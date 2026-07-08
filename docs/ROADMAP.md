@@ -59,7 +59,7 @@
 
 关键交付：
 
-- BYOK 配置。
+- BYOK 配置：支持从 `.env` 读取 `CLAUDE_BASE_URL`、`CLAUDE_API_KEY`、`CLAUDE_MODEL`。
 - Claude Agent SDK 接入。
 - 内置流程：
   - 总结当前论文。

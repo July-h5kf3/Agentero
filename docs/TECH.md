@@ -307,6 +307,19 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 - 写入操作先写临时文件，用户确认后再移动到目标路径。
 - Agent 内部路由可先查 SQLite 索引提升性能，但最终读取与引用必须对应到本地 Markdown 或 source 文件路径。
 
+### 5.7 Agent 环境变量
+
+MVP 通过 `.env` 文件配置 Claude API 连接信息，支持 BYOK（Bring Your Own Key）：
+
+| 变量名 | 说明 | 示例 |
+|---|---|---|
+| `CLAUDE_BASE_URL` | Claude API 基础 URL | `https://api.anthropic.com` |
+| `CLAUDE_API_KEY` | 用户自己的 Claude API Key | `sk-ant-api03-...` |
+| `CLAUDE_MODEL` | 默认调用的模型名称 | `claude-sonnet-4-20250514` |
+
+- 开发时由 Vite / Rust 读取 `.env`；生产运行时用户可在应用设置中填写，最终存入 `tauri-plugin-store`。
+- `.env.example` 提供模板，`.env` 已加入 `.gitignore`，避免提交真实 key。
+
 ## 6. 平台策略：Mac 优先 + iPadOS 扩展
 
 ### 6.1 Mac 优先（MVP）

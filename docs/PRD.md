@@ -93,7 +93,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 #### Agent 集成
 
 - 内置 Claude Agent SDK。
-- 支持 Bring Your Own Key。
+- 支持 Bring Your Own Key（BYOK），通过 `.env` 配置 `CLAUDE_BASE_URL`、`CLAUDE_API_KEY`、`CLAUDE_MODEL`。
 - MVP 提供 3 个内置流程：
   - 总结当前论文。
   - 基于本地库问答。
