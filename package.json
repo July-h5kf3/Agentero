@@ -8,8 +8,16 @@
 		"build": "tsc && vite build",
 		"preview": "vite preview",
 		"tauri": "tauri",
-		"lint": "biome check .",
-		"format": "biome format --write ."
+		"lint": "pnpm run lint:ts && pnpm run lint:rs",
+		"lint:ts": "biome check .",
+		"lint:rs": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+		"format": "pnpm run format:ts && pnpm run format:rs",
+		"format:ts": "biome format --write .",
+		"format:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml",
+		"fix": "pnpm run fix:ts && pnpm run fix:rs",
+		"fix:ts": "biome check --write .",
+		"fix:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml && pnpm run lint:rs",
+		"prepare": "husky"
 	},
 	"dependencies": {
 		"@tauri-apps/api": "^2",
@@ -23,6 +31,8 @@
 		"@types/react": "^19.1.8",
 		"@types/react-dom": "^19.1.6",
 		"@vitejs/plugin-react": "^4.6.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^17.0.8",
 		"typescript": "~5.8.3",
 		"vite": "^7.0.4"
 	}
