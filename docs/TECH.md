@@ -1,0 +1,472 @@
+# Motif / notemd 技术方案
+
+> 本文档基于 `docs/PRD.md`、`docs/UI.md`、`docs/ROADMAP.md` 与当前仓库现状编写，用于指导 MVP 及后续演进的技术选型与模块划分。
+
+## 1. 技术定位与目标
+
+- **本地优先（Local-first）**：Vault 以 Markdown + 源文件为事实来源，数据库/索引仅作为缓存。
+- **跨平台但 Mac 优先**：MVP 以 macOS 桌面应用为主，技术栈保留向 iPadOS 扩展的能力。
+- **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引、Agent 编排能力。
+- **可迁移**：Vault 离开应用后仍能被 Obsidian、VS Code、Cursor 直接打开。
+
+## 2. 整体架构
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend (Web)                          │
+│  React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui    │
+│  - 三栏工作台                                                │
+│  - Markdown 编辑/预览                                        │
+│  - PDF / HTML 阅读器                                         │
+│  - 双链/反链/图谱                                            │
+│  - Agent 面板                                                │
+└───────────────────────────┬─────────────────────────────────┘
+│                           │ Tauri invoke / event
+┌───────────────────────────▼─────────────────────────────────┐
+│                 Host (Tauri 2 + Rust)                        │
+│  - 文件系统操作（读写 Vault、文件树、文件监听）               │
+│  - arXiv / HTTP 抓取                                         │
+│  - Markdown / 双链 / 图谱索引                                 │
+│  - Agent 编排（Claude SDK）                                   │
+│  - 本地配置与最近 Vault 存储                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 2.1 为什么选 Tauri 2
+
+- Rust 宿主能直接、安全地操作本地文件系统，符合本地优先定位。
+- 前端使用成熟的 Web 技术栈，UI 开发效率高于纯原生。
+- Tauri 2 支持 iOS/iPadOS 构建（`tauri ios`），与 MVP 的 Mac-first、后续 iPadOS 策略一致。
+- 包体小、内存占用低，适合作为常驻研究工具。
+
+### 2.2 前后端职责边界
+
+| 能力 | Frontend | Host (Rust) |
+|---|---|---|
+| 文件树展示/交互 | 渲染、事件 | 读取目录、监听变化 |
+| Markdown 编辑 | CodeMirror / 编辑器组件 | 持久化到磁盘 |
+| 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
+| 图谱 | 可视化组件（React Flow） | 输出节点/边数据 |
+| PDF/HTML 阅读 | iframe / PDF.js 渲染 | 提供本地文件路径/URL |
+| arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
+| Agent 调用 | 展示对话与结果 | 编排 prompt、调用 Claude API、写入文件 |
+| 配置/最近 Vault | 读取与展示 | 使用 Tauri Store 持久化 |
+
+## 3. 前端技术栈
+
+### 3.1 基础框架
+
+| 库/工具 | 版本/说明 | 用途 |
+|---|---|---|
+| React | ^19.1.0 | UI 组件与状态驱动 |
+| TypeScript | ~5.8.3 | 类型安全 |
+| Vite | ^7.0.4 | 构建与 HMR |
+| Biome | 2.5.2 | Lint + Format（已配置） |
+
+### 3.2 UI 与样式
+
+| 库/工具 | 说明 | 用途 |
+|---|---|---|
+| Tailwind CSS | 原子化 CSS | 布局、间距、响应式 |
+| shadcn/ui | 基于 Radix UI 的 headless 组件 | 按钮、输入框、对话框、下拉菜单、侧边栏 |
+| Radix UI Primitives | shadcn/ui 底层 | 可访问性、键盘交互、弹窗管理 |
+| Lucide React | 图标库 | 工具栏、文件树、状态图标 |
+| tweakcn 主题 | `modern-minimal` | 已确定的视觉主题，保持简约 |
+
+> 主题安装命令（已记录于 `docs/UI.md`）：
+> `pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`
+
+### 3.3 Markdown 编辑与预览
+
+采用**分屏编辑器**方案，优先满足人可读、Agent 可写的目标：
+
+| 库 | 用途 |
+|---|---|
+| `@uiw/react-codemirror6` 或 `codemirror` | Markdown 源代码编辑，支持语法高亮、vim 模式可选 |
+| `react-markdown` + `remark-gfm` + `rehype-highlight` | 实时预览，支持表格、任务列表、代码高亮 |
+| `remark-wiki-link` / 自定义插件 | 识别并渲染 `[[双链]]` |
+
+**选型理由**：
+- CodeMirror 6 性能优于 Monaco 处理大段 Markdown，且体积小。
+- `react-markdown` 生态成熟，便于扩展双链、数学公式插件。
+- 数学公式后续可通过 `rehype-katex` / `remark-math` 支持。
+
+### 3.4 PDF / HTML 阅读器
+
+| 类型 | 方案 |
+|---|---|
+| PDF | `pdfjs-dist`（Mozilla PDF.js）+ 自定义 Canvas/文本层 |
+| HTML（arXiv HTML）| Tauri Webview 内嵌 `iframe` 或独立 Webview 窗口 |
+| 本地 HTML | 通过 Tauri `convertFileSrc` 转换为安全 URL 后加载 |
+
+> MVP 阅读器以审阅和定位为主，不实现完整批注系统。
+
+### 3.5 关系图谱
+
+| 库 | 用途 |
+|---|---|
+| `@xyflow/react`（React Flow）| 节点/边渲染、缩放、拖拽、点击交互 |
+
+**原因**：React Flow 对可控布局友好，易于从 Rust 索引数据生成 Paper/Note/Concept 节点，并绑定点击打开文件事件。
+
+### 3.6 状态管理
+
+| 库 | 用途 |
+|---|---|
+| Zustand | 全局状态：当前 Vault、打开的文件、Agent 会话、UI 布局 |
+
+**原因**：MVP 规模下 Zustand 足够轻量；无需 Redux 的样板代码。
+
+### 3.7 路由（可选）
+
+MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视图（图谱全屏、设置页），引入：
+
+| 库 | 用途 |
+|---|---|
+| TanStack Router | 类型安全路由 |
+
+## 4. 后端/宿主层（Tauri + Rust）
+
+### 4.1 Tauri 插件
+
+| 插件 | 用途 |
+|---|---|
+| `tauri-plugin-fs` | 读/写/监听 Vault 文件与目录 |
+| `tauri-plugin-dialog` | 选择/创建 Vault 文件夹 |
+| `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充） |
+| `tauri-plugin-opener` | 打开外部链接（已配置） |
+| `tauri-plugin-http`（可选）| 前端直接发起受控 HTTP 请求 |
+| `tauri-plugin-process` / `tauri-plugin-shell` | 后续用于调用外部工具 |
+
+### 4.2 Rust Crates
+
+| Crate | 用途 |
+|---|---|
+| `tauri` / `tauri-build` | 应用框架 |
+| `serde` / `serde_json` | 序列化与 IPC |
+| `reqwest` + `tokio` | 异步 HTTP，抓取 arXiv 资源 |
+| `pulldown-cmark` 或 `comrak` | Markdown 解析、提取双链、标题、frontmatter |
+| `regex` | 双链、arXiv ID 解析 |
+| `thiserror` / `anyhow` | 错误处理 |
+| `notify` | 文件系统监听，实时同步外部编辑器修改 |
+| `dirs` | 获取系统配置/缓存目录 |
+| `tempfile` | Agent 生成内容临时文件，确认后写入 |
+| `walkdir` | 遍历 Vault 构建索引 |
+| `rusqlite` | 本地 SQLite 索引，缓存论文元数据与全文检索 |
+
+### 4.3 核心 Rust 模块设计
+
+```text
+src-tauri/src/
+  main.rs          # 入口
+  lib.rs           # Tauri Builder、命令注册
+  commands/        # invoke 命令
+    vault.rs       # 创建/打开/列出 Vault、最近记录
+    file.rs        # 文件读写、监听
+    input.rs       # 输入分类与候选论文查询
+    arxiv.rs       # arXiv 入库命令
+    agent.rs       # Agent 流程触发与状态
+    graph.rs       # 图谱节点/边查询
+  services/        # 业务逻辑
+    vault.rs       # Vault 初始化与校验
+    fs.rs          # 安全文件操作（路径白名单）
+    input.rs       # 输入分类、意图解析、候选检索
+    arxiv.rs       # arXiv HTML/LaTeX/PDF 抓取与解析
+    markdown.rs    # Markdown 解析、双链提取、索引构建
+    agent/         # Agent 编排
+      engine.rs    # Claude SDK 调用封装
+      prompts.rs   # 系统提示与 AGENTS.md 注入
+      workflows.rs # 总结/问答/Related Work 流程
+      search.rs    # Agent 驱动的论文检索/候选生成
+  models/          # 数据类型
+    vault.rs
+    paper.rs
+    note.rs
+    graph.rs
+    agent.rs
+    candidate.rs   # 候选论文/检索结果
+  error.rs         # 应用错误类型
+```
+
+### 4.4 安全模型
+
+- **路径白名单**：Tauri `fs` 权限仅允许访问用户显式选择的 Vault 目录及其子目录。
+- **CSP 配置**：`tauri.conf.json` 中设置合理的 Content-Security-Policy，限制本地 Webview 加载外部资源。
+- **API Key 存储**：MVP 使用 `tauri-plugin-store` 明文存储；后续迁移到系统钥匙串（`keyring` crate）。
+- **网络范围**：Agent 仅访问 Claude API；arXiv 抓取限定于 `arxiv.org` 域名。
+
+## 4.5 本地存储分层：Tauri Store vs SQLite
+
+MVP 涉及两类本地持久化需求，需要明确分层：
+
+| 维度 | Tauri Store | SQLite 索引 |
+|---|---|---|
+| 数据类型 | 用户配置、最近 Vault 列表、API Key、UI 状态 | 论文元数据、标签、全文检索索引、双链图缓存 |
+| 数据模型 | Key-Value | 关系表 + FTS |
+| 典型容量 | 几十到几百条记录 | 可扩展到数万条论文与链接 |
+| 查询能力 | 按 key 读取，不适合过滤/聚合 | 支持按作者、年份、标签、关键词过滤，支持复杂查询 |
+| 事实来源 | 是（配置类数据无其他来源） | 否，只能从 `PAPERS.md` / `NOTES.md` / 双链重建 |
+| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/cache.sqlite` 或应用缓存目录 |
+| 损坏处理 | 丢失后用户重新配置 | 删除后可从 Markdown 自动重建 |
+
+**使用原则**：
+- Tauri Store 只存配置和机密，不存论文元数据。
+- SQLite 是查询缓存/索引，任何写入 SQLite 的数据必须能从 Markdown 重新生成。
+- Agent 路由、搜索、图谱可先读 SQLite，但最终引用和展示必须落回本地文件路径。
+
+## 5. 核心模块搭配与数据流
+
+### 5.1 Vault 初始化与恢复
+
+```text
+用户选择目录
+  → Rust: dialog.open({ directory: true })
+  → Rust: 初始化 AGENTS.md / PAPERS.md / papers / notes / plans
+  → Rust: store.set('recent-vaults', [...])
+  → Frontend: 加载文件树，打开 PAPERS.md
+```
+
+### 5.2 arXiv 入库闭环
+
+```text
+用户输入 arXiv ID / URL / 关键词 / 话题 / 一段描述
+  → Rust: 输入分类（规则解析 + Agent 意图识别）
+     ├─ 精确 ID/URL → 直接提取标准 arXiv ID
+     └─ 模糊输入 → Agent 检索 arXiv 候选并返回候选列表
+  → Frontend: 展示候选论文（标题、作者、摘要片段、推荐理由）
+  → 用户确认目标论文（单选/多选）
+  → Rust: 归一化为标准 arXiv ID
+  → Rust: 请求 arXiv API (http://export.arxiv.org/api/query)
+  → Rust: 并行下载 LaTeX source / HTML / PDF（按优先级），source 存入 `papers/<id>/source/`
+  → Rust: 若无 LaTeX source 或需要可读结构化正文，生成 paper.md（LaTeX/HTML/PDF → Markdown）
+  → Rust: 调用 Agent 生成 NOTES.md（三段论结构）
+  → Rust: 更新 PAPERS.md（事实来源），并同步写入本地 SQLite 索引（查询缓存）
+  → Frontend: 展示进度、成功、失败原因
+  → Frontend: 自动打开 NOTES.md 供用户审阅
+```
+
+**输入分类与 Agent 解析**：
+- 规则层先用正则识别 arXiv ID（如 `1706.03762`、`arXiv:1706.03762`）和 URL。
+- 非精确输入统一交给 Agent，Agent 可调用 arXiv API 进行关键词/摘要搜索，并返回 Top-K 候选。
+- 候选需包含：标题、作者、年份、arXiv ID、摘要片段、与输入意图的匹配理由。
+- 用户可在列表中多选批量入库，或拒绝全部候选后重新输入。
+
+**paper.md 生成策略**：
+- 优先保留 arXiv LaTeX source 到 `papers/<id>/source/`，Agent 直接读取 `.tex`。
+- 仅在无 LaTeX source 或 Agent/用户需要统一可读格式时，按需生成 `paper.md`：
+  - 有 LaTeX source 时，通过 pandoc 或轻量 LaTeX→Markdown 转换保留章节、公式、表格。
+  - 无 LaTeX source 时，次选 arXiv HTML 实验版，解析 DOM 转 Markdown。
+  - 兜底使用 PDF 文本提取（`pdf-extract` 或调用 Python 工具），并明确标记质量。
+- `paper.md` 是派生文件，可被删除或重建；`source/` 中的原始文件才是归档事实来源。
+
+### 5.3 Markdown 工作台
+
+```text
+文件树点击
+  → Frontend: 请求 Rust 读取文件内容
+  → Frontend: CodeMirror 展示源码
+  → Frontend: react-markdown 展示预览
+  → Frontend: 解析双链，渲染为可点击链接
+  → Frontend: 右侧面板展示反链、元信息、Agent 结果
+
+用户保存
+  → Frontend: 将内容发往 Rust 写入磁盘
+  → Rust: notify 触发文件变化事件
+  → Frontend: 重建双链索引与图谱
+```
+
+### 5.4 双链与反链
+
+- **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
+- **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引。
+- **前端渲染**：自定义 remark 插件将 `[[...]]` 转为 React Router/点击处理器可识别的 `<a>`。
+- **反链查询**：Rust 根据当前文件路径返回所有引用它的文件列表。
+- **缺失目标**：点击不存在的双链时弹出创建对话框，生成 `notes/<concept>.md`。
+
+### 5.5 关系图谱
+
+- **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`。
+- **节点类型**：`paper`、`note`、`concept`。
+- **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_source`（论文→paper.md）。
+- **前端渲染**：React Flow 加载节点/边，点击节点调用 Rust 打开对应文件。
+
+### 5.6 Agent 工作流
+
+```text
+用户选择流程（总结/问答/Related Work）
+  → Rust: 读取 AGENTS.md 作为系统提示约束
+  → Rust: 按 PAPERS.md → NOTES.md → source/paper.md 顺序读取上下文，优先使用 `source/` 中的原始源文件
+  → Rust: 调用 Claude API（BYOK）
+  → Rust: 返回结果 + 读取过的文件路径列表
+  → Frontend: 展示结果，用户确认后写入 Markdown
+```
+
+**Agent 输出规范**：
+- 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表。
+- 涉及双链的内容必须保留 `[[...]]` 格式。
+- 写入操作先写临时文件，用户确认后再移动到目标路径。
+- Agent 内部路由可先查 SQLite 索引提升性能，但最终读取与引用必须对应到本地 Markdown 或 source 文件路径。
+
+## 6. 平台策略：Mac 优先 + iPadOS 扩展
+
+### 6.1 Mac 优先（MVP）
+
+- **窗口模型**：单文档多面板工作台，参考 Obsidian / Notion 桌面版。
+- **Bundle 目标**：`tauri.conf.json` 中 `bundle.targets` 优先 `app`、`dmg`；暂不做 Windows/Linux 发布包，但保留跨平台构建能力。
+- **原生体验**：
+  - 使用 macOS 原生菜单栏（Tauri `Menu` API）。
+  - 快捷键遵循 macOS 习惯：`Cmd+O` 打开 Vault、`Cmd+S` 保存、`Cmd+Shift+N` 新建笔记。
+  - 支持窗口大小记忆与恢复。
+- **文件系统集成**：直接读写用户选择的本地目录，与 Finder 无缝协作。
+
+### 6.2 iPadOS 扩展（后续版本）
+
+Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
+
+#### 6.2.1 构建与打包
+
+- 使用 `tauri ios init` / `tauri ios build` 生成 Xcode 工程。
+- 在 `tauri.conf.json` 中补充 iOS bundle 配置：
+  - `bundle.ios.minimumSystemVersion` 设为 `16.0` 或更高。
+  - 配置 `identifier`、`developmentTeam`。
+- Rust 代码中避免使用桌面专属插件（如 `shell`），使用 iOS 兼容的 `fs`、`dialog`、`store`。
+
+#### 6.2.2 UI 适配
+
+| Mac 设计 | iPadOS 调整 |
+|---|---|
+| 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
+| 鼠标悬停提示 | 长按菜单替代 |
+| 小点击区域 | 增大按钮/节点热区至 44pt |
+| 多窗口自由拖拽 | 分屏/Split View 适配；暂不支持多独立窗口 |
+| PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
+| 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
+
+#### 6.2.3 文件系统差异
+
+- iPadOS 沙盒限制更强，Vault 选择通过系统文件选择器（`UIDocumentPickerViewController`）完成。
+- 考虑支持 iCloud Drive / Files App 中的 Vault，保持与 macOS 相同的目录结构。
+- 文件监听策略在 iOS 上受限，可改为应用激活时增量扫描。
+
+#### 6.2.4 Agent 与网络
+
+- iPadOS 同样使用 Claude API（BYOK），网络策略与 macOS 一致。
+- 注意后台任务限制：长时间 Agent 调用需在前台保持连接或拆分为短请求。
+
+### 6.3 跨平台共享代码
+
+- **共享层**：Rust 业务逻辑（Vault、Markdown 索引、Agent 编排）完全跨平台。
+- **前端适配层**：通过 `useMediaQuery` / 平台检测（Tauri `os` API）切换布局组件。
+- **平台特定代码**：封装在 `src/platform/` 下，如 `desktop.ts`、`mobile.ts`。
+
+## 7. 开发/构建/部署
+
+### 7.1 本地开发
+
+```bash
+pnpm install
+pnpm tauri dev
+```
+
+### 7.2 构建
+
+```bash
+pnpm tauri build
+```
+
+### 7.3 代码规范
+
+- TypeScript：Biome 已配置，提交前通过 husky + lint-staged 自动检查。
+- Rust：`cargo clippy` + `cargo fmt`。
+- 提交信息遵循仓库现有风格：`feat:`, `fix:`, `docs:`, `chore:`。
+
+## 8. 依赖清单（计划）
+
+### 8.1 前端依赖
+
+```json
+{
+  "@tauri-apps/api": "^2",
+  "@tauri-apps/plugin-fs": "^2",
+  "@tauri-apps/plugin-dialog": "^2",
+  "@tauri-apps/plugin-store": "^2",
+  "@tauri-apps/plugin-opener": "^2",
+  "react": "^19.1.0",
+  "react-dom": "^19.1.0",
+  "zustand": "^5",
+  "react-markdown": "^9",
+  "remark-gfm": "^4",
+  "rehype-highlight": "^7",
+  "remark-wiki-link": "^2",
+  "@uiw/react-codemirror": "^4",
+  "@codemirror/lang-markdown": "^6",
+  "@xyflow/react": "^12",
+  "pdfjs-dist": "^4",
+  "lucide-react": "^0.x",
+  "class-variance-authority": "^0.x",
+  "clsx": "^2",
+  "tailwind-merge": "^2"
+}
+```
+
+### 8.2 Rust 依赖
+
+```toml
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+tauri-plugin-opener = "2"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+pulldown-cmark = "0.12"
+regex = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+notify = "6"
+dirs = "5"
+walkdir = "2"
+tempfile = "3"
+```
+
+### 8.3 可选依赖
+
+| 场景 | 库 |
+|---|---|
+| LaTeX → Markdown | `pandoc`（外部 CLI，可选）、`texparser` |
+| 数学公式渲染 | `rehype-katex` + `katex` |
+| 全文搜索 | `minisearch`（前端）或 Rust `tantivy` / SQLite FTS5 |
+| 加密存储 API Key | `keyring` crate |
+| iOS 原生能力 | `tauri-plugin-os`、Swift 桥接 |
+
+## 9. 与 Roadmap 的对应关系
+
+| Roadmap 版本 | 技术重点 |
+|---|---|
+| V0.1 | 完成 Tauri + React 工作台；接入 `fs`、`dialog`、`store`；实现 Vault 初始化与文件树。 |
+| V0.2 | 实现 arXiv importer；paper.md / NOTES.md 生成；PAPERS.md 更新。 |
+| V0.3 | 接入 Claude SDK；Agent 工作流与读取路径回显；临时文件确认机制。 |
+| V0.4 | 双链解析、反链面板、React Flow 图谱。 |
+| V0.5 | 抽象 `Importer` trait；预留 PDF/DOI/BibTeX 扩展点。 |
+| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
+
+## 10. 风险与技术对策
+
+| 风险 | 对策 |
+|---|---|
+| arXiv HTML/LaTeX 不可用 | 降级到 PDF 文本提取，并在 paper.md 中标记来源质量。 |
+| Agent 输出破坏用户笔记 | 所有写入先走临时文件，用户确认后再覆盖；NOTES.md 用户修改部分优先保留。 |
+| 文件索引性能差 | SQLite 缓存元数据与双链；增量索引，仅在 Vault 变化时重建受影响文件。 |
+| SQLite 索引损坏或过期 | 索引只能从 Markdown 重建；启动时校验版本，异常时全量重建。 |
+| iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |
+| 跨平台 UI 差异大 | 核心组件复用，布局通过平台适配层切换。 |
+
+## 11. 相关文档
+
+- `docs/PRD.md`：产品需求与验收标准。
+- `docs/UI.md`：视觉主题与简约设计原则。
+- `docs/ROADMAP.md`：版本规划与里程碑。

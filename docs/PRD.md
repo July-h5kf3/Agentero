@@ -18,8 +18,8 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 验证一个 Agent-first 的研究闭环：
 
-1. 用户输入 arXiv ID 或 URL。
-2. 系统按照规则拉取 tex版本，并保留pdf、html版本的链接
+1. 用户输入 arXiv ID、URL、关键词、话题或一段描述。
+2. 系统借助 Agent 能力解析输入意图、检索候选论文，并在需要时让用户确认目标论文；确认后优先拉取 tex 源文件，并保留 pdf、html 版本的链接。仅在无 tex 源或 Agent 明确需要可读结构化正文时才生成 `paper.md`。
 3. Agent完成粗读 生成结构化 `NOTES.md`，并更新全局 `PAPERS.md` 索引。
 
 用户部分：
@@ -64,11 +64,14 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 #### arXiv 入库
 
-- 支持输入 arXiv ID 或 arXiv URL。
+- 支持输入 arXiv ID、arXiv URL、关键词、话题或一段自然语言描述。
+- 当输入不是精确 ID/URL 时，调用 Agent 检索 arXiv 候选论文并返回列表供用户确认。
+- Agent 应给出候选论文的标题、作者、摘要片段及推荐理由，用户确认后再进入入库流程。
 - 为每篇论文创建独立目录：`papers/<arxiv-id>/`。
-- 优先获取 arXiv HTML 或 LaTeX 作为结构化来源；PDF 作为人类阅读补充。
+- 优先获取 arXiv LaTeX source 作为结构化来源；HTML/PDF 作为人类阅读补充。
+- 仅在无 LaTeX source 或 Agent/用户需要时才生成 `paper.md`；有 source 时直接保留原始 `.tex`。
 - 生成 `NOTES.md`，默认使用三段论结构。
-- 更新根目录 `PAPERS.md`或轻量数据库，作为全局路由表。
+- 更新根目录 `PAPERS.md`（事实来源），并同步写入本地 SQLite 索引（查询缓存）。
 - 对重复入库、网络失败、缺少 HTML/LaTeX、解析失败给出明确状态。
 
 #### Markdown 工作台
@@ -95,7 +98,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
   - 总结当前论文。
   - 基于本地库问答。
   - 生成带本地路径引用的 Related Work 草稿。
-- Agent 读取顺序必须遵循 `PAPERS.md -> NOTES.md -> paper.md/source`。
+- Agent 读取顺序必须遵循 `PAPERS.md -> NOTES.md -> source/paper.md`，优先读取 `source/` 中的原始源文件，仅在无源文件时读取 `paper.md`。
 - Agent 输出必须展示读取过的文件路径。
 
 #### 阅读器
@@ -133,9 +136,9 @@ motif-vault/
   PAPERS.md
   papers/
     1706.03762/
-      paper.md
+      paper.md          # 可选：无 LaTeX source 或需要时生成
       NOTES.md
-      source/
+      source/           # 优先保留 .tex 等原始源文件
       assets/
   notes/
     *.md
@@ -173,6 +176,7 @@ motif-vault/
 #### `paper.md`
 
 面向 Agent 阅读的轻量正文，保留章节、公式、表格、引用等结构信息，降低 PDF 排版噪音。
+当 `source/` 中已存在 LaTeX 源文件时，`paper.md` 为可选生成项，仅在 Agent 需要统一可读格式或源文件解析困难时按需创建。
 
 #### `AGENTS.md`
 
@@ -195,14 +199,19 @@ Vault 内的 Agent 行为规范，至少包含：
 
 ### 6.2 arXiv 论文入库
 
-1. 用户输入 arXiv ID 或 URL。
-2. 系统识别论文元数据。
-3. 系统创建 `papers/<arxiv-id>/`。
-4. 系统获取 HTML/LaTeX/PDF。
-5. 系统生成 `paper.md`。
-6. Agent 生成 `NOTES.md`。
-7. 系统更新 `PAPERS.md`。
-8. 用户进入 `NOTES.md` 审阅和修订。
+1. 用户在入库输入框中提供 arXiv ID、URL、关键词、话题或一段描述。
+2. 系统通过规则 + Agent 判断输入类型：
+   - 若为精确 ID/URL，直接进入元数据拉取。
+   - 若为关键词、话题或描述，调用 Agent 检索 arXiv 候选论文并展示列表。
+3. 用户从候选列表中确认目标论文（单选或多选）。
+4. 系统识别论文元数据。
+5. 系统将确认结果归一化为标准 arXiv ID。
+6. 系统创建 `papers/<arxiv-id>/`。
+7. 系统获取 LaTeX source / HTML / PDF，source 文件保存到 `source/`。
+8. 若无 LaTeX source 或需要可读结构化正文，系统生成 `paper.md`。
+9. Agent 生成 `NOTES.md`。
+10. 系统更新 `PAPERS.md`（事实来源），并同步更新本地 SQLite 索引（查询缓存）。
+11. 用户进入 `NOTES.md` 审阅和修订。
 
 ### 6.3 基于本地库问答
 
@@ -233,6 +242,7 @@ Vault 内的 Agent 行为规范，至少包含：
 
 - 创建新 Vault 后，目录结构符合 PRD 中的 Vault 结构。
 - 输入 `1706.03762` 后，生成对应 `papers/1706.03762/paper.md` 和 `papers/1706.03762/NOTES.md`。
+- 输入关键词或一段研究描述后，Agent 能检索并返回候选论文，用户确认后完成入库。
 - 连续入库 3 篇 arXiv 论文后，`PAPERS.md` 至少包含 3 条索引。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
 - `[[双链]]` 能跳转；反链面板能显示引用来源。
