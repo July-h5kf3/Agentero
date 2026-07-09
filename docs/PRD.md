@@ -19,7 +19,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 验证一个 Agent-first 的研究闭环：
 
 1. 用户输入 arXiv ID、URL、关键词、话题或一段描述。
-2. 系统借助 Agent 能力解析输入意图、检索候选论文，并在需要时让用户确认目标论文；确认后优先拉取 tex 源文件，并保留 pdf、html 版本的链接。仅在无 tex 源或 Agent 明确需要可读结构化正文时才生成 `paper.md`。
+2. 系统借助 Agent 能力解析输入意图、检索候选论文，并在需要时让用户确认目标论文；确认后优先拉取 tex 源文件，并保留 pdf、html 版本的链接。仅在无 tex 源或 Agent 明确需要可读结构化正文时才生成 `source/PAPER.md`。
 3. Agent完成粗读 生成结构化 `NOTES.md`，并更新全局 `PAPERS.md` 索引。
 
 用户部分：
@@ -30,7 +30,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 ### 2.2 成功标准
 
 - 用户可以在 5 分钟内完成一个新 Vault 的创建、arXiv 论文入库、笔记生成和人工修订。
-- 输入 3 篇 arXiv 论文后，系统能生成稳定的 `paper.md / NOTES.md / PAPERS.md` 结构。
+- 输入 3 篇 arXiv 论文后，系统能生成稳定的 `source/PAPER.md / NOTES.md / PAPERS.md` 结构。
 - 用户能通过 `[[双链]]` 连接论文、概念、作者和 Idea，并看到反链,类似 Obsidian当中的设计
 - Agent 回答跨论文问题时，必须展示读取过的本地文件路径。
 - 关系图谱能反映 Markdown 双链和论文关系，而不是依赖不可见数据库。
@@ -69,7 +69,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - Agent 应给出候选论文的标题、作者、摘要片段及推荐理由，用户确认后再进入入库流程。
 - 为每篇论文创建独立目录：`papers/<arxiv-id>/`。
 - 优先获取 arXiv LaTeX source 作为结构化来源；HTML/PDF 作为人类阅读补充。
-- 仅在无 LaTeX source 或 Agent/用户需要时才生成 `paper.md`；有 source 时直接保留原始 `.tex`。
+- 仅在无 LaTeX source 或 Agent/用户需要时才生成 `source/PAPER.md`；有 source 时直接保留原始 `.tex`。
 - 生成 `NOTES.md`，默认使用三段论结构。
 - 更新根目录 `PAPERS.md`（事实来源），并同步写入本地 SQLite 索引（查询缓存）。
 - 对重复入库、网络失败、缺少 HTML/LaTeX、解析失败给出明确状态。
@@ -98,7 +98,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
   - 总结当前论文。
   - 基于本地库问答。
   - 生成带本地路径引用的 Related Work 草稿。
-- Agent 读取顺序必须遵循 `PAPERS.md -> NOTES.md -> source/paper.md`，优先读取 `source/` 中的原始源文件，仅在无源文件时读取 `paper.md`。
+- Agent 读取顺序必须遵循 `PAPERS.md -> NOTES.md -> source/PAPER.md`，优先读取 `source/` 中的原始源文件。
 - Agent 输出必须展示读取过的文件路径。
 
 #### 阅读器
@@ -136,10 +136,12 @@ motif-vault/
   PAPERS.md
   papers/
     1706.03762/
-      paper.md          # 可选：无 LaTeX source 或需要时生成
       NOTES.md
-      source/           # 优先保留 .tex 等原始源文件
-      assets/
+      source/           # 始终存在
+        *.tex           # LaTeX 源文件
+        PAPER.md        # 可选：无 tex 源或需要可读结构化正文时生成
+        *.pdf
+        *.html
   notes/
     *.md
   plans/
@@ -173,10 +175,10 @@ motif-vault/
 # 效果怎么样
 ```
 
-#### `paper.md`
+#### `PAPER.md`
 
-面向 Agent 阅读的轻量正文，保留章节、公式、表格、引用等结构信息，降低 PDF 排版噪音。
-当 `source/` 中已存在 LaTeX 源文件时，`paper.md` 为可选生成项，仅在 Agent 需要统一可读格式或源文件解析困难时按需创建。
+位于 `papers/<id>/source/PAPER.md`，面向 Agent 阅读的轻量正文，保留章节、公式、表格、引用等结构信息，降低 PDF 排版噪音。
+当 `source/` 中已存在 LaTeX 源文件时，`PAPER.md` 为可选生成项，仅在 Agent 需要统一可读格式或源文件解析困难时按需创建。
 
 #### `AGENTS.md`
 
@@ -208,7 +210,7 @@ Vault 内的 Agent 行为规范，至少包含：
 5. 系统将确认结果归一化为标准 arXiv ID。
 6. 系统创建 `papers/<arxiv-id>/`。
 7. 系统获取 LaTeX source / HTML / PDF，source 文件保存到 `source/`。
-8. 若无 LaTeX source 或需要可读结构化正文，系统生成 `paper.md`。
+8. 若无 LaTeX source 或需要可读结构化正文，系统生成 `source/PAPER.md`。
 9. Agent 生成 `NOTES.md`。
 10. 系统更新 `PAPERS.md`（事实来源），并同步更新本地 SQLite 索引（查询缓存）。
 11. 用户进入 `NOTES.md` 审阅和修订。
@@ -218,7 +220,7 @@ Vault 内的 Agent 行为规范，至少包含：
 1. 用户在 Agent 面板输入问题。
 2. Agent 先读取 `PAPERS.md` 锁定候选论文。
 3. Agent 读取相关 `NOTES.md`。
-4. 仅当需要公式、实验细节或原文时读取 `paper.md/source`。
+4. 仅当需要公式、实验细节或原文时读取 `source/PAPER.md`。
 5. Agent 输出答案。
 6. 答案末尾展示读取过的文件路径。
 
@@ -241,7 +243,7 @@ Vault 内的 Agent 行为规范，至少包含：
 ## 8. 验收标准
 
 - 创建新 Vault 后，目录结构符合 PRD 中的 Vault 结构。
-- 输入 `1706.03762` 后，生成对应 `papers/1706.03762/paper.md` 和 `papers/1706.03762/NOTES.md`。
+- 输入 `1706.03762` 后，生成对应 `papers/1706.03762/NOTES.md` 与 `papers/1706.03762/source/PAPER.md`（无 tex 源时）。
 - 输入关键词或一段研究描述后，Agent 能检索并返回候选论文，用户确认后完成入库。
 - 连续入库 3 篇 arXiv 论文后，`PAPERS.md` 至少包含 3 条索引。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
