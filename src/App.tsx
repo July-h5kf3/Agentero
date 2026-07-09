@@ -7,46 +7,40 @@ import {
 	ItalicPlugin,
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
-import { PDFViewer } from "@react-pdf/renderer";
-import type { Value } from "platejs";
+import { MarkdownPlugin } from "@platejs/markdown";
 import { Plate, usePlateEditor } from "platejs/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { MyDocument } from "@/components/pdf/my-document";
+import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { BlockquoteElement } from "@/components/ui/blockquote-node";
 import { Editor, EditorContainer } from "@/components/ui/editor";
-import { FixedToolbar } from "@/components/ui/fixed-toolbar";
 import { H1Element, H2Element, H3Element } from "@/components/ui/heading-node";
-import { MarkToolbarButton } from "@/components/ui/mark-toolbar-button";
-import { ToolbarButton } from "@/components/ui/toolbar";
-import { TooltipProvider } from "@/components/ui/tooltip";
 
-const initialValue: Value = [
-	{
-		children: [{ text: "Title" }],
-		type: "h3",
-	},
-	{
-		children: [
-			{
-				children: [{ text: "This is a quote." }],
-				type: "p",
-			},
-		],
-		type: "blockquote",
-	},
-	{
-		children: [
-			{ text: "With some " },
-			{ bold: true, text: "bold" },
-			{ text: " text for emphasis!" },
-		],
-		type: "p",
-	},
-];
+const STORAGE_KEY = "motif-editor-content";
+
+const defaultMarkdown = `### Title
+
+> This is a quote.
+
+With some **bold** text for emphasis!
+`;
+
+function useDebounce<T>(value: T, delay: number): T {
+	const [debounced, setDebounced] = useState(value);
+
+	useEffect(() => {
+		const timer = setTimeout(() => setDebounced(value), delay);
+		return () => clearTimeout(timer);
+	}, [value, delay]);
+
+	return debounced;
+}
 
 export default function App() {
-	const [showPdf, setShowPdf] = useState(false);
+	const [markdown, setMarkdown] = useState(
+		() => localStorage.getItem(STORAGE_KEY) ?? defaultMarkdown,
+	);
+	const debouncedMarkdown = useDebounce(markdown, 300);
 
 	const editor = usePlateEditor({
 		plugins: [
@@ -57,75 +51,45 @@ export default function App() {
 			H2Plugin.withComponent(H2Element),
 			H3Plugin.withComponent(H3Element),
 			BlockquotePlugin.withComponent(BlockquoteElement),
+			...MarkdownKit,
 		],
-		value: () => {
-			const savedValue = localStorage.getItem("installation-react-demo");
-			return savedValue ? JSON.parse(savedValue) : initialValue;
-		},
+		value: (editor) =>
+			editor.getApi(MarkdownPlugin).markdown.deserialize(markdown),
 	});
 
+	useEffect(() => {
+		localStorage.setItem(STORAGE_KEY, markdown);
+	}, [markdown]);
+
+	useEffect(() => {
+		const value = editor
+			.getApi(MarkdownPlugin)
+			.markdown.deserialize(debouncedMarkdown);
+		editor.tf.reset();
+		editor.tf.setValue(value);
+	}, [debouncedMarkdown, editor]);
+
 	return (
-		<TooltipProvider>
-			<div className="flex h-screen flex-col">
-				<Plate
-					editor={editor}
-					onChange={({ value }) => {
-						localStorage.setItem(
-							"installation-react-demo",
-							JSON.stringify(value),
-						);
-					}}
-				>
-					<FixedToolbar className="flex justify-start gap-1 rounded-t-lg">
-						<ToolbarButton onClick={() => editor.tf.h1.toggle()}>
-							H1
-						</ToolbarButton>
-						<ToolbarButton onClick={() => editor.tf.h2.toggle()}>
-							H2
-						</ToolbarButton>
-						<ToolbarButton onClick={() => editor.tf.h3.toggle()}>
-							H3
-						</ToolbarButton>
-						<ToolbarButton onClick={() => editor.tf.blockquote.toggle()}>
-							Quote
-						</ToolbarButton>
-						<MarkToolbarButton nodeType="bold" tooltip="Bold (⌘+B)">
-							B
-						</MarkToolbarButton>
-						<MarkToolbarButton nodeType="italic" tooltip="Italic (⌘+I)">
-							I
-						</MarkToolbarButton>
-						<MarkToolbarButton nodeType="underline" tooltip="Underline (⌘+U)">
-							U
-						</MarkToolbarButton>
-						<div className="flex-1" />
-						<ToolbarButton
-							className="px-2"
-							onClick={() => setShowPdf((prev) => !prev)}
-						>
-							{showPdf ? "Hide PDF" : "Preview PDF"}
-						</ToolbarButton>
-						<ToolbarButton
-							className="px-2"
-							onClick={() => editor.tf.setValue(initialValue)}
-						>
-							Reset
-						</ToolbarButton>
-					</FixedToolbar>
-					<div className="flex flex-1 overflow-hidden">
-						<EditorContainer className={showPdf ? "w-1/2" : "w-full"}>
-							<Editor placeholder="Type your amazing content here..." />
-						</EditorContainer>
-						{showPdf && (
-							<div className="w-1/2 border-l">
-								<PDFViewer className="size-full" showToolbar>
-									<MyDocument />
-								</PDFViewer>
-							</div>
-						)}
-					</div>
-				</Plate>
+		<div className="flex h-screen flex-col">
+			<div className="flex flex-1 overflow-hidden">
+				<div className="flex w-1/2 flex-col border-r">
+					<div className="border-b px-4 py-2 text-sm font-medium">Markdown</div>
+					<textarea
+						className="flex-1 resize-none bg-muted/30 p-4 font-mono text-sm outline-none"
+						value={markdown}
+						onChange={(event) => setMarkdown(event.target.value)}
+						placeholder="Type Markdown here..."
+					/>
+				</div>
+				<div className="flex w-1/2 flex-col">
+					<div className="border-b px-4 py-2 text-sm font-medium">Preview</div>
+					<EditorContainer className="flex-1">
+						<Plate editor={editor}>
+							<Editor placeholder="Rendered Markdown will appear here..." />
+						</Plate>
+					</EditorContainer>
+				</div>
 			</div>
-		</TooltipProvider>
+		</div>
 	);
 }
