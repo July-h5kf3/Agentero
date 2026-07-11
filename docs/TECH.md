@@ -117,7 +117,7 @@
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
-- **解析层**（`liteparse`）：在 Rust 端提取 PDF 文本内容，用于生成 `source/PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
+- **解析层**（`liteparse`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 
 > MVP 阅读器以审阅和定位为主，不实现完整批注系统。
@@ -206,6 +206,7 @@ src-tauri/src/
     vault.rs
     paper.rs
     note.rs
+    annotation.rs  # 标注/highlights
     graph.rs
     agent.rs
     candidate.rs   # 候选论文/检索结果
@@ -225,17 +226,18 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 | 维度 | Tauri Store | SQLite 索引 |
 |---|---|---|
-| 数据类型 | 用户配置、最近 Vault 列表、API Key、UI 状态 | 论文元数据、标签、全文检索索引、双链图缓存 |
+| 数据类型 | 用户配置、最近 Vault 列表、API Key、UI 状态 | 论文元数据、标签、全文检索、双链图、标注坐标缓存 |
 | 数据模型 | Key-Value | 关系表 + FTS |
 | 典型容量 | 几十到几百条记录 | 可扩展到数万条论文与链接 |
 | 查询能力 | 按 key 读取，不适合过滤/聚合 | 支持按作者、年份、标签、关键词过滤，支持复杂查询 |
-| 事实来源 | 是（配置类数据无其他来源） | 否，只能从 `PAPERS.md` / `NOTES.md` / 双链重建 |
+| 事实来源 | 是（配置类数据无其他来源） | 否，只能从 `metadata.json` / `NOTES.md` / `highlights.md` / 双链重建 |
 | 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/cache.sqlite` 或应用缓存目录 |
 | 损坏处理 | 丢失后用户重新配置 | 删除后可从 Markdown 自动重建 |
 
 **使用原则**：
 - Tauri Store 只存配置和机密，不存论文元数据。
-- SQLite 是查询缓存/索引，任何写入 SQLite 的数据必须能从 Markdown 重新生成。
+- 每篇论文的元数据事实来源是 `papers/<id>/metadata.json`；`PAPERS.md`、`library.bib`、SQLite 都是它的派生投影。
+- SQLite 是查询缓存/索引，遵守三条纪律：可整删重建、写入 file-first（先写 `metadata.json`/Markdown 再更新索引）、冲突时以文件为准并触发重索引。
 - Agent 路由、搜索、图谱可先读 SQLite，但最终引用和展示必须落回本地文件路径。
 
 ## 5. 核心模块搭配与数据流
@@ -262,9 +264,9 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → Rust: 归一化为标准 arXiv ID
   → Rust: 请求 arXiv API (http://export.arxiv.org/api/query)
   → Rust: 并行下载 LaTeX source / HTML / PDF（按优先级），均存入 `papers/<id>/source/`
-  → Rust: 若无 LaTeX source 或需要可读结构化正文，生成 `papers/<id>/source/PAPER.md`（LaTeX/HTML/PDF → Markdown）
-  → Rust: 调用 Agent 生成 `papers/<id>/NOTES.md`（三段论结构）
-  → Rust: 更新 PAPERS.md（事实来源），并同步写入本地 SQLite 索引（查询缓存）
+  → Rust: 若无 LaTeX source 或需要可读结构化正文，生成 `papers/<id>/PAPER.md`（LaTeX/HTML/PDF → Markdown）
+  → Rust: 调用 Agent 生成 `papers/<id>/NOTES.md`（三段论结构），并创建空的 `papers/<id>/highlights.md`
+  → Rust: 写入 `papers/<id>/metadata.json` 并更新 PAPERS.md（派生索引）与 library.bib，同步刷新 `.motif/cache.sqlite`（查询缓存）
   → Frontend: 展示进度、成功、失败原因
   → Frontend: 自动打开 NOTES.md 供用户审阅
 ```
@@ -278,7 +280,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 **PAPER.md 生成策略**：
 - `papers/<id>/source/` 始终存在，LaTeX source、PDF、HTML 均下载到该目录。
 - Agent 优先读取 `source/` 中的 `.tex` 原始源文件。
-- 仅在无 LaTeX source 或 Agent/用户需要统一可读格式时，按需生成 `papers/<id>/source/PAPER.md`：
+- 仅在无 LaTeX source 或 Agent/用户需要统一可读格式时，按需生成 `papers/<id>/PAPER.md`：
   - 有 LaTeX source 时，通过 pandoc 或轻量 LaTeX→Markdown 转换保留章节、公式、表格。
   - 无 LaTeX source 时，次选 arXiv HTML 实验版，解析 DOM 转 Markdown。
   - 兜底使用 `liteparse` 进行 PDF 文本提取（支持 Markdown/JSON/Text 输出，内置 OCR），并明确标记质量。
@@ -312,7 +314,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 - **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`。
 - **节点类型**：`paper`、`note`、`concept`。
-- **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_source`（论文→source/PAPER.md）。
+- **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_body`（论文→PAPER.md）、`has_highlight`（论文→highlights）。
 - **前端渲染**：React Flow 加载节点/边，点击节点调用 Rust 打开对应文件。
 
 ### 5.6 Agent 工作流
@@ -330,7 +332,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）** 协议，Rust 端通过
 用户选择流程（总结/问答/Related Work）
   → Rust: 通过 ACP 创建/复用 session
   → Rust: 注入 AGENTS.md 作为系统提示约束
-  → Rust: 按 PAPERS.md → NOTES.md → source/PAPER.md 顺序读取上下文，优先使用 `source/` 中的原始源文件
+  → Rust: 按 AGENTS.md → PAPERS.md → NOTES.md → highlights.md → PAPER.md → source/ 顺序渐进式读取上下文，仅在需要时逐层下钻
   → Rust: 通过 ACP session.prompt() 发送请求
   → Rust: 接收 agent 响应（流式/完整）
   → Rust: 返回结果 + 读取过的文件路径列表
@@ -504,7 +506,7 @@ tempfile = "3"
 | Roadmap 版本 | 技术重点 |
 |---|---|
 | V0.1 | 完成 Tauri + React 工作台；接入 `fs`、`dialog`、`store`；实现 Vault 初始化与文件树。 |
-| V0.2 | 实现 arXiv importer；source/PAPER.md / NOTES.md 生成；PAPERS.md 更新。 |
+| V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
 | V0.3 | 接入 ACP 协议 + 内置 opencode agent；Agent 工作流与读取路径回显；临时文件确认机制。 |
 | V0.4 | 双链解析、反链面板、React Flow 图谱。 |
 | V0.5 | 抽象 `Importer` trait；预留 PDF/DOI/BibTeX 扩展点。 |
@@ -514,10 +516,10 @@ tempfile = "3"
 
 | 风险 | 对策 |
 |---|---|
-| arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 `source/PAPER.md` 中标记来源质量。 |
+| arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 `metadata.json` 中标记 `body_source`/`body_quality`。 |
 | Agent 输出破坏用户笔记 | 所有写入先走临时文件，用户确认后再覆盖；NOTES.md 用户修改部分优先保留。 |
 | 文件索引性能差 | SQLite 缓存元数据与双链；增量索引，仅在 Vault 变化时重建受影响文件。 |
-| SQLite 索引损坏或过期 | 索引只能从 Markdown 重建；启动时校验版本，异常时全量重建。 |
+| SQLite 索引损坏或过期 | 索引只能从 `metadata.json` 与 Markdown 重建；启动时校验版本，异常时全量重建。 |
 | iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |
 | 跨平台 UI 差异大 | 核心组件复用，布局通过平台适配层切换。 |
 

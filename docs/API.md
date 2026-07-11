@@ -364,7 +364,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 {
   arxiv_id: string;
   options?: {
-    generate_paper_md?: boolean; // 是否强制生成 source/PAPER.md
+    generate_paper_md?: boolean; // 是否强制生成 PAPER.md
     overwrite?: boolean; // 是否覆盖已有目录，默认 false
   };
 }
@@ -383,11 +383,11 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 异步任务，通过 `arxiv:progress` / `arxiv:completed` / `arxiv:failed` 事件推送结果。
-  - 创建 `papers/<id>/` 与 `papers/<id>/source/`。
+  - 创建 `papers/<id>/` 与 `papers/<id>/source/`，写入 `metadata.json`（元数据事实来源）。
   - 下载 LaTeX source、PDF、HTML 到 `source/`。
-  - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/source/PAPER.md`。
-  - 调用 Agent 生成 `papers/<id>/NOTES.md`。
-  - 更新 `PAPERS.md` 与 SQLite 索引。
+  - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/PAPER.md`。
+  - 调用 Agent 生成 `papers/<id>/NOTES.md`，并创建空的 `papers/<id>/highlights.md`。
+  - 更新 `PAPERS.md`（派生索引）与 `library.bib`，刷新 `.motif/cache.sqlite`。
 
 
 ### 3.4 论文
@@ -697,7 +697,8 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - `VaultInfo` / `RecentVault`
 - `FileNode`
-- `Paper`
+- `Paper` / `PaperMetadata`
+- `Highlight`
 - `ArxivCandidate` / `ArxivImportResult`
 - `AgentSession` / `AgentResult`
 - `GraphNode` / `GraphEdge` / `Backlink`
@@ -716,5 +717,5 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 后续扩展：
 - `importer:import` 统一来源入口。
 - `search:full_text` 本地全文搜索。
-- `reader:annotations` PDF 批注读写。
+- `reader:annotations` 标注（`highlights.md`）读写。
 - `sync:*` 多设备同步（远期）。

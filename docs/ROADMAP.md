@@ -38,19 +38,19 @@
 - 输入分类与意图解析：规则识别精确 ID/URL，Agent 处理模糊输入。
 - Agent 检索 arXiv 候选论文并返回列表供用户确认（单选/多选）。
 - 获取论文元数据。
-- 创建 `papers/<arxiv-id>/`。
+- 创建 `papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey），写入 `metadata.json`。
 - 获取 LaTeX source / HTML / PDF 资源，source 保存到 `source/`。
-- 仅在无 LaTeX source 或需要可读结构化正文时生成 `source/PAPER.md`。
-- 生成默认结构的 `NOTES.md`。
-- 更新 `PAPERS.md`（事实来源），并同步写入 SQLite 索引（查询缓存）。
+- 仅在无 LaTeX source 或需要可读结构化正文时生成 `PAPER.md`。
+- 生成默认结构的 `NOTES.md`，并创建空的 `highlights.md`。
+- 更新 `PAPERS.md`（派生索引）与 `library.bib`，并同步刷新 `.motif/cache.sqlite`（查询缓存）。
 - 在 UI 中展示入库进度、成功结果和失败原因。
 
 验收标准：
 
 - 输入 `1706.03762` 后能生成对应论文目录和核心 Markdown 文件。
 - 输入一段描述或关键词后，Agent 能返回候选论文列表，用户确认后完成入库。
-- 连续入库 3 篇论文后，`PAPERS.md` 有 3 条有效索引，SQLite 索引可从中重建。
-- 有 LaTeX source 的论文优先保留 `.tex` 源文件，`source/PAPER.md` 为可选生成。
+- 连续入库 3 篇论文后，`PAPERS.md` 有 3 条有效索引，SQLite 索引可从各篇 `metadata.json` 重建。
+- 有 LaTeX source 的论文优先保留 `.tex` 源文件，`PAPER.md` 为可选生成。
 - 重复入库时不会破坏用户已修改的 `NOTES.md`。
 
 ## V0.3 Agent 工作流
@@ -156,7 +156,7 @@
 
 - 每个版本都必须保持 Vault 可被外部编辑器打开。
 - 每个版本都必须避免覆盖用户手写笔记。
-- 新 importer 不得改变已存在的 `PAPERS.md / NOTES.md` 语义；`source/PAPER.md` 作为派生文件可随时重建。
-- SQLite 索引损坏时必须能从 `PAPERS.md`、`NOTES.md` 和双链自动重建。
+- 新 importer 不得改变已存在的 `PAPERS.md / NOTES.md` 语义；`PAPER.md` 作为派生文件可随时重建。
+- SQLite 索引损坏时必须能从 `metadata.json`、`NOTES.md` 和双链自动重建。
 - 图谱和搜索可以使用缓存，但缓存损坏时必须能从 Markdown 重建。
 - Agent 功能失败时必须保留可读错误信息和重试入口。
