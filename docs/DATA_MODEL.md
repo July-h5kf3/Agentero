@@ -62,7 +62,7 @@ motif-vault/
     └── config.json        #   库级设置(非机密)
 ```
 
-> ID 方案:arxiv 论文用标准 arXiv ID 作为目录名;非 arxiv 来源用 citekey(如 `vaswani2017attention`,冲突时追加后缀)。目录名即论文唯一标识。
+> ID 方案:arxiv 论文用标准 arXiv ID 作为目录名;非 arxiv 来源(如本地 PDF)用 citekey 作为目录名。citekey 由「第一作者姓氏 + 年份 + 标题首个实词」小写拼接生成(如 `vaswani2017attention`),冲突时追加字母后缀(`…a` / `…b`)。目录名即论文唯一标识。
 
 ## 2. 核心文件约定
 
@@ -193,6 +193,12 @@ interface PaperMetadata {
   updated_at: string; // ISO 8601
 }
 ```
+
+**元数据来源**:
+
+- **arxiv**:由 arXiv API 提供权威字段(标题 / 作者 / 年份 / 摘要 / arxiv_id)。
+- **pdf**:先从 PDF 提取 DOI / arXiv ID,命中则查询 Crossref / arXiv 获取权威字段;未命中或失败时由 Agent 从正文抽取候选,最终一律经用户在入库前确认面板校对后写入。
+- `type='pdf'` 时 `body_source` 为 `pdf`(文本层)或 `ocr`(扫描件),`body_quality` 由解析后端与结果决定:MinerU → high,liteparse 文本 → medium,OCR → low。
 
 ### 3.4 论文运行时对象 (Paper)
 

@@ -97,15 +97,17 @@
 - 图谱能从 Markdown 重建，不依赖手写数据库。
 - 20 个节点以内交互流畅。
 
-## V0.5 Importer 架构与扩展入口
+## V0.5 Importer 架构与本地 PDF 入库
 
-目标：保持 arXiv 优先的产品焦点，同时为后续 PDF、HTML、DOI、Zotero/BibTeX 做架构准备。
+目标：抽象 Importer 接口，落地 arXiv 与本地 PDF 两个 importer，并为后续 HTML、DOI、Zotero/BibTeX 做架构准备。
 
 关键交付：
 
 - 抽象 importer 接口。
 - 将 arXiv 入库实现迁移为第一个 importer。
-- 预留本地 PDF importer。
+- 实现本地 PDF importer：文件选择/拖拽/批量导入、citekey 生成与重复检测。
+- 可插拔 `PdfParser`：默认本地 liteparse，配置 MinerU API Key 后优先云端 MinerU，失败自动降级。
+- PDF 元数据混合获取：DOI/arXiv 标识符查询 Crossref/arXiv + Agent 正文抽取，入库前用户确认。
 - 预留本地 HTML importer。
 - 预留 BibTeX/Zotero importer。
 - 统一入库状态、错误类型和输出文件契约。
@@ -113,6 +115,8 @@
 验收标准：
 
 - arXiv importer 行为与 V0.2 保持兼容。
+- 导入本地 PDF 能生成 `papers/<citekey>/`（含必定生成的 `PAPER.md`）并进入笔记审阅。
+- 配置 MinerU API Key 后 PDF 默认走云端解析，未配置或失败时自动降级本地且不中断。
 - 新 importer 可以复用同一套输出结构。
 - UI 不需要为每种来源重写入库流程。
 
@@ -123,6 +127,7 @@
 - Zotero/BibTeX 批量导入。
 - 浏览器插件，一键收集网页和论文。
 - 完整 PDF 高亮、批注、摘录同步。
+- 远程 PDF 链接、DOI、任意网页入库。
 - 多 Agent 并行读论文和综合评估。
 - 论文引用关系自动抽取。
 - 作者、机构、会议关系图谱。
@@ -150,7 +155,7 @@
 
 ### Milestone E：来源可扩展
 
-包含 V0.5。完成后，产品可以稳妥扩展到 arXiv 以外的来源。
+包含 V0.5。完成后，产品在 arXiv 之外可稳妥导入本地 PDF，并为更多来源预留扩展点。
 
 ## 5. 风险控制
 

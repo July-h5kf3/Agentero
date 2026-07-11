@@ -18,7 +18,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 验证一个 Agent-first 的研究闭环：
 
-1. 用户输入 arXiv ID、URL、关键词、话题或一段描述。
+1. 用户输入 arXiv ID、URL、关键词、话题、一段描述，或直接导入本地 PDF 文件。
 2. 系统借助 Agent 能力解析输入意图、检索候选论文，并在需要时让用户确认目标论文；确认后优先拉取 tex 源文件，并保留 pdf、html 版本的链接。仅在无 tex 源或 Agent 明确需要可读结构化正文时才生成 `PAPER.md`。
 3. Agent完成粗读 生成结构化 `NOTES.md`，并更新全局 `PAPERS.md` 索引。
 
@@ -75,6 +75,17 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 更新根目录 `PAPERS.md`（派生索引）与 `library.bib`，并同步刷新 `.motif/cache.sqlite`（查询缓存）。
 - 对重复入库、网络失败、缺少 HTML/LaTeX、解析失败给出明确状态。
 
+#### 本地 PDF 入库
+
+- 支持从文件选择器选择或拖拽导入本地 PDF，支持一次批量导入多篇。
+- 通过统一的 Importer 抽象接入：arXiv 与本地 PDF 是首批两个 importer，共用同一套落盘结构与状态契约。
+- 采用可插拔 PDF 解析器（BYOK）：默认使用本地嵌入式解析器（离线、开箱即用）；用户在设置中配置 MinerU API Key 后，默认优先云端 MinerU 以获得更高解析质量，失败时自动降级回本地解析器。
+- 元数据混合获取 + 入库前确认：先从 PDF 提取 DOI / arXiv ID 并查询 Crossref / arXiv 获取权威元数据；无标识符或查询失败时由 Agent 从正文抽取候选；入库前弹出确认面板供用户校对、修正标题、作者、年份、摘要与标签。
+- 为每篇创建 `papers/<citekey>/` 目录（citekey 由作者、年份、标题派生，冲突时追加后缀），写入 `metadata.json`（`type` 为 `pdf`）。
+- 原始 PDF 保存到 `source/`；因无 LaTeX source，PDF 来源必定生成 `PAPER.md` 作为唯一可读正文，并在 `metadata.json` 记录 `body_source`（`pdf`/`ocr`）与 `body_quality`。
+- 生成 `NOTES.md` 与空的 `highlights.md`，更新 `PAPERS.md`、`library.bib` 与 `.motif/cache.sqlite`。
+- 使用云端 MinerU 前需明确提示用户 PDF 将上传至第三方服务；默认本地解析不外传数据。
+
 #### Markdown 工作台
 
 - 左侧：Vault 文件树。
@@ -122,7 +133,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 云同步、多人协作、权限管理。
 - 浏览器插件。
 - 移动端和平板端。
-- 通用 DOI、任意网页、任意 PDF 链接入库。
+- 通用 DOI、任意网页、远程 PDF 链接入库（本地 PDF 文件入库已纳入 P0）。
 - 完整 PDF 高亮批注同步。
 - 高级 BibTeX 清洗和引用格式管理。
 - 多 Agent 可视化编排。
@@ -194,7 +205,7 @@ motif-vault/
 
 #### `PAPER.md`（L3，派生）
 
-位于 `papers/<id>/PAPER.md`（在论文目录根部，不在 `source/` 内），面向 Agent 阅读的统一可读正文，保留章节、公式、表格、引用等结构信息，降低 PDF 排版噪音。`source/` 是异构原始归档，`PAPER.md` 提供同构可读出口；正文来源与质量记录在 `metadata.json` 的 `body_source`/`body_quality`。当 `source/` 中已存在 LaTeX 源文件时，`PAPER.md` 为可选生成项。
+位于 `papers/<id>/PAPER.md`（在论文目录根部，不在 `source/` 内），面向 Agent 阅读的统一可读正文，保留章节、公式、表格、引用等结构信息，降低 PDF 排版噪音。`source/` 是异构原始归档，`PAPER.md` 提供同构可读出口；正文来源与质量记录在 `metadata.json` 的 `body_source`/`body_quality`。当 `source/` 中已存在 LaTeX 源文件时，`PAPER.md` 为可选生成项；对无 LaTeX source 的本地 PDF 来源，`PAPER.md` 为必定生成项，是该篇唯一的结构化可读正文。
 
 #### `AGENTS.md`（L0，事实来源）
 
@@ -232,7 +243,19 @@ Vault 内的 Agent 行为规范，至少包含：
 10. 系统更新 `PAPERS.md`（派生索引）与 `library.bib`，并同步刷新 `.motif/cache.sqlite`（查询缓存）。
 11. 用户进入 `NOTES.md` 审阅和修订。
 
-### 6.3 基于本地库问答
+### 6.3 本地 PDF 入库
+
+1. 用户通过“导入 PDF”按钮或拖拽，选择一篇或多篇本地 PDF。
+2. 系统对每篇 PDF 做轻量解析，提取首页文本并识别 DOI / arXiv ID。
+3. 命中标识符时查询 Crossref / arXiv 获取权威元数据；未命中或失败时由 Agent 从正文抽取候选元数据。
+4. 系统弹出确认面板，展示标题、作者、年份、摘要、标签，用户校对并修正。
+5. 系统据此生成 citekey，检测重复（DOI / 标题指纹），创建 `papers/<citekey>/` 并写入 `metadata.json`。
+6. 原始 PDF 保存到 `source/`；按当前解析器（默认本地，配置 Key 后优先 MinerU）全文解析生成 `PAPER.md` 与 `assets/`。
+7. Agent 生成 `NOTES.md`，创建空的 `highlights.md`。
+8. 系统更新 `PAPERS.md`、`library.bib` 与 `.motif/cache.sqlite`。
+9. 用户进入 `NOTES.md` 审阅和修订。
+
+### 6.4 基于本地库问答
 
 1. 用户在 Agent 面板输入问题。
 2. Agent 先读取 `PAPERS.md` 锁定候选论文。
@@ -241,7 +264,7 @@ Vault 内的 Agent 行为规范，至少包含：
 5. Agent 输出答案。
 6. 答案末尾展示读取过的文件路径。
 
-### 6.4 双链组织
+### 6.5 双链组织
 
 1. 用户在笔记里输入 `[[Concept]]`。
 2. 系统解析并展示可点击链接。
@@ -261,6 +284,8 @@ Vault 内的 Agent 行为规范，至少包含：
 
 - 创建新 Vault 后，目录结构符合 PRD 中的 Vault 结构。
 - 输入 `1706.03762` 后，生成对应 `papers/1706.03762/metadata.json`、`NOTES.md` 与 `PAPER.md`（无 tex 源时）。
+- 导入一篇本地 PDF 后，生成 `papers/<citekey>/` 目录，包含 `metadata.json`（`type=pdf`）、必定生成的 `PAPER.md`、`NOTES.md`，以及 `source/` 中的原始 PDF。
+- 配置 MinerU API Key 后导入 PDF 默认走云端解析；未配置或云端失败时自动降级为本地解析，且入库流程不中断。
 - 输入关键词或一段研究描述后，Agent 能检索并返回候选论文，用户确认后完成入库。
 - 连续入库 3 篇 arXiv 论文后，`PAPERS.md` 至少包含 3 条索引。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
@@ -272,6 +297,8 @@ Vault 内的 Agent 行为规范，至少包含：
 ## 9. 风险与对策
 
 - arXiv HTML/LaTeX 可用性不稳定：优先采用 HTML/LaTeX，失败时降级到 PDF 解析，并明确标记质量。
+- 本地 PDF 解析质量参差：默认本地解析保证可用，配置后优先云端 MinerU 提质，失败自动降级，并在 `metadata.json` 标记 `body_quality`。
+- 云端 MinerU 涉及数据外传：默认本地解析不外传；启用 MinerU 前明确提示 PDF 将上传第三方服务，由用户自行决定。
 - Agent 生成质量不稳定：把 `AGENTS.md` 规范作为强约束，并让用户能编辑最终 Markdown。
 - 范围膨胀成 Zotero 替代品：MVP 只验证 Agent-first 入库、笔记、问答、双链、图谱闭环。
 - 图谱成为装饰功能：图谱必须从真实 Markdown 双链和论文索引生成，并支持打开文件。

@@ -45,6 +45,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `arxiv:progress` | arXiv 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
 | `arxiv:completed` | 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
 | `arxiv:failed` | 入库失败 | `{ job_id: string, error: AppError }` |
+| `pdf:progress` | 本地 PDF 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
+| `pdf:completed` | PDF 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
+| `pdf:failed` | PDF 入库失败 | `{ job_id: string, error: AppError }` |
 | `agent:stream` | Agent 流式输出 | `{ session_id: string, chunk: string }` |
 | `agent:tool_call` | Agent 调用 tool | `{ session_id: string, tool: string, args: object }` |
 | `agent:completed` | Agent 回答完成 | `{ session_id: string, result: AgentResult }` |
@@ -390,7 +393,77 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
   - 更新 `PAPERS.md`（派生索引）与 `library.bib`，刷新 `.motif/cache.sqlite`。
 
 
-### 3.4 论文
+### 3.4 本地 PDF 入库
+
+本地 PDF 通过统一 Importer 接入，与 arXiv 共用 `papers/<id>/` 输出结构。入库分两步：先解析并混合获取元数据供用户确认，再正式入库。
+
+#### `pdf:prepare`
+
+对本地 PDF 做轻量解析并混合获取候选元数据，供入库前确认，不落盘。
+
+- **参数**
+
+```ts
+{
+  paths: string[]; // 本地 PDF 绝对路径，可批量
+}
+```
+
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    drafts: PdfMetadataDraft[]; // 每篇一个候选元数据草稿
+  };
+}
+```
+
+- **行为**
+  - 复制 PDF 到临时目录，提取首页文本并识别 DOI / arXiv ID。
+  - 命中标识符时查询 Crossref / arXiv 获取权威元数据；未命中或失败时由 Agent 从正文抽取候选。
+  - 生成建议 citekey，并标记与已入库论文的重复情况。
+
+#### `pdf:import`
+
+根据用户确认后的元数据正式入库。
+
+- **参数**
+
+```ts
+{
+  items: {
+    tmp_id: string;             // 对应 pdf:prepare 返回的草稿
+    metadata: PdfMetadataDraft; // 用户校对后的元数据
+  }[];
+  options?: {
+    parser?: 'auto' | 'liteparse' | 'mineru'; // 默认 auto：配置并启用则 mineru，否则 liteparse
+    overwrite?: boolean;        // 默认 false
+  };
+}
+```
+
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    job_id: string;
+  };
+}
+```
+
+- **行为**
+  - 异步任务，通过 `pdf:progress` / `pdf:completed` / `pdf:failed` 事件推送结果。
+  - 生成 citekey，落位 `papers/<citekey>/`，写入 `metadata.json`（`type=pdf`）。
+  - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，记录 `body_source` / `body_quality`。
+  - 调用 Agent 生成 `NOTES.md`，创建空 `highlights.md`。
+  - 更新 `PAPERS.md`、`library.bib`，刷新 `.motif/cache.sqlite`。
+  - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
+
+### 3.5 论文
 
 论文数据由 arXiv 入库流程生成，也可通过本组命令查询与列表。
 
@@ -444,7 +517,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 }
 ```
 
-### 3.5 Agent 工作流
+### 3.6 Agent 工作流
 
 #### `agent:list_sessions`
 
@@ -568,7 +641,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **返回**：`{ ok: true; data: null }`
 
-### 3.6 双链与图谱
+### 3.7 双链与图谱
 
 #### `graph:get_backlinks`
 
@@ -645,7 +718,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 }
 ```
 
-### 3.7 配置
+### 3.8 配置
 
 #### `config:get`
 
@@ -689,6 +762,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - **常用 key**
   - `agent.command`：Agent 启动命令，默认 `opencode acp`。
   - `agent.model`：默认模型。
+  - `parser.pdf.backend`：PDF 解析后端，`liteparse`（默认）或 `mineru`。
+  - `parser.mineru.api_key`：云端 MinerU API Key（BYOK，启用后 PDF 优先云端解析）。
+  - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
 ## 4. 数据模型
@@ -700,6 +776,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - `Paper` / `PaperMetadata`
 - `Highlight`
 - `ArxivCandidate` / `ArxivImportResult`
+- `PdfMetadataDraft` / `PdfImportResult`
 - `AgentSession` / `AgentResult`
 - `GraphNode` / `GraphEdge` / `Backlink`
 - `AppError`
@@ -712,7 +789,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | V0.2 | 增加 `arxiv:*`、`paper:*` 命令与异步任务事件；定义 `Paper` 数据结构。 |
 | V0.3 | 增加 `agent:*` 命令。 |
 | V0.4 | 增加 `graph:*` 命令。 |
-| V0.5 | 抽象 importer，新增 `importer:*` 命令，arxiv 作为默认 importer。 |
+| V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
 
 后续扩展：
 - `importer:import` 统一来源入口。

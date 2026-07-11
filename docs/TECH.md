@@ -53,7 +53,8 @@
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
 | 图谱 | 可视化组件（React Flow） | 输出节点/边数据 |
-| PDF/HTML 阅读 | react-pdf 渲染 | liteparse 解析文本、提供本地文件路径/URL |
+| PDF/HTML 阅读 | react-pdf 渲染 | 可插拔解析器提取文本、提供本地文件路径/URL |
+| 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
 | Agent 调用 | 展示对话与结果 | 通过 ACP 协议与 Agent 通信、编排 prompt、写入文件 |
 | 配置/最近 Vault | 读取与展示 | 使用 Tauri Store 持久化 |
@@ -111,7 +112,7 @@
 | 类型 | 方案 |
 |---|---|
 | PDF 渲染（前端） | `react-pdf`（基于 PDF.js 的 React 组件封装），提供页面渲染、缩放、翻页 |
-| PDF 解析（Rust） | `liteparse`（LlamaIndex 开源 Rust 解析器），提取结构化文本 + bounding box，支持 Markdown/JSON/Text 输出 |
+| PDF 解析（Rust） | 可插拔 `PdfParser` 后端：默认本地 `liteparse`（LlamaIndex 开源 Rust 解析器，结构化文本 + bounding box + OCR），配置 API Key 后可选云端 MinerU；输出 Markdown/JSON/Text |
 | HTML（arXiv HTML）| Tauri Webview 内嵌 `iframe` 或独立 Webview 窗口 |
 | 本地 HTML | 通过 Tauri `convertFileSrc` 转换为安全 URL 后加载 |
 
@@ -119,6 +120,13 @@
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
+
+**可插拔 PDF 解析器（`PdfParser`）**：
+- 抽象 `PdfParser` trait，提供两个后端：本地 `LiteparseBackend`（默认，离线开箱即用）与云端 `MineruCloudBackend`（BYOK，配置 MinerU API Key 后启用）。
+- 选择策略：配置并启用 MinerU 时优先云端（解析质量更高），失败自动降级本地 `liteparse`；未配置时始终本地。
+- 质量映射：MinerU → `body_quality=high`；liteparse 文本层 → `medium`；扫描件 OCR → `low`，写入 `metadata.json`。
+- 隐私：云端 MinerU 需上传 PDF，首次启用时提示；默认本地解析不外传数据。
+- arXiv 入库在无 LaTeX/HTML 时复用同一 `PdfParser` 做兜底解析。
 
 > MVP 阅读器以审阅和定位为主，不实现完整批注系统。
 
@@ -166,7 +174,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `tauri` / `tauri-build` | 应用框架 |
 | `serde` / `serde_json` | 序列化与 IPC |
 | `agent-client-protocol` | ACP 协议 Rust SDK，通过 stdio JSON-RPC 与 Agent 通信 |
-| `reqwest` + `tokio` | 异步 HTTP，抓取 arXiv 资源 |
+| `reqwest` + `tokio` | 异步 HTTP：抓取 arXiv 资源、查询 Crossref、调用云端 MinerU API |
 | `pulldown-cmark` 或 `comrak` | Markdown 解析、提取双链、标题、frontmatter |
 | `regex` | 双链、arXiv ID 解析 |
 | `thiserror` / `anyhow` | 错误处理 |
@@ -174,7 +182,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `dirs` | 获取系统配置/缓存目录 |
 | `tempfile` | Agent 生成内容临时文件，确认后写入 |
 | `walkdir` | 遍历 Vault 构建索引 |
-| `liteparse` | PDF/文档解析：提取结构化文本 + bounding box，输出 Markdown/JSON/Text，内置 OCR |
+| `liteparse` | 默认本地 PDF 解析后端：提取结构化文本 + bounding box，输出 Markdown/JSON/Text，内置 OCR |
 | `rusqlite` | 本地 SQLite 索引，缓存论文元数据与全文检索 |
 
 ### 4.3 核心 Rust 模块设计
@@ -188,13 +196,22 @@ src-tauri/src/
     file.rs        # 文件读写、监听
     input.rs       # 输入分类与候选论文查询
     arxiv.rs       # arXiv 入库命令
+    pdf.rs         # 本地 PDF 入库：元数据预解析与确认、入库任务
     agent.rs       # Agent 流程触发与状态
     graph.rs       # 图谱节点/边查询
   services/        # 业务逻辑
     vault.rs       # Vault 初始化与校验
     fs.rs          # 安全文件操作（路径白名单）
     input.rs       # 输入分类、意图解析、候选检索
-    arxiv.rs       # arXiv HTML/LaTeX/PDF 抓取与解析
+    importer/      # 入库来源抽象（统一落盘结构与状态契约）
+      mod.rs       #   Importer trait：import/status/输出文件契约
+      arxiv.rs     #   arXiv importer：HTML/LaTeX/PDF 抓取与解析
+      pdf.rs       #   本地 PDF importer：归档、解析、生成 PAPER.md
+    parser/        # PDF 解析后端
+      mod.rs       #   PdfParser trait：parse(pdf) -> Markdown/bbox
+      liteparse.rs #   本地嵌入式后端（默认，含 OCR）
+      mineru.rs    #   云端 MinerU 后端（BYOK，可选）
+    metadata.rs    # 元数据解析：DOI/arXiv 识别 + Crossref/arXiv 查询 + Agent 兜底 + citekey
     markdown.rs    # Markdown 解析、双链提取、索引构建
     agent/         # Agent 编排（基于 ACP 协议）
       acp.rs       # ACP client 封装：spawn agent 子进程、stdio JSON-RPC 通信
@@ -210,6 +227,7 @@ src-tauri/src/
     graph.rs
     agent.rs
     candidate.rs   # 候选论文/检索结果
+    importer.rs    # 入库状态、PDF 元数据草稿、解析器配置
   error.rs         # 应用错误类型
 ```
 
@@ -286,7 +304,30 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   - 兜底使用 `liteparse` 进行 PDF 文本提取（支持 Markdown/JSON/Text 输出，内置 OCR），并明确标记质量。
 - `PAPER.md` 是派生文件，可被删除或重建；`source/` 中的原始文件才是归档事实来源。
 
-### 5.3 Markdown 工作台
+### 5.3 本地 PDF 入库闭环
+
+```text
+用户选择或拖拽本地 PDF（可批量）
+  → Rust: 复制原始 PDF 到临时目录 <tmp>/source/original.pdf（先入临时，确认后落位）
+  → Rust: 轻量解析首页文本，正则识别 DOI / arXiv ID
+     ├─ 命中 → 查询 Crossref(DOI) / arXiv API 获取权威元数据
+     └─ 未命中/失败 → Agent 从首页正文抽取候选元数据（标题/作者/年份/摘要）
+  → Frontend: 弹出确认面板，用户校对并修正元数据
+  → Rust: 生成 citekey（作者 + 年份 + 标题词，冲突加后缀），重复检测（DOI / 标题指纹）
+  → Rust: 临时目录落位为 papers/<citekey>/，写入 metadata.json（type=pdf）
+  → Rust: 用当前 PdfParser 全文解析（默认 liteparse；配置并启用则优先 MinerU，失败降级）
+          生成 papers/<citekey>/PAPER.md 与 assets/，记录 body_source / body_quality
+  → Rust: 调用 Agent 生成 NOTES.md（三段论），创建空的 highlights.md
+  → Rust: 更新 PAPERS.md（派生索引）与 library.bib，同步刷新 .motif/cache.sqlite
+  → Frontend: 展示进度、成功、失败原因；自动打开 NOTES.md
+```
+
+**与 arXiv 入库的差异**：
+- 目录名用 citekey 而非 arXiv ID；无 arXiv API 提供权威元数据，改由“标识符查询 + Agent 抽取 + 用户确认”混合获取。
+- 无 LaTeX source，`PAPER.md` 必定生成，是该篇唯一结构化可读正文。
+- 解析器可插拔：默认本地 `liteparse`，配置 MinerU API Key 后优先云端 MinerU，失败自动降级；arXiv 入库在缺 LaTeX/HTML 时复用同一 `PdfParser`。
+
+### 5.4 Markdown 工作台
 
 ```text
 文件树点击
@@ -302,7 +343,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → Frontend: 重建双链索引与图谱
 ```
 
-### 5.4 双链与反链
+### 5.5 双链与反链
 
 - **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
 - **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引。
@@ -310,14 +351,14 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 - **反链查询**：Rust 根据当前文件路径返回所有引用它的文件列表。
 - **缺失目标**：点击不存在的双链时弹出创建对话框，生成 `notes/<concept>.md`。
 
-### 5.5 关系图谱
+### 5.6 关系图谱
 
 - **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`。
 - **节点类型**：`paper`、`note`、`concept`。
 - **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_body`（论文→PAPER.md）、`has_highlight`（论文→highlights）。
 - **前端渲染**：React Flow 加载节点/边，点击节点调用 Rust 打开对应文件。
 
-### 5.6 Agent 工作流
+### 5.7 Agent 工作流
 
 Agent 层统一基于 **ACP（Agent Client Protocol）** 协议，Rust 端通过 `agent-client-protocol` crate 与 Agent 子进程进行 stdio JSON-RPC 通信。
 
@@ -350,7 +391,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）** 协议，Rust 端通过
 - 写入操作先写临时文件，用户确认后再移动到目标路径。
 - Agent 内部路由可先查 SQLite 索引提升性能，但最终读取与引用必须对应到本地 Markdown 或 source 文件路径。
 
-### 5.7 Agent 配置
+### 5.8 Agent 配置
 
 MVP 通过 `.env` 文件配置 Agent 连接信息，支持 BYOK（Bring Your Own Key）：
 
@@ -509,7 +550,7 @@ tempfile = "3"
 | V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
 | V0.3 | 接入 ACP 协议 + 内置 opencode agent；Agent 工作流与读取路径回显；临时文件确认机制。 |
 | V0.4 | 双链解析、反链面板、React Flow 图谱。 |
-| V0.5 | 抽象 `Importer` trait；预留 PDF/DOI/BibTeX 扩展点。 |
+| V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
 
 ## 10. 风险与技术对策
@@ -517,6 +558,7 @@ tempfile = "3"
 | 风险 | 对策 |
 |---|---|
 | arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 `metadata.json` 中标记 `body_source`/`body_quality`。 |
+| 云端 MinerU 不可用或数据敏感 | 默认本地 `liteparse` 解析不外传；MinerU 失败自动降级本地；启用前提示 PDF 将上传第三方。 |
 | Agent 输出破坏用户笔记 | 所有写入先走临时文件，用户确认后再覆盖；NOTES.md 用户修改部分优先保留。 |
 | 文件索引性能差 | SQLite 缓存元数据与双链；增量索引，仅在 Vault 变化时重建受影响文件。 |
 | SQLite 索引损坏或过期 | 索引只能从 `metadata.json` 与 Markdown 重建；启动时校验版本，异常时全量重建。 |
