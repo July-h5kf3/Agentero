@@ -8,7 +8,7 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
-import { MessageSquare } from "lucide-react";
+import { Bot, Link2, PanelLeft, PanelRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,6 +56,7 @@ import {
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 import {
 	type FileNode,
 	getDemoTextContent,
@@ -177,8 +178,14 @@ export default function App() {
 	const [htmlSrcUrl, setHtmlSrcUrl] = useState<string | null>(null);
 	/** NOTES.md for the current paper — shown on the right when viewing PDF/HTML */
 	const [paperNotes, setPaperNotes] = useState("");
-	/** Fourth column: ACP chat (⌘L). When open the layout has 4 panes. */
-	const [chatOpen, setChatOpen] = useState(false);
+	/**
+	 * Right sidebar (⌘L): Agent (default) or Backlinks.
+	 * Collapsed by default; top-bar icons open a tab.
+	 */
+	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
+		"agent",
+	);
 	const sidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLTextAreaElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
@@ -280,13 +287,35 @@ export default function App() {
 		}
 	}, [sidebarCollapsed, sidebarPanelRef]);
 
-	const toggleChat = useCallback(() => {
-		setChatOpen((open) => {
+	const toggleRightSidebar = useCallback(() => {
+		setRightSidebarOpen((open) => {
 			const next = !open;
-			if (next) chatInputFocusKey.current += 1;
+			if (next && rightSidebarTab === "agent") {
+				chatInputFocusKey.current += 1;
+			}
 			return next;
 		});
+	}, [rightSidebarTab]);
+
+	/** Open right sidebar on a tab (or switch tab if already open). */
+	const openRightTab = useCallback((tab: "agent" | "backlinks") => {
+		setRightSidebarTab(tab);
+		setRightSidebarOpen(true);
+		if (tab === "agent") {
+			chatInputFocusKey.current += 1;
+		}
 	}, []);
+
+	/** ⌘L — toggle right sidebar (defaults to agent). */
+	const toggleChat = useCallback(() => {
+		setRightSidebarOpen((open) => {
+			const next = !open;
+			if (next && rightSidebarTab === "agent") {
+				chatInputFocusKey.current += 1;
+			}
+			return next;
+		});
+	}, [rightSidebarTab]);
 
 	const expandSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
@@ -699,6 +728,122 @@ export default function App() {
 	return (
 		<WikiNavContext.Provider value={wikiNavValue}>
 			<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
+				{/*
+				  macOS title bar (traffic lights row): Tauri Overlay + hiddenTitle.
+				  Left: panel collapse after traffic lights; right: agent / backlinks / panel.
+				  Drag window via data-tauri-drag-region (empty middle).
+				*/}
+				{/*
+				  Title bar height must match trafficLightPosition math in tao:
+				  titleBarH ≈ closeButtonH(~14) + y(18) ≈ 32 → h-8
+				*/}
+				<header className="flex h-8 shrink-0 items-center border-b select-none">
+					{/* Native traffic lights: x=14, cluster ~54px wide */}
+					<div
+						className="w-[70px] shrink-0 self-stretch"
+						data-tauri-drag-region
+					/>
+					<TooltipProvider delayDuration={250}>
+						<div className="flex shrink-0 items-center gap-0.5 pr-1">
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										aria-label={
+											sidebarCollapsed
+												? "Show left sidebar"
+												: "Hide left sidebar"
+										}
+										aria-pressed={!sidebarCollapsed}
+										onClick={toggleSidebar}
+									>
+										<PanelLeft className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{sidebarCollapsed
+										? "Show sidebar (⌥⌘S)"
+										: "Hide sidebar (⌥⌘S)"}
+								</TooltipContent>
+							</Tooltip>
+						</div>
+						{/* Draggable empty middle of the title bar */}
+						<div
+							className="min-w-0 flex-1 self-stretch"
+							data-tauri-drag-region
+						/>
+						<div className="flex shrink-0 items-center gap-0.5 pr-2">
+							{rightSidebarOpen ? (
+								<>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label="Agent panel"
+												aria-pressed={rightSidebarTab === "agent"}
+												className={cn(
+													rightSidebarTab === "agent" &&
+														"bg-muted text-foreground",
+												)}
+												onClick={() => openRightTab("agent")}
+											>
+												<Bot className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">Agent</TooltipContent>
+									</Tooltip>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label="Backlinks panel"
+												aria-pressed={rightSidebarTab === "backlinks"}
+												className={cn(
+													rightSidebarTab === "backlinks" &&
+														"bg-muted text-foreground",
+												)}
+												onClick={() => openRightTab("backlinks")}
+											>
+												<Link2 className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">Backlinks</TooltipContent>
+									</Tooltip>
+								</>
+							) : null}
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										aria-label={
+											rightSidebarOpen
+												? "Hide right sidebar"
+												: "Show right sidebar"
+										}
+										aria-pressed={rightSidebarOpen}
+										onClick={toggleRightSidebar}
+									>
+										<PanelRight className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{rightSidebarOpen
+										? "Hide right sidebar (⌘L)"
+										: "Show right sidebar (⌘L)"}
+								</TooltipContent>
+							</Tooltip>
+						</div>
+					</TooltipProvider>
+				</header>
+
 				<ErrorBoundary label="workspace">
 					<ResizableGroup
 						orientation="horizontal"
@@ -796,13 +941,6 @@ export default function App() {
 										<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
 									</div>
 								) : null}
-								{selectedPath && isMarkdownPath(selectedPath) ? (
-									<BacklinksPanel
-										vaultPath={vaultPath}
-										selectedPath={selectedPath}
-										onOpenPath={handleOpenVaultRel}
-									/>
-								) : null}
 							</div>
 						</ResizablePanel>
 
@@ -810,62 +948,16 @@ export default function App() {
 
 						<ResizablePanel
 							id="preview"
-							defaultSize={chatOpen ? "30" : "40"}
+							defaultSize={rightSidebarOpen ? "30" : "40"}
 							minSize={200}
 							className="min-h-0 overflow-hidden"
 						>
-							{/* biome-ignore lint/a11y/useSemanticElements: preview holds a rich editor and cannot be a native <button> */}
 							<div
 								ref={previewPaneRef}
 								className="flex h-full min-h-0 flex-col overflow-hidden"
 								style={{ fontSize: editorFontSize }}
-								role="button"
-								tabIndex={0}
-								aria-label={
-									chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
-								}
-								onClick={(event) => {
-									const target = event.target as HTMLElement;
-									if (target.closest("button,a,input,textarea,select")) {
-										return;
-									}
-									if (window.getSelection()?.toString()) return;
-									toggleChat();
-								}}
-								onKeyDown={(event) => {
-									if (event.target !== event.currentTarget) return;
-									if (event.key !== "Enter" && event.key !== " ") return;
-									event.preventDefault();
-									toggleChat();
-								}}
 							>
-								<PaneHeader
-									trailing={
-										<TooltipProvider delayDuration={250}>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={
-															chatOpen
-																? "Hide chat sidebar"
-																: "Show chat sidebar"
-														}
-														aria-pressed={chatOpen}
-														onClick={toggleChat}
-													>
-														<MessageSquare className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
-												</TooltipContent>
-											</Tooltip>
-										</TooltipProvider>
-									}
-								>
+								<PaneHeader>
 									<span className="min-w-0 flex-1 font-medium text-sm">
 										{showNotesOnRight ? "Notes" : "Preview"}
 									</span>
@@ -898,23 +990,33 @@ export default function App() {
 							</div>
 						</ResizablePanel>
 
-						{/* Fourth column: ACP chat — only when ⌘L opens chat */}
-						{chatOpen ? <ResizableHandle /> : null}
-						{chatOpen ? (
+						{/* Right sidebar: Agent (default) or Backlinks */}
+						{rightSidebarOpen ? <ResizableHandle /> : null}
+						{rightSidebarOpen ? (
 							<ResizablePanel
-								id="chat"
+								id="right-sidebar"
 								defaultSize="28"
 								minSize={260}
 								maxSize={520}
 								className="min-h-0 overflow-hidden"
 							>
-								<AgentPanel
-									key={chatInputFocusKey.current}
-									vaultPath={vaultPath}
-									className="min-h-0 h-full"
-									title="Chat"
-									autoFocus
-								/>
+								{rightSidebarTab === "agent" ? (
+									<AgentPanel
+										key={chatInputFocusKey.current}
+										vaultPath={vaultPath}
+										className="min-h-0 h-full"
+										title="Agent"
+										autoFocus
+									/>
+								) : (
+									<BacklinksPanel
+										vaultPath={vaultPath}
+										selectedPath={selectedPath}
+										onOpenPath={handleOpenVaultRel}
+										variant="sidebar"
+										className="min-h-0 h-full"
+									/>
+								)}
 							</ResizablePanel>
 						) : null}
 					</ResizableGroup>
