@@ -113,6 +113,12 @@ export function getDemoTree(): FileNode[] {
 					path: `${root}/notes/idea.md`,
 					kind: "file",
 				},
+				{
+					id: `${root}/notes/attention.md`,
+					name: "attention.md",
+					path: `${root}/notes/attention.md`,
+					kind: "file",
+				},
 			],
 		},
 		{
@@ -121,29 +127,69 @@ export function getDemoTree(): FileNode[] {
 			path: `${root}/papers`,
 			kind: "directory",
 			children: [
-				{
-					id: `${root}/papers/1706.03762`,
-					name: "1706.03762",
-					path: `${root}/papers/1706.03762`,
-					kind: "directory",
-					children: [
-						{
-							id: `${root}/papers/1706.03762/NOTES.md`,
-							name: "NOTES.md",
-							path: `${root}/papers/1706.03762/NOTES.md`,
-							kind: "file",
-						},
-						{
-							id: `${root}/papers/1706.03762/metadata.json`,
-							name: "metadata.json",
-							path: `${root}/papers/1706.03762/metadata.json`,
-							kind: "file",
-						},
-					],
-				},
+				paperNode(root, "1706.03762"),
+				paperNode(root, "1810.04805"),
+				paperNode(root, "2005.14165"),
+				paperNode(root, "1412.6980"),
+				paperNode(root, "1512.03385"),
 			],
 		},
 	];
+}
+
+function paperNode(root: string, id: string): FileNode {
+	const path = `${root}/papers/${id}`;
+	return {
+		id: path,
+		name: id,
+		path,
+		kind: "directory",
+		children: [
+			{
+				id: `${path}/NOTES.md`,
+				name: "NOTES.md",
+				path: `${path}/NOTES.md`,
+				kind: "file",
+			},
+			{
+				id: `${path}/metadata.json`,
+				name: "metadata.json",
+				path: `${path}/metadata.json`,
+				kind: "file",
+			},
+		],
+	};
+}
+
+function demoMeta(opts: {
+	id: string;
+	title: string;
+	authors: string[];
+	year: number;
+	abstract: string;
+	tags: string[];
+	bibtex: string;
+}): string {
+	return `{
+  "id": "${opts.id}",
+  "type": "arxiv",
+  "title": ${JSON.stringify(opts.title)},
+  "authors": ${JSON.stringify(opts.authors)},
+  "year": ${opts.year},
+  "abstract": ${JSON.stringify(opts.abstract)},
+  "tags": ${JSON.stringify(opts.tags)},
+  "arxiv_id": "${opts.id}",
+  "doi": "10.48550/arXiv.${opts.id}",
+  "pdf_url": "https://arxiv.org/pdf/${opts.id}",
+  "html_url": "https://arxiv.org/html/${opts.id}",
+  "source_url": "https://arxiv.org/abs/${opts.id}",
+  "body_source": "latex",
+  "body_quality": "high",
+  "bibtex_key": "${opts.bibtex}",
+  "status": "completed",
+  "added_at": "2026-07-01T10:00:00.000Z",
+  "updated_at": "2026-07-01T10:00:00.000Z"
+}`;
 }
 
 const DEMO_CONTENTS: Record<string, string> = {
@@ -157,12 +203,26 @@ Rules for agents working in this vault.
 	"demo-vault/PAPERS.md": `# Papers index
 
 - [[papers/1706.03762/NOTES]] — Attention Is All You Need
+- [[papers/1810.04805/NOTES]] — BERT
+- [[papers/2005.14165/NOTES]] — GPT-3
+- [[papers/1412.6980/NOTES]] — Adam
+- [[papers/1512.03385/NOTES]] — ResNet
 `,
 	"demo-vault/notes/idea.md": `# Idea
 
 Compare attention mechanisms across transformer variants.
 
-Related: [[papers/1706.03762/NOTES]]
+Related: [[papers/1706.03762/NOTES]] · [[papers/1810.04805/NOTES]] · [[notes/attention]]
+`,
+	"demo-vault/notes/attention.md": `# Attention
+
+Core concept shared by Transformers and later LMs.
+
+Papers:
+
+- [[papers/1706.03762/NOTES]]
+- [[papers/1810.04805/NOTES]]
+- [[papers/2005.14165/NOTES]]
 `,
 	"demo-vault/papers/1706.03762/NOTES.md": `# NOTES — Attention Is All You Need
 
@@ -176,46 +236,125 @@ Multi-head self-attention + positional encoding.
 
 ## Related
 
-- Idea scratchpad: [[notes/idea]]
+- Concept: [[notes/attention]]
+- Idea: [[notes/idea]]
+- Follow-ups: [[papers/1810.04805/NOTES]] · [[papers/2005.14165/NOTES]]
 - Index: [[PAPERS]]
-
-## Open questions
-
-- How do later variants change the attention bottleneck?
 `,
-	// Mock: real arXiv browse URLs in metadata (source of truth for PDF/HTML viewers).
-	// PDF:  https://arxiv.org/pdf/{id}
-	// HTML: https://arxiv.org/html/{id}  (experimental HTML; CORS *)
-	"demo-vault/papers/1706.03762/metadata.json": `{
-  "id": "1706.03762",
-  "type": "arxiv",
-  "title": "Attention Is All You Need",
-  "authors": [
-    "Ashish Vaswani",
-    "Noam Shazeer",
-    "Niki Parmar",
-    "Jakob Uszkoreit",
-    "Llion Jones",
-    "Aidan N. Gomez",
-    "Łukasz Kaiser",
-    "Illia Polosukhin"
-  ],
-  "year": 2017,
-  "abstract": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
-  "tags": ["transformer", "attention", "nlp"],
-  "arxiv_id": "1706.03762",
-  "doi": "10.48550/arXiv.1706.03762",
-  "pdf_url": "https://arxiv.org/pdf/1706.03762",
-  "html_url": "https://arxiv.org/html/1706.03762",
-  "source_url": "https://arxiv.org/abs/1706.03762",
-  "body_source": "latex",
-  "body_quality": "high",
-  "bibtex_key": "vaswani2017attention",
-  "status": "completed",
-  "added_at": "2026-07-01T10:00:00.000Z",
-  "updated_at": "2026-07-01T10:00:00.000Z"
-}
+	"demo-vault/papers/1810.04805/NOTES.md": `# NOTES — BERT
+
+## Summary
+
+Bidirectional pre-training for language understanding.
+
+## Related
+
+- Base architecture: [[papers/1706.03762/NOTES]]
+- Concept: [[notes/attention]]
+- Scaling: [[papers/2005.14165/NOTES]]
+- Index: [[PAPERS]]
 `,
+	"demo-vault/papers/2005.14165/NOTES.md": `# NOTES — GPT-3
+
+## Summary
+
+Few-shot learners via large-scale language models.
+
+## Related
+
+- Transformer: [[papers/1706.03762/NOTES]]
+- BERT contrast: [[papers/1810.04805/NOTES]]
+- Optimizers often used: [[papers/1412.6980/NOTES]]
+- Index: [[PAPERS]]
+`,
+	"demo-vault/papers/1412.6980/NOTES.md": `# NOTES — Adam
+
+## Summary
+
+Adaptive moment estimation optimizer, widely used for deep nets.
+
+## Related
+
+- Used in: [[papers/1706.03762/NOTES]] · [[papers/2005.14165/NOTES]]
+- Vision backbone era: [[papers/1512.03385/NOTES]]
+- Index: [[PAPERS]]
+`,
+	"demo-vault/papers/1512.03385/NOTES.md": `# NOTES — ResNet
+
+## Summary
+
+Deep residual learning for image recognition.
+
+## Related
+
+- Optimizers: [[papers/1412.6980/NOTES]]
+- Index: [[PAPERS]]
+`,
+	"demo-vault/papers/1706.03762/metadata.json": demoMeta({
+		id: "1706.03762",
+		title: "Attention Is All You Need",
+		authors: [
+			"Ashish Vaswani",
+			"Noam Shazeer",
+			"Niki Parmar",
+			"Jakob Uszkoreit",
+			"Llion Jones",
+			"Aidan N. Gomez",
+			"Łukasz Kaiser",
+			"Illia Polosukhin",
+		],
+		year: 2017,
+		abstract:
+			"We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+		tags: ["transformer", "attention", "nlp"],
+		bibtex: "vaswani2017attention",
+	}),
+	"demo-vault/papers/1810.04805/metadata.json": demoMeta({
+		id: "1810.04805",
+		title:
+			"BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+		authors: [
+			"Jacob Devlin",
+			"Ming-Wei Chang",
+			"Kenton Lee",
+			"Kristina Toutanova",
+		],
+		year: 2019,
+		abstract:
+			"We introduce BERT, designed to pre-train deep bidirectional representations from unlabeled text.",
+		tags: ["bert", "pretraining", "nlp"],
+		bibtex: "devlin2019bert",
+	}),
+	"demo-vault/papers/2005.14165/metadata.json": demoMeta({
+		id: "2005.14165",
+		title: "Language Models are Few-Shot Learners",
+		authors: ["Tom B. Brown", "Benjamin Mann", "Nick Ryder", "Melanie Subbiah"],
+		year: 2020,
+		abstract:
+			"We train GPT-3, an autoregressive language model with 175 billion parameters, and test its performance in the few-shot setting.",
+		tags: ["gpt", "llm", "few-shot"],
+		bibtex: "brown2020language",
+	}),
+	"demo-vault/papers/1412.6980/metadata.json": demoMeta({
+		id: "1412.6980",
+		title: "Adam: A Method for Stochastic Optimization",
+		authors: ["Diederik P. Kingma", "Jimmy Ba"],
+		year: 2015,
+		abstract:
+			"We introduce Adam, an algorithm for first-order gradient-based optimization of stochastic objective functions.",
+		tags: ["optimization", "adam"],
+		bibtex: "kingma2015adam",
+	}),
+	"demo-vault/papers/1512.03385/metadata.json": demoMeta({
+		id: "1512.03385",
+		title: "Deep Residual Learning for Image Recognition",
+		authors: ["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"],
+		year: 2016,
+		abstract:
+			"We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously.",
+		tags: ["resnet", "vision", "cnn"],
+		bibtex: "he2016deep",
+	}),
 };
 
 export async function pickVaultDirectory(): Promise<string | null> {

@@ -58,6 +58,7 @@
 		"radix-ui": "^1.6.2",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
+		"react-force-graph-2d": "^1.29.1",
 		"react-pdf": "^10.4.1",
 		"react-resizable-panels": "^4.12.2",
 		"remark-emoji": "^5.0.2",
