@@ -9,6 +9,7 @@ import {
 	FolderOpenDot,
 	FolderSearch,
 	RefreshCw,
+	Settings,
 	Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -198,6 +199,7 @@ export function VaultSidebarHeader({
 	onOpenVault,
 	onRefresh,
 	onUseDemo,
+	onOpenSettings,
 	busy,
 	error,
 	isDemo,
@@ -206,6 +208,7 @@ export function VaultSidebarHeader({
 	onOpenVault: () => void;
 	onRefresh: () => void;
 	onUseDemo: () => void;
+	onOpenSettings: () => void;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
@@ -226,14 +229,14 @@ export function VaultSidebarHeader({
 					</span>
 					<div className="flex shrink-0 items-center">
 						<IconAction
-							label="Open vault"
+							label="Open vault (⌘O)"
 							onClick={onOpenVault}
 							disabled={busy}
 						>
 							<FolderSearch className="size-3.5" />
 						</IconAction>
 						<IconAction
-							label="Refresh"
+							label="Refresh (⌘R)"
 							onClick={onRefresh}
 							disabled={busy || isDemo}
 						>
@@ -248,6 +251,9 @@ export function VaultSidebarHeader({
 								<Sparkles className="size-3.5" />
 							</IconAction>
 						) : null}
+						<IconAction label="Settings (⌘,)" onClick={onOpenSettings}>
+							<Settings className="size-3.5" />
+						</IconAction>
 					</div>
 				</div>
 				{error ? (

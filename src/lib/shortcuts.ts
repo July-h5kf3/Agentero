@@ -1,0 +1,190 @@
+/**
+ * App shortcuts aligned with common macOS / Apple HIG patterns.
+ * Display uses Apple symbols: ⌘ ⌥ ⇧ ⌃
+ */
+
+export type ShortcutId =
+	| "settings"
+	| "openVault"
+	| "refreshTree"
+	| "toggleSidebar"
+	| "closeSheet"
+	| "focusSidebar"
+	| "focusEditor"
+	| "focusPreview";
+
+export type ShortcutDef = {
+	id: ShortcutId;
+	/** Human-readable action (Settings UI) */
+	label: string;
+	/** Optional grouping label */
+	group: "App" | "Navigation" | "Vault";
+	/** Keys without modifiers, lower-case letter or special */
+	key: string;
+	meta?: boolean;
+	ctrl?: boolean;
+	alt?: boolean;
+	shift?: boolean;
+	/** When true, only matches if settings/modal is open */
+	whenSettingsOpen?: boolean;
+	/** When true, only matches if settings is closed */
+	whenSettingsClosed?: boolean;
+};
+
+export const SHORTCUTS: ShortcutDef[] = [
+	{
+		id: "settings",
+		label: "Settings…",
+		group: "App",
+		key: ",",
+		meta: true,
+	},
+	{
+		id: "closeSheet",
+		label: "Close settings",
+		group: "App",
+		key: "Escape",
+		whenSettingsOpen: true,
+	},
+	{
+		id: "openVault",
+		label: "Open vault…",
+		group: "Vault",
+		key: "o",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "refreshTree",
+		label: "Refresh file tree",
+		group: "Vault",
+		key: "r",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "toggleSidebar",
+		label: "Show / hide sidebar",
+		group: "Navigation",
+		// Apple Mail / Preview family uses ⌥⌘S; many Mac productivity apps use ⌘B.
+		// Prefer ⌥⌘S for platform feel; ⌘B kept as secondary alias in matcher.
+		key: "s",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "focusSidebar",
+		label: "Focus sidebar",
+		group: "Navigation",
+		key: "1",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "focusEditor",
+		label: "Focus editor",
+		group: "Navigation",
+		key: "2",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "focusPreview",
+		label: "Focus preview",
+		group: "Navigation",
+		key: "3",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+];
+
+/** Secondary aliases that still work (documented lightly). */
+const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
+	toggleSidebar: [
+		{
+			id: "toggleSidebar",
+			label: "Show / hide sidebar",
+			group: "Navigation",
+			key: "b",
+			meta: true,
+			whenSettingsClosed: true,
+		},
+	],
+};
+
+export function formatShortcut(def: ShortcutDef): string {
+	if (def.key === "Escape") return "Esc";
+
+	const isMac =
+		typeof navigator !== "undefined" &&
+		/Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
+	const parts: string[] = [];
+	if (def.ctrl) parts.push(isMac ? "⌃" : "Ctrl");
+	if (def.alt) parts.push(isMac ? "⌥" : "Alt");
+	if (def.shift) parts.push(isMac ? "⇧" : "Shift");
+	if (def.meta) parts.push(isMac ? "⌘" : "Ctrl");
+
+	const keyLabel =
+		def.key === ","
+			? ","
+			: def.key.length === 1
+				? def.key.toUpperCase()
+				: def.key;
+	parts.push(keyLabel);
+	return parts.join(isMac ? "" : "+");
+}
+
+export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
+	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+	const defKey = def.key.length === 1 ? def.key.toLowerCase() : def.key;
+	if (key !== defKey && event.key !== def.key) return false;
+
+	const wantMeta = Boolean(def.meta);
+	const wantAlt = Boolean(def.alt);
+	const wantShift = Boolean(def.shift);
+	const wantCtrl = Boolean(def.ctrl);
+
+	// On Windows/Linux, treat Ctrl as ⌘ equivalent when meta is required.
+	const metaOrCtrl = event.metaKey || event.ctrlKey;
+	if (wantMeta) {
+		if (!metaOrCtrl) return false;
+	} else if (event.metaKey) {
+		return false;
+	}
+
+	if (wantCtrl && !wantMeta && !event.ctrlKey) return false;
+	if (wantAlt !== event.altKey) return false;
+	if (wantShift !== event.shiftKey) return false;
+
+	// When meta maps to ctrl on non-Mac, ignore pure ctrl-only false positives
+	if (!wantMeta && !wantCtrl && event.ctrlKey) return false;
+
+	return true;
+}
+
+export function resolveShortcutId(
+	event: KeyboardEvent,
+	opts: { settingsOpen: boolean },
+): ShortcutId | null {
+	const candidates = SHORTCUTS.flatMap((def) => {
+		const aliases = ALIASES[def.id] ?? [];
+		return [def, ...aliases];
+	});
+
+	for (const def of candidates) {
+		if (def.whenSettingsOpen && !opts.settingsOpen) continue;
+		if (def.whenSettingsClosed && opts.settingsOpen) continue;
+		if (matchShortcut(event, def)) return def.id;
+	}
+	return null;
+}
+
+export function shortcutsByGroup(): { group: string; items: ShortcutDef[] }[] {
+	const order = ["App", "Vault", "Navigation"] as const;
+	return order.map((group) => ({
+		group,
+		items: SHORTCUTS.filter((s) => s.group === group),
+	}));
+}

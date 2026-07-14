@@ -8,8 +8,9 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
+import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { FileTree, VaultSidebarHeader } from "@/components/file-tree/file-tree";
@@ -18,9 +19,15 @@ import {
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import {
+	type SettingsSection,
+	SettingsWindow,
+} from "@/components/settings/settings-window";
 import { BlockquoteElement } from "@/components/ui/blockquote-node";
 import { Editor, EditorContainer } from "@/components/ui/editor";
 import { H1Element, H2Element, H3Element } from "@/components/ui/heading-node";
+import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
+import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import {
 	type FileNode,
@@ -56,12 +63,23 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export default function App() {
+	const { setTheme } = useTheme();
+	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [settingsSection, setSettingsSection] =
+		useState<SettingsSection>("general");
+	const settingsOpenRef = useRef(settingsOpen);
+	settingsOpenRef.current = settingsOpen;
+
 	const [markdown, setMarkdown] = useState(
 		() => localStorage.getItem(STORAGE_KEY) ?? defaultMarkdown,
 	);
-	const [vaultPath, setVaultPath] = useState<string | null>(() =>
-		isTauri() ? getSavedVaultPath() : null,
-	);
+	const [vaultPath, setVaultPath] = useState<string | null>(() => {
+		const s = loadSettings();
+		if (!isTauri()) return null;
+		if (!s.restoreLastVault) return null;
+		return getSavedVaultPath();
+	});
 	const [tree, setTree] = useState<FileNode[]>(() => getDemoTree());
 	const [selectedPath, setSelectedPath] = useState<string | null>(() =>
 		localStorage.getItem(OPEN_FILE_KEY),
@@ -70,9 +88,21 @@ export default function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const sidebarPanelRef = usePanelRef();
+	const editorPaneRef = useRef<HTMLTextAreaElement>(null);
+	const previewPaneRef = useRef<HTMLDivElement>(null);
+	const sidebarAsideRef = useRef<HTMLElement>(null);
 
 	const debouncedMarkdown = useDebounce(markdown, 300);
 	const isDemo = vaultPath === null;
+
+	useEffect(() => {
+		setTheme(settings.theme);
+	}, [settings.theme, setTheme]);
+
+	const updateSettings = useCallback((next: AppSettings) => {
+		setSettings(next);
+		saveSettings(next);
+	}, []);
 
 	const toggleSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
@@ -81,30 +111,14 @@ export default function App() {
 		else panel.collapse();
 	}, [sidebarPanelRef]);
 
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
-				event.preventDefault();
-				toggleSidebar();
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [toggleSidebar]);
-
-	const editor = usePlateEditor({
-		plugins: [
-			BoldPlugin,
-			ItalicPlugin,
-			UnderlinePlugin,
-			H1Plugin.withComponent(H1Element),
-			H2Plugin.withComponent(H2Element),
-			H3Plugin.withComponent(H3Element),
-			BlockquotePlugin.withComponent(BlockquoteElement),
-			...MarkdownKit,
-		],
-		value: (ed) => ed.getApi(MarkdownPlugin).markdown.deserialize(markdown),
-	});
+	const expandSidebar = useCallback(() => {
+		const panel = sidebarPanelRef.current;
+		if (!panel) return;
+		if (panel.isCollapsed()) panel.expand();
+		requestAnimationFrame(() => {
+			sidebarAsideRef.current?.querySelector<HTMLElement>("button")?.focus();
+		});
+	}, [sidebarPanelRef]);
 
 	const refreshTree = useCallback(async (path: string) => {
 		setBusy(true);
@@ -120,6 +134,100 @@ export default function App() {
 			setBusy(false);
 		}
 	}, []);
+
+	const handleOpenVault = useCallback(async () => {
+		setError(null);
+		try {
+			if (!isTauri()) {
+				setError("Open vault requires the Tauri desktop app (pnpm tauri dev).");
+				return;
+			}
+			setBusy(true);
+			const path = await pickVaultDirectory();
+			if (!path) return;
+			saveVaultPath(path);
+			setVaultPath(path);
+			setSelectedPath(null);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, []);
+
+	const handleRefresh = useCallback(() => {
+		if (vaultPath) void refreshTree(vaultPath);
+	}, [vaultPath, refreshTree]);
+
+	const openSettings = useCallback((section: SettingsSection = "general") => {
+		setSettingsSection(section);
+		setSettingsOpen(true);
+	}, []);
+
+	const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			const id = resolveShortcutId(event, {
+				settingsOpen: settingsOpenRef.current,
+			});
+			if (!id) return;
+			event.preventDefault();
+
+			switch (id) {
+				case "settings":
+					if (settingsOpenRef.current) closeSettings();
+					else openSettings();
+					break;
+				case "closeSheet":
+					closeSettings();
+					break;
+				case "openVault":
+					void handleOpenVault();
+					break;
+				case "refreshTree":
+					handleRefresh();
+					break;
+				case "toggleSidebar":
+					toggleSidebar();
+					break;
+				case "focusSidebar":
+					expandSidebar();
+					break;
+				case "focusEditor":
+					editorPaneRef.current?.focus();
+					break;
+				case "focusPreview":
+					previewPaneRef.current
+						?.querySelector<HTMLElement>("[contenteditable='true']")
+						?.focus();
+					break;
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [
+		closeSettings,
+		expandSidebar,
+		handleOpenVault,
+		handleRefresh,
+		openSettings,
+		toggleSidebar,
+	]);
+
+	const editor = usePlateEditor({
+		plugins: [
+			BoldPlugin,
+			ItalicPlugin,
+			UnderlinePlugin,
+			H1Plugin.withComponent(H1Element),
+			H2Plugin.withComponent(H2Element),
+			H3Plugin.withComponent(H3Element),
+			BlockquotePlugin.withComponent(BlockquoteElement),
+			...MarkdownKit,
+		],
+		value: (ed) => ed.getApi(MarkdownPlugin).markdown.deserialize(markdown),
+	});
 
 	useEffect(() => {
 		if (!vaultPath) {
@@ -145,26 +253,6 @@ export default function App() {
 		editor.tf.reset();
 		editor.tf.setValue(value);
 	}, [debouncedMarkdown, editor]);
-
-	const handleOpenVault = async () => {
-		setError(null);
-		try {
-			if (!isTauri()) {
-				setError("Open vault requires the Tauri desktop app (pnpm tauri dev).");
-				return;
-			}
-			setBusy(true);
-			const path = await pickVaultDirectory();
-			if (!path) return;
-			saveVaultPath(path);
-			setVaultPath(path);
-			setSelectedPath(null);
-		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setBusy(false);
-		}
-	};
 
 	const handleUseDemo = () => {
 		saveVaultPath(null);
@@ -199,6 +287,8 @@ export default function App() {
 		? selectedPath.split(/[\\/]/).pop()
 		: "Untitled";
 
+	const editorFontSize = settings.editorFontSize;
+
 	return (
 		<div className="flex h-screen flex-col bg-background text-foreground">
 			<ResizableGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -216,14 +306,16 @@ export default function App() {
 						setSidebarCollapsed(collapsed);
 					}}
 				>
-					<aside className="flex h-full min-h-0 flex-col border-r bg-muted/20">
+					<aside
+						ref={sidebarAsideRef}
+						className="flex h-full min-h-0 flex-col border-r bg-muted/20"
+					>
 						<VaultSidebarHeader
 							title={vaultDisplayName(vaultPath)}
 							onOpenVault={() => void handleOpenVault()}
-							onRefresh={() => {
-								if (vaultPath) void refreshTree(vaultPath);
-							}}
+							onRefresh={handleRefresh}
 							onUseDemo={handleUseDemo}
+							onOpenSettings={() => openSettings()}
 							busy={busy}
 							error={error}
 							isDemo={isDemo}
@@ -254,7 +346,9 @@ export default function App() {
 							</span>
 						</div>
 						<textarea
-							className="min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono text-sm outline-none"
+							ref={editorPaneRef}
+							className="min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
+							style={{ fontSize: editorFontSize }}
 							value={markdown}
 							onChange={(event) => setMarkdown(event.target.value)}
 							placeholder="Type Markdown here..."
@@ -271,7 +365,11 @@ export default function App() {
 					minSize={200}
 					className="min-h-0"
 				>
-					<div className="flex h-full min-h-0 flex-col">
+					<div
+						ref={previewPaneRef}
+						className="flex h-full min-h-0 flex-col"
+						style={{ fontSize: editorFontSize }}
+					>
 						<div className="border-b px-4 py-2 font-medium text-sm">
 							Preview
 						</div>
@@ -283,6 +381,15 @@ export default function App() {
 					</div>
 				</ResizablePanel>
 			</ResizableGroup>
+
+			<SettingsWindow
+				open={settingsOpen}
+				section={settingsSection}
+				onSectionChange={setSettingsSection}
+				onClose={closeSettings}
+				settings={settings}
+				onChange={updateSettings}
+			/>
 		</div>
 	);
 }

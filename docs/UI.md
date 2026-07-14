@@ -7,25 +7,26 @@
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
 - 视觉原则：**尽量简约，减少不必要的元素**。
+- 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
 
 ## 2. 文案 vs 图标
 
 | 场景 | 规则 |
 |---|---|
 | 工具栏、侧边栏操作、可识别的动作 | **优先用图标**，不要用长按钮文案 |
-| 图标含义 | 必须配 `aria-label`；悬停用 **Tooltip** 显示短标签（英文/中文均可，保持简短） |
+| 图标含义 | 必须配 `aria-label`；悬停用 **Tooltip** 显示短标签 |
 | 页面主标题、空状态、错误、表单字段 | 可用文字；错误仅在发生时出现 |
 | 解释性说明文案 | 默认不展示；避免常驻帮助段落挤占空间 |
 
-### 2.1 侧边栏文件树（当前）
+### 2.1 侧边栏文件树
 
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide）：
-  - 打开 Vault → `FolderSearch`
-  - 刷新树 → `RefreshCw`（加载中可 spin）
-  - 切回 Demo → `Sparkles`（仅在非 demo 时显示）
-- **不要**使用「Open vault… / Refresh / Demo」等文字按钮。
-- **不要**常驻「Demo tree — open a real folder…」类说明文字。
+  - 打开 Vault → `FolderSearch`（⌘O）
+  - 刷新树 → `RefreshCw`（⌘R）
+  - 切回 Demo → `Sparkles`（仅非 demo）
+  - 设置 → `Settings`（⌘,）
+- **不要**使用「Open vault… / Refresh」等文字按钮。
 
 ## 3. 布局
 
@@ -33,15 +34,51 @@
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
-### 3.1 快捷键
+### 3.1 快捷键（对齐 macOS / Apple HIG 习惯）
 
-| 快捷键 | 作用 |
+显示使用 Apple 符号：`⌘ ⌥ ⇧ ⌃`。Windows / Linux 上将 `⌘` 映射为 `Ctrl`。
+
+| 快捷键 | 作用 | 说明 |
+|---|---|---|
+| `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
+| `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
+| `⌘O` | Open vault… | 打开文档/文件夹 |
+| `⌘R` | 刷新文件树 | 刷新当前视图 |
+| `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
+| `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
+| `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
+| `⌘2` | 聚焦编辑器 | |
+| `⌘3` | 聚焦预览 | |
+
+- 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
+- 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
+
+## 4. 设置窗口（Settings）
+
+参考 **macOS System Settings / 传统 Preferences** 形态，而非多标签网页：
+
+| 要求 | 说明 |
 |---|---|
-| `⌘B` / `Ctrl+B` | 显示 / 隐藏左侧文件树侧边栏 |
+| 入口 | 侧边栏齿轮图标，或 `⌘,` |
+| 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
+| 分类 | General · Appearance · Agent · Keyboard · Privacy · About |
+| 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
+| 控件 | Switch / Select / Input；避免花哨装饰 |
+| 关闭 | 右上角 `X`、点遮罩、`Esc`、再次 `⌘,` |
+| 文案 | 英文 UI（与当前应用一致），简短说明可作 footer |
 
-- 在编辑区聚焦时同样生效；需 `preventDefault` 避免浏览器默认书签行为（Chrome 等）。
+**页面职责**
 
-## 4. 组件基线
+- **General**：恢复上次 Vault、退出确认等应用行为。
+- **Appearance**：主题、编辑字号、行号。
+- **Agent**：BYOK（Base URL / API Key / Model）、总开关。
+- **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
+- **Privacy**：分析与崩溃上报（默认关，本地优先）。
+- **About**：版本与一句话定位。
+
+实现：`src/components/settings/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`）。
+
+## 5. 组件基线
 
 - UI 组件基于 **shadcn/ui + Radix**；图标统一 **Lucide React**。
-- 优先复用已有 `Button`（`variant="ghost"` + `size="icon-xs"`）与 `Tooltip`，避免自定义花哨控件。
+- 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`。
