@@ -1,0 +1,55 @@
+import { isArxivHostedUrl } from "@/lib/arxiv";
+import { cn } from "@/lib/utils";
+
+type HtmlViewerProps = {
+	/** Remote URL only — streamed in a sandboxed iframe (no local download) */
+	srcUrl?: string | null;
+	className?: string;
+};
+
+/**
+ * HTML paper viewer — remote URL in a separate sandboxed iframe.
+ * Does not fetch or cache HTML into the vault.
+ */
+export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
+	if (!srcUrl || !/^https?:\/\//i.test(srcUrl)) {
+		return (
+			<div
+				className={cn(
+					"flex h-full items-center justify-center p-6 text-center text-muted-foreground text-sm",
+					className,
+				)}
+			>
+				No remote HTML URL in metadata.
+				<br />
+				<span className="mt-1 text-xs">
+					Set <code className="text-foreground">html_url</code> (e.g. arXiv
+					HTML) — Motif does not load local HTML files for preview.
+				</span>
+			</div>
+		);
+	}
+
+	const trusted = isArxivHostedUrl(srcUrl);
+	const sandbox = trusted
+		? "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+		: "allow-popups allow-popups-to-escape-sandbox";
+
+	return (
+		<div
+			className={cn(
+				"relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background",
+				className,
+			)}
+		>
+			<iframe
+				title="HTML paper sandbox"
+				src={srcUrl}
+				sandbox={sandbox}
+				referrerPolicy="no-referrer-when-downgrade"
+				className="absolute inset-0 block h-full w-full border-0 bg-background"
+				style={{ colorScheme: "light dark" }}
+			/>
+		</div>
+	);
+}

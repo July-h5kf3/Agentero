@@ -178,10 +178,37 @@ Multi-head self-attention + positional encoding.
 
 - How do later variants change the attention bottleneck?
 `,
+	// Mock: real arXiv browse URLs in metadata (source of truth for PDF/HTML viewers).
+	// PDF:  https://arxiv.org/pdf/{id}
+	// HTML: https://arxiv.org/html/{id}  (experimental HTML; CORS *)
 	"demo-vault/papers/1706.03762/metadata.json": `{
   "id": "1706.03762",
+  "type": "arxiv",
   "title": "Attention Is All You Need",
-  "type": "arxiv"
+  "authors": [
+    "Ashish Vaswani",
+    "Noam Shazeer",
+    "Niki Parmar",
+    "Jakob Uszkoreit",
+    "Llion Jones",
+    "Aidan N. Gomez",
+    "Łukasz Kaiser",
+    "Illia Polosukhin"
+  ],
+  "year": 2017,
+  "abstract": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+  "tags": ["transformer", "attention", "nlp"],
+  "arxiv_id": "1706.03762",
+  "doi": "10.48550/arXiv.1706.03762",
+  "pdf_url": "https://arxiv.org/pdf/1706.03762",
+  "html_url": "https://arxiv.org/html/1706.03762",
+  "source_url": "https://arxiv.org/abs/1706.03762",
+  "body_source": "latex",
+  "body_quality": "high",
+  "bibtex_key": "vaswani2017attention",
+  "status": "completed",
+  "added_at": "2026-07-01T10:00:00.000Z",
+  "updated_at": "2026-07-01T10:00:00.000Z"
 }
 `,
 };
@@ -215,6 +242,11 @@ export function isTextOpenable(path: string): boolean {
 		isMarkdownPath(path) ||
 		/\.(txt|json|bib|tex|html?|css|ts|tsx|js|jsx|rs|toml|yaml|yml)$/i.test(path)
 	);
+}
+
+/** Sync read for inlined demo text files (no network). */
+export function getDemoTextContent(path: string): string | null {
+	return DEMO_CONTENTS[path] ?? null;
 }
 
 export async function readVaultFile(path: string): Promise<string> {
