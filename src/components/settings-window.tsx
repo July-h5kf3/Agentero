@@ -402,7 +402,13 @@ function catalogStatusTone(
 	}
 }
 
-function AgentPane() {
+function AgentPane({
+	settings,
+	patch,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+}) {
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [probing, setProbing] = useState(false);
@@ -423,11 +429,7 @@ function AgentPane() {
 		setLoading(true);
 		setError(null);
 		try {
-			let scan = await scanCatalog();
-			if (!scan.enabled) {
-				await setAgentEnabled(true);
-				scan = await scanCatalog();
-			}
+			const scan = await scanCatalog();
 			setCatalog(scan);
 			setProxyEnabled(scan.proxyEnabled);
 			setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
@@ -482,6 +484,17 @@ function AgentPane() {
 			if (scan) await probeInstalled(scan);
 		})();
 	}, [refresh, probeInstalled]);
+
+	const onToggleEnabled = async (v: boolean) => {
+		patch({ agentEnabled: v });
+		if (!isTauri()) return;
+		try {
+			await setAgentEnabled(v);
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
 
 	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
@@ -570,7 +583,18 @@ function AgentPane() {
 				title="Agent"
 				description="Bring your own ACP agent (BYOA). Motif is the client only."
 			/>
-			<SettingsGroup>
+			<SettingsGroup footer="Model API keys stay with each agent CLI — Motif never stores them.">
+				<SettingsRow
+					label="Enable Agent"
+					description="Allow ACP workflows in this app."
+					htmlFor="agent-enabled"
+				>
+					<Switch
+						id="agent-enabled"
+						checked={settings.agentEnabled}
+						onCheckedChange={(v) => void onToggleEnabled(v)}
+					/>
+				</SettingsRow>
 				<SettingsRow
 					label="Agent proxy"
 					description="Pass HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY to built-in agents."
