@@ -1,17 +1,19 @@
 import {
-	ChevronDown,
-	ChevronRight,
 	FileCode2,
 	FileJson,
 	FileText,
-	Folder,
 	FolderOpen,
 	FolderOpenDot,
 	FolderSearch,
 	RefreshCw,
 	Sparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	FileTree as AiFileTree,
+	FileTreeFile,
+	FileTreeFolder,
+} from "@/components/ai-elements/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +31,15 @@ function fileIcon(name: string) {
 	return FileText;
 }
 
+function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
+	for (const n of nodes) {
+		if (n.kind === "directory") {
+			into.add(n.path);
+			if (n.children?.length) collectDefaultExpanded(n.children, into);
+		}
+	}
+}
+
 type FileTreeProps = {
 	nodes: FileNode[];
 	selectedPath: string | null;
@@ -42,27 +53,47 @@ export function FileTree({
 	onSelectFile,
 	className,
 }: FileTreeProps) {
-	const defaultOpen = useMemo(() => {
+	const defaultExpanded = useMemo(() => {
 		const open = new Set<string>();
-		for (const n of nodes) {
-			if (n.kind === "directory") open.add(n.path);
-		}
+		collectDefaultExpanded(nodes, open);
 		return open;
 	}, [nodes]);
 
-	const [expanded, setExpanded] = useState<Set<string>>(defaultOpen);
+	const [expanded, setExpanded] = useState<Set<string>>(defaultExpanded);
 
 	useEffect(() => {
-		setExpanded(defaultOpen);
-	}, [defaultOpen]);
+		setExpanded(defaultExpanded);
+	}, [defaultExpanded]);
 
-	const toggle = (path: string) => {
-		setExpanded((prev) => {
-			const next = new Set(prev);
-			if (next.has(path)) next.delete(path);
-			else next.add(path);
-			return next;
-		});
+	const byPath = useMemo(() => {
+		const map = new Map<string, FileNode>();
+		const walk = (list: FileNode[]) => {
+			for (const n of list) {
+				map.set(n.path, n);
+				if (n.children) walk(n.children);
+			}
+		};
+		walk(nodes);
+		return map;
+	}, [nodes]);
+
+	const renderNode = (node: FileNode): ReactNode => {
+		if (node.kind === "directory") {
+			return (
+				<FileTreeFolder key={node.id} path={node.path} name={node.name}>
+					{node.children?.map((child) => renderNode(child))}
+				</FileTreeFolder>
+			);
+		}
+		const Icon = fileIcon(node.name);
+		return (
+			<FileTreeFile
+				key={node.id}
+				path={node.path}
+				name={node.name}
+				icon={<Icon className="size-4 text-muted-foreground" />}
+			/>
+		);
 	};
 
 	return (
@@ -70,96 +101,18 @@ export function FileTree({
 			{nodes.length === 0 ? (
 				<p className="px-3 py-2 text-muted-foreground text-xs">Empty folder</p>
 			) : (
-				nodes.map((node) => (
-					<TreeNode
-						key={node.id}
-						node={node}
-						depth={0}
-						expanded={expanded}
-						selectedPath={selectedPath}
-						onToggle={toggle}
-						onSelectFile={onSelectFile}
-					/>
-				))
-			)}
-		</div>
-	);
-}
-
-type TreeNodeProps = {
-	node: FileNode;
-	depth: number;
-	expanded: Set<string>;
-	selectedPath: string | null;
-	onToggle: (path: string) => void;
-	onSelectFile: (node: FileNode) => void;
-};
-
-function TreeNode({
-	node,
-	depth,
-	expanded,
-	selectedPath,
-	onToggle,
-	onSelectFile,
-}: TreeNodeProps) {
-	const isDir = node.kind === "directory";
-	const isOpen = isDir && expanded.has(node.path);
-	const isSelected = selectedPath === node.path;
-	const Icon = isDir ? (isOpen ? FolderOpen : Folder) : fileIcon(node.name);
-
-	return (
-		<div>
-			<button
-				type="button"
-				className={cn(
-					"flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left outline-none",
-					"hover:bg-accent/70 focus-visible:ring-1 focus-visible:ring-ring",
-					isSelected && "bg-accent text-accent-foreground",
-				)}
-				style={{ paddingLeft: 8 + depth * 12 }}
-				aria-expanded={isDir ? isOpen : undefined}
-				onClick={() => {
-					if (isDir) onToggle(node.path);
-					else onSelectFile(node);
-				}}
-				title={node.path}
-			>
-				<span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-					{isDir ? (
-						isOpen ? (
-							<ChevronDown className="size-3.5" />
-						) : (
-							<ChevronRight className="size-3.5" />
-						)
-					) : (
-						<span className="size-3.5" />
-					)}
-				</span>
-				<Icon className="size-3.5 shrink-0 text-muted-foreground" />
-				<span className="truncate">{node.name}</span>
-			</button>
-			{isDir && isOpen && node.children?.length
-				? node.children.map((child) => (
-						<TreeNode
-							key={child.id}
-							node={child}
-							depth={depth + 1}
-							expanded={expanded}
-							selectedPath={selectedPath}
-							onToggle={onToggle}
-							onSelectFile={onSelectFile}
-						/>
-					))
-				: null}
-			{isDir && isOpen && (!node.children || node.children.length === 0) ? (
-				<div
-					className="px-2 py-0.5 text-muted-foreground text-xs"
-					style={{ paddingLeft: 28 + depth * 12 }}
+				<AiFileTree
+					selectedPath={selectedPath ?? undefined}
+					expanded={expanded}
+					onExpandedChange={setExpanded}
+					onSelect={(path) => {
+						const node = byPath.get(path);
+						if (node?.kind === "file") onSelectFile(node);
+					}}
 				>
-					Empty
-				</div>
-			) : null}
+					{nodes.map((node) => renderNode(node))}
+				</AiFileTree>
+			)}
 		</div>
 	);
 }
@@ -173,7 +126,7 @@ function IconAction({
 	label: string;
 	onClick: () => void;
 	disabled?: boolean;
-	children: React.ReactNode;
+	children: ReactNode;
 }) {
 	return (
 		<Tooltip>

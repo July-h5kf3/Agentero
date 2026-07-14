@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronDown, Loader2, User, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, X } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -10,16 +10,27 @@ import {
 	Conversation,
 	ConversationContent,
 	ConversationEmptyState,
+	ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+	Message,
+	MessageContent,
+	MessageResponse,
+} from "@/components/ai-elements/message";
+import {
 	PromptInput,
 	PromptInputBody,
 	PromptInputFooter,
 	PromptInputSubmit,
 	PromptInputTextarea,
 	PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import {
+	Source,
 	Sources,
-} from "@/components/ai";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
+	SourcesContent,
+	SourcesTrigger,
+} from "@/components/ai-elements/sources";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -29,14 +40,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Marker, MarkerContent } from "@/components/ui/marker";
-import {
-	Message,
-	MessageAvatar,
-	MessageContent,
-	MessageFooter,
-	MessageHeader,
-} from "@/components/ui/message";
 import {
 	type AgentListResponse,
 	type CatalogScanResponse,
@@ -62,10 +65,22 @@ type AgentPanelProps = {
 };
 
 type ChatLine =
-	| { kind: "user"; text: string }
-	| { kind: "agent"; text: string; sources?: string[]; streaming?: boolean }
-	| { kind: "error"; text: string }
-	| { kind: "system"; text: string };
+	| { id: string; kind: "user"; text: string }
+	| {
+			id: string;
+			kind: "agent";
+			text: string;
+			sources?: string[];
+			streaming?: boolean;
+	  }
+	| { id: string; kind: "error"; text: string }
+	| { id: string; kind: "system"; text: string };
+
+let chatLineSeq = 0;
+function nextLineId(prefix: string) {
+	chatLineSeq += 1;
+	return `${prefix}-${chatLineSeq}`;
+}
 
 type AgentOption = {
 	key: string;
@@ -161,12 +176,10 @@ export function AgentPanel({
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-	const [prompt, setPrompt] = useState("");
 	const [lines, setLines] = useState<ChatLine[]>([]);
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const activeSessionRef = useRef<string | null>(null);
-	const inputRef = useRef<HTMLTextAreaElement>(null);
 
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
@@ -179,6 +192,7 @@ export function AgentPanel({
 			setLines((prev) => [
 				...prev,
 				{
+					id: nextLineId("err"),
 					kind: "error",
 					text: e instanceof Error ? e.message : String(e),
 				},
@@ -191,19 +205,14 @@ export function AgentPanel({
 	}, [refresh]);
 
 	useEffect(() => {
-		if (autoFocus) {
-			requestAnimationFrame(() => inputRef.current?.focus());
-		}
-	}, [autoFocus]);
-
-	useEffect(() => {
 		if (!isTauri()) return;
-		let unsubs: Array<() => void> = [];
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+
 		void (async () => {
 			const u1 = await listenAgentStream((ev) => {
 				const cur = activeSessionRef.current;
 				if (cur && cur !== ev.sessionId) return;
-				if (!cur) activeSessionRef.current = ev.sessionId;
 				setLines((prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
@@ -212,10 +221,9 @@ export function AgentPanel({
 							...last,
 							text: last.text + ev.chunk,
 						};
-					} else {
-						next.push({ kind: "agent", text: ev.chunk, streaming: true });
+						return next;
 					}
-					return next;
+					return prev;
 				});
 			});
 			const u2 = await listenAgentCompleted((ev) => {
@@ -231,20 +239,19 @@ export function AgentPanel({
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
+						const text =
+							last.text.trim().length > 0
+								? last.text
+								: ev.content || "(empty response)";
 						next[next.length - 1] = {
-							kind: "agent",
-							text: ev.content || last.text,
+							...last,
+							text,
 							sources: ev.sources,
 							streaming: false,
 						};
-					} else {
-						next.push({
-							kind: "agent",
-							text: ev.content || "(empty response)",
-							sources: ev.sources,
-						});
+						return next;
 					}
-					return next;
+					return prev;
 				});
 			});
 			const u3 = await listenAgentFailed((ev) => {
@@ -256,11 +263,30 @@ export function AgentPanel({
 				}
 				setBusy(false);
 				activeSessionRef.current = null;
-				setLines((prev) => [...prev, { kind: "error", text: ev.error }]);
+				setLines((prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					if (last?.kind === "agent" && last.streaming) {
+						next.pop();
+					}
+					return [
+						...next,
+						{ id: nextLineId("err"), kind: "error", text: ev.error },
+					];
+				});
 			});
-			unsubs = [u1, u2, u3];
+
+			if (cancelled) {
+				u1();
+				u2();
+				u3();
+				return;
+			}
+			unsubs.push(u1, u2, u3);
 		})();
+
 		return () => {
+			cancelled = true;
 			for (const u of unsubs) u();
 		};
 	}, []);
@@ -287,12 +313,17 @@ export function AgentPanel({
 			await refresh();
 			setLines((p) => [
 				...p,
-				{ kind: "system", text: `Switched to ${opt.name}` },
+				{
+					id: nextLineId("sys"),
+					kind: "system",
+					text: `Switched to ${opt.name}`,
+				},
 			]);
 		} catch (e) {
 			setLines((p) => [
 				...p,
 				{
+					id: nextLineId("err"),
 					kind: "error",
 					text: e instanceof Error ? e.message : String(e),
 				},
@@ -302,13 +333,17 @@ export function AgentPanel({
 		}
 	};
 
-	const send = async (textRaw?: string) => {
-		const text = (textRaw ?? prompt).trim();
+	const send = async (textRaw: string) => {
+		const text = textRaw.trim();
 		if (!text || busy) return;
 		if (!isTauri()) {
 			setLines((p) => [
 				...p,
-				{ kind: "error", text: "Open the desktop app to run agents." },
+				{
+					id: nextLineId("err"),
+					kind: "error",
+					text: "Open the desktop app to run agents.",
+				},
 			]);
 			return;
 		}
@@ -324,6 +359,7 @@ export function AgentPanel({
 				setLines((p) => [
 					...p,
 					{
+						id: nextLineId("err"),
 						kind: "error",
 						text: e instanceof Error ? e.message : String(e),
 					},
@@ -336,6 +372,7 @@ export function AgentPanel({
 			setLines((p) => [
 				...p,
 				{
+					id: nextLineId("sys"),
 					kind: "system",
 					text: "No available agent. Open Settings → Agent to configure one.",
 				},
@@ -351,6 +388,7 @@ export function AgentPanel({
 			setLines((p) => [
 				...p,
 				{
+					id: nextLineId("sys"),
 					kind: "system",
 					text: `${selected?.name ?? "Agent"} is not available. Pick another or open Settings → Agent.`,
 				},
@@ -358,8 +396,7 @@ export function AgentPanel({
 			return;
 		}
 
-		setPrompt("");
-		setLines((p) => [...p, { kind: "user", text }]);
+		setLines((p) => [...p, { id: nextLineId("user"), kind: "user", text }]);
 		setBusy(true);
 		try {
 			const accepted = await runOnce({
@@ -369,12 +406,24 @@ export function AgentPanel({
 				workflow: "free",
 			});
 			activeSessionRef.current = accepted.sessionId;
-			setLines((p) => [...p, { kind: "agent", text: "", streaming: true }]);
+			setLines((p) => [
+				...p,
+				{
+					id: nextLineId("agent"),
+					kind: "agent",
+					text: "",
+					streaming: true,
+				},
+			]);
 		} catch (e) {
 			setBusy(false);
 			setLines((p) => [
 				...p,
-				{ kind: "error", text: e instanceof Error ? e.message : String(e) },
+				{
+					id: nextLineId("err"),
+					kind: "error",
+					text: e instanceof Error ? e.message : String(e),
+				},
 			]);
 		}
 	};
@@ -467,116 +516,111 @@ export function AgentPanel({
 				) : null}
 			</div>
 
-			<Conversation>
+			<Conversation className="min-h-0">
 				<ConversationContent>
 					{lines.length === 0 ? (
 						<ConversationEmptyState
 							title="Chat with your vault"
-							description="Messages go to your default ACP agent. Click the agent name above to switch backends."
+							description="Messages go to your ACP agent. Click the agent name above to switch backends."
 						/>
 					) : (
-						lines.map((line, i) => {
+						lines.map((line) => {
 							if (line.kind === "user") {
 								return (
-									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Message key={i} align="end">
+									<Message key={line.id} from="user">
 										<MessageContent>
-											<MessageHeader>You</MessageHeader>
-											<Bubble variant="default" align="end">
-												<BubbleContent className="whitespace-pre-wrap">
-													{line.text}
-												</BubbleContent>
-											</Bubble>
+											<MessageResponse>{line.text}</MessageResponse>
 										</MessageContent>
-										<MessageAvatar>
-											<Avatar size="sm">
-												<AvatarFallback className="bg-primary text-primary-foreground">
-													<User className="size-3.5" />
-												</AvatarFallback>
-											</Avatar>
-										</MessageAvatar>
 									</Message>
 								);
 							}
 							if (line.kind === "agent") {
 								return (
-									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Message key={i} align="start">
-										<MessageAvatar>
-											<Avatar size="sm">
-												<AvatarFallback>
-													<Bot className="size-3.5" />
-												</AvatarFallback>
-											</Avatar>
-										</MessageAvatar>
-										<MessageContent>
-											<MessageHeader>{selected?.name ?? "Agent"}</MessageHeader>
-											<Bubble variant="muted" align="start">
-												<BubbleContent className="whitespace-pre-wrap">
+									<div key={line.id} className="flex w-full flex-col gap-2">
+										<Message from="assistant">
+											<MessageContent>
+												<p className="mb-1 font-medium text-muted-foreground text-xs">
+													{selected?.name ?? "Agent"}
+												</p>
+												<MessageResponse isAnimating={line.streaming}>
 													{line.text || (line.streaming ? "…" : "")}
-													{line.streaming ? (
-														<span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-foreground/50 align-middle" />
-													) : null}
-												</BubbleContent>
-											</Bubble>
-											{line.sources && line.sources.length > 0 ? (
-												<MessageFooter>
-													<Sources items={line.sources} />
-												</MessageFooter>
-											) : null}
-										</MessageContent>
-									</Message>
+												</MessageResponse>
+											</MessageContent>
+										</Message>
+										{line.sources && line.sources.length > 0 ? (
+											<Sources>
+												<SourcesTrigger count={line.sources.length} />
+												<SourcesContent>
+													{line.sources.map((s) => (
+														<Source
+															key={s}
+															title={s}
+															href={`#${encodeURIComponent(s)}`}
+														/>
+													))}
+												</SourcesContent>
+											</Sources>
+										) : null}
+									</div>
 								);
 							}
 							if (line.kind === "error") {
 								return (
-									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Marker key={i} className="justify-center text-destructive">
-										<MarkerContent>{line.text}</MarkerContent>
-									</Marker>
+									<p
+										key={line.id}
+										className="px-1 text-center text-destructive text-xs"
+									>
+										{line.text}
+									</p>
 								);
 							}
 							return (
-								// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-								<Marker key={i} variant="separator">
-									<MarkerContent>{line.text}</MarkerContent>
-								</Marker>
+								<p
+									key={line.id}
+									className="px-1 text-center text-muted-foreground text-xs"
+								>
+									{line.text}
+								</p>
 							);
 						})
 					)}
 				</ConversationContent>
+				<ConversationScrollButton />
 			</Conversation>
 
-			<PromptInput onSubmitPrompt={(value) => void send(value)}>
-				<PromptInputBody>
-					<PromptInputTextarea
-						ref={inputRef}
-						value={prompt}
-						onChange={(e) => setPrompt(e.target.value)}
-						placeholder={
-							selected?.available || selected?.id
-								? `Message ${selected?.name ?? "agent"}…`
-								: "Configure an agent in Settings…"
-						}
-						disabled={busy}
-						autoComplete="off"
-						rows={1}
-					/>
-				</PromptInputBody>
-				<PromptInputFooter>
-					<PromptInputTools>
-						<span className="truncate">
-							{selected?.name
-								? `↵ send · ⇧↵ newline · ${selected.name}`
-								: "↵ send · ⇧↵ newline"}
-						</span>
-					</PromptInputTools>
-					<PromptInputSubmit
-						status={busy ? "streaming" : "ready"}
-						disabled={busy || !prompt.trim()}
-					/>
-				</PromptInputFooter>
-			</PromptInput>
+			<div className="shrink-0 border-t p-3">
+				<PromptInput
+					className="w-full"
+					onSubmit={({ text }) => {
+						void send(text);
+					}}
+				>
+					<PromptInputBody>
+						<PromptInputTextarea
+							autoFocus={autoFocus || undefined}
+							placeholder={
+								selected?.available || selected?.id
+									? `Message ${selected?.name ?? "agent"}…`
+									: "Configure an agent in Settings…"
+							}
+							disabled={busy}
+						/>
+					</PromptInputBody>
+					<PromptInputFooter>
+						<PromptInputTools>
+							<span className="truncate px-1 text-[11px] text-muted-foreground">
+								{selected?.name
+									? `↵ send · ⇧↵ newline · ${selected.name}`
+									: "↵ send · ⇧↵ newline"}
+							</span>
+						</PromptInputTools>
+						<PromptInputSubmit
+							status={busy ? "streaming" : "ready"}
+							disabled={busy}
+						/>
+					</PromptInputFooter>
+				</PromptInput>
+			</div>
 		</div>
 	);
 }
