@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauri } from "@/lib/tauri";
-import { getDemoTextContent } from "@/lib/vault";
 
 export type Backlink = {
 	source: string;
@@ -76,8 +75,6 @@ export function toVaultRelative(
 ): string {
 	const n = normalizeVaultRel(path);
 	if (!vaultPath) {
-		// demo: demo-vault/papers/... → papers/...
-		if (n.startsWith("demo-vault/")) return n.slice("demo-vault/".length);
 		return n;
 	}
 	const root = normalizeVaultRel(vaultPath);
@@ -366,221 +363,6 @@ export function newNoteMarkdown(targetRaw: string): string {
 	return `# ${title}\n\n`;
 }
 
-/** Demo vault Markdown map (relative paths without demo-vault/ prefix). */
-function demoContents(): Record<string, string> {
-	const out: Record<string, string> = {};
-	// Known demo keys are under demo-vault/; pull every .md seed.
-	const seeds = [
-		"AGENTS.md",
-		"PAPERS.md",
-		"notes/idea.md",
-		"notes/attention.md",
-		"papers/1706.03762/NOTES.md",
-		"papers/1810.04805/NOTES.md",
-		"papers/2005.14165/NOTES.md",
-		"papers/1412.6980/NOTES.md",
-		"papers/1512.03385/NOTES.md",
-	];
-	for (const rel of seeds) {
-		const full = `demo-vault/${rel}`;
-		const text = getDemoTextContent(full);
-		if (text != null) out[rel] = text;
-	}
-	return out;
-}
-
-/** Collapse `papers/<id>/…` (NOTES etc.) → one node `papers/<id>`. */
-function collapseGraphId(path: string): string {
-	const n = normalizeVaultRel(path);
-	if (n.startsWith("stub:")) return n;
-	const m = n.match(/^(papers\/[^/]+)/i);
-	if (m) return m[1];
-	return n;
-}
-
-function classifyNodePath(path: string): GraphNodeType {
-	const n = normalizeVaultRel(path);
-	if (n.startsWith("stub:")) return "stub";
-	if (/^papers\/[^/]+$/i.test(n) || n.startsWith("papers/")) return "paper";
-	const base = n.split("/").pop()?.toLowerCase() ?? "";
-	if (base === "papers.md" || base === "agents.md" || base === "readme.md") {
-		return "index";
-	}
-	return "note";
-}
-
-function demoPaperTitles(): Map<string, string> {
-	const map = new Map<string, string>();
-	const ids = [
-		"1706.03762",
-		"1810.04805",
-		"2005.14165",
-		"1412.6980",
-		"1512.03385",
-	];
-	for (const id of ids) {
-		const raw = getDemoTextContent(`demo-vault/papers/${id}/metadata.json`);
-		if (!raw) continue;
-		try {
-			const meta = JSON.parse(raw) as { title?: string };
-			if (meta.title) map.set(`papers/${id}`, meta.title);
-		} catch {
-			// ignore
-		}
-	}
-	return map;
-}
-
-function graphNodeFromId(id: string, titles: Map<string, string>): GraphNode {
-	if (id.startsWith("stub:")) {
-		const raw = id.slice("stub:".length);
-		return { id, label: raw, type: "stub" };
-	}
-	const type = classifyNodePath(id);
-	let label =
-		id
-			.split("/")
-			.pop()
-			?.replace(/\.(md|mdx|markdown)$/i, "") ?? id;
-	if (type === "paper") {
-		label = titles.get(id) ?? id.split("/").pop() ?? id;
-	}
-	return {
-		id,
-		label,
-		type,
-		path: id,
-	};
-}
-
-function buildDemoGraph(
-	center: string | null | undefined,
-	depth: number,
-): GraphResponse {
-	const contents = demoContents();
-	const files = Object.keys(contents);
-	const titles = demoPaperTitles();
-	const nodeIds = new Set<string>();
-	const fullEdges: { source: string; target: string; targetRaw: string }[] = [];
-	const edgeKey = new Set<string>();
-
-	for (const f of files) {
-		nodeIds.add(collapseGraphId(f));
-	}
-
-	for (const [sourceFile, md] of Object.entries(contents)) {
-		const source = collapseGraphId(sourceFile);
-		for (const link of extractWikilinks(md)) {
-			const resolved = resolveWikiTarget(link.targetRaw, files);
-			const target = resolved
-				? collapseGraphId(resolved)
-				: `stub:${link.targetRaw}`;
-			if (source === target) continue;
-			nodeIds.add(source);
-			nodeIds.add(target);
-			const key = `${source}\0${target}`;
-			if (edgeKey.has(key)) continue;
-			edgeKey.add(key);
-			fullEdges.push({
-				source,
-				target,
-				targetRaw: link.targetRaw,
-			});
-		}
-	}
-
-	let centerId: string | null = null;
-	if (center?.trim()) {
-		const rel = collapseGraphId(toVaultRelative(null, center));
-		if (nodeIds.has(rel)) centerId = rel;
-		else if (nodeIds.has(`${rel}.md`)) centerId = `${rel}.md`;
-		else {
-			const hit = [...nodeIds].find(
-				(id) =>
-					id.toLowerCase() === rel.toLowerCase() ||
-					id.toLowerCase() === `${rel}.md`.toLowerCase(),
-			);
-			centerId = hit ?? rel;
-		}
-	}
-
-	let keep = nodeIds;
-	let edges = fullEdges;
-	if (centerId) {
-		const adj = new Map<string, Set<string>>();
-		for (const e of fullEdges) {
-			if (!adj.has(e.source)) adj.set(e.source, new Set());
-			if (!adj.has(e.target)) adj.set(e.target, new Set());
-			adj.get(e.source)?.add(e.target);
-			adj.get(e.target)?.add(e.source);
-		}
-		const dist = new Map<string, number>();
-		const q: string[] = [centerId];
-		dist.set(centerId, 0);
-		while (q.length) {
-			const u = q.shift();
-			if (!u) break;
-			const d = dist.get(u) ?? 0;
-			if (d >= depth) continue;
-			for (const v of adj.get(u) ?? []) {
-				if (!dist.has(v)) {
-					dist.set(v, d + 1);
-					q.push(v);
-				}
-			}
-		}
-		keep = new Set(dist.keys());
-		edges = fullEdges.filter((e) => keep.has(e.source) && keep.has(e.target));
-	}
-
-	const nodes = [...keep]
-		.map((id) => graphNodeFromId(id, titles))
-		.sort((a, b) => a.id.localeCompare(b.id));
-	const graphEdges: GraphEdge[] = edges.map((e, i) => ({
-		id: `e${i}:${e.source}->${e.target}`,
-		source: e.source,
-		target: e.target,
-		targetRaw: e.targetRaw,
-	}));
-
-	return {
-		nodes,
-		edges: graphEdges,
-		center: centerId,
-		depth,
-	};
-}
-
-function buildDemoBacklinks(path: string): BacklinksResponse {
-	const rel = toVaultRelative(null, path);
-	const contents = demoContents();
-	const files = Object.keys(contents);
-	const backlinks: Backlink[] = [];
-
-	for (const [source, md] of Object.entries(contents)) {
-		if (source === rel) continue;
-		for (const link of extractWikilinks(md)) {
-			const target = resolveWikiTarget(link.targetRaw, files);
-			if (
-				target === rel ||
-				target?.toLowerCase() === rel.toLowerCase() ||
-				(!rel.endsWith(".md") && target === `${rel}.md`)
-			) {
-				backlinks.push({
-					source,
-					targetRaw: link.targetRaw,
-					alias: link.alias,
-					context: link.context,
-					line: link.line,
-				});
-			}
-		}
-	}
-
-	backlinks.sort((a, b) => a.source.localeCompare(b.source));
-	return { path: rel, backlinks };
-}
-
 export async function getBacklinks(
 	vaultPath: string | null,
 	path: string,
@@ -589,7 +371,7 @@ export async function getBacklinks(
 		return { path: "", backlinks: [] };
 	}
 	if (!vaultPath || !isTauri()) {
-		return buildDemoBacklinks(path);
+		return { path: toVaultRelative(vaultPath, path), backlinks: [] };
 	}
 	return invokeApi<BacklinksResponse>("graph_get_backlinks", {
 		vaultPath,
@@ -610,7 +392,7 @@ export async function getGraph(
 	const depth = opts?.depth ?? 2;
 	const center = opts?.center ?? null;
 	if (!vaultPath || !isTauri()) {
-		return buildDemoGraph(center, depth);
+		return { nodes: [], edges: [], center: null, depth };
 	}
 	return invokeApi<GraphResponse>("graph_get_graph", {
 		vaultPath,

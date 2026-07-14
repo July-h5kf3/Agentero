@@ -3,7 +3,7 @@
 		"empty": "Empty folder",
 		"openVault": "Open vault (⌘O)",
 		"refresh": "Refresh (⌘R)",
-		"useDemo": "Use demo vault"
+		"closeVault": "Close vault"
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",

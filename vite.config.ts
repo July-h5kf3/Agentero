@@ -1,3 +1,5 @@
+/// <reference types="vitest" />
+
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -14,6 +16,11 @@ export default defineConfig(async () => ({
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
 		},
+	},
+
+	test: {
+		environment: "node",
+		include: ["test/**/*.test.ts"],
 	},
 
 	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

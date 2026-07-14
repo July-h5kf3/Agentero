@@ -24,12 +24,6 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 				)}
 			>
 				{t("html.empty")}
-				<br />
-				<span className="mt-1 text-xs">
-					{t("html.emptyHintPrefix")}{" "}
-					<code className="text-foreground">html_url</code>{" "}
-					{t("html.emptyHintSuffix")}
-				</span>
 			</div>
 		);
 	}

@@ -45,12 +45,6 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 				)}
 			>
 				{t("pdf.empty")}
-				<br />
-				<span className="mt-1 text-xs">
-					{t("pdf.emptyHintPrefix")}{" "}
-					<code className="text-foreground">pdf_url</code>{" "}
-					{t("pdf.emptyHintSuffix")}
-				</span>
 			</div>
 		);
 	}

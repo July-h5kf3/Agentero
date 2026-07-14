@@ -3,7 +3,7 @@
 		"empty": "空文件夹",
 		"openVault": "打开 Vault (⌘O)",
 		"refresh": "刷新 (⌘R)",
-		"useDemo": "使用演示 Vault"
+		"closeVault": "关闭 Vault"
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",

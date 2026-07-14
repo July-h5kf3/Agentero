@@ -19,6 +19,8 @@ nav:
       - API 契约: backend/api.md
       - 数据模型: backend/data-model.md
       - 双链与图谱: backend/wikilinks.md
+  - 测试:
+      - 概览: test/index.md
   - 开发:
       - 概览: development/index.md
       - 产品需求: development/prd.md

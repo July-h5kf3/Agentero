@@ -208,7 +208,7 @@ export function VaultSidebarHeader({
 	title,
 	onOpenVault,
 	onRefresh,
-	onUseDemo,
+	onCloseVault,
 	busy,
 	error,
 	isDemo,
@@ -216,7 +216,7 @@ export function VaultSidebarHeader({
 	title: string;
 	onOpenVault: () => void;
 	onRefresh: () => void;
-	onUseDemo: () => void;
+	onCloseVault: () => void;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
@@ -245,8 +245,8 @@ export function VaultSidebarHeader({
 							</IconAction>
 							{!isDemo ? (
 								<IconAction
-									label={t("fileTree.useDemo")}
-									onClick={onUseDemo}
+									label={t("fileTree.closeVault")}
+									onClick={onCloseVault}
 									disabled={busy}
 								>
 									<Sparkles className="size-3.5" />
