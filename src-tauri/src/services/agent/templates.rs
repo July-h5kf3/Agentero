@@ -18,7 +18,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
         },
         AgentTemplateInfo {
             id: AgentTemplate::ClaudeAcp.as_str().to_string(),
-            name: "Claude (ACP)".to_string(),
+            name: "Claude".to_string(),
             description: "Claude Code via official ACP adapter (`claude-agent-acp`).".to_string(),
             // Prefer global install: npm i -g @agentclientprotocol/claude-agent-acp
             command: "claude-agent-acp".to_string(),
@@ -30,7 +30,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
         },
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),
-            name: "Codex (ACP)".to_string(),
+            name: "Codex".to_string(),
             description: "OpenAI Codex via official ACP adapter (`codex-acp`).".to_string(),
             // Prefer global install: npm i -g @agentclientprotocol/codex-acp
             command: "codex-acp".to_string(),
