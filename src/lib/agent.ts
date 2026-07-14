@@ -8,6 +8,7 @@ export type AgentTemplate =
 	| "claude-acp"
 	| "codex-acp"
 	| "qodercli"
+	| "grok-build"
 	| "custom";
 
 export type CatalogAcpStatus = "missing" | "not-probed" | "ready" | "failed";
@@ -66,6 +67,8 @@ export type CatalogScanResponse = {
 	customAgents: AgentDescriptor[];
 	defaultId: string | null;
 	enabled: boolean;
+	proxyEnabled: boolean;
+	proxyUrl: string;
 };
 
 export type ProbeResult = {
@@ -226,6 +229,13 @@ export async function setAgentEnabled(enabled: boolean): Promise<boolean> {
 		enabled,
 	});
 	return res.enabled;
+}
+
+export async function setAgentProxy(
+	proxyEnabled: boolean,
+	proxyUrl: string,
+): Promise<{ proxyEnabled: boolean; proxyUrl: string }> {
+	return invokeApi("agent_set_proxy", { proxyEnabled, proxyUrl });
 }
 
 export async function discoverAgents(id?: string): Promise<AgentListResponse> {

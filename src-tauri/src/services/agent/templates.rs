@@ -60,6 +60,23 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                     .to_string(),
         },
         AgentTemplateInfo {
+            id: AgentTemplate::GrokBuild.as_str().to_string(),
+            name: "Grok Build".to_string(),
+            description:
+                "xAI Grok Build via ACP (`npx @xai-official/grok@0.2.100 agent stdio`)."
+                    .to_string(),
+            command: "npx".to_string(),
+            args: vec![
+                "@xai-official/grok@0.2.100".to_string(),
+                "agent".to_string(),
+                "stdio".to_string(),
+            ],
+            detect_command: Some("npx".to_string()),
+            install_hint:
+                "Run with `npx @xai-official/grok@0.2.100 agent stdio`  ·  https://zed.dev/acp/agent/grok-build"
+                    .to_string(),
+        },
+        AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
             name: "Custom".to_string(),
             description: "Any ACP-compatible command + args.".to_string(),
@@ -86,6 +103,7 @@ pub fn template_from_id(id: &str) -> AgentTemplate {
         "claude-acp" => AgentTemplate::ClaudeAcp,
         "codex-acp" => AgentTemplate::CodexAcp,
         "qodercli" => AgentTemplate::QoderCli,
+        "grok-build" => AgentTemplate::GrokBuild,
         _ => AgentTemplate::Custom,
     }
 }

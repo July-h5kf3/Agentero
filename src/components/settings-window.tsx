@@ -41,6 +41,7 @@ import {
 	removeAgent,
 	scanCatalog,
 	setAgentEnabled,
+	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
 import type { AppSettings, ThemePreference } from "@/lib/settings";
@@ -401,13 +402,7 @@ function catalogStatusTone(
 	}
 }
 
-function AgentPane({
-	settings,
-	patch,
-}: {
-	settings: AppSettings;
-	patch: (p: Partial<AppSettings>) => void;
-}) {
+function AgentPane() {
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [probing, setProbing] = useState(false);
@@ -416,6 +411,8 @@ function AgentPane({
 	const [formName, setFormName] = useState("Custom agent");
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
+	const [proxyEnabled, setProxyEnabled] = useState(false);
+	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const autoProbedRef = useRef(false);
 
 	const refresh = useCallback(async (): Promise<CatalogScanResponse | null> => {
@@ -426,8 +423,14 @@ function AgentPane({
 		setLoading(true);
 		setError(null);
 		try {
-			const scan = await scanCatalog();
+			let scan = await scanCatalog();
+			if (!scan.enabled) {
+				await setAgentEnabled(true);
+				scan = await scanCatalog();
+			}
 			setCatalog(scan);
+			setProxyEnabled(scan.proxyEnabled);
+			setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
 			return scan;
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -480,21 +483,30 @@ function AgentPane({
 		})();
 	}, [refresh, probeInstalled]);
 
-	useEffect(() => {
-		if (catalog && catalog.enabled !== settings.agentEnabled) {
-			patch({ agentEnabled: catalog.enabled });
-		}
-	}, [catalog, settings.agentEnabled, patch]);
-
-	const onToggleEnabled = async (v: boolean) => {
-		patch({ agentEnabled: v });
+	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
+		setLoading(true);
+		setError(null);
 		try {
-			await setAgentEnabled(v);
-			await refresh();
+			const saved = await setAgentProxy(enabled, url);
+			setProxyEnabled(saved.proxyEnabled);
+			setProxyUrl(saved.proxyUrl);
+			const scan = await refresh();
+			if (scan) await probeInstalled(scan);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
 		}
+	};
+
+	const onToggleProxy = async (v: boolean) => {
+		setProxyEnabled(v);
+		await saveProxySettings(v, proxyUrl);
+	};
+
+	const onCommitProxyUrl = async () => {
+		await saveProxySettings(proxyEnabled, proxyUrl);
 	};
 
 	const onRescanAndProbe = async () => {
@@ -558,17 +570,35 @@ function AgentPane({
 				title="Agent"
 				description="Bring your own ACP agent (BYOA). Motif is the client only."
 			/>
-			<SettingsGroup footer="Model API keys stay with each agent CLI — Motif never stores them.">
+			<SettingsGroup>
 				<SettingsRow
-					label="Enable Agent"
-					description="Allow ACP workflows in this app."
-					htmlFor="agent-enabled"
+					label="Agent proxy"
+					description="Pass HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY to built-in agents."
+					htmlFor="agent-proxy-enabled"
 				>
-					<Switch
-						id="agent-enabled"
-						checked={settings.agentEnabled}
-						onCheckedChange={(v) => void onToggleEnabled(v)}
-					/>
+					<div className="flex items-center gap-2">
+						<Input
+							value={proxyUrl}
+							onChange={(e) => setProxyUrl(e.target.value)}
+							onBlur={() => void onCommitProxyUrl()}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.currentTarget.blur();
+								}
+							}}
+							placeholder="http://127.0.0.1:7890"
+							spellCheck={false}
+							autoComplete="off"
+							disabled={!proxyEnabled || busy || !isTauri()}
+							className="h-8 w-48 text-xs"
+						/>
+						<Switch
+							id="agent-proxy-enabled"
+							checked={proxyEnabled}
+							disabled={busy || !isTauri()}
+							onCheckedChange={(v) => void onToggleProxy(v)}
+						/>
+					</div>
 				</SettingsRow>
 			</SettingsGroup>
 

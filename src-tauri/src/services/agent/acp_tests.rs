@@ -61,6 +61,7 @@ mod acp_live {
         assert!(ids.contains(&"codex-acp"));
         assert!(ids.contains(&"gemini"));
         assert!(ids.contains(&"qodercli"));
+        assert!(ids.contains(&"grok-build"));
         assert!(!ids.contains(&"custom"));
     }
 
@@ -94,6 +95,10 @@ mod acp_live {
         if resolve_command("qodercli").is_some() {
             assert!(by_id("qodercli").binary_available);
             assert_ne!(by_id("qodercli").acp_status, CatalogAcpStatus::Missing);
+        }
+        if resolve_command("npx").is_some() {
+            assert!(by_id("grok-build").binary_available);
+            assert_ne!(by_id("grok-build").acp_status, CatalogAcpStatus::Missing);
         }
         if resolve_command("codex").is_some() {
             assert!(by_id("codex-acp").binary_available);
