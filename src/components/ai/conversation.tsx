@@ -1,6 +1,8 @@
 /**
- * Chat conversation shell — follows shadcn.io/ai Conversation family conventions.
- * @see https://www.shadcn.io/ai/conversation
+ * Lightweight scroll shell for chat logs.
+ * Prefer pairing with official Message + Bubble:
+ * @see https://ui.shadcn.com/docs/components/base/message
+ * @see https://ui.shadcn.com/docs/components/base/message-scroller
  */
 import type { ComponentProps, ReactNode } from "react";
 import { useEffect, useRef } from "react";
@@ -8,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export type ConversationProps = ComponentProps<"div">;
 
-/** Scrollable chat log (auto-scrolls to bottom when children change). */
+/** Auto-scrolling message list container (Motif substitute for MessageScroller). */
 export function Conversation({
 	className,
 	children,
@@ -50,7 +52,11 @@ export function ConversationContent({
 }: ConversationContentProps) {
 	return (
 		<div
-			className={cn("flex min-h-full flex-col gap-4 p-3", className)}
+			className={cn(
+				// Match official MessageScrollerContent spacing
+				"flex min-h-full flex-col gap-6 p-4",
+				className,
+			)}
 			{...props}
 		/>
 	);

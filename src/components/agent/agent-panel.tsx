@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Loader2, X } from "lucide-react";
+import { Bot, Check, ChevronDown, Loader2, User, X } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -10,16 +10,16 @@ import {
 	Conversation,
 	ConversationContent,
 	ConversationEmptyState,
-	Message,
-	MessageContent,
-	MessageHeader,
-	MessageResponse,
 	PromptInput,
 	PromptInputBody,
+	PromptInputFooter,
 	PromptInputSubmit,
 	PromptInputTextarea,
+	PromptInputTools,
 	Sources,
 } from "@/components/ai";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -29,6 +29,14 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Marker, MarkerContent } from "@/components/ui/marker";
+import {
+	Message,
+	MessageAvatar,
+	MessageContent,
+	MessageFooter,
+	MessageHeader,
+} from "@/components/ui/message";
 import {
 	type AgentListResponse,
 	type CatalogScanResponse,
@@ -158,7 +166,7 @@ export function AgentPanel({
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const activeSessionRef = useRef<string | null>(null);
-	const inputRef = useRef<HTMLInputElement>(null);
+	const inputRef = useRef<HTMLTextAreaElement>(null);
 
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
@@ -471,25 +479,50 @@ export function AgentPanel({
 							if (line.kind === "user") {
 								return (
 									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Message key={i} from="user">
-										<MessageHeader>You</MessageHeader>
+									<Message key={i} align="end">
 										<MessageContent>
-											<MessageResponse>{line.text}</MessageResponse>
+											<MessageHeader>You</MessageHeader>
+											<Bubble variant="default" align="end">
+												<BubbleContent className="whitespace-pre-wrap">
+													{line.text}
+												</BubbleContent>
+											</Bubble>
 										</MessageContent>
+										<MessageAvatar>
+											<Avatar size="sm">
+												<AvatarFallback className="bg-primary text-primary-foreground">
+													<User className="size-3.5" />
+												</AvatarFallback>
+											</Avatar>
+										</MessageAvatar>
 									</Message>
 								);
 							}
 							if (line.kind === "agent") {
 								return (
 									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Message key={i} from="assistant">
-										<MessageHeader>{selected?.name ?? "Agent"}</MessageHeader>
+									<Message key={i} align="start">
+										<MessageAvatar>
+											<Avatar size="sm">
+												<AvatarFallback>
+													<Bot className="size-3.5" />
+												</AvatarFallback>
+											</Avatar>
+										</MessageAvatar>
 										<MessageContent>
-											<MessageResponse streaming={line.streaming}>
-												{line.text || (line.streaming ? "" : "")}
-											</MessageResponse>
+											<MessageHeader>{selected?.name ?? "Agent"}</MessageHeader>
+											<Bubble variant="muted" align="start">
+												<BubbleContent className="whitespace-pre-wrap">
+													{line.text || (line.streaming ? "…" : "")}
+													{line.streaming ? (
+														<span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-foreground/50 align-middle" />
+													) : null}
+												</BubbleContent>
+											</Bubble>
 											{line.sources && line.sources.length > 0 ? (
-												<Sources items={line.sources} />
+												<MessageFooter>
+													<Sources items={line.sources} />
+												</MessageFooter>
 											) : null}
 										</MessageContent>
 									</Message>
@@ -498,30 +531,23 @@ export function AgentPanel({
 							if (line.kind === "error") {
 								return (
 									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-									<Message key={i} from="system">
-										<MessageContent className="text-destructive">
-											{line.text}
-										</MessageContent>
-									</Message>
+									<Marker key={i} className="justify-center text-destructive">
+										<MarkerContent>{line.text}</MarkerContent>
+									</Marker>
 								);
 							}
 							return (
 								// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-								<Message key={i} from="system">
-									<MessageContent>{line.text}</MessageContent>
-								</Message>
+								<Marker key={i} variant="separator">
+									<MarkerContent>{line.text}</MarkerContent>
+								</Marker>
 							);
 						})
 					)}
 				</ConversationContent>
 			</Conversation>
 
-			<PromptInput
-				onSubmit={(e) => {
-					e.preventDefault();
-					void send(prompt);
-				}}
-			>
+			<PromptInput onSubmitPrompt={(value) => void send(value)}>
 				<PromptInputBody>
 					<PromptInputTextarea
 						ref={inputRef}
@@ -534,12 +560,22 @@ export function AgentPanel({
 						}
 						disabled={busy}
 						autoComplete="off"
+						rows={1}
 					/>
 				</PromptInputBody>
-				<PromptInputSubmit
-					status={busy ? "streaming" : "ready"}
-					disabled={busy || !prompt.trim()}
-				/>
+				<PromptInputFooter>
+					<PromptInputTools>
+						<span className="truncate">
+							{selected?.name
+								? `↵ send · ⇧↵ newline · ${selected.name}`
+								: "↵ send · ⇧↵ newline"}
+						</span>
+					</PromptInputTools>
+					<PromptInputSubmit
+						status={busy ? "streaming" : "ready"}
+						disabled={busy || !prompt.trim()}
+					/>
+				</PromptInputFooter>
 			</PromptInput>
 		</div>
 	);

@@ -80,8 +80,9 @@
 | 库/工具 | 说明 | 用途 |
 |---|---|---|
 | Tailwind CSS v4 | 原子化 CSS + CSS variables | 布局、间距、响应式 |
-| shadcn/ui | `components.json` → `radix-nova` | 通用控件（Button、Dialog、Dropdown…） |
-| [shadcn.io/ai](https://www.shadcn.io/ai) 规范 | Chat 组件族约定（非独立主题） | Conversation / Message / PromptInput / Sources；实现于 `src/components/ai/` |
+| shadcn/ui | `components.json` → `radix-nova` | 通用控件 + **Chat Message 体系** |
+| 官方 Chat 原语 | [Message](https://ui.shadcn.com/docs/components/base/message) / [Bubble](https://ui.shadcn.com/docs/components/base/bubble) / [Marker](https://ui.shadcn.com/docs/components/base/marker) | `src/components/ui/message.tsx` 等；`pnpm dlx shadcn@latest add message bubble marker` |
+| Prompt 辅助 | Motif 自研，风格对齐官方 | `src/components/ai/prompt-input.tsx`（composer 输入区） |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
 | `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview / **Chat（⌘L 第四栏）** |
@@ -93,7 +94,7 @@
 **Chat 分层（强制）**
 
 ```text
-UI (shadcn.io/ai 规范组件)
+UI (官方 Message + Bubble + Marker + PromptInput)
   → AgentPanel 状态机
   → Tauri invoke / events
   → Rust ACP Client
@@ -101,8 +102,8 @@ UI (shadcn.io/ai 规范组件)
 ```
 
 - **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
-- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 Message / Sources。
-- 后续若引入 `streamdown` 等做 Markdown 流式渲染，仅替换 Message 内容渲染器，不改 ACP 协议。
+- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 `BubbleContent` 文本与 Sources。
+- 可选：后续接入官方 `message-scroller`（依赖 `@shadcn/react`）替换当前滚动壳。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
 

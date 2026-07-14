@@ -8,6 +8,7 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
+import { MessageSquare } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,8 +27,15 @@ import {
 	SettingsWindow,
 } from "@/components/settings/settings-window";
 import { BlockquoteElement } from "@/components/ui/blockquote-node";
+import { Button } from "@/components/ui/button";
 import { Editor, EditorContainer } from "@/components/ui/editor";
 import { H1Element, H2Element, H3Element } from "@/components/ui/heading-node";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
@@ -580,7 +588,31 @@ export default function App() {
 						className="flex h-full min-h-0 flex-col overflow-hidden"
 						style={{ fontSize: editorFontSize }}
 					>
-						<PaneHeader>
+						<PaneHeader
+							trailing={
+								<TooltipProvider delayDuration={250}>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label={
+													chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
+												}
+												aria-pressed={chatOpen}
+												onClick={toggleChat}
+											>
+												<MessageSquare className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
+										</TooltipContent>
+									</Tooltip>
+								</TooltipProvider>
+							}
+						>
 							<span className="min-w-0 flex-1 font-medium text-sm">
 								{showNotesOnRight ? "Notes" : "Preview"}
 							</span>

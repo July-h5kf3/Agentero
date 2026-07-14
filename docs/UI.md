@@ -7,10 +7,16 @@
   ```bash
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
-- **Chat / AI 界面**：以 [shadcn.io/ai](https://www.shadcn.io/ai) 的组件族为 **Chat UI 规范**（Conversation · Message · PromptInput · Sources · Loader …）。  
-  - 主题 **不单独配置**：继续读 `--background` / `--primary` / `--muted` / `--card` 等 shadcn token，随 System / Light / Dark。  
-  - 传输层 **不是** Vercel AI SDK 默认 HTTP chat，而是 Motif **ACP Client**（`agent_run_once` + 事件流）；UI 只消费消息模型。  
-  - 本地实现目录：`src/components/ai/`（对齐 shadcn.io/ai 命名与结构，可按需替换为官方 registry 拷贝）。
+- **Chat / 消息界面**：以官方 shadcn/ui **Message** 体系为规范：
+  - [Message](https://ui.shadcn.com/docs/components/base/message)
+  - [Bubble](https://ui.shadcn.com/docs/components/base/bubble)
+  - [Message Scroller](https://ui.shadcn.com/docs/components/base/message-scroller)（可选；MVP 用轻量滚动壳）
+  - [Marker](https://ui.shadcn.com/docs/components/base/marker)（系统分隔 / 状态行）
+  - 安装：`pnpm dlx shadcn@latest add message bubble marker`
+  - 落盘：`src/components/ui/message.tsx`、`bubble.tsx`、`marker.tsx`
+  - 主题 **不单独配置**：继续读 shadcn CSS token，随 System / Light / Dark。
+  - 传输层是 Motif **ACP Client**（`agent_run_once` + 事件流），不是 Vercel AI SDK `useChat`。
+  - 辅助：`src/components/ai/` 仅保留 PromptInput 输入区与滚动壳（非第三方 AI Elements）。
 - 视觉原则：**尽量简约，减少不必要的元素**。
 - 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
 
@@ -74,17 +80,30 @@
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
 
-### 3.2 Chat 侧栏（shadcn.io/ai 规范）
+### 3.2 Chat 侧栏（官方 Message / Bubble）
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | `⌘L` 或菜单 **View → Toggle Chat** |
-| 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ Conversation + PromptInput |
-| 组件 | `src/components/ai/*`：`Conversation` / `Message` / `PromptInput` / `Sources` |
+| 入口 | `⌘L`、Preview header 的 Chat 图标、菜单 **View → Toggle Chat** |
+| 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ 消息列表 + PromptInput |
+| 消息组件 | 官方 `Message` + `Bubble`（`align`/`variant`）；系统行用 `Marker` |
+| 列表滚动 | MVP：`Conversation` 轻量自动贴底；后续可换官方 MessageScroller |
+| 输入 | `src/components/ai/prompt-input.tsx`（卡片式 composer，↵ 发送 / ⇧↵ 换行） |
 | 业务壳 | `src/components/agent/agent-panel.tsx`：注册表、流式事件、默认 Agent |
-| 空状态 | ConversationEmptyState，简短英文；无常驻帮助长文 |
-| Sources | Agent 回复底部折叠/列表展示 Vault 相对路径 |
+| Sources | Agent 气泡内展示 Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
+
+**消息树（与官方 Message 文档一致）**
+
+```text
+Message (align=end | start)
+  ├── MessageAvatar (Avatar)
+  └── MessageContent
+        ├── MessageHeader
+        ├── Bubble (variant=default | muted)
+        │     └── BubbleContent
+        └── MessageFooter (Sources，可选)
+```
 
 **Agent 切换**：点击 header 中的 Agent 名称打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
 
@@ -122,8 +141,9 @@
 ## 5. 组件基线
 
 - 通用 UI：**shadcn/ui + Radix**（`src/components/ui/`）；图标 **Lucide React**。
-- Chat UI：**shadcn.io/ai 规范** 的组件族（`src/components/ai/`）；与 `ui/` 共用 token。
+- Chat 消息：**官方 Message / Bubble / Marker**（同上路径）；输入辅助在 `src/components/ai/prompt-input.tsx`。
 - 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
 - 参考：
   - [shadcn/ui](https://ui.shadcn.com/)
-  - [shadcn.io/ai](https://www.shadcn.io/ai)（Message / Conversation / PromptInput 等）
+  - [Message](https://ui.shadcn.com/docs/components/base/message)
+  - [Bubble](https://ui.shadcn.com/docs/components/base/bubble)

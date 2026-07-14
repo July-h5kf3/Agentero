@@ -1,6 +1,6 @@
 /**
- * Source citations — follows shadcn.io/ai Sources family conventions (subset).
- * @see https://www.shadcn.io/ai/sources
+ * Vault path citations — typically placed in MessageFooter.
+ * @see https://ui.shadcn.com/docs/components/base/message
  */
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
@@ -22,12 +22,12 @@ export function Sources({
 		<div
 			data-slot="sources"
 			className={cn(
-				"mt-2 border-t pt-1.5 text-[11px] text-muted-foreground",
+				"w-full min-w-0 text-[11px] text-muted-foreground",
 				className,
 			)}
 			{...props}
 		>
-			<p className="mb-1 font-medium text-foreground/80">{label}</p>
+			<p className="mb-1 font-medium">{label}</p>
 			<ul className="space-y-0.5">
 				{items.map((item) => (
 					<li key={item} className="truncate font-mono" title={item}>

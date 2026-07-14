@@ -1,14 +1,21 @@
 /**
- * Chat prompt input — follows shadcn.io/ai PromptInput family conventions (subset).
- * @see https://www.shadcn.io/ai/prompt-input
+ * Chat composer input (Motif helper).
+ * Pairs with official Message / Bubble:
+ * @see https://ui.shadcn.com/docs/components/base/message
  */
 import { Loader2, Send } from "lucide-react";
-import type { ComponentProps, FormEvent, ReactNode } from "react";
-import { forwardRef } from "react";
+import type {
+	ComponentProps,
+	FormEvent,
+	KeyboardEventHandler,
+	ReactNode,
+} from "react";
+import { forwardRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type PromptInputProps = Omit<ComponentProps<"form">, "onSubmit"> & {
+	/** Called with trimmed text when the form submits */
 	onSubmitPrompt?: (value: string) => void | Promise<void>;
 	onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -35,29 +42,84 @@ export function PromptInput({
 	return (
 		<form
 			data-slot="prompt-input"
-			className={cn("flex shrink-0 gap-1.5 border-t p-2", className)}
+			className={cn("shrink-0 border-t bg-background p-3", className)}
 			onSubmit={handleSubmit}
 			{...props}
 		>
-			{children}
+			<div
+				data-slot="prompt-input-shell"
+				className={cn(
+					"flex flex-col gap-2 rounded-xl border border-input bg-muted/30 shadow-sm",
+					"focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+					"dark:bg-input/20",
+				)}
+			>
+				{children}
+			</div>
 		</form>
 	);
 }
 
-export type PromptInputTextareaProps = ComponentProps<"input">;
+export type PromptInputBodyProps = {
+	className?: string;
+	children: ReactNode;
+};
+
+export function PromptInputBody({ className, children }: PromptInputBodyProps) {
+	return (
+		<div
+			data-slot="prompt-input-body"
+			className={cn("min-w-0 flex-1 px-3 pt-2.5", className)}
+		>
+			{children}
+		</div>
+	);
+}
+
+export type PromptInputTextareaProps = ComponentProps<"textarea"> & {
+	/** Enter submits; Shift+Enter inserts newline (default true) */
+	submitOnEnter?: boolean;
+};
 
 export const PromptInputTextarea = forwardRef<
-	HTMLInputElement,
+	HTMLTextAreaElement,
 	PromptInputTextareaProps
->(function PromptInputTextarea({ className, name = "message", ...props }, ref) {
+>(function PromptInputTextarea(
+	{
+		className,
+		name = "message",
+		submitOnEnter = true,
+		onKeyDown,
+		rows = 1,
+		...props
+	},
+	ref,
+) {
+	const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = useCallback(
+		(e) => {
+			onKeyDown?.(e);
+			if (e.defaultPrevented) return;
+			if (!submitOnEnter) return;
+			// Enter without Shift → submit
+			if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+				e.preventDefault();
+				e.currentTarget.form?.requestSubmit();
+			}
+		},
+		[onKeyDown, submitOnEnter],
+	);
+
 	return (
-		<input
+		<textarea
 			ref={ref}
 			data-slot="prompt-input-textarea"
 			name={name}
+			rows={rows}
+			onKeyDown={handleKeyDown}
 			className={cn(
-				"min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 text-[13px] outline-none",
-				"focus-visible:ring-1 focus-visible:ring-ring",
+				"field-sizing-content max-h-40 min-h-[40px] w-full resize-none",
+				"bg-transparent text-[13px] leading-relaxed outline-none",
+				"placeholder:text-muted-foreground",
 				"disabled:cursor-not-allowed disabled:opacity-50",
 				className,
 			)}
@@ -65,6 +127,50 @@ export const PromptInputTextarea = forwardRef<
 		/>
 	);
 });
+
+export type PromptInputFooterProps = {
+	className?: string;
+	children: ReactNode;
+};
+
+export function PromptInputFooter({
+	className,
+	children,
+}: PromptInputFooterProps) {
+	return (
+		<div
+			data-slot="prompt-input-footer"
+			className={cn(
+				"flex items-center justify-between gap-2 px-2 pb-2",
+				className,
+			)}
+		>
+			{children}
+		</div>
+	);
+}
+
+export type PromptInputToolsProps = {
+	className?: string;
+	children?: ReactNode;
+};
+
+export function PromptInputTools({
+	className,
+	children,
+}: PromptInputToolsProps) {
+	return (
+		<div
+			data-slot="prompt-input-tools"
+			className={cn(
+				"flex min-w-0 flex-1 items-center gap-1 text-[11px] text-muted-foreground",
+				className,
+			)}
+		>
+			{children}
+		</div>
+	);
+}
 
 export type PromptInputSubmitProps = ComponentProps<typeof Button> & {
 	status?: "ready" | "streaming" | "submitted";
@@ -82,10 +188,11 @@ export function PromptInputSubmit({
 		<Button
 			type="submit"
 			size="icon-xs"
+			variant={busy ? "secondary" : "default"}
 			data-slot="prompt-input-submit"
 			disabled={disabled || busy}
 			aria-label={busy ? "Sending" : "Send"}
-			className={className}
+			className={cn("shrink-0 rounded-full", className)}
 			{...props}
 		>
 			{children ??
@@ -95,21 +202,5 @@ export function PromptInputSubmit({
 					<Send className="size-3.5" />
 				))}
 		</Button>
-	);
-}
-
-export type PromptInputBodyProps = {
-	className?: string;
-	children: ReactNode;
-};
-
-export function PromptInputBody({ className, children }: PromptInputBodyProps) {
-	return (
-		<div
-			data-slot="prompt-input-body"
-			className={cn("flex min-w-0 flex-1 items-center gap-1.5", className)}
-		>
-			{children}
-		</div>
 	);
 }

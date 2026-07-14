@@ -1,20 +1,19 @@
-/** shadcn.io/ai–style chat primitives used by Motif Chat (ACP transport). */
+/**
+ * Motif chat helpers (PromptInput + scroll shell).
+ * Message / Bubble / Marker come from official shadcn/ui:
+ * @see https://ui.shadcn.com/docs/components/base/message
+ */
 export {
 	Conversation,
 	ConversationContent,
 	ConversationEmptyState,
 } from "./conversation";
 export {
-	Message,
-	MessageContent,
-	MessageHeader,
-	MessageResponse,
-	type MessageRole,
-} from "./message";
-export {
 	PromptInput,
 	PromptInputBody,
+	PromptInputFooter,
 	PromptInputSubmit,
 	PromptInputTextarea,
+	PromptInputTools,
 } from "./prompt-input";
 export { Source, Sources } from "./sources";
