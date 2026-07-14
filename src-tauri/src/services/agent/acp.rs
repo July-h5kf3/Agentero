@@ -1,12 +1,14 @@
 use crate::error::AppError;
 use crate::models::agent::{
-    AgentDescriptor, AgentFailedEvent, AgentResultPayload, AgentStreamEvent, ProbeResult,
+    AgentDescriptor, AgentFailedEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
+    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult,
 };
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use agent_client_protocol::schema::v1::{
     ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
-    PromptRequest, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-    SelectedPermissionOutcome, SessionNotification, SessionUpdate, TextContent,
+    PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
+    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
+    SessionNotification, SessionUpdate, TextContent, ToolCallStatus, ToolKind,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
@@ -35,11 +37,124 @@ fn text_from_content_block(block: &ContentBlock) -> Option<String> {
     }
 }
 
-fn chunk_from_update(update: &SessionUpdate) -> Option<String> {
+fn stream_from_update(update: &SessionUpdate) -> Option<(String, AgentStreamKind)> {
     match update {
-        SessionUpdate::AgentMessageChunk(chunk) => text_from_content_block(&chunk.content),
-        SessionUpdate::AgentThoughtChunk(chunk) => text_from_content_block(&chunk.content),
+        SessionUpdate::AgentMessageChunk(chunk) => {
+            text_from_content_block(&chunk.content).map(|t| (t, AgentStreamKind::Message))
+        }
+        SessionUpdate::AgentThoughtChunk(chunk) => {
+            text_from_content_block(&chunk.content).map(|t| (t, AgentStreamKind::Thought))
+        }
         _ => None,
+    }
+}
+
+fn tool_status_str(s: ToolCallStatus) -> &'static str {
+    match s {
+        ToolCallStatus::Pending => "pending",
+        ToolCallStatus::InProgress => "in_progress",
+        ToolCallStatus::Completed => "completed",
+        ToolCallStatus::Failed => "failed",
+        _ => "pending",
+    }
+}
+
+fn tool_kind_str(k: ToolKind) -> &'static str {
+    match k {
+        ToolKind::Read => "read",
+        ToolKind::Edit => "edit",
+        ToolKind::Delete => "delete",
+        ToolKind::Move => "move",
+        ToolKind::Search => "search",
+        ToolKind::Execute => "execute",
+        ToolKind::Think => "think",
+        ToolKind::Fetch => "fetch",
+        ToolKind::SwitchMode => "switch_mode",
+        ToolKind::Other => "other",
+        _ => "other",
+    }
+}
+
+fn plan_status_str(s: &PlanEntryStatus) -> &'static str {
+    match s {
+        PlanEntryStatus::Pending => "pending",
+        PlanEntryStatus::InProgress => "in_progress",
+        PlanEntryStatus::Completed => "completed",
+        _ => "pending",
+    }
+}
+
+fn plan_priority_str(p: &PlanEntryPriority) -> &'static str {
+    match p {
+        PlanEntryPriority::High => "high",
+        PlanEntryPriority::Medium => "medium",
+        PlanEntryPriority::Low => "low",
+        _ => "medium",
+    }
+}
+
+fn emit_rich_session_update(app: &AppHandle, session_id: &str, update: &SessionUpdate) {
+    match update {
+        SessionUpdate::ToolCall(tc) => {
+            let _ = app.emit(
+                "agent:tool",
+                AgentToolEvent {
+                    session_id: session_id.to_string(),
+                    tool_call_id: tc.tool_call_id.to_string(),
+                    title: Some(tc.title.clone()),
+                    kind: Some(tool_kind_str(tc.kind).to_string()),
+                    status: Some(tool_status_str(tc.status).to_string()),
+                    input: tc.raw_input.clone(),
+                    output: tc.raw_output.clone(),
+                    full: true,
+                },
+            );
+        }
+        SessionUpdate::ToolCallUpdate(upd) => {
+            let f = &upd.fields;
+            let _ = app.emit(
+                "agent:tool",
+                AgentToolEvent {
+                    session_id: session_id.to_string(),
+                    tool_call_id: upd.tool_call_id.to_string(),
+                    title: f.title.clone(),
+                    kind: f.kind.map(tool_kind_str).map(str::to_string),
+                    status: f.status.map(tool_status_str).map(str::to_string),
+                    input: f.raw_input.clone(),
+                    output: f.raw_output.clone(),
+                    full: false,
+                },
+            );
+        }
+        SessionUpdate::Plan(plan) => {
+            let entries = plan
+                .entries
+                .iter()
+                .map(|e| AgentPlanEntry {
+                    content: e.content.clone(),
+                    status: plan_status_str(&e.status).to_string(),
+                    priority: plan_priority_str(&e.priority).to_string(),
+                })
+                .collect();
+            let _ = app.emit(
+                "agent:plan",
+                AgentPlanEvent {
+                    session_id: session_id.to_string(),
+                    entries,
+                },
+            );
+        }
+        SessionUpdate::UsageUpdate(u) => {
+            let _ = app.emit(
+                "agent:usage",
+                AgentUsageEvent {
+                    session_id: session_id.to_string(),
+                    used: u.used,
+                    size: u.size,
+                },
+            );
+        }
+        _ => {}
     }
 }
 
@@ -159,13 +274,16 @@ pub async fn run_once(
 
     let acp = to_acp_agent(&desc)?;
     let content_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let thought_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     let content_for_notif = content_buf.clone();
+    let thought_for_notif = thought_buf.clone();
     let app_for_notif = app.clone();
     let session_for_notif = session_id.clone();
 
     let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let stop_for_conn = stop_reason.clone();
     let content_for_conn = content_buf.clone();
+    let thought_for_conn = thought_buf.clone();
     let session_for_conn = session_id.clone();
     let message_for_conn = message_id.clone();
     let app_for_conn = app.clone();
@@ -175,18 +293,29 @@ pub async fn run_once(
         .name("motif")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
-                if let Some(chunk) = chunk_from_update(&notification.update) {
-                    if let Ok(mut buf) = content_for_notif.lock() {
-                        buf.push_str(&chunk);
+                if let Some((chunk, kind)) = stream_from_update(&notification.update) {
+                    match kind {
+                        AgentStreamKind::Message => {
+                            if let Ok(mut buf) = content_for_notif.lock() {
+                                buf.push_str(&chunk);
+                            }
+                        }
+                        AgentStreamKind::Thought => {
+                            if let Ok(mut buf) = thought_for_notif.lock() {
+                                buf.push_str(&chunk);
+                            }
+                        }
                     }
                     let _ = app_for_notif.emit(
                         "agent:stream",
                         AgentStreamEvent {
                             session_id: session_for_notif.clone(),
                             chunk,
+                            kind,
                         },
                     );
                 }
+                emit_rich_session_update(&app_for_notif, &session_for_notif, &notification.update);
                 Ok(())
             },
             agent_client_protocol::on_receive_notification!(),
@@ -241,11 +370,20 @@ pub async fn run_once(
                     .lock()
                     .map(|g| g.clone())
                     .unwrap_or_default();
+                let reasoning = thought_for_conn
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
                 let sources = extract_sources(&content);
                 let payload = AgentResultPayload {
                     session_id: session_for_conn.clone(),
                     message_id: message_for_conn.clone(),
                     content,
+                    reasoning: if reasoning.is_empty() {
+                        None
+                    } else {
+                        Some(reasoning)
+                    },
                     sources,
                     stop_reason: stop_for_conn.lock().ok().and_then(|g| g.clone()),
                 };

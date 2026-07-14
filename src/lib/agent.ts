@@ -85,13 +85,48 @@ export type AgentResultPayload = {
 	sessionId: string;
 	messageId: string;
 	content: string;
+	/** ACP agent thought / reasoning text, if the agent emitted thought chunks. */
+	reasoning?: string | null;
 	sources: string[];
 	stopReason?: string | null;
 };
 
+export type AgentStreamKind = "message" | "thought";
+
 export type AgentStreamEvent = {
 	sessionId: string;
 	chunk: string;
+	/** Defaults to message when older backends omit the field. */
+	kind?: AgentStreamKind;
+};
+
+export type AgentToolEvent = {
+	sessionId: string;
+	toolCallId: string;
+	title?: string | null;
+	kind?: string | null;
+	/** pending | in_progress | completed | failed */
+	status?: string | null;
+	input?: unknown;
+	output?: unknown;
+	full?: boolean;
+};
+
+export type AgentPlanEntry = {
+	content: string;
+	status: string;
+	priority: string;
+};
+
+export type AgentPlanEvent = {
+	sessionId: string;
+	entries: AgentPlanEntry[];
+};
+
+export type AgentUsageEvent = {
+	sessionId: string;
+	used: number;
+	size: number;
 };
 
 export type AgentFailedEvent = {
@@ -228,6 +263,24 @@ export async function listenAgentFailed(
 	handler: (e: AgentFailedEvent) => void,
 ): Promise<UnlistenFn> {
 	return listen<AgentFailedEvent>("agent:failed", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentTool(
+	handler: (e: AgentToolEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentToolEvent>("agent:tool", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentPlan(
+	handler: (e: AgentPlanEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentPlanEvent>("agent:plan", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentUsage(
+	handler: (e: AgentUsageEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentUsageEvent>("agent:usage", (ev) => handler(ev.payload));
 }
 
 export function acpStatusLabel(status: CatalogAcpStatus): string {
