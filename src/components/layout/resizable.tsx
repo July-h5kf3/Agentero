@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils";
 
 export { Group as ResizableGroup, Panel as ResizablePanel };
 
+/**
+ * Editor-style sash (VS Code / Cursor): 1px line, wider invisible hit target.
+ */
 export function ResizableHandle({
 	className,
 	...props
@@ -12,9 +15,11 @@ export function ResizableHandle({
 	return (
 		<Separator
 			className={cn(
-				"relative flex w-1.5 items-center justify-center bg-border outline-none transition-colors",
-				"hover:bg-ring/40 data-[separator=active]:bg-ring/50",
-				"after:absolute after:inset-y-0 after:left-1/2 after:w-3 after:-translate-x-1/2",
+				// Visual: single 1px rule; hit area via ::after (~5px)
+				"relative z-10 w-px shrink-0 bg-border outline-none transition-colors",
+				"hover:bg-foreground/25 data-[separator=active]:bg-foreground/35",
+				"after:absolute after:inset-y-0 after:left-1/2 after:w-[5px] after:-translate-x-1/2",
+				"after:content-['']",
 				className,
 			)}
 			{...props}

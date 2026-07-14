@@ -215,6 +215,45 @@ export default function App() {
 		toggleSidebar,
 	]);
 
+	// Native menu bar (motif → Settings…, File, View) — desktop only
+	useEffect(() => {
+		if (!isTauri()) return;
+
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+
+			unsubs.push(
+				await listen("settings", () => {
+					openSettings();
+				}),
+			);
+			unsubs.push(
+				await listen("open_vault", () => {
+					void handleOpenVault();
+				}),
+			);
+			unsubs.push(
+				await listen("refresh_tree", () => {
+					handleRefresh();
+				}),
+			);
+			unsubs.push(
+				await listen("toggle_sidebar", () => {
+					toggleSidebar();
+				}),
+			);
+		})();
+
+		return () => {
+			cancelled = true;
+			for (const unsub of unsubs) unsub();
+		};
+	}, [handleOpenVault, handleRefresh, openSettings, toggleSidebar]);
+
 	const editor = usePlateEditor({
 		plugins: [
 			BoldPlugin,
@@ -308,14 +347,13 @@ export default function App() {
 				>
 					<aside
 						ref={sidebarAsideRef}
-						className="flex h-full min-h-0 flex-col border-r bg-muted/20"
+						className="flex h-full min-h-0 flex-col bg-muted/20"
 					>
 						<VaultSidebarHeader
 							title={vaultDisplayName(vaultPath)}
 							onOpenVault={() => void handleOpenVault()}
 							onRefresh={handleRefresh}
 							onUseDemo={handleUseDemo}
-							onOpenSettings={() => openSettings()}
 							busy={busy}
 							error={error}
 							isDemo={isDemo}

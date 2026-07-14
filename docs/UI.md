@@ -25,13 +25,14 @@
   - 打开 Vault → `FolderSearch`（⌘O）
   - 刷新树 → `RefreshCw`（⌘R）
   - 切回 Demo → `Sparkles`（仅非 demo）
-  - 设置 → `Settings`（⌘,）
+- **设置入口不在侧边栏**：使用 macOS 顶部菜单 **motif → Settings…**（`⌘,`），不放齿轮图标。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
 
 ## 3. 布局
 
 - 工作台：可伸缩侧边栏文件树 + Markdown + Preview。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
+- **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
 ### 3.1 快捷键（对齐 macOS / Apple HIG 习惯）
@@ -59,7 +60,7 @@
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | 侧边栏齿轮图标，或 `⌘,` |
+| 入口 | 顶部菜单栏 **motif → Settings…**，或 `⌘,`（不在侧边栏放设置图标） |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
 | 分类 | General · Appearance · Agent · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
