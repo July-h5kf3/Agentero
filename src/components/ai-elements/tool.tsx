@@ -25,7 +25,10 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
 	<Collapsible
-		className={cn("group not-prose mb-4 w-full rounded-md border", className)}
+		className={cn(
+			"group not-prose mb-1.5 w-full max-w-full rounded border bg-muted/20",
+			className,
+		)}
 		{...props}
 	/>
 );
@@ -65,8 +68,11 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
 };
 
 export const getStatusBadge = (status: ToolPart["state"]) => (
-	<Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-		{statusIcons[status]}
+	<Badge
+		className="h-5 gap-1 rounded-full px-1.5 py-0 text-[10px] font-normal"
+		variant="secondary"
+	>
+		<span className="[&>svg]:size-3">{statusIcons[status]}</span>
 		{statusLabels[status]}
 	</Badge>
 );
@@ -85,17 +91,18 @@ export const ToolHeader = ({
 	return (
 		<CollapsibleTrigger
 			className={cn(
-				"flex w-full items-center justify-between gap-4 p-3",
+				// Left-aligned compact header (not space-between)
+				"flex w-full items-center justify-start gap-1.5 px-2 py-1 text-left",
 				className,
 			)}
 			{...props}
 		>
-			<div className="flex items-center gap-2">
-				<WrenchIcon className="size-4 text-muted-foreground" />
-				<span className="font-medium text-sm">{title ?? derivedName}</span>
-				{getStatusBadge(state)}
-			</div>
-			<ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+			<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform -rotate-90 group-data-[state=open]:rotate-0" />
+			<WrenchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+			<span className="min-w-0 truncate font-medium text-xs">
+				{title ?? derivedName}
+			</span>
+			{getStatusBadge(state)}
 		</CollapsibleTrigger>
 	);
 };
@@ -105,7 +112,7 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
 	<CollapsibleContent
 		className={cn(
-			"data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+			"data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-2 border-t px-2 py-1.5 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
 			className,
 		)}
 		{...props}
@@ -117,11 +124,11 @@ export type ToolInputProps = ComponentProps<"div"> & {
 };
 
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-	<div className={cn("space-y-2 overflow-hidden", className)} {...props}>
-		<h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+	<div className={cn("space-y-1 overflow-hidden", className)} {...props}>
+		<h4 className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
 			Parameters
 		</h4>
-		<div className="rounded-md bg-muted/50">
+		<div className="rounded bg-muted/50 text-xs">
 			<CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
 		</div>
 	</div>
@@ -153,19 +160,19 @@ export const ToolOutput = ({
 	}
 
 	return (
-		<div className={cn("space-y-2", className)} {...props}>
-			<h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+		<div className={cn("space-y-1", className)} {...props}>
+			<h4 className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
 				{errorText ? "Error" : "Result"}
 			</h4>
 			<div
 				className={cn(
-					"overflow-x-auto rounded-md text-xs [&_table]:w-full",
+					"overflow-x-auto rounded text-[11px] [&_table]:w-full",
 					errorText
 						? "bg-destructive/10 text-destructive"
 						: "bg-muted/50 text-foreground",
 				)}
 			>
-				{errorText && <div>{errorText}</div>}
+				{errorText && <div className="px-1.5 py-1">{errorText}</div>}
 				{Output}
 			</div>
 		</div>

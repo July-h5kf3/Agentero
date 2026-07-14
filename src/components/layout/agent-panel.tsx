@@ -96,12 +96,6 @@ import {
 } from "@/components/ai-elements/sources";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import {
-	Task,
-	TaskContent,
-	TaskItem,
-	TaskTrigger,
-} from "@/components/ai-elements/task";
-import {
 	Tool,
 	ToolContent,
 	ToolHeader,
@@ -1048,13 +1042,7 @@ export function AgentPanel({
 												{tools.map((t) => {
 													const state = toolPartState(t.status);
 													return (
-														<Tool
-															key={t.id}
-															defaultOpen={
-																state !== "output-available" &&
-																state !== "output-error"
-															}
-														>
+														<Tool key={t.id} defaultOpen={false}>
 															<ToolHeader
 																title={t.title}
 																type={`tool-${t.kind}`}
@@ -1076,20 +1064,6 @@ export function AgentPanel({
 														</Tool>
 													);
 												})}
-												{tools.length > 0 ? (
-													<Task className="mb-2" defaultOpen={false}>
-														<TaskTrigger
-															title={`${tools.length} tool call(s)`}
-														/>
-														<TaskContent>
-															{tools.map((t) => (
-																<TaskItem key={t.id}>
-																	{t.title} · {t.status}
-																</TaskItem>
-															))}
-														</TaskContent>
-													</Task>
-												) : null}
 												{line.text ? (
 													<div className="min-w-0">
 														<MessageResponse
