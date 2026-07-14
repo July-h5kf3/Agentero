@@ -2,13 +2,23 @@ import {
 	Bot,
 	Info,
 	Keyboard,
+	Loader2,
 	Paintbrush,
+	Plus,
 	Shield,
 	SlidersHorizontal,
+	Trash2,
 	X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { type ReactNode, useEffect, useId, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,12 +30,26 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+	type AgentTemplate,
+	acpStatusLabel,
+	type CatalogEntry,
+	type CatalogScanResponse,
+	ensureCatalogAgent,
+	probeAgent,
+	probeCatalogAgent,
+	removeAgent,
+	scanCatalog,
+	setAgentEnabled,
+	upsertAgent,
+} from "@/lib/agent";
 import type { AppSettings, ThemePreference } from "@/lib/settings";
 import {
 	formatShortcut,
 	type ShortcutDef,
 	shortcutsByGroup,
 } from "@/lib/shortcuts";
+import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
@@ -338,6 +362,45 @@ function AppearancePane({
 	);
 }
 
+function StatusBadge({
+	tone,
+	children,
+}: {
+	tone: "ok" | "warn" | "err" | "muted" | "primary";
+	children: ReactNode;
+}) {
+	return (
+		<span
+			className={cn(
+				"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
+				tone === "ok" &&
+					"bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+				tone === "warn" && "bg-amber-500/15 text-amber-800 dark:text-amber-400",
+				tone === "err" && "bg-destructive/15 text-destructive",
+				tone === "muted" && "bg-muted text-muted-foreground",
+				tone === "primary" && "bg-primary/10 text-primary",
+			)}
+		>
+			{children}
+		</span>
+	);
+}
+
+function catalogStatusTone(
+	status: CatalogEntry["acpStatus"],
+): "ok" | "warn" | "err" | "muted" {
+	switch (status) {
+		case "ready":
+			return "ok";
+		case "failed":
+			return "err";
+		case "not-probed":
+			return "warn";
+		case "missing":
+			return "muted";
+	}
+}
+
 function AgentPane({
 	settings,
 	patch,
@@ -345,87 +408,358 @@ function AgentPane({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
-	const [showKey, setShowKey] = useState(false);
-	const baseId = useId();
-	const keyId = useId();
-	const modelId = useId();
+	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [probing, setProbing] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [adding, setAdding] = useState(false);
+	const [formName, setFormName] = useState("Custom agent");
+	const [formCommand, setFormCommand] = useState("");
+	const [formArgs, setFormArgs] = useState("");
+	const autoProbedRef = useRef(false);
+
+	const refresh = useCallback(async (): Promise<CatalogScanResponse | null> => {
+		if (!isTauri()) {
+			setError("Agent registry requires the desktop app.");
+			return null;
+		}
+		setLoading(true);
+		setError(null);
+		try {
+			const scan = await scanCatalog();
+			setCatalog(scan);
+			return scan;
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+			return null;
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	const probeInstalled = useCallback(
+		async (scan: CatalogScanResponse) => {
+			if (!isTauri()) return;
+			const candidates = scan.entries.filter(
+				(e) => e.binaryAvailable || e.acpCommandAvailable,
+			);
+			const custom = scan.customAgents.filter((a) => a.available);
+			if (candidates.length === 0 && custom.length === 0) return;
+
+			setProbing(true);
+			setError(null);
+			try {
+				for (const entry of candidates) {
+					try {
+						await probeCatalogAgent(entry.templateId);
+					} catch {
+						// badges update after rescan
+					}
+				}
+				for (const agent of custom) {
+					try {
+						await probeAgent(agent.id);
+					} catch {
+						// ignore
+					}
+				}
+				await refresh();
+			} finally {
+				setProbing(false);
+			}
+		},
+		[refresh],
+	);
+
+	useEffect(() => {
+		if (autoProbedRef.current) return;
+		autoProbedRef.current = true;
+		void (async () => {
+			const scan = await refresh();
+			if (scan) await probeInstalled(scan);
+		})();
+	}, [refresh, probeInstalled]);
+
+	useEffect(() => {
+		if (catalog && catalog.enabled !== settings.agentEnabled) {
+			patch({ agentEnabled: catalog.enabled });
+		}
+	}, [catalog, settings.agentEnabled, patch]);
+
+	const onToggleEnabled = async (v: boolean) => {
+		patch({ agentEnabled: v });
+		if (!isTauri()) return;
+		try {
+			await setAgentEnabled(v);
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const onRescanAndProbe = async () => {
+		const scan = await refresh();
+		if (scan) await probeInstalled(scan);
+	};
+
+	const onUseDefault = async (entry: CatalogEntry) => {
+		if (!isTauri()) return;
+		setError(null);
+		try {
+			await ensureCatalogAgent(entry.templateId, true);
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const onRemove = async (id: string) => {
+		if (!isTauri()) return;
+		try {
+			await removeAgent(id);
+			await refresh();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const onAddCustom = async () => {
+		if (!isTauri()) return;
+		setLoading(true);
+		setError(null);
+		try {
+			const args = formArgs.trim().split(/\s+/).filter(Boolean);
+			await upsertAgent({
+				name: formName.trim() || formCommand,
+				template: "custom" as AgentTemplate,
+				command: formCommand.trim(),
+				args,
+				setDefault: true,
+			});
+			setAdding(false);
+			setFormCommand("");
+			setFormArgs("");
+			const scan = await refresh();
+			if (scan) await probeInstalled(scan);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const entries = catalog?.entries ?? [];
+	const customAgents = catalog?.customAgents ?? [];
+	const busy = loading || probing;
 
 	return (
 		<>
 			<PageTitle
 				title="Agent"
-				description="Bring your own key. Stored only on this device."
+				description="Bring your own ACP agent (BYOA). Motif is the client only."
 			/>
-			<SettingsGroup footer="Keys stay in local storage for now; system keychain support comes later.">
+			<SettingsGroup footer="Model API keys stay with each agent CLI — Motif never stores them.">
 				<SettingsRow
 					label="Enable Agent"
-					description="Allow agent workflows in the vault."
+					description="Allow ACP workflows in this app."
 					htmlFor="agent-enabled"
 				>
 					<Switch
 						id="agent-enabled"
 						checked={settings.agentEnabled}
-						onCheckedChange={(v) => patch({ agentEnabled: v })}
+						onCheckedChange={(v) => void onToggleEnabled(v)}
 					/>
 				</SettingsRow>
 			</SettingsGroup>
 
-			<SettingsGroup>
-				<div className="space-y-3 px-3.5 py-3">
-					<div className="space-y-1.5">
-						<Label htmlFor={baseId} className="font-normal text-[13px]">
-							Base URL
-						</Label>
-						<Input
-							id={baseId}
-							value={settings.agentBaseUrl}
-							disabled={!settings.agentEnabled}
-							onChange={(e) => patch({ agentBaseUrl: e.target.value })}
-							placeholder="https://api.anthropic.com"
-							autoComplete="off"
-							spellCheck={false}
-						/>
-					</div>
-					<div className="space-y-1.5">
-						<div className="flex items-center justify-between">
-							<Label htmlFor={keyId} className="font-normal text-[13px]">
-								API Key
-							</Label>
-							<button
-								type="button"
-								className="text-muted-foreground text-xs hover:text-foreground"
-								onClick={() => setShowKey((s) => !s)}
-							>
-								{showKey ? "Hide" : "Show"}
-							</button>
-						</div>
-						<Input
-							id={keyId}
-							type={showKey ? "text" : "password"}
-							value={settings.agentApiKey}
-							disabled={!settings.agentEnabled}
-							onChange={(e) => patch({ agentApiKey: e.target.value })}
-							placeholder="sk-…"
-							autoComplete="off"
-							spellCheck={false}
-						/>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor={modelId} className="font-normal text-[13px]">
-							Model
-						</Label>
-						<Input
-							id={modelId}
-							value={settings.agentModel}
-							disabled={!settings.agentEnabled}
-							onChange={(e) => patch({ agentModel: e.target.value })}
-							placeholder="claude-sonnet-4-20250514"
-							autoComplete="off"
-							spellCheck={false}
-						/>
-					</div>
+			{!isTauri() ? (
+				<p className="mb-3 text-muted-foreground text-xs">
+					Run `pnpm tauri dev` to scan agents on this machine.
+				</p>
+			) : null}
+
+			<div className="mb-2 flex items-center justify-between gap-2">
+				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					Common agents
+				</p>
+				<div className="flex items-center gap-1.5">
+					{busy ? (
+						<span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+							<Loader2 className="size-3 animate-spin" />
+							{probing ? "Probing…" : "Scanning…"}
+						</span>
+					) : null}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="h-7 px-2 text-xs"
+						disabled={busy || !isTauri()}
+						onClick={() => void onRescanAndProbe()}
+					>
+						Probe
+					</Button>
 				</div>
+			</div>
+
+			<SettingsGroup>
+				{entries.length === 0 && busy ? (
+					<div className="flex items-center gap-2 px-3.5 py-4 text-muted-foreground text-xs">
+						<Loader2 className="size-3.5 animate-spin" />
+						{probing ? "Probing…" : "Scanning…"}
+					</div>
+				) : null}
+				{entries.map((entry) => {
+					const canUse =
+						entry.binaryAvailable ||
+						entry.acpCommandAvailable ||
+						entry.acpStatus === "ready";
+					return (
+						<div
+							key={entry.templateId}
+							className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
+						>
+							<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+								<span className="font-medium text-[13px]">{entry.name}</span>
+								{entry.isDefault ? (
+									<StatusBadge tone="primary">default</StatusBadge>
+								) : null}
+								<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
+									{acpStatusLabel(entry.acpStatus)}
+								</StatusBadge>
+								{entry.binaryAvailable ? (
+									<StatusBadge tone="ok">installed</StatusBadge>
+								) : (
+									<StatusBadge tone="muted">not on PATH</StatusBadge>
+								)}
+							</div>
+							{!entry.isDefault && canUse ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-7 shrink-0 px-2 text-xs"
+									onClick={() => void onUseDefault(entry)}
+								>
+									Use default
+								</Button>
+							) : null}
+						</div>
+					);
+				})}
 			</SettingsGroup>
+
+			<div className="mb-2 flex items-center justify-between gap-2">
+				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					Custom
+				</p>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-xs"
+					aria-label="Add custom agent"
+					disabled={!isTauri()}
+					onClick={() => setAdding((v) => !v)}
+				>
+					<Plus className="size-3.5" />
+				</Button>
+			</div>
+
+			{customAgents.length > 0 ? (
+				<SettingsGroup>
+					{customAgents.map((agent) => {
+						const isDefault = catalog?.defaultId === agent.id;
+						return (
+							<div
+								key={agent.id}
+								className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
+							>
+								<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+									<span className="font-medium text-[13px]">{agent.name}</span>
+									{isDefault ? (
+										<StatusBadge tone="primary">default</StatusBadge>
+									) : null}
+									{agent.lastProbeOk === true ? (
+										<StatusBadge tone="ok">ACP ready</StatusBadge>
+									) : agent.lastProbeOk === false ? (
+										<StatusBadge tone="err">ACP failed</StatusBadge>
+									) : agent.available ? (
+										<StatusBadge tone="warn">Not probed</StatusBadge>
+									) : (
+										<StatusBadge tone="muted">Not installed</StatusBadge>
+									)}
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Remove"
+									onClick={() => void onRemove(agent.id)}
+								>
+									<Trash2 className="size-3.5" />
+								</Button>
+							</div>
+						);
+					})}
+				</SettingsGroup>
+			) : null}
+
+			{adding ? (
+				<SettingsGroup footer="Any ACP-compatible stdio command. Motif does not ship agents.">
+					<div className="space-y-2.5 px-3.5 py-3">
+						<div className="space-y-1">
+							<Label className="font-normal text-[13px]">Name</Label>
+							<Input
+								value={formName}
+								onChange={(e) => setFormName(e.target.value)}
+								spellCheck={false}
+							/>
+						</div>
+						<div className="space-y-1">
+							<Label className="font-normal text-[13px]">Command</Label>
+							<Input
+								value={formCommand}
+								onChange={(e) => setFormCommand(e.target.value)}
+								placeholder="opencode"
+								spellCheck={false}
+								autoComplete="off"
+							/>
+						</div>
+						<div className="space-y-1">
+							<Label className="font-normal text-[13px]">Args</Label>
+							<Input
+								value={formArgs}
+								onChange={(e) => setFormArgs(e.target.value)}
+								placeholder="acp"
+								spellCheck={false}
+								autoComplete="off"
+							/>
+						</div>
+						<div className="flex justify-end gap-1.5 pt-1">
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								onClick={() => setAdding(false)}
+							>
+								Cancel
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								disabled={!formCommand.trim() || loading}
+								onClick={() => void onAddCustom()}
+							>
+								Save
+							</Button>
+						</div>
+					</div>
+				</SettingsGroup>
+			) : null}
+
+			{error ? (
+				<p className="mt-1 px-1 text-destructive text-xs">{error}</p>
+			) : null}
 		</>
 	);
 }

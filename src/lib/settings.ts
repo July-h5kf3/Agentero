@@ -8,11 +8,8 @@ export type AppSettings = {
 	theme: ThemePreference;
 	editorFontSize: number;
 	showLineNumbers: boolean;
-	// Agent
+	// Agent (local UI prefs; registry lives in Host)
 	agentEnabled: boolean;
-	agentBaseUrl: string;
-	agentApiKey: string;
-	agentModel: string;
 	// Privacy
 	analyticsEnabled: boolean;
 	shareCrashReports: boolean;
@@ -24,10 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	theme: "system",
 	editorFontSize: 14,
 	showLineNumbers: false,
-	agentEnabled: false,
-	agentBaseUrl: "https://api.anthropic.com",
-	agentApiKey: "",
-	agentModel: "claude-sonnet-4-20250514",
+	agentEnabled: true,
 	analyticsEnabled: false,
 	shareCrashReports: false,
 };
@@ -39,7 +33,18 @@ export function loadSettings(): AppSettings {
 		const raw = localStorage.getItem(SETTINGS_KEY);
 		if (!raw) return { ...DEFAULT_SETTINGS };
 		const parsed = JSON.parse(raw) as Partial<AppSettings>;
-		return { ...DEFAULT_SETTINGS, ...parsed };
+		// Drop legacy BYOK fields if present.
+		const {
+			agentBaseUrl: _u,
+			agentApiKey: _k,
+			agentModel: _m,
+			...rest
+		} = parsed as Partial<AppSettings> & {
+			agentBaseUrl?: string;
+			agentApiKey?: string;
+			agentModel?: string;
+		};
+		return { ...DEFAULT_SETTINGS, ...rest };
 	} catch {
 		return { ...DEFAULT_SETTINGS };
 	}
