@@ -706,7 +706,6 @@ export default function App() {
 								className="min-h-0 h-full"
 								title="Chat"
 								autoFocus
-								onClose={() => setChatOpen(false)}
 							/>
 						</ResizablePanel>
 					) : null}

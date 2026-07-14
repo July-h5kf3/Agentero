@@ -1,12 +1,5 @@
 import type { ToolUIPart } from "ai";
-import {
-	Check,
-	CheckIcon,
-	ChevronDown,
-	CopyIcon,
-	History,
-	X,
-} from "lucide-react";
+import { Check, CheckIcon, ChevronDown, CopyIcon, History } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -149,7 +142,6 @@ type AgentPanelProps = {
 	vaultPath: string | null;
 	className?: string;
 	headerActions?: ReactNode;
-	onClose?: () => void;
 	autoFocus?: boolean;
 	title?: string;
 };
@@ -397,7 +389,6 @@ export function AgentPanel({
 	vaultPath,
 	className,
 	headerActions,
-	onClose,
 	autoFocus = false,
 	title = "Chat",
 }: AgentPanelProps) {
@@ -995,17 +986,6 @@ export function AgentPanel({
 					</PopoverContent>
 				</Popover>
 				{headerActions}
-				{onClose ? (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Close chat"
-						onClick={onClose}
-					>
-						<X className="size-3.5" />
-					</Button>
-				) : null}
 			</div>
 
 			<Conversation className="min-h-0">
