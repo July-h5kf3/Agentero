@@ -200,6 +200,26 @@ type AgentOption = {
 	source: "registry" | "catalog";
 };
 
+/** Catalog entry is usable in Chat only when ACP handshake succeeded. */
+function catalogEntryUsable(e: {
+	acpStatus: string;
+	binaryAvailable: boolean;
+	acpCommandAvailable: boolean;
+}): boolean {
+	return e.acpStatus === "ready";
+}
+
+function registryAgentUsable(a: {
+	available: boolean;
+	lastProbeOk?: boolean | null;
+}): boolean {
+	return a.available || a.lastProbeOk === true;
+}
+
+/**
+ * Agents shown in the Chat header switcher.
+ * Unavailable ACP backends are omitted entirely (not shown as disabled).
+ */
 function buildOptions(
 	registry: AgentListResponse | null,
 	catalog: CatalogScanResponse | null,
@@ -209,6 +229,7 @@ function buildOptions(
 
 	if (catalog) {
 		for (const e of catalog.entries) {
+			if (!catalogEntryUsable(e)) continue;
 			const id = e.registeredId ?? null;
 			if (id) seenIds.add(id);
 			options.push({
@@ -216,13 +237,13 @@ function buildOptions(
 				id,
 				templateId: e.templateId,
 				name: e.name,
-				available:
-					e.acpStatus === "ready" || e.binaryAvailable || e.acpCommandAvailable,
+				available: true,
 				isDefault: e.isDefault,
 				source: "catalog",
 			});
 		}
 		for (const a of catalog.customAgents) {
+			if (!registryAgentUsable(a)) continue;
 			if (seenIds.has(a.id)) continue;
 			seenIds.add(a.id);
 			options.push({
@@ -230,7 +251,7 @@ function buildOptions(
 				id: a.id,
 				templateId: null,
 				name: a.name,
-				available: a.available || a.lastProbeOk === true,
+				available: true,
 				isDefault: catalog.defaultId === a.id,
 				source: "registry",
 			});
@@ -239,6 +260,7 @@ function buildOptions(
 
 	if (registry) {
 		for (const a of registry.agents) {
+			if (!registryAgentUsable(a)) continue;
 			if (seenIds.has(a.id)) continue;
 			seenIds.add(a.id);
 			options.push({
@@ -246,7 +268,7 @@ function buildOptions(
 				id: a.id,
 				templateId: null,
 				name: a.name,
-				available: a.available || a.lastProbeOk === true,
+				available: true,
 				isDefault: registry.defaultId === a.id,
 				source: "registry",
 			});
@@ -261,6 +283,7 @@ function resolveSelected(
 	selectedId: string | null,
 	registry: AgentListResponse | null,
 ): AgentOption | undefined {
+	// options is already availability-filtered
 	if (selectedId) {
 		const byId = options.find((o) => o.id === selectedId);
 		if (byId) return byId;
@@ -268,9 +291,10 @@ function resolveSelected(
 	const def = options.find((o) => o.isDefault);
 	if (def) return def;
 	if (registry?.defaultId) {
-		return options.find((o) => o.id === registry.defaultId);
+		const byDefault = options.find((o) => o.id === registry.defaultId);
+		if (byDefault) return byDefault;
 	}
-	return options.find((o) => o.available) ?? options[0];
+	return options[0];
 }
 
 function mapToolStatus(
@@ -852,7 +876,7 @@ export function AgentPanel({
 							<DropdownMenuSeparator />
 							{options.length === 0 ? (
 								<div className="px-2 py-1.5 text-muted-foreground text-xs">
-									No agents. Configure in Settings.
+									No ready ACP agents. Configure in Settings.
 								</div>
 							) : (
 								options.map((opt) => {
@@ -862,19 +886,10 @@ export function AgentPanel({
 									return (
 										<DropdownMenuItem
 											key={opt.key}
-											disabled={!opt.available && !opt.id}
 											className="flex items-center justify-between gap-2"
 											onSelect={() => void selectAgent(opt)}
 										>
-											<span className="min-w-0 truncate">
-												{opt.name}
-												{!opt.available ? (
-													<span className="text-muted-foreground">
-														{" "}
-														· unavailable
-													</span>
-												) : null}
-											</span>
+											<span className="min-w-0 truncate">{opt.name}</span>
 											{isActive ? (
 												<Check className="size-3.5 shrink-0 opacity-80" />
 											) : null}
