@@ -1,11 +1,16 @@
 # Motif UI 规范
 
-## 1. 主题
+## 1. 主题与设计系统
 
-- 使用 tweakcn **modern-minimal** 主题：
+- **基础组件**：以 [shadcn/ui](https://ui.shadcn.com/) 为规范（`components.json` → `style: radix-nova`，`baseColor: neutral`，CSS variables）。
+- **主题**：tweakcn **modern-minimal**（覆盖 token，不另起皮肤）：
   ```bash
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
+- **Chat / AI 界面**：以 [shadcn.io/ai](https://www.shadcn.io/ai) 的组件族为 **Chat UI 规范**（Conversation · Message · PromptInput · Sources · Loader …）。  
+  - 主题 **不单独配置**：继续读 `--background` / `--primary` / `--muted` / `--card` 等 shadcn token，随 System / Light / Dark。  
+  - 传输层 **不是** Vercel AI SDK 默认 HTTP chat，而是 Motif **ACP Client**（`agent_run_once` + 事件流）；UI 只消费消息模型。  
+  - 本地实现目录：`src/components/ai/`（对齐 shadcn.io/ai 命名与结构，可按需替换为官方 registry 拷贝）。
 - 视觉原则：**尽量简约，减少不必要的元素**。
 - 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
 
@@ -30,8 +35,9 @@
 
 ## 3. 布局
 
-- 工作台：可伸缩侧边栏文件树 + **中间内容** + Preview。
-- **三栏 header 等高**：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
+- 工作台默认 **三栏**：文件树 + 中间内容 + Preview/Notes。
+- **⌘L** 打开 **第四栏 Chat**（ACP chatbot）；打开后为四栏。关闭 Chat 或点 Chat header 的关闭后恢复三栏。
+- 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
 - **独立滚动**：侧边栏 / 中间 / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
@@ -63,9 +69,24 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦预览 | |
+| `⌘L` | 显示 / 隐藏 Chat 侧栏 | 第四栏 ACP 对话 |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
+
+### 3.2 Chat 侧栏（shadcn.io/ai 规范）
+
+| 要求 | 说明 |
+|---|---|
+| 入口 | `⌘L` 或菜单 **View → Toggle Chat** |
+| 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ Conversation + PromptInput |
+| 组件 | `src/components/ai/*`：`Conversation` / `Message` / `PromptInput` / `Sources` |
+| 业务壳 | `src/components/agent/agent-panel.tsx`：注册表、流式事件、默认 Agent |
+| 空状态 | ConversationEmptyState，简短英文；无常驻帮助长文 |
+| Sources | Agent 回复底部折叠/列表展示 Vault 相对路径 |
+| 不内置 | 模型 Key、Agent 二进制（BYOA） |
+
+**Agent 切换**：点击 header 中的 Agent 名称打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
 
 ## 4. 设置窗口（Settings）
 
@@ -87,10 +108,10 @@
 - **Appearance**：主题、编辑字号、行号。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
-  - 已注册 Agent 列表（名称、command、探测状态 available / missing）。
-  - 添加：预设模板（OpenCode / Gemini CLI / Claude ACP / Codex ACP）或自定义 command / args / env。
-  - 设为默认；编辑 / 删除。
-  - 空状态：说明「Motif 不内置 Agent」，提供安装指引链接与「添加 Agent」主按钮。
+  - **Common agents** 目录表：名称 + 状态徽章（installed / ACP ready / missing 等）；打开页自动 Probe。
+  - 仅保留 **Probe** 文字按钮（无 icon）；无逐行 Probe、无 command/路径/Handshake 详情文案。
+  - **Use default** 纯文字（无 icon）。
+  - Custom 区：添加任意 ACP command/args。
   - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Motif 内填写。
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
@@ -100,5 +121,9 @@
 
 ## 5. 组件基线
 
-- UI 组件基于 **shadcn/ui + Radix**；图标统一 **Lucide React**。
-- 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`。
+- 通用 UI：**shadcn/ui + Radix**（`src/components/ui/`）；图标 **Lucide React**。
+- Chat UI：**shadcn.io/ai 规范** 的组件族（`src/components/ai/`）；与 `ui/` 共用 token。
+- 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
+- 参考：
+  - [shadcn/ui](https://ui.shadcn.com/)
+  - [shadcn.io/ai](https://www.shadcn.io/ai)（Message / Conversation / PromptInput 等）

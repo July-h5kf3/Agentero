@@ -79,15 +79,30 @@
 
 | 库/工具 | 说明 | 用途 |
 |---|---|---|
-| Tailwind CSS | 原子化 CSS | 布局、间距、响应式 |
-| shadcn/ui | 基于 Radix UI 的 headless 组件 | 按钮、输入框、对话框、下拉菜单、侧边栏 |
-| Radix UI Primitives | shadcn/ui 底层 | 可访问性、键盘交互、弹窗管理 |
-| Lucide React | 图标库 | 工具栏、文件树、状态图标 |
-| `react-resizable-panels` | 可拖拽分隔面板 | 左侧文件树 / Markdown 源码 / Preview 三栏伸缩 |
-| tweakcn 主题 | `modern-minimal` | 已确定的视觉主题，保持简约 |
+| Tailwind CSS v4 | 原子化 CSS + CSS variables | 布局、间距、响应式 |
+| shadcn/ui | `components.json` → `radix-nova` | 通用控件（Button、Dialog、Dropdown…） |
+| [shadcn.io/ai](https://www.shadcn.io/ai) 规范 | Chat 组件族约定（非独立主题） | Conversation / Message / PromptInput / Sources；实现于 `src/components/ai/` |
+| Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
+| Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
+| `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview / **Chat（⌘L 第四栏）** |
+| tweakcn `modern-minimal` | shadcn token 主题 | 简约视觉；Chat 共用同一套 token |
+| `next-themes` | 明暗 | System / Light / Dark |
 
-> 主题安装命令（已记录于 `docs/UI.md`）：
-> `pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`
+> 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/UI.md`）。
+
+**Chat 分层（强制）**
+
+```text
+UI (shadcn.io/ai 规范组件)
+  → AgentPanel 状态机
+  → Tauri invoke / events
+  → Rust ACP Client
+  → 本机 Agent CLI
+```
+
+- **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
+- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 Message / Sources。
+- 后续若引入 `streamdown` 等做 Markdown 流式渲染，仅替换 Message 内容渲染器，不改 ACP 协议。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
 
