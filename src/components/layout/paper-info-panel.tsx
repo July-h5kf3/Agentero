@@ -77,8 +77,13 @@ export function PaperInfoPanel({
 }: PaperInfoPanelProps) {
 	const [open, setOpen] = useState(Boolean(meta) && autoOpen);
 
+	// Open when a paper is selected; collapse when none.
 	useEffect(() => {
-		if (meta && autoOpen) setOpen(true);
+		if (!meta) {
+			setOpen(false);
+			return;
+		}
+		if (autoOpen) setOpen(true);
 	}, [meta, autoOpen]);
 
 	return (
