@@ -45,6 +45,23 @@ export function paperDirFromPath(path: string | null): string | null {
 	return m ? m[1] : null;
 }
 
+/**
+ * True when path is exactly a paper folder: `…/papers/<id>`
+ * (not a nested file/folder inside the paper).
+ */
+export function isPaperDirectory(path: string | null): boolean {
+	if (!path) return false;
+	const norm = path.replace(/\\/g, "/").replace(/\/+$/, "");
+	return /\/papers\/[^/]+$/i.test(norm);
+}
+
+/** True when path is the `papers` directory itself. */
+export function isPapersRoot(path: string | null): boolean {
+	if (!path) return false;
+	const norm = path.replace(/\\/g, "/").replace(/\/+$/, "");
+	return /(^|\/)papers$/i.test(norm);
+}
+
 export function metadataPathForPaper(paperDir: string): string {
 	const sep = paperDir.endsWith("/") ? "" : "/";
 	return `${paperDir}${sep}metadata.json`;

@@ -27,6 +27,7 @@ import { AgentPanel } from "@/components/layout/agent-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
 import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
+import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import {
 	ResizableGroup,
 	ResizableHandle,
@@ -47,6 +48,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import {
+	isPaperDirectory,
 	loadPaperMetadata,
 	notesPathForPaper,
 	type PaperMetadata,
@@ -148,7 +150,8 @@ export default function App() {
 	const settingsOpenRef = useRef(settingsOpen);
 	settingsOpenRef.current = settingsOpen;
 
-	const DEMO_NOTES = "demo-vault/papers/1706.03762/NOTES.md";
+	const DEMO_PAPER = "demo-vault/papers/1706.03762";
+	const DEMO_NOTES = `${DEMO_PAPER}/NOTES.md`;
 	const [markdown, setMarkdown] = useState(
 		() =>
 			localStorage.getItem(STORAGE_KEY) ??
@@ -164,14 +167,20 @@ export default function App() {
 	const [tree, setTree] = useState<FileNode[]>(() => getDemoTree());
 	const [selectedPath, setSelectedPath] = useState<string | null>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		// Demo: land on mock paper so metadata PDF/HTML toggles are usable immediately
-		if (!saved) return DEMO_NOTES;
+		// Demo: land on paper folder → PDF + Notes
+		if (!saved) return DEMO_PAPER;
 		return saved;
 	});
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const [centerMode, setCenterMode] = useState<CenterViewMode>("markdown");
+	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
+		const saved = localStorage.getItem(OPEN_FILE_KEY);
+		if (!saved || isPaperDirectory(saved) || paperDirFromPath(saved)) {
+			return "pdf";
+		}
+		return preferredModeForPath(saved);
+	});
 	const [paperMeta, setPaperMeta] = useState<PaperMetadata | null>(null);
 	/** Remote streaming URLs only — never local vault file / blob download */
 	const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -235,13 +244,23 @@ export default function App() {
 
 			// Notes stay local (Markdown only)
 			const notesPath = notesPathForPaper(paperDir);
+			let notes = "# Notes\n\nNo NOTES.md found for this paper.\n";
 			try {
-				const notes = await readVaultFile(notesPath);
-				if (cancelled) return;
-				setPaperNotes(notes);
+				notes = await readVaultFile(notesPath);
 			} catch {
-				if (cancelled) return;
-				setPaperNotes("# Notes\n\nNo NOTES.md found for this paper.\n");
+				// keep placeholder
+			}
+			if (cancelled) return;
+			setPaperNotes(notes);
+
+			// Opening a paper folder: prefer PDF, fall back HTML, else NOTES as markdown
+			if (selectedPath && isPaperDirectory(selectedPath)) {
+				if (remotePdf) setCenterMode("pdf");
+				else if (remoteHtml) setCenterMode("html");
+				else {
+					setMarkdown(notes);
+					setCenterMode("markdown");
+				}
 			}
 		})();
 
@@ -564,51 +583,79 @@ export default function App() {
 	const handleUseDemo = () => {
 		saveVaultPath(null);
 		setVaultPath(null);
-		setSelectedPath(DEMO_NOTES);
+		setSelectedPath(DEMO_PAPER);
 		setMarkdown(getDemoTextContent(DEMO_NOTES) ?? defaultMarkdown);
 		setError(null);
 		setTree(getDemoTree());
-		setCenterMode("markdown");
+		setCenterMode("pdf");
 	};
 
-	const openPath = useCallback(async (absoluteOrDemoPath: string) => {
-		const name = absoluteOrDemoPath.split(/[\\/]/).pop() ?? absoluteOrDemoPath;
-		const node: FileNode = {
-			id: absoluteOrDemoPath,
-			name,
-			path: absoluteOrDemoPath,
-			kind: "file",
-		};
-		setSelectedPath(node.path);
+	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
+	const openPaper = useCallback((paperDir: string) => {
+		setSelectedPath(paperDir);
 		setError(null);
-
-		const mode = preferredModeForPath(node.path);
-		setCenterMode(mode);
-
-		if (isPdfPath(node.path) || isHtmlPath(node.path)) {
-			return;
-		}
-
-		if (!isTextOpenable(node.path)) {
-			setError(`Cannot preview this file type: ${node.name}`);
-			return;
-		}
-
-		setBusy(true);
-		try {
-			const content = await readVaultFile(node.path);
-			setMarkdown(content);
-			if (!isMarkdownPath(node.path) && !isHtmlPath(node.path)) {
-				setCenterMode("markdown");
-			}
-		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setBusy(false);
-		}
+		// Mode is refined after metadata loads (pdf → html → notes).
+		setCenterMode("pdf");
 	}, []);
 
+	const openPath = useCallback(
+		async (absoluteOrDemoPath: string) => {
+			// Paper folder path (from tree or restore)
+			if (isPaperDirectory(absoluteOrDemoPath)) {
+				openPaper(absoluteOrDemoPath);
+				return;
+			}
+
+			const name =
+				absoluteOrDemoPath.split(/[\\/]/).pop() ?? absoluteOrDemoPath;
+			const node: FileNode = {
+				id: absoluteOrDemoPath,
+				name,
+				path: absoluteOrDemoPath,
+				kind: "file",
+			};
+			setSelectedPath(node.path);
+			setError(null);
+
+			// File under a paper: prefer PDF if available later; set by extension first
+			const paperDir = paperDirFromPath(node.path);
+			if (paperDir && isMarkdownPath(node.path)) {
+				// Opening NOTES.md etc. from wiki/backlink still shows notes; PDF if user toggles
+				setCenterMode(preferredModeForPath(node.path));
+			} else {
+				setCenterMode(preferredModeForPath(node.path));
+			}
+
+			if (isPdfPath(node.path) || isHtmlPath(node.path)) {
+				return;
+			}
+
+			if (!isTextOpenable(node.path)) {
+				setError(`Cannot preview this file type: ${node.name}`);
+				return;
+			}
+
+			setBusy(true);
+			try {
+				const content = await readVaultFile(node.path);
+				setMarkdown(content);
+				if (!isMarkdownPath(node.path) && !isHtmlPath(node.path)) {
+					setCenterMode("markdown");
+				}
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[openPaper],
+	);
+
 	const handleSelectFile = async (node: FileNode) => {
+		if (node.kind === "directory" && isPaperDirectory(node.path)) {
+			openPaper(node.path);
+			return;
+		}
 		if (node.kind !== "file") return;
 		await openPath(node.path);
 	};
@@ -889,6 +936,7 @@ export default function App() {
 										onSelectFile={(n) => void handleSelectFile(n)}
 									/>
 								</div>
+								<PaperInfoPanel meta={paperMeta} />
 							</aside>
 						</ResizablePanel>
 

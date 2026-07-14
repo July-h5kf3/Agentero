@@ -6,6 +6,7 @@ import {
 	FolderOpenDot,
 	FolderSearch,
 	RefreshCw,
+	ScrollText,
 	Sparkles,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -22,6 +23,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	isPaperDirectory,
+	isPapersRoot,
+	paperDirFromPath,
+} from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
 
@@ -31,18 +37,20 @@ function fileIcon(name: string) {
 	return FileText;
 }
 
+/** Expand folders by default, but never expand individual paper folders. */
 function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
 	for (const n of nodes) {
-		if (n.kind === "directory") {
-			into.add(n.path);
-			if (n.children?.length) collectDefaultExpanded(n.children, into);
-		}
+		if (n.kind !== "directory") continue;
+		if (isPaperDirectory(n.path)) continue;
+		into.add(n.path);
+		if (n.children?.length) collectDefaultExpanded(n.children, into);
 	}
 }
 
 type FileTreeProps = {
 	nodes: FileNode[];
 	selectedPath: string | null;
+	/** Called for normal files and for paper folders (collapsed leaves). */
 	onSelectFile: (node: FileNode) => void;
 	className?: string;
 };
@@ -77,14 +85,36 @@ export function FileTree({
 		return map;
 	}, [nodes]);
 
-	const renderNode = (node: FileNode): ReactNode => {
+	/** Highlight paper folder when any file under it is open. */
+	const treeSelectedPath = useMemo(() => {
+		if (!selectedPath) return undefined;
+		const paperDir = paperDirFromPath(selectedPath);
+		if (paperDir) return paperDir;
+		return selectedPath;
+	}, [selectedPath]);
+
+	const renderNode = (node: FileNode, parentPath: string | null): ReactNode => {
+		// papers/<id> → leaf paper entry (do not expand internals)
+		const parentIsPapers = parentPath != null && isPapersRoot(parentPath);
+		if (node.kind === "directory" && parentIsPapers) {
+			return (
+				<FileTreeFile
+					key={node.id}
+					path={node.path}
+					name={node.name}
+					icon={<ScrollText className="size-4 text-muted-foreground" />}
+				/>
+			);
+		}
+
 		if (node.kind === "directory") {
 			return (
 				<FileTreeFolder key={node.id} path={node.path} name={node.name}>
-					{node.children?.map((child) => renderNode(child))}
+					{node.children?.map((child) => renderNode(child, node.path))}
 				</FileTreeFolder>
 			);
 		}
+
 		const Icon = fileIcon(node.name);
 		return (
 			<FileTreeFile
@@ -102,15 +132,18 @@ export function FileTree({
 				<p className="px-3 py-2 text-muted-foreground text-xs">Empty folder</p>
 			) : (
 				<AiFileTree
-					selectedPath={selectedPath ?? undefined}
+					selectedPath={treeSelectedPath}
 					expanded={expanded}
 					onExpandedChange={setExpanded}
 					onSelect={(path) => {
 						const node = byPath.get(path);
-						if (node?.kind === "file") onSelectFile(node);
+						if (!node) return;
+						if (node.kind === "file" || isPaperDirectory(node.path)) {
+							onSelectFile(node);
+						}
 					}}
 				>
-					{nodes.map((node) => renderNode(node))}
+					{nodes.map((node) => renderNode(node, null))}
 				</AiFileTree>
 			)}
 		</div>
