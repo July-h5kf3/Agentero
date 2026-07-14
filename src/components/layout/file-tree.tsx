@@ -2,8 +2,6 @@ import {
 	FileCode2,
 	FileJson,
 	FileText,
-	FolderOpen,
-	FolderOpenDot,
 	FolderSearch,
 	RefreshCw,
 	ScrollText,
@@ -30,6 +28,28 @@ import {
 } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
+
+function MotifLogo({ className }: { className?: string }) {
+	return (
+		<svg
+			viewBox="0 0 64 64"
+			fill="none"
+			aria-hidden="true"
+			className={className}
+		>
+			<path
+				d="M10 46 L10 18 L32 40 L54 18 L54 46"
+				stroke="currentColor"
+				strokeWidth="5"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<circle cx="10" cy="18" r="4" fill="currentColor" />
+			<circle cx="32" cy="40" r="4" fill="currentColor" />
+			<circle cx="54" cy="18" r="4" fill="currentColor" />
+		</svg>
+	);
+}
 
 function fileIcon(name: string) {
 	if (/\.json$/i.test(name)) return FileJson;
@@ -230,11 +250,7 @@ export function VaultSidebarHeader({
 						</>
 					}
 				>
-					{isDemo ? (
-						<FolderOpenDot className="size-3.5 shrink-0 text-muted-foreground" />
-					) : (
-						<FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-					)}
+					<MotifLogo className="size-4 shrink-0 text-foreground" />
 					<span className="truncate font-medium text-sm" title={title}>
 						{title}
 					</span>
