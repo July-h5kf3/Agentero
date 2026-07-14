@@ -33,6 +33,7 @@
 - 工作台：可伸缩侧边栏文件树 + Markdown + Preview。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
+- **独立滚动**：侧边栏 / Markdown / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
 ### 3.1 快捷键（对齐 macOS / Apple HIG 习惯）

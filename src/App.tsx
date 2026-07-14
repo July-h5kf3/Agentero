@@ -329,8 +329,11 @@ export default function App() {
 	const editorFontSize = settings.editorFontSize;
 
 	return (
-		<div className="flex h-screen flex-col bg-background text-foreground">
-			<ResizableGroup orientation="horizontal" className="min-h-0 flex-1">
+		<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
+			<ResizableGroup
+				orientation="horizontal"
+				className="h-full min-h-0 flex-1 overflow-hidden"
+			>
 				<ResizablePanel
 					id="sidebar"
 					panelRef={sidebarPanelRef}
@@ -339,7 +342,7 @@ export default function App() {
 					maxSize={420}
 					collapsible
 					collapsedSize={0}
-					className="min-h-0"
+					className="min-h-0 overflow-hidden"
 					onResize={() => {
 						const collapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
 						setSidebarCollapsed(collapsed);
@@ -347,18 +350,20 @@ export default function App() {
 				>
 					<aside
 						ref={sidebarAsideRef}
-						className="flex h-full min-h-0 flex-col bg-muted/20"
+						className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
 					>
-						<VaultSidebarHeader
-							title={vaultDisplayName(vaultPath)}
-							onOpenVault={() => void handleOpenVault()}
-							onRefresh={handleRefresh}
-							onUseDemo={handleUseDemo}
-							busy={busy}
-							error={error}
-							isDemo={isDemo}
-						/>
-						<div className="min-h-0 flex-1 overflow-y-auto px-1">
+						<div className="shrink-0">
+							<VaultSidebarHeader
+								title={vaultDisplayName(vaultPath)}
+								onOpenVault={() => void handleOpenVault()}
+								onRefresh={handleRefresh}
+								onUseDemo={handleUseDemo}
+								busy={busy}
+								error={error}
+								isDemo={isDemo}
+							/>
+						</div>
+						<div className="motif-scroll min-h-0 flex-1 px-1">
 							<FileTree
 								nodes={tree}
 								selectedPath={selectedPath}
@@ -374,10 +379,10 @@ export default function App() {
 					id="source"
 					defaultSize="40"
 					minSize={200}
-					className="min-h-0"
+					className="min-h-0 overflow-hidden"
 				>
-					<div className="flex h-full min-h-0 flex-col">
-						<div className="flex items-center justify-between border-b px-4 py-2 text-sm">
+					<div className="flex h-full min-h-0 flex-col overflow-hidden">
+						<div className="flex shrink-0 items-center justify-between border-b px-4 py-2 text-sm">
 							<span className="font-medium">Markdown</span>
 							<span className="max-w-[50%] truncate text-muted-foreground text-xs">
 								{activeFileLabel}
@@ -385,7 +390,7 @@ export default function App() {
 						</div>
 						<textarea
 							ref={editorPaneRef}
-							className="min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
+							className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
 							style={{ fontSize: editorFontSize }}
 							value={markdown}
 							onChange={(event) => setMarkdown(event.target.value)}
@@ -401,21 +406,27 @@ export default function App() {
 					id="preview"
 					defaultSize="40"
 					minSize={200}
-					className="min-h-0"
+					className="min-h-0 overflow-hidden"
 				>
 					<div
 						ref={previewPaneRef}
-						className="flex h-full min-h-0 flex-col"
+						className="flex h-full min-h-0 flex-col overflow-hidden"
 						style={{ fontSize: editorFontSize }}
 					>
-						<div className="border-b px-4 py-2 font-medium text-sm">
+						<div className="shrink-0 border-b px-4 py-2 font-medium text-sm">
 							Preview
 						</div>
-						<Plate editor={editor}>
-							<EditorContainer className="min-h-0 flex-1 overflow-y-auto">
-								<Editor placeholder="Rendered Markdown will appear here..." />
-							</EditorContainer>
-						</Plate>
+						<div className="min-h-0 flex-1 overflow-hidden">
+							<Plate editor={editor}>
+								<EditorContainer className="motif-scroll h-full min-h-0">
+									<Editor
+										variant="none"
+										className="min-h-full px-6 py-4"
+										placeholder="Rendered Markdown will appear here..."
+									/>
+								</EditorContainer>
+							</Plate>
+						</div>
 					</div>
 				</ResizablePanel>
 			</ResizableGroup>

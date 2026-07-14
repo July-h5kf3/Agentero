@@ -127,10 +127,60 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+	html,
+	body,
+	#root {
+		height: 100%;
+		overflow: hidden;
+	}
 	body {
 		@apply bg-background text-foreground;
 	}
 	html {
 		@apply font-sans;
 	}
+}
+
+/* Subtle, independent pane scrollbars (VS Code / Cursor style) */
+.motif-scroll {
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
+		transparent;
+}
+
+.motif-scroll::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.motif-scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.motif-scroll::-webkit-scrollbar-thumb {
+	background-color: color-mix(
+		in oklch,
+		var(--muted-foreground) 28%,
+		transparent
+	);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+.motif-scroll::-webkit-scrollbar-thumb:hover {
+	background-color: color-mix(
+		in oklch,
+		var(--muted-foreground) 48%,
+		transparent
+	);
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+.motif-scroll::-webkit-scrollbar-corner {
+	background: transparent;
 }
