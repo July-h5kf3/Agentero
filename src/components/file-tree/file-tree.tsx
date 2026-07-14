@@ -12,6 +12,7 @@ import {
 	Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -212,46 +213,50 @@ export function VaultSidebarHeader({
 }) {
 	return (
 		<TooltipProvider delayDuration={300}>
-			<div className="flex flex-col gap-0.5 border-b px-1.5 py-1.5">
-				<div className="flex min-w-0 items-center gap-0.5">
-					<span className="flex min-w-0 flex-1 items-center gap-1.5 px-1">
-						{isDemo ? (
-							<FolderOpenDot className="size-3.5 shrink-0 text-muted-foreground" />
-						) : (
-							<FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-						)}
-						<span className="truncate font-medium text-sm" title={title}>
-							{title}
-						</span>
-					</span>
-					<div className="flex shrink-0 items-center">
-						<IconAction
-							label="Open vault (⌘O)"
-							onClick={onOpenVault}
-							disabled={busy}
-						>
-							<FolderSearch className="size-3.5" />
-						</IconAction>
-						<IconAction
-							label="Refresh (⌘R)"
-							onClick={onRefresh}
-							disabled={busy || isDemo}
-						>
-							<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
-						</IconAction>
-						{!isDemo ? (
+			<div className="shrink-0">
+				<PaneHeader
+					className="bg-muted/20"
+					trailing={
+						<>
 							<IconAction
-								label="Use demo vault"
-								onClick={onUseDemo}
+								label="Open vault (⌘O)"
+								onClick={onOpenVault}
 								disabled={busy}
 							>
-								<Sparkles className="size-3.5" />
+								<FolderSearch className="size-3.5" />
 							</IconAction>
-						) : null}
-					</div>
-				</div>
+							<IconAction
+								label="Refresh (⌘R)"
+								onClick={onRefresh}
+								disabled={busy || isDemo}
+							>
+								<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
+							</IconAction>
+							{!isDemo ? (
+								<IconAction
+									label="Use demo vault"
+									onClick={onUseDemo}
+									disabled={busy}
+								>
+									<Sparkles className="size-3.5" />
+								</IconAction>
+							) : null}
+						</>
+					}
+				>
+					{isDemo ? (
+						<FolderOpenDot className="size-3.5 shrink-0 text-muted-foreground" />
+					) : (
+						<FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+					)}
+					<span className="truncate font-medium text-sm" title={title}>
+						{title}
+					</span>
+				</PaneHeader>
 				{error ? (
-					<p className="px-1 text-destructive text-xs leading-snug">{error}</p>
+					<p className="border-b px-3 py-1 text-destructive text-xs leading-snug">
+						{error}
+					</p>
 				) : null}
 			</div>
 		</TooltipProvider>
