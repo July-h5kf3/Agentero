@@ -5,7 +5,6 @@ import {
 	ChevronDown,
 	CopyIcon,
 	History,
-	Loader2,
 	X,
 } from "lucide-react";
 import {
@@ -944,14 +943,6 @@ export function AgentPanel({
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
-				{usage && usage.size > 0 ? (
-					<Context usedTokens={usage.used} maxTokens={usage.size}>
-						<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
-						<ContextContent>
-							<ContextContentHeader />
-						</ContextContent>
-					</Context>
-				) : null}
 				<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
 					<PopoverTrigger asChild>
 						<Button
@@ -1003,9 +994,6 @@ export function AgentPanel({
 						)}
 					</PopoverContent>
 				</Popover>
-				{busy || switching || warming ? (
-					<Loader2 className="size-3.5 shrink-0 animate-spin opacity-70" />
-				) : null}
 				{headerActions}
 				{onClose ? (
 					<Button
@@ -1351,6 +1339,14 @@ export function AgentPanel({
 									</ModelSelectorList>
 								</ModelSelectorContent>
 							</ModelSelector>
+							{usage && usage.size > 0 ? (
+								<Context usedTokens={usage.used} maxTokens={usage.size}>
+									<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
+									<ContextContent>
+										<ContextContentHeader />
+									</ContextContent>
+								</Context>
+							) : null}
 						</PromptInputTools>
 						<PromptInputSubmit
 							status={busy ? "streaming" : "ready"}
