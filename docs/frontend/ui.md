@@ -7,7 +7,7 @@
   ```bash
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
-- **Chat / Agent / 文件树 AI UI**：以 [**AI Elements**](https://elements.ai-sdk.dev/) 为规范（完整约定见 **`docs/reference/COMPONENTS.md`**）：
+- **Chat / Agent / 文件树 AI UI**：以 [**AI Elements**](https://elements.ai-sdk.dev/) 为规范（完整约定见 **`docs/frontend/components.md`**）：
   - 落盘：`src/components/ai-elements/`（`conversation`、`message`、`prompt-input`、`sources`、`file-tree` 等）
   - 安装：`pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`
   - 主题 **不单独配置**：继续读 shadcn CSS token，随 System / Light / Dark。
@@ -27,7 +27,7 @@
 
 ### 2.1 侧边栏文件树
 
-- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/reference/COMPONENTS.md`）。
+- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide）：
   - 打开 Vault → `FolderSearch`（⌘O）
@@ -90,7 +90,7 @@
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
-| 规范文档 | **`docs/reference/COMPONENTS.md`** |
+| 规范文档 | **`docs/frontend/components.md`** |
 
 **消息树（AI Elements；不带头像）**
 
@@ -150,7 +150,7 @@ PromptInput → Body / Footer / Submit
 
 ## 5. 组件基线
 
-目录分层（详情 **`docs/reference/COMPONENTS.md` §0**）：
+目录分层（详情 **`docs/frontend/components.md` §0**）：
 
 | 位置 | 职责 |
 |---|---|
@@ -163,4 +163,4 @@ PromptInput → Body / Footer / Submit
 
 - 图标：**Lucide React**。
 - 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
-- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/reference/COMPONENTS.md`
+- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/frontend/components.md`

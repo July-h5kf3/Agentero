@@ -89,7 +89,7 @@ Vault 内的 Agent 行为规范,至少包含:
 
 ### `metadata.json`(每篇元数据的事实来源)
 
-位于 `papers/<id>/metadata.json`,是这篇论文结构化元数据的唯一事实来源。与 `NOTES.md` 分离,避免机器字段与人的 prose 相互踩踏:用户编辑笔记不会碰坏元数据,importer 也能确定性地写入。`PAPERS.md`、`library.bib`、`cache.sqlite` 都是它的派生投影。字段见 [3.3](#33-论文元数据-metadatajson)。
+位于 `papers/<id>/metadata.json`,是这篇论文结构化元数据的唯一事实来源。与 `NOTES.md` 分离,避免机器字段与人的 prose 相互踩踏:用户编辑笔记不会碰坏元数据,importer 也能确定性地写入。`PAPERS.md`、`library.bib`、`cache.sqlite` 都是它的派生投影。字段见下文“3.3 论文元数据”。
 
 ### `NOTES.md`(L2,事实来源)
 
@@ -246,7 +246,7 @@ interface Highlight {
 
 ## 4. 事实来源与缓存规则
 
-`.motif/cache.sqlite` 存储元数据、全文检索、双链图与标注坐标的**派生副本**,用于文件系统做不快的查询(按作者/年份/标签过滤排序、全文检索、反链聚合、大规模)。它不是第二个事实来源,须遵守三条纪律（双链边模型与重建纪律详见 **`docs/WIKILINKS.md`**）:
+`.motif/cache.sqlite` 存储元数据、全文检索、双链图与标注坐标的**派生副本**,用于文件系统做不快的查询(按作者/年份/标签过滤排序、全文检索、反链聚合、大规模)。它不是第二个事实来源,须遵守三条纪律（双链边模型与重建纪律详见 **`docs/backend/wikilinks.md`**）:
 
 1. **可整删重建**:删除 `cache.sqlite` 后,应用重扫 Vault(`metadata.json` + Markdown + 双链)即可完全恢复。
 2. **写入 file-first**:先写 `metadata.json` / Markdown,再更新 SQLite 与 `PAPERS.md`;`notify` 监听外部编辑(如在 Obsidian 中修改)自动增量重建。
@@ -289,6 +289,6 @@ interface AgentResult {
 
 ## 6. 相关文档
 
-- `docs/PRD.md`:产品需求与验收标准(§5 文件结构)。
-- `docs/TECH.md`:存储分层与入库/Agent 数据流(§4.5、§5)；ACP Client + BYOA。
-- `docs/API.md`:Host 命令与数据模型引用。
+- `docs/development/prd.md`:产品需求与验收标准(§5 文件结构)。
+- `docs/development/technical-plan.md`:存储分层与入库/Agent 数据流(§4.5、§5)；ACP Client + BYOA。
+- `docs/backend/api.md`:Host 命令与数据模型引用。

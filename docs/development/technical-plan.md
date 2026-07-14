@@ -1,6 +1,6 @@
 # Motif / notemd 技术方案
 
-> 本文档基于 `docs/PRD.md`、`docs/UI.md`、`docs/ROADMAP.md` 与当前仓库现状编写，用于指导 MVP 及后续演进的技术选型与模块划分。
+> 本文档基于 `docs/development/prd.md`、`docs/frontend/ui.md`、`docs/development/roadmap.md` 与当前仓库现状编写，用于指导 MVP 及后续演进的技术选型与模块划分。
 
 ## 1. 技术定位与目标
 
@@ -91,8 +91,8 @@
 | tweakcn `modern-minimal` | shadcn token 主题 | 简约视觉；Chat 共用同一套 token |
 | `next-themes` | 明暗 | System / Light / Dark |
 
-> 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/UI.md`）。  
-> AI Elements 安装与组件约定见 **`docs/reference/COMPONENTS.md`**。
+> 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/frontend/ui.md`）。  
+> AI Elements 安装与组件约定见 **`docs/frontend/components.md`**。
 
 **Chat 分层（强制）**
 
@@ -106,7 +106,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 - **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
 - 流式：`agent:stream`（`kind: message | thought`）/ `agent:completed` / `agent:failed` 映射到 `Reasoning` + `MessageResponse` + `Sources`。
-- 组件规范与安装：`docs/reference/COMPONENTS.md`。
+- 组件规范与安装：`docs/frontend/components.md`。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
 
@@ -193,7 +193,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 **原因**：产品对照 Obsidian 式「中心 + 辐射」力导向图；右侧栏内 Canvas 性能足够；数据来自 wikilink 索引而非手写布局。  
 **壳**：右侧栏只有 `agent` 与 `backlinks` 两个顶层 tab；`GraphPanel` 嵌在 Backlinks 下方，与反链共享上下文。  
-**详设**：`docs/reference/WIKILINKS.md` §4.4 / §6.3；Host 契约 `docs/reference/API.md` §3.7 `graph_get_graph`。
+**详设**：`docs/backend/wikilinks.md` §4.4 / §6.3；Host 契约 `docs/backend/api.md` §3.7 `graph_get_graph`。
 
 ### 3.6 状态管理
 
@@ -405,7 +405,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.5 双链与反链
 
-完整设计见 **`docs/reference/WIKILINKS.md`**（语法、索引、反链、开源选型与分期）。
+完整设计见 **`docs/backend/wikilinks.md`**（语法、索引、反链、开源选型与分期）。
 
 - **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
 - **模型**：单向写入 Markdown + 索引反查（不做目标文件自动插入回链）。
@@ -416,7 +416,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.6 关系图谱
 
-- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/reference/API.md` §3.7；设计 `docs/reference/WIKILINKS.md` §4.4）。
+- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/backend/api.md` §3.7；设计 `docs/backend/wikilinks.md` §4.4）。
 - **节点类型（路径启发）**：`paper` | `note` | `index` | `stub`。
 - **边**：wikilink 有向边 `source → target`（未解析目标为 `stub:<raw>`）；邻域模式用无向 BFS 裁剪。
 - **前端渲染**：`react-force-graph-2d`；`GraphPanel` 位于 Backlinks 右侧栏下方，点击节点打开文件/paper。
@@ -682,8 +682,8 @@ tempfile = "3"
 
 ## 11. 相关文档
 
-- `docs/PRD.md`：产品需求与验收标准。
-- `docs/UI.md`：视觉主题与简约设计原则。
-- `docs/reference/COMPONENTS.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
-- `docs/reference/WIKILINKS.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
-- `docs/ROADMAP.md`：版本规划与里程碑。
+- `docs/development/prd.md`：产品需求与验收标准。
+- `docs/frontend/ui.md`：视觉主题与简约设计原则。
+- `docs/frontend/components.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
+- `docs/backend/wikilinks.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
+- `docs/development/roadmap.md`：版本规划与里程碑。

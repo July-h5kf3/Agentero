@@ -1,0 +1,43 @@
+name: 部署文档
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 安装文档依赖
+        run: pip install mkdocs==1.6.1
+
+      - name: 构建文档
+        run: mkdocs build --strict
+
+      - name: 部署文档到 gh-pages
+        run: mkdocs gh-deploy --force --clean --remote-branch gh-pages

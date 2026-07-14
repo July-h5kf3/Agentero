@@ -1,6 +1,6 @@
 # Motif / notemd 后端 API 规范
 
-> 本文档基于 `docs/TECH.md`、`docs/PRD.md`、`docs/ROADMAP.md` 编写，定义 Host（Tauri + Rust）暴露给前端的 Tauri invoke 命令与事件。
+> 本文档基于 `docs/development/technical-plan.md`、`docs/development/prd.md`、`docs/development/roadmap.md` 编写，定义 Host（Tauri + Rust）暴露给前端的 Tauri invoke 命令与事件。
 
 ## 1. 分层定位
 
@@ -755,7 +755,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 ### 3.7 双链与图谱
 
-> 产品与索引设计见 **`docs/WIKILINKS.md`**。下列为 Host 接口草案。
+> 产品与索引设计见 **`docs/backend/wikilinks.md`**。下列为 Host 接口草案。
 
 #### `graph_get_backlinks`（实现中；草案名 `graph:get_backlinks`）
 
@@ -785,7 +785,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 #### `graph_get_graph`（草案名 `graph:get_graph`）
 
 获取全量或局部 wikilink 图谱。数据来自内存索引（必要时 `ensure_vault` 先 rebuild）。  
-设计见 **`docs/WIKILINKS.md` §4.4 / §6.3**。
+设计见 **`docs/backend/wikilinks.md` §4.4 / §6.3**。
 
 - **参数**
 
@@ -905,7 +905,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 ## 4. 数据模型
 
-完整类型定义见 `docs/DATA_MODEL.md`。API 中涉及的核心类型包括：
+完整类型定义见 `docs/backend/data-model.md`。API 中涉及的核心类型包括：
 
 - `VaultInfo` / `RecentVault`
 - `FileNode`

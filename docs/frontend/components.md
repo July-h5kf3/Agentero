@@ -3,7 +3,7 @@
 > Motif 的 Chat / Agent / 文件树等 AI UI **统一使用 [AI Elements](https://elements.ai-sdk.dev/)**。  
 > 本文档按 **[elements.ai-sdk.dev/components](https://elements.ai-sdk.dev/components)** 的组件目录整理，并标注 Motif 安装与使用状态。
 
-相关：`docs/UI.md` · `docs/TECH.md` · 官网 [Docs](https://elements.ai-sdk.dev/docs) · [Setup](https://elements.ai-sdk.dev/docs/setup)
+相关：`docs/frontend/ui.md` · `docs/development/technical-plan.md` · 官网 [Docs](https://elements.ai-sdk.dev/docs) · [Setup](https://elements.ai-sdk.dev/docs/setup)
 
 ---
 

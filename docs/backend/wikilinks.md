@@ -1,7 +1,7 @@
 # Motif 双链设计（Obsidian 兼容）
 
 > 状态：**Phase A–B 已实现**（索引 + 反链 + 预览可点）/ **Phase D 基本完成**（GraphPanel + `graph_get_graph`）/ Phase C 待增强  
-> 相关：`docs/PRD.md` · `docs/TECH.md` §5.5–5.6 · `docs/ROADMAP.md` V0.4 · `docs/reference/API.md` §3.7 · `docs/reference/DATA_MODEL.md`
+> 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.7 · `docs/backend/data-model.md`
 
 本文定义 Motif 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
 
@@ -143,7 +143,7 @@ backlinks(path) = { e.source | e.target_path == path }
 数据：
 
 - 唯一事实来源：Markdown 中的 `[[wikilink]]`（内存索引，可 `graph_rebuild` 重建）。
-- Host：`graph_get_graph`（见 `docs/reference/API.md` §3.7）。
+- Host：`graph_get_graph`（见 `docs/backend/api.md` §3.7）。
 - Demo（无 Tauri）：前端用 demo vault 文件内容现算 nodes/edges。
 
 验收：20+ 节点可交互；选中 paper 时邻域图以当前 paper 为中心；不依赖手写图数据库。
@@ -152,7 +152,7 @@ backlinks(path) = { e.source | e.target_path == path }
 
 ## 5. Host API
 
-见 `docs/API.md` §3.7：
+见 `docs/backend/api.md` §3.7：
 
 | 命令 | 状态 | 用途 |
 |---|---|---|
@@ -288,4 +288,4 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 
 - [Obsidian Internal links](https://obsidian.md/help/links)  
 - [Agent Client Protocol](https://agentclientprotocol.com/)（Agent 侧不解析双链，只保证文件约定）  
-- 本仓库：`docs/TECH.md` §5.5–5.6、`docs/ROADMAP.md` V0.4  
+- 本仓库：`docs/development/technical-plan.md` §5.5–5.6、`docs/development/roadmap.md` V0.4  

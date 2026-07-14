@@ -118,7 +118,7 @@
 
 目标：让知识库从文件集合升级为可导航的研究网络。
 
-**设计文档**：`docs/reference/WIKILINKS.md`（Obsidian 兼容模型、开源选型、Phase A–D）。
+**设计文档**：`docs/backend/wikilinks.md`（Obsidian 兼容模型、开源选型、Phase A–D）。
 
 关键交付：
 

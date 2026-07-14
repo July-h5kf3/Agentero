@@ -1,8 +1,8 @@
 # Motif
 
 <p align="center">
-  <strong>Agent-first local research library</strong><br />
-  Markdown vault · wikilinks · arXiv papers · ACP agents — owned by you, not locked in a proprietary database.
+  <strong>Agent-first 本地科研文献库</strong><br />
+  Markdown Vault · 双链/反链/图谱 · arXiv 论文 · ACP Agent — 文件归你所有，不锁进私有数据库。
 </p>
 
 <p align="center">
@@ -24,120 +24,117 @@
 
 ---
 
-## Why Motif?
+## 为什么做 Motif？
 
-Classic reference managers are great at **storing** PDFs. Agent workflows need something else:
+传统文献管理器擅长**存 PDF**，但 Agent 工作流需要更稳定、可寻址、可复用的本地知识结构：
 
-- Reading highlights and notes locked in single files are hard for agents to reuse across papers.
-- Every chat restarts without a stable local knowledge map.
-- PDFs are human-friendly but noisy for models; structure and links should be addressable.
+- 阅读高亮和笔记被锁在单篇文件里，Agent 很难跨论文复用。
+- 每次对话都要重新提供上下文，缺少稳定的本地知识地图。
+- PDF 对人友好，但对模型有排版噪音；结构、链接、引用路径应该可寻址。
 
-**Motif** is a local, file-first research workspace for both humans and agents. Papers, notes, and indexes live as Markdown (and source files) in a vault you control. Agents connect via **BYOA** (bring your own ACP agent) — Motif is the client, not a locked-in model host.
+**Motif** 是面向人和 Agent 共用的本地优先研究工作台。论文、笔记、索引都以 Markdown 和源文件形式存在于用户控制的 Vault 中。Agent 采用 **BYOA**（Bring Your Own Agent）：Motif 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
 
-## Features
+## 功能
 
-- **Local vault** — open a folder; all core data is plain files you can edit, sync, or version.
-- **Markdown workbench** — multi-pane layout: file tree, source/PDF/HTML, preview/notes, right sidebar.
-- **Wikilinks, backlinks & graph** — `[[links]]` across notes and papers; the Backlinks sidebar shows backlinks on top and the graph below.
-- **Agent sidebar** — chat with your vault via ACP backends (Claude, Codex, Grok Build, …).
-- **Paper-centric layout** — remote PDF/HTML from metadata; NOTES beside the paper.
-- **Desktop-native** — Tauri 2 on macOS (overlay title bar, menus, shortcuts).
+- **本地 Vault**：打开一个文件夹，核心数据都是可编辑、可同步、可版本管理的普通文件。
+- **Markdown 工作台**：文件树、中间 Markdown/PDF/HTML、Preview/Notes、可选右侧栏。
+- **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph。
+- **Agent 右侧栏**：通过 ACP 后端（Claude、Codex、Grok Build 等）与本地 Vault 对话。
+- **Paper-centric 布局**：根据 `metadata.json` 打开远程 PDF/HTML，同时在右侧显示该篇 `NOTES.md`。
+- **桌面原生体验**：Tauri 2、macOS overlay title bar、菜单、快捷键。
 
-> Status: early MVP. See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/PRD.md](docs/PRD.md).
+> 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)，产品范围见 [docs/development/prd.md](docs/development/prd.md)。
 
-## Screenshots
+## 快速开始
 
-<p align="center">
-  <img src="docs/UI-1.png" alt="Motif workbench" width="90%" />
-</p>
-
-<p align="center">
-  <img src="docs/UI-2.png" alt="Motif flows" width="90%" />
-</p>
-
-## Quick start
-
-### Prerequisites
+### 前置依赖
 
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) 9+
-- [Rust](https://rustup.rs/) (stable)
-- Platform deps for [Tauri 2](https://v2.tauri.app/start/prerequisites/)
+- [Rust](https://rustup.rs/) stable
+- [Tauri 2](https://v2.tauri.app/start/prerequisites/) 对应平台依赖
 
-### Install & run
+### 安装与运行
 
 ```bash
 git clone https://github.com/poco-ai/motif.git
 cd motif
 pnpm install
 
-# Desktop app (recommended)
+# 桌面应用（推荐）
 pnpm tauri dev
 
-# Frontend only (no native vault / agent backends)
+# 仅前端预览（无原生 Vault / Agent 后端）
 pnpm dev
 ```
 
-### Scripts
+### 常用脚本
 
-| Command | Description |
+| 命令 | 说明 |
 | --- | --- |
-| `pnpm tauri dev` | Dev desktop app |
-| `pnpm build` | Build frontend |
-| `pnpm tauri build` | Production desktop bundle |
-| `pnpm lint` | TypeScript (Biome) + Rust (clippy) |
-| `pnpm format` | Format TS + Rust |
+| `pnpm tauri dev` | 启动桌面开发应用 |
+| `pnpm build` | 构建前端产物 |
+| `pnpm tauri build` | 构建桌面安装包 |
+| `pnpm lint` | TypeScript（Biome）+ Rust（clippy）检查 |
+| `pnpm format` | 格式化 TypeScript + Rust |
 
-## Releases
+## 发布
 
-Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds Tauri installers on macOS, Ubuntu, and Windows and uploads them to a draft GitHub Release.
+推送 `v*` tag 会触发 `.github/workflows/release.yml`，在 macOS、Ubuntu、Windows 上构建 Tauri 安装包，并上传到草稿 GitHub Release。
 
-## Project structure
+## 项目结构
 
 ```text
 motif/
-├── AGENTS.md            # Agent/developer guidance for this repository
-├── src/                 # React + TypeScript UI
-├── src-tauri/           # Tauri 2 + Rust (vault, wiki, ACP)
-├── docs/                # PRD, tech, UI, roadmap
+├── AGENTS.md             # 面向 Agent / 开发者的仓库指南
+├── mkdocs.yml            # MkDocs 文档站配置
+├── src/                  # React + TypeScript 前端
+├── src-tauri/            # Tauri 2 + Rust Host（Vault、Wiki、ACP）
+├── docs/                 # MkDocs 文档源文件
 └── package.json
 ```
 
-## Documentation
+## 文档
 
-| Doc | Topic |
+文档使用 [MkDocs](https://www.mkdocs.org/) 和 Read the Docs 主题组织：
+
+| 分区 | 说明 |
 | --- | --- |
-| [AGENTS.md](AGENTS.md) | Agent/developer guidance for this repo |
-| [docs/PRD.md](docs/PRD.md) | Product requirements |
-| [docs/TECH.md](docs/TECH.md) | Technical design |
-| [docs/UI.md](docs/UI.md) | UI conventions |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Version roadmap and implementation status |
-| [docs/TODO.md](docs/TODO.md) | Prioritized task backlog |
-| [docs/reference/DATA_MODEL.md](docs/reference/DATA_MODEL.md) | Vault layout & files |
-| [docs/reference/WIKILINKS.md](docs/reference/WIKILINKS.md) | Wikilink / backlink / graph design |
-| [docs/reference/COMPONENTS.md](docs/reference/COMPONENTS.md) | UI component conventions |
-| [docs/reference/API.md](docs/reference/API.md) | Commands / APIs |
+| [docs/index.md](docs/index.md) | 整体技术框架与文档分层 |
+| [docs/frontend/index.md](docs/frontend/index.md) | 前端技术选型与 UI 文档 |
+| [docs/backend/index.md](docs/backend/index.md) | 后端技术选型、API 与数据模型 |
+| [docs/development/index.md](docs/development/index.md) | 产品、路线图、开发与发布流程 |
+| [AGENTS.md](AGENTS.md) | Agent / 开发者协作指南 |
 
-## Stack
+本地预览文档：
 
-- **Shell:** [Tauri 2](https://v2.tauri.app/)
-- **UI:** React 19, TypeScript, Tailwind CSS 4, shadcn/ui, AI Elements
-- **Editor:** Plate / Markdown
-- **Agents:** Agent Client Protocol (ACP), BYOA
+```bash
+python3 -m venv .venv-docs
+. .venv-docs/bin/activate
+pip install mkdocs==1.6.1
+mkdocs serve
+```
 
-## Contributing
+## 技术栈
 
-Issues and PRs are welcome.
+- **桌面壳**：[Tauri 2](https://v2.tauri.app/)
+- **前端**：[React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[AI Elements](https://elements.ai-sdk.dev/)
+- **编辑器**：[Plate](https://platejs.org/) / Markdown
+- **Agent**：[Agent Client Protocol](https://agentclientprotocol.com/)、BYOA
 
-1. Fork and create a feature branch.
-2. Keep changes focused; follow existing lint/format setup (`pnpm lint` / `pnpm format`).
-3. Open a PR with a clear description of *what* and *why*.
+## 贡献
 
-For larger ideas, open an issue first so we can align on scope.
+欢迎提交 Issue 和 PR。
+
+1. Fork 后创建功能分支。
+2. 保持改动聚焦，并遵守现有 lint/format 设置（`pnpm lint` / `pnpm format`）。
+3. PR 描述清楚改动内容和原因。
+
+较大的想法请先开 issue 对齐范围。
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+本项目使用 [MIT License](LICENSE)。
 
 ## Star History
 
