@@ -8,7 +8,7 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
-import { Bot, Link2, PanelLeft, PanelRight } from "lucide-react";
+import { Bot, FolderOpen, Link2, PanelLeft, PanelRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -62,8 +62,6 @@ import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
 	type FileNode,
-	getDemoTextContent,
-	getDemoTree,
 	getSavedVaultPath,
 	isMarkdownPath,
 	isTextOpenable,
@@ -151,36 +149,32 @@ export default function App() {
 	const settingsOpenRef = useRef(settingsOpen);
 	settingsOpenRef.current = settingsOpen;
 
-	const DEMO_PAPER = "demo-vault/papers/1706.03762";
-	const DEMO_NOTES = `${DEMO_PAPER}/NOTES.md`;
-	const [markdown, setMarkdown] = useState(
-		() =>
-			localStorage.getItem(STORAGE_KEY) ??
-			getDemoTextContent(DEMO_NOTES) ??
-			defaultMarkdown,
-	);
+	const [markdown, setMarkdown] = useState(() => {
+		const saved = localStorage.getItem(STORAGE_KEY);
+		const hasVault =
+			isTauri() && loadSettings().restoreLastVault && getSavedVaultPath();
+		if (!hasVault) return defaultMarkdown;
+		return saved ?? defaultMarkdown;
+	});
 	const [vaultPath, setVaultPath] = useState<string | null>(() => {
 		const s = loadSettings();
 		if (!isTauri()) return null;
 		if (!s.restoreLastVault) return null;
 		return getSavedVaultPath();
 	});
-	const [tree, setTree] = useState<FileNode[]>(() => getDemoTree());
-	const [selectedPath, setSelectedPath] = useState<string | null>(() => {
-		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		// Demo: land on paper folder → PDF + Notes
-		if (!saved) return DEMO_PAPER;
-		return saved;
-	});
+	const [tree, setTree] = useState<FileNode[]>([]);
+	const [selectedPath, setSelectedPath] = useState<string | null>(() =>
+		localStorage.getItem(OPEN_FILE_KEY),
+	);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		if (!saved || isPaperDirectory(saved) || paperDirFromPath(saved)) {
+		if (saved && (isPaperDirectory(saved) || paperDirFromPath(saved))) {
 			return "pdf";
 		}
-		return preferredModeForPath(saved);
+		return saved ? preferredModeForPath(saved) : "markdown";
 	});
 	const [paperMeta, setPaperMeta] = useState<PaperMetadata | null>(null);
 	/** Remote streaming URLs only — never local vault file / blob download */
@@ -534,7 +528,7 @@ export default function App() {
 
 	useEffect(() => {
 		if (!vaultPath) {
-			setTree(getDemoTree());
+			setTree([]);
 			return;
 		}
 		void refreshTree(vaultPath);
@@ -581,14 +575,16 @@ export default function App() {
 		}
 	}, [debouncedPaperNotes, notesEditor, vaultMdFiles]);
 
-	const handleUseDemo = () => {
+	const handleCloseVault = () => {
 		saveVaultPath(null);
+		localStorage.removeItem(STORAGE_KEY);
+		localStorage.removeItem(OPEN_FILE_KEY);
 		setVaultPath(null);
-		setSelectedPath(DEMO_PAPER);
-		setMarkdown(getDemoTextContent(DEMO_NOTES) ?? defaultMarkdown);
+		setSelectedPath(null);
+		setMarkdown(defaultMarkdown);
 		setError(null);
-		setTree(getDemoTree());
-		setCenterMode("pdf");
+		setTree([]);
+		setCenterMode("markdown");
 	};
 
 	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
@@ -664,10 +660,12 @@ export default function App() {
 	/** Open a vault-relative path from backlinks (e.g. `notes/idea.md`). */
 	const handleOpenVaultRel = useCallback(
 		(rel: string) => {
+			if (!vaultPath) {
+				setError("Open a vault before navigating vault-relative links.");
+				return;
+			}
 			const clean = normalizeVaultRel(rel);
-			const full = vaultPath
-				? `${vaultPath.replace(/[\\/]+$/, "")}/${clean}`
-				: `demo-vault/${clean}`;
+			const full = `${vaultPath.replace(/[\\/]+$/, "")}/${clean}`;
 			void openPath(full);
 		},
 		[vaultPath, openPath],
@@ -676,12 +674,14 @@ export default function App() {
 	/** Graph: paper NOTES / paper folder → open paper (PDF + Notes). */
 	const handleGraphOpenPath = useCallback(
 		(rel: string) => {
+			if (!vaultPath) {
+				setError("Open a vault before navigating graph links.");
+				return;
+			}
 			const clean = normalizeVaultRel(rel);
 			const paperMatch = clean.match(/^(papers\/[^/]+)/i);
 			if (paperMatch) {
-				const paperDir = vaultPath
-					? `${vaultPath.replace(/[\\/]+$/, "")}/${paperMatch[1]}`
-					: `demo-vault/${paperMatch[1]}`;
+				const paperDir = `${vaultPath.replace(/[\\/]+$/, "")}/${paperMatch[1]}`;
 				openPaper(paperDir);
 				return;
 			}
@@ -696,6 +696,10 @@ export default function App() {
 				handleOpenVaultRel(nav.path);
 				return;
 			}
+			if (!vaultPath) {
+				setError("Open a vault before creating wikilink targets.");
+				return;
+			}
 			const createRel = missingNotePath(nav.targetRaw);
 			const ok = window.confirm(
 				`「${nav.targetRaw}」 does not exist.\n\nCreate ${createRel}?`,
@@ -703,67 +707,16 @@ export default function App() {
 			if (!ok) return;
 
 			const content = newNoteMarkdown(nav.targetRaw);
-			const full = vaultPath
-				? `${vaultPath.replace(/[\\/]+$/, "")}/${createRel}`
-				: `demo-vault/${createRel}`;
+			const full = `${vaultPath.replace(/[\\/]+$/, "")}/${createRel}`;
 
 			try {
 				await writeVaultFile(full, content);
-				if (vaultPath) {
-					try {
-						await rebuildWikiIndex(vaultPath);
-					} catch {
-						// ignore
-					}
-					await refreshTree(vaultPath);
-				} else {
-					// Demo: inject into tree so resolve finds it next time
-					setTree((prev) => {
-						const next = structuredClone(prev);
-						const ensureChild = (
-							nodes: FileNode[],
-							name: string,
-							path: string,
-							kind: "file" | "directory",
-						): FileNode => {
-							let node = nodes.find((n) => n.name === name);
-							if (!node) {
-								node = {
-									id: path,
-									name,
-									path,
-									kind,
-									children: kind === "directory" ? [] : undefined,
-								};
-								nodes.push(node);
-								nodes.sort((a, b) => {
-									if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
-									return a.name.localeCompare(b.name);
-								});
-							}
-							return node;
-						};
-						const parts = createRel.split("/");
-						let cursor = next;
-						let acc = "demo-vault";
-						for (let i = 0; i < parts.length; i++) {
-							const part = parts[i];
-							acc = `${acc}/${part}`;
-							const isLast = i === parts.length - 1;
-							const node = ensureChild(
-								cursor,
-								part,
-								acc,
-								isLast ? "file" : "directory",
-							);
-							if (!isLast) {
-								if (!node.children) node.children = [];
-								cursor = node.children;
-							}
-						}
-						return next;
-					});
+				try {
+					await rebuildWikiIndex(vaultPath);
+				} catch {
+					// ignore
 				}
+				await refreshTree(vaultPath);
 				await openPath(full);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
@@ -941,7 +894,7 @@ export default function App() {
 										title={vaultDisplayName(vaultPath)}
 										onOpenVault={() => void handleOpenVault()}
 										onRefresh={handleRefresh}
-										onUseDemo={handleUseDemo}
+										onCloseVault={handleCloseVault}
 										busy={busy}
 										error={error}
 										isDemo={isDemo}
@@ -989,27 +942,62 @@ export default function App() {
 										</span>
 									</div>
 								</div>
-								{centerMode === "markdown" ? (
-									<textarea
-										ref={editorPaneRef}
-										className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
-										style={{ fontSize: editorFontSize }}
-										value={markdown}
-										onChange={(event) => setMarkdown(event.target.value)}
-										placeholder="Type Markdown here..."
-										spellCheck={false}
-									/>
-								) : null}
-								{centerMode === "pdf" ? (
-									<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-										<PdfViewer source={pdfUrl} className="h-full w-full" />
+								{!vaultPath ? (
+									<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
+										<FolderOpen className="size-10 text-muted-foreground" />
+										<div className="max-w-xs space-y-2">
+											<p className="font-medium text-sm">No vault open</p>
+											<p className="text-muted-foreground text-xs">
+												Open a vault folder to view files, notes, and graph.
+											</p>
+										</div>
+										{isTauri() ? (
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() => void handleOpenVault()}
+											>
+												Open vault
+											</Button>
+										) : (
+											<p className="text-muted-foreground text-xs">
+												Run the app with{" "}
+												<code className="rounded bg-muted px-1 py-0.5">
+													pnpm tauri dev
+												</code>{" "}
+												to open a vault.
+											</p>
+										)}
 									</div>
-								) : null}
-								{centerMode === "html" ? (
-									<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-										<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
-									</div>
-								) : null}
+								) : (
+									<>
+										{centerMode === "markdown" ? (
+											<textarea
+												ref={editorPaneRef}
+												className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
+												style={{ fontSize: editorFontSize }}
+												value={markdown}
+												onChange={(event) => setMarkdown(event.target.value)}
+												placeholder="Type Markdown here..."
+												spellCheck={false}
+											/>
+										) : null}
+										{centerMode === "pdf" ? (
+											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+												<PdfViewer source={pdfUrl} className="h-full w-full" />
+											</div>
+										) : null}
+										{centerMode === "html" ? (
+											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+												<HtmlViewer
+													srcUrl={htmlSrcUrl}
+													className="h-full w-full"
+												/>
+											</div>
+										) : null}
+									</>
+								)}
 							</div>
 						</ResizablePanel>
 

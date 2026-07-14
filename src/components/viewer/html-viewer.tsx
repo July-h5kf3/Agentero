@@ -20,12 +20,7 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 					className,
 				)}
 			>
-				No remote HTML URL in metadata.
-				<br />
-				<span className="mt-1 text-xs">
-					Set <code className="text-foreground">html_url</code> (e.g. arXiv
-					HTML) — Motif does not load local HTML files for preview.
-				</span>
+				No paper available.
 			</div>
 		);
 	}

@@ -64,15 +64,19 @@ export function BacklinksPanel({
 			)}
 		>
 			{!selectedPath ? (
-				<p className="px-1 text-muted-foreground text-xs">
+				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
 					Open a note to see backlinks
 				</p>
 			) : null}
 			{selectedPath && error ? (
-				<p className="px-1 text-destructive text-xs">{error}</p>
+				<p className="flex h-full items-center justify-center text-destructive text-xs">
+					{error}
+				</p>
 			) : null}
 			{selectedPath && !error && !loading && backlinks.length === 0 ? (
-				<p className="px-1 text-muted-foreground text-xs">No backlinks</p>
+				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
+					No backlinks
+				</p>
 			) : null}
 			{selectedPath ? (
 				<ul className="flex flex-col gap-0.5">

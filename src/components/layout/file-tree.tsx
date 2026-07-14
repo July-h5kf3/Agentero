@@ -204,7 +204,7 @@ export function VaultSidebarHeader({
 	title,
 	onOpenVault,
 	onRefresh,
-	onUseDemo,
+	onCloseVault,
 	busy,
 	error,
 	isDemo,
@@ -212,7 +212,7 @@ export function VaultSidebarHeader({
 	title: string;
 	onOpenVault: () => void;
 	onRefresh: () => void;
-	onUseDemo: () => void;
+	onCloseVault: () => void;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
@@ -240,8 +240,8 @@ export function VaultSidebarHeader({
 							</IconAction>
 							{!isDemo ? (
 								<IconAction
-									label="Use demo vault"
-									onClick={onUseDemo}
+									label="Close vault"
+									onClick={onCloseVault}
 									disabled={busy}
 								>
 									<Sparkles className="size-3.5" />

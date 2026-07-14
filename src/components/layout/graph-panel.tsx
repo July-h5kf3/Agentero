@@ -94,17 +94,7 @@ export function GraphPanel({
 
 	const centerHint = useMemo(() => {
 		if (!selectedPath) return null;
-		const paperDir = paperDirFromPath(selectedPath);
-		if (paperDir) {
-			const rel = paperDir.includes("demo-vault/")
-				? paperDir.replace(/^.*demo-vault\//, "")
-				: paperDir;
-			return rel;
-		}
-		if (selectedPath.includes("demo-vault/")) {
-			return selectedPath.replace(/^.*demo-vault\//, "");
-		}
-		return selectedPath;
+		return paperDirFromPath(selectedPath) ?? selectedPath;
 	}, [selectedPath]);
 
 	useEffect(() => {

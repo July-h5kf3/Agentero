@@ -42,12 +42,7 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 					className,
 				)}
 			>
-				No remote PDF URL in metadata.
-				<br />
-				<span className="mt-1 text-xs">
-					Set <code className="text-foreground">pdf_url</code> (e.g. arXiv PDF)
-					— Motif does not load local PDF files for preview.
-				</span>
+				No paper available.
 			</div>
 		);
 	}
