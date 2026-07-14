@@ -1,0 +1,14 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Motif">
+  <title>Motif</title>
+  <rect width="1024" height="1024" rx="224" fill="#0A0A0A" />
+  <path
+    d="M224 704 L224 320 L512 608 L800 320 L800 704"
+    stroke="#F7F7F7"
+    stroke-width="80"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="224" cy="320" r="64" fill="#F7F7F7" />
+  <circle cx="512" cy="608" r="64" fill="#F7F7F7" />
+  <circle cx="800" cy="320" r="64" fill="#F7F7F7" />
+</svg>
