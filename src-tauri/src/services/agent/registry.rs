@@ -1,7 +1,7 @@
 use crate::error::AppError;
 use crate::models::agent::{
-    AgentDescriptor, AgentRegistryState, AgentTemplate, CatalogAcpStatus, CatalogEntry,
-    CatalogScanResponse, ProbeResult, UpsertAgentRequest,
+    default_agent_proxy_url, AgentDescriptor, AgentRegistryState, AgentTemplate, CatalogAcpStatus,
+    CatalogEntry, CatalogScanResponse, ProbeResult, UpsertAgentRequest,
 };
 use crate::services::agent::discover::{probe_command, resolve_command};
 use crate::services::agent::templates::{catalog_templates, template_from_id, template_info};
@@ -18,7 +18,8 @@ pub struct AgentRegistry {
 impl AgentRegistry {
     pub fn load() -> Self {
         let path = config_path();
-        let state = read_state(&path).unwrap_or_default();
+        let mut state = read_state(&path).unwrap_or_default();
+        state.enabled = true;
         Self {
             inner: Mutex::new(state),
             path,
@@ -32,6 +33,7 @@ impl AgentRegistry {
             .map_err(|_| AppError::message("agent registry lock poisoned"))?
             .clone();
         refresh_availability(&mut state);
+        apply_proxy_settings(&mut state);
         Ok(state)
     }
 
@@ -41,6 +43,33 @@ impl AgentRegistry {
             .lock()
             .map_err(|_| AppError::message("agent registry lock poisoned"))?;
         guard.enabled = enabled;
+        persist(&self.path, &guard)?;
+        Ok(guard.clone())
+    }
+
+    pub fn set_proxy(
+        &self,
+        proxy_enabled: bool,
+        proxy_url: String,
+    ) -> Result<AgentRegistryState, AppError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| AppError::message("agent registry lock poisoned"))?;
+        let proxy_url = normalize_proxy_url(&proxy_url);
+        let changed = guard.proxy_enabled != proxy_enabled || guard.proxy_url != proxy_url;
+        guard.proxy_enabled = proxy_enabled;
+        guard.proxy_url = proxy_url;
+        if changed {
+            for agent in &mut guard.agents {
+                if !matches!(agent.template, AgentTemplate::Custom) {
+                    agent.last_probe_ok = None;
+                    agent.last_probe_agent_name = None;
+                    agent.last_probe_error = None;
+                    agent.last_probed_at = None;
+                }
+            }
+        }
         persist(&self.path, &guard)?;
         Ok(guard.clone())
     }
@@ -144,7 +173,7 @@ impl AgentRegistry {
             }
         }
 
-        self.upsert(UpsertAgentRequest {
+        let agent = self.upsert(UpsertAgentRequest {
             id: Some(format!("catalog-{template_id}")),
             name: info.name,
             template: Some(template_from_id(template_id)),
@@ -152,7 +181,8 @@ impl AgentRegistry {
             args: info.args,
             env: Default::default(),
             set_default,
-        })
+        })?;
+        self.get(&agent.id)
     }
 
     pub fn remove(&self, id: &str) -> Result<(), AppError> {
@@ -334,6 +364,8 @@ impl AgentRegistry {
             custom_agents,
             default_id,
             enabled: state.enabled,
+            proxy_enabled: state.proxy_enabled,
+            proxy_url: state.proxy_url,
         })
     }
 
@@ -407,6 +439,41 @@ fn persist(path: &PathBuf, state: &AgentRegistryState) -> Result<(), AppError> {
     let raw = serde_json::to_string_pretty(state)?;
     fs::write(path, raw)?;
     Ok(())
+}
+
+fn normalize_proxy_url(proxy_url: &str) -> String {
+    let trimmed = proxy_url.trim();
+    if trimmed.is_empty() {
+        default_agent_proxy_url()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn apply_proxy_settings(state: &mut AgentRegistryState) {
+    state.proxy_url = normalize_proxy_url(&state.proxy_url);
+    let proxy_enabled = state.proxy_enabled;
+    let proxy_url = state.proxy_url.clone();
+    for agent in &mut state.agents {
+        apply_proxy_to_agent(agent, proxy_enabled, &proxy_url);
+    }
+}
+
+fn apply_proxy_to_agent(agent: &mut AgentDescriptor, proxy_enabled: bool, proxy_url: &str) {
+    if matches!(agent.template, AgentTemplate::Custom) {
+        return;
+    }
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+        agent.env.remove(key);
+    }
+    if proxy_enabled {
+        let proxy_url = proxy_url.trim();
+        if !proxy_url.is_empty() {
+            for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+                agent.env.insert(key.to_string(), proxy_url.to_string());
+            }
+        }
+    }
 }
 
 fn refresh_availability(state: &mut AgentRegistryState) {

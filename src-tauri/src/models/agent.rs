@@ -11,6 +11,9 @@ pub enum AgentTemplate {
     /// Qoder CLI native ACP (`qodercli --acp`).
     /// Docs: https://docs.qoder.com/en/cli/acp
     QoderCli,
+    /// Grok Build ACP (`npx @xai-official/grok@0.2.100 agent stdio`).
+    /// Docs: https://zed.dev/acp/agent/grok-build
+    GrokBuild,
     Custom,
 }
 
@@ -22,6 +25,7 @@ impl AgentTemplate {
             Self::ClaudeAcp => "claude-acp",
             Self::CodexAcp => "codex-acp",
             Self::QoderCli => "qodercli",
+            Self::GrokBuild => "grok-build",
             Self::Custom => "custom",
         }
     }
@@ -53,7 +57,9 @@ pub struct AgentDescriptor {
     pub last_probed_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub const DEFAULT_AGENT_PROXY_URL: &str = "http://127.0.0.1:7890";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRegistryState {
     #[serde(default)]
@@ -62,6 +68,26 @@ pub struct AgentRegistryState {
     pub default_id: Option<String>,
     #[serde(default)]
     pub agents: Vec<AgentDescriptor>,
+    #[serde(default)]
+    pub proxy_enabled: bool,
+    #[serde(default = "default_agent_proxy_url")]
+    pub proxy_url: String,
+}
+
+impl Default for AgentRegistryState {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_id: None,
+            agents: Vec::new(),
+            proxy_enabled: false,
+            proxy_url: default_agent_proxy_url(),
+        }
+    }
+}
+
+pub fn default_agent_proxy_url() -> String {
+    DEFAULT_AGENT_PROXY_URL.to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +161,8 @@ pub struct CatalogScanResponse {
     pub custom_agents: Vec<AgentDescriptor>,
     pub default_id: Option<String>,
     pub enabled: bool,
+    pub proxy_enabled: bool,
+    pub proxy_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
