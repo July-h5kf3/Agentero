@@ -1,6 +1,7 @@
 import { Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type Backlink, getBacklinks } from "@/lib/wiki";
@@ -11,6 +12,8 @@ type BacklinksPanelProps = {
 	selectedPath: string | null;
 	onOpenPath: (vaultRelativePath: string) => void;
 	className?: string;
+	/** Full-height sidebar mode (default). Compact strip is legacy. */
+	variant?: "sidebar" | "compact";
 };
 
 export function BacklinksPanel({
@@ -18,6 +21,7 @@ export function BacklinksPanel({
 	selectedPath,
 	onOpenPath,
 	className,
+	variant = "sidebar",
 }: BacklinksPanelProps) {
 	const [backlinks, setBacklinks] = useState<Backlink[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -50,29 +54,27 @@ export function BacklinksPanel({
 		};
 	}, [vaultPath, selectedPath]);
 
-	if (!selectedPath) return null;
+	const countLabel = loading ? "" : ` (${backlinks.length})`;
 
-	return (
+	const body = (
 		<div
 			className={cn(
-				"flex max-h-40 shrink-0 flex-col border-t bg-muted/15",
-				className,
+				"motif-scroll min-h-0 flex-1 overflow-y-auto",
+				variant === "sidebar" ? "px-2 py-2" : "px-2 pb-2",
 			)}
 		>
-			<div className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-muted-foreground">
-				<Link2 className="size-3.5 shrink-0" aria-hidden />
-				<span className="text-xs font-medium">
-					Backlinks
-					{loading ? "" : ` (${backlinks.length})`}
-				</span>
-			</div>
-			<div className="motif-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-				{error ? (
-					<p className="px-1 text-destructive text-xs">{error}</p>
-				) : null}
-				{!error && !loading && backlinks.length === 0 ? (
-					<p className="px-1 text-muted-foreground text-xs">No backlinks</p>
-				) : null}
+			{!selectedPath ? (
+				<p className="px-1 text-muted-foreground text-xs">
+					Open a note to see backlinks
+				</p>
+			) : null}
+			{selectedPath && error ? (
+				<p className="px-1 text-destructive text-xs">{error}</p>
+			) : null}
+			{selectedPath && !error && !loading && backlinks.length === 0 ? (
+				<p className="px-1 text-muted-foreground text-xs">No backlinks</p>
+			) : null}
+			{selectedPath ? (
 				<ul className="flex flex-col gap-0.5">
 					{backlinks.map((b) => (
 						<li key={`${b.source}:${b.line ?? 0}:${b.targetRaw}`}>
@@ -80,7 +82,7 @@ export function BacklinksPanel({
 								type="button"
 								variant="ghost"
 								size="sm"
-								className="h-auto w-full justify-start gap-1 px-2 py-1 font-normal text-left"
+								className="h-auto w-full justify-start gap-1 px-2 py-1.5 font-normal text-left"
 								onClick={() => onOpenPath(b.source)}
 								title={b.source}
 							>
@@ -100,7 +102,51 @@ export function BacklinksPanel({
 						</li>
 					))}
 				</ul>
+			) : null}
+		</div>
+	);
+
+	if (variant === "compact") {
+		if (!selectedPath) return null;
+		return (
+			<div
+				className={cn(
+					"flex max-h-40 shrink-0 flex-col border-t bg-muted/15",
+					className,
+				)}
+			>
+				<div className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-muted-foreground">
+					<Link2 className="size-3.5 shrink-0" aria-hidden />
+					<span className="text-xs font-medium">
+						Backlinks
+						{countLabel}
+					</span>
+				</div>
+				{body}
 			</div>
+		);
+	}
+
+	return (
+		<div
+			className={cn(
+				"flex h-full min-h-0 flex-col overflow-hidden bg-background",
+				className,
+			)}
+		>
+			<PaneHeader>
+				<Link2
+					className="size-3.5 shrink-0 text-muted-foreground"
+					aria-hidden
+				/>
+				<span className="min-w-0 flex-1 truncate font-medium text-sm">
+					Backlinks
+					<span className="font-normal text-muted-foreground">
+						{countLabel}
+					</span>
+				</span>
+			</PaneHeader>
+			{body}
 		</div>
 	);
 }
