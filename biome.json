@@ -42,7 +42,8 @@
 			"includes": [
 				"src/components/ai-elements/**",
 				"src/components/ui/button-group.tsx",
-				"src/components/ui/input-group.tsx"
+				"src/components/ui/input-group.tsx",
+				"src/components/ui/carousel.tsx"
 			],
 			"linter": {
 				"rules": {
