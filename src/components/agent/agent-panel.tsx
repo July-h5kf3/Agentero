@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Loader2, Send, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, X } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -6,6 +6,20 @@ import {
 	useRef,
 	useState,
 } from "react";
+import {
+	Conversation,
+	ConversationContent,
+	ConversationEmptyState,
+	Message,
+	MessageContent,
+	MessageHeader,
+	MessageResponse,
+	PromptInput,
+	PromptInputBody,
+	PromptInputSubmit,
+	PromptInputTextarea,
+	Sources,
+} from "@/components/ai";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -34,9 +48,7 @@ type AgentPanelProps = {
 	vaultPath: string | null;
 	className?: string;
 	headerActions?: ReactNode;
-	/** Called when user closes the chat sidebar */
 	onClose?: () => void;
-	/** Autofocus the prompt when panel mounts / becomes visible */
 	autoFocus?: boolean;
 	title?: string;
 };
@@ -48,11 +60,8 @@ type ChatLine =
 	| { kind: "system"; text: string };
 
 type AgentOption = {
-	/** Stable key for React */
 	key: string;
-	/** Registry id when registered */
 	id: string | null;
-	/** Catalog template id when from catalog */
 	templateId: string | null;
 	name: string;
 	available: boolean;
@@ -67,7 +76,6 @@ function buildOptions(
 	const options: AgentOption[] = [];
 	const seenIds = new Set<string>();
 
-	// Prefer catalog entries (common agents) with current probe/PATH status.
 	if (catalog) {
 		for (const e of catalog.entries) {
 			const id = e.registeredId ?? null;
@@ -98,7 +106,6 @@ function buildOptions(
 		}
 	}
 
-	// Fallback / merge any registry-only agents not already listed.
 	if (registry) {
 		for (const a of registry.agents) {
 			if (seenIds.has(a.id)) continue;
@@ -151,7 +158,6 @@ export function AgentPanel({
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const activeSessionRef = useRef<string | null>(null);
-	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	const refresh = useCallback(async () => {
@@ -251,12 +257,6 @@ export function AgentPanel({
 		};
 	}, []);
 
-	useEffect(() => {
-		const el = scrollRef.current;
-		if (el) el.scrollTop = el.scrollHeight;
-		void lines;
-	});
-
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
 
@@ -279,10 +279,7 @@ export function AgentPanel({
 			await refresh();
 			setLines((p) => [
 				...p,
-				{
-					kind: "system",
-					text: `Switched to ${opt.name}`,
-				},
+				{ kind: "system", text: `Switched to ${opt.name}` },
 			]);
 		} catch (e) {
 			setLines((p) => [
@@ -297,8 +294,8 @@ export function AgentPanel({
 		}
 	};
 
-	const send = async () => {
-		const text = prompt.trim();
+	const send = async (textRaw?: string) => {
+		const text = (textRaw ?? prompt).trim();
 		if (!text || busy) return;
 		if (!isTauri()) {
 			setLines((p) => [
@@ -309,7 +306,6 @@ export function AgentPanel({
 		}
 
 		let agentId = selected?.id ?? registry?.defaultId ?? null;
-		// Lazily register catalog agent on first send if needed.
 		if (!agentId && selected?.templateId) {
 			try {
 				const agent = await ensureCatalogAgent(selected.templateId, true);
@@ -328,7 +324,7 @@ export function AgentPanel({
 			}
 		}
 
-		if (!agentId || (selected && !selected.available && !selected.id)) {
+		if (!agentId) {
 			setLines((p) => [
 				...p,
 				{
@@ -339,7 +335,6 @@ export function AgentPanel({
 			return;
 		}
 
-		// Prefer available flag; still try if user selected a ready agent.
 		const agentOk =
 			!selected ||
 			selected.available ||
@@ -408,7 +403,7 @@ export function AgentPanel({
 							</button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start" className="min-w-[200px]">
-							<DropdownMenuLabel className="text-xs text-muted-foreground">
+							<DropdownMenuLabel className="text-muted-foreground text-xs">
 								ACP backend
 							</DropdownMenuLabel>
 							<DropdownMenuSeparator />
@@ -464,86 +459,88 @@ export function AgentPanel({
 				) : null}
 			</div>
 
-			<div
-				ref={scrollRef}
-				className="motif-scroll min-h-0 flex-1 space-y-3 p-3"
-			>
-				{lines.length === 0 ? (
-					<p className="text-muted-foreground text-xs leading-relaxed">
-						Chat with your ACP agent about this vault. Click the agent name
-						above to switch backends.
-					</p>
-				) : null}
-				{lines.map((line, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
-					<div key={i} className="text-[13px] leading-relaxed">
-						{line.kind === "user" ? (
-							<div className="rounded-lg bg-primary/10 px-2.5 py-1.5">
-								<span className="font-medium text-xs opacity-70">You</span>
-								<p className="whitespace-pre-wrap">{line.text}</p>
-							</div>
-						) : null}
-						{line.kind === "agent" ? (
-							<div className="rounded-lg border bg-card px-2.5 py-1.5">
-								<span className="font-medium text-xs opacity-70">
-									{selected?.name ?? "Agent"}
-								</span>
-								<p className="whitespace-pre-wrap">
-									{line.text || (line.streaming ? "…" : "")}
-								</p>
-								{line.sources && line.sources.length > 0 ? (
-									<ul className="mt-2 border-t pt-1.5 text-[11px] text-muted-foreground">
-										{line.sources.map((s) => (
-											<li key={s} className="truncate font-mono">
-												{s}
-											</li>
-										))}
-									</ul>
-								) : null}
-							</div>
-						) : null}
-						{line.kind === "error" ? (
-							<p className="text-destructive text-xs">{line.text}</p>
-						) : null}
-						{line.kind === "system" ? (
-							<p className="text-muted-foreground text-xs">{line.text}</p>
-						) : null}
-					</div>
-				))}
-			</div>
+			<Conversation>
+				<ConversationContent>
+					{lines.length === 0 ? (
+						<ConversationEmptyState
+							title="Chat with your vault"
+							description="Messages go to your default ACP agent. Click the agent name above to switch backends."
+						/>
+					) : (
+						lines.map((line, i) => {
+							if (line.kind === "user") {
+								return (
+									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
+									<Message key={i} from="user">
+										<MessageHeader>You</MessageHeader>
+										<MessageContent>
+											<MessageResponse>{line.text}</MessageResponse>
+										</MessageContent>
+									</Message>
+								);
+							}
+							if (line.kind === "agent") {
+								return (
+									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
+									<Message key={i} from="assistant">
+										<MessageHeader>{selected?.name ?? "Agent"}</MessageHeader>
+										<MessageContent>
+											<MessageResponse streaming={line.streaming}>
+												{line.text || (line.streaming ? "" : "")}
+											</MessageResponse>
+											{line.sources && line.sources.length > 0 ? (
+												<Sources items={line.sources} />
+											) : null}
+										</MessageContent>
+									</Message>
+								);
+							}
+							if (line.kind === "error") {
+								return (
+									// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
+									<Message key={i} from="system">
+										<MessageContent className="text-destructive">
+											{line.text}
+										</MessageContent>
+									</Message>
+								);
+							}
+							return (
+								// biome-ignore lint/suspicious/noArrayIndexKey: chat stream
+								<Message key={i} from="system">
+									<MessageContent>{line.text}</MessageContent>
+								</Message>
+							);
+						})
+					)}
+				</ConversationContent>
+			</Conversation>
 
-			<form
-				className="flex shrink-0 gap-1.5 border-t p-2"
+			<PromptInput
 				onSubmit={(e) => {
 					e.preventDefault();
-					void send();
+					void send(prompt);
 				}}
 			>
-				<input
-					ref={inputRef}
-					className="min-w-0 flex-1 rounded-md border bg-background px-2.5 py-1.5 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
-					value={prompt}
-					onChange={(e) => setPrompt(e.target.value)}
-					placeholder={
-						selected?.available || selected?.id
-							? `Message ${selected?.name ?? "agent"}…`
-							: "Configure an agent in Settings…"
-					}
-					disabled={busy}
-				/>
-				<Button
-					type="submit"
-					size="icon-xs"
+				<PromptInputBody>
+					<PromptInputTextarea
+						ref={inputRef}
+						value={prompt}
+						onChange={(e) => setPrompt(e.target.value)}
+						placeholder={
+							selected?.available || selected?.id
+								? `Message ${selected?.name ?? "agent"}…`
+								: "Configure an agent in Settings…"
+						}
+						disabled={busy}
+						autoComplete="off"
+					/>
+				</PromptInputBody>
+				<PromptInputSubmit
+					status={busy ? "streaming" : "ready"}
 					disabled={busy || !prompt.trim()}
-					aria-label="Send"
-				>
-					{busy ? (
-						<Loader2 className="size-3.5 animate-spin" />
-					) : (
-						<Send className="size-3.5" />
-					)}
-				</Button>
-			</form>
+				/>
+			</PromptInput>
 		</div>
 	);
 }
