@@ -8,6 +8,9 @@ pub enum AgentTemplate {
     Gemini,
     ClaudeAcp,
     CodexAcp,
+    /// Qoder CLI native ACP (`qodercli --acp`).
+    /// Docs: https://docs.qoder.com/en/cli/acp
+    QoderCli,
     Custom,
 }
 
@@ -18,6 +21,7 @@ impl AgentTemplate {
             Self::Gemini => "gemini",
             Self::ClaudeAcp => "claude-acp",
             Self::CodexAcp => "codex-acp",
+            Self::QoderCli => "qodercli",
             Self::Custom => "custom",
         }
     }

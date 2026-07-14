@@ -450,6 +450,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 | `gemini` | `gemini`（ACP 模式参数以官方为准） | Gemini CLI |
 | `claude-acp` | 用户本机 Claude ACP 适配器 | Claude 系 agent |
 | `codex-acp` | 用户本机 Codex ACP 入口 | Codex |
+| `qodercli` | `qodercli` + `--acp` | [Qoder CLI ACP](https://docs.qoder.com/en/cli/acp) |
 | `custom` | 任意 command + args + env | 用户完全自定义 |
 
 **Agent 切换**：

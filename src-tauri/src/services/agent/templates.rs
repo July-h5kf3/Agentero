@@ -49,6 +49,17 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_hint: "Install Google Gemini CLI (with ACP support).".to_string(),
         },
         AgentTemplateInfo {
+            id: AgentTemplate::QoderCli.as_str().to_string(),
+            name: "Qoder CLI".to_string(),
+            description: "Qoder CLI with native ACP (`qodercli --acp`).".to_string(),
+            command: "qodercli".to_string(),
+            args: vec!["--acp".to_string()],
+            detect_command: Some("qodercli".to_string()),
+            install_hint:
+                "Install Qoder CLI, then `qodercli login`  ·  https://docs.qoder.com/en/cli/acp"
+                    .to_string(),
+        },
+        AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
             name: "Custom".to_string(),
             description: "Any ACP-compatible command + args.".to_string(),
@@ -74,6 +85,7 @@ pub fn template_from_id(id: &str) -> AgentTemplate {
         "gemini" => AgentTemplate::Gemini,
         "claude-acp" => AgentTemplate::ClaudeAcp,
         "codex-acp" => AgentTemplate::CodexAcp,
+        "qodercli" => AgentTemplate::QoderCli,
         _ => AgentTemplate::Custom,
     }
 }

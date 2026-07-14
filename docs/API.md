@@ -568,7 +568,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   id?: string; // 省略则新建
   name: string;
-  template?: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'custom';
+  template?: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'custom';
   command: string;
   args?: string[];
   env?: Record<string, string>;

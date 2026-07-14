@@ -7,6 +7,7 @@ export type AgentTemplate =
 	| "gemini"
 	| "claude-acp"
 	| "codex-acp"
+	| "qodercli"
 	| "custom";
 
 export type CatalogAcpStatus = "missing" | "not-probed" | "ready" | "failed";

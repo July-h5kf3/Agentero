@@ -261,7 +261,7 @@ interface Highlight {
 interface AgentDescriptor {
   id: string;
   name: string;
-  template: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'custom';
+  template: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'custom';
   command: string;
   args: string[];
   env?: Record<string, string>;
