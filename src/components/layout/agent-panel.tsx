@@ -337,6 +337,27 @@ async function copyText(text: string) {
 	}
 }
 
+/** Client-side dedupe (id first, then display name) for cached/stale catalogs. */
+function dedupeModelsClient(models: AgentModelChoice[]): AgentModelChoice[] {
+	const seenIds = new Set<string>();
+	const seenNames = new Set<string>();
+	const out: AgentModelChoice[] = [];
+	for (const m of models) {
+		const id = m.id.trim();
+		const nameKey = m.name.trim().toLowerCase();
+		if (!id || !nameKey) continue;
+		if (seenIds.has(id) || seenNames.has(nameKey)) continue;
+		seenIds.add(id);
+		seenNames.add(nameKey);
+		out.push({
+			id,
+			name: m.name.trim(),
+			group: m.group,
+		});
+	}
+	return out;
+}
+
 export function AgentPanel({
 	vaultPath,
 	className,
@@ -370,19 +391,21 @@ export function AgentPanel({
 			models: AgentModelChoice[];
 		}) => {
 			if (ev.models.length === 0) return;
+			// Defense in depth: host already dedupes; keep unique by id then name.
+			const models = dedupeModelsClient(ev.models);
 			saveModelCatalog(ev.agentId, {
 				configId: ev.configId,
 				currentId: ev.currentId,
-				models: ev.models,
+				models,
 			});
 			const cur = selectedAgentIdRef.current;
 			if (cur && cur !== ev.agentId) return;
-			setModels(ev.models);
+			setModels(models);
 			setModelId((prev) => {
 				const pref = loadModelPref(ev.agentId);
-				if (pref && ev.models.some((m) => m.id === pref)) return pref;
-				if (prev && ev.models.some((m) => m.id === prev)) return prev;
-				return ev.currentId || ev.models[0]?.id || null;
+				if (pref && models.some((m) => m.id === pref)) return pref;
+				if (prev && models.some((m) => m.id === prev)) return prev;
+				return ev.currentId || models[0]?.id || null;
 			});
 		},
 		[],
@@ -422,11 +445,14 @@ export function AgentPanel({
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
 		if (catalog?.models.length) {
-			setModels(catalog.models);
+			const models = dedupeModelsClient(catalog.models);
+			setModels(models);
 			const preferred =
-				(pref && catalog.models.some((m) => m.id === pref) && pref) ||
-				catalog.currentId ||
-				catalog.models[0]?.id ||
+				(pref && models.some((m) => m.id === pref) && pref) ||
+				(catalog.currentId &&
+					models.some((m) => m.id === catalog.currentId) &&
+					catalog.currentId) ||
+				models[0]?.id ||
 				null;
 			setModelId(preferred);
 		} else {

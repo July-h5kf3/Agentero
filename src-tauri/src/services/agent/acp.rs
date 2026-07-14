@@ -15,6 +15,7 @@ use agent_client_protocol::schema::v1::{
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
@@ -96,11 +97,87 @@ fn plan_priority_str(p: &PlanEntryPriority) -> &'static str {
     }
 }
 
-fn is_model_config(opt: &SessionConfigOption) -> bool {
+fn is_explicit_model_category(opt: &SessionConfigOption) -> bool {
     matches!(
         opt.category.as_ref(),
         Some(SessionConfigOptionCategory::Model)
-    ) || opt.name.to_ascii_lowercase().contains("model")
+    )
+}
+
+fn is_model_name_fallback(opt: &SessionConfigOption) -> bool {
+    // Only used when no category=Model option exists. Avoid matching
+    // "model_config" / "thought model" style options when possible.
+    let n = opt.name.to_ascii_lowercase();
+    n == "model" || n == "models" || n.ends_with(" model") || n.starts_with("model ")
+}
+
+/// Deduplicate model choices: agents often list the same model under multiple
+/// groups (e.g. Recent + All) or with the same display name and different ids.
+fn dedupe_model_choices(models: Vec<AgentModelChoice>) -> Vec<AgentModelChoice> {
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
+    let mut out = Vec::with_capacity(models.len());
+    let mut dropped = 0u32;
+
+    for m in models {
+        let id_key = m.id.trim().to_string();
+        let name_key = m.name.trim().to_ascii_lowercase();
+        if id_key.is_empty() || name_key.is_empty() {
+            dropped += 1;
+            continue;
+        }
+        if seen_ids.contains(&id_key) || seen_names.contains(&name_key) {
+            dropped += 1;
+            continue;
+        }
+        seen_ids.insert(id_key);
+        seen_names.insert(name_key);
+        out.push(AgentModelChoice {
+            id: m.id.trim().to_string(),
+            name: m.name.trim().to_string(),
+            group: m.group,
+        });
+    }
+
+    if dropped > 0 {
+        eprintln!(
+            "[motif acp] model catalog deduped: kept={}, dropped_duplicates={}",
+            out.len(),
+            dropped
+        );
+    }
+    out
+}
+
+fn collect_choices_from_select(
+    sel: &agent_client_protocol::schema::v1::SessionConfigSelect,
+) -> Vec<AgentModelChoice> {
+    let mut models = Vec::new();
+    match &sel.options {
+        SessionConfigSelectOptions::Ungrouped(list) => {
+            for o in list {
+                models.push(AgentModelChoice {
+                    id: o.value.to_string(),
+                    name: o.name.clone(),
+                    group: None,
+                });
+            }
+        }
+        SessionConfigSelectOptions::Grouped(groups) => {
+            for g in groups {
+                for o in &g.options {
+                    models.push(AgentModelChoice {
+                        id: o.value.to_string(),
+                        name: o.name.clone(),
+                        // Keep first group only after dedupe-by-name; still useful for UI.
+                        group: Some(g.name.clone()),
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+    models
 }
 
 /// Extract model selector catalog from ACP session config options.
@@ -109,39 +186,33 @@ fn models_from_config_options(
     agent_id: &str,
     opts: &[SessionConfigOption],
 ) -> Option<AgentModelsEvent> {
-    for opt in opts {
-        if !is_model_config(opt) {
-            continue;
-        }
+    // Prefer explicit category=model so we don't accidentally pick model_config etc.
+    let mut candidates: Vec<&SessionConfigOption> = opts
+        .iter()
+        .filter(|o| is_explicit_model_category(o))
+        .collect();
+    if candidates.is_empty() {
+        candidates = opts.iter().filter(|o| is_model_name_fallback(o)).collect();
+    }
+
+    for opt in candidates {
         let SessionConfigKind::Select(sel) = &opt.kind else {
             continue;
         };
-        let mut models = Vec::new();
-        match &sel.options {
-            SessionConfigSelectOptions::Ungrouped(list) => {
-                for o in list {
-                    models.push(AgentModelChoice {
-                        id: o.value.to_string(),
-                        name: o.name.clone(),
-                        group: None,
-                    });
-                }
-            }
-            SessionConfigSelectOptions::Grouped(groups) => {
-                for g in groups {
-                    for o in &g.options {
-                        models.push(AgentModelChoice {
-                            id: o.value.to_string(),
-                            name: o.name.clone(),
-                            group: Some(g.name.clone()),
-                        });
-                    }
-                }
-            }
-            _ => {}
-        }
+        let raw = collect_choices_from_select(sel);
+        let raw_len = raw.len();
+        let models = dedupe_model_choices(raw);
         if models.is_empty() {
             continue;
+        }
+        if raw_len != models.len() {
+            eprintln!(
+                "[motif acp] agent={} config_id={} model list: raw={} unique={}",
+                agent_id,
+                opt.id,
+                raw_len,
+                models.len()
+            );
         }
         return Some(AgentModelsEvent {
             session_id: session_id.to_string(),
