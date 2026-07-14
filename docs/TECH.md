@@ -80,21 +80,24 @@
 | 库/工具 | 说明 | 用途 |
 |---|---|---|
 | Tailwind CSS v4 | 原子化 CSS + CSS variables | 布局、间距、响应式 |
-| shadcn/ui | `components.json` → `radix-nova` | 通用控件 + **Chat Message 体系** |
-| 官方 Chat 原语 | [Message](https://ui.shadcn.com/docs/components/base/message) / [Bubble](https://ui.shadcn.com/docs/components/base/bubble) / [Marker](https://ui.shadcn.com/docs/components/base/marker) | `src/components/ui/message.tsx` 等；`pnpm dlx shadcn@latest add message bubble marker` |
-| Prompt 辅助 | Motif 自研，风格对齐官方 | `src/components/ai/prompt-input.tsx`（composer 输入区） |
+| shadcn/ui | `components.json` → `radix-nova` | 通用控件（`src/components/ui/`） |
+| **AI Elements** | [elements.ai-sdk.dev](https://elements.ai-sdk.dev/) | Chat / Prompt / Sources / **FileTree** 等；落盘 `src/components/ai-elements/` |
+| streamdown + `@streamdown/*` | Markdown 流式渲染 | `MessageResponse` |
+| `use-stick-to-bottom` | 对话贴底 | `Conversation` |
+| `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Motif 默认 HTTP 传输 |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
 | `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview / **Chat（⌘L 第四栏）** |
 | tweakcn `modern-minimal` | shadcn token 主题 | 简约视觉；Chat 共用同一套 token |
 | `next-themes` | 明暗 | System / Light / Dark |
 
-> 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/UI.md`）。
+> 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/UI.md`）。  
+> AI Elements 安装与组件约定见 **`docs/COMPONENTS.md`**。
 
 **Chat 分层（强制）**
 
 ```text
-UI (官方 Message + Bubble + Marker + PromptInput)
+UI (AI Elements: Conversation + Message + PromptInput + Sources)
   → AgentPanel 状态机
   → Tauri invoke / events
   → Rust ACP Client
@@ -102,8 +105,8 @@ UI (官方 Message + Bubble + Marker + PromptInput)
 ```
 
 - **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
-- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 `BubbleContent` 文本与 Sources。
-- 可选：后续接入官方 `message-scroller`（依赖 `@shadcn/react`）替换当前滚动壳。
+- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 `MessageResponse` 文本与 `Sources`。
+- 组件规范与安装：`docs/COMPONENTS.md`。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
 
@@ -112,7 +115,7 @@ UI (官方 Message + Bubble + Marker + PromptInput)
 | 模块 | 路径 | 说明 |
 |---|---|---|
 | 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx` |
-| 侧边栏文件树 | `src/components/file-tree/file-tree.tsx` | 递归目录树、展开折叠、选中高亮、文件类型图标 |
+| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree` / `FileTreeFolder` / `FileTreeFile` |
 | Vault IO | `src/lib/vault.ts` | 选目录、建树、读文本文件；浏览器下提供 demo vault |
 
 **交互（当前实现）**
@@ -663,4 +666,5 @@ tempfile = "3"
 
 - `docs/PRD.md`：产品需求与验收标准。
 - `docs/UI.md`：视觉主题与简约设计原则。
+- `docs/COMPONENTS.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
 - `docs/ROADMAP.md`：版本规划与里程碑。

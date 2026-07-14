@@ -1,0 +1,243 @@
+# AI Elements 组件目录
+
+> Motif 的 Chat / Agent / 文件树等 AI UI **统一使用 [AI Elements](https://elements.ai-sdk.dev/)**。  
+> 本文档按 **[elements.ai-sdk.dev/components](https://elements.ai-sdk.dev/components)** 的组件目录整理，并标注 Motif 安装与使用状态。
+
+相关：`docs/UI.md` · `docs/TECH.md` · 官网 [Docs](https://elements.ai-sdk.dev/docs) · [Setup](https://elements.ai-sdk.dev/docs/setup)
+
+---
+
+## 1. 约定（Motif）
+
+| 项 | 说明 |
+|---|---|
+| 落盘 | `src/components/ai-elements/<name>.tsx` |
+| 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
+| 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
+| 传输层 | Motif **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
+| 业务壳 | `layout/agent-panel`（Chat）、`layout/file-tree`（Vault 树） |
+| 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
+
+安装命令中的 `<name>` 与下表 **Registry 名**（URL 路径）一致。
+
+```bash
+# 示例：安装 Message
+pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json -y -o
+```
+
+---
+
+## 2. 组件总表（按官网）
+
+官网组件页：`https://elements.ai-sdk.dev/components/<name>`。  
+下表按场景分组；**Registry 名** = 安装 URL 与文件名。
+
+### 2.1 对话核心（Chat）
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Conversation](https://elements.ai-sdk.dev/components/conversation) | `conversation` | 消息列表容器；贴底滚动、空状态、滚动按钮 | ✅ Chat 列表 |
+| [Message](https://elements.ai-sdk.dev/components/message) | `message` | 单条消息：`from`、内容、`MessageResponse`（Streamdown）、操作/分支 | ✅ 用户/助手气泡 |
+| [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) | `prompt-input` | Composer：输入、附件、提交状态、工具槽 | ✅ 底部输入 |
+| [Sources](https://elements.ai-sdk.dev/components/sources) | `sources` | 折叠展示引用来源列表 | ✅ Vault 路径引用 |
+| [Attachments](https://elements.ai-sdk.dev/components/attachments) | `attachments` | 附件网格/列表/预览 | 📦 |
+| [Suggestion](https://elements.ai-sdk.dev/components/suggestion) | `suggestion` | 快捷建议 chip / 横向建议条 | 📦 |
+| [Shimmer](https://elements.ai-sdk.dev/components/shimmer) | `shimmer` | 加载占位闪光文案 | 📦 |
+| [Inline Citation](https://elements.ai-sdk.dev/components/inline-citation) | `inline-citation` | 正文内可悬停引用 | — |
+| [Open in Chat](https://elements.ai-sdk.dev/components/open-in-chat) | `open-in-chat` | 「在 Chat 中打开」类入口 | — |
+
+### 2.2 Agent / 推理 / 工具
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Reasoning](https://elements.ai-sdk.dev/components/reasoning) | `reasoning` | 思考过程折叠展示 | 📦 |
+| [Chain of Thought](https://elements.ai-sdk.dev/components/chain-of-thought) | `chain-of-thought` | 思维链步骤可视化 | — |
+| [Tool](https://elements.ai-sdk.dev/components/tool) | `tool` | 工具调用：状态、输入、输出 | 📦 |
+| [Confirmation](https://elements.ai-sdk.dev/components/confirmation) | `confirmation` | 人在环确认（接受/拒绝） | 📦 |
+| [Task](https://elements.ai-sdk.dev/components/task) | `task` | 任务列表 / 进度折叠 | — |
+| [Plan](https://elements.ai-sdk.dev/components/plan) | `plan` | 计划步骤展示 | — |
+| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办、可折叠任务段 | — |
+| [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint) | `checkpoint` | 检查点 / 里程碑 | — |
+| [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份/状态相关 UI | — |
+| [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量等展示 | — |
+| [Persona](https://elements.ai-sdk.dev/components/persona) | `persona` | 角色/人格展示 | — |
+| [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择下拉 | — |
+
+> Motif BYOA：模型与 Key 在各 Agent CLI；Chat header 切换的是 **ACP 后端**，不是 Model Selector。
+
+### 2.3 代码与工程
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Code Block](https://elements.ai-sdk.dev/components/code-block) | `code-block` | 代码块、复制、语言切换 | 📦（`MessageResponse` 内已有 streamdown 代码） |
+| [File Tree](https://elements.ai-sdk.dev/components/file-tree) | `file-tree` | 可展开文件树 | ✅ 侧栏 Vault 树 |
+| [Terminal](https://elements.ai-sdk.dev/components/terminal) | `terminal` | 终端输出样式 | — |
+| [Stack Trace](https://elements.ai-sdk.dev/components/stack-trace) | `stack-trace` | 堆栈展示 | — |
+| [Test Results](https://elements.ai-sdk.dev/components/test-results) | `test-results` | 测试结果 | — |
+| [Snippet](https://elements.ai-sdk.dev/components/snippet) | `snippet` | 短代码片段 | — |
+| [Commit](https://elements.ai-sdk.dev/components/commit) | `commit` | Commit 信息展示 | — |
+| [Package Info](https://elements.ai-sdk.dev/components/package-info) | `package-info` | 包信息 | — |
+| [Schema Display](https://elements.ai-sdk.dev/components/schema-display) | `schema-display` | Schema 结构展示 | — |
+| [Environment Variables](https://elements.ai-sdk.dev/components/environment-variables) | `environment-variables` | 环境变量展示 | — |
+
+### 2.4 预览 / Artifact / 沙箱
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Web Preview](https://elements.ai-sdk.dev/components/web-preview) | `web-preview` | URL / 网页预览框 | — |
+| [Artifact](https://elements.ai-sdk.dev/components/artifact) | `artifact` | 生成物（文档/代码等）容器 | — |
+| [Sandbox](https://elements.ai-sdk.dev/components/sandbox) | `sandbox` | 沙箱运行环境 UI | — |
+| [JSX Preview](https://elements.ai-sdk.dev/components/jsx-preview) | `jsx-preview` | JSX 实时预览 | — |
+| [Image](https://elements.ai-sdk.dev/components/image) | `image` | 图片展示 | — |
+
+### 2.5 语音 / 音频
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Speech Input](https://elements.ai-sdk.dev/components/speech-input) | `speech-input` | 语音输入 | — |
+| [Mic Selector](https://elements.ai-sdk.dev/components/mic-selector) | `mic-selector` | 麦克风设备选择 | — |
+| [Voice Selector](https://elements.ai-sdk.dev/components/voice-selector) | `voice-selector` | 语音/音色选择 | — |
+| [Audio Player](https://elements.ai-sdk.dev/components/audio-player) | `audio-player` | 音频播放 | — |
+| [Transcription](https://elements.ai-sdk.dev/components/transcription) | `transcription` | 转写文本 | — |
+
+### 2.6 图 / 工作流画布
+
+| 组件 | Registry | 说明 | Motif |
+|---|---|---|---|
+| [Canvas](https://elements.ai-sdk.dev/components/canvas) | `canvas` | 画布根容器 | — |
+| [Node](https://elements.ai-sdk.dev/components/node) | `node` | 图节点 | — |
+| [Edge](https://elements.ai-sdk.dev/components/edge) | `edge` | 边 | — |
+| [Connection](https://elements.ai-sdk.dev/components/connection) | `connection` | 连接线/连线交互 | — |
+| [Controls](https://elements.ai-sdk.dev/components/controls) | `controls` | 画布控件 | — |
+| [Panel](https://elements.ai-sdk.dev/components/panel) | `panel` | 画布面板 | — |
+| [Toolbar](https://elements.ai-sdk.dev/components/toolbar) | `toolbar` | 画布工具栏 | — |
+
+---
+
+## 3. Motif 已安装明细
+
+路径：`src/components/ai-elements/`
+
+| 文件 | 主要导出 | 接线位置 |
+|---|---|---|
+| `conversation.tsx` | `Conversation`、`ConversationContent`、`ConversationEmptyState`、`ConversationScrollButton` | `layout/agent-panel` |
+| `message.tsx` | `Message`、`MessageContent`、`MessageResponse`… | `layout/agent-panel` |
+| `prompt-input.tsx` | `PromptInput`、`PromptInputBody`、`PromptInputTextarea`、`PromptInputFooter`、`PromptInputSubmit`… | `layout/agent-panel` |
+| `sources.tsx` | `Sources`、`SourcesTrigger`、`SourcesContent`、`Source` | `layout/agent-panel` |
+| `file-tree.tsx` | `FileTree`、`FileTreeFolder`、`FileTreeFile`… | `layout/file-tree`（无卡片边框：本地去掉 `border/rounded` 壳） |
+| `attachments.tsx` | `Attachments`、`Attachment`… | 未接线 |
+| `suggestion.tsx` | `Suggestion`、`Suggestions` | 未接线 |
+| `shimmer.tsx` | `Shimmer` | 未接线 |
+| `tool.tsx` | `Tool`、`ToolHeader`、`ToolContent`… | 未接线 |
+| `reasoning.tsx` | `Reasoning`、`ReasoningTrigger`、`ReasoningContent` | 未接线 |
+| `confirmation.tsx` | `Confirmation`… | 未接线 |
+| `code-block.tsx` | `CodeBlock`… | 未接线 |
+
+---
+
+## 4. Motif 集成要点
+
+### 4.1 Chat 组合（已接线）
+
+```text
+Conversation
+  ConversationContent
+    Message from="user" | "assistant"
+      MessageContent → MessageResponse
+    Sources（可选）
+  ConversationScrollButton
+PromptInput
+  PromptInputBody → PromptInputTextarea
+  PromptInputFooter → PromptInputTools + PromptInputSubmit
+```
+
+### 4.2 流式事件映射
+
+| ACP 事件 | UI |
+|---|---|
+| 发送成功 | 追加 user 行 + streaming assistant 行 |
+| `agent:stream` | 只追加到最后一条 streaming 文本 |
+| `agent:completed` | 定稿 + `sources` |
+| `agent:failed` | 去掉未完成 streaming，追加 error |
+
+监听需可取消，避免 Strict Mode 双挂载导致重复气泡。
+
+### 4.3 传输边界
+
+| 能力 | Motif |
+|---|---|
+| AI Elements UI | ✅ |
+| `useChat` / HTTP DefaultChatTransport | ❌ 默认不用 |
+| ACP `runOnce` + events | ✅ |
+
+### 4.4 推荐 import
+
+```ts
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/components/ai-elements/prompt-input";
+import {
+  Source,
+  Sources,
+  SourcesContent,
+  SourcesTrigger,
+} from "@/components/ai-elements/sources";
+import {
+  FileTree,
+  FileTreeFile,
+  FileTreeFolder,
+} from "@/components/ai-elements/file-tree";
+```
+
+---
+
+## 5. 扩展新组件
+
+1. 在 [组件目录](https://elements.ai-sdk.dev/components) 确认名称与文档。  
+2. `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`  
+3. 仅在 `layout/*` 等业务壳接线；不复制平行实现。  
+4. 更新本文 **§2 状态列** 与 **§3**。  
+5. 传输仍走 ACP，除非产品明确改为 HTTP Agent。
+
+---
+
+## 6. 仓库目录（非 AI Elements）
+
+```text
+src/components/
+├── ui/                  # shadcn 原语
+├── ai-elements/         # 本文档对应内容
+├── layout/              # 工作台：分栏、文件树、Chat 面板
+├── editor/              # Plate Markdown 编辑器
+├── viewer/              # PDF / HTML
+└── settings-window.tsx
+```
+
+- **Plate**（`editor/`）：笔记 WYSIWYG，不是 AI Elements。  
+- **禁止**把 Chat 塞进 `ui/` 或与 shadcn Message/Bubble 混用。
+
+---
+
+## 7. 参考
+
+- [AI Elements](https://elements.ai-sdk.dev/)  
+- [Components](https://elements.ai-sdk.dev/components)  
+- [Docs / Setup](https://elements.ai-sdk.dev/docs/setup)  
+- [Conversation](https://elements.ai-sdk.dev/components/conversation) · [Message](https://elements.ai-sdk.dev/components/message) · [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) · [Sources](https://elements.ai-sdk.dev/components/sources) · [File Tree](https://elements.ai-sdk.dev/components/file-tree)  
+- 业务：`src/components/layout/agent-panel.tsx` · `src/components/layout/file-tree.tsx`

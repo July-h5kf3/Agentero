@@ -7,16 +7,12 @@
   ```bash
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
-- **Chat / 消息界面**：以官方 shadcn/ui **Message** 体系为规范：
-  - [Message](https://ui.shadcn.com/docs/components/base/message)
-  - [Bubble](https://ui.shadcn.com/docs/components/base/bubble)
-  - [Message Scroller](https://ui.shadcn.com/docs/components/base/message-scroller)（可选；MVP 用轻量滚动壳）
-  - [Marker](https://ui.shadcn.com/docs/components/base/marker)（系统分隔 / 状态行）
-  - 安装：`pnpm dlx shadcn@latest add message bubble marker`
-  - 落盘：`src/components/ui/message.tsx`、`bubble.tsx`、`marker.tsx`
+- **Chat / Agent / 文件树 AI UI**：以 [**AI Elements**](https://elements.ai-sdk.dev/) 为规范（完整约定见 **`docs/COMPONENTS.md`**）：
+  - 落盘：`src/components/ai-elements/`（`conversation`、`message`、`prompt-input`、`sources`、`file-tree` 等）
+  - 安装：`pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`
   - 主题 **不单独配置**：继续读 shadcn CSS token，随 System / Light / Dark。
-  - 传输层是 Motif **ACP Client**（`agent_run_once` + 事件流），不是 Vercel AI SDK `useChat`。
-  - 辅助：`src/components/ai/` 仅保留 PromptInput 输入区与滚动壳（非第三方 AI Elements）。
+  - 传输层是 Motif **ACP Client**（`agent_run_once` + 事件流），**不是** Vercel AI SDK `useChat`。
+  - **禁止**用自研 `src/components/ai/*` 或官方 `ui/message`+`bubble` 搭新 Chat。
 - 视觉原则：**尽量简约，减少不必要的元素**。
 - 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
 
@@ -31,6 +27,7 @@
 
 ### 2.1 侧边栏文件树
 
+- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/COMPONENTS.md`）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide）：
   - 打开 Vault → `FolderSearch`（⌘O）
@@ -80,29 +77,29 @@
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
 
-### 3.2 Chat 侧栏（官方 Message / Bubble）
+### 3.2 Chat 侧栏（AI Elements）
 
 | 要求 | 说明 |
 |---|---|
 | 入口 | `⌘L`、Preview header 的 Chat 图标、菜单 **View → Toggle Chat** |
 | 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ 消息列表 + PromptInput |
-| 消息组件 | 官方 `Message` + `Bubble`（`align`/`variant`）；系统行用 `Marker` |
-| 列表滚动 | MVP：`Conversation` 轻量自动贴底；后续可换官方 MessageScroller |
-| 输入 | `src/components/ai/prompt-input.tsx`（卡片式 composer，↵ 发送 / ⇧↵ 换行） |
-| 业务壳 | `src/components/agent/agent-panel.tsx`：注册表、流式事件、默认 Agent |
-| Sources | Agent 气泡内展示 Vault 相对路径列表 |
+| 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
+| 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
+| 输入 | `ai-elements/prompt-input`（↵ 发送 / ⇧↵ 换行） |
+| 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
+| Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
+| 规范文档 | **`docs/COMPONENTS.md`** |
 
-**消息树（与官方 Message 文档一致）**
+**消息树（AI Elements；不带头像）**
 
 ```text
-Message (align=end | start)
-  ├── MessageAvatar (Avatar)
-  └── MessageContent
-        ├── MessageHeader
-        ├── Bubble (variant=default | muted)
-        │     └── BubbleContent
-        └── MessageFooter (Sources，可选)
+Conversation
+  └── ConversationContent
+        ├── Message from="user" → MessageContent → MessageResponse
+        └── Message from="assistant" → MessageContent → MessageResponse
+              └── Sources（可选）
+PromptInput → Body / Footer / Submit
 ```
 
 **Agent 切换**：点击 header 中的 Agent 名称打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
@@ -136,14 +133,21 @@ Message (align=end | start)
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`）。
+实现：`src/components/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`）。
 
 ## 5. 组件基线
 
-- 通用 UI：**shadcn/ui + Radix**（`src/components/ui/`）；图标 **Lucide React**。
-- Chat 消息：**官方 Message / Bubble / Marker**（同上路径）；输入辅助在 `src/components/ai/prompt-input.tsx`。
+目录分层（详情 **`docs/COMPONENTS.md` §0**）：
+
+| 位置 | 职责 |
+|---|---|
+| `ui/` | shadcn 通用原语 |
+| `ai-elements/` | AI Elements |
+| `layout/` | 分栏、顶栏、文件树、Chat 面板 |
+| `editor/` | Plate 编辑器 + 插件 |
+| `viewer/` | PDF / HTML |
+| `settings-window.tsx` | 设置窗 |
+
+- 图标：**Lucide React**。
 - 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
-- 参考：
-  - [shadcn/ui](https://ui.shadcn.com/)
-  - [Message](https://ui.shadcn.com/docs/components/base/message)
-  - [Bubble](https://ui.shadcn.com/docs/components/base/bubble)
+- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/COMPONENTS.md`
