@@ -61,9 +61,9 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份 UI | — |
 | [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量 | ✅ `agent:usage` |
 | [Persona](https://elements.ai-sdk.dev/components/persona) | `persona` | Rive 角色动画 | 📦（依赖 WebGL/外链，未接） |
-| [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择 | — BYOA 不用 |
+| [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择 | ✅ 输入框旁；列表来自 ACP session config |
 
-> Motif BYOA：模型与 Key 在各 Agent CLI；Chat header 切换的是 **ACP 后端**，不是 Model Selector。
+> Motif BYOA：模型列表与能力由 **ACP Agent** 通过 session `config_options`（category: model）上报；Motif 不托管 API Key。Header 切换的是 **ACP 后端**，输入框切换的是 **该 Agent 提供的 model**。
 
 ### 2.3 代码与工程
 

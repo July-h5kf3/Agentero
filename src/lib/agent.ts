@@ -129,6 +129,20 @@ export type AgentUsageEvent = {
 	size: number;
 };
 
+export type AgentModelChoice = {
+	id: string;
+	name: string;
+	group?: string | null;
+};
+
+export type AgentModelsEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	currentId: string;
+	models: AgentModelChoice[];
+};
+
 export type AgentFailedEvent = {
 	sessionId: string;
 	error: string;
@@ -233,6 +247,8 @@ export async function runOnce(request: {
 	vaultPath?: string;
 	workflow?: string;
 	target?: string;
+	/** ACP model config value id (from agent:models). */
+	modelId?: string;
 }): Promise<RunOnceAccepted> {
 	return invokeApi("agent_run_once", {
 		request: {
@@ -241,6 +257,7 @@ export async function runOnce(request: {
 			vaultPath: request.vaultPath,
 			workflow: request.workflow,
 			target: request.target,
+			modelId: request.modelId,
 		},
 	});
 }
@@ -281,6 +298,77 @@ export async function listenAgentUsage(
 	handler: (e: AgentUsageEvent) => void,
 ): Promise<UnlistenFn> {
 	return listen<AgentUsageEvent>("agent:usage", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentModels(
+	handler: (e: AgentModelsEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentModelsEvent>("agent:models", (ev) => handler(ev.payload));
+}
+
+const MODEL_PREF_KEY = "motif-agent-model-pref";
+
+/** Persist last chosen model id per agent. */
+export function loadModelPref(agentId: string | null): string | null {
+	if (!agentId) return null;
+	try {
+		const raw = localStorage.getItem(MODEL_PREF_KEY);
+		if (!raw) return null;
+		const map = JSON.parse(raw) as Record<string, string>;
+		return map[agentId] ?? null;
+	} catch {
+		return null;
+	}
+}
+
+export function saveModelPref(agentId: string, modelId: string): void {
+	try {
+		const raw = localStorage.getItem(MODEL_PREF_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, string>;
+		map[agentId] = modelId;
+		localStorage.setItem(MODEL_PREF_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
+const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
+
+export type CachedModelCatalog = {
+	configId: string;
+	currentId: string;
+	models: AgentModelChoice[];
+};
+
+export function loadModelCatalog(
+	agentId: string | null,
+): CachedModelCatalog | null {
+	if (!agentId) return null;
+	try {
+		const raw = localStorage.getItem(MODEL_CATALOG_KEY);
+		if (!raw) return null;
+		const map = JSON.parse(raw) as Record<string, CachedModelCatalog>;
+		return map[agentId] ?? null;
+	} catch {
+		return null;
+	}
+}
+
+export function saveModelCatalog(
+	agentId: string,
+	catalog: CachedModelCatalog,
+): void {
+	try {
+		const raw = localStorage.getItem(MODEL_CATALOG_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<
+			string,
+			CachedModelCatalog
+		>;
+		map[agentId] = catalog;
+		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
 }
 
 export function acpStatusLabel(status: CatalogAcpStatus): string {

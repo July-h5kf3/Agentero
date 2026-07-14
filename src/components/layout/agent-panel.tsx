@@ -1,9 +1,17 @@
 import type { ToolUIPart } from "ai";
-import { Check, ChevronDown, CopyIcon, Loader2, X } from "lucide-react";
+import {
+	Check,
+	CheckIcon,
+	ChevronDown,
+	CopyIcon,
+	Loader2,
+	X,
+} from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -46,6 +54,17 @@ import {
 	MessageResponse,
 } from "@/components/ai-elements/message";
 import {
+	ModelSelector,
+	ModelSelectorContent,
+	ModelSelectorEmpty,
+	ModelSelectorGroup,
+	ModelSelectorInput,
+	ModelSelectorItem,
+	ModelSelectorList,
+	ModelSelectorName,
+	ModelSelectorTrigger,
+} from "@/components/ai-elements/model-selector";
+import {
 	Plan,
 	PlanAction,
 	PlanContent,
@@ -57,6 +76,7 @@ import {
 import {
 	PromptInput,
 	PromptInputBody,
+	PromptInputButton,
 	PromptInputFooter,
 	PromptInputSubmit,
 	PromptInputTextarea,
@@ -99,17 +119,23 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
 	type AgentListResponse,
+	type AgentModelChoice,
 	type AgentPlanEntry,
 	type CatalogScanResponse,
 	ensureCatalogAgent,
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
+	listenAgentModels,
 	listenAgentPlan,
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
+	loadModelCatalog,
+	loadModelPref,
 	runOnce,
+	saveModelCatalog,
+	saveModelPref,
 	scanCatalog,
 	setDefaultAgent,
 } from "@/lib/agent";
@@ -156,12 +182,11 @@ function nextLineId(prefix: string) {
 	return `${prefix}-${chatLineSeq}`;
 }
 
+/** Empty-state suggestion chips — one per row (3 lines). */
 const SUGGESTIONS = [
 	"Summarize the open paper",
 	"List key claims and evidence",
 	"Find related notes in this vault",
-	"Draft a NOTES.md outline",
-	"Explain jargon in simple terms",
 ];
 
 type AgentOption = {
@@ -328,7 +353,11 @@ export function AgentPanel({
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
 	);
+	const [modelOpen, setModelOpen] = useState(false);
+	const [models, setModels] = useState<AgentModelChoice[]>([]);
+	const [modelId, setModelId] = useState<string | null>(null);
 	const activeSessionRef = useRef<string | null>(null);
+	const selectedAgentIdRef = useRef<string | null>(null);
 
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
@@ -352,6 +381,30 @@ export function AgentPanel({
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
+
+	// Restore last model catalog / preference for the selected agent.
+	useEffect(() => {
+		selectedAgentIdRef.current = selectedAgentId;
+		if (!selectedAgentId) {
+			setModels([]);
+			setModelId(null);
+			return;
+		}
+		const catalog = loadModelCatalog(selectedAgentId);
+		const pref = loadModelPref(selectedAgentId);
+		if (catalog?.models.length) {
+			setModels(catalog.models);
+			const preferred =
+				(pref && catalog.models.some((m) => m.id === pref) && pref) ||
+				catalog.currentId ||
+				catalog.models[0]?.id ||
+				null;
+			setModelId(preferred);
+		} else {
+			setModels([]);
+			setModelId(pref);
+		}
+	}, [selectedAgentId]);
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -430,6 +483,23 @@ export function AgentPanel({
 				if (cur && cur !== ev.sessionId) return;
 				if (ev.size > 0) setUsage({ used: ev.used, size: ev.size });
 			});
+			const uModels = await listenAgentModels((ev) => {
+				if (ev.models.length === 0) return;
+				saveModelCatalog(ev.agentId, {
+					configId: ev.configId,
+					currentId: ev.currentId,
+					models: ev.models,
+				});
+				const cur = selectedAgentIdRef.current;
+				if (cur && cur !== ev.agentId) return;
+				setModels(ev.models);
+				setModelId((prev) => {
+					const pref = loadModelPref(ev.agentId);
+					if (pref && ev.models.some((m) => m.id === pref)) return pref;
+					if (prev && ev.models.some((m) => m.id === prev)) return prev;
+					return ev.currentId || ev.models[0]?.id || null;
+				});
+			});
 			const u2 = await listenAgentCompleted((ev) => {
 				if (
 					activeSessionRef.current &&
@@ -491,11 +561,12 @@ export function AgentPanel({
 				uTool();
 				uPlan();
 				uUsage();
+				uModels();
 				u2();
 				u3();
 				return;
 			}
-			unsubs.push(u1, uTool, uPlan, uUsage, u2, u3);
+			unsubs.push(u1, uTool, uPlan, uUsage, uModels, u2, u3);
 		})();
 
 		return () => {
@@ -506,6 +577,28 @@ export function AgentPanel({
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
+
+	const modelGroups = useMemo(() => {
+		const groups = new Map<string, AgentModelChoice[]>();
+		for (const m of models) {
+			const g = m.group?.trim() || "Models";
+			const list = groups.get(g) ?? [];
+			list.push(m);
+			groups.set(g, list);
+		}
+		return [...groups.entries()];
+	}, [models]);
+
+	const selectedModelName = useMemo(() => {
+		if (!modelId) return null;
+		return models.find((m) => m.id === modelId)?.name ?? modelId;
+	}, [modelId, models]);
+
+	const pickModel = (id: string) => {
+		setModelId(id);
+		setModelOpen(false);
+		if (selectedAgentId) saveModelPref(selectedAgentId, id);
+	};
 
 	const selectAgent = async (opt: AgentOption) => {
 		if (!isTauri() || switching || busy) return;
@@ -617,6 +710,7 @@ export function AgentPanel({
 				prompt: text,
 				vaultPath: vaultPath ?? undefined,
 				workflow: "free",
+				modelId: modelId ?? undefined,
 			});
 			activeSessionRef.current = accepted.sessionId;
 			setLines((p) => [
@@ -746,20 +840,21 @@ export function AgentPanel({
 							title="Chat with your vault"
 							description="Messages go to your ACP agent. Click the agent name above to switch backends."
 						>
-							<div className="mt-4 flex w-full max-w-md flex-col gap-3">
+							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
 								{busy ? (
-									<Shimmer className="text-sm">Waiting for agent…</Shimmer>
+									<Shimmer className="text-center text-sm">
+										Waiting for agent…
+									</Shimmer>
 								) : (
-									<Suggestions className="px-1">
-										{SUGGESTIONS.map((s) => (
-											<Suggestion
-												key={s}
-												suggestion={s}
-												onClick={(v) => void send(v)}
-												disabled={busy}
-											/>
-										))}
-									</Suggestions>
+									SUGGESTIONS.map((s) => (
+										<Suggestion
+											key={s}
+											suggestion={s}
+											className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
+											onClick={(v) => void send(v)}
+											disabled={busy}
+										/>
+									))
 								)}
 							</div>
 						</ConversationEmptyState>
@@ -1018,7 +1113,7 @@ export function AgentPanel({
 			{lines.length > 0 && !busy ? (
 				<div className="shrink-0 border-t px-3 pt-2">
 					<Suggestions>
-						{SUGGESTIONS.slice(0, 3).map((s) => (
+						{SUGGESTIONS.map((s) => (
 							<Suggestion
 								key={s}
 								suggestion={s}
@@ -1040,21 +1135,57 @@ export function AgentPanel({
 					<PromptInputBody>
 						<PromptInputTextarea
 							autoFocus={autoFocus || undefined}
-							placeholder={
-								selected?.available || selected?.id
-									? `Message ${selected?.name ?? "agent"}…`
-									: "Configure an agent in Settings…"
-							}
+							placeholder=""
 							disabled={busy}
 						/>
 					</PromptInputBody>
 					<PromptInputFooter>
 						<PromptInputTools>
-							<span className="truncate px-1 text-[11px] text-muted-foreground">
-								{selected?.name
-									? `↵ send · ⇧↵ newline · ${selected.name}`
-									: "↵ send · ⇧↵ newline"}
-							</span>
+							<ModelSelector open={modelOpen} onOpenChange={setModelOpen}>
+								<ModelSelectorTrigger asChild>
+									<PromptInputButton
+										type="button"
+										className="max-w-[10rem] gap-1 px-2"
+										disabled={busy}
+										tooltip={
+											models.length > 0
+												? "Select model (ACP)"
+												: "Models appear after your agent reports them"
+										}
+									>
+										<span className="truncate text-xs">
+											{selectedModelName ?? "Model"}
+										</span>
+										<ChevronDown className="size-3 shrink-0 opacity-70" />
+									</PromptInputButton>
+								</ModelSelectorTrigger>
+								<ModelSelectorContent title="Select model">
+									<ModelSelectorInput placeholder="Search models…" />
+									<ModelSelectorList>
+										<ModelSelectorEmpty>
+											{models.length === 0
+												? "No models yet. Run once so the ACP agent can advertise models."
+												: "No match."}
+										</ModelSelectorEmpty>
+										{modelGroups.map(([group, items]) => (
+											<ModelSelectorGroup key={group} heading={group}>
+												{items.map((m) => (
+													<ModelSelectorItem
+														key={m.id}
+														value={`${m.name} ${m.id}`}
+														onSelect={() => pickModel(m.id)}
+													>
+														<ModelSelectorName>{m.name}</ModelSelectorName>
+														{modelId === m.id ? (
+															<CheckIcon className="ml-auto size-4 opacity-70" />
+														) : null}
+													</ModelSelectorItem>
+												))}
+											</ModelSelectorGroup>
+										))}
+									</ModelSelectorList>
+								</ModelSelectorContent>
+							</ModelSelector>
 						</PromptInputTools>
 						<PromptInputSubmit
 							status={busy ? "streaming" : "ready"}

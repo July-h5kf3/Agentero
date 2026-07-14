@@ -214,6 +214,7 @@ pub async fn agent_run_once(
             request.workflow,
             request.target,
             request.vault_path,
+            request.model_id,
         )
         .await;
     });

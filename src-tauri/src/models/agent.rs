@@ -176,6 +176,9 @@ pub struct RunOnceRequest {
     pub workflow: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
+    /// Preferred model id from ACP session config (category: model). Applied after session/new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +264,27 @@ pub struct AgentUsageEvent {
     pub session_id: String,
     pub used: u64,
     pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelChoice {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+/// Models advertised by the ACP agent via session config options (category: model).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelsEvent {
+    pub session_id: String,
+    pub agent_id: String,
+    /// ACP config option id for the model selector.
+    pub config_id: String,
+    pub current_id: String,
+    pub models: Vec<AgentModelChoice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

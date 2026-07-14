@@ -1,14 +1,17 @@
 use crate::error::AppError;
 use crate::models::agent::{
-    AgentDescriptor, AgentFailedEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
-    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult,
+    AgentDescriptor, AgentFailedEvent, AgentModelChoice, AgentModelsEvent, AgentPlanEntry,
+    AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind, AgentToolEvent,
+    AgentUsageEvent, ProbeResult,
 };
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use agent_client_protocol::schema::v1::{
     ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
     PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
     RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
-    SessionNotification, SessionUpdate, TextContent, ToolCallStatus, ToolKind,
+    SessionConfigId, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
+    SessionConfigOptionValue, SessionConfigSelectOptions, SessionNotification, SessionUpdate,
+    SetSessionConfigOptionRequest, TextContent, ToolCallStatus, ToolKind,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
@@ -93,8 +96,77 @@ fn plan_priority_str(p: &PlanEntryPriority) -> &'static str {
     }
 }
 
-fn emit_rich_session_update(app: &AppHandle, session_id: &str, update: &SessionUpdate) {
+fn is_model_config(opt: &SessionConfigOption) -> bool {
+    matches!(
+        opt.category.as_ref(),
+        Some(SessionConfigOptionCategory::Model)
+    ) || opt.name.to_ascii_lowercase().contains("model")
+}
+
+/// Extract model selector catalog from ACP session config options.
+fn models_from_config_options(
+    session_id: &str,
+    agent_id: &str,
+    opts: &[SessionConfigOption],
+) -> Option<AgentModelsEvent> {
+    for opt in opts {
+        if !is_model_config(opt) {
+            continue;
+        }
+        let SessionConfigKind::Select(sel) = &opt.kind else {
+            continue;
+        };
+        let mut models = Vec::new();
+        match &sel.options {
+            SessionConfigSelectOptions::Ungrouped(list) => {
+                for o in list {
+                    models.push(AgentModelChoice {
+                        id: o.value.to_string(),
+                        name: o.name.clone(),
+                        group: None,
+                    });
+                }
+            }
+            SessionConfigSelectOptions::Grouped(groups) => {
+                for g in groups {
+                    for o in &g.options {
+                        models.push(AgentModelChoice {
+                            id: o.value.to_string(),
+                            name: o.name.clone(),
+                            group: Some(g.name.clone()),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+        if models.is_empty() {
+            continue;
+        }
+        return Some(AgentModelsEvent {
+            session_id: session_id.to_string(),
+            agent_id: agent_id.to_string(),
+            config_id: opt.id.to_string(),
+            current_id: sel.current_value.to_string(),
+            models,
+        });
+    }
+    None
+}
+
+fn emit_rich_session_update(
+    app: &AppHandle,
+    session_id: &str,
+    agent_id: &str,
+    update: &SessionUpdate,
+) {
     match update {
+        SessionUpdate::ConfigOptionUpdate(upd) => {
+            if let Some(ev) = models_from_config_options(session_id, agent_id, &upd.config_options)
+            {
+                let _ = app.emit("agent:models", ev);
+            }
+        }
         SessionUpdate::ToolCall(tc) => {
             let _ = app.emit(
                 "agent:tool",
@@ -265,6 +337,7 @@ pub async fn run_once(
     workflow: Option<String>,
     target: Option<String>,
     vault_path: Option<String>,
+    preferred_model_id: Option<String>,
 ) -> Result<AgentResultPayload, AppError> {
     let full_prompt = build_prompt(workflow.as_deref(), &prompt, target.as_deref());
     let cwd = vault_path
@@ -279,6 +352,7 @@ pub async fn run_once(
     let thought_for_notif = thought_buf.clone();
     let app_for_notif = app.clone();
     let session_for_notif = session_id.clone();
+    let agent_id_for_notif = desc.id.clone();
 
     let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let stop_for_conn = stop_reason.clone();
@@ -315,7 +389,12 @@ pub async fn run_once(
                         },
                     );
                 }
-                emit_rich_session_update(&app_for_notif, &session_for_notif, &notification.update);
+                emit_rich_session_update(
+                    &app_for_notif,
+                    &session_for_notif,
+                    &agent_id_for_notif,
+                    &notification.update,
+                );
                 Ok(())
             },
             agent_client_protocol::on_receive_notification!(),
@@ -339,6 +418,10 @@ pub async fn run_once(
         )
         .connect_with(acp, {
             let full_prompt = full_prompt.clone();
+            let preferred_model = preferred_model_id.clone();
+            let app_for_models = app_for_conn.clone();
+            let session_for_models = session_for_conn.clone();
+            let agent_id_for_models = desc.id.clone();
             move |connection: ConnectionTo<Agent>| async move {
                 connection
                     .send_request(InitializeRequest::new(ProtocolVersion::V1))
@@ -353,6 +436,27 @@ pub async fn run_once(
                     .map_err(|e| acp_err(format!("new_session: {e}")))?;
 
                 let acp_session_id = new_session.session_id;
+                if let Some(opts) = new_session.config_options.as_ref() {
+                    if let Some(ev) =
+                        models_from_config_options(&session_for_models, &agent_id_for_models, opts)
+                    {
+                        // Apply preferred model before prompt when it differs from current.
+                        if let Some(pref) = preferred_model.clone() {
+                            if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
+                                let _ = connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        SessionConfigId::new(ev.config_id.as_str()),
+                                        SessionConfigOptionValue::value_id(pref),
+                                    ))
+                                    .block_task()
+                                    .await;
+                            }
+                        }
+                        let _ = app_for_models.emit("agent:models", ev);
+                    }
+                }
+
                 let prompt_response = connection
                     .send_request(PromptRequest::new(
                         acp_session_id,
