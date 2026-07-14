@@ -7,7 +7,7 @@
   ```bash
   pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json
   ```
-- **Chat / Agent / 文件树 AI UI**：以 [**AI Elements**](https://elements.ai-sdk.dev/) 为规范（完整约定见 **`docs/COMPONENTS.md`**）：
+- **Chat / Agent / 文件树 AI UI**：以 [**AI Elements**](https://elements.ai-sdk.dev/) 为规范（完整约定见 **`docs/reference/COMPONENTS.md`**）：
   - 落盘：`src/components/ai-elements/`（`conversation`、`message`、`prompt-input`、`sources`、`file-tree` 等）
   - 安装：`pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`
   - 主题 **不单独配置**：继续读 shadcn CSS token，随 System / Light / Dark。
@@ -27,7 +27,7 @@
 
 ### 2.1 侧边栏文件树
 
-- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/COMPONENTS.md`）。
+- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/reference/COMPONENTS.md`）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide）：
   - 打开 Vault → `FolderSearch`（⌘O）
@@ -39,7 +39,8 @@
 ## 3. 布局
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + Preview/Notes。
-- **⌘L** 打开 **第四栏 Chat**（ACP chatbot）；打开后为四栏。关闭 Chat 或点 Chat header 的关闭后恢复三栏。
+- **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
+- Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
@@ -72,16 +73,16 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦预览 | |
-| `⌘L` | 显示 / 隐藏 Chat 侧栏 | 第四栏 ACP 对话 |
+| `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
 
-### 3.2 Chat 侧栏（AI Elements）
+### 3.2 Agent 右侧栏（AI Elements）
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | `⌘L`、Preview header 的 Chat 图标、菜单 **View → Toggle Chat** |
+| 入口 | `⌘L`、标题栏右侧 Agent 图标、菜单 **View → Toggle Chat** |
 | 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ 消息列表 + PromptInput |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
@@ -89,7 +90,7 @@
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
-| 规范文档 | **`docs/COMPONENTS.md`** |
+| 规范文档 | **`docs/reference/COMPONENTS.md`** |
 
 **消息树（AI Elements；不带头像）**
 
@@ -105,6 +106,16 @@ PromptInput → Body / Footer / Submit
 ```
 
 **Agent 切换**：点击 header 中的 Agent 名称打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
+
+### 3.3 Backlinks + Graph 右侧栏
+
+| 区域 | 说明 |
+|---|---|
+| 入口 | 标题栏右侧 Backlinks 图标；若右侧栏关闭，点击后打开并切到 Backlinks |
+| 上方 | `BacklinksPanel`：当前文件的反链来源与上下文摘录 |
+| 下方 | `GraphPanel`：当前邻域 / 全图切换，节点点击打开对应文件或 paper |
+| 布局 | 同一右侧栏内垂直堆叠，Backlinks 约占上方区域，Graph 填充剩余高度 |
+| 非目标 | 不再提供独立顶层 Graph tab；避免右侧栏入口过多 |
 
 ## 4. 设置窗口（Settings）
 
@@ -139,7 +150,7 @@ PromptInput → Body / Footer / Submit
 
 ## 5. 组件基线
 
-目录分层（详情 **`docs/COMPONENTS.md` §0**）：
+目录分层（详情 **`docs/reference/COMPONENTS.md` §0**）：
 
 | 位置 | 职责 |
 |---|---|
@@ -152,4 +163,4 @@ PromptInput → Body / Footer / Submit
 
 - 图标：**Lucide React**。
 - 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
-- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/COMPONENTS.md`
+- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/reference/COMPONENTS.md`

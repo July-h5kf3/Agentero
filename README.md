@@ -38,7 +38,7 @@ Classic reference managers are great at **storing** PDFs. Agent workflows need s
 
 - **Local vault** — open a folder; all core data is plain files you can edit, sync, or version.
 - **Markdown workbench** — multi-pane layout: file tree, source/PDF/HTML, preview/notes, right sidebar.
-- **Wikilinks & backlinks** — `[[links]]` across notes and papers (Obsidian-style).
+- **Wikilinks, backlinks & graph** — `[[links]]` across notes and papers; the Backlinks sidebar shows backlinks on top and the graph below.
 - **Agent sidebar** — chat with your vault via ACP backends (Claude, Codex, Grok Build, …).
 - **Paper-centric layout** — remote PDF/HTML from metadata; NOTES beside the paper.
 - **Desktop-native** — Tauri 2 on macOS (overlay title bar, menus, shortcuts).
@@ -88,10 +88,15 @@ pnpm dev
 | `pnpm lint` | TypeScript (Biome) + Rust (clippy) |
 | `pnpm format` | Format TS + Rust |
 
+## Releases
+
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds Tauri installers on macOS, Ubuntu, and Windows and uploads them to a draft GitHub Release.
+
 ## Project structure
 
 ```text
 motif/
+├── AGENTS.md            # Agent/developer guidance for this repository
 ├── src/                 # React + TypeScript UI
 ├── src-tauri/           # Tauri 2 + Rust (vault, wiki, ACP)
 ├── docs/                # PRD, tech, UI, roadmap
@@ -102,14 +107,16 @@ motif/
 
 | Doc | Topic |
 | --- | --- |
+| [AGENTS.md](AGENTS.md) | Agent/developer guidance for this repo |
 | [docs/PRD.md](docs/PRD.md) | Product requirements |
 | [docs/TECH.md](docs/TECH.md) | Technical design |
 | [docs/UI.md](docs/UI.md) | UI conventions |
-| [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Vault layout & files |
-| [docs/WIKILINKS.md](docs/WIKILINKS.md) | Wikilink / backlink design |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Version roadmap |
-| [docs/COMPONENTS.md](docs/COMPONENTS.md) | UI component conventions |
-| [docs/API.md](docs/API.md) | Commands / APIs |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Version roadmap and implementation status |
+| [docs/TODO.md](docs/TODO.md) | Prioritized task backlog |
+| [docs/reference/DATA_MODEL.md](docs/reference/DATA_MODEL.md) | Vault layout & files |
+| [docs/reference/WIKILINKS.md](docs/reference/WIKILINKS.md) | Wikilink / backlink / graph design |
+| [docs/reference/COMPONENTS.md](docs/reference/COMPONENTS.md) | UI component conventions |
+| [docs/reference/API.md](docs/reference/API.md) | Commands / APIs |
 
 ## Stack
 

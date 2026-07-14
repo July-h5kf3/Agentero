@@ -88,9 +88,10 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 #### Markdown 工作台
 
-- 左侧：Vault 文件树。
-- 中间：Markdown 编辑器和预览切换。
-- 右侧：元信息、反链、Agent 运行结果。
+- 左侧：Vault 文件树与 paper 元信息。
+- 中间：Markdown / PDF / HTML 视图切换。
+- 右侧 Preview/Notes：Markdown 预览，或阅读 PDF/HTML 时展示该篇 `NOTES.md`。
+- 可选右侧栏：Agent，或 Backlinks+Graph（上方反链，下方图谱）。
 - 支持打开、编辑、保存 Markdown。
 - 支持基本标题、列表、代码块、链接、表格预览。
 
@@ -125,9 +126,10 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 #### 关系图谱
 
 - 基于 Markdown 双链和论文索引生成图谱。
-- 节点至少包括 Paper、Note、Concept。
+- 节点至少包括 Paper、Note、Concept/Stub。
 - 点击节点可以打开对应 Markdown。
 - 图谱数据必须能从本地 Markdown 重建。
+- MVP UI 中图谱位于 Backlinks 右侧栏下方，与当前文件反链共享上下文。
 
 ### 4.2 P1 暂缓
 
@@ -271,8 +273,8 @@ Vault 内的 Agent 行为规范，至少包含：
 1. 用户在笔记里输入 `[[Concept]]`。
 2. 系统解析并展示可点击链接。
 3. 如果目标不存在，用户可以创建新 note。
-4. 反链面板展示所有引用当前 note 的文件。
-5. 图谱自动更新节点和边。
+4. Backlinks 右侧栏上方展示所有引用当前 note 的文件。
+5. Backlinks 右侧栏下方的图谱自动更新节点和边。
 
 ## 7. 非功能要求
 
@@ -291,7 +293,7 @@ Vault 内的 Agent 行为规范，至少包含：
 - 输入关键词或一段研究描述后，在已配置本机 Agent 的前提下，能检索并返回候选论文，用户确认后完成入库。
 - 连续入库 3 篇 arXiv 论文后，`PAPERS.md` 至少包含 3 条索引。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
-- `[[双链]]` 能跳转；反链面板能显示引用来源。
+- `[[双链]]` 能跳转；Backlinks 右侧栏能在上方显示引用来源，并在下方显示图谱。
 - 配置并探测到本机 ACP Agent 后，跨论文问答结果包含读取文件列表；未配置时展示 BYOA 空状态而非崩溃。
 - 关闭应用后重新打开，最近 Vault、文件树、Markdown 内容可以恢复。
 - 图谱展示至少 20 个节点时，点击节点能打开对应文件。
@@ -310,7 +312,9 @@ Vault 内的 Agent 行为规范，至少包含：
 
 ## 10. 相关文档
 
-- Roadmap：`doc/ROADMAP.md`
-- 主要想法来源：`docs/idea-2.md`
-- 背景与产品叙事：`docs/idea-1.md`
-- 演示材料：`docs/ppt/index.html`
+- Roadmap：`docs/ROADMAP.md`
+- 技术方案：`docs/TECH.md`
+- UI 规范：`docs/UI.md`
+- 双链/反链/图谱设计：`docs/reference/WIKILINKS.md`
+- 数据模型：`docs/reference/DATA_MODEL.md`
+- API 契约：`docs/reference/API.md`

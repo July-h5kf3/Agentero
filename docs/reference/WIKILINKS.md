@@ -1,7 +1,7 @@
 # Motif 双链设计（Obsidian 兼容）
 
-> 状态：**Phase A–B 已实现**（索引 + 反链 + 预览可点）/ C–D 待做  
-> 相关：`docs/PRD.md` · `docs/TECH.md` §5.5–5.6 · `docs/ROADMAP.md` V0.4 · `docs/API.md` §3.7 · `docs/DATA_MODEL.md`
+> 状态：**Phase A–B 已实现**（索引 + 反链 + 预览可点）/ **Phase D 基本完成**（GraphPanel + `graph_get_graph`）/ Phase C 待增强  
+> 相关：`docs/PRD.md` · `docs/TECH.md` §5.5–5.6 · `docs/ROADMAP.md` V0.4 · `docs/reference/API.md` §3.7 · `docs/reference/DATA_MODEL.md`
 
 本文定义 Motif 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
 
@@ -131,19 +131,19 @@ backlinks(path) = { e.source | e.target_path == path }
 - 点击不存在的 `[[Concept]]` → 确认创建 `notes/<slug>.md`（默认 frontmatter 可极简）。
 - 创建后刷新索引并跳转。
 
-### 4.4 图谱（右侧栏 Graph tab）
+### 4.4 图谱（Backlinks 右侧栏下方）
 
 产品形态：
 
-- 右侧边栏 **第三个 tab**（与 Agent / Backlinks 并列），标题栏 **Network icon** 进入。
-- 力导向关系图 + 下方「关联」列表（当前中心节点的出链 / 入链）。
+- 右侧边栏只有 Agent 与 Backlinks 两个顶层入口；Graph 嵌在 Backlinks 入口下方。
+- 上方 `BacklinksPanel` 展示当前文件反链；下方 `GraphPanel` 展示力导向关系图。
 - 点击节点打开对应文件 / paper（paper 级路径走现有 openPaper 逻辑）。
 - 模式：**全图** | **当前邻域**（`center` + `depth`，默认 depth=2）。
 
 数据：
 
 - 唯一事实来源：Markdown 中的 `[[wikilink]]`（内存索引，可 `graph_rebuild` 重建）。
-- Host：`graph_get_graph`（见 `docs/API.md` §3.7）。
+- Host：`graph_get_graph`（见 `docs/reference/API.md` §3.7）。
 - Demo（无 Tauri）：前端用 demo vault 文件内容现算 nodes/edges。
 
 验收：20+ 节点可交互；选中 paper 时邻域图以当前 paper 为中心；不依赖手写图数据库。
@@ -197,8 +197,8 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 | 数据 | Rust `WikiIndex` + `graph_get_graph` | 复用 wikilink 边；不引入图数据库 |
 | 可视化 | **`react-force-graph-2d`** | Canvas 力导向，贴合「中心 + 辐射」；侧栏性能足够 |
 | 备选 | `@xyflow/react` | 仅当未来需要可编辑流程图式节点时再考虑 |
-| UI 壳 | 右侧栏 tab + Lucide `Network` + Tailwind | 与 Agent / Backlinks 一致 |
-| 关联列表 | 纯 React 列表 | 当前中心节点 out / in 链接，点击打开 |
+| UI 壳 | Backlinks 右侧栏下方 + Tailwind | 与反链共享上下文，避免额外顶层入口 |
+| 模式切换 | Near / All | 当前邻域与全图切换 |
 
 **不采用：** Neo4j 等图库；D3 从零画力导向；Cytoscape / Sigma / vis-network（集成成本高）。
 
@@ -218,7 +218,7 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 
 - 为双链替换整个编辑器栈。
 - 自动改写目标文件插入回链（除非未来产品单独立项）。
-- 图谱常驻第四主栏（与「右侧栏 icon 切换」产品形态冲突）。
+- 图谱常驻第四主栏或独立顶层 Graph tab（当前默认嵌在 Backlinks 下方）。
 
 ---
 
@@ -244,11 +244,11 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 1. 源码模式 `[[` 补全。  
 2. Plate 内联 wikilink 节点，序列化回 `[[...]]`。  
 
-### Phase D — 图谱 ✅ / 进行中
+### Phase D — 图谱 ✅
 
 1. **API**：`graph_get_graph`（`center?` + `depth?`，默认全图 / depth=2）。  
-2. **前端**：`getGraph()` + demo 构图；`GraphPanel`（force-graph-2d + 关联列表）。  
-3. **壳**：`rightSidebarTab: "graph"`，标题栏 Network icon（侧栏打开时与 Agent/Backlinks 并列）。  
+2. **前端**：`getGraph()` + demo 构图；`GraphPanel`（force-graph-2d、Near / All 模式、节点点击打开）。  
+3. **壳**：`rightSidebarTab` 只有 `agent` / `backlinks`；`GraphPanel` 嵌在 Backlinks 下方。  
 4. **测试数据**：Demo vault 多 paper + 交叉 `[[双链]]`（图谱质量取决于 NOTES 链接，不依赖本地下载 PDF 正文）。  
 
 **代码位置**：
@@ -258,7 +258,7 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 - `src-tauri/src/commands/graph.rs`（`graph_get_graph`）
 - `src/lib/wiki.ts`（`getGraph` / demo）
 - `src/components/layout/graph-panel.tsx`
-- `src/App.tsx`（tab 接线）
+- `src/App.tsx`（Backlinks 右侧栏内接线）
 
 ---
 

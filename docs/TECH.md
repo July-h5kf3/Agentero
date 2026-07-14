@@ -56,7 +56,7 @@
 | 文件树展示/交互 | `FileTree` + 可伸缩侧边栏；展开/选中/打开文件 | `plugin-dialog` 选目录 + `plugin-fs` `readDir`/`readTextFile`（监听变化后续） |
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
-| 图谱 | `react-force-graph-2d` 侧栏 Graph tab | `graph_get_graph` 输出 nodes/edges |
+| 图谱 | `react-force-graph-2d`，嵌在 Backlinks 右侧栏下方 | `graph_get_graph` 输出 nodes/edges |
 | PDF/HTML 阅读 | react-pdf 渲染；内联 HTML 经 DOMPurify 消毒 | 可插拔解析器提取文本、提供本地文件路径/URL |
 | 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
@@ -87,12 +87,12 @@
 | `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Motif 默认 HTTP 传输 |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
-| `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview / **Chat（⌘L 第四栏）** |
+| `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview/Notes / 可选右侧栏（Agent 或 Backlinks+Graph） |
 | tweakcn `modern-minimal` | shadcn token 主题 | 简约视觉；Chat 共用同一套 token |
 | `next-themes` | 明暗 | System / Light / Dark |
 
 > 主题：`pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`（见 `docs/UI.md`）。  
-> AI Elements 安装与组件约定见 **`docs/COMPONENTS.md`**。
+> AI Elements 安装与组件约定见 **`docs/reference/COMPONENTS.md`**。
 
 **Chat 分层（强制）**
 
@@ -106,7 +106,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 - **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
 - 流式：`agent:stream`（`kind: message | thought`）/ `agent:completed` / `agent:failed` 映射到 `Reasoning` + `MessageResponse` + `Sources`。
-- 组件规范与安装：`docs/COMPONENTS.md`。
+- 组件规范与安装：`docs/reference/COMPONENTS.md`。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
 
@@ -191,9 +191,9 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | **`react-force-graph-2d`** | Canvas 力导向：缩放、拖拽、邻域高亮、点击打开 |
 | `@xyflow/react`（备选） | 仅当未来要可编辑流程图式节点时再引入 |
 
-**原因**：产品对照 Obsidian 式「中心 + 辐射」力导向图；侧栏内 Canvas 性能足够；数据来自 wikilink 索引而非手写布局。  
-**壳**：右侧栏 tab（`agent` | `backlinks` | `graph`），Lucide `Network`。  
-**详设**：`docs/WIKILINKS.md` §4.4 / §6.3；Host 契约 `docs/API.md` §3.7 `graph_get_graph`。
+**原因**：产品对照 Obsidian 式「中心 + 辐射」力导向图；右侧栏内 Canvas 性能足够；数据来自 wikilink 索引而非手写布局。  
+**壳**：右侧栏只有 `agent` 与 `backlinks` 两个顶层 tab；`GraphPanel` 嵌在 Backlinks 下方，与反链共享上下文。  
+**详设**：`docs/reference/WIKILINKS.md` §4.4 / §6.3；Host 契约 `docs/reference/API.md` §3.7 `graph_get_graph`。
 
 ### 3.6 状态管理
 
@@ -394,7 +394,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → Frontend: 请求 Rust 读取 Markdown 文件内容
   → Frontend: @platejs/markdown 将 Markdown 反序列化为 Slate 文档
   → Frontend: Plate.js WYSIWYG 编辑器渲染（所见即所得，双链高亮可点击）
-  → Frontend: 右侧面板展示反链、元信息、Agent 结果
+  → Frontend: 右侧 Preview/Notes 展示渲染内容；可选右侧栏展示 Agent 或 Backlinks+Graph
 
 用户保存
   → Frontend: @platejs/markdown 将 Slate 文档序列化为 Markdown 文本
@@ -405,7 +405,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.5 双链与反链
 
-完整设计见 **`docs/WIKILINKS.md`**（语法、索引、反链、开源选型与分期）。
+完整设计见 **`docs/reference/WIKILINKS.md`**（语法、索引、反链、开源选型与分期）。
 
 - **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
 - **模型**：单向写入 Markdown + 索引反查（不做目标文件自动插入回链）。
@@ -416,10 +416,10 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.6 关系图谱
 
-- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/API.md` §3.7；设计 `docs/WIKILINKS.md` §4.4）。
+- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/reference/API.md` §3.7；设计 `docs/reference/WIKILINKS.md` §4.4）。
 - **节点类型（路径启发）**：`paper` | `note` | `index` | `stub`。
 - **边**：wikilink 有向边 `source → target`（未解析目标为 `stub:<raw>`）；邻域模式用无向 BFS 裁剪。
-- **前端渲染**：`react-force-graph-2d` + 关联列表（出链/入链）；点击节点打开文件/paper。
+- **前端渲染**：`react-force-graph-2d`；`GraphPanel` 位于 Backlinks 右侧栏下方，点击节点打开文件/paper。
 - **Demo**：无 Tauri 时前端从 demo vault Markdown 现算图。
 
 ### 5.7 Agent 工作流（ACP Client + BYOA）
@@ -499,7 +499,7 @@ Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
 ### 6.1 Mac 优先（MVP）
 
 - **窗口模型**：单文档多面板工作台，参考 Obsidian / Notion 桌面版。
-- **Bundle 目标**：`tauri.conf.json` 中 `bundle.targets` 优先 `app`、`dmg`；暂不做 Windows/Linux 发布包，但保留跨平台构建能力。
+- **Bundle 目标**：`tauri.conf.json` 中 `bundle.targets = "all"`；本地仍以 macOS 开发为主，tag CI 会构建 macOS / Linux / Windows 安装包。
 - **原生体验**：
   - 使用 macOS 原生菜单栏（Tauri `Menu` API）。
   - 快捷键遵循 macOS 习惯：`Cmd+O` 打开 Vault、`Cmd+S` 保存、`Cmd+Shift+N` 新建笔记。
@@ -562,7 +562,15 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-### 7.3 代码规范
+### 7.3 Release CI
+
+- `.github/workflows/release.yml` 在 push `v*` tag 时触发。
+- 构建矩阵：`macos-latest`、`ubuntu-22.04`、`windows-latest`。
+- CI 安装 pnpm、Node.js 24、Rust stable；Linux 额外安装 WebKit/AppIndicator/Rsvg/patchelf 依赖。
+- 使用 `tauri-apps/tauri-action@v0` 构建安装包，并上传到草稿 GitHub Release。
+- 后续若加入签名、公证或自动发布，需要在文档中同步列出所需 secrets，并保证本地开发构建不依赖发布凭据。
+
+### 7.4 代码规范
 
 - TypeScript：Biome 已配置，提交前通过 husky + lint-staged 自动检查。
 - Rust：`cargo clippy` + `cargo fmt`。
@@ -601,8 +609,8 @@ pnpm tauri build
 }
 ```
 
-> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、`react-pdf`、双链反链。  
-> **图谱**：`react-force-graph-2d` + `graph_get_graph`（见 WIKILINKS Phase D）。  
+> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、`react-pdf`、双链反链、`react-force-graph-2d` + `graph_get_graph`。  
+> **图谱 UI**：Graph 位于 Backlinks 右侧栏下方，支持 Near / All 模式和节点点击打开。  
 > **仍为计划**：`zustand`（可选）。
 
 ### 8.2 Rust 依赖
@@ -652,11 +660,12 @@ tempfile = "3"
 
 | Roadmap 版本 | 技术重点 |
 |---|---|
-| V0.1 | 完成 Tauri + React 工作台；**可伸缩侧边栏文件树已接入**（open vault + readDir + 打开 MD）；后续补 Vault 初始化结构、写回磁盘与 `store` 最近列表。 |
-| V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
-| V0.3 | 接入 ACP Client + BYOA 注册表/探测；工作流 prompt、读取路径回显、权限与临时文件确认机制。 |
-| V0.4 | 双链解析、反链面板、`react-force-graph-2d` 右侧栏图谱。 |
+| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes 视图已接入；仍需补 Create Vault 初始化与文件监听。 |
+| V0.2 | arXiv importer 仍待实现；当前仅有 arXiv URL 推导、metadata 读取和 demo paper 数据。 |
+| V0.3 | ACP Client + BYOA 面板进行中；注册表、探测、`agent_run_once`、流式 UI 和 Sources 已接入；workflow prompt、权限确认、写入草稿待补。 |
+| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
+| Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
 | Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
 
 ## 10. 风险与技术对策
@@ -675,6 +684,6 @@ tempfile = "3"
 
 - `docs/PRD.md`：产品需求与验收标准。
 - `docs/UI.md`：视觉主题与简约设计原则。
-- `docs/COMPONENTS.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
-- `docs/WIKILINKS.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
+- `docs/reference/COMPONENTS.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
+- `docs/reference/WIKILINKS.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
 - `docs/ROADMAP.md`：版本规划与里程碑。
