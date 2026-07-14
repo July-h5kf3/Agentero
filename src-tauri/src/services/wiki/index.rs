@@ -1,9 +1,12 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
-use crate::models::wiki::{Backlink, BacklinksResponse, RebuildResult, WikiLinkEdge};
+use crate::models::wiki::{
+    Backlink, BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, RebuildResult,
+    WikiLinkEdge,
+};
 use crate::services::wiki::extract::extract_wikilinks;
 use crate::services::wiki::resolve::{normalize_rel, resolve_target};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -202,6 +205,236 @@ impl WikiIndex {
             backlinks,
         }
     }
+
+    /// Full graph or undirected BFS neighborhood around `center`.
+    ///
+    /// Paper folders collapse: any path under `papers/<id>/…` (including NOTES)
+    /// becomes one node `papers/<id>`, labeled with `metadata.json` title when present.
+    pub fn get_graph(
+        &self,
+        vault_root: &str,
+        center: Option<&str>,
+        depth: Option<u32>,
+    ) -> GraphResponse {
+        let depth = depth.unwrap_or(2);
+        let root = Path::new(vault_root);
+
+        // Build full edge list as (source_id, target_id, target_raw) after paper collapse
+        let mut full_edges: Vec<(String, String, String)> = Vec::new();
+        let mut node_ids: HashSet<String> = HashSet::new();
+
+        for f in &self.files {
+            node_ids.insert(collapse_graph_id(f));
+        }
+
+        for e in &self.edges {
+            let source = collapse_graph_id(&e.source);
+            let target = match &e.target_path {
+                Some(tp) => collapse_graph_id(tp),
+                None => format!("stub:{}", e.target_raw),
+            };
+            if source == target {
+                continue; // self-loop after collapse (e.g. NOTES ↔ paper internals)
+            }
+            node_ids.insert(source.clone());
+            node_ids.insert(target.clone());
+            full_edges.push((source, target, e.target_raw.clone()));
+        }
+
+        // Dedupe edges by (source, target)
+        full_edges.sort();
+        full_edges.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+
+        let center_rel = center.and_then(|c| {
+            if c.trim().is_empty() {
+                return None;
+            }
+            let rel = collapse_graph_id(&to_vault_rel(root, c));
+            if node_ids.contains(&rel) {
+                return Some(rel);
+            }
+            let with_md = if rel.ends_with(".md") {
+                rel.clone()
+            } else {
+                format!("{rel}.md")
+            };
+            if node_ids.contains(&with_md) {
+                return Some(with_md);
+            }
+            for id in &node_ids {
+                if id.eq_ignore_ascii_case(&rel) || id.eq_ignore_ascii_case(&with_md) {
+                    return Some(id.clone());
+                }
+            }
+            Some(rel)
+        });
+
+        let (keep_nodes, keep_edges, out_center) = if let Some(ref c) = center_rel {
+            if !node_ids.contains(c) && !full_edges.iter().any(|(s, t, _)| s == c || t == c) {
+                let mut ids = HashSet::new();
+                ids.insert(c.clone());
+                (ids, Vec::new(), Some(c.clone()))
+            } else {
+                let mut adj: HashMap<String, HashSet<String>> = HashMap::new();
+                for (s, t, _) in &full_edges {
+                    adj.entry(s.clone()).or_default().insert(t.clone());
+                    adj.entry(t.clone()).or_default().insert(s.clone());
+                }
+                let mut dist: HashMap<String, u32> = HashMap::new();
+                let mut q = VecDeque::new();
+                dist.insert(c.clone(), 0);
+                q.push_back(c.clone());
+                while let Some(u) = q.pop_front() {
+                    let d = dist[&u];
+                    if d >= depth {
+                        continue;
+                    }
+                    if let Some(neis) = adj.get(&u) {
+                        for v in neis {
+                            if !dist.contains_key(v) {
+                                dist.insert(v.clone(), d + 1);
+                                q.push_back(v.clone());
+                            }
+                        }
+                    }
+                }
+                let ids: HashSet<String> = dist.keys().cloned().collect();
+                let edges: Vec<(String, String, String)> = full_edges
+                    .into_iter()
+                    .filter(|(s, t, _)| ids.contains(s) && ids.contains(t))
+                    .collect();
+                (ids, edges, Some(c.clone()))
+            }
+        } else {
+            (node_ids, full_edges, None)
+        };
+
+        let mut nodes: Vec<GraphNode> = keep_nodes
+            .iter()
+            .map(|id| graph_node_from_id(root, id))
+            .collect();
+        nodes.sort_by(|a, b| a.id.cmp(&b.id));
+
+        let mut edges: Vec<GraphEdge> = keep_edges
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, t, raw))| GraphEdge {
+                id: format!("e{i}:{s}->{t}"),
+                source: s,
+                target: t,
+                target_raw: Some(raw),
+            })
+            .collect();
+        edges.sort_by(|a, b| a.id.cmp(&b.id));
+
+        GraphResponse {
+            nodes,
+            edges,
+            center: out_center,
+            depth,
+        }
+    }
+}
+
+/// Collapse `papers/<id>/…` (NOTES, metadata, etc.) to a single node `papers/<id>`.
+fn collapse_graph_id(path: &str) -> String {
+    let n = normalize_rel(path);
+    if n.starts_with("stub:") {
+        return n;
+    }
+    // papers/<id> or papers/<id>/anything
+    if let Some(rest) = n.strip_prefix("papers/") {
+        let id = rest.split('/').next().unwrap_or(rest);
+        if !id.is_empty() {
+            return format!("papers/{id}");
+        }
+    }
+    n
+}
+
+fn paper_title_from_metadata(vault_root: &Path, paper_rel: &str) -> Option<String> {
+    let meta_path = vault_root.join(paper_rel).join("metadata.json");
+    let raw = fs::read_to_string(meta_path).ok()?;
+    // Lightweight parse: "title": "..."
+    let key = "\"title\"";
+    let idx = raw.find(key)?;
+    let after = &raw[idx + key.len()..];
+    let colon = after.find(':')?;
+    let rest = after[colon + 1..].trim_start();
+    if !rest.starts_with('"') {
+        return None;
+    }
+    let mut out = String::new();
+    let mut chars = rest[1..].chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(n) = chars.next() {
+                out.push(n);
+            }
+        } else if c == '"' {
+            break;
+        } else {
+            out.push(c);
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+fn graph_node_from_id(vault_root: &Path, id: &str) -> GraphNode {
+    if let Some(raw) = id.strip_prefix("stub:") {
+        return GraphNode {
+            id: id.to_string(),
+            label: raw.to_string(),
+            node_type: GraphNodeType::Stub,
+            path: None,
+        };
+    }
+    let node_type = classify_node_path(id);
+    let label = if node_type == GraphNodeType::Paper {
+        paper_title_from_metadata(vault_root, id)
+            .unwrap_or_else(|| id.rsplit('/').next().unwrap_or(id).to_string())
+    } else {
+        id.rsplit('/')
+            .next()
+            .unwrap_or(id)
+            .trim_end_matches(".md")
+            .trim_end_matches(".mdx")
+            .trim_end_matches(".markdown")
+            .to_string()
+    };
+    GraphNode {
+        id: id.to_string(),
+        label,
+        node_type,
+        path: Some(id.to_string()),
+    }
+}
+
+fn classify_node_path(path: &str) -> GraphNodeType {
+    let n = path.replace('\\', "/");
+    // Collapsed paper nodes are exactly papers/<id> (or uncollapsed papers/<id>/…)
+    if let Some(rest) = n.strip_prefix("papers/") {
+        if !rest.is_empty() {
+            return GraphNodeType::Paper;
+        }
+    }
+    let base = n.rsplit('/').next().unwrap_or(&n);
+    let base_lower = base.to_ascii_lowercase();
+    if base_lower == "papers.md"
+        || base_lower == "agents.md"
+        || base_lower == "readme.md"
+        || base_lower == "library.bib"
+    {
+        return GraphNodeType::Index;
+    }
+    if n.contains("/notes/") || n.starts_with("notes/") {
+        return GraphNodeType::Note;
+    }
+    GraphNodeType::Note
 }
 
 /// Thread-safe index managed by Tauri.

@@ -111,6 +111,7 @@ pub fn run() {
             commands::agent::agent_run_once,
             commands::agent::agent_warm,
             commands::graph::graph_get_backlinks,
+            commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
         ])
         .setup(|app| {
