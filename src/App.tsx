@@ -8,7 +8,7 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
-import { Bot, Link2, Network, PanelLeft, PanelRight } from "lucide-react";
+import { Bot, Link2, PanelLeft, PanelRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -189,13 +189,13 @@ export default function App() {
 	/** NOTES.md for the current paper — shown on the right when viewing PDF/HTML */
 	const [paperNotes, setPaperNotes] = useState("");
 	/**
-	 * Right sidebar (⌘L): Agent (default) or Backlinks.
+	 * Right sidebar (⌘L): Agent (default) or Backlinks with Graph below.
 	 * Collapsed by default; top-bar icons open a tab.
 	 */
 	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
-	const [rightSidebarTab, setRightSidebarTab] = useState<
-		"agent" | "backlinks" | "graph"
-	>("agent");
+	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
+		"agent",
+	);
 	const sidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLTextAreaElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
@@ -318,7 +318,7 @@ export default function App() {
 	}, [rightSidebarTab]);
 
 	/** Open right sidebar on a tab (or switch tab if already open). */
-	const openRightTab = useCallback((tab: "agent" | "backlinks" | "graph") => {
+	const openRightTab = useCallback((tab: "agent" | "backlinks") => {
 		setRightSidebarTab(tab);
 		setRightSidebarOpen(true);
 		if (tab === "agent") {
@@ -883,25 +883,6 @@ export default function App() {
 										</TooltipTrigger>
 										<TooltipContent side="bottom">Backlinks</TooltipContent>
 									</Tooltip>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label="Graph panel"
-												aria-pressed={rightSidebarTab === "graph"}
-												className={cn(
-													rightSidebarTab === "graph" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => openRightTab("graph")}
-											>
-												<Network className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">Graph</TooltipContent>
-									</Tooltip>
 								</>
 							) : null}
 							<Tooltip>
@@ -1078,7 +1059,7 @@ export default function App() {
 							</div>
 						</ResizablePanel>
 
-						{/* Right sidebar: Agent (default) | Backlinks | Graph */}
+						{/* Right sidebar: Agent (default) | Backlinks with Graph */}
 						{rightSidebarOpen ? <ResizableHandle /> : null}
 						{rightSidebarOpen ? (
 							<ResizablePanel
@@ -1098,21 +1079,21 @@ export default function App() {
 									/>
 								) : null}
 								{rightSidebarTab === "backlinks" ? (
-									<BacklinksPanel
-										vaultPath={vaultPath}
-										selectedPath={selectedPath}
-										onOpenPath={handleOpenVaultRel}
-										variant="sidebar"
-										className="min-h-0 h-full"
-									/>
-								) : null}
-								{rightSidebarTab === "graph" ? (
-									<GraphPanel
-										vaultPath={vaultPath}
-										selectedPath={selectedPath}
-										onOpenPath={handleGraphOpenPath}
-										className="min-h-0 h-full"
-									/>
+									<div className="flex h-full min-h-0 flex-col overflow-hidden">
+										<BacklinksPanel
+											vaultPath={vaultPath}
+											selectedPath={selectedPath}
+											onOpenPath={handleOpenVaultRel}
+											variant="sidebar"
+											className="min-h-0 basis-[42%] border-b"
+										/>
+										<GraphPanel
+											vaultPath={vaultPath}
+											selectedPath={selectedPath}
+											onOpenPath={handleGraphOpenPath}
+											className="min-h-0 flex-1"
+										/>
+									</div>
 								) : null}
 							</ResizablePanel>
 						) : null}
