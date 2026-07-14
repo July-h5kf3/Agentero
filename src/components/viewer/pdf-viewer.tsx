@@ -1,10 +1,9 @@
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -16,15 +15,16 @@ type PdfViewerProps = {
 };
 
 export function PdfViewer({ source, className }: PdfViewerProps) {
+	const hostRef = useRef<HTMLDivElement>(null);
 	const [numPages, setNumPages] = useState(0);
-	const [page, setPage] = useState(1);
 	const [error, setError] = useState<string | null>(null);
 	const [width, setWidth] = useState(640);
 
 	const remote = source && /^https?:\/\//i.test(source) ? source : null;
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-bind observer when remote viewer mounts
 	useEffect(() => {
-		const el = document.getElementById("motif-pdf-host");
+		const el = hostRef.current;
 		if (!el) return;
 		const ro = new ResizeObserver((entries) => {
 			const w = entries[0]?.contentRect.width;
@@ -32,7 +32,7 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 		});
 		ro.observe(el);
 		return () => ro.disconnect();
-	}, []);
+	}, [remote]);
 
 	if (!remote) {
 		return (
@@ -54,57 +54,52 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 
 	return (
 		<div
+			ref={hostRef}
 			id="motif-pdf-host"
 			className={cn("flex h-full min-h-0 flex-col", className)}
 		>
-			<div className="flex shrink-0 items-center justify-center gap-2 border-b px-2 py-1.5">
-				<Button
-					type="button"
-					variant="ghost"
-					size="xs"
-					disabled={page <= 1}
-					onClick={() => setPage((p) => Math.max(1, p - 1))}
-				>
-					Prev
-				</Button>
-				<span className="min-w-20 text-center text-muted-foreground text-xs">
-					{numPages ? `${page} / ${numPages}` : "—"}
-				</span>
-				<Button
-					type="button"
-					variant="ghost"
-					size="xs"
-					disabled={!numPages || page >= numPages}
-					onClick={() => setPage((p) => Math.min(numPages, p + 1))}
-				>
-					Next
-				</Button>
-			</div>
-			<div className="motif-scroll flex min-h-0 flex-1 justify-center bg-muted/20 p-3">
+			<div className="motif-scroll min-h-0 flex-1 bg-muted/20">
 				{error ? (
-					<p className="text-destructive text-sm">{error}</p>
+					<p className="p-6 text-destructive text-sm">{error}</p>
 				) : (
 					<Document
 						key={remote}
 						file={remote}
 						loading={
-							<p className="text-muted-foreground text-sm">Loading PDF…</p>
+							<p className="p-6 text-center text-muted-foreground text-sm">
+								Loading PDF…
+							</p>
 						}
 						onLoadSuccess={(doc) => {
 							setNumPages(doc.numPages);
-							setPage(1);
 							setError(null);
 						}}
 						onLoadError={(err) => {
 							setError(err.message || "Failed to load PDF");
 						}}
+						className="flex flex-col items-center gap-3 px-3 py-3"
 					>
-						<Page
-							pageNumber={page}
-							width={width}
-							renderTextLayer
-							renderAnnotationLayer
-						/>
+						{Array.from({ length: numPages }, (_, i) => i + 1).map(
+							(pageNumber) => (
+								<div
+									key={`${remote}-p${pageNumber}`}
+									className="overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+								>
+									<Page
+										pageNumber={pageNumber}
+										width={width}
+										renderTextLayer
+										renderAnnotationLayer
+										loading={
+											<div
+												className="bg-muted/40"
+												style={{ width, height: width * 1.3 }}
+											/>
+										}
+									/>
+								</div>
+							),
+						)}
 					</Document>
 				)}
 			</div>

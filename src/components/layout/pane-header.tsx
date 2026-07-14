@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** Shared pane title bar height — keep all three columns aligned. */
 export const PANE_HEADER_CLASS =
-	"flex h-10 shrink-0 items-center gap-2 border-b px-3";
+	"flex h-10 shrink-0 items-center gap-2 border-b px-3 leading-none";
 
 type PaneHeaderProps = {
 	children: ReactNode;
@@ -28,7 +28,7 @@ export function PaneHeader({
 		<div className={cn(PANE_HEADER_CLASS, className)}>
 			<div
 				className={cn(
-					"flex items-center gap-2",
+					"flex h-full items-center gap-2",
 					leadingCompact ? "shrink-0" : "min-w-0 flex-1",
 				)}
 			>
@@ -37,7 +37,7 @@ export function PaneHeader({
 			{trailing ? (
 				<div
 					className={cn(
-						"flex items-center gap-1",
+						"flex h-full min-h-0 items-center gap-1",
 						leadingCompact ? "min-w-0 flex-1 justify-end" : "shrink-0",
 					)}
 				>

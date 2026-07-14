@@ -8,7 +8,6 @@ import {
 	UnderlinePlugin,
 } from "@platejs/basic-nodes/react";
 import { MarkdownPlugin } from "@platejs/markdown";
-import { ExternalLink } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -501,57 +500,28 @@ export default function App() {
 					className="min-h-0 overflow-hidden"
 				>
 					<div className="flex h-full min-h-0 flex-col overflow-hidden">
-						<PaneHeader
-							leadingCompact
-							trailing={
-								<>
-									<span
-										className="min-w-0 truncate text-right text-muted-foreground text-xs"
-										title={
-											paperMeta
-												? `${paperMeta.title} · ${activeFileLabel}`
-												: (activeFileLabel ?? undefined)
-										}
-									>
-										{paperMeta?.title ?? activeFileLabel}
-									</span>
-									{centerMode === "html" &&
-									htmlSrcUrl &&
-									/^https?:\/\//i.test(htmlSrcUrl) ? (
-										<a
-											href={htmlSrcUrl}
-											target="_blank"
-											rel="noreferrer"
-											className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-											title="Open HTML in browser"
-											aria-label="Open HTML in browser"
-										>
-											<ExternalLink className="size-3.5" />
-										</a>
-									) : null}
-									{centerMode === "pdf" &&
-									pdfUrl &&
-									/^https?:\/\//i.test(pdfUrl) ? (
-										<a
-											href={pdfUrl}
-											target="_blank"
-											rel="noreferrer"
-											className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-											title="Open PDF in browser"
-											aria-label="Open PDF in browser"
-										>
-											<ExternalLink className="size-3.5" />
-										</a>
-									) : null}
-								</>
-							}
-						>
-							<ViewModeToggle
-								value={centerMode}
-								onChange={handleCenterModeChange}
-								available={modeAvailable}
-							/>
-						</PaneHeader>
+						{/* Single-row header: toggle left, title right — same 28px line box */}
+						<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+							<div className="flex h-7 shrink-0 items-center">
+								<ViewModeToggle
+									value={centerMode}
+									onChange={handleCenterModeChange}
+									available={modeAvailable}
+								/>
+							</div>
+							<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
+								<span
+									className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+									title={
+										paperMeta
+											? `${paperMeta.title} · ${activeFileLabel}`
+											: (activeFileLabel ?? undefined)
+									}
+								>
+									{paperMeta?.title ?? activeFileLabel}
+								</span>
+							</div>
+						</div>
 						{centerMode === "markdown" ? (
 							<textarea
 								ref={editorPaneRef}

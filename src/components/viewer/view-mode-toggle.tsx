@@ -43,7 +43,7 @@ export function ViewModeToggle({
 	return (
 		<TooltipProvider delayDuration={250}>
 			<div
-				className="relative inline-flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 dark:bg-muted/30"
+				className="relative inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 dark:bg-muted/30"
 				role="tablist"
 				aria-label="Center pane view"
 			>
