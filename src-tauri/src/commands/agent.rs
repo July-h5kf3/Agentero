@@ -1,9 +1,11 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::agent::{
     AgentDescriptor, AgentListResponse, AgentTemplateInfo, CatalogScanResponse, ProbeResult,
-    RunOnceAccepted, RunOnceRequest, UpsertAgentRequest,
+    RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
-use crate::services::agent::{builtin_templates, new_ids, probe_agent, run_once, AgentRegistry};
+use crate::services::agent::{
+    builtin_templates, new_ids, probe_agent, run_once, warm_agent, AgentRegistry,
+};
 use serde::Serialize;
 use tauri::State;
 
@@ -220,4 +222,29 @@ pub async fn agent_run_once(
     });
 
     Ok(ApiResult::ok(accepted))
+}
+
+/// Background ACP start when Chat opens — loads models/context without a user prompt.
+#[tauri::command]
+pub async fn agent_warm(
+    app: tauri::AppHandle,
+    registry: State<'_, AgentRegistry>,
+    request: WarmRequest,
+) -> Result<ApiResult<WarmResult>, String> {
+    let desc = match registry.resolve_default(request.agent_id.as_deref()) {
+        Ok(d) => d,
+        Err(e) => {
+            return Ok(ApiResult::ok(WarmResult {
+                agent_id: request.agent_id.unwrap_or_default(),
+                ok: false,
+                models: None,
+                usage_used: None,
+                usage_size: None,
+                error: Some(e.to_string()),
+            }));
+        }
+    };
+
+    let result = warm_agent(app, desc, request.vault_path, request.model_id).await;
+    Ok(ApiResult::ok(result))
 }

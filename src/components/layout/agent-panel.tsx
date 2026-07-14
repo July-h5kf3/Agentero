@@ -138,6 +138,7 @@ import {
 	saveModelPref,
 	scanCatalog,
 	setDefaultAgent,
+	warmAgent,
 } from "@/lib/agent";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -356,8 +357,36 @@ export function AgentPanel({
 	const [modelOpen, setModelOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
+	const [warming, setWarming] = useState(false);
 	const activeSessionRef = useRef<string | null>(null);
 	const selectedAgentIdRef = useRef<string | null>(null);
+	const warmGenRef = useRef(0);
+
+	const applyModelsEvent = useCallback(
+		(ev: {
+			agentId: string;
+			configId: string;
+			currentId: string;
+			models: AgentModelChoice[];
+		}) => {
+			if (ev.models.length === 0) return;
+			saveModelCatalog(ev.agentId, {
+				configId: ev.configId,
+				currentId: ev.currentId,
+				models: ev.models,
+			});
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			setModels(ev.models);
+			setModelId((prev) => {
+				const pref = loadModelPref(ev.agentId);
+				if (pref && ev.models.some((m) => m.id === pref)) return pref;
+				if (prev && ev.models.some((m) => m.id === prev)) return prev;
+				return ev.currentId || ev.models[0]?.id || null;
+			});
+		},
+		[],
+	);
 
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
@@ -405,6 +434,42 @@ export function AgentPanel({
 			setModelId(pref);
 		}
 	}, [selectedAgentId]);
+
+	// When Chat opens (or agent/vault changes), warm ACP in the background for models/context.
+	useEffect(() => {
+		if (!isTauri() || !selectedAgentId) return;
+		const gen = ++warmGenRef.current;
+		let cancelled = false;
+		setWarming(true);
+		void (async () => {
+			try {
+				const pref = loadModelPref(selectedAgentId) ?? undefined;
+				const result = await warmAgent({
+					agentId: selectedAgentId,
+					vaultPath: vaultPath ?? undefined,
+					modelId: pref,
+				});
+				if (cancelled || gen !== warmGenRef.current) return;
+				if (result.models) {
+					applyModelsEvent(result.models);
+				}
+				if (
+					result.usageUsed != null &&
+					result.usageSize != null &&
+					result.usageSize > 0
+				) {
+					setUsage({ used: result.usageUsed, size: result.usageSize });
+				}
+			} catch {
+				// Warm is best-effort; first message can still discover models.
+			} finally {
+				if (!cancelled && gen === warmGenRef.current) setWarming(false);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedAgentId, vaultPath, applyModelsEvent]);
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -484,21 +549,7 @@ export function AgentPanel({
 				if (ev.size > 0) setUsage({ used: ev.used, size: ev.size });
 			});
 			const uModels = await listenAgentModels((ev) => {
-				if (ev.models.length === 0) return;
-				saveModelCatalog(ev.agentId, {
-					configId: ev.configId,
-					currentId: ev.currentId,
-					models: ev.models,
-				});
-				const cur = selectedAgentIdRef.current;
-				if (cur && cur !== ev.agentId) return;
-				setModels(ev.models);
-				setModelId((prev) => {
-					const pref = loadModelPref(ev.agentId);
-					if (pref && ev.models.some((m) => m.id === pref)) return pref;
-					if (prev && ev.models.some((m) => m.id === prev)) return prev;
-					return ev.currentId || ev.models[0]?.id || null;
-				});
+				applyModelsEvent(ev);
 			});
 			const u2 = await listenAgentCompleted((ev) => {
 				if (
@@ -573,7 +624,7 @@ export function AgentPanel({
 			cancelled = true;
 			for (const u of unsubs) u();
 		};
-	}, []);
+	}, [applyModelsEvent]);
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
@@ -816,7 +867,7 @@ export function AgentPanel({
 						</ContextContent>
 					</Context>
 				) : null}
-				{busy || switching ? (
+				{busy || switching || warming ? (
 					<Loader2 className="size-3.5 shrink-0 animate-spin opacity-70" />
 				) : null}
 				{headerActions}
@@ -1154,7 +1205,7 @@ export function AgentPanel({
 										}
 									>
 										<span className="truncate text-xs">
-											{selectedModelName ?? "Model"}
+											{selectedModelName ?? (warming ? "Loading…" : "Model")}
 										</span>
 										<ChevronDown className="size-3 shrink-0 opacity-70" />
 									</PromptInputButton>

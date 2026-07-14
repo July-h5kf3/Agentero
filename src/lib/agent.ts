@@ -262,6 +262,30 @@ export async function runOnce(request: {
 	});
 }
 
+export type WarmResult = {
+	agentId: string;
+	ok: boolean;
+	models?: AgentModelsEvent | null;
+	usageUsed?: number | null;
+	usageSize?: number | null;
+	error?: string | null;
+};
+
+/** Start ACP in the background (no prompt) to prefetch models / usage for Chat UI. */
+export async function warmAgent(request: {
+	agentId?: string;
+	vaultPath?: string;
+	modelId?: string;
+}): Promise<WarmResult> {
+	return invokeApi("agent_warm", {
+		request: {
+			agentId: request.agentId,
+			vaultPath: request.vaultPath,
+			modelId: request.modelId,
+		},
+	});
+}
+
 export async function listenAgentStream(
 	handler: (e: AgentStreamEvent) => void,
 ): Promise<UnlistenFn> {

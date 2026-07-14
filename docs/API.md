@@ -53,6 +53,22 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }` |
+
+#### `agent_warm`
+
+打开 Chat 时后台预热 ACP（不发用户 prompt）：`initialize` + `session/new`，上报 `agent:models`，并短暂等待 `UsageUpdate`。
+
+- **参数**
+
+```ts
+{
+  agentId?: string;
+  vaultPath?: string;
+  modelId?: string; // preferred ACP model config value
+}
+```
+
+- **返回** `WarmResult`：`{ agentId, ok, models?, usageUsed?, usageSize?, error? }`
 | `agent:permission_request` | Agent 请求权限（读/写/网络等） | `{ session_id: string, request_id: string, kind: string, detail: object }` |
 | `agent:completed` | Agent 回答完成 | `{ session_id: string, result: AgentResult }` |
 | `agent:failed` | Agent 调用失败 | `{ session_id: string, error: AppError }` |

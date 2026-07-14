@@ -287,6 +287,33 @@ pub struct AgentModelsEvent {
     pub models: Vec<AgentModelChoice>,
 }
 
+/// Background ACP warm-up (no user prompt) so Chat can show models/context early.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarmRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarmResult {
+    pub agent_id: String,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<AgentModelsEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_used: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentFailedEvent {
