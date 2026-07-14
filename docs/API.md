@@ -48,8 +48,10 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `pdf:progress` | 本地 PDF 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
 | `pdf:completed` | PDF 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
 | `pdf:failed` | PDF 入库失败 | `{ job_id: string, error: AppError }` |
-| `agent:stream` | Agent 流式输出 | `{ session_id: string, chunk: string }` |
-| `agent:tool_call` | Agent 调用 tool | `{ session_id: string, tool: string, args: object }` |
+| `agent:stream` | Agent 流式输出 | `{ sessionId, chunk, kind: "message" \| "thought" }`（`thought` = ACP reasoning） |
+| `agent:tool` | ACP tool call 创建/更新 | `{ sessionId, toolCallId, title?, kind?, status?, input?, output?, full? }` |
+| `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
+| `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:permission_request` | Agent 请求权限（读/写/网络等） | `{ session_id: string, request_id: string, kind: string, detail: object }` |
 | `agent:completed` | Agent 回答完成 | `{ session_id: string, result: AgentResult }` |
 | `agent:failed` | Agent 调用失败 | `{ session_id: string, error: AppError }` |

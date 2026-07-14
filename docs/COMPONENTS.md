@@ -40,28 +40,28 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Message](https://elements.ai-sdk.dev/components/message) | `message` | 单条消息：`from`、内容、`MessageResponse`（Streamdown）、操作/分支 | ✅ 用户/助手气泡 |
 | [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) | `prompt-input` | Composer：输入、附件、提交状态、工具槽 | ✅ 底部输入 |
 | [Sources](https://elements.ai-sdk.dev/components/sources) | `sources` | 折叠展示引用来源列表 | ✅ Vault 路径引用 |
-| [Attachments](https://elements.ai-sdk.dev/components/attachments) | `attachments` | 附件网格/列表/预览 | 📦 |
-| [Suggestion](https://elements.ai-sdk.dev/components/suggestion) | `suggestion` | 快捷建议 chip / 横向建议条 | 📦 |
-| [Shimmer](https://elements.ai-sdk.dev/components/shimmer) | `shimmer` | 加载占位闪光文案 | 📦 |
-| [Inline Citation](https://elements.ai-sdk.dev/components/inline-citation) | `inline-citation` | 正文内可悬停引用 | — |
-| [Open in Chat](https://elements.ai-sdk.dev/components/open-in-chat) | `open-in-chat` | 「在 Chat 中打开」类入口 | — |
+| [Attachments](https://elements.ai-sdk.dev/components/attachments) | `attachments` | 附件网格/列表/预览 | 📦（Prompt 已支持，ACP 暂不传文件） |
+| [Suggestion](https://elements.ai-sdk.dev/components/suggestion) | `suggestion` | 快捷建议 chip | ✅ 空态 / 输入上方 |
+| [Shimmer](https://elements.ai-sdk.dev/components/shimmer) | `shimmer` | 加载占位闪光文案 | ✅ 等待正文 |
+| [Inline Citation](https://elements.ai-sdk.dev/components/inline-citation) | `inline-citation` | 正文内可悬停引用 | ✅ 回复末尾徽章 + Hover 轮播 |
+| [Open in Chat](https://elements.ai-sdk.dev/components/open-in-chat) | `open-in-chat` | 「在 Chat 中打开」 | — 非 Chat 栏入口 |
 
 ### 2.2 Agent / 推理 / 工具
 
 | 组件 | Registry | 说明 | Motif |
 |---|---|---|---|
-| [Reasoning](https://elements.ai-sdk.dev/components/reasoning) | `reasoning` | 思考过程折叠展示 | 📦 |
-| [Chain of Thought](https://elements.ai-sdk.dev/components/chain-of-thought) | `chain-of-thought` | 思维链步骤可视化 | — |
-| [Tool](https://elements.ai-sdk.dev/components/tool) | `tool` | 工具调用：状态、输入、输出 | 📦 |
-| [Confirmation](https://elements.ai-sdk.dev/components/confirmation) | `confirmation` | 人在环确认（接受/拒绝） | 📦 |
-| [Task](https://elements.ai-sdk.dev/components/task) | `task` | 任务列表 / 进度折叠 | — |
-| [Plan](https://elements.ai-sdk.dev/components/plan) | `plan` | 计划步骤展示 | — |
-| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办、可折叠任务段 | — |
-| [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint) | `checkpoint` | 检查点 / 里程碑 | — |
-| [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份/状态相关 UI | — |
-| [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量等展示 | — |
-| [Persona](https://elements.ai-sdk.dev/components/persona) | `persona` | 角色/人格展示 | — |
-| [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择下拉 | — |
+| [Reasoning](https://elements.ai-sdk.dev/components/reasoning) | `reasoning` | 思考过程折叠展示 | ✅ ACP `thought` 流 |
+| [Chain of Thought](https://elements.ai-sdk.dev/components/chain-of-thought) | `chain-of-thought` | 思维链步骤 | 📦（Reasoning + Tool 已覆盖） |
+| [Tool](https://elements.ai-sdk.dev/components/tool) | `tool` | 工具调用：状态、输入、输出 | ✅ `agent:tool` |
+| [Confirmation](https://elements.ai-sdk.dev/components/confirmation) | `confirmation` | 人在环确认 | 📦（Host 仍自动选第一项） |
+| [Task](https://elements.ai-sdk.dev/components/task) | `task` | 任务列表 / 进度折叠 | ✅ 工具调用摘要 |
+| [Plan](https://elements.ai-sdk.dev/components/plan) | `plan` | 计划步骤展示 | ✅ `agent:plan` |
+| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办 | 📦 |
+| [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint) | `checkpoint` | 检查点 / 里程碑 | ✅ 系统行 |
+| [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份 UI | — |
+| [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量 | ✅ `agent:usage` |
+| [Persona](https://elements.ai-sdk.dev/components/persona) | `persona` | Rive 角色动画 | 📦（依赖 WebGL/外链，未接） |
+| [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择 | — BYOA 不用 |
 
 > Motif BYOA：模型与 Key 在各 Agent CLI；Chat header 切换的是 **ACP 后端**，不是 Model Selector。
 
@@ -120,18 +120,20 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 | 文件 | 主要导出 | 接线位置 |
 |---|---|---|
-| `conversation.tsx` | `Conversation`、`ConversationContent`、`ConversationEmptyState`、`ConversationScrollButton` | `layout/agent-panel` |
-| `message.tsx` | `Message`、`MessageContent`、`MessageResponse`… | `layout/agent-panel` |
-| `prompt-input.tsx` | `PromptInput`、`PromptInputBody`、`PromptInputTextarea`、`PromptInputFooter`、`PromptInputSubmit`… | `layout/agent-panel` |
-| `sources.tsx` | `Sources`、`SourcesTrigger`、`SourcesContent`、`Source` | `layout/agent-panel` |
-| `file-tree.tsx` | `FileTree`、`FileTreeFolder`、`FileTreeFile`… | `layout/file-tree`（无卡片边框：本地去掉 `border/rounded` 壳） |
-| `attachments.tsx` | `Attachments`、`Attachment`… | 未接线 |
-| `suggestion.tsx` | `Suggestion`、`Suggestions` | 未接线 |
-| `shimmer.tsx` | `Shimmer` | 未接线 |
-| `tool.tsx` | `Tool`、`ToolHeader`、`ToolContent`… | 未接线 |
-| `reasoning.tsx` | `Reasoning`、`ReasoningTrigger`、`ReasoningContent` | 未接线 |
-| `confirmation.tsx` | `Confirmation`… | 未接线 |
-| `code-block.tsx` | `CodeBlock`… | 未接线 |
+| `conversation.tsx` | 列表 / 空态 / 贴底 | `layout/agent-panel` |
+| `message.tsx` | Message + Actions / Response | `layout/agent-panel` |
+| `prompt-input.tsx` | Composer | `layout/agent-panel` |
+| `sources.tsx` | Vault 引用 | `layout/agent-panel` |
+| `reasoning.tsx` | Thought 折叠 | `layout/agent-panel` |
+| `tool.tsx` | ACP tool 调用 | `layout/agent-panel` |
+| `plan.tsx` | ACP plan | `layout/agent-panel` |
+| `task.tsx` | 工具摘要 | `layout/agent-panel` |
+| `suggestion.tsx` / `shimmer.tsx` | 建议 chip / 加载 | `layout/agent-panel` |
+| `checkpoint.tsx` | 系统切换行 | `layout/agent-panel` |
+| `context.tsx` | Token 用量 | `layout/agent-panel` header |
+| `file-tree.tsx` | Vault 树 | `layout/file-tree` |
+| `inline-citation.tsx` | 正文旁引用徽章 | `layout/agent-panel` |
+| 其它已装未接 | chain-of-thought, queue, confirmation, persona, attachments, code-block | 按需扩展 |
 
 ---
 
@@ -143,7 +145,9 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 Conversation
   ConversationContent
     Message from="user" | "assistant"
-      MessageContent → MessageResponse
+      MessageContent
+        Reasoning → ReasoningTrigger + ReasoningContent   // ACP thought
+        MessageResponse                                    // ACP message
     Sources（可选）
   ConversationScrollButton
 PromptInput
@@ -156,8 +160,9 @@ PromptInput
 | ACP 事件 | UI |
 |---|---|
 | 发送成功 | 追加 user 行 + streaming assistant 行 |
-| `agent:stream` | 只追加到最后一条 streaming 文本 |
-| `agent:completed` | 定稿 + `sources` |
+| `agent:stream` `kind=thought` | 追加到最后一条 agent 的 `reasoning`，`Reasoning isStreaming` |
+| `agent:stream` `kind=message`（默认） | 追加到最后一条 agent 的正文 `MessageResponse` |
+| `agent:completed` | 定稿正文 / reasoning + `sources` |
 | `agent:failed` | 去掉未完成 streaming，追加 error |
 
 监听需可取消，避免 Strict Mode 双挂载导致重复气泡。

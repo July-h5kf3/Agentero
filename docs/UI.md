@@ -97,7 +97,9 @@
 Conversation
   └── ConversationContent
         ├── Message from="user" → MessageContent → MessageResponse
-        └── Message from="assistant" → MessageContent → MessageResponse
+        └── Message from="assistant" → MessageContent
+              ├── Reasoning（ACP thought，可选）
+              ├── MessageResponse
               └── Sources（可选）
 PromptInput → Body / Footer / Submit
 ```

@@ -105,7 +105,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 ```
 
 - **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
-- 流式：`agent:stream` / `agent:completed` / `agent:failed` 映射到 `MessageResponse` 文本与 `Sources`。
+- 流式：`agent:stream`（`kind: message | thought`）/ `agent:completed` / `agent:failed` 映射到 `Reasoning` + `MessageResponse` + `Sources`。
 - 组件规范与安装：`docs/COMPONENTS.md`。
 
 ### 3.2.1 工作台布局与 Vault 文件树（已接入）
