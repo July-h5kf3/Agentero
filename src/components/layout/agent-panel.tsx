@@ -4,6 +4,7 @@ import {
 	CheckIcon,
 	ChevronDown,
 	CopyIcon,
+	History,
 	Loader2,
 	X,
 } from "lucide-react";
@@ -112,6 +113,14 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+	Popover,
+	PopoverContent,
+	PopoverDescription,
+	PopoverHeader,
+	PopoverTitle,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
 	type AgentListResponse,
 	type AgentModelChoice,
 	type AgentPlanEntry,
@@ -170,6 +179,15 @@ type ChatLine =
 	  }
 	| { id: string; kind: "error"; text: string }
 	| { id: string; kind: "system"; text: string };
+
+type ChatSessionHistoryItem = {
+	id: string;
+	title: string;
+	agentName: string;
+	startedAt: string;
+	lines: ChatLine[];
+	status: "running" | "completed" | "failed";
+};
 
 let chatLineSeq = 0;
 function nextLineId(prefix: string) {
@@ -388,12 +406,16 @@ export function AgentPanel({
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 	const [lines, setLines] = useState<ChatLine[]>([]);
+	const [sessionHistory, setSessionHistory] = useState<
+		ChatSessionHistoryItem[]
+	>([]);
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
 	);
 	const [modelOpen, setModelOpen] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [warming, setWarming] = useState(false);
@@ -616,7 +638,7 @@ export function AgentPanel({
 							(last.reasoning && last.reasoning.trim().length > 0
 								? last.reasoning
 								: ev.reasoning) || undefined;
-						next[next.length - 1] = {
+						const completedLine: ChatLine = {
 							...last,
 							text,
 							reasoning,
@@ -624,6 +646,14 @@ export function AgentPanel({
 							sources: ev.sources,
 							streaming: false,
 						};
+						next[next.length - 1] = completedLine;
+						setSessionHistory((prev) =>
+							prev.map((item) =>
+								item.id === ev.sessionId
+									? { ...item, lines: next, status: "completed" }
+									: item,
+							),
+						);
 						return next;
 					}
 					return prev;
@@ -644,10 +674,18 @@ export function AgentPanel({
 					if (last?.kind === "agent" && last.streaming) {
 						next.pop();
 					}
-					return [
+					const failedLines: ChatLine[] = [
 						...next,
 						{ id: nextLineId("err"), kind: "error", text: ev.error },
 					];
+					setSessionHistory((prev) =>
+						prev.map((item) =>
+							item.id === ev.sessionId
+								? { ...item, lines: failedLines, status: "failed" }
+								: item,
+						),
+					);
+					return failedLines;
 				});
 			});
 
@@ -797,7 +835,9 @@ export function AgentPanel({
 			return;
 		}
 
-		setLines((p) => [...p, { id: nextLineId("user"), kind: "user", text }]);
+		const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
+		const sessionStartLines = [...lines, userLine];
+		setLines(sessionStartLines);
 		setBusy(true);
 		try {
 			const accepted = await runOnce({
@@ -807,18 +847,28 @@ export function AgentPanel({
 				workflow: "free",
 				modelId: modelId ?? undefined,
 			});
+			const agentLine: ChatLine = {
+				id: nextLineId("agent"),
+				kind: "agent",
+				text: "",
+				streaming: true,
+				tools: [],
+				plan: [],
+			};
+			const pendingLines = [...sessionStartLines, agentLine];
 			activeSessionRef.current = accepted.sessionId;
-			setLines((p) => [
-				...p,
+			setSessionHistory((prev) => [
 				{
-					id: nextLineId("agent"),
-					kind: "agent",
-					text: "",
-					streaming: true,
-					tools: [],
-					plan: [],
+					id: accepted.sessionId,
+					title: text,
+					agentName: selected?.name ?? "Agent",
+					startedAt: new Date().toLocaleString(),
+					lines: pendingLines,
+					status: "running",
 				},
+				...prev.filter((item) => item.id !== accepted.sessionId),
 			]);
+			setLines(pendingLines);
 		} catch (e) {
 			setBusy(false);
 			setLines((p) => [
@@ -902,6 +952,57 @@ export function AgentPanel({
 						</ContextContent>
 					</Context>
 				) : null}
+				<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+					<PopoverTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-7 gap-1 px-2 text-xs"
+							aria-label="Open chat history"
+							title="History"
+						>
+							<History className="size-3.5" />
+							<span className="hidden sm:inline">History</span>
+						</Button>
+					</PopoverTrigger>
+					<PopoverContent align="end" className="w-80 p-0">
+						<PopoverHeader className="border-b px-3 py-2">
+							<PopoverTitle>Session history</PopoverTitle>
+							<PopoverDescription className="text-xs">
+								Recent ACP sessions in this chat.
+							</PopoverDescription>
+						</PopoverHeader>
+						{sessionHistory.length === 0 ? (
+							<div className="px-3 py-4 text-muted-foreground text-sm">
+								No sessions yet.
+							</div>
+						) : (
+							<div className="max-h-72 overflow-y-auto p-1.5">
+								{sessionHistory.map((item) => (
+									<button
+										key={item.id}
+										type="button"
+										className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+										disabled={busy}
+										onClick={() => {
+											setHistoryOpen(false);
+											setLines(item.lines);
+										}}
+									>
+										<span className="text-muted-foreground text-[11px]">
+											{item.agentName} · {item.status} · {item.id.slice(0, 8)}
+										</span>
+										<span className="line-clamp-2 text-sm">{item.title}</span>
+										<span className="text-muted-foreground text-[11px]">
+											{item.startedAt}
+										</span>
+									</button>
+								))}
+							</div>
+						)}
+					</PopoverContent>
+				</Popover>
 				{busy || switching || warming ? (
 					<Loader2 className="size-3.5 shrink-0 animate-spin opacity-70" />
 				) : null}
