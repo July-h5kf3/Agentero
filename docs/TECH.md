@@ -402,18 +402,21 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.5 双链与反链
 
+完整设计见 **`docs/WIKILINKS.md`**（语法、索引、反链、开源选型与分期）。
+
 - **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
-- **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引。
-- **前端渲染**：自定义 remark 插件将 `[[...]]` 转为 React Router/点击处理器可识别的 `<a>`。
+- **模型**：单向写入 Markdown + 索引反查（不做目标文件自动插入回链）。
+- **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引（`.motif/cache.sqlite` 可删重建）。
+- **前端渲染**：remark-wiki-link 系 / Plate 插件将 `[[...]]` 转为可点击链接；序列化必须写回 `[[...]]`。
 - **反链查询**：Rust 根据当前文件路径返回所有引用它的文件列表。
 - **缺失目标**：点击不存在的双链时弹出创建对话框，生成 `notes/<concept>.md`。
 
 ### 5.6 关系图谱
 
-- **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`。
+- **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`（详见 `docs/WIKILINKS.md` §3–4）。
 - **节点类型**：`paper`、`note`、`concept`。
 - **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_body`（论文→PAPER.md）、`has_highlight`（论文→highlights）。
-- **前端渲染**：React Flow 加载节点/边，点击节点调用 Rust 打开对应文件。
+- **前端渲染**：React Flow 加载节点/边，点击节点打开对应文件。
 
 ### 5.7 Agent 工作流（ACP Client + BYOA）
 
@@ -668,4 +671,5 @@ tempfile = "3"
 - `docs/PRD.md`：产品需求与验收标准。
 - `docs/UI.md`：视觉主题与简约设计原则。
 - `docs/COMPONENTS.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
+- `docs/WIKILINKS.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
 - `docs/ROADMAP.md`：版本规划与里程碑。

@@ -11,7 +11,7 @@ import { MarkdownPlugin } from "@platejs/markdown";
 import { MessageSquare } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import { BlockquoteElement } from "@/components/editor/blockquote-node";
 import { Editor, EditorContainer } from "@/components/editor/editor";
@@ -20,9 +20,11 @@ import {
 	H2Element,
 	H3Element,
 } from "@/components/editor/heading-node";
+import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
+import { BacklinksPanel } from "@/components/layout/backlinks-panel";
 import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import {
@@ -66,6 +68,7 @@ import {
 	readVaultFile,
 	saveVaultPath,
 	vaultDisplayName,
+	writeVaultFile,
 } from "@/lib/vault";
 import {
 	type CenterViewMode,
@@ -73,6 +76,16 @@ import {
 	isPdfPath,
 	preferredModeForPath,
 } from "@/lib/viewer";
+import {
+	missingNotePath,
+	newNoteMarkdown,
+	normalizeVaultRel,
+	rebuildWikiIndex,
+	rewriteWikilinksForPreview,
+	toVaultRelative,
+	type WikiNavTarget,
+} from "@/lib/wiki";
+import { WikiNavContext } from "@/lib/wiki-nav-context";
 
 const STORAGE_KEY = "motif-editor-content";
 const OPEN_FILE_KEY = "motif-open-file";
@@ -103,8 +116,27 @@ const platePlugins = [
 	H2Plugin.withComponent(H2Element),
 	H3Plugin.withComponent(H3Element),
 	BlockquotePlugin.withComponent(BlockquoteElement),
+	LinkPlugin,
 	...MarkdownKit,
 ];
+
+/** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
+function collectMarkdownRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind === "directory" && n.children) walk(n.children);
+			else if (n.kind === "file" && isMarkdownPath(n.path)) {
+				out.push(toVaultRelative(vaultPath, n.path));
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
 
 export default function App() {
 	const { setTheme } = useTheme();
@@ -157,6 +189,10 @@ export default function App() {
 	const debouncedPaperNotes = useDebounce(paperNotes, 200);
 	const isDemo = vaultPath === null;
 	const showNotesOnRight = centerMode === "pdf" || centerMode === "html";
+	const vaultMdFiles = useMemo(
+		() => collectMarkdownRelPaths(tree, vaultPath),
+		[tree, vaultPath],
+	);
 
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
@@ -299,6 +335,11 @@ export default function App() {
 			saveVaultPath(path);
 			setVaultPath(path);
 			setSelectedPath(null);
+			try {
+				await rebuildWikiIndex(path);
+			} catch {
+				// Index rebuild is best-effort; get_backlinks will rebuild on demand.
+			}
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -307,7 +348,15 @@ export default function App() {
 	}, []);
 
 	const handleRefresh = useCallback(() => {
-		if (vaultPath) void refreshTree(vaultPath);
+		if (!vaultPath) return;
+		void (async () => {
+			await refreshTree(vaultPath);
+			try {
+				await rebuildWikiIndex(vaultPath);
+			} catch {
+				// ignore
+			}
+		})();
 	}, [vaultPath, refreshTree]);
 
 	const openSettings = useCallback((section: SettingsSection = "general") => {
@@ -416,13 +465,22 @@ export default function App() {
 
 	const editor = usePlateEditor({
 		plugins: platePlugins,
-		value: (ed) => ed.getApi(MarkdownPlugin).markdown.deserialize(markdown),
+		value: (ed) =>
+			ed
+				.getApi(MarkdownPlugin)
+				.markdown.deserialize(
+					rewriteWikilinksForPreview(markdown, vaultMdFiles) || " ",
+				),
 	});
 
 	const notesEditor = usePlateEditor({
 		plugins: platePlugins,
 		value: (ed) =>
-			ed.getApi(MarkdownPlugin).markdown.deserialize(paperNotes || " "),
+			ed
+				.getApi(MarkdownPlugin)
+				.markdown.deserialize(
+					rewriteWikilinksForPreview(paperNotes || " ", vaultMdFiles) || " ",
+				),
 	});
 
 	useEffect(() => {
@@ -444,27 +502,35 @@ export default function App() {
 
 	useEffect(() => {
 		try {
+			const previewMd = rewriteWikilinksForPreview(
+				debouncedMarkdown || " ",
+				vaultMdFiles,
+			);
 			const value = editor
 				.getApi(MarkdownPlugin)
-				.markdown.deserialize(debouncedMarkdown || " ");
+				.markdown.deserialize(previewMd || " ");
 			editor.tf.reset();
 			editor.tf.setValue(value);
 		} catch (e) {
 			console.error("Failed to deserialize markdown for preview:", e);
 		}
-	}, [debouncedMarkdown, editor]);
+	}, [debouncedMarkdown, editor, vaultMdFiles]);
 
 	useEffect(() => {
 		try {
+			const previewMd = rewriteWikilinksForPreview(
+				debouncedPaperNotes || " ",
+				vaultMdFiles,
+			);
 			const value = notesEditor
 				.getApi(MarkdownPlugin)
-				.markdown.deserialize(debouncedPaperNotes || " ");
+				.markdown.deserialize(previewMd || " ");
 			notesEditor.tf.reset();
 			notesEditor.tf.setValue(value);
 		} catch (e) {
 			console.error("Failed to deserialize NOTES.md for preview:", e);
 		}
-	}, [debouncedPaperNotes, notesEditor]);
+	}, [debouncedPaperNotes, notesEditor, vaultMdFiles]);
 
 	const handleUseDemo = () => {
 		saveVaultPath(null);
@@ -476,15 +542,20 @@ export default function App() {
 		setCenterMode("markdown");
 	};
 
-	const handleSelectFile = async (node: FileNode) => {
-		if (node.kind !== "file") return;
+	const openPath = useCallback(async (absoluteOrDemoPath: string) => {
+		const name = absoluteOrDemoPath.split(/[\\/]/).pop() ?? absoluteOrDemoPath;
+		const node: FileNode = {
+			id: absoluteOrDemoPath,
+			name,
+			path: absoluteOrDemoPath,
+			kind: "file",
+		};
 		setSelectedPath(node.path);
 		setError(null);
 
 		const mode = preferredModeForPath(node.path);
 		setCenterMode(mode);
 
-		// Opening PDF/HTML: center shows viewer; notes load via paperDir effect
 		if (isPdfPath(node.path) || isHtmlPath(node.path)) {
 			return;
 		}
@@ -506,7 +577,113 @@ export default function App() {
 		} finally {
 			setBusy(false);
 		}
+	}, []);
+
+	const handleSelectFile = async (node: FileNode) => {
+		if (node.kind !== "file") return;
+		await openPath(node.path);
 	};
+
+	/** Open a vault-relative path from backlinks (e.g. `notes/idea.md`). */
+	const handleOpenVaultRel = useCallback(
+		(rel: string) => {
+			const clean = normalizeVaultRel(rel);
+			const full = vaultPath
+				? `${vaultPath.replace(/[\\/]+$/, "")}/${clean}`
+				: `demo-vault/${clean}`;
+			void openPath(full);
+		},
+		[vaultPath, openPath],
+	);
+
+	const handleWikiNavigate = useCallback(
+		async (nav: WikiNavTarget) => {
+			if (nav.exists && nav.path) {
+				handleOpenVaultRel(nav.path);
+				return;
+			}
+			const createRel = missingNotePath(nav.targetRaw);
+			const ok = window.confirm(
+				`「${nav.targetRaw}」 does not exist.\n\nCreate ${createRel}?`,
+			);
+			if (!ok) return;
+
+			const content = newNoteMarkdown(nav.targetRaw);
+			const full = vaultPath
+				? `${vaultPath.replace(/[\\/]+$/, "")}/${createRel}`
+				: `demo-vault/${createRel}`;
+
+			try {
+				await writeVaultFile(full, content);
+				if (vaultPath) {
+					try {
+						await rebuildWikiIndex(vaultPath);
+					} catch {
+						// ignore
+					}
+					await refreshTree(vaultPath);
+				} else {
+					// Demo: inject into tree so resolve finds it next time
+					setTree((prev) => {
+						const next = structuredClone(prev);
+						const ensureChild = (
+							nodes: FileNode[],
+							name: string,
+							path: string,
+							kind: "file" | "directory",
+						): FileNode => {
+							let node = nodes.find((n) => n.name === name);
+							if (!node) {
+								node = {
+									id: path,
+									name,
+									path,
+									kind,
+									children: kind === "directory" ? [] : undefined,
+								};
+								nodes.push(node);
+								nodes.sort((a, b) => {
+									if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+									return a.name.localeCompare(b.name);
+								});
+							}
+							return node;
+						};
+						const parts = createRel.split("/");
+						let cursor = next;
+						let acc = "demo-vault";
+						for (let i = 0; i < parts.length; i++) {
+							const part = parts[i];
+							acc = `${acc}/${part}`;
+							const isLast = i === parts.length - 1;
+							const node = ensureChild(
+								cursor,
+								part,
+								acc,
+								isLast ? "file" : "directory",
+							);
+							if (!isLast) {
+								if (!node.children) node.children = [];
+								cursor = node.children;
+							}
+						}
+						return next;
+					});
+				}
+				await openPath(full);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[vaultPath, handleOpenVaultRel, openPath, refreshTree],
+	);
+
+	const wikiNavValue = useMemo(
+		() => ({
+			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
+		}),
+		[handleWikiNavigate],
+	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
 		if (!modeAvailable[mode]) return;
@@ -520,224 +697,238 @@ export default function App() {
 	const editorFontSize = settings.editorFontSize;
 
 	return (
-		<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
-			<ErrorBoundary label="workspace">
-				<ResizableGroup
-					orientation="horizontal"
-					className="h-full min-h-0 flex-1 overflow-hidden"
-				>
-					<ResizablePanel
-						id="sidebar"
-						panelRef={sidebarPanelRef}
-						defaultSize={SIDEBAR_DEFAULT_PX}
-						minSize={160}
-						maxSize={420}
-						collapsible
-						collapsedSize={0}
-						className="min-h-0 overflow-hidden"
-						onResize={(size) => {
-							// Only mark collapsed after a real collapse (near 0px), never mid-drag.
-							if (size.inPixels <= 1) setSidebarCollapsed(true);
-							else if (size.inPixels >= 80) setSidebarCollapsed(false);
-						}}
+		<WikiNavContext.Provider value={wikiNavValue}>
+			<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
+				<ErrorBoundary label="workspace">
+					<ResizableGroup
+						orientation="horizontal"
+						className="h-full min-h-0 flex-1 overflow-hidden"
 					>
-						<aside
-							ref={sidebarAsideRef}
-							className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
+						<ResizablePanel
+							id="sidebar"
+							panelRef={sidebarPanelRef}
+							defaultSize={SIDEBAR_DEFAULT_PX}
+							minSize={160}
+							maxSize={420}
+							collapsible
+							collapsedSize={0}
+							className="min-h-0 overflow-hidden"
+							onResize={(size) => {
+								// Only mark collapsed after a real collapse (near 0px), never mid-drag.
+								if (size.inPixels <= 1) setSidebarCollapsed(true);
+								else if (size.inPixels >= 80) setSidebarCollapsed(false);
+							}}
 						>
-							<div className="shrink-0">
-								<VaultSidebarHeader
-									title={vaultDisplayName(vaultPath)}
-									onOpenVault={() => void handleOpenVault()}
-									onRefresh={handleRefresh}
-									onUseDemo={handleUseDemo}
-									busy={busy}
-									error={error}
-									isDemo={isDemo}
-								/>
-							</div>
-							<div className="motif-scroll min-h-0 flex-1 px-1">
-								<FileTree
-									nodes={tree}
-									selectedPath={selectedPath}
-									onSelectFile={(n) => void handleSelectFile(n)}
-								/>
-							</div>
-						</aside>
-					</ResizablePanel>
-
-					{sidebarCollapsed ? null : <ResizableHandle />}
-
-					<ResizablePanel
-						id="source"
-						defaultSize="40"
-						minSize={200}
-						className="min-h-0 overflow-hidden"
-					>
-						<div className="flex h-full min-h-0 flex-col overflow-hidden">
-							{/* Single-row header: toggle left, title right — same 28px line box */}
-							<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-								<div className="flex h-7 shrink-0 items-center">
-									<ViewModeToggle
-										value={centerMode}
-										onChange={handleCenterModeChange}
-										available={modeAvailable}
+							<aside
+								ref={sidebarAsideRef}
+								className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
+							>
+								<div className="shrink-0">
+									<VaultSidebarHeader
+										title={vaultDisplayName(vaultPath)}
+										onOpenVault={() => void handleOpenVault()}
+										onRefresh={handleRefresh}
+										onUseDemo={handleUseDemo}
+										busy={busy}
+										error={error}
+										isDemo={isDemo}
 									/>
 								</div>
-								<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
-									<span
-										className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-										title={
-											paperMeta
-												? `${paperMeta.title} · ${activeFileLabel}`
-												: (activeFileLabel ?? undefined)
-										}
-									>
-										{paperMeta?.title ?? activeFileLabel}
-									</span>
+								<div className="motif-scroll min-h-0 flex-1 px-1">
+									<FileTree
+										nodes={tree}
+										selectedPath={selectedPath}
+										onSelectFile={(n) => void handleSelectFile(n)}
+									/>
 								</div>
-							</div>
-							{centerMode === "markdown" ? (
-								<textarea
-									ref={editorPaneRef}
-									className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
-									style={{ fontSize: editorFontSize }}
-									value={markdown}
-									onChange={(event) => setMarkdown(event.target.value)}
-									placeholder="Type Markdown here..."
-									spellCheck={false}
-								/>
-							) : null}
-							{centerMode === "pdf" ? (
-								<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-									<PdfViewer source={pdfUrl} className="h-full w-full" />
-								</div>
-							) : null}
-							{centerMode === "html" ? (
-								<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-									<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
-								</div>
-							) : null}
-						</div>
-					</ResizablePanel>
+							</aside>
+						</ResizablePanel>
 
-					<ResizableHandle />
+						{sidebarCollapsed ? null : <ResizableHandle />}
 
-					<ResizablePanel
-						id="preview"
-						defaultSize={chatOpen ? "30" : "40"}
-						minSize={200}
-						className="min-h-0 overflow-hidden"
-					>
-						{/* biome-ignore lint/a11y/useSemanticElements: preview holds a rich editor and cannot be a native <button> */}
-						<div
-							ref={previewPaneRef}
-							className="flex h-full min-h-0 flex-col overflow-hidden"
-							style={{ fontSize: editorFontSize }}
-							role="button"
-							tabIndex={0}
-							aria-label={chatOpen ? "Hide chat sidebar" : "Show chat sidebar"}
-							onClick={(event) => {
-								const target = event.target as HTMLElement;
-								if (target.closest("button,a,input,textarea,select")) {
-									return;
-								}
-								if (window.getSelection()?.toString()) return;
-								toggleChat();
-							}}
-							onKeyDown={(event) => {
-								if (event.target !== event.currentTarget) return;
-								if (event.key !== "Enter" && event.key !== " ") return;
-								event.preventDefault();
-								toggleChat();
-							}}
-						>
-							<PaneHeader
-								trailing={
-									<TooltipProvider delayDuration={250}>
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													aria-label={
-														chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
-													}
-													aria-pressed={chatOpen}
-													onClick={toggleChat}
-												>
-													<MessageSquare className="size-3.5" />
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent side="bottom">
-												{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
-											</TooltipContent>
-										</Tooltip>
-									</TooltipProvider>
-								}
-							>
-								<span className="min-w-0 flex-1 font-medium text-sm">
-									{showNotesOnRight ? "Notes" : "Preview"}
-								</span>
-							</PaneHeader>
-							<div className="min-h-0 flex-1 overflow-hidden">
-								{showNotesOnRight ? (
-									<Plate editor={notesEditor}>
-										<EditorContainer className="motif-scroll h-full min-h-0">
-											<Editor
-												variant="none"
-												className="min-h-full px-6 py-4"
-												placeholder="Paper NOTES.md will appear here..."
-												readOnly
-											/>
-										</EditorContainer>
-									</Plate>
-								) : (
-									<Plate editor={editor}>
-										<EditorContainer className="motif-scroll h-full min-h-0">
-											<Editor
-												variant="none"
-												className="min-h-full px-6 py-4"
-												placeholder="Rendered Markdown will appear here..."
-											/>
-										</EditorContainer>
-									</Plate>
-								)}
-							</div>
-						</div>
-					</ResizablePanel>
-
-					{/* Fourth column: ACP chat — only when ⌘L opens chat */}
-					{chatOpen ? <ResizableHandle /> : null}
-					{chatOpen ? (
 						<ResizablePanel
-							id="chat"
-							defaultSize="28"
-							minSize={260}
-							maxSize={520}
+							id="source"
+							defaultSize="40"
+							minSize={200}
 							className="min-h-0 overflow-hidden"
 						>
-							<AgentPanel
-								key={chatInputFocusKey.current}
-								vaultPath={vaultPath}
-								className="min-h-0 h-full"
-								title="Chat"
-								autoFocus
-							/>
+							<div className="flex h-full min-h-0 flex-col overflow-hidden">
+								{/* Single-row header: toggle left, title right — same 28px line box */}
+								<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+									<div className="flex h-7 shrink-0 items-center">
+										<ViewModeToggle
+											value={centerMode}
+											onChange={handleCenterModeChange}
+											available={modeAvailable}
+										/>
+									</div>
+									<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
+										<span
+											className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+											title={
+												paperMeta
+													? `${paperMeta.title} · ${activeFileLabel}`
+													: (activeFileLabel ?? undefined)
+											}
+										>
+											{paperMeta?.title ?? activeFileLabel}
+										</span>
+									</div>
+								</div>
+								{centerMode === "markdown" ? (
+									<textarea
+										ref={editorPaneRef}
+										className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
+										style={{ fontSize: editorFontSize }}
+										value={markdown}
+										onChange={(event) => setMarkdown(event.target.value)}
+										placeholder="Type Markdown here..."
+										spellCheck={false}
+									/>
+								) : null}
+								{centerMode === "pdf" ? (
+									<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+										<PdfViewer source={pdfUrl} className="h-full w-full" />
+									</div>
+								) : null}
+								{centerMode === "html" ? (
+									<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+										<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
+									</div>
+								) : null}
+								{selectedPath && isMarkdownPath(selectedPath) ? (
+									<BacklinksPanel
+										vaultPath={vaultPath}
+										selectedPath={selectedPath}
+										onOpenPath={handleOpenVaultRel}
+									/>
+								) : null}
+							</div>
 						</ResizablePanel>
-					) : null}
-				</ResizableGroup>
-			</ErrorBoundary>
 
-			<SettingsWindow
-				open={settingsOpen}
-				section={settingsSection}
-				onSectionChange={setSettingsSection}
-				onClose={closeSettings}
-				settings={settings}
-				onChange={updateSettings}
-			/>
-		</div>
+						<ResizableHandle />
+
+						<ResizablePanel
+							id="preview"
+							defaultSize={chatOpen ? "30" : "40"}
+							minSize={200}
+							className="min-h-0 overflow-hidden"
+						>
+							{/* biome-ignore lint/a11y/useSemanticElements: preview holds a rich editor and cannot be a native <button> */}
+							<div
+								ref={previewPaneRef}
+								className="flex h-full min-h-0 flex-col overflow-hidden"
+								style={{ fontSize: editorFontSize }}
+								role="button"
+								tabIndex={0}
+								aria-label={
+									chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
+								}
+								onClick={(event) => {
+									const target = event.target as HTMLElement;
+									if (target.closest("button,a,input,textarea,select")) {
+										return;
+									}
+									if (window.getSelection()?.toString()) return;
+									toggleChat();
+								}}
+								onKeyDown={(event) => {
+									if (event.target !== event.currentTarget) return;
+									if (event.key !== "Enter" && event.key !== " ") return;
+									event.preventDefault();
+									toggleChat();
+								}}
+							>
+								<PaneHeader
+									trailing={
+										<TooltipProvider delayDuration={250}>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														aria-label={
+															chatOpen
+																? "Hide chat sidebar"
+																: "Show chat sidebar"
+														}
+														aria-pressed={chatOpen}
+														onClick={toggleChat}
+													>
+														<MessageSquare className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
+												</TooltipContent>
+											</Tooltip>
+										</TooltipProvider>
+									}
+								>
+									<span className="min-w-0 flex-1 font-medium text-sm">
+										{showNotesOnRight ? "Notes" : "Preview"}
+									</span>
+								</PaneHeader>
+								<div className="min-h-0 flex-1 overflow-hidden">
+									{showNotesOnRight ? (
+										<Plate editor={notesEditor}>
+											<EditorContainer className="motif-scroll h-full min-h-0">
+												<Editor
+													variant="none"
+													className="min-h-full px-6 py-4"
+													placeholder="Paper NOTES.md will appear here..."
+													readOnly
+												/>
+											</EditorContainer>
+										</Plate>
+									) : (
+										<Plate editor={editor}>
+											<EditorContainer className="motif-scroll h-full min-h-0">
+												<Editor
+													variant="none"
+													className="min-h-full px-6 py-4"
+													placeholder="Rendered Markdown will appear here..."
+													readOnly
+												/>
+											</EditorContainer>
+										</Plate>
+									)}
+								</div>
+							</div>
+						</ResizablePanel>
+
+						{/* Fourth column: ACP chat — only when ⌘L opens chat */}
+						{chatOpen ? <ResizableHandle /> : null}
+						{chatOpen ? (
+							<ResizablePanel
+								id="chat"
+								defaultSize="28"
+								minSize={260}
+								maxSize={520}
+								className="min-h-0 overflow-hidden"
+							>
+								<AgentPanel
+									key={chatInputFocusKey.current}
+									vaultPath={vaultPath}
+									className="min-h-0 h-full"
+									title="Chat"
+									autoFocus
+								/>
+							</ResizablePanel>
+						) : null}
+					</ResizableGroup>
+				</ErrorBoundary>
+
+				<SettingsWindow
+					open={settingsOpen}
+					section={settingsSection}
+					onSectionChange={setSettingsSection}
+					onClose={closeSettings}
+					settings={settings}
+					onChange={updateSettings}
+				/>
+			</div>
+		</WikiNavContext.Provider>
 	);
 }

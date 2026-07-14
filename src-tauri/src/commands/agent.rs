@@ -27,6 +27,13 @@ pub struct EnabledResponse {
     pub enabled: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentProxyResponse {
+    pub proxy_enabled: bool,
+    pub proxy_url: String,
+}
+
 fn list_from_state(state: crate::models::agent::AgentRegistryState) -> AgentListResponse {
     AgentListResponse {
         agents: state.agents,
@@ -110,6 +117,21 @@ pub fn agent_set_enabled(
 ) -> ApiResult<EnabledResponse> {
     match registry.set_enabled(enabled) {
         Ok(s) => ApiResult::ok(EnabledResponse { enabled: s.enabled }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_set_proxy(
+    registry: State<'_, AgentRegistry>,
+    proxy_enabled: bool,
+    proxy_url: String,
+) -> ApiResult<AgentProxyResponse> {
+    match registry.set_proxy(proxy_enabled, proxy_url) {
+        Ok(s) => ApiResult::ok(AgentProxyResponse {
+            proxy_enabled: s.proxy_enabled,
+            proxy_url: s.proxy_url,
+        }),
         Err(e) => map_err(e),
     }
 }

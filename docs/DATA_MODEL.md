@@ -246,7 +246,7 @@ interface Highlight {
 
 ## 4. 事实来源与缓存规则
 
-`.motif/cache.sqlite` 存储元数据、全文检索、双链图与标注坐标的**派生副本**,用于文件系统做不快的查询(按作者/年份/标签过滤排序、全文检索、反链聚合、大规模)。它不是第二个事实来源,须遵守三条纪律:
+`.motif/cache.sqlite` 存储元数据、全文检索、双链图与标注坐标的**派生副本**,用于文件系统做不快的查询(按作者/年份/标签过滤排序、全文检索、反链聚合、大规模)。它不是第二个事实来源,须遵守三条纪律（双链边模型与重建纪律详见 **`docs/WIKILINKS.md`**）:
 
 1. **可整删重建**:删除 `cache.sqlite` 后,应用重扫 Vault(`metadata.json` + Markdown + 双链)即可完全恢复。
 2. **写入 file-first**:先写 `metadata.json` / Markdown,再更新 SQLite 与 `PAPERS.md`;`notify` 监听外部编辑(如在 Obsidian 中修改)自动增量重建。

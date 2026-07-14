@@ -755,15 +755,18 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 ### 3.7 双链与图谱
 
-#### `graph:get_backlinks`
+> 产品与索引设计见 **`docs/WIKILINKS.md`**。下列为 Host 接口草案。
 
-获取某个文件的反链列表。
+#### `graph_get_backlinks`（实现中；草案名 `graph:get_backlinks`）
+
+获取某个文件的反链列表。若当前 Vault 尚未索引会先全量重建。
 
 - **参数**
 
 ```ts
 {
-  path: string;
+  vaultPath: string;
+  path: string; // 绝对路径或 Vault 相对路径
 }
 ```
 
@@ -773,15 +776,15 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   ok: true;
   data: {
-    path: string;
-    backlinks: Backlink[];
+    path: string; // 规范化后的 Vault 相对路径
+    backlinks: Backlink[]; // { source, targetRaw, alias?, context?, line? }
   };
 }
 ```
 
 #### `graph:get_graph`
 
-获取全量或局部图谱数据。
+获取全量或局部图谱数据。（Phase D，未实现）
 
 - **参数**
 
@@ -805,15 +808,15 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
-#### `graph:rebuild_index`
+#### `graph_rebuild`（实现中；草案名 `graph:rebuild_index`）
 
-手动触发索引重建。
+全量扫描 Vault 内 Markdown，重建内存 wikilink 索引。
 
 - **参数**
 
 ```ts
 {
-  full?: boolean; // 默认 false，仅增量重建
+  vaultPath: string;
 }
 ```
 
@@ -823,9 +826,9 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   ok: true;
   data: {
-    indexed_files: number;
-    nodes: number;
+    indexedFiles: number;
     edges: number;
+    nodes: number;
   };
 }
 ```

@@ -174,6 +174,11 @@ Introduces the Transformer architecture based solely on attention.
 
 Multi-head self-attention + positional encoding.
 
+## Related
+
+- Idea scratchpad: [[notes/idea]]
+- Index: [[PAPERS]]
+
 ## Open questions
 
 - How do later variants change the attention bottleneck?
@@ -261,6 +266,32 @@ export async function readVaultFile(path: string): Promise<string> {
 	}
 
 	return readTextFile(path);
+}
+
+/** Write text file (creates parent dirs when possible). */
+export async function writeVaultFile(
+	path: string,
+	content: string,
+): Promise<void> {
+	if (path.startsWith("demo-vault/")) {
+		DEMO_CONTENTS[path] = content;
+		return;
+	}
+
+	if (!isTauri()) {
+		throw new Error("Writing local files requires the Tauri app.");
+	}
+
+	const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+	const parent = path.replace(/[\\/][^\\/]+$/, "");
+	if (parent && parent !== path) {
+		try {
+			await mkdir(parent, { recursive: true });
+		} catch {
+			// Parent may already exist
+		}
+	}
+	await writeTextFile(path, content);
 }
 
 export function vaultDisplayName(rootPath: string | null): string {

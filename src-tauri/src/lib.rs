@@ -4,6 +4,7 @@ mod models;
 mod services;
 
 use services::agent::AgentRegistry;
+use services::wiki::WikiIndexState;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     Emitter, Manager,
@@ -93,6 +94,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(AgentRegistry::load())
+        .manage(WikiIndexState::new())
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
@@ -102,17 +104,21 @@ pub fn run() {
             commands::agent::agent_remove_agent,
             commands::agent::agent_set_default,
             commands::agent::agent_set_enabled,
+            commands::agent::agent_set_proxy,
             commands::agent::agent_discover,
             commands::agent::agent_probe,
             commands::agent::agent_probe_catalog,
             commands::agent::agent_run_once,
             commands::agent::agent_warm,
+            commands::graph::graph_get_backlinks,
+            commands::graph::graph_rebuild,
         ])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
             // Ensure registry is loaded early.
             let _ = app.state::<AgentRegistry>();
+            let _ = app.state::<WikiIndexState>();
             Ok(())
         })
         .on_menu_event(|app, event| {

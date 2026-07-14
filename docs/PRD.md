@@ -31,7 +31,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 - 用户可以在 5 分钟内完成一个新 Vault 的创建、arXiv 论文入库、笔记生成和人工修订。
 - 输入 3 篇 arXiv 论文后，系统能生成稳定的 `metadata.json / NOTES.md / PAPERS.md`（及按需 `PAPER.md`）结构。
-- 用户能通过 `[[双链]]` 连接论文、概念、作者和 Idea，并看到反链,类似 Obsidian当中的设计
+- 用户能通过 `[[双链]]` 连接论文、概念、作者和 Idea，并看到反链（类似 Obsidian；设计见 `docs/WIKILINKS.md`）
 - Agent 回答跨论文问题时，必须展示读取过的本地文件路径。
 - 关系图谱能反映 Markdown 双链和论文关系，而不是依赖不可见数据库。
 
