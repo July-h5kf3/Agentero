@@ -13,9 +13,16 @@ import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { AgentPanel } from "@/components/agent/agent-panel";
+import { BlockquoteElement } from "@/components/editor/blockquote-node";
+import { Editor, EditorContainer } from "@/components/editor/editor";
+import {
+	H1Element,
+	H2Element,
+	H3Element,
+} from "@/components/editor/heading-node";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
-import { FileTree, VaultSidebarHeader } from "@/components/file-tree/file-tree";
+import { AgentPanel } from "@/components/layout/agent-panel";
+import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import {
 	ResizableGroup,
@@ -25,11 +32,8 @@ import {
 import {
 	type SettingsSection,
 	SettingsWindow,
-} from "@/components/settings/settings-window";
-import { BlockquoteElement } from "@/components/ui/blockquote-node";
+} from "@/components/settings-window";
 import { Button } from "@/components/ui/button";
-import { Editor, EditorContainer } from "@/components/ui/editor";
-import { H1Element, H2Element, H3Element } from "@/components/ui/heading-node";
 import {
 	Tooltip,
 	TooltipContent,
