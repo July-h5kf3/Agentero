@@ -102,16 +102,18 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 展示当前文件的反链列表。
 - Agent 生成内容时需要保留双链格式。
 
-#### Agent 集成
+#### Agent 集成（ACP Client + BYOA）
 
-- 内置 Claude Agent SDK。
-- 支持 Bring Your Own Key（BYOK），通过 `.env` 配置 `CLAUDE_BASE_URL`、`CLAUDE_API_KEY`、`CLAUDE_MODEL`。
-- MVP 提供 3 个内置流程：
+- Motif 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
+- **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Motif 不持有模型密钥。
+- 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
+- MVP 提供 3 个内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
   - 总结当前论文。
   - 基于本地库问答。
   - 生成带本地路径引用的 Related Work 草稿。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md -> PAPERS.md -> NOTES.md -> highlights.md -> PAPER.md -> source/`，仅在需要时逐层下钻。
-- Agent 输出必须展示读取过的文件路径。
+- Agent 输出必须展示读取过的文件路径；写回 Vault 前需用户确认（临时草稿 → 正式文件）。
+- 未检测到可用 Agent 时，设置与 Agent 面板展示安装/配置指引，不阻塞 Vault 与阅读功能。
 
 #### 阅读器
 
@@ -286,11 +288,11 @@ Vault 内的 Agent 行为规范，至少包含：
 - 输入 `1706.03762` 后，生成对应 `papers/1706.03762/metadata.json`、`NOTES.md` 与 `PAPER.md`（无 tex 源时）。
 - 导入一篇本地 PDF 后，生成 `papers/<citekey>/` 目录，包含 `metadata.json`（`type=pdf`）、必定生成的 `PAPER.md`、`NOTES.md`，以及 `source/` 中的原始 PDF。
 - 配置 MinerU API Key 后导入 PDF 默认走云端解析；未配置或云端失败时自动降级为本地解析，且入库流程不中断。
-- 输入关键词或一段研究描述后，Agent 能检索并返回候选论文，用户确认后完成入库。
+- 输入关键词或一段研究描述后，在已配置本机 Agent 的前提下，能检索并返回候选论文，用户确认后完成入库。
 - 连续入库 3 篇 arXiv 论文后，`PAPERS.md` 至少包含 3 条索引。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
 - `[[双链]]` 能跳转；反链面板能显示引用来源。
-- Agent 回答跨论文问题时，结果包含读取文件列表。
+- 配置并探测到本机 ACP Agent 后，跨论文问答结果包含读取文件列表；未配置时展示 BYOA 空状态而非崩溃。
 - 关闭应用后重新打开，最近 Vault、文件树、Markdown 内容可以恢复。
 - 图谱展示至少 20 个节点时，点击节点能打开对应文件。
 
@@ -299,7 +301,9 @@ Vault 内的 Agent 行为规范，至少包含：
 - arXiv HTML/LaTeX 可用性不稳定：优先采用 HTML/LaTeX，失败时降级到 PDF 解析，并明确标记质量。
 - 本地 PDF 解析质量参差：默认本地解析保证可用，配置后优先云端 MinerU 提质，失败自动降级，并在 `metadata.json` 标记 `body_quality`。
 - 云端 MinerU 涉及数据外传：默认本地解析不外传；启用 MinerU 前明确提示 PDF 将上传第三方服务，由用户自行决定。
-- Agent 生成质量不稳定：把 `AGENTS.md` 规范作为强约束，并让用户能编辑最终 Markdown。
+- 用户未安装 / 未配置 Agent：设置与 Agent 面板提供探测与安装指引；Vault 与阅读能力不依赖 Agent。
+- Agent 生成质量不稳定：把 `AGENTS.md` 与工作流 prompt 作为强约束，写回前确认，并让用户能编辑最终 Markdown。
+- 不同 Agent CLI 行为差异：只依赖 ACP 公共能力；能力缺失时可读降级，不假设某单一厂商 SDK。
 - 范围膨胀成 Zotero 替代品：MVP 只验证 Agent-first 入库、笔记、问答、双链、图谱闭环。
 - 图谱成为装饰功能：图谱必须从真实 Markdown 双链和论文索引生成，并支持打开文件。
 - 私有数据库锁定用户数据：数据库只能做缓存，Markdown 文件是事实来源。

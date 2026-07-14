@@ -12,7 +12,7 @@ Host (Tauri + Rust)
 ```
 
 - **Frontend ↔ Host**：`invoke('namespace:command')` 请求响应，配合 Tauri event 做进度/流式推送。
-- Agent 相关能力由 Host 内部托管，本文档暂不暴露其与 Agent 进程之间的私有通信协议。
+- Host 作为 **ACP Client** 连接用户本机 Agent；Frontend 只面对下方 `agent:*` 命令与事件，**不** 直接暴露 ACP JSON-RPC 细节。
 
 ## 2. 通用约定
 
@@ -50,6 +50,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `pdf:failed` | PDF 入库失败 | `{ job_id: string, error: AppError }` |
 | `agent:stream` | Agent 流式输出 | `{ session_id: string, chunk: string }` |
 | `agent:tool_call` | Agent 调用 tool | `{ session_id: string, tool: string, args: object }` |
+| `agent:permission_request` | Agent 请求权限（读/写/网络等） | `{ session_id: string, request_id: string, kind: string, detail: object }` |
 | `agent:completed` | Agent 回答完成 | `{ session_id: string, result: AgentResult }` |
 | `agent:failed` | Agent 调用失败 | `{ session_id: string, error: AppError }` |
 | `graph:updated` | 图谱索引重建 | `{ nodes: number, edges: number }` |
@@ -517,7 +518,78 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 }
 ```
 
-### 3.6 Agent 工作流
+### 3.6 Agent 工作流（ACP Client + BYOA）
+
+Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 Vault），通过 stdio JSON-RPC 会话。**不** 内置 agent 二进制；**不** 在 config 中要求模型 API Key。
+
+#### `agent:list_agents`
+
+列出已注册 Agent 及其探测状态。
+
+- **参数**：无
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    agents: AgentDescriptor[];
+    default_id: string | null;
+  };
+}
+```
+
+#### `agent:upsert_agent`
+
+新增或更新一条 Agent 注册项。
+
+- **参数**
+
+```ts
+{
+  id?: string; // 省略则新建
+  name: string;
+  template?: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'custom';
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  set_default?: boolean;
+}
+```
+
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    agent: AgentDescriptor;
+  };
+}
+```
+
+#### `agent:remove_agent`
+
+删除注册项（不卸载用户本机 CLI）。
+
+- **参数**：`{ id: string }`
+- **返回**：`{ ok: true; data: null }`
+
+#### `agent:discover`
+
+对 PATH / 已配置绝对路径做可执行文件探测，更新 `available` 状态。
+
+- **参数**：`{ id?: string }` // 省略则探测全部
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    agents: AgentDescriptor[];
+  };
+}
+```
 
 #### `agent:list_sessions`
 
@@ -537,13 +609,14 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 #### `agent:create_session`
 
-创建新的 Agent 会话。
+创建新的 Agent 会话（按需 spawn ACP 子进程）。
 
 - **参数**
 
 ```ts
 {
   name?: string;
+  agent_id?: string; // 默认 agent.default_id
   workflow?: 'summary' | 'qa' | 'related_work' | 'free';
   context_paths?: string[]; // 预加载的 Vault 相对路径
 }
@@ -561,7 +634,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 ```
 
 - **行为**
-  - Host 内部创建 Agent 会话并加载 `AGENTS.md` 作为系统提示约束。
+  - 使用注册表中的 `command` / `args` / `env` spawn Agent，`cwd` = Vault root。
+  - 加载工作流 prompt 模板与 `AGENTS.md` 作为系统约束。
+  - 若 command 不可用，返回可诊断错误（含探测信息），不静默使用其他 agent。
 
 #### `agent:send_prompt`
 
@@ -594,8 +669,26 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 若 `stream=true`，通过 `agent:stream` 事件推送增量内容。
+  - 权限请求通过 `agent:permission_request` 推送，前端调用 `agent:respond_permission` 应答。
   - 完成时推送 `agent:completed` 事件，包含读取过的文件路径列表。
-  - 若指定 `write_target`，Agent 输出先写入临时文件，不直接覆盖目标。
+  - 若指定 `write_target`，输出先写入临时草稿，不直接覆盖目标。
+
+#### `agent:respond_permission`
+
+应答权限请求。
+
+- **参数**
+
+```ts
+{
+  session_id: string;
+  request_id: string;
+  allow: boolean;
+  remember?: 'session' | 'once'; // 默认 'once'
+}
+```
+
+- **返回**：`{ ok: true; data: null }`
 
 #### `agent:accept_draft`
 
@@ -629,7 +722,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 #### `agent:close_session`
 
-关闭 Agent 会话。
+关闭 Agent 会话（结束 ACP 连接并可终止子进程）。
 
 - **参数**
 
@@ -760,10 +853,11 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - **返回**：`{ ok: true; data: null }`
 
 - **常用 key**
-  - `agent.command`：Agent 启动命令，默认 `opencode acp`。
-  - `agent.model`：默认模型。
+  - `agent.enabled`：Agent 总开关，默认 `true`。
+  - `agent.default_id`：默认 Agent 注册 id；无可用 agent 时为 `null`。
+  - `agent.agents`：Agent 注册表数组（`id` / `name` / `template` / `command` / `args` / `env`）。**不** 包含模型 API Key 字段。
   - `parser.pdf.backend`：PDF 解析后端，`liteparse`（默认）或 `mineru`。
-  - `parser.mineru.api_key`：云端 MinerU API Key（BYOK，启用后 PDF 优先云端解析）。
+  - `parser.mineru.api_key`：云端 MinerU API Key（产品侧 BYOK，与 Agent 密钥分离）。
   - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
@@ -777,7 +871,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - `Highlight`
 - `ArxivCandidate` / `ArxivImportResult`
 - `PdfMetadataDraft` / `PdfImportResult`
-- `AgentSession` / `AgentResult`
+- `AgentDescriptor` / `AgentSession` / `AgentResult`
 - `GraphNode` / `GraphEdge` / `Backlink`
 - `AppError`
 
@@ -787,7 +881,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 |---|---|
 | V0.1 | 实现 `vault:*`、`file:*`、`config:*`。 |
 | V0.2 | 增加 `arxiv:*`、`paper:*` 命令与异步任务事件；定义 `Paper` 数据结构。 |
-| V0.3 | 增加 `agent:*` 命令。 |
+| V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流。 |
 | V0.4 | 增加 `graph:*` 命令。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
 

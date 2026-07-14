@@ -85,7 +85,13 @@
 
 - **General**：恢复上次 Vault、退出确认等应用行为。
 - **Appearance**：主题、编辑字号、行号。
-- **Agent**：BYOK（Base URL / API Key / Model）、总开关。
+- **Agent**（BYOA，非模型 BYOK 表单）：
+  - 总开关。
+  - 已注册 Agent 列表（名称、command、探测状态 available / missing）。
+  - 添加：预设模板（OpenCode / Gemini CLI / Claude ACP / Codex ACP）或自定义 command / args / env。
+  - 设为默认；编辑 / 删除。
+  - 空状态：说明「Motif 不内置 Agent」，提供安装指引链接与「添加 Agent」主按钮。
+  - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Motif 内填写。
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。

@@ -6,7 +6,7 @@
 - 先做好 arXiv，不急于覆盖所有论文来源。
 - 所有核心数据必须能从本地 Markdown 重建。
 - 阅读器服务于审阅和修正，不在早期追求完整 Zotero/PDF 批注体验。
-- Agent 能力必须可解释、可追溯、可被用户修正。
+- Agent 采用 **BYOA**：Motif 只做 ACP Client，不捆绑 Agent；能力必须可解释、可追溯、可被用户修正。
 
 ## 2. 版本规划
 
@@ -53,28 +53,31 @@
 - 有 LaTeX source 的论文优先保留 `.tex` 源文件，`PAPER.md` 为可选生成。
 - 重复入库时不会破坏用户已修改的 `NOTES.md`。
 
-## V0.3 Agent 工作流
+## V0.3 Agent 工作流（ACP Client + BYOA）
 
-目标：把 Claude Agent SDK 接入到本地文献库，让 Agent 依据 Vault 规则工作。
+目标：将 Motif 实现为 **ACP Client**，连接用户本机已安装的 Agent，按 Vault 规则完成总结 / 问答 / Related Work。
 
 关键交付：
 
-- BYOK 配置：支持从 `.env` 读取 `CLAUDE_BASE_URL`、`CLAUDE_API_KEY`、`CLAUDE_MODEL`。
-- Claude Agent SDK 接入。
-- 内置流程：
+- ACP Client：stdio JSON-RPC 会话、权限请求转发、流式输出事件。
+- BYOA 注册表：预设模板（OpenCode / Gemini CLI / Claude ACP / Codex ACP）+ 自定义 `command` / `args` / `env`；默认 agent 选择。
+- 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
+- 会话 `cwd` = 当前 Vault；工作流 prompt 模板注入 + `AGENTS.md` 约束。
+- 内置工作流：
   - 总结当前论文。
   - 基于本地库问答。
   - 生成 Related Work 草稿。
-- Agent 读取路径回显。
-- Agent 输出写入 Markdown 的确认机制。
-- `AGENTS.md` 规则参与 Agent prompt。
+- Agent 读取路径回显（Sources）。
+- 写文件前临时草稿确认机制。
+- 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求 `CLAUDE_*` / 同类 BYOK 表单。
 
 验收标准：
 
-- 用户配置 key 后能运行 Agent 流程。
-- Agent 问答必须展示读取过的文件。
+- 用户配置并成功探测至少一个本机 Agent 后，可运行内置工作流。
+- 未安装 Agent 时有清晰空状态与配置入口，应用其余功能可用。
+- Agent 问答必须展示读取过的本地文件路径。
 - Related Work 草稿必须包含本地路径引用。
-- Agent 失败时不会覆盖已有 Markdown。
+- Agent 失败或用户拒绝写入时，不会覆盖已有 Markdown。
 
 ## V0.4 双链、反链与图谱
 
@@ -147,7 +150,7 @@
 
 ### Milestone C：Agent 可协作
 
-包含 V0.3。完成后，产品可以让 Agent 基于本地库问答和写作。
+包含 V0.3。完成后，Motif 可作为 ACP Client 连接本机 Agent，基于本地库问答和写作。
 
 ### Milestone D：知识可导航
 

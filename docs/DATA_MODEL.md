@@ -252,8 +252,43 @@ interface Highlight {
 2. **写入 file-first**:先写 `metadata.json` / Markdown,再更新 SQLite 与 `PAPERS.md`;`notify` 监听外部编辑(如在 Obsidian 中修改)自动增量重建。
 3. **冲突时文件赢**:SQLite 与文件不一致时以文件为准并触发重索引;Agent 可查 SQLite 加速路由,但最终引用与展示必须落回本地文件路径。
 
-## 5. 相关文档
+## 5. Agent 运行时类型（应用配置，非 Vault 文件）
+
+以下类型由 Host 配置与会话层持有，**不** 写入 Vault 目录；模型密钥不在此模型中出现。
+
+```ts
+/** 用户本机 ACP Agent 注册项（BYOA） */
+interface AgentDescriptor {
+  id: string;
+  name: string;
+  template: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'custom';
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  available: boolean; // PATH / 绝对路径探测结果
+  last_error?: string;
+}
+
+interface AgentSession {
+  id: string;
+  agent_id: string;
+  vault_path: string;
+  workflow: 'summary' | 'qa' | 'related_work' | 'free';
+  created_at: string;
+  status: 'idle' | 'running' | 'awaiting_permission' | 'closed' | 'failed';
+}
+
+interface AgentResult {
+  session_id: string;
+  message_id: string;
+  content: string;
+  sources: string[]; // Vault 相对路径
+  draft_path?: string; // 待用户确认的临时草稿
+}
+```
+
+## 6. 相关文档
 
 - `docs/PRD.md`:产品需求与验收标准(§5 文件结构)。
-- `docs/TECH.md`:存储分层与入库/Agent 数据流(§4.5、§5)。
+- `docs/TECH.md`:存储分层与入库/Agent 数据流(§4.5、§5)；ACP Client + BYOA。
 - `docs/API.md`:Host 命令与数据模型引用。

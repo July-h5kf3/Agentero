@@ -6,7 +6,8 @@
 
 - **本地优先（Local-first）**：Vault 以 Markdown + 源文件为事实来源，数据库/索引仅作为缓存。
 - **跨平台但 Mac 优先**：MVP 以 macOS 桌面应用为主，技术栈保留向 iPadOS 扩展的能力。
-- **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引、Agent 编排能力。
+- **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引，并以 **ACP Client** 身份连接本机已有 Agent。
+- **BYOA（Bring Your Own Agent）**：Motif **不内置、不捆绑** 任何 coding agent 二进制；用户使用本机已安装的 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、Codex ACP、自定义 command）。密钥与模型由各 Agent 自行管理。
 - **可迁移**：Vault 离开应用后仍能被 Obsidian、VS Code、Cursor 直接打开。
 
 ## 2. 整体架构
@@ -19,24 +20,27 @@
 │  - Markdown 编辑/预览                                        │
 │  - PDF / HTML 阅读器                                         │
 │  - 双链/反链/图谱                                            │
-│  - Agent 面板                                                │
+│  - Agent 面板（会话 / 权限确认 / 读取路径回显）               │
 └───────────────────────────┬─────────────────────────────────┘
 │                           │ Tauri invoke / event
 ┌───────────────────────────▼─────────────────────────────────┐
-│                 Host (Tauri 2 + Rust)                        │
+│           Host (Tauri 2 + Rust) = ACP Client                 │
 │  - 文件系统操作（读写 Vault、文件树、文件监听）               │
 │  - arXiv / HTTP 抓取                                         │
 │  - Markdown / 双链 / 图谱索引                                 │
-│  - Agent 编排（ACP 协议）                                     │
+│  - Agent 注册表 / 发现 / 会话 / 权限 UX                       │
+│  - 工作流 prompt 模板（总结 / 问答 / Related Work）           │
 │  - 本地配置与最近 Vault 存储                                  │
 └───────────────────────────┬─────────────────────────────────┘
-│                           │ ACP (stdio JSON-RPC)
+│                           │ ACP (JSON-RPC 2.0 over stdio)
 ┌───────────────────────────▼─────────────────────────────────┐
-│              Agent Server (ACP-compatible)                   │
-│  - opencode（默认内置，开箱即用）                             │
-│  - Claude Code / Gemini CLI / 其他（用户可选切换）            │
+│     用户本机已安装的 ACP Agent（BYOA，Motif 不打包）           │
+│  - OpenCode / Gemini CLI / Claude ACP / Codex ACP / 自定义  │
+│  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Motif 始终作为 **Client**，Agent CLI 作为 **Server**。
 
 ### 2.1 为什么选 Tauri 2
 
@@ -56,7 +60,8 @@
 | PDF/HTML 阅读 | react-pdf 渲染；内联 HTML 经 DOMPurify 消毒 | 可插拔解析器提取文本、提供本地文件路径/URL |
 | 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
-| Agent 调用 | 展示对话与结果 | 通过 ACP 协议与 Agent 通信、编排 prompt、写入文件 |
+| Agent 调用 | 会话 UI、权限确认、读取路径回显 | ACP Client：spawn 用户配置的 agent、stdio JSON-RPC、会话与权限桥接、工作流 prompt |
+| Agent 配置 | 注册表 UI、PATH 探测空状态、模板选择 | 持久化 command/args/env；探测可执行文件；不持有模型 API Key |
 | 配置/最近 Vault | 读取与展示 | 使用 Tauri Store 持久化 |
 
 ## 3. 前端技术栈
@@ -194,7 +199,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `tauri-plugin-dialog` | 选择 Vault 文件夹（**已用于 Open vault**） |
 | `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充；当前最近路径仍用 localStorage） |
 | `tauri-plugin-opener` | 打开外部链接（已配置） |
-| `tauri-plugin-shell` | 已注册；后续外部工具 / ACP agent 子进程 |
+| `tauri-plugin-shell` | 已注册；spawn 用户配置的 ACP agent 子进程 |
 | `tauri-plugin-http`（可选）| 前端直接发起受控 HTTP 请求 |
 
 ### 4.2 Rust Crates
@@ -203,7 +208,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 |---|---|
 | `tauri` / `tauri-build` | 应用框架 |
 | `serde` / `serde_json` | 序列化与 IPC |
-| `agent-client-protocol` | ACP 协议 Rust SDK，通过 stdio JSON-RPC 与 Agent 通信 |
+| `agent-client-protocol` | ACP Client SDK：stdio JSON-RPC 与本机 Agent Server 通信 |
 | `reqwest` + `tokio` | 异步 HTTP：抓取 arXiv 资源、查询 Crossref、调用云端 MinerU API |
 | `pulldown-cmark` 或 `comrak` | Markdown 解析、提取双链、标题、frontmatter |
 | `regex` | 双链、arXiv ID 解析 |
@@ -227,7 +232,7 @@ src-tauri/src/
     input.rs       # 输入分类与候选论文查询
     arxiv.rs       # arXiv 入库命令
     pdf.rs         # 本地 PDF 入库：元数据预解析与确认、入库任务
-    agent.rs       # Agent 流程触发与状态
+    agent.rs       # Agent 注册表 / 会话 / 权限 / 工作流触发
     graph.rs       # 图谱节点/边查询
   services/        # 业务逻辑
     vault.rs       # Vault 初始化与校验
@@ -243,10 +248,13 @@ src-tauri/src/
       mineru.rs    #   云端 MinerU 后端（BYOK，可选）
     metadata.rs    # 元数据解析：DOI/arXiv 识别 + Crossref/arXiv 查询 + Agent 兜底 + citekey
     markdown.rs    # Markdown 解析、双链提取、索引构建
-    agent/         # Agent 编排（基于 ACP 协议）
-      acp.rs       # ACP client 封装：spawn agent 子进程、stdio JSON-RPC 通信
-      session.rs   # 会话管理：创建/切换/恢复 agent 会话
-      prompts.rs   # 系统提示与 AGENTS.md 注入
+    agent/         # ACP Client（BYOA，不内置 agent 二进制）
+      acp.rs       # ACP client：spawn 用户配置的 agent、stdio JSON-RPC
+      registry.rs  # Agent 注册表：模板预设 + 自定义 command/args/env
+      discover.rs  # PATH / 可执行文件探测，空状态安装指引
+      session.rs   # 会话管理：cwd=Vault、创建/切换/恢复
+      permission.rs# 权限请求转发前端确认（含写文件前确认）
+      prompts.rs   # 工作流 prompt 模板 + AGENTS.md 注入
       workflows.rs # 总结/问答/Related Work 流程
       search.rs    # Agent 驱动的论文检索/候选生成
   models/          # 数据类型
@@ -265,8 +273,8 @@ src-tauri/src/
 
 - **路径白名单**：Tauri `fs` 权限仅允许访问用户显式选择的 Vault 目录及其子目录。
 - **CSP 配置**：`tauri.conf.json` 中设置合理的 Content-Security-Policy，限制本地 Webview 加载外部资源。
-- **API Key 存储**：API Key 由 Agent 进程自行管理（opencode 内置 auth 机制），Rust 端不直接持有 key；MVP 使用 `tauri-plugin-store` 存储用户配置；后续迁移到系统钥匙串（`keyring` crate）。
-- **网络范围**：Agent 网络访问由 agent 进程自身控制；arXiv 抓取限定于 `arxiv.org` 域名。
+- **密钥边界**：Motif **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
+- **网络范围**：Agent 网络访问由 agent 进程自身控制；Motif 自身 arXiv 抓取限定于 `arxiv.org` 域名。
 
 ## 4.5 本地存储分层：Tauri Store vs SQLite
 
@@ -388,52 +396,76 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 - **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_body`（论文→PAPER.md）、`has_highlight`（论文→highlights）。
 - **前端渲染**：React Flow 加载节点/边，点击节点调用 Rust 打开对应文件。
 
-### 5.7 Agent 工作流
+### 5.7 Agent 工作流（ACP Client + BYOA）
 
-Agent 层统一基于 **ACP（Agent Client Protocol）** 协议，Rust 端通过 `agent-client-protocol` crate 与 Agent 子进程进行 stdio JSON-RPC 通信。
+Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Motif **不打包** 任何 agent 二进制。
 
-**默认内置 Agent**：opencode（通过 `opencode acp` 启动），开箱即用，支持多模型提供商（Claude、OpenAI 等）。用户可在设置中切换到其他 ACP-compatible agent（如 Claude Code、Gemini CLI）。
+**BYOA 原则**：
+- 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
+- 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `PAPERS.md` / `papers/` 等本地资产。
+- 模型与 API Key 完全由 Agent CLI 管理；Motif 只负责 Client 侧会话、权限 UX 与工作流 prompt。
 
 ```text
-应用启动
-  → Rust: spawn `opencode acp` 子进程（默认 agent）
-  → Rust: 通过 ACP stdio 建立 JSON-RPC 连接
-  → Rust: 等待 agent ready
+用户首次打开 Agent 面板 / 进入设置
+  → Rust: 读取 agent 注册表；对 PATH 做可执行文件探测
+  → Frontend: 若无可用 agent → 空状态（安装指引 + 添加自定义 agent）
+  → 用户选择预设模板或填写 command/args/env 并设为默认
 
-用户选择流程（总结/问答/Related Work）
-  → Rust: 通过 ACP 创建/复用 session
-  → Rust: 注入 AGENTS.md 作为系统提示约束
-  → Rust: 按 AGENTS.md → PAPERS.md → NOTES.md → highlights.md → PAPER.md → source/ 顺序渐进式读取上下文，仅在需要时逐层下钻
-  → Rust: 通过 ACP session.prompt() 发送请求
-  → Rust: 接收 agent 响应（流式/完整）
-  → Rust: 返回结果 + 读取过的文件路径列表
-  → Frontend: 展示结果，用户确认后写入 Markdown
+用户选择流程（总结 / 问答 / Related Work / 自由对话）
+  → Rust: 按默认或指定 agent 配置 spawn 子进程（cwd = Vault）
+  → Rust: 通过 ACP stdio 建立 JSON-RPC 连接，等待 ready
+  → Rust: 创建/复用 ACP session
+  → Rust: 注入工作流 prompt 模板 + AGENTS.md 约束
+  → Agent: 按渐进式披露自行读取 Vault
+      （AGENTS.md → PAPERS.md → NOTES.md → highlights.md → PAPER.md → source/）
+  → Rust: 转发权限请求到 Frontend（读/写/网络等）；写文件默认确认后落盘
+  → Rust: 接收流式响应，汇总读取过的本地路径
+  → Frontend: 展示结果与 Sources；用户确认后写入目标 Markdown
 ```
 
-**Agent 切换机制**：
-- 默认使用内置 opencode，用户无需额外安装。
-- 设置中可选择其他 ACP agent（指定 command + args），Rust 端 spawn 对应子进程即可。
-- 切换 agent 不影响 Rust 业务逻辑，ACP 协议保证接口统一。
+**预设模板（仅命令模板，不随应用分发二进制）**：
 
-**Agent 输出规范**：
-- 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表。
-- 涉及双链的内容必须保留 `[[...]]` 格式。
-- 写入操作先写临时文件，用户确认后再移动到目标路径。
-- Agent 内部路由可先查 SQLite 索引提升性能，但最终读取与引用必须对应到本地 Markdown 或 source 文件路径。
-
-### 5.8 Agent 配置
-
-MVP 通过 `.env` 文件配置 Agent 连接信息，支持 BYOK（Bring Your Own Key）：
-
-| 变量名 | 说明 | 示例 |
+| 模板 ID | 典型 command / args | 说明 |
 |---|---|---|
-| `OPENCODE_MODEL` | 默认使用的模型 | `anthropic/claude-sonnet-4-20250514` |
-| `OPENCODE_API_KEY` | 用户自己的 API Key（由 opencode auth 管理） | `sk-ant-api03-...` |
+| `opencode` | `opencode` + `acp` | 多模型 OpenCode |
+| `gemini` | `gemini`（ACP 模式参数以官方为准） | Gemini CLI |
+| `claude-acp` | 用户本机 Claude ACP 适配器 | Claude 系 agent |
+| `codex-acp` | 用户本机 Codex ACP 入口 | Codex |
+| `custom` | 任意 command + args + env | 用户完全自定义 |
 
-- opencode 内置 auth 机制，API Key 由 agent 进程管理，Rust 端不直接持有。
-- 用户可在应用设置中选择模型和配置 API Key，最终存入 `tauri-plugin-store` 并传递给 agent 进程。
-- 若用户切换到其他 ACP agent（如 Claude Code），则由该 agent 自行管理认证。
-- `.env.example` 提供模板，`.env` 已加入 `.gitignore`，避免提交真实 key。
+**Agent 切换**：
+- 切换只改注册表中的默认 agent id 与启动参数，不改变 Rust 业务逻辑。
+- ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
+
+**权限与写入**：
+- ACP 权限请求经 Host 转发给前端确认（可记住会话内策略）。
+- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致）。
+
+**Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
+- 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
+- 涉及双链的内容必须保留 `[[...]]` 格式。
+- Agent 可先查 SQLite 索引加速路由，但最终引用与展示必须落回本地文件路径。
+
+### 5.8 Agent 配置（注册表，非模型 BYOK）
+
+Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
+
+| 配置项 | 说明 | 示例 |
+|---|---|---|
+| `agents[]` | 已注册 agent 列表 | 见下 |
+| `agents[].id` | 稳定 id | `opencode-default` |
+| `agents[].name` | 展示名 | `OpenCode` |
+| `agents[].template` | 预设模板或 `custom` | `opencode` |
+| `agents[].command` | 可执行文件 | `opencode` |
+| `agents[].args` | 启动参数 | `["acp"]` |
+| `agents[].env` | 额外环境变量（非密钥优先） | `{}` |
+| `agents[].cwd_mode` | 工作目录策略 | `vault`（默认） |
+| `agent.default_id` | 默认 agent | `opencode-default` |
+| `agent.enabled` | Agent 总开关 | `true` |
+
+- 持久化：`tauri-plugin-store`（或后续等价本地配置）。
+- **不** 要求用户在 Motif 内填写 `CLAUDE_API_KEY` / `OPENCODE_API_KEY` 等模型密钥；若某 agent 需要环境变量，由用户在系统或自定义 `env` 中自行配置，文档明确风险。
+- 探测：Host 在 PATH（及可选用户指定绝对路径）上检查 `command` 是否可执行；失败时 UI 展示安装文档链接，不阻塞应用其他功能。
 
 ## 6. 平台策略：Mac 优先 + iPadOS 扩展
 
@@ -478,13 +510,13 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 
 #### 6.2.4 Agent 与网络
 
-- iPadOS 同样通过 ACP 协议与 Agent 通信，网络策略与 macOS 一致。
+- iPadOS 若支持 ACP，仍作为 Client 连接本机/可用 agent；子进程与沙盒限制更严，**不保证** 与 macOS 同等 BYOA 体验。
 - 注意后台任务限制：长时间 Agent 调用需在前台保持连接或拆分为短请求。
-- ACP agent 子进程在 iOS 上可能需要适配沙盒限制，需验证 `opencode acp` 在 iOS 的可用性。
+- MVP 以 macOS 桌面 BYOA 为准；iPadOS Agent 能力单独评估，不作为 V0.3 验收项。
 
 ### 6.3 跨平台共享代码
 
-- **共享层**：Rust 业务逻辑（Vault、Markdown 索引、Agent 编排）完全跨平台。
+- **共享层**：Rust 业务逻辑（Vault、Markdown 索引、ACP Client）完全跨平台。
 - **前端适配层**：通过 `useMediaQuery` / 平台检测（Tauri `os` API）切换布局组件。
 - **平台特定代码**：封装在 `src/platform/` 下，如 `desktop.ts`、`mobile.ts`。
 
@@ -584,8 +616,8 @@ tempfile = "3"
 | LaTeX → Markdown | `pandoc`（外部 CLI，可选）、`texparser` |
 | 数学公式渲染 | Plate math 插件 + `katex` |
 | 全文搜索 | `minisearch`（前端）或 Rust `tantivy` / SQLite FTS5 |
-| 加密存储 API Key | `keyring` crate |
-| 可选 ACP Agents | `opencode`（默认内置）、`claude-code`、`gemini-cli` |
+| 加密存储产品侧密钥（如 MinerU） | `keyring` crate |
+| 本机 ACP Agents（用户自装，不随 Motif 分发） | OpenCode、Gemini CLI、Claude ACP、Codex ACP、自定义 CLI |
 | iOS 原生能力 | `tauri-plugin-os`、Swift 桥接 |
 
 ## 9. 与 Roadmap 的对应关系
@@ -594,7 +626,7 @@ tempfile = "3"
 |---|---|
 | V0.1 | 完成 Tauri + React 工作台；**可伸缩侧边栏文件树已接入**（open vault + readDir + 打开 MD）；后续补 Vault 初始化结构、写回磁盘与 `store` 最近列表。 |
 | V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
-| V0.3 | 接入 ACP 协议 + 内置 opencode agent；Agent 工作流与读取路径回显；临时文件确认机制。 |
+| V0.3 | 接入 ACP Client + BYOA 注册表/探测；工作流 prompt、读取路径回显、权限与临时文件确认机制。 |
 | V0.4 | 双链解析、反链面板、React Flow 图谱。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
