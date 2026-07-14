@@ -1,4 +1,4 @@
-name: 部署文档
+name: Deploy docs
 
 on:
   push:
@@ -22,22 +22,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 检出仓库
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 设置 Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: pip
 
-      - name: 安装文档依赖
+      - name: Install docs dependencies
         run: pip install mkdocs==1.6.1
 
-      - name: 构建文档
+      - name: Build docs
         run: mkdocs build --strict
 
-      - name: 部署文档到 gh-pages
+      - name: Deploy docs to gh-pages
         run: mkdocs gh-deploy --force --clean --remote-branch gh-pages
