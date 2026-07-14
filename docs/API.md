@@ -782,17 +782,20 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
-#### `graph:get_graph`
+#### `graph_get_graph`（草案名 `graph:get_graph`）
 
-获取全量或局部图谱数据。（Phase D，未实现）
+获取全量或局部 wikilink 图谱。数据来自内存索引（必要时 `ensure_vault` 先 rebuild）。  
+设计见 **`docs/WIKILINKS.md` §4.4 / §6.3**。
 
 - **参数**
 
 ```ts
 {
-  center?: string; // 中心节点 ID，为空返回全图
-  depth?: number; // 默认 2
-  types?: NodeType[]; // 过滤节点类型
+  vaultPath: string;
+  /** 中心节点：Vault 相对路径或绝对路径；省略 / 空 = 全图 */
+  center?: string | null;
+  /** 邻域跳数；仅当 center 有效时生效。默认 2。全图时忽略。 */
+  depth?: number | null;
 }
 ```
 
@@ -802,11 +805,28 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 {
   ok: true;
   data: {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
+    nodes: GraphNode[]; // { id, label, type, path? }
+    edges: GraphEdge[]; // { id, source, target, targetRaw? }
+    /** 实际用作中心的规范化路径；全图时为 null */
+    center: string | null;
+    depth: number;
   };
 }
 ```
+
+- **节点折叠**：`papers/<id>/NOTES.md` 与同目录其它文件 **合并为一个节点** `papers/<id>`。
+- **节点 `label`**：paper 用 `metadata.json` 的 `title`；其它节点用文件名（去扩展名）。
+- **节点 `type`**
+
+| type | 规则 |
+|---|---|
+| `paper` | 折叠后的 `papers/<id>` |
+| `note` | `notes/…` 或其它 md |
+| `index` | 根级 `PAPERS.md` / `AGENTS.md` 等 |
+| `stub` | 未解析目标（id 形如 `stub:<raw>`） |
+
+- **边**：有向，`source` / `target` 为折叠后节点 id；折叠后的自环丢弃。
+- **邻域**：无向 BFS（出边+入边）从 `center` 扩展至多 `depth` 跳，再裁剪 edges。
 
 #### `graph_rebuild`（实现中；草案名 `graph:rebuild_index`）
 

@@ -131,32 +131,43 @@ backlinks(path) = { e.source | e.target_path == path }
 - 点击不存在的 `[[Concept]]` → 确认创建 `notes/<slug>.md`（默认 frontmatter 可极简）。
 - 创建后刷新索引并跳转。
 
-### 4.4 图谱
+### 4.4 图谱（右侧栏 Graph tab）
 
-- 数据来自索引 API（`graph:get_graph`）。
-- 前端可用 React Flow / force-graph；点击节点打开文件。
-- 20 节点内流畅（ROADMAP 验收）。
+产品形态：
+
+- 右侧边栏 **第三个 tab**（与 Agent / Backlinks 并列），标题栏 **Network icon** 进入。
+- 力导向关系图 + 下方「关联」列表（当前中心节点的出链 / 入链）。
+- 点击节点打开对应文件 / paper（paper 级路径走现有 openPaper 逻辑）。
+- 模式：**全图** | **当前邻域**（`center` + `depth`，默认 depth=2）。
+
+数据：
+
+- 唯一事实来源：Markdown 中的 `[[wikilink]]`（内存索引，可 `graph_rebuild` 重建）。
+- Host：`graph_get_graph`（见 `docs/API.md` §3.7）。
+- Demo（无 Tauri）：前端用 demo vault 文件内容现算 nodes/edges。
+
+验收：20+ 节点可交互；选中 paper 时邻域图以当前 paper 为中心；不依赖手写图数据库。
 
 ---
 
-## 5. Host API（已有草案，实现时补全）
+## 5. Host API
 
 见 `docs/API.md` §3.7：
 
+| 命令 | 状态 | 用途 |
+|---|---|---|
+| `graph_get_backlinks` | ✅ | `{ vaultPath, path }` → 反链列表 |
+| `graph_rebuild` | ✅ | 全量重建内存索引 |
+| `graph_get_graph` | ✅ / Phase D | 全图或局部邻域 `{ nodes, edges }` |
+
+建议后续补充：
+
 | 命令 | 用途 |
 |---|---|
-| `graph:get_backlinks` | `{ path }` → `{ path, backlinks[] }` |
-| `graph:get_graph` | 全图或局部邻域 |
-
-建议后续补充（实现时写入 API.md）：
-
-| 命令 | 用途 |
-|---|---|
-| `graph:rebuild` | 全量重建索引 |
 | `wiki:resolve` | 单条 target → path / missing |
 | `wiki:search` | 补全用标题/路径搜索 |
 
-索引更新：在 Markdown 保存、Vault 扫描、外部 `fs:changed` 后触发增量。
+索引更新：Markdown 保存、Vault 扫描、打开 Vault 后 `rebuild`；查询侧 `ensure_vault` 惰性重建。
 
 ---
 
@@ -168,28 +179,46 @@ backlinks(path) = { e.source | e.target_path == path }
 |---|---|
 | [landakram/remark-wiki-link](https://github.com/landakram/remark-wiki-link) | remark 管线解析/渲染 `[[wiki]]` |
 | [landakram/micromark-extension-wiki-link](https://github.com/landakram/micromark-extension-wiki-link) | micromark 层 token |
-| [flowershow/remark-wiki-link](https://github.com/flowershow/remark-wiki-link) / [@portaljs/remark-wiki-link](https://www.npmjs.com/package/@portaljs/remark-wiki-link) | 偏 Obsidian 风格 |
 
-Motif 前端已用 remark/Plate Markdown 链路时，**预览侧优先接 remark-wiki-link 系**，并注入自定义 `permalink` / resolve。
+Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图谱 **不**依赖 remark-wiki-link。
 
 ### 6.2 架构参考（不必整包嵌入）
 
 | 项目 | 看点 |
 |---|---|
-| [Foam](https://github.com/foambubble/foam) | 本地 vault、wikilink 跳转、补全 |
+| [Foam](https://github.com/foambubble/foam) | 本地 vault、wikilink 跳转 |
 | [Quartz](https://github.com/jackyzha0/quartz) | 从 vault 批处理建 backlinks / graph |
-| [Logseq](https://github.com/logseq/logseq) | 反链 UI、块模型（仅作对照） |
-| [SilverBullet](https://github.com/silverbulletmd/silverbullet) | Markdown 优先 + 可扩展索引 |
+| [Obsidian Graph](https://help.obsidian.md/plugins/graph) | 力导向 UX 对照 |
 
-### 6.3 图可视化（可选）
+### 6.3 图可视化 — **已定栈**
 
-- [xyflow/reactflow](https://github.com/xyflow/xyflow)（TECH 已倾向）
-- [react-force-graph](https://github.com/vasturiano/react-force-graph)
+| 层 | 选型 | 说明 |
+|---|---|---|
+| 数据 | Rust `WikiIndex` + `graph_get_graph` | 复用 wikilink 边；不引入图数据库 |
+| 可视化 | **`react-force-graph-2d`** | Canvas 力导向，贴合「中心 + 辐射」；侧栏性能足够 |
+| 备选 | `@xyflow/react` | 仅当未来需要可编辑流程图式节点时再考虑 |
+| UI 壳 | 右侧栏 tab + Lucide `Network` + Tailwind | 与 Agent / Backlinks 一致 |
+| 关联列表 | 纯 React 列表 | 当前中心节点 out / in 链接，点击打开 |
 
-### 6.4 不采用
+**不采用：** Neo4j 等图库；D3 从零画力导向；Cytoscape / Sigma / vis-network（集成成本高）。
+
+### 6.4 节点类型与折叠规则
+
+| `type` | 判定 |
+|---|---|
+| `paper` | **一个 paper 一个节点**：`papers/<id>/…`（含 `NOTES.md`）全部折叠为 `papers/<id>` |
+| `note` | `notes/` 下或其它 Markdown |
+| `index` | 根级 `PAPERS.md` / `AGENTS.md` 等 |
+| `stub` | 未解析目标（`stub:<raw>` 或 missing） |
+
+- **Paper 标签**：优先读 `papers/<id>/metadata.json` 的 `title`；缺失时回退 arXiv id / 目录名。
+- 折叠后自环（同 paper 内文件互链）丢弃。
+
+### 6.5 不采用
 
 - 为双链替换整个编辑器栈。
 - 自动改写目标文件插入回链（除非未来产品单独立项）。
+- 图谱常驻第四主栏（与「右侧栏 icon 切换」产品形态冲突）。
 
 ---
 
@@ -199,30 +228,37 @@ Motif 前端已用 remark/Plate Markdown 链路时，**预览侧优先接 remark
 
 1. Rust：`extract_wikilinks(md)` + `resolve` + **内存索引**（全量 `graph_rebuild`；尚无 SQLite 落盘）。  
 2. Tauri：`graph_get_backlinks` / `graph_rebuild`（参数 `vaultPath` + `path`）。  
-3. 前端：`src/lib/wiki.ts` + 编辑栏底部 `BacklinksPanel`；Demo 模式纯前端索引。  
+3. 前端：`src/lib/wiki.ts` + `BacklinksPanel`；Demo 模式纯前端索引。  
 
 **代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/layout/backlinks-panel.tsx`
 
-**验收**：改 `NOTES.md` 增加 `[[x]]` 并 rebuild 后目标页反链可见；重启后 `rebuild` 可重建。
-
 ### Phase B — 预览可点 ✅
 
-1. 预览：`rewriteWikilinksForPreview` 将 `[[...]]` 转为 markdown link（`motif-wiki:`），Plate `LinkPlugin` 渲染。  
-2. 存在：实线下划线，点击打开目标；缺失：虚线样式，确认后创建 `notes/<slug>.md`（或显式路径）并跳转。  
+1. 预览：`rewriteWikilinksForPreview` → Plate `LinkPlugin`。  
+2. 存在 / 缺失链跳转与创建。  
 
-**代码**：`src/lib/wiki.ts` · `src/components/editor/link-node.tsx` · `LinkPlugin` · `WikiNavContext`
-
-**验收**：Demo 中 NOTES → `[[notes/idea]]` / `[[PAPERS]]` 可跳；缺失链可创建。
+**代码**：`src/lib/wiki.ts` · `link-node.tsx` · `WikiNavContext`
 
 ### Phase C — 输入补全 + Plate（可选同一版本）
 
 1. 源码模式 `[[` 补全。  
 2. Plate 内联 wikilink 节点，序列化回 `[[...]]`。  
 
-### Phase D — 图谱
+### Phase D — 图谱 ✅ / 进行中
 
-1. `graph:get_graph` + React Flow。  
-2. 节点类型 paper / note / concept。  
+1. **API**：`graph_get_graph`（`center?` + `depth?`，默认全图 / depth=2）。  
+2. **前端**：`getGraph()` + demo 构图；`GraphPanel`（force-graph-2d + 关联列表）。  
+3. **壳**：`rightSidebarTab: "graph"`，标题栏 Network icon（侧栏打开时与 Agent/Backlinks 并列）。  
+4. **测试数据**：Demo vault 多 paper + 交叉 `[[双链]]`（图谱质量取决于 NOTES 链接，不依赖本地下载 PDF 正文）。  
+
+**代码位置**：
+
+- `src-tauri/src/models/wiki.rs`（`GraphNode` / `GraphEdge` / `GraphResponse`）
+- `src-tauri/src/services/wiki/index.rs`（`get_graph`）
+- `src-tauri/src/commands/graph.rs`（`graph_get_graph`）
+- `src/lib/wiki.ts`（`getGraph` / demo）
+- `src/components/layout/graph-panel.tsx`
+- `src/App.tsx`（tab 接线）
 
 ---
 

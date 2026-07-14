@@ -56,7 +56,7 @@
 | 文件树展示/交互 | `FileTree` + 可伸缩侧边栏；展开/选中/打开文件 | `plugin-dialog` 选目录 + `plugin-fs` `readDir`/`readTextFile`（监听变化后续） |
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
-| 图谱 | 可视化组件（React Flow） | 输出节点/边数据 |
+| 图谱 | `react-force-graph-2d` 侧栏 Graph tab | `graph_get_graph` 输出 nodes/edges |
 | PDF/HTML 阅读 | react-pdf 渲染；内联 HTML 经 DOMPurify 消毒 | 可插拔解析器提取文本、提供本地文件路径/URL |
 | 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
@@ -188,9 +188,12 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 库 | 用途 |
 |---|---|
-| `@xyflow/react`（React Flow）| 节点/边渲染、缩放、拖拽、点击交互 |
+| **`react-force-graph-2d`** | Canvas 力导向：缩放、拖拽、邻域高亮、点击打开 |
+| `@xyflow/react`（备选） | 仅当未来要可编辑流程图式节点时再引入 |
 
-**原因**：React Flow 对可控布局友好，易于从 Rust 索引数据生成 Paper/Note/Concept 节点，并绑定点击打开文件事件。
+**原因**：产品对照 Obsidian 式「中心 + 辐射」力导向图；侧栏内 Canvas 性能足够；数据来自 wikilink 索引而非手写布局。  
+**壳**：右侧栏 tab（`agent` | `backlinks` | `graph`），Lucide `Network`。  
+**详设**：`docs/WIKILINKS.md` §4.4 / §6.3；Host 契约 `docs/API.md` §3.7 `graph_get_graph`。
 
 ### 3.6 状态管理
 
@@ -413,10 +416,11 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.6 关系图谱
 
-- **数据来源**：Rust 索引服务输出 JSON：`{ nodes: [...], edges: [...] }`（详见 `docs/WIKILINKS.md` §3–4）。
-- **节点类型**：`paper`、`note`、`concept`。
-- **边类型**：`links_to`（双链）、`has_note`（论文→NOTES）、`has_body`（论文→PAPER.md）、`has_highlight`（论文→highlights）。
-- **前端渲染**：React Flow 加载节点/边，点击节点打开对应文件。
+- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/API.md` §3.7；设计 `docs/WIKILINKS.md` §4.4）。
+- **节点类型（路径启发）**：`paper` | `note` | `index` | `stub`。
+- **边**：wikilink 有向边 `source → target`（未解析目标为 `stub:<raw>`）；邻域模式用无向 BFS 裁剪。
+- **前端渲染**：`react-force-graph-2d` + 关联列表（出链/入链）；点击节点打开文件/paper。
+- **Demo**：无 Tauri 时前端从 demo vault Markdown 现算图。
 
 ### 5.7 Agent 工作流（ACP Client + BYOA）
 
@@ -589,7 +593,7 @@ pnpm tauri build
   "remark-math": "^6",
   "remark-emoji": "^5",
   "zustand": "^5",
-  "@xyflow/react": "^12",
+  "react-force-graph-2d": "^1",
   "react-pdf": "^9",
   "class-variance-authority": "^0.7",
   "clsx": "^2",
@@ -597,8 +601,9 @@ pnpm tauri build
 }
 ```
 
-> **已落地（文件树相关）**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`。  
-> **仍为计划**：`zustand`、`@xyflow/react`、`react-pdf`（PDF.js 阅读器，勿与 `@react-pdf/renderer` 混淆）。
+> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、`react-pdf`、双链反链。  
+> **图谱**：`react-force-graph-2d` + `graph_get_graph`（见 WIKILINKS Phase D）。  
+> **仍为计划**：`zustand`（可选）。
 
 ### 8.2 Rust 依赖
 
@@ -650,7 +655,7 @@ tempfile = "3"
 | V0.1 | 完成 Tauri + React 工作台；**可伸缩侧边栏文件树已接入**（open vault + readDir + 打开 MD）；后续补 Vault 初始化结构、写回磁盘与 `store` 最近列表。 |
 | V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
 | V0.3 | 接入 ACP Client + BYOA 注册表/探测；工作流 prompt、读取路径回显、权限与临时文件确认机制。 |
-| V0.4 | 双链解析、反链面板、React Flow 图谱。 |
+| V0.4 | 双链解析、反链面板、`react-force-graph-2d` 右侧栏图谱。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
 
