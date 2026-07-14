@@ -30,10 +30,22 @@
 
 ## 3. 布局
 
-- 工作台：可伸缩侧边栏文件树 + Markdown + Preview。
+- 工作台：可伸缩侧边栏文件树 + **中间内容** + Preview。
+- **三栏 header 等高**：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
-- **独立滚动**：侧边栏 / Markdown / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
+- **独立滚动**：侧边栏 / 中间 / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
+- **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）。
+  - Markdown：源码编辑
+  - PDF / HTML：**只读 `metadata.json` 的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**）
+  - arXiv 推荐写入：
+    - `pdf_url`: `https://arxiv.org/pdf/{id}`
+    - `html_url`: `https://arxiv.org/html/{id}`
+    - `source_url`: `https://arxiv.org/abs/{id}`
+  - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL
+  - PDF：PDF.js 按 URL 流式渲染；HTML：独立 iframe 打开远程页
+  - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**
+  - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
 ### 3.1 快捷键（对齐 macOS / Apple HIG 习惯）

@@ -172,11 +172,20 @@ interface PaperMetadata {
   abstract?: string;
   tags: string[];
 
-  // 来源链接
+  // 来源链接（UI 阅读器 PDF/HTML 模式以此为准）
   arxiv_id?: string;
   doi?: string;
+  /**
+   * 远程 PDF URL（UI 仅流式预览，不落盘）。
+   * 推荐 arXiv: `https://arxiv.org/pdf/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
+   */
   pdf_url?: string;
+  /**
+   * 远程 HTML URL（iframe 预览，不落盘）。
+   * 推荐 arXiv: `https://arxiv.org/html/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
+   */
   html_url?: string;
+  /** 摘要页等，如 `https://arxiv.org/abs/{arxiv_id}` */
   source_url?: string;
 
   // 正文来源与质量:渐进式披露与降级策略的决策依据

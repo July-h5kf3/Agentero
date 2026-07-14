@@ -139,11 +139,11 @@
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | `react-pdf`（基于 PDF.js 的 React 组件封装），提供页面渲染、缩放、翻页 |
-| PDF 解析（Rust） | 可插拔 `PdfParser` 后端：默认本地 `liteparse`（LlamaIndex 开源 Rust 解析器，结构化文本 + bounding box + OCR），配置 API Key 后可选云端 MinerU；输出 Markdown/JSON/Text |
-| HTML（arXiv HTML）| Tauri Webview 内嵌 `iframe` 或独立 Webview 窗口 |
-| 本地 HTML | 通过 Tauri `convertFileSrc` 转换为安全 URL 后加载 |
-| HTML 消毒 | `DOMPurify`（`src/lib/sanitize.ts` → `sanitizeHtml`）：凡需内联注入的 HTML（`innerHTML` / `dangerouslySetInnerHTML`、Markdown 派生片段、导入 HTML 片段）必须先消毒 |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：仅按 **远程 `pdf_url`** 流式渲染（**不落盘、不读 vault 内 pdf**） |
+| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
+| HTML 预览 | 远程 `html_url` → 独立 iframe；**不下载到本地** |
+| 中间栏切换 | `ViewModeToggle`；URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
+| arXiv 资源 | `pdf` / `html` / `abs` 规范 URL；CORS `*` 便于内嵌 |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
