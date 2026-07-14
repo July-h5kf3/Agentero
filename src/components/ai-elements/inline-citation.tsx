@@ -9,6 +9,7 @@ import {
 	useEffect,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { CarouselApi } from "@/components/ui/carousel";
 import {
@@ -74,24 +75,28 @@ export const InlineCitationCardTrigger = ({
 	sources,
 	className,
 	...props
-}: InlineCitationCardTriggerProps) => (
-	<HoverCardTrigger asChild>
-		<Badge
-			className={cn("ml-1 cursor-pointer rounded-full", className)}
-			variant="secondary"
-			{...props}
-		>
-			{sources[0] ? (
-				<>
-					{citationTriggerLabel(sources[0])}
-					{sources.length > 1 ? ` +${sources.length - 1}` : null}
-				</>
-			) : (
-				"unknown"
-			)}
-		</Badge>
-	</HoverCardTrigger>
-);
+}: InlineCitationCardTriggerProps) => {
+	const { t } = useTranslation("aiElements");
+
+	return (
+		<HoverCardTrigger asChild>
+			<Badge
+				className={cn("ml-1 cursor-pointer rounded-full", className)}
+				variant="secondary"
+				{...props}
+			>
+				{sources[0] ? (
+					<>
+						{citationTriggerLabel(sources[0])}
+						{sources.length > 1 ? ` +${sources.length - 1}` : null}
+					</>
+				) : (
+					t("inlineCitation.unknown")
+				)}
+			</Badge>
+		</HoverCardTrigger>
+	);
+};
 
 export type InlineCitationCardBodyProps = ComponentProps<"div">;
 
@@ -212,6 +217,7 @@ export const InlineCitationCarouselPrev = ({
 	className,
 	...props
 }: InlineCitationCarouselPrevProps) => {
+	const { t } = useTranslation("aiElements");
 	const api = useCarouselApi();
 
 	const handleClick = useCallback(() => {
@@ -222,7 +228,7 @@ export const InlineCitationCarouselPrev = ({
 
 	return (
 		<button
-			aria-label="Previous"
+			aria-label={t("inlineCitation.previous")}
 			className={cn("shrink-0", className)}
 			onClick={handleClick}
 			type="button"
@@ -239,6 +245,7 @@ export const InlineCitationCarouselNext = ({
 	className,
 	...props
 }: InlineCitationCarouselNextProps) => {
+	const { t } = useTranslation("aiElements");
 	const api = useCarouselApi();
 
 	const handleClick = useCallback(() => {
@@ -249,7 +256,7 @@ export const InlineCitationCarouselNext = ({
 
 	return (
 		<button
-			aria-label="Next"
+			aria-label={t("inlineCitation.next")}
 			className={cn("shrink-0", className)}
 			onClick={handleClick}
 			type="button"

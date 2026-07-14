@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import i18n from "@/i18n";
 
 type Props = {
 	children: ReactNode;
@@ -32,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
 		return (
 			<div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 bg-background p-6 text-center text-foreground">
-				<p className="font-medium text-sm">Something went wrong</p>
+				<p className="font-medium text-sm">{i18n.t("common:somethingWrong")}</p>
 				<p className="max-w-md break-words text-destructive text-xs">
 					{error.message}
 				</p>
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
 					variant="outline"
 					onClick={() => this.setState({ error: null })}
 				>
-					Try again
+					{i18n.t("common:tryAgain")}
 				</Button>
 			</div>
 		);

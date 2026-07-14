@@ -1,0 +1,41 @@
+{
+	"labels": {
+		"agent": "Agent",
+		"backlinks": "反向链接",
+		"notes": "笔记",
+		"preview": "预览",
+		"untitled": "未命名"
+	},
+	"titlebar": {
+		"showLeftSidebar": "显示左侧边栏",
+		"hideLeftSidebar": "隐藏左侧边栏",
+		"showSidebarHint": "显示侧边栏 (⌥⌘S)",
+		"hideSidebarHint": "隐藏侧边栏 (⌥⌘S)",
+		"agentPanel": "Agent 面板",
+		"backlinksPanel": "反向链接面板",
+		"showRightSidebar": "显示右侧边栏",
+		"hideRightSidebar": "隐藏右侧边栏",
+		"showRightSidebarHint": "显示右侧边栏 (⌘L)",
+		"hideRightSidebarHint": "隐藏右侧边栏 (⌘L)"
+	},
+	"editor": {
+		"markdownPlaceholder": "在此输入 Markdown……",
+		"notesPlaceholder": "论文 NOTES.md 将显示在此……",
+		"previewPlaceholder": "渲染后的 Markdown 将显示在此……"
+	},
+	"errors": {
+		"openVaultDesktopOnly": "打开 Vault 需要 Tauri 桌面应用（pnpm tauri dev）。",
+		"cannotPreview": "无法预览此文件类型：{{name}}"
+	},
+	"vault": {
+		"openDesktopOnly": "打开 Vault 仅在 Tauri 应用中可用。",
+		"dialogTitle": "选择 Motif Vault 文件夹",
+		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
+		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",
+		"demoName": "演示 Vault",
+		"demoNoContent": "（演示文件暂无示例内容。）"
+	},
+	"confirm": {
+		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"
+	}
+}

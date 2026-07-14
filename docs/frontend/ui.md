@@ -129,12 +129,12 @@ PromptInput → Body / Footer / Submit
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
 | 关闭 | 右上角 `X`、点遮罩、`Esc`、再次 `⌘,` |
-| 文案 | 英文 UI（与当前应用一致），简短说明可作 footer |
+| 文案 | 支持国际化（i18n）：English 与简体中文可切换，English 为源语言与兜底；简短说明可作 footer |
 
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认等应用行为。
-- **Appearance**：主题、编辑字号、行号。
+- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **Common agents** 目录表：名称 + 状态徽章（installed / ACP ready / missing 等）；打开页自动 Probe。
@@ -146,7 +146,18 @@ PromptInput → Body / Footer / Submit
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`）。
+实现：`src/components/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`，含 `locale` 偏好）。
+
+## 4.1 国际化（i18n）
+
+- 技术选型：[`react-i18next`](https://react.i18next.com/) + `i18next`，运行时切换，无需重启。
+- 语言：English（`en`，源语言与兜底）、简体中文（`zh-CN`）；`locale` 偏好为 `system | en | zh-CN`，`system` 依据 `navigator.language` 解析。
+- 词条目录：`src/i18n/locales/<locale>/<namespace>.json`，按功能划分命名空间（`common` `app` `settings` `agent` `sidebar` `viewer` `editor` `shortcuts` `aiElements`）。
+- 类型安全：`src/i18n/i18next.d.ts` 依据英文词条推导 `t()` 的 key 类型；新增文案须先在 `en` 词条登记，并同步 `zh-CN`。
+- 组件内用 `useTranslation("<ns>")`；跨命名空间用 `t("ns:key")` 前缀，并在 `useTranslation([...])` 中声明相关命名空间。React 之外的模块（如 `lib/`、`error-boundary`）用全局实例 `i18n.t(...)`。
+- 数字/货币/日期用活动 locale 格式化（`Intl.*` 传入 `i18n.language`）。
+- 原生 macOS 菜单同样本地化：渲染层通过 `set_locale` command 通知 Host 重建菜单（见 `docs/backend/api.md`）。
+- 语言切换的联动集中在 `src/App.tsx`：`i18n.changeLanguage`、`document.documentElement.lang`、以及 `set_locale`。
 
 ## 5. 组件基线
 

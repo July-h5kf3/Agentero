@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { isArxivHostedUrl } from "@/lib/arxiv";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +14,7 @@ type HtmlViewerProps = {
  * Does not fetch or cache HTML into the vault.
  */
 export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
+	const { t } = useTranslation("viewer");
 	if (!srcUrl || !/^https?:\/\//i.test(srcUrl)) {
 		return (
 			<div
@@ -20,11 +23,12 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 					className,
 				)}
 			>
-				No remote HTML URL in metadata.
+				{t("html.empty")}
 				<br />
 				<span className="mt-1 text-xs">
-					Set <code className="text-foreground">html_url</code> (e.g. arXiv
-					HTML) — Motif does not load local HTML files for preview.
+					{t("html.emptyHintPrefix")}{" "}
+					<code className="text-foreground">html_url</code>{" "}
+					{t("html.emptyHintSuffix")}
 				</span>
 			</div>
 		);
@@ -43,7 +47,7 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 			)}
 		>
 			<iframe
-				title="HTML paper sandbox"
+				title={t("html.sandboxTitle")}
 				src={srcUrl}
 				sandbox={sandbox}
 				referrerPolicy="no-referrer-when-downgrade"

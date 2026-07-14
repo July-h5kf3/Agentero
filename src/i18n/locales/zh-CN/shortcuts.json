@@ -1,0 +1,18 @@
+{
+	"groups": {
+		"app": "应用",
+		"vault": "Vault",
+		"navigation": "导航"
+	},
+	"labels": {
+		"settings": "设置…",
+		"closeSheet": "关闭设置",
+		"openVault": "打开 Vault…",
+		"refreshTree": "刷新文件树",
+		"toggleSidebar": "显示 / 隐藏侧边栏",
+		"toggleChat": "显示 / 隐藏对话",
+		"focusSidebar": "聚焦侧边栏",
+		"focusEditor": "聚焦编辑器",
+		"focusPreview": "聚焦预览"
+	}
+}

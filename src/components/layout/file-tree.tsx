@@ -8,6 +8,7 @@ import {
 	Sparkles,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
 	FileTree as AiFileTree,
 	FileTreeFile,
@@ -81,6 +82,7 @@ export function FileTree({
 	onSelectFile,
 	className,
 }: FileTreeProps) {
+	const { t } = useTranslation("sidebar");
 	const defaultExpanded = useMemo(() => {
 		const open = new Set<string>();
 		collectDefaultExpanded(nodes, open);
@@ -149,7 +151,9 @@ export function FileTree({
 	return (
 		<div className={cn("select-none py-1 text-sm", className)}>
 			{nodes.length === 0 ? (
-				<p className="px-3 py-2 text-muted-foreground text-xs">Empty folder</p>
+				<p className="px-3 py-2 text-muted-foreground text-xs">
+					{t("fileTree.empty")}
+				</p>
 			) : (
 				<AiFileTree
 					selectedPath={treeSelectedPath}
@@ -217,6 +221,7 @@ export function VaultSidebarHeader({
 	error?: string | null;
 	isDemo: boolean;
 }) {
+	const { t } = useTranslation("sidebar");
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div className="shrink-0">
@@ -225,14 +230,14 @@ export function VaultSidebarHeader({
 					trailing={
 						<>
 							<IconAction
-								label="Open vault (⌘O)"
+								label={t("fileTree.openVault")}
 								onClick={onOpenVault}
 								disabled={busy}
 							>
 								<FolderSearch className="size-3.5" />
 							</IconAction>
 							<IconAction
-								label="Refresh (⌘R)"
+								label={t("fileTree.refresh")}
 								onClick={onRefresh}
 								disabled={busy || isDemo}
 							>
@@ -240,7 +245,7 @@ export function VaultSidebarHeader({
 							</IconAction>
 							{!isDemo ? (
 								<IconAction
-									label="Use demo vault"
+									label={t("fileTree.useDemo")}
 									onClick={onUseDemo}
 									disabled={busy}
 								>

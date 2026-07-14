@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
 	Command,
 	CommandDialog,
@@ -37,23 +38,29 @@ export type ModelSelectorContentProps = ComponentProps<typeof DialogContent> & {
 export const ModelSelectorContent = ({
 	className,
 	children,
-	title = "Model Selector",
+	title,
 	...props
-}: ModelSelectorContentProps) => (
-	<DialogContent
-		aria-describedby={undefined}
-		className={cn(
-			"outline! border-none! p-0 outline-border! outline-solid!",
-			className,
-		)}
-		{...props}
-	>
-		<DialogTitle className="sr-only">{title}</DialogTitle>
-		<Command className="**:data-[slot=command-input-wrapper]:h-auto">
-			{children}
-		</Command>
-	</DialogContent>
-);
+}: ModelSelectorContentProps) => {
+	const { t } = useTranslation("aiElements");
+
+	return (
+		<DialogContent
+			aria-describedby={undefined}
+			className={cn(
+				"outline! border-none! p-0 outline-border! outline-solid!",
+				className,
+			)}
+			{...props}
+		>
+			<DialogTitle className="sr-only">
+				{title ?? t("modelSelector.label")}
+			</DialogTitle>
+			<Command className="**:data-[slot=command-input-wrapper]:h-auto">
+				{children}
+			</Command>
+		</DialogContent>
+	);
+};
 
 export type ModelSelectorDialogProps = ComponentProps<typeof CommandDialog>;
 

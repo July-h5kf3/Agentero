@@ -1,0 +1,80 @@
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+import { type LocalePreference, loadSettings } from "@/lib/settings";
+
+import enAgent from "./locales/en/agent.json";
+import enAiElements from "./locales/en/aiElements.json";
+import enApp from "./locales/en/app.json";
+import enCommon from "./locales/en/common.json";
+import enEditor from "./locales/en/editor.json";
+import enSettings from "./locales/en/settings.json";
+import enShortcuts from "./locales/en/shortcuts.json";
+import enSidebar from "./locales/en/sidebar.json";
+import enViewer from "./locales/en/viewer.json";
+import zhAgent from "./locales/zh-CN/agent.json";
+import zhAiElements from "./locales/zh-CN/aiElements.json";
+import zhApp from "./locales/zh-CN/app.json";
+import zhCommon from "./locales/zh-CN/common.json";
+import zhEditor from "./locales/zh-CN/editor.json";
+import zhSettings from "./locales/zh-CN/settings.json";
+import zhShortcuts from "./locales/zh-CN/shortcuts.json";
+import zhSidebar from "./locales/zh-CN/sidebar.json";
+import zhViewer from "./locales/zh-CN/viewer.json";
+
+export const SUPPORTED_LOCALES = ["en", "zh-CN"] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
+
+export const DEFAULT_NS = "common";
+
+export const resources = {
+	en: {
+		common: enCommon,
+		app: enApp,
+		settings: enSettings,
+		agent: enAgent,
+		sidebar: enSidebar,
+		viewer: enViewer,
+		editor: enEditor,
+		shortcuts: enShortcuts,
+		aiElements: enAiElements,
+	},
+	"zh-CN": {
+		common: zhCommon,
+		app: zhApp,
+		settings: zhSettings,
+		agent: zhAgent,
+		sidebar: zhSidebar,
+		viewer: zhViewer,
+		editor: zhEditor,
+		shortcuts: zhShortcuts,
+		aiElements: zhAiElements,
+	},
+} as const;
+
+/** Resolve a stored preference to a concrete BCP-47 locale we ship. */
+export function resolveLocale(pref: LocalePreference): Locale {
+	if (pref === "en" || pref === "zh-CN") return pref;
+	const nav =
+		typeof navigator !== "undefined" && navigator.language
+			? navigator.language
+			: "en";
+	return nav.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+}
+
+const initialLocale = resolveLocale(loadSettings().locale);
+
+i18n.use(initReactI18next).init({
+	resources,
+	lng: initialLocale,
+	fallbackLng: "en",
+	defaultNS: DEFAULT_NS,
+	ns: Object.keys(resources.en),
+	interpolation: { escapeValue: false },
+	returnNull: false,
+});
+
+if (typeof document !== "undefined") {
+	document.documentElement.lang = initialLocale;
+}
+
+export default i18n;

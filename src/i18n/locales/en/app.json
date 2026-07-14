@@ -1,0 +1,41 @@
+{
+	"labels": {
+		"agent": "Agent",
+		"backlinks": "Backlinks",
+		"notes": "Notes",
+		"preview": "Preview",
+		"untitled": "Untitled"
+	},
+	"titlebar": {
+		"showLeftSidebar": "Show left sidebar",
+		"hideLeftSidebar": "Hide left sidebar",
+		"showSidebarHint": "Show sidebar (⌥⌘S)",
+		"hideSidebarHint": "Hide sidebar (⌥⌘S)",
+		"agentPanel": "Agent panel",
+		"backlinksPanel": "Backlinks panel",
+		"showRightSidebar": "Show right sidebar",
+		"hideRightSidebar": "Hide right sidebar",
+		"showRightSidebarHint": "Show right sidebar (⌘L)",
+		"hideRightSidebarHint": "Hide right sidebar (⌘L)"
+	},
+	"editor": {
+		"markdownPlaceholder": "Type Markdown here...",
+		"notesPlaceholder": "Paper NOTES.md will appear here...",
+		"previewPlaceholder": "Rendered Markdown will appear here..."
+	},
+	"errors": {
+		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",
+		"cannotPreview": "Cannot preview this file type: {{name}}"
+	},
+	"vault": {
+		"openDesktopOnly": "Open vault is only available in the Tauri app.",
+		"dialogTitle": "Select Motif vault folder",
+		"readDesktopOnly": "Reading local files requires the Tauri app.",
+		"writeDesktopOnly": "Writing local files requires the Tauri app.",
+		"demoName": "Demo vault",
+		"demoNoContent": "(Demo file has no sample content.)"
+	},
+	"confirm": {
+		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"
+	}
+}

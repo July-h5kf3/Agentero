@@ -1,0 +1,22 @@
+{
+	"mode": {
+		"markdown": "Markdown",
+		"pdf": "PDF",
+		"html": "HTML"
+	},
+	"centerPaneView": "Center pane view",
+	"unavailable": "{{label}} unavailable",
+	"pdf": {
+		"empty": "No remote PDF URL in metadata.",
+		"emptyHintPrefix": "Set",
+		"emptyHintSuffix": "(e.g. arXiv PDF) — Motif does not load local PDF files for preview.",
+		"loading": "Loading PDF…",
+		"loadError": "Failed to load PDF"
+	},
+	"html": {
+		"empty": "No remote HTML URL in metadata.",
+		"emptyHintPrefix": "Set",
+		"emptyHintSuffix": "(e.g. arXiv HTML) — Motif does not load local HTML files for preview.",
+		"sandboxTitle": "HTML paper sandbox"
+	}
+}

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import {
 	Collapsible,
@@ -47,15 +48,15 @@ export type ToolHeaderProps = {
 	  }
 );
 
-const statusLabels: Record<ToolPart["state"], string> = {
-	"approval-requested": "Awaiting Approval",
-	"approval-responded": "Responded",
-	"input-available": "Running",
-	"input-streaming": "Pending",
-	"output-available": "Completed",
-	"output-denied": "Denied",
-	"output-error": "Error",
-};
+const statusLabelKeys = {
+	"approval-requested": "tool.status.awaitingApproval",
+	"approval-responded": "tool.status.responded",
+	"input-available": "tool.status.running",
+	"input-streaming": "tool.status.pending",
+	"output-available": "tool.status.completed",
+	"output-denied": "tool.status.denied",
+	"output-error": "tool.status.error",
+} as const satisfies Record<ToolPart["state"], string>;
 
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
 	"approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
@@ -67,13 +68,13 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
 	"output-error": <XCircleIcon className="size-4 text-red-600" />,
 };
 
-export const getStatusBadge = (status: ToolPart["state"]) => (
+export const getStatusBadge = (status: ToolPart["state"], label: string) => (
 	<Badge
 		className="h-5 gap-1 rounded-full px-1.5 py-0 text-[10px] font-normal"
 		variant="secondary"
 	>
 		<span className="[&>svg]:size-3">{statusIcons[status]}</span>
-		{statusLabels[status]}
+		{label}
 	</Badge>
 );
 
@@ -85,6 +86,7 @@ export const ToolHeader = ({
 	toolName,
 	...props
 }: ToolHeaderProps) => {
+	const { t } = useTranslation("aiElements");
 	const derivedName =
 		type === "dynamic-tool" ? toolName : type.split("-").slice(1).join("-");
 
@@ -102,7 +104,7 @@ export const ToolHeader = ({
 			<span className="min-w-0 truncate font-medium text-xs">
 				{title ?? derivedName}
 			</span>
-			{getStatusBadge(state)}
+			{getStatusBadge(state, t(statusLabelKeys[state]))}
 		</CollapsibleTrigger>
 	);
 };
@@ -123,16 +125,20 @@ export type ToolInputProps = ComponentProps<"div"> & {
 	input: ToolPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-	<div className={cn("space-y-1 overflow-hidden", className)} {...props}>
-		<h4 className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
-			Parameters
-		</h4>
-		<div className="rounded bg-muted/50 text-xs">
-			<CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
+	const { t } = useTranslation("aiElements");
+
+	return (
+		<div className={cn("space-y-1 overflow-hidden", className)} {...props}>
+			<h4 className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
+				{t("tool.parameters")}
+			</h4>
+			<div className="rounded bg-muted/50 text-xs">
+				<CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+			</div>
 		</div>
-	</div>
-);
+	);
+};
 
 export type ToolOutputProps = ComponentProps<"div"> & {
 	output: ToolPart["output"];
@@ -145,6 +151,8 @@ export const ToolOutput = ({
 	errorText,
 	...props
 }: ToolOutputProps) => {
+	const { t } = useTranslation("aiElements");
+
 	if (!(output || errorText)) {
 		return null;
 	}
@@ -162,7 +170,7 @@ export const ToolOutput = ({
 	return (
 		<div className={cn("space-y-1", className)} {...props}>
 			<h4 className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
-				{errorText ? "Error" : "Result"}
+				{errorText ? t("tool.error") : t("tool.result")}
 			</h4>
 			<div
 				className={cn(

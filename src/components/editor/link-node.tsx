@@ -3,6 +3,7 @@
 import type { PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
 import type { MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { parseWikiHref, WIKI_HREF_PREFIX } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki-nav-context";
@@ -14,6 +15,7 @@ type LinkEl = {
 };
 
 export function LinkElement(props: PlateElementProps) {
+	const { t } = useTranslation("editor");
 	const { children, element } = props;
 	const url = (element as LinkEl).url ?? "";
 	const wiki = url.startsWith(WIKI_HREF_PREFIX) ? parseWikiHref(url) : null;
@@ -35,7 +37,7 @@ export function LinkElement(props: PlateElementProps) {
 					href: url,
 					title: wiki.exists
 						? (wiki.path ?? wiki.targetRaw)
-						: `Missing: ${wiki.targetRaw} (click to create)`,
+						: t("missingLink", { target: wiki.targetRaw }),
 					"data-wiki": wiki.exists ? "ok" : "missing",
 					onClick: (event: MouseEvent) => {
 						event.preventDefault();

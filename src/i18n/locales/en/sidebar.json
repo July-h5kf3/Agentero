@@ -1,0 +1,33 @@
+{
+	"fileTree": {
+		"empty": "Empty folder",
+		"openVault": "Open vault (⌘O)",
+		"refresh": "Refresh (⌘R)",
+		"useDemo": "Use demo vault"
+	},
+	"backlinks": {
+		"openNote": "Open a note to see backlinks",
+		"none": "No backlinks",
+		"title": "Backlinks"
+	},
+	"graph": {
+		"near": "Near",
+		"all": "All",
+		"title": "Graph",
+		"loading": "Loading graph…",
+		"selectPrompt": "Select a paper or note for neighborhood graph.",
+		"noEdges": "No wikilink edges yet."
+	},
+	"paperInfo": {
+		"info": "Info",
+		"selectPrompt": "Select a paper to see metadata.",
+		"title": "Title",
+		"authors": "Authors",
+		"year": "Year",
+		"tags": "Tags",
+		"abstract": "Abstract",
+		"pdf": "PDF",
+		"html": "HTML",
+		"abs": "Abs"
+	}
+}

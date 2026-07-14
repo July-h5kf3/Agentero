@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
 
 export type AgentTemplate =
@@ -409,12 +410,12 @@ export function saveModelCatalog(
 export function acpStatusLabel(status: CatalogAcpStatus): string {
 	switch (status) {
 		case "ready":
-			return "ACP ready";
+			return i18n.t("agent:acpStatus.ready");
 		case "failed":
-			return "ACP failed";
+			return i18n.t("agent:acpStatus.failed");
 		case "not-probed":
-			return "Not probed";
+			return i18n.t("agent:acpStatus.notProbed");
 		case "missing":
-			return "Not installed";
+			return i18n.t("agent:acpStatus.notInstalled");
 	}
 }

@@ -1,4 +1,5 @@
 import { FileCode2, FileText, FileType2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
 	Tooltip,
@@ -11,12 +12,12 @@ import type { CenterViewMode } from "@/lib/viewer";
 
 const MODES: {
 	id: CenterViewMode;
-	label: string;
+	labelKey: "mode.markdown" | "mode.pdf" | "mode.html";
 	icon: typeof FileText;
 }[] = [
-	{ id: "markdown", label: "Markdown", icon: FileText },
-	{ id: "pdf", label: "PDF", icon: FileType2 },
-	{ id: "html", label: "HTML", icon: FileCode2 },
+	{ id: "markdown", labelKey: "mode.markdown", icon: FileText },
+	{ id: "pdf", labelKey: "mode.pdf", icon: FileType2 },
+	{ id: "html", labelKey: "mode.html", icon: FileCode2 },
 ];
 
 /** size-6 = 24px, gap-0.5 = 2px — keep in sync with class names below */
@@ -34,6 +35,7 @@ export function ViewModeToggle({
 	onChange,
 	available,
 }: ViewModeToggleProps) {
+	const { t } = useTranslation("viewer");
 	const activeIndex = Math.max(
 		0,
 		MODES.findIndex((m) => m.id === value),
@@ -45,7 +47,7 @@ export function ViewModeToggle({
 			<div
 				className="relative inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 dark:bg-muted/30"
 				role="tablist"
-				aria-label="Center pane view"
+				aria-label={t("centerPaneView")}
 			>
 				{/* Sliding pill — fixed cell size, left-aligned then translateX */}
 				<span
@@ -61,9 +63,10 @@ export function ViewModeToggle({
 					}}
 				/>
 
-				{MODES.map(({ id, label, icon: Icon }) => {
+				{MODES.map(({ id, labelKey, icon: Icon }) => {
 					const enabled = available[id];
 					const active = value === id;
+					const label = t(labelKey);
 					return (
 						<Tooltip key={id}>
 							<TooltipTrigger asChild>
@@ -89,7 +92,7 @@ export function ViewModeToggle({
 								</button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
-								{enabled ? label : `${label} unavailable`}
+								{enabled ? label : t("unavailable", { label })}
 							</TooltipContent>
 						</Tooltip>
 					);

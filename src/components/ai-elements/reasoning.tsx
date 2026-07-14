@@ -17,6 +17,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import {
 	Collapsible,
@@ -154,24 +155,31 @@ export type ReasoningTriggerProps = ComponentProps<
 	getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode;
 };
 
-const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
-	if (isStreaming || duration === 0) {
-		return <Shimmer duration={1}>Thinking...</Shimmer>;
-	}
-	if (duration === undefined) {
-		return <p>Thought for a few seconds</p>;
-	}
-	return <p>Thought for {duration} seconds</p>;
-};
-
 export const ReasoningTrigger = memo(
 	({
 		className,
 		children,
-		getThinkingMessage = defaultGetThinkingMessage,
+		getThinkingMessage,
 		...props
 	}: ReasoningTriggerProps) => {
+		const { t } = useTranslation("aiElements");
 		const { isStreaming, isOpen, duration } = useReasoning();
+
+		const defaultGetThinkingMessage = (
+			streaming: boolean,
+			thinkingDuration?: number,
+		) => {
+			if (streaming || thinkingDuration === 0) {
+				return <Shimmer duration={1}>{t("reasoning.thinking")}</Shimmer>;
+			}
+			if (thinkingDuration === undefined) {
+				return <p>{t("reasoning.thoughtForFew")}</p>;
+			}
+			return <p>{t("reasoning.thoughtFor", { count: thinkingDuration })}</p>;
+		};
+
+		const renderThinkingMessage =
+			getThinkingMessage ?? defaultGetThinkingMessage;
 
 		return (
 			<CollapsibleTrigger
@@ -184,7 +192,7 @@ export const ReasoningTrigger = memo(
 				{children ?? (
 					<>
 						<BrainIcon className="size-4" />
-						{getThinkingMessage(isStreaming, duration)}
+						{renderThinkingMessage(isStreaming, duration)}
 						<ChevronDownIcon
 							className={cn(
 								"size-4 transition-transform",

@@ -903,6 +903,35 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
+### 3.9 界面与本地化（UI / i18n）
+
+#### `set_locale`（已实现）
+
+渲染层在语言偏好变化时通知 Host 按新 locale 重建原生应用菜单（macOS 菜单栏）。
+
+- **参数**
+
+```ts
+{
+  locale: string; // 解析后的具体 locale，如 "en" | "zh-CN"
+}
+```
+
+- **返回**：`Result<(), String>`（成功为 `()`，失败返回错误信息字符串）。
+- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `motif-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
+
+#### 菜单事件
+
+原生菜单项点击后 Host 通过 `emit(id, ())` 广播，前端在 `src/App.tsx` 监听。事件名（id）稳定、不随语言变化；仅菜单显示文案随 `set_locale` 本地化。
+
+| 事件名 | 菜单项 | 快捷键 |
+|---|---|---|
+| `settings` | Settings… | `⌘,` |
+| `open_vault` | Open Vault… | `⌘O` |
+| `refresh_tree` | Refresh File Tree | `⌘R` |
+| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` |
+| `toggle_chat` | Toggle Chat | `⌘L` |
+
 ## 4. 数据模型
 
 完整类型定义见 `docs/backend/data-model.md`。API 中涉及的核心类型包括：

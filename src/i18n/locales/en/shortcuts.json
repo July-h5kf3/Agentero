@@ -1,0 +1,18 @@
+{
+	"groups": {
+		"app": "App",
+		"vault": "Vault",
+		"navigation": "Navigation"
+	},
+	"labels": {
+		"settings": "Settings…",
+		"closeSheet": "Close settings",
+		"openVault": "Open vault…",
+		"refreshTree": "Refresh file tree",
+		"toggleSidebar": "Show / hide sidebar",
+		"toggleChat": "Show / hide chat",
+		"focusSidebar": "Focus sidebar",
+		"focusEditor": "Focus editor",
+		"focusPreview": "Focus preview"
+	}
+}

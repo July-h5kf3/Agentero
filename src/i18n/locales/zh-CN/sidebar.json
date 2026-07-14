@@ -1,0 +1,33 @@
+{
+	"fileTree": {
+		"empty": "空文件夹",
+		"openVault": "打开 Vault (⌘O)",
+		"refresh": "刷新 (⌘R)",
+		"useDemo": "使用演示 Vault"
+	},
+	"backlinks": {
+		"openNote": "打开一篇笔记以查看反向链接",
+		"none": "暂无反向链接",
+		"title": "反向链接"
+	},
+	"graph": {
+		"near": "邻近",
+		"all": "全部",
+		"title": "关系图",
+		"loading": "正在加载关系图…",
+		"selectPrompt": "选择一篇论文或笔记以查看邻近关系图。",
+		"noEdges": "暂无双链连接。"
+	},
+	"paperInfo": {
+		"info": "信息",
+		"selectPrompt": "选择一篇论文以查看元数据。",
+		"title": "标题",
+		"authors": "作者",
+		"year": "年份",
+		"tags": "标签",
+		"abstract": "摘要",
+		"pdf": "PDF",
+		"html": "HTML",
+		"abs": "摘要"
+	}
+}

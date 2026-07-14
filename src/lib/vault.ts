@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
+import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
 
 export type FileNode = {
@@ -359,13 +360,13 @@ Deep residual learning for image recognition.
 
 export async function pickVaultDirectory(): Promise<string | null> {
 	if (!isTauri()) {
-		throw new Error("Open vault is only available in the Tauri app.");
+		throw new Error(i18n.t("app:vault.openDesktopOnly"));
 	}
 
 	const selected = await open({
 		directory: true,
 		multiple: false,
-		title: "Select Motif vault folder",
+		title: i18n.t("app:vault.dialogTitle"),
 	});
 
 	if (selected === null) return null;
@@ -396,12 +397,13 @@ export function getDemoTextContent(path: string): string | null {
 export async function readVaultFile(path: string): Promise<string> {
 	if (path.startsWith("demo-vault/")) {
 		return (
-			DEMO_CONTENTS[path] ?? `# ${path}\n\n(Demo file has no sample content.)\n`
+			DEMO_CONTENTS[path] ??
+			`# ${path}\n\n${i18n.t("app:vault.demoNoContent")}\n`
 		);
 	}
 
 	if (!isTauri()) {
-		throw new Error("Reading local files requires the Tauri app.");
+		throw new Error(i18n.t("app:vault.readDesktopOnly"));
 	}
 
 	return readTextFile(path);
@@ -418,7 +420,7 @@ export async function writeVaultFile(
 	}
 
 	if (!isTauri()) {
-		throw new Error("Writing local files requires the Tauri app.");
+		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
 	const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
@@ -434,7 +436,7 @@ export async function writeVaultFile(
 }
 
 export function vaultDisplayName(rootPath: string | null): string {
-	if (!rootPath) return "Demo vault";
+	if (!rootPath) return i18n.t("app:vault.demoName");
 	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
 	return parts[parts.length - 1] || rootPath;
 }

@@ -16,6 +16,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
@@ -255,11 +256,12 @@ export const MessageBranchPrevious = ({
 	children,
 	...props
 }: MessageBranchPreviousProps) => {
+	const { t } = useTranslation("aiElements");
 	const { goToPrevious, totalBranches } = useMessageBranch();
 
 	return (
 		<Button
-			aria-label="Previous branch"
+			aria-label={t("message.previousBranch")}
 			disabled={totalBranches <= 1}
 			onClick={goToPrevious}
 			size="icon-sm"
@@ -278,11 +280,12 @@ export const MessageBranchNext = ({
 	children,
 	...props
 }: MessageBranchNextProps) => {
+	const { t } = useTranslation("aiElements");
 	const { goToNext, totalBranches } = useMessageBranch();
 
 	return (
 		<Button
-			aria-label="Next branch"
+			aria-label={t("message.nextBranch")}
 			disabled={totalBranches <= 1}
 			onClick={goToNext}
 			size="icon-sm"
@@ -301,6 +304,7 @@ export const MessageBranchPage = ({
 	className,
 	...props
 }: MessageBranchPageProps) => {
+	const { t } = useTranslation("aiElements");
 	const { currentBranch, totalBranches } = useMessageBranch();
 
 	return (
@@ -311,7 +315,10 @@ export const MessageBranchPage = ({
 			)}
 			{...props}
 		>
-			{currentBranch + 1} of {totalBranches}
+			{t("message.branchIndicator", {
+				current: currentBranch + 1,
+				total: totalBranches,
+			})}
 		</ButtonGroupText>
 	);
 };

@@ -1,8 +1,10 @@
 mod commands;
 mod error;
+mod i18n;
 mod models;
 mod services;
 
+use i18n::menu_labels;
 use services::agent::AgentRegistry;
 use services::wiki::WikiIndexState;
 use tauri::{
@@ -10,29 +12,31 @@ use tauri::{
     Emitter, Manager,
 };
 
-fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    let labels = menu_labels(lang);
+
     // Appears under the app name menu on macOS (e.g. "motif").
-    let settings = MenuItemBuilder::with_id("settings", "Settings…")
+    let settings = MenuItemBuilder::with_id("settings", labels.settings)
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
 
-    let open_vault = MenuItemBuilder::with_id("open_vault", "Open Vault…")
+    let open_vault = MenuItemBuilder::with_id("open_vault", labels.open_vault)
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
 
-    let refresh_tree = MenuItemBuilder::with_id("refresh_tree", "Refresh File Tree")
+    let refresh_tree = MenuItemBuilder::with_id("refresh_tree", labels.refresh_tree)
         .accelerator("CmdOrCtrl+R")
         .build(app)?;
 
-    let toggle_sidebar = MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar")
+    let toggle_sidebar = MenuItemBuilder::with_id("toggle_sidebar", labels.toggle_sidebar)
         .accelerator("CmdOrCtrl+Alt+S")
         .build(app)?;
 
-    let toggle_chat = MenuItemBuilder::with_id("toggle_chat", "Toggle Chat")
+    let toggle_chat = MenuItemBuilder::with_id("toggle_chat", labels.toggle_chat)
         .accelerator("CmdOrCtrl+L")
         .build(app)?;
 
-    let app_submenu = SubmenuBuilder::new(app, "Motif")
+    let app_submenu = SubmenuBuilder::new(app, labels.app)
         .about(None)
         .separator()
         .item(&settings)
@@ -46,7 +50,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .quit()
         .build()?;
 
-    let file_submenu = SubmenuBuilder::new(app, "File")
+    let file_submenu = SubmenuBuilder::new(app, labels.file)
         .item(&open_vault)
         .item(&refresh_tree)
         .separator()
@@ -54,7 +58,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .build()?;
 
     // Required so text fields keep standard edit shortcuts after custom menu is set.
-    let edit_submenu = SubmenuBuilder::new(app, "Edit")
+    let edit_submenu = SubmenuBuilder::new(app, labels.edit)
         .undo()
         .redo()
         .separator()
@@ -64,12 +68,12 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .select_all()
         .build()?;
 
-    let view_submenu = SubmenuBuilder::new(app, "View")
+    let view_submenu = SubmenuBuilder::new(app, labels.view)
         .item(&toggle_sidebar)
         .item(&toggle_chat)
         .build()?;
 
-    let window_submenu = SubmenuBuilder::new(app, "Window")
+    let window_submenu = SubmenuBuilder::new(app, labels.window)
         .minimize()
         .maximize()
         .separator()
@@ -83,6 +87,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .item(&view_submenu)
         .item(&window_submenu)
         .build()
+}
+
+/// Rebuild and install the native application menu for the given locale.
+/// Called by the renderer whenever the language preference changes.
+#[tauri::command]
+fn set_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
+    let menu = build_menu(&app, &locale).map_err(|e| e.to_string())?;
+    app.set_menu(menu).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -113,9 +126,11 @@ pub fn run() {
             commands::graph::graph_get_backlinks,
             commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
+            set_locale,
         ])
         .setup(|app| {
-            let menu = build_menu(app.handle())?;
+            // English by default; the renderer re-syncs the stored locale on mount.
+            let menu = build_menu(app.handle(), "en")?;
             app.set_menu(menu)?;
             // Ensure registry is loaded early.
             let _ = app.state::<AgentRegistry>();

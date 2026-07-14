@@ -1,0 +1,58 @@
+{
+	"acpStatus": {
+		"ready": "ACP 就绪",
+		"failed": "ACP 失败",
+		"notProbed": "未探测",
+		"notInstalled": "未安装"
+	},
+	"defaultName": "Agent",
+	"missing": "（缺失）",
+	"switchAgent": "切换 ACP Agent",
+	"suggestions": {
+		"summarizePaper": "总结当前论文",
+		"listClaims": "列出关键论点与证据",
+		"findRelated": "在此 Vault 中查找相关笔记"
+	},
+	"history": {
+		"aria": "打开对话历史",
+		"label": "历史",
+		"title": "会话历史",
+		"description": "此对话中最近的 ACP 会话。",
+		"empty": "暂无会话。"
+	},
+	"empty": {
+		"title": "与你的 Vault 对话",
+		"description": "消息将发送给你的 ACP Agent。点击上方的 Agent 名称可切换后端。",
+		"waiting": "正在等待 Agent……"
+	},
+	"thinking": "思考中……",
+	"copy": "复制",
+	"plan": {
+		"title": "计划",
+		"steps": "{{completed}}/{{total}} 步"
+	},
+	"tool": {
+		"defaultTitle": "工具",
+		"failed": "工具执行失败"
+	},
+	"citation": {
+		"vaultPath": "Agent 引用的 Vault 路径"
+	},
+	"models": {
+		"defaultGroup": "模型",
+		"selectTooltip": "选择模型 (ACP)",
+		"reportedTooltip": "Agent 上报模型后将在此显示",
+		"loading": "加载中……",
+		"button": "模型",
+		"title": "选择模型",
+		"searchPlaceholder": "搜索模型……",
+		"emptyNone": "暂无模型。先运行一次，让 ACP Agent 上报可用模型。",
+		"emptyNoMatch": "无匹配项。"
+	},
+	"messages": {
+		"switchedTo": "已切换到 {{name}}",
+		"desktopOnly": "请打开桌面应用以运行 Agent。",
+		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
+		"notAvailable": "{{name}} 不可用。请更换或在 设置 → Agent 中打开。"
+	}
+}

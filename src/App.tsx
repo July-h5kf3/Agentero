@@ -12,6 +12,7 @@ import { Bot, Link2, PanelLeft, PanelRight } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
 import { BlockquoteElement } from "@/components/editor/blockquote-node";
 import { Editor, EditorContainer } from "@/components/editor/editor";
@@ -48,6 +49,7 @@ import {
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
+import i18n, { resolveLocale } from "@/i18n";
 import {
 	isPaperDirectory,
 	loadPaperMetadata,
@@ -143,6 +145,7 @@ function collectMarkdownRelPaths(
 }
 
 export default function App() {
+	const { t } = useTranslation("app");
 	const { setTheme } = useTheme();
 	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -274,6 +277,23 @@ export default function App() {
 		setTheme(settings.theme);
 	}, [settings.theme, setTheme]);
 
+	useEffect(() => {
+		const locale = resolveLocale(settings.locale);
+		void i18n.changeLanguage(locale);
+		if (typeof document !== "undefined") {
+			document.documentElement.lang = locale;
+		}
+		if (!isTauri()) return;
+		void (async () => {
+			try {
+				const { invoke } = await import("@tauri-apps/api/core");
+				await invoke("set_locale", { locale });
+			} catch {
+				// Native menu keeps its previous locale; non-fatal.
+			}
+		})();
+	}, [settings.locale]);
+
 	const updateSettings = useCallback((next: AppSettings) => {
 		setSettings(next);
 		saveSettings(next);
@@ -375,7 +395,7 @@ export default function App() {
 		setError(null);
 		try {
 			if (!isTauri()) {
-				setError("Open vault requires the Tauri desktop app (pnpm tauri dev).");
+				setError(t("errors.openVaultDesktopOnly"));
 				return;
 			}
 			setBusy(true);
@@ -394,7 +414,7 @@ export default function App() {
 		} finally {
 			setBusy(false);
 		}
-	}, []);
+	}, [t]);
 
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
@@ -632,7 +652,7 @@ export default function App() {
 			}
 
 			if (!isTextOpenable(node.path)) {
-				setError(`Cannot preview this file type: ${node.name}`);
+				setError(t("errors.cannotPreview", { name: node.name }));
 				return;
 			}
 
@@ -649,7 +669,7 @@ export default function App() {
 				setBusy(false);
 			}
 		},
-		[openPaper],
+		[openPaper, t],
 	);
 
 	const handleSelectFile = async (node: FileNode) => {
@@ -698,7 +718,10 @@ export default function App() {
 			}
 			const createRel = missingNotePath(nav.targetRaw);
 			const ok = window.confirm(
-				`「${nav.targetRaw}」 does not exist.\n\nCreate ${createRel}?`,
+				t("confirm.createNote", {
+					target: nav.targetRaw,
+					path: createRel,
+				}),
 			);
 			if (!ok) return;
 
@@ -769,7 +792,7 @@ export default function App() {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, handleOpenVaultRel, openPath, refreshTree],
+		[vaultPath, handleOpenVaultRel, openPath, refreshTree, t],
 	);
 
 	const wikiNavValue = useMemo(
@@ -786,7 +809,7 @@ export default function App() {
 
 	const activeFileLabel = selectedPath
 		? selectedPath.split(/[\\/]/).pop()
-		: "Untitled";
+		: t("labels.untitled");
 
 	const editorFontSize = settings.editorFontSize;
 
@@ -821,8 +844,8 @@ export default function App() {
 										size="icon-xs"
 										aria-label={
 											sidebarCollapsed
-												? "Show left sidebar"
-												: "Hide left sidebar"
+												? t("titlebar.showLeftSidebar")
+												: t("titlebar.hideLeftSidebar")
 										}
 										aria-pressed={!sidebarCollapsed}
 										onClick={toggleSidebar}
@@ -832,8 +855,8 @@ export default function App() {
 								</TooltipTrigger>
 								<TooltipContent side="bottom">
 									{sidebarCollapsed
-										? "Show sidebar (⌥⌘S)"
-										: "Hide sidebar (⌥⌘S)"}
+										? t("titlebar.showSidebarHint")
+										: t("titlebar.hideSidebarHint")}
 								</TooltipContent>
 							</Tooltip>
 						</div>
@@ -851,7 +874,7 @@ export default function App() {
 												type="button"
 												variant="ghost"
 												size="icon-xs"
-												aria-label="Agent panel"
+												aria-label={t("titlebar.agentPanel")}
 												aria-pressed={rightSidebarTab === "agent"}
 												className={cn(
 													rightSidebarTab === "agent" &&
@@ -862,7 +885,9 @@ export default function App() {
 												<Bot className="size-3.5" />
 											</Button>
 										</TooltipTrigger>
-										<TooltipContent side="bottom">Agent</TooltipContent>
+										<TooltipContent side="bottom">
+											{t("labels.agent")}
+										</TooltipContent>
 									</Tooltip>
 									<Tooltip>
 										<TooltipTrigger asChild>
@@ -870,7 +895,7 @@ export default function App() {
 												type="button"
 												variant="ghost"
 												size="icon-xs"
-												aria-label="Backlinks panel"
+												aria-label={t("titlebar.backlinksPanel")}
 												aria-pressed={rightSidebarTab === "backlinks"}
 												className={cn(
 													rightSidebarTab === "backlinks" &&
@@ -881,7 +906,9 @@ export default function App() {
 												<Link2 className="size-3.5" />
 											</Button>
 										</TooltipTrigger>
-										<TooltipContent side="bottom">Backlinks</TooltipContent>
+										<TooltipContent side="bottom">
+											{t("labels.backlinks")}
+										</TooltipContent>
 									</Tooltip>
 								</>
 							) : null}
@@ -893,8 +920,8 @@ export default function App() {
 										size="icon-xs"
 										aria-label={
 											rightSidebarOpen
-												? "Hide right sidebar"
-												: "Show right sidebar"
+												? t("titlebar.hideRightSidebar")
+												: t("titlebar.showRightSidebar")
 										}
 										aria-pressed={rightSidebarOpen}
 										onClick={toggleRightSidebar}
@@ -904,8 +931,8 @@ export default function App() {
 								</TooltipTrigger>
 								<TooltipContent side="bottom">
 									{rightSidebarOpen
-										? "Hide right sidebar (⌘L)"
-										: "Show right sidebar (⌘L)"}
+										? t("titlebar.hideRightSidebarHint")
+										: t("titlebar.showRightSidebarHint")}
 								</TooltipContent>
 							</Tooltip>
 						</div>
@@ -996,7 +1023,7 @@ export default function App() {
 										style={{ fontSize: editorFontSize }}
 										value={markdown}
 										onChange={(event) => setMarkdown(event.target.value)}
-										placeholder="Type Markdown here..."
+										placeholder={t("editor.markdownPlaceholder")}
 										spellCheck={false}
 									/>
 								) : null}
@@ -1028,7 +1055,7 @@ export default function App() {
 							>
 								<PaneHeader>
 									<span className="min-w-0 flex-1 font-medium text-sm">
-										{showNotesOnRight ? "Notes" : "Preview"}
+										{showNotesOnRight ? t("labels.notes") : t("labels.preview")}
 									</span>
 								</PaneHeader>
 								<div className="min-h-0 flex-1 overflow-hidden">
@@ -1038,7 +1065,7 @@ export default function App() {
 												<Editor
 													variant="none"
 													className="min-h-full px-6 py-4"
-													placeholder="Paper NOTES.md will appear here..."
+													placeholder={t("editor.notesPlaceholder")}
 													readOnly
 												/>
 											</EditorContainer>
@@ -1049,7 +1076,7 @@ export default function App() {
 												<Editor
 													variant="none"
 													className="min-h-full px-6 py-4"
-													placeholder="Rendered Markdown will appear here..."
+													placeholder={t("editor.previewPlaceholder")}
 													readOnly
 												/>
 											</EditorContainer>
@@ -1074,7 +1101,7 @@ export default function App() {
 										key={chatInputFocusKey.current}
 										vaultPath={vaultPath}
 										className="min-h-0 h-full"
-										title="Agent"
+										title={t("labels.agent")}
 										autoFocus
 									/>
 								) : null}

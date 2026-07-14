@@ -8,6 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
 	Checkpoint,
 	CheckpointIcon,
@@ -186,12 +187,12 @@ function nextLineId(prefix: string) {
 	return `${prefix}-${chatLineSeq}`;
 }
 
-/** Empty-state suggestion chips — one per row (3 lines). */
-const SUGGESTIONS = [
-	"Summarize the open paper",
-	"List key claims and evidence",
-	"Find related notes in this vault",
-];
+/** Empty-state suggestion chips — one per row (3 lines). Labels via i18n. */
+const SUGGESTION_KEYS = [
+	"summarizePaper",
+	"listClaims",
+	"findRelated",
+] as const;
 
 type AgentOption = {
 	key: string;
@@ -345,7 +346,7 @@ function mergeTool(
 	const prev = idx >= 0 ? list[idx] : undefined;
 	const next: ToolUiState = {
 		id: patch.id,
-		title: patch.title ?? prev?.title ?? "Tool",
+		title: patch.title ?? prev?.title ?? "",
 		kind: patch.kind ?? prev?.kind ?? "other",
 		status: mapToolStatus(patch.status ?? prev?.status),
 		input: patch.input !== undefined ? patch.input : prev?.input,
@@ -392,6 +393,7 @@ export function AgentPanel({
 	autoFocus = false,
 	title = "Chat",
 }: AgentPanelProps) {
+	const { t, i18n } = useTranslation("agent");
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -704,13 +706,13 @@ export function AgentPanel({
 	const modelGroups = useMemo(() => {
 		const groups = new Map<string, AgentModelChoice[]>();
 		for (const m of models) {
-			const g = m.group?.trim() || "Models";
+			const g = m.group?.trim() || t("models.defaultGroup");
 			const list = groups.get(g) ?? [];
 			list.push(m);
 			groups.set(g, list);
 		}
 		return [...groups.entries()];
-	}, [models]);
+	}, [models, t]);
 
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
@@ -745,7 +747,7 @@ export function AgentPanel({
 				{
 					id: nextLineId("sys"),
 					kind: "system",
-					text: `Switched to ${opt.name}`,
+					text: t("messages.switchedTo", { name: opt.name }),
 				},
 			]);
 		} catch (e) {
@@ -771,7 +773,7 @@ export function AgentPanel({
 				{
 					id: nextLineId("err"),
 					kind: "error",
-					text: "Open the desktop app to run agents.",
+					text: t("messages.desktopOnly"),
 				},
 			]);
 			return;
@@ -803,7 +805,7 @@ export function AgentPanel({
 				{
 					id: nextLineId("sys"),
 					kind: "system",
-					text: "No available agent. Open Settings → Agent to configure one.",
+					text: t("messages.noAgent"),
 				},
 			]);
 			return;
@@ -819,7 +821,9 @@ export function AgentPanel({
 				{
 					id: nextLineId("sys"),
 					kind: "system",
-					text: `${selected?.name ?? "Agent"} is not available. Pick another or open Settings → Agent.`,
+					text: t("messages.notAvailable", {
+						name: selected?.name ?? t("defaultName"),
+					}),
 				},
 			]);
 			return;
@@ -851,8 +855,8 @@ export function AgentPanel({
 				{
 					id: accepted.sessionId,
 					title: text,
-					agentName: selected?.name ?? "Agent",
-					startedAt: new Date().toLocaleString(),
+					agentName: selected?.name ?? t("defaultName"),
+					startedAt: new Date().toLocaleString(i18n.language),
 					lines: pendingLines,
 					status: "running",
 				},
@@ -901,11 +905,11 @@ export function AgentPanel({
 									"focus-visible:ring-1 focus-visible:ring-ring",
 									"disabled:opacity-50",
 								)}
-								aria-label="Switch ACP agent"
+								aria-label={t("switchAgent")}
 							>
 								<span className="truncate leading-none">
 									{labelName}
-									{labelMissing ? " (missing)" : ""}
+									{labelMissing ? t("missing") : ""}
 								</span>
 								<ChevronDown className="size-3.5 shrink-0 opacity-70" />
 							</button>
@@ -948,25 +952,27 @@ export function AgentPanel({
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
-							aria-label="Open chat history"
-							title="History"
+							aria-label={t("history.aria")}
+							title={t("history.label")}
 						>
 							<History className="size-3.5" />
-							<span className="hidden leading-none sm:inline">History</span>
+							<span className="hidden leading-none sm:inline">
+								{t("history.label")}
+							</span>
 						</Button>
 					</PopoverTrigger>
 					<PopoverContent align="end" className="w-80 p-0">
 						<PopoverHeader className="border-b px-3 py-2">
 							<PopoverTitle className="font-medium text-sm leading-none">
-								Session history
+								{t("history.title")}
 							</PopoverTitle>
 							<PopoverDescription className="text-muted-foreground text-sm leading-snug">
-								Recent ACP sessions in this chat.
+								{t("history.description")}
 							</PopoverDescription>
 						</PopoverHeader>
 						{sessionHistory.length === 0 ? (
 							<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
-								No sessions yet.
+								{t("history.empty")}
 							</div>
 						) : (
 							<div className="max-h-72 overflow-y-auto p-1.5">
@@ -1003,24 +1009,27 @@ export function AgentPanel({
 				<ConversationContent>
 					{lines.length === 0 ? (
 						<ConversationEmptyState
-							title="Chat with your vault"
-							description="Messages go to your ACP agent. Click the agent name above to switch backends."
+							title={t("empty.title")}
+							description={t("empty.description")}
 						>
 							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
 								{busy ? (
 									<Shimmer className="text-center text-sm">
-										Waiting for agent…
+										{t("empty.waiting")}
 									</Shimmer>
 								) : (
-									SUGGESTIONS.map((s) => (
-										<Suggestion
-											key={s}
-											suggestion={s}
-											className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
-											onClick={(v) => void send(v)}
-											disabled={busy}
-										/>
-									))
+									SUGGESTION_KEYS.map((key) => {
+										const label = t(`suggestions.${key}`);
+										return (
+											<Suggestion
+												key={key}
+												suggestion={label}
+												className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
+												onClick={(v) => void send(v)}
+												disabled={busy}
+											/>
+										);
+									})
 								)}
 							</div>
 						</ConversationEmptyState>
@@ -1035,8 +1044,8 @@ export function AgentPanel({
 										{/* Align under user bubble (Message is full-width) */}
 										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
 											<MessageAction
-												tooltip="Copy"
-												label="Copy"
+												tooltip={t("copy")}
+												label={t("copy")}
 												onClick={() => void copyText(line.text)}
 											>
 												<CopyIcon className="size-3.5" />
@@ -1059,7 +1068,7 @@ export function AgentPanel({
 										<Message from="assistant">
 											<MessageContent>
 												<p className="mb-1 font-medium text-muted-foreground text-xs">
-													{selected?.name ?? "Agent"}
+													{selected?.name ?? t("defaultName")}
 												</p>
 												{hasReasoning ? (
 													<Reasoning
@@ -1080,9 +1089,14 @@ export function AgentPanel({
 													>
 														<PlanHeader>
 															<div className="min-w-0 flex-1 space-y-1">
-																<PlanTitle>Plan</PlanTitle>
+																<PlanTitle>{t("plan.title")}</PlanTitle>
 																<PlanDescription>
-																	{`${plan.filter((p) => p.status === "completed").length}/${plan.length} steps`}
+																	{t("plan.steps", {
+																		completed: plan.filter(
+																			(p) => p.status === "completed",
+																		).length,
+																		total: plan.length,
+																	})}
 																</PlanDescription>
 															</div>
 															<PlanAction>
@@ -1119,24 +1133,24 @@ export function AgentPanel({
 														</PlanContent>
 													</Plan>
 												) : null}
-												{tools.map((t) => {
-													const state = toolPartState(t.status);
+												{tools.map((tool) => {
+													const state = toolPartState(tool.status);
 													return (
-														<Tool key={t.id} defaultOpen={false}>
+														<Tool key={tool.id} defaultOpen={false}>
 															<ToolHeader
-																title={t.title}
-																type={`tool-${t.kind}`}
+																title={tool.title || t("tool.defaultTitle")}
+																type={`tool-${tool.kind}`}
 																state={state}
 															/>
 															<ToolContent>
-																{t.input !== undefined ? (
-																	<ToolInput input={t.input} />
+																{tool.input !== undefined ? (
+																	<ToolInput input={tool.input} />
 																) : null}
 																<ToolOutput
-																	output={t.output}
+																	output={tool.output}
 																	errorText={
-																		t.status === "failed"
-																			? "Tool failed"
+																		tool.status === "failed"
+																			? t("tool.failed")
 																			: undefined
 																	}
 																/>
@@ -1180,7 +1194,7 @@ export function AgentPanel({
 																								description={
 																									/^https?:\/\//i.test(s)
 																										? undefined
-																										: "Vault path referenced by agent"
+																										: t("citation.vaultPath")
 																								}
 																							/>
 																						</InlineCitationCarouselItem>
@@ -1197,14 +1211,14 @@ export function AgentPanel({
 													!hasReasoning &&
 													tools.length === 0 &&
 													plan.length === 0 ? (
-													<Shimmer className="text-sm">Thinking…</Shimmer>
+													<Shimmer className="text-sm">{t("thinking")}</Shimmer>
 												) : null}
 											</MessageContent>
 											{!line.streaming && line.text ? (
 												<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
 													<MessageAction
-														tooltip="Copy"
-														label="Copy"
+														tooltip={t("copy")}
+														label={t("copy")}
 														onClick={() => void copyText(line.text)}
 													>
 														<CopyIcon className="size-3.5" />
@@ -1260,14 +1274,17 @@ export function AgentPanel({
 			<div className="shrink-0 space-y-2 border-t p-3">
 				{lines.length > 0 && !busy ? (
 					<Suggestions>
-						{SUGGESTIONS.map((s) => (
-							<Suggestion
-								key={s}
-								suggestion={s}
-								onClick={(v) => void send(v)}
-								disabled={busy}
-							/>
-						))}
+						{SUGGESTION_KEYS.map((key) => {
+							const label = t(`suggestions.${key}`);
+							return (
+								<Suggestion
+									key={key}
+									suggestion={label}
+									onClick={(v) => void send(v)}
+									disabled={busy}
+								/>
+							);
+						})}
 					</Suggestions>
 				) : null}
 				<PromptInput
@@ -1293,23 +1310,26 @@ export function AgentPanel({
 										disabled={busy}
 										tooltip={
 											models.length > 0
-												? "Select model (ACP)"
-												: "Models appear after your agent reports them"
+												? t("models.selectTooltip")
+												: t("models.reportedTooltip")
 										}
 									>
 										<span className="truncate text-xs">
-											{selectedModelName ?? (warming ? "Loading…" : "Model")}
+											{selectedModelName ??
+												(warming ? t("models.loading") : t("models.button"))}
 										</span>
 										<ChevronDown className="size-3 shrink-0 opacity-70" />
 									</PromptInputButton>
 								</ModelSelectorTrigger>
-								<ModelSelectorContent title="Select model">
-									<ModelSelectorInput placeholder="Search models…" />
+								<ModelSelectorContent title={t("models.title")}>
+									<ModelSelectorInput
+										placeholder={t("models.searchPlaceholder")}
+									/>
 									<ModelSelectorList>
 										<ModelSelectorEmpty>
 											{models.length === 0
-												? "No models yet. Run once so the ACP agent can advertise models."
-												: "No match."}
+												? t("models.emptyNone")
+												: t("models.emptyNoMatch")}
 										</ModelSelectorEmpty>
 										{modelGroups.map(([group, items]) => (
 											<ModelSelectorGroup key={group} heading={group}>

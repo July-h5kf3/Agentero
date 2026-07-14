@@ -1,5 +1,6 @@
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -15,6 +16,7 @@ type PdfViewerProps = {
 };
 
 export function PdfViewer({ source, className }: PdfViewerProps) {
+	const { t } = useTranslation("viewer");
 	const hostRef = useRef<HTMLDivElement>(null);
 	const [numPages, setNumPages] = useState(0);
 	const [error, setError] = useState<string | null>(null);
@@ -42,11 +44,12 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 					className,
 				)}
 			>
-				No remote PDF URL in metadata.
+				{t("pdf.empty")}
 				<br />
 				<span className="mt-1 text-xs">
-					Set <code className="text-foreground">pdf_url</code> (e.g. arXiv PDF)
-					— Motif does not load local PDF files for preview.
+					{t("pdf.emptyHintPrefix")}{" "}
+					<code className="text-foreground">pdf_url</code>{" "}
+					{t("pdf.emptyHintSuffix")}
 				</span>
 			</div>
 		);
@@ -67,7 +70,7 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 						file={remote}
 						loading={
 							<p className="p-6 text-center text-muted-foreground text-sm">
-								Loading PDF…
+								{t("pdf.loading")}
 							</p>
 						}
 						onLoadSuccess={(doc) => {
@@ -75,7 +78,7 @@ export function PdfViewer({ source, className }: PdfViewerProps) {
 							setError(null);
 						}}
 						onLoadError={(err) => {
-							setError(err.message || "Failed to load PDF");
+							setError(err.message || t("pdf.loadError"));
 						}}
 						className="flex flex-col items-center gap-3 px-3 py-3"
 					>

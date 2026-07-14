@@ -1,5 +1,6 @@
 import { Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ export function BacklinksPanel({
 	className,
 	variant = "sidebar",
 }: BacklinksPanelProps) {
+	const { t } = useTranslation("sidebar");
 	const [backlinks, setBacklinks] = useState<Backlink[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -65,14 +67,16 @@ export function BacklinksPanel({
 		>
 			{!selectedPath ? (
 				<p className="px-1 text-muted-foreground text-xs">
-					Open a note to see backlinks
+					{t("backlinks.openNote")}
 				</p>
 			) : null}
 			{selectedPath && error ? (
 				<p className="px-1 text-destructive text-xs">{error}</p>
 			) : null}
 			{selectedPath && !error && !loading && backlinks.length === 0 ? (
-				<p className="px-1 text-muted-foreground text-xs">No backlinks</p>
+				<p className="px-1 text-muted-foreground text-xs">
+					{t("backlinks.none")}
+				</p>
 			) : null}
 			{selectedPath ? (
 				<ul className="flex flex-col gap-0.5">
@@ -118,7 +122,7 @@ export function BacklinksPanel({
 				<div className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-muted-foreground">
 					<Link2 className="size-3.5 shrink-0" aria-hidden />
 					<span className="text-xs font-medium">
-						Backlinks
+						{t("backlinks.title")}
 						{countLabel}
 					</span>
 				</div>
@@ -140,7 +144,7 @@ export function BacklinksPanel({
 					aria-hidden
 				/>
 				<span className="min-w-0 flex-1 truncate font-medium text-sm">
-					Backlinks
+					{t("backlinks.title")}
 					<span className="font-normal text-muted-foreground">
 						{countLabel}
 					</span>

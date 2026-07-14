@@ -1,0 +1,58 @@
+{
+	"acpStatus": {
+		"ready": "ACP ready",
+		"failed": "ACP failed",
+		"notProbed": "Not probed",
+		"notInstalled": "Not installed"
+	},
+	"defaultName": "Agent",
+	"missing": " (missing)",
+	"switchAgent": "Switch ACP agent",
+	"suggestions": {
+		"summarizePaper": "Summarize the open paper",
+		"listClaims": "List key claims and evidence",
+		"findRelated": "Find related notes in this vault"
+	},
+	"history": {
+		"aria": "Open chat history",
+		"label": "History",
+		"title": "Session history",
+		"description": "Recent ACP sessions in this chat.",
+		"empty": "No sessions yet."
+	},
+	"empty": {
+		"title": "Chat with your vault",
+		"description": "Messages go to your ACP agent. Click the agent name above to switch backends.",
+		"waiting": "Waiting for agent…"
+	},
+	"thinking": "Thinking…",
+	"copy": "Copy",
+	"plan": {
+		"title": "Plan",
+		"steps": "{{completed}}/{{total}} steps"
+	},
+	"tool": {
+		"defaultTitle": "Tool",
+		"failed": "Tool failed"
+	},
+	"citation": {
+		"vaultPath": "Vault path referenced by agent"
+	},
+	"models": {
+		"defaultGroup": "Models",
+		"selectTooltip": "Select model (ACP)",
+		"reportedTooltip": "Models appear after your agent reports them",
+		"loading": "Loading…",
+		"button": "Model",
+		"title": "Select model",
+		"searchPlaceholder": "Search models…",
+		"emptyNone": "No models yet. Run once so the ACP agent can advertise models.",
+		"emptyNoMatch": "No match."
+	},
+	"messages": {
+		"switchedTo": "Switched to {{name}}",
+		"desktopOnly": "Open the desktop app to run agents.",
+		"noAgent": "No available agent. Open Settings → Agent to configure one.",
+		"notAvailable": "{{name}} is not available. Pick another or open Settings → Agent."
+	}
+}

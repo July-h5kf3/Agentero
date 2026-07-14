@@ -9,6 +9,7 @@ import {
 	Users,
 } from "lucide-react";
 import { type ComponentType, type ReactNode, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
 	Collapsible,
@@ -75,6 +76,7 @@ export function PaperInfoPanel({
 	className,
 	autoOpen = true,
 }: PaperInfoPanelProps) {
+	const { t } = useTranslation("sidebar");
 	const [open, setOpen] = useState(Boolean(meta) && autoOpen);
 
 	// Open when a paper is selected; collapse when none.
@@ -105,7 +107,7 @@ export function PaperInfoPanel({
 						aria-hidden
 					/>
 					<Info className="size-3.5 shrink-0" aria-hidden />
-					<span className="truncate">Info</span>
+					<span className="truncate">{t("paperInfo.info")}</span>
 					{meta ? (
 						<span className="ml-auto max-w-[40%] truncate font-normal text-[10px] opacity-70">
 							{meta.id}
@@ -115,27 +117,27 @@ export function PaperInfoPanel({
 				<CollapsibleContent>
 					{!meta ? (
 						<p className="px-3 pb-3 text-muted-foreground text-xs leading-snug">
-							Select a paper to see metadata.
+							{t("paperInfo.selectPrompt")}
 						</p>
 					) : (
 						<div className="motif-scroll max-h-96 overflow-y-auto border-t pb-2">
-							<MetaRow icon={BookOpen} label="Title">
+							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
 								<span className="font-medium">{meta.title}</span>
 							</MetaRow>
 							{meta.authors?.length ? (
-								<MetaRow icon={Users} label="Authors">
+								<MetaRow icon={Users} label={t("paperInfo.authors")}>
 									<span className="line-clamp-3">
 										{meta.authors.join(", ")}
 									</span>
 								</MetaRow>
 							) : null}
 							{meta.year ? (
-								<MetaRow icon={Calendar} label="Year">
+								<MetaRow icon={Calendar} label={t("paperInfo.year")}>
 									{meta.year}
 								</MetaRow>
 							) : null}
 							{meta.tags?.length ? (
-								<MetaRow icon={Tag} label="Tags">
+								<MetaRow icon={Tag} label={t("paperInfo.tags")}>
 									<div className="flex flex-wrap gap-1">
 										{meta.tags.map((t) => (
 											<span
@@ -149,7 +151,7 @@ export function PaperInfoPanel({
 								</MetaRow>
 							) : null}
 							{meta.abstract ? (
-								<MetaRow icon={FileText} label="Abstract">
+								<MetaRow icon={FileText} label={t("paperInfo.abstract")}>
 									<p className="line-clamp-4 text-muted-foreground">
 										{meta.abstract}
 									</p>
@@ -165,7 +167,7 @@ export function PaperInfoPanel({
 											href={
 												meta.pdf_url ?? `https://arxiv.org/pdf/${meta.arxiv_id}`
 											}
-											label="PDF"
+											label={t("paperInfo.pdf")}
 										/>
 									) : null}
 									{meta.html_url || meta.arxiv_id ? (
@@ -174,7 +176,7 @@ export function PaperInfoPanel({
 												meta.html_url ??
 												`https://arxiv.org/html/${meta.arxiv_id}`
 											}
-											label="HTML"
+											label={t("paperInfo.html")}
 										/>
 									) : null}
 									{meta.source_url || meta.arxiv_id ? (
@@ -183,7 +185,7 @@ export function PaperInfoPanel({
 												meta.source_url ??
 												`https://arxiv.org/abs/${meta.arxiv_id}`
 											}
-											label="Abs"
+											label={t("paperInfo.abs")}
 										/>
 									) : null}
 								</div>

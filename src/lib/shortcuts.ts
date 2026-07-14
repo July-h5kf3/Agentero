@@ -14,12 +14,12 @@ export type ShortcutId =
 	| "focusEditor"
 	| "focusPreview";
 
+export type ShortcutGroup = "App" | "Navigation" | "Vault";
+
 export type ShortcutDef = {
 	id: ShortcutId;
-	/** Human-readable action (Settings UI) */
-	label: string;
-	/** Optional grouping label */
-	group: "App" | "Navigation" | "Vault";
+	/** Grouping label (translated for display via the `shortcuts` namespace) */
+	group: ShortcutGroup;
 	/** Keys without modifiers, lower-case letter or special */
 	key: string;
 	meta?: boolean;
@@ -35,21 +35,18 @@ export type ShortcutDef = {
 export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "settings",
-		label: "Settings…",
 		group: "App",
 		key: ",",
 		meta: true,
 	},
 	{
 		id: "closeSheet",
-		label: "Close settings",
 		group: "App",
 		key: "Escape",
 		whenSettingsOpen: true,
 	},
 	{
 		id: "openVault",
-		label: "Open vault…",
 		group: "Vault",
 		key: "o",
 		meta: true,
@@ -57,7 +54,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "refreshTree",
-		label: "Refresh file tree",
 		group: "Vault",
 		key: "r",
 		meta: true,
@@ -65,7 +61,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "toggleSidebar",
-		label: "Show / hide sidebar",
 		group: "Navigation",
 		// Apple Mail / Preview family uses ⌥⌘S; many Mac productivity apps use ⌘B.
 		// Prefer ⌥⌘S for platform feel; ⌘B kept as secondary alias in matcher.
@@ -76,7 +71,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "toggleChat",
-		label: "Show / hide chat",
 		group: "Navigation",
 		key: "l",
 		meta: true,
@@ -84,7 +78,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "focusSidebar",
-		label: "Focus sidebar",
 		group: "Navigation",
 		key: "1",
 		meta: true,
@@ -92,7 +85,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "focusEditor",
-		label: "Focus editor",
 		group: "Navigation",
 		key: "2",
 		meta: true,
@@ -100,7 +92,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 	},
 	{
 		id: "focusPreview",
-		label: "Focus preview",
 		group: "Navigation",
 		key: "3",
 		meta: true,
@@ -113,7 +104,6 @@ const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
 	toggleSidebar: [
 		{
 			id: "toggleSidebar",
-			label: "Show / hide sidebar",
 			group: "Navigation",
 			key: "b",
 			meta: true,
@@ -190,7 +180,10 @@ export function resolveShortcutId(
 	return null;
 }
 
-export function shortcutsByGroup(): { group: string; items: ShortcutDef[] }[] {
+export function shortcutsByGroup(): {
+	group: ShortcutGroup;
+	items: ShortcutDef[];
+}[] {
 	const order = ["App", "Vault", "Navigation"] as const;
 	return order.map((group) => ({
 		group,

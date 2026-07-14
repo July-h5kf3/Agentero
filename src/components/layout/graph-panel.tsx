@@ -1,6 +1,7 @@
 import { Network } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,7 @@ export function GraphPanel({
 	onOpenPath,
 	className,
 }: GraphPanelProps) {
+	const { t } = useTranslation("sidebar");
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const [size, setSize] = useState({ w: 280, h: 240 });
 	const [mode, setMode] = useState<GraphMode>("neighborhood");
@@ -252,7 +254,7 @@ export function GraphPanel({
 							)}
 							onClick={() => setMode("neighborhood")}
 						>
-							Near
+							{t("graph.near")}
 						</Button>
 						<Button
 							type="button"
@@ -264,7 +266,7 @@ export function GraphPanel({
 							)}
 							onClick={() => setMode("full")}
 						>
-							All
+							{t("graph.all")}
 						</Button>
 					</div>
 				}
@@ -274,14 +276,14 @@ export function GraphPanel({
 					aria-hidden
 				/>
 				<span className="min-w-0 flex-1 truncate font-medium text-sm leading-none">
-					Graph
+					{t("graph.title")}
 				</span>
 			</PaneHeader>
 
 			<div ref={wrapRef} className="relative min-h-0 flex-1 bg-background">
 				{loading ? (
 					<p className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs">
-						Loading graph…
+						{t("graph.loading")}
 					</p>
 				) : null}
 				{error ? (
@@ -292,8 +294,8 @@ export function GraphPanel({
 				{!loading && !error && graphData.nodes.length === 0 ? (
 					<p className="absolute inset-0 flex items-center justify-center px-3 text-center text-muted-foreground text-xs">
 						{mode === "neighborhood" && !selectedPath
-							? "Select a paper or note for neighborhood graph."
-							: "No wikilink edges yet."}
+							? t("graph.selectPrompt")
+							: t("graph.noEdges")}
 					</p>
 				) : null}
 				{!loading && !error && graphData.nodes.length > 0 ? (

@@ -19,6 +19,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,10 +45,15 @@ import {
 	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
-import type { AppSettings, ThemePreference } from "@/lib/settings";
+import type {
+	AppSettings,
+	LocalePreference,
+	ThemePreference,
+} from "@/lib/settings";
 import {
 	formatShortcut,
 	type ShortcutDef,
+	type ShortcutGroup,
 	shortcutsByGroup,
 } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
@@ -63,16 +69,21 @@ export type SettingsSection =
 
 const NAV: {
 	id: SettingsSection;
-	label: string;
 	icon: typeof Bot;
 }[] = [
-	{ id: "general", label: "General", icon: SlidersHorizontal },
-	{ id: "appearance", label: "Appearance", icon: Paintbrush },
-	{ id: "agent", label: "Agent", icon: Bot },
-	{ id: "keyboard", label: "Keyboard", icon: Keyboard },
-	{ id: "privacy", label: "Privacy", icon: Shield },
-	{ id: "about", label: "About", icon: Info },
+	{ id: "general", icon: SlidersHorizontal },
+	{ id: "appearance", icon: Paintbrush },
+	{ id: "agent", icon: Bot },
+	{ id: "keyboard", icon: Keyboard },
+	{ id: "privacy", icon: Shield },
+	{ id: "about", icon: Info },
 ];
+
+const GROUP_KEY: Record<ShortcutGroup, "app" | "navigation" | "vault"> = {
+	App: "app",
+	Navigation: "navigation",
+	Vault: "vault",
+};
 
 type SettingsWindowProps = {
 	open: boolean;
@@ -91,6 +102,7 @@ export function SettingsWindow({
 	settings,
 	onChange,
 }: SettingsWindowProps) {
+	const { t } = useTranslation(["settings", "common"]);
 	const titleId = useId();
 
 	useEffect(() => {
@@ -112,7 +124,7 @@ export function SettingsWindow({
 			<button
 				type="button"
 				className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
-				aria-label="Dismiss settings"
+				aria-label={t("dismiss")}
 				onClick={onClose}
 			/>
 			<div
@@ -128,13 +140,13 @@ export function SettingsWindow({
 							id={titleId}
 							className="font-semibold text-[13px] tracking-tight"
 						>
-							Settings
+							{t("title")}
 						</span>
 						<Button
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label="Close"
+							aria-label={t("common:close")}
 							onClick={onClose}
 						>
 							<X className="size-3.5" />
@@ -158,7 +170,7 @@ export function SettingsWindow({
 										onClick={() => onSectionChange(item.id)}
 									>
 										<Icon className="size-3.5 shrink-0 opacity-90" />
-										<span className="truncate">{item.label}</span>
+										<span className="truncate">{t(`nav.${item.id}`)}</span>
 									</button>
 								</li>
 							);
@@ -263,16 +275,17 @@ function GeneralPane({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
+	const { t } = useTranslation("settings");
 	return (
 		<>
 			<PageTitle
-				title="General"
-				description="App behavior and vault defaults."
+				title={t("general.title")}
+				description={t("general.description")}
 			/>
-			<SettingsGroup footer="Vault path is remembered locally on this device.">
+			<SettingsGroup footer={t("general.footer")}>
 				<SettingsRow
-					label="Restore last vault"
-					description="Reopen the previous folder on launch."
+					label={t("general.restoreVault.label")}
+					description={t("general.restoreVault.description")}
 					htmlFor="restore-vault"
 				>
 					<Switch
@@ -282,8 +295,8 @@ function GeneralPane({
 					/>
 				</SettingsRow>
 				<SettingsRow
-					label="Confirm before quit"
-					description="Ask when there may be unsaved changes."
+					label={t("general.confirmClose.label")}
+					description={t("general.confirmClose.description")}
 					htmlFor="confirm-close"
 				>
 					<Switch
@@ -304,6 +317,7 @@ function AppearancePane({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
+	const { t } = useTranslation("settings");
 	const { setTheme } = useTheme();
 	const fontId = useId();
 
@@ -314,9 +328,12 @@ function AppearancePane({
 
 	return (
 		<>
-			<PageTitle title="Appearance" description="Theme and editor look." />
+			<PageTitle
+				title={t("appearance.title")}
+				description={t("appearance.description")}
+			/>
 			<SettingsGroup>
-				<SettingsRow label="Appearance">
+				<SettingsRow label={t("appearance.themeLabel")}>
 					<Select
 						value={settings.theme}
 						onValueChange={(v) => setThemePref(v as ThemePreference)}
@@ -325,15 +342,40 @@ function AppearancePane({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="system">System</SelectItem>
-							<SelectItem value="light">Light</SelectItem>
-							<SelectItem value="dark">Dark</SelectItem>
+							<SelectItem value="system">
+								{t("appearance.theme.system")}
+							</SelectItem>
+							<SelectItem value="light">
+								{t("appearance.theme.light")}
+							</SelectItem>
+							<SelectItem value="dark">{t("appearance.theme.dark")}</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow label={t("appearance.languageLabel")}>
+					<Select
+						value={settings.locale}
+						onValueChange={(v) => patch({ locale: v as LocalePreference })}
+					>
+						<SelectTrigger size="sm" className="min-w-[120px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="system">
+								{t("appearance.language.system")}
+							</SelectItem>
+							<SelectItem value="en">{t("appearance.language.en")}</SelectItem>
+							<SelectItem value="zh-CN">
+								{t("appearance.language.zhCN")}
+							</SelectItem>
 						</SelectContent>
 					</Select>
 				</SettingsRow>
 				<SettingsRow
-					label="Editor font size"
-					description={`${settings.editorFontSize} px`}
+					label={t("appearance.fontSize.label")}
+					description={t("appearance.fontSize.value", {
+						size: settings.editorFontSize,
+					})}
 					htmlFor={fontId}
 				>
 					<input
@@ -348,8 +390,8 @@ function AppearancePane({
 					/>
 				</SettingsRow>
 				<SettingsRow
-					label="Line numbers"
-					description="Show numbers in the source editor."
+					label={t("appearance.lineNumbers.label")}
+					description={t("appearance.lineNumbers.description")}
 					htmlFor="line-numbers"
 				>
 					<Switch
@@ -409,12 +451,13 @@ function AgentPane({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
+	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [probing, setProbing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
-	const [formName, setFormName] = useState("Custom agent");
+	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
 	const [proxyEnabled, setProxyEnabled] = useState(false);
@@ -423,7 +466,7 @@ function AgentPane({
 
 	const refresh = useCallback(async (): Promise<CatalogScanResponse | null> => {
 		if (!isTauri()) {
-			setError("Agent registry requires the desktop app.");
+			setError(t("agent.desktopOnly"));
 			return null;
 		}
 		setLoading(true);
@@ -440,7 +483,7 @@ function AgentPane({
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [t]);
 
 	const probeInstalled = useCallback(
 		async (scan: CatalogScanResponse) => {
@@ -580,13 +623,13 @@ function AgentPane({
 	return (
 		<>
 			<PageTitle
-				title="Agent"
-				description="Bring your own ACP agent (BYOA). Motif is the client only."
+				title={t("agent.title")}
+				description={t("agent.description")}
 			/>
-			<SettingsGroup footer="Model API keys stay with each agent CLI — Motif never stores them.">
+			<SettingsGroup footer={t("agent.footer")}>
 				<SettingsRow
-					label="Enable Agent"
-					description="Allow ACP workflows in this app."
+					label={t("agent.enable.label")}
+					description={t("agent.enable.description")}
 					htmlFor="agent-enabled"
 				>
 					<Switch
@@ -596,8 +639,8 @@ function AgentPane({
 					/>
 				</SettingsRow>
 				<SettingsRow
-					label="Agent proxy"
-					description="Pass HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY to built-in agents."
+					label={t("agent.proxy.label")}
+					description={t("agent.proxy.description")}
 					htmlFor="agent-proxy-enabled"
 				>
 					<div className="flex items-center gap-2">
@@ -628,19 +671,19 @@ function AgentPane({
 
 			{!isTauri() ? (
 				<p className="mb-3 text-muted-foreground text-xs">
-					Run `pnpm tauri dev` to scan agents on this machine.
+					{t("agent.desktopHint")}
 				</p>
 			) : null}
 
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-					Common agents
+					{t("agent.commonAgents")}
 				</p>
 				<div className="flex items-center gap-1.5">
 					{busy ? (
 						<span className="flex items-center gap-1 text-[11px] text-muted-foreground">
 							<Loader2 className="size-3 animate-spin" />
-							{probing ? "Probing…" : "Scanning…"}
+							{probing ? t("agent.probing") : t("agent.scanning")}
 						</span>
 					) : null}
 					<Button
@@ -651,7 +694,7 @@ function AgentPane({
 						disabled={busy || !isTauri()}
 						onClick={() => void onRescanAndProbe()}
 					>
-						Probe
+						{t("agent.probe")}
 					</Button>
 				</div>
 			</div>
@@ -660,7 +703,7 @@ function AgentPane({
 				{entries.length === 0 && busy ? (
 					<div className="flex items-center gap-2 px-3.5 py-4 text-muted-foreground text-xs">
 						<Loader2 className="size-3.5 animate-spin" />
-						{probing ? "Probing…" : "Scanning…"}
+						{probing ? t("agent.probing") : t("agent.scanning")}
 					</div>
 				) : null}
 				{entries.map((entry) => {
@@ -676,15 +719,21 @@ function AgentPane({
 							<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
 								<span className="font-medium text-[13px]">{entry.name}</span>
 								{entry.isDefault ? (
-									<StatusBadge tone="primary">default</StatusBadge>
+									<StatusBadge tone="primary">
+										{t("agent.badges.default")}
+									</StatusBadge>
 								) : null}
 								<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
 									{acpStatusLabel(entry.acpStatus)}
 								</StatusBadge>
 								{entry.binaryAvailable ? (
-									<StatusBadge tone="ok">installed</StatusBadge>
+									<StatusBadge tone="ok">
+										{t("agent.badges.installed")}
+									</StatusBadge>
 								) : (
-									<StatusBadge tone="muted">not on PATH</StatusBadge>
+									<StatusBadge tone="muted">
+										{t("agent.badges.notOnPath")}
+									</StatusBadge>
 								)}
 							</div>
 							{!entry.isDefault && canUse ? (
@@ -695,7 +744,7 @@ function AgentPane({
 									className="h-7 shrink-0 px-2 text-xs"
 									onClick={() => void onUseDefault(entry)}
 								>
-									Use default
+									{t("agent.useDefault")}
 								</Button>
 							) : null}
 						</div>
@@ -705,13 +754,13 @@ function AgentPane({
 
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-					Custom
+					{t("agent.custom")}
 				</p>
 				<Button
 					type="button"
 					variant="ghost"
 					size="icon-xs"
-					aria-label="Add custom agent"
+					aria-label={t("agent.addCustom")}
 					disabled={!isTauri()}
 					onClick={() => setAdding((v) => !v)}
 				>
@@ -731,23 +780,33 @@ function AgentPane({
 								<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
 									<span className="font-medium text-[13px]">{agent.name}</span>
 									{isDefault ? (
-										<StatusBadge tone="primary">default</StatusBadge>
+										<StatusBadge tone="primary">
+											{t("agent.badges.default")}
+										</StatusBadge>
 									) : null}
 									{agent.lastProbeOk === true ? (
-										<StatusBadge tone="ok">ACP ready</StatusBadge>
+										<StatusBadge tone="ok">
+											{t("agent:acpStatus.ready")}
+										</StatusBadge>
 									) : agent.lastProbeOk === false ? (
-										<StatusBadge tone="err">ACP failed</StatusBadge>
+										<StatusBadge tone="err">
+											{t("agent:acpStatus.failed")}
+										</StatusBadge>
 									) : agent.available ? (
-										<StatusBadge tone="warn">Not probed</StatusBadge>
+										<StatusBadge tone="warn">
+											{t("agent:acpStatus.notProbed")}
+										</StatusBadge>
 									) : (
-										<StatusBadge tone="muted">Not installed</StatusBadge>
+										<StatusBadge tone="muted">
+											{t("agent:acpStatus.notInstalled")}
+										</StatusBadge>
 									)}
 								</div>
 								<Button
 									type="button"
 									variant="ghost"
 									size="icon-xs"
-									aria-label="Remove"
+									aria-label={t("common:remove")}
 									onClick={() => void onRemove(agent.id)}
 								>
 									<Trash2 className="size-3.5" />
@@ -759,10 +818,12 @@ function AgentPane({
 			) : null}
 
 			{adding ? (
-				<SettingsGroup footer="Any ACP-compatible stdio command. Motif does not ship agents.">
+				<SettingsGroup footer={t("agent.form.footer")}>
 					<div className="space-y-2.5 px-3.5 py-3">
 						<div className="space-y-1">
-							<Label className="font-normal text-[13px]">Name</Label>
+							<Label className="font-normal text-[13px]">
+								{t("agent.form.name")}
+							</Label>
 							<Input
 								value={formName}
 								onChange={(e) => setFormName(e.target.value)}
@@ -770,7 +831,9 @@ function AgentPane({
 							/>
 						</div>
 						<div className="space-y-1">
-							<Label className="font-normal text-[13px]">Command</Label>
+							<Label className="font-normal text-[13px]">
+								{t("agent.form.command")}
+							</Label>
 							<Input
 								value={formCommand}
 								onChange={(e) => setFormCommand(e.target.value)}
@@ -780,7 +843,9 @@ function AgentPane({
 							/>
 						</div>
 						<div className="space-y-1">
-							<Label className="font-normal text-[13px]">Args</Label>
+							<Label className="font-normal text-[13px]">
+								{t("agent.form.args")}
+							</Label>
 							<Input
 								value={formArgs}
 								onChange={(e) => setFormArgs(e.target.value)}
@@ -796,7 +861,7 @@ function AgentPane({
 								size="sm"
 								onClick={() => setAdding(false)}
 							>
-								Cancel
+								{t("common:cancel")}
 							</Button>
 							<Button
 								type="button"
@@ -804,7 +869,7 @@ function AgentPane({
 								disabled={!formCommand.trim() || loading}
 								onClick={() => void onAddCustom()}
 							>
-								Save
+								{t("common:save")}
 							</Button>
 						</div>
 					</div>
@@ -819,18 +884,19 @@ function AgentPane({
 }
 
 function KeyboardPane() {
+	const { t } = useTranslation(["settings", "shortcuts"]);
 	const groups = shortcutsByGroup();
 
 	return (
 		<>
 			<PageTitle
-				title="Keyboard"
-				description="Shortcuts follow common macOS conventions."
+				title={t("keyboard.title")}
+				description={t("keyboard.description")}
 			/>
 			{groups.map(({ group, items }) => (
 				<div key={group} className="mb-5">
 					<p className="mb-1.5 px-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-						{group}
+						{t(`shortcuts:groups.${GROUP_KEY[group]}`)}
 					</p>
 					<SettingsGroup>
 						{items.map((item) => (
@@ -840,16 +906,17 @@ function KeyboardPane() {
 				</div>
 			))}
 			<p className="px-1 text-muted-foreground text-xs">
-				Sidebar can also be toggled with ⌘B. On Windows / Linux, ⌘ is Ctrl.
+				{t("keyboard.footer")}
 			</p>
 		</>
 	);
 }
 
 function ShortcutRow({ def }: { def: ShortcutDef }) {
+	const { t } = useTranslation("shortcuts");
 	return (
 		<div className="flex items-center justify-between gap-4 border-b px-3.5 py-2.5 last:border-b-0">
-			<span className="text-[13px]">{def.label}</span>
+			<span className="text-[13px]">{t(`labels.${def.id}`)}</span>
 			<kbd className="rounded-md border bg-muted/60 px-1.5 py-0.5 font-medium font-sans text-[12px] text-foreground tracking-wide">
 				{formatShortcut(def)}
 			</kbd>
@@ -864,16 +931,17 @@ function PrivacyPane({
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
 }) {
+	const { t } = useTranslation("settings");
 	return (
 		<>
 			<PageTitle
-				title="Privacy"
-				description="Local-first by default. Nothing leaves this Mac unless you opt in."
+				title={t("privacy.title")}
+				description={t("privacy.description")}
 			/>
-			<SettingsGroup footer="Analytics and crash reports are off until you enable them.">
+			<SettingsGroup footer={t("privacy.footer")}>
 				<SettingsRow
-					label="Analytics"
-					description="Share anonymous usage metrics."
+					label={t("privacy.analytics.label")}
+					description={t("privacy.analytics.description")}
 					htmlFor="analytics"
 				>
 					<Switch
@@ -883,8 +951,8 @@ function PrivacyPane({
 					/>
 				</SettingsRow>
 				<SettingsRow
-					label="Crash reports"
-					description="Send diagnostic data when the app quits unexpectedly."
+					label={t("privacy.crash.label")}
+					description={t("privacy.crash.description")}
 					htmlFor="crash"
 				>
 					<Switch
@@ -899,15 +967,18 @@ function PrivacyPane({
 }
 
 function AboutPane() {
+	const { t } = useTranslation("settings");
 	return (
 		<>
-			<PageTitle title="About" />
+			<PageTitle title={t("about.title")} />
 			<SettingsGroup>
 				<div className="space-y-1 px-3.5 py-4 text-center">
 					<p className="font-semibold text-base tracking-tight">Motif</p>
-					<p className="text-muted-foreground text-sm">Version 0.1.0</p>
+					<p className="text-muted-foreground text-sm">
+						{t("about.version", { version: "0.1.0" })}
+					</p>
 					<p className="pt-2 text-muted-foreground text-xs leading-relaxed">
-						Local-first research vault for people and agents.
+						{t("about.tagline")}
 					</p>
 				</div>
 			</SettingsGroup>

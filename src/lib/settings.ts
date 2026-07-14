@@ -1,11 +1,14 @@
 export type ThemePreference = "system" | "light" | "dark";
 
+export type LocalePreference = "system" | "en" | "zh-CN";
+
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
 	confirmBeforeClose: boolean;
 	// Appearance
 	theme: ThemePreference;
+	locale: LocalePreference;
 	editorFontSize: number;
 	showLineNumbers: boolean;
 	// Agent (local UI prefs; registry lives in Host)
@@ -19,6 +22,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
 	confirmBeforeClose: false,
 	theme: "system",
+	locale: "system",
 	editorFontSize: 14,
 	showLineNumbers: false,
 	agentEnabled: true,
