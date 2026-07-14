@@ -12,6 +12,7 @@ import { useTheme } from "next-themes";
 import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
+import { AgentPanel } from "@/components/agent/agent-panel";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { FileTree, VaultSidebarHeader } from "@/components/file-tree/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
@@ -131,10 +132,13 @@ export default function App() {
 	const [htmlSrcUrl, setHtmlSrcUrl] = useState<string | null>(null);
 	/** NOTES.md for the current paper — shown on the right when viewing PDF/HTML */
 	const [paperNotes, setPaperNotes] = useState("");
+	/** Fourth column: ACP chat (⌘L). When open the layout has 4 panes. */
+	const [chatOpen, setChatOpen] = useState(false);
 	const sidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLTextAreaElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
+	const chatInputFocusKey = useRef(0);
 
 	const debouncedMarkdown = useDebounce(markdown, 300);
 	const debouncedPaperNotes = useDebounce(paperNotes, 200);
@@ -205,6 +209,14 @@ export default function App() {
 		if (panel.isCollapsed()) panel.expand();
 		else panel.collapse();
 	}, [sidebarPanelRef]);
+
+	const toggleChat = useCallback(() => {
+		setChatOpen((open) => {
+			const next = !open;
+			if (next) chatInputFocusKey.current += 1;
+			return next;
+		});
+	}, []);
 
 	const expandSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
@@ -286,6 +298,9 @@ export default function App() {
 				case "toggleSidebar":
 					toggleSidebar();
 					break;
+				case "toggleChat":
+					toggleChat();
+					break;
 				case "focusSidebar":
 					expandSidebar();
 					break;
@@ -307,6 +322,7 @@ export default function App() {
 		handleOpenVault,
 		handleRefresh,
 		openSettings,
+		toggleChat,
 		toggleSidebar,
 	]);
 
@@ -341,13 +357,18 @@ export default function App() {
 					toggleSidebar();
 				}),
 			);
+			unsubs.push(
+				await listen("toggle_chat", () => {
+					toggleChat();
+				}),
+			);
 		})();
 
 		return () => {
 			cancelled = true;
 			for (const unsub of unsubs) unsub();
 		};
-	}, [handleOpenVault, handleRefresh, openSettings, toggleSidebar]);
+	}, [handleOpenVault, handleRefresh, openSettings, toggleChat, toggleSidebar]);
 
 	const editor = usePlateEditor({
 		plugins: platePlugins,
@@ -550,7 +571,7 @@ export default function App() {
 
 				<ResizablePanel
 					id="preview"
-					defaultSize="40"
+					defaultSize={chatOpen ? "30" : "40"}
 					minSize={200}
 					className="min-h-0 overflow-hidden"
 				>
@@ -560,7 +581,7 @@ export default function App() {
 						style={{ fontSize: editorFontSize }}
 					>
 						<PaneHeader>
-							<span className="font-medium text-sm">
+							<span className="min-w-0 flex-1 font-medium text-sm">
 								{showNotesOnRight ? "Notes" : "Preview"}
 							</span>
 						</PaneHeader>
@@ -590,6 +611,27 @@ export default function App() {
 						</div>
 					</div>
 				</ResizablePanel>
+
+				{/* Fourth column: ACP chat — only when ⌘L opens chat */}
+				{chatOpen ? <ResizableHandle /> : null}
+				{chatOpen ? (
+					<ResizablePanel
+						id="chat"
+						defaultSize="28"
+						minSize={260}
+						maxSize={520}
+						className="min-h-0 overflow-hidden"
+					>
+						<AgentPanel
+							key={chatInputFocusKey.current}
+							vaultPath={vaultPath}
+							className="min-h-0 h-full"
+							title="Chat"
+							autoFocus
+							onClose={() => setChatOpen(false)}
+						/>
+					</ResizablePanel>
+				) : null}
 			</ResizableGroup>
 
 			<SettingsWindow

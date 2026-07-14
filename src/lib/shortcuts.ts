@@ -8,6 +8,7 @@ export type ShortcutId =
 	| "openVault"
 	| "refreshTree"
 	| "toggleSidebar"
+	| "toggleChat"
 	| "closeSheet"
 	| "focusSidebar"
 	| "focusEditor"
@@ -71,6 +72,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		key: "s",
 		meta: true,
 		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "toggleChat",
+		label: "Show / hide chat",
+		group: "Navigation",
+		key: "l",
+		meta: true,
 		whenSettingsClosed: true,
 	},
 	{
