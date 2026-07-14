@@ -917,7 +917,8 @@ export function AgentPanel({
 										<MessageContent>
 											<MessageResponse>{line.text}</MessageResponse>
 										</MessageContent>
-										<MessageActions>
+										{/* Align under user bubble (Message is full-width) */}
+										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
 											<MessageAction
 												tooltip="Copy"
 												label="Copy"
@@ -1105,7 +1106,7 @@ export function AgentPanel({
 												) : null}
 											</MessageContent>
 											{!line.streaming && line.text ? (
-												<MessageActions>
+												<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
 													<MessageAction
 														tooltip="Copy"
 														label="Copy"
@@ -1161,8 +1162,8 @@ export function AgentPanel({
 				<ConversationScrollButton />
 			</Conversation>
 
-			{lines.length > 0 && !busy ? (
-				<div className="shrink-0 border-t px-3 pt-2">
+			<div className="shrink-0 space-y-2 border-t p-3">
+				{lines.length > 0 && !busy ? (
 					<Suggestions>
 						{SUGGESTIONS.map((s) => (
 							<Suggestion
@@ -1173,10 +1174,7 @@ export function AgentPanel({
 							/>
 						))}
 					</Suggestions>
-				</div>
-			) : null}
-
-			<div className="shrink-0 border-t p-3">
+				) : null}
 				<PromptInput
 					className="w-full"
 					onSubmit={({ text }) => {
