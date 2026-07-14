@@ -1,0 +1,276 @@
+use crate::error::AppError;
+use crate::models::agent::{
+    AgentDescriptor, AgentFailedEvent, AgentResultPayload, AgentStreamEvent, ProbeResult,
+};
+use crate::services::agent::prompts::{build_prompt, extract_sources};
+use agent_client_protocol::schema::v1::{
+    ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
+    PromptRequest, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    SelectedPermissionOutcome, SessionNotification, SessionUpdate, TextContent,
+};
+use agent_client_protocol::schema::ProtocolVersion;
+use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Emitter};
+use uuid::Uuid;
+
+fn to_acp_agent(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
+    let env: Vec<EnvVariable> = desc
+        .env
+        .iter()
+        .map(|(k, v)| EnvVariable::new(k.clone(), v.clone()))
+        .collect();
+
+    let stdio = McpServerStdio::new(desc.name.clone(), PathBuf::from(&desc.command))
+        .args(desc.args.clone())
+        .env(env);
+    Ok(AcpAgent::new(McpServer::Stdio(stdio)))
+}
+
+fn text_from_content_block(block: &ContentBlock) -> Option<String> {
+    match block {
+        ContentBlock::Text(t) => Some(t.text.clone()),
+        _ => None,
+    }
+}
+
+fn chunk_from_update(update: &SessionUpdate) -> Option<String> {
+    match update {
+        SessionUpdate::AgentMessageChunk(chunk) => text_from_content_block(&chunk.content),
+        SessionUpdate::AgentThoughtChunk(chunk) => text_from_content_block(&chunk.content),
+        _ => None,
+    }
+}
+
+fn acp_err(msg: impl ToString) -> agent_client_protocol::Error {
+    util::internal_error(msg)
+}
+
+/// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
+pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
+    let agent_id = desc.id.clone();
+    let acp = match to_acp_agent(desc) {
+        Ok(a) => a,
+        Err(e) => {
+            return ProbeResult {
+                agent_id,
+                available: false,
+                agent_name: None,
+                protocol_version: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
+
+    let captured: Arc<Mutex<Option<(String, String)>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+
+    let result = agent_client_protocol::Client
+        .builder()
+        .name("motif")
+        .on_receive_request(
+            async move |request: RequestPermissionRequest, responder, _cx| {
+                if let Some(opt) = request.options.first() {
+                    let _ = responder.respond(RequestPermissionResponse::new(
+                        RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                            opt.option_id.clone(),
+                        )),
+                    ));
+                } else {
+                    let _ = responder.respond(RequestPermissionResponse::new(
+                        RequestPermissionOutcome::Cancelled,
+                    ));
+                }
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(acp, {
+            let captured = captured_clone;
+            move |connection: ConnectionTo<Agent>| async move {
+                let init = connection
+                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .block_task()
+                    .await
+                    .map_err(|e| acp_err(format!("initialize failed: {e}")))?;
+
+                let name = init
+                    .agent_info
+                    .as_ref()
+                    .map(|i| i.name.clone())
+                    .unwrap_or_else(|| "unknown".into());
+                let version = format!("{:?}", init.protocol_version);
+                if let Ok(mut g) = captured.lock() {
+                    *g = Some((name, version));
+                }
+                Ok(())
+            }
+        })
+        .await;
+
+    match result {
+        Ok(()) => {
+            let info = captured.lock().ok().and_then(|g| g.clone());
+            match info {
+                Some((name, version)) => ProbeResult {
+                    agent_id,
+                    available: true,
+                    agent_name: Some(name),
+                    protocol_version: Some(version),
+                    error: None,
+                },
+                None => ProbeResult {
+                    agent_id,
+                    available: false,
+                    agent_name: None,
+                    protocol_version: None,
+                    error: Some("no initialize response".into()),
+                },
+            }
+        }
+        Err(e) => ProbeResult {
+            agent_id,
+            available: false,
+            agent_name: None,
+            protocol_version: None,
+            error: Some(e.to_string()),
+        },
+    }
+}
+
+/// One-shot prompt: spawn → initialize → session → prompt → stream events → completed/failed.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_once(
+    app: AppHandle,
+    desc: AgentDescriptor,
+    session_id: String,
+    message_id: String,
+    prompt: String,
+    workflow: Option<String>,
+    target: Option<String>,
+    vault_path: Option<String>,
+) -> Result<AgentResultPayload, AppError> {
+    let full_prompt = build_prompt(workflow.as_deref(), &prompt, target.as_deref());
+    let cwd = vault_path
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+    let acp = to_acp_agent(&desc)?;
+    let content_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let content_for_notif = content_buf.clone();
+    let app_for_notif = app.clone();
+    let session_for_notif = session_id.clone();
+
+    let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let stop_for_conn = stop_reason.clone();
+    let content_for_conn = content_buf.clone();
+    let session_for_conn = session_id.clone();
+    let message_for_conn = message_id.clone();
+    let app_for_conn = app.clone();
+
+    let run_result = agent_client_protocol::Client
+        .builder()
+        .name("motif")
+        .on_receive_notification(
+            async move |notification: SessionNotification, _cx| {
+                if let Some(chunk) = chunk_from_update(&notification.update) {
+                    if let Ok(mut buf) = content_for_notif.lock() {
+                        buf.push_str(&chunk);
+                    }
+                    let _ = app_for_notif.emit(
+                        "agent:stream",
+                        AgentStreamEvent {
+                            session_id: session_for_notif.clone(),
+                            chunk,
+                        },
+                    );
+                }
+                Ok(())
+            },
+            agent_client_protocol::on_receive_notification!(),
+        )
+        .on_receive_request(
+            async move |request: RequestPermissionRequest, responder, _cx| {
+                if let Some(opt) = request.options.first() {
+                    let _ = responder.respond(RequestPermissionResponse::new(
+                        RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                            opt.option_id.clone(),
+                        )),
+                    ));
+                } else {
+                    let _ = responder.respond(RequestPermissionResponse::new(
+                        RequestPermissionOutcome::Cancelled,
+                    ));
+                }
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(acp, {
+            let full_prompt = full_prompt.clone();
+            move |connection: ConnectionTo<Agent>| async move {
+                connection
+                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .block_task()
+                    .await
+                    .map_err(|e| acp_err(format!("initialize: {e}")))?;
+
+                let new_session = connection
+                    .send_request(NewSessionRequest::new(cwd))
+                    .block_task()
+                    .await
+                    .map_err(|e| acp_err(format!("new_session: {e}")))?;
+
+                let acp_session_id = new_session.session_id;
+                let prompt_response = connection
+                    .send_request(PromptRequest::new(
+                        acp_session_id,
+                        vec![ContentBlock::Text(TextContent::new(full_prompt))],
+                    ))
+                    .block_task()
+                    .await
+                    .map_err(|e| acp_err(format!("prompt: {e}")))?;
+
+                if let Ok(mut s) = stop_for_conn.lock() {
+                    *s = Some(format!("{:?}", prompt_response.stop_reason));
+                }
+
+                let content = content_for_conn
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or_default();
+                let sources = extract_sources(&content);
+                let payload = AgentResultPayload {
+                    session_id: session_for_conn.clone(),
+                    message_id: message_for_conn.clone(),
+                    content,
+                    sources,
+                    stop_reason: stop_for_conn.lock().ok().and_then(|g| g.clone()),
+                };
+                let _ = app_for_conn.emit("agent:completed", payload.clone());
+                Ok(payload)
+            }
+        })
+        .await;
+
+    match run_result {
+        Ok(payload) => Ok(payload),
+        Err(e) => {
+            let msg = e.to_string();
+            let _ = app.emit(
+                "agent:failed",
+                AgentFailedEvent {
+                    session_id: session_id.clone(),
+                    error: msg.clone(),
+                },
+            );
+            Err(AppError::Acp(msg))
+        }
+    }
+}
+
+pub fn new_ids() -> (String, String) {
+    (Uuid::new_v4().to_string(), Uuid::new_v4().to_string())
+}

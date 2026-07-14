@@ -1,6 +1,12 @@
+mod commands;
+mod error;
+mod models;
+mod services;
+
+use services::agent::AgentRegistry;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    Emitter,
+    Emitter, Manager,
 };
 
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -19,6 +25,10 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
 
     let toggle_sidebar = MenuItemBuilder::with_id("toggle_sidebar", "Toggle Sidebar")
         .accelerator("CmdOrCtrl+Alt+S")
+        .build(app)?;
+
+    let toggle_chat = MenuItemBuilder::with_id("toggle_chat", "Toggle Chat")
+        .accelerator("CmdOrCtrl+L")
         .build(app)?;
 
     let app_submenu = SubmenuBuilder::new(app, "Motif")
@@ -55,6 +65,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
 
     let view_submenu = SubmenuBuilder::new(app, "View")
         .item(&toggle_sidebar)
+        .item(&toggle_chat)
         .build()?;
 
     let window_submenu = SubmenuBuilder::new(app, "Window")
@@ -81,9 +92,26 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .manage(AgentRegistry::load())
+        .invoke_handler(tauri::generate_handler![
+            commands::agent::agent_list_agents,
+            commands::agent::agent_list_templates,
+            commands::agent::agent_scan_catalog,
+            commands::agent::agent_upsert_agent,
+            commands::agent::agent_ensure_catalog,
+            commands::agent::agent_remove_agent,
+            commands::agent::agent_set_default,
+            commands::agent::agent_set_enabled,
+            commands::agent::agent_discover,
+            commands::agent::agent_probe,
+            commands::agent::agent_probe_catalog,
+            commands::agent::agent_run_once,
+        ])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
+            // Ensure registry is loaded early.
+            let _ = app.state::<AgentRegistry>();
             Ok(())
         })
         .on_menu_event(|app, event| {

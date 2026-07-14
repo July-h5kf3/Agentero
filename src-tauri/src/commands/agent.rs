@@ -1,0 +1,222 @@
+use crate::error::{map_err, ApiResult, AppError};
+use crate::models::agent::{
+    AgentDescriptor, AgentListResponse, AgentTemplateInfo, CatalogScanResponse, ProbeResult,
+    RunOnceAccepted, RunOnceRequest, UpsertAgentRequest,
+};
+use crate::services::agent::{builtin_templates, new_ids, probe_agent, run_once, AgentRegistry};
+use serde::Serialize;
+use tauri::State;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentOnly {
+    pub agent: AgentDescriptor,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplatesResponse {
+    pub templates: Vec<AgentTemplateInfo>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnabledResponse {
+    pub enabled: bool,
+}
+
+fn list_from_state(state: crate::models::agent::AgentRegistryState) -> AgentListResponse {
+    AgentListResponse {
+        agents: state.agents,
+        default_id: state.default_id,
+        enabled: state.enabled,
+    }
+}
+
+#[tauri::command]
+pub fn agent_list_agents(registry: State<'_, AgentRegistry>) -> ApiResult<AgentListResponse> {
+    match registry.snapshot() {
+        Ok(s) => ApiResult::ok(list_from_state(s)),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_list_templates() -> ApiResult<TemplatesResponse> {
+    ApiResult::ok(TemplatesResponse {
+        templates: builtin_templates(),
+    })
+}
+
+#[tauri::command]
+pub fn agent_scan_catalog(registry: State<'_, AgentRegistry>) -> ApiResult<CatalogScanResponse> {
+    match registry.scan_catalog() {
+        Ok(s) => ApiResult::ok(s),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_upsert_agent(
+    registry: State<'_, AgentRegistry>,
+    request: UpsertAgentRequest,
+) -> ApiResult<AgentOnly> {
+    match registry.upsert(request) {
+        Ok(agent) => ApiResult::ok(AgentOnly { agent }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_ensure_catalog(
+    registry: State<'_, AgentRegistry>,
+    template_id: String,
+    set_default: bool,
+) -> ApiResult<AgentOnly> {
+    match registry.ensure_catalog_agent(&template_id, set_default) {
+        Ok(agent) => ApiResult::ok(AgentOnly { agent }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_remove_agent(
+    registry: State<'_, AgentRegistry>,
+    id: String,
+) -> ApiResult<serde_json::Value> {
+    match registry.remove(&id) {
+        Ok(()) => ApiResult::ok(serde_json::Value::Null),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_set_default(
+    registry: State<'_, AgentRegistry>,
+    id: Option<String>,
+) -> ApiResult<AgentListResponse> {
+    match registry.set_default(id) {
+        Ok(s) => ApiResult::ok(list_from_state(s)),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_set_enabled(
+    registry: State<'_, AgentRegistry>,
+    enabled: bool,
+) -> ApiResult<EnabledResponse> {
+    match registry.set_enabled(enabled) {
+        Ok(s) => ApiResult::ok(EnabledResponse { enabled: s.enabled }),
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub fn agent_discover(
+    registry: State<'_, AgentRegistry>,
+    id: Option<String>,
+) -> ApiResult<AgentListResponse> {
+    match registry.discover(id.as_deref()) {
+        Ok(_) => match registry.snapshot() {
+            Ok(s) => ApiResult::ok(list_from_state(s)),
+            Err(e) => map_err(e),
+        },
+        Err(e) => map_err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn agent_probe(
+    registry: State<'_, AgentRegistry>,
+    id: String,
+) -> Result<ApiResult<ProbeResult>, String> {
+    let desc = match registry.get(&id) {
+        Ok(d) => d,
+        Err(e) => return Ok(map_err(e)),
+    };
+    if !desc.available {
+        let result = ProbeResult {
+            agent_id: id.clone(),
+            available: false,
+            agent_name: None,
+            protocol_version: None,
+            error: desc
+                .last_error
+                .or_else(|| Some(format!("command `{}` not found on PATH", desc.command))),
+        };
+        let _ = registry.apply_probe_result(&id, &result);
+        return Ok(ApiResult::ok(result));
+    }
+    let result = probe_agent(&desc).await;
+    let _ = registry.apply_probe_result(&id, &result);
+    Ok(ApiResult::ok(result))
+}
+
+/// Ensure catalog agent is registered, then run ACP initialize probe.
+#[tauri::command]
+pub async fn agent_probe_catalog(
+    registry: State<'_, AgentRegistry>,
+    template_id: String,
+) -> Result<ApiResult<ProbeResult>, String> {
+    let desc = match registry.ensure_catalog_agent(&template_id, false) {
+        Ok(d) => d,
+        Err(e) => return Ok(map_err(e)),
+    };
+    if !desc.available {
+        let result = ProbeResult {
+            agent_id: desc.id.clone(),
+            available: false,
+            agent_name: None,
+            protocol_version: None,
+            error: desc
+                .last_error
+                .or_else(|| Some(format!("command `{}` not found on PATH", desc.command))),
+        };
+        let _ = registry.apply_probe_result(&desc.id, &result);
+        return Ok(ApiResult::ok(result));
+    }
+    let result = probe_agent(&desc).await;
+    let _ = registry.apply_probe_result(&desc.id, &result);
+    Ok(ApiResult::ok(result))
+}
+
+#[tauri::command]
+pub async fn agent_run_once(
+    app: tauri::AppHandle,
+    registry: State<'_, AgentRegistry>,
+    request: RunOnceRequest,
+) -> Result<ApiResult<RunOnceAccepted>, String> {
+    if request.prompt.trim().is_empty() {
+        return Ok(map_err(AppError::message("prompt is required")));
+    }
+
+    let desc = match registry.resolve_default(request.agent_id.as_deref()) {
+        Ok(d) => d,
+        Err(e) => return Ok(map_err(e)),
+    };
+
+    let (session_id, message_id) = new_ids();
+    let accepted = RunOnceAccepted {
+        session_id: session_id.clone(),
+        message_id: message_id.clone(),
+        agent_id: desc.id.clone(),
+    };
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = run_once(
+            app_handle,
+            desc,
+            session_id,
+            message_id,
+            request.prompt,
+            request.workflow,
+            request.target,
+            request.vault_path,
+        )
+        .await;
+    });
+
+    Ok(ApiResult::ok(accepted))
+}
