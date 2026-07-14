@@ -629,10 +629,28 @@ export default function App() {
 						minSize={200}
 						className="min-h-0 overflow-hidden"
 					>
+						{/* biome-ignore lint/a11y/useSemanticElements: preview holds a rich editor and cannot be a native <button> */}
 						<div
 							ref={previewPaneRef}
 							className="flex h-full min-h-0 flex-col overflow-hidden"
 							style={{ fontSize: editorFontSize }}
+							role="button"
+							tabIndex={0}
+							aria-label={chatOpen ? "Hide chat sidebar" : "Show chat sidebar"}
+							onClick={(event) => {
+								const target = event.target as HTMLElement;
+								if (target.closest("button,a,input,textarea,select")) {
+									return;
+								}
+								if (window.getSelection()?.toString()) return;
+								toggleChat();
+							}}
+							onKeyDown={(event) => {
+								if (event.target !== event.currentTarget) return;
+								if (event.key !== "Enter" && event.key !== " ") return;
+								event.preventDefault();
+								toggleChat();
+							}}
 						>
 							<PaneHeader
 								trailing={
