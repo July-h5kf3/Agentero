@@ -14,11 +14,6 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import {
-	Collapsible,
-	CollapsibleContent,
-	CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 
 interface FileTreeContextType {
@@ -28,12 +23,9 @@ interface FileTreeContextType {
 	onSelect?: (path: string) => void;
 }
 
-// Default noop for context default value
-// oxlint-disable-next-line eslint(no-empty-function)
 const noop = () => {};
 
 const FileTreeContext = createContext<FileTreeContextType>({
-	// oxlint-disable-next-line eslint-plugin-unicorn(no-new-builtin)
 	expandedPaths: new Set(),
 	togglePath: noop,
 });
@@ -48,7 +40,7 @@ export type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
 
 export const FileTree = ({
 	expanded: controlledExpanded,
-	defaultExpanded = new Set(),
+	defaultExpanded,
 	selectedPath,
 	onSelect,
 	onExpandedChange,
@@ -56,21 +48,26 @@ export const FileTree = ({
 	children,
 	...props
 }: FileTreeProps) => {
-	const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
+	const [internalExpanded, setInternalExpanded] = useState<Set<string>>(
+		() => defaultExpanded ?? new Set(),
+	);
 	const expandedPaths = controlledExpanded ?? internalExpanded;
 
 	const togglePath = useCallback(
 		(path: string) => {
-			const newExpanded = new Set(expandedPaths);
+			const base = controlledExpanded ?? internalExpanded;
+			const newExpanded = new Set(base);
 			if (newExpanded.has(path)) {
 				newExpanded.delete(path);
 			} else {
 				newExpanded.add(path);
 			}
-			setInternalExpanded(newExpanded);
+			if (!controlledExpanded) {
+				setInternalExpanded(newExpanded);
+			}
 			onExpandedChange?.(newExpanded);
 		},
-		[expandedPaths, onExpandedChange],
+		[controlledExpanded, internalExpanded, onExpandedChange],
 	);
 
 	const contextValue = useMemo(
@@ -135,18 +132,10 @@ export const FileTreeFolder = ({
 	children,
 	...props
 }: FileTreeFolderProps) => {
-	const { expandedPaths, togglePath, selectedPath, onSelect } =
+	const { expandedPaths, togglePath, selectedPath } =
 		useContext(FileTreeContext);
 	const isExpanded = expandedPaths.has(path);
 	const isSelected = selectedPath === path;
-
-	const handleOpenChange = useCallback(() => {
-		togglePath(path);
-	}, [togglePath, path]);
-
-	const handleSelect = useCallback(() => {
-		onSelect?.(path);
-	}, [onSelect, path]);
 
 	const folderContextValue = useMemo(
 		() => ({ isExpanded, name, path }),
@@ -155,52 +144,36 @@ export const FileTreeFolder = ({
 
 	return (
 		<FileTreeFolderContext.Provider value={folderContextValue}>
-			<Collapsible onOpenChange={handleOpenChange} open={isExpanded}>
-				<div
-					className={cn("", className)}
+			<div className={cn("", className)} {...props}>
+				<button
+					type="button"
+					className={cn(
+						"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
+						isSelected && "bg-muted",
+					)}
+					onClick={() => togglePath(path)}
+					aria-expanded={isExpanded}
 					role="treeitem"
-					tabIndex={0}
-					{...props}
 				>
-					<div
+					<ChevronRightIcon
 						className={cn(
-							"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
-							isSelected && "bg-muted",
+							"size-4 shrink-0 text-muted-foreground transition-transform",
+							isExpanded && "rotate-90",
 						)}
-					>
-						<CollapsibleTrigger asChild>
-							<button
-								className="flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
-								type="button"
-							>
-								<ChevronRightIcon
-									className={cn(
-										"size-4 shrink-0 text-muted-foreground transition-transform",
-										isExpanded && "rotate-90",
-									)}
-								/>
-							</button>
-						</CollapsibleTrigger>
-						<button
-							className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left"
-							onClick={handleSelect}
-							type="button"
-						>
-							<FileTreeIcon>
-								{isExpanded ? (
-									<FolderOpenIcon className="size-4 text-blue-500" />
-								) : (
-									<FolderIcon className="size-4 text-blue-500" />
-								)}
-							</FileTreeIcon>
-							<FileTreeName>{name}</FileTreeName>
-						</button>
-					</div>
-					<CollapsibleContent>
-						<div className="ml-4 border-l pl-2">{children}</div>
-					</CollapsibleContent>
-				</div>
-			</Collapsible>
+					/>
+					<FileTreeIcon>
+						{isExpanded ? (
+							<FolderOpenIcon className="size-4 text-blue-500" />
+						) : (
+							<FolderIcon className="size-4 text-blue-500" />
+						)}
+					</FileTreeIcon>
+					<FileTreeName>{name}</FileTreeName>
+				</button>
+				{isExpanded ? (
+					<div className="ml-4 border-l pl-2">{children}</div>
+				) : null}
+			</div>
 		</FileTreeFolderContext.Provider>
 	);
 };
@@ -239,6 +212,7 @@ export const FileTreeFile = ({
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
 				onSelect?.(path);
 			}
 		},
@@ -263,7 +237,6 @@ export const FileTreeFile = ({
 			>
 				{children ?? (
 					<>
-						{/* Spacer for alignment */}
 						<span className="size-4 shrink-0" />
 						<FileTreeIcon>
 							{icon ?? <FileIcon className="size-4 text-muted-foreground" />}
@@ -278,20 +251,12 @@ export const FileTreeFile = ({
 
 export type FileTreeActionsProps = HTMLAttributes<HTMLDivElement>;
 
-const stopPropagation = (e: React.SyntheticEvent) => e.stopPropagation();
-
 export const FileTreeActions = ({
 	className,
 	children,
 	...props
 }: FileTreeActionsProps) => (
-	<div
-		className={cn("ml-auto flex items-center gap-1", className)}
-		onClick={stopPropagation}
-		onKeyDown={stopPropagation}
-		role="group"
-		{...props}
-	>
+	<div className={cn("ml-auto flex items-center gap-1", className)} {...props}>
 		{children}
 	</div>
 );

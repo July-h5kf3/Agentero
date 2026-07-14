@@ -21,6 +21,7 @@ import {
 	H3Element,
 } from "@/components/editor/heading-node";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
@@ -215,12 +216,33 @@ export default function App() {
 		saveSettings(next);
 	}, []);
 
+	const SIDEBAR_DEFAULT_PX = 240;
+
 	const toggleSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
 		if (!panel) return;
-		if (panel.isCollapsed()) panel.expand();
-		else panel.collapse();
-	}, [sidebarPanelRef]);
+		// Use React state as source of truth — library isCollapsed() is unreliable at 0px.
+		if (sidebarCollapsed) {
+			try {
+				panel.expand();
+			} catch {
+				// ignore
+			}
+			try {
+				panel.resize(SIDEBAR_DEFAULT_PX);
+			} catch {
+				// ignore
+			}
+			setSidebarCollapsed(false);
+		} else {
+			try {
+				panel.collapse();
+			} catch {
+				// ignore
+			}
+			setSidebarCollapsed(true);
+		}
+	}, [sidebarCollapsed, sidebarPanelRef]);
 
 	const toggleChat = useCallback(() => {
 		setChatOpen((open) => {
@@ -233,7 +255,17 @@ export default function App() {
 	const expandSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
 		if (!panel) return;
-		if (panel.isCollapsed()) panel.expand();
+		try {
+			panel.expand();
+		} catch {
+			// ignore
+		}
+		try {
+			panel.resize(SIDEBAR_DEFAULT_PX);
+		} catch {
+			// ignore
+		}
+		setSidebarCollapsed(false);
 		requestAnimationFrame(() => {
 			sidebarAsideRef.current?.querySelector<HTMLElement>("button")?.focus();
 		});
@@ -411,19 +443,27 @@ export default function App() {
 	}, [selectedPath]);
 
 	useEffect(() => {
-		const value = editor
-			.getApi(MarkdownPlugin)
-			.markdown.deserialize(debouncedMarkdown);
-		editor.tf.reset();
-		editor.tf.setValue(value);
+		try {
+			const value = editor
+				.getApi(MarkdownPlugin)
+				.markdown.deserialize(debouncedMarkdown || " ");
+			editor.tf.reset();
+			editor.tf.setValue(value);
+		} catch (e) {
+			console.error("Failed to deserialize markdown for preview:", e);
+		}
 	}, [debouncedMarkdown, editor]);
 
 	useEffect(() => {
-		const value = notesEditor
-			.getApi(MarkdownPlugin)
-			.markdown.deserialize(debouncedPaperNotes || " ");
-		notesEditor.tf.reset();
-		notesEditor.tf.setValue(value);
+		try {
+			const value = notesEditor
+				.getApi(MarkdownPlugin)
+				.markdown.deserialize(debouncedPaperNotes || " ");
+			notesEditor.tf.reset();
+			notesEditor.tf.setValue(value);
+		} catch (e) {
+			console.error("Failed to deserialize NOTES.md for preview:", e);
+		}
 	}, [debouncedPaperNotes, notesEditor]);
 
 	const handleUseDemo = () => {
@@ -481,194 +521,197 @@ export default function App() {
 
 	return (
 		<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
-			<ResizableGroup
-				orientation="horizontal"
-				className="h-full min-h-0 flex-1 overflow-hidden"
-			>
-				<ResizablePanel
-					id="sidebar"
-					panelRef={sidebarPanelRef}
-					defaultSize={240}
-					minSize={160}
-					maxSize={420}
-					collapsible
-					collapsedSize={0}
-					className="min-h-0 overflow-hidden"
-					onResize={() => {
-						const collapsed = sidebarPanelRef.current?.isCollapsed() ?? false;
-						setSidebarCollapsed(collapsed);
-					}}
+			<ErrorBoundary label="workspace">
+				<ResizableGroup
+					orientation="horizontal"
+					className="h-full min-h-0 flex-1 overflow-hidden"
 				>
-					<aside
-						ref={sidebarAsideRef}
-						className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
+					<ResizablePanel
+						id="sidebar"
+						panelRef={sidebarPanelRef}
+						defaultSize={SIDEBAR_DEFAULT_PX}
+						minSize={160}
+						maxSize={420}
+						collapsible
+						collapsedSize={0}
+						className="min-h-0 overflow-hidden"
+						onResize={(size) => {
+							// Only mark collapsed after a real collapse (near 0px), never mid-drag.
+							if (size.inPixels <= 1) setSidebarCollapsed(true);
+							else if (size.inPixels >= 80) setSidebarCollapsed(false);
+						}}
 					>
-						<div className="shrink-0">
-							<VaultSidebarHeader
-								title={vaultDisplayName(vaultPath)}
-								onOpenVault={() => void handleOpenVault()}
-								onRefresh={handleRefresh}
-								onUseDemo={handleUseDemo}
-								busy={busy}
-								error={error}
-								isDemo={isDemo}
-							/>
-						</div>
-						<div className="motif-scroll min-h-0 flex-1 px-1">
-							<FileTree
-								nodes={tree}
-								selectedPath={selectedPath}
-								onSelectFile={(n) => void handleSelectFile(n)}
-							/>
-						</div>
-					</aside>
-				</ResizablePanel>
-
-				{sidebarCollapsed ? null : <ResizableHandle />}
-
-				<ResizablePanel
-					id="source"
-					defaultSize="40"
-					minSize={200}
-					className="min-h-0 overflow-hidden"
-				>
-					<div className="flex h-full min-h-0 flex-col overflow-hidden">
-						{/* Single-row header: toggle left, title right — same 28px line box */}
-						<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-							<div className="flex h-7 shrink-0 items-center">
-								<ViewModeToggle
-									value={centerMode}
-									onChange={handleCenterModeChange}
-									available={modeAvailable}
+						<aside
+							ref={sidebarAsideRef}
+							className="flex h-full min-h-0 flex-col overflow-hidden bg-muted/20"
+						>
+							<div className="shrink-0">
+								<VaultSidebarHeader
+									title={vaultDisplayName(vaultPath)}
+									onOpenVault={() => void handleOpenVault()}
+									onRefresh={handleRefresh}
+									onUseDemo={handleUseDemo}
+									busy={busy}
+									error={error}
+									isDemo={isDemo}
 								/>
 							</div>
-							<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
-								<span
-									className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-									title={
-										paperMeta
-											? `${paperMeta.title} · ${activeFileLabel}`
-											: (activeFileLabel ?? undefined)
-									}
-								>
-									{paperMeta?.title ?? activeFileLabel}
-								</span>
+							<div className="motif-scroll min-h-0 flex-1 px-1">
+								<FileTree
+									nodes={tree}
+									selectedPath={selectedPath}
+									onSelectFile={(n) => void handleSelectFile(n)}
+								/>
 							</div>
-						</div>
-						{centerMode === "markdown" ? (
-							<textarea
-								ref={editorPaneRef}
-								className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
-								style={{ fontSize: editorFontSize }}
-								value={markdown}
-								onChange={(event) => setMarkdown(event.target.value)}
-								placeholder="Type Markdown here..."
-								spellCheck={false}
-							/>
-						) : null}
-						{centerMode === "pdf" ? (
-							<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-								<PdfViewer source={pdfUrl} className="h-full w-full" />
-							</div>
-						) : null}
-						{centerMode === "html" ? (
-							<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-								<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
-							</div>
-						) : null}
-					</div>
-				</ResizablePanel>
+						</aside>
+					</ResizablePanel>
 
-				<ResizableHandle />
+					{sidebarCollapsed ? null : <ResizableHandle />}
 
-				<ResizablePanel
-					id="preview"
-					defaultSize={chatOpen ? "30" : "40"}
-					minSize={200}
-					className="min-h-0 overflow-hidden"
-				>
-					<div
-						ref={previewPaneRef}
-						className="flex h-full min-h-0 flex-col overflow-hidden"
-						style={{ fontSize: editorFontSize }}
-					>
-						<PaneHeader
-							trailing={
-								<TooltipProvider delayDuration={250}>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={
-													chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
-												}
-												aria-pressed={chatOpen}
-												onClick={toggleChat}
-											>
-												<MessageSquare className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
-							}
-						>
-							<span className="min-w-0 flex-1 font-medium text-sm">
-								{showNotesOnRight ? "Notes" : "Preview"}
-							</span>
-						</PaneHeader>
-						<div className="min-h-0 flex-1 overflow-hidden">
-							{showNotesOnRight ? (
-								<Plate editor={notesEditor}>
-									<EditorContainer className="motif-scroll h-full min-h-0">
-										<Editor
-											variant="none"
-											className="min-h-full px-6 py-4"
-											placeholder="Paper NOTES.md will appear here..."
-											readOnly
-										/>
-									</EditorContainer>
-								</Plate>
-							) : (
-								<Plate editor={editor}>
-									<EditorContainer className="motif-scroll h-full min-h-0">
-										<Editor
-											variant="none"
-											className="min-h-full px-6 py-4"
-											placeholder="Rendered Markdown will appear here..."
-										/>
-									</EditorContainer>
-								</Plate>
-							)}
-						</div>
-					</div>
-				</ResizablePanel>
-
-				{/* Fourth column: ACP chat — only when ⌘L opens chat */}
-				{chatOpen ? <ResizableHandle /> : null}
-				{chatOpen ? (
 					<ResizablePanel
-						id="chat"
-						defaultSize="28"
-						minSize={260}
-						maxSize={520}
+						id="source"
+						defaultSize="40"
+						minSize={200}
 						className="min-h-0 overflow-hidden"
 					>
-						<AgentPanel
-							key={chatInputFocusKey.current}
-							vaultPath={vaultPath}
-							className="min-h-0 h-full"
-							title="Chat"
-							autoFocus
-							onClose={() => setChatOpen(false)}
-						/>
+						<div className="flex h-full min-h-0 flex-col overflow-hidden">
+							{/* Single-row header: toggle left, title right — same 28px line box */}
+							<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+								<div className="flex h-7 shrink-0 items-center">
+									<ViewModeToggle
+										value={centerMode}
+										onChange={handleCenterModeChange}
+										available={modeAvailable}
+									/>
+								</div>
+								<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
+									<span
+										className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+										title={
+											paperMeta
+												? `${paperMeta.title} · ${activeFileLabel}`
+												: (activeFileLabel ?? undefined)
+										}
+									>
+										{paperMeta?.title ?? activeFileLabel}
+									</span>
+								</div>
+							</div>
+							{centerMode === "markdown" ? (
+								<textarea
+									ref={editorPaneRef}
+									className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
+									style={{ fontSize: editorFontSize }}
+									value={markdown}
+									onChange={(event) => setMarkdown(event.target.value)}
+									placeholder="Type Markdown here..."
+									spellCheck={false}
+								/>
+							) : null}
+							{centerMode === "pdf" ? (
+								<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+									<PdfViewer source={pdfUrl} className="h-full w-full" />
+								</div>
+							) : null}
+							{centerMode === "html" ? (
+								<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+									<HtmlViewer srcUrl={htmlSrcUrl} className="h-full w-full" />
+								</div>
+							) : null}
+						</div>
 					</ResizablePanel>
-				) : null}
-			</ResizableGroup>
+
+					<ResizableHandle />
+
+					<ResizablePanel
+						id="preview"
+						defaultSize={chatOpen ? "30" : "40"}
+						minSize={200}
+						className="min-h-0 overflow-hidden"
+					>
+						<div
+							ref={previewPaneRef}
+							className="flex h-full min-h-0 flex-col overflow-hidden"
+							style={{ fontSize: editorFontSize }}
+						>
+							<PaneHeader
+								trailing={
+									<TooltipProvider delayDuration={250}>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-xs"
+													aria-label={
+														chatOpen ? "Hide chat sidebar" : "Show chat sidebar"
+													}
+													aria-pressed={chatOpen}
+													onClick={toggleChat}
+												>
+													<MessageSquare className="size-3.5" />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent side="bottom">
+												{chatOpen ? "Hide chat (⌘L)" : "Show chat (⌘L)"}
+											</TooltipContent>
+										</Tooltip>
+									</TooltipProvider>
+								}
+							>
+								<span className="min-w-0 flex-1 font-medium text-sm">
+									{showNotesOnRight ? "Notes" : "Preview"}
+								</span>
+							</PaneHeader>
+							<div className="min-h-0 flex-1 overflow-hidden">
+								{showNotesOnRight ? (
+									<Plate editor={notesEditor}>
+										<EditorContainer className="motif-scroll h-full min-h-0">
+											<Editor
+												variant="none"
+												className="min-h-full px-6 py-4"
+												placeholder="Paper NOTES.md will appear here..."
+												readOnly
+											/>
+										</EditorContainer>
+									</Plate>
+								) : (
+									<Plate editor={editor}>
+										<EditorContainer className="motif-scroll h-full min-h-0">
+											<Editor
+												variant="none"
+												className="min-h-full px-6 py-4"
+												placeholder="Rendered Markdown will appear here..."
+											/>
+										</EditorContainer>
+									</Plate>
+								)}
+							</div>
+						</div>
+					</ResizablePanel>
+
+					{/* Fourth column: ACP chat — only when ⌘L opens chat */}
+					{chatOpen ? <ResizableHandle /> : null}
+					{chatOpen ? (
+						<ResizablePanel
+							id="chat"
+							defaultSize="28"
+							minSize={260}
+							maxSize={520}
+							className="min-h-0 overflow-hidden"
+						>
+							<AgentPanel
+								key={chatInputFocusKey.current}
+								vaultPath={vaultPath}
+								className="min-h-0 h-full"
+								title="Chat"
+								autoFocus
+								onClose={() => setChatOpen(false)}
+							/>
+						</ResizablePanel>
+					) : null}
+				</ResizableGroup>
+			</ErrorBoundary>
 
 			<SettingsWindow
 				open={settingsOpen}
