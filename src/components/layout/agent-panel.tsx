@@ -1,4 +1,5 @@
-import { Check, ChevronDown, Loader2, X } from "lucide-react";
+import type { ToolUIPart } from "ai";
+import { Check, ChevronDown, CopyIcon, Loader2, X } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -7,16 +8,52 @@ import {
 	useState,
 } from "react";
 import {
+	Checkpoint,
+	CheckpointIcon,
+	CheckpointTrigger,
+} from "@/components/ai-elements/checkpoint";
+import {
+	Context,
+	ContextContent,
+	ContextContentHeader,
+	ContextTrigger,
+} from "@/components/ai-elements/context";
+import {
 	Conversation,
 	ConversationContent,
 	ConversationEmptyState,
 	ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
+	InlineCitation,
+	InlineCitationCard,
+	InlineCitationCardBody,
+	InlineCitationCardTrigger,
+	InlineCitationCarousel,
+	InlineCitationCarouselContent,
+	InlineCitationCarouselHeader,
+	InlineCitationCarouselIndex,
+	InlineCitationCarouselItem,
+	InlineCitationCarouselNext,
+	InlineCitationCarouselPrev,
+	InlineCitationSource,
+} from "@/components/ai-elements/inline-citation";
+import {
 	Message,
+	MessageAction,
+	MessageActions,
 	MessageContent,
 	MessageResponse,
 } from "@/components/ai-elements/message";
+import {
+	Plan,
+	PlanAction,
+	PlanContent,
+	PlanDescription,
+	PlanHeader,
+	PlanTitle,
+	PlanTrigger,
+} from "@/components/ai-elements/plan";
 import {
 	PromptInput,
 	PromptInputBody,
@@ -26,11 +63,31 @@ import {
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
 import {
+	Reasoning,
+	ReasoningContent,
+	ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
 	Source,
 	Sources,
 	SourcesContent,
 	SourcesTrigger,
 } from "@/components/ai-elements/sources";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import {
+	Task,
+	TaskContent,
+	TaskItem,
+	TaskTrigger,
+} from "@/components/ai-elements/task";
+import {
+	Tool,
+	ToolContent,
+	ToolHeader,
+	ToolInput,
+	ToolOutput,
+} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -42,12 +99,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
 	type AgentListResponse,
+	type AgentPlanEntry,
 	type CatalogScanResponse,
 	ensureCatalogAgent,
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
+	listenAgentPlan,
 	listenAgentStream,
+	listenAgentTool,
+	listenAgentUsage,
 	runOnce,
 	scanCatalog,
 	setDefaultAgent,
@@ -64,12 +125,25 @@ type AgentPanelProps = {
 	title?: string;
 };
 
+type ToolUiState = {
+	id: string;
+	title: string;
+	kind: string;
+	status: "pending" | "in_progress" | "completed" | "failed";
+	input?: unknown;
+	output?: unknown;
+};
+
 type ChatLine =
 	| { id: string; kind: "user"; text: string }
 	| {
 			id: string;
 			kind: "agent";
 			text: string;
+			reasoning?: string;
+			reasoningStreaming?: boolean;
+			tools?: ToolUiState[];
+			plan?: AgentPlanEntry[];
 			sources?: string[];
 			streaming?: boolean;
 	  }
@@ -81,6 +155,14 @@ function nextLineId(prefix: string) {
 	chatLineSeq += 1;
 	return `${prefix}-${chatLineSeq}`;
 }
+
+const SUGGESTIONS = [
+	"Summarize the open paper",
+	"List key claims and evidence",
+	"Find related notes in this vault",
+	"Draft a NOTES.md outline",
+	"Explain jargon in simple terms",
+];
 
 type AgentOption = {
 	key: string;
@@ -165,6 +247,70 @@ function resolveSelected(
 	return options.find((o) => o.available) ?? options[0];
 }
 
+function mapToolStatus(
+	status: string | null | undefined,
+): ToolUiState["status"] {
+	switch (status) {
+		case "in_progress":
+			return "in_progress";
+		case "completed":
+			return "completed";
+		case "failed":
+			return "failed";
+		default:
+			return "pending";
+	}
+}
+
+function toolPartState(status: ToolUiState["status"]): ToolUIPart["state"] {
+	switch (status) {
+		case "in_progress":
+			return "input-available";
+		case "completed":
+			return "output-available";
+		case "failed":
+			return "output-error";
+		default:
+			return "input-streaming";
+	}
+}
+
+function mergeTool(
+	tools: ToolUiState[] | undefined,
+	patch: {
+		id: string;
+		title?: string | null;
+		kind?: string | null;
+		status?: string | null;
+		input?: unknown;
+		output?: unknown;
+		full?: boolean;
+	},
+): ToolUiState[] {
+	const list = tools ? [...tools] : [];
+	const idx = list.findIndex((t) => t.id === patch.id);
+	const prev = idx >= 0 ? list[idx] : undefined;
+	const next: ToolUiState = {
+		id: patch.id,
+		title: patch.title ?? prev?.title ?? "Tool",
+		kind: patch.kind ?? prev?.kind ?? "other",
+		status: mapToolStatus(patch.status ?? prev?.status),
+		input: patch.input !== undefined ? patch.input : prev?.input,
+		output: patch.output !== undefined ? patch.output : prev?.output,
+	};
+	if (idx >= 0) list[idx] = next;
+	else list.push(next);
+	return list;
+}
+
+async function copyText(text: string) {
+	try {
+		await navigator.clipboard.writeText(text);
+	} catch {
+		// ignore
+	}
+}
+
 export function AgentPanel({
 	vaultPath,
 	className,
@@ -179,6 +325,9 @@ export function AgentPanel({
 	const [lines, setLines] = useState<ChatLine[]>([]);
 	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
+	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
+		null,
+	);
 	const activeSessionRef = useRef<string | null>(null);
 
 	const refresh = useCallback(async () => {
@@ -213,18 +362,73 @@ export function AgentPanel({
 			const u1 = await listenAgentStream((ev) => {
 				const cur = activeSessionRef.current;
 				if (cur && cur !== ev.sessionId) return;
+				const streamKind = ev.kind ?? "message";
+				setLines((prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					if (last?.kind === "agent" && last.streaming) {
+						if (streamKind === "thought") {
+							next[next.length - 1] = {
+								...last,
+								reasoning: (last.reasoning ?? "") + ev.chunk,
+								reasoningStreaming: true,
+							};
+						} else {
+							next[next.length - 1] = {
+								...last,
+								text: last.text + ev.chunk,
+								reasoningStreaming: false,
+							};
+						}
+						return next;
+					}
+					return prev;
+				});
+			});
+			const uTool = await listenAgentTool((ev) => {
+				const cur = activeSessionRef.current;
+				if (cur && cur !== ev.sessionId) return;
 				setLines((prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
 						next[next.length - 1] = {
 							...last,
-							text: last.text + ev.chunk,
+							tools: mergeTool(last.tools, {
+								id: ev.toolCallId,
+								title: ev.title,
+								kind: ev.kind,
+								status: ev.status,
+								input: ev.input,
+								output: ev.output,
+								full: ev.full,
+							}),
 						};
 						return next;
 					}
 					return prev;
 				});
+			});
+			const uPlan = await listenAgentPlan((ev) => {
+				const cur = activeSessionRef.current;
+				if (cur && cur !== ev.sessionId) return;
+				setLines((prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					if (last?.kind === "agent" && last.streaming) {
+						next[next.length - 1] = {
+							...last,
+							plan: ev.entries,
+						};
+						return next;
+					}
+					return prev;
+				});
+			});
+			const uUsage = await listenAgentUsage((ev) => {
+				const cur = activeSessionRef.current;
+				if (cur && cur !== ev.sessionId) return;
+				if (ev.size > 0) setUsage({ used: ev.used, size: ev.size });
 			});
 			const u2 = await listenAgentCompleted((ev) => {
 				if (
@@ -243,9 +447,15 @@ export function AgentPanel({
 							last.text.trim().length > 0
 								? last.text
 								: ev.content || "(empty response)";
+						const reasoning =
+							(last.reasoning && last.reasoning.trim().length > 0
+								? last.reasoning
+								: ev.reasoning) || undefined;
 						next[next.length - 1] = {
 							...last,
 							text,
+							reasoning,
+							reasoningStreaming: false,
 							sources: ev.sources,
 							streaming: false,
 						};
@@ -278,11 +488,14 @@ export function AgentPanel({
 
 			if (cancelled) {
 				u1();
+				uTool();
+				uPlan();
+				uUsage();
 				u2();
 				u3();
 				return;
 			}
-			unsubs.push(u1, u2, u3);
+			unsubs.push(u1, uTool, uPlan, uUsage, u2, u3);
 		})();
 
 		return () => {
@@ -413,6 +626,8 @@ export function AgentPanel({
 					kind: "agent",
 					text: "",
 					streaming: true,
+					tools: [],
+					plan: [],
 				},
 			]);
 		} catch (e) {
@@ -499,6 +714,14 @@ export function AgentPanel({
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
+				{usage && usage.size > 0 ? (
+					<Context usedTokens={usage.used} maxTokens={usage.size}>
+						<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
+						<ContextContent>
+							<ContextContentHeader />
+						</ContextContent>
+					</Context>
+				) : null}
 				{busy || switching ? (
 					<Loader2 className="size-3.5 shrink-0 animate-spin opacity-70" />
 				) : null}
@@ -522,7 +745,24 @@ export function AgentPanel({
 						<ConversationEmptyState
 							title="Chat with your vault"
 							description="Messages go to your ACP agent. Click the agent name above to switch backends."
-						/>
+						>
+							<div className="mt-4 flex w-full max-w-md flex-col gap-3">
+								{busy ? (
+									<Shimmer className="text-sm">Waiting for agent…</Shimmer>
+								) : (
+									<Suggestions className="px-1">
+										{SUGGESTIONS.map((s) => (
+											<Suggestion
+												key={s}
+												suggestion={s}
+												onClick={(v) => void send(v)}
+												disabled={busy}
+											/>
+										))}
+									</Suggestions>
+								)}
+							</div>
+						</ConversationEmptyState>
 					) : (
 						lines.map((line) => {
 							if (line.kind === "user") {
@@ -531,10 +771,27 @@ export function AgentPanel({
 										<MessageContent>
 											<MessageResponse>{line.text}</MessageResponse>
 										</MessageContent>
+										<MessageActions>
+											<MessageAction
+												tooltip="Copy"
+												label="Copy"
+												onClick={() => void copyText(line.text)}
+											>
+												<CopyIcon className="size-3.5" />
+											</MessageAction>
+										</MessageActions>
 									</Message>
 								);
 							}
 							if (line.kind === "agent") {
+								const hasReasoning =
+									Boolean(line.reasoning?.trim()) ||
+									Boolean(line.reasoningStreaming);
+								const tools = line.tools ?? [];
+								const plan = line.plan ?? [];
+								const planStreaming =
+									Boolean(line.streaming) &&
+									plan.some((p) => p.status !== "completed");
 								return (
 									<div key={line.id} className="flex w-full flex-col gap-2">
 										<Message from="assistant">
@@ -542,10 +799,176 @@ export function AgentPanel({
 												<p className="mb-1 font-medium text-muted-foreground text-xs">
 													{selected?.name ?? "Agent"}
 												</p>
-												<MessageResponse isAnimating={line.streaming}>
-													{line.text || (line.streaming ? "…" : "")}
-												</MessageResponse>
+												{hasReasoning ? (
+													<Reasoning
+														className="mb-2"
+														isStreaming={Boolean(line.reasoningStreaming)}
+													>
+														<ReasoningTrigger />
+														<ReasoningContent>
+															{line.reasoning ?? ""}
+														</ReasoningContent>
+													</Reasoning>
+												) : null}
+												{plan.length > 0 ? (
+													<Plan
+														className="mb-2"
+														defaultOpen
+														isStreaming={planStreaming}
+													>
+														<PlanHeader>
+															<div className="min-w-0 flex-1 space-y-1">
+																<PlanTitle>Plan</PlanTitle>
+																<PlanDescription>
+																	{`${plan.filter((p) => p.status === "completed").length}/${plan.length} steps`}
+																</PlanDescription>
+															</div>
+															<PlanAction>
+																<PlanTrigger />
+															</PlanAction>
+														</PlanHeader>
+														<PlanContent className="space-y-2 pt-0">
+															{plan.map((entry) => (
+																<div
+																	key={`${entry.status}:${entry.priority}:${entry.content}`}
+																	className="flex items-start gap-2 text-sm"
+																>
+																	<span
+																		className={cn(
+																			"mt-1 size-1.5 shrink-0 rounded-full",
+																			entry.status === "completed" &&
+																				"bg-emerald-500",
+																			entry.status === "in_progress" &&
+																				"bg-amber-500",
+																			entry.status === "pending" &&
+																				"bg-muted-foreground/40",
+																		)}
+																	/>
+																	<span
+																		className={cn(
+																			entry.status === "completed" &&
+																				"text-muted-foreground line-through",
+																		)}
+																	>
+																		{entry.content}
+																	</span>
+																</div>
+															))}
+														</PlanContent>
+													</Plan>
+												) : null}
+												{tools.map((t) => {
+													const state = toolPartState(t.status);
+													return (
+														<Tool
+															key={t.id}
+															defaultOpen={
+																state !== "output-available" &&
+																state !== "output-error"
+															}
+														>
+															<ToolHeader
+																title={t.title}
+																type={`tool-${t.kind}`}
+																state={state}
+															/>
+															<ToolContent>
+																{t.input !== undefined ? (
+																	<ToolInput input={t.input} />
+																) : null}
+																<ToolOutput
+																	output={t.output}
+																	errorText={
+																		t.status === "failed"
+																			? "Tool failed"
+																			: undefined
+																	}
+																/>
+															</ToolContent>
+														</Tool>
+													);
+												})}
+												{tools.length > 0 ? (
+													<Task className="mb-2" defaultOpen={false}>
+														<TaskTrigger
+															title={`${tools.length} tool call(s)`}
+														/>
+														<TaskContent>
+															{tools.map((t) => (
+																<TaskItem key={t.id}>
+																	{t.title} · {t.status}
+																</TaskItem>
+															))}
+														</TaskContent>
+													</Task>
+												) : null}
+												{line.text ? (
+													<div className="min-w-0">
+														<MessageResponse
+															isAnimating={Boolean(
+																line.streaming && line.text.length > 0,
+															)}
+														>
+															{line.text}
+														</MessageResponse>
+														{!line.streaming &&
+														line.sources &&
+														line.sources.length > 0 ? (
+															<span className="mt-1 inline-flex items-center">
+																<InlineCitation>
+																	<InlineCitationCard>
+																		<InlineCitationCardTrigger
+																			sources={line.sources}
+																		/>
+																		<InlineCitationCardBody>
+																			<InlineCitationCarousel>
+																				<InlineCitationCarouselHeader>
+																					<InlineCitationCarouselPrev />
+																					<InlineCitationCarouselNext />
+																					<InlineCitationCarouselIndex />
+																				</InlineCitationCarouselHeader>
+																				<InlineCitationCarouselContent>
+																					{line.sources.map((s) => (
+																						<InlineCitationCarouselItem key={s}>
+																							<InlineCitationSource
+																								title={
+																									s.split(/[/\\]/).pop() || s
+																								}
+																								url={s}
+																								description={
+																									/^https?:\/\//i.test(s)
+																										? undefined
+																										: "Vault path referenced by agent"
+																								}
+																							/>
+																						</InlineCitationCarouselItem>
+																					))}
+																				</InlineCitationCarouselContent>
+																			</InlineCitationCarousel>
+																		</InlineCitationCardBody>
+																	</InlineCitationCard>
+																</InlineCitation>
+															</span>
+														) : null}
+													</div>
+												) : line.streaming &&
+													!hasReasoning &&
+													tools.length === 0 &&
+													plan.length === 0 ? (
+													<Shimmer className="text-sm">Thinking…</Shimmer>
+												) : null}
 											</MessageContent>
+											{!line.streaming && line.text ? (
+												<MessageActions>
+													<MessageAction
+														tooltip="Copy"
+														label="Copy"
+														onClick={() => void copyText(line.text)}
+													>
+														<CopyIcon className="size-3.5" />
+													</MessageAction>
+												</MessageActions>
+											) : null}
 										</Message>
 										{line.sources && line.sources.length > 0 ? (
 											<Sources>
@@ -575,18 +998,37 @@ export function AgentPanel({
 								);
 							}
 							return (
-								<p
-									key={line.id}
-									className="px-1 text-center text-muted-foreground text-xs"
-								>
-									{line.text}
-								</p>
+								<Checkpoint key={line.id} className="my-1 px-1">
+									<CheckpointIcon />
+									<CheckpointTrigger
+										className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
+										variant="ghost"
+										tooltip={line.text}
+									>
+										{line.text}
+									</CheckpointTrigger>
+								</Checkpoint>
 							);
 						})
 					)}
 				</ConversationContent>
 				<ConversationScrollButton />
 			</Conversation>
+
+			{lines.length > 0 && !busy ? (
+				<div className="shrink-0 border-t px-3 pt-2">
+					<Suggestions>
+						{SUGGESTIONS.slice(0, 3).map((s) => (
+							<Suggestion
+								key={s}
+								suggestion={s}
+								onClick={(v) => void send(v)}
+								disabled={busy}
+							/>
+						))}
+					</Suggestions>
+				</div>
+			) : null}
 
 			<div className="shrink-0 border-t p-3">
 				<PromptInput
