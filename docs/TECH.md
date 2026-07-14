@@ -49,11 +49,11 @@
 
 | 能力 | Frontend | Host (Rust) |
 |---|---|---|
-| 文件树展示/交互 | 渲染、事件 | 读取目录、监听变化 |
+| 文件树展示/交互 | `FileTree` + 可伸缩侧边栏；展开/选中/打开文件 | `plugin-dialog` 选目录 + `plugin-fs` `readDir`/`readTextFile`（监听变化后续） |
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
 | 图谱 | 可视化组件（React Flow） | 输出节点/边数据 |
-| PDF/HTML 阅读 | react-pdf 渲染 | 可插拔解析器提取文本、提供本地文件路径/URL |
+| PDF/HTML 阅读 | react-pdf 渲染；内联 HTML 经 DOMPurify 消毒 | 可插拔解析器提取文本、提供本地文件路径/URL |
 | 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
 | Agent 调用 | 展示对话与结果 | 通过 ACP 协议与 Agent 通信、编排 prompt、写入文件 |
@@ -78,10 +78,38 @@
 | shadcn/ui | 基于 Radix UI 的 headless 组件 | 按钮、输入框、对话框、下拉菜单、侧边栏 |
 | Radix UI Primitives | shadcn/ui 底层 | 可访问性、键盘交互、弹窗管理 |
 | Lucide React | 图标库 | 工具栏、文件树、状态图标 |
+| `react-resizable-panels` | 可拖拽分隔面板 | 左侧文件树 / Markdown 源码 / Preview 三栏伸缩 |
 | tweakcn 主题 | `modern-minimal` | 已确定的视觉主题，保持简约 |
 
 > 主题安装命令（已记录于 `docs/UI.md`）：
 > `pnpm dlx shadcn@latest add https://tweakcn.com/r/themes/modern-minimal.json`
+
+### 3.2.1 工作台布局与 Vault 文件树（已接入）
+
+**布局**
+
+| 模块 | 路径 | 说明 |
+|---|---|---|
+| 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx` |
+| 侧边栏文件树 | `src/components/file-tree/file-tree.tsx` | 递归目录树、展开折叠、选中高亮、文件类型图标 |
+| Vault IO | `src/lib/vault.ts` | 选目录、建树、读文本文件；浏览器下提供 demo vault |
+
+**交互（当前实现）**
+
+1. 左侧可拖拽伸缩（可折叠）侧边栏展示 Vault 文件树。  
+2. 「Open vault…」通过 `@tauri-apps/plugin-dialog` 选择本地文件夹。  
+3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.motif` 等。  
+4. 点击文本类文件（`.md` / `.json` / `.txt` 等）用 `readTextFile` 载入中间 Markdown 面板，右侧 Plate 预览同步更新。  
+5. 非 Tauri 环境（纯浏览器 `pnpm dev`）使用内置 **demo vault** 演示结构；真实读盘需 `pnpm tauri dev`。  
+6. 最近 Vault 路径暂存 `localStorage`（后续迁到 `tauri-plugin-store`）。
+
+**权限（`src-tauri/capabilities/default.json`）**
+
+- `fs:default` + `fs:allow-read-dir` / `fs:allow-read-text-file` / `fs:allow-stat` / `fs:allow-exists`
+- `fs:scope` 允许：`$HOME/**`、`$DOCUMENT/**`、`$DESKTOP/**`、`$DOWNLOAD/**`（用户自选 Vault 落在这些目录下可读）
+- `dialog:default` 打开文件夹对话框
+
+**未做（后续）**：写回磁盘、文件监听热更新、按 Vault 白名单动态收紧 scope、Zustand 全局状态。
 
 ### 3.3 Markdown 编辑与预览
 
@@ -115,11 +143,13 @@
 | PDF 解析（Rust） | 可插拔 `PdfParser` 后端：默认本地 `liteparse`（LlamaIndex 开源 Rust 解析器，结构化文本 + bounding box + OCR），配置 API Key 后可选云端 MinerU；输出 Markdown/JSON/Text |
 | HTML（arXiv HTML）| Tauri Webview 内嵌 `iframe` 或独立 Webview 窗口 |
 | 本地 HTML | 通过 Tauri `convertFileSrc` 转换为安全 URL 后加载 |
+| HTML 消毒 | `DOMPurify`（`src/lib/sanitize.ts` → `sanitizeHtml`）：凡需内联注入的 HTML（`innerHTML` / `dangerouslySetInnerHTML`、Markdown 派生片段、导入 HTML 片段）必须先消毒 |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
+- **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
 **可插拔 PDF 解析器（`PdfParser`）**：
 - 抽象 `PdfParser` trait，提供两个后端：本地 `LiteparseBackend`（默认，离线开箱即用）与云端 `MineruCloudBackend`（BYOK，配置 MinerU API Key 后启用）。
@@ -160,12 +190,12 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 
 | 插件 | 用途 |
 |---|---|
-| `tauri-plugin-fs` | 读/写/监听 Vault 文件与目录 |
-| `tauri-plugin-dialog` | 选择/创建 Vault 文件夹 |
-| `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充） |
+| `tauri-plugin-fs` | 读 Vault 目录树与文本文件（**已用于文件树**）；写/监听后续 |
+| `tauri-plugin-dialog` | 选择 Vault 文件夹（**已用于 Open vault**） |
+| `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充；当前最近路径仍用 localStorage） |
 | `tauri-plugin-opener` | 打开外部链接（已配置） |
+| `tauri-plugin-shell` | 已注册；后续外部工具 / ACP agent 子进程 |
 | `tauri-plugin-http`（可选）| 前端直接发起受控 HTTP 请求 |
-| `tauri-plugin-process` / `tauri-plugin-shell` | 后续用于调用外部工具 |
 
 ### 4.2 Rust Crates
 
@@ -490,20 +520,30 @@ pnpm tauri build
   "@tauri-apps/plugin-dialog": "^2",
   "@tauri-apps/plugin-store": "^2",
   "@tauri-apps/plugin-opener": "^2",
+  "@tauri-apps/plugin-shell": "^2",
   "react": "^19.1.0",
   "react-dom": "^19.1.0",
-  "zustand": "^5",
-  "@platejs/core": "^53",
+  "react-resizable-panels": "^4",
+  "platejs": "^53",
   "@platejs/markdown": "^53",
+  "@platejs/basic-nodes": "^53",
   "@platejs/ai": "^53",
+  "dompurify": "^3",
+  "lucide-react": "^1",
+  "remark-gfm": "^4",
+  "remark-math": "^6",
+  "remark-emoji": "^5",
+  "zustand": "^5",
   "@xyflow/react": "^12",
   "react-pdf": "^9",
-  "lucide-react": "^0.x",
-  "class-variance-authority": "^0.x",
+  "class-variance-authority": "^0.7",
   "clsx": "^2",
-  "tailwind-merge": "^2"
+  "tailwind-merge": "^3"
 }
 ```
+
+> **已落地（文件树相关）**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`。  
+> **仍为计划**：`zustand`、`@xyflow/react`、`react-pdf`（PDF.js 阅读器，勿与 `@react-pdf/renderer` 混淆）。
 
 ### 8.2 Rust 依赖
 
@@ -531,7 +571,13 @@ walkdir = "2"
 tempfile = "3"
 ```
 
-### 8.3 可选依赖
+### 8.3 安全相关依赖
+
+| 库 | 用途 | 说明 |
+|---|---|---|
+| `dompurify` | HTML XSS 消毒 | 已接入；封装见 `src/lib/sanitize.ts` 的 `sanitizeHtml`。内联 HTML 渲染前必须调用。 |
+
+### 8.4 可选依赖
 
 | 场景 | 库 |
 |---|---|
@@ -546,7 +592,7 @@ tempfile = "3"
 
 | Roadmap 版本 | 技术重点 |
 |---|---|
-| V0.1 | 完成 Tauri + React 工作台；接入 `fs`、`dialog`、`store`；实现 Vault 初始化与文件树。 |
+| V0.1 | 完成 Tauri + React 工作台；**可伸缩侧边栏文件树已接入**（open vault + readDir + 打开 MD）；后续补 Vault 初始化结构、写回磁盘与 `store` 最近列表。 |
 | V0.2 | 实现 arXiv importer；metadata.json / NOTES.md / PAPER.md 生成；PAPERS.md 与 library.bib 更新。 |
 | V0.3 | 接入 ACP 协议 + 内置 opencode agent；Agent 工作流与读取路径回显；临时文件确认机制。 |
 | V0.4 | 双链解析、反链面板、React Flow 图谱。 |

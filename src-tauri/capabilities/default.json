@@ -7,6 +7,19 @@
 		"core:default",
 		"opener:default",
 		"fs:default",
+		"fs:allow-read-dir",
+		"fs:allow-read-text-file",
+		"fs:allow-stat",
+		"fs:allow-exists",
+		{
+			"identifier": "fs:scope",
+			"allow": [
+				{ "path": "$HOME/**" },
+				{ "path": "$DOCUMENT/**" },
+				{ "path": "$DESKTOP/**" },
+				{ "path": "$DOWNLOAD/**" }
+			]
+		},
 		"shell:default",
 		"store:default",
 		"dialog:default"
