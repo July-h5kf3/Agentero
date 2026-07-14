@@ -3,12 +3,6 @@ use tauri::{
     Emitter,
 };
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     // Appears under the app name menu on macOS (e.g. "motif").
     let settings = MenuItemBuilder::with_id("settings", "Settings…")
@@ -96,7 +90,6 @@ pub fn run() {
             let id = event.id().as_ref();
             let _ = app.emit(id, ());
         })
-        .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
