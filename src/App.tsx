@@ -738,9 +738,12 @@ export default function App() {
 				  titleBarH ≈ closeButtonH(~14) + y(18) ≈ 32 → h-8
 				*/}
 				<header className="flex h-8 shrink-0 items-center border-b select-none">
-					{/* Native traffic lights: x=14, cluster ~54px wide */}
+					{/*
+					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
+					  Keep extra gap so the sidebar toggle never hugs the lights.
+					*/}
 					<div
-						className="w-[70px] shrink-0 self-stretch"
+						className="w-[92px] shrink-0 self-stretch"
 						data-tauri-drag-region
 					/>
 					<TooltipProvider delayDuration={250}>

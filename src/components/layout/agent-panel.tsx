@@ -880,27 +880,34 @@ export function AgentPanel({
 			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
 		>
 			<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-				<div className="flex min-w-0 flex-1 items-center gap-1.5">
-					<span className="shrink-0 font-medium text-sm">{title}</span>
-					<span className="shrink-0 text-muted-foreground text-xs">·</span>
+				<div className="flex h-full min-w-0 flex-1 items-center gap-1.5">
+					<span className="shrink-0 font-medium text-sm leading-none">
+						{title}
+					</span>
+					<span
+						className="shrink-0 text-muted-foreground text-sm leading-none"
+						aria-hidden
+					>
+						·
+					</span>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild disabled={busy || switching}>
 							<button
 								type="button"
 								className={cn(
-									"inline-flex min-w-0 max-w-full items-center gap-0.5 rounded-md px-1 py-0.5 text-left outline-none",
-									"font-normal text-muted-foreground text-xs",
+									"inline-flex h-7 min-w-0 max-w-full items-center gap-0.5 rounded-md px-1.5 text-left outline-none",
+									"font-normal text-muted-foreground text-sm leading-none",
 									"hover:bg-muted hover:text-foreground",
 									"focus-visible:ring-1 focus-visible:ring-ring",
 									"disabled:opacity-50",
 								)}
 								aria-label="Switch ACP agent"
 							>
-								<span className="truncate">
+								<span className="truncate leading-none">
 									{labelName}
 									{labelMissing ? " (missing)" : ""}
 								</span>
-								<ChevronDown className="size-3 shrink-0 opacity-70" />
+								<ChevronDown className="size-3.5 shrink-0 opacity-70" />
 							</button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start" className="min-w-[200px]">
@@ -940,23 +947,25 @@ export function AgentPanel({
 							type="button"
 							variant="ghost"
 							size="sm"
-							className="h-7 gap-1 px-2 text-xs"
+							className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
 							aria-label="Open chat history"
 							title="History"
 						>
 							<History className="size-3.5" />
-							<span className="hidden sm:inline">History</span>
+							<span className="hidden leading-none sm:inline">History</span>
 						</Button>
 					</PopoverTrigger>
 					<PopoverContent align="end" className="w-80 p-0">
 						<PopoverHeader className="border-b px-3 py-2">
-							<PopoverTitle>Session history</PopoverTitle>
-							<PopoverDescription className="text-xs">
+							<PopoverTitle className="font-medium text-sm leading-none">
+								Session history
+							</PopoverTitle>
+							<PopoverDescription className="text-muted-foreground text-sm leading-snug">
 								Recent ACP sessions in this chat.
 							</PopoverDescription>
 						</PopoverHeader>
 						{sessionHistory.length === 0 ? (
-							<div className="px-3 py-4 text-muted-foreground text-sm">
+							<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
 								No sessions yet.
 							</div>
 						) : (
@@ -972,11 +981,13 @@ export function AgentPanel({
 											setLines(item.lines);
 										}}
 									>
-										<span className="text-muted-foreground text-[11px]">
+										<span className="text-muted-foreground text-sm leading-none">
 											{item.agentName} · {item.status} · {item.id.slice(0, 8)}
 										</span>
-										<span className="line-clamp-2 text-sm">{item.title}</span>
-										<span className="text-muted-foreground text-[11px]">
+										<span className="line-clamp-2 font-medium text-sm leading-snug">
+											{item.title}
+										</span>
+										<span className="text-muted-foreground text-sm leading-none">
 											{item.startedAt}
 										</span>
 									</button>
