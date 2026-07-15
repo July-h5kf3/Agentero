@@ -213,7 +213,8 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 					type="button"
 					className={cn(
 						"flex w-full items-center gap-2 rounded-md border bg-popover px-2.5 py-1.5 text-left shadow-md",
-						"hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+						// Solid hover — avoid /opacity so content under the floater does not show through
+						"hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 					)}
 					aria-expanded={expanded}
 					aria-label={t("tasks.toggle")}
