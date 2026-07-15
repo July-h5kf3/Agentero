@@ -262,7 +262,6 @@ export default function App() {
 	const [notesDirty, setNotesDirty] = useState(false);
 
 	const isDemo = vaultPath === null;
-	const showNotesOnRight = centerMode === "pdf" || centerMode === "html";
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
@@ -1061,6 +1060,11 @@ export default function App() {
 	const showLibrary = Boolean(
 		vaultPath && isLibraryHome(vaultPath, selectedPath),
 	);
+	/** Notes / Preview: only when a concrete paper is open (PDF/HTML), never on library. */
+	const showNotesOnRight =
+		!showLibrary &&
+		Boolean(paperMeta) &&
+		(centerMode === "pdf" || centerMode === "html");
 
 	const activeFileLabel = showLibrary
 		? t("sidebar:papersLibrary.title")
@@ -1244,7 +1248,8 @@ export default function App() {
 										onSelectLibrary={handleSelectLibrary}
 									/>
 								</div>
-								<PaperInfoPanel meta={paperMeta} />
+								{/* Paper info only when a specific paper is selected */}
+								{paperMeta ? <PaperInfoPanel meta={paperMeta} /> : null}
 							</aside>
 						</ResizablePanel>
 
@@ -1254,9 +1259,9 @@ export default function App() {
 							id="source"
 							defaultSize="40"
 							minSize={200}
-							className="min-h-0 overflow-hidden"
+							className="min-h-0 min-w-0 overflow-hidden"
 						>
-							<div className="flex h-full min-h-0 flex-col overflow-hidden">
+							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
 								{/* Single-row header: toggle left, title right — same 28px line box */}
 								<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 									<div className="flex h-7 shrink-0 items-center">

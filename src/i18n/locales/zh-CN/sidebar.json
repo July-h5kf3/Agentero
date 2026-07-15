@@ -18,6 +18,7 @@
 		"colYear": "年份",
 		"colType": "类型",
 		"colId": "标识符",
+		"sortBy": "按{{column}}排序",
 		"count": "共 {{formatted}} 篇"
 	},
 	"lookup": {

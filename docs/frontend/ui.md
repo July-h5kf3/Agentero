@@ -68,8 +68,8 @@
 ## 3. 布局
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + 右侧栏（Agent / Backlinks）。
-- **论文库表格**：文件树顶部有虚拟节点 **Library / 论文库**（`motif:library`，非真实目录）；点击后中间栏展示 catalog 论文表（标题、作者、年份、类型、标识符）。选中 Vault 根 / `papers/` / 未选文件时也可显示。点击行打开 paper。数据来自 `paper_list`（SQLite）。
-- 查看论文 PDF/HTML 时，右侧显示可编辑的 **Notes**（该篇 `NOTES.md`）。
+- **论文库表格**：文件树顶部有虚拟节点 **Library / 论文库**（`motif:library`，非真实目录）；点击后中间栏展示 catalog 论文表（标题、作者、年份、类型、标识符）。选中 Vault 根 / `papers/` / 未选文件时也可显示。点击行打开 paper。数据来自 `paper_list`（SQLite）。表格容器支持 **横向 + 纵向** 独立滚动（`.motif-scroll-both`）。**点击表头**按该列升序 / 降序切换排序（年份列首次点击为降序 / 新→旧）。
+- **Paper Info / Notes（Preview）**：仅在选中**具体论文**时显示——左侧栏底部 Paper Info、以及 PDF/HTML 时右侧可编辑 **Notes**（该篇 `NOTES.md`）。论文库或未选论文时二者均隐藏。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。

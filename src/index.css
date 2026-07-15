@@ -151,16 +151,28 @@
 		transparent;
 }
 
-.motif-scroll::-webkit-scrollbar {
+/* Both axes (e.g. papers library table) */
+.motif-scroll-both {
+	overflow: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
+		transparent;
+}
+
+.motif-scroll::-webkit-scrollbar,
+.motif-scroll-both::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
 }
 
-.motif-scroll::-webkit-scrollbar-track {
+.motif-scroll::-webkit-scrollbar-track,
+.motif-scroll-both::-webkit-scrollbar-track {
 	background: transparent;
 }
 
-.motif-scroll::-webkit-scrollbar-thumb {
+.motif-scroll::-webkit-scrollbar-thumb,
+.motif-scroll-both::-webkit-scrollbar-thumb {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 28%,
@@ -171,7 +183,8 @@
 	background-clip: content-box;
 }
 
-.motif-scroll::-webkit-scrollbar-thumb:hover {
+.motif-scroll::-webkit-scrollbar-thumb:hover,
+.motif-scroll-both::-webkit-scrollbar-thumb:hover {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 48%,
@@ -181,6 +194,7 @@
 	background-clip: content-box;
 }
 
-.motif-scroll::-webkit-scrollbar-corner {
+.motif-scroll::-webkit-scrollbar-corner,
+.motif-scroll-both::-webkit-scrollbar-corner {
 	background: transparent;
 }

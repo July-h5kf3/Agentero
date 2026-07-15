@@ -18,6 +18,7 @@
 		"colYear": "Year",
 		"colType": "Type",
 		"colId": "ID",
+		"sortBy": "Sort by {{column}}",
 		"count": "{{formatted}} papers"
 	},
 	"lookup": {
