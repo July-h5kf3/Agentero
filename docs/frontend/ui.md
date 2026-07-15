@@ -68,7 +68,7 @@
 ## 3. 布局
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + 右侧栏（Agent / Backlinks）。
-- **论文库表格**：Vault 已打开且选中根目录 / `papers/` / 未选文件时，中间栏展示 catalog 中全部论文表格（标题、作者、年份、类型、标识符）；点击行打开该 paper。数据来自 `paper_list`（SQLite），纯展示。
+- **论文库表格**：文件树顶部有虚拟节点 **Library / 论文库**（`motif:library`，非真实目录）；点击后中间栏展示 catalog 论文表（标题、作者、年份、类型、标识符）。选中 Vault 根 / `papers/` / 未选文件时也可显示。点击行打开 paper。数据来自 `paper_list`（SQLite）。
 - 查看论文 PDF/HTML 时，右侧显示可编辑的 **Notes**（该篇 `NOTES.md`）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。

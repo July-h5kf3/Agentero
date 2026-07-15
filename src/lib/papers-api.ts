@@ -5,6 +5,16 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { isTauri } from "@/lib/tauri";
 
+/**
+ * Virtual file-tree path for the papers library table.
+ * Not a real filesystem path — never passed to Host fs APIs.
+ */
+export const LIBRARY_VIRTUAL_PATH = "motif:library";
+
+export function isLibraryVirtualPath(path: string | null | undefined): boolean {
+	return path === LIBRARY_VIRTUAL_PATH;
+}
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;

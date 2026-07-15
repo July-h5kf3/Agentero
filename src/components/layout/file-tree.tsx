@@ -4,6 +4,7 @@ import {
 	FilePlus2,
 	FileText,
 	FolderPlus,
+	Library,
 	ScrollText,
 	WandSparkles,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { isPaperDirectory, paperDirFromPath } from "@/lib/paper-metadata";
+import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
 
@@ -209,6 +211,8 @@ type FileTreeProps = {
 	onCancelCreate: () => void;
 	/** Called for normal files and for paper folders (collapsed leaves). */
 	onSelectFile: (node: FileNode) => void;
+	/** Virtual library node → papers table in center pane. */
+	onSelectLibrary?: () => void;
 	className?: string;
 };
 
@@ -220,6 +224,7 @@ export function FileTree({
 	onConfirmCreate,
 	onCancelCreate,
 	onSelectFile,
+	onSelectLibrary,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
@@ -260,9 +265,10 @@ export function FileTree({
 		return map;
 	}, [nodes]);
 
-	/** Highlight paper folder when any file under it is open. */
+	/** Highlight paper folder when any file under it is open; keep virtual library selected. */
 	const treeSelectedPath = useMemo(() => {
 		if (!selectedPath) return undefined;
+		if (selectedPath === LIBRARY_VIRTUAL_PATH) return LIBRARY_VIRTUAL_PATH;
 		const paperDir = paperDirFromPath(selectedPath);
 		if (paperDir) return paperDir;
 		return selectedPath;
@@ -333,9 +339,29 @@ export function FileTree({
 	return (
 		<div className={cn("select-none py-1 text-sm", className)}>
 			{nodes.length === 0 && !createDraft ? (
-				<p className="px-3 py-2 text-muted-foreground text-xs">
-					{t("fileTree.empty")}
-				</p>
+				<>
+					{/* Virtual library node still useful on empty vault */}
+					<AiFileTree
+						selectedPath={treeSelectedPath}
+						expanded={expanded}
+						onExpandedChange={setExpanded}
+						onSelect={(path) => {
+							if (createDraft) return;
+							if (path === LIBRARY_VIRTUAL_PATH) {
+								onSelectLibrary?.();
+							}
+						}}
+					>
+						<FileTreeFile
+							path={LIBRARY_VIRTUAL_PATH}
+							name={t("papersLibrary.title")}
+							icon={<Library className="size-4 text-muted-foreground" />}
+						/>
+					</AiFileTree>
+					<p className="px-3 py-2 text-muted-foreground text-xs">
+						{t("fileTree.empty")}
+					</p>
+				</>
 			) : (
 				<AiFileTree
 					selectedPath={treeSelectedPath}
@@ -344,6 +370,10 @@ export function FileTree({
 					onSelect={(path) => {
 						// Don't navigate away while naming a new entry.
 						if (createDraft) return;
+						if (path === LIBRARY_VIRTUAL_PATH) {
+							onSelectLibrary?.();
+							return;
+						}
 						const node = byPath.get(path);
 						if (!node) return;
 						if (
@@ -354,6 +384,12 @@ export function FileTree({
 						}
 					}}
 				>
+					{/* Virtual root: papers library table (not a real folder) */}
+					<FileTreeFile
+						path={LIBRARY_VIRTUAL_PATH}
+						name={t("papersLibrary.title")}
+						icon={<Library className="size-4 text-muted-foreground" />}
+					/>
 					{rootCreate}
 					{nodes.map((node) => renderNode(node))}
 				</AiFileTree>

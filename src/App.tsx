@@ -50,7 +50,11 @@ import {
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
-import { listPapers } from "@/lib/papers-api";
+import {
+	isLibraryVirtualPath,
+	LIBRARY_VIRTUAL_PATH,
+	listPapers,
+} from "@/lib/papers-api";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
@@ -141,12 +145,13 @@ function resolveCreateParent(
 	return parent && parent !== selectedPath ? parent : vaultRoot;
 }
 
-/** Library home: no file selection, vault root, or papers/ folder. */
+/** Library table view: virtual tree node, or vault root / papers/ selection. */
 function isLibraryHome(
 	vaultPath: string | null,
 	selectedPath: string | null,
 ): boolean {
 	if (!vaultPath) return false;
+	if (isLibraryVirtualPath(selectedPath)) return true;
 	if (!selectedPath) return true;
 	const sel = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
 	const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -933,7 +938,22 @@ export default function App() {
 		};
 	}, [handleCreateVault]);
 
+	const handleSelectLibrary = useCallback(() => {
+		setSelectedPath(LIBRARY_VIRTUAL_PATH);
+		setPaperMeta(null);
+		setPdfUrl(null);
+		setHtmlSrcUrl(null);
+		setNotesPath(null);
+		setNotesDirty(false);
+		setError(null);
+		void refreshLibrary();
+	}, [refreshLibrary]);
+
 	const handleSelectFile = async (node: FileNode) => {
+		if (isLibraryVirtualPath(node.path)) {
+			handleSelectLibrary();
+			return;
+		}
 		if (
 			node.kind === "directory" &&
 			isPaperDirectory(node.path, node.children)
@@ -1221,6 +1241,7 @@ export default function App() {
 										onConfirmCreate={(name) => void handleConfirmCreate(name)}
 										onCancelCreate={handleCancelCreate}
 										onSelectFile={(n) => void handleSelectFile(n)}
+										onSelectLibrary={handleSelectLibrary}
 									/>
 								</div>
 								<PaperInfoPanel meta={paperMeta} />
