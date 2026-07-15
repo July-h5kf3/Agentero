@@ -9,6 +9,7 @@ export type ShortcutId =
 	| "openVault"
 	| "createVault"
 	| "refreshTree"
+	| "magicWand"
 	| "toggleSidebar"
 	| "toggleChat"
 	| "closeSheet"
@@ -74,6 +75,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "Vault",
 		key: "r",
 		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "magicWand",
+		group: "Vault",
+		// ⇧⌘I — open identifier / magic-wand import popover
+		key: "i",
+		meta: true,
+		shift: true,
 		whenSettingsClosed: true,
 	},
 	{

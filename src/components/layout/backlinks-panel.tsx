@@ -15,6 +15,11 @@ type BacklinksPanelProps = {
 	className?: string;
 	/** Full-height sidebar mode (default). Compact strip is legacy. */
 	variant?: "sidebar" | "compact";
+	/**
+	 * Bumped after `graph_rebuild` (e.g. magic-wand import) so the panel
+	 * re-fetches without requiring a path change.
+	 */
+	wikiIndexRevision?: number;
 };
 
 export function BacklinksPanel({
@@ -23,6 +28,7 @@ export function BacklinksPanel({
 	onOpenPath,
 	className,
 	variant = "sidebar",
+	wikiIndexRevision = 0,
 }: BacklinksPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const [backlinks, setBacklinks] = useState<Backlink[]>([]);
@@ -30,6 +36,8 @@ export function BacklinksPanel({
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
+		// `wikiIndexRevision` is intentional: re-fetch after graph_rebuild.
+		void wikiIndexRevision;
 		if (!selectedPath) {
 			setBacklinks([]);
 			setError(null);
@@ -54,7 +62,7 @@ export function BacklinksPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [vaultPath, selectedPath]);
+	}, [vaultPath, selectedPath, wikiIndexRevision]);
 
 	const countLabel = loading ? "" : ` (${backlinks.length})`;
 

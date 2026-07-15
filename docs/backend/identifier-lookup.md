@@ -519,7 +519,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 ### 8.1 入口
 
 - 工具栏 **魔棒图标**（`WandSparkles` 等），Tooltip + `aria-label` → i18n `lookup.magicWand`。
-- 快捷键：`⇧⌘I`（写入 `shortcuts.ts` + 设置 Keyboard）。
+- 快捷键：`⇧⌘I`（`shortcuts.ts` `magicWand` + 设置 Keyboard；无 Vault 时提示先打开）。
 - 无 Vault 时 disabled。
 
 ### 8.2 主交互流（v1）
@@ -635,10 +635,12 @@ arXiv URL 推导：
 ### Phase C — 体验打磨
 
 - [x] 入库后刷新文件树；可打开 paper
+- [x] 入库后 `graph_rebuild` 并刷新 Backlinks/Graph
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
 - [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
-- [ ] 重复提示增强、入库任务可取消、`⇧⌘I` 快捷键
+- [x] `⇧⌘I` 魔棒快捷键
+- [ ] 重复提示增强、入库任务可取消
 
 ### Phase D — 可选
 

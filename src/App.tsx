@@ -248,6 +248,10 @@ export default function App() {
 	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
 		"agent",
 	);
+	/** Bumped after graph_rebuild so Backlinks/Graph re-fetch. */
+	const [wikiIndexRevision, setWikiIndexRevision] = useState(0);
+	/** Increment to open magic-wand popover (⇧⌘I). */
+	const [lookupOpenSignal, setLookupOpenSignal] = useState(0);
 	const sidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
@@ -465,17 +469,26 @@ export default function App() {
 		}
 	}, []);
 
-	const activateVault = useCallback(async (path: string) => {
-		saveVaultPath(path);
-		setVaultPath(path);
-		setSelectedPath(null);
-		setRecentVaults(getRecentVaults());
+	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
+	const rebuildWikiAndNotify = useCallback(async (path: string) => {
 		try {
 			await rebuildWikiIndex(path);
+			setWikiIndexRevision((n) => n + 1);
 		} catch {
-			// Index rebuild is best-effort; get_backlinks will rebuild on demand.
+			// Index rebuild is best-effort; panels re-fetch on next path change.
 		}
 	}, []);
+
+	const activateVault = useCallback(
+		async (path: string) => {
+			saveVaultPath(path);
+			setVaultPath(path);
+			setSelectedPath(null);
+			setRecentVaults(getRecentVaults());
+			await rebuildWikiAndNotify(path);
+		},
+		[rebuildWikiAndNotify],
+	);
 
 	const handleOpenVault = useCallback(async () => {
 		setError(null);
@@ -559,14 +572,35 @@ export default function App() {
 		if (!vaultPath) return;
 		void (async () => {
 			await refreshTree(vaultPath);
-			try {
-				await rebuildWikiIndex(vaultPath);
-			} catch {
-				// ignore
-			}
+			await rebuildWikiAndNotify(vaultPath);
 			await refreshLibrary();
 		})();
-	}, [vaultPath, refreshTree, refreshLibrary]);
+	}, [vaultPath, refreshTree, refreshLibrary, rebuildWikiAndNotify]);
+
+	const openMagicWand = useCallback(() => {
+		if (!vaultPath) {
+			setError(t("sidebar:lookup.needsVault"));
+			return;
+		}
+		// Expand left rail without stealing focus (popover owns focus).
+		if (sidebarCollapsed) {
+			const panel = sidebarPanelRef.current;
+			if (panel) {
+				try {
+					panel.expand();
+				} catch {
+					// ignore
+				}
+				try {
+					panel.resize(SIDEBAR_DEFAULT_PX);
+				} catch {
+					// ignore
+				}
+			}
+			setSidebarCollapsed(false);
+		}
+		setLookupOpenSignal((n) => n + 1);
+	}, [vaultPath, sidebarCollapsed, sidebarPanelRef, t]);
 
 	useEffect(() => {
 		void refreshLibrary();
@@ -609,6 +643,9 @@ export default function App() {
 				case "refreshTree":
 					handleRefresh();
 					break;
+				case "magicWand":
+					openMagicWand();
+					break;
 				case "toggleSidebar":
 					toggleSidebar();
 					break;
@@ -638,6 +675,7 @@ export default function App() {
 		handleNewWindow,
 		handleOpenVault,
 		handleRefresh,
+		openMagicWand,
 		openSettings,
 		toggleChat,
 		toggleSidebar,
@@ -738,11 +776,8 @@ export default function App() {
 				settings,
 			});
 			await refreshTree(vaultPath);
-			try {
-				await rebuildWikiIndex(vaultPath);
-			} catch {
-				// ignore
-			}
+			// Rebuild Backlinks/Graph index so new NOTES.md / links are visible.
+			await rebuildWikiAndNotify(vaultPath);
 			await refreshLibrary();
 			openPaper(paperDir);
 		},
@@ -753,6 +788,7 @@ export default function App() {
 			refreshTree,
 			refreshLibrary,
 			openPaper,
+			rebuildWikiAndNotify,
 			t,
 		],
 	);
@@ -1104,18 +1140,21 @@ export default function App() {
 
 			try {
 				await writeVaultFile(full, content);
-				try {
-					await rebuildWikiIndex(vaultPath);
-				} catch {
-					// ignore
-				}
+				await rebuildWikiAndNotify(vaultPath);
 				await refreshTree(vaultPath);
 				await openPath(full);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, handleOpenVaultRel, openPath, refreshTree, t],
+		[
+			vaultPath,
+			handleOpenVaultRel,
+			openPath,
+			refreshTree,
+			rebuildWikiAndNotify,
+			t,
+		],
 	);
 
 	const wikiNavValue = useMemo(
@@ -1308,6 +1347,7 @@ export default function App() {
 										busy={busy || Boolean(createDraft)}
 										error={error}
 										isDemo={isDemo}
+										lookupOpenSignal={lookupOpenSignal}
 									/>
 								</div>
 								<div className="motif-scroll min-h-0 flex-1 px-1">
@@ -1524,12 +1564,14 @@ export default function App() {
 											onOpenPath={handleOpenVaultRel}
 											variant="sidebar"
 											className="min-h-0 basis-[42%] border-b"
+											wikiIndexRevision={wikiIndexRevision}
 										/>
 										<GraphPanel
 											vaultPath={vaultPath}
 											selectedPath={selectedPath}
 											onOpenPath={handleGraphOpenPath}
 											className="min-h-0 flex-1"
+											wikiIndexRevision={wikiIndexRevision}
 										/>
 									</div>
 								) : null}

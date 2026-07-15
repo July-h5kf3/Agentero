@@ -29,7 +29,7 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
 - Agent 集成采用 BYOA：Motif 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Motif 内填写模型 API Key。
 - UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。
 - 国际化（i18n）：所有面向用户的文案都必须经 `t()` 走 `react-i18next`，禁止硬编码字符串。English（`en`）为源语言，新增文案先登记 `en` 词条再同步 `zh-CN`（`src/i18n/locales/`）。跨命名空间用 `t("ns:key")` 并在 `useTranslation([...])` 声明；React 之外用全局 `i18n.t()`。数字/日期用 `i18n.language` 格式化。详见 `docs/frontend/ui.md` §4.1。
-- 修改后需要同步更新相关文档。
+- 修改后需要同步更新相关文档。如果修改了 UI、数据契约、发布流程或 Vault 语义，必须同步更新相关文档。并检查 Roadmap 和 Todo。
 
 ## 常用命令
 

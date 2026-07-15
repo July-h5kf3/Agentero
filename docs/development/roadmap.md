@@ -79,11 +79,10 @@
 
 - [ ] 关键词/话题/自然语言描述 + 输入分类（规则 + Agent）。
 - [ ] Agent 检索候选列表确认（单选/多选）。
-- [ ] 无 LaTeX 或需要统一正文时生成 `PAPER.md`。
+- [ ] 无 LaTeX 或需要统一正文时生成 `PAPER.md`。(放在解析部分完成)
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex`。
-- [ ] 入库任务可取消/可重试/部分失败恢复。
-- [ ] 入库后刷新 Backlinks/Graph 索引（当前刷新文件树 + 打开 paper）。
-- [ ] 魔棒快捷键 `⇧⌘I`；Translator 本机 sidecar 捆绑。
+- [x] 入库后刷新 Backlinks/Graph 索引
+- [x] 魔棒快捷键 `⇧⌘I`；
 
 验收标准：
 
@@ -162,7 +161,6 @@
 - [ ] Plate 内联 wikilink 节点与更稳定的 Markdown 序列化。
 - [ ] 图谱 hover 时只高亮直接邻居。
 - [ ] 增加 Graph 全屏/聚焦模式，保留右侧栏小图作为默认入口。
-- [ ] 图谱索引持久化到 SQLite，并支持增量重建。
 
 ## V0.5 Importer 架构与本地 PDF 入库
 

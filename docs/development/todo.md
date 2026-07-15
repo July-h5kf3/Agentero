@@ -22,7 +22,7 @@
    - [x] 写入默认 `NOTES.md`、空 `highlights.md`。
    - [x] **始终下载 PDF**；**arXiv 解压 e-print LaTeX** 到 `source/`。
    - [x] 入库后刷新文件树并打开 paper。
-   - [ ] 入库后刷新 Backlinks/Graph 索引。
+   - [x] 入库后刷新 Backlinks/Graph 索引。
    - [ ] 关键词/描述 Agent 候选列表确认。
 
 2b. **魔棒 / Identifier Lookup（Translator）** ✅ v0
@@ -32,7 +32,7 @@
    - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
    - [x] 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download。
    - [x] Library 行：库内任一篇仍缺资源 → 批量 Download 全部缺失 PDF / 可取 TeX。
-   - [ ] 快捷键 `⇧⌘I`；本机 Translator sidecar 捆绑。
+   - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
 2c. **论文库表格 UI** ✅
    - [x] 虚拟节点 `motif:library`；中间栏 catalog 表（`paper_list`）。

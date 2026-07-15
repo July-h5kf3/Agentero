@@ -21,6 +21,10 @@ type GraphPanelProps = {
 	selectedPath: string | null;
 	onOpenPath: (vaultRelativePath: string) => void;
 	className?: string;
+	/**
+	 * Bumped after `graph_rebuild` so the graph reloads without a path change.
+	 */
+	wikiIndexRevision?: number;
 };
 
 type FgNode = GraphNode & {
@@ -81,6 +85,7 @@ export function GraphPanel({
 	selectedPath,
 	onOpenPath,
 	className,
+	wikiIndexRevision = 0,
 }: GraphPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const wrapRef = useRef<HTMLDivElement>(null);
@@ -129,6 +134,8 @@ export function GraphPanel({
 	}, []);
 
 	useEffect(() => {
+		// `wikiIndexRevision` is intentional: re-fetch after graph_rebuild.
+		void wikiIndexRevision;
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
@@ -157,7 +164,7 @@ export function GraphPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [vaultPath, mode, centerHint]);
+	}, [vaultPath, mode, centerHint, wikiIndexRevision]);
 
 	const graphData = useMemo(() => {
 		if (!data) return { nodes: [] as FgNode[], links: [] as FgLink[] };

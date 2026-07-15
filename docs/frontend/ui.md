@@ -126,7 +126,7 @@
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（论文 PDF/HTML 视图时） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
-| `⇧⌘I` | 魔棒（规划快捷键） | UI 已用侧栏图标；快捷键尚未接入 `shortcuts.ts` |
+| `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand`；设置 Keyboard 可见 |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。

@@ -47,6 +47,7 @@ import {
 	paperNeedsAssetDownload,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
@@ -619,6 +620,11 @@ export function VaultSidebarHeader({
 	busy,
 	error,
 	isDemo,
+	/**
+	 * Increment from App (e.g. ⇧⌘I) to open the magic-wand popover.
+	 * Only reacts to positive values after mount.
+	 */
+	lookupOpenSignal = 0,
 }: {
 	title: string;
 	onNewFile: () => void;
@@ -628,12 +634,24 @@ export function VaultSidebarHeader({
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
+	lookupOpenSignal?: number;
 }) {
-	const { t } = useTranslation("sidebar");
+	const { t } = useTranslation(["sidebar", "shortcuts"]);
 	const [wandOpen, setWandOpen] = useState(false);
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
 	const [lookupError, setLookupError] = useState<string | null>(null);
+	const actionsDisabled = busy || isDemo || lookupBusy;
+	const magicWandShortcut = useMemo(() => {
+		const def = SHORTCUTS.find((s) => s.id === "magicWand");
+		return def ? formatShortcut(def) : "⇧⌘I";
+	}, []);
+
+	useEffect(() => {
+		if (lookupOpenSignal <= 0 || isDemo || busy) return;
+		setWandOpen(true);
+		setLookupError(null);
+	}, [lookupOpenSignal, isDemo, busy]);
 
 	const runLookup = async () => {
 		const text = lookupText.trim();
@@ -650,8 +668,6 @@ export function VaultSidebarHeader({
 			setLookupBusy(false);
 		}
 	};
-
-	const actionsDisabled = busy || isDemo || lookupBusy;
 
 	return (
 		<TooltipProvider delayDuration={300}>
@@ -683,6 +699,9 @@ export function VaultSidebarHeader({
 									</TooltipTrigger>
 									<TooltipContent side="bottom">
 										{t("lookup.magicWand")}
+										<span className="ml-2 text-muted-foreground">
+											{magicWandShortcut}
+										</span>
 									</TooltipContent>
 								</Tooltip>
 								<PopoverContent
