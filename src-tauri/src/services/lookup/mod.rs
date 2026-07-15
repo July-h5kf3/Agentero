@@ -15,7 +15,7 @@ use std::time::Duration;
 
 /// Default Translator Runtime base URL (hosted service).
 /// Override via Settings → `translatorBaseUrl` / `LookupImportArgs.translator_base_url`.
-pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.poco-ai.com";
+pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -509,12 +509,12 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 **交互**：侧边栏魔棒 → 粘贴链接/编号 → Host `lookup_import` → Translator → 写 paper 文件夹。  
 详见 [`identifier-lookup.md`](identifier-lookup.md)。
 
-**Translator 默认地址**：`https://translator.poco-ai.com`（设置 `translatorBaseUrl` 可改）。  
+**Translator 默认地址**：`https://translator.philfan.cn`（设置 `translatorBaseUrl` 可改）。  
 `POST {base}/search` 或 `/web`，body 为 plain text。
 
 #### `lookup_translator_config`
 
-- **返回**：`{ ok: true; data: { defaultBaseUrl: "https://translator.poco-ai.com" } }`
+- **返回**：`{ ok: true; data: { defaultBaseUrl: "https://translator.philfan.cn" } }`
 
 #### `lookup_import`
 
@@ -525,7 +525,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
     parentDir: string;              // "papers" | "papers/nlp"
     text: string;
     downloadFulltextToLocal?: boolean;
-    translatorBaseUrl?: string;     // 来自设置，默认 https://translator.poco-ai.com
+    translatorBaseUrl?: string;     // 来自设置，默认 https://translator.philfan.cn
   }
   ```
 - **返回**：

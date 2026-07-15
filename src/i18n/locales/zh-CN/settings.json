@@ -23,7 +23,7 @@
 		},
 		"translatorBaseUrl": {
 			"label": "Translator 服务地址",
-			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.poco-ai.com"
+			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn"
 		}
 	},
 	"appearance": {

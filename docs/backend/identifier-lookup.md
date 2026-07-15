@@ -84,7 +84,7 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
 | 项 | 值 |
 |---|---|
 | 设置 key | `translatorBaseUrl`（Settings → General） |
-| 默认 | **`https://translator.poco-ai.com`** |
+| 默认 | **`https://translator.philfan.cn`** |
 | Host 常量 | `DEFAULT_TRANSLATOR_BASE_URL`（与设置默认一致） |
 
 - 魔棒入库时前端把设置中的 URL 传入 `lookup_import.args.translatorBaseUrl`。

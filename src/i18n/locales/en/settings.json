@@ -23,7 +23,7 @@
 		},
 		"translatorBaseUrl": {
 			"label": "Translator service URL",
-			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.poco-ai.com"
+			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn"
 		}
 	},
 	"appearance": {

@@ -46,7 +46,7 @@ function resolveTranslatorBaseUrl(
 /**
  * Add a paper by identifier/URL into `vaultRoot/parentDir/<id>/`.
  * Host calls Translator at Settings `translatorBaseUrl`
- * (default https://translator.poco-ai.com); falls back to arXiv API
+ * (default https://translator.philfan.cn); falls back to arXiv API
  * when Runtime is down and input is an arXiv id.
  */
 export async function addPaperByIdentifier(opts: {

@@ -35,7 +35,7 @@ export type AppSettings = {
 };
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
-export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.poco-ai.com";
+export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
 
 export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
