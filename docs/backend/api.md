@@ -542,7 +542,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
     }
   }
   ```
-- **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；写 `NOTES.md` / `highlights.md` / `metadata.json`；下载策略见 identifier-lookup §1.3。
+- **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` / `highlights.md`；`metadata.json` 为 catalog 投影同步；下载策略见 identifier-lookup §1.3。
 
 ### 3.6 论文
 
@@ -593,14 +593,31 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 }
 ```
 
-#### `paper:list`
+#### `paper_list`（已落地）
 
-列出当前 Vault 中已入库的论文（**读 catalog**，不扫盘拼表）。
+列出当前 Vault 中已入库的全部论文（**读 catalog**，不扫盘拼表）。供前端 **论文库表格**（Library 虚拟节点 / vault home）。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+}
+```
+
+- **返回**：`{ ok: true; data: PaperMetadata[] }`（数组元素含 `path`、`title`、`authors`、`year`、`type`、标识符与远程 URL 等）。
+- **前端**：`src/lib/papers-api.ts` → `listPapers`；UI 侧本地表头排序（不经由本命令传 sort 参数）。
+- **说明**：当前无 filter/pagination；扩展筛选/FTS 仍可用规划契约 `paper:list`（见下）。
+
+#### `paper:list`（扩展规划）
+
+带过滤与分页的列表（尚未实现；现网用 `paper_list`）。
 
 - **参数**
 
 ```ts
 {
+  vaultPath: string;
   status?: ('pending' | 'importing' | 'completed' | 'failed')[];
   tag?: string;
   year?: number;

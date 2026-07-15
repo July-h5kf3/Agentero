@@ -88,7 +88,7 @@
 | `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Motif 默认 HTTP 传输 |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
-| `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 编辑 / Preview/Notes / 可选右侧栏（Agent 或 Backlinks+Graph） |
+| `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 中间内容（论文库或编辑器）/ Notes（仅具体论文）/ 可选右侧栏（Agent 或 Backlinks+Graph） |
 | tweakcn `modern-minimal` | shadcn token 主题 | 简约视觉；Chat 共用同一套 token |
 | `next-themes` | 明暗 | System / Light / Dark |
 

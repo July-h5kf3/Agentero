@@ -19,9 +19,9 @@
 
 ## 布局模型
 
-- 左侧栏：Vault 文件树（新建文件 / 文件夹）与 paper 元信息。
-- 中间栏：无 Vault 时为欢迎页（最近路径 + 打开 / 创建）；有 Vault 时为 Markdown / PDF / HTML。
-- 右侧 Preview：Markdown 渲染预览或当前 paper 的 `NOTES.md`。
+- 左侧栏：Vault 文件树（顶部虚拟节点 **Library**；魔棒 / 新建文件 / 文件夹）+ 选中论文时底部 **Paper Info**。
+- 中间栏：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或 Markdown / PDF / HTML。
+- 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`；论文库视图隐藏。
 - 可选右侧栏：Agent 或 Backlinks。
 - Backlinks 右侧栏：上方反链列表，下方 Graph 面板。
 - 多窗口：`⌘N` 新开窗口，当前 Vault 按窗口隔离（sessionStorage）。

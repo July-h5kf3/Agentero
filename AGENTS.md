@@ -9,10 +9,11 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
 - 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
 - 工作台布局：
-  - 左侧：Vault 文件树（新建文件 / 文件夹）与 paper 信息；
-  - 中间：无 Vault 时欢迎页（最近路径）；有 Vault 时 Markdown / PDF / HTML；
-  - 右侧 Preview：Markdown 渲染预览或 paper `NOTES.md`；
+  - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹）+ 选中论文时 **Paper Info**；
+  - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或 Markdown / PDF / HTML；
+  - 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`；
   - 可选右侧栏：`Agent` 或 `Backlinks`。
+- 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `motif:library` 不写盘。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab。
 - Graph 数据必须来自 Markdown 双链或可重建索引，不能来自手工维护的图数据库。

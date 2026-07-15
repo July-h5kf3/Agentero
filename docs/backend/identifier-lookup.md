@@ -1,7 +1,7 @@
 # 魔棒入库（Identifier Lookup）与 Translator 后端
 
-> 状态：**设计稿（待实现）**  
-> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **只写 catalog + 轻量 paper 文件夹**（远程 `pdf_url` / `html_url` **不下载**）→ 落到 `papers/` 或当前 Papers 子文件夹。
+> 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator；sidecar/批量/快捷键仍可扩展）  
+> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + 轻量 paper 文件夹**（远程 `pdf_url` / `html_url` 默认 **不下载**）→ 落到 `papers/` 或当前 Papers 子文件夹。
 
 相关文档：
 
@@ -656,23 +656,26 @@ arXiv 远程 URL 推导（无下载）：
 ### Phase A — 交互闭环（可先 fallback）
 
 - [x] 文档：交互、目标文件夹、不下载约定
-- [ ] 魔棒 Popover + `parent_dir` 解析 + i18n
-- [ ] `lookup:parse` + arXiv/DOI fallback 客户端
-- [ ] `lookup:import`：catalog + NOTES 壳，**无下载**
+- [x] 魔棒 Popover + `parent_dir` 解析 + i18n（侧栏 `WandSparkles`）
+- [x] Host 解析 + arXiv fallback（Translator 失败时）
+- [x] `lookup_import`：catalog upsert + NOTES 壳；下载策略见 §1.3
 
-### Phase B — Translator Runtime
+### Phase B — Translator 服务
 
-- [ ] sidecar + `lookup:search` → `POST /search`（及链接时 `/web`）
-- [ ] map / dedupe / 设置页状态
+- [x] HTTP 客户端 → `POST {translatorBaseUrl}/search|/web`（默认 `https://translator.philfan.cn`）
+- [x] map → `PaperMetadata` / catalog schema v2；设置页 `translatorBaseUrl`
+- [ ] 可选本机 sidecar 捆绑 / 探测；更细 dedupe UX
 
 ### Phase C — 体验打磨
 
-- [ ] 重复提示、批量、打开 paper 联调
-- [ ] 与文件树选中态同步目标路径
+- [x] 入库后刷新文件树；可打开 paper
+- [x] 与文件树选中态同步目标 `parent_dir`
+- [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
+- [ ] 重复提示、批量导入、`⇧⌘I` 快捷键
 
 ### Phase D — 可选
 
-- [x] 设置：`downloadFulltextToLocal`（有预览 URL 时是否也下载；无 URL 始终下载）— UI 已加
+- [x] 设置：`downloadFulltextToLocal`（有预览 URL 时是否也下载；无 URL 始终下载）
 - [ ] PDF prepare 复用同一 Lookup
 
 ---
@@ -683,25 +686,26 @@ arXiv 远程 URL 推导（无下载）：
 |---|---|
 | 单测 `parse` | arXiv URL/ID、DOI、version 剥离 |
 | 单测 `parent_dir` | 根 / 子文件夹 / paper 内文件 → 父目录 |
-| 单测 import | catalog 有 `pdf_url`；`source/` 不出现 pdf |
-| UI | 目标路径文案；无 Vault；重复 skip |
+| 单测 import | catalog 有 `pdf_url`；`source/` 不出现 pdf（设置关时） |
+| UI | 魔棒无 Vault 禁用；Library 表可见新行；远程 PDF 预览 |
 
 ---
 
 ## 13. 验收标准
 
-1. 点击魔棒，粘贴链接或编号，成功后 paper 壳 + **catalog 有行**。  
+1. ~~点击魔棒，粘贴链接或编号，成功后 paper 壳 + **catalog 有行**。~~ ✅  
 2. **无** `pdf_url`/`html_url`：无论设置，尽量下载到 `source/`。  
 3. **有** 预览 URL + 设置关：不下载，远程预览。  
 4. **有** 预览 URL + 设置开：catalog 保留 URL 且下载到 `source/`。  
 5. 文件树选中 `papers/nlp` 时路径为 `papers/nlp/<id>/`。  
-6. 重复不覆盖 `NOTES.md`；文案 i18n。
+6. 重复不覆盖 `NOTES.md`；文案 i18n。  
+7. ~~论文库表格（`paper_list`）能列出已入库论文。~~ ✅  
 
 ---
 
 ## 14. 开放问题
 
-1. **sidecar 分发**方式（捆绑 / Docker / 首次下载）。  
+1. **sidecar 分发**方式（捆绑 / Docker / 首次下载）— 当前默认远程 Translator URL。  
 2. v1 是否「解析成功即入库」还是始终二次确认。  
 3. `generate_notes` 默认是否调 Agent（建议默认占位模板）。  
 
@@ -715,3 +719,4 @@ arXiv 远程 URL 推导（无下载）：
 | 2026-07-15 | 交互收敛：链接/编号 → Translator → 加入 papers/ 或当前子文件夹；远程 URL 只写 catalog、不下载 |
 | 2026-07-15 | 数据流合并：arXiv/DOI 等统一 Translator → 直接 map 进 PaperMetadata；catalog schema v2 补字段 |
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
+| 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |

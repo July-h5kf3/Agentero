@@ -15,7 +15,7 @@
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Motif **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat）、`layout/file-tree`（Vault 树）、`layout/backlinks-panel`（反链）、`layout/graph-panel`（图谱） |
+| 业务壳 | `layout/agent-panel`（Chat）、`layout/file-tree`（Vault 树 + 虚拟 Library 节点 + 魔棒）、`layout/papers-library`（catalog 论文表）、`layout/paper-info-panel`（选中论文元信息）、`layout/backlinks-panel`（反链）、`layout/graph-panel`（图谱） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
 安装命令中的 `<name>` 与下表 **Registry 名**（URL 路径）一致。

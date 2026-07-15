@@ -15,7 +15,7 @@ Motif 的存储遵循两条原则:
 | 层 | 载体 | Agent / UI 何时用 | 体量 |
 |---|---|---|---|
 | L0 指令 | `AGENTS.md` | 会话开始,总是 | 极小 |
-| L1 索引 | **Catalog**（`paper:list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小(每篇一行) |
+| L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小(每篇一行) |
 | L2 条目 | `{paper}/NOTES.md` | 锁定某篇之后 | 小 |
 | L2.5 证据 | `{paper}/highlights.md` | 需要用户标注 / 精确引文 | 中 |
 | L3 正文 | `{paper}/PAPER.md` | 需要公式 / 实验细节 / 原文 | 大 |
@@ -86,7 +86,7 @@ Vault 内的 Agent 行为规范,至少包含:
 
 权威存储：**`.motif/catalog.sqlite`** 的 `papers` 表。  
 字段、schema、导出与实现见 **[`catalog.md`](catalog.md)**。  
-UI 列表 / 筛选 / Paper Info / 远程 PDF·HTML URL 均读 catalog，不扫 `metadata.json`。
+UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`）均读 catalog，不扫 `metadata.json`。
 
 ### 可选导出：`PAPERS.md` / `library.bib`
 

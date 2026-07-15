@@ -209,9 +209,14 @@ src-tauri/src/
 
 前端「论文库 / 筛选」**只读 catalog**，不扫盘拼表：
 
-- `paper:list`：支持 year、tag、type、query（LIKE 或 FTS）
-- `paper:get`：单篇 meta + 解析出的路径字段
-- 文件树仍扫 `papers/` 目录；**标题展示**优先 `paper:get` / 批量 map，缺失则回退目录名
+| 命令 | 状态 | 说明 |
+|---|---|---|
+| `paper_list` | **已落地** | 全量列表 → UI 论文库表格；参数仅 `vaultPath` |
+| `paper_get` | **已落地** | 单篇 meta（`path` 或 `id`）→ Paper Info / 远程预览 URL |
+| `paper:list`（过滤/分页） | 规划 | year、tag、type、query（LIKE 或 FTS）、limit/offset |
+
+- 文件树仍扫 `papers/` 目录；**标题与元数据**优先 `paper_get` / `paper_list`，缺失则回退目录名。
+- UI 排序在前端对 `paper_list` 结果本地完成（表头点击），不写回 SQLite。
 
 ### 5.4 导出（保留能力，非默认文件）
 
@@ -248,7 +253,7 @@ import paper
   → 创建 paper 文件夹（默认 `papers/<id>/`，也可 `papers/<org>/…/<id>/`）
   → 事务写入 catalog.papers（path = 该文件夹相对路径）
   → 不更新根级 PAPERS.md / library.bib
-  → 可选：emit 事件供 UI 刷新 paper:list
+  → 可选：emit 事件供 UI 刷新 paper_list
 ```
 
 重复入库：`id` 冲突时按 `overwrite` 策略更新行或拒绝；**不得静默覆盖**用户 `NOTES.md`。
@@ -309,8 +314,9 @@ import paper
 
 ## 9. 验收要点
 
-- [x] Create Vault 生成 `.motif/catalog.sqlite`（v1 schema），**不**生成 `PAPERS.md` / `library.bib`。
-- [ ] 入库后 `paper:list` 可见新行；磁盘上无强制 `metadata.json`。
+- [x] Create Vault 生成 `.motif/catalog.sqlite`（schema 当前版本），**不**生成 `PAPERS.md` / `library.bib`。
+- [x] 魔棒 / `lookup_import` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
+- [x] 读路径走 `paper_get` / `paper_list`；`metadata.json` 仅为 upsert 后投影（非 UI 主源）。
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex` 能生成与历史格式兼容的文本。
 - [ ] 删除导出文件不影响 catalog 与 UI 列表。
 - [ ] 打开缺 catalog 的旧目录能 init 或从 `metadata.json` 迁移。
@@ -320,7 +326,8 @@ import paper
 ## 10. 相关文档
 
 - [`data-model.md`](data-model.md) — Vault 分层与类型
-- [`api.md`](api.md) — `vault:*` / `paper:*` / `catalog:export_*` / `lookup:*`（规划）
+- [`api.md`](api.md) — `paper_list` / `paper_get` / `lookup_import` 等已落地契约 + 规划扩展
 - [`identifier-lookup.md`](identifier-lookup.md) — 魔棒元数据 → catalog 写入路径
+- [`../frontend/ui.md`](../frontend/ui.md) — 论文库表格与虚拟 Library 节点
 - [`../development/technical-plan.md`](../development/technical-plan.md) — 模块与依赖
 - [`../development/roadmap.md`](../development/roadmap.md) — 版本交付

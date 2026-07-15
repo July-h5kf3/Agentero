@@ -28,9 +28,10 @@
 ### 2.1 侧边栏文件树
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
+- **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
-  - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号）
+  - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
@@ -67,21 +68,30 @@
 
 ## 3. 布局
 
-- 工作台默认 **三栏**：文件树 + 中间内容 + 右侧栏（Agent / Backlinks）。
-- **论文库表格**：文件树顶部有虚拟节点 **Library / 论文库**（`motif:library`，非真实目录）；点击后中间栏展示 catalog 论文表（标题、作者、年份、类型、标识符）。选中 Vault 根 / `papers/` / 未选文件时也可显示。点击行打开 paper。数据来自 `paper_list`（SQLite）。表格容器支持 **横向 + 纵向** 独立滚动（`.motif-scroll-both`）。**点击表头**按该列升序 / 降序切换排序（年份列首次点击为降序 / 新→旧）。
-- **Paper Info / Notes（Preview）**：仅在选中**具体论文**时显示——左侧栏底部 Paper Info、以及 PDF/HTML 时右侧可编辑 **Notes**（该篇 `NOTES.md`）。论文库或未选论文时二者均隐藏。
+- 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间与 Notes 随内容切换。
+- **论文库表格**（`src/components/layout/papers-library.tsx`）：
+  - **入口**：文件树虚拟节点 `motif:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
+  - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
+  - **列**：标题、作者、年份、类型、标识符；点击行打开对应 paper 文件夹。
+  - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
+  - **滚动**：容器 `.motif-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
+- **Paper Info / Notes（Preview）——仅具体论文**：
+  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
+  - **右侧 Notes**：仅当已打开具体论文且中心为 PDF/HTML 时显示该篇 `NOTES.md`；论文库视图或未选论文时隐藏（不残留上一篇 Notes 栏）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
-- **独立滚动**：侧边栏 / 中间编辑器 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
-- **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）。
+- **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
+  - 默认竖向：`.motif-scroll`（`overflow-x: hidden; overflow-y: auto`）。
+  - 需双向滚动（论文库表）：`.motif-scroll-both`。
+- **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）；论文库视图下不显示该切换。
   - Markdown：**所见即所得富文本编辑**（Plate）。直接输入 Markdown 语法即时渲染（标题、列表、任务列表、代码块、表格、公式、`[[wikilink]]` 等）；无独立「预览」栏。
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML：**只读 catalog 中的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**；过渡期可回退读 `metadata.json`）
+  - PDF / HTML：**只读 catalog 中的远程 `pdf_url` / `html_url`**（经 `paper_get`；**不下载、不读本地 pdf/html 文件**）
   - arXiv 推荐写入：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
@@ -110,15 +120,15 @@
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（论文 PDF/HTML 视图时） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
-| `⇧⌘I` | 魔棒：按链接/编号加入 Papers（规划） | Translator 解析；写入 catalog 远程 URL，不下载；目标为 `papers/` 或当前 Papers 子文件夹 |
+| `⇧⌘I` | 魔棒（规划快捷键） | UI 已用侧栏图标；快捷键尚未接入 `shortcuts.ts` |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
-- **魔棒**（规划）：工具栏图标 + `⇧⌘I`；粘贴链接或编号 → Translator → 加入 Papers。  
+- **魔棒**（已落地 v0）：侧栏 `WandSparkles` Popover；粘贴链接或编号 → Host `lookup_import` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ catalog + paper 壳。  
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
   - 无 `pdf_url`/`html_url`：**始终**尽量下载到 `source/`。  
   - 有预览 URL：默认只远程预览；Settings「有预览链接时也下载到本地」开启时再镜像到 `source/`。  
-  - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `lookup.*`；无 Vault 时禁用。
+  - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 

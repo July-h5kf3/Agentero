@@ -25,14 +25,14 @@
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
-- 标识符魔棒入库：解析 ID、调用本机 Translator Runtime、映射元数据并写入 catalog（规划中）。
+- 标识符魔棒入库：`lookup_import` 调用 Translator 服务（可配置 base URL）、映射元数据并写入 catalog；论文库列表 `paper_list`。
 
 ## 本分区文档
 
 - [`api.md`](api.md)：Tauri invoke commands、event contracts、Graph 与 Agent API 形状。
 - [`data-model.md`](data-model.md)：Vault 结构、paper 文件、分层规则、运行时类型。
 - [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
-- [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Zotero Translator 后端架构（设计稿）。
+- [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Translator 后端（v0 已落地 + 后续扩展）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型。
 
 ## 交叉引用

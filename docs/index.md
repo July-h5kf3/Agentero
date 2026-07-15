@@ -36,10 +36,13 @@ Motif 桌面应用
 
 ## 当前 UI 形态
 
-- 默认工作台为三栏：文件树、中间内容、Preview/Notes。
+- 默认工作台：文件树 + 中间内容 +（按需）Notes + 可选右侧栏。
+- 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、双向滚动），数据来自 `paper_list`。
+- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。
 - 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab。
+- 魔棒：侧栏粘贴标识符 → Translator → 写入 catalog（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
 
 ## 关键三方技术
 

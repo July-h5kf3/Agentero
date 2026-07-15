@@ -14,18 +14,24 @@
    - 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建（无常驻说明文案）。
    - 当前窗口 Vault 用 `sessionStorage`；最近列表 / 上次路径用 `localStorage`。
 
-2. **arXiv 精确入库**
-   - 支持输入 arXiv ID / URL。
-   - 拉取 metadata，写入 catalog `papers` 表。
-   - 写入默认 `NOTES.md`、空 `highlights.md`。
-   - 入库后自动打开 paper，并刷新 Backlinks/Graph。
+2. **arXiv 精确入库** 🟡 魔棒路径已通；Agent 候选 / LaTeX 全量仍待
+   - [x] 支持输入 arXiv ID / URL（魔棒）。
+   - [x] 拉取 metadata，写入 catalog `papers` 表。
+   - [x] 写入默认 `NOTES.md`、空 `highlights.md`。
+   - [x] 入库后刷新文件树并打开 paper。
+   - [ ] 刷新 Backlinks/Graph 索引；关键词/描述 Agent 候选。
 
-2b. **魔棒 / Identifier Lookup（Translator 后端）** — 设计见 [`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)
-   - UI：点击魔棒 → 粘贴链接或编号 → 加入 Papers。
-   - 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
-   - Translator → 直接写入 `PaperMetadata`/catalog；有 `pdf_url`/`html_url` **不下载**。
-   - 无预览 URL 始终尝试下载；设置 `downloadFulltextToLocal`（默认关）控制「有预览 URL 时是否也下载」。
-   - Host：`lookup:parse` / `lookup:search` / `lookup:import(parent_dir)`；sidecar Runtime。
+2b. **魔棒 / Identifier Lookup（Translator 后端）** ✅ v0 — 设计见 [`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)
+   - [x] UI：侧栏魔棒 → 粘贴链接或编号 → 加入 Papers。
+   - [x] 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
+   - [x] Translator → 直接写入 `PaperMetadata`/catalog；有 `pdf_url`/`html_url` 默认不下载。
+   - [x] 无预览 URL 始终尝试下载；设置 `downloadFulltextToLocal`（默认关）。
+   - [x] Host：`lookup_import` / `lookup_translator_config`；HTTP Translator（`translatorBaseUrl`）。
+   - [ ] `⇧⌘I` 快捷键；批量；本机 sidecar 捆绑。
+
+2c. **论文库表格 UI** ✅
+   - [x] 虚拟节点 `motif:library`；中间栏 catalog 表（`paper_list`）。
+   - [x] 表头排序；横向/纵向滚动；仅具体论文时显示 Paper Info / Notes。
 
 3. **Agent 工作流入口**
    - 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。

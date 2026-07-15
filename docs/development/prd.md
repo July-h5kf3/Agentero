@@ -90,7 +90,8 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 - 左侧：Vault 文件树与 paper 元信息。
 - 中间：Markdown / PDF / HTML 视图切换。
-- 右侧 Preview/Notes：Markdown 预览，或阅读 PDF/HTML 时展示该篇 `NOTES.md`。
+- 中间栏：论文库表格（Library / vault home）或 Markdown / PDF / HTML。
+- 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时展示该篇 `NOTES.md`；论文库视图隐藏。
 - 可选右侧栏：Agent，或 Backlinks+Graph（上方反链，下方图谱）。
 - 支持打开、编辑、保存 Markdown。
 - 支持基本标题、列表、代码块、链接、表格预览。
@@ -278,7 +279,7 @@ Vault 内的 Agent 行为规范，至少包含：
 - 导入一篇本地 PDF 后，生成 `papers/<citekey>/`，catalog 中 `type=pdf`，磁盘有必定生成的 `PAPER.md`、`NOTES.md` 与 `source/` 中的原始 PDF。
 - 配置 MinerU API Key 后导入 PDF 默认走云端解析；未配置或云端失败时自动降级为本地解析，且入库流程不中断。
 - 输入关键词或一段研究描述后，在已配置本机 Agent 的前提下，能检索并返回候选论文，用户确认后完成入库。
-- 连续入库 3 篇 arXiv 论文后，`paper:list` 至少返回 3 条；导出 PAPERS.md 时含 3 行。
+- 连续入库 3 篇 arXiv 论文后，`paper_list` 至少返回 3 条；导出 PAPERS.md 时含 3 行（export 仍可规划）。
 - 编辑 `NOTES.md` 并保存后，文件系统中的 Markdown 内容同步更新。
 - `[[双链]]` 能跳转；Backlinks 右侧栏能在上方显示引用来源，并在下方显示图谱。
 - 配置并探测到本机 ACP Agent 后，跨论文问答结果包含读取文件列表；未配置时展示 BYOA 空状态而非崩溃。
