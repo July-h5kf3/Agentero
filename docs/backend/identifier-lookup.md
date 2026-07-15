@@ -638,7 +638,7 @@ papers/
 2. 写 `NOTES.md` + `highlights.md`。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
 4. 下载按 §1.3：**无预览 URL 必下**；有 URL 仅设置开时下。
-5. **不**写默认 `PAPERS.md` / `library.bib` / `metadata.json`。
+5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。
 6. 重复：`on_duplicate: skip | open_existing`，**不**覆盖用户 `NOTES.md`。
 
 arXiv 远程 URL 推导（无下载）：
