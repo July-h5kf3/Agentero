@@ -19,6 +19,15 @@ pub enum AppError {
 
     #[error("acp: {0}")]
     Acp(String),
+
+    #[error("sqlite: {0}")]
+    Sqlite(String),
+}
+
+impl From<rusqlite::Error> for AppError {
+    fn from(value: rusqlite::Error) -> Self {
+        Self::Sqlite(value.to_string())
+    }
 }
 
 impl AppError {
@@ -34,6 +43,7 @@ impl AppError {
             Self::Io(_) => "io",
             Self::Json(_) => "json",
             Self::Acp(_) => "acp",
+            Self::Sqlite(_) => "sqlite",
         }
     }
 }

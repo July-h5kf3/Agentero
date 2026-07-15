@@ -33,3 +33,4 @@ uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "6"
 thiserror = "2"
 which = "7"
+rusqlite = { version = "0.32", features = ["bundled"] }
