@@ -168,6 +168,11 @@ type AgentPanelProps = {
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
 	title?: string;
+	/**
+	 * `sidebar` — right rail chat (default).
+	 * `zen` — full-workbench focus: centered conversation column (AI Elements layout).
+	 */
+	variant?: "sidebar" | "zen";
 };
 
 type ToolUiState = {
@@ -428,7 +433,9 @@ export function AgentPanel({
 	headerActions,
 	autoFocus = false,
 	title = "Chat",
+	variant = "sidebar",
 }: AgentPanelProps) {
+	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
 	const selectedVaultPath = useMemo(() => {
 		if (!selectedPath) return null;
@@ -721,13 +728,25 @@ export function AgentPanel({
 
 	const updateSessionLines = useCallback(
 		(sessionId: string, update: (lines: ChatLine[]) => ChatLine[]) => {
-			setSessionHistory((prev) =>
-				prev.map((item) =>
-					item.id === sessionId ? { ...item, lines: update(item.lines) } : item,
-				),
-			);
+			// Compute once per session entry so concurrent tabs never share an
+			// updater applied against the wrong `lines` snapshot (tab-switch race).
+			setSessionHistory((prev) => {
+				const idx = prev.findIndex((item) => item.id === sessionId);
+				if (idx < 0) return prev;
+				const newLines = update(prev[idx].lines);
+				if (newLines === prev[idx].lines) return prev;
+				const next = prev.slice();
+				next[idx] = { ...prev[idx], lines: newLines };
+				return next;
+			});
+			// Sync active transcript only if still viewing this session.
+			// Use a value (not a second updater) so a late flush after tab switch
+			// cannot append another session's stream chunks into the new view.
 			if (activeTabRef.current === sessionId) {
-				setLines(update);
+				setLines((prev) => {
+					if (activeTabRef.current !== sessionId) return prev;
+					return update(prev);
+				});
 			}
 		},
 		[],
@@ -1479,10 +1498,23 @@ export function AgentPanel({
 				kind: "agent",
 				text: "",
 				streaming: true,
+				reasoningStreaming: false,
 				tools: [],
 				plan: [],
 			};
+			// Clone so history entry and active view never share array/object identity
+			// (prevents cross-session stream updates mutating the wrong transcript).
 			const pendingLines: ChatLine[] = [...sessionStartLines, agentLine];
+			const historyLines: ChatLine[] = pendingLines.map((line) => {
+				if (line.kind === "agent") {
+					return {
+						...line,
+						tools: line.tools ? [...line.tools] : [],
+						plan: line.plan ? [...line.plan] : [],
+					};
+				}
+				return { ...line };
+			});
 			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
 			completeComposerSubmission(accepted.sessionId, submittedComposerState);
 			activeTabRef.current = accepted.sessionId;
@@ -1495,7 +1527,7 @@ export function AgentPanel({
 					title: text,
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
-					lines: pendingLines,
+					lines: historyLines,
 					status: "running",
 				},
 				...prev.filter((item) => item.id !== accepted.sessionId),
@@ -1642,858 +1674,906 @@ export function AgentPanel({
 		activeConversationRef.current = null;
 	};
 
-	return (
-		<div
-			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
-		>
-			<PaneHeader
-				trailing={
-					<>
-						<DropdownMenu>
-							<DropdownMenuTrigger
-								asChild
-								disabled={hasRunningSessions || switching || submitting}
-							>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="h-7 max-w-[9rem] gap-1 px-1.5 font-medium text-sm leading-none"
-									aria-label={t("switchAgent")}
-									title={t("switchAgent")}
-								>
-									<span className="truncate">
-										{selected?.name ?? t("defaultName")}
-									</span>
-									<ChevronDown className="size-3 shrink-0 opacity-70" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="min-w-[200px]">
-								<DropdownMenuLabel className="text-muted-foreground text-xs">
-									{t("agentMenu.title")}
-								</DropdownMenuLabel>
-								<DropdownMenuSeparator />
-								{options.length === 0 ? (
-									<div className="px-2 py-1.5 text-muted-foreground text-xs">
-										{t("agentMenu.empty")}
-									</div>
-								) : (
-									options.map((opt) => {
-										const isActive =
-											selected?.key === opt.key ||
-											(opt.id !== null && opt.id === selectedAgentId);
-										return (
-											<DropdownMenuItem
-												key={opt.key}
-												className="flex items-center justify-between gap-2"
-												onSelect={() => void selectAgent(opt)}
-											>
-												<span className="min-w-0 truncate">{opt.name}</span>
-												{isActive ? (
-													<Check className="size-3.5 shrink-0 opacity-80" />
-												) : null}
-											</DropdownMenuItem>
-										);
-									})
-								)}
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							aria-label={t("tabs.new")}
-							title={t("tabs.new")}
-							disabled={submitting}
-							onClick={newConversation}
-						>
-							<Plus className="size-4" />
-						</Button>
-						<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-							<PopoverTrigger asChild>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
-									aria-label={t("history.aria")}
-									title={t("history.label")}
-									disabled={submitting}
-								>
-									<History className="size-3.5" />
-								</Button>
-							</PopoverTrigger>
-							<PopoverContent align="end" className="w-80 p-0">
-								<PopoverHeader className="border-b px-3 py-2">
-									<div className="flex items-center justify-between gap-3">
-										<PopoverTitle className="font-medium text-sm leading-none">
-											{t("history.title")}
-										</PopoverTitle>
-										{isCodexAgent && (
-											<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-												<span>{t("history.includeExternal")}</span>
-												<Switch
-													size="sm"
-													checked={includeExternalCodexHistory}
-													disabled={submitting}
-													onCheckedChange={(enabled) => {
-														if (submittingRef.current) return;
-														historyHydrationGenRef.current += 1;
-														includeExternalCodexHistoryRef.current = enabled;
-														if (!enabled) {
-															const active = sessionHistory.find(
-																(item) => item.id === activeTabId,
-															);
-															if (
-																active?.source === "external" &&
-																active.status !== "running"
-															) {
-																newConversation();
-															}
-														}
-														setIncludeExternalCodexHistory(enabled);
-														if (selectedAgentId) {
-															saveExternalCodexHistoryPref(
-																selectedAgentId,
-																enabled,
-															);
-														}
-													}}
-													aria-label={t("history.includeExternalToggle")}
-												/>
-											</div>
-										)}
-									</div>
-									<PopoverDescription className="text-muted-foreground text-sm leading-snug">
-										{t("history.description")}
-									</PopoverDescription>
-								</PopoverHeader>
-								{sessionHistory.length === 0 ? (
-									<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
-										{t("history.empty")}
-									</div>
-								) : (
-									<div className="max-h-72 overflow-y-auto p-1.5">
-										{sessionHistory.map((item) => (
-											<button
-												key={item.id}
-												type="button"
-												disabled={submitting}
-												className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-												onClick={() => {
-													if (submittingRef.current) return;
-													const hydrationGeneration =
-														++historyHydrationGenRef.current;
-													setHistoryOpen(false);
-													if (!isCodexAgent || item.lines.length > 0) {
-														activateComposerSession(item.id);
-														setLines(item.lines);
-														activeTabRef.current = item.id;
-														setActiveTabId(item.id);
-														if (isCodexAgent) {
-															activeConversationRef.current = item.id;
-														}
-														return;
-													}
-													const requestAgentId = selectedAgentId;
-													const requestVaultPath = vaultPath;
-													const requestIncludeExternal =
-														includeExternalCodexHistory;
-													if (!requestAgentId) return;
-													void (async () => {
-														try {
-															const history = await readCodexThread({
-																agentId: requestAgentId,
-																threadId: item.id,
-																vaultPath: requestVaultPath ?? undefined,
-																includeExternal: requestIncludeExternal,
-															});
-															if (
-																hydrationGeneration !==
-																	historyHydrationGenRef.current ||
-																selectedAgentIdRef.current !== requestAgentId ||
-																vaultPathRef.current !== requestVaultPath ||
-																includeExternalCodexHistoryRef.current !==
-																	requestIncludeExternal
-															) {
-																return;
-															}
-															const lines: ChatLine[] = history.lines.map(
-																(line) => {
-																	if (line.kind === "user") {
-																		return {
-																			id: line.id,
-																			kind: "user",
-																			text: line.text,
-																		};
-																	}
-																	return {
-																		id: line.id,
-																		kind: "agent",
-																		text: line.text,
-																		reasoning: line.reasoning ?? undefined,
-																	};
-																},
-															);
-															setSessionHistory((prev) =>
-																prev.map((entry) =>
-																	entry.id === item.id &&
-																	entry.agentId === requestAgentId
-																		? {
-																				...entry,
-																				title: history.thread.title,
-																				lines,
-																			}
-																		: entry,
-																),
-															);
-															activeConversationRef.current = item.id;
-															activateComposerSession(item.id);
-															activeTabRef.current = item.id;
-															setActiveTabId(item.id);
-															setLines(lines);
-														} catch (error) {
-															if (
-																hydrationGeneration !==
-																	historyHydrationGenRef.current ||
-																selectedAgentIdRef.current !== requestAgentId ||
-																vaultPathRef.current !== requestVaultPath ||
-																includeExternalCodexHistoryRef.current !==
-																	requestIncludeExternal
-															) {
-																return;
-															}
-															setLines((prev) => [
-																...prev,
-																{
-																	id: nextLineId("err"),
-																	kind: "error",
-																	text:
-																		error instanceof Error
-																			? error.message
-																			: String(error),
-																},
-															]);
-														}
-													})();
-												}}
-											>
-												<span className="text-muted-foreground text-sm leading-none">
-													{item.agentName} ·{" "}
-													{t(`history.status.${item.status}`)} ·{" "}
-													{item.id.slice(0, 8)}
-												</span>
-												<span className="line-clamp-2 font-medium text-sm leading-snug">
-													{item.title}
-												</span>
-												<span className="text-muted-foreground text-sm leading-none">
-													{item.startedAt}
-												</span>
-											</button>
-										))}
-									</div>
-								)}
-							</PopoverContent>
-						</Popover>
-						{headerActions}
-					</>
-				}
-			>
-				{conversationTabs.length > 1 ? (
-					<div
-						className="flex min-w-0 items-center gap-1.5"
-						role="tablist"
-						aria-label={title}
+	const headerTrailing = (
+		<>
+			<DropdownMenu>
+				<DropdownMenuTrigger
+					asChild
+					disabled={hasRunningSessions || switching || submitting}
+				>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-7 max-w-[9rem] gap-1 px-1.5 font-medium text-sm leading-none"
+						aria-label={t("switchAgent")}
+						title={t("switchAgent")}
 					>
-						{conversationTabs.map((tab, index) => {
-							const isActive = activeTabId === tab.id;
-							return (
-								<button
-									key={tab.id}
-									type="button"
-									role="tab"
-									aria-label={t("tabs.open", { number: index + 1 })}
-									aria-selected={isActive}
-									disabled={submitting}
-									className={cn(
-										"grid size-7 place-items-center rounded-md border text-xs font-medium transition-colors",
-										isActive
-											? "border-primary bg-background text-foreground ring-1 ring-primary"
-											: "border-border bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground",
-									)}
-									onClick={() => {
-										if (submittingRef.current) return;
-										historyHydrationGenRef.current += 1;
-										activateComposerSession(tab.id);
-										activeTabRef.current = tab.id;
-										setActiveTabId(tab.id);
-										setLines(tab.lines ?? []);
-										if (isCodexAgent) {
-											activeConversationRef.current =
-												tab.id === "draft" ? null : tab.id;
-										}
-									}}
-								>
-									{index + 1}
-								</button>
-							);
-						})}
-					</div>
-				) : null}
-			</PaneHeader>
-
-			<Conversation className="min-h-0">
-				<ConversationContent>
-					{lines.length === 0 ? (
-						<ConversationEmptyState
-							title={t("empty.title")}
-							description={t("empty.description")}
-						>
-							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
-								{activeTabIsRunning ? (
-									<Shimmer className="text-center text-sm">
-										{t("empty.waiting")}
-									</Shimmer>
-								) : (
-									SUGGESTION_KEYS.map((key) => {
-										const label = t(`suggestions.${key}`);
-										return (
-											<Suggestion
-												key={key}
-												suggestion={label}
-												className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
-												onClick={(v) => void send(v)}
-												disabled={activeTabIsRunning}
-											/>
-										);
-									})
-								)}
-							</div>
-						</ConversationEmptyState>
+						<span className="truncate">
+							{selected?.name ?? t("defaultName")}
+						</span>
+						<ChevronDown className="size-3 shrink-0 opacity-70" />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="min-w-[200px]">
+					<DropdownMenuLabel className="text-muted-foreground text-xs">
+						{t("agentMenu.title")}
+					</DropdownMenuLabel>
+					<DropdownMenuSeparator />
+					{options.length === 0 ? (
+						<div className="px-2 py-1.5 text-muted-foreground text-xs">
+							{t("agentMenu.empty")}
+						</div>
 					) : (
-						lines.map((line) => {
-							if (line.kind === "user") {
-								return (
-									<Message key={line.id} from="user">
-										<MessageContent>
-											<MessageResponse>{line.text}</MessageResponse>
-										</MessageContent>
-										{/* Align under user bubble (Message is full-width) */}
-										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-											<MessageAction
-												tooltip={t("copy")}
-												label={t("copy")}
-												onClick={() => void copyText(line.text)}
-											>
-												<CopyIcon className="size-3.5" />
-											</MessageAction>
-										</MessageActions>
-									</Message>
-								);
-							}
-							if (line.kind === "agent") {
-								const hasReasoning =
-									Boolean(line.reasoning?.trim()) ||
-									Boolean(line.reasoningStreaming);
-								const tools = line.tools ?? [];
-								const plan = line.plan ?? [];
-								const planStreaming =
-									Boolean(line.streaming) &&
-									plan.some((p) => p.status !== "completed");
-								return (
-									<div key={line.id} className="flex w-full flex-col gap-2">
-										<Message from="assistant">
-											<MessageContent>
-												<p className="mb-1 font-medium text-muted-foreground text-xs">
-													{selected?.name ?? t("defaultName")}
-												</p>
-												{hasReasoning ? (
-													<Reasoning
-														className="mb-2"
-														isStreaming={Boolean(line.reasoningStreaming)}
-													>
-														<ReasoningTrigger />
-														<ReasoningContent>
-															{line.reasoning ?? ""}
-														</ReasoningContent>
-													</Reasoning>
-												) : null}
-												{plan.length > 0 ? (
-													<Plan
-														className="mb-2"
-														defaultOpen
-														isStreaming={planStreaming}
-													>
-														<PlanHeader>
-															<div className="min-w-0 flex-1 space-y-1">
-																<PlanTitle>{t("plan.title")}</PlanTitle>
-																<PlanDescription>
-																	{t("plan.steps", {
-																		completed: plan.filter(
-																			(p) => p.status === "completed",
-																		).length,
-																		total: plan.length,
-																	})}
-																</PlanDescription>
-															</div>
-															<PlanAction>
-																<PlanTrigger />
-															</PlanAction>
-														</PlanHeader>
-														<PlanContent className="space-y-2 pt-0">
-															{plan.map((entry) => (
-																<div
-																	key={`${entry.status}:${entry.priority}:${entry.content}`}
-																	className="flex items-start gap-2 text-sm"
-																>
-																	<span
-																		className={cn(
-																			"mt-1 size-1.5 shrink-0 rounded-full",
-																			entry.status === "completed" &&
-																				"bg-emerald-500",
-																			entry.status === "in_progress" &&
-																				"bg-amber-500",
-																			entry.status === "pending" &&
-																				"bg-muted-foreground/40",
-																		)}
-																	/>
-																	<span
-																		className={cn(
-																			entry.status === "completed" &&
-																				"text-muted-foreground line-through",
-																		)}
-																	>
-																		{entry.content}
-																	</span>
-																</div>
-															))}
-														</PlanContent>
-													</Plan>
-												) : null}
-												{tools.map((tool) => {
-													const state = toolPartState(tool.status);
-													return (
-														<Tool key={tool.id} defaultOpen={false}>
-															<ToolHeader
-																title={tool.title || t("tool.defaultTitle")}
-																type={`tool-${tool.kind}`}
-																state={state}
-															/>
-															<ToolContent>
-																{tool.input !== undefined ? (
-																	<ToolInput input={tool.input} />
-																) : null}
-																<ToolOutput
-																	output={tool.output}
-																	errorText={
-																		tool.status === "failed"
-																			? t("tool.failed")
-																			: undefined
-																	}
-																/>
-															</ToolContent>
-														</Tool>
-													);
-												})}
-												{line.text ? (
-													<div className="min-w-0">
-														<MessageResponse
-															isAnimating={Boolean(
-																line.streaming && line.text.length > 0,
-															)}
-														>
-															{line.text}
-														</MessageResponse>
-														{!line.streaming &&
-														line.sources &&
-														line.sources.length > 0 ? (
-															<span className="mt-1 inline-flex items-center">
-																<InlineCitation>
-																	<InlineCitationCard>
-																		<InlineCitationCardTrigger
-																			sources={line.sources}
-																		/>
-																		<InlineCitationCardBody>
-																			<InlineCitationCarousel>
-																				<InlineCitationCarouselHeader>
-																					<InlineCitationCarouselPrev />
-																					<InlineCitationCarouselNext />
-																					<InlineCitationCarouselIndex />
-																				</InlineCitationCarouselHeader>
-																				<InlineCitationCarouselContent>
-																					{line.sources.map((s) => (
-																						<InlineCitationCarouselItem key={s}>
-																							<InlineCitationSource
-																								title={
-																									s.split(/[/\\]/).pop() || s
-																								}
-																								url={s}
-																								description={
-																									/^https?:\/\//i.test(s)
-																										? undefined
-																										: t("citation.vaultPath")
-																								}
-																							/>
-																						</InlineCitationCarouselItem>
-																					))}
-																				</InlineCitationCarouselContent>
-																			</InlineCitationCarousel>
-																		</InlineCitationCardBody>
-																	</InlineCitationCard>
-																</InlineCitation>
-															</span>
-														) : null}
-													</div>
-												) : line.streaming &&
-													!hasReasoning &&
-													tools.length === 0 &&
-													plan.length === 0 ? (
-													<Shimmer className="text-sm">{t("thinking")}</Shimmer>
-												) : null}
-											</MessageContent>
-											{!line.streaming && line.text ? (
-												<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-													<MessageAction
-														tooltip={t("copy")}
-														label={t("copy")}
-														onClick={() => void copyText(line.text)}
-													>
-														<CopyIcon className="size-3.5" />
-													</MessageAction>
-												</MessageActions>
-											) : null}
-										</Message>
-										{line.sources && line.sources.length > 0 ? (
-											<Sources>
-												<SourcesTrigger count={line.sources.length} />
-												<SourcesContent>
-													{line.sources.map((s) => (
-														<Source
-															key={s}
-															title={s}
-															href={`#${encodeURIComponent(s)}`}
-														/>
-													))}
-												</SourcesContent>
-											</Sources>
-										) : null}
-									</div>
-								);
-							}
-							if (line.kind === "error") {
-								return (
-									<p
-										key={line.id}
-										className="px-1 text-center text-destructive text-xs"
-									>
-										{line.text}
-									</p>
-								);
-							}
+						options.map((opt) => {
+							const isActive =
+								selected?.key === opt.key ||
+								(opt.id !== null && opt.id === selectedAgentId);
 							return (
-								<Checkpoint key={line.id} className="my-1 px-1">
-									<CheckpointIcon />
-									<CheckpointTrigger
-										className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
-										variant="ghost"
-										tooltip={line.text}
-									>
-										{line.text}
-									</CheckpointTrigger>
-								</Checkpoint>
+								<DropdownMenuItem
+									key={opt.key}
+									className="flex items-center justify-between gap-2"
+									onSelect={() => void selectAgent(opt)}
+								>
+									<span className="min-w-0 truncate">{opt.name}</span>
+									{isActive ? (
+										<Check className="size-3.5 shrink-0 opacity-80" />
+									) : null}
+								</DropdownMenuItem>
 							);
 						})
 					)}
-				</ConversationContent>
-				<ConversationScrollButton />
-			</Conversation>
-
-			<div className="shrink-0 space-y-2 border-t bg-muted/10 p-3">
-				{lines.length > 0 && !activeTabIsRunning ? (
-					<Suggestions>
-						{SUGGESTION_KEYS.map((key) => {
-							const label = t(`suggestions.${key}`);
-							return (
-								<Suggestion
-									key={key}
-									suggestion={label}
-									onClick={(v) => void send(v)}
-									disabled={activeTabIsRunning || switching}
-								/>
-							);
-						})}
-					</Suggestions>
-				) : null}
-				<PromptInput
-					className="w-full rounded-xl border-border bg-background shadow-none"
-					inputGroupClassName={cn(
-						"overflow-visible",
-						!hasStreamingAgentMessage &&
-							"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
-					)}
-					onSubmit={async ({ text }) => {
-						if (
-							activeTabIsRunning ||
-							switchingRef.current ||
-							submittingRef.current
-						)
-							return;
-						await send(text);
-					}}
-				>
-					<PromptInputBody>
-						<div className="relative flex min-h-[154px] w-full flex-col px-3 pt-3">
-							{contextPaths.length > 0 ? (
-								<div className="mb-2 flex flex-wrap gap-1.5">
-									{contextPaths.map((path) => (
-										<button
-											key={path}
-											type="button"
-											className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-											onClick={() => removeContextPath(path)}
-											title={t("composer.removeContext", { path })}
-										>
-											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
-											<span className="truncate">{path.split("/").at(-1)}</span>
-											<X className="size-3 shrink-0 text-muted-foreground" />
-										</button>
-									))}
-								</div>
-							) : null}
-							{selectedSkills.length > 0 ? (
-								<div className="mb-2 flex flex-wrap gap-1.5">
-									{selectedSkills.map((skill) => (
-										<button
-											key={skill.id}
-											type="button"
-											className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-											onClick={() =>
-												setSelectedSkillIds((prev) =>
-													prev.filter((id) => id !== skill.id),
-												)
+				</DropdownMenuContent>
+			</DropdownMenu>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-xs"
+				aria-label={t("tabs.new")}
+				title={t("tabs.new")}
+				disabled={submitting}
+				onClick={newConversation}
+			>
+				<Plus className="size-4" />
+			</Button>
+			<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+				<PopoverTrigger asChild>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
+						aria-label={t("history.aria")}
+						title={t("history.label")}
+						disabled={submitting}
+					>
+						<History className="size-3.5" />
+					</Button>
+				</PopoverTrigger>
+				<PopoverContent align="end" className="w-80 p-0">
+					<PopoverHeader className="border-b px-3 py-2">
+						<div className="flex items-center justify-between gap-3">
+							<PopoverTitle className="font-medium text-sm leading-none">
+								{t("history.title")}
+							</PopoverTitle>
+							{isCodexAgent && (
+								<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+									<span>{t("history.includeExternal")}</span>
+									<Switch
+										size="sm"
+										checked={includeExternalCodexHistory}
+										disabled={submitting}
+										onCheckedChange={(enabled) => {
+											if (submittingRef.current) return;
+											historyHydrationGenRef.current += 1;
+											includeExternalCodexHistoryRef.current = enabled;
+											if (!enabled) {
+												const active = sessionHistory.find(
+													(item) => item.id === activeTabId,
+												);
+												if (
+													active?.source === "external" &&
+													active.status !== "running"
+												) {
+													newConversation();
+												}
 											}
-											title={t("composer.removeSkill", { skill: skill.name })}
-										>
-											<span className="font-mono text-muted-foreground">$</span>
-											<span className="truncate">{skill.name}</span>
-											<X className="size-3 shrink-0 text-muted-foreground" />
-										</button>
-									))}
+											setIncludeExternalCodexHistory(enabled);
+											if (selectedAgentId) {
+												saveExternalCodexHistoryPref(selectedAgentId, enabled);
+											}
+										}}
+										aria-label={t("history.includeExternalToggle")}
+									/>
 								</div>
-							) : null}
-							{showMentionMenu ? (
-								<div
-									id="agent-mention-menu"
-									role="listbox"
-									className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
-								>
-									{mentionOptions.map((path, index) => (
-										<button
-											key={path}
-											id={`agent-mention-option-${index}`}
-											type="button"
-											role="option"
-											aria-selected={mentionActiveIndex === index}
-											className={cn(
-												"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-												mentionActiveIndex === index
-													? "bg-muted"
-													: "hover:bg-muted/70",
-											)}
-											onMouseEnter={() => setMentionActiveIndex(index)}
-											onClick={() => attachMention(path)}
-										>
-											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
-											<span className="truncate">{path}</span>
-										</button>
-									))}
-								</div>
-							) : null}
-							{showSkillMenu ? (
-								<div
-									id="agent-skill-menu"
-									role="listbox"
-									className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
-								>
-									{skillOptions.map((skill, index) => (
-										<button
-											key={skill.id}
-											id={`agent-skill-option-${index}`}
-											type="button"
-											role="option"
-											aria-selected={skillActiveIndex === index}
-											className={cn(
-												"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-												skillActiveIndex === index
-													? "bg-muted"
-													: "hover:bg-muted/70",
-											)}
-											onMouseEnter={() => setSkillActiveIndex(index)}
-											onClick={() => attachSkill(skill)}
-										>
-											<span className="font-mono text-muted-foreground">$</span>
-											<span className="min-w-0 flex-1 truncate">
-												{skill.name}
-											</span>
-											{skill.description ? (
-												<span className="max-w-40 truncate text-muted-foreground text-xs">
-													{skill.description}
-												</span>
-											) : null}
-										</button>
-									))}
-								</div>
-							) : null}
-							<PromptInputTextarea
-								autoFocus={autoFocus || undefined}
-								className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
-								value={composerText}
-								onChange={(event) => {
-									setComposerText(event.currentTarget.value);
-									setComposerMenuDismissed(false);
-									setMentionActiveIndex(0);
-									setSkillActiveIndex(0);
-								}}
-								onKeyDown={handleComposerMenuKeyDown}
-								aria-expanded={showMentionMenu || showSkillMenu}
-								aria-autocomplete="list"
-								aria-controls={
-									showMentionMenu
-										? "agent-mention-menu"
-										: showSkillMenu
-											? "agent-skill-menu"
-											: undefined
-								}
-								aria-activedescendant={
-									showMentionMenu
-										? `agent-mention-option-${mentionActiveIndex}`
-										: showSkillMenu
-											? `agent-skill-option-${skillActiveIndex}`
-											: undefined
-								}
-								role="combobox"
-								disabled={switching}
-								placeholder={
-									activeTabIsRunning
-										? t("composer.interruptHint")
-										: t("composer.placeholder")
-								}
-							/>
+							)}
 						</div>
-					</PromptInputBody>
-					<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
-						<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<PromptInputButton
-										type="button"
-										className={cn(
-											"h-7 max-w-[min(9rem,100%)] gap-1 px-1.5 text-xs font-medium",
-											composerControlsMuted
-												? "text-muted-foreground"
-												: "text-foreground",
-										)}
-										disabled={
-											activeTabIsRunning || warming || models.length === 0
+						<PopoverDescription className="text-muted-foreground text-sm leading-snug">
+							{t("history.description")}
+						</PopoverDescription>
+					</PopoverHeader>
+					{sessionHistory.length === 0 ? (
+						<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
+							{t("history.empty")}
+						</div>
+					) : (
+						<div className="max-h-72 overflow-y-auto p-1.5">
+							{sessionHistory.map((item) => (
+								<button
+									key={item.id}
+									type="button"
+									disabled={submitting}
+									className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+									onClick={() => {
+										if (submittingRef.current) return;
+										const hydrationGeneration =
+											++historyHydrationGenRef.current;
+										setHistoryOpen(false);
+										if (!isCodexAgent || item.lines.length > 0) {
+											activateComposerSession(item.id);
+											setLines(item.lines);
+											activeTabRef.current = item.id;
+											setActiveTabId(item.id);
+											if (isCodexAgent) {
+												activeConversationRef.current = item.id;
+											}
+											return;
 										}
-										tooltip={
-											models.length > 0
-												? t("models.selectTooltip")
-												: t("models.reportedTooltip")
-										}
-									>
-										<span className="truncate text-xs">
-											{selectedModelName ??
-												(warming ? t("models.loading") : t("models.button"))}
-										</span>
-										<ChevronDown className="size-3 shrink-0 opacity-70" />
-									</PromptInputButton>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="start" className="min-w-44 p-1">
-									{models.map((model) => (
-										<DropdownMenuItem
-											key={model.id}
-											className={cn(
-												"justify-between rounded-md",
-												modelId === model.id && "bg-muted",
-											)}
-											onSelect={() => pickModel(model.id)}
-										>
-											<span className="truncate">{model.name}</span>
-											{modelId === model.id ? (
-												<CheckIcon className="size-3.5 text-muted-foreground" />
+										const requestAgentId = selectedAgentId;
+										const requestVaultPath = vaultPath;
+										const requestIncludeExternal = includeExternalCodexHistory;
+										if (!requestAgentId) return;
+										void (async () => {
+											try {
+												const history = await readCodexThread({
+													agentId: requestAgentId,
+													threadId: item.id,
+													vaultPath: requestVaultPath ?? undefined,
+													includeExternal: requestIncludeExternal,
+												});
+												if (
+													hydrationGeneration !==
+														historyHydrationGenRef.current ||
+													selectedAgentIdRef.current !== requestAgentId ||
+													vaultPathRef.current !== requestVaultPath ||
+													includeExternalCodexHistoryRef.current !==
+														requestIncludeExternal
+												) {
+													return;
+												}
+												const lines: ChatLine[] = history.lines.map((line) => {
+													if (line.kind === "user") {
+														return {
+															id: line.id,
+															kind: "user",
+															text: line.text,
+														};
+													}
+													return {
+														id: line.id,
+														kind: "agent",
+														text: line.text,
+														reasoning: line.reasoning ?? undefined,
+													};
+												});
+												setSessionHistory((prev) =>
+													prev.map((entry) =>
+														entry.id === item.id &&
+														entry.agentId === requestAgentId
+															? {
+																	...entry,
+																	title: history.thread.title,
+																	lines,
+																}
+															: entry,
+													),
+												);
+												activeConversationRef.current = item.id;
+												activateComposerSession(item.id);
+												activeTabRef.current = item.id;
+												setActiveTabId(item.id);
+												setLines(lines);
+											} catch (error) {
+												if (
+													hydrationGeneration !==
+														historyHydrationGenRef.current ||
+													selectedAgentIdRef.current !== requestAgentId ||
+													vaultPathRef.current !== requestVaultPath ||
+													includeExternalCodexHistoryRef.current !==
+														requestIncludeExternal
+												) {
+													return;
+												}
+												setLines((prev) => [
+													...prev,
+													{
+														id: nextLineId("err"),
+														kind: "error",
+														text:
+															error instanceof Error
+																? error.message
+																: String(error),
+													},
+												]);
+											}
+										})();
+									}}
+								>
+									<span className="text-muted-foreground text-sm leading-none">
+										{item.agentName} · {t(`history.status.${item.status}`)} ·{" "}
+										{item.id.slice(0, 8)}
+									</span>
+									<span className="line-clamp-2 font-medium text-sm leading-snug">
+										{item.title}
+									</span>
+									<span className="text-muted-foreground text-sm leading-none">
+										{item.startedAt}
+									</span>
+								</button>
+							))}
+						</div>
+					)}
+				</PopoverContent>
+			</Popover>
+			{headerActions}
+		</>
+	);
+
+	const conversationTabList =
+		conversationTabs.length > 1 ? (
+			<div
+				className="flex min-w-0 items-center gap-1.5"
+				role="tablist"
+				aria-label={title}
+			>
+				{conversationTabs.map((tab, index) => {
+					const isActive = activeTabId === tab.id;
+					return (
+						<button
+							key={tab.id}
+							type="button"
+							role="tab"
+							aria-label={t("tabs.open", { number: index + 1 })}
+							aria-selected={isActive}
+							disabled={submitting}
+							className={cn(
+								"grid size-7 place-items-center rounded-md border text-xs font-medium transition-colors",
+								isActive
+									? "border-primary bg-background text-foreground ring-1 ring-primary"
+									: "border-border bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground",
+							)}
+							onClick={() => {
+								if (submittingRef.current) return;
+								historyHydrationGenRef.current += 1;
+								activateComposerSession(tab.id);
+								activeTabRef.current = tab.id;
+								setActiveTabId(tab.id);
+								setLines(tab.lines ?? []);
+								if (isCodexAgent) {
+									activeConversationRef.current =
+										tab.id === "draft" ? null : tab.id;
+								}
+							}}
+						>
+							{index + 1}
+						</button>
+					);
+				})}
+			</div>
+		) : null;
+
+	return (
+		<div
+			className={cn(
+				"flex h-full min-h-0 flex-col bg-background",
+				isZen && "bg-muted/15",
+				className,
+			)}
+		>
+			{/* Zen: full-bleed top strip with tools aligned to the chat column */}
+			{isZen ? (
+				<div className="flex shrink-0 justify-center border-border/50 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
+					<div className="flex h-12 w-full max-w-2xl items-center justify-between gap-3">
+						<div className="flex min-w-0 items-center gap-2">
+							{conversationTabList}
+						</div>
+						<div className="flex shrink-0 items-center gap-1">
+							{headerTrailing}
+						</div>
+					</div>
+				</div>
+			) : (
+				<PaneHeader trailing={headerTrailing}>{conversationTabList}</PaneHeader>
+			)}
+
+			{/*
+			  Zen layout: single centered column (quest / ChatGPT-style).
+			  Empty state fills height and centers; composer sits at the bottom of the column.
+			*/}
+			<div
+				className={cn(
+					"flex min-h-0 flex-1 flex-col",
+					isZen && "mx-auto w-full max-w-2xl px-4 sm:px-6",
+				)}
+			>
+				<Conversation className={cn("min-h-0", isZen && "min-h-0 flex-1")}>
+					<ConversationContent
+						className={cn(
+							isZen &&
+								(lines.length === 0
+									? "min-h-full justify-center gap-6 px-0 py-8"
+									: "gap-6 px-0 py-8"),
+						)}
+					>
+						{lines.length === 0 ? (
+							<ConversationEmptyState
+								className={cn(isZen && "max-w-md p-0")}
+								title={t("empty.title")}
+								description={t("empty.description")}
+							>
+								<div
+									className={cn(
+										"mt-4 flex w-full flex-col items-stretch gap-2",
+										isZen ? "max-w-md" : "max-w-sm",
+									)}
+								>
+									{activeTabIsRunning ? (
+										<Shimmer className="text-center text-sm">
+											{t("empty.waiting")}
+										</Shimmer>
+									) : (
+										SUGGESTION_KEYS.map((key) => {
+											const label = t(`suggestions.${key}`);
+											return (
+												<Suggestion
+													key={key}
+													suggestion={label}
+													className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
+													onClick={(v) => void send(v)}
+													disabled={activeTabIsRunning}
+												/>
+											);
+										})
+									)}
+								</div>
+							</ConversationEmptyState>
+						) : (
+							lines.map((line) => {
+								if (line.kind === "user") {
+									return (
+										<Message key={line.id} from="user">
+											<MessageContent>
+												<MessageResponse>{line.text}</MessageResponse>
+											</MessageContent>
+											{/* Align under user bubble (Message is full-width) */}
+											<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+												<MessageAction
+													tooltip={t("copy")}
+													label={t("copy")}
+													onClick={() => void copyText(line.text)}
+												>
+													<CopyIcon className="size-3.5" />
+												</MessageAction>
+											</MessageActions>
+										</Message>
+									);
+								}
+								if (line.kind === "agent") {
+									const hasReasoning =
+										Boolean(line.reasoning?.trim()) ||
+										Boolean(line.reasoningStreaming);
+									const tools = line.tools ?? [];
+									const plan = line.plan ?? [];
+									const planStreaming =
+										Boolean(line.streaming) &&
+										plan.some((p) => p.status !== "completed");
+									// Include activeTabId so Reasoning state never leaks across sessions
+									// when history line ids collide (e.g. Codex thread message ids).
+									const rowKey = `${activeTabId}:${line.id}`;
+									return (
+										<div key={rowKey} className="flex w-full flex-col gap-2">
+											<Message from="assistant">
+												<MessageContent>
+													<p className="mb-1 font-medium text-muted-foreground text-xs">
+														{selected?.name ?? t("defaultName")}
+													</p>
+													{hasReasoning ? (
+														<Reasoning
+															key={`${rowKey}:reasoning`}
+															className="mb-2"
+															isStreaming={Boolean(line.reasoningStreaming)}
+														>
+															<ReasoningTrigger />
+															<ReasoningContent>
+																{line.reasoning ?? ""}
+															</ReasoningContent>
+														</Reasoning>
+													) : null}
+													{plan.length > 0 ? (
+														<Plan
+															className="mb-2"
+															defaultOpen
+															isStreaming={planStreaming}
+														>
+															<PlanHeader>
+																<div className="min-w-0 flex-1 space-y-1">
+																	<PlanTitle>{t("plan.title")}</PlanTitle>
+																	<PlanDescription>
+																		{t("plan.steps", {
+																			completed: plan.filter(
+																				(p) => p.status === "completed",
+																			).length,
+																			total: plan.length,
+																		})}
+																	</PlanDescription>
+																</div>
+																<PlanAction>
+																	<PlanTrigger />
+																</PlanAction>
+															</PlanHeader>
+															<PlanContent className="space-y-2 pt-0">
+																{plan.map((entry) => (
+																	<div
+																		key={`${entry.status}:${entry.priority}:${entry.content}`}
+																		className="flex items-start gap-2 text-sm"
+																	>
+																		<span
+																			className={cn(
+																				"mt-1 size-1.5 shrink-0 rounded-full",
+																				entry.status === "completed" &&
+																					"bg-emerald-500",
+																				entry.status === "in_progress" &&
+																					"bg-amber-500",
+																				entry.status === "pending" &&
+																					"bg-muted-foreground/40",
+																			)}
+																		/>
+																		<span
+																			className={cn(
+																				entry.status === "completed" &&
+																					"text-muted-foreground line-through",
+																			)}
+																		>
+																			{entry.content}
+																		</span>
+																	</div>
+																))}
+															</PlanContent>
+														</Plan>
+													) : null}
+													{tools.map((tool) => {
+														const state = toolPartState(tool.status);
+														return (
+															<Tool key={tool.id} defaultOpen={false}>
+																<ToolHeader
+																	title={tool.title || t("tool.defaultTitle")}
+																	type={`tool-${tool.kind}`}
+																	state={state}
+																/>
+																<ToolContent>
+																	{tool.input !== undefined ? (
+																		<ToolInput input={tool.input} />
+																	) : null}
+																	<ToolOutput
+																		output={tool.output}
+																		errorText={
+																			tool.status === "failed"
+																				? t("tool.failed")
+																				: undefined
+																		}
+																	/>
+																</ToolContent>
+															</Tool>
+														);
+													})}
+													{line.text ? (
+														<div className="min-w-0">
+															<MessageResponse
+																isAnimating={Boolean(
+																	line.streaming && line.text.length > 0,
+																)}
+															>
+																{line.text}
+															</MessageResponse>
+															{!line.streaming &&
+															line.sources &&
+															line.sources.length > 0 ? (
+																<span className="mt-1 inline-flex items-center">
+																	<InlineCitation>
+																		<InlineCitationCard>
+																			<InlineCitationCardTrigger
+																				sources={line.sources}
+																			/>
+																			<InlineCitationCardBody>
+																				<InlineCitationCarousel>
+																					<InlineCitationCarouselHeader>
+																						<InlineCitationCarouselPrev />
+																						<InlineCitationCarouselNext />
+																						<InlineCitationCarouselIndex />
+																					</InlineCitationCarouselHeader>
+																					<InlineCitationCarouselContent>
+																						{line.sources.map((s) => (
+																							<InlineCitationCarouselItem
+																								key={s}
+																							>
+																								<InlineCitationSource
+																									title={
+																										s.split(/[/\\]/).pop() || s
+																									}
+																									url={s}
+																									description={
+																										/^https?:\/\//i.test(s)
+																											? undefined
+																											: t("citation.vaultPath")
+																									}
+																								/>
+																							</InlineCitationCarouselItem>
+																						))}
+																					</InlineCitationCarouselContent>
+																				</InlineCitationCarousel>
+																			</InlineCitationCardBody>
+																		</InlineCitationCard>
+																	</InlineCitation>
+																</span>
+															) : null}
+														</div>
+													) : line.streaming &&
+														!hasReasoning &&
+														tools.length === 0 &&
+														plan.length === 0 ? (
+														<Shimmer className="text-sm">
+															{t("thinking")}
+														</Shimmer>
+													) : null}
+												</MessageContent>
+												{!line.streaming && line.text ? (
+													<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+														<MessageAction
+															tooltip={t("copy")}
+															label={t("copy")}
+															onClick={() => void copyText(line.text)}
+														>
+															<CopyIcon className="size-3.5" />
+														</MessageAction>
+													</MessageActions>
+												) : null}
+											</Message>
+											{line.sources && line.sources.length > 0 ? (
+												<Sources>
+													<SourcesTrigger count={line.sources.length} />
+													<SourcesContent>
+														{line.sources.map((s) => (
+															<Source
+																key={s}
+																title={s}
+																href={`#${encodeURIComponent(s)}`}
+															/>
+														))}
+													</SourcesContent>
+												</Sources>
 											) : null}
-										</DropdownMenuItem>
-									))}
-								</DropdownMenuContent>
-							</DropdownMenu>
-							{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
+										</div>
+									);
+								}
+								if (line.kind === "error") {
+									return (
+										<p
+											key={line.id}
+											className="px-1 text-center text-destructive text-xs"
+										>
+											{line.text}
+										</p>
+									);
+								}
+								return (
+									<Checkpoint key={line.id} className="my-1 px-1">
+										<CheckpointIcon />
+										<CheckpointTrigger
+											className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
+											variant="ghost"
+											tooltip={line.text}
+										>
+											{line.text}
+										</CheckpointTrigger>
+									</Checkpoint>
+								);
+							})
+						)}
+					</ConversationContent>
+					<ConversationScrollButton className={cn(isZen && "bottom-4")} />
+				</Conversation>
+
+				<div
+					className={cn(
+						"shrink-0 space-y-2",
+						isZen
+							? "border-0 bg-transparent px-0 pt-1 pb-6 sm:pb-8"
+							: "border-t bg-muted/10 p-3",
+					)}
+				>
+					{lines.length > 0 && !activeTabIsRunning ? (
+						<Suggestions className={cn(isZen && "justify-center")}>
+							{SUGGESTION_KEYS.map((key) => {
+								const label = t(`suggestions.${key}`);
+								return (
+									<Suggestion
+										key={key}
+										suggestion={label}
+										onClick={(v) => void send(v)}
+										disabled={activeTabIsRunning || switching}
+									/>
+								);
+							})}
+						</Suggestions>
+					) : null}
+					<PromptInput
+						className={cn(
+							"w-full rounded-xl border-border bg-background shadow-none",
+							isZen && "rounded-2xl border shadow-sm",
+						)}
+						inputGroupClassName={cn(
+							"overflow-visible",
+							!hasStreamingAgentMessage &&
+								"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
+						)}
+						onSubmit={async ({ text }) => {
+							if (
+								activeTabIsRunning ||
+								switchingRef.current ||
+								submittingRef.current
+							)
+								return;
+							await send(text);
+						}}
+					>
+						<PromptInputBody>
+							<div
+								className={cn(
+									"relative flex w-full flex-col px-3 pt-3",
+									isZen ? "min-h-[120px]" : "min-h-[154px]",
+								)}
+							>
+								{contextPaths.length > 0 ? (
+									<div className="mb-2 flex flex-wrap gap-1.5">
+										{contextPaths.map((path) => (
+											<button
+												key={path}
+												type="button"
+												className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+												onClick={() => removeContextPath(path)}
+												title={t("composer.removeContext", { path })}
+											>
+												<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+												<span className="truncate">
+													{path.split("/").at(-1)}
+												</span>
+												<X className="size-3 shrink-0 text-muted-foreground" />
+											</button>
+										))}
+									</div>
+								) : null}
+								{selectedSkills.length > 0 ? (
+									<div className="mb-2 flex flex-wrap gap-1.5">
+										{selectedSkills.map((skill) => (
+											<button
+												key={skill.id}
+												type="button"
+												className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+												onClick={() =>
+													setSelectedSkillIds((prev) =>
+														prev.filter((id) => id !== skill.id),
+													)
+												}
+												title={t("composer.removeSkill", { skill: skill.name })}
+											>
+												<span className="font-mono text-muted-foreground">
+													$
+												</span>
+												<span className="truncate">{skill.name}</span>
+												<X className="size-3 shrink-0 text-muted-foreground" />
+											</button>
+										))}
+									</div>
+								) : null}
+								{showMentionMenu ? (
+									<div
+										id="agent-mention-menu"
+										role="listbox"
+										className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+									>
+										{mentionOptions.map((path, index) => (
+											<button
+												key={path}
+												id={`agent-mention-option-${index}`}
+												type="button"
+												role="option"
+												aria-selected={mentionActiveIndex === index}
+												className={cn(
+													"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+													mentionActiveIndex === index
+														? "bg-muted"
+														: "hover:bg-muted/70",
+												)}
+												onMouseEnter={() => setMentionActiveIndex(index)}
+												onClick={() => attachMention(path)}
+											>
+												<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+												<span className="truncate">{path}</span>
+											</button>
+										))}
+									</div>
+								) : null}
+								{showSkillMenu ? (
+									<div
+										id="agent-skill-menu"
+										role="listbox"
+										className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+									>
+										{skillOptions.map((skill, index) => (
+											<button
+												key={skill.id}
+												id={`agent-skill-option-${index}`}
+												type="button"
+												role="option"
+												aria-selected={skillActiveIndex === index}
+												className={cn(
+													"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+													skillActiveIndex === index
+														? "bg-muted"
+														: "hover:bg-muted/70",
+												)}
+												onMouseEnter={() => setSkillActiveIndex(index)}
+												onClick={() => attachSkill(skill)}
+											>
+												<span className="font-mono text-muted-foreground">
+													$
+												</span>
+												<span className="min-w-0 flex-1 truncate">
+													{skill.name}
+												</span>
+												{skill.description ? (
+													<span className="max-w-40 truncate text-muted-foreground text-xs">
+														{skill.description}
+													</span>
+												) : null}
+											</button>
+										))}
+									</div>
+								) : null}
+								<PromptInputTextarea
+									autoFocus={autoFocus || undefined}
+									className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
+									value={composerText}
+									onChange={(event) => {
+										setComposerText(event.currentTarget.value);
+										setComposerMenuDismissed(false);
+										setMentionActiveIndex(0);
+										setSkillActiveIndex(0);
+									}}
+									onKeyDown={handleComposerMenuKeyDown}
+									aria-expanded={showMentionMenu || showSkillMenu}
+									aria-autocomplete="list"
+									aria-controls={
+										showMentionMenu
+											? "agent-mention-menu"
+											: showSkillMenu
+												? "agent-skill-menu"
+												: undefined
+									}
+									aria-activedescendant={
+										showMentionMenu
+											? `agent-mention-option-${mentionActiveIndex}`
+											: showSkillMenu
+												? `agent-skill-option-${skillActiveIndex}`
+												: undefined
+									}
+									role="combobox"
+									disabled={switching}
+									placeholder={
+										activeTabIsRunning
+											? t("composer.interruptHint")
+											: t("composer.placeholder")
+									}
+								/>
+							</div>
+						</PromptInputBody>
+						<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
+							<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<PromptInputButton
 											type="button"
 											className={cn(
-												"h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium",
+												"h-7 max-w-[min(9rem,100%)] gap-1 px-1.5 text-xs font-medium",
 												composerControlsMuted
 													? "text-muted-foreground"
 													: "text-foreground",
 											)}
-											disabled={activeTabIsRunning}
-											tooltip={t("composer.effortTooltip")}
+											disabled={
+												activeTabIsRunning || warming || models.length === 0
+											}
+											tooltip={
+												models.length > 0
+													? t("models.selectTooltip")
+													: t("models.reportedTooltip")
+											}
 										>
-											<span className="truncate">
-												{t("composer.effort.label")}:{" "}
-												{formatEffort(reasoningEffort ?? "medium")}
+											<span className="truncate text-xs">
+												{selectedModelName ??
+													(warming ? t("models.loading") : t("models.button"))}
 											</span>
 											<ChevronDown className="size-3 shrink-0 opacity-70" />
 										</PromptInputButton>
 									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="min-w-28 p-1">
-										{effortOptionsInDisplayOrder.map((effort) => (
+									<DropdownMenuContent align="start" className="min-w-44 p-1">
+										{models.map((model) => (
 											<DropdownMenuItem
-												key={effort.id}
+												key={model.id}
 												className={cn(
 													"justify-between rounded-md",
-													reasoningEffort === effort.id && "bg-muted",
+													modelId === model.id && "bg-muted",
 												)}
-												onSelect={() => setReasoningEffort(effort.id)}
+												onSelect={() => pickModel(model.id)}
 											>
-												{formatEffort(effort.id)}
-												{reasoningEffort === effort.id ? (
+												<span className="truncate">{model.name}</span>
+												{modelId === model.id ? (
 													<CheckIcon className="size-3.5 text-muted-foreground" />
 												) : null}
 											</DropdownMenuItem>
 										))}
 									</DropdownMenuContent>
 								</DropdownMenu>
-							) : null}
-							{activeUsage && activeUsage.size > 0 ? (
-								<Context
-									usedTokens={activeUsage.used}
-									maxTokens={activeUsage.size}
-								>
-									<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
-									<ContextContent>
-										<ContextContentHeader />
-									</ContextContent>
-								</Context>
-							) : null}
-							<PromptInputButton
-								type="button"
-								className={cn(
-									"size-7",
-									composerControlsMuted
-										? "text-muted-foreground"
-										: "text-foreground",
-									includeSelectedFile && selectedVaultPath && "bg-muted",
-								)}
-								disabled={!selectedVaultPath || activeTabIsRunning}
-								onClick={() => setIncludeSelectedFile((current) => !current)}
-								tooltip={t("composer.toggleCurrentFile")}
-							>
-								<FolderOpen className="size-4" />
-							</PromptInputButton>
-							{isCodexAgent && fastAvailable ? (
+								{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<PromptInputButton
+												type="button"
+												className={cn(
+													"h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium",
+													composerControlsMuted
+														? "text-muted-foreground"
+														: "text-foreground",
+												)}
+												disabled={activeTabIsRunning}
+												tooltip={t("composer.effortTooltip")}
+											>
+												<span className="truncate">
+													{t("composer.effort.label")}:{" "}
+													{formatEffort(reasoningEffort ?? "medium")}
+												</span>
+												<ChevronDown className="size-3 shrink-0 opacity-70" />
+											</PromptInputButton>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="start" className="min-w-28 p-1">
+											{effortOptionsInDisplayOrder.map((effort) => (
+												<DropdownMenuItem
+													key={effort.id}
+													className={cn(
+														"justify-between rounded-md",
+														reasoningEffort === effort.id && "bg-muted",
+													)}
+													onSelect={() => setReasoningEffort(effort.id)}
+												>
+													{formatEffort(effort.id)}
+													{reasoningEffort === effort.id ? (
+														<CheckIcon className="size-3.5 text-muted-foreground" />
+													) : null}
+												</DropdownMenuItem>
+											))}
+										</DropdownMenuContent>
+									</DropdownMenu>
+								) : null}
+								{activeUsage && activeUsage.size > 0 ? (
+									<Context
+										usedTokens={activeUsage.used}
+										maxTokens={activeUsage.size}
+									>
+										<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
+										<ContextContent>
+											<ContextContentHeader />
+										</ContextContent>
+									</Context>
+								) : null}
 								<PromptInputButton
 									type="button"
 									className={cn(
@@ -2501,69 +2581,87 @@ export function AgentPanel({
 										composerControlsMuted
 											? "text-muted-foreground"
 											: "text-foreground",
-										fastEnabled && "text-amber-500 hover:text-amber-500",
+										includeSelectedFile && selectedVaultPath && "bg-muted",
 									)}
-									aria-pressed={fastEnabled}
-									disabled={activeTabIsRunning}
-									onClick={() => setFastEnabled((current) => !current)}
-									tooltip={t("composer.fastToggle")}
+									disabled={!selectedVaultPath || activeTabIsRunning}
+									onClick={() => setIncludeSelectedFile((current) => !current)}
+									tooltip={t("composer.toggleCurrentFile")}
 								>
-									<Zap
-										className={cn(
-											"size-3.5",
-											fastEnabled &&
-												"fill-amber-400 text-amber-500 dark:fill-amber-300 dark:text-amber-300",
-										)}
-									/>
+									<FolderOpen className="size-4" />
 								</PromptInputButton>
-							) : null}
-							<div
-								className={cn(
-									"flex h-7 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium",
-									composerControlsMuted
-										? "text-muted-foreground"
-										: "text-foreground",
-									yoloEnabled && "text-orange-700 dark:text-orange-300",
-								)}
-								title={
-									yoloEnabled
-										? t("composer.yoloEnabled")
-										: t("composer.yoloDisabled")
+								{isCodexAgent && fastAvailable ? (
+									<PromptInputButton
+										type="button"
+										className={cn(
+											"size-7",
+											composerControlsMuted
+												? "text-muted-foreground"
+												: "text-foreground",
+											fastEnabled && "text-amber-500 hover:text-amber-500",
+										)}
+										aria-pressed={fastEnabled}
+										disabled={activeTabIsRunning}
+										onClick={() => setFastEnabled((current) => !current)}
+										tooltip={t("composer.fastToggle")}
+									>
+										<Zap
+											className={cn(
+												"size-3.5",
+												fastEnabled &&
+													"fill-amber-400 text-amber-500 dark:fill-amber-300 dark:text-amber-300",
+											)}
+										/>
+									</PromptInputButton>
+								) : null}
+								<div
+									className={cn(
+										"flex h-7 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium",
+										composerControlsMuted
+											? "text-muted-foreground"
+											: "text-foreground",
+										yoloEnabled && "text-orange-700 dark:text-orange-300",
+									)}
+									title={
+										yoloEnabled
+											? t("composer.yoloEnabled")
+											: t("composer.yoloDisabled")
+									}
+								>
+									<span className="truncate">{t("composer.yolo")}</span>
+									<Switch
+										size="sm"
+										checked={yoloEnabled}
+										disabled={activeTabIsRunning}
+										onCheckedChange={(enabled) => {
+											setYoloEnabled(enabled);
+											if (selectedAgentId)
+												saveYoloPref(selectedAgentId, enabled);
+										}}
+										aria-label={t("composer.yoloToggle")}
+									/>
+								</div>
+							</PromptInputTools>
+							<PromptInputSubmit
+								className="ml-auto shrink-0"
+								size="icon-xs"
+								status={
+									activeTabIsRunning
+										? "streaming"
+										: submitting
+											? "submitted"
+											: "ready"
 								}
-							>
-								<span className="truncate">{t("composer.yolo")}</span>
-								<Switch
-									size="sm"
-									checked={yoloEnabled}
-									disabled={activeTabIsRunning}
-									onCheckedChange={(enabled) => {
-										setYoloEnabled(enabled);
-										if (selectedAgentId) saveYoloPref(selectedAgentId, enabled);
-									}}
-									aria-label={t("composer.yoloToggle")}
-								/>
-							</div>
-						</PromptInputTools>
-						<PromptInputSubmit
-							className="ml-auto shrink-0"
-							size="icon-xs"
-							status={
-								activeTabIsRunning
-									? "streaming"
-									: submitting
-										? "submitted"
-										: "ready"
-							}
-							onStop={
-								activeTabIsRunning ? () => void cancelCurrentRun() : undefined
-							}
-							disabled={
-								!activeTabIsRunning &&
-								(switching || submitting || !composerText.trim())
-							}
-						/>
-					</PromptInputFooter>
-				</PromptInput>
+								onStop={
+									activeTabIsRunning ? () => void cancelCurrentRun() : undefined
+								}
+								disabled={
+									!activeTabIsRunning &&
+									(switching || submitting || !composerText.trim())
+								}
+							/>
+						</PromptInputFooter>
+					</PromptInput>
+				</div>
 			</div>
 		</div>
 	);

@@ -15,7 +15,11 @@
 		"showRightSidebar": "显示右侧边栏",
 		"hideRightSidebar": "隐藏右侧边栏",
 		"showRightSidebarHint": "显示右侧边栏 (⌘L)",
-		"hideRightSidebarHint": "隐藏右侧边栏 (⌘L)"
+		"hideRightSidebarHint": "隐藏右侧边栏 (⌘L)",
+		"enterAgentZen": "Agent 禅模式",
+		"exitAgentZen": "退出禅模式",
+		"enterAgentZenHint": "全屏 Agent 对话 (⌥⌘Z)",
+		"exitAgentZenHint": "返回工作台 (⌥⌘Z)"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",

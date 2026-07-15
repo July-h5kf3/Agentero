@@ -13,6 +13,7 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
   - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或论文 **PDF / HTML** / 打开的 Markdown 笔记；
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
+  - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Focus）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话。
 - 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `motif:library` 不写盘。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。

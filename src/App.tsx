@@ -1,11 +1,13 @@
 import {
 	Bot,
 	Download,
+	Focus,
 	FolderOpen,
 	Link2,
 	Loader2,
 	PanelLeft,
 	PanelRight,
+	X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -264,16 +266,26 @@ export default function App() {
 	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
 		"agent",
 	);
+	/**
+	 * Agent zen / quest mode: hide vault chrome, full-width Agent chat
+	 * (Cursor Agents Window / VS Code zen — distraction-free single surface).
+	 */
+	const [agentZenMode, setAgentZenMode] = useState(false);
+	/** Keep AgentPanel mounted across sidebar ↔ zen so chat history is not lost. */
+	const [agentPanelMounted, setAgentPanelMounted] = useState(false);
 	/** Bumped after graph_rebuild so Backlinks/Graph re-fetch. */
 	const [wikiIndexRevision, setWikiIndexRevision] = useState(0);
 	/** Increment to open magic-wand popover (⇧⌘I). */
 	const [lookupOpenSignal, setLookupOpenSignal] = useState(0);
 	const sidebarPanelRef = usePanelRef();
 	const rightSidebarPanelRef = usePanelRef();
+	const sourcePanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const notesPaneRef = useRef<HTMLDivElement>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
+	const agentZenModeRef = useRef(false);
+	const leftCollapsedBeforeZenRef = useRef(false);
 
 	// Editor seed key: bumps when a file's content (re)loads to remount + reseed.
 	const [editorKey, setEditorKey] = useState(0);
@@ -459,20 +471,29 @@ export default function App() {
 	);
 
 	const toggleSidebar = useCallback(() => {
+		if (agentZenMode) return;
 		// React state is source of truth — isCollapsed() can lag at 0px.
 		setLeftSidebarCollapsed(!sidebarCollapsed);
-	}, [sidebarCollapsed, setLeftSidebarCollapsed]);
+	}, [agentZenMode, sidebarCollapsed, setLeftSidebarCollapsed]);
 
 	const toggleRightSidebar = useCallback(() => {
+		if (agentZenMode) return;
+		if (!rightSidebarOpen) setAgentPanelMounted(true);
 		setRightSidebarCollapsed(rightSidebarOpen, {
 			focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
 		});
-	}, [rightSidebarOpen, rightSidebarTab, setRightSidebarCollapsed]);
+	}, [
+		agentZenMode,
+		rightSidebarOpen,
+		rightSidebarTab,
+		setRightSidebarCollapsed,
+	]);
 
 	/** Open right sidebar on a tab (or switch tab if already open). */
 	const openRightTab = useCallback(
 		(tab: "agent" | "backlinks") => {
 			setRightSidebarTab(tab);
+			if (tab === "agent") setAgentPanelMounted(true);
 			if (!rightSidebarOpen) {
 				setRightSidebarCollapsed(false, { focusAgent: tab === "agent" });
 			} else if (tab === "agent") {
@@ -484,17 +505,91 @@ export default function App() {
 
 	/** ⌘L — toggle right sidebar (defaults to agent). */
 	const toggleChat = useCallback(() => {
+		if (agentZenMode) return;
 		setRightSidebarCollapsed(rightSidebarOpen, {
 			focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
 		});
-	}, [rightSidebarOpen, rightSidebarTab, setRightSidebarCollapsed]);
+	}, [
+		agentZenMode,
+		rightSidebarOpen,
+		rightSidebarTab,
+		setRightSidebarCollapsed,
+	]);
 
 	const expandSidebar = useCallback(() => {
+		if (agentZenMode) return;
 		setLeftSidebarCollapsed(false);
 		requestAnimationFrame(() => {
 			sidebarAsideRef.current?.querySelector<HTMLElement>("button")?.focus();
 		});
-	}, [setLeftSidebarCollapsed]);
+	}, [agentZenMode, setLeftSidebarCollapsed]);
+
+	/**
+	 * Enter agent zen mode: collapse left + center, expand Agent rail full width.
+	 * Keeps the same AgentPanel instance so conversation state survives.
+	 */
+	const enterAgentZen = useCallback(() => {
+		leftCollapsedBeforeZenRef.current = sidebarCollapsed;
+		agentZenModeRef.current = true;
+		setAgentZenMode(true);
+		setAgentPanelMounted(true);
+		setRightSidebarTab("agent");
+		setRightSidebarCollapsed(false, { focusAgent: true });
+		setLeftSidebarCollapsed(true);
+		requestAnimationFrame(() => {
+			try {
+				sourcePanelRef.current?.collapse();
+			} catch {
+				// ignore
+			}
+			try {
+				rightSidebarPanelRef.current?.expand();
+			} catch {
+				// ignore
+			}
+			try {
+				rightSidebarPanelRef.current?.resize("100%");
+			} catch {
+				// ignore
+			}
+		});
+	}, [
+		sidebarCollapsed,
+		setLeftSidebarCollapsed,
+		setRightSidebarCollapsed,
+		sourcePanelRef,
+		rightSidebarPanelRef,
+	]);
+
+	const exitAgentZen = useCallback(() => {
+		agentZenModeRef.current = false;
+		setAgentZenMode(false);
+		requestAnimationFrame(() => {
+			try {
+				sourcePanelRef.current?.expand();
+			} catch {
+				// ignore
+			}
+			try {
+				sourcePanelRef.current?.resize("40");
+			} catch {
+				// ignore
+			}
+			try {
+				rightSidebarPanelRef.current?.resize(RIGHT_SIDEBAR_DEFAULT_PX);
+			} catch {
+				// ignore
+			}
+			if (!leftCollapsedBeforeZenRef.current) {
+				setLeftSidebarCollapsed(false);
+			}
+		});
+	}, [setLeftSidebarCollapsed, sourcePanelRef, rightSidebarPanelRef]);
+
+	const toggleAgentZen = useCallback(() => {
+		if (agentZenMode) exitAgentZen();
+		else enterAgentZen();
+	}, [agentZenMode, enterAgentZen, exitAgentZen]);
 
 	const refreshTree = useCallback(async (path: string) => {
 		setBusy(true);
@@ -839,6 +934,9 @@ export default function App() {
 				case "toggleChat":
 					toggleChat();
 					break;
+				case "toggleAgentZen":
+					toggleAgentZen();
+					break;
 				case "focusSidebar":
 					expandSidebar();
 					break;
@@ -866,6 +964,7 @@ export default function App() {
 		handleRevealInFinder,
 		openMagicWand,
 		openSettings,
+		toggleAgentZen,
 		toggleChat,
 		toggleSidebar,
 	]);
@@ -1580,107 +1679,154 @@ export default function App() {
 						data-tauri-drag-region
 					/>
 					<TooltipProvider delayDuration={250}>
-						<div className="flex shrink-0 items-center gap-0.5 pr-1">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={
-											sidebarCollapsed
-												? t("titlebar.showLeftSidebar")
-												: t("titlebar.hideLeftSidebar")
-										}
-										aria-pressed={!sidebarCollapsed}
-										onClick={toggleSidebar}
-									>
-										<PanelLeft className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{sidebarCollapsed
-										? t("titlebar.showSidebarHint")
-										: t("titlebar.hideSidebarHint")}
-								</TooltipContent>
-							</Tooltip>
-						</div>
-						{/* Draggable empty middle of the title bar */}
-						<div
-							className="min-w-0 flex-1 self-stretch"
-							data-tauri-drag-region
-						/>
-						<div className="flex shrink-0 items-center gap-0.5 pr-2">
-							{rightSidebarOpen ? (
-								<>
+						{agentZenMode ? (
+							<>
+								{/* Zen: drag strip + exit only — chat chrome lives in AgentPanel */}
+								<div
+									className="min-w-0 flex-1 self-stretch"
+									data-tauri-drag-region
+								/>
+								<div className="flex shrink-0 items-center gap-0.5 pr-2">
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button
 												type="button"
 												variant="ghost"
 												size="icon-xs"
-												aria-label={t("titlebar.agentPanel")}
-												aria-pressed={rightSidebarTab === "agent"}
-												className={cn(
-													rightSidebarTab === "agent" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => openRightTab("agent")}
+												aria-label={t("titlebar.exitAgentZen")}
+												onClick={exitAgentZen}
 											>
-												<Bot className="size-3.5" />
+												<X className="size-3.5" />
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("labels.agent")}
+											{t("titlebar.exitAgentZenHint")}
 										</TooltipContent>
 									</Tooltip>
+								</div>
+							</>
+						) : (
+							<>
+								<div className="flex shrink-0 items-center gap-0.5 pr-1">
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button
 												type="button"
 												variant="ghost"
 												size="icon-xs"
-												aria-label={t("titlebar.backlinksPanel")}
-												aria-pressed={rightSidebarTab === "backlinks"}
-												className={cn(
-													rightSidebarTab === "backlinks" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => openRightTab("backlinks")}
+												aria-label={
+													sidebarCollapsed
+														? t("titlebar.showLeftSidebar")
+														: t("titlebar.hideLeftSidebar")
+												}
+												aria-pressed={!sidebarCollapsed}
+												onClick={toggleSidebar}
 											>
-												<Link2 className="size-3.5" />
+												<PanelLeft className="size-3.5" />
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("labels.backlinks")}
+											{sidebarCollapsed
+												? t("titlebar.showSidebarHint")
+												: t("titlebar.hideSidebarHint")}
 										</TooltipContent>
 									</Tooltip>
-								</>
-							) : null}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={
-											rightSidebarOpen
-												? t("titlebar.hideRightSidebar")
-												: t("titlebar.showRightSidebar")
-										}
-										aria-pressed={rightSidebarOpen}
-										onClick={toggleRightSidebar}
-									>
-										<PanelRight className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{rightSidebarOpen
-										? t("titlebar.hideRightSidebarHint")
-										: t("titlebar.showRightSidebarHint")}
-								</TooltipContent>
-							</Tooltip>
-						</div>
+								</div>
+								{/* Draggable empty middle of the title bar */}
+								<div
+									className="min-w-0 flex-1 self-stretch"
+									data-tauri-drag-region
+								/>
+								<div className="flex shrink-0 items-center gap-0.5 pr-2">
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label={t("titlebar.enterAgentZen")}
+												aria-pressed={agentZenMode}
+												onClick={enterAgentZen}
+											>
+												<Focus className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{t("titlebar.enterAgentZenHint")}
+										</TooltipContent>
+									</Tooltip>
+									{rightSidebarOpen ? (
+										<>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														aria-label={t("titlebar.agentPanel")}
+														aria-pressed={rightSidebarTab === "agent"}
+														className={cn(
+															rightSidebarTab === "agent" &&
+																"bg-muted text-foreground",
+														)}
+														onClick={() => openRightTab("agent")}
+													>
+														<Bot className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("labels.agent")}
+												</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														aria-label={t("titlebar.backlinksPanel")}
+														aria-pressed={rightSidebarTab === "backlinks"}
+														className={cn(
+															rightSidebarTab === "backlinks" &&
+																"bg-muted text-foreground",
+														)}
+														onClick={() => openRightTab("backlinks")}
+													>
+														<Link2 className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("labels.backlinks")}
+												</TooltipContent>
+											</Tooltip>
+										</>
+									) : null}
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label={
+													rightSidebarOpen
+														? t("titlebar.hideRightSidebar")
+														: t("titlebar.showRightSidebar")
+												}
+												aria-pressed={rightSidebarOpen}
+												onClick={toggleRightSidebar}
+											>
+												<PanelRight className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{rightSidebarOpen
+												? t("titlebar.hideRightSidebarHint")
+												: t("titlebar.showRightSidebarHint")}
+										</TooltipContent>
+									</Tooltip>
+								</div>
+							</>
+						)}
 					</TooltipProvider>
 				</header>
 
@@ -1748,12 +1894,15 @@ export default function App() {
 							</aside>
 						</ResizablePanel>
 
-						{sidebarCollapsed ? null : <ResizableHandle />}
+						{sidebarCollapsed || agentZenMode ? null : <ResizableHandle />}
 
 						<ResizablePanel
 							id="source"
+							panelRef={sourcePanelRef}
 							defaultSize="40"
-							minSize={200}
+							minSize={agentZenMode ? 0 : 200}
+							collapsible
+							collapsedSize={0}
 							className="min-h-0 min-w-0 overflow-hidden"
 						>
 							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -1938,9 +2087,9 @@ export default function App() {
 							</div>
 						</ResizablePanel>
 
-						{showNotesOnRight ? <ResizableHandle /> : null}
+						{showNotesOnRight && !agentZenMode ? <ResizableHandle /> : null}
 
-						{showNotesOnRight ? (
+						{showNotesOnRight && !agentZenMode ? (
 							<ResizablePanel
 								id="notes"
 								defaultSize={rightSidebarOpen ? "30" : "40"}
@@ -1987,52 +2136,83 @@ export default function App() {
 						  Conditional mount used to remount the Group when toggling ⌘L,
 						  which redistributed left panel size and caused visual overlap.
 						*/}
-						{rightSidebarOpen ? <ResizableHandle /> : null}
+						{rightSidebarOpen && !agentZenMode ? <ResizableHandle /> : null}
 						<ResizablePanel
 							id="right-sidebar"
 							panelRef={rightSidebarPanelRef}
 							defaultSize={0}
-							minSize={260}
-							maxSize={520}
+							minSize={agentZenMode ? 0 : 260}
+							maxSize={agentZenMode ? "100%" : 520}
 							collapsible
 							collapsedSize={0}
 							groupResizeBehavior="preserve-pixel-size"
 							className="min-h-0 overflow-hidden"
 							onResize={(size) => {
+								if (agentZenModeRef.current) return;
 								if (size.inPixels <= 1) setRightSidebarOpen(false);
 								else if (size.inPixels >= 80) setRightSidebarOpen(true);
 							}}
 						>
-							{rightSidebarOpen ? (
-								rightSidebarTab === "agent" ? (
+							{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat). */}
+							{(agentPanelMounted ||
+								agentZenMode ||
+								(rightSidebarOpen && rightSidebarTab === "agent")) && (
+								<div
+									className={cn(
+										"h-full min-h-0",
+										!agentZenMode &&
+											(!rightSidebarOpen || rightSidebarTab !== "agent") &&
+											"hidden",
+									)}
+								>
 									<AgentPanel
-										key={chatInputFocusKey.current}
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
 										vaultMarkdownPaths={vaultMdFiles}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
-										autoFocus
+										variant={agentZenMode ? "zen" : "sidebar"}
+										autoFocus={
+											agentZenMode ||
+											(rightSidebarOpen && rightSidebarTab === "agent")
+										}
+										headerActions={
+											agentZenMode ? (
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-xs"
+													className="size-7"
+													aria-label={t("titlebar.exitAgentZen")}
+													onClick={exitAgentZen}
+												>
+													<X className="size-3.5" />
+												</Button>
+											) : undefined
+										}
 									/>
-								) : (
-									<div className="flex h-full min-h-0 flex-col overflow-hidden">
-										<BacklinksPanel
-											vaultPath={vaultPath}
-											selectedPath={selectedPath}
-											onOpenPath={handleOpenVaultRel}
-											variant="sidebar"
-											className="min-h-0 basis-[42%] border-b"
-											wikiIndexRevision={wikiIndexRevision}
-										/>
-										<GraphPanel
-											vaultPath={vaultPath}
-											selectedPath={selectedPath}
-											onOpenPath={handleGraphOpenPath}
-											className="min-h-0 flex-1"
-											wikiIndexRevision={wikiIndexRevision}
-										/>
-									</div>
-								)
+								</div>
+							)}
+							{rightSidebarOpen &&
+							!agentZenMode &&
+							rightSidebarTab === "backlinks" ? (
+								<div className="flex h-full min-h-0 flex-col overflow-hidden">
+									<BacklinksPanel
+										vaultPath={vaultPath}
+										selectedPath={selectedPath}
+										onOpenPath={handleOpenVaultRel}
+										variant="sidebar"
+										className="min-h-0 basis-[42%] border-b"
+										wikiIndexRevision={wikiIndexRevision}
+									/>
+									<GraphPanel
+										vaultPath={vaultPath}
+										selectedPath={selectedPath}
+										onOpenPath={handleGraphOpenPath}
+										className="min-h-0 flex-1"
+										wikiIndexRevision={wikiIndexRevision}
+									/>
+								</div>
 							) : null}
 						</ResizablePanel>
 					</ResizableGroup>
@@ -2047,8 +2227,8 @@ export default function App() {
 					onChange={updateSettings}
 				/>
 
-				{/* IDE-style background tasks (bottom-left floater) */}
-				<BackgroundTasksPanel />
+				{/* IDE-style background tasks (bottom-left floater); hide in zen */}
+				{agentZenMode ? null : <BackgroundTasksPanel />}
 			</div>
 		</WikiNavContext.Provider>
 	);

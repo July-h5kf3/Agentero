@@ -107,6 +107,12 @@
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
+- **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 Focus 图标）：
+  - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + 退出；隐藏后台任务条与 Notes。
+  - **同一** `AgentPanel` 实例保持挂载（CSS 切换 / 不 remount），会话与流式状态不丢。
+  - **布局**（`variant="zen"`）：浅底全幅画布；顶栏工具与对话列同宽居中（`max-w-2xl`）；空态垂直居中；底部 Composer 圆角悬浮（无侧栏式 `border-t` 底条）。
+  - 仍用 AI Elements：`Conversation` / `Message` / `PromptInput` / `Suggestion` 等。
+  - 退出：标题栏 / 面板头 **X**，或再次 `⌥⌘Z`；恢复进入前左栏折叠意图与右栏默认宽度。
 - **左右侧栏隔离**（`react-resizable-panels`）：
   - 左栏（文件树）与右栏（Agent/Backlinks）均为 **常驻 collapsible 面板**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**对右栏做条件卸载整块 `ResizablePanel`（否则 Group 重排会冲掉左栏折叠态，交替 `⌥⌘S` / `⌘L` 时出现重叠/半开）。
   - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，中间主栏保持默认相对尺寸，避免一侧开合时另一侧像素宽度被重新分配。
@@ -158,6 +164,7 @@
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
+| `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
 | `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand`；设置 Keyboard 可见 |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。

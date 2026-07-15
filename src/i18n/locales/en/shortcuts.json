@@ -16,6 +16,7 @@
 		"magicWand": "Add paper by identifier",
 		"toggleSidebar": "Show / hide sidebar",
 		"toggleChat": "Show / hide chat",
+		"toggleAgentZen": "Agent zen mode",
 		"focusSidebar": "Focus sidebar",
 		"focusEditor": "Focus editor",
 		"focusNotes": "Focus notes"

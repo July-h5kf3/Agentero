@@ -14,6 +14,7 @@ export type ShortcutId =
 	| "magicWand"
 	| "toggleSidebar"
 	| "toggleChat"
+	| "toggleAgentZen"
 	| "closeSheet"
 	| "focusSidebar"
 	| "focusEditor"
@@ -120,6 +121,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "Navigation",
 		key: "l",
 		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "toggleAgentZen",
+		group: "Navigation",
+		// ⌥⌘Z — agent zen / quest mode (full-screen chat)
+		key: "z",
+		meta: true,
+		alt: true,
 		whenSettingsClosed: true,
 	},
 	{
