@@ -20,6 +20,20 @@
 		"description": "此对话中最近的 ACP 会话。",
 		"empty": "暂无会话。"
 	},
+	"tabs": {
+		"open": "打开会话 {{number}}",
+		"new": "新建会话"
+	},
+	"agentMenu": {
+		"title": "ACP 后端",
+		"empty": "没有就绪的 ACP Agent。请在设置中配置。"
+	},
+	"composer": {
+		"placeholder": "今天想做些什么？",
+		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
+		"removeContext": "从上下文移除 {{path}}",
+		"toggleCurrentFile": "将当前文件加入上下文"
+	},
 	"empty": {
 		"title": "与你的知识库对话",
 		"description": "消息将发送给你的 ACP Agent。点击上方的 Agent 名称可切换后端。",

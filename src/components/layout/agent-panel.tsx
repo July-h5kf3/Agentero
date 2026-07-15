@@ -1,5 +1,16 @@
 import type { ToolUIPart } from "ai";
-import { Check, CheckIcon, ChevronDown, CopyIcon, History } from "lucide-react";
+import {
+	Bot,
+	Check,
+	CheckIcon,
+	ChevronDown,
+	CopyIcon,
+	FileText,
+	FolderOpen,
+	History,
+	PencilLine,
+	X,
+} from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
@@ -138,9 +149,12 @@ import {
 } from "@/lib/agent";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import { toVaultRelative } from "@/lib/wiki";
 
 type AgentPanelProps = {
 	vaultPath: string | null;
+	selectedPath?: string | null;
+	vaultMarkdownPaths?: string[];
 	className?: string;
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
@@ -388,6 +402,8 @@ function dedupeModelsClient(models: AgentModelChoice[]): AgentModelChoice[] {
 
 export function AgentPanel({
 	vaultPath,
+	selectedPath = null,
+	vaultMarkdownPaths = [],
 	className,
 	headerActions,
 	autoFocus = false,
@@ -411,6 +427,10 @@ export function AgentPanel({
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [warming, setWarming] = useState(false);
+	const [composerText, setComposerText] = useState("");
+	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
+	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
+	const [activeTabId, setActiveTabId] = useState("draft");
 	const activeSessionRef = useRef<string | null>(null);
 	const selectedAgentIdRef = useRef<string | null>(null);
 	const warmGenRef = useRef(0);
@@ -719,6 +739,41 @@ export function AgentPanel({
 		return models.find((m) => m.id === modelId)?.name ?? modelId;
 	}, [modelId, models]);
 
+	const selectedVaultPath = useMemo(() => {
+		if (!selectedPath) return null;
+		const relative = toVaultRelative(vaultPath, selectedPath);
+		return relative || null;
+	}, [selectedPath, vaultPath]);
+
+	const contextPaths = useMemo(() => {
+		const paths = [
+			...(includeSelectedFile && selectedVaultPath ? [selectedVaultPath] : []),
+			...mentionedPaths,
+		];
+		return [...new Set(paths)];
+	}, [includeSelectedFile, mentionedPaths, selectedVaultPath]);
+
+	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
+	const mentionQuery = mentionMatch?.[2]?.toLocaleLowerCase() ?? "";
+	const mentionOptions = useMemo(() => {
+		if (!mentionMatch) return [];
+		return vaultMarkdownPaths
+			.filter((path) => path.toLocaleLowerCase().includes(mentionQuery))
+			.filter((path) => !contextPaths.includes(path))
+			.slice(0, 6);
+	}, [contextPaths, mentionMatch, mentionQuery, vaultMarkdownPaths]);
+
+	const conversationTabs = useMemo(
+		() => [
+			{ id: "draft", lines: null as ChatLine[] | null },
+			...sessionHistory.slice(0, 2).map((item) => ({
+				id: item.id,
+				lines: item.lines,
+			})),
+		],
+		[sessionHistory],
+	);
+
 	const pickModel = (id: string) => {
 		setModelId(id);
 		setModelOpen(false);
@@ -829,6 +884,11 @@ export function AgentPanel({
 			return;
 		}
 
+		const prompt = contextPaths.length
+			? `${text}\n\n${t("composer.contextInstruction")}\n${contextPaths
+					.map((path) => `- ${path}`)
+					.join("\n")}`
+			: text;
 		const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
 		const sessionStartLines = [...lines, userLine];
 		setLines(sessionStartLines);
@@ -836,9 +896,10 @@ export function AgentPanel({
 		try {
 			const accepted = await runOnce({
 				agentId,
-				prompt: text,
+				prompt,
 				vaultPath: vaultPath ?? undefined,
 				workflow: "free",
+				target: contextPaths[0],
 				modelId: modelId ?? undefined,
 			});
 			const agentLine: ChatLine = {
@@ -851,6 +912,7 @@ export function AgentPanel({
 			};
 			const pendingLines = [...sessionStartLines, agentLine];
 			activeSessionRef.current = accepted.sessionId;
+			setActiveTabId(accepted.sessionId);
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,
@@ -876,75 +938,117 @@ export function AgentPanel({
 		}
 	};
 
-	const labelName = selected?.name ?? "not configured";
-	const labelMissing = selected && !selected.available;
+	const attachMention = (path: string) => {
+		setMentionedPaths((prev) => [...new Set([...prev, path])]);
+		setComposerText((prev) =>
+			prev.replace(/(^|\s)@[^\s]*$/, (_match, prefix: string) => `${prefix}`),
+		);
+	};
+
+	const removeContextPath = (path: string) => {
+		if (path === selectedVaultPath) {
+			setIncludeSelectedFile(false);
+			return;
+		}
+		setMentionedPaths((prev) => prev.filter((item) => item !== path));
+	};
+
+	const newConversation = () => {
+		if (busy) return;
+		setLines([]);
+		setComposerText("");
+		setMentionedPaths([]);
+		setIncludeSelectedFile(Boolean(selectedVaultPath));
+		setActiveTabId("draft");
+		activeSessionRef.current = null;
+	};
 
 	return (
 		<div
 			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
 		>
-			<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-				<div className="flex h-full min-w-0 flex-1 items-center gap-1.5">
-					<span className="shrink-0 font-medium text-sm leading-none">
-						{title}
-					</span>
-					<span
-						className="shrink-0 text-muted-foreground text-sm leading-none"
-						aria-hidden
-					>
-						·
-					</span>
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild disabled={busy || switching}>
-							<button
-								type="button"
-								className={cn(
-									"inline-flex h-7 min-w-0 max-w-full items-center gap-0.5 rounded-md px-1.5 text-left outline-none",
-									"font-normal text-muted-foreground text-sm leading-none",
-									"hover:bg-muted hover:text-foreground",
-									"focus-visible:ring-1 focus-visible:ring-ring",
-									"disabled:opacity-50",
-								)}
-								aria-label={t("switchAgent")}
-							>
-								<span className="truncate leading-none">
-									{labelName}
-									{labelMissing ? t("missing") : ""}
-								</span>
-								<ChevronDown className="size-3.5 shrink-0 opacity-70" />
-							</button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="start" className="min-w-[200px]">
-							<DropdownMenuLabel className="text-muted-foreground text-xs">
-								ACP backend
-							</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							{options.length === 0 ? (
-								<div className="px-2 py-1.5 text-muted-foreground text-xs">
-									No ready ACP agents. Configure in Settings.
-								</div>
-							) : (
-								options.map((opt) => {
-									const isActive =
-										selected?.key === opt.key ||
-										(opt.id !== null && opt.id === selectedAgentId);
-									return (
-										<DropdownMenuItem
-											key={opt.key}
-											className="flex items-center justify-between gap-2"
-											onSelect={() => void selectAgent(opt)}
-										>
-											<span className="min-w-0 truncate">{opt.name}</span>
-											{isActive ? (
-												<Check className="size-3.5 shrink-0 opacity-80" />
-											) : null}
-										</DropdownMenuItem>
-									);
-								})
+			<div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+				<div
+					className="flex min-w-0 flex-1 items-center gap-1.5"
+					role="tablist"
+					aria-label={title}
+				>
+					{conversationTabs.map((tab, index) => (
+						<button
+							key={tab.id}
+							type="button"
+							disabled={busy}
+							role="tab"
+							aria-label={t("tabs.open", { number: index + 1 })}
+							aria-selected={activeTabId === tab.id}
+							className={cn(
+								"grid size-8 place-items-center rounded-md border text-sm font-medium text-muted-foreground transition-colors",
+								activeTabId === tab.id
+									? "border-primary bg-background text-foreground ring-1 ring-primary"
+									: "border-border bg-muted/30 hover:bg-muted hover:text-foreground",
 							)}
-						</DropdownMenuContent>
-					</DropdownMenu>
+							onClick={() => {
+								setActiveTabId(tab.id);
+								setLines(tab.lines ?? []);
+							}}
+						>
+							{index + 1}
+						</button>
+					))}
 				</div>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild disabled={busy || switching}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							aria-label={t("switchAgent")}
+							title={t("switchAgent")}
+						>
+							<Bot className="size-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="min-w-[200px]">
+						<DropdownMenuLabel className="text-muted-foreground text-xs">
+							{t("agentMenu.title")}
+						</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						{options.length === 0 ? (
+							<div className="px-2 py-1.5 text-muted-foreground text-xs">
+								{t("agentMenu.empty")}
+							</div>
+						) : (
+							options.map((opt) => {
+								const isActive =
+									selected?.key === opt.key ||
+									(opt.id !== null && opt.id === selectedAgentId);
+								return (
+									<DropdownMenuItem
+										key={opt.key}
+										className="flex items-center justify-between gap-2"
+										onSelect={() => void selectAgent(opt)}
+									>
+										<span className="min-w-0 truncate">{opt.name}</span>
+										{isActive ? (
+											<Check className="size-3.5 shrink-0 opacity-80" />
+										) : null}
+									</DropdownMenuItem>
+								);
+							})
+						)}
+					</DropdownMenuContent>
+				</DropdownMenu>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-xs"
+					disabled={busy}
+					aria-label={t("tabs.new")}
+					title={t("tabs.new")}
+					onClick={newConversation}
+				>
+					<PencilLine className="size-4" />
+				</Button>
 				<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
 					<PopoverTrigger asChild>
 						<Button
@@ -956,9 +1060,6 @@ export function AgentPanel({
 							title={t("history.label")}
 						>
 							<History className="size-3.5" />
-							<span className="hidden leading-none sm:inline">
-								{t("history.label")}
-							</span>
 						</Button>
 					</PopoverTrigger>
 					<PopoverContent align="end" className="w-80 p-0">
@@ -985,6 +1086,7 @@ export function AgentPanel({
 										onClick={() => {
 											setHistoryOpen(false);
 											setLines(item.lines);
+											setActiveTabId(item.id);
 										}}
 									>
 										<span className="text-muted-foreground text-sm leading-none">
@@ -1271,7 +1373,7 @@ export function AgentPanel({
 				<ConversationScrollButton />
 			</Conversation>
 
-			<div className="shrink-0 space-y-2 border-t p-3">
+			<div className="shrink-0 space-y-2 border-t bg-muted/10 p-3">
 				{lines.length > 0 && !busy ? (
 					<Suggestions>
 						{SUGGESTION_KEYS.map((key) => {
@@ -1288,25 +1390,63 @@ export function AgentPanel({
 					</Suggestions>
 				) : null}
 				<PromptInput
-					className="w-full"
+					className="w-full rounded-xl border-border bg-background shadow-none"
 					onSubmit={({ text }) => {
 						void send(text);
+						setComposerText("");
 					}}
 				>
 					<PromptInputBody>
-						<PromptInputTextarea
-							autoFocus={autoFocus || undefined}
-							placeholder=""
-							disabled={busy}
-						/>
+						<div className="relative flex min-h-[154px] w-full flex-col px-3 pt-3">
+							{contextPaths.length > 0 ? (
+								<div className="mb-2 flex flex-wrap gap-1.5">
+									{contextPaths.map((path) => (
+										<button
+											key={path}
+											type="button"
+											className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+											onClick={() => removeContextPath(path)}
+											title={t("composer.removeContext", { path })}
+										>
+											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+											<span className="truncate">{path.split("/").at(-1)}</span>
+											<X className="size-3 shrink-0 text-muted-foreground" />
+										</button>
+									))}
+								</div>
+							) : null}
+							{mentionOptions.length > 0 ? (
+								<div className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
+									{mentionOptions.map((path) => (
+										<button
+											key={path}
+											type="button"
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+											onClick={() => attachMention(path)}
+										>
+											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+											<span className="truncate">{path}</span>
+										</button>
+									))}
+								</div>
+							) : null}
+							<PromptInputTextarea
+								autoFocus={autoFocus || undefined}
+								className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
+								value={composerText}
+								onChange={(event) => setComposerText(event.currentTarget.value)}
+								placeholder={t("composer.placeholder")}
+								disabled={busy}
+							/>
+						</div>
 					</PromptInputBody>
-					<PromptInputFooter>
-						<PromptInputTools>
+					<PromptInputFooter className="gap-2 px-3 pb-2.5">
+						<PromptInputTools className="gap-1.5">
 							<ModelSelector open={modelOpen} onOpenChange={setModelOpen}>
 								<ModelSelectorTrigger asChild>
 									<PromptInputButton
 										type="button"
-										className="max-w-[10rem] gap-1 px-2"
+										className="max-w-[10rem] gap-1 px-0 font-semibold text-sm"
 										disabled={busy}
 										tooltip={
 											models.length > 0
@@ -1358,6 +1498,20 @@ export function AgentPanel({
 									</ContextContent>
 								</Context>
 							) : null}
+							<PromptInputButton
+								type="button"
+								className={cn(
+									"size-7 text-muted-foreground",
+									includeSelectedFile &&
+										selectedVaultPath &&
+										"bg-muted text-foreground",
+								)}
+								disabled={!selectedVaultPath || busy}
+								onClick={() => setIncludeSelectedFile((current) => !current)}
+								tooltip={t("composer.toggleCurrentFile")}
+							>
+								<FolderOpen className="size-4" />
+							</PromptInputButton>
 						</PromptInputTools>
 						<PromptInputSubmit
 							status={busy ? "streaming" : "ready"}

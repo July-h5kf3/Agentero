@@ -20,6 +20,20 @@
 		"description": "Recent ACP sessions in this chat.",
 		"empty": "No sessions yet."
 	},
+	"tabs": {
+		"open": "Open conversation {{number}}",
+		"new": "Start a new conversation"
+	},
+	"agentMenu": {
+		"title": "ACP backend",
+		"empty": "No ready ACP agents. Configure one in Settings."
+	},
+	"composer": {
+		"placeholder": "How can I help you today?",
+		"contextInstruction": "Read these Vault files before answering when relevant:",
+		"removeContext": "Remove {{path}} from context",
+		"toggleCurrentFile": "Include the current file as context"
+	},
 	"empty": {
 		"title": "Chat with your vault",
 		"description": "Messages go to your ACP agent. Click the agent name above to switch backends.",

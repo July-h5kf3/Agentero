@@ -83,10 +83,10 @@
 | 要求 | 说明 |
 |---|---|
 | 入口 | `⌘L`、标题栏右侧 Agent 图标、菜单 **View → Toggle Chat** |
-| 结构 | Header（标题 · **可点 Agent 名切换 ACP 后端** · 关闭）+ 消息列表 + PromptInput |
+| 结构 | 会话标签 · Agent 选择 / 新建 / 历史操作 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
-| 输入 | `ai-elements/prompt-input`（↵ 发送 / ⇧↵ 换行） |
+| 输入 | 单层 Composer：当前文件与 `@` 提及显示为可移除 context chip；`↵` 发送 / `⇧↵` 换行 |
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
@@ -105,7 +105,9 @@ Conversation
 PromptInput → Body / Footer / Submit
 ```
 
-**Agent 切换**：点击 header 中的 Agent 名称打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
+**Agent 切换**：点击 Composer 上方的 Agent 图标打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
+
+**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 ### 3.3 Backlinks + Graph 右侧栏
 

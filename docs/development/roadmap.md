@@ -91,6 +91,7 @@
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
+- [x] Composer 上下文：当前文件 chip、`@` Vault Markdown 提及与本地会话标签切换。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [ ] 内置工作流：总结当前论文、基于本地库问答、生成 Related Work 草稿。
