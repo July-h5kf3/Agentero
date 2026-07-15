@@ -139,6 +139,8 @@ pub fn run() {
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
             commands::window::window_new,
+            commands::lookup::lookup_import,
+            commands::lookup::lookup_translator_config,
             set_locale,
         ])
         .setup(|app| {

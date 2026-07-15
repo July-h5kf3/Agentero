@@ -1,0 +1,190 @@
+//! Identifier extraction (subset of Zotero extractIdentifiers).
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentifierKind {
+    Doi,
+    Isbn,
+    Arxiv,
+    Pmid,
+    AdsBibcode,
+    Url,
+}
+
+/// Returns the first recognized identifier in `text`.
+pub fn extract_primary_identifier(text: &str) -> Option<(IdentifierKind, String)> {
+    let t = text.trim();
+    if t.is_empty() {
+        return None;
+    }
+
+    if t.starts_with("http://") || t.starts_with("https://") {
+        return Some((IdentifierKind::Url, t.to_string()));
+    }
+
+    if let Some(doi) = clean_doi(t) {
+        return Some((IdentifierKind::Doi, doi));
+    }
+    if let Some(id) = extract_arxiv_id(t) {
+        return Some((IdentifierKind::Arxiv, id));
+    }
+    if let Some(isbn) = clean_isbn(t) {
+        return Some((IdentifierKind::Isbn, isbn));
+    }
+    // PMID: 1–9 digits
+    if let Some(caps) = regex_pmid(t) {
+        return Some((IdentifierKind::Pmid, caps));
+    }
+    if let Some(ads) = regex_ads(t) {
+        return Some((IdentifierKind::AdsBibcode, ads));
+    }
+    None
+}
+
+pub fn extract_arxiv_id(text: &str) -> Option<String> {
+    let s = text.trim();
+    // URL form
+    let stripped = s
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("export.arxiv.org/")
+        .trim_start_matches("arxiv.org/");
+    let after_path = if let Some(rest) = stripped.strip_prefix("abs/") {
+        rest
+    } else if let Some(rest) = stripped.strip_prefix("pdf/") {
+        rest.trim_end_matches(".pdf")
+    } else if let Some(rest) = stripped.strip_prefix("html/") {
+        rest
+    } else if let Some(rest) = stripped.strip_prefix("src/") {
+        rest
+    } else if let Some(rest) = stripped.strip_prefix("e-print/") {
+        rest
+    } else {
+        s.trim_start_matches("arXiv:").trim_start_matches("arxiv:")
+    };
+    let id = after_path
+        .split(['?', '#', '/'])
+        .next()
+        .unwrap_or(after_path);
+    let id = id.trim().trim_end_matches('/');
+    // new-style 1706.03762 or old-style hep-th/9901001
+    let bare = strip_version(id);
+    if is_arxiv_id(&bare) {
+        Some(bare)
+    } else {
+        None
+    }
+}
+
+fn is_arxiv_id(s: &str) -> bool {
+    // 1234.5678 or 1234.56789
+    if s.len() >= 9 && s.as_bytes().get(4) == Some(&b'.') {
+        let (a, b) = s.split_at(4);
+        let b = &b[1..];
+        return a.chars().all(|c| c.is_ascii_digit())
+            && (b.len() == 4 || b.len() == 5)
+            && b.chars().all(|c| c.is_ascii_digit());
+    }
+    // archive/YYMMNNN
+    if let Some((arch, num)) = s.split_once('/') {
+        return !arch.is_empty() && num.len() == 7 && num.chars().all(|c| c.is_ascii_digit());
+    }
+    false
+}
+
+fn strip_version(id: &str) -> String {
+    if let Some(i) = id.rfind('v') {
+        if id[i + 1..].chars().all(|c| c.is_ascii_digit()) && i > 0 {
+            return id[..i].to_string();
+        }
+    }
+    id.to_string()
+}
+
+fn clean_doi(s: &str) -> Option<String> {
+    let mut x = s.trim().to_string();
+    if x.starts_with("https://doi.org/") {
+        x = x["https://doi.org/".len()..].to_string();
+    } else if x.starts_with("http://doi.org/") {
+        x = x["http://doi.org/".len()..].to_string();
+    } else if x.starts_with("doi:") {
+        x = x["doi:".len()..].trim().to_string();
+    }
+    // 10.xxxx/...
+    if let Some(start) = x.find("10.") {
+        let cand = &x[start..];
+        let end = cand
+            .find(|c: char| c.is_whitespace() || c == ',' || c == ';')
+            .unwrap_or(cand.len());
+        let doi = cand[..end].trim_end_matches(['.', ',', ')']).to_string();
+        if doi.contains('/') {
+            return Some(doi);
+        }
+    }
+    None
+}
+
+fn clean_isbn(s: &str) -> Option<String> {
+    let digits: String = s
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
+        .collect();
+    let upper = digits.to_uppercase();
+    if upper.len() == 13 && (upper.starts_with("978") || upper.starts_with("979")) {
+        return Some(upper);
+    }
+    if upper.len() == 10 {
+        return Some(upper);
+    }
+    None
+}
+
+fn regex_pmid(s: &str) -> Option<String> {
+    let t = s
+        .trim()
+        .trim_start_matches("PMID:")
+        .trim_start_matches("pmid:");
+    let t = t.trim();
+    if !t.is_empty() && t.len() <= 9 && t.chars().all(|c| c.is_ascii_digit()) {
+        return Some(t.to_string());
+    }
+    None
+}
+
+fn regex_ads(s: &str) -> Option<String> {
+    // 2015ApJ...810...89S — 19 chars-ish
+    let t = s.trim();
+    if t.len() == 19
+        && t.as_bytes()[0].is_ascii_digit()
+        && t.as_bytes()[1].is_ascii_digit()
+        && t.as_bytes()[2].is_ascii_digit()
+        && t.as_bytes()[3].is_ascii_digit()
+    {
+        return Some(t.to_string());
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arxiv_id_new() {
+        assert_eq!(
+            extract_arxiv_id("1706.03762").as_deref(),
+            Some("1706.03762")
+        );
+        assert_eq!(
+            extract_arxiv_id("https://arxiv.org/abs/1706.03762v1").as_deref(),
+            Some("1706.03762")
+        );
+    }
+
+    #[test]
+    fn doi_clean() {
+        assert_eq!(
+            clean_doi("https://doi.org/10.1038/nature12373").as_deref(),
+            Some("10.1038/nature12373")
+        );
+    }
+}
