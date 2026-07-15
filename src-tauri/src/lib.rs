@@ -20,6 +20,10 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
         .accelerator("CmdOrCtrl+,")
         .build(app)?;
 
+    let new_window = MenuItemBuilder::with_id("new_window", labels.new_window)
+        .accelerator("CmdOrCtrl+N")
+        .build(app)?;
+
     let open_vault = MenuItemBuilder::with_id("open_vault", labels.open_vault)
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
@@ -55,6 +59,8 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
         .build()?;
 
     let file_submenu = SubmenuBuilder::new(app, labels.file)
+        .item(&new_window)
+        .separator()
         .item(&open_vault)
         .item(&create_vault)
         .item(&refresh_tree)
@@ -132,6 +138,7 @@ pub fn run() {
             commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
+            commands::window::window_new,
             set_locale,
         ])
         .setup(|app| {
@@ -145,6 +152,12 @@ pub fn run() {
         })
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
+            if id == "new_window" {
+                if let Err(e) = commands::window::window_new(app.clone()) {
+                    eprintln!("window_new failed: {e}");
+                }
+                return;
+            }
             let _ = app.emit(id, ());
         })
         .run(tauri::generate_context!())

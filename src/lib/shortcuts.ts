@@ -5,6 +5,7 @@
 
 export type ShortcutId =
 	| "settings"
+	| "newWindow"
 	| "openVault"
 	| "createVault"
 	| "refreshTree"
@@ -45,6 +46,13 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "App",
 		key: "Escape",
 		whenSettingsOpen: true,
+	},
+	{
+		id: "newWindow",
+		group: "App",
+		key: "n",
+		meta: true,
+		whenSettingsClosed: true,
 	},
 	{
 		id: "openVault",

@@ -34,6 +34,7 @@
   - 新建文件夹 → `FolderPlus`（同上）
   - 刷新树 → `RefreshCw`（⌘R）
 - **打开 / 创建 Vault** 不在侧边栏：使用 macOS 顶部菜单 **File → Open Vault…**（`⌘O`）/ **Create Vault…**（`⇧⌘N`）。
+- **新建窗口**：菜单 **File → New Window**（`⌘N`）。新窗口不自动打开上次 Vault；无 Vault 时中间栏显示欢迎页（最近路径列表 + 打开 / 创建）。
 - **设置入口不在侧边栏**：使用 macOS 顶部菜单 **motif → Settings…**（`⌘,`），不放齿轮图标。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
 
@@ -70,7 +71,9 @@
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
+| `⌘N` | 新建窗口 | 打开空白窗口；不自动恢复 Vault，欢迎页列出最近路径 |
 | `⌘O` | Open vault… | 打开文档/文件夹 |
+| `⇧⌘N` | Create vault… | 创建并初始化新 Vault |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |

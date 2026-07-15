@@ -20,6 +20,7 @@ import {
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import { VaultWelcome } from "@/components/layout/vault-welcome";
 import {
 	type SettingsSection,
 	SettingsWindow,
@@ -53,15 +54,18 @@ import {
 	createVault,
 	createVaultDirectory,
 	type FileNode,
+	getRecentVaults,
 	getSavedVaultPath,
 	isMarkdownPath,
 	isTextOpenable,
 	isValidVaultEntryName,
 	joinVaultPath,
 	loadVaultTree,
+	openNewWindow,
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
+	removeRecentVault,
 	saveVaultPath,
 	vaultDisplayName,
 	writeVaultFile,
@@ -162,24 +166,35 @@ export default function App() {
 	const [markdown, setMarkdown] = useState(() => {
 		const saved = localStorage.getItem(STORAGE_KEY);
 		const hasVault =
-			isTauri() && loadSettings().restoreLastVault && getSavedVaultPath();
+			isTauri() &&
+			Boolean(
+				getSavedVaultPath({ allowRestore: loadSettings().restoreLastVault }),
+			);
 		if (!hasVault) return defaultMarkdown;
 		return saved ?? defaultMarkdown;
 	});
 	const [vaultPath, setVaultPath] = useState<string | null>(() => {
-		const s = loadSettings();
 		if (!isTauri()) return null;
-		if (!s.restoreLastVault) return null;
-		return getSavedVaultPath();
+		return getSavedVaultPath({
+			allowRestore: loadSettings().restoreLastVault,
+		});
 	});
 	const [tree, setTree] = useState<FileNode[]>([]);
-	const [selectedPath, setSelectedPath] = useState<string | null>(() =>
-		localStorage.getItem(OPEN_FILE_KEY),
-	);
+	const [selectedPath, setSelectedPath] = useState<string | null>(() => {
+		// Fresh windows and empty vaults should not restore a previous file.
+		if (!isTauri()) return null;
+		const vault = getSavedVaultPath({
+			allowRestore: loadSettings().restoreLastVault,
+		});
+		return vault ? localStorage.getItem(OPEN_FILE_KEY) : null;
+	});
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/** Inline new file/folder draft in the tree (IDE-style). */
 	const [createDraft, setCreateDraft] = useState<TreeCreateDraft | null>(null);
+	const [recentVaults, setRecentVaults] = useState<string[]>(() =>
+		getRecentVaults(),
+	);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
@@ -428,6 +443,7 @@ export default function App() {
 		saveVaultPath(path);
 		setVaultPath(path);
 		setSelectedPath(null);
+		setRecentVaults(getRecentVaults());
 		try {
 			await rebuildWikiIndex(path);
 		} catch {
@@ -452,6 +468,50 @@ export default function App() {
 			setBusy(false);
 		}
 	}, [t, activateVault]);
+
+	const handleOpenRecentVault = useCallback(
+		async (path: string) => {
+			setError(null);
+			try {
+				if (!isTauri()) {
+					setError(t("errors.openVaultDesktopOnly"));
+					return;
+				}
+				setBusy(true);
+				const { exists } = await import("@tauri-apps/plugin-fs");
+				if (!(await exists(path))) {
+					removeRecentVault(path);
+					setRecentVaults(getRecentVaults());
+					setError(t("vault.recentMissing", { path }));
+					return;
+				}
+				await activateVault(path);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[t, activateVault],
+	);
+
+	const handleRemoveRecentVault = useCallback((path: string) => {
+		removeRecentVault(path);
+		setRecentVaults(getRecentVaults());
+	}, []);
+
+	const handleNewWindow = useCallback(async () => {
+		setError(null);
+		try {
+			if (!isTauri()) {
+				setError(t("errors.openVaultDesktopOnly"));
+				return;
+			}
+			await openNewWindow();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	}, [t]);
 
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
@@ -488,6 +548,9 @@ export default function App() {
 				case "closeSheet":
 					closeSettings();
 					break;
+				case "newWindow":
+					void handleNewWindow();
+					break;
 				case "openVault":
 					void handleOpenVault();
 					break;
@@ -520,6 +583,7 @@ export default function App() {
 	}, [
 		closeSettings,
 		expandSidebar,
+		handleNewWindow,
 		handleOpenVault,
 		handleRefresh,
 		openSettings,
@@ -543,6 +607,7 @@ export default function App() {
 					openSettings();
 				}),
 			);
+			// new_window is handled natively in Rust (creates the window directly).
 			unsubs.push(
 				await listen("open_vault", () => {
 					void handleOpenVault();
@@ -1108,45 +1173,32 @@ export default function App() {
 									</div>
 								</div>
 								{!vaultPath ? (
-									<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
-										<FolderOpen className="size-10 text-muted-foreground" />
-										<div className="max-w-xs space-y-2">
-											<p className="font-medium text-sm">
-												{t("vault.noVaultOpenTitle")}
-											</p>
-											<p className="text-muted-foreground text-xs">
-												{t("vault.noVaultOpenDescription")}
-											</p>
-										</div>
-										{isTauri() ? (
-											<div className="flex flex-wrap items-center justify-center gap-2">
-												<Button
-													type="button"
-													variant="default"
-													size="sm"
-													onClick={() => void handleCreateVault()}
-												>
-													{t("vault.createVaultButton")}
-												</Button>
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													onClick={() => void handleOpenVault()}
-												>
-													{t("vault.openVaultButton")}
-												</Button>
+									isTauri() ? (
+										<VaultWelcome
+											recentVaults={recentVaults}
+											busy={busy}
+											onOpenVault={() => void handleOpenVault()}
+											onCreateVault={() => void handleCreateVault()}
+											onOpenRecent={(path) => void handleOpenRecentVault(path)}
+											onRemoveRecent={handleRemoveRecentVault}
+										/>
+									) : (
+										<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
+											<FolderOpen className="size-10 text-muted-foreground" />
+											<div className="max-w-xs space-y-2">
+												<p className="font-medium text-sm">
+													{t("vault.noVaultOpenTitle")}
+												</p>
+												<p className="text-muted-foreground text-xs">
+													{t("vault.runTauriPrefix")}{" "}
+													<code className="rounded bg-muted px-1 py-0.5">
+														pnpm tauri dev
+													</code>{" "}
+													{t("vault.runTauriSuffix")}
+												</p>
 											</div>
-										) : (
-											<p className="text-muted-foreground text-xs">
-												{t("vault.runTauriPrefix")}{" "}
-												<code className="rounded bg-muted px-1 py-0.5">
-													pnpm tauri dev
-												</code>{" "}
-												{t("vault.runTauriSuffix")}
-											</p>
-										)}
-									</div>
+										</div>
+									)
 								) : (
 									<>
 										{centerMode === "markdown" ? (
