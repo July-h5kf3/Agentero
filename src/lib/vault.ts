@@ -195,6 +195,30 @@ export async function writeVaultFile(
 	await writeTextFile(path, content);
 }
 
+/** Create a directory (and parents) under the vault. */
+export async function createVaultDirectory(path: string): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+
+	const { mkdir } = await import("@tauri-apps/plugin-fs");
+	await mkdir(path, { recursive: true });
+}
+
+/** Join parent + name with the parent's path separator style. */
+export function joinVaultPath(parent: string, name: string): string {
+	return joinPath(parent, name);
+}
+
+/** True if name is a single path segment (no separators / traversal). */
+export function isValidVaultEntryName(name: string): boolean {
+	const trimmed = name.trim();
+	if (!trimmed) return false;
+	if (trimmed === "." || trimmed === "..") return false;
+	if (/[\\/]/.test(trimmed)) return false;
+	return true;
+}
+
 export function vaultDisplayName(rootPath: string | null): string {
 	if (!rootPath) return i18n.t("app:vault.noVaultName");
 	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
