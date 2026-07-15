@@ -116,6 +116,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	type AgentEffortChoice,
 	type AgentListResponse,
@@ -429,6 +430,11 @@ export function AgentPanel({
 	title = "Chat",
 }: AgentPanelProps) {
 	const { t, i18n } = useTranslation("agent");
+	const selectedVaultPath = useMemo(() => {
+		if (!selectedPath) return null;
+		const relative = toVaultRelative(vaultPath, selectedPath);
+		return relative || null;
+	}, [selectedPath, vaultPath]);
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -448,11 +454,7 @@ export function AgentPanel({
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [warming, setWarming] = useState(false);
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
-	const [composerText, setComposerText] = useState("");
 	const [submitting, setSubmitting] = useState(false);
-	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
-	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
-	const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 	const [skills, setSkills] = useState<AgentSkill[]>([]);
 	const [effortOptions, setEffortOptions] = useState<AgentEffortChoice[]>([]);
 	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
@@ -465,6 +467,25 @@ export function AgentPanel({
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
 	const [activeTabId, setActiveTabId] = useState("draft");
+	const {
+		text: composerText,
+		mentionedPaths,
+		selectedSkillIds,
+		includeSelectedFile,
+		activateSession: activateComposerSession,
+		completeSubmission: completeComposerSubmission,
+		resetSession: resetComposerSession,
+		setText: setComposerText,
+		setMentionedPaths,
+		setSelectedSkillIds,
+		setIncludeSelectedFile,
+		snapshot: snapshotComposerState,
+	} = useSessionComposerState({
+		vaultPath,
+		agentId: selectedAgentId,
+		sessionId: activeTabId,
+		defaultIncludeSelectedFile: Boolean(selectedVaultPath),
+	});
 	const activeConversationRef = useRef<string | null>(null);
 	const activeTabRef = useRef("draft");
 	const selectedAgentIdRef = useRef<string | null>(null);
@@ -608,10 +629,6 @@ export function AgentPanel({
 		setUsage(null);
 		setUsageBySession({});
 		setHistoryOpen(false);
-		setComposerText("");
-		setMentionedPaths([]);
-		setSelectedSkillIds([]);
-		setIncludeSelectedFile(true);
 		setComposerMenuDismissed(false);
 		setMentionActiveIndex(0);
 		setSkillActiveIndex(0);
@@ -1109,12 +1126,6 @@ export function AgentPanel({
 		return models.find((m) => m.id === modelId)?.name ?? modelId;
 	}, [modelId, models]);
 
-	const selectedVaultPath = useMemo(() => {
-		if (!selectedPath) return null;
-		const relative = toVaultRelative(vaultPath, selectedPath);
-		return relative || null;
-	}, [selectedPath, vaultPath]);
-
 	const contextPaths = useMemo(() => {
 		const paths = [
 			...(includeSelectedFile && selectedVaultPath ? [selectedVaultPath] : []),
@@ -1308,6 +1319,7 @@ export function AgentPanel({
 			knownSessionIdsRef.current.clear();
 			selectedAgentIdRef.current = agentId;
 			activeConversationRef.current = null;
+			activateComposerSession("draft");
 			activeTabRef.current = "draft";
 			setActiveTabId("draft");
 			setLines([]);
@@ -1346,6 +1358,10 @@ export function AgentPanel({
 			submittingRef.current
 		)
 			return false;
+		const submittedComposerState = {
+			...snapshotComposerState(),
+			text: textRaw,
+		};
 		const submissionGeneration = ++submissionGenRef.current;
 		const sessionContextGeneration = sessionContextGenRef.current;
 		const requestVaultPath = vaultPath;
@@ -1438,7 +1454,7 @@ export function AgentPanel({
 				reasoningEffort:
 					isCodexAgent && reasoningEffort ? reasoningEffort : undefined,
 				fastMode: isCodexAgent && fastAvailable ? fastEnabled : undefined,
-				skillIds: selectedSkillIds,
+				skillIds: submittedComposerState.selectedSkillIds,
 				autoApprove: yoloEnabled,
 			});
 			if (
@@ -1468,6 +1484,7 @@ export function AgentPanel({
 			};
 			const pendingLines: ChatLine[] = [...sessionStartLines, agentLine];
 			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
+			completeComposerSubmission(accepted.sessionId, submittedComposerState);
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
 			setSessionHistory((prev) => [
@@ -1619,10 +1636,7 @@ export function AgentPanel({
 		if (submittingRef.current) return;
 		historyHydrationGenRef.current += 1;
 		setLines([]);
-		setComposerText("");
-		setMentionedPaths([]);
-		setSelectedSkillIds([]);
-		setIncludeSelectedFile(Boolean(selectedVaultPath));
+		resetComposerSession("draft");
 		setActiveTabId("draft");
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
@@ -1655,6 +1669,7 @@ export function AgentPanel({
 							onClick={() => {
 								if (submittingRef.current) return;
 								historyHydrationGenRef.current += 1;
+								activateComposerSession(tab.id);
 								activeTabRef.current = tab.id;
 								setActiveTabId(tab.id);
 								setLines(tab.lines ?? []);
@@ -1801,6 +1816,7 @@ export function AgentPanel({
 												++historyHydrationGenRef.current;
 											setHistoryOpen(false);
 											if (!isCodexAgent || item.lines.length > 0) {
+												activateComposerSession(item.id);
 												setLines(item.lines);
 												activeTabRef.current = item.id;
 												setActiveTabId(item.id);
@@ -1862,6 +1878,7 @@ export function AgentPanel({
 														),
 													);
 													activeConversationRef.current = item.id;
+													activateComposerSession(item.id);
 													activeTabRef.current = item.id;
 													setActiveTabId(item.id);
 													setLines(lines);
@@ -2206,10 +2223,7 @@ export function AgentPanel({
 							submittingRef.current
 						)
 							return;
-						const accepted = await send(text);
-						if (accepted) {
-							setComposerText((current) => (current === text ? "" : current));
-						}
+						await send(text);
 					}}
 				>
 					<PromptInputBody>
