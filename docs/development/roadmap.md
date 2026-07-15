@@ -14,7 +14,7 @@
 | 版本 | 状态 | 说明 |
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、Preview/Info 仅在具体论文时显示。 |
-| V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源** 已落地；Agent 关键词候选、`PAPER.md` 生成、`catalog:export_*` 仍待。 |
+| V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；内置工作流、逐项权限确认、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
@@ -54,8 +54,6 @@
 
 - [x] 补齐“Create Vault”流程（含 catalog 初始化），而不只是打开已有目录。
 - [ ] 最近 Vault / UI 偏好从 `localStorage` 迁到 Tauri Store（语义对齐现有前端 MRU）。
-- [ ] 文件监听与外部编辑器修改同步。
-- [ ] 增加保存状态提示和冲突处理（Markdown 已有脏点 + 自动保存，可再增强）。
 
 ## V0.2 arXiv / 标识符入库闭环
 
@@ -73,14 +71,15 @@
 - [x] 中间栏预览仍可用 catalog 远程 `pdf_url` / `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
+- [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`；文件树眼睛 / Library 批量解析。
+- [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误行内展示；重复不覆盖用户 `NOTES.md`。
 
 ### 未完成
 
 - [ ] 关键词/话题/自然语言描述 + 输入分类（规则 + Agent）。
 - [ ] Agent 检索候选列表确认（单选/多选）。
-- [ ] 无 LaTeX 或需要统一正文时生成 `PAPER.md`。(放在解析部分完成)
-- [ ] `catalog:export_papers_md` / `catalog:export_bibtex`。
+- [ ] `catalog:export_papers_md`（Markdown 表形态；BibTeX 已由 Library 导出覆盖）。
 - [x] 入库后刷新 Backlinks/Graph 索引
 - [x] 魔棒快捷键 `⇧⌘I`；
 
@@ -89,8 +88,9 @@
 - [x] 输入 `1706.03762` 后生成 paper 目录、NOTES 壳、catalog 行，并尽量得到 PDF（arXiv 另有 TeX）。
 - [x] 连续入库多篇后 `paper_list` / Library 可见对应行。
 - [x] 缺本地资源时 paper 行 / Library 可补下。
+- [x] Library 可导出 BibTeX、可导入 .bib/.ris 进 catalog。
 - [ ] 关键词路径：候选列表 → 确认 → 入库。
-- [ ] 可选导出 PAPERS.md / BibTeX 与 catalog 一致。
+- [ ] 可选导出 PAPERS.md 与 catalog 一致。
 - [x] 重复入库不破坏已有 `NOTES.md`。
 
 ## V0.3 Agent 工作流（ACP Client + BYOA）
@@ -233,6 +233,7 @@
 - [x] arXiv/标识符精确入库（魔棒 + Translator + catalog + 默认 PDF/LaTeX）。
 - [x] 论文库 UI：`paper_list` + Library 虚拟节点 + 表头排序 + 双向滚动。
 - [x] 缺失资源补下：单篇 Download + Library 批量 Download（`paper_download_assets`）。
+- [x] 无 TeX 正文：下载后 liteparse → `PAPER.md`；`paper_parse_body`；眼睛 / Library 批量解析。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。
@@ -242,8 +243,9 @@
 ### 中期优先级 P1
 
 - [ ] 本地 PDF importer 与 metadata 确认面板。
-- [x] Catalog 权威存储 + `paper_list` / `paper_get` / 入库写路径（导出 / FTS / 双链缓存表仍待）。
-- [ ] `catalog:export_papers_md` / `catalog:export_bibtex`。
+- [x] Catalog 权威存储 + `paper_list` / `paper_get` / 入库写路径（FTS / 双链缓存表仍待）。
+- [x] Library BibTeX 导入/导出（Translator `/import` `/export`）。
+- [ ] `catalog:export_papers_md`（Markdown 表）。
 - [ ] `[[` 补全与 Plate wikilink 内联节点。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。

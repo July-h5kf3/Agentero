@@ -89,6 +89,7 @@ export const PAPER_DIR_MARKERS = ["source", "assets"] as const;
 
 const PDF_NAME_RE = /\.pdf$/i;
 const TEX_NAME_RE = /\.(tex|ltx)$/i;
+const PAPER_MD_RE = /^paper\.md$/i;
 
 type TreeWalkNode = {
 	name: string;
@@ -117,6 +118,29 @@ export function paperHasLocalPdf(node: TreeWalkNode): boolean {
 
 export function paperHasLocalTex(node: TreeWalkNode): boolean {
 	return treeHasFileExt(node, TEX_NAME_RE);
+}
+
+/** True when the paper folder has a direct-child `PAPER.md` (any depth name match). */
+export function paperHasLocalPaperMd(node: TreeWalkNode): boolean {
+	if (node.kind !== "directory" && PAPER_MD_RE.test(node.name)) return true;
+	for (const child of node.children ?? []) {
+		if (paperHasLocalPaperMd(child as TreeWalkNode)) return true;
+	}
+	return false;
+}
+
+/**
+ * Show file-tree eye (parse body) when:
+ * - local PDF exists,
+ * - no local `.tex`/`.ltx`,
+ * - no `PAPER.md` yet.
+ */
+export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
+	return (
+		paperHasLocalPdf(node) &&
+		!paperHasLocalTex(node) &&
+		!paperHasLocalPaperMd(node)
+	);
 }
 
 /**

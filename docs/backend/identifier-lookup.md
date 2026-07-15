@@ -70,12 +70,15 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 | **PDF** | 始终尝试下载到 `{paper}/source/{id}.pdf`（URL 来自 `pdf_url` 或 arXiv 推导） |
 | **arXiv LaTeX** | 从 `https://arxiv.org/e-print/{id}` 下载；gzip/tar 解压到 `source/`（路径穿越拒绝） |
 | **已有文件** | 跳过对应资源 |
+| **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
-按需补下：
-- **单篇 paper 行**：缺 PDF，或 arXiv 可取 TeX 但缺本地 TeX → Download → `paper_download_assets`。
-- **Library 行**：库内任一篇仍缺资源时显示 Download → 对全部缺失 paper **批量** `paper_download_assets`（只补缺失 PDF / 可下载 TeX）。
+按需补下 / 解析：
+- **单篇 paper 行 Download**：缺 PDF，或 arXiv 可取 TeX 但缺本地 TeX → `paper_download_assets`（下载后仍无 TeX 则自动尝试 `PAPER.md`）。
+- **单篇 paper 行眼睛**：有 PDF、无 TeX、无 `PAPER.md` → `paper_parse_body`。
+- **Library 行 Download**：库内任一篇仍缺资源时 → 批量 `paper_download_assets`。
+- **Library 行眼睛**：库内任一篇需生成 `PAPER.md` 时 → 批量 `paper_parse_body`。
 
-UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本。
+UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本；`PAPER.md` 为无 TeX 时的派生正文。
 
 #### Translator 服务地址（设置）
 
@@ -294,7 +297,17 @@ curl -d '10.2307/4486062' \
 
 用于后续「粘贴论文页 URL」；本阶段可不接 UI。
 
-#### `POST /import` — BibTeX/RIS 等（与迁移工具共享，非魔棒主路径）
+#### `POST /import` — BibTeX/RIS 等（Library 导入已用）
+
+- **Request**：`Content-Type: text/plain`，body = 文件全文。  
+- **Response**：`200` + **Zotero API JSON 数组**（与 `/search` 相同 item 形状）。  
+- Motif：`paper_import` → map → catalog + paper 壳。
+
+#### `POST /export` — Zotero items → BibTeX/RIS/…（Library 导出已用）
+
+- **Request**：`Content-Type: application/json`，body = **items 数组**（非单个 object）。  
+- **Query**：`format=bibtex|biblatex|ris|csljson|…`  
+- Motif：catalog 行先 `paper_record_to_zotero_item` 再调 `/export`。
 
 ### 4.3 健康检查与懒启动
 
@@ -639,6 +652,7 @@ arXiv URL 推导：
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
 - [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
+- [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body` + 眼睛 / Library 批量）
 - [x] `⇧⌘I` 魔棒快捷键
 - [ ] 重复提示增强、入库任务可取消
 
@@ -646,6 +660,7 @@ arXiv URL 推导：
 
 - [x] 默认下载 PDF；arXiv e-print 解压 LaTeX；无 `downloadFulltextToLocal` 开关
 - [x] 文件树缺 PDF 或 arXiv 缺 TeX 时 Download → `paper_download_assets`
+- [x] 无 TeX 时生成 `PAPER.md`（liteparse）
 - [ ] PDF prepare 复用同一 Lookup
 
 ---
@@ -667,9 +682,10 @@ arXiv URL 推导：
 2. ~~入库始终尝试下载 PDF 到 `source/`。~~ ✅  
 3. ~~arXiv 另下载 e-print 并解压 LaTeX。~~ ✅  
 4. ~~缺 PDF，或 arXiv 缺 TeX 时文件树显示 Download，可补下。~~ ✅  
-5. 文件树选中 `papers/nlp` 时路径为 `papers/nlp/<id>/`。  
-6. 重复不覆盖 `NOTES.md`；文案 i18n。  
-7. ~~论文库表格（`paper_list`）能列出已入库论文。~~ ✅  
+5. ~~无 TeX 时下载后 / 眼睛图标可生成 `PAPER.md`。~~ ✅  
+6. 文件树选中 `papers/nlp` 时路径为 `papers/nlp/<id>/`。  
+7. 重复不覆盖 `NOTES.md`；文案 i18n。  
+8. ~~论文库表格（`paper_list`）能列出已入库论文。~~ ✅  
 
 ---
 
@@ -691,3 +707,4 @@ arXiv URL 推导：
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
+| 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body` + 眼睛 / Library 批量） |

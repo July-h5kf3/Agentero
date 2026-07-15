@@ -133,15 +133,16 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 
 | 来源情况 | `source/` 放什么 | `PAPER.md` |
 |---|---|---|
-| arxiv 有 LaTeX | **默认下载**：`{id}.pdf` + e-print 解包的 `.tex` 工程 | **按需**生成(Agent 可直接读 `.tex`) |
-| 非 arxiv（有 `pdf_url`） | **默认下载** PDF | 解析成 Markdown(必生成，后续 importer) |
-| 扫描件 | 原始 PDF + `ocr/` 中间产物 | OCR → Markdown(必生成,并标注质量) |
+| arxiv 有 LaTeX | **默认下载**：`{id}.pdf` + e-print 解包的 `.tex` 工程 | **不自动生成**（Agent 可直接读 `.tex`） |
+| 无 TeX（非 arXiv / e-print 失败 / PDF-only） | **默认下载** PDF | **下载后** liteparse 生成 Markdown（`paper_parse_body` 亦可手动） |
+| 扫描件 | 原始 PDF | liteparse OCR → Markdown，`body_quality=low` |
 
 **入库下载**（`lookup_import` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
 
 - PDF → `{paper}/source/{id}.pdf`
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
-- 文件树：paper 行缺 PDF，或 arXiv 可取 TeX 但本地无 TeX 时，显示 Download 补下
+- **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
+- 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download；有 PDF、无 TeX、无 `PAPER.md` → 眼睛图标手动解析；Library 行可批量 Download / 批量 Parse
 
 正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
 

@@ -319,6 +319,7 @@ import paper（魔棒 lookup_import）
 - [x] 魔棒 / `lookup_import` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
 - [x] 读路径走 `paper_get` / `paper_list`；`metadata.json` 仅为 upsert 后投影（非 UI 主源）。
 - [x] 入库默认写 PDF（及 arXiv TeX）到 `source/`；`paper_download_assets` 可补缺失。
+- [x] 无 TeX 时 liteparse 写 `PAPER.md`，catalog 更新 `body_source` / `body_quality`（`paper_parse_body`）。
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex` 能生成与历史格式兼容的文本。
 - [ ] 删除导出文件不影响 catalog 与 UI 列表。
 - [ ] 打开缺 catalog 的旧目录能 init 或从 `metadata.json` 迁移。

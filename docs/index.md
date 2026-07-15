@@ -43,7 +43,7 @@ Motif 桌面应用
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
-- 补资源：paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；Library 行可**批量**补全部缺失（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
+- 补资源：paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`；眼睛图标 / Library 可批量解析（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
 ## 关键三方技术

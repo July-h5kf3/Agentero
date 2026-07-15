@@ -1,5 +1,6 @@
 import {
 	Download,
+	Eye,
 	FileCode2,
 	FileJson,
 	FilePlus2,
@@ -8,6 +9,7 @@ import {
 	Library,
 	Loader2,
 	ScrollText,
+	Upload,
 	WandSparkles,
 } from "lucide-react";
 import {
@@ -45,6 +47,7 @@ import {
 	isPaperDirectory,
 	paperDirFromPath,
 	paperNeedsAssetDownload,
+	paperNeedsBodyParse,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
@@ -81,6 +84,24 @@ function collectPapersNeedingAssets(
 						canFetchTex: paperCanFetchTex(n, vaultPath, arxivPaperRelPaths),
 					})
 				) {
+					out.push(n);
+				}
+			} else if (n.children?.length) {
+				walk(n.children);
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
+/** Paper folders that need liteparse → PAPER.md (PDF, no TeX, no PAPER.md). */
+function collectPapersNeedingBodyParse(nodes: FileNode[]): FileNode[] {
+	const out: FileNode[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
+				if (paperNeedsBodyParse(n)) {
 					out.push(n);
 				}
 			} else if (n.children?.length) {
@@ -273,6 +294,10 @@ type FileTreeProps = {
 	arxivPaperRelPaths?: ReadonlySet<string>;
 	/** Download missing PDF/TeX for every paper that needs it (Library row). */
 	onDownloadAllMissingAssets?: () => Promise<void>;
+	/** Parse PDF → PAPER.md when paper has no TeX and no PAPER.md. */
+	onParsePaperBody?: (paperNode: FileNode) => Promise<void>;
+	/** Parse all papers that need PAPER.md (Library row). */
+	onParseAllMissingBodies?: () => Promise<void>;
 	className?: string;
 };
 
@@ -288,11 +313,15 @@ export function FileTree({
 	onDownloadPaperAssets,
 	arxivPaperRelPaths,
 	onDownloadAllMissingAssets,
+	onParsePaperBody,
+	onParseAllMissingBodies,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
 	const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
 	const [downloadingAll, setDownloadingAll] = useState(false);
+	const [parsingPath, setParsingPath] = useState<string | null>(null);
+	const [parsingAll, setParsingAll] = useState(false);
 	const defaultExpanded = useMemo(() => {
 		const open = new Set<string>();
 		collectDefaultExpanded(nodes, open);
@@ -361,12 +390,30 @@ export function FileTree({
 		() => collectPapersNeedingAssets(nodes, vaultPath, arxivPaperRelPaths),
 		[nodes, vaultPath, arxivPaperRelPaths],
 	);
+	const papersNeedingBodyParse = useMemo(
+		() => collectPapersNeedingBodyParse(nodes),
+		[nodes],
+	);
 	const showLibraryDownload =
 		Boolean(onDownloadAllMissingAssets) && papersNeedingAssets.length > 0;
+	const showLibraryParse =
+		Boolean(onParseAllMissingBodies) && papersNeedingBodyParse.length > 0;
+	const libraryBusy =
+		downloadingAll ||
+		parsingAll ||
+		Boolean(downloadingPath) ||
+		Boolean(parsingPath);
 
 	const handleDownload = useCallback(
 		async (node: FileNode) => {
-			if (!onDownloadPaperAssets || downloadingPath || downloadingAll) return;
+			if (
+				!onDownloadPaperAssets ||
+				downloadingPath ||
+				downloadingAll ||
+				parsingPath ||
+				parsingAll
+			)
+				return;
 			setDownloadingPath(node.path);
 			try {
 				await onDownloadPaperAssets(node);
@@ -374,11 +421,23 @@ export function FileTree({
 				setDownloadingPath(null);
 			}
 		},
-		[onDownloadPaperAssets, downloadingPath, downloadingAll],
+		[
+			onDownloadPaperAssets,
+			downloadingPath,
+			downloadingAll,
+			parsingPath,
+			parsingAll,
+		],
 	);
 
 	const handleDownloadAll = useCallback(async () => {
-		if (!onDownloadAllMissingAssets || downloadingAll || downloadingPath)
+		if (
+			!onDownloadAllMissingAssets ||
+			downloadingAll ||
+			downloadingPath ||
+			parsingAll ||
+			parsingPath
+		)
 			return;
 		setDownloadingAll(true);
 		try {
@@ -386,7 +445,62 @@ export function FileTree({
 		} finally {
 			setDownloadingAll(false);
 		}
-	}, [onDownloadAllMissingAssets, downloadingAll, downloadingPath]);
+	}, [
+		onDownloadAllMissingAssets,
+		downloadingAll,
+		downloadingPath,
+		parsingAll,
+		parsingPath,
+	]);
+
+	const handleParse = useCallback(
+		async (node: FileNode) => {
+			if (
+				!onParsePaperBody ||
+				parsingPath ||
+				parsingAll ||
+				downloadingPath ||
+				downloadingAll
+			)
+				return;
+			setParsingPath(node.path);
+			try {
+				await onParsePaperBody(node);
+			} finally {
+				setParsingPath(null);
+			}
+		},
+		[
+			onParsePaperBody,
+			parsingPath,
+			parsingAll,
+			downloadingPath,
+			downloadingAll,
+		],
+	);
+
+	const handleParseAll = useCallback(async () => {
+		if (
+			!onParseAllMissingBodies ||
+			parsingAll ||
+			parsingPath ||
+			downloadingAll ||
+			downloadingPath
+		)
+			return;
+		setParsingAll(true);
+		try {
+			await onParseAllMissingBodies();
+		} finally {
+			setParsingAll(false);
+		}
+	}, [
+		onParseAllMissingBodies,
+		parsingAll,
+		parsingPath,
+		downloadingAll,
+		downloadingPath,
+	]);
 
 	const libraryRow = (
 		<FileTreeFile path={LIBRARY_VIRTUAL_PATH} name={t("papersLibrary.title")}>
@@ -397,37 +511,66 @@ export function FileTree({
 			<FileTreeName className="min-w-0 flex-1 truncate">
 				{t("papersLibrary.title")}
 			</FileTreeName>
-			{showLibraryDownload ? (
+			{showLibraryDownload || showLibraryParse ? (
 				<FileTreeActions
-					className="shrink-0"
+					className="flex shrink-0 items-center gap-0.5"
 					onClick={(e) => e.stopPropagation()}
 					onKeyDown={(e) => e.stopPropagation()}
 				>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								className="size-6"
-								aria-label={t("fileTree.downloadAllMissing")}
-								disabled={downloadingAll || Boolean(downloadingPath)}
-								onClick={(e) => {
-									e.stopPropagation();
-									void handleDownloadAll();
-								}}
-							>
-								{downloadingAll ? (
-									<Loader2 className="size-3.5 animate-spin" />
-								) : (
-									<Download className="size-3.5" />
-								)}
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="right">
-							{t("fileTree.downloadAllMissing")}
-						</TooltipContent>
-					</Tooltip>
+					{showLibraryParse ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-6"
+									aria-label={t("fileTree.parseAllMissing")}
+									disabled={libraryBusy}
+									onClick={(e) => {
+										e.stopPropagation();
+										void handleParseAll();
+									}}
+								>
+									{parsingAll ? (
+										<Loader2 className="size-3.5 animate-spin" />
+									) : (
+										<Eye className="size-3.5" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="right">
+								{t("fileTree.parseAllMissing")}
+							</TooltipContent>
+						</Tooltip>
+					) : null}
+					{showLibraryDownload ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="size-6"
+									aria-label={t("fileTree.downloadAllMissing")}
+									disabled={libraryBusy}
+									onClick={(e) => {
+										e.stopPropagation();
+										void handleDownloadAll();
+									}}
+								>
+									{downloadingAll ? (
+										<Loader2 className="size-3.5 animate-spin" />
+									) : (
+										<Download className="size-3.5" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="right">
+								{t("fileTree.downloadAllMissing")}
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 				</FileTreeActions>
 			) : null}
 		</FileTreeFile>
@@ -444,7 +587,16 @@ export function FileTree({
 			const showDownload =
 				Boolean(onDownloadPaperAssets) &&
 				paperNeedsAssetDownload(node, { canFetchTex });
+			const showParse = Boolean(onParsePaperBody) && paperNeedsBodyParse(node);
 			const isDownloading = downloadingPath === node.path || downloadingAll;
+			const isParsing = parsingPath === node.path || parsingAll;
+			const rowBusy =
+				isDownloading ||
+				isParsing ||
+				Boolean(downloadingPath) ||
+				Boolean(parsingPath) ||
+				downloadingAll ||
+				parsingAll;
 			return (
 				<div key={node.id}>
 					<FileTreeFile path={node.path} name={node.name}>
@@ -455,39 +607,68 @@ export function FileTree({
 						<FileTreeName className="min-w-0 flex-1 truncate">
 							{node.name}
 						</FileTreeName>
-						{showDownload ? (
+						{showDownload || showParse ? (
 							<FileTreeActions
-								className="shrink-0"
+								className="flex shrink-0 items-center gap-0.5"
 								onClick={(e) => {
 									e.stopPropagation();
 								}}
 								onKeyDown={(e) => e.stopPropagation()}
 							>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-6"
-											aria-label={t("fileTree.downloadAssets")}
-											disabled={isDownloading}
-											onClick={(e) => {
-												e.stopPropagation();
-												void handleDownload(node);
-											}}
-										>
-											{isDownloading ? (
-												<Loader2 className="size-3.5 animate-spin" />
-											) : (
-												<Download className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="right">
-										{t("fileTree.downloadAssets")}
-									</TooltipContent>
-								</Tooltip>
+								{showParse ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												className="size-6"
+												aria-label={t("fileTree.parseBody")}
+												disabled={rowBusy}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleParse(node);
+												}}
+											>
+												{isParsing ? (
+													<Loader2 className="size-3.5 animate-spin" />
+												) : (
+													<Eye className="size-3.5" />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="right">
+											{t("fileTree.parseBody")}
+										</TooltipContent>
+									</Tooltip>
+								) : null}
+								{showDownload ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												className="size-6"
+												aria-label={t("fileTree.downloadAssets")}
+												disabled={rowBusy}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleDownload(node);
+												}}
+											>
+												{isDownloading ? (
+													<Loader2 className="size-3.5 animate-spin" />
+												) : (
+													<Download className="size-3.5" />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="right">
+											{t("fileTree.downloadAssets")}
+										</TooltipContent>
+									</Tooltip>
+								) : null}
 							</FileTreeActions>
 						) : null}
 					</FileTreeFile>
@@ -617,6 +798,9 @@ export function VaultSidebarHeader({
 	/** Vault-relative papers parent, e.g. `papers` or `papers/nlp` */
 	lookupParentDir,
 	onLookupSubmit,
+	/** Bibliography import (bottom-left of magic-wand popover). */
+	onImportBibliography,
+	importBusy,
 	busy,
 	error,
 	isDemo,
@@ -631,6 +815,8 @@ export function VaultSidebarHeader({
 	onNewFolder: () => void;
 	lookupParentDir: string;
 	onLookupSubmit: (text: string) => Promise<void>;
+	onImportBibliography?: () => void | Promise<void>;
+	importBusy?: boolean;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
@@ -641,7 +827,7 @@ export function VaultSidebarHeader({
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
 	const [lookupError, setLookupError] = useState<string | null>(null);
-	const actionsDisabled = busy || isDemo || lookupBusy;
+	const actionsDisabled = busy || isDemo || lookupBusy || Boolean(importBusy);
 	const magicWandShortcut = useMemo(() => {
 		const def = SHORTCUTS.find((s) => s.id === "magicWand");
 		return def ? formatShortcut(def) : "⇧⌘I";
@@ -723,7 +909,7 @@ export function VaultSidebarHeader({
 											value={lookupText}
 											onChange={(e) => setLookupText(e.target.value)}
 											placeholder={t("lookup.placeholder")}
-											disabled={lookupBusy}
+											disabled={lookupBusy || importBusy}
 											className="h-8 text-xs"
 										/>
 										{lookupError ? (
@@ -731,12 +917,41 @@ export function VaultSidebarHeader({
 												{lookupError}
 											</p>
 										) : null}
-										<div className="flex justify-end">
+										{/* Import (file) bottom-left · Add (identifier) bottom-right */}
+										<div className="flex items-center justify-between gap-2">
+											{onImportBibliography ? (
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													className="h-7 gap-1 px-2 text-xs"
+													disabled={lookupBusy || importBusy || isDemo}
+													aria-label={t("papersLibrary.import")}
+													onClick={() => {
+														void onImportBibliography();
+													}}
+												>
+													{importBusy ? (
+														<Loader2 className="size-3.5 animate-spin" />
+													) : (
+														<Upload className="size-3.5" />
+													)}
+													<span>
+														{importBusy
+															? t("papersLibrary.importing")
+															: t("papersLibrary.import")}
+													</span>
+												</Button>
+											) : (
+												<span />
+											)}
 											<Button
 												type="submit"
 												size="sm"
 												className="h-7 px-2.5 text-xs"
-												disabled={lookupBusy || !lookupText.trim()}
+												disabled={
+													lookupBusy || importBusy || !lookupText.trim()
+												}
 											>
 												{lookupBusy ? t("lookup.adding") : t("lookup.add")}
 											</Button>

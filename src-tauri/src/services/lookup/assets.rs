@@ -16,6 +16,9 @@ const USER_AGENT: &str = "motif-lookup/0.1 (+https://github.com/poco-ai/motif)";
 pub struct AssetDownloadResult {
     pub pdf: bool,
     pub tex: bool,
+    /// True when `PAPER.md` was written (or already present after auto-parse).
+    #[serde(default)]
+    pub paper_md: bool,
     pub messages: Vec<String>,
 }
 

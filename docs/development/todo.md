@@ -28,10 +28,11 @@
 2b. **魔棒 / Identifier Lookup（Translator）** ✅ v0
    - [x] UI：侧栏魔棒 → 粘贴链接或编号 → 加入 Papers。
    - [x] 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
-   - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets`。
+   - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets` / `paper_parse_body`。
    - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
    - [x] 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download。
-   - [x] Library 行：库内任一篇仍缺资源 → 批量 Download 全部缺失 PDF / 可取 TeX。
+   - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`；无 `PAPER.md` 时行尾眼睛手动解析。
+   - [x] Library 行：库内任一篇仍缺资源 → 批量 Download；需 `PAPER.md` → 批量 Parse（眼睛）。
    - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
 2c. **论文库表格 UI** ✅
@@ -53,8 +54,9 @@
 ## P1 — 中期增强
 
 1. **Catalog 导出与检索**
-   - `catalog:export_papers_md` / `catalog:export_bibtex`。
-   - 可选 FTS5；Agent 工作流临时导出 L1 列表。
+   - [x] Library UI：Translator `/export` BibTeX + `/import` Bib/RIS（`paper_export` / `paper_import`）。
+   - [ ] `catalog:export_papers_md`（Markdown 表）等其它形态。
+   - [ ] 可选 FTS5；Agent 工作流临时导出 L1 列表。
 
 2. **本地 PDF importer**
    - 文件选择 / 拖拽 / 批量导入。

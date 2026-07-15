@@ -30,10 +30,12 @@
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 仍缺 PDF，或 arXiv 缺 TeX 时，Library 标题右侧显示 Download；点击**批量**对全部缺失项调用 `paper_download_assets`（逐篇，已有资源跳过）。
+- **Library 行 Parse（眼睛）**：当库内**任一** paper **有 PDF、无 TeX、无 `PAPER.md`** 时，Library 标题右侧另显示眼睛图标；点击**批量**对全部符合条件项调用 `paper_parse_body`（已有 `PAPER.md` 或已有 TeX 跳过）。
 - **Paper 行 Download**：单篇 paper 行最右侧在需要补资源时显示 `Download`：
   - 本地**没有 PDF** → 显示（尽量下 PDF）；
   - 或可获取 TeX（catalog `arxiv_id` / `type=arxiv` / 文件夹名像 arXiv id）但本地**没有** `.tex`/`.ltx` → 显示；
   - 已有 PDF，且（非 arXiv 或已有 TeX）→ 不显示。
+- **Paper 行 Parse（眼睛）**：本地**有 PDF**、**无** `.tex`/`.ltx`、**无** `PAPER.md` 时，行尾显示眼睛图标 → `paper_parse_body`（liteparse → `PAPER.md`）。有 TeX 时不显示（Agent 可直接读 TeX）。可与 Download 同时出现（例如 PDF 已有但尚缺 PAPER.md）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -80,6 +82,9 @@
   - **列**：标题、作者、年份、类型、标识符；点击行打开对应 paper 文件夹。
   - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
   - **滚动**：容器 `.motif-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
+  - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
+    - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存对话框写 `.bib`。
+  - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
 - **Paper Info / Notes（Preview）——仅具体论文**：
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
   - **右侧 Notes**：仅当已打开具体论文且中心为 PDF/HTML 时显示该篇 `NOTES.md`；论文库视图或未选论文时隐藏（不残留上一篇 Notes 栏）。
@@ -135,7 +140,8 @@
   - **始终下载 PDF** 到 `{paper}/source/{id}.pdf`。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
-- **论文行下载按钮**：缺本地 PDF，或 arXiv 可取 TeX 但尚无 `.tex` 时，行尾 Download → `paper_download_assets`（已有资源跳过，只补缺失项）。
+- **论文行下载按钮**：缺本地 PDF，或 arXiv 可取 TeX 但尚无 `.tex` 时，行尾 Download → `paper_download_assets`（已有资源跳过，只补缺失项）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。
+- **论文行解析按钮**：有 PDF、无 TeX、无 `PAPER.md` 时行尾眼睛 → `paper_parse_body`；Library 行可批量解析。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 

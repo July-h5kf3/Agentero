@@ -9,7 +9,10 @@
 		"alreadyExists": "「{{name}}」已存在。",
 		"downloadAssets": "下载缺失的 PDF / LaTeX",
 		"downloadAllMissing": "下载全部缺失的 PDF / LaTeX",
-		"downloadFailed": "下载论文资源失败。"
+		"downloadFailed": "下载论文资源失败。",
+		"parseBody": "解析 PDF 生成 PAPER.md",
+		"parseAllMissing": "解析全部无 TeX 且缺 PAPER.md 的论文",
+		"parseFailed": "解析论文正文失败。"
 	},
 	"papersLibrary": {
 		"title": "论文库",
@@ -22,7 +25,17 @@
 		"colType": "类型",
 		"colId": "标识符",
 		"sortBy": "按{{column}}排序",
-		"count": "共 {{formatted}} 篇"
+		"count": "共 {{formatted}} 篇",
+		"import": "导入文献",
+		"export": "导出论文库",
+		"importing": "导入中…",
+		"exporting": "导出中…",
+		"importDone": "已导入 {{count}} 篇",
+		"importSkipped": "跳过已存在 {{count}} 篇",
+		"exportDone": "已导出 {{count}} 篇",
+		"importFailed": "导入失败",
+		"exportFailed": "导出失败",
+		"desktopOnly": "导入/导出需要桌面应用。"
 	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",

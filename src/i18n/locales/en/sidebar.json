@@ -9,7 +9,10 @@
 		"alreadyExists": "「{{name}}」 already exists.",
 		"downloadAssets": "Download missing PDF / LaTeX",
 		"downloadAllMissing": "Download all missing PDF / LaTeX",
-		"downloadFailed": "Failed to download paper assets."
+		"downloadFailed": "Failed to download paper assets.",
+		"parseBody": "Parse PDF to PAPER.md",
+		"parseAllMissing": "Parse all papers missing PAPER.md (no TeX)",
+		"parseFailed": "Failed to parse paper body."
 	},
 	"papersLibrary": {
 		"title": "Library",
@@ -22,7 +25,17 @@
 		"colType": "Type",
 		"colId": "ID",
 		"sortBy": "Sort by {{column}}",
-		"count": "{{formatted}} papers"
+		"count": "{{formatted}} papers",
+		"import": "Import bibliography",
+		"export": "Export library",
+		"importing": "Importing…",
+		"exporting": "Exporting…",
+		"importDone": "Imported {{count}} papers",
+		"importSkipped": "{{count}} already present (skipped)",
+		"exportDone": "Exported {{count}} papers",
+		"importFailed": "Import failed",
+		"exportFailed": "Export failed",
+		"desktopOnly": "Import/export requires the desktop app."
 	},
 	"lookup": {
 		"magicWand": "Add by identifier",

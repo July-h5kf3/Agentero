@@ -5,8 +5,13 @@
 mod assets;
 mod map;
 mod parse;
+mod zotero_io;
 
-pub use assets::{ensure_paper_assets, AssetDownloadResult};
+pub use assets::{ensure_paper_assets, has_local_pdf, has_local_tex, AssetDownloadResult};
+pub use zotero_io::{
+    export_catalog, import_catalog, PaperExportArgs, PaperExportResult, PaperImportArgs,
+    PaperImportResult,
+};
 
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
@@ -92,11 +97,16 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
     papers::upsert_paper(&vault, &record)?;
 
     // 2) Always download PDF; arXiv also unpacks LaTeX into source/
+    // 3) No TeX → liteparse PAPER.md after download
     let _ = ensure_paper_assets(
         &paper_dir,
         &id,
         meta.arxiv_id.as_deref(),
         meta.pdf_url.as_deref(),
+    )
+    .await;
+    let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+        &vault, &path_rel, &paper_dir,
     )
     .await;
 
@@ -150,7 +160,19 @@ pub async fn download_paper_assets(
         (name, arxiv, pdf)
     };
 
-    ensure_paper_assets(&paper_dir, &id, arxiv_id.as_deref(), pdf_url.as_deref()).await
+    let mut result =
+        ensure_paper_assets(&paper_dir, &id, arxiv_id.as_deref(), pdf_url.as_deref()).await?;
+
+    // After download: no TeX + has PDF → liteparse PAPER.md
+    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+        &vault, &path_rel, &paper_dir,
+    )
+    .await;
+    result.paper_md = parse.paper_md;
+    for m in parse.messages {
+        result.messages.push(m);
+    }
+    Ok(result)
 }
 
 async fn resolve_metadata(
@@ -283,7 +305,7 @@ fn urlencoding_encode(s: &str) -> String {
     s.replace('/', "%2F")
 }
 
-fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecord {
+pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecord {
     PaperRecord {
         path: path.replace('\\', "/"),
         id: meta.id.clone(),
@@ -325,7 +347,7 @@ fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecord {
     }
 }
 
-fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
+pub(crate) fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
     let notes = format!(
         "# {}\n\n{}\n",
         meta.title,
@@ -339,7 +361,7 @@ fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError>
     Ok(())
 }
 
-fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
+pub(crate) fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
     let s = raw.trim().replace('\\', "/").trim_matches('/').to_string();
     if s.is_empty() {
         return Ok("papers".into());

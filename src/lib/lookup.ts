@@ -21,6 +21,14 @@ export type LookupAddResult = {
 export type PaperAssetsDownloadResult = {
 	pdf: boolean;
 	tex: boolean;
+	paperMd?: boolean;
+	messages: string[];
+};
+
+export type PaperParseBodyResult = {
+	paperMd: boolean;
+	bodySource?: string;
+	bodyQuality?: string;
 	messages: string[];
 };
 
@@ -128,6 +136,36 @@ export async function downloadPaperAssets(opts: {
 	if (!result.ok || !result.data) {
 		throw new Error(
 			result.error?.message ?? i18n.t("sidebar:fileTree.downloadFailed"),
+		);
+	}
+	return result.data;
+}
+
+/**
+ * Parse local PDF → PAPER.md via liteparse when the paper has no TeX.
+ * `paperPath` is vault-relative (e.g. `papers/1706.03762`).
+ */
+export async function parsePaperBody(opts: {
+	vaultRoot: string;
+	paperPath: string;
+	force?: boolean;
+}): Promise<PaperParseBodyResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
+	}
+	const result = await invoke<ApiResult<PaperParseBodyResult>>(
+		"paper_parse_body",
+		{
+			args: {
+				vaultPath: opts.vaultRoot,
+				path: opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+				force: opts.force ?? false,
+			},
+		},
+	);
+	if (!result.ok || !result.data) {
+		throw new Error(
+			result.error?.message ?? i18n.t("sidebar:fileTree.parseFailed"),
 		);
 	}
 	return result.data;

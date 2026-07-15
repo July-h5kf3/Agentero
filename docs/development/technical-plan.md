@@ -174,7 +174,8 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
-- **解析层**（`liteparse`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
+- **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；手动 `paper_parse_body`；文件树眼睛 / Library 批量。有 TeX 不自动生成。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
@@ -367,13 +368,11 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 - 候选需包含：标题、作者、年份、arXiv ID、摘要片段、与输入意图的匹配理由。
 - 用户可在列表中多选批量入库，或拒绝全部候选后重新输入。
 
-**PAPER.md 生成策略**：
-- `papers/<id>/source/` 始终存在，LaTeX source、PDF、HTML 均下载到该目录。
-- Agent 优先读取 `source/` 中的 `.tex` 原始源文件。
-- 仅在无 LaTeX source 或 Agent/用户需要统一可读格式时，按需生成 `papers/<id>/PAPER.md`：
-  - 有 LaTeX source 时，通过 pandoc 或轻量 LaTeX→Markdown 转换保留章节、公式、表格。
-  - 无 LaTeX source 时，次选 arXiv HTML 实验版，解析 DOM 转 Markdown。
-  - 兜底使用 `liteparse` 进行 PDF 文本提取（支持 Markdown/JSON/Text 输出，内置 OCR），并明确标记质量。
+**PAPER.md 生成策略**（魔棒路径已部分落地）：
+- `papers/<id>/source/` 存 PDF / 可选 LaTeX；Agent 优先读 `.tex`。
+- **无本地 TeX**：在 PDF（及 e-print 尝试）**下载之后**，Host 用 **liteparse** 写 `PAPER.md`，并更新 catalog `body_source` / `body_quality`；亦可 `paper_parse_body` / 文件树眼睛 / Library 批量。
+- **有 TeX**：不自动生成 `PAPER.md`。
+- 可选后续：LaTeX→Markdown（pandoc）、arXiv HTML DOM→Markdown、可插拔 MinerU。
 - `PAPER.md` 是派生文件，可被删除或重建；`source/` 中的原始文件才是归档事实来源。
 
 ### 5.3 本地 PDF 入库闭环
@@ -638,7 +637,7 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 pulldown-cmark = "0.12"
 regex = "1"
-liteparse = "0.2"
+liteparse = "2.5"
 agent-client-protocol = "0.2"
 rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.motif/catalog.sqlite
 serde = { version = "1", features = ["derive"] }

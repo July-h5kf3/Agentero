@@ -1,4 +1,12 @@
-import { Bot, FolderOpen, Link2, PanelLeft, PanelRight } from "lucide-react";
+import {
+	Bot,
+	Download,
+	FolderOpen,
+	Link2,
+	Loader2,
+	PanelLeft,
+	PanelRight,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -37,7 +45,11 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
-import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
+import {
+	addPaperByIdentifier,
+	downloadPaperAssets,
+	parsePaperBody,
+} from "@/lib/lookup";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -48,10 +60,13 @@ import {
 	type PaperMetadata,
 	paperDirFromPath,
 	paperNeedsAssetDownload,
+	paperNeedsBodyParse,
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import {
+	exportLibraryToFile,
+	importLibraryFromFile,
 	isLibraryVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
@@ -803,11 +818,12 @@ export default function App() {
 			try {
 				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
 				await refreshTree(vaultPath);
+				await refreshLibrary();
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshTree],
+		[vaultPath, refreshTree, refreshLibrary],
 	);
 
 	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
@@ -826,6 +842,63 @@ export default function App() {
 	 * Library bulk download: every paper folder missing PDF and/or fetchable TeX.
 	 * Walks the file tree so local source/ presence matches the row icons.
 	 */
+	const [libraryIoBusy, setLibraryIoBusy] = useState<
+		"import" | "export" | null
+	>(null);
+
+	const handleLibraryExport = useCallback(async () => {
+		if (!vaultPath || libraryIoBusy) return;
+		setLibraryIoBusy("export");
+		setError(null);
+		try {
+			const result = await exportLibraryToFile({
+				vaultPath,
+				settings,
+				format: "bibtex",
+			});
+			if (!result) return; // cancelled
+			// success: brief status in error slot is wrong; keep silent or set soft message
+			setError(null);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLibraryIoBusy(null);
+		}
+	}, [vaultPath, settings, libraryIoBusy]);
+
+	const handleLibraryImport = useCallback(async () => {
+		if (!vaultPath || libraryIoBusy) return;
+		setLibraryIoBusy("import");
+		setError(null);
+		try {
+			const result = await importLibraryFromFile({
+				vaultPath,
+				parentDir: lookupParentDir,
+				settings,
+			});
+			if (!result) return;
+			await refreshTree(vaultPath);
+			await refreshLibrary();
+			if (result.errors.length) {
+				setError(
+					`${t("sidebar:papersLibrary.importDone", { count: result.imported })}; ${result.errors.slice(0, 2).join("; ")}`,
+				);
+			}
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLibraryIoBusy(null);
+		}
+	}, [
+		vaultPath,
+		settings,
+		libraryIoBusy,
+		lookupParentDir,
+		refreshTree,
+		refreshLibrary,
+		t,
+	]);
+
 	const handleDownloadAllMissingAssets = useCallback(async () => {
 		if (!vaultPath) return;
 		const queue: FileNode[] = [];
@@ -861,10 +934,67 @@ export default function App() {
 			}
 		}
 		await refreshTree(vaultPath);
+		await refreshLibrary();
 		if (errors.length) {
 			setError(errors.slice(0, 3).join("; "));
 		}
-	}, [vaultPath, tree, arxivPaperRelPaths, refreshTree]);
+	}, [vaultPath, tree, arxivPaperRelPaths, refreshTree, refreshLibrary]);
+
+	/**
+	 * Manual parse: PDF → PAPER.md when no TeX (eye icon).
+	 */
+	const handleParsePaperBody = useCallback(
+		async (node: FileNode) => {
+			if (!vaultPath) return;
+			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
+			try {
+				await parsePaperBody({ vaultRoot: vaultPath, paperPath: rel });
+				await refreshTree(vaultPath);
+				await refreshLibrary();
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[vaultPath, refreshTree, refreshLibrary],
+	);
+
+	/**
+	 * Library bulk parse: every paper with PDF, no TeX, no PAPER.md.
+	 */
+	const handleParseAllMissingBodies = useCallback(async () => {
+		if (!vaultPath) return;
+		const queue: FileNode[] = [];
+		const walk = (list: FileNode[]) => {
+			for (const n of list) {
+				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
+					if (paperNeedsBodyParse(n)) {
+						queue.push(n);
+					}
+				} else if (n.children?.length) {
+					walk(n.children);
+				}
+			}
+		};
+		walk(tree);
+		if (!queue.length) return;
+
+		const errors: string[] = [];
+		for (const node of queue) {
+			const rel = toVaultRelative(vaultPath, node.path)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			try {
+				await parsePaperBody({ vaultRoot: vaultPath, paperPath: rel });
+			} catch (e) {
+				errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+		await refreshTree(vaultPath);
+		await refreshLibrary();
+		if (errors.length) {
+			setError(errors.slice(0, 3).join("; "));
+		}
+	}, [vaultPath, tree, refreshTree, refreshLibrary]);
 
 	const handleOpenLibraryPaper = useCallback(
 		(paper: PaperMetadata) => {
@@ -1344,7 +1474,11 @@ export default function App() {
 										onNewFolder={() => startCreate("folder")}
 										lookupParentDir={lookupParentDir}
 										onLookupSubmit={handleLookupSubmit}
-										busy={busy || Boolean(createDraft)}
+										onImportBibliography={() => void handleLibraryImport()}
+										importBusy={libraryIoBusy === "import"}
+										busy={
+											busy || Boolean(createDraft) || libraryIoBusy !== null
+										}
 										error={error}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
@@ -1362,6 +1496,8 @@ export default function App() {
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
+										onParsePaperBody={handleParsePaperBody}
+										onParseAllMissingBodies={handleParseAllMissingBodies}
 										arxivPaperRelPaths={arxivPaperRelPaths}
 									/>
 								</div>
@@ -1401,20 +1537,45 @@ export default function App() {
 												title={t("editor.unsaved")}
 											/>
 										) : null}
-										<span
-											className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-											title={
-												showLibrary
-													? t("sidebar:papersLibrary.title")
-													: paperMeta
+										{showLibrary ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														className="size-7 shrink-0"
+														aria-label={t("sidebar:papersLibrary.export")}
+														disabled={
+															!vaultPath ||
+															libraryIoBusy !== null ||
+															libraryPapers.length === 0
+														}
+														onClick={() => void handleLibraryExport()}
+													>
+														{libraryIoBusy === "export" ? (
+															<Loader2 className="size-3.5 animate-spin" />
+														) : (
+															<Download className="size-3.5" />
+														)}
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("sidebar:papersLibrary.export")}
+												</TooltipContent>
+											</Tooltip>
+										) : (
+											<span
+												className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+												title={
+													paperMeta
 														? `${paperMeta.title} · ${activeFileLabel}`
 														: (activeFileLabel ?? undefined)
-											}
-										>
-											{showLibrary
-												? t("sidebar:papersLibrary.title")
-												: (paperMeta?.title ?? activeFileLabel)}
-										</span>
+												}
+											>
+												{paperMeta?.title ?? activeFileLabel}
+											</span>
+										)}
 									</div>
 								</div>
 								{!vaultPath ? (
