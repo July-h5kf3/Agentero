@@ -289,12 +289,10 @@ fn turn_completion(params: &Value) -> TurnNotification {
     }
 }
 
-fn approval_policy(auto_approve: bool) -> &'static str {
-    if auto_approve {
-        "never"
-    } else {
-        "on-request"
-    }
+fn approval_policy(_auto_approve: bool) -> &'static str {
+    // Motif has no interactive approval surface. `never` makes Codex reject
+    // escalations using its native policy instead of issuing server requests.
+    "never"
 }
 
 fn sandbox(auto_approve: bool) -> &'static str {
@@ -331,6 +329,27 @@ fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
         cwd: string(value, &["cwd"]),
         id,
     })
+}
+
+fn validate_thread_vault(
+    thread: &CodexThreadInfo,
+    vault_path: Option<&str>,
+) -> Result<(), AppError> {
+    let Some(vault_path) = vault_path else {
+        return Ok(());
+    };
+    let vault = fs::canonicalize(vault_path).map_err(AppError::Io)?;
+    let thread_cwd = thread
+        .cwd
+        .as_deref()
+        .ok_or_else(|| AppError::message("Codex thread has no working directory"))?;
+    let thread_cwd = fs::canonicalize(thread_cwd).map_err(AppError::Io)?;
+    if thread_cwd != vault {
+        return Err(AppError::message(
+            "Codex thread belongs to a different Vault",
+        ));
+    }
+    Ok(())
 }
 
 fn content_text(value: &Value) -> String {
@@ -538,7 +557,24 @@ pub async fn prepare_codex_thread(
     auto_approve: bool,
 ) -> Result<PreparedCodexThread, AppError> {
     let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
-    let params = if let Some(thread_id) = session_id.filter(|id| !id.trim().is_empty()) {
+    let session_id = session_id.filter(|id| !id.trim().is_empty());
+    if let Some(thread_id) = session_id.as_deref() {
+        let result = client
+            .request("thread/read", json!({ "threadId": thread_id }))
+            .await;
+        let validation = result.and_then(|result| {
+            let thread = result
+                .get("thread")
+                .and_then(thread_info)
+                .ok_or_else(|| AppError::message("Codex App Server did not return a thread"))?;
+            validate_thread_vault(&thread, vault_path.as_deref())
+        });
+        if let Err(error) = validation {
+            client.shutdown().await;
+            return Err(error);
+        }
+    }
+    let params = if let Some(thread_id) = session_id {
         json!({ "threadId": thread_id, "cwd": vault_path, "model": model_id, "approvalPolicy": approval_policy(auto_approve), "sandbox": sandbox(auto_approve) })
     } else {
         json!({ "cwd": vault_path, "model": model_id, "approvalPolicy": approval_policy(auto_approve), "sandbox": sandbox(auto_approve) })
@@ -852,8 +888,11 @@ pub async fn codex_list_threads(
     vault_path: Option<String>,
     include_external: bool,
 ) -> Result<Vec<CodexThreadInfo>, AppError> {
-    let motif_thread_ids = (!include_external).then(|| motif_thread_ids(vault_path.as_deref()));
-    let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
+    let vault_path = vault_path
+        .filter(|path| Path::new(path).is_dir())
+        .ok_or_else(|| AppError::message("Open a Vault before loading Codex history"))?;
+    let motif_thread_ids = (!include_external).then(|| motif_thread_ids(Some(&vault_path)));
+    let mut client = CodexClient::spawn(desc, Some(&vault_path)).await?;
     let result = client.request("thread/list", json!({ "cwd": vault_path, "limit": 100, "archived": false, "sortKey": "recency_at", "sortDirection": "desc" })).await?;
     client.shutdown().await;
     Ok(result
@@ -876,12 +915,15 @@ pub async fn codex_read_thread(
     vault_path: Option<String>,
     include_external: bool,
 ) -> Result<CodexThreadHistory, AppError> {
-    if !include_external && !motif_thread_ids(vault_path.as_deref()).contains(thread_id.as_str()) {
+    let vault_path = vault_path
+        .filter(|path| Path::new(path).is_dir())
+        .ok_or_else(|| AppError::message("Open a Vault before loading Codex history"))?;
+    if !include_external && !motif_thread_ids(Some(&vault_path)).contains(thread_id.as_str()) {
         return Err(AppError::message(
             "Codex thread is not indexed for the current Vault",
         ));
     }
-    let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
+    let mut client = CodexClient::spawn(desc, Some(&vault_path)).await?;
     let result = client
         .request("thread/read", json!({ "threadId": thread_id }))
         .await?;
@@ -889,26 +931,8 @@ pub async fn codex_read_thread(
     let thread = result
         .get("thread")
         .and_then(thread_info)
-        .unwrap_or(CodexThreadInfo {
-            id: thread_id.clone(),
-            title: thread_id,
-            created_at: None,
-            updated_at: None,
-            cwd: vault_path.clone(),
-        });
-    if let Some(vault_path) = vault_path.as_deref() {
-        let vault = fs::canonicalize(vault_path).map_err(AppError::Io)?;
-        let thread_cwd = thread
-            .cwd
-            .as_deref()
-            .ok_or_else(|| AppError::message("Codex thread has no working directory"))?;
-        let thread_cwd = fs::canonicalize(thread_cwd).map_err(AppError::Io)?;
-        if thread_cwd != vault {
-            return Err(AppError::message(
-                "Codex thread belongs to a different Vault",
-            ));
-        }
-    }
+        .ok_or_else(|| AppError::message("Codex App Server did not return a thread"))?;
+    validate_thread_vault(&thread, Some(&vault_path))?;
     Ok(CodexThreadHistory {
         lines: history_from_jsonl(desc, &thread.id),
         thread,
@@ -919,6 +943,7 @@ pub async fn warm_codex(
     app: AppHandle,
     desc: AgentDescriptor,
     vault_path: Option<String>,
+    preferred_model_id: Option<String>,
 ) -> WarmResult {
     let response = async {
         let mut client = CodexClient::spawn(&desc, vault_path.as_deref()).await?;
@@ -951,10 +976,16 @@ pub async fn warm_codex(
                     })
                 })
                 .collect::<Vec<_>>();
-            let current = data
-                .iter()
-                .find(|model| model.get("isDefault").and_then(Value::as_bool) == Some(true))
-                .and_then(|model| string(model, &["id"]))
+            let current = preferred_model_id
+                .filter(|preferred| {
+                    data.iter()
+                        .any(|model| string(model, &["id"]).as_deref() == Some(preferred.as_str()))
+                })
+                .or_else(|| {
+                    data.iter()
+                        .find(|model| model.get("isDefault").and_then(Value::as_bool) == Some(true))
+                        .and_then(|model| string(model, &["id"]))
+                })
                 .or_else(|| models.first().map(|model| model.id.clone()))
                 .unwrap_or_default();
             let selected = data

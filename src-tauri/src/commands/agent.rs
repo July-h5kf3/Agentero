@@ -404,7 +404,7 @@ pub async fn agent_warm(
     };
 
     let result = if desc.template == AgentTemplate::CodexAcp {
-        warm_codex(app, desc, request.vault_path).await
+        warm_codex(app, desc, request.vault_path, request.model_id).await
     } else {
         warm_agent(app, desc, request.vault_path, request.model_id).await
     };

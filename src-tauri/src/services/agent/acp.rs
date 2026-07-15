@@ -57,6 +57,24 @@ async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
     let _ = cancellation.changed().await;
 }
 
+async fn timed_acp_request<T, E>(
+    label: &str,
+    request: impl std::future::Future<Output = Result<T, E>>,
+) -> Result<T, agent_client_protocol::Error>
+where
+    E: std::fmt::Display,
+{
+    tokio::time::timeout(PROBE_TIMEOUT, request)
+        .await
+        .map_err(|_| {
+            acp_err(format!(
+                "{label} timed out after {}s",
+                PROBE_TIMEOUT.as_secs()
+            ))
+        })?
+        .map_err(|error| acp_err(format!("{label}: {error}")))
+}
+
 fn cancelled_payload(
     session_id: String,
     message_id: String,
@@ -421,8 +439,8 @@ fn acp_err(msg: impl ToString) -> agent_client_protocol::Error {
     util::internal_error(msg)
 }
 
-/// Default to cancelling permission requests. YOLO mode explicitly opts into the ACP
-/// example's first-option selection for the lifetime of one prompt run.
+/// Default to cancelling permission requests. A provider's persisted YOLO preference
+/// is applied to each prompt run and explicitly opts into the first offered option.
 pub(crate) fn permission_response(
     request: &RequestPermissionRequest,
     auto_approve: bool,
@@ -663,17 +681,41 @@ pub async fn run_once(
             let session_for_models = session_for_conn.clone();
             let agent_id_for_models = desc.id.clone();
             move |connection: ConnectionTo<Agent>| async move {
-                connection
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
-                    .block_task()
-                    .await
-                    .map_err(|e| acp_err(format!("initialize: {e}")))?;
+                tokio::select! {
+                    result = timed_acp_request(
+                        "initialize",
+                        connection
+                            .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                            .block_task(),
+                    ) => { result?; }
+                    () = wait_for_cancellation(&mut cancellation) => {
+                        let payload = cancelled_payload(
+                            session_for_conn.clone(),
+                            message_for_conn.clone(),
+                            &content_for_conn,
+                            &thought_for_conn,
+                        );
+                        let _ = app_for_conn.emit("agent:completed", payload.clone());
+                        return Ok(payload);
+                    }
+                }
 
-                let new_session = connection
-                    .send_request(NewSessionRequest::new(cwd))
-                    .block_task()
-                    .await
-                    .map_err(|e| acp_err(format!("new_session: {e}")))?;
+                let new_session = tokio::select! {
+                    result = timed_acp_request(
+                        "new_session",
+                        connection.send_request(NewSessionRequest::new(cwd)).block_task(),
+                    ) => result?,
+                    () = wait_for_cancellation(&mut cancellation) => {
+                        let payload = cancelled_payload(
+                            session_for_conn.clone(),
+                            message_for_conn.clone(),
+                            &content_for_conn,
+                            &thought_for_conn,
+                        );
+                        let _ = app_for_conn.emit("agent:completed", payload.clone());
+                        return Ok(payload);
+                    }
+                };
 
                 let acp_session_id = new_session.session_id;
                 let mut config_options = new_session.config_options.unwrap_or_default();
@@ -686,14 +728,17 @@ pub async fn run_once(
                     // complete response before resolving the remaining preferences.
                     if let Some(pref) = preferred_model.clone() {
                         if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
-                            if let Ok(response) = connection
-                                .send_request(SetSessionConfigOptionRequest::new(
-                                    acp_session_id.clone(),
-                                    SessionConfigId::new(ev.config_id.as_str()),
-                                    SessionConfigOptionValue::value_id(pref),
-                                ))
-                                .block_task()
-                                .await
+                            if let Ok(response) = timed_acp_request(
+                                "set model",
+                                connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        SessionConfigId::new(ev.config_id.as_str()),
+                                        SessionConfigOptionValue::value_id(pref),
+                                    ))
+                                    .block_task(),
+                            )
+                            .await
                             {
                                 config_options = response.config_options;
                             }
@@ -709,14 +754,17 @@ pub async fn run_once(
                         if pref != ev.current_id
                             && ev.efforts.iter().any(|effort| effort.id == pref)
                         {
-                            if let Ok(response) = connection
-                                .send_request(SetSessionConfigOptionRequest::new(
-                                    acp_session_id.clone(),
-                                    SessionConfigId::new(ev.config_id.as_str()),
-                                    SessionConfigOptionValue::value_id(pref),
-                                ))
-                                .block_task()
-                                .await
+                            if let Ok(response) = timed_acp_request(
+                                "set effort",
+                                connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        SessionConfigId::new(ev.config_id.as_str()),
+                                        SessionConfigOptionValue::value_id(pref),
+                                    ))
+                                    .block_task(),
+                            )
+                            .await
                             {
                                 config_options = response.config_options;
                             }
@@ -739,14 +787,17 @@ pub async fn run_once(
                             _ => None,
                         };
                         if let Some(value) = value {
-                            if let Ok(response) = connection
-                                .send_request(SetSessionConfigOptionRequest::new(
-                                    acp_session_id.clone(),
-                                    opt.id.clone(),
-                                    value,
-                                ))
-                                .block_task()
-                                .await
+                            if let Ok(response) = timed_acp_request(
+                                "set fast mode",
+                                connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        opt.id.clone(),
+                                        value,
+                                    ))
+                                    .block_task(),
+                            )
+                            .await
                             {
                                 config_options = response.config_options;
                             }
@@ -919,17 +970,7 @@ pub async fn warm_agent(
         )
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
-                if let Some(opt) = request.options.first() {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
-                            opt.option_id.clone(),
-                        )),
-                    ));
-                } else {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Cancelled,
-                    ));
-                }
+                let _ = responder.respond(permission_response(&request, false));
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),
@@ -938,17 +979,21 @@ pub async fn warm_agent(
             let preferred = preferred.clone();
             let models_for_conn = models_for_conn.clone();
             move |connection: ConnectionTo<Agent>| async move {
-                connection
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
-                    .block_task()
-                    .await
-                    .map_err(|e| acp_err(format!("initialize: {e}")))?;
+                timed_acp_request(
+                    "initialize",
+                    connection
+                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .block_task(),
+                )
+                .await?;
 
-                let new_session = connection
-                    .send_request(NewSessionRequest::new(cwd))
-                    .block_task()
-                    .await
-                    .map_err(|e| acp_err(format!("new_session: {e}")))?;
+                let new_session = timed_acp_request(
+                    "new_session",
+                    connection
+                        .send_request(NewSessionRequest::new(cwd))
+                        .block_task(),
+                )
+                .await?;
 
                 let acp_session_id = new_session.session_id;
                 let mut config_options = new_session.config_options.unwrap_or_default();
@@ -957,14 +1002,17 @@ pub async fn warm_agent(
                 {
                     if let Some(pref) = preferred.clone() {
                         if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
-                            if let Ok(response) = connection
-                                .send_request(SetSessionConfigOptionRequest::new(
-                                    acp_session_id.clone(),
-                                    SessionConfigId::new(ev.config_id.as_str()),
-                                    SessionConfigOptionValue::value_id(pref),
-                                ))
-                                .block_task()
-                                .await
+                            if let Ok(response) = timed_acp_request(
+                                "set model",
+                                connection
+                                    .send_request(SetSessionConfigOptionRequest::new(
+                                        acp_session_id.clone(),
+                                        SessionConfigId::new(ev.config_id.as_str()),
+                                        SessionConfigOptionValue::value_id(pref),
+                                    ))
+                                    .block_task(),
+                            )
+                            .await
                             {
                                 config_options = response.config_options;
                             }
