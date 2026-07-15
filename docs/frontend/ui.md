@@ -30,9 +30,10 @@
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide）：
-  - 打开 Vault → `FolderSearch`（⌘O）
+  - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
+  - 新建文件夹 → `FolderPlus`（同上）
   - 刷新树 → `RefreshCw`（⌘R）
-  - 切回 Demo → `Sparkles`（仅非 demo）
+- **打开 / 创建 Vault** 不在侧边栏：使用 macOS 顶部菜单 **File → Open Vault…**（`⌘O`）/ **Create Vault…**（`⇧⌘N`）。
 - **设置入口不在侧边栏**：使用 macOS 顶部菜单 **motif → Settings…**（`⌘,`），不放齿轮图标。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
 

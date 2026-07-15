@@ -7,7 +7,11 @@ import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
-import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
+import {
+	FileTree,
+	type TreeCreateDraft,
+	VaultSidebarHeader,
+} from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
@@ -47,10 +51,13 @@ import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
 	createVault,
+	createVaultDirectory,
 	type FileNode,
 	getSavedVaultPath,
 	isMarkdownPath,
 	isTextOpenable,
+	isValidVaultEntryName,
+	joinVaultPath,
 	loadVaultTree,
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
@@ -90,24 +97,39 @@ function normalizePathKey(path: string): string {
 	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function treeFindChildren(
-	nodes: FileNode[],
-	path: string,
-): FileNode[] | undefined {
+function treeFindNode(nodes: FileNode[], path: string): FileNode | undefined {
 	const key = normalizePathKey(path);
-	const walk = (list: FileNode[]): FileNode[] | undefined => {
+	const walk = (list: FileNode[]): FileNode | undefined => {
 		for (const n of list) {
-			if (normalizePathKey(n.path) === key) {
-				return n.children;
-			}
+			if (normalizePathKey(n.path) === key) return n;
 			if (n.children?.length) {
 				const hit = walk(n.children);
-				if (hit !== undefined) return hit;
+				if (hit) return hit;
 			}
 		}
 		return undefined;
 	};
 	return walk(nodes);
+}
+
+function treeFindChildren(
+	nodes: FileNode[],
+	path: string,
+): FileNode[] | undefined {
+	return treeFindNode(nodes, path)?.children;
+}
+
+/** Parent directory for new file/folder: selected folder, or parent of selected file, else vault root. */
+function resolveCreateParent(
+	vaultRoot: string,
+	selectedPath: string | null,
+	tree: FileNode[],
+): string {
+	if (!selectedPath) return vaultRoot;
+	const node = treeFindNode(tree, selectedPath);
+	if (node?.kind === "directory") return selectedPath;
+	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
+	return parent && parent !== selectedPath ? parent : vaultRoot;
 }
 
 function collectMarkdownRelPaths(
@@ -128,7 +150,7 @@ function collectMarkdownRelPaths(
 }
 
 export default function App() {
-	const { t } = useTranslation("app");
+	const { t } = useTranslation(["app", "sidebar"]);
 	const { setTheme } = useTheme();
 	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -156,6 +178,8 @@ export default function App() {
 	);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	/** Inline new file/folder draft in the tree (IDE-style). */
+	const [createDraft, setCreateDraft] = useState<TreeCreateDraft | null>(null);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
@@ -577,20 +601,6 @@ export default function App() {
 		[vaultPath],
 	);
 
-	const handleCloseVault = () => {
-		saveVaultPath(null);
-		localStorage.removeItem(STORAGE_KEY);
-		localStorage.removeItem(OPEN_FILE_KEY);
-		setVaultPath(null);
-		setSelectedPath(null);
-		setMarkdown(defaultMarkdown);
-		setMarkdownDirty(false);
-		setEditorKey((k) => k + 1);
-		setError(null);
-		setTree([]);
-		setCenterMode("markdown");
-	};
-
 	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
 	const openPaper = useCallback((paperDir: string) => {
 		setSelectedPath(paperDir);
@@ -655,6 +665,65 @@ export default function App() {
 			}
 		},
 		[openPaper, paperFolders, t, tree],
+	);
+
+	const startCreate = useCallback(
+		(kind: TreeCreateDraft["kind"]) => {
+			setError(null);
+			if (!vaultPath || !isTauri()) {
+				setError(t("sidebar:fileTree.needsVault"));
+				return;
+			}
+			const parent = resolveCreateParent(vaultPath, selectedPath, tree);
+			setCreateDraft({ kind, parentPath: parent });
+		},
+		[vaultPath, selectedPath, tree, t],
+	);
+
+	const handleCancelCreate = useCallback(() => {
+		setCreateDraft(null);
+	}, []);
+
+	const handleConfirmCreate = useCallback(
+		async (name: string) => {
+			if (!createDraft || !vaultPath || !isTauri()) {
+				setCreateDraft(null);
+				return;
+			}
+			const trimmed = name.trim();
+			if (!isValidVaultEntryName(trimmed)) {
+				setError(t("sidebar:fileTree.invalidName"));
+				setCreateDraft(null);
+				return;
+			}
+			const full = joinVaultPath(createDraft.parentPath, trimmed);
+			const kind = createDraft.kind;
+			// Clear draft first so the tree can re-render after create.
+			setCreateDraft(null);
+			try {
+				setBusy(true);
+				setError(null);
+				const { exists } = await import("@tauri-apps/plugin-fs");
+				if (await exists(full)) {
+					setError(t("sidebar:fileTree.alreadyExists", { name: trimmed }));
+					return;
+				}
+				if (kind === "file") {
+					await writeVaultFile(full, "");
+					await refreshTree(vaultPath);
+					await openPath(full);
+				} else {
+					await createVaultDirectory(full);
+					await refreshTree(vaultPath);
+					setSelectedPath(full);
+				}
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[createDraft, vaultPath, t, refreshTree, openPath],
 	);
 
 	const handleCreateVault = useCallback(async () => {
@@ -976,11 +1045,10 @@ export default function App() {
 								<div className="shrink-0">
 									<VaultSidebarHeader
 										title={vaultDisplayName(vaultPath)}
-										onOpenVault={() => void handleOpenVault()}
-										onCreateVault={() => void handleCreateVault()}
+										onNewFile={() => startCreate("file")}
+										onNewFolder={() => startCreate("folder")}
 										onRefresh={handleRefresh}
-										onCloseVault={handleCloseVault}
-										busy={busy}
+										busy={busy || Boolean(createDraft)}
 										error={error}
 										isDemo={isDemo}
 									/>
@@ -989,6 +1057,10 @@ export default function App() {
 									<FileTree
 										nodes={tree}
 										selectedPath={selectedPath}
+										vaultPath={vaultPath}
+										createDraft={createDraft}
+										onConfirmCreate={(name) => void handleConfirmCreate(name)}
+										onCancelCreate={handleCancelCreate}
 										onSelectFile={(n) => void handleSelectFile(n)}
 									/>
 								</div>
