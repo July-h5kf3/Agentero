@@ -637,7 +637,8 @@ arXiv URL 推导：
 - [x] 入库后刷新文件树；可打开 paper
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
-- [ ] 重复提示、批量导入、`⇧⌘I` 快捷键
+- [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
+- [ ] 重复提示增强、入库任务可取消、`⇧⌘I` 快捷键
 
 ### Phase D — 可选
 

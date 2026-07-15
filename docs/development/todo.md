@@ -1,5 +1,7 @@
 # Motif TODO
 
+可执行 backlog。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)。
+
 ## P0 — 近期闭环
 
 1. **Create Vault 初始化** ✅
@@ -14,25 +16,29 @@
    - 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建（无常驻说明文案）。
    - 当前窗口 Vault 用 `sessionStorage`；最近列表 / 上次路径用 `localStorage`。
 
-2. **arXiv 精确入库** 🟡 魔棒路径已通；Agent 候选 / LaTeX 全量仍待
-   - [x] 支持输入 arXiv ID / URL（魔棒）。
-   - [x] 拉取 metadata，写入 catalog `papers` 表。
+2. **精确标识符入库（arXiv / DOI 等）** ✅ 魔棒路径
+   - [x] 支持输入 arXiv ID / URL 等（侧栏魔棒）。
+   - [x] Translator → `PaperMetadata` → catalog `papers` 表。
    - [x] 写入默认 `NOTES.md`、空 `highlights.md`。
+   - [x] **始终下载 PDF**；**arXiv 解压 e-print LaTeX** 到 `source/`。
    - [x] 入库后刷新文件树并打开 paper。
-   - [ ] 刷新 Backlinks/Graph 索引；关键词/描述 Agent 候选。
+   - [ ] 入库后刷新 Backlinks/Graph 索引。
+   - [ ] 关键词/描述 Agent 候选列表确认。
 
-2b. **魔棒 / Identifier Lookup（Translator 后端）** ✅ v0 — 设计见 [`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)
+2b. **魔棒 / Identifier Lookup（Translator）** ✅ v0
    - [x] UI：侧栏魔棒 → 粘贴链接或编号 → 加入 Papers。
    - [x] 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
-   - [x] Translator → 直接写入 `PaperMetadata`/catalog。
-   - [x] **始终下载 PDF**；**arXiv 另解压 LaTeX** 到 `source/`（无下载开关）。
-   - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets`；HTTP Translator。
-   - [x] 文件树：缺 PDF，或 arXiv 缺 TeX 时行尾 Download 图标。
-   - [ ] `⇧⌘I` 快捷键；批量；本机 sidecar 捆绑。
+   - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets`。
+   - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
+   - [x] 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download。
+   - [x] Library 行：库内任一篇仍缺资源 → 批量 Download 全部缺失 PDF / 可取 TeX。
+   - [ ] 快捷键 `⇧⌘I`；本机 Translator sidecar 捆绑。
 
 2c. **论文库表格 UI** ✅
    - [x] 虚拟节点 `motif:library`；中间栏 catalog 表（`paper_list`）。
-   - [x] 表头排序；横向/纵向滚动；仅具体论文时显示 Paper Info / Notes。
+   - [x] 表头排序；横向/纵向滚动。
+   - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
+   - [x] Library 行批量补资源（与 2b 联动）。
 
 3. **Agent 工作流入口**
    - 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
@@ -87,7 +93,7 @@
    - PDF.js / HTML iframe 都需要统一标注模型。
 
 4. **更大范围导入**
-   - DOI / 网页 importer。
+   - DOI / 网页 importer 深化（魔棒已部分覆盖 DOI）。
    - 浏览器插件一键收集。
    - 远程 PDF 链接入库。
 

@@ -318,6 +318,7 @@ import paper（魔棒 lookup_import）
 - [x] Create Vault 生成 `.motif/catalog.sqlite`（schema 当前版本），**不**生成 `PAPERS.md` / `library.bib`。
 - [x] 魔棒 / `lookup_import` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
 - [x] 读路径走 `paper_get` / `paper_list`；`metadata.json` 仅为 upsert 后投影（非 UI 主源）。
+- [x] 入库默认写 PDF（及 arXiv TeX）到 `source/`；`paper_download_assets` 可补缺失。
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex` 能生成与历史格式兼容的文本。
 - [ ] 删除导出文件不影响 catalog 与 UI 列表。
 - [ ] 打开缺 catalog 的旧目录能 init 或从 `metadata.json` 迁移。
