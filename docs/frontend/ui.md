@@ -107,6 +107,8 @@ PromptInput → Body / Footer / Submit
 
 **Agent 切换**：点击 Composer 上方的 Agent 图标打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
 
+**会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
+
 **上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 **本机技能**：输入 `$` 可筛选 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills` 中的 `SKILL.md`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小并将内容注入当前 provider 的 prompt。Codex 也会使用这条受限的本机技能注入路径。

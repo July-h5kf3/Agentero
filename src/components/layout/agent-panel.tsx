@@ -420,7 +420,6 @@ export function AgentPanel({
 	const [sessionHistory, setSessionHistory] = useState<
 		ChatSessionHistoryItem[]
 	>([]);
-	const [busy, setBusy] = useState(false);
 	const [switching, setSwitching] = useState(false);
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
@@ -445,8 +444,8 @@ export function AgentPanel({
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
 	const [activeTabId, setActiveTabId] = useState("draft");
-	const activeSessionRef = useRef<string | null>(null);
 	const activeConversationRef = useRef<string | null>(null);
+	const activeTabRef = useRef("draft");
 	const selectedAgentIdRef = useRef<string | null>(null);
 	const warmGenRef = useRef(0);
 
@@ -530,6 +529,10 @@ export function AgentPanel({
 		void refresh();
 	}, [refresh]);
 
+	useEffect(() => {
+		activeTabRef.current = activeTabId;
+	}, [activeTabId]);
+
 	// Restore last model catalog / preference for the selected agent.
 	useEffect(() => {
 		selectedAgentIdRef.current = selectedAgentId;
@@ -611,13 +614,24 @@ export function AgentPanel({
 		if (!isTauri()) return;
 		let cancelled = false;
 		const unsubs: Array<() => void> = [];
+		const updateSessionLines = (
+			sessionId: string,
+			update: (lines: ChatLine[]) => ChatLine[],
+		) => {
+			setSessionHistory((prev) =>
+				prev.map((item) =>
+					item.id === sessionId ? { ...item, lines: update(item.lines) } : item,
+				),
+			);
+			if (activeTabRef.current === sessionId) {
+				setLines(update);
+			}
+		};
 
 		void (async () => {
 			const u1 = await listenAgentStream((ev) => {
-				const cur = activeSessionRef.current;
-				if (cur && cur !== ev.sessionId) return;
 				const streamKind = ev.kind ?? "message";
-				setLines((prev) => {
+				updateSessionLines(ev.sessionId, (prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
@@ -640,9 +654,7 @@ export function AgentPanel({
 				});
 			});
 			const uTool = await listenAgentTool((ev) => {
-				const cur = activeSessionRef.current;
-				if (cur && cur !== ev.sessionId) return;
-				setLines((prev) => {
+				updateSessionLines(ev.sessionId, (prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
@@ -664,9 +676,7 @@ export function AgentPanel({
 				});
 			});
 			const uPlan = await listenAgentPlan((ev) => {
-				const cur = activeSessionRef.current;
-				if (cur && cur !== ev.sessionId) return;
-				setLines((prev) => {
+				updateSessionLines(ev.sessionId, (prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
@@ -680,8 +690,6 @@ export function AgentPanel({
 				});
 			});
 			const uUsage = await listenAgentUsage((ev) => {
-				const cur = activeSessionRef.current;
-				if (cur && cur !== ev.sessionId) return;
 				if (ev.size > 0) setUsage({ used: ev.used, size: ev.size });
 			});
 			const uModels = await listenAgentModels((ev) => {
@@ -694,18 +702,15 @@ export function AgentPanel({
 				applyFastModeEvent(ev);
 			});
 			const u2 = await listenAgentCompleted((ev) => {
-				if (
-					activeSessionRef.current &&
-					activeSessionRef.current !== ev.sessionId
-				) {
-					return;
-				}
-				setBusy(false);
-				activeSessionRef.current = null;
-				setLines((prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (ev.stopReason === "cancelled") {
+				if (ev.stopReason === "cancelled") {
+					const cancelledLine: ChatLine = {
+						id: nextLineId("sys"),
+						kind: "system",
+						text: t("messages.cancelled"),
+					};
+					updateSessionLines(ev.sessionId, (prev) => {
+						const next = [...prev];
+						const last = next[next.length - 1];
 						if (last?.kind === "agent" && last.streaming) {
 							const hasOutput =
 								last.text.trim().length > 0 ||
@@ -722,23 +727,20 @@ export function AgentPanel({
 								next.pop();
 							}
 						}
-						const cancelledLines: ChatLine[] = [
-							...next,
-							{
-								id: nextLineId("sys"),
-								kind: "system",
-								text: t("messages.cancelled"),
-							},
-						];
-						setSessionHistory((prev) =>
-							prev.map((item) =>
-								item.id === ev.sessionId
-									? { ...item, lines: cancelledLines, status: "cancelled" }
-									: item,
-							),
-						);
-						return cancelledLines;
-					}
+						return [...next, cancelledLine];
+					});
+					setSessionHistory((prev) =>
+						prev.map((item) =>
+							item.id === ev.sessionId
+								? { ...item, status: "cancelled" }
+								: item,
+						),
+					);
+					return;
+				}
+				updateSessionLines(ev.sessionId, (prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
 						const text =
 							last.text.trim().length > 0
@@ -757,46 +759,35 @@ export function AgentPanel({
 							streaming: false,
 						};
 						next[next.length - 1] = completedLine;
-						setSessionHistory((prev) =>
-							prev.map((item) =>
-								item.id === ev.sessionId
-									? { ...item, lines: next, status: "completed" }
-									: item,
-							),
-						);
 						return next;
 					}
 					return prev;
 				});
+				setSessionHistory((prev) =>
+					prev.map((item) =>
+						item.id === ev.sessionId ? { ...item, status: "completed" } : item,
+					),
+				);
 			});
 			const u3 = await listenAgentFailed((ev) => {
-				if (
-					activeSessionRef.current &&
-					activeSessionRef.current !== ev.sessionId
-				) {
-					return;
-				}
-				setBusy(false);
-				activeSessionRef.current = null;
-				setLines((prev) => {
+				const failedLine: ChatLine = {
+					id: nextLineId("err"),
+					kind: "error",
+					text: ev.error,
+				};
+				updateSessionLines(ev.sessionId, (prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
 					if (last?.kind === "agent" && last.streaming) {
 						next.pop();
 					}
-					const failedLines: ChatLine[] = [
-						...next,
-						{ id: nextLineId("err"), kind: "error", text: ev.error },
-					];
-					setSessionHistory((prev) =>
-						prev.map((item) =>
-							item.id === ev.sessionId
-								? { ...item, lines: failedLines, status: "failed" }
-								: item,
-						),
-					);
-					return failedLines;
+					return [...next, failedLine];
 				});
+				setSessionHistory((prev) =>
+					prev.map((item) =>
+						item.id === ev.sessionId ? { ...item, status: "failed" } : item,
+					),
+				);
 			});
 
 			if (cancelled) {
@@ -976,6 +967,13 @@ export function AgentPanel({
 		],
 		[sessionHistory],
 	);
+	const activeTabSession = sessionHistory.find(
+		(session) => session.id === activeTabId,
+	);
+	const activeTabIsRunning = activeTabSession?.status === "running";
+	const hasRunningSessions = sessionHistory.some(
+		(session) => session.status === "running",
+	);
 
 	const pickModel = (id: string) => {
 		setModelId(id);
@@ -983,7 +981,7 @@ export function AgentPanel({
 	};
 
 	const selectAgent = async (opt: AgentOption) => {
-		if (!isTauri() || switching || busy) return;
+		if (!isTauri() || switching || hasRunningSessions) return;
 		if (opt.id && opt.id === selectedAgentId) return;
 
 		setSwitching(true);
@@ -1023,7 +1021,7 @@ export function AgentPanel({
 
 	const send = async (textRaw: string) => {
 		const text = textRaw.trim();
-		if (!text || busy) return;
+		if (!text || activeTabIsRunning) return;
 		if (!isTauri()) {
 			setLines((p) => [
 				...p,
@@ -1094,7 +1092,6 @@ export function AgentPanel({
 		const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
 		const sessionStartLines = [...lines, userLine];
 		setLines(sessionStartLines);
-		setBusy(true);
 		try {
 			const accepted = await runOnce({
 				agentId,
@@ -1121,8 +1118,8 @@ export function AgentPanel({
 				plan: [],
 			};
 			const pendingLines = [...sessionStartLines, agentLine];
-			activeSessionRef.current = accepted.sessionId;
 			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
+			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
 			setSessionHistory((prev) => [
 				{
@@ -1137,7 +1134,6 @@ export function AgentPanel({
 			]);
 			setLines(pendingLines);
 		} catch (e) {
-			setBusy(false);
 			setLines((p) => [
 				...p,
 				{
@@ -1150,8 +1146,8 @@ export function AgentPanel({
 	};
 
 	const cancelCurrentRun = async () => {
-		const sessionId = activeSessionRef.current;
-		if (!sessionId || !busy || !isTauri()) return;
+		const sessionId = activeTabIsRunning ? activeTabId : null;
+		if (!sessionId || !isTauri()) return;
 		try {
 			await cancelAgentRun(sessionId);
 		} catch (error) {
@@ -1193,7 +1189,7 @@ export function AgentPanel({
 	const handleComposerMenuKeyDown = (
 		event: KeyboardEvent<HTMLTextAreaElement>,
 	) => {
-		if (event.key === "Escape" && busy && activeSessionRef.current) {
+		if (event.key === "Escape" && activeTabIsRunning) {
 			event.preventDefault();
 			void cancelCurrentRun();
 			return;
@@ -1242,14 +1238,13 @@ export function AgentPanel({
 	};
 
 	const newConversation = () => {
-		if (busy) return;
 		setLines([]);
 		setComposerText("");
 		setMentionedPaths([]);
 		setSelectedSkillIds([]);
 		setIncludeSelectedFile(Boolean(selectedVaultPath));
 		setActiveTabId("draft");
-		activeSessionRef.current = null;
+		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
 	};
 
@@ -1267,7 +1262,6 @@ export function AgentPanel({
 						<button
 							key={tab.id}
 							type="button"
-							disabled={busy}
 							role="tab"
 							aria-label={t("tabs.open", { number: index + 1 })}
 							aria-selected={activeTabId === tab.id}
@@ -1278,8 +1272,13 @@ export function AgentPanel({
 									: "border-border bg-muted/30 hover:bg-muted hover:text-foreground",
 							)}
 							onClick={() => {
+								activeTabRef.current = tab.id;
 								setActiveTabId(tab.id);
 								setLines(tab.lines ?? []);
+								if (isCodexAgent) {
+									activeConversationRef.current =
+										tab.id === "draft" ? null : tab.id;
+								}
 							}}
 						>
 							{index + 1}
@@ -1287,7 +1286,10 @@ export function AgentPanel({
 					))}
 				</div>
 				<DropdownMenu>
-					<DropdownMenuTrigger asChild disabled={busy || switching}>
+					<DropdownMenuTrigger
+						asChild
+						disabled={hasRunningSessions || switching}
+					>
 						<Button
 							type="button"
 							variant="ghost"
@@ -1332,7 +1334,6 @@ export function AgentPanel({
 					type="button"
 					variant="ghost"
 					size="icon-xs"
-					disabled={busy}
 					aria-label={t("tabs.new")}
 					title={t("tabs.new")}
 					onClick={newConversation}
@@ -1393,14 +1394,15 @@ export function AgentPanel({
 										key={item.id}
 										type="button"
 										className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-										disabled={busy}
 										onClick={() => {
 											setHistoryOpen(false);
 											if (!isCodexAgent || item.lines.length > 0) {
 												setLines(item.lines);
+												activeTabRef.current = item.id;
 												setActiveTabId(item.id);
-												if (isCodexAgent)
+												if (isCodexAgent) {
 													activeConversationRef.current = item.id;
+												}
 												return;
 											}
 											void (async () => {
@@ -1439,6 +1441,7 @@ export function AgentPanel({
 														),
 													);
 													activeConversationRef.current = item.id;
+													activeTabRef.current = item.id;
 													setActiveTabId(item.id);
 													setLines(lines);
 												} catch (error) {
@@ -1483,7 +1486,7 @@ export function AgentPanel({
 							description={t("empty.description")}
 						>
 							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
-								{busy ? (
+								{activeTabIsRunning ? (
 									<Shimmer className="text-center text-sm">
 										{t("empty.waiting")}
 									</Shimmer>
@@ -1496,7 +1499,7 @@ export function AgentPanel({
 												suggestion={label}
 												className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
 												onClick={(v) => void send(v)}
-												disabled={busy}
+												disabled={activeTabIsRunning}
 											/>
 										);
 									})
@@ -1742,7 +1745,7 @@ export function AgentPanel({
 			</Conversation>
 
 			<div className="shrink-0 space-y-2 border-t bg-muted/10 p-3">
-				{lines.length > 0 && !busy ? (
+				{lines.length > 0 && !activeTabIsRunning ? (
 					<Suggestions>
 						{SUGGESTION_KEYS.map((key) => {
 							const label = t(`suggestions.${key}`);
@@ -1751,7 +1754,7 @@ export function AgentPanel({
 									key={key}
 									suggestion={label}
 									onClick={(v) => void send(v)}
-									disabled={busy}
+									disabled={activeTabIsRunning}
 								/>
 							);
 						})}
@@ -1761,7 +1764,7 @@ export function AgentPanel({
 					className="w-full rounded-xl border-border bg-background shadow-none"
 					inputGroupClassName="overflow-visible"
 					onSubmit={({ text }) => {
-						if (!busy) {
+						if (!activeTabIsRunning) {
 							void send(text);
 							setComposerText("");
 						}
@@ -1884,7 +1887,9 @@ export function AgentPanel({
 									showMentionMenu ? "agent-mention-menu" : "agent-skill-menu"
 								}
 								placeholder={
-									busy ? t("composer.interruptHint") : t("composer.placeholder")
+									activeTabIsRunning
+										? t("composer.interruptHint")
+										: t("composer.placeholder")
 								}
 							/>
 						</div>
@@ -1896,7 +1901,7 @@ export function AgentPanel({
 									<PromptInputButton
 										type="button"
 										className="h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium text-muted-foreground"
-										disabled={busy || models.length === 0}
+										disabled={activeTabIsRunning || models.length === 0}
 										tooltip={
 											models.length > 0
 												? t("models.selectTooltip")
@@ -1934,7 +1939,7 @@ export function AgentPanel({
 										<PromptInputButton
 											type="button"
 											className="h-7 gap-1 px-1.5 text-xs font-medium text-muted-foreground"
-											disabled={busy}
+											disabled={activeTabIsRunning}
 											tooltip={t("composer.effortTooltip")}
 										>
 											{t("composer.effort.label")}:{" "}
@@ -1977,7 +1982,7 @@ export function AgentPanel({
 										selectedVaultPath &&
 										"bg-muted text-foreground",
 								)}
-								disabled={!selectedVaultPath || busy}
+								disabled={!selectedVaultPath || activeTabIsRunning}
 								onClick={() => setIncludeSelectedFile((current) => !current)}
 								tooltip={t("composer.toggleCurrentFile")}
 							>
@@ -1991,7 +1996,7 @@ export function AgentPanel({
 										fastEnabled && "text-amber-500 hover:text-amber-500",
 									)}
 									aria-pressed={fastEnabled}
-									disabled={busy}
+									disabled={activeTabIsRunning}
 									onClick={() => setFastEnabled((current) => !current)}
 									tooltip={t("composer.fastToggle")}
 								>
@@ -2019,7 +2024,7 @@ export function AgentPanel({
 								<Switch
 									size="sm"
 									checked={yoloEnabled}
-									disabled={busy}
+									disabled={activeTabIsRunning}
 									onCheckedChange={(enabled) => {
 										setYoloEnabled(enabled);
 										if (selectedAgentId) saveYoloPref(selectedAgentId, enabled);
