@@ -63,7 +63,11 @@ import {
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
-import { runPaperReaderWorkflow } from "@/lib/paper-read";
+import {
+	maybeAutoRunPaperReader,
+	paperAssetsReadyForReader,
+	runPaperReaderWorkflow,
+} from "@/lib/paper-read";
 import {
 	deletePapersUnderPath,
 	exportLibraryToFile,
@@ -1072,17 +1076,27 @@ export default function App() {
 					title: t("tasks.lookupImport"),
 					detail: text.trim().slice(0, 80),
 				},
-				async ({ setDetail }) => {
-					setDetail(text.trim().slice(0, 80));
+				async ({ setDetail, setProgress }) => {
+					setDetail(
+						t("tasks.lookupFetching", { id: text.trim().slice(0, 80) }),
+					);
+					setProgress(15);
 					const r = await addPaperByIdentifier({
 						vaultRoot: vaultPath,
 						parentDir: lookupParentDir,
 						text,
 						settings,
 					});
+					setProgress(70);
+					setDetail(
+						t("tasks.lookupRefreshing", {
+							title: r.title?.slice(0, 60) || r.path,
+						}),
+					);
 					await refreshTree(vaultPath);
 					await rebuildWikiAndNotify(vaultPath);
 					await refreshLibrary();
+					setProgress(100);
 					return r;
 				},
 			);
@@ -1099,6 +1113,42 @@ export default function App() {
 						? t("sidebar:lookup.pdfDownloadFailedDetail", { detail })
 						: t("sidebar:lookup.pdfDownloadFailed"),
 				);
+			}
+			// Assets ready → auto paper-reader (progress in bottom-left)
+			const rel = (result.path || "")
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			if (
+				rel &&
+				paperAssetsReadyForReader({
+					pdf: result.pdf,
+					tex: result.tex,
+					paperMd: result.paperMd,
+				})
+			) {
+				try {
+					const started = await maybeAutoRunPaperReader({
+						vaultRoot: vaultPath,
+						paperPath: rel,
+						assetsReady: true,
+					});
+					if (started) {
+						await refreshLibrary();
+						// We just opened this paper — reload NOTES after reader writes
+						const notesAbs = notesPathForPaper(result.paperDir);
+						try {
+							const content = await readVaultFile(notesAbs);
+							setPaperNotes(content);
+							setNotesPath(notesAbs);
+							setNotesDirty(false);
+							setNotesKey((k) => k + 1);
+						} catch {
+							// ignore
+						}
+					}
+				} catch (e) {
+					setError(e instanceof Error ? e.message : String(e));
+				}
 			}
 		},
 		[
@@ -1119,29 +1169,71 @@ export default function App() {
 	const handleDownloadPaperAssets = useCallback(
 		async (node: FileNode) => {
 			if (!vaultPath) return;
-			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
+			const rel = toVaultRelative(vaultPath, node.path)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
 			try {
-				await runBackgroundTask(
+				const assets = await runBackgroundTask(
 					{
 						kind: "download",
 						title: t("tasks.downloadPaper"),
 						detail: rel,
 					},
-					async ({ setDetail }) => {
+					async ({ setDetail, setProgress }) => {
 						setDetail(rel);
-						await downloadPaperAssets({
+						setProgress(20);
+						const r = await downloadPaperAssets({
 							vaultRoot: vaultPath,
 							paperPath: rel,
 						});
+						setProgress(85);
+						setDetail(t("tasks.downloadRefreshing", { path: rel }));
 						await refreshTree(vaultPath);
 						await refreshLibrary();
+						setProgress(100);
+						return r;
 					},
 				);
+				// After PDF/TeX/PAPER.md ready → auto paper-reader with task progress
+				if (
+					paperAssetsReadyForReader({
+						pdf: assets.pdf,
+						tex: assets.tex,
+						paperMd: assets.paperMd,
+					})
+				) {
+					try {
+						const started = await maybeAutoRunPaperReader({
+							vaultRoot: vaultPath,
+							paperPath: rel,
+							assetsReady: true,
+						});
+						if (started) {
+							await refreshLibrary();
+							const notesAbs = notesPathForPaper(node.path);
+							if (
+								notesPath &&
+								normalizePathKey(notesPath) === normalizePathKey(notesAbs)
+							) {
+								try {
+									const content = await readVaultFile(notesAbs);
+									setPaperNotes(content);
+									setNotesDirty(false);
+									setNotesKey((k) => k + 1);
+								} catch {
+									// ignore
+								}
+							}
+						}
+					} catch (e) {
+						setError(e instanceof Error ? e.message : String(e));
+					}
+				}
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshTree, refreshLibrary, t],
+		[vaultPath, refreshTree, refreshLibrary, notesPath, t],
 	);
 
 	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */

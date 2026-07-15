@@ -34,7 +34,8 @@
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
   - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
   - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
-- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击启动 **paper-reader** 工作流（默认 Agent + skill；运行时触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`）。阅读中图标转圈，进度在左下角后台任务条展示；成功后 `is_read = true`，图标消失。
+- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击可**手动**启动 **paper-reader**。
+- **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Eye 消失。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
