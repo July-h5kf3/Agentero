@@ -1217,7 +1217,10 @@ export function AgentPanel({
 		(session) => session.id === activeTabId,
 	);
 	const activeTabIsRunning = activeTabSession?.status === "running";
-	const composerControlsMuted = submitting || activeTabIsRunning;
+	const hasStreamingAgentMessage = lines.some(
+		(line) => line.kind === "agent" && line.streaming,
+	);
+	const composerControlsMuted = hasStreamingAgentMessage;
 	const activeUsage = usageBySession[activeTabId] ?? usage;
 	const hasRunningSessions = sessionHistory.some(
 		(session) => session.status === "running",
@@ -2191,7 +2194,11 @@ export function AgentPanel({
 				) : null}
 				<PromptInput
 					className="w-full rounded-xl border-border bg-background shadow-none"
-					inputGroupClassName="overflow-visible"
+					inputGroupClassName={cn(
+						"overflow-visible",
+						!hasStreamingAgentMessage &&
+							"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
+					)}
 					onSubmit={async ({ text }) => {
 						if (
 							activeTabIsRunning ||
@@ -2259,9 +2266,9 @@ export function AgentPanel({
 											role="option"
 											aria-selected={mentionActiveIndex === index}
 											className={cn(
-												"flex w-full items-center gap-2 rounded-md border-l-2 border-transparent px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+												"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
 												mentionActiveIndex === index
-													? "border-primary bg-muted"
+													? "bg-muted"
 													: "hover:bg-muted/70",
 											)}
 											onMouseEnter={() => setMentionActiveIndex(index)}
@@ -2287,9 +2294,9 @@ export function AgentPanel({
 											role="option"
 											aria-selected={skillActiveIndex === index}
 											className={cn(
-												"flex w-full items-center gap-2 rounded-md border-l-2 border-transparent px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+												"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
 												skillActiveIndex === index
-													? "border-primary bg-muted"
+													? "bg-muted"
 													: "hover:bg-muted/70",
 											)}
 											onMouseEnter={() => setSkillActiveIndex(index)}
