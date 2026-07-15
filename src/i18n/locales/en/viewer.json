@@ -11,6 +11,20 @@
 		"loading": "Loading PDF…",
 		"loadError": "Failed to load PDF"
 	},
+	"pdfAsk": {
+		"dialogLabel": "Ask about selection",
+		"quoteLine": "p.{{page}} · {{quote}}",
+		"pageOnly": "Page {{page}}",
+		"emptyHint": "Ask a question about this passage.",
+		"placeholder": "Ask a question…",
+		"send": "Send",
+		"close": "Close",
+		"end": "End and pin",
+		"thinking": "Thinking…",
+		"agentFailed": "Agent failed. Check Agent settings and try again.",
+		"pillAria": "Open ask: {{preview}}",
+		"pillFallback": "Ask thread"
+	},
 	"html": {
 		"empty": "No paper available.",
 		"sandboxTitle": "HTML paper sandbox"

@@ -11,6 +11,20 @@
 		"loading": "正在加载 PDF…",
 		"loadError": "加载 PDF 失败"
 	},
+	"pdfAsk": {
+		"dialogLabel": "划词提问",
+		"quoteLine": "第 {{page}} 页 · {{quote}}",
+		"pageOnly": "第 {{page}} 页",
+		"emptyHint": "针对这段原文提问。",
+		"placeholder": "输入问题…",
+		"send": "发送",
+		"close": "关闭",
+		"end": "结束并钉住",
+		"thinking": "思考中…",
+		"agentFailed": "Agent 调用失败。请检查 Agent 设置后重试。",
+		"pillAria": "打开提问：{{preview}}",
+		"pillFallback": "提问线程"
+	},
 	"html": {
 		"empty": "暂无论文。",
 		"sandboxTitle": "HTML 论文沙箱"

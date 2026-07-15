@@ -1,7 +1,8 @@
 # PDF 划词提问（Selection Ask）
 
-> 状态：**设计中（未实现）**  
+> 状态：**MVP 已落地（前端 + 文件 IO）**  
 > 范围：阅读 PDF 时选中/双击/悬停触发提问 → 小对话框问答 → JSON 落盘 → 页边圆片回访（飞书式边注）。  
+> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/lib/pdf-ask/`、`src/components/viewer/pdf-ask/`。  
 > 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
 
 ## 1. 产品目标

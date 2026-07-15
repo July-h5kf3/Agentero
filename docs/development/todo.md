@@ -90,11 +90,11 @@
    - 实验复现清单。
 
 3. **PDF 划词提问（Selection Ask）** — 设计见 [`pdf-ask.md`](pdf-ask.md)
-   - [ ] M1：划词弹出迷你问答卡（本地假回复可验收交互）。
-   - [ ] M2：`papers/<id>/asks/<threadId>.json` 读写 + 页边圆片锚点（归一化坐标）。
-   - [ ] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
-   - [ ] M4：双击 / 悬停停留触发 + 防误触；阈值可配置。
-   - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer 增强。
+   - [x] M1：划词弹出迷你问答卡。
+   - [x] M2：`papers/<id>/asks/<threadId>.json` 读写 + 页边圆片锚点（归一化坐标）。
+   - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
+   - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）。
+   - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer 增强；阈值可配置。
 
 4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。

@@ -1679,7 +1679,34 @@ export default function App() {
 										) : null}
 										{centerMode === "pdf" ? (
 											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-												<PdfViewer source={pdfUrl} className="h-full w-full" />
+												<PdfViewer
+													source={pdfUrl}
+													paperAbsPath={
+														notesPath
+															? notesPath.replace(/[\\/]NOTES\.md$/i, "")
+															: null
+													}
+													paperRelPath={
+														paperMeta?.path ??
+														(notesPath && vaultPath
+															? (() => {
+																	const abs = notesPath
+																		.replace(/[\\/]NOTES\.md$/i, "")
+																		.replace(/\\/g, "/");
+																	const root = vaultPath
+																		.replace(/\\/g, "/")
+																		.replace(/\/$/, "");
+																	if (abs === root) return "";
+																	if (abs.startsWith(`${root}/`)) {
+																		return abs.slice(root.length + 1);
+																	}
+																	return abs;
+																})()
+															: null)
+													}
+													vaultPath={vaultPath}
+													className="h-full w-full"
+												/>
 											</div>
 										) : null}
 										{centerMode === "html" ? (
