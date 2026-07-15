@@ -40,6 +40,11 @@
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
+- **在系统文件管理器中显示**（`revealItemInDir` / `src/lib/reveal.ts`）：
+  - **双击**真实文件 / 文件夹 / paper 行 → 在 Finder（macOS）/ Explorer（Windows）/ 文件管理器（Linux）中定位并选中。
+  - **右键**同上节点 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
+  - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
+  - 虚拟节点 **Library**（`motif:library`）不提供此操作；仅桌面端可用。
 - **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault、刷新或设置入口。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
 
@@ -132,6 +137,7 @@
 | `⌘O` | Open vault… | 打开文档/文件夹 |
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
+| `⌥⌘R` | 在 Finder 中显示 | 定位当前选中文件/文件夹；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |

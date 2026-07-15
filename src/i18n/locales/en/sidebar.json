@@ -13,7 +13,12 @@
 		"downloadReason": {
 			"noPdf": "Missing PDF",
 			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
-		}
+		},
+		"showInFinder": "Show in Finder",
+		"showInExplorer": "Show in Explorer",
+		"showInFileManager": "Show in File Manager",
+		"revealFailed": "Could not reveal in the file manager.",
+		"revealDesktopOnly": "Show in file manager requires the desktop app."
 	},
 	"papersLibrary": {
 		"title": "Library",

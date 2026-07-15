@@ -13,7 +13,12 @@
 		"downloadReason": {
 			"noPdf": "缺少 PDF",
 			"noBody": "缺少 TeX 与 PAPER.md（有其一即可，优先 TeX）"
-		}
+		},
+		"showInFinder": "在 Finder 中显示",
+		"showInExplorer": "在资源管理器中显示",
+		"showInFileManager": "在文件管理器中显示",
+		"revealFailed": "无法在文件管理器中显示。",
+		"revealDesktopOnly": "在文件管理器中显示需要桌面应用。"
 	},
 	"papersLibrary": {
 		"title": "论文库",

@@ -6,7 +6,12 @@ import {
 	FolderIcon,
 	FolderOpenIcon,
 } from "lucide-react";
-import type { HTMLAttributes, ReactNode } from "react";
+import type {
+	HTMLAttributes,
+	KeyboardEvent,
+	MouseEvent,
+	ReactNode,
+} from "react";
 import {
 	createContext,
 	useCallback,
@@ -21,6 +26,8 @@ interface FileTreeContextType {
 	togglePath: (path: string) => void;
 	selectedPath?: string;
 	onSelect?: (path: string) => void;
+	onDoubleClickPath?: (path: string) => void;
+	onContextMenuPath?: (path: string, event: MouseEvent) => void;
 }
 
 const noop = () => {};
@@ -35,6 +42,10 @@ export type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
 	defaultExpanded?: Set<string>;
 	selectedPath?: string;
 	onSelect?: (path: string) => void;
+	/** Double-click a tree row (file or folder). */
+	onDoubleClickPath?: (path: string) => void;
+	/** Right-click a tree row (file or folder). */
+	onContextMenuPath?: (path: string, event: MouseEvent) => void;
 	onExpandedChange?: (expanded: Set<string>) => void;
 };
 
@@ -43,6 +54,8 @@ export const FileTree = ({
 	defaultExpanded,
 	selectedPath,
 	onSelect,
+	onDoubleClickPath,
+	onContextMenuPath,
 	onExpandedChange,
 	className,
 	children,
@@ -71,8 +84,22 @@ export const FileTree = ({
 	);
 
 	const contextValue = useMemo(
-		() => ({ expandedPaths, onSelect, selectedPath, togglePath }),
-		[expandedPaths, onSelect, selectedPath, togglePath],
+		() => ({
+			expandedPaths,
+			onSelect,
+			onDoubleClickPath,
+			onContextMenuPath,
+			selectedPath,
+			togglePath,
+		}),
+		[
+			expandedPaths,
+			onSelect,
+			onDoubleClickPath,
+			onContextMenuPath,
+			selectedPath,
+			togglePath,
+		],
 	);
 
 	return (
@@ -132,8 +159,13 @@ export const FileTreeFolder = ({
 	children,
 	...props
 }: FileTreeFolderProps) => {
-	const { expandedPaths, togglePath, selectedPath } =
-		useContext(FileTreeContext);
+	const {
+		expandedPaths,
+		togglePath,
+		selectedPath,
+		onDoubleClickPath,
+		onContextMenuPath,
+	} = useContext(FileTreeContext);
 	const isExpanded = expandedPaths.has(path);
 	const isSelected = selectedPath === path;
 
@@ -147,11 +179,20 @@ export const FileTreeFolder = ({
 			<div className={cn("", className)} {...props}>
 				<button
 					type="button"
+					data-path={path}
 					className={cn(
 						"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
 						isSelected && "bg-muted",
 					)}
 					onClick={() => togglePath(path)}
+					onDoubleClick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						onDoubleClickPath?.(path);
+					}}
+					onContextMenu={(e) => {
+						onContextMenuPath?.(path, e);
+					}}
 					aria-expanded={isExpanded}
 					role="treeitem"
 				>
@@ -202,15 +243,32 @@ export const FileTreeFile = ({
 	children,
 	...props
 }: FileTreeFileProps) => {
-	const { selectedPath, onSelect } = useContext(FileTreeContext);
+	const { selectedPath, onSelect, onDoubleClickPath, onContextMenuPath } =
+		useContext(FileTreeContext);
 	const isSelected = selectedPath === path;
 
 	const handleClick = useCallback(() => {
 		onSelect?.(path);
 	}, [onSelect, path]);
 
+	const handleDoubleClick = useCallback(
+		(e: MouseEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			onDoubleClickPath?.(path);
+		},
+		[onDoubleClickPath, path],
+	);
+
+	const handleContextMenu = useCallback(
+		(e: MouseEvent) => {
+			onContextMenuPath?.(path, e);
+		},
+		[onContextMenuPath, path],
+	);
+
 	const handleKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
+		(e: KeyboardEvent<HTMLDivElement>) => {
 			if (e.key === "Enter" || e.key === " ") {
 				e.preventDefault();
 				onSelect?.(path);
@@ -224,12 +282,15 @@ export const FileTreeFile = ({
 	return (
 		<FileTreeFileContext.Provider value={fileContextValue}>
 			<div
+				data-path={path}
 				className={cn(
 					"flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
 					isSelected && "bg-muted",
 					className,
 				)}
 				onClick={handleClick}
+				onDoubleClick={handleDoubleClick}
+				onContextMenu={handleContextMenu}
 				onKeyDown={handleKeyDown}
 				role="treeitem"
 				tabIndex={0}

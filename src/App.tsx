@@ -68,6 +68,7 @@ import {
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
 } from "@/lib/papers-api";
+import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
@@ -589,6 +590,23 @@ export default function App() {
 		})();
 	}, [vaultPath, refreshTree, refreshLibrary, rebuildWikiAndNotify]);
 
+	/** ⌥⌘R — reveal selected vault path in Finder / Explorer. */
+	const handleRevealInFinder = useCallback(() => {
+		const path = selectedPath;
+		if (!path || isLibraryVirtualPath(path)) return;
+		if (!isTauri()) {
+			setError(t("sidebar:fileTree.revealDesktopOnly"));
+			return;
+		}
+		void (async () => {
+			try {
+				await revealInFileManager(path);
+			} catch {
+				setError(t("sidebar:fileTree.revealFailed"));
+			}
+		})();
+	}, [selectedPath, t]);
+
 	const openMagicWand = useCallback(() => {
 		if (!vaultPath) {
 			setError(t("sidebar:lookup.needsVault"));
@@ -655,6 +673,9 @@ export default function App() {
 				case "refreshTree":
 					handleRefresh();
 					break;
+				case "revealInFinder":
+					handleRevealInFinder();
+					break;
 				case "magicWand":
 					openMagicWand();
 					break;
@@ -687,6 +708,7 @@ export default function App() {
 		handleNewWindow,
 		handleOpenVault,
 		handleRefresh,
+		handleRevealInFinder,
 		openMagicWand,
 		openSettings,
 		toggleChat,

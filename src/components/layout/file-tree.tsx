@@ -12,6 +12,7 @@ import {
 	WandSparkles,
 } from "lucide-react";
 import {
+	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -19,6 +20,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
 	FileTree as AiFileTree,
@@ -49,7 +51,9 @@ import {
 	paperNeedsAssetDownload,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { revealInFileManager, revealInOsLabelKey } from "@/lib/reveal";
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
+import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
 
@@ -259,6 +263,12 @@ type FileTreeProps = {
 	className?: string;
 };
 
+type TreeContextMenu = {
+	path: string;
+	x: number;
+	y: number;
+};
+
 export function FileTree({
 	nodes,
 	selectedPath,
@@ -275,6 +285,9 @@ export function FileTree({
 	const { t } = useTranslation("sidebar");
 	const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
 	const [downloadingAll, setDownloadingAll] = useState(false);
+	const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
+	const [revealError, setRevealError] = useState<string | null>(null);
+	const contextMenuRef = useRef<HTMLDivElement>(null);
 	const defaultExpanded = useMemo(() => {
 		const open = new Set<string>();
 		collectDefaultExpanded(nodes, open);
@@ -370,6 +383,112 @@ export function FileTree({
 			setDownloadingAll(false);
 		}
 	}, [onDownloadAllMissingAssets, downloadingAll, downloadingPath]);
+
+	const canRevealPath = useCallback((path: string) => {
+		return Boolean(path) && !path.startsWith("motif:");
+	}, []);
+
+	const handleReveal = useCallback(
+		async (path: string) => {
+			setContextMenu(null);
+			if (!canRevealPath(path)) return;
+			if (!isTauri()) {
+				setRevealError(t("fileTree.revealDesktopOnly"));
+				return;
+			}
+			setRevealError(null);
+			try {
+				await revealInFileManager(path);
+			} catch {
+				setRevealError(t("fileTree.revealFailed"));
+			}
+		},
+		[canRevealPath, t],
+	);
+
+	const handleDoubleClickPath = useCallback(
+		(path: string) => {
+			if (createDraft) return;
+			if (!canRevealPath(path)) return;
+			void handleReveal(path);
+		},
+		[canRevealPath, createDraft, handleReveal],
+	);
+
+	const handleContextMenuPath = useCallback(
+		(path: string, event: ReactMouseEvent) => {
+			if (createDraft) return;
+			if (!canRevealPath(path)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			setRevealError(null);
+			setContextMenu({ path, x: event.clientX, y: event.clientY });
+		},
+		[canRevealPath, createDraft],
+	);
+
+	useEffect(() => {
+		if (!contextMenu) return;
+		const close = () => setContextMenu(null);
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") close();
+		};
+		const onPointer = (e: PointerEvent) => {
+			const el = contextMenuRef.current;
+			if (el && e.target instanceof Node && el.contains(e.target)) return;
+			close();
+		};
+		// Defer so the opening contextmenu event does not immediately close.
+		const timer = window.setTimeout(() => {
+			window.addEventListener("pointerdown", onPointer, true);
+			window.addEventListener("keydown", onKey, true);
+			window.addEventListener("scroll", close, true);
+			window.addEventListener("resize", close);
+		}, 0);
+		return () => {
+			window.clearTimeout(timer);
+			window.removeEventListener("pointerdown", onPointer, true);
+			window.removeEventListener("keydown", onKey, true);
+			window.removeEventListener("scroll", close, true);
+			window.removeEventListener("resize", close);
+		};
+	}, [contextMenu]);
+
+	const revealLabel = t(revealInOsLabelKey());
+	const revealShortcut = useMemo(() => {
+		const def = SHORTCUTS.find((s) => s.id === "revealInFinder");
+		return def ? formatShortcut(def) : "⌥⌘R";
+	}, []);
+
+	const contextMenuPortal =
+		contextMenu && typeof document !== "undefined"
+			? createPortal(
+					<div
+						ref={contextMenuRef}
+						role="menu"
+						className="fixed z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+						style={{
+							left: Math.min(contextMenu.x, window.innerWidth - 200),
+							top: Math.min(contextMenu.y, window.innerHeight - 48),
+						}}
+					>
+						<button
+							type="button"
+							role="menuitem"
+							className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+							onClick={() => {
+								void handleReveal(contextMenu.path);
+							}}
+						>
+							<span>{revealLabel}</span>
+							<span className="text-muted-foreground text-xs tracking-wide">
+								{revealShortcut}
+							</span>
+						</button>
+					</div>,
+					document.body,
+				)
+			: null;
 
 	const libraryRow = (
 		<FileTreeFile path={LIBRARY_VIRTUAL_PATH} name={t("papersLibrary.title")}>
@@ -525,6 +644,8 @@ export function FileTree({
 							selectedPath={treeSelectedPath}
 							expanded={expanded}
 							onExpandedChange={setExpanded}
+							onDoubleClickPath={handleDoubleClickPath}
+							onContextMenuPath={handleContextMenuPath}
 							onSelect={(path) => {
 								if (createDraft) return;
 								if (path === LIBRARY_VIRTUAL_PATH) {
@@ -546,6 +667,8 @@ export function FileTree({
 						selectedPath={treeSelectedPath}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
+						onDoubleClickPath={handleDoubleClickPath}
+						onContextMenuPath={handleContextMenuPath}
 						onSelect={(path) => {
 							// Don't navigate away while naming a new entry.
 							if (createDraft) return;
@@ -569,6 +692,12 @@ export function FileTree({
 						{nodes.map((node) => renderNode(node))}
 					</AiFileTree>
 				)}
+				{revealError ? (
+					<p className="px-3 py-1 text-destructive text-xs leading-snug">
+						{revealError}
+					</p>
+				) : null}
+				{contextMenuPortal}
 			</div>
 		</TooltipProvider>
 	);
