@@ -193,6 +193,7 @@ type ChatLine =
 type ChatSessionHistoryItem = {
 	id: string;
 	agentId: string;
+	source: "local" | "indexed" | "external";
 	title: string;
 	agentName: string;
 	startedAt: string;
@@ -433,6 +434,7 @@ export function AgentPanel({
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [warming, setWarming] = useState(false);
+	const [agentListenersReady, setAgentListenersReady] = useState(false);
 	const [composerText, setComposerText] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
@@ -455,7 +457,15 @@ export function AgentPanel({
 	const selectedAgentIdRef = useRef<string | null>(null);
 	const warmGenRef = useRef(0);
 	const historyGenRef = useRef(0);
+	const historyHydrationGenRef = useRef(0);
 	const submittingRef = useRef(false);
+	const submissionGenRef = useRef(0);
+	const pendingFailuresRef = useRef(new Map<string, string>());
+	const knownSessionIdsRef = useRef(new Set<string>());
+	const vaultPathRef = useRef(vaultPath);
+	const includeExternalCodexHistoryRef = useRef(includeExternalCodexHistory);
+	const sessionContextGenRef = useRef(0);
+	const previousVaultPathRef = useRef(vaultPath);
 
 	const applyModelsEvent = useCallback(
 		(ev: {
@@ -541,9 +551,47 @@ export function AgentPanel({
 		activeTabRef.current = activeTabId;
 	}, [activeTabId]);
 
+	useEffect(() => {
+		vaultPathRef.current = vaultPath;
+	}, [vaultPath]);
+
+	useEffect(() => {
+		includeExternalCodexHistoryRef.current = includeExternalCodexHistory;
+		historyHydrationGenRef.current += 1;
+	}, [includeExternalCodexHistory]);
+
+	useEffect(() => {
+		if (previousVaultPathRef.current === vaultPath) return;
+		previousVaultPathRef.current = vaultPath;
+		sessionContextGenRef.current += 1;
+		historyGenRef.current += 1;
+		historyHydrationGenRef.current += 1;
+		submissionGenRef.current += 1;
+		submittingRef.current = false;
+		pendingFailuresRef.current.clear();
+		knownSessionIdsRef.current.clear();
+		setSubmitting(false);
+		setLines([]);
+		setSessionHistory([]);
+		setUsage(null);
+		setUsageBySession({});
+		setHistoryOpen(false);
+		setComposerText("");
+		setMentionedPaths([]);
+		setSelectedSkillIds([]);
+		setIncludeSelectedFile(true);
+		setComposerMenuDismissed(false);
+		setMentionActiveIndex(0);
+		setSkillActiveIndex(0);
+		setActiveTabId("draft");
+		activeTabRef.current = "draft";
+		activeConversationRef.current = null;
+	}, [vaultPath]);
+
 	// Restore last model catalog / preference for the selected agent.
 	useEffect(() => {
 		selectedAgentIdRef.current = selectedAgentId;
+		historyHydrationGenRef.current += 1;
 		if (!selectedAgentId) {
 			setModels([]);
 			setModelId(null);
@@ -588,7 +636,7 @@ export function AgentPanel({
 
 	// When Chat opens (or agent/vault changes), warm ACP in the background for models/context.
 	useEffect(() => {
-		if (!isTauri() || !selectedAgentId) return;
+		if (!isTauri() || !selectedAgentId || !agentListenersReady) return;
 		const gen = ++warmGenRef.current;
 		let cancelled = false;
 		setWarming(true);
@@ -620,12 +668,13 @@ export function AgentPanel({
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedAgentId, vaultPath, applyModelsEvent]);
+	}, [selectedAgentId, vaultPath, applyModelsEvent, agentListenersReady]);
 
 	useEffect(() => {
 		if (!isTauri()) return;
 		let cancelled = false;
 		const unsubs: Array<() => void> = [];
+		setAgentListenersReady(false);
 		const updateSessionLines = (
 			sessionId: string,
 			update: (lines: ChatLine[]) => ChatLine[],
@@ -790,6 +839,12 @@ export function AgentPanel({
 				);
 			});
 			const u3 = await listenAgentFailed((ev) => {
+				if (!knownSessionIdsRef.current.has(ev.sessionId)) {
+					if (submittingRef.current) {
+						pendingFailuresRef.current.set(ev.sessionId, ev.error);
+					}
+					return;
+				}
 				const failedLine: ChatLine = {
 					id: nextLineId("err"),
 					kind: "error",
@@ -823,6 +878,7 @@ export function AgentPanel({
 				return;
 			}
 			unsubs.push(u1, uTool, uPlan, uUsage, uModels, uEffort, uFast, u2, u3);
+			setAgentListenersReady(true);
 		})();
 
 		return () => {
@@ -843,12 +899,24 @@ export function AgentPanel({
 		if (!isTauri() || !isCodexAgent || !selectedAgentId) return;
 		const generation = ++historyGenRef.current;
 		try {
-			const threads = await listCodexThreads({
-				agentId: selectedAgentId,
-				vaultPath: vaultPath ?? undefined,
-				includeExternal: includeExternalCodexHistory,
-			});
+			const [threads, indexedThreads] = await Promise.all([
+				listCodexThreads({
+					agentId: selectedAgentId,
+					vaultPath: vaultPath ?? undefined,
+					includeExternal: includeExternalCodexHistory,
+				}),
+				includeExternalCodexHistory
+					? listCodexThreads({
+							agentId: selectedAgentId,
+							vaultPath: vaultPath ?? undefined,
+							includeExternal: false,
+						})
+					: Promise.resolve(null),
+			]);
 			if (generation !== historyGenRef.current) return;
+			const indexedIds = new Set(
+				(indexedThreads ?? threads).map((thread) => thread.id),
+			);
 			setSessionHistory((prev) => {
 				const existing = new Map(
 					prev
@@ -857,6 +925,12 @@ export function AgentPanel({
 				);
 				const imported = threads.map((thread) => {
 					const current = existing.get(thread.id);
+					const source: ChatSessionHistoryItem["source"] =
+						current?.source === "local"
+							? "local"
+							: indexedIds.has(thread.id)
+								? "indexed"
+								: "external";
 					const startedAt = (() => {
 						const timestamp = Number(thread.updatedAt ?? thread.createdAt);
 						return Number.isFinite(timestamp)
@@ -866,6 +940,7 @@ export function AgentPanel({
 					if (current) {
 						return {
 							...current,
+							source,
 							agentName: selected?.name ?? "Codex",
 							title: current.lines.length > 0 ? current.title : thread.title,
 							startedAt: current.startedAt || startedAt,
@@ -874,6 +949,7 @@ export function AgentPanel({
 					return {
 						id: thread.id,
 						agentId: selectedAgentId,
+						source,
 						title: thread.title,
 						agentName: selected?.name ?? "Codex",
 						startedAt,
@@ -886,7 +962,8 @@ export function AgentPanel({
 					(item) =>
 						item.agentId === selectedAgentId &&
 						!importedIds.has(item.id) &&
-						(item.status === "running" || item.lines.length > 0),
+						(item.status === "running" ||
+							(item.source === "local" && item.lines.length > 0)),
 				);
 				return [...localOnly, ...imported];
 			});
@@ -1029,11 +1106,58 @@ export function AgentPanel({
 
 	const pickModel = (id: string) => {
 		setModelId(id);
-		if (selectedAgentId) saveModelPref(selectedAgentId, id);
+		if (!selectedAgentId) return;
+		saveModelPref(selectedAgentId, id);
+		if (!isTauri() || !isCodexAgent || !agentListenersReady) return;
+
+		const agentId = selectedAgentId;
+		const requestVaultPath = vaultPath;
+		const generation = ++warmGenRef.current;
+		setEffortOptions([]);
+		setReasoningEffort(null);
+		setFastAvailable(false);
+		setFastEnabled(false);
+		setWarming(true);
+		void (async () => {
+			try {
+				const result = await warmAgent({
+					agentId,
+					vaultPath: requestVaultPath ?? undefined,
+					modelId: id,
+				});
+				if (
+					generation !== warmGenRef.current ||
+					selectedAgentIdRef.current !== agentId ||
+					vaultPathRef.current !== requestVaultPath ||
+					loadModelPref(agentId) !== id
+				) {
+					return;
+				}
+				if (result.models) applyModelsEvent(result.models);
+				if (
+					result.usageUsed != null &&
+					result.usageSize != null &&
+					result.usageSize > 0
+				) {
+					setUsage({ used: result.usageUsed, size: result.usageSize });
+				}
+			} catch {
+				// Model selection remains usable even if capability refresh fails.
+			} finally {
+				if (
+					generation === warmGenRef.current &&
+					selectedAgentIdRef.current === agentId &&
+					vaultPathRef.current === requestVaultPath
+				) {
+					setWarming(false);
+				}
+			}
+		})();
 	};
 
 	const selectAgent = async (opt: AgentOption) => {
-		if (!isTauri() || switching || hasRunningSessions) return;
+		if (!isTauri() || switching || hasRunningSessions || submittingRef.current)
+			return;
 		if (opt.id && opt.id === selectedAgentId) return;
 
 		setSwitching(true);
@@ -1071,9 +1195,12 @@ export function AgentPanel({
 		}
 	};
 
-	const send = async (textRaw: string) => {
+	const send = async (textRaw: string): Promise<boolean> => {
 		const text = textRaw.trim();
-		if (!text || activeTabIsRunning || submittingRef.current) return;
+		if (!text || activeTabIsRunning || submittingRef.current) return false;
+		const submissionGeneration = ++submissionGenRef.current;
+		const sessionContextGeneration = sessionContextGenRef.current;
+		const requestVaultPath = vaultPath;
 		submittingRef.current = true;
 		setSubmitting(true);
 		try {
@@ -1086,7 +1213,7 @@ export function AgentPanel({
 						text: t("messages.desktopOnly"),
 					},
 				]);
-				return;
+				return false;
 			}
 
 			let agentId = selected?.id ?? registry?.defaultId ?? null;
@@ -1105,7 +1232,7 @@ export function AgentPanel({
 							text: e instanceof Error ? e.message : String(e),
 						},
 					]);
-					return;
+					return false;
 				}
 			}
 
@@ -1118,7 +1245,7 @@ export function AgentPanel({
 						text: t("messages.noAgent"),
 					},
 				]);
-				return;
+				return false;
 			}
 
 			const agentOk =
@@ -1136,7 +1263,7 @@ export function AgentPanel({
 						}),
 					},
 				]);
-				return;
+				return false;
 			}
 
 			const prompt = contextPaths.length
@@ -1163,6 +1290,16 @@ export function AgentPanel({
 				skillIds: selectedSkillIds,
 				autoApprove: yoloEnabled,
 			});
+			if (
+				sessionContextGeneration !== sessionContextGenRef.current ||
+				requestVaultPath !== vaultPathRef.current
+			) {
+				void cancelAgentRun(accepted.sessionId).catch(() => undefined);
+				return false;
+			}
+			knownSessionIdsRef.current.add(accepted.sessionId);
+			const pendingFailure = pendingFailuresRef.current.get(accepted.sessionId);
+			pendingFailuresRef.current.delete(accepted.sessionId);
 			const agentLine: ChatLine = {
 				id: nextLineId("agent"),
 				kind: "agent",
@@ -1171,7 +1308,16 @@ export function AgentPanel({
 				tools: [],
 				plan: [],
 			};
-			const pendingLines = [...sessionStartLines, agentLine];
+			const pendingLines: ChatLine[] = pendingFailure
+				? [
+						...sessionStartLines,
+						{
+							id: nextLineId("err"),
+							kind: "error",
+							text: pendingFailure,
+						},
+					]
+				: [...sessionStartLines, agentLine];
 			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
@@ -1179,27 +1325,37 @@ export function AgentPanel({
 				{
 					id: accepted.sessionId,
 					agentId,
+					source: "local",
 					title: text,
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
 					lines: pendingLines,
-					status: "running",
+					status: pendingFailure ? "failed" : "running",
 				},
 				...prev.filter((item) => item.id !== accepted.sessionId),
 			]);
 			setLines(pendingLines);
+			return true;
 		} catch (e) {
-			setLines((p) => [
-				...p,
-				{
-					id: nextLineId("err"),
-					kind: "error",
-					text: e instanceof Error ? e.message : String(e),
-				},
-			]);
+			if (
+				sessionContextGeneration === sessionContextGenRef.current &&
+				requestVaultPath === vaultPathRef.current
+			) {
+				setLines((p) => [
+					...p,
+					{
+						id: nextLineId("err"),
+						kind: "error",
+						text: e instanceof Error ? e.message : String(e),
+					},
+				]);
+			}
+			return false;
 		} finally {
-			submittingRef.current = false;
-			setSubmitting(false);
+			if (submissionGeneration === submissionGenRef.current) {
+				submittingRef.current = false;
+				setSubmitting(false);
+			}
 		}
 	};
 
@@ -1296,6 +1452,8 @@ export function AgentPanel({
 	};
 
 	const newConversation = () => {
+		if (submittingRef.current) return;
+		historyHydrationGenRef.current += 1;
 		setLines([]);
 		setComposerText("");
 		setMentionedPaths([]);
@@ -1323,6 +1481,7 @@ export function AgentPanel({
 							role="tab"
 							aria-label={t("tabs.open", { number: index + 1 })}
 							aria-selected={activeTabId === tab.id}
+							disabled={submitting}
 							className={cn(
 								"grid size-8 place-items-center rounded-md border text-sm font-medium text-muted-foreground transition-colors",
 								activeTabId === tab.id
@@ -1330,6 +1489,8 @@ export function AgentPanel({
 									: "border-border bg-muted/30 hover:bg-muted hover:text-foreground",
 							)}
 							onClick={() => {
+								if (submittingRef.current) return;
+								historyHydrationGenRef.current += 1;
 								activeTabRef.current = tab.id;
 								setActiveTabId(tab.id);
 								setLines(tab.lines ?? []);
@@ -1346,7 +1507,7 @@ export function AgentPanel({
 				<DropdownMenu>
 					<DropdownMenuTrigger
 						asChild
-						disabled={hasRunningSessions || switching}
+						disabled={hasRunningSessions || switching || submitting}
 					>
 						<Button
 							type="button"
@@ -1394,6 +1555,7 @@ export function AgentPanel({
 					size="icon-xs"
 					aria-label={t("tabs.new")}
 					title={t("tabs.new")}
+					disabled={submitting}
 					onClick={newConversation}
 				>
 					<PencilLine className="size-4" />
@@ -1407,6 +1569,7 @@ export function AgentPanel({
 							className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
 							aria-label={t("history.aria")}
 							title={t("history.label")}
+							disabled={submitting}
 						>
 							<History className="size-3.5" />
 						</Button>
@@ -1423,7 +1586,22 @@ export function AgentPanel({
 										<Switch
 											size="sm"
 											checked={includeExternalCodexHistory}
+											disabled={submitting}
 											onCheckedChange={(enabled) => {
+												if (submittingRef.current) return;
+												historyHydrationGenRef.current += 1;
+												includeExternalCodexHistoryRef.current = enabled;
+												if (!enabled) {
+													const active = sessionHistory.find(
+														(item) => item.id === activeTabId,
+													);
+													if (
+														active?.source === "external" &&
+														active.status !== "running"
+													) {
+														newConversation();
+													}
+												}
 												setIncludeExternalCodexHistory(enabled);
 												if (selectedAgentId) {
 													saveExternalCodexHistoryPref(
@@ -1451,8 +1629,12 @@ export function AgentPanel({
 									<button
 										key={item.id}
 										type="button"
+										disabled={submitting}
 										className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
 										onClick={() => {
+											if (submittingRef.current) return;
+											const hydrationGeneration =
+												++historyHydrationGenRef.current;
 											setHistoryOpen(false);
 											if (!isCodexAgent || item.lines.length > 0) {
 												setLines(item.lines);
@@ -1463,14 +1645,29 @@ export function AgentPanel({
 												}
 												return;
 											}
+											const requestAgentId = selectedAgentId;
+											const requestVaultPath = vaultPath;
+											const requestIncludeExternal =
+												includeExternalCodexHistory;
+											if (!requestAgentId) return;
 											void (async () => {
 												try {
 													const history = await readCodexThread({
-														agentId: selectedAgentId ?? undefined,
+														agentId: requestAgentId,
 														threadId: item.id,
-														vaultPath: vaultPath ?? undefined,
-														includeExternal: includeExternalCodexHistory,
+														vaultPath: requestVaultPath ?? undefined,
+														includeExternal: requestIncludeExternal,
 													});
+													if (
+														hydrationGeneration !==
+															historyHydrationGenRef.current ||
+														selectedAgentIdRef.current !== requestAgentId ||
+														vaultPathRef.current !== requestVaultPath ||
+														includeExternalCodexHistoryRef.current !==
+															requestIncludeExternal
+													) {
+														return;
+													}
 													const lines: ChatLine[] = history.lines.map(
 														(line) => {
 															if (line.kind === "user") {
@@ -1490,7 +1687,8 @@ export function AgentPanel({
 													);
 													setSessionHistory((prev) =>
 														prev.map((entry) =>
-															entry.id === item.id
+															entry.id === item.id &&
+															entry.agentId === requestAgentId
 																? {
 																		...entry,
 																		title: history.thread.title,
@@ -1504,6 +1702,16 @@ export function AgentPanel({
 													setActiveTabId(item.id);
 													setLines(lines);
 												} catch (error) {
+													if (
+														hydrationGeneration !==
+															historyHydrationGenRef.current ||
+														selectedAgentIdRef.current !== requestAgentId ||
+														vaultPathRef.current !== requestVaultPath ||
+														includeExternalCodexHistoryRef.current !==
+															requestIncludeExternal
+													) {
+														return;
+													}
 													setLines((prev) => [
 														...prev,
 														{
@@ -1823,10 +2031,11 @@ export function AgentPanel({
 				<PromptInput
 					className="w-full rounded-xl border-border bg-background shadow-none"
 					inputGroupClassName="overflow-visible"
-					onSubmit={({ text }) => {
-						if (!activeTabIsRunning && !submittingRef.current) {
-							void send(text);
-							setComposerText("");
+					onSubmit={async ({ text }) => {
+						if (activeTabIsRunning || submittingRef.current) return;
+						const accepted = await send(text);
+						if (accepted) {
+							setComposerText((current) => (current === text ? "" : current));
 						}
 					}}
 				>
@@ -1976,7 +2185,9 @@ export function AgentPanel({
 									<PromptInputButton
 										type="button"
 										className="h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium text-muted-foreground"
-										disabled={activeTabIsRunning || models.length === 0}
+										disabled={
+											activeTabIsRunning || warming || models.length === 0
+										}
 										tooltip={
 											models.length > 0
 												? t("models.selectTooltip")
