@@ -32,6 +32,8 @@ import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import {
+	collectPaperFoldersFromTree,
+	detectPaperDirectory,
 	isPaperDirectory,
 	loadPaperMetadata,
 	notesPathForPaper,
@@ -44,12 +46,13 @@ import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
-	createVaultDirectory,
+	createVault,
 	type FileNode,
 	getSavedVaultPath,
 	isMarkdownPath,
 	isTextOpenable,
 	loadVaultTree,
+	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
 	saveVaultPath,
@@ -83,6 +86,30 @@ With some **bold** text for emphasis!
 `;
 
 /** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
+function normalizePathKey(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function treeFindChildren(
+	nodes: FileNode[],
+	path: string,
+): FileNode[] | undefined {
+	const key = normalizePathKey(path);
+	const walk = (list: FileNode[]): FileNode[] | undefined => {
+		for (const n of list) {
+			if (normalizePathKey(n.path) === key) {
+				return n.children;
+			}
+			if (n.children?.length) {
+				const hit = walk(n.children);
+				if (hit !== undefined) return hit;
+			}
+		}
+		return undefined;
+	};
+	return walk(nodes);
+}
+
 function collectMarkdownRelPaths(
 	nodes: FileNode[],
 	vaultPath: string | null,
@@ -132,7 +159,11 @@ export default function App() {
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		if (saved && (isPaperDirectory(saved) || paperDirFromPath(saved))) {
+		if (saved && paperDirFromPath(saved)) {
+			return "pdf";
+		}
+		// Paper folder root (no marker in path alone) — prefer pdf until meta loads
+		if (saved && /(?:^|\/)papers\//i.test(saved.replace(/\\/g, "/"))) {
 			return "pdf";
 		}
 		return saved ? preferredModeForPath(saved) : "markdown";
@@ -171,6 +202,8 @@ export default function App() {
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
+	/** Paper folders at any depth under papers/ (marker-based). */
+	const paperFolders = useMemo(() => collectPaperFoldersFromTree(tree), [tree]);
 
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
@@ -183,7 +216,14 @@ export default function App() {
 		let cancelled = false;
 
 		void (async () => {
-			const paperDir = paperDirFromPath(selectedPath);
+			let paperDir = paperDirFromPath(selectedPath, paperFolders);
+			if (
+				!paperDir &&
+				selectedPath &&
+				(await detectPaperDirectory(selectedPath))
+			) {
+				paperDir = selectedPath.replace(/[\\/]+$/, "");
+			}
 
 			// Selecting a bare .pdf/.html path without paper metadata: no remote preview
 			if (!paperDir) {
@@ -221,7 +261,11 @@ export default function App() {
 			setNotesKey((k) => k + 1);
 
 			// Opening a paper folder: prefer PDF, fall back HTML, else NOTES as markdown
-			if (selectedPath && isPaperDirectory(selectedPath)) {
+			const openingPaperRoot =
+				selectedPath != null &&
+				(normalizePathKey(selectedPath) === normalizePathKey(paperDir) ||
+					isPaperDirectory(selectedPath, treeFindChildren(tree, selectedPath)));
+			if (openingPaperRoot) {
 				if (remotePdf) setCenterMode("pdf");
 				else if (remoteHtml) setCenterMode("html");
 				else {
@@ -236,7 +280,7 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedPath]);
+	}, [selectedPath, paperFolders, tree]);
 
 	useEffect(() => {
 		setTheme(settings.theme);
@@ -376,24 +420,6 @@ export default function App() {
 			}
 			setBusy(true);
 			const path = await pickVaultDirectory();
-			if (!path) return;
-			await activateVault(path);
-		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setBusy(false);
-		}
-	}, [t, activateVault]);
-
-	const handleCreateVault = useCallback(async () => {
-		setError(null);
-		try {
-			if (!isTauri()) {
-				setError(t("errors.openVaultDesktopOnly"));
-				return;
-			}
-			setBusy(true);
-			const path = await createVaultDirectory();
 			if (!path) return;
 			await activateVault(path);
 		} catch (e) {
@@ -575,8 +601,11 @@ export default function App() {
 
 	const openPath = useCallback(
 		async (absoluteOrDemoPath: string) => {
-			// Paper folder path (from tree or restore)
-			if (isPaperDirectory(absoluteOrDemoPath)) {
+			const children = treeFindChildren(tree, absoluteOrDemoPath);
+			if (
+				isPaperDirectory(absoluteOrDemoPath, children) ||
+				(await detectPaperDirectory(absoluteOrDemoPath))
+			) {
 				openPaper(absoluteOrDemoPath);
 				return;
 			}
@@ -593,7 +622,7 @@ export default function App() {
 			setError(null);
 
 			// File under a paper: prefer PDF if available later; set by extension first
-			const paperDir = paperDirFromPath(node.path);
+			const paperDir = paperDirFromPath(node.path, paperFolders);
 			if (paperDir && isMarkdownPath(node.path)) {
 				// Opening NOTES.md etc. from wiki/backlink still shows notes; PDF if user toggles
 				setCenterMode(preferredModeForPath(node.path));
@@ -625,11 +654,69 @@ export default function App() {
 				setBusy(false);
 			}
 		},
-		[openPaper, t],
+		[openPaper, paperFolders, t, tree],
 	);
 
+	const handleCreateVault = useCallback(async () => {
+		setError(null);
+		try {
+			if (!isTauri()) {
+				setError(t("errors.openVaultDesktopOnly"));
+				return;
+			}
+			setBusy(true);
+			const path = await pickCreateVaultDirectory();
+			if (!path) return;
+			const result = await createVault(path);
+			const root = result.path || path;
+			await activateVault(root);
+			const sep = root.includes("\\") ? "\\" : "/";
+			const openRel = result.openPath || "AGENTS.md";
+			const openAbs = `${root.replace(/[\\/]+$/, "")}${sep}${openRel.replace(/\//g, sep)}`;
+			await openPath(openAbs);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [activateVault, openPath, t]);
+
+	// Create Vault shortcut + native menu (after handler is defined)
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			const id = resolveShortcutId(event, {
+				settingsOpen: settingsOpenRef.current,
+			});
+			if (id !== "createVault") return;
+			event.preventDefault();
+			void handleCreateVault();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [handleCreateVault]);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		let unsub: (() => void) | undefined;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen("create_vault", () => {
+				void handleCreateVault();
+			});
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, [handleCreateVault]);
+
 	const handleSelectFile = async (node: FileNode) => {
-		if (node.kind === "directory" && isPaperDirectory(node.path)) {
+		if (
+			node.kind === "directory" &&
+			isPaperDirectory(node.path, node.children)
+		) {
 			openPaper(node.path);
 			return;
 		}
@@ -659,15 +746,24 @@ export default function App() {
 				return;
 			}
 			const clean = normalizeVaultRel(rel);
-			const paperMatch = clean.match(/^(papers\/[^/]+)/i);
-			if (paperMatch) {
-				const paperDir = `${vaultPath.replace(/[\\/]+$/, "")}/${paperMatch[1]}`;
-				openPaper(paperDir);
+			const root = vaultPath.replace(/[\\/]+$/, "");
+			// paperFolders are absolute paths from the file tree
+			const paperAbs = paperDirFromPath(`${root}/${clean}`, paperFolders);
+			if (paperAbs) {
+				openPaper(paperAbs);
 				return;
 			}
-			handleOpenVaultRel(clean);
+			// Collapsed graph node may already be the paper folder rel path
+			void (async () => {
+				const candidate = `${root}/${clean}`;
+				if (await detectPaperDirectory(candidate)) {
+					openPaper(candidate);
+					return;
+				}
+				handleOpenVaultRel(clean);
+			})();
 		},
-		[vaultPath, openPaper, handleOpenVaultRel, t],
+		[vaultPath, openPaper, handleOpenVaultRel, paperFolders, t],
 	);
 
 	const handleWikiNavigate = useCallback(
@@ -951,7 +1047,7 @@ export default function App() {
 											</p>
 										</div>
 										{isTauri() ? (
-											<div className="flex items-center gap-2">
+											<div className="flex flex-wrap items-center justify-center gap-2">
 												<Button
 													type="button"
 													variant="default"

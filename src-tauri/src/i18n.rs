@@ -6,6 +6,7 @@
 pub struct MenuLabels {
     pub settings: &'static str,
     pub open_vault: &'static str,
+    pub create_vault: &'static str,
     pub refresh_tree: &'static str,
     pub toggle_sidebar: &'static str,
     pub toggle_chat: &'static str,
@@ -19,6 +20,7 @@ pub struct MenuLabels {
 const EN: MenuLabels = MenuLabels {
     settings: "Settings…",
     open_vault: "Open Vault…",
+    create_vault: "Create Vault…",
     refresh_tree: "Refresh File Tree",
     toggle_sidebar: "Toggle Sidebar",
     toggle_chat: "Toggle Chat",
@@ -32,6 +34,7 @@ const EN: MenuLabels = MenuLabels {
 const ZH_CN: MenuLabels = MenuLabels {
     settings: "设置…",
     open_vault: "打开 Vault…",
+    create_vault: "创建 Vault…",
     refresh_tree: "刷新文件树",
     toggle_sidebar: "切换侧边栏",
     toggle_chat: "切换对话",

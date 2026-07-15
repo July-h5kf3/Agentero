@@ -178,7 +178,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 **可插拔 PDF 解析器（`PdfParser`）**：
 - 抽象 `PdfParser` trait，提供两个后端：本地 `LiteparseBackend`（默认，离线开箱即用）与云端 `MineruCloudBackend`（BYOK，配置 MinerU API Key 后启用）。
 - 选择策略：配置并启用 MinerU 时优先云端（解析质量更高），失败自动降级本地 `liteparse`；未配置时始终本地。
-- 质量映射：MinerU → `body_quality=high`；liteparse 文本层 → `medium`；扫描件 OCR → `low`，写入 `metadata.json`。
+- 质量映射：MinerU → `body_quality=high`；liteparse 文本层 → `medium`；扫描件 OCR → `low`，写入 catalog。
 - 隐私：云端 MinerU 需上传 PDF，首次启用时提示；默认本地解析不外传数据。
 - arXiv 入库在无 LaTeX/HTML 时复用同一 `PdfParser` 做兜底解析。
 
@@ -240,7 +240,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `tempfile` | Agent 生成内容临时文件，确认后写入 |
 | `walkdir` | 遍历 Vault 构建索引 |
 | `liteparse` | 默认本地 PDF 解析后端：提取结构化文本 + bounding box，输出 Markdown/JSON/Text，内置 OCR |
-| `rusqlite` | 本地 SQLite 索引，缓存论文元数据与全文检索 |
+| `rusqlite`（`bundled`） | **Catalog**：`.motif/catalog.sqlite` 论文集合 + metadata；可选 FTS / 双链缓存表 |
 
 ### 4.3 核心 Rust 模块设计
 
@@ -258,6 +258,7 @@ src-tauri/src/
     graph.rs       # 图谱节点/边查询
   services/        # 业务逻辑
     vault.rs       # Vault 初始化与校验
+    catalog/       # .motif/catalog.sqlite：schema、papers CRUD、export
     fs.rs          # 安全文件操作（路径白名单）
     input.rs       # 输入分类、意图解析、候选检索
     importer/      # 入库来源抽象（统一落盘结构与状态契约）
@@ -298,25 +299,27 @@ src-tauri/src/
 - **密钥边界**：Motif **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
 - **网络范围**：Agent 网络访问由 agent 进程自身控制；Motif 自身 arXiv 抓取限定于 `arxiv.org` 域名。
 
-## 4.5 本地存储分层：Tauri Store vs SQLite
+## 4.5 本地存储分层：Tauri Store vs Catalog SQLite
 
 MVP 涉及两类本地持久化需求，需要明确分层：
 
-| 维度 | Tauri Store | SQLite 索引 |
+| 维度 | Tauri Store | Catalog SQLite |
 |---|---|---|
-| 数据类型 | 用户配置、最近 Vault 列表、API Key、UI 状态 | 论文元数据、标签、全文检索、双链图、标注坐标缓存 |
-| 数据模型 | Key-Value | 关系表 + FTS |
-| 典型容量 | 几十到几百条记录 | 可扩展到数万条论文与链接 |
-| 查询能力 | 按 key 读取，不适合过滤/聚合 | 支持按作者、年份、标签、关键词过滤，支持复杂查询 |
-| 事实来源 | 是（配置类数据无其他来源） | 否，只能从 `metadata.json` / `NOTES.md` / `highlights.md` / 双链重建 |
-| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/cache.sqlite` 或应用缓存目录 |
-| 损坏处理 | 丢失后用户重新配置 | 删除后可从 Markdown 自动重建 |
+| 数据类型 | 用户配置、最近 Vault 列表、UI 状态、产品侧 BYOK | 论文集合、结构化 metadata；可选 FTS / 双链缓存表 |
+| 数据模型 | Key-Value | 关系表 + 可选 FTS5 |
+| 典型容量 | 几十到几百条记录 | 可扩展到数万条论文 |
+| 查询能力 | 按 key 读取 | 按作者、年份、标签、关键词过滤与列表分页 |
+| 事实来源 | 是（配置类无其他来源） | **是**（论文 meta / 集合）；笔记与 source 仍是文件 |
+| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/catalog.sqlite` |
+| 损坏处理 | 丢失后用户重新配置 | meta 需备份/export；笔记目录仍在。双链缓存表可删重建 |
 
 **使用原则**：
 - Tauri Store 只存配置和机密，不存论文元数据。
-- 每篇论文的元数据事实来源是 `papers/<id>/metadata.json`；`PAPERS.md`、`library.bib`、SQLite 都是它的派生投影。
-- SQLite 是查询缓存/索引，遵守三条纪律：可整删重建、写入 file-first（先写 `metadata.json`/Markdown 再更新索引）、冲突时以文件为准并触发重索引。
-- Agent 路由、搜索、图谱可先读 SQLite，但最终引用和展示必须落回本地文件路径。
+- 论文集合与 metadata 的权威来源是 **catalog**；根级 `PAPERS.md` / `library.bib` **默认不生成**，仅 `catalog:export_*` 按需写出。
+- 人写笔记（`NOTES.md` / `highlights.md`）与 `source/` 仍是文件；`PAPER.md` 仍是可选派生文件。
+- 入库：写 `papers/<id>/` 文件 + 事务写入 catalog；不维护自动同步的 Markdown 总表。
+- Agent 最终引用必须落回 Vault 相对文件路径；L1 总览可靠应用注入列表或临时导出。
+- 专题：[`docs/backend/catalog.md`](../backend/catalog.md)。
 
 ## 5. 核心模块搭配与数据流
 
@@ -325,9 +328,9 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```text
 用户选择目录
   → Rust: dialog.open({ directory: true })
-  → Rust: 初始化 AGENTS.md / PAPERS.md / papers / notes / plans
+  → Rust: 初始化 AGENTS.md / papers / notes / plans / .motif/catalog.sqlite
   → Rust: store.set('recent-vaults', [...])
-  → Frontend: 加载文件树，打开 PAPERS.md
+  → Frontend: 加载文件树；打开 AGENTS.md 或空状态（无默认 PAPERS.md）
 ```
 
 ### 5.2 arXiv 入库闭环
@@ -344,7 +347,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → Rust: 并行下载 LaTeX source / HTML / PDF（按优先级），均存入 `papers/<id>/source/`
   → Rust: 若无 LaTeX source 或需要可读结构化正文，生成 `papers/<id>/PAPER.md`（LaTeX/HTML/PDF → Markdown）
   → Rust: 调用 Agent 生成 `papers/<id>/NOTES.md`（三段论结构），并创建空的 `papers/<id>/highlights.md`
-  → Rust: 写入 `papers/<id>/metadata.json` 并更新 PAPERS.md（派生索引）与 library.bib，同步刷新 `.motif/cache.sqlite`（查询缓存）
+  → Rust: 写 `papers/<id>/` 文件 + 事务写入 catalog.papers（不写默认 PAPERS.md / library.bib / metadata.json）
   → Frontend: 展示进度、成功、失败原因
   → Frontend: 自动打开 NOTES.md 供用户审阅
 ```
@@ -374,11 +377,11 @@ MVP 涉及两类本地持久化需求，需要明确分层：
      └─ 未命中/失败 → Agent 从首页正文抽取候选元数据（标题/作者/年份/摘要）
   → Frontend: 弹出确认面板，用户校对并修正元数据
   → Rust: 生成 citekey（作者 + 年份 + 标题词，冲突加后缀），重复检测（DOI / 标题指纹）
-  → Rust: 临时目录落位为 papers/<citekey>/，写入 metadata.json（type=pdf）
+  → Rust: 临时目录落位为 papers/<citekey>/，catalog 写入 type=pdf
   → Rust: 用当前 PdfParser 全文解析（默认 liteparse；配置并启用则优先 MinerU，失败降级）
           生成 papers/<citekey>/PAPER.md 与 assets/，记录 body_source / body_quality
   → Rust: 调用 Agent 生成 NOTES.md（三段论），创建空的 highlights.md
-  → Rust: 更新 PAPERS.md（派生索引）与 library.bib，同步刷新 .motif/cache.sqlite
+  → Rust: 更新 catalog 行（不自动写 PAPERS.md / library.bib）
   → Frontend: 展示进度、成功、失败原因；自动打开 NOTES.md
 ```
 
@@ -409,7 +412,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 - **双链格式**：`[[Concept]]`、`[[papers/1706.03762/NOTES]]`，与 Obsidian 兼容。
 - **模型**：单向写入 Markdown + 索引反查（不做目标文件自动插入回链）。
-- **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引（`.motif/cache.sqlite` 可删重建）。
+- **提取时机**：Rust 在后台遍历 Vault，构建文件→链接→目标索引（内存；后续可入 catalog 可重建表）。
 - **前端渲染**：remark-wiki-link 系 / Plate 插件将 `[[...]]` 转为可点击链接；序列化必须写回 `[[...]]`。
 - **反链查询**：Rust 根据当前文件路径返回所有引用它的文件列表。
 - **缺失目标**：点击不存在的双链时弹出创建对话框，生成 `notes/<concept>.md`。
@@ -428,7 +431,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 
 **BYOA 原则**：
 - 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
-- 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `PAPERS.md` / `papers/` 等本地资产。
+- 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `papers/` 等本地资产（无默认 PAPERS.md）。
 - 模型与 API Key 完全由 Agent CLI 管理；Motif 只负责 Client 侧会话、权限 UX 与工作流 prompt。
 
 ```text
@@ -443,7 +446,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
   → Rust: 创建/复用 ACP session
   → Rust: 注入工作流 prompt 模板 + AGENTS.md 约束
   → Agent: 按渐进式披露自行读取 Vault
-      （AGENTS.md → PAPERS.md → NOTES.md → highlights.md → PAPER.md → source/）
+      （AGENTS.md → catalog/列表或导出 → NOTES.md → highlights.md → PAPER.md → source/）
   → Rust: 转发权限请求到 Frontend（读/写/网络等）；写文件默认确认后落盘
   → Rust: 接收流式响应，汇总读取过的本地路径
   → Frontend: 展示结果与 Sources；用户确认后写入目标 Markdown
@@ -628,7 +631,7 @@ pulldown-cmark = "0.12"
 regex = "1"
 liteparse = "0.2"
 agent-client-protocol = "0.2"
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.motif/catalog.sqlite
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -672,11 +675,11 @@ tempfile = "3"
 
 | 风险 | 对策 |
 |---|---|
-| arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 `metadata.json` 中标记 `body_source`/`body_quality`。 |
+| arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 catalog 中标记 `body_source`/`body_quality`。 |
 | 云端 MinerU 不可用或数据敏感 | 默认本地 `liteparse` 解析不外传；MinerU 失败自动降级本地；启用前提示 PDF 将上传第三方。 |
 | Agent 输出破坏用户笔记 | 所有写入先走临时文件，用户确认后再覆盖；NOTES.md 用户修改部分优先保留。 |
-| 文件索引性能差 | SQLite 缓存元数据与双链；增量索引，仅在 Vault 变化时重建受影响文件。 |
-| SQLite 索引损坏或过期 | 索引只能从 `metadata.json` 与 Markdown 重建；启动时校验版本，异常时全量重建。 |
+| 论文列表性能差 | Catalog SQLite 权威查询；双链边增量索引。 |
+| Catalog 损坏 | 启动校验 schema；提示从备份恢复；可选从历史 `metadata.json` 导入；导出 `PAPERS.md`/BibTeX 作可读快照。 |
 | iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |
 | 跨平台 UI 差异大 | 核心组件复用，布局通过平台适配层切换。 |
 
@@ -685,5 +688,6 @@ tempfile = "3"
 - `docs/development/prd.md`：产品需求与验收标准。
 - `docs/frontend/ui.md`：视觉主题与简约设计原则。
 - `docs/frontend/components.md`：AI Elements 组件规范与 Chat / 文件树集成约定。
+- `docs/backend/catalog.md`：Catalog SQLite schema 与导出。
 - `docs/backend/wikilinks.md`：Obsidian 兼容双链 / 反链 / 图谱设计与开源选型。
 - `docs/development/roadmap.md`：版本规划与里程碑。

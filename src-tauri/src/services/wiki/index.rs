@@ -208,8 +208,9 @@ impl WikiIndex {
 
     /// Full graph or undirected BFS neighborhood around `center`.
     ///
-    /// Paper folders collapse: any path under `papers/<id>/…` (including NOTES)
-    /// becomes one node `papers/<id>`, labeled with `metadata.json` title when present.
+    /// Paper folders (minimal unit under `papers/` at any depth) collapse: any path
+    /// under a paper folder becomes one node at that folder path (e.g.
+    /// `papers/nlp/1706.03762`), labeled with `metadata.json` title when present.
     pub fn get_graph(
         &self,
         vault_root: &str,
@@ -218,19 +219,20 @@ impl WikiIndex {
     ) -> GraphResponse {
         let depth = depth.unwrap_or(2);
         let root = Path::new(vault_root);
+        let paper_folders = discover_paper_folders(root, &self.files);
 
         // Build full edge list as (source_id, target_id, target_raw) after paper collapse
         let mut full_edges: Vec<(String, String, String)> = Vec::new();
         let mut node_ids: HashSet<String> = HashSet::new();
 
         for f in &self.files {
-            node_ids.insert(collapse_graph_id(f));
+            node_ids.insert(collapse_graph_id(f, &paper_folders));
         }
 
         for e in &self.edges {
-            let source = collapse_graph_id(&e.source);
+            let source = collapse_graph_id(&e.source, &paper_folders);
             let target = match &e.target_path {
-                Some(tp) => collapse_graph_id(tp),
+                Some(tp) => collapse_graph_id(tp, &paper_folders),
                 None => format!("stub:{}", e.target_raw),
             };
             if source == target {
@@ -249,7 +251,7 @@ impl WikiIndex {
             if c.trim().is_empty() {
                 return None;
             }
-            let rel = collapse_graph_id(&to_vault_rel(root, c));
+            let rel = collapse_graph_id(&to_vault_rel(root, c), &paper_folders);
             if node_ids.contains(&rel) {
                 return Some(rel);
             }
@@ -336,17 +338,130 @@ impl WikiIndex {
     }
 }
 
-/// Collapse `papers/<id>/…` (NOTES, metadata, etc.) to a single node `papers/<id>`.
-fn collapse_graph_id(path: &str) -> String {
+/// Discover paper folder roots under `papers/` (any depth).
+///
+/// A paper folder is the parent of marker files (`NOTES.md`, `highlights.md`,
+/// `PAPER.md`, `metadata.json`) or of `source/` / `assets/` path segments.
+fn discover_paper_folders(vault_root: &Path, md_files: &[String]) -> Vec<String> {
+    let mut set: HashSet<String> = HashSet::new();
+
+    let markers = [
+        "NOTES.md",
+        "highlights.md",
+        "PAPER.md",
+        "metadata.json",
+        "notes.md",
+        "paper.md",
+    ];
+
+    for f in md_files {
+        let n = normalize_rel(f);
+        if !n.starts_with("papers/") {
+            continue;
+        }
+        let lower = n.to_ascii_lowercase();
+        for m in markers {
+            let suffix = format!("/{m}");
+            if lower.ends_with(&suffix.to_ascii_lowercase()) || lower == m.to_ascii_lowercase() {
+                if let Some(parent) = n.rsplit_once('/').map(|(p, _)| p.to_string()) {
+                    if parent.starts_with("papers/") {
+                        set.insert(parent);
+                    }
+                }
+            }
+        }
+        // …/source/… or …/assets/… inside papers
+        for seg in ["source", "assets"] {
+            let needle = format!("/{seg}/");
+            if let Some(idx) = lower.find(&needle) {
+                let parent = &n[..idx];
+                if parent.starts_with("papers/") {
+                    set.insert(parent.to_string());
+                }
+            }
+            let needle_end = format!("/{seg}");
+            if lower.ends_with(&needle_end) {
+                if let Some(parent) = n.rsplit_once('/').map(|(p, _)| p) {
+                    if parent.starts_with("papers/") {
+                        set.insert(parent.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Also scan disk under papers/ for directories that contain markers but no md yet
+    let papers_root = vault_root.join("papers");
+    if papers_root.is_dir() {
+        discover_paper_folders_walk(vault_root, &papers_root, &mut set);
+    }
+
+    let mut out: Vec<String> = set.into_iter().collect();
+    // Longest first for prefix matching
+    out.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    out
+}
+
+fn discover_paper_folders_walk(vault_root: &Path, dir: &Path, out: &mut HashSet<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut names: Vec<String> = Vec::new();
+    let mut subdirs: Vec<PathBuf> = Vec::new();
+    for ent in entries.flatten() {
+        let name = ent.file_name().to_string_lossy().to_string();
+        if should_skip_name(&name) {
+            continue;
+        }
+        let path = ent.path();
+        if path.is_dir() {
+            names.push(name.clone());
+            subdirs.push(path);
+        } else {
+            names.push(name);
+        }
+    }
+    if dir_has_paper_markers(&names) {
+        if let Ok(rel) = path_to_rel(vault_root, dir) {
+            if rel.starts_with("papers/") {
+                out.insert(rel);
+            }
+        }
+        // Do not recurse into paper internals
+        return;
+    }
+    for sub in subdirs {
+        discover_paper_folders_walk(vault_root, &sub, out);
+    }
+}
+
+fn dir_has_paper_markers(names: &[String]) -> bool {
+    for n in names {
+        let lower = n.to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "notes.md" | "highlights.md" | "paper.md" | "metadata.json" | "source" | "assets"
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+fn path_to_rel(vault_root: &Path, path: &Path) -> Result<String, ()> {
+    let rel = path.strip_prefix(vault_root).map_err(|_| ())?;
+    Ok(normalize_rel(&rel.to_string_lossy()))
+}
+
+/// Collapse paths under a paper folder to that folder node id.
+fn collapse_graph_id(path: &str, paper_folders: &[String]) -> String {
     let n = normalize_rel(path);
     if n.starts_with("stub:") {
         return n;
     }
-    // papers/<id> or papers/<id>/anything
-    if let Some(rest) = n.strip_prefix("papers/") {
-        let id = rest.split('/').next().unwrap_or(rest);
-        if !id.is_empty() {
-            return format!("papers/{id}");
+    for folder in paper_folders {
+        if n == *folder || n.starts_with(&format!("{folder}/")) {
+            return folder.clone();
         }
     }
     n
@@ -416,9 +531,11 @@ fn graph_node_from_id(vault_root: &Path, id: &str) -> GraphNode {
 
 fn classify_node_path(path: &str) -> GraphNodeType {
     let n = path.replace('\\', "/");
-    // Collapsed paper nodes are exactly papers/<id> (or uncollapsed papers/<id>/…)
+    // Collapsed paper nodes live under papers/ at any depth (not the papers root alone)
     if let Some(rest) = n.strip_prefix("papers/") {
         if !rest.is_empty() {
+            // Org-only folders without paper markers still get Note if they appear;
+            // discovered paper folders always collapse to paths under papers/.
             return GraphNodeType::Paper;
         }
     }

@@ -23,11 +23,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-	isPaperDirectory,
-	isPapersRoot,
-	paperDirFromPath,
-} from "@/lib/paper-metadata";
+import { isPaperDirectory, paperDirFromPath } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
 
@@ -63,7 +59,7 @@ function fileIcon(name: string) {
 function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
 	for (const n of nodes) {
 		if (n.kind !== "directory") continue;
-		if (isPaperDirectory(n.path)) continue;
+		if (isPaperDirectory(n.path, n.children)) continue;
 		into.add(n.path);
 		if (n.children?.length) collectDefaultExpanded(n.children, into);
 	}
@@ -116,10 +112,12 @@ export function FileTree({
 		return selectedPath;
 	}, [selectedPath]);
 
-	const renderNode = (node: FileNode, parentPath: string | null): ReactNode => {
-		// papers/<id> → leaf paper entry (do not expand internals)
-		const parentIsPapers = parentPath != null && isPapersRoot(parentPath);
-		if (node.kind === "directory" && parentIsPapers) {
+	const renderNode = (node: FileNode): ReactNode => {
+		// Paper folder (any depth under papers/) → leaf; org folders expand
+		if (
+			node.kind === "directory" &&
+			isPaperDirectory(node.path, node.children)
+		) {
 			return (
 				<FileTreeFile
 					key={node.id}
@@ -133,7 +131,7 @@ export function FileTree({
 		if (node.kind === "directory") {
 			return (
 				<FileTreeFolder key={node.id} path={node.path} name={node.name}>
-					{node.children?.map((child) => renderNode(child, node.path))}
+					{node.children?.map((child) => renderNode(child))}
 				</FileTreeFolder>
 			);
 		}
@@ -163,12 +161,15 @@ export function FileTree({
 					onSelect={(path) => {
 						const node = byPath.get(path);
 						if (!node) return;
-						if (node.kind === "file" || isPaperDirectory(node.path)) {
+						if (
+							node.kind === "file" ||
+							isPaperDirectory(node.path, node.children)
+						) {
 							onSelectFile(node);
 						}
 					}}
 				>
-					{nodes.map((node) => renderNode(node, null))}
+					{nodes.map((node) => renderNode(node))}
 				</AiFileTree>
 			)}
 		</div>

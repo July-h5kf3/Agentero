@@ -6,6 +6,7 @@
 export type ShortcutId =
 	| "settings"
 	| "openVault"
+	| "createVault"
 	| "refreshTree"
 	| "toggleSidebar"
 	| "toggleChat"
@@ -50,6 +51,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "Vault",
 		key: "o",
 		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "createVault",
+		group: "Vault",
+		key: "n",
+		meta: true,
+		shift: true,
 		whenSettingsClosed: true,
 	},
 	{

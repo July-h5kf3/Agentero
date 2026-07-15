@@ -1,8 +1,21 @@
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { mkdir, readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
+
+export type CreateVaultResult = {
+	path: string;
+	created: string[];
+	openPath: string;
+};
+
+type ApiResult<T> = {
+	ok: boolean;
+	data?: T;
+	error?: { code: string; message: string };
+};
 
 export type FileNode = {
 	id: string;
@@ -102,19 +115,40 @@ export async function pickVaultDirectory(): Promise<string | null> {
 	return path ?? null;
 }
 
-export async function createVaultDirectory(): Promise<string | null> {
+/** Pick a directory that will be scaffolded as a new Motif vault. */
+export async function pickCreateVaultDirectory(): Promise<string | null> {
 	if (!isTauri()) {
-		throw new Error(i18n.t("app:vault.openDesktopOnly"));
+		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
 
-	const selected = await save({
+	const selected = await open({
+		directory: true,
+		multiple: false,
 		title: i18n.t("app:vault.createDialogTitle"),
-		canCreateDirectories: true,
 	});
 
-	if (!selected) return null;
-	await mkdir(selected, { recursive: true });
-	return selected;
+	if (selected === null) return null;
+	const path = Array.isArray(selected) ? selected[0] : selected;
+	return path ?? null;
+}
+
+/**
+ * Scaffold a Motif vault at `path` (Host: vault_create).
+ * Creates papers/notes/plans/.motif, AGENTS.md, catalog.sqlite.
+ * Does not create PAPERS.md / library.bib.
+ */
+export async function createVault(path: string): Promise<CreateVaultResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.createDesktopOnly"));
+	}
+
+	const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
+		path,
+	});
+	if (!result.ok || !result.data) {
+		throw new Error(result.error?.message ?? i18n.t("app:vault.createFailed"));
+	}
+	return result.data;
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {

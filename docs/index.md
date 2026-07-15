@@ -19,10 +19,10 @@ Motif 桌面应用
 │   ├── 面向 BYOA Agent 的 ACP Client
 │   └── 本地配置与可重建缓存
 └── Vault
-    ├── Markdown 文件与 paper notes
-    ├── metadata.json 作为论文元数据事实来源
-    ├── papers/<id>/source/ 下的原始来源文件
-    └── .motif/cache.sqlite 作为可重建缓存
+    ├── Markdown 笔记与 paper notes / source
+    ├── .motif/catalog.sqlite（论文集合 + metadata 权威）
+    ├── 可选导出 PAPERS.md / library.bib（非默认）
+    └── papers/<id>/ 下 NOTES、highlights、可选 PAPER.md、source/
 ```
 
 ## 文档分层
@@ -30,7 +30,7 @@ Motif 桌面应用
 | 分层 | 目录 | 说明 |
 |---|---|---|
 | 前端 | [`frontend/`](frontend/index.md) | 工作台 UI、组件约定、AI Elements 接入、右侧栏行为。 |
-| 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、双链/反链/图谱索引。 |
+| 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、Catalog SQLite、双链/反链/图谱索引。 |
 | 测试 | [`test/`](test/index.md) | 前端 Vitest、Rust 单测、临时 Vault fixture 与验证策略。 |
 | 开发 | [`development/`](development/index.md) | 产品需求、路线图、实现 backlog、发布与开发流程。 |
 
@@ -58,4 +58,5 @@ Motif 桌面应用
 - 前端布局：[`frontend/ui.md`](frontend/ui.md)
 - 后端 API 契约：[`backend/api.md`](backend/api.md)
 - Vault 数据模型：[`backend/data-model.md`](backend/data-model.md)
+- 论文目录库：[`backend/catalog.md`](backend/catalog.md)
 - 测试与验证：[`test/index.md`](test/index.md)

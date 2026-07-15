@@ -24,6 +24,10 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
         .accelerator("CmdOrCtrl+O")
         .build(app)?;
 
+    let create_vault = MenuItemBuilder::with_id("create_vault", labels.create_vault)
+        .accelerator("CmdOrCtrl+Shift+N")
+        .build(app)?;
+
     let refresh_tree = MenuItemBuilder::with_id("refresh_tree", labels.refresh_tree)
         .accelerator("CmdOrCtrl+R")
         .build(app)?;
@@ -52,6 +56,7 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
 
     let file_submenu = SubmenuBuilder::new(app, labels.file)
         .item(&open_vault)
+        .item(&create_vault)
         .item(&refresh_tree)
         .separator()
         .close_window()
@@ -126,6 +131,7 @@ pub fn run() {
             commands::graph::graph_get_backlinks,
             commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
+            commands::vault::vault_create,
             set_locale,
         ])
         .setup(|app| {

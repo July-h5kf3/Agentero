@@ -2,16 +2,20 @@ import { arxivUrls } from "@/lib/arxiv";
 import { readVaultFile } from "@/lib/vault";
 
 /**
- * papers/<id>/metadata.json — single source of truth for paper meta.
- * See docs/DATA_MODEL.md §3.3.
+ * Paper metadata: target of truth is Vault `.motif/catalog.sqlite` (see docs/backend/catalog.md).
+ * Transition: still may load `<paperDir>/metadata.json` until Host paper:* APIs land.
  *
- * PDF/HTML viewers use **remote URLs only** (no local download / vault file read):
- *   pdf_url  → https://arxiv.org/pdf/{id}
- *   html_url → https://arxiv.org/html/{id}
- * If omitted but `arxiv_id` is set, URLs are derived via `arxivUrls()`.
+ * **Paper folder = minimal unit** under `papers/` at any depth, e.g.
+ *   `papers/1706.03762/`
+ *   `papers/nlp/transformers/1706.03762/`
+ * Identified by marker children (NOTES.md, highlights.md, source/, …), not by path depth.
+ *
+ * PDF/HTML viewers use **remote URLs only** (no local download / vault file read).
  */
 export type PaperMetadata = {
 	id: string;
+	/** Vault-relative paper folder path when known (catalog). */
+	path?: string;
 	type: "arxiv" | "pdf" | "html" | "doi" | "other";
 	title: string;
 	authors: string[];
@@ -37,29 +41,199 @@ export type PaperMetadata = {
 /** Only remote http(s) URLs are used for PDF/HTML preview. */
 export type RemoteAsset = { url: string };
 
-/** Extract `…/papers/<id>` from any file path under that paper. */
-export function paperDirFromPath(path: string | null): string | null {
-	if (!path) return null;
-	const norm = path.replace(/\\/g, "/");
-	const m = norm.match(/^(.*\/papers\/[^/]+)/i);
-	return m ? m[1] : null;
+/** Direct-child names that mark a directory as a paper folder. */
+export const PAPER_FILE_MARKERS = [
+	"NOTES.md",
+	"highlights.md",
+	"PAPER.md",
+	"metadata.json",
+] as const;
+
+/** Direct-child directory names that mark a paper folder. */
+export const PAPER_DIR_MARKERS = ["source", "assets"] as const;
+
+type NameKind = { name: string; kind?: "file" | "directory" | string };
+
+function normalizePath(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+/** True when path is the `papers` directory itself (Vault-relative or absolute). */
+export function isPapersRoot(path: string | null): boolean {
+	if (!path) return false;
+	const norm = normalizePath(path);
+	return /(^|\/)papers$/i.test(norm);
 }
 
 /**
- * True when path is exactly a paper folder: `…/papers/<id>`
- * (not a nested file/folder inside the paper).
+ * True when path is somewhere under a `papers` root (not the root itself).
+ * Absolute: `…/papers/…` ; Vault-relative: `papers/…`.
  */
-export function isPaperDirectory(path: string | null): boolean {
-	if (!path) return false;
-	const norm = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	return /\/papers\/[^/]+$/i.test(norm);
+export function isUnderPapers(path: string | null): boolean {
+	if (!path || isPapersRoot(path)) return false;
+	const norm = normalizePath(path);
+	return /(^|\/)papers\//i.test(norm);
 }
 
-/** True when path is the `papers` directory itself. */
-export function isPapersRoot(path: string | null): boolean {
-	if (!path) return false;
-	const norm = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	return /(^|\/)papers$/i.test(norm);
+/** Whether direct children indicate a paper folder (minimal unit). */
+export function directoryHasPaperMarkers(
+	children: NameKind[] | undefined | null,
+): boolean {
+	if (!children?.length) return false;
+	for (const c of children) {
+		const name = c.name;
+		const lower = name.toLowerCase();
+		if (
+			lower === "notes.md" ||
+			lower === "highlights.md" ||
+			lower === "paper.md" ||
+			lower === "metadata.json"
+		) {
+			return true;
+		}
+		const isDir =
+			c.kind === "directory" ||
+			// name-only lists: treat known dir markers as dirs
+			(!c.kind && (lower === "source" || lower === "assets"));
+		if (isDir && (lower === "source" || lower === "assets")) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * True when `path` is a paper folder (minimal unit under `papers/`).
+ * Prefer passing `children` from the file tree so nested org folders are not treated as papers.
+ * Path-only: returns false for bare directories (use markers or `paperDirFromPath` for files).
+ */
+export function isPaperDirectory(
+	path: string | null,
+	children?: NameKind[] | null,
+): boolean {
+	if (!path || !isUnderPapers(path)) return false;
+	if (children !== undefined && children !== null) {
+		return directoryHasPaperMarkers(children);
+	}
+	return false;
+}
+
+/**
+ * Extract the paper folder path from any file/dir path under that paper.
+ * Supports nested layout: `…/papers/topic/1706.03762/NOTES.md` → `…/papers/topic/1706.03762`.
+ *
+ * Uses path structure (known internal files / source|assets), not a single path segment.
+ * Optional `paperFolders` (sorted vault-relative or absolute paper roots) picks the longest matching prefix.
+ */
+export function paperDirFromPath(
+	path: string | null,
+	paperFolders?: string[] | null,
+): string | null {
+	if (!path || !isUnderPapers(path)) return null;
+	const norm = normalizePath(path);
+
+	if (paperFolders?.length) {
+		const folders = [...paperFolders]
+			.map(normalizePath)
+			.filter(Boolean)
+			.sort((a, b) => b.length - a.length);
+		for (const folder of folders) {
+			if (norm === folder || norm.startsWith(`${folder}/`)) {
+				return folder;
+			}
+		}
+	}
+
+	// Known paper-root files → parent is paper folder
+	const fileMarker = /\/(NOTES\.md|highlights\.md|PAPER\.md|metadata\.json)$/i;
+	if (fileMarker.test(norm)) {
+		return norm.replace(fileMarker, "") || null;
+	}
+
+	// …/source/… or …/assets/… → paper is parent of source|assets
+	const nestedAsset = norm.match(
+		/^(.*\/papers\/.+?)\/(source|assets)(?:\/|$)/i,
+	);
+	if (nestedAsset?.[1]) {
+		return nestedAsset[1];
+	}
+	// Vault-relative without leading drive: papers/…/source/…
+	const nestedAssetRel = norm.match(/^(papers\/.+?)\/(source|assets)(?:\/|$)/i);
+	if (nestedAssetRel?.[1]) {
+		return nestedAssetRel[1];
+	}
+
+	// Path is a directory under papers with no further hint → not enough to claim paper unit
+	return null;
+}
+
+/**
+ * Collect paper folder paths from a file tree (any depth under `papers/`).
+ */
+export function collectPaperFoldersFromTree(
+	nodes: Array<{
+		path: string;
+		kind: "file" | "directory";
+		children?: unknown[];
+		name?: string;
+	}>,
+): string[] {
+	const out: string[] = [];
+	const walk = (
+		list: Array<{
+			path: string;
+			kind: "file" | "directory";
+			children?: Array<{
+				path: string;
+				kind: "file" | "directory";
+				name: string;
+				children?: unknown[];
+			}>;
+			name?: string;
+		}>,
+	) => {
+		for (const n of list) {
+			if (n.kind === "directory") {
+				const children = n.children as
+					| Array<{ name: string; kind: "file" | "directory" }>
+					| undefined;
+				if (isUnderPapers(n.path) && directoryHasPaperMarkers(children)) {
+					out.push(normalizePath(n.path));
+					// Do not walk into paper internals for nested papers
+					continue;
+				}
+				if (n.children?.length) {
+					walk(
+						n.children as Array<{
+							path: string;
+							kind: "file" | "directory";
+							children?: Array<{
+								path: string;
+								kind: "file" | "directory";
+								name: string;
+								children?: unknown[];
+							}>;
+							name?: string;
+						}>,
+					);
+				}
+			}
+		}
+	};
+	walk(
+		nodes as Array<{
+			path: string;
+			kind: "file" | "directory";
+			children?: Array<{
+				path: string;
+				kind: "file" | "directory";
+				name: string;
+				children?: unknown[];
+			}>;
+			name?: string;
+		}>,
+	);
+	return out;
 }
 
 export function metadataPathForPaper(paperDir: string): string {
@@ -67,7 +241,7 @@ export function metadataPathForPaper(paperDir: string): string {
 	return `${paperDir}${sep}metadata.json`;
 }
 
-/** papers/<id>/NOTES.md — structured notes for the paper. */
+/** `<paperDir>/NOTES.md` — structured notes for the paper. */
 export function notesPathForPaper(paperDir: string): string {
 	const sep = paperDir.endsWith("/") ? "" : "/";
 	return `${paperDir}${sep}NOTES.md`;
@@ -93,6 +267,26 @@ export async function loadPaperMetadata(
 		return data;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Async paper-folder check when tree children are unavailable
+ * (graph navigation, session restore). Probes marker files on disk.
+ */
+export async function detectPaperDirectory(path: string): Promise<boolean> {
+	if (!isUnderPapers(path) || isPapersRoot(path)) return false;
+	try {
+		await readVaultFile(notesPathForPaper(path));
+		return true;
+	} catch {
+		// continue
+	}
+	try {
+		await readVaultFile(metadataPathForPaper(path));
+		return true;
+	} catch {
+		return false;
 	}
 }
 

@@ -1,7 +1,7 @@
 {
 	"fileTree": {
 		"empty": "Empty folder",
-		"createVault": "New vault",
+		"createVault": "Create vault (⇧⌘N)",
 		"openVault": "Open vault (⌘O)",
 		"refresh": "Refresh (⌘R)",
 		"closeVault": "Close vault"

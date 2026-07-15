@@ -50,7 +50,7 @@
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML：**只读 `metadata.json` 的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**）
+  - PDF / HTML：**只读 catalog 中的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**；过渡期可回退读 `metadata.json`）
   - arXiv 推荐写入：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`

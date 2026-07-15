@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 是唯一事实来源：Markdown、`metadata.json`、源文件和可重建索引都必须能在离开应用后继续被外部工具读取。
+Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中：人的笔记与 source 以 Markdown/文件为准；论文集合与结构化 metadata 以 `.motif/catalog.sqlite` 为准（可导出 `PAPERS.md` / BibTeX，非默认落盘）。离开应用后笔记与源文件仍可被外部工具读取。
 
 ## 当前应用形态
 
@@ -51,6 +51,7 @@ pnpm tauri build
 - `docs/backend/api.md`：Tauri command 与 event 契约。
 - `docs/backend/wikilinks.md`：双链、反链与图谱设计。
 - `docs/backend/data-model.md`：Vault 文件模型。
+- `docs/backend/catalog.md`：论文目录库（`.motif/catalog.sqlite`）与导出。
 - `docs/development/index.md`：产品、路线图、开发和发布流程入口。
 - `docs/development/roadmap.md`：实现状态与路线图。
 - `docs/development/todo.md`：可执行 backlog。

@@ -36,7 +36,7 @@
 事实来源：Vault 内 *.md 中的 [[...]] 文本
      │
      ▼ 解析 + resolve
-边表 / 反查索引（内存 + .motif/cache.sqlite 缓存）
+边表 / 反查索引（内存；后续可入 catalog 可重建表）
      │
      ├── 预览/编辑器：高亮、点击跳转
      ├── 反链面板
@@ -97,8 +97,9 @@ backlinks(path) = { e.source | e.target_path == path }
 
 ### 3.2 缓存位置
 
-- 派生索引：`.motif/cache.sqlite`（与 `DATA_MODEL` 一致）。
-- 可整删重建：重扫 `metadata.json` + 全部 Markdown 中的 `[[...]]`。
+- 双链边：当前为**内存索引**；后续可落入 `.motif/catalog.sqlite` 的可重建表（与 `papers` 权威表区分，见 [`catalog.md`](catalog.md) §6）。
+- **Paper 标题**：读 catalog `papers.title`，不读 `metadata.json`。
+- 可整删重建（仅边表）：重扫全部 Markdown 中的 `[[...]]` + join catalog 取 label。
 - 增量：文件 mtime / fs 事件变化时，仅重算该 `source` 的出边。
 
 ### 3.3 图谱节点 / 边类型（与 TECH §5.6 对齐）
@@ -206,12 +207,12 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 
 | `type` | 判定 |
 |---|---|
-| `paper` | **一个 paper 一个节点**：`papers/<id>/…`（含 `NOTES.md`）全部折叠为 `papers/<id>` |
+| `paper` | **一个 paper 文件夹一个节点**（任意深度）：文件夹内路径折叠为该文件夹 path |
 | `note` | `notes/` 下或其它 Markdown |
-| `index` | 根级 `PAPERS.md` / `AGENTS.md` 等 |
+| `index` | 根级 `AGENTS.md` 及用户导出的索引类 md 等 |
 | `stub` | 未解析目标（`stub:<raw>` 或 missing） |
 
-- **Paper 标签**：优先读 `papers/<id>/metadata.json` 的 `title`；缺失时回退 arXiv id / 目录名。
+- **Paper 标签**：优先读 catalog `papers.title`（按 path）；缺失时回退逻辑 id / 文件夹名。
 - 折叠后自环（同 paper 内文件互链）丢弃。
 
 ### 6.5 不采用
