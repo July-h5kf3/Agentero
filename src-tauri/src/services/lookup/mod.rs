@@ -55,6 +55,18 @@ pub struct LookupImportResult {
     pub title: String,
     pub used_translator: bool,
     pub translator_base_url: String,
+    /// Whether local PDF was present after import download attempt.
+    #[serde(default)]
+    pub pdf: bool,
+    /// Whether local TeX was present after import download attempt.
+    #[serde(default)]
+    pub tex: bool,
+    /// Whether PAPER.md was written (no-TeX liteparse path).
+    #[serde(default)]
+    pub paper_md: bool,
+    /// Download / parse messages (for UI warnings).
+    #[serde(default)]
+    pub asset_messages: Vec<String>,
 }
 
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
@@ -96,19 +108,29 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(&vault, &record)?;
 
-    // 2) Always download PDF; arXiv also unpacks LaTeX into source/
+    // 2) Always download PDF into source/; arXiv also unpacks LaTeX
     // 3) No TeX → liteparse PAPER.md after download
-    let _ = ensure_paper_assets(
+    let mut assets = ensure_paper_assets(
         &paper_dir,
         &id,
         meta.arxiv_id.as_deref(),
         meta.pdf_url.as_deref(),
     )
-    .await;
-    let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+    .await
+    .unwrap_or_else(|e| {
+        let mut r = AssetDownloadResult::default();
+        r.messages.push(format!("asset download error: {e}"));
+        r
+    });
+
+    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
         &vault, &path_rel, &paper_dir,
     )
     .await;
+    assets.paper_md = parse.paper_md;
+    for m in parse.messages {
+        assets.messages.push(m);
+    }
 
     let paper_dir_str = paper_dir.to_string_lossy().to_string();
 
@@ -119,6 +141,10 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
         title: meta.title,
         used_translator,
         translator_base_url: base,
+        pdf: assets.pdf,
+        tex: assets.tex,
+        paper_md: assets.paper_md,
+        asset_messages: assets.messages,
     })
 }
 

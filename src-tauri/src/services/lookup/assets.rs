@@ -1,4 +1,6 @@
 //! Download PDF + arXiv LaTeX source into a paper folder's `source/`.
+//!
+//! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
 use crate::error::AppError;
 use flate2::read::GzDecoder;
@@ -57,6 +59,8 @@ fn walk_has_ext(root: &Path, exts: &[&str]) -> bool {
 }
 
 /// Download missing PDF (always try when URL known) and arXiv LaTeX source.
+///
+/// Order: PDF first, then TeX (arXiv only). Caller runs liteparse when `!tex && pdf`.
 pub async fn ensure_paper_assets(
     paper_dir: &Path,
     id: &str,
@@ -71,24 +75,33 @@ pub async fn ensure_paper_assets(
     let need_tex = !has_local_tex(paper_dir);
 
     if need_pdf {
-        let url = pdf_url
-            .filter(|u| !u.trim().is_empty())
-            .map(str::to_string)
-            .or_else(|| {
-                arxiv_id
-                    .filter(|a| !a.trim().is_empty())
-                    .map(|a| format!("https://arxiv.org/pdf/{}", strip_version(a)))
-            });
-        if let Some(url) = url {
-            match download_pdf(&source, id, &url).await {
-                Ok(()) => {
-                    out.pdf = true;
-                    out.messages.push("pdf ok".into());
-                }
-                Err(e) => out.messages.push(format!("pdf failed: {e}")),
-            }
-        } else {
+        let candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
+        if candidates.is_empty() {
             out.messages.push("pdf: no url".into());
+        } else {
+            let mut last_err = String::new();
+            let mut ok = false;
+            for url in &candidates {
+                match download_pdf(&source, id, url).await {
+                    Ok(()) => {
+                        out.pdf = true;
+                        out.messages.push(format!("pdf ok ({url})"));
+                        ok = true;
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = e.to_string();
+                        out.messages
+                            .push(format!("pdf candidate failed ({url}): {e}"));
+                    }
+                }
+            }
+            if !ok {
+                out.messages.push(format!(
+                    "pdf failed after {} attempt(s): {last_err}",
+                    candidates.len()
+                ));
+            }
         }
     } else {
         out.pdf = true;
@@ -122,6 +135,59 @@ pub async fn ensure_paper_assets(
     Ok(out)
 }
 
+/// Build ordered PDF URL candidates (first success wins).
+fn pdf_url_candidates(id: &str, arxiv_id: Option<&str>, pdf_url: Option<&str>) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut push = |u: String| {
+        let t = u.trim().to_string();
+        if !t.is_empty() && !out.iter().any(|x| x == &t) {
+            out.push(t);
+        }
+    };
+
+    if let Some(u) = pdf_url.map(str::trim).filter(|s| !s.is_empty()) {
+        push(u.to_string());
+    }
+
+    let bare_arxiv = arxiv_id
+        .map(strip_version)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            // Folder / id often is the arXiv id
+            let s = strip_version(id);
+            if looks_like_arxiv_id(&s) {
+                Some(s)
+            } else {
+                None
+            }
+        });
+
+    if let Some(bare) = bare_arxiv {
+        push(format!("https://arxiv.org/pdf/{bare}"));
+        push(format!("https://arxiv.org/pdf/{bare}.pdf"));
+        push(format!("https://export.arxiv.org/pdf/{bare}"));
+    }
+
+    out
+}
+
+fn looks_like_arxiv_id(s: &str) -> bool {
+    // 1412.6980 or hep-th/9901001
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    if s.contains('/') {
+        return true;
+    }
+    let parts: Vec<_> = s.split('.').collect();
+    parts.len() == 2
+        && parts[0].len() == 4
+        && parts[0].chars().all(|c| c.is_ascii_digit())
+        && parts[1].chars().all(|c| c.is_ascii_digit())
+        && (parts[1].len() >= 4 && parts[1].len() <= 5)
+}
+
 async fn download_pdf(source_dir: &Path, id: &str, url: &str) -> Result<(), AppError> {
     let bytes = http_get_bytes(url, Duration::from_secs(180)).await?;
     // Reject HTML error pages disguised as PDF
@@ -132,6 +198,11 @@ async fn download_pdf(source_dir: &Path, id: &str, url: &str) -> Result<(), AppE
     }
     // Some servers omit magic; still write if URL looks like pdf and body is large
     if (url.contains("/pdf/") || url.ends_with(".pdf")) && bytes.len() > 1024 {
+        // Avoid writing HTML error pages
+        let head = String::from_utf8_lossy(&bytes[..bytes.len().min(200)]).to_ascii_lowercase();
+        if head.contains("<!doctype") || head.contains("<html") {
+            return Err(AppError::message("download returned HTML, not PDF"));
+        }
         let name = safe_filename(id, "pdf");
         fs::write(source_dir.join(name), &bytes)?;
         return Ok(());
@@ -280,6 +351,7 @@ async fn http_get_bytes(url: &str, timeout: Duration) -> Result<Vec<u8>, AppErro
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
     let res = client
         .get(url)
+        .header("Accept", "application/pdf,application/octet-stream,*/*")
         .send()
         .await
         .map_err(|e| AppError::message(format!("download: {e}")))?;
@@ -353,5 +425,23 @@ mod tests {
         assert!(dir.join("1234.5678.tex").exists());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pdf_candidates_include_arxiv() {
+        let c = pdf_url_candidates(
+            "1412.6980",
+            Some("1412.6980"),
+            Some("https://arxiv.org/pdf/1412.6980"),
+        );
+        assert!(c.iter().any(|u| u.contains("arxiv.org/pdf/1412.6980")));
+        assert!(c.len() >= 2);
+    }
+
+    #[test]
+    fn looks_like_arxiv_id_basic() {
+        assert!(looks_like_arxiv_id("1412.6980"));
+        assert!(looks_like_arxiv_id("1706.03762"));
+        assert!(!looks_like_arxiv_id("not-an-id"));
     }
 }

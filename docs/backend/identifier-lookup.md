@@ -67,13 +67,13 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 
 | 资源 | 行为 |
 |---|---|
-| **PDF** | 始终尝试下载到 `{paper}/source/{id}.pdf`（URL 来自 `pdf_url` 或 arXiv 推导） |
+| **PDF** | **始终**尝试下载到 `{paper}/source/{id}.pdf`（`pdf_url` + arXiv 多候选 URL 回退） |
 | **arXiv LaTeX** | 从 `https://arxiv.org/e-print/{id}` 下载；gzip/tar 解压到 `source/`（路径穿越拒绝） |
 | **已有文件** | 跳过对应资源 |
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
 按需补下 / 解析：
-- **单篇 paper 行 Download**：缺 PDF，或 arXiv 可取 TeX 但缺本地 TeX → `paper_download_assets`（下载后仍无 TeX 则自动尝试 `PAPER.md`）。
+- **单篇 paper 行 Download**：缺 PDF、或无 `source/`、或 arXiv 可取 TeX 但缺本地 TeX → `paper_download_assets`（PDF → TeX → 无 TeX 则 `PAPER.md`）。
 - **单篇 paper 行眼睛**：有 PDF、无 TeX、无 `PAPER.md` → `paper_parse_body`。
 - **Library 行 Download**：库内任一篇仍缺资源时 → 批量 `paper_download_assets`。
 - **Library 行眼睛**：库内任一篇需生成 `PAPER.md` 时 → 批量 `paper_parse_body`。

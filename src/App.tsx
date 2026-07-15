@@ -784,7 +784,7 @@ export default function App() {
 			if (!vaultPath) {
 				throw new Error(t("sidebar:lookup.needsVault"));
 			}
-			const { paperDir } = await addPaperByIdentifier({
+			const result = await addPaperByIdentifier({
 				vaultRoot: vaultPath,
 				parentDir: lookupParentDir,
 				text,
@@ -794,7 +794,20 @@ export default function App() {
 			// Rebuild Backlinks/Graph index so new NOTES.md / links are visible.
 			await rebuildWikiAndNotify(vaultPath);
 			await refreshLibrary();
-			openPaper(paperDir);
+			openPaper(result.paperDir);
+			// Surface download failure without failing the whole import
+			if (result.pdf === false) {
+				const detail =
+					result.assetMessages
+						?.filter((m) => /pdf/i.test(m))
+						.slice(-2)
+						.join("; ") ?? "";
+				setError(
+					detail
+						? t("sidebar:lookup.pdfDownloadFailedDetail", { detail })
+						: t("sidebar:lookup.pdfDownloadFailed"),
+				);
+			}
 		},
 		[
 			vaultPath,

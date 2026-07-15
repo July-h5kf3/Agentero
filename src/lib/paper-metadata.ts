@@ -129,6 +129,19 @@ export function paperHasLocalPaperMd(node: TreeWalkNode): boolean {
 	return false;
 }
 
+/** True when paper folder has a direct child directory named `source`. */
+export function paperHasLocalSourceDir(node: TreeWalkNode): boolean {
+	for (const child of node.children ?? []) {
+		if (
+			(child.kind === "directory" || !child.kind) &&
+			/^source$/i.test(child.name)
+		) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /**
  * Show file-tree eye (parse body) when:
  * - local PDF exists,
@@ -144,9 +157,12 @@ export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
 }
 
 /**
- * Show file-tree Download when:
- * - local PDF is missing, or
+ * Show file-tree Download when local archive is incomplete:
+ * - no local PDF, or
+ * - no `source/` directory, or
  * - TeX is fetchable (arXiv) but no local `.tex`/`.ltx` yet.
+ *
+ * Click handler: download PDF; if arXiv also try TeX; if still no TeX → liteparse PAPER.md.
  *
  * `canFetchTex`: true if catalog has arxiv_id / type=arxiv, or folder name looks like arXiv id.
  */
@@ -155,8 +171,12 @@ export function paperNeedsAssetDownload(
 	opts?: { canFetchTex?: boolean },
 ): boolean {
 	const hasPdf = paperHasLocalPdf(node);
+	const hasSource = paperHasLocalSourceDir(node);
 	const hasTex = paperHasLocalTex(node);
-	if (!hasPdf) return true;
+
+	// No PDF and/or no source/ → need download (demo shells, failed import, etc.)
+	if (!hasPdf || !hasSource) return true;
+
 	const canTex =
 		opts?.canFetchTex === true ||
 		// Heuristic when catalog map not ready: folder name is arXiv id

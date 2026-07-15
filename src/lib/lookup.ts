@@ -16,6 +16,12 @@ export type LookupAddResult = {
 	title: string;
 	usedTranslator: boolean;
 	translatorBaseUrl: string;
+	/** Local PDF present after import download. */
+	pdf?: boolean;
+	/** Local TeX present after import download. */
+	tex?: boolean;
+	paperMd?: boolean;
+	assetMessages?: string[];
 };
 
 export type PaperAssetsDownloadResult = {
@@ -45,6 +51,10 @@ type HostLookupResult = {
 	title: string;
 	usedTranslator: boolean;
 	translatorBaseUrl: string;
+	pdf?: boolean;
+	tex?: boolean;
+	paperMd?: boolean;
+	assetMessages?: string[];
 };
 
 function resolveTranslatorBaseUrl(
@@ -110,6 +120,10 @@ export async function addPaperByIdentifier(opts: {
 		title: result.data.title,
 		usedTranslator: result.data.usedTranslator,
 		translatorBaseUrl: result.data.translatorBaseUrl,
+		pdf: result.data.pdf,
+		tex: result.data.tex,
+		paperMd: result.data.paperMd,
+		assetMessages: result.data.assetMessages,
 	};
 }
 

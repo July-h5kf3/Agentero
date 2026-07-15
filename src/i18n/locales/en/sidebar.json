@@ -7,7 +7,7 @@
 		"invalidName": "Invalid name. Do not use path separators.",
 		"needsVault": "Open a vault before creating files.",
 		"alreadyExists": "「{{name}}」 already exists.",
-		"downloadAssets": "Download missing PDF / LaTeX",
+		"downloadAssets": "Download PDF (and LaTeX if available)",
 		"downloadAllMissing": "Download all missing PDF / LaTeX",
 		"downloadFailed": "Failed to download paper assets.",
 		"parseBody": "Parse PDF to PAPER.md",
@@ -47,7 +47,9 @@
 		"invalidId": "Could not parse an arXiv identifier.",
 		"unsupportedId": "Only arXiv URL or ID is supported for now.",
 		"fetchFailed": "Failed to fetch metadata.",
-		"needsVault": "Open a vault first."
+		"needsVault": "Open a vault first.",
+		"pdfDownloadFailed": "Paper added, but PDF download failed. Use the Download button on the paper row to retry.",
+		"pdfDownloadFailedDetail": "Paper added, but PDF download failed: {{detail}}"
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",

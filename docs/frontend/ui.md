@@ -32,9 +32,10 @@
 - **Library 行 Download**：当库内**任一** paper 仍缺 PDF，或 arXiv 缺 TeX 时，Library 标题右侧显示 Download；点击**批量**对全部缺失项调用 `paper_download_assets`（逐篇，已有资源跳过）。
 - **Library 行 Parse（眼睛）**：当库内**任一** paper **有 PDF、无 TeX、无 `PAPER.md`** 时，Library 标题右侧另显示眼睛图标；点击**批量**对全部符合条件项调用 `paper_parse_body`（已有 `PAPER.md` 或已有 TeX 跳过）。
 - **Paper 行 Download**：单篇 paper 行最右侧在需要补资源时显示 `Download`：
-  - 本地**没有 PDF** → 显示（尽量下 PDF）；
+  - 本地**没有 PDF**，或**没有 `source/`** → 显示；
   - 或可获取 TeX（catalog `arxiv_id` / `type=arxiv` / 文件夹名像 arXiv id）但本地**没有** `.tex`/`.ltx` → 显示；
-  - 已有 PDF，且（非 arXiv 或已有 TeX）→ 不显示。
+  - 点击后：先下 PDF → arXiv 尽量下 TeX → **仍无 TeX** 则 liteparse 写 `PAPER.md`；
+  - 已有 PDF + `source/`，且（非 arXiv 或已有 TeX）→ 不显示。
 - **Paper 行 Parse（眼睛）**：本地**有 PDF**、**无** `.tex`/`.ltx`、**无** `PAPER.md` 时，行尾显示眼睛图标 → `paper_parse_body`（liteparse → `PAPER.md`）。有 TeX 时不显示（Agent 可直接读 TeX）。可与 Download 同时出现（例如 PDF 已有但尚缺 PAPER.md）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
