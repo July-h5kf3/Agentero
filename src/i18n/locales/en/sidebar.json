@@ -13,7 +13,7 @@
 		"downloadReason": {
 			"noPdf": "Missing PDF",
 			"noSource": "Missing source/ folder",
-			"noPaperMd": "Missing PAPER.md"
+			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
 		}
 	},
 	"papersLibrary": {

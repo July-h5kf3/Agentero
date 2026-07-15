@@ -29,11 +29,11 @@
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
-- **Library 行 Download**：当库内**任一** paper 缺 PDF / `source/` / `PAPER.md` 时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
+- **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**（无眼睛图标）：下列任一成立即显示，hover 列出原因：
   - 本地**没有 PDF**；
   - **没有 `source/`**；
-  - **没有 `PAPER.md`**；
+  - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**；有 TeX 时不要求 `PAPER.md`）；
   - 点击后：PDF 写入 `source/` → arXiv 尽量下 TeX → **无 TeX** 时 liteparse 写 `PAPER.md`。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：

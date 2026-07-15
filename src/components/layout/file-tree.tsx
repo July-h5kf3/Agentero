@@ -74,7 +74,7 @@ function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
 const DOWNLOAD_REASON_KEYS = {
 	noPdf: "fileTree.downloadReason.noPdf",
 	noSource: "fileTree.downloadReason.noSource",
-	noPaperMd: "fileTree.downloadReason.noPaperMd",
+	noBody: "fileTree.downloadReason.noBody",
 } as const;
 
 export type TreeCreateKind = "file" | "folder";

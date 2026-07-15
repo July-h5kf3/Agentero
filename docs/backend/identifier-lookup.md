@@ -73,7 +73,7 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
 按需补下（仅 Download 图标，无眼睛）：
-- **显示条件**：缺 PDF **或** 缺 `source/` **或** 缺 `PAPER.md`（hover 说明原因）。
+- **显示条件**：缺 PDF **或** 缺 `source/` **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。hover 说明原因。
 - **点击**：`paper_download_assets` → PDF 到 `source/` → arXiv 尽量 TeX → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
