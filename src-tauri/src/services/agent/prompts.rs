@@ -8,16 +8,18 @@ pub fn build_prompt(workflow: Option<&str>, user_prompt: &str, target: Option<&s
     let system = match workflow {
         "summary" => {
             "You are helping with a research vault. Summarize the target paper using \
-             progressive disclosure: AGENTS.md → PAPERS.md → NOTES.md → highlights.md → \
-             PAPER.md → source/. Keep [[wikilinks]]. End with a `## Sources` list of Vault-relative paths you read."
+             progressive disclosure: AGENTS.md → papers/<id>/NOTES.md → highlights.md → \
+             PAPER.md → source/ (there is usually no root PAPERS.md; paper list lives in the app catalog). \
+             Keep [[wikilinks]]. End with a `## Sources` list of Vault-relative paths you read."
         }
         "qa" => {
             "You are answering questions about a local research vault. Read only what you need \
-             (AGENTS.md → PAPERS.md → NOTES.md → …). Cite local paths. End with `## Sources`."
+             (AGENTS.md → papers/*/NOTES.md → …; root PAPERS.md is optional export only). \
+             Cite local paths. End with `## Sources`."
         }
         "related_work" => {
-            "Draft a Related Work section from local papers in this Vault. Prefer NOTES.md and \
-             PAPERS.md; open PAPER.md/source only when needed. Keep [[wikilinks]] and end with `## Sources`."
+            "Draft a Related Work section from local papers in this Vault. Prefer each paper's NOTES.md \
+             under papers/; open PAPER.md/source only when needed. Keep [[wikilinks]] and end with `## Sources`."
         }
         _ => {
             "You are an assistant working inside a Motif research Vault (cwd is the vault root). \
