@@ -1,5 +1,6 @@
 import type {
 	PdfAskAnchor,
+	PdfAskImage,
 	PdfAskMessage,
 	PdfAskNormalizedRect,
 	PdfAskThread,
@@ -21,7 +22,18 @@ function isRect(v: unknown): v is PdfAskNormalizedRect {
 }
 
 function isTrigger(v: unknown): v is PdfAskTrigger {
-	return v === "selection" || v === "dblclick" || v === "dwell";
+	return (
+		v === "selection" || v === "dblclick" || v === "dwell" || v === "marquee"
+	);
+}
+
+function parseImage(v: unknown): PdfAskImage | undefined {
+	if (!isRecord(v)) return undefined;
+	if (typeof v.mimeType !== "string" || typeof v.dataUrl !== "string") {
+		return undefined;
+	}
+	if (!v.dataUrl.startsWith("data:")) return undefined;
+	return { mimeType: v.mimeType, dataUrl: v.dataUrl };
 }
 
 function parseMessage(v: unknown): PdfAskMessage | null {
@@ -46,6 +58,8 @@ function parseMessage(v: unknown): PdfAskMessage | null {
 			uri: typeof s.uri === "string" ? s.uri : undefined,
 		}));
 	}
+	const image = parseImage(v.image);
+	if (image) msg.image = image;
 	return msg;
 }
 
@@ -82,7 +96,7 @@ export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 		if (!parsed) return null;
 		messages.push(parsed);
 	}
-	return {
+	const thread: PdfAskThread = {
 		version: 1,
 		id: raw.id,
 		paperPath: raw.paperPath,
@@ -92,27 +106,76 @@ export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 		anchor,
 		messages,
 	};
+	const pending = parseImage(raw.pendingImage);
+	if (pending) thread.pendingImage = pending;
+	return thread;
 }
 
+function shorten(text: string, max: number): string {
+	const t = text.trim().replace(/\s+/g, " ");
+	if (!t) return "";
+	return t.length > max ? `${t.slice(0, Math.max(1, max - 1))}…` : t;
+}
+
+/** Longer preview for tooltips / gutter aria. */
 export function threadPreview(thread: PdfAskThread): string {
 	const firstUser = thread.messages.find((m) => m.role === "user");
 	if (firstUser?.content.trim()) {
-		const t = firstUser.content.trim().replace(/\s+/g, " ");
-		return t.length > 80 ? `${t.slice(0, 77)}…` : t;
+		return shorten(firstUser.content, 80) || thread.id;
 	}
-	const q = thread.anchor.quote?.trim().replace(/\s+/g, " ") ?? "";
-	if (q) return q.length > 80 ? `${q.slice(0, 77)}…` : q;
+	if (firstUser?.image || thread.pendingImage) return "🖼";
+	const q = thread.anchor.quote?.trim() ?? "";
+	if (q) return shorten(q, 80);
+	if (thread.anchor.trigger === "marquee") return "🖼";
 	return thread.id;
 }
 
-export function threadY(thread: PdfAskThread): number {
+/** Shortest conversation summary for dialog header. */
+export function threadTitle(
+	thread: PdfAskThread,
+	emptyFallback: string,
+	imageFallback?: string,
+): string {
+	const firstUser = thread.messages.find((m) => m.role === "user");
+	if (firstUser?.content.trim()) {
+		return shorten(firstUser.content, 28) || emptyFallback;
+	}
+	if (firstUser?.image || thread.pendingImage) {
+		return imageFallback ?? emptyFallback;
+	}
+	const firstAssistant = thread.messages.find((m) => m.role === "assistant");
+	if (firstAssistant?.content.trim()) {
+		return shorten(firstAssistant.content, 28) || emptyFallback;
+	}
+	return emptyFallback;
+}
+
+/** True once the user has sent at least one turn (question / image ask). */
+export function threadHasUserQuestion(thread: PdfAskThread): boolean {
+	return thread.messages.some((m) => m.role === "user");
+}
+
+/** Pin near the end of the selection (right-center of union rects). */
+export function threadPin(thread: PdfAskThread): { x: number; y: number } {
 	const rects = thread.anchor.rects;
-	if (!rects.length) return 0.1;
+	if (!rects.length) return { x: 0.5, y: 0.12 };
+	let minX = 1;
 	let minY = 1;
+	let maxX = 0;
 	let maxY = 0;
 	for (const r of rects) {
+		minX = Math.min(minX, r.x);
 		minY = Math.min(minY, r.y);
+		maxX = Math.max(maxX, r.x + r.w);
 		maxY = Math.max(maxY, r.y + r.h);
 	}
-	return Math.min(1, Math.max(0, (minY + maxY) / 2));
+	// Sit just past the selection’s right edge, vertically centered
+	const x = Math.min(0.98, Math.max(0.02, maxX + 0.008));
+	const y = Math.min(0.98, Math.max(0.02, (minY + maxY) / 2));
+	return { x, y };
+}
+
+/** @deprecated use threadPin().y */
+export function threadY(thread: PdfAskThread): number {
+	return threadPin(thread).y;
 }

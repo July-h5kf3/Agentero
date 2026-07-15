@@ -4,8 +4,10 @@ import {
 	clientRectsToNormalized,
 	createEmptyThread,
 	parsePdfAskThread,
+	threadHasUserQuestion,
+	threadPin,
 	threadPreview,
-	threadY,
+	threadTitle,
 } from "@/lib/pdf-ask";
 import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
 
@@ -39,7 +41,41 @@ describe("pdf-ask schema", () => {
 		expect(t.id).toBe("t1");
 		expect(t.anchor.page).toBe(2);
 		expect(threadPreview(t)).toContain("What does this mean");
-		expect(threadY(t)).toBeCloseTo(0.225, 3);
+		expect(threadTitle(t, "New")).toContain("What does this mean");
+		const pin = threadPin(t);
+		expect(pin.y).toBeCloseTo(0.225, 3);
+		expect(pin.x).toBeGreaterThan(0.3);
+	});
+
+	it("uses empty fallback title when no messages", () => {
+		const t = createEmptyThread({
+			paperPath: "papers/x",
+			anchor: {
+				page: 1,
+				rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+				trigger: "selection",
+			},
+		});
+		expect(threadTitle(t, "新提问")).toBe("新提问");
+		expect(threadHasUserQuestion(t)).toBe(false);
+	});
+
+	it("detects user question after a user turn", () => {
+		const t = createEmptyThread({
+			paperPath: "papers/x",
+			anchor: {
+				page: 1,
+				rects: [{ x: 0, y: 0, w: 0.1, h: 0.1 }],
+				trigger: "selection",
+			},
+		});
+		t.messages.push({
+			id: "m1",
+			role: "user",
+			content: "hello",
+			createdAt: new Date().toISOString(),
+		});
+		expect(threadHasUserQuestion(t)).toBe(true);
 	});
 
 	it("rejects bad version", () => {

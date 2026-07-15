@@ -3,8 +3,8 @@ import { nanoid } from "nanoid";
 
 import {
 	parsePdfAskThread,
+	threadPin,
 	threadPreview,
-	threadY,
 } from "@/lib/pdf-ask/schema";
 import type {
 	PdfAskAnchor,
@@ -101,14 +101,18 @@ export async function listPdfAskSummaries(
 	paperAbsPath: string,
 ): Promise<PdfAskThreadSummary[]> {
 	const threads = await listPdfAskThreads(paperAbsPath);
-	return threads.map((t) => ({
-		id: t.id,
-		page: t.anchor.page,
-		y: threadY(t),
-		preview: threadPreview(t),
-		updatedAt: t.updatedAt,
-		status: t.status,
-	}));
+	return threads.map((t) => {
+		const pin = threadPin(t);
+		return {
+			id: t.id,
+			page: t.anchor.page,
+			x: pin.x,
+			y: pin.y,
+			preview: threadPreview(t),
+			updatedAt: t.updatedAt,
+			status: t.status,
+		};
+	});
 }
 
 export async function readPdfAskThread(
@@ -144,13 +148,33 @@ export async function writePdfAskThread(
 	await writeVaultFile(path, `${JSON.stringify(next, null, 2)}\n`);
 }
 
+export async function deletePdfAskThread(
+	paperAbsPath: string,
+	threadId: string,
+): Promise<void> {
+	if (!isTauri()) {
+		memoryBucket(paperAbsPath).delete(threadId);
+		return;
+	}
+	try {
+		const { remove } = await import("@tauri-apps/plugin-fs");
+		await remove(threadPath(paperAbsPath, threadId));
+	} catch {
+		// missing file is fine
+	}
+}
+
 export function toSummaries(threads: PdfAskThread[]): PdfAskThreadSummary[] {
-	return threads.map((t) => ({
-		id: t.id,
-		page: t.anchor.page,
-		y: threadY(t),
-		preview: threadPreview(t),
-		updatedAt: t.updatedAt,
-		status: t.status,
-	}));
+	return threads.map((t) => {
+		const pin = threadPin(t);
+		return {
+			id: t.id,
+			page: t.anchor.page,
+			x: pin.x,
+			y: pin.y,
+			preview: threadPreview(t),
+			updatedAt: t.updatedAt,
+			status: t.status,
+		};
+	});
 }

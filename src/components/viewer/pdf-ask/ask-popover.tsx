@@ -1,8 +1,31 @@
-import { Loader2, MessageSquare, Send, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { MessageSquareIcon, MinusIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import {
+	Conversation,
+	ConversationContent,
+	ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+	Message,
+	MessageContent,
+	MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+	PromptInput,
+	PromptInputBody,
+	PromptInputSubmit,
+	PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { threadTitle } from "@/lib/pdf-ask/schema";
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { cn } from "@/lib/utils";
 
@@ -11,9 +34,18 @@ type AskPopoverProps = {
 	screen: { x: number; y: number };
 	streaming: boolean;
 	error: string | null;
+	/** Prefill single-line prompt (e.g. page number on double-click) */
+	initialPrompt?: string;
 	onSend: (question: string) => void;
-	onClose: () => void;
-	onEnd: () => void;
+	/** Collapse dialog; keep margin pin */
+	onHide: () => void;
+	/** Remove thread + pin permanently */
+	onDelete: () => void;
+	onStop?: () => void;
+	/** Cancel delayed hover-hide while pointer is over dialog */
+	onPointerEnter?: () => void;
+	/** Schedule delayed hide when leaving dialog */
+	onPointerLeave?: () => void;
 };
 
 export function AskPopover({
@@ -21,155 +53,202 @@ export function AskPopover({
 	screen,
 	streaming,
 	error,
+	initialPrompt,
 	onSend,
-	onClose,
-	onEnd,
+	onHide,
+	onDelete,
+	onStop,
+	onPointerEnter,
+	onPointerLeave,
 }: AskPopoverProps) {
 	const { t } = useTranslation("viewer");
-	const [draft, setDraft] = useState("");
-	const listRef = useRef<HTMLDivElement>(null);
-	const inputRef = useRef<HTMLTextAreaElement>(null);
 
-	// Focus when switching threads
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-focus on thread change
-	useEffect(() => {
-		inputRef.current?.focus();
-	}, [thread.id]);
+	// Prefer opening just to the right of the pin; flip left if near viewport edge
+	const cardW = 360;
+	const cardH = 360;
+	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+	let left = screen.x + 6;
+	if (left + cardW > vw - 12) {
+		left = Math.max(12, screen.x - cardW - 14);
+	}
+	left = Math.min(Math.max(12, left), vw - cardW - 12);
+	const top = Math.min(Math.max(12, screen.y - 24), vh - cardH - 12);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll when messages grow
-	useEffect(() => {
-		const el = listRef.current;
-		if (!el) return;
-		el.scrollTop = el.scrollHeight;
-	}, [thread.messages, streaming]);
-
-	const submit = () => {
-		const q = draft.trim();
-		if (!q || streaming) return;
-		setDraft("");
-		onSend(q);
-	};
-
-	// Keep card inside viewport
-	const left = Math.min(
-		Math.max(12, screen.x + 8),
-		typeof window !== "undefined" ? window.innerWidth - 340 : screen.x,
+	const title = threadTitle(
+		thread,
+		t("pdfAsk.newTitle"),
+		t("pdfAsk.imageTitle"),
 	);
-	const top = Math.min(
-		Math.max(12, screen.y),
-		typeof window !== "undefined" ? window.innerHeight - 320 : screen.y,
-	);
+	const pendingImage = thread.pendingImage;
 
 	return (
 		<div
 			className={cn(
-				"fixed z-50 flex w-[min(320px,calc(100vw-24px))] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg",
+				"fixed z-50 flex max-h-[min(420px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] flex-col overflow-hidden",
+				"rounded-2xl border border-border/80 bg-background text-foreground shadow-2xl ring-1 ring-black/5 dark:ring-white/10",
 			)}
 			style={{ left, top }}
 			role="dialog"
 			aria-label={t("pdfAsk.dialogLabel")}
 			onMouseDown={(e) => e.stopPropagation()}
+			onMouseEnter={onPointerEnter}
+			onMouseLeave={onPointerLeave}
 		>
-			<div className="flex items-center gap-1.5 border-border border-b px-2.5 py-1.5">
-				<MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
-				<span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
-					{thread.anchor.quote
-						? t("pdfAsk.quoteLine", {
-								page: thread.anchor.page,
-								quote:
-									thread.anchor.quote.length > 48
-										? `${thread.anchor.quote.slice(0, 45)}…`
-										: thread.anchor.quote,
-							})
-						: t("pdfAsk.pageOnly", { page: thread.anchor.page })}
+			<div className="flex shrink-0 items-center gap-2 border-border/60 border-b px-3 py-2">
+				<MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+				<span className="min-w-0 flex-1 truncate font-medium text-foreground text-sm">
+					{title}
 				</span>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("pdfAsk.end")}
-					title={t("pdfAsk.end")}
-					onClick={onEnd}
-				>
-					<span className="text-[10px] font-medium">✓</span>
-				</Button>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("pdfAsk.close")}
-					onClick={onClose}
-				>
-					<X className="size-3.5" />
-				</Button>
+				<TooltipProvider delayDuration={200}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label={t("pdfAsk.delete")}
+								onClick={onDelete}
+							>
+								<Trash2Icon className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">{t("pdfAsk.delete")}</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label={t("pdfAsk.hide")}
+								onClick={onHide}
+							>
+								<MinusIcon className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">{t("pdfAsk.hide")}</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
 			</div>
 
-			<div
-				ref={listRef}
-				className="motif-scroll max-h-48 min-h-[4rem] space-y-2 overflow-y-auto px-2.5 py-2"
-			>
-				{thread.messages.length === 0 && !streaming ? (
-					<p className="text-muted-foreground text-xs">
-						{t("pdfAsk.emptyHint")}
+			{pendingImage ? (
+				<div className="shrink-0 border-border/40 border-b px-3 py-2">
+					<img
+						src={pendingImage.dataUrl}
+						alt={t("pdfAsk.imageAlt")}
+						className="max-h-36 w-full rounded-lg object-contain ring-1 ring-border/60"
+					/>
+					<p className="mt-1 text-[11px] text-muted-foreground">
+						{t("pdfAsk.imageResizeHint")}
 					</p>
-				) : null}
-				{thread.messages.map((m) => (
-					<div
-						key={m.id}
-						className={cn(
-							"rounded-lg px-2 py-1.5 text-xs leading-relaxed",
-							m.role === "user"
-								? "ml-4 bg-primary/10 text-foreground"
-								: m.role === "assistant"
-									? "mr-2 bg-muted text-foreground"
-									: "text-muted-foreground",
-						)}
-					>
-						{m.content}
-					</div>
-				))}
-				{streaming ? (
-					<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-						<Loader2 className="size-3 animate-spin" />
-						{t("pdfAsk.thinking")}
-					</div>
-				) : null}
-				{error ? (
-					<p className="text-destructive text-xs" role="alert">
-						{error}
-					</p>
-				) : null}
+				</div>
+			) : null}
+
+			<div className="flex min-h-0 flex-1 flex-col">
+				<Conversation className="min-h-0 flex-1">
+					<ConversationContent className="gap-3 px-3 py-2.5">
+						{thread.messages.map((m) => {
+							if (m.role === "system") {
+								return (
+									<p
+										key={m.id}
+										className="text-center text-muted-foreground text-xs"
+									>
+										{m.content}
+									</p>
+								);
+							}
+							const from = m.role === "user" ? "user" : "assistant";
+							const isEmptyAssistant =
+								from === "assistant" && !m.content.trim() && streaming;
+							return (
+								<Message key={m.id} from={from} className="max-w-full">
+									<MessageContent
+										className={cn(
+											"text-sm",
+											from === "user" && "px-3 py-2",
+											from === "assistant" && "w-full max-w-full",
+										)}
+									>
+										{m.image ? (
+											<img
+												src={m.image.dataUrl}
+												alt={t("pdfAsk.imageAlt")}
+												className="mb-2 max-h-40 max-w-full rounded-md object-contain"
+											/>
+										) : null}
+										{isEmptyAssistant ? (
+											<Shimmer className="text-sm" as="p">
+												{t("pdfAsk.thinking")}
+											</Shimmer>
+										) : m.content.trim() ? (
+											<MessageResponse
+												isAnimating={
+													streaming &&
+													from === "assistant" &&
+													m.id ===
+														thread.messages[thread.messages.length - 1]?.id
+												}
+											>
+												{m.content}
+											</MessageResponse>
+										) : null}
+									</MessageContent>
+								</Message>
+							);
+						})}
+						{error ? (
+							<p className="text-destructive text-xs" role="alert">
+								{error}
+							</p>
+						) : null}
+					</ConversationContent>
+					<ConversationScrollButton className="bottom-2 size-8 shadow-md" />
+				</Conversation>
 			</div>
 
-			<div className="flex items-end gap-1 border-border border-t p-2">
-				<textarea
-					ref={inputRef}
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					rows={2}
-					placeholder={t("pdfAsk.placeholder")}
-					disabled={streaming}
-					className="motif-scroll max-h-24 min-h-[2.5rem] flex-1 resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"
-					onKeyDown={(e) => {
-						if (e.key === "Enter" && !e.shiftKey) {
-							e.preventDefault();
-							submit();
-						}
-						if (e.key === "Escape") {
-							e.preventDefault();
-							onClose();
-						}
+			<div className="shrink-0 border-border/60 border-t p-2">
+				<PromptInput
+					key={`${thread.id}-${initialPrompt ?? ""}`}
+					className="w-full rounded-full border-border/80 bg-background shadow-none"
+					inputGroupClassName="overflow-visible"
+					onSubmit={({ text }) => {
+						const q = text.trim();
+						// Allow empty text when a crop is pending (image-only ask)
+						if (streaming) return;
+						if (!q && !thread.pendingImage) return;
+						onSend(q);
 					}}
-				/>
-				<Button
-					type="button"
-					size="icon-sm"
-					disabled={streaming || !draft.trim()}
-					aria-label={t("pdfAsk.send")}
-					onClick={submit}
 				>
-					<Send className="size-3.5" />
-				</Button>
+					<PromptInputBody>
+						<div className="flex w-full items-center gap-1 px-1.5 py-0.5">
+							<PromptInputTextarea
+								placeholder={
+									pendingImage
+										? t("pdfAsk.placeholderImage")
+										: t("pdfAsk.placeholder")
+								}
+								defaultValue={initialPrompt}
+								disabled={streaming}
+								rows={1}
+								className="min-h-8 max-h-8 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 text-sm leading-5 shadow-none focus-visible:ring-0"
+								onKeyDown={(e) => {
+									if (e.key === "Escape") {
+										e.preventDefault();
+										onHide();
+									}
+								}}
+							/>
+							<PromptInputSubmit
+								className="shrink-0 rounded-full"
+								size="icon-xs"
+								status={streaming ? "streaming" : "ready"}
+								onStop={streaming ? onStop : undefined}
+							/>
+						</div>
+					</PromptInputBody>
+				</PromptInput>
 			</div>
 		</div>
 	);

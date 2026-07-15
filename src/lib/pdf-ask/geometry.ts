@@ -114,16 +114,32 @@ export function anchorFromPoint(
 	};
 }
 
+/** Screen point next to the pin (right of selection), for dialog placement. */
 export function popoverScreenPoint(
 	pageEl: HTMLElement | null,
 	rects: PdfAskNormalizedRect[],
+	pin?: { x: number; y: number } | null,
 ): { x: number; y: number } | null {
-	if (!pageEl || !rects.length) return null;
+	if (!pageEl) return null;
 	const box = pageEl.getBoundingClientRect();
-	const r = rects[0];
+	if (pin) {
+		return {
+			x: box.left + pin.x * box.width + 10,
+			y: box.top + pin.y * box.height - 12,
+		};
+	}
+	if (!rects.length) return null;
+	let maxX = 0;
+	let minY = 1;
+	let maxY = 0;
+	for (const r of rects) {
+		maxX = Math.max(maxX, r.x + r.w);
+		minY = Math.min(minY, r.y);
+		maxY = Math.max(maxY, r.y + r.h);
+	}
 	return {
-		x: box.left + (r.x + r.w) * box.width,
-		y: box.top + r.y * box.height,
+		x: box.left + Math.min(0.98, maxX + 0.008) * box.width + 10,
+		y: box.top + ((minY + maxY) / 2) * box.height - 12,
 	};
 }
 
