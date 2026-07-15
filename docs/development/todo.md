@@ -94,8 +94,7 @@
    - [x] M2：`papers/<id>/asks/<threadId>.json` 读写 + 页边圆片锚点（归一化坐标）。
    - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
    - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）。
-   - [x] 框选截图：⌥/Alt+拖或工具栏框选 → canvas 裁剪 → 选框可缩放 → ACP Image。
-   - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer；真·三指手势（系统常占用）；PDF 内嵌图 XObject 一键提取；Codex 多模态。
+   - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer。
 
 4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。

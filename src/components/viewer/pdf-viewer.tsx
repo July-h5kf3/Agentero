@@ -6,7 +6,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { Crop, Minus, Plus, RotateCcw } from "lucide-react";
+import { Minus, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -17,11 +17,6 @@ import {
 import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import {
-	applyMarqueeResize,
-	type MarqueeHandle,
-	MarqueeOverlay,
-} from "@/components/viewer/pdf-ask/marquee-overlay";
-import {
 	cancelAgentRun,
 	listenAgentCompleted,
 	listenAgentFailed,
@@ -31,12 +26,7 @@ import {
 import {
 	anchorFromPoint,
 	anchorFromSelection,
-	captureNormalizedRegion,
-	capturePageRegion,
-	clientBoxFromPoints,
-	clientBoxToNormalized,
 	createEmptyThread,
-	dataUrlToBase64,
 	deletePdfAskThread,
 	findPageElByNumber,
 	listPdfAskThreads,
@@ -48,11 +38,7 @@ import {
 } from "@/lib/pdf-ask";
 import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf-ask/schema";
-import type {
-	PdfAskAnchor,
-	PdfAskNormalizedRect,
-	PdfAskThread,
-} from "@/lib/pdf-ask/types";
+import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf-ask/types";
 import { cn } from "@/lib/utils";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -120,13 +106,6 @@ export function PdfViewer({
 	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
-	/** Explicit marquee mode (also Alt/⌥+drag works without toggle) */
-	const [marqueeMode, setMarqueeMode] = useState(false);
-	/** Live draft rect while drawing (page-local) */
-	const [draftMarquee, setDraftMarquee] = useState<{
-		page: number;
-		rect: PdfAskNormalizedRect;
-	} | null>(null);
 
 	const activeSessionRef = useRef<string | null>(null);
 	const suppressSelectionUntilRef = useRef(0);
@@ -482,185 +461,6 @@ export function PdfViewer({
 		};
 	}, [remote, startFromAnchor]);
 
-	// Marquee: Alt/⌥+drag, or marqueeMode toggle. 3-finger touch when available.
-	useEffect(() => {
-		const host = hostRef.current;
-		if (!host || !remote) return;
-
-		type DragState = {
-			pageEl: HTMLElement;
-			page: number;
-			x0: number;
-			y0: number;
-			pointerId: number;
-		};
-		let drag: DragState | null = null;
-
-		const finish = (x1: number, y1: number, pageEl: HTMLElement) => {
-			if (!drag) return;
-			const box = clientBoxFromPoints(drag.x0, drag.y0, x1, y1);
-			if (box.w < 12 || box.h < 12) {
-				setDraftMarquee(null);
-				drag = null;
-				return;
-			}
-			const capture = capturePageRegion(pageEl, box);
-			setDraftMarquee(null);
-			drag = null;
-			if (!capture) return;
-
-			const paperPath = paperRelPath || paperAbsPath || "paper";
-			const anchor: PdfAskAnchor = {
-				page: capture.page,
-				rects: capture.rects,
-				trigger: "marquee",
-			};
-			const thread = createEmptyThread({ paperPath, anchor });
-			thread.pendingImage = {
-				mimeType: capture.mimeType,
-				dataUrl: capture.dataUrl,
-			};
-			// Draft only until user sends a question
-			setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
-			openThread(thread);
-			suppressSelectionUntilRef.current = Date.now() + 400;
-		};
-
-		const onPointerDown = (e: PointerEvent) => {
-			if (e.button !== 0) return;
-			if ((e.target as HTMLElement).closest?.("[data-pdf-ask-ui]")) return;
-			// Alt/⌥+drag or explicit marquee mode. (OS often steals 3-finger trackpad.)
-			if (!marqueeMode && !e.altKey) return;
-
-			const el = document.elementFromPoint(e.clientX, e.clientY);
-			let resolved: HTMLElement | null = null;
-			let n: Node | null = el;
-			while (n && n !== host) {
-				if (n instanceof HTMLElement && n.hasAttribute(PDF_PAGE_ATTR)) {
-					resolved = n;
-					break;
-				}
-				n = n.parentNode;
-			}
-			if (!resolved) return;
-
-			e.preventDefault();
-			const page = Number(resolved.getAttribute(PDF_PAGE_ATTR)) || 1;
-			drag = {
-				pageEl: resolved,
-				page,
-				x0: e.clientX,
-				y0: e.clientY,
-				pointerId: e.pointerId,
-			};
-			try {
-				host.setPointerCapture(e.pointerId);
-			} catch {
-				// ignore
-			}
-		};
-
-		const onPointerMove = (e: PointerEvent) => {
-			if (!drag) return;
-			const box = clientBoxFromPoints(drag.x0, drag.y0, e.clientX, e.clientY);
-			const rects = clientBoxToNormalized(drag.pageEl, box);
-			if (rects[0]) {
-				setDraftMarquee({ page: drag.page, rect: rects[0] });
-			}
-		};
-
-		const onPointerUp = (e: PointerEvent) => {
-			if (!drag) return;
-			const pageEl = drag.pageEl;
-			finish(e.clientX, e.clientY, pageEl);
-		};
-
-		host.addEventListener("pointerdown", onPointerDown);
-		window.addEventListener("pointermove", onPointerMove);
-		window.addEventListener("pointerup", onPointerUp);
-		window.addEventListener("pointercancel", onPointerUp);
-
-		return () => {
-			host.removeEventListener("pointerdown", onPointerDown);
-			window.removeEventListener("pointermove", onPointerMove);
-			window.removeEventListener("pointerup", onPointerUp);
-			window.removeEventListener("pointercancel", onPointerUp);
-		};
-	}, [remote, marqueeMode, paperAbsPath, paperRelPath, openThread]);
-
-	// Resize handles on active marquee selection
-	const resizeRef = useRef<{
-		handle: MarqueeHandle;
-		startX: number;
-		startY: number;
-		origin: PdfAskNormalizedRect;
-		pageEl: HTMLElement;
-		threadId: string;
-	} | null>(null);
-
-	const onMarqueeResizeStart = useCallback(
-		(handle: MarqueeHandle, e: React.PointerEvent) => {
-			const thread = activeThread;
-			const host = hostRef.current;
-			if (!thread || !host) return;
-			const pageEl = findPageElByNumber(host, thread.anchor.page);
-			const origin = thread.anchor.rects[0];
-			if (!pageEl || !origin) return;
-			resizeRef.current = {
-				handle,
-				startX: e.clientX,
-				startY: e.clientY,
-				origin: { ...origin },
-				pageEl,
-				threadId: thread.id,
-			};
-			(e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-
-			const onMove = (ev: PointerEvent) => {
-				const st = resizeRef.current;
-				if (!st) return;
-				const box = st.pageEl.getBoundingClientRect();
-				const dx = (ev.clientX - st.startX) / (box.width || 1);
-				const dy = (ev.clientY - st.startY) / (box.height || 1);
-				const next = applyMarqueeResize(st.origin, st.handle, dx, dy);
-				setThreads((prev) =>
-					prev.map((th) =>
-						th.id === st.threadId
-							? { ...th, anchor: { ...th.anchor, rects: [next] } }
-							: th,
-					),
-				);
-			};
-			const onUp = () => {
-				const st = resizeRef.current;
-				resizeRef.current = null;
-				window.removeEventListener("pointermove", onMove);
-				window.removeEventListener("pointerup", onUp);
-				if (!st) return;
-				const th = threadsRef.current.find((x) => x.id === st.threadId);
-				const rect = th?.anchor.rects[0];
-				if (!th || !rect) return;
-				const cap = captureNormalizedRegion(st.pageEl, rect);
-				if (!cap) return;
-				const updated: PdfAskThread = {
-					...th,
-					anchor: { ...th.anchor, rects: cap.rects, page: cap.page },
-					pendingImage: {
-						mimeType: cap.mimeType,
-						dataUrl: cap.dataUrl,
-					},
-					updatedAt: new Date().toISOString(),
-				};
-				upsertThread(updated);
-				void persist(updated);
-				placePopover(updated);
-			};
-			window.addEventListener("pointermove", onMove);
-			window.addEventListener("pointerup", onUp);
-		},
-		[activeThread, upsertThread, persist, placePopover],
-	);
-
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor dialog after zoom/layout
 	useEffect(() => {
 		if (!activeThread) return;
@@ -686,20 +486,17 @@ export function PdfViewer({
 			const thread = threadsRef.current.find((th) => th.id === threadId);
 			if (!thread) return;
 
-			const image = thread.pendingImage;
-			if (!question.trim() && !image) return;
+			if (!question.trim()) return;
 
 			const userMsg = {
 				id: newMessageId(),
 				role: "user" as const,
 				content: question,
 				createdAt: new Date().toISOString(),
-				...(image ? { image } : {}),
 			};
 			const withUser: PdfAskThread = {
 				...thread,
 				status: "open",
-				pendingImage: undefined,
 				messages: [...thread.messages, userMsg],
 				updatedAt: new Date().toISOString(),
 			};
@@ -709,17 +506,7 @@ export function PdfViewer({
 			setStreaming(true);
 
 			const assistantId = newMessageId();
-			const prompt = buildPdfAskPrompt(withUser, question, {
-				hasImage: Boolean(image),
-			});
-			const images = image
-				? [
-						{
-							data: dataUrlToBase64(image.dataUrl),
-							mimeType: image.mimeType,
-						},
-					]
-				: undefined;
+			const prompt = buildPdfAskPrompt(withUser, question);
 
 			try {
 				const accepted = await runOnce({
@@ -727,7 +514,6 @@ export function PdfViewer({
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
-					images,
 				});
 				activeSessionRef.current = accepted.sessionId;
 
@@ -903,11 +689,7 @@ export function PdfViewer({
 		<div
 			ref={hostRef}
 			id="motif-pdf-host"
-			className={cn(
-				"relative flex h-full min-h-0 flex-col",
-				marqueeMode && "cursor-crosshair",
-				className,
-			)}
+			className={cn("relative flex h-full min-h-0 flex-col", className)}
 		>
 			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
 				<TooltipProvider delayDuration={200}>
@@ -966,24 +748,6 @@ export function PdfViewer({
 							<TooltipContent side="bottom">{t("pdf.zoomFit")}</TooltipContent>
 						</Tooltip>
 					</div>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-sm"
-								variant={marqueeMode ? "default" : "outline"}
-								className="pointer-events-auto shadow-sm"
-								aria-label={t("pdfAsk.marqueeToggle")}
-								aria-pressed={marqueeMode}
-								onClick={() => setMarqueeMode((v) => !v)}
-							>
-								<Crop className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="left">
-							{t("pdfAsk.marqueeToggleHint")}
-						</TooltipContent>
-					</Tooltip>
 				</TooltipProvider>
 			</div>
 			<div ref={scrollRef} className="motif-scroll min-h-0 flex-1 bg-muted/20">
@@ -1032,17 +796,6 @@ export function PdfViewer({
 										const pageSummaries = summaries.filter(
 											(s) => s.page === pageNumber,
 										);
-										const isMarqueeActive =
-											activeThread?.anchor.trigger === "marquee" &&
-											activeThread.anchor.page === pageNumber;
-										const marqueeRect =
-											isMarqueeActive && activeThread
-												? (activeThread.anchor.rects[0] ?? null)
-												: null;
-										const draft =
-											draftMarquee?.page === pageNumber
-												? draftMarquee.rect
-												: null;
 										return (
 											<div
 												key={`${remote}-p${pageNumber}`}
@@ -1055,7 +808,7 @@ export function PdfViewer({
 													<Page
 														pageNumber={pageNumber}
 														width={pageWidth}
-														renderTextLayer={!marqueeMode}
+														renderTextLayer
 														renderAnnotationLayer
 														loading={
 															<div
@@ -1070,7 +823,6 @@ export function PdfViewer({
 												</div>
 												{/* Text selection highlight only for real划词 (has quote) */}
 												{activeThread?.anchor.page === pageNumber &&
-												activeThread.anchor.trigger !== "marquee" &&
 												activeThread.anchor.quote
 													? activeThread.anchor.rects.map((r) => (
 															<div
@@ -1085,16 +837,6 @@ export function PdfViewer({
 															/>
 														))
 													: null}
-												{draft ? <MarqueeOverlay rect={draft} draft /> : null}
-												{marqueeRect ? (
-													<div data-pdf-ask-ui="">
-														<MarqueeOverlay
-															rect={marqueeRect}
-															active
-															onResizeStart={onMarqueeResizeStart}
-														/>
-													</div>
-												) : null}
 												<div data-pdf-ask-ui="">
 													<AskGutter
 														items={pageSummaries}

@@ -75,12 +75,7 @@ export function AskPopover({
 	left = Math.min(Math.max(12, left), vw - cardW - 12);
 	const top = Math.min(Math.max(12, screen.y - 24), vh - cardH - 12);
 
-	const title = threadTitle(
-		thread,
-		t("pdfAsk.newTitle"),
-		t("pdfAsk.imageTitle"),
-	);
-	const pendingImage = thread.pendingImage;
+	const title = threadTitle(thread, t("pdfAsk.newTitle"));
 
 	return (
 		<div
@@ -132,19 +127,6 @@ export function AskPopover({
 				</TooltipProvider>
 			</div>
 
-			{pendingImage ? (
-				<div className="shrink-0 border-border/40 border-b px-3 py-2">
-					<img
-						src={pendingImage.dataUrl}
-						alt={t("pdfAsk.imageAlt")}
-						className="max-h-36 w-full rounded-lg object-contain ring-1 ring-border/60"
-					/>
-					<p className="mt-1 text-[11px] text-muted-foreground">
-						{t("pdfAsk.imageResizeHint")}
-					</p>
-				</div>
-			) : null}
-
 			<div className="flex min-h-0 flex-1 flex-col">
 				<Conversation className="min-h-0 flex-1">
 					<ConversationContent className="gap-3 px-3 py-2.5">
@@ -171,13 +153,6 @@ export function AskPopover({
 											from === "assistant" && "w-full max-w-full",
 										)}
 									>
-										{m.image ? (
-											<img
-												src={m.image.dataUrl}
-												alt={t("pdfAsk.imageAlt")}
-												className="mb-2 max-h-40 max-w-full rounded-md object-contain"
-											/>
-										) : null}
 										{isEmptyAssistant ? (
 											<Shimmer className="text-sm" as="p">
 												{t("pdfAsk.thinking")}
@@ -215,20 +190,14 @@ export function AskPopover({
 					inputGroupClassName="overflow-visible"
 					onSubmit={({ text }) => {
 						const q = text.trim();
-						// Allow empty text when a crop is pending (image-only ask)
-						if (streaming) return;
-						if (!q && !thread.pendingImage) return;
+						if (streaming || !q) return;
 						onSend(q);
 					}}
 				>
 					<PromptInputBody>
 						<div className="flex w-full items-center gap-1 px-1.5 py-0.5">
 							<PromptInputTextarea
-								placeholder={
-									pendingImage
-										? t("pdfAsk.placeholderImage")
-										: t("pdfAsk.placeholder")
-								}
+								placeholder={t("pdfAsk.placeholder")}
 								defaultValue={initialPrompt}
 								disabled={streaming}
 								rows={1}

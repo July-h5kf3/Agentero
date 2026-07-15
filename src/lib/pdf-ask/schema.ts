@@ -1,6 +1,5 @@
 import type {
 	PdfAskAnchor,
-	PdfAskImage,
 	PdfAskMessage,
 	PdfAskNormalizedRect,
 	PdfAskThread,
@@ -22,18 +21,7 @@ function isRect(v: unknown): v is PdfAskNormalizedRect {
 }
 
 function isTrigger(v: unknown): v is PdfAskTrigger {
-	return (
-		v === "selection" || v === "dblclick" || v === "dwell" || v === "marquee"
-	);
-}
-
-function parseImage(v: unknown): PdfAskImage | undefined {
-	if (!isRecord(v)) return undefined;
-	if (typeof v.mimeType !== "string" || typeof v.dataUrl !== "string") {
-		return undefined;
-	}
-	if (!v.dataUrl.startsWith("data:")) return undefined;
-	return { mimeType: v.mimeType, dataUrl: v.dataUrl };
+	return v === "selection" || v === "dblclick" || v === "dwell";
 }
 
 function parseMessage(v: unknown): PdfAskMessage | null {
@@ -58,8 +46,6 @@ function parseMessage(v: unknown): PdfAskMessage | null {
 			uri: typeof s.uri === "string" ? s.uri : undefined,
 		}));
 	}
-	const image = parseImage(v.image);
-	if (image) msg.image = image;
 	return msg;
 }
 
@@ -67,11 +53,24 @@ function parseAnchor(v: unknown): PdfAskAnchor | null {
 	if (!isRecord(v)) return null;
 	if (typeof v.page !== "number" || !Number.isFinite(v.page)) return null;
 	if (!Array.isArray(v.rects) || !v.rects.every(isRect)) return null;
-	if (!isTrigger(v.trigger)) return null;
+	// Accept legacy "marquee" files as selection anchors (image crop removed)
+	const triggerRaw = v.trigger;
+	const trigger: PdfAskTrigger =
+		triggerRaw === "dblclick" || triggerRaw === "dwell"
+			? triggerRaw
+			: "selection";
+	if (
+		triggerRaw !== "selection" &&
+		triggerRaw !== "dblclick" &&
+		triggerRaw !== "dwell" &&
+		triggerRaw !== "marquee"
+	) {
+		if (!isTrigger(triggerRaw)) return null;
+	}
 	const anchor: PdfAskAnchor = {
 		page: Math.max(1, Math.floor(v.page)),
 		rects: v.rects as PdfAskNormalizedRect[],
-		trigger: v.trigger,
+		trigger,
 	};
 	if (typeof v.quote === "string") anchor.quote = v.quote;
 	return anchor;
@@ -96,7 +95,7 @@ export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 		if (!parsed) return null;
 		messages.push(parsed);
 	}
-	const thread: PdfAskThread = {
+	return {
 		version: 1,
 		id: raw.id,
 		paperPath: raw.paperPath,
@@ -106,9 +105,6 @@ export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 		anchor,
 		messages,
 	};
-	const pending = parseImage(raw.pendingImage);
-	if (pending) thread.pendingImage = pending;
-	return thread;
 }
 
 function shorten(text: string, max: number): string {
@@ -117,16 +113,19 @@ function shorten(text: string, max: number): string {
 	return t.length > max ? `${t.slice(0, Math.max(1, max - 1))}…` : t;
 }
 
+/** True once the user has sent at least one turn. */
+export function threadHasUserQuestion(thread: PdfAskThread): boolean {
+	return thread.messages.some((m) => m.role === "user");
+}
+
 /** Longer preview for tooltips / gutter aria. */
 export function threadPreview(thread: PdfAskThread): string {
 	const firstUser = thread.messages.find((m) => m.role === "user");
 	if (firstUser?.content.trim()) {
 		return shorten(firstUser.content, 80) || thread.id;
 	}
-	if (firstUser?.image || thread.pendingImage) return "🖼";
 	const q = thread.anchor.quote?.trim() ?? "";
 	if (q) return shorten(q, 80);
-	if (thread.anchor.trigger === "marquee") return "🖼";
 	return thread.id;
 }
 
@@ -134,14 +133,10 @@ export function threadPreview(thread: PdfAskThread): string {
 export function threadTitle(
 	thread: PdfAskThread,
 	emptyFallback: string,
-	imageFallback?: string,
 ): string {
 	const firstUser = thread.messages.find((m) => m.role === "user");
 	if (firstUser?.content.trim()) {
 		return shorten(firstUser.content, 28) || emptyFallback;
-	}
-	if (firstUser?.image || thread.pendingImage) {
-		return imageFallback ?? emptyFallback;
 	}
 	const firstAssistant = thread.messages.find((m) => m.role === "assistant");
 	if (firstAssistant?.content.trim()) {
@@ -150,26 +145,18 @@ export function threadTitle(
 	return emptyFallback;
 }
 
-/** True once the user has sent at least one turn (question / image ask). */
-export function threadHasUserQuestion(thread: PdfAskThread): boolean {
-	return thread.messages.some((m) => m.role === "user");
-}
-
 /** Pin near the end of the selection (right-center of union rects). */
 export function threadPin(thread: PdfAskThread): { x: number; y: number } {
 	const rects = thread.anchor.rects;
 	if (!rects.length) return { x: 0.5, y: 0.12 };
-	let minX = 1;
 	let minY = 1;
 	let maxX = 0;
 	let maxY = 0;
 	for (const r of rects) {
-		minX = Math.min(minX, r.x);
 		minY = Math.min(minY, r.y);
 		maxX = Math.max(maxX, r.x + r.w);
 		maxY = Math.max(maxY, r.y + r.h);
 	}
-	// Sit just past the selection’s right edge, vertically centered
 	const x = Math.min(0.98, Math.max(0.02, maxX + 0.008));
 	const y = Math.min(0.98, Math.max(0.02, (minY + maxY) / 2));
 	return { x, y };

@@ -1,4 +1,3 @@
-export * from "@/lib/pdf-ask/capture";
 export * from "@/lib/pdf-ask/geometry";
 export * from "@/lib/pdf-ask/io";
 export * from "@/lib/pdf-ask/prompt";

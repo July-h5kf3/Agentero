@@ -1,6 +1,6 @@
 /** PDF selection-ask thread model. See docs/development/pdf-ask.md */
 
-export type PdfAskTrigger = "selection" | "dblclick" | "dwell" | "marquee";
+export type PdfAskTrigger = "selection" | "dblclick" | "dwell";
 
 export type PdfAskStatus = "open" | "ended";
 
@@ -12,12 +12,6 @@ export type PdfAskNormalizedRect = {
 	y: number;
 	w: number;
 	h: number;
-};
-
-export type PdfAskImage = {
-	mimeType: string;
-	/** data:image/...;base64,... for display / agent */
-	dataUrl: string;
 };
 
 export type PdfAskAnchor = {
@@ -34,8 +28,6 @@ export type PdfAskMessage = {
 	createdAt: string;
 	agentSessionId?: string;
 	sources?: { title?: string; uri?: string }[];
-	/** Optional screenshot / figure crop attached to this turn */
-	image?: PdfAskImage;
 };
 
 export type PdfAskThread = {
@@ -48,19 +40,14 @@ export type PdfAskThread = {
 	status: PdfAskStatus;
 	anchor: PdfAskAnchor;
 	messages: PdfAskMessage[];
-	/**
-	 * Draft crop attached before the first send (marquee).
-	 * Cleared when folded into a user message.
-	 */
-	pendingImage?: PdfAskImage;
 };
 
 export type PdfAskThreadSummary = {
 	id: string;
 	page: number;
 	/**
-	 * Pin position on the page (0–1), near the selection / marquee —
-	 * typically the right-middle of the anchor rects, not forced to page margin.
+	 * Pin position on the page (0–1), near the selection —
+	 * typically the right-middle of the anchor rects.
 	 */
 	x: number;
 	y: number;
