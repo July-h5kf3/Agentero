@@ -4,8 +4,9 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Paper metadata written to `metadata.json`.
+/// **snake_case** to match frontend `PaperMetadata` (`pdf_url`, `arxiv_id`, …).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PaperMeta {
     pub id: String,
     #[serde(rename = "type")]
@@ -161,21 +162,25 @@ pub fn map_zotero_item(item: &Value) -> Result<PaperMeta, AppError> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let arxiv_id = extract_arxiv_from_extra(extra.as_deref()).or_else(|| {
-        item.get("archiveID").and_then(|v| v.as_str()).map(|s| {
-            s.trim()
-                .trim_start_matches("arXiv:")
-                .trim_start_matches("arxiv:")
-                .to_string()
-        })
-    });
-
-    let pmid = extract_pmid_from_extra(extra.as_deref());
-
     let url = item
         .get("url")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+
+    // Translator often puts arXiv id in archiveID ("arXiv:1706.03762"), extra, or url
+    let arxiv_id = extract_arxiv_from_extra(extra.as_deref())
+        .or_else(|| normalize_arxiv_field(item.get("archiveID").and_then(|v| v.as_str())))
+        .or_else(|| normalize_arxiv_field(item.get("archiveLocation").and_then(|v| v.as_str())))
+        .or_else(|| url.as_deref().and_then(extract_arxiv_from_url))
+        .or_else(|| {
+            // DOI form 10.48550/arXiv.1706.03762
+            item.get("DOI")
+                .or_else(|| item.get("doi"))
+                .and_then(|v| v.as_str())
+                .and_then(extract_arxiv_from_doi)
+        });
+
+    let pmid = extract_pmid_from_extra(extra.as_deref());
 
     // attachments may carry pdf url
     let mut pdf_url = None;
@@ -188,6 +193,14 @@ pub fn map_zotero_item(item: &Value) -> Result<PaperMeta, AppError> {
             {
                 pdf_url = Some(aurl.to_string());
                 break;
+            }
+        }
+    }
+    // Direct url pointing at a PDF
+    if pdf_url.is_none() {
+        if let Some(ref u) = url {
+            if u.contains("/pdf/") || u.ends_with(".pdf") {
+                pdf_url = Some(u.clone());
             }
         }
     }
@@ -269,17 +282,15 @@ pub fn enrich_remote_urls(meta: &mut PaperMeta) {
     if let Some(ref aid) = meta.arxiv_id {
         let bare = aid.trim().trim_start_matches("arXiv:").to_string();
         let bare = strip_v(&bare);
-        if meta.pdf_url.as_ref().is_none_or(|s| s.is_empty()) {
-            meta.pdf_url = Some(format!("https://arxiv.org/pdf/{bare}"));
-        }
-        if meta.html_url.as_ref().is_none_or(|s| s.is_empty()) {
-            meta.html_url = Some(format!("https://arxiv.org/html/{bare}"));
-        }
-        if meta.source_url.as_ref().is_none_or(|s| s.is_empty()) {
-            meta.source_url = Some(format!("https://arxiv.org/abs/{bare}"));
-        }
+        // Always set canonical https arXiv preview URLs (overwrite http://arxiv.org/…)
+        meta.pdf_url = Some(format!("https://arxiv.org/pdf/{bare}"));
+        meta.html_url = Some(format!("https://arxiv.org/html/{bare}"));
+        meta.source_url = Some(format!("https://arxiv.org/abs/{bare}"));
         if meta.bibtex_key.is_none() {
             meta.bibtex_key = Some(bare.replace('/', ""));
+        }
+        if meta.paper_type == "other" || meta.paper_type.is_empty() {
+            meta.paper_type = "arxiv".into();
         }
     } else if let Some(ref doi) = meta.doi {
         if meta.source_url.as_ref().is_none_or(|s| s.is_empty()) {
@@ -385,20 +396,74 @@ fn extract_arxiv_from_extra(extra: Option<&str>) -> Option<String> {
     for line in extra.lines() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("arXiv:") {
-            return Some(rest.split_whitespace().next()?.trim().to_string());
+            return normalize_arxiv_id_token(rest.split_whitespace().next()?.trim());
         }
         if line.to_ascii_lowercase().starts_with("arxiv:") {
-            return Some(
-                line.split_once(':')?
-                    .1
-                    .split_whitespace()
-                    .next()?
-                    .trim()
-                    .to_string(),
+            return normalize_arxiv_id_token(
+                line.split_once(':')?.1.split_whitespace().next()?.trim(),
             );
         }
     }
     None
+}
+
+fn normalize_arxiv_field(raw: Option<&str>) -> Option<String> {
+    let s = raw?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let s = s
+        .trim_start_matches("arXiv:")
+        .trim_start_matches("arxiv:")
+        .trim();
+    // "1706.03762 [cs]" or "arXiv:1706.03762"
+    let token = s.split_whitespace().next().unwrap_or(s);
+    normalize_arxiv_id_token(token)
+}
+
+fn extract_arxiv_from_url(url: &str) -> Option<String> {
+    // http://arxiv.org/abs/1706.03762 or /pdf/1706.03762
+    let lower = url.to_ascii_lowercase();
+    for marker in ["/abs/", "/pdf/", "/html/", "/src/", "/e-print/"] {
+        if let Some(i) = lower.find(marker) {
+            let rest = &url[i + marker.len()..];
+            let token = rest
+                .split(['?', '#', '/'])
+                .next()
+                .unwrap_or(rest)
+                .trim_end_matches(".pdf");
+            return normalize_arxiv_id_token(token);
+        }
+    }
+    None
+}
+
+fn extract_arxiv_from_doi(doi: &str) -> Option<String> {
+    // 10.48550/arXiv.1706.03762
+    let lower = doi.to_ascii_lowercase();
+    if let Some(i) = lower.find("arxiv.") {
+        let rest = &doi[i + "arxiv.".len()..];
+        return normalize_arxiv_id_token(rest.split_whitespace().next().unwrap_or(rest));
+    }
+    None
+}
+
+/// Bare arXiv id without version suffix.
+fn normalize_arxiv_id_token(token: &str) -> Option<String> {
+    let t = token
+        .trim()
+        .trim_start_matches("arXiv:")
+        .trim_start_matches("arxiv:");
+    if t.is_empty() {
+        return None;
+    }
+    let bare = strip_v(t);
+    // light validation: new-style NNNN.NNNNN or archive/NNNNNNN
+    if bare.contains('.') || bare.contains('/') {
+        Some(bare)
+    } else {
+        None
+    }
 }
 
 fn extract_pmid_from_extra(extra: Option<&str>) -> Option<String> {
@@ -457,4 +522,50 @@ fn strip_v(id: &str) -> String {
 
 fn chrono_lite_now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn map_translator_arxiv_item_fills_pdf_html() {
+        // Real shape from translation-server /search 1706.03762
+        let item = json!({
+            "itemType": "preprint",
+            "title": "Attention Is All You Need",
+            "creators": [
+                {"firstName": "Ashish", "lastName": "Vaswani", "creatorType": "author"}
+            ],
+            "date": "2023-08-02",
+            "abstractNote": "The dominant sequence transduction models…",
+            "archiveID": "arXiv:1706.03762",
+            "extra": "arXiv:1706.03762 [cs]",
+            "libraryCatalog": "arXiv.org",
+            "repository": "arXiv",
+            "url": "http://arxiv.org/abs/1706.03762",
+            "DOI": "10.48550/arXiv.1706.03762"
+        });
+        let mut meta = map_zotero_item(&item).expect("map");
+        enrich_remote_urls(&mut meta);
+        assert_eq!(meta.arxiv_id.as_deref(), Some("1706.03762"));
+        assert_eq!(
+            meta.pdf_url.as_deref(),
+            Some("https://arxiv.org/pdf/1706.03762")
+        );
+        assert_eq!(
+            meta.html_url.as_deref(),
+            Some("https://arxiv.org/html/1706.03762")
+        );
+        assert_eq!(
+            meta.source_url.as_deref(),
+            Some("https://arxiv.org/abs/1706.03762")
+        );
+        // metadata.json must use snake_case keys for the frontend
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(json.contains("\"pdf_url\""), "got {json}");
+        assert!(json.contains("\"arxiv_id\""), "got {json}");
+        assert!(!json.contains("\"pdfUrl\""));
+    }
 }

@@ -386,13 +386,50 @@ export function resolveRemoteUrl(
 	return null;
 }
 
+/** Normalize legacy camelCase keys from early Host writes. */
+function normalizeMetadataKeys(
+	raw: Record<string, unknown>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...raw };
+	const aliases: [string, string][] = [
+		["pdfUrl", "pdf_url"],
+		["htmlUrl", "html_url"],
+		["sourceUrl", "source_url"],
+		["arxivId", "arxiv_id"],
+		["bibtexKey", "bibtex_key"],
+		["zoteroItemType", "zotero_item_type"],
+		["metaSource", "meta_source"],
+		["bodySource", "body_source"],
+		["bodyQuality", "body_quality"],
+		["citationCount", "citation_count"],
+		["addedAt", "added_at"],
+		["updatedAt", "updated_at"],
+	];
+	for (const [camel, snake] of aliases) {
+		if (out[snake] == null && out[camel] != null) {
+			out[snake] = out[camel];
+		}
+	}
+	return out;
+}
+
 export async function loadPaperMetadata(
 	paperDir: string,
 ): Promise<PaperMetadata | null> {
 	try {
 		const raw = await readVaultFile(metadataPathForPaper(paperDir));
-		const data = JSON.parse(raw) as PaperMetadata;
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		const data = normalizeMetadataKeys(parsed) as unknown as PaperMetadata;
 		if (!data?.id) return null;
+		// Derive preview URLs from arxiv_id when missing (older imports)
+		if (data.arxiv_id) {
+			const urls = arxivUrls(data.arxiv_id);
+			if (urls) {
+				if (!data.pdf_url) data.pdf_url = urls.pdf;
+				if (!data.html_url) data.html_url = urls.html;
+				if (!data.source_url) data.source_url = urls.abs;
+			}
+		}
 		return data;
 	} catch {
 		return null;
