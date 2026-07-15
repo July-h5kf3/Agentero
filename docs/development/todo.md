@@ -5,7 +5,7 @@
 1. **Create Vault 初始化** ✅
    - 创建标准目录：`papers/`、`notes/`、`plans/`、`.motif/`。
    - 生成 Vault 内 `AGENTS.md` 模板。
-   - 初始化 `.motif/catalog.sqlite`（schema v1，`path` 主键）。
+   - 初始化 `.motif/catalog.sqlite`（schema 当前版本，`path` 主键）。
    - **不**默认生成 `PAPERS.md` / `library.bib`（导出能力另做）。
    - 初始化后打开 `AGENTS.md`。
 
@@ -19,6 +19,13 @@
    - 拉取 metadata，写入 catalog `papers` 表。
    - 写入默认 `NOTES.md`、空 `highlights.md`。
    - 入库后自动打开 paper，并刷新 Backlinks/Graph。
+
+2b. **魔棒 / Identifier Lookup（Translator 后端）** — 设计见 [`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)
+   - UI：点击魔棒 → 粘贴链接或编号 → 加入 Papers。
+   - 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
+   - Translator → 直接写入 `PaperMetadata`/catalog；有 `pdf_url`/`html_url` **不下载**。
+   - 无预览 URL 始终尝试下载；设置 `downloadFulltextToLocal`（默认关）控制「有预览 URL 时是否也下载」。
+   - Host：`lookup:parse` / `lookup:search` / `lookup:import(parent_dir)`；sidecar Runtime。
 
 3. **Agent 工作流入口**
    - 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。

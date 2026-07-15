@@ -14,6 +14,7 @@
 | Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Motif 作为 Client 连接用户本机 BYOA Agent。 |
 | Markdown 图谱 | Rust Wiki 索引 + Markdown 解析 | 反链和图谱必须从 Vault Markdown 派生。 |
 | 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.motif/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |
+| 标识符查元数据 | 本机 [Zotero Translators](https://www.zotero.org/support/dev/translators) Runtime（旁路进程） | 魔棒：DOI / ISBN / PMID / arXiv 等；不链进主二进制。见 [`identifier-lookup.md`](identifier-lookup.md)。 |
 | PDF 解析 | 计划使用 `liteparse` / MinerU BYOK | 默认本地优先，可选云端提高解析质量。 |
 
 ## Host 职责
@@ -24,12 +25,14 @@
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
+- 标识符魔棒入库：解析 ID、调用本机 Translator Runtime、映射元数据并写入 catalog（规划中）。
 
 ## 本分区文档
 
 - [`api.md`](api.md)：Tauri invoke commands、event contracts、Graph 与 Agent API 形状。
 - [`data-model.md`](data-model.md)：Vault 结构、paper 文件、分层规则、运行时类型。
 - [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
+- [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Zotero Translator 后端架构（设计稿）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型。
 
 ## 交叉引用

@@ -162,6 +162,7 @@
 - [ ] PDF 元数据混合获取：DOI/arXiv 标识符查询 Crossref/arXiv + Agent 正文抽取，入库前用户确认。
 - [ ] 预留本地 HTML importer。
 - [ ] 预留 BibTeX/Zotero importer。
+- [ ] **魔棒 Identifier Lookup**：本机 Zotero Translator Runtime + `lookup:*` 命令（设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)）。
 - [ ] 统一入库状态、错误类型和输出文件契约。
 
 验收标准：

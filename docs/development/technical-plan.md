@@ -270,6 +270,8 @@ src-tauri/src/
       liteparse.rs #   本地嵌入式后端（默认，含 OCR）
       mineru.rs    #   云端 MinerU 后端（BYOK，可选）
     metadata.rs    # 元数据解析：DOI/arXiv 识别 + Crossref/arXiv 查询 + Agent 兜底 + citekey
+    lookup/        # 魔棒：标识符解析 + Translator Runtime 客户端 + Zotero JSON 映射（见 docs/backend/identifier-lookup.md）
+    translator_runtime/  # 本机 translation-server 旁路进程生命周期
     markdown.rs    # Markdown 解析、双链提取、索引构建
     agent/         # ACP Client（BYOA，不内置 agent 二进制）
       acp.rs       # ACP client：spawn 用户配置的 agent、stdio JSON-RPC
@@ -320,6 +322,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 - 入库：写 `papers/<id>/` 文件 + 事务写入 catalog；不维护自动同步的 Markdown 总表。
 - Agent 最终引用必须落回 Vault 相对文件路径；L1 总览可靠应用注入列表或临时导出。
 - 专题：[`docs/backend/catalog.md`](../backend/catalog.md)。
+- 魔棒 / Translator：[`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)（Search Translator 旁路进程，写入 catalog）。
 
 ## 5. 核心模块搭配与数据流
 

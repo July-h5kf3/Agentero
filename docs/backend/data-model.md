@@ -172,14 +172,33 @@ interface PaperMetadata {
   id: string;                 // 逻辑 id：arXiv ID 或 citekey
   type: 'arxiv' | 'pdf' | 'html' | 'doi' | 'other';
   title: string;
-  authors: string[];
-  year: number;
+  authors: string[];          // 展示用
+  /** 完整 creators（Translator 映射，含 creatorType） */
+  creators?: { firstName?: string; lastName?: string; name?: string; creatorType?: string }[];
+  year?: number;
+  /** 原始日期串（Translator `date`） */
+  date?: string;
   abstract?: string;
   tags: string[];
 
-  // 来源链接（UI 阅读器 PDF/HTML 模式以此为准）
+  // 标识符
   arxiv_id?: string;
   doi?: string;
+  isbn?: string;
+  issn?: string;
+  pmid?: string;
+
+  // 出版信息（Translator 期刊/图书字段并入）
+  publication?: string;       // publicationTitle / proceedingsTitle / bookTitle
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  publisher?: string;
+  place?: string;
+  series?: string;
+  language?: string;
+
+  // 来源链接（UI 阅读器 PDF/HTML 模式以此为准；只存 URL，不落盘）
   /**
    * 远程 PDF URL（UI 仅流式预览，不落盘）。
    * 推荐 arXiv: `https://arxiv.org/pdf/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
@@ -190,16 +209,22 @@ interface PaperMetadata {
    * 推荐 arXiv: `https://arxiv.org/html/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
    */
   html_url?: string;
-  /** 摘要页等，如 `https://arxiv.org/abs/{arxiv_id}` */
+  /** 摘要页 / 条目页，如 arXiv abs、doi.org */
   source_url?: string;
 
-  // 正文来源与质量:渐进式披露与降级策略的决策依据
+  // 正文来源与质量（本地 PDF 解析时用；魔棒通常不填）
   body_source?: 'latex' | 'html' | 'pdf' | 'ocr';
   body_quality?: 'high' | 'medium' | 'low';
 
-  // 引用
+  // 引用与溯源
   bibtex_key?: string;
   citation_count?: number;
+  /** Translator itemType，如 journalArticle / preprint / book */
+  zotero_item_type?: string;
+  /** libraryCatalog，如 DOI.org (Crossref)、arXiv.org */
+  meta_source?: string;
+  /** Translator extra 残余 */
+  extra?: string;
 
   /** 列表/导出用一行说明（可选） */
   summary?: string;
@@ -211,11 +236,11 @@ interface PaperMetadata {
 }
 ```
 
-**元数据来源**:
+**元数据来源**（统一）:
 
-- **arxiv**:由 arXiv API 提供权威字段(标题 / 作者 / 年份 / 摘要 / arxiv_id)。
-- **pdf**:先从 PDF 提取 DOI / arXiv ID,命中则查询 Crossref / arXiv;未命中或失败时由 Agent 从正文抽取候选,最终一律经用户在入库前确认面板校对后**写入 catalog**。
-- `type='pdf'` 时 `body_source` 为 `pdf`(文本层)或 `ocr`(扫描件),`body_quality` 由解析后端决定:MinerU → high,liteparse 文本 → medium,OCR → low。
+- **魔棒 / 标识符入库**：Translator（含 arXiv、DOI、ISBN、PMID 等）→ **直接 map 进 `PaperMetadata`** → catalog；`pdf_url`/`html_url` 只存远程 URL。见 [`identifier-lookup.md`](identifier-lookup.md) §5。
+- **本地 PDF**：提取 DOI/arXiv 后同样可走 Translator 补全，再经用户确认写 catalog。
+- `type='pdf'` 时 `body_source` 为 `pdf` 或 `ocr`，`body_quality` 由解析后端决定。
 
 ### 3.4 论文运行时对象 (Paper)
 

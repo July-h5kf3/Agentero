@@ -35,4 +35,5 @@
 - 前端 UI 细节：[`../frontend/index.md`](../frontend/index.md)
 - 后端数据与 API 契约：[`../backend/index.md`](../backend/index.md)
 - 论文目录库 Catalog：[`../backend/catalog.md`](../backend/catalog.md)
+- 魔棒与 Translator：[`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)
 - 总体技术框架：[`../index.md`](../index.md)

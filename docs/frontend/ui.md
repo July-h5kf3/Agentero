@@ -29,11 +29,12 @@
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
-- 动作映射（Lucide）：
+- 动作映射（Lucide），从左到右：
+  - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号）
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
-  - 刷新树 → `RefreshCw`（⌘R）
-- **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault 或设置入口。
+- **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
+- **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault、刷新或设置入口。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
 
 ### 2.2 无 Vault 欢迎页
@@ -107,9 +108,15 @@
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（论文 PDF/HTML 视图时） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
+| `⇧⌘I` | 魔棒：按链接/编号加入 Papers（规划） | Translator 解析；写入 catalog 远程 URL，不下载；目标为 `papers/` 或当前 Papers 子文件夹 |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
+- **魔棒**（规划）：工具栏图标 + `⇧⌘I`；粘贴链接或编号 → Translator → 加入 Papers。  
+  - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
+  - 无 `pdf_url`/`html_url`：**始终**尽量下载到 `source/`。  
+  - 有预览 URL：默认只远程预览；Settings「有预览链接时也下载到本地」开启时再镜像到 `source/`。  
+  - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `lookup.*`；无 Vault 时禁用。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 
@@ -166,7 +173,7 @@ PromptInput → Body / Footer / Submit
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认等应用行为。
+- **General**：恢复上次 Vault、退出确认；**有预览链接时也下载到本地**（`downloadFulltextToLocal`，默认关——无预览 URL 时入库仍会尽量下载）。
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。

@@ -85,7 +85,7 @@ motif-vault/
 | `key` | TEXT PRIMARY KEY | 如 `schema_version`、`motif_app` |
 | `value` | TEXT NOT NULL | |
 
-当前 **`schema_version = 1`**。打开 Vault 时：
+当前 **`schema_version = 2`**（v1 打开时自动 migration 加 Translator 字段列）。打开 Vault 时：
 
 1. 若文件不存在 → 创建并执行 migration v1。
 2. 若 version &lt; 当前 → 顺序 migration。
@@ -101,23 +101,41 @@ motif-vault/
 | `id` | TEXT NOT NULL | 逻辑 id（arXiv ID 或 citekey），用于展示/去重查询 |
 | `type` | TEXT NOT NULL | `arxiv` \| `pdf` \| `html` \| `doi` \| `other` |
 | `title` | TEXT NOT NULL | |
-| `authors_json` | TEXT NOT NULL | JSON 数组 `string[]` |
+| `authors_json` | TEXT NOT NULL | JSON 数组 `string[]`（展示用） |
+| `creators_json` | TEXT | v2：完整 creators（含 creatorType），Translator 原样映射 |
 | `year` | INTEGER | 可空 |
+| `date` | TEXT | v2：原始发表日期串 |
 | `abstract` | TEXT | |
 | `tags_json` | TEXT NOT NULL DEFAULT `'[]'` | JSON 数组 |
 | `arxiv_id` | TEXT | |
 | `doi` | TEXT | |
+| `isbn` | TEXT | v2 |
+| `issn` | TEXT | v2 |
+| `pmid` | TEXT | v2 |
+| `publication` | TEXT | v2：期刊/会议/书名（← publicationTitle 等） |
+| `volume` | TEXT | v2 |
+| `issue` | TEXT | v2 |
+| `pages` | TEXT | v2 |
+| `publisher` | TEXT | v2 |
+| `place` | TEXT | v2：出版地 |
+| `series` | TEXT | v2 |
+| `language` | TEXT | v2 |
 | `pdf_url` | TEXT | 远程预览 URL，不强制落盘 PDF |
 | `html_url` | TEXT | |
-| `source_url` | TEXT | 如 abs 页 |
+| `source_url` | TEXT | 如 abs 页 / 条目页 |
 | `body_source` | TEXT | `latex` \| `html` \| `pdf` \| `ocr` |
 | `body_quality` | TEXT | `high` \| `medium` \| `low` |
 | `bibtex_key` | TEXT | 导出 BibTeX 时的 key；默认可等于 `id` 规范化结果 |
 | `citation_count` | INTEGER | |
+| `zotero_item_type` | TEXT | v2：Translator `itemType` |
+| `meta_source` | TEXT | v2：如 `DOI.org (Crossref)`、`arXiv.org` |
+| `extra` | TEXT | v2：Translator `extra` 残余 |
 | `status` | TEXT NOT NULL | `pending` \| `importing` \| `completed` \| `failed` |
 | `summary` | TEXT | 短摘要/一行说明（可选，供列表与导出表） |
 | `added_at` | TEXT NOT NULL | ISO 8601 |
 | `updated_at` | TEXT NOT NULL | ISO 8601 |
+
+**schema_version**：当前目标 **2**（v1 库打开时 `ALTER TABLE` 追加列）。见 Host `schema.rs`。
 
 索引建议：
 
@@ -128,10 +146,12 @@ motif-vault/
 - `idx_papers_arxiv` ON `papers(arxiv_id)` WHERE `arxiv_id` IS NOT NULL
 - `idx_papers_doi` ON `papers(doi)` WHERE `doi` IS NOT NULL
 - `idx_papers_bibtex` ON `papers(bibtex_key)` WHERE `bibtex_key` IS NOT NULL
+- `idx_papers_pmid` ON `papers(pmid)` WHERE `pmid` IS NOT NULL（v2）
+- `idx_papers_isbn` ON `papers(isbn)` WHERE `isbn` IS NOT NULL（v2）
 
-可选后续（非 v1 必须）：
+可选后续：
 
-- `papers_fts`（FTS5：title / abstract / tags / authors）用于库内搜索。
+- `papers_fts`（FTS5：title / abstract / tags / authors / publication）
 - `wiki_edges` / `highlight_anchors` 作为 **Tier 3** 同库缓存表（见 §6）。
 
 ### 4.3 与 TypeScript 类型对齐
@@ -299,6 +319,7 @@ import paper
 ## 10. 相关文档
 
 - [`data-model.md`](data-model.md) — Vault 分层与类型
-- [`api.md`](api.md) — `vault:*` / `paper:*` / `catalog:export_*`
+- [`api.md`](api.md) — `vault:*` / `paper:*` / `catalog:export_*` / `lookup:*`（规划）
+- [`identifier-lookup.md`](identifier-lookup.md) — 魔棒元数据 → catalog 写入路径
 - [`../development/technical-plan.md`](../development/technical-plan.md) — 模块与依赖
 - [`../development/roadmap.md`](../development/roadmap.md) — 版本交付

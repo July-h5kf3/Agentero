@@ -110,7 +110,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`。
-  - 初始化 `.motif/catalog.sqlite`（schema v1）。详见 [`catalog.md`](catalog.md)。
+  - 初始化 `.motif/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md`。
   - **不**创建根级 `PAPERS.md` / `library.bib`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
@@ -503,7 +503,48 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
   - **不**自动写 `PAPERS.md` / `library.bib`。
   - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
 ```
-### 3.5 论文
+
+### 3.5 魔棒 / 标识符入库（已落地 v0）
+
+**交互**：侧边栏魔棒 → 粘贴链接/编号 → Host `lookup_import` → Translator → 写 paper 文件夹。  
+详见 [`identifier-lookup.md`](identifier-lookup.md)。
+
+**Translator 占位地址**：`http://127.0.0.1:1969`（`DEFAULT_TRANSLATOR_BASE_URL`）。  
+`POST {base}/search` 或 `/web`，body 为 plain text。
+
+#### `lookup_translator_config`
+
+- **返回**：`{ ok: true; data: { defaultBaseUrl: "http://127.0.0.1:1969" } }`
+
+#### `lookup_import`
+
+- **参数**（invoke 字段名 `args`）：
+  ```ts
+  {
+    vaultPath: string;
+    parentDir: string;              // "papers" | "papers/nlp"
+    text: string;
+    downloadFulltextToLocal?: boolean;
+    translatorBaseUrl?: string;     // 默认占位 http://127.0.0.1:1969
+  }
+  ```
+- **返回**：
+  ```ts
+  {
+    ok: true;
+    data: {
+      paperDir: string;
+      path: string;
+      id: string;
+      title: string;
+      usedTranslator: boolean;
+      translatorBaseUrl: string;
+    }
+  }
+  ```
+- **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；写 `NOTES.md` / `highlights.md` / `metadata.json`；下载策略见 identifier-lookup §1.3。
+
+### 3.6 论文
 
 论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
@@ -578,7 +619,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **返回**：`{ ok: true; data: { paper: Paper } }`
 
-### 3.5.1 Catalog 导出
+### 3.6.1 Catalog 导出
 
 根级 `PAPERS.md` / `library.bib` **默认不存在**；需要时显式导出。完整约定见 [`catalog.md`](catalog.md)。
 
@@ -614,7 +655,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **参数 / 返回**：同 `catalog:export_papers_md`（`content` 为 BibTeX 文本）。
 
-### 3.6 Agent 工作流（ACP Client + BYOA）
+### 3.7 Agent 工作流（ACP Client + BYOA）
 
 Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 Vault），通过 stdio JSON-RPC 会话。**不** 内置 agent 二进制；**不** 在 config 中要求模型 API Key。
 
@@ -830,7 +871,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **返回**：`{ ok: true; data: null }`
 
-### 3.7 双链与图谱
+### 3.8 双链与图谱
 
 > 产品与索引设计见 **`docs/backend/wikilinks.md`**。下列为 Host 接口草案。
 
@@ -930,7 +971,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
-### 3.8 配置
+### 3.9 配置
 
 #### `config:get`
 
@@ -980,7 +1021,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
-### 3.9 界面与本地化（UI / i18n）
+### 3.10 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）
 
@@ -1034,9 +1075,11 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流。 |
 | V0.4 | 增加 `graph:*` 命令。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
+| V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 
 后续扩展：
 - `importer:import` 统一来源入口。
+- `lookup:*` 与 PDF prepare 共用元数据管道。
 - `search:full_text` 本地全文搜索。
 - `reader:annotations` 标注（`highlights.md`）读写。
 - `sync:*` 多设备同步（远期）。
