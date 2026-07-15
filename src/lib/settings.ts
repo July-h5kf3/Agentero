@@ -7,17 +7,6 @@ export type AppSettings = {
 	restoreLastVault: boolean;
 	confirmBeforeClose: boolean;
 	/**
-	 * Magic-wand / identifier import — extra local mirror when remote preview exists.
-	 *
-	 * Always (regardless of this flag): if the item has neither `pdf_url` nor
-	 * `html_url`, Motif downloads full text into `source/` when a downloadable
-	 * URL can be resolved (otherwise there is nothing to preview).
-	 *
-	 * When true: also download into `source/` even if `pdf_url`/`html_url` exist
-	 * (catalog still keeps remote URLs). Default false.
-	 */
-	downloadFulltextToLocal: boolean;
-	/**
 	 * Translator Runtime base URL for magic-wand / identifier import.
 	 * Default: hosted poco-ai service.
 	 */
@@ -40,7 +29,6 @@ export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
 export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
 	confirmBeforeClose: false,
-	downloadFulltextToLocal: false,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	theme: "system",
 	locale: "system",
@@ -57,28 +45,24 @@ export function loadSettings(): AppSettings {
 	try {
 		const raw = localStorage.getItem(SETTINGS_KEY);
 		if (!raw) return { ...DEFAULT_SETTINGS };
-		const parsed = JSON.parse(raw) as Partial<AppSettings>;
-		// Drop legacy BYOK fields if present.
+		const parsed = JSON.parse(raw) as Partial<AppSettings> & {
+			agentBaseUrl?: string;
+			agentApiKey?: string;
+			agentModel?: string;
+			/** @deprecated always download PDF on import */
+			downloadFulltextToLocal?: boolean;
+			downloadFulltextWhenNoRemotePreview?: boolean;
+		};
+		// Drop legacy BYOK / download-toggle fields if present.
 		const {
 			agentBaseUrl: _u,
 			agentApiKey: _k,
 			agentModel: _m,
-			downloadFulltextWhenNoRemotePreview: legacyDownload,
+			downloadFulltextToLocal: _d1,
+			downloadFulltextWhenNoRemotePreview: _d2,
 			...rest
-		} = parsed as Partial<AppSettings> & {
-			agentBaseUrl?: string;
-			agentApiKey?: string;
-			agentModel?: string;
-			/** @deprecated renamed to downloadFulltextToLocal */
-			downloadFulltextWhenNoRemotePreview?: boolean;
-		};
+		} = parsed;
 		const merged = { ...DEFAULT_SETTINGS, ...rest };
-		if (
-			legacyDownload !== undefined &&
-			rest.downloadFulltextToLocal === undefined
-		) {
-			merged.downloadFulltextToLocal = legacyDownload;
-		}
 		// Empty / missing URL → product default
 		if (!merged.translatorBaseUrl?.trim()) {
 			merged.translatorBaseUrl = DEFAULT_TRANSLATOR_BASE_URL;

@@ -1,5 +1,6 @@
 /**
  * Magic-wand identifier import via Host `lookup_import`.
+ * Always downloads PDF; arXiv also downloads and unpacks LaTeX into `source/`.
  * Translator base URL comes from Settings (`translatorBaseUrl`).
  * @see docs/backend/identifier-lookup.md
  */
@@ -15,6 +16,12 @@ export type LookupAddResult = {
 	title: string;
 	usedTranslator: boolean;
 	translatorBaseUrl: string;
+};
+
+export type PaperAssetsDownloadResult = {
+	pdf: boolean;
+	tex: boolean;
+	messages: string[];
 };
 
 type ApiResult<T> = {
@@ -48,6 +55,7 @@ function resolveTranslatorBaseUrl(
  * Host calls Translator at Settings `translatorBaseUrl`
  * (default https://translator.philfan.cn); falls back to arXiv API
  * when Runtime is down and input is an arXiv id.
+ * Always mirrors PDF into `source/`; arXiv also unpacks e-print TeX.
  */
 export async function addPaperByIdentifier(opts: {
 	vaultRoot: string;
@@ -77,7 +85,6 @@ export async function addPaperByIdentifier(opts: {
 			vaultPath: opts.vaultRoot,
 			parentDir: opts.parentDir.replace(/\\/g, "/"),
 			text,
-			downloadFulltextToLocal: opts.settings.downloadFulltextToLocal,
 			translatorBaseUrl,
 		},
 	});
@@ -96,4 +103,32 @@ export async function addPaperByIdentifier(opts: {
 		usedTranslator: result.data.usedTranslator,
 		translatorBaseUrl: result.data.translatorBaseUrl,
 	};
+}
+
+/**
+ * Download PDF (+ arXiv LaTeX) for a paper folder missing local assets.
+ * `paperPath` is vault-relative (e.g. `papers/1706.03762`).
+ */
+export async function downloadPaperAssets(opts: {
+	vaultRoot: string;
+	paperPath: string;
+}): Promise<PaperAssetsDownloadResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
+	}
+	const result = await invoke<ApiResult<PaperAssetsDownloadResult>>(
+		"paper_download_assets",
+		{
+			args: {
+				vaultPath: opts.vaultRoot,
+				path: opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+			},
+		},
+	);
+	if (!result.ok || !result.data) {
+		throw new Error(
+			result.error?.message ?? i18n.t("sidebar:fileTree.downloadFailed"),
+		);
+	}
+	return result.data;
 }

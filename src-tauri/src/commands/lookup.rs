@@ -2,7 +2,8 @@
 
 use crate::error::{map_err, ApiResult};
 use crate::services::lookup::{
-    self, LookupImportArgs, LookupImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+    self, AssetDownloadResult, LookupImportArgs, LookupImportResult, PaperDownloadAssetsArgs,
+    DEFAULT_TRANSLATOR_BASE_URL,
 };
 use serde::Serialize;
 
@@ -22,9 +23,21 @@ pub fn lookup_translator_config() -> ApiResult<TranslatorConfig> {
 }
 
 /// Resolve identifier via Translator (placeholder URL) and write paper into vault.
+/// Always downloads PDF; arXiv also downloads and unpacks LaTeX into `source/`.
 #[tauri::command]
 pub async fn lookup_import(args: LookupImportArgs) -> ApiResult<LookupImportResult> {
     match lookup::import_by_identifier(args).await {
+        Ok(r) => ApiResult::ok(r),
+        Err(e) => map_err(e),
+    }
+}
+
+/// Download PDF (+ arXiv LaTeX) for an existing paper folder that is missing local assets.
+#[tauri::command]
+pub async fn paper_download_assets(
+    args: PaperDownloadAssetsArgs,
+) -> ApiResult<AssetDownloadResult> {
+    match lookup::download_paper_assets(args).await {
         Ok(r) => ApiResult::ok(r),
         Err(e) => map_err(e),
     }

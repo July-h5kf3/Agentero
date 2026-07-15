@@ -2,8 +2,11 @@
 //!
 //! @see docs/backend/identifier-lookup.md
 
+mod assets;
 mod map;
 mod parse;
+
+pub use assets::{ensure_paper_assets, AssetDownloadResult};
 
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
@@ -25,11 +28,17 @@ pub struct LookupImportArgs {
     /// Vault-relative parent, e.g. `papers` or `papers/nlp`.
     pub parent_dir: String,
     pub text: String,
-    #[serde(default)]
-    pub download_fulltext_to_local: bool,
     /// Optional override; empty → [`DEFAULT_TRANSLATOR_BASE_URL`].
     #[serde(default)]
     pub translator_base_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperDownloadAssetsArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder, e.g. `papers/1706.03762`.
+    pub path: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,19 +91,14 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(&vault, &record)?;
 
-    // 2) Download policy: no preview URL → always try; has preview → only if setting on
-    let has_preview = non_empty(&meta.pdf_url) || non_empty(&meta.html_url);
-    let should_download = !has_preview || args.download_fulltext_to_local;
-    if should_download {
-        if let Some(url) = meta
-            .pdf_url
-            .as_deref()
-            .filter(|u| !u.is_empty())
-            .or(meta.html_url.as_deref().filter(|u| !u.is_empty()))
-        {
-            let _ = download_to_source(&paper_dir, &id, url).await;
-        }
-    }
+    // 2) Always download PDF; arXiv also unpacks LaTeX into source/
+    let _ = ensure_paper_assets(
+        &paper_dir,
+        &id,
+        meta.arxiv_id.as_deref(),
+        meta.pdf_url.as_deref(),
+    )
+    .await;
 
     let paper_dir_str = paper_dir.to_string_lossy().to_string();
 
@@ -106,6 +110,47 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
         used_translator,
         translator_base_url: base,
     })
+}
+
+/// On-demand download of PDF (+ arXiv LaTeX) for an existing paper folder.
+pub async fn download_paper_assets(
+    args: PaperDownloadAssetsArgs,
+) -> Result<AssetDownloadResult, AppError> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let path_rel = args
+        .path
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+    if path_rel.is_empty() || path_rel.split('/').any(|p| p == ".." || p.is_empty()) {
+        return Err(AppError::message("invalid paper path"));
+    }
+    let paper_dir = vault.join(&path_rel);
+    if !paper_dir.is_dir() {
+        return Err(AppError::message("paper folder not found"));
+    }
+
+    let (id, arxiv_id, pdf_url) = if let Ok(Some(row)) = papers::get_by_path(&vault, &path_rel) {
+        (row.id, row.arxiv_id, row.pdf_url)
+    } else {
+        // Fallback: folder name as id; treat as arXiv if it looks like one
+        let name = paper_dir
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("paper")
+            .to_string();
+        let arxiv = parse::extract_arxiv_id(&name);
+        let pdf = arxiv
+            .as_ref()
+            .map(|a| format!("https://arxiv.org/pdf/{}", a));
+        (name, arxiv, pdf)
+    };
+
+    ensure_paper_assets(&paper_dir, &id, arxiv_id.as_deref(), pdf_url.as_deref()).await
 }
 
 async fn resolve_metadata(
@@ -294,35 +339,6 @@ fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError>
     Ok(())
 }
 
-async fn download_to_source(paper_dir: &Path, id: &str, url: &str) -> Result<(), AppError> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .user_agent("motif-lookup/0.1")
-        .build()
-        .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let res = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("download: {e}")))?;
-    if !res.status().is_success() {
-        return Err(AppError::message(format!("download HTTP {}", res.status())));
-    }
-    let bytes = res
-        .bytes()
-        .await
-        .map_err(|e| AppError::message(format!("download body: {e}")))?;
-    let source = paper_dir.join("source");
-    fs::create_dir_all(&source)?;
-    let name = if url.contains(".pdf") || url.contains("/pdf/") {
-        format!("{id}.pdf")
-    } else {
-        format!("{id}.bin")
-    };
-    fs::write(source.join(name), bytes)?;
-    Ok(())
-}
-
 fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
     let s = raw.trim().replace('\\', "/").trim_matches('/').to_string();
     if s.is_empty() {
@@ -338,8 +354,4 @@ fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
     Err(AppError::message(
         "parent_dir must be papers or under papers/",
     ))
-}
-
-fn non_empty(s: &Option<String>) -> bool {
-    s.as_ref().is_some_and(|v| !v.trim().is_empty())
 }

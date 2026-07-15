@@ -146,6 +146,7 @@ pub fn run() {
             commands::window::window_new,
             commands::lookup::lookup_import,
             commands::lookup::lookup_translator_config,
+            commands::lookup::paper_download_assets,
             commands::paper::paper_get,
             commands::paper::paper_list,
             set_locale,
