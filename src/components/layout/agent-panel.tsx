@@ -126,6 +126,7 @@ import {
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
+	listCodexThreads,
 	listenAgentCompleted,
 	listenAgentEffort,
 	listenAgentFailed,
@@ -137,6 +138,7 @@ import {
 	listenAgentUsage,
 	loadModelCatalog,
 	loadModelPref,
+	readCodexThread,
 	runOnce,
 	saveModelCatalog,
 	saveModelPref,
@@ -438,6 +440,7 @@ export function AgentPanel({
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
 	const [activeTabId, setActiveTabId] = useState("draft");
 	const activeSessionRef = useRef<string | null>(null);
+	const activeConversationRef = useRef<string | null>(null);
 	const selectedAgentIdRef = useRef<string | null>(null);
 	const warmGenRef = useRef(0);
 
@@ -813,6 +816,37 @@ export function AgentPanel({
 		null;
 	const isCodexAgent = selectedTemplate === "codex-acp";
 
+	const loadCodexHistory = useCallback(async () => {
+		if (!isTauri() || !isCodexAgent || !selectedAgentId) return;
+		try {
+			const threads = await listCodexThreads({
+				agentId: selectedAgentId,
+				vaultPath: vaultPath ?? undefined,
+			});
+			setSessionHistory(
+				threads.map((thread) => ({
+					id: thread.id,
+					title: thread.title,
+					agentName: selected?.name ?? "Codex",
+					startedAt: (() => {
+						const timestamp = Number(thread.updatedAt ?? thread.createdAt);
+						return Number.isFinite(timestamp)
+							? new Date(timestamp * 1000).toLocaleString(i18n.language)
+							: "";
+					})(),
+					lines: [],
+					status: "completed" as const,
+				})),
+			);
+		} catch {
+			// History is supplementary: a failed scan must not block the Composer.
+		}
+	}, [i18n.language, isCodexAgent, selected?.name, selectedAgentId, vaultPath]);
+
+	useEffect(() => {
+		void loadCodexHistory();
+	}, [loadCodexHistory]);
+
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
 		return models.find((m) => m.id === modelId)?.name ?? modelId;
@@ -912,10 +946,13 @@ export function AgentPanel({
 	const conversationTabs = useMemo(
 		() => [
 			{ id: "draft", lines: null as ChatLine[] | null },
-			...sessionHistory.slice(0, 2).map((item) => ({
-				id: item.id,
-				lines: item.lines,
-			})),
+			...sessionHistory
+				.filter((item) => item.lines.length > 0)
+				.slice(0, 2)
+				.map((item) => ({
+					id: item.id,
+					lines: item.lines,
+				})),
 		],
 		[sessionHistory],
 	);
@@ -1041,6 +1078,9 @@ export function AgentPanel({
 		try {
 			const accepted = await runOnce({
 				agentId,
+				sessionId: isCodexAgent
+					? (activeConversationRef.current ?? undefined)
+					: undefined,
 				prompt,
 				vaultPath: vaultPath ?? undefined,
 				workflow: "free",
@@ -1062,6 +1102,7 @@ export function AgentPanel({
 			};
 			const pendingLines = [...sessionStartLines, agentLine];
 			activeSessionRef.current = accepted.sessionId;
+			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
 			setSessionHistory((prev) => [
 				{
@@ -1189,6 +1230,7 @@ export function AgentPanel({
 		setIncludeSelectedFile(Boolean(selectedVaultPath));
 		setActiveTabId("draft");
 		activeSessionRef.current = null;
+		activeConversationRef.current = null;
 	};
 
 	return (
@@ -1313,8 +1355,65 @@ export function AgentPanel({
 										disabled={busy}
 										onClick={() => {
 											setHistoryOpen(false);
-											setLines(item.lines);
-											setActiveTabId(item.id);
+											if (!isCodexAgent || item.lines.length > 0) {
+												setLines(item.lines);
+												setActiveTabId(item.id);
+												if (isCodexAgent)
+													activeConversationRef.current = item.id;
+												return;
+											}
+											void (async () => {
+												try {
+													const history = await readCodexThread({
+														agentId: selectedAgentId ?? undefined,
+														threadId: item.id,
+														vaultPath: vaultPath ?? undefined,
+													});
+													const lines: ChatLine[] = history.lines.map(
+														(line) => {
+															if (line.kind === "user") {
+																return {
+																	id: line.id,
+																	kind: "user",
+																	text: line.text,
+																};
+															}
+															return {
+																id: line.id,
+																kind: "agent",
+																text: line.text,
+																reasoning: line.reasoning ?? undefined,
+															};
+														},
+													);
+													setSessionHistory((prev) =>
+														prev.map((entry) =>
+															entry.id === item.id
+																? {
+																		...entry,
+																		title: history.thread.title,
+																		lines,
+																	}
+																: entry,
+														),
+													);
+													activeConversationRef.current = item.id;
+													setActiveTabId(item.id);
+													setLines(lines);
+												} catch (error) {
+													setLines((prev) => [
+														...prev,
+														{
+															id: nextLineId("err"),
+															kind: "error",
+															text:
+																error instanceof Error
+																	? error.message
+																	: String(error),
+														},
+													]);
+												}
+											})();
 										}}
 									>
 										<span className="text-muted-foreground text-sm leading-none">

@@ -86,6 +86,26 @@ export type RunOnceAccepted = {
 	agentId: string;
 };
 
+export type CodexThreadInfo = {
+	id: string;
+	title: string;
+	createdAt?: string | null;
+	updatedAt?: string | null;
+	cwd?: string | null;
+};
+
+export type CodexHistoryLine = {
+	id: string;
+	kind: "user" | "agent";
+	text: string;
+	reasoning?: string | null;
+};
+
+export type CodexThreadHistory = {
+	thread: CodexThreadInfo;
+	lines: CodexHistoryLine[];
+};
+
 export type AgentSkill = {
 	id: string;
 	name: string;
@@ -288,6 +308,8 @@ export async function probeCatalogAgent(
 
 export async function runOnce(request: {
 	agentId?: string;
+	/** Durable provider conversation id; Codex uses its native thread id. */
+	sessionId?: string;
 	prompt: string;
 	vaultPath?: string;
 	workflow?: string;
@@ -306,6 +328,7 @@ export async function runOnce(request: {
 	return invokeApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
+			sessionId: request.sessionId,
 			prompt: request.prompt,
 			vaultPath: request.vaultPath,
 			workflow: request.workflow,
@@ -316,6 +339,28 @@ export async function runOnce(request: {
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
 		},
+	});
+}
+
+export async function listCodexThreads(request: {
+	agentId?: string;
+	vaultPath?: string;
+}): Promise<CodexThreadInfo[]> {
+	return invokeApi("agent_codex_list_threads", {
+		agentId: request.agentId ?? null,
+		vaultPath: request.vaultPath ?? null,
+	});
+}
+
+export async function readCodexThread(request: {
+	agentId?: string;
+	threadId: string;
+	vaultPath?: string;
+}): Promise<CodexThreadHistory> {
+	return invokeApi("agent_codex_read_thread", {
+		agentId: request.agentId ?? null,
+		threadId: request.threadId,
+		vaultPath: request.vaultPath ?? null,
 	});
 }
 
