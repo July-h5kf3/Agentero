@@ -1411,6 +1411,7 @@ export function AgentPanel({
 														agentId: selectedAgentId ?? undefined,
 														threadId: item.id,
 														vaultPath: vaultPath ?? undefined,
+														includeExternal: includeExternalCodexHistory,
 													});
 													const lines: ChatLine[] = history.lines.map(
 														(line) => {

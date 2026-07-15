@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
@@ -21,6 +22,7 @@ use tokio::sync::watch;
 const CLIENT_INFO: &str = "motif";
 const MOTIF_THREAD_INDEX_PATH: &str = ".motif/agent-sessions/codex.json";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
+static MOTIF_THREAD_INDEX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,9 +91,9 @@ impl PreparedCodexThread {
 
 impl CodexClient {
     async fn spawn(desc: &AgentDescriptor, cwd: Option<&str>) -> Result<Self, AppError> {
-        // Registries created before the migration may still point at the retired
-        // npx ACP adapter. Continue to recognize them, but always launch Codex.
-        let use_legacy_adapter = desc.template == AgentTemplate::CodexAcp && desc.command == "npx";
+        // Continue to recognize descriptors loaded outside the registry migration.
+        let use_legacy_adapter = desc.template == AgentTemplate::CodexAcp
+            && matches!(desc.command.as_str(), "npx" | "codex-acp");
         let command_name = if use_legacy_adapter {
             "codex"
         } else {
@@ -102,7 +104,14 @@ impl CodexClient {
         } else {
             desc.args.clone()
         };
-        let command = resolve_command(command_name).unwrap_or_else(|| PathBuf::from(command_name));
+        let saved_codex_path = (desc.template == AgentTemplate::CodexAcp)
+            .then(|| desc.env.get("CODEX_PATH"))
+            .flatten()
+            .map(PathBuf::from)
+            .filter(|path| path.is_file());
+        let command = saved_codex_path
+            .or_else(|| resolve_command(command_name))
+            .unwrap_or_else(|| PathBuf::from(command_name));
         let mut process = Command::new(command);
         process
             .args(&args)
@@ -349,11 +358,19 @@ fn content_text(value: &Value) -> String {
     }
 }
 
-fn history_from_jsonl(thread_id: &str) -> Vec<CodexHistoryLine> {
-    let Some(home) = dirs::home_dir() else {
+fn codex_home(desc: &AgentDescriptor) -> Option<PathBuf> {
+    desc.env
+        .get("CODEX_HOME")
+        .filter(|path| !path.trim().is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("CODEX_HOME").map(PathBuf::from))
+        .or_else(|| dirs::home_dir().map(|home| home.join(".codex")))
+}
+
+fn history_from_jsonl(desc: &AgentDescriptor, thread_id: &str) -> Vec<CodexHistoryLine> {
+    let Some(root) = codex_home(desc).map(|home| home.join("sessions")) else {
         return Vec::new();
     };
-    let root = home.join(".codex").join("sessions");
     let Some(path) = find_transcript(&root, thread_id) else {
         return Vec::new();
     };
@@ -446,6 +463,12 @@ fn motif_thread_index_path(vault_path: Option<&str>) -> Option<PathBuf> {
 }
 
 fn motif_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
+    let Ok(_guard) = MOTIF_THREAD_INDEX_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+    else {
+        return HashSet::new();
+    };
     let Some(path) = motif_thread_index_path(vault_path) else {
         return HashSet::new();
     };
@@ -460,6 +483,10 @@ fn motif_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
 }
 
 fn remember_motif_thread(vault_path: Option<&str>, thread_id: &str) -> Result<(), AppError> {
+    let _guard = MOTIF_THREAD_INDEX_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| AppError::message("Motif Codex session index lock poisoned"))?;
     let Some(path) = motif_thread_index_path(vault_path) else {
         return Ok(());
     };
@@ -847,7 +874,13 @@ pub async fn codex_read_thread(
     desc: &AgentDescriptor,
     thread_id: String,
     vault_path: Option<String>,
+    include_external: bool,
 ) -> Result<CodexThreadHistory, AppError> {
+    if !include_external && !motif_thread_ids(vault_path.as_deref()).contains(thread_id.as_str()) {
+        return Err(AppError::message(
+            "Codex thread is not indexed for the current Vault",
+        ));
+    }
     let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
     let result = client
         .request("thread/read", json!({ "threadId": thread_id }))
@@ -861,10 +894,23 @@ pub async fn codex_read_thread(
             title: thread_id,
             created_at: None,
             updated_at: None,
-            cwd: vault_path,
+            cwd: vault_path.clone(),
         });
+    if let Some(vault_path) = vault_path.as_deref() {
+        let vault = fs::canonicalize(vault_path).map_err(AppError::Io)?;
+        let thread_cwd = thread
+            .cwd
+            .as_deref()
+            .ok_or_else(|| AppError::message("Codex thread has no working directory"))?;
+        let thread_cwd = fs::canonicalize(thread_cwd).map_err(AppError::Io)?;
+        if thread_cwd != vault {
+            return Err(AppError::message(
+                "Codex thread belongs to a different Vault",
+            ));
+        }
+    }
     Ok(CodexThreadHistory {
-        lines: history_from_jsonl(&thread.id),
+        lines: history_from_jsonl(desc, &thread.id),
         thread,
     })
 }

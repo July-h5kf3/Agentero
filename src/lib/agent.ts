@@ -358,11 +358,13 @@ export async function readCodexThread(request: {
 	agentId?: string;
 	threadId: string;
 	vaultPath?: string;
+	includeExternal?: boolean;
 }): Promise<CodexThreadHistory> {
 	return invokeApi("agent_codex_read_thread", {
 		agentId: request.agentId ?? null,
 		threadId: request.threadId,
 		vaultPath: request.vaultPath ?? null,
+		includeExternal: request.includeExternal ?? false,
 	});
 }
 

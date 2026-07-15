@@ -353,6 +353,7 @@ pub async fn agent_codex_read_thread(
     agent_id: Option<String>,
     thread_id: String,
     vault_path: Option<String>,
+    include_external: bool,
 ) -> Result<ApiResult<CodexThreadHistory>, String> {
     let desc = match registry.resolve_default(agent_id.as_deref()) {
         Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
@@ -363,7 +364,7 @@ pub async fn agent_codex_read_thread(
         }
         Err(error) => return Ok(map_err(error)),
     };
-    match codex_read_thread(&desc, thread_id, vault_path).await {
+    match codex_read_thread(&desc, thread_id, vault_path, include_external).await {
         Ok(thread) => Ok(ApiResult::ok(thread)),
         Err(error) => Ok(map_err(error)),
     }
