@@ -15,6 +15,7 @@ import {
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
+import { PapersLibrary } from "@/components/layout/papers-library";
 import {
 	ResizableGroup,
 	ResizableHandle,
@@ -41,6 +42,7 @@ import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
 	isPaperDirectory,
+	isPapersRoot,
 	loadPaperMetadata,
 	notesPathForPaper,
 	type PaperMetadata,
@@ -48,6 +50,7 @@ import {
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
+import { listPapers } from "@/lib/papers-api";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
@@ -138,6 +141,20 @@ function resolveCreateParent(
 	return parent && parent !== selectedPath ? parent : vaultRoot;
 }
 
+/** Library home: no file selection, vault root, or papers/ folder. */
+function isLibraryHome(
+	vaultPath: string | null,
+	selectedPath: string | null,
+): boolean {
+	if (!vaultPath) return false;
+	if (!selectedPath) return true;
+	const sel = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	if (sel === root) return true;
+	if (isPapersRoot(sel)) return true;
+	return false;
+}
+
 function collectMarkdownRelPaths(
 	nodes: FileNode[],
 	vaultPath: string | null,
@@ -210,6 +227,8 @@ export default function App() {
 		return saved ? preferredModeForPath(saved) : "markdown";
 	});
 	const [paperMeta, setPaperMeta] = useState<PaperMetadata | null>(null);
+	const [libraryPapers, setLibraryPapers] = useState<PaperMetadata[]>([]);
+	const [libraryLoading, setLibraryLoading] = useState(false);
 	/** Remote streaming URLs only — never local vault file / blob download */
 	const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 	const [htmlSrcUrl, setHtmlSrcUrl] = useState<string | null>(null);
@@ -515,6 +534,22 @@ export default function App() {
 		}
 	}, [t]);
 
+	const refreshLibrary = useCallback(async () => {
+		if (!vaultPath || !isTauri()) {
+			setLibraryPapers([]);
+			return;
+		}
+		setLibraryLoading(true);
+		try {
+			const list = await listPapers(vaultPath);
+			setLibraryPapers(list);
+		} catch {
+			setLibraryPapers([]);
+		} finally {
+			setLibraryLoading(false);
+		}
+	}, [vaultPath]);
+
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
 		void (async () => {
@@ -524,8 +559,13 @@ export default function App() {
 			} catch {
 				// ignore
 			}
+			await refreshLibrary();
 		})();
-	}, [vaultPath, refreshTree]);
+	}, [vaultPath, refreshTree, refreshLibrary]);
+
+	useEffect(() => {
+		void refreshLibrary();
+	}, [refreshLibrary]);
 
 	const lookupParentDir = useMemo(
 		() => resolvePapersParentDir(vaultPath, selectedPath, tree),
@@ -698,9 +738,27 @@ export default function App() {
 			} catch {
 				// ignore
 			}
+			await refreshLibrary();
 			openPaper(paperDir);
 		},
-		[vaultPath, lookupParentDir, settings, refreshTree, openPaper, t],
+		[
+			vaultPath,
+			lookupParentDir,
+			settings,
+			refreshTree,
+			refreshLibrary,
+			openPaper,
+			t,
+		],
+	);
+
+	const handleOpenLibraryPaper = useCallback(
+		(paper: PaperMetadata) => {
+			if (!vaultPath || !paper.path) return;
+			const abs = joinVaultPath(vaultPath, paper.path);
+			openPaper(abs);
+		},
+		[vaultPath, openPaper],
 	);
 
 	const openPath = useCallback(
@@ -980,9 +1038,15 @@ export default function App() {
 		setCenterMode(mode);
 	};
 
-	const activeFileLabel = selectedPath
-		? selectedPath.split(/[\\/]/).pop()
-		: t("labels.untitled");
+	const showLibrary = Boolean(
+		vaultPath && isLibraryHome(vaultPath, selectedPath),
+	);
+
+	const activeFileLabel = showLibrary
+		? t("sidebar:papersLibrary.title")
+		: selectedPath
+			? selectedPath.split(/[\\/]/).pop()
+			: t("labels.untitled");
 
 	const editorFontSize = settings.editorFontSize;
 
@@ -1175,14 +1239,18 @@ export default function App() {
 								{/* Single-row header: toggle left, title right — same 28px line box */}
 								<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 									<div className="flex h-7 shrink-0 items-center">
-										<ViewModeToggle
-											value={centerMode}
-											onChange={handleCenterModeChange}
-											available={modeAvailable}
-										/>
+										{showLibrary ? null : (
+											<ViewModeToggle
+												value={centerMode}
+												onChange={handleCenterModeChange}
+												available={modeAvailable}
+											/>
+										)}
 									</div>
 									<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
-										{centerMode === "markdown" && markdownDirty ? (
+										{!showLibrary &&
+										centerMode === "markdown" &&
+										markdownDirty ? (
 											<span
 												className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
 												role="img"
@@ -1193,12 +1261,16 @@ export default function App() {
 										<span
 											className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
 											title={
-												paperMeta
-													? `${paperMeta.title} · ${activeFileLabel}`
-													: (activeFileLabel ?? undefined)
+												showLibrary
+													? t("sidebar:papersLibrary.title")
+													: paperMeta
+														? `${paperMeta.title} · ${activeFileLabel}`
+														: (activeFileLabel ?? undefined)
 											}
 										>
-											{paperMeta?.title ?? activeFileLabel}
+											{showLibrary
+												? t("sidebar:papersLibrary.title")
+												: (paperMeta?.title ?? activeFileLabel)}
 										</span>
 									</div>
 								</div>
@@ -1229,6 +1301,13 @@ export default function App() {
 											</div>
 										</div>
 									)
+								) : showLibrary ? (
+									<PapersLibrary
+										papers={libraryPapers}
+										loading={libraryLoading}
+										onOpenPaper={handleOpenLibraryPaper}
+										className="bg-muted/20"
+									/>
 								) : (
 									<>
 										{centerMode === "markdown" ? (

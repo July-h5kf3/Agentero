@@ -45,3 +45,22 @@ pub fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperListArgs {
+    pub vault_path: String,
+}
+
+/// List all papers for the library table (catalog.sqlite).
+#[tauri::command]
+pub fn paper_list(args: PaperListArgs) -> ApiResult<Vec<PaperRecord>> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    match papers::list_all(&vault) {
+        Ok(rows) => ApiResult::ok(rows),
+        Err(e) => map_err(e),
+    }
+}

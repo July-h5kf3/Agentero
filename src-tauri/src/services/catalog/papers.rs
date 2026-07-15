@@ -111,6 +111,33 @@ pub fn get_by_id(vault_root: &Path, id: &str) -> Result<Option<PaperRecord>, App
     }
 }
 
+/// List all papers for library table (newest first).
+pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT
+                path, id, type, title, authors_json, year, abstract, tags_json,
+                arxiv_id, doi, pdf_url, html_url, source_url,
+                body_source, body_quality, bibtex_key, citation_count, status, summary,
+                added_at, updated_at,
+                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
+                publisher, place, series, language, zotero_item_type, meta_source, extra
+            FROM papers
+            ORDER BY updated_at DESC, title COLLATE NOCASE ASC
+            "#,
+        )
+        .map_err(AppError::from)?;
+
+    let rows = stmt
+        .query_map([], map_row)
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    Ok(rows)
+}
+
 fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
     let authors_json =
         serde_json::to_string(&r.authors).map_err(|e| AppError::message(e.to_string()))?;
@@ -220,6 +247,53 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
     Ok(())
 }
 
+fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
+    let authors_json: String = row.get(4)?;
+    let tags_json: String = row.get(7)?;
+    let creators_json: Option<String> = row.get(21)?;
+    Ok(PaperRecord {
+        path: row.get(0)?,
+        id: row.get(1)?,
+        paper_type: row.get(2)?,
+        title: row.get(3)?,
+        authors: serde_json::from_str(&authors_json).unwrap_or_default(),
+        year: row.get(5)?,
+        abstract_text: row.get(6)?,
+        tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+        arxiv_id: row.get(8)?,
+        doi: row.get(9)?,
+        pdf_url: row.get(10)?,
+        html_url: row.get(11)?,
+        source_url: row.get(12)?,
+        body_source: row.get(13)?,
+        body_quality: row.get(14)?,
+        bibtex_key: row.get(15)?,
+        citation_count: row.get(16)?,
+        status: row.get(17)?,
+        summary: row.get(18)?,
+        added_at: row.get(19)?,
+        updated_at: row.get(20)?,
+        creators: creators_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok()),
+        date: row.get(22)?,
+        isbn: row.get(23)?,
+        issn: row.get(24)?,
+        pmid: row.get(25)?,
+        publication: row.get(26)?,
+        volume: row.get(27)?,
+        issue: row.get(28)?,
+        pages: row.get(29)?,
+        publisher: row.get(30)?,
+        place: row.get(31)?,
+        series: row.get(32)?,
+        language: row.get(33)?,
+        zotero_item_type: row.get(34)?,
+        meta_source: row.get(35)?,
+        extra: row.get(36)?,
+    })
+}
+
 fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppError> {
     let mut stmt = conn
         .prepare(
@@ -237,52 +311,7 @@ fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppErr
         .map_err(AppError::from)?;
 
     let row = stmt
-        .query_row(params![path], |row| {
-            let authors_json: String = row.get(4)?;
-            let tags_json: String = row.get(7)?;
-            let creators_json: Option<String> = row.get(21)?;
-            Ok(PaperRecord {
-                path: row.get(0)?,
-                id: row.get(1)?,
-                paper_type: row.get(2)?,
-                title: row.get(3)?,
-                authors: serde_json::from_str(&authors_json).unwrap_or_default(),
-                year: row.get(5)?,
-                abstract_text: row.get(6)?,
-                tags: serde_json::from_str(&tags_json).unwrap_or_default(),
-                arxiv_id: row.get(8)?,
-                doi: row.get(9)?,
-                pdf_url: row.get(10)?,
-                html_url: row.get(11)?,
-                source_url: row.get(12)?,
-                body_source: row.get(13)?,
-                body_quality: row.get(14)?,
-                bibtex_key: row.get(15)?,
-                citation_count: row.get(16)?,
-                status: row.get(17)?,
-                summary: row.get(18)?,
-                added_at: row.get(19)?,
-                updated_at: row.get(20)?,
-                creators: creators_json
-                    .as_deref()
-                    .and_then(|s| serde_json::from_str(s).ok()),
-                date: row.get(22)?,
-                isbn: row.get(23)?,
-                issn: row.get(24)?,
-                pmid: row.get(25)?,
-                publication: row.get(26)?,
-                volume: row.get(27)?,
-                issue: row.get(28)?,
-                pages: row.get(29)?,
-                publisher: row.get(30)?,
-                place: row.get(31)?,
-                series: row.get(32)?,
-                language: row.get(33)?,
-                zotero_item_type: row.get(34)?,
-                meta_source: row.get(35)?,
-                extra: row.get(36)?,
-            })
-        })
+        .query_row(params![path], map_row)
         .optional()
         .map_err(AppError::from)?;
 

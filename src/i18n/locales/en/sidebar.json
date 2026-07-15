@@ -8,6 +8,18 @@
 		"needsVault": "Open a vault before creating files.",
 		"alreadyExists": "「{{name}}」 already exists."
 	},
+	"papersLibrary": {
+		"title": "Library",
+		"loading": "Loading papers…",
+		"emptyTitle": "No papers yet",
+		"emptyHint": "Use the magic wand to add a paper by arXiv ID or DOI.",
+		"colTitle": "Title",
+		"colAuthors": "Authors",
+		"colYear": "Year",
+		"colType": "Type",
+		"colId": "ID",
+		"count": "{{formatted}} papers"
+	},
 	"lookup": {
 		"magicWand": "Add by identifier",
 		"placeholder": "arXiv URL or ID…",

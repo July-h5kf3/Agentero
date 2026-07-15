@@ -8,6 +8,18 @@
 		"needsVault": "请先打开知识库再创建文件。",
 		"alreadyExists": "「{{name}}」已存在。"
 	},
+	"papersLibrary": {
+		"title": "论文库",
+		"loading": "正在加载论文…",
+		"emptyTitle": "暂无论文",
+		"emptyHint": "用侧边栏魔棒粘贴 arXiv 编号或 DOI 添加论文。",
+		"colTitle": "标题",
+		"colAuthors": "作者",
+		"colYear": "年份",
+		"colType": "类型",
+		"colId": "标识符",
+		"count": "共 {{formatted}} 篇"
+	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",
 		"placeholder": "arXiv 链接或编号…",
