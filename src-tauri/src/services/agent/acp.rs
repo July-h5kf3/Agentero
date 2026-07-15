@@ -1,8 +1,8 @@
 use crate::error::AppError;
 use crate::models::agent::{
-    AgentDescriptor, AgentFailedEvent, AgentModelChoice, AgentModelsEvent, AgentPlanEntry,
-    AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind, AgentToolEvent,
-    AgentUsageEvent, ProbeResult, WarmResult,
+    AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
+    AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
+    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, WarmResult,
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::prompts::{build_prompt, extract_sources};
@@ -233,6 +233,85 @@ fn models_from_config_options(
     None
 }
 
+fn is_effort_option(opt: &SessionConfigOption) -> bool {
+    matches!(
+        opt.category.as_ref(),
+        Some(SessionConfigOptionCategory::ThoughtLevel)
+    ) || matches!(opt.id.0.as_ref(), "reasoning_effort" | "effort")
+}
+
+fn is_fast_option(opt: &SessionConfigOption) -> bool {
+    matches!(
+        opt.category.as_ref(),
+        Some(SessionConfigOptionCategory::ModelConfig)
+    ) && (opt.id.0.as_ref() == "fast-mode" || opt.name.to_ascii_lowercase().contains("fast"))
+}
+
+fn effort_from_config_options(
+    session_id: &str,
+    agent_id: &str,
+    opts: &[SessionConfigOption],
+) -> Option<AgentEffortEvent> {
+    let opt = opts.iter().find(|opt| is_effort_option(opt))?;
+    let SessionConfigKind::Select(sel) = &opt.kind else {
+        return None;
+    };
+    let efforts = collect_choices_from_select(sel)
+        .into_iter()
+        .map(|choice| AgentEffortChoice {
+            id: choice.id,
+            name: choice.name,
+            description: None,
+        })
+        .collect::<Vec<_>>();
+    if efforts.is_empty() {
+        return None;
+    }
+    Some(AgentEffortEvent {
+        session_id: session_id.to_string(),
+        agent_id: agent_id.to_string(),
+        config_id: opt.id.to_string(),
+        current_id: sel.current_value.to_string(),
+        efforts,
+    })
+}
+
+fn fast_mode_from_config_options(
+    session_id: &str,
+    agent_id: &str,
+    opts: &[SessionConfigOption],
+) -> Option<AgentFastModeEvent> {
+    let opt = opts.iter().find(|opt| is_fast_option(opt))?;
+    let enabled = match &opt.kind {
+        SessionConfigKind::Boolean(value) => value.current_value,
+        SessionConfigKind::Select(value) => value.current_value.0.as_ref() == "on",
+        _ => return None,
+    };
+    Some(AgentFastModeEvent {
+        session_id: session_id.to_string(),
+        agent_id: agent_id.to_string(),
+        config_id: opt.id.to_string(),
+        enabled,
+    })
+}
+
+fn emit_session_config_options(
+    app: &AppHandle,
+    session_id: &str,
+    agent_id: &str,
+    opts: &[SessionConfigOption],
+) {
+    if let Some(ev) = models_from_config_options(session_id, agent_id, opts) {
+        let _ = app.emit("agent:models", ev);
+    }
+    if let Some(ev) = effort_from_config_options(session_id, agent_id, opts) {
+        let _ = app.emit("agent:effort", ev);
+    }
+    if let Some(ev) = fast_mode_from_config_options(session_id, agent_id, opts) {
+        let _ = app.emit("agent:fast-mode", ev);
+    }
+}
+
 fn emit_rich_session_update(
     app: &AppHandle,
     session_id: &str,
@@ -241,10 +320,7 @@ fn emit_rich_session_update(
 ) {
     match update {
         SessionUpdate::ConfigOptionUpdate(upd) => {
-            if let Some(ev) = models_from_config_options(session_id, agent_id, &upd.config_options)
-            {
-                let _ = app.emit("agent:models", ev);
-            }
+            emit_session_config_options(app, session_id, agent_id, &upd.config_options);
         }
         SessionUpdate::ToolCall(tc) => {
             let _ = app.emit(
@@ -428,6 +504,8 @@ pub async fn run_once(
     target: Option<String>,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    preferred_reasoning_effort: Option<String>,
+    fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
 ) -> Result<AgentResultPayload, AppError> {
@@ -506,6 +584,7 @@ pub async fn run_once(
         .connect_with(acp, {
             let full_prompt = full_prompt.clone();
             let preferred_model = preferred_model_id.clone();
+            let preferred_effort = preferred_reasoning_effort.clone();
             let app_for_models = app_for_conn.clone();
             let session_for_models = session_for_conn.clone();
             let agent_id_for_models = desc.id.clone();
@@ -523,26 +602,89 @@ pub async fn run_once(
                     .map_err(|e| acp_err(format!("new_session: {e}")))?;
 
                 let acp_session_id = new_session.session_id;
-                if let Some(opts) = new_session.config_options.as_ref() {
-                    if let Some(ev) =
-                        models_from_config_options(&session_for_models, &agent_id_for_models, opts)
-                    {
-                        // Apply preferred model before prompt when it differs from current.
-                        if let Some(pref) = preferred_model.clone() {
-                            if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
-                                let _ = connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref),
-                                    ))
-                                    .block_task()
-                                    .await;
+                let mut config_options = new_session.config_options.unwrap_or_default();
+                if let Some(ev) = models_from_config_options(
+                    &session_for_models,
+                    &agent_id_for_models,
+                    &config_options,
+                ) {
+                    // Model changes can affect supported effort and service tiers, so retain the
+                    // complete response before resolving the remaining preferences.
+                    if let Some(pref) = preferred_model.clone() {
+                        if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
+                            if let Ok(response) = connection
+                                .send_request(SetSessionConfigOptionRequest::new(
+                                    acp_session_id.clone(),
+                                    SessionConfigId::new(ev.config_id.as_str()),
+                                    SessionConfigOptionValue::value_id(pref),
+                                ))
+                                .block_task()
+                                .await
+                            {
+                                config_options = response.config_options;
                             }
                         }
-                        let _ = app_for_models.emit("agent:models", ev);
                     }
                 }
+                if let Some(pref) = preferred_effort.clone() {
+                    if let Some(ev) = effort_from_config_options(
+                        &session_for_models,
+                        &agent_id_for_models,
+                        &config_options,
+                    ) {
+                        if pref != ev.current_id
+                            && ev.efforts.iter().any(|effort| effort.id == pref)
+                        {
+                            if let Ok(response) = connection
+                                .send_request(SetSessionConfigOptionRequest::new(
+                                    acp_session_id.clone(),
+                                    SessionConfigId::new(ev.config_id.as_str()),
+                                    SessionConfigOptionValue::value_id(pref),
+                                ))
+                                .block_task()
+                                .await
+                            {
+                                config_options = response.config_options;
+                            }
+                        }
+                    }
+                }
+                if let Some(enabled) = fast_mode {
+                    if let Some(opt) = config_options.iter().find(|opt| is_fast_option(opt)) {
+                        let value = match &opt.kind {
+                            SessionConfigKind::Boolean(_) => {
+                                Some(SessionConfigOptionValue::boolean(enabled))
+                            }
+                            SessionConfigKind::Select(_) => {
+                                Some(SessionConfigOptionValue::value_id(if enabled {
+                                    "on"
+                                } else {
+                                    "off"
+                                }))
+                            }
+                            _ => None,
+                        };
+                        if let Some(value) = value {
+                            if let Ok(response) = connection
+                                .send_request(SetSessionConfigOptionRequest::new(
+                                    acp_session_id.clone(),
+                                    opt.id.clone(),
+                                    value,
+                                ))
+                                .block_task()
+                                .await
+                            {
+                                config_options = response.config_options;
+                            }
+                        }
+                    }
+                }
+                emit_session_config_options(
+                    &app_for_models,
+                    &session_for_models,
+                    &agent_id_for_models,
+                    &config_options,
+                );
 
                 let prompt_response = connection
                     .send_request(PromptRequest::new(
@@ -665,13 +807,12 @@ pub async fn warm_agent(
                     );
                 }
                 if let SessionUpdate::ConfigOptionUpdate(upd) = &notification.update {
-                    if let Some(ev) = models_from_config_options(
+                    emit_session_config_options(
+                        &app_for_notif,
                         &session_for_notif,
                         &agent_for_notif,
                         &upd.config_options,
-                    ) {
-                        let _ = app_for_notif.emit("agent:models", ev);
-                    }
+                    );
                 }
                 Ok(())
             },
@@ -711,30 +852,37 @@ pub async fn warm_agent(
                     .map_err(|e| acp_err(format!("new_session: {e}")))?;
 
                 let acp_session_id = new_session.session_id;
-                if let Some(opts) = new_session.config_options.as_ref() {
-                    if let Some(mut ev) =
-                        models_from_config_options(&session_for_conn, &agent_for_conn, opts)
-                    {
-                        if let Some(pref) = preferred.clone() {
-                            if pref != ev.current_id
-                                && ev.models.iter().any(|m| m.id == pref)
-                                && connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref.clone()),
-                                    ))
-                                    .block_task()
-                                    .await
-                                    .is_ok()
+                let mut config_options = new_session.config_options.unwrap_or_default();
+                if let Some(ev) =
+                    models_from_config_options(&session_for_conn, &agent_for_conn, &config_options)
+                {
+                    if let Some(pref) = preferred.clone() {
+                        if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
+                            if let Ok(response) = connection
+                                .send_request(SetSessionConfigOptionRequest::new(
+                                    acp_session_id.clone(),
+                                    SessionConfigId::new(ev.config_id.as_str()),
+                                    SessionConfigOptionValue::value_id(pref),
+                                ))
+                                .block_task()
+                                .await
                             {
-                                ev.current_id = pref;
+                                config_options = response.config_options;
                             }
                         }
-                        let _ = app_for_conn.emit("agent:models", ev.clone());
-                        if let Ok(mut g) = models_for_conn.lock() {
-                            *g = Some(ev);
-                        }
+                    }
+                }
+                emit_session_config_options(
+                    &app_for_conn,
+                    &session_for_conn,
+                    &agent_for_conn,
+                    &config_options,
+                );
+                if let Some(ev) =
+                    models_from_config_options(&session_for_conn, &agent_for_conn, &config_options)
+                {
+                    if let Ok(mut g) = models_for_conn.lock() {
+                        *g = Some(ev);
                     }
                 }
 
@@ -766,5 +914,50 @@ pub async fn warm_agent(
             usage_size: None,
             error: Some(e.to_string()),
         },
+    }
+}
+
+#[cfg(test)]
+mod config_option_tests {
+    use super::{effort_from_config_options, fast_mode_from_config_options};
+    use agent_client_protocol::schema::v1::{
+        SessionConfigOption, SessionConfigOptionCategory, SessionConfigSelectOption,
+    };
+
+    #[test]
+    fn extracts_codex_reasoning_effort_from_thought_level() {
+        let options = vec![SessionConfigOption::select(
+            "reasoning_effort",
+            "Reasoning effort",
+            "xhigh",
+            vec![
+                SessionConfigSelectOption::new("medium", "medium"),
+                SessionConfigSelectOption::new("xhigh", "xhigh"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::ThoughtLevel)];
+
+        let effort = effort_from_config_options("session", "codex", &options)
+            .expect("Codex thought level should be exposed");
+        assert_eq!(effort.current_id, "xhigh");
+        assert_eq!(effort.efforts.len(), 2);
+    }
+
+    #[test]
+    fn extracts_codex_fast_mode_from_model_config() {
+        let options = vec![SessionConfigOption::select(
+            "fast-mode",
+            "Fast mode",
+            "on",
+            vec![
+                SessionConfigSelectOption::new("off", "Off"),
+                SessionConfigSelectOption::new("on", "On"),
+            ],
+        )
+        .category(SessionConfigOptionCategory::ModelConfig)];
+
+        let fast = fast_mode_from_config_options("session", "codex", &options)
+            .expect("Codex fast mode should be exposed");
+        assert!(fast.enabled);
     }
 }

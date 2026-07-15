@@ -154,6 +154,27 @@ export type AgentModelsEvent = {
 	models: AgentModelChoice[];
 };
 
+export type AgentEffortChoice = {
+	id: string;
+	name: string;
+	description?: string | null;
+};
+
+export type AgentEffortEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	currentId: string;
+	efforts: AgentEffortChoice[];
+};
+
+export type AgentFastModeEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	enabled: boolean;
+};
+
 export type AgentFailedEvent = {
 	sessionId: string;
 	error: string;
@@ -273,6 +294,10 @@ export async function runOnce(request: {
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
+	/** ACP reasoning-effort value id (from agent:effort). */
+	reasoningEffort?: string;
+	/** ACP fast-mode preference (from agent:fast-mode). */
+	fastMode?: boolean;
 	/** Local SKILL.md identifiers selected through the composer. */
 	skillIds?: string[];
 	/** Select the agent's first ACP permission option for this run. */
@@ -286,6 +311,8 @@ export async function runOnce(request: {
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
+			reasoningEffort: request.reasoningEffort,
+			fastMode: request.fastMode,
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
 		},
@@ -358,6 +385,20 @@ export async function listenAgentModels(
 	handler: (e: AgentModelsEvent) => void,
 ): Promise<UnlistenFn> {
 	return listen<AgentModelsEvent>("agent:models", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentEffort(
+	handler: (e: AgentEffortEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentEffortEvent>("agent:effort", (ev) => handler(ev.payload));
+}
+
+export async function listenAgentFastMode(
+	handler: (e: AgentFastModeEvent) => void,
+): Promise<UnlistenFn> {
+	return listen<AgentFastModeEvent>("agent:fast-mode", (ev) =>
+		handler(ev.payload),
+	);
 }
 
 const MODEL_PREF_KEY = "motif-agent-model-pref";

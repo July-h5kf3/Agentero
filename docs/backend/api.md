@@ -53,12 +53,14 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }` |
+| `agent:effort` | ACP 上报 reasoning effort 选项 | `{ sessionId, agentId, configId, currentId, efforts: { id, name, description? }[] }` |
+| `agent:fast-mode` | ACP 上报 Fast 开关状态 | `{ sessionId, agentId, configId, enabled }` |
 | `agent:completed` | Agent 回答完成 | `{ sessionId, messageId, content, reasoning?, sources, stopReason? }` |
 | `agent:failed` | Agent 调用失败 | `{ sessionId, error }` |
 
 #### `agent_warm`
 
-打开 Chat 时后台预热 ACP（不发用户 prompt）：`initialize` + `session/new`，上报 `agent:models`，并短暂等待 `UsageUpdate`。
+打开 Chat 时后台预热 ACP（不发用户 prompt）：`initialize` + `session/new`，上报模型与会话配置（包括可用的 effort / Fast），并短暂等待 `UsageUpdate`。
 
 - **参数**
 
@@ -553,6 +555,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   workflow?: string;
   target?: string;
   modelId?: string;
+  reasoningEffort?: string; // 仅写入当前 ACP 会话声明的 thought_level 选项
+  fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
 }
@@ -563,6 +567,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 - **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
 
 - **权限策略**：默认取消 ACP 权限请求。`autoApprove` 仅由 Composer 的 YOLO 开关传入，作用范围为这一次运行；逐项权限确认仍未实现。
+
+- **能力边界**：Host 根据 ACP 的 `SessionConfigOption` 能力协商模型、reasoning effort 和 Fast；前端只为 `codex-acp` 暴露后两项。未声明对应配置的 Agent 不会收到该参数。
 
 #### `agent_list_skills`
 

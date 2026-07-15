@@ -9,10 +9,12 @@ import {
 	FolderOpen,
 	History,
 	PencilLine,
+	ShieldCheck,
 	X,
 	Zap,
 } from "lucide-react";
 import {
+	type KeyboardEvent,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -84,7 +86,6 @@ import {
 	PromptInputBody,
 	PromptInputButton,
 	PromptInputFooter,
-	PromptInputSubmit,
 	PromptInputTextarea,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
@@ -125,7 +126,9 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import {
+	type AgentEffortChoice,
 	type AgentListResponse,
 	type AgentModelChoice,
 	type AgentPlanEntry,
@@ -135,7 +138,9 @@ import {
 	listAgentSkills,
 	listAgents,
 	listenAgentCompleted,
+	listenAgentEffort,
 	listenAgentFailed,
+	listenAgentFastMode,
 	listenAgentModels,
 	listenAgentPlan,
 	listenAgentStream,
@@ -435,7 +440,14 @@ export function AgentPanel({
 	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
 	const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 	const [skills, setSkills] = useState<AgentSkill[]>([]);
+	const [effortOptions, setEffortOptions] = useState<AgentEffortChoice[]>([]);
+	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
+	const [fastAvailable, setFastAvailable] = useState(false);
+	const [fastEnabled, setFastEnabled] = useState(false);
 	const [yoloEnabled, setYoloEnabled] = useState(false);
+	const [composerMenuDismissed, setComposerMenuDismissed] = useState(false);
+	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
 	const [activeTabId, setActiveTabId] = useState("draft");
 	const activeSessionRef = useRef<string | null>(null);
 	const selectedAgentIdRef = useRef<string | null>(null);
@@ -465,6 +477,30 @@ export function AgentPanel({
 				if (prev && models.some((m) => m.id === prev)) return prev;
 				return ev.currentId || models[0]?.id || null;
 			});
+		},
+		[],
+	);
+
+	const applyEffortEvent = useCallback(
+		(ev: {
+			agentId: string;
+			currentId: string;
+			efforts: AgentEffortChoice[];
+		}) => {
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			setEffortOptions(ev.efforts);
+			setReasoningEffort(ev.currentId);
+		},
+		[],
+	);
+
+	const applyFastModeEvent = useCallback(
+		(ev: { agentId: string; enabled: boolean }) => {
+			const cur = selectedAgentIdRef.current;
+			if (cur && cur !== ev.agentId) return;
+			setFastAvailable(true);
+			setFastEnabled(ev.enabled);
 		},
 		[],
 	);
@@ -503,8 +539,16 @@ export function AgentPanel({
 		if (!selectedAgentId) {
 			setModels([]);
 			setModelId(null);
+			setEffortOptions([]);
+			setReasoningEffort(null);
+			setFastAvailable(false);
+			setFastEnabled(false);
 			return;
 		}
+		setEffortOptions([]);
+		setReasoningEffort(null);
+		setFastAvailable(false);
+		setFastEnabled(false);
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
 		if (catalog?.models.length) {
@@ -640,6 +684,12 @@ export function AgentPanel({
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
+			const uEffort = await listenAgentEffort((ev) => {
+				applyEffortEvent(ev);
+			});
+			const uFast = await listenAgentFastMode((ev) => {
+				applyFastModeEvent(ev);
+			});
 			const u2 = await listenAgentCompleted((ev) => {
 				if (
 					activeSessionRef.current &&
@@ -718,21 +768,28 @@ export function AgentPanel({
 				uPlan();
 				uUsage();
 				uModels();
+				uEffort();
+				uFast();
 				u2();
 				u3();
 				return;
 			}
-			unsubs.push(u1, uTool, uPlan, uUsage, uModels, u2, u3);
+			unsubs.push(u1, uTool, uPlan, uUsage, uModels, uEffort, uFast, u2, u3);
 		})();
 
 		return () => {
 			cancelled = true;
 			for (const u of unsubs) u();
 		};
-	}, [applyModelsEvent]);
+	}, [applyEffortEvent, applyFastModeEvent, applyModelsEvent]);
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
+	const selectedTemplate =
+		selected?.templateId ??
+		registry?.agents.find((agent) => agent.id === selectedAgentId)?.template ??
+		null;
+	const isCodexAgent = selectedTemplate === "codex-acp";
 
 	const modelGroups = useMemo(() => {
 		const groups = new Map<string, AgentModelChoice[]>();
@@ -787,6 +844,51 @@ export function AgentPanel({
 			.filter((skill) => !selectedSkillIds.includes(skill.id))
 			.slice(0, 6);
 	}, [selectedSkillIds, skillMatch, skillQuery, skills]);
+
+	const showMentionMenu = !composerMenuDismissed && mentionOptions.length > 0;
+	const showSkillMenu = !composerMenuDismissed && skillOptions.length > 0;
+
+	useEffect(() => {
+		setMentionActiveIndex((index) =>
+			mentionOptions.length
+				? Math.max(0, Math.min(index, mentionOptions.length - 1))
+				: 0,
+		);
+	}, [mentionOptions.length]);
+
+	useEffect(() => {
+		setSkillActiveIndex((index) =>
+			skillOptions.length
+				? Math.max(0, Math.min(index, skillOptions.length - 1))
+				: 0,
+		);
+	}, [skillOptions.length]);
+
+	const effortOptionsInDisplayOrder = useMemo(() => {
+		const order = ["max", "xhigh", "high", "medium", "low"];
+		return [...effortOptions].sort(
+			(left, right) =>
+				order.indexOf(left.id.toLocaleLowerCase()) -
+				order.indexOf(right.id.toLocaleLowerCase()),
+		);
+	}, [effortOptions]);
+
+	const formatEffort = (value: string) => {
+		switch (value.toLocaleLowerCase()) {
+			case "max":
+				return t("composer.effort.max");
+			case "xhigh":
+				return t("composer.effort.xhigh");
+			case "high":
+				return t("composer.effort.high");
+			case "medium":
+				return t("composer.effort.medium");
+			case "low":
+				return t("composer.effort.low");
+			default:
+				return value;
+		}
+	};
 
 	const selectedSkills = useMemo(
 		() =>
@@ -934,6 +1036,9 @@ export function AgentPanel({
 				workflow: "free",
 				target: contextPaths[0],
 				modelId: modelId ?? undefined,
+				reasoningEffort:
+					isCodexAgent && reasoningEffort ? reasoningEffort : undefined,
+				fastMode: isCodexAgent && fastAvailable ? fastEnabled : undefined,
 				skillIds: selectedSkillIds,
 				autoApprove: yoloEnabled,
 			});
@@ -975,6 +1080,7 @@ export function AgentPanel({
 
 	const attachMention = (path: string) => {
 		setMentionedPaths((prev) => [...new Set([...prev, path])]);
+		setComposerMenuDismissed(true);
 		setComposerText((prev) =>
 			prev.replace(/(^|\s)@[^\s]*$/, (_match, prefix: string) => `${prefix}`),
 		);
@@ -990,9 +1096,55 @@ export function AgentPanel({
 
 	const attachSkill = (skill: AgentSkill) => {
 		setSelectedSkillIds((prev) => [...new Set([...prev, skill.id])]);
+		setComposerMenuDismissed(true);
 		setComposerText((prev) =>
 			prev.replace(/(^|\s)\$[^\s]*$/, (_match, prefix: string) => `${prefix}`),
 		);
+	};
+
+	const handleComposerMenuKeyDown = (
+		event: KeyboardEvent<HTMLTextAreaElement>,
+	) => {
+		if (event.key === "Escape" && (showMentionMenu || showSkillMenu)) {
+			event.preventDefault();
+			setComposerMenuDismissed(true);
+			return;
+		}
+
+		if (showMentionMenu) {
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				setMentionActiveIndex((index) =>
+					event.key === "ArrowDown"
+						? (index + 1) % mentionOptions.length
+						: (index - 1 + mentionOptions.length) % mentionOptions.length,
+				);
+				return;
+			}
+			if (event.key === "Enter") {
+				event.preventDefault();
+				const path = mentionOptions[mentionActiveIndex] ?? mentionOptions[0];
+				if (path) attachMention(path);
+			}
+			return;
+		}
+
+		if (showSkillMenu) {
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				setSkillActiveIndex((index) =>
+					event.key === "ArrowDown"
+						? (index + 1) % skillOptions.length
+						: (index - 1 + skillOptions.length) % skillOptions.length,
+				);
+				return;
+			}
+			if (event.key === "Enter") {
+				event.preventDefault();
+				const skill = skillOptions[skillActiveIndex] ?? skillOptions[0];
+				if (skill) attachSkill(skill);
+			}
+		}
 	};
 
 	const newConversation = () => {
@@ -1480,13 +1632,25 @@ export function AgentPanel({
 									))}
 								</div>
 							) : null}
-							{mentionOptions.length > 0 ? (
-								<div className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
-									{mentionOptions.map((path) => (
+							{showMentionMenu ? (
+								<div
+									id="agent-mention-menu"
+									role="listbox"
+									className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+								>
+									{mentionOptions.map((path, index) => (
 										<button
 											key={path}
 											type="button"
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+											role="option"
+											aria-selected={mentionActiveIndex === index}
+											className={cn(
+												"flex w-full items-center gap-2 rounded-md border-l-2 border-transparent px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+												mentionActiveIndex === index
+													? "border-primary bg-muted"
+													: "hover:bg-muted/70",
+											)}
+											onMouseEnter={() => setMentionActiveIndex(index)}
 											onClick={() => attachMention(path)}
 										>
 											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1495,13 +1659,25 @@ export function AgentPanel({
 									))}
 								</div>
 							) : null}
-							{skillOptions.length > 0 ? (
-								<div className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
-									{skillOptions.map((skill) => (
+							{showSkillMenu ? (
+								<div
+									id="agent-skill-menu"
+									role="listbox"
+									className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+								>
+									{skillOptions.map((skill, index) => (
 										<button
 											key={skill.id}
 											type="button"
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+											role="option"
+											aria-selected={skillActiveIndex === index}
+											className={cn(
+												"flex w-full items-center gap-2 rounded-md border-l-2 border-transparent px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+												skillActiveIndex === index
+													? "border-primary bg-muted"
+													: "hover:bg-muted/70",
+											)}
+											onMouseEnter={() => setSkillActiveIndex(index)}
 											onClick={() => attachSkill(skill)}
 										>
 											<span className="font-mono text-muted-foreground">$</span>
@@ -1521,7 +1697,17 @@ export function AgentPanel({
 								autoFocus={autoFocus || undefined}
 								className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
 								value={composerText}
-								onChange={(event) => setComposerText(event.currentTarget.value)}
+								onChange={(event) => {
+									setComposerText(event.currentTarget.value);
+									setComposerMenuDismissed(false);
+									setMentionActiveIndex(0);
+									setSkillActiveIndex(0);
+								}}
+								onKeyDown={handleComposerMenuKeyDown}
+								aria-expanded={showMentionMenu || showSkillMenu}
+								aria-controls={
+									showMentionMenu ? "agent-mention-menu" : "agent-skill-menu"
+								}
 								placeholder={t("composer.placeholder")}
 								disabled={busy}
 							/>
@@ -1577,6 +1763,39 @@ export function AgentPanel({
 									</ModelSelectorList>
 								</ModelSelectorContent>
 							</ModelSelector>
+							{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<PromptInputButton
+											type="button"
+											className="h-7 gap-1 px-1.5 text-xs font-medium text-muted-foreground"
+											disabled={busy}
+											tooltip={t("composer.effortTooltip")}
+										>
+											{t("composer.effort.label")}:{" "}
+											{formatEffort(reasoningEffort ?? "medium")}
+											<ChevronDown className="size-3 shrink-0 opacity-70" />
+										</PromptInputButton>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="min-w-28 p-1">
+										{effortOptionsInDisplayOrder.map((effort) => (
+											<DropdownMenuItem
+												key={effort.id}
+												className={cn(
+													"justify-between rounded-md",
+													reasoningEffort === effort.id && "bg-muted",
+												)}
+												onSelect={() => setReasoningEffort(effort.id)}
+											>
+												{formatEffort(effort.id)}
+												{reasoningEffort === effort.id ? (
+													<CheckIcon className="size-3.5 text-muted-foreground" />
+												) : null}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+							) : null}
 							{usage && usage.size > 0 ? (
 								<Context usedTokens={usage.used} maxTokens={usage.size}>
 									<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
@@ -1599,30 +1818,44 @@ export function AgentPanel({
 							>
 								<FolderOpen className="size-4" />
 							</PromptInputButton>
-							<PromptInputButton
-								type="button"
+							{isCodexAgent && fastAvailable ? (
+								<PromptInputButton
+									type="button"
+									className={cn(
+										"size-7 text-muted-foreground",
+										fastEnabled &&
+											"bg-amber-400 text-amber-950 hover:bg-amber-400/90 dark:bg-amber-400 dark:text-amber-950",
+									)}
+									aria-pressed={fastEnabled}
+									disabled={busy}
+									onClick={() => setFastEnabled((current) => !current)}
+									tooltip={t("composer.fastToggle")}
+								>
+									<Zap className="size-3.5" />
+								</PromptInputButton>
+							) : null}
+							<div
 								className={cn(
-									"h-7 gap-1 px-1.5 text-xs font-medium text-muted-foreground",
-									yoloEnabled &&
-										"bg-orange-500/10 text-orange-700 dark:text-orange-300",
+									"flex h-7 items-center gap-1.5 px-1.5 text-muted-foreground text-xs font-medium",
+									yoloEnabled && "text-orange-700 dark:text-orange-300",
 								)}
-								aria-pressed={yoloEnabled}
-								disabled={busy}
-								onClick={() => setYoloEnabled((current) => !current)}
-								tooltip={
+								title={
 									yoloEnabled
 										? t("composer.yoloEnabled")
 										: t("composer.yoloDisabled")
 								}
 							>
-								<Zap className="size-3.5" />
-								{t("composer.yolo")}
-							</PromptInputButton>
+								<ShieldCheck className="size-3.5" />
+								<span>{t("composer.yolo")}</span>
+								<Switch
+									size="sm"
+									checked={yoloEnabled}
+									disabled={busy}
+									onCheckedChange={setYoloEnabled}
+									aria-label={t("composer.yoloToggle")}
+								/>
+							</div>
 						</PromptInputTools>
-						<PromptInputSubmit
-							status={busy ? "streaming" : "ready"}
-							disabled={busy}
-						/>
 					</PromptInputFooter>
 				</PromptInput>
 			</div>

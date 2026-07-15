@@ -34,9 +34,21 @@
 		"removeContext": "从上下文移除 {{path}}",
 		"removeSkill": "从上下文移除 ${{skill}}",
 		"toggleCurrentFile": "将当前文件加入上下文",
+		"fast": "快速",
+		"fastToggle": "切换快速模式",
 		"yolo": "YOLO",
+		"yoloToggle": "切换 YOLO 权限自动批准",
 		"yoloDisabled": "YOLO 已关闭。本次运行会拒绝权限请求。",
-		"yoloEnabled": "YOLO 已开启。本次运行会自动批准 ACP 权限请求。"
+		"yoloEnabled": "YOLO 已开启。本次运行会自动批准 ACP 权限请求。",
+		"effortTooltip": "选择 Codex 推理强度",
+		"effort": {
+			"label": "推理强度",
+			"max": "最高",
+			"xhigh": "极高",
+			"high": "高",
+			"medium": "中等",
+			"low": "低"
+		}
 	},
 	"empty": {
 		"title": "与你的知识库对话",

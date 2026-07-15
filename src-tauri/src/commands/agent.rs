@@ -244,6 +244,8 @@ pub async fn agent_run_once(
             request.target,
             request.vault_path,
             request.model_id,
+            request.reasoning_effort,
+            request.fast_mode,
             request.skill_ids,
             request.auto_approve,
         )
