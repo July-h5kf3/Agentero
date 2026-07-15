@@ -87,6 +87,67 @@ export const PAPER_FILE_MARKERS = [
 /** Direct-child directory names that mark a paper folder. */
 export const PAPER_DIR_MARKERS = ["source", "assets"] as const;
 
+const PDF_NAME_RE = /\.pdf$/i;
+const TEX_NAME_RE = /\.(tex|ltx)$/i;
+
+type TreeWalkNode = {
+	name: string;
+	kind?: string;
+	path?: string;
+	children?: Array<{
+		name: string;
+		kind?: string;
+		path?: string;
+		children?: unknown[];
+	}>;
+};
+
+/** Walk tree node names for a matching extension. */
+function treeHasFileExt(node: TreeWalkNode, re: RegExp): boolean {
+	if (node.kind !== "directory" && re.test(node.name)) return true;
+	for (const child of node.children ?? []) {
+		if (treeHasFileExt(child as TreeWalkNode, re)) return true;
+	}
+	return false;
+}
+
+export function paperHasLocalPdf(node: TreeWalkNode): boolean {
+	return treeHasFileExt(node, PDF_NAME_RE);
+}
+
+export function paperHasLocalTex(node: TreeWalkNode): boolean {
+	return treeHasFileExt(node, TEX_NAME_RE);
+}
+
+/**
+ * Show file-tree Download when:
+ * - local PDF is missing, or
+ * - TeX is fetchable (arXiv) but no local `.tex`/`.ltx` yet.
+ *
+ * `canFetchTex`: true if catalog has arxiv_id / type=arxiv, or folder name looks like arXiv id.
+ */
+export function paperNeedsAssetDownload(
+	node: TreeWalkNode,
+	opts?: { canFetchTex?: boolean },
+): boolean {
+	const hasPdf = paperHasLocalPdf(node);
+	const hasTex = paperHasLocalTex(node);
+	if (!hasPdf) return true;
+	const canTex =
+		opts?.canFetchTex === true ||
+		// Heuristic when catalog map not ready: folder name is arXiv id
+		Boolean(node.name && folderNameLooksLikeArxivId(node.name));
+	if (canTex && !hasTex) return true;
+	return false;
+}
+
+/** Folder-name heuristic: looks like bare arXiv id. */
+export function folderNameLooksLikeArxivId(name: string): boolean {
+	return /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i.test(
+		name.trim(),
+	);
+}
+
 type NameKind = { name: string; kind?: "file" | "directory" | string };
 
 function normalizePath(path: string): string {

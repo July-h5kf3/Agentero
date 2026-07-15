@@ -18,20 +18,32 @@ export type PapersLibraryProps = {
 type SortKey = "title" | "authors" | "year" | "type" | "id";
 type SortDir = "asc" | "desc";
 
-const SORT_COLUMNS: { key: SortKey; labelKey: string; className: string }[] = [
+const SORT_COLUMNS = [
 	{
-		key: "title",
-		labelKey: "papersLibrary.colTitle",
+		key: "title" as const,
+		labelKey: "papersLibrary.colTitle" as const,
 		className: "min-w-[240px]",
 	},
 	{
-		key: "authors",
-		labelKey: "papersLibrary.colAuthors",
+		key: "authors" as const,
+		labelKey: "papersLibrary.colAuthors" as const,
 		className: "min-w-[140px]",
 	},
-	{ key: "year", labelKey: "papersLibrary.colYear", className: "min-w-16" },
-	{ key: "type", labelKey: "papersLibrary.colType", className: "min-w-24" },
-	{ key: "id", labelKey: "papersLibrary.colId", className: "min-w-[160px]" },
+	{
+		key: "year" as const,
+		labelKey: "papersLibrary.colYear" as const,
+		className: "min-w-16",
+	},
+	{
+		key: "type" as const,
+		labelKey: "papersLibrary.colType" as const,
+		className: "min-w-24",
+	},
+	{
+		key: "id" as const,
+		labelKey: "papersLibrary.colId" as const,
+		className: "min-w-[160px]",
+	},
 ];
 
 function formatAuthors(authors: string[] | undefined): string {

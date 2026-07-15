@@ -1,10 +1,12 @@
 import {
+	Download,
 	FileCode2,
 	FileJson,
 	FilePlus2,
 	FileText,
 	FolderPlus,
 	Library,
+	Loader2,
 	ScrollText,
 	WandSparkles,
 } from "lucide-react";
@@ -19,8 +21,11 @@ import {
 import { useTranslation } from "react-i18next";
 import {
 	FileTree as AiFileTree,
+	FileTreeActions,
 	FileTreeFile,
 	FileTreeFolder,
+	FileTreeIcon,
+	FileTreeName,
 } from "@/components/ai-elements/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
@@ -36,10 +41,55 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { isPaperDirectory, paperDirFromPath } from "@/lib/paper-metadata";
+import {
+	isPaperDirectory,
+	paperDirFromPath,
+	paperNeedsAssetDownload,
+} from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
+import { toVaultRelative } from "@/lib/wiki";
+
+function paperCanFetchTex(
+	node: FileNode,
+	vaultPath: string | null,
+	arxivPaperRelPaths?: ReadonlySet<string>,
+): boolean {
+	const abs = node.path.replace(/\\/g, "/");
+	if (arxivPaperRelPaths?.has(abs)) return true;
+	if (vaultPath) {
+		const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
+		if (rel && arxivPaperRelPaths?.has(rel)) return true;
+	}
+	return false;
+}
+
+/** Paper folders under the tree that still need PDF and/or fetchable TeX. */
+function collectPapersNeedingAssets(
+	nodes: FileNode[],
+	vaultPath: string | null,
+	arxivPaperRelPaths?: ReadonlySet<string>,
+): FileNode[] {
+	const out: FileNode[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
+				if (
+					paperNeedsAssetDownload(n, {
+						canFetchTex: paperCanFetchTex(n, vaultPath, arxivPaperRelPaths),
+					})
+				) {
+					out.push(n);
+				}
+			} else if (n.children?.length) {
+				walk(n.children);
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
 
 export type TreeCreateKind = "file" | "folder";
 
@@ -213,6 +263,15 @@ type FileTreeProps = {
 	onSelectFile: (node: FileNode) => void;
 	/** Virtual library node → papers table in center pane. */
 	onSelectLibrary?: () => void;
+	/** Download PDF and/or arXiv TeX when local copies are missing. */
+	onDownloadPaperAssets?: (paperNode: FileNode) => Promise<void>;
+	/**
+	 * Vault-relative paper paths that can fetch LaTeX (catalog arxiv_id / type=arxiv).
+	 * Used so Download still shows when PDF exists but TeX does not.
+	 */
+	arxivPaperRelPaths?: ReadonlySet<string>;
+	/** Download missing PDF/TeX for every paper that needs it (Library row). */
+	onDownloadAllMissingAssets?: () => Promise<void>;
 	className?: string;
 };
 
@@ -225,9 +284,14 @@ export function FileTree({
 	onCancelCreate,
 	onSelectFile,
 	onSelectLibrary,
+	onDownloadPaperAssets,
+	arxivPaperRelPaths,
+	onDownloadAllMissingAssets,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
+	const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
+	const [downloadingAll, setDownloadingAll] = useState(false);
 	const defaultExpanded = useMemo(() => {
 		const open = new Set<string>();
 		collectDefaultExpanded(nodes, open);
@@ -292,6 +356,82 @@ export function FileTree({
 			/>
 		) : null;
 
+	const papersNeedingAssets = useMemo(
+		() => collectPapersNeedingAssets(nodes, vaultPath, arxivPaperRelPaths),
+		[nodes, vaultPath, arxivPaperRelPaths],
+	);
+	const showLibraryDownload =
+		Boolean(onDownloadAllMissingAssets) && papersNeedingAssets.length > 0;
+
+	const handleDownload = useCallback(
+		async (node: FileNode) => {
+			if (!onDownloadPaperAssets || downloadingPath || downloadingAll) return;
+			setDownloadingPath(node.path);
+			try {
+				await onDownloadPaperAssets(node);
+			} finally {
+				setDownloadingPath(null);
+			}
+		},
+		[onDownloadPaperAssets, downloadingPath, downloadingAll],
+	);
+
+	const handleDownloadAll = useCallback(async () => {
+		if (!onDownloadAllMissingAssets || downloadingAll || downloadingPath)
+			return;
+		setDownloadingAll(true);
+		try {
+			await onDownloadAllMissingAssets();
+		} finally {
+			setDownloadingAll(false);
+		}
+	}, [onDownloadAllMissingAssets, downloadingAll, downloadingPath]);
+
+	const libraryRow = (
+		<FileTreeFile path={LIBRARY_VIRTUAL_PATH} name={t("papersLibrary.title")}>
+			<span className="size-4 shrink-0" />
+			<FileTreeIcon>
+				<Library className="size-4 text-muted-foreground" />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate">
+				{t("papersLibrary.title")}
+			</FileTreeName>
+			{showLibraryDownload ? (
+				<FileTreeActions
+					className="shrink-0"
+					onClick={(e) => e.stopPropagation()}
+					onKeyDown={(e) => e.stopPropagation()}
+				>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6"
+								aria-label={t("fileTree.downloadAllMissing")}
+								disabled={downloadingAll || Boolean(downloadingPath)}
+								onClick={(e) => {
+									e.stopPropagation();
+									void handleDownloadAll();
+								}}
+							>
+								{downloadingAll ? (
+									<Loader2 className="size-3.5 animate-spin" />
+								) : (
+									<Download className="size-3.5" />
+								)}
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="right">
+							{t("fileTree.downloadAllMissing")}
+						</TooltipContent>
+					</Tooltip>
+				</FileTreeActions>
+			) : null}
+		</FileTreeFile>
+	);
+
 	const renderNode = (node: FileNode): ReactNode => {
 		// Paper folder (any depth under papers/) → leaf; org folders expand
 		if (
@@ -299,13 +439,57 @@ export function FileTree({
 			isPaperDirectory(node.path, node.children)
 		) {
 			const creatingInside = draftHere(node.path);
+			const canFetchTex = paperCanFetchTex(node, vaultPath, arxivPaperRelPaths);
+			const showDownload =
+				Boolean(onDownloadPaperAssets) &&
+				paperNeedsAssetDownload(node, { canFetchTex });
+			const isDownloading = downloadingPath === node.path || downloadingAll;
 			return (
 				<div key={node.id}>
-					<FileTreeFile
-						path={node.path}
-						name={node.name}
-						icon={<ScrollText className="size-4 text-muted-foreground" />}
-					/>
+					<FileTreeFile path={node.path} name={node.name}>
+						<span className="size-4 shrink-0" />
+						<FileTreeIcon>
+							<ScrollText className="size-4 text-muted-foreground" />
+						</FileTreeIcon>
+						<FileTreeName className="min-w-0 flex-1 truncate">
+							{node.name}
+						</FileTreeName>
+						{showDownload ? (
+							<FileTreeActions
+								className="shrink-0"
+								onClick={(e) => {
+									e.stopPropagation();
+								}}
+								onKeyDown={(e) => e.stopPropagation()}
+							>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											className="size-6"
+											aria-label={t("fileTree.downloadAssets")}
+											disabled={isDownloading}
+											onClick={(e) => {
+												e.stopPropagation();
+												void handleDownload(node);
+											}}
+										>
+											{isDownloading ? (
+												<Loader2 className="size-3.5 animate-spin" />
+											) : (
+												<Download className="size-3.5" />
+											)}
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent side="right">
+										{t("fileTree.downloadAssets")}
+									</TooltipContent>
+								</Tooltip>
+							</FileTreeActions>
+						) : null}
+					</FileTreeFile>
 					{creatingInside ? (
 						<div className="ml-4 border-l pl-2">{createRow}</div>
 					) : null}
@@ -337,64 +521,58 @@ export function FileTree({
 		createDraft && vaultPath && draftHere(vaultPath) ? createRow : null;
 
 	return (
-		<div className={cn("select-none py-1 text-sm", className)}>
-			{nodes.length === 0 && !createDraft ? (
-				<>
-					{/* Virtual library node still useful on empty vault */}
+		<TooltipProvider delayDuration={300}>
+			<div className={cn("select-none py-1 text-sm", className)}>
+				{nodes.length === 0 && !createDraft ? (
+					<>
+						{/* Virtual library node still useful on empty vault */}
+						<AiFileTree
+							selectedPath={treeSelectedPath}
+							expanded={expanded}
+							onExpandedChange={setExpanded}
+							onSelect={(path) => {
+								if (createDraft) return;
+								if (path === LIBRARY_VIRTUAL_PATH) {
+									onSelectLibrary?.();
+								}
+							}}
+						>
+							{libraryRow}
+						</AiFileTree>
+						<p className="px-3 py-2 text-muted-foreground text-xs">
+							{t("fileTree.empty")}
+						</p>
+					</>
+				) : (
 					<AiFileTree
 						selectedPath={treeSelectedPath}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
 						onSelect={(path) => {
+							// Don't navigate away while naming a new entry.
 							if (createDraft) return;
 							if (path === LIBRARY_VIRTUAL_PATH) {
 								onSelectLibrary?.();
+								return;
+							}
+							const node = byPath.get(path);
+							if (!node) return;
+							if (
+								node.kind === "file" ||
+								isPaperDirectory(node.path, node.children)
+							) {
+								onSelectFile(node);
 							}
 						}}
 					>
-						<FileTreeFile
-							path={LIBRARY_VIRTUAL_PATH}
-							name={t("papersLibrary.title")}
-							icon={<Library className="size-4 text-muted-foreground" />}
-						/>
+						{/* Virtual root: papers library table (not a real folder) */}
+						{libraryRow}
+						{rootCreate}
+						{nodes.map((node) => renderNode(node))}
 					</AiFileTree>
-					<p className="px-3 py-2 text-muted-foreground text-xs">
-						{t("fileTree.empty")}
-					</p>
-				</>
-			) : (
-				<AiFileTree
-					selectedPath={treeSelectedPath}
-					expanded={expanded}
-					onExpandedChange={setExpanded}
-					onSelect={(path) => {
-						// Don't navigate away while naming a new entry.
-						if (createDraft) return;
-						if (path === LIBRARY_VIRTUAL_PATH) {
-							onSelectLibrary?.();
-							return;
-						}
-						const node = byPath.get(path);
-						if (!node) return;
-						if (
-							node.kind === "file" ||
-							isPaperDirectory(node.path, node.children)
-						) {
-							onSelectFile(node);
-						}
-					}}
-				>
-					{/* Virtual root: papers library table (not a real folder) */}
-					<FileTreeFile
-						path={LIBRARY_VIRTUAL_PATH}
-						name={t("papersLibrary.title")}
-						icon={<Library className="size-4 text-muted-foreground" />}
-					/>
-					{rootCreate}
-					{nodes.map((node) => renderNode(node))}
-				</AiFileTree>
-			)}
-		</div>
+				)}
+			</div>
+		</TooltipProvider>
 	);
 }
 

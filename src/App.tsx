@@ -37,7 +37,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
-import { addPaperByIdentifier } from "@/lib/lookup";
+import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -47,6 +47,7 @@ import {
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
+	paperNeedsAssetDownload,
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
@@ -756,6 +757,79 @@ export default function App() {
 		],
 	);
 
+	/**
+	 * On-demand assets: missing local PDF, and/or arXiv TeX when fetchable but absent.
+	 */
+	const handleDownloadPaperAssets = useCallback(
+		async (node: FileNode) => {
+			if (!vaultPath) return;
+			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
+			try {
+				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
+				await refreshTree(vaultPath);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[vaultPath, refreshTree],
+	);
+
+	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
+	const arxivPaperRelPaths = useMemo(() => {
+		const set = new Set<string>();
+		for (const p of libraryPapers) {
+			if (!p.path) continue;
+			if (p.arxiv_id || p.type === "arxiv") {
+				set.add(p.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
+			}
+		}
+		return set;
+	}, [libraryPapers]);
+
+	/**
+	 * Library bulk download: every paper folder missing PDF and/or fetchable TeX.
+	 * Walks the file tree so local source/ presence matches the row icons.
+	 */
+	const handleDownloadAllMissingAssets = useCallback(async () => {
+		if (!vaultPath) return;
+		const queue: FileNode[] = [];
+		const walk = (list: FileNode[]) => {
+			for (const n of list) {
+				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
+					const rel = toVaultRelative(vaultPath, n.path)
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "");
+					const canFetchTex =
+						Boolean(rel && arxivPaperRelPaths.has(rel)) ||
+						Boolean(arxivPaperRelPaths.has(n.path.replace(/\\/g, "/")));
+					if (paperNeedsAssetDownload(n, { canFetchTex })) {
+						queue.push(n);
+					}
+				} else if (n.children?.length) {
+					walk(n.children);
+				}
+			}
+		};
+		walk(tree);
+		if (!queue.length) return;
+
+		const errors: string[] = [];
+		for (const node of queue) {
+			const rel = toVaultRelative(vaultPath, node.path)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			try {
+				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
+			} catch (e) {
+				errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+		await refreshTree(vaultPath);
+		if (errors.length) {
+			setError(errors.slice(0, 3).join("; "));
+		}
+	}, [vaultPath, tree, arxivPaperRelPaths, refreshTree]);
+
 	const handleOpenLibraryPaper = useCallback(
 		(paper: PaperMetadata) => {
 			if (!vaultPath || !paper.path) return;
@@ -1246,6 +1320,9 @@ export default function App() {
 										onCancelCreate={handleCancelCreate}
 										onSelectFile={(n) => void handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
+										onDownloadPaperAssets={handleDownloadPaperAssets}
+										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
+										arxivPaperRelPaths={arxivPaperRelPaths}
 									/>
 								</div>
 								{/* Paper info only when a specific paper is selected */}

@@ -6,7 +6,10 @@
 		"refresh": "Refresh (⌘R)",
 		"invalidName": "Invalid name. Do not use path separators.",
 		"needsVault": "Open a vault before creating files.",
-		"alreadyExists": "「{{name}}」 already exists."
+		"alreadyExists": "「{{name}}」 already exists.",
+		"downloadAssets": "Download missing PDF / LaTeX",
+		"downloadAllMissing": "Download all missing PDF / LaTeX",
+		"downloadFailed": "Failed to download paper assets."
 	},
 	"papersLibrary": {
 		"title": "Library",
