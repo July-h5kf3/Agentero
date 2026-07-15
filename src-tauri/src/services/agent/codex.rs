@@ -5,6 +5,7 @@ use crate::models::agent::{
     AgentTemplate, AgentToolEvent, ProbeResult, WarmResult,
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
+use crate::services::agent::events::AgentEventEmitter;
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::watch;
@@ -608,7 +608,7 @@ pub async fn prepare_codex_thread(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run_codex_turn(
-    app: AppHandle,
+    app: AgentEventEmitter,
     prepared: PreparedCodexThread,
     message_id: String,
     prompt: String,
@@ -663,7 +663,7 @@ async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
 }
 
 fn emit_codex_result(
-    app: &AppHandle,
+    app: &AgentEventEmitter,
     thread_id: &str,
     message_id: &str,
     content: String,
@@ -686,7 +686,7 @@ fn emit_codex_result(
 
 #[allow(clippy::too_many_arguments)]
 async fn run_codex_turn_inner(
-    app: &AppHandle,
+    app: &AgentEventEmitter,
     client: &mut CodexClient,
     thread_id: &str,
     message_id: &str,
@@ -859,7 +859,7 @@ async fn resolve_fast_tier(
 }
 
 fn handle_notification(
-    app: &AppHandle,
+    app: &AgentEventEmitter,
     thread_id: &str,
     content: &mut String,
     reasoning: &mut String,
@@ -987,7 +987,7 @@ pub async fn codex_read_thread(
 }
 
 pub async fn warm_codex(
-    app: AppHandle,
+    app: AgentEventEmitter,
     desc: AgentDescriptor,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,

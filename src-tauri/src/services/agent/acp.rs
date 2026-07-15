@@ -5,6 +5,7 @@ use crate::models::agent::{
     AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, WarmResult,
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
+use crate::services::agent::events::AgentEventEmitter;
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
 use agent_client_protocol::schema::v1::{
@@ -21,7 +22,6 @@ use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -347,7 +347,7 @@ fn fast_mode_from_config_options(
 }
 
 fn emit_session_config_options(
-    app: &AppHandle,
+    app: &AgentEventEmitter,
     session_id: &str,
     agent_id: &str,
     opts: &[SessionConfigOption],
@@ -364,7 +364,7 @@ fn emit_session_config_options(
 }
 
 fn emit_rich_session_update(
-    app: &AppHandle,
+    app: &AgentEventEmitter,
     session_id: &str,
     agent_id: &str,
     update: &SessionUpdate,
@@ -564,7 +564,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
 /// One-shot prompt: spawn → initialize → session → prompt → stream events → completed/failed.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_once(
-    app: AppHandle,
+    app: AgentEventEmitter,
     desc: AgentDescriptor,
     session_id: String,
     message_id: String,
@@ -919,7 +919,7 @@ pub fn new_ids() -> (String, String) {
 /// Background warm-up: spawn ACP → initialize → new_session → emit models/usage (no prompt).
 /// Used when Chat opens so the model selector and context meter are ready before first send.
 pub async fn warm_agent(
-    app: AppHandle,
+    app: AgentEventEmitter,
     desc: AgentDescriptor,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,

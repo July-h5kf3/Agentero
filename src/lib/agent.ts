@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
 
@@ -397,62 +398,67 @@ export async function warmAgent(request: {
 	});
 }
 
+function listenAgentEvent<T>(
+	event: string,
+	handler: (payload: T) => void,
+): Promise<UnlistenFn> {
+	return getCurrentWebviewWindow().listen<T>(event, (message) =>
+		handler(message.payload),
+	);
+}
+
 export async function listenAgentStream(
 	handler: (e: AgentStreamEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentStreamEvent>("agent:stream", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:stream", handler);
 }
 
 export async function listenAgentCompleted(
 	handler: (e: AgentResultPayload) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentResultPayload>("agent:completed", (ev) =>
-		handler(ev.payload),
-	);
+	return listenAgentEvent("agent:completed", handler);
 }
 
 export async function listenAgentFailed(
 	handler: (e: AgentFailedEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentFailedEvent>("agent:failed", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:failed", handler);
 }
 
 export async function listenAgentTool(
 	handler: (e: AgentToolEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentToolEvent>("agent:tool", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:tool", handler);
 }
 
 export async function listenAgentPlan(
 	handler: (e: AgentPlanEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentPlanEvent>("agent:plan", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:plan", handler);
 }
 
 export async function listenAgentUsage(
 	handler: (e: AgentUsageEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentUsageEvent>("agent:usage", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:usage", handler);
 }
 
 export async function listenAgentModels(
 	handler: (e: AgentModelsEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentModelsEvent>("agent:models", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:models", handler);
 }
 
 export async function listenAgentEffort(
 	handler: (e: AgentEffortEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentEffortEvent>("agent:effort", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:effort", handler);
 }
 
 export async function listenAgentFastMode(
 	handler: (e: AgentFastModeEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentFastModeEvent>("agent:fast-mode", (ev) =>
-		handler(ev.payload),
-	);
+	return listenAgentEvent("agent:fast-mode", handler);
 }
 
 const MODEL_PREF_KEY = "motif-agent-model-pref";

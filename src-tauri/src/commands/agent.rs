@@ -8,7 +8,7 @@ use crate::services::agent::codex::{CodexThreadHistory, CodexThreadInfo};
 use crate::services::agent::{
     builtin_templates, codex_list_threads, codex_read_thread, list_agent_skills, new_ids,
     prepare_codex_thread, probe_agent, probe_codex, run_codex_turn, run_once, warm_agent,
-    warm_codex, AgentRegistry, AgentRunController,
+    warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController,
 };
 use serde::Serialize;
 use tauri::{Manager, State};
@@ -224,7 +224,7 @@ pub async fn agent_probe_catalog(
 
 #[tauri::command]
 pub async fn agent_run_once(
-    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
     runs: State<'_, AgentRunController>,
     request: RunOnceRequest,
@@ -275,12 +275,13 @@ pub async fn agent_run_once(
         }
     };
 
-    let app_handle = app.clone();
+    let app_handle = window.app_handle().clone();
+    let events = AgentEventEmitter::new(app_handle.clone(), window.label());
     tauri::async_runtime::spawn(async move {
         if desc.template == AgentTemplate::CodexAcp {
             if let Some(prepared_codex_thread) = prepared_codex_thread {
                 run_codex_turn(
-                    app_handle.clone(),
+                    events.clone(),
                     prepared_codex_thread,
                     message_id,
                     request.prompt,
@@ -298,7 +299,7 @@ pub async fn agent_run_once(
             }
         } else {
             let _ = run_once(
-                app_handle.clone(),
+                events.clone(),
                 desc,
                 session_id.clone(),
                 message_id,
@@ -385,7 +386,7 @@ pub fn agent_cancel_run(
 /// Background ACP start when Chat opens — loads models/context without a user prompt.
 #[tauri::command]
 pub async fn agent_warm(
-    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
     request: WarmRequest,
 ) -> Result<ApiResult<WarmResult>, String> {
@@ -403,10 +404,11 @@ pub async fn agent_warm(
         }
     };
 
+    let events = AgentEventEmitter::new(window.app_handle().clone(), window.label());
     let result = if desc.template == AgentTemplate::CodexAcp {
-        warm_codex(app, desc, request.vault_path, request.model_id).await
+        warm_codex(events, desc, request.vault_path, request.model_id).await
     } else {
-        warm_agent(app, desc, request.vault_path, request.model_id).await
+        warm_agent(events, desc, request.vault_path, request.model_id).await
     };
     Ok(ApiResult::ok(result))
 }

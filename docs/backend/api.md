@@ -37,7 +37,7 @@ Host (Tauri + Rust)
 
 ### 2.4 事件约定
 
-Host 通过 `emit('event_name', payload)` 向前端推送事件：
+Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单事件可广播；`agent:*` 事件必须由 Host 使用 `emit_to` 定向到发起 `agent_run_once` 或 `agent_warm` 的 WebviewWindow，前端也必须通过当前 WebviewWindow 注册 listener。发射与监听两端使用相同窗口 label，避免多窗口之间串流、误消费终态或覆盖 Composer 配置。
 
 | 事件名 | 触发时机 | payload 关键字段 |
 |---|---|---|
