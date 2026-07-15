@@ -12,7 +12,7 @@
 | 目标 | 说明 |
 |---|---|
 | 集合索引进库 | 「库里有哪些论文」以 SQLite 表为准，不再依赖根级 `PAPERS.md`。 |
-| 元数据进库 | 单篇 title / authors / tags / URLs 等写入 catalog，不再默认写 `papers/<id>/metadata.json`。 |
+| 元数据进库 | 单篇 title / authors / tags / URLs 等以 **catalog.sqlite 为权威**；`metadata.json` 仅为 SQLite 变更后的投影同步。 |
 | 人写内容仍文件 | `NOTES.md`、`highlights.md`、`source/`、可选 `PAPER.md` 保持 Markdown/二进制文件。 |
 | 可导出、非默认 | 保留导出为 `PAPERS.md` / `library.bib` 的能力，供 Agent、引用管理器、分享使用；Create Vault **不**生成这两份文件。 |
 | 与可扔缓存区分 | Catalog 是 Vault 资产（备份/同步应包含）；双链图等仍可另作可重建缓存（见 §6）。 |
@@ -33,6 +33,7 @@
 1. **Catalog 不可当作「随手可删的 cache」**：删除 `catalog.sqlite` 会丢失标签、远程 URL、入库状态等元数据（除非事先 export / 备份）。
 2. **笔记与 source 仍是可再生之外的用户资产**；catalog 损坏时，磁盘上的 paper 文件夹仍在，但 meta 字段不可从 NOTES 可靠还原。
 3. **导出是单向投影**：`PAPERS.md` / `library.bib` 不是写回入口；改元数据只走 `paper:*` / 入库命令写 SQLite。
+4. **`metadata.json` 是投影**：读路径走 `paper_get`（catalog）；每次 `upsert` 后同步写到对应 paper 文件夹，便于外部工具浏览，**不是** UI 主数据源。
 
 ---
 

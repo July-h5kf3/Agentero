@@ -6,6 +6,7 @@ mod map;
 mod parse;
 
 use crate::error::AppError;
+use crate::services::catalog::papers::{self, PaperRecord};
 use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 use parse::{extract_primary_identifier, IdentifierKind};
 use serde::{Deserialize, Serialize};
@@ -71,12 +72,17 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
         return Err(AppError::message("resolved metadata has empty id"));
     }
 
-    let paper_dir = vault.join(&parent_rel).join(&id);
+    let path_rel = format!("{parent_rel}/{id}").replace('\\', "/");
+    let paper_dir = vault.join(&path_rel);
     fs::create_dir_all(&paper_dir)?;
 
     write_paper_shell(&paper_dir, &meta)?;
 
-    // Download policy: no preview URL → always try; has preview → only if setting on
+    // 1) Catalog SQLite is authoritative; metadata.json is a projection
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(&vault, &record)?;
+
+    // 2) Download policy: no preview URL → always try; has preview → only if setting on
     let has_preview = non_empty(&meta.pdf_url) || non_empty(&meta.html_url);
     let should_download = !has_preview || args.download_fulltext_to_local;
     if should_download {
@@ -90,13 +96,7 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
         }
     }
 
-    // Transition metadata.json (catalog upsert can replace later)
-    let meta_path = paper_dir.join("metadata.json");
-    let json = serde_json::to_string_pretty(&meta).map_err(AppError::from)?;
-    fs::write(meta_path, format!("{json}\n"))?;
-
     let paper_dir_str = paper_dir.to_string_lossy().to_string();
-    let path_rel = format!("{parent_rel}/{id}").replace('\\', "/");
 
     Ok(LookupImportResult {
         paper_dir: paper_dir_str,
@@ -236,6 +236,48 @@ fn regex_lite_strip_version(id: &str) -> String {
 fn urlencoding_encode(s: &str) -> String {
     // minimal encode for arxiv ids
     s.replace('/', "%2F")
+}
+
+fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecord {
+    PaperRecord {
+        path: path.replace('\\', "/"),
+        id: meta.id.clone(),
+        paper_type: meta.paper_type.clone(),
+        title: meta.title.clone(),
+        authors: meta.authors.clone(),
+        creators: meta.creators.clone(),
+        year: meta.year,
+        date: meta.date.clone(),
+        abstract_text: meta.abstract_text.clone(),
+        tags: meta.tags.clone(),
+        arxiv_id: meta.arxiv_id.clone(),
+        doi: meta.doi.clone(),
+        isbn: meta.isbn.clone(),
+        issn: meta.issn.clone(),
+        pmid: meta.pmid.clone(),
+        publication: meta.publication.clone(),
+        volume: meta.volume.clone(),
+        issue: meta.issue.clone(),
+        pages: meta.pages.clone(),
+        publisher: meta.publisher.clone(),
+        place: meta.place.clone(),
+        series: meta.series.clone(),
+        language: meta.language.clone(),
+        pdf_url: meta.pdf_url.clone(),
+        html_url: meta.html_url.clone(),
+        source_url: meta.source_url.clone(),
+        body_source: None,
+        body_quality: None,
+        bibtex_key: meta.bibtex_key.clone(),
+        citation_count: None,
+        zotero_item_type: meta.zotero_item_type.clone(),
+        meta_source: meta.meta_source.clone(),
+        extra: meta.extra.clone(),
+        summary: meta.summary.clone(),
+        status: meta.status.clone(),
+        added_at: meta.added_at.clone(),
+        updated_at: meta.updated_at.clone(),
+    }
 }
 
 fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {

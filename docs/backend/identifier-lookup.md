@@ -144,7 +144,8 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
   parent_dir 解析 → path = {parent_dir}/{id}
         │
         ▼
-  catalog.papers UPSERT（sqlite）
+  catalog.papers UPSERT（sqlite，权威）
+  + 同步投影 metadata.json 到 paper 文件夹
   + papers/.../NOTES.md、highlights.md
         │
         ▼
@@ -152,6 +153,8 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
     无 pdf_url 且无 html_url → 始终尝试下载到 source/
     有预览 URL 且 downloadFulltextToLocal → 用 URL 下载到 source/
     有预览 URL 且设置关 → 不下载
+
+读路径：UI 用 paper_get 读 catalog；不把 metadata.json 当主源。
 ```
 
 | 来源 | 在统一流中的位置 |

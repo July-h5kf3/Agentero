@@ -548,9 +548,28 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
-#### `paper:get`
+#### `paper_get`（已落地）
 
-获取单篇论文完整数据（catalog 行 + 路径）。
+从 **catalog.sqlite** 读取单篇论文元数据（权威来源）。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** paper 文件夹 Vault 相对路径（主键），如 papers/nlp/1706.03762 */
+  path?: string;
+  /** 或按逻辑 id 查询 */
+  id?: string;
+}
+```
+
+- **返回**：`{ ok: true; data: PaperMetadata }`（含 `pdf_url` / `html_url` / `arxiv_id` 等）；未找到则 `ok: false`。
+- **说明**：UI 预览链接从此接口读取；`metadata.json` 仅作同步投影。
+
+#### `paper:get`（扩展规划）
+
+获取单篇论文完整数据（catalog 行 + 路径附件信息）。
 
 - **参数**
 

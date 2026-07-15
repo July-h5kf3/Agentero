@@ -141,6 +141,7 @@ pub fn run() {
             commands::window::window_new,
             commands::lookup::lookup_import,
             commands::lookup::lookup_translator_config,
+            commands::paper::paper_get,
             set_locale,
         ])
         .setup(|app| {

@@ -1,16 +1,15 @@
+import { invoke } from "@tauri-apps/api/core";
 import { arxivUrls } from "@/lib/arxiv";
+import { isTauri } from "@/lib/tauri";
 import { readVaultFile } from "@/lib/vault";
+import { toVaultRelative } from "@/lib/wiki";
 
 /**
- * Paper metadata: target of truth is Vault `.motif/catalog.sqlite` (see docs/backend/catalog.md).
- * Transition: still may load `<paperDir>/metadata.json` until Host paper:* APIs land.
+ * Paper metadata: **authoritative store is** Vault `.motif/catalog.sqlite`.
+ * `metadata.json` is a projection synced after catalog writes (not the read path).
  *
- * **Paper folder = minimal unit** under `papers/` at any depth, e.g.
- *   `papers/1706.03762/`
- *   `papers/nlp/transformers/1706.03762/`
- * Identified by marker children (NOTES.md, highlights.md, source/, …), not by path depth.
- *
- * PDF/HTML viewers use **remote URLs only** (no local download / vault file read).
+ * **Paper folder = minimal unit** under `papers/` at any depth.
+ * PDF/HTML viewers use **remote URLs** from catalog fields.
  */
 /** Creator from Translator / Zotero item mapping. */
 export type PaperCreator = {
@@ -413,24 +412,60 @@ function normalizeMetadataKeys(
 	return out;
 }
 
+function enrichArxivUrls(data: PaperMetadata): PaperMetadata {
+	if (!data.arxiv_id) return data;
+	const urls = arxivUrls(data.arxiv_id);
+	if (!urls) return data;
+	if (!data.pdf_url) data.pdf_url = urls.pdf;
+	if (!data.html_url) data.html_url = urls.html;
+	if (!data.source_url) data.source_url = urls.abs;
+	return data;
+}
+
+type ApiResult<T> = {
+	ok: boolean;
+	data?: T;
+	error?: { code: string; message: string };
+};
+
+/**
+ * Load paper metadata. Prefer catalog.sqlite via Host `paper_get`.
+ * Falls back to `metadata.json` only when catalog has no row (legacy).
+ *
+ * @param paperDir absolute paper folder path
+ * @param vaultRoot absolute vault root (needed for catalog lookup)
+ */
 export async function loadPaperMetadata(
 	paperDir: string,
+	vaultRoot?: string | null,
 ): Promise<PaperMetadata | null> {
+	// Primary: SQLite catalog
+	if (isTauri() && vaultRoot) {
+		const path = toVaultRelative(vaultRoot, paperDir).replace(/\\/g, "/");
+		if (path && path !== ".") {
+			try {
+				const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
+					args: { vaultPath: vaultRoot, path },
+				});
+				if (res.ok && res.data?.id) {
+					return enrichArxivUrls({
+						...res.data,
+						path: res.data.path ?? path,
+					});
+				}
+			} catch {
+				// fall through
+			}
+		}
+	}
+
+	// Legacy projection only
 	try {
 		const raw = await readVaultFile(metadataPathForPaper(paperDir));
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
 		const data = normalizeMetadataKeys(parsed) as unknown as PaperMetadata;
 		if (!data?.id) return null;
-		// Derive preview URLs from arxiv_id when missing (older imports)
-		if (data.arxiv_id) {
-			const urls = arxivUrls(data.arxiv_id);
-			if (urls) {
-				if (!data.pdf_url) data.pdf_url = urls.pdf;
-				if (!data.html_url) data.html_url = urls.html;
-				if (!data.source_url) data.source_url = urls.abs;
-			}
-		}
-		return data;
+		return enrichArxivUrls(data);
 	} catch {
 		return null;
 	}

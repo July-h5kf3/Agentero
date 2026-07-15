@@ -278,7 +278,7 @@ export default function App() {
 				return;
 			}
 
-			const meta = await loadPaperMetadata(paperDir);
+			const meta = await loadPaperMetadata(paperDir, vaultPath);
 			if (cancelled) return;
 			setPaperMeta(meta);
 
@@ -321,7 +321,7 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedPath, paperFolders, tree]);
+	}, [selectedPath, paperFolders, tree, vaultPath]);
 
 	useEffect(() => {
 		setTheme(settings.theme);
