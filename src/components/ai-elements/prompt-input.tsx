@@ -1244,6 +1244,7 @@ export const PromptInputSubmit = ({
 }: PromptInputSubmitProps) => {
 	const { t } = useTranslation("aiElements");
 	const isGenerating = status === "submitted" || status === "streaming";
+	const canStop = isGenerating && Boolean(onStop);
 
 	let Icon = <CornerDownLeftIcon className="size-4" />;
 
@@ -1257,25 +1258,23 @@ export const PromptInputSubmit = ({
 
 	const handleClick = useCallback(
 		(e: React.MouseEvent<HTMLButtonElement>) => {
-			if (isGenerating && onStop) {
+			if (canStop && onStop) {
 				e.preventDefault();
 				onStop();
 				return;
 			}
 			onClick?.(e);
 		},
-		[isGenerating, onStop, onClick],
+		[canStop, onStop, onClick],
 	);
 
 	return (
 		<InputGroupButton
-			aria-label={
-				isGenerating ? t("promptInput.stop") : t("promptInput.submit")
-			}
+			aria-label={canStop ? t("promptInput.stop") : t("promptInput.submit")}
 			className={cn(className)}
 			onClick={handleClick}
 			size={size}
-			type={isGenerating && onStop ? "button" : "submit"}
+			type={canStop ? "button" : "submit"}
 			variant={variant}
 			{...props}
 		>

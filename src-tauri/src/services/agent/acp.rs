@@ -9,11 +9,12 @@ use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
 use agent_client_protocol::schema::v1::{
     CancelNotification, ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio,
-    NewSessionRequest, PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
-    RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
-    SessionConfigId, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
-    SessionConfigOptionValue, SessionConfigSelectOptions, SessionNotification, SessionUpdate,
-    SetSessionConfigOptionRequest, TextContent, ToolCallStatus, ToolKind,
+    NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
+    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    SelectedPermissionOutcome, SessionConfigId, SessionConfigKind, SessionConfigOption,
+    SessionConfigOptionCategory, SessionConfigOptionValue, SessionConfigSelectOptions,
+    SessionNotification, SessionUpdate, SetSessionConfigOptionRequest, TextContent, ToolCallStatus,
+    ToolKind,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
@@ -448,7 +449,8 @@ pub(crate) fn permission_response(
     let outcome = if auto_approve {
         request
             .options
-            .first()
+            .iter()
+            .find(|option| option.kind == PermissionOptionKind::AllowOnce)
             .map_or(RequestPermissionOutcome::Cancelled, |opt| {
                 RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
                     opt.option_id.clone(),
@@ -719,6 +721,18 @@ pub async fn run_once(
 
                 let acp_session_id = new_session.session_id;
                 let mut config_options = new_session.config_options.unwrap_or_default();
+                macro_rules! return_cancelled {
+                    () => {{
+                        let payload = cancelled_payload(
+                            session_for_conn.clone(),
+                            message_for_conn.clone(),
+                            &content_for_conn,
+                            &thought_for_conn,
+                        );
+                        let _ = app_for_conn.emit("agent:completed", payload.clone());
+                        return Ok(payload);
+                    }};
+                }
                 if let Some(ev) = models_from_config_options(
                     &session_for_models,
                     &agent_id_for_models,
@@ -728,18 +742,20 @@ pub async fn run_once(
                     // complete response before resolving the remaining preferences.
                     if let Some(pref) = preferred_model.clone() {
                         if pref != ev.current_id && ev.models.iter().any(|m| m.id == pref) {
-                            if let Ok(response) = timed_acp_request(
-                                "set model",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref),
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
+                            let response = tokio::select! {
+                                result = timed_acp_request(
+                                    "set model",
+                                    connection
+                                        .send_request(SetSessionConfigOptionRequest::new(
+                                            acp_session_id.clone(),
+                                            SessionConfigId::new(ev.config_id.as_str()),
+                                            SessionConfigOptionValue::value_id(pref),
+                                        ))
+                                        .block_task(),
+                                ) => result.ok(),
+                                () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
+                            };
+                            if let Some(response) = response {
                                 config_options = response.config_options;
                             }
                         }
@@ -754,18 +770,20 @@ pub async fn run_once(
                         if pref != ev.current_id
                             && ev.efforts.iter().any(|effort| effort.id == pref)
                         {
-                            if let Ok(response) = timed_acp_request(
-                                "set effort",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref),
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
+                            let response = tokio::select! {
+                                result = timed_acp_request(
+                                    "set effort",
+                                    connection
+                                        .send_request(SetSessionConfigOptionRequest::new(
+                                            acp_session_id.clone(),
+                                            SessionConfigId::new(ev.config_id.as_str()),
+                                            SessionConfigOptionValue::value_id(pref),
+                                        ))
+                                        .block_task(),
+                                ) => result.ok(),
+                                () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
+                            };
+                            if let Some(response) = response {
                                 config_options = response.config_options;
                             }
                         }
@@ -787,18 +805,20 @@ pub async fn run_once(
                             _ => None,
                         };
                         if let Some(value) = value {
-                            if let Ok(response) = timed_acp_request(
-                                "set fast mode",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        opt.id.clone(),
-                                        value,
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
+                            let response = tokio::select! {
+                                result = timed_acp_request(
+                                    "set fast mode",
+                                    connection
+                                        .send_request(SetSessionConfigOptionRequest::new(
+                                            acp_session_id.clone(),
+                                            opt.id.clone(),
+                                            value,
+                                        ))
+                                        .block_task(),
+                                ) => result.ok(),
+                                () = wait_for_cancellation(&mut cancellation) => return_cancelled!(),
+                            };
+                            if let Some(response) = response {
                                 config_options = response.config_options;
                             }
                         }

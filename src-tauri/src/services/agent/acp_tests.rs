@@ -7,8 +7,8 @@ mod acp_live {
     use crate::services::agent::templates::catalog_templates;
     use crate::services::agent::AgentRegistry;
     use agent_client_protocol::schema::v1::{
-        PermissionOption, PermissionOptionKind, RequestPermissionOutcome, RequestPermissionRequest,
-        ToolCallUpdate, ToolCallUpdateFields,
+        PermissionOption, PermissionOptionId, PermissionOptionKind, RequestPermissionOutcome,
+        RequestPermissionRequest, ToolCallUpdate, ToolCallUpdateFields,
     };
     use std::collections::HashMap;
 
@@ -87,11 +87,19 @@ mod acp_live {
         let request = RequestPermissionRequest::new(
             "session",
             ToolCallUpdate::new("tool-call", ToolCallUpdateFields::new()),
-            vec![PermissionOption::new(
-                "allow-once",
-                "Allow once",
-                PermissionOptionKind::AllowOnce,
-            )],
+            vec![
+                PermissionOption::new(
+                    "reject-once",
+                    "Reject once",
+                    PermissionOptionKind::RejectOnce,
+                ),
+                PermissionOption::new(
+                    "allow-always",
+                    "Allow always",
+                    PermissionOptionKind::AllowAlways,
+                ),
+                PermissionOption::new("allow-once", "Allow once", PermissionOptionKind::AllowOnce),
+            ],
         );
 
         assert!(matches!(
@@ -100,7 +108,8 @@ mod acp_live {
         ));
         assert!(matches!(
             permission_response(&request, true).outcome,
-            RequestPermissionOutcome::Selected(_)
+            RequestPermissionOutcome::Selected(selected)
+                if selected.option_id == PermissionOptionId::new("allow-once")
         ));
     }
 

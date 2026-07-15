@@ -655,6 +655,35 @@ pub async fn run_codex_turn(
     }
 }
 
+async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
+    if *cancellation.borrow() {
+        return;
+    }
+    let _ = cancellation.changed().await;
+}
+
+fn emit_codex_result(
+    app: &AppHandle,
+    thread_id: &str,
+    message_id: &str,
+    content: String,
+    reasoning: String,
+    cancelled: bool,
+) -> Result<(), AppError> {
+    app.emit(
+        "agent:completed",
+        AgentResultPayload {
+            session_id: thread_id.to_string(),
+            message_id: message_id.to_string(),
+            sources: extract_sources(&content),
+            content,
+            reasoning: (!reasoning.is_empty()).then_some(reasoning),
+            stop_reason: cancelled.then_some("cancelled".to_string()),
+        },
+    )
+    .map_err(|error| AppError::message(error.to_string()))
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_codex_turn_inner(
     app: &AppHandle,
@@ -678,13 +707,28 @@ async fn run_codex_turn_inner(
         build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
         skill_instructions
     );
+    if *cancellation.borrow() {
+        return emit_codex_result(
+            app,
+            thread_id,
+            message_id,
+            String::new(),
+            String::new(),
+            true,
+        );
+    }
     let service_tier = if fast_mode == Some(true) {
-        resolve_fast_tier(client, model_id.as_deref()).await?
+        tokio::select! {
+            result = resolve_fast_tier(client, model_id.as_deref()) => result?,
+            () = wait_for_cancellation(cancellation) => {
+                return emit_codex_result(app, thread_id, message_id, String::new(), String::new(), true);
+            }
+        }
     } else {
         None
     };
-    let turn = client
-        .request(
+    let turn = tokio::select! {
+        result = client.request(
             "turn/start",
             json!({
                 "threadId": thread_id,
@@ -695,8 +739,11 @@ async fn run_codex_turn_inner(
                 "approvalPolicy": approval_policy(auto_approve),
                 "cwd": vault_path,
             }),
-        )
-        .await?;
+        ) => result?,
+        () = wait_for_cancellation(cancellation) => {
+            return emit_codex_result(app, thread_id, message_id, String::new(), String::new(), true);
+        }
+    };
     let turn_id = turn
         .get("turn")
         .and_then(|turn| string(turn, &["id"]))
@@ -705,6 +752,17 @@ async fn run_codex_turn_inner(
     let mut reasoning = String::new();
     let mut cancelled = false;
     let mut finished = false;
+    let mut interrupt_sent = false;
+    if *cancellation.borrow() {
+        cancelled = true;
+        interrupt_sent = true;
+        client
+            .request(
+                "turn/interrupt",
+                json!({ "threadId": thread_id, "turnId": turn_id }),
+            )
+            .await?;
+    }
     loop {
         for (method, params) in client.drain_notifications() {
             match handle_notification(
@@ -732,9 +790,10 @@ async fn run_codex_turn_inner(
             break;
         }
         tokio::select! {
-            changed = cancellation.changed(), if !*cancellation.borrow() => {
+            changed = cancellation.changed(), if !interrupt_sent => {
                 if changed.is_ok() && *cancellation.borrow() {
                     cancelled = true;
+                    interrupt_sent = true;
                     // The server will finish the turn after the interrupt request.
                     let _ = client
                         .request(
@@ -762,19 +821,7 @@ async fn run_codex_turn_inner(
             }
         }
     }
-    app.emit(
-        "agent:completed",
-        AgentResultPayload {
-            session_id: thread_id.to_string(),
-            message_id: message_id.to_string(),
-            sources: extract_sources(&content),
-            content,
-            reasoning: (!reasoning.is_empty()).then_some(reasoning),
-            stop_reason: cancelled.then_some("cancelled".to_string()),
-        },
-    )
-    .map_err(|error| AppError::message(error.to_string()))?;
-    Ok(())
+    emit_codex_result(app, thread_id, message_id, content, reasoning, cancelled)
 }
 
 async fn resolve_fast_tier(

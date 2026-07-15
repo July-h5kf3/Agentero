@@ -121,7 +121,11 @@ import {
 	type AgentListResponse,
 	type AgentModelChoice,
 	type AgentPlanEntry,
+	type AgentPlanEvent,
+	type AgentResultPayload,
 	type AgentSkill,
+	type AgentStreamEvent,
+	type AgentToolEvent,
 	type CatalogScanResponse,
 	cancelAgentRun,
 	ensureCatalogAgent,
@@ -200,6 +204,15 @@ type ChatSessionHistoryItem = {
 	lines: ChatLine[];
 	status: "running" | "completed" | "cancelled" | "failed";
 };
+
+type PendingTerminalEvent =
+	| { kind: "completed"; event: AgentResultPayload }
+	| { kind: "failed"; error: string };
+
+type PendingSessionEvent =
+	| { kind: "stream"; event: AgentStreamEvent }
+	| { kind: "tool"; event: AgentToolEvent }
+	| { kind: "plan"; event: AgentPlanEvent };
 
 let chatLineSeq = 0;
 function nextLineId(prefix: string) {
@@ -458,10 +471,18 @@ export function AgentPanel({
 	const warmGenRef = useRef(0);
 	const historyGenRef = useRef(0);
 	const historyHydrationGenRef = useRef(0);
+	const switchingRef = useRef(false);
 	const submittingRef = useRef(false);
 	const submissionGenRef = useRef(0);
-	const pendingFailuresRef = useRef(new Map<string, string>());
+	const pendingTerminalEventsRef = useRef(
+		new Map<string, PendingTerminalEvent>(),
+	);
+	const pendingSessionEventsRef = useRef(
+		new Map<string, PendingSessionEvent[]>(),
+	);
+	const pendingSubmissionSessionIdRef = useRef<string | null>(null);
 	const knownSessionIdsRef = useRef(new Set<string>());
+	const sessionHistoryRef = useRef<ChatSessionHistoryItem[]>([]);
 	const vaultPathRef = useRef(vaultPath);
 	const includeExternalCodexHistoryRef = useRef(includeExternalCodexHistory);
 	const sessionContextGenRef = useRef(0);
@@ -552,6 +573,10 @@ export function AgentPanel({
 	}, [activeTabId]);
 
 	useEffect(() => {
+		sessionHistoryRef.current = sessionHistory;
+	}, [sessionHistory]);
+
+	useEffect(() => {
 		vaultPathRef.current = vaultPath;
 	}, [vaultPath]);
 
@@ -563,12 +588,19 @@ export function AgentPanel({
 	useEffect(() => {
 		if (previousVaultPathRef.current === vaultPath) return;
 		previousVaultPathRef.current = vaultPath;
+		for (const session of sessionHistoryRef.current) {
+			if (session.status === "running") {
+				void cancelAgentRun(session.id).catch(() => undefined);
+			}
+		}
 		sessionContextGenRef.current += 1;
 		historyGenRef.current += 1;
 		historyHydrationGenRef.current += 1;
 		submissionGenRef.current += 1;
 		submittingRef.current = false;
-		pendingFailuresRef.current.clear();
+		pendingTerminalEventsRef.current.clear();
+		pendingSessionEventsRef.current.clear();
+		pendingSubmissionSessionIdRef.current = null;
 		knownSessionIdsRef.current.clear();
 		setSubmitting(false);
 		setLines([]);
@@ -670,15 +702,8 @@ export function AgentPanel({
 		};
 	}, [selectedAgentId, vaultPath, applyModelsEvent, agentListenersReady]);
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-		setAgentListenersReady(false);
-		const updateSessionLines = (
-			sessionId: string,
-			update: (lines: ChatLine[]) => ChatLine[],
-		) => {
+	const updateSessionLines = useCallback(
+		(sessionId: string, update: (lines: ChatLine[]) => ChatLine[]) => {
 			setSessionHistory((prev) =>
 				prev.map((item) =>
 					item.id === sessionId ? { ...item, lines: update(item.lines) } : item,
@@ -687,68 +712,224 @@ export function AgentPanel({
 			if (activeTabRef.current === sessionId) {
 				setLines(update);
 			}
-		};
+		},
+		[],
+	);
+
+	const applyStreamEvent = useCallback(
+		(ev: AgentStreamEvent) => {
+			const streamKind = ev.kind ?? "message";
+			updateSessionLines(ev.sessionId, (prev) => {
+				const next = [...prev];
+				const last = next[next.length - 1];
+				if (last?.kind !== "agent" || !last.streaming) return prev;
+				if (streamKind === "thought") {
+					next[next.length - 1] = {
+						...last,
+						reasoning: (last.reasoning ?? "") + ev.chunk,
+						reasoningStreaming: true,
+					};
+				} else {
+					next[next.length - 1] = {
+						...last,
+						text: last.text + ev.chunk,
+						reasoningStreaming: false,
+					};
+				}
+				return next;
+			});
+		},
+		[updateSessionLines],
+	);
+
+	const applyToolEvent = useCallback(
+		(ev: AgentToolEvent) => {
+			updateSessionLines(ev.sessionId, (prev) => {
+				const next = [...prev];
+				const last = next[next.length - 1];
+				if (last?.kind !== "agent" || !last.streaming) return prev;
+				next[next.length - 1] = {
+					...last,
+					tools: mergeTool(last.tools, {
+						id: ev.toolCallId,
+						title: ev.title,
+						kind: ev.kind,
+						status: ev.status,
+						input: ev.input,
+						output: ev.output,
+						full: ev.full,
+					}),
+				};
+				return next;
+			});
+		},
+		[updateSessionLines],
+	);
+
+	const applyPlanEvent = useCallback(
+		(ev: AgentPlanEvent) => {
+			updateSessionLines(ev.sessionId, (prev) => {
+				const next = [...prev];
+				const last = next[next.length - 1];
+				if (last?.kind !== "agent" || !last.streaming) return prev;
+				next[next.length - 1] = { ...last, plan: ev.entries };
+				return next;
+			});
+		},
+		[updateSessionLines],
+	);
+
+	const deferSessionEvent = useCallback(
+		(sessionId: string, event: PendingSessionEvent) => {
+			const pending = pendingSessionEventsRef.current.get(sessionId) ?? [];
+			pending.push(event);
+			pendingSessionEventsRef.current.set(sessionId, pending);
+		},
+		[],
+	);
+
+	const completeSession = useCallback(
+		(ev: AgentResultPayload) => {
+			if (ev.stopReason === "cancelled") {
+				const cancelledLine: ChatLine = {
+					id: nextLineId("sys"),
+					kind: "system",
+					text: t("messages.cancelled"),
+				};
+				updateSessionLines(ev.sessionId, (prev) => {
+					const next = [...prev];
+					const last = next[next.length - 1];
+					if (last?.kind === "agent" && last.streaming) {
+						const hasOutput =
+							last.text.trim().length > 0 ||
+							Boolean(last.reasoning?.trim()) ||
+							Boolean(last.tools?.length) ||
+							Boolean(last.plan?.length);
+						if (hasOutput) {
+							next[next.length - 1] = {
+								...last,
+								reasoningStreaming: false,
+								streaming: false,
+							};
+						} else {
+							next.pop();
+						}
+					}
+					return [...next, cancelledLine];
+				});
+				setSessionHistory((prev) =>
+					prev.map((item) =>
+						item.id === ev.sessionId ? { ...item, status: "cancelled" } : item,
+					),
+				);
+				return;
+			}
+			updateSessionLines(ev.sessionId, (prev) => {
+				const next = [...prev];
+				const last = next[next.length - 1];
+				if (last?.kind === "agent" && last.streaming) {
+					const text =
+						last.text.trim().length > 0
+							? last.text
+							: ev.content || "(empty response)";
+					const reasoning =
+						(last.reasoning && last.reasoning.trim().length > 0
+							? last.reasoning
+							: ev.reasoning) || undefined;
+					next[next.length - 1] = {
+						...last,
+						text,
+						reasoning,
+						reasoningStreaming: false,
+						sources: ev.sources,
+						streaming: false,
+					};
+					return next;
+				}
+				return prev;
+			});
+			setSessionHistory((prev) =>
+				prev.map((item) =>
+					item.id === ev.sessionId ? { ...item, status: "completed" } : item,
+				),
+			);
+		},
+		[t, updateSessionLines],
+	);
+
+	const failSession = useCallback(
+		(sessionId: string, error: string) => {
+			const failedLine: ChatLine = {
+				id: nextLineId("err"),
+				kind: "error",
+				text: error,
+			};
+			updateSessionLines(sessionId, (prev) => {
+				const next = [...prev];
+				const last = next[next.length - 1];
+				if (last?.kind === "agent" && last.streaming) {
+					const hasOutput =
+						last.text.trim().length > 0 ||
+						Boolean(last.reasoning?.trim()) ||
+						Boolean(last.tools?.length) ||
+						Boolean(last.plan?.length);
+					if (hasOutput) {
+						next[next.length - 1] = {
+							...last,
+							reasoningStreaming: false,
+							streaming: false,
+						};
+					} else {
+						next.pop();
+					}
+				}
+				return [...next, failedLine];
+			});
+			setSessionHistory((prev) =>
+				prev.map((item) =>
+					item.id === sessionId ? { ...item, status: "failed" } : item,
+				),
+			);
+		},
+		[updateSessionLines],
+	);
+
+	const shouldDeferTerminalEvent = useCallback((sessionId: string) => {
+		if (!submittingRef.current) return false;
+		const expectedSessionId = pendingSubmissionSessionIdRef.current;
+		return (
+			expectedSessionId === sessionId ||
+			(expectedSessionId === null && !knownSessionIdsRef.current.has(sessionId))
+		);
+	}, []);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+		setAgentListenersReady(false);
 
 		void (async () => {
 			const u1 = await listenAgentStream((ev) => {
-				const streamKind = ev.kind ?? "message";
-				updateSessionLines(ev.sessionId, (prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (last?.kind === "agent" && last.streaming) {
-						if (streamKind === "thought") {
-							next[next.length - 1] = {
-								...last,
-								reasoning: (last.reasoning ?? "") + ev.chunk,
-								reasoningStreaming: true,
-							};
-						} else {
-							next[next.length - 1] = {
-								...last,
-								text: last.text + ev.chunk,
-								reasoningStreaming: false,
-							};
-						}
-						return next;
-					}
-					return prev;
-				});
+				if (shouldDeferTerminalEvent(ev.sessionId)) {
+					deferSessionEvent(ev.sessionId, { kind: "stream", event: ev });
+					return;
+				}
+				applyStreamEvent(ev);
 			});
 			const uTool = await listenAgentTool((ev) => {
-				updateSessionLines(ev.sessionId, (prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (last?.kind === "agent" && last.streaming) {
-						next[next.length - 1] = {
-							...last,
-							tools: mergeTool(last.tools, {
-								id: ev.toolCallId,
-								title: ev.title,
-								kind: ev.kind,
-								status: ev.status,
-								input: ev.input,
-								output: ev.output,
-								full: ev.full,
-							}),
-						};
-						return next;
-					}
-					return prev;
-				});
+				if (shouldDeferTerminalEvent(ev.sessionId)) {
+					deferSessionEvent(ev.sessionId, { kind: "tool", event: ev });
+					return;
+				}
+				applyToolEvent(ev);
 			});
 			const uPlan = await listenAgentPlan((ev) => {
-				updateSessionLines(ev.sessionId, (prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (last?.kind === "agent" && last.streaming) {
-						next[next.length - 1] = {
-							...last,
-							plan: ev.entries,
-						};
-						return next;
-					}
-					return prev;
-				});
+				if (shouldDeferTerminalEvent(ev.sessionId)) {
+					deferSessionEvent(ev.sessionId, { kind: "plan", event: ev });
+					return;
+				}
+				applyPlanEvent(ev);
 			});
 			const uUsage = await listenAgentUsage((ev) => {
 				if (ev.size <= 0) return;
@@ -771,98 +952,24 @@ export function AgentPanel({
 				applyFastModeEvent(ev);
 			});
 			const u2 = await listenAgentCompleted((ev) => {
-				if (ev.stopReason === "cancelled") {
-					const cancelledLine: ChatLine = {
-						id: nextLineId("sys"),
-						kind: "system",
-						text: t("messages.cancelled"),
-					};
-					updateSessionLines(ev.sessionId, (prev) => {
-						const next = [...prev];
-						const last = next[next.length - 1];
-						if (last?.kind === "agent" && last.streaming) {
-							const hasOutput =
-								last.text.trim().length > 0 ||
-								Boolean(last.reasoning?.trim()) ||
-								Boolean(last.tools?.length) ||
-								Boolean(last.plan?.length);
-							if (hasOutput) {
-								next[next.length - 1] = {
-									...last,
-									reasoningStreaming: false,
-									streaming: false,
-								};
-							} else {
-								next.pop();
-							}
-						}
-						return [...next, cancelledLine];
+				if (shouldDeferTerminalEvent(ev.sessionId)) {
+					pendingTerminalEventsRef.current.set(ev.sessionId, {
+						kind: "completed",
+						event: ev,
 					});
-					setSessionHistory((prev) =>
-						prev.map((item) =>
-							item.id === ev.sessionId
-								? { ...item, status: "cancelled" }
-								: item,
-						),
-					);
 					return;
 				}
-				updateSessionLines(ev.sessionId, (prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (last?.kind === "agent" && last.streaming) {
-						const text =
-							last.text.trim().length > 0
-								? last.text
-								: ev.content || "(empty response)";
-						const reasoning =
-							(last.reasoning && last.reasoning.trim().length > 0
-								? last.reasoning
-								: ev.reasoning) || undefined;
-						const completedLine: ChatLine = {
-							...last,
-							text,
-							reasoning,
-							reasoningStreaming: false,
-							sources: ev.sources,
-							streaming: false,
-						};
-						next[next.length - 1] = completedLine;
-						return next;
-					}
-					return prev;
-				});
-				setSessionHistory((prev) =>
-					prev.map((item) =>
-						item.id === ev.sessionId ? { ...item, status: "completed" } : item,
-					),
-				);
+				completeSession(ev);
 			});
 			const u3 = await listenAgentFailed((ev) => {
-				if (!knownSessionIdsRef.current.has(ev.sessionId)) {
-					if (submittingRef.current) {
-						pendingFailuresRef.current.set(ev.sessionId, ev.error);
-					}
+				if (shouldDeferTerminalEvent(ev.sessionId)) {
+					pendingTerminalEventsRef.current.set(ev.sessionId, {
+						kind: "failed",
+						error: ev.error,
+					});
 					return;
 				}
-				const failedLine: ChatLine = {
-					id: nextLineId("err"),
-					kind: "error",
-					text: ev.error,
-				};
-				updateSessionLines(ev.sessionId, (prev) => {
-					const next = [...prev];
-					const last = next[next.length - 1];
-					if (last?.kind === "agent" && last.streaming) {
-						next.pop();
-					}
-					return [...next, failedLine];
-				});
-				setSessionHistory((prev) =>
-					prev.map((item) =>
-						item.id === ev.sessionId ? { ...item, status: "failed" } : item,
-					),
-				);
+				failSession(ev.sessionId, ev.error);
 			});
 
 			if (cancelled) {
@@ -885,7 +992,18 @@ export function AgentPanel({
 			cancelled = true;
 			for (const u of unsubs) u();
 		};
-	}, [applyEffortEvent, applyFastModeEvent, applyModelsEvent, t]);
+	}, [
+		applyEffortEvent,
+		applyFastModeEvent,
+		applyModelsEvent,
+		applyPlanEvent,
+		applyStreamEvent,
+		applyToolEvent,
+		completeSession,
+		deferSessionEvent,
+		failSession,
+		shouldDeferTerminalEvent,
+	]);
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
@@ -1099,6 +1217,7 @@ export function AgentPanel({
 		(session) => session.id === activeTabId,
 	);
 	const activeTabIsRunning = activeTabSession?.status === "running";
+	const composerControlsMuted = submitting || activeTabIsRunning;
 	const activeUsage = usageBySession[activeTabId] ?? usage;
 	const hasRunningSessions = sessionHistory.some(
 		(session) => session.status === "running",
@@ -1156,10 +1275,16 @@ export function AgentPanel({
 	};
 
 	const selectAgent = async (opt: AgentOption) => {
-		if (!isTauri() || switching || hasRunningSessions || submittingRef.current)
+		if (
+			!isTauri() ||
+			switchingRef.current ||
+			hasRunningSessions ||
+			submittingRef.current
+		)
 			return;
 		if (opt.id && opt.id === selectedAgentId) return;
 
+		switchingRef.current = true;
 		setSwitching(true);
 		try {
 			let agentId = opt.id;
@@ -1171,6 +1296,19 @@ export function AgentPanel({
 			} else {
 				return;
 			}
+			sessionContextGenRef.current += 1;
+			historyGenRef.current += 1;
+			historyHydrationGenRef.current += 1;
+			pendingTerminalEventsRef.current.clear();
+			pendingSessionEventsRef.current.clear();
+			pendingSubmissionSessionIdRef.current = null;
+			knownSessionIdsRef.current.clear();
+			selectedAgentIdRef.current = agentId;
+			activeConversationRef.current = null;
+			activeTabRef.current = "draft";
+			setActiveTabId("draft");
+			setLines([]);
+			setSessionHistory([]);
 			setSelectedAgentId(agentId);
 			await refresh();
 			setLines((p) => [
@@ -1191,13 +1329,20 @@ export function AgentPanel({
 				},
 			]);
 		} finally {
+			switchingRef.current = false;
 			setSwitching(false);
 		}
 	};
 
 	const send = async (textRaw: string): Promise<boolean> => {
 		const text = textRaw.trim();
-		if (!text || activeTabIsRunning || submittingRef.current) return false;
+		if (
+			!text ||
+			activeTabIsRunning ||
+			switchingRef.current ||
+			submittingRef.current
+		)
+			return false;
 		const submissionGeneration = ++submissionGenRef.current;
 		const sessionContextGeneration = sessionContextGenRef.current;
 		const requestVaultPath = vaultPath;
@@ -1274,6 +1419,9 @@ export function AgentPanel({
 			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
 			const sessionStartLines = [...lines, userLine];
 			setLines(sessionStartLines);
+			pendingSubmissionSessionIdRef.current = isCodexAgent
+				? activeConversationRef.current
+				: null;
 			const accepted = await runOnce({
 				agentId,
 				sessionId: isCodexAgent
@@ -1294,12 +1442,19 @@ export function AgentPanel({
 				sessionContextGeneration !== sessionContextGenRef.current ||
 				requestVaultPath !== vaultPathRef.current
 			) {
+				pendingTerminalEventsRef.current.delete(accepted.sessionId);
+				pendingSessionEventsRef.current.delete(accepted.sessionId);
 				void cancelAgentRun(accepted.sessionId).catch(() => undefined);
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
-			const pendingFailure = pendingFailuresRef.current.get(accepted.sessionId);
-			pendingFailuresRef.current.delete(accepted.sessionId);
+			const pendingTerminal = pendingTerminalEventsRef.current.get(
+				accepted.sessionId,
+			);
+			pendingTerminalEventsRef.current.delete(accepted.sessionId);
+			const pendingSessionEvents =
+				pendingSessionEventsRef.current.get(accepted.sessionId) ?? [];
+			pendingSessionEventsRef.current.delete(accepted.sessionId);
 			const agentLine: ChatLine = {
 				id: nextLineId("agent"),
 				kind: "agent",
@@ -1308,16 +1463,7 @@ export function AgentPanel({
 				tools: [],
 				plan: [],
 			};
-			const pendingLines: ChatLine[] = pendingFailure
-				? [
-						...sessionStartLines,
-						{
-							id: nextLineId("err"),
-							kind: "error",
-							text: pendingFailure,
-						},
-					]
-				: [...sessionStartLines, agentLine];
+			const pendingLines: ChatLine[] = [...sessionStartLines, agentLine];
 			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
@@ -1330,12 +1476,26 @@ export function AgentPanel({
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
 					lines: pendingLines,
-					status: pendingFailure ? "failed" : "running",
+					status: "running",
 				},
 				...prev.filter((item) => item.id !== accepted.sessionId),
 			]);
 			setLines(pendingLines);
-			return true;
+			for (const pendingEvent of pendingSessionEvents) {
+				if (pendingEvent.kind === "stream") {
+					applyStreamEvent(pendingEvent.event);
+				} else if (pendingEvent.kind === "tool") {
+					applyToolEvent(pendingEvent.event);
+				} else {
+					applyPlanEvent(pendingEvent.event);
+				}
+			}
+			if (pendingTerminal?.kind === "completed") {
+				completeSession(pendingTerminal.event);
+			} else if (pendingTerminal?.kind === "failed") {
+				failSession(accepted.sessionId, pendingTerminal.error);
+			}
+			return pendingTerminal?.kind !== "failed";
 		} catch (e) {
 			if (
 				sessionContextGeneration === sessionContextGenRef.current &&
@@ -1353,6 +1513,7 @@ export function AgentPanel({
 			return false;
 		} finally {
 			if (submissionGeneration === submissionGenRef.current) {
+				pendingSubmissionSessionIdRef.current = null;
 				submittingRef.current = false;
 				setSubmitting(false);
 			}
@@ -2022,7 +2183,7 @@ export function AgentPanel({
 									key={key}
 									suggestion={label}
 									onClick={(v) => void send(v)}
-									disabled={activeTabIsRunning}
+									disabled={activeTabIsRunning || switching}
 								/>
 							);
 						})}
@@ -2032,7 +2193,12 @@ export function AgentPanel({
 					className="w-full rounded-xl border-border bg-background shadow-none"
 					inputGroupClassName="overflow-visible"
 					onSubmit={async ({ text }) => {
-						if (activeTabIsRunning || submittingRef.current) return;
+						if (
+							activeTabIsRunning ||
+							switchingRef.current ||
+							submittingRef.current
+						)
+							return;
 						const accepted = await send(text);
 						if (accepted) {
 							setComposerText((current) => (current === text ? "" : current));
@@ -2170,6 +2336,7 @@ export function AgentPanel({
 											: undefined
 								}
 								role="combobox"
+								disabled={switching}
 								placeholder={
 									activeTabIsRunning
 										? t("composer.interruptHint")
@@ -2184,7 +2351,12 @@ export function AgentPanel({
 								<DropdownMenuTrigger asChild>
 									<PromptInputButton
 										type="button"
-										className="h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium text-muted-foreground"
+										className={cn(
+											"h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium",
+											composerControlsMuted
+												? "text-muted-foreground"
+												: "text-foreground",
+										)}
 										disabled={
 											activeTabIsRunning || warming || models.length === 0
 										}
@@ -2224,7 +2396,12 @@ export function AgentPanel({
 									<DropdownMenuTrigger asChild>
 										<PromptInputButton
 											type="button"
-											className="h-7 gap-1 px-1.5 text-xs font-medium text-muted-foreground"
+											className={cn(
+												"h-7 gap-1 px-1.5 text-xs font-medium",
+												composerControlsMuted
+													? "text-muted-foreground"
+													: "text-foreground",
+											)}
 											disabled={activeTabIsRunning}
 											tooltip={t("composer.effortTooltip")}
 										>
@@ -2266,10 +2443,11 @@ export function AgentPanel({
 							<PromptInputButton
 								type="button"
 								className={cn(
-									"size-7 text-muted-foreground",
-									includeSelectedFile &&
-										selectedVaultPath &&
-										"bg-muted text-foreground",
+									"size-7",
+									composerControlsMuted
+										? "text-muted-foreground"
+										: "text-foreground",
+									includeSelectedFile && selectedVaultPath && "bg-muted",
 								)}
 								disabled={!selectedVaultPath || activeTabIsRunning}
 								onClick={() => setIncludeSelectedFile((current) => !current)}
@@ -2281,7 +2459,10 @@ export function AgentPanel({
 								<PromptInputButton
 									type="button"
 									className={cn(
-										"size-7 text-muted-foreground",
+										"size-7",
+										composerControlsMuted
+											? "text-muted-foreground"
+											: "text-foreground",
 										fastEnabled && "text-amber-500 hover:text-amber-500",
 									)}
 									aria-pressed={fastEnabled}
@@ -2300,7 +2481,10 @@ export function AgentPanel({
 							) : null}
 							<div
 								className={cn(
-									"flex h-7 items-center gap-1.5 px-1.5 text-muted-foreground text-xs font-medium",
+									"flex h-7 items-center gap-1.5 px-1.5 text-xs font-medium",
+									composerControlsMuted
+										? "text-muted-foreground"
+										: "text-foreground",
 									yoloEnabled && "text-orange-700 dark:text-orange-300",
 								)}
 								title={
@@ -2330,9 +2514,12 @@ export function AgentPanel({
 										? "submitted"
 										: "ready"
 							}
-							onStop={() => void cancelCurrentRun()}
+							onStop={
+								activeTabIsRunning ? () => void cancelCurrentRun() : undefined
+							}
 							disabled={
-								!activeTabIsRunning && (submitting || !composerText.trim())
+								!activeTabIsRunning &&
+								(switching || submitting || !composerText.trim())
 							}
 						/>
 					</PromptInputFooter>
