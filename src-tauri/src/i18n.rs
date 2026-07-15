@@ -33,8 +33,8 @@ const EN: MenuLabels = MenuLabels {
 
 const ZH_CN: MenuLabels = MenuLabels {
     settings: "设置…",
-    open_vault: "打开 Vault…",
-    create_vault: "创建 Vault…",
+    open_vault: "打开知识库…",
+    create_vault: "创建知识库…",
     refresh_tree: "刷新文件树",
     toggle_sidebar: "切换侧边栏",
     toggle_chat: "切换对话",
