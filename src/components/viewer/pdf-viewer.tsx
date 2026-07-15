@@ -348,7 +348,7 @@ export function PdfViewer({
 			setActiveThreadId(null);
 			setPopoverScreen(null);
 			setAskError(null);
-		}, 1500);
+		}, 1000);
 	}, [cancelHoverHide, discardIfEmptyDraft]);
 
 	const openThread = useCallback(
