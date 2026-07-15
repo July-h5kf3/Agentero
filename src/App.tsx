@@ -373,7 +373,7 @@ export default function App() {
 		saveSettings(next);
 	}, []);
 
-	const SIDEBAR_DEFAULT_PX = 240;
+	const SIDEBAR_DEFAULT_PX = 200;
 
 	const toggleSidebar = useCallback(() => {
 		const panel = sidebarPanelRef.current;
