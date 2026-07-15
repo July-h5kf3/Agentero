@@ -44,6 +44,7 @@ import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	createVaultDirectory,
 	type FileNode,
 	getSavedVaultPath,
 	isMarkdownPath,
@@ -355,6 +356,17 @@ export default function App() {
 		}
 	}, []);
 
+	const activateVault = useCallback(async (path: string) => {
+		saveVaultPath(path);
+		setVaultPath(path);
+		setSelectedPath(null);
+		try {
+			await rebuildWikiIndex(path);
+		} catch {
+			// Index rebuild is best-effort; get_backlinks will rebuild on demand.
+		}
+	}, []);
+
 	const handleOpenVault = useCallback(async () => {
 		setError(null);
 		try {
@@ -365,20 +377,31 @@ export default function App() {
 			setBusy(true);
 			const path = await pickVaultDirectory();
 			if (!path) return;
-			saveVaultPath(path);
-			setVaultPath(path);
-			setSelectedPath(null);
-			try {
-				await rebuildWikiIndex(path);
-			} catch {
-				// Index rebuild is best-effort; get_backlinks will rebuild on demand.
-			}
+			await activateVault(path);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setBusy(false);
 		}
-	}, [t]);
+	}, [t, activateVault]);
+
+	const handleCreateVault = useCallback(async () => {
+		setError(null);
+		try {
+			if (!isTauri()) {
+				setError(t("errors.openVaultDesktopOnly"));
+				return;
+			}
+			setBusy(true);
+			const path = await createVaultDirectory();
+			if (!path) return;
+			await activateVault(path);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [t, activateVault]);
 
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
@@ -858,6 +881,7 @@ export default function App() {
 									<VaultSidebarHeader
 										title={vaultDisplayName(vaultPath)}
 										onOpenVault={() => void handleOpenVault()}
+										onCreateVault={() => void handleCreateVault()}
 										onRefresh={handleRefresh}
 										onCloseVault={handleCloseVault}
 										busy={busy}
@@ -927,14 +951,24 @@ export default function App() {
 											</p>
 										</div>
 										{isTauri() ? (
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												onClick={() => void handleOpenVault()}
-											>
-												{t("vault.openVaultButton")}
-											</Button>
+											<div className="flex items-center gap-2">
+												<Button
+													type="button"
+													variant="default"
+													size="sm"
+													onClick={() => void handleCreateVault()}
+												>
+													{t("vault.createVaultButton")}
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => void handleOpenVault()}
+												>
+													{t("vault.openVaultButton")}
+												</Button>
+											</div>
 										) : (
 											<p className="text-muted-foreground text-xs">
 												{t("vault.runTauriPrefix")}{" "}
