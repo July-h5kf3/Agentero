@@ -20,8 +20,9 @@
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",
-		"notesPlaceholder": "Paper NOTES.md will appear here...",
-		"previewPlaceholder": "Rendered Markdown will appear here..."
+		"notesPlaceholder": "Write notes for this paper...",
+		"previewPlaceholder": "Rendered Markdown will appear here...",
+		"unsaved": "Unsaved changes"
 	},
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",

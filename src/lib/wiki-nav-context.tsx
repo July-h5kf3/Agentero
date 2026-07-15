@@ -4,6 +4,8 @@ import type { WikiNavTarget } from "@/lib/wiki";
 
 export type WikiNavContextValue = {
 	onWikiNavigate: (nav: WikiNavTarget) => void;
+	/** Vault-relative Markdown paths, used to resolve `[[wikilink]]` targets. */
+	mdFiles?: string[];
 };
 
 export const WikiNavContext = createContext<WikiNavContextValue | null>(null);

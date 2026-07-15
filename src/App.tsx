@@ -1,28 +1,9 @@
-import {
-	BlockquotePlugin,
-	BoldPlugin,
-	H1Plugin,
-	H2Plugin,
-	H3Plugin,
-	ItalicPlugin,
-	UnderlinePlugin,
-} from "@platejs/basic-nodes/react";
-import { MarkdownPlugin } from "@platejs/markdown";
 import { Bot, FolderOpen, Link2, PanelLeft, PanelRight } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Plate, usePlateEditor } from "platejs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import { BlockquoteElement } from "@/components/editor/blockquote-node";
-import { Editor, EditorContainer } from "@/components/editor/editor";
-import {
-	H1Element,
-	H2Element,
-	H3Element,
-} from "@/components/editor/heading-node";
-import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
-import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
+import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
@@ -85,7 +66,6 @@ import {
 	newNoteMarkdown,
 	normalizeVaultRel,
 	rebuildWikiIndex,
-	rewriteWikilinksForPreview,
 	toVaultRelative,
 	type WikiNavTarget,
 } from "@/lib/wiki";
@@ -100,29 +80,6 @@ const defaultMarkdown = `### Title
 
 With some **bold** text for emphasis!
 `;
-
-function useDebounce<T>(value: T, delay: number): T {
-	const [debounced, setDebounced] = useState(value);
-
-	useEffect(() => {
-		const timer = setTimeout(() => setDebounced(value), delay);
-		return () => clearTimeout(timer);
-	}, [value, delay]);
-
-	return debounced;
-}
-
-const platePlugins = [
-	BoldPlugin,
-	ItalicPlugin,
-	UnderlinePlugin,
-	H1Plugin.withComponent(H1Element),
-	H2Plugin.withComponent(H2Element),
-	H3Plugin.withComponent(H3Element),
-	BlockquotePlugin.withComponent(BlockquoteElement),
-	LinkPlugin,
-	...MarkdownKit,
-];
 
 /** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
 function collectMarkdownRelPaths(
@@ -194,13 +151,19 @@ export default function App() {
 		"agent",
 	);
 	const sidebarPanelRef = usePanelRef();
-	const editorPaneRef = useRef<HTMLTextAreaElement>(null);
+	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
 
-	const debouncedMarkdown = useDebounce(markdown, 300);
-	const debouncedPaperNotes = useDebounce(paperNotes, 200);
+	// Editor seed key: bumps when a file's content (re)loads to remount + reseed.
+	const [editorKey, setEditorKey] = useState(0);
+	const [markdownDirty, setMarkdownDirty] = useState(false);
+	// Paper NOTES.md editing (right pane during PDF/HTML view).
+	const [notesPath, setNotesPath] = useState<string | null>(null);
+	const [notesKey, setNotesKey] = useState(0);
+	const [notesDirty, setNotesDirty] = useState(false);
+
 	const isDemo = vaultPath === null;
 	const showNotesOnRight = centerMode === "pdf" || centerMode === "html";
 	const vaultMdFiles = useMemo(
@@ -228,6 +191,8 @@ export default function App() {
 				setPaperNotes("");
 				setPdfUrl(null);
 				setHtmlSrcUrl(null);
+				setNotesPath(null);
+				setNotesDirty(false);
 				return;
 			}
 
@@ -241,15 +206,18 @@ export default function App() {
 			setHtmlSrcUrl(remoteHtml);
 
 			// Notes stay local (Markdown only)
-			const notesPath = notesPathForPaper(paperDir);
+			const resolvedNotesPath = notesPathForPaper(paperDir);
 			let notes = "# Notes\n\nNo NOTES.md found for this paper.\n";
 			try {
-				notes = await readVaultFile(notesPath);
+				notes = await readVaultFile(resolvedNotesPath);
 			} catch {
 				// keep placeholder
 			}
 			if (cancelled) return;
 			setPaperNotes(notes);
+			setNotesPath(resolvedNotesPath);
+			setNotesDirty(false);
+			setNotesKey((k) => k + 1);
 
 			// Opening a paper folder: prefer PDF, fall back HTML, else NOTES as markdown
 			if (selectedPath && isPaperDirectory(selectedPath)) {
@@ -257,6 +225,8 @@ export default function App() {
 				else if (remoteHtml) setCenterMode("html");
 				else {
 					setMarkdown(notes);
+					setMarkdownDirty(false);
+					setEditorKey((k) => k + 1);
 					setCenterMode("markdown");
 				}
 			}
@@ -461,7 +431,9 @@ export default function App() {
 					expandSidebar();
 					break;
 				case "focusEditor":
-					editorPaneRef.current?.focus();
+					editorPaneRef.current
+						?.querySelector<HTMLElement>("[contenteditable='true']")
+						?.focus();
 					break;
 				case "focusPreview":
 					previewPaneRef.current
@@ -526,26 +498,6 @@ export default function App() {
 		};
 	}, [handleOpenVault, handleRefresh, openSettings, toggleChat, toggleSidebar]);
 
-	const editor = usePlateEditor({
-		plugins: platePlugins,
-		value: (ed) =>
-			ed
-				.getApi(MarkdownPlugin)
-				.markdown.deserialize(
-					rewriteWikilinksForPreview(markdown, vaultMdFiles) || " ",
-				),
-	});
-
-	const notesEditor = usePlateEditor({
-		plugins: platePlugins,
-		value: (ed) =>
-			ed
-				.getApi(MarkdownPlugin)
-				.markdown.deserialize(
-					rewriteWikilinksForPreview(paperNotes || " ", vaultMdFiles) || " ",
-				),
-	});
-
 	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
@@ -563,37 +515,18 @@ export default function App() {
 		else localStorage.removeItem(OPEN_FILE_KEY);
 	}, [selectedPath]);
 
-	useEffect(() => {
-		try {
-			const previewMd = rewriteWikilinksForPreview(
-				debouncedMarkdown || " ",
-				vaultMdFiles,
-			);
-			const value = editor
-				.getApi(MarkdownPlugin)
-				.markdown.deserialize(previewMd || " ");
-			editor.tf.reset();
-			editor.tf.setValue(value);
-		} catch (e) {
-			console.error("Failed to deserialize markdown for preview:", e);
-		}
-	}, [debouncedMarkdown, editor, vaultMdFiles]);
-
-	useEffect(() => {
-		try {
-			const previewMd = rewriteWikilinksForPreview(
-				debouncedPaperNotes || " ",
-				vaultMdFiles,
-			);
-			const value = notesEditor
-				.getApi(MarkdownPlugin)
-				.markdown.deserialize(previewMd || " ");
-			notesEditor.tf.reset();
-			notesEditor.tf.setValue(value);
-		} catch (e) {
-			console.error("Failed to deserialize NOTES.md for preview:", e);
-		}
-	}, [debouncedPaperNotes, notesEditor, vaultMdFiles]);
+	// Persist a specific file's Markdown to disk. The MarkdownEditor calls this with
+	// its own fixed path (debounced autosave, ⌘S, and unmount flush), so writes always
+	// target the correct file even when switching files quickly.
+	const persistFile = useCallback(
+		(path: string, md: string) => {
+			if (!isTauri() || !vaultPath || !path) return;
+			void writeVaultFile(path, md).catch((e) => {
+				setError(e instanceof Error ? e.message : String(e));
+			});
+		},
+		[vaultPath],
+	);
 
 	const handleCloseVault = () => {
 		saveVaultPath(null);
@@ -602,6 +535,8 @@ export default function App() {
 		setVaultPath(null);
 		setSelectedPath(null);
 		setMarkdown(defaultMarkdown);
+		setMarkdownDirty(false);
+		setEditorKey((k) => k + 1);
 		setError(null);
 		setTree([]);
 		setCenterMode("markdown");
@@ -656,6 +591,8 @@ export default function App() {
 			try {
 				const content = await readVaultFile(node.path);
 				setMarkdown(content);
+				setMarkdownDirty(false);
+				setEditorKey((k) => k + 1);
 				if (!isMarkdownPath(node.path) && !isHtmlPath(node.path)) {
 					setCenterMode("markdown");
 				}
@@ -751,8 +688,9 @@ export default function App() {
 	const wikiNavValue = useMemo(
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
+			mdFiles: vaultMdFiles,
 		}),
-		[handleWikiNavigate],
+		[handleWikiNavigate, vaultMdFiles],
 	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
@@ -956,7 +894,15 @@ export default function App() {
 											available={modeAvailable}
 										/>
 									</div>
-									<div className="flex h-7 min-w-0 flex-1 items-center justify-end">
+									<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
+										{centerMode === "markdown" && markdownDirty ? (
+											<span
+												className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
+												role="img"
+												aria-label={t("editor.unsaved")}
+												title={t("editor.unsaved")}
+											/>
+										) : null}
 										<span
 											className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
 											title={
@@ -1002,15 +948,25 @@ export default function App() {
 								) : (
 									<>
 										{centerMode === "markdown" ? (
-											<textarea
+											<div
 												ref={editorPaneRef}
-												className="motif-scroll min-h-0 flex-1 resize-none bg-muted/30 p-4 font-mono outline-none"
-												style={{ fontSize: editorFontSize }}
-												value={markdown}
-												onChange={(event) => setMarkdown(event.target.value)}
-												placeholder={t("editor.markdownPlaceholder")}
-												spellCheck={false}
-											/>
+												className="min-h-0 flex-1 overflow-hidden bg-muted/30"
+											>
+												<MarkdownEditor
+													key={editorKey}
+													className="motif-scroll h-full min-h-0"
+													initialMarkdown={markdown}
+													filePath={
+														selectedPath && isMarkdownPath(selectedPath)
+															? selectedPath
+															: null
+													}
+													fontSize={editorFontSize}
+													placeholder={t("editor.markdownPlaceholder")}
+													onPersist={persistFile}
+													onDirtyChange={setMarkdownDirty}
+												/>
+											</div>
 										) : null}
 										{centerMode === "pdf" ? (
 											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -1030,51 +986,48 @@ export default function App() {
 							</div>
 						</ResizablePanel>
 
-						<ResizableHandle />
+						{showNotesOnRight ? <ResizableHandle /> : null}
 
-						<ResizablePanel
-							id="preview"
-							defaultSize={rightSidebarOpen ? "30" : "40"}
-							minSize={200}
-							className="min-h-0 overflow-hidden"
-						>
-							<div
-								ref={previewPaneRef}
-								className="flex h-full min-h-0 flex-col overflow-hidden"
-								style={{ fontSize: editorFontSize }}
+						{showNotesOnRight ? (
+							<ResizablePanel
+								id="notes"
+								defaultSize={rightSidebarOpen ? "30" : "40"}
+								minSize={200}
+								className="min-h-0 overflow-hidden"
 							>
-								<PaneHeader>
-									<span className="min-w-0 flex-1 font-medium text-sm">
-										{showNotesOnRight ? t("labels.notes") : t("labels.preview")}
-									</span>
-								</PaneHeader>
-								<div className="min-h-0 flex-1 overflow-hidden">
-									{showNotesOnRight ? (
-										<Plate editor={notesEditor}>
-											<EditorContainer className="motif-scroll h-full min-h-0">
-												<Editor
-													variant="none"
-													className="min-h-full px-6 py-4"
-													placeholder={t("editor.notesPlaceholder")}
-													readOnly
+								<div
+									ref={previewPaneRef}
+									className="flex h-full min-h-0 flex-col overflow-hidden"
+									style={{ fontSize: editorFontSize }}
+								>
+									<PaneHeader>
+										<span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-sm">
+											{t("labels.notes")}
+											{notesDirty ? (
+												<span
+													className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
+													role="img"
+													aria-label={t("editor.unsaved")}
+													title={t("editor.unsaved")}
 												/>
-											</EditorContainer>
-										</Plate>
-									) : (
-										<Plate editor={editor}>
-											<EditorContainer className="motif-scroll h-full min-h-0">
-												<Editor
-													variant="none"
-													className="min-h-full px-6 py-4"
-													placeholder={t("editor.previewPlaceholder")}
-													readOnly
-												/>
-											</EditorContainer>
-										</Plate>
-									)}
+											) : null}
+										</span>
+									</PaneHeader>
+									<div className="min-h-0 flex-1 overflow-hidden">
+										<MarkdownEditor
+											key={`notes-${notesKey}`}
+											className="motif-scroll h-full min-h-0"
+											initialMarkdown={paperNotes}
+											filePath={notesPath}
+											fontSize={editorFontSize}
+											placeholder={t("editor.notesPlaceholder")}
+											onPersist={persistFile}
+											onDirtyChange={setNotesDirty}
+										/>
+									</div>
 								</div>
-							</div>
-						</ResizablePanel>
+							</ResizablePanel>
+						) : null}
 
 						{/* Right sidebar: Agent (default) | Backlinks with Graph */}
 						{rightSidebarOpen ? <ResizableHandle /> : null}
