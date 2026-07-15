@@ -10,6 +10,7 @@ export type BackgroundTaskKind =
 	| "import"
 	| "export"
 	| "parse"
+	| "paperRead"
 	| "other";
 
 export type BackgroundTaskStatus =

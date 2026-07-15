@@ -87,7 +87,7 @@ motif-vault/
 | `key` | TEXT PRIMARY KEY | 如 `schema_version`、`motif_app` |
 | `value` | TEXT NOT NULL | |
 
-当前 **`schema_version = 2`**（v1 打开时自动 migration 加 Translator 字段列）。打开 Vault 时：
+当前 **`schema_version = 3`**（v1→v2 Translator 列；v2→v3 `is_read`）。打开 Vault 时：
 
 1. 若文件不存在 → 创建并执行 migration v1。
 2. 若 version &lt; 当前 → 顺序 migration。
@@ -134,10 +134,11 @@ motif-vault/
 | `extra` | TEXT | v2：Translator `extra` 残余 |
 | `status` | TEXT NOT NULL | `pending` \| `importing` \| `completed` \| `failed` |
 | `summary` | TEXT | 短摘要/一行说明（可选，供列表与导出表） |
+| `is_read` | INTEGER NOT NULL DEFAULT 0 | v3：是否已完成 paper-reader 精读工作流（0/1 → bool） |
 | `added_at` | TEXT NOT NULL | ISO 8601 |
 | `updated_at` | TEXT NOT NULL | ISO 8601 |
 
-**schema_version**：当前目标 **2**（v1 库打开时 `ALTER TABLE` 追加列）。见 Host `schema.rs`。
+**schema_version**：当前目标 **3**（v1→v2 Translator 列；v2→v3 增加 `is_read`）。见 Host `schema.rs`。
 
 索引建议：
 
@@ -150,6 +151,7 @@ motif-vault/
 - `idx_papers_bibtex` ON `papers(bibtex_key)` WHERE `bibtex_key` IS NOT NULL
 - `idx_papers_pmid` ON `papers(pmid)` WHERE `pmid` IS NOT NULL（v2）
 - `idx_papers_isbn` ON `papers(isbn)` WHERE `isbn` IS NOT NULL（v2）
+- `idx_papers_is_read` ON `papers(is_read)`（v3）
 
 可选后续：
 

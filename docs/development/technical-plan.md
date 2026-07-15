@@ -179,7 +179,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 单一图标（无独立眼睛）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源；资源齐全且未读时 Eye 启动 paper-reader 精读（`is_read`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 

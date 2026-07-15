@@ -560,7 +560,9 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `paper_parse_body`（已落地）
 
-对**无本地 TeX** 的 paper，用 liteparse 从本地 PDF 生成 `{paper}/PAPER.md`。在 `paper_download_assets` / `lookup_import` 下载后自动触发，亦可手动 `paper_parse_body`（UI 无独立眼睛图标）。
+对**无本地 TeX** 的 paper，用 liteparse 从本地 PDF 生成 `{paper}/PAPER.md`。在 `paper_download_assets` / `lookup_import` 下载后自动触发，亦可手动 `paper_parse_body`。
+
+> **眼睛图标**现用于 **paper-reader 精读**（资源齐全且未读时显示），不再表示「生成 PAPER.md」。
 
 - **参数**（invoke 字段名 `args`）：
   ```ts
@@ -691,6 +693,25 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **SQL**：`DELETE FROM papers WHERE path = ? OR path LIKE '{path}/%'`。
 - **前端**：`src/lib/papers-api.ts` → `deletePapersUnderPath`；侧栏右键删除 / `⌘⌫`。
 
+#### `paper_set_is_read`（已落地）
+
+更新 catalog 中单篇论文的 **`is_read`**（是否已完成 paper-reader 精读）。成功后同步 `metadata.json` 投影。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** paper 文件夹 Vault 相对路径 */
+  path: string;
+  isRead: boolean;
+}
+```
+
+- **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
+- **前端**：`src/lib/papers-api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
+- **说明**：与 `status`（入库态）无关；默认 `false`。文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
+
 #### `paper:list`（扩展规划）
 
 带过滤与分页的列表（尚未实现；现网用 `paper_list`）。
@@ -801,7 +822,12 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **返回**：`{ ok: true, data: { sessionId, messageId, agentId } }`
 
-- **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
+- **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
+- **技能提及按 provider 分流**（`SkillMentionStyle`，见 Host `skills.rs`）：
+  - **Codex** → `$skill-id` 前缀 + 注入正文；
+  - **Claude ACP** → `/skill-id` 前缀 + 注入正文；
+  - **其它** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
+  - Composer 的 `$` 仅是 Motif UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
 - **权限策略**：默认取消 ACP 权限请求。Composer 按 provider 持久化 YOLO 偏好，并在每次运行中通过 `autoApprove` 传入；逐项权限确认仍未实现。
 

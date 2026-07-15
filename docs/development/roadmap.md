@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条、Preview/Info 仅在具体论文时显示。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；内置工作流、逐项权限确认、写入草稿确认仍待。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（文件树 Eye + catalog `is_read`）已落地；其它内置工作流、逐项权限确认、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
@@ -73,7 +73,8 @@
 - [x] 中间栏预览仍可用 catalog 远程 `pdf_url` / `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
-- [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发；无独立眼睛图标）。
+- [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发）。
+- [x] **paper-reader 精读**：资源齐全且 `is_read=false` 时文件树 Eye（见 V0.3）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误行内展示；重复不覆盖用户 `NOTES.md`。
 - [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
@@ -112,7 +113,8 @@
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
-- [ ] 内置工作流：总结当前论文、基于本地库问答、生成 Related Work 草稿。
+- [x] **paper-reader 精读工作流**：资源齐全且未读时文件树 Eye → `$paper-reader` skill → 写 `NOTES.md` → catalog `is_read=true`；左下角任务条进度。
+- [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求模型 BYOK 表单。
 
@@ -121,12 +123,14 @@
 - [x] 用户配置并成功探测至少一个本机 Agent 后，可发起 Agent 对话。
 - [x] 未安装 Agent 时有清晰空状态与配置入口，应用其余功能可用。
 - [x] Agent 问答展示读取过的本地文件路径（Agent 返回 Sources 时）。
+- [x] 下载完成且未读的 paper 行显示 Eye；点击后精读并标记已读。
 - [ ] Related Work 草稿必须包含本地路径引用。
 - [ ] Agent 失败或用户拒绝写入时，不会覆盖已有 Markdown。
 
 细化 TODO：
 
-- [ ] 把“总结当前论文 / 本地库问答 / Related Work”做成可点击 workflow。
+- [x] paper-reader：文件树 Eye + `is_read` + 后台任务进度。
+- [ ] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
 - [ ] 接入 ACP 权限确认 UI，而不是自动选择或静默处理。
 - [ ] 写入草稿使用 diff/preview 确认后落盘。

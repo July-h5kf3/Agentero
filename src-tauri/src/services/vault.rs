@@ -36,6 +36,10 @@ This file is the L0 map for agents working in this Motif research vault.
 /// Scaffold for `.agents/README.md` (only if missing).
 pub const AGENTS_DIR_README: &str = include_str!("../../../templates/vault/.agents/README.md");
 
+/// Bundled paper-reader skill (file-tree Eye workflow).
+pub const PAPER_READER_SKILL: &str =
+    include_str!("../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateVaultResult {
@@ -99,6 +103,15 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         created.push(".agents/README.md".into());
     }
 
+    // Seed paper-reader skill for Eye / 精读 workflow (no overwrite).
+    let paper_reader_dir = join_rel(path, ".agents/skills/paper-reader");
+    let paper_reader_skill = paper_reader_dir.join("SKILL.md");
+    if !paper_reader_skill.exists() {
+        fs::create_dir_all(&paper_reader_dir)?;
+        fs::write(&paper_reader_skill, PAPER_READER_SKILL)?;
+        created.push(".agents/skills/paper-reader/SKILL.md".into());
+    }
+
     // Catalog: always ensure schema (may create catalog.sqlite)
     let db_path = catalog::catalog_db_path(path);
     let db_existed = db_path.exists();
@@ -140,6 +153,7 @@ mod tests {
         assert!(dir.join(".agents").is_dir());
         assert!(dir.join(".agents/skills").is_dir());
         assert!(dir.join(".agents/README.md").is_file());
+        assert!(dir.join(".agents/skills/paper-reader/SKILL.md").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".motif/catalog.sqlite").is_file());
         assert!(!dir.join("PAPERS.md").exists());

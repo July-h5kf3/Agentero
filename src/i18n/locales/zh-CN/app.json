@@ -69,6 +69,12 @@
 		"downloadProgress": "{{current}} / {{total}}",
 		"lookupImport": "添加论文",
 		"libraryImport": "导入文献库",
-		"libraryExport": "导出文献库"
+		"libraryExport": "导出文献库",
+		"paperRead": "精读论文",
+		"paperReadStarting": "正在启动 paper-reader…",
+		"paperReadRunning": "Agent 正在阅读论文…",
+		"paperReadMarking": "正在标记为已读…",
+		"paperReadDone": "精读完成",
+		"paperReadFailed": "精读失败"
 	}
 }

@@ -368,6 +368,7 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
         extra: meta.extra.clone(),
         summary: meta.summary.clone(),
         status: meta.status.clone(),
+        is_read: false,
         added_at: meta.added_at.clone(),
         updated_at: meta.updated_at.clone(),
     }

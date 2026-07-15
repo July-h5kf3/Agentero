@@ -97,3 +97,29 @@ pub fn paper_delete(args: PaperDeleteArgs) -> ApiResult<PaperDeleteResult> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperSetIsReadArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder path.
+    pub path: String,
+    pub is_read: bool,
+}
+
+/// Update catalog `is_read` after paper-reader workflow completes (or reset).
+#[tauri::command]
+pub fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    let path = args.path.trim().trim_matches('/').replace('\\', "/");
+    if path.is_empty() {
+        return map_err(AppError::message("path is required"));
+    }
+    match papers::set_is_read(&vault, &path, args.is_read) {
+        Ok(row) => ApiResult::ok(row),
+        Err(e) => map_err(e),
+    }
+}

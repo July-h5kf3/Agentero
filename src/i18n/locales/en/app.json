@@ -69,6 +69,12 @@
 		"downloadProgress": "{{current}} / {{total}}",
 		"lookupImport": "Add paper",
 		"libraryImport": "Import bibliography",
-		"libraryExport": "Export library"
+		"libraryExport": "Export library",
+		"paperRead": "Reading paper",
+		"paperReadStarting": "Starting paper-reader…",
+		"paperReadRunning": "Agent is reading the paper…",
+		"paperReadMarking": "Marking as read…",
+		"paperReadDone": "Read complete",
+		"paperReadFailed": "Paper reading failed"
 	}
 }

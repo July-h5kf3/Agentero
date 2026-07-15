@@ -1,0 +1,289 @@
+/**
+ * paper-reader workflow: run the paper-reader skill against a paper folder,
+ * surface progress via background tasks, mark catalog `is_read` on success.
+ *
+ * Skill activation syntax is provider-specific (Host also adapts):
+ * - Codex: `$paper-reader`
+ * - Claude ACP: `/paper-reader`
+ * - others: Motif injects SKILL.md body (no native $ / / trigger)
+ */
+import i18n from "@/i18n";
+import {
+	type AgentFailedEvent,
+	type AgentPlanEntry,
+	type AgentPlanEvent,
+	type AgentResultPayload,
+	type AgentTemplate,
+	type AgentToolEvent,
+	listAgents,
+	listenAgentCompleted,
+	listenAgentFailed,
+	listenAgentPlan,
+	listenAgentTool,
+	type RunOnceAccepted,
+	runOnce,
+} from "@/lib/agent";
+import {
+	completeBackgroundTask,
+	failBackgroundTask,
+	startBackgroundTask,
+	updateBackgroundTask,
+} from "@/lib/background-tasks";
+import { setPaperIsRead } from "@/lib/papers-api";
+import { isTauri } from "@/lib/tauri";
+
+export const PAPER_READER_SKILL_ID = "paper-reader";
+
+/** How this Motif agent template expects skills to be named in the user prompt. */
+export type SkillMentionStyle = "dollar" | "slash" | "injected";
+
+export function skillMentionStyleForTemplate(
+	template: AgentTemplate | string | null | undefined,
+): SkillMentionStyle {
+	switch (template) {
+		case "codex-acp":
+			return "dollar";
+		case "claude-acp":
+			return "slash";
+		default:
+			return "injected";
+	}
+}
+
+export function formatSkillMention(
+	skillId: string,
+	style: SkillMentionStyle,
+): string {
+	switch (style) {
+		case "dollar":
+			return `$${skillId}`;
+		case "slash":
+			return `/${skillId}`;
+		default:
+			return `skill:${skillId}`;
+	}
+}
+
+/**
+ * User-facing request body. Host will additionally prefix native triggers
+ * (e.g. `$paper-reader` for Codex) and inject SKILL.md by style.
+ */
+export function buildPaperReaderUserPrompt(
+	paperRel: string,
+	style: SkillMentionStyle,
+): string {
+	const mention = formatSkillMention(PAPER_READER_SKILL_ID, style);
+	const skillLine =
+		style === "dollar"
+			? `Activate and follow ${mention} (this agent uses $skill-id syntax).`
+			: style === "slash"
+				? `Activate and follow ${mention} (this agent uses /skill-id syntax).`
+				: `Follow the paper-reader skill instructions Motif injects into this prompt (${mention}). Do not wait for a separate $ or / command.`;
+
+	return [
+		skillLine,
+		`Paper folder (Vault-relative): \`${paperRel}\`.`,
+		"Prefer TeX under source/, else PAPER.md, else local PDF.",
+		`Write structured lecture notes into \`${paperRel}/NOTES.md\`.`,
+		"Keep [[wikilinks]]. End with ## Sources listing Vault-relative paths you read.",
+	].join("\n");
+}
+
+async function resolveDefaultAgentTemplate(): Promise<AgentTemplate | null> {
+	try {
+		const list = await listAgents();
+		const id = list.defaultId;
+		if (!id) return list.agents[0]?.template ?? null;
+		return list.agents.find((a) => a.id === id)?.template ?? null;
+	} catch {
+		return null;
+	}
+}
+
+function planProgress(entries: AgentPlanEntry[]): {
+	pct: number;
+	detail: string;
+} {
+	if (!entries.length) {
+		return { pct: 10, detail: i18n.t("app:tasks.paperReadRunning") };
+	}
+	const done = entries.filter(
+		(e) => e.status === "completed" || e.status === "done",
+	).length;
+	const active = entries.find(
+		(e) => e.status === "in_progress" || e.status === "pending",
+	);
+	const pct = Math.min(
+		90,
+		Math.round(10 + (done / Math.max(entries.length, 1)) * 75),
+	);
+	const detail =
+		active?.content?.trim() ||
+		entries[entries.length - 1]?.content?.trim() ||
+		i18n.t("app:tasks.paperReadRunning");
+	return { pct, detail };
+}
+
+/**
+ * Wait for agent:completed / agent:failed for a sessionId.
+ * Also forwards plan/tool progress into the background task.
+ */
+async function waitForAgentSession(
+	sessionId: string,
+	taskId: string,
+): Promise<AgentResultPayload> {
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const unsubs: Array<() => void> = [];
+
+		const cleanup = () => {
+			for (const u of unsubs) {
+				try {
+					u();
+				} catch {
+					// ignore
+				}
+			}
+		};
+
+		const finishOk = (payload: AgentResultPayload) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			resolve(payload);
+		};
+
+		const finishErr = (error: string) => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			reject(new Error(error));
+		};
+
+		void (async () => {
+			try {
+				unsubs.push(
+					await listenAgentCompleted((ev: AgentResultPayload) => {
+						if (ev.sessionId !== sessionId) return;
+						finishOk(ev);
+					}),
+				);
+				unsubs.push(
+					await listenAgentFailed((ev: AgentFailedEvent) => {
+						if (ev.sessionId !== sessionId) return;
+						finishErr(ev.error || i18n.t("app:tasks.paperReadFailed"));
+					}),
+				);
+				unsubs.push(
+					await listenAgentPlan((ev: AgentPlanEvent) => {
+						if (ev.sessionId !== sessionId) return;
+						const { pct, detail } = planProgress(ev.entries ?? []);
+						updateBackgroundTask(taskId, { progress: pct, detail });
+					}),
+				);
+				unsubs.push(
+					await listenAgentTool((ev: AgentToolEvent) => {
+						if (ev.sessionId !== sessionId) return;
+						const title = ev.title?.trim();
+						const status = ev.status ?? "";
+						if (title) {
+							updateBackgroundTask(taskId, {
+								detail: title,
+								progress: status === "in_progress" ? 45 : 30,
+							});
+						}
+					}),
+				);
+			} catch (e) {
+				finishErr(e instanceof Error ? e.message : String(e));
+			}
+		})();
+	});
+}
+
+/**
+ * Start paper-reader for a Vault-relative paper path.
+ * Reports progress in the bottom-left background task floater.
+ */
+export async function runPaperReaderWorkflow(opts: {
+	vaultRoot: string;
+	/** Vault-relative paper folder, e.g. papers/1706.03762 */
+	paperPath: string;
+}): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.readDesktopOnly"));
+	}
+	const paperRel = opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!paperRel) {
+		throw new Error(i18n.t("sidebar:fileTree.readFailed"));
+	}
+
+	const taskId = startBackgroundTask({
+		kind: "paperRead",
+		title: i18n.t("app:tasks.paperRead"),
+		detail: paperRel,
+		running: true,
+		progress: 5,
+	});
+
+	try {
+		updateBackgroundTask(taskId, {
+			detail: i18n.t("app:tasks.paperReadStarting"),
+			progress: 8,
+		});
+
+		const template = await resolveDefaultAgentTemplate();
+		const skillStyle = skillMentionStyleForTemplate(template);
+		const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
+
+		let accepted: RunOnceAccepted;
+		try {
+			accepted = await runOnce({
+				vaultPath: opts.vaultRoot,
+				workflow: "paper_reader",
+				target: paperRel,
+				prompt: userPrompt,
+				skillIds: [PAPER_READER_SKILL_ID],
+				autoApprove: true,
+			});
+		} catch (skillErr) {
+			// Skill may be missing on older vaults — retry with workflow prompt only.
+			const msg =
+				skillErr instanceof Error ? skillErr.message : String(skillErr);
+			if (!/skill|not found/i.test(msg)) throw skillErr;
+			updateBackgroundTask(taskId, {
+				detail: i18n.t("app:tasks.paperReadStarting"),
+				progress: 10,
+			});
+			accepted = await runOnce({
+				vaultPath: opts.vaultRoot,
+				workflow: "paper_reader",
+				target: paperRel,
+				// Without skillIds Host won't inject body; keep full task wording.
+				prompt: userPrompt,
+				skillIds: [],
+				autoApprove: true,
+			});
+		}
+
+		updateBackgroundTask(taskId, {
+			detail: i18n.t("app:tasks.paperReadRunning"),
+			progress: 15,
+		});
+
+		await waitForAgentSession(accepted.sessionId, taskId);
+
+		updateBackgroundTask(taskId, {
+			detail: i18n.t("app:tasks.paperReadMarking"),
+			progress: 95,
+		});
+
+		await setPaperIsRead(opts.vaultRoot, paperRel, true);
+
+		completeBackgroundTask(taskId, i18n.t("app:tasks.paperReadDone"));
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : String(e);
+		failBackgroundTask(taskId, msg);
+		throw e;
+	}
+}

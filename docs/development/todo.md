@@ -31,7 +31,8 @@
    - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets` / `paper_parse_body`。
    - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
    - [x] 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 原因）。
-   - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`（Download 路径内；无独立眼睛图标）。
+   - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`（Download 路径内）。
+   - [x] 资源齐全且未读：文件树 Eye → paper-reader 精读 → `is_read`。
    - [x] Library 行：库内任一篇仍缺资源 → 批量 Download。
    - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
@@ -53,9 +54,10 @@
    - [ ] 本地 PDF 直接预览（非仅远程 `pdf_url`）。
 
 3. **Agent 工作流入口**
-   - 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
-   - workflow prompt 自动注入 Vault 内 `AGENTS.md`。
-   - 输出必须包含 Sources；写入前先进入草稿确认。
+   - [x] **paper-reader 精读**：文件树 Eye（资源齐全 + `is_read=false`）→ `$paper-reader` → `NOTES.md` → `paper_set_is_read`；左下角任务进度。
+   - [ ] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
+   - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`。
+   - [ ] 输出必须包含 Sources；写入前先进入草稿确认。
 
 4. **文件与索引同步**
    - 将最近 Vault、UI 偏好迁到 Tauri Store。
@@ -94,11 +96,11 @@
    - 保留原始附件与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**
-   - 粗读论文。
-   - 多篇对比。
-   - Related Work 草稿。
-   - Idea 批判性评估。
-   - 实验复现清单。
+   - [x] 精读论文（paper-reader：文件树 Eye + catalog `is_read`）。
+   - [ ] 多篇对比。
+   - [ ] Related Work 草稿。
+   - [ ] Idea 批判性评估。
+   - [ ] 实验复现清单。
 
 3. **PDF 划词提问（Selection Ask）** — 设计见 [`pdf-ask.md`](pdf-ask.md)
    - [x] M1：划词弹出迷你问答卡。

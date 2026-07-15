@@ -77,6 +77,9 @@ pub struct PaperRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     pub status: String,
+    /// Whether paper-reader workflow has completed for this paper.
+    #[serde(default)]
+    pub is_read: bool,
     pub added_at: String,
     pub updated_at: String,
 }
@@ -123,7 +126,8 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
                 body_source, body_quality, bibtex_key, citation_count, status, summary,
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra
+                publisher, place, series, language, zotero_item_type, meta_source, extra,
+                is_read
             FROM papers
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC
             "#,
@@ -136,6 +140,17 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppError::from)?;
     Ok(rows)
+}
+
+/// Set `is_read` for a paper path; returns the updated row.
+pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<PaperRecord, AppError> {
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    let Some(mut row) = get_by_path(vault_root, &path)? else {
+        return Err(AppError::message("paper not found in catalog"));
+    };
+    row.is_read = is_read;
+    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    upsert_paper(vault_root, &row)
 }
 
 /// Delete a paper row and any papers nested under `path/` (org folder delete).
@@ -175,14 +190,16 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             body_source, body_quality, bibtex_key, citation_count, status, summary,
             added_at, updated_at,
             creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-            publisher, place, series, language, zotero_item_type, meta_source, extra
+            publisher, place, series, language, zotero_item_type, meta_source, extra,
+            is_read
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
             ?9, ?10, ?11, ?12, ?13,
             ?14, ?15, ?16, ?17, ?18, ?19,
             ?20, ?21,
             ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30,
-            ?31, ?32, ?33, ?34, ?35, ?36, ?37
+            ?31, ?32, ?33, ?34, ?35, ?36, ?37,
+            ?38
         )
         ON CONFLICT(path) DO UPDATE SET
             id = excluded.id,
@@ -219,7 +236,8 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             language = excluded.language,
             zotero_item_type = excluded.zotero_item_type,
             meta_source = excluded.meta_source,
-            extra = excluded.extra
+            extra = excluded.extra,
+            is_read = excluded.is_read
         "#,
         params![
             r.path,
@@ -259,6 +277,7 @@ fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
             r.zotero_item_type,
             r.meta_source,
             r.extra,
+            if r.is_read { 1i32 } else { 0i32 },
         ],
     )
     .map_err(AppError::from)?;
@@ -269,6 +288,7 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
     let authors_json: String = row.get(4)?;
     let tags_json: String = row.get(7)?;
     let creators_json: Option<String> = row.get(21)?;
+    let is_read_i: i32 = row.get(37).unwrap_or(0);
     Ok(PaperRecord {
         path: row.get(0)?,
         id: row.get(1)?,
@@ -309,6 +329,7 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperRecord> {
         zotero_item_type: row.get(34)?,
         meta_source: row.get(35)?,
         extra: row.get(36)?,
+        is_read: is_read_i != 0,
     })
 }
 
@@ -322,7 +343,8 @@ fn get_conn(conn: &Connection, path: &str) -> Result<Option<PaperRecord>, AppErr
                 body_source, body_quality, bibtex_key, citation_count, status, summary,
                 added_at, updated_at,
                 creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
-                publisher, place, series, language, zotero_item_type, meta_source, extra
+                publisher, place, series, language, zotero_item_type, meta_source, extra,
+                is_read
             FROM papers WHERE path = ?1
             "#,
         )

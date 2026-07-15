@@ -7,7 +7,9 @@ use crate::models::agent::{
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::events::AgentEventEmitter;
 use crate::services::agent::prompts::{build_prompt, extract_sources};
-use crate::services::agent::skills::load_skill_instructions;
+use crate::services::agent::skills::{
+    load_skill_instructions, skill_activation_prefix, SkillMentionStyle,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -701,10 +703,20 @@ async fn run_codex_turn_inner(
     auto_approve: bool,
     cancellation: &mut watch::Receiver<bool>,
 ) -> Result<(), AppError> {
-    let skill_instructions = load_skill_instructions(&skill_ids, vault_path.as_deref())?;
+    // Codex activates skills with `$skill-id` (dollar syntax).
+    let skill_style = SkillMentionStyle::Dollar;
+    let skill_instructions =
+        load_skill_instructions(&skill_ids, vault_path.as_deref(), skill_style)?;
+    let activation = skill_activation_prefix(&skill_ids, skill_style);
     let prompt = format!(
         "{}{}",
-        build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
+        build_prompt(
+            workflow.as_deref(),
+            &format!("{activation}{prompt}"),
+            target.as_deref(),
+            skill_style,
+            &skill_ids,
+        ),
         skill_instructions
     );
     if *cancellation.borrow() {

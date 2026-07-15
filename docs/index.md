@@ -45,6 +45,7 @@ Motif 桌面应用
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download（hover 列原因）；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
+- **精读**：资源齐全且 catalog `is_read === false` 时 paper 行显示 **Eye**；点击启动 `$paper-reader` → 写 `NOTES.md` → `is_read=true`；进度在左下角任务条。
 - PDF 阅读：缩放（工具栏 / `⌘`+滚轮）；**划词提问** MVP（`asks/*.json` + 锚点图标，见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 

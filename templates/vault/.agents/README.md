@@ -18,6 +18,8 @@ Motif (and many ACP agents) look here for **vault-scoped** agent configuration.
 - Chat Composer: type `$` to pick skills from this vault, plus global
   `~/.agents/skills` and `${CODEX_HOME:-~/.codex}/skills`.
 - Keep each `SKILL.md` small (Motif loads at most 64 KiB per skill, 5 per prompt).
+- **Bundled**: Create Vault seeds `skills/paper-reader/` for the file-tree
+  Eye (精读) workflow. Existing vaults can copy that folder manually.
 
 Add a skill:
 

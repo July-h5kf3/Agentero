@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::models::agent::AgentSkill;
+use crate::models::agent::{AgentSkill, AgentTemplate};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,8 +7,68 @@ use std::path::{Path, PathBuf};
 const MAX_SKILL_BYTES: u64 = 64 * 1024;
 const MAX_SELECTED_SKILLS: usize = 5;
 
+/// How a given Agent CLI expects skills to be activated in the **user-visible prompt**.
+///
+/// Motif always *also* injects the full `SKILL.md` body (size-limited) so agents without
+/// a native skill system still receive instructions. The mention style is for agents that
+/// natively parse skill triggers (e.g. Codex `$skill-id`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillMentionStyle {
+    /// Codex (and similar): `$paper-reader`
+    Dollar,
+    /// Claude Code style slash skills / commands: `/paper-reader`
+    Slash,
+    /// No native trigger — Motif injects body only; do not pretend `$`/`/` activate anything.
+    InjectedOnly,
+}
+
+/// Map Motif agent template → native skill mention style.
+pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
+    match template {
+        AgentTemplate::CodexAcp => SkillMentionStyle::Dollar,
+        AgentTemplate::ClaudeAcp => SkillMentionStyle::Slash,
+        // OpenCode / Gemini / Qoder / Grok / custom: Motif injection is the reliable path.
+        AgentTemplate::Opencode
+        | AgentTemplate::Gemini
+        | AgentTemplate::QoderCli
+        | AgentTemplate::GrokBuild
+        | AgentTemplate::Custom => SkillMentionStyle::InjectedOnly,
+    }
+}
+
+/// Format a single skill id the way this agent expects (or a neutral label).
+pub fn format_skill_mention(skill_id: &str, style: SkillMentionStyle) -> String {
+    match style {
+        SkillMentionStyle::Dollar => format!("${skill_id}"),
+        SkillMentionStyle::Slash => format!("/{skill_id}"),
+        SkillMentionStyle::InjectedOnly => format!("skill:{skill_id}"),
+    }
+}
+
+/// Leading user-prompt line(s) that activate native skills when applicable.
+/// Empty for InjectedOnly (body injection carries the instructions).
+pub fn skill_activation_prefix(skill_ids: &[String], style: SkillMentionStyle) -> String {
+    if skill_ids.is_empty() {
+        return String::new();
+    }
+    match style {
+        SkillMentionStyle::Dollar | SkillMentionStyle::Slash => {
+            let mentions: Vec<String> = skill_ids
+                .iter()
+                .map(|id| format_skill_mention(id, style))
+                .collect();
+            format!("{}\n\n", mentions.join(" "))
+        }
+        SkillMentionStyle::InjectedOnly => String::new(),
+    }
+}
+
 fn skill_roots(vault_path: Option<&str>) -> Vec<PathBuf> {
     let mut roots = Vec::new();
+    // Vault-local skills first (highest priority when same id exists later roots are skipped).
+    if let Some(vault) = vault_path.map(Path::new).filter(|path| path.is_dir()) {
+        roots.push(vault.join(".agents/skills"));
+    }
     if let Some(home) = dirs::home_dir() {
         roots.push(home.join(".agents/skills"));
         roots.push(
@@ -17,9 +77,8 @@ fn skill_roots(vault_path: Option<&str>) -> Vec<PathBuf> {
                 .unwrap_or_else(|| home.join(".codex"))
                 .join("skills"),
         );
-    }
-    if let Some(vault) = vault_path.map(Path::new).filter(|path| path.is_dir()) {
-        roots.push(vault.join(".agents/skills"));
+        // Claude Code / Claude Desktop user skills (e.g. paper-reader).
+        roots.push(home.join(".claude/skills"));
     }
     roots
 }
@@ -88,9 +147,46 @@ pub fn list_agent_skills(vault_path: Option<&str>) -> Vec<AgentSkill> {
         .collect()
 }
 
+fn skill_block_heading(skill_id: &str, style: SkillMentionStyle) -> String {
+    match style {
+        SkillMentionStyle::Dollar => format!("### ${skill_id}"),
+        SkillMentionStyle::Slash => format!("### /{skill_id}"),
+        SkillMentionStyle::InjectedOnly => format!("### skill:{skill_id}"),
+    }
+}
+
+fn skill_section_preamble(style: SkillMentionStyle, skill_ids: &[String]) -> String {
+    let mentions: Vec<String> = skill_ids
+        .iter()
+        .map(|id| format_skill_mention(id, style))
+        .collect();
+    let list = mentions.join(", ");
+    match style {
+        SkillMentionStyle::Dollar => format!(
+            "\n\n## Active local skills\n\
+             This agent activates skills with the **$skill-id** syntax (e.g. {list}).\n\
+             Prefer following the agent's native skill if it resolves the same id; \
+             otherwise follow the full SKILL.md text Motif injects below.\n\n"
+        ),
+        SkillMentionStyle::Slash => format!(
+            "\n\n## Active local skills\n\
+             This agent typically activates skills/commands with the **/skill-id** syntax (e.g. {list}).\n\
+             Prefer the native skill when available; otherwise follow the full SKILL.md text Motif injects below.\n\n"
+        ),
+        SkillMentionStyle::InjectedOnly => format!(
+            "\n\n## Active local skills (Motif-injected)\n\
+             This agent does **not** use Motif Composer `$` as a runtime skill trigger. \
+             Follow the SKILL.md instructions Motif injects below for: {list}.\n\
+             Do not wait for a separate $ or / command — the instructions are already in this prompt.\n\n"
+        ),
+    }
+}
+
+/// Load SKILL.md bodies and format them for the given agent skill-mention style.
 pub fn load_skill_instructions(
     skill_ids: &[String],
     vault_path: Option<&str>,
+    style: SkillMentionStyle,
 ) -> Result<String, AppError> {
     if skill_ids.len() > MAX_SELECTED_SKILLS {
         return Err(AppError::message(format!(
@@ -112,13 +208,17 @@ pub fn load_skill_instructions(
             )));
         }
         let content = fs::read_to_string(path).map_err(AppError::Io)?;
-        blocks.push(format!("### ${skill_id}\n{content}"));
+        blocks.push(format!(
+            "{}\n{content}",
+            skill_block_heading(skill_id, style)
+        ));
     }
     if blocks.is_empty() {
         Ok(String::new())
     } else {
         Ok(format!(
-            "\n\n## Active local skills\nFollow the selected local skill instructions below when they apply.\n\n{}",
+            "{}{}",
+            skill_section_preamble(style, skill_ids),
             blocks.join("\n\n")
         ))
     }
@@ -126,7 +226,8 @@ pub fn load_skill_instructions(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_skill_metadata;
+    use super::*;
+    use crate::models::agent::AgentTemplate;
 
     #[test]
     fn parses_skill_front_matter() {
@@ -136,5 +237,43 @@ mod tests {
         );
         assert_eq!(name, "example");
         assert_eq!(description, "Useful instructions");
+    }
+
+    #[test]
+    fn codex_uses_dollar_mentions() {
+        assert_eq!(
+            skill_mention_style(&AgentTemplate::CodexAcp),
+            SkillMentionStyle::Dollar
+        );
+        assert_eq!(
+            format_skill_mention("paper-reader", SkillMentionStyle::Dollar),
+            "$paper-reader"
+        );
+        let prefix = skill_activation_prefix(&["paper-reader".into()], SkillMentionStyle::Dollar);
+        assert!(prefix.starts_with("$paper-reader"));
+    }
+
+    #[test]
+    fn claude_uses_slash_mentions() {
+        assert_eq!(
+            skill_mention_style(&AgentTemplate::ClaudeAcp),
+            SkillMentionStyle::Slash
+        );
+        assert_eq!(
+            format_skill_mention("paper-reader", SkillMentionStyle::Slash),
+            "/paper-reader"
+        );
+    }
+
+    #[test]
+    fn generic_agents_inject_only() {
+        assert_eq!(
+            skill_mention_style(&AgentTemplate::Opencode),
+            SkillMentionStyle::InjectedOnly
+        );
+        assert!(
+            skill_activation_prefix(&["paper-reader".into()], SkillMentionStyle::InjectedOnly)
+                .is_empty()
+        );
     }
 }

@@ -63,6 +63,28 @@ export async function deletePapersUnderPath(
 	return res.data;
 }
 
+/**
+ * Mark paper as read / unread after paper-reader workflow (catalog authority).
+ */
+export async function setPaperIsRead(
+	vaultPath: string,
+	path: string,
+	isRead: boolean,
+): Promise<PaperMetadata> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.readDesktopOnly"));
+	}
+	const res = await invoke<ApiResult<PaperMetadata>>("paper_set_is_read", {
+		args: { vaultPath, path, isRead },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.readMarkFailed"),
+		);
+	}
+	return res.data;
+}
+
 export type PaperExportResult = {
 	format: string;
 	content: string;

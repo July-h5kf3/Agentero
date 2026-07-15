@@ -8,7 +8,9 @@ use crate::models::agent::{
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::events::AgentEventEmitter;
 use crate::services::agent::prompts::{build_prompt, extract_sources};
-use crate::services::agent::skills::load_skill_instructions;
+use crate::services::agent::skills::{
+    load_skill_instructions, skill_activation_prefix, skill_mention_style,
+};
 use agent_client_protocol::schema::v1::{
     CancelNotification, ContentBlock, EnvVariable, ImageContent, InitializeRequest, McpServer,
     McpServerStdio, NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus,
@@ -581,27 +583,38 @@ pub async fn run_once(
     auto_approve: bool,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
-    let skill_instructions = match load_skill_instructions(&skill_ids, vault_path.as_deref()) {
-        Ok(instructions) => instructions,
-        Err(error) => {
-            let _ = app.emit(
-                "agent:failed",
-                AgentFailedEvent {
-                    session_id,
-                    error: error.to_string(),
-                },
-            );
-            return Err(error);
-        }
-    };
+    let skill_style = skill_mention_style(&desc.template);
+    let skill_instructions =
+        match load_skill_instructions(&skill_ids, vault_path.as_deref(), skill_style) {
+            Ok(instructions) => instructions,
+            Err(error) => {
+                let _ = app.emit(
+                    "agent:failed",
+                    AgentFailedEvent {
+                        session_id,
+                        error: error.to_string(),
+                    },
+                );
+                return Err(error);
+            }
+        };
     let user_prompt = if prompt.trim().is_empty() && !images.is_empty() {
         "Please analyze the attached image crop from the research paper PDF.".to_string()
     } else {
         prompt
     };
+    // Prefix native skill triggers (e.g. Codex `$id`) so the CLI can activate them.
+    let activation = skill_activation_prefix(&skill_ids, skill_style);
+    let user_prompt = format!("{activation}{user_prompt}");
     let full_prompt = format!(
         "{}{}",
-        build_prompt(workflow.as_deref(), &user_prompt, target.as_deref()),
+        build_prompt(
+            workflow.as_deref(),
+            &user_prompt,
+            target.as_deref(),
+            skill_style,
+            &skill_ids,
+        ),
         skill_instructions
     );
     let prompt_images = images;

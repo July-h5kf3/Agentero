@@ -69,6 +69,11 @@ export type PaperMetadata = {
 	extra?: string;
 	summary?: string;
 	status: "pending" | "importing" | "completed" | "failed";
+	/**
+	 * Whether paper-reader workflow has finished for this paper.
+	 * Catalog schema v3; default false when missing (legacy rows).
+	 */
+	is_read?: boolean;
 	added_at: string;
 	updated_at: string;
 };
@@ -182,8 +187,27 @@ export function paperNeedsAssetDownload(
 }
 
 /**
- * @deprecated Eye icon removed; use download which also liteparses when no TeX.
- * Kept for any residual callers.
+ * Local assets are complete enough for reading / paper-reader:
+ * PDF present, and TeX or PAPER.md as readable body.
+ */
+export function paperAssetsComplete(node: TreeWalkNode): boolean {
+	return paperAssetDownloadReasons(node).length === 0;
+}
+
+/**
+ * Show file-tree Eye when assets are complete and catalog says not yet read.
+ */
+export function paperNeedsRead(
+	node: TreeWalkNode,
+	meta: { is_read?: boolean } | null | undefined,
+): boolean {
+	if (!paperAssetsComplete(node)) return false;
+	return !(meta?.is_read === true);
+}
+
+/**
+ * @deprecated Prefer paperNeedsAssetDownload / paperNeedsRead.
+ * Kept for residual callers: missing PAPER.md path when no TeX.
  */
 export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
 	return (

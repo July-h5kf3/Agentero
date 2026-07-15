@@ -1,5 +1,6 @@
 import {
 	Download,
+	Eye,
 	FileCode2,
 	FileJson,
 	FilePlus2,
@@ -46,9 +47,11 @@ import {
 } from "@/components/ui/tooltip";
 import {
 	isPaperDirectory,
+	type PaperMetadata,
 	paperAssetDownloadReasons,
 	paperDirFromPath,
 	paperNeedsAssetDownload,
+	paperNeedsRead,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { revealInFileManager, revealInOsLabelKey } from "@/lib/reveal";
@@ -260,6 +263,13 @@ type FileTreeProps = {
 	arxivPaperRelPaths?: ReadonlySet<string>;
 	/** Download missing assets for every incomplete paper (Library row). */
 	onDownloadAllMissingAssets?: () => Promise<void>;
+	/**
+	 * Catalog paper rows keyed by vault-relative path (for `is_read` / Eye icon).
+	 * Paths normalized without leading/trailing slashes.
+	 */
+	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata>;
+	/** Start paper-reader workflow for a paper folder with complete local assets. */
+	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
 	onDeletePath?: (path: string) => void | Promise<void>;
 	className?: string;
@@ -282,12 +292,15 @@ export function FileTree({
 	onSelectLibrary,
 	onDownloadPaperAssets,
 	onDownloadAllMissingAssets,
+	paperMetaByRelPath,
+	onReadPaper,
 	onDeletePath,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
 	const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
 	const [downloadingAll, setDownloadingAll] = useState(false);
+	const [readingPath, setReadingPath] = useState<string | null>(null);
 	const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
 	const [revealError, setRevealError] = useState<string | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -386,6 +399,35 @@ export function FileTree({
 			setDownloadingAll(false);
 		}
 	}, [onDownloadAllMissingAssets, downloadingAll, downloadingPath]);
+
+	const handleReadPaper = useCallback(
+		async (node: FileNode) => {
+			if (!onReadPaper || readingPath || downloadingPath || downloadingAll)
+				return;
+			setReadingPath(node.path);
+			try {
+				await onReadPaper(node);
+			} finally {
+				setReadingPath(null);
+			}
+		},
+		[onReadPaper, readingPath, downloadingPath, downloadingAll],
+	);
+
+	const relPathForNode = useCallback(
+		(absPath: string): string => {
+			if (!vaultPath) return absPath.replace(/\\/g, "/");
+			const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+			const norm = absPath.replace(/\\/g, "/");
+			if (norm === root) return "";
+			const prefix = `${root}/`;
+			if (norm.startsWith(prefix)) {
+				return norm.slice(prefix.length).replace(/^\/+|\/+$/g, "");
+			}
+			return norm.replace(/^\/+|\/+$/g, "");
+		},
+		[vaultPath],
+	);
 
 	const canRevealPath = useCallback((path: string) => {
 		return Boolean(path) && !path.startsWith("motif:");
@@ -572,12 +614,22 @@ export function FileTree({
 			const downloadReasons = paperAssetDownloadReasons(node);
 			const showDownload =
 				Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
+			const rel = relPathForNode(node.path);
+			const meta = paperMetaByRelPath?.get(rel) ?? null;
+			const showRead =
+				Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
 			const isDownloading = downloadingPath === node.path || downloadingAll;
+			const isReading = readingPath === node.path;
 			const rowBusy =
-				isDownloading || Boolean(downloadingPath) || downloadingAll;
+				isDownloading ||
+				isReading ||
+				Boolean(downloadingPath) ||
+				downloadingAll ||
+				Boolean(readingPath);
 			const reasonTip = downloadReasons.length
 				? downloadReasons.map((r) => t(DOWNLOAD_REASON_KEYS[r])).join(" · ")
 				: t("fileTree.downloadAssets");
+			const showActions = showDownload || showRead;
 			return (
 				<div key={node.id}>
 					<FileTreeFile path={node.path} name={node.name}>
@@ -588,7 +640,7 @@ export function FileTree({
 						<FileTreeName className="min-w-0 flex-1 truncate">
 							{node.name}
 						</FileTreeName>
-						{showDownload ? (
+						{showActions ? (
 							<FileTreeActions
 								className="shrink-0"
 								onClick={(e) => {
@@ -596,38 +648,70 @@ export function FileTree({
 								}}
 								onKeyDown={(e) => e.stopPropagation()}
 							>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-6"
-											aria-label={reasonTip}
-											disabled={rowBusy}
-											onClick={(e) => {
-												e.stopPropagation();
-												void handleDownload(node);
-											}}
-										>
-											{isDownloading ? (
-												<Loader2 className="size-3.5 animate-spin" />
-											) : (
-												<Download className="size-3.5" />
-											)}
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent side="right" className="max-w-xs">
-										<p className="font-medium">
-											{t("fileTree.downloadAssets")}
-										</p>
-										<ul className="mt-1 list-disc space-y-0.5 pl-3 text-xs opacity-90">
-											{downloadReasons.map((r) => (
-												<li key={r}>{t(DOWNLOAD_REASON_KEYS[r])}</li>
-											))}
-										</ul>
-									</TooltipContent>
-								</Tooltip>
+								{showDownload ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												className="size-6"
+												aria-label={reasonTip}
+												disabled={rowBusy}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleDownload(node);
+												}}
+											>
+												{isDownloading ? (
+													<Loader2 className="size-3.5 animate-spin" />
+												) : (
+													<Download className="size-3.5" />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="right" className="max-w-xs">
+											<p className="font-medium">
+												{t("fileTree.downloadAssets")}
+											</p>
+											<ul className="mt-1 list-disc space-y-0.5 pl-3 text-xs opacity-90">
+												{downloadReasons.map((r) => (
+													<li key={r}>{t(DOWNLOAD_REASON_KEYS[r])}</li>
+												))}
+											</ul>
+										</TooltipContent>
+									</Tooltip>
+								) : null}
+								{showRead ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												className="size-6"
+												aria-label={t("fileTree.readPaper")}
+												disabled={rowBusy}
+												onClick={(e) => {
+													e.stopPropagation();
+													void handleReadPaper(node);
+												}}
+											>
+												{isReading ? (
+													<Loader2 className="size-3.5 animate-spin" />
+												) : (
+													<Eye className="size-3.5" />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="right" className="max-w-xs">
+											<p className="font-medium">{t("fileTree.readPaper")}</p>
+											<p className="mt-1 text-xs opacity-90">
+												{t("fileTree.readPaperHint")}
+											</p>
+										</TooltipContent>
+									</Tooltip>
+								) : null}
 							</FileTreeActions>
 						) : null}
 					</FileTreeFile>

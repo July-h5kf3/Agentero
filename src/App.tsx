@@ -63,6 +63,7 @@ import {
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
+import { runPaperReaderWorkflow } from "@/lib/paper-read";
 import {
 	deletePapersUnderPath,
 	exportLibraryToFile,
@@ -1155,6 +1156,55 @@ export default function App() {
 		return set;
 	}, [libraryPapers]);
 
+	/** Catalog rows by vault-relative path (for Eye / is_read). */
+	const paperMetaByRelPath = useMemo(() => {
+		const map = new Map<string, PaperMetadata>();
+		for (const p of libraryPapers) {
+			if (!p.path) continue;
+			const key = p.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+			map.set(key, p);
+		}
+		return map;
+	}, [libraryPapers]);
+
+	/**
+	 * paper-reader workflow: Eye on complete + unread papers.
+	 * Progress surfaces in the bottom-left background tasks panel.
+	 */
+	const handleReadPaper = useCallback(
+		async (node: FileNode) => {
+			if (!vaultPath) return;
+			const rel = toVaultRelative(vaultPath, node.path)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			try {
+				await runPaperReaderWorkflow({
+					vaultRoot: vaultPath,
+					paperPath: rel,
+				});
+				await refreshLibrary();
+				// Refresh NOTES pane if this paper is open
+				const notesAbs = notesPathForPaper(node.path);
+				if (
+					notesPath &&
+					normalizePathKey(notesPath) === normalizePathKey(notesAbs)
+				) {
+					try {
+						const content = await readVaultFile(notesAbs);
+						setPaperNotes(content);
+						setNotesDirty(false);
+						setNotesKey((k) => k + 1);
+					} catch {
+						// ignore
+					}
+				}
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[vaultPath, refreshLibrary, notesPath],
+	);
+
 	/**
 	 * Library bulk download: every paper folder missing PDF and/or fetchable TeX.
 	 * Walks the file tree so local source/ presence matches the row icons.
@@ -1887,6 +1937,8 @@ export default function App() {
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
 										arxivPaperRelPaths={arxivPaperRelPaths}
+										paperMetaByRelPath={paperMetaByRelPath}
+										onReadPaper={handleReadPaper}
 									/>
 								</div>
 								{/* Paper info only when a specific paper is selected */}

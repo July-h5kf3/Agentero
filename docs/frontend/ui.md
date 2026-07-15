@@ -30,10 +30,11 @@
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
-- **Paper 行 Download**（无眼睛图标）：下列任一成立即显示，hover 列出原因：
+- **Paper 行 Download**：下列任一成立即显示，hover 列出原因：
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
   - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
   - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
+- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击启动 **paper-reader** 工作流（`$paper-reader` skill + 默认 Agent）。阅读中图标转圈，进度在左下角后台任务条展示；成功后 `is_read = true`，图标消失。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -59,7 +60,8 @@
 - **显示时机**：**有任务时**才出现；全部结束后约 4s 自动消失。
 - **收起态**：一条状态条——转圈 / 完成勾 + 当前任务标题或「N 个进行中」+ 进度条；点击展开/收起。
 - **展开态**：任务列表（队列序号、标题、详情、进度）；可清除已完成项。
-- **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出等长操作经 `runBackgroundTask` 登记。
+- **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**等长操作经 `runBackgroundTask` 登记。
+- **paper-reader 进度**：任务 kind=`paperRead`；detail 显示当前阶段（启动 Agent / 读正文 / 写 NOTES / …）；plan/tool 事件会更新进度百分比；失败时 error 写入任务条。
 - 交互对齐常见 IDE（VS Code 类）：不抢焦点、可折叠、只展示后台进度，错误仍可走原有 error 槽位。
 
 ### 2.2 无 Vault 欢迎页
@@ -174,7 +176,8 @@
   - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
-- **论文行 Download**（单一图标，无独立眼睛）：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
+- **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
+- **论文行 Eye（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击 → paper-reader 工作流（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。进度在左下角后台任务条。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 
@@ -209,9 +212,17 @@ PromptInput → Body / Footer / Submit
 
 **上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
-**本机技能**：输入 `$` 可筛选 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills` 中的 `SKILL.md`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小并将内容注入当前 provider 的 prompt。Codex 也会使用这条受限的本机技能注入路径。
+**本机技能**：Composer 统一用 `$` 打开技能选择器（Motif UI 约定，与运行时触发语法无关）。可选来源：`~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills`、当前 Vault `.agents/skills`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小，并**按当前 Agent 模板**组装 prompt：
 
-**斜杠命令**：Motif 不实现自己的 `/` 命令菜单，输入内容原样传递给当前 provider。Codex 使用 App Server 的 native thread，保持 Codex 自己的命令语义。
+| Agent 模板 | 运行时 skill 提及 | Host 行为 |
+|---|---|---|
+| **Codex** (`codex-acp`) | **`$skill-id`** | 用户 prompt 前缀 `$id` + 注入完整 `SKILL.md`（双保险） |
+| **Claude** (`claude-acp`) | **`/skill-id`** | 用户 prompt 前缀 `/id` + 注入完整 `SKILL.md` |
+| 其它（OpenCode / Gemini / Qoder / Grok / custom） | 无原生触发 | 仅注入 `SKILL.md` 正文，并在 prompt 中说明不要等待 `$`/`/` 命令 |
+
+paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex 的 `$` 误写成 Claude 的 `/`，或反向。
+
+**斜杠命令**：Motif 不实现自己的 `/` 命令菜单。用户手打的 `/…` 原样透传；Claude 路径上 Host 也可能主动加上 `/skill-id` 前缀以对齐其 skill 语法。Codex 使用 App Server native thread，skill 侧以 `$` 为准。
 
 **YOLO**：Composer 底栏的 YOLO 开关按 provider 注册项保存在本机浏览器偏好中，并持续作用于后续运行，直到用户主动关闭。默认关闭时，Motif 取消 ACP 的权限请求；开启后自动选择 Agent 给出的第一个权限选项。逐项权限确认需要由保持 ACP 会话的后续实现提供。
 

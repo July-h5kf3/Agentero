@@ -153,6 +153,7 @@ pub fn run() {
             commands::paper::paper_get,
             commands::paper::paper_list,
             commands::paper::paper_delete,
+            commands::paper::paper_set_is_read,
             set_locale,
         ])
         .setup(|app| {
