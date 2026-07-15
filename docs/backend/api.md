@@ -12,7 +12,7 @@ Host (Tauri + Rust)
 ```
 
 - **Frontend ↔ Host**：`invoke('namespace:command')` 请求响应，配合 Tauri event 做进度/流式推送。
-- Host 作为 **ACP Client** 连接用户本机 Agent；Frontend 只面对下方 `agent:*` 命令与事件，**不** 直接暴露 ACP JSON-RPC 细节。
+- Host 对通用 provider 作为 **ACP Client**；Codex 使用本机 `codex app-server` 的原生 thread runtime。Frontend 只面对下方 `agent:*` 命令与事件，**不** 直接暴露底层 RPC 细节。
 
 ## 2. 通用约定
 
@@ -48,8 +48,8 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `pdf:progress` | 本地 PDF 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
 | `pdf:completed` | PDF 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
 | `pdf:failed` | PDF 入库失败 | `{ job_id: string, error: AppError }` |
-| `agent:stream` | Agent 流式输出 | `{ sessionId, chunk, kind: "message" \| "thought" }`（`thought` = ACP reasoning） |
-| `agent:tool` | ACP tool call 创建/更新 | `{ sessionId, toolCallId, title?, kind?, status?, input?, output?, full? }` |
+| `agent:stream` | Agent 流式输出 | `{ sessionId, chunk, kind: "message" \| "thought" }`（`thought` = reasoning） |
+| `agent:tool` | Agent tool call 创建/更新 | `{ sessionId, toolCallId, title?, kind?, status?, input?, output?, full? }` |
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }` |
@@ -60,7 +60,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 #### `agent_warm`
 
-打开 Chat 时后台预热 ACP（不发用户 prompt）：`initialize` + `session/new`，上报模型与会话配置（包括可用的 effort / Fast），并短暂等待 `UsageUpdate`。
+打开 Chat 时后台预热 provider（不发用户 prompt）。ACP provider 通过 `initialize` + `session/new` 获取配置；Codex 通过 `model/list` 获取模型、effort 和 service tier。
 
 - **参数**
 
@@ -543,13 +543,14 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_run_once`
 
-创建一次性的 ACP 会话并发送 prompt。当前实现会在 prompt 结束后关闭连接。
+通用 ACP provider 创建一次性会话并发送 prompt。Codex 会先创建或恢复原生 thread，再通过 `turn/start` 发送 prompt；每个 turn 的连接结束后，native thread 仍保存在 Codex CLI history 中。
 
 - **参数**
 
 ```ts
 {
   agentId?: string;
+  sessionId?: string; // Codex native thread id; other providers currently ignore it
   prompt: string;
   vaultPath?: string;
   workflow?: string;
@@ -568,7 +569,25 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **权限策略**：默认取消 ACP 权限请求。`autoApprove` 仅由 Composer 的 YOLO 开关传入，作用范围为这一次运行；逐项权限确认仍未实现。
 
-- **能力边界**：Host 根据 ACP 的 `SessionConfigOption` 能力协商模型、reasoning effort 和 Fast；前端只为 `codex-acp` 暴露后两项。未声明对应配置的 Agent 不会收到该参数。
+- **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
+
+#### `agent_codex_list_threads`
+
+列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。
+
+```ts
+{ agentId?: string; vaultPath?: string }
+// -> CodexThreadInfo[]
+```
+
+#### `agent_codex_read_thread`
+
+按 native thread id 恢复对话显示。Host 用 `thread/read` 校验 thread，并从对应 Codex JSONL transcript 回放 user、assistant 与 reasoning 文本。
+
+```ts
+{ agentId?: string; threadId: string; vaultPath?: string }
+// -> { thread: CodexThreadInfo; lines: CodexHistoryLine[] }
+```
 
 #### `agent_list_skills`
 

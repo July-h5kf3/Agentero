@@ -1,11 +1,14 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::agent::{
-    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplateInfo, CatalogScanResponse,
-    ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
+    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplate, AgentTemplateInfo,
+    CatalogScanResponse, ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest,
+    WarmRequest, WarmResult,
 };
+use crate::services::agent::codex::{CodexThreadHistory, CodexThreadInfo};
 use crate::services::agent::{
-    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent,
-    AgentRegistry, AgentRunController,
+    builtin_templates, codex_list_threads, codex_read_thread, list_agent_skills, new_ids,
+    prepare_codex_thread, probe_agent, probe_codex, run_codex_turn, run_once, warm_agent,
+    warm_codex, AgentRegistry, AgentRunController,
 };
 use serde::Serialize;
 use tauri::{Manager, State};
@@ -178,7 +181,11 @@ pub async fn agent_probe(
         let _ = registry.apply_probe_result(&id, &result);
         return Ok(ApiResult::ok(result));
     }
-    let result = probe_agent(&desc).await;
+    let result = if desc.template == AgentTemplate::CodexAcp {
+        probe_codex(&desc).await
+    } else {
+        probe_agent(&desc).await
+    };
     let _ = registry.apply_probe_result(&id, &result);
     Ok(ApiResult::ok(result))
 }
@@ -206,7 +213,11 @@ pub async fn agent_probe_catalog(
         let _ = registry.apply_probe_result(&desc.id, &result);
         return Ok(ApiResult::ok(result));
     }
-    let result = probe_agent(&desc).await;
+    let result = if desc.template == AgentTemplate::CodexAcp {
+        probe_codex(&desc).await
+    } else {
+        probe_agent(&desc).await
+    };
     let _ = registry.apply_probe_result(&desc.id, &result);
     Ok(ApiResult::ok(result))
 }
@@ -227,7 +238,23 @@ pub async fn agent_run_once(
         Err(e) => return Ok(map_err(e)),
     };
 
-    let (session_id, message_id) = new_ids();
+    let (generated_session_id, message_id) = new_ids();
+    let session_id = if desc.template == AgentTemplate::CodexAcp {
+        match prepare_codex_thread(
+            &desc,
+            request.session_id.clone(),
+            request.vault_path.clone(),
+            request.model_id.clone(),
+            request.auto_approve,
+        )
+        .await
+        {
+            Ok(thread_id) => thread_id,
+            Err(error) => return Ok(map_err(error)),
+        }
+    } else {
+        generated_session_id
+    };
     let accepted = RunOnceAccepted {
         session_id: session_id.clone(),
         message_id: message_id.clone(),
@@ -241,27 +268,94 @@ pub async fn agent_run_once(
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let _ = run_once(
-            app_handle.clone(),
-            desc,
-            session_id.clone(),
-            message_id,
-            request.prompt,
-            request.workflow,
-            request.target,
-            request.vault_path,
-            request.model_id,
-            request.reasoning_effort,
-            request.fast_mode,
-            request.skill_ids,
-            request.auto_approve,
-            cancellation,
-        )
-        .await;
+        if desc.template == AgentTemplate::CodexAcp {
+            run_codex_turn(
+                app_handle.clone(),
+                desc,
+                session_id.clone(),
+                message_id,
+                request.prompt,
+                request.workflow,
+                request.target,
+                request.vault_path,
+                request.model_id,
+                request.reasoning_effort,
+                request.fast_mode,
+                request.skill_ids,
+                request.auto_approve,
+                cancellation,
+            )
+            .await;
+        } else {
+            let _ = run_once(
+                app_handle.clone(),
+                desc,
+                session_id.clone(),
+                message_id,
+                request.prompt,
+                request.workflow,
+                request.target,
+                request.vault_path,
+                request.model_id,
+                request.reasoning_effort,
+                request.fast_mode,
+                request.skill_ids,
+                request.auto_approve,
+                cancellation,
+            )
+            .await;
+        }
         let _ = app_handle.state::<AgentRunController>().finish(&session_id);
     });
 
     Ok(ApiResult::ok(accepted))
+}
+
+/// Read native Codex threads. The App Server owns the actual history; Motif only
+/// filters it to the current Vault and renders it locally.
+#[tauri::command]
+pub async fn agent_codex_list_threads(
+    registry: State<'_, AgentRegistry>,
+    agent_id: Option<String>,
+    vault_path: Option<String>,
+) -> Result<ApiResult<Vec<CodexThreadInfo>>, String> {
+    let desc = match registry.resolve_default(agent_id.as_deref()) {
+        Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
+        Ok(_) => {
+            return Ok(map_err(AppError::message(
+                "Codex history is only available for the Codex provider",
+            )))
+        }
+        Err(error) => return Ok(map_err(error)),
+    };
+    match codex_list_threads(&desc, vault_path).await {
+        Ok(threads) => Ok(ApiResult::ok(threads)),
+        Err(error) => Ok(map_err(error)),
+    }
+}
+
+/// Hydrate an existing Codex thread from its native JSONL transcript without
+/// copying that transcript into the Vault.
+#[tauri::command]
+pub async fn agent_codex_read_thread(
+    registry: State<'_, AgentRegistry>,
+    agent_id: Option<String>,
+    thread_id: String,
+    vault_path: Option<String>,
+) -> Result<ApiResult<CodexThreadHistory>, String> {
+    let desc = match registry.resolve_default(agent_id.as_deref()) {
+        Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
+        Ok(_) => {
+            return Ok(map_err(AppError::message(
+                "Codex history is only available for the Codex provider",
+            )))
+        }
+        Err(error) => return Ok(map_err(error)),
+    };
+    match codex_read_thread(&desc, thread_id, vault_path).await {
+        Ok(thread) => Ok(ApiResult::ok(thread)),
+        Err(error) => Ok(map_err(error)),
+    }
 }
 
 /// Request cooperative cancellation for a currently streaming ACP session.
@@ -297,6 +391,10 @@ pub async fn agent_warm(
         }
     };
 
-    let result = warm_agent(app, desc, request.vault_path, request.model_id).await;
+    let result = if desc.template == AgentTemplate::CodexAcp {
+        warm_codex(app, desc, request.vault_path).await
+    } else {
+        warm_agent(app, desc, request.vault_path, request.model_id).await
+    };
     Ok(ApiResult::ok(result))
 }

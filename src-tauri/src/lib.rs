@@ -124,6 +124,8 @@ pub fn run() {
             commands::agent::agent_probe,
             commands::agent::agent_probe_catalog,
             commands::agent::agent_run_once,
+            commands::agent::agent_codex_list_threads,
+            commands::agent::agent_codex_read_thread,
             commands::agent::agent_cancel_run,
             commands::agent::agent_warm,
             commands::graph::graph_get_backlinks,

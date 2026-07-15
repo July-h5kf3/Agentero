@@ -200,6 +200,10 @@ pub struct ProbeResult {
 pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Native provider conversation id. Codex maps this to its durable thread id;
+    /// ACP providers intentionally ignore it until they gain persistent runtimes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub prompt: String,
     /// Vault root used as ACP session cwd. Falls back to process cwd when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
