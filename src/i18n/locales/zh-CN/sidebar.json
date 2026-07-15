@@ -2,6 +2,7 @@
 	"fileTree": {
 		"empty": "空文件夹",
 		"openVault": "打开 Vault (⌘O)",
+		"createVault": "创建 Vault (⇧⌘N)",
 		"refresh": "刷新 (⌘R)",
 		"closeVault": "关闭 Vault"
 	},

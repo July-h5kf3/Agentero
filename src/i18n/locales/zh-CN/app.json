@@ -32,13 +32,17 @@
 	},
 	"vault": {
 		"openDesktopOnly": "打开 Vault 仅在 Tauri 应用中可用。",
+		"createDesktopOnly": "创建 Vault 仅在 Tauri 应用中可用。",
 		"dialogTitle": "选择 Motif Vault 文件夹",
+		"createDialogTitle": "选择新建 Motif Vault 的文件夹",
+		"createFailed": "创建 Vault 失败。",
 		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
 		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",
 		"noVaultName": "未打开 Vault",
 		"noVaultOpenTitle": "未打开 Vault",
-		"noVaultOpenDescription": "打开一个 Vault 文件夹以查看文件、笔记和图谱。",
+		"noVaultOpenDescription": "打开或创建一个 Vault 文件夹以查看文件、笔记和图谱。",
 		"openVaultButton": "打开 Vault",
+		"createVaultButton": "创建 Vault",
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开 Vault。"
 	},

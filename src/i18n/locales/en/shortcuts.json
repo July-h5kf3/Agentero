@@ -8,6 +8,7 @@
 		"settings": "Settings…",
 		"closeSheet": "Close settings",
 		"openVault": "Open vault…",
+		"createVault": "Create vault…",
 		"refreshTree": "Refresh file tree",
 		"toggleSidebar": "Show / hide sidebar",
 		"toggleChat": "Show / hide chat",
