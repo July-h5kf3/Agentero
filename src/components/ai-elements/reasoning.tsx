@@ -91,9 +91,14 @@ export const Reasoning = memo(
 				hasEverStreamedRef.current = true;
 				if (startTimeRef.current === null) {
 					startTimeRef.current = Date.now();
+					// Clear stale duration so a reused instance never keeps "0s Thinking"
+					setDuration(undefined);
 				}
 			} else if (startTimeRef.current !== null) {
-				setDuration(Math.ceil((Date.now() - startTimeRef.current) / MS_IN_S));
+				// At least 1s label; 0 was previously treated as "still thinking"
+				setDuration(
+					Math.max(1, Math.ceil((Date.now() - startTimeRef.current) / MS_IN_S)),
+				);
 				startTimeRef.current = null;
 			}
 		}, [isStreaming, setDuration]);
@@ -169,10 +174,17 @@ export const ReasoningTrigger = memo(
 			streaming: boolean,
 			thinkingDuration?: number,
 		) => {
-			if (streaming || thinkingDuration === 0) {
+			// Only the active stream shows the Thinking shimmer.
+			// (duration === 0 used to mean "still thinking", so finished short
+			// thoughts stayed on Thinking forever across every conversation.)
+			if (streaming) {
 				return <Shimmer duration={1}>{t("reasoning.thinking")}</Shimmer>;
 			}
-			if (thinkingDuration === undefined) {
+			if (
+				thinkingDuration === undefined ||
+				thinkingDuration <= 0 ||
+				!Number.isFinite(thinkingDuration)
+			) {
 				return <p>{t("reasoning.thoughtForFew")}</p>;
 			}
 			return <p>{t("reasoning.thoughtFor", { count: thinkingDuration })}</p>;
