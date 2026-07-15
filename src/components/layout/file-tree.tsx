@@ -525,7 +525,7 @@ export function FileTree({
 			<div className={cn("select-none py-1 text-sm", className)}>
 				{nodes.length === 0 && !createDraft ? (
 					<>
-						{/* Virtual library node still useful on empty vault */}
+						{/* Virtual library node always available (empty vault or no vault yet) */}
 						<AiFileTree
 							selectedPath={treeSelectedPath}
 							expanded={expanded}
@@ -539,9 +539,12 @@ export function FileTree({
 						>
 							{libraryRow}
 						</AiFileTree>
-						<p className="px-3 py-2 text-muted-foreground text-xs">
-							{t("fileTree.empty")}
-						</p>
+						{/* Only when a vault is open but has no files — not before open/create. */}
+						{vaultPath ? (
+							<p className="px-3 py-2 text-muted-foreground text-xs">
+								{t("fileTree.empty")}
+							</p>
+						) : null}
 					</>
 				) : (
 					<AiFileTree
