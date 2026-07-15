@@ -173,7 +173,7 @@ PromptInput → Body / Footer / Submit
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认；**有预览链接时也下载到本地**（`downloadFulltextToLocal`，默认关——无预览 URL 时入库仍会尽量下载）。
+- **General**：恢复上次 Vault、退出确认；**有预览链接时也下载到本地**（`downloadFulltextToLocal`，默认关）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.poco-ai.com`）。
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。

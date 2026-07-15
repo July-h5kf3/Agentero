@@ -46,10 +46,11 @@ import {
 	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
-import type {
-	AppSettings,
-	LocalePreference,
-	ThemePreference,
+import {
+	type AppSettings,
+	DEFAULT_TRANSLATOR_BASE_URL,
+	type LocalePreference,
+	type ThemePreference,
 } from "@/lib/settings";
 import {
 	formatShortcut,
@@ -279,8 +280,40 @@ function GeneralPane({
 					/>
 				</SettingsRow>
 			</SettingsGroup>
-			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+			<p className="mb-4 px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.downloadFulltextToLocal.hint")}
+			</p>
+			<SettingsGroup>
+				<div className="flex flex-col gap-1.5 border-b px-3.5 py-2.5 last:border-b-0">
+					<Label
+						htmlFor="translator-base-url"
+						className="font-normal text-[13px]"
+					>
+						{t("general.translatorBaseUrl.label")}
+					</Label>
+					<Input
+						id="translator-base-url"
+						value={settings.translatorBaseUrl}
+						onChange={(e) => patch({ translatorBaseUrl: e.target.value })}
+						onBlur={() => {
+							const trimmed = settings.translatorBaseUrl
+								.trim()
+								.replace(/\/+$/, "");
+							if (!trimmed) {
+								patch({ translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL });
+							} else if (trimmed !== settings.translatorBaseUrl) {
+								patch({ translatorBaseUrl: trimmed });
+							}
+						}}
+						placeholder={DEFAULT_TRANSLATOR_BASE_URL}
+						className="h-8 font-mono text-xs"
+						spellCheck={false}
+						autoComplete="off"
+					/>
+				</div>
+			</SettingsGroup>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.translatorBaseUrl.hint")}
 			</p>
 		</>
 	);

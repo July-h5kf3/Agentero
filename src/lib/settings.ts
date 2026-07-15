@@ -17,6 +17,11 @@ export type AppSettings = {
 	 * (catalog still keeps remote URLs). Default false.
 	 */
 	downloadFulltextToLocal: boolean;
+	/**
+	 * Translator Runtime base URL for magic-wand / identifier import.
+	 * Default: hosted poco-ai service.
+	 */
+	translatorBaseUrl: string;
 	// Appearance
 	theme: ThemePreference;
 	locale: LocalePreference;
@@ -29,10 +34,14 @@ export type AppSettings = {
 	shareCrashReports: boolean;
 };
 
+/** Default Translator Runtime endpoint (overridable in Settings). */
+export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.poco-ai.com";
+
 export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
 	confirmBeforeClose: false,
 	downloadFulltextToLocal: false,
+	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	theme: "system",
 	locale: "system",
 	editorFontSize: 14,
@@ -69,6 +78,14 @@ export function loadSettings(): AppSettings {
 			rest.downloadFulltextToLocal === undefined
 		) {
 			merged.downloadFulltextToLocal = legacyDownload;
+		}
+		// Empty / missing URL → product default
+		if (!merged.translatorBaseUrl?.trim()) {
+			merged.translatorBaseUrl = DEFAULT_TRANSLATOR_BASE_URL;
+		} else {
+			merged.translatorBaseUrl = merged.translatorBaseUrl
+				.trim()
+				.replace(/\/+$/, "");
 		}
 		return merged;
 	} catch {

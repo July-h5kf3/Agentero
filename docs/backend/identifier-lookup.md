@@ -79,15 +79,17 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
 
 阅读：优先远程 URL；`source/` 有文件时可作离线回退（实现阶段再定优先级）。
 
-#### Translator 请求地址（占位）
+#### Translator 服务地址（设置）
 
-| 常量 / 参数 | 默认值 |
+| 项 | 值 |
 |---|---|
-| `DEFAULT_TRANSLATOR_BASE_URL`（Host + 前端） | **`http://127.0.0.1:1969`** |
+| 设置 key | `translatorBaseUrl`（Settings → General） |
+| 默认 | **`https://translator.poco-ai.com`** |
+| Host 常量 | `DEFAULT_TRANSLATOR_BASE_URL`（与设置默认一致） |
 
-- Host：`lookup_import` 对 `{base}/search` 或 `{base}/web` 发 `POST`（`Content-Type: text/plain`）。
-- 可经参数 `translatorBaseUrl` 覆盖；未起 translation-server 时，**仅 arXiv** 回退到 export.arxiv.org。
-- 命令 `lookup_translator_config` 返回当前默认占位地址。
+- 魔棒入库时前端把设置中的 URL 传入 `lookup_import.args.translatorBaseUrl`。
+- Host：`POST {base}/search` 或 `/web`（`Content-Type: text/plain`）。
+- 服务不可达且输入为 arXiv 时，回退 export.arxiv.org。
 
 #### 设置项
 

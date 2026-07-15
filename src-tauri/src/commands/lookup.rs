@@ -13,7 +13,7 @@ pub struct TranslatorConfig {
     pub default_base_url: String,
 }
 
-/// Return default Translator Runtime base URL (placeholder until configured).
+/// Return default Translator Runtime base URL (Settings default).
 #[tauri::command]
 pub fn lookup_translator_config() -> ApiResult<TranslatorConfig> {
     ApiResult::ok(TranslatorConfig {

@@ -1,15 +1,12 @@
 /**
  * Magic-wand identifier import via Host `lookup_import`.
- * Translator Runtime base URL is a placeholder (default http://127.0.0.1:1969).
+ * Translator base URL comes from Settings (`translatorBaseUrl`).
  * @see docs/backend/identifier-lookup.md
  */
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
-import type { AppSettings } from "@/lib/settings";
+import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
-
-/** Placeholder — Zotero translation-server default listen address. */
-export const DEFAULT_TRANSLATOR_BASE_URL = "http://127.0.0.1:1969";
 
 export type LookupAddResult = {
 	paperDir: string;
@@ -35,10 +32,22 @@ type HostLookupResult = {
 	translatorBaseUrl: string;
 };
 
+function resolveTranslatorBaseUrl(
+	settings: AppSettings,
+	override?: string,
+): string {
+	const raw =
+		override?.trim() ||
+		settings.translatorBaseUrl?.trim() ||
+		DEFAULT_TRANSLATOR_BASE_URL;
+	return raw.replace(/\/+$/, "");
+}
+
 /**
  * Add a paper by identifier/URL into `vaultRoot/parentDir/<id>/`.
- * Host calls Translator at `translatorBaseUrl` (placeholder by default);
- * falls back to arXiv API when Runtime is down and input is an arXiv id.
+ * Host calls Translator at Settings `translatorBaseUrl`
+ * (default https://translator.poco-ai.com); falls back to arXiv API
+ * when Runtime is down and input is an arXiv id.
  */
 export async function addPaperByIdentifier(opts: {
 	vaultRoot: string;
@@ -46,7 +55,7 @@ export async function addPaperByIdentifier(opts: {
 	parentDir: string;
 	text: string;
 	settings: AppSettings;
-	/** Override placeholder URL; default http://127.0.0.1:1969 */
+	/** Override settings URL for this call */
 	translatorBaseUrl?: string;
 }): Promise<LookupAddResult> {
 	if (!isTauri()) {
@@ -58,14 +67,18 @@ export async function addPaperByIdentifier(opts: {
 		throw new Error(i18n.t("sidebar:lookup.invalidId"));
 	}
 
+	const translatorBaseUrl = resolveTranslatorBaseUrl(
+		opts.settings,
+		opts.translatorBaseUrl,
+	);
+
 	const result = await invoke<ApiResult<HostLookupResult>>("lookup_import", {
 		args: {
 			vaultPath: opts.vaultRoot,
 			parentDir: opts.parentDir.replace(/\\/g, "/"),
 			text,
 			downloadFulltextToLocal: opts.settings.downloadFulltextToLocal,
-			translatorBaseUrl:
-				opts.translatorBaseUrl?.trim() || DEFAULT_TRANSLATOR_BASE_URL,
+			translatorBaseUrl,
 		},
 	});
 

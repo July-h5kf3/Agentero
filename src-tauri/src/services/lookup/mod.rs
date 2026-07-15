@@ -13,9 +13,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// Placeholder Translator Runtime base URL (translation-server default).
-/// Override via `LookupImportArgs.translator_base_url`.
-pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "http://127.0.0.1:1969";
+/// Default Translator Runtime base URL (hosted service).
+/// Override via Settings → `translatorBaseUrl` / `LookupImportArgs.translator_base_url`.
+pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.poco-ai.com";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
