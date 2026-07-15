@@ -145,14 +145,16 @@ export function paperHasLocalSourceDir(node: TreeWalkNode): boolean {
 /**
  * Reasons a paper row should show the Download icon (for hover tooltip).
  * Keys are i18n suffixes under `sidebar:fileTree.downloadReason.*`.
+ *
+ * Readable body: **TeX OR PAPER.md** is enough (prefer TeX — if TeX exists, PAPER.md is not required).
  */
-export type PaperDownloadReason = "noPdf" | "noSource" | "noPaperMd";
+export type PaperDownloadReason = "noPdf" | "noSource" | "noBody";
 
 /**
  * Missing local assets that warrant a Download control:
  * - no PDF, or
  * - no `source/` directory, or
- * - no `PAPER.md`
+ * - no TeX **and** no `PAPER.md` (either body form is sufficient; TeX preferred)
  *
  * Click: download PDF into `source/`; arXiv also tries TeX; if no TeX → liteparse PAPER.md.
  */
@@ -162,12 +164,15 @@ export function paperAssetDownloadReasons(
 	const reasons: PaperDownloadReason[] = [];
 	if (!paperHasLocalPdf(node)) reasons.push("noPdf");
 	if (!paperHasLocalSourceDir(node)) reasons.push("noSource");
-	if (!paperHasLocalPaperMd(node)) reasons.push("noPaperMd");
+	// Body: TeX wins; only flag when neither TeX nor PAPER.md exists
+	if (!paperHasLocalTex(node) && !paperHasLocalPaperMd(node)) {
+		reasons.push("noBody");
+	}
 	return reasons;
 }
 
 /**
- * Show file-tree Download when PDF / source / PAPER.md is incomplete.
+ * Show file-tree Download when PDF / source / readable body is incomplete.
  * (`canFetchTex` kept for call-site compatibility; no longer gates visibility.)
  */
 export function paperNeedsAssetDownload(
