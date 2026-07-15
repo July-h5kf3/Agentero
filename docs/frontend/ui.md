@@ -38,15 +38,18 @@
 
 ## 3. 布局
 
-- 工作台默认 **三栏**：文件树 + 中间内容 + Preview/Notes。
+- 工作台默认 **三栏**：文件树 + 中间内容（WYSIWYG Markdown 编辑器）+ 右侧栏（Agent / Backlinks）。查看论文 PDF/HTML 时，右侧显示可编辑的 **Notes**（该篇 `NOTES.md`）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
-- **独立滚动**：侧边栏 / 中间 / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
+- **独立滚动**：侧边栏 / 中间编辑器 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
 - **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）。
-  - Markdown：源码编辑
+  - Markdown：**所见即所得富文本编辑**（Plate）。直接输入 Markdown 语法即时渲染（标题、列表、任务列表、代码块、表格、公式、`[[wikilink]]` 等）；无独立「预览」栏。
+  - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
+  - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
+  - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
   - PDF / HTML：**只读 `metadata.json` 的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**）
   - arXiv 推荐写入：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
@@ -54,7 +57,7 @@
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL
   - PDF：PDF.js 按 URL 流式渲染；HTML：独立 iframe 打开远程页
-  - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**
+  - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
@@ -72,7 +75,7 @@
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
-| `⌘3` | 聚焦预览 | |
+| `⌘3` | 聚焦 Notes（论文 PDF/HTML 视图时） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。

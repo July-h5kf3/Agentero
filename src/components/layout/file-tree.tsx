@@ -2,6 +2,7 @@ import {
 	FileCode2,
 	FileJson,
 	FileText,
+	FolderPlus,
 	FolderSearch,
 	RefreshCw,
 	ScrollText,
@@ -207,6 +208,7 @@ function IconAction({
 export function VaultSidebarHeader({
 	title,
 	onOpenVault,
+	onCreateVault,
 	onRefresh,
 	onCloseVault,
 	busy,
@@ -215,6 +217,7 @@ export function VaultSidebarHeader({
 }: {
 	title: string;
 	onOpenVault: () => void;
+	onCreateVault: () => void;
 	onRefresh: () => void;
 	onCloseVault: () => void;
 	busy?: boolean;
@@ -229,6 +232,13 @@ export function VaultSidebarHeader({
 					className="bg-muted/20"
 					trailing={
 						<>
+							<IconAction
+								label={t("fileTree.createVault")}
+								onClick={onCreateVault}
+								disabled={busy}
+							>
+								<FolderPlus className="size-3.5" />
+							</IconAction>
 							<IconAction
 								label={t("fileTree.openVault")}
 								onClick={onOpenVault}

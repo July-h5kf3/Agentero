@@ -442,6 +442,8 @@ pub(crate) fn permission_response(
     RequestPermissionResponse::new(outcome)
 }
 
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 /// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
 pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
     let agent_id = desc.id.clone();
@@ -461,7 +463,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
     let captured: Arc<Mutex<Option<(String, String)>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
 
-    let result = agent_client_protocol::Client
+    let connect = agent_client_protocol::Client
         .builder()
         .name("motif")
         .on_receive_request(
@@ -491,8 +493,23 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
                 }
                 Ok(())
             }
-        })
-        .await;
+        });
+
+    let result = match tokio::time::timeout(PROBE_TIMEOUT, connect).await {
+        Ok(r) => r,
+        Err(_) => {
+            return ProbeResult {
+                agent_id,
+                available: false,
+                agent_name: None,
+                protocol_version: None,
+                error: Some(format!(
+                    "probe timed out after {}s (check Agent proxy / network)",
+                    PROBE_TIMEOUT.as_secs()
+                )),
+            };
+        }
+    };
 
     match result {
         Ok(()) => {

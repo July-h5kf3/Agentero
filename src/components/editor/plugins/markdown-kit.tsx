@@ -1,3 +1,4 @@
+import wikiLink from "@flowershow/remark-wiki-link";
 import {
 	BaseFootnoteDefinitionPlugin,
 	BaseFootnoteReferencePlugin,
@@ -7,6 +8,7 @@ import { KEYS } from "platejs";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { wikiLinkRules } from "@/components/editor/plugins/wikilink-plugin";
 
 export const MarkdownKit = [
 	BaseFootnoteReferencePlugin,
@@ -17,10 +19,13 @@ export const MarkdownKit = [
 			remarkPlugins: [
 				remarkMath,
 				remarkGfm,
+				[wikiLink, { aliasDivider: "|" }],
+				// biome-ignore lint/suspicious/noExplicitAny: remark-emoji's plugin type is incompatible with Plate's remark plugin type
 				remarkEmoji as any,
 				remarkMdx,
 				remarkMention,
 			],
+			rules: { ...wikiLinkRules },
 		},
 	}),
 ];

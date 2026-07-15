@@ -5,6 +5,7 @@ import {
 	Loader2,
 	Paintbrush,
 	Plus,
+	RefreshCw,
 	Shield,
 	SlidersHorizontal,
 	Trash2,
@@ -202,67 +203,34 @@ export function SettingsWindow({
 	);
 }
 
-function PageTitle({
-	title,
-	description,
-}: {
-	title: string;
-	description?: string;
-}) {
-	return (
-		<div className="mb-4">
-			<h2 className="font-semibold text-lg tracking-tight">{title}</h2>
-			{description ? (
-				<p className="mt-0.5 text-muted-foreground text-sm">{description}</p>
-			) : null}
-		</div>
-	);
+function PageTitle({ title }: { title: string }) {
+	return <h2 className="mb-4 font-semibold text-lg tracking-tight">{title}</h2>;
 }
 
-function SettingsGroup({
-	children,
-	footer,
-}: {
-	children: ReactNode;
-	footer?: string;
-}) {
+function SettingsGroup({ children }: { children: ReactNode }) {
 	return (
 		<div className="mb-5">
 			<div className="overflow-hidden rounded-xl border bg-card">
 				{children}
 			</div>
-			{footer ? (
-				<p className="mt-1.5 px-1 text-muted-foreground text-xs leading-relaxed">
-					{footer}
-				</p>
-			) : null}
 		</div>
 	);
 }
 
 function SettingsRow({
 	label,
-	description,
 	htmlFor,
 	children,
 }: {
 	label: string;
-	description?: string;
 	htmlFor?: string;
 	children: ReactNode;
 }) {
 	return (
 		<div className="flex items-center justify-between gap-4 border-b px-3.5 py-2.5 last:border-b-0">
-			<div className="min-w-0 flex-1">
-				<Label htmlFor={htmlFor} className="font-normal text-[13px]">
-					{label}
-				</Label>
-				{description ? (
-					<p className="mt-0.5 text-muted-foreground text-xs leading-snug">
-						{description}
-					</p>
-				) : null}
-			</div>
+			<Label htmlFor={htmlFor} className="min-w-0 font-normal text-[13px]">
+				{label}
+			</Label>
 			<div className="shrink-0">{children}</div>
 		</div>
 	);
@@ -278,14 +246,10 @@ function GeneralPane({
 	const { t } = useTranslation("settings");
 	return (
 		<>
-			<PageTitle
-				title={t("general.title")}
-				description={t("general.description")}
-			/>
-			<SettingsGroup footer={t("general.footer")}>
+			<PageTitle title={t("general.title")} />
+			<SettingsGroup>
 				<SettingsRow
 					label={t("general.restoreVault.label")}
-					description={t("general.restoreVault.description")}
 					htmlFor="restore-vault"
 				>
 					<Switch
@@ -296,7 +260,6 @@ function GeneralPane({
 				</SettingsRow>
 				<SettingsRow
 					label={t("general.confirmClose.label")}
-					description={t("general.confirmClose.description")}
 					htmlFor="confirm-close"
 				>
 					<Switch
@@ -328,10 +291,7 @@ function AppearancePane({
 
 	return (
 		<>
-			<PageTitle
-				title={t("appearance.title")}
-				description={t("appearance.description")}
-			/>
+			<PageTitle title={t("appearance.title")} />
 			<SettingsGroup>
 				<SettingsRow label={t("appearance.themeLabel")}>
 					<Select
@@ -371,27 +331,29 @@ function AppearancePane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
-				<SettingsRow
-					label={t("appearance.fontSize.label")}
-					description={t("appearance.fontSize.value", {
-						size: settings.editorFontSize,
-					})}
-					htmlFor={fontId}
-				>
-					<input
-						id={fontId}
-						type="range"
-						min={12}
-						max={20}
-						step={1}
-						value={settings.editorFontSize}
-						onChange={(e) => patch({ editorFontSize: Number(e.target.value) })}
-						className="w-28 accent-primary"
-					/>
+				<SettingsRow label={t("appearance.fontSize.label")} htmlFor={fontId}>
+					<div className="flex items-center gap-2">
+						<input
+							id={fontId}
+							type="range"
+							min={12}
+							max={20}
+							step={1}
+							value={settings.editorFontSize}
+							onChange={(e) =>
+								patch({ editorFontSize: Number(e.target.value) })
+							}
+							className="w-28 accent-primary"
+						/>
+						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
+							{t("appearance.fontSize.value", {
+								size: settings.editorFontSize,
+							})}
+						</span>
+					</div>
 				</SettingsRow>
 				<SettingsRow
 					label={t("appearance.lineNumbers.label")}
-					description={t("appearance.lineNumbers.description")}
 					htmlFor="line-numbers"
 				>
 					<Switch
@@ -497,20 +459,10 @@ function AgentPane({
 			setProbing(true);
 			setError(null);
 			try {
-				for (const entry of candidates) {
-					try {
-						await probeCatalogAgent(entry.templateId);
-					} catch {
-						// badges update after rescan
-					}
-				}
-				for (const agent of custom) {
-					try {
-						await probeAgent(agent.id);
-					} catch {
-						// ignore
-					}
-				}
+				await Promise.allSettled([
+					...candidates.map((entry) => probeCatalogAgent(entry.templateId)),
+					...custom.map((agent) => probeAgent(agent.id)),
+				]);
 				await refresh();
 			} finally {
 				setProbing(false);
@@ -622,16 +574,9 @@ function AgentPane({
 
 	return (
 		<>
-			<PageTitle
-				title={t("agent.title")}
-				description={t("agent.description")}
-			/>
-			<SettingsGroup footer={t("agent.footer")}>
-				<SettingsRow
-					label={t("agent.enable.label")}
-					description={t("agent.enable.description")}
-					htmlFor="agent-enabled"
-				>
+			<PageTitle title={t("agent.title")} />
+			<SettingsGroup>
+				<SettingsRow label={t("agent.enable.label")} htmlFor="agent-enabled">
 					<Switch
 						id="agent-enabled"
 						checked={settings.agentEnabled}
@@ -640,7 +585,6 @@ function AgentPane({
 				</SettingsRow>
 				<SettingsRow
 					label={t("agent.proxy.label")}
-					description={t("agent.proxy.description")}
 					htmlFor="agent-proxy-enabled"
 				>
 					<div className="flex items-center gap-2">
@@ -679,24 +623,17 @@ function AgentPane({
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
 					{t("agent.commonAgents")}
 				</p>
-				<div className="flex items-center gap-1.5">
-					{busy ? (
-						<span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-							<Loader2 className="size-3 animate-spin" />
-							{probing ? t("agent.probing") : t("agent.scanning")}
-						</span>
-					) : null}
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="h-7 px-2 text-xs"
-						disabled={busy || !isTauri()}
-						onClick={() => void onRescanAndProbe()}
-					>
-						{t("agent.probe")}
-					</Button>
-				</div>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-xs"
+					aria-label={t("agent.probe")}
+					title={t("agent.probe")}
+					disabled={busy || !isTauri()}
+					onClick={() => void onRescanAndProbe()}
+				>
+					<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
+				</Button>
 			</div>
 
 			<SettingsGroup>
@@ -818,7 +755,7 @@ function AgentPane({
 			) : null}
 
 			{adding ? (
-				<SettingsGroup footer={t("agent.form.footer")}>
+				<SettingsGroup>
 					<div className="space-y-2.5 px-3.5 py-3">
 						<div className="space-y-1">
 							<Label className="font-normal text-[13px]">
@@ -889,10 +826,7 @@ function KeyboardPane() {
 
 	return (
 		<>
-			<PageTitle
-				title={t("keyboard.title")}
-				description={t("keyboard.description")}
-			/>
+			<PageTitle title={t("keyboard.title")} />
 			{groups.map(({ group, items }) => (
 				<div key={group} className="mb-5">
 					<p className="mb-1.5 px-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -905,9 +839,6 @@ function KeyboardPane() {
 					</SettingsGroup>
 				</div>
 			))}
-			<p className="px-1 text-muted-foreground text-xs">
-				{t("keyboard.footer")}
-			</p>
 		</>
 	);
 }
@@ -934,27 +865,16 @@ function PrivacyPane({
 	const { t } = useTranslation("settings");
 	return (
 		<>
-			<PageTitle
-				title={t("privacy.title")}
-				description={t("privacy.description")}
-			/>
-			<SettingsGroup footer={t("privacy.footer")}>
-				<SettingsRow
-					label={t("privacy.analytics.label")}
-					description={t("privacy.analytics.description")}
-					htmlFor="analytics"
-				>
+			<PageTitle title={t("privacy.title")} />
+			<SettingsGroup>
+				<SettingsRow label={t("privacy.analytics.label")} htmlFor="analytics">
 					<Switch
 						id="analytics"
 						checked={settings.analyticsEnabled}
 						onCheckedChange={(v) => patch({ analyticsEnabled: v })}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					label={t("privacy.crash.label")}
-					description={t("privacy.crash.description")}
-					htmlFor="crash"
-				>
+				<SettingsRow label={t("privacy.crash.label")} htmlFor="crash">
 					<Switch
 						id="crash"
 						checked={settings.shareCrashReports}

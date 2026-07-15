@@ -11,20 +11,15 @@
 	},
 	"general": {
 		"title": "通用",
-		"description": "应用行为与知识库默认设置。",
-		"footer": "知识库路径仅保存在本机设备上。",
 		"restoreVault": {
-			"label": "恢复上次的知识库",
-			"description": "启动时重新打开上次的文件夹。"
+			"label": "恢复上次的知识库"
 		},
 		"confirmClose": {
-			"label": "退出前确认",
-			"description": "可能存在未保存的更改时进行询问。"
+			"label": "退出前确认"
 		}
 	},
 	"appearance": {
 		"title": "外观",
-		"description": "主题与编辑器外观。",
 		"themeLabel": "外观",
 		"theme": {
 			"system": "跟随系统",
@@ -42,28 +37,23 @@
 			"value": "{{size}} px"
 		},
 		"lineNumbers": {
-			"label": "行号",
-			"description": "在源码编辑器中显示行号。"
+			"label": "行号"
 		}
 	},
 	"agent": {
 		"title": "Agent",
-		"description": "自带 ACP Agent(BYOA)。Motif 仅作为客户端。",
-		"footer": "模型 API Key 由各 Agent CLI 自行保管 —— Motif 从不存储。",
 		"enable": {
-			"label": "启用 Agent",
-			"description": "允许在本应用中使用 ACP 工作流。"
+			"label": "启用 Agent"
 		},
 		"proxy": {
-			"label": "Agent 代理",
-			"description": "向内置 Agent 传递 HTTP_PROXY、HTTPS_PROXY 和 ALL_PROXY。"
+			"label": "Agent 代理"
 		},
 		"desktopOnly": "Agent 注册表需要桌面应用。",
 		"desktopHint": "运行 `pnpm tauri dev` 以扫描本机上的 Agent。",
 		"commonAgents": "常用 Agent",
 		"custom": "自定义",
 		"addCustom": "添加自定义 Agent",
-		"probe": "探测",
+		"probe": "刷新",
 		"probing": "探测中…",
 		"scanning": "扫描中…",
 		"useDefault": "设为默认",
@@ -76,26 +66,19 @@
 			"defaultName": "自定义 Agent",
 			"name": "名称",
 			"command": "命令",
-			"args": "参数",
-			"footer": "任意兼容 ACP 的 stdio 命令。Motif 不附带 Agent。"
+			"args": "参数"
 		}
 	},
 	"keyboard": {
-		"title": "键盘",
-		"description": "快捷键遵循常见的 macOS 约定。",
-		"footer": "侧边栏也可用 ⌘B 切换。在 Windows / Linux 上，⌘ 即 Ctrl。"
+		"title": "键盘"
 	},
 	"privacy": {
 		"title": "隐私",
-		"description": "默认本地优先。除非你主动开启，数据不会离开这台 Mac。",
-		"footer": "分析与崩溃报告在你启用前均为关闭状态。",
 		"analytics": {
-			"label": "使用分析",
-			"description": "分享匿名使用指标。"
+			"label": "使用分析"
 		},
 		"crash": {
-			"label": "崩溃报告",
-			"description": "在应用异常退出时发送诊断数据。"
+			"label": "崩溃报告"
 		}
 	},
 	"about": {

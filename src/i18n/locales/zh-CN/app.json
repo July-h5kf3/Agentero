@@ -20,8 +20,9 @@
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",
-		"notesPlaceholder": "论文 NOTES.md 将显示在此……",
-		"previewPlaceholder": "渲染后的 Markdown 将显示在此……"
+		"notesPlaceholder": "在此撰写这篇论文的笔记……",
+		"previewPlaceholder": "渲染后的 Markdown 将显示在此……",
+		"unsaved": "有未保存的更改"
 	},
 	"errors": {
 		"openVaultDesktopOnly": "打开知识库需要 Tauri 桌面应用（pnpm tauri dev）。",
@@ -33,12 +34,14 @@
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
 		"dialogTitle": "选择 Motif 知识库文件夹",
+		"createDialogTitle": "新建 Motif 知识库文件夹",
 		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
 		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",
 		"noVaultName": "未打开知识库",
 		"noVaultOpenTitle": "未打开知识库",
 		"noVaultOpenDescription": "打开一个知识库文件夹以查看文件、笔记和图谱。",
 		"openVaultButton": "打开知识库",
+		"createVaultButton": "新建知识库",
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开知识库。"
 	},

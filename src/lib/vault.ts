@@ -1,5 +1,5 @@
-import { open } from "@tauri-apps/plugin-dialog";
-import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { mkdir, readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
@@ -100,6 +100,21 @@ export async function pickVaultDirectory(): Promise<string | null> {
 	if (selected === null) return null;
 	const path = Array.isArray(selected) ? selected[0] : selected;
 	return path ?? null;
+}
+
+export async function createVaultDirectory(): Promise<string | null> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.openDesktopOnly"));
+	}
+
+	const selected = await save({
+		title: i18n.t("app:vault.createDialogTitle"),
+		canCreateDirectories: true,
+	});
+
+	if (!selected) return null;
+	await mkdir(selected, { recursive: true });
+	return selected;
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
