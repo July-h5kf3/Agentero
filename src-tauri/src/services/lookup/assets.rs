@@ -60,7 +60,10 @@ fn walk_has_ext(root: &Path, exts: &[&str]) -> bool {
 
 /// Download missing PDF (always try when URL known) and arXiv LaTeX source.
 ///
-/// Order: PDF first, then TeX (arXiv only). Caller runs liteparse when `!tex && pdf`.
+/// - **PDF** → paper folder root: `{paper}/{id}.pdf` (not under `source/`)
+/// - **TeX** (arXiv e-print) → `{paper}/source/`
+///
+/// Order: PDF first, then TeX. Caller runs liteparse when `!tex && pdf`.
 pub async fn ensure_paper_assets(
     paper_dir: &Path,
     id: &str,
@@ -68,8 +71,7 @@ pub async fn ensure_paper_assets(
     pdf_url: Option<&str>,
 ) -> Result<AssetDownloadResult, AppError> {
     let mut out = AssetDownloadResult::default();
-    let source = paper_dir.join("source");
-    fs::create_dir_all(&source)?;
+    fs::create_dir_all(paper_dir)?;
 
     let need_pdf = !has_local_pdf(paper_dir);
     let need_tex = !has_local_tex(paper_dir);
@@ -82,7 +84,8 @@ pub async fn ensure_paper_assets(
             let mut last_err = String::new();
             let mut ok = false;
             for url in &candidates {
-                match download_pdf(&source, id, url).await {
+                // PDF lives next to NOTES.md, not under source/
+                match download_pdf(paper_dir, id, url).await {
                     Ok(()) => {
                         out.pdf = true;
                         out.messages.push(format!("pdf ok ({url})"));
@@ -108,10 +111,12 @@ pub async fn ensure_paper_assets(
         out.messages.push("pdf already present".into());
     }
 
-    // LaTeX only for arXiv papers
+    // LaTeX only for arXiv papers → unpack into source/
     if let Some(aid) = arxiv_id.filter(|a| !a.trim().is_empty()) {
         if need_tex {
-            match download_arxiv_source(&source, aid).await {
+            let source = paper_dir.join("source");
+            fs::create_dir_all(&source)?;
+            match download_arxiv_source(&source, paper_dir, aid).await {
                 Ok(()) => {
                     out.tex = true;
                     out.messages.push("tex ok".into());
@@ -210,23 +215,36 @@ async fn download_pdf(source_dir: &Path, id: &str, url: &str) -> Result<(), AppE
     Err(AppError::message("download did not look like a PDF"))
 }
 
-/// Fetch arXiv e-print and unpack into `source/`.
-async fn download_arxiv_source(source_dir: &Path, arxiv_id: &str) -> Result<(), AppError> {
+/// Fetch arXiv e-print and unpack TeX into `source/`.
+/// PDF-only e-prints are written to the **paper folder root** (same as normal PDF download).
+async fn download_arxiv_source(
+    source_dir: &Path,
+    paper_dir: &Path,
+    arxiv_id: &str,
+) -> Result<(), AppError> {
     let bare = strip_version(arxiv_id);
     // Prefer e-print; /src/ is an alias
     let url = format!("https://arxiv.org/e-print/{bare}");
     let bytes = http_get_bytes(&url, Duration::from_secs(180)).await?;
-    unpack_arxiv_eprint(source_dir, &bare, &bytes)
+    unpack_arxiv_eprint(source_dir, paper_dir, &bare, &bytes)
 }
 
-fn unpack_arxiv_eprint(source_dir: &Path, bare_id: &str, bytes: &[u8]) -> Result<(), AppError> {
+fn unpack_arxiv_eprint(
+    source_dir: &Path,
+    paper_dir: &Path,
+    bare_id: &str,
+    bytes: &[u8],
+) -> Result<(), AppError> {
     if bytes.is_empty() {
         return Err(AppError::message("empty e-print response"));
     }
 
-    // PDF-only submissions
+    // PDF-only submissions → paper folder root (not source/)
     if bytes.len() >= 4 && &bytes[..4] == b"%PDF" {
-        fs::write(source_dir.join(safe_filename(bare_id, "pdf")), bytes)?;
+        // Only write if we don't already have a local PDF
+        if !has_local_pdf(paper_dir) {
+            fs::write(paper_dir.join(safe_filename(bare_id, "pdf")), bytes)?;
+        }
         return Ok(());
     }
 
@@ -410,21 +428,38 @@ mod tests {
 
     #[test]
     fn unpack_plain_and_gzipped_tex() {
-        let dir = std::env::temp_dir().join(format!("motif-tex-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let paper = std::env::temp_dir().join(format!("motif-paper-{}", std::process::id()));
+        let source = paper.join("source");
+        let _ = fs::remove_dir_all(&paper);
+        fs::create_dir_all(&source).unwrap();
 
         let tex = b"\\documentclass{article}\\begin{document}Hi\\end{document}";
-        unpack_arxiv_eprint(&dir, "1706.03762", tex).unwrap();
-        assert!(dir.join("1706.03762.tex").exists());
+        unpack_arxiv_eprint(&source, &paper, "1706.03762", tex).unwrap();
+        assert!(source.join("1706.03762.tex").exists());
 
         let mut enc = GzEncoder::new(Vec::new(), Compression::default());
         enc.write_all(b"\\documentclass{article}\n").unwrap();
         let gz = enc.finish().unwrap();
-        unpack_arxiv_eprint(&dir, "1234.5678", &gz).unwrap();
-        assert!(dir.join("1234.5678.tex").exists());
+        unpack_arxiv_eprint(&source, &paper, "1234.5678", &gz).unwrap();
+        assert!(source.join("1234.5678.tex").exists());
 
-        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&paper);
+    }
+
+    #[test]
+    fn unpack_pdf_only_eprint_to_paper_root() {
+        let paper = std::env::temp_dir().join(format!("motif-pdf-eprint-{}", std::process::id()));
+        let source = paper.join("source");
+        let _ = fs::remove_dir_all(&paper);
+        fs::create_dir_all(&source).unwrap();
+
+        let mut pdf = b"%PDF-1.4".to_vec();
+        pdf.extend_from_slice(&[0u8; 64]);
+        unpack_arxiv_eprint(&source, &paper, "1412.6980", &pdf).unwrap();
+        assert!(paper.join("1412.6980.pdf").exists());
+        assert!(!source.join("1412.6980.pdf").exists());
+
+        let _ = fs::remove_dir_all(&paper);
     }
 
     #[test]

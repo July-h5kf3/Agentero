@@ -41,14 +41,23 @@ pub fn has_paper_md(paper_dir: &Path) -> bool {
     paper_dir.join(PAPER_MD).is_file()
 }
 
-/// Find first local PDF under the paper folder (prefer `source/`).
+/// Find first local PDF under the paper folder (prefer root `*.pdf`, then nested/legacy).
 pub fn find_local_pdf(paper_dir: &Path) -> Option<PathBuf> {
-    let source = paper_dir.join("source");
-    if source.is_dir() {
-        if let Some(p) = find_pdf_under(&source) {
-            return Some(p);
+    // Prefer direct children of the paper folder (canonical location)
+    if let Ok(entries) = fs::read_dir(paper_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+            {
+                return Some(path);
+            }
         }
     }
+    // Fallback: recursive (legacy PDFs under source/, etc.)
     find_pdf_under(paper_dir)
 }
 

@@ -31,10 +31,9 @@
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**（无眼睛图标）：下列任一成立即显示，hover 列出原因：
-  - 本地**没有 PDF**；
-  - **没有 `source/`**；
-  - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**；有 TeX 时不要求 `PAPER.md`）；
-  - 点击后：PDF 写入 `source/` → arXiv 尽量下 TeX → **无 TeX** 时 liteparse 写 `PAPER.md`。
+  - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
+  - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
+  - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -136,7 +135,7 @@
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
 - **魔棒**（已落地 v0）：侧栏 `WandSparkles` Popover；粘贴链接或编号 → Host `lookup_import` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ catalog + paper 壳。  
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
-  - **始终下载 PDF** 到 `{paper}/source/{id}.pdf`。  
+  - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 - **论文行下载按钮**：缺本地 PDF，或 arXiv 可取 TeX 但尚无 `.tex` 时，行尾 Download → `paper_download_assets`（已有资源跳过，只补缺失项）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。

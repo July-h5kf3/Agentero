@@ -12,7 +12,6 @@
 		"downloadFailed": "下载论文资源失败。",
 		"downloadReason": {
 			"noPdf": "缺少 PDF",
-			"noSource": "缺少 source/ 目录",
 			"noBody": "缺少 TeX 与 PAPER.md（有其一即可，优先 TeX）"
 		}
 	},

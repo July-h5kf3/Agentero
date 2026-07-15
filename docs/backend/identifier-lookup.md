@@ -1,7 +1,7 @@
 # 魔棒入库（Identifier Lookup）与 Translator 后端
 
 > 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator + 默认 PDF/LaTeX 下载；sidecar/批量/快捷键仍可扩展）  
-> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认进 `source/`**；arXiv **e-print 解压 LaTeX**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url` 供在线预览。
+> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认到论文根目录**；arXiv **e-print 解压 LaTeX 到 `source/`**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url` 供在线预览。
 
 相关文档：
 
@@ -25,7 +25,7 @@
        ├─ 默认：papers/<id>/
        └─ 若当前上下文是 papers 下的组织子文件夹：papers/<子路径>/<id>/
   → catalog.sqlite 写入一行（含 pdf_url / html_url / source_url 等）
-  → 始终下载 PDF → source/{id}.pdf
+  → 始终下载 PDF → {paper}/{id}.pdf
   → 若 arXiv：下载 e-print 并解压 LaTeX → source/
 ```
 
@@ -67,14 +67,14 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 
 | 资源 | 行为 |
 |---|---|
-| **PDF** | **始终**尝试下载到 `{paper}/source/{id}.pdf`（`pdf_url` + arXiv 多候选 URL 回退） |
-| **arXiv LaTeX** | 从 `https://arxiv.org/e-print/{id}` 下载；gzip/tar 解压到 `source/`（路径穿越拒绝） |
+| **PDF** | **始终**尝试下载到 **`{paper}/{id}.pdf`（论文文件夹根目录）**（`pdf_url` + arXiv 多候选 URL 回退） |
+| **arXiv LaTeX** | 从 `https://arxiv.org/e-print/{id}` 下载；gzip/tar 解压到 `source/`（路径穿越拒绝）；纯 PDF e-print 写到论文根目录 |
 | **已有文件** | 跳过对应资源 |
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
 按需补下（仅 Download 图标，无眼睛）：
 - **显示条件**：缺 PDF **或** 缺 `source/` **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。hover 说明原因。
-- **点击**：`paper_download_assets` → PDF 到 `source/` → arXiv 尽量 TeX → 无 TeX 则 liteparse `PAPER.md`。
+- **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
 UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本；`PAPER.md` 为无 TeX 时的派生正文。
@@ -135,7 +135,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本；`PAPER.md` �
   + papers/.../NOTES.md、highlights.md
         │
         ▼
-  下载（见 §1.3）：始终 PDF → source/；arXiv 另 e-print 解压 LaTeX
+  下载（见 §1.3）：始终 PDF → 论文根目录；arXiv 另 e-print 解压 LaTeX 到 source/
 
 读路径：UI 用 paper_get 读 catalog；不把 metadata.json 当主源。
 ```
@@ -476,7 +476,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 2. `path = {parent_dir}/{id}`。
 3. 创建目录 + 占位 `NOTES.md` + 空 `highlights.md`。
 4. **事务 upsert catalog**（远程 URL 仍存字符串供预览）。
-5. **始终** `ensure_paper_assets`：PDF → `source/{id}.pdf`；有 `arxiv_id` 时 e-print 解压到 `source/`。
+5. **始终** `ensure_paper_assets`：PDF → `{paper}/{id}.pdf`；有 `arxiv_id` 时 e-print TeX 解压到 `source/`。
 6. 返回 `path`；前端刷新并打开 paper。
 
 ### 6.4 事件

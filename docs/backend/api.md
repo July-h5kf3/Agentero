@@ -555,7 +555,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   }
   ```
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
-- **行为**：读 catalog 取 `pdf_url` / `arxiv_id`；已有对应文件则跳过；PDF → `source/{id}.pdf`；arXiv e-print → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。
+- **行为**：读 catalog 取 `pdf_url` / `arxiv_id`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。
 
 #### `paper_parse_body`（已落地）
 

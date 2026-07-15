@@ -67,7 +67,7 @@
 - [x] Translator HTTP（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）+ arXiv Atom fallback。
 - [x] map → `PaperMetadata` → **catalog.sqlite 权威**；`metadata.json` 仅为投影。
 - [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` / `highlights.md` 壳。
-- [x] **始终下载 PDF** 到 `source/{id}.pdf`；**arXiv e-print 解压 LaTeX** 到 `source/`（无下载开关）。
+- [x] **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文根目录）；**arXiv e-print 解压 LaTeX** 到 `source/`（无下载开关）。
 - [x] 中间栏预览仍可用 catalog 远程 `pdf_url` / `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。

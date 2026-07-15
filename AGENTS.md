@@ -14,8 +14,8 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
   - 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`；
   - 可选右侧栏：`Agent` 或 `Backlinks`。
 - 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `motif:library` 不写盘。
-- 魔棒入库：默认下载 PDF 到 `source/`；arXiv 另解压 e-print LaTeX。paper 行缺 PDF 或 arXiv 缺 TeX 时显示 Download；Library 行在库内仍有缺失时显示批量 Download。
-- **无 TeX 正文**：下载结束后若无本地 `.tex`/`.ltx` 且有 PDF，Host 用 **liteparse** 生成 `{paper}/PAPER.md`（`body_source`/`body_quality` 写入 catalog）。已有 TeX 则不自动生成。paper 行在「有 PDF、无 TeX、无 PAPER.md」时显示眼睛图标可手动解析；Library 行可批量解析。
+- 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
+- **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab。

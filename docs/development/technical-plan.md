@@ -165,7 +165,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 类型 | 方案 |
 |---|---|
 | PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染 |
-| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/source/{id}.pdf`（与预览路径分离） |
+| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；与预览路径分离） |
 | arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
 | PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
 | HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
@@ -348,7 +348,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 侧栏魔棒粘贴 arXiv ID/URL
   → lookup_import → Translator（或 arXiv Atom fallback）
   → catalog upsert + NOTES.md / highlights.md 壳
-  → ensure_paper_assets：PDF → source/{id}.pdf；e-print → 解压 LaTeX 到 source/
+  → ensure_paper_assets：PDF → {paper}/{id}.pdf；e-print TeX → 解压 LaTeX 到 source/
   → 刷新文件树；打开 paper（预览可用远程 pdf_url）
 ```
 

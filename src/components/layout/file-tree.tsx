@@ -73,7 +73,6 @@ function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
 
 const DOWNLOAD_REASON_KEYS = {
 	noPdf: "fileTree.downloadReason.noPdf",
-	noSource: "fileTree.downloadReason.noSource",
 	noBody: "fileTree.downloadReason.noBody",
 } as const;
 

@@ -12,7 +12,6 @@
 		"downloadFailed": "Failed to download paper assets.",
 		"downloadReason": {
 			"noPdf": "Missing PDF",
-			"noSource": "Missing source/ folder",
 			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
 		}
 	},

@@ -139,7 +139,7 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 
 **入库下载**（`lookup_import` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
 
-- PDF → `{paper}/source/{id}.pdf`
+- PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
 - 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download；有 PDF、无 TeX、无 `PAPER.md` → 眼睛图标手动解析；Library 行可批量 Download / 批量 Parse

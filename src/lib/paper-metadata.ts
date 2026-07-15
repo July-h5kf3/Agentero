@@ -148,22 +148,21 @@ export function paperHasLocalSourceDir(node: TreeWalkNode): boolean {
  *
  * Readable body: **TeX OR PAPER.md** is enough (prefer TeX — if TeX exists, PAPER.md is not required).
  */
-export type PaperDownloadReason = "noPdf" | "noSource" | "noBody";
+export type PaperDownloadReason = "noPdf" | "noBody";
 
 /**
  * Missing local assets that warrant a Download control:
- * - no PDF, or
- * - no `source/` directory, or
+ * - no PDF (at paper folder root or nested), or
  * - no TeX **and** no `PAPER.md` (either body form is sufficient; TeX preferred)
  *
- * Click: download PDF into `source/`; arXiv also tries TeX; if no TeX → liteparse PAPER.md.
+ * Click: download PDF to paper folder root; arXiv TeX into `source/`; if no TeX → liteparse PAPER.md.
+ * Note: `source/` is only required for TeX archives — PDF alone does not require `source/`.
  */
 export function paperAssetDownloadReasons(
 	node: TreeWalkNode,
 ): PaperDownloadReason[] {
 	const reasons: PaperDownloadReason[] = [];
 	if (!paperHasLocalPdf(node)) reasons.push("noPdf");
-	if (!paperHasLocalSourceDir(node)) reasons.push("noSource");
 	// Body: TeX wins; only flag when neither TeX nor PAPER.md exists
 	if (!paperHasLocalTex(node) && !paperHasLocalPaperMd(node)) {
 		reasons.push("noBody");

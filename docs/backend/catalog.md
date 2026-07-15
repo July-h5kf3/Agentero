@@ -252,7 +252,7 @@ src-tauri/src/
 import paper（魔棒 lookup_import）
   → 创建 paper 文件夹（默认 `papers/<id>/`，也可 `papers/<org>/…/<id>/`）
   → 事务写入 catalog.papers（path = 该文件夹相对路径）
-  → ensure_paper_assets：PDF → source/；arXiv e-print → 解压 LaTeX 到 source/
+  → ensure_paper_assets：PDF → 论文根目录；arXiv e-print TeX → 解压到 source/
   → 不更新根级 PAPERS.md / library.bib
   → UI 刷新 paper_list / 文件树
 ```
