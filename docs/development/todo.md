@@ -5,8 +5,8 @@
 ## P0 — 近期闭环
 
 1. **Create Vault 初始化** ✅
-   - 创建标准目录：`papers/`、`notes/`、`plans/`、`.motif/`。
-   - 生成 Vault 内 `AGENTS.md` 模板。
+   - 创建标准目录：`papers/`、`notes/`、`plans/`、`.motif/`、`.agents/`、`.agents/skills/`。
+   - 生成 Vault 内 `AGENTS.md` 模板；种子 `.agents/README.md`（`templates/vault/.agents/`）。
    - 初始化 `.motif/catalog.sqlite`（schema 当前版本，`path` 主键）。
    - **不**默认生成 `PAPERS.md` / `library.bib`（导出能力另做）。
    - 初始化后打开 `AGENTS.md`。

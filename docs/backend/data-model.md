@@ -29,7 +29,7 @@ Motif 的存储遵循两条原则:
 
 | 层级 | 内容 | 落盘 |
 |---|---|---|
-| **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`source/` | 文件 |
+| **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`.agents/`（skills 等）、`source/` | 文件 |
 | **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.motif/catalog.sqlite`** |
 | **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、`assets/` | **按需**生成，非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表；可整删后重建 |
@@ -58,6 +58,9 @@ motif-vault/
 │               └── source/
 ├── notes/
 ├── plans/
+├── .agents/               # Vault 本地 Agent 资产（Create Vault 脚手架）
+│   ├── README.md
+│   └── skills/            # `$` 技能：`skills/<id>/SKILL.md`
 └── .motif/
     ├── catalog.sqlite     # path = paper 文件夹相对路径
     └── config.json

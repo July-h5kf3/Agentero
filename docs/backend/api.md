@@ -109,10 +109,11 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`、**`.agents/`**、**`.agents/skills/`**。
   - 初始化 `.motif/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
-  - 写入默认 `AGENTS.md`。
-  - **不**创建根级 `PAPERS.md` / `library.bib`。
+  - 写入默认 `AGENTS.md`（若不存在）。
+  - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
+  - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
 
 #### `window_new`（已实现）

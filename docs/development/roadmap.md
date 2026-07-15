@@ -31,7 +31,7 @@
 关键交付：
 
 - [x] 打开本地 Vault。
-- [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.motif/catalog.sqlite`。
+- [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.motif/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。

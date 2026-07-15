@@ -16,6 +16,7 @@ This file is the L0 map for agents working in this Motif research vault.
 - `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `highlights.md` / `PAPER.md`, and `source/`.
 - `notes/` — free-form concept notes and ideas (`[[wikilinks]]` welcome).
 - `plans/` — research plans and drafts.
+- `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.motif/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
 
 ## Progressive disclosure
@@ -31,6 +32,9 @@ This file is the L0 map for agents working in this Motif research vault.
 - Cite Vault-relative paths you read; end substantial answers with `## Sources`.
 - Never overwrite user notes without an explicit draft + confirmation path.
 "#;
+
+/// Scaffold for `.agents/README.md` (only if missing).
+pub const AGENTS_DIR_README: &str = include_str!("../../../templates/vault/.agents/README.md");
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,8 +55,9 @@ fn join_rel(root: &Path, rel: &str) -> std::path::PathBuf {
 
 /// Create Motif vault skeleton under `path` without overwriting existing user files.
 ///
-/// Creates: `papers/`, `notes/`, `plans/`, `.motif/`, `AGENTS.md` (if missing),
-/// and initializes `.motif/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
+/// Creates: `papers/`, `notes/`, `plans/`, `.motif/`, `.agents/` (+ `skills/`),
+/// `AGENTS.md` (if missing), seeds `.agents/README.md`, and initializes
+/// `.motif/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
 pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     if !path.exists() {
         fs::create_dir_all(path)?;
@@ -66,7 +71,14 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
 
     let mut created: Vec<String> = Vec::new();
 
-    for dir in ["papers", "notes", "plans", ".motif"] {
+    for dir in [
+        "papers",
+        "notes",
+        "plans",
+        ".motif",
+        ".agents",
+        ".agents/skills",
+    ] {
         let p = join_rel(path, dir);
         if !p.exists() {
             fs::create_dir_all(&p)?;
@@ -74,10 +86,17 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         }
     }
 
-    let agents = join_rel(path, "AGENTS.md");
-    if !agents.exists() {
-        fs::write(&agents, AGENTS_MD_TEMPLATE)?;
+    let agents_md = join_rel(path, "AGENTS.md");
+    if !agents_md.exists() {
+        fs::write(&agents_md, AGENTS_MD_TEMPLATE)?;
         created.push("AGENTS.md".into());
+    }
+
+    // Seed vault-local agent layout from `templates/vault/.agents/` (no overwrite).
+    let agents_readme = join_rel(path, ".agents/README.md");
+    if !agents_readme.exists() {
+        fs::write(&agents_readme, AGENTS_DIR_README)?;
+        created.push(".agents/README.md".into());
     }
 
     // Catalog: always ensure schema (may create catalog.sqlite)
@@ -118,6 +137,9 @@ mod tests {
         assert!(dir.join("notes").is_dir());
         assert!(dir.join("plans").is_dir());
         assert!(dir.join(".motif").is_dir());
+        assert!(dir.join(".agents").is_dir());
+        assert!(dir.join(".agents/skills").is_dir());
+        assert!(dir.join(".agents/README.md").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".motif/catalog.sqlite").is_file());
         assert!(!dir.join("PAPERS.md").exists());
@@ -126,13 +148,18 @@ mod tests {
             .created
             .iter()
             .any(|c| c.contains("catalog") || c == "AGENTS.md" || c.ends_with('/')));
+        assert!(r.created.iter().any(|c| c.starts_with(".agents")));
 
-        // Second call does not wipe AGENTS.md
+        // Second call does not wipe AGENTS.md or .agents/README.md
         fs::write(dir.join("AGENTS.md"), "# custom\n").unwrap();
+        fs::write(dir.join(".agents/README.md"), "# keep\n").unwrap();
         let r2 = create_vault(&dir).expect("again");
         let content = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
         assert!(content.starts_with("# custom"));
         assert!(!r2.created.iter().any(|c| c == "AGENTS.md"));
+        let agents_readme = fs::read_to_string(dir.join(".agents/README.md")).unwrap();
+        assert!(agents_readme.starts_with("# keep"));
+        assert!(!r2.created.iter().any(|c| c == ".agents/README.md"));
 
         let _ = fs::remove_dir_all(&dir);
     }
