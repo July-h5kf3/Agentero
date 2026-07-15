@@ -82,6 +82,7 @@
 - [ ] `catalog:export_papers_md`（Markdown 表形态；BibTeX 已由 Library 导出覆盖）。
 - [x] 入库后刷新 Backlinks/Graph 索引
 - [x] 魔棒快捷键 `⇧⌘I`；
+- [ ] 非 arxiv 下载 PDF 有问题（10.1371/journal.pbio.0040157）
 
 验收标准：
 
@@ -110,7 +111,6 @@
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [ ] 内置工作流：总结当前论文、基于本地库问答、生成 Related Work 草稿。
 - [x] Agent 读取路径回显（Sources）。
-- [ ] 写文件前临时草稿确认机制。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求模型 BYOK 表单。
 
 验收标准：
@@ -193,7 +193,8 @@
 
 - Zotero/BibTeX 批量导入。
 - 浏览器插件，一键收集网页和论文。
-- 完整 PDF 高亮、批注、摘录同步。
+- **PDF 划词提问**（选区/双击/悬停 → 迷你问答 → `asks/*.json` → 页边圆片）；设计见 [`pdf-ask.md`](pdf-ask.md)。
+- 完整 PDF 高亮、批注、摘录同步（`highlights.md`；可与划词提问互导）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。
 - 论文引用关系自动抽取。
@@ -264,7 +265,8 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - [ ] Zotero/BibTeX 迁移工具。
 - [ ] 浏览器插件与网页 importer。
-- [ ] PDF/HTML 标注系统。
+- [ ] PDF 划词提问（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 页边圆片 + ACP）。
+- [ ] PDF/HTML 标注系统（`highlights.md`）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] iPadOS 文件系统与触控布局适配。
 

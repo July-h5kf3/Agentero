@@ -188,6 +188,8 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 > MVP 阅读器以审阅和定位为主，不实现完整批注系统。
 
+**PDF 划词提问（设计中）**：选区 / 双击 / 悬停 → 迷你问答卡 → `papers/<id>/asks/*.json` → 页边圆片回访。复用 TextLayer + ACP BYOA，不写入 PDF 二进制。详见 [`pdf-ask.md`](pdf-ask.md)。
+
 ### 3.5 关系图谱
 
 | 库 | 用途 |

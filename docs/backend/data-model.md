@@ -119,6 +119,13 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 - **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.motif/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
 - 用 Obsidian 块引用 `^id`,让 `NOTES.md` 能精确引用某条标注:`[[papers/1706.03762/highlights#^h12]]`。
 
+### `asks/`（规划：PDF 划词提问）
+
+多轮「就地问答」线程，与 `highlights.md` **分离**：asks 存对话 JSON，highlights 存引文证据。设计见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
+
+- 路径：`papers/<id>/asks/<threadId>.json`（可选 `asks/index.json` 目录）。
+- 含锚点（page + 归一化 rects + quote）与 `messages[]`；**不**写入 PDF 二进制，**不**进 catalog 正文。
+
 格式示例:
 
 ```md

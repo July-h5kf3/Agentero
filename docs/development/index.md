@@ -33,6 +33,7 @@
 - [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
 - [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
+- [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（选区/双击/悬停 → 迷你问答 → JSON → 页边圆片）技术栈与数据契约。
 - [`hypothesis.md`](hypothesis.md)：简短产品假设。
 
 ## 交叉引用

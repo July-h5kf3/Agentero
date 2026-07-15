@@ -89,17 +89,25 @@
    - Idea 批判性评估。
    - 实验复现清单。
 
-3. **PDF / HTML 标注系统**
+3. **PDF 划词提问（Selection Ask）** — 设计见 [`pdf-ask.md`](pdf-ask.md)
+   - [ ] M1：划词弹出迷你问答卡（本地假回复可验收交互）。
+   - [ ] M2：`papers/<id>/asks/<threadId>.json` 读写 + 页边圆片锚点（归一化坐标）。
+   - [ ] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
+   - [ ] M4：双击 / 悬停停留触发 + 防误触；阈值可配置。
+   - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer 增强。
+
+4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。
    - 标注正文进入 `highlights.md`，坐标/锚点缓存可重建。
    - PDF.js / HTML iframe 都需要统一标注模型。
+   - 与划词提问（asks JSON）边界清晰，可互导。
 
-4. **更大范围导入**
+5. **更大范围导入**
    - DOI / 网页 importer 深化（魔棒已部分覆盖 DOI）。
    - 浏览器插件一键收集。
    - 远程 PDF 链接入库。
 
-5. **多端与协作**
+6. **多端与协作**
    - iPadOS 触控布局。
    - Git 版本管理集成。
    - 可选云同步与多设备阅读。

@@ -27,6 +27,7 @@ nav:
       - 概览: development/index.md
       - 产品需求: development/prd.md
       - 技术方案: development/technical-plan.md
+      - PDF 划词提问: development/pdf-ask.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
       - 产品假设: development/hypothesis.md

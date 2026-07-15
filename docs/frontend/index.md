@@ -36,3 +36,4 @@
 - 后端图谱与反链 API：[`../backend/api.md`](../backend/api.md)
 - 双链与图谱模型：[`../backend/wikilinks.md`](../backend/wikilinks.md)
 - 路线图与 backlog：[`../development/roadmap.md`](../development/roadmap.md)
+- PDF 划词提问（设计中）：[`../development/pdf-ask.md`](../development/pdf-ask.md)

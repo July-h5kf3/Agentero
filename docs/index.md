@@ -66,4 +66,5 @@ Motif 桌面应用
 - Vault 数据模型：[`backend/data-model.md`](backend/data-model.md)
 - 论文目录库：[`backend/catalog.md`](backend/catalog.md)
 - 魔棒入库与 Translator：[`backend/identifier-lookup.md`](backend/identifier-lookup.md)
+- PDF 划词提问（设计中）：[`development/pdf-ask.md`](development/pdf-ask.md)
 - 测试与验证：[`test/index.md`](test/index.md)
