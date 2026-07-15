@@ -469,7 +469,9 @@ async function verifyVault(root) {
 	checks.push({
 		name: "no default PAPERS.md",
 		ok: !(await pathExists(papersMd)),
-		detail: (await pathExists(papersMd)) ? "exists (optional export only)" : "absent (ok)",
+		detail: (await pathExists(papersMd))
+			? "exists (optional export only)"
+			: "absent (ok)",
 	});
 	checks.push({
 		name: "no default library.bib",
@@ -618,7 +620,11 @@ async function main() {
 
 	const root = path.resolve(target);
 
-	if (flags.has("verify") && (await pathExists(root))) {
+	if (flags.has("verify")) {
+		if (!(await pathExists(root))) {
+			console.error(`Vault not found: ${root}`);
+			process.exit(1);
+		}
 		const result = await verifyVault(root);
 		for (const c of result.checks) {
 			const mark = c.ok ? "✓" : "✗";

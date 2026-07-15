@@ -136,4 +136,27 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    /// Optional smoke write:
+    /// `MOTIF_TEST_VAULT_PATH=$HOME/Downloads/motif-from-rust cargo test create_vault_at_env_path -- --ignored --nocapture`
+    #[test]
+    #[ignore = "set MOTIF_TEST_VAULT_PATH to write a real vault (e.g. under Downloads)"]
+    fn create_vault_at_env_path() {
+        let raw = env::var("MOTIF_TEST_VAULT_PATH").expect("set MOTIF_TEST_VAULT_PATH");
+        let dir = Path::new(&raw);
+        if dir.exists() {
+            let _ = fs::remove_dir_all(dir);
+        }
+        fs::create_dir_all(dir).unwrap();
+        let r = create_vault(dir).expect("create");
+        assert!(dir.join(".motif/catalog.sqlite").is_file());
+        assert!(dir.join("AGENTS.md").is_file());
+        assert!(dir.join("papers").is_dir());
+        assert!(!dir.join("PAPERS.md").exists());
+        eprintln!(
+            "create_vault wrote {} items to {}",
+            r.created.len(),
+            dir.display()
+        );
+    }
 }
