@@ -33,10 +33,36 @@
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
   - 刷新树 → `RefreshCw`（⌘R）
-- **打开 / 创建 Vault** 不在侧边栏：使用 macOS 顶部菜单 **File → Open Vault…**（`⌘O`）/ **Create Vault…**（`⇧⌘N`）。
-- **新建窗口**：菜单 **File → New Window**（`⌘N`）。新窗口不自动打开上次 Vault；无 Vault 时中间栏显示欢迎页（最近路径列表 + 打开 / 创建）。
-- **设置入口不在侧边栏**：使用 macOS 顶部菜单 **motif → Settings…**（`⌘,`），不放齿轮图标。
+- **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault 或设置入口。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
+
+### 2.2 无 Vault 欢迎页
+
+当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/vault-welcome.tsx`）：
+
+- **内容**：图标 + **Create vault** / **Open vault** 按钮 + **Recent** 路径列表（可点打开，可从列表移除）。
+- **不加**常驻说明文案、标题口号或快捷键提示（保持空状态极简）。
+- 点选最近路径时若目录不存在：提示错误并从列表剔除。
+
+### 2.3 原生菜单与多窗口
+
+| 菜单 | 项 | 快捷键 | 行为 |
+|---|---|---|---|
+| File | New Window | `⌘N` | Host `window_new`：新 Webview 窗口（`?fresh=1`），**不**自动恢复上次 Vault |
+| File | Open Vault… | `⌘O` | 选择已有文件夹并打开 |
+| File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
+| File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
+| motif | Settings… | `⌘,` | 设置 sheet |
+
+**窗口与路径状态**（`src/lib/vault.ts`）：
+
+| 存储 | 键 / 用途 |
+|---|---|
+| `sessionStorage` | 当前窗口已打开的 Vault 路径（多窗口互不抢） |
+| `localStorage` | 最近 Vault 列表（MRU，欢迎页）、上次 Vault（主窗口「恢复最近」） |
+| 查询参数 `fresh=1` | 新建窗口标记：跳过自动恢复，直接欢迎页 |
+
+主窗口在设置开启「恢复上次 Vault」且非 `fresh` 时，用 `localStorage` 上次路径自动打开；`⌘N` 窗口始终从欢迎页开始。
 
 ## 3. 布局
 
@@ -71,9 +97,9 @@
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
-| `⌘N` | 新建窗口 | 打开空白窗口；不自动恢复 Vault，欢迎页列出最近路径 |
+| `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |
-| `⇧⌘N` | Create vault… | 创建并初始化新 Vault |
+| `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |

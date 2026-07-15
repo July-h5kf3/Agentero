@@ -62,7 +62,7 @@ motif-vault/
 - **Catalog 主键**：Vault 相对路径 `path`（如 `papers/nlp/transformers/1706.03762`），不是「仅叶子目录名」。
 - **逻辑 `id`**：arXiv ID / citekey，用于展示与去重；可与目录名相同，但**唯一标识落盘位置的是 `path`**。
 
-**合法 Vault 最低条件**（`vault:open` / `vault:create`）：
+**合法 Vault 最低条件**（打开目录 / `vault_create`）：
 
 - 存在 `papers/`、`notes/`、`plans/`（目录可空）
 - 存在 `AGENTS.md`（建议；缺失时可提示补模板）
@@ -174,9 +174,10 @@ src-tauri/src/
 
 | 时机 | 行为 |
 |---|---|
-| `vault:create` | 建目录骨架 + `ensure_catalog(path)` 空库 |
-| `vault:open` | `ensure_catalog` + migration；失败则 open 失败 |
-| `vault:close` | 关闭连接，释放锁 |
+| `vault_create`（已实现） | 建目录骨架 + `ensure_catalog(path)` 空库 |
+| `vault:open`（规划） | `ensure_catalog` + migration；失败则 open 失败 |
+| `vault:close`（规划） | 关闭连接，释放锁 |
+| `window_new`（已实现） | 新 Webview 窗口（与 Vault 打开无关） |
 | 入库完成 | 事务内 `INSERT OR REPLACE` papers 行 + 文件系统写 NOTES/source |
 | UI 改标签/标题 | `paper:update` 只更新 SQLite（及 `updated_at`） |
 
@@ -287,7 +288,7 @@ import paper
 
 ## 9. 验收要点
 
-- [ ] Create Vault 生成 `.motif/catalog.sqlite`（v1 schema），**不**生成 `PAPERS.md` / `library.bib`。
+- [x] Create Vault 生成 `.motif/catalog.sqlite`（v1 schema），**不**生成 `PAPERS.md` / `library.bib`。
 - [ ] 入库后 `paper:list` 可见新行；磁盘上无强制 `metadata.json`。
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex` 能生成与历史格式兼容的文本。
 - [ ] 删除导出文件不影响 catalog 与 UI 列表。

@@ -10,7 +10,7 @@
 | 系统语言 | [Rust](https://www.rust-lang.org/) | 适合安全本地 IO、异步服务和强约束命令契约。 |
 | Tauri 文件系统 | [`tauri-plugin-fs`](https://v2.tauri.app/plugin/file-system/) | 读写用户选择的 Vault 文件。 |
 | Tauri 对话框 | [`tauri-plugin-dialog`](https://v2.tauri.app/plugin/dialog/) | 原生文件夹 / 文件选择。 |
-| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 计划用于持久化应用设置和最近 Vault。 |
+| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 已接入插件；最近 Vault / 设置目前仍以前端 `localStorage` 为主，后续迁 Store。 |
 | Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Motif 作为 Client 连接用户本机 BYOA Agent。 |
 | Markdown 图谱 | Rust Wiki 索引 + Markdown 解析 | 反链和图谱必须从 Vault Markdown 派生。 |
 | 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.motif/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |

@@ -19,11 +19,12 @@
 
 ## 布局模型
 
-- 左侧栏：Vault 文件树与 paper 元信息。
-- 中间栏：Markdown / PDF / HTML 视图切换。
+- 左侧栏：Vault 文件树（新建文件 / 文件夹 / 刷新）与 paper 元信息。
+- 中间栏：无 Vault 时为欢迎页（最近路径 + 打开 / 创建）；有 Vault 时为 Markdown / PDF / HTML。
 - 右侧 Preview：Markdown 渲染预览或当前 paper 的 `NOTES.md`。
 - 可选右侧栏：Agent 或 Backlinks。
 - Backlinks 右侧栏：上方反链列表，下方 Graph 面板。
+- 多窗口：`⌘N` 新开窗口，当前 Vault 按窗口隔离（sessionStorage）。
 
 ## 本分区文档
 

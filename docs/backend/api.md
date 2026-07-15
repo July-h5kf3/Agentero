@@ -19,7 +19,7 @@ Host (Tauri + Rust)
 ### 2.1 命名规范
 
 - Tauri command：`namespace:verb`（全小写，冒号分隔命名空间）。
-  - 例：`vault:create`、`file:read_text`、`arxiv:import`。
+  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`window_new`、`graph_get_graph`）。
 
 ### 2.2 参数与返回
 
@@ -76,41 +76,58 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 ## 3. Host 层 Tauri invoke API
 
-### 3.1 Vault 管理
+### 3.1 Vault 与窗口
 
-#### `vault:create`
+> **实现状态（V0.1）**  
+> - 已实现：`vault_create`（snake_case invoke 名）、`window_new`、`set_locale`。  
+> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
+> - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
-创建并初始化一个 Vault。
+#### `vault_create`（已实现）
+
+创建并初始化一个 Vault（前端 dialog 选路径后 `invoke("vault_create", { path })`）。
 
 - **参数**
 
 ```ts
 {
-  path: string; // 本地绝对路径，由 dialog 选择或用户输入
+  path: string; // 本地绝对路径
 }
 ```
 
-- **返回**
+- **返回**（`ApiResult<CreateVaultResult>`）
 
 ```ts
 {
   ok: true;
   data: {
-    vault: VaultInfo;
+    path: string;
     created: string[]; // 创建的目录/文件相对路径列表
+    openPath: string;  // 建议首开，如 AGENTS.md
   };
 }
 ```
 
 - **行为**
-  - 检查目录是否为空或已包含 Vault。
-  - 创建 `AGENTS.md`、`papers/`、`notes/`、`plans/`、`.motif/`。
-  - 初始化 `.motif/catalog.sqlite`（schema v1，空 `papers` 表）。详见 [`catalog.md`](catalog.md)。
-  - 写入默认 `AGENTS.md` 模板。
-  - **不**创建根级 `PAPERS.md` / `library.bib`（导出见 `catalog:export_*`）。
-  - 更新最近 Vault 列表。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`。
+  - 初始化 `.motif/catalog.sqlite`（schema v1）。详见 [`catalog.md`](catalog.md)。
+  - 写入默认 `AGENTS.md`。
+  - **不**创建根级 `PAPERS.md` / `library.bib`。
+  - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
 
-#### `vault:open`
+#### `window_new`（已实现）
+
+打开一个新的 Motif 窗口（菜单 **File → New Window** / `⌘N`）。
+
+- **参数**：无
+- **返回**：`Result<(), String>`
+- **行为**
+  - 创建 label 为 `motif-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
+  - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
+  - Capability 覆盖 `main` 与 `motif-*`（见 `src-tauri/capabilities/default.json`）。
+  - 菜单点击由 Host 直接调用，不经过前端 event 往返。
+
+#### `vault:open`（规划）
 
 打开一个已存在的 Vault。
 
@@ -140,7 +157,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
   - 启动文件监听（后续）。
   - 返回完整文件树。
 
-#### `vault:close`
+#### `vault:close`（规划）
 
 关闭当前 Vault。
 
@@ -148,12 +165,11 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - **返回**：`{ ok: true; data: null }`
 - **行为**：停止文件监听，释放资源，不删除数据。
 
-#### `vault:recent`
+#### `vault:recent`（规划；前端已临时实现）
 
 获取最近打开的 Vault 列表。
 
-- **参数**：无
-- **返回**
+- **规划返回**
 
 ```ts
 {
@@ -164,7 +180,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 }
 ```
 
-#### `vault:info`
+- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `motif-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
+
+#### `vault:info`（规划）
 
 获取当前 Vault 元信息。
 
@@ -983,13 +1001,15 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 原生菜单项点击后 Host 通过 `emit(id, ())` 广播，前端在 `src/App.tsx` 监听。事件名（id）稳定、不随语言变化；仅菜单显示文案随 `set_locale` 本地化。
 
-| 事件名 | 菜单项 | 快捷键 |
-|---|---|---|
-| `settings` | Settings… | `⌘,` |
-| `open_vault` | Open Vault… | `⌘O` |
-| `refresh_tree` | Refresh File Tree | `⌘R` |
-| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` |
-| `toggle_chat` | Toggle Chat | `⌘L` |
+| 事件名 | 菜单项 | 快捷键 | 说明 |
+|---|---|---|---|
+| `settings` | Settings… | `⌘,` | 前端监听，打开设置 |
+| `new_window` | New Window | `⌘N` | **Host 直接** `window_new`，不 emit 给前端 |
+| `open_vault` | Open Vault… | `⌘O` | 前端监听 |
+| `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
+| `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
+| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听 |
+| `toggle_chat` | Toggle Chat | `⌘L` | 前端监听 |
 
 ## 4. 数据模型
 

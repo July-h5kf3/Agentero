@@ -13,7 +13,7 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | Tauri/React 工作台、文件树、文件读取/保存、最近 Vault、PDF/HTML/Notes 视图已落地。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页最近列表、树内联新建文件/文件夹、PDF/HTML/Notes、WYSIWYG Markdown。 |
 | V0.2 arXiv 入库闭环 | ⏳ 待实现 | 已有 arXiv URL/metadata 辅助与 demo 数据，完整检索、确认、入库、索引刷新仍待做。 |
 | V0.3 Agent 工作流（ACP Client + BYOA） | 🟡 进行中 | Agent 面板、注册表、ACP `agent_run_once` 与流式 UI 已接入；内置工作流、权限确认和写入草稿仍需补齐。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 面板与 `graph_get_graph` 已落地；输入补全/Plate 内联节点可后续增强。 |
@@ -31,8 +31,10 @@
 - [x] 打开本地 Vault。
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.motif/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
-- [x] Markdown 文件读取、编辑、保存。
-- [x] 最近 Vault 记录与应用重启恢复。
+- [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存）。
+- [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
+- [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
+- [x] 树内联新建文件 / 文件夹。
 - [x] Paper-centric 视图：选中 paper 后中间显示远程 PDF/HTML，右侧显示该篇 `NOTES.md`。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口。
 
@@ -40,12 +42,13 @@
 
 - [x] 用户可以创建一个空 Vault 并看到标准目录结构与 catalog 数据库。
 - [x] 用户可以打开、编辑、保存一个 Markdown note。
-- [x] 重启应用后可以回到最近使用的 Vault。
+- [x] 重启应用后可以回到最近使用的 Vault（设置开启时）。
+- [x] `⌘N` 打开的新窗口不自动占用上一窗口的 Vault，欢迎页可点最近路径。
 
 后续 TODO：
 
 - [x] 补齐“Create Vault”流程（含 catalog 初始化），而不只是打开已有目录。
-- [ ] 最近 Vault 从 `localStorage` 迁到 Tauri Store。
+- [ ] 最近 Vault / UI 偏好从 `localStorage` 迁到 Tauri Store（语义对齐现有前端 MRU）。
 - [ ] 文件监听与外部编辑器修改同步。
 - [ ] 增加保存状态提示和冲突处理。
 
@@ -211,6 +214,7 @@
 ### 近期优先级 P0
 
 - [x] Create Vault：标准目录 + `AGENTS.md` + `.motif/catalog.sqlite`。
+- [x] 多窗口（⌘N）+ 欢迎页最近 Vault 列表（前端 MRU；Store 迁移仍待做）。
 - [ ] arXiv 精确 ID/URL 入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。

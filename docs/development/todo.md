@@ -9,6 +9,11 @@
    - **不**默认生成 `PAPERS.md` / `library.bib`（导出能力另做）。
    - 初始化后打开 `AGENTS.md`。
 
+1b. **多窗口与欢迎页** ✅
+   - `⌘N` / File → New Window → Host `window_new`（`?fresh=1`）。
+   - 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建（无常驻说明文案）。
+   - 当前窗口 Vault 用 `sessionStorage`；最近列表 / 上次路径用 `localStorage`。
+
 2. **arXiv 精确入库**
    - 支持输入 arXiv ID / URL。
    - 拉取 metadata，写入 catalog `papers` 表。
