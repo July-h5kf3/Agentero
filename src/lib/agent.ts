@@ -345,10 +345,12 @@ export async function runOnce(request: {
 export async function listCodexThreads(request: {
 	agentId?: string;
 	vaultPath?: string;
+	includeExternal?: boolean;
 }): Promise<CodexThreadInfo[]> {
 	return invokeApi("agent_codex_list_threads", {
 		agentId: request.agentId ?? null,
 		vaultPath: request.vaultPath ?? null,
+		includeExternal: request.includeExternal ?? false,
 	});
 }
 
@@ -478,6 +480,9 @@ export function saveModelPref(agentId: string, modelId: string): void {
 }
 
 const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
+const YOLO_PREF_KEY = "motif-agent-yolo-pref";
+const EXTERNAL_CODEX_HISTORY_PREF_KEY =
+	"motif-agent-external-codex-history-pref";
 
 export type CachedModelCatalog = {
 	configId: string;
@@ -511,6 +516,57 @@ export function saveModelCatalog(
 		>;
 		map[agentId] = catalog;
 		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
+/** Persist YOLO separately for each provider registration. */
+export function loadYoloPref(agentId: string | null): boolean {
+	if (!agentId) return false;
+	try {
+		const raw = localStorage.getItem(YOLO_PREF_KEY);
+		if (!raw) return false;
+		const map = JSON.parse(raw) as Record<string, boolean>;
+		return map[agentId] === true;
+	} catch {
+		return false;
+	}
+}
+
+export function saveYoloPref(agentId: string, enabled: boolean): void {
+	try {
+		const raw = localStorage.getItem(YOLO_PREF_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
+		map[agentId] = enabled;
+		localStorage.setItem(YOLO_PREF_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
+/** Persist whether a Codex registration includes non-Motif Vault threads. */
+export function loadExternalCodexHistoryPref(agentId: string | null): boolean {
+	if (!agentId) return false;
+	try {
+		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
+		if (!raw) return false;
+		const map = JSON.parse(raw) as Record<string, boolean>;
+		return map[agentId] === true;
+	} catch {
+		return false;
+	}
+}
+
+export function saveExternalCodexHistoryPref(
+	agentId: string,
+	enabled: boolean,
+): void {
+	try {
+		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
+		map[agentId] = enabled;
+		localStorage.setItem(EXTERNAL_CODEX_HISTORY_PREF_KEY, JSON.stringify(map));
 	} catch {
 		// ignore
 	}

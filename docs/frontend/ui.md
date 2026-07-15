@@ -109,13 +109,15 @@ PromptInput → Body / Footer / Submit
 
 **上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
-**本机技能**：输入 `$` 可筛选 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills` 中的 `SKILL.md`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小并将内容注入本次 ACP prompt。该路径为 ACP 兼容实现，未来的 Codex App Server provider 可改用原生 `skills/list` 和结构化 `SkillInput`。
+**本机技能**：输入 `$` 可筛选 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills` 中的 `SKILL.md`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小并将内容注入当前 provider 的 prompt。Codex 也会使用这条受限的本机技能注入路径。
 
-**斜杠命令**：Motif 不实现自己的 `/` 命令菜单，输入内容会原样透传给 ACP Agent。Codex 原生的线程级命令需要后续切换到 Codex App Server provider 才能完整支持。
+**斜杠命令**：Motif 不实现自己的 `/` 命令菜单，输入内容原样传递给当前 provider。Codex 使用 App Server 的 native thread，保持 Codex 自己的命令语义。
 
 **YOLO**：Composer 底栏的 YOLO 开关只作用于下一次运行。默认关闭时，Motif 取消 ACP 的权限请求；开启后自动选择 Agent 给出的第一个权限选项。逐项权限确认需要由保持 ACP 会话的后续实现提供。
 
-**Codex 控件**：只有选中 `codex-acp` 且 ACP 会话明确上报相应配置时，底栏才显示模型与 reasoning effort 的紧凑选择列表，以及仅在闪电图标内填充黄色的 Fast toggle。选择会在下一次运行创建会话后按模型、effort、Fast 的顺序写入 ACP；其他 Agent 不显示也不接收这些偏好。
+**Codex 控件**：只有选中 `codex-acp` 时，底栏才显示 App Server `model/list` 提供的模型与 reasoning effort，以及仅在闪电图标内填充黄色的 Fast toggle。选择在下一次 native turn 中传给 App Server；其他 Agent 不显示也不接收这些偏好。YOLO 按 provider 注册项保存在本机浏览器偏好中。
+
+**Codex 历史**：Motif 会将它创建或继续运行的 native thread id 记录在 Vault 的 `.motif/agent-sessions/codex.json`。历史列表默认只显示这份索引中的会话，避免混入同一 Vault 工作目录下由 Codex CLI、编辑器或其它应用创建的 thread。历史面板的“External”开关仅对 Codex 生效；开启后显示 App Server 返回的全部 Vault-scoped thread。开关偏好按 Codex provider 注册项保存在本机浏览器中。
 
 ### 3.3 Backlinks + Graph 右侧栏
 

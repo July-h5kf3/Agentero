@@ -7,7 +7,7 @@
 - **本地优先（Local-first）**：Vault 以 Markdown + 源文件为事实来源，数据库/索引仅作为缓存。
 - **跨平台但 Mac 优先**：MVP 以 macOS 桌面应用为主，技术栈保留向 iPadOS 扩展的能力。
 - **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引，并以 **ACP Client** 身份连接本机已有 Agent。
-- **BYOA（Bring Your Own Agent）**：Motif **不内置、不捆绑** 任何 coding agent 二进制；用户使用本机已安装的 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、Codex ACP、自定义 command）。密钥与模型由各 Agent 自行管理。
+- **BYOA（Bring Your Own Agent）**：Motif **不内置、不捆绑**任何 coding agent 二进制；通用 provider 使用本机 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、自定义 command），Codex 使用用户本机的 `codex app-server`。密钥与模型由各 Agent CLI 自行管理。
 - **可迁移**：Vault 离开应用后仍能被 Obsidian、VS Code、Cursor 直接打开。
 
 ## 2. 整体架构
@@ -32,10 +32,11 @@
 │  - 工作流 prompt 模板（总结 / 问答 / Related Work）           │
 │  - 本地配置与最近 Vault 存储                                  │
 └───────────────────────────┬─────────────────────────────────┘
-│                           │ ACP (JSON-RPC 2.0 over stdio)
+│                           │ Provider runtime (JSON-RPC 2.0 over stdio)
 ┌───────────────────────────▼─────────────────────────────────┐
-│     用户本机已安装的 ACP Agent（BYOA，Motif 不打包）           │
-│  - OpenCode / Gemini CLI / Claude ACP / Codex ACP / 自定义  │
+│     用户本机已安装的 Agent（BYOA，Motif 不打包）               │
+│  - ACP: OpenCode / Gemini CLI / Claude ACP / 自定义           │
+│  - Native: Codex App Server                                   │
 │  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -456,7 +457,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 | `opencode` | `opencode` + `acp` | 多模型 OpenCode |
 | `gemini` | `gemini`（ACP 模式参数以官方为准） | Gemini CLI |
 | `claude-acp` | 用户本机 Claude ACP 适配器 | Claude 系 agent |
-| `codex-acp` | `npx --yes @agentclientprotocol/codex-acp`（自动复用本机 `codex`） | Codex |
+| `codex-acp` | `codex app-server` | Codex 原生 thread runtime（保留 template id 兼容既有设置） |
 | `qodercli` | `qodercli` + `--acp` | [Qoder CLI ACP](https://docs.qoder.com/en/cli/acp) |
 | `custom` | 任意 command + args + env | 用户完全自定义 |
 
@@ -653,7 +654,7 @@ tempfile = "3"
 | 数学公式渲染 | Plate math 插件 + `katex` |
 | 全文搜索 | `minisearch`（前端）或 Rust `tantivy` / SQLite FTS5 |
 | 加密存储产品侧密钥（如 MinerU） | `keyring` crate |
-| 本机 ACP Agents（用户自装，不随 Motif 分发） | OpenCode、Gemini CLI、Claude ACP、Codex ACP、自定义 CLI |
+| 本机 Agent（用户自装，不随 Motif 分发） | OpenCode、Gemini CLI、Claude ACP、Codex App Server、自定义 CLI |
 | iOS 原生能力 | `tauri-plugin-os`、Swift 桥接 |
 
 ## 9. 与 Roadmap 的对应关系
@@ -662,7 +663,7 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes 视图已接入；仍需补 Create Vault 初始化与文件监听。 |
 | V0.2 | arXiv importer 仍待实现；当前仅有 arXiv URL 推导、metadata 读取和 demo paper 数据。 |
-| V0.3 | ACP Client + BYOA 面板进行中；注册表、探测、`agent_run_once`、流式 UI、Sources、`@` / `$` 上下文、Codex 的 ACP effort / Fast 会话配置与每次运行的 YOLO 权限策略已接入；workflow prompt、逐项权限确认、写入草稿待补。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread（历史、恢复、模型、effort、Fast、YOLO）；注册表、探测、`agent_run_once`、流式 UI、Sources、`@` / `$` 上下文已接入；workflow prompt、逐项权限确认、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |

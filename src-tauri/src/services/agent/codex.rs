@@ -7,8 +7,9 @@ use crate::models::agent::{
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
@@ -17,6 +18,20 @@ use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::watch;
 
 const CLIENT_INFO: &str = "motif";
+const MOTIF_THREAD_INDEX_PATH: &str = ".motif/agent-sessions/codex.json";
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MotifCodexThreadIndex {
+    #[serde(default = "default_thread_index_version")]
+    version: u8,
+    #[serde(default)]
+    thread_ids: Vec<String>,
+}
+
+fn default_thread_index_version() -> u8 {
+    1
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,6 +66,23 @@ struct CodexClient {
     stdout: Lines<BufReader<ChildStdout>>,
     next_id: u64,
     notifications: Vec<(String, Value)>,
+}
+
+/// A loaded native thread whose App Server process must stay alive until its
+/// first (or resumed) turn begins. A new thread has no rollout on disk yet.
+pub struct PreparedCodexThread {
+    thread_id: String,
+    client: CodexClient,
+}
+
+impl PreparedCodexThread {
+    pub fn thread_id(&self) -> &str {
+        &self.thread_id
+    }
+
+    pub async fn shutdown(self) {
+        self.client.shutdown().await;
+    }
 }
 
 impl CodexClient {
@@ -369,6 +401,49 @@ fn find_transcript(root: &Path, thread_id: &str) -> Option<PathBuf> {
     None
 }
 
+fn motif_thread_index_path(vault_path: Option<&str>) -> Option<PathBuf> {
+    vault_path
+        .map(Path::new)
+        .filter(|path| path.is_dir())
+        .map(|path| path.join(MOTIF_THREAD_INDEX_PATH))
+}
+
+fn motif_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
+    let Some(path) = motif_thread_index_path(vault_path) else {
+        return HashSet::new();
+    };
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<MotifCodexThreadIndex>(&content).ok())
+        .unwrap_or_default()
+        .thread_ids
+        .into_iter()
+        .filter(|thread_id| !thread_id.trim().is_empty())
+        .collect()
+}
+
+fn remember_motif_thread(vault_path: Option<&str>, thread_id: &str) -> Result<(), AppError> {
+    let Some(path) = motif_thread_index_path(vault_path) else {
+        return Ok(());
+    };
+    let mut index = fs::read_to_string(&path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<MotifCodexThreadIndex>(&content).ok())
+        .unwrap_or_default();
+    if !index.thread_ids.iter().any(|id| id == thread_id) {
+        index.thread_ids.push(thread_id.to_string());
+    }
+    index.version = default_thread_index_version();
+    let parent = path
+        .parent()
+        .ok_or_else(|| AppError::message("Motif Codex session path has no parent"))?;
+    fs::create_dir_all(parent).map_err(AppError::Io)?;
+    let content = serde_json::to_string_pretty(&index).map_err(|error| {
+        AppError::message(format!("failed to encode Codex session metadata: {error}"))
+    })?;
+    fs::write(path, content).map_err(AppError::Io)
+}
+
 pub async fn probe_codex(desc: &AgentDescriptor) -> ProbeResult {
     match CodexClient::spawn(desc, None).await {
         Ok(client) => {
@@ -397,7 +472,7 @@ pub async fn prepare_codex_thread(
     vault_path: Option<String>,
     model_id: Option<String>,
     auto_approve: bool,
-) -> Result<String, AppError> {
+) -> Result<PreparedCodexThread, AppError> {
     let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
     let params = if let Some(thread_id) = session_id.filter(|id| !id.trim().is_empty()) {
         json!({ "threadId": thread_id, "cwd": vault_path, "model": model_id, "approvalPolicy": approval_policy(auto_approve), "sandbox": sandbox(auto_approve) })
@@ -409,21 +484,32 @@ pub async fn prepare_codex_thread(
     } else {
         "thread/start"
     };
-    let result = client.request(method, params).await?;
-    let thread_id = result
-        .get("thread")
-        .or(Some(&result))
-        .and_then(|thread| string(thread, &["id", "threadId"]))
-        .ok_or_else(|| AppError::message("Codex App Server did not return a thread id"));
-    client.shutdown().await;
-    thread_id
+    let result = client.request(method, params).await;
+    let thread_id = result.and_then(|result| {
+        result
+            .get("thread")
+            .or(Some(&result))
+            .and_then(|thread| string(thread, &["id", "threadId"]))
+            .ok_or_else(|| AppError::message("Codex App Server did not return a thread id"))
+    });
+    match thread_id {
+        Ok(thread_id) => {
+            if let Err(error) = remember_motif_thread(vault_path.as_deref(), &thread_id) {
+                eprintln!("[motif codex] failed to save native thread metadata: {error}");
+            }
+            Ok(PreparedCodexThread { thread_id, client })
+        }
+        Err(error) => {
+            client.shutdown().await;
+            Err(error)
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run_codex_turn(
     app: AppHandle,
-    desc: AgentDescriptor,
-    thread_id: String,
+    prepared: PreparedCodexThread,
     message_id: String,
     prompt: String,
     workflow: Option<String>,
@@ -436,9 +522,13 @@ pub async fn run_codex_turn(
     auto_approve: bool,
     mut cancellation: watch::Receiver<bool>,
 ) {
+    let PreparedCodexThread {
+        thread_id,
+        mut client,
+    } = prepared;
     let result = run_codex_turn_inner(
         &app,
-        &desc,
+        &mut client,
         &thread_id,
         &message_id,
         prompt,
@@ -453,6 +543,7 @@ pub async fn run_codex_turn(
         &mut cancellation,
     )
     .await;
+    client.shutdown().await;
     if let Err(error) = result {
         let _ = app.emit(
             "agent:failed",
@@ -467,7 +558,7 @@ pub async fn run_codex_turn(
 #[allow(clippy::too_many_arguments)]
 async fn run_codex_turn_inner(
     app: &AppHandle,
-    desc: &AgentDescriptor,
+    client: &mut CodexClient,
     thread_id: &str,
     message_id: &str,
     prompt: String,
@@ -487,10 +578,8 @@ async fn run_codex_turn_inner(
         build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
         skill_instructions
     );
-    let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
-    client.request("thread/resume", json!({ "threadId": thread_id, "cwd": vault_path, "model": model_id, "approvalPolicy": approval_policy(auto_approve), "sandbox": sandbox(auto_approve) })).await?;
     let service_tier = if fast_mode == Some(true) {
-        resolve_fast_tier(&mut client, model_id.as_deref()).await?
+        resolve_fast_tier(client, model_id.as_deref()).await?
     } else {
         None
     };
@@ -560,7 +649,6 @@ async fn run_codex_turn_inner(
             }
         }
     }
-    client.shutdown().await;
     app.emit(
         "agent:completed",
         AgentResultPayload {
@@ -685,7 +773,9 @@ fn handle_notification(
 pub async fn codex_list_threads(
     desc: &AgentDescriptor,
     vault_path: Option<String>,
+    include_external: bool,
 ) -> Result<Vec<CodexThreadInfo>, AppError> {
+    let motif_thread_ids = (!include_external).then(|| motif_thread_ids(vault_path.as_deref()));
     let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
     let result = client.request("thread/list", json!({ "cwd": vault_path, "limit": 100, "archived": false, "sortKey": "recency_at", "sortDirection": "desc" })).await?;
     client.shutdown().await;
@@ -695,6 +785,11 @@ pub async fn codex_list_threads(
         .into_iter()
         .flatten()
         .filter_map(thread_info)
+        .filter(|thread| {
+            motif_thread_ids
+                .as_ref()
+                .is_none_or(|ids| ids.contains(&thread.id))
+        })
         .collect())
 }
 

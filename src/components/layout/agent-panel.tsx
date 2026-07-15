@@ -136,12 +136,16 @@ import {
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
+	loadExternalCodexHistoryPref,
 	loadModelCatalog,
 	loadModelPref,
+	loadYoloPref,
 	readCodexThread,
 	runOnce,
+	saveExternalCodexHistoryPref,
 	saveModelCatalog,
 	saveModelPref,
+	saveYoloPref,
 	scanCatalog,
 	setDefaultAgent,
 	warmAgent,
@@ -435,6 +439,8 @@ export function AgentPanel({
 	const [fastAvailable, setFastAvailable] = useState(false);
 	const [fastEnabled, setFastEnabled] = useState(false);
 	const [yoloEnabled, setYoloEnabled] = useState(false);
+	const [includeExternalCodexHistory, setIncludeExternalCodexHistory] =
+		useState(false);
 	const [composerMenuDismissed, setComposerMenuDismissed] = useState(false);
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
@@ -534,12 +540,18 @@ export function AgentPanel({
 			setReasoningEffort(null);
 			setFastAvailable(false);
 			setFastEnabled(false);
+			setYoloEnabled(false);
+			setIncludeExternalCodexHistory(false);
 			return;
 		}
 		setEffortOptions([]);
 		setReasoningEffort(null);
 		setFastAvailable(false);
 		setFastEnabled(false);
+		setYoloEnabled(loadYoloPref(selectedAgentId));
+		setIncludeExternalCodexHistory(
+			loadExternalCodexHistoryPref(selectedAgentId),
+		);
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
 		if (catalog?.models.length) {
@@ -822,6 +834,7 @@ export function AgentPanel({
 			const threads = await listCodexThreads({
 				agentId: selectedAgentId,
 				vaultPath: vaultPath ?? undefined,
+				includeExternal: includeExternalCodexHistory,
 			});
 			setSessionHistory(
 				threads.map((thread) => ({
@@ -841,7 +854,14 @@ export function AgentPanel({
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
 		}
-	}, [i18n.language, isCodexAgent, selected?.name, selectedAgentId, vaultPath]);
+	}, [
+		includeExternalCodexHistory,
+		i18n.language,
+		isCodexAgent,
+		selected?.name,
+		selectedAgentId,
+		vaultPath,
+	]);
 
 	useEffect(() => {
 		void loadCodexHistory();
@@ -1334,9 +1354,30 @@ export function AgentPanel({
 					</PopoverTrigger>
 					<PopoverContent align="end" className="w-80 p-0">
 						<PopoverHeader className="border-b px-3 py-2">
-							<PopoverTitle className="font-medium text-sm leading-none">
-								{t("history.title")}
-							</PopoverTitle>
+							<div className="flex items-center justify-between gap-3">
+								<PopoverTitle className="font-medium text-sm leading-none">
+									{t("history.title")}
+								</PopoverTitle>
+								{isCodexAgent && (
+									<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+										<span>{t("history.includeExternal")}</span>
+										<Switch
+											size="sm"
+											checked={includeExternalCodexHistory}
+											onCheckedChange={(enabled) => {
+												setIncludeExternalCodexHistory(enabled);
+												if (selectedAgentId) {
+													saveExternalCodexHistoryPref(
+														selectedAgentId,
+														enabled,
+													);
+												}
+											}}
+											aria-label={t("history.includeExternalToggle")}
+										/>
+									</div>
+								)}
+							</div>
 							<PopoverDescription className="text-muted-foreground text-sm leading-snug">
 								{t("history.description")}
 							</PopoverDescription>
@@ -1979,7 +2020,10 @@ export function AgentPanel({
 									size="sm"
 									checked={yoloEnabled}
 									disabled={busy}
-									onCheckedChange={setYoloEnabled}
+									onCheckedChange={(enabled) => {
+										setYoloEnabled(enabled);
+										if (selectedAgentId) saveYoloPref(selectedAgentId, enabled);
+									}}
 									aria-label={t("composer.yoloToggle")}
 								/>
 							</div>

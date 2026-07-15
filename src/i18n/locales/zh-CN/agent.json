@@ -18,7 +18,9 @@
 		"label": "历史",
 		"title": "会话历史",
 		"description": "此对话中最近的 ACP 会话。",
-		"empty": "暂无会话。"
+		"empty": "暂无会话。",
+		"includeExternal": "外部会话",
+		"includeExternalToggle": "显示外部 Codex 会话"
 	},
 	"tabs": {
 		"open": "打开会话 {{number}}",

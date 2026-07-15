@@ -573,10 +573,10 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_codex_list_threads`
 
-列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。
+列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Motif 在 `.motif/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
 
 ```ts
-{ agentId?: string; vaultPath?: string }
+{ agentId?: string; vaultPath?: string; includeExternal?: boolean }
 // -> CodexThreadInfo[]
 ```
 

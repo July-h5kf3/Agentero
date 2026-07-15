@@ -239,7 +239,7 @@ pub async fn agent_run_once(
     };
 
     let (generated_session_id, message_id) = new_ids();
-    let session_id = if desc.template == AgentTemplate::CodexAcp {
+    let prepared_codex_thread = if desc.template == AgentTemplate::CodexAcp {
         match prepare_codex_thread(
             &desc,
             request.session_id.clone(),
@@ -249,12 +249,16 @@ pub async fn agent_run_once(
         )
         .await
         {
-            Ok(thread_id) => thread_id,
+            Ok(thread) => Some(thread),
             Err(error) => return Ok(map_err(error)),
         }
     } else {
-        generated_session_id
+        None
     };
+    let session_id = prepared_codex_thread
+        .as_ref()
+        .map(|thread| thread.thread_id().to_string())
+        .unwrap_or(generated_session_id);
     let accepted = RunOnceAccepted {
         session_id: session_id.clone(),
         message_id: message_id.clone(),
@@ -263,29 +267,35 @@ pub async fn agent_run_once(
 
     let cancellation = match runs.register(&session_id) {
         Ok(cancellation) => cancellation,
-        Err(e) => return Ok(map_err(e)),
+        Err(error) => {
+            if let Some(thread) = prepared_codex_thread {
+                thread.shutdown().await;
+            }
+            return Ok(map_err(error));
+        }
     };
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         if desc.template == AgentTemplate::CodexAcp {
-            run_codex_turn(
-                app_handle.clone(),
-                desc,
-                session_id.clone(),
-                message_id,
-                request.prompt,
-                request.workflow,
-                request.target,
-                request.vault_path,
-                request.model_id,
-                request.reasoning_effort,
-                request.fast_mode,
-                request.skill_ids,
-                request.auto_approve,
-                cancellation,
-            )
-            .await;
+            if let Some(prepared_codex_thread) = prepared_codex_thread {
+                run_codex_turn(
+                    app_handle.clone(),
+                    prepared_codex_thread,
+                    message_id,
+                    request.prompt,
+                    request.workflow,
+                    request.target,
+                    request.vault_path,
+                    request.model_id,
+                    request.reasoning_effort,
+                    request.fast_mode,
+                    request.skill_ids,
+                    request.auto_approve,
+                    cancellation,
+                )
+                .await;
+            }
         } else {
             let _ = run_once(
                 app_handle.clone(),
@@ -318,6 +328,7 @@ pub async fn agent_codex_list_threads(
     registry: State<'_, AgentRegistry>,
     agent_id: Option<String>,
     vault_path: Option<String>,
+    include_external: bool,
 ) -> Result<ApiResult<Vec<CodexThreadInfo>>, String> {
     let desc = match registry.resolve_default(agent_id.as_deref()) {
         Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
@@ -328,7 +339,7 @@ pub async fn agent_codex_list_threads(
         }
         Err(error) => return Ok(map_err(error)),
     };
-    match codex_list_threads(&desc, vault_path).await {
+    match codex_list_threads(&desc, vault_path, include_external).await {
         Ok(threads) => Ok(ApiResult::ok(threads)),
         Err(error) => Ok(map_err(error)),
     }

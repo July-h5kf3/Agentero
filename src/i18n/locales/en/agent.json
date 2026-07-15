@@ -18,7 +18,9 @@
 		"label": "History",
 		"title": "Session history",
 		"description": "Recent ACP sessions in this chat.",
-		"empty": "No sessions yet."
+		"empty": "No sessions yet.",
+		"includeExternal": "External",
+		"includeExternalToggle": "Include external Codex sessions"
 	},
 	"tabs": {
 		"open": "Open conversation {{number}}",

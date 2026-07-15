@@ -71,14 +71,14 @@ mod acp_live {
     }
 
     #[test]
-    fn codex_template_uses_the_local_cli_through_the_on_demand_adapter() {
+    fn codex_template_uses_the_native_app_server() {
         let codex = catalog_templates()
             .into_iter()
             .find(|entry| entry.id == "codex-acp")
             .expect("Codex template");
 
-        assert_eq!(codex.command, "npx");
-        assert_eq!(codex.args, vec!["--yes", "@agentclientprotocol/codex-acp"]);
+        assert_eq!(codex.command, "codex");
+        assert_eq!(codex.args, vec!["app-server"]);
         assert_eq!(codex.detect_command.as_deref(), Some("codex"));
     }
 
