@@ -19,7 +19,10 @@ Motif (and many ACP agents) look here for **vault-scoped** agent configuration.
   `~/.agents/skills` and `${CODEX_HOME:-~/.codex}/skills`.
 - Keep each `SKILL.md` small (Motif loads at most 64 KiB per skill, 5 per prompt).
 - **Bundled**: Create Vault seeds `skills/paper-reader/` for the file-tree
-  Eye (精读) workflow. Existing vaults can copy that folder manually.
+  Eye (精读) workflow. Existing vaults can copy that folder, or install
+  globally under `~/.agents/skills/paper-reader/`.
+- **Runtime triggers** (not the Composer `$` picker): Codex uses `$paper-reader`,
+  Claude ACP often uses `/paper-reader`; other agents follow Motif-injected body.
 
 Add a skill:
 

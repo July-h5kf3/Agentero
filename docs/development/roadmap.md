@@ -13,7 +13,7 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条、Preview/Info 仅在具体论文时显示。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、Preview/Info 仅在具体论文时显示。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（文件树 Eye + catalog `is_read`）已落地；其它内置工作流、逐项权限确认、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
@@ -42,7 +42,7 @@
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
 - [x] 论文库表格：虚拟节点 `motif:library`、`paper_list`、表头排序、双向滚动。
 - [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）。
-- [x] 后台任务条（左下角）：下载 / 入库 / 导入导出等长操作进度。
+- [x] 后台任务条（左下角）：下载 / 入库 / 导入导出 / paper-reader 等长操作进度；收起态 hover 保持实色不透明。
 
 验收标准：
 
@@ -113,7 +113,8 @@
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
-- [x] **paper-reader 精读工作流**：资源齐全且未读时文件树 Eye → `$paper-reader` skill → 写 `NOTES.md` → catalog `is_read=true`；左下角任务条进度。
+- [x] **paper-reader 精读工作流**：资源齐全且未读时文件树 Eye → paper-reader skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条进度。
+- [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求模型 BYOK 表单。

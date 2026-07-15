@@ -34,7 +34,7 @@
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
   - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
   - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
-- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击启动 **paper-reader** 工作流（`$paper-reader` skill + 默认 Agent）。阅读中图标转圈，进度在左下角后台任务条展示；成功后 `is_read = true`，图标消失。
+- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击启动 **paper-reader** 工作流（默认 Agent + skill；运行时触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`）。阅读中图标转圈，进度在左下角后台任务条展示；成功后 `is_read = true`，图标消失。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -56,12 +56,13 @@
 
 ### 2.1.1 后台任务（左下角，IDE 风格）
 
-- **位置**：窗口左下角固定悬浮（`BackgroundTasksPanel`），不占用侧栏布局。
+- **位置**：窗口左下角固定悬浮（`BackgroundTasksPanel`，`src/components/layout/background-tasks-panel.tsx`），不占用侧栏布局；禅模式隐藏。
 - **显示时机**：**有任务时**才出现；全部结束后约 4s 自动消失。
 - **收起态**：一条状态条——转圈 / 完成勾 + 当前任务标题或「N 个进行中」+ 进度条；点击展开/收起。
 - **展开态**：任务列表（队列序号、标题、详情、进度）；可清除已完成项。
-- **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**等长操作经 `runBackgroundTask` 登记。
-- **paper-reader 进度**：任务 kind=`paperRead`；detail 显示当前阶段（启动 Agent / 读正文 / 写 NOTES / …）；plan/tool 事件会更新进度百分比；失败时 error 写入任务条。
+- **外观**：`bg-popover` 实底 + 边框阴影；**hover 使用实色 `hover:bg-accent`**（禁止 `accent/40` 等半透明，避免底下内容透出）。
+- **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**等长操作经 `runBackgroundTask` / `startBackgroundTask` 登记（`kind` 含 `download` | `downloadAll` | `lookup` | `import` | `export` | `paperRead` | …）。
+- **paper-reader 进度**：任务 kind=`paperRead`；title/detail 走 i18n `app:tasks.paperRead*`；plan/tool 事件会更新进度百分比；失败时 error 写入任务条。
 - 交互对齐常见 IDE（VS Code 类）：不抢焦点、可折叠、只展示后台进度，错误仍可走原有 error 槽位。
 
 ### 2.2 无 Vault 欢迎页

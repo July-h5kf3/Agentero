@@ -46,7 +46,7 @@
    - [x] 在 Finder 中显示：双击 / 右键 / `⌥⌘R`（`revealItemInDir`）。
    - [x] 删除：右键 / `⌘⌫`；确认；`papers/` 下同步 `paper_delete`。
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
-   - [x] 后台任务条（下载 / 入库 / 导入导出）。
+   - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。
 
 2e. **PDF 阅读增强** 🟡
    - [x] 缩放：工具栏 +/- / 重置；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）。
@@ -54,7 +54,8 @@
    - [ ] 本地 PDF 直接预览（非仅远程 `pdf_url`）。
 
 3. **Agent 工作流入口**
-   - [x] **paper-reader 精读**：文件树 Eye（资源齐全 + `is_read=false`）→ `$paper-reader` → `NOTES.md` → `paper_set_is_read`；左下角任务进度。
+   - [x] **paper-reader 精读**：文件树 Eye（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度。
+   - [x] skill 运行时语法按 Agent 模板分流（Host `SkillMentionStyle`）。
    - [ ] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
    - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`。
    - [ ] 输出必须包含 Sources；写入前先进入草稿确认。

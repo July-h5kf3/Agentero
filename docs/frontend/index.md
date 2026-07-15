@@ -26,7 +26,8 @@
 - 可选右侧栏：Agent 或 Backlinks（与左栏同为 **常驻 collapsible**，`preserve-pixel-size`，互不冲折叠态）。
 - Backlinks 右侧栏：上方反链列表，下方 Graph 面板。
 - 多窗口：`⌘N` 新开窗口，当前 Vault 按窗口隔离（sessionStorage）。
-- 左下角：后台任务条（下载 / 入库 / 导入导出等）。
+- 左下角：后台任务条（下载 / 入库 / 导入导出 / paper-reader 精读等；`BackgroundTasksPanel`；hover 保持实色不透明）。
+- 文件树 paper 行：资源不齐 → Download；资源齐且未读 → Eye（精读）。
 
 ## 本分区文档
 

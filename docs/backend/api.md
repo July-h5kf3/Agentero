@@ -710,7 +710,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 - **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
 - **前端**：`src/lib/papers-api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
-- **说明**：与 `status`（入库态）无关；默认 `false`。文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
+- **说明**：与 `status`（入库态）无关；默认 `false`。文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
 #### `paper:list`（扩展规划）
 

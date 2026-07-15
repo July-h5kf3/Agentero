@@ -17,7 +17,7 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
 - 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `motif:library` 不写盘。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
-- **精读工作流**：资源齐全且 catalog `is_read === false` 时，文件树 paper 行显示 **Eye**；点击后用默认 Agent + paper-reader skill 精读并写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`（Composer 的 `$` 只是 UI 选 skill，不等于所有 CLI 的触发方式）。
+- **精读工作流**：资源齐全且 catalog `is_read === false` 时，文件树 paper 行显示 **Eye**；点击后用默认 Agent + paper-reader skill 精读并写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`（Composer 的 `$` 只是 UI 选 skill，不等于所有 CLI 的触发方式）。
 - 文件树：双击 / `⌥⌘R` 在 Finder 中显示；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
 - PDF：缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。

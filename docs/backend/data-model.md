@@ -91,7 +91,9 @@ Vault 内的 Agent 行为规范,至少包含:
 字段、schema、导出与实现见 **[`catalog.md`](catalog.md)**。  
 UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`）均读 catalog，不扫 `metadata.json`。
 
-其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示眼睛图标，点击后启动 Agent 精读并写入 `NOTES.md`，成功后置 `true`。
+其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示眼睛图标，点击后启动默认 Agent 精读并写入 `NOTES.md`，成功后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条。
+
+Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`（亦可放在 `~/.agents/skills` / `~/.claude/skills`）。
 
 ### 可选导出：`PAPERS.md` / `library.bib`
 

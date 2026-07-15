@@ -72,12 +72,17 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 | **已有文件** | 跳过对应资源 |
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
-按需补下（仅 Download 图标，无眼睛）：
-- **显示条件**：缺 PDF **或** 缺 `source/` **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。hover 说明原因。
+按需补下（**Download** 图标）：
+- **显示条件**：缺 PDF **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。**不再**因缺少空 `source/` 单独显示 Download。hover 说明原因。
 - **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
-UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本；`PAPER.md` 为无 TeX 时的派生正文。
+**精读（Eye 图标，与 Download 互斥）**：
+- **显示条件**：本地资源齐全（有 PDF + TeX 或 `PAPER.md`）且 catalog **`is_read === false`**。
+- **点击**：paper-reader 工作流（`src/lib/paper-read.ts` → `agent_run_once` + skill；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md`）→ 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`。
+- **进度**：左下角后台任务条 `kind=paperRead`。
+
+UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.md` 为无 TeX 时的派生正文。
 
 #### Translator 服务地址（设置）
 
