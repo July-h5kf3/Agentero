@@ -2,15 +2,17 @@
 
 ## P0 — 近期闭环
 
-1. **Create Vault 初始化**
+1. **Create Vault 初始化** ✅
    - 创建标准目录：`papers/`、`notes/`、`plans/`、`.motif/`。
-   - 生成 Vault 内 `AGENTS.md`、`PAPERS.md`、`library.bib` 模板。
-   - 初始化后自动打开 `PAPERS.md` 或欢迎笔记。
+   - 生成 Vault 内 `AGENTS.md` 模板。
+   - 初始化 `.motif/catalog.sqlite`（schema v1，`path` 主键）。
+   - **不**默认生成 `PAPERS.md` / `library.bib`（导出能力另做）。
+   - 初始化后打开 `AGENTS.md`。
 
 2. **arXiv 精确入库**
    - 支持输入 arXiv ID / URL。
-   - 拉取 metadata，写入 `papers/<id>/metadata.json`。
-   - 写入默认 `NOTES.md`、空 `highlights.md`，刷新 `PAPERS.md`。
+   - 拉取 metadata，写入 catalog `papers` 表。
+   - 写入默认 `NOTES.md`、空 `highlights.md`。
    - 入库后自动打开 paper，并刷新 Backlinks/Graph。
 
 3. **Agent 工作流入口**
@@ -25,19 +27,23 @@
 
 ## P1 — 中期增强
 
-1. **本地 PDF importer**
+1. **Catalog 导出与检索**
+   - `catalog:export_papers_md` / `catalog:export_bibtex`。
+   - 可选 FTS5；Agent 工作流临时导出 L1 列表。
+
+2. **本地 PDF importer**
    - 文件选择 / 拖拽 / 批量导入。
    - DOI / arXiv ID 识别，元数据确认面板。
-   - 生成 citekey、`PAPER.md`、`NOTES.md`、`metadata.json`。
+   - 生成 citekey、`PAPER.md`、`NOTES.md`；metadata 写入 catalog。
    - 默认本地解析，MinerU BYOK 后可选云端解析。
 
-2. **双链与图谱增强**
+3. **双链与图谱增强**
    - 源码编辑 `[[` 补全。
    - Plate 内联 wikilink 节点，序列化仍保持 `[[...]]`。
    - Graph 增加全屏/聚焦模式、邻居高亮、节点搜索。
-   - SQLite 持久化双链索引并支持增量重建。
+   - 双链边可写入 catalog 可重建表并支持增量重建。
 
-3. **Release 完善**
+4. **Release 完善**
    - tag 构建已完成；后续补签名、公证、自动 changelog。
    - 同步 `package.json`、`src-tauri/tauri.conf.json` 和 tag 版本号。
    - Release artifact 命名规范化，区分 macOS arch / Windows / Linux。

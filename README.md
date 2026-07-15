@@ -40,7 +40,7 @@
 - **Markdown 工作台**：文件树、中间 Markdown/PDF/HTML、Preview/Notes、可选右侧栏。
 - **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph。
 - **Agent 右侧栏**：通过 ACP 后端（Claude、Codex、Grok Build 等）与本地 Vault 对话。
-- **Paper-centric 布局**：根据 `metadata.json` 打开远程 PDF/HTML，同时在右侧显示该篇 `NOTES.md`。
+- **Paper-centric 布局**：根据 catalog 中的元数据打开远程 PDF/HTML，同时在右侧显示该篇 `NOTES.md`。
 - **桌面原生体验**：Tauri 2、macOS overlay title bar、菜单、快捷键。
 
 > 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)，产品范围见 [docs/development/prd.md](docs/development/prd.md)。

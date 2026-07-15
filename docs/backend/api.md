@@ -104,8 +104,10 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 检查目录是否为空或已包含 Vault。
-  - 创建 `AGENTS.md`、`PAPERS.md`、`papers/`、`notes/`、`plans/`。
+  - 创建 `AGENTS.md`、`papers/`、`notes/`、`plans/`、`.motif/`。
+  - 初始化 `.motif/catalog.sqlite`（schema v1，空 `papers` 表）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md` 模板。
+  - **不**创建根级 `PAPERS.md` / `library.bib`（导出见 `catalog:export_*`）。
   - 更新最近 Vault 列表。
 
 #### `vault:open`
@@ -133,9 +135,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 ```
 
 - **行为**
-  - 校验 Vault 结构（至少存在 `PAPERS.md`）。
-  - 初始化/校验 SQLite 索引。
-  - 启动文件监听。
+  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.motif/catalog.sqlite` 可打开或可初始化）。
+  - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
+  - 启动文件监听（后续）。
   - 返回完整文件树。
 
 #### `vault:close`
@@ -406,12 +408,12 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 异步任务，通过 `arxiv:progress` / `arxiv:completed` / `arxiv:failed` 事件推送结果。
-  - 创建 `papers/<id>/` 与 `papers/<id>/source/`，写入 `metadata.json`（元数据事实来源）。
+  - 创建 paper 文件夹（默认 `papers/<id>/`，允许 `papers/<org>/…/<id>/`）与 `source/`；**元数据写入 catalog**（`path` = 该文件夹；不写默认 `metadata.json`）。
   - 下载 LaTeX source、PDF、HTML 到 `source/`。
   - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/PAPER.md`。
   - 调用 Agent 生成 `papers/<id>/NOTES.md`，并创建空的 `papers/<id>/highlights.md`。
-  - 更新 `PAPERS.md`（派生索引）与 `library.bib`，刷新 `.motif/cache.sqlite`。
-
+  - **不**自动更新根级 `PAPERS.md` / `library.bib`（需要时由用户触发 `catalog:export_*`）。
+```
 
 ### 3.4 本地 PDF 入库
 
@@ -477,25 +479,28 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 异步任务，通过 `pdf:progress` / `pdf:completed` / `pdf:failed` 事件推送结果。
-  - 生成 citekey，落位 `papers/<citekey>/`，写入 `metadata.json`（`type=pdf`）。
-  - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，记录 `body_source` / `body_quality`。
+  - 生成 citekey，落位 `papers/<citekey>/`，**metadata 写入 catalog**（`type=pdf`）。
+  - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，`body_source` / `body_quality` 写入 catalog。
   - 调用 Agent 生成 `NOTES.md`，创建空 `highlights.md`。
-  - 更新 `PAPERS.md`、`library.bib`，刷新 `.motif/cache.sqlite`。
+  - **不**自动写 `PAPERS.md` / `library.bib`。
   - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
-
+```
 ### 3.5 论文
 
-论文数据由 arXiv 入库流程生成，也可通过本组命令查询与列表。
+论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
 #### `paper:get`
 
-获取单篇论文完整数据。
+获取单篇论文完整数据（catalog 行 + 路径）。
 
 - **参数**
 
 ```ts
 {
-  id: string; // 论文唯一标识，如 arxiv_id
+  /** paper 文件夹 Vault 相对路径（主键），如 papers/nlp/1706.03762 */
+  path?: string;
+  /** 逻辑 id（arXiv / citekey）；多 path 命中时返回列表或报歧义（实现可选） */
+  id?: string;
 }
 ```
 
@@ -512,7 +517,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 #### `paper:list`
 
-列出当前 Vault 中已入库的论文。
+列出当前 Vault 中已入库的论文（**读 catalog**，不扫盘拼表）。
 
 - **参数**
 
@@ -520,6 +525,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 {
   status?: ('pending' | 'importing' | 'completed' | 'failed')[];
   tag?: string;
+  year?: number;
+  type?: string;
+  query?: string; // title/abstract/authors 子串或后续 FTS
   limit?: number;
   offset?: number;
 }
@@ -536,6 +544,57 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
   };
 }
 ```
+
+#### `paper:update`
+
+更新 catalog 中已有论文的元数据字段（标题、标签、URL 等）。不覆盖 `NOTES.md`。
+
+- **参数**
+
+```ts
+{
+  path: string; // paper 文件夹路径（主键）
+  patch: Partial<PaperMetadata>; // 不允许改 path
+}
+```
+
+- **返回**：`{ ok: true; data: { paper: Paper } }`
+
+### 3.5.1 Catalog 导出
+
+根级 `PAPERS.md` / `library.bib` **默认不存在**；需要时显式导出。完整约定见 [`catalog.md`](catalog.md)。
+
+#### `catalog:export_papers_md`
+
+从 `papers` 表生成 Markdown 索引表（历史 `PAPERS.md` 形态）。
+
+- **参数**
+
+```ts
+{
+  vault_path: string;
+  /** 若提供则写入路径（绝对或 Vault 相对）；否则仅返回 content */
+  dest_path?: string;
+}
+```
+
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    content: string;
+    written_path?: string;
+  };
+}
+```
+
+#### `catalog:export_bibtex`
+
+从 catalog 生成 BibTeX 汇总（历史 `library.bib` 形态）。
+
+- **参数 / 返回**：同 `catalog:export_papers_md`（`content` 为 BibTeX 文本）。
 
 ### 3.6 Agent 工作流（ACP Client + BYOA）
 
@@ -815,14 +874,14 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **节点折叠**：`papers/<id>/NOTES.md` 与同目录其它文件 **合并为一个节点** `papers/<id>`。
-- **节点 `label`**：paper 用 `metadata.json` 的 `title`；其它节点用文件名（去扩展名）。
+- **节点 `label`**：paper 用 catalog `papers.title`；其它节点用文件名（去扩展名）。
 - **节点 `type`**
 
 | type | 规则 |
 |---|---|
 | `paper` | 折叠后的 `papers/<id>` |
 | `note` | `notes/…` 或其它 md |
-| `index` | 根级 `PAPERS.md` / `AGENTS.md` 等 |
+| `index` | 根级 `AGENTS.md` 及用户导出的索引类 md 等 |
 | `stub` | 未解析目标（id 形如 `stub:<raw>`） |
 
 - **边**：有向，`source` / `target` 为折叠后节点 id；折叠后的自环丢弃。

@@ -47,7 +47,7 @@
 - **独立滚动**：侧边栏 / 中间 / Preview **各自**滚动，顶栏固定；禁止整页连带滚动。内容区使用 `.motif-scroll`（细滚动条、半透明、`overscroll-behavior: contain`）。
 - **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）。
   - Markdown：源码编辑
-  - PDF / HTML：**只读 `metadata.json` 的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**）
+  - PDF / HTML：**只读 catalog 中的远程 `pdf_url` / `html_url`**（**不下载、不读本地 pdf/html 文件**；过渡期可回退读 `metadata.json`）
   - arXiv 推荐写入：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
