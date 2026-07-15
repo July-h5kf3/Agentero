@@ -11,7 +11,7 @@
 	"suggestions": {
 		"summarizePaper": "总结当前论文",
 		"listClaims": "列出关键论点与证据",
-		"findRelated": "在此 Vault 中查找相关笔记"
+		"findRelated": "在此知识库中查找相关笔记"
 	},
 	"history": {
 		"aria": "打开对话历史",
@@ -21,7 +21,7 @@
 		"empty": "暂无会话。"
 	},
 	"empty": {
-		"title": "与你的 Vault 对话",
+		"title": "与你的知识库对话",
 		"description": "消息将发送给你的 ACP Agent。点击上方的 Agent 名称可切换后端。",
 		"waiting": "正在等待 Agent……"
 	},
@@ -36,7 +36,7 @@
 		"failed": "工具执行失败"
 	},
 	"citation": {
-		"vaultPath": "Agent 引用的 Vault 路径"
+		"vaultPath": "Agent 引用的知识库路径"
 	},
 	"models": {
 		"defaultGroup": "模型",

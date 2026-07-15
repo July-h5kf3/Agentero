@@ -11,10 +11,10 @@
 	},
 	"general": {
 		"title": "通用",
-		"description": "应用行为与 Vault 默认设置。",
-		"footer": "Vault 路径仅保存在本机设备上。",
+		"description": "应用行为与知识库默认设置。",
+		"footer": "知识库路径仅保存在本机设备上。",
 		"restoreVault": {
-			"label": "恢复上次的 Vault",
+			"label": "恢复上次的知识库",
 			"description": "启动时重新打开上次的文件夹。"
 		},
 		"confirmClose": {
@@ -101,6 +101,6 @@
 	"about": {
 		"title": "关于",
 		"version": "版本 {{version}}",
-		"tagline": "面向人与 Agent 的本地优先科研 Vault。"
+		"tagline": "面向人与 Agent 的本地优先科研知识库。"
 	}
 }

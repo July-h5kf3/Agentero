@@ -1,9 +1,9 @@
 {
 	"fileTree": {
 		"empty": "空文件夹",
-		"openVault": "打开 Vault (⌘O)",
+		"openVault": "打开知识库 (⌘O)",
 		"refresh": "刷新 (⌘R)",
-		"closeVault": "关闭 Vault"
+		"closeVault": "关闭知识库"
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",

@@ -24,23 +24,23 @@
 		"previewPlaceholder": "渲染后的 Markdown 将显示在此……"
 	},
 	"errors": {
-		"openVaultDesktopOnly": "打开 Vault 需要 Tauri 桌面应用（pnpm tauri dev）。",
+		"openVaultDesktopOnly": "打开知识库需要 Tauri 桌面应用（pnpm tauri dev）。",
 		"cannotPreview": "无法预览此文件类型：{{name}}",
-		"openVaultForLinks": "请先打开 Vault，再导航 Vault 相对链接。",
-		"openVaultForGraph": "请先打开 Vault，再导航图谱链接。",
-		"openVaultForCreate": "请先打开 Vault，再创建双链目标。"
+		"openVaultForLinks": "请先打开知识库，再导航知识库相对链接。",
+		"openVaultForGraph": "请先打开知识库，再导航图谱链接。",
+		"openVaultForCreate": "请先打开知识库，再创建双链目标。"
 	},
 	"vault": {
-		"openDesktopOnly": "打开 Vault 仅在 Tauri 应用中可用。",
-		"dialogTitle": "选择 Motif Vault 文件夹",
+		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
+		"dialogTitle": "选择 Motif 知识库文件夹",
 		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
 		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",
-		"noVaultName": "未打开 Vault",
-		"noVaultOpenTitle": "未打开 Vault",
-		"noVaultOpenDescription": "打开一个 Vault 文件夹以查看文件、笔记和图谱。",
-		"openVaultButton": "打开 Vault",
+		"noVaultName": "未打开知识库",
+		"noVaultOpenTitle": "未打开知识库",
+		"noVaultOpenDescription": "打开一个知识库文件夹以查看文件、笔记和图谱。",
+		"openVaultButton": "打开知识库",
 		"runTauriPrefix": "运行",
-		"runTauriSuffix": "以打开 Vault。"
+		"runTauriSuffix": "以打开知识库。"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"
