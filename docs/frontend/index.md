@@ -19,12 +19,14 @@
 
 ## 布局模型
 
-- 左侧栏：Vault 文件树（顶部虚拟节点 **Library**；魔棒 / 新建文件 / 文件夹）+ 选中论文时底部 **Paper Info**。
+- 左侧栏：Vault 文件树（顶部虚拟节点 **Library**；魔棒 / 新建文件 / 文件夹；右键 **在 Finder 中显示** / **删除**）+ 选中论文时底部 **Paper Info**。
 - 中间栏：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或 Markdown / PDF / HTML。
+  - PDF：缩放工具栏 + `⌘/Ctrl`+滚轮；**划词提问**（迷你卡 + `asks/*.json` + 锚点对话图标）。
 - 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`；论文库视图隐藏。
-- 可选右侧栏：Agent 或 Backlinks。
+- 可选右侧栏：Agent 或 Backlinks（与左栏同为 **常驻 collapsible**，`preserve-pixel-size`，互不冲折叠态）。
 - Backlinks 右侧栏：上方反链列表，下方 Graph 面板。
 - 多窗口：`⌘N` 新开窗口，当前 Vault 按窗口隔离（sessionStorage）。
+- 左下角：后台任务条（下载 / 入库 / 导入导出等）。
 
 ## 本分区文档
 
@@ -36,4 +38,4 @@
 - 后端图谱与反链 API：[`../backend/api.md`](../backend/api.md)
 - 双链与图谱模型：[`../backend/wikilinks.md`](../backend/wikilinks.md)
 - 路线图与 backlog：[`../development/roadmap.md`](../development/roadmap.md)
-- PDF 划词提问（设计中）：[`../development/pdf-ask.md`](../development/pdf-ask.md)
+- PDF 划词提问（MVP 已落地）：[`../development/pdf-ask.md`](../development/pdf-ask.md)

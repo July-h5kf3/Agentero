@@ -651,14 +651,14 @@ arXiv URL 推导：
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
 - [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
-- [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body` + 眼睛 / Library 批量）
+- [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`）
 - [x] `⇧⌘I` 魔棒快捷键
 - [ ] 重复提示增强、入库任务可取消
 
 ### Phase D — 可选
 
 - [x] 默认下载 PDF；arXiv e-print 解压 LaTeX；无 `downloadFulltextToLocal` 开关
-- [x] 文件树缺 PDF 或 arXiv 缺 TeX 时 Download → `paper_download_assets`
+- [x] 文件树缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download → `paper_download_assets`
 - [x] 无 TeX 时生成 `PAPER.md`（liteparse）
 - [ ] PDF prepare 复用同一 Lookup
 
@@ -680,8 +680,8 @@ arXiv URL 推导：
 1. ~~点击魔棒，粘贴链接或编号，成功后 paper 壳 + **catalog 有行**。~~ ✅  
 2. ~~入库始终尝试下载 PDF 到 `source/`。~~ ✅  
 3. ~~arXiv 另下载 e-print 并解压 LaTeX。~~ ✅  
-4. ~~缺 PDF，或 arXiv 缺 TeX 时文件树显示 Download，可补下。~~ ✅  
-5. ~~无 TeX 时下载后 / 眼睛图标可生成 `PAPER.md`。~~ ✅  
+4. ~~缺 PDF，或既无 TeX 也无 `PAPER.md` 时文件树显示 Download，可补下。~~ ✅  
+5. ~~无 TeX 时下载后 liteparse 可生成 `PAPER.md`（无独立眼睛图标）。~~ ✅  
 6. 文件树选中 `papers/nlp` 时路径为 `papers/nlp/<id>/`。  
 7. 重复不覆盖 `NOTES.md`；文案 i18n。  
 8. ~~论文库表格（`paper_list`）能列出已入库论文。~~ ✅  
@@ -706,4 +706,4 @@ arXiv URL 推导：
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
-| 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body` + 眼睛 / Library 批量） |
+| 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |

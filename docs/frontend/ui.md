@@ -123,13 +123,17 @@
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
   - PDF / HTML **预览**：当前仍读 catalog 远程 `pdf_url` / `html_url`（经 `paper_get` + PDF.js / iframe）。
-  - **本地归档**（与预览分离）：魔棒 / `paper_download_assets` 将 PDF（及 arXiv LaTeX）写入 `{paper}/source/`；中间栏预览暂不强制读本地文件。
+  - **本地归档**（与预览分离）：魔棒 / `paper_download_assets` 将 PDF 写入 `{paper}/{id}.pdf`（根目录），arXiv LaTeX 到 `source/`；中间栏预览暂不强制读本地文件。
   - arXiv 推荐写入 catalog：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL
   - PDF：PDF.js 按 URL 流式渲染；HTML：独立 iframe 打开远程页
+  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
+  - **PDF 划词提问**（已落地 MVP，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
+    - 划词 / 框选 / 双击 / 悬停停留 → 迷你问答卡（ACP 流式）；发送过问题后在锚点旁保留对话图标（Hover 回访）。
+    - 线程落盘 `papers/<id>/asks/<threadId>.json`；**不**写 PDF 二进制。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
@@ -163,8 +167,7 @@
   - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
-- **论文行下载按钮**：缺本地 PDF，或 arXiv 可取 TeX 但尚无 `.tex` 时，行尾 Download → `paper_download_assets`（已有资源跳过，只补缺失项）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。
-- **论文行解析按钮**：有 PDF、无 TeX、无 `PAPER.md` 时行尾眼睛 → `paper_parse_body`；Library 行可批量解析。
+- **论文行 Download**（单一图标，无独立眼睛）：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 

@@ -119,12 +119,13 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 - **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.motif/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
 - 用 Obsidian 块引用 `^id`,让 `NOTES.md` 能精确引用某条标注:`[[papers/1706.03762/highlights#^h12]]`。
 
-### `asks/`（规划：PDF 划词提问）
+### `asks/`（已落地 MVP：PDF 划词提问）
 
-多轮「就地问答」线程，与 `highlights.md` **分离**：asks 存对话 JSON，highlights 存引文证据。设计见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
+多轮「就地问答」线程，与 `highlights.md` **分离**：asks 存对话 JSON，highlights 存引文证据。设计与实现见 [`../development/pdf-ask.md`](../development/pdf-ask.md)；前端 `src/lib/pdf-ask/` + `PdfViewer` 交互层。
 
 - 路径：`papers/<id>/asks/<threadId>.json`（可选 `asks/index.json` 目录）。
 - 含锚点（page + 归一化 rects + quote）与 `messages[]`；**不**写入 PDF 二进制，**不**进 catalog 正文。
+- 触发：划词 / 框选 / 双击 / 悬停；发送过问题后锚点旁对话图标可回访。
 
 格式示例:
 
@@ -149,7 +150,7 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 - PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
-- 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download；有 PDF、无 TeX、无 `PAPER.md` → 眼睛图标手动解析；Library 行可批量 Download / 批量 Parse
+- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`（无独立眼睛图标）
 
 正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
 

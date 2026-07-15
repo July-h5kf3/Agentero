@@ -13,7 +13,7 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、Preview/Info 仅在具体论文时显示。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条、Preview/Info 仅在具体论文时显示。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；内置工作流、逐项权限确认、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
@@ -37,10 +37,12 @@
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
+- [x] 文件树：**在 Finder 中显示**（双击 / 右键 / `⌥⌘R`）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
 - [x] Paper-centric 视图：选中 paper 后中间显示远程 PDF/HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
-- [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口。
+- [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
 - [x] 论文库表格：虚拟节点 `motif:library`、`paper_list`、表头排序、双向滚动。
 - [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）。
+- [x] 后台任务条（左下角）：下载 / 入库 / 导入导出等长操作进度。
 
 验收标准：
 
@@ -71,9 +73,10 @@
 - [x] 中间栏预览仍可用 catalog 远程 `pdf_url` / `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
-- [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`；文件树眼睛 / Library 批量解析。
+- [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发；无独立眼睛图标）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误行内展示；重复不覆盖用户 `NOTES.md`。
+- [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
 
 ### 未完成
 
@@ -193,7 +196,7 @@
 
 - Zotero/BibTeX 批量导入。
 - 浏览器插件，一键收集网页和论文。
-- **PDF 划词提问**（选区/双击/悬停 → 迷你问答 → `asks/*.json` → 页边圆片）；设计见 [`pdf-ask.md`](pdf-ask.md)。
+- ~~**PDF 划词提问** MVP~~ ✅（选区/框选/双击/悬停 → 迷你问答 → `asks/*.json` → 锚点对话图标；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、本地 PDF TextLayer 增强。
 - 完整 PDF 高亮、批注、摘录同步（`highlights.md`；可与划词提问互导）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。
@@ -234,7 +237,10 @@
 - [x] arXiv/标识符精确入库（魔棒 + Translator + catalog + 默认 PDF/LaTeX）。
 - [x] 论文库 UI：`paper_list` + Library 虚拟节点 + 表头排序 + 双向滚动。
 - [x] 缺失资源补下：单篇 Download + Library 批量 Download（`paper_download_assets`）。
-- [x] 无 TeX 正文：下载后 liteparse → `PAPER.md`；`paper_parse_body`；眼睛 / Library 批量解析。
+- [x] 无 TeX 正文：下载后 liteparse → `PAPER.md`；`paper_parse_body`（Download 路径内）。
+- [x] 文件树：Finder 显示、删除 + `paper_delete`、左右侧栏隔离。
+- [x] PDF 缩放（工具栏 / `⌘`+滚轮）。
+- [x] PDF 划词提问 MVP（M1–M4；见 [`pdf-ask.md`](pdf-ask.md)）。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。
@@ -244,7 +250,7 @@
 ### 中期优先级 P1
 
 - [ ] 本地 PDF importer 与 metadata 确认面板。
-- [x] Catalog 权威存储 + `paper_list` / `paper_get` / 入库写路径（FTS / 双链缓存表仍待）。
+- [x] Catalog 权威存储 + `paper_list` / `paper_get` / `paper_delete` / 入库写路径（FTS / 双链缓存表仍待）。
 - [x] Library BibTeX 导入/导出（Translator `/import` `/export`）。
 - [ ] `catalog:export_papers_md`（Markdown 表）。
 - [ ] `[[` 补全与 Plate wikilink 内联节点。
@@ -265,7 +271,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - [ ] Zotero/BibTeX 迁移工具。
 - [ ] 浏览器插件与网页 importer。
-- [ ] PDF 划词提问（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 页边圆片 + ACP）。
+- [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 锚点图标 + ACP；M5 增强仍待）。
 - [ ] PDF/HTML 标注系统（`highlights.md`）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] iPadOS 文件系统与触控布局适配。

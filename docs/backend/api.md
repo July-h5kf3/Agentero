@@ -559,7 +559,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `paper_parse_body`（已落地）
 
-对**无本地 TeX** 的 paper，用 liteparse 从本地 PDF 生成 `{paper}/PAPER.md`。用于文件树眼睛图标与 Library 批量解析。
+对**无本地 TeX** 的 paper，用 liteparse 从本地 PDF 生成 `{paper}/PAPER.md`。在 `paper_download_assets` / `lookup_import` 下载后自动触发，亦可手动 `paper_parse_body`（UI 无独立眼睛图标）。
 
 - **参数**（invoke 字段名 `args`）：
   ```ts
@@ -1221,8 +1221,10 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `open_vault` | Open Vault… | `⌘O` | 前端监听 |
 | `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
 | `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
-| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听 |
-| `toggle_chat` | Toggle Chat | `⌘L` | 前端监听 |
+| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
+| `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
+
+前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
 
 ## 4. 数据模型
 

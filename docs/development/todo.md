@@ -30,9 +30,9 @@
    - [x] 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
    - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets` / `paper_parse_body`。
    - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
-   - [x] 文件树：paper 行缺 PDF 或 arXiv 缺 TeX → Download。
-   - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`；无 `PAPER.md` 时行尾眼睛手动解析。
-   - [x] Library 行：库内任一篇仍缺资源 → 批量 Download；需 `PAPER.md` → 批量 Parse（眼睛）。
+   - [x] 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 原因）。
+   - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`（Download 路径内；无独立眼睛图标）。
+   - [x] Library 行：库内任一篇仍缺资源 → 批量 Download。
    - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
 2c. **论文库表格 UI** ✅
@@ -40,6 +40,17 @@
    - [x] 表头排序；横向/纵向滚动。
    - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
    - [x] Library 行批量补资源（与 2b 联动）。
+
+2d. **文件树与侧栏 UX** ✅
+   - [x] 在 Finder 中显示：双击 / 右键 / `⌥⌘R`（`revealItemInDir`）。
+   - [x] 删除：右键 / `⌘⌫`；确认；`papers/` 下同步 `paper_delete`。
+   - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
+   - [x] 后台任务条（下载 / 入库 / 导入导出）。
+
+2e. **PDF 阅读增强** 🟡
+   - [x] 缩放：工具栏 +/- / 重置；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）。
+   - [x] 划词提问 MVP：M1–M4（见 3. PDF 划词提问）。
+   - [ ] 本地 PDF 直接预览（非仅远程 `pdf_url`）。
 
 3. **Agent 工作流入口**
    - 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。

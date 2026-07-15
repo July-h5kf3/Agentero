@@ -54,7 +54,7 @@
 
 | 能力 | Frontend | Host (Rust) |
 |---|---|---|
-| 文件树展示/交互 | `FileTree` + 可伸缩侧边栏；展开/选中/打开文件 | `plugin-dialog` 选目录 + `plugin-fs` `readDir`/`readTextFile`（监听变化后续） |
+| 文件树展示/交互 | `FileTree` + 可伸缩侧边栏；展开/选中/打开；Finder 显示；删除 | `plugin-dialog` 选目录 + `plugin-fs` `readDir`/`readTextFile`/`writeTextFile`/`mkdir`/`remove`；`plugin-opener` `revealItemInDir`；`paper_delete` |
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
 | 图谱 | `react-force-graph-2d`，嵌在 Backlinks 右侧栏下方 | `graph_get_graph` 输出 nodes/edges |
@@ -115,26 +115,29 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 模块 | 路径 | 说明 |
 |---|---|---|
-| 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx` |
-| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree` / `FileTreeFolder` / `FileTreeFile` |
-| Vault IO | `src/lib/vault.ts` | 选目录、建树、读文本文件；浏览器下提供 demo vault |
+| 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx`；左右侧栏 **collapsible 常驻** + `preserve-pixel-size` |
+| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 双击 / 快捷键 |
+| Vault IO | `src/lib/vault.ts` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/reveal.ts` 系统文件管理器定位 |
+| Catalog 删除 | Host `paper_delete` | 删除 paper 或组织目录下 catalog 行（`path` / `path/%`） |
 
 **交互（当前实现）**
 
-1. 左侧可拖拽伸缩（可折叠）侧边栏展示 Vault 文件树。  
+1. 左侧可拖拽伸缩（可折叠）侧边栏展示 Vault 文件树；右侧 Agent/Backlinks 同为 collapsible 常驻面板（避免条件卸载冲掉折叠态）。  
 2. 「Open vault…」通过 `@tauri-apps/plugin-dialog` 选择本地文件夹。  
 3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.motif` 等。  
-4. 点击文本类文件（`.md` / `.json` / `.txt` 等）用 `readTextFile` 载入中间 Markdown 面板，右侧 Plate 预览同步更新。  
-5. 非 Tauri 环境（纯浏览器 `pnpm dev`）使用内置 **demo vault** 演示结构；真实读盘需 `pnpm tauri dev`。  
-6. 最近 Vault 路径暂存 `localStorage`（后续迁到 `tauri-plugin-store`）。
+4. 点击文本类文件用 `readTextFile` 载入中间 Markdown 面板（Plate WYSIWYG）；写回 `writeTextFile`。  
+5. 双击 / 右键 / `⌥⌘R`：`revealItemInDir` 在 Finder 中显示；右键 / `⌘⌫`：确认后 `remove` + 可选 `paper_delete`。  
+6. 非 Tauri 环境（纯浏览器 `pnpm dev`）能力受限；真实读盘需 `pnpm tauri dev`。  
+7. 最近 Vault 路径暂存 `localStorage`（后续迁到 `tauri-plugin-store`）。
 
 **权限（`src-tauri/capabilities/default.json`）**
 
-- `fs:default` + `fs:allow-read-dir` / `fs:allow-read-text-file` / `fs:allow-stat` / `fs:allow-exists`
-- `fs:scope` 允许：`$HOME/**`、`$DOCUMENT/**`、`$DESKTOP/**`、`$DOWNLOAD/**`（用户自选 Vault 落在这些目录下可读）
+- `fs:default` + `fs:allow-read-dir` / `fs:allow-read-text-file` / `fs:allow-write-text-file` / `fs:allow-mkdir` / `fs:allow-remove` / `fs:allow-stat` / `fs:allow-exists`
+- `fs:scope` 允许：`$HOME/**`、`$DOCUMENT/**`、`$DESKTOP/**`、`$DOWNLOAD/**`
+- `opener:default`（含 `revealItemInDir`）
 - `dialog:default` 打开文件夹对话框
 
-**未做（后续）**：写回磁盘、文件监听热更新、按 Vault 白名单动态收紧 scope、Zustand 全局状态。
+**未做（后续）**：文件监听热更新、按 Vault 白名单动态收紧 scope、Zustand 全局状态。
 
 ### 3.3 Markdown 编辑与预览
 
@@ -171,11 +174,12 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
 | 中间栏切换 | `ViewModeToggle`；URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
 | arXiv 资源 | `pdf` / `html` / `abs` / `e-print` 规范 URL |
+| PDF 划词提问 | **MVP 已落地**：`src/lib/pdf-ask/` + `PdfViewer` 交互层；`asks/*.json`；ACP 流式 |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；手动 `paper_parse_body`；文件树眼睛 / Library 批量。有 TeX 不自动生成。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 单一图标（无独立眼睛）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
@@ -186,9 +190,9 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - 隐私：云端 MinerU 需上传 PDF，首次启用时提示；默认本地解析不外传数据。
 - arXiv 入库在无 LaTeX/HTML 时复用同一 `PdfParser` 做兜底解析。
 
-> MVP 阅读器以审阅和定位为主，不实现完整批注系统。
+> MVP 阅读器以审阅、定位与就地提问为主，不实现完整 Hypothesis 式批注系统。
 
-**PDF 划词提问（设计中）**：选区 / 双击 / 悬停 → 迷你问答卡 → `papers/<id>/asks/*.json` → 页边圆片回访。复用 TextLayer + ACP BYOA，不写入 PDF 二进制。详见 [`pdf-ask.md`](pdf-ask.md)。
+**PDF 划词提问（MVP 已落地）**：选区 / 框选 / 双击 / 悬停 → 迷你问答卡 → `papers/<id>/asks/*.json` → 锚点对话图标回访。复用 TextLayer + ACP BYOA，不写入 PDF 二进制。详设与分期见 [`pdf-ask.md`](pdf-ask.md)。
 
 ### 3.5 关系图谱
 
@@ -223,7 +227,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 
 | 插件 | 用途 |
 |---|---|
-| `tauri-plugin-fs` | 读 Vault 目录树与文本文件（**已用于文件树**）；写/监听后续 |
+| `tauri-plugin-fs` | 读/写 Vault 目录树与文本文件、mkdir、remove（**已用于文件树**）；监听热更新后续 |
 | `tauri-plugin-dialog` | 选择 Vault 文件夹（**已用于 Open vault**） |
 | `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充；当前最近路径仍用 localStorage） |
 | `tauri-plugin-opener` | 打开外部链接（已配置） |
@@ -372,7 +376,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 **PAPER.md 生成策略**（魔棒路径已部分落地）：
 - `papers/<id>/source/` 存 PDF / 可选 LaTeX；Agent 优先读 `.tex`。
-- **无本地 TeX**：在 PDF（及 e-print 尝试）**下载之后**，Host 用 **liteparse** 写 `PAPER.md`，并更新 catalog `body_source` / `body_quality`；亦可 `paper_parse_body` / 文件树眼睛 / Library 批量。
+- **无本地 TeX**：在 PDF（及 e-print 尝试）**下载之后**，Host 用 **liteparse** 写 `PAPER.md`，并更新 catalog `body_source` / `body_quality`；亦可 `paper_parse_body`（Download 路径内触发）。
 - **有 TeX**：不自动生成 `PAPER.md`。
 - 可选后续：LaTeX→Markdown（pandoc）、arXiv HTML DOM→Markdown、可插拔 MinerU。
 - `PAPER.md` 是派生文件，可被删除或重建；`source/` 中的原始文件才是归档事实来源。
@@ -673,7 +677,7 @@ tempfile = "3"
 
 | Roadmap 版本 | 技术重点 |
 |---|---|
-| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes 视图已接入；仍需补 Create Vault 初始化与文件监听。 |
+| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes、Library 表、左右侧栏 collapsible 隔离；文件监听仍待。 |
 | V0.2 | arXiv importer 仍待实现；当前仅有 arXiv URL 推导、metadata 读取和 demo paper 数据。 |
 | V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread（历史、恢复、模型、effort、Fast、YOLO）；注册表、探测、`agent_run_once`、流式 UI、Sources、`@` / `$` 上下文已接入；workflow prompt、逐项权限确认、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
