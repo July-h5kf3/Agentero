@@ -16,6 +16,10 @@
 		},
 		"confirmClose": {
 			"label": "Confirm before quit"
+		},
+		"downloadFulltextToLocal": {
+			"label": "Also download when a preview URL exists",
+			"hint": "When adding papers by identifier: items with no PDF/HTML preview URL are always downloaded to source/ when possible (so you can still open them). Turn this on to also save a local copy even when a remote preview link is available. Off by default."
 		}
 	},
 	"appearance": {

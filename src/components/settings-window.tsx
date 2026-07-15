@@ -268,7 +268,20 @@ function GeneralPane({
 						onCheckedChange={(v) => patch({ confirmBeforeClose: v })}
 					/>
 				</SettingsRow>
+				<SettingsRow
+					label={t("general.downloadFulltextToLocal.label")}
+					htmlFor="download-fulltext-local"
+				>
+					<Switch
+						id="download-fulltext-local"
+						checked={settings.downloadFulltextToLocal}
+						onCheckedChange={(v) => patch({ downloadFulltextToLocal: v })}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.downloadFulltextToLocal.hint")}
+			</p>
 		</>
 	);
 }

@@ -12,18 +12,47 @@ import { readVaultFile } from "@/lib/vault";
  *
  * PDF/HTML viewers use **remote URLs only** (no local download / vault file read).
  */
+/** Creator from Translator / Zotero item mapping. */
+export type PaperCreator = {
+	firstName?: string;
+	lastName?: string;
+	name?: string;
+	creatorType?: string;
+};
+
+/**
+ * Paper metadata: catalog.sqlite row (see docs/backend/catalog.md).
+ * Magic-wand / Translator results map **directly** into these fields.
+ */
 export type PaperMetadata = {
 	id: string;
 	/** Vault-relative paper folder path when known (catalog). */
 	path?: string;
 	type: "arxiv" | "pdf" | "html" | "doi" | "other";
 	title: string;
+	/** Display names */
 	authors: string[];
-	year: number;
+	/** Full creators (roles preserved from Translator) */
+	creators?: PaperCreator[];
+	year?: number;
+	/** Raw date string from Translator */
+	date?: string;
 	abstract?: string;
 	tags: string[];
 	arxiv_id?: string;
 	doi?: string;
+	isbn?: string;
+	issn?: string;
+	pmid?: string;
+	/** Journal / proceedings / book title */
+	publication?: string;
+	volume?: string;
+	issue?: string;
+	pages?: string;
+	publisher?: string;
+	place?: string;
+	series?: string;
+	language?: string;
 	/** Remote PDF URL only (e.g. https://arxiv.org/pdf/1706.03762) */
 	pdf_url?: string;
 	/** Remote HTML URL only (e.g. https://arxiv.org/html/1706.03762) */
@@ -33,6 +62,13 @@ export type PaperMetadata = {
 	body_quality?: "high" | "medium" | "low";
 	bibtex_key?: string;
 	citation_count?: number;
+	/** Translator itemType, e.g. journalArticle */
+	zotero_item_type?: string;
+	/** libraryCatalog, e.g. DOI.org (Crossref) */
+	meta_source?: string;
+	/** Translator extra residue */
+	extra?: string;
+	summary?: string;
 	status: "pending" | "importing" | "completed" | "failed";
 	added_at: string;
 	updated_at: string;
@@ -73,6 +109,99 @@ export function isUnderPapers(path: string | null): boolean {
 	if (!path || isPapersRoot(path)) return false;
 	const norm = normalizePath(path);
 	return /(^|\/)papers\//i.test(norm);
+}
+
+/**
+ * Vault-relative parent for magic-wand import: `papers` or `papers/<org>/…`.
+ * Never returns a paper folder itself (uses parent of paper when selection is inside one).
+ *
+ * @see docs/backend/identifier-lookup.md §1.2
+ */
+export function resolvePapersParentDir(
+	vaultRoot: string | null,
+	selectedPath: string | null,
+	tree: Array<{
+		path: string;
+		kind: "file" | "directory";
+		children?: Array<{
+			path: string;
+			kind: "file" | "directory";
+			name: string;
+			children?: unknown[];
+		}>;
+	}>,
+): string {
+	const papersRel = "papers";
+	if (!vaultRoot) return papersRel;
+
+	const rootNorm = normalizePath(vaultRoot);
+	const toRel = (abs: string): string => {
+		const n = normalizePath(abs);
+		if (n === rootNorm) return "";
+		const prefix = `${rootNorm}/`;
+		if (n.startsWith(prefix)) return n.slice(prefix.length);
+		// Already vault-relative?
+		if (n === "papers" || n.startsWith("papers/")) return n;
+		return n;
+	};
+
+	const findNode = (
+		nodes: typeof tree,
+		absPath: string,
+	): (typeof tree)[0] | null => {
+		const key = normalizePath(absPath).toLowerCase();
+		for (const n of nodes) {
+			if (normalizePath(n.path).toLowerCase() === key) return n;
+			if (n.children?.length) {
+				const hit = findNode(n.children as typeof tree, absPath);
+				if (hit) return hit;
+			}
+		}
+		return null;
+	};
+
+	const paperFolders = collectPaperFoldersFromTree(tree);
+	if (!selectedPath) return papersRel;
+
+	const paperRoot = paperDirFromPath(selectedPath, paperFolders);
+	if (paperRoot) {
+		const parentAbs = paperRoot.replace(/[\\/][^\\/]+$/, "");
+		const rel = toRel(parentAbs);
+		if (
+			!rel ||
+			rel === "papers" ||
+			isPapersRoot(rel) ||
+			isPapersRoot(parentAbs)
+		) {
+			return papersRel;
+		}
+		if (rel.startsWith("papers/") || isUnderPapers(parentAbs)) {
+			return rel.replace(/\\/g, "/");
+		}
+		return papersRel;
+	}
+
+	const node = findNode(tree, selectedPath);
+	if (node?.kind === "directory") {
+		const rel = toRel(selectedPath);
+		if (isPapersRoot(selectedPath) || rel === "papers" || isPapersRoot(rel)) {
+			return papersRel;
+		}
+		if (isUnderPapers(selectedPath) || rel.startsWith("papers/")) {
+			return rel.replace(/\\/g, "/");
+		}
+	} else {
+		const parentAbs = selectedPath.replace(/[\\/][^\\/]+$/, "");
+		if (parentAbs && parentAbs !== selectedPath) {
+			const rel = toRel(parentAbs);
+			if (isPapersRoot(parentAbs) || rel === "papers") return papersRel;
+			if (isUnderPapers(parentAbs) || rel.startsWith("papers/")) {
+				return rel.replace(/\\/g, "/");
+			}
+		}
+	}
+
+	return papersRel;
 }
 
 /** Whether direct children indicate a paper folder (minimal unit). */

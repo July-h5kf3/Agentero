@@ -8,6 +8,18 @@
 		"needsVault": "Open a vault before creating files.",
 		"alreadyExists": "「{{name}}」 already exists."
 	},
+	"lookup": {
+		"magicWand": "Add by identifier",
+		"placeholder": "arXiv URL or ID…",
+		"add": "Add",
+		"adding": "Adding…",
+		"addTo": "Add to {{path}}",
+		"desktopOnly": "Adding papers requires the desktop app.",
+		"invalidId": "Could not parse an arXiv identifier.",
+		"unsupportedId": "Only arXiv URL or ID is supported for now.",
+		"fetchFailed": "Failed to fetch metadata.",
+		"needsVault": "Open a vault first."
+	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",
 		"none": "No backlinks",

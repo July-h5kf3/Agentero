@@ -8,6 +8,18 @@
 		"needsVault": "请先打开知识库再创建文件。",
 		"alreadyExists": "「{{name}}」已存在。"
 	},
+	"lookup": {
+		"magicWand": "按标识符添加论文",
+		"placeholder": "arXiv 链接或编号…",
+		"add": "添加",
+		"adding": "添加中…",
+		"addTo": "加入 {{path}}",
+		"desktopOnly": "添加论文需要桌面应用。",
+		"invalidId": "无法识别 arXiv 标识符。",
+		"unsupportedId": "目前仅支持 arXiv 链接或编号。",
+		"fetchFailed": "获取元数据失败。",
+		"needsVault": "请先打开知识库。"
+	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",
 		"none": "暂无反向链接",

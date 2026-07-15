@@ -36,6 +36,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
+import { addPaperByIdentifier } from "@/lib/lookup";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -45,6 +46,7 @@ import {
 	type PaperMetadata,
 	paperDirFromPath,
 	paperRemoteAssetsFromMetadata,
+	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
@@ -525,6 +527,11 @@ export default function App() {
 		})();
 	}, [vaultPath, refreshTree]);
 
+	const lookupParentDir = useMemo(
+		() => resolvePapersParentDir(vaultPath, selectedPath, tree),
+		[vaultPath, selectedPath, tree],
+	);
+
 	const openSettings = useCallback((section: SettingsSection = "general") => {
 		setSettingsSection(section);
 		setSettingsOpen(true);
@@ -673,6 +680,28 @@ export default function App() {
 		// Mode is refined after metadata loads (pdf → html → notes).
 		setCenterMode("pdf");
 	}, []);
+
+	const handleLookupSubmit = useCallback(
+		async (text: string) => {
+			if (!vaultPath) {
+				throw new Error(t("sidebar:lookup.needsVault"));
+			}
+			const { paperDir } = await addPaperByIdentifier({
+				vaultRoot: vaultPath,
+				parentDir: lookupParentDir,
+				text,
+				settings,
+			});
+			await refreshTree(vaultPath);
+			try {
+				await rebuildWikiIndex(vaultPath);
+			} catch {
+				// ignore
+			}
+			openPaper(paperDir);
+		},
+		[vaultPath, lookupParentDir, settings, refreshTree, openPaper, t],
+	);
 
 	const openPath = useCallback(
 		async (absoluteOrDemoPath: string) => {
@@ -1112,7 +1141,8 @@ export default function App() {
 										title={vaultDisplayName(vaultPath)}
 										onNewFile={() => startCreate("file")}
 										onNewFolder={() => startCreate("folder")}
-										onRefresh={handleRefresh}
+										lookupParentDir={lookupParentDir}
+										onLookupSubmit={handleLookupSubmit}
 										busy={busy || Boolean(createDraft)}
 										error={error}
 										isDemo={isDemo}

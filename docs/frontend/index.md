@@ -19,7 +19,7 @@
 
 ## 布局模型
 
-- 左侧栏：Vault 文件树（新建文件 / 文件夹 / 刷新）与 paper 元信息。
+- 左侧栏：Vault 文件树（新建文件 / 文件夹）与 paper 元信息。
 - 中间栏：无 Vault 时为欢迎页（最近路径 + 打开 / 创建）；有 Vault 时为 Markdown / PDF / HTML。
 - 右侧 Preview：Markdown 渲染预览或当前 paper 的 `NOTES.md`。
 - 可选右侧栏：Agent 或 Backlinks。

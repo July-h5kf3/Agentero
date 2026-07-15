@@ -16,6 +16,10 @@
 		},
 		"confirmClose": {
 			"label": "退出前确认"
+		},
+		"downloadFulltextToLocal": {
+			"label": "有预览链接时也下载到本地",
+			"hint": "用于魔棒等按标识符入库。若没有 PDF/HTML 预览链接，只要能解析到可下载地址就会写入 source/（否则无法预览）。开启本项后，即使已有远程预览链接，也会再存一份到本地。默认关闭。"
 		}
 	},
 	"appearance": {

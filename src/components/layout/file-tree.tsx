@@ -4,8 +4,8 @@ import {
 	FilePlus2,
 	FileText,
 	FolderPlus,
-	RefreshCw,
 	ScrollText,
+	WandSparkles,
 } from "lucide-react";
 import {
 	type ReactNode,
@@ -23,6 +23,12 @@ import {
 } from "@/components/ai-elements/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import {
 	Tooltip,
 	TooltipContent,
@@ -390,7 +396,9 @@ export function VaultSidebarHeader({
 	title,
 	onNewFile,
 	onNewFolder,
-	onRefresh,
+	/** Vault-relative papers parent, e.g. `papers` or `papers/nlp` */
+	lookupParentDir,
+	onLookupSubmit,
 	busy,
 	error,
 	isDemo,
@@ -398,12 +406,36 @@ export function VaultSidebarHeader({
 	title: string;
 	onNewFile: () => void;
 	onNewFolder: () => void;
-	onRefresh: () => void;
+	lookupParentDir: string;
+	onLookupSubmit: (text: string) => Promise<void>;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
 }) {
 	const { t } = useTranslation("sidebar");
+	const [wandOpen, setWandOpen] = useState(false);
+	const [lookupText, setLookupText] = useState("");
+	const [lookupBusy, setLookupBusy] = useState(false);
+	const [lookupError, setLookupError] = useState<string | null>(null);
+
+	const runLookup = async () => {
+		const text = lookupText.trim();
+		if (!text || lookupBusy) return;
+		setLookupBusy(true);
+		setLookupError(null);
+		try {
+			await onLookupSubmit(text);
+			setLookupText("");
+			setWandOpen(false);
+		} catch (e) {
+			setLookupError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLookupBusy(false);
+		}
+	};
+
+	const actionsDisabled = busy || isDemo || lookupBusy;
+
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div className="shrink-0">
@@ -411,26 +443,84 @@ export function VaultSidebarHeader({
 					className="bg-muted/20"
 					trailing={
 						<>
+							<Popover
+								open={wandOpen}
+								onOpenChange={(open) => {
+									setWandOpen(open);
+									if (!open) setLookupError(null);
+								}}
+							>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<PopoverTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label={t("lookup.magicWand")}
+												disabled={actionsDisabled}
+											>
+												<WandSparkles className="size-3.5" />
+											</Button>
+										</PopoverTrigger>
+									</TooltipTrigger>
+									<TooltipContent side="bottom">
+										{t("lookup.magicWand")}
+									</TooltipContent>
+								</Tooltip>
+								<PopoverContent
+									align="end"
+									side="bottom"
+									className="w-72 gap-2 p-2.5"
+								>
+									<form
+										className="flex flex-col gap-2"
+										onSubmit={(e) => {
+											e.preventDefault();
+											void runLookup();
+										}}
+									>
+										<p className="text-muted-foreground text-xs">
+											{t("lookup.addTo", { path: lookupParentDir })}
+										</p>
+										<Input
+											value={lookupText}
+											onChange={(e) => setLookupText(e.target.value)}
+											placeholder={t("lookup.placeholder")}
+											disabled={lookupBusy}
+											className="h-8 text-xs"
+										/>
+										{lookupError ? (
+											<p className="text-destructive text-xs leading-snug">
+												{lookupError}
+											</p>
+										) : null}
+										<div className="flex justify-end">
+											<Button
+												type="submit"
+												size="sm"
+												className="h-7 px-2.5 text-xs"
+												disabled={lookupBusy || !lookupText.trim()}
+											>
+												{lookupBusy ? t("lookup.adding") : t("lookup.add")}
+											</Button>
+										</div>
+									</form>
+								</PopoverContent>
+							</Popover>
 							<IconAction
 								label={t("fileTree.newFile")}
 								onClick={onNewFile}
-								disabled={busy || isDemo}
+								disabled={actionsDisabled}
 							>
 								<FilePlus2 className="size-3.5" />
 							</IconAction>
 							<IconAction
 								label={t("fileTree.newFolder")}
 								onClick={onNewFolder}
-								disabled={busy || isDemo}
+								disabled={actionsDisabled}
 							>
 								<FolderPlus className="size-3.5" />
-							</IconAction>
-							<IconAction
-								label={t("fileTree.refresh")}
-								onClick={onRefresh}
-								disabled={busy || isDemo}
-							>
-								<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
 							</IconAction>
 						</>
 					}
