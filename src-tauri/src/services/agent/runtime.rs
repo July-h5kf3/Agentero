@@ -20,10 +20,14 @@ impl AgentRunController {
 
     pub fn register(&self, session_id: &str) -> Result<watch::Receiver<bool>, AppError> {
         let (sender, receiver) = watch::channel(false);
-        self.cancellations
+        let mut cancellations = self
+            .cancellations
             .lock()
-            .map_err(|_| AppError::message("agent run controller lock poisoned"))?
-            .insert(session_id.to_string(), sender);
+            .map_err(|_| AppError::message("agent run controller lock poisoned"))?;
+        if cancellations.contains_key(session_id) {
+            return Err(AppError::message("agent run is already active"));
+        }
+        cancellations.insert(session_id.to_string(), sender);
         Ok(receiver)
     }
 
@@ -68,5 +72,15 @@ mod tests {
 
         controller.finish("session-1").expect("finish run");
         assert!(controller.cancel("session-1").is_err());
+    }
+
+    #[test]
+    fn duplicate_registration_does_not_replace_the_active_run() {
+        let controller = AgentRunController::new();
+        let receiver = controller.register("session-1").expect("register run");
+
+        assert!(controller.register("session-1").is_err());
+        controller.cancel("session-1").expect("cancel original run");
+        assert!(*receiver.borrow());
     }
 }

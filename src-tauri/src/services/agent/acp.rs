@@ -559,7 +559,19 @@ pub async fn run_once(
     auto_approve: bool,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
-    let skill_instructions = load_skill_instructions(&skill_ids, vault_path.as_deref())?;
+    let skill_instructions = match load_skill_instructions(&skill_ids, vault_path.as_deref()) {
+        Ok(instructions) => instructions,
+        Err(error) => {
+            let _ = app.emit(
+                "agent:failed",
+                AgentFailedEvent {
+                    session_id,
+                    error: error.to_string(),
+                },
+            );
+            return Err(error);
+        }
+    };
     let full_prompt = format!(
         "{}{}",
         build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
@@ -570,7 +582,19 @@ pub async fn run_once(
         .filter(|p| p.is_dir())
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    let acp = to_acp_agent(&desc)?;
+    let acp = match to_acp_agent(&desc) {
+        Ok(agent) => agent,
+        Err(error) => {
+            let _ = app.emit(
+                "agent:failed",
+                AgentFailedEvent {
+                    session_id,
+                    error: error.to_string(),
+                },
+            );
+            return Err(error);
+        }
+    };
     let content_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     let thought_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
     let content_for_notif = content_buf.clone();

@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
@@ -19,6 +20,7 @@ use tokio::sync::watch;
 
 const CLIENT_INFO: &str = "motif";
 const MOTIF_THREAD_INDEX_PATH: &str = ".motif/agent-sessions/codex.json";
+const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +106,7 @@ impl CodexClient {
         let mut process = Command::new(command);
         process
             .args(&args)
+            .kill_on_drop(true)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
@@ -175,6 +178,16 @@ impl CodexClient {
     }
 
     async fn request(&mut self, method: &str, params: Value) -> Result<Value, AppError> {
+        match tokio::time::timeout(RPC_TIMEOUT, self.request_inner(method, params)).await {
+            Ok(result) => result,
+            Err(_) => Err(AppError::message(format!(
+                "Codex App Server request `{method}` timed out after {}s",
+                RPC_TIMEOUT.as_secs()
+            ))),
+        }
+    }
+
+    async fn request_inner(&mut self, method: &str, params: Value) -> Result<Value, AppError> {
         let id = self.next_id;
         self.next_id += 1;
         self.write(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
@@ -240,6 +253,30 @@ impl CodexClient {
     async fn shutdown(mut self) {
         let _ = self.child.kill().await;
         let _ = self.child.wait().await;
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum TurnNotification {
+    Continue,
+    Completed,
+    Interrupted,
+    Failed(String),
+}
+
+fn turn_completion(params: &Value) -> TurnNotification {
+    let turn = params.get("turn").unwrap_or(params);
+    match string(turn, &["status"]).as_deref() {
+        Some("failed") => TurnNotification::Failed(
+            turn.get("error")
+                .and_then(|error| string(error, &["message"]))
+                .unwrap_or_else(|| "Codex turn failed".to_string()),
+        ),
+        Some("interrupted") => TurnNotification::Interrupted,
+        Some("completed") | None => TurnNotification::Completed,
+        Some(status) => TurnNotification::Failed(format!(
+            "Codex turn ended with unexpected status `{status}`"
+        )),
     }
 }
 
@@ -607,7 +644,7 @@ async fn run_codex_turn_inner(
     let mut finished = false;
     loop {
         for (method, params) in client.drain_notifications() {
-            if handle_notification(
+            match handle_notification(
                 app,
                 thread_id,
                 &mut content,
@@ -615,8 +652,17 @@ async fn run_codex_turn_inner(
                 &method,
                 &params,
             )? {
-                finished = true;
-                break;
+                TurnNotification::Continue => {}
+                TurnNotification::Completed => {
+                    finished = true;
+                    break;
+                }
+                TurnNotification::Interrupted => {
+                    cancelled = true;
+                    finished = true;
+                    break;
+                }
+                TurnNotification::Failed(error) => return Err(AppError::message(error)),
             }
         }
         if finished {
@@ -637,15 +683,19 @@ async fn run_codex_turn_inner(
             }
             message = client.next_message() => {
                 let value = message?;
-                let method = value.get("method").and_then(Value::as_str).map(str::to_string);
-                let is_completed = method.as_deref() == Some("turn/completed");
                 client.handle_incoming(value).await?;
                 for (method, params) in client.drain_notifications() {
-                    if handle_notification(app, thread_id, &mut content, &mut reasoning, &method, &params)? {
-                        finished = true;
+                    match handle_notification(app, thread_id, &mut content, &mut reasoning, &method, &params)? {
+                        TurnNotification::Continue => {}
+                        TurnNotification::Completed => finished = true,
+                        TurnNotification::Interrupted => {
+                            cancelled = true;
+                            finished = true;
+                        }
+                        TurnNotification::Failed(error) => return Err(AppError::message(error)),
                     }
                 }
-                if is_completed || finished { break; }
+                if finished { break; }
             }
         }
     }
@@ -705,7 +755,7 @@ fn handle_notification(
     reasoning: &mut String,
     method: &str,
     params: &Value,
-) -> Result<bool, AppError> {
+) -> Result<TurnNotification, AppError> {
     match method {
         "item/agentMessage/delta" => {
             let delta = string(params, &["delta"]).unwrap_or_default();
@@ -764,10 +814,10 @@ fn handle_notification(
                 }
             }
         }
-        "turn/completed" => return Ok(true),
+        "turn/completed" => return Ok(turn_completion(params)),
         _ => {}
     }
-    Ok(false)
+    Ok(TurnNotification::Continue)
 }
 
 pub async fn codex_list_threads(
@@ -935,5 +985,29 @@ pub async fn warm_codex(
             usage_size: None,
             error: Some(error.to_string()),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{turn_completion, TurnNotification};
+    use serde_json::json;
+
+    #[test]
+    fn maps_codex_turn_completion_statuses() {
+        assert_eq!(
+            turn_completion(&json!({ "turn": { "status": "completed" } })),
+            TurnNotification::Completed
+        );
+        assert_eq!(
+            turn_completion(&json!({ "turn": { "status": "interrupted" } })),
+            TurnNotification::Interrupted
+        );
+        assert_eq!(
+            turn_completion(&json!({
+                "turn": { "status": "failed", "error": { "message": "boom" } }
+            })),
+            TurnNotification::Failed("boom".to_string())
+        );
     }
 }
