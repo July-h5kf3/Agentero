@@ -1434,6 +1434,7 @@ export function AgentPanel({
 				) : null}
 				<PromptInput
 					className="w-full rounded-xl border-border bg-background shadow-none"
+					inputGroupClassName="overflow-visible"
 					onSubmit={({ text }) => {
 						void send(text);
 						setComposerText("");

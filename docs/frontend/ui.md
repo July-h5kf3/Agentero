@@ -86,7 +86,7 @@
 | 结构 | 会话标签 · Agent 选择 / 新建 / 历史操作 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
-| 输入 | 单层 Composer：当前文件、`@` 文件提及和 `$` 本机技能显示为可移除 context chip；YOLO 默认关闭；`↵` 发送 / `⇧↵` 换行 |
+| 输入 | 单层 Composer：当前文件、`@` 文件提及和 `$` 本机技能显示为可移除 context chip；`/` 文本原样透传给 ACP Agent；YOLO 默认关闭；`↵` 发送 / `⇧↵` 换行 |
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
@@ -110,6 +110,8 @@ PromptInput → Body / Footer / Submit
 **上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 **本机技能**：输入 `$` 可筛选 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills` 中的 `SKILL.md`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小并将内容注入本次 ACP prompt。该路径为 ACP 兼容实现，未来的 Codex App Server provider 可改用原生 `skills/list` 和结构化 `SkillInput`。
+
+**斜杠命令**：Motif 不实现自己的 `/` 命令菜单，输入内容会原样透传给 ACP Agent。Codex 原生的线程级命令需要后续切换到 Codex App Server provider 才能完整支持。
 
 **YOLO**：Composer 底栏的 YOLO 开关只作用于下一次运行。默认关闭时，Motif 取消 ACP 的权限请求；开启后自动选择 Agent 给出的第一个权限选项。逐项权限确认需要由保持 ACP 会话的后续实现提供。
 

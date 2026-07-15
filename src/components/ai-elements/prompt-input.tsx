@@ -505,6 +505,8 @@ export type PromptInputProps = Omit<
 	maxFiles?: number;
 	// bytes
 	maxFileSize?: number;
+	/** Class applied to the inner InputGroup. */
+	inputGroupClassName?: string;
 	onError?: (err: {
 		code: "max_files" | "max_file_size" | "accept";
 		message: string;
@@ -523,6 +525,7 @@ export const PromptInput = ({
 	syncHiddenInput,
 	maxFiles,
 	maxFileSize,
+	inputGroupClassName,
 	onError,
 	onSubmit,
 	children,
@@ -934,7 +937,9 @@ export const PromptInput = ({
 				ref={formRef}
 				{...props}
 			>
-				<InputGroup className="overflow-hidden">{children}</InputGroup>
+				<InputGroup className={cn("overflow-hidden", inputGroupClassName)}>
+					{children}
+				</InputGroup>
 			</form>
 		</>
 	);
