@@ -31,12 +31,17 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),
             name: "Codex".to_string(),
-            description: "OpenAI Codex via official ACP adapter (`codex-acp`).".to_string(),
-            // Prefer global install: npm i -g @agentclientprotocol/codex-acp
-            command: "codex-acp".to_string(),
-            args: vec![],
-            detect_command: Some("codex-acp".to_string()),
-            install_hint: "npm i -g @agentclientprotocol/codex-acp  (needs Codex login)"
+            description:
+                "OpenAI Codex via the ACP adapter (started on demand with `npx`).".to_string(),
+            // The Codex CLI is the user-managed dependency. The adapter translates ACP
+            // requests to Codex App Server and is downloaded by npx only when needed.
+            command: "npx".to_string(),
+            args: vec![
+                "--yes".to_string(),
+                "@agentclientprotocol/codex-acp".to_string(),
+            ],
+            detect_command: Some("codex".to_string()),
+            install_hint: "Install Codex CLI and sign in; Motif starts its ACP adapter on demand."
                 .to_string(),
         },
         AgentTemplateInfo {

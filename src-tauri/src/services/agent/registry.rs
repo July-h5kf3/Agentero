@@ -5,6 +5,7 @@ use crate::models::agent::{
 };
 use crate::services::agent::discover::{probe_command, resolve_command};
 use crate::services::agent::templates::{catalog_templates, template_from_id, template_info};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -158,18 +159,39 @@ impl AgentRegistry {
             .filter(|t| t.id != "custom")
             .ok_or_else(|| AppError::message(format!("unknown catalog template: {template_id}")))?;
 
-        // Prefer existing registration for this template.
+        let env = catalog_env(&info);
+
+        // Prefer existing registration for this template. Built-in descriptors are owned by the
+        // catalog, so refresh their command when a release changes the launcher.
         {
             let state = self.snapshot()?;
             if let Some(existing) = state.agents.iter().find(|a| {
                 a.template.as_str() == template_id
                     || (a.command == info.command && a.args == info.args)
             }) {
-                if set_default {
-                    let _ = self.set_default(Some(existing.id.clone()));
-                    return self.get(&existing.id);
+                let needs_refresh = existing.command != info.command
+                    || existing.args != info.args
+                    || env
+                        .get("CODEX_PATH")
+                        .is_some_and(|path| existing.env.get("CODEX_PATH") != Some(path));
+                if !needs_refresh {
+                    if set_default {
+                        self.set_default(Some(existing.id.clone()))?;
+                        return self.get(&existing.id);
+                    }
+                    return Ok(existing.clone());
                 }
-                return Ok(existing.clone());
+
+                let agent = self.upsert(UpsertAgentRequest {
+                    id: Some(existing.id.clone()),
+                    name: info.name,
+                    template: Some(template_from_id(template_id)),
+                    command: info.command,
+                    args: info.args,
+                    env,
+                    set_default,
+                })?;
+                return self.get(&agent.id);
             }
         }
 
@@ -179,7 +201,7 @@ impl AgentRegistry {
             template: Some(template_from_id(template_id)),
             command: info.command,
             args: info.args,
-            env: Default::default(),
+            env,
             set_default,
         })?;
         self.get(&agent.id)
@@ -394,6 +416,16 @@ impl AgentRegistry {
         }
         Ok(agent)
     }
+}
+
+fn catalog_env(info: &crate::models::agent::AgentTemplateInfo) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    if info.id == AgentTemplate::CodexAcp.as_str() {
+        if let Some(path) = resolve_command("codex") {
+            env.insert("CODEX_PATH".to_string(), path.display().to_string());
+        }
+    }
+    env
 }
 
 fn stable_id_for(template: &AgentTemplate, command: &str, args: &[String]) -> String {

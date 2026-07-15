@@ -4,6 +4,7 @@ use crate::models::agent::{
     AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind, AgentToolEvent,
     AgentUsageEvent, ProbeResult, WarmResult,
 };
+use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use agent_client_protocol::schema::v1::{
     ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
@@ -15,20 +16,26 @@ use agent_client_protocol::schema::v1::{
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 fn to_acp_agent(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
-    let env: Vec<EnvVariable> = desc
-        .env
-        .iter()
+    let command = resolve_command(&desc.command).unwrap_or_else(|| PathBuf::from(&desc.command));
+    let mut child_env: HashMap<String, String> = desc.env.clone();
+    if !child_env.contains_key("PATH") {
+        if let Ok(path) = std::env::join_paths(path_entries()) {
+            child_env.insert("PATH".to_string(), path.to_string_lossy().to_string());
+        }
+    }
+    let env: Vec<EnvVariable> = child_env
+        .into_iter()
         .map(|(k, v)| EnvVariable::new(k.clone(), v.clone()))
         .collect();
 
-    let stdio = McpServerStdio::new(desc.name.clone(), PathBuf::from(&desc.command))
+    let stdio = McpServerStdio::new(desc.name.clone(), command)
         .args(desc.args.clone())
         .env(env);
     Ok(AcpAgent::new(McpServer::Stdio(stdio)))
