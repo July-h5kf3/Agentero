@@ -179,7 +179,7 @@ export async function parsePaperBody(opts: {
 	);
 	if (!result.ok || !result.data) {
 		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:fileTree.parseFailed"),
+			result.error?.message ?? i18n.t("sidebar:fileTree.downloadFailed"),
 		);
 	}
 	return result.data;

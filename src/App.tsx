@@ -45,11 +45,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
-import {
-	addPaperByIdentifier,
-	downloadPaperAssets,
-	parsePaperBody,
-} from "@/lib/lookup";
+import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -60,7 +56,6 @@ import {
 	type PaperMetadata,
 	paperDirFromPath,
 	paperNeedsAssetDownload,
-	paperNeedsBodyParse,
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
@@ -918,13 +913,7 @@ export default function App() {
 		const walk = (list: FileNode[]) => {
 			for (const n of list) {
 				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-					const rel = toVaultRelative(vaultPath, n.path)
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "");
-					const canFetchTex =
-						Boolean(rel && arxivPaperRelPaths.has(rel)) ||
-						Boolean(arxivPaperRelPaths.has(n.path.replace(/\\/g, "/")));
-					if (paperNeedsAssetDownload(n, { canFetchTex })) {
+					if (paperNeedsAssetDownload(n)) {
 						queue.push(n);
 					}
 				} else if (n.children?.length) {
@@ -942,62 +931,6 @@ export default function App() {
 				.replace(/^\/+|\/+$/g, "");
 			try {
 				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
-			} catch (e) {
-				errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
-			}
-		}
-		await refreshTree(vaultPath);
-		await refreshLibrary();
-		if (errors.length) {
-			setError(errors.slice(0, 3).join("; "));
-		}
-	}, [vaultPath, tree, arxivPaperRelPaths, refreshTree, refreshLibrary]);
-
-	/**
-	 * Manual parse: PDF → PAPER.md when no TeX (eye icon).
-	 */
-	const handleParsePaperBody = useCallback(
-		async (node: FileNode) => {
-			if (!vaultPath) return;
-			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
-			try {
-				await parsePaperBody({ vaultRoot: vaultPath, paperPath: rel });
-				await refreshTree(vaultPath);
-				await refreshLibrary();
-			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
-			}
-		},
-		[vaultPath, refreshTree, refreshLibrary],
-	);
-
-	/**
-	 * Library bulk parse: every paper with PDF, no TeX, no PAPER.md.
-	 */
-	const handleParseAllMissingBodies = useCallback(async () => {
-		if (!vaultPath) return;
-		const queue: FileNode[] = [];
-		const walk = (list: FileNode[]) => {
-			for (const n of list) {
-				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-					if (paperNeedsBodyParse(n)) {
-						queue.push(n);
-					}
-				} else if (n.children?.length) {
-					walk(n.children);
-				}
-			}
-		};
-		walk(tree);
-		if (!queue.length) return;
-
-		const errors: string[] = [];
-		for (const node of queue) {
-			const rel = toVaultRelative(vaultPath, node.path)
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			try {
-				await parsePaperBody({ vaultRoot: vaultPath, paperPath: rel });
 			} catch (e) {
 				errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
 			}
@@ -1509,8 +1442,6 @@ export default function App() {
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
-										onParsePaperBody={handleParsePaperBody}
-										onParseAllMissingBodies={handleParseAllMissingBodies}
 										arxivPaperRelPaths={arxivPaperRelPaths}
 									/>
 								</div>

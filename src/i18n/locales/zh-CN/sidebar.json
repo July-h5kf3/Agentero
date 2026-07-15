@@ -7,12 +7,14 @@
 		"invalidName": "名称无效，请勿使用路径分隔符。",
 		"needsVault": "请先打开知识库再创建文件。",
 		"alreadyExists": "「{{name}}」已存在。",
-		"downloadAssets": "下载 PDF（有 LaTeX 则一并下载）",
-		"downloadAllMissing": "下载全部缺失的 PDF / LaTeX",
+		"downloadAssets": "下载论文资源",
+		"downloadAllMissing": "下载全部不完整的论文资源",
 		"downloadFailed": "下载论文资源失败。",
-		"parseBody": "解析 PDF 生成 PAPER.md",
-		"parseAllMissing": "解析全部无 TeX 且缺 PAPER.md 的论文",
-		"parseFailed": "解析论文正文失败。"
+		"downloadReason": {
+			"noPdf": "缺少 PDF",
+			"noSource": "缺少 source/ 目录",
+			"noPaperMd": "缺少 PAPER.md"
+		}
 	},
 	"papersLibrary": {
 		"title": "论文库",

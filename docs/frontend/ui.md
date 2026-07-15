@@ -29,14 +29,12 @@
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
-- **Library 行 Download**：当库内**任一** paper 仍缺 PDF，或 arXiv 缺 TeX 时，Library 标题右侧显示 Download；点击**批量**对全部缺失项调用 `paper_download_assets`（逐篇，已有资源跳过）。
-- **Library 行 Parse（眼睛）**：当库内**任一** paper **有 PDF、无 TeX、无 `PAPER.md`** 时，Library 标题右侧另显示眼睛图标；点击**批量**对全部符合条件项调用 `paper_parse_body`（已有 `PAPER.md` 或已有 TeX 跳过）。
-- **Paper 行 Download**：单篇 paper 行最右侧在需要补资源时显示 `Download`：
-  - 本地**没有 PDF**，或**没有 `source/`** → 显示；
-  - 或可获取 TeX（catalog `arxiv_id` / `type=arxiv` / 文件夹名像 arXiv id）但本地**没有** `.tex`/`.ltx` → 显示；
-  - 点击后：先下 PDF → arXiv 尽量下 TeX → **仍无 TeX** 则 liteparse 写 `PAPER.md`；
-  - 已有 PDF + `source/`，且（非 arXiv 或已有 TeX）→ 不显示。
-- **Paper 行 Parse（眼睛）**：本地**有 PDF**、**无** `.tex`/`.ltx`、**无** `PAPER.md` 时，行尾显示眼睛图标 → `paper_parse_body`（liteparse → `PAPER.md`）。有 TeX 时不显示（Agent 可直接读 TeX）。可与 Download 同时出现（例如 PDF 已有但尚缺 PAPER.md）。
+- **Library 行 Download**：当库内**任一** paper 缺 PDF / `source/` / `PAPER.md` 时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
+- **Paper 行 Download**（无眼睛图标）：下列任一成立即显示，hover 列出原因：
+  - 本地**没有 PDF**；
+  - **没有 `source/`**；
+  - **没有 `PAPER.md`**；
+  - 点击后：PDF 写入 `source/` → arXiv 尽量下 TeX → **无 TeX** 时 liteparse 写 `PAPER.md`。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）

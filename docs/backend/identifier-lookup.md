@@ -72,11 +72,10 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 | **已有文件** | 跳过对应资源 |
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
-按需补下 / 解析：
-- **单篇 paper 行 Download**：缺 PDF、或无 `source/`、或 arXiv 可取 TeX 但缺本地 TeX → `paper_download_assets`（PDF → TeX → 无 TeX 则 `PAPER.md`）。
-- **单篇 paper 行眼睛**：有 PDF、无 TeX、无 `PAPER.md` → `paper_parse_body`。
-- **Library 行 Download**：库内任一篇仍缺资源时 → 批量 `paper_download_assets`。
-- **Library 行眼睛**：库内任一篇需生成 `PAPER.md` 时 → 批量 `paper_parse_body`。
+按需补下（仅 Download 图标，无眼睛）：
+- **显示条件**：缺 PDF **或** 缺 `source/` **或** 缺 `PAPER.md`（hover 说明原因）。
+- **点击**：`paper_download_assets` → PDF 到 `source/` → arXiv 尽量 TeX → 无 TeX 则 liteparse `PAPER.md`。
+- **Library 行**：库内任一篇不完整时批量同一逻辑。
 
 UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本；`PAPER.md` 为无 TeX 时的派生正文。
 

@@ -143,10 +143,43 @@ export function paperHasLocalSourceDir(node: TreeWalkNode): boolean {
 }
 
 /**
- * Show file-tree eye (parse body) when:
- * - local PDF exists,
- * - no local `.tex`/`.ltx`,
- * - no `PAPER.md` yet.
+ * Reasons a paper row should show the Download icon (for hover tooltip).
+ * Keys are i18n suffixes under `sidebar:fileTree.downloadReason.*`.
+ */
+export type PaperDownloadReason = "noPdf" | "noSource" | "noPaperMd";
+
+/**
+ * Missing local assets that warrant a Download control:
+ * - no PDF, or
+ * - no `source/` directory, or
+ * - no `PAPER.md`
+ *
+ * Click: download PDF into `source/`; arXiv also tries TeX; if no TeX → liteparse PAPER.md.
+ */
+export function paperAssetDownloadReasons(
+	node: TreeWalkNode,
+): PaperDownloadReason[] {
+	const reasons: PaperDownloadReason[] = [];
+	if (!paperHasLocalPdf(node)) reasons.push("noPdf");
+	if (!paperHasLocalSourceDir(node)) reasons.push("noSource");
+	if (!paperHasLocalPaperMd(node)) reasons.push("noPaperMd");
+	return reasons;
+}
+
+/**
+ * Show file-tree Download when PDF / source / PAPER.md is incomplete.
+ * (`canFetchTex` kept for call-site compatibility; no longer gates visibility.)
+ */
+export function paperNeedsAssetDownload(
+	node: TreeWalkNode,
+	_opts?: { canFetchTex?: boolean },
+): boolean {
+	return paperAssetDownloadReasons(node).length > 0;
+}
+
+/**
+ * @deprecated Eye icon removed; use download which also liteparses when no TeX.
+ * Kept for any residual callers.
  */
 export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
 	return (
@@ -154,35 +187,6 @@ export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
 		!paperHasLocalTex(node) &&
 		!paperHasLocalPaperMd(node)
 	);
-}
-
-/**
- * Show file-tree Download when local archive is incomplete:
- * - no local PDF, or
- * - no `source/` directory, or
- * - TeX is fetchable (arXiv) but no local `.tex`/`.ltx` yet.
- *
- * Click handler: download PDF; if arXiv also try TeX; if still no TeX → liteparse PAPER.md.
- *
- * `canFetchTex`: true if catalog has arxiv_id / type=arxiv, or folder name looks like arXiv id.
- */
-export function paperNeedsAssetDownload(
-	node: TreeWalkNode,
-	opts?: { canFetchTex?: boolean },
-): boolean {
-	const hasPdf = paperHasLocalPdf(node);
-	const hasSource = paperHasLocalSourceDir(node);
-	const hasTex = paperHasLocalTex(node);
-
-	// No PDF and/or no source/ → need download (demo shells, failed import, etc.)
-	if (!hasPdf || !hasSource) return true;
-
-	const canTex =
-		opts?.canFetchTex === true ||
-		// Heuristic when catalog map not ready: folder name is arXiv id
-		Boolean(node.name && folderNameLooksLikeArxivId(node.name));
-	if (canTex && !hasTex) return true;
-	return false;
 }
 
 /** Folder-name heuristic: looks like bare arXiv id. */
