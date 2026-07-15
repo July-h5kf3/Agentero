@@ -2,16 +2,17 @@ use crate::error::AppError;
 use crate::models::agent::{
     AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
     AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
-    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, WarmResult,
+    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
+    WarmResult,
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::events::AgentEventEmitter;
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
 use agent_client_protocol::schema::v1::{
-    CancelNotification, ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio,
-    NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
-    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    CancelNotification, ContentBlock, EnvVariable, ImageContent, InitializeRequest, McpServer,
+    McpServerStdio, NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus,
+    PromptRequest, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
     SelectedPermissionOutcome, SessionConfigId, SessionConfigKind, SessionConfigOption,
     SessionConfigOptionCategory, SessionConfigOptionValue, SessionConfigSelectOptions,
     SessionNotification, SessionUpdate, SetSessionConfigOptionRequest, TextContent, ToolCallStatus,
@@ -569,6 +570,7 @@ pub async fn run_once(
     session_id: String,
     message_id: String,
     prompt: String,
+    images: Vec<PromptImage>,
     workflow: Option<String>,
     target: Option<String>,
     vault_path: Option<String>,
@@ -592,11 +594,17 @@ pub async fn run_once(
             return Err(error);
         }
     };
+    let user_prompt = if prompt.trim().is_empty() && !images.is_empty() {
+        "Please analyze the attached image crop from the research paper PDF.".to_string()
+    } else {
+        prompt
+    };
     let full_prompt = format!(
         "{}{}",
-        build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
+        build_prompt(workflow.as_deref(), &user_prompt, target.as_deref()),
         skill_instructions
     );
+    let prompt_images = images;
     let cwd = vault_path
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
@@ -677,6 +685,7 @@ pub async fn run_once(
         )
         .connect_with(acp, {
             let full_prompt = full_prompt.clone();
+            let prompt_images = prompt_images.clone();
             let preferred_model = preferred_model_id.clone();
             let preferred_effort = preferred_reasoning_effort.clone();
             let app_for_models = app_for_conn.clone();
@@ -844,11 +853,23 @@ pub async fn run_once(
                     return Ok(payload);
                 }
 
+                let mut content_blocks: Vec<ContentBlock> =
+                    vec![ContentBlock::Text(TextContent::new(full_prompt))];
+                for img in &prompt_images {
+                    if img.data.trim().is_empty() || img.mime_type.trim().is_empty() {
+                        continue;
+                    }
+                    content_blocks.push(ContentBlock::Image(ImageContent::new(
+                        img.data.clone(),
+                        img.mime_type.clone(),
+                    )));
+                }
+
                 let prompt_response = tokio::select! {
                     response = connection
                         .send_request(PromptRequest::new(
                             acp_session_id.clone(),
-                            vec![ContentBlock::Text(TextContent::new(full_prompt))],
+                            content_blocks,
                         ))
                         .block_task() => response.map_err(|e| acp_err(format!("prompt: {e}")))?,
                     () = wait_for_cancellation(&mut cancellation) => {

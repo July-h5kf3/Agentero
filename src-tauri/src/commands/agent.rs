@@ -229,8 +229,8 @@ pub async fn agent_run_once(
     runs: State<'_, AgentRunController>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
-    if request.prompt.trim().is_empty() {
-        return Ok(map_err(AppError::message("prompt is required")));
+    if request.prompt.trim().is_empty() && request.images.is_empty() {
+        return Ok(map_err(AppError::message("prompt or images are required")));
     }
 
     let desc = match registry.resolve_default(request.agent_id.as_deref()) {
@@ -280,6 +280,7 @@ pub async fn agent_run_once(
     tauri::async_runtime::spawn(async move {
         if desc.template == AgentTemplate::CodexAcp {
             if let Some(prepared_codex_thread) = prepared_codex_thread {
+                // Codex turn path is text-first; image bytes are not forwarded yet.
                 run_codex_turn(
                     events.clone(),
                     prepared_codex_thread,
@@ -304,6 +305,7 @@ pub async fn agent_run_once(
                 session_id.clone(),
                 message_id,
                 request.prompt,
+                request.images,
                 request.workflow,
                 request.target,
                 request.vault_path,

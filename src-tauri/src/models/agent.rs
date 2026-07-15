@@ -195,6 +195,15 @@ pub struct ProbeResult {
     pub error: Option<String>,
 }
 
+/// Base64 image payload for multimodal ACP prompts (PDF region crops, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptImage {
+    /// Raw base64 (no data: URL prefix).
+    pub data: String,
+    pub mime_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunOnceRequest {
@@ -205,6 +214,9 @@ pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub prompt: String,
+    /// Optional images attached to this prompt (ACP `ContentBlock::Image`).
+    #[serde(default)]
+    pub images: Vec<PromptImage>,
     /// Vault root used as ACP session cwd. Falls back to process cwd when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vault_path: Option<String>,

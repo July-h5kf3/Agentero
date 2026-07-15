@@ -307,11 +307,19 @@ export async function probeCatalogAgent(
 	return invokeApi("agent_probe_catalog", { templateId });
 }
 
+export type PromptImage = {
+	/** Raw base64 without data: prefix */
+	data: string;
+	mimeType: string;
+};
+
 export async function runOnce(request: {
 	agentId?: string;
 	/** Durable provider conversation id; Codex uses its native thread id. */
 	sessionId?: string;
 	prompt: string;
+	/** Multimodal crops for ACP Image content blocks */
+	images?: PromptImage[];
 	vaultPath?: string;
 	workflow?: string;
 	target?: string;
@@ -331,6 +339,7 @@ export async function runOnce(request: {
 			agentId: request.agentId,
 			sessionId: request.sessionId,
 			prompt: request.prompt,
+			images: request.images ?? [],
 			vaultPath: request.vaultPath,
 			workflow: request.workflow,
 			target: request.target,
