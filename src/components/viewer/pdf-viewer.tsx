@@ -6,7 +6,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { Crop } from "lucide-react";
+import { Crop, Minus, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -60,6 +60,21 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 const DWELL_MS = 700;
 const DWELL_MOVE_PX = 8;
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+/** Button step — larger for snappier +/- */
+const ZOOM_STEP = 0.15;
+/**
+ * Wheel sensitivity for exp(-deltaY * k). Higher = faster zoom.
+ * Trackpads send small continuous deltas; mice send larger steps.
+ */
+const WHEEL_ZOOM_SENSITIVITY = 0.0032;
+
+function clampZoom(z: number): number {
+	const rounded = Math.round(z * 1000) / 1000;
+	return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, rounded));
+}
+
 type PdfViewerProps = {
 	/** Remote http(s) URL only — PDF.js streams from network, not vault disk */
 	source: string | null;
@@ -81,9 +96,21 @@ export function PdfViewer({
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
 	const hostRef = useRef<HTMLDivElement>(null);
+	const scrollRef = useRef<HTMLDivElement>(null);
 	const [numPages, setNumPages] = useState(0);
 	const [error, setError] = useState<string | null>(null);
-	const [width, setWidth] = useState(640);
+	/** Container fit width (100% zoom baseline) — PDF.js always rasters at this width */
+	const [fitWidth, setFitWidth] = useState(640);
+	/**
+	 * Visual zoom via CSS transform only (never changes Page width while zooming).
+	 * Avoids react-pdf re-raster flash that caused flicker.
+	 */
+	const [zoom, setZoom] = useState(1);
+	const [contentHeight, setContentHeight] = useState(0);
+
+	const pageWidth = Math.max(200, fitWidth);
+	const shellWidth = pageWidth * zoom;
+	const shellHeight = Math.max(0, contentHeight * zoom);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -112,6 +139,9 @@ export function PdfViewer({
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	const contentRef = useRef<HTMLDivElement>(null);
+	const zoomRef = useRef(zoom);
+	zoomRef.current = zoom;
 
 	const remote = source && /^https?:\/\//i.test(source) ? source : null;
 
@@ -133,11 +163,112 @@ export function PdfViewer({
 		if (!el) return;
 		const ro = new ResizeObserver((entries) => {
 			const w = entries[0]?.contentRect.width;
-			if (w) setWidth(Math.max(280, Math.floor(w - 40)));
+			if (w) setFitWidth(Math.max(280, Math.floor(w - 40)));
 		});
 		ro.observe(el);
 		return () => ro.disconnect();
 	}, [remote]);
+
+	/**
+	 * Zoom keeping the document point under (clientX, clientY) stable.
+	 * Pure CSS scale — never remounts PDF pages (no flicker).
+	 */
+	const zoomAtClientPoint = useCallback(
+		(nextZoom: number, clientX: number, clientY: number) => {
+			const z = clampZoom(nextZoom);
+			const oldZ = zoomRef.current;
+			if (Math.abs(z - oldZ) < 0.0005) return;
+
+			const scrollEl = scrollRef.current;
+			if (!scrollEl) {
+				setZoom(z);
+				return;
+			}
+
+			const rect = scrollEl.getBoundingClientRect();
+			const ox = clientX - rect.left;
+			const oy = clientY - rect.top;
+			const ratio = z / oldZ;
+			const nextLeft = (scrollEl.scrollLeft + ox) * ratio - ox;
+			const nextTop = (scrollEl.scrollTop + oy) * ratio - oy;
+
+			setZoom(z);
+			// Apply scroll in the same frame as the new shell size / transform
+			scrollEl.scrollLeft = nextLeft;
+			scrollEl.scrollTop = nextTop;
+			requestAnimationFrame(() => {
+				scrollEl.scrollLeft = nextLeft;
+				scrollEl.scrollTop = nextTop;
+			});
+		},
+		[],
+	);
+
+	const zoomAtViewportCenter = useCallback(
+		(nextZoom: number) => {
+			const scrollEl = scrollRef.current;
+			if (!scrollEl) {
+				setZoom(clampZoom(nextZoom));
+				return;
+			}
+			const rect = scrollEl.getBoundingClientRect();
+			zoomAtClientPoint(
+				nextZoom,
+				rect.left + rect.width / 2,
+				rect.top + rect.height / 2,
+			);
+		},
+		[zoomAtClientPoint],
+	);
+
+	// Reset zoom when switching PDF source
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when PDF URL changes
+	useEffect(() => {
+		setZoom(1);
+		const scrollEl = scrollRef.current;
+		if (scrollEl) {
+			scrollEl.scrollLeft = 0;
+			scrollEl.scrollTop = 0;
+		}
+	}, [remote]);
+
+	// Measure unscaled content height for scroll shell
+	// biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when page set / width changes
+	useEffect(() => {
+		const el = contentRef.current;
+		if (!el) return;
+		const ro = new ResizeObserver(() => {
+			setContentHeight(el.offsetHeight);
+		});
+		ro.observe(el);
+		setContentHeight(el.offsetHeight);
+		return () => ro.disconnect();
+	}, [remote, numPages, pageWidth]);
+
+	const zoomIn = useCallback(() => {
+		zoomAtViewportCenter(zoomRef.current + ZOOM_STEP);
+	}, [zoomAtViewportCenter]);
+	const zoomOut = useCallback(() => {
+		zoomAtViewportCenter(zoomRef.current - ZOOM_STEP);
+	}, [zoomAtViewportCenter]);
+	const zoomReset = useCallback(() => {
+		zoomAtViewportCenter(1);
+	}, [zoomAtViewportCenter]);
+
+	// ⌘/Ctrl + wheel: zoom toward cursor (faster continuous scale)
+	useEffect(() => {
+		const el = hostRef.current;
+		if (!el || !remote) return;
+		const onWheel = (e: WheelEvent) => {
+			if (!(e.ctrlKey || e.metaKey)) return;
+			e.preventDefault();
+			const factor = Math.exp(-e.deltaY * WHEEL_ZOOM_SENSITIVITY);
+			const z = clampZoom(zoomRef.current * factor);
+			zoomAtClientPoint(z, e.clientX, e.clientY);
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => el.removeEventListener("wheel", onWheel);
+	}, [remote, zoomAtClientPoint]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -530,18 +661,23 @@ export function PdfViewer({
 		[activeThread, upsertThread, persist, placePopover],
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor dialog after zoom/layout
 	useEffect(() => {
 		if (!activeThread) return;
 		const host = hostRef.current;
 		const scrollEl = host?.querySelector(".motif-scroll");
 		const reposition = () => placePopover(activeThread);
+		// After zoom, layout may lag one frame — schedule twice
+		reposition();
+		const raf = requestAnimationFrame(reposition);
 		scrollEl?.addEventListener("scroll", reposition, { passive: true });
 		window.addEventListener("resize", reposition);
 		return () => {
+			cancelAnimationFrame(raf);
 			scrollEl?.removeEventListener("scroll", reposition);
 			window.removeEventListener("resize", reposition);
 		};
-	}, [activeThread, placePopover]);
+	}, [activeThread, placePopover, zoom, pageWidth]);
 
 	const handleSend = useCallback(
 		async (question: string) => {
@@ -773,8 +909,63 @@ export function PdfViewer({
 				className,
 			)}
 		>
-			<div className="pointer-events-none absolute top-2 right-3 z-20">
+			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
 				<TooltipProvider delayDuration={200}>
+					<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.zoomOut")}
+									disabled={zoom <= ZOOM_MIN}
+									onClick={zoomOut}
+								>
+									<Minus className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.zoomOut")}</TooltipContent>
+						</Tooltip>
+						<button
+							type="button"
+							className="min-w-11 px-1 text-center font-medium text-muted-foreground text-xs tabular-nums hover:text-foreground"
+							aria-label={t("pdf.zoomReset")}
+							title={t("pdf.zoomReset")}
+							onClick={zoomReset}
+						>
+							{Math.round(zoom * 100)}%
+						</button>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.zoomIn")}
+									disabled={zoom >= ZOOM_MAX}
+									onClick={zoomIn}
+								>
+									<Plus className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.zoomIn")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.zoomFit")}
+									onClick={zoomReset}
+								>
+									<RotateCcw className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.zoomFit")}</TooltipContent>
+						</Tooltip>
+					</div>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
@@ -795,104 +986,131 @@ export function PdfViewer({
 					</Tooltip>
 				</TooltipProvider>
 			</div>
-			<div className="motif-scroll min-h-0 flex-1 bg-muted/20">
+			<div ref={scrollRef} className="motif-scroll min-h-0 flex-1 bg-muted/20">
 				{error ? (
 					<p className="p-6 text-destructive text-sm">{error}</p>
 				) : (
-					<Document
-						key={remote}
-						file={remote}
-						loading={
-							<p className="p-6 text-center text-muted-foreground text-sm">
-								{t("pdf.loading")}
-							</p>
-						}
-						onLoadSuccess={(doc) => {
-							setNumPages(doc.numPages);
-							setError(null);
+					// Shell reserves scroll space. Scale from top-left so scroll
+					// compensation can keep the cursor/viewport focus stable.
+					<div
+						className="relative"
+						style={{
+							width: Math.max(shellWidth + 24, fitWidth),
+							height: shellHeight > 0 ? shellHeight + 24 : undefined,
+							minHeight: "100%",
 						}}
-						onLoadError={(err) => {
-							setError(err.message || t("pdf.loadError"));
-						}}
-						className="flex flex-col items-center gap-3 px-3 py-3"
 					>
-						{Array.from({ length: numPages }, (_, i) => i + 1).map(
-							(pageNumber) => {
-								const pageSummaries = summaries.filter(
-									(s) => s.page === pageNumber,
-								);
-								const isMarqueeActive =
-									activeThread?.anchor.trigger === "marquee" &&
-									activeThread.anchor.page === pageNumber;
-								const marqueeRect =
-									isMarqueeActive && activeThread
-										? (activeThread.anchor.rects[0] ?? null)
-										: null;
-								const draft =
-									draftMarquee?.page === pageNumber ? draftMarquee.rect : null;
-								return (
-									<div
-										key={`${remote}-p${pageNumber}`}
-										className="relative overflow-visible"
-										{...{
-											[PDF_PAGE_ATTR]: pageNumber,
-										}}
-									>
-										<div className="overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
-											<Page
-												pageNumber={pageNumber}
-												width={width}
-												renderTextLayer={!marqueeMode}
-												renderAnnotationLayer
-												loading={
-													<div
-														className="bg-muted/40"
-														style={{ width, height: width * 1.3 }}
+						<div
+							ref={contentRef}
+							className="absolute top-3 left-3 flex flex-col items-center gap-3 will-change-transform"
+							style={{
+								width: pageWidth,
+								transform: `scale(${zoom})`,
+								transformOrigin: "top left",
+								// No CSS transition: keeps cursor-anchored zoom in sync and avoids flash
+							}}
+						>
+							<Document
+								key={remote}
+								file={remote}
+								loading={
+									<p className="p-6 text-center text-muted-foreground text-sm">
+										{t("pdf.loading")}
+									</p>
+								}
+								onLoadSuccess={(doc) => {
+									setNumPages(doc.numPages);
+									setError(null);
+								}}
+								onLoadError={(err) => {
+									setError(err.message || t("pdf.loadError"));
+								}}
+								className="flex w-full flex-col items-center gap-3"
+							>
+								{Array.from({ length: numPages }, (_, i) => i + 1).map(
+									(pageNumber) => {
+										const pageSummaries = summaries.filter(
+											(s) => s.page === pageNumber,
+										);
+										const isMarqueeActive =
+											activeThread?.anchor.trigger === "marquee" &&
+											activeThread.anchor.page === pageNumber;
+										const marqueeRect =
+											isMarqueeActive && activeThread
+												? (activeThread.anchor.rects[0] ?? null)
+												: null;
+										const draft =
+											draftMarquee?.page === pageNumber
+												? draftMarquee.rect
+												: null;
+										return (
+											<div
+												key={`${remote}-p${pageNumber}`}
+												className="relative overflow-visible"
+												{...{
+													[PDF_PAGE_ATTR]: pageNumber,
+												}}
+											>
+												<div className="overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+													<Page
+														pageNumber={pageNumber}
+														width={pageWidth}
+														renderTextLayer={!marqueeMode}
+														renderAnnotationLayer
+														loading={
+															<div
+																className="bg-muted/40"
+																style={{
+																	width: pageWidth,
+																	height: pageWidth * 1.3,
+																}}
+															/>
+														}
 													/>
-												}
-											/>
-										</div>
-										{/* Text selection highlight only for real划词 (has quote) */}
-										{activeThread?.anchor.page === pageNumber &&
-										activeThread.anchor.trigger !== "marquee" &&
-										activeThread.anchor.quote
-											? activeThread.anchor.rects.map((r) => (
-													<div
-														key={`${activeThread.id}-${r.x}-${r.y}-${r.w}`}
-														className="pointer-events-none absolute z-[1] bg-amber-300/35 dark:bg-amber-400/25"
-														style={{
-															left: `${r.x * 100}%`,
-															top: `${r.y * 100}%`,
-															width: `${r.w * 100}%`,
-															height: `${r.h * 100}%`,
-														}}
+												</div>
+												{/* Text selection highlight only for real划词 (has quote) */}
+												{activeThread?.anchor.page === pageNumber &&
+												activeThread.anchor.trigger !== "marquee" &&
+												activeThread.anchor.quote
+													? activeThread.anchor.rects.map((r) => (
+															<div
+																key={`${activeThread.id}-${r.x}-${r.y}-${r.w}`}
+																className="pointer-events-none absolute z-[1] bg-amber-300/35 dark:bg-amber-400/25"
+																style={{
+																	left: `${r.x * 100}%`,
+																	top: `${r.y * 100}%`,
+																	width: `${r.w * 100}%`,
+																	height: `${r.h * 100}%`,
+																}}
+															/>
+														))
+													: null}
+												{draft ? <MarqueeOverlay rect={draft} draft /> : null}
+												{marqueeRect ? (
+													<div data-pdf-ask-ui="">
+														<MarqueeOverlay
+															rect={marqueeRect}
+															active
+															onResizeStart={onMarqueeResizeStart}
+														/>
+													</div>
+												) : null}
+												<div data-pdf-ask-ui="">
+													<AskGutter
+														items={pageSummaries}
+														activeId={activeThreadId}
+														onOpen={handleOpenPill}
+														onEnter={cancelHoverHide}
+														onLeave={scheduleHoverHide}
 													/>
-												))
-											: null}
-										{draft ? <MarqueeOverlay rect={draft} draft /> : null}
-										{marqueeRect ? (
-											<div data-pdf-ask-ui="">
-												<MarqueeOverlay
-													rect={marqueeRect}
-													active
-													onResizeStart={onMarqueeResizeStart}
-												/>
+												</div>
 											</div>
-										) : null}
-										<div data-pdf-ask-ui="">
-											<AskGutter
-												items={pageSummaries}
-												activeId={activeThreadId}
-												onOpen={handleOpenPill}
-												onEnter={cancelHoverHide}
-												onLeave={scheduleHoverHide}
-											/>
-										</div>
-									</div>
-								);
-							},
-						)}
-					</Document>
+										);
+									},
+								)}
+							</Document>
+						</div>
+					</div>
 				)}
 			</div>
 

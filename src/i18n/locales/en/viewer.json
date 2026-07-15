@@ -9,7 +9,11 @@
 	"pdf": {
 		"empty": "No paper available.",
 		"loading": "Loading PDF…",
-		"loadError": "Failed to load PDF"
+		"loadError": "Failed to load PDF",
+		"zoomIn": "Zoom in",
+		"zoomOut": "Zoom out",
+		"zoomReset": "Reset zoom",
+		"zoomFit": "Fit width"
 	},
 	"pdfAsk": {
 		"dialogLabel": "Ask about selection",

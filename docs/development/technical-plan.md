@@ -164,7 +164,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染 |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
 | PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；与预览路径分离） |
 | arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
 | PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
