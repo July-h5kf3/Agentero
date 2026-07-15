@@ -32,6 +32,7 @@
 		"placeholder": "今天想做些什么？",
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
 		"removeContext": "从上下文移除 {{path}}",
+		"removeSkill": "从上下文移除 ${{skill}}",
 		"toggleCurrentFile": "将当前文件加入上下文",
 		"yolo": "YOLO",
 		"yoloDisabled": "YOLO 已关闭。本次运行会拒绝权限请求。",

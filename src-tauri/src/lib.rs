@@ -111,6 +111,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
+            commands::agent::agent_list_skills,
             commands::agent::agent_scan_catalog,
             commands::agent::agent_upsert_agent,
             commands::agent::agent_ensure_catalog,

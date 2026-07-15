@@ -86,6 +86,12 @@ export type RunOnceAccepted = {
 	agentId: string;
 };
 
+export type AgentSkill = {
+	id: string;
+	name: string;
+	description: string;
+};
+
 export type AgentResultPayload = {
 	sessionId: string;
 	messageId: string;
@@ -184,6 +190,12 @@ export async function listTemplates(): Promise<AgentTemplateInfo[]> {
 	return res.templates;
 }
 
+export async function listAgentSkills(
+	vaultPath?: string,
+): Promise<AgentSkill[]> {
+	return invokeApi("agent_list_skills", { vaultPath: vaultPath ?? null });
+}
+
 export async function scanCatalog(): Promise<CatalogScanResponse> {
 	return invokeApi("agent_scan_catalog");
 }
@@ -261,6 +273,8 @@ export async function runOnce(request: {
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
+	/** Local SKILL.md identifiers selected through the composer. */
+	skillIds?: string[];
 	/** Select the agent's first ACP permission option for this run. */
 	autoApprove?: boolean;
 }): Promise<RunOnceAccepted> {
@@ -272,6 +286,7 @@ export async function runOnce(request: {
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
+			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
 		},
 	});

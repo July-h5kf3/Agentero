@@ -553,13 +553,23 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   workflow?: string;
   target?: string;
   modelId?: string;
+  skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
 }
 ```
 
 - **返回**：`{ ok: true, data: { sessionId, messageId, agentId } }`
 
+- **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
+
 - **权限策略**：默认取消 ACP 权限请求。`autoApprove` 仅由 Composer 的 YOLO 开关传入，作用范围为这一次运行；逐项权限确认仍未实现。
+
+#### `agent_list_skills`
+
+列出可由 Composer `$` 提及的本机技能。
+
+- **参数**：`{ vaultPath?: string }`
+- **返回**：`{ ok: true, data: { id, name, description }[] }`
 
 #### `agent:list_agents`
 

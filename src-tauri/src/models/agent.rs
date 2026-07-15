@@ -211,9 +211,21 @@ pub struct RunOnceRequest {
     /// Preferred model id from ACP session config (category: model). Applied after session/new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// Locally discovered SKILL.md identifiers selected through the composer.
+    #[serde(default)]
+    pub skill_ids: Vec<String>,
     /// When enabled, automatically select the first ACP permission option for this run.
     #[serde(default)]
     pub auto_approve: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkill {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

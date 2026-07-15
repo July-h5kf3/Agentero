@@ -129,8 +129,10 @@ import {
 	type AgentListResponse,
 	type AgentModelChoice,
 	type AgentPlanEntry,
+	type AgentSkill,
 	type CatalogScanResponse,
 	ensureCatalogAgent,
+	listAgentSkills,
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
@@ -431,6 +433,8 @@ export function AgentPanel({
 	const [composerText, setComposerText] = useState("");
 	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
 	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
+	const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+	const [skills, setSkills] = useState<AgentSkill[]>([]);
 	const [yoloEnabled, setYoloEnabled] = useState(false);
 	const [activeTabId, setActiveTabId] = useState("draft");
 	const activeSessionRef = useRef<string | null>(null);
@@ -468,9 +472,14 @@ export function AgentPanel({
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
 		try {
-			const [list, scan] = await Promise.all([listAgents(), scanCatalog()]);
+			const [list, scan, discoveredSkills] = await Promise.all([
+				listAgents(),
+				scanCatalog(),
+				listAgentSkills(vaultPath ?? undefined).catch(() => []),
+			]);
 			setRegistry(list);
 			setCatalog(scan);
+			setSkills(discoveredSkills);
 			setSelectedAgentId((prev) => prev ?? list.defaultId);
 		} catch (e) {
 			setLines((prev) => [
@@ -482,7 +491,7 @@ export function AgentPanel({
 				},
 			]);
 		}
-	}, []);
+	}, [vaultPath]);
 
 	useEffect(() => {
 		void refresh();
@@ -765,6 +774,28 @@ export function AgentPanel({
 			.slice(0, 6);
 	}, [contextPaths, mentionMatch, mentionQuery, vaultMarkdownPaths]);
 
+	const skillMatch = composerText.match(/(^|\s)\$([^\s]*)$/);
+	const skillQuery = skillMatch?.[2]?.toLocaleLowerCase() ?? "";
+	const skillOptions = useMemo(() => {
+		if (!skillMatch) return [];
+		return skills
+			.filter((skill) => {
+				const searchable =
+					`${skill.id} ${skill.name} ${skill.description}`.toLocaleLowerCase();
+				return searchable.includes(skillQuery);
+			})
+			.filter((skill) => !selectedSkillIds.includes(skill.id))
+			.slice(0, 6);
+	}, [selectedSkillIds, skillMatch, skillQuery, skills]);
+
+	const selectedSkills = useMemo(
+		() =>
+			selectedSkillIds
+				.map((id) => skills.find((skill) => skill.id === id))
+				.filter((skill): skill is AgentSkill => Boolean(skill)),
+		[selectedSkillIds, skills],
+	);
+
 	const conversationTabs = useMemo(
 		() => [
 			{ id: "draft", lines: null as ChatLine[] | null },
@@ -903,6 +934,7 @@ export function AgentPanel({
 				workflow: "free",
 				target: contextPaths[0],
 				modelId: modelId ?? undefined,
+				skillIds: selectedSkillIds,
 				autoApprove: yoloEnabled,
 			});
 			const agentLine: ChatLine = {
@@ -956,11 +988,19 @@ export function AgentPanel({
 		setMentionedPaths((prev) => prev.filter((item) => item !== path));
 	};
 
+	const attachSkill = (skill: AgentSkill) => {
+		setSelectedSkillIds((prev) => [...new Set([...prev, skill.id])]);
+		setComposerText((prev) =>
+			prev.replace(/(^|\s)\$[^\s]*$/, (_match, prefix: string) => `${prefix}`),
+		);
+	};
+
 	const newConversation = () => {
 		if (busy) return;
 		setLines([]);
 		setComposerText("");
 		setMentionedPaths([]);
+		setSelectedSkillIds([]);
 		setIncludeSelectedFile(Boolean(selectedVaultPath));
 		setActiveTabId("draft");
 		activeSessionRef.current = null;
@@ -1418,6 +1458,27 @@ export function AgentPanel({
 									))}
 								</div>
 							) : null}
+							{selectedSkills.length > 0 ? (
+								<div className="mb-2 flex flex-wrap gap-1.5">
+									{selectedSkills.map((skill) => (
+										<button
+											key={skill.id}
+											type="button"
+											className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+											onClick={() =>
+												setSelectedSkillIds((prev) =>
+													prev.filter((id) => id !== skill.id),
+												)
+											}
+											title={t("composer.removeSkill", { skill: skill.name })}
+										>
+											<span className="font-mono text-muted-foreground">$</span>
+											<span className="truncate">{skill.name}</span>
+											<X className="size-3 shrink-0 text-muted-foreground" />
+										</button>
+									))}
+								</div>
+							) : null}
 							{mentionOptions.length > 0 ? (
 								<div className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
 									{mentionOptions.map((path) => (
@@ -1429,6 +1490,28 @@ export function AgentPanel({
 										>
 											<FileText className="size-3.5 shrink-0 text-muted-foreground" />
 											<span className="truncate">{path}</span>
+										</button>
+									))}
+								</div>
+							) : null}
+							{skillOptions.length > 0 ? (
+								<div className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md">
+									{skillOptions.map((skill) => (
+										<button
+											key={skill.id}
+											type="button"
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+											onClick={() => attachSkill(skill)}
+										>
+											<span className="font-mono text-muted-foreground">$</span>
+											<span className="min-w-0 flex-1 truncate">
+												{skill.name}
+											</span>
+											{skill.description ? (
+												<span className="max-w-40 truncate text-muted-foreground text-xs">
+													{skill.description}
+												</span>
+											) : null}
 										</button>
 									))}
 								</div>

@@ -32,6 +32,7 @@
 		"placeholder": "How can I help you today?",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
+		"removeSkill": "Remove ${{skill}} from context",
 		"toggleCurrentFile": "Include the current file as context",
 		"yolo": "YOLO",
 		"yoloDisabled": "YOLO is off. Permission requests are declined for this run.",

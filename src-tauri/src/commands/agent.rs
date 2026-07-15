@@ -1,10 +1,10 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::agent::{
-    AgentDescriptor, AgentListResponse, AgentTemplateInfo, CatalogScanResponse, ProbeResult,
-    RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
+    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplateInfo, CatalogScanResponse,
+    ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
 use crate::services::agent::{
-    builtin_templates, new_ids, probe_agent, run_once, warm_agent, AgentRegistry,
+    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentRegistry,
 };
 use serde::Serialize;
 use tauri::State;
@@ -55,6 +55,11 @@ pub fn agent_list_templates() -> ApiResult<TemplatesResponse> {
     ApiResult::ok(TemplatesResponse {
         templates: builtin_templates(),
     })
+}
+
+#[tauri::command]
+pub fn agent_list_skills(vault_path: Option<String>) -> ApiResult<Vec<AgentSkill>> {
+    ApiResult::ok(list_agent_skills(vault_path.as_deref()))
 }
 
 #[tauri::command]
@@ -239,6 +244,7 @@ pub async fn agent_run_once(
             request.target,
             request.vault_path,
             request.model_id,
+            request.skill_ids,
             request.auto_approve,
         )
         .await;

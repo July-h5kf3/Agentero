@@ -6,6 +6,7 @@ use crate::models::agent::{
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::prompts::{build_prompt, extract_sources};
+use crate::services::agent::skills::load_skill_instructions;
 use agent_client_protocol::schema::v1::{
     ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
     PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
@@ -427,9 +428,15 @@ pub async fn run_once(
     target: Option<String>,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    skill_ids: Vec<String>,
     auto_approve: bool,
 ) -> Result<AgentResultPayload, AppError> {
-    let full_prompt = build_prompt(workflow.as_deref(), &prompt, target.as_deref());
+    let skill_instructions = load_skill_instructions(&skill_ids, vault_path.as_deref())?;
+    let full_prompt = format!(
+        "{}{}",
+        build_prompt(workflow.as_deref(), &prompt, target.as_deref()),
+        skill_instructions
+    );
     let cwd = vault_path
         .map(PathBuf::from)
         .filter(|p| p.is_dir())

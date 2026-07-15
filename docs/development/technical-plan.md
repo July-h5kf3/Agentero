@@ -662,7 +662,7 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes 视图已接入；仍需补 Create Vault 初始化与文件监听。 |
 | V0.2 | arXiv importer 仍待实现；当前仅有 arXiv URL 推导、metadata 读取和 demo paper 数据。 |
-| V0.3 | ACP Client + BYOA 面板进行中；注册表、探测、`agent_run_once`、流式 UI、Sources 与每次运行的 YOLO 权限策略已接入；workflow prompt、逐项权限确认、写入草稿待补。 |
+| V0.3 | ACP Client + BYOA 面板进行中；注册表、探测、`agent_run_once`、流式 UI、Sources、`@` Vault 上下文、`$` 本机技能与每次运行的 YOLO 权限策略已接入；workflow prompt、逐项权限确认、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |

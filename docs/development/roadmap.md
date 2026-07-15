@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | Tauri/React 工作台、文件树、文件读取/保存、最近 Vault、PDF/HTML/Notes 视图已落地。 |
 | V0.2 arXiv 入库闭环 | ⏳ 待实现 | 已有 arXiv URL/metadata 辅助与 demo 数据，完整检索、确认、入库、索引刷新仍待做。 |
-| V0.3 Agent 工作流（ACP Client + BYOA） | 🟡 进行中 | Agent 面板、注册表、ACP `agent_run_once`、流式 UI 与每次运行的 YOLO 权限策略已接入；内置工作流、逐项权限确认和写入草稿仍需补齐。 |
+| V0.3 Agent 工作流（ACP Client + BYOA） | 🟡 进行中 | Agent 面板、注册表、ACP `agent_run_once`、流式 UI、`@` Vault 上下文、`$` 本机技能与每次运行的 YOLO 权限策略已接入；内置工作流、逐项权限确认和写入草稿仍需补齐。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 面板与 `graph_get_graph` 已落地；输入补全/Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 入库、PDF parser 策略仍在规划。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
