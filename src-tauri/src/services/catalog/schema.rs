@@ -1,4 +1,7 @@
-//! Catalog SQLite schema (v1) and ensure/open helpers.
+//! Catalog SQLite schema and ensure/open helpers.
+//!
+//! - v1: initial papers table
+//! - v2: Translator / magic-wand fields (publication, volume, isbn, …)
 
 use crate::error::AppError;
 use rusqlite::Connection;
@@ -6,7 +9,7 @@ use std::fs;
 use std::path::Path;
 
 /// Current catalog schema version written to `schema_meta`.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 const DDL_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -47,6 +50,28 @@ CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi);
 CREATE INDEX IF NOT EXISTS idx_papers_bibtex ON papers(bibtex_key);
 "#;
 
+/// Columns added in schema v2 (Translator → PaperMetadata).
+const MIGRATE_V1_TO_V2: &str = r#"
+ALTER TABLE papers ADD COLUMN creators_json TEXT;
+ALTER TABLE papers ADD COLUMN date TEXT;
+ALTER TABLE papers ADD COLUMN isbn TEXT;
+ALTER TABLE papers ADD COLUMN issn TEXT;
+ALTER TABLE papers ADD COLUMN pmid TEXT;
+ALTER TABLE papers ADD COLUMN publication TEXT;
+ALTER TABLE papers ADD COLUMN volume TEXT;
+ALTER TABLE papers ADD COLUMN issue TEXT;
+ALTER TABLE papers ADD COLUMN pages TEXT;
+ALTER TABLE papers ADD COLUMN publisher TEXT;
+ALTER TABLE papers ADD COLUMN place TEXT;
+ALTER TABLE papers ADD COLUMN series TEXT;
+ALTER TABLE papers ADD COLUMN language TEXT;
+ALTER TABLE papers ADD COLUMN zotero_item_type TEXT;
+ALTER TABLE papers ADD COLUMN meta_source TEXT;
+ALTER TABLE papers ADD COLUMN extra TEXT;
+CREATE INDEX IF NOT EXISTS idx_papers_pmid ON papers(pmid);
+CREATE INDEX IF NOT EXISTS idx_papers_isbn ON papers(isbn);
+"#;
+
 /// Absolute path to `{vault}/.motif/catalog.sqlite`.
 pub fn catalog_db_path(vault_root: &Path) -> std::path::PathBuf {
     vault_root.join(".motif").join("catalog.sqlite")
@@ -81,6 +106,29 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch(DDL_V1)
             .map_err(|e| AppError::message(format!("catalog migrate v1: {e}")))?;
         set_schema_version(conn, 1)?;
+    }
+
+    let version = schema_version(conn).unwrap_or(0);
+    if version < 2 {
+        // SQLite ADD COLUMN is not fully batch-safe across existing cols; run one-by-one ignore dupes
+        for stmt in MIGRATE_V1_TO_V2.split(';') {
+            let s = stmt.trim();
+            if s.is_empty() {
+                continue;
+            }
+            match conn.execute_batch(&format!("{s};")) {
+                Ok(()) => {}
+                Err(e) => {
+                    let msg = e.to_string();
+                    // Idempotent re-run / partial migrate
+                    if msg.contains("duplicate column name") {
+                        continue;
+                    }
+                    return Err(AppError::message(format!("catalog migrate v2: {e}")));
+                }
+            }
+        }
+        set_schema_version(conn, 2)?;
     }
 
     Ok(())
@@ -131,7 +179,7 @@ mod tests {
     use std::env;
 
     #[test]
-    fn ensure_catalog_creates_schema_v1() {
+    fn ensure_catalog_creates_schema_current() {
         let dir = env::temp_dir().join(format!("motif-catalog-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -143,6 +191,16 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM papers", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 0);
+
+        // v2 columns exist
+        let has_pub: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('papers') WHERE name = 'publication'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(has_pub, 1);
 
         // Idempotent second open
         drop(conn);
