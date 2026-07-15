@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
 
@@ -86,6 +87,32 @@ export type RunOnceAccepted = {
 	agentId: string;
 };
 
+export type CodexThreadInfo = {
+	id: string;
+	title: string;
+	createdAt?: string | null;
+	updatedAt?: string | null;
+	cwd?: string | null;
+};
+
+export type CodexHistoryLine = {
+	id: string;
+	kind: "user" | "agent";
+	text: string;
+	reasoning?: string | null;
+};
+
+export type CodexThreadHistory = {
+	thread: CodexThreadInfo;
+	lines: CodexHistoryLine[];
+};
+
+export type AgentSkill = {
+	id: string;
+	name: string;
+	description: string;
+};
+
 export type AgentResultPayload = {
 	sessionId: string;
 	messageId: string;
@@ -148,6 +175,27 @@ export type AgentModelsEvent = {
 	models: AgentModelChoice[];
 };
 
+export type AgentEffortChoice = {
+	id: string;
+	name: string;
+	description?: string | null;
+};
+
+export type AgentEffortEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	currentId: string;
+	efforts: AgentEffortChoice[];
+};
+
+export type AgentFastModeEvent = {
+	sessionId: string;
+	agentId: string;
+	configId: string;
+	enabled: boolean;
+};
+
 export type AgentFailedEvent = {
 	sessionId: string;
 	error: string;
@@ -182,6 +230,12 @@ export async function listTemplates(): Promise<AgentTemplateInfo[]> {
 		"agent_list_templates",
 	);
 	return res.templates;
+}
+
+export async function listAgentSkills(
+	vaultPath?: string,
+): Promise<AgentSkill[]> {
+	return invokeApi("agent_list_skills", { vaultPath: vaultPath ?? null });
 }
 
 export async function scanCatalog(): Promise<CatalogScanResponse> {
@@ -255,23 +309,69 @@ export async function probeCatalogAgent(
 
 export async function runOnce(request: {
 	agentId?: string;
+	/** Durable provider conversation id; Codex uses its native thread id. */
+	sessionId?: string;
 	prompt: string;
 	vaultPath?: string;
 	workflow?: string;
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
+	/** ACP reasoning-effort value id (from agent:effort). */
+	reasoningEffort?: string;
+	/** ACP fast-mode preference (from agent:fast-mode). */
+	fastMode?: boolean;
+	/** Local SKILL.md identifiers selected through the composer. */
+	skillIds?: string[];
+	/** Select the agent's first ACP permission option for this run. */
+	autoApprove?: boolean;
 }): Promise<RunOnceAccepted> {
 	return invokeApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
+			sessionId: request.sessionId,
 			prompt: request.prompt,
 			vaultPath: request.vaultPath,
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
+			reasoningEffort: request.reasoningEffort,
+			fastMode: request.fastMode,
+			skillIds: request.skillIds ?? [],
+			autoApprove: request.autoApprove ?? false,
 		},
 	});
+}
+
+export async function listCodexThreads(request: {
+	agentId?: string;
+	vaultPath?: string;
+	includeExternal?: boolean;
+}): Promise<CodexThreadInfo[]> {
+	return invokeApi("agent_codex_list_threads", {
+		agentId: request.agentId ?? null,
+		vaultPath: request.vaultPath ?? null,
+		includeExternal: request.includeExternal ?? false,
+	});
+}
+
+export async function readCodexThread(request: {
+	agentId?: string;
+	threadId: string;
+	vaultPath?: string;
+	includeExternal?: boolean;
+}): Promise<CodexThreadHistory> {
+	return invokeApi("agent_codex_read_thread", {
+		agentId: request.agentId ?? null,
+		threadId: request.threadId,
+		vaultPath: request.vaultPath ?? null,
+		includeExternal: request.includeExternal ?? false,
+	});
+}
+
+/** Request cooperative cancellation of the active ACP session. */
+export async function cancelAgentRun(sessionId: string): Promise<void> {
+	await invokeApi<boolean>("agent_cancel_run", { sessionId });
 }
 
 export type WarmResult = {
@@ -298,48 +398,67 @@ export async function warmAgent(request: {
 	});
 }
 
+function listenAgentEvent<T>(
+	event: string,
+	handler: (payload: T) => void,
+): Promise<UnlistenFn> {
+	return getCurrentWebviewWindow().listen<T>(event, (message) =>
+		handler(message.payload),
+	);
+}
+
 export async function listenAgentStream(
 	handler: (e: AgentStreamEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentStreamEvent>("agent:stream", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:stream", handler);
 }
 
 export async function listenAgentCompleted(
 	handler: (e: AgentResultPayload) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentResultPayload>("agent:completed", (ev) =>
-		handler(ev.payload),
-	);
+	return listenAgentEvent("agent:completed", handler);
 }
 
 export async function listenAgentFailed(
 	handler: (e: AgentFailedEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentFailedEvent>("agent:failed", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:failed", handler);
 }
 
 export async function listenAgentTool(
 	handler: (e: AgentToolEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentToolEvent>("agent:tool", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:tool", handler);
 }
 
 export async function listenAgentPlan(
 	handler: (e: AgentPlanEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentPlanEvent>("agent:plan", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:plan", handler);
 }
 
 export async function listenAgentUsage(
 	handler: (e: AgentUsageEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentUsageEvent>("agent:usage", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:usage", handler);
 }
 
 export async function listenAgentModels(
 	handler: (e: AgentModelsEvent) => void,
 ): Promise<UnlistenFn> {
-	return listen<AgentModelsEvent>("agent:models", (ev) => handler(ev.payload));
+	return listenAgentEvent("agent:models", handler);
+}
+
+export async function listenAgentEffort(
+	handler: (e: AgentEffortEvent) => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:effort", handler);
+}
+
+export async function listenAgentFastMode(
+	handler: (e: AgentFastModeEvent) => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:fast-mode", handler);
 }
 
 const MODEL_PREF_KEY = "motif-agent-model-pref";
@@ -369,6 +488,9 @@ export function saveModelPref(agentId: string, modelId: string): void {
 }
 
 const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
+const YOLO_PREF_KEY = "motif-agent-yolo-pref";
+const EXTERNAL_CODEX_HISTORY_PREF_KEY =
+	"motif-agent-external-codex-history-pref";
 
 export type CachedModelCatalog = {
 	configId: string;
@@ -402,6 +524,57 @@ export function saveModelCatalog(
 		>;
 		map[agentId] = catalog;
 		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
+/** Persist YOLO separately for each provider registration. */
+export function loadYoloPref(agentId: string | null): boolean {
+	if (!agentId) return false;
+	try {
+		const raw = localStorage.getItem(YOLO_PREF_KEY);
+		if (!raw) return false;
+		const map = JSON.parse(raw) as Record<string, boolean>;
+		return map[agentId] === true;
+	} catch {
+		return false;
+	}
+}
+
+export function saveYoloPref(agentId: string, enabled: boolean): void {
+	try {
+		const raw = localStorage.getItem(YOLO_PREF_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
+		map[agentId] = enabled;
+		localStorage.setItem(YOLO_PREF_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
+/** Persist whether a Codex registration includes non-Motif Vault threads. */
+export function loadExternalCodexHistoryPref(agentId: string | null): boolean {
+	if (!agentId) return false;
+	try {
+		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
+		if (!raw) return false;
+		const map = JSON.parse(raw) as Record<string, boolean>;
+		return map[agentId] === true;
+	} catch {
+		return false;
+	}
+}
+
+export function saveExternalCodexHistoryPref(
+	agentId: string,
+	enabled: boolean,
+): void {
+	try {
+		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
+		map[agentId] = enabled;
+		localStorage.setItem(EXTERNAL_CODEX_HISTORY_PREF_KEY, JSON.stringify(map));
 	} catch {
 		// ignore
 	}

@@ -200,6 +200,10 @@ pub struct ProbeResult {
 pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Native provider conversation id. Codex maps this to its durable thread id;
+    /// ACP providers intentionally ignore it until they gain persistent runtimes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
     pub prompt: String,
     /// Vault root used as ACP session cwd. Falls back to process cwd when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -211,6 +215,27 @@ pub struct RunOnceRequest {
     /// Preferred model id from ACP session config (category: model). Applied after session/new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// Preferred ACP reasoning effort (category: thought_level). Applied after session/new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    /// Preferred ACP fast mode (category: model_config). Applied after session/new.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast_mode: Option<bool>,
+    /// Locally discovered SKILL.md identifiers selected through the composer.
+    #[serde(default)]
+    pub skill_ids: Vec<String>,
+    /// When enabled, automatically select the first ACP permission option for this run.
+    #[serde(default)]
+    pub auto_approve: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSkill {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,6 +274,36 @@ pub struct AgentStreamEvent {
     pub session_id: String,
     pub chunk: String,
     pub kind: AgentStreamKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEffortChoice {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// ACP reasoning-effort selector advertised for the current session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEffortEvent {
+    pub session_id: String,
+    pub agent_id: String,
+    pub config_id: String,
+    pub current_id: String,
+    pub efforts: Vec<AgentEffortChoice>,
+}
+
+/// ACP fast-mode toggle advertised for the current session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentFastModeEvent {
+    pub session_id: String,
+    pub agent_id: String,
+    pub config_id: String,
+    pub enabled: bool,
 }
 
 /// ACP tool call create/update for UI (`Tool` element).

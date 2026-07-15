@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页最近列表、树内联新建文件/文件夹、PDF/HTML/Notes、WYSIWYG Markdown。 |
 | V0.2 arXiv 入库闭环 | ⏳ 待实现 | 已有 arXiv URL/metadata 辅助与 demo 数据，完整检索、确认、入库、索引刷新仍待做。 |
-| V0.3 Agent 工作流（ACP Client + BYOA） | 🟡 进行中 | Agent 面板、注册表、ACP `agent_run_once` 与流式 UI 已接入；内置工作流、权限确认和写入草稿仍需补齐。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client 覆盖 OpenCode、Gemini、Claude、Qoder、Grok 与自定义 agent；Codex 已切换到原生 App Server thread runtime，可读取、恢复本地 Codex history。内置工作流、逐项权限确认和写入草稿仍待补齐。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 面板与 `graph_get_graph` 已落地；输入补全/Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 入库、PDF parser 策略仍在规划。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
@@ -92,8 +92,12 @@
 关键交付：
 
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
+- [x] Codex 原生 runtime：`codex app-server` 的 thread start/resume、流式 turn、原生 history 列表与 JSONL transcript 回放；不再经 ACP adapter 启动 Codex。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
+- [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
+- [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast；YOLO 保持独立权限开关。
+- [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [ ] 内置工作流：总结当前论文、基于本地库问答、生成 Related Work 草稿。
@@ -115,7 +119,9 @@
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
 - [ ] 接入 ACP 权限确认 UI，而不是自动选择或静默处理。
 - [ ] 写入草稿使用 diff/preview 确认后落盘。
-- [ ] 为 Agent 面板补充会话恢复与取消正在运行任务。
+- [x] Codex 会话恢复：按 Vault 过滤原生 Codex thread，恢复后继续使用同一 thread id。
+- [ ] 为通用 ACP provider 定义持久 runtime 与原生 history 契约；当前 ACP 会话仍是一次性连接。
+- [ ] Agent 输出期间的后续交互：普通 Agent 排队下一条消息，Codex 支持 guide / 引导消息。
 
 ## V0.4 双链、反链与图谱
 
@@ -229,6 +235,16 @@
 - [ ] `[[` 补全与 Plate wikilink 内联节点。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。
+
+### Agent provider 后续改造
+
+Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、history 文件或配置能力抽象成所有 agent 的默认行为。后续按 provider 的真实能力逐项接入：
+
+- [ ] Claude Code：评估官方 SDK / 原生 session resume，保存 native session id，接入其历史和权限请求；不能时继续走 ACP 单轮模式。
+- [ ] OpenCode：使用其原生 session API / ACP 能力确认持久会话、模型目录、权限与 history 的可用接口。
+- [ ] Gemini CLI：确认 experimental ACP 的 session lifecycle 和恢复语义；在稳定前仅提供一次性 ACP run。
+- [ ] Qoder CLI、Grok Build 与 Custom ACP：只暴露 ACP 已声明的能力；增加 capability discovery，避免展示不受支持的模型、effort、Fast、YOLO 或 history 控件。
+- [ ] 建立 provider capability contract：`persistentRuntime`、`nativeHistory`、`modelCatalog`、`reasoningEffort`、`serviceTier`、`permissionRequests`、`skillPicker`。Composer 仅按当前 provider 的能力显示对应组件。
 
 ### 长期优先级 P2
 

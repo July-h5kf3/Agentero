@@ -5,6 +5,7 @@ use crate::models::agent::{
 };
 use crate::services::agent::discover::{probe_command, resolve_command};
 use crate::services::agent::templates::{catalog_templates, template_from_id, template_info};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -19,7 +20,13 @@ impl AgentRegistry {
     pub fn load() -> Self {
         let path = config_path();
         let mut state = read_state(&path).unwrap_or_default();
+        let migrated = migrate_legacy_codex_agents(&mut state);
         state.enabled = true;
+        if migrated {
+            if let Err(error) = persist(&path, &state) {
+                eprintln!("[motif agent] failed to persist Codex registration migration: {error}");
+            }
+        }
         Self {
             inner: Mutex::new(state),
             path,
@@ -158,18 +165,39 @@ impl AgentRegistry {
             .filter(|t| t.id != "custom")
             .ok_or_else(|| AppError::message(format!("unknown catalog template: {template_id}")))?;
 
-        // Prefer existing registration for this template.
+        let env = catalog_env(&info);
+
+        // Prefer existing registration for this template. Built-in descriptors are owned by the
+        // catalog, so refresh their command when a release changes the launcher.
         {
             let state = self.snapshot()?;
             if let Some(existing) = state.agents.iter().find(|a| {
                 a.template.as_str() == template_id
                     || (a.command == info.command && a.args == info.args)
             }) {
-                if set_default {
-                    let _ = self.set_default(Some(existing.id.clone()));
-                    return self.get(&existing.id);
+                let needs_refresh = existing.command != info.command
+                    || existing.args != info.args
+                    || env
+                        .get("CODEX_PATH")
+                        .is_some_and(|path| existing.env.get("CODEX_PATH") != Some(path));
+                if !needs_refresh {
+                    if set_default {
+                        self.set_default(Some(existing.id.clone()))?;
+                        return self.get(&existing.id);
+                    }
+                    return Ok(existing.clone());
                 }
-                return Ok(existing.clone());
+
+                let agent = self.upsert(UpsertAgentRequest {
+                    id: Some(existing.id.clone()),
+                    name: info.name,
+                    template: Some(template_from_id(template_id)),
+                    command: info.command,
+                    args: info.args,
+                    env,
+                    set_default,
+                })?;
+                return self.get(&agent.id);
             }
         }
 
@@ -179,7 +207,7 @@ impl AgentRegistry {
             template: Some(template_from_id(template_id)),
             command: info.command,
             args: info.args,
-            env: Default::default(),
+            env,
             set_default,
         })?;
         self.get(&agent.id)
@@ -396,6 +424,39 @@ impl AgentRegistry {
     }
 }
 
+fn catalog_env(info: &crate::models::agent::AgentTemplateInfo) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    if info.id == AgentTemplate::CodexAcp.as_str() {
+        if let Some(path) = resolve_command("codex") {
+            env.insert("CODEX_PATH".to_string(), path.display().to_string());
+        }
+    }
+    env
+}
+
+fn migrate_legacy_codex_agents(state: &mut AgentRegistryState) -> bool {
+    let codex_path = resolve_command("codex").map(|path| path.display().to_string());
+    let mut migrated = false;
+    for agent in &mut state.agents {
+        if agent.template != AgentTemplate::CodexAcp
+            || (agent.command != "codex-acp" && agent.command != "npx")
+        {
+            continue;
+        }
+        agent.command = "codex".to_string();
+        agent.args = vec!["app-server".to_string()];
+        if let Some(path) = codex_path.as_ref() {
+            agent.env.insert("CODEX_PATH".to_string(), path.clone());
+        }
+        agent.last_probe_ok = None;
+        agent.last_probe_agent_name = None;
+        agent.last_probe_error = None;
+        agent.last_probed_at = None;
+        migrated = true;
+    }
+    migrated
+}
+
 fn stable_id_for(template: &AgentTemplate, command: &str, args: &[String]) -> String {
     match template {
         AgentTemplate::Custom => Uuid::new_v4().to_string(),
@@ -478,6 +539,16 @@ fn apply_proxy_to_agent(agent: &mut AgentDescriptor, proxy_enabled: bool, proxy_
 
 fn refresh_availability(state: &mut AgentRegistryState) {
     for agent in &mut state.agents {
+        let saved_codex_path_available = agent.template == AgentTemplate::CodexAcp
+            && agent
+                .env
+                .get("CODEX_PATH")
+                .is_some_and(|path| PathBuf::from(path).is_file());
+        if saved_codex_path_available {
+            agent.available = true;
+            agent.last_error = None;
+            continue;
+        }
         match probe_command(&agent.command) {
             Ok(_) => {
                 agent.available = true;
@@ -487,6 +558,46 @@ fn refresh_availability(state: &mut AgentRegistryState) {
                 agent.available = false;
                 agent.last_error = Some(e);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate_legacy_codex_agents;
+    use crate::models::agent::{AgentDescriptor, AgentRegistryState, AgentTemplate};
+    use std::collections::HashMap;
+
+    fn legacy_codex(command: &str) -> AgentDescriptor {
+        AgentDescriptor {
+            id: "catalog-codex-acp".to_string(),
+            name: "Codex".to_string(),
+            template: AgentTemplate::CodexAcp,
+            command: command.to_string(),
+            args: vec!["old-adapter".to_string()],
+            env: HashMap::new(),
+            available: false,
+            last_error: None,
+            last_probe_ok: Some(true),
+            last_probe_agent_name: Some("legacy".to_string()),
+            last_probe_error: None,
+            last_probed_at: Some("1".to_string()),
+        }
+    }
+
+    #[test]
+    fn migrates_legacy_codex_launchers_to_app_server() {
+        for command in ["codex-acp", "npx"] {
+            let mut state = AgentRegistryState {
+                agents: vec![legacy_codex(command)],
+                ..AgentRegistryState::default()
+            };
+
+            assert!(migrate_legacy_codex_agents(&mut state));
+            let agent = &state.agents[0];
+            assert_eq!(agent.command, "codex");
+            assert_eq!(agent.args, ["app-server"]);
+            assert_eq!(agent.last_probe_ok, None);
         }
     }
 }

@@ -1,10 +1,15 @@
 #[cfg(test)]
 mod acp_live {
     use crate::models::agent::{AgentDescriptor, AgentTemplate, CatalogAcpStatus};
+    use crate::services::agent::acp::permission_response;
     use crate::services::agent::discover::resolve_command;
     use crate::services::agent::probe_agent;
     use crate::services::agent::templates::catalog_templates;
     use crate::services::agent::AgentRegistry;
+    use agent_client_protocol::schema::v1::{
+        PermissionOption, PermissionOptionId, PermissionOptionKind, RequestPermissionOutcome,
+        RequestPermissionRequest, ToolCallUpdate, ToolCallUpdateFields,
+    };
     use std::collections::HashMap;
 
     fn desc(
@@ -63,6 +68,49 @@ mod acp_live {
         assert!(ids.contains(&"qodercli"));
         assert!(ids.contains(&"grok-build"));
         assert!(!ids.contains(&"custom"));
+    }
+
+    #[test]
+    fn codex_template_uses_the_native_app_server() {
+        let codex = catalog_templates()
+            .into_iter()
+            .find(|entry| entry.id == "codex-acp")
+            .expect("Codex template");
+
+        assert_eq!(codex.command, "codex");
+        assert_eq!(codex.args, vec!["app-server"]);
+        assert_eq!(codex.detect_command.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn permission_requests_are_cancelled_unless_yolo_is_enabled() {
+        let request = RequestPermissionRequest::new(
+            "session",
+            ToolCallUpdate::new("tool-call", ToolCallUpdateFields::new()),
+            vec![
+                PermissionOption::new(
+                    "reject-once",
+                    "Reject once",
+                    PermissionOptionKind::RejectOnce,
+                ),
+                PermissionOption::new(
+                    "allow-always",
+                    "Allow always",
+                    PermissionOptionKind::AllowAlways,
+                ),
+                PermissionOption::new("allow-once", "Allow once", PermissionOptionKind::AllowOnce),
+            ],
+        );
+
+        assert!(matches!(
+            permission_response(&request, false).outcome,
+            RequestPermissionOutcome::Cancelled
+        ));
+        assert!(matches!(
+            permission_response(&request, true).outcome,
+            RequestPermissionOutcome::Selected(selected)
+                if selected.option_id == PermissionOptionId::new("allow-once")
+        ));
     }
 
     #[test]

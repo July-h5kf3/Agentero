@@ -1327,6 +1327,8 @@ export default function App() {
 									<AgentPanel
 										key={chatInputFocusKey.current}
 										vaultPath={vaultPath}
+										selectedPath={selectedPath}
+										vaultMarkdownPaths={vaultMdFiles}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
 										autoFocus

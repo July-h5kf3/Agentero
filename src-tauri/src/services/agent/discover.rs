@@ -17,7 +17,7 @@ fn extra_path_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-fn path_entries() -> Vec<PathBuf> {
+pub fn path_entries() -> Vec<PathBuf> {
     let mut entries = Vec::new();
     if let Ok(path) = std::env::var("PATH") {
         for part in std::env::split_paths(&path) {

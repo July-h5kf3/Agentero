@@ -31,12 +31,13 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),
             name: "Codex".to_string(),
-            description: "OpenAI Codex via official ACP adapter (`codex-acp`).".to_string(),
-            // Prefer global install: npm i -g @agentclientprotocol/codex-acp
-            command: "codex-acp".to_string(),
-            args: vec![],
-            detect_command: Some("codex-acp".to_string()),
-            install_hint: "npm i -g @agentclientprotocol/codex-acp  (needs Codex login)"
+            description: "OpenAI Codex through its native App Server runtime.".to_string(),
+            // Keep the historical template id for registry compatibility. Codex is not
+            // launched through ACP: its App Server owns native threads and history.
+            command: "codex".to_string(),
+            args: vec!["app-server".to_string()],
+            detect_command: Some("codex".to_string()),
+            install_hint: "Install Codex CLI and sign in; Motif starts `codex app-server`."
                 .to_string(),
         },
         AgentTemplateInfo {
