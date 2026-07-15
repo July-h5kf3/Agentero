@@ -19,7 +19,7 @@ Host (Tauri + Rust)
 ### 2.1 命名规范
 
 - Tauri command：`namespace:verb`（全小写，冒号分隔命名空间）。
-  - 例：`vault:create`、`file:read_text`、`arxiv:import`。
+  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`window_new`、`graph_get_graph`）。
 
 ### 2.2 参数与返回
 
@@ -76,39 +76,58 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 ## 3. Host 层 Tauri invoke API
 
-### 3.1 Vault 管理
+### 3.1 Vault 与窗口
 
-#### `vault:create`
+> **实现状态（V0.1）**  
+> - 已实现：`vault_create`（snake_case invoke 名）、`window_new`、`set_locale`。  
+> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
+> - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
-创建并初始化一个 Vault。
+#### `vault_create`（已实现）
+
+创建并初始化一个 Vault（前端 dialog 选路径后 `invoke("vault_create", { path })`）。
 
 - **参数**
 
 ```ts
 {
-  path: string; // 本地绝对路径，由 dialog 选择或用户输入
+  path: string; // 本地绝对路径
 }
 ```
 
-- **返回**
+- **返回**（`ApiResult<CreateVaultResult>`）
 
 ```ts
 {
   ok: true;
   data: {
-    vault: VaultInfo;
+    path: string;
     created: string[]; // 创建的目录/文件相对路径列表
+    openPath: string;  // 建议首开，如 AGENTS.md
   };
 }
 ```
 
 - **行为**
-  - 检查目录是否为空或已包含 Vault。
-  - 创建 `AGENTS.md`、`PAPERS.md`、`papers/`、`notes/`、`plans/`。
-  - 写入默认 `AGENTS.md` 模板。
-  - 更新最近 Vault 列表。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`。
+  - 初始化 `.motif/catalog.sqlite`（schema v1）。详见 [`catalog.md`](catalog.md)。
+  - 写入默认 `AGENTS.md`。
+  - **不**创建根级 `PAPERS.md` / `library.bib`。
+  - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
 
-#### `vault:open`
+#### `window_new`（已实现）
+
+打开一个新的 Motif 窗口（菜单 **File → New Window** / `⌘N`）。
+
+- **参数**：无
+- **返回**：`Result<(), String>`
+- **行为**
+  - 创建 label 为 `motif-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
+  - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
+  - Capability 覆盖 `main` 与 `motif-*`（见 `src-tauri/capabilities/default.json`）。
+  - 菜单点击由 Host 直接调用，不经过前端 event 往返。
+
+#### `vault:open`（规划）
 
 打开一个已存在的 Vault。
 
@@ -133,12 +152,12 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 ```
 
 - **行为**
-  - 校验 Vault 结构（至少存在 `PAPERS.md`）。
-  - 初始化/校验 SQLite 索引。
-  - 启动文件监听。
+  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.motif/catalog.sqlite` 可打开或可初始化）。
+  - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
+  - 启动文件监听（后续）。
   - 返回完整文件树。
 
-#### `vault:close`
+#### `vault:close`（规划）
 
 关闭当前 Vault。
 
@@ -146,12 +165,11 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 - **返回**：`{ ok: true; data: null }`
 - **行为**：停止文件监听，释放资源，不删除数据。
 
-#### `vault:recent`
+#### `vault:recent`（规划；前端已临时实现）
 
 获取最近打开的 Vault 列表。
 
-- **参数**：无
-- **返回**
+- **规划返回**
 
 ```ts
 {
@@ -162,7 +180,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 }
 ```
 
-#### `vault:info`
+- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `motif-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
+
+#### `vault:info`（规划）
 
 获取当前 Vault 元信息。
 
@@ -406,12 +426,12 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 异步任务，通过 `arxiv:progress` / `arxiv:completed` / `arxiv:failed` 事件推送结果。
-  - 创建 `papers/<id>/` 与 `papers/<id>/source/`，写入 `metadata.json`（元数据事实来源）。
+  - 创建 paper 文件夹（默认 `papers/<id>/`，允许 `papers/<org>/…/<id>/`）与 `source/`；**元数据写入 catalog**（`path` = 该文件夹；不写默认 `metadata.json`）。
   - 下载 LaTeX source、PDF、HTML 到 `source/`。
   - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/PAPER.md`。
   - 调用 Agent 生成 `papers/<id>/NOTES.md`，并创建空的 `papers/<id>/highlights.md`。
-  - 更新 `PAPERS.md`（派生索引）与 `library.bib`，刷新 `.motif/cache.sqlite`。
-
+  - **不**自动更新根级 `PAPERS.md` / `library.bib`（需要时由用户触发 `catalog:export_*`）。
+```
 
 ### 3.4 本地 PDF 入库
 
@@ -477,25 +497,28 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 - **行为**
   - 异步任务，通过 `pdf:progress` / `pdf:completed` / `pdf:failed` 事件推送结果。
-  - 生成 citekey，落位 `papers/<citekey>/`，写入 `metadata.json`（`type=pdf`）。
-  - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，记录 `body_source` / `body_quality`。
+  - 生成 citekey，落位 `papers/<citekey>/`，**metadata 写入 catalog**（`type=pdf`）。
+  - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，`body_source` / `body_quality` 写入 catalog。
   - 调用 Agent 生成 `NOTES.md`，创建空 `highlights.md`。
-  - 更新 `PAPERS.md`、`library.bib`，刷新 `.motif/cache.sqlite`。
+  - **不**自动写 `PAPERS.md` / `library.bib`。
   - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
-
+```
 ### 3.5 论文
 
-论文数据由 arXiv 入库流程生成，也可通过本组命令查询与列表。
+论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
 #### `paper:get`
 
-获取单篇论文完整数据。
+获取单篇论文完整数据（catalog 行 + 路径）。
 
 - **参数**
 
 ```ts
 {
-  id: string; // 论文唯一标识，如 arxiv_id
+  /** paper 文件夹 Vault 相对路径（主键），如 papers/nlp/1706.03762 */
+  path?: string;
+  /** 逻辑 id（arXiv / citekey）；多 path 命中时返回列表或报歧义（实现可选） */
+  id?: string;
 }
 ```
 
@@ -512,7 +535,7 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 
 #### `paper:list`
 
-列出当前 Vault 中已入库的论文。
+列出当前 Vault 中已入库的论文（**读 catalog**，不扫盘拼表）。
 
 - **参数**
 
@@ -520,6 +543,9 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 {
   status?: ('pending' | 'importing' | 'completed' | 'failed')[];
   tag?: string;
+  year?: number;
+  type?: string;
+  query?: string; // title/abstract/authors 子串或后续 FTS
   limit?: number;
   offset?: number;
 }
@@ -536,6 +562,57 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
   };
 }
 ```
+
+#### `paper:update`
+
+更新 catalog 中已有论文的元数据字段（标题、标签、URL 等）。不覆盖 `NOTES.md`。
+
+- **参数**
+
+```ts
+{
+  path: string; // paper 文件夹路径（主键）
+  patch: Partial<PaperMetadata>; // 不允许改 path
+}
+```
+
+- **返回**：`{ ok: true; data: { paper: Paper } }`
+
+### 3.5.1 Catalog 导出
+
+根级 `PAPERS.md` / `library.bib` **默认不存在**；需要时显式导出。完整约定见 [`catalog.md`](catalog.md)。
+
+#### `catalog:export_papers_md`
+
+从 `papers` 表生成 Markdown 索引表（历史 `PAPERS.md` 形态）。
+
+- **参数**
+
+```ts
+{
+  vault_path: string;
+  /** 若提供则写入路径（绝对或 Vault 相对）；否则仅返回 content */
+  dest_path?: string;
+}
+```
+
+- **返回**
+
+```ts
+{
+  ok: true;
+  data: {
+    content: string;
+    written_path?: string;
+  };
+}
+```
+
+#### `catalog:export_bibtex`
+
+从 catalog 生成 BibTeX 汇总（历史 `library.bib` 形态）。
+
+- **参数 / 返回**：同 `catalog:export_papers_md`（`content` 为 BibTeX 文本）。
 
 ### 3.6 Agent 工作流（ACP Client + BYOA）
 
@@ -870,14 +947,14 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **节点折叠**：`papers/<id>/NOTES.md` 与同目录其它文件 **合并为一个节点** `papers/<id>`。
-- **节点 `label`**：paper 用 `metadata.json` 的 `title`；其它节点用文件名（去扩展名）。
+- **节点 `label`**：paper 用 catalog `papers.title`；其它节点用文件名（去扩展名）。
 - **节点 `type`**
 
 | type | 规则 |
 |---|---|
 | `paper` | 折叠后的 `papers/<id>` |
 | `note` | `notes/…` 或其它 md |
-| `index` | 根级 `PAPERS.md` / `AGENTS.md` 等 |
+| `index` | 根级 `AGENTS.md` 及用户导出的索引类 md 等 |
 | `stub` | 未解析目标（id 形如 `stub:<raw>`） |
 
 - **边**：有向，`source` / `target` 为折叠后节点 id；折叠后的自环丢弃。
@@ -979,13 +1056,15 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 原生菜单项点击后 Host 通过 `emit(id, ())` 广播，前端在 `src/App.tsx` 监听。事件名（id）稳定、不随语言变化；仅菜单显示文案随 `set_locale` 本地化。
 
-| 事件名 | 菜单项 | 快捷键 |
-|---|---|---|
-| `settings` | Settings… | `⌘,` |
-| `open_vault` | Open Vault… | `⌘O` |
-| `refresh_tree` | Refresh File Tree | `⌘R` |
-| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` |
-| `toggle_chat` | Toggle Chat | `⌘L` |
+| 事件名 | 菜单项 | 快捷键 | 说明 |
+|---|---|---|---|
+| `settings` | Settings… | `⌘,` | 前端监听，打开设置 |
+| `new_window` | New Window | `⌘N` | **Host 直接** `window_new`，不 emit 给前端 |
+| `open_vault` | Open Vault… | `⌘O` | 前端监听 |
+| `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
+| `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
+| `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听 |
+| `toggle_chat` | Toggle Chat | `⌘L` | 前端监听 |
 
 ## 4. 数据模型
 

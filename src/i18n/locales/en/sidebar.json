@@ -1,10 +1,12 @@
 {
 	"fileTree": {
 		"empty": "Empty folder",
-		"createVault": "New vault",
-		"openVault": "Open vault (⌘O)",
+		"newFile": "New file",
+		"newFolder": "New folder",
 		"refresh": "Refresh (⌘R)",
-		"closeVault": "Close vault"
+		"invalidName": "Invalid name. Do not use path separators.",
+		"needsVault": "Open a vault before creating files.",
+		"alreadyExists": "「{{name}}」 already exists."
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",

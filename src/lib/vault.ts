@@ -1,8 +1,21 @@
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { mkdir, readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
+
+export type CreateVaultResult = {
+	path: string;
+	created: string[];
+	openPath: string;
+};
+
+type ApiResult<T> = {
+	ok: boolean;
+	data?: T;
+	error?: { code: string; message: string };
+};
 
 export type FileNode = {
 	id: string;
@@ -21,23 +34,122 @@ const IGNORE_NAMES = new Set([
 	".motif",
 ]);
 
-const VAULT_PATH_KEY = "motif-vault-path";
+/** Per-window vault (sessionStorage — isolated across ⌘N windows). */
+const SESSION_VAULT_KEY = "motif-vault-path";
+/** Last opened vault for “restore last vault” on the primary window. */
+const LAST_VAULT_KEY = "motif-vault-path";
+/** MRU list for welcome screen (localStorage, shared). */
+const RECENT_VAULTS_KEY = "motif-recent-vaults";
+const MAX_RECENT_VAULTS = 8;
 
-export function getSavedVaultPath(): string | null {
+/** True when this window was opened via ⌘N / New Window (`?fresh=1`). */
+export function isFreshWindow(): boolean {
 	try {
-		return localStorage.getItem(VAULT_PATH_KEY);
+		return new URLSearchParams(window.location.search).get("fresh") === "1";
+	} catch {
+		return false;
+	}
+}
+
+export function getSessionVaultPath(): string | null {
+	try {
+		return sessionStorage.getItem(SESSION_VAULT_KEY);
 	} catch {
 		return null;
 	}
 }
 
+/** Last vault path (localStorage) — used when restore-last is enabled. */
+export function getLastVaultPath(): string | null {
+	try {
+		return localStorage.getItem(LAST_VAULT_KEY);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Resolve initial vault for this window:
+ * 1. Session path if already chosen in this window
+ * 2. Never auto-open on fresh (⌘N) windows
+ * 3. Otherwise last vault when caller enables restore
+ */
+export function getSavedVaultPath(opts?: {
+	allowRestore?: boolean;
+}): string | null {
+	const session = getSessionVaultPath();
+	if (session) return session;
+	if (isFreshWindow()) return null;
+	if (opts?.allowRestore === false) return null;
+	return getLastVaultPath();
+}
+
+export function getRecentVaults(): string[] {
+	try {
+		const raw = localStorage.getItem(RECENT_VAULTS_KEY);
+		if (!raw) {
+			// Migrate single last-vault into recents once.
+			const last = getLastVaultPath();
+			return last ? [last] : [];
+		}
+		const parsed = JSON.parse(raw) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter(
+			(p): p is string => typeof p === "string" && p.length > 0,
+		);
+	} catch {
+		return [];
+	}
+}
+
+export function rememberRecentVault(path: string): void {
+	const normalized = path.replace(/[\\/]+$/, "");
+	if (!normalized) return;
+	try {
+		const next = [
+			normalized,
+			...getRecentVaults().filter(
+				(p) => p.replace(/[\\/]+$/, "") !== normalized,
+			),
+		].slice(0, MAX_RECENT_VAULTS);
+		localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(next));
+	} catch {
+		// ignore
+	}
+}
+
+export function removeRecentVault(path: string): void {
+	const normalized = path.replace(/[\\/]+$/, "");
+	try {
+		const next = getRecentVaults().filter(
+			(p) => p.replace(/[\\/]+$/, "") !== normalized,
+		);
+		localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(next));
+	} catch {
+		// ignore
+	}
+}
+
 export function saveVaultPath(path: string | null): void {
 	try {
-		if (path) localStorage.setItem(VAULT_PATH_KEY, path);
-		else localStorage.removeItem(VAULT_PATH_KEY);
+		if (path) {
+			sessionStorage.setItem(SESSION_VAULT_KEY, path);
+			localStorage.setItem(LAST_VAULT_KEY, path);
+			rememberRecentVault(path);
+		} else {
+			sessionStorage.removeItem(SESSION_VAULT_KEY);
+		}
 	} catch {
 		// ignore quota / private mode
 	}
+}
+
+/** Open a new Motif window without restoring a vault (desktop only). */
+export async function openNewWindow(): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.openDesktopOnly"));
+	}
+	await invoke("window_new");
 }
 
 function joinPath(parent: string, name: string): string {
@@ -102,19 +214,40 @@ export async function pickVaultDirectory(): Promise<string | null> {
 	return path ?? null;
 }
 
-export async function createVaultDirectory(): Promise<string | null> {
+/** Pick a directory that will be scaffolded as a new Motif vault. */
+export async function pickCreateVaultDirectory(): Promise<string | null> {
 	if (!isTauri()) {
-		throw new Error(i18n.t("app:vault.openDesktopOnly"));
+		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
 
-	const selected = await save({
+	const selected = await open({
+		directory: true,
+		multiple: false,
 		title: i18n.t("app:vault.createDialogTitle"),
-		canCreateDirectories: true,
 	});
 
-	if (!selected) return null;
-	await mkdir(selected, { recursive: true });
-	return selected;
+	if (selected === null) return null;
+	const path = Array.isArray(selected) ? selected[0] : selected;
+	return path ?? null;
+}
+
+/**
+ * Scaffold a Motif vault at `path` (Host: vault_create).
+ * Creates papers/notes/plans/.motif, AGENTS.md, catalog.sqlite.
+ * Does not create PAPERS.md / library.bib.
+ */
+export async function createVault(path: string): Promise<CreateVaultResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.createDesktopOnly"));
+	}
+
+	const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
+		path,
+	});
+	if (!result.ok || !result.data) {
+		throw new Error(result.error?.message ?? i18n.t("app:vault.createFailed"));
+	}
+	return result.data;
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
@@ -159,6 +292,30 @@ export async function writeVaultFile(
 		}
 	}
 	await writeTextFile(path, content);
+}
+
+/** Create a directory (and parents) under the vault. */
+export async function createVaultDirectory(path: string): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+
+	const { mkdir } = await import("@tauri-apps/plugin-fs");
+	await mkdir(path, { recursive: true });
+}
+
+/** Join parent + name with the parent's path separator style. */
+export function joinVaultPath(parent: string, name: string): string {
+	return joinPath(parent, name);
+}
+
+/** True if name is a single path segment (no separators / traversal). */
+export function isValidVaultEntryName(name: string): boolean {
+	const trimmed = name.trim();
+	if (!trimmed) return false;
+	if (trimmed === "." || trimmed === "..") return false;
+	if (/[\\/]/.test(trimmed)) return false;
+	return true;
 }
 
 export function vaultDisplayName(rootPath: string | null): string {

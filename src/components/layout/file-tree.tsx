@@ -1,14 +1,20 @@
 import {
 	FileCode2,
 	FileJson,
+	FilePlus2,
 	FileText,
 	FolderPlus,
-	FolderSearch,
 	RefreshCw,
 	ScrollText,
-	Sparkles,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
 	FileTree as AiFileTree,
@@ -23,13 +29,17 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-	isPaperDirectory,
-	isPapersRoot,
-	paperDirFromPath,
-} from "@/lib/paper-metadata";
+import { isPaperDirectory, paperDirFromPath } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/vault";
+
+export type TreeCreateKind = "file" | "folder";
+
+export type TreeCreateDraft = {
+	kind: TreeCreateKind;
+	/** Absolute path of the parent directory (vault root or folder). */
+	parentPath: string;
+};
 
 function MotifLogo({ className }: { className?: string }) {
 	return (
@@ -59,19 +69,138 @@ function fileIcon(name: string) {
 	return FileText;
 }
 
+function pathKey(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
 /** Expand folders by default, but never expand individual paper folders. */
 function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
 	for (const n of nodes) {
 		if (n.kind !== "directory") continue;
-		if (isPaperDirectory(n.path)) continue;
+		if (isPaperDirectory(n.path, n.children)) continue;
 		into.add(n.path);
 		if (n.children?.length) collectDefaultExpanded(n.children, into);
 	}
 }
 
+/** Inline name input — VS Code / Cursor style create. */
+function TreeCreateInput({
+	kind,
+	onConfirm,
+	onCancel,
+}: {
+	kind: TreeCreateKind;
+	onConfirm: (name: string) => void;
+	onCancel: () => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const defaultName = kind === "file" ? "Untitled.md" : "New Folder";
+	const [value, setValue] = useState(defaultName);
+	const [error, setError] = useState<string | null>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
+	const committedRef = useRef(false);
+
+	useEffect(() => {
+		const el = inputRef.current;
+		if (!el) return;
+		el.focus();
+		// Select basename without extension for files (IDE-like).
+		if (kind === "file") {
+			const dot = defaultName.lastIndexOf(".");
+			if (dot > 0) el.setSelectionRange(0, dot);
+			else el.select();
+		} else {
+			el.select();
+		}
+	}, [kind, defaultName]);
+
+	const commit = useCallback(() => {
+		if (committedRef.current) return;
+		const name = value.trim();
+		if (!name) {
+			committedRef.current = true;
+			onCancel();
+			return;
+		}
+		if (name === "." || name === ".." || /[\\/]/.test(name)) {
+			setError(t("fileTree.invalidName"));
+			// Keep editing; re-focus next tick.
+			requestAnimationFrame(() => inputRef.current?.focus());
+			return;
+		}
+		committedRef.current = true;
+		onConfirm(name);
+	}, [value, onCancel, onConfirm, t]);
+
+	const cancel = useCallback(() => {
+		if (committedRef.current) return;
+		committedRef.current = true;
+		onCancel();
+	}, [onCancel]);
+
+	const Icon = kind === "file" ? FileText : FolderPlus;
+
+	return (
+		<div className="flex flex-col gap-0.5 py-0.5">
+			<div
+				className={cn(
+					"flex items-center gap-1 rounded px-2 py-1",
+					error ? "bg-destructive/10" : "bg-muted/60",
+				)}
+			>
+				<span className="size-4 shrink-0" aria-hidden />
+				<Icon className="size-4 shrink-0 text-muted-foreground" />
+				<input
+					ref={inputRef}
+					type="text"
+					value={value}
+					aria-label={
+						kind === "file" ? t("fileTree.newFile") : t("fileTree.newFolder")
+					}
+					aria-invalid={Boolean(error)}
+					className={cn(
+						"min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 py-0.5 text-sm outline-none",
+						error && "border-destructive",
+					)}
+					onChange={(e) => {
+						setValue(e.target.value);
+						if (error) setError(null);
+					}}
+					onKeyDown={(e) => {
+						e.stopPropagation();
+						if (e.key === "Enter") {
+							e.preventDefault();
+							commit();
+						} else if (e.key === "Escape") {
+							e.preventDefault();
+							cancel();
+						}
+					}}
+					onBlur={() => {
+						// Defer so Enter/click handlers run first.
+						requestAnimationFrame(() => {
+							if (!committedRef.current) commit();
+						});
+					}}
+				/>
+			</div>
+			{error ? (
+				<p className="px-8 text-destructive text-[11px] leading-tight">
+					{error}
+				</p>
+			) : null}
+		</div>
+	);
+}
+
 type FileTreeProps = {
 	nodes: FileNode[];
 	selectedPath: string | null;
+	/** Vault root absolute path — used as create parent for root-level entries. */
+	vaultPath: string | null;
+	createDraft: TreeCreateDraft | null;
+	onConfirmCreate: (name: string) => void;
+	onCancelCreate: () => void;
 	/** Called for normal files and for paper folders (collapsed leaves). */
 	onSelectFile: (node: FileNode) => void;
 	className?: string;
@@ -80,6 +209,10 @@ type FileTreeProps = {
 export function FileTree({
 	nodes,
 	selectedPath,
+	vaultPath,
+	createDraft,
+	onConfirmCreate,
+	onCancelCreate,
 	onSelectFile,
 	className,
 }: FileTreeProps) {
@@ -95,6 +228,19 @@ export function FileTree({
 	useEffect(() => {
 		setExpanded(defaultExpanded);
 	}, [defaultExpanded]);
+
+	// Expand parent folder when starting inline create (IDE-like).
+	useEffect(() => {
+		if (!createDraft || !vaultPath) return;
+		const parent = createDraft.parentPath;
+		if (pathKey(parent) === pathKey(vaultPath)) return;
+		setExpanded((prev) => {
+			if (prev.has(parent)) return prev;
+			const next = new Set(prev);
+			next.add(parent);
+			return next;
+		});
+	}, [createDraft, vaultPath]);
 
 	const byPath = useMemo(() => {
 		const map = new Map<string, FileNode>();
@@ -116,24 +262,50 @@ export function FileTree({
 		return selectedPath;
 	}, [selectedPath]);
 
-	const renderNode = (node: FileNode, parentPath: string | null): ReactNode => {
-		// papers/<id> → leaf paper entry (do not expand internals)
-		const parentIsPapers = parentPath != null && isPapersRoot(parentPath);
-		if (node.kind === "directory" && parentIsPapers) {
+	const draftHere = useCallback(
+		(parentAbs: string) =>
+			Boolean(
+				createDraft && pathKey(createDraft.parentPath) === pathKey(parentAbs),
+			),
+		[createDraft],
+	);
+
+	const createRow =
+		createDraft && vaultPath ? (
+			<TreeCreateInput
+				key={`create-${createDraft.kind}-${createDraft.parentPath}`}
+				kind={createDraft.kind}
+				onConfirm={onConfirmCreate}
+				onCancel={onCancelCreate}
+			/>
+		) : null;
+
+	const renderNode = (node: FileNode): ReactNode => {
+		// Paper folder (any depth under papers/) → leaf; org folders expand
+		if (
+			node.kind === "directory" &&
+			isPaperDirectory(node.path, node.children)
+		) {
+			const creatingInside = draftHere(node.path);
 			return (
-				<FileTreeFile
-					key={node.id}
-					path={node.path}
-					name={node.name}
-					icon={<ScrollText className="size-4 text-muted-foreground" />}
-				/>
+				<div key={node.id}>
+					<FileTreeFile
+						path={node.path}
+						name={node.name}
+						icon={<ScrollText className="size-4 text-muted-foreground" />}
+					/>
+					{creatingInside ? (
+						<div className="ml-4 border-l pl-2">{createRow}</div>
+					) : null}
+				</div>
 			);
 		}
 
 		if (node.kind === "directory") {
 			return (
 				<FileTreeFolder key={node.id} path={node.path} name={node.name}>
-					{node.children?.map((child) => renderNode(child, node.path))}
+					{draftHere(node.path) ? createRow : null}
+					{node.children?.map((child) => renderNode(child))}
 				</FileTreeFolder>
 			);
 		}
@@ -149,9 +321,12 @@ export function FileTree({
 		);
 	};
 
+	const rootCreate =
+		createDraft && vaultPath && draftHere(vaultPath) ? createRow : null;
+
 	return (
 		<div className={cn("select-none py-1 text-sm", className)}>
-			{nodes.length === 0 ? (
+			{nodes.length === 0 && !createDraft ? (
 				<p className="px-3 py-2 text-muted-foreground text-xs">
 					{t("fileTree.empty")}
 				</p>
@@ -161,14 +336,20 @@ export function FileTree({
 					expanded={expanded}
 					onExpandedChange={setExpanded}
 					onSelect={(path) => {
+						// Don't navigate away while naming a new entry.
+						if (createDraft) return;
 						const node = byPath.get(path);
 						if (!node) return;
-						if (node.kind === "file" || isPaperDirectory(node.path)) {
+						if (
+							node.kind === "file" ||
+							isPaperDirectory(node.path, node.children)
+						) {
 							onSelectFile(node);
 						}
 					}}
 				>
-					{nodes.map((node) => renderNode(node, null))}
+					{rootCreate}
+					{nodes.map((node) => renderNode(node))}
 				</AiFileTree>
 			)}
 		</div>
@@ -207,19 +388,17 @@ function IconAction({
 
 export function VaultSidebarHeader({
 	title,
-	onOpenVault,
-	onCreateVault,
+	onNewFile,
+	onNewFolder,
 	onRefresh,
-	onCloseVault,
 	busy,
 	error,
 	isDemo,
 }: {
 	title: string;
-	onOpenVault: () => void;
-	onCreateVault: () => void;
+	onNewFile: () => void;
+	onNewFolder: () => void;
 	onRefresh: () => void;
-	onCloseVault: () => void;
 	busy?: boolean;
 	error?: string | null;
 	isDemo: boolean;
@@ -233,18 +412,18 @@ export function VaultSidebarHeader({
 					trailing={
 						<>
 							<IconAction
-								label={t("fileTree.createVault")}
-								onClick={onCreateVault}
-								disabled={busy}
+								label={t("fileTree.newFile")}
+								onClick={onNewFile}
+								disabled={busy || isDemo}
 							>
-								<FolderPlus className="size-3.5" />
+								<FilePlus2 className="size-3.5" />
 							</IconAction>
 							<IconAction
-								label={t("fileTree.openVault")}
-								onClick={onOpenVault}
-								disabled={busy}
+								label={t("fileTree.newFolder")}
+								onClick={onNewFolder}
+								disabled={busy || isDemo}
 							>
-								<FolderSearch className="size-3.5" />
+								<FolderPlus className="size-3.5" />
 							</IconAction>
 							<IconAction
 								label={t("fileTree.refresh")}
@@ -253,15 +432,6 @@ export function VaultSidebarHeader({
 							>
 								<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
 							</IconAction>
-							{!isDemo ? (
-								<IconAction
-									label={t("fileTree.closeVault")}
-									onClick={onCloseVault}
-									disabled={busy}
-								>
-									<Sparkles className="size-3.5" />
-								</IconAction>
-							) : null}
 						</>
 					}
 				>

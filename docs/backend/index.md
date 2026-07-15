@@ -10,25 +10,26 @@
 | 系统语言 | [Rust](https://www.rust-lang.org/) | 适合安全本地 IO、异步服务和强约束命令契约。 |
 | Tauri 文件系统 | [`tauri-plugin-fs`](https://v2.tauri.app/plugin/file-system/) | 读写用户选择的 Vault 文件。 |
 | Tauri 对话框 | [`tauri-plugin-dialog`](https://v2.tauri.app/plugin/dialog/) | 原生文件夹 / 文件选择。 |
-| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 计划用于持久化应用设置和最近 Vault。 |
+| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 已接入插件；最近 Vault / 设置目前仍以前端 `localStorage` 为主，后续迁 Store。 |
 | Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Motif 作为 Client 连接用户本机 BYOA Agent。 |
 | Markdown 图谱 | Rust Wiki 索引 + Markdown 解析 | 反链和图谱必须从 Vault Markdown 派生。 |
-| 缓存 | 计划使用 SQLite / `rusqlite` | 作为可重建查询缓存，不作为事实来源。 |
+| 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.motif/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |
 | PDF 解析 | 计划使用 `liteparse` / MinerU BYOK | 默认本地优先，可选云端提高解析质量。 |
 
 ## Host 职责
 
 - 校验并访问用户显式选择的 Vault 路径。
-- 读写 Markdown 与 metadata 文件。
-- 从 Markdown 构建双链、反链和图谱索引。
+- 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。
+- 从 Markdown 构建双链、反链和图谱索引（paper 标题可读 catalog）。
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
-- 确保缓存可从 Vault 文件重建。
+- 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 
 ## 本分区文档
 
 - [`api.md`](api.md)：Tauri invoke commands、event contracts、Graph 与 Agent API 形状。
-- [`data-model.md`](data-model.md)：Vault 结构、paper 文件、缓存规则、运行时类型。
+- [`data-model.md`](data-model.md)：Vault 结构、paper 文件、分层规则、运行时类型。
+- [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型。
 
 ## 交叉引用

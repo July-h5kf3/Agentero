@@ -2,17 +2,18 @@
 
 ## 项目概览
 
-Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 是唯一事实来源：Markdown、`metadata.json`、源文件和可重建索引都必须能在离开应用后继续被外部工具读取。
+Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中：人的笔记与 source 以 Markdown/文件为准；论文集合与结构化 metadata 以 `.motif/catalog.sqlite` 为准（可导出 `PAPERS.md` / BibTeX，非默认落盘）。离开应用后笔记与源文件仍可被外部工具读取。
 
 ## 当前应用形态
 
 - 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
 - 工作台布局：
-  - 左侧：Vault 文件树与 paper 信息；
-  - 中间：Markdown / PDF / HTML 视图；
+  - 左侧：Vault 文件树（新建文件 / 文件夹 / 刷新）与 paper 信息；
+  - 中间：无 Vault 时欢迎页（最近路径）；有 Vault 时 Markdown / PDF / HTML；
   - 右侧 Preview：Markdown 渲染预览或 paper `NOTES.md`；
   - 可选右侧栏：`Agent` 或 `Backlinks`。
+- 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab。
 - Graph 数据必须来自 Markdown 双链或可重建索引，不能来自手工维护的图数据库。
 
@@ -51,6 +52,7 @@ pnpm tauri build
 - `docs/backend/api.md`：Tauri command 与 event 契约。
 - `docs/backend/wikilinks.md`：双链、反链与图谱设计。
 - `docs/backend/data-model.md`：Vault 文件模型。
+- `docs/backend/catalog.md`：论文目录库（`.motif/catalog.sqlite`）与导出。
 - `docs/development/index.md`：产品、路线图、开发和发布流程入口。
 - `docs/development/roadmap.md`：实现状态与路线图。
 - `docs/development/todo.md`：可执行 backlog。

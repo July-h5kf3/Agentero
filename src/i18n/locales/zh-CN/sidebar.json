@@ -1,10 +1,12 @@
 {
 	"fileTree": {
 		"empty": "空文件夹",
-		"createVault": "新建知识库",
-		"openVault": "打开知识库 (⌘O)",
+		"newFile": "新建文件",
+		"newFolder": "新建文件夹",
 		"refresh": "刷新 (⌘R)",
-		"closeVault": "关闭知识库"
+		"invalidName": "名称无效，请勿使用路径分隔符。",
+		"needsVault": "请先打开知识库再创建文件。",
+		"alreadyExists": "「{{name}}」已存在。"
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",

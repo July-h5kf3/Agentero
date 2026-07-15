@@ -7,7 +7,9 @@
 	"labels": {
 		"settings": "Settings…",
 		"closeSheet": "Close settings",
+		"newWindow": "New window",
 		"openVault": "Open vault…",
+		"createVault": "Create vault…",
 		"refreshTree": "Refresh file tree",
 		"toggleSidebar": "Show / hide sidebar",
 		"toggleChat": "Show / hide chat",

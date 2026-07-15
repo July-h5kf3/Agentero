@@ -7,7 +7,11 @@ import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
-import { FileTree, VaultSidebarHeader } from "@/components/layout/file-tree";
+import {
+	FileTree,
+	type TreeCreateDraft,
+	VaultSidebarHeader,
+} from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
@@ -16,6 +20,7 @@ import {
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import { VaultWelcome } from "@/components/layout/vault-welcome";
 import {
 	type SettingsSection,
 	SettingsWindow,
@@ -32,6 +37,8 @@ import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import {
+	collectPaperFoldersFromTree,
+	detectPaperDirectory,
 	isPaperDirectory,
 	loadPaperMetadata,
 	notesPathForPaper,
@@ -44,14 +51,21 @@ import { resolveShortcutId } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	createVault,
 	createVaultDirectory,
 	type FileNode,
+	getRecentVaults,
 	getSavedVaultPath,
 	isMarkdownPath,
 	isTextOpenable,
+	isValidVaultEntryName,
+	joinVaultPath,
 	loadVaultTree,
+	openNewWindow,
+	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
+	removeRecentVault,
 	saveVaultPath,
 	vaultDisplayName,
 	writeVaultFile,
@@ -83,6 +97,45 @@ With some **bold** text for emphasis!
 `;
 
 /** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
+function normalizePathKey(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function treeFindNode(nodes: FileNode[], path: string): FileNode | undefined {
+	const key = normalizePathKey(path);
+	const walk = (list: FileNode[]): FileNode | undefined => {
+		for (const n of list) {
+			if (normalizePathKey(n.path) === key) return n;
+			if (n.children?.length) {
+				const hit = walk(n.children);
+				if (hit) return hit;
+			}
+		}
+		return undefined;
+	};
+	return walk(nodes);
+}
+
+function treeFindChildren(
+	nodes: FileNode[],
+	path: string,
+): FileNode[] | undefined {
+	return treeFindNode(nodes, path)?.children;
+}
+
+/** Parent directory for new file/folder: selected folder, or parent of selected file, else vault root. */
+function resolveCreateParent(
+	vaultRoot: string,
+	selectedPath: string | null,
+	tree: FileNode[],
+): string {
+	if (!selectedPath) return vaultRoot;
+	const node = treeFindNode(tree, selectedPath);
+	if (node?.kind === "directory") return selectedPath;
+	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
+	return parent && parent !== selectedPath ? parent : vaultRoot;
+}
+
 function collectMarkdownRelPaths(
 	nodes: FileNode[],
 	vaultPath: string | null,
@@ -101,7 +154,7 @@ function collectMarkdownRelPaths(
 }
 
 export default function App() {
-	const { t } = useTranslation("app");
+	const { t } = useTranslation(["app", "sidebar"]);
 	const { setTheme } = useTheme();
 	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -113,26 +166,43 @@ export default function App() {
 	const [markdown, setMarkdown] = useState(() => {
 		const saved = localStorage.getItem(STORAGE_KEY);
 		const hasVault =
-			isTauri() && loadSettings().restoreLastVault && getSavedVaultPath();
+			isTauri() &&
+			Boolean(
+				getSavedVaultPath({ allowRestore: loadSettings().restoreLastVault }),
+			);
 		if (!hasVault) return defaultMarkdown;
 		return saved ?? defaultMarkdown;
 	});
 	const [vaultPath, setVaultPath] = useState<string | null>(() => {
-		const s = loadSettings();
 		if (!isTauri()) return null;
-		if (!s.restoreLastVault) return null;
-		return getSavedVaultPath();
+		return getSavedVaultPath({
+			allowRestore: loadSettings().restoreLastVault,
+		});
 	});
 	const [tree, setTree] = useState<FileNode[]>([]);
-	const [selectedPath, setSelectedPath] = useState<string | null>(() =>
-		localStorage.getItem(OPEN_FILE_KEY),
-	);
+	const [selectedPath, setSelectedPath] = useState<string | null>(() => {
+		// Fresh windows and empty vaults should not restore a previous file.
+		if (!isTauri()) return null;
+		const vault = getSavedVaultPath({
+			allowRestore: loadSettings().restoreLastVault,
+		});
+		return vault ? localStorage.getItem(OPEN_FILE_KEY) : null;
+	});
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	/** Inline new file/folder draft in the tree (IDE-style). */
+	const [createDraft, setCreateDraft] = useState<TreeCreateDraft | null>(null);
+	const [recentVaults, setRecentVaults] = useState<string[]>(() =>
+		getRecentVaults(),
+	);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
 		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		if (saved && (isPaperDirectory(saved) || paperDirFromPath(saved))) {
+		if (saved && paperDirFromPath(saved)) {
+			return "pdf";
+		}
+		// Paper folder root (no marker in path alone) — prefer pdf until meta loads
+		if (saved && /(?:^|\/)papers\//i.test(saved.replace(/\\/g, "/"))) {
 			return "pdf";
 		}
 		return saved ? preferredModeForPath(saved) : "markdown";
@@ -171,6 +241,8 @@ export default function App() {
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
+	/** Paper folders at any depth under papers/ (marker-based). */
+	const paperFolders = useMemo(() => collectPaperFoldersFromTree(tree), [tree]);
 
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
@@ -183,7 +255,14 @@ export default function App() {
 		let cancelled = false;
 
 		void (async () => {
-			const paperDir = paperDirFromPath(selectedPath);
+			let paperDir = paperDirFromPath(selectedPath, paperFolders);
+			if (
+				!paperDir &&
+				selectedPath &&
+				(await detectPaperDirectory(selectedPath))
+			) {
+				paperDir = selectedPath.replace(/[\\/]+$/, "");
+			}
 
 			// Selecting a bare .pdf/.html path without paper metadata: no remote preview
 			if (!paperDir) {
@@ -221,7 +300,11 @@ export default function App() {
 			setNotesKey((k) => k + 1);
 
 			// Opening a paper folder: prefer PDF, fall back HTML, else NOTES as markdown
-			if (selectedPath && isPaperDirectory(selectedPath)) {
+			const openingPaperRoot =
+				selectedPath != null &&
+				(normalizePathKey(selectedPath) === normalizePathKey(paperDir) ||
+					isPaperDirectory(selectedPath, treeFindChildren(tree, selectedPath)));
+			if (openingPaperRoot) {
 				if (remotePdf) setCenterMode("pdf");
 				else if (remoteHtml) setCenterMode("html");
 				else {
@@ -236,7 +319,7 @@ export default function App() {
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedPath]);
+	}, [selectedPath, paperFolders, tree]);
 
 	useEffect(() => {
 		setTheme(settings.theme);
@@ -360,6 +443,7 @@ export default function App() {
 		saveVaultPath(path);
 		setVaultPath(path);
 		setSelectedPath(null);
+		setRecentVaults(getRecentVaults());
 		try {
 			await rebuildWikiIndex(path);
 		} catch {
@@ -385,23 +469,49 @@ export default function App() {
 		}
 	}, [t, activateVault]);
 
-	const handleCreateVault = useCallback(async () => {
+	const handleOpenRecentVault = useCallback(
+		async (path: string) => {
+			setError(null);
+			try {
+				if (!isTauri()) {
+					setError(t("errors.openVaultDesktopOnly"));
+					return;
+				}
+				setBusy(true);
+				const { exists } = await import("@tauri-apps/plugin-fs");
+				if (!(await exists(path))) {
+					removeRecentVault(path);
+					setRecentVaults(getRecentVaults());
+					setError(t("vault.recentMissing", { path }));
+					return;
+				}
+				await activateVault(path);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[t, activateVault],
+	);
+
+	const handleRemoveRecentVault = useCallback((path: string) => {
+		removeRecentVault(path);
+		setRecentVaults(getRecentVaults());
+	}, []);
+
+	const handleNewWindow = useCallback(async () => {
 		setError(null);
 		try {
 			if (!isTauri()) {
 				setError(t("errors.openVaultDesktopOnly"));
 				return;
 			}
-			setBusy(true);
-			const path = await createVaultDirectory();
-			if (!path) return;
-			await activateVault(path);
+			await openNewWindow();
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setBusy(false);
 		}
-	}, [t, activateVault]);
+	}, [t]);
 
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
@@ -438,6 +548,9 @@ export default function App() {
 				case "closeSheet":
 					closeSettings();
 					break;
+				case "newWindow":
+					void handleNewWindow();
+					break;
 				case "openVault":
 					void handleOpenVault();
 					break;
@@ -470,6 +583,7 @@ export default function App() {
 	}, [
 		closeSettings,
 		expandSidebar,
+		handleNewWindow,
 		handleOpenVault,
 		handleRefresh,
 		openSettings,
@@ -493,6 +607,7 @@ export default function App() {
 					openSettings();
 				}),
 			);
+			// new_window is handled natively in Rust (creates the window directly).
 			unsubs.push(
 				await listen("open_vault", () => {
 					void handleOpenVault();
@@ -551,20 +666,6 @@ export default function App() {
 		[vaultPath],
 	);
 
-	const handleCloseVault = () => {
-		saveVaultPath(null);
-		localStorage.removeItem(STORAGE_KEY);
-		localStorage.removeItem(OPEN_FILE_KEY);
-		setVaultPath(null);
-		setSelectedPath(null);
-		setMarkdown(defaultMarkdown);
-		setMarkdownDirty(false);
-		setEditorKey((k) => k + 1);
-		setError(null);
-		setTree([]);
-		setCenterMode("markdown");
-	};
-
 	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
 	const openPaper = useCallback((paperDir: string) => {
 		setSelectedPath(paperDir);
@@ -575,8 +676,11 @@ export default function App() {
 
 	const openPath = useCallback(
 		async (absoluteOrDemoPath: string) => {
-			// Paper folder path (from tree or restore)
-			if (isPaperDirectory(absoluteOrDemoPath)) {
+			const children = treeFindChildren(tree, absoluteOrDemoPath);
+			if (
+				isPaperDirectory(absoluteOrDemoPath, children) ||
+				(await detectPaperDirectory(absoluteOrDemoPath))
+			) {
 				openPaper(absoluteOrDemoPath);
 				return;
 			}
@@ -593,7 +697,7 @@ export default function App() {
 			setError(null);
 
 			// File under a paper: prefer PDF if available later; set by extension first
-			const paperDir = paperDirFromPath(node.path);
+			const paperDir = paperDirFromPath(node.path, paperFolders);
 			if (paperDir && isMarkdownPath(node.path)) {
 				// Opening NOTES.md etc. from wiki/backlink still shows notes; PDF if user toggles
 				setCenterMode(preferredModeForPath(node.path));
@@ -625,11 +729,128 @@ export default function App() {
 				setBusy(false);
 			}
 		},
-		[openPaper, t],
+		[openPaper, paperFolders, t, tree],
 	);
 
+	const startCreate = useCallback(
+		(kind: TreeCreateDraft["kind"]) => {
+			setError(null);
+			if (!vaultPath || !isTauri()) {
+				setError(t("sidebar:fileTree.needsVault"));
+				return;
+			}
+			const parent = resolveCreateParent(vaultPath, selectedPath, tree);
+			setCreateDraft({ kind, parentPath: parent });
+		},
+		[vaultPath, selectedPath, tree, t],
+	);
+
+	const handleCancelCreate = useCallback(() => {
+		setCreateDraft(null);
+	}, []);
+
+	const handleConfirmCreate = useCallback(
+		async (name: string) => {
+			if (!createDraft || !vaultPath || !isTauri()) {
+				setCreateDraft(null);
+				return;
+			}
+			const trimmed = name.trim();
+			if (!isValidVaultEntryName(trimmed)) {
+				setError(t("sidebar:fileTree.invalidName"));
+				setCreateDraft(null);
+				return;
+			}
+			const full = joinVaultPath(createDraft.parentPath, trimmed);
+			const kind = createDraft.kind;
+			// Clear draft first so the tree can re-render after create.
+			setCreateDraft(null);
+			try {
+				setBusy(true);
+				setError(null);
+				const { exists } = await import("@tauri-apps/plugin-fs");
+				if (await exists(full)) {
+					setError(t("sidebar:fileTree.alreadyExists", { name: trimmed }));
+					return;
+				}
+				if (kind === "file") {
+					await writeVaultFile(full, "");
+					await refreshTree(vaultPath);
+					await openPath(full);
+				} else {
+					await createVaultDirectory(full);
+					await refreshTree(vaultPath);
+					setSelectedPath(full);
+				}
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setBusy(false);
+			}
+		},
+		[createDraft, vaultPath, t, refreshTree, openPath],
+	);
+
+	const handleCreateVault = useCallback(async () => {
+		setError(null);
+		try {
+			if (!isTauri()) {
+				setError(t("errors.openVaultDesktopOnly"));
+				return;
+			}
+			setBusy(true);
+			const path = await pickCreateVaultDirectory();
+			if (!path) return;
+			const result = await createVault(path);
+			const root = result.path || path;
+			await activateVault(root);
+			const sep = root.includes("\\") ? "\\" : "/";
+			const openRel = result.openPath || "AGENTS.md";
+			const openAbs = `${root.replace(/[\\/]+$/, "")}${sep}${openRel.replace(/\//g, sep)}`;
+			await openPath(openAbs);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [activateVault, openPath, t]);
+
+	// Create Vault shortcut + native menu (after handler is defined)
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			const id = resolveShortcutId(event, {
+				settingsOpen: settingsOpenRef.current,
+			});
+			if (id !== "createVault") return;
+			event.preventDefault();
+			void handleCreateVault();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [handleCreateVault]);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		let unsub: (() => void) | undefined;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen("create_vault", () => {
+				void handleCreateVault();
+			});
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, [handleCreateVault]);
+
 	const handleSelectFile = async (node: FileNode) => {
-		if (node.kind === "directory" && isPaperDirectory(node.path)) {
+		if (
+			node.kind === "directory" &&
+			isPaperDirectory(node.path, node.children)
+		) {
 			openPaper(node.path);
 			return;
 		}
@@ -659,15 +880,24 @@ export default function App() {
 				return;
 			}
 			const clean = normalizeVaultRel(rel);
-			const paperMatch = clean.match(/^(papers\/[^/]+)/i);
-			if (paperMatch) {
-				const paperDir = `${vaultPath.replace(/[\\/]+$/, "")}/${paperMatch[1]}`;
-				openPaper(paperDir);
+			const root = vaultPath.replace(/[\\/]+$/, "");
+			// paperFolders are absolute paths from the file tree
+			const paperAbs = paperDirFromPath(`${root}/${clean}`, paperFolders);
+			if (paperAbs) {
+				openPaper(paperAbs);
 				return;
 			}
-			handleOpenVaultRel(clean);
+			// Collapsed graph node may already be the paper folder rel path
+			void (async () => {
+				const candidate = `${root}/${clean}`;
+				if (await detectPaperDirectory(candidate)) {
+					openPaper(candidate);
+					return;
+				}
+				handleOpenVaultRel(clean);
+			})();
 		},
-		[vaultPath, openPaper, handleOpenVaultRel, t],
+		[vaultPath, openPaper, handleOpenVaultRel, paperFolders, t],
 	);
 
 	const handleWikiNavigate = useCallback(
@@ -880,11 +1110,10 @@ export default function App() {
 								<div className="shrink-0">
 									<VaultSidebarHeader
 										title={vaultDisplayName(vaultPath)}
-										onOpenVault={() => void handleOpenVault()}
-										onCreateVault={() => void handleCreateVault()}
+										onNewFile={() => startCreate("file")}
+										onNewFolder={() => startCreate("folder")}
 										onRefresh={handleRefresh}
-										onCloseVault={handleCloseVault}
-										busy={busy}
+										busy={busy || Boolean(createDraft)}
 										error={error}
 										isDemo={isDemo}
 									/>
@@ -893,6 +1122,10 @@ export default function App() {
 									<FileTree
 										nodes={tree}
 										selectedPath={selectedPath}
+										vaultPath={vaultPath}
+										createDraft={createDraft}
+										onConfirmCreate={(name) => void handleConfirmCreate(name)}
+										onCancelCreate={handleCancelCreate}
 										onSelectFile={(n) => void handleSelectFile(n)}
 									/>
 								</div>
@@ -940,45 +1173,32 @@ export default function App() {
 									</div>
 								</div>
 								{!vaultPath ? (
-									<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
-										<FolderOpen className="size-10 text-muted-foreground" />
-										<div className="max-w-xs space-y-2">
-											<p className="font-medium text-sm">
-												{t("vault.noVaultOpenTitle")}
-											</p>
-											<p className="text-muted-foreground text-xs">
-												{t("vault.noVaultOpenDescription")}
-											</p>
-										</div>
-										{isTauri() ? (
-											<div className="flex items-center gap-2">
-												<Button
-													type="button"
-													variant="default"
-													size="sm"
-													onClick={() => void handleCreateVault()}
-												>
-													{t("vault.createVaultButton")}
-												</Button>
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													onClick={() => void handleOpenVault()}
-												>
-													{t("vault.openVaultButton")}
-												</Button>
+									isTauri() ? (
+										<VaultWelcome
+											recentVaults={recentVaults}
+											busy={busy}
+											onOpenVault={() => void handleOpenVault()}
+											onCreateVault={() => void handleCreateVault()}
+											onOpenRecent={(path) => void handleOpenRecentVault(path)}
+											onRemoveRecent={handleRemoveRecentVault}
+										/>
+									) : (
+										<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
+											<FolderOpen className="size-10 text-muted-foreground" />
+											<div className="max-w-xs space-y-2">
+												<p className="font-medium text-sm">
+													{t("vault.noVaultOpenTitle")}
+												</p>
+												<p className="text-muted-foreground text-xs">
+													{t("vault.runTauriPrefix")}{" "}
+													<code className="rounded bg-muted px-1 py-0.5">
+														pnpm tauri dev
+													</code>{" "}
+													{t("vault.runTauriSuffix")}
+												</p>
 											</div>
-										) : (
-											<p className="text-muted-foreground text-xs">
-												{t("vault.runTauriPrefix")}{" "}
-												<code className="rounded bg-muted px-1 py-0.5">
-													pnpm tauri dev
-												</code>{" "}
-												{t("vault.runTauriSuffix")}
-											</p>
-										)}
-									</div>
+										</div>
+									)
 								) : (
 									<>
 										{centerMode === "markdown" ? (

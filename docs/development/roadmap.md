@@ -13,7 +13,7 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | Tauri/React 工作台、文件树、文件读取/保存、最近 Vault、PDF/HTML/Notes 视图已落地。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页最近列表、树内联新建文件/文件夹、PDF/HTML/Notes、WYSIWYG Markdown。 |
 | V0.2 arXiv 入库闭环 | ⏳ 待实现 | 已有 arXiv URL/metadata 辅助与 demo 数据，完整检索、确认、入库、索引刷新仍待做。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client 覆盖 OpenCode、Gemini、Claude、Qoder、Grok 与自定义 agent；Codex 已切换到原生 App Server thread runtime，可读取、恢复本地 Codex history。内置工作流、逐项权限确认和写入草稿仍待补齐。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 面板与 `graph_get_graph` 已落地；输入补全/Plate 内联节点可后续增强。 |
@@ -29,23 +29,26 @@
 关键交付：
 
 - [x] 打开本地 Vault。
-- [ ] 创建空 Vault 并初始化 `AGENTS.md / PAPERS.md / papers / notes / plans`。
+- [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.motif/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
-- [x] Markdown 文件读取、编辑、保存。
-- [x] 最近 Vault 记录与应用重启恢复。
+- [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存）。
+- [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
+- [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
+- [x] 树内联新建文件 / 文件夹。
 - [x] Paper-centric 视图：选中 paper 后中间显示远程 PDF/HTML，右侧显示该篇 `NOTES.md`。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口。
 
 验收标准：
 
-- [ ] 用户可以创建一个空 Vault 并看到标准目录结构。
+- [x] 用户可以创建一个空 Vault 并看到标准目录结构与 catalog 数据库。
 - [x] 用户可以打开、编辑、保存一个 Markdown note。
-- [x] 重启应用后可以回到最近使用的 Vault。
+- [x] 重启应用后可以回到最近使用的 Vault（设置开启时）。
+- [x] `⌘N` 打开的新窗口不自动占用上一窗口的 Vault，欢迎页可点最近路径。
 
 后续 TODO：
 
-- [ ] 补齐“Create Vault”流程，而不只是打开已有目录。
-- [ ] 最近 Vault 从 `localStorage` 迁到 Tauri Store。
+- [x] 补齐“Create Vault”流程（含 catalog 初始化），而不只是打开已有目录。
+- [ ] 最近 Vault / UI 偏好从 `localStorage` 迁到 Tauri Store（语义对齐现有前端 MRU）。
 - [ ] 文件监听与外部编辑器修改同步。
 - [ ] 增加保存状态提示和冲突处理。
 
@@ -59,18 +62,18 @@
 - [ ] 输入分类与意图解析：规则识别精确 ID/URL，Agent 处理模糊输入。
 - [ ] Agent 检索 arXiv 候选论文并返回列表供用户确认（单选/多选）。
 - [ ] 获取论文元数据。
-- [ ] 创建 `papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey），写入 `metadata.json`。
+- [ ] 创建 `papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey），metadata 写入 catalog。
 - [ ] 获取 LaTeX source / HTML / PDF 资源，source 保存到 `source/`。
 - [ ] 仅在无 LaTeX source 或需要可读结构化正文时生成 `PAPER.md`。
 - [ ] 生成默认结构的 `NOTES.md`，并创建空的 `highlights.md`。
-- [ ] 更新 `PAPERS.md`（派生索引）与 `library.bib`，并同步刷新 `.motif/cache.sqlite`（查询缓存）。
+- [ ] metadata 写入 `.motif/catalog.sqlite`；可选 `catalog:export_*`（不默认写 PAPERS.md / library.bib）。
 - [ ] 在 UI 中展示入库进度、成功结果和失败原因。
 
 验收标准：
 
 - [ ] 输入 `1706.03762` 后能生成对应论文目录和核心 Markdown 文件。
 - [ ] 输入一段描述或关键词后，Agent 能返回候选论文列表，用户确认后完成入库。
-- [ ] 连续入库 3 篇论文后，`PAPERS.md` 有 3 条有效索引，SQLite 索引可从各篇 `metadata.json` 重建。
+- [ ] 连续入库 3 篇论文后，`paper:list` 返回 3 条；export 的 PAPERS.md 含 3 行。
 - [ ] 有 LaTeX source 的论文优先保留 `.tex` 源文件，`PAPER.md` 为可选生成。
 - [ ] 重复入库时不会破坏用户已修改的 `NOTES.md`。
 
@@ -79,7 +82,7 @@
 - [ ] 设计 Import dialog：精确 ID/URL 直接导入，关键词/描述走 Agent 候选。
 - [ ] Rust 端实现 arXiv Atom 查询、标准 ID 归一化、错误类型。
 - [ ] 入库任务需要可取消、可重试，并能恢复部分完成状态。
-- [ ] 明确 `metadata.json` schema 与 `library.bib` 派生规则。
+- [ ] 明确 catalog schema 与 BibTeX / PAPERS.md 导出规则。
 - [ ] 入库后自动打开 paper 目录并刷新反链/图谱索引。
 
 ## V0.3 Agent 工作流（ACP Client + BYOA）
@@ -216,7 +219,8 @@
 
 ### 近期优先级 P0
 
-- [ ] Create Vault：初始化标准目录与 Vault 内 `AGENTS.md`。
+- [x] Create Vault：标准目录 + `AGENTS.md` + `.motif/catalog.sqlite`。
+- [x] 多窗口（⌘N）+ 欢迎页最近 Vault 列表（前端 MRU；Store 迁移仍待做）。
 - [ ] arXiv 精确 ID/URL 入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。
@@ -226,7 +230,7 @@
 ### 中期优先级 P1
 
 - [ ] 本地 PDF importer 与 metadata 确认面板。
-- [ ] SQLite 索引落盘：元数据、双链边、全文检索。
+- [ ] Catalog 落地 + 双链边/全文 FTS 缓存表（可重建）。
 - [ ] `[[` 补全与 Plate wikilink 内联节点。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。
@@ -253,8 +257,8 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - 每个版本都必须保持 Vault 可被外部编辑器打开。
 - 每个版本都必须避免覆盖用户手写笔记。
-- 新 importer 不得改变已存在的 `PAPERS.md / NOTES.md` 语义；`PAPER.md` 作为派生文件可随时重建。
-- SQLite 索引损坏时必须能从 `metadata.json`、`NOTES.md` 和双链自动重建。
+- 新 importer 不得覆盖用户 `NOTES.md`；meta 只写 catalog；`PAPER.md` 可重建；不自动改用户导出的 PAPERS.md。
+- Catalog 损坏时依赖备份/export；双链缓存可从 Markdown 重建；历史 `metadata.json` 可导入。
 - 图谱和搜索可以使用缓存，但缓存损坏时必须能从 Markdown 重建。
 - Agent 功能失败时必须保留可读错误信息和重试入口。
 - 发布构建必须由 tag 触发；如加入签名/公证，需要保证本地开发构建不依赖发布密钥。

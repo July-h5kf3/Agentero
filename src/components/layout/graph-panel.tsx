@@ -96,6 +96,7 @@ export function GraphPanel({
 
 	const centerHint = useMemo(() => {
 		if (!selectedPath) return null;
+		// Nested papers: prefer folder containing NOTES/source; fall back to path
 		return paperDirFromPath(selectedPath) ?? selectedPath;
 	}, [selectedPath]);
 
