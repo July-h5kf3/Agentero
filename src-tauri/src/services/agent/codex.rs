@@ -494,7 +494,7 @@ async fn run_codex_turn_inner(
     } else {
         None
     };
-    client
+    let turn = client
         .request(
             "turn/start",
             json!({
@@ -508,6 +508,10 @@ async fn run_codex_turn_inner(
             }),
         )
         .await?;
+    let turn_id = turn
+        .get("turn")
+        .and_then(|turn| string(turn, &["id"]))
+        .ok_or_else(|| AppError::message("Codex App Server did not return a turn id"))?;
     let mut content = String::new();
     let mut reasoning = String::new();
     let mut cancelled = false;
@@ -534,7 +538,12 @@ async fn run_codex_turn_inner(
                 if changed.is_ok() && *cancellation.borrow() {
                     cancelled = true;
                     // The server will finish the turn after the interrupt request.
-                    let _ = client.request("turn/interrupt", json!({ "threadId": thread_id })).await?;
+                    let _ = client
+                        .request(
+                            "turn/interrupt",
+                            json!({ "threadId": thread_id, "turnId": turn_id }),
+                        )
+                        .await?;
                 }
             }
             message = client.next_message() => {
