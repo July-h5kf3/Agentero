@@ -91,14 +91,13 @@ pub fn probe_command(command: &str) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn finds_sh_on_unix() {
-        #[cfg(unix)]
-        {
-            let p = resolve_command("sh");
-            assert!(p.is_some());
-        }
+        let p = resolve_command("sh");
+        assert!(p.is_some());
     }
 }

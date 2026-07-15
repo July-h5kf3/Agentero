@@ -19,7 +19,11 @@
 		"enterAgentZen": "Agent 禅模式",
 		"exitAgentZen": "退出禅模式",
 		"enterAgentZenHint": "全屏 Agent 对话 (⌥⌘Z)",
-		"exitAgentZenHint": "返回工作台 (⌥⌘Z)"
+		"exitAgentZenHint": "返回工作台 (⌥⌘Z)",
+		"minimize": "最小化",
+		"maximize": "最大化",
+		"restore": "还原",
+		"close": "关闭"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",

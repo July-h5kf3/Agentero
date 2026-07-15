@@ -19,7 +19,11 @@
 		"enterAgentZen": "Agent zen mode",
 		"exitAgentZen": "Exit zen mode",
 		"enterAgentZenHint": "Full-screen Agent chat (⌥⌘Z)",
-		"exitAgentZenHint": "Back to workbench (⌥⌘Z)"
+		"exitAgentZenHint": "Back to workbench (⌥⌘Z)",
+		"minimize": "Minimize",
+		"maximize": "Maximize",
+		"restore": "Restore",
+		"close": "Close"
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",

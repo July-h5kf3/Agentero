@@ -33,6 +33,7 @@ import {
 	ResizablePanel,
 } from "@/components/layout/resizable";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
+import { WindowControls } from "@/components/layout/window-controls";
 import {
 	type SettingsSection,
 	SettingsWindow,
@@ -75,7 +76,7 @@ import {
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
-import { isTauri } from "@/lib/tauri";
+import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
 	createVault,
@@ -297,6 +298,10 @@ export default function App() {
 	const [notesDirty, setNotesDirty] = useState(false);
 
 	const isDemo = vaultPath === null;
+	// macOS keeps native traffic lights (Overlay title bar); other desktop
+	// platforms are frameless and draw their own caption buttons on the right.
+	const isMacDesktop = isTauri() && isMacOS();
+	const showWindowControls = isTauri() && !isMacOS();
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
@@ -1724,10 +1729,14 @@ export default function App() {
 					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
 					  Keep extra gap so the sidebar toggle never hugs the lights.
 					*/}
-					<div
-						className="w-[92px] shrink-0 self-stretch"
-						data-tauri-drag-region
-					/>
+					{isMacDesktop ? (
+						<div
+							className="w-[92px] shrink-0 self-stretch"
+							data-tauri-drag-region
+						/>
+					) : (
+						<div className="w-2 shrink-0 self-stretch" data-tauri-drag-region />
+					)}
 					<TooltipProvider delayDuration={250}>
 						{agentZenMode ? (
 							<>
@@ -1877,6 +1886,7 @@ export default function App() {
 								</div>
 							</>
 						)}
+						{showWindowControls ? <WindowControls /> : null}
 					</TooltipProvider>
 				</header>
 
