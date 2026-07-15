@@ -53,5 +53,20 @@
 	},
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"
+	},
+	"tasks": {
+		"title": "后台任务",
+		"toggle": "显示或隐藏后台任务",
+		"collapse": "收起",
+		"clearFinished": "清除已完成",
+		"empty": "暂无任务",
+		"idle": "已完成",
+		"activeCount": "{{count}} 个进行中",
+		"downloadPaper": "下载论文资源",
+		"downloadAll": "下载缺失资源",
+		"downloadProgress": "{{current}} / {{total}}",
+		"lookupImport": "添加论文",
+		"libraryImport": "导入文献库",
+		"libraryExport": "导出文献库"
 	}
 }

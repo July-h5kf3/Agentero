@@ -53,5 +53,20 @@
 	},
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"
+	},
+	"tasks": {
+		"title": "Background Tasks",
+		"toggle": "Show or hide background tasks",
+		"collapse": "Collapse",
+		"clearFinished": "Clear finished",
+		"empty": "No tasks",
+		"idle": "Done",
+		"activeCount": "{{count}} running",
+		"downloadPaper": "Download paper assets",
+		"downloadAll": "Download missing assets",
+		"downloadProgress": "{{current}} / {{total}}",
+		"lookupImport": "Add paper",
+		"libraryImport": "Import bibliography",
+		"libraryExport": "Export library"
 	}
 }

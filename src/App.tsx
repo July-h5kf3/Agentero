@@ -14,6 +14,7 @@ import { usePanelRef } from "react-resizable-panels";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
+import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
 import {
 	FileTree,
@@ -45,6 +46,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
+import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import {
 	collectPaperFoldersFromTree,
@@ -779,16 +781,26 @@ export default function App() {
 			if (!vaultPath) {
 				throw new Error(t("sidebar:lookup.needsVault"));
 			}
-			const result = await addPaperByIdentifier({
-				vaultRoot: vaultPath,
-				parentDir: lookupParentDir,
-				text,
-				settings,
-			});
-			await refreshTree(vaultPath);
-			// Rebuild Backlinks/Graph index so new NOTES.md / links are visible.
-			await rebuildWikiAndNotify(vaultPath);
-			await refreshLibrary();
+			const result = await runBackgroundTask(
+				{
+					kind: "lookup",
+					title: t("tasks.lookupImport"),
+					detail: text.trim().slice(0, 80),
+				},
+				async ({ setDetail }) => {
+					setDetail(text.trim().slice(0, 80));
+					const r = await addPaperByIdentifier({
+						vaultRoot: vaultPath,
+						parentDir: lookupParentDir,
+						text,
+						settings,
+					});
+					await refreshTree(vaultPath);
+					await rebuildWikiAndNotify(vaultPath);
+					await refreshLibrary();
+					return r;
+				},
+			);
 			openPaper(result.paperDir);
 			// Surface download failure without failing the whole import
 			if (result.pdf === false) {
@@ -824,14 +836,27 @@ export default function App() {
 			if (!vaultPath) return;
 			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
 			try {
-				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
-				await refreshTree(vaultPath);
-				await refreshLibrary();
+				await runBackgroundTask(
+					{
+						kind: "download",
+						title: t("tasks.downloadPaper"),
+						detail: rel,
+					},
+					async ({ setDetail }) => {
+						setDetail(rel);
+						await downloadPaperAssets({
+							vaultRoot: vaultPath,
+							paperPath: rel,
+						});
+						await refreshTree(vaultPath);
+						await refreshLibrary();
+					},
+				);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshTree, refreshLibrary],
+		[vaultPath, refreshTree, refreshLibrary, t],
 	);
 
 	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
@@ -859,35 +884,58 @@ export default function App() {
 		setLibraryIoBusy("export");
 		setError(null);
 		try {
-			const result = await exportLibraryToFile({
-				vaultPath,
-				settings,
-				format: "bibtex",
-			});
-			if (!result) return; // cancelled
-			// success: brief status in error slot is wrong; keep silent or set soft message
+			await runBackgroundTask(
+				{
+					kind: "export",
+					title: t("tasks.libraryExport"),
+				},
+				async () => {
+					const result = await exportLibraryToFile({
+						vaultPath,
+						settings,
+						format: "bibtex",
+					});
+					if (!result) {
+						// User cancelled dialog — treat as soft cancel, not failure
+						return null;
+					}
+					return result;
+				},
+			);
 			setError(null);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLibraryIoBusy(null);
 		}
-	}, [vaultPath, settings, libraryIoBusy]);
+	}, [vaultPath, settings, libraryIoBusy, t]);
 
 	const handleLibraryImport = useCallback(async () => {
 		if (!vaultPath || libraryIoBusy) return;
 		setLibraryIoBusy("import");
 		setError(null);
 		try {
-			const result = await importLibraryFromFile({
-				vaultPath,
-				parentDir: lookupParentDir,
-				settings,
-			});
-			if (!result) return;
-			await refreshTree(vaultPath);
-			await refreshLibrary();
-			if (result.errors.length) {
+			const result = await runBackgroundTask(
+				{
+					kind: "import",
+					title: t("tasks.libraryImport"),
+				},
+				async ({ setDetail }) => {
+					const r = await importLibraryFromFile({
+						vaultPath,
+						parentDir: lookupParentDir,
+						settings,
+					});
+					if (!r) return null;
+					setDetail(
+						t("sidebar:papersLibrary.importDone", { count: r.imported }),
+					);
+					await refreshTree(vaultPath);
+					await refreshLibrary();
+					return r;
+				},
+			);
+			if (result?.errors.length) {
 				setError(
 					`${t("sidebar:papersLibrary.importDone", { count: result.imported })}; ${result.errors.slice(0, 2).join("; ")}`,
 				);
@@ -925,22 +973,50 @@ export default function App() {
 		if (!queue.length) return;
 
 		const errors: string[] = [];
-		for (const node of queue) {
-			const rel = toVaultRelative(vaultPath, node.path)
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			try {
-				await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
-			} catch (e) {
-				errors.push(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
-			}
+		try {
+			await runBackgroundTask(
+				{
+					kind: "downloadAll",
+					title: t("tasks.downloadAll"),
+					detail: t("tasks.downloadProgress", {
+						current: 0,
+						total: queue.length,
+					}),
+				},
+				async ({ setProgress, setDetail }) => {
+					let i = 0;
+					for (const node of queue) {
+						const rel = toVaultRelative(vaultPath, node.path)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						i += 1;
+						setDetail(
+							`${t("tasks.downloadProgress", { current: i, total: queue.length })} · ${rel}`,
+						);
+						setProgress(Math.round(((i - 1) / queue.length) * 100));
+						try {
+							await downloadPaperAssets({
+								vaultRoot: vaultPath,
+								paperPath: rel,
+							});
+						} catch (e) {
+							errors.push(
+								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
+							);
+						}
+						setProgress(Math.round((i / queue.length) * 100));
+					}
+					await refreshTree(vaultPath);
+					await refreshLibrary();
+				},
+			);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
 		}
-		await refreshTree(vaultPath);
-		await refreshLibrary();
 		if (errors.length) {
 			setError(errors.slice(0, 3).join("; "));
 		}
-	}, [vaultPath, tree, refreshTree, refreshLibrary]);
+	}, [vaultPath, tree, refreshTree, refreshLibrary, t]);
 
 	const handleOpenLibraryPaper = useCallback(
 		(paper: PaperMetadata) => {
@@ -1693,6 +1769,9 @@ export default function App() {
 					settings={settings}
 					onChange={updateSettings}
 				/>
+
+				{/* IDE-style background tasks (bottom-left floater) */}
+				<BackgroundTasksPanel />
 			</div>
 		</WikiNavContext.Provider>
 	);
