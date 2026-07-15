@@ -20,7 +20,13 @@
 		"description": "Recent ACP sessions in this chat.",
 		"empty": "No sessions yet.",
 		"includeExternal": "External",
-		"includeExternalToggle": "Include external Codex sessions"
+		"includeExternalToggle": "Include external Codex sessions",
+		"status": {
+			"running": "Running",
+			"completed": "Completed",
+			"cancelled": "Cancelled",
+			"failed": "Failed"
+		}
 	},
 	"tabs": {
 		"open": "Open conversation {{number}}",
@@ -41,8 +47,8 @@
 		"fastToggle": "Toggle Fast mode",
 		"yolo": "YOLO",
 		"yoloToggle": "Toggle YOLO permission approvals",
-		"yoloDisabled": "YOLO is off. Permission requests are declined for this run.",
-		"yoloEnabled": "YOLO is on. Automatically approve ACP permission requests for this run.",
+		"yoloDisabled": "YOLO is off. Permission requests are declined until you enable it.",
+		"yoloEnabled": "YOLO is on. Agent runs automatically approve ACP permission requests until you turn it off.",
 		"effortTooltip": "Select Codex reasoning effort",
 		"effort": {
 			"label": "Effort",

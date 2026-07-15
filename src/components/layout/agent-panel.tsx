@@ -74,6 +74,7 @@ import {
 	PromptInputBody,
 	PromptInputButton,
 	PromptInputFooter,
+	PromptInputSubmit,
 	PromptInputTextarea,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
@@ -191,6 +192,7 @@ type ChatLine =
 
 type ChatSessionHistoryItem = {
 	id: string;
+	agentId: string;
 	title: string;
 	agentName: string;
 	startedAt: string;
@@ -424,11 +426,15 @@ export function AgentPanel({
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
 	);
+	const [usageBySession, setUsageBySession] = useState<
+		Record<string, { used: number; size: number }>
+	>({});
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [warming, setWarming] = useState(false);
 	const [composerText, setComposerText] = useState("");
+	const [submitting, setSubmitting] = useState(false);
 	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
 	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
 	const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
@@ -448,6 +454,8 @@ export function AgentPanel({
 	const activeTabRef = useRef("draft");
 	const selectedAgentIdRef = useRef<string | null>(null);
 	const warmGenRef = useRef(0);
+	const historyGenRef = useRef(0);
+	const submittingRef = useRef(false);
 
 	const applyModelsEvent = useCallback(
 		(ev: {
@@ -543,6 +551,8 @@ export function AgentPanel({
 			setReasoningEffort(null);
 			setFastAvailable(false);
 			setFastEnabled(false);
+			setUsage(null);
+			setUsageBySession({});
 			setYoloEnabled(false);
 			setIncludeExternalCodexHistory(false);
 			return;
@@ -551,6 +561,8 @@ export function AgentPanel({
 		setReasoningEffort(null);
 		setFastAvailable(false);
 		setFastEnabled(false);
+		setUsage(null);
+		setUsageBySession({});
 		setYoloEnabled(loadYoloPref(selectedAgentId));
 		setIncludeExternalCodexHistory(
 			loadExternalCodexHistoryPref(selectedAgentId),
@@ -690,7 +702,15 @@ export function AgentPanel({
 				});
 			});
 			const uUsage = await listenAgentUsage((ev) => {
-				if (ev.size > 0) setUsage({ used: ev.used, size: ev.size });
+				if (ev.size <= 0) return;
+				if (ev.sessionId === "warm") {
+					setUsage({ used: ev.used, size: ev.size });
+					return;
+				}
+				setUsageBySession((prev) => ({
+					...prev,
+					[ev.sessionId]: { used: ev.used, size: ev.size },
+				}));
 			});
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
@@ -821,27 +841,55 @@ export function AgentPanel({
 
 	const loadCodexHistory = useCallback(async () => {
 		if (!isTauri() || !isCodexAgent || !selectedAgentId) return;
+		const generation = ++historyGenRef.current;
 		try {
 			const threads = await listCodexThreads({
 				agentId: selectedAgentId,
 				vaultPath: vaultPath ?? undefined,
 				includeExternal: includeExternalCodexHistory,
 			});
-			setSessionHistory(
-				threads.map((thread) => ({
-					id: thread.id,
-					title: thread.title,
-					agentName: selected?.name ?? "Codex",
-					startedAt: (() => {
+			if (generation !== historyGenRef.current) return;
+			setSessionHistory((prev) => {
+				const existing = new Map(
+					prev
+						.filter((item) => item.agentId === selectedAgentId)
+						.map((item) => [item.id, item]),
+				);
+				const imported = threads.map((thread) => {
+					const current = existing.get(thread.id);
+					const startedAt = (() => {
 						const timestamp = Number(thread.updatedAt ?? thread.createdAt);
 						return Number.isFinite(timestamp)
 							? new Date(timestamp * 1000).toLocaleString(i18n.language)
 							: "";
-					})(),
-					lines: [],
-					status: "completed" as const,
-				})),
-			);
+					})();
+					if (current) {
+						return {
+							...current,
+							agentName: selected?.name ?? "Codex",
+							title: current.lines.length > 0 ? current.title : thread.title,
+							startedAt: current.startedAt || startedAt,
+						};
+					}
+					return {
+						id: thread.id,
+						agentId: selectedAgentId,
+						title: thread.title,
+						agentName: selected?.name ?? "Codex",
+						startedAt,
+						lines: [],
+						status: "completed" as const,
+					};
+				});
+				const importedIds = new Set(threads.map((thread) => thread.id));
+				const localOnly = prev.filter(
+					(item) =>
+						item.agentId === selectedAgentId &&
+						!importedIds.has(item.id) &&
+						(item.status === "running" || item.lines.length > 0),
+				);
+				return [...localOnly, ...imported];
+			});
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
 		}
@@ -856,6 +904,9 @@ export function AgentPanel({
 
 	useEffect(() => {
 		void loadCodexHistory();
+		return () => {
+			historyGenRef.current += 1;
+		};
 	}, [loadCodexHistory]);
 
 	const selectedModelName = useMemo(() => {
@@ -971,6 +1022,7 @@ export function AgentPanel({
 		(session) => session.id === activeTabId,
 	);
 	const activeTabIsRunning = activeTabSession?.status === "running";
+	const activeUsage = usageBySession[activeTabId] ?? usage;
 	const hasRunningSessions = sessionHistory.some(
 		(session) => session.status === "running",
 	);
@@ -1021,78 +1073,80 @@ export function AgentPanel({
 
 	const send = async (textRaw: string) => {
 		const text = textRaw.trim();
-		if (!text || activeTabIsRunning) return;
-		if (!isTauri()) {
-			setLines((p) => [
-				...p,
-				{
-					id: nextLineId("err"),
-					kind: "error",
-					text: t("messages.desktopOnly"),
-				},
-			]);
-			return;
-		}
-
-		let agentId = selected?.id ?? registry?.defaultId ?? null;
-		if (!agentId && selected?.templateId) {
-			try {
-				const agent = await ensureCatalogAgent(selected.templateId, true);
-				agentId = agent.id;
-				setSelectedAgentId(agentId);
-				await refresh();
-			} catch (e) {
+		if (!text || activeTabIsRunning || submittingRef.current) return;
+		submittingRef.current = true;
+		setSubmitting(true);
+		try {
+			if (!isTauri()) {
 				setLines((p) => [
 					...p,
 					{
 						id: nextLineId("err"),
 						kind: "error",
-						text: e instanceof Error ? e.message : String(e),
+						text: t("messages.desktopOnly"),
 					},
 				]);
 				return;
 			}
-		}
 
-		if (!agentId) {
-			setLines((p) => [
-				...p,
-				{
-					id: nextLineId("sys"),
-					kind: "system",
-					text: t("messages.noAgent"),
-				},
-			]);
-			return;
-		}
+			let agentId = selected?.id ?? registry?.defaultId ?? null;
+			if (!agentId && selected?.templateId) {
+				try {
+					const agent = await ensureCatalogAgent(selected.templateId, true);
+					agentId = agent.id;
+					setSelectedAgentId(agentId);
+					await refresh();
+				} catch (e) {
+					setLines((p) => [
+						...p,
+						{
+							id: nextLineId("err"),
+							kind: "error",
+							text: e instanceof Error ? e.message : String(e),
+						},
+					]);
+					return;
+				}
+			}
 
-		const agentOk =
-			!selected ||
-			selected.available ||
-			registry?.agents.some((a) => a.id === agentId && a.available);
-		if (!agentOk) {
-			setLines((p) => [
-				...p,
-				{
-					id: nextLineId("sys"),
-					kind: "system",
-					text: t("messages.notAvailable", {
-						name: selected?.name ?? t("defaultName"),
-					}),
-				},
-			]);
-			return;
-		}
+			if (!agentId) {
+				setLines((p) => [
+					...p,
+					{
+						id: nextLineId("sys"),
+						kind: "system",
+						text: t("messages.noAgent"),
+					},
+				]);
+				return;
+			}
 
-		const prompt = contextPaths.length
-			? `${text}\n\n${t("composer.contextInstruction")}\n${contextPaths
-					.map((path) => `- ${path}`)
-					.join("\n")}`
-			: text;
-		const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
-		const sessionStartLines = [...lines, userLine];
-		setLines(sessionStartLines);
-		try {
+			const agentOk =
+				!selected ||
+				selected.available ||
+				registry?.agents.some((a) => a.id === agentId && a.available);
+			if (!agentOk) {
+				setLines((p) => [
+					...p,
+					{
+						id: nextLineId("sys"),
+						kind: "system",
+						text: t("messages.notAvailable", {
+							name: selected?.name ?? t("defaultName"),
+						}),
+					},
+				]);
+				return;
+			}
+
+			const prompt = contextPaths.length
+				? `${text}\n\n${t("composer.contextInstruction")}\n${contextPaths
+						.map((path) => `- ${path}`)
+						.join("\n")}`
+				: text;
+			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
+			const sessionStartLines = [...lines, userLine];
+			setLines(sessionStartLines);
 			const accepted = await runOnce({
 				agentId,
 				sessionId: isCodexAgent
@@ -1124,6 +1178,7 @@ export function AgentPanel({
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,
+					agentId,
 					title: text,
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
@@ -1142,6 +1197,9 @@ export function AgentPanel({
 					text: e instanceof Error ? e.message : String(e),
 				},
 			]);
+		} finally {
+			submittingRef.current = false;
+			setSubmitting(false);
 		}
 	};
 
@@ -1462,7 +1520,8 @@ export function AgentPanel({
 										}}
 									>
 										<span className="text-muted-foreground text-sm leading-none">
-											{item.agentName} · {item.status} · {item.id.slice(0, 8)}
+											{item.agentName} · {t(`history.status.${item.status}`)} ·{" "}
+											{item.id.slice(0, 8)}
 										</span>
 										<span className="line-clamp-2 font-medium text-sm leading-snug">
 											{item.title}
@@ -1765,7 +1824,7 @@ export function AgentPanel({
 					className="w-full rounded-xl border-border bg-background shadow-none"
 					inputGroupClassName="overflow-visible"
 					onSubmit={({ text }) => {
-						if (!activeTabIsRunning) {
+						if (!activeTabIsRunning && !submittingRef.current) {
 							void send(text);
 							setComposerText("");
 						}
@@ -1820,6 +1879,7 @@ export function AgentPanel({
 									{mentionOptions.map((path, index) => (
 										<button
 											key={path}
+											id={`agent-mention-option-${index}`}
 											type="button"
 											role="option"
 											aria-selected={mentionActiveIndex === index}
@@ -1847,6 +1907,7 @@ export function AgentPanel({
 									{skillOptions.map((skill, index) => (
 										<button
 											key={skill.id}
+											id={`agent-skill-option-${index}`}
 											type="button"
 											role="option"
 											aria-selected={skillActiveIndex === index}
@@ -1884,9 +1945,22 @@ export function AgentPanel({
 								}}
 								onKeyDown={handleComposerMenuKeyDown}
 								aria-expanded={showMentionMenu || showSkillMenu}
+								aria-autocomplete="list"
 								aria-controls={
-									showMentionMenu ? "agent-mention-menu" : "agent-skill-menu"
+									showMentionMenu
+										? "agent-mention-menu"
+										: showSkillMenu
+											? "agent-skill-menu"
+											: undefined
 								}
+								aria-activedescendant={
+									showMentionMenu
+										? `agent-mention-option-${mentionActiveIndex}`
+										: showSkillMenu
+											? `agent-skill-option-${skillActiveIndex}`
+											: undefined
+								}
+								role="combobox"
 								placeholder={
 									activeTabIsRunning
 										? t("composer.interruptHint")
@@ -1967,8 +2041,11 @@ export function AgentPanel({
 									</DropdownMenuContent>
 								</DropdownMenu>
 							) : null}
-							{usage && usage.size > 0 ? (
-								<Context usedTokens={usage.used} maxTokens={usage.size}>
+							{activeUsage && activeUsage.size > 0 ? (
+								<Context
+									usedTokens={activeUsage.used}
+									maxTokens={activeUsage.size}
+								>
 									<ContextTrigger className="h-7 gap-1 px-1.5 text-xs" />
 									<ContextContent>
 										<ContextContentHeader />
@@ -2034,6 +2111,19 @@ export function AgentPanel({
 								/>
 							</div>
 						</PromptInputTools>
+						<PromptInputSubmit
+							status={
+								activeTabIsRunning
+									? "streaming"
+									: submitting
+										? "submitted"
+										: "ready"
+							}
+							onStop={() => void cancelCurrentRun()}
+							disabled={
+								!activeTabIsRunning && (submitting || !composerText.trim())
+							}
+						/>
 					</PromptInputFooter>
 				</PromptInput>
 			</div>

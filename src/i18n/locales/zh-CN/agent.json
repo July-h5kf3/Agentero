@@ -20,7 +20,13 @@
 		"description": "此对话中最近的 ACP 会话。",
 		"empty": "暂无会话。",
 		"includeExternal": "外部会话",
-		"includeExternalToggle": "显示外部 Codex 会话"
+		"includeExternalToggle": "显示外部 Codex 会话",
+		"status": {
+			"running": "运行中",
+			"completed": "已完成",
+			"cancelled": "已中止",
+			"failed": "失败"
+		}
 	},
 	"tabs": {
 		"open": "打开会话 {{number}}",
@@ -41,8 +47,8 @@
 		"fastToggle": "切换快速模式",
 		"yolo": "YOLO",
 		"yoloToggle": "切换 YOLO 权限自动批准",
-		"yoloDisabled": "YOLO 已关闭。本次运行会拒绝权限请求。",
-		"yoloEnabled": "YOLO 已开启。本次运行会自动批准 ACP 权限请求。",
+		"yoloDisabled": "YOLO 已关闭。开启前，Agent 运行会拒绝权限请求。",
+		"yoloEnabled": "YOLO 已开启。关闭前，Agent 运行会自动批准 ACP 权限请求。",
 		"effortTooltip": "选择 Codex 推理强度",
 		"effort": {
 			"label": "推理强度",

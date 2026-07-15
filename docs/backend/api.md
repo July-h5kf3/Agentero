@@ -567,7 +567,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
 
-- **权限策略**：默认取消 ACP 权限请求。`autoApprove` 仅由 Composer 的 YOLO 开关传入，作用范围为这一次运行；逐项权限确认仍未实现。
+- **权限策略**：默认取消 ACP 权限请求。Composer 按 provider 持久化 YOLO 偏好，并在每次运行中通过 `autoApprove` 传入；逐项权限确认仍未实现。
 
 - **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
 

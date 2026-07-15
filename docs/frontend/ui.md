@@ -89,7 +89,7 @@
 | 结构 | 会话标签 · Agent 选择 / 新建 / 历史操作 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
-| 输入 | 单层 Composer：当前文件、`@` 文件提及和 `$` 本机技能显示为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`；Agent 输出期间仍可编辑下一条输入，`Esc` 取消当前 ACP 运行；`/` 文本原样透传给 ACP Agent；YOLO 默认关闭；`↵` 发送 / `⇧↵` 换行 |
+| 输入 | 单层 Composer：当前文件、`@` 文件提及和 `$` 本机技能显示为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；Agent 输出期间仍可编辑下一条输入；`/` 文本原样透传给 ACP Agent；YOLO 默认关闭 |
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
@@ -118,7 +118,7 @@ PromptInput → Body / Footer / Submit
 
 **斜杠命令**：Motif 不实现自己的 `/` 命令菜单，输入内容原样传递给当前 provider。Codex 使用 App Server 的 native thread，保持 Codex 自己的命令语义。
 
-**YOLO**：Composer 底栏的 YOLO 开关只作用于下一次运行。默认关闭时，Motif 取消 ACP 的权限请求；开启后自动选择 Agent 给出的第一个权限选项。逐项权限确认需要由保持 ACP 会话的后续实现提供。
+**YOLO**：Composer 底栏的 YOLO 开关按 provider 注册项保存在本机浏览器偏好中，并持续作用于后续运行，直到用户主动关闭。默认关闭时，Motif 取消 ACP 的权限请求；开启后自动选择 Agent 给出的第一个权限选项。逐项权限确认需要由保持 ACP 会话的后续实现提供。
 
 **Codex 控件**：只有选中 `codex-acp` 时，底栏才显示 App Server `model/list` 提供的模型与 reasoning effort，以及仅在闪电图标内填充黄色的 Fast toggle。选择在下一次 native turn 中传给 App Server；其他 Agent 不显示也不接收这些偏好。YOLO 按 provider 注册项保存在本机浏览器偏好中。
 
