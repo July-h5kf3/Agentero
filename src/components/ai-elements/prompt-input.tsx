@@ -1114,7 +1114,11 @@ export const PromptInputFooter = ({
 }: PromptInputFooterProps) => (
 	<InputGroupAddon
 		align="block-end"
-		className={cn("justify-between gap-1", className)}
+		className={cn(
+			// Wrap on narrow sidebars so tools never sit under the submit (↵) control.
+			"flex flex-wrap items-center justify-between gap-1",
+			className,
+		)}
 		{...props}
 	/>
 );
@@ -1126,7 +1130,10 @@ export const PromptInputTools = ({
 	...props
 }: PromptInputToolsProps) => (
 	<div
-		className={cn("flex min-w-0 items-center gap-1", className)}
+		className={cn(
+			"flex min-w-0 flex-1 flex-wrap items-center gap-1",
+			className,
+		)}
 		{...props}
 	/>
 );
