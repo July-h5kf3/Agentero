@@ -3,7 +3,6 @@
 		"agent": "Agent",
 		"backlinks": "反向链接",
 		"notes": "笔记",
-		"preview": "预览",
 		"untitled": "未命名"
 	},
 	"titlebar": {
@@ -21,7 +20,6 @@
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",
 		"notesPlaceholder": "在此撰写这篇论文的笔记……",
-		"previewPlaceholder": "渲染后的 Markdown 将显示在此……",
 		"unsaved": "有未保存的更改"
 	},
 	"errors": {

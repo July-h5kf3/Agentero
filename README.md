@@ -43,7 +43,7 @@
 - **魔棒入库**：粘贴 arXiv 链接/编号 → Translator → catalog + **默认下载 PDF**；arXiv 另解压 LaTeX 到 `source/`。缺资源时 paper 行 / Library 行可单篇或批量补下。
 - **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph。
 - **Agent 右侧栏**：通过 ACP 后端（Claude、Codex、Grok Build 等）与本地 Vault 对话。
-- **Paper-centric 布局**：打开具体论文时根据 catalog 远程 URL 显示 PDF/HTML，并显示 Paper Info 与该篇 `NOTES.md`（论文库视图下隐藏 Preview）。
+- **Paper-centric 布局**：打开具体论文时根据 catalog 远程 URL 显示 PDF/HTML，并显示 Paper Info 与该篇 `NOTES.md` 实时编辑（论文库视图下隐藏 Notes）。
 - **桌面原生体验**：Tauri 2、macOS overlay title bar、File 菜单、快捷键与 i18n。
 
 > 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)，产品范围见 [docs/development/prd.md](docs/development/prd.md)。

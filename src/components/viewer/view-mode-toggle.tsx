@@ -1,4 +1,4 @@
-import { FileCode2, FileText, FileType2 } from "lucide-react";
+import { FileCode2, FileType2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -10,12 +10,12 @@ import {
 import { cn } from "@/lib/utils";
 import type { CenterViewMode } from "@/lib/viewer";
 
+/** Center paper view: PDF / HTML only (Notes is the side editor, not a center mode card). */
 const MODES: {
-	id: CenterViewMode;
-	labelKey: "mode.markdown" | "mode.pdf" | "mode.html";
-	icon: typeof FileText;
+	id: Extract<CenterViewMode, "pdf" | "html">;
+	labelKey: "mode.pdf" | "mode.html";
+	icon: typeof FileType2;
 }[] = [
-	{ id: "markdown", labelKey: "mode.markdown", icon: FileText },
 	{ id: "pdf", labelKey: "mode.pdf", icon: FileType2 },
 	{ id: "html", labelKey: "mode.html", icon: FileCode2 },
 ];
@@ -36,11 +36,14 @@ export function ViewModeToggle({
 	available,
 }: ViewModeToggleProps) {
 	const { t } = useTranslation("viewer");
-	const activeIndex = Math.max(
-		0,
-		MODES.findIndex((m) => m.id === value),
-	);
-	const thumbX = activeIndex * (CELL + GAP);
+	const activeIndex = MODES.findIndex((m) => m.id === value);
+	const showThumb = activeIndex >= 0;
+	const thumbX = Math.max(0, activeIndex) * (CELL + GAP);
+
+	// Nothing to switch if neither paper view exists
+	if (!available.pdf && !available.html) {
+		return null;
+	}
 
 	return (
 		<TooltipProvider delayDuration={250}>
@@ -49,19 +52,20 @@ export function ViewModeToggle({
 				role="tablist"
 				aria-label={t("centerPaneView")}
 			>
-				{/* Sliding pill — fixed cell size, left-aligned then translateX */}
-				<span
-					aria-hidden
-					className={cn(
-						"pointer-events-none absolute top-0.5 left-0.5 z-0 h-6 w-6 rounded-md",
-						"bg-background shadow-sm",
-						"dark:bg-foreground/10 dark:shadow-none dark:ring-1 dark:ring-white/10",
-						"transition-transform duration-200 ease-out will-change-transform",
-					)}
-					style={{
-						transform: `translate3d(${thumbX}px, 0, 0)`,
-					}}
-				/>
+				{showThumb ? (
+					<span
+						aria-hidden
+						className={cn(
+							"pointer-events-none absolute top-0.5 left-0.5 z-0 h-6 w-6 rounded-md",
+							"bg-background shadow-sm",
+							"dark:bg-foreground/10 dark:shadow-none dark:ring-1 dark:ring-white/10",
+							"transition-transform duration-200 ease-out will-change-transform",
+						)}
+						style={{
+							transform: `translate3d(${thumbX}px, 0, 0)`,
+						}}
+					/>
+				) : null}
 
 				{MODES.map(({ id, labelKey, icon: Icon }) => {
 					const enabled = available[id];

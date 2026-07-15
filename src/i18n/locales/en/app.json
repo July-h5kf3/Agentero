@@ -3,7 +3,6 @@
 		"agent": "Agent",
 		"backlinks": "Backlinks",
 		"notes": "Notes",
-		"preview": "Preview",
 		"untitled": "Untitled"
 	},
 	"titlebar": {
@@ -21,7 +20,6 @@
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",
 		"notesPlaceholder": "Write notes for this paper...",
-		"previewPlaceholder": "Rendered Markdown will appear here...",
 		"unsaved": "Unsaved changes"
 	},
 	"errors": {

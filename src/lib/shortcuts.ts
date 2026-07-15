@@ -17,7 +17,7 @@ export type ShortcutId =
 	| "closeSheet"
 	| "focusSidebar"
 	| "focusEditor"
-	| "focusPreview";
+	| "focusNotes";
 
 export type ShortcutGroup = "App" | "Navigation" | "Vault";
 
@@ -137,7 +137,7 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
-		id: "focusPreview",
+		id: "focusNotes",
 		group: "Navigation",
 		key: "3",
 		meta: true,

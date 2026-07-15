@@ -102,9 +102,9 @@
   - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
     - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存对话框写 `.bib`。
   - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
-- **Paper Info / Notes（Preview）——仅具体论文**：
+- **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
-  - **右侧 Notes**：仅当已打开具体论文且中心为 PDF/HTML 时显示该篇 `NOTES.md`；论文库视图或未选论文时隐藏（不残留上一篇 Notes 栏）。
+  - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - **左右侧栏隔离**（`react-resizable-panels`）：
@@ -117,8 +117,8 @@
 - **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
   - 默认竖向：`.motif-scroll`（`overflow-x: hidden; overflow-y: auto`）。
   - 需双向滚动（论文库表）：`.motif-scroll-both`。
-- **中间栏视图切换**（纯图标 + Tooltip）：Markdown · PDF · HTML（`ViewModeToggle`）；论文库视图下不显示该切换。
-  - Markdown：**所见即所得富文本编辑**（Plate）。直接输入 Markdown 语法即时渲染（标题、列表、任务列表、代码块、表格、公式、`[[wikilink]]` 等）；无独立「预览」栏。
+- **中间栏视图切换**（纯图标 + Tooltip）：**仅 PDF · HTML**（`ViewModeToggle`）；无 PDF/HTML 时不显示切换。论文库视图下不显示。
+  - Notes / 普通 Markdown 文件：**所见即所得富文本编辑**（Plate），在 Notes 侧栏或打开 `.md` 时编辑；不占中间栏切换卡片。
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
@@ -156,7 +156,7 @@
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
-| `⌘3` | 聚焦 Notes（论文 PDF/HTML 视图时） | |
+| `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand`；设置 Keyboard 可见 |
 

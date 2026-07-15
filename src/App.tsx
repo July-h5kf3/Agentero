@@ -271,7 +271,7 @@ export default function App() {
 	const sidebarPanelRef = usePanelRef();
 	const rightSidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
-	const previewPaneRef = useRef<HTMLDivElement>(null);
+	const notesPaneRef = useRef<HTMLDivElement>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
 
@@ -847,8 +847,8 @@ export default function App() {
 						?.querySelector<HTMLElement>("[contenteditable='true']")
 						?.focus();
 					break;
-				case "focusPreview":
-					previewPaneRef.current
+				case "focusNotes":
+					notesPaneRef.current
 						?.querySelector<HTMLElement>("[contenteditable='true']")
 						?.focus();
 					break;
@@ -938,11 +938,19 @@ export default function App() {
 	const persistFile = useCallback(
 		(path: string, md: string) => {
 			if (!isTauri() || !vaultPath || !path) return;
+			// Keep NOTES.md buffer in sync so PDF↔Notes mode switches see latest text
+			if (
+				notesPath &&
+				path.replace(/\\/g, "/").toLowerCase() ===
+					notesPath.replace(/\\/g, "/").toLowerCase()
+			) {
+				setPaperNotes(md);
+			}
 			void writeVaultFile(path, md).catch((e) => {
 				setError(e instanceof Error ? e.message : String(e));
 			});
 		},
-		[vaultPath],
+		[vaultPath, notesPath],
 	);
 
 	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
@@ -1502,11 +1510,17 @@ export default function App() {
 	const showLibrary = Boolean(
 		vaultPath && isLibraryHome(vaultPath, selectedPath),
 	);
-	/** Notes / Preview: only when a concrete paper is open (PDF/HTML), never on library. */
+	/** Side Notes column: paper open + PDF/HTML center (not when Notes is already center). */
 	const showNotesOnRight =
 		!showLibrary &&
 		Boolean(paperMeta) &&
 		(centerMode === "pdf" || centerMode === "html");
+
+	/**
+	 * Center markdown mode while a paper is selected edits NOTES.md live (WYSIWYG),
+	 * not a separate read-only preview of another document.
+	 */
+	const centerIsPaperNotes = Boolean(paperMeta) && centerMode === "markdown";
 
 	/**
 	 * Notes still mounts/unmounts with paper selection. Re-assert intended collapse
@@ -1757,7 +1771,7 @@ export default function App() {
 									<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
 										{!showLibrary &&
 										centerMode === "markdown" &&
-										markdownDirty ? (
+										(centerIsPaperNotes ? notesDirty : markdownDirty) ? (
 											<span
 												className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
 												role="img"
@@ -1848,18 +1862,34 @@ export default function App() {
 												className="min-h-0 flex-1 overflow-hidden bg-muted/30"
 											>
 												<MarkdownEditor
-													key={editorKey}
+													key={
+														centerIsPaperNotes
+															? `notes-center-${notesKey}`
+															: editorKey
+													}
 													className="motif-scroll h-full min-h-0"
-													initialMarkdown={markdown}
+													initialMarkdown={
+														centerIsPaperNotes ? paperNotes : markdown
+													}
 													filePath={
-														selectedPath && isMarkdownPath(selectedPath)
-															? selectedPath
-															: null
+														centerIsPaperNotes
+															? notesPath
+															: selectedPath && isMarkdownPath(selectedPath)
+																? selectedPath
+																: null
 													}
 													fontSize={editorFontSize}
-													placeholder={t("editor.markdownPlaceholder")}
+													placeholder={
+														centerIsPaperNotes
+															? t("editor.notesPlaceholder")
+															: t("editor.markdownPlaceholder")
+													}
 													onPersist={persistFile}
-													onDirtyChange={setMarkdownDirty}
+													onDirtyChange={
+														centerIsPaperNotes
+															? setNotesDirty
+															: setMarkdownDirty
+													}
 												/>
 											</div>
 										) : null}
@@ -1918,7 +1948,7 @@ export default function App() {
 								className="min-h-0 overflow-hidden"
 							>
 								<div
-									ref={previewPaneRef}
+									ref={notesPaneRef}
 									className="flex h-full min-h-0 flex-col overflow-hidden"
 									style={{ fontSize: editorFontSize }}
 								>
@@ -1936,6 +1966,7 @@ export default function App() {
 										</span>
 									</PaneHeader>
 									<div className="min-h-0 flex-1 overflow-hidden">
+										{/* Live WYSIWYG NOTES.md — no separate read-only preview pane */}
 										<MarkdownEditor
 											key={`notes-${notesKey}`}
 											className="motif-scroll h-full min-h-0"
