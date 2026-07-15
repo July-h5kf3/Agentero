@@ -249,11 +249,12 @@ src-tauri/src/
 ### 5.5 与 importer 的写路径
 
 ```text
-import paper
+import paper（魔棒 lookup_import）
   → 创建 paper 文件夹（默认 `papers/<id>/`，也可 `papers/<org>/…/<id>/`）
   → 事务写入 catalog.papers（path = 该文件夹相对路径）
+  → ensure_paper_assets：PDF → source/；arXiv e-print → 解压 LaTeX 到 source/
   → 不更新根级 PAPERS.md / library.bib
-  → 可选：emit 事件供 UI 刷新 paper_list
+  → UI 刷新 paper_list / 文件树
 ```
 
 重复入库：`id` 冲突时按 `overwrite` 策略更新行或拒绝；**不得静默覆盖**用户 `NOTES.md`。

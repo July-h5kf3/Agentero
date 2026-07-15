@@ -65,7 +65,7 @@
 - [ ] Agent 检索 arXiv 候选论文并返回列表供用户确认（单选/多选）。
 - [x] 获取论文元数据（Translator map → `PaperMetadata`）。
 - [x] 创建 `papers/<id>/`（arxiv 用 arXiv ID 等），metadata 写入 catalog。
-- [ ] 获取 LaTeX source 全量归档；HTML/PDF 默认远程 URL，可选本地下载（`downloadFulltextToLocal`）。
+- [x] 入库默认下载 PDF；arXiv e-print 解压 LaTeX 到 `source/`（catalog 仍保留远程 URL 供预览）。
 - [ ] 仅在无 LaTeX source 或需要可读结构化正文时生成 `PAPER.md`。
 - [x] 生成默认结构的 `NOTES.md`，并创建空的 `highlights.md`。
 - [x] metadata 写入 `.motif/catalog.sqlite`（`paper_list` / `paper_get`）；可选 `catalog:export_*` 仍待做。

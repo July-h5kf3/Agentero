@@ -133,11 +133,17 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 
 | 来源情况 | `source/` 放什么 | `PAPER.md` |
 |---|---|---|
-| arxiv 有 LaTeX | 解包的 `.tex` 工程 + PDF | **按需**生成(Agent 可直接读 `.tex`) |
-| 非 arxiv 原生 PDF/HTML | 原始 PDF/HTML | 解析成 Markdown(必生成) |
+| arxiv 有 LaTeX | **默认下载**：`{id}.pdf` + e-print 解包的 `.tex` 工程 | **按需**生成(Agent 可直接读 `.tex`) |
+| 非 arxiv（有 `pdf_url`） | **默认下载** PDF | 解析成 Markdown(必生成，后续 importer) |
 | 扫描件 | 原始 PDF + `ocr/` 中间产物 | OCR → Markdown(必生成,并标注质量) |
 
-正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。
+**入库下载**（`lookup_import` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
+
+- PDF → `{paper}/source/{id}.pdf`
+- arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
+- 文件树：paper 行缺 PDF，或 arXiv 可取 TeX 但本地无 TeX 时，显示 Download 补下
+
+正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
 
 ## 3. 数据类型
 

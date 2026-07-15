@@ -29,6 +29,11 @@
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
+- **Library 行 Download**：当库内**任一** paper 仍缺 PDF，或 arXiv 缺 TeX 时，Library 标题右侧显示 Download；点击**批量**对全部缺失项调用 `paper_download_assets`（逐篇，已有资源跳过）。
+- **Paper 行 Download**：单篇 paper 行最右侧在需要补资源时显示 `Download`：
+  - 本地**没有 PDF** → 显示（尽量下 PDF）；
+  - 或可获取 TeX（catalog `arxiv_id` / `type=arxiv` / 文件夹名像 arXiv id）但本地**没有** `.tex`/`.ltx` → 显示；
+  - 已有 PDF，且（非 arXiv 或已有 TeX）→ 不显示。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -91,8 +96,9 @@
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML：**只读 catalog 中的远程 `pdf_url` / `html_url`**（经 `paper_get`；**不下载、不读本地 pdf/html 文件**）
-  - arXiv 推荐写入：
+  - PDF / HTML **预览**：当前仍读 catalog 远程 `pdf_url` / `html_url`（经 `paper_get` + PDF.js / iframe）。
+  - **本地归档**（与预览分离）：魔棒 / `paper_download_assets` 将 PDF（及 arXiv LaTeX）写入 `{paper}/source/`；中间栏预览暂不强制读本地文件。
+  - arXiv 推荐写入 catalog：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
     - `source_url`: `https://arxiv.org/abs/{id}`
@@ -126,9 +132,10 @@
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
 - **魔棒**（已落地 v0）：侧栏 `WandSparkles` Popover；粘贴链接或编号 → Host `lookup_import` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ catalog + paper 壳。  
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
-  - 无 `pdf_url`/`html_url`：**始终**尽量下载到 `source/`。  
-  - 有预览 URL：默认只远程预览；Settings「有预览链接时也下载到本地」开启时再镜像到 `source/`。  
+  - **始终下载 PDF** 到 `{paper}/source/{id}.pdf`。  
+  - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
+- **论文行下载按钮**：缺本地 PDF，或 arXiv 可取 TeX 但尚无 `.tex` 时，行尾 Download → `paper_download_assets`（已有资源跳过，只补缺失项）。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 
@@ -199,7 +206,7 @@ PromptInput → Body / Footer / Submit
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认；**有预览链接时也下载到本地**（`downloadFulltextToLocal`，默认关）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。
+- **General**：恢复上次 Vault、退出确认；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。

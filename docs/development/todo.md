@@ -24,9 +24,10 @@
 2b. **魔棒 / Identifier Lookup（Translator 后端）** ✅ v0 — 设计见 [`docs/backend/identifier-lookup.md`](../backend/identifier-lookup.md)
    - [x] UI：侧栏魔棒 → 粘贴链接或编号 → 加入 Papers。
    - [x] 目标：`papers/` 或文件树当前选中的 Papers 子文件夹。
-   - [x] Translator → 直接写入 `PaperMetadata`/catalog；有 `pdf_url`/`html_url` 默认不下载。
-   - [x] 无预览 URL 始终尝试下载；设置 `downloadFulltextToLocal`（默认关）。
-   - [x] Host：`lookup_import` / `lookup_translator_config`；HTTP Translator（`translatorBaseUrl`）。
+   - [x] Translator → 直接写入 `PaperMetadata`/catalog。
+   - [x] **始终下载 PDF**；**arXiv 另解压 LaTeX** 到 `source/`（无下载开关）。
+   - [x] Host：`lookup_import` / `lookup_translator_config` / `paper_download_assets`；HTTP Translator。
+   - [x] 文件树：缺 PDF，或 arXiv 缺 TeX 时行尾 Download 图标。
    - [ ] `⇧⌘I` 快捷键；批量；本机 sidecar 捆绑。
 
 2c. **论文库表格 UI** ✅

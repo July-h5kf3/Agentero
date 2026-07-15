@@ -17,7 +17,7 @@
 ## 当前实现状态
 
 - V0.1 本地工作台基本完成：文件树、Markdown IO、paper 视图、**论文库表格 + Library 虚拟节点**、设置与最近 Vault 恢复；**Create Vault**（含 catalog schema）已落地。
-- V0.2 arXiv 入库 **部分完成**：魔棒 + Translator + catalog 权威 + `paper_list` / `paper_get`；Agent 关键词候选与 export 仍待。
+- V0.2 arXiv 入库 **部分完成**：魔棒 + Translator + catalog 权威 + **默认 PDF/LaTeX 下载** + `paper_list` / `paper_get` / `paper_download_assets`；Agent 关键词候选与 export 仍待。
 - V0.3 Agent 进行中：BYOA 注册表、ACP run-once、流式 UI 与 Sources 已有；workflow prompt 和写入确认仍待补齐。
 - V0.4 反链与图谱基本完成：Backlinks 和 Graph 位于同一个右侧栏中。
 - V0.5 Importer 架构（本地 PDF 等）仍在规划。

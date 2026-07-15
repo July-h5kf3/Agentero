@@ -229,11 +229,11 @@ Vault 内的 Agent 行为规范，至少包含：
 4. 系统识别论文元数据。
 5. 系统将确认结果归一化为标准 arXiv ID。
 6. 系统创建 `papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey），metadata 写入 catalog。
-7. 系统获取 LaTeX source / HTML / PDF，source 文件保存到 `source/`。
-8. 若无 LaTeX source 或需要可读结构化正文，系统生成 `PAPER.md`。
-9. Agent 生成 `NOTES.md`，并创建空的 `highlights.md`。
+7. 系统**默认下载 PDF** 到 `source/`；arXiv **另下载 e-print 并解压 LaTeX** 到 `source/`（catalog 仍保留远程 URL 供预览）。
+8. 若无 LaTeX source 或需要可读结构化正文，系统可生成 `PAPER.md`（后续）。
+9. 生成占位 `NOTES.md`，并创建空的 `highlights.md`（Agent 深化仍规划）。
 10. 系统将 metadata 写入 catalog；不自动写 `PAPERS.md` / `library.bib`（可按需导出）。
-11. 用户进入 `NOTES.md` 审阅和修订。
+11. 用户进入 paper 视图 / `NOTES.md` 审阅和修订。
 
 ### 6.3 本地 PDF 入库
 

@@ -164,11 +164,13 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：仅按 **远程 `pdf_url`** 流式渲染（**不落盘、不读 vault 内 pdf**） |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染 |
+| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/source/{id}.pdf`（与预览路径分离） |
+| arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
 | PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
-| HTML 预览 | 远程 `html_url` → 独立 iframe；**不下载到本地** |
+| HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
 | 中间栏切换 | `ViewModeToggle`；URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
-| arXiv 资源 | `pdf` / `html` / `abs` 规范 URL；CORS `*` 便于内嵌 |
+| arXiv 资源 | `pdf` / `html` / `abs` / `e-print` 规范 URL |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
@@ -339,21 +341,24 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.2 arXiv 入库闭环
 
+**已落地（魔棒精确 ID/URL）**：
+
 ```text
-用户输入 arXiv ID / URL / 关键词 / 话题 / 一段描述
-  → Rust: 输入分类（规则解析 + Agent 意图识别）
-     ├─ 精确 ID/URL → 直接提取标准 arXiv ID
-     └─ 模糊输入 → Agent 检索 arXiv 候选并返回候选列表
-  → Frontend: 展示候选论文（标题、作者、摘要片段、推荐理由）
-  → 用户确认目标论文（单选/多选）
-  → Rust: 归一化为标准 arXiv ID
-  → Rust: 请求 arXiv API (http://export.arxiv.org/api/query)
-  → Rust: 并行下载 LaTeX source / HTML / PDF（按优先级），均存入 `papers/<id>/source/`
-  → Rust: 若无 LaTeX source 或需要可读结构化正文，生成 `papers/<id>/PAPER.md`（LaTeX/HTML/PDF → Markdown）
-  → Rust: 调用 Agent 生成 `papers/<id>/NOTES.md`（三段论结构），并创建空的 `papers/<id>/highlights.md`
-  → Rust: 写 `papers/<id>/` 文件 + 事务写入 catalog.papers（不写默认 PAPERS.md / library.bib / metadata.json）
-  → Frontend: 展示进度、成功、失败原因
-  → Frontend: 自动打开 NOTES.md 供用户审阅
+侧栏魔棒粘贴 arXiv ID/URL
+  → lookup_import → Translator（或 arXiv Atom fallback）
+  → catalog upsert + NOTES.md / highlights.md 壳
+  → ensure_paper_assets：PDF → source/{id}.pdf；e-print → 解压 LaTeX 到 source/
+  → 刷新文件树；打开 paper（预览可用远程 pdf_url）
+```
+
+**规划中（关键词 / Agent 候选）**：
+
+```text
+用户输入关键词 / 话题 / 一段描述
+  → Rust: 输入分类 + Agent 检索 arXiv 候选
+  → Frontend: 候选列表确认（单选/多选）
+  → 复用 lookup_import / ensure_paper_assets 写盘
+  → 可选：生成 PAPER.md、Agent NOTES 深化
 ```
 
 **输入分类与 Agent 解析**：

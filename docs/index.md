@@ -42,7 +42,7 @@ Motif 桌面应用
 - 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab。
-- 魔棒：侧栏粘贴标识符 → Translator → 写入 catalog（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
+- 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）；缺资源时文件树可补下（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
 
 ## 关键三方技术
 

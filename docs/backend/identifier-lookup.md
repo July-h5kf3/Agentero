@@ -1,7 +1,7 @@
 # 魔棒入库（Identifier Lookup）与 Translator 后端
 
-> 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator；sidecar/批量/快捷键仍可扩展）  
-> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + 轻量 paper 文件夹**（远程 `pdf_url` / `html_url` 默认 **不下载**）→ 落到 `papers/` 或当前 Papers 子文件夹。
+> 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator + 默认 PDF/LaTeX 下载；sidecar/批量/快捷键仍可扩展）  
+> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认进 `source/`**；arXiv **e-print 解压 LaTeX**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url` 供在线预览。
 
 相关文档：
 
@@ -25,7 +25,8 @@
        ├─ 默认：papers/<id>/
        └─ 若当前上下文是 papers 下的组织子文件夹：papers/<子路径>/<id>/
   → catalog.sqlite 写入一行（含 pdf_url / html_url / source_url 等）
-  → 不下载 PDF/HTML 文件到 source/（与现有「远程 URL 只读 catalog」一致）
+  → 始终下载 PDF → source/{id}.pdf
+  → 若 arXiv：下载 e-print 并解压 LaTeX → source/
 ```
 
 #### 用户故事
@@ -60,24 +61,21 @@
 
 UI：弹层底部一行轻量文案，如「将加入 `papers/nlp/`」（i18n），避免大段说明。
 
-### 1.3 远程预览 vs 本地下载（策略 + 设置）
+### 1.3 本地下载（默认策略）
 
-catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。本地下载规则如下。
+catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）。入库时**默认本地下载**，无配置开关：
 
-#### 决策表
+| 资源 | 行为 |
+|---|---|
+| **PDF** | 始终尝试下载到 `{paper}/source/{id}.pdf`（URL 来自 `pdf_url` 或 arXiv 推导） |
+| **arXiv LaTeX** | 从 `https://arxiv.org/e-print/{id}` 下载；gzip/tar 解压到 `source/`（路径穿越拒绝） |
+| **已有文件** | 跳过对应资源 |
 
-| 有 `pdf_url` 或 `html_url` | 设置 `downloadFulltextToLocal` | 行为 |
-|---|---|---|
-| **有** | **关（默认）** | 只写 catalog URL；**不**下载（用远程预览） |
-| **有** | **开** | catalog 写 URL **且** 用该 URL 下载到 `source/` |
-| **无** | **任意**（关/开相同） | **必须尝试下载**到 `source/`（否则没有可预览内容）；无可下载地址则仅 metadata |
+按需补下：
+- **单篇 paper 行**：缺 PDF，或 arXiv 可取 TeX 但缺本地 TeX → Download → `paper_download_assets`。
+- **Library 行**：库内任一篇仍缺资源时显示 Download → 对全部缺失 paper **批量** `paper_download_assets`（只补缺失 PDF / 可下载 TeX）。
 
-要点：
-
-- **无预览 URL → 始终尽量下载**（与设置无关）。
-- **有预览 URL → 默认不下载**；仅设置打开时额外镜像到本地。
-
-阅读：优先远程 URL；`source/` 有文件时可作离线回退（实现阶段再定优先级）。
+UI 阅读：优先 catalog 远程 URL；`source/` 为归档副本。
 
 #### Translator 服务地址（设置）
 
@@ -91,21 +89,7 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
 - Host：`POST {base}/search` 或 `/web`（`Content-Type: text/plain`）。
 - 服务不可达且输入为 arXiv 时，回退 export.arxiv.org。
 
-#### 设置项
-
-| Key | 类型 | 默认 | UI |
-|---|---|---|---|
-| `downloadFulltextToLocal` | `boolean` | **`false`** | Settings → **General** |
-
-含义是「**有预览链接时是否也下载到本地**」，不是「总开关」：
-
-- **关（默认）**：有 URL 只远程预览；无 URL 仍会下载（若可能）。
-- **开**：有 URL 时也写入 `source/`。
-
-文案（i18n）：
-
-- en：`Also download when a preview URL exists`
-- zh：`有预览链接时也下载到本地`
+> ~~`downloadFulltextToLocal`~~ 已移除；始终下载 PDF。
 
 实现：`AppSettings` + General Switch；`lookup:import` 传入该标志。
 
@@ -149,25 +133,22 @@ catalog **始终**可写入 `pdf_url` / `html_url`（有则供在线预览）。
   + papers/.../NOTES.md、highlights.md
         │
         ▼
-  下载判定（见 §1.3）：
-    无 pdf_url 且无 html_url → 始终尝试下载到 source/
-    有预览 URL 且 downloadFulltextToLocal → 用 URL 下载到 source/
-    有预览 URL 且设置关 → 不下载
+  下载（见 §1.3）：始终 PDF → source/；arXiv 另 e-print 解压 LaTeX
 
 读路径：UI 用 paper_get 读 catalog；不把 metadata.json 当主源。
 ```
 
 | 来源 | 在统一流中的位置 |
 |---|---|
-| arXiv 编号/abs URL | 同一 Translator（arXiv Search/Web）→ map 进 metadata |
-| DOI / ISBN / PMID | 同一 Translator Search → map 进 metadata |
-| 远程 PDF/HTML | **只**作为 `pdf_url` / `html_url` 字段进 metadata/catalog |
-| 旧独立 `arxiv:import` 全量下载 | **不**混进魔棒；若保留则是另一命令，默认用户走魔棒 |
+| arXiv 编号/abs URL | 同一 Translator（arXiv Search/Web）→ map 进 metadata + PDF/TeX 下载 |
+| DOI / ISBN / PMID | 同一 Translator Search → map 进 metadata + 尽量下载 PDF |
+| 远程 PDF/HTML | catalog 字段 + **PDF 默认本地下载**；HTML 可仍远程预览 |
+| 旧独立 `arxiv:import` 全量下载 | 已并入魔棒默认下载路径 |
 
 原则：
 
 - **Translator 返回值 → 直接并入 `PaperMetadata`**，再落 catalog；不并行维护两套 arXiv 专用结构。
-- **魔棒 = 轻量加入文库**（metadata + 远程 URL + 笔记壳）。
+- **魔棒 = 加入文库 + 本地归档**（metadata + 远程 URL + 笔记壳 + PDF；arXiv 含 LaTeX）。
 
 ---
 
@@ -385,25 +366,26 @@ catalog **schema v2** 起补齐期刊/卷期页等字段（见 [`catalog.md`](ca
 | `body_source` / `body_quality` | 魔棒通常不填 | 无本地正文解析 |
 | `citation_count` | 一般无 | 可空 |
 
-### 5.2 URL 补全（仍不下载）
+### 5.2 URL 补全
 
 在 map 之后、写库之前：
 
-1. 若有 `arxiv_id` 且缺 URL → `arxiv.ts`：`pdf_url` / `html_url` / `source_url`。
+1. 若有 `arxiv_id` 且缺 URL → 推导 `pdf_url` / `html_url` / `source_url`。
 2. 若有 `doi` 且缺 `source_url` → `https://doi.org/{doi}`。
 3. 若有 `pmid` 且缺 `source_url` → PubMed 条目 URL。
-4. **禁止**因补全 URL 而发起 PDF 文件下载。
+4. **URL 补全本身不下载**；下载在 catalog upsert **之后**由 `ensure_paper_assets` 统一执行（§1.3）。
 
 ### 5.3 中间结果
 
 入库前 Host 手中只有 **`PaperMetadata`（已 map）**；不必单独长期持有 Zotero Item。调试可选暂存 `raw` 日志，不进 catalog。
 
 ```ts
-// 概念：一次魔棒调用
+// 概念：一次魔棒调用（落地：lookup_import）
 const item = await translator.searchOrWeb(input); // Zotero Item
 const metadata = mapZoteroItemToPaperMetadata(item); // → PaperMetadata
 enrichRemoteUrls(metadata); // arxiv/doi 推导
 await catalog.upsert({ ...metadata, path });
+await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 ```
 
 ---
@@ -466,13 +448,6 @@ await catalog.upsert({ ...metadata, path });
     on_duplicate?: 'skip' | 'open_existing';
   }[];
   options?: {
-    /**
-     * 来自设置 `downloadFulltextToLocal`（默认 false）。
-     * true：有 pdf_url/html_url 时也下载到 source/。
-     * false：有预览 URL 时不下载。
-     * 注意：无 pdf_url 且无 html_url 时，无论本标志，都尝试下载。
-     */
-    download_fulltext_to_local?: boolean;
     /** Agent 生成 NOTES；默认 false 写占位模板 */
     generate_notes?: boolean;
   };
@@ -483,24 +458,13 @@ await catalog.upsert({ ...metadata, path });
 // 或同步：{ ok: true; data: { paths: string[] } }
 ```
 
-**Host 行为**：
+**Host 行为**（落地实现：`lookup_import`）：
 
 1. 规范化 `parent_dir`（必须位于 `papers` 下）。
 2. `path = {parent_dir}/{id}`。
 3. 创建目录 + 占位 `NOTES.md` + 空 `highlights.md`。
-4. **事务 upsert catalog**（远程 URL 只存字符串）。
-5. **下载判定**（伪代码）：
-   ```text
-   has_preview = nonEmpty(pdf_url) || nonEmpty(html_url)
-   if has_preview and not options.download_fulltext_to_local:
-     skip download                    # 远程预览即可
-   else:
-     url = pdf_url or html_url or resolve_downloadable_url(metadata)
-     if url:
-       try download(url) → source/    # 无预览 URL 时必走此支；有 URL 且设置开也走
-     else:
-       skip download                  # 真的无法下载
-   ```
+4. **事务 upsert catalog**（远程 URL 仍存字符串供预览）。
+5. **始终** `ensure_paper_assets`：PDF → `source/{id}.pdf`；有 `arxiv_id` 时 e-print 解压到 `source/`。
 6. 返回 `path`；前端刷新并打开 paper。
 
 ### 6.4 事件
@@ -566,9 +530,9 @@ await catalog.upsert({ ...metadata, path });
   → 展示目标路径提示：将加入「papers/」或「papers/nlp/」（来自 §1.2）
   → 用户 Enter 或点「添加」
   → lookup:search（Translator）→ 可选极简预览
-  → lookup:import({ parent_dir, items, download_fulltext_to_local: settings… })
-  → 成功：刷新文件树；打开该 paper（PDF 视图读 catalog.pdf_url）
-  → 失败：toast / 行内错误，不写半截 catalog
+  → lookup_import({ parent_dir, text, translatorBaseUrl })
+  → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树；打开 paper（预览仍可走远程 pdf_url）
+  → 失败：toast / 行内错误
 ```
 
 **默认体验偏好**：少步骤——解析成功即可入库；仅在 **重复** 或 **解析到多结果** 时打断确认。
@@ -629,23 +593,25 @@ papers/
     └── <id>/
         ├── NOTES.md
         ├── highlights.md
-        └── source/            # 无预览 URL 时尽量有；有 URL 且设置开时也有
-            └── …pdf / …
+        └── source/
+            ├── {id}.pdf       # 默认下载
+            └── …              # arXiv：e-print 解压后的 .tex 工程
 # catalog.papers：path, title, pdf_url, html_url, …
 ```
 
 1. `path = {parent_dir}/{id}`（§1.2 + §6.3）。
 2. 写 `NOTES.md` + `highlights.md`。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
-4. 下载按 §1.3：**无预览 URL 必下**；有 URL 仅设置开时下。
+4. 下载按 §1.3：**始终 PDF**；**arXiv 另解压 LaTeX**。
 5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。
 6. 重复：`on_duplicate: skip | open_existing`，**不**覆盖用户 `NOTES.md`。
 
-arXiv 远程 URL 推导（无下载）：
+arXiv URL 推导：
 
-- `pdf_url`: `https://arxiv.org/pdf/{id}`
+- `pdf_url`: `https://arxiv.org/pdf/{id}`（并下载）
 - `html_url`: `https://arxiv.org/html/{id}`
 - `source_url`: `https://arxiv.org/abs/{id}`
+- e-print: `https://arxiv.org/e-print/{id}`（解压到 `source/`）
 
 `type`：`arxiv` | `doi` | `other`（按标识符）。
 
@@ -655,10 +621,10 @@ arXiv 远程 URL 推导（无下载）：
 
 ### Phase A — 交互闭环（可先 fallback）
 
-- [x] 文档：交互、目标文件夹、不下载约定
+- [x] 文档：交互、目标文件夹、默认下载约定
 - [x] 魔棒 Popover + `parent_dir` 解析 + i18n（侧栏 `WandSparkles`）
 - [x] Host 解析 + arXiv fallback（Translator 失败时）
-- [x] `lookup_import`：catalog upsert + NOTES 壳；下载策略见 §1.3
+- [x] `lookup_import`：catalog upsert + NOTES 壳 + PDF/LaTeX 下载
 
 ### Phase B — Translator 服务
 
@@ -675,7 +641,8 @@ arXiv 远程 URL 推导（无下载）：
 
 ### Phase D — 可选
 
-- [x] 设置：`downloadFulltextToLocal`（有预览 URL 时是否也下载；无 URL 始终下载）
+- [x] 默认下载 PDF；arXiv e-print 解压 LaTeX；无 `downloadFulltextToLocal` 开关
+- [x] 文件树缺 PDF 或 arXiv 缺 TeX 时 Download → `paper_download_assets`
 - [ ] PDF prepare 复用同一 Lookup
 
 ---
@@ -694,9 +661,9 @@ arXiv 远程 URL 推导（无下载）：
 ## 13. 验收标准
 
 1. ~~点击魔棒，粘贴链接或编号，成功后 paper 壳 + **catalog 有行**。~~ ✅  
-2. **无** `pdf_url`/`html_url`：无论设置，尽量下载到 `source/`。  
-3. **有** 预览 URL + 设置关：不下载，远程预览。  
-4. **有** 预览 URL + 设置开：catalog 保留 URL 且下载到 `source/`。  
+2. ~~入库始终尝试下载 PDF 到 `source/`。~~ ✅  
+3. ~~arXiv 另下载 e-print 并解压 LaTeX。~~ ✅  
+4. ~~缺 PDF，或 arXiv 缺 TeX 时文件树显示 Download，可补下。~~ ✅  
 5. 文件树选中 `papers/nlp` 时路径为 `papers/nlp/<id>/`。  
 6. 重复不覆盖 `NOTES.md`；文案 i18n。  
 7. ~~论文库表格（`paper_list`）能列出已入库论文。~~ ✅  
@@ -720,3 +687,4 @@ arXiv 远程 URL 推导（无下载）：
 | 2026-07-15 | 数据流合并：arXiv/DOI 等统一 Translator → 直接 map 进 PaperMetadata；catalog schema v2 补字段 |
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
+| 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
