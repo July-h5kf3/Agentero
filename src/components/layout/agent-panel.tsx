@@ -1,6 +1,5 @@
 import type { ToolUIPart } from "ai";
 import {
-	Bot,
 	Check,
 	CheckIcon,
 	ChevronDown,
@@ -8,7 +7,7 @@ import {
 	FileText,
 	FolderOpen,
 	History,
-	PencilLine,
+	Plus,
 	X,
 	Zap,
 } from "lucide-react";
@@ -98,6 +97,7 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
+import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -1646,286 +1646,301 @@ export function AgentPanel({
 		<div
 			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
 		>
-			<div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-				<div
-					className="flex min-w-0 flex-1 items-center gap-1.5"
-					role="tablist"
-					aria-label={title}
-				>
-					{conversationTabs.map((tab, index) => (
-						<button
-							key={tab.id}
-							type="button"
-							role="tab"
-							aria-label={t("tabs.open", { number: index + 1 })}
-							aria-selected={activeTabId === tab.id}
-							disabled={submitting}
-							className={cn(
-								"grid size-8 place-items-center rounded-md border text-sm font-medium text-muted-foreground transition-colors",
-								activeTabId === tab.id
-									? "border-primary bg-background text-foreground ring-1 ring-primary"
-									: "border-border bg-muted/30 hover:bg-muted hover:text-foreground",
-							)}
-							onClick={() => {
-								if (submittingRef.current) return;
-								historyHydrationGenRef.current += 1;
-								activateComposerSession(tab.id);
-								activeTabRef.current = tab.id;
-								setActiveTabId(tab.id);
-								setLines(tab.lines ?? []);
-								if (isCodexAgent) {
-									activeConversationRef.current =
-										tab.id === "draft" ? null : tab.id;
-								}
-							}}
-						>
-							{index + 1}
-						</button>
-					))}
-				</div>
-				<DropdownMenu>
-					<DropdownMenuTrigger
-						asChild
-						disabled={hasRunningSessions || switching || submitting}
-					>
+			<PaneHeader
+				trailing={
+					<>
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								asChild
+								disabled={hasRunningSessions || switching || submitting}
+							>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-7 max-w-[9rem] gap-1 px-1.5 font-medium text-sm leading-none"
+									aria-label={t("switchAgent")}
+									title={t("switchAgent")}
+								>
+									<span className="truncate">
+										{selected?.name ?? t("defaultName")}
+									</span>
+									<ChevronDown className="size-3 shrink-0 opacity-70" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="min-w-[200px]">
+								<DropdownMenuLabel className="text-muted-foreground text-xs">
+									{t("agentMenu.title")}
+								</DropdownMenuLabel>
+								<DropdownMenuSeparator />
+								{options.length === 0 ? (
+									<div className="px-2 py-1.5 text-muted-foreground text-xs">
+										{t("agentMenu.empty")}
+									</div>
+								) : (
+									options.map((opt) => {
+										const isActive =
+											selected?.key === opt.key ||
+											(opt.id !== null && opt.id === selectedAgentId);
+										return (
+											<DropdownMenuItem
+												key={opt.key}
+												className="flex items-center justify-between gap-2"
+												onSelect={() => void selectAgent(opt)}
+											>
+												<span className="min-w-0 truncate">{opt.name}</span>
+												{isActive ? (
+													<Check className="size-3.5 shrink-0 opacity-80" />
+												) : null}
+											</DropdownMenuItem>
+										);
+									})
+								)}
+							</DropdownMenuContent>
+						</DropdownMenu>
 						<Button
 							type="button"
 							variant="ghost"
 							size="icon-xs"
-							aria-label={t("switchAgent")}
-							title={t("switchAgent")}
-						>
-							<Bot className="size-4" />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="min-w-[200px]">
-						<DropdownMenuLabel className="text-muted-foreground text-xs">
-							{t("agentMenu.title")}
-						</DropdownMenuLabel>
-						<DropdownMenuSeparator />
-						{options.length === 0 ? (
-							<div className="px-2 py-1.5 text-muted-foreground text-xs">
-								{t("agentMenu.empty")}
-							</div>
-						) : (
-							options.map((opt) => {
-								const isActive =
-									selected?.key === opt.key ||
-									(opt.id !== null && opt.id === selectedAgentId);
-								return (
-									<DropdownMenuItem
-										key={opt.key}
-										className="flex items-center justify-between gap-2"
-										onSelect={() => void selectAgent(opt)}
-									>
-										<span className="min-w-0 truncate">{opt.name}</span>
-										{isActive ? (
-											<Check className="size-3.5 shrink-0 opacity-80" />
-										) : null}
-									</DropdownMenuItem>
-								);
-							})
-						)}
-					</DropdownMenuContent>
-				</DropdownMenu>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("tabs.new")}
-					title={t("tabs.new")}
-					disabled={submitting}
-					onClick={newConversation}
-				>
-					<PencilLine className="size-4" />
-				</Button>
-				<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-					<PopoverTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
-							aria-label={t("history.aria")}
-							title={t("history.label")}
+							aria-label={t("tabs.new")}
+							title={t("tabs.new")}
 							disabled={submitting}
+							onClick={newConversation}
 						>
-							<History className="size-3.5" />
+							<Plus className="size-4" />
 						</Button>
-					</PopoverTrigger>
-					<PopoverContent align="end" className="w-80 p-0">
-						<PopoverHeader className="border-b px-3 py-2">
-							<div className="flex items-center justify-between gap-3">
-								<PopoverTitle className="font-medium text-sm leading-none">
-									{t("history.title")}
-								</PopoverTitle>
-								{isCodexAgent && (
-									<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-										<span>{t("history.includeExternal")}</span>
-										<Switch
-											size="sm"
-											checked={includeExternalCodexHistory}
-											disabled={submitting}
-											onCheckedChange={(enabled) => {
-												if (submittingRef.current) return;
-												historyHydrationGenRef.current += 1;
-												includeExternalCodexHistoryRef.current = enabled;
-												if (!enabled) {
-													const active = sessionHistory.find(
-														(item) => item.id === activeTabId,
-													);
-													if (
-														active?.source === "external" &&
-														active.status !== "running"
-													) {
-														newConversation();
+						<Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+							<PopoverTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-7 gap-1 px-1.5 font-normal text-muted-foreground text-sm leading-none hover:text-foreground"
+									aria-label={t("history.aria")}
+									title={t("history.label")}
+									disabled={submitting}
+								>
+									<History className="size-3.5" />
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent align="end" className="w-80 p-0">
+								<PopoverHeader className="border-b px-3 py-2">
+									<div className="flex items-center justify-between gap-3">
+										<PopoverTitle className="font-medium text-sm leading-none">
+											{t("history.title")}
+										</PopoverTitle>
+										{isCodexAgent && (
+											<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+												<span>{t("history.includeExternal")}</span>
+												<Switch
+													size="sm"
+													checked={includeExternalCodexHistory}
+													disabled={submitting}
+													onCheckedChange={(enabled) => {
+														if (submittingRef.current) return;
+														historyHydrationGenRef.current += 1;
+														includeExternalCodexHistoryRef.current = enabled;
+														if (!enabled) {
+															const active = sessionHistory.find(
+																(item) => item.id === activeTabId,
+															);
+															if (
+																active?.source === "external" &&
+																active.status !== "running"
+															) {
+																newConversation();
+															}
+														}
+														setIncludeExternalCodexHistory(enabled);
+														if (selectedAgentId) {
+															saveExternalCodexHistoryPref(
+																selectedAgentId,
+																enabled,
+															);
+														}
+													}}
+													aria-label={t("history.includeExternalToggle")}
+												/>
+											</div>
+										)}
+									</div>
+									<PopoverDescription className="text-muted-foreground text-sm leading-snug">
+										{t("history.description")}
+									</PopoverDescription>
+								</PopoverHeader>
+								{sessionHistory.length === 0 ? (
+									<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
+										{t("history.empty")}
+									</div>
+								) : (
+									<div className="max-h-72 overflow-y-auto p-1.5">
+										{sessionHistory.map((item) => (
+											<button
+												key={item.id}
+												type="button"
+												disabled={submitting}
+												className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+												onClick={() => {
+													if (submittingRef.current) return;
+													const hydrationGeneration =
+														++historyHydrationGenRef.current;
+													setHistoryOpen(false);
+													if (!isCodexAgent || item.lines.length > 0) {
+														activateComposerSession(item.id);
+														setLines(item.lines);
+														activeTabRef.current = item.id;
+														setActiveTabId(item.id);
+														if (isCodexAgent) {
+															activeConversationRef.current = item.id;
+														}
+														return;
 													}
-												}
-												setIncludeExternalCodexHistory(enabled);
-												if (selectedAgentId) {
-													saveExternalCodexHistoryPref(
-														selectedAgentId,
-														enabled,
-													);
-												}
-											}}
-											aria-label={t("history.includeExternalToggle")}
-										/>
+													const requestAgentId = selectedAgentId;
+													const requestVaultPath = vaultPath;
+													const requestIncludeExternal =
+														includeExternalCodexHistory;
+													if (!requestAgentId) return;
+													void (async () => {
+														try {
+															const history = await readCodexThread({
+																agentId: requestAgentId,
+																threadId: item.id,
+																vaultPath: requestVaultPath ?? undefined,
+																includeExternal: requestIncludeExternal,
+															});
+															if (
+																hydrationGeneration !==
+																	historyHydrationGenRef.current ||
+																selectedAgentIdRef.current !== requestAgentId ||
+																vaultPathRef.current !== requestVaultPath ||
+																includeExternalCodexHistoryRef.current !==
+																	requestIncludeExternal
+															) {
+																return;
+															}
+															const lines: ChatLine[] = history.lines.map(
+																(line) => {
+																	if (line.kind === "user") {
+																		return {
+																			id: line.id,
+																			kind: "user",
+																			text: line.text,
+																		};
+																	}
+																	return {
+																		id: line.id,
+																		kind: "agent",
+																		text: line.text,
+																		reasoning: line.reasoning ?? undefined,
+																	};
+																},
+															);
+															setSessionHistory((prev) =>
+																prev.map((entry) =>
+																	entry.id === item.id &&
+																	entry.agentId === requestAgentId
+																		? {
+																				...entry,
+																				title: history.thread.title,
+																				lines,
+																			}
+																		: entry,
+																),
+															);
+															activeConversationRef.current = item.id;
+															activateComposerSession(item.id);
+															activeTabRef.current = item.id;
+															setActiveTabId(item.id);
+															setLines(lines);
+														} catch (error) {
+															if (
+																hydrationGeneration !==
+																	historyHydrationGenRef.current ||
+																selectedAgentIdRef.current !== requestAgentId ||
+																vaultPathRef.current !== requestVaultPath ||
+																includeExternalCodexHistoryRef.current !==
+																	requestIncludeExternal
+															) {
+																return;
+															}
+															setLines((prev) => [
+																...prev,
+																{
+																	id: nextLineId("err"),
+																	kind: "error",
+																	text:
+																		error instanceof Error
+																			? error.message
+																			: String(error),
+																},
+															]);
+														}
+													})();
+												}}
+											>
+												<span className="text-muted-foreground text-sm leading-none">
+													{item.agentName} ·{" "}
+													{t(`history.status.${item.status}`)} ·{" "}
+													{item.id.slice(0, 8)}
+												</span>
+												<span className="line-clamp-2 font-medium text-sm leading-snug">
+													{item.title}
+												</span>
+												<span className="text-muted-foreground text-sm leading-none">
+													{item.startedAt}
+												</span>
+											</button>
+										))}
 									</div>
 								)}
-							</div>
-							<PopoverDescription className="text-muted-foreground text-sm leading-snug">
-								{t("history.description")}
-							</PopoverDescription>
-						</PopoverHeader>
-						{sessionHistory.length === 0 ? (
-							<div className="px-3 py-4 text-muted-foreground text-sm leading-none">
-								{t("history.empty")}
-							</div>
-						) : (
-							<div className="max-h-72 overflow-y-auto p-1.5">
-								{sessionHistory.map((item) => (
-									<button
-										key={item.id}
-										type="button"
-										disabled={submitting}
-										className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-										onClick={() => {
-											if (submittingRef.current) return;
-											const hydrationGeneration =
-												++historyHydrationGenRef.current;
-											setHistoryOpen(false);
-											if (!isCodexAgent || item.lines.length > 0) {
-												activateComposerSession(item.id);
-												setLines(item.lines);
-												activeTabRef.current = item.id;
-												setActiveTabId(item.id);
-												if (isCodexAgent) {
-													activeConversationRef.current = item.id;
-												}
-												return;
-											}
-											const requestAgentId = selectedAgentId;
-											const requestVaultPath = vaultPath;
-											const requestIncludeExternal =
-												includeExternalCodexHistory;
-											if (!requestAgentId) return;
-											void (async () => {
-												try {
-													const history = await readCodexThread({
-														agentId: requestAgentId,
-														threadId: item.id,
-														vaultPath: requestVaultPath ?? undefined,
-														includeExternal: requestIncludeExternal,
-													});
-													if (
-														hydrationGeneration !==
-															historyHydrationGenRef.current ||
-														selectedAgentIdRef.current !== requestAgentId ||
-														vaultPathRef.current !== requestVaultPath ||
-														includeExternalCodexHistoryRef.current !==
-															requestIncludeExternal
-													) {
-														return;
-													}
-													const lines: ChatLine[] = history.lines.map(
-														(line) => {
-															if (line.kind === "user") {
-																return {
-																	id: line.id,
-																	kind: "user",
-																	text: line.text,
-																};
-															}
-															return {
-																id: line.id,
-																kind: "agent",
-																text: line.text,
-																reasoning: line.reasoning ?? undefined,
-															};
-														},
-													);
-													setSessionHistory((prev) =>
-														prev.map((entry) =>
-															entry.id === item.id &&
-															entry.agentId === requestAgentId
-																? {
-																		...entry,
-																		title: history.thread.title,
-																		lines,
-																	}
-																: entry,
-														),
-													);
-													activeConversationRef.current = item.id;
-													activateComposerSession(item.id);
-													activeTabRef.current = item.id;
-													setActiveTabId(item.id);
-													setLines(lines);
-												} catch (error) {
-													if (
-														hydrationGeneration !==
-															historyHydrationGenRef.current ||
-														selectedAgentIdRef.current !== requestAgentId ||
-														vaultPathRef.current !== requestVaultPath ||
-														includeExternalCodexHistoryRef.current !==
-															requestIncludeExternal
-													) {
-														return;
-													}
-													setLines((prev) => [
-														...prev,
-														{
-															id: nextLineId("err"),
-															kind: "error",
-															text:
-																error instanceof Error
-																	? error.message
-																	: String(error),
-														},
-													]);
-												}
-											})();
-										}}
-									>
-										<span className="text-muted-foreground text-sm leading-none">
-											{item.agentName} · {t(`history.status.${item.status}`)} ·{" "}
-											{item.id.slice(0, 8)}
-										</span>
-										<span className="line-clamp-2 font-medium text-sm leading-snug">
-											{item.title}
-										</span>
-										<span className="text-muted-foreground text-sm leading-none">
-											{item.startedAt}
-										</span>
-									</button>
-								))}
-							</div>
-						)}
-					</PopoverContent>
-				</Popover>
-				{headerActions}
-			</div>
+							</PopoverContent>
+						</Popover>
+						{headerActions}
+					</>
+				}
+			>
+				{conversationTabs.length > 1 ? (
+					<div
+						className="flex min-w-0 items-center gap-1.5"
+						role="tablist"
+						aria-label={title}
+					>
+						{conversationTabs.map((tab, index) => {
+							const isActive = activeTabId === tab.id;
+							return (
+								<button
+									key={tab.id}
+									type="button"
+									role="tab"
+									aria-label={t("tabs.open", { number: index + 1 })}
+									aria-selected={isActive}
+									disabled={submitting}
+									className={cn(
+										"grid size-7 place-items-center rounded-md border text-xs font-medium transition-colors",
+										isActive
+											? "border-primary bg-background text-foreground ring-1 ring-primary"
+											: "border-border bg-muted/30 text-muted-foreground hover:bg-muted hover:text-foreground",
+									)}
+									onClick={() => {
+										if (submittingRef.current) return;
+										historyHydrationGenRef.current += 1;
+										activateComposerSession(tab.id);
+										activeTabRef.current = tab.id;
+										setActiveTabId(tab.id);
+										setLines(tab.lines ?? []);
+										if (isCodexAgent) {
+											activeConversationRef.current =
+												tab.id === "draft" ? null : tab.id;
+										}
+									}}
+								>
+									{index + 1}
+								</button>
+							);
+						})}
+					</div>
+				) : null}
+			</PaneHeader>
 
 			<Conversation className="min-h-0">
 				<ConversationContent>
@@ -2366,14 +2381,14 @@ export function AgentPanel({
 							/>
 						</div>
 					</PromptInputBody>
-					<PromptInputFooter className="gap-2 px-3 pb-2.5">
-						<PromptInputTools className="gap-1.5">
+					<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
+						<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<PromptInputButton
 										type="button"
 										className={cn(
-											"h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium",
+											"h-7 max-w-[min(9rem,100%)] gap-1 px-1.5 text-xs font-medium",
 											composerControlsMuted
 												? "text-muted-foreground"
 												: "text-foreground",
@@ -2418,7 +2433,7 @@ export function AgentPanel({
 										<PromptInputButton
 											type="button"
 											className={cn(
-												"h-7 gap-1 px-1.5 text-xs font-medium",
+												"h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium",
 												composerControlsMuted
 													? "text-muted-foreground"
 													: "text-foreground",
@@ -2426,8 +2441,10 @@ export function AgentPanel({
 											disabled={activeTabIsRunning}
 											tooltip={t("composer.effortTooltip")}
 										>
-											{t("composer.effort.label")}:{" "}
-											{formatEffort(reasoningEffort ?? "medium")}
+											<span className="truncate">
+												{t("composer.effort.label")}:{" "}
+												{formatEffort(reasoningEffort ?? "medium")}
+											</span>
 											<ChevronDown className="size-3 shrink-0 opacity-70" />
 										</PromptInputButton>
 									</DropdownMenuTrigger>
@@ -2502,7 +2519,7 @@ export function AgentPanel({
 							) : null}
 							<div
 								className={cn(
-									"flex h-7 items-center gap-1.5 px-1.5 text-xs font-medium",
+									"flex h-7 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium",
 									composerControlsMuted
 										? "text-muted-foreground"
 										: "text-foreground",
@@ -2514,7 +2531,7 @@ export function AgentPanel({
 										: t("composer.yoloDisabled")
 								}
 							>
-								<span>{t("composer.yolo")}</span>
+								<span className="truncate">{t("composer.yolo")}</span>
 								<Switch
 									size="sm"
 									checked={yoloEnabled}
@@ -2528,6 +2545,8 @@ export function AgentPanel({
 							</div>
 						</PromptInputTools>
 						<PromptInputSubmit
+							className="ml-auto shrink-0"
+							size="icon-xs"
 							status={
 								activeTabIsRunning
 									? "streaming"
