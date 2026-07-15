@@ -672,6 +672,24 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **前端**：`src/lib/papers-api.ts` → `listPapers`；UI 侧本地表头排序（不经由本命令传 sort 参数）。
 - **说明**：当前无 filter/pagination；扩展筛选/FTS 仍可用规划契约 `paper:list`（见下）。
 
+#### `paper_delete`（已落地）
+
+从 **catalog.sqlite** 删除指定路径的 paper 行，以及其下嵌套路径（组织目录批量删）。**不**删除磁盘文件；文件树删除由前端 `plugin-fs` `remove` 负责，再调本命令清理索引。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** paper 文件夹或 papers/ 下组织目录的 Vault 相对路径 */
+  path: string;
+}
+```
+
+- **返回**：`{ ok: true; data: { removed: number } }`（删除行数；无匹配时 `removed: 0`）。
+- **SQL**：`DELETE FROM papers WHERE path = ? OR path LIKE '{path}/%'`。
+- **前端**：`src/lib/papers-api.ts` → `deletePapersUnderPath`；侧栏右键删除 / `⌘⌫`。
+
 #### `paper:list`（扩展规划）
 
 带过滤与分页的列表（尚未实现；现网用 `paper_list`）。

@@ -18,7 +18,15 @@
 		"showInExplorer": "在资源管理器中显示",
 		"showInFileManager": "在文件管理器中显示",
 		"revealFailed": "无法在文件管理器中显示。",
-		"revealDesktopOnly": "在文件管理器中显示需要桌面应用。"
+		"revealDesktopOnly": "在文件管理器中显示需要桌面应用。",
+		"delete": "删除",
+		"deleteConfirmFile": "删除「{{name}}」？",
+		"deleteConfirmFolder": "删除文件夹「{{name}}」及其全部内容？",
+		"deleteConfirmPaper": "删除论文「{{name}}」？将移除文件夹与 catalog 条目。",
+		"deleteFailed": "删除失败。",
+		"deleteDesktopOnly": "删除需要桌面应用。",
+		"deleteInvalid": "无法删除该项。",
+		"deleteNeedsSelection": "请先选中要删除的文件或文件夹。"
 	},
 	"papersLibrary": {
 		"title": "论文库",

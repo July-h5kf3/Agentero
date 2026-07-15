@@ -12,6 +12,7 @@
 		"createVault": "Create vault…",
 		"refreshTree": "Refresh file tree",
 		"revealInFinder": "Show in Finder",
+		"deleteTreeItem": "Delete selected item",
 		"magicWand": "Add paper by identifier",
 		"toggleSidebar": "Show / hide sidebar",
 		"toggleChat": "Show / hide chat",

@@ -34,6 +34,7 @@
 2. **笔记与 source 仍是可再生之外的用户资产**；catalog 损坏时，磁盘上的 paper 文件夹仍在，但 meta 字段不可从 NOTES 可靠还原。
 3. **导出是单向投影**：`PAPERS.md` / `library.bib` 不是写回入口；改元数据只走 `paper:*` / 入库命令写 SQLite。
 4. **`metadata.json` 是投影**：读路径走 `paper_get`（catalog）；每次 `upsert` 后同步写到对应 paper 文件夹，便于外部工具浏览，**不是** UI 主数据源。
+5. **删除**：文件树删除磁盘后，若路径在 `papers/` 下，调用 Host `paper_delete` 清理 catalog 行（`path = ? OR path LIKE '{path}/%'`），避免 Library 残留幽灵条目。
 
 ---
 

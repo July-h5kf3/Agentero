@@ -304,6 +304,36 @@ export async function createVaultDirectory(path: string): Promise<void> {
 	await mkdir(path, { recursive: true });
 }
 
+/**
+ * Remove a file or directory under the vault.
+ * Directories are removed recursively (including non-empty).
+ */
+export async function removeVaultPath(path: string): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+	const trimmed = path.trim();
+	if (!trimmed || trimmed.startsWith("motif:")) {
+		throw new Error(i18n.t("sidebar:fileTree.deleteInvalid"));
+	}
+	const { remove } = await import("@tauri-apps/plugin-fs");
+	await remove(trimmed, { recursive: true });
+}
+
+/** Vault-relative path from absolute path, or null if outside vault. */
+export function vaultRelativePath(
+	vaultRoot: string,
+	absPath: string,
+): string | null {
+	const root = vaultRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+	const abs = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	if (abs === root) return "";
+	const prefix = `${root}/`;
+	if (abs.startsWith(prefix)) return abs.slice(prefix.length);
+	if (abs === "papers" || abs.startsWith("papers/")) return abs;
+	return null;
+}
+
 /** Join parent + name with the parent's path separator style. */
 export function joinVaultPath(parent: string, name: string): string {
 	return joinPath(parent, name);

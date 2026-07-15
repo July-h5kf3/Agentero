@@ -62,6 +62,7 @@ import {
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import {
+	deletePapersUnderPath,
 	exportLibraryToFile,
 	importLibraryFromFile,
 	isLibraryVirtualPath,
@@ -89,8 +90,10 @@ import {
 	pickVaultDirectory,
 	readVaultFile,
 	removeRecentVault,
+	removeVaultPath,
 	saveVaultPath,
 	vaultDisplayName,
+	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
 import {
@@ -607,6 +610,127 @@ export default function App() {
 		})();
 	}, [selectedPath, t]);
 
+	const findTreeNode = useCallback(
+		(path: string): FileNode | null => {
+			const key = path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+			const walk = (list: FileNode[]): FileNode | null => {
+				for (const n of list) {
+					const nk = n.path
+						.replace(/\\/g, "/")
+						.replace(/\/+$/, "")
+						.toLowerCase();
+					if (nk === key) return n;
+					if (n.children?.length) {
+						const hit = walk(n.children);
+						if (hit) return hit;
+					}
+				}
+				return null;
+			};
+			return walk(tree);
+		},
+		[tree],
+	);
+
+	/**
+	 * Delete a vault file / folder / paper after confirm.
+	 * Removes disk path; if under papers/, also drops matching catalog rows.
+	 */
+	const handleDeletePath = useCallback(
+		async (path: string) => {
+			if (!vaultPath || !isTauri()) {
+				setError(t("sidebar:fileTree.deleteDesktopOnly"));
+				return;
+			}
+			if (!path || isLibraryVirtualPath(path)) {
+				setError(t("sidebar:fileTree.deleteInvalid"));
+				return;
+			}
+			const rootNorm = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+			const pathNorm = path.replace(/\\/g, "/").replace(/\/+$/, "");
+			if (pathNorm === rootNorm) {
+				setError(t("sidebar:fileTree.deleteInvalid"));
+				return;
+			}
+			if (!pathNorm.startsWith(`${rootNorm}/`)) {
+				setError(t("sidebar:fileTree.deleteInvalid"));
+				return;
+			}
+
+			const node = findTreeNode(path);
+			const name = node?.name ?? pathNorm.split("/").pop() ?? path;
+			const isDir = node?.kind === "directory" || !node;
+			const isPaper =
+				node?.kind === "directory" &&
+				isPaperDirectory(node.path, node.children);
+
+			const confirmMsg = isPaper
+				? t("sidebar:fileTree.deleteConfirmPaper", { name })
+				: isDir
+					? t("sidebar:fileTree.deleteConfirmFolder", { name })
+					: t("sidebar:fileTree.deleteConfirmFile", { name });
+			if (!window.confirm(confirmMsg)) return;
+
+			setBusy(true);
+			setError(null);
+			try {
+				await removeVaultPath(path);
+
+				const rel = vaultRelativePath(vaultPath, path);
+				if (rel && (rel === "papers" || rel.startsWith("papers/"))) {
+					try {
+						await deletePapersUnderPath(vaultPath, rel);
+					} catch {
+						// Catalog cleanup is best-effort if row missing.
+					}
+				}
+
+				const selectedNorm = selectedPath
+					?.replace(/\\/g, "/")
+					.replace(/\/+$/, "");
+				if (
+					selectedNorm &&
+					(selectedNorm === pathNorm || selectedNorm.startsWith(`${pathNorm}/`))
+				) {
+					setSelectedPath(LIBRARY_VIRTUAL_PATH);
+					setMarkdown("");
+					setMarkdownDirty(false);
+					setNotesPath(null);
+					setPaperMeta(null);
+					setCenterMode("markdown");
+				}
+
+				await refreshTree(vaultPath);
+				await rebuildWikiAndNotify(vaultPath);
+				await refreshLibrary();
+			} catch (e) {
+				setError(
+					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
+				);
+			} finally {
+				setBusy(false);
+			}
+		},
+		[
+			vaultPath,
+			findTreeNode,
+			selectedPath,
+			refreshTree,
+			rebuildWikiAndNotify,
+			refreshLibrary,
+			t,
+		],
+	);
+
+	const handleDeleteSelected = useCallback(() => {
+		const path = selectedPath;
+		if (!path || isLibraryVirtualPath(path)) {
+			setError(t("sidebar:fileTree.deleteNeedsSelection"));
+			return;
+		}
+		void handleDeletePath(path);
+	}, [selectedPath, handleDeletePath, t]);
+
 	const openMagicWand = useCallback(() => {
 		if (!vaultPath) {
 			setError(t("sidebar:lookup.needsVault"));
@@ -654,6 +778,20 @@ export default function App() {
 				settingsOpen: settingsOpenRef.current,
 			});
 			if (!id) return;
+
+			// ⌘⌫ is "delete to line start" in editors — only claim it outside text fields.
+			if (id === "deleteTreeItem") {
+				const el = event.target;
+				if (
+					el instanceof HTMLElement &&
+					el.closest(
+						"input, textarea, select, [contenteditable='true'], [role='textbox']",
+					)
+				) {
+					return;
+				}
+			}
+
 			event.preventDefault();
 
 			switch (id) {
@@ -675,6 +813,9 @@ export default function App() {
 					break;
 				case "revealInFinder":
 					handleRevealInFinder();
+					break;
+				case "deleteTreeItem":
+					handleDeleteSelected();
 					break;
 				case "magicWand":
 					openMagicWand();
@@ -707,6 +848,7 @@ export default function App() {
 		expandSidebar,
 		handleNewWindow,
 		handleOpenVault,
+		handleDeleteSelected,
 		handleRefresh,
 		handleRevealInFinder,
 		openMagicWand,
@@ -1536,6 +1678,7 @@ export default function App() {
 										createDraft={createDraft}
 										onConfirmCreate={(name) => void handleConfirmCreate(name)}
 										onCancelCreate={handleCancelCreate}
+										onDeletePath={(path) => void handleDeletePath(path)}
 										onSelectFile={(n) => void handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}

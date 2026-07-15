@@ -260,6 +260,8 @@ type FileTreeProps = {
 	arxivPaperRelPaths?: ReadonlySet<string>;
 	/** Download missing assets for every incomplete paper (Library row). */
 	onDownloadAllMissingAssets?: () => Promise<void>;
+	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
+	onDeletePath?: (path: string) => void | Promise<void>;
 	className?: string;
 };
 
@@ -280,6 +282,7 @@ export function FileTree({
 	onSelectLibrary,
 	onDownloadPaperAssets,
 	onDownloadAllMissingAssets,
+	onDeletePath,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
@@ -459,6 +462,17 @@ export function FileTree({
 		const def = SHORTCUTS.find((s) => s.id === "revealInFinder");
 		return def ? formatShortcut(def) : "⌥⌘R";
 	}, []);
+	const deleteShortcut = useMemo(() => {
+		const def = SHORTCUTS.find((s) => s.id === "deleteTreeItem");
+		return def ? formatShortcut(def) : "⌘⌫";
+	}, []);
+
+	const handleDeleteFromMenu = useCallback(() => {
+		if (!contextMenu || !onDeletePath) return;
+		const path = contextMenu.path;
+		setContextMenu(null);
+		void onDeletePath(path);
+	}, [contextMenu, onDeletePath]);
 
 	const contextMenuPortal =
 		contextMenu && typeof document !== "undefined"
@@ -469,7 +483,7 @@ export function FileTree({
 						className="fixed z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
 						style={{
 							left: Math.min(contextMenu.x, window.innerWidth - 200),
-							top: Math.min(contextMenu.y, window.innerHeight - 48),
+							top: Math.min(contextMenu.y, window.innerHeight - 80),
 						}}
 					>
 						<button
@@ -485,6 +499,19 @@ export function FileTree({
 								{revealShortcut}
 							</span>
 						</button>
+						{onDeletePath ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
+								onClick={handleDeleteFromMenu}
+							>
+								<span>{t("fileTree.delete")}</span>
+								<span className="text-xs tracking-wide opacity-80">
+									{deleteShortcut}
+								</span>
+							</button>
+						) : null}
 					</div>,
 					document.body,
 				)

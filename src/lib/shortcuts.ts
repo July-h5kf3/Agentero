@@ -10,6 +10,7 @@ export type ShortcutId =
 	| "createVault"
 	| "refreshTree"
 	| "revealInFinder"
+	| "deleteTreeItem"
 	| "magicWand"
 	| "toggleSidebar"
 	| "toggleChat"
@@ -85,6 +86,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		key: "r",
 		meta: true,
 		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "deleteTreeItem",
+		group: "Vault",
+		// ⌘⌫ — delete selected file tree item (with confirm)
+		key: "Backspace",
+		meta: true,
 		whenSettingsClosed: true,
 	},
 	{
@@ -165,9 +174,15 @@ export function formatShortcut(def: ShortcutDef): string {
 	const keyLabel =
 		def.key === ","
 			? ","
-			: def.key.length === 1
-				? def.key.toUpperCase()
-				: def.key;
+			: def.key === "Backspace"
+				? isMac
+					? "⌫"
+					: "Backspace"
+				: def.key === "Escape"
+					? "Esc"
+					: def.key.length === 1
+						? def.key.toUpperCase()
+						: def.key;
 	parts.push(keyLabel);
 	return parts.join(isMac ? "" : "+");
 }

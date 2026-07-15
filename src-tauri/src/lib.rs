@@ -152,6 +152,7 @@ pub fn run() {
             commands::lookup::paper_import,
             commands::paper::paper_get,
             commands::paper::paper_list,
+            commands::paper::paper_delete,
             set_locale,
         ])
         .setup(|app| {

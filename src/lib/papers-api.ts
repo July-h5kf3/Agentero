@@ -37,6 +37,32 @@ export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 	return res.data;
 }
 
+export type PaperDeleteResult = {
+	removed: number;
+};
+
+/**
+ * Remove catalog rows for a paper path or any papers under an org folder.
+ * Does not delete filesystem entries — pair with `removeVaultPath`.
+ */
+export async function deletePapersUnderPath(
+	vaultPath: string,
+	path: string,
+): Promise<PaperDeleteResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.deleteDesktopOnly"));
+	}
+	const res = await invoke<ApiResult<PaperDeleteResult>>("paper_delete", {
+		args: { vaultPath, path },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.deleteFailed"),
+		);
+	}
+	return res.data;
+}
+
 export type PaperExportResult = {
 	format: string;
 	content: string;

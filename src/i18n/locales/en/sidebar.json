@@ -18,7 +18,15 @@
 		"showInExplorer": "Show in Explorer",
 		"showInFileManager": "Show in File Manager",
 		"revealFailed": "Could not reveal in the file manager.",
-		"revealDesktopOnly": "Show in file manager requires the desktop app."
+		"revealDesktopOnly": "Show in file manager requires the desktop app.",
+		"delete": "Delete",
+		"deleteConfirmFile": "Delete 「{{name}}」?",
+		"deleteConfirmFolder": "Delete folder 「{{name}}」 and all of its contents?",
+		"deleteConfirmPaper": "Delete paper 「{{name}}」? This removes the folder and its catalog entry.",
+		"deleteFailed": "Failed to delete.",
+		"deleteDesktopOnly": "Delete requires the desktop app.",
+		"deleteInvalid": "Cannot delete this item.",
+		"deleteNeedsSelection": "Select a file or folder to delete."
 	},
 	"papersLibrary": {
 		"title": "Library",

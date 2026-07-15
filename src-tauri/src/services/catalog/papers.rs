@@ -138,6 +138,24 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     Ok(rows)
 }
 
+/// Delete a paper row and any papers nested under `path/` (org folder delete).
+/// Returns the number of catalog rows removed.
+pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    if path.is_empty() {
+        return Err(AppError::message("path is required"));
+    }
+    let like = format!("{path}/%");
+    let n = conn
+        .execute(
+            "DELETE FROM papers WHERE path = ?1 OR path LIKE ?2",
+            params![path, like],
+        )
+        .map_err(AppError::from)?;
+    Ok(n)
+}
+
 fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
     let authors_json =
         serde_json::to_string(&r.authors).map_err(|e| AppError::message(e.to_string()))?;
