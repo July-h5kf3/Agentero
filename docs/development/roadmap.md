@@ -93,6 +93,7 @@
 - [x] 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
 - [x] Codex 会话配置：仅在 `codex-acp` 上按 ACP 能力显示并应用 reasoning effort 与 Fast；YOLO 保持独立权限开关。
+- [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [ ] 内置工作流：总结当前论文、基于本地库问答、生成 Related Work 草稿。
@@ -114,7 +115,8 @@
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
 - [ ] 接入 ACP 权限确认 UI，而不是自动选择或静默处理。
 - [ ] 写入草稿使用 diff/preview 确认后落盘。
-- [ ] 为 Agent 面板补充会话恢复与取消正在运行任务。
+- [ ] 为 Agent 面板补充会话恢复。
+- [ ] Agent 输出期间的后续交互：普通 Agent 排队下一条消息，Codex 支持 guide / 引导消息。
 
 ## V0.4 双链、反链与图谱
 

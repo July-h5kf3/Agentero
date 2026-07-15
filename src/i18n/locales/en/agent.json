@@ -30,6 +30,7 @@
 	},
 	"composer": {
 		"placeholder": "How can I help you today?",
+		"interruptHint": "Press Esc to interrupt",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
 		"removeSkill": "Remove ${{skill}} from context",
@@ -80,6 +81,7 @@
 		"emptyNoMatch": "No match."
 	},
 	"messages": {
+		"cancelled": "Stopped the current run.",
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
 		"noAgent": "No available agent. Open Settings → Agent to configure one.",

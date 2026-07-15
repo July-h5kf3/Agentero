@@ -5,7 +5,7 @@ mod models;
 mod services;
 
 use i18n::menu_labels;
-use services::agent::AgentRegistry;
+use services::agent::{AgentRegistry, AgentRunController};
 use services::wiki::WikiIndexState;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
@@ -107,6 +107,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(AgentRegistry::load())
+        .manage(AgentRunController::new())
         .manage(WikiIndexState::new())
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
@@ -123,6 +124,7 @@ pub fn run() {
             commands::agent::agent_probe,
             commands::agent::agent_probe_catalog,
             commands::agent::agent_run_once,
+            commands::agent::agent_cancel_run,
             commands::agent::agent_warm,
             commands::graph::graph_get_backlinks,
             commands::graph::graph_get_graph,

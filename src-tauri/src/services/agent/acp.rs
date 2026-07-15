@@ -8,8 +8,8 @@ use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::prompts::{build_prompt, extract_sources};
 use crate::services::agent::skills::load_skill_instructions;
 use agent_client_protocol::schema::v1::{
-    ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
-    PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
+    CancelNotification, ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio,
+    NewSessionRequest, PlanEntryPriority, PlanEntryStatus, PromptRequest, RequestPermissionOutcome,
     RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
     SessionConfigId, SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
     SessionConfigOptionValue, SessionConfigSelectOptions, SessionNotification, SessionUpdate,
@@ -21,6 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
+use tokio::sync::watch;
 use uuid::Uuid;
 
 fn to_acp_agent(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
@@ -46,6 +47,37 @@ fn text_from_content_block(block: &ContentBlock) -> Option<String> {
     match block {
         ContentBlock::Text(t) => Some(t.text.clone()),
         _ => None,
+    }
+}
+
+async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
+    if *cancellation.borrow() {
+        return;
+    }
+    let _ = cancellation.changed().await;
+}
+
+fn cancelled_payload(
+    session_id: String,
+    message_id: String,
+    content: &Arc<Mutex<String>>,
+    thought: &Arc<Mutex<String>>,
+) -> AgentResultPayload {
+    let content = content
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
+    let reasoning = thought
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
+    AgentResultPayload {
+        session_id,
+        message_id,
+        sources: extract_sources(&content),
+        content,
+        reasoning: (!reasoning.is_empty()).then_some(reasoning),
+        stop_reason: Some("cancelled".to_string()),
     }
 }
 
@@ -508,6 +540,7 @@ pub async fn run_once(
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
+    mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_instructions = load_skill_instructions(&skill_ids, vault_path.as_deref())?;
     let full_prompt = format!(
@@ -686,14 +719,39 @@ pub async fn run_once(
                     &config_options,
                 );
 
-                let prompt_response = connection
-                    .send_request(PromptRequest::new(
-                        acp_session_id,
-                        vec![ContentBlock::Text(TextContent::new(full_prompt))],
-                    ))
-                    .block_task()
-                    .await
-                    .map_err(|e| acp_err(format!("prompt: {e}")))?;
+                if *cancellation.borrow() {
+                    let _ = connection
+                        .send_notification(CancelNotification::new(acp_session_id.clone()));
+                    let payload = cancelled_payload(
+                        session_for_conn.clone(),
+                        message_for_conn.clone(),
+                        &content_for_conn,
+                        &thought_for_conn,
+                    );
+                    let _ = app_for_conn.emit("agent:completed", payload.clone());
+                    return Ok(payload);
+                }
+
+                let prompt_response = tokio::select! {
+                    response = connection
+                        .send_request(PromptRequest::new(
+                            acp_session_id.clone(),
+                            vec![ContentBlock::Text(TextContent::new(full_prompt))],
+                        ))
+                        .block_task() => response.map_err(|e| acp_err(format!("prompt: {e}")))?,
+                    () = wait_for_cancellation(&mut cancellation) => {
+                        let _ = connection
+                            .send_notification(CancelNotification::new(acp_session_id));
+                        let payload = cancelled_payload(
+                            session_for_conn.clone(),
+                            message_for_conn.clone(),
+                            &content_for_conn,
+                            &thought_for_conn,
+                        );
+                        let _ = app_for_conn.emit("agent:completed", payload.clone());
+                        return Ok(payload);
+                    }
+                };
 
                 if let Ok(mut s) = stop_for_conn.lock() {
                     *s = Some(format!("{:?}", prompt_response.stop_reason));

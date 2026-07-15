@@ -4,10 +4,11 @@ use crate::models::agent::{
     ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
 use crate::services::agent::{
-    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentRegistry,
+    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent,
+    AgentRegistry, AgentRunController,
 };
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -214,6 +215,7 @@ pub async fn agent_probe_catalog(
 pub async fn agent_run_once(
     app: tauri::AppHandle,
     registry: State<'_, AgentRegistry>,
+    runs: State<'_, AgentRunController>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
     if request.prompt.trim().is_empty() {
@@ -232,12 +234,17 @@ pub async fn agent_run_once(
         agent_id: desc.id.clone(),
     };
 
+    let cancellation = match runs.register(&session_id) {
+        Ok(cancellation) => cancellation,
+        Err(e) => return Ok(map_err(e)),
+    };
+
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let _ = run_once(
-            app_handle,
+            app_handle.clone(),
             desc,
-            session_id,
+            session_id.clone(),
             message_id,
             request.prompt,
             request.workflow,
@@ -248,11 +255,25 @@ pub async fn agent_run_once(
             request.fast_mode,
             request.skill_ids,
             request.auto_approve,
+            cancellation,
         )
         .await;
+        let _ = app_handle.state::<AgentRunController>().finish(&session_id);
     });
 
     Ok(ApiResult::ok(accepted))
+}
+
+/// Request cooperative cancellation for a currently streaming ACP session.
+#[tauri::command]
+pub fn agent_cancel_run(
+    runs: State<'_, AgentRunController>,
+    session_id: String,
+) -> ApiResult<bool> {
+    match runs.cancel(&session_id) {
+        Ok(()) => ApiResult::ok(true),
+        Err(e) => map_err(e),
+    }
 }
 
 /// Background ACP start when Chat opens — loads models/context without a user prompt.

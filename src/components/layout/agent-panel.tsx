@@ -9,7 +9,6 @@ import {
 	FolderOpen,
 	History,
 	PencilLine,
-	ShieldCheck,
 	X,
 	Zap,
 } from "lucide-react";
@@ -61,17 +60,6 @@ import {
 	MessageContent,
 	MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-	ModelSelector,
-	ModelSelectorContent,
-	ModelSelectorEmpty,
-	ModelSelectorGroup,
-	ModelSelectorInput,
-	ModelSelectorItem,
-	ModelSelectorList,
-	ModelSelectorName,
-	ModelSelectorTrigger,
-} from "@/components/ai-elements/model-selector";
 import {
 	Plan,
 	PlanAction,
@@ -134,6 +122,7 @@ import {
 	type AgentPlanEntry,
 	type AgentSkill,
 	type CatalogScanResponse,
+	cancelAgentRun,
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
@@ -200,7 +189,7 @@ type ChatSessionHistoryItem = {
 	agentName: string;
 	startedAt: string;
 	lines: ChatLine[];
-	status: "running" | "completed" | "failed";
+	status: "running" | "completed" | "cancelled" | "failed";
 };
 
 let chatLineSeq = 0;
@@ -430,7 +419,6 @@ export function AgentPanel({
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
 	);
-	const [modelOpen, setModelOpen] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
@@ -702,6 +690,40 @@ export function AgentPanel({
 				setLines((prev) => {
 					const next = [...prev];
 					const last = next[next.length - 1];
+					if (ev.stopReason === "cancelled") {
+						if (last?.kind === "agent" && last.streaming) {
+							const hasOutput =
+								last.text.trim().length > 0 ||
+								Boolean(last.reasoning?.trim()) ||
+								Boolean(last.tools?.length) ||
+								Boolean(last.plan?.length);
+							if (hasOutput) {
+								next[next.length - 1] = {
+									...last,
+									reasoningStreaming: false,
+									streaming: false,
+								};
+							} else {
+								next.pop();
+							}
+						}
+						const cancelledLines: ChatLine[] = [
+							...next,
+							{
+								id: nextLineId("sys"),
+								kind: "system",
+								text: t("messages.cancelled"),
+							},
+						];
+						setSessionHistory((prev) =>
+							prev.map((item) =>
+								item.id === ev.sessionId
+									? { ...item, lines: cancelledLines, status: "cancelled" }
+									: item,
+							),
+						);
+						return cancelledLines;
+					}
 					if (last?.kind === "agent" && last.streaming) {
 						const text =
 							last.text.trim().length > 0
@@ -781,7 +803,7 @@ export function AgentPanel({
 			cancelled = true;
 			for (const u of unsubs) u();
 		};
-	}, [applyEffortEvent, applyFastModeEvent, applyModelsEvent]);
+	}, [applyEffortEvent, applyFastModeEvent, applyModelsEvent, t]);
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
@@ -790,17 +812,6 @@ export function AgentPanel({
 		registry?.agents.find((agent) => agent.id === selectedAgentId)?.template ??
 		null;
 	const isCodexAgent = selectedTemplate === "codex-acp";
-
-	const modelGroups = useMemo(() => {
-		const groups = new Map<string, AgentModelChoice[]>();
-		for (const m of models) {
-			const g = m.group?.trim() || t("models.defaultGroup");
-			const list = groups.get(g) ?? [];
-			list.push(m);
-			groups.set(g, list);
-		}
-		return [...groups.entries()];
-	}, [models, t]);
 
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
@@ -911,7 +922,6 @@ export function AgentPanel({
 
 	const pickModel = (id: string) => {
 		setModelId(id);
-		setModelOpen(false);
 		if (selectedAgentId) saveModelPref(selectedAgentId, id);
 	};
 
@@ -1078,6 +1088,23 @@ export function AgentPanel({
 		}
 	};
 
+	const cancelCurrentRun = async () => {
+		const sessionId = activeSessionRef.current;
+		if (!sessionId || !busy || !isTauri()) return;
+		try {
+			await cancelAgentRun(sessionId);
+		} catch (error) {
+			setLines((prev) => [
+				...prev,
+				{
+					id: nextLineId("err"),
+					kind: "error",
+					text: error instanceof Error ? error.message : String(error),
+				},
+			]);
+		}
+	};
+
 	const attachMention = (path: string) => {
 		setMentionedPaths((prev) => [...new Set([...prev, path])]);
 		setComposerMenuDismissed(true);
@@ -1105,6 +1132,12 @@ export function AgentPanel({
 	const handleComposerMenuKeyDown = (
 		event: KeyboardEvent<HTMLTextAreaElement>,
 	) => {
+		if (event.key === "Escape" && busy && activeSessionRef.current) {
+			event.preventDefault();
+			void cancelCurrentRun();
+			return;
+		}
+
 		if (event.key === "Escape" && (showMentionMenu || showSkillMenu)) {
 			event.preventDefault();
 			setComposerMenuDismissed(true);
@@ -1588,8 +1621,10 @@ export function AgentPanel({
 					className="w-full rounded-xl border-border bg-background shadow-none"
 					inputGroupClassName="overflow-visible"
 					onSubmit={({ text }) => {
-						void send(text);
-						setComposerText("");
+						if (!busy) {
+							void send(text);
+							setComposerText("");
+						}
 					}}
 				>
 					<PromptInputBody>
@@ -1708,19 +1743,20 @@ export function AgentPanel({
 								aria-controls={
 									showMentionMenu ? "agent-mention-menu" : "agent-skill-menu"
 								}
-								placeholder={t("composer.placeholder")}
-								disabled={busy}
+								placeholder={
+									busy ? t("composer.interruptHint") : t("composer.placeholder")
+								}
 							/>
 						</div>
 					</PromptInputBody>
 					<PromptInputFooter className="gap-2 px-3 pb-2.5">
 						<PromptInputTools className="gap-1.5">
-							<ModelSelector open={modelOpen} onOpenChange={setModelOpen}>
-								<ModelSelectorTrigger asChild>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
 									<PromptInputButton
 										type="button"
-										className="max-w-[10rem] gap-1 px-0 font-semibold text-sm"
-										disabled={busy}
+										className="h-7 max-w-[10rem] gap-1 px-1.5 text-xs font-medium text-muted-foreground"
+										disabled={busy || models.length === 0}
 										tooltip={
 											models.length > 0
 												? t("models.selectTooltip")
@@ -1733,36 +1769,25 @@ export function AgentPanel({
 										</span>
 										<ChevronDown className="size-3 shrink-0 opacity-70" />
 									</PromptInputButton>
-								</ModelSelectorTrigger>
-								<ModelSelectorContent title={t("models.title")}>
-									<ModelSelectorInput
-										placeholder={t("models.searchPlaceholder")}
-									/>
-									<ModelSelectorList>
-										<ModelSelectorEmpty>
-											{models.length === 0
-												? t("models.emptyNone")
-												: t("models.emptyNoMatch")}
-										</ModelSelectorEmpty>
-										{modelGroups.map(([group, items]) => (
-											<ModelSelectorGroup key={group} heading={group}>
-												{items.map((m) => (
-													<ModelSelectorItem
-														key={m.id}
-														value={`${m.name} ${m.id}`}
-														onSelect={() => pickModel(m.id)}
-													>
-														<ModelSelectorName>{m.name}</ModelSelectorName>
-														{modelId === m.id ? (
-															<CheckIcon className="ml-auto size-4 opacity-70" />
-														) : null}
-													</ModelSelectorItem>
-												))}
-											</ModelSelectorGroup>
-										))}
-									</ModelSelectorList>
-								</ModelSelectorContent>
-							</ModelSelector>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start" className="min-w-44 p-1">
+									{models.map((model) => (
+										<DropdownMenuItem
+											key={model.id}
+											className={cn(
+												"justify-between rounded-md",
+												modelId === model.id && "bg-muted",
+											)}
+											onSelect={() => pickModel(model.id)}
+										>
+											<span className="truncate">{model.name}</span>
+											{modelId === model.id ? (
+												<CheckIcon className="size-3.5 text-muted-foreground" />
+											) : null}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
 							{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
@@ -1823,15 +1848,20 @@ export function AgentPanel({
 									type="button"
 									className={cn(
 										"size-7 text-muted-foreground",
-										fastEnabled &&
-											"bg-amber-400 text-amber-950 hover:bg-amber-400/90 dark:bg-amber-400 dark:text-amber-950",
+										fastEnabled && "text-amber-500 hover:text-amber-500",
 									)}
 									aria-pressed={fastEnabled}
 									disabled={busy}
 									onClick={() => setFastEnabled((current) => !current)}
 									tooltip={t("composer.fastToggle")}
 								>
-									<Zap className="size-3.5" />
+									<Zap
+										className={cn(
+											"size-3.5",
+											fastEnabled &&
+												"fill-amber-400 text-amber-500 dark:fill-amber-300 dark:text-amber-300",
+										)}
+									/>
 								</PromptInputButton>
 							) : null}
 							<div
@@ -1845,7 +1875,6 @@ export function AgentPanel({
 										: t("composer.yoloDisabled")
 								}
 							>
-								<ShieldCheck className="size-3.5" />
 								<span>{t("composer.yolo")}</span>
 								<Switch
 									size="sm"

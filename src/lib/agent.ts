@@ -319,6 +319,11 @@ export async function runOnce(request: {
 	});
 }
 
+/** Request cooperative cancellation of the active ACP session. */
+export async function cancelAgentRun(sessionId: string): Promise<void> {
+	await invokeApi<boolean>("agent_cancel_run", { sessionId });
+}
+
 export type WarmResult = {
 	agentId: string;
 	ok: boolean;

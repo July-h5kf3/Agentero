@@ -30,6 +30,7 @@
 	},
 	"composer": {
 		"placeholder": "今天想做些什么？",
+		"interruptHint": "按 Esc 中止当前输出",
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
 		"removeContext": "从上下文移除 {{path}}",
 		"removeSkill": "从上下文移除 ${{skill}}",
@@ -80,6 +81,7 @@
 		"emptyNoMatch": "无匹配项。"
 	},
 	"messages": {
+		"cancelled": "已停止当前运行。",
 		"switchedTo": "已切换到 {{name}}",
 		"desktopOnly": "请打开桌面应用以运行 Agent。",
 		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
