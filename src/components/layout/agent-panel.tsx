@@ -10,6 +10,7 @@ import {
 	History,
 	PencilLine,
 	X,
+	Zap,
 } from "lucide-react";
 import {
 	type ReactNode,
@@ -430,6 +431,7 @@ export function AgentPanel({
 	const [composerText, setComposerText] = useState("");
 	const [includeSelectedFile, setIncludeSelectedFile] = useState(true);
 	const [mentionedPaths, setMentionedPaths] = useState<string[]>([]);
+	const [yoloEnabled, setYoloEnabled] = useState(false);
 	const [activeTabId, setActiveTabId] = useState("draft");
 	const activeSessionRef = useRef<string | null>(null);
 	const selectedAgentIdRef = useRef<string | null>(null);
@@ -901,6 +903,7 @@ export function AgentPanel({
 				workflow: "free",
 				target: contextPaths[0],
 				modelId: modelId ?? undefined,
+				autoApprove: yoloEnabled,
 			});
 			const agentLine: ChatLine = {
 				id: nextLineId("agent"),
@@ -1511,6 +1514,25 @@ export function AgentPanel({
 								tooltip={t("composer.toggleCurrentFile")}
 							>
 								<FolderOpen className="size-4" />
+							</PromptInputButton>
+							<PromptInputButton
+								type="button"
+								className={cn(
+									"h-7 gap-1 px-1.5 text-xs font-medium text-muted-foreground",
+									yoloEnabled &&
+										"bg-orange-500/10 text-orange-700 dark:text-orange-300",
+								)}
+								aria-pressed={yoloEnabled}
+								disabled={busy}
+								onClick={() => setYoloEnabled((current) => !current)}
+								tooltip={
+									yoloEnabled
+										? t("composer.yoloEnabled")
+										: t("composer.yoloDisabled")
+								}
+							>
+								<Zap className="size-3.5" />
+								{t("composer.yolo")}
 							</PromptInputButton>
 						</PromptInputTools>
 						<PromptInputSubmit

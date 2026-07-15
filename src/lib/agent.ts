@@ -261,6 +261,8 @@ export async function runOnce(request: {
 	target?: string;
 	/** ACP model config value id (from agent:models). */
 	modelId?: string;
+	/** Select the agent's first ACP permission option for this run. */
+	autoApprove?: boolean;
 }): Promise<RunOnceAccepted> {
 	return invokeApi("agent_run_once", {
 		request: {
@@ -270,6 +272,7 @@ export async function runOnce(request: {
 			workflow: request.workflow,
 			target: request.target,
 			modelId: request.modelId,
+			autoApprove: request.autoApprove ?? false,
 		},
 	});
 }

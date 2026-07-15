@@ -312,6 +312,27 @@ fn acp_err(msg: impl ToString) -> agent_client_protocol::Error {
     util::internal_error(msg)
 }
 
+/// Default to cancelling permission requests. YOLO mode explicitly opts into the ACP
+/// example's first-option selection for the lifetime of one prompt run.
+pub(crate) fn permission_response(
+    request: &RequestPermissionRequest,
+    auto_approve: bool,
+) -> RequestPermissionResponse {
+    let outcome = if auto_approve {
+        request
+            .options
+            .first()
+            .map_or(RequestPermissionOutcome::Cancelled, |opt| {
+                RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                    opt.option_id.clone(),
+                ))
+            })
+    } else {
+        RequestPermissionOutcome::Cancelled
+    };
+    RequestPermissionResponse::new(outcome)
+}
+
 /// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
 pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
     let agent_id = desc.id.clone();
@@ -336,17 +357,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
         .name("motif")
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
-                if let Some(opt) = request.options.first() {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
-                            opt.option_id.clone(),
-                        )),
-                    ));
-                } else {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Cancelled,
-                    ));
-                }
+                let _ = responder.respond(permission_response(&request, false));
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),
@@ -416,6 +427,7 @@ pub async fn run_once(
     target: Option<String>,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    auto_approve: bool,
 ) -> Result<AgentResultPayload, AppError> {
     let full_prompt = build_prompt(workflow.as_deref(), &prompt, target.as_deref());
     let cwd = vault_path
@@ -479,17 +491,7 @@ pub async fn run_once(
         )
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
-                if let Some(opt) = request.options.first() {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
-                            opt.option_id.clone(),
-                        )),
-                    ));
-                } else {
-                    let _ = responder.respond(RequestPermissionResponse::new(
-                        RequestPermissionOutcome::Cancelled,
-                    ));
-                }
+                let _ = responder.respond(permission_response(&request, auto_approve));
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),

@@ -32,7 +32,10 @@
 		"placeholder": "How can I help you today?",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
-		"toggleCurrentFile": "Include the current file as context"
+		"toggleCurrentFile": "Include the current file as context",
+		"yolo": "YOLO",
+		"yoloDisabled": "YOLO is off. Permission requests are declined for this run.",
+		"yoloEnabled": "YOLO is on. Automatically approve ACP permission requests for this run."
 	},
 	"empty": {
 		"title": "Chat with your vault",

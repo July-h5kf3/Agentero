@@ -211,6 +211,9 @@ pub struct RunOnceRequest {
     /// Preferred model id from ACP session config (category: model). Applied after session/new.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
+    /// When enabled, automatically select the first ACP permission option for this run.
+    #[serde(default)]
+    pub auto_approve: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

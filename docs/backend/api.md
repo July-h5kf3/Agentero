@@ -53,6 +53,8 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 | `agent:plan` | ACP 执行计划 | `{ sessionId, entries: { content, status, priority }[] }` |
 | `agent:usage` | 上下文 token 用量 | `{ sessionId, used, size }` |
 | `agent:models` | Agent 上报可用模型 | `{ sessionId, agentId, configId, currentId, models: { id, name, group? }[] }` |
+| `agent:completed` | Agent 回答完成 | `{ sessionId, messageId, content, reasoning?, sources, stopReason? }` |
+| `agent:failed` | Agent 调用失败 | `{ sessionId, error }` |
 
 #### `agent_warm`
 
@@ -69,10 +71,6 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 ```
 
 - **返回** `WarmResult`：`{ agentId, ok, models?, usageUsed?, usageSize?, error? }`
-| `agent:permission_request` | Agent 请求权限（读/写/网络等） | `{ session_id: string, request_id: string, kind: string, detail: object }` |
-| `agent:completed` | Agent 回答完成 | `{ session_id: string, result: AgentResult }` |
-| `agent:failed` | Agent 调用失败 | `{ session_id: string, error: AppError }` |
-| `graph:updated` | 图谱索引重建 | `{ nodes: number, edges: number }` |
 
 ## 3. Host 层 Tauri invoke API
 
@@ -540,6 +538,28 @@ Host 通过 `emit('event_name', payload)` 向前端推送事件：
 ### 3.6 Agent 工作流（ACP Client + BYOA）
 
 Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 Vault），通过 stdio JSON-RPC 会话。**不** 内置 agent 二进制；**不** 在 config 中要求模型 API Key。
+
+#### `agent_run_once`
+
+创建一次性的 ACP 会话并发送 prompt。当前实现会在 prompt 结束后关闭连接。
+
+- **参数**
+
+```ts
+{
+  agentId?: string;
+  prompt: string;
+  vaultPath?: string;
+  workflow?: string;
+  target?: string;
+  modelId?: string;
+  autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
+}
+```
+
+- **返回**：`{ ok: true, data: { sessionId, messageId, agentId } }`
+
+- **权限策略**：默认取消 ACP 权限请求。`autoApprove` 仅由 Composer 的 YOLO 开关传入，作用范围为这一次运行；逐项权限确认仍未实现。
 
 #### `agent:list_agents`
 

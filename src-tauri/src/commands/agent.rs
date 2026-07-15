@@ -239,6 +239,7 @@ pub async fn agent_run_once(
             request.target,
             request.vault_path,
             request.model_id,
+            request.auto_approve,
         )
         .await;
     });

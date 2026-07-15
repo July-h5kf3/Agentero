@@ -1,10 +1,15 @@
 #[cfg(test)]
 mod acp_live {
     use crate::models::agent::{AgentDescriptor, AgentTemplate, CatalogAcpStatus};
+    use crate::services::agent::acp::permission_response;
     use crate::services::agent::discover::resolve_command;
     use crate::services::agent::probe_agent;
     use crate::services::agent::templates::catalog_templates;
     use crate::services::agent::AgentRegistry;
+    use agent_client_protocol::schema::v1::{
+        PermissionOption, PermissionOptionKind, RequestPermissionOutcome, RequestPermissionRequest,
+        ToolCallUpdate, ToolCallUpdateFields,
+    };
     use std::collections::HashMap;
 
     fn desc(
@@ -75,6 +80,28 @@ mod acp_live {
         assert_eq!(codex.command, "npx");
         assert_eq!(codex.args, vec!["--yes", "@agentclientprotocol/codex-acp"]);
         assert_eq!(codex.detect_command.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn permission_requests_are_cancelled_unless_yolo_is_enabled() {
+        let request = RequestPermissionRequest::new(
+            "session",
+            ToolCallUpdate::new("tool-call", ToolCallUpdateFields::new()),
+            vec![PermissionOption::new(
+                "allow-once",
+                "Allow once",
+                PermissionOptionKind::AllowOnce,
+            )],
+        );
+
+        assert!(matches!(
+            permission_response(&request, false).outcome,
+            RequestPermissionOutcome::Cancelled
+        ));
+        assert!(matches!(
+            permission_response(&request, true).outcome,
+            RequestPermissionOutcome::Selected(_)
+        ));
     }
 
     #[test]
