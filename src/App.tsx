@@ -269,6 +269,7 @@ export default function App() {
 	/** Increment to open magic-wand popover (⇧⌘I). */
 	const [lookupOpenSignal, setLookupOpenSignal] = useState(0);
 	const sidebarPanelRef = usePanelRef();
+	const rightSidebarPanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const previewPaneRef = useRef<HTMLDivElement>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
@@ -394,81 +395,106 @@ export default function App() {
 	}, []);
 
 	const SIDEBAR_DEFAULT_PX = 200;
+	const RIGHT_SIDEBAR_DEFAULT_PX = 320;
 
-	const toggleSidebar = useCallback(() => {
-		const panel = sidebarPanelRef.current;
-		if (!panel) return;
-		// Use React state as source of truth — library isCollapsed() is unreliable at 0px.
-		if (sidebarCollapsed) {
-			try {
-				panel.expand();
-			} catch {
-				// ignore
+	/** Collapse / expand left file-tree panel without remounting (stable Group layout). */
+	const setLeftSidebarCollapsed = useCallback(
+		(collapsed: boolean) => {
+			const panel = sidebarPanelRef.current;
+			if (panel) {
+				if (collapsed) {
+					try {
+						panel.collapse();
+					} catch {
+						// ignore
+					}
+				} else {
+					try {
+						panel.expand();
+					} catch {
+						// ignore
+					}
+					try {
+						panel.resize(SIDEBAR_DEFAULT_PX);
+					} catch {
+						// ignore
+					}
+				}
 			}
-			try {
-				panel.resize(SIDEBAR_DEFAULT_PX);
-			} catch {
-				// ignore
-			}
-			setSidebarCollapsed(false);
-		} else {
-			try {
-				panel.collapse();
-			} catch {
-				// ignore
-			}
-			setSidebarCollapsed(true);
-		}
-	}, [sidebarCollapsed, sidebarPanelRef]);
+			setSidebarCollapsed(collapsed);
+		},
+		[sidebarPanelRef],
+	);
 
-	const toggleRightSidebar = useCallback(() => {
-		setRightSidebarOpen((open) => {
-			const next = !open;
-			if (next && rightSidebarTab === "agent") {
+	/** Collapse / expand right Agent/Backlinks panel; always mounted as collapsible. */
+	const setRightSidebarCollapsed = useCallback(
+		(collapsed: boolean, opts?: { focusAgent?: boolean }) => {
+			const panel = rightSidebarPanelRef.current;
+			if (panel) {
+				if (collapsed) {
+					try {
+						panel.collapse();
+					} catch {
+						// ignore
+					}
+				} else {
+					try {
+						panel.expand();
+					} catch {
+						// ignore
+					}
+					try {
+						panel.resize(RIGHT_SIDEBAR_DEFAULT_PX);
+					} catch {
+						// ignore
+					}
+				}
+			}
+			setRightSidebarOpen(!collapsed);
+			if (!collapsed && opts?.focusAgent) {
 				chatInputFocusKey.current += 1;
 			}
-			return next;
+		},
+		[rightSidebarPanelRef],
+	);
+
+	const toggleSidebar = useCallback(() => {
+		// React state is source of truth — isCollapsed() can lag at 0px.
+		setLeftSidebarCollapsed(!sidebarCollapsed);
+	}, [sidebarCollapsed, setLeftSidebarCollapsed]);
+
+	const toggleRightSidebar = useCallback(() => {
+		setRightSidebarCollapsed(rightSidebarOpen, {
+			focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
 		});
-	}, [rightSidebarTab]);
+	}, [rightSidebarOpen, rightSidebarTab, setRightSidebarCollapsed]);
 
 	/** Open right sidebar on a tab (or switch tab if already open). */
-	const openRightTab = useCallback((tab: "agent" | "backlinks") => {
-		setRightSidebarTab(tab);
-		setRightSidebarOpen(true);
-		if (tab === "agent") {
-			chatInputFocusKey.current += 1;
-		}
-	}, []);
+	const openRightTab = useCallback(
+		(tab: "agent" | "backlinks") => {
+			setRightSidebarTab(tab);
+			if (!rightSidebarOpen) {
+				setRightSidebarCollapsed(false, { focusAgent: tab === "agent" });
+			} else if (tab === "agent") {
+				chatInputFocusKey.current += 1;
+			}
+		},
+		[rightSidebarOpen, setRightSidebarCollapsed],
+	);
 
 	/** ⌘L — toggle right sidebar (defaults to agent). */
 	const toggleChat = useCallback(() => {
-		setRightSidebarOpen((open) => {
-			const next = !open;
-			if (next && rightSidebarTab === "agent") {
-				chatInputFocusKey.current += 1;
-			}
-			return next;
+		setRightSidebarCollapsed(rightSidebarOpen, {
+			focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
 		});
-	}, [rightSidebarTab]);
+	}, [rightSidebarOpen, rightSidebarTab, setRightSidebarCollapsed]);
 
 	const expandSidebar = useCallback(() => {
-		const panel = sidebarPanelRef.current;
-		if (!panel) return;
-		try {
-			panel.expand();
-		} catch {
-			// ignore
-		}
-		try {
-			panel.resize(SIDEBAR_DEFAULT_PX);
-		} catch {
-			// ignore
-		}
-		setSidebarCollapsed(false);
+		setLeftSidebarCollapsed(false);
 		requestAnimationFrame(() => {
 			sidebarAsideRef.current?.querySelector<HTMLElement>("button")?.focus();
 		});
-	}, [sidebarPanelRef]);
+	}, [setLeftSidebarCollapsed]);
 
 	const refreshTree = useCallback(async (path: string) => {
 		setBusy(true);
@@ -738,23 +764,10 @@ export default function App() {
 		}
 		// Expand left rail without stealing focus (popover owns focus).
 		if (sidebarCollapsed) {
-			const panel = sidebarPanelRef.current;
-			if (panel) {
-				try {
-					panel.expand();
-				} catch {
-					// ignore
-				}
-				try {
-					panel.resize(SIDEBAR_DEFAULT_PX);
-				} catch {
-					// ignore
-				}
-			}
-			setSidebarCollapsed(false);
+			setLeftSidebarCollapsed(false);
 		}
 		setLookupOpenSignal((n) => n + 1);
-	}, [vaultPath, sidebarCollapsed, sidebarPanelRef, t]);
+	}, [vaultPath, sidebarCollapsed, setLeftSidebarCollapsed, t]);
 
 	useEffect(() => {
 		void refreshLibrary();
@@ -1495,6 +1508,34 @@ export default function App() {
 		Boolean(paperMeta) &&
 		(centerMode === "pdf" || centerMode === "html");
 
+	/**
+	 * Notes still mounts/unmounts with paper selection. Re-assert intended collapse
+	 * so a remounted middle column cannot partially un-collapse either rail.
+	 * (showNotesOnRight is intentional; panel refs are stable.)
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on Notes mount; assert current collapse intent
+	useEffect(() => {
+		const id = requestAnimationFrame(() => {
+			const left = sidebarPanelRef.current;
+			const right = rightSidebarPanelRef.current;
+			if (sidebarCollapsed) {
+				try {
+					left?.collapse();
+				} catch {
+					// ignore
+				}
+			}
+			if (!rightSidebarOpen) {
+				try {
+					right?.collapse();
+				} catch {
+					// ignore
+				}
+			}
+		});
+		return () => cancelAnimationFrame(id);
+	}, [showNotesOnRight, sidebarCollapsed, rightSidebarOpen]);
+
 	const activeFileLabel = showLibrary
 		? t("sidebar:papersLibrary.title")
 		: selectedPath
@@ -1642,6 +1683,8 @@ export default function App() {
 							maxSize={420}
 							collapsible
 							collapsedSize={0}
+							// Keep pixel width when the right rail or Notes column appears/disappears.
+							groupResizeBehavior="preserve-pixel-size"
 							className="min-h-0 overflow-hidden"
 							onResize={(size) => {
 								// Only mark collapsed after a real collapse (near 0px), never mid-drag.
@@ -1908,17 +1951,29 @@ export default function App() {
 							</ResizablePanel>
 						) : null}
 
-						{/* Right sidebar: Agent (default) | Backlinks with Graph */}
+						{/*
+						  Right sidebar: always mounted + collapsible (same as left).
+						  Conditional mount used to remount the Group when toggling ⌘L,
+						  which redistributed left panel size and caused visual overlap.
+						*/}
 						{rightSidebarOpen ? <ResizableHandle /> : null}
-						{rightSidebarOpen ? (
-							<ResizablePanel
-								id="right-sidebar"
-								defaultSize="28"
-								minSize={260}
-								maxSize={520}
-								className="min-h-0 overflow-hidden"
-							>
-								{rightSidebarTab === "agent" ? (
+						<ResizablePanel
+							id="right-sidebar"
+							panelRef={rightSidebarPanelRef}
+							defaultSize={0}
+							minSize={260}
+							maxSize={520}
+							collapsible
+							collapsedSize={0}
+							groupResizeBehavior="preserve-pixel-size"
+							className="min-h-0 overflow-hidden"
+							onResize={(size) => {
+								if (size.inPixels <= 1) setRightSidebarOpen(false);
+								else if (size.inPixels >= 80) setRightSidebarOpen(true);
+							}}
+						>
+							{rightSidebarOpen ? (
+								rightSidebarTab === "agent" ? (
 									<AgentPanel
 										key={chatInputFocusKey.current}
 										vaultPath={vaultPath}
@@ -1928,8 +1983,7 @@ export default function App() {
 										title={t("labels.agent")}
 										autoFocus
 									/>
-								) : null}
-								{rightSidebarTab === "backlinks" ? (
+								) : (
 									<div className="flex h-full min-h-0 flex-col overflow-hidden">
 										<BacklinksPanel
 											vaultPath={vaultPath}
@@ -1947,9 +2001,9 @@ export default function App() {
 											wikiIndexRevision={wikiIndexRevision}
 										/>
 									</div>
-								) : null}
-							</ResizablePanel>
-						) : null}
+								)
+							) : null}
+						</ResizablePanel>
 					</ResizableGroup>
 				</ErrorBoundary>
 
