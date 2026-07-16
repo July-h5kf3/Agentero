@@ -24,6 +24,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { isTauri } from "@/lib/tauri";
 import {
@@ -279,7 +286,7 @@ export function ZoteroMigrateDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col sm:max-w-md">
+			<DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>{t("sidebar:zoteroMigrate.title")}</DialogTitle>
 					<DialogDescription>
@@ -454,43 +461,44 @@ export function ZoteroMigrateDialog({
 										</div>
 										<div className="flex gap-2">
 											<div className="relative flex-1">
-												<Search className="-translate-y-1/2 absolute top-1/2 left-2 size-3.5 text-muted-foreground" />
+												<Search className="-translate-y-1/2 absolute top-1/2 left-2.5 size-4 text-muted-foreground" />
 												<Input
 													value={query}
 													onChange={(e) => setQuery(e.target.value)}
 													placeholder={t(
 														"sidebar:zoteroMigrate.searchPlaceholder",
 													)}
-													className="h-8 pl-7 text-sm"
+													className="pl-8"
 													disabled={busy}
 												/>
 											</div>
 											{scan.collections.length > 0 ? (
-												<select
+												<Select
 													value={String(collFilter)}
-													onChange={(e) =>
-														setCollFilter(
-															e.target.value === "all"
-																? "all"
-																: Number(e.target.value),
-														)
+													onValueChange={(v) =>
+														setCollFilter(v === "all" ? "all" : Number(v))
 													}
 													disabled={busy}
-													className="h-8 rounded-md border bg-transparent px-2 text-sm"
 												>
-													<option value="all">
-														{t("sidebar:zoteroMigrate.allFolders")}
-													</option>
-													{scan.collections.map((c) => (
-														<option key={c.id} value={c.id}>
-															{(c.path || t("sidebar:zoteroMigrate.unfiled")) +
-																` (${c.itemCount})`}
-														</option>
-													))}
-												</select>
+													<SelectTrigger className="w-48 shrink-0">
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="all">
+															{t("sidebar:zoteroMigrate.allFolders")}
+														</SelectItem>
+														{scan.collections.map((c) => (
+															<SelectItem key={c.id} value={String(c.id)}>
+																{(c.path ||
+																	t("sidebar:zoteroMigrate.unfiled")) +
+																	` (${c.itemCount})`}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
 											) : null}
 										</div>
-										<ScrollArea className="h-40 rounded-md border">
+										<ScrollArea className="h-56 rounded-md border">
 											<div className="space-y-0.5 p-1.5">
 												{filtered.map((it) => (
 													<div
