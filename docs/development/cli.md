@@ -97,7 +97,7 @@
 | **暴露** | 把库内容以稳定结构交给 Agent/脚本（路径、meta、资源状态） | `paper_list` / `paper_get` + 落盘状态探测 |
 | **文献基础** | 标识符入库、补 PDF/TeX、`PAPER.md`、bib 导入导出 | `lookup_*` / `paper_*` import-export / parse |
 | **双链索引（只读+重建）** | 反链查询、图导出、重建 | `graph_*`（不依赖 Agent） |
-| **Catalog 标记** | `is_read` 等字段读写（**仅字段**，不触发精读） | `paper_set_is_read` |
+| **Catalog 标记** | `is_read` / `tags` 等字段读写（**仅字段**，不触发精读） | `paper_set_is_read`、`paper_set_tags` |
 
 ### 3.2 明确不进 CLI
 
@@ -162,11 +162,13 @@ agentero
 ├── tree [path] [--depth N]        # 文件树暴露（Vault 相对）
 │
 ├── paper
-│   ├── list [--query] [--unread] [--status …]
+│   ├── list [--query] [--tag …] [--unread] [--status …]
+│   ├── tags                       # 库内 tag 汇总（名 + 计数）
 │   ├── get <path|id>              # meta + 资源探测 + 建议读取路径
 │   ├── paths <path|id>            # 仅输出相关文件路径（极简 Agent 用）
 │   ├── delete <path> [--files]    # 默认只删 catalog；--files 删目录
 │   ├── set-read <path|id> [--false]  # 仅改 is_read 字段
+│   ├── set-tags <path|id> [tags…] [--add|--remove]  # 仅改 tags
 │   ├── download <path|id>         # 补 PDF / arXiv TeX
 │   └── parse <path|id> [--force]  # 无 TeX 时 liteparse → PAPER.md
 │
@@ -254,9 +256,20 @@ agentero
 **`paper list`**
 
 - L1 索引：读 catalog，不扫全文
-- text 列：`path` `id` `title` `year` `is_read`
-- 过滤：`--unread`、`--query`（title/authors/id 子串）
-- JSON：`PaperRecord[]`（字段与 Host 对齐，**稳定**）
+- text 列：`path` `id` `title` `year` `tags` `is_read`（`tags` 逗号拼接，空为 `-`）
+- 过滤：
+  - `--unread`：仅 `is_read = false`
+  - `--status <s>`：status 字段（ignore case）
+  - `--query <q>`：title / authors / id / path / **tags** 子串（ignore case）
+  - `--tag <name>`：**可重复**；每篇须 **同时含** 全部给定 tag（AND；精确匹配、ignore case）
+- JSON：`PaperRecord[]`（字段与 Host 对齐，**稳定**；含 `tags: string[]`）
+
+**`paper tags`**
+
+- 库内全部 tag 汇总（从 catalog 扫描，不另建 tags 表）
+- text 列：`tag` `count`（按 tag 名排序）
+- JSON：`{ items: [{ tag, count }] }`
+- 用途：外部 Agent 先摸有哪些标签，再 `paper list --tag …`
 
 **`paper get <ref>`**
 
@@ -317,6 +330,17 @@ agentero
 
 - **仅**更新 catalog `is_read` 布尔值
 - 语义：外部 Agent 自己读完写完 NOTES 后，可用此标记；CLI 不负责「读」
+
+**`paper set-tags`**
+
+- **仅**更新 catalog `tags`（`tags_json`）；同步 `metadata.json` 投影（与 Host `paper_set_tags` / `papers::set_tags` 同一 service）
+- **默认 = 整表替换**：`agentero paper set-tags <ref> nlp rl` → tags 变为 `["nlp","rl"]`
+- **清空**：`agentero paper set-tags <ref>`（无额外 tag 参数）
+- **增量**（与 replace 互斥）：
+  - `--add t1 t2`：在现有列表上追加（trim + 大小写不敏感去重）
+  - `--remove t1 t2`：按 ignore-case 移除
+- 规范化与 Host 一致：trim 空白、丢弃空串、大小写不敏感去重（保留首次写法）
+- 不触发精读、不改 NOTES
 
 **`graph *`**
 
@@ -431,7 +455,7 @@ services/*     → 真正的业务（文件系统、SQLite、HTTP、liteparse、
 | 模块 | 路径 | 是否依赖 `tauri` | CLI 复用 |
 |---|---|---|---|
 | `services/vault` | `create_vault` 等 | **否** | ✅ 直接 `use` |
-| `services/catalog` | `papers::list_all/get/delete/set_is_read` | **否** | ✅ 直接 `use` |
+| `services/catalog` | `papers::list_all/get/delete/set_is_read/set_tags/add_tags/remove_tags/list_all_tags` | **否** | ✅ 直接 `use` |
 | `services/lookup` | `import_by_identifier`、`download_paper_assets`、export/import | **否** | ✅ 直接 `use`（async） |
 | `services/pdf_parse` | `parse_paper_body` | **否** | ✅ 直接 `use` |
 | `services/wiki` | 索引 / 反链 / 图 | **service 本身否**；`commands/graph` 用 `State<WikiIndexState>` | ✅ 调 service；CLI 自建 `WikiIndexState` 或每次 rebuild |
@@ -570,7 +594,8 @@ Desktop-only: services/agent/*   （CLI 不引用）
 
 - [x] `vault create|which|info|check|use`
 - [x] `tree`
-- [x] `paper list|get|paths|delete|set-read|download|parse`
+- [x] `paper list|get|paths|delete|set-read|set-tags|tags|download|parse`
+- [x] `paper list --tag`（AND、ignore case）+ `--query` 匹配 tags
 - [x] `import id|bib`、`export bib`
 - [x] 全局 `--vault` / env / 上溯 / `--json` / 退出码
 - [x] 稳定 error.code 表
@@ -649,12 +674,19 @@ agentero paper get 1706.03762 --json
 agentero import id 2401.12345 --json
 # 外部 Agent 自行精读并写 NOTES.md 后：
 agentero paper set-read papers/2401.12345 --json
+
+# Tags（仅 catalog 字段）
+agentero paper tags --json
+agentero paper set-tags papers/2401.12345 nlp survey --json
+agentero paper set-tags papers/2401.12345 --add draft --json
+agentero paper list --tag nlp --json
 ```
 
 ### 管道
 
 ```bash
 agentero paper list --json | jq -r '.data[].path'
+agentero paper list --tag nlp --json | jq -r '.data[].path'
 agentero paper paths 1706.03762 | xargs -I{} echo "read {}"
 ```
 
@@ -668,6 +700,7 @@ agentero paper paths 1706.03762 | xargs -I{} echo "read {}"
 | Q2 | 是否包含 Agent / BYOA | **否** |
 | Q3 | 是否自动精读 | **否** |
 | Q4 | `is_read` | 仅字段读写，不触发精读 |
+| Q4b | `tags` | 仅字段读写；`set-tags` 默认 replace；`--add`/`--remove` 增量；`list --tag` AND 精确匹配 |
 | Q5 | `paper delete` | 默认只 catalog；`--files` 需确认 |
 | Q6 | 与 GUI 共享 | **仅 Vault 目录** |
 | Q7 | **代码目录** | **`cli/`**（与 `src-tauri` 并列） |

@@ -757,6 +757,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
 - **规范化**：trim 空白；丢弃空串；大小写不敏感去重（保留首次出现的写法）。
 - **前端**：`src/lib/papers-api.ts` → `setPaperTags`；Paper Info 面板可增删；Library 表格展示 + 标签筛选。
+- **CLI**：`agentero paper set-tags <ref> [tags…]`（默认 replace；`--add` / `--remove` 增量）；`paper list --tag` 筛选；`paper tags` 汇总。见 [`../development/cli.md`](../development/cli.md)。
 
 #### `paper:list`（扩展规划）
 
@@ -1311,7 +1312,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `vault create` | `services::vault::create_vault` / `vault_create` |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
-| `paper list\|get\|paths\|delete\|set-read` | `catalog::papers::*` / `paper_*` |
+| `paper list\|get\|paths\|delete\|set-read\|set-tags\|tags` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
+| `paper list --tag` / `--query` 含 tags | CLI 侧过滤（读 `list_all`）；Host `paper_list` 仍全量 |
 | `paper download\|parse` | `lookup::download_paper_assets` / `pdf_parse::parse_paper_body` |
 | `import id\|bib` | `lookup::import_by_identifier` / `import_catalog` |
 | `export bib` | `lookup::export_catalog`（`-o`/`--out` 写文件；全局格式用 `--json`） |

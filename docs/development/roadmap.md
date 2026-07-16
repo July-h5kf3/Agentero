@@ -295,7 +295,7 @@
 - [x] 按需放宽 `services::*` 可见性（`pub` / re-export），**不搬迁模块**。
 - [x] **Vault**：`create` / `which` / `info` / `check` / `use`；`--vault` / `AGENTERO_VAULT` / cwd 上溯 / default_vault。
 - [x] **发现与暴露**：`tree`；`paper list|get|paths`（`get` 含 `assets` + `suggestedReads`，对齐渐进披露）。
-- [x] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read`（仅 catalog 字段；**无**自动精读）。
+- [x] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read|set-tags|tags`（仅 catalog 字段；**无**自动精读；`list --tag` 筛选）。
 - [x] 全局 `--json` / 退出码 / 稳定 `error.code`（Agent 友好）。
 - [ ] 可选随后：`graph backlinks|export|rebuild`、`doctor`、shell completions。
 - [x] 文档：README 构建说明；Release 附带 `agentero` 二进制（`release.yml`）。

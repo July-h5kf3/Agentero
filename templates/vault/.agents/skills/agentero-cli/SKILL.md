@@ -61,8 +61,10 @@ After `paper get --json`, use `data.suggestedReads` / `paper paths` then
 agentero vault which --json
 # or: agentero vault info --json
 
-# 2) L1 index
+# 2) L1 index (optional filters: --unread, --query, --tag)
 agentero paper list --json
+agentero paper tags --json
+agentero paper list --tag nlp --json
 
 # 3) One paper: meta + asset flags + suggested paths
 agentero paper get <path|id> --json
@@ -74,8 +76,10 @@ agentero paper paths <path|id> --json
 # 5) Import (exact id / DOI / URL) — creates shell NOTES, not lecture body
 agentero import id <arxiv|doi|url> --json
 
-# 6) After you finish your own notes, optional catalog flag only:
+# 6) After you finish your own notes, optional catalog flags only:
 agentero paper set-read <path|id> --json
+agentero paper set-tags <path|id> nlp survey --json
+# incremental: --add / --remove (mutually exclusive with bare replace tags)
 ```
 
 ## Command map (MVP)
@@ -88,13 +92,15 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Current vault path | `agentero vault which --json` |
 | Summary / health | `agentero vault info --json` / `vault check --json` |
 | File tree | `agentero tree [path] --json` |
-| List papers | `agentero paper list [--unread] [--query …] --json` |
+| List papers | `agentero paper list [--unread] [--query …] [--tag …] --json` |
+| List tags | `agentero paper tags --json` |
 | Get paper | `agentero paper get <path\|id> --json` |
 | Paths only | `agentero paper paths <path\|id> --json` |
 | Download PDF/TeX | `agentero paper download <path\|id> --json` |
 | PDF → PAPER.md | `agentero paper parse <path\|id> [--force] --json` |
 | Delete catalog (± files) | `agentero paper delete <path> [--files -y] --json` |
 | Mark is_read | `agentero paper set-read <path\|id> [--false] --json` |
+| Set tags | `agentero paper set-tags <path\|id> [tags…] [--add\|--remove] --json` |
 | Magic-wand import | `agentero import id <text> [--parent papers/…] --json` |
 | Bib import/export | `agentero import bib <file\|-> --json` / `export bib [-o\|--out file\|-] --json` |
 | Graph (later) | `agentero graph backlinks|export|rebuild --json` |

@@ -184,7 +184,69 @@ pub fn set_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperR
     upsert_paper(vault_root, &row)
 }
 
-fn normalize_tags(tags: &[String]) -> Vec<String> {
+/// Append tags to a paper (trim + case-insensitive dedupe). Returns the updated row.
+pub fn add_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperRecord, AppError> {
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    let Some(mut row) = get_by_path(vault_root, &path)? else {
+        return Err(AppError::message("paper not found in catalog"));
+    };
+    let mut next = row.tags.clone();
+    next.extend(tags.iter().cloned());
+    row.tags = normalize_tags(&next);
+    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    upsert_paper(vault_root, &row)
+}
+
+/// Remove tags from a paper (case-insensitive). Returns the updated row.
+pub fn remove_tags(
+    vault_root: &Path,
+    path: &str,
+    tags: &[String],
+) -> Result<PaperRecord, AppError> {
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    let Some(mut row) = get_by_path(vault_root, &path)? else {
+        return Err(AppError::message("paper not found in catalog"));
+    };
+    let drop: Vec<String> = tags
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    row.tags
+        .retain(|existing| !drop.iter().any(|d| d.eq_ignore_ascii_case(existing)));
+    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    upsert_paper(vault_root, &row)
+}
+
+/// Unique tags across the catalog with occurrence counts (sorted by tag name).
+/// First-seen casing is preserved for the tag string.
+pub fn list_all_tags(vault_root: &Path) -> Result<Vec<(String, usize)>, AppError> {
+    let rows = list_all(vault_root)?;
+    let mut map: std::collections::BTreeMap<String, (String, usize)> =
+        std::collections::BTreeMap::new();
+    for r in rows {
+        for tag in r.tags {
+            let key = tag.to_ascii_lowercase();
+            map.entry(key)
+                .and_modify(|(_, n)| *n += 1)
+                .or_insert((tag, 1));
+        }
+    }
+    Ok(map.into_values().collect())
+}
+
+/// True if the paper has every tag in `required` (exact match, case-insensitive).
+pub fn paper_has_all_tags(paper: &PaperRecord, required: &[String]) -> bool {
+    required.iter().all(|need| {
+        let n = need.trim();
+        if n.is_empty() {
+            return true;
+        }
+        paper.tags.iter().any(|t| t.eq_ignore_ascii_case(n))
+    })
+}
+
+pub fn normalize_tags(tags: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for raw in tags {
         let t = raw.trim();
@@ -448,7 +510,7 @@ pub fn sync_metadata_json(vault_root: &Path, record: &PaperRecord) -> Result<(),
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_tags;
+    use super::{normalize_tags, paper_has_all_tags, PaperRecord};
 
     #[test]
     fn normalize_tags_trims_dedupes_case_insensitive() {
@@ -462,5 +524,53 @@ mod tests {
             "CV".into(),
         ]);
         assert_eq!(tags, vec!["NLP", "RL", "CV"]);
+    }
+
+    #[test]
+    fn paper_has_all_tags_and_match() {
+        let mut p = PaperRecord {
+            path: "papers/x".into(),
+            id: "x".into(),
+            paper_type: "other".into(),
+            title: "T".into(),
+            authors: vec![],
+            creators: None,
+            year: None,
+            date: None,
+            abstract_text: None,
+            tags: vec!["NLP".into(), "rl".into()],
+            arxiv_id: None,
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: None,
+            extra: None,
+            summary: None,
+            status: "completed".into(),
+            is_read: false,
+            added_at: "t".into(),
+            updated_at: "t".into(),
+        };
+        assert!(paper_has_all_tags(&p, &["nlp".into(), "RL".into()]));
+        assert!(!paper_has_all_tags(&p, &["nlp".into(), "cv".into()]));
+        p.tags.clear();
+        assert!(paper_has_all_tags(&p, &[]));
     }
 }

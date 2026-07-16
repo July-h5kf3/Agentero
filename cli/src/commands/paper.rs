@@ -15,9 +15,12 @@ use std::fs;
 pub enum PaperCmd {
     /// List papers from catalog (L1 index).
     List {
-        /// Substring filter on title / authors / id / path.
+        /// Substring filter on title / authors / id / path / tags.
         #[arg(long = "query")]
         query: Option<String>,
+        /// Filter: paper must have this tag (repeatable, AND; case-insensitive exact).
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
         /// Only unread (`is_read = false`).
         #[arg(long = "unread")]
         unread: bool,
@@ -25,6 +28,8 @@ pub enum PaperCmd {
         #[arg(long = "status")]
         status: Option<String>,
     },
+    /// List unique tags in the catalog with counts.
+    Tags,
     /// Meta + asset flags + suggestedReads (no body dump).
     Get {
         /// Vault-relative path or paper id.
@@ -46,6 +51,21 @@ pub enum PaperCmd {
         /// Set is_read to false.
         #[arg(long = "false")]
         set_false: bool,
+    },
+    /// Set catalog tags (does not run paper-reader).
+    ///
+    /// Default: replace the full tag list with `tags` (empty list clears).
+    /// Use `--add` or `--remove` for incremental edits (mutually exclusive).
+    SetTags {
+        r#ref: String,
+        /// Tag names (replace mode when neither --add nor --remove).
+        tags: Vec<String>,
+        /// Append tags (case-insensitive dedupe).
+        #[arg(long = "add", conflicts_with = "remove")]
+        add: bool,
+        /// Remove tags (case-insensitive).
+        #[arg(long = "remove", conflicts_with = "add")]
+        remove: bool,
     },
     /// Download PDF / arXiv TeX for an existing paper.
     Download { r#ref: String },
@@ -75,17 +95,31 @@ struct PaperGetData {
     suggested_reads: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct TagCount {
+    tag: String,
+    count: usize,
+}
+
 pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError> {
     match cmd {
         PaperCmd::List {
             query,
+            tags,
             unread,
             status,
-        } => list(globals, query.as_deref(), unread, status.as_deref()),
+        } => list(globals, query.as_deref(), &tags, unread, status.as_deref()),
+        PaperCmd::Tags => list_tags(globals),
         PaperCmd::Get { r#ref } => get(globals, &r#ref),
         PaperCmd::Paths { r#ref } => paths(globals, &r#ref),
         PaperCmd::Delete { path, files } => delete(globals, &path, files),
         PaperCmd::SetRead { r#ref, set_false } => set_read(globals, &r#ref, !set_false),
+        PaperCmd::SetTags {
+            r#ref,
+            tags,
+            add,
+            remove,
+        } => set_tags(globals, &r#ref, &tags, add, remove),
         PaperCmd::Download { r#ref } => download(globals, &r#ref).await,
         PaperCmd::Parse { r#ref, force } => parse(globals, &r#ref, force).await,
     }
@@ -94,6 +128,7 @@ pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError>
 fn list(
     globals: &GlobalOpts,
     query: Option<&str>,
+    filter_tags: &[String],
     unread: bool,
     status: Option<&str>,
 ) -> Result<Value, CliError> {
@@ -105,6 +140,14 @@ fn list(
     if let Some(st) = status.map(str::trim).filter(|s| !s.is_empty()) {
         rows.retain(|r| r.status.eq_ignore_ascii_case(st));
     }
+    let required_tags: Vec<String> = filter_tags
+        .iter()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if !required_tags.is_empty() {
+        rows.retain(|r| papers::paper_has_all_tags(r, &required_tags));
+    }
     if let Some(q) = query.map(str::trim).filter(|s| !s.is_empty()) {
         let q = q.to_ascii_lowercase();
         rows.retain(|r| {
@@ -114,6 +157,7 @@ fn list(
                 || r.authors
                     .iter()
                     .any(|a| a.to_ascii_lowercase().contains(&q))
+                || r.tags.iter().any(|t| t.to_ascii_lowercase().contains(&q))
         });
     }
 
@@ -125,12 +169,18 @@ fn list(
         .map(|r| {
             let year = r.year.map(|y| y.to_string()).unwrap_or_else(|| "-".into());
             let read = if r.is_read { "read" } else { "unread" };
+            let tags = if r.tags.is_empty() {
+                "-".into()
+            } else {
+                r.tags.join(",")
+            };
             format!(
-                "{}\t{}\t{}\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}",
                 r.path,
                 r.id,
                 truncate(&r.title, 60),
                 year,
+                tags,
                 read
             )
         })
@@ -140,6 +190,23 @@ fn list(
         "items": rows,
         "lines": lines,
         "__paper_list": true,
+    }))
+}
+
+fn list_tags(globals: &GlobalOpts) -> Result<Value, CliError> {
+    let vault = resolve_vault(globals)?;
+    let pairs = papers::list_all_tags(&vault)?;
+    let items: Vec<TagCount> = pairs
+        .into_iter()
+        .map(|(tag, count)| TagCount { tag, count })
+        .collect();
+    let lines: Vec<String> = items
+        .iter()
+        .map(|t| format!("{}\t{}", t.tag, t.count))
+        .collect();
+    Ok(json!({
+        "items": items,
+        "lines": lines,
     }))
 }
 
@@ -242,6 +309,48 @@ fn set_read(globals: &GlobalOpts, ref_: &str, is_read: bool) -> Result<Value, Cl
         obj.insert(
             "lines".into(),
             json!([format!("is_read={} path={}", row.is_read, row.path)]),
+        );
+    }
+    Ok(v)
+}
+
+fn set_tags(
+    globals: &GlobalOpts,
+    ref_: &str,
+    tags: &[String],
+    add: bool,
+    remove: bool,
+) -> Result<Value, CliError> {
+    let vault = resolve_vault(globals)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
+    if add && remove {
+        return Err(CliError::message(
+            "--add and --remove are mutually exclusive",
+        ));
+    }
+    let row = if add {
+        if tags.is_empty() {
+            return Err(CliError::message("--add requires at least one tag"));
+        }
+        papers::add_tags(&vault, &paper.path, tags)?
+    } else if remove {
+        if tags.is_empty() {
+            return Err(CliError::message("--remove requires at least one tag"));
+        }
+        papers::remove_tags(&vault, &paper.path, tags)?
+    } else {
+        papers::set_tags(&vault, &paper.path, tags)?
+    };
+    let tags_disp = if row.tags.is_empty() {
+        "[]".into()
+    } else {
+        format!("[{}]", row.tags.join(", "))
+    };
+    let mut v = to_value(&row)?;
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert(
+            "lines".into(),
+            json!([format!("tags={} path={}", tags_disp, row.path)]),
         );
     }
     Ok(v)

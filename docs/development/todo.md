@@ -42,6 +42,7 @@
    - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
    - [x] Library 行批量补资源（与 2b 联动）。
    - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选。
+   - [x] **Tags CLI**：`paper set-tags` / `list --tag` / `tags`（与 Host 共用 `papers::set_tags`）。
 
 2d. **文件树与侧栏 UX** ✅
    - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）。
@@ -84,7 +85,7 @@
    - 复用：**不迁 core**；path 依赖 `agentero_lib`，调用 `services::{vault,catalog,lookup,pdf_parse,wiki}`；禁止 `use …::agent`。
    - [x] Workspace + scaffold `cli/`（clap、`--vault` / env / 上溯、`--json`、退出码）。
    - [x] `vault create|which|info|check|use`（对齐 `vault_create` / catalog 初始化）。
-   - [x] `tree`；`paper list|get|paths|delete|set-read|download|parse`（`get`：`assets` + `suggestedReads`）。
+   - [x] `tree`；`paper list|get|paths|delete|set-read|set-tags|tags|download|parse`（`get`：`assets` + `suggestedReads`；`list --tag` AND）。
    - [x] `import id|bib`、`export bib`（对齐 Host；**不**自动精读）。
    - [x] 稳定 `error.code`；集成测试（临时 Vault + `--json` 契约，`cli/tests/cli_mvp.rs`）。
    - [x] 按需放宽 service `pub`（`lib.rs` 导出 `services` / `error`；`list_by_id`）。
