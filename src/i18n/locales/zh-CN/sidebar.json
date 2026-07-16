@@ -60,9 +60,7 @@
 	"zoteroMigrate": {
 		"button": "从 Zotero 迁移",
 		"title": "从 Zotero 迁移",
-		"description": "把你的 Zotero 文库导入当前知识库。Motif 直接读取 zotero.sqlite，数据不出本机。",
 		"chooseFolder": "选择 Zotero 数据文件夹…",
-		"folderHint": "包含 zotero.sqlite 和 storage/ 的文件夹。",
 		"scanning": "正在扫描文库…",
 		"detecting": "正在查找你的 Zotero 文库…",
 		"scanResult": "{{count}} 篇文献 · {{withPdf}} 篇有本地 PDF · {{notes}} 条笔记",

@@ -15,7 +15,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
-	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
@@ -276,12 +275,12 @@ export function ZoteroMigrateDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+			<DialogContent
+				className="flex max-h-[85vh] flex-col sm:max-w-2xl"
+				aria-describedby={undefined}
+			>
 				<DialogHeader>
 					<DialogTitle>{t("sidebar:zoteroMigrate.title")}</DialogTitle>
-					<DialogDescription>
-						{t("sidebar:zoteroMigrate.description")}
-					</DialogDescription>
 				</DialogHeader>
 
 				<div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
@@ -349,9 +348,6 @@ export function ZoteroMigrateDialog({
 										{dir ?? t("sidebar:zoteroMigrate.chooseFolder")}
 									</span>
 								</Button>
-								<p className="px-0.5 text-muted-foreground text-xs">
-									{t("sidebar:zoteroMigrate.folderHint")}
-								</p>
 							</div>
 
 							{scanning || detecting ? (

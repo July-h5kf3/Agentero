@@ -60,9 +60,7 @@
 	"zoteroMigrate": {
 		"button": "Migrate from Zotero",
 		"title": "Migrate from Zotero",
-		"description": "Import your Zotero library into this vault. Motif reads zotero.sqlite directly — nothing leaves your computer.",
 		"chooseFolder": "Choose Zotero data folder…",
-		"folderHint": "The folder that contains zotero.sqlite and storage/.",
 		"scanning": "Scanning library…",
 		"detecting": "Looking for your Zotero library…",
 		"scanResult": "{{count}} references · {{withPdf}} with a local PDF · {{notes}} notes",
