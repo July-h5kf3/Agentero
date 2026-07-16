@@ -261,6 +261,40 @@ pub fn normalize_tags(tags: &[String]) -> Vec<String> {
     out
 }
 
+/// Snapshot the paper row at `path` and any papers nested under `path/`.
+/// Used by the recycle bin so a delete can be undone (see `services::trash`).
+pub fn list_under_path(vault_root: &Path, path: &str) -> Result<Vec<PaperRecord>, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    if path.is_empty() {
+        return Ok(Vec::new());
+    }
+    let like = format!("{path}/%");
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT
+                path, id, type, title, authors_json, year, abstract, tags_json,
+                arxiv_id, doi, pdf_url, html_url, source_url,
+                body_source, body_quality, bibtex_key, citation_count, status, summary,
+                added_at, updated_at,
+                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
+                publisher, place, series, language, zotero_item_type, meta_source, extra,
+                is_read
+            FROM papers
+            WHERE path = ?1 OR path LIKE ?2
+            ORDER BY path ASC
+            "#,
+        )
+        .map_err(AppError::from)?;
+    let rows = stmt
+        .query_map(params![path, like], map_row)
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    Ok(rows)
+}
+
 /// Delete a paper row and any papers nested under `path/` (org folder delete).
 /// Returns the number of catalog rows removed.
 pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppError> {

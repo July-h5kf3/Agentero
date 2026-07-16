@@ -162,6 +162,8 @@ pub fn run() {
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
             commands::terminal::path_open_in_terminal,
+            commands::trash::path_trash,
+            commands::trash::path_untrash,
             commands::window::window_new,
             commands::lookup::lookup_import,
             commands::lookup::lookup_translator_config,

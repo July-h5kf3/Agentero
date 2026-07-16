@@ -3,6 +3,7 @@ pub mod graph;
 pub mod lookup;
 pub mod paper;
 pub mod terminal;
+pub mod trash;
 pub mod vault;
 pub mod window;
 pub mod zotero;
