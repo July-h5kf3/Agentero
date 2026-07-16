@@ -77,6 +77,8 @@ pub struct ZoteroMigrateResult {
     pub imported: usize,
     pub skipped: usize,
     pub copied_pdfs: usize,
+    /// Zotero notes backfilled into existing papers' NOTES.md (already-present papers).
+    pub notes_added: usize,
     /// Orphan catalog rows removed before import (paper folder gone from disk).
     pub pruned: usize,
     pub paths: Vec<String>,
@@ -173,18 +175,28 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
         )
         .await
         {
-            Ok(Some((path, copied))) => {
+            Ok(MigrateOutcome::Imported { path, copied_pdf }) => {
                 out.imported += 1;
                 out.paths.push(path);
-                if copied {
+                if copied_pdf {
                     out.copied_pdfs += 1;
                 }
             }
-            Ok(None) => out.skipped += 1,
+            Ok(MigrateOutcome::NotesBackfilled { path }) => {
+                out.notes_added += 1;
+                out.paths.push(path);
+            }
+            Ok(MigrateOutcome::Skipped) => out.skipped += 1,
             Err(e) => out.errors.push(e.to_string()),
         }
     }
     Ok(out)
+}
+
+enum MigrateOutcome {
+    Imported { path: String, copied_pdf: bool },
+    NotesBackfilled { path: String },
+    Skipped,
 }
 
 async fn migrate_one(
@@ -195,7 +207,7 @@ async fn migrate_one(
     preserve_collections: bool,
     migrate_notes: bool,
     dedup: &mut Dedup,
-) -> Result<Option<(String, bool)>, AppError> {
+) -> Result<MigrateOutcome, AppError> {
     let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
     enrich_remote_urls(&mut meta);
     let id = meta.id.clone();
@@ -204,7 +216,17 @@ async fn migrate_one(
     }
 
     if dedup.contains(&meta) {
-        return Ok(None);
+        // Paper already in the vault: backfill missing Zotero notes into its
+        // NOTES.md (idempotent by content); never re-import or touch other content.
+        if migrate_notes && !item.note_html.is_empty() {
+            if let Some(existing) = dedup.existing_path(&meta) {
+                let notes_md = vault.join(&existing).join("NOTES.md");
+                if notes_md.is_file() && append_notes(&notes_md, &item.note_html) {
+                    return Ok(MigrateOutcome::NotesBackfilled { path: existing });
+                }
+            }
+        }
+        return Ok(MigrateOutcome::Skipped);
     }
 
     // Recreate the Zotero collection folder under the base parent when requested.
@@ -222,7 +244,7 @@ async fn migrate_one(
     }
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
-    dedup.insert(&meta);
+    dedup.insert(&meta, &path_rel);
 
     let mut copied = false;
     if copy_pdfs {
@@ -239,33 +261,43 @@ async fn migrate_one(
         }
     }
 
-    Ok(Some((path_rel, copied)))
+    Ok(MigrateOutcome::Imported {
+        path: path_rel,
+        copied_pdf: copied,
+    })
 }
 
-/// Convert Zotero note HTML to Markdown and append it under the paper's NOTES.md.
-fn append_notes(notes_md: &Path, html_notes: &[String]) {
-    let md = html_notes
-        .iter()
-        .map(|html| htmd::convert(html).unwrap_or_else(|_| html.clone()))
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n---\n\n");
-    if md.is_empty() {
-        return;
+/// Convert Zotero note HTML to Markdown and append any that are not already in the
+/// paper's NOTES.md (idempotent by content). Returns true when it added something.
+fn append_notes(notes_md: &Path, html_notes: &[String]) -> bool {
+    let existing = fs::read_to_string(notes_md).unwrap_or_default();
+    let mut to_add = Vec::new();
+    for html in html_notes {
+        let md = htmd::convert(html).unwrap_or_else(|_| html.clone());
+        let md = md.trim().to_string();
+        if md.is_empty() || existing.contains(&md) {
+            continue; // empty, or already migrated on an earlier run
+        }
+        to_add.push(md);
     }
+    if to_add.is_empty() {
+        return false;
+    }
+    let block = to_add.join("\n\n---\n\n");
     use std::io::Write;
-    if let Ok(mut f) = fs::OpenOptions::new().append(true).open(notes_md) {
-        let _ = write!(f, "\n---\n\n{md}\n");
+    match fs::OpenOptions::new().append(true).open(notes_md) {
+        Ok(mut f) => write!(f, "\n---\n\n{block}\n").is_ok(),
+        Err(_) => false,
     }
 }
 
 /// Skip real duplicates / re-runs by arXiv id, DOI, or normalized title.
+/// Maps each key to the existing paper's vault-relative path (for note backfill).
 #[derive(Default)]
 struct Dedup {
-    arxiv: HashSet<String>,
-    doi: HashSet<String>,
-    title: HashSet<String>,
+    arxiv: HashMap<String, String>,
+    doi: HashMap<String, String>,
+    title: HashMap<String, String>,
 }
 
 impl Dedup {
@@ -273,44 +305,54 @@ impl Dedup {
         let mut d = Dedup::default();
         for r in papers::list_all(vault).unwrap_or_default() {
             if let Some(a) = r.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
-                d.arxiv.insert(a.to_lowercase());
+                d.arxiv.insert(a.to_lowercase(), r.path.clone());
             }
             if let Some(x) = r.doi.as_deref().filter(|s| !s.is_empty()) {
-                d.doi.insert(x.to_lowercase());
+                d.doi.insert(x.to_lowercase(), r.path.clone());
             }
             let t = normalize_title(&r.title);
             if !t.is_empty() {
-                d.title.insert(t);
+                d.title.insert(t, r.path.clone());
             }
         }
         d
     }
 
     fn contains(&self, meta: &super::map::PaperMeta) -> bool {
-        if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
-            if self.arxiv.contains(&a.to_lowercase()) {
-                return true;
-            }
-        }
-        if let Some(x) = meta.doi.as_deref().filter(|s| !s.is_empty()) {
-            if self.doi.contains(&x.to_lowercase()) {
-                return true;
-            }
-        }
-        let t = normalize_title(&meta.title);
-        !t.is_empty() && self.title.contains(&t)
+        self.existing_path(meta).is_some()
     }
 
-    fn insert(&mut self, meta: &super::map::PaperMeta) {
+    /// Vault-relative path of the already-present paper matching `meta`, if any.
+    fn existing_path(&self, meta: &super::map::PaperMeta) -> Option<String> {
         if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
-            self.arxiv.insert(a.to_lowercase());
+            if let Some(p) = self.arxiv.get(&a.to_lowercase()) {
+                return Some(p.clone());
+            }
         }
         if let Some(x) = meta.doi.as_deref().filter(|s| !s.is_empty()) {
-            self.doi.insert(x.to_lowercase());
+            if let Some(p) = self.doi.get(&x.to_lowercase()) {
+                return Some(p.clone());
+            }
         }
         let t = normalize_title(&meta.title);
         if !t.is_empty() {
-            self.title.insert(t);
+            if let Some(p) = self.title.get(&t) {
+                return Some(p.clone());
+            }
+        }
+        None
+    }
+
+    fn insert(&mut self, meta: &super::map::PaperMeta, path: &str) {
+        if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
+            self.arxiv.insert(a.to_lowercase(), path.to_string());
+        }
+        if let Some(x) = meta.doi.as_deref().filter(|s| !s.is_empty()) {
+            self.doi.insert(x.to_lowercase(), path.to_string());
+        }
+        let t = normalize_title(&meta.title);
+        if !t.is_empty() {
+            self.title.insert(t, path.to_string());
         }
     }
 }

@@ -32,6 +32,8 @@ export type ZoteroMigrateResult = {
 	imported: number;
 	skipped: number;
 	copiedPdfs: number;
+	notesAdded: number;
+	pruned: number;
 	paths: string[];
 	errors: string[];
 };
