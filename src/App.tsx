@@ -37,6 +37,7 @@ import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import { PapersLibrary } from "@/components/layout/papers-library";
+import { RecycleBinDialog } from "@/components/layout/recycle-bin-dialog";
 import {
 	ResizableGroup,
 	ResizableHandle,
@@ -1076,6 +1077,18 @@ export default function App() {
 
 	/** Paths queued for the "move to folder" dialog (null = closed). */
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
+
+	/** Recycle Bin dialog visibility. */
+	const [recycleBinOpen, setRecycleBinOpen] = useState(false);
+
+	/** Refresh tree / library / wiki after a recycle-bin restore. */
+	const handleTrashChanged = useCallback(async () => {
+		if (!vaultPath) return;
+		setTreeSelectedPath(null);
+		await refreshTree(vaultPath);
+		await rebuildWikiAndNotify(vaultPath);
+		await refreshLibrary();
+	}, [vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary]);
 
 	const handleMovePaths = useCallback((paths: string[]) => {
 		const valid = paths.filter((p) => !isLibraryVirtualPath(p));
@@ -2455,6 +2468,7 @@ export default function App() {
 										}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
+										onOpenRecycleBin={() => setRecycleBinOpen(true)}
 									/>
 								</div>
 								<div className="agentero-scroll min-h-0 flex-1 px-1">
@@ -2918,6 +2932,13 @@ export default function App() {
 					count={movePaths?.length ?? 0}
 					sourcePaths={movePaths ?? []}
 					onConfirm={(dest) => void runMovePaths(dest)}
+				/>
+
+				<RecycleBinDialog
+					open={recycleBinOpen}
+					onOpenChange={setRecycleBinOpen}
+					vaultPath={vaultPath}
+					onChanged={handleTrashChanged}
 				/>
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}

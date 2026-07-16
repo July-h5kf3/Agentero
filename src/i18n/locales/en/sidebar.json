@@ -58,6 +58,20 @@
 			"cancel": "Cancel"
 		}
 	},
+	"recycleBin": {
+		"open": "Recycle Bin",
+		"title": "Recycle Bin",
+		"loading": "Loading…",
+		"empty": "Recycle bin is empty.",
+		"restore": "Restore",
+		"deleteForever": "Delete permanently",
+		"deleteForeverConfirm": "Permanently delete 「{{name}}」? This cannot be undone.",
+		"emptyTrash": "Empty Recycle Bin",
+		"emptyConfirm": "Permanently delete all {{count}} items? This cannot be undone.",
+		"close": "Close",
+		"loadFailed": "Failed to load the recycle bin.",
+		"purgeFailed": "Failed to delete permanently."
+	},
 	"papersLibrary": {
 		"title": "Library",
 		"loading": "Loading papers…",

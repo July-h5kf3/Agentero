@@ -1205,6 +1205,7 @@ export function VaultSidebarHeader({
 	title,
 	onNewFile,
 	onNewFolder,
+	onOpenRecycleBin,
 	/** Vault-relative papers parent, e.g. `papers` or `papers/nlp` */
 	lookupParentDir,
 	onLookupSubmit,
@@ -1222,6 +1223,7 @@ export function VaultSidebarHeader({
 	title: string;
 	onNewFile: () => void;
 	onNewFolder: () => void;
+	onOpenRecycleBin?: () => void;
 	lookupParentDir: string;
 	onLookupSubmit: (text: string) => Promise<void>;
 	onImportBibliography?: () => void | Promise<void>;
@@ -1381,6 +1383,15 @@ export function VaultSidebarHeader({
 							>
 								<FolderPlus className="size-3.5" />
 							</IconAction>
+							{onOpenRecycleBin ? (
+								<IconAction
+									label={t("recycleBin.open")}
+									onClick={onOpenRecycleBin}
+									disabled={busy || isDemo}
+								>
+									<Trash2 className="size-3.5" />
+								</IconAction>
+							) : null}
 						</>
 					}
 				>

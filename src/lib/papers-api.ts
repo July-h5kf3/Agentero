@@ -109,6 +109,75 @@ export async function untrashBatch(
 	return res.data.restored;
 }
 
+export type TrashEntry = {
+	id: string;
+	batchId: string;
+	stored: string;
+	rel: string;
+	name: string;
+	deletedAt: string;
+	isDir: boolean;
+};
+
+/** List all items currently in the recycle bin (`.agentero/.trash/`). */
+export async function listTrash(vaultPath: string): Promise<TrashEntry[]> {
+	if (!isTauri()) return [];
+	const res = await invoke<ApiResult<TrashEntry[]>>("path_list_trash", {
+		args: { vaultPath },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:recycleBin.loadFailed"),
+		);
+	}
+	return res.data;
+}
+
+/** Restore one recycle-bin item to its original path; returns the rel path. */
+export async function restoreTrashItem(
+	vaultPath: string,
+	batchId: string,
+	stored: string,
+): Promise<string> {
+	const res = await invoke<ApiResult<{ rel: string }>>("path_restore_item", {
+		args: { vaultPath, batchId, stored },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.undoFailed"),
+		);
+	}
+	return res.data.rel;
+}
+
+/** Permanently delete one recycle-bin item. */
+export async function purgeTrashItem(
+	vaultPath: string,
+	batchId: string,
+	stored: string,
+): Promise<void> {
+	const res = await invoke<ApiResult<null>>("path_purge_item", {
+		args: { vaultPath, batchId, stored },
+	});
+	if (!res.ok) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:recycleBin.purgeFailed"),
+		);
+	}
+}
+
+/** Empty the entire recycle bin (permanent). */
+export async function purgeAllTrash(vaultPath: string): Promise<void> {
+	const res = await invoke<ApiResult<null>>("path_purge_trash", {
+		args: { vaultPath },
+	});
+	if (!res.ok) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:recycleBin.purgeFailed"),
+		);
+	}
+}
+
 export type PaperMoveResult = {
 	newRel: string;
 };

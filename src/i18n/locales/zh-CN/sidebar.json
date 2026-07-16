@@ -58,6 +58,20 @@
 			"cancel": "取消"
 		}
 	},
+	"recycleBin": {
+		"open": "回收站",
+		"title": "回收站",
+		"loading": "加载中…",
+		"empty": "回收站是空的。",
+		"restore": "恢复",
+		"deleteForever": "永久删除",
+		"deleteForeverConfirm": "永久删除「{{name}}」？此操作不可撤销。",
+		"emptyTrash": "清空回收站",
+		"emptyConfirm": "永久删除全部 {{count}} 项？此操作不可撤销。",
+		"close": "关闭",
+		"loadFailed": "加载回收站失败。",
+		"purgeFailed": "永久删除失败。"
+	},
 	"papersLibrary": {
 		"title": "论文库",
 		"loading": "正在加载论文…",
