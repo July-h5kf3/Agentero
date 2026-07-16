@@ -3,8 +3,10 @@
 
 use crate::error::{map_err, ApiResult};
 use crate::services::lookup::{
-    migrate_zotero, scan_zotero, ZoteroMigrateArgs, ZoteroMigrateResult, ZoteroScan, ZoteroScanArgs,
+    migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
+    ZoteroScan, ZoteroScanArgs,
 };
+use tauri::ipc::Channel;
 
 /// Read-only preview of a Zotero data directory (item + local-PDF counts).
 #[tauri::command]
@@ -16,9 +18,16 @@ pub fn zotero_scan(args: ZoteroScanArgs) -> ApiResult<ZoteroScan> {
 }
 
 /// Migrate a Zotero library into `papers/…` + catalog; optionally copy PDFs.
+/// Streams `{current,total}` progress to the UI via `on_progress`.
 #[tauri::command]
-pub async fn zotero_migrate(args: ZoteroMigrateArgs) -> ApiResult<ZoteroMigrateResult> {
-    match migrate_zotero(args).await {
+pub async fn zotero_migrate(
+    args: ZoteroMigrateArgs,
+    on_progress: Channel<MigrateProgress>,
+) -> ApiResult<ZoteroMigrateResult> {
+    let report = move |current, total| {
+        let _ = on_progress.send(MigrateProgress { current, total });
+    };
+    match migrate_zotero(args, report).await {
         Ok(r) => ApiResult::ok(r),
         Err(e) => map_err(e),
     }
