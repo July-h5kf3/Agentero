@@ -8,6 +8,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 
 - 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
+- CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
   - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹；右键 **Finder 显示 / 删除**）+ 选中论文时 **Paper Info**；
   - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或论文 **PDF / HTML** / 打开的 Markdown 笔记；
@@ -48,6 +49,11 @@ pnpm build
 pnpm lint
 pnpm format
 pnpm tauri build
+
+# Headless CLI（仓库根 workspace）
+cargo build -p agentero-cli
+cargo run -p agentero-cli -- vault which --json
+cargo test -p agentero-cli
 ```
 
 完成实现前运行最小必要验证。UI 改动优先启动应用并检查对应流程；如果 dev 端口被占用或无法做浏览器级验证，需要明确说明。
@@ -69,6 +75,7 @@ pnpm tauri build
 - `docs/development/todo.md`：可执行 backlog。
 - `docs/development/technical-plan.md`：跨前后端技术方案。
 - `docs/development/prd.md`：产品需求和验收标准。
+- `docs/development/cli.md`：headless CLI 语义与实现（`cli/`）。
 
 当修改 UI、数据契约、发布流程或 Vault 语义时，必须同步更新相关文档。
 

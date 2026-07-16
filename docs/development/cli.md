@@ -1,6 +1,6 @@
 # Agentero CLI 设计（语义 + 技术栈）
 
-> 状态：**设计定稿（未实现；实现排期另议）**  
+> 状态：**MVP 已落地**（`cli/` + workspace；`graph` / `doctor` / completions 仍待）  
 > 目标：为 Vault / Catalog / 文献基础能力提供 **headless、Agent 友好** 的 CLI。  
 > 相关：[`backend/api.md`](../backend/api.md)、[`backend/data-model.md`](../backend/data-model.md)、[`backend/catalog.md`](../backend/catalog.md)、[`technical-plan.md`](technical-plan.md)。
 
@@ -14,7 +14,7 @@
 | 设计取向 | **给外部 Agent / 脚本当工具用**（稳定 JSON、可组合、可发现），不是第二个 Agent 运行时 |
 | **代码位置** | 仓库根 **`cli/`**（独立 crate，与 `src-tauri` 并列） |
 | **domain 复用** | **不迁 core**；path 依赖 `src-tauri` 的 `agentero_lib`，直接 `use services::{vault,catalog,lookup,…}` |
-| 实现状态 | 文档定稿；代码尚未落地 |
+| 实现状态 | **MVP**：`vault` / `tree` / `paper` / `import` / `export` / `config`；集成测试 `cli/tests/cli_mvp.rs` |
 | **Vault skill** | Create Vault 种子 **`templates/vault/.agents/skills/agentero-cli/SKILL.md`** → `.agents/skills/agentero-cli/` |
 
 ---
@@ -128,8 +128,8 @@ agentero [GLOBAL] <command> ...
 
 GLOBAL:
   -v, --vault <PATH>     Vault 根（绝对或相对）
-  --json                 等价 -o json（Agent / 脚本推荐始终使用）
-  -o, --output <FMT>     text | json（默认 text）
+  --json                 等价 --output json（Agent / 脚本推荐始终使用）
+  --output <FMT>         text | json（默认 text；短选项 `-o` 留给 export 等写文件）
   -q, --quiet            成功时少说话；错误仍走 stderr
   -y, --yes              跳过破坏性确认
   --translator-url <URL> 覆盖 Translator base
@@ -175,12 +175,12 @@ agentero
 │   └── bib <file|-> [--parent …]
 │
 ├── export
-│   ├── bib [--format …] [-o file|-]
-│   └── papers-md [-o file|-]      # 可选；Host 落地后对齐
+│   ├── bib [--format …] [-o|--out file|-]
+│   └── papers-md [-o|--out file|-]      # 可选；Host 落地后对齐
 │
 ├── graph
 │   ├── backlinks <path>
-│   ├── export [--format json|dot] [-o …]
+│   ├── export [--format json|dot] [-o|--out …]
 │   └── rebuild
 │
 ├── config
@@ -381,6 +381,7 @@ resolve_paper(ref):
 | `paper_not_found` | path/id 无匹配 |
 | `paper_ambiguous` | id 多 path |
 | `import_failed` | Translator / 写盘失败 |
+| `export_failed` | Translator export / 写文件失败 |
 | `asset_missing` | download/parse 缺前置文件 |
 | `needs_confirmation` | 破坏性操作无 `--yes` |
 | `catalog_busy` | SQLite 锁冲突（可选） |
@@ -566,12 +567,12 @@ Desktop-only: services/agent/*   （CLI 不引用）
 
 ### MVP（基础：管理 + 发现 + 暴露 + 入库资源）
 
-- [ ] `vault create|which|info|check|use`
-- [ ] `tree`
-- [ ] `paper list|get|paths|delete|set-read|download|parse`
-- [ ] `import id|bib`、`export bib`
-- [ ] 全局 `--vault` / env / 上溯 / `--json` / 退出码
-- [ ] 稳定 error.code 表
+- [x] `vault create|which|info|check|use`
+- [x] `tree`
+- [x] `paper list|get|paths|delete|set-read|download|parse`
+- [x] `import id|bib`、`export bib`
+- [x] 全局 `--vault` / env / 上溯 / `--json` / 退出码
+- [x] 稳定 error.code 表
 
 ### 随后
 

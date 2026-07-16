@@ -53,16 +53,16 @@ pnpm tauri dev
 pnpm dev
 ```
 
-### CLI（设计已定稿；二进制实现中）
+### CLI（MVP）
 
 Headless **Vault / Catalog 机器接口**：创建与发现库、列表与入库文献基础能力。**不含** BYOA / Agent 运行时。设计见 [`docs/development/cli.md`](docs/development/cli.md)。
 
-实现落地后（代码目录 `cli/`，path 复用 `src-tauri` services，**不迁 core**）：
+代码目录 `cli/`，path 复用 `src-tauri` services（**不迁 core**）：
 
 ```bash
-# 仓库根需有 Cargo workspace（members: src-tauri, cli）
+# 仓库根 Cargo workspace（members: src-tauri, cli）
 cargo build -p agentero-cli
-# 二进制名: agentero
+# 二进制: target/debug/agentero
 
 export AGENTERO_VAULT=~/path/to/vault   # 或每条命令 --vault
 agentero vault which --json
@@ -96,7 +96,8 @@ agentero paper get 1706.03762 --json    # 再按 suggestedReads 读本地文件
 | `pnpm tauri dev` | 启动桌面开发应用 |
 | `pnpm build` | 构建前端产物 |
 | `pnpm tauri build` | 构建桌面安装包 |
-| `cargo build -p agentero-cli` | 构建 CLI（实现后；bin `agentero`） |
+| `cargo build -p agentero-cli` | 构建 CLI（bin `agentero`） |
+| `cargo test -p agentero-cli` | CLI 集成测试 |
 | `pnpm lint` | TypeScript（Biome）+ Rust（clippy）检查 |
 | `pnpm format` | 格式化 TypeScript + Rust |
 
@@ -108,7 +109,7 @@ agentero/
 ├── mkdocs.yml            # MkDocs 文档站配置
 ├── src/                  # React + TypeScript 前端
 ├── src-tauri/            # Tauri 2 + Rust Host（Vault、Wiki、ACP）
-├── cli/                  # headless CLI（规划/实现中；见 docs/development/cli.md）
+├── cli/                  # headless CLI（bin agentero；见 docs/development/cli.md）
 ├── templates/vault/      # Create Vault 脚手架（含 .agents/skills）
 ├── docs/                 # MkDocs 文档源文件
 └── package.json

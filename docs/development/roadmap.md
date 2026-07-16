@@ -20,7 +20,7 @@
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
 | V0.6 工作区标签页与分屏 | ⏳ 待实现 | 中间栏由「单文件固定排布」升级为可开多标签、可分屏；与当前左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
-| **CLI（headless Vault 接口）** | ⏳ 设计定稿 | 设计见 [`cli.md`](cli.md)；代码目录 **`cli/`**；**不迁 core**，path 依赖 `agentero_lib::services`；Vault 创建/发现/暴露 + 文献基础；**无 BYOA / 无精读编排**；Agent 友好 `--json`。 |
+| **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
 
@@ -290,29 +290,29 @@
 
 关键交付：
 
-- [ ] 根 `Cargo.toml` workspace：`members = ["src-tauri", "cli"]`。
-- [ ] **`cli/`** crate（package `agentero-cli`，bin **`agentero`**）+ clap 命令树。
-- [ ] 按需放宽 `services::*` 可见性（`pub` / re-export），**不搬迁模块**。
-- [ ] **Vault**：`create` / `which` / `info` / `check` / `use`；`--vault` / `AGENTERO_VAULT` / cwd 上溯 / default_vault。
-- [ ] **发现与暴露**：`tree`；`paper list|get|paths`（`get` 含 `assets` + `suggestedReads`，对齐渐进披露）。
-- [ ] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read`（仅 catalog 字段；**无**自动精读）。
-- [ ] 全局 `--json` / 退出码 / 稳定 `error.code`（Agent 友好）。
+- [x] 根 `Cargo.toml` workspace：`members = ["src-tauri", "cli"]`。
+- [x] **`cli/`** crate（package `agentero-cli`，bin **`agentero`**）+ clap 命令树。
+- [x] 按需放宽 `services::*` 可见性（`pub` / re-export），**不搬迁模块**。
+- [x] **Vault**：`create` / `which` / `info` / `check` / `use`；`--vault` / `AGENTERO_VAULT` / cwd 上溯 / default_vault。
+- [x] **发现与暴露**：`tree`；`paper list|get|paths`（`get` 含 `assets` + `suggestedReads`，对齐渐进披露）。
+- [x] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read`（仅 catalog 字段；**无**自动精读）。
+- [x] 全局 `--json` / 退出码 / 稳定 `error.code`（Agent 友好）。
 - [ ] 可选随后：`graph backlinks|export|rebuild`、`doctor`、shell completions。
-- [ ] 文档：README 构建说明；Release 可选附带 `agentero` 二进制。
+- [x] 文档：README 构建说明；Release 可选附带 `agentero` 二进制（仍待）。
 
 验收标准：
 
-- [ ] `cargo build -p agentero-cli`（或等价）产出 `agentero`。
-- [ ] `agentero vault create <path>` 脚手架与 Host `vault_create` 一致（含 catalog，无默认 PAPERS.md）。
-- [ ] 在已有 Vault 上 `paper list --json` / `paper get <id> --json` 与 catalog 语义一致。
-- [ ] `import id 1706.03762 --json` 写入 catalog + 资源路径，**不**调用 Agent、不重写用户 NOTES 精读体。
-- [ ] 无 GUI 时，外部 Agent / 脚本可仅凭 CLI + 读文件完成「摸库 → 入库 → 自己写 NOTES」。
+- [x] `cargo build -p agentero-cli`（或等价）产出 `agentero`。
+- [x] `agentero vault create <path>` 脚手架与 Host `vault_create` 一致（含 catalog，无默认 PAPERS.md）。
+- [x] 在已有 Vault 上 `paper list --json` / `paper get <id> --json` 与 catalog 语义一致。
+- [x] `import id` / `export bib` 对齐 Host service（**不**调用 Agent；集成测试覆盖离线路径）。
+- [x] 无 GUI 时，外部 Agent / 脚本可仅凭 CLI + 读文件完成「摸库 → 入库 → 自己写 NOTES」。
 
 非目标（本里程碑明确不做）：
 
-- [ ] ~~`agent run` / BYOA / paper-reader / 自动写精读 NOTES~~
-- [ ] ~~抽离 `agentero-core` crate~~（远期可选，非本里程碑）
-- [ ] ~~daemon / `serve`~~
+- [x] ~~`agent run` / BYOA / paper-reader / 自动写精读 NOTES~~
+- [x] ~~抽离 `agentero-core` crate~~（远期可选，非本里程碑）
+- [x] ~~daemon / `serve`~~
 
 ## Vault 采纳：现有文件夹自动发现与整理
 
@@ -431,9 +431,9 @@
 
 包含 V0.7。完成后，用户可 hover 文内引用看 Info、浏览引用邻域，并用 Agent 沿引用链探索与入库。
 
-### Milestone H：CLI 可脚本化 ⏳
+### Milestone H：CLI 可脚本化 ✅ MVP
 
-包含 **CLI（headless）**（[`cli.md`](cli.md)）。完成后，人与外部 Agent 可在无 GUI 下创建/发现 Vault、列表与入库文献基础能力；**不含** BYOA。代码在 `cli/`，复用 `agentero_lib` services，不迁 core。
+包含 **CLI（headless）**（[`cli.md`](cli.md)）。**MVP 已落地**：人与外部 Agent 可在无 GUI 下创建/发现 Vault、列表与入库文献基础能力；**不含** BYOA。代码在 `cli/`，复用 `agentero_lib` services，不迁 core。P1：`graph` / `doctor` / completions。
 
 ### Milestone I：现有文件夹可采纳 ⏳
 
@@ -459,7 +459,7 @@
 - [ ] Agent 写入草稿确认与拒绝路径。
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
 - [ ] 文件监听与索引增量刷新。
-- [ ] **CLI MVP**（设计已定稿 [`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export`；`--json`；path 复用 services，**不迁 core、无 Agent**。
+- [x] **CLI MVP**（[`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export` / `config`；`--json`；path 复用 services，**不迁 core、无 Agent**。
 - [ ] **Vault 采纳（发现）**：打开文件夹时 inspect——合法 Vault / 半结构 / 散落 PDF / 未知；安全自动项（ensure catalog、缺目录脚手架、不覆盖种子）。
 
 ### 中期优先级 P1

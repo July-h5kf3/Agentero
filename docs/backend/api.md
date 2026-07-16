@@ -1259,6 +1259,23 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
 
+## 3.x Headless CLI（对照）
+
+> 完整语义见 [`../development/cli.md`](../development/cli.md)。CLI **不**走 Tauri invoke，直接 path 依赖 `agentero_lib::services`（无 BYOA）。
+
+| CLI | Host service / command 锚点 |
+|---|---|
+| `vault create` | `services::vault::create_vault` / `vault_create` |
+| `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
+| `tree` | 磁盘扫描（非 Library 虚拟节点） |
+| `paper list\|get\|paths\|delete\|set-read` | `catalog::papers::*` / `paper_*` |
+| `paper download\|parse` | `lookup::download_paper_assets` / `pdf_parse::parse_paper_body` |
+| `import id\|bib` | `lookup::import_by_identifier` / `import_catalog` |
+| `export bib` | `lookup::export_catalog`（`-o`/`--out` 写文件；全局格式用 `--json`） |
+| `config show\|set` | `~/.config/agentero/config.toml`（与 GUI 隔离） |
+
+构建：`cargo build -p agentero-cli` → bin `agentero`。
+
 ## 4. 数据模型
 
 完整类型定义见 `docs/backend/data-model.md`。API 中涉及的核心类型包括：

@@ -76,17 +76,17 @@
    - [ ] 幂等：已就绪 Vault 重复打开不反复打扰。
    - 路径：**以编程为主**；不确定命名/归类留给 P1 skill 或确认面板。
 
-5. **CLI（headless Vault 接口）** — 设计定稿 [`cli.md`](cli.md)；可与 UI 并行
+5. **CLI（headless Vault 接口）** — 设计 [`cli.md`](cli.md)；**MVP 已落地**
    - 边界：**无 BYOA / 无 Agent / 无 paper-reader**；只做 Vault 管理、发现、暴露 + 文献基础能力。
    - 布局：仓库根 **`cli/`**（package `agentero-cli`，bin `agentero`）；根 Cargo workspace `members = ["src-tauri", "cli"]`。
    - 复用：**不迁 core**；path 依赖 `agentero_lib`，调用 `services::{vault,catalog,lookup,pdf_parse,wiki}`；禁止 `use …::agent`。
-   - [ ] Workspace + scaffold `cli/`（clap、`--vault` / env / 上溯、`--json`、退出码）。
-   - [ ] `vault create|which|info|check|use`（对齐 `vault_create` / catalog 初始化）。
-   - [ ] `tree`；`paper list|get|paths|delete|set-read|download|parse`（`get`：`assets` + `suggestedReads`）。
-   - [ ] `import id|bib`、`export bib`（对齐 Host；**不**自动精读）。
-   - [ ] 稳定 `error.code`；集成测试（临时 Vault + `--json` 契约）。
-   - [ ] 按需放宽 service `pub`（小改可见性，不搬模块）。
-   - [ ] README / 本仓库开发说明：`cargo build -p agentero-cli`。
+   - [x] Workspace + scaffold `cli/`（clap、`--vault` / env / 上溯、`--json`、退出码）。
+   - [x] `vault create|which|info|check|use`（对齐 `vault_create` / catalog 初始化）。
+   - [x] `tree`；`paper list|get|paths|delete|set-read|download|parse`（`get`：`assets` + `suggestedReads`）。
+   - [x] `import id|bib`、`export bib`（对齐 Host；**不**自动精读）。
+   - [x] 稳定 `error.code`；集成测试（临时 Vault + `--json` 契约，`cli/tests/cli_mvp.rs`）。
+   - [x] 按需放宽 service `pub`（`lib.rs` 导出 `services` / `error`；`list_by_id`）。
+   - [x] README / 本仓库开发说明：`cargo build -p agentero-cli`。
    - [x] Vault skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`；Create Vault 种子；README Quick Start 已写协议。
 
 ## P1 — 中期增强
@@ -217,5 +217,5 @@
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
 | PDF | 缩放、划词操作菜单（高亮/笔记/提问/翻译；asks + highlights JSON） | 本地 PDF 直开、`highlights.md` 标注系统、M5 |
-| **CLI** | 设计定稿（[`cli.md`](cli.md)：`cli/`、不迁 core、无 BYOA） | **MVP 实现**（P0-5）；graph/doctor/completions（P1-7） |
+| **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
 | 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |
