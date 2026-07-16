@@ -196,7 +196,7 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 								</TooltipContent>
 							</Tooltip>
 						</div>
-						<div className="motif-scroll max-h-56 overflow-y-auto">
+						<div className="agentero-scroll max-h-56 overflow-y-auto">
 							{visible.length === 0 ? (
 								<p className="px-3 py-4 text-center text-muted-foreground text-xs">
 									{t("tasks.empty")}

@@ -10,7 +10,7 @@ export type ComposerStateStorage = Pick<
 	"getItem" | "setItem" | "removeItem"
 >;
 
-const COMPOSER_STATE_PREFIX = "motif-agent-composer-state-v1";
+const COMPOSER_STATE_PREFIX = "agentero-agent-composer-state-v1";
 
 function uniqueStrings(value: unknown): string[] {
 	if (!Array.isArray(value)) return [];

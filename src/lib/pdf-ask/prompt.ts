@@ -15,7 +15,7 @@ export function buildPdfAskPrompt(
 		.join("\n\n");
 
 	const parts = [
-		"You are helping the user read a research paper PDF in Motif.",
+		"You are helping the user read a research paper PDF in Agentero.",
 		`Page: ${page}`,
 	];
 	if (quote) {

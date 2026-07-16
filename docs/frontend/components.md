@@ -1,21 +1,21 @@
 # AI Elements 组件目录
 
-> Motif 的 Chat / Agent / 文件树等 AI UI **统一使用 [AI Elements](https://elements.ai-sdk.dev/)**。  
-> 本文档按 **[elements.ai-sdk.dev/components](https://elements.ai-sdk.dev/components)** 的组件目录整理，并标注 Motif 安装与使用状态。
+> Agentero 的 Chat / Agent / 文件树等 AI UI **统一使用 [AI Elements](https://elements.ai-sdk.dev/)**。  
+> 本文档按 **[elements.ai-sdk.dev/components](https://elements.ai-sdk.dev/components)** 的组件目录整理，并标注 Agentero 安装与使用状态。
 
 相关：`docs/frontend/ui.md` · `docs/development/technical-plan.md` · 官网 [Docs](https://elements.ai-sdk.dev/docs) · [Setup](https://elements.ai-sdk.dev/docs/setup)
 
 ---
 
-## 1. 约定（Motif）
+## 1. 约定（Agentero）
 
 | 项 | 说明 |
 |---|---|
 | 落盘 | `src/components/ai-elements/<name>.tsx` |
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
-| 传输层 | Motif **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat；`variant="sidebar" \| "zen"` 禅模式全屏对话）、`layout/file-tree`（Vault 树 + 虚拟 Library + 魔棒 + paper **Download / Eye 精读**）、`layout/papers-library`（catalog 论文表）、`layout/paper-info-panel`（选中论文元信息）、`layout/backlinks-panel`（反链）、`layout/graph-panel`（图谱）、`layout/background-tasks-panel`（左下角后台任务；实色 hover） |
+| 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
+| 业务壳 | `layout/agent-panel`（Chat；`variant="sidebar" \| "zen"` 禅模式全屏对话；全局权限模式）、`layout/file-tree`（Vault 树 + 虚拟 Library + 魔棒 + paper **Download / Eye 精读**）、`layout/papers-library`（catalog 论文表）、`layout/paper-info-panel`（选中论文元信息；V0.7 规划支持 hover 引用切换）、`layout/backlinks-panel`（反链）、`layout/graph-panel`（**双链**图谱）、`layout/background-tasks-panel`（左下角后台任务；lookup/download → paperRead 衔接；实色 hover） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
 安装命令中的 `<name>` 与下表 **Registry 名**（URL 路径）一致。
@@ -34,7 +34,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ### 2.1 对话核心（Chat）
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Conversation](https://elements.ai-sdk.dev/components/conversation) | `conversation` | 消息列表容器；贴底滚动、空状态、滚动按钮 | ✅ Chat 列表 |
 | [Message](https://elements.ai-sdk.dev/components/message) | `message` | 单条消息：`from`、内容、`MessageResponse`（Streamdown）、操作/分支 | ✅ 用户/助手气泡 |
@@ -48,7 +48,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ### 2.2 Agent / 推理 / 工具
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Reasoning](https://elements.ai-sdk.dev/components/reasoning) | `reasoning` | 思考过程折叠展示 | ✅ ACP `thought` 流 |
 | [Chain of Thought](https://elements.ai-sdk.dev/components/chain-of-thought) | `chain-of-thought` | 思维链步骤 | 📦（Reasoning + Tool 已覆盖） |
@@ -63,11 +63,11 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Persona](https://elements.ai-sdk.dev/components/persona) | `persona` | Rive 角色动画 | 📦（依赖 WebGL/外链，未接） |
 | [Model Selector](https://elements.ai-sdk.dev/components/model-selector) | `model-selector` | 模型选择 | ✅ 输入框旁；列表来自 ACP session config |
 
-> Motif BYOA：模型列表与能力由 **ACP Agent** 通过 session `config_options`（category: model）上报；Motif 不托管 API Key。Header 切换的是 **ACP 后端**，输入框切换的是 **该 Agent 提供的 model**。
+> Agentero BYOA：模型列表与能力由 **ACP Agent** 通过 session `config_options`（category: model）上报；Agentero 不托管 API Key。Header 切换的是 **ACP 后端**，输入框切换的是 **该 Agent 提供的 model**。
 
 ### 2.3 代码与工程
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Code Block](https://elements.ai-sdk.dev/components/code-block) | `code-block` | 代码块、复制、语言切换 | 📦（`MessageResponse` 内已有 streamdown 代码） |
 | [File Tree](https://elements.ai-sdk.dev/components/file-tree) | `file-tree` | 可展开文件树 | ✅ 侧栏 Vault 树 |
@@ -82,7 +82,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ### 2.4 预览 / Artifact / 沙箱
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Web Preview](https://elements.ai-sdk.dev/components/web-preview) | `web-preview` | URL / 网页预览框 | — |
 | [Artifact](https://elements.ai-sdk.dev/components/artifact) | `artifact` | 生成物（文档/代码等）容器 | — |
@@ -92,7 +92,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ### 2.5 语音 / 音频
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Speech Input](https://elements.ai-sdk.dev/components/speech-input) | `speech-input` | 语音输入 | — |
 | [Mic Selector](https://elements.ai-sdk.dev/components/mic-selector) | `mic-selector` | 麦克风设备选择 | — |
@@ -102,7 +102,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ### 2.6 图 / 工作流画布
 
-| 组件 | Registry | 说明 | Motif |
+| 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
 | [Canvas](https://elements.ai-sdk.dev/components/canvas) | `canvas` | 画布根容器 | — |
 | [Node](https://elements.ai-sdk.dev/components/node) | `node` | 图节点 | — |
@@ -114,7 +114,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ---
 
-## 3. Motif 已安装明细
+## 3. Agentero 已安装明细
 
 路径：`src/components/ai-elements/`
 
@@ -137,7 +137,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 ---
 
-## 4. Motif 集成要点
+## 4. Agentero 集成要点
 
 ### 4.1 Chat 组合（已接线）
 
@@ -169,7 +169,7 @@ PromptInput
 
 ### 4.3 传输边界
 
-| 能力 | Motif |
+| 能力 | Agentero |
 |---|---|
 | AI Elements UI | ✅ |
 | `useChat` / HTTP DefaultChatTransport | ❌ 默认不用 |

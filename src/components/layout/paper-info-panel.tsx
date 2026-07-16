@@ -120,7 +120,7 @@ export function PaperInfoPanel({
 							{t("paperInfo.selectPrompt")}
 						</p>
 					) : (
-						<div className="motif-scroll max-h-96 overflow-y-auto border-t pb-2">
+						<div className="agentero-scroll max-h-96 overflow-y-auto border-t pb-2">
 							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
 								<span className="font-medium">{meta.title}</span>
 							</MetaRow>

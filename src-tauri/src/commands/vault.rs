@@ -2,7 +2,7 @@ use crate::error::{map_err, ApiResult, AppError};
 use crate::services::vault::{self, CreateVaultResult};
 use std::path::PathBuf;
 
-/// Create / scaffold a Motif vault at the given absolute path.
+/// Create / scaffold a Agentero vault at the given absolute path.
 #[tauri::command]
 pub fn vault_create(path: String) -> ApiResult<CreateVaultResult> {
     let p = PathBuf::from(path.trim());

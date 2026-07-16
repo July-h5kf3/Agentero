@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import i18n from "@/i18n";
+import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 
 export type AgentTemplate =
@@ -333,7 +334,17 @@ export async function runOnce(request: {
 	skillIds?: string[];
 	/** Select the agent's first ACP permission option for this run. */
 	autoApprove?: boolean;
+	/**
+	 * Force the language of the agent response and any generated notes.
+	 * When omitted, runOnce falls back to the global `aiResponseLanguage`
+	 * setting; `"auto"` (or omitting) sends no directive.
+	 */
+	responseLanguage?: string;
 }): Promise<RunOnceAccepted> {
+	const language =
+		request.responseLanguage ?? loadSettings().aiResponseLanguage;
+	const responseLanguage =
+		language && language !== "auto" ? language : undefined;
 	return invokeApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
@@ -348,6 +359,7 @@ export async function runOnce(request: {
 			fastMode: request.fastMode,
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
+			responseLanguage,
 		},
 	});
 }
@@ -470,7 +482,7 @@ export async function listenAgentFastMode(
 	return listenAgentEvent("agent:fast-mode", handler);
 }
 
-const MODEL_PREF_KEY = "motif-agent-model-pref";
+const MODEL_PREF_KEY = "agentero-agent-model-pref";
 
 /** Persist last chosen model id per agent. */
 export function loadModelPref(agentId: string | null): string | null {
@@ -496,10 +508,9 @@ export function saveModelPref(agentId: string, modelId: string): void {
 	}
 }
 
-const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
-const YOLO_PREF_KEY = "motif-agent-yolo-pref";
+const MODEL_CATALOG_KEY = "agentero-agent-model-catalog";
 const EXTERNAL_CODEX_HISTORY_PREF_KEY =
-	"motif-agent-external-codex-history-pref";
+	"agentero-agent-external-codex-history-pref";
 
 export type CachedModelCatalog = {
 	configId: string;
@@ -538,31 +549,7 @@ export function saveModelCatalog(
 	}
 }
 
-/** Persist YOLO separately for each provider registration. */
-export function loadYoloPref(agentId: string | null): boolean {
-	if (!agentId) return false;
-	try {
-		const raw = localStorage.getItem(YOLO_PREF_KEY);
-		if (!raw) return false;
-		const map = JSON.parse(raw) as Record<string, boolean>;
-		return map[agentId] === true;
-	} catch {
-		return false;
-	}
-}
-
-export function saveYoloPref(agentId: string, enabled: boolean): void {
-	try {
-		const raw = localStorage.getItem(YOLO_PREF_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
-		map[agentId] = enabled;
-		localStorage.setItem(YOLO_PREF_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
-}
-
-/** Persist whether a Codex registration includes non-Motif Vault threads. */
+/** Persist whether a Codex registration includes non-Agentero Vault threads. */
 export function loadExternalCodexHistoryPref(agentId: string | null): boolean {
 	if (!agentId) return false;
 	try {

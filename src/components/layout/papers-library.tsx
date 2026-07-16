@@ -171,7 +171,9 @@ export function PapersLibrary({
 	}
 
 	return (
-		<div className={cn("motif-scroll-both min-h-0 min-w-0 flex-1", className)}>
+		<div
+			className={cn("agentero-scroll-both min-h-0 min-w-0 flex-1", className)}
+		>
 			{/* w-max + column min-widths: grow past pane for horizontal scroll */}
 			<table className="w-max min-w-full border-collapse text-left text-sm">
 				<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">

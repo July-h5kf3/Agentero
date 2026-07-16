@@ -14,24 +14,24 @@ test/
 ```
 
 - `test/helpers/create-test-vault.ts` 用临时目录创建真实文件形态的 Vault。
-- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.motif/catalog.sqlite`）。
+- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.agentero/catalog.sqlite`）。
 - 测试文件可以从 `src/` import 生产代码，但生产代码不能从 `test/` import。
 - 优先在每个测试内声明最小必要 Vault 文件，让测试数据和断言靠近。
 
 ### Demo Vault 脚本
 
 ```bash
-# 默认写到仓库 tmp/motif-demo-vault
+# 默认写到仓库 tmp/agentero-demo-vault
 pnpm demo:vault
 
-# ~/Downloads/motif-demo-vault（嵌套 papers + catalog 样本数据）
+# ~/Downloads/agentero-demo-vault（嵌套 papers + catalog 样本数据）
 pnpm demo:vault:downloads
 
 # 仅 Create Vault 骨架（无样例论文）
-pnpm demo:vault:empty -- ~/Downloads/motif-empty-vault
+pnpm demo:vault:empty -- ~/Downloads/agentero-empty-vault
 
 # 校验已有目录
-pnpm demo:vault:verify -- ~/Downloads/motif-demo-vault
+pnpm demo:vault:verify -- ~/Downloads/agentero-demo-vault
 ```
 
 ## 前端测试

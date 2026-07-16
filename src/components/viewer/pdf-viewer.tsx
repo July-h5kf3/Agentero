@@ -465,7 +465,7 @@ export function PdfViewer({
 	useEffect(() => {
 		if (!activeThread) return;
 		const host = hostRef.current;
-		const scrollEl = host?.querySelector(".motif-scroll");
+		const scrollEl = host?.querySelector(".agentero-scroll");
 		const reposition = () => placePopover(activeThread);
 		// After zoom, layout may lag one frame — schedule twice
 		reposition();
@@ -688,7 +688,7 @@ export function PdfViewer({
 	return (
 		<div
 			ref={hostRef}
-			id="motif-pdf-host"
+			id="agentero-pdf-host"
 			className={cn("relative flex h-full min-h-0 flex-col", className)}
 		>
 			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
@@ -750,16 +750,19 @@ export function PdfViewer({
 					</div>
 				</TooltipProvider>
 			</div>
-			<div ref={scrollRef} className="motif-scroll min-h-0 flex-1 bg-muted/20">
+			<div
+				ref={scrollRef}
+				className="agentero-scroll min-h-0 flex-1 bg-muted/20"
+			>
 				{error ? (
 					<p className="p-6 text-destructive text-sm">{error}</p>
 				) : (
 					// Shell reserves scroll space. Scale from top-left so scroll
 					// compensation can keep the cursor/viewport focus stable.
 					<div
-						className="relative"
+						className="relative mx-auto"
 						style={{
-							width: Math.max(shellWidth + 24, fitWidth),
+							width: shellWidth + 24,
 							height: shellHeight > 0 ? shellHeight + 24 : undefined,
 							minHeight: "100%",
 						}}

@@ -33,7 +33,7 @@
 
 1. 用户在工具栏点击 **魔棒**（或 `⇧⌘I`）。
 2. 粘贴 **链接**（如 `https://arxiv.org/abs/1706.03762`、`https://doi.org/10.…`）或 **编号**（如 `1706.03762`、`10.1038/…`）。
-3. Motif 用 **本机 Translator Runtime**（Search / 必要 Web）解析出书目元数据。
+3. Agentero 用 **本机 Translator Runtime**（Search / 必要 Web）解析出书目元数据。
 4. 将条目加入 **Papers**：
    - **默认目标**：Vault 的 `papers/` 根下，`papers/<id>/`。
    - **上下文目标**：若文件树当前选中（或等价「当前打开」）的是 `papers/` 下的**组织子文件夹**（非 paper 本体），则写入  
@@ -77,10 +77,12 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 - **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
-**精读（Eye 图标，与 Download 互斥）**：
-- **显示条件**：本地资源齐全（有 PDF + TeX 或 `PAPER.md`）且 catalog **`is_read === false`**。
-- **点击**：paper-reader 工作流（`src/lib/paper-read.ts` → `agent_run_once` + skill；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md`）→ 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`。
-- **进度**：左下角后台任务条 `kind=paperRead`。
+**精读（Eye 图标 + 自动触发）**：
+- **显示条件（Eye）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
+- **自动触发**：`lookup_import`（魔棒）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
+- **手动**：点击 Eye → 同上。
+- **实现**：`src/lib/paper-read.ts` → `agent_run_once` + skill；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md` → 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`。
+- **进度**：左下角后台任务条——入库/下载阶段 `kind=lookup|download`（分阶段 detail/progress），随后精读 `kind=paperRead`。
 
 UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.md` 为无 TeX 时的派生正文。
 
@@ -184,15 +186,15 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | 方案 | 优点 | 缺点 | 结论 |
 |---|---|---|---|
 | A. 仅自写 Crossref/arXiv 客户端 | 无 AGPL、实现简单 | 覆盖面远小于 Zotero；ISBN/PMID/ADS 等要逐个做 | 可作为 **fallback** |
-| B. Motif 进程内嵌 JS 翻译器引擎 | 零外部进程 | AGPL 传染风险、打包复杂 | **不做**（除非产品整体 AGPL） |
+| B. Agentero 进程内嵌 JS 翻译器引擎 | 零外部进程 | AGPL 传染风险、打包复杂 | **不做**（除非产品整体 AGPL） |
 | C. **本机 sidecar：translation-server** | 复用全量 Search Translator；进程边界清晰；可热更新 translators | 需管理子进程生命周期 | **推荐主路径** |
 | D. 用户自备 URL 指向外部 server | 灵活 | 隐私/ToS/可用性不可控 | 高级设置可选 |
 
-**默认策略**：Motif 启动后按需拉起本地 Translator Runtime；不可用时降级到内置轻量客户端（DOI→doi.org/Crossref，arXiv→export API），并在 UI 标明「精简模式」。
+**默认策略**：Agentero 启动后按需拉起本地 Translator Runtime；不可用时降级到内置轻量客户端（DOI→doi.org/Crossref，arXiv→export API），并在 UI 标明「精简模式」。
 
 ### 2.3 与 Zotero 魔棒的对应关系
 
-| Zotero | Motif |
+| Zotero | Agentero |
 |---|---|
 | `lookup.js` UI | `MagicWand` 弹层 |
 | `extractIdentifiers()` | `lookup:parse` / Host `parse.rs` |
@@ -201,7 +203,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | 写入 Zotero SQLite | 写 Vault 文件 + **catalog.sqlite** |
 | 可选附件 | 本阶段可选：有 `pdf_url`/`arxiv_id` 再走 source 抓取 |
 
-参考实现（上游，不 fork 进 Motif 主仓逻辑）：
+参考实现（上游，不 fork 进 Agentero 主仓逻辑）：
 
 - UI：[`zotero/zotero` `lookup.js`](https://github.com/zotero/zotero/blob/main/chrome/content/zotero/lookup.js)
 - 解析：[`zotero/utilities` `extractIdentifiers`](https://github.com/zotero/utilities)
@@ -220,14 +222,14 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | **DOI** | `10.1038/nature12373`、`https://doi.org/10.…` | DOI Content Negotiation → Crossref / DataCite / CSL |
 | **ISBN** | `978-0-262-03384-8`、`0838985890` | LoC / WorldCat 等 ISBN Search Translator |
 | **PMID** | `24297125`、`PMID:24297125` | NCBI E-utilities via PubMed Translator |
-| **arXiv** | `1706.03762`、`arXiv:1706.03762v1`、abs URL | arXiv Search Translator 或 Motif arXiv API |
+| **arXiv** | `1706.03762`、`arXiv:1706.03762v1`、abs URL | arXiv Search Translator 或 Agentero arXiv API |
 | **ADS Bibcode** | `2015ApJ...810...89S` | ADS 相关 Search Translator |
 
 批量：空格、逗号、换行分隔；PMID 可在 Runtime 侧按批合并（Zotero 习惯每批 ≤200）。
 
 ### 3.2 解析优先级（对齐 Zotero `extractIdentifiers`）
 
-对同一段输入文本，**按序**尝试（命中一类后，Zotero 原逻辑会停止后续类型；Motif 建议：
+对同一段输入文本，**按序**尝试（命中一类后，Zotero 原逻辑会停止后续类型；Agentero 建议：
 
 - **单条粘贴框**：采用 Zotero 同序，降低数字误识别为 PMID。
 - **显式多行「每行一个」模式**：逐行独立解析，允许一行 DOI、一行 arXiv 混合。
@@ -264,7 +266,7 @@ interface ParsedIdentifier {
 
 | 模式 | 说明 | 默认 |
 |---|---|---|
-| `bundled` | Motif 附带/下载 sidecar 二进制或 Docker 镜像说明；Host 管理端口与生命周期 | 是（桌面） |
+| `bundled` | Agentero 附带/下载 sidecar 二进制或 Docker 镜像说明；Host 管理端口与生命周期 | 是（桌面） |
 | `external` | 用户在设置中填 `http://127.0.0.1:1969` | 可选 |
 | `off` | 仅用内置 fallback 客户端 | 降级 |
 
@@ -281,7 +283,7 @@ interface TranslatorRuntimeConfig {
 ```
 
 **User-Agent**：对外请求应带可识别后缀，例如  
-`motif-translation/0.1 (+https://github.com/poco-ai/motif; contact@…)`，避免伪装成无标识爬虫（与 translation-server README 建议一致）。
+`agentero-translation/0.1 (+https://github.com/poco-ai/agentero; contact@…)`，避免伪装成无标识爬虫（与 translation-server README 建议一致）。
 
 ### 4.2 HTTP API（与官方 translation-server 对齐）
 
@@ -305,13 +307,13 @@ curl -d '10.2307/4486062' \
 
 - **Request**：`Content-Type: text/plain`，body = 文件全文。  
 - **Response**：`200` + **Zotero API JSON 数组**（与 `/search` 相同 item 形状）。  
-- Motif：`paper_import` → map → catalog + paper 壳。
+- Agentero：`paper_import` → map → catalog + paper 壳。
 
 #### `POST /export` — Zotero items → BibTeX/RIS/…（Library 导出已用）
 
 - **Request**：`Content-Type: application/json`，body = **items 数组**（非单个 object）。  
 - **Query**：`format=bibtex|biblatex|ris|csljson|…`  
-- Motif：catalog 行先 `paper_record_to_zotero_item` 再调 `/export`。
+- Agentero：catalog 行先 `paper_record_to_zotero_item` 再调 `/export`。
 
 ### 4.3 健康检查与懒启动
 
@@ -334,7 +336,7 @@ lookup:search 被调用
 | `/search` 超时 | `lookup.timeout`；该 ID 标记 failed，其它 ID 继续 |
 | 无匹配书目 | `lookup.not_found` |
 | Runtime 返回部分成功 | 返回成功草稿 + 失败列表（对齐 Zotero「部分失败仍继续」） |
-| fallback 成功 | `source: 'fallback'`，libraryCatalog 填 `Motif (Crossref)` 等 |
+| fallback 成功 | `source: 'fallback'`，libraryCatalog 填 `Agentero (Crossref)` 等 |
 
 ---
 
@@ -505,11 +507,11 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 
 ### 7.1 许可
 
-| 组件 | 许可（典型） | Motif 用法 |
+| 组件 | 许可（典型） | Agentero 用法 |
 |---|---|---|
 | `zotero/translators` | 多为 AGPL-3.0 | **仅在 sidecar 进程内**使用与分发 |
 | `zotero/translate` / translation-server | AGPL-3.0 | 旁路进程；源码按 AGPL 提供或指向上游 |
-| Motif 主应用 | 以仓库 LICENSE 为准 | 通过 **HTTP localhost** 调用 sidecar，不把 translators 链进主二进制 |
+| Agentero 主应用 | 以仓库 LICENSE 为准 | 通过 **HTTP localhost** 调用 sidecar，不把 translators 链进主二进制 |
 
 产品文案建议：
 
@@ -519,7 +521,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 ### 7.2 隐私与网络
 
 - 标识符与查询会发往 **第三方书目服务**（Crossref、PubMed、出版社 DOI 解析等），由各 Translator 决定，**不经 Zotero 公司服务器**（自托管 Runtime 时）。
-- Motif 默认 **不**把 Vault 路径或笔记内容发给 Translator Runtime（Search 路径只传 ID）。
+- Agentero 默认 **不**把 Vault 路径或笔记内容发给 Translator Runtime（Search 路径只传 ID）。
 - 遵守目标站 ToS；控制并发与超时；批量入库限流。
 
 ### 7.3 local-first
@@ -712,3 +714,4 @@ arXiv URL 推导：
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
 | 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |
+| 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Eye 手动；任务条 lookup/download → paperRead 衔接 |

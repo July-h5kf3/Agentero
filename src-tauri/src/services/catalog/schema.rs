@@ -79,15 +79,15 @@ ALTER TABLE papers ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_papers_is_read ON papers(is_read);
 "#;
 
-/// Absolute path to `{vault}/.motif/catalog.sqlite`.
+/// Absolute path to `{vault}/.agentero/catalog.sqlite`.
 pub fn catalog_db_path(vault_root: &Path) -> std::path::PathBuf {
-    vault_root.join(".motif").join("catalog.sqlite")
+    vault_root.join(".agentero").join("catalog.sqlite")
 }
 
-/// Ensure `.motif/` exists, create/open catalog.sqlite, apply migrations.
+/// Ensure `.agentero/` exists, create/open catalog.sqlite, apply migrations.
 pub fn ensure_catalog(vault_root: &Path) -> Result<Connection, AppError> {
-    let motif_dir = vault_root.join(".motif");
-    fs::create_dir_all(&motif_dir)?;
+    let agentero_dir = vault_root.join(".agentero");
+    fs::create_dir_all(&agentero_dir)?;
 
     let db_path = catalog_db_path(vault_root);
     let conn = Connection::open(&db_path)
@@ -105,7 +105,7 @@ fn migrate(conn: &Connection) -> Result<(), AppError> {
 
     if version > SCHEMA_VERSION {
         return Err(AppError::message(format!(
-            "catalog schema version {version} is newer than this app supports ({SCHEMA_VERSION}); upgrade Motif"
+            "catalog schema version {version} is newer than this app supports ({SCHEMA_VERSION}); upgrade Agentero"
         )));
     }
 
@@ -193,11 +193,11 @@ fn set_schema_version(conn: &Connection, version: i32) -> Result<(), AppError> {
     )
     .map_err(|e| AppError::message(format!("write schema_version: {e}")))?;
     conn.execute(
-        "INSERT INTO schema_meta(key, value) VALUES('motif_app', 'motif')
+        "INSERT INTO schema_meta(key, value) VALUES('agentero_app', 'agentero')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [],
     )
-    .map_err(|e| AppError::message(format!("write motif_app: {e}")))?;
+    .map_err(|e| AppError::message(format!("write agentero_app: {e}")))?;
     Ok(())
 }
 
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn ensure_catalog_creates_schema_current() {
-        let dir = env::temp_dir().join(format!("motif-catalog-test-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("agentero-catalog-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 

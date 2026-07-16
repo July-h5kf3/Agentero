@@ -1,8 +1,8 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "motif",
+	"productName": "Agentero",
 	"version": "0.1.0",
-	"identifier": "com.poco-ai.motif",
+	"identifier": "com.poco-ai.agentero",
 	"build": {
 		"beforeDevCommand": "pnpm dev",
 		"devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
 	"app": {
 		"windows": [
 			{
-				"title": "motif",
+				"title": "Agentero",
 				"width": 1280,
 				"height": 800,
 				"minWidth": 800,

@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
 
-const USER_AGENT: &str = "motif-lookup/0.1 (+https://github.com/poco-ai/motif)";
+const USER_AGENT: &str = "agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)";
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -428,7 +428,7 @@ mod tests {
 
     #[test]
     fn unpack_plain_and_gzipped_tex() {
-        let paper = std::env::temp_dir().join(format!("motif-paper-{}", std::process::id()));
+        let paper = std::env::temp_dir().join(format!("agentero-paper-{}", std::process::id()));
         let source = paper.join("source");
         let _ = fs::remove_dir_all(&paper);
         fs::create_dir_all(&source).unwrap();
@@ -448,7 +448,8 @@ mod tests {
 
     #[test]
     fn unpack_pdf_only_eprint_to_paper_root() {
-        let paper = std::env::temp_dir().join(format!("motif-pdf-eprint-{}", std::process::id()));
+        let paper =
+            std::env::temp_dir().join(format!("agentero-pdf-eprint-{}", std::process::id()));
         let source = paper.join("source");
         let _ = fs::remove_dir_all(&paper);
         fs::create_dir_all(&source).unwrap();

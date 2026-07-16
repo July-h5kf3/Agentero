@@ -5,8 +5,10 @@ import {
 	FolderOpen,
 	Link2,
 	Loader2,
+	NotebookPen,
 	PanelLeft,
 	PanelRight,
+	PanelTop,
 	X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -24,6 +26,7 @@ import {
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
+import { LayoutMenu } from "@/components/layout/layout-menu";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import { PapersLibrary } from "@/components/layout/papers-library";
@@ -64,7 +67,11 @@ import {
 	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
-import { runPaperReaderWorkflow } from "@/lib/paper-read";
+import {
+	maybeAutoRunPaperReader,
+	paperAssetsReadyForReader,
+	runPaperReaderWorkflow,
+} from "@/lib/paper-read";
 import {
 	deletePapersUnderPath,
 	exportLibraryToFile,
@@ -116,8 +123,8 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
-const STORAGE_KEY = "motif-editor-content";
-const OPEN_FILE_KEY = "motif-open-file";
+const STORAGE_KEY = "agentero-editor-content";
+const OPEN_FILE_KEY = "agentero-open-file";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
@@ -204,7 +211,7 @@ function collectMarkdownRelPaths(
 }
 
 export default function App() {
-	const { t } = useTranslation(["app", "sidebar"]);
+	const { t } = useTranslation(["app", "sidebar", "editor"]);
 	const { setTheme } = useTheme();
 	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -265,6 +272,10 @@ export default function App() {
 	const [htmlSrcUrl, setHtmlSrcUrl] = useState<string | null>(null);
 	/** NOTES.md for the current paper — shown on the right when viewing PDF/HTML */
 	const [paperNotes, setPaperNotes] = useState("");
+	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
+	const [showNotes, setShowNotes] = useState(true);
+	const showNotesRef = useRef(showNotes);
+	showNotesRef.current = showNotes;
 	/**
 	 * Right sidebar (⌘L): Agent (default) or Backlinks with Graph below.
 	 * Collapsed by default; top-bar icons open a tab.
@@ -956,11 +967,22 @@ export default function App() {
 						?.querySelector<HTMLElement>("[contenteditable='true']")
 						?.focus();
 					break;
-				case "focusNotes":
-					notesPaneRef.current
-						?.querySelector<HTMLElement>("[contenteditable='true']")
-						?.focus();
+				case "focusNotes": {
+					const focusNotesEditor = () =>
+						notesPaneRef.current
+							?.querySelector<HTMLElement>("[contenteditable='true']")
+							?.focus();
+					if (!showNotesRef.current) {
+						// Notes hidden: reveal it first, then focus once it mounts.
+						setShowNotes(true);
+						requestAnimationFrame(() =>
+							requestAnimationFrame(focusNotesEditor),
+						);
+					} else {
+						focusNotesEditor();
+					}
 					break;
+				}
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
@@ -980,7 +1002,7 @@ export default function App() {
 		toggleSidebar,
 	]);
 
-	// Native menu bar (motif → Settings…, File, View) — desktop only
+	// Native menu bar (agentero → Settings…, File, View) — desktop only
 	useEffect(() => {
 		if (!isTauri()) return;
 
@@ -1082,17 +1104,27 @@ export default function App() {
 					title: t("tasks.lookupImport"),
 					detail: text.trim().slice(0, 80),
 				},
-				async ({ setDetail }) => {
-					setDetail(text.trim().slice(0, 80));
+				async ({ setDetail, setProgress }) => {
+					setDetail(
+						t("tasks.lookupFetching", { id: text.trim().slice(0, 80) }),
+					);
+					setProgress(15);
 					const r = await addPaperByIdentifier({
 						vaultRoot: vaultPath,
 						parentDir: lookupParentDir,
 						text,
 						settings,
 					});
+					setProgress(70);
+					setDetail(
+						t("tasks.lookupRefreshing", {
+							title: r.title?.slice(0, 60) || r.path,
+						}),
+					);
 					await refreshTree(vaultPath);
 					await rebuildWikiAndNotify(vaultPath);
 					await refreshLibrary();
+					setProgress(100);
 					return r;
 				},
 			);
@@ -1109,6 +1141,42 @@ export default function App() {
 						? t("sidebar:lookup.pdfDownloadFailedDetail", { detail })
 						: t("sidebar:lookup.pdfDownloadFailed"),
 				);
+			}
+			// Assets ready → auto paper-reader (progress in bottom-left)
+			const rel = (result.path || "")
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			if (
+				rel &&
+				paperAssetsReadyForReader({
+					pdf: result.pdf,
+					tex: result.tex,
+					paperMd: result.paperMd,
+				})
+			) {
+				try {
+					const started = await maybeAutoRunPaperReader({
+						vaultRoot: vaultPath,
+						paperPath: rel,
+						assetsReady: true,
+					});
+					if (started) {
+						await refreshLibrary();
+						// We just opened this paper — reload NOTES after reader writes
+						const notesAbs = notesPathForPaper(result.paperDir);
+						try {
+							const content = await readVaultFile(notesAbs);
+							setPaperNotes(content);
+							setNotesPath(notesAbs);
+							setNotesDirty(false);
+							setNotesKey((k) => k + 1);
+						} catch {
+							// ignore
+						}
+					}
+				} catch (e) {
+					setError(e instanceof Error ? e.message : String(e));
+				}
 			}
 		},
 		[
@@ -1129,29 +1197,71 @@ export default function App() {
 	const handleDownloadPaperAssets = useCallback(
 		async (node: FileNode) => {
 			if (!vaultPath) return;
-			const rel = toVaultRelative(vaultPath, node.path).replace(/\\/g, "/");
+			const rel = toVaultRelative(vaultPath, node.path)
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
 			try {
-				await runBackgroundTask(
+				const assets = await runBackgroundTask(
 					{
 						kind: "download",
 						title: t("tasks.downloadPaper"),
 						detail: rel,
 					},
-					async ({ setDetail }) => {
+					async ({ setDetail, setProgress }) => {
 						setDetail(rel);
-						await downloadPaperAssets({
+						setProgress(20);
+						const r = await downloadPaperAssets({
 							vaultRoot: vaultPath,
 							paperPath: rel,
 						});
+						setProgress(85);
+						setDetail(t("tasks.downloadRefreshing", { path: rel }));
 						await refreshTree(vaultPath);
 						await refreshLibrary();
+						setProgress(100);
+						return r;
 					},
 				);
+				// After PDF/TeX/PAPER.md ready → auto paper-reader with task progress
+				if (
+					paperAssetsReadyForReader({
+						pdf: assets.pdf,
+						tex: assets.tex,
+						paperMd: assets.paperMd,
+					})
+				) {
+					try {
+						const started = await maybeAutoRunPaperReader({
+							vaultRoot: vaultPath,
+							paperPath: rel,
+							assetsReady: true,
+						});
+						if (started) {
+							await refreshLibrary();
+							const notesAbs = notesPathForPaper(node.path);
+							if (
+								notesPath &&
+								normalizePathKey(notesPath) === normalizePathKey(notesAbs)
+							) {
+								try {
+									const content = await readVaultFile(notesAbs);
+									setPaperNotes(content);
+									setNotesDirty(false);
+									setNotesKey((k) => k + 1);
+								} catch {
+									// ignore
+								}
+							}
+						}
+					} catch (e) {
+						setError(e instanceof Error ? e.message : String(e));
+					}
+				}
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshTree, refreshLibrary, t],
+		[vaultPath, refreshTree, refreshLibrary, notesPath, t],
 	);
 
 	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
@@ -1669,11 +1779,13 @@ export default function App() {
 	const showLibrary = Boolean(
 		vaultPath && isLibraryHome(vaultPath, selectedPath),
 	);
-	/** Side Notes column: paper open + PDF/HTML center (not when Notes is already center). */
-	const showNotesOnRight =
+	/** Notes column is relevant: paper open + PDF/HTML center (not when Notes is already center). */
+	const notesEligible =
 		!showLibrary &&
 		Boolean(paperMeta) &&
 		(centerMode === "pdf" || centerMode === "html");
+	/** Side Notes column actually renders when relevant and the user hasn't hidden it. */
+	const showNotesOnRight = notesEligible && showNotes;
 
 	/**
 	 * Center markdown mode while a paper is selected edits NOTES.md live (WYSIWYG),
@@ -1808,6 +1920,17 @@ export default function App() {
 									data-tauri-drag-region
 								/>
 								<div className="flex shrink-0 items-center gap-0.5 pr-2">
+									<LayoutMenu
+										leftSidebarOpen={!sidebarCollapsed}
+										onToggleLeftSidebar={toggleSidebar}
+										notesAvailable={notesEligible}
+										notesOpen={showNotes}
+										onToggleNotes={(v) => setShowNotes(v)}
+										rightSidebarOpen={rightSidebarOpen}
+										onToggleRightSidebar={toggleRightSidebar}
+										zenMode={agentZenMode}
+										onToggleZen={toggleAgentZen}
+									/>
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<Button
@@ -1950,7 +2073,7 @@ export default function App() {
 										lookupOpenSignal={lookupOpenSignal}
 									/>
 								</div>
-								<div className="motif-scroll min-h-0 flex-1 px-1">
+								<div className="agentero-scroll min-h-0 flex-1 px-1">
 									<FileTree
 										nodes={tree}
 										selectedPath={selectedPath}
@@ -2035,16 +2158,66 @@ export default function App() {
 												</TooltipContent>
 											</Tooltip>
 										) : (
-											<span
-												className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-												title={
-													paperMeta
-														? `${paperMeta.title} · ${activeFileLabel}`
-														: (activeFileLabel ?? undefined)
-												}
-											>
-												{paperMeta?.title ?? activeFileLabel}
-											</span>
+											<>
+												<span
+													className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+													title={
+														paperMeta
+															? `${paperMeta.title} · ${activeFileLabel}`
+															: (activeFileLabel ?? undefined)
+													}
+												>
+													{paperMeta?.title ?? activeFileLabel}
+												</span>
+												{notesEligible ? (
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="ghost"
+																size="icon-xs"
+																className={cn(
+																	"size-7 shrink-0",
+																	showNotes && "bg-muted text-foreground",
+																)}
+																aria-label={
+																	showNotes
+																		? t("titlebar.hideNotes")
+																		: t("titlebar.showNotes")
+																}
+																aria-pressed={showNotes}
+																onClick={() => setShowNotes((v) => !v)}
+															>
+																<NotebookPen className="size-3.5" />
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent side="bottom">
+															{showNotes
+																? t("titlebar.hideNotesHint")
+																: t("titlebar.showNotesHint")}
+														</TooltipContent>
+													</Tooltip>
+												) : null}
+												{vaultPath ? (
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="ghost"
+																size="icon-xs"
+																className="size-7 shrink-0"
+																aria-label={t("titlebar.closeDocument")}
+																onClick={handleSelectLibrary}
+															>
+																<X className="size-3.5" />
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent side="bottom">
+															{t("titlebar.closeDocumentHint")}
+														</TooltipContent>
+													</Tooltip>
+												) : null}
+											</>
 										)}
 									</div>
 								</div>
@@ -2059,7 +2232,7 @@ export default function App() {
 											onRemoveRecent={handleRemoveRecentVault}
 										/>
 									) : (
-										<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
+										<div className="agentero-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
 											<FolderOpen className="size-10 text-muted-foreground" />
 											<div className="max-w-xs space-y-2">
 												<p className="font-medium text-sm">
@@ -2095,7 +2268,7 @@ export default function App() {
 															? `notes-center-${notesKey}`
 															: editorKey
 													}
-													className="motif-scroll h-full min-h-0"
+													className="agentero-scroll h-full min-h-0"
 													initialMarkdown={
 														centerIsPaperNotes ? paperNotes : markdown
 													}
@@ -2107,6 +2280,7 @@ export default function App() {
 																: null
 													}
 													fontSize={editorFontSize}
+													showToolbar={settings.showEditorToolbar}
 													placeholder={
 														centerIsPaperNotes
 															? t("editor.notesPlaceholder")
@@ -2180,7 +2354,38 @@ export default function App() {
 									className="flex h-full min-h-0 flex-col overflow-hidden"
 									style={{ fontSize: editorFontSize }}
 								>
-									<PaneHeader>
+									<PaneHeader
+										trailing={
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														aria-label={
+															settings.showEditorToolbar
+																? t("editor:toolbar.hide")
+																: t("editor:toolbar.show")
+														}
+														aria-pressed={settings.showEditorToolbar}
+														onClick={() =>
+															updateSettings({
+																...settings,
+																showEditorToolbar: !settings.showEditorToolbar,
+															})
+														}
+													>
+														<PanelTop className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{settings.showEditorToolbar
+														? t("editor:toolbar.hide")
+														: t("editor:toolbar.show")}
+												</TooltipContent>
+											</Tooltip>
+										}
+									>
 										<span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-sm">
 											{t("labels.notes")}
 											{notesDirty ? (
@@ -2197,10 +2402,11 @@ export default function App() {
 										{/* Live WYSIWYG NOTES.md — no separate read-only preview pane */}
 										<MarkdownEditor
 											key={`notes-${notesKey}`}
-											className="motif-scroll h-full min-h-0"
+											className="agentero-scroll h-full min-h-0"
 											initialMarkdown={paperNotes}
 											filePath={notesPath}
 											fontSize={editorFontSize}
+											showToolbar={settings.showEditorToolbar}
 											placeholder={t("editor.notesPlaceholder")}
 											onPersist={persistFile}
 											onDirtyChange={setNotesDirty}

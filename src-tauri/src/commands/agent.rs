@@ -294,6 +294,7 @@ pub async fn agent_run_once(
                     request.fast_mode,
                     request.skill_ids,
                     request.auto_approve,
+                    request.response_language,
                     cancellation,
                 )
                 .await;
@@ -314,6 +315,7 @@ pub async fn agent_run_once(
                 request.fast_mode,
                 request.skill_ids,
                 request.auto_approve,
+                request.response_language,
                 cancellation,
             )
             .await;
@@ -324,7 +326,7 @@ pub async fn agent_run_once(
     Ok(ApiResult::ok(accepted))
 }
 
-/// Read native Codex threads. The App Server owns the actual history; Motif only
+/// Read native Codex threads. The App Server owns the actual history; Agentero only
 /// filters it to the current Vault and renders it locally.
 #[tauri::command]
 pub async fn agent_codex_list_threads(

@@ -17,7 +17,7 @@ const IGNORE_NAMES: &[&str] = &[
     "node_modules",
     "target",
     "dist",
-    ".motif",
+    ".agentero",
 ];
 
 fn is_markdown(path: &Path) -> bool {

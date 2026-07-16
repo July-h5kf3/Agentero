@@ -4,7 +4,7 @@ import type {
 	PdfAskTrigger,
 } from "@/lib/pdf-ask/types";
 
-export const PDF_PAGE_ATTR = "data-motif-pdf-page";
+export const PDF_PAGE_ATTR = "data-agentero-pdf-page";
 
 export function findPageElement(
 	node: Node | null,
