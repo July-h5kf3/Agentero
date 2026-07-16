@@ -46,6 +46,7 @@ import {
 	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
+import { revealInOsLabelKey } from "@/lib/reveal";
 import {
 	type AppSettings,
 	DEFAULT_TRANSLATOR_BASE_URL,
@@ -877,10 +878,15 @@ function KeyboardPane() {
 }
 
 function ShortcutRow({ def }: { def: ShortcutDef }) {
-	const { t } = useTranslation("shortcuts");
+	const { t } = useTranslation(["shortcuts", "sidebar"]);
+	// "Show in Finder" is macOS wording; use the platform-specific file-manager name.
+	const label =
+		def.id === "revealInFinder"
+			? t(`sidebar:${revealInOsLabelKey()}`)
+			: t(`labels.${def.id}`);
 	return (
 		<div className="flex items-center justify-between gap-4 border-b px-3.5 py-2.5 last:border-b-0">
-			<span className="text-[13px]">{t(`labels.${def.id}`)}</span>
+			<span className="text-[13px]">{label}</span>
 			<kbd className="rounded-md border bg-muted/60 px-1.5 py-0.5 font-medium font-sans text-[12px] text-foreground tracking-wide">
 				{formatShortcut(def)}
 			</kbd>
