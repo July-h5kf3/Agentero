@@ -57,6 +57,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
+import { ImageViewer } from "@/components/viewer/image-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
@@ -322,6 +323,7 @@ export default function App() {
 		markdown: true,
 		pdf: Boolean(activeTab?.pdfUrl),
 		html: Boolean(activeTab?.htmlUrl),
+		image: Boolean(activeTab?.imageUrl),
 	};
 
 	const paperFoldersRef = useRef(paperFolders);
@@ -360,6 +362,7 @@ export default function App() {
 					paperMeta: null,
 					pdfUrl: null,
 					htmlUrl: null,
+					imageUrl: null,
 					notesPath: null,
 					notesSeed: "",
 					markdownSeed: "",
@@ -395,6 +398,7 @@ export default function App() {
 					paperMeta: res.paperMeta,
 					pdfUrl: res.pdfUrl,
 					htmlUrl: res.htmlUrl,
+					imageUrl: res.imageUrl,
 					notesPath: res.notesPath,
 					notesSeed: res.notesSeed,
 					markdownSeed: res.markdownSeed,
@@ -2048,6 +2052,17 @@ export default function App() {
 						}
 						vaultPath={vaultPath}
 						onAddNote={(quote) => void handleAddPdfNote(tab, quote)}
+						className="h-full w-full"
+					/>
+				</div>
+			);
+		}
+		if (tab.mode === "image") {
+			return (
+				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+					<ImageViewer
+						source={tab.imageUrl}
+						alt={tab.title}
 						className="h-full w-full"
 					/>
 				</div>

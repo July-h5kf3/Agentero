@@ -2,9 +2,11 @@ import {
 	Download,
 	Eye,
 	FileCode2,
+	FileImage,
 	FileJson,
 	FilePlus2,
 	FileText,
+	FileType2,
 	FolderPlus,
 	Library,
 	Loader2,
@@ -118,6 +120,8 @@ function AgenteroLogo({ className }: { className?: string }) {
 }
 
 function fileIcon(name: string) {
+	if (/\.pdf$/i.test(name)) return FileType2;
+	if (/\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(name)) return FileImage;
 	if (/\.json$/i.test(name)) return FileJson;
 	if (/\.(ts|tsx|js|jsx|rs|toml)$/i.test(name)) return FileCode2;
 	return FileText;

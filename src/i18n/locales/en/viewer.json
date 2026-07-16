@@ -40,5 +40,9 @@
 	"html": {
 		"empty": "No paper available.",
 		"sandboxTitle": "HTML paper sandbox"
+	},
+	"image": {
+		"empty": "No image available.",
+		"altFallback": "Image preview"
 	}
 }
