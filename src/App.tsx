@@ -20,6 +20,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
+import { DocumentTabBar } from "@/components/layout/document-tab-bar";
 import {
 	FileTree,
 	type TreeCreateDraft,
@@ -57,13 +58,10 @@ import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
 	isPaperDirectory,
-	isPapersRoot,
-	loadPaperMetadata,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
 	paperNeedsAssetDownload,
-	paperRemoteAssetsFromMetadata,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import {
@@ -82,6 +80,15 @@ import {
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { resolveShortcutId } from "@/lib/shortcuts";
+import {
+	basenameOf,
+	type DocTab,
+	loadTabResources,
+	normalizeTabPath,
+	tabIdForPath,
+	tabIsPaperNotes,
+	tabNotesEligible,
+} from "@/lib/tabs";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
@@ -91,7 +98,6 @@ import {
 	getRecentVaults,
 	getSavedVaultPath,
 	isMarkdownPath,
-	isTextOpenable,
 	isValidVaultEntryName,
 	joinVaultPath,
 	loadVaultTree,
@@ -106,12 +112,7 @@ import {
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
-import {
-	type CenterViewMode,
-	isHtmlPath,
-	isPdfPath,
-	preferredModeForPath,
-} from "@/lib/viewer";
+import { type CenterViewMode, preferredModeForPath } from "@/lib/viewer";
 import {
 	missingNotePath,
 	newNoteMarkdown,
@@ -122,15 +123,22 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
-const STORAGE_KEY = "agentero-editor-content";
-const OPEN_FILE_KEY = "agentero-open-file";
+const TABS_KEY = "agentero-open-tabs";
 
-const defaultMarkdown = `### Title
+type PersistedTab = { path: string; mode: CenterViewMode };
+type PersistedTabs = { tabs: PersistedTab[]; activeIndex: number };
 
-> This is a quote.
-
-With some **bold** text for emphasis!
-`;
+function loadPersistedTabs(): PersistedTabs | null {
+	try {
+		const raw = localStorage.getItem(TABS_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as PersistedTabs;
+		if (!parsed || !Array.isArray(parsed.tabs)) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
 
 /** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
 function normalizePathKey(path: string): string {
@@ -152,13 +160,6 @@ function treeFindNode(nodes: FileNode[], path: string): FileNode | undefined {
 	return walk(nodes);
 }
 
-function treeFindChildren(
-	nodes: FileNode[],
-	path: string,
-): FileNode[] | undefined {
-	return treeFindNode(nodes, path)?.children;
-}
-
 /** Parent directory for new file/folder: selected folder, or parent of selected file, else vault root. */
 function resolveCreateParent(
 	vaultRoot: string,
@@ -170,21 +171,6 @@ function resolveCreateParent(
 	if (node?.kind === "directory") return selectedPath;
 	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
 	return parent && parent !== selectedPath ? parent : vaultRoot;
-}
-
-/** Library table view: virtual tree node, or vault root / papers/ selection. */
-function isLibraryHome(
-	vaultPath: string | null,
-	selectedPath: string | null,
-): boolean {
-	if (!vaultPath) return false;
-	if (isLibraryVirtualPath(selectedPath)) return true;
-	if (!selectedPath) return true;
-	const sel = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
-	const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
-	if (sel === root) return true;
-	if (isPapersRoot(sel)) return true;
-	return false;
 }
 
 function collectMarkdownRelPaths(
@@ -204,6 +190,19 @@ function collectMarkdownRelPaths(
 	return out;
 }
 
+/** Vault-relative paper folder path derived from a `.../NOTES.md` absolute path. */
+function paperRelFromNotes(
+	notesPath: string | null,
+	vaultPath: string | null,
+): string | null {
+	if (!notesPath || !vaultPath) return null;
+	const abs = notesPath.replace(/[\\/]NOTES\.md$/i, "").replace(/\\/g, "/");
+	const root = vaultPath.replace(/\\/g, "/").replace(/\/$/, "");
+	if (abs === root) return "";
+	if (abs.startsWith(`${root}/`)) return abs.slice(root.length + 1);
+	return abs;
+}
+
 export default function App() {
 	const { t } = useTranslation(["app", "sidebar", "editor"]);
 	const { setTheme } = useTheme();
@@ -214,16 +213,6 @@ export default function App() {
 	const settingsOpenRef = useRef(settingsOpen);
 	settingsOpenRef.current = settingsOpen;
 
-	const [markdown, setMarkdown] = useState(() => {
-		const saved = localStorage.getItem(STORAGE_KEY);
-		const hasVault =
-			isTauri() &&
-			Boolean(
-				getSavedVaultPath({ allowRestore: loadSettings().restoreLastVault }),
-			);
-		if (!hasVault) return defaultMarkdown;
-		return saved ?? defaultMarkdown;
-	});
 	const [vaultPath, setVaultPath] = useState<string | null>(() => {
 		if (!isTauri()) return null;
 		return getSavedVaultPath({
@@ -231,14 +220,14 @@ export default function App() {
 		});
 	});
 	const [tree, setTree] = useState<FileNode[]>([]);
-	const [selectedPath, setSelectedPath] = useState<string | null>(() => {
-		// Fresh windows and empty vaults should not restore a previous file.
-		if (!isTauri()) return null;
-		const vault = getSavedVaultPath({
-			allowRestore: loadSettings().restoreLastVault,
-		});
-		return vault ? localStorage.getItem(OPEN_FILE_KEY) : null;
-	});
+	/** Open documents in the center tab strip (browser-style multi-tab). */
+	const [tabs, setTabs] = useState<DocTab[]>([]);
+	const [activeTabId, setActiveTabId] = useState<string | null>(null);
+	/**
+	 * File-tree selection / create-parent context. Follows the active document,
+	 * but a folder create can point it at a folder without opening a tab.
+	 */
+	const [treeSelectedPath, setTreeSelectedPath] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/** Inline new file/folder draft in the tree (IDE-style). */
@@ -247,25 +236,8 @@ export default function App() {
 		getRecentVaults(),
 	);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const [centerMode, setCenterMode] = useState<CenterViewMode>(() => {
-		const saved = localStorage.getItem(OPEN_FILE_KEY);
-		if (saved && paperDirFromPath(saved)) {
-			return "pdf";
-		}
-		// Paper folder root (no marker in path alone) — prefer pdf until meta loads
-		if (saved && /(?:^|\/)papers\//i.test(saved.replace(/\\/g, "/"))) {
-			return "pdf";
-		}
-		return saved ? preferredModeForPath(saved) : "markdown";
-	});
-	const [paperMeta, setPaperMeta] = useState<PaperMetadata | null>(null);
 	const [libraryPapers, setLibraryPapers] = useState<PaperMetadata[]>([]);
 	const [libraryLoading, setLibraryLoading] = useState(false);
-	/** Remote streaming URLs only — never local vault file / blob download */
-	const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-	const [htmlSrcUrl, setHtmlSrcUrl] = useState<string | null>(null);
-	/** NOTES.md for the current paper — shown on the right when viewing PDF/HTML */
-	const [paperNotes, setPaperNotes] = useState("");
 	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
 	const [showNotes, setShowNotes] = useState(true);
 	const showNotesRef = useRef(showNotes);
@@ -299,14 +271,6 @@ export default function App() {
 	const agentZenModeRef = useRef(false);
 	const leftCollapsedBeforeZenRef = useRef(false);
 
-	// Editor seed key: bumps when a file's content (re)loads to remount + reseed.
-	const [editorKey, setEditorKey] = useState(0);
-	const [markdownDirty, setMarkdownDirty] = useState(false);
-	// Paper NOTES.md editing (right pane during PDF/HTML view).
-	const [notesPath, setNotesPath] = useState<string | null>(null);
-	const [notesKey, setNotesKey] = useState(0);
-	const [notesDirty, setNotesDirty] = useState(false);
-
 	const isDemo = vaultPath === null;
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
@@ -315,82 +279,210 @@ export default function App() {
 	/** Paper folders at any depth under papers/ (marker-based). */
 	const paperFolders = useMemo(() => collectPaperFoldersFromTree(tree), [tree]);
 
+	const activeTab = useMemo(
+		() => tabs.find((t) => t.id === activeTabId) ?? null,
+		[tabs, activeTabId],
+	);
+	/** Active document identity — downstream panels read this as before. */
+	const selectedPath = activeTab?.path ?? null;
+	const centerMode = activeTab?.mode ?? "markdown";
+	const paperMeta = activeTab?.paperMeta ?? null;
+
+	// Tree selection / create-parent follows the active document.
+	useEffect(() => {
+		if (selectedPath) setTreeSelectedPath(selectedPath);
+	}, [selectedPath]);
+
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
-		pdf: Boolean(pdfUrl),
-		html: Boolean(htmlSrcUrl),
+		pdf: Boolean(activeTab?.pdfUrl),
+		html: Boolean(activeTab?.htmlUrl),
 	};
 
-	// Load remote PDF/HTML URLs from metadata (no local file download)
-	useEffect(() => {
-		let cancelled = false;
+	const paperFoldersRef = useRef(paperFolders);
+	paperFoldersRef.current = paperFolders;
+	const treeRef = useRef(tree);
+	treeRef.current = tree;
+	const vaultPathRef = useRef(vaultPath);
+	vaultPathRef.current = vaultPath;
 
-		void (async () => {
-			let paperDir = paperDirFromPath(selectedPath, paperFolders);
-			if (
-				!paperDir &&
-				selectedPath &&
-				(await detectPaperDirectory(selectedPath))
-			) {
-				paperDir = selectedPath.replace(/[\\/]+$/, "");
-			}
+	/** Merge a patch into the tab with the given id. */
+	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
+		setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+	}, []);
 
-			// Selecting a bare .pdf/.html path without paper metadata: no remote preview
-			if (!paperDir) {
-				if (cancelled) return;
-				setPaperMeta(null);
-				setPaperNotes("");
-				setPdfUrl(null);
-				setHtmlSrcUrl(null);
-				setNotesPath(null);
-				setNotesDirty(false);
-				return;
-			}
-
-			const meta = await loadPaperMetadata(paperDir, vaultPath);
-			if (cancelled) return;
-			setPaperMeta(meta);
-
-			const { pdfUrl: remotePdf, htmlUrl: remoteHtml } =
-				paperRemoteAssetsFromMetadata(meta);
-			setPdfUrl(remotePdf);
-			setHtmlSrcUrl(remoteHtml);
-
-			// Notes stay local (Markdown only)
-			const resolvedNotesPath = notesPathForPaper(paperDir);
-			let notes = "# Notes\n\nNo NOTES.md found for this paper.\n";
-			try {
-				notes = await readVaultFile(resolvedNotesPath);
-			} catch {
-				// keep placeholder
-			}
-			if (cancelled) return;
-			setPaperNotes(notes);
-			setNotesPath(resolvedNotesPath);
-			setNotesDirty(false);
-			setNotesKey((k) => k + 1);
-
-			// Opening a paper folder: prefer PDF, fall back HTML, else NOTES as markdown
-			const openingPaperRoot =
-				selectedPath != null &&
-				(normalizePathKey(selectedPath) === normalizePathKey(paperDir) ||
-					isPaperDirectory(selectedPath, treeFindChildren(tree, selectedPath)));
-			if (openingPaperRoot) {
-				if (remotePdf) setCenterMode("pdf");
-				else if (remoteHtml) setCenterMode("html");
-				else {
-					setMarkdown(notes);
-					setMarkdownDirty(false);
-					setEditorKey((k) => k + 1);
-					setCenterMode("markdown");
+	/**
+	 * Open a document in a tab. If a tab for this path already exists we just
+	 * activate it (keeps its mounted viewer/editor state — like a browser tab).
+	 * Otherwise a placeholder is inserted, then its resources load asynchronously.
+	 */
+	const openTab = useCallback(
+		(path: string, opts?: { preferMode?: CenterViewMode }) => {
+			const id = tabIdForPath(path);
+			setError(null);
+			let exists = false;
+			setTabs((prev) => {
+				if (prev.some((t) => t.id === id)) {
+					exists = true;
+					return prev;
 				}
-			}
-		})();
+				const placeholder: DocTab = {
+					id,
+					path: isLibraryVirtualPath(path) ? LIBRARY_VIRTUAL_PATH : path,
+					kind: isLibraryVirtualPath(path) ? "library" : "file",
+					title: isLibraryVirtualPath(path) ? "Library" : basenameOf(path),
+					mode: opts?.preferMode ?? "markdown",
+					paperMeta: null,
+					pdfUrl: null,
+					htmlUrl: null,
+					notesPath: null,
+					notesSeed: "",
+					markdownSeed: "",
+					markdownDirty: false,
+					notesDirty: false,
+					seedKey: 0,
+					notesKey: 0,
+					loaded: false,
+				};
+				return [...prev, placeholder];
+			});
+			setActiveTabId(id);
 
-		return () => {
-			cancelled = true;
-		};
-	}, [selectedPath, paperFolders, tree, vaultPath]);
+			if (exists) return;
+			void (async () => {
+				const res = await loadTabResources(
+					path,
+					vaultPathRef.current,
+					treeRef.current,
+					paperFoldersRef.current,
+				);
+				if (res.error) {
+					setError(
+						res.error === "cannotPreview"
+							? t("errors.cannotPreview", { name: basenameOf(path) })
+							: res.error,
+					);
+				}
+				updateTab(id, {
+					kind: res.kind,
+					title: res.title,
+					mode: res.mode,
+					paperMeta: res.paperMeta,
+					pdfUrl: res.pdfUrl,
+					htmlUrl: res.htmlUrl,
+					notesPath: res.notesPath,
+					notesSeed: res.notesSeed,
+					markdownSeed: res.markdownSeed,
+					loaded: true,
+				});
+			})();
+		},
+		[t, updateTab],
+	);
+
+	/** Close a tab; move focus to a neighbor, or Library when emptied. */
+	const closeTab = useCallback((id: string) => {
+		setTabs((prev) => {
+			const idx = prev.findIndex((t) => t.id === id);
+			if (idx < 0) return prev;
+			const next = prev.filter((t) => t.id !== id);
+			setActiveTabId((curActive) => {
+				if (curActive !== id) return curActive;
+				if (!next.length) return null;
+				const neighbor = next[Math.min(idx, next.length - 1)];
+				return neighbor?.id ?? null;
+			});
+			return next;
+		});
+	}, []);
+
+	/** Close every tab whose path is at or under the given path. */
+	const closeTabsUnderPath = useCallback((path: string) => {
+		const key = normalizeTabPath(path);
+		setTabs((prev) => {
+			const survivors = prev.filter((t) => {
+				if (isLibraryVirtualPath(t.path)) return true;
+				const tk = normalizeTabPath(t.path);
+				return tk !== key && !tk.startsWith(`${key}/`);
+			});
+			if (survivors.length === prev.length) return prev;
+			setActiveTabId((curActive) =>
+				survivors.some((t) => t.id === curActive)
+					? curActive
+					: (survivors[survivors.length - 1]?.id ?? null),
+			);
+			return survivors;
+		});
+	}, []);
+
+	const reorderTabs = useCallback((fromId: string, toId: string) => {
+		setTabs((prev) => {
+			const from = prev.findIndex((t) => t.id === fromId);
+			const to = prev.findIndex((t) => t.id === toId);
+			if (from < 0 || to < 0 || from === to) return prev;
+			const next = [...prev];
+			const [moved] = next.splice(from, 1);
+			next.splice(to, 0, moved);
+			return next;
+		});
+	}, []);
+
+	const setActiveTabMode = useCallback(
+		(mode: CenterViewMode) => {
+			if (!activeTabId) return;
+			updateTab(activeTabId, { mode });
+		},
+		[activeTabId, updateTab],
+	);
+
+	const tabsRef = useRef(tabs);
+	tabsRef.current = tabs;
+	const activeTabIdRef = useRef(activeTabId);
+	activeTabIdRef.current = activeTabId;
+
+	/** Cycle the active tab by delta (wraps). */
+	const cycleActiveTab = useCallback((delta: number) => {
+		const list = tabsRef.current;
+		if (list.length < 2) return;
+		const idx = list.findIndex((t) => t.id === activeTabIdRef.current);
+		const nextIdx = (idx + delta + list.length) % list.length;
+		setActiveTabId(list[nextIdx].id);
+	}, []);
+
+	const closeActiveTab = useCallback(() => {
+		const id = activeTabIdRef.current;
+		if (id) closeTab(id);
+	}, [closeTab]);
+
+	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
+	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
+		const id = tabIdForPath(paperDir);
+		setTabs((prev) =>
+			prev.map((t) =>
+				t.id === id
+					? {
+							...t,
+							notesSeed: content,
+							notesDirty: false,
+							notesKey: t.notesKey + 1,
+						}
+					: t,
+			),
+		);
+	}, []);
+
+	// Restore the previous window's open tabs once on mount (per-window session).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
+	useEffect(() => {
+		if (!isTauri() || !vaultPathRef.current) return;
+		const persisted = loadPersistedTabs();
+		if (!persisted?.tabs.length) return;
+		for (const pt of persisted.tabs) {
+			openTab(pt.path, { preferMode: pt.mode });
+		}
+		const active = persisted.tabs[persisted.activeIndex];
+		if (active) setActiveTabId(tabIdForPath(active.path));
+	}, []);
 
 	useEffect(() => {
 		setTheme(settings.theme);
@@ -632,7 +724,9 @@ export default function App() {
 		async (path: string) => {
 			saveVaultPath(path);
 			setVaultPath(path);
-			setSelectedPath(null);
+			setTabs([]);
+			setActiveTabId(null);
+			setTreeSelectedPath(null);
 			setRecentVaults(getRecentVaults());
 			await rebuildWikiAndNotify(path);
 		},
@@ -728,7 +822,7 @@ export default function App() {
 
 	/** ⌥⌘R — reveal selected vault path in Finder / Explorer. */
 	const handleRevealInFinder = useCallback(() => {
-		const path = selectedPath;
+		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path)) return;
 		if (!isTauri()) {
 			setError(t("sidebar:fileTree.revealDesktopOnly"));
@@ -741,7 +835,7 @@ export default function App() {
 				setError(t("sidebar:fileTree.revealFailed"));
 			}
 		})();
-	}, [selectedPath, t]);
+	}, [treeSelectedPath, t]);
 
 	const findTreeNode = useCallback(
 		(path: string): FileNode | null => {
@@ -818,19 +912,16 @@ export default function App() {
 					}
 				}
 
-				const selectedNorm = selectedPath
+				// Close any open tabs at or under the deleted path.
+				closeTabsUnderPath(path);
+				const treeNorm = treeSelectedPath
 					?.replace(/\\/g, "/")
 					.replace(/\/+$/, "");
 				if (
-					selectedNorm &&
-					(selectedNorm === pathNorm || selectedNorm.startsWith(`${pathNorm}/`))
+					treeNorm &&
+					(treeNorm === pathNorm || treeNorm.startsWith(`${pathNorm}/`))
 				) {
-					setSelectedPath(LIBRARY_VIRTUAL_PATH);
-					setMarkdown("");
-					setMarkdownDirty(false);
-					setNotesPath(null);
-					setPaperMeta(null);
-					setCenterMode("markdown");
+					setTreeSelectedPath(null);
 				}
 
 				await refreshTree(vaultPath);
@@ -847,7 +938,8 @@ export default function App() {
 		[
 			vaultPath,
 			findTreeNode,
-			selectedPath,
+			treeSelectedPath,
+			closeTabsUnderPath,
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
@@ -856,13 +948,13 @@ export default function App() {
 	);
 
 	const handleDeleteSelected = useCallback(() => {
-		const path = selectedPath;
+		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path)) {
 			setError(t("sidebar:fileTree.deleteNeedsSelection"));
 			return;
 		}
 		void handleDeletePath(path);
-	}, [selectedPath, handleDeletePath, t]);
+	}, [treeSelectedPath, handleDeletePath, t]);
 
 	const openMagicWand = useCallback(() => {
 		if (!vaultPath) {
@@ -881,8 +973,8 @@ export default function App() {
 	}, [refreshLibrary]);
 
 	const lookupParentDir = useMemo(
-		() => resolvePapersParentDir(vaultPath, selectedPath, tree),
-		[vaultPath, selectedPath, tree],
+		() => resolvePapersParentDir(vaultPath, treeSelectedPath, tree),
+		[vaultPath, treeSelectedPath, tree],
 	);
 
 	const openSettings = useCallback((section: SettingsSection = "general") => {
@@ -973,6 +1065,15 @@ export default function App() {
 					}
 					break;
 				}
+				case "closeTab":
+					closeActiveTab();
+					break;
+				case "nextTab":
+					cycleActiveTab(1);
+					break;
+				case "prevTab":
+					cycleActiveTab(-1);
+					break;
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);
@@ -990,6 +1091,8 @@ export default function App() {
 		toggleAgentZen,
 		toggleChat,
 		toggleSidebar,
+		closeActiveTab,
+		cycleActiveTab,
 	]);
 
 	// Native menu bar (agentero → Settings…, File, View) — desktop only
@@ -1046,13 +1149,23 @@ export default function App() {
 	}, [vaultPath, refreshTree]);
 
 	useEffect(() => {
-		localStorage.setItem(STORAGE_KEY, markdown);
-	}, [markdown]);
-
-	useEffect(() => {
-		if (selectedPath) localStorage.setItem(OPEN_FILE_KEY, selectedPath);
-		else localStorage.removeItem(OPEN_FILE_KEY);
-	}, [selectedPath]);
+		try {
+			const payload: PersistedTabs = {
+				tabs: tabs.map((t) => ({ path: t.path, mode: t.mode })),
+				activeIndex: Math.max(
+					0,
+					tabs.findIndex((t) => t.id === activeTabId),
+				),
+			};
+			if (payload.tabs.length) {
+				localStorage.setItem(TABS_KEY, JSON.stringify(payload));
+			} else {
+				localStorage.removeItem(TABS_KEY);
+			}
+		} catch {
+			// localStorage may be unavailable; tab restore is best-effort.
+		}
+	}, [tabs, activeTabId]);
 
 	// Persist a specific file's Markdown to disk. The MarkdownEditor calls this with
 	// its own fixed path (debounced autosave, ⌘S, and unmount flush), so writes always
@@ -1060,28 +1173,32 @@ export default function App() {
 	const persistFile = useCallback(
 		(path: string, md: string) => {
 			if (!isTauri() || !vaultPath || !path) return;
-			// Keep NOTES.md buffer in sync so PDF↔Notes mode switches see latest text
-			if (
-				notesPath &&
-				path.replace(/\\/g, "/").toLowerCase() ===
-					notesPath.replace(/\\/g, "/").toLowerCase()
-			) {
-				setPaperNotes(md);
-			}
+			// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
+			const key = path.replace(/\\/g, "/").toLowerCase();
+			setTabs((prev) =>
+				prev.map((tab) => {
+					const notesKey = tab.notesPath?.replace(/\\/g, "/").toLowerCase();
+					if (notesKey === key) return { ...tab, notesSeed: md };
+					if (normalizeTabPath(tab.path) === normalizeTabPath(path)) {
+						return { ...tab, markdownSeed: md };
+					}
+					return tab;
+				}),
+			);
 			void writeVaultFile(path, md).catch((e) => {
 				setError(e instanceof Error ? e.message : String(e));
 			});
 		},
-		[vaultPath, notesPath],
+		[vaultPath],
 	);
 
-	/** Open a paper folder: center PDF, right Notes (via metadata effect). */
-	const openPaper = useCallback((paperDir: string) => {
-		setSelectedPath(paperDir);
-		setError(null);
-		// Mode is refined after metadata loads (pdf → html → notes).
-		setCenterMode("pdf");
-	}, []);
+	/** Open a paper folder in a tab: center PDF, right Notes (resolved on load). */
+	const openPaper = useCallback(
+		(paperDir: string) => {
+			openTab(paperDir, { preferMode: "pdf" });
+		},
+		[openTab],
+	);
 
 	const handleLookupSubmit = useCallback(
 		async (text: string) => {
@@ -1156,10 +1273,7 @@ export default function App() {
 						const notesAbs = notesPathForPaper(result.paperDir);
 						try {
 							const content = await readVaultFile(notesAbs);
-							setPaperNotes(content);
-							setNotesPath(notesAbs);
-							setNotesDirty(false);
-							setNotesKey((k) => k + 1);
+							refreshTabNotes(result.paperDir, content);
 						} catch {
 							// ignore
 						}
@@ -1176,6 +1290,7 @@ export default function App() {
 			refreshTree,
 			refreshLibrary,
 			openPaper,
+			refreshTabNotes,
 			rebuildWikiAndNotify,
 			t,
 		],
@@ -1229,18 +1344,11 @@ export default function App() {
 						if (started) {
 							await refreshLibrary();
 							const notesAbs = notesPathForPaper(node.path);
-							if (
-								notesPath &&
-								normalizePathKey(notesPath) === normalizePathKey(notesAbs)
-							) {
-								try {
-									const content = await readVaultFile(notesAbs);
-									setPaperNotes(content);
-									setNotesDirty(false);
-									setNotesKey((k) => k + 1);
-								} catch {
-									// ignore
-								}
+							try {
+								const content = await readVaultFile(notesAbs);
+								refreshTabNotes(node.path, content);
+							} catch {
+								// ignore
 							}
 						}
 					} catch (e) {
@@ -1251,7 +1359,7 @@ export default function App() {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshTree, refreshLibrary, notesPath, t],
+		[vaultPath, refreshTree, refreshLibrary, refreshTabNotes, t],
 	);
 
 	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
@@ -1293,26 +1401,19 @@ export default function App() {
 					paperPath: rel,
 				});
 				await refreshLibrary();
-				// Refresh NOTES pane if this paper is open
+				// Refresh NOTES pane if this paper is open in a tab
 				const notesAbs = notesPathForPaper(node.path);
-				if (
-					notesPath &&
-					normalizePathKey(notesPath) === normalizePathKey(notesAbs)
-				) {
-					try {
-						const content = await readVaultFile(notesAbs);
-						setPaperNotes(content);
-						setNotesDirty(false);
-						setNotesKey((k) => k + 1);
-					} catch {
-						// ignore
-					}
+				try {
+					const content = await readVaultFile(notesAbs);
+					refreshTabNotes(node.path, content);
+				} catch {
+					// ignore
 				}
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, refreshLibrary, notesPath],
+		[vaultPath, refreshLibrary, refreshTabNotes],
 	);
 
 	/**
@@ -1472,61 +1573,12 @@ export default function App() {
 	);
 
 	const openPath = useCallback(
-		async (absoluteOrDemoPath: string) => {
-			const children = treeFindChildren(tree, absoluteOrDemoPath);
-			if (
-				isPaperDirectory(absoluteOrDemoPath, children) ||
-				(await detectPaperDirectory(absoluteOrDemoPath))
-			) {
-				openPaper(absoluteOrDemoPath);
-				return;
-			}
-
-			const name =
-				absoluteOrDemoPath.split(/[\\/]/).pop() ?? absoluteOrDemoPath;
-			const node: FileNode = {
-				id: absoluteOrDemoPath,
-				name,
-				path: absoluteOrDemoPath,
-				kind: "file",
-			};
-			setSelectedPath(node.path);
-			setError(null);
-
-			// File under a paper: prefer PDF if available later; set by extension first
-			const paperDir = paperDirFromPath(node.path, paperFolders);
-			if (paperDir && isMarkdownPath(node.path)) {
-				// Opening NOTES.md etc. from wiki/backlink still shows notes; PDF if user toggles
-				setCenterMode(preferredModeForPath(node.path));
-			} else {
-				setCenterMode(preferredModeForPath(node.path));
-			}
-
-			if (isPdfPath(node.path) || isHtmlPath(node.path)) {
-				return;
-			}
-
-			if (!isTextOpenable(node.path)) {
-				setError(t("errors.cannotPreview", { name: node.name }));
-				return;
-			}
-
-			setBusy(true);
-			try {
-				const content = await readVaultFile(node.path);
-				setMarkdown(content);
-				setMarkdownDirty(false);
-				setEditorKey((k) => k + 1);
-				if (!isMarkdownPath(node.path) && !isHtmlPath(node.path)) {
-					setCenterMode("markdown");
-				}
-			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
-			} finally {
-				setBusy(false);
-			}
+		(absoluteOrDemoPath: string) => {
+			openTab(absoluteOrDemoPath, {
+				preferMode: preferredModeForPath(absoluteOrDemoPath),
+			});
 		},
-		[openPaper, paperFolders, t, tree],
+		[openTab],
 	);
 
 	const startCreate = useCallback(
@@ -1536,10 +1588,10 @@ export default function App() {
 				setError(t("sidebar:fileTree.needsVault"));
 				return;
 			}
-			const parent = resolveCreateParent(vaultPath, selectedPath, tree);
+			const parent = resolveCreateParent(vaultPath, treeSelectedPath, tree);
 			setCreateDraft({ kind, parentPath: parent });
 		},
-		[vaultPath, selectedPath, tree, t],
+		[vaultPath, treeSelectedPath, tree, t],
 	);
 
 	const handleCancelCreate = useCallback(() => {
@@ -1573,11 +1625,11 @@ export default function App() {
 				if (kind === "file") {
 					await writeVaultFile(full, "");
 					await refreshTree(vaultPath);
-					await openPath(full);
+					openPath(full);
 				} else {
 					await createVaultDirectory(full);
 					await refreshTree(vaultPath);
-					setSelectedPath(full);
+					setTreeSelectedPath(full);
 				}
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
@@ -1604,7 +1656,7 @@ export default function App() {
 			const sep = root.includes("\\") ? "\\" : "/";
 			const openRel = result.openPath || "AGENTS.md";
 			const openAbs = `${root.replace(/[\\/]+$/, "")}${sep}${openRel.replace(/\//g, sep)}`;
-			await openPath(openAbs);
+			openPath(openAbs);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -1644,17 +1696,13 @@ export default function App() {
 	}, [handleCreateVault]);
 
 	const handleSelectLibrary = useCallback(() => {
-		setSelectedPath(LIBRARY_VIRTUAL_PATH);
-		setPaperMeta(null);
-		setPdfUrl(null);
-		setHtmlSrcUrl(null);
-		setNotesPath(null);
-		setNotesDirty(false);
 		setError(null);
+		setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
+		openTab(LIBRARY_VIRTUAL_PATH);
 		void refreshLibrary();
-	}, [refreshLibrary]);
+	}, [openTab, refreshLibrary]);
 
-	const handleSelectFile = async (node: FileNode) => {
+	const handleSelectFile = (node: FileNode) => {
 		if (isLibraryVirtualPath(node.path)) {
 			handleSelectLibrary();
 			return;
@@ -1667,7 +1715,7 @@ export default function App() {
 			return;
 		}
 		if (node.kind !== "file") return;
-		await openPath(node.path);
+		openPath(node.path);
 	};
 
 	/** Open a vault-relative path from backlinks (e.g. `notes/idea.md`). */
@@ -1679,7 +1727,7 @@ export default function App() {
 			}
 			const clean = normalizeVaultRel(rel);
 			const full = `${vaultPath.replace(/[\\/]+$/, "")}/${clean}`;
-			void openPath(full);
+			openPath(full);
 		},
 		[vaultPath, openPath, t],
 	);
@@ -1738,7 +1786,7 @@ export default function App() {
 				await writeVaultFile(full, content);
 				await rebuildWikiAndNotify(vaultPath);
 				await refreshTree(vaultPath);
-				await openPath(full);
+				openPath(full);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
 			}
@@ -1763,17 +1811,12 @@ export default function App() {
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
 		if (!modeAvailable[mode]) return;
-		setCenterMode(mode);
+		setActiveTabMode(mode);
 	};
 
-	const showLibrary = Boolean(
-		vaultPath && isLibraryHome(vaultPath, selectedPath),
-	);
+	const showLibrary = Boolean(vaultPath) && activeTab?.kind === "library";
 	/** Notes column is relevant: paper open + PDF/HTML center (not when Notes is already center). */
-	const notesEligible =
-		!showLibrary &&
-		Boolean(paperMeta) &&
-		(centerMode === "pdf" || centerMode === "html");
+	const notesEligible = tabNotesEligible(activeTab);
 	/** Side Notes column actually renders when relevant and the user hasn't hidden it. */
 	const showNotesOnRight = notesEligible && showNotes;
 
@@ -1781,7 +1824,7 @@ export default function App() {
 	 * Center markdown mode while a paper is selected edits NOTES.md live (WYSIWYG),
 	 * not a separate read-only preview of another document.
 	 */
-	const centerIsPaperNotes = Boolean(paperMeta) && centerMode === "markdown";
+	const centerIsPaperNotes = tabIsPaperNotes(activeTab);
 
 	/**
 	 * Notes still mounts/unmounts with paper selection. Re-assert intended collapse
@@ -1811,13 +1854,84 @@ export default function App() {
 		return () => cancelAnimationFrame(id);
 	}, [showNotesOnRight, sidebarCollapsed, rightSidebarOpen]);
 
-	const activeFileLabel = showLibrary
-		? t("sidebar:papersLibrary.title")
-		: selectedPath
-			? selectedPath.split(/[\\/]/).pop()
-			: t("labels.untitled");
+	const activeFileLabel = activeTab?.title ?? t("labels.untitled");
 
 	const editorFontSize = settings.editorFontSize;
+
+	/** Center content for one tab (kept mounted; hidden when not active). */
+	const renderTabCenter = (tab: DocTab) => {
+		if (tab.kind === "library") {
+			return (
+				<PapersLibrary
+					papers={libraryPapers}
+					loading={libraryLoading}
+					onOpenPaper={handleOpenLibraryPaper}
+					className="bg-muted/20"
+				/>
+			);
+		}
+		const isNotes = tabIsPaperNotes(tab);
+		if (tab.mode === "markdown") {
+			return (
+				<div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
+					<MarkdownEditor
+						key={
+							isNotes
+								? `notes-center-${tab.id}-${tab.notesKey}`
+								: `file-${tab.id}-${tab.seedKey}`
+						}
+						className="agentero-scroll h-full min-h-0"
+						initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
+						filePath={
+							isNotes
+								? tab.notesPath
+								: isMarkdownPath(tab.path)
+									? tab.path
+									: null
+						}
+						fontSize={editorFontSize}
+						showToolbar={settings.showEditorToolbar}
+						placeholder={
+							isNotes
+								? t("editor.notesPlaceholder")
+								: t("editor.markdownPlaceholder")
+						}
+						onPersist={persistFile}
+						onDirtyChange={(d) =>
+							updateTab(
+								tab.id,
+								isNotes ? { notesDirty: d } : { markdownDirty: d },
+							)
+						}
+					/>
+				</div>
+			);
+		}
+		if (tab.mode === "pdf") {
+			return (
+				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+					<PdfViewer
+						source={tab.pdfUrl}
+						paperAbsPath={
+							tab.notesPath
+								? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "")
+								: null
+						}
+						paperRelPath={
+							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
+						}
+						vaultPath={vaultPath}
+						className="h-full w-full"
+					/>
+				</div>
+			);
+		}
+		return (
+			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+				<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
+			</div>
+		);
+	};
 
 	return (
 		<WikiNavContext.Provider value={wikiNavValue}>
@@ -2049,13 +2163,13 @@ export default function App() {
 								<div className="agentero-scroll min-h-0 flex-1 px-1">
 									<FileTree
 										nodes={tree}
-										selectedPath={selectedPath}
+										selectedPath={treeSelectedPath}
 										vaultPath={vaultPath}
 										createDraft={createDraft}
 										onConfirmCreate={(name) => void handleConfirmCreate(name)}
 										onCancelCreate={handleCancelCreate}
 										onDeletePath={(path) => void handleDeletePath(path)}
-										onSelectFile={(n) => void handleSelectFile(n)}
+										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
@@ -2081,97 +2195,108 @@ export default function App() {
 							className="min-h-0 min-w-0 overflow-hidden"
 						>
 							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+								{vaultPath && tabs.length ? (
+									<DocumentTabBar
+										tabs={tabs}
+										activeId={activeTabId}
+										onSelect={setActiveTabId}
+										onClose={closeTab}
+										onReorder={reorderTabs}
+									/>
+								) : null}
 								{/* Single-row header: toggle left, title right — same 28px line box */}
-								<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-									<div className="flex h-7 shrink-0 items-center">
-										{showLibrary ? null : (
-											<ViewModeToggle
-												value={centerMode}
-												onChange={handleCenterModeChange}
-												available={modeAvailable}
-											/>
-										)}
-									</div>
-									<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
-										{!showLibrary &&
-										centerMode === "markdown" &&
-										(centerIsPaperNotes ? notesDirty : markdownDirty) ? (
-											<span
-												className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
-												role="img"
-												aria-label={t("editor.unsaved")}
-												title={t("editor.unsaved")}
-											/>
-										) : null}
-										{showLibrary ? (
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														className="size-7 shrink-0"
-														aria-label={t("sidebar:papersLibrary.export")}
-														disabled={
-															!vaultPath ||
-															libraryIoBusy !== null ||
-															libraryPapers.length === 0
-														}
-														onClick={() => void handleLibraryExport()}
-													>
-														{libraryIoBusy === "export" ? (
-															<Loader2 className="size-3.5 animate-spin" />
-														) : (
-															<Download className="size-3.5" />
-														)}
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{t("sidebar:papersLibrary.export")}
-												</TooltipContent>
-											</Tooltip>
-										) : (
-											<>
+								{vaultPath && activeTab ? (
+									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+										<div className="flex h-7 shrink-0 items-center">
+											{showLibrary ? null : (
+												<ViewModeToggle
+													value={centerMode}
+													onChange={handleCenterModeChange}
+													available={modeAvailable}
+												/>
+											)}
+										</div>
+										<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
+											{!showLibrary &&
+											centerMode === "markdown" &&
+											(centerIsPaperNotes
+												? activeTab.notesDirty
+												: activeTab.markdownDirty) ? (
 												<span
-													className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-													title={
-														paperMeta
-															? `${paperMeta.title} · ${activeFileLabel}`
-															: (activeFileLabel ?? undefined)
-													}
-												>
-													{paperMeta?.title ?? activeFileLabel}
-												</span>
-												{notesEligible ? (
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																className={cn(
-																	"size-7 shrink-0",
-																	showNotes && "bg-muted text-foreground",
-																)}
-																aria-label={
-																	showNotes
-																		? t("titlebar.hideNotes")
-																		: t("titlebar.showNotes")
-																}
-																aria-pressed={showNotes}
-																onClick={() => setShowNotes((v) => !v)}
-															>
-																<NotebookPen className="size-3.5" />
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{showNotes
-																? t("titlebar.hideNotesHint")
-																: t("titlebar.showNotesHint")}
-														</TooltipContent>
-													</Tooltip>
-												) : null}
-												{vaultPath ? (
+													className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
+													role="img"
+													aria-label={t("editor.unsaved")}
+													title={t("editor.unsaved")}
+												/>
+											) : null}
+											{showLibrary ? (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-xs"
+															className="size-7 shrink-0"
+															aria-label={t("sidebar:papersLibrary.export")}
+															disabled={
+																!vaultPath ||
+																libraryIoBusy !== null ||
+																libraryPapers.length === 0
+															}
+															onClick={() => void handleLibraryExport()}
+														>
+															{libraryIoBusy === "export" ? (
+																<Loader2 className="size-3.5 animate-spin" />
+															) : (
+																<Download className="size-3.5" />
+															)}
+														</Button>
+													</TooltipTrigger>
+													<TooltipContent side="bottom">
+														{t("sidebar:papersLibrary.export")}
+													</TooltipContent>
+												</Tooltip>
+											) : (
+												<>
+													<span
+														className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
+														title={
+															paperMeta
+																? `${paperMeta.title} · ${activeFileLabel}`
+																: (activeFileLabel ?? undefined)
+														}
+													>
+														{paperMeta?.title ?? activeFileLabel}
+													</span>
+													{notesEligible ? (
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	type="button"
+																	variant="ghost"
+																	size="icon-xs"
+																	className={cn(
+																		"size-7 shrink-0",
+																		showNotes && "bg-muted text-foreground",
+																	)}
+																	aria-label={
+																		showNotes
+																			? t("titlebar.hideNotes")
+																			: t("titlebar.showNotes")
+																	}
+																	aria-pressed={showNotes}
+																	onClick={() => setShowNotes((v) => !v)}
+																>
+																	<NotebookPen className="size-3.5" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent side="bottom">
+																{showNotes
+																	? t("titlebar.hideNotesHint")
+																	: t("titlebar.showNotesHint")}
+															</TooltipContent>
+														</Tooltip>
+													) : null}
 													<Tooltip>
 														<TooltipTrigger asChild>
 															<Button
@@ -2180,7 +2305,9 @@ export default function App() {
 																size="icon-xs"
 																className="size-7 shrink-0"
 																aria-label={t("titlebar.closeDocument")}
-																onClick={handleSelectLibrary}
+																onClick={() =>
+																	activeTabId && closeTab(activeTabId)
+																}
 															>
 																<X className="size-3.5" />
 															</Button>
@@ -2189,11 +2316,11 @@ export default function App() {
 															{t("titlebar.closeDocumentHint")}
 														</TooltipContent>
 													</Tooltip>
-												) : null}
-											</>
-										)}
+												</>
+											)}
+										</div>
 									</div>
-								</div>
+								) : null}
 								{!vaultPath ? (
 									isTauri() ? (
 										<VaultWelcome
@@ -2221,94 +2348,24 @@ export default function App() {
 											</div>
 										</div>
 									)
-								) : showLibrary ? (
-									<PapersLibrary
-										papers={libraryPapers}
-										loading={libraryLoading}
-										onOpenPaper={handleOpenLibraryPaper}
-										className="bg-muted/20"
-									/>
+								) : !tabs.length ? (
+									<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-muted/20 p-6 text-center text-muted-foreground">
+										<p className="text-sm">{t("tabs.emptyTitle")}</p>
+										<p className="text-xs">{t("tabs.emptyHint")}</p>
+									</div>
 								) : (
-									<>
-										{centerMode === "markdown" ? (
+									<div className="relative min-h-0 flex-1 overflow-hidden">
+										{tabs.map((tab) => (
 											<div
-												ref={editorPaneRef}
-												className="min-h-0 flex-1 overflow-hidden bg-muted/30"
+												key={tab.id}
+												hidden={tab.id !== activeTabId}
+												ref={tab.id === activeTabId ? editorPaneRef : undefined}
+												className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden"
 											>
-												<MarkdownEditor
-													key={
-														centerIsPaperNotes
-															? `notes-center-${notesKey}`
-															: editorKey
-													}
-													className="agentero-scroll h-full min-h-0"
-													initialMarkdown={
-														centerIsPaperNotes ? paperNotes : markdown
-													}
-													filePath={
-														centerIsPaperNotes
-															? notesPath
-															: selectedPath && isMarkdownPath(selectedPath)
-																? selectedPath
-																: null
-													}
-													fontSize={editorFontSize}
-													showToolbar={settings.showEditorToolbar}
-													placeholder={
-														centerIsPaperNotes
-															? t("editor.notesPlaceholder")
-															: t("editor.markdownPlaceholder")
-													}
-													onPersist={persistFile}
-													onDirtyChange={
-														centerIsPaperNotes
-															? setNotesDirty
-															: setMarkdownDirty
-													}
-												/>
+												{renderTabCenter(tab)}
 											</div>
-										) : null}
-										{centerMode === "pdf" ? (
-											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-												<PdfViewer
-													source={pdfUrl}
-													paperAbsPath={
-														notesPath
-															? notesPath.replace(/[\\/]NOTES\.md$/i, "")
-															: null
-													}
-													paperRelPath={
-														paperMeta?.path ??
-														(notesPath && vaultPath
-															? (() => {
-																	const abs = notesPath
-																		.replace(/[\\/]NOTES\.md$/i, "")
-																		.replace(/\\/g, "/");
-																	const root = vaultPath
-																		.replace(/\\/g, "/")
-																		.replace(/\/$/, "");
-																	if (abs === root) return "";
-																	if (abs.startsWith(`${root}/`)) {
-																		return abs.slice(root.length + 1);
-																	}
-																	return abs;
-																})()
-															: null)
-													}
-													vaultPath={vaultPath}
-													className="h-full w-full"
-												/>
-											</div>
-										) : null}
-										{centerMode === "html" ? (
-											<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-												<HtmlViewer
-													srcUrl={htmlSrcUrl}
-													className="h-full w-full"
-												/>
-											</div>
-										) : null}
-									</>
+										))}
+									</div>
 								)}
 							</div>
 						</ResizablePanel>
@@ -2361,7 +2418,7 @@ export default function App() {
 									>
 										<span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-sm">
 											{t("labels.notes")}
-											{notesDirty ? (
+											{activeTab?.notesDirty ? (
 												<span
 													className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
 													role="img"
@@ -2371,19 +2428,31 @@ export default function App() {
 											) : null}
 										</span>
 									</PaneHeader>
-									<div className="min-h-0 flex-1 overflow-hidden">
-										{/* Live WYSIWYG NOTES.md — no separate read-only preview pane */}
-										<MarkdownEditor
-											key={`notes-${notesKey}`}
-											className="agentero-scroll h-full min-h-0"
-											initialMarkdown={paperNotes}
-											filePath={notesPath}
-											fontSize={editorFontSize}
-											showToolbar={settings.showEditorToolbar}
-											placeholder={t("editor.notesPlaceholder")}
-											onPersist={persistFile}
-											onDirtyChange={setNotesDirty}
-										/>
+									<div className="relative min-h-0 flex-1 overflow-hidden">
+										{/* Live WYSIWYG NOTES.md — one editor per paper tab, kept mounted. */}
+										{tabs
+											.filter((tab) => tab.notesPath)
+											.map((tab) => (
+												<div
+													key={tab.id}
+													hidden={tab.id !== activeTabId}
+													className="absolute inset-0"
+												>
+													<MarkdownEditor
+														key={`notes-${tab.id}-${tab.notesKey}`}
+														className="agentero-scroll h-full min-h-0"
+														initialMarkdown={tab.notesSeed}
+														filePath={tab.notesPath}
+														fontSize={editorFontSize}
+														showToolbar={settings.showEditorToolbar}
+														placeholder={t("editor.notesPlaceholder")}
+														onPersist={persistFile}
+														onDirtyChange={(d) =>
+															updateTab(tab.id, { notesDirty: d })
+														}
+													/>
+												</div>
+											))}
 									</div>
 								</div>
 							</ResizablePanel>

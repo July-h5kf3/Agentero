@@ -26,7 +26,7 @@
 		"layoutLeftSidebar": "左侧边栏",
 		"layoutRightSidebar": "右侧边栏",
 		"closeDocument": "关闭",
-		"closeDocumentHint": "关闭并返回论文库",
+		"closeDocumentHint": "关闭当前标签",
 		"showNotes": "显示笔记",
 		"hideNotes": "隐藏笔记",
 		"showNotesHint": "显示笔记栏",
@@ -36,6 +36,12 @@
 		"markdownPlaceholder": "在此输入 Markdown……",
 		"notesPlaceholder": "在此撰写这篇论文的笔记……",
 		"unsaved": "有未保存的更改"
+	},
+	"tabs": {
+		"strip": "已打开的文档",
+		"close": "关闭 {{title}}",
+		"emptyTitle": "未打开任何文档",
+		"emptyHint": "从侧边栏选择文件或论文即可在标签中打开。"
 	},
 	"errors": {
 		"openVaultDesktopOnly": "打开知识库需要 Tauri 桌面应用（pnpm tauri dev）。",

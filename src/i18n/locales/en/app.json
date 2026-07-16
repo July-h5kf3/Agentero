@@ -26,7 +26,7 @@
 		"layoutLeftSidebar": "Left sidebar",
 		"layoutRightSidebar": "Right sidebar",
 		"closeDocument": "Close",
-		"closeDocumentHint": "Close and return to Library",
+		"closeDocumentHint": "Close tab",
 		"showNotes": "Show notes",
 		"hideNotes": "Hide notes",
 		"showNotesHint": "Show notes panel",
@@ -36,6 +36,12 @@
 		"markdownPlaceholder": "Type Markdown here...",
 		"notesPlaceholder": "Write notes for this paper...",
 		"unsaved": "Unsaved changes"
+	},
+	"tabs": {
+		"strip": "Open documents",
+		"close": "Close {{title}}",
+		"emptyTitle": "No document open",
+		"emptyHint": "Pick a file or paper from the sidebar to open it in a tab."
 	},
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",

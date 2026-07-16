@@ -210,24 +210,24 @@
 
 现状对照：
 
-- 今日中间栏是单槽：Library / PDF / HTML / Markdown 互斥切换，打开新文件会替换当前内容。
+- **标签页已落地**（浏览器式多 tab，常驻挂载）：中间区可同时打开 Library / PDF / HTML / Markdown 多个文档，切换保留 PDF 滚动/缩放与编辑器状态。**分屏（split）仍待实现**。
 - 左右侧栏已是常驻 collapsible（`preserve-pixel-size`）；Agent 禅模式是全屏 Agent，不是编辑区分屏。
 - Agent 面板内部已有 **会话标签**（多 session），与「文档标签页」是不同概念。
 
 关键交付：
 
-- [ ] **文档标签栏**：打开 paper / Markdown / PDF / HTML / Library 时在中间区以 tab 呈现，可关闭、切换、拖拽重排。
-- [ ] **标签状态**：每 tab 保留滚动位置、PDF 缩放、视图模式（PDF/HTML/Notes 侧栏上下文）；关闭前未保存 Markdown 需提示。
+- [x] **文档标签栏**：打开 paper / Markdown / PDF / HTML / Library 时在中间区以 tab 呈现，可关闭、切换、拖拽重排。（`src/components/layout/document-tab-bar.tsx`、`src/lib/tabs.ts`）
+- [x] **标签状态**：每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush），关闭不丢内容。
 - [ ] **分屏（split）**：水平或垂直拆成 2 格（MVP 可先 2 格；后续可扩展 3–4 格），每格独立 tab 栈或共享 tab 池。
-- [ ] **快捷键**：新建/关闭 tab、下一/上一 tab、分屏 / 取消分屏（具体键位写入 `docs/frontend/ui.md`）。
-- [ ] **与文件树联动**：树选中可「在当前 tab 打开」或「新 tab 打开」；默认策略在设置中可配。
-- [ ] **多窗口兼容**：`⌘N` 窗口各自有独立 tab 集（session 隔离，与 Vault session 一致）。
+- [x] **快捷键**：关闭 tab `⌥⌘W`、下一/上一 tab `⌥⌘→ / ⌥⌘←`；分屏快捷键随 split 一并补。
+- [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 tab。
+- [x] **多窗口兼容**：`⌘N` 窗口各自有独立 tab 集（`agentero-open-tabs` 按窗口 localStorage 恢复）。
 
 验收标准：
 
-- [ ] 可同时打开至少 3 个文档标签并在其间切换而不丢滚动位置。
+- [x] 可同时打开至少 3 个文档标签并在其间切换而不丢滚动位置。
 - [ ] 分屏下左格读 PDF、右格写 `NOTES.md`（或两篇 paper 并排）可用。
-- [ ] 关闭 Vault / 关窗不损坏磁盘文件；tab 布局可恢复（localStorage 或 Tauri Store）。
+- [x] 关闭 Vault / 关窗不损坏磁盘文件；tab 布局可恢复（localStorage）。
 
 后续增强：
 
