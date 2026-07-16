@@ -1,5 +1,7 @@
 import { homeDir, join } from "@tauri-apps/api/path";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+	BookOpen,
 	CheckCircle2,
 	FolderOpen,
 	Import,
@@ -64,6 +66,15 @@ function saveOpts(o: SavedOpts) {
 	} catch {
 		// ignore quota / non-browser environments
 	}
+}
+
+/** "View import tutorial" target. Replace with your hosted tutorial/docs URL. */
+const IMPORT_TUTORIAL_URL =
+	"https://github.com/poco-ai/motif/blob/main/docs/backend/identifier-lookup.md";
+function openTutorial() {
+	void openUrl(IMPORT_TUTORIAL_URL).catch(() => {
+		window.open(IMPORT_TUTORIAL_URL, "_blank");
+	});
 }
 
 /** A compact number + label stat card for the scan preview. */
@@ -268,7 +279,7 @@ export function ZoteroMigrateDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="flex max-h-[85vh] flex-col sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>{t("sidebar:zoteroMigrate.title")}</DialogTitle>
 					<DialogDescription>
@@ -276,295 +287,310 @@ export function ZoteroMigrateDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				{result ? (
-					<div className="space-y-3 py-1">
-						<div className="flex items-center gap-2 font-medium text-sm">
-							<CheckCircle2 className="size-5 text-emerald-500" />
-							{t("sidebar:zoteroMigrate.summaryTitle")}
-						</div>
-						<ul className="space-y-1 text-muted-foreground text-sm">
-							<li>
-								{t("sidebar:zoteroMigrate.summaryImported", {
-									count: result.imported,
-								})}
-							</li>
-							{result.notesAdded > 0 ? (
-								<li>
-									{t("sidebar:zoteroMigrate.summaryNotes", {
-										count: result.notesAdded,
-									})}
-								</li>
-							) : null}
-							{result.copiedPdfs > 0 ? (
-								<li>
-									{t("sidebar:zoteroMigrate.summaryPdfs", {
-										count: result.copiedPdfs,
-									})}
-								</li>
-							) : null}
-							{result.pruned > 0 ? (
-								<li>
-									{t("sidebar:zoteroMigrate.summaryPruned", {
-										count: result.pruned,
-									})}
-								</li>
-							) : null}
-							{result.skipped > 0 ? (
-								<li>
-									{t("sidebar:zoteroMigrate.summarySkipped", {
-										count: result.skipped,
-									})}
-								</li>
-							) : null}
-							{result.errors.length > 0 ? (
-								<li className="text-destructive">
-									{t("sidebar:zoteroMigrate.summaryErrors", {
-										count: result.errors.length,
-									})}
-								</li>
-							) : null}
-						</ul>
-					</div>
-				) : (
-					<div className="space-y-4">
-						<div className="space-y-1.5">
-							<Button
-								type="button"
-								variant="outline"
-								className="w-full justify-start gap-2"
-								onClick={() => void chooseFolder()}
-								disabled={busy || detecting}
-							>
-								<FolderOpen className="size-4 shrink-0" />
-								<span className="truncate">
-									{dir ?? t("sidebar:zoteroMigrate.chooseFolder")}
-								</span>
-							</Button>
-							<p className="px-0.5 text-muted-foreground text-xs">
-								{t("sidebar:zoteroMigrate.folderHint")}
-							</p>
-						</div>
-
-						{scanning || detecting ? (
-							<p className="flex items-center gap-2 text-muted-foreground text-sm">
-								<Loader2 className="size-3.5 animate-spin" />
-								{detecting
-									? t("sidebar:zoteroMigrate.detecting")
-									: t("sidebar:zoteroMigrate.scanning")}
-							</p>
-						) : scan ? (
-							<div className="flex gap-2">
-								<Stat
-									value={scan.itemCount}
-									label={t("sidebar:zoteroMigrate.statPapers")}
-								/>
-								<Stat
-									value={scan.withPdfCount}
-									label={t("sidebar:zoteroMigrate.statPdfs")}
-								/>
-								<Stat
-									value={scan.noteCount}
-									label={t("sidebar:zoteroMigrate.statNotes")}
-								/>
+				<div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+					{result ? (
+						<div className="space-y-3 py-1">
+							<div className="flex items-center gap-2 font-medium text-sm">
+								<CheckCircle2 className="size-5 text-emerald-500" />
+								{t("sidebar:zoteroMigrate.summaryTitle")}
 							</div>
-						) : null}
+							<ul className="space-y-1 text-muted-foreground text-sm">
+								<li>
+									{t("sidebar:zoteroMigrate.summaryImported", {
+										count: result.imported,
+									})}
+								</li>
+								{result.notesAdded > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summaryNotes", {
+											count: result.notesAdded,
+										})}
+									</li>
+								) : null}
+								{result.copiedPdfs > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summaryPdfs", {
+											count: result.copiedPdfs,
+										})}
+									</li>
+								) : null}
+								{result.pruned > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summaryPruned", {
+											count: result.pruned,
+										})}
+									</li>
+								) : null}
+								{result.skipped > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summarySkipped", {
+											count: result.skipped,
+										})}
+									</li>
+								) : null}
+								{result.errors.length > 0 ? (
+									<li className="text-destructive">
+										{t("sidebar:zoteroMigrate.summaryErrors", {
+											count: result.errors.length,
+										})}
+									</li>
+								) : null}
+							</ul>
+						</div>
+					) : (
+						<div className="space-y-4">
+							<div className="space-y-1.5">
+								<Button
+									type="button"
+									variant="outline"
+									className="w-full justify-start gap-2"
+									onClick={() => void chooseFolder()}
+									disabled={busy || detecting}
+								>
+									<FolderOpen className="size-4 shrink-0" />
+									<span className="truncate">
+										{dir ?? t("sidebar:zoteroMigrate.chooseFolder")}
+									</span>
+								</Button>
+								<p className="px-0.5 text-muted-foreground text-xs">
+									{t("sidebar:zoteroMigrate.folderHint")}
+								</p>
+							</div>
 
-						{scan ? (
-							<>
-								<div className="grid grid-cols-2 gap-3">
-									<div className="space-y-1.5">
-										<Label htmlFor="zotero-parent" className="text-xs">
-											{t("sidebar:zoteroMigrate.targetFolder")}
-										</Label>
-										<Input
-											id="zotero-parent"
-											value={parentDir}
-											onChange={(e) => setParentDir(e.target.value)}
-											disabled={busy}
-										/>
-									</div>
+							{scanning || detecting ? (
+								<p className="flex items-center gap-2 text-muted-foreground text-sm">
+									<Loader2 className="size-3.5 animate-spin" />
+									{detecting
+										? t("sidebar:zoteroMigrate.detecting")
+										: t("sidebar:zoteroMigrate.scanning")}
+								</p>
+							) : scan ? (
+								<div className="flex gap-2">
+									<Stat
+										value={scan.itemCount}
+										label={t("sidebar:zoteroMigrate.statPapers")}
+									/>
+									<Stat
+										value={scan.withPdfCount}
+										label={t("sidebar:zoteroMigrate.statPdfs")}
+									/>
+									<Stat
+										value={scan.noteCount}
+										label={t("sidebar:zoteroMigrate.statNotes")}
+									/>
 								</div>
+							) : null}
 
-								<div className="grid grid-cols-2 gap-x-3 gap-y-2">
-									<Toggle
-										id="zotero-copy-pdfs"
-										checked={copyPdfs}
-										onChange={setCopyPdfs}
-										disabled={busy}
-										label={t("sidebar:zoteroMigrate.copyPdfs")}
-									/>
-									<Toggle
-										id="zotero-collections"
-										checked={preserveCollections}
-										onChange={setPreserveCollections}
-										disabled={busy}
-										label={t("sidebar:zoteroMigrate.preserveCollections")}
-									/>
-									<Toggle
-										id="zotero-notes"
-										checked={migrateNotes}
-										onChange={setMigrateNotes}
-										disabled={busy}
-										label={t("sidebar:zoteroMigrate.migrateNotes")}
-									/>
-									<Toggle
-										id="zotero-annotations"
-										checked={migrateAnnotations}
-										onChange={setMigrateAnnotations}
-										disabled={busy}
-										label={t("sidebar:zoteroMigrate.migrateAnnotations")}
-									/>
-								</div>
-
-								<div className="space-y-1.5">
-									<div className="flex items-center justify-between">
-										<Label className="text-xs">
-											{t("sidebar:zoteroMigrate.papers")}
-										</Label>
-										<div className="flex items-center gap-2">
-											<span className="text-muted-foreground text-xs tabular-nums">
-												{t("sidebar:zoteroMigrate.selectedCount", {
-													sel: selectedItems.size,
-													total: scan.items.length,
-												})}
-											</span>
-											<button
-												type="button"
-												className="text-muted-foreground text-xs hover:text-foreground"
-												onClick={toggleFiltered}
-												disabled={busy || filtered.length === 0}
-											>
-												{allFilteredSelected
-													? t("sidebar:zoteroMigrate.selectNone")
-													: t("sidebar:zoteroMigrate.selectAll")}
-											</button>
-										</div>
-									</div>
-									<div className="flex gap-2">
-										<div className="relative flex-1">
-											<Search className="-translate-y-1/2 absolute top-1/2 left-2 size-3.5 text-muted-foreground" />
+							{scan ? (
+								<>
+									<div className="grid grid-cols-2 gap-3">
+										<div className="space-y-1.5">
+											<Label htmlFor="zotero-parent" className="text-xs">
+												{t("sidebar:zoteroMigrate.targetFolder")}
+											</Label>
 											<Input
-												value={query}
-												onChange={(e) => setQuery(e.target.value)}
-												placeholder={t(
-													"sidebar:zoteroMigrate.searchPlaceholder",
-												)}
-												className="h-8 pl-7 text-sm"
+												id="zotero-parent"
+												value={parentDir}
+												onChange={(e) => setParentDir(e.target.value)}
 												disabled={busy}
 											/>
 										</div>
-										{scan.collections.length > 0 ? (
-											<select
-												value={String(collFilter)}
-												onChange={(e) =>
-													setCollFilter(
-														e.target.value === "all"
-															? "all"
-															: Number(e.target.value),
-													)
-												}
-												disabled={busy}
-												className="h-8 rounded-md border bg-transparent px-2 text-sm"
-											>
-												<option value="all">
-													{t("sidebar:zoteroMigrate.allFolders")}
-												</option>
-												{scan.collections.map((c) => (
-													<option key={c.id} value={c.id}>
-														{(c.path || t("sidebar:zoteroMigrate.unfiled")) +
-															` (${c.itemCount})`}
-													</option>
-												))}
-											</select>
-										) : null}
 									</div>
-									<ScrollArea className="h-40 rounded-md border">
-										<div className="space-y-0.5 p-1.5">
-											{filtered.map((it) => (
-												<div
-													key={it.id}
-													className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-accent"
-												>
-													<Checkbox
-														id={`zitem-${it.id}`}
-														checked={selectedItems.has(it.id)}
-														onCheckedChange={() => toggleItem(it.id)}
-														disabled={busy}
-													/>
-													<label
-														htmlFor={`zitem-${it.id}`}
-														className="flex-1 cursor-pointer truncate text-sm"
-													>
-														{it.title}
-														{it.year ? ` (${it.year})` : ""}
-													</label>
-													{it.hasPdf ? (
-														<span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground uppercase">
-															pdf
-														</span>
-													) : null}
-												</div>
-											))}
-										</div>
-									</ScrollArea>
-								</div>
 
-								{busy && progress ? (
-									<div className="space-y-1.5">
-										<Progress
-											value={
-												progress.total
-													? Math.round(
-															(progress.current / progress.total) * 100,
-														)
-													: 0
-											}
+									<div className="grid grid-cols-2 gap-x-3 gap-y-2">
+										<Toggle
+											id="zotero-copy-pdfs"
+											checked={copyPdfs}
+											onChange={setCopyPdfs}
+											disabled={busy}
+											label={t("sidebar:zoteroMigrate.copyPdfs")}
 										/>
-										<p className="text-center text-muted-foreground text-xs tabular-nums">
-											{t("sidebar:zoteroMigrate.progressLabel", {
-												current: progress.current,
-												total: progress.total,
-											})}
-										</p>
+										<Toggle
+											id="zotero-collections"
+											checked={preserveCollections}
+											onChange={setPreserveCollections}
+											disabled={busy}
+											label={t("sidebar:zoteroMigrate.preserveCollections")}
+										/>
+										<Toggle
+											id="zotero-notes"
+											checked={migrateNotes}
+											onChange={setMigrateNotes}
+											disabled={busy}
+											label={t("sidebar:zoteroMigrate.migrateNotes")}
+										/>
+										<Toggle
+											id="zotero-annotations"
+											checked={migrateAnnotations}
+											onChange={setMigrateAnnotations}
+											disabled={busy}
+											label={t("sidebar:zoteroMigrate.migrateAnnotations")}
+										/>
 									</div>
-								) : null}
-							</>
-						) : null}
 
-						{error ? <p className="text-destructive text-xs">{error}</p> : null}
-					</div>
-				)}
+									<div className="space-y-1.5">
+										<div className="flex items-center justify-between">
+											<Label className="text-xs">
+												{t("sidebar:zoteroMigrate.papers")}
+											</Label>
+											<div className="flex items-center gap-2">
+												<span className="text-muted-foreground text-xs tabular-nums">
+													{t("sidebar:zoteroMigrate.selectedCount", {
+														sel: selectedItems.size,
+														total: scan.items.length,
+													})}
+												</span>
+												<button
+													type="button"
+													className="text-muted-foreground text-xs hover:text-foreground"
+													onClick={toggleFiltered}
+													disabled={busy || filtered.length === 0}
+												>
+													{allFilteredSelected
+														? t("sidebar:zoteroMigrate.selectNone")
+														: t("sidebar:zoteroMigrate.selectAll")}
+												</button>
+											</div>
+										</div>
+										<div className="flex gap-2">
+											<div className="relative flex-1">
+												<Search className="-translate-y-1/2 absolute top-1/2 left-2 size-3.5 text-muted-foreground" />
+												<Input
+													value={query}
+													onChange={(e) => setQuery(e.target.value)}
+													placeholder={t(
+														"sidebar:zoteroMigrate.searchPlaceholder",
+													)}
+													className="h-8 pl-7 text-sm"
+													disabled={busy}
+												/>
+											</div>
+											{scan.collections.length > 0 ? (
+												<select
+													value={String(collFilter)}
+													onChange={(e) =>
+														setCollFilter(
+															e.target.value === "all"
+																? "all"
+																: Number(e.target.value),
+														)
+													}
+													disabled={busy}
+													className="h-8 rounded-md border bg-transparent px-2 text-sm"
+												>
+													<option value="all">
+														{t("sidebar:zoteroMigrate.allFolders")}
+													</option>
+													{scan.collections.map((c) => (
+														<option key={c.id} value={c.id}>
+															{(c.path || t("sidebar:zoteroMigrate.unfiled")) +
+																` (${c.itemCount})`}
+														</option>
+													))}
+												</select>
+											) : null}
+										</div>
+										<ScrollArea className="h-40 rounded-md border">
+											<div className="space-y-0.5 p-1.5">
+												{filtered.map((it) => (
+													<div
+														key={it.id}
+														className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-accent"
+													>
+														<Checkbox
+															id={`zitem-${it.id}`}
+															checked={selectedItems.has(it.id)}
+															onCheckedChange={() => toggleItem(it.id)}
+															disabled={busy}
+														/>
+														<label
+															htmlFor={`zitem-${it.id}`}
+															className="flex-1 cursor-pointer truncate text-sm"
+														>
+															{it.title}
+															{it.year ? ` (${it.year})` : ""}
+														</label>
+														{it.hasPdf ? (
+															<span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground uppercase">
+																pdf
+															</span>
+														) : null}
+													</div>
+												))}
+											</div>
+										</ScrollArea>
+									</div>
 
-				<DialogFooter>
-					{result ? (
-						<Button type="button" onClick={() => handleOpenChange(false)}>
-							{t("sidebar:zoteroMigrate.done")}
-						</Button>
-					) : (
-						<>
-							<Button
-								type="button"
-								variant="ghost"
-								onClick={() => handleOpenChange(false)}
-								disabled={busy}
-							>
-								{t("sidebar:zoteroMigrate.cancel")}
-							</Button>
-							<Button
-								type="button"
-								className="gap-1.5"
-								onClick={() => void handleMigrate()}
-								disabled={migrateDisabled}
-							>
-								{busy ? (
-									<Loader2 className="size-3.5 animate-spin" />
-								) : (
-									<Import className="size-3.5" />
-								)}
-								{t("sidebar:zoteroMigrate.migrate")}
-							</Button>
-						</>
+									{busy && progress ? (
+										<div className="space-y-1.5">
+											<Progress
+												value={
+													progress.total
+														? Math.round(
+																(progress.current / progress.total) * 100,
+															)
+														: 0
+												}
+											/>
+											<p className="text-center text-muted-foreground text-xs tabular-nums">
+												{t("sidebar:zoteroMigrate.progressLabel", {
+													current: progress.current,
+													total: progress.total,
+												})}
+											</p>
+										</div>
+									) : null}
+								</>
+							) : null}
+
+							{error ? (
+								<p className="text-destructive text-xs">{error}</p>
+							) : null}
+						</div>
 					)}
+				</div>
+
+				<DialogFooter className="sm:justify-between">
+					<Button
+						type="button"
+						variant="link"
+						className="h-auto gap-1.5 px-0 text-muted-foreground text-xs"
+						onClick={openTutorial}
+					>
+						<BookOpen className="size-3.5" />
+						{t("sidebar:zoteroMigrate.tutorial")}
+					</Button>
+					<div className="flex gap-2">
+						{result ? (
+							<Button type="button" onClick={() => handleOpenChange(false)}>
+								{t("sidebar:zoteroMigrate.done")}
+							</Button>
+						) : (
+							<>
+								<Button
+									type="button"
+									variant="ghost"
+									onClick={() => handleOpenChange(false)}
+									disabled={busy}
+								>
+									{t("sidebar:zoteroMigrate.cancel")}
+								</Button>
+								<Button
+									type="button"
+									className="gap-1.5"
+									onClick={() => void handleMigrate()}
+									disabled={migrateDisabled}
+								>
+									{busy ? (
+										<Loader2 className="size-3.5 animate-spin" />
+									) : (
+										<Import className="size-3.5" />
+									)}
+									{t("sidebar:zoteroMigrate.migrate")}
+								</Button>
+							</>
+						)}
+					</div>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>

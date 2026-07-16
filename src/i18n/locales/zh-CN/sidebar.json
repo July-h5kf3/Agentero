@@ -100,6 +100,7 @@
 		"summarySkipped": "{{count}} 篇已在库中（跳过）",
 		"summaryErrors": "{{count}} 篇失败",
 		"done": "完成",
+		"tutorial": "查看导入教程",
 		"desktopOnly": "Zotero 迁移需要桌面应用。"
 	},
 	"lookup": {
