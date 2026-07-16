@@ -45,6 +45,7 @@
 - [x] 文件树：**在 Finder 中显示**（右键 / `⌥⌘R`，无双击）；**在终端中打开**（右键 / `⌥⌘T`；文件夹 = 自身 / 文件 = 父目录）；**删除**（右键 / `⌘⌫`，移入回收站 `.agentero/.trash/`（不弹提示）；侧栏 `Trash2` 打开**回收站**中间栏视图可浏览 / 恢复 / 永久删除 / 清空；`papers/` 行随删随快照 catalog）。
 - [x] Paper-centric 视图：选中 paper 后中间显示 PDF（本地优先 / 远程回退）或 HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
 - [x] Vault **任意路径** PDF / 常见图片中间栏预览（`blob:`）。
+- [x] **PDF 阅读操作**：页码导航（底部 pill 跳转 + `PageDown/PageUp`、`Home/End`）、**适应宽度 / 适应整页**、**大纲（书签）**左侧浮层跳页、**文档内查找**（`⌘/Ctrl+F` + 命中高亮）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
 - [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、**tags 列 + chip 筛选**、双向滚动。
 - [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）；Paper Info **Tags** 可编辑（`paper_set_tags`）。

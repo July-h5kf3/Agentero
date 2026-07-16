@@ -183,7 +183,10 @@
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
   - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
-  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
+  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
+  - **PDF 页码导航**：底部居中页码 pill（`‹ [当前页] / 总页数 ›`，输入数字回车跳页）；当前页用 `IntersectionObserver` 跟踪；键盘 `PageDown/PageUp` 翻页、`Home/End` 首/末页（PDF 区悬停或聚焦时生效，输入框内不拦截）。i18n `viewer:pdf.prevPage/nextPage/goToPage`。
+  - **PDF 大纲（书签）**：有大纲时左上 `List` 按钮切换**左侧浮层目录**（`getOutline()` 读书签树；点条目经 `getDestination`/`getPageIndex` 解析跳页）；无大纲不显示。i18n `viewer:pdf.outline`。
+  - **PDF 文档内查找**（`⌘/Ctrl+F`）：右上查找条（查询 + 命中计数 + 上/下一个 + `Esc` 关闭；`Enter`/`Shift+Enter` 循环）。`pdf-find.ts` 用 pdfjs `getTextContent` 逐页搜索（按页缓存）；命中滚动到该页并把该次出现映射回**文本层 rects** 高亮（复用 pdf-ask 归一化覆盖层），文本层未就绪时仅滚动。i18n `viewer:pdf.find*`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**高亮 / 笔记 / 提问 / 翻译**；**不再默认套用琥珀高亮**，只保留浏览器原生选区。双击 / 悬停停留仍直接开问答卡（页码上下文）。
     - 高亮：`papers/<id>/highlights/<id>.json`（归一化坐标可重定位）→ 页面琥珀覆盖层；点击已有高亮出现「删除」浮层。笔记：选中原文以块引用 `> …` 追加进该篇 `NOTES.md`（经编辑器实例写入，避免覆盖未存改动），菜单内联「已加入」。提问 / 翻译复用迷你问答卡（ACP 流式）；发送过问题后锚点旁保留对话图标（Hover 回访）。
