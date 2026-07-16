@@ -294,6 +294,27 @@ export async function writeVaultFile(
 	await writeTextFile(path, content);
 }
 
+/** Write binary file (creates parent dirs when possible). Used for Markdown `./assets/` images. */
+export async function writeVaultBytes(
+	path: string,
+	bytes: Uint8Array,
+): Promise<void> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+
+	const { mkdir, writeFile } = await import("@tauri-apps/plugin-fs");
+	const parent = path.replace(/[\\/][^\\/]+$/, "");
+	if (parent && parent !== path) {
+		try {
+			await mkdir(parent, { recursive: true });
+		} catch {
+			// Parent may already exist
+		}
+	}
+	await writeFile(path, bytes);
+}
+
 /** Create a directory (and parents) under the vault. */
 export async function createVaultDirectory(path: string): Promise<void> {
 	if (!isTauri()) {

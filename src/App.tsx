@@ -2092,6 +2092,9 @@ export default function App() {
 								: t("editor.markdownPlaceholder")
 						}
 						onPersist={persistFile}
+						onAssetsChanged={() => {
+							if (vaultPath) void refreshTree(vaultPath);
+						}}
 						onDirtyChange={(d) =>
 							updateTab(
 								tab.id,
@@ -2724,6 +2727,9 @@ export default function App() {
 														showToolbar={settings.showEditorToolbar}
 														placeholder={t("editor.notesPlaceholder")}
 														onPersist={persistFile}
+														onAssetsChanged={() => {
+															if (vaultPath) void refreshTree(vaultPath);
+														}}
 														onDirtyChange={(d) =>
 															updateTab(tab.id, { notesDirty: d })
 														}

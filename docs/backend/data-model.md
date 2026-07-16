@@ -56,15 +56,18 @@ agentero-vault/
 │           └── 1706.03762/  # paper 单元（嵌套，最小单元仍是该文件夹）
 │               ├── NOTES.md
 │               └── source/
-├── notes/
+├── notes/                 # 概念笔记；亦可放 loose 附件（如 notes/attachments/*.pdf）
 ├── plans/
+├── assets/                # 可选：非 paper 媒体（demo / 用户图床）；不进 catalog
 ├── .agents/               # Vault 本地 Agent 资产（Create Vault 脚手架）
 │   ├── README.md
 │   └── skills/            # `$` 技能：`skills/<id>/SKILL.md`
 └── .agentero/
-    ├── catalog.sqlite     # path = paper 文件夹相对路径
+    ├── catalog.sqlite     # path = paper 文件夹相对路径；schema_version = 3
     └── config.json
 ```
+
+> **预览**：Vault 内**任意路径**的 `.pdf` 与常见图片（png/jpg/gif/webp/bmp/svg/avif/ico）均可在中间栏打开；不要求位于 `papers/`。Demo 脚手架见 [`../test/index.md`](../test/index.md)。
 
 > **默认不生成**：根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。  
 > 需要可读索引或 BibTeX 时，使用 `catalog:export_papers_md` / `catalog:export_bibtex`（见 [`catalog.md`](catalog.md) §5.4）。
@@ -117,6 +120,24 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 
 # 效果怎么样
 ```
+
+### Markdown 内嵌图片（`./assets/`）
+
+编辑任意 Markdown（含 `NOTES.md` 与 `notes/**/*.md`）时，**粘贴 / 工具栏插入**的图片统一落在**该 `.md` 文件旁**的 `assets/` 目录，正文写入便携相对路径：
+
+```md
+![可选说明](./assets/image-2026-07-16_12-00-00-abc123.png)
+```
+
+| 项 | 约定 |
+|---|---|
+| 落盘目录 | `{mdDir}/assets/`（对 paper 的 `NOTES.md` 即 `{paper}/assets/`） |
+| 链接写法 | `./assets/<file>`（相对当前 `.md`，Obsidian 兼容） |
+| 触发 | 剪贴板粘贴图片；工具栏「插入图片」选本地文件 |
+| 展示 | WYSIWYG 将相对路径解析为本地 `blob:` 预览；不把 base64 写进 `.md` |
+| 命名 | 粘贴生成时间戳 + 短 id；点选文件尽量保留原名，冲突则 `-1`/`-2` 后缀 |
+
+与 PDF 解析派生资源共用同一 `assets/` 文件夹时互不冲突（文件名唯一）。**不要**把大图 base64 嵌进 Markdown 正文。
 
 ### `highlights.md`(L2.5,事实来源)
 
