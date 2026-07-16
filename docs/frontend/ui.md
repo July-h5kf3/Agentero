@@ -183,12 +183,12 @@
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
   - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
-  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）；**放大后**按缩放级别重新栅格化画布（`devicePixelRatio`，缩放停下 ~180ms 后生效）避免位图拉伸模糊；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
+  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）；**放大后**缩放停下 ~160ms 后按**真实比例**重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero），手势中以 transform 比值即时反馈；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
   - **PDF 页码导航**：底部居中页码 pill（`‹ [当前页] / 总页数 ›`，输入数字回车跳页）；当前页用 `IntersectionObserver` 跟踪；键盘 `PageDown/PageUp` 翻页、`Home/End` 首/末页（PDF 区悬停或聚焦时生效，输入框内不拦截）。i18n `viewer:pdf.prevPage/nextPage/goToPage`。
   - **PDF 大纲（书签）**：有大纲时左上 `List` 按钮切换**左侧浮层目录**（`getOutline()` 读书签树；点条目经 `getDestination`/`getPageIndex` 解析跳页）；无大纲不显示。i18n `viewer:pdf.outline`。
   - **PDF 文档内查找**（`⌘/Ctrl+F`）：右上查找条（查询 + 命中计数 + 上/下一个 + `Esc` 关闭；`Enter`/`Shift+Enter` 循环）。`pdf-find.ts` 用 pdfjs `getTextContent` 逐页搜索（按页缓存）；命中滚动到该页并把该次出现映射回**文本层 rects** 高亮（复用 pdf-ask 归一化覆盖层），文本层未就绪时仅滚动。i18n `viewer:pdf.find*`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
-    - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**高亮 / 笔记 / 提问 / 翻译**；**不再默认套用琥珀高亮**，只保留浏览器原生选区。双击 / 悬停停留仍直接开问答卡（页码上下文）。
+    - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**高亮 / 笔记 / 提问 / 翻译**；**不再默认套用琥珀高亮**；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
     - 高亮：`papers/<id>/highlights/<id>.json`（归一化坐标可重定位）→ 页面琥珀覆盖层；点击已有高亮出现「删除」浮层。笔记：选中原文以块引用 `> …` 追加进该篇 `NOTES.md`（经编辑器实例写入，避免覆盖未存改动），菜单内联「已加入」。提问 / 翻译复用迷你问答卡（ACP 流式）；发送过问题后锚点旁保留对话图标（Hover 回访）。
     - 提问线程落盘 `papers/<id>/asks/<threadId>.json`；高亮 / 提问 / 笔记均**不**写 PDF 二进制。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
