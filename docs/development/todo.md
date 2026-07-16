@@ -125,7 +125,7 @@
    - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / Library 以 tab 打开，可关闭、切换、拖拽重排。
    - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容。
    - [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）。
-   - [x] 快捷键：关 tab `⌥⌘W` / 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
+   - [x] 快捷键：关 tab `⌘W`（无 tab 时关窗口）/ 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
    - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦。
    - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局。
    - 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开。

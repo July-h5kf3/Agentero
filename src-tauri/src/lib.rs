@@ -42,6 +42,12 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
         .accelerator("CmdOrCtrl+R")
         .build(app)?;
 
+    // Smart Close (⌘W): frontend closes the active tab first; with no tabs, closes the window.
+    // Must not use PredefinedMenuItem::CloseWindow — that would steal ⌘W before the renderer.
+    let close = MenuItemBuilder::with_id("close_tab_or_window", labels.close)
+        .accelerator("CmdOrCtrl+W")
+        .build(app)?;
+
     let toggle_sidebar = MenuItemBuilder::with_id("toggle_sidebar", labels.toggle_sidebar)
         .accelerator("CmdOrCtrl+Alt+S")
         .build(app)?;
@@ -71,7 +77,7 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
         .item(&create_vault)
         .item(&refresh_tree)
         .separator()
-        .close_window()
+        .item(&close)
         .build()?;
 
     // Required so text fields keep standard edit shortcuts after custom menu is set.
@@ -93,8 +99,6 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
     let window_submenu = SubmenuBuilder::new(app, labels.window)
         .minimize()
         .maximize()
-        .separator()
-        .close_window()
         .build()?;
 
     MenuBuilder::new(app)

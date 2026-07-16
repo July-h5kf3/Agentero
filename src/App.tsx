@@ -503,9 +503,32 @@ export default function App() {
 		setActiveTabId(list[nextIdx].id);
 	}, []);
 
-	const closeActiveTab = useCallback(() => {
-		const id = activeTabIdRef.current;
-		if (id) closeTab(id);
+	/**
+	 * ⌘W / File → Close: close the active document tab one at a time.
+	 * When no tabs remain, close the current window (ends the app UI if last window).
+	 * Debounced so macOS menu accelerator + keydown do not close two tabs at once.
+	 */
+	const lastCloseTabOrWindowAt = useRef(0);
+	const closeTabOrWindow = useCallback(() => {
+		const now = Date.now();
+		if (now - lastCloseTabOrWindowAt.current < 80) return;
+		lastCloseTabOrWindowAt.current = now;
+
+		const list = tabsRef.current;
+		if (list.length > 0) {
+			const id = activeTabIdRef.current ?? list[list.length - 1]?.id;
+			if (id) closeTab(id);
+			return;
+		}
+		if (!isTauri()) return;
+		void (async () => {
+			try {
+				const { getCurrentWindow } = await import("@tauri-apps/api/window");
+				await getCurrentWindow().close();
+			} catch {
+				// window close unavailable outside the desktop shell
+			}
+		})();
 	}, [closeTab]);
 
 	/** NOTES editor imperative handles by tab id (for PDF "add note"). */
@@ -1179,7 +1202,7 @@ export default function App() {
 					break;
 				}
 				case "closeTab":
-					closeActiveTab();
+					closeTabOrWindow();
 					break;
 				case "nextTab":
 					cycleActiveTab(1);
@@ -1205,7 +1228,7 @@ export default function App() {
 		toggleAgentZen,
 		toggleChat,
 		toggleSidebar,
-		closeActiveTab,
+		closeTabOrWindow,
 		cycleActiveTab,
 	]);
 
@@ -1246,13 +1269,26 @@ export default function App() {
 					toggleChat();
 				}),
 			);
+			// File → Close / ⌘W (macOS menu accelerator; keydown also handles non-macOS)
+			unsubs.push(
+				await listen("close_tab_or_window", () => {
+					closeTabOrWindow();
+				}),
+			);
 		})();
 
 		return () => {
 			cancelled = true;
 			for (const unsub of unsubs) unsub();
 		};
-	}, [handleOpenVault, handleRefresh, openSettings, toggleChat, toggleSidebar]);
+	}, [
+		closeTabOrWindow,
+		handleOpenVault,
+		handleRefresh,
+		openSettings,
+		toggleChat,
+		toggleSidebar,
+	]);
 
 	useEffect(() => {
 		if (!vaultPath) {

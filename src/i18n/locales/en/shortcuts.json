@@ -21,7 +21,7 @@
 		"focusSidebar": "Focus sidebar",
 		"focusEditor": "Focus editor",
 		"focusNotes": "Focus notes",
-		"closeTab": "Close tab",
+		"closeTab": "Close tab (or window if none)",
 		"nextTab": "Next tab",
 		"prevTab": "Previous tab"
 	}

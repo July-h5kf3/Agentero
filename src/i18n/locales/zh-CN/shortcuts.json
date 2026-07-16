@@ -21,7 +21,7 @@
 		"focusSidebar": "聚焦侧边栏",
 		"focusEditor": "聚焦编辑器",
 		"focusNotes": "聚焦笔记",
-		"closeTab": "关闭标签",
+		"closeTab": "关闭标签（无标签时关闭窗口）",
 		"nextTab": "下一个标签",
 		"prevTab": "上一个标签"
 	}

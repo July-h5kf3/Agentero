@@ -169,10 +169,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "closeTab",
 		group: "Navigation",
-		// ⌥⌘W — close the active document tab (⌘W is reserved for closing the window).
+		// ⌘W — close the active document tab; with no open tabs, close the window.
 		key: "w",
 		meta: true,
-		alt: true,
 		whenSettingsClosed: true,
 	},
 	{

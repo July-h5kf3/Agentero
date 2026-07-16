@@ -15,7 +15,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
   - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Focus）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话。
-  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与禅模式 Focus 图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library，切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：关闭标签 `⌥⌘W`、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
+  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与禅模式 Focus 图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library，切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：关闭标签 `⌘W`（无打开标签时关闭窗口）、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
 - 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动；**tags** 列 + chip 筛选。虚拟路径 `agentero:library` 不写盘。
 - 标签：Paper Info 增删 → Host `paper_set_tags`（catalog `tags_json` 权威）；Library 展示与筛选；CLI `paper set-tags` / `list --tag` / `tags`。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
