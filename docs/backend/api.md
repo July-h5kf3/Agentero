@@ -693,6 +693,28 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **SQL**：`DELETE FROM papers WHERE path = ? OR path LIKE '{path}/%'`。
 - **前端**：`src/lib/papers-api.ts` → `deletePapersUnderPath`；侧栏右键删除 / `⌘⌫`。
 
+#### `paper_move`（已落地）
+
+把 paper 文件夹 / `papers/` 下组织目录（或文件）移动到另一 `papers/` 目录：磁盘 `fs::rename`（**不覆盖**已存在目标），并改写 catalog 中受影响行的 `path` 前缀。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** 要移动的 Vault 相对路径（paper / 组织目录 / 文件） */
+  fromRel: string;
+  /** 目标父目录（`papers` 或 `papers/` 下），Vault 相对 */
+  destParentRel: string;
+}
+```
+
+- **返回**：`{ ok: true; data: { newRel: string } }`（移动后的新相对路径）。
+- **校验**：目标须在 `papers/` 下；拒绝移入自身 / 子孙；目标已存在则报错。
+- **SQL**：`UPDATE papers SET path = ?to || substr(path, len(?from)+1) WHERE path = ?from OR path LIKE '{from}/%'`（字符级 substr，兼容非 ASCII 目录名）。
+- **单测**：`papers.rs::move_under_path`（叶子 + 组织目录下多行前缀改写）。
+- **前端**：`src/lib/papers-api.ts` → `movePaperFolder`；文件树多选批量移动（`MovePapersDialog`）。
+
 #### `paper_set_is_read`（已落地）
 
 更新 catalog 中单篇论文的 **`is_read`**（是否已完成 paper-reader 精读）。成功后同步 `metadata.json` 投影。
