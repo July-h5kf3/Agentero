@@ -3,7 +3,14 @@
 import "katex/dist/katex.min.css";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { Plate, usePlateEditor } from "platejs/react";
-import { type KeyboardEvent, useCallback, useEffect, useRef } from "react";
+import {
+	forwardRef,
+	type KeyboardEvent,
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useRef,
+} from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
@@ -30,19 +37,31 @@ export type MarkdownEditorProps = {
 	onDirtyChange?: (dirty: boolean) => void;
 };
 
+/** Imperative handle for appending content without clobbering unsaved edits. */
+export type MarkdownEditorHandle = {
+	/** Append a Markdown fragment to the end of the document and persist. */
+	appendMarkdown: (markdown: string) => void;
+};
+
 const CHANGE_DEBOUNCE_MS = 500;
 
-export function MarkdownEditor({
-	initialMarkdown,
-	filePath,
-	readOnly,
-	placeholder,
-	className,
-	fontSize,
-	showToolbar,
-	onPersist,
-	onDirtyChange,
-}: MarkdownEditorProps) {
+export const MarkdownEditor = forwardRef<
+	MarkdownEditorHandle,
+	MarkdownEditorProps
+>(function MarkdownEditor(
+	{
+		initialMarkdown,
+		filePath,
+		readOnly,
+		placeholder,
+		className,
+		fontSize,
+		showToolbar,
+		onPersist,
+		onDirtyChange,
+	},
+	ref,
+) {
 	const frontmatterRef = useRef("");
 	const savedRef = useRef(initialMarkdown);
 	const readyRef = useRef(false);
@@ -75,6 +94,29 @@ export function MarkdownEditor({
 	// Latest persist closure, for the unmount flush (captures this file's path).
 	const persistRef = useRef(persist);
 	persistRef.current = persist;
+
+	useImperativeHandle(
+		ref,
+		() => ({
+			appendMarkdown: (markdown: string) => {
+				if (readOnly) return;
+				const fragment = markdown.trim();
+				if (!fragment) return;
+				const nodes = editor
+					.getApi(MarkdownPlugin)
+					.markdown.deserialize(fragment);
+				if (!Array.isArray(nodes) || !nodes.length) return;
+				editor.tf.insertNodes(nodes, { at: [editor.children.length] });
+				if (timerRef.current) {
+					clearTimeout(timerRef.current);
+					timerRef.current = null;
+				}
+				onDirtyChange?.(false);
+				persistRef.current();
+			},
+		}),
+		[editor, readOnly, onDirtyChange],
+	);
 
 	// Mark ready after the initial normalization pass so opening a file never saves.
 	// On unmount, flush any pending edit to THIS editor's file.
@@ -129,4 +171,4 @@ export function MarkdownEditor({
 			</div>
 		</Plate>
 	);
-}
+});

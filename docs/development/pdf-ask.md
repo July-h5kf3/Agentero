@@ -1,8 +1,8 @@
 # PDF 划词提问（Selection Ask）
 
-> 状态：**MVP 已落地（前端 + 文件 IO）**  
-> 范围：阅读 PDF 时选中/双击/悬停触发提问 → 小对话框问答 → JSON 落盘 → 页边圆片回访（飞书式边注）。  
-> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/lib/pdf-ask/`、`src/components/viewer/pdf-ask/`。  
+> 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 笔记 / 提问 / 翻译），不再默认套用琥珀高亮。  
+> 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 笔记（追加 `NOTES.md`）/ 提问（迷你对话框）/ 翻译（复用对话框走 Agent）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）。  
+> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`）、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
 > 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
 
 ## 1. 产品目标
@@ -11,12 +11,13 @@
 
 | 交互 | 行为 |
 |---|---|
-| **划词** | 选中 PDF 文本后，在选区旁弹出迷你问答卡 |
+| **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（高亮 / 笔记 / 提问 / 翻译）；不默认高亮，只保留浏览器原生选区 |
+| **操作菜单** | 高亮→JSON 落盘并渲染琥珀覆盖层；笔记→原文以 `> …` 追加进 `NOTES.md`（菜单内联「已加入」）；提问→打开迷你问答卡；翻译→建线程后复用问答卡走 Agent 流式 |
 | **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
 | **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
 | **键入提问** | 卡内输入问题并发送；**仅发送过问题的线程**保留对话图标 |
 | **对话图标** | 锚在选区附近；Hover 打开，离开约 1s 后隐藏 |
-| **回访** | Hover 图标打开线程；隐藏 / 删除 |
+| **回访** | Hover 图标打开线程；隐藏 / 删除；点击已有高亮出现删除浮层 |
 
 参考形态：浮层卡片 + 底部输入（类似常见 AI 浮层；本应用内需对齐 shadcn / AI Elements，且不引入外部 Chat 产品壳）。
 
@@ -269,6 +270,7 @@ src/lib/pdf-ask/
 | **M3 ACP 接入** | 真流式回答；多轮；结束写盘 | 与 Agent 面板共用 provider 配置 | ✅ |
 | **M4 双击 / 悬停** | 触发完善；阈值暂固定（约 700ms） | 防误触可接受 | ✅ |
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
+| **M6 选区菜单** | 划词弹菜单：高亮（`highlights/*.json`）/ 笔记（追加 `NOTES.md`）/ 提问 / 翻译；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除；笔记不覆盖未存改动 | ✅ |
 
 ## 10. 风险与降级
 

@@ -114,6 +114,25 @@ export function anchorFromPoint(
 	};
 }
 
+/** Map a client point to the page under it, returning normalized coords. */
+export function clientPointInPage(
+	clientX: number,
+	clientY: number,
+	host: HTMLElement,
+): { page: number; x: number; y: number } | null {
+	const target = document.elementFromPoint(clientX, clientY);
+	const pageEl = findPageElement(target, host);
+	if (!pageEl || !host.contains(pageEl)) return null;
+	const box = pageEl.getBoundingClientRect();
+	const pw = box.width || 1;
+	const ph = box.height || 1;
+	return {
+		page: pageNumberOf(pageEl),
+		x: clamp01((clientX - box.left) / pw),
+		y: clamp01((clientY - box.top) / ph),
+	};
+}
+
 /** Screen point next to the pin (right of selection), for dialog placement. */
 export function popoverScreenPoint(
 	pageEl: HTMLElement | null,

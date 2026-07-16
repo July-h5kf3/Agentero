@@ -146,9 +146,10 @@
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
   - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页
   - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
-  - **PDF 划词提问**（已落地 MVP，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
-    - 划词 / 框选 / 双击 / 悬停停留 → 迷你问答卡（ACP 流式）；发送过问题后在锚点旁保留对话图标（Hover 回访）。
-    - 线程落盘 `papers/<id>/asks/<threadId>.json`；**不**写 PDF 二进制。
+  - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
+    - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**高亮 / 笔记 / 提问 / 翻译**；**不再默认套用琥珀高亮**，只保留浏览器原生选区。双击 / 悬停停留仍直接开问答卡（页码上下文）。
+    - 高亮：`papers/<id>/highlights/<id>.json`（归一化坐标可重定位）→ 页面琥珀覆盖层；点击已有高亮出现「删除」浮层。笔记：选中原文以块引用 `> …` 追加进该篇 `NOTES.md`（经编辑器实例写入，避免覆盖未存改动），菜单内联「已加入」。提问 / 翻译复用迷你问答卡（ACP 流式）；发送过问题后锚点旁保留对话图标（Hover 回访）。
+    - 提问线程落盘 `papers/<id>/asks/<threadId>.json`；高亮 / 提问 / 笔记均**不**写 PDF 二进制。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。

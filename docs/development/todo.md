@@ -153,6 +153,7 @@
    - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
    - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）。
    - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer。
+   - [x] M6：划词操作菜单（高亮 / 笔记 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；笔记追加 `NOTES.md`（经编辑器实例，防覆盖）；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区。
 
 4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。
@@ -196,6 +197,6 @@
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
-| PDF | 缩放、划词提问 MVP（asks JSON） | 本地 PDF 直开、highlights 标注系统、M5 |
+| PDF | 缩放、划词操作菜单（高亮/笔记/提问/翻译；asks + highlights JSON） | 本地 PDF 直开、`highlights.md` 标注系统、M5 |
 | **CLI** | 设计定稿（[`cli.md`](cli.md)：`cli/`、不迁 core、无 BYOA） | **MVP 实现**（P0-5）；graph/doctor/completions（P1-7） |
 | 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |

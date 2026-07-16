@@ -319,7 +319,7 @@
 
 - Zotero/BibTeX 批量导入。
 - 浏览器插件，一键收集网页和论文。
-- ~~**PDF 划词提问** MVP~~ ✅（选区/框选/双击/悬停 → 迷你问答 → `asks/*.json` → 锚点对话图标；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、本地 PDF TextLayer 增强。
+- ~~**PDF 划词提问** MVP~~ ✅（划词弹操作菜单：高亮 / 笔记 / 提问 / 翻译 → `asks/*.json` 问答线程 + `highlights/*.json` 高亮 → 锚点对话图标；去掉默认琥珀高亮，仅原生选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、本地 PDF TextLayer 增强。
 - 完整 PDF 高亮、批注、摘录同步（`highlights.md`；可与划词提问互导）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。
@@ -417,7 +417,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - [ ] Zotero/BibTeX 迁移工具。
 - [ ] 浏览器插件与网页 importer。
-- [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 锚点图标 + ACP；M5 增强仍待）。
+- [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：划词操作菜单 高亮/笔记/提问/翻译；`asks/*.json` 线程 + `highlights/*.json` 高亮 + 锚点图标 + ACP；M5 增强仍待）。
 - [ ] PDF/HTML 标注系统（`highlights.md`）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。

@@ -6,7 +6,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { Minus, Plus, RotateCcw } from "lucide-react";
+import { Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/tooltip";
 import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
+import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
+import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
+import i18n from "@/i18n";
 import {
 	cancelAgentRun,
 	listenAgentCompleted,
@@ -27,6 +30,7 @@ import { isPdfViewerSource } from "@/lib/paper-metadata";
 import {
 	anchorFromPoint,
 	anchorFromSelection,
+	clientPointInPage,
 	createEmptyThread,
 	deletePdfAskThread,
 	findPageElByNumber,
@@ -37,9 +41,19 @@ import {
 	toSummaries,
 	writePdfAskThread,
 } from "@/lib/pdf-ask";
-import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
+import {
+	buildPdfAskPrompt,
+	buildPdfTranslatePrompt,
+} from "@/lib/pdf-ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf-ask/schema";
 import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf-ask/types";
+import {
+	createHighlight,
+	deletePdfHighlight,
+	listPdfHighlights,
+	writePdfHighlight,
+} from "@/lib/pdf-highlight";
+import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { cn } from "@/lib/utils";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -75,6 +89,8 @@ type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
+	/** Append a quoted passage to the paper's NOTES.md (handled by parent) */
+	onAddNote?: (quote: string) => void;
 	className?: string;
 };
 
@@ -83,6 +99,7 @@ export function PdfViewer({
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
+	onAddNote,
 	className,
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
@@ -111,6 +128,20 @@ export function PdfViewer({
 	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
+
+	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
+	/** Selection action menu (highlight/note/ask/translate) near a selection */
+	const [selectionMenu, setSelectionMenu] = useState<{
+		anchor: PdfAskAnchor;
+		screen: { x: number; y: number };
+	} | null>(null);
+	/** Floating remove button for a clicked highlight */
+	const [highlightMenu, setHighlightMenu] = useState<{
+		id: string;
+		screen: { x: number; y: number };
+	} | null>(null);
+	const highlightsRef = useRef(highlights);
+	highlightsRef.current = highlights;
 
 	const activeSessionRef = useRef<string | null>(null);
 	const suppressSelectionUntilRef = useRef(0);
@@ -261,6 +292,9 @@ export function PdfViewer({
 		setPopoverScreen(null);
 		setAskError(null);
 		setStreaming(false);
+		setHighlights([]);
+		setSelectionMenu(null);
+		setHighlightMenu(null);
 		activeSessionRef.current = null;
 
 		if (!paperAbsPath) return;
@@ -268,6 +302,10 @@ export function PdfViewer({
 		void (async () => {
 			const list = await listPdfAskThreads(paperAbsPath);
 			if (!cancelled) setThreads(list);
+		})();
+		void (async () => {
+			const list = await listPdfHighlights(paperAbsPath);
+			if (!cancelled) setHighlights(list);
 		})();
 
 		return () => {
@@ -375,16 +413,48 @@ export function PdfViewer({
 				window.getSelection()?.removeAllRanges();
 				return;
 			}
+			if ((e.target as HTMLElement).closest?.("[data-pdf-ask-ui]")) return;
 			if (Date.now() < suppressSelectionUntilRef.current) return;
+			const cx = e.clientX;
+			const cy = e.clientY;
 			window.setTimeout(() => {
 				if (Date.now() < suppressSelectionUntilRef.current) return;
 				const sel = window.getSelection();
-				if (!sel || !host.contains(sel.anchorNode)) return;
-				const anchor = anchorFromSelection(sel, host, "selection");
-				if (!anchor) return;
-				// Ignore trivial selections (accidental click noise)
-				if ((anchor.quote?.length ?? 0) < 2) return;
-				startFromAnchor(anchor);
+				const anchor =
+					sel && sel.rangeCount > 0 && host.contains(sel.anchorNode)
+						? anchorFromSelection(sel, host, "selection")
+						: null;
+				// Real划词 → show the action menu (highlight/note/ask/translate)
+				if (sel && anchor && (anchor.quote?.length ?? 0) >= 2) {
+					const rect = sel.getRangeAt(0).getBoundingClientRect();
+					setHighlightMenu(null);
+					setSelectionMenu({
+						anchor,
+						screen: { x: rect.left + rect.width / 2, y: rect.top },
+					});
+					return;
+				}
+				// Plain click → hit-test existing highlights for a remove affordance
+				setSelectionMenu(null);
+				const hit = clientPointInPage(cx, cy, host);
+				if (!hit) {
+					setHighlightMenu(null);
+					return;
+				}
+				const found = highlightsRef.current.find(
+					(h) =>
+						h.page === hit.page &&
+						h.rects.some(
+							(r) =>
+								hit.x >= r.x &&
+								hit.x <= r.x + r.w &&
+								hit.y >= r.y &&
+								hit.y <= r.y + r.h,
+						),
+				);
+				setHighlightMenu(
+					found ? { id: found.id, screen: { x: cx, y: cy } } : null,
+				);
 			}, 0);
 		};
 
@@ -484,13 +554,9 @@ export function PdfViewer({
 		};
 	}, [activeThread, placePopover, zoom, pageWidth]);
 
-	const handleSend = useCallback(
-		async (question: string) => {
-			const threadId = activeThreadId;
-			if (!threadId) return;
-			const thread = threadsRef.current.find((th) => th.id === threadId);
-			if (!thread) return;
-
+	const sendToThread = useCallback(
+		async (thread: PdfAskThread, question: string, promptOverride?: string) => {
+			const threadId = thread.id;
 			if (!question.trim()) return;
 
 			const userMsg = {
@@ -511,7 +577,7 @@ export function PdfViewer({
 			setStreaming(true);
 
 			const assistantId = newMessageId();
-			const prompt = buildPdfAskPrompt(withUser, question);
+			const prompt = promptOverride ?? buildPdfAskPrompt(withUser, question);
 
 			try {
 				const accepted = await runOnce({
@@ -618,7 +684,18 @@ export function PdfViewer({
 				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
 			}
 		},
-		[activeThreadId, upsertThread, persist, vaultPath, t],
+		[upsertThread, persist, vaultPath, t],
+	);
+
+	const handleSend = useCallback(
+		(question: string) => {
+			const threadId = activeThreadId;
+			if (!threadId) return;
+			const thread = threadsRef.current.find((th) => th.id === threadId);
+			if (!thread) return;
+			void sendToThread(thread, question);
+		},
+		[activeThreadId, sendToThread],
 	);
 
 	const dismissPopoverChrome = useCallback(() => {
@@ -676,6 +753,97 @@ export function PdfViewer({
 		},
 		[upsertThread, openThread, cancelHoverHide],
 	);
+
+	// --- Selection action menu (highlight / note / ask / translate) ---
+
+	const handleMenuAsk = useCallback(() => {
+		const sm = selectionMenu;
+		if (!sm) return;
+		setSelectionMenu(null);
+		startFromAnchor(sm.anchor);
+	}, [selectionMenu, startFromAnchor]);
+
+	const handleMenuTranslate = useCallback(() => {
+		const sm = selectionMenu;
+		if (!sm) return;
+		setSelectionMenu(null);
+		const quote = sm.anchor.quote?.trim();
+		if (!quote) return;
+		const paperPath = paperRelPath || paperAbsPath || "paper";
+		const thread = createEmptyThread({ paperPath, anchor: sm.anchor });
+		setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
+		openThread(thread);
+		const targetLang = i18n.language?.toLowerCase().startsWith("zh")
+			? "Chinese"
+			: "English";
+		void sendToThread(
+			thread,
+			t("selection.translateAction"),
+			buildPdfTranslatePrompt(quote, sm.anchor.page, targetLang),
+		);
+	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
+
+	const handleMenuHighlight = useCallback(() => {
+		const sm = selectionMenu;
+		if (!sm) return;
+		setSelectionMenu(null);
+		const quote = sm.anchor.quote?.trim();
+		if (!quote || !sm.anchor.rects.length) return;
+		const paperPath = paperRelPath || paperAbsPath || "paper";
+		const hl = createHighlight({
+			paperPath,
+			page: sm.anchor.page,
+			rects: sm.anchor.rects,
+			quote,
+		});
+		setHighlights((prev) => [hl, ...prev]);
+		window.getSelection()?.removeAllRanges();
+		if (paperAbsPath) {
+			void writePdfHighlight(paperAbsPath, hl).catch(() => undefined);
+		}
+	}, [selectionMenu, paperAbsPath, paperRelPath]);
+
+	const handleMenuNote = useCallback(() => {
+		const quote = selectionMenu?.anchor.quote?.trim();
+		if (quote) onAddNote?.(quote);
+		// SelectionMenu shows its own confirmation, then calls onClose.
+	}, [selectionMenu, onAddNote]);
+
+	const removeHighlight = useCallback(
+		(id: string) => {
+			setHighlights((prev) => prev.filter((h) => h.id !== id));
+			setHighlightMenu(null);
+			if (paperAbsPath) {
+				void deletePdfHighlight(paperAbsPath, id).catch(() => undefined);
+			}
+		},
+		[paperAbsPath],
+	);
+
+	// Dismiss menus on outside pointerdown / Escape / scroll
+	useEffect(() => {
+		if (!selectionMenu && !highlightMenu) return;
+		const closeAll = () => {
+			setSelectionMenu(null);
+			setHighlightMenu(null);
+		};
+		const onDocPointerDown = (e: PointerEvent) => {
+			if ((e.target as HTMLElement).closest?.("[data-pdf-ask-ui]")) return;
+			closeAll();
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") closeAll();
+		};
+		const scrollEl = hostRef.current?.querySelector(".agentero-scroll");
+		window.addEventListener("pointerdown", onDocPointerDown, true);
+		window.addEventListener("keydown", onKey);
+		scrollEl?.addEventListener("scroll", closeAll, { passive: true });
+		return () => {
+			window.removeEventListener("pointerdown", onDocPointerDown, true);
+			window.removeEventListener("keydown", onKey);
+			scrollEl?.removeEventListener("scroll", closeAll);
+		};
+	}, [selectionMenu, highlightMenu]);
 
 	if (!fileUrl) {
 		return (
@@ -804,6 +972,9 @@ export function PdfViewer({
 										const pageSummaries = summaries.filter(
 											(s) => s.page === pageNumber,
 										);
+										const pageHighlights = highlights.filter(
+											(h) => h.page === pageNumber,
+										);
 										return (
 											<div
 												key={`${fileUrl}-p${pageNumber}`}
@@ -829,22 +1000,11 @@ export function PdfViewer({
 														}
 													/>
 												</div>
-												{/* Text selection highlight only for real划词 (has quote) */}
-												{activeThread?.anchor.page === pageNumber &&
-												activeThread.anchor.quote
-													? activeThread.anchor.rects.map((r) => (
-															<div
-																key={`${activeThread.id}-${r.x}-${r.y}-${r.w}`}
-																className="pointer-events-none absolute z-[1] bg-amber-300/35 dark:bg-amber-400/25"
-																style={{
-																	left: `${r.x * 100}%`,
-																	top: `${r.y * 100}%`,
-																	width: `${r.w * 100}%`,
-																	height: `${r.h * 100}%`,
-																}}
-															/>
-														))
-													: null}
+												{/* Persisted highlights (visual only; removal via click hit-test) */}
+												<HighlightLayer
+													items={pageHighlights}
+													activeId={highlightMenu?.id ?? null}
+												/>
 												<div data-pdf-ask-ui="">
 													<AskGutter
 														items={pageSummaries}
@@ -892,6 +1052,41 @@ export function PdfViewer({
 							setStreaming(false);
 						}}
 					/>
+				</div>
+			) : null}
+
+			{selectionMenu ? (
+				<div data-pdf-ask-ui="">
+					<SelectionMenu
+						screen={selectionMenu.screen}
+						onHighlight={handleMenuHighlight}
+						onNote={handleMenuNote}
+						onAsk={handleMenuAsk}
+						onTranslate={handleMenuTranslate}
+						onClose={() => setSelectionMenu(null)}
+					/>
+				</div>
+			) : null}
+
+			{highlightMenu ? (
+				<div data-pdf-ask-ui="">
+					<button
+						type="button"
+						className="fixed z-50 flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-2 text-muted-foreground text-xs shadow-2xl ring-1 ring-black/5 hover:text-foreground dark:ring-white/10"
+						style={{
+							left: Math.min(
+								Math.max(12, highlightMenu.screen.x - 40),
+								(typeof window !== "undefined" ? window.innerWidth : 1200) -
+									120,
+							),
+							top: highlightMenu.screen.y + 12,
+						}}
+						onMouseDown={(e) => e.stopPropagation()}
+						onClick={() => removeHighlight(highlightMenu.id)}
+					>
+						<Trash2 className="size-3.5" />
+						{t("selection.removeHighlight")}
+					</button>
 				</div>
 			) : null}
 		</div>
