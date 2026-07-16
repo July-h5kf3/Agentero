@@ -122,9 +122,10 @@
   - 仍用 AI Elements：`Conversation` / `Message` / `PromptInput` / `Suggestion` 等。
   - 退出：标题栏 / 面板头 **X**，或再次 `⌥⌘Z`；恢复进入前左栏折叠意图与右栏默认宽度。
 - **左右侧栏隔离**（`react-resizable-panels`）：
-  - 左栏（文件树）与右栏（Agent/Backlinks）均为 **常驻 collapsible 面板**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**对右栏做条件卸载整块 `ResizablePanel`（否则 Group 重排会冲掉左栏折叠态，交替 `⌥⌘S` / `⌘L` 时出现重叠/半开）。
-  - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，中间主栏保持默认相对尺寸，避免一侧开合时另一侧像素宽度被重新分配。
-  - Notes 列仍随论文选中条件挂载；`showNotesOnRight` 变化后 rAF 再 assert 两侧折叠意图。
+  - 左栏（文件树）与右栏（Agent/Backlinks）均为 **常驻 collapsible 面板**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**对右栏做条件卸载整块 `ResizablePanel`（否则 Group 重排会冲掉左栏折叠态）。
+  - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，并把上次展开像素宽记入 ref；中间主栏保持默认相对尺寸。
+  - Notes 列仍随论文选中条件挂载（需真实 `defaultSize` 才能出现）；`showNotesOnRight` 变化后 rAF 再 assert 左右栏宽度/折叠意图，避免 Library ↔ paper 时左栏跳宽。
+- **文档标签栏位置**：与标题栏右侧禅模式 / Layout / 右栏图标 **同一行**（`DocumentTabBar` 在 `header` 中间 flex 区；无 tab 时该区为拖拽空白）。中间栏仅保留 view mode / 文档标题工具行。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
@@ -192,7 +193,7 @@
 
 ### 3.1.1 文档标签页（已落地）与分屏（规划，roadmap V0.6）
 
-中间栏为**浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）：
+**浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与禅模式 Focus 图标同行）：
 
 - **多 tab**：paper / Markdown / PDF / HTML / Library 各占一个 tab，可切换、关闭（`X` / 中键 / `⌥⌘W`）、拖拽重排；同一路径已开则聚焦其 tab（不重复打开）。
 - **常驻挂载**：每个 tab 的内容组件保持 mounted（非激活 `hidden`），切换瞬时并保留 **PDF 滚动位置/缩放** 与编辑器状态。PDF 多篇同开会同时占用内存（符合浏览器式取舍）。

@@ -288,6 +288,9 @@ export default function App() {
 	const chatInputFocusKey = useRef(0);
 	const agentZenModeRef = useRef(false);
 	const leftCollapsedBeforeZenRef = useRef(false);
+	/** Last expanded left-rail width in px (survive Notes mount remount). */
+	const leftWidthPxRef = useRef(200);
+	const rightWidthPxRef = useRef(320);
 
 	const isDemo = vaultPath === null;
 	// macOS keeps native traffic lights (Overlay title bar); other desktop
@@ -590,6 +593,7 @@ export default function App() {
 
 	const SIDEBAR_DEFAULT_PX = 200;
 	const RIGHT_SIDEBAR_DEFAULT_PX = 320;
+	const NOTES_DEFAULT_PCT = "30";
 
 	/** Collapse / expand left file-tree panel without remounting (stable Group layout). */
 	const setLeftSidebarCollapsed = useCallback(
@@ -609,7 +613,7 @@ export default function App() {
 						// ignore
 					}
 					try {
-						panel.resize(SIDEBAR_DEFAULT_PX);
+						panel.resize(leftWidthPxRef.current || SIDEBAR_DEFAULT_PX);
 					} catch {
 						// ignore
 					}
@@ -638,7 +642,7 @@ export default function App() {
 						// ignore
 					}
 					try {
-						panel.resize(RIGHT_SIDEBAR_DEFAULT_PX);
+						panel.resize(rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX);
 					} catch {
 						// ignore
 					}
@@ -758,7 +762,9 @@ export default function App() {
 				// ignore
 			}
 			try {
-				rightSidebarPanelRef.current?.resize(RIGHT_SIDEBAR_DEFAULT_PX);
+				rightSidebarPanelRef.current?.resize(
+					rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX,
+				);
 			} catch {
 				// ignore
 			}
@@ -1912,18 +1918,25 @@ export default function App() {
 	const centerIsPaperNotes = tabIsPaperNotes(activeTab);
 
 	/**
-	 * Notes still mounts/unmounts with paper selection. Re-assert intended collapse
-	 * so a remounted middle column cannot partially un-collapse either rail.
-	 * (showNotesOnRight is intentional; panel refs are stable.)
+	 * Notes still mounts/unmounts with paper selection (needs a real defaultSize
+	 * to appear — collapsible expand-from-0 was unreliable). After remount,
+	 * re-assert left/right rail pixel widths so Library ↔ paper does not jump.
 	 */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on Notes mount; assert current collapse intent
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on Notes mount; restore rail widths
 	useEffect(() => {
+		if (agentZenMode) return;
 		const id = requestAnimationFrame(() => {
 			const left = sidebarPanelRef.current;
 			const right = rightSidebarPanelRef.current;
 			if (sidebarCollapsed) {
 				try {
 					left?.collapse();
+				} catch {
+					// ignore
+				}
+			} else {
+				try {
+					left?.resize(leftWidthPxRef.current || SIDEBAR_DEFAULT_PX);
 				} catch {
 					// ignore
 				}
@@ -1934,10 +1947,16 @@ export default function App() {
 				} catch {
 					// ignore
 				}
+			} else {
+				try {
+					right?.resize(rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX);
+				} catch {
+					// ignore
+				}
 			}
 		});
 		return () => cancelAnimationFrame(id);
-	}, [showNotesOnRight, sidebarCollapsed, rightSidebarOpen]);
+	}, [showNotesOnRight, sidebarCollapsed, rightSidebarOpen, agentZenMode]);
 
 	const activeFileLabel = activeTab?.title ?? t("labels.untitled");
 
@@ -2105,11 +2124,21 @@ export default function App() {
 										</TooltipContent>
 									</Tooltip>
 								</div>
-								{/* Draggable empty middle of the title bar */}
-								<div
-									className="min-w-0 flex-1 self-stretch"
-									data-tauri-drag-region
-								/>
+								{/* Document tabs share the title bar row with zen / layout icons */}
+								{vaultPath && tabs.length ? (
+									<DocumentTabBar
+										tabs={tabs}
+										activeId={activeTabId}
+										onSelect={setActiveTabId}
+										onClose={closeTab}
+										onReorder={reorderTabs}
+									/>
+								) : (
+									<div
+										className="min-w-0 flex-1 self-stretch"
+										data-tauri-drag-region
+									/>
+								)}
 								<div className="flex shrink-0 items-center gap-0.5 pr-2">
 									<LayoutMenu
 										leftSidebarOpen={!sidebarCollapsed}
@@ -2240,7 +2269,10 @@ export default function App() {
 							onResize={(size) => {
 								// Only mark collapsed after a real collapse (near 0px), never mid-drag.
 								if (size.inPixels <= 1) setSidebarCollapsed(true);
-								else if (size.inPixels >= 80) setSidebarCollapsed(false);
+								else if (size.inPixels >= 80) {
+									setSidebarCollapsed(false);
+									leftWidthPxRef.current = size.inPixels;
+								}
 							}}
 						>
 							<aside
@@ -2299,16 +2331,8 @@ export default function App() {
 							className="min-h-0 min-w-0 overflow-hidden"
 						>
 							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-								{vaultPath && tabs.length ? (
-									<DocumentTabBar
-										tabs={tabs}
-										activeId={activeTabId}
-										onSelect={setActiveTabId}
-										onClose={closeTab}
-										onReorder={reorderTabs}
-									/>
-								) : null}
-								{/* Single-row header: toggle left, title right — same 28px line box */}
+								{/* Document tabs live in the window title bar (same row as zen icon). */}
+								{/* Center header: library search / view mode left; actions right */}
 								{vaultPath && activeTab ? (
 									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 										<div
@@ -2519,7 +2543,7 @@ export default function App() {
 						{showNotesOnRight && !agentZenMode ? (
 							<ResizablePanel
 								id="notes"
-								defaultSize={rightSidebarOpen ? "30" : "40"}
+								defaultSize={rightSidebarOpen ? NOTES_DEFAULT_PCT : "40"}
 								minSize={200}
 								className="min-h-0 overflow-hidden"
 							>
@@ -2625,7 +2649,10 @@ export default function App() {
 							onResize={(size) => {
 								if (agentZenModeRef.current) return;
 								if (size.inPixels <= 1) setRightSidebarOpen(false);
-								else if (size.inPixels >= 80) setRightSidebarOpen(true);
+								else if (size.inPixels >= 80) {
+									setRightSidebarOpen(true);
+									rightWidthPxRef.current = size.inPixels;
+								}
 							}}
 						>
 							{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat). */}
