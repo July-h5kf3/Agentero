@@ -46,12 +46,52 @@ pub struct TrashResult {
     pub count: usize,
 }
 
+/// One item in the recycle bin (flattened across batches) for the UI list.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEntry {
+    /// Stable id: "{batchId}::{stored}".
+    pub id: String,
+    pub batch_id: String,
+    pub stored: String,
+    /// Original vault-relative path.
+    pub rel: String,
+    /// Basename for display.
+    pub name: String,
+    pub deleted_at: String,
+    pub is_dir: bool,
+}
+
 fn norm_rel(rel: &str) -> String {
     rel.replace('\\', "/").trim_matches('/').to_string()
 }
 
 fn is_under_papers(rel: &str) -> bool {
     rel == "papers" || rel.starts_with("papers/")
+}
+
+fn validate_batch_id(batch_id: &str) -> Result<(), AppError> {
+    if batch_id.is_empty()
+        || batch_id.contains('/')
+        || batch_id.contains('\\')
+        || batch_id.contains("..")
+    {
+        return Err(AppError::message("invalid batch id"));
+    }
+    Ok(())
+}
+
+fn read_manifest(batch_dir: &Path) -> Result<TrashManifest, AppError> {
+    let raw = fs::read_to_string(batch_dir.join("manifest.json"))
+        .map_err(|_| AppError::message("trash batch not found"))?;
+    serde_json::from_str(&raw).map_err(|e| AppError::message(e.to_string()))
+}
+
+fn write_manifest(batch_dir: &Path, manifest: &TrashManifest) -> Result<(), AppError> {
+    let json =
+        serde_json::to_string_pretty(manifest).map_err(|e| AppError::message(e.to_string()))?;
+    fs::write(batch_dir.join("manifest.json"), json)?;
+    Ok(())
 }
 
 /// Move the given vault-relative paths into a new recycle-bin batch.
@@ -137,18 +177,9 @@ pub fn restore_batch(vault_root: &Path, batch_id: &str) -> Result<usize, AppErro
     if !vault_root.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
-    if batch_id.is_empty()
-        || batch_id.contains('/')
-        || batch_id.contains('\\')
-        || batch_id.contains("..")
-    {
-        return Err(AppError::message("invalid batch id"));
-    }
+    validate_batch_id(batch_id)?;
     let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
-    let raw = fs::read_to_string(batch_dir.join("manifest.json"))
-        .map_err(|_| AppError::message("trash batch not found"))?;
-    let manifest: TrashManifest =
-        serde_json::from_str(&raw).map_err(|e| AppError::message(e.to_string()))?;
+    let manifest = read_manifest(&batch_dir)?;
 
     // Pre-check: never overwrite a path that has reappeared since deletion.
     for item in &manifest.items {
@@ -173,6 +204,118 @@ pub fn restore_batch(vault_root: &Path, batch_id: &str) -> Result<usize, AppErro
 
     let _ = fs::remove_dir_all(&batch_dir);
     Ok(manifest.items.len())
+}
+
+/// List every item currently in the recycle bin, newest batch first.
+pub fn list_trash(vault_root: &Path) -> Result<Vec<TrashEntry>, AppError> {
+    let root = vault_root.join(TRASH_REL);
+    let mut out: Vec<TrashEntry> = Vec::new();
+    let Ok(read) = fs::read_dir(&root) else {
+        return Ok(out);
+    };
+    for ent in read.flatten() {
+        let batch_dir = ent.path();
+        if !batch_dir.is_dir() {
+            continue;
+        }
+        let Ok(manifest) = read_manifest(&batch_dir) else {
+            continue;
+        };
+        for item in &manifest.items {
+            let is_dir = batch_dir.join(&item.stored).is_dir();
+            let name = Path::new(&item.rel)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(item.rel.as_str())
+                .to_string();
+            out.push(TrashEntry {
+                id: format!("{}::{}", manifest.batch_id, item.stored),
+                batch_id: manifest.batch_id.clone(),
+                stored: item.stored.clone(),
+                rel: item.rel.clone(),
+                name,
+                deleted_at: manifest.created_at.clone(),
+                is_dir,
+            });
+        }
+    }
+    out.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at));
+    Ok(out)
+}
+
+/// Restore a single recycle-bin item to its original path (files + catalog rows).
+/// Aborts if the original path has reappeared. Returns the restored rel path.
+pub fn restore_item(vault_root: &Path, batch_id: &str, stored: &str) -> Result<String, AppError> {
+    if !vault_root.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    validate_batch_id(batch_id)?;
+    let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
+    let mut manifest = read_manifest(&batch_dir)?;
+    let idx = manifest
+        .items
+        .iter()
+        .position(|i| i.stored == stored)
+        .ok_or_else(|| AppError::message("trash item not found"))?;
+
+    let target = vault_root.join(&manifest.items[idx].rel);
+    if target.exists() {
+        return Err(AppError::message(format!(
+            "cannot restore: '{}' already exists",
+            manifest.items[idx].rel
+        )));
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let item = manifest.items.remove(idx);
+    fs::rename(batch_dir.join(&item.stored), &target)?;
+    for row in &item.catalog_rows {
+        papers::upsert_paper(vault_root, row)?;
+    }
+    if manifest.items.is_empty() {
+        let _ = fs::remove_dir_all(&batch_dir);
+    } else {
+        write_manifest(&batch_dir, &manifest)?;
+    }
+    Ok(item.rel)
+}
+
+/// Permanently delete a single recycle-bin item.
+pub fn purge_item(vault_root: &Path, batch_id: &str, stored: &str) -> Result<(), AppError> {
+    if !vault_root.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    validate_batch_id(batch_id)?;
+    let batch_dir = vault_root.join(TRASH_REL).join(batch_id);
+    let mut manifest = read_manifest(&batch_dir)?;
+    let idx = manifest
+        .items
+        .iter()
+        .position(|i| i.stored == stored)
+        .ok_or_else(|| AppError::message("trash item not found"))?;
+    let item = manifest.items.remove(idx);
+    let stored_path = batch_dir.join(&item.stored);
+    if stored_path.is_dir() {
+        let _ = fs::remove_dir_all(&stored_path);
+    } else {
+        let _ = fs::remove_file(&stored_path);
+    }
+    if manifest.items.is_empty() {
+        let _ = fs::remove_dir_all(&batch_dir);
+    } else {
+        write_manifest(&batch_dir, &manifest)?;
+    }
+    Ok(())
+}
+
+/// Empty the entire recycle bin (permanent).
+pub fn purge_all(vault_root: &Path) -> Result<(), AppError> {
+    let root = vault_root.join(TRASH_REL);
+    if root.exists() {
+        fs::remove_dir_all(&root)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -263,6 +406,39 @@ mod tests {
         assert!(restore_batch(&dir, &res.batch_id).is_err());
         // The reoccupying file is untouched.
         assert_eq!(fs::read_to_string(note.join("a.md")).unwrap(), "two\n");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_restore_and_purge_items() {
+        let dir = env::temp_dir().join(format!("agentero-trash-list-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let notes = dir.join("notes");
+        fs::create_dir_all(&notes).unwrap();
+        fs::write(notes.join("a.md"), "a\n").unwrap();
+        fs::write(notes.join("b.md"), "b\n").unwrap();
+
+        // One batch with two items.
+        let res = trash_paths(&dir, &["notes/a.md".to_string(), "notes/b.md".to_string()]).unwrap();
+        assert_eq!(res.count, 2);
+        assert_eq!(list_trash(&dir).unwrap().len(), 2);
+
+        // Restore one item; the other stays in the bin.
+        let a = list_trash(&dir)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.rel == "notes/a.md")
+            .unwrap();
+        restore_item(&dir, &a.batch_id, &a.stored).unwrap();
+        assert!(notes.join("a.md").exists());
+        assert_eq!(list_trash(&dir).unwrap().len(), 1);
+
+        // Purge the remaining item; the bin becomes empty.
+        let b = list_trash(&dir).unwrap().into_iter().next().unwrap();
+        purge_item(&dir, &b.batch_id, &b.stored).unwrap();
+        assert!(list_trash(&dir).unwrap().is_empty());
+        assert!(!notes.join("b.md").exists());
 
         let _ = fs::remove_dir_all(&dir);
     }

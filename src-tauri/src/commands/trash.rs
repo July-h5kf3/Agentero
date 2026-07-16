@@ -47,3 +47,65 @@ pub fn path_untrash(args: PathUntrashArgs) -> ApiResult<PathUntrashResult> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashVaultArgs {
+    pub vault_path: String,
+}
+
+/// List every item currently in the recycle bin (Recycle Bin view).
+#[tauri::command]
+pub fn path_list_trash(args: TrashVaultArgs) -> ApiResult<Vec<trash::TrashEntry>> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    match trash::list_trash(&vault) {
+        Ok(items) => ApiResult::ok(items),
+        Err(e) => map_err(e),
+    }
+}
+
+/// Empty the entire recycle bin (permanent).
+#[tauri::command]
+pub fn path_purge_trash(args: TrashVaultArgs) -> ApiResult<()> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    match trash::purge_all(&vault) {
+        Ok(()) => ApiResult::ok(()),
+        Err(e) => map_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashItemArgs {
+    pub vault_path: String,
+    pub batch_id: String,
+    /// Basename of the stored copy inside the batch (from `path_list_trash`).
+    pub stored: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathRestoreItemResult {
+    /// Vault-relative path the item was restored to.
+    pub rel: String,
+}
+
+/// Restore a single recycle-bin item to its original path.
+#[tauri::command]
+pub fn path_restore_item(args: TrashItemArgs) -> ApiResult<PathRestoreItemResult> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    match trash::restore_item(&vault, &args.batch_id, &args.stored) {
+        Ok(rel) => ApiResult::ok(PathRestoreItemResult { rel }),
+        Err(e) => map_err(e),
+    }
+}
+
+/// Permanently delete a single recycle-bin item.
+#[tauri::command]
+pub fn path_purge_item(args: TrashItemArgs) -> ApiResult<()> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    match trash::purge_item(&vault, &args.batch_id, &args.stored) {
+        Ok(()) => ApiResult::ok(()),
+        Err(e) => map_err(e),
+    }
+}
