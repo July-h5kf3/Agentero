@@ -154,9 +154,10 @@ function OutlineTree({
 	);
 }
 
-/** Hide the browser's choppy per-span selection; a smooth overlay replaces it. */
+/** Hide the browser's native selection everywhere inside a page (spans AND the
+ * text-layer container gaps between lines); a smooth overlay replaces it. */
 const SELECTION_CSS =
-	".textLayer ::selection,.react-pdf__Page__textContent ::selection{background-color:transparent !important}.textLayer ::-moz-selection,.react-pdf__Page__textContent ::-moz-selection{background-color:transparent !important}";
+	"[data-agentero-pdf-page] ::selection{background-color:transparent !important}[data-agentero-pdf-page] ::-moz-selection{background-color:transparent !important}";
 
 export function PdfViewer({
 	source,
