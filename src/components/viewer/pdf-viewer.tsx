@@ -8,14 +8,18 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
 import {
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	ChevronUp,
 	List,
 	Minus,
 	MoveVertical,
 	Plus,
 	RotateCcw,
+	Search,
 	Trash2,
+	X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +51,7 @@ import {
 	listPdfAskThreads,
 	newMessageId,
 	PDF_PAGE_ATTR,
+	type PdfAskNormalizedRect,
 	popoverScreenPoint,
 	toSummaries,
 	writePdfAskThread,
@@ -57,6 +62,11 @@ import {
 } from "@/lib/pdf-ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf-ask/schema";
 import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf-ask/types";
+import {
+	type FindMatch,
+	findAllMatches,
+	matchRectsOnPage,
+} from "@/lib/pdf-find";
 import {
 	createHighlight,
 	deletePdfHighlight,
@@ -168,6 +178,14 @@ export function PdfViewer({
 	const [firstPageAspect, setFirstPageAspect] = useState(1.3);
 	const [outline, setOutline] = useState<PdfOutlineNode[] | null>(null);
 	const [showOutline, setShowOutline] = useState(false);
+	const [findOpen, setFindOpen] = useState(false);
+	const [findQuery, setFindQuery] = useState("");
+	const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
+	const [findIndex, setFindIndex] = useState(-1);
+	const [findHighlight, setFindHighlight] = useState<{
+		page: number;
+		rects: PdfAskNormalizedRect[];
+	} | null>(null);
 
 	const pageWidth = Math.max(200, fitWidth);
 	const shellWidth = pageWidth * zoom;
@@ -214,6 +232,9 @@ export function PdfViewer({
 	currentPageRef.current = currentPage;
 	const pageFocusedRef = useRef(false);
 	const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
+	const findInputRef = useRef<HTMLInputElement>(null);
+	const pageTextCacheRef = useRef<Map<number, string>>(new Map());
+	const findReqRef = useRef(0);
 
 	const fileUrl = isPdfViewerSource(source) ? source.trim() : null;
 
@@ -301,6 +322,12 @@ export function PdfViewer({
 		setShowOutline(false);
 		setOutline(null);
 		pdfDocRef.current = null;
+		setFindOpen(false);
+		setFindQuery("");
+		setFindMatches([]);
+		setFindIndex(-1);
+		setFindHighlight(null);
+		pageTextCacheRef.current = new Map();
 		const scrollEl = scrollRef.current;
 		if (scrollEl) {
 			scrollEl.scrollLeft = 0;
@@ -390,6 +417,77 @@ export function PdfViewer({
 		[goToPage],
 	);
 
+	const openFind = useCallback(() => {
+		setFindOpen(true);
+		requestAnimationFrame(() => {
+			findInputRef.current?.focus();
+			findInputRef.current?.select();
+		});
+	}, []);
+
+	const closeFind = useCallback(() => {
+		setFindOpen(false);
+		setFindHighlight(null);
+	}, []);
+
+	/** Scroll to a match's page, then highlight its text-layer rects. */
+	const highlightMatch = useCallback(
+		(match: FindMatch, query: string) => {
+			goToPage(match.page);
+			window.setTimeout(() => {
+				const host = hostRef.current;
+				const rects = host
+					? matchRectsOnPage(host, match.page, match.occ, query)
+					: null;
+				setFindHighlight(
+					rects && rects.length > 0 ? { page: match.page, rects } : null,
+				);
+			}, 90);
+		},
+		[goToPage],
+	);
+
+	const goToMatch = useCallback(
+		(index: number) => {
+			const n = findMatches.length;
+			if (n === 0) return;
+			const i = ((index % n) + n) % n;
+			setFindIndex(i);
+			highlightMatch(findMatches[i], findQuery);
+		},
+		[findMatches, findQuery, highlightMatch],
+	);
+
+	// Debounced full-document search as the query changes.
+	useEffect(() => {
+		if (!findOpen) return;
+		const doc = pdfDocRef.current;
+		const q = findQuery.trim();
+		if (!doc || !q) {
+			setFindMatches([]);
+			setFindIndex(-1);
+			setFindHighlight(null);
+			return;
+		}
+		const seq = ++findReqRef.current;
+		const timer = window.setTimeout(() => {
+			void findAllMatches(doc, numPages, q, pageTextCacheRef.current).then(
+				(matches) => {
+					if (seq !== findReqRef.current) return;
+					setFindMatches(matches);
+					if (matches.length > 0) {
+						setFindIndex(0);
+						highlightMatch(matches[0], q);
+					} else {
+						setFindIndex(-1);
+						setFindHighlight(null);
+					}
+				},
+			);
+		}, 250);
+		return () => window.clearTimeout(timer);
+	}, [findQuery, findOpen, numPages, highlightMatch]);
+
 	const commitPageField = useCallback(() => {
 		const n = Number.parseInt(pageField, 10);
 		if (Number.isFinite(n)) goToPage(n);
@@ -439,6 +537,14 @@ export function PdfViewer({
 		const onKey = (e: KeyboardEvent) => {
 			const host = hostRef.current;
 			if (!host) return;
+			const engaged =
+				host.matches(":hover") || host.contains(document.activeElement);
+			if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+				if (!engaged) return;
+				e.preventDefault();
+				openFind();
+				return;
+			}
 			const el = e.target as HTMLElement | null;
 			if (
 				el &&
@@ -446,8 +552,6 @@ export function PdfViewer({
 			) {
 				return;
 			}
-			const engaged =
-				host.matches(":hover") || host.contains(document.activeElement);
 			if (!engaged) return;
 			if (e.key === "PageDown") {
 				e.preventDefault();
@@ -465,7 +569,7 @@ export function PdfViewer({
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [fileUrl, numPages, goToPage]);
+	}, [fileUrl, numPages, goToPage, openFind]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1154,6 +1258,83 @@ export function PdfViewer({
 					</div>
 				</aside>
 			) : null}
+			{findOpen ? (
+				<TooltipProvider delayDuration={200}>
+					<div className="absolute top-12 right-3 z-30 flex items-center gap-1 rounded-lg border border-border/80 bg-background/95 p-1 shadow-md backdrop-blur-sm">
+						<Search className="ml-1 size-3.5 shrink-0 text-muted-foreground" />
+						<input
+							ref={findInputRef}
+							type="text"
+							className="w-40 bg-transparent text-xs outline-none"
+							placeholder={t("pdf.findPlaceholder")}
+							value={findQuery}
+							onChange={(e) => setFindQuery(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.preventDefault();
+									goToMatch(e.shiftKey ? findIndex - 1 : findIndex + 1);
+								} else if (e.key === "Escape") {
+									e.preventDefault();
+									closeFind();
+								}
+							}}
+						/>
+						<span className="min-w-11 shrink-0 px-1 text-center text-muted-foreground text-xs tabular-nums">
+							{findQuery.trim()
+								? findMatches.length > 0
+									? `${findIndex + 1}/${findMatches.length}`
+									: t("pdf.findNoResults")
+								: ""}
+						</span>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.findPrev")}
+									disabled={findMatches.length === 0}
+									onClick={() => goToMatch(findIndex - 1)}
+								>
+									<ChevronUp className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.findPrev")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.findNext")}
+									disabled={findMatches.length === 0}
+									onClick={() => goToMatch(findIndex + 1)}
+								>
+									<ChevronDown className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.findNext")}</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.findClose")}
+									onClick={closeFind}
+								>
+									<X className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("pdf.findClose")}
+							</TooltipContent>
+						</Tooltip>
+					</div>
+				</TooltipProvider>
+			) : null}
 			<div
 				ref={scrollRef}
 				className="agentero-scroll min-h-0 flex-1 bg-muted/20"
@@ -1246,6 +1427,22 @@ export function PdfViewer({
 													items={pageHighlights}
 													activeId={highlightMenu?.id ?? null}
 												/>
+												{findHighlight?.page === pageNumber ? (
+													<div className="pointer-events-none absolute inset-0 z-[7]">
+														{findHighlight.rects.map((r) => (
+															<div
+																key={`find-${r.x}-${r.y}-${r.w}-${r.h}`}
+																className="absolute rounded-[1px] bg-orange-400/50 ring-1 ring-orange-500/70"
+																style={{
+																	left: `${r.x * 100}%`,
+																	top: `${r.y * 100}%`,
+																	width: `${r.w * 100}%`,
+																	height: `${r.h * 100}%`,
+																}}
+															/>
+														))}
+													</div>
+												) : null}
 												<div data-pdf-ask-ui="">
 													<AskGutter
 														items={pageSummaries}

@@ -17,7 +17,12 @@
 		"nextPage": "下一页",
 		"goToPage": "跳转到页",
 		"zoomFitPage": "适应整页",
-		"outline": "目录"
+		"outline": "目录",
+		"findPlaceholder": "在文档中查找",
+		"findPrev": "上一个",
+		"findNext": "下一个",
+		"findClose": "关闭查找",
+		"findNoResults": "无结果"
 	},
 	"pdfAsk": {
 		"dialogLabel": "划词提问",

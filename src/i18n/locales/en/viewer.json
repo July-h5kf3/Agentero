@@ -17,7 +17,12 @@
 		"nextPage": "Next page",
 		"goToPage": "Go to page",
 		"zoomFitPage": "Fit page",
-		"outline": "Outline"
+		"outline": "Outline",
+		"findPlaceholder": "Find in document",
+		"findPrev": "Previous match",
+		"findNext": "Next match",
+		"findClose": "Close find",
+		"findNoResults": "No results"
 	},
 	"pdfAsk": {
 		"dialogLabel": "Ask about selection",
