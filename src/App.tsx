@@ -1261,13 +1261,15 @@ export default function App() {
 					paperMd: result.paperMd,
 				})
 			) {
-				try {
-					const started = await maybeAutoRunPaperReader({
-						vaultRoot: vaultPath,
-						paperPath: rel,
-						assetsReady: true,
-					});
-					if (started) {
+				// Fire-and-forget: reader progress shows in the bottom-left task bar.
+				// Do NOT await — awaiting keeps the sidebar busy and blocks new imports.
+				void maybeAutoRunPaperReader({
+					vaultRoot: vaultPath,
+					paperPath: rel,
+					assetsReady: true,
+				})
+					.then(async (started) => {
+						if (!started) return;
 						await refreshLibrary();
 						// We just opened this paper — reload NOTES after reader writes
 						const notesAbs = notesPathForPaper(result.paperDir);
@@ -1277,10 +1279,10 @@ export default function App() {
 						} catch {
 							// ignore
 						}
-					}
-				} catch (e) {
-					setError(e instanceof Error ? e.message : String(e));
-				}
+					})
+					.catch((e) => {
+						setError(e instanceof Error ? e.message : String(e));
+					});
 			}
 		},
 		[
@@ -1335,13 +1337,15 @@ export default function App() {
 						paperMd: assets.paperMd,
 					})
 				) {
-					try {
-						const started = await maybeAutoRunPaperReader({
-							vaultRoot: vaultPath,
-							paperPath: rel,
-							assetsReady: true,
-						});
-						if (started) {
+					// Fire-and-forget: reader progress shows in the bottom-left task bar.
+					// Do NOT await — awaiting keeps every paper row busy during reading.
+					void maybeAutoRunPaperReader({
+						vaultRoot: vaultPath,
+						paperPath: rel,
+						assetsReady: true,
+					})
+						.then(async (started) => {
+							if (!started) return;
 							await refreshLibrary();
 							const notesAbs = notesPathForPaper(node.path);
 							try {
@@ -1350,10 +1354,10 @@ export default function App() {
 							} catch {
 								// ignore
 							}
-						}
-					} catch (e) {
-						setError(e instanceof Error ? e.message : String(e));
-					}
+						})
+						.catch((e) => {
+							setError(e instanceof Error ? e.message : String(e));
+						});
 				}
 			} catch (e) {
 				setError(e instanceof Error ? e.message : String(e));
@@ -1395,23 +1399,26 @@ export default function App() {
 			const rel = toVaultRelative(vaultPath, node.path)
 				.replace(/\\/g, "/")
 				.replace(/^\/+|\/+$/g, "");
-			try {
-				await runPaperReaderWorkflow({
-					vaultRoot: vaultPath,
-					paperPath: rel,
+			// Fire-and-forget: reader progress shows in the bottom-left task bar.
+			// Do NOT await — awaiting keeps every paper row busy during reading.
+			void runPaperReaderWorkflow({
+				vaultRoot: vaultPath,
+				paperPath: rel,
+			})
+				.then(async () => {
+					await refreshLibrary();
+					// Refresh NOTES pane if this paper is open in a tab
+					const notesAbs = notesPathForPaper(node.path);
+					try {
+						const content = await readVaultFile(notesAbs);
+						refreshTabNotes(node.path, content);
+					} catch {
+						// ignore
+					}
+				})
+				.catch((e) => {
+					setError(e instanceof Error ? e.message : String(e));
 				});
-				await refreshLibrary();
-				// Refresh NOTES pane if this paper is open in a tab
-				const notesAbs = notesPathForPaper(node.path);
-				try {
-					const content = await readVaultFile(notesAbs);
-					refreshTabNotes(node.path, content);
-				} catch {
-					// ignore
-				}
-			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
-			}
 		},
 		[vaultPath, refreshLibrary, refreshTabNotes],
 	);
