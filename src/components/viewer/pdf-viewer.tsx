@@ -838,8 +838,7 @@ export function PdfViewer({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor dialog after zoom/layout
 	useEffect(() => {
 		if (!activeThread) return;
-		const host = hostRef.current;
-		const scrollEl = host?.querySelector(".agentero-scroll");
+		const scrollEl = scrollRef.current;
 		const reposition = () => placePopover(activeThread);
 		// After zoom, layout may lag one frame — schedule twice
 		reposition();
@@ -1133,7 +1132,7 @@ export function PdfViewer({
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") closeAll();
 		};
-		const scrollEl = hostRef.current?.querySelector(".agentero-scroll");
+		const scrollEl = scrollRef.current;
 		window.addEventListener("pointerdown", onDocPointerDown, true);
 		window.addEventListener("keydown", onKey);
 		scrollEl?.addEventListener("scroll", closeAll, { passive: true });
@@ -1350,7 +1349,7 @@ export function PdfViewer({
 			) : null}
 			<div
 				ref={scrollRef}
-				className="agentero-scroll min-h-0 flex-1 bg-muted/20"
+				className="agentero-scroll-both min-h-0 flex-1 bg-muted/20"
 			>
 				{error ? (
 					<p className="p-6 text-destructive text-sm">{error}</p>

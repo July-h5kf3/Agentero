@@ -68,9 +68,9 @@ function mergeRectsByLine(
 	for (const r of sorted) {
 		const last = lines[lines.length - 1];
 		if (last) {
-			const overlap =
-				Math.min(last.y + last.h, r.y + r.h) - Math.max(last.y, r.y);
-			if (overlap > Math.min(last.h, r.h) * 0.5) {
+			const centerLast = last.y + last.h / 2;
+			const centerR = r.y + r.h / 2;
+			if (Math.abs(centerLast - centerR) < Math.max(last.h, r.h) * 0.6) {
 				const x1 = Math.min(last.x, r.x);
 				const y1 = Math.min(last.y, r.y);
 				const x2 = Math.max(last.x + last.w, r.x + r.w);
