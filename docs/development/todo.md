@@ -97,7 +97,8 @@
    - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）。
    - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）。
    - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）。
-   - [ ] 保留 Zotero 批注与引用 key 映射。
+   - [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项。
+   - [ ] 批注原位高亮渲染（highlights.md 系统）与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Eye + catalog `is_read`）。
