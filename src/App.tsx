@@ -128,20 +128,11 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
-const _STORAGE_KEY = "agentero-editor-content";
-const _OPEN_FILE_KEY = "agentero-open-file";
-
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
 
-const _defaultMarkdown = `### Title
-
-> This is a quote.
-
-With some **bold** text for emphasis!
-`;
 const TABS_KEY = "agentero-open-tabs";
 
 type PersistedTab = { path: string; mode: CenterViewMode };

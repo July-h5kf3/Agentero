@@ -1,9 +1,13 @@
 mod commands;
-mod error;
+/// Shared error types (used by Host commands and the headless CLI).
+pub mod error;
 #[cfg(target_os = "macos")]
 mod i18n;
 mod models;
-mod services;
+/// Domain services (Vault / Catalog / Lookup / Wiki / …).
+/// The CLI path-depends on this crate and may `use agentero_lib::services::{vault,catalog,…}`;
+/// it must **not** use `services::agent` (BYOA is desktop-only).
+pub mod services;
 
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
