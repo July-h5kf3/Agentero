@@ -1,3 +1,20 @@
 {
-	"missingLink": "缺失：{{target}}（点击创建）"
+	"missingLink": "缺失：{{target}}（点击创建）",
+	"toolbar": {
+		"h1": "标题 1",
+		"h2": "标题 2",
+		"h3": "标题 3",
+		"quote": "引用",
+		"bold": "加粗",
+		"italic": "斜体",
+		"underline": "下划线",
+		"strikethrough": "删除线",
+		"code": "行内代码",
+		"highlight": "高亮",
+		"bulletedList": "无序列表",
+		"numberedList": "有序列表",
+		"todoList": "待办列表",
+		"show": "显示格式工具栏",
+		"hide": "隐藏格式工具栏"
+	}
 }

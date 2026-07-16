@@ -5,8 +5,10 @@ import { MarkdownPlugin } from "@platejs/markdown";
 import { Plate, usePlateEditor } from "platejs/react";
 import { type KeyboardEvent, useCallback, useEffect, useRef } from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
+import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
+import { cn } from "@/lib/utils";
 
 export type MarkdownEditorProps = {
 	/** Initial Markdown content for the open file. The component reseeds on remount (key). */
@@ -21,6 +23,8 @@ export type MarkdownEditorProps = {
 	placeholder?: string;
 	className?: string;
 	fontSize?: number | string;
+	/** Show the WYSIWYG formatting toolbar above the editor. */
+	showToolbar?: boolean;
 	/** Persist serialized Markdown (frontmatter re-attached) to `path`. */
 	onPersist?: (path: string, markdown: string) => void;
 	onDirtyChange?: (dirty: boolean) => void;
@@ -35,6 +39,7 @@ export function MarkdownEditor({
 	placeholder,
 	className,
 	fontSize,
+	showToolbar,
 	onPersist,
 	onDirtyChange,
 }: MarkdownEditorProps) {
@@ -107,18 +112,21 @@ export function MarkdownEditor({
 
 	return (
 		<Plate editor={editor} onValueChange={handleChange}>
-			<EditorContainer
-				className={className}
-				onKeyDown={readOnly ? undefined : handleKeyDown}
-			>
-				<Editor
-					variant="none"
-					placeholder={placeholder}
-					readOnly={readOnly}
-					className="min-h-full px-6 py-4"
-					style={fontSize ? { fontSize } : undefined}
-				/>
-			</EditorContainer>
+			<div className={cn("flex h-full min-h-0 flex-col", className)}>
+				{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
+				<EditorContainer
+					className="motif-scroll min-h-0 flex-1"
+					onKeyDown={readOnly ? undefined : handleKeyDown}
+				>
+					<Editor
+						variant="none"
+						placeholder={placeholder}
+						readOnly={readOnly}
+						className="min-h-full px-6 py-4"
+						style={fontSize ? { fontSize } : undefined}
+					/>
+				</EditorContainer>
+			</div>
 		</Plate>
 	);
 }

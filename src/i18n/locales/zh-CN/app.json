@@ -19,7 +19,18 @@
 		"enterAgentZen": "Agent 禅模式",
 		"exitAgentZen": "退出禅模式",
 		"enterAgentZenHint": "全屏 Agent 对话 (⌥⌘Z)",
-		"exitAgentZenHint": "返回工作台 (⌥⌘Z)"
+		"exitAgentZenHint": "返回工作台 (⌥⌘Z)",
+		"layout": "布局",
+		"layoutHint": "配置面板",
+		"layoutPanels": "面板",
+		"layoutLeftSidebar": "左侧边栏",
+		"layoutRightSidebar": "右侧边栏",
+		"closeDocument": "关闭",
+		"closeDocumentHint": "关闭并返回论文库",
+		"showNotes": "显示笔记",
+		"hideNotes": "隐藏笔记",
+		"showNotesHint": "显示笔记栏",
+		"hideNotesHint": "隐藏笔记栏"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",

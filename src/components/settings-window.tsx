@@ -397,6 +397,16 @@ function AppearancePane({
 						onCheckedChange={(v) => patch({ showLineNumbers: v })}
 					/>
 				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.editorToolbar.label")}
+					htmlFor="editor-toolbar"
+				>
+					<Switch
+						id="editor-toolbar"
+						checked={settings.showEditorToolbar}
+						onCheckedChange={(v) => patch({ showEditorToolbar: v })}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 		</>
 	);

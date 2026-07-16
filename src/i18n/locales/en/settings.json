@@ -42,6 +42,9 @@
 		},
 		"lineNumbers": {
 			"label": "Line numbers"
+		},
+		"editorToolbar": {
+			"label": "Formatting toolbar"
 		}
 	},
 	"agent": {

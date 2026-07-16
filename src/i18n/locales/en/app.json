@@ -19,7 +19,18 @@
 		"enterAgentZen": "Agent zen mode",
 		"exitAgentZen": "Exit zen mode",
 		"enterAgentZenHint": "Full-screen Agent chat (⌥⌘Z)",
-		"exitAgentZenHint": "Back to workbench (⌥⌘Z)"
+		"exitAgentZenHint": "Back to workbench (⌥⌘Z)",
+		"layout": "Layout",
+		"layoutHint": "Configure panels",
+		"layoutPanels": "Panels",
+		"layoutLeftSidebar": "Left sidebar",
+		"layoutRightSidebar": "Right sidebar",
+		"closeDocument": "Close",
+		"closeDocumentHint": "Close and return to Library",
+		"showNotes": "Show notes",
+		"hideNotes": "Hide notes",
+		"showNotesHint": "Show notes panel",
+		"hideNotesHint": "Hide notes panel"
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",

@@ -42,6 +42,9 @@
 		},
 		"lineNumbers": {
 			"label": "行号"
+		},
+		"editorToolbar": {
+			"label": "格式工具栏"
 		}
 	},
 	"agent": {
