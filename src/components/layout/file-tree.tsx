@@ -1015,7 +1015,7 @@ export function FileTree({
 		<TooltipProvider delayDuration={300}>
 			<div className={cn("select-none py-1 text-sm", className)}>
 				{selected.size > 0 ? (
-					<div className="mb-1 flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1">
+					<div className="-mx-1 sticky top-0 z-20 mb-1 flex items-center gap-1 border-b bg-muted/95 px-3 py-1.5 backdrop-blur-sm">
 						<span className="text-muted-foreground text-xs">
 							{t("fileTree.selectedCount", { count: selected.size })}
 						</span>
