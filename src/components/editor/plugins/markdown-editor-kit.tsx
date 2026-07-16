@@ -48,7 +48,6 @@ import {
 import { ListPlugin } from "@platejs/list/react";
 import { MathRules } from "@platejs/math";
 import { EquationPlugin, InlineEquationPlugin } from "@platejs/math/react";
-import { ImagePlugin } from "@platejs/media/react";
 import { MentionPlugin } from "@platejs/mention/react";
 import {
 	TableCellHeaderPlugin,
@@ -81,7 +80,6 @@ import {
 } from "@/components/editor/heading-node";
 import { HighlightLeaf } from "@/components/editor/highlight-leaf";
 import { HrElement } from "@/components/editor/hr-node";
-import { ImageElement } from "@/components/editor/image-node";
 import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
@@ -232,7 +230,7 @@ export const MarkdownEditorKit = [
 	}),
 
 	// Inline nodes
-	ImagePlugin.withComponent(ImageElement),
+	// ImagePlugin is configured per-editor (uploadImage → ./assets/) in markdown-editor.tsx
 	MentionPlugin.withComponent(MentionElement),
 	WikiLinkPlugin,
 	LinkPlugin,
