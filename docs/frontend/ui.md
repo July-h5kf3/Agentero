@@ -54,10 +54,11 @@
   - **文件**：终端 cwd 为文件所在父目录。
   - 使用系统默认终端：macOS `Terminal.app`；Windows 优先 `wt`（Windows Terminal）否则 `cmd`；Linux `xdg-terminal-exec` / `$TERMINAL` / 常见终端回退。
   - 虚拟 Library 不可用；仅桌面端。
-- **删除**（`remove` + 可选 `paper_delete`）：
-  - **右键**真实节点 →「删除」（旁注 `⌘⌫`）；确认后删盘。
-  - **`⌘⌫`**：删除当前选中项（编辑器 / 输入框聚焦时不拦截，保留系统删行首行为）。
-  - 路径在 `papers/` 下时同步清理 catalog 对应行（含组织目录下嵌套 paper）；随后刷新文件树、Library 与双链索引。
+- **删除（回收站 + 撤销）**（`path_trash` / `path_untrash`；不再物理 `remove`）：
+  - **右键**「删除」（旁注 `⌘⌫`）、**`⌘⌫`**、批量条 / 右键「删除 N 项」：均**移入 Vault 回收站** `.agentero/.trash/<批次>/`，**不弹确认**，随后弹「已删除 N 项 · 撤销」Toast（`notifyUndo`）。
+  - **撤销**：Toast 内点「撤销」→ `path_untrash` 把文件移回原位并恢复 catalog 行；若原路径已被重新占用则整批中止、不覆盖新内容。
+  - `papers/` 下的项移入回收站时**快照并移除** catalog 对应行（含嵌套 paper），撤销时一并恢复；随后刷新文件树、Library 与双链索引。
+  - `⌘⌫` 在编辑器 / 输入框聚焦时不拦截（保留系统删行首行为）。
   - 不可删：虚拟 Library、Vault 根。
 - **多选与批量操作**（`file-tree.tsx` + 原语 `ai-elements/file-tree.tsx`）：
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
@@ -204,7 +205,7 @@
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
-| `⌘⌫` | 删除选中项 | 文件树选中项；确认后删盘；`papers/` 同步 `paper_delete`；编辑区不拦截 |
+| `⌘⌫` | 删除选中项 | 文件树选中项；移入回收站 `.agentero/.trash/` + 「撤销」Toast；`papers/` 行随删随快照；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |

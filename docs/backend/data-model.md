@@ -65,6 +65,7 @@ agentero-vault/
 │   └── skills/            # `$` 技能：`skills/<id>/SKILL.md`
 └── .agentero/
     ├── catalog.sqlite     # path = paper 文件夹相对路径；schema_version = 3
+    ├── .trash/            # 回收站：删除移入 <批次>/（manifest.json + 文件）；撤销可恢复
     └── config.json
 ```
 

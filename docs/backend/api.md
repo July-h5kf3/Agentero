@@ -79,7 +79,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`window_new`、`set_locale`。  
+> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
@@ -138,6 +138,37 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
     - macOS：`open -a Terminal <cwd>`
     - Windows：优先 `wt -d <cwd>`，失败则 `cmd /K cd /d …`
     - Linux：`xdg-terminal-exec` → `$TERMINAL` → 常见终端（gnome-terminal / konsole / …）→ `x-terminal-emulator`
+
+#### `path_trash` / `path_untrash`（已落地）
+
+可撤销删除：把项移入 Vault 回收站 `.agentero/.trash/<batchId>/`（带 `manifest.json` 记录原路径与被删 catalog 行快照），而非物理删除。前端删除后弹「已删除 N 项 · 撤销」Toast。
+
+- **`path_trash` 参数**
+
+```ts
+{
+  vaultPath: string;
+  rels: string[]; // 待删除的 Vault 相对路径
+}
+```
+
+- **`path_trash` 返回**（`ApiResult<{ batchId: string; count: number }>`）
+  - `batchId` 用于撤销；`count` 为实际移入回收站的项数。
+  - `papers/` 下的项：移动前**快照并删除** catalog 行（含嵌套 paper）。
+  - 跳过空 / 含 `..` / `.agentero` / `papers` 根 / 不存在的路径。
+
+- **`path_untrash` 参数**
+
+```ts
+{
+  vaultPath: string;
+  batchId: string;
+}
+```
+
+- **`path_untrash` 返回**（`ApiResult<{ restored: number }>`）
+  - 把该批次文件移回原位并 `upsert` 恢复 catalog 行。
+  - **预检**：若任一原路径已被重新占用，整批中止且不改动任何内容（不覆盖新内容）。
 
 #### `window_new`（已实现）
 
