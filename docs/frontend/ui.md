@@ -96,7 +96,7 @@
 
 ## 3. 布局
 
-- 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间与 Notes 随内容切换。
+- 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
   - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
   - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
@@ -110,7 +110,7 @@
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
-  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 返回论文库表格（等价于选中虚拟 `Library` 节点）；论文库视图与欢迎页不显示。
+  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 关闭当前标签（等价 `⌥⌘W`）；论文库视图与欢迎页不显示。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
@@ -170,6 +170,8 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
+| `⌥⌘W` | 关闭当前标签（`closeTab`） | 关闭中间栏激活文档；`⌘W` 仍关窗口 |
+| `⌥⌘→` / `⌥⌘←` | 下一 / 上一标签（`nextTab` / `prevTab`） | 在打开的文档标签间循环 |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
 | `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand`；设置 Keyboard 可见 |
@@ -184,13 +186,21 @@
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
 - **论文行 Eye（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。魔棒入库 / 单篇 Download 成功后会**自动**同一工作流（批量不连跑）。进度在左下角后台任务条（lookup/download → paperRead）。
 
-### 3.1.1 规划：文档标签与分屏（roadmap V0.6）
+### 3.1.1 文档标签页（已落地）与分屏（规划，roadmap V0.6）
 
-当前中间栏为**单槽**：打开新文件/论文会替换当前内容。规划升级为：
+中间栏为**浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）：
 
-- 文档 **tab 栏**（paper / MD / PDF / HTML / Library），可关/切/重排；保留滚动与 PDF 缩放等视图状态。
-- **2 格分屏**（水平或垂直）：例如 PDF | NOTES、两篇 paper 并排。
-- 与 Agent 面板 **会话标签** 分离；快捷键与「当前 tab vs 新 tab 打开」策略见落地时更新本表与 `shortcuts.ts`。
+- **多 tab**：paper / Markdown / PDF / HTML / Library 各占一个 tab，可切换、关闭（`X` / 中键 / `⌥⌘W`）、拖拽重排；同一路径已开则聚焦其 tab（不重复打开）。
+- **常驻挂载**：每个 tab 的内容组件保持 mounted（非激活 `hidden`），切换瞬时并保留 **PDF 滚动位置/缩放** 与编辑器状态。PDF 多篇同开会同时占用内存（符合浏览器式取舍）。
+- **状态派生**：`activeTab` 驱动 `selectedPath` / `centerMode` / `paperMeta` / Notes；文件树选中与「新建父目录」上下文用独立的 `treeSelectedPath`（跟随激活文档，folder 新建时可指向文件夹）。
+- **持久化**：`agentero-open-tabs`（`{tabs:[{path,mode}], activeIndex}`）按窗口保存，重开窗口恢复 tab 集与激活项；`⌘N` 各窗口独立。
+- **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
+
+规划中（尚未实现）：
+
+- **2 格分屏**（水平或垂直）：例如 PDF | NOTES、两篇 paper 并排；分屏快捷键随实现补入本表与 `shortcuts.ts`。
+- tab 固定（pin）、按 paper 分组、「当前 tab vs 新 tab 打开」策略可配。
+- 与 Agent 面板 **会话标签** 分离（不同概念）。
 
 ### 3.1.2 规划：文内引用 hover → Paper Info（roadmap V0.7）
 
