@@ -1272,14 +1272,12 @@ export function AgentPanel({
 	}, [modelId, models]);
 
 	const groupedModels = useMemo(() => {
-		const favSet = new Set(favoriteIds);
 		const favItems = favoriteIds
 			.map((id) => models.find((m) => m.id === id))
 			.filter((m): m is AgentModelChoice => Boolean(m));
 
 		const groups = new Map<string, AgentModelChoice[]>();
 		for (const model of models) {
-			if (favSet.has(model.id)) continue;
 			const group = model.group || t("models.defaultGroup");
 			let items = groups.get(group);
 			if (!items) {
@@ -2875,23 +2873,22 @@ export function AgentPanel({
 												>
 													{group.items.map((model) => {
 														const favorited = favoriteIds.includes(model.id);
+														const selected = modelId === model.id;
 														return (
 															<ModelSelectorItem
-																key={model.id}
-																value={`${model.name} ${model.id}`}
+																key={`${group.id}-${model.id}`}
+																value={`${model.name} ${model.id}${
+																	group.isFavorites ? "\u200b" : ""
+																}`}
 																onSelect={() => pickModel(model.id)}
+																className={cn(
+																	selected &&
+																		"bg-accent font-medium text-accent-foreground data-selected:bg-accent",
+																)}
 															>
-																<span
-																	className={cn(
-																		"flex-1 truncate",
-																		modelId === model.id && "font-medium",
-																	)}
-																>
+																<span className="flex-1 truncate">
 																	{model.name}
 																</span>
-																{modelId === model.id ? (
-																	<CheckIcon className="size-3.5 text-muted-foreground" />
-																) : null}
 																<button
 																	type="button"
 																	aria-label={
