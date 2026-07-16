@@ -84,18 +84,8 @@ function openTutorial() {
 	});
 }
 
-/** A compact number + label stat card for the scan preview. */
-function Stat({ value, label }: { value: number; label: string }) {
-	return (
-		<div className="flex-1 rounded-lg border bg-muted/40 px-3 py-2 text-center">
-			<div className="font-semibold text-base tabular-nums">{value}</div>
-			<div className="text-muted-foreground text-xs">{label}</div>
-		</div>
-	);
-}
-
 /**
- * One-click Zotero migration: auto-detect the library, preview counts, pick the
+ * One-click Zotero migration: auto-detect the library, pick the
  * exact papers (search + folder filter + per-item), choose options, then migrate
  * with a live progress bar and a result summary. Options are remembered.
  */
@@ -371,21 +361,6 @@ export function ZoteroMigrateDialog({
 										? t("sidebar:zoteroMigrate.detecting")
 										: t("sidebar:zoteroMigrate.scanning")}
 								</p>
-							) : scan ? (
-								<div className="flex gap-2">
-									<Stat
-										value={scan.itemCount}
-										label={t("sidebar:zoteroMigrate.statPapers")}
-									/>
-									<Stat
-										value={scan.withPdfCount}
-										label={t("sidebar:zoteroMigrate.statPdfs")}
-									/>
-									<Stat
-										value={scan.noteCount}
-										label={t("sidebar:zoteroMigrate.statNotes")}
-									/>
-								</div>
 							) : null}
 
 							{scan ? (
