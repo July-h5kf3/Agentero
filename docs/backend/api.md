@@ -829,7 +829,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - **其它** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
   - Composer 的 `$` 仅是 Motif UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
-- **权限策略**：默认取消 ACP 权限请求。Composer 按 provider 持久化 YOLO 偏好，并在每次运行中通过 `autoApprove` 传入；逐项权限确认仍未实现。
+- **权限策略**：默认取消 ACP 权限请求。设置 → Agent 提供全局「权限模式」（受限默认 / 自动批准），对所有 Agent 生效，并在每次运行中通过 `autoApprove`（自动批准 → `true`）传入；逐项权限确认仍未实现。
 
 - **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
 

@@ -497,7 +497,6 @@ export function saveModelPref(agentId: string, modelId: string): void {
 }
 
 const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
-const YOLO_PREF_KEY = "motif-agent-yolo-pref";
 const EXTERNAL_CODEX_HISTORY_PREF_KEY =
 	"motif-agent-external-codex-history-pref";
 
@@ -533,30 +532,6 @@ export function saveModelCatalog(
 		>;
 		map[agentId] = catalog;
 		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
-}
-
-/** Persist YOLO separately for each provider registration. */
-export function loadYoloPref(agentId: string | null): boolean {
-	if (!agentId) return false;
-	try {
-		const raw = localStorage.getItem(YOLO_PREF_KEY);
-		if (!raw) return false;
-		const map = JSON.parse(raw) as Record<string, boolean>;
-		return map[agentId] === true;
-	} catch {
-		return false;
-	}
-}
-
-export function saveYoloPref(agentId: string, enabled: boolean): void {
-	try {
-		const raw = localStorage.getItem(YOLO_PREF_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
-		map[agentId] = enabled;
-		localStorage.setItem(YOLO_PREF_KEY, JSON.stringify(map));
 	} catch {
 		// ignore
 	}

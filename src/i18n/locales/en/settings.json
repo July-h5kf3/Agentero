@@ -66,6 +66,15 @@
 			"installed": "installed",
 			"notOnPath": "not on PATH"
 		},
+		"permission": {
+			"label": "Permission mode",
+			"restricted": {
+				"label": "Restricted (default)"
+			},
+			"auto": {
+				"label": "Auto-approve"
+			}
+		},
 		"form": {
 			"defaultName": "Custom agent",
 			"name": "Name",

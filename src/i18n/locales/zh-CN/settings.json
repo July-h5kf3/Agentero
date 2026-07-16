@@ -66,6 +66,15 @@
 			"installed": "已安装",
 			"notOnPath": "不在 PATH"
 		},
+		"permission": {
+			"label": "权限模式",
+			"restricted": {
+				"label": "受限（默认）"
+			},
+			"auto": {
+				"label": "自动批准"
+			}
+		},
 		"form": {
 			"defaultName": "自定义 Agent",
 			"name": "名称",

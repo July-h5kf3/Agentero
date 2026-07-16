@@ -47,6 +47,7 @@ import {
 	upsertAgent,
 } from "@/lib/agent";
 import {
+	type AgentPermissionMode,
 	type AppSettings,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
@@ -643,6 +644,26 @@ function AgentPane({
 							onCheckedChange={(v) => void onToggleProxy(v)}
 						/>
 					</div>
+				</SettingsRow>
+				<SettingsRow label={t("agent.permission.label")} htmlFor="agent-perm">
+					<Select
+						value={settings.agentPermissionMode}
+						onValueChange={(v) =>
+							patch({ agentPermissionMode: v as AgentPermissionMode })
+						}
+					>
+						<SelectTrigger id="agent-perm" size="sm" className="min-w-[140px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="restricted">
+								{t("agent.permission.restricted.label")}
+							</SelectItem>
+							<SelectItem value="auto">
+								{t("agent.permission.auto.label")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
 				</SettingsRow>
 			</SettingsGroup>
 

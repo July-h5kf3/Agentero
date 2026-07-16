@@ -2,6 +2,13 @@ export type ThemePreference = "system" | "light" | "dark";
 
 export type LocalePreference = "system" | "en" | "zh-CN";
 
+/**
+ * How Motif responds to agent permission escalations.
+ * - `restricted`: decline requests (Codex uses workspace-write).
+ * - `auto`: auto-approve every request (YOLO; Codex uses danger-full-access).
+ */
+export type AgentPermissionMode = "restricted" | "auto";
+
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
@@ -18,6 +25,8 @@ export type AppSettings = {
 	showLineNumbers: boolean;
 	// Agent (local UI prefs; registry lives in Host)
 	agentEnabled: boolean;
+	/** Global permission handling applied to every agent run. */
+	agentPermissionMode: AgentPermissionMode;
 	// Privacy
 	analyticsEnabled: boolean;
 	shareCrashReports: boolean;
@@ -35,6 +44,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	editorFontSize: 14,
 	showLineNumbers: false,
 	agentEnabled: true,
+	agentPermissionMode: "restricted",
 	analyticsEnabled: false,
 	shareCrashReports: false,
 };
@@ -49,6 +59,8 @@ export function loadSettings(): AppSettings {
 			agentBaseUrl?: string;
 			agentApiKey?: string;
 			agentModel?: string;
+			/** @deprecated replaced by agentPermissionMode */
+			agentYolo?: boolean;
 			/** @deprecated always download PDF on import */
 			downloadFulltextToLocal?: boolean;
 			downloadFulltextWhenNoRemotePreview?: boolean;
@@ -58,11 +70,19 @@ export function loadSettings(): AppSettings {
 			agentBaseUrl: _u,
 			agentApiKey: _k,
 			agentModel: _m,
+			agentYolo: _y,
 			downloadFulltextToLocal: _d1,
 			downloadFulltextWhenNoRemotePreview: _d2,
 			...rest
 		} = parsed;
 		const merged = { ...DEFAULT_SETTINGS, ...rest };
+		// Migrate legacy boolean YOLO into the permission-mode enum.
+		if (
+			parsed.agentYolo !== undefined &&
+			rest.agentPermissionMode === undefined
+		) {
+			merged.agentPermissionMode = parsed.agentYolo ? "auto" : "restricted";
+		}
 		// Empty / missing URL → product default
 		if (!merged.translatorBaseUrl?.trim()) {
 			merged.translatorBaseUrl = DEFAULT_TRANSLATOR_BASE_URL;

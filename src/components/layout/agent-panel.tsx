@@ -5,7 +5,6 @@ import {
 	ChevronDown,
 	CopyIcon,
 	FileText,
-	FolderOpen,
 	History,
 	Plus,
 	X,
@@ -59,6 +58,16 @@ import {
 	MessageContent,
 	MessageResponse,
 } from "@/components/ai-elements/message";
+import {
+	ModelSelector,
+	ModelSelectorContent,
+	ModelSelectorEmpty,
+	ModelSelectorGroup,
+	ModelSelectorInput,
+	ModelSelectorItem,
+	ModelSelectorList,
+	ModelSelectorTrigger,
+} from "@/components/ai-elements/model-selector";
 import {
 	Plan,
 	PlanAction,
@@ -145,17 +154,17 @@ import {
 	loadExternalCodexHistoryPref,
 	loadModelCatalog,
 	loadModelPref,
-	loadYoloPref,
 	readCodexThread,
 	runOnce,
 	saveExternalCodexHistoryPref,
 	saveModelCatalog,
 	saveModelPref,
-	saveYoloPref,
 	scanCatalog,
 	setDefaultAgent,
 	warmAgent,
 } from "@/lib/agent";
+import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { toVaultRelative } from "@/lib/wiki";
@@ -459,6 +468,7 @@ export function AgentPanel({
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
+	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 	const [warming, setWarming] = useState(false);
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -467,7 +477,6 @@ export function AgentPanel({
 	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
 	const [fastAvailable, setFastAvailable] = useState(false);
 	const [fastEnabled, setFastEnabled] = useState(false);
-	const [yoloEnabled, setYoloEnabled] = useState(false);
 	const [includeExternalCodexHistory, setIncludeExternalCodexHistory] =
 		useState(false);
 	const [composerMenuDismissed, setComposerMenuDismissed] = useState(false);
@@ -491,7 +500,7 @@ export function AgentPanel({
 		vaultPath,
 		agentId: selectedAgentId,
 		sessionId: activeTabId,
-		defaultIncludeSelectedFile: Boolean(selectedVaultPath),
+		defaultIncludeSelectedFile: false,
 	});
 	const activeConversationRef = useRef<string | null>(null);
 	const activeTabRef = useRef("draft");
@@ -657,7 +666,6 @@ export function AgentPanel({
 			setFastEnabled(false);
 			setUsage(null);
 			setUsageBySession({});
-			setYoloEnabled(false);
 			setIncludeExternalCodexHistory(false);
 			return;
 		}
@@ -667,7 +675,6 @@ export function AgentPanel({
 		setFastEnabled(false);
 		setUsage(null);
 		setUsageBySession({});
-		setYoloEnabled(loadYoloPref(selectedAgentId));
 		setIncludeExternalCodexHistory(
 			loadExternalCodexHistoryPref(selectedAgentId),
 		);
@@ -1145,6 +1152,20 @@ export function AgentPanel({
 		return models.find((m) => m.id === modelId)?.name ?? modelId;
 	}, [modelId, models]);
 
+	const groupedModels = useMemo(() => {
+		const groups = new Map<string, AgentModelChoice[]>();
+		for (const model of models) {
+			const group = model.group || t("models.defaultGroup");
+			let items = groups.get(group);
+			if (!items) {
+				items = [];
+				groups.set(group, items);
+			}
+			items.push(model);
+		}
+		return Array.from(groups.entries());
+	}, [models, t]);
+
 	const contextPaths = useMemo(() => {
 		const paths = [
 			...(includeSelectedFile && selectedVaultPath ? [selectedVaultPath] : []),
@@ -1152,6 +1173,15 @@ export function AgentPanel({
 		];
 		return [...new Set(paths)];
 	}, [includeSelectedFile, mentionedPaths, selectedVaultPath]);
+
+	const currentFilePath =
+		selectedVaultPath && selectedVaultPath !== LIBRARY_VIRTUAL_PATH
+			? selectedVaultPath
+			: null;
+	const mentionChipPaths = useMemo(
+		() => contextPaths.filter((path) => path !== selectedVaultPath),
+		[contextPaths, selectedVaultPath],
+	);
 
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
 	const mentionQuery = mentionMatch?.[2]?.toLocaleLowerCase() ?? "";
@@ -1257,6 +1287,7 @@ export function AgentPanel({
 	);
 
 	const pickModel = (id: string) => {
+		setModelSelectorOpen(false);
 		setModelId(id);
 		if (!selectedAgentId) return;
 		saveModelPref(selectedAgentId, id);
@@ -1474,7 +1505,7 @@ export function AgentPanel({
 					isCodexAgent && reasoningEffort ? reasoningEffort : undefined,
 				fastMode: isCodexAgent && fastAvailable ? fastEnabled : undefined,
 				skillIds: submittedComposerState.selectedSkillIds,
-				autoApprove: yoloEnabled,
+				autoApprove: loadSettings().agentPermissionMode === "auto",
 			});
 			if (
 				sessionContextGeneration !== sessionContextGenRef.current ||
@@ -1674,57 +1705,58 @@ export function AgentPanel({
 		activeConversationRef.current = null;
 	};
 
+	const agentSwitcher = (
+		<DropdownMenu>
+			<DropdownMenuTrigger
+				asChild
+				disabled={hasRunningSessions || switching || submitting}
+			>
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					className="h-7 max-w-[9rem] gap-1 px-1.5 font-medium text-sm leading-none"
+					aria-label={t("switchAgent")}
+					title={t("switchAgent")}
+				>
+					<span className="truncate">{selected?.name ?? t("defaultName")}</span>
+					<ChevronDown className="size-3 shrink-0 opacity-70" />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="start" className="min-w-[200px]">
+				<DropdownMenuLabel className="text-muted-foreground text-xs">
+					{t("agentMenu.title")}
+				</DropdownMenuLabel>
+				<DropdownMenuSeparator />
+				{options.length === 0 ? (
+					<div className="px-2 py-1.5 text-muted-foreground text-xs">
+						{t("agentMenu.empty")}
+					</div>
+				) : (
+					options.map((opt) => {
+						const isActive =
+							selected?.key === opt.key ||
+							(opt.id !== null && opt.id === selectedAgentId);
+						return (
+							<DropdownMenuItem
+								key={opt.key}
+								className="flex items-center justify-between gap-2"
+								onSelect={() => void selectAgent(opt)}
+							>
+								<span className="min-w-0 truncate">{opt.name}</span>
+								{isActive ? (
+									<Check className="size-3.5 shrink-0 opacity-80" />
+								) : null}
+							</DropdownMenuItem>
+						);
+					})
+				)}
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+
 	const headerTrailing = (
 		<>
-			<DropdownMenu>
-				<DropdownMenuTrigger
-					asChild
-					disabled={hasRunningSessions || switching || submitting}
-				>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="h-7 max-w-[9rem] gap-1 px-1.5 font-medium text-sm leading-none"
-						aria-label={t("switchAgent")}
-						title={t("switchAgent")}
-					>
-						<span className="truncate">
-							{selected?.name ?? t("defaultName")}
-						</span>
-						<ChevronDown className="size-3 shrink-0 opacity-70" />
-					</Button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="min-w-[200px]">
-					<DropdownMenuLabel className="text-muted-foreground text-xs">
-						{t("agentMenu.title")}
-					</DropdownMenuLabel>
-					<DropdownMenuSeparator />
-					{options.length === 0 ? (
-						<div className="px-2 py-1.5 text-muted-foreground text-xs">
-							{t("agentMenu.empty")}
-						</div>
-					) : (
-						options.map((opt) => {
-							const isActive =
-								selected?.key === opt.key ||
-								(opt.id !== null && opt.id === selectedAgentId);
-							return (
-								<DropdownMenuItem
-									key={opt.key}
-									className="flex items-center justify-between gap-2"
-									onSelect={() => void selectAgent(opt)}
-								>
-									<span className="min-w-0 truncate">{opt.name}</span>
-									{isActive ? (
-										<Check className="size-3.5 shrink-0 opacity-80" />
-									) : null}
-								</DropdownMenuItem>
-							);
-						})
-					)}
-				</DropdownMenuContent>
-			</DropdownMenu>
 			<Button
 				type="button"
 				variant="ghost"
@@ -1975,6 +2007,7 @@ export function AgentPanel({
 				<div className="flex shrink-0 justify-center border-border/50 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
 					<div className="flex h-12 w-full max-w-2xl items-center justify-between gap-3">
 						<div className="flex min-w-0 items-center gap-2">
+							{agentSwitcher}
 							{conversationTabList}
 						</div>
 						<div className="flex shrink-0 items-center gap-1">
@@ -1983,7 +2016,10 @@ export function AgentPanel({
 					</div>
 				</div>
 			) : (
-				<PaneHeader trailing={headerTrailing}>{conversationTabList}</PaneHeader>
+				<PaneHeader trailing={headerTrailing}>
+					{agentSwitcher}
+					{conversationTabList}
+				</PaneHeader>
 			)}
 
 			{/*
@@ -2333,9 +2369,40 @@ export function AgentPanel({
 									isZen ? "min-h-[120px]" : "min-h-[154px]",
 								)}
 							>
-								{contextPaths.length > 0 ? (
+								{currentFilePath || mentionChipPaths.length > 0 ? (
 									<div className="mb-2 flex flex-wrap gap-1.5">
-										{contextPaths.map((path) => (
+										{currentFilePath ? (
+											<button
+												type="button"
+												className={cn(
+													"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-xs transition-colors",
+													includeSelectedFile
+														? "bg-muted/20 text-foreground hover:bg-muted"
+														: "border-dashed bg-transparent text-muted-foreground hover:bg-muted/40",
+												)}
+												aria-pressed={includeSelectedFile}
+												disabled={activeTabIsRunning}
+												onClick={() =>
+													setIncludeSelectedFile((current) => !current)
+												}
+												title={
+													includeSelectedFile
+														? t("composer.currentFileRemove")
+														: t("composer.currentFileAdd")
+												}
+											>
+												<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+												<span className="truncate">
+													{currentFilePath.split("/").at(-1)}
+												</span>
+												{includeSelectedFile ? (
+													<X className="size-3 shrink-0 text-muted-foreground" />
+												) : (
+													<Plus className="size-3 shrink-0 text-muted-foreground" />
+												)}
+											</button>
+										) : null}
+										{mentionChipPaths.map((path) => (
 											<button
 												key={path}
 												type="button"
@@ -2479,12 +2546,15 @@ export function AgentPanel({
 						</PromptInputBody>
 						<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
 							<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
+								<ModelSelector
+									open={modelSelectorOpen}
+									onOpenChange={setModelSelectorOpen}
+								>
+									<ModelSelectorTrigger asChild>
 										<PromptInputButton
 											type="button"
 											className={cn(
-												"h-7 max-w-[min(9rem,100%)] gap-1 px-1.5 text-xs font-medium",
+												"h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium",
 												composerControlsMuted
 													? "text-muted-foreground"
 													: "text-foreground",
@@ -2504,25 +2574,43 @@ export function AgentPanel({
 											</span>
 											<ChevronDown className="size-3 shrink-0 opacity-70" />
 										</PromptInputButton>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="min-w-44 p-1">
-										{models.map((model) => (
-											<DropdownMenuItem
-												key={model.id}
-												className={cn(
-													"justify-between rounded-md",
-													modelId === model.id && "bg-muted",
-												)}
-												onSelect={() => pickModel(model.id)}
-											>
-												<span className="truncate">{model.name}</span>
-												{modelId === model.id ? (
-													<CheckIcon className="size-3.5 text-muted-foreground" />
-												) : null}
-											</DropdownMenuItem>
-										))}
-									</DropdownMenuContent>
-								</DropdownMenu>
+									</ModelSelectorTrigger>
+									<ModelSelectorContent className="sm:max-w-md">
+										<ModelSelectorInput
+											placeholder={t("models.searchPlaceholder")}
+										/>
+										<ModelSelectorList className="max-h-64">
+											{groupedModels.map(([group, items]) => (
+												<ModelSelectorGroup key={group} heading={group}>
+													{items.map((model) => (
+														<ModelSelectorItem
+															key={model.id}
+															value={`${model.name} ${model.id}`}
+															onSelect={() => pickModel(model.id)}
+														>
+															<span
+																className={cn(
+																	"flex-1 truncate",
+																	modelId === model.id && "font-medium",
+																)}
+															>
+																{model.name}
+															</span>
+															{modelId === model.id ? (
+																<CheckIcon className="size-3.5 text-muted-foreground" />
+															) : null}
+														</ModelSelectorItem>
+													))}
+												</ModelSelectorGroup>
+											))}
+											<ModelSelectorEmpty>
+												{models.length === 0
+													? t("models.emptyNone")
+													: t("models.emptyNoMatch")}
+											</ModelSelectorEmpty>
+										</ModelSelectorList>
+									</ModelSelectorContent>
+								</ModelSelector>
 								{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>
@@ -2574,21 +2662,6 @@ export function AgentPanel({
 										</ContextContent>
 									</Context>
 								) : null}
-								<PromptInputButton
-									type="button"
-									className={cn(
-										"size-7",
-										composerControlsMuted
-											? "text-muted-foreground"
-											: "text-foreground",
-										includeSelectedFile && selectedVaultPath && "bg-muted",
-									)}
-									disabled={!selectedVaultPath || activeTabIsRunning}
-									onClick={() => setIncludeSelectedFile((current) => !current)}
-									tooltip={t("composer.toggleCurrentFile")}
-								>
-									<FolderOpen className="size-4" />
-								</PromptInputButton>
 								{isCodexAgent && fastAvailable ? (
 									<PromptInputButton
 										type="button"
@@ -2613,33 +2686,6 @@ export function AgentPanel({
 										/>
 									</PromptInputButton>
 								) : null}
-								<div
-									className={cn(
-										"flex h-7 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium",
-										composerControlsMuted
-											? "text-muted-foreground"
-											: "text-foreground",
-										yoloEnabled && "text-orange-700 dark:text-orange-300",
-									)}
-									title={
-										yoloEnabled
-											? t("composer.yoloEnabled")
-											: t("composer.yoloDisabled")
-									}
-								>
-									<span className="truncate">{t("composer.yolo")}</span>
-									<Switch
-										size="sm"
-										checked={yoloEnabled}
-										disabled={activeTabIsRunning}
-										onCheckedChange={(enabled) => {
-											setYoloEnabled(enabled);
-											if (selectedAgentId)
-												saveYoloPref(selectedAgentId, enabled);
-										}}
-										aria-label={t("composer.yoloToggle")}
-									/>
-								</div>
 							</PromptInputTools>
 							<PromptInputSubmit
 								className="ml-auto shrink-0"
