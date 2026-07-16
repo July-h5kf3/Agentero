@@ -26,6 +26,12 @@ const MOTIF_THREAD_INDEX_PATH: &str = ".motif/agent-sessions/codex.json";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
 static MOTIF_THREAD_INDEX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
+/// `CREATE_NO_WINDOW` — stop the GUI app from flashing a console window when it
+/// launches the Codex child process on Windows (release builds have no console
+/// to inherit, so a console child would otherwise pop its own window).
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MotifCodexThreadIndex {
@@ -121,6 +127,9 @@ impl CodexClient {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
+        // Windows: launch without popping a console window (see CREATE_NO_WINDOW).
+        #[cfg(windows)]
+        process.creation_flags(CREATE_NO_WINDOW);
         if let Some(cwd) = cwd.filter(|value| !value.trim().is_empty()) {
             process.current_dir(cwd);
         }
