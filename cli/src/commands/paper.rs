@@ -145,7 +145,7 @@ fn list(
 
 fn get(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let paper = resolve_paper(&vault, ref_)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
     let assets = probe_assets(&dir);
     let suggested_reads = suggested_reads(&paper.path, &assets);
@@ -174,7 +174,7 @@ fn get(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
 
 fn paths(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let paper = resolve_paper(&vault, ref_)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
     let assets = probe_assets(&dir);
 
@@ -207,10 +207,12 @@ fn delete(globals: &GlobalOpts, path: &str, files: bool) -> Result<Value, CliErr
     if path.is_empty() {
         return Err(CliError::usage("path is required"));
     }
-    if files && !globals.yes {
-        return Err(CliError::needs_confirmation(
-            "deleting paper files requires --yes (-y)",
-        ));
+    if files {
+        let msg = format!("Delete paper files on disk for '{path}'? This cannot be undone.");
+        let ok = crate::prompt::confirm(globals, &msg, false)?;
+        if !ok {
+            return Err(CliError::needs_confirmation("deletion cancelled"));
+        }
     }
 
     let removed = papers::delete_under_path(&vault, &path)?;
@@ -233,7 +235,7 @@ fn delete(globals: &GlobalOpts, path: &str, files: bool) -> Result<Value, CliErr
 
 fn set_read(globals: &GlobalOpts, ref_: &str, is_read: bool) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let paper = resolve_paper(&vault, ref_)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
     let row = papers::set_is_read(&vault, &paper.path, is_read)?;
     let mut v = to_value(&row)?;
     if let Some(obj) = v.as_object_mut() {
@@ -247,7 +249,7 @@ fn set_read(globals: &GlobalOpts, ref_: &str, is_read: bool) -> Result<Value, Cl
 
 async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let paper = resolve_paper(&vault, ref_)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
     let result = lookup::download_paper_assets(PaperDownloadAssetsArgs {
         vault_path: vault.to_string_lossy().to_string(),
         path: paper.path.clone(),
@@ -269,7 +271,7 @@ async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
 
 async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let paper = resolve_paper(&vault, ref_)?;
+    let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
     if lookup::has_local_tex(&dir) {
         return Err(CliError::message(

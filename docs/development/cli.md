@@ -383,7 +383,7 @@ resolve_paper(ref):
 | `import_failed` | Translator / 写盘失败 |
 | `export_failed` | Translator export / 写文件失败 |
 | `asset_missing` | download/parse 缺前置文件 |
-| `needs_confirmation` | 破坏性操作无 `--yes` |
+| `needs_confirmation` | 破坏性操作无 `--yes` / 非 TTY 或用户取消 prompt |
 | `catalog_busy` | SQLite 锁冲突（可选） |
 
 ---
@@ -517,6 +517,7 @@ Desktop-only: services/agent/*   （CLI 不引用）
 | 配置 | toml + dirs（或 figment） | CLI 自有 `config.toml` |
 | 错误 | 映射 `AppError` → 退出码 + JSON | 与 Host 错误语义对齐 |
 | 表格 / 进度 | 轻量手写或 comfy-table；进度走 stderr | 不污染 stdout JSON |
+| 交互确认 | **`inquire`**（TTY only） | `--json` 永不 prompt；破坏性确认可用 `-y` 跳过 |
 
 **刻意不做**：初始化 Tauri app、调用 ACP/Agent registry、任何模型 SDK。  
 **编译期已知**：因 path 依赖整包 `agentero_lib`，会带上 tauri 等依赖；可接受。

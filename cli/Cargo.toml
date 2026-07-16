@@ -20,6 +20,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 dirs = "6"
 toml = "0.8"
 thiserror = "2"
+# Interactive prompts (TTY only; skipped under --json / non-TTY)
+inquire = "0.7"
 
 [dev-dependencies]
 assert_cmd = "2"

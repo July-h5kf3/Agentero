@@ -139,7 +139,13 @@ pub fn looks_like_path(ref_: &str) -> bool {
 }
 
 /// Resolve paper by path or id (with ambiguity detection).
-pub fn resolve_paper(vault: &Path, ref_: &str) -> Result<PaperRecord, CliError> {
+///
+/// When multiple rows share an id and stdin is a TTY (not `--json`), prompts with `inquire::Select`.
+pub fn resolve_paper(
+    vault: &Path,
+    ref_: &str,
+    globals: &GlobalOpts,
+) -> Result<PaperRecord, CliError> {
     let ref_ = ref_.trim();
     if ref_.is_empty() {
         return Err(CliError::usage("paper ref is required"));
@@ -156,6 +162,14 @@ pub fn resolve_paper(vault: &Path, ref_: &str) -> Result<PaperRecord, CliError> 
         1 => Ok(matches.into_iter().next().expect("len 1")),
         _ => {
             let candidates: Vec<String> = matches.iter().map(|p| p.path.clone()).collect();
+            if let Some(path) = crate::prompt::select_one(
+                globals,
+                &format!("Multiple papers match id '{ref_}'"),
+                candidates.clone(),
+            )? {
+                return papers::get_by_path(vault, &path)?
+                    .ok_or_else(|| CliError::paper_not_found(&path));
+            }
             Err(CliError::paper_ambiguous(ref_, &candidates))
         }
     }

@@ -7,20 +7,92 @@ mod commands;
 mod config;
 mod error;
 mod output;
+mod prompt;
 mod resolve;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::builder::styling::{AnsiColor, Effects, Styles};
+use clap::{ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use error::{CliError, ExitCode};
 use output::{emit_err, emit_ok, OutputFormat};
 use resolve::GlobalOpts;
 use std::path::PathBuf;
 use std::process::ExitCode as StdExitCode;
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 enum ColorWhen {
     Auto,
     Always,
     Never,
+}
+
+/// High-contrast help styles so sections / flags / placeholders are easy to scan.
+///
+/// | Part | Color | Examples |
+/// |---|---|---|
+/// | header | magenta + bold + underline | `Commands:`, `Options:` |
+/// | usage | bright white + bold | `Usage:` |
+/// | literal | bright green + bold | `paper`, `--vault`, `list` |
+/// | placeholder | bright yellow | `<PATH>`, `<COMMAND>` |
+/// | valid | bright cyan | `text`, `json`, `auto` |
+/// | error / invalid | bright red + bold | parse errors |
+fn clap_styles() -> Styles {
+    Styles::styled()
+        .header(
+            AnsiColor::BrightMagenta
+                .on_default()
+                .effects(Effects::BOLD | Effects::UNDERLINE),
+        )
+        .usage(AnsiColor::BrightWhite.on_default().effects(Effects::BOLD))
+        .literal(AnsiColor::BrightGreen.on_default().effects(Effects::BOLD))
+        .placeholder(AnsiColor::BrightYellow.on_default())
+        .valid(AnsiColor::BrightCyan.on_default())
+        .invalid(AnsiColor::BrightRed.on_default().effects(Effects::BOLD))
+        .error(AnsiColor::BrightRed.on_default().effects(Effects::BOLD))
+}
+
+/// Peek `--color` before full parse so help itself is styled correctly.
+///
+/// Priority: explicit `--color` → `CLICOLOR_FORCE` → `NO_COLOR` / `CLICOLOR=0` → auto.
+fn peek_color_when() -> ColorWhen {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--color" {
+            return match args.next().as_deref() {
+                Some("always") => ColorWhen::Always,
+                Some("never") => ColorWhen::Never,
+                Some("auto") | None => ColorWhen::Auto,
+                Some(_) => ColorWhen::Auto,
+            };
+        }
+        if let Some(v) = arg.strip_prefix("--color=") {
+            return match v {
+                "always" => ColorWhen::Always,
+                "never" => ColorWhen::Never,
+                _ => ColorWhen::Auto,
+            };
+        }
+    }
+    // Env only applies when the flag is omitted.
+    if matches!(
+        std::env::var("CLICOLOR_FORCE").as_deref(),
+        Ok(v) if v != "0" && !v.is_empty()
+    ) {
+        return ColorWhen::Always;
+    }
+    if std::env::var_os("NO_COLOR").is_some()
+        || matches!(std::env::var("CLICOLOR").as_deref(), Ok("0"))
+    {
+        return ColorWhen::Never;
+    }
+    ColorWhen::Auto
+}
+
+fn color_choice(when: ColorWhen) -> ColorChoice {
+    match when {
+        ColorWhen::Auto => ColorChoice::Auto,
+        ColorWhen::Always => ColorChoice::Always,
+        ColorWhen::Never => ColorChoice::Never,
+    }
 }
 
 #[derive(Debug, Parser)]
@@ -30,7 +102,9 @@ enum ColorWhen {
     about = "Agentero headless CLI — Vault / Catalog machine interface (no BYOA)",
     long_about = "Discover, manage, and expose a local Agentero research vault and catalog.\n\
                   Does not run agents or paper-reader. Prefer --json for scripts and external agents.\n\
-                  Design: docs/development/cli.md"
+                  Design: docs/development/cli.md",
+    styles = clap_styles(),
+    propagate_version = true
 )]
 struct Cli {
     /// Vault root (absolute or relative). Overrides env / walk-up / config.
@@ -58,7 +132,7 @@ struct Cli {
     #[arg(long = "translator-url", global = true, value_name = "URL")]
     translator_url: Option<String>,
 
-    /// Colorize text output.
+    /// Colorize help / errors (`auto` = TTY; `always` overrides NO_COLOR).
     #[arg(long = "color", global = true, value_enum, default_value = "auto")]
     color: ColorWhen,
 
@@ -104,8 +178,23 @@ enum Commands {
 }
 
 fn main() -> StdExitCode {
+    // Apply color choice before parse so `--help` / usage errors use the same styles.
+    let mut cmd = Cli::command()
+        .styles(clap_styles())
+        .color(color_choice(peek_color_when()));
+    let matches = match cmd.try_get_matches_from_mut(std::env::args_os()) {
+        Ok(m) => m,
+        Err(err) => {
+            // clap prints help / usage itself (styled).
+            err.exit();
+        }
+    };
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(c) => c,
+        Err(err) => err.exit(),
+    };
+
     // Honor AGENTERO_OUTPUT when -o / --json not set explicitly via env default later.
-    let cli = Cli::parse();
     let format = resolve_format(&cli);
     let globals = GlobalOpts {
         vault_flag: cli.vault.clone(),

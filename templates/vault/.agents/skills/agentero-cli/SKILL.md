@@ -22,7 +22,10 @@ Design reference (repo): `docs/development/cli.md`.
 ## Prerequisites
 
 - Binary name: **`agentero`** (crate lives at repo `cli/` when built).
-- Prefer always passing **`--json`** for machine parsing.
+- Prefer always passing **`--json`** for machine parsing (disables interactive
+  prompts from `inquire`).
+- Destructive file deletes: pass **`-y` / `--yes`** under `--json` / non-TTY;
+  humans on a TTY may confirm via prompt instead.
 - Resolve vault with (first wins): `--vault <path>` → env `AGENTERO_VAULT` →
   cwd walk-up (`.agentero/catalog.sqlite` or standard dirs) → CLI config
   `default_vault`.
