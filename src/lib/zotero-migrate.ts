@@ -55,6 +55,7 @@ export async function migrateZotero(opts: {
 	zoteroDir: string;
 	parentDir?: string;
 	copyPdfs: boolean;
+	preserveCollections: boolean;
 }): Promise<ZoteroMigrateResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:zoteroMigrate.desktopOnly"));
@@ -65,6 +66,7 @@ export async function migrateZotero(opts: {
 			zoteroDir: opts.zoteroDir,
 			parentDir: opts.parentDir ?? "papers",
 			copyPdfs: opts.copyPdfs,
+			preserveCollections: opts.preserveCollections,
 		},
 	});
 	if (!res.ok || !res.data) {

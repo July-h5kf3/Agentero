@@ -14,7 +14,7 @@ use crate::services::pdf_parse::maybe_generate_paper_md_after_download;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -47,6 +47,9 @@ pub struct ZoteroMigrateArgs {
     /// Copy each item's local PDF into the paper folder.
     #[serde(default)]
     pub copy_pdfs: bool,
+    /// Recreate Zotero collections as nested subfolders under `parent_dir`.
+    #[serde(default)]
+    pub preserve_collections: bool,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -64,6 +67,8 @@ pub struct ZoteroMigrateResult {
 struct ReadItem {
     json: Value,
     pdfs: Vec<PathBuf>,
+    /// Sanitized folder segments of the item's chosen Zotero collection (empty = unfiled).
+    collection_path: Vec<String>,
 }
 
 /// Read-only preview: how many regular items, and how many have a local PDF.
@@ -105,7 +110,16 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
 
     let mut out = ZoteroMigrateResult::default();
     for item in items {
-        match migrate_one(&vault, &parent_rel, &item, args.copy_pdfs, &mut dedup).await {
+        match migrate_one(
+            &vault,
+            &parent_rel,
+            &item,
+            args.copy_pdfs,
+            args.preserve_collections,
+            &mut dedup,
+        )
+        .await
+        {
             Ok(Some((path, copied))) => {
                 out.imported += 1;
                 out.paths.push(path);
@@ -125,6 +139,7 @@ async fn migrate_one(
     parent_rel: &str,
     item: &ReadItem,
     copy_pdfs: bool,
+    preserve_collections: bool,
     dedup: &mut Dedup,
 ) -> Result<Option<(String, bool)>, AppError> {
     let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
@@ -138,7 +153,13 @@ async fn migrate_one(
         return Ok(None);
     }
 
-    let path_rel = free_path(vault, parent_rel, &id);
+    // Recreate the Zotero collection folder under the base parent when requested.
+    let base_parent = if preserve_collections && !item.collection_path.is_empty() {
+        format!("{parent_rel}/{}", item.collection_path.join("/"))
+    } else {
+        parent_rel.to_string()
+    };
+    let path_rel = free_path(vault, &base_parent, &id);
     let paper_dir = vault.join(&path_rel);
     fs::create_dir_all(&paper_dir)?;
     write_paper_shell(&paper_dir, &meta)?;
@@ -302,6 +323,7 @@ fn copy_and_read(db: &Path, tmp_db: &Path, zotero_dir: &Path) -> Result<Vec<Read
 }
 
 fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+    let collections = read_collections(conn)?;
     let mut stmt = conn.prepare(
         "SELECT i.itemID, it.typeName
          FROM items i
@@ -323,11 +345,20 @@ fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>
             continue;
         }
         let creators = read_creators(conn, item_id)?;
-        let tags = read_tags(conn, item_id)?;
+        let mut tags = read_tags(conn, item_id)?;
+        let coll_ids = read_item_collection_ids(conn, item_id)?;
+        // Keep collection membership as tags (an item can live in several).
+        for name in collection_leaf_names(&collections, &coll_ids) {
+            if !tags.iter().any(|t| t.eq_ignore_ascii_case(&name)) {
+                tags.push(name);
+            }
+        }
+        let collection_path = chosen_collection_path(&collections, &coll_ids);
         let pdfs = read_pdf_attachments(conn, zotero_dir, item_id)?;
         out.push(ReadItem {
             json: assemble_json(&type_name, fields, creators, &tags),
             pdfs,
+            collection_path,
         });
     }
     Ok(out)
@@ -405,6 +436,107 @@ fn read_tags(conn: &Connection, item_id: i64) -> Result<Vec<String>, AppError> {
         out.push(row?);
     }
     Ok(out)
+}
+
+/// A Zotero collection (folder) node.
+struct Collection {
+    name: String,
+    parent: Option<i64>,
+}
+
+fn read_collections(conn: &Connection) -> Result<HashMap<i64, Collection>, AppError> {
+    // Older/newer Zotero all have the collections table; be lenient if absent.
+    let mut stmt = match conn
+        .prepare("SELECT collectionID, collectionName, parentCollectionID FROM collections")
+    {
+        Ok(s) => s,
+        Err(_) => return Ok(HashMap::new()),
+    };
+    let rows = stmt.query_map(params![], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<i64>>(2)?,
+        ))
+    })?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (id, name, parent) = row?;
+        map.insert(id, Collection { name, parent });
+    }
+    Ok(map)
+}
+
+fn read_item_collection_ids(conn: &Connection, item_id: i64) -> Result<Vec<i64>, AppError> {
+    let mut stmt = match conn.prepare("SELECT collectionID FROM collectionItems WHERE itemID = ?1")
+    {
+        Ok(s) => s,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let rows = stmt.query_map(params![item_id], |r| r.get::<_, i64>(0))?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+/// Full folder path (root → leaf) of a collection, sanitized for the filesystem.
+fn collection_full_path(collections: &HashMap<i64, Collection>, id: i64) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut seen = HashSet::new();
+    let mut cur = Some(id);
+    while let Some(cid) = cur {
+        if !seen.insert(cid) || chain.len() >= 16 {
+            break; // cycle / depth guard
+        }
+        let Some(c) = collections.get(&cid) else {
+            break;
+        };
+        if let Some(seg) = sanitize_segment(&c.name) {
+            chain.push(seg);
+        }
+        cur = c.parent;
+    }
+    chain.reverse();
+    chain
+}
+
+/// Deterministic single collection folder for an item (smallest full path).
+fn chosen_collection_path(collections: &HashMap<i64, Collection>, ids: &[i64]) -> Vec<String> {
+    ids.iter()
+        .map(|id| collection_full_path(collections, *id))
+        .filter(|p| !p.is_empty())
+        .min_by(|a, b| a.join("/").cmp(&b.join("/")))
+        .unwrap_or_default()
+}
+
+/// Leaf collection names (all memberships) for use as tags.
+fn collection_leaf_names(collections: &HashMap<i64, Collection>, ids: &[i64]) -> Vec<String> {
+    ids.iter()
+        .filter_map(|id| collections.get(id))
+        .map(|c| c.name.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Sanitize a collection name into a single safe folder segment (None to skip).
+fn sanitize_segment(name: &str) -> Option<String> {
+    let cleaned: String = name
+        .trim()
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let cleaned = cleaned.trim().trim_matches('.').trim().to_string();
+    if cleaned.is_empty() || cleaned == ".." {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 fn read_pdf_attachments(
@@ -500,6 +632,8 @@ mod tests {
              CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);
              CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, linkMode INTEGER, contentType TEXT, path TEXT);
              CREATE TABLE deletedItems (itemID INTEGER);
+             CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, collectionName TEXT, parentCollectionID INTEGER);
+             CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER, orderIndex INTEGER);
 
              INSERT INTO itemTypes VALUES (1,'journalArticle'),(2,'attachment'),(3,'note');
              INSERT INTO creatorTypes VALUES (1,'author');
@@ -513,6 +647,8 @@ mod tests {
              INSERT INTO itemCreators VALUES (10,1,1,0);
              INSERT INTO tags VALUES (1,'nlp');
              INSERT INTO itemTags VALUES (10,1);
+             INSERT INTO collections VALUES (1,'NLP',NULL),(2,'Transformers',1);
+             INSERT INTO collectionItems VALUES (2,10,0);
              -- pdf attachment (child item 11) in storage/BBBB2222
              INSERT INTO items VALUES (11,2,'BBBB2222');
              INSERT INTO itemAttachments VALUES (11,10,0,'application/pdf','storage:paper.pdf');
@@ -556,6 +692,17 @@ mod tests {
         assert_eq!(meta.doi.as_deref(), Some("10.5555/abc"));
         // DOI present → id is the doi slug
         assert_eq!(meta.id, "10_5555_abc");
+    }
+
+    #[test]
+    fn recreates_collection_path_and_tags() {
+        let conn = seed_db();
+        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let it = &items[0];
+        assert_eq!(it.collection_path, vec!["NLP", "Transformers"]);
+        let tags = it.json["tags"].as_array().unwrap();
+        assert!(tags.iter().any(|t| t["tag"] == "Transformers"));
+        assert!(tags.iter().any(|t| t["tag"] == "nlp"));
     }
 
     #[test]

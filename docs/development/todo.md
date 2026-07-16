@@ -94,7 +94,8 @@
 1. **Zotero/BibTeX 迁移工具** 🟡
    - [x] 一键从本地 Zotero 迁移：直读 `zotero.sqlite` + `storage/` → catalog，可选拷本地 PDF（`zotero_scan` / `zotero_migrate`；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
    - [ ] 解析 Zotero export / 独立 BibTeX 文件路径（Library 导入已覆盖 Bib/RIS 文本）。
-   - [ ] 保留 Zotero 笔记 / 批注、collection 层级与引用 key 映射。
+   - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）。
+   - [ ] 保留 Zotero 笔记 / 批注与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Eye + catalog `is_read`）。

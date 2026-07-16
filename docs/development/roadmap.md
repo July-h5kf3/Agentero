@@ -274,7 +274,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 ### 长期优先级 P2
 
-- [x] 从本地 Zotero 迁移（`zotero_scan` / `zotero_migrate`：直读 sqlite + 可选拷 PDF）；Zotero 笔记 / 批注 / collection 层级仍待。
+- [x] 从本地 Zotero 迁移（`zotero_scan` / `zotero_migrate`：直读 sqlite、可选拷 PDF、按 collection 建子文件夹）；Zotero 笔记 / 批注仍待。
 - [ ] 浏览器插件与网页 importer。
 - [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 锚点图标 + ACP；M5 增强仍待）。
 - [ ] PDF/HTML 标注系统（`highlights.md`）。

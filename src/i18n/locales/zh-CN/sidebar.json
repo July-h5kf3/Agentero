@@ -67,6 +67,8 @@
 		"scanResult": "{{count}} 篇文献 · {{withPdf}} 篇有本地 PDF",
 		"copyPdfs": "把 PDF 复制进知识库",
 		"copyPdfsHint": "关闭则只导入书目信息，之后可按需下载 PDF。",
+		"preserveCollections": "按 Zotero 分类建子文件夹",
+		"preserveCollectionsHint": "在目标文件夹下还原 Zotero 的文件夹层级；关闭则全部平铺。",
 		"targetFolder": "目标文件夹",
 		"migrate": "开始迁移",
 		"migrating": "迁移中…",

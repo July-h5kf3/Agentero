@@ -726,4 +726,5 @@ arXiv URL 推导：
 - 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
 - PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
 - 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。
-- 非目标（v1）：Zotero 笔记 / 批注、collection 层级、群组库。
+- 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（默认开）→ 在目标目录下还原 collection 层级（`{parent}/<collection 路径>/<id>/`），collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（全路径字典序最小）。
+- 非目标（v1）：Zotero 笔记 / 批注、群组库。

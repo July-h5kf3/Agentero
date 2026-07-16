@@ -67,6 +67,8 @@
 		"scanResult": "{{count}} references · {{withPdf}} with a local PDF",
 		"copyPdfs": "Copy PDFs into the vault",
 		"copyPdfsHint": "Off: import bibliographic info only and download PDFs on demand later.",
+		"preserveCollections": "Recreate Zotero collections as folders",
+		"preserveCollectionsHint": "Mirror your Zotero folder tree under the target folder; off keeps everything flat.",
 		"targetFolder": "Target folder",
 		"migrate": "Migrate",
 		"migrating": "Migrating…",

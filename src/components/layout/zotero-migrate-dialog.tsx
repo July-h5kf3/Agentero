@@ -42,6 +42,7 @@ export function ZoteroMigrateDialog({
 	const [scan, setScan] = useState<ZoteroScan | null>(null);
 	const [scanning, setScanning] = useState(false);
 	const [copyPdfs, setCopyPdfs] = useState(true);
+	const [preserveCollections, setPreserveCollections] = useState(true);
 	const [parentDir, setParentDir] = useState("papers");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -94,6 +95,7 @@ export function ZoteroMigrateDialog({
 						zoteroDir: dir,
 						parentDir: parentDir.trim() || "papers",
 						copyPdfs,
+						preserveCollections,
 					});
 				},
 			);
@@ -171,6 +173,26 @@ export function ZoteroMigrateDialog({
 									onChange={(e) => setParentDir(e.target.value)}
 									disabled={busy}
 								/>
+							</div>
+							<div className="flex items-start gap-2.5">
+								<Checkbox
+									id="zotero-collections"
+									checked={preserveCollections}
+									onCheckedChange={(v) => setPreserveCollections(v === true)}
+									disabled={busy}
+									className="mt-0.5"
+								/>
+								<div className="space-y-0.5">
+									<Label
+										htmlFor="zotero-collections"
+										className="font-normal text-sm"
+									>
+										{t("sidebar:zoteroMigrate.preserveCollections")}
+									</Label>
+									<p className="text-muted-foreground text-xs">
+										{t("sidebar:zoteroMigrate.preserveCollectionsHint")}
+									</p>
+								</div>
 							</div>
 							<div className="flex items-start gap-2.5">
 								<Checkbox
