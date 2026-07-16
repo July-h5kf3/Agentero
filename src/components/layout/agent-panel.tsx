@@ -8,6 +8,7 @@ import {
 	History,
 	Pencil,
 	Plus,
+	Star,
 	X,
 	Zap,
 } from "lucide-react";
@@ -154,11 +155,13 @@ import {
 	listenAgentUsage,
 	loadExternalCodexHistoryPref,
 	loadModelCatalog,
+	loadModelFavorites,
 	loadModelPref,
 	readCodexThread,
 	runOnce,
 	saveExternalCodexHistoryPref,
 	saveModelCatalog,
+	saveModelFavorites,
 	saveModelPref,
 	scanCatalog,
 	setDefaultAgent,
@@ -565,6 +568,7 @@ export function AgentPanel({
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
 	const [modelId, setModelId] = useState<string | null>(null);
+	const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
 	const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
 	const [warming, setWarming] = useState(false);
 	const [agentListenersReady, setAgentListenersReady] = useState(false);
@@ -775,6 +779,7 @@ export function AgentPanel({
 		if (!selectedAgentId) {
 			setModels([]);
 			setModelId(null);
+			setFavoriteIds([]);
 			setEffortOptions([]);
 			setReasoningEffort(null);
 			setFastAvailable(false);
@@ -793,6 +798,7 @@ export function AgentPanel({
 		setIncludeExternalCodexHistory(
 			loadExternalCodexHistoryPref(selectedAgentId),
 		);
+		setFavoriteIds(loadModelFavorites(selectedAgentId));
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
 		if (catalog?.models.length) {
@@ -1266,8 +1272,14 @@ export function AgentPanel({
 	}, [modelId, models]);
 
 	const groupedModels = useMemo(() => {
+		const favSet = new Set(favoriteIds);
+		const favItems = favoriteIds
+			.map((id) => models.find((m) => m.id === id))
+			.filter((m): m is AgentModelChoice => Boolean(m));
+
 		const groups = new Map<string, AgentModelChoice[]>();
 		for (const model of models) {
+			if (favSet.has(model.id)) continue;
 			const group = model.group || t("models.defaultGroup");
 			let items = groups.get(group);
 			if (!items) {
@@ -1276,8 +1288,26 @@ export function AgentPanel({
 			}
 			items.push(model);
 		}
-		return Array.from(groups.entries());
-	}, [models, t]);
+
+		const result: {
+			id: string;
+			heading: string;
+			isFavorites: boolean;
+			items: AgentModelChoice[];
+		}[] = [];
+		if (favItems.length > 0) {
+			result.push({
+				id: "__favorites__",
+				heading: t("models.favorites"),
+				isFavorites: true,
+				items: favItems,
+			});
+		}
+		for (const [heading, items] of groups) {
+			result.push({ id: heading, heading, isFavorites: false, items });
+		}
+		return result;
+	}, [models, favoriteIds, t]);
 
 	const contextPaths = useMemo(() => {
 		const paths = [
@@ -1450,6 +1480,20 @@ export function AgentPanel({
 			}
 		})();
 	};
+
+	const toggleFavorite = useCallback(
+		(id: string) => {
+			if (!selectedAgentId) return;
+			setFavoriteIds((prev) => {
+				const next = prev.includes(id)
+					? prev.filter((x) => x !== id)
+					: [...prev, id];
+				saveModelFavorites(selectedAgentId, next);
+				return next;
+			});
+		},
+		[selectedAgentId],
+	);
 
 	const selectAgent = async (opt: AgentOption) => {
 		if (
@@ -2824,27 +2868,67 @@ export function AgentPanel({
 											placeholder={t("models.searchPlaceholder")}
 										/>
 										<ModelSelectorList className="max-h-64">
-											{groupedModels.map(([group, items]) => (
-												<ModelSelectorGroup key={group} heading={group}>
-													{items.map((model) => (
-														<ModelSelectorItem
-															key={model.id}
-															value={`${model.name} ${model.id}`}
-															onSelect={() => pickModel(model.id)}
-														>
-															<span
-																className={cn(
-																	"flex-1 truncate",
-																	modelId === model.id && "font-medium",
-																)}
+											{groupedModels.map((group) => (
+												<ModelSelectorGroup
+													key={group.id}
+													heading={group.heading}
+												>
+													{group.items.map((model) => {
+														const favorited = favoriteIds.includes(model.id);
+														return (
+															<ModelSelectorItem
+																key={model.id}
+																value={`${model.name} ${model.id}`}
+																onSelect={() => pickModel(model.id)}
 															>
-																{model.name}
-															</span>
-															{modelId === model.id ? (
-																<CheckIcon className="size-3.5 text-muted-foreground" />
-															) : null}
-														</ModelSelectorItem>
-													))}
+																<span
+																	className={cn(
+																		"flex-1 truncate",
+																		modelId === model.id && "font-medium",
+																	)}
+																>
+																	{model.name}
+																</span>
+																{modelId === model.id ? (
+																	<CheckIcon className="size-3.5 text-muted-foreground" />
+																) : null}
+																<button
+																	type="button"
+																	aria-label={
+																		favorited
+																			? t("models.removeFromFavorites")
+																			: t("models.addToFavorites")
+																	}
+																	title={
+																		favorited
+																			? t("models.removeFromFavorites")
+																			: t("models.addToFavorites")
+																	}
+																	className={cn(
+																		"rounded p-0.5 text-muted-foreground transition hover:text-foreground",
+																		favorited
+																			? "opacity-100"
+																			: "opacity-0 group-hover/command-item:opacity-100 group-data-selected/command-item:opacity-100",
+																	)}
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		e.preventDefault();
+																		toggleFavorite(model.id);
+																	}}
+																	onPointerDown={(e) => e.stopPropagation()}
+																	onMouseDown={(e) => e.stopPropagation()}
+																>
+																	<Star
+																		className={cn(
+																			"size-3.5",
+																			favorited &&
+																				"fill-current text-amber-500",
+																		)}
+																	/>
+																</button>
+															</ModelSelectorItem>
+														);
+													})}
 												</ModelSelectorGroup>
 											))}
 											<ModelSelectorEmpty>

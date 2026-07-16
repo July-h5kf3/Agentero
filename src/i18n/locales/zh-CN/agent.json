@@ -81,6 +81,9 @@
 	},
 	"models": {
 		"defaultGroup": "模型",
+		"favorites": "收藏",
+		"addToFavorites": "添加到收藏",
+		"removeFromFavorites": "取消收藏",
 		"selectTooltip": "选择模型 (ACP)",
 		"reportedTooltip": "Agent 上报模型后将在此显示",
 		"loading": "加载中……",
