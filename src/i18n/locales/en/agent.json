@@ -63,6 +63,11 @@
 	},
 	"thinking": "Thinking…",
 	"copy": "Copy",
+	"edit": {
+		"action": "Edit",
+		"resend": "Resend",
+		"cancel": "Cancel"
+	},
 	"plan": {
 		"title": "Plan",
 		"steps": "{{completed}}/{{total}} steps"

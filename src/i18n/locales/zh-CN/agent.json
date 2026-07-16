@@ -63,6 +63,11 @@
 	},
 	"thinking": "思考中……",
 	"copy": "复制",
+	"edit": {
+		"action": "编辑",
+		"resend": "重新发送",
+		"cancel": "取消"
+	},
 	"plan": {
 		"title": "计划",
 		"steps": "{{completed}}/{{total}} 步"
