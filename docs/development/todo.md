@@ -84,7 +84,28 @@
    - Graph 增加全屏/聚焦模式、邻居高亮、节点搜索。
    - 双链边可写入 catalog 可重建表并支持增量重建。
 
-4. **Release 完善**
+4. **工作区标签页与分屏**（roadmap V0.6）
+   - [ ] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / Library 以 tab 打开，可关闭、切换、拖拽重排。
+   - [ ] 每 tab 保留滚动位置、PDF 缩放、视图模式；未保存 MD 关闭前提示。
+   - [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）。
+   - [ ] 快捷键：新 tab / 关 tab / 切 tab / 分屏·取消分屏（键位写入 `docs/frontend/ui.md`）。
+   - [ ] 文件树：当前 tab 打开 vs 新 tab 打开（设置可配默认）。
+   - [ ] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集；关窗/换 Vault 可恢复布局。
+   - 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开。
+
+5. **引用关系 / Connected Papers**（roadmap V0.7）
+   - [ ] **文内引用 hover → 右侧 Paper Info**：PDF/HTML/`PAPER.md` 中识别 `[n]` / Author-year / DOI·arXiv 链接；hover 时侧栏展示目标论文 Info（库内 path / 远程缓存 metadata、入库或打开）。
+   - [ ] **引用图数据**：cites / cited_by 可重建缓存（catalog 扩展表或 `.motif/`）；外部 API 可插拔（Semantic Scholar / OpenAlex 等），失败可降级 TeX/参考文献解析。
+   - [ ] **Connected Papers 式邻域 UI**：以当前 paper 为中心展示引用/被引列表 + 简易图；节点可打开 / 入库 / 进阅读队列。
+   - [ ] 与 V0.4 **双链 Graph** 区分：双链 = `[[wikilinks]]`；本项 = bibliographic 引用边。
+
+6. **Agent 引用与综述工作流**（衔接 V0.3 面板入口 + V0.7）
+   - [ ] 面板 workflow：**Explore citations**（沿引用/被引解释相关性、建议精读顺序）。
+   - [ ] 面板 workflow：**Map related work**（本地 NOTES + 引用图 → Related Work 骨架，含本地 path）。
+   - [ ] 面板 workflow：**Ingest citation neighborhood**（确认后批量魔棒入库邻居）。
+   - [ ] 与「Summarize / Ask library / Draft Related Work」共用 prompt 注入与草稿确认路径。
+
+7. **Release 完善**
    - tag 构建已完成；后续补签名、公证、自动 changelog。
    - 同步 `package.json`、`src-tauri/tauri.conf.json` 和 tag 版本号。
    - Release artifact 命名规范化，区分 macOS arch / Windows / Linux。
@@ -98,8 +119,9 @@
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Eye + catalog `is_read`）。
-   - [ ] 多篇对比。
-   - [ ] Related Work 草稿。
+   - [ ] 多篇对比（可与分屏 + 引用邻域联动）。
+   - [ ] Related Work 草稿（面板入口；与 V0.7 Map related work 可合并实现）。
+   - [ ] Explore citations / Ingest neighborhood（见 P1-6；完成后勾到此处）。
    - [ ] Idea 批判性评估。
    - [ ] 实验复现清单。
 
@@ -121,7 +143,32 @@
    - 浏览器插件一键收集。
    - 远程 PDF 链接入库。
 
-6. **多端与协作**
+6. **引用图增强**
+   - prior / derivative 布局、相似度聚类、跨库联合图（更深 Connected Papers 体验）。
+   - 作者、机构、会议关系图谱。
+
+7. **工作区增强**
+   - 超过 2 格的网格分屏；tab 固定（pin）、按 paper 分组。
+   - 命名工作区会话（保存/恢复一整套 tab + 分屏布局）。
+
+8. **多端与协作**
    - iPadOS 触控布局。
    - Git 版本管理集成。
    - 可选云同步与多设备阅读。
+
+---
+
+## 已完成能力速览（对照现状）
+
+便于对照「还没做的新项」。细节与验收以 [`roadmap.md`](roadmap.md) 为准。
+
+| 领域 | 已完成 | 未完成 / 进行中 |
+|---|---|---|
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条 | 最近 Vault 迁 Tauri Store；文件监听增量刷新 |
+| 中间内容 | 单槽：Library 表 / PDF / HTML / Markdown WYSIWYG；Notes 仅具体论文时显示 | **文档标签页、分屏**（V0.6） |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
+| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader 精读**、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、权限 UI；**引用类 workflow**（V0.7） |
+| 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
+| 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
+| PDF | 缩放、划词提问 MVP（asks JSON） | 本地 PDF 直开、highlights 标注系统、M5 |
+| 发布 | tag → 三平台草稿 Release | 签名/公证/changelog |

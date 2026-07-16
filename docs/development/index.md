@@ -24,6 +24,8 @@
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
 | 阅读增强 | 🟡 | PDF **缩放**；**划词提问** MVP（`asks/*.json` + 锚点图标 + ACP）；完整 `highlights.md` 批注仍待 |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
+| V0.6 标签页与分屏 | ⏳ | 中间栏多文档 tab + 2 格分屏（规划中） |
+| V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | Release CI | ✅ | `v*` tag → 三平台安装包草稿 Release |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
