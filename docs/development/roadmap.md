@@ -21,6 +21,7 @@
 | V0.6 工作区标签页与分屏 | ⏳ 待实现 | 中间栏由「单文件固定排布」升级为可开多标签、可分屏；与当前左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
 | **CLI（headless Vault 接口）** | ⏳ 设计定稿 | 设计见 [`cli.md`](cli.md)；代码目录 **`cli/`**；**不迁 core**，path 依赖 `agentero_lib::services`；Vault 创建/发现/暴露 + 文献基础；**无 BYOA / 无精读编排**；Agent 友好 `--json`。 |
+| **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
 
 **精确 arXiv/标识符入库（可用）**：魔棒粘贴 ID/URL → Translator → catalog + `NOTES.md` 壳 → `source/` PDF（arXiv 含 TeX）→ Library 表可见；缺资源时树行/Library 可补下。
@@ -313,6 +314,75 @@
 - [ ] ~~抽离 `agentero-core` crate~~（远期可选，非本里程碑）
 - [ ] ~~daemon / `serve`~~
 
+## Vault 采纳：现有文件夹自动发现与整理
+
+> 与 **Create Vault（空库脚手架）**、**CLI `vault create`** 互补：用户打开的是 **已有资料夹**（散落 PDF、Markdown 笔记、Zotero 导出、半 Agentero 结构等），产品应 **发现 → 计划 → 改造**，而非只能「从零创建」。
+
+### 目标
+
+打开（或 CLI 指定）一个文件夹时：
+
+1. **发现**当前目录像什么（空壳 / 已是合法 Vault / 缺 catalog / 仅 PDF 堆 / 混杂笔记 / 未知）。
+2. **整理与改造**为符合 data-model 的 Vault：`papers/`·`notes/`·`plans/`、`.agentero/catalog.sqlite`、paper 最小单元、可选 `AGENTS.md` / skills 种子。
+3. 过程 **可解释、可预览、可撤销或至少可报告**；默认 **不覆盖** 用户手写笔记与已有 Markdown。
+
+### 触发点
+
+| 入口 | 行为（规划） |
+|---|---|
+| 桌面 **打开文件夹** | 打开后跑发现；若非「就绪 Vault」→ 提示整理计划或后台任务 |
+| 桌面 **欢迎页 / Open** | 同上 |
+| CLI（落地后） | `agentero vault adopt <path>` / `vault check --fix` 等（命名实现时定） |
+| 用户手动 | 设置或命令面板「整理此文件夹为 Vault」 |
+
+### 双路径（均可；可组合）
+
+| 路径 | 适用 | 说明 |
+|---|---|---|
+| **A. 编程（确定性）** | 结构清晰、规则可写死 | Host/CLI：扫描 PDF/目录名/arXiv 模式、补脚手架、`ensure_catalog`、历史 `metadata.json` 导入、paper 文件夹识别、可选批量 `paper_download_assets` / parse；输出 diff 清单 |
+| **B. Skill + Agent** | 命名混乱、多来源混杂、需语义归类 | Vault skill（如 `vault-adopt` / `vault-organize`）+ BYOA：读发现报告 → 提议移动/命名/NOTES 壳 → **用户确认后**落盘；可与 CLI/编程 API 配合执行机械步骤 |
+| **组合（推荐）** | 默认产品路径 | 编程先产 **发现报告 + 安全脚手架**；不确定项交给 Agent skill 或人工确认面板 |
+
+### 发现维度（初稿）
+
+- 是否已有 `.agentero/catalog.sqlite`、schema 版本、能否打开。
+- 是否已有 `papers/` / `notes/` / `plans/` / `AGENTS.md` / `.agents/skills`。
+- `papers/` 下 paper 单元候选（含 `NOTES.md` / `source/` / 根 PDF 等标记）。
+- 散落 PDF（根目录或任意子树）与可抽取标识符（arXiv/DOI）。
+- 已有 Markdown 笔记是否应归入 `notes/` 而非 paper。
+- 与 catalog 的漂移（盘上有、库中无 / 库中有、盘上无）。
+
+### 改造动作分级
+
+| 级别 | 示例 | 默认 |
+|---|---|---|
+| **安全自动** | 建缺失空目录、`ensure_catalog`、schema migrate、种子缺失的 `AGENTS.md`/skills（不覆盖） | 可默认开 |
+| **建议确认** | 散落 PDF → `papers/<id|citekey>/`、生成 NOTES 壳、catalog upsert | 计划面板 / `--yes` / Agent 确认 |
+| **禁止静默** | 覆盖用户 NOTES、删除文件、大范围重命名无备份 | 必须显式 |
+
+### 关键交付
+
+- [ ] 设计文档：`docs/development/vault-adopt.md`（或 backend 分册）：发现模型、报告 JSON、与 `vault_create` 边界。
+- [ ] **编程路径**：`vault_inspect` / `vault_adopt`（Host + 可选 CLI）→ 发现报告 + 安全脚手架 + 可选确认后迁移。
+- [ ] **Skill 路径**：模板 skill（如 `vault-organize`）描述如何读报告、提议整理、调用 CLI/不直接蛮力 `rm`。
+- [ ] 打开文件夹 UX：非就绪 Vault 时横幅/对话框「可整理」+ 进度进后台任务条。
+- [ ] 幂等：重复打开同一已整理库不重复打扰；报告可缓存于 `.agentero/`（可删重建）。
+- [ ] 与现有 **catalog 从 metadata.json 导入**、Create Vault 种子逻辑复用，避免第三套写盘规则。
+
+### 验收标准
+
+- [ ] 打开「仅含若干 PDF 的普通文件夹」可得到发现报告，并在用户确认后形成合法 Vault + catalog 行（至少路径与标题/id 尽力填充）。
+- [ ] 打开「已是完整 Agentero Vault」时发现为就绪，**无**破坏性改动、无多余弹窗（或仅首次静默 check）。
+- [ ] 缺 catalog 的半结构库可自动 `ensure_catalog` + 扫描 paper 单元补行，不覆盖已有 NOTES。
+- [ ] Agent skill 路径：在有默认 Agent 时可根据报告给出整理计划并经确认执行；无 Agent 时编程路径仍可用。
+
+### 风险与纪律
+
+- Local-first：改造结果仍是普通文件 + catalog，可被 Obsidian 打开。
+- 不覆盖用户手写；大改前 plan / dry-run。
+- Agent 路径不得绕过权限模式；破坏性操作走确认。
+- 与 V0.5 本地 PDF importer、Zotero 迁移工具边界写清（采纳 = 整夹变 Vault；importer = 单次导入源）。
+
 ## 4. Later
 
 这些能力不进入 MVP 主线，但可在上述版本之后继续规划：
@@ -365,6 +435,10 @@
 
 包含 **CLI（headless）**（[`cli.md`](cli.md)）。完成后，人与外部 Agent 可在无 GUI 下创建/发现 Vault、列表与入库文献基础能力；**不含** BYOA。代码在 `cli/`，复用 `agentero_lib` services，不迁 core。
 
+### Milestone I：现有文件夹可采纳 ⏳
+
+包含 **Vault 采纳 / 整理**。完成后，打开非标准或半结构目录时可自动发现并（在安全范围内或经确认后）改造为 Agentero Vault；支持 **编程路径** 与 **Skill + Agent 路径**，二者可组合。
+
 ## 6. 主要 TODO 总表
 
 ### 近期优先级 P0
@@ -386,6 +460,7 @@
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
 - [ ] 文件监听与索引增量刷新。
 - [ ] **CLI MVP**（设计已定稿 [`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export`；`--json`；path 复用 services，**不迁 core、无 Agent**。
+- [ ] **Vault 采纳（发现）**：打开文件夹时 inspect——合法 Vault / 半结构 / 散落 PDF / 未知；安全自动项（ensure catalog、缺目录脚手架、不覆盖种子）。
 
 ### 中期优先级 P1
 
@@ -401,6 +476,7 @@
 - [ ] **引用关系图 / Connected Papers 式邻域**（cites / cited_by 缓存 + 列表/简图）（V0.7-B）。
 - [ ] **Agent 引用工作流**：Explore citations / Map related work / Ingest neighborhood（V0.7-C）。
 - [ ] CLI 增强：`graph *`、`doctor`、shell completions；Release 附带 `agentero` 二进制。
+- [ ] **Vault 采纳（整理）**：确认后迁移散落 PDF→paper 单元、catalog 对齐、漂移修复；打开 UX + 后台任务；编程 API + 可选 `vault-organize` skill。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。
 
 ### Agent provider 后续改造
@@ -429,6 +505,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - 每个版本都必须保持 Vault 可被外部编辑器打开。
 - 每个版本都必须避免覆盖用户手写笔记。
+- **Vault 采纳 / 整理**不得静默覆盖 NOTES 或大范围删改；安全自动项与需确认项分级；Agent 路径须走权限与确认。
 - 新 importer 不得覆盖用户 `NOTES.md`；meta 只写 catalog；`PAPER.md` 可重建；不自动改用户导出的 PAPERS.md。
 - Catalog 损坏时依赖备份/export；双链缓存可从 Markdown 重建；历史 `metadata.json` 可导入。
 - 图谱和搜索可以使用缓存，但缓存损坏时必须能从 Markdown 重建。

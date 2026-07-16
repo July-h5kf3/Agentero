@@ -27,6 +27,7 @@
 | V0.6 标签页与分屏 | ⏳ | 中间栏多文档 tab + 2 格分屏（规划中） |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | CLI headless | ⏳ 设计定稿 | 目录 `cli/`；不迁 core；Vault 管理/发现/暴露 + 文献基础；无 BYOA（见 [`cli.md`](cli.md)） |
+| Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
 | Release CI | ✅ | `v*` tag → 三平台安装包草稿 Release |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。

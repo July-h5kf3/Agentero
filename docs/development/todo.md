@@ -67,6 +67,15 @@
    - 增加文件监听，外部编辑器修改后自动刷新当前文件与 wiki 索引。
    - 保存失败、外部冲突和未保存状态要有明确提示。
 
+4b. **Vault 采纳 / 现有文件夹发现（编程优先）** — roadmap「Vault 采纳」
+   - 场景：用户 **打开已有文件夹**（非 Create Vault），自动 **发现** 是否已是 Agentero Vault、缺什么、盘上有哪些 paper/PDF 候选。
+   - [ ] 设计：`docs/development/vault-adopt.md`（发现报告 JSON、安全级/确认级动作、与 `vault_create` 边界）。
+   - [ ] Host：`vault_inspect`（只读报告）——结构、catalog、paper 单元、散落 PDF、与 catalog 漂移。
+   - [ ] Host：安全自动整理——缺 `papers|notes|plans|.agentero` 则补空目录；`ensure_catalog` + schema migrate；缺失则种子 `AGENTS.md` / bundled skills（**不覆盖**）。
+   - [ ] 打开文件夹 UX：就绪则静默；半结构/未知则横幅或对话框「可整理」，进度进后台任务条。
+   - [ ] 幂等：已就绪 Vault 重复打开不反复打扰。
+   - 路径：**以编程为主**；不确定命名/归类留给 P1 skill 或确认面板。
+
 5. **CLI（headless Vault 接口）** — 设计定稿 [`cli.md`](cli.md)；可与 UI 并行
    - 边界：**无 BYOA / 无 Agent / 无 paper-reader**；只做 Vault 管理、发现、暴露 + 文献基础能力。
    - 布局：仓库根 **`cli/`**（package `agentero-cli`，bin `agentero`）；根 Cargo workspace `members = ["src-tauri", "cli"]`。
@@ -92,6 +101,16 @@
    - DOI / arXiv ID 识别，元数据确认面板。
    - 生成 citekey、`PAPER.md`、`NOTES.md`；metadata 写入 catalog。
    - 默认本地解析，MinerU BYOK 后可选云端解析。
+   - 与 **Vault 采纳** 边界：importer = 用户显式导入源；采纳 = 整夹扫描改造。
+
+2b. **Vault 采纳 / 整理（确认迁移 + Skill 可选）** — 接 P0-4b
+   - [ ] 确认后改造：散落 PDF → `papers/<id|citekey>/` + NOTES 壳 + catalog upsert（复用 lookup/import 写盘纪律）。
+   - [ ] catalog ↔ 磁盘漂移修复（有盘无行 / 有行无盘的报告与可选清理索引）。
+   - [ ] 历史 `metadata.json` → catalog 导入（若尚未统一入口则收拢）。
+   - [ ] **Skill 路径**：模板 `vault-organize`（或同名）——读 inspect 报告、提议移动/命名、经用户确认后落盘；触发 `$vault-organize` / `/vault-organize`。
+   - [ ] **组合**：编程产报告与执行机械步骤；Agent 只处理模糊归类；无 Agent 时确认面板仍可用。
+   - [ ] CLI（若 MVP 已有）：`vault inspect|adopt` 对齐 Host（命名实现时定）。
+   - [ ] 纪律：dry-run / 计划清单；禁止静默覆盖 NOTES、禁止无确认大删。
 
 3. **双链与图谱增强**
    - 源码编辑 `[[` 补全。
@@ -191,7 +210,7 @@
 
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
-| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条 | 最近 Vault 迁 Tauri Store；文件监听增量刷新 |
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条 | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
 | 中间内容 | 单槽：Library 表 / PDF / HTML / Markdown WYSIWYG；Notes 仅具体论文时显示 | **文档标签页、分屏**（V0.6） |
 | 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
