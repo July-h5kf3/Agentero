@@ -508,6 +508,33 @@ export function saveModelPref(agentId: string, modelId: string): void {
 	}
 }
 
+const MODEL_FAVORITES_KEY = "agentero-agent-model-favorites";
+
+/** Per-agent ordered list of favorited model ids. */
+export function loadModelFavorites(agentId: string | null): string[] {
+	if (!agentId) return [];
+	try {
+		const raw = localStorage.getItem(MODEL_FAVORITES_KEY);
+		if (!raw) return [];
+		const map = JSON.parse(raw) as Record<string, string[]>;
+		const list = map[agentId];
+		return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
+	} catch {
+		return [];
+	}
+}
+
+export function saveModelFavorites(agentId: string, ids: string[]): void {
+	try {
+		const raw = localStorage.getItem(MODEL_FAVORITES_KEY);
+		const map = (raw ? JSON.parse(raw) : {}) as Record<string, string[]>;
+		map[agentId] = ids;
+		localStorage.setItem(MODEL_FAVORITES_KEY, JSON.stringify(map));
+	} catch {
+		// ignore
+	}
+}
+
 const MODEL_CATALOG_KEY = "agentero-agent-model-catalog";
 const EXTERNAL_CODEX_HISTORY_PREF_KEY =
 	"agentero-agent-external-codex-history-pref";

@@ -10,6 +10,7 @@ export type ShortcutId =
 	| "createVault"
 	| "refreshTree"
 	| "revealInFinder"
+	| "openInTerminal"
 	| "deleteTreeItem"
 	| "magicWand"
 	| "toggleSidebar"
@@ -93,6 +94,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
+		id: "openInTerminal",
+		group: "Vault",
+		// ⌥⌘T — open system terminal at selected path (dir = self, file = parent)
+		key: "t",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
 		id: "deleteTreeItem",
 		group: "Vault",
 		// ⌘⌫ — delete selected file tree item (with confirm)
@@ -159,10 +169,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "closeTab",
 		group: "Navigation",
-		// ⌥⌘W — close the active document tab (⌘W is reserved for closing the window).
+		// ⌘W — close the active document tab; with no open tabs, close the window.
 		key: "w",
 		meta: true,
-		alt: true,
 		whenSettingsClosed: true,
 	},
 	{

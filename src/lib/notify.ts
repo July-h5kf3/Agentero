@@ -1,0 +1,73 @@
+/**
+ * Global user-facing notifications (top-right toasts via Sonner).
+ *
+ * Use for operational failures across vault / lookup / tree / library.
+ * Keep form-field validation (inline under the input) local to the form.
+ */
+
+import { toast } from "sonner";
+
+export type NotifyOptions = {
+	/** Optional secondary line under the title. */
+	description?: string;
+	/** Stable id collapses duplicates (same id replaces the previous toast). */
+	id?: string | number;
+	/** Auto-dismiss ms; default 7s for errors. */
+	duration?: number;
+};
+
+/** Show an error toast in the top-right stack. */
+export function notifyError(
+	message: string,
+	opts: NotifyOptions = {},
+): string | number {
+	const text = message?.trim();
+	if (!text) return "";
+	return toast.error(text, {
+		description: opts.description,
+		id: opts.id,
+		duration: opts.duration ?? 7000,
+	});
+}
+
+/** Warning / soft failure (e.g. import partial success with warnings). */
+export function notifyWarning(
+	message: string,
+	opts: NotifyOptions = {},
+): string | number {
+	const text = message?.trim();
+	if (!text) return "";
+	return toast.warning(text, {
+		description: opts.description,
+		id: opts.id,
+		duration: opts.duration ?? 6000,
+	});
+}
+
+/** Brief success feedback (optional; keep rare per UI simplicity rules). */
+export function notifySuccess(
+	message: string,
+	opts: NotifyOptions = {},
+): string | number {
+	const text = message?.trim();
+	if (!text) return "";
+	return toast.success(text, {
+		description: opts.description,
+		id: opts.id,
+		duration: opts.duration ?? 3500,
+	});
+}
+
+/** Dismiss one toast by id, or all if omitted. */
+export function dismissNotify(id?: string | number): void {
+	if (id === undefined) toast.dismiss();
+	else toast.dismiss(id);
+}
+
+/** Coerce unknown catch values into a display string. */
+export function errorMessage(err: unknown, fallback = "Error"): string {
+	if (err instanceof Error && err.message.trim()) return err.message;
+	if (typeof err === "string" && err.trim()) return err;
+	if (err != null && String(err).trim()) return String(err);
+	return fallback;
+}

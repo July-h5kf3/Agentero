@@ -14,7 +14,7 @@ test/
 ```
 
 - `test/helpers/create-test-vault.ts` 用临时目录创建真实文件形态的 Vault。
-- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.agentero/catalog.sqlite`）。
+- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.agentero/catalog.sqlite`，**schema_version = 3**）。
 - 测试文件可以从 `src/` import 生产代码，但生产代码不能从 `test/` import。
 - 优先在每个测试内声明最小必要 Vault 文件，让测试数据和断言靠近。
 
@@ -27,12 +27,24 @@ pnpm demo:vault
 # ~/Downloads/agentero-demo-vault（嵌套 papers + catalog 样本数据）
 pnpm demo:vault:downloads
 
-# 仅 Create Vault 骨架（无样例论文）
+# 仅 Create Vault 骨架（无样例论文 / 无 loose media）
 pnpm demo:vault:empty -- ~/Downloads/agentero-empty-vault
 
 # 校验已有目录
 pnpm demo:vault:verify -- ~/Downloads/agentero-demo-vault
 ```
+
+Demo 完整包内容（`--empty` 除外）：
+
+| 类别 | 路径示例 | 用途 |
+|---|---|---|
+| 嵌套 paper 单元 | `papers/nlp/transformers/1706.03762/` | Library / NOTES / 双链 |
+| paper 根 PDF | `{paper}/{id}.pdf` | 本地优先 PDF 预览 |
+| 非 papers PDF | `assets/sample.pdf`、`notes/attachments/reading-list.pdf` | 任意路径 PDF 预览 |
+| 图片 | `assets/figures/*.{png,jpg,gif,webp,svg,bmp,ico}` | 中间栏图片预览 |
+| Catalog | `.agentero/catalog.sqlite` | schema v3（含 `is_read` / Translator 列）+ 样例 paper 行 |
+
+每次生成会**重建** `catalog.sqlite`（避免重复跑脚本留下旧 schema）。依赖本机 `sqlite3` CLI。
 
 ## 前端测试
 
@@ -77,6 +89,19 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ## 手动验证
 
 纯逻辑优先用自动化测试覆盖。涉及 UI 或桌面流程时，还需要启动应用检查受影响路径。如果 dev 端口被占用或无法做浏览器/桌面验证，汇报时需要明确说明。
+
+建议用 `pnpm demo:vault` 生成的 Vault 做冒烟：
+
+| 场景 | 预期 |
+|---|---|
+| 打开 demo vault | catalog 5 篇、Library 可见、tags 可筛 |
+| 点 `assets/sample.pdf` / `notes/attachments/*.pdf` | 中间栏 PDF 预览（非 papers 路径） |
+| 点 `assets/figures/*` 图片 | 中间栏图片预览 |
+| Notes / `.md` 中粘贴图片 | 生成 `{mdDir}/assets/*`，正文 `![](./assets/…)`；文件树可见新文件 |
+| 选中文档中的图片节点 | 显示 Markdown 源码而非位图；取消选中恢复预览 |
+| 删除文档中的图片节点 | 若无其它引用，磁盘 `./assets/` 文件同步删除并刷新树 |
+| 打开多 tab 后连按 `⌘W` | 逐个关 tab；无 tab 后再按关窗口 |
+| 触发删除失败 / 无 Vault 操作等 | 右上角 Toast，不出现侧栏 header 错误条 |
 
 ## 文档验证
 

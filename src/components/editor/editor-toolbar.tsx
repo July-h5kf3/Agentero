@@ -7,6 +7,7 @@ import {
 	useListToolbarButton,
 	useListToolbarButtonState,
 } from "@platejs/list/react";
+import { insertImage } from "@platejs/media";
 import {
 	Bold,
 	Code,
@@ -14,6 +15,7 @@ import {
 	Heading2,
 	Heading3,
 	Highlighter,
+	ImageIcon,
 	Italic,
 	List,
 	ListOrdered,
@@ -25,7 +27,12 @@ import {
 } from "lucide-react";
 import { KEYS } from "platejs";
 import { useEditorRef, useSelectionFragmentProp } from "platejs/react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown-image";
+import { errorMessage, notifyError } from "@/lib/notify";
 
 import { FixedToolbar } from "./fixed-toolbar";
 import { MarkToolbarButton } from "./mark-toolbar-button";
@@ -88,6 +95,49 @@ function TodoListToolbarButton({
 	return (
 		<ToolbarButton tooltip={label} aria-label={label} {...props}>
 			<Icon />
+		</ToolbarButton>
+	);
+}
+
+/**
+ * Pick local image files → copy into `./assets/` next to the Markdown file →
+ * insert `![](./assets/…)` nodes.
+ */
+function ImageToolbarButton({ label }: { label: string }) {
+	const { t } = useTranslation("editor");
+	const editor = useEditorRef();
+	const { filePath, onAssetsChanged } = useMarkdownDoc();
+	const [busy, setBusy] = useState(false);
+
+	const onClick = useCallback(async () => {
+		if (!filePath || busy) {
+			if (!filePath) notifyError(t("image.noFile"));
+			return;
+		}
+		setBusy(true);
+		try {
+			const paths = await pickImageFiles();
+			if (!paths.length) return;
+			for (const src of paths) {
+				const rel = await copyFileToMarkdownAssets(filePath, src);
+				insertImage(editor, rel);
+			}
+			onAssetsChanged?.();
+		} catch (e) {
+			notifyError(errorMessage(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [busy, editor, filePath, onAssetsChanged, t]);
+
+	return (
+		<ToolbarButton
+			tooltip={label}
+			aria-label={label}
+			disabled={!filePath || busy}
+			onClick={() => void onClick()}
+		>
+			<ImageIcon />
 		</ToolbarButton>
 	);
 }
@@ -189,6 +239,7 @@ export function MarkdownEditorToolbar() {
 					label={t("toolbar.numberedList")}
 				/>
 				<TodoListToolbarButton icon={ListTodo} label={t("toolbar.todoList")} />
+				<ImageToolbarButton label={t("toolbar.image")} />
 			</ToolbarGroup>
 		</FixedToolbar>
 	);

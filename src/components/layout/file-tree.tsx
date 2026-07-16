@@ -2,9 +2,11 @@ import {
 	Download,
 	Eye,
 	FileCode2,
+	FileImage,
 	FileJson,
 	FilePlus2,
 	FileText,
+	FileType2,
 	FolderInput,
 	FolderPlus,
 	Library,
@@ -58,7 +60,11 @@ import {
 	paperNeedsRead,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
-import { revealInFileManager, revealInOsLabelKey } from "@/lib/reveal";
+import {
+	openInTerminal,
+	revealInFileManager,
+	revealInOsLabelKey,
+} from "@/lib/reveal";
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -118,6 +124,8 @@ function AgenteroLogo({ className }: { className?: string }) {
 }
 
 function fileIcon(name: string) {
+	if (/\.pdf$/i.test(name)) return FileType2;
+	if (/\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(name)) return FileImage;
 	if (/\.json$/i.test(name)) return FileJson;
 	if (/\.(ts|tsx|js|jsx|rs|toml)$/i.test(name)) return FileCode2;
 	return FileText;
@@ -690,13 +698,22 @@ export function FileTree({
 		[canRevealPath, t],
 	);
 
-	const handleDoubleClickPath = useCallback(
-		(path: string) => {
-			if (createDraft) return;
+	const handleOpenInTerminal = useCallback(
+		async (path: string) => {
+			setContextMenu(null);
 			if (!canRevealPath(path)) return;
-			void handleReveal(path);
+			if (!isTauri()) {
+				setRevealError(t("fileTree.openInTerminalDesktopOnly"));
+				return;
+			}
+			setRevealError(null);
+			try {
+				await openInTerminal(path);
+			} catch {
+				setRevealError(t("fileTree.openInTerminalFailed"));
+			}
 		},
-		[canRevealPath, createDraft, handleReveal],
+		[canRevealPath, t],
 	);
 
 	const handleContextMenuPath = useCallback(
@@ -743,6 +760,10 @@ export function FileTree({
 		const def = SHORTCUTS.find((s) => s.id === "revealInFinder");
 		return def ? formatShortcut(def) : "⌥⌘R";
 	}, []);
+	const openInTerminalShortcut = useMemo(() => {
+		const def = SHORTCUTS.find((s) => s.id === "openInTerminal");
+		return def ? formatShortcut(def) : "⌥⌘T";
+	}, []);
 	const deleteShortcut = useMemo(() => {
 		const def = SHORTCUTS.find((s) => s.id === "deleteTreeItem");
 		return def ? formatShortcut(def) : "⌘⌫";
@@ -773,7 +794,7 @@ export function FileTree({
 						className="fixed z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
 						style={{
 							left: Math.min(contextMenu.x, window.innerWidth - 200),
-							top: Math.min(contextMenu.y, window.innerHeight - 80),
+							top: Math.min(contextMenu.y, window.innerHeight - 120),
 						}}
 					>
 						{menuCount === 1 ? (
@@ -788,6 +809,21 @@ export function FileTree({
 								<span>{revealLabel}</span>
 								<span className="text-muted-foreground text-xs tracking-wide">
 									{revealShortcut}
+								</span>
+							</button>
+						) : null}
+						{menuCount === 1 ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={() => {
+									void handleOpenInTerminal(contextMenu.path);
+								}}
+							>
+								<span>{t("fileTree.openInTerminal")}</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{openInTerminalShortcut}
 								</span>
 							</button>
 						) : null}
@@ -1092,7 +1128,6 @@ export function FileTree({
 							selectedPaths={selected}
 							expanded={expanded}
 							onExpandedChange={setExpanded}
-							onDoubleClickPath={handleDoubleClickPath}
 							onContextMenuPath={handleContextMenuPath}
 							onSelectRow={handleSelectRow}
 						>
@@ -1111,7 +1146,6 @@ export function FileTree({
 						selectedPaths={selected}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
-						onDoubleClickPath={handleDoubleClickPath}
 						onContextMenuPath={handleContextMenuPath}
 						onSelectRow={handleSelectRow}
 						dropTargetPath={dropTarget}
@@ -1178,7 +1212,6 @@ export function VaultSidebarHeader({
 	onImportBibliography,
 	importBusy,
 	busy,
-	error,
 	isDemo,
 	/**
 	 * Increment from App (e.g. ⇧⌘I) to open the magic-wand popover.
@@ -1194,7 +1227,6 @@ export function VaultSidebarHeader({
 	onImportBibliography?: () => void | Promise<void>;
 	importBusy?: boolean;
 	busy?: boolean;
-	error?: string | null;
 	isDemo: boolean;
 	lookupOpenSignal?: number;
 }) {
@@ -1357,11 +1389,6 @@ export function VaultSidebarHeader({
 						{title}
 					</span>
 				</PaneHeader>
-				{error ? (
-					<p className="border-b px-3 py-1 text-destructive text-xs leading-snug">
-						{error}
-					</p>
-				) : null}
 			</div>
 		</TooltipProvider>
 	);

@@ -7,6 +7,7 @@ import {
 	findLocalPdfPath,
 	isPaperDirectory,
 	loadPaperMetadata,
+	localImageToViewerSource,
 	localPdfToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
@@ -19,7 +20,9 @@ import { isTauri } from "@/lib/tauri";
 import { type FileNode, isTextOpenable, readVaultFile } from "@/lib/vault";
 import {
 	type CenterViewMode,
+	imageMimeFromPath,
 	isHtmlPath,
+	isImagePath,
 	isPdfPath,
 	preferredModeForPath,
 } from "@/lib/viewer";
@@ -40,6 +43,8 @@ export type DocTab = {
 	paperMeta: PaperMetadata | null;
 	pdfUrl: string | null;
 	htmlUrl: string | null;
+	/** Local image preview (`blob:`) when mode is image. */
+	imageUrl: string | null;
 	notesPath: string | null;
 	/** Seed content for the NOTES editor (live content lives inside the editor). */
 	notesSeed: string;
@@ -98,6 +103,7 @@ export type TabResources = {
 	paperMeta: PaperMetadata | null;
 	pdfUrl: string | null;
 	htmlUrl: string | null;
+	imageUrl: string | null;
 	notesPath: string | null;
 	notesSeed: string;
 	markdownSeed: string;
@@ -171,14 +177,18 @@ async function resolvePaperPdfSource(
 	return { pdfUrl: remotePdf, didDownload };
 }
 
-/** Revoke blob: PDF sources held by closed tabs. */
-export function revokeTabPdfSource(tab: Pick<DocTab, "pdfUrl"> | null): void {
-	if (tab?.pdfUrl) revokePdfViewerSource(tab.pdfUrl);
+/** Revoke blob: media sources held by closed tabs (PDF + image). */
+export function revokeTabPdfSource(
+	tab: Pick<DocTab, "pdfUrl" | "imageUrl"> | null,
+): void {
+	if (!tab) return;
+	if (tab.pdfUrl) revokePdfViewerSource(tab.pdfUrl);
+	if (tab.imageUrl) revokePdfViewerSource(tab.imageUrl);
 }
 
 /**
  * Resolve everything a tab needs to render (paper metadata, local/remote PDF,
- * HTML URL, NOTES seed, initial view mode, plain-file text).
+ * HTML URL, image blob, NOTES seed, initial view mode, plain-file text).
  */
 export async function loadTabResources(
 	path: string,
@@ -194,6 +204,7 @@ export async function loadTabResources(
 			paperMeta: null,
 			pdfUrl: null,
 			htmlUrl: null,
+			imageUrl: null,
 			notesPath: null,
 			notesSeed: "",
 			markdownSeed: "",
@@ -209,7 +220,7 @@ export async function loadTabResources(
 	if (paperDir) {
 		const meta = await loadPaperMetadata(paperDir, vaultPath);
 		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
-		const { pdfUrl, didDownload } = await resolvePaperPdfSource(
+		const { pdfUrl: paperPdf, didDownload } = await resolvePaperPdfSource(
 			paperDir,
 			vaultPath,
 			meta,
@@ -228,7 +239,7 @@ export async function loadTabResources(
 			isPaperDirectory(path, findChildren(tree, path));
 
 		if (openingPaperRoot) {
-			const mode: CenterViewMode = pdfUrl
+			const mode: CenterViewMode = paperPdf
 				? "pdf"
 				: htmlUrl
 					? "html"
@@ -238,8 +249,9 @@ export async function loadTabResources(
 				title: meta?.title || basenameOf(paperDir),
 				mode,
 				paperMeta: meta,
-				pdfUrl,
+				pdfUrl: paperPdf,
 				htmlUrl,
+				imageUrl: null,
 				notesPath,
 				notesSeed,
 				markdownSeed: "",
@@ -248,14 +260,51 @@ export async function loadTabResources(
 			};
 		}
 
-		// A file inside a paper folder (e.g. NOTES.md opened via wikilink).
+		// A file inside a paper folder (e.g. NOTES.md, a nested PDF, or figure).
+		const mode = preferredModeForPath(path);
+		let pdfUrl = paperPdf;
+		let imageUrl: string | null = null;
+
+		if (isPdfPath(path)) {
+			// Prefer the exact file the user clicked (may differ from canonical {id}.pdf).
+			const exact = await localPdfToViewerSource(path);
+			if (exact) {
+				if (paperPdf && paperPdf !== exact) {
+					revokePdfViewerSource(paperPdf);
+				}
+				pdfUrl = exact;
+			} else {
+				pdfUrl = paperPdf;
+			}
+		} else if (isImagePath(path)) {
+			imageUrl = await localImageToViewerSource(path, imageMimeFromPath(path));
+			if (!imageUrl) {
+				return {
+					kind: "file",
+					title: basenameOf(path),
+					mode: "image",
+					paperMeta: meta,
+					pdfUrl: paperPdf,
+					htmlUrl,
+					imageUrl: null,
+					notesPath,
+					notesSeed,
+					markdownSeed: "",
+					loaded: true,
+					didDownloadAssets: didDownload,
+					error: "cannotPreview",
+				};
+			}
+		}
+
 		return {
 			kind: "file",
 			title: basenameOf(path),
-			mode: preferredModeForPath(path),
+			mode,
 			paperMeta: meta,
 			pdfUrl,
 			htmlUrl,
+			imageUrl,
 			notesPath,
 			notesSeed,
 			markdownSeed: "",
@@ -264,23 +313,43 @@ export async function loadTabResources(
 		};
 	}
 
-	// Plain file, not under a paper folder.
+	// Plain file, not under a paper folder (vault root, notes/, etc.).
 	const mode = preferredModeForPath(path);
 	const base = {
 		kind: "file" as const,
 		title: basenameOf(path),
 		mode,
 		paperMeta: null,
-		pdfUrl: null,
-		htmlUrl: null,
+		pdfUrl: null as string | null,
+		htmlUrl: null as string | null,
+		imageUrl: null as string | null,
 		notesPath: null,
 		notesSeed: "",
 		markdownSeed: "",
 		loaded: true as const,
 	};
 
-	if (isPdfPath(path) || isHtmlPath(path)) {
-		// Bare .pdf/.html without paper metadata: no remote preview (matches prior behavior).
+	if (isPdfPath(path)) {
+		const pdfUrl = await localPdfToViewerSource(path);
+		if (!pdfUrl) {
+			return { ...base, mode: "pdf", error: "cannotPreview" };
+		}
+		return { ...base, mode: "pdf", pdfUrl };
+	}
+
+	if (isImagePath(path)) {
+		const imageUrl = await localImageToViewerSource(
+			path,
+			imageMimeFromPath(path),
+		);
+		if (!imageUrl) {
+			return { ...base, mode: "image", error: "cannotPreview" };
+		}
+		return { ...base, mode: "image", imageUrl };
+	}
+
+	if (isHtmlPath(path)) {
+		// Local HTML still has no sandboxed file:// preview (remote only for paper HTML).
 		return base;
 	}
 

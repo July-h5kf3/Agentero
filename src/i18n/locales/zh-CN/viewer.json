@@ -40,5 +40,9 @@
 	"html": {
 		"empty": "暂无论文。",
 		"sandboxTitle": "HTML 论文沙箱"
+	},
+	"image": {
+		"empty": "暂无图片。",
+		"altFallback": "图片预览"
 	}
 }

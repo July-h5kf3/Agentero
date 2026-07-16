@@ -20,13 +20,15 @@
 ## Host 职责
 
 - 校验并访问用户显式选择的 Vault 路径。
-- 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。
+- 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。笔记内嵌图由前端写入 `{mdDir}/assets/`（见 [`data-model.md`](data-model.md)「Markdown 内嵌图片」）；Host 提供 fs 权限，无独立 image Tauri command。
 - 从 Markdown 构建双链、反链和图谱索引（paper 标题可读 catalog）。
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
+- 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换）；Paper Info 编辑；Library 展示与筛选；CLI `set-tags` / `list --tag` / `tags`。
+- 原生菜单 Close（`close_tab_or_window` / `⌘W`）：由前端先关文档 tab，无 tab 时关窗口（见 [`api.md`](api.md) §3.10）。
 - **双链**索引（`graph_*`）与规划中的 **文献引用图**（roadmap V0.7）分层；后者不复用双链边语义。
 
 ## 本分区文档

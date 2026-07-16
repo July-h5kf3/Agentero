@@ -41,9 +41,12 @@
    - [x] 表头排序；横向/纵向滚动。
    - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
    - [x] Library 行批量补资源（与 2b 联动）。
+   - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选。
+   - [x] **Tags CLI**：`paper set-tags` / `list --tag` / `tags`（与 Host 共用 `papers::set_tags`）。
 
 2d. **文件树与侧栏 UX** ✅
-   - [x] 在 Finder 中显示：双击 / 右键 / `⌥⌘R`（`revealItemInDir`）。
+   - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）。
+   - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）。
    - [x] 删除：右键 / `⌘⌫`；确认；`papers/` 下同步 `paper_delete`。
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
    - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。
@@ -52,6 +55,12 @@
    - [x] 缩放：工具栏 +/- / 重置；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）。
    - [x] 划词提问 MVP：M1–M4（见 3. PDF 划词提问）。
    - [x] 本地 PDF 直接预览（优先本地 → 无本地时 `paper_download_assets` → 失败再远程 `pdf_url`）。
+
+2f. **Markdown 内嵌图片** ✅
+   - [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown-image.ts`）。
+   - [x] 选中图片节点显示 Markdown 源码；未选中 `blob:` 预览。
+   - [x] 删除节点且引用计数归零时 GC managed assets 文件并刷新文件树。
+   - [x] 单测 + 文档（data-model / ui / technical-plan / test 冒烟表）。
 
 3. **Agent 工作流入口**
    - [x] **paper-reader 精读**：入库/单篇 Download **自动** + 文件树 Eye 手动（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度（lookup/download → paperRead）。
@@ -82,7 +91,7 @@
    - 复用：**不迁 core**；path 依赖 `agentero_lib`，调用 `services::{vault,catalog,lookup,pdf_parse,wiki}`；禁止 `use …::agent`。
    - [x] Workspace + scaffold `cli/`（clap、`--vault` / env / 上溯、`--json`、退出码）。
    - [x] `vault create|which|info|check|use`（对齐 `vault_create` / catalog 初始化）。
-   - [x] `tree`；`paper list|get|paths|delete|set-read|download|parse`（`get`：`assets` + `suggestedReads`）。
+   - [x] `tree`；`paper list|get|paths|delete|set-read|set-tags|tags|download|parse`（`get`：`assets` + `suggestedReads`；`list --tag` AND）。
    - [x] `import id|bib`、`export bib`（对齐 Host；**不**自动精读）。
    - [x] 稳定 `error.code`；集成测试（临时 Vault + `--json` 契约，`cli/tests/cli_mvp.rs`）。
    - [x] 按需放宽 service `pub`（`lib.rs` 导出 `services` / `error`；`list_by_id`）。
@@ -119,12 +128,13 @@
    - 双链边可写入 catalog 可重建表并支持增量重建。
 
 4. **工作区标签页与分屏**（roadmap V0.6）
-   - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / Library 以 tab 打开，可关闭、切换、拖拽重排。
+   - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / 图片 / Library 以 tab 打开，可关闭、切换、拖拽重排。
    - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容。
    - [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）。
-   - [x] 快捷键：关 tab `⌥⌘W` / 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
+   - [x] 快捷键：关 tab `⌘W`（无 tab 时关窗口；File → Close / 菜单 `close_tab_or_window` 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
    - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦。
    - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局。
+   - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）。
    - 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开。
 
 5. **引用关系 / Connected Papers**（roadmap V0.7）
@@ -218,12 +228,12 @@
 
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
-| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条 | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
-| 中间内容 | 单槽：Library 表 / PDF / HTML / Markdown WYSIWYG；Notes 仅具体论文时显示 | **文档标签页、分屏**（V0.6） |
-| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
-| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条、**全局错误 Toast**（`notifyError`） | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
+| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`、选中源码、删节点 GC）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
+| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、模型收藏、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
-| PDF | 缩放、划词操作菜单（高亮/笔记/提问/翻译；asks + highlights JSON） | 本地 PDF 直开、`highlights.md` 标注系统、M5 |
-| **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
+| PDF / 媒体 | 任意路径 PDF + 常见图片预览；缩放；划词操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |
+| **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、`paper set-tags` / `tags`、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
 | 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |

@@ -31,3 +31,6 @@ dist-ssr
 # Rust workspace (root target/ for agentero-cli + src-tauri)
 /target/
 src-tauri/target/
+
+# Local scratch / demo vaults
+/tmp/

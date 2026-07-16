@@ -10,19 +10,23 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
 - CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
-  - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹；右键 **Finder 显示 / 删除**）+ 选中论文时 **Paper Info**；
-  - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或论文 **PDF / HTML** / 打开的 Markdown 笔记；
+  - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹；右键 **Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
+  - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或标签页打开的 **PDF / HTML / 图片** / Markdown 笔记；
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
+  - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）弹出；表单就地校验除外。
   - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Focus）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话。
-  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与禅模式 Focus 图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library，切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：关闭标签 `⌥⌘W`、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
-- 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `agentero:library` 不写盘。
+  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与禅模式 Focus 图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library，切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：关闭标签 `⌘W`（无打开标签时关闭窗口）、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
+- 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动；**tags** 列 + chip 筛选。虚拟路径 `agentero:library` 不写盘。
+- 标签：Paper Info 增删 → Host `paper_set_tags`（catalog `tags_json` 权威）；Library 展示与筛选；CLI `paper set-tags` / `list --tag` / `tags`。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
 - **精读工作流**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时文件树仍显示 **Eye** 可手动重跑。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（入库/下载 → 精读衔接；**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
 - **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。
-- 文件树：双击 / `⌥⌘R` 在 Finder 中显示；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
-- PDF：预览 **本地优先**（fs `readFile` → `blob:`，避免 `asset://`）→ 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
+- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
+- PDF：Vault **任意路径** `.pdf` 均可 `readFile` → `blob:` 预览；论文单元额外 **本地优先** → 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
+- 图片：常见格式（png/jpg/gif/webp/bmp/svg/avif/ico）任意路径 `blob:` 中间栏预览。
+- **Markdown 内嵌图片**：粘贴 / 工具栏插入 → 写入当前 `.md` 旁 `./assets/`，正文 `![](./assets/…)`；选中节点显示源码；删除节点且无其它引用时 GC 磁盘文件（见 `src/lib/markdown-image.ts`、`docs/backend/data-model.md`）。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。规划中：**V0.6 分屏（split，标签页已落地）**、**V0.7 引用关系（hover Info / Connected Papers / Agent 引用工作流）**。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。
@@ -35,7 +39,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
 - Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。
-- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。
+- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。操作失败用右上角 `notifyError` Toast，不要在侧栏 header 挂常驻错误条。
 - 国际化（i18n）：所有面向用户的文案都必须经 `t()` 走 `react-i18next`，禁止硬编码字符串。English（`en`）为源语言，新增文案先登记 `en` 词条再同步 `zh-CN`（`src/i18n/locales/`）。跨命名空间用 `t("ns:key")` 并在 `useTranslation([...])` 声明；React 之外用全局 `i18n.t()`。数字/日期用 `i18n.language` 格式化。详见 `docs/frontend/ui.md` §4.1。
 - 修改后需要同步更新相关文档。如果修改了 UI、数据契约、发布流程或 Vault 语义，必须同步更新相关文档。并检查 Roadmap 和 Todo。
 

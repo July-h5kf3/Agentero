@@ -43,10 +43,17 @@
   - 新建文件夹 → `FolderPlus`（同上）
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
 - **在系统文件管理器中显示**（`revealItemInDir` / `src/lib/reveal.ts`）：
-  - **双击**真实文件 / 文件夹 / paper 行 → 在 Finder（macOS）/ Explorer（Windows）/ 文件管理器（Linux）中定位并选中。
-  - **右键**同上节点 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
+  - **右键**真实文件 / 文件夹 / paper 行 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
   - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
+  - **不**绑定双击（单击选中 / 打开文档；双击不触发 Finder）。
   - 虚拟节点 **Library**（`agentero:library`）不提供此操作；仅桌面端可用。
+- **在终端中打开**（Host `path_open_in_terminal` / `src/lib/reveal.ts` `openInTerminal`）：
+  - **右键**真实文件 / 文件夹 / paper 行 →「在终端中打开」（旁注 `⌥⌘T`）。
+  - **`⌥⌘T`**：对当前选中路径执行相同操作（`shortcuts.ts` → `openInTerminal`）。
+  - **文件夹**（含 paper 目录）：终端 cwd 为该目录本身。
+  - **文件**：终端 cwd 为文件所在父目录。
+  - 使用系统默认终端：macOS `Terminal.app`；Windows 优先 `wt`（Windows Terminal）否则 `cmd`；Linux `xdg-terminal-exec` / `$TERMINAL` / 常见终端回退。
+  - 虚拟 Library 不可用；仅桌面端。
 - **删除**（`remove` + 可选 `paper_delete`）：
   - **右键**真实节点 →「删除」（旁注 `⌘⌫`）；确认后删盘。
   - **`⌘⌫`**：删除当前选中项（编辑器 / 输入框聚焦时不拦截，保留系统删行首行为）。
@@ -69,7 +76,19 @@
 - **外观**：`bg-popover` 实底 + 边框阴影；**hover 使用实色 `hover:bg-accent`**（禁止 `accent/40` 等半透明，避免底下内容透出）。
 - **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**等长操作经 `runBackgroundTask` / `startBackgroundTask` 登记（`kind` 含 `download` | `downloadAll` | `lookup` | `import` | `export` | `paperRead` | …）。
 - **paper-reader 进度**：任务 kind=`paperRead`；title/detail 走 i18n `app:tasks.paperRead*`；plan/tool 事件会更新进度百分比；失败时 error 写入任务条。
-- 交互对齐常见 IDE（VS Code 类）：不抢焦点、可折叠、只展示后台进度，错误仍可走原有 error 槽位。
+- 交互对齐常见 IDE（VS Code 类）：不抢焦点、可折叠、只展示后台进度；操作级错误另走右上角 toast（见 §2.1.2）。
+
+### 2.1.2 全局错误 Toast（右上角）
+
+- **组件**：shadcn Sonner（`src/components/ui/sonner.tsx`），在 `main.tsx` 挂载 `<Toaster />`。
+- **位置**：`top-right`，`offset` 避开标题栏；可关闭（`closeButton`），最多叠 5 条。
+- **API**：`src/lib/notify.ts`
+  - `notifyError(message)` — 操作失败（打开 Vault、删除、入库、下载、设置 Agent 等）
+  - `notifyWarning(message)` — 软失败 / 部分成功
+  - `notifySuccess(message)` — 少用（避免成功噪音）
+  - `errorMessage(err)` — `catch` 值转可读字符串
+- **约定**：跨页面的**操作失败**统一 toast；**表单字段校验**（如树内联新建命名、Popover 内输入）仍可就地 `text-destructive`。
+- **禁止**再在侧栏 header 下挂常驻 error 条（已移除）。
 
 ### 2.2 无 Vault 欢迎页
 
@@ -87,6 +106,7 @@
 | File | Open Vault… | `⌘O` | 选择已有文件夹并打开 |
 | File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
 | File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
+| File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：先关当前文档 tab；无 tab 时关当前窗口（非系统 CloseWindow） |
 | agentero | Settings… | `⌘,` | 设置 sheet |
 
 **窗口与路径状态**（`src/lib/vault.ts`）：
@@ -105,7 +125,8 @@
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
   - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
   - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
-  - **列**：标题、作者、年份、类型、标识符；点击行打开对应 paper 文件夹。
+  - **列**：标题、作者、年份、**标签**、类型、标识符；点击行打开对应 paper 文件夹。
+  - **标签筛选**：表上方汇总库内全部 tag 为可点 chip（再点取消）；单元格内 tag 也可筛选。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
   - **滚动**：容器 `.agentero-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
   - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
@@ -113,10 +134,16 @@
   - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
   - **从 Zotero 迁移**（`Import` 图标，论文库工具栏左侧；仅 Library 视图）：`ZoteroMigrateDialog` → 选 Zotero 数据目录 → 预览文献/PDF 计数 + 「把 PDF 复制进知识库」勾选（默认开）→ `zotero_migrate`（直读 `zotero.sqlite`，见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
 - **Paper Info / Notes——仅具体论文**：
-  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
+  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威，同步 `metadata.json`）。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
-  - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
-  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 关闭当前标签（等价 `⌥⌘W`）；论文库视图与欢迎页不显示。
+  - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表、**插入图片**等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
+  - **Markdown 图片**（已落地）：
+    - **插入**：粘贴剪贴板图 / 工具栏「插入图片」→ 二进制写入当前 `.md` 旁 `{mdDir}/assets/` → 正文 `![alt](./assets/…)`（不写 base64）。
+    - **预览**：未选中时相对路径解析为 `blob:` 位图；**选中节点**时显示 monospace Markdown 源码（`ImageElement` + `useSelected`）。
+    - **删除**：节点离开文档且 managed `./assets/` URL 引用计数归零 → 删磁盘文件 → 刷新文件树（`onAssetsChanged`）。
+    - 实现：`src/lib/markdown-image.ts`、`markdown-editor.tsx`、`image-node.tsx`、`editor-toolbar.tsx`；i18n `editor:toolbar.image` / `editor:image.*`。
+    - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
+  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 关闭当前标签（等价 `⌘W`）；论文库视图与欢迎页不显示。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
@@ -131,7 +158,7 @@
   - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，并把上次展开像素宽记入 ref；中间主栏保持默认相对尺寸。
   - Notes 列仍随论文选中条件挂载（需真实 `defaultSize` 才能出现）；`showNotesOnRight` 变化后 rAF 再 assert 左右栏宽度/折叠意图，避免 Library ↔ paper 时左栏跳宽。
 - **文档标签栏位置**：与标题栏右侧禅模式 / Layout / 右栏图标 **同一行**（`DocumentTabBar` 在 `header` 中间 flex 区；无 tab 时该区为拖拽空白）。中间栏仅保留 view mode / 文档标题工具行。
-- 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；错误提示等放在 header 下方，不撑高标题栏。
+- 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；全局操作错误走右上角 toast（§2.1.2），不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
 - **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
@@ -142,16 +169,18 @@
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML **预览**：
-    - **PDF 解析顺序**（本地优先）：① 论文文件夹内本地 PDF（根目录 `{id}.pdf` 优先，兼容 `source/` 等嵌套）→ `readFile` 读字节生成 `blob:` URL 交给 PDF.js（**不用** `convertFileSrc`/`asset://`，PDF.js XHR 会失败）；② **无本地 PDF** 时自动 `paper_download_assets` 尝试下载；③ 下载失败或无可用下载源时回退 catalog 远程 `pdf_url`（或 `arxiv_id` 推导 URL）。
-    - **HTML**：仍读远程 `html_url`（iframe）；HTML 本身不强制本地下载。
+  - PDF / HTML / **图片** **预览**：
+    - **PDF（任意路径）**：Vault 内任意位置的 `.pdf`（根目录、`notes/`、paper 内嵌套文件等）均可直接打开；`readFile` → `blob:` → PDF.js（**不用** `convertFileSrc`/`asset://`）。
+    - **PDF（论文单元）**额外链路：① 论文文件夹内本地 PDF（根目录 `{id}.pdf` 优先，兼容 `source/` 等嵌套）；② **无本地 PDF** 时自动 `paper_download_assets`；③ 失败回退 catalog 远程 `pdf_url`（或 `arxiv_id` 推导 URL）。点开 paper 内某一具体 `.pdf` 时优先该文件字节。
+    - **HTML**：仍读远程 `html_url`（iframe）；本地 `.html` 文件尚无 file 沙盒预览。
+    - **图片**：常见格式 `.png` / `.jpg` / `.jpeg` / `.gif` / `.webp` / `.bmp` / `.svg` / `.avif` / `.ico` → `readFile` → `blob:` → 中间栏 `ImageViewer`（居中 contain、可滚动）；任意 Vault 路径。
   - **本地归档**：魔棒 / `paper_download_assets` 将 PDF 写入 `{paper}/{id}.pdf`（根目录），arXiv LaTeX 到 `source/`；预览优先读同一本地 PDF。
   - arXiv 推荐写入 catalog：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
-  - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页
+  - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
   - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**高亮 / 笔记 / 提问 / 翻译**；**不再默认套用琥珀高亮**，只保留浏览器原生选区。双击 / 悬停停留仍直接开问答卡（页码上下文）。
@@ -173,14 +202,15 @@
 | `⌘O` | Open vault… | 打开文档/文件夹 |
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
-| `⌥⌘R` | 在 Finder 中显示 | 定位当前选中文件/文件夹；`shortcuts.ts` → `revealInFinder` |
+| `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
+| `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
 | `⌘⌫` | 删除选中项 | 文件树选中项；确认后删盘；`papers/` 同步 `paper_delete`；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
-| `⌥⌘W` | 关闭当前标签（`closeTab`） | 关闭中间栏激活文档；`⌘W` 仍关窗口 |
+| `⌘W` | 关闭当前标签 / 窗口（`closeTab`） | 有打开标签时逐个关闭当前标签；无标签时关闭当前窗口（File → Close 同源） |
 | `⌥⌘→` / `⌥⌘←` | 下一 / 上一标签（`nextTab` / `prevTab`） | 在打开的文档标签间循环 |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
@@ -200,7 +230,7 @@
 
 **浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与禅模式 Focus 图标同行）：
 
-- **多 tab**：paper / Markdown / PDF / HTML / Library 各占一个 tab，可切换、关闭（`X` / 中键 / `⌥⌘W`）、拖拽重排；同一路径已开则聚焦其 tab（不重复打开）。
+- **多 tab**：paper / Markdown / PDF / HTML / Library 各占一个 tab，可切换、关闭（`X` / 中键 / `⌘W`）、拖拽重排；同一路径已开则聚焦其 tab（不重复打开）。无标签时再按 `⌘W` 关闭窗口。
 - **常驻挂载**：每个 tab 的内容组件保持 mounted（非激活 `hidden`），切换瞬时并保留 **PDF 滚动位置/缩放** 与编辑器状态。PDF 多篇同开会同时占用内存（符合浏览器式取舍）。
 - **状态派生**：`activeTab` 驱动 `selectedPath` / `centerMode` / `paperMeta` / Notes；文件树选中与「新建父目录」上下文用独立的 `treeSelectedPath`（跟随激活文档，folder 新建时可指向文件夹）。
 - **持久化**：`agentero-open-tabs`（`{tabs:[{path,mode}], activeIndex}`）按窗口保存，重开窗口恢复 tab 集与激活项；`⌘N` 各窗口独立。

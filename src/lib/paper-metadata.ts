@@ -539,14 +539,15 @@ export function isPdfViewerSource(
 }
 
 /**
- * Read a local PDF into a `blob:` URL for PDF.js.
+ * Read a local file into a `blob:` URL for in-app viewers (PDF.js, img tags).
  *
  * Prefer this over `convertFileSrc` / `asset://`: PDF.js issues range/XHR
  * requests that often fail on Tauri's asset protocol ("Unexpected server response (0)").
  * Caller should `URL.revokeObjectURL` when replacing the source.
  */
-export async function localPdfToViewerSource(
+export async function localBytesToViewerSource(
 	absPath: string,
+	mimeType: string,
 ): Promise<string | null> {
 	if (!isTauri() || !absPath?.trim()) return null;
 	try {
@@ -554,14 +555,35 @@ export async function localPdfToViewerSource(
 		// Copy so Blob owns a stable ArrayBuffer (plugin may return a view)
 		const copy = new Uint8Array(bytes.byteLength);
 		copy.set(bytes);
-		const blob = new Blob([copy], { type: "application/pdf" });
+		const blob = new Blob([copy], { type: mimeType });
 		return URL.createObjectURL(blob);
 	} catch {
 		return null;
 	}
 }
 
-/** Revoke a blob: URL created by `localPdfToViewerSource` (no-op for others). */
+/**
+ * Read a local PDF into a `blob:` URL for PDF.js.
+ * @see localBytesToViewerSource
+ */
+export async function localPdfToViewerSource(
+	absPath: string,
+): Promise<string | null> {
+	return localBytesToViewerSource(absPath, "application/pdf");
+}
+
+/**
+ * Read a local image into a `blob:` URL for the image viewer.
+ * MIME is inferred from the file extension.
+ */
+export async function localImageToViewerSource(
+	absPath: string,
+	mimeType: string,
+): Promise<string | null> {
+	return localBytesToViewerSource(absPath, mimeType);
+}
+
+/** Revoke a blob: URL created by local*ToViewerSource (no-op for others). */
 export function revokePdfViewerSource(source: string | null | undefined): void {
 	if (source?.startsWith("blob:")) {
 		try {

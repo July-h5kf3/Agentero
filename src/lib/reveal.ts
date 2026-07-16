@@ -1,5 +1,12 @@
+import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isTauri } from "@/lib/tauri";
+
+type ApiResult<T> = {
+	ok: boolean;
+	data?: T;
+	error?: { code: string; message: string };
+};
 
 /** Platform-aware label key under `sidebar:fileTree.*`. */
 export function revealInOsLabelKey():
@@ -27,4 +34,25 @@ export async function revealInFileManager(path: string): Promise<void> {
 		throw new Error("Reveal in file manager requires the desktop app.");
 	}
 	await revealItemInDir(trimmed);
+}
+
+/**
+ * Open the system default terminal at `path`.
+ * Directories open as cwd; files open their parent directory.
+ */
+export async function openInTerminal(path: string): Promise<void> {
+	const trimmed = path.trim();
+	if (!trimmed || trimmed.startsWith("agentero:")) {
+		throw new Error("Cannot open a virtual path in the terminal.");
+	}
+	if (!isTauri()) {
+		throw new Error("Open in terminal requires the desktop app.");
+	}
+	const result = await invoke<ApiResult<{ cwd: string }>>(
+		"path_open_in_terminal",
+		{ path: trimmed },
+	);
+	if (!result.ok) {
+		throw new Error(result.error?.message ?? "Failed to open terminal.");
+	}
 }

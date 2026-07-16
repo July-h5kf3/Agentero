@@ -23,9 +23,9 @@
 
 | 层级 | 内容 | 落盘 |
 |---|---|---|
-| **Tier 1a 人的知识 / 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`source/` | 文件 |
+| **Tier 1a 人的知识 / 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`source/`、用户插入的笔记旁 `assets/*` | 文件 |
 | **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
-| **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、`assets/` | 按需生成；非 Vault 必备 |
+| **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、解析派生的 `assets/` 图 | 按需生成；非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表，或后续独立；可整删后从文件+catalog 重建 |
 
 原则：
@@ -215,6 +215,7 @@ src-tauri/src/
 | 命令 | 状态 | 说明 |
 |---|---|---|
 | `paper_list` | **已落地** | 全量列表 → UI 论文库表格；参数仅 `vaultPath` |
+| `paper_set_tags` | **已落地** | 整表替换 `tags`；Paper Info 增删；Library 展示 + 筛选；CLI `paper set-tags` / `list --tag` / `tags` |
 | `paper_get` | **已落地** | 单篇 meta（`path` 或 `id`）→ Paper Info / 远程 URL（下载候选与预览回退） |
 | `paper:list`（过滤/分页） | 规划 | year、tag、type、query（LIKE 或 FTS）、limit/offset |
 

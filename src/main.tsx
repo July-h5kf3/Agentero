@@ -2,6 +2,7 @@ import { ThemeProvider } from "next-themes";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import App from "./App";
 import i18n from "./i18n";
@@ -13,6 +14,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 			<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 				<TooltipProvider delayDuration={300}>
 					<App />
+					{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
+					<Toaster />
 				</TooltipProvider>
 			</ThemeProvider>
 		</I18nextProvider>

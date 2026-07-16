@@ -1,4 +1,11 @@
-import { FileCode2, FileText, FileType2, Library, X } from "lucide-react";
+import {
+	FileCode2,
+	FileImage,
+	FileText,
+	FileType2,
+	Library,
+	X,
+} from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { DocTab } from "@/lib/tabs";
@@ -8,6 +15,7 @@ function iconForTab(tab: DocTab) {
 	if (tab.kind === "library") return Library;
 	if (tab.mode === "pdf") return FileType2;
 	if (tab.mode === "html") return FileCode2;
+	if (tab.mode === "image") return FileImage;
 	return FileText;
 }
 

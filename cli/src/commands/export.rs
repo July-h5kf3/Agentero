@@ -30,11 +30,7 @@ pub async fn run(cmd: ExportCmd, globals: &GlobalOpts) -> Result<Value, CliError
     }
 }
 
-async fn export_bib(
-    globals: &GlobalOpts,
-    format: &str,
-    out: &PathBuf,
-) -> Result<Value, CliError> {
+async fn export_bib(globals: &GlobalOpts, format: &str, out: &PathBuf) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let result = lookup::export_catalog(PaperExportArgs {
         vault_path: vault.to_string_lossy().to_string(),

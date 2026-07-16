@@ -79,7 +79,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`window_new`、`set_locale`。  
+> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
@@ -115,6 +115,29 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
+
+#### `path_open_in_terminal`（已实现）
+
+在系统默认终端中打开本地路径（文件树右键 / `⌥⌘T`「在终端中打开」）。
+
+- **参数**
+
+```ts
+{
+  path: string; // 本地绝对路径
+}
+```
+
+- **返回**（`ApiResult<{ cwd: string }>`）
+  - 成功时 `cwd` 为实际作为终端工作目录打开的绝对路径。
+- **行为**
+  - 路径为**目录**时：`cwd` = 该目录。
+  - 路径为**文件**时：`cwd` = 父目录。
+  - 路径不存在或无法解析父目录时返回错误。
+  - 平台：
+    - macOS：`open -a Terminal <cwd>`
+    - Windows：优先 `wt -d <cwd>`，失败则 `cmd /K cd /d …`
+    - Linux：`xdg-terminal-exec` → `$TERMINAL` → 常见终端（gnome-terminal / konsole / …）→ `x-terminal-emulator`
 
 #### `window_new`（已实现）
 
@@ -737,6 +760,27 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - **手动**：文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
   - 实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
+#### `paper_set_tags`（已落地）
+
+整表替换 catalog 中单篇论文的 **`tags`**（`tags_json`）。成功后同步 `metadata.json` 投影。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** paper 文件夹 Vault 相对路径 */
+  path: string;
+  /** 完整标签列表（非增量 patch） */
+  tags: string[];
+}
+```
+
+- **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
+- **规范化**：trim 空白；丢弃空串；大小写不敏感去重（保留首次出现的写法）。
+- **前端**：`src/lib/papers-api.ts` → `setPaperTags`；Paper Info 面板可增删；Library 表格展示 + 标签筛选。
+- **CLI**：`agentero paper set-tags <ref> [tags…]`（默认 replace；`--add` / `--remove` 增量）；`paper list --tag` 筛选；`paper tags` 汇总。见 [`../development/cli.md`](../development/cli.md)。
+
 #### `paper:list`（扩展规划）
 
 带过滤与分页的列表（尚未实现；现网用 `paper_list`）。
@@ -1276,10 +1320,11 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `open_vault` | Open Vault… | `⌘O` | 前端监听 |
 | `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
 | `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
+| `close_tab_or_window` | Close | `⌘W` | 前端监听：有文档 tab 时关闭当前 tab；无 tab 时 `getCurrentWindow().close()`。**不要**用 PredefinedMenuItem::CloseWindow（会独占 `⌘W`） |
 | `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
-前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
+前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒、`⌥⌘←/→` 切换文档标签。`⌘W` 亦可由渲染层 `shortcuts.ts` 直接匹配（与菜单同源逻辑，防抖避免双触发）。
 
 ## 3.x Headless CLI（对照）
 
@@ -1290,7 +1335,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `vault create` | `services::vault::create_vault` / `vault_create` |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
-| `paper list\|get\|paths\|delete\|set-read` | `catalog::papers::*` / `paper_*` |
+| `paper list\|get\|paths\|delete\|set-read\|set-tags\|tags` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
+| `paper list --tag` / `--query` 含 tags | CLI 侧过滤（读 `list_all`）；Host `paper_list` 仍全量 |
 | `paper download\|parse` | `lookup::download_paper_assets` / `pdf_parse::parse_paper_body` |
 | `import id\|bib` | `lookup::import_by_identifier` / `import_catalog` |
 | `export bib` | `lookup::export_catalog`（`-o`/`--out` 写文件；全局格式用 `--json`） |
@@ -1321,7 +1367,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流；`paper_set_is_read` + paper-reader（自动/手动）。 |
 | V0.4 | 增加 `graph:*` 命令（双链 / 反链 / 图谱；与 bibliographic 引用图分离）。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
-| V0.6 | 主要为前端工作区状态（文档 tab / 分屏布局持久化）；Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
+| V0.6 | 文档 **tab 已落地**（前端 `agentero-open-tabs` + 菜单 `close_tab_or_window`）；**分屏**布局持久化仍待。Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
 | V0.7 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 

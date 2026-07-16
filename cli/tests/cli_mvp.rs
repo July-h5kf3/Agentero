@@ -219,6 +219,128 @@ fn paper_crud_catalog_only() {
     let v: Value = serde_json::from_slice(&get2).unwrap();
     assert_eq!(v["data"]["paper"]["is_read"], true);
 
+    // Tags: replace → list filter → add → remove → tags index
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "set-tags",
+            "demo",
+            "nlp",
+            "survey",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let tagged = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "NLP",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&tagged).unwrap();
+    assert_eq!(v["data"].as_array().unwrap().len(), 1);
+    assert_eq!(v["data"][0]["tags"][0], "nlp");
+    assert_eq!(v["data"][0]["tags"][1], "survey");
+
+    let no_tag = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "missing",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&no_tag).unwrap();
+    assert!(v["data"].as_array().unwrap().is_empty());
+
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "set-tags",
+            "demo",
+            "--add",
+            "draft",
+            "--json",
+        ])
+        .assert()
+        .success();
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "set-tags",
+            "demo",
+            "--remove",
+            "survey",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    let get_tags = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "get",
+            "demo",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&get_tags).unwrap();
+    let tags = v["data"]["paper"]["tags"].as_array().unwrap();
+    assert!(tags.iter().any(|t| t.as_str() == Some("nlp")));
+    assert!(tags.iter().any(|t| t.as_str() == Some("draft")));
+    assert!(!tags.iter().any(|t| t.as_str() == Some("survey")));
+
+    let tags_idx = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "tags",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&tags_idx).unwrap();
+    let items = v["data"]["items"].as_array().unwrap();
+    assert!(items
+        .iter()
+        .any(|it| { it["tag"].as_str() == Some("nlp") && it["count"].as_u64() == Some(1) }));
+    assert!(items
+        .iter()
+        .any(|it| { it["tag"].as_str() == Some("draft") && it["count"].as_u64() == Some(1) }));
+
     agentero()
         .args([
             "--vault",

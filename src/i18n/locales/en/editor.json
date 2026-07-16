@@ -14,7 +14,14 @@
 		"bulletedList": "Bulleted list",
 		"numberedList": "Numbered list",
 		"todoList": "To-do list",
+		"image": "Insert image",
 		"show": "Show formatting toolbar",
 		"hide": "Hide formatting toolbar"
+	},
+	"image": {
+		"noFile": "Save the note to a file before inserting images.",
+		"invalidPayload": "Could not read the pasted image data.",
+		"pickTitle": "Insert image into note",
+		"pickFilter": "Images"
 	}
 }
