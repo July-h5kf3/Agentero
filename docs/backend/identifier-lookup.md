@@ -729,4 +729,5 @@ arXiv URL 推导：
 - 自愈：迁移前 `prune_missing` 清掉「文件夹已被手动删除」的 catalog 孤儿行，防止幽灵条目占位、去重误跳过导致无法重导（结果含 `pruned` 计数）。
 - 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（默认开）→ 在目标目录下还原 collection 层级（`{parent}/<collection 路径>/<id>/`），collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（全路径字典序最小）。
 - 选择性导入：`zotero_scan` 预览返回各 collection（含「未分类」= id 0）及条目数；对话框可勾选只导入部分文件夹（`include_collections`，缺省 = 全部）。
-- 非目标（v1）：Zotero 笔记 / 批注、群组库。
+- 笔记：对话框「迁移 Zotero 笔记」勾选项（默认开）→ 每篇挂载的子笔记（`itemNotes`）HTML 经 `htmd` 转 Markdown，追加进该篇 `NOTES.md`（以 `---` 分隔）；`zotero_scan` 预览显示笔记总数。仅处理有父条目的子笔记。
+- 非目标（v1）：Zotero 批注（annotation）、独立笔记（无父条目）、群组库。

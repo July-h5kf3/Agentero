@@ -23,6 +23,7 @@ export type ZoteroScan = {
 	valid: boolean;
 	itemCount: number;
 	withPdfCount: number;
+	noteCount: number;
 	collections: ZoteroCollectionInfo[];
 	warning?: string;
 };
@@ -63,6 +64,7 @@ export async function migrateZotero(opts: {
 	parentDir?: string;
 	copyPdfs: boolean;
 	preserveCollections: boolean;
+	migrateNotes: boolean;
 	includeCollections?: number[];
 }): Promise<ZoteroMigrateResult> {
 	if (!isTauri()) {
@@ -75,6 +77,7 @@ export async function migrateZotero(opts: {
 			parentDir: opts.parentDir ?? "papers",
 			copyPdfs: opts.copyPdfs,
 			preserveCollections: opts.preserveCollections,
+			migrateNotes: opts.migrateNotes,
 			includeCollections: opts.includeCollections ?? null,
 		},
 	});

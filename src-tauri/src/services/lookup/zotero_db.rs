@@ -43,6 +43,7 @@ pub struct ZoteroScan {
     pub valid: bool,
     pub item_count: usize,
     pub with_pdf_count: usize,
+    pub note_count: usize,
     pub collections: Vec<ZoteroCollectionInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
@@ -65,6 +66,9 @@ pub struct ZoteroMigrateArgs {
     /// If set, only import items in these collection IDs (0 = unfiled). None = all.
     #[serde(default)]
     pub include_collections: Option<Vec<i64>>,
+    /// Migrate each item's Zotero notes (HTML → Markdown) into NOTES.md.
+    #[serde(default)]
+    pub migrate_notes: bool,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -88,6 +92,8 @@ struct ReadItem {
     collection_path: Vec<String>,
     /// Raw Zotero collectionIDs this item belongs to (for the include filter).
     collection_ids: Vec<i64>,
+    /// Raw HTML of the item's child notes (converted to Markdown at import time).
+    note_html: Vec<String>,
 }
 
 /// Read-only preview: how many regular items, and how many have a local PDF.
@@ -98,10 +104,12 @@ pub fn scan_zotero(args: ZoteroScanArgs) -> Result<ZoteroScan, AppError> {
     }
     let (items, collections) = read_all_items(&dir)?;
     let with_pdf = items.iter().filter(|i| !i.pdfs.is_empty()).count();
+    let note_count = items.iter().map(|i| i.note_html.len()).sum();
     Ok(ZoteroScan {
         valid: true,
         item_count: items.len(),
         with_pdf_count: with_pdf,
+        note_count,
         collections,
         warning: None,
     })
@@ -160,6 +168,7 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
             &item,
             args.copy_pdfs,
             args.preserve_collections,
+            args.migrate_notes,
             &mut dedup,
         )
         .await
@@ -184,6 +193,7 @@ async fn migrate_one(
     item: &ReadItem,
     copy_pdfs: bool,
     preserve_collections: bool,
+    migrate_notes: bool,
     dedup: &mut Dedup,
 ) -> Result<Option<(String, bool)>, AppError> {
     let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
@@ -207,6 +217,9 @@ async fn migrate_one(
     let paper_dir = vault.join(&path_rel);
     fs::create_dir_all(&paper_dir)?;
     write_paper_shell(&paper_dir, &meta)?;
+    if migrate_notes && !item.note_html.is_empty() {
+        append_notes(&paper_dir.join("NOTES.md"), &item.note_html);
+    }
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
     dedup.insert(&meta);
@@ -227,6 +240,24 @@ async fn migrate_one(
     }
 
     Ok(Some((path_rel, copied)))
+}
+
+/// Convert Zotero note HTML to Markdown and append it under the paper's NOTES.md.
+fn append_notes(notes_md: &Path, html_notes: &[String]) {
+    let md = html_notes
+        .iter()
+        .map(|html| htmd::convert(html).unwrap_or_else(|_| html.clone()))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n---\n\n");
+    if md.is_empty() {
+        return;
+    }
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new().append(true).open(notes_md) {
+        let _ = write!(f, "\n---\n\n{md}\n");
+    }
 }
 
 /// Skip real duplicates / re-runs by arXiv id, DOI, or normalized title.
@@ -418,11 +449,13 @@ fn read_items_conn(
         }
         let collection_path = chosen_collection_path(&collections, &coll_ids);
         let pdfs = read_pdf_attachments(conn, zotero_dir, item_id)?;
+        let note_html = read_notes(conn, item_id)?;
         out.push(ReadItem {
             json: assemble_json(&type_name, fields, creators, &tags),
             pdfs,
             collection_path,
             collection_ids: coll_ids,
+            note_html,
         });
     }
 
@@ -620,6 +653,28 @@ fn sanitize_segment(name: &str) -> Option<String> {
     }
 }
 
+fn read_notes(conn: &Connection, parent_item_id: i64) -> Result<Vec<String>, AppError> {
+    // Child notes attached to this item; skip trashed notes. Tolerate old schemas.
+    let mut stmt = match conn.prepare(
+        "SELECT note FROM itemNotes
+         WHERE parentItemID = ?1
+           AND itemID NOT IN (SELECT itemID FROM deletedItems)
+         ORDER BY itemID",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let rows = stmt.query_map(params![parent_item_id], |r| r.get::<_, String>(0))?;
+    let mut out = Vec::new();
+    for row in rows {
+        let html = row?;
+        if !html.trim().is_empty() {
+            out.push(html);
+        }
+    }
+    Ok(out)
+}
+
 fn read_pdf_attachments(
     conn: &Connection,
     zotero_dir: &Path,
@@ -715,6 +770,7 @@ mod tests {
              CREATE TABLE deletedItems (itemID INTEGER);
              CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, collectionName TEXT, parentCollectionID INTEGER);
              CREATE TABLE collectionItems (collectionID INTEGER, itemID INTEGER, orderIndex INTEGER);
+             CREATE TABLE itemNotes (itemID INTEGER, parentItemID INTEGER, note TEXT, title TEXT);
 
              INSERT INTO itemTypes VALUES (1,'journalArticle'),(2,'attachment'),(3,'note');
              INSERT INTO creatorTypes VALUES (1,'author');
@@ -730,6 +786,7 @@ mod tests {
              INSERT INTO itemTags VALUES (10,1);
              INSERT INTO collections VALUES (1,'NLP',NULL),(2,'Transformers',1);
              INSERT INTO collectionItems VALUES (2,10,0);
+             INSERT INTO itemNotes VALUES (12,10,'<p>Great <strong>paper</strong>.</p>','Great');
              -- pdf attachment (child item 11) in storage/BBBB2222
              INSERT INTO items VALUES (11,2,'BBBB2222');
              INSERT INTO itemAttachments VALUES (11,10,0,'application/pdf','storage:paper.pdf');
@@ -755,6 +812,7 @@ mod tests {
             read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
         assert_eq!(items.len(), 1, "note + trashed items must be excluded");
         let it = &items[0];
+        assert_eq!(it.note_html.len(), 1, "child note attached to the paper");
         assert_eq!(it.json["title"], "Attention Is All You Need");
         assert_eq!(it.json["itemType"], "journalArticle");
         assert_eq!(it.json["DOI"], "10.5555/abc");
@@ -794,6 +852,12 @@ mod tests {
     }
 
     #[test]
+    fn converts_note_html_to_markdown() {
+        let md = htmd::convert("<p>Great <strong>paper</strong>.</p>").unwrap();
+        assert!(md.contains("**paper**"), "got: {md}");
+    }
+
+    #[test]
     fn resolves_storage_attachment_when_file_exists() {
         let dir = std::env::temp_dir().join(format!("motif-ztest-{}", now_nanos()));
         let store = dir.join("storage").join("BBBB2222");
@@ -827,6 +891,7 @@ mod tests {
         .unwrap();
         assert_eq!(scan.item_count, 1);
         assert_eq!(scan.with_pdf_count, 0); // no storage/ file present
+        assert_eq!(scan.note_count, 1);
         assert!(scan.valid);
 
         let _ = fs::remove_dir_all(&dir);

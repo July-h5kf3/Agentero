@@ -38,3 +38,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 flate2 = "1.1.9"
 tar = "0.4.46"
+htmd = "0.5.4"

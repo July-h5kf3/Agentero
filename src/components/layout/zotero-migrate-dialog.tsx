@@ -43,6 +43,7 @@ export function ZoteroMigrateDialog({
 	const [scanning, setScanning] = useState(false);
 	const [copyPdfs, setCopyPdfs] = useState(true);
 	const [preserveCollections, setPreserveCollections] = useState(true);
+	const [migrateNotes, setMigrateNotes] = useState(true);
 	const [selected, setSelected] = useState<Set<number>>(new Set());
 	const [parentDir, setParentDir] = useState("papers");
 	const [busy, setBusy] = useState(false);
@@ -118,6 +119,7 @@ export function ZoteroMigrateDialog({
 						parentDir: parentDir.trim() || "papers",
 						copyPdfs,
 						preserveCollections,
+						migrateNotes,
 						includeCollections:
 							scan.collections.length > 0 && !allSelected
 								? Array.from(selected)
@@ -183,6 +185,7 @@ export function ZoteroMigrateDialog({
 							{t("sidebar:zoteroMigrate.scanResult", {
 								count: scan.itemCount,
 								withPdf: scan.withPdfCount,
+								notes: scan.noteCount,
 							})}
 						</p>
 					) : null}
@@ -277,6 +280,23 @@ export function ZoteroMigrateDialog({
 									</Label>
 									<p className="text-muted-foreground text-xs">
 										{t("sidebar:zoteroMigrate.copyPdfsHint")}
+									</p>
+								</div>
+							</div>
+							<div className="flex items-start gap-2.5">
+								<Checkbox
+									id="zotero-notes"
+									checked={migrateNotes}
+									onCheckedChange={(v) => setMigrateNotes(v === true)}
+									disabled={busy}
+									className="mt-0.5"
+								/>
+								<div className="space-y-0.5">
+									<Label htmlFor="zotero-notes" className="font-normal text-sm">
+										{t("sidebar:zoteroMigrate.migrateNotes")}
+									</Label>
+									<p className="text-muted-foreground text-xs">
+										{t("sidebar:zoteroMigrate.migrateNotesHint")}
 									</p>
 								</div>
 							</div>
