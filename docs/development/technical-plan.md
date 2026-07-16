@@ -116,7 +116,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 模块 | 路径 | 说明 |
 |---|---|---|
 | 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx`；左右侧栏 **collapsible 常驻** + `preserve-pixel-size` |
-| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 双击 / 快捷键 |
+| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 快捷键 |
 | Vault IO | `src/lib/vault.ts` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/reveal.ts` 系统文件管理器定位 / 终端打开 |
 | Catalog 删除 | Host `paper_delete` | 删除 paper 或组织目录下 catalog 行（`path` / `path/%`） |
 
@@ -126,7 +126,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 2. 「Open vault…」通过 `@tauri-apps/plugin-dialog` 选择本地文件夹。  
 3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.agentero` 等。  
 4. 点击文本类文件用 `readTextFile` 载入中间 Markdown 面板（Plate WYSIWYG）；写回 `writeTextFile`。  
-5. 双击 / 右键 / `⌥⌘R`：`revealItemInDir` 在 Finder 中显示；右键 / `⌥⌘T`「在终端中打开」：`path_open_in_terminal`；右键 / `⌘⌫`：确认后 `remove` + 可选 `paper_delete`。  
+5. 右键 / `⌥⌘R`：`revealItemInDir` 在 Finder 中显示（无双击）；右键 / `⌥⌘T`「在终端中打开」：`path_open_in_terminal`；右键 / `⌘⌫`：确认后 `remove` + 可选 `paper_delete`。  
 6. 非 Tauri 环境（纯浏览器 `pnpm dev`）能力受限；真实读盘需 `pnpm tauri dev`。  
 7. 最近 Vault 路径暂存 `localStorage`（后续迁到 `tauri-plugin-store`）。
 

@@ -473,15 +473,6 @@ export function FileTree({
 		[canRevealPath, t],
 	);
 
-	const handleDoubleClickPath = useCallback(
-		(path: string) => {
-			if (createDraft) return;
-			if (!canRevealPath(path)) return;
-			void handleReveal(path);
-		},
-		[canRevealPath, createDraft, handleReveal],
-	);
-
 	const handleContextMenuPath = useCallback(
 		(path: string, event: ReactMouseEvent) => {
 			if (createDraft) return;
@@ -794,7 +785,6 @@ export function FileTree({
 							selectedPath={treeSelectedPath}
 							expanded={expanded}
 							onExpandedChange={setExpanded}
-							onDoubleClickPath={handleDoubleClickPath}
 							onContextMenuPath={handleContextMenuPath}
 							onSelect={(path) => {
 								if (createDraft) return;
@@ -817,7 +807,6 @@ export function FileTree({
 						selectedPath={treeSelectedPath}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
-						onDoubleClickPath={handleDoubleClickPath}
 						onContextMenuPath={handleContextMenuPath}
 						onSelect={(path) => {
 							// Don't navigate away while naming a new entry.

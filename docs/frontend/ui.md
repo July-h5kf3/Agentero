@@ -43,9 +43,9 @@
   - 新建文件夹 → `FolderPlus`（同上）
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
 - **在系统文件管理器中显示**（`revealItemInDir` / `src/lib/reveal.ts`）：
-  - **双击**真实文件 / 文件夹 / paper 行 → 在 Finder（macOS）/ Explorer（Windows）/ 文件管理器（Linux）中定位并选中。
-  - **右键**同上节点 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
+  - **右键**真实文件 / 文件夹 / paper 行 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
   - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
+  - **不**绑定双击（单击选中 / 打开文档；双击不触发 Finder）。
   - 虚拟节点 **Library**（`agentero:library`）不提供此操作；仅桌面端可用。
 - **在终端中打开**（Host `path_open_in_terminal` / `src/lib/reveal.ts` `openInTerminal`）：
   - **右键**真实文件 / 文件夹 / paper 行 →「在终端中打开」（旁注 `⌥⌘T`）。
@@ -175,7 +175,7 @@
 | `⌘O` | Open vault… | 打开文档/文件夹 |
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
-| `⌥⌘R` | 在 Finder 中显示 | 定位当前选中文件/文件夹；`shortcuts.ts` → `revealInFinder` |
+| `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
 | `⌘⌫` | 删除选中项 | 文件树选中项；确认后删盘；`papers/` 同步 `paper_delete`；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
