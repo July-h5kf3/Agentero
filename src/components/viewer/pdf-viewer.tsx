@@ -1432,7 +1432,7 @@ export function PdfViewer({
 														{findHighlight.rects.map((r) => (
 															<div
 																key={`find-${r.x}-${r.y}-${r.w}-${r.h}`}
-																className="absolute rounded-[1px] bg-orange-400/50 ring-1 ring-orange-500/70"
+																className="absolute rounded-[1px] bg-yellow-300/60 dark:bg-yellow-500/40"
 																style={{
 																	left: `${r.x * 100}%`,
 																	top: `${r.y * 100}%`,

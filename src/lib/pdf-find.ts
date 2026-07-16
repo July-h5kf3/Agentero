@@ -55,6 +55,39 @@ export async function findAllMatches(
 }
 
 /**
+ * Merge the many per-fragment rects a Range yields into one rect per text
+ * line. Overlapping semi-transparent rects would otherwise stack into uneven
+ * dark/light patches; one union rect per line keeps the highlight flat.
+ */
+function mergeRectsByLine(
+	rects: PdfAskNormalizedRect[],
+): PdfAskNormalizedRect[] {
+	if (rects.length <= 1) return rects;
+	const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);
+	const lines: PdfAskNormalizedRect[] = [];
+	for (const r of sorted) {
+		const last = lines[lines.length - 1];
+		if (last) {
+			const overlap =
+				Math.min(last.y + last.h, r.y + r.h) - Math.max(last.y, r.y);
+			if (overlap > Math.min(last.h, r.h) * 0.5) {
+				const x1 = Math.min(last.x, r.x);
+				const y1 = Math.min(last.y, r.y);
+				const x2 = Math.max(last.x + last.w, r.x + r.w);
+				const y2 = Math.max(last.y + last.h, r.y + r.h);
+				last.x = x1;
+				last.y = y1;
+				last.w = x2 - x1;
+				last.h = y2 - y1;
+				continue;
+			}
+		}
+		lines.push({ ...r });
+	}
+	return lines;
+}
+
+/**
  * Normalized (0–1) rects for the `occ`-th occurrence of `query` in a page's
  * rendered text layer, or null when it cannot be located (e.g. text layer not
  * yet rendered). Walks the same item order used by {@link getPageText}, so the
@@ -110,7 +143,9 @@ export function matchRectsOnPage(
 		const range = document.createRange();
 		range.setStart(s.node, s.offset);
 		range.setEnd(en.node, en.offset);
-		return clientRectsToNormalized(pageEl, range.getClientRects());
+		return mergeRectsByLine(
+			clientRectsToNormalized(pageEl, range.getClientRects()),
+		);
 	} catch {
 		return null;
 	}
