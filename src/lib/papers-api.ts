@@ -37,6 +37,22 @@ export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 	return res.data;
 }
 
+export type PaperRescanResult = { count: number };
+
+/** Rebuild catalog rows from papers/ metadata.json (recover disk-only papers). */
+export async function rescanPapers(vaultPath: string): Promise<number> {
+	if (!isTauri()) return 0;
+	const res = await invoke<ApiResult<PaperRescanResult>>("paper_rescan", {
+		args: { vaultPath },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:papersLibrary.rescanFailed"),
+		);
+	}
+	return res.data.count;
+}
+
 export type PaperDeleteResult = {
 	removed: number;
 };

@@ -738,6 +738,15 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **前端**：`src/lib/papers-api.ts` → `listPapers`；UI 侧本地表头排序（不经由本命令传 sort 参数）。
 - **说明**：当前无 filter/pagination；扩展筛选/FTS 仍可用规划契约 `paper:list`（见下）。
 
+#### `paper_rescan`（已落地）
+
+扫描 `papers/` 磁盘目录，用每个 paper 文件夹的 `metadata.json`（catalog 投影）**重建 / 补齐 catalog 行**——找回“盘上有、catalog 无”的论文（外部拷入，或历史删除顺序 bug 丢失的行）。幂等。
+
+- **参数**（invoke 字段名 `args`）：`{ vaultPath: string }`。
+- **返回**：`{ ok: true; data: { count: number } }`（重新导入的 paper 数）。
+- **行为**：递归遍历 `papers/`，遇含 `metadata.json` 的文件夹即为 paper 叶子；反序列化时**回填** `path`（投影省略），`upsert` 进 catalog。不删行、不改磁盘文件。
+- **前端**：`src/lib/papers-api.ts` → `rescanPapers`；论文库空态「重新扫描 papers/」按钮。
+
 #### `paper_delete`（已落地）
 
 从 **catalog.sqlite** 删除指定路径的 paper 行，以及其下嵌套路径（组织目录批量删）。**不**删除磁盘文件；文件树删除由前端 `plugin-fs` `remove` 负责，再调本命令清理索引。

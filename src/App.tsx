@@ -65,7 +65,12 @@ import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
-import { notifyError, notifyUndo, notifyWarning } from "@/lib/notify";
+import {
+	notifyError,
+	notifySuccess,
+	notifyUndo,
+	notifyWarning,
+} from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -88,6 +93,7 @@ import {
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
 	movePaperFolder,
+	rescanPapers,
 	setPaperTags,
 	trashPaths,
 	untrashBatch,
@@ -933,6 +939,32 @@ export default function App() {
 			await refreshLibrary();
 		})();
 	}, [vaultPath, refreshTree, refreshLibrary, rebuildWikiAndNotify]);
+
+	const [rescanning, setRescanning] = useState(false);
+
+	/** Rebuild the catalog from papers/ on disk (recover disk-only papers). */
+	const handleRescanPapers = useCallback(async () => {
+		if (!vaultPath || rescanning) return;
+		setRescanning(true);
+		try {
+			const n = await rescanPapers(vaultPath);
+			await refreshLibrary();
+			await refreshTree(vaultPath);
+			if (n > 0) {
+				notifySuccess(t("sidebar:papersLibrary.rescanned", { count: n }));
+			} else {
+				notifyWarning(t("sidebar:papersLibrary.rescanEmpty"));
+			}
+		} catch (e) {
+			notifyError(
+				e instanceof Error
+					? e.message
+					: t("sidebar:papersLibrary.rescanFailed"),
+			);
+		} finally {
+			setRescanning(false);
+		}
+	}, [vaultPath, rescanning, refreshLibrary, refreshTree, t]);
 
 	/** ⌥⌘R — reveal selected vault path in Finder / Explorer. */
 	const handleRevealInFinder = useCallback(() => {
@@ -2132,6 +2164,8 @@ export default function App() {
 					tagFilter={libraryTagFilter}
 					onTagFilterChange={setLibraryTagFilter}
 					onOpenPaper={handleOpenLibraryPaper}
+					onRescan={() => void handleRescanPapers()}
+					rescanning={rescanning}
 					className="bg-muted/20"
 				/>
 			);

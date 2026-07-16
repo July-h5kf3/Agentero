@@ -127,7 +127,7 @@
 - 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
   - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
-  - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
+  - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。**catalog 权威**：盘上有、catalog 无的论文不会显示；空态提供「重新扫描 papers/」（`paper_rescan`）从各 `metadata.json` 重建 catalog。
   - **列**：标题、作者、年份、**标签**、类型、标识符；点击行打开对应 paper 文件夹。
   - **标签筛选**：表上方汇总库内全部 tag 为可点 chip（再点取消）；单元格内 tag 也可筛选。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。

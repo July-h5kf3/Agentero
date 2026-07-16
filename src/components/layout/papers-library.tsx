@@ -3,9 +3,10 @@
  * Click column headers to sort ascending / descending.
  * Optional tag filter chips above the table.
  */
-import { ArrowDown, ArrowUp, ArrowUpDown, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,9 @@ export type PapersLibraryProps = {
 	tagFilter?: string | null;
 	onTagFilterChange?: (tag: string | null) => void;
 	onOpenPaper: (paper: PaperMetadata) => void;
+	/** Rebuild the catalog from papers/ on disk (empty-state recovery). */
+	onRescan?: () => void;
+	rescanning?: boolean;
 	className?: string;
 };
 
@@ -179,6 +183,8 @@ export function PapersLibrary({
 	tagFilter = null,
 	onTagFilterChange,
 	onOpenPaper,
+	onRescan,
+	rescanning,
 	className,
 }: PapersLibraryProps) {
 	const { t, i18n } = useTranslation("sidebar");
@@ -265,6 +271,21 @@ export function PapersLibrary({
 						{t("papersLibrary.emptyHint")}
 					</p>
 				)}
+				{!searching && onRescan ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="mt-1"
+						disabled={rescanning}
+						onClick={onRescan}
+					>
+						<RefreshCw
+							className={cn("size-3.5", rescanning && "animate-spin")}
+						/>
+						{t("papersLibrary.rescan")}
+					</Button>
+				) : null}
 			</div>
 		);
 	}

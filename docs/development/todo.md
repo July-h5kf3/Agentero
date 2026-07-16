@@ -115,7 +115,7 @@
 2b. **Vault 采纳 / 整理（确认迁移 + Skill 可选）** — 接 P0-4b
    - [ ] 确认后改造：散落 PDF → `papers/<id|citekey>/` + NOTES 壳 + catalog upsert（复用 lookup/import 写盘纪律）。
    - [ ] catalog ↔ 磁盘漂移修复（有盘无行 / 有行无盘的报告与可选清理索引）。
-   - [ ] 历史 `metadata.json` → catalog 导入（若尚未统一入口则收拢）。
+   - [x] 历史 `metadata.json` → catalog 导入（`paper_rescan` / `rebuild_from_disk`；论文库空态「重新扫描」重建行）。
    - [ ] **Skill 路径**：模板 `vault-organize`（或同名）——读 inspect 报告、提议移动/命名、经用户确认后落盘；触发 `$vault-organize` / `/vault-organize`。
    - [ ] **组合**：编程产报告与执行机械步骤；Agent 只处理模糊归类；无 Agent 时确认面板仍可用。
    - [ ] CLI（若 MVP 已有）：`vault inspect|adopt` 对齐 Host（命名实现时定）。
