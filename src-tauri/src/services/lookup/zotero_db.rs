@@ -26,12 +26,24 @@ pub struct ZoteroScanArgs {
     pub zotero_dir: String,
 }
 
+/// A Zotero collection surfaced in the scan preview (for the folder picker).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroCollectionInfo {
+    /// Zotero collectionID, or 0 for the pseudo "unfiled" bucket.
+    pub id: i64,
+    /// Full folder path label (empty for unfiled).
+    pub path: String,
+    pub item_count: usize,
+}
+
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ZoteroScan {
     pub valid: bool,
     pub item_count: usize,
     pub with_pdf_count: usize,
+    pub collections: Vec<ZoteroCollectionInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
 }
@@ -50,6 +62,9 @@ pub struct ZoteroMigrateArgs {
     /// Recreate Zotero collections as nested subfolders under `parent_dir`.
     #[serde(default)]
     pub preserve_collections: bool,
+    /// If set, only import items in these collection IDs (0 = unfiled). None = all.
+    #[serde(default)]
+    pub include_collections: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -71,6 +86,8 @@ struct ReadItem {
     pdfs: Vec<PathBuf>,
     /// Sanitized folder segments of the item's chosen Zotero collection (empty = unfiled).
     collection_path: Vec<String>,
+    /// Raw Zotero collectionIDs this item belongs to (for the include filter).
+    collection_ids: Vec<i64>,
 }
 
 /// Read-only preview: how many regular items, and how many have a local PDF.
@@ -79,12 +96,13 @@ pub fn scan_zotero(args: ZoteroScanArgs) -> Result<ZoteroScan, AppError> {
     if !dir.is_dir() {
         return Err(AppError::message("selected path is not a folder"));
     }
-    let items = read_all_items(&dir)?;
+    let (items, collections) = read_all_items(&dir)?;
     let with_pdf = items.iter().filter(|i| !i.pdfs.is_empty()).count();
     Ok(ZoteroScan {
         valid: true,
         item_count: items.len(),
         with_pdf_count: with_pdf,
+        collections,
         warning: None,
     })
 }
@@ -103,7 +121,7 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
     }
     let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
 
-    let items = read_all_items(&zotero_dir)?;
+    let (items, _collections) = read_all_items(&zotero_dir)?;
 
     // Deleting paper folders outside the app leaves orphan catalog rows; drop them
     // first so dedup does not block re-import and the Library shows no ghosts.
@@ -118,7 +136,24 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
         pruned,
         ..Default::default()
     };
+
+    // Optional collection filter (0 = unfiled). None → import everything.
+    let include: Option<HashSet<i64>> = args
+        .include_collections
+        .as_ref()
+        .map(|v| v.iter().copied().collect());
+
     for item in items {
+        if let Some(set) = &include {
+            let selected = if item.collection_ids.is_empty() {
+                set.contains(&0)
+            } else {
+                item.collection_ids.iter().any(|c| set.contains(c))
+            };
+            if !selected {
+                continue;
+            }
+        }
         match migrate_one(
             &vault,
             &parent_rel,
@@ -298,7 +333,9 @@ fn pdf_dest_name(id: &str) -> String {
 // Zotero SQLite reading
 // ---------------------------------------------------------------------------
 
-fn read_all_items(zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+fn read_all_items(
+    zotero_dir: &Path,
+) -> Result<(Vec<ReadItem>, Vec<ZoteroCollectionInfo>), AppError> {
     let db = zotero_dir.join("zotero.sqlite");
     if !db.is_file() {
         return Err(AppError::message(
@@ -318,7 +355,11 @@ fn read_all_items(zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
     result
 }
 
-fn copy_and_read(db: &Path, tmp_db: &Path, zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+fn copy_and_read(
+    db: &Path,
+    tmp_db: &Path,
+    zotero_dir: &Path,
+) -> Result<(Vec<ReadItem>, Vec<ZoteroCollectionInfo>), AppError> {
     fs::copy(db, tmp_db)?;
     for ext in ["-wal", "-shm"] {
         let src = PathBuf::from(format!("{}{ext}", db.display()));
@@ -331,7 +372,10 @@ fn copy_and_read(db: &Path, tmp_db: &Path, zotero_dir: &Path) -> Result<Vec<Read
     read_items_conn(&conn, zotero_dir)
 }
 
-fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+fn read_items_conn(
+    conn: &Connection,
+    zotero_dir: &Path,
+) -> Result<(Vec<ReadItem>, Vec<ZoteroCollectionInfo>), AppError> {
     let collections = read_collections(conn)?;
     let mut stmt = conn.prepare(
         "SELECT i.itemID, it.typeName
@@ -345,6 +389,8 @@ fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>
     })?;
 
     let mut out = Vec::new();
+    let mut coll_counts: HashMap<i64, usize> = HashMap::new();
+    let mut unfiled = 0usize;
     for row in rows {
         let (item_id, type_name) = row?;
         let fields = read_fields(conn, item_id)?;
@@ -356,6 +402,14 @@ fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>
         let creators = read_creators(conn, item_id)?;
         let mut tags = read_tags(conn, item_id)?;
         let coll_ids = read_item_collection_ids(conn, item_id)?;
+        // Tally memberships for the folder picker preview.
+        if coll_ids.is_empty() {
+            unfiled += 1;
+        } else {
+            for id in &coll_ids {
+                *coll_counts.entry(*id).or_insert(0) += 1;
+            }
+        }
         // Keep collection membership as tags (an item can live in several).
         for name in collection_leaf_names(&collections, &coll_ids) {
             if !tags.iter().any(|t| t.eq_ignore_ascii_case(&name)) {
@@ -368,9 +422,27 @@ fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>
             json: assemble_json(&type_name, fields, creators, &tags),
             pdfs,
             collection_path,
+            collection_ids: coll_ids,
         });
     }
-    Ok(out)
+
+    let mut infos: Vec<ZoteroCollectionInfo> = coll_counts
+        .into_iter()
+        .map(|(id, item_count)| ZoteroCollectionInfo {
+            id,
+            path: collection_full_path(&collections, id).join("/"),
+            item_count,
+        })
+        .collect();
+    infos.sort_by(|a, b| a.path.cmp(&b.path));
+    if unfiled > 0 {
+        infos.push(ZoteroCollectionInfo {
+            id: 0,
+            path: String::new(),
+            item_count: unfiled,
+        });
+    }
+    Ok((out, infos))
 }
 
 fn read_fields(conn: &Connection, item_id: i64) -> Result<Map<String, Value>, AppError> {
@@ -679,7 +751,8 @@ mod tests {
     #[test]
     fn reads_only_regular_non_trashed_items() {
         let conn = seed_db();
-        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let (items, _collections) =
+            read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
         assert_eq!(items.len(), 1, "note + trashed items must be excluded");
         let it = &items[0];
         assert_eq!(it.json["title"], "Attention Is All You Need");
@@ -694,7 +767,8 @@ mod tests {
     #[test]
     fn assembled_item_maps_to_expected_citekey() {
         let conn = seed_db();
-        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let (items, _collections) =
+            read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
         let meta = map_zotero_item(&items[0].json).unwrap();
         assert_eq!(meta.title, "Attention Is All You Need");
         assert_eq!(meta.year, Some(2017));
@@ -706,9 +780,14 @@ mod tests {
     #[test]
     fn recreates_collection_path_and_tags() {
         let conn = seed_db();
-        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let (items, collections) =
+            read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
         let it = &items[0];
         assert_eq!(it.collection_path, vec!["NLP", "Transformers"]);
+        assert_eq!(it.collection_ids, vec![2]);
+        assert!(collections
+            .iter()
+            .any(|c| c.path == "NLP/Transformers" && c.item_count == 1));
         let tags = it.json["tags"].as_array().unwrap();
         assert!(tags.iter().any(|t| t["tag"] == "Transformers"));
         assert!(tags.iter().any(|t| t["tag"] == "nlp"));

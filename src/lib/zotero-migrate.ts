@@ -13,10 +13,17 @@ type ApiResult<T> = {
 	error?: { code: string; message: string };
 };
 
+export type ZoteroCollectionInfo = {
+	id: number;
+	path: string;
+	itemCount: number;
+};
+
 export type ZoteroScan = {
 	valid: boolean;
 	itemCount: number;
 	withPdfCount: number;
+	collections: ZoteroCollectionInfo[];
 	warning?: string;
 };
 
@@ -56,6 +63,7 @@ export async function migrateZotero(opts: {
 	parentDir?: string;
 	copyPdfs: boolean;
 	preserveCollections: boolean;
+	includeCollections?: number[];
 }): Promise<ZoteroMigrateResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:zoteroMigrate.desktopOnly"));
@@ -67,6 +75,7 @@ export async function migrateZotero(opts: {
 			parentDir: opts.parentDir ?? "papers",
 			copyPdfs: opts.copyPdfs,
 			preserveCollections: opts.preserveCollections,
+			includeCollections: opts.includeCollections ?? null,
 		},
 	});
 	if (!res.ok || !res.data) {

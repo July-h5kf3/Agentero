@@ -95,6 +95,7 @@
    - [x] 一键从本地 Zotero 迁移：直读 `zotero.sqlite` + `storage/` → catalog，可选拷本地 PDF（`zotero_scan` / `zotero_migrate`；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
    - [ ] 解析 Zotero export / 独立 BibTeX 文件路径（Library 导入已覆盖 Bib/RIS 文本）。
    - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）。
+   - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）。
    - [ ] 保留 Zotero 笔记 / 批注与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**

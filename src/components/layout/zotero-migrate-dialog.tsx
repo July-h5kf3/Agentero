@@ -43,6 +43,7 @@ export function ZoteroMigrateDialog({
 	const [scanning, setScanning] = useState(false);
 	const [copyPdfs, setCopyPdfs] = useState(true);
 	const [preserveCollections, setPreserveCollections] = useState(true);
+	const [selected, setSelected] = useState<Set<number>>(new Set());
 	const [parentDir, setParentDir] = useState("papers");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export function ZoteroMigrateDialog({
 	const reset = () => {
 		setDir(null);
 		setScan(null);
+		setSelected(new Set());
 		setScanning(false);
 		setError(null);
 		setBusy(false);
@@ -69,13 +71,33 @@ export function ZoteroMigrateDialog({
 		setScan(null);
 		setScanning(true);
 		try {
-			setScan(await scanZotero(picked));
+			const result = await scanZotero(picked);
+			setScan(result);
+			setSelected(new Set(result.collections.map((c) => c.id)));
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setScanning(false);
 		}
 	};
+
+	const allSelected =
+		scan != null &&
+		scan.collections.length > 0 &&
+		selected.size === scan.collections.length;
+	const toggleOne = (id: number) =>
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	const toggleAll = () =>
+		setSelected(
+			allSelected
+				? new Set()
+				: new Set(scan?.collections.map((c) => c.id) ?? []),
+		);
 
 	const handleMigrate = async () => {
 		if (!vaultPath || !dir || !scan) return;
@@ -96,6 +118,10 @@ export function ZoteroMigrateDialog({
 						parentDir: parentDir.trim() || "papers",
 						copyPdfs,
 						preserveCollections,
+						includeCollections:
+							scan.collections.length > 0 && !allSelected
+								? Array.from(selected)
+								: undefined,
 					});
 				},
 			);
@@ -174,6 +200,46 @@ export function ZoteroMigrateDialog({
 									disabled={busy}
 								/>
 							</div>
+							{scan.collections.length > 0 ? (
+								<div className="space-y-1.5">
+									<div className="flex items-center justify-between">
+										<Label className="text-xs">
+											{t("sidebar:zoteroMigrate.collections")}
+										</Label>
+										<button
+											type="button"
+											className="text-muted-foreground text-xs hover:text-foreground"
+											onClick={toggleAll}
+											disabled={busy}
+										>
+											{allSelected
+												? t("sidebar:zoteroMigrate.selectNone")
+												: t("sidebar:zoteroMigrate.selectAll")}
+										</button>
+									</div>
+									<div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
+										{scan.collections.map((c) => (
+											<div key={c.id} className="flex items-center gap-2">
+												<Checkbox
+													id={`zotero-coll-${c.id}`}
+													checked={selected.has(c.id)}
+													onCheckedChange={() => toggleOne(c.id)}
+													disabled={busy}
+												/>
+												<Label
+													htmlFor={`zotero-coll-${c.id}`}
+													className="flex-1 truncate font-normal text-sm"
+												>
+													{c.path || t("sidebar:zoteroMigrate.unfiled")}
+												</Label>
+												<span className="text-muted-foreground text-xs">
+													{c.itemCount}
+												</span>
+											</div>
+										))}
+									</div>
+								</div>
+							) : null}
 							<div className="flex items-start gap-2.5">
 								<Checkbox
 									id="zotero-collections"
@@ -233,7 +299,13 @@ export function ZoteroMigrateDialog({
 						type="button"
 						className="gap-1.5"
 						onClick={() => void handleMigrate()}
-						disabled={busy || !scan || scan.itemCount === 0 || !vaultPath}
+						disabled={
+							busy ||
+							!scan ||
+							scan.itemCount === 0 ||
+							!vaultPath ||
+							(scan.collections.length > 0 && selected.size === 0)
+						}
 					>
 						{busy ? (
 							<Loader2 className="size-3.5 animate-spin" />
