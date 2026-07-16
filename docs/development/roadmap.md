@@ -35,7 +35,7 @@
 - [x] 打开本地 Vault。
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.motif/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
-- [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存）。
+- [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
@@ -114,6 +114,7 @@
 - [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast。
 - [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `autoApprove`）；对所有 Agent 生效；经 `autoApprove` 传入运行；逐项「每次询问」仍待。
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
+- [x] 消息编辑与重发：会话空闲时 hover 用户消息可 **Edit**，就地编辑后重发（丢弃该消息及其之后内容并发起全新 turn）。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [x] **paper-reader 精读工作流**：

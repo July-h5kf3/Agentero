@@ -109,7 +109,10 @@
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
+  - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
+  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 返回论文库表格（等价于选中虚拟 `Library` 节点）；论文库视图与欢迎页不显示。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
+- **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 Focus 图标）：
   - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + 退出；隐藏后台任务条与 Notes。
@@ -222,6 +225,8 @@ PromptInput → Body / Footer / Submit
 
 **Agent 切换**：点击 Composer 上方的 Agent 图标打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
 
+**消息编辑与重发**：会话空闲时（发送成功、停止或失败后）hover 已发送的用户消息会显示 **Edit（铅笔）** 与 **Copy** 两个图标按钮；运行中不显示 Edit，须先按 `Esc` / 点击停止。点击 Edit 就地把气泡替换为文本框（`↵` 重新发送、`⇧↵` 换行、`Esc` 取消），重发时会丢弃**该消息及其之后的所有内容**（旧回答 / 被中断的运行）并以新文本发起一次全新的 turn，用于修正发错的输入。切换会话 / 标签 / 新建对话会自动取消未完成的编辑。（重发沿用普通发送的 session 续接规则：非 Codex 每次新建 session；Codex 续接原生 thread，因此可见转录被截断但 Agent 侧线程记忆不随之回退。）
+
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
 **上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
@@ -239,6 +244,8 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **斜杠命令**：Motif 不实现自己的 `/` 命令菜单。用户手打的 `/…` 原样透传；Claude 路径上 Host 也可能主动加上 `/skill-id` 前缀以对齐其 skill 语法。Codex 使用 App Server native thread，skill 侧以 `$` 为准。
 
 **权限模式**：**设置 → Agent** 提供一个全局「权限模式」下拉，对**所有 Agent** 的运行生效（存于 app settings，默认 **受限**）。**受限（默认）**时，Motif 取消 ACP 的权限请求（Codex 走原生策略、沙箱为 `workspace-write`）；**自动批准**时自动选择 Agent 给出的第一个权限选项（Codex 沙箱切换为 `danger-full-access`）。选 **自动批准** 时面板下方显示一行风险说明。逐项权限确认需要由保持 ACP 会话的后续实现提供；届时可在此下拉新增「每次询问」档。
+
+**回答语言**：**设置 → Agent** 提供一个全局「回答语言」下拉（**自动 / English / 简体中文**，存于 app settings，默认 **自动**），**独立于界面语言**，对**所有 Agent** 交互生效（Composer 对话、精读、summary/QA、PDF 划词问答）。前端 `runOnce` 统一读取该设置并透传，Host 在 `build_prompt` 为所有 workflow 追加一句语言指令；选 **自动** 时不注入任何指令，交由 Agent 依据内容决定。
 
 **Codex 控件**：只有选中 `codex-acp` 时，底栏才显示 App Server `model/list` 提供的模型与 reasoning effort，以及仅在闪电图标内填充黄色的 Fast toggle。选择在下一次 native turn 中传给 App Server；其他 Agent 不显示也不接收这些偏好。
 
@@ -271,7 +278,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。
-- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号。
+- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **Common agents** 目录表：名称 + 状态徽章（installed / ACP ready / missing 等）；打开页自动 Probe。

@@ -820,6 +820,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
+  responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
 }
 ```
 
@@ -833,6 +834,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - Composer 的 `$` 仅是 Motif UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
 - **权限策略**：默认取消 ACP 权限请求。设置 → Agent 提供全局「权限模式」（受限默认 / 自动批准），对所有 Agent 生效，并在每次运行中通过 `autoApprove`（自动批准 → `true`）传入；逐项权限确认仍未实现。
+
+- **回答语言**：设置 → Agent 提供全局「回答语言」（自动 / English / 简体中文，独立于界面语言）。前端 `runOnce` 统一读取该设置并透传 `responseLanguage`；Host 在 `build_prompt`（`prompts.rs`）为所有 workflow 追加一句语言指令，`auto` 时不注入。
 
 - **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
 
