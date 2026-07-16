@@ -609,7 +609,14 @@ cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 ```
 
-Release：可选附加 `agentero` 可执行文件；不绑签名公证第一步。
+Release（已接 CI）：推送 `v*` tag 时，`.github/workflows/release.yml` 在构建桌面安装包的同一矩阵上：
+
+1. `cargo build -p agentero-cli --release`
+2. 打包为 `agentero-<version>-<rustc-host-triple>.tar.gz`（macOS/Linux）或 `.zip`（Windows）
+3. 用 `softprops/action-gh-release` **上传到同一草稿 GitHub Release**
+
+用户从 Releases 下载解压即可，无需 npm/pypi。  
+**不**发 crates.io（当前 path 依赖整包 `agentero_lib`/Tauri）；开发者可用 `cargo install --git … --package agentero-cli`。不绑签名公证第一步。
 
 ---
 

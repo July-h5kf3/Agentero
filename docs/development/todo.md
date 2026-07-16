@@ -144,7 +144,7 @@
    - [ ] `doctor`（Translator / catalog schema / 路径；**不** probe Agent）。
    - [ ] shell completions（bash / zsh / fish）。
    - [ ] `export papers-md`（Host 落地 `catalog:export_papers_md` 后对齐）。
-   - [ ] Release 可选附带 `agentero` 二进制（与桌面安装包并列）。
+   - [x] Release 附带 `agentero` 二进制（与桌面安装包同草稿 Release；见 `release.yml`）。
 
 8. **Release 完善**
    - tag 构建已完成；后续补签名、公证、自动 changelog。

@@ -28,7 +28,7 @@
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
-| Release CI | ✅ | `v*` tag → 三平台安装包草稿 Release |
+| Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
 

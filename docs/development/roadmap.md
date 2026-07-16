@@ -298,7 +298,7 @@
 - [x] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read`（仅 catalog 字段；**无**自动精读）。
 - [x] 全局 `--json` / 退出码 / 稳定 `error.code`（Agent 友好）。
 - [ ] 可选随后：`graph backlinks|export|rebuild`、`doctor`、shell completions。
-- [x] 文档：README 构建说明；Release 可选附带 `agentero` 二进制（仍待）。
+- [x] 文档：README 构建说明；Release 附带 `agentero` 二进制（`release.yml`）。
 
 验收标准：
 
@@ -475,7 +475,8 @@
 - [ ] **文内引用 hover → 右侧 Paper Info**（库内/远程缓存 + 一键入库）（V0.7-A）。
 - [ ] **引用关系图 / Connected Papers 式邻域**（cites / cited_by 缓存 + 列表/简图）（V0.7-B）。
 - [ ] **Agent 引用工作流**：Explore citations / Map related work / Ingest neighborhood（V0.7-C）。
-- [ ] CLI 增强：`graph *`、`doctor`、shell completions；Release 附带 `agentero` 二进制。
+- [ ] CLI 增强：`graph *`、`doctor`、shell completions。
+- [x] Release 附带 `agentero` 二进制（`v*` tag → 草稿 GitHub Release assets）。
 - [ ] **Vault 采纳（整理）**：确认后迁移散落 PDF→paper 单元、catalog 对齐、漂移修复；打开 UX + 后台任务；编程 API + 可选 `vault-organize` skill。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。
 
