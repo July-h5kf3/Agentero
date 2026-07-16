@@ -32,7 +32,25 @@
 		"deleteFailed": "Failed to delete.",
 		"deleteDesktopOnly": "Delete requires the desktop app.",
 		"deleteInvalid": "Cannot delete this item.",
-		"deleteNeedsSelection": "Select a file or folder to delete."
+		"deleteNeedsSelection": "Select a file or folder to delete.",
+		"selectedCount": "{{count}} selected",
+		"deleteSelected": "Delete {{count}}",
+		"moveSelected": "Move {{count}}",
+		"clearSelection": "Clear selection",
+		"deleteConfirmMany": "Delete {{count}} items? This removes the folders and their catalog entries.",
+		"move": "Move…",
+		"movedWithErrors": "{{count}} item(s) could not be moved.",
+		"moveFailed": "Failed to move.",
+		"moveDesktopOnly": "Move requires the desktop app.",
+		"moveDialog": {
+			"title": "Move {{count}} item(s) to…",
+			"existing": "Existing folders",
+			"papersRoot": "papers (top level)",
+			"newFolder": "New folder",
+			"newFolderHint": "e.g. papers/archive",
+			"confirm": "Move",
+			"cancel": "Cancel"
+		}
 	},
 	"papersLibrary": {
 		"title": "Library",

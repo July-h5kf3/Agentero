@@ -63,6 +63,33 @@ export async function deletePapersUnderPath(
 	return res.data;
 }
 
+export type PaperMoveResult = {
+	newRel: string;
+};
+
+/**
+ * Move a paper/org folder (or file) into another papers/ folder on disk and
+ * rewrite matching catalog path prefixes. Never overwrites an existing target.
+ */
+export async function movePaperFolder(
+	vaultPath: string,
+	fromRel: string,
+	destParentRel: string,
+): Promise<PaperMoveResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.moveDesktopOnly"));
+	}
+	const res = await invoke<ApiResult<PaperMoveResult>>("paper_move", {
+		args: { vaultPath, fromRel, destParentRel },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.moveFailed"),
+		);
+	}
+	return res.data;
+}
+
 /**
  * Mark paper as read / unread after paper-reader workflow (catalog authority).
  */

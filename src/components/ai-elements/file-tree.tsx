@@ -1,6 +1,7 @@
 "use client";
 
 import {
+	Check,
 	ChevronRightIcon,
 	FileIcon,
 	FolderIcon,
@@ -21,6 +22,8 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
+export type SelectMods = { meta: boolean; ctrl: boolean; shift: boolean };
+
 interface FileTreeContextType {
 	expandedPaths: Set<string>;
 	togglePath: (path: string) => void;
@@ -28,6 +31,14 @@ interface FileTreeContextType {
 	onSelect?: (path: string) => void;
 	onDoubleClickPath?: (path: string) => void;
 	onContextMenuPath?: (path: string, event: MouseEvent) => void;
+	/** Multi-selection set (row highlight + checkbox state). */
+	selectedPaths?: Set<string>;
+	/** True when a multi-selection is active (checkboxes stay visible). */
+	selecting?: boolean;
+	/** Row click carrying modifier keys (files + modifier-clicked folders). */
+	onSelectRow?: (path: string, mods: SelectMods) => void;
+	/** Checkbox toggle for a row (never opens/expands). */
+	onToggleSelect?: (path: string) => void;
 }
 
 const noop = () => {};
@@ -47,6 +58,10 @@ export type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
 	/** Right-click a tree row (file or folder). */
 	onContextMenuPath?: (path: string, event: MouseEvent) => void;
 	onExpandedChange?: (expanded: Set<string>) => void;
+	selectedPaths?: Set<string>;
+	selecting?: boolean;
+	onSelectRow?: (path: string, mods: SelectMods) => void;
+	onToggleSelect?: (path: string) => void;
 };
 
 export const FileTree = ({
@@ -56,6 +71,10 @@ export const FileTree = ({
 	onSelect,
 	onDoubleClickPath,
 	onContextMenuPath,
+	selectedPaths,
+	selecting,
+	onSelectRow,
+	onToggleSelect,
 	onExpandedChange,
 	className,
 	children,
@@ -90,6 +109,10 @@ export const FileTree = ({
 			onDoubleClickPath,
 			onContextMenuPath,
 			selectedPath,
+			selectedPaths,
+			selecting,
+			onSelectRow,
+			onToggleSelect,
 			togglePath,
 		}),
 		[
@@ -98,6 +121,10 @@ export const FileTree = ({
 			onDoubleClickPath,
 			onContextMenuPath,
 			selectedPath,
+			selectedPaths,
+			selecting,
+			onSelectRow,
+			onToggleSelect,
 			togglePath,
 		],
 	);
@@ -152,6 +179,47 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
 	name: string;
 };
 
+/** Row selection checkbox — visible on hover or when a selection is active. */
+function RowCheckbox({
+	checked,
+	show,
+	onToggle,
+}: {
+	checked: boolean;
+	show: boolean;
+	onToggle: () => void;
+}) {
+	return (
+		<span
+			role="checkbox"
+			aria-checked={checked}
+			tabIndex={-1}
+			onClick={(e) => {
+				e.stopPropagation();
+				onToggle();
+			}}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					e.stopPropagation();
+					onToggle();
+				}
+			}}
+			className={cn(
+				"grid size-3.5 shrink-0 cursor-pointer place-items-center rounded-[4px] border transition-opacity",
+				checked
+					? "border-primary bg-primary text-primary-foreground opacity-100"
+					: cn(
+							"border-muted-foreground/40",
+							show ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+						),
+			)}
+		>
+			{checked ? <Check className="size-2.5" /> : null}
+		</span>
+	);
+}
+
 export const FileTreeFolder = ({
 	path,
 	name,
@@ -163,11 +231,16 @@ export const FileTreeFolder = ({
 		expandedPaths,
 		togglePath,
 		selectedPath,
+		selectedPaths,
+		selecting,
+		onSelectRow,
+		onToggleSelect,
 		onDoubleClickPath,
 		onContextMenuPath,
 	} = useContext(FileTreeContext);
 	const isExpanded = expandedPaths.has(path);
-	const isSelected = selectedPath === path;
+	const checked = selectedPaths?.has(path) ?? false;
+	const isSelected = selectedPath === path || checked;
 
 	const folderContextValue = useMemo(
 		() => ({ isExpanded, name, path }),
@@ -181,10 +254,20 @@ export const FileTreeFolder = ({
 					type="button"
 					data-path={path}
 					className={cn(
-						"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
+						"group flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
 						isSelected && "bg-muted",
 					)}
-					onClick={() => togglePath(path)}
+					onClick={(e) => {
+						if ((e.metaKey || e.ctrlKey || e.shiftKey) && onSelectRow) {
+							onSelectRow(path, {
+								meta: e.metaKey,
+								ctrl: e.ctrlKey,
+								shift: e.shiftKey,
+							});
+						} else {
+							togglePath(path);
+						}
+					}}
 					onDoubleClick={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -196,6 +279,13 @@ export const FileTreeFolder = ({
 					aria-expanded={isExpanded}
 					role="treeitem"
 				>
+					{onToggleSelect ? (
+						<RowCheckbox
+							checked={checked}
+							show={Boolean(selecting)}
+							onToggle={() => onToggleSelect(path)}
+						/>
+					) : null}
 					<ChevronRightIcon
 						className={cn(
 							"size-4 shrink-0 text-muted-foreground transition-transform",
@@ -243,13 +333,33 @@ export const FileTreeFile = ({
 	children,
 	...props
 }: FileTreeFileProps) => {
-	const { selectedPath, onSelect, onDoubleClickPath, onContextMenuPath } =
-		useContext(FileTreeContext);
-	const isSelected = selectedPath === path;
+	const {
+		selectedPath,
+		onSelect,
+		onDoubleClickPath,
+		onContextMenuPath,
+		selectedPaths,
+		selecting,
+		onSelectRow,
+		onToggleSelect,
+	} = useContext(FileTreeContext);
+	const checked = selectedPaths?.has(path) ?? false;
+	const isSelected = selectedPath === path || checked;
 
-	const handleClick = useCallback(() => {
-		onSelect?.(path);
-	}, [onSelect, path]);
+	const handleClick = useCallback(
+		(e: MouseEvent) => {
+			if (onSelectRow) {
+				onSelectRow(path, {
+					meta: e.metaKey,
+					ctrl: e.ctrlKey,
+					shift: e.shiftKey,
+				});
+			} else {
+				onSelect?.(path);
+			}
+		},
+		[onSelect, onSelectRow, path],
+	);
 
 	const handleDoubleClick = useCallback(
 		(e: MouseEvent) => {
@@ -284,7 +394,7 @@ export const FileTreeFile = ({
 			<div
 				data-path={path}
 				className={cn(
-					"flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
+					"group flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
 					isSelected && "bg-muted",
 					className,
 				)}
@@ -296,6 +406,13 @@ export const FileTreeFile = ({
 				tabIndex={0}
 				{...props}
 			>
+				{onToggleSelect ? (
+					<RowCheckbox
+						checked={checked}
+						show={Boolean(selecting)}
+						onToggle={() => onToggleSelect(path)}
+					/>
+				) : null}
 				{children ?? (
 					<>
 						<span className="size-4 shrink-0" />

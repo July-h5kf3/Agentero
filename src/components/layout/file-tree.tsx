@@ -5,12 +5,15 @@ import {
 	FileJson,
 	FilePlus2,
 	FileText,
+	FolderInput,
 	FolderPlus,
 	Library,
 	Loader2,
 	ScrollText,
+	Trash2,
 	Upload,
 	WandSparkles,
+	X,
 } from "lucide-react";
 import {
 	type MouseEvent as ReactMouseEvent,
@@ -272,6 +275,10 @@ type FileTreeProps = {
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
 	onDeletePath?: (path: string) => void | Promise<void>;
+	/** Batch delete multiple real tree paths (one confirm). */
+	onDeletePaths?: (paths: string[]) => void | Promise<void>;
+	/** Batch move: parent opens a destination picker for these paths. */
+	onMovePaths?: (paths: string[]) => void;
 	className?: string;
 };
 
@@ -295,6 +302,8 @@ export function FileTree({
 	paperMetaByRelPath,
 	onReadPaper,
 	onDeletePath,
+	onDeletePaths,
+	onMovePaths,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
@@ -349,6 +358,155 @@ export function FileTree({
 		if (paperDir) return paperDir;
 		return selectedPath;
 	}, [selectedPath]);
+
+	// ---- Multi-selection (checkbox + Ctrl/Cmd/Shift click) --------------------
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const [anchor, setAnchor] = useState<string | null>(null);
+
+	// Reset the multi-selection whenever the tree changes (post delete/move).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset on nodes change
+	useEffect(() => {
+		setSelected(new Set());
+		setAnchor(null);
+	}, [nodes]);
+
+	/** Visible, selectable rows in display order (paper folders are leaves). */
+	const selectableOrder = useMemo(() => {
+		const out: string[] = [];
+		const walk = (list: FileNode[]) => {
+			for (const n of list) {
+				out.push(n.path);
+				if (
+					n.kind === "directory" &&
+					!isPaperDirectory(n.path, n.children) &&
+					expanded.has(n.path) &&
+					n.children?.length
+				) {
+					walk(n.children);
+				}
+			}
+		};
+		walk(nodes);
+		return out;
+	}, [nodes, expanded]);
+
+	const clearSelection = useCallback(() => {
+		setSelected(new Set());
+		setAnchor(null);
+	}, []);
+
+	const openRow = useCallback(
+		(path: string) => {
+			if (path === LIBRARY_VIRTUAL_PATH) {
+				onSelectLibrary?.();
+				return;
+			}
+			const node = byPath.get(path);
+			if (!node) return;
+			if (node.kind === "file" || isPaperDirectory(node.path, node.children)) {
+				onSelectFile(node);
+			}
+		},
+		[byPath, onSelectFile, onSelectLibrary],
+	);
+
+	const handleToggleSelect = useCallback((path: string) => {
+		if (path === LIBRARY_VIRTUAL_PATH) return;
+		setSelected((prev) => {
+			const next = new Set(prev);
+			if (next.has(path)) next.delete(path);
+			else next.add(path);
+			return next;
+		});
+		setAnchor(path);
+	}, []);
+
+	const handleSelectRow = useCallback(
+		(path: string, mods: { meta: boolean; ctrl: boolean; shift: boolean }) => {
+			if (createDraft) return;
+			if (path === LIBRARY_VIRTUAL_PATH) {
+				clearSelection();
+				onSelectLibrary?.();
+				return;
+			}
+			if (mods.shift && anchor) {
+				const a = selectableOrder.indexOf(anchor);
+				const b = selectableOrder.indexOf(path);
+				if (a !== -1 && b !== -1) {
+					const [lo, hi] = a <= b ? [a, b] : [b, a];
+					setSelected(new Set(selectableOrder.slice(lo, hi + 1)));
+					return;
+				}
+			}
+			if (mods.meta || mods.ctrl) {
+				handleToggleSelect(path);
+				return;
+			}
+			// Plain click: drop any multi-selection and open the row.
+			setSelected(new Set());
+			setAnchor(path);
+			openRow(path);
+		},
+		[
+			anchor,
+			clearSelection,
+			createDraft,
+			handleToggleSelect,
+			onSelectLibrary,
+			openRow,
+			selectableOrder,
+		],
+	);
+
+	const orderedSelected = useCallback(
+		() => selectableOrder.filter((p) => selected.has(p)),
+		[selectableOrder, selected],
+	);
+
+	const runBatchDelete = useCallback(() => {
+		const paths = orderedSelected();
+		if (paths.length === 0) return;
+		if (onDeletePaths) void onDeletePaths(paths);
+		else if (onDeletePath && paths[0]) void onDeletePath(paths[0]);
+	}, [orderedSelected, onDeletePaths, onDeletePath]);
+
+	const runBatchMove = useCallback(() => {
+		const paths = orderedSelected();
+		if (paths.length === 0 || !onMovePaths) return;
+		onMovePaths(paths);
+	}, [orderedSelected, onMovePaths]);
+
+	/** Context-menu action target: the whole selection when the row is in it. */
+	const menuTargets = useCallback(
+		(path: string): string[] =>
+			selected.has(path) && selected.size > 0 ? orderedSelected() : [path],
+		[selected, orderedSelected],
+	);
+
+	// Delete / clear the multi-selection via the keyboard.
+	useEffect(() => {
+		if (selected.size === 0) return;
+		const onKey = (e: KeyboardEvent) => {
+			const el = e.target as HTMLElement | null;
+			if (
+				el &&
+				(el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+			) {
+				return;
+			}
+			if (e.key === "Escape") {
+				clearSelection();
+			} else if (
+				e.key === "Delete" ||
+				(e.key === "Backspace" && (e.metaKey || e.ctrlKey))
+			) {
+				e.preventDefault();
+				runBatchDelete();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [selected.size, clearSelection, runBatchDelete]);
 
 	const draftHere = useCallback(
 		(parentAbs: string) =>
@@ -510,12 +668,21 @@ export function FileTree({
 	}, []);
 
 	const handleDeleteFromMenu = useCallback(() => {
-		if (!contextMenu || !onDeletePath) return;
-		const path = contextMenu.path;
+		if (!contextMenu) return;
+		const targets = menuTargets(contextMenu.path);
 		setContextMenu(null);
-		void onDeletePath(path);
-	}, [contextMenu, onDeletePath]);
+		if (targets.length > 1 && onDeletePaths) void onDeletePaths(targets);
+		else if (onDeletePath && targets[0]) void onDeletePath(targets[0]);
+	}, [contextMenu, menuTargets, onDeletePaths, onDeletePath]);
 
+	const handleMoveFromMenu = useCallback(() => {
+		if (!contextMenu || !onMovePaths) return;
+		const targets = menuTargets(contextMenu.path);
+		setContextMenu(null);
+		onMovePaths(targets);
+	}, [contextMenu, menuTargets, onMovePaths]);
+
+	const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
 	const contextMenuPortal =
 		contextMenu && typeof document !== "undefined"
 			? createPortal(
@@ -528,30 +695,52 @@ export function FileTree({
 							top: Math.min(contextMenu.y, window.innerHeight - 80),
 						}}
 					>
-						<button
-							type="button"
-							role="menuitem"
-							className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-							onClick={() => {
-								void handleReveal(contextMenu.path);
-							}}
-						>
-							<span>{revealLabel}</span>
-							<span className="text-muted-foreground text-xs tracking-wide">
-								{revealShortcut}
-							</span>
-						</button>
-						{onDeletePath ? (
+						{menuCount === 1 ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={() => {
+									void handleReveal(contextMenu.path);
+								}}
+							>
+								<span>{revealLabel}</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{revealShortcut}
+								</span>
+							</button>
+						) : null}
+						{onMovePaths ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleMoveFromMenu}
+							>
+								<span>
+									{menuCount > 1
+										? t("fileTree.moveSelected", { count: menuCount })
+										: t("fileTree.move")}
+								</span>
+							</button>
+						) : null}
+						{onDeletePath || onDeletePaths ? (
 							<button
 								type="button"
 								role="menuitem"
 								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
 								onClick={handleDeleteFromMenu}
 							>
-								<span>{t("fileTree.delete")}</span>
-								<span className="text-xs tracking-wide opacity-80">
-									{deleteShortcut}
+								<span>
+									{menuCount > 1
+										? t("fileTree.deleteSelected", { count: menuCount })
+										: t("fileTree.delete")}
 								</span>
+								{menuCount === 1 ? (
+									<span className="text-xs tracking-wide opacity-80">
+										{deleteShortcut}
+									</span>
+								) : null}
 							</button>
 						) : null}
 					</div>,
@@ -748,21 +937,85 @@ export function FileTree({
 	return (
 		<TooltipProvider delayDuration={300}>
 			<div className={cn("select-none py-1 text-sm", className)}>
+				{selected.size > 0 ? (
+					<div className="mb-1 flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1">
+						<span className="text-muted-foreground text-xs">
+							{t("fileTree.selectedCount", { count: selected.size })}
+						</span>
+						<div className="ml-auto flex items-center gap-0.5">
+							{onMovePaths ? (
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											className="size-6"
+											aria-label={t("fileTree.moveSelected", {
+												count: selected.size,
+											})}
+											onClick={runBatchMove}
+										>
+											<FolderInput className="size-3.5" />
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent side="bottom">
+										{t("fileTree.moveSelected", { count: selected.size })}
+									</TooltipContent>
+								</Tooltip>
+							) : null}
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6 text-destructive"
+										aria-label={t("fileTree.deleteSelected", {
+											count: selected.size,
+										})}
+										onClick={runBatchDelete}
+									>
+										<Trash2 className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{t("fileTree.deleteSelected", { count: selected.size })}
+								</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6"
+										aria-label={t("fileTree.clearSelection")}
+										onClick={clearSelection}
+									>
+										<X className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{t("fileTree.clearSelection")}
+								</TooltipContent>
+							</Tooltip>
+						</div>
+					</div>
+				) : null}
 				{nodes.length === 0 && !createDraft ? (
 					<>
 						{/* Virtual library node always available (empty vault or no vault yet) */}
 						<AiFileTree
 							selectedPath={treeSelectedPath}
+							selectedPaths={selected}
+							selecting={selected.size > 0}
 							expanded={expanded}
 							onExpandedChange={setExpanded}
 							onDoubleClickPath={handleDoubleClickPath}
 							onContextMenuPath={handleContextMenuPath}
-							onSelect={(path) => {
-								if (createDraft) return;
-								if (path === LIBRARY_VIRTUAL_PATH) {
-									onSelectLibrary?.();
-								}
-							}}
+							onSelectRow={handleSelectRow}
+							onToggleSelect={handleToggleSelect}
 						>
 							{libraryRow}
 						</AiFileTree>
@@ -776,26 +1029,14 @@ export function FileTree({
 				) : (
 					<AiFileTree
 						selectedPath={treeSelectedPath}
+						selectedPaths={selected}
+						selecting={selected.size > 0}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
 						onDoubleClickPath={handleDoubleClickPath}
 						onContextMenuPath={handleContextMenuPath}
-						onSelect={(path) => {
-							// Don't navigate away while naming a new entry.
-							if (createDraft) return;
-							if (path === LIBRARY_VIRTUAL_PATH) {
-								onSelectLibrary?.();
-								return;
-							}
-							const node = byPath.get(path);
-							if (!node) return;
-							if (
-								node.kind === "file" ||
-								isPaperDirectory(node.path, node.children)
-							) {
-								onSelectFile(node);
-							}
-						}}
+						onSelectRow={handleSelectRow}
+						onToggleSelect={handleToggleSelect}
 					>
 						{/* Virtual root: papers library table (not a real folder) */}
 						{libraryRow}

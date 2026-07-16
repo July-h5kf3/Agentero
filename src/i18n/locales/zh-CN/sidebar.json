@@ -32,7 +32,25 @@
 		"deleteFailed": "删除失败。",
 		"deleteDesktopOnly": "删除需要桌面应用。",
 		"deleteInvalid": "无法删除该项。",
-		"deleteNeedsSelection": "请先选中要删除的文件或文件夹。"
+		"deleteNeedsSelection": "请先选中要删除的文件或文件夹。",
+		"selectedCount": "已选 {{count}} 项",
+		"deleteSelected": "删除 {{count}} 项",
+		"moveSelected": "移动 {{count}} 项",
+		"clearSelection": "清除选择",
+		"deleteConfirmMany": "删除选中的 {{count}} 项？将删除这些文件夹及其目录记录。",
+		"move": "移动…",
+		"movedWithErrors": "{{count}} 项移动失败。",
+		"moveFailed": "移动失败。",
+		"moveDesktopOnly": "移动需要桌面应用。",
+		"moveDialog": {
+			"title": "移动 {{count}} 项到…",
+			"existing": "已有文件夹",
+			"papersRoot": "papers（顶层）",
+			"newFolder": "新建文件夹",
+			"newFolderHint": "例如 papers/archive",
+			"confirm": "移动",
+			"cancel": "取消"
+		}
 	},
 	"papersLibrary": {
 		"title": "论文库",

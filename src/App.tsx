@@ -33,6 +33,7 @@ import {
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { LayoutMenu } from "@/components/layout/layout-menu";
+import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import { PapersLibrary } from "@/components/layout/papers-library";
@@ -84,6 +85,7 @@ import {
 	isLibraryVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
+	movePaperFolder,
 } from "@/lib/papers-api";
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
@@ -1039,6 +1041,134 @@ export default function App() {
 		}
 		void handleDeletePath(path);
 	}, [treeSelectedPath, handleDeletePath, t]);
+
+	/** Batch delete: single confirm, then remove each path + catalog rows. */
+	const handleDeletePaths = useCallback(
+		async (paths: string[]) => {
+			if (!vaultPath || !isTauri()) {
+				setError(t("sidebar:fileTree.deleteDesktopOnly"));
+				return;
+			}
+			const rootNorm = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+			const valid = paths
+				.map((p) => p.replace(/\\/g, "/").replace(/\/+$/, ""))
+				.filter(
+					(p) =>
+						p &&
+						!isLibraryVirtualPath(p) &&
+						p !== rootNorm &&
+						p.startsWith(`${rootNorm}/`),
+				);
+			if (valid.length === 0) return;
+			if (valid.length === 1) {
+				await handleDeletePath(valid[0]);
+				return;
+			}
+			if (
+				!window.confirm(
+					t("sidebar:fileTree.deleteConfirmMany", { count: valid.length }),
+				)
+			) {
+				return;
+			}
+			setBusy(true);
+			setError(null);
+			try {
+				for (const path of valid) {
+					try {
+						await removeVaultPath(path);
+						const rel = vaultRelativePath(vaultPath, path);
+						if (rel && (rel === "papers" || rel.startsWith("papers/"))) {
+							try {
+								await deletePapersUnderPath(vaultPath, rel);
+							} catch {
+								// best-effort catalog cleanup
+							}
+						}
+						closeTabsUnderPath(path);
+					} catch {
+						// keep deleting the rest
+					}
+				}
+				setTreeSelectedPath(null);
+				await refreshTree(vaultPath);
+				await rebuildWikiAndNotify(vaultPath);
+				await refreshLibrary();
+			} catch (e) {
+				setError(
+					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
+				);
+			} finally {
+				setBusy(false);
+			}
+		},
+		[
+			vaultPath,
+			handleDeletePath,
+			closeTabsUnderPath,
+			refreshTree,
+			rebuildWikiAndNotify,
+			refreshLibrary,
+			t,
+		],
+	);
+
+	/** Paths queued for the "move to folder" dialog (null = closed). */
+	const [movePaths, setMovePaths] = useState<string[] | null>(null);
+
+	const handleMovePaths = useCallback((paths: string[]) => {
+		const valid = paths.filter((p) => !isLibraryVirtualPath(p));
+		if (valid.length === 0) return;
+		setMovePaths(valid);
+	}, []);
+
+	const runMovePaths = useCallback(
+		async (destParentRel: string) => {
+			if (!vaultPath || !movePaths) return;
+			const paths = movePaths;
+			setMovePaths(null);
+			setBusy(true);
+			setError(null);
+			let failed = 0;
+			try {
+				for (const path of paths) {
+					const rel = vaultRelativePath(vaultPath, path);
+					if (!rel) {
+						failed++;
+						continue;
+					}
+					try {
+						await movePaperFolder(vaultPath, rel, destParentRel);
+						closeTabsUnderPath(path);
+					} catch {
+						failed++;
+					}
+				}
+				setTreeSelectedPath(null);
+				await refreshTree(vaultPath);
+				await rebuildWikiAndNotify(vaultPath);
+				await refreshLibrary();
+				if (failed > 0) {
+					setError(t("sidebar:fileTree.movedWithErrors", { count: failed }));
+				}
+			} catch (e) {
+				setError(
+					e instanceof Error ? e.message : t("sidebar:fileTree.moveFailed"),
+				);
+			} finally {
+				setBusy(false);
+			}
+		},
+		[
+			vaultPath,
+			movePaths,
+			closeTabsUnderPath,
+			refreshTree,
+			rebuildWikiAndNotify,
+			refreshLibrary,
+			t,
+		],
+	);
 
 	const openMagicWand = useCallback(() => {
 		if (!vaultPath) {
@@ -2305,6 +2435,8 @@ export default function App() {
 										onConfirmCreate={(name) => void handleConfirmCreate(name)}
 										onCancelCreate={handleCancelCreate}
 										onDeletePath={(path) => void handleDeletePath(path)}
+										onDeletePaths={(paths) => void handleDeletePaths(paths)}
+										onMovePaths={handleMovePaths}
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
@@ -2734,6 +2866,18 @@ export default function App() {
 					onOpenChange={setZoteroOpen}
 					vaultPath={vaultPath}
 					onDone={handleRefresh}
+				/>
+
+				<MovePapersDialog
+					open={movePaths !== null}
+					onOpenChange={(o) => {
+						if (!o) setMovePaths(null);
+					}}
+					nodes={tree}
+					vaultPath={vaultPath}
+					count={movePaths?.length ?? 0}
+					sourcePaths={movePaths ?? []}
+					onConfirm={(dest) => void runMovePaths(dest)}
 				/>
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}
