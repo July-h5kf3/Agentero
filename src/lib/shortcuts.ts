@@ -197,6 +197,12 @@ export function formatShortcut(def: ShortcutDef): string {
 	return parts.join(isMac ? "" : "+");
 }
 
+/** Format the primary shortcut for an id (platform-aware) for tooltip interpolation. */
+export function formatShortcutById(id: ShortcutId): string {
+	const def = SHORTCUTS.find((s) => s.id === id);
+	return def ? formatShortcut(def) : "";
+}
+
 export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 	const defKey = def.key.length === 1 ? def.key.toLowerCase() : def.key;

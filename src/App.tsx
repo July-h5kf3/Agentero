@@ -75,7 +75,7 @@ import {
 } from "@/lib/papers-api";
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
-import { resolveShortcutId } from "@/lib/shortcuts";
+import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
 import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
@@ -118,6 +118,11 @@ import { WikiNavContext } from "@/lib/wiki-nav-context";
 
 const STORAGE_KEY = "motif-editor-content";
 const OPEN_FILE_KEY = "motif-open-file";
+
+/** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
+const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
+const CHAT_SHORTCUT = formatShortcutById("toggleChat");
+const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
 
 const defaultMarkdown = `### Title
 
@@ -1759,7 +1764,9 @@ export default function App() {
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("titlebar.exitAgentZenHint")}
+											{t("titlebar.exitAgentZenHint", {
+												shortcut: ZEN_SHORTCUT,
+											})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
@@ -1786,8 +1793,12 @@ export default function App() {
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
 											{sidebarCollapsed
-												? t("titlebar.showSidebarHint")
-												: t("titlebar.hideSidebarHint")}
+												? t("titlebar.showSidebarHint", {
+														shortcut: SIDEBAR_SHORTCUT,
+													})
+												: t("titlebar.hideSidebarHint", {
+														shortcut: SIDEBAR_SHORTCUT,
+													})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
@@ -1811,7 +1822,9 @@ export default function App() {
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("titlebar.enterAgentZenHint")}
+											{t("titlebar.enterAgentZenHint", {
+												shortcut: ZEN_SHORTCUT,
+											})}
 										</TooltipContent>
 									</Tooltip>
 									{rightSidebarOpen ? (
@@ -1879,8 +1892,12 @@ export default function App() {
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
 											{rightSidebarOpen
-												? t("titlebar.hideRightSidebarHint")
-												: t("titlebar.showRightSidebarHint")}
+												? t("titlebar.hideRightSidebarHint", {
+														shortcut: CHAT_SHORTCUT,
+													})
+												: t("titlebar.showRightSidebarHint", {
+														shortcut: CHAT_SHORTCUT,
+													})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
