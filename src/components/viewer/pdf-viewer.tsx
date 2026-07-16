@@ -757,9 +757,9 @@ export function PdfViewer({
 					// Shell reserves scroll space. Scale from top-left so scroll
 					// compensation can keep the cursor/viewport focus stable.
 					<div
-						className="relative"
+						className="relative mx-auto"
 						style={{
-							width: Math.max(shellWidth + 24, fitWidth),
+							width: shellWidth + 24,
 							height: shellHeight > 0 ? shellHeight + 24 : undefined,
 							minHeight: "100%",
 						}}
