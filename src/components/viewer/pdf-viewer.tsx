@@ -6,7 +6,14 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
-import { Minus, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+	ChevronLeft,
+	ChevronRight,
+	Minus,
+	Plus,
+	RotateCcw,
+	Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -115,6 +122,8 @@ export function PdfViewer({
 	 */
 	const [zoom, setZoom] = useState(1);
 	const [contentHeight, setContentHeight] = useState(0);
+	const [currentPage, setCurrentPage] = useState(1);
+	const [pageField, setPageField] = useState("1");
 
 	const pageWidth = Math.max(200, fitWidth);
 	const shellWidth = pageWidth * zoom;
@@ -157,6 +166,9 @@ export function PdfViewer({
 	const contentRef = useRef<HTMLDivElement>(null);
 	const zoomRef = useRef(zoom);
 	zoomRef.current = zoom;
+	const currentPageRef = useRef(1);
+	currentPageRef.current = currentPage;
+	const pageFocusedRef = useRef(false);
 
 	const fileUrl = isPdfViewerSource(source) ? source.trim() : null;
 
@@ -284,6 +296,96 @@ export function PdfViewer({
 		el.addEventListener("wheel", onWheel, { passive: false });
 		return () => el.removeEventListener("wheel", onWheel);
 	}, [fileUrl, zoomAtClientPoint]);
+
+	/** Scroll a page into view and mark it current. */
+	const goToPage = useCallback(
+		(n: number) => {
+			if (numPages <= 0) return;
+			const target = Math.min(numPages, Math.max(1, Math.round(n)));
+			const host = hostRef.current;
+			const el = host ? findPageElByNumber(host, target) : null;
+			el?.scrollIntoView({ block: "start" });
+			setCurrentPage(target);
+		},
+		[numPages],
+	);
+
+	const commitPageField = useCallback(() => {
+		const n = Number.parseInt(pageField, 10);
+		if (Number.isFinite(n)) goToPage(n);
+		else setPageField(String(currentPageRef.current));
+	}, [pageField, goToPage]);
+
+	// Keep the page field in sync with the current page unless it is being edited.
+	useEffect(() => {
+		if (!pageFocusedRef.current) setPageField(String(currentPage));
+	}, [currentPage]);
+
+	// Track the most-visible page for the page indicator.
+	useEffect(() => {
+		const root = scrollRef.current;
+		const host = hostRef.current;
+		if (!root || !host || !fileUrl || numPages === 0) return;
+		const ratios = new Map<number, number>();
+		const io = new IntersectionObserver(
+			(entries) => {
+				for (const e of entries) {
+					const p = Number(
+						(e.target as HTMLElement).getAttribute(PDF_PAGE_ATTR),
+					);
+					if (p) ratios.set(p, e.intersectionRatio);
+				}
+				let best = -1;
+				let bestRatio = -1;
+				for (const [p, r] of ratios) {
+					if (r > bestRatio) {
+						bestRatio = r;
+						best = p;
+					}
+				}
+				if (best > 0) setCurrentPage(best);
+			},
+			{ root, threshold: [0, 0.25, 0.5, 0.75, 1] },
+		);
+		for (const el of host.querySelectorAll(`[${PDF_PAGE_ATTR}]`)) {
+			io.observe(el);
+		}
+		return () => io.disconnect();
+	}, [fileUrl, numPages]);
+
+	// Keyboard page navigation when the PDF area is hovered or focused.
+	useEffect(() => {
+		if (!fileUrl) return;
+		const onKey = (e: KeyboardEvent) => {
+			const host = hostRef.current;
+			if (!host) return;
+			const el = e.target as HTMLElement | null;
+			if (
+				el &&
+				(el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+			) {
+				return;
+			}
+			const engaged =
+				host.matches(":hover") || host.contains(document.activeElement);
+			if (!engaged) return;
+			if (e.key === "PageDown") {
+				e.preventDefault();
+				goToPage(currentPageRef.current + 1);
+			} else if (e.key === "PageUp") {
+				e.preventDefault();
+				goToPage(currentPageRef.current - 1);
+			} else if (e.key === "Home") {
+				e.preventDefault();
+				goToPage(1);
+			} else if (e.key === "End") {
+				e.preventDefault();
+				goToPage(numPages);
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [fileUrl, numPages, goToPage]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1023,6 +1125,73 @@ export function PdfViewer({
 					</div>
 				)}
 			</div>
+
+			{numPages > 0 ? (
+				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
+					<TooltipProvider delayDuration={200}>
+						<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={t("pdf.prevPage")}
+										disabled={currentPage <= 1}
+										onClick={() => goToPage(currentPage - 1)}
+									>
+										<ChevronLeft className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{t("pdf.prevPage")}</TooltipContent>
+							</Tooltip>
+							<input
+								type="text"
+								inputMode="numeric"
+								className="w-8 rounded bg-transparent text-center font-medium text-foreground text-xs tabular-nums outline-none focus:bg-muted"
+								aria-label={t("pdf.goToPage")}
+								value={pageField}
+								onFocus={(e) => {
+									pageFocusedRef.current = true;
+									e.currentTarget.select();
+								}}
+								onChange={(e) =>
+									setPageField(e.target.value.replace(/[^0-9]/g, ""))
+								}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") {
+										e.preventDefault();
+										commitPageField();
+										e.currentTarget.blur();
+									}
+								}}
+								onBlur={() => {
+									pageFocusedRef.current = false;
+									commitPageField();
+								}}
+							/>
+							<span className="px-0.5 text-muted-foreground text-xs tabular-nums">
+								/ {numPages}
+							</span>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={t("pdf.nextPage")}
+										disabled={currentPage >= numPages}
+										onClick={() => goToPage(currentPage + 1)}
+									>
+										<ChevronRight className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{t("pdf.nextPage")}</TooltipContent>
+							</Tooltip>
+						</div>
+					</TooltipProvider>
+				</div>
+			) : null}
 
 			{activeThread && popoverScreen ? (
 				<div data-pdf-ask-ui="">

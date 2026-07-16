@@ -12,7 +12,10 @@
 		"zoomIn": "放大",
 		"zoomOut": "缩小",
 		"zoomReset": "重置缩放",
-		"zoomFit": "适应宽度"
+		"zoomFit": "适应宽度",
+		"prevPage": "上一页",
+		"nextPage": "下一页",
+		"goToPage": "跳转到页"
 	},
 	"pdfAsk": {
 		"dialogLabel": "划词提问",
