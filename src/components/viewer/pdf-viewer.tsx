@@ -176,7 +176,7 @@ export function PdfViewer({
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageField, setPageField] = useState("1");
 	const [firstPageAspect, setFirstPageAspect] = useState(1.3);
-	const [renderScale, setRenderScale] = useState(1);
+	const [renderZoom, setRenderZoom] = useState(1);
 	const [outline, setOutline] = useState<PdfOutlineNode[] | null>(null);
 	const [showOutline, setShowOutline] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
@@ -189,11 +189,11 @@ export function PdfViewer({
 	} | null>(null);
 
 	const pageWidth = Math.max(200, fitWidth);
+	// Pages render at the real (settled) scale so the text layer stays crisp and
+	// selection is smooth; a transient transform ratio covers the live gesture.
+	const pageDisplayWidth = Math.round(pageWidth * renderZoom);
 	const shellWidth = pageWidth * zoom;
-	const renderDpr =
-		(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1) *
-		renderScale;
-	const shellHeight = Math.max(0, contentHeight * zoom);
+	const shellHeight = Math.max(0, (contentHeight * zoom) / renderZoom);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -322,6 +322,7 @@ export function PdfViewer({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when PDF URL changes
 	useEffect(() => {
 		setZoom(1);
+		setRenderZoom(1);
 		setCurrentPage(1);
 		setShowOutline(false);
 		setOutline(null);
@@ -339,14 +340,14 @@ export function PdfViewer({
 		}
 	}, [fileUrl]);
 
-	// Re-rasterize pages at higher resolution once a zoom gesture settles, so
-	// CSS-scaled canvases stay crisp instead of blurry when zoomed in.
+	// Once a zoom gesture settles, re-render pages at the real scale (the
+	// transform ratio returns to 1) so the text layer is crisp and selection is
+	// smooth instead of a stretched bitmap.
 	useEffect(() => {
-		const target = Math.min(3, Math.max(1, Math.ceil(zoom * 2) / 2));
-		if (target === renderScale) return;
-		const id = window.setTimeout(() => setRenderScale(target), 180);
+		if (Math.abs(zoom - renderZoom) < 0.001) return;
+		const id = window.setTimeout(() => setRenderZoom(zoom), 160);
 		return () => window.clearTimeout(id);
-	}, [zoom, renderScale]);
+	}, [zoom, renderZoom]);
 
 	// Measure unscaled content height for scroll shell
 	// biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when page set / width changes
@@ -1368,10 +1369,9 @@ export function PdfViewer({
 							ref={contentRef}
 							className="absolute top-3 left-3 flex flex-col items-center gap-3 will-change-transform"
 							style={{
-								width: pageWidth,
-								transform: `scale(${zoom})`,
+								width: pageDisplayWidth,
+								transform: `scale(${zoom / renderZoom})`,
 								transformOrigin: "top left",
-								// No CSS transition: keeps cursor-anchored zoom in sync and avoids flash
 							}}
 						>
 							<Document
@@ -1420,16 +1420,15 @@ export function PdfViewer({
 												<div className="overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
 													<Page
 														pageNumber={pageNumber}
-														width={pageWidth}
+														width={pageDisplayWidth}
 														renderTextLayer
 														renderAnnotationLayer
-														devicePixelRatio={renderDpr}
 														loading={
 															<div
 																className="bg-muted/40"
 																style={{
-																	width: pageWidth,
-																	height: pageWidth * 1.3,
+																	width: pageDisplayWidth,
+																	height: pageDisplayWidth * 1.3,
 																}}
 															/>
 														}
