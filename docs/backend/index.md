@@ -20,7 +20,7 @@
 ## Host 职责
 
 - 校验并访问用户显式选择的 Vault 路径。
-- 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。
+- 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。笔记内嵌图由前端写入 `{mdDir}/assets/`（见 [`data-model.md`](data-model.md)「Markdown 内嵌图片」）；Host 提供 fs 权限，无独立 image Tauri command。
 - 从 Markdown 构建双链、反链和图谱索引（paper 标题可读 catalog）。
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。

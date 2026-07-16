@@ -26,6 +26,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
 - PDF：Vault **任意路径** `.pdf` 均可 `readFile` → `blob:` 预览；论文单元额外 **本地优先** → 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
 - 图片：常见格式（png/jpg/gif/webp/bmp/svg/avif/ico）任意路径 `blob:` 中间栏预览。
+- **Markdown 内嵌图片**：粘贴 / 工具栏插入 → 写入当前 `.md` 旁 `./assets/`，正文 `![](./assets/…)`；选中节点显示源码；删除节点且无其它引用时 GC 磁盘文件（见 `src/lib/markdown-image.ts`、`docs/backend/data-model.md`）。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。规划中：**V0.6 分屏（split，标签页已落地）**、**V0.7 引用关系（hover Info / Connected Papers / Agent 引用工作流）**。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。

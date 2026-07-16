@@ -24,6 +24,7 @@
   - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
 - **魔棒入库**：与 Zotero 当中能力一致；catalog 权威 + 默认 PDF / arXiv TeX。
 - **文档标签页**：多文档 tab（`⌘W` 关标签；无标签时关窗口）；Library / PDF / 图片 / Markdown。
+- **Markdown 内嵌图片**：粘贴 / 工具栏写入笔记旁 `./assets/`；选中显示源码；删除节点可 GC 文件。
 - **双链与知识图谱**：Obsidian 当中的双链与知识图谱功能。
 - **桌面原生体验**：全局错误 Toast、后台任务条、多窗口。
 

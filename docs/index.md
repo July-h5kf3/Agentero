@@ -51,6 +51,7 @@ Agentero 桌面应用
 - **精读**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时 paper 行仍显示 **Eye** 可手动。Skill 按 provider（**Codex `$` / Claude `/` / 其它注入正文**）→ 写 `NOTES.md` → `is_read=true`；进度在左下角任务条（入库/下载 → 精读衔接；hover 实色）。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
 - 预览：Vault **任意路径** `.pdf` 与常见图片（png/jpg/gif/webp/bmp/svg/avif/ico）中间栏 `blob:` 预览；PDF 另支持缩放与**划词提问** MVP（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
+- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC 文件（见 [`backend/data-model.md`](backend/data-model.md)、[`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）；表单就地校验除外（见 [`frontend/ui.md`](frontend/ui.md) §2.1.2）。
 - **规划中**（见 roadmap）：**V0.6** 分屏（标签页已落地）；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式引用邻域与 Agent 引用工作流。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。

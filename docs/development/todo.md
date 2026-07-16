@@ -56,6 +56,12 @@
    - [x] 划词提问 MVP：M1–M4（见 3. PDF 划词提问）。
    - [x] 本地 PDF 直接预览（优先本地 → 无本地时 `paper_download_assets` → 失败再远程 `pdf_url`）。
 
+2f. **Markdown 内嵌图片** ✅
+   - [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown-image.ts`）。
+   - [x] 选中图片节点显示 Markdown 源码；未选中 `blob:` 预览。
+   - [x] 删除节点且引用计数归零时 GC managed assets 文件并刷新文件树。
+   - [x] 单测 + 文档（data-model / ui / technical-plan / test 冒烟表）。
+
 3. **Agent 工作流入口**
    - [x] **paper-reader 精读**：入库/单篇 Download **自动** + 文件树 Eye 手动（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度（lookup/download → paperRead）。
    - [x] skill 运行时语法按 Agent 模板分流（Host `SkillMentionStyle`）。
@@ -223,7 +229,7 @@
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
 | Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条、**全局错误 Toast**（`notifyError`） | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
-| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags**；PDF / HTML / 图片 / Markdown WYSIWYG（图片 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`、选中源码、删节点 GC）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
 | 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、模型收藏、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |

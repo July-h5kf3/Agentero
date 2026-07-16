@@ -236,6 +236,10 @@ src/components/
 ```
 
 - **Plate**（`editor/`）：笔记 WYSIWYG，不是 AI Elements。  
+  - `markdown-editor.tsx`：防抖保存、`ImagePlugin.uploadImage` → `./assets/`、引用计数 GC。  
+  - `image-node.tsx`：相对路径 `blob:` 预览；选中显示 `![alt](url)` 源码。  
+  - `editor-toolbar.tsx`：格式按钮 +「插入图片」。  
+  - `src/lib/markdown-image.ts`：路径 / 落盘 / GC 工具（单测 `test/markdown-image.test.ts`）。  
 - **禁止**把 Chat 塞进 `ui/` 或与 shadcn Message/Bubble 混用。
 
 ---

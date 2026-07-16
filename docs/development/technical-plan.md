@@ -163,6 +163,19 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - Agent 写入的 Markdown 同样需反序列化为 Slate 文档后展示在编辑器中。
 - 对于习惯源码编辑的用户，后续可考虑提供 CodeMirror 源码模式作为可选切换。
 
+**Markdown 内嵌图片（已落地）**：
+
+| 项 | 方案 |
+|---|---|
+| 落盘 | `{mdDir}/assets/`；正文 `![alt](./assets/file.ext)`（Obsidian 兼容） |
+| 插入 | Plate `ImagePlugin.uploadImage`（粘贴）+ 工具栏 `pickImageFiles` → `writeVaultBytes` |
+| 预览 | 相对路径 → fs `readFile` → `blob:`；**选中**节点时渲染 Markdown 源码而非位图 |
+| GC | `collectImageUrlCounts` 引用计数；归零且 managed `./assets/` 时 `remove` 文件 |
+| 代码 | `src/lib/markdown-image.ts`；`MarkdownEditor` 配置 `ImagePlugin`；`ImageElement` |
+| 权限 | `fs:allow-write-file`（capabilities） |
+
+详见 [`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」、[`../frontend/ui.md`](../frontend/ui.md)。
+
 ### 3.4 PDF / HTML 阅读器
 
 | 类型 | 方案 |

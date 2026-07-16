@@ -18,7 +18,7 @@
 
 | 区域 | 状态 | 摘要 |
 |---|---|---|
-| V0.1 工作台 | ✅ | 文件树（Finder / 删除 / 内联新建）、Markdown IO、paper 预览/Notes、**Library 论文表 + tags**、左右侧栏 collapsible 隔离、多窗口、Create Vault + catalog、后台任务条、**全局错误 Toast** |
+| V0.1 工作台 | ✅ | 文件树（Finder / 删除 / 内联新建）、Markdown IO、**内嵌图 `./assets/`**、paper 预览/Notes、**Library 论文表 + tags**、左右侧栏 collapsible 隔离、多窗口、Create Vault + catalog、后台任务条、**全局错误 Toast** |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
 | V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader 自动+Eye**、**全局权限模式**、模型收藏；面板 workflow 与写入确认仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
