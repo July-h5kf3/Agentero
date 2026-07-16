@@ -20,6 +20,13 @@ export function isLibraryVirtualPath(path: string | null | undefined): boolean {
 	return path === LIBRARY_VIRTUAL_PATH;
 }
 
+/** Virtual file-tree / tab path for the Recycle Bin center view. */
+export const TRASH_VIRTUAL_PATH = "agentero:trash";
+
+export function isTrashVirtualPath(path: string | null | undefined): boolean {
+	return path === TRASH_VIRTUAL_PATH;
+}
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;

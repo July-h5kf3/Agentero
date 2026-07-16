@@ -37,7 +37,7 @@ import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import { PapersLibrary } from "@/components/layout/papers-library";
-import { RecycleBinDialog } from "@/components/layout/recycle-bin-dialog";
+import { RecycleBinView } from "@/components/layout/recycle-bin-view";
 import {
 	ResizableGroup,
 	ResizableHandle,
@@ -95,6 +95,7 @@ import {
 	movePaperFolder,
 	rescanPapers,
 	setPaperTags,
+	TRASH_VIRTUAL_PATH,
 	trashPaths,
 	untrashBatch,
 } from "@/lib/papers-api";
@@ -1110,9 +1111,6 @@ export default function App() {
 	/** Paths queued for the "move to folder" dialog (null = closed). */
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
 
-	/** Recycle Bin dialog visibility. */
-	const [recycleBinOpen, setRecycleBinOpen] = useState(false);
-
 	/** Refresh tree / library / wiki after a recycle-bin restore. */
 	const handleTrashChanged = useCallback(async () => {
 		if (!vaultPath) return;
@@ -1984,6 +1982,11 @@ export default function App() {
 		void refreshLibrary();
 	}, [openTab, refreshLibrary]);
 
+	const handleSelectTrash = useCallback(() => {
+		setTreeSelectedPath(TRASH_VIRTUAL_PATH);
+		openTab(TRASH_VIRTUAL_PATH);
+	}, [openTab]);
+
 	const handleSelectFile = (node: FileNode) => {
 		if (isLibraryVirtualPath(node.path)) {
 			handleSelectLibrary();
@@ -2166,6 +2169,16 @@ export default function App() {
 					onOpenPaper={handleOpenLibraryPaper}
 					onRescan={() => void handleRescanPapers()}
 					rescanning={rescanning}
+					className="bg-muted/20"
+				/>
+			);
+		}
+		if (tab.kind === "trash") {
+			return (
+				<RecycleBinView
+					vaultPath={vaultPath}
+					active={tab.id === activeTabId}
+					onChanged={handleTrashChanged}
 					className="bg-muted/20"
 				/>
 			);
@@ -2502,7 +2515,7 @@ export default function App() {
 										}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
-										onOpenRecycleBin={() => setRecycleBinOpen(true)}
+										onOpenRecycleBin={handleSelectTrash}
 									/>
 								</div>
 								<div className="agentero-scroll min-h-0 flex-1 px-1">
@@ -2966,13 +2979,6 @@ export default function App() {
 					count={movePaths?.length ?? 0}
 					sourcePaths={movePaths ?? []}
 					onConfirm={(dest) => void runMovePaths(dest)}
-				/>
-
-				<RecycleBinDialog
-					open={recycleBinOpen}
-					onOpenChange={setRecycleBinOpen}
-					vaultPath={vaultPath}
-					onChanged={handleTrashChanged}
 				/>
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}

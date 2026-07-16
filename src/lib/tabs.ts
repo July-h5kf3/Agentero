@@ -15,7 +15,12 @@ import {
 	paperRemoteAssetsFromMetadata,
 	revokePdfViewerSource,
 } from "@/lib/paper-metadata";
-import { isLibraryVirtualPath, LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import {
+	isLibraryVirtualPath,
+	isTrashVirtualPath,
+	LIBRARY_VIRTUAL_PATH,
+	TRASH_VIRTUAL_PATH,
+} from "@/lib/papers-api";
 import { isTauri } from "@/lib/tauri";
 import { type FileNode, isTextOpenable, readVaultFile } from "@/lib/vault";
 import {
@@ -28,7 +33,7 @@ import {
 } from "@/lib/viewer";
 import { toVaultRelative } from "@/lib/wiki";
 
-export type DocTabKind = "library" | "paper" | "file";
+export type DocTabKind = "library" | "trash" | "paper" | "file";
 
 /** One open document in the center tab strip (browser-style multi-tab). */
 export type DocTab = {
@@ -68,6 +73,7 @@ export function normalizeTabPath(path: string): string {
 
 export function tabIdForPath(path: string): string {
 	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;
+	if (isTrashVirtualPath(path)) return TRASH_VIRTUAL_PATH;
 	return normalizeTabPath(path);
 }
 
@@ -196,6 +202,21 @@ export async function loadTabResources(
 	tree: FileNode[],
 	paperFolders: string[],
 ): Promise<TabResources> {
+	if (isTrashVirtualPath(path)) {
+		return {
+			kind: "trash",
+			title: "Recycle Bin",
+			mode: "markdown",
+			paperMeta: null,
+			pdfUrl: null,
+			htmlUrl: null,
+			imageUrl: null,
+			notesPath: null,
+			notesSeed: "",
+			markdownSeed: "",
+			loaded: true,
+		};
+	}
 	if (isLibraryVirtualPath(path)) {
 		return {
 			kind: "library",

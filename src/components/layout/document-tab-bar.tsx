@@ -4,6 +4,7 @@ import {
 	FileText,
 	FileType2,
 	Library,
+	Trash2,
 	X,
 } from "lucide-react";
 import { useRef } from "react";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 function iconForTab(tab: DocTab) {
 	if (tab.kind === "library") return Library;
+	if (tab.kind === "trash") return Trash2;
 	if (tab.mode === "pdf") return FileType2;
 	if (tab.mode === "html") return FileCode2;
 	if (tab.mode === "image") return FileImage;
@@ -59,7 +61,9 @@ export function DocumentTabBar({
 					const label =
 						tab.kind === "library"
 							? t("sidebar:papersLibrary.title")
-							: tab.title;
+							: tab.kind === "trash"
+								? t("sidebar:recycleBin.title")
+								: tab.title;
 					return (
 						<div
 							key={tab.id}
