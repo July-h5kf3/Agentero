@@ -1,0 +1,605 @@
+//! Read a local Zotero library (`zotero.sqlite` + `storage/`) and migrate it
+//! into the Motif catalog.
+//!
+//! Strategy: reconstruct each regular item as a **Zotero API JSON item** and
+//! reuse the existing `map_zotero_item` + paper-shell/catalog pipeline, so the
+//! id/citekey and field mapping match the magic-wand / file import exactly.
+//! Everything is local: no Translator is contacted.
+
+use super::map::{enrich_remote_urls, map_zotero_item};
+use super::{normalize_parent_dir, paper_record_from_meta, write_paper_shell};
+use crate::error::AppError;
+use crate::services::catalog::papers;
+use crate::services::pdf_parse::maybe_generate_paper_md_after_download;
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroScanArgs {
+    /// Absolute path to the Zotero data directory (contains zotero.sqlite + storage/).
+    pub zotero_dir: String,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroScan {
+    pub valid: bool,
+    pub item_count: usize,
+    pub with_pdf_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroMigrateArgs {
+    pub vault_path: String,
+    pub zotero_dir: String,
+    /// Vault-relative parent, e.g. `papers` (default) or `papers/zotero`.
+    #[serde(default)]
+    pub parent_dir: Option<String>,
+    /// Copy each item's local PDF into the paper folder.
+    #[serde(default)]
+    pub copy_pdfs: bool,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroMigrateResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub copied_pdfs: usize,
+    pub paths: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// One regular Zotero item, reconstructed as a Zotero API JSON object plus the
+/// resolved local PDF attachment paths (real files that exist on disk).
+struct ReadItem {
+    json: Value,
+    pdfs: Vec<PathBuf>,
+}
+
+/// Read-only preview: how many regular items, and how many have a local PDF.
+pub fn scan_zotero(args: ZoteroScanArgs) -> Result<ZoteroScan, AppError> {
+    let dir = PathBuf::from(args.zotero_dir.trim());
+    if !dir.is_dir() {
+        return Err(AppError::message("selected path is not a folder"));
+    }
+    let items = read_all_items(&dir)?;
+    let with_pdf = items.iter().filter(|i| !i.pdfs.is_empty()).count();
+    Ok(ZoteroScan {
+        valid: true,
+        item_count: items.len(),
+        with_pdf_count: with_pdf,
+        warning: None,
+    })
+}
+
+/// Migrate every regular item into `papers/…` + catalog. Optionally copy PDFs.
+pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResult, AppError> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let zotero_dir = PathBuf::from(args.zotero_dir.trim());
+    if !zotero_dir.is_dir() {
+        return Err(AppError::message(
+            "selected Zotero folder is not a directory",
+        ));
+    }
+    let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
+
+    let items = read_all_items(&zotero_dir)?;
+
+    // Dedup against the existing catalog (and within this run) by strong ids +
+    // normalized title, so re-runs and pre-existing papers are skipped without
+    // losing distinct papers that happen to share a citekey.
+    let mut dedup = Dedup::from_catalog(&vault);
+
+    let mut out = ZoteroMigrateResult::default();
+    for item in items {
+        match migrate_one(&vault, &parent_rel, &item, args.copy_pdfs, &mut dedup).await {
+            Ok(Some((path, copied))) => {
+                out.imported += 1;
+                out.paths.push(path);
+                if copied {
+                    out.copied_pdfs += 1;
+                }
+            }
+            Ok(None) => out.skipped += 1,
+            Err(e) => out.errors.push(e.to_string()),
+        }
+    }
+    Ok(out)
+}
+
+async fn migrate_one(
+    vault: &Path,
+    parent_rel: &str,
+    item: &ReadItem,
+    copy_pdfs: bool,
+    dedup: &mut Dedup,
+) -> Result<Option<(String, bool)>, AppError> {
+    let mut meta = map_zotero_item(&item.json)?; // errors when the item has no title
+    enrich_remote_urls(&mut meta);
+    let id = meta.id.clone();
+    if id.is_empty() {
+        return Err(AppError::message("mapped item has empty id"));
+    }
+
+    if dedup.contains(&meta) {
+        return Ok(None);
+    }
+
+    let path_rel = free_path(vault, parent_rel, &id);
+    let paper_dir = vault.join(&path_rel);
+    fs::create_dir_all(&paper_dir)?;
+    write_paper_shell(&paper_dir, &meta)?;
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(vault, &record)?;
+    dedup.insert(&meta);
+
+    let mut copied = false;
+    if copy_pdfs {
+        if let Some(src) = item.pdfs.first() {
+            let dest = paper_dir.join(pdf_dest_name(&id));
+            if fs::copy(src, &dest).is_ok() {
+                copied = true;
+            }
+        }
+        if copied {
+            // No TeX for Zotero PDFs → liteparse a readable PAPER.md, same as the
+            // magic-wand download path.
+            let _ = maybe_generate_paper_md_after_download(vault, &path_rel, &paper_dir).await;
+        }
+    }
+
+    Ok(Some((path_rel, copied)))
+}
+
+/// Skip real duplicates / re-runs by arXiv id, DOI, or normalized title.
+#[derive(Default)]
+struct Dedup {
+    arxiv: HashSet<String>,
+    doi: HashSet<String>,
+    title: HashSet<String>,
+}
+
+impl Dedup {
+    fn from_catalog(vault: &Path) -> Self {
+        let mut d = Dedup::default();
+        for r in papers::list_all(vault).unwrap_or_default() {
+            if let Some(a) = r.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
+                d.arxiv.insert(a.to_lowercase());
+            }
+            if let Some(x) = r.doi.as_deref().filter(|s| !s.is_empty()) {
+                d.doi.insert(x.to_lowercase());
+            }
+            let t = normalize_title(&r.title);
+            if !t.is_empty() {
+                d.title.insert(t);
+            }
+        }
+        d
+    }
+
+    fn contains(&self, meta: &super::map::PaperMeta) -> bool {
+        if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
+            if self.arxiv.contains(&a.to_lowercase()) {
+                return true;
+            }
+        }
+        if let Some(x) = meta.doi.as_deref().filter(|s| !s.is_empty()) {
+            if self.doi.contains(&x.to_lowercase()) {
+                return true;
+            }
+        }
+        let t = normalize_title(&meta.title);
+        !t.is_empty() && self.title.contains(&t)
+    }
+
+    fn insert(&mut self, meta: &super::map::PaperMeta) {
+        if let Some(a) = meta.arxiv_id.as_deref().filter(|s| !s.is_empty()) {
+            self.arxiv.insert(a.to_lowercase());
+        }
+        if let Some(x) = meta.doi.as_deref().filter(|s| !s.is_empty()) {
+            self.doi.insert(x.to_lowercase());
+        }
+        let t = normalize_title(&meta.title);
+        if !t.is_empty() {
+            self.title.insert(t);
+        }
+    }
+}
+
+fn normalize_title(title: &str) -> String {
+    title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// Free `{parent}/{id}` folder, else suffix `-2`, `-3`, … for distinct papers
+/// whose citekey collides with an existing folder.
+fn free_path(vault: &Path, parent_rel: &str, id: &str) -> String {
+    let base = format!("{parent_rel}/{id}").replace('\\', "/");
+    if !path_taken(vault, &base) {
+        return base;
+    }
+    for n in 2..1000 {
+        let cand = format!("{parent_rel}/{id}-{n}").replace('\\', "/");
+        if !path_taken(vault, &cand) {
+            return cand;
+        }
+    }
+    base
+}
+
+fn path_taken(vault: &Path, path_rel: &str) -> bool {
+    if vault.join(path_rel).exists() {
+        return true;
+    }
+    matches!(papers::get_by_path(vault, path_rel), Ok(Some(_)))
+}
+
+/// PDF destination filename inside the paper folder (matches the download path).
+fn pdf_dest_name(id: &str) -> String {
+    let base = id
+        .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
+        .trim()
+        .to_string();
+    let base = if base.is_empty() {
+        "paper".into()
+    } else {
+        base
+    };
+    format!("{base}.pdf")
+}
+
+// ---------------------------------------------------------------------------
+// Zotero SQLite reading
+// ---------------------------------------------------------------------------
+
+fn read_all_items(zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+    let db = zotero_dir.join("zotero.sqlite");
+    if !db.is_file() {
+        return Err(AppError::message(
+            "zotero.sqlite not found in the selected folder",
+        ));
+    }
+    // Zotero may hold a write lock while running; read a private copy (incl. WAL).
+    let tmp_dir = std::env::temp_dir().join(format!(
+        "motif-zotero-{}-{}",
+        std::process::id(),
+        now_nanos()
+    ));
+    fs::create_dir_all(&tmp_dir)?;
+    let tmp_db = tmp_dir.join("zotero.sqlite");
+    let result = copy_and_read(&db, &tmp_db, zotero_dir);
+    let _ = fs::remove_dir_all(&tmp_dir);
+    result
+}
+
+fn copy_and_read(db: &Path, tmp_db: &Path, zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+    fs::copy(db, tmp_db)?;
+    for ext in ["-wal", "-shm"] {
+        let src = PathBuf::from(format!("{}{ext}", db.display()));
+        if src.is_file() {
+            let _ = fs::copy(&src, PathBuf::from(format!("{}{ext}", tmp_db.display())));
+        }
+    }
+    let conn = Connection::open(tmp_db)
+        .map_err(|e| AppError::message(format!("open zotero.sqlite: {e}")))?;
+    read_items_conn(&conn, zotero_dir)
+}
+
+fn read_items_conn(conn: &Connection, zotero_dir: &Path) -> Result<Vec<ReadItem>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT i.itemID, it.typeName
+         FROM items i
+         JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+         WHERE it.typeName NOT IN ('attachment', 'note', 'annotation')
+           AND i.itemID NOT IN (SELECT itemID FROM deletedItems)",
+    )?;
+    let rows = stmt.query_map(params![], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+    })?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let (item_id, type_name) = row?;
+        let fields = read_fields(conn, item_id)?;
+        // Items without a title (standalone attachments/notes already excluded)
+        // cannot be mapped — skip them quietly.
+        if !fields.contains_key("title") {
+            continue;
+        }
+        let creators = read_creators(conn, item_id)?;
+        let tags = read_tags(conn, item_id)?;
+        let pdfs = read_pdf_attachments(conn, zotero_dir, item_id)?;
+        out.push(ReadItem {
+            json: assemble_json(&type_name, fields, creators, &tags),
+            pdfs,
+        });
+    }
+    Ok(out)
+}
+
+fn read_fields(conn: &Connection, item_id: i64) -> Result<Map<String, Value>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT f.fieldName, idv.value
+         FROM itemData d
+         JOIN fields f ON d.fieldID = f.fieldID
+         JOIN itemDataValues idv ON d.valueID = idv.valueID
+         WHERE d.itemID = ?1",
+    )?;
+    let rows = stmt.query_map(params![item_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, rusqlite::types::Value>(1)?,
+        ))
+    })?;
+    let mut map = Map::new();
+    for row in rows {
+        let (name, value) = row?;
+        let text = match value {
+            rusqlite::types::Value::Text(t) => t,
+            rusqlite::types::Value::Integer(i) => i.to_string(),
+            rusqlite::types::Value::Real(f) => f.to_string(),
+            _ => continue,
+        };
+        map.insert(name, Value::String(text));
+    }
+    Ok(map)
+}
+
+fn read_creators(conn: &Connection, item_id: i64) -> Result<Vec<Value>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT ct.creatorType, c.firstName, c.lastName, c.fieldMode
+         FROM itemCreators ic
+         JOIN creators c ON ic.creatorID = c.creatorID
+         JOIN creatorTypes ct ON ic.creatorTypeID = ct.creatorTypeID
+         WHERE ic.itemID = ?1
+         ORDER BY ic.orderIndex",
+    )?;
+    let rows = stmt.query_map(params![item_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, Option<String>>(2)?,
+            r.get::<_, Option<i64>>(3)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (creator_type, first, last, field_mode) = row?;
+        if field_mode == Some(1) {
+            // Single-field name lives in lastName.
+            out.push(json!({ "creatorType": creator_type, "name": last.unwrap_or_default() }));
+        } else {
+            out.push(json!({
+                "creatorType": creator_type,
+                "firstName": first.unwrap_or_default(),
+                "lastName": last.unwrap_or_default(),
+            }));
+        }
+    }
+    Ok(out)
+}
+
+fn read_tags(conn: &Connection, item_id: i64) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT t.name FROM itemTags it JOIN tags t ON it.tagID = t.tagID WHERE it.itemID = ?1",
+    )?;
+    let rows = stmt.query_map(params![item_id], |r| r.get::<_, String>(0))?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+fn read_pdf_attachments(
+    conn: &Connection,
+    zotero_dir: &Path,
+    parent_item_id: i64,
+) -> Result<Vec<PathBuf>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT ia.linkMode, ia.path, ai.key
+         FROM itemAttachments ia
+         JOIN items ai ON ia.itemID = ai.itemID
+         WHERE ia.parentItemID = ?1
+           AND ia.contentType = 'application/pdf'
+           AND ia.itemID NOT IN (SELECT itemID FROM deletedItems)",
+    )?;
+    let rows = stmt.query_map(params![parent_item_id], |r| {
+        Ok((
+            r.get::<_, Option<i64>>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (link_mode, path, att_key) = row?;
+        let Some(path) = path else { continue };
+        if let Some(p) = resolve_attachment(zotero_dir, &att_key, link_mode.unwrap_or(0), &path) {
+            out.push(p);
+        }
+    }
+    Ok(out)
+}
+
+/// Resolve a Zotero attachment `path` to a real PDF file on disk.
+/// - `storage:foo.pdf` → `<zotero_dir>/storage/<attachmentKey>/foo.pdf`
+/// - absolute linked file → used as-is when it exists
+/// - `attachments:` (linked base dir) is unknown here → skipped
+fn resolve_attachment(
+    zotero_dir: &Path,
+    att_key: &str,
+    _link_mode: i64,
+    path: &str,
+) -> Option<PathBuf> {
+    let path = path.trim();
+    if let Some(name) = path.strip_prefix("storage:") {
+        let p = zotero_dir.join("storage").join(att_key).join(name);
+        return p.is_file().then_some(p);
+    }
+    if path.starts_with("attachments:") {
+        return None;
+    }
+    let p = PathBuf::from(path);
+    (p.is_absolute() && p.is_file()).then_some(p)
+}
+
+fn assemble_json(
+    type_name: &str,
+    fields: Map<String, Value>,
+    creators: Vec<Value>,
+    tags: &[String],
+) -> Value {
+    let mut obj = fields;
+    obj.insert("itemType".into(), Value::String(type_name.to_string()));
+    obj.insert("creators".into(), Value::Array(creators));
+    obj.insert(
+        "tags".into(),
+        Value::Array(tags.iter().map(|t| json!({ "tag": t })).collect()),
+    );
+    Value::Object(obj)
+}
+
+fn now_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal Zotero schema + rows for read tests.
+    const SEED_SQL: &str = "CREATE TABLE itemTypes (itemTypeID INTEGER PRIMARY KEY, typeName TEXT);
+             CREATE TABLE items (itemID INTEGER PRIMARY KEY, itemTypeID INTEGER, key TEXT);
+             CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT);
+             CREATE TABLE itemData (itemID INTEGER, fieldID INTEGER, valueID INTEGER);
+             CREATE TABLE itemDataValues (valueID INTEGER PRIMARY KEY, value);
+             CREATE TABLE creators (creatorID INTEGER PRIMARY KEY, firstName TEXT, lastName TEXT, fieldMode INTEGER);
+             CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);
+             CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);
+             CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);
+             CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);
+             CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, linkMode INTEGER, contentType TEXT, path TEXT);
+             CREATE TABLE deletedItems (itemID INTEGER);
+
+             INSERT INTO itemTypes VALUES (1,'journalArticle'),(2,'attachment'),(3,'note');
+             INSERT INTO creatorTypes VALUES (1,'author');
+             INSERT INTO fields VALUES (1,'title'),(2,'date'),(3,'DOI');
+
+             -- regular item 10
+             INSERT INTO items VALUES (10,1,'AAAA1111');
+             INSERT INTO itemDataValues VALUES (100,'Attention Is All You Need'),(101,'2017-06-12'),(102,'10.5555/abc');
+             INSERT INTO itemData VALUES (10,1,100),(10,2,101),(10,3,102);
+             INSERT INTO creators VALUES (1,'Ashish','Vaswani',0);
+             INSERT INTO itemCreators VALUES (10,1,1,0);
+             INSERT INTO tags VALUES (1,'nlp');
+             INSERT INTO itemTags VALUES (10,1);
+             -- pdf attachment (child item 11) in storage/BBBB2222
+             INSERT INTO items VALUES (11,2,'BBBB2222');
+             INSERT INTO itemAttachments VALUES (11,10,0,'application/pdf','storage:paper.pdf');
+
+             -- standalone note (excluded)
+             INSERT INTO items VALUES (20,3,'CCCC3333');
+             -- trashed regular item (excluded)
+             INSERT INTO items VALUES (30,1,'DDDD4444');
+             INSERT INTO itemDataValues VALUES (300,'Trashed Paper');
+             INSERT INTO itemData VALUES (30,1,300);
+             INSERT INTO deletedItems VALUES (30);";
+
+    fn seed_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SEED_SQL).unwrap();
+        conn
+    }
+
+    #[test]
+    fn reads_only_regular_non_trashed_items() {
+        let conn = seed_db();
+        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        assert_eq!(items.len(), 1, "note + trashed items must be excluded");
+        let it = &items[0];
+        assert_eq!(it.json["title"], "Attention Is All You Need");
+        assert_eq!(it.json["itemType"], "journalArticle");
+        assert_eq!(it.json["DOI"], "10.5555/abc");
+        assert_eq!(it.json["creators"][0]["lastName"], "Vaswani");
+        assert_eq!(it.json["tags"][0]["tag"], "nlp");
+        // storage dir does not exist → attachment resolves to nothing
+        assert!(it.pdfs.is_empty());
+    }
+
+    #[test]
+    fn assembled_item_maps_to_expected_citekey() {
+        let conn = seed_db();
+        let items = read_items_conn(&conn, Path::new("/nonexistent-zotero")).unwrap();
+        let meta = map_zotero_item(&items[0].json).unwrap();
+        assert_eq!(meta.title, "Attention Is All You Need");
+        assert_eq!(meta.year, Some(2017));
+        assert_eq!(meta.doi.as_deref(), Some("10.5555/abc"));
+        // DOI present → id is the doi slug
+        assert_eq!(meta.id, "10_5555_abc");
+    }
+
+    #[test]
+    fn resolves_storage_attachment_when_file_exists() {
+        let dir = std::env::temp_dir().join(format!("motif-ztest-{}", now_nanos()));
+        let store = dir.join("storage").join("BBBB2222");
+        fs::create_dir_all(&store).unwrap();
+        fs::write(store.join("paper.pdf"), b"%PDF-1.4").unwrap();
+
+        let hit = resolve_attachment(&dir, "BBBB2222", 0, "storage:paper.pdf");
+        assert!(hit.is_some());
+        assert!(hit.unwrap().is_file());
+
+        assert!(resolve_attachment(&dir, "BBBB2222", 0, "storage:missing.pdf").is_none());
+        assert!(resolve_attachment(&dir, "BBBB2222", 2, "attachments:x.pdf").is_none());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scan_counts_items_and_pdfs() {
+        // Point at a folder that has zotero.sqlite so read_all_items runs end-to-end.
+        let dir = std::env::temp_dir().join(format!("motif-zscan-{}", now_nanos()));
+        fs::create_dir_all(&dir).unwrap();
+        // Seed a file-based db the scanner can copy + open (no backup feature).
+        {
+            let conn = Connection::open(dir.join("zotero.sqlite")).unwrap();
+            conn.execute_batch(SEED_SQL).unwrap();
+        }
+
+        let scan = scan_zotero(ZoteroScanArgs {
+            zotero_dir: dir.to_string_lossy().to_string(),
+        })
+        .unwrap();
+        assert_eq!(scan.item_count, 1);
+        assert_eq!(scan.with_pdf_count, 0); // no storage/ file present
+        assert!(scan.valid);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pdf_dest_name_sanitizes() {
+        assert_eq!(pdf_dest_name("1706.03762"), "1706.03762.pdf");
+        assert_eq!(pdf_dest_name("10.1000/xyz"), "10.1000_xyz.pdf");
+    }
+}

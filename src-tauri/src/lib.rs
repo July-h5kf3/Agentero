@@ -164,6 +164,8 @@ pub fn run() {
             commands::paper::paper_list,
             commands::paper::paper_delete,
             commands::paper::paper_set_is_read,
+            commands::zotero::zotero_scan,
+            commands::zotero::zotero_migrate,
             set_locale,
         ])
         .setup(|app| {
