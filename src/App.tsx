@@ -37,6 +37,7 @@ import {
 	ResizablePanel,
 } from "@/components/layout/resizable";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
+import { WindowControls } from "@/components/layout/window-controls";
 import {
 	type SettingsSection,
 	SettingsWindow,
@@ -79,6 +80,8 @@ import {
 } from "@/lib/papers-api";
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
+import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
+import { isMacOS, isTauri } from "@/lib/tauri";
 import { resolveShortcutId } from "@/lib/shortcuts";
 import {
 	basenameOf,
@@ -123,6 +126,20 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
+const STORAGE_KEY = "agentero-editor-content";
+const OPEN_FILE_KEY = "agentero-open-file";
+
+/** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
+const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
+const CHAT_SHORTCUT = formatShortcutById("toggleChat");
+const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
+
+const defaultMarkdown = `### Title
+
+> This is a quote.
+
+With some **bold** text for emphasis!
+`;
 const TABS_KEY = "agentero-open-tabs";
 
 type PersistedTab = { path: string; mode: CenterViewMode };
@@ -272,6 +289,10 @@ export default function App() {
 	const leftCollapsedBeforeZenRef = useRef(false);
 
 	const isDemo = vaultPath === null;
+	// macOS keeps native traffic lights (Overlay title bar); other desktop
+	// platforms are frameless and draw their own caption buttons on the right.
+	const isMacDesktop = isTauri() && isMacOS();
+	const showWindowControls = isTauri() && !isMacOS();
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
@@ -1957,10 +1978,14 @@ export default function App() {
 					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
 					  Keep extra gap so the sidebar toggle never hugs the lights.
 					*/}
-					<div
-						className="w-[92px] shrink-0 self-stretch"
-						data-tauri-drag-region
-					/>
+					{isMacDesktop ? (
+						<div
+							className="w-[92px] shrink-0 self-stretch"
+							data-tauri-drag-region
+						/>
+					) : (
+						<div className="w-2 shrink-0 self-stretch" data-tauri-drag-region />
+					)}
 					<TooltipProvider delayDuration={250}>
 						{agentZenMode ? (
 							<>
@@ -1983,7 +2008,9 @@ export default function App() {
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("titlebar.exitAgentZenHint")}
+											{t("titlebar.exitAgentZenHint", {
+												shortcut: ZEN_SHORTCUT,
+											})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
@@ -2010,8 +2037,12 @@ export default function App() {
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
 											{sidebarCollapsed
-												? t("titlebar.showSidebarHint")
-												: t("titlebar.hideSidebarHint")}
+												? t("titlebar.showSidebarHint", {
+														shortcut: SIDEBAR_SHORTCUT,
+													})
+												: t("titlebar.hideSidebarHint", {
+														shortcut: SIDEBAR_SHORTCUT,
+													})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
@@ -2046,7 +2077,9 @@ export default function App() {
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
-											{t("titlebar.enterAgentZenHint")}
+											{t("titlebar.enterAgentZenHint", {
+												shortcut: ZEN_SHORTCUT,
+											})}
 										</TooltipContent>
 									</Tooltip>
 									{rightSidebarOpen ? (
@@ -2114,13 +2147,18 @@ export default function App() {
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
 											{rightSidebarOpen
-												? t("titlebar.hideRightSidebarHint")
-												: t("titlebar.showRightSidebarHint")}
+												? t("titlebar.hideRightSidebarHint", {
+														shortcut: CHAT_SHORTCUT,
+													})
+												: t("titlebar.showRightSidebarHint", {
+														shortcut: CHAT_SHORTCUT,
+													})}
 										</TooltipContent>
 									</Tooltip>
 								</div>
 							</>
 						)}
+						{showWindowControls ? <WindowControls /> : null}
 					</TooltipProvider>
 				</header>
 

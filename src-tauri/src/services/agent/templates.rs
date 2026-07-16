@@ -14,7 +14,12 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             command: "opencode".to_string(),
             args: vec!["acp".to_string()],
             detect_command: Some("opencode".to_string()),
-            install_hint: "brew install opencode  ·  https://opencode.ai".to_string(),
+            install_hint: (if cfg!(windows) {
+                "npm i -g opencode  ·  https://opencode.ai"
+            } else {
+                "brew install opencode  ·  https://opencode.ai"
+            })
+            .to_string(),
         },
         AgentTemplateInfo {
             id: AgentTemplate::ClaudeAcp.as_str().to_string(),

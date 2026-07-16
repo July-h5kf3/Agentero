@@ -10,10 +10,29 @@ fn extra_path_dirs() -> Vec<PathBuf> {
         // fnm / nvm common locations (best-effort)
         dirs.push(home.join(".fnm"));
     }
-    dirs.push(PathBuf::from("/opt/homebrew/bin"));
-    dirs.push(PathBuf::from("/usr/local/bin"));
-    dirs.push(PathBuf::from("/usr/bin"));
-    dirs.push(PathBuf::from("/bin"));
+    // Windows: a GUI app often starts without the user's full PATH, and npm/pnpm
+    // global bins plus package-manager shims (.cmd) live outside the default PATH.
+    #[cfg(windows)]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            dirs.push(PathBuf::from(appdata).join("npm")); // npm i -g shims
+        }
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let local = PathBuf::from(local);
+            dirs.push(local.join("pnpm")); // pnpm global bin
+            dirs.push(local.join("Microsoft").join("WinGet").join("Links")); // winget
+        }
+        if let Some(home) = dirs::home_dir() {
+            dirs.push(home.join("scoop").join("shims")); // scoop
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/usr/bin"));
+        dirs.push(PathBuf::from("/bin"));
+    }
     dirs
 }
 
@@ -72,11 +91,13 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
         if is_executable(&candidate) {
             return Some(candidate);
         }
+        // Windows shims are rarely bare files: try common executable extensions
+        // (npm/pnpm CLIs are usually .cmd, native tools .exe).
         #[cfg(windows)]
-        {
-            let exe = dir.join(format!("{command}.exe"));
-            if is_executable(&exe) {
-                return Some(exe);
+        for ext in ["exe", "cmd", "bat", "ps1"] {
+            let with_ext = dir.join(format!("{command}.{ext}"));
+            if is_executable(&with_ext) {
+                return Some(with_ext);
             }
         }
     }
@@ -91,14 +112,13 @@ pub fn probe_command(command: &str) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn finds_sh_on_unix() {
-        #[cfg(unix)]
-        {
-            let p = resolve_command("sh");
-            assert!(p.is_some());
-        }
+        let p = resolve_command("sh");
+        assert!(p.is_some());
     }
 }

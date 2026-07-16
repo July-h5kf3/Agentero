@@ -1,17 +1,19 @@
 mod commands;
 mod error;
+#[cfg(target_os = "macos")]
 mod i18n;
 mod models;
 mod services;
 
+#[cfg(target_os = "macos")]
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
 use services::wiki::WikiIndexState;
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
-    Emitter, Manager,
-};
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::{Emitter, Manager};
 
+#[cfg(target_os = "macos")]
 fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let labels = menu_labels(lang);
 
@@ -101,11 +103,19 @@ fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::
 }
 
 /// Rebuild and install the native application menu for the given locale.
-/// Called by the renderer whenever the language preference changes.
+/// macOS-only: other platforms have no native window menu (actions live in the
+/// React title bar + keyboard shortcuts), so this is a no-op there.
 #[tauri::command]
 fn set_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
-    let menu = build_menu(&app, &locale).map_err(|e| e.to_string())?;
-    app.set_menu(menu).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let menu = build_menu(&app, &locale).map_err(|e| e.to_string())?;
+        app.set_menu(menu).map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (&app, &locale);
+    }
     Ok(())
 }
 
@@ -157,9 +167,21 @@ pub fn run() {
             set_locale,
         ])
         .setup(|app| {
-            // English by default; the renderer re-syncs the stored locale on mount.
-            let menu = build_menu(app.handle(), "en")?;
-            app.set_menu(menu)?;
+            // Non-macOS windows are frameless (custom caption buttons in React);
+            // strip native decorations before the window is shown to avoid a flash.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_decorations(false);
+            }
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.show();
+            }
+            // Native menu is macOS-only; the renderer re-syncs the locale on mount.
+            #[cfg(target_os = "macos")]
+            {
+                let menu = build_menu(app.handle(), "en")?;
+                app.set_menu(menu)?;
+            }
             // Ensure registry is loaded early.
             let _ = app.state::<AgentRegistry>();
             let _ = app.state::<WikiIndexState>();
