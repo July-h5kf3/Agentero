@@ -41,7 +41,7 @@
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
-- [x] 文件树：**在 Finder 中显示**（双击 / 右键 / `⌥⌘R`）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
+- [x] 文件树：**在 Finder 中显示**（双击 / 右键 / `⌥⌘R`）；**在终端中打开**（右键 / `⌥⌘T`；文件夹 = 自身 / 文件 = 父目录）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
 - [x] Paper-centric 视图：选中 paper 后中间显示 PDF（本地优先 / 远程回退）或 HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
 - [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、双向滚动。

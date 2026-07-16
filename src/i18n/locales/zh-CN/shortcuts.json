@@ -12,6 +12,7 @@
 		"createVault": "创建知识库…",
 		"refreshTree": "刷新文件树",
 		"revealInFinder": "在 Finder 中显示",
+		"openInTerminal": "在终端中打开",
 		"deleteTreeItem": "删除选中项",
 		"magicWand": "按标识符添加论文",
 		"toggleSidebar": "显示 / 隐藏侧边栏",

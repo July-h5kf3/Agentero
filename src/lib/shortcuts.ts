@@ -10,6 +10,7 @@ export type ShortcutId =
 	| "createVault"
 	| "refreshTree"
 	| "revealInFinder"
+	| "openInTerminal"
 	| "deleteTreeItem"
 	| "magicWand"
 	| "toggleSidebar"
@@ -88,6 +89,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "Vault",
 		// ⌥⌘R — reveal selected tree item in Finder / Explorer
 		key: "r",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "openInTerminal",
+		group: "Vault",
+		// ⌥⌘T — open system terminal at selected path (dir = self, file = parent)
+		key: "t",
 		meta: true,
 		alt: true,
 		whenSettingsClosed: true,

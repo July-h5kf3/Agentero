@@ -44,6 +44,7 @@
 
 2d. **文件树与侧栏 UX** ✅
    - [x] 在 Finder 中显示：双击 / 右键 / `⌥⌘R`（`revealItemInDir`）。
+   - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）。
    - [x] 删除：右键 / `⌘⌫`；确认；`papers/` 下同步 `paper_delete`。
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
    - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。

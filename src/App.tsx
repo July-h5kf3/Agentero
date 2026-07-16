@@ -85,7 +85,7 @@ import {
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
 } from "@/lib/papers-api";
-import { revealInFileManager } from "@/lib/reveal";
+import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
 import {
@@ -921,6 +921,23 @@ export default function App() {
 		})();
 	}, [treeSelectedPath, t]);
 
+	/** ⌥⌘T — open system terminal at selected path (dir = self, file = parent). */
+	const handleOpenInTerminal = useCallback(() => {
+		const path = treeSelectedPath;
+		if (!path || isLibraryVirtualPath(path)) return;
+		if (!isTauri()) {
+			setError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
+			return;
+		}
+		void (async () => {
+			try {
+				await openInTerminal(path);
+			} catch {
+				setError(t("sidebar:fileTree.openInTerminalFailed"));
+			}
+		})();
+	}, [treeSelectedPath, t]);
+
 	const findTreeNode = useCallback(
 		(path: string): FileNode | null => {
 			const key = path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
@@ -1110,6 +1127,9 @@ export default function App() {
 				case "revealInFinder":
 					handleRevealInFinder();
 					break;
+				case "openInTerminal":
+					handleOpenInTerminal();
+					break;
 				case "deleteTreeItem":
 					handleDeleteSelected();
 					break;
@@ -1170,6 +1190,7 @@ export default function App() {
 		handleDeleteSelected,
 		handleRefresh,
 		handleRevealInFinder,
+		handleOpenInTerminal,
 		openMagicWand,
 		openSettings,
 		toggleAgentZen,

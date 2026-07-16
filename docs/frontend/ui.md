@@ -47,6 +47,13 @@
   - **右键**同上节点 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
   - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
   - 虚拟节点 **Library**（`agentero:library`）不提供此操作；仅桌面端可用。
+- **在终端中打开**（Host `path_open_in_terminal` / `src/lib/reveal.ts` `openInTerminal`）：
+  - **右键**真实文件 / 文件夹 / paper 行 →「在终端中打开」（旁注 `⌥⌘T`）。
+  - **`⌥⌘T`**：对当前选中路径执行相同操作（`shortcuts.ts` → `openInTerminal`）。
+  - **文件夹**（含 paper 目录）：终端 cwd 为该目录本身。
+  - **文件**：终端 cwd 为文件所在父目录。
+  - 使用系统默认终端：macOS `Terminal.app`；Windows 优先 `wt`（Windows Terminal）否则 `cmd`；Linux `xdg-terminal-exec` / `$TERMINAL` / 常见终端回退。
+  - 虚拟 Library 不可用；仅桌面端。
 - **删除**（`remove` + 可选 `paper_delete`）：
   - **右键**真实节点 →「删除」（旁注 `⌘⌫`）；确认后删盘。
   - **`⌘⌫`**：删除当前选中项（编辑器 / 输入框聚焦时不拦截，保留系统删行首行为）。
@@ -169,6 +176,7 @@
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘R` | 在 Finder 中显示 | 定位当前选中文件/文件夹；`shortcuts.ts` → `revealInFinder` |
+| `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
 | `⌘⌫` | 删除选中项 | 文件树选中项；确认后删盘；`papers/` 同步 `paper_delete`；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |

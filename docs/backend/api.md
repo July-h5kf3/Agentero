@@ -79,7 +79,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`window_new`、`set_locale`。  
+> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
@@ -115,6 +115,29 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
+
+#### `path_open_in_terminal`（已实现）
+
+在系统默认终端中打开本地路径（文件树右键 / `⌥⌘T`「在终端中打开」）。
+
+- **参数**
+
+```ts
+{
+  path: string; // 本地绝对路径
+}
+```
+
+- **返回**（`ApiResult<{ cwd: string }>`）
+  - 成功时 `cwd` 为实际作为终端工作目录打开的绝对路径。
+- **行为**
+  - 路径为**目录**时：`cwd` = 该目录。
+  - 路径为**文件**时：`cwd` = 父目录。
+  - 路径不存在或无法解析父目录时返回错误。
+  - 平台：
+    - macOS：`open -a Terminal <cwd>`
+    - Windows：优先 `wt -d <cwd>`，失败则 `cmd /K cd /d …`
+    - Linux：`xdg-terminal-exec` → `$TERMINAL` → 常见终端（gnome-terminal / konsole / …）→ `x-terminal-emulator`
 
 #### `window_new`（已实现）
 
@@ -1257,7 +1280,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
-前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
+前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
 
 ## 3.x Headless CLI（对照）
 
