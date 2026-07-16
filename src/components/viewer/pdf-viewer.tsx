@@ -66,6 +66,7 @@ import {
 	type FindMatch,
 	findAllMatches,
 	matchRectsOnPage,
+	mergeRectsByLine,
 	selectionRectsByPage,
 } from "@/lib/pdf-find";
 import {
@@ -1122,7 +1123,7 @@ export function PdfViewer({
 		const hl = createHighlight({
 			paperPath,
 			page: sm.anchor.page,
-			rects: sm.anchor.rects,
+			rects: mergeRectsByLine(sm.anchor.rects),
 			quote,
 		});
 		setHighlights((prev) => [hl, ...prev]);

@@ -89,6 +89,15 @@ export function mergeRectsByLine(
 		}
 		lines.push({ ...r });
 	}
+	// Trim vertical overlap between adjacent lines so translucent bands abut
+	// instead of stacking into a darker seam between rows.
+	lines.sort((a, b) => a.y - b.y);
+	for (let i = 0; i < lines.length - 1; i++) {
+		const cur = lines[i];
+		const next = lines[i + 1];
+		const overlap = cur.y + cur.h - next.y;
+		if (overlap > 0) cur.h = Math.max(0, cur.h - overlap);
+	}
 	return lines;
 }
 
