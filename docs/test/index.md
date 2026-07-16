@@ -90,6 +90,16 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 纯逻辑优先用自动化测试覆盖。涉及 UI 或桌面流程时，还需要启动应用检查受影响路径。如果 dev 端口被占用或无法做浏览器/桌面验证，汇报时需要明确说明。
 
+建议用 `pnpm demo:vault` 生成的 Vault 做冒烟：
+
+| 场景 | 预期 |
+|---|---|
+| 打开 demo vault | catalog 5 篇、Library 可见、tags 可筛 |
+| 点 `assets/sample.pdf` / `notes/attachments/*.pdf` | 中间栏 PDF 预览（非 papers 路径） |
+| 点 `assets/figures/*` 图片 | 中间栏图片预览 |
+| 打开多 tab 后连按 `⌘W` | 逐个关 tab；无 tab 后再按关窗口 |
+| 触发删除失败 / 无 Vault 操作等 | 右上角 Toast，不出现侧栏 header 错误条 |
+
 ## 文档验证
 
 修改 docs 或 `mkdocs.yml` 后运行：

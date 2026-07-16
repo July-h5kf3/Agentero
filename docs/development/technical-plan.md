@@ -542,7 +542,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 | 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
 | 鼠标悬停提示 | 长按菜单替代 |
 | 小点击区域 | 增大按钮/节点热区至 44pt |
-| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口；**中间栏文档分屏 / 标签页** 规划见 roadmap V0.6（当前仍为单槽） |
+| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口与**文档标签页**；**分屏** 规划见 roadmap V0.6 余量 |
 | PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
 | 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
 
@@ -677,12 +677,12 @@ tempfile = "3"
 
 | Roadmap 版本 | 技术重点 |
 |---|---|
-| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes、Library 表、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）；文件监听仍待。 |
-| V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Eye 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
+| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听仍待。 |
+| V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、`paper_set_tags`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Eye 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）、模型收藏已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
-| V0.6 | 中间栏从单槽升级为**文档标签页 + 2 格分屏**；布局/滚动状态可恢复；与 Agent 会话标签分离；多窗口各自独立 tab 集。 |
+| V0.6 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 关 tab / 无 tab 关窗、多窗口独立 tab 集）；**2 格分屏**仍待；与 Agent 会话标签分离。 |
 | V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
 | Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局、>2 格分屏。 |

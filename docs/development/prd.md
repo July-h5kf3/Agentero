@@ -136,14 +136,15 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - MVP UI 中图谱位于 Backlinks 右侧栏下方，与当前文件反链共享上下文。
 - **文献引用图**（bibliographic cites/cited_by、Connected Papers 式邻域、文内引用 hover→Info）见 roadmap **V0.7**，与双链 Graph 分离。
 
-#### 工作区（规划）
+#### 工作区
 
-- 当前中间栏为单槽：打开项互斥替换。
-- 规划（roadmap **V0.6**）：文档标签页管理打开内容，并支持分屏并排（PDF | NOTES 等）。
+- **文档标签页已落地**：中间栏以浏览器式多 tab 管理 Library / PDF / HTML / Markdown / 图片等；常驻挂载，切换保留滚动与编辑状态；`⌘W` 先关标签，无标签时关窗口。
+- **规划（roadmap V0.6 余量）**：2 格分屏并排（PDF | NOTES 等）。
+- **操作错误**：全局右上角 Toast（`notifyError`），不占用侧栏 header。
 
 ### 4.2 P1 暂缓 / 后续版本
 
-- 文档标签页与分屏（升格为 roadmap V0.6）。
+- 分屏（V0.6 余量；标签页已完成）。
 - 文献引用关系探索与 hover Paper Info（升格为 roadmap V0.7）。
 - Zotero 全量替代能力。
 - 云同步、多人协作、权限管理。

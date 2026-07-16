@@ -122,12 +122,13 @@
    - 双链边可写入 catalog 可重建表并支持增量重建。
 
 4. **工作区标签页与分屏**（roadmap V0.6）
-   - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / Library 以 tab 打开，可关闭、切换、拖拽重排。
+   - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / 图片 / Library 以 tab 打开，可关闭、切换、拖拽重排。
    - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容。
    - [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）。
-   - [x] 快捷键：关 tab `⌘W`（无 tab 时关窗口）/ 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
+   - [x] 快捷键：关 tab `⌘W`（无 tab 时关窗口；File → Close / 菜单 `close_tab_or_window` 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏·取消分屏随 split 补（键位写入 `docs/frontend/ui.md`）。
    - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦。
    - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局。
+   - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）。
    - 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开。
 
 5. **引用关系 / Connected Papers**（roadmap V0.7）
@@ -221,12 +222,12 @@
 
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
-| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条 | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
-| 中间内容 | 单槽：Library 表 / PDF / HTML / Markdown WYSIWYG；Notes 仅具体论文时显示 | **文档标签页、分屏**（V0.6） |
-| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
-| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/删除、左右侧栏 collapsible、后台任务条、**全局错误 Toast**（`notifyError`） | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
+| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags**；PDF / HTML / 图片 / Markdown WYSIWYG（图片 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
+| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Eye）、**全局权限模式**、模型收藏、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
-| PDF | 缩放、划词操作菜单（高亮/笔记/提问/翻译；asks + highlights JSON） | 本地 PDF 直开、`highlights.md` 标注系统、M5 |
-| **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
+| PDF / 媒体 | 任意路径 PDF + 常见图片预览；缩放；划词操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |
+| **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、`paper set-tags` / `tags`、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
 | 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |

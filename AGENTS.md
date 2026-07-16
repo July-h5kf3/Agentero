@@ -11,7 +11,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
   - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹；右键 **Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
-  - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或论文 **PDF / HTML** / 打开的 Markdown 笔记；
+  - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或标签页打开的 **PDF / HTML / 图片** / Markdown 笔记；
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
   - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）弹出；表单就地校验除外。
@@ -38,7 +38,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
 - Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。
-- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。
+- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。操作失败用右上角 `notifyError` Toast，不要在侧栏 header 挂常驻错误条。
 - 国际化（i18n）：所有面向用户的文案都必须经 `t()` 走 `react-i18next`，禁止硬编码字符串。English（`en`）为源语言，新增文案先登记 `en` 词条再同步 `zh-CN`（`src/i18n/locales/`）。跨命名空间用 `t("ns:key")` 并在 `useTranslation([...])` 声明；React 之外用全局 `i18n.t()`。数字/日期用 `i18n.language` 格式化。详见 `docs/frontend/ui.md` §4.1。
 - 修改后需要同步更新相关文档。如果修改了 UI、数据契约、发布流程或 Vault 语义，必须同步更新相关文档。并检查 Roadmap 和 Todo。
 

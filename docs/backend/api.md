@@ -1298,10 +1298,11 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `open_vault` | Open Vault… | `⌘O` | 前端监听 |
 | `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
 | `refresh_tree` | Refresh File Tree | `⌘R` | 前端监听 |
+| `close_tab_or_window` | Close | `⌘W` | 前端监听：有文档 tab 时关闭当前 tab；无 tab 时 `getCurrentWindow().close()`。**不要**用 PredefinedMenuItem::CloseWindow（会独占 `⌘W`） |
 | `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
-前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
+前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒、`⌥⌘←/→` 切换文档标签。`⌘W` 亦可由渲染层 `shortcuts.ts` 直接匹配（与菜单同源逻辑，防抖避免双触发）。
 
 ## 3.x Headless CLI（对照）
 
@@ -1344,7 +1345,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流；`paper_set_is_read` + paper-reader（自动/手动）。 |
 | V0.4 | 增加 `graph:*` 命令（双链 / 反链 / 图谱；与 bibliographic 引用图分离）。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
-| V0.6 | 主要为前端工作区状态（文档 tab / 分屏布局持久化）；Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
+| V0.6 | 文档 **tab 已落地**（前端 `agentero-open-tabs` + 菜单 `close_tab_or_window`）；**分屏**布局持久化仍待。Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
 | V0.7 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 

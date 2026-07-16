@@ -22,9 +22,10 @@
 
 - **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
   - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
-- **魔棒入库**：与 Zotero 当中能力一致。
+- **魔棒入库**：与 Zotero 当中能力一致；catalog 权威 + 默认 PDF / arXiv TeX。
+- **文档标签页**：多文档 tab（`⌘W` 关标签；无标签时关窗口）；Library / PDF / 图片 / Markdown。
 - **双链与知识图谱**：Obsidian 当中的双链与知识图谱功能。
-- **桌面原生体验**
+- **桌面原生体验**：全局错误 Toast、后台任务条、多窗口。
 
 > 当前状态：早期 MVP
 
@@ -55,6 +56,7 @@ Headless **Vault / Catalog 机器接口**：创建与发现库、列表与入库
 | `pnpm tauri dev` | 启动桌面开发应用 |
 | `pnpm build` | 构建前端产物 |
 | `pnpm tauri build` | 构建桌面安装包 |
+| `pnpm demo:vault` | 生成 demo Vault（catalog schema v3 + 样例 paper / loose PDF / 图片） |
 | `cargo build -p agentero-cli` | 构建 CLI（bin `agentero`） |
 | `cargo test -p agentero-cli` | CLI 集成测试 |
 | `pnpm lint` | TypeScript（Biome）+ Rust（clippy）检查 |

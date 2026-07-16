@@ -13,12 +13,12 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、Preview/Info 仅在具体论文时显示。 |
-| V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Eye 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/图片/Notes、WYSIWYG Markdown、**论文库表格 + tags + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、**全局错误 Toast**（`notifyError`）、Preview/Info 仅在具体论文时显示。 |
+| V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Eye 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
-| V0.6 工作区标签页与分屏 | ⏳ 待实现 | 中间栏由「单文件固定排布」升级为可开多标签、可分屏；与当前左右侧栏 collapsible 共存。 |
+| V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 先关 tab 再关窗）；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
@@ -38,15 +38,18 @@
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.agentero/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
+- [x] Markdown **图片插入**：粘贴 / 工具栏选文件 → 写入当前 `.md` 旁 `./assets/` → 正文 `![](./assets/…)`；相对路径 `blob:` 预览（见 `src/lib/markdown-image.ts`、data-model）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
 - [x] 文件树：**在 Finder 中显示**（右键 / `⌥⌘R`，无双击）；**在终端中打开**（右键 / `⌥⌘T`；文件夹 = 自身 / 文件 = 父目录）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
 - [x] Paper-centric 视图：选中 paper 后中间显示 PDF（本地优先 / 远程回退）或 HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
+- [x] Vault **任意路径** PDF / 常见图片中间栏预览（`blob:`）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
-- [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、双向滚动。
-- [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）。
+- [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、**tags 列 + chip 筛选**、双向滚动。
+- [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）；Paper Info **Tags** 可编辑（`paper_set_tags`）。
 - [x] 后台任务条（左下角）：下载 / 入库 / 导入导出 / paper-reader 等长操作进度；收起态 hover 保持实色不透明。
+- [x] 全局错误 Toast（右上角 Sonner + `notifyError`）；操作失败不占侧栏 header。
 
 验收标准：
 
@@ -80,7 +83,7 @@
 - [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发）。
 - [x] **paper-reader 精读**：入库/单篇 Download 后可自动；资源齐全且 `is_read=false` 时文件树 Eye 手动（见 V0.3）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
-- [x] 入库错误行内展示；重复不覆盖用户 `NOTES.md`。
+- [x] 入库错误经全局 Toast（`notifyError`）展示；重复不覆盖用户 `NOTES.md`。
 - [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
 
 ### 未完成
@@ -423,9 +426,9 @@
 
 包含 V0.5。完成后，产品在 arXiv 之外可稳妥导入本地 PDF，并为更多来源预留扩展点。
 
-### Milestone F：多文档工作区 ⏳
+### Milestone F：多文档工作区 🟡
 
-包含 V0.6。完成后，用户可以标签页管理打开的文档，并分屏并排阅读/笔记。
+包含 V0.6。**标签页已完成**（多文档 tab、`⌘W` 先关 tab 再关窗）；**分屏**完成后用户可并排阅读/笔记。
 
 ### Milestone G：文献引用可探索 ⏳
 
@@ -470,8 +473,8 @@
 - [ ] `catalog:export_papers_md`（Markdown 表）。
 - [ ] `[[` 补全与 Plate wikilink 内联节点。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
-- [ ] **工作区标签页**：多文档 tab、关闭/重排、滚动与视图状态保留（V0.6）。
-- [ ] **分屏**：中间栏 2 格并排（PDF | NOTES 或 paper | paper）（V0.6）。
+- [x] **工作区标签页**：多文档 tab、关闭/重排、滚动与视图状态保留；`⌘W` 关 tab / 无 tab 关窗（V0.6 标签页部分）。
+- [ ] **分屏**：中间栏 2 格并排（PDF | NOTES 或 paper | paper）（V0.6 余量）。
 - [ ] **文内引用 hover → 右侧 Paper Info**（库内/远程缓存 + 一键入库）（V0.7-A）。
 - [ ] **引用关系图 / Connected Papers 式邻域**（cites / cited_by 缓存 + 列表/简图）（V0.7-B）。
 - [ ] **Agent 引用工作流**：Explore citations / Map related work / Ingest neighborhood（V0.7-C）。
