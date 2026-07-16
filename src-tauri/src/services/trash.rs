@@ -124,14 +124,6 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
         if !abs.exists() {
             continue;
         }
-        // Snapshot + remove catalog rows before moving the files.
-        let catalog_rows = if is_under_papers(&rel) {
-            let rows = papers::list_under_path(vault_root, &rel)?;
-            papers::delete_under_path(vault_root, &rel)?;
-            rows
-        } else {
-            Vec::new()
-        };
         // Index prefix avoids basename collisions within one batch.
         let base = Path::new(&rel)
             .file_name()
@@ -139,8 +131,24 @@ pub fn trash_paths(vault_root: &Path, rels: &[String]) -> Result<TrashResult, Ap
             .unwrap_or("item")
             .to_string();
         let stored = format!("{i}__{base}");
-        fs::create_dir_all(&batch_dir)?;
-        fs::rename(&abs, batch_dir.join(&stored))?;
+        // Snapshot catalog rows first (read-only), but keep them until the move
+        // succeeds — otherwise a failed rename (e.g. a file open on Windows)
+        // would orphan the catalog and hide the paper from the Library.
+        let catalog_rows = if is_under_papers(&rel) {
+            papers::list_under_path(vault_root, &rel).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        if fs::create_dir_all(&batch_dir).is_err() {
+            continue;
+        }
+        if fs::rename(&abs, batch_dir.join(&stored)).is_err() {
+            // Leave the item in place and the catalog untouched.
+            continue;
+        }
+        if is_under_papers(&rel) {
+            let _ = papers::delete_under_path(vault_root, &rel);
+        }
         items.push(TrashItem {
             rel,
             stored,
