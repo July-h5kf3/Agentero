@@ -63,6 +63,7 @@ import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
+import { notifyError, notifyWarning } from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -245,7 +246,6 @@ export default function App() {
 	 */
 	const [treeSelectedPath, setTreeSelectedPath] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	/** Inline new file/folder draft in the tree (IDE-style). */
 	const [createDraft, setCreateDraft] = useState<TreeCreateDraft | null>(null);
 	const [recentVaults, setRecentVaults] = useState<string[]>(() =>
@@ -349,7 +349,6 @@ export default function App() {
 	const openTab = useCallback(
 		(path: string, opts?: { preferMode?: CenterViewMode }) => {
 			const id = tabIdForPath(path);
-			setError(null);
 			let exists = false;
 			setTabs((prev) => {
 				if (prev.some((t) => t.id === id)) {
@@ -388,7 +387,7 @@ export default function App() {
 					paperFoldersRef.current,
 				);
 				if (res.error) {
-					setError(
+					notifyError(
 						res.error === "cannotPreview"
 							? t("errors.cannotPreview", { name: basenameOf(path) })
 							: res.error,
@@ -576,7 +575,7 @@ export default function App() {
 				await writeVaultFile(tab.notesPath, next);
 				refreshTabNotes(paperDir, next);
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
 		[refreshTabNotes],
@@ -811,13 +810,12 @@ export default function App() {
 
 	const refreshTree = useCallback(async (path: string) => {
 		setBusy(true);
-		setError(null);
 		try {
 			const nodes = await loadVaultTree(path);
 			setTree(nodes);
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
-			setError(message);
+			notifyError(message);
 			setTree([]);
 		} finally {
 			setBusy(false);
@@ -850,10 +848,9 @@ export default function App() {
 	);
 
 	const handleOpenVault = useCallback(async () => {
-		setError(null);
 		try {
 			if (!isTauri()) {
-				setError(t("errors.openVaultDesktopOnly"));
+				notifyError(t("errors.openVaultDesktopOnly"));
 				return;
 			}
 			setBusy(true);
@@ -861,7 +858,7 @@ export default function App() {
 			if (!path) return;
 			await activateVault(path);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setBusy(false);
 		}
@@ -869,10 +866,9 @@ export default function App() {
 
 	const handleOpenRecentVault = useCallback(
 		async (path: string) => {
-			setError(null);
 			try {
 				if (!isTauri()) {
-					setError(t("errors.openVaultDesktopOnly"));
+					notifyError(t("errors.openVaultDesktopOnly"));
 					return;
 				}
 				setBusy(true);
@@ -880,12 +876,12 @@ export default function App() {
 				if (!(await exists(path))) {
 					removeRecentVault(path);
 					setRecentVaults(getRecentVaults());
-					setError(t("vault.recentMissing", { path }));
+					notifyError(t("vault.recentMissing", { path }));
 					return;
 				}
 				await activateVault(path);
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			} finally {
 				setBusy(false);
 			}
@@ -899,15 +895,14 @@ export default function App() {
 	}, []);
 
 	const handleNewWindow = useCallback(async () => {
-		setError(null);
 		try {
 			if (!isTauri()) {
-				setError(t("errors.openVaultDesktopOnly"));
+				notifyError(t("errors.openVaultDesktopOnly"));
 				return;
 			}
 			await openNewWindow();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 	}, [t]);
 
@@ -941,14 +936,14 @@ export default function App() {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path)) return;
 		if (!isTauri()) {
-			setError(t("sidebar:fileTree.revealDesktopOnly"));
+			notifyError(t("sidebar:fileTree.revealDesktopOnly"));
 			return;
 		}
 		void (async () => {
 			try {
 				await revealInFileManager(path);
 			} catch {
-				setError(t("sidebar:fileTree.revealFailed"));
+				notifyError(t("sidebar:fileTree.revealFailed"));
 			}
 		})();
 	}, [treeSelectedPath, t]);
@@ -958,14 +953,14 @@ export default function App() {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path)) return;
 		if (!isTauri()) {
-			setError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
+			notifyError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
 			return;
 		}
 		void (async () => {
 			try {
 				await openInTerminal(path);
 			} catch {
-				setError(t("sidebar:fileTree.openInTerminalFailed"));
+				notifyError(t("sidebar:fileTree.openInTerminalFailed"));
 			}
 		})();
 	}, [treeSelectedPath, t]);
@@ -999,21 +994,21 @@ export default function App() {
 	const handleDeletePath = useCallback(
 		async (path: string) => {
 			if (!vaultPath || !isTauri()) {
-				setError(t("sidebar:fileTree.deleteDesktopOnly"));
+				notifyError(t("sidebar:fileTree.deleteDesktopOnly"));
 				return;
 			}
 			if (!path || isLibraryVirtualPath(path)) {
-				setError(t("sidebar:fileTree.deleteInvalid"));
+				notifyError(t("sidebar:fileTree.deleteInvalid"));
 				return;
 			}
 			const rootNorm = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
 			const pathNorm = path.replace(/\\/g, "/").replace(/\/+$/, "");
 			if (pathNorm === rootNorm) {
-				setError(t("sidebar:fileTree.deleteInvalid"));
+				notifyError(t("sidebar:fileTree.deleteInvalid"));
 				return;
 			}
 			if (!pathNorm.startsWith(`${rootNorm}/`)) {
-				setError(t("sidebar:fileTree.deleteInvalid"));
+				notifyError(t("sidebar:fileTree.deleteInvalid"));
 				return;
 			}
 
@@ -1032,7 +1027,6 @@ export default function App() {
 			if (!window.confirm(confirmMsg)) return;
 
 			setBusy(true);
-			setError(null);
 			try {
 				await removeVaultPath(path);
 
@@ -1061,7 +1055,7 @@ export default function App() {
 				await rebuildWikiAndNotify(vaultPath);
 				await refreshLibrary();
 			} catch (e) {
-				setError(
+				notifyError(
 					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
 				);
 			} finally {
@@ -1083,7 +1077,7 @@ export default function App() {
 	const handleDeleteSelected = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path)) {
-			setError(t("sidebar:fileTree.deleteNeedsSelection"));
+			notifyError(t("sidebar:fileTree.deleteNeedsSelection"));
 			return;
 		}
 		void handleDeletePath(path);
@@ -1091,7 +1085,7 @@ export default function App() {
 
 	const openMagicWand = useCallback(() => {
 		if (!vaultPath) {
-			setError(t("sidebar:lookup.needsVault"));
+			notifyError(t("sidebar:lookup.needsVault"));
 			return;
 		}
 		// Expand left rail without stealing focus (popover owns focus).
@@ -1336,7 +1330,7 @@ export default function App() {
 				}),
 			);
 			void writeVaultFile(path, md).catch((e) => {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			});
 		},
 		[vaultPath],
@@ -1393,7 +1387,7 @@ export default function App() {
 						?.filter((m) => /pdf/i.test(m))
 						.slice(-2)
 						.join("; ") ?? "";
-				setError(
+				notifyError(
 					detail
 						? t("sidebar:lookup.pdfDownloadFailedDetail", { detail })
 						: t("sidebar:lookup.pdfDownloadFailed"),
@@ -1431,7 +1425,7 @@ export default function App() {
 						}
 					})
 					.catch((e) => {
-						setError(e instanceof Error ? e.message : String(e));
+						notifyError(e instanceof Error ? e.message : String(e));
 					});
 			}
 		},
@@ -1506,11 +1500,11 @@ export default function App() {
 							}
 						})
 						.catch((e) => {
-							setError(e instanceof Error ? e.message : String(e));
+							notifyError(e instanceof Error ? e.message : String(e));
 						});
 				}
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
 		[vaultPath, refreshTree, refreshLibrary, refreshTabNotes, t],
@@ -1567,7 +1561,7 @@ export default function App() {
 					}
 				})
 				.catch((e) => {
-					setError(e instanceof Error ? e.message : String(e));
+					notifyError(e instanceof Error ? e.message : String(e));
 				});
 		},
 		[vaultPath, refreshLibrary, refreshTabNotes],
@@ -1584,7 +1578,6 @@ export default function App() {
 	const handleLibraryExport = useCallback(async () => {
 		if (!vaultPath || libraryIoBusy) return;
 		setLibraryIoBusy("export");
-		setError(null);
 		try {
 			await runBackgroundTask(
 				{
@@ -1604,9 +1597,8 @@ export default function App() {
 					return result;
 				},
 			);
-			setError(null);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLibraryIoBusy(null);
 		}
@@ -1615,7 +1607,6 @@ export default function App() {
 	const handleLibraryImport = useCallback(async () => {
 		if (!vaultPath || libraryIoBusy) return;
 		setLibraryIoBusy("import");
-		setError(null);
 		try {
 			const result = await runBackgroundTask(
 				{
@@ -1638,12 +1629,12 @@ export default function App() {
 				},
 			);
 			if (result?.errors.length) {
-				setError(
+				notifyWarning(
 					`${t("sidebar:papersLibrary.importDone", { count: result.imported })}; ${result.errors.slice(0, 2).join("; ")}`,
 				);
 			}
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLibraryIoBusy(null);
 		}
@@ -1713,10 +1704,10 @@ export default function App() {
 				},
 			);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 		if (errors.length) {
-			setError(errors.slice(0, 3).join("; "));
+			notifyError(errors.slice(0, 3).join("; "));
 		}
 	}, [vaultPath, tree, refreshTree, refreshLibrary, t]);
 
@@ -1758,7 +1749,7 @@ export default function App() {
 					}),
 				);
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
 		[vaultPath, paperMeta],
@@ -1775,9 +1766,8 @@ export default function App() {
 
 	const startCreate = useCallback(
 		(kind: TreeCreateDraft["kind"]) => {
-			setError(null);
 			if (!vaultPath || !isTauri()) {
-				setError(t("sidebar:fileTree.needsVault"));
+				notifyError(t("sidebar:fileTree.needsVault"));
 				return;
 			}
 			const parent = resolveCreateParent(vaultPath, treeSelectedPath, tree);
@@ -1798,7 +1788,7 @@ export default function App() {
 			}
 			const trimmed = name.trim();
 			if (!isValidVaultEntryName(trimmed)) {
-				setError(t("sidebar:fileTree.invalidName"));
+				notifyError(t("sidebar:fileTree.invalidName"));
 				setCreateDraft(null);
 				return;
 			}
@@ -1808,10 +1798,9 @@ export default function App() {
 			setCreateDraft(null);
 			try {
 				setBusy(true);
-				setError(null);
 				const { exists } = await import("@tauri-apps/plugin-fs");
 				if (await exists(full)) {
-					setError(t("sidebar:fileTree.alreadyExists", { name: trimmed }));
+					notifyError(t("sidebar:fileTree.alreadyExists", { name: trimmed }));
 					return;
 				}
 				if (kind === "file") {
@@ -1824,7 +1813,7 @@ export default function App() {
 					setTreeSelectedPath(full);
 				}
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			} finally {
 				setBusy(false);
 			}
@@ -1833,10 +1822,9 @@ export default function App() {
 	);
 
 	const handleCreateVault = useCallback(async () => {
-		setError(null);
 		try {
 			if (!isTauri()) {
-				setError(t("errors.openVaultDesktopOnly"));
+				notifyError(t("errors.openVaultDesktopOnly"));
 				return;
 			}
 			setBusy(true);
@@ -1850,7 +1838,7 @@ export default function App() {
 			const openAbs = `${root.replace(/[\\/]+$/, "")}${sep}${openRel.replace(/\//g, sep)}`;
 			openPath(openAbs);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setBusy(false);
 		}
@@ -1888,7 +1876,6 @@ export default function App() {
 	}, [handleCreateVault]);
 
 	const handleSelectLibrary = useCallback(() => {
-		setError(null);
 		setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
 		openTab(LIBRARY_VIRTUAL_PATH);
 		void refreshLibrary();
@@ -1914,7 +1901,7 @@ export default function App() {
 	const handleOpenVaultRel = useCallback(
 		(rel: string) => {
 			if (!vaultPath) {
-				setError(t("errors.openVaultForLinks"));
+				notifyError(t("errors.openVaultForLinks"));
 				return;
 			}
 			const clean = normalizeVaultRel(rel);
@@ -1928,7 +1915,7 @@ export default function App() {
 	const handleGraphOpenPath = useCallback(
 		(rel: string) => {
 			if (!vaultPath) {
-				setError(t("errors.openVaultForGraph"));
+				notifyError(t("errors.openVaultForGraph"));
 				return;
 			}
 			const clean = normalizeVaultRel(rel);
@@ -1959,7 +1946,7 @@ export default function App() {
 				return;
 			}
 			if (!vaultPath) {
-				setError(t("errors.openVaultForCreate"));
+				notifyError(t("errors.openVaultForCreate"));
 				return;
 			}
 			const createRel = missingNotePath(nav.targetRaw);
@@ -1980,7 +1967,7 @@ export default function App() {
 				await refreshTree(vaultPath);
 				openPath(full);
 			} catch (e) {
-				setError(e instanceof Error ? e.message : String(e));
+				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
 		[
@@ -2405,7 +2392,6 @@ export default function App() {
 										busy={
 											busy || Boolean(createDraft) || libraryIoBusy !== null
 										}
-										error={error}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
 									/>

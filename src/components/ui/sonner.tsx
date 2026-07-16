@@ -15,6 +15,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
 		<Sonner
 			theme={theme as ToasterProps["theme"]}
 			className="toaster group"
+			position="top-right"
+			closeButton
+			richColors
+			expand={false}
+			visibleToasts={5}
+			// Sit below the custom title bar (~2.5rem) so toasts don't cover traffic lights / tabs.
+			offset={{ top: "2.75rem", right: "0.75rem" }}
 			icons={{
 				success: <CircleCheckIcon className="size-4" />,
 				info: <InfoIcon className="size-4" />,

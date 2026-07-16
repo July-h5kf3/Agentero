@@ -887,7 +887,6 @@ export function VaultSidebarHeader({
 	onImportBibliography,
 	importBusy,
 	busy,
-	error,
 	isDemo,
 	/**
 	 * Increment from App (e.g. ⇧⌘I) to open the magic-wand popover.
@@ -903,7 +902,6 @@ export function VaultSidebarHeader({
 	onImportBibliography?: () => void | Promise<void>;
 	importBusy?: boolean;
 	busy?: boolean;
-	error?: string | null;
 	isDemo: boolean;
 	lookupOpenSignal?: number;
 }) {
@@ -1066,11 +1064,6 @@ export function VaultSidebarHeader({
 						{title}
 					</span>
 				</PaneHeader>
-				{error ? (
-					<p className="border-b px-3 py-1 text-destructive text-xs leading-snug">
-						{error}
-					</p>
-				) : null}
 			</div>
 		</TooltipProvider>
 	);

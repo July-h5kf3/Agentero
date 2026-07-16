@@ -46,6 +46,7 @@ import {
 	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
+import { notifyError } from "@/lib/notify";
 import { revealInOsLabelKey } from "@/lib/reveal";
 import {
 	type AgentPermissionMode,
@@ -463,7 +464,6 @@ function AgentPane({
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [probing, setProbing] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
@@ -474,11 +474,10 @@ function AgentPane({
 
 	const refresh = useCallback(async (): Promise<CatalogScanResponse | null> => {
 		if (!isTauri()) {
-			setError(t("agent.desktopOnly"));
+			notifyError(t("agent.desktopOnly"));
 			return null;
 		}
 		setLoading(true);
-		setError(null);
 		try {
 			const scan = await scanCatalog();
 			setCatalog(scan);
@@ -486,7 +485,7 @@ function AgentPane({
 			setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
 			return scan;
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 			return null;
 		} finally {
 			setLoading(false);
@@ -503,7 +502,6 @@ function AgentPane({
 			if (candidates.length === 0 && custom.length === 0) return;
 
 			setProbing(true);
-			setError(null);
 			try {
 				await Promise.allSettled([
 					...candidates.map((entry) => probeCatalogAgent(entry.templateId)),
@@ -533,14 +531,13 @@ function AgentPane({
 			await setAgentEnabled(v);
 			await refresh();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 	};
 
 	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
 		setLoading(true);
-		setError(null);
 		try {
 			const saved = await setAgentProxy(enabled, url);
 			setProxyEnabled(saved.proxyEnabled);
@@ -548,7 +545,7 @@ function AgentPane({
 			const scan = await refresh();
 			if (scan) await probeInstalled(scan);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLoading(false);
 		}
@@ -570,12 +567,11 @@ function AgentPane({
 
 	const onUseDefault = async (entry: CatalogEntry) => {
 		if (!isTauri()) return;
-		setError(null);
 		try {
 			await ensureCatalogAgent(entry.templateId, true);
 			await refresh();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 	};
 
@@ -585,14 +581,13 @@ function AgentPane({
 			await removeAgent(id);
 			await refresh();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 	};
 
 	const onAddCustom = async () => {
 		if (!isTauri()) return;
 		setLoading(true);
-		setError(null);
 		try {
 			const args = formArgs.trim().split(/\s+/).filter(Boolean);
 			await upsertAgent({
@@ -608,7 +603,7 @@ function AgentPane({
 			const scan = await refresh();
 			if (scan) await probeInstalled(scan);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : String(e));
+			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLoading(false);
 		}
@@ -907,10 +902,6 @@ function AgentPane({
 						</div>
 					</div>
 				</SettingsGroup>
-			) : null}
-
-			{error ? (
-				<p className="mt-1 px-1 text-destructive text-xs">{error}</p>
 			) : null}
 		</>
 	);
