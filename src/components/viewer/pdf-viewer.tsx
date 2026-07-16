@@ -10,6 +10,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Minus,
+	MoveVertical,
 	Plus,
 	RotateCcw,
 	Trash2,
@@ -124,6 +125,7 @@ export function PdfViewer({
 	const [contentHeight, setContentHeight] = useState(0);
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageField, setPageField] = useState("1");
+	const [firstPageAspect, setFirstPageAspect] = useState(1.3);
 
 	const pageWidth = Math.max(200, fitWidth);
 	const shellWidth = pageWidth * zoom;
@@ -309,6 +311,17 @@ export function PdfViewer({
 		},
 		[numPages],
 	);
+
+	/** Zoom so one page's height fits the viewport (fit-page). */
+	const fitPage = useCallback(() => {
+		const root = scrollRef.current;
+		if (!root || firstPageAspect <= 0) return;
+		const avail = root.clientHeight - 24;
+		const pageH = pageWidth * firstPageAspect;
+		if (pageH <= 0 || avail <= 0) return;
+		setZoom(clampZoom(avail / pageH));
+		requestAnimationFrame(() => goToPage(currentPageRef.current));
+	}, [firstPageAspect, pageWidth, goToPage]);
 
 	const commitPageField = useCallback(() => {
 		const n = Number.parseInt(pageField, 10);
@@ -1022,6 +1035,22 @@ export function PdfViewer({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">{t("pdf.zoomFit")}</TooltipContent>
 						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("pdf.zoomFitPage")}
+									onClick={fitPage}
+								>
+									<MoveVertical className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("pdf.zoomFitPage")}
+							</TooltipContent>
+						</Tooltip>
 					</div>
 				</TooltipProvider>
 			</div>
@@ -1063,6 +1092,12 @@ export function PdfViewer({
 								onLoadSuccess={(doc) => {
 									setNumPages(doc.numPages);
 									setError(null);
+									void doc.getPage(1).then((p) => {
+										const vp = p.getViewport({ scale: 1 });
+										if (vp.width > 0) {
+											setFirstPageAspect(vp.height / vp.width);
+										}
+									});
 								}}
 								onLoadError={(err) => {
 									setError(err.message || t("pdf.loadError"));

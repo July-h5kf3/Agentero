@@ -15,7 +15,8 @@
 		"zoomFit": "Fit width",
 		"prevPage": "Previous page",
 		"nextPage": "Next page",
-		"goToPage": "Go to page"
+		"goToPage": "Go to page",
+		"zoomFitPage": "Fit page"
 	},
 	"pdfAsk": {
 		"dialogLabel": "Ask about selection",
