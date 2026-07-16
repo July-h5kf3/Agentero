@@ -65,12 +65,7 @@ import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
-import {
-	notifyError,
-	notifySuccess,
-	notifyUndo,
-	notifyWarning,
-} from "@/lib/notify";
+import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -97,7 +92,6 @@ import {
 	setPaperTags,
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
-	untrashBatch,
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
@@ -1001,27 +995,9 @@ export default function App() {
 		})();
 	}, [treeSelectedPath, t]);
 
-	const undoTrash = useCallback(
-		async (batchId: string) => {
-			if (!vaultPath) return;
-			try {
-				await untrashBatch(vaultPath, batchId);
-				setTreeSelectedPath(null);
-				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
-				await refreshLibrary();
-			} catch (e) {
-				notifyError(
-					e instanceof Error ? e.message : t("sidebar:fileTree.undoFailed"),
-				);
-			}
-		},
-		[vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary, t],
-	);
-
 	/**
 	 * Delete vault paths into the recycle bin (`.agentero/.trash/`).
-	 * Reversible via the "Undo" toast; catalog rows are snapshotted + restored.
+	 * Recoverable from the Recycle Bin view; catalog rows are snapshotted too.
 	 */
 	const trashPathsAndNotify = useCallback(
 		async (absPaths: string[]) => {
@@ -1045,7 +1021,7 @@ export default function App() {
 				const rels = valid
 					.map((p) => vaultRelativePath(vaultPath, p))
 					.filter((r): r is string => Boolean(r));
-				const res = await trashPaths(vaultPath, rels);
+				await trashPaths(vaultPath, rels);
 				for (const p of valid) closeTabsUnderPath(p);
 				const treeNorm = treeSelectedPath
 					?.replace(/\\/g, "/")
@@ -1059,12 +1035,6 @@ export default function App() {
 				await refreshTree(vaultPath);
 				await rebuildWikiAndNotify(vaultPath);
 				await refreshLibrary();
-				if (res.count > 0) {
-					notifyUndo(t("sidebar:fileTree.deletedCount", { count: res.count }), {
-						actionLabel: t("sidebar:fileTree.undo"),
-						onAction: () => void undoTrash(res.batchId),
-					});
-				}
 			} catch (e) {
 				notifyError(
 					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
@@ -1080,7 +1050,6 @@ export default function App() {
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
-			undoTrash,
 			t,
 		],
 	);
