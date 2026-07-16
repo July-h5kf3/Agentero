@@ -380,12 +380,18 @@ fn note_blocks(item: &ReadItem, migrate_notes: bool, migrate_annotations: bool) 
             }
         }
     }
-    if migrate_annotations {
-        for a in &item.annotations {
-            let a = a.trim();
-            if !a.is_empty() {
-                blocks.push(a.to_string());
-            }
+    if migrate_annotations && !item.annotations.is_empty() {
+        // Group every highlight into a single block so import adds one tidy
+        // section (a lone `---` divider), not a divider between each highlight.
+        let hl = item
+            .annotations
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        if !hl.is_empty() {
+            blocks.push(hl);
         }
     }
     blocks
@@ -829,21 +835,25 @@ fn read_annotations(conn: &Connection, parent_item_id: i64) -> Result<Vec<String
         if text.is_empty() && comment.is_empty() {
             continue;
         }
+        // Collapse the highlighted passage into one quoted line with an inline
+        // page ref and the comment underneath — compact, not divider-heavy.
+        let page = page.as_deref().map(str::trim).filter(|s| !s.is_empty());
         let mut block = String::new();
-        for line in text.lines() {
+        if !text.is_empty() {
+            let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
             block.push_str("> ");
-            block.push_str(line.trim());
-            block.push('\n');
+            block.push_str(&collapsed);
+            if let Some(p) = page {
+                block.push_str(&format!(" (p. {p})"));
+            }
+        } else if let Some(p) = page {
+            block.push_str(&format!("(p. {p})"));
         }
         if !comment.is_empty() {
             if !block.is_empty() {
                 block.push('\n');
             }
             block.push_str(comment);
-            block.push('\n');
-        }
-        if let Some(p) = page.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-            block.push_str(&format!("\n— p. {p}"));
         }
         out.push(block.trim().to_string());
     }
