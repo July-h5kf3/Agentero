@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 export type PapersLibraryProps = {
 	papers: PaperMetadata[];
 	loading?: boolean;
+	query?: string;
 	onOpenPaper: (paper: PaperMetadata) => void;
 	className?: string;
 };
@@ -115,6 +116,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 export function PapersLibrary({
 	papers,
 	loading,
+	query,
 	onOpenPaper,
 	className,
 }: PapersLibraryProps) {
@@ -135,11 +137,18 @@ export function PapersLibrary({
 		[sortKey],
 	);
 
+	const normalizedQuery = (query ?? "").trim().toLocaleLowerCase();
+
 	const rows = useMemo(() => {
-		const copy = [...papers];
+		const filtered = normalizedQuery
+			? papers.filter((p) =>
+					(p.title ?? "").toLocaleLowerCase().includes(normalizedQuery),
+				)
+			: papers;
+		const copy = [...filtered];
 		copy.sort((a, b) => comparePapers(a, b, sortKey, sortDir));
 		return copy;
-	}, [papers, sortKey, sortDir]);
+	}, [papers, sortKey, sortDir, normalizedQuery]);
 
 	if (loading) {
 		return (
@@ -155,6 +164,7 @@ export function PapersLibrary({
 	}
 
 	if (!rows.length) {
+		const searching = normalizedQuery.length > 0;
 		return (
 			<div
 				className={cn(
@@ -162,10 +172,16 @@ export function PapersLibrary({
 					className,
 				)}
 			>
-				<p className="font-medium text-sm">{t("papersLibrary.emptyTitle")}</p>
-				<p className="max-w-sm text-muted-foreground text-xs">
-					{t("papersLibrary.emptyHint")}
+				<p className="font-medium text-sm">
+					{searching
+						? t("papersLibrary.noMatch")
+						: t("papersLibrary.emptyTitle")}
 				</p>
+				{searching ? null : (
+					<p className="max-w-sm text-muted-foreground text-xs">
+						{t("papersLibrary.emptyHint")}
+					</p>
+				)}
 			</div>
 		);
 	}

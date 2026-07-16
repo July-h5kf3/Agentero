@@ -9,6 +9,7 @@ import {
 	PanelLeft,
 	PanelRight,
 	PanelTop,
+	Search,
 	X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -46,6 +47,7 @@ import {
 	SettingsWindow,
 } from "@/components/settings-window";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
 	Tooltip,
 	TooltipContent,
@@ -248,6 +250,8 @@ export default function App() {
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [libraryPapers, setLibraryPapers] = useState<PaperMetadata[]>([]);
 	const [libraryLoading, setLibraryLoading] = useState(false);
+	/** Title search query for the papers library view. */
+	const [libraryQuery, setLibraryQuery] = useState("");
 	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
 	const [showNotes, setShowNotes] = useState(true);
 	const showNotesRef = useRef(showNotes);
@@ -1942,6 +1946,7 @@ export default function App() {
 				<PapersLibrary
 					papers={libraryPapers}
 					loading={libraryLoading}
+					query={libraryQuery}
 					onOpenPaper={handleOpenLibraryPaper}
 					className="bg-muted/20"
 				/>
@@ -2302,8 +2307,28 @@ export default function App() {
 								{/* Single-row header: toggle left, title right — same 28px line box */}
 								{vaultPath && activeTab ? (
 									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-										<div className="flex h-7 shrink-0 items-center">
-											{showLibrary ? null : (
+										<div
+											className={cn(
+												"flex h-7 items-center",
+												showLibrary ? "min-w-0 flex-1" : "shrink-0",
+											)}
+										>
+											{showLibrary ? (
+												<div className="relative w-full max-w-[280px]">
+													<Search
+														className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+														aria-hidden
+													/>
+													<Input
+														type="search"
+														value={libraryQuery}
+														onChange={(e) => setLibraryQuery(e.target.value)}
+														placeholder={t("sidebar:papersLibrary.search")}
+														aria-label={t("sidebar:papersLibrary.search")}
+														className="h-7 pl-7 text-xs"
+													/>
+												</div>
+											) : (
 												<ViewModeToggle
 													value={centerMode}
 													onChange={handleCenterModeChange}

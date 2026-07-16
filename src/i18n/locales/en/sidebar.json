@@ -46,6 +46,8 @@
 		"colId": "ID",
 		"sortBy": "Sort by {{column}}",
 		"count": "{{formatted}} papers",
+		"search": "Search by title",
+		"noMatch": "No papers match your search.",
 		"import": "Import bibliography",
 		"export": "Export library",
 		"importing": "Importing…",

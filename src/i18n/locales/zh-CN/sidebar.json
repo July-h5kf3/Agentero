@@ -46,6 +46,8 @@
 		"colId": "标识符",
 		"sortBy": "按{{column}}排序",
 		"count": "共 {{formatted}} 篇",
+		"search": "按标题搜索",
+		"noMatch": "没有匹配的论文。",
 		"import": "导入文献",
 		"export": "导出论文库",
 		"importing": "导入中…",
