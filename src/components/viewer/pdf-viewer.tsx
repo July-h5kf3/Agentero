@@ -1,4 +1,5 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,6 +10,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import {
 	ChevronLeft,
 	ChevronRight,
+	List,
 	Minus,
 	MoveVertical,
 	Plus,
@@ -102,6 +104,44 @@ type PdfViewerProps = {
 	className?: string;
 };
 
+type PdfOutlineNode = {
+	title: string;
+	dest: string | unknown[] | null;
+	items?: PdfOutlineNode[];
+};
+
+/** Recursive outline (bookmarks) list for the PDF side panel. */
+function OutlineTree({
+	nodes,
+	depth,
+	onOpen,
+}: {
+	nodes: PdfOutlineNode[];
+	depth: number;
+	onOpen: (dest: string | unknown[] | null) => void;
+}) {
+	return (
+		<ul className="space-y-0.5">
+			{nodes.map((n) => (
+				<li key={`${depth}-${n.title}-${JSON.stringify(n.dest)}`}>
+					<button
+						type="button"
+						className="w-full truncate rounded px-2 py-1 text-left text-muted-foreground text-xs hover:bg-muted/60 hover:text-foreground"
+						style={{ paddingLeft: 8 + depth * 12 }}
+						title={n.title}
+						onClick={() => onOpen(n.dest)}
+					>
+						{n.title}
+					</button>
+					{n.items?.length ? (
+						<OutlineTree nodes={n.items} depth={depth + 1} onOpen={onOpen} />
+					) : null}
+				</li>
+			))}
+		</ul>
+	);
+}
+
 export function PdfViewer({
 	source,
 	paperAbsPath = null,
@@ -126,6 +166,8 @@ export function PdfViewer({
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageField, setPageField] = useState("1");
 	const [firstPageAspect, setFirstPageAspect] = useState(1.3);
+	const [outline, setOutline] = useState<PdfOutlineNode[] | null>(null);
+	const [showOutline, setShowOutline] = useState(false);
 
 	const pageWidth = Math.max(200, fitWidth);
 	const shellWidth = pageWidth * zoom;
@@ -171,6 +213,7 @@ export function PdfViewer({
 	const currentPageRef = useRef(1);
 	currentPageRef.current = currentPage;
 	const pageFocusedRef = useRef(false);
+	const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 
 	const fileUrl = isPdfViewerSource(source) ? source.trim() : null;
 
@@ -254,6 +297,10 @@ export function PdfViewer({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when PDF URL changes
 	useEffect(() => {
 		setZoom(1);
+		setCurrentPage(1);
+		setShowOutline(false);
+		setOutline(null);
+		pdfDocRef.current = null;
 		const scrollEl = scrollRef.current;
 		if (scrollEl) {
 			scrollEl.scrollLeft = 0;
@@ -322,6 +369,26 @@ export function PdfViewer({
 		setZoom(clampZoom(avail / pageH));
 		requestAnimationFrame(() => goToPage(currentPageRef.current));
 	}, [firstPageAspect, pageWidth, goToPage]);
+
+	/** Resolve an outline destination to a page and scroll to it. */
+	const goToDest = useCallback(
+		async (dest: string | unknown[] | null) => {
+			const doc = pdfDocRef.current;
+			if (!doc || !dest) return;
+			try {
+				const explicit =
+					typeof dest === "string" ? await doc.getDestination(dest) : dest;
+				if (!Array.isArray(explicit) || explicit.length === 0) return;
+				const pageIndex = await doc.getPageIndex(
+					explicit[0] as Parameters<typeof doc.getPageIndex>[0],
+				);
+				goToPage(pageIndex + 1);
+			} catch {
+				// ignore unresolved destinations
+			}
+		},
+		[goToPage],
+	);
 
 	const commitPageField = useCallback(() => {
 		const n = Number.parseInt(pageField, 10);
@@ -1054,6 +1121,39 @@ export function PdfViewer({
 					</div>
 				</TooltipProvider>
 			</div>
+			{outline && outline.length > 0 ? (
+				<div className="pointer-events-none absolute top-2 left-3 z-30">
+					<TooltipProvider delayDuration={200}>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									className="pointer-events-auto rounded-lg border border-border/80 bg-background/95 shadow-sm backdrop-blur-sm"
+									aria-label={t("pdf.outline")}
+									aria-pressed={showOutline}
+									onClick={() => setShowOutline((v) => !v)}
+								>
+									<List className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">{t("pdf.outline")}</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
+				</div>
+			) : null}
+			{showOutline && outline && outline.length > 0 ? (
+				<aside className="agentero-scroll absolute inset-y-0 left-0 z-20 w-60 border-r bg-background/95 pt-11 pb-2 backdrop-blur-sm">
+					<div className="px-2">
+						<OutlineTree
+							nodes={outline}
+							depth={0}
+							onOpen={(d) => void goToDest(d)}
+						/>
+					</div>
+				</aside>
+			) : null}
 			<div
 				ref={scrollRef}
 				className="agentero-scroll min-h-0 flex-1 bg-muted/20"
@@ -1092,6 +1192,10 @@ export function PdfViewer({
 								onLoadSuccess={(doc) => {
 									setNumPages(doc.numPages);
 									setError(null);
+									pdfDocRef.current = doc;
+									void doc.getOutline().then((o) => {
+										setOutline((o as PdfOutlineNode[] | null) ?? []);
+									});
 									void doc.getPage(1).then((p) => {
 										const vp = p.getViewport({ scale: 1 });
 										if (vp.width > 0) {
