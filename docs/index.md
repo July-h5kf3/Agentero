@@ -18,6 +18,8 @@ Agentero 桌面应用
 │   ├── 双链 / 反链 / 图谱索引
 │   ├── 面向 BYOA Agent 的 ACP Client
 │   └── 本地配置与可重建缓存
+├── CLI（规划，见 development/cli.md）
+│   └── 代码目录 `cli/`；path 复用 src-tauri services（不迁 core；无 BYOA）
 └── Vault
     ├── Markdown 笔记与 paper notes / source
     ├── .agentero/catalog.sqlite（论文集合 + metadata 权威）

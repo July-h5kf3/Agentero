@@ -67,6 +67,19 @@
    - 增加文件监听，外部编辑器修改后自动刷新当前文件与 wiki 索引。
    - 保存失败、外部冲突和未保存状态要有明确提示。
 
+5. **CLI（headless Vault 接口）** — 设计定稿 [`cli.md`](cli.md)；可与 UI 并行
+   - 边界：**无 BYOA / 无 Agent / 无 paper-reader**；只做 Vault 管理、发现、暴露 + 文献基础能力。
+   - 布局：仓库根 **`cli/`**（package `agentero-cli`，bin `agentero`）；根 Cargo workspace `members = ["src-tauri", "cli"]`。
+   - 复用：**不迁 core**；path 依赖 `agentero_lib`，调用 `services::{vault,catalog,lookup,pdf_parse,wiki}`；禁止 `use …::agent`。
+   - [ ] Workspace + scaffold `cli/`（clap、`--vault` / env / 上溯、`--json`、退出码）。
+   - [ ] `vault create|which|info|check|use`（对齐 `vault_create` / catalog 初始化）。
+   - [ ] `tree`；`paper list|get|paths|delete|set-read|download|parse`（`get`：`assets` + `suggestedReads`）。
+   - [ ] `import id|bib`、`export bib`（对齐 Host；**不**自动精读）。
+   - [ ] 稳定 `error.code`；集成测试（临时 Vault + `--json` 契约）。
+   - [ ] 按需放宽 service `pub`（小改可见性，不搬模块）。
+   - [ ] README / 本仓库开发说明：`cargo build -p agentero-cli`。
+   - [x] Vault skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`；Create Vault 种子；README Quick Start 已写协议。
+
 ## P1 — 中期增强
 
 1. **Catalog 导出与检索**
@@ -107,7 +120,14 @@
    - [ ] 面板 workflow：**Ingest citation neighborhood**（确认后批量魔棒入库邻居）。
    - [ ] 与「Summarize / Ask library / Draft Related Work」共用 prompt 注入与草稿确认路径。
 
-7. **Release 完善**
+7. **CLI 增强**（MVP 见 P0-5）
+   - [ ] `graph backlinks|export|rebuild`（复用 wiki service；CLI 自管索引生命周期）。
+   - [ ] `doctor`（Translator / catalog schema / 路径；**不** probe Agent）。
+   - [ ] shell completions（bash / zsh / fish）。
+   - [ ] `export papers-md`（Host 落地 `catalog:export_papers_md` 后对齐）。
+   - [ ] Release 可选附带 `agentero` 二进制（与桌面安装包并列）。
+
+8. **Release 完善**
    - tag 构建已完成；后续补签名、公证、自动 changelog。
    - 同步 `package.json`、`src-tauri/tauri.conf.json` 和 tag 版本号。
    - Release artifact 命名规范化，区分 macOS arch / Windows / Linux。
@@ -158,6 +178,10 @@
    - Git 版本管理集成。
    - 可选云同步与多设备阅读。
 
+9. **CLI domain 抽离（可选）**
+   - 仅当 CLI 体积 / 依赖边界成为问题时：从 `agentero_lib` 抽出无 Agent 的 `services` 到独立 crate。
+   - **当前不做**；默认保持 `cli/` → path → `agentero_lib`。
+
 ---
 
 ## 已完成能力速览（对照现状）
@@ -173,4 +197,5 @@
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
 | PDF | 缩放、划词提问 MVP（asks JSON） | 本地 PDF 直开、highlights 标注系统、M5 |
-| 发布 | tag → 三平台草稿 Release | 签名/公证/changelog |
+| **CLI** | 设计定稿（[`cli.md`](cli.md)：`cli/`、不迁 core、无 BYOA） | **MVP 实现**（P0-5）；graph/doctor/completions（P1-7） |
+| 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |

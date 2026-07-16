@@ -12,53 +12,34 @@
   <a href="https://github.com/poco-ai/agentero/pulls"><img src="https://img.shields.io/github/issues-pr/poco-ai/agentero?style=flat" alt="GitHub pull requests" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://github.com/poco-ai/agentero/releases"><img src="https://img.shields.io/github/v/release/poco-ai/agentero?include_prereleases&style=flat" alt="Release" /></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=white" alt="Tauri 2" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Rust-stable-DEA584?logo=rust&logoColor=black" alt="Rust" />
-  <img src="https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white" alt="pnpm" />
+  <a href="https://agentero.poco-ai.com"><img src="https://img.shields.io/badge/docs-online-5319E7?logo=mkdocs&logoColor=white" alt="Documentation" /></a>
 </p>
 
 ---
 
 ## 为什么做 Agentero？
 
+**Agentero** 旨在构建给 Agent 友好的、Agent 原生的文献管理方式，探索人与 Agent 在文献管理中的协作方式
+
 传统文献管理器擅长**存 PDF**，但 Agent 工作流需要更稳定、可寻址、可复用的本地知识结构：
 
 - 阅读高亮和笔记被锁在单篇文件里，Agent 很难跨论文复用。
 - 每次对话都要重新提供上下文，缺少稳定的本地知识地图。
-- PDF 对人友好，但对模型有排版噪音；结构、链接、引用路径应该可寻址。
-
-**Agentero** 是面向人和 Agent 共用的本地优先研究工作台。论文、笔记、索引都以 Markdown 和源文件形式存在于用户控制的 Vault 中。Agent 采用 **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
+- PDF 对人友好，但对 Agent 来讲不是最舒服的阅读材料；结构、链接、引用路径应该可寻址。
 
 ## 功能
 
-- **本地 Vault**：打开或创建文件夹；Create Vault 初始化目录与 `.agentero/catalog.sqlite`。
-- **多窗口**：`⌘N` 新建窗口（不自动恢复上次 Vault）；欢迎页列出最近路径。
-- **Markdown 工作台**：文件树（虚拟 Library 节点、内联新建文件/文件夹；刷新走 ⌘R）、中间 Markdown/PDF/HTML 或论文库表格、可选右侧栏（当前为**单槽**中间栏）。
-- **论文库**：catalog 表格（`paper_list`）；表头排序；双向滚动；点击行打开 paper。
-- **魔棒入库**：粘贴 arXiv 链接/编号 → Translator → catalog + **默认下载 PDF**；arXiv 另解压 LaTeX 到 `source/`。缺资源时 paper 行 / Library 行可单篇或批量补下。
-- **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
-- **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph（双链图）。
-- **Agent 右侧栏**：通过 ACP（Claude、Codex、Grok Build 等）与本地 Vault 对话；设置中全局权限模式（受限 / 自动批准）。
-- **Paper-centric 布局**：打开具体论文时根据 catalog 远程 URL 显示 PDF/HTML，并显示 Paper Info 与该篇 `NOTES.md` 实时编辑（论文库视图下隐藏 Notes）。
-- **桌面原生体验**：Tauri 2、macOS overlay title bar、File 菜单、快捷键与 i18n。
+- **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
+  - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
+- **魔棒入库**：与 Zotero 当中能力一致。
+- **双链与知识图谱**：Obsidian 当中的双链与知识图谱功能。
+- **桌面原生体验**
 
-> 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)（含规划中的 **V0.6 标签页/分屏**、**V0.7 引用关系 / Connected Papers**），产品范围见 [docs/development/prd.md](docs/development/prd.md)。
+> 当前状态：早期 MVP
 
-## 快速开始
+## Quick Start
 
-### 前置依赖
-
-- [Node.js](https://nodejs.org/) 20+
-- [pnpm](https://pnpm.io/) 9+
-- [Rust](https://rustup.rs/) stable
-- [Tauri 2](https://v2.tauri.app/start/prerequisites/) 对应平台依赖
-
-### 安装与运行
+### 桌面应用
 
 ```bash
 git clone https://github.com/poco-ai/agentero.git
@@ -72,6 +53,42 @@ pnpm tauri dev
 pnpm dev
 ```
 
+### CLI（设计已定稿；二进制实现中）
+
+Headless **Vault / Catalog 机器接口**：创建与发现库、列表与入库文献基础能力。**不含** BYOA / Agent 运行时。设计见 [`docs/development/cli.md`](docs/development/cli.md)。
+
+实现落地后（代码目录 `cli/`，path 复用 `src-tauri` services，**不迁 core**）：
+
+```bash
+# 仓库根需有 Cargo workspace（members: src-tauri, cli）
+cargo build -p agentero-cli
+# 二进制名: agentero
+
+export AGENTERO_VAULT=~/path/to/vault   # 或每条命令 --vault
+agentero vault which --json
+agentero paper list --json
+agentero import id 1706.03762 --json
+agentero paper get 1706.03762 --json    # 再按 suggestedReads 读本地文件
+```
+
+**给外部 Agent 的 skill**（Create Vault 会种子写入 Vault）：
+
+| 路径 | 说明 |
+| --- | --- |
+| [`templates/vault/.agents/skills/agentero-cli/SKILL.md`](templates/vault/.agents/skills/agentero-cli/SKILL.md) | 模板源；协议：`--json` 摸库 → 读文件 → 入库 |
+| Vault 内 `.agents/skills/agentero-cli/` | 新建 Vault 后可用；Composer `$agentero-cli` / Claude `/agentero-cli` |
+| [`templates/vault/.agents/skills/paper-reader/SKILL.md`](templates/vault/.agents/skills/paper-reader/SKILL.md) | 精读写 `NOTES.md`（与 CLI 分工：CLI 不管精读） |
+
+外部 Agent 最小协议：
+
+```text
+1. agentero vault which --json
+2. agentero paper list --json
+3. agentero paper get <path|id> --json
+4. read_file: NOTES.md → highlights.md → PAPER.md / source/
+5. agentero import id <arxiv|doi|url> --json   # 需要入库时
+```
+
 ### 常用脚本
 
 | 命令 | 说明 |
@@ -79,12 +96,9 @@ pnpm dev
 | `pnpm tauri dev` | 启动桌面开发应用 |
 | `pnpm build` | 构建前端产物 |
 | `pnpm tauri build` | 构建桌面安装包 |
+| `cargo build -p agentero-cli` | 构建 CLI（实现后；bin `agentero`） |
 | `pnpm lint` | TypeScript（Biome）+ Rust（clippy）检查 |
 | `pnpm format` | 格式化 TypeScript + Rust |
-
-## 发布
-
-推送 `v*` tag 会触发 `.github/workflows/release.yml`，在 macOS、Ubuntu、Windows 上构建 Tauri 安装包，并上传到草稿 GitHub Release。
 
 ## 项目结构
 
@@ -94,32 +108,21 @@ agentero/
 ├── mkdocs.yml            # MkDocs 文档站配置
 ├── src/                  # React + TypeScript 前端
 ├── src-tauri/            # Tauri 2 + Rust Host（Vault、Wiki、ACP）
+├── cli/                  # headless CLI（规划/实现中；见 docs/development/cli.md）
+├── templates/vault/      # Create Vault 脚手架（含 .agents/skills）
 ├── docs/                 # MkDocs 文档源文件
 └── package.json
 ```
 
-## 文档
-
-文档使用 [MkDocs](https://www.mkdocs.org/) 和 Read the Docs 主题组织：
-
-| 分区 | 说明 |
-| --- | --- |
-| [docs/index.md](docs/index.md) | 整体技术框架与文档分层 |
-| [docs/frontend/index.md](docs/frontend/index.md) | 前端技术选型与 UI 文档 |
-| [docs/backend/index.md](docs/backend/index.md) | 后端技术选型、API 与数据模型 |
-| [docs/development/index.md](docs/development/index.md) | 产品、路线图、开发与发布流程 |
-| [AGENTS.md](AGENTS.md) | Agent / 开发者协作指南 |
-
-本地预览文档：
-
-```bash
-python3 -m venv .venv-docs
-. .venv-docs/bin/activate
-pip install mkdocs==1.6.1
-mkdocs serve
-```
-
 ## 技术栈
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=white" alt="Tauri 2" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Rust-stable-DEA584?logo=rust&logoColor=black" alt="Rust" />
+  <img src="https://img.shields.io/badge/pnpm-workspace-F69220?logo=pnpm&logoColor=white" alt="pnpm" />
+</p>
 
 - **桌面壳**：[Tauri 2](https://v2.tauri.app/)
 - **前端**：[React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[AI Elements](https://elements.ai-sdk.dev/)

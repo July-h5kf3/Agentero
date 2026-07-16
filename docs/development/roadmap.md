@@ -20,6 +20,7 @@
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
 | V0.6 工作区标签页与分屏 | ⏳ 待实现 | 中间栏由「单文件固定排布」升级为可开多标签、可分屏；与当前左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
+| **CLI（headless Vault 接口）** | ⏳ 设计定稿 | 设计见 [`cli.md`](cli.md)；代码目录 **`cli/`**；**不迁 core**，path 依赖 `agentero_lib::services`；Vault 创建/发现/暴露 + 文献基础；**无 BYOA / 无精读编排**；Agent 友好 `--json`。 |
 | Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
 
 **精确 arXiv/标识符入库（可用）**：魔棒粘贴 ID/URL → Translator → catalog + `NOTES.md` 壳 → `source/` PDF（arXiv 含 TeX）→ Library 表可见；缺资源时树行/Library 可补下。
@@ -273,6 +274,45 @@
 - [ ] 可查看至少「出链 cites」或「入链 cited_by」列表/图，并一键打开或入库。
 - [ ] Agent「Explore citations」能基于本地 + 缓存引用边回答，并列出读取过的路径/来源。
 
+## CLI：Vault 管理与发现（headless）
+
+> 设计文档：[`cli.md`](cli.md)。可与 UI 版本线并行推进，不依赖 V0.5–V0.7。
+
+目标：提供 **`agentero` CLI**，作为 Vault / Catalog 的机器接口——创建、管理、发现、暴露本地研究库，并覆盖已落地的文献基础能力（入库、补资源、`PAPER.md`、Bib 导入导出）。**不**内嵌 BYOA、不 spawn Agent、不跑 paper-reader。
+
+架构约束（已拍板）：
+
+- 代码在仓库根 **`cli/`**（与 `src-tauri` 并列），Cargo workspace member。
+- **不迁 `agentero-core`**；path 依赖 `src-tauri` 的 `agentero_lib`，直接调用 `services::{vault,catalog,lookup,pdf_parse,wiki}`。
+- CLI 源码禁止 `use …::services::agent`；可接受编译期带上 tauri 依赖图。
+- 与 GUI 只通过 **同一 Vault 目录** 协作；CLI 自有 `config.toml` / `default_vault`，不读 GUI localStorage / Agent 注册表。
+
+关键交付：
+
+- [ ] 根 `Cargo.toml` workspace：`members = ["src-tauri", "cli"]`。
+- [ ] **`cli/`** crate（package `agentero-cli`，bin **`agentero`**）+ clap 命令树。
+- [ ] 按需放宽 `services::*` 可见性（`pub` / re-export），**不搬迁模块**。
+- [ ] **Vault**：`create` / `which` / `info` / `check` / `use`；`--vault` / `AGENTERO_VAULT` / cwd 上溯 / default_vault。
+- [ ] **发现与暴露**：`tree`；`paper list|get|paths`（`get` 含 `assets` + `suggestedReads`，对齐渐进披露）。
+- [ ] **文献基础**：`import id|bib`、`export bib`、`paper download|parse|delete|set-read`（仅 catalog 字段；**无**自动精读）。
+- [ ] 全局 `--json` / 退出码 / 稳定 `error.code`（Agent 友好）。
+- [ ] 可选随后：`graph backlinks|export|rebuild`、`doctor`、shell completions。
+- [ ] 文档：README 构建说明；Release 可选附带 `agentero` 二进制。
+
+验收标准：
+
+- [ ] `cargo build -p agentero-cli`（或等价）产出 `agentero`。
+- [ ] `agentero vault create <path>` 脚手架与 Host `vault_create` 一致（含 catalog，无默认 PAPERS.md）。
+- [ ] 在已有 Vault 上 `paper list --json` / `paper get <id> --json` 与 catalog 语义一致。
+- [ ] `import id 1706.03762 --json` 写入 catalog + 资源路径，**不**调用 Agent、不重写用户 NOTES 精读体。
+- [ ] 无 GUI 时，外部 Agent / 脚本可仅凭 CLI + 读文件完成「摸库 → 入库 → 自己写 NOTES」。
+
+非目标（本里程碑明确不做）：
+
+- [ ] ~~`agent run` / BYOA / paper-reader / 自动写精读 NOTES~~
+- [ ] ~~抽离 `agentero-core` crate~~（远期可选，非本里程碑）
+- [ ] ~~daemon / `serve`~~
+
 ## 4. Later
 
 这些能力不进入 MVP 主线，但可在上述版本之后继续规划：
@@ -321,6 +361,10 @@
 
 包含 V0.7。完成后，用户可 hover 文内引用看 Info、浏览引用邻域，并用 Agent 沿引用链探索与入库。
 
+### Milestone H：CLI 可脚本化 ⏳
+
+包含 **CLI（headless）**（[`cli.md`](cli.md)）。完成后，人与外部 Agent 可在无 GUI 下创建/发现 Vault、列表与入库文献基础能力；**不含** BYOA。代码在 `cli/`，复用 `agentero_lib` services，不迁 core。
+
 ## 6. 主要 TODO 总表
 
 ### 近期优先级 P0
@@ -341,6 +385,7 @@
 - [ ] Agent 写入草稿确认与拒绝路径。
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
 - [ ] 文件监听与索引增量刷新。
+- [ ] **CLI MVP**（设计已定稿 [`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export`；`--json`；path 复用 services，**不迁 core、无 Agent**。
 
 ### 中期优先级 P1
 
@@ -355,6 +400,7 @@
 - [ ] **文内引用 hover → 右侧 Paper Info**（库内/远程缓存 + 一键入库）（V0.7-A）。
 - [ ] **引用关系图 / Connected Papers 式邻域**（cites / cited_by 缓存 + 列表/简图）（V0.7-B）。
 - [ ] **Agent 引用工作流**：Explore citations / Map related work / Ingest neighborhood（V0.7-C）。
+- [ ] CLI 增强：`graph *`、`doctor`、shell completions；Release 附带 `agentero` 二进制。
 - [ ] Release 流程补充签名、公证、版本号同步和自动 changelog。
 
 ### Agent provider 后续改造
@@ -377,6 +423,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。
 - [ ] 复杂分屏（>2 格）与命名工作区会话。
 - [ ] iPadOS 文件系统与触控布局适配。
+- [ ] （可选）从 `agentero_lib` 抽出无 Agent 的 domain crate，供 CLI 零 tauri 依赖——**非当前 CLI 范围**。
 
 ## 7. 风险控制
 

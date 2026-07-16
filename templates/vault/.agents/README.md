@@ -18,11 +18,13 @@ Agentero (and many ACP agents) look here for **vault-scoped** agent configuratio
 - Chat Composer: type `$` to pick skills from this vault, plus global
   `~/.agents/skills` and `${CODEX_HOME:-~/.codex}/skills`.
 - Keep each `SKILL.md` small (Agentero loads at most 64 KiB per skill, 5 per prompt).
-- **Bundled**: Create Vault seeds `skills/paper-reader/` for the file-tree
-  Eye (精读) workflow. Existing vaults can copy that folder, or install
-  globally under `~/.agents/skills/paper-reader/`.
-- **Runtime triggers** (not the Composer `$` picker): Codex uses `$paper-reader`,
-  Claude ACP often uses `/paper-reader`; other agents follow Agentero-injected body.
+- **Bundled** (Create Vault seeds; no overwrite if already present):
+  - `skills/paper-reader/` — file-tree Eye (精读) → structured `NOTES.md`.
+  - `skills/agentero-cli/` — how external agents use the headless `agentero` CLI
+    (vault discover / paper list / import; **no** BYOA). Design: `docs/development/cli.md`.
+  Existing vaults can copy those folders, or install under `~/.agents/skills/<id>/`.
+- **Runtime triggers** (not the Composer `$` picker): Codex `$id`, Claude often
+  `/id` (e.g. `$paper-reader`, `$agentero-cli`); other agents follow Agentero-injected body.
 
 Add a skill:
 

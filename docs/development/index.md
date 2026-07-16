@@ -26,6 +26,7 @@
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
 | V0.6 标签页与分屏 | ⏳ | 中间栏多文档 tab + 2 格分屏（规划中） |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
+| CLI headless | ⏳ 设计定稿 | 目录 `cli/`；不迁 core；Vault 管理/发现/暴露 + 文献基础；无 BYOA（见 [`cli.md`](cli.md)） |
 | Release CI | ✅ | `v*` tag → 三平台安装包草稿 Release |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
@@ -36,8 +37,9 @@
 - [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
 - [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
+- [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（定稿，未实现）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
-- [`hypothesis.md`](hypothesis.md)：简短产品假设。
+- [`.md`](.md)：简短产品假设。
 
 ## 交叉引用
 

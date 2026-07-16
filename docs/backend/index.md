@@ -36,6 +36,7 @@
 - [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
 - [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Translator 后端（v0 已落地 + 后续扩展）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型（与 V0.7 文献引用图边界见文内 §6.5）。
+- CLI（规划）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**；不迁 core，复用 `services/*`；Vault 管理/发现/暴露；无 BYOA。
 
 ## 交叉引用
 

@@ -18,10 +18,11 @@ This file is the L0 map for agents working in this Agentero research vault.
 - `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
+- Headless tooling: optional **`agentero` CLI** (discover / list / import). Prefer skill **`agentero-cli`** (`$agentero-cli` / `/agentero-cli`) with `--json`. CLI does **not** run agents or paper-reader.
 
 ## Progressive disclosure
 
-1. Start with this file and the paper list from the app catalog (or scan `papers/**/NOTES.md`).
+1. Start with this file and the paper list from the app catalog, or `agentero paper list --json` when the CLI is available.
 2. Open `{paper}/NOTES.md` for a locked paper.
 3. Then `highlights.md` → optional `PAPER.md` → `source/` only as needed.
 
@@ -39,6 +40,10 @@ pub const AGENTS_DIR_README: &str = include_str!("../../../templates/vault/.agen
 /// Bundled paper-reader skill (file-tree Eye workflow).
 pub const PAPER_READER_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
+
+/// Bundled agentero-cli skill (headless vault discover/import via CLI).
+pub const AGENTERO_CLI_SKILL: &str =
+    include_str!("../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,6 +117,15 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         created.push(".agents/skills/paper-reader/SKILL.md".into());
     }
 
+    // Seed agentero-cli skill for headless vault discover / import (no overwrite).
+    let agentero_cli_dir = join_rel(path, ".agents/skills/agentero-cli");
+    let agentero_cli_skill = agentero_cli_dir.join("SKILL.md");
+    if !agentero_cli_skill.exists() {
+        fs::create_dir_all(&agentero_cli_dir)?;
+        fs::write(&agentero_cli_skill, AGENTERO_CLI_SKILL)?;
+        created.push(".agents/skills/agentero-cli/SKILL.md".into());
+    }
+
     // Catalog: always ensure schema (may create catalog.sqlite)
     let db_path = catalog::catalog_db_path(path);
     let db_existed = db_path.exists();
@@ -154,6 +168,7 @@ mod tests {
         assert!(dir.join(".agents/skills").is_dir());
         assert!(dir.join(".agents/README.md").is_file());
         assert!(dir.join(".agents/skills/paper-reader/SKILL.md").is_file());
+        assert!(dir.join(".agents/skills/agentero-cli/SKILL.md").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(!dir.join("PAPERS.md").exists());
