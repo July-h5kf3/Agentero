@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /**
  * Create a Agentero demo vault matching the current data model:
- * - AGENTS.md, papers/, notes/, plans/, .agentero/catalog.sqlite
+ * - AGENTS.md, papers/, notes/, plans/, assets/, .agentero/catalog.sqlite
  * - No default PAPERS.md / library.bib
  * - Paper folders as minimal units (flat + nested under papers/)
+ * - Loose PDFs / images outside papers/ (center-pane preview fixtures)
+ * - Catalog SQLite schema_version = 3 (matches Host schema.rs)
  * - Optional metadata.json for transition / external tools
  *
  * Usage:
@@ -18,7 +20,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { access, mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,8 +28,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../..");
 
-const SCHEMA_VERSION = 1;
+/** Must match `src-tauri/src/services/catalog/schema.rs` SCHEMA_VERSION. */
+const SCHEMA_VERSION = 3;
 
+/**
+ * Fresh CREATE for schema v3 (v1 base + v2 Translator cols + v3 is_read).
+ * Prefer full CREATE over stepwise ALTER when scaffolding a new demo DB.
+ */
 const DDL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY NOT NULL,
@@ -54,12 +61,35 @@ CREATE TABLE IF NOT EXISTS papers (
     status          TEXT NOT NULL DEFAULT 'completed',
     summary         TEXT,
     added_at        TEXT NOT NULL,
-    updated_at      TEXT NOT NULL
+    updated_at      TEXT NOT NULL,
+    creators_json   TEXT,
+    date            TEXT,
+    isbn            TEXT,
+    issn            TEXT,
+    pmid            TEXT,
+    publication     TEXT,
+    volume          TEXT,
+    issue           TEXT,
+    pages           TEXT,
+    publisher       TEXT,
+    place           TEXT,
+    series          TEXT,
+    language        TEXT,
+    zotero_item_type TEXT,
+    meta_source     TEXT,
+    extra           TEXT,
+    is_read         INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_papers_id ON papers(id);
 CREATE INDEX IF NOT EXISTS idx_papers_year ON papers(year);
 CREATE INDEX IF NOT EXISTS idx_papers_type ON papers(type);
 CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(status);
+CREATE INDEX IF NOT EXISTS idx_papers_arxiv ON papers(arxiv_id);
+CREATE INDEX IF NOT EXISTS idx_papers_doi ON papers(doi);
+CREATE INDEX IF NOT EXISTS idx_papers_bibtex ON papers(bibtex_key);
+CREATE INDEX IF NOT EXISTS idx_papers_pmid ON papers(pmid);
+CREATE INDEX IF NOT EXISTS idx_papers_isbn ON papers(isbn);
+CREATE INDEX IF NOT EXISTS idx_papers_is_read ON papers(is_read);
 `;
 
 /** @typedef {{
@@ -72,6 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(status);
  *   tags: string[];
  *   bibtex: string;
  *   notes: string;
+ *   is_read?: boolean;
  * }} PaperSeed */
 
 /** @type {PaperSeed[]} */
@@ -95,6 +126,7 @@ const PAPERS = [
 			"We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
 		tags: ["transformer", "attention", "nlp"],
 		bibtex: "vaswani2017attention",
+		is_read: true,
 		notes: `# NOTES — Attention Is All You Need
 
 # 解决了什么问题
@@ -132,6 +164,7 @@ Multi-head self-attention + positional encoding（Transformer）。
 			"We introduce BERT, designed to pre-train deep bidirectional representations from unlabeled text.",
 		tags: ["bert", "pretraining", "nlp"],
 		bibtex: "devlin2019bert",
+		is_read: true,
 		notes: `# NOTES — BERT
 
 # 解决了什么问题
@@ -163,6 +196,7 @@ GLUE 等理解任务大幅提升。
 			"We train GPT-3, an autoregressive language model with 175 billion parameters, and test its performance in the few-shot setting.",
 		tags: ["gpt", "llm", "few-shot"],
 		bibtex: "brown2020language",
+		is_read: false,
 		notes: `# NOTES — GPT-3
 
 # 解决了什么问题
@@ -194,6 +228,7 @@ GLUE 等理解任务大幅提升。
 			"We introduce Adam, an algorithm for first-order gradient-based optimization of stochastic objective functions.",
 		tags: ["optimization", "adam"],
 		bibtex: "kingma2015adam",
+		is_read: false,
 		notes: `# NOTES — Adam
 
 # 解决了什么问题
@@ -224,6 +259,7 @@ GLUE 等理解任务大幅提升。
 			"We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously.",
 		tags: ["resnet", "vision", "cnn"],
 		bibtex: "he2016deep",
+		is_read: false,
 		notes: `# NOTES — ResNet
 
 # 解决了什么问题
@@ -245,6 +281,21 @@ ImageNet 等视觉任务显著提升，成为骨干网络。
 	},
 ];
 
+/** Loose media outside papers/ — exercises arbitrary-path PDF / image preview. */
+const LOOSE_MEDIA = {
+	/** Vault-relative paths for verify. */
+	pdfs: ["assets/sample.pdf", "notes/attachments/reading-list.pdf"],
+	images: [
+		"assets/figures/red-pixel.png",
+		"assets/figures/sample.jpg",
+		"assets/figures/sample.gif",
+		"assets/figures/sample.webp",
+		"assets/figures/diagram.svg",
+		"assets/figures/sample.bmp",
+		"assets/figures/favicon.ico",
+	],
+};
+
 const AGENTS_MD = `# AGENTS.md
 
 This file is the L0 map for agents working in this Agentero research vault.
@@ -252,8 +303,9 @@ This file is the L0 map for agents working in this Agentero research vault.
 ## Layout
 
 - \`papers/\` — paper folders at **any depth**. A paper folder is the minimal unit (has \`NOTES.md\`, optional \`highlights.md\` / \`PAPER.md\`, and \`source/\`).
-- \`notes/\` — free-form concept notes (\`[[wikilinks]]\` welcome).
+- \`notes/\` — free-form concept notes (\`[[wikilinks]]\` welcome). May also hold loose PDFs under \`notes/attachments/\`.
 - \`plans/\` — research plans and drafts.
+- \`assets/\` — non-paper media (sample PDF / figures) for preview; not catalogued as papers.
 - \`.agentero/catalog.sqlite\` — paper **catalog** (collection + metadata). There is usually **no** root \`PAPERS.md\` unless exported.
 
 ## Progressive disclosure
@@ -298,6 +350,144 @@ Research plans and Related Work drafts live here.
 Example: draft a comparison of Transformer → BERT → GPT-3 using local NOTES only.
 `;
 
+const ASSETS_README = `# Assets
+
+Non-paper media for local preview (not catalogued in SQLite):
+
+- \`sample.pdf\` — loose PDF outside \`papers/\`
+- \`figures/\` — sample images (png / jpg / gif / webp / svg / bmp / ico)
+
+Paper-unit PDFs live under each paper folder as \`{id}.pdf\`.
+`;
+
+// --- Minimal binary fixtures (valid enough for blob: / image viewers) ---
+
+/** Minimal one-page PDF (Helvetica "Demo"). */
+function minimalPdf(label = "Demo") {
+	const safe = String(label)
+		.replace(/[()\\]/g, " ")
+		.slice(0, 40);
+	const stream = `BT /F1 24 Tf 72 720 Td (${safe}) Tj ET`;
+	const objects = [
+		"1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n",
+		"2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n",
+		"3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj\n",
+		`4 0 obj<< /Length ${stream.length} >>stream\n${stream}\nendstream\nendobj\n`,
+		"5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n",
+	];
+	let body = "%PDF-1.4\n";
+	const offsets = [0];
+	for (const obj of objects) {
+		offsets.push(Buffer.byteLength(body, "utf8"));
+		body += obj;
+	}
+	const xrefStart = Buffer.byteLength(body, "utf8");
+	let xref = `xref\n0 ${objects.length + 1}\n`;
+	xref += "0000000000 65535 f \n";
+	for (let i = 1; i <= objects.length; i++) {
+		xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+	}
+	body += xref;
+	body += `trailer<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+	body += `startxref\n${xrefStart}\n%%EOF\n`;
+	return Buffer.from(body, "utf8");
+}
+
+/** 1×1 red PNG. */
+const PNG_1X1 = Buffer.from(
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+	"base64",
+);
+
+/** 1×1 JPEG. */
+const JPEG_1X1 = Buffer.from(
+	"/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=",
+	"base64",
+);
+
+/** 1×1 GIF. */
+const GIF_1X1 = Buffer.from(
+	"R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+	"base64",
+);
+
+/** 1×1 lossy WebP. */
+const WEBP_1X1 = Buffer.from(
+	"UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=",
+	"base64",
+);
+
+/** Tiny SVG diagram. */
+const SVG_DIAGRAM = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120">
+  <rect width="240" height="120" fill="#0f172a"/>
+  <circle cx="60" cy="60" r="28" fill="#38bdf8"/>
+  <rect x="110" y="32" width="96" height="56" rx="8" fill="#a78bfa"/>
+  <text x="120" y="66" fill="#f8fafc" font-family="sans-serif" font-size="14">demo</text>
+</svg>
+`;
+
+/** 1×1 24-bit BMP (blue pixel). */
+function minimalBmp() {
+	// BITMAPFILEHEADER (14) + BITMAPINFOHEADER (40) + pixel row (4-byte aligned)
+	const fileSize = 14 + 40 + 4;
+	const buf = Buffer.alloc(fileSize);
+	buf.write("BM", 0); // bfType
+	buf.writeUInt32LE(fileSize, 2);
+	buf.writeUInt32LE(0, 6); // reserved
+	buf.writeUInt32LE(54, 10); // pixel offset
+	buf.writeUInt32LE(40, 14); // biSize
+	buf.writeInt32LE(1, 18); // width
+	buf.writeInt32LE(1, 22); // height
+	buf.writeUInt16LE(1, 26); // planes
+	buf.writeUInt16LE(24, 28); // bpp
+	buf.writeUInt32LE(0, 30); // BI_RGB
+	buf.writeUInt32LE(4, 34); // image size
+	// BGR pixel + pad
+	buf[54] = 0xff; // B
+	buf[55] = 0x00; // G
+	buf[56] = 0x00; // R
+	buf[57] = 0x00;
+	return buf;
+}
+
+/** Minimal 16×16 ICO (1-bit mask + 32bpp XOR via embedded PNG-like raw DIB is heavy; use 1×1 AND/XOR). */
+function minimalIco() {
+	// ICONDIR + ICONDIRENTRY + 40-byte BITMAPINFOHEADER + 4 BGRA + 4 AND mask
+	const headerSize = 6 + 16;
+	const dibSize = 40 + 4 + 4;
+	const total = headerSize + dibSize;
+	const buf = Buffer.alloc(total);
+	// ICONDIR
+	buf.writeUInt16LE(0, 0);
+	buf.writeUInt16LE(1, 2); // icon
+	buf.writeUInt16LE(1, 4); // count
+	// ICONDIRENTRY
+	buf[6] = 1; // width
+	buf[7] = 1; // height
+	buf[8] = 0; // colors
+	buf[9] = 0;
+	buf.writeUInt16LE(1, 10); // planes
+	buf.writeUInt16LE(32, 12); // bit count
+	buf.writeUInt32LE(dibSize, 14);
+	buf.writeUInt32LE(headerSize, 18);
+	// BITMAPINFOHEADER (height = 2 for XOR+AND)
+	const dib = headerSize;
+	buf.writeUInt32LE(40, dib);
+	buf.writeInt32LE(1, dib + 4);
+	buf.writeInt32LE(2, dib + 8);
+	buf.writeUInt16LE(1, dib + 12);
+	buf.writeUInt16LE(32, dib + 14);
+	// XOR: green pixel BGRA
+	const px = dib + 40;
+	buf[px] = 0x00;
+	buf[px + 1] = 0xff;
+	buf[px + 2] = 0x00;
+	buf[px + 3] = 0xff;
+	// AND mask row (4 bytes, zero = opaque)
+	return buf;
+}
+
 function isoNow() {
 	return new Date().toISOString();
 }
@@ -323,6 +513,8 @@ function demoMeta(paper) {
 			bibtex_key: paper.bibtex,
 			status: "completed",
 			summary: paper.abstract.slice(0, 120),
+			is_read: Boolean(paper.is_read),
+			meta_source: "demo-vault",
 			added_at: "2026-07-01T10:00:00.000Z",
 			updated_at: isoNow(),
 		},
@@ -344,11 +536,14 @@ function buildCatalogSql(papers) {
 	for (const p of papers) {
 		const added = "2026-07-01T10:00:00.000Z";
 		const updated = isoNow();
+		const isRead = p.is_read ? 1 : 0;
 		lines.push(
 			`INSERT OR REPLACE INTO papers(
   path, id, type, title, authors_json, year, abstract, tags_json,
   arxiv_id, doi, pdf_url, html_url, source_url,
-  body_source, body_quality, bibtex_key, status, summary, added_at, updated_at
+  body_source, body_quality, bibtex_key, status, summary,
+  creators_json, date, language, meta_source, is_read,
+  added_at, updated_at
 ) VALUES (
   ${sqlQuote(p.path)},
   ${sqlQuote(p.id)},
@@ -368,6 +563,11 @@ function buildCatalogSql(papers) {
   ${sqlQuote(p.bibtex)},
   'completed',
   ${sqlQuote(p.abstract.slice(0, 120))},
+  ${sqlQuote(JSON.stringify(p.authors.map((name) => ({ name, creatorType: "author" }))))},
+  ${sqlQuote(String(p.year))},
+  'en',
+  'demo-vault',
+  ${isRead},
   ${sqlQuote(added)},
   ${sqlQuote(updated)}
 );`,
@@ -390,27 +590,63 @@ async function writeText(root, rel, content) {
 	await writeFile(full, content, "utf8");
 }
 
+async function writeBytes(root, rel, data) {
+	const full = path.join(root, rel);
+	await mkdir(path.dirname(full), { recursive: true });
+	await writeFile(full, data);
+}
+
 async function ensureDir(root, rel) {
 	await mkdir(path.join(root, rel), { recursive: true });
 }
 
-/** Skeleton equivalent to Create Vault (no sample papers). */
+/** Recreate catalog.sqlite from scratch (avoids stale schema on re-run). */
+async function writeCatalog(root, papers) {
+	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
+	await ensureDir(root, ".agentero");
+	await rm(dbPath, { force: true });
+	// also drop side-car journals if any
+	await rm(`${dbPath}-wal`, { force: true });
+	await rm(`${dbPath}-shm`, { force: true });
+	runSqlite(dbPath, buildCatalogSql(papers));
+}
+
+/** Skeleton equivalent to Create Vault (no sample papers / loose media). */
 async function scaffoldEmpty(root) {
-	for (const d of ["papers", "notes", "plans", ".agentero"]) {
+	for (const d of ["papers", "notes", "plans", "assets", ".agentero"]) {
 		await ensureDir(root, d);
 	}
 	await writeText(root, "AGENTS.md", AGENTS_MD);
-	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
-	runSqlite(dbPath, buildCatalogSql([]));
+	await writeCatalog(root, []);
 }
 
-/** Full demo with nested papers + notes + catalog rows. */
+/** Loose PDFs + multi-format images (not under papers/). */
+async function writeLooseMedia(root) {
+	await writeText(root, "assets/README.md", ASSETS_README);
+	await writeBytes(root, "assets/sample.pdf", minimalPdf("Loose PDF"));
+	await writeBytes(
+		root,
+		"notes/attachments/reading-list.pdf",
+		minimalPdf("Reading List"),
+	);
+
+	await writeBytes(root, "assets/figures/red-pixel.png", PNG_1X1);
+	await writeBytes(root, "assets/figures/sample.jpg", JPEG_1X1);
+	await writeBytes(root, "assets/figures/sample.gif", GIF_1X1);
+	await writeBytes(root, "assets/figures/sample.webp", WEBP_1X1);
+	await writeText(root, "assets/figures/diagram.svg", SVG_DIAGRAM);
+	await writeBytes(root, "assets/figures/sample.bmp", minimalBmp());
+	await writeBytes(root, "assets/figures/favicon.ico", minimalIco());
+}
+
+/** Full demo with nested papers + notes + loose media + catalog rows. */
 async function scaffoldDemo(root) {
 	await scaffoldEmpty(root);
 
 	await writeText(root, "notes/idea.md", NOTES_IDEA);
 	await writeText(root, "notes/attention.md", NOTES_ATTENTION);
 	await writeText(root, "plans/README.md", PLANS_README);
+	await writeLooseMedia(root);
 
 	for (const paper of PAPERS) {
 		await writeText(root, `${paper.path}/NOTES.md`, paper.notes);
@@ -426,10 +662,15 @@ async function scaffoldDemo(root) {
 			`${paper.path}/source/.gitkeep`,
 			"# Placeholder: original PDF / LaTeX would live here\n",
 		);
+		// Canonical paper-root PDF (local-first preview path)
+		await writeBytes(
+			root,
+			`${paper.path}/${paper.id}.pdf`,
+			minimalPdf(paper.id),
+		);
 	}
 
-	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
-	runSqlite(dbPath, buildCatalogSql(PAPERS));
+	await writeCatalog(root, PAPERS);
 }
 
 async function pathExists(p) {
@@ -492,7 +733,7 @@ async function verifyVault(root) {
 			checks.push({
 				name: "schema_version",
 				ok: ver === String(SCHEMA_VERSION),
-				detail: `got ${ver}`,
+				detail: `got ${ver}, expect ${SCHEMA_VERSION}`,
 			});
 			const count = execFileSync(
 				"sqlite3",
@@ -503,6 +744,33 @@ async function verifyVault(root) {
 				name: "papers table readable",
 				ok: /^\d+$/.test(count),
 				detail: `${count} row(s)`,
+			});
+			// v3 column must exist
+			const hasIsRead = execFileSync(
+				"sqlite3",
+				[
+					dbPath,
+					"SELECT COUNT(*) FROM pragma_table_info('papers') WHERE name='is_read';",
+				],
+				{ encoding: "utf8" },
+			).trim();
+			checks.push({
+				name: "column is_read (v3)",
+				ok: hasIsRead === "1",
+				detail: hasIsRead === "1" ? "present" : "missing",
+			});
+			const hasPub = execFileSync(
+				"sqlite3",
+				[
+					dbPath,
+					"SELECT COUNT(*) FROM pragma_table_info('papers') WHERE name='publication';",
+				],
+				{ encoding: "utf8" },
+			).trim();
+			checks.push({
+				name: "column publication (v2)",
+				ok: hasPub === "1",
+				detail: hasPub === "1" ? "present" : "missing",
 			});
 			const nested = execFileSync(
 				"sqlite3",
@@ -535,6 +803,35 @@ async function verifyVault(root) {
 		ok: paperDirs.length >= 0,
 		detail: `${paperDirs.length}: ${paperDirs.slice(0, 3).join(", ")}${paperDirs.length > 3 ? "…" : ""}`,
 	});
+
+	// Loose media (demo vault only; empty skeleton may skip)
+	if (paperDirs.length > 0) {
+		for (const rel of LOOSE_MEDIA.pdfs) {
+			const ok = await pathExists(path.join(root, rel));
+			checks.push({
+				name: `loose PDF ${rel}`,
+				ok,
+				detail: ok ? "ok" : "missing",
+			});
+		}
+		for (const rel of LOOSE_MEDIA.images) {
+			const ok = await pathExists(path.join(root, rel));
+			checks.push({
+				name: `image ${rel}`,
+				ok,
+				detail: ok ? "ok" : "missing",
+			});
+		}
+		// At least one paper-root PDF
+		const samplePaperPdf = path.join(
+			root,
+			"papers/nlp/transformers/1706.03762/1706.03762.pdf",
+		);
+		checks.push({
+			name: "paper-root PDF (canonical)",
+			ok: await pathExists(samplePaperPdf),
+		});
+	}
 
 	const ok = checks.every((c) => c.ok);
 	return { ok, checks, paperDirs };
@@ -641,6 +938,10 @@ async function main() {
 		await scaffoldDemo(root);
 		console.log(`Demo Agentero vault created at ${root}`);
 		console.log(`  papers: ${PAPERS.length} (nested under papers/<topic>/…)`);
+		console.log(
+			`  loose PDFs: ${LOOSE_MEDIA.pdfs.length} · images: ${LOOSE_MEDIA.images.length}`,
+		);
+		console.log(`  catalog schema_version: ${SCHEMA_VERSION}`);
 	}
 
 	const result = await verifyVault(root);

@@ -14,7 +14,7 @@ test/
 ```
 
 - `test/helpers/create-test-vault.ts` 用临时目录创建真实文件形态的 Vault。
-- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.agentero/catalog.sqlite`）。
+- `test/scripts/create-demo-vault.mjs` 生成符合 catalog + 嵌套 paper 文件夹约定的 demo Vault（含 `.agentero/catalog.sqlite`，**schema_version = 3**）。
 - 测试文件可以从 `src/` import 生产代码，但生产代码不能从 `test/` import。
 - 优先在每个测试内声明最小必要 Vault 文件，让测试数据和断言靠近。
 
@@ -27,12 +27,24 @@ pnpm demo:vault
 # ~/Downloads/agentero-demo-vault（嵌套 papers + catalog 样本数据）
 pnpm demo:vault:downloads
 
-# 仅 Create Vault 骨架（无样例论文）
+# 仅 Create Vault 骨架（无样例论文 / 无 loose media）
 pnpm demo:vault:empty -- ~/Downloads/agentero-empty-vault
 
 # 校验已有目录
 pnpm demo:vault:verify -- ~/Downloads/agentero-demo-vault
 ```
+
+Demo 完整包内容（`--empty` 除外）：
+
+| 类别 | 路径示例 | 用途 |
+|---|---|---|
+| 嵌套 paper 单元 | `papers/nlp/transformers/1706.03762/` | Library / NOTES / 双链 |
+| paper 根 PDF | `{paper}/{id}.pdf` | 本地优先 PDF 预览 |
+| 非 papers PDF | `assets/sample.pdf`、`notes/attachments/reading-list.pdf` | 任意路径 PDF 预览 |
+| 图片 | `assets/figures/*.{png,jpg,gif,webp,svg,bmp,ico}` | 中间栏图片预览 |
+| Catalog | `.agentero/catalog.sqlite` | schema v3（含 `is_read` / Translator 列）+ 样例 paper 行 |
+
+每次生成会**重建** `catalog.sqlite`（避免重复跑脚本留下旧 schema）。依赖本机 `sqlite3` CLI。
 
 ## 前端测试
 
