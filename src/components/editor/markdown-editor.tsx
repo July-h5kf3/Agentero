@@ -20,7 +20,11 @@ import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import i18n from "@/i18n";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
-import { saveImageToMarkdownAssets } from "@/lib/markdown-image";
+import {
+	collectImageUrlCounts,
+	deleteRemovedManagedAssets,
+	saveImageToMarkdownAssets,
+} from "@/lib/markdown-image";
 import { errorMessage, notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +84,8 @@ export const MarkdownEditor = forwardRef<
 	filePathRef.current = filePath ?? null;
 	const onAssetsChangedRef = useRef(onAssetsChanged);
 	onAssetsChangedRef.current = onAssetsChanged;
+	/** Image URL ref-counts; used to GC `./assets/` when an image node is removed. */
+	const imageCountsRef = useRef<Map<string, number> | null>(null);
 
 	/**
 	 * ImagePlugin must declare `uploadImage` in its initial options store.
@@ -165,9 +171,11 @@ export const MarkdownEditor = forwardRef<
 	);
 
 	// Mark ready after the initial normalization pass so opening a file never saves.
+	// Seed image URL counts so we only GC assets removed after open.
 	// On unmount, flush any pending edit to THIS editor's file.
 	useEffect(() => {
 		readyRef.current = true;
+		imageCountsRef.current = collectImageUrlCounts(editor.children);
 		return () => {
 			if (timerRef.current) {
 				clearTimeout(timerRef.current);
@@ -175,17 +183,31 @@ export const MarkdownEditor = forwardRef<
 				persistRef.current();
 			}
 		};
-	}, []);
+	}, [editor]);
 
 	const handleChange = useCallback(() => {
 		if (readOnly || !readyRef.current) return;
+
+		// When an image node leaves the document, delete its managed `./assets/` file.
+		const nextCounts = collectImageUrlCounts(editor.children);
+		const prevCounts = imageCountsRef.current;
+		imageCountsRef.current = nextCounts;
+		const mdPath = filePathRef.current;
+		if (prevCounts && mdPath) {
+			void deleteRemovedManagedAssets(mdPath, prevCounts, nextCounts).then(
+				(n) => {
+					if (n > 0) onAssetsChangedRef.current?.();
+				},
+			);
+		}
+
 		onDirtyChange?.(true);
 		if (timerRef.current) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(() => {
 			timerRef.current = null;
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
-	}, [readOnly, onDirtyChange]);
+	}, [editor, readOnly, onDirtyChange]);
 
 	const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
 		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {

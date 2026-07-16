@@ -134,7 +134,8 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 | 落盘目录 | `{mdDir}/assets/`（对 paper 的 `NOTES.md` 即 `{paper}/assets/`） |
 | 链接写法 | `./assets/<file>`（相对当前 `.md`，Obsidian 兼容） |
 | 触发 | 剪贴板粘贴图片；工具栏「插入图片」选本地文件 |
-| 展示 | WYSIWYG 将相对路径解析为本地 `blob:` 预览；不把 base64 写进 `.md` |
+| 展示 | WYSIWYG 将相对路径解析为本地 `blob:` 预览；**选中图片节点时**显示 Markdown 源码 `![](./assets/…)`；不把 base64 写进 `.md` |
+| 删除 | 从文档中移除图片节点后，若该 `./assets/` 文件**无其它引用**，同步删除磁盘文件（仅限本笔记 `assets/`；远程 URL 不动） |
 | 命名 | 粘贴生成时间戳 + 短 id；点选文件尽量保留原名，冲突则 `-1`/`-2` 后缀 |
 
 与 PDF 解析派生资源共用同一 `assets/` 文件夹时互不冲突（文件名唯一）。**不要**把大图 base64 嵌进 Markdown 正文。

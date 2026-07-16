@@ -38,7 +38,7 @@
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.agentero/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
-- [x] Markdown **图片插入**：粘贴 / 工具栏选文件 → 写入当前 `.md` 旁 `./assets/` → 正文 `![](./assets/…)`；相对路径 `blob:` 预览（见 `src/lib/markdown-image.ts`、data-model）。
+- [x] Markdown **图片**：粘贴 / 工具栏 → `./assets/` + `![](./assets/…)`；相对路径预览；**选中显示源码**；删除节点且无引用时同步删 assets 文件（见 `src/lib/markdown-image.ts`、data-model）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。

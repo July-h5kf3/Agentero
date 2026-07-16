@@ -34,6 +34,100 @@ export function isRemoteOrInlineImageUrl(url: string): boolean {
 	return /^(https?|data|blob):/i.test(url.trim());
 }
 
+/**
+ * True when the Markdown image points at this note's managed `assets/` folder
+ * (not remote URLs or arbitrary relative paths outside `assets/`).
+ */
+export function isManagedMarkdownAssetUrl(url: string): boolean {
+	const n = url.trim().replace(/\\/g, "/");
+	return /^(?:\.\/)?assets\//i.test(n);
+}
+
+/** Serialize an image node as portable Markdown syntax. */
+export function formatMarkdownImageSyntax(alt: string, url: string): string {
+	return `![${alt ?? ""}](${url ?? ""})`;
+}
+
+type WalkNode = {
+	type?: string;
+	url?: string;
+	children?: WalkNode[];
+};
+
+/** Count image `url` values in a Plate/Slate node tree. */
+export function collectImageUrlCounts(
+	nodes: readonly unknown[],
+): Map<string, number> {
+	const counts = new Map<string, number>();
+	const walk = (list: readonly unknown[]) => {
+		for (const raw of list) {
+			if (!raw || typeof raw !== "object") continue;
+			const n = raw as WalkNode;
+			if (n.type === "img" && typeof n.url === "string") {
+				const url = n.url.trim();
+				if (url) counts.set(url, (counts.get(url) ?? 0) + 1);
+			}
+			if (Array.isArray(n.children)) walk(n.children);
+		}
+	};
+	walk(nodes);
+	return counts;
+}
+
+/**
+ * Delete a managed `./assets/…` file for this Markdown document.
+ * Returns true when a file was removed. Never deletes outside `{mdDir}/assets/`.
+ */
+export async function deleteManagedMarkdownAsset(
+	mdFilePath: string,
+	url: string,
+): Promise<boolean> {
+	if (!isTauri() || !mdFilePath?.trim() || !isManagedMarkdownAssetUrl(url)) {
+		return false;
+	}
+	const abs = resolveMarkdownImageAbs(mdFilePath, url);
+	if (!abs) return false;
+
+	const assetsDir = joinFilePath(parentDir(mdFilePath), MARKDOWN_ASSETS_DIR);
+	const normAbs = abs.replace(/\\/g, "/").toLowerCase();
+	const normAssets = assetsDir.replace(/\\/g, "/").toLowerCase();
+	// Stay strictly inside this note's assets folder
+	if (normAbs !== normAssets && !normAbs.startsWith(`${normAssets}/`)) {
+		return false;
+	}
+	// Refuse directory deletes
+	if (normAbs === normAssets) return false;
+
+	try {
+		const { exists, remove } = await import("@tauri-apps/plugin-fs");
+		if (!(await exists(abs))) return false;
+		await remove(abs);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Diff image URL counts; delete managed assets whose count dropped to zero.
+ * Returns how many files were removed.
+ */
+export async function deleteRemovedManagedAssets(
+	mdFilePath: string,
+	prev: Map<string, number>,
+	next: Map<string, number>,
+): Promise<number> {
+	let removed = 0;
+	for (const [url, prevCount] of prev) {
+		if (prevCount <= 0) continue;
+		const nextCount = next.get(url) ?? 0;
+		if (nextCount > 0) continue;
+		if (!isManagedMarkdownAssetUrl(url)) continue;
+		if (await deleteManagedMarkdownAsset(mdFilePath, url)) removed += 1;
+	}
+	return removed;
+}
+
 /** Parent directory of a file path (preserves path separator style). */
 export function parentDir(filePath: string): string {
 	const trimmed = filePath.replace(/[/\\]+$/, "");

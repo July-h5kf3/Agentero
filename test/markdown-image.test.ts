@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+	collectImageUrlCounts,
+	deleteRemovedManagedAssets,
+	formatMarkdownImageSyntax,
+	isManagedMarkdownAssetUrl,
 	isRemoteOrInlineImageUrl,
 	joinFilePath,
 	parentDir,
@@ -70,6 +74,56 @@ describe("markdown-image path helpers", () => {
 		expect(sanitizeAssetFileName("../evil.png")).toBe("evil.png");
 		expect(sanitizeAssetFileName("foo/bar.png")).toBe("bar.png");
 		expect(sanitizeAssetFileName("")).toBe("image");
+	});
+
+	it("isManagedMarkdownAssetUrl only matches assets/ links", () => {
+		expect(isManagedMarkdownAssetUrl("./assets/a.png")).toBe(true);
+		expect(isManagedMarkdownAssetUrl("assets/a.png")).toBe(true);
+		expect(isManagedMarkdownAssetUrl("https://x/a.png")).toBe(false);
+		expect(isManagedMarkdownAssetUrl("./figures/a.png")).toBe(false);
+	});
+
+	it("formatMarkdownImageSyntax", () => {
+		expect(formatMarkdownImageSyntax("cap", "./assets/x.png")).toBe(
+			"![cap](./assets/x.png)",
+		);
+		expect(formatMarkdownImageSyntax("", "./assets/x.png")).toBe(
+			"![](./assets/x.png)",
+		);
+	});
+
+	it("collectImageUrlCounts walks nested nodes", () => {
+		const counts = collectImageUrlCounts([
+			{
+				type: "p",
+				children: [{ text: "hi" }],
+			},
+			{
+				type: "img",
+				url: "./assets/a.png",
+				children: [{ text: "" }],
+			},
+			{
+				type: "img",
+				url: "./assets/a.png",
+				children: [{ text: "" }],
+			},
+			{
+				type: "img",
+				url: "https://example.com/b.png",
+				children: [{ text: "" }],
+			},
+		]);
+		expect(counts.get("./assets/a.png")).toBe(2);
+		expect(counts.get("https://example.com/b.png")).toBe(1);
+	});
+
+	it("deleteRemovedManagedAssets skips when ref-count remains", async () => {
+		const prev = new Map([["./assets/a.png", 2]]);
+		const next = new Map([["./assets/a.png", 1]]);
+		// no Tauri → managed delete returns 0
+		const n = await deleteRemovedManagedAssets("/vault/notes/x.md", prev, next);
+		expect(n).toBe(0);
 	});
 });
 
