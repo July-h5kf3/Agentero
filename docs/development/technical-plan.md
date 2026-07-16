@@ -179,7 +179,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源；资源齐全且未读时 Eye 启动 paper-reader 精读（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Eye 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
@@ -482,8 +482,8 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 - ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
 
 **权限与写入**：
-- ACP 权限请求经 Host 转发给前端确认（可记住会话内策略）。
-- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致）。
+- **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）时取消 ACP 权限请求 / Codex `workspace-write`；**自动批准**时选 Agent 给出的第一项 / Codex `danger-full-access`。运行经 `autoApprove` 传入。逐项「每次询问」仍待。
+- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致；草稿确认 UX 仍待补齐）。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
@@ -542,7 +542,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 | 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
 | 鼠标悬停提示 | 长按菜单替代 |
 | 小点击区域 | 增大按钮/节点热区至 44pt |
-| 多窗口自由拖拽 | 分屏/Split View 适配；暂不支持多独立窗口 |
+| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口；**中间栏文档分屏 / 标签页** 规划见 roadmap V0.6（当前仍为单槽） |
 | PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
 | 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
 
@@ -679,11 +679,13 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes、Library 表、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）；文件监听仍待。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader 精读**（Eye + `is_read`）、**SkillMentionStyle**（Codex `$` / Claude `/` / 其它注入）已接入；面板内其它 workflow、逐项权限确认、写入草稿待补。 |
-| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Eye 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
+| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
+| V0.6 | 中间栏从单槽升级为**文档标签页 + 2 格分屏**；布局/滚动状态可恢复；与 Agent 会话标签分离；多窗口各自独立 tab 集。 |
+| V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
-| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
+| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局、>2 格分屏。 |
 
 ## 10. 风险与技术对策
 

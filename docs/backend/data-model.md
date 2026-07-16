@@ -91,7 +91,7 @@ Vault 内的 Agent 行为规范,至少包含:
 字段、schema、导出与实现见 **[`catalog.md`](catalog.md)**。  
 UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`）均读 catalog，不扫 `metadata.json`。
 
-其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示眼睛图标，点击后启动默认 Agent 精读并写入 `NOTES.md`，成功后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条。
+其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`。触发：魔棒入库 / 单篇 Download 资源就绪后可**自动**精读；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时仍显示眼睛图标供**手动**重跑。成功写入 `NOTES.md` 后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条（可与入库/下载任务衔接）。
 
 Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`（亦可放在 `~/.agents/skills` / `~/.claude/skills`）。
 
@@ -157,7 +157,7 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 - PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
-- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；资源齐全且 `is_read=false` → Eye 精读
+- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Eye 手动精读
 
 正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
 

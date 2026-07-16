@@ -38,15 +38,16 @@
 
 - **本地 Vault**：打开或创建文件夹；Create Vault 初始化目录与 `.motif/catalog.sqlite`。
 - **多窗口**：`⌘N` 新建窗口（不自动恢复上次 Vault）；欢迎页列出最近路径。
-- **Markdown 工作台**：文件树（虚拟 Library 节点、内联新建文件/文件夹；刷新走 ⌘R）、中间 Markdown/PDF/HTML 或论文库表格、可选右侧栏。
+- **Markdown 工作台**：文件树（虚拟 Library 节点、内联新建文件/文件夹；刷新走 ⌘R）、中间 Markdown/PDF/HTML 或论文库表格、可选右侧栏（当前为**单槽**中间栏）。
 - **论文库**：catalog 表格（`paper_list`）；表头排序；双向滚动；点击行打开 paper。
 - **魔棒入库**：粘贴 arXiv 链接/编号 → Translator → catalog + **默认下载 PDF**；arXiv 另解压 LaTeX 到 `source/`。缺资源时 paper 行 / Library 行可单篇或批量补下。
-- **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph。
-- **Agent 右侧栏**：通过 ACP 后端（Claude、Codex、Grok Build 等）与本地 Vault 对话。
+- **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
+- **双链、反链与图谱**：跨 notes 与 papers 使用 `[[links]]`；Backlinks 右侧栏上方是反链，下方是 Graph（双链图）。
+- **Agent 右侧栏**：通过 ACP（Claude、Codex、Grok Build 等）与本地 Vault 对话；设置中全局权限模式（受限 / 自动批准）。
 - **Paper-centric 布局**：打开具体论文时根据 catalog 远程 URL 显示 PDF/HTML，并显示 Paper Info 与该篇 `NOTES.md` 实时编辑（论文库视图下隐藏 Notes）。
 - **桌面原生体验**：Tauri 2、macOS overlay title bar、File 菜单、快捷键与 i18n。
 
-> 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)，产品范围见 [docs/development/prd.md](docs/development/prd.md)。
+> 当前状态：早期 MVP。进度见 [docs/development/roadmap.md](docs/development/roadmap.md)（含规划中的 **V0.6 标签页/分屏**、**V0.7 引用关系 / Connected Papers**），产品范围见 [docs/development/prd.md](docs/development/prd.md)。
 
 ## 快速开始
 

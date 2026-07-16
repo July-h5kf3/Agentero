@@ -215,11 +215,21 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 - **Paper 标签**：优先读 catalog `papers.title`（按 path）；缺失时回退逻辑 id / 文件夹名。
 - 折叠后自环（同 paper 内文件互链）丢弃。
 
-### 6.5 不采用
+### 6.5 与文献引用图的边界
+
+本设计只覆盖 **Obsidian 式 `[[wikilinks]]`**（用户/Agent 写在 Markdown 里的概念与文件链接）。
+
+**文献引用图**（paper cites / cited_by、Connected Papers 式邻域、文内 `[12]` hover → Paper Info）是另一条能力线，见 [`../development/roadmap.md`](../development/roadmap.md) **V0.7**。二者可在 UI 上对照展示，但：
+
+- 数据源不同：双链边来自 Markdown 解析；引用边来自外部 API 或参考文献解析，缓存于 catalog / `.motif/` 可重建结构。
+- API 不同：现有 `graph_*` 服务双链；引用图使用独立 `citation:*`（名称待定），不污染双链索引语义。
+
+### 6.6 不采用
 
 - 为双链替换整个编辑器栈。
 - 自动改写目标文件插入回链（除非未来产品单独立项）。
 - 图谱常驻第四主栏或独立顶层 Graph tab（当前默认嵌在 Backlinks 下方）。
+- 用双链 Graph 冒充 bibliographic 引用关系（引用探索走 V0.7）。
 
 ---
 

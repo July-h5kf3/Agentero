@@ -714,3 +714,4 @@ arXiv URL 推导：
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
 | 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |
+| 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Eye 手动；任务条 lookup/download → paperRead 衔接 |

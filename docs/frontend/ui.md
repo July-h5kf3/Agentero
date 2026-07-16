@@ -179,7 +179,19 @@
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
-- **论文行 Eye（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击 → paper-reader 工作流（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。进度在左下角后台任务条。
+- **论文行 Eye（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。魔棒入库 / 单篇 Download 成功后会**自动**同一工作流（批量不连跑）。进度在左下角后台任务条（lookup/download → paperRead）。
+
+### 3.1.1 规划：文档标签与分屏（roadmap V0.6）
+
+当前中间栏为**单槽**：打开新文件/论文会替换当前内容。规划升级为：
+
+- 文档 **tab 栏**（paper / MD / PDF / HTML / Library），可关/切/重排；保留滚动与 PDF 缩放等视图状态。
+- **2 格分屏**（水平或垂直）：例如 PDF | NOTES、两篇 paper 并排。
+- 与 Agent 面板 **会话标签** 分离；快捷键与「当前 tab vs 新 tab 打开」策略见落地时更新本表与 `shortcuts.ts`。
+
+### 3.1.2 规划：文内引用 hover → Paper Info（roadmap V0.7）
+
+阅读 PDF/HTML/`PAPER.md` 时，对文内引用锚点 hover，右侧 Paper Info 展示**被引论文**元信息（库内打开 / 库外缓存 + 入库）。引用邻域图与 Agent 引用工作流见 roadmap V0.7；**不**与 Backlinks 双链 Graph 混为一谈。
 
 ### 3.2 Agent 右侧栏（AI Elements）
 

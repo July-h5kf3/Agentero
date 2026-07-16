@@ -36,17 +36,19 @@ Motif 桌面应用
 
 ## 当前 UI 形态
 
-- 默认工作台：文件树 + 中间内容 +（按需）Notes + 可选右侧栏。
+- 默认工作台：文件树 + **单槽**中间内容 +（按需）Notes + 可选右侧栏。
 - 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、双向滚动），数据来自 `paper_list`。
 - 文件树：双击 / 右键 / `⌥⌘R` **在 Finder 中显示**；右键 / `⌘⌫` **删除**（`papers/` 同步 `paper_delete`）。
 - **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。
 - 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
-- Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab。
+- Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download（hover 列原因）；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
-- **精读**：资源齐全且 catalog `is_read === false` 时 paper 行显示 **Eye**；点击启动 paper-reader（**Codex `$` / Claude `/` / 其它注入正文**）→ 写 `NOTES.md` → `is_read=true`；进度在左下角任务条（实色 hover，不透明）。
+- **精读**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时 paper 行仍显示 **Eye** 可手动。Skill 按 provider（**Codex `$` / Claude `/` / 其它注入正文**）→ 写 `NOTES.md` → `is_read=true`；进度在左下角任务条（入库/下载 → 精读衔接；hover 实色）。
+- **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
 - PDF 阅读：缩放（工具栏 / `⌘`+滚轮）；**划词提问** MVP（`asks/*.json` + 锚点图标，见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
+- **规划中**（见 roadmap）：**V0.6** 中间栏文档标签页 + 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式引用邻域与 Agent 引用工作流。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
 ## 关键三方技术

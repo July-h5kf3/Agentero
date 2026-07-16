@@ -109,10 +109,12 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - Motif 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Motif 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- MVP 提供 3 个内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
+- 已落地：**paper-reader 精读**（魔棒/单篇 Download 后自动 + 文件树 Eye 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / 自动批准）。
+- MVP 仍规划面板可点的内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
   - 总结当前论文。
   - 基于本地库问答。
   - 生成带本地路径引用的 Related Work 草稿。
+- 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `highlights.md` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
 - Agent 输出必须展示读取过的文件路径；写回 Vault 前需用户确认（临时草稿 → 正式文件）。
 - 未检测到可用 Agent 时，设置与 Agent 面板展示安装/配置指引，不阻塞 Vault 与阅读功能。
@@ -123,17 +125,26 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 支持在应用内打开 arXiv HTML 或本地 HTML。
 - 支持基础搜索、缩放、页内定位。
 - 标注（引文 + 想法）以 `highlights.md` 落盘，坐标缓存于 `.motif/`；MVP 提供轻量标注捕获，不做完整 PDF 批注同步系统。
+- 划词提问 MVP 已落地（`asks/*.json`）；完整批注同步仍属后续。
 
 #### 关系图谱
 
-- 基于 Markdown 双链和论文索引生成图谱。
+- 基于 Markdown 双链和论文索引生成图谱（**双链图**）。
 - 节点至少包括 Paper、Note、Concept/Stub。
 - 点击节点可以打开对应 Markdown。
 - 图谱数据必须能从本地 Markdown 重建。
 - MVP UI 中图谱位于 Backlinks 右侧栏下方，与当前文件反链共享上下文。
+- **文献引用图**（bibliographic cites/cited_by、Connected Papers 式邻域、文内引用 hover→Info）见 roadmap **V0.7**，与双链 Graph 分离。
 
-### 4.2 P1 暂缓
+#### 工作区（规划）
 
+- 当前中间栏为单槽：打开项互斥替换。
+- 规划（roadmap **V0.6**）：文档标签页管理打开内容，并支持分屏并排（PDF | NOTES 等）。
+
+### 4.2 P1 暂缓 / 后续版本
+
+- 文档标签页与分屏（升格为 roadmap V0.6）。
+- 文献引用关系探索与 hover Paper Info（升格为 roadmap V0.7）。
 - Zotero 全量替代能力。
 - 云同步、多人协作、权限管理。
 - 浏览器插件。

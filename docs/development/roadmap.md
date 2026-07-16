@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/Notes、WYSIWYG Markdown、**论文库表格 + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、Preview/Info 仅在具体论文时显示。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（文件树 Eye + catalog `is_read`）已落地；其它内置工作流、逐项权限确认、写入草稿确认仍待。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Eye 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
 | V0.6 工作区标签页与分屏 | ⏳ 待实现 | 中间栏由「单文件固定排布」升级为可开多标签、可分屏；与当前左右侧栏 collapsible 共存。 |
@@ -76,7 +76,7 @@
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
 - [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发）。
-- [x] **paper-reader 精读**：资源齐全且 `is_read=false` 时文件树 Eye（见 V0.3）。
+- [x] **paper-reader 精读**：入库/单篇 Download 后可自动；资源齐全且 `is_read=false` 时文件树 Eye 手动（见 V0.3）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误行内展示；重复不覆盖用户 `NOTES.md`。
 - [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
@@ -111,13 +111,17 @@
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
-- [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast；YOLO 保持独立权限开关。
+- [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast。
+- [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `autoApprove`）；对所有 Agent 生效；经 `autoApprove` 传入运行；逐项「每次询问」仍待。
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
-- [x] **paper-reader 精读工作流**：资源齐全且未读时文件树 Eye → paper-reader skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条进度。
+- [x] **paper-reader 精读工作流**：
+  - 魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 时**自动**启动（`maybeAutoRunPaperReader`；批量导入/批量 Download **不**连跑）。
+  - 资源齐全且未读时文件树 **Eye** 可手动重跑。
+  - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
-- [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿。
+- [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿（引用类 workflow 见 V0.7）。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求模型 BYOK 表单。
 
@@ -127,15 +131,17 @@
 - [x] 未安装 Agent 时有清晰空状态与配置入口，应用其余功能可用。
 - [x] Agent 问答展示读取过的本地文件路径（Agent 返回 Sources 时）。
 - [x] 下载完成且未读的 paper 行显示 Eye；点击后精读并标记已读。
+- [x] 魔棒/单篇 Download 成功后可自动进入精读（有默认 Agent 时）。
 - [ ] Related Work 草稿必须包含本地路径引用。
 - [ ] Agent 失败或用户拒绝写入时，不会覆盖已有 Markdown。
 
 细化 TODO：
 
-- [x] paper-reader：文件树 Eye + `is_read` + 后台任务进度。
+- [x] paper-reader：自动触发 + 文件树 Eye + `is_read` + 后台任务进度。
+- [x] 全局权限模式替代 per-provider YOLO 开关。
 - [ ] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
-- [ ] 接入 ACP 权限确认 UI，而不是自动选择或静默处理。
+- [ ] 接入 ACP 权限确认 UI（「每次询问」档），而不是仅取消或自动选第一项。
 - [ ] 写入草稿使用 diff/preview 确认后落盘。
 - [x] Codex 会话恢复：按 Vault 过滤原生 Codex thread，恢复后继续使用同一 thread id。
 - [ ] 为通用 ACP provider 定义持久 runtime 与原生 history 契约；当前 ACP 会话仍是一次性连接。
@@ -327,6 +333,8 @@
 - [x] 文件树：Finder 显示、删除 + `paper_delete`、左右侧栏隔离。
 - [x] PDF 缩放（工具栏 / `⌘`+滚轮）。
 - [x] PDF 划词提问 MVP（M1–M4；见 [`pdf-ask.md`](pdf-ask.md)）。
+- [x] paper-reader 精读：自动（入库/单篇 Download）+ Eye 手动；`is_read`；任务条进度。
+- [x] Agent 全局权限模式（受限 / 自动批准）。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。
@@ -355,8 +363,8 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 - [ ] Claude Code：评估官方 SDK / 原生 session resume，保存 native session id，接入其历史和权限请求；不能时继续走 ACP 单轮模式。
 - [ ] OpenCode：使用其原生 session API / ACP 能力确认持久会话、模型目录、权限与 history 的可用接口。
 - [ ] Gemini CLI：确认 experimental ACP 的 session lifecycle 和恢复语义；在稳定前仅提供一次性 ACP run。
-- [ ] Qoder CLI、Grok Build 与 Custom ACP：只暴露 ACP 已声明的能力；增加 capability discovery，避免展示不受支持的模型、effort、Fast、YOLO 或 history 控件。
-- [ ] 建立 provider capability contract：`persistentRuntime`、`nativeHistory`、`modelCatalog`、`reasoningEffort`、`serviceTier`、`permissionRequests`、`skillPicker`。Composer 仅按当前 provider 的能力显示对应组件。
+- [ ] Qoder CLI、Grok Build 与 Custom ACP：只暴露 ACP 已声明的能力；增加 capability discovery，避免展示不受支持的模型、effort、Fast 或 history 控件。
+- [ ] 建立 provider capability contract：`persistentRuntime`、`nativeHistory`、`modelCatalog`、`reasoningEffort`、`serviceTier`、`permissionRequests`、`skillPicker`。Composer 仅按当前 provider 的能力显示对应组件；**全局权限模式**已对所有 Agent 生效，不在 per-provider 能力表重复。
 
 ### 长期优先级 P2
 

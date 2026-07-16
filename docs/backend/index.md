@@ -26,6 +26,8 @@
 - 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
+- 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
+- **双链**索引（`graph_*`）与规划中的 **文献引用图**（roadmap V0.7）分层；后者不复用双链边语义。
 
 ## 本分区文档
 
@@ -33,7 +35,7 @@
 - [`data-model.md`](data-model.md)：Vault 结构、paper 文件、分层规则、运行时类型。
 - [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
 - [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Translator 后端（v0 已落地 + 后续扩展）。
-- [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型。
+- [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型（与 V0.7 文献引用图边界见文内 §6.5）。
 
 ## 交叉引用
 

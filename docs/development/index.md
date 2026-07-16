@@ -20,7 +20,7 @@
 |---|---|---|
 | V0.1 工作台 | ✅ | 文件树（Finder / 删除 / 内联新建）、Markdown IO、paper 预览/Notes、**Library 论文表**、左右侧栏 collapsible 隔离、多窗口、Create Vault + catalog、后台任务条 |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
-| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources；workflow 与写入确认仍待 |
+| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader 自动+Eye**、**全局权限模式**；面板 workflow 与写入确认仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
 | 阅读增强 | 🟡 | PDF **缩放**；**划词提问** MVP（`asks/*.json` + 锚点图标 + ACP）；完整 `highlights.md` 批注仍待 |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |

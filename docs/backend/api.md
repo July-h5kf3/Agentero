@@ -710,7 +710,10 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 - **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
 - **前端**：`src/lib/papers-api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
-- **说明**：与 `status`（入库态）无关；默认 `false`。文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
+- **说明**：与 `status`（入库态）无关；默认 `false`。触发路径：
+  - **自动**：魔棒 `lookup_import` / 单篇 `paper_download_assets` 成功且资源就绪时，前端 `maybeAutoRunPaperReader`（批量导入/批量 Download 不连跑）。
+  - **手动**：文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
+  - 实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
 #### `paper:list`（扩展规划）
 
@@ -1273,14 +1276,17 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 |---|---|
 | V0.1 | 实现 `vault:*`、`file:*`、`config:*`。 |
 | V0.2 | 增加 `arxiv:*`、`paper:*` 命令与异步任务事件；定义 `Paper` 数据结构。 |
-| V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流。 |
-| V0.4 | 增加 `graph:*` 命令。 |
+| V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流；`paper_set_is_read` + paper-reader（自动/手动）。 |
+| V0.4 | 增加 `graph:*` 命令（双链 / 反链 / 图谱；与 bibliographic 引用图分离）。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
+| V0.6 | 主要为前端工作区状态（文档 tab / 分屏布局持久化）；Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
+| V0.7 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 
 后续扩展：
 - `importer:import` 统一来源入口。
 - `lookup:*` 与 PDF prepare 共用元数据管道。
+- `citation:fetch` / `citation:list_neighbors`（名称待定）：引用/被引邻域与缓存刷新（V0.7）。
 - `search:full_text` 本地全文搜索。
 - `reader:annotations` 标注（`highlights.md`）读写。
 - `sync:*` 多设备同步（远期）。
