@@ -181,6 +181,7 @@ pub fn run() {
             commands::paper::paper_move,
             commands::paper::paper_set_is_read,
             commands::paper::paper_set_tags,
+            commands::paper::paper_rescan,
             commands::zotero::zotero_scan,
             commands::zotero::zotero_migrate,
             set_locale,

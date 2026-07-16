@@ -227,3 +227,30 @@ pub fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperRescanArgs {
+    pub vault_path: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperRescanResult {
+    /// Number of paper folders re-imported into the catalog.
+    pub count: usize,
+}
+
+/// Rebuild catalog rows from `papers/` metadata.json — recovers papers that are
+/// on disk but missing from the catalog (added externally, or a lost row).
+#[tauri::command]
+pub fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    match papers::rebuild_from_disk(&vault) {
+        Ok(count) => ApiResult::ok(PaperRescanResult { count }),
+        Err(e) => map_err(e),
+    }
+}

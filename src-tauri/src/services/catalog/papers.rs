@@ -160,6 +160,59 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     Ok(rows)
 }
 
+/// Rebuild missing catalog rows by scanning `papers/` on disk and re-importing
+/// each folder's `metadata.json` (the projection). Idempotent — existing rows
+/// are refreshed and disk-only papers are re-added. Returns the count imported.
+pub fn rebuild_from_disk(vault_root: &Path) -> Result<usize, AppError> {
+    let papers_dir = vault_root.join("papers");
+    if !papers_dir.is_dir() {
+        return Ok(0);
+    }
+    let conn = ensure_catalog(vault_root)?;
+    let mut count = 0usize;
+    let mut stack = vec![papers_dir];
+    while let Some(dir) = stack.pop() {
+        if dir.join("metadata.json").is_file() {
+            // A paper folder is a leaf: re-import it and do not descend.
+            if let Some(record) = record_from_metadata(vault_root, &dir) {
+                if upsert_conn(&conn, &record).is_ok() {
+                    count += 1;
+                }
+            }
+            continue;
+        }
+        if let Ok(read) = fs::read_dir(&dir) {
+            for ent in read.flatten() {
+                let p = ent.path();
+                if p.is_dir() {
+                    stack.push(p);
+                }
+            }
+        }
+    }
+    Ok(count)
+}
+
+/// Read a paper folder's `metadata.json`, re-injecting the folder path (which
+/// the projection omits) so it deserializes into a full [`PaperRecord`].
+fn record_from_metadata(vault_root: &Path, dir: &Path) -> Option<PaperRecord> {
+    let rel = dir
+        .strip_prefix(vault_root)
+        .ok()?
+        .to_str()?
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+    if rel.is_empty() {
+        return None;
+    }
+    let raw = fs::read_to_string(dir.join("metadata.json")).ok()?;
+    let mut val: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let obj = val.as_object_mut()?;
+    obj.insert("path".to_string(), serde_json::Value::String(rel));
+    serde_json::from_value::<PaperRecord>(val).ok()
+}
+
 /// Set `is_read` for a paper path; returns the updated row.
 pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<PaperRecord, AppError> {
     let path = path.replace('\\', "/").trim_matches('/').to_string();
@@ -680,5 +733,65 @@ mod tests {
         assert!(!paper_has_all_tags(&p, &["nlp".into(), "cv".into()]));
         p.tags.clear();
         assert!(paper_has_all_tags(&p, &[]));
+    }
+
+    #[test]
+    fn rebuild_from_disk_reimports_metadata() {
+        let dir = env::temp_dir().join(format!("agentero-rescan-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("papers").join("x")).unwrap();
+        let record = PaperRecord {
+            path: "papers/x".into(),
+            id: "x".into(),
+            paper_type: "article".into(),
+            title: "Attention".into(),
+            authors: vec!["A".into()],
+            creators: None,
+            year: Some(2017),
+            date: None,
+            abstract_text: None,
+            tags: vec![],
+            arxiv_id: None,
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: None,
+            extra: None,
+            summary: None,
+            status: "completed".into(),
+            is_read: false,
+            added_at: "t".into(),
+            updated_at: "t".into(),
+        };
+        // upsert writes both the catalog row and metadata.json.
+        upsert_paper(&dir, &record).unwrap();
+        // Simulate a lost catalog row (folder + metadata.json stay on disk).
+        delete_under_path(&dir, "papers/x").unwrap();
+        assert!(get_by_path(&dir, "papers/x").unwrap().is_none());
+
+        // Rescan re-imports it from metadata.json.
+        assert_eq!(rebuild_from_disk(&dir).unwrap(), 1);
+        let row = get_by_path(&dir, "papers/x").unwrap().unwrap();
+        assert_eq!(row.title, "Attention");
+        assert_eq!(row.year, Some(2017));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
