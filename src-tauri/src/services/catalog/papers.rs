@@ -189,6 +189,30 @@ pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppErro
     Ok(n)
 }
 
+/// Move a paper folder (and any papers nested under it) in the catalog by
+/// rewriting the `from` path prefix to `to`. Returns the number of rows updated.
+pub fn move_under_path(vault_root: &Path, from: &str, to: &str) -> Result<usize, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let from = from.replace('\\', "/").trim_matches('/').to_string();
+    let to = to.replace('\\', "/").trim_matches('/').to_string();
+    if from.is_empty() || to.is_empty() {
+        return Err(AppError::message("from and to are required"));
+    }
+    let like = format!("{from}/%");
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    // Exact row -> `to`; nested rows -> `to` + the suffix after `from`.
+    // substr uses a 1-based CHARACTER index so non-ASCII folder names are safe.
+    let offset = from.chars().count() as i64 + 1;
+    let n = conn
+        .execute(
+            "UPDATE papers SET path = ?1 || substr(path, ?2), updated_at = ?3 \
+             WHERE path = ?4 OR path LIKE ?5",
+            params![to, offset, now, from, like],
+        )
+        .map_err(AppError::from)?;
+    Ok(n)
+}
+
 /// Remove catalog rows whose paper folder no longer exists on disk (orphans left
 /// by deleting folders outside the app). Returns the number of rows removed.
 pub fn prune_missing(vault_root: &Path) -> Result<usize, AppError> {
@@ -416,4 +440,59 @@ pub fn sync_metadata_json(vault_root: &Path, record: &PaperRecord) -> Result<(),
         serde_json::to_string_pretty(&file_copy).map_err(|e| AppError::message(e.to_string()))?;
     fs::write(paper_dir.join("metadata.json"), format!("{json}\n"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    fn insert(conn: &Connection, path: &str) {
+        conn.execute(
+            "INSERT INTO papers (path, id, type, title, added_at, updated_at) \
+             VALUES (?1, ?2, 'article', ?2, 't', 't')",
+            params![path, path],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn move_under_path_rewrites_prefix() {
+        let dir = env::temp_dir().join(format!("agentero-move-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        {
+            let conn = ensure_catalog(&dir).unwrap();
+            insert(&conn, "papers/a");
+            insert(&conn, "papers/nlp/b");
+            insert(&conn, "papers/other/c");
+        }
+        // Org folder move rewrites nested paper rows.
+        assert_eq!(
+            move_under_path(&dir, "papers/nlp", "papers/archive/nlp").unwrap(),
+            1
+        );
+        // Leaf paper move rewrites the exact row.
+        assert_eq!(
+            move_under_path(&dir, "papers/a", "papers/archive/a").unwrap(),
+            1
+        );
+
+        let conn = ensure_catalog(&dir).unwrap();
+        let count = |p: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM papers WHERE path = ?1",
+                params![p],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(count("papers/archive/nlp/b"), 1);
+        assert_eq!(count("papers/archive/a"), 1);
+        assert_eq!(count("papers/other/c"), 1);
+        assert_eq!(count("papers/nlp/b"), 0);
+        assert_eq!(count("papers/a"), 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

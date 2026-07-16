@@ -123,3 +123,80 @@ pub fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperMoveArgs {
+    pub vault_path: String,
+    /// Vault-relative item to move (paper folder, org folder, or file under `papers/`).
+    pub from_rel: String,
+    /// Vault-relative destination parent (`papers` or under `papers/`).
+    pub dest_parent_rel: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperMoveResult {
+    /// New vault-relative path of the moved item.
+    pub new_rel: String,
+}
+
+/// Move an item into another `papers/` folder on disk and rewrite matching
+/// catalog path prefixes. Never overwrites an existing target.
+#[tauri::command]
+pub fn paper_move(args: PaperMoveArgs) -> ApiResult<PaperMoveResult> {
+    match move_inner(args) {
+        Ok(r) => ApiResult::ok(r),
+        Err(e) => map_err(e),
+    }
+}
+
+fn move_inner(args: PaperMoveArgs) -> Result<PaperMoveResult, AppError> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let from = args.from_rel.trim().trim_matches('/').replace('\\', "/");
+    let dest_raw = args
+        .dest_parent_rel
+        .trim()
+        .trim_matches('/')
+        .replace('\\', "/");
+    let dest_parent = if dest_raw.is_empty() {
+        "papers".to_string()
+    } else {
+        dest_raw
+    };
+    if from.is_empty() || from == "papers" {
+        return Err(AppError::message("cannot move this path"));
+    }
+    if dest_parent != "papers" && !dest_parent.starts_with("papers/") {
+        return Err(AppError::message("destination must be under papers/"));
+    }
+    if from.contains("..") || dest_parent.contains("..") {
+        return Err(AppError::message("invalid path"));
+    }
+    // Reject moving a folder into itself or its own descendant.
+    if dest_parent == from || dest_parent.starts_with(&format!("{from}/")) {
+        return Err(AppError::message("cannot move a folder into itself"));
+    }
+    let base = from.rsplit('/').next().unwrap_or(from.as_str()).to_string();
+    let new_rel = format!("{dest_parent}/{base}");
+    if new_rel == from {
+        return Err(AppError::message("already in this folder"));
+    }
+    let from_abs = vault.join(&from);
+    if !from_abs.exists() {
+        return Err(AppError::message("source path does not exist"));
+    }
+    let new_abs = vault.join(&new_rel);
+    if new_abs.exists() {
+        return Err(AppError::message("target already exists"));
+    }
+    if let Some(parent) = new_abs.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&from_abs, &new_abs)?;
+    papers::move_under_path(&vault, &from, &new_rel)?;
+    Ok(PaperMoveResult { new_rel })
+}
