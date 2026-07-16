@@ -77,7 +77,7 @@ agentero paper set-read <path|id> --json
 
 ## Command map (MVP)
 
-Global: `--vault`, `--json` / `-o json`, `-y` / `--yes`, `--translator-url`.
+Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url`.
 
 | Intent | Command |
 |---|---|
@@ -93,7 +93,7 @@ Global: `--vault`, `--json` / `-o json`, `-y` / `--yes`, `--translator-url`.
 | Delete catalog (± files) | `agentero paper delete <path> [--files -y] --json` |
 | Mark is_read | `agentero paper set-read <path\|id> [--false] --json` |
 | Magic-wand import | `agentero import id <text> [--parent papers/…] --json` |
-| Bib import/export | `agentero import bib <file\|-> --json` / `export bib [-o file\|-] --json` |
+| Bib import/export | `agentero import bib <file\|-> --json` / `export bib [-o\|--out file\|-] --json` |
 | Graph (later) | `agentero graph backlinks|export|rebuild --json` |
 
 ## JSON contract
@@ -116,7 +116,8 @@ Failure (non-zero exit):
 Stdout = result; stderr = progress/diagnostics. Parse `error.code` when retrying.
 
 Common codes: `vault_not_found`, `vault_invalid`, `paper_not_found`,
-`paper_ambiguous`, `import_failed`, `asset_missing`, `needs_confirmation`.
+`paper_ambiguous`, `import_failed`, `export_failed`, `asset_missing`,
+`needs_confirmation`.
 
 ## Path / id resolution
 
