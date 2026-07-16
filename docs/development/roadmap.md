@@ -199,7 +199,7 @@
 
 这些能力不进入 MVP，但可以在 Agent-first 闭环验证后规划：
 
-- Zotero/BibTeX 批量导入。
+- ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - 浏览器插件，一键收集网页和论文。
 - ~~**PDF 划词提问** MVP~~ ✅（选区/框选/双击/悬停 → 迷你问答 → `asks/*.json` → 锚点对话图标；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、本地 PDF TextLayer 增强。
 - 完整 PDF 高亮、批注、摘录同步（`highlights.md`；可与划词提问互导）。
@@ -274,7 +274,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 ### 长期优先级 P2
 
-- [ ] Zotero/BibTeX 迁移工具。
+- [x] 从本地 Zotero 迁移（`zotero_scan` / `zotero_migrate`：直读 sqlite + 可选拷 PDF）；Zotero 笔记 / 批注 / collection 层级仍待。
 - [ ] 浏览器插件与网页 importer。
 - [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：JSON 线程 + 锚点图标 + ACP；M5 增强仍待）。
 - [ ] PDF/HTML 标注系统（`highlights.md`）。

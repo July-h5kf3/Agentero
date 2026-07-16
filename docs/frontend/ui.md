@@ -105,6 +105,7 @@
   - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
     - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存对话框写 `.bib`。
   - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
+  - **从 Zotero 迁移**（`Import` 图标，论文库工具栏左侧；仅 Library 视图）：`ZoteroMigrateDialog` → 选 Zotero 数据目录 → 预览文献/PDF 计数 + 「把 PDF 复制进知识库」勾选（默认开）→ `zotero_migrate`（直读 `zotero.sqlite`，见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。

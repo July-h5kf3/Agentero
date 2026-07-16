@@ -91,10 +91,10 @@
 
 ## P2 — 长期方向
 
-1. **Zotero/BibTeX 迁移工具**
-   - 解析 Zotero export 或 BibTeX。
-   - 由 Agent 辅助重组为 Motif vault。
-   - 保留原始附件与引用 key 映射。
+1. **Zotero/BibTeX 迁移工具** 🟡
+   - [x] 一键从本地 Zotero 迁移：直读 `zotero.sqlite` + `storage/` → catalog，可选拷本地 PDF（`zotero_scan` / `zotero_migrate`；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
+   - [ ] 解析 Zotero export / 独立 BibTeX 文件路径（Library 导入已覆盖 Bib/RIS 文本）。
+   - [ ] 保留 Zotero 笔记 / 批注、collection 层级与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Eye + catalog `is_read`）。

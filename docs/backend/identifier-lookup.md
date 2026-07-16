@@ -712,3 +712,18 @@ arXiv URL 推导：
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
 | 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |
+| 2026-07-16 | 从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`；`zotero_scan` / `zotero_migrate`；可选拷 PDF） |
+
+---
+
+## 16. 从本地 Zotero 迁移（直读 zotero.sqlite）
+
+> 状态：**已落地**。一键把本地 Zotero 文库迁入当前 Vault，全程本地、**不经 Translator**。
+
+- 入口：论文库工具栏 **Migrate from Zotero**（`ZoteroMigrateDialog`）→ 选中 Zotero 数据目录（含 `zotero.sqlite` + `storage/`）。
+- Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `services/lookup/zotero_db.rs`。
+- 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型。
+- 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
+- PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
+- 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。
+- 非目标（v1）：Zotero 笔记 / 批注、collection 层级、群组库。
