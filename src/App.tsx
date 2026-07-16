@@ -64,7 +64,7 @@ import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
-import { notifyError, notifyWarning } from "@/lib/notify";
+import { notifyError, notifyUndo, notifyWarning } from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
 	detectPaperDirectory,
@@ -81,7 +81,6 @@ import {
 	runPaperReaderWorkflow,
 } from "@/lib/paper-read";
 import {
-	deletePapersUnderPath,
 	exportLibraryToFile,
 	importLibraryFromFile,
 	isLibraryVirtualPath,
@@ -89,6 +88,8 @@ import {
 	listPapers,
 	movePaperFolder,
 	setPaperTags,
+	trashPaths,
+	untrashBatch,
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
@@ -120,7 +121,6 @@ import {
 	pickVaultDirectory,
 	readVaultFile,
 	removeRecentVault,
-	removeVaultPath,
 	saveVaultPath,
 	vaultDisplayName,
 	vaultRelativePath,
@@ -967,95 +967,70 @@ export default function App() {
 		})();
 	}, [treeSelectedPath, t]);
 
-	const findTreeNode = useCallback(
-		(path: string): FileNode | null => {
-			const key = path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-			const walk = (list: FileNode[]): FileNode | null => {
-				for (const n of list) {
-					const nk = n.path
-						.replace(/\\/g, "/")
-						.replace(/\/+$/, "")
-						.toLowerCase();
-					if (nk === key) return n;
-					if (n.children?.length) {
-						const hit = walk(n.children);
-						if (hit) return hit;
-					}
-				}
-				return null;
-			};
-			return walk(tree);
+	const undoTrash = useCallback(
+		async (batchId: string) => {
+			if (!vaultPath) return;
+			try {
+				await untrashBatch(vaultPath, batchId);
+				setTreeSelectedPath(null);
+				await refreshTree(vaultPath);
+				await rebuildWikiAndNotify(vaultPath);
+				await refreshLibrary();
+			} catch (e) {
+				notifyError(
+					e instanceof Error ? e.message : t("sidebar:fileTree.undoFailed"),
+				);
+			}
 		},
-		[tree],
+		[vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary, t],
 	);
 
 	/**
-	 * Delete a vault file / folder / paper after confirm.
-	 * Removes disk path; if under papers/, also drops matching catalog rows.
+	 * Delete vault paths into the recycle bin (`.agentero/.trash/`).
+	 * Reversible via the "Undo" toast; catalog rows are snapshotted + restored.
 	 */
-	const handleDeletePath = useCallback(
-		async (path: string) => {
+	const trashPathsAndNotify = useCallback(
+		async (absPaths: string[]) => {
 			if (!vaultPath || !isTauri()) {
 				notifyError(t("sidebar:fileTree.deleteDesktopOnly"));
 				return;
 			}
-			if (!path || isLibraryVirtualPath(path)) {
-				notifyError(t("sidebar:fileTree.deleteInvalid"));
-				return;
-			}
 			const rootNorm = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
-			const pathNorm = path.replace(/\\/g, "/").replace(/\/+$/, "");
-			if (pathNorm === rootNorm) {
-				notifyError(t("sidebar:fileTree.deleteInvalid"));
-				return;
-			}
-			if (!pathNorm.startsWith(`${rootNorm}/`)) {
-				notifyError(t("sidebar:fileTree.deleteInvalid"));
-				return;
-			}
-
-			const node = findTreeNode(path);
-			const name = node?.name ?? pathNorm.split("/").pop() ?? path;
-			const isDir = node?.kind === "directory" || !node;
-			const isPaper =
-				node?.kind === "directory" &&
-				isPaperDirectory(node.path, node.children);
-
-			const confirmMsg = isPaper
-				? t("sidebar:fileTree.deleteConfirmPaper", { name })
-				: isDir
-					? t("sidebar:fileTree.deleteConfirmFolder", { name })
-					: t("sidebar:fileTree.deleteConfirmFile", { name });
-			if (!window.confirm(confirmMsg)) return;
-
+			const valid = absPaths
+				.map((p) => p.replace(/\\/g, "/").replace(/\/+$/, ""))
+				.filter(
+					(p) =>
+						p &&
+						!isLibraryVirtualPath(p) &&
+						p !== rootNorm &&
+						p.startsWith(`${rootNorm}/`),
+				);
+			if (valid.length === 0) return;
 			setBusy(true);
 			try {
-				await removeVaultPath(path);
-
-				const rel = vaultRelativePath(vaultPath, path);
-				if (rel && (rel === "papers" || rel.startsWith("papers/"))) {
-					try {
-						await deletePapersUnderPath(vaultPath, rel);
-					} catch {
-						// Catalog cleanup is best-effort if row missing.
-					}
-				}
-
-				// Close any open tabs at or under the deleted path.
-				closeTabsUnderPath(path);
+				const rels = valid
+					.map((p) => vaultRelativePath(vaultPath, p))
+					.filter((r): r is string => Boolean(r));
+				const res = await trashPaths(vaultPath, rels);
+				for (const p of valid) closeTabsUnderPath(p);
 				const treeNorm = treeSelectedPath
 					?.replace(/\\/g, "/")
 					.replace(/\/+$/, "");
 				if (
 					treeNorm &&
-					(treeNorm === pathNorm || treeNorm.startsWith(`${pathNorm}/`))
+					valid.some((p) => treeNorm === p || treeNorm.startsWith(`${p}/`))
 				) {
 					setTreeSelectedPath(null);
 				}
-
 				await refreshTree(vaultPath);
 				await rebuildWikiAndNotify(vaultPath);
 				await refreshLibrary();
+				if (res.count > 0) {
+					notifyUndo(t("sidebar:fileTree.deletedCount", { count: res.count }), {
+						actionLabel: t("sidebar:fileTree.undo"),
+						onAction: () => void undoTrash(res.batchId),
+					});
+				}
 			} catch (e) {
 				notifyError(
 					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
@@ -1066,14 +1041,21 @@ export default function App() {
 		},
 		[
 			vaultPath,
-			findTreeNode,
 			treeSelectedPath,
 			closeTabsUnderPath,
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
+			undoTrash,
 			t,
 		],
+	);
+
+	const handleDeletePath = useCallback(
+		(path: string) => {
+			void trashPathsAndNotify([path]);
+		},
+		[trashPathsAndNotify],
 	);
 
 	const handleDeleteSelected = useCallback(() => {
@@ -1085,74 +1067,11 @@ export default function App() {
 		void handleDeletePath(path);
 	}, [treeSelectedPath, handleDeletePath, t]);
 
-	/** Batch delete: single confirm, then remove each path + catalog rows. */
 	const handleDeletePaths = useCallback(
-		async (paths: string[]) => {
-			if (!vaultPath || !isTauri()) {
-				notifyError(t("sidebar:fileTree.deleteDesktopOnly"));
-				return;
-			}
-			const rootNorm = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
-			const valid = paths
-				.map((p) => p.replace(/\\/g, "/").replace(/\/+$/, ""))
-				.filter(
-					(p) =>
-						p &&
-						!isLibraryVirtualPath(p) &&
-						p !== rootNorm &&
-						p.startsWith(`${rootNorm}/`),
-				);
-			if (valid.length === 0) return;
-			if (valid.length === 1) {
-				await handleDeletePath(valid[0]);
-				return;
-			}
-			if (
-				!window.confirm(
-					t("sidebar:fileTree.deleteConfirmMany", { count: valid.length }),
-				)
-			) {
-				return;
-			}
-			setBusy(true);
-			try {
-				for (const path of valid) {
-					try {
-						await removeVaultPath(path);
-						const rel = vaultRelativePath(vaultPath, path);
-						if (rel && (rel === "papers" || rel.startsWith("papers/"))) {
-							try {
-								await deletePapersUnderPath(vaultPath, rel);
-							} catch {
-								// best-effort catalog cleanup
-							}
-						}
-						closeTabsUnderPath(path);
-					} catch {
-						// keep deleting the rest
-					}
-				}
-				setTreeSelectedPath(null);
-				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
-				await refreshLibrary();
-			} catch (e) {
-				notifyError(
-					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
-				);
-			} finally {
-				setBusy(false);
-			}
+		(paths: string[]) => {
+			void trashPathsAndNotify(paths);
 		},
-		[
-			vaultPath,
-			handleDeletePath,
-			closeTabsUnderPath,
-			refreshTree,
-			rebuildWikiAndNotify,
-			refreshLibrary,
-			t,
-		],
+		[trashPathsAndNotify],
 	);
 
 	/** Paths queued for the "move to folder" dialog (null = closed). */

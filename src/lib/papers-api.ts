@@ -63,6 +63,52 @@ export async function deletePapersUnderPath(
 	return res.data;
 }
 
+export type TrashResult = {
+	batchId: string;
+	count: number;
+};
+
+/**
+ * Move vault-relative paths into the recycle bin (`.agentero/.trash/`).
+ * Snapshots + removes catalog rows so the delete can be undone.
+ */
+export async function trashPaths(
+	vaultPath: string,
+	rels: string[],
+): Promise<TrashResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.deleteDesktopOnly"));
+	}
+	const res = await invoke<ApiResult<TrashResult>>("path_trash", {
+		args: { vaultPath, rels },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.deleteFailed"),
+		);
+	}
+	return res.data;
+}
+
+/** Restore a recycle-bin batch (undo a delete); returns items restored. */
+export async function untrashBatch(
+	vaultPath: string,
+	batchId: string,
+): Promise<number> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:fileTree.undoFailed"));
+	}
+	const res = await invoke<ApiResult<{ restored: number }>>("path_untrash", {
+		args: { vaultPath, batchId },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:fileTree.undoFailed"),
+		);
+	}
+	return res.data.restored;
+}
+
 export type PaperMoveResult = {
 	newRel: string;
 };

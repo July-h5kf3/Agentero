@@ -58,6 +58,26 @@ export function notifySuccess(
 	});
 }
 
+export type UndoOptions = {
+	actionLabel: string;
+	onAction: () => void;
+	/** Auto-dismiss ms; default 8s so the action stays reachable. */
+	duration?: number;
+};
+
+/** Neutral toast with an inline action (e.g. "Deleted N · Undo"). */
+export function notifyUndo(
+	message: string,
+	{ actionLabel, onAction, duration }: UndoOptions,
+): string | number {
+	const text = message?.trim();
+	if (!text) return "";
+	return toast(text, {
+		duration: duration ?? 8000,
+		action: { label: actionLabel, onClick: onAction },
+	});
+}
+
 /** Dismiss one toast by id, or all if omitted. */
 export function dismissNotify(id?: string | number): void {
 	if (id === undefined) toast.dismiss();
