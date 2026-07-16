@@ -16,6 +16,7 @@ import {
 	X,
 } from "lucide-react";
 import {
+	type DragEvent as ReactDragEvent,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	useCallback,
@@ -279,6 +280,8 @@ type FileTreeProps = {
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
 	/** Batch move: parent opens a destination picker for these paths. */
 	onMovePaths?: (paths: string[]) => void;
+	/** Drag-and-drop move: relocate paths into an existing folder (no dialog). */
+	onMoveTo?: (paths: string[], destParentRel: string) => void;
 	className?: string;
 };
 
@@ -304,6 +307,7 @@ export function FileTree({
 	onDeletePath,
 	onDeletePaths,
 	onMovePaths,
+	onMoveTo,
 	className,
 }: FileTreeProps) {
 	const { t } = useTranslation("sidebar");
@@ -350,6 +354,21 @@ export function FileTree({
 		return map;
 	}, [nodes]);
 
+	const relPathForNode = useCallback(
+		(absPath: string): string => {
+			if (!vaultPath) return absPath.replace(/\\/g, "/");
+			const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
+			const norm = absPath.replace(/\\/g, "/");
+			if (norm === root) return "";
+			const prefix = `${root}/`;
+			if (norm.startsWith(prefix)) {
+				return norm.slice(prefix.length).replace(/^\/+|\/+$/g, "");
+			}
+			return norm.replace(/^\/+|\/+$/g, "");
+		},
+		[vaultPath],
+	);
+
 	/** Highlight paper folder when any file under it is open; keep virtual library selected. */
 	const treeSelectedPath = useMemo(() => {
 		if (!selectedPath) return undefined;
@@ -359,7 +378,7 @@ export function FileTree({
 		return selectedPath;
 	}, [selectedPath]);
 
-	// ---- Multi-selection (checkbox + Ctrl/Cmd/Shift click) --------------------
+	// ---- Multi-selection (Ctrl/Cmd/Shift click) -----------------------------
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [anchor, setAnchor] = useState<string | null>(null);
 
@@ -508,6 +527,79 @@ export function FileTree({
 		return () => window.removeEventListener("keydown", onKey);
 	}, [selected.size, clearSelection, runBatchDelete]);
 
+	// ---- Drag and drop to move into a papers/ folder -------------------------
+	const [dragging, setDragging] = useState<string[] | null>(null);
+	const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+	/** A row is a valid drop target only if it is an org folder under papers/. */
+	const canDrop = useCallback(
+		(targetPath: string, paths: string[]): boolean => {
+			if (paths.length === 0 || targetPath === LIBRARY_VIRTUAL_PATH)
+				return false;
+			const node = byPath.get(targetPath);
+			if (node?.kind !== "directory") return false;
+			if (isPaperDirectory(node.path, node.children)) return false;
+			const rel = relPathForNode(targetPath);
+			if (rel !== "papers" && !rel.startsWith("papers/")) return false;
+			const norm = targetPath.replace(/\\/g, "/").replace(/\/+$/, "");
+			return !paths.some((d) => {
+				const dn = d.replace(/\\/g, "/").replace(/\/+$/, "");
+				return norm === dn || norm.startsWith(`${dn}/`);
+			});
+		},
+		[byPath, relPathForNode],
+	);
+
+	const handleRowDragStart = useCallback(
+		(path: string, e: ReactDragEvent) => {
+			if (createDraft || path === LIBRARY_VIRTUAL_PATH) {
+				e.preventDefault();
+				return;
+			}
+			const paths =
+				selected.has(path) && selected.size > 0 ? orderedSelected() : [path];
+			setDragging(paths);
+			e.dataTransfer.effectAllowed = "move";
+			try {
+				e.dataTransfer.setData("text/plain", paths.join("\n"));
+			} catch {
+				// some webviews restrict setData; state still drives the drop
+			}
+		},
+		[createDraft, selected, orderedSelected],
+	);
+
+	const handleRowDragOver = useCallback(
+		(path: string, e: ReactDragEvent) => {
+			if (dragging && canDrop(path, dragging)) {
+				e.preventDefault();
+				e.dataTransfer.dropEffect = "move";
+				if (dropTarget !== path) setDropTarget(path);
+			} else if (dropTarget) {
+				setDropTarget(null);
+			}
+		},
+		[dragging, dropTarget, canDrop],
+	);
+
+	const handleRowDrop = useCallback(
+		(path: string, e: ReactDragEvent) => {
+			e.preventDefault();
+			const paths = dragging;
+			setDragging(null);
+			setDropTarget(null);
+			if (!paths || !onMoveTo || !canDrop(path, paths)) return;
+			const dest = relPathForNode(path) || "papers";
+			onMoveTo(paths, dest);
+		},
+		[dragging, onMoveTo, canDrop, relPathForNode],
+	);
+
+	const handleRowDragEnd = useCallback(() => {
+		setDragging(null);
+		setDropTarget(null);
+	}, []);
+
 	const draftHere = useCallback(
 		(parentAbs: string) =>
 			Boolean(
@@ -570,21 +662,6 @@ export function FileTree({
 			}
 		},
 		[onReadPaper, readingPath, downloadingPath, downloadingAll],
-	);
-
-	const relPathForNode = useCallback(
-		(absPath: string): string => {
-			if (!vaultPath) return absPath.replace(/\\/g, "/");
-			const root = vaultPath.replace(/\\/g, "/").replace(/\/+$/, "");
-			const norm = absPath.replace(/\\/g, "/");
-			if (norm === root) return "";
-			const prefix = `${root}/`;
-			if (norm.startsWith(prefix)) {
-				return norm.slice(prefix.length).replace(/^\/+|\/+$/g, "");
-			}
-			return norm.replace(/^\/+|\/+$/g, "");
-		},
-		[vaultPath],
 	);
 
 	const canRevealPath = useCallback((path: string) => {
@@ -1009,13 +1086,11 @@ export function FileTree({
 						<AiFileTree
 							selectedPath={treeSelectedPath}
 							selectedPaths={selected}
-							selecting={selected.size > 0}
 							expanded={expanded}
 							onExpandedChange={setExpanded}
 							onDoubleClickPath={handleDoubleClickPath}
 							onContextMenuPath={handleContextMenuPath}
 							onSelectRow={handleSelectRow}
-							onToggleSelect={handleToggleSelect}
 						>
 							{libraryRow}
 						</AiFileTree>
@@ -1030,13 +1105,16 @@ export function FileTree({
 					<AiFileTree
 						selectedPath={treeSelectedPath}
 						selectedPaths={selected}
-						selecting={selected.size > 0}
 						expanded={expanded}
 						onExpandedChange={setExpanded}
 						onDoubleClickPath={handleDoubleClickPath}
 						onContextMenuPath={handleContextMenuPath}
 						onSelectRow={handleSelectRow}
-						onToggleSelect={handleToggleSelect}
+						dropTargetPath={dropTarget}
+						onRowDragStart={handleRowDragStart}
+						onRowDragOver={handleRowDragOver}
+						onRowDrop={handleRowDrop}
+						onRowDragEnd={handleRowDragEnd}
 					>
 						{/* Virtual root: papers library table (not a real folder) */}
 						{libraryRow}

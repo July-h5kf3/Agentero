@@ -1,13 +1,13 @@
 "use client";
 
 import {
-	Check,
 	ChevronRightIcon,
 	FileIcon,
 	FolderIcon,
 	FolderOpenIcon,
 } from "lucide-react";
 import type {
+	DragEvent,
 	HTMLAttributes,
 	KeyboardEvent,
 	MouseEvent,
@@ -31,14 +31,16 @@ interface FileTreeContextType {
 	onSelect?: (path: string) => void;
 	onDoubleClickPath?: (path: string) => void;
 	onContextMenuPath?: (path: string, event: MouseEvent) => void;
-	/** Multi-selection set (row highlight + checkbox state). */
+	/** Multi-selection set (row highlight). No checkboxes — modifier-click only. */
 	selectedPaths?: Set<string>;
-	/** True when a multi-selection is active (checkboxes stay visible). */
-	selecting?: boolean;
 	/** Row click carrying modifier keys (files + modifier-clicked folders). */
 	onSelectRow?: (path: string, mods: SelectMods) => void;
-	/** Checkbox toggle for a row (never opens/expands). */
-	onToggleSelect?: (path: string) => void;
+	/** Drag-and-drop to move: current drop-target row (highlight) + callbacks. */
+	dropTargetPath?: string | null;
+	onRowDragStart?: (path: string, e: DragEvent) => void;
+	onRowDragOver?: (path: string, e: DragEvent) => void;
+	onRowDrop?: (path: string, e: DragEvent) => void;
+	onRowDragEnd?: () => void;
 }
 
 const noop = () => {};
@@ -59,9 +61,12 @@ export type FileTreeProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"> & {
 	onContextMenuPath?: (path: string, event: MouseEvent) => void;
 	onExpandedChange?: (expanded: Set<string>) => void;
 	selectedPaths?: Set<string>;
-	selecting?: boolean;
 	onSelectRow?: (path: string, mods: SelectMods) => void;
-	onToggleSelect?: (path: string) => void;
+	dropTargetPath?: string | null;
+	onRowDragStart?: (path: string, e: DragEvent) => void;
+	onRowDragOver?: (path: string, e: DragEvent) => void;
+	onRowDrop?: (path: string, e: DragEvent) => void;
+	onRowDragEnd?: () => void;
 };
 
 export const FileTree = ({
@@ -72,9 +77,12 @@ export const FileTree = ({
 	onDoubleClickPath,
 	onContextMenuPath,
 	selectedPaths,
-	selecting,
 	onSelectRow,
-	onToggleSelect,
+	dropTargetPath,
+	onRowDragStart,
+	onRowDragOver,
+	onRowDrop,
+	onRowDragEnd,
 	onExpandedChange,
 	className,
 	children,
@@ -110,9 +118,12 @@ export const FileTree = ({
 			onContextMenuPath,
 			selectedPath,
 			selectedPaths,
-			selecting,
 			onSelectRow,
-			onToggleSelect,
+			dropTargetPath,
+			onRowDragStart,
+			onRowDragOver,
+			onRowDrop,
+			onRowDragEnd,
 			togglePath,
 		}),
 		[
@@ -122,9 +133,12 @@ export const FileTree = ({
 			onContextMenuPath,
 			selectedPath,
 			selectedPaths,
-			selecting,
 			onSelectRow,
-			onToggleSelect,
+			dropTargetPath,
+			onRowDragStart,
+			onRowDragOver,
+			onRowDrop,
+			onRowDragEnd,
 			togglePath,
 		],
 	);
@@ -179,46 +193,8 @@ export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
 	name: string;
 };
 
-/** Row selection checkbox — visible on hover or when a selection is active. */
-function RowCheckbox({
-	checked,
-	show,
-	onToggle,
-}: {
-	checked: boolean;
-	show: boolean;
-	onToggle: () => void;
-}) {
-	return (
-		<span
-			role="checkbox"
-			aria-checked={checked}
-			tabIndex={-1}
-			onClick={(e) => {
-				e.stopPropagation();
-				onToggle();
-			}}
-			onKeyDown={(e) => {
-				if (e.key === "Enter" || e.key === " ") {
-					e.preventDefault();
-					e.stopPropagation();
-					onToggle();
-				}
-			}}
-			className={cn(
-				"grid size-3.5 shrink-0 cursor-pointer place-items-center rounded-[4px] border transition-opacity",
-				checked
-					? "border-primary bg-primary text-primary-foreground opacity-100"
-					: cn(
-							"border-muted-foreground/40",
-							show ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-						),
-			)}
-		>
-			{checked ? <Check className="size-2.5" /> : null}
-		</span>
-	);
-}
+/** Ring shown on the row a drag is currently hovering (valid drop target). */
+const DROP_RING = "ring-1 ring-inset ring-primary bg-accent";
 
 export const FileTreeFolder = ({
 	path,
@@ -232,15 +208,18 @@ export const FileTreeFolder = ({
 		togglePath,
 		selectedPath,
 		selectedPaths,
-		selecting,
 		onSelectRow,
-		onToggleSelect,
 		onDoubleClickPath,
 		onContextMenuPath,
+		dropTargetPath,
+		onRowDragStart,
+		onRowDragOver,
+		onRowDrop,
+		onRowDragEnd,
 	} = useContext(FileTreeContext);
 	const isExpanded = expandedPaths.has(path);
-	const checked = selectedPaths?.has(path) ?? false;
-	const isSelected = selectedPath === path || checked;
+	const isSelected =
+		selectedPath === path || (selectedPaths?.has(path) ?? false);
 
 	const folderContextValue = useMemo(
 		() => ({ isExpanded, name, path }),
@@ -253,9 +232,11 @@ export const FileTreeFolder = ({
 				<button
 					type="button"
 					data-path={path}
+					draggable
 					className={cn(
-						"group flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
+						"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
 						isSelected && "bg-muted",
+						dropTargetPath === path && DROP_RING,
 					)}
 					onClick={(e) => {
 						if ((e.metaKey || e.ctrlKey || e.shiftKey) && onSelectRow) {
@@ -276,16 +257,13 @@ export const FileTreeFolder = ({
 					onContextMenu={(e) => {
 						onContextMenuPath?.(path, e);
 					}}
+					onDragStart={(e) => onRowDragStart?.(path, e)}
+					onDragOver={(e) => onRowDragOver?.(path, e)}
+					onDrop={(e) => onRowDrop?.(path, e)}
+					onDragEnd={() => onRowDragEnd?.()}
 					aria-expanded={isExpanded}
 					role="treeitem"
 				>
-					{onToggleSelect ? (
-						<RowCheckbox
-							checked={checked}
-							show={Boolean(selecting)}
-							onToggle={() => onToggleSelect(path)}
-						/>
-					) : null}
 					<ChevronRightIcon
 						className={cn(
 							"size-4 shrink-0 text-muted-foreground transition-transform",
@@ -339,12 +317,15 @@ export const FileTreeFile = ({
 		onDoubleClickPath,
 		onContextMenuPath,
 		selectedPaths,
-		selecting,
 		onSelectRow,
-		onToggleSelect,
+		dropTargetPath,
+		onRowDragStart,
+		onRowDragOver,
+		onRowDrop,
+		onRowDragEnd,
 	} = useContext(FileTreeContext);
-	const checked = selectedPaths?.has(path) ?? false;
-	const isSelected = selectedPath === path || checked;
+	const isSelected =
+		selectedPath === path || (selectedPaths?.has(path) ?? false);
 
 	const handleClick = useCallback(
 		(e: MouseEvent) => {
@@ -393,26 +374,25 @@ export const FileTreeFile = ({
 		<FileTreeFileContext.Provider value={fileContextValue}>
 			<div
 				data-path={path}
+				draggable
 				className={cn(
-					"group flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
+					"flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
 					isSelected && "bg-muted",
+					dropTargetPath === path && DROP_RING,
 					className,
 				)}
 				onClick={handleClick}
 				onDoubleClick={handleDoubleClick}
 				onContextMenu={handleContextMenu}
 				onKeyDown={handleKeyDown}
+				onDragStart={(e) => onRowDragStart?.(path, e)}
+				onDragOver={(e) => onRowDragOver?.(path, e)}
+				onDrop={(e) => onRowDrop?.(path, e)}
+				onDragEnd={() => onRowDragEnd?.()}
 				role="treeitem"
 				tabIndex={0}
 				{...props}
 			>
-				{onToggleSelect ? (
-					<RowCheckbox
-						checked={checked}
-						show={Boolean(selecting)}
-						onToggle={() => onToggleSelect(path)}
-					/>
-				) : null}
 				{children ?? (
 					<>
 						<span className="size-4 shrink-0" />

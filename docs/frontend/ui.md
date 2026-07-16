@@ -53,8 +53,9 @@
   - 路径在 `papers/` 下时同步清理 catalog 对应行（含组织目录下嵌套 paper）；随后刷新文件树、Library 与双链索引。
   - 不可删：虚拟 Library、Vault 根。
 - **多选与批量操作**（`file-tree.tsx` + 原语 `ai-elements/file-tree.tsx`）：
-  - **勾选框**（行悬停显示，多选时常驻）、**Ctrl/⌘ 点击**切换、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
+  - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
   - 选中 ≥1 项时树顶出现**批量条**（移动 / 删除 / 清空）；右键选中项菜单提供「删除 N 项 / 移动 N 项」；`Delete`/`⌘⌫` 批量删除，`Esc` 清空（编辑 / 输入聚焦时不拦截）。
+  - **拖拽移动**：把行（或整个选区）拖到某个 `papers/` 组织文件夹（含 papers 根）即移动；仅这类文件夹是合法落点（论文文件夹与 Library 除外），hover 时以 ring 高亮。经 `onMoveTo` 复用批量移动管线，无需对话框。
   - **批量移动**（`MovePapersDialog` → `paper_move`）：把选中项移到某个 `papers/` 子文件夹（现有或新建）；移动文件夹并改写 catalog 路径前缀，随后统一刷新树 / Library / 双链。
 - **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault、刷新或设置入口。
 - **不要**使用「Open vault… / Refresh」等文字按钮。

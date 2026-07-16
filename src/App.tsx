@@ -1122,11 +1122,12 @@ export default function App() {
 		setMovePaths(valid);
 	}, []);
 
-	const runMovePaths = useCallback(
-		async (destParentRel: string) => {
-			if (!vaultPath || !movePaths) return;
-			const paths = movePaths;
-			setMovePaths(null);
+	/** Core move loop reused by the dialog and by drag-and-drop. */
+	const movePathsTo = useCallback(
+		async (rawPaths: string[], destParentRel: string) => {
+			if (!vaultPath) return;
+			const paths = rawPaths.filter((p) => !isLibraryVirtualPath(p));
+			if (paths.length === 0) return;
 			setBusy(true);
 			setError(null);
 			let failed = 0;
@@ -1161,13 +1162,21 @@ export default function App() {
 		},
 		[
 			vaultPath,
-			movePaths,
 			closeTabsUnderPath,
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
 			t,
 		],
+	);
+
+	const runMovePaths = useCallback(
+		async (destParentRel: string) => {
+			const paths = movePaths;
+			setMovePaths(null);
+			if (paths) await movePathsTo(paths, destParentRel);
+		},
+		[movePaths, movePathsTo],
 	);
 
 	const openMagicWand = useCallback(() => {
@@ -2437,6 +2446,7 @@ export default function App() {
 										onDeletePath={(path) => void handleDeletePath(path)}
 										onDeletePaths={(paths) => void handleDeletePaths(paths)}
 										onMovePaths={handleMovePaths}
+										onMoveTo={(paths, dest) => void movePathsTo(paths, dest)}
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
