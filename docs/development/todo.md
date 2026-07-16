@@ -48,10 +48,10 @@
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
    - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。
 
-2e. **PDF 阅读增强** 🟡
+2e. **PDF 阅读增强** ✅
    - [x] 缩放：工具栏 +/- / 重置；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）。
    - [x] 划词提问 MVP：M1–M4（见 3. PDF 划词提问）。
-   - [ ] 本地 PDF 直接预览（非仅远程 `pdf_url`）。
+   - [x] 本地 PDF 直接预览（优先本地 → 无本地时 `paper_download_assets` → 失败再远程 `pdf_url`）。
 
 3. **Agent 工作流入口**
    - [x] **paper-reader 精读**：入库/单篇 Download **自动** + 文件树 Eye 手动（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度（lookup/download → paperRead）。

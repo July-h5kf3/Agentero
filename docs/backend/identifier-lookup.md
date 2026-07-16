@@ -1,7 +1,7 @@
 # 魔棒入库（Identifier Lookup）与 Translator 后端
 
 > 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator + 默认 PDF/LaTeX 下载；sidecar/批量/快捷键仍可扩展）  
-> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认到论文根目录**；arXiv **e-print 解压 LaTeX 到 `source/`**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url` 供在线预览。
+> 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认到论文根目录**；arXiv **e-print 解压 LaTeX 到 `source/`**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url`（PDF 预览本地优先，远程作下载候选与回退；HTML 仍远程 iframe）。
 
 相关文档：
 
@@ -38,7 +38,7 @@
    - **默认目标**：Vault 的 `papers/` 根下，`papers/<id>/`。
    - **上下文目标**：若文件树当前选中（或等价「当前打开」）的是 `papers/` 下的**组织子文件夹**（非 paper 本体），则写入  
      `papers/<该子路径>/<id>/`。
-5. **Catalog 写入** title / authors / year / doi / arxiv_id / **`pdf_url` / `html_url` / `source_url`** 等；中间栏 PDF/HTML 视图仍按 UI 约定 **只读远程 URL，不落盘下载**。
+5. **Catalog 写入** title / authors / year / doi / arxiv_id / **`pdf_url` / `html_url` / `source_url`** 等；中间栏 **PDF 预览本地优先**（见 [`../frontend/ui.md`](../frontend/ui.md)），`pdf_url` 作下载候选与失败回退；HTML 仍读远程 `html_url`。
 6. 本地只创建轻量 paper 壳：`NOTES.md`（占位或短摘要）、空 `highlights.md`；**不**强制 `source/` 下载、**不**因魔棒去抓 PDF/HTML 文件。
 
 ### 1.2 目标文件夹解析规则
@@ -106,7 +106,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 
 | 不做 | 说明 |
 |---|---|
-| 有远程预览时仍强制镜像下载 | 与「远程优先」冲突；不做 |
+| 有远程 URL 时跳过本地下载 | 不做：入库与预览均本地优先；远程仅作下载候选与失败回退 |
 | 官方 Zotero 公网 Translation SaaS | 自托管 Runtime |
 | AGPL 翻译器链进主二进制 | sidecar 旁路进程 |
 | 复杂多步确认面板 | v1 可「解析成功即入库」；重复时提示 skip / 打开已有 |
@@ -550,7 +550,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
   → 用户 Enter 或点「添加」
   → lookup:search（Translator）→ 可选极简预览
   → lookup_import({ parent_dir, text, translatorBaseUrl })
-  → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树；打开 paper（预览仍可走远程 pdf_url）
+  → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树；打开 paper（PDF 预览优先本地文件）
   → 失败：toast / 行内错误
 ```
 
@@ -678,7 +678,7 @@ arXiv URL 推导：
 | 单测 `parse` | arXiv URL/ID、DOI、version 剥离 |
 | 单测 `parent_dir` | 根 / 子文件夹 / paper 内文件 → 父目录 |
 | 单测 import | catalog 有 `pdf_url`；`source/` 不出现 pdf（设置关时） |
-| UI | 魔棒无 Vault 禁用；Library 表可见新行；远程 PDF 预览 |
+| UI | 魔棒无 Vault 禁用；Library 表可见新行；本地 PDF 预览（无本地则下载 / 远程回退） |
 
 ---
 

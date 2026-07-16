@@ -1,13 +1,21 @@
+import i18n from "@/i18n";
+import { runBackgroundTask } from "@/lib/background-tasks";
+import { downloadPaperAssets } from "@/lib/lookup";
 import {
+	canAttemptPdfDownload,
 	detectPaperDirectory,
+	findLocalPdfPath,
 	isPaperDirectory,
 	loadPaperMetadata,
+	localPdfToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
 	paperRemoteAssetsFromMetadata,
+	revokePdfViewerSource,
 } from "@/lib/paper-metadata";
 import { isLibraryVirtualPath, LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { isTauri } from "@/lib/tauri";
 import { type FileNode, isTextOpenable, readVaultFile } from "@/lib/vault";
 import {
 	type CenterViewMode,
@@ -15,6 +23,7 @@ import {
 	isPdfPath,
 	preferredModeForPath,
 } from "@/lib/viewer";
+import { toVaultRelative } from "@/lib/wiki";
 
 export type DocTabKind = "library" | "paper" | "file";
 
@@ -95,12 +104,81 @@ export type TabResources = {
 	loaded: true;
 	/** Non-fatal message to surface (e.g. unpreviewable file). */
 	error?: string;
+	/** True when this load triggered `paper_download_assets` (tree may need refresh). */
+	didDownloadAssets?: boolean;
 };
 
+/** Session-scoped: vault-rel paper paths already auto-downloaded for preview. */
+const pdfAutoDownloadTried = new Set<string>();
+
 /**
- * Resolve everything a tab needs to render, mirroring App.tsx's former
- * per-`selectedPath` loading effect (paper metadata, remote PDF/HTML URLs,
- * NOTES seed, initial view mode, plain-file text).
+ * PDF for a paper tab: local file (blob:) → auto-download if missing → remote pdf_url.
+ * Avoids Tauri asset:// which PDF.js cannot XHR ("Unexpected server response (0)").
+ */
+async function resolvePaperPdfSource(
+	paperDir: string,
+	vaultPath: string | null,
+	meta: PaperMetadata | null,
+	remotePdf: string | null,
+): Promise<{ pdfUrl: string | null; didDownload: boolean }> {
+	const localPath = await findLocalPdfPath(paperDir);
+	if (localPath) {
+		const blob = await localPdfToViewerSource(localPath);
+		return { pdfUrl: blob ?? remotePdf, didDownload: false };
+	}
+
+	if (!isTauri() || !vaultPath || !canAttemptPdfDownload(meta, remotePdf)) {
+		return { pdfUrl: remotePdf, didDownload: false };
+	}
+
+	const rel = toVaultRelative(vaultPath, paperDir)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!rel || pdfAutoDownloadTried.has(rel)) {
+		return { pdfUrl: remotePdf, didDownload: false };
+	}
+	pdfAutoDownloadTried.add(rel);
+
+	let didDownload = false;
+	try {
+		await runBackgroundTask(
+			{
+				kind: "download",
+				title: i18n.t("app:tasks.downloadPaper"),
+				detail: rel,
+			},
+			async ({ setDetail, setProgress }) => {
+				setDetail(rel);
+				setProgress(25);
+				const r = await downloadPaperAssets({
+					vaultRoot: vaultPath,
+					paperPath: rel,
+				});
+				setProgress(100);
+				return r;
+			},
+		);
+		didDownload = true;
+	} catch {
+		// fall through to remote
+	}
+
+	const after = await findLocalPdfPath(paperDir);
+	if (after) {
+		const blob = await localPdfToViewerSource(after);
+		return { pdfUrl: blob ?? remotePdf, didDownload };
+	}
+	return { pdfUrl: remotePdf, didDownload };
+}
+
+/** Revoke blob: PDF sources held by closed tabs. */
+export function revokeTabPdfSource(tab: Pick<DocTab, "pdfUrl"> | null): void {
+	if (tab?.pdfUrl) revokePdfViewerSource(tab.pdfUrl);
+}
+
+/**
+ * Resolve everything a tab needs to render (paper metadata, local/remote PDF,
+ * HTML URL, NOTES seed, initial view mode, plain-file text).
  */
 export async function loadTabResources(
 	path: string,
@@ -130,7 +208,13 @@ export async function loadTabResources(
 
 	if (paperDir) {
 		const meta = await loadPaperMetadata(paperDir, vaultPath);
-		const { pdfUrl, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
+		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
+		const { pdfUrl, didDownload } = await resolvePaperPdfSource(
+			paperDir,
+			vaultPath,
+			meta,
+			remotePdf,
+		);
 		const notesPath = notesPathForPaper(paperDir);
 		let notesSeed = NOTES_PLACEHOLDER;
 		try {
@@ -160,6 +244,7 @@ export async function loadTabResources(
 				notesSeed,
 				markdownSeed: "",
 				loaded: true,
+				didDownloadAssets: didDownload,
 			};
 		}
 
@@ -175,6 +260,7 @@ export async function loadTabResources(
 			notesSeed,
 			markdownSeed: "",
 			loaded: true,
+			didDownloadAssets: didDownload,
 		};
 	}
 

@@ -159,7 +159,7 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
 - 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Eye 手动精读
 
-正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
+正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
 
 ## 3. 数据类型
 
@@ -220,14 +220,14 @@ interface PaperMetadata {
   series?: string;
   language?: string;
 
-  // 来源链接（UI 阅读器 PDF/HTML 模式以此为准；只存 URL，不落盘）
+  // 来源链接（catalog 存远程 URL；PDF 预览优先本地文件）
   /**
-   * 远程 PDF URL（UI 仅流式预览，不落盘）。
+   * 远程 PDF URL：下载候选；本地 PDF 缺失且下载失败时作预览回退。
    * 推荐 arXiv: `https://arxiv.org/pdf/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
    */
   pdf_url?: string;
   /**
-   * 远程 HTML URL（iframe 预览，不落盘）。
+   * 远程 HTML URL（iframe 预览，不强制本地下载）。
    * 推荐 arXiv: `https://arxiv.org/html/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
    */
   html_url?: string;

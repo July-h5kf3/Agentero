@@ -122,7 +122,7 @@ agentero-vault/
 | `place` | TEXT | v2：出版地 |
 | `series` | TEXT | v2 |
 | `language` | TEXT | v2 |
-| `pdf_url` | TEXT | 远程预览 URL，不强制落盘 PDF |
+| `pdf_url` | TEXT | 远程 PDF URL：下载候选；本地 PDF 缺失且下载失败时作预览回退 |
 | `html_url` | TEXT | |
 | `source_url` | TEXT | 如 abs 页 / 条目页 |
 | `body_source` | TEXT | `latex` \| `html` \| `pdf` \| `ocr` |
@@ -215,7 +215,7 @@ src-tauri/src/
 | 命令 | 状态 | 说明 |
 |---|---|---|
 | `paper_list` | **已落地** | 全量列表 → UI 论文库表格；参数仅 `vaultPath` |
-| `paper_get` | **已落地** | 单篇 meta（`path` 或 `id`）→ Paper Info / 远程预览 URL |
+| `paper_get` | **已落地** | 单篇 meta（`path` 或 `id`）→ Paper Info / 远程 URL（下载候选与预览回退） |
 | `paper:list`（过滤/分页） | 规划 | year、tag、type、query（LIKE 或 FTS）、limit/offset |
 
 - 文件树仍扫 `papers/` 目录；**标题与元数据**优先 `paper_get` / `paper_list`，缺失则回退目录名。

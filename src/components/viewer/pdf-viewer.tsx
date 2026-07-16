@@ -23,6 +23,7 @@ import {
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
+import { isPdfViewerSource } from "@/lib/paper-metadata";
 import {
 	anchorFromPoint,
 	anchorFromSelection,
@@ -62,7 +63,11 @@ function clampZoom(z: number): number {
 }
 
 type PdfViewerProps = {
-	/** Remote http(s) URL only — PDF.js streams from network, not vault disk */
+	/**
+	 * PDF.js file source: local `blob:` (bytes via fs) or remote https.
+	 * Prefer local vault PDF; remote URL is fallback when download fails.
+	 * Do not pass `asset://` — PDF.js XHR fails on Tauri asset protocol.
+	 */
 	source: string | null;
 	/** Absolute path to paper folder for asks/*.json persistence */
 	paperAbsPath?: string | null;
@@ -122,7 +127,7 @@ export function PdfViewer({
 	const zoomRef = useRef(zoom);
 	zoomRef.current = zoom;
 
-	const remote = source && /^https?:\/\//i.test(source) ? source : null;
+	const fileUrl = isPdfViewerSource(source) ? source.trim() : null;
 
 	const activeThread = useMemo(
 		() => threads.find((th) => th.id === activeThreadId) ?? null,
@@ -136,7 +141,7 @@ export function PdfViewer({
 		[threads],
 	);
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-bind observer when remote viewer mounts
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-bind observer when fileUrl viewer mounts
 	useEffect(() => {
 		const el = hostRef.current;
 		if (!el) return;
@@ -146,7 +151,7 @@ export function PdfViewer({
 		});
 		ro.observe(el);
 		return () => ro.disconnect();
-	}, [remote]);
+	}, [fileUrl]);
 
 	/**
 	 * Zoom keeping the document point under (clientX, clientY) stable.
@@ -209,7 +214,7 @@ export function PdfViewer({
 			scrollEl.scrollLeft = 0;
 			scrollEl.scrollTop = 0;
 		}
-	}, [remote]);
+	}, [fileUrl]);
 
 	// Measure unscaled content height for scroll shell
 	// biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when page set / width changes
@@ -222,7 +227,7 @@ export function PdfViewer({
 		ro.observe(el);
 		setContentHeight(el.offsetHeight);
 		return () => ro.disconnect();
-	}, [remote, numPages, pageWidth]);
+	}, [fileUrl, numPages, pageWidth]);
 
 	const zoomIn = useCallback(() => {
 		zoomAtViewportCenter(zoomRef.current + ZOOM_STEP);
@@ -237,7 +242,7 @@ export function PdfViewer({
 	// ⌘/Ctrl + wheel: zoom toward cursor (faster continuous scale)
 	useEffect(() => {
 		const el = hostRef.current;
-		if (!el || !remote) return;
+		if (!el || !fileUrl) return;
 		const onWheel = (e: WheelEvent) => {
 			if (!(e.ctrlKey || e.metaKey)) return;
 			e.preventDefault();
@@ -247,7 +252,7 @@ export function PdfViewer({
 		};
 		el.addEventListener("wheel", onWheel, { passive: false });
 		return () => el.removeEventListener("wheel", onWheel);
-	}, [remote, zoomAtClientPoint]);
+	}, [fileUrl, zoomAtClientPoint]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -354,7 +359,7 @@ export function PdfViewer({
 	// Selection + double-click + dwell triggers
 	useEffect(() => {
 		const host = hostRef.current;
-		if (!host || !remote) return;
+		if (!host || !fileUrl) return;
 
 		const clearDwell = () => {
 			if (dwellTimerRef.current) {
@@ -459,7 +464,7 @@ export function PdfViewer({
 			window.removeEventListener("pointerup", onPointerUp);
 			window.removeEventListener("pointercancel", onPointerCancel);
 		};
-	}, [remote, startFromAnchor]);
+	}, [fileUrl, startFromAnchor]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor dialog after zoom/layout
 	useEffect(() => {
@@ -672,7 +677,7 @@ export function PdfViewer({
 		[upsertThread, openThread, cancelHoverHide],
 	);
 
-	if (!remote) {
+	if (!fileUrl) {
 		return (
 			<div
 				className={cn(
@@ -778,8 +783,8 @@ export function PdfViewer({
 							}}
 						>
 							<Document
-								key={remote}
-								file={remote}
+								key={fileUrl}
+								file={fileUrl}
 								loading={
 									<p className="p-6 text-center text-muted-foreground text-sm">
 										{t("pdf.loading")}
@@ -801,7 +806,7 @@ export function PdfViewer({
 										);
 										return (
 											<div
-												key={`${remote}-p${pageNumber}`}
+												key={`${fileUrl}-p${pageNumber}`}
 												className="relative overflow-visible"
 												{...{
 													[PDF_PAGE_ATTR]: pageNumber,

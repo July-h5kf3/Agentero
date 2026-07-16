@@ -135,14 +135,16 @@
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
   - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML **预览**：当前仍读 catalog 远程 `pdf_url` / `html_url`（经 `paper_get` + PDF.js / iframe）。
-  - **本地归档**（与预览分离）：魔棒 / `paper_download_assets` 将 PDF 写入 `{paper}/{id}.pdf`（根目录），arXiv LaTeX 到 `source/`；中间栏预览暂不强制读本地文件。
+  - PDF / HTML **预览**：
+    - **PDF 解析顺序**（本地优先）：① 论文文件夹内本地 PDF（根目录 `{id}.pdf` 优先，兼容 `source/` 等嵌套）→ `readFile` 读字节生成 `blob:` URL 交给 PDF.js（**不用** `convertFileSrc`/`asset://`，PDF.js XHR 会失败）；② **无本地 PDF** 时自动 `paper_download_assets` 尝试下载；③ 下载失败或无可用下载源时回退 catalog 远程 `pdf_url`（或 `arxiv_id` 推导 URL）。
+    - **HTML**：仍读远程 `html_url`（iframe）；HTML 本身不强制本地下载。
+  - **本地归档**：魔棒 / `paper_download_assets` 将 PDF 写入 `{paper}/{id}.pdf`（根目录），arXiv LaTeX 到 `source/`；预览优先读同一本地 PDF。
   - arXiv 推荐写入 catalog：
     - `pdf_url`: `https://arxiv.org/pdf/{id}`
     - `html_url`: `https://arxiv.org/html/{id}`
     - `source_url`: `https://arxiv.org/abs/{id}`
-  - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL
-  - PDF：PDF.js 按 URL 流式渲染；HTML：独立 iframe 打开远程页
+  - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
+  - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页
   - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。i18n `viewer:pdf.zoom*`。
   - **PDF 划词提问**（已落地 MVP，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词 / 框选 / 双击 / 悬停停留 → 迷你问答卡（ACP 流式）；发送过问题后在锚点旁保留对话图标（Hover 回访）。

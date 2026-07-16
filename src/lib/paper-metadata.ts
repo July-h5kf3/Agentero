@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import { arxivUrls } from "@/lib/arxiv";
 import { isTauri } from "@/lib/tauri";
 import { readVaultFile } from "@/lib/vault";
@@ -9,7 +10,8 @@ import { toVaultRelative } from "@/lib/wiki";
  * `metadata.json` is a projection synced after catalog writes (not the read path).
  *
  * **Paper folder = minimal unit** under `papers/` at any depth.
- * PDF/HTML viewers use **remote URLs** from catalog fields.
+ * PDF preview: **local file first** → download if missing → remote `pdf_url` fallback.
+ * HTML preview: remote `html_url` only.
  */
 /** Creator from Translator / Zotero item mapping. */
 export type PaperCreator = {
@@ -78,8 +80,11 @@ export type PaperMetadata = {
 	updated_at: string;
 };
 
-/** Only remote http(s) URLs are used for PDF/HTML preview. */
+/** Remote http(s) URL (HTML preview; PDF download candidate / fallback). */
 export type RemoteAsset = { url: string };
+
+/** How the PDF viewer source was resolved. */
+export type PaperPdfOrigin = "local" | "remote";
 
 /** Direct-child names that mark a directory as a paper folder. */
 export const PAPER_FILE_MARKERS = [
@@ -512,7 +517,7 @@ export function notesPathForPaper(paperDir: string): string {
 	return `${paperDir}${sep}NOTES.md`;
 }
 
-/** Accept only remote http(s) URLs for streaming preview (never local vault paths). */
+/** Accept only remote http(s) URLs (catalog fields / arxiv-derived). */
 export function resolveRemoteUrl(
 	ref: string | undefined | null,
 ): string | null {
@@ -520,6 +525,137 @@ export function resolveRemoteUrl(
 	const value = ref.trim();
 	if (/^https?:\/\//i.test(value)) return value;
 	return null;
+}
+
+/** True when a string can be passed to PDF.js `Document` `file`. */
+export function isPdfViewerSource(
+	source: string | null | undefined,
+): source is string {
+	if (!source?.trim()) return false;
+	const s = source.trim();
+	// blob: (local bytes) or remote https — not asset:// (PDF.js XHR fails on asset protocol)
+	if (/^(https?|blob):/i.test(s)) return true;
+	return false;
+}
+
+/**
+ * Read a local PDF into a `blob:` URL for PDF.js.
+ *
+ * Prefer this over `convertFileSrc` / `asset://`: PDF.js issues range/XHR
+ * requests that often fail on Tauri's asset protocol ("Unexpected server response (0)").
+ * Caller should `URL.revokeObjectURL` when replacing the source.
+ */
+export async function localPdfToViewerSource(
+	absPath: string,
+): Promise<string | null> {
+	if (!isTauri() || !absPath?.trim()) return null;
+	try {
+		const bytes = await readFile(absPath);
+		// Copy so Blob owns a stable ArrayBuffer (plugin may return a view)
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		const blob = new Blob([copy], { type: "application/pdf" });
+		return URL.createObjectURL(blob);
+	} catch {
+		return null;
+	}
+}
+
+/** Revoke a blob: URL created by `localPdfToViewerSource` (no-op for others). */
+export function revokePdfViewerSource(source: string | null | undefined): void {
+	if (source?.startsWith("blob:")) {
+		try {
+			URL.revokeObjectURL(source);
+		} catch {
+			// ignore
+		}
+	}
+}
+
+function joinDir(parent: string, name: string): string {
+	const sep = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
+	const base = parent.replace(/[/\\]+$/, "");
+	return `${base}${sep}${name}`;
+}
+
+/**
+ * Find first local PDF under a paper folder.
+ * Prefer root-level `*.pdf` (canonical `{id}.pdf`), then shallow recursive
+ * (legacy under `source/`, etc.). Max depth 4.
+ */
+export async function findLocalPdfPath(
+	paperDir: string,
+): Promise<string | null> {
+	if (!isTauri() || !paperDir?.trim()) return null;
+	const root = paperDir.replace(/[/\\]+$/, "");
+	try {
+		const entries = await readDir(root);
+		const rootPdfs: string[] = [];
+		for (const e of entries) {
+			if (!e.name || !e.isFile) continue;
+			if (PDF_NAME_RE.test(e.name)) {
+				rootPdfs.push(joinDir(root, e.name));
+			}
+		}
+		if (rootPdfs.length > 0) {
+			// Prefer shorter names / id-like: stable sort
+			rootPdfs.sort((a, b) => a.localeCompare(b));
+			return rootPdfs[0] ?? null;
+		}
+		return await findPdfUnder(root, 1, 4);
+	} catch {
+		return null;
+	}
+}
+
+async function findPdfUnder(
+	dir: string,
+	depth: number,
+	maxDepth: number,
+): Promise<string | null> {
+	if (depth > maxDepth) return null;
+	let entries: Awaited<ReturnType<typeof readDir>>;
+	try {
+		entries = await readDir(dir);
+	} catch {
+		return null;
+	}
+	const subdirs: string[] = [];
+	for (const e of entries) {
+		if (!e.name) continue;
+		if (e.name.startsWith(".")) continue;
+		const full = joinDir(dir, e.name);
+		if (e.isFile && PDF_NAME_RE.test(e.name)) return full;
+		if (e.isDirectory) subdirs.push(full);
+	}
+	// Prefer source/ before other nested dirs
+	subdirs.sort((a, b) => {
+		const an = a.replace(/\\/g, "/").toLowerCase();
+		const bn = b.replace(/\\/g, "/").toLowerCase();
+		const aSrc = an.endsWith("/source") || an.includes("/source/") ? 0 : 1;
+		const bSrc = bn.endsWith("/source") || bn.includes("/source/") ? 0 : 1;
+		if (aSrc !== bSrc) return aSrc - bSrc;
+		return an.localeCompare(bn);
+	});
+	for (const sub of subdirs) {
+		const found = await findPdfUnder(sub, depth + 1, maxDepth);
+		if (found) return found;
+	}
+	return null;
+}
+
+/**
+ * Whether we should attempt `paper_download_assets` when local PDF is missing.
+ * Needs a remote candidate (pdf_url or arxiv_id / arxiv-like folder id).
+ */
+export function canAttemptPdfDownload(
+	meta: PaperMetadata | null,
+	remotePdfUrl: string | null,
+): boolean {
+	if (remotePdfUrl) return true;
+	if (meta?.arxiv_id?.trim()) return true;
+	if (meta?.type === "arxiv") return true;
+	return false;
 }
 
 /** Normalize legacy camelCase keys from early Host writes. */
@@ -629,9 +765,10 @@ export async function detectPaperDirectory(path: string): Promise<boolean> {
 }
 
 /**
- * Remote PDF/HTML URLs for viewers.
+ * Remote PDF/HTML URLs from catalog metadata.
  * Prefer metadata fields; fall back to arxiv_id-derived URLs.
- * Never resolves vault-relative paths (no local download).
+ * PDF remote URL is a **download candidate / fallback**, not the only preview path.
+ * HTML remote URL is the iframe source.
  */
 export function paperRemoteAssetsFromMetadata(meta: PaperMetadata | null): {
 	pdfUrl: string | null;

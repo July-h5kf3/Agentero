@@ -88,6 +88,7 @@ import {
 	type DocTab,
 	loadTabResources,
 	normalizeTabPath,
+	revokeTabPdfSource,
 	tabIdForPath,
 	tabIsPaperNotes,
 	tabNotesEligible,
@@ -396,6 +397,16 @@ export default function App() {
 					markdownSeed: res.markdownSeed,
 					loaded: true,
 				});
+				// Auto-download for preview may have written local PDF — refresh tree icons
+				const vault = vaultPathRef.current;
+				if (res.didDownloadAssets && vault) {
+					try {
+						const nodes = await loadVaultTree(vault);
+						setTree(nodes);
+					} catch {
+						// ignore; viewer already has source
+					}
+				}
 			})();
 		},
 		[t, updateTab],
@@ -406,6 +417,8 @@ export default function App() {
 		setTabs((prev) => {
 			const idx = prev.findIndex((t) => t.id === id);
 			if (idx < 0) return prev;
+			const closing = prev[idx];
+			if (closing) revokeTabPdfSource(closing);
 			const next = prev.filter((t) => t.id !== id);
 			setActiveTabId((curActive) => {
 				if (curActive !== id) return curActive;
@@ -421,12 +434,22 @@ export default function App() {
 	const closeTabsUnderPath = useCallback((path: string) => {
 		const key = normalizeTabPath(path);
 		setTabs((prev) => {
-			const survivors = prev.filter((t) => {
-				if (isLibraryVirtualPath(t.path)) return true;
+			const survivors: DocTab[] = [];
+			let changed = false;
+			for (const t of prev) {
+				if (isLibraryVirtualPath(t.path)) {
+					survivors.push(t);
+					continue;
+				}
 				const tk = normalizeTabPath(t.path);
-				return tk !== key && !tk.startsWith(`${key}/`);
-			});
-			if (survivors.length === prev.length) return prev;
+				if (tk === key || tk.startsWith(`${key}/`)) {
+					revokeTabPdfSource(t);
+					changed = true;
+					continue;
+				}
+				survivors.push(t);
+			}
+			if (!changed) return prev;
 			setActiveTabId((curActive) =>
 				survivors.some((t) => t.id === curActive)
 					? curActive

@@ -83,7 +83,7 @@
    - 运行时：`DOMRect` → 相对当前 `Page` 容器的 `(x, y, w, h)` → 除以 `viewport.width/height` 得 `0–1` 归一化 rects。
    - 回放：页渲染完成 + `width` 变化时，用同一归一化 rects × 当前 viewport 重定位圆片与高亮。
 4. **多矩形选区**：跨行选区可能多个 `ClientRect`；全部保存为 `rects[]`，圆片锚点取首段中线 y 或包围盒中心。
-5. **远程 PDF CORS**：当前预览走远程 `pdf_url`；TextLayer 抽取依赖 PDF.js 能读文本。若 CORS/范围请求失败，需降级提示；本地归档 PDF（`{paper}/{id}.pdf`）未来可用 `convertFileSrc` 增强稳定性（与阅读器演进一致）。
+5. **PDF 源与 CORS**：预览 **本地优先**（fs `readFile` → `blob:` 读 `{paper}/*.pdf`；不用 `asset://`，PDF.js 对其 XHR 会 `Unexpected server response (0)`）；无本地时尝试下载，失败再回退远程 `pdf_url`。TextLayer 抽取依赖 PDF.js 能读文本。远程路径若 CORS/范围请求失败，可提示用户补下本地 PDF 后重开。
 
 ## 4. 交互状态机
 

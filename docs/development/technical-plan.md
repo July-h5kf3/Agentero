@@ -167,12 +167,12 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
-| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；与预览路径分离） |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：**本地优先**（`findLocalPdf` + fs `readFile` → `blob:`；避免 `asset://`）→ 无本地时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
+| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；预览与归档同一文件） |
 | arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
-| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
+| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用；与 Webview 预览分离） |
 | HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
-| 中间栏切换 | `ViewModeToggle`；URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
+| 中间栏切换 | `ViewModeToggle`；PDF 源见上；HTML URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
 | arXiv 资源 | `pdf` / `html` / `abs` / `e-print` 规范 URL |
 | PDF 划词提问 | **MVP 已落地**：`src/lib/pdf-ask/` + `PdfViewer` 交互层；`asks/*.json`；ACP 流式 |
 
@@ -355,7 +355,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → lookup_import → Translator（或 arXiv Atom fallback）
   → catalog upsert + NOTES.md / highlights.md 壳
   → ensure_paper_assets：PDF → {paper}/{id}.pdf；e-print TeX → 解压 LaTeX 到 source/
-  → 刷新文件树；打开 paper（预览可用远程 pdf_url）
+  → 刷新文件树；打开 paper（PDF 预览优先本地文件）
 ```
 
 **规划中（关键词 / Agent 候选）**：

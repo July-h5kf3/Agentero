@@ -40,7 +40,7 @@
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
 - [x] 文件树：**在 Finder 中显示**（双击 / 右键 / `⌥⌘R`）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
-- [x] Paper-centric 视图：选中 paper 后中间显示远程 PDF/HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
+- [x] Paper-centric 视图：选中 paper 后中间显示 PDF（本地优先 / 远程回退）或 HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
 - [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、双向滚动。
 - [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）。
@@ -72,7 +72,7 @@
 - [x] map → `PaperMetadata` → **catalog.sqlite 权威**；`metadata.json` 仅为投影。
 - [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` / `highlights.md` 壳。
 - [x] **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文根目录）；**arXiv e-print 解压 LaTeX** 到 `source/`（无下载开关）。
-- [x] 中间栏预览仍可用 catalog 远程 `pdf_url` / `html_url`。
+- [x] 中间栏 **PDF 预览本地优先**：本地 `{paper}/*.pdf` → 缺省时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；HTML 仍用远程 `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
 - [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发）。
