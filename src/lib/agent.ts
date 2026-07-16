@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import i18n from "@/i18n";
+import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 
 export type AgentTemplate =
@@ -333,7 +334,17 @@ export async function runOnce(request: {
 	skillIds?: string[];
 	/** Select the agent's first ACP permission option for this run. */
 	autoApprove?: boolean;
+	/**
+	 * Force the language of the agent response and any generated notes.
+	 * When omitted, runOnce falls back to the global `aiResponseLanguage`
+	 * setting; `"auto"` (or omitting) sends no directive.
+	 */
+	responseLanguage?: string;
 }): Promise<RunOnceAccepted> {
+	const language =
+		request.responseLanguage ?? loadSettings().aiResponseLanguage;
+	const responseLanguage =
+		language && language !== "auto" ? language : undefined;
 	return invokeApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
@@ -348,6 +359,7 @@ export async function runOnce(request: {
 			fastMode: request.fastMode,
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
+			responseLanguage,
 		},
 	});
 }

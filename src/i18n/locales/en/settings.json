@@ -75,6 +75,12 @@
 				"label": "Auto-approve"
 			}
 		},
+		"responseLanguage": {
+			"label": "Response language",
+			"auto": "Auto (follow content)",
+			"en": "English",
+			"zhCN": "简体中文"
+		},
 		"form": {
 			"defaultName": "Custom agent",
 			"name": "Name",

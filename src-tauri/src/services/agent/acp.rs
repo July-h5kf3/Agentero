@@ -581,6 +581,7 @@ pub async fn run_once(
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
+    response_language: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
@@ -614,6 +615,7 @@ pub async fn run_once(
             target.as_deref(),
             skill_style,
             &skill_ids,
+            response_language.as_deref(),
         ),
         skill_instructions
     );

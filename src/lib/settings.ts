@@ -9,6 +9,12 @@ export type LocalePreference = "system" | "en" | "zh-CN";
  */
 export type AgentPermissionMode = "restricted" | "auto";
 
+/**
+ * Language every agent response (and notes written to files) should use.
+ * Independent from the UI `locale`. `auto` injects no directive (agent decides).
+ */
+export type AiResponseLanguage = "auto" | "en" | "zh-CN";
+
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
@@ -27,6 +33,8 @@ export type AppSettings = {
 	agentEnabled: boolean;
 	/** Global permission handling applied to every agent run. */
 	agentPermissionMode: AgentPermissionMode;
+	/** Language forced onto every agent response and generated notes. */
+	aiResponseLanguage: AiResponseLanguage;
 	// Privacy
 	analyticsEnabled: boolean;
 	shareCrashReports: boolean;
@@ -45,6 +53,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	showLineNumbers: false,
 	agentEnabled: true,
 	agentPermissionMode: "restricted",
+	aiResponseLanguage: "auto",
 	analyticsEnabled: false,
 	shareCrashReports: false,
 };

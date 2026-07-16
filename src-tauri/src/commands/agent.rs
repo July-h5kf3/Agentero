@@ -294,6 +294,7 @@ pub async fn agent_run_once(
                     request.fast_mode,
                     request.skill_ids,
                     request.auto_approve,
+                    request.response_language,
                     cancellation,
                 )
                 .await;
@@ -314,6 +315,7 @@ pub async fn agent_run_once(
                 request.fast_mode,
                 request.skill_ids,
                 request.auto_approve,
+                request.response_language,
                 cancellation,
             )
             .await;

@@ -48,6 +48,7 @@ import {
 } from "@/lib/agent";
 import {
 	type AgentPermissionMode,
+	type AiResponseLanguage,
 	type AppSettings,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
@@ -661,6 +662,36 @@ function AgentPane({
 							</SelectItem>
 							<SelectItem value="auto">
 								{t("agent.permission.auto.label")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.responseLanguage.label")}
+					htmlFor="agent-response-language"
+				>
+					<Select
+						value={settings.aiResponseLanguage}
+						onValueChange={(v) =>
+							patch({ aiResponseLanguage: v as AiResponseLanguage })
+						}
+					>
+						<SelectTrigger
+							id="agent-response-language"
+							size="sm"
+							className="min-w-[140px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="auto">
+								{t("agent.responseLanguage.auto")}
+							</SelectItem>
+							<SelectItem value="en">
+								{t("agent.responseLanguage.en")}
+							</SelectItem>
+							<SelectItem value="zh-CN">
+								{t("agent.responseLanguage.zhCN")}
 							</SelectItem>
 						</SelectContent>
 					</Select>

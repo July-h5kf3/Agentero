@@ -75,6 +75,12 @@
 				"label": "自动批准"
 			}
 		},
+		"responseLanguage": {
+			"label": "回答语言",
+			"auto": "自动（跟随内容）",
+			"en": "English",
+			"zhCN": "简体中文"
+		},
 		"form": {
 			"defaultName": "自定义 Agent",
 			"name": "名称",

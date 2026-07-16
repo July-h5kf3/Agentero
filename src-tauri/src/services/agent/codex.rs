@@ -622,6 +622,7 @@ pub async fn run_codex_turn(
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
+    response_language: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) {
     let PreparedCodexThread {
@@ -642,6 +643,7 @@ pub async fn run_codex_turn(
         fast_mode,
         skill_ids,
         auto_approve,
+        response_language,
         &mut cancellation,
     )
     .await;
@@ -701,6 +703,7 @@ async fn run_codex_turn_inner(
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
+    response_language: Option<String>,
     cancellation: &mut watch::Receiver<bool>,
 ) -> Result<(), AppError> {
     // Codex activates skills with `$skill-id` (dollar syntax).
@@ -716,6 +719,7 @@ async fn run_codex_turn_inner(
             target.as_deref(),
             skill_style,
             &skill_ids,
+            response_language.as_deref(),
         ),
         skill_instructions
     );

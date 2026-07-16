@@ -10,6 +10,7 @@ pub fn build_prompt(
     target: Option<&str>,
     skill_style: SkillMentionStyle,
     skill_ids: &[String],
+    response_language: Option<&str>,
 ) -> String {
     let workflow = workflow.unwrap_or("free");
     let target_line = target
@@ -57,7 +58,23 @@ pub fn build_prompt(
         }
     };
 
+    let system = format!("{system}{}", language_directive(response_language));
+
     format!("{system}\n\n{target_line}User request:\n{user_prompt}")
+}
+
+/// A trailing system instruction forcing the response/notes language.
+/// Empty for unknown / `None` codes so `auto` keeps current behavior.
+fn language_directive(code: Option<&str>) -> String {
+    let name = match code {
+        Some("zh-CN") => "Simplified Chinese (简体中文)",
+        Some("en") => "English",
+        _ => return String::new(),
+    };
+    format!(
+        " Always write your entire response, including any notes saved to files, in {name}, \
+         regardless of the language of the source material or this prompt."
+    )
 }
 
 fn skill_follow_hint(style: SkillMentionStyle, skill_ids: &[String]) -> String {
@@ -157,6 +174,7 @@ mod tests {
             Some("papers/x/NOTES.md"),
             SkillMentionStyle::InjectedOnly,
             &[],
+            None,
         );
         assert!(p.contains("What is attention?"));
         assert!(p.contains("papers/x/NOTES.md"));
@@ -170,6 +188,7 @@ mod tests {
             Some("papers/1706.03762"),
             SkillMentionStyle::Dollar,
             &["paper-reader".into()],
+            None,
         );
         assert!(p.contains("$paper-reader"));
         assert!(p.contains("$skill-id"));
@@ -184,6 +203,7 @@ mod tests {
             Some("papers/1706.03762"),
             SkillMentionStyle::Slash,
             &["paper-reader".into()],
+            None,
         );
         assert!(p.contains("/paper-reader"));
         assert!(p.contains("**/skill-id**") || p.contains("/skill-id"));
@@ -197,9 +217,37 @@ mod tests {
             Some("papers/1706.03762"),
             SkillMentionStyle::InjectedOnly,
             &["paper-reader".into()],
+            None,
         );
         assert!(p.contains("Motif injects") || p.contains("does not use Motif Composer `$`"));
         // Should not tell the agent to activate with $paper-reader as a runtime command
         assert!(!p.contains("Activate the skill with `$paper-reader`"));
+    }
+
+    #[test]
+    fn response_language_injects_directive() {
+        let p = build_prompt(
+            Some("paper_reader"),
+            "Read this paper",
+            Some("papers/1706.03762"),
+            SkillMentionStyle::InjectedOnly,
+            &["paper-reader".into()],
+            Some("zh-CN"),
+        );
+        assert!(p.contains("Simplified Chinese"));
+        assert!(p.contains("Always write your entire response"));
+    }
+
+    #[test]
+    fn response_language_none_adds_no_directive() {
+        let p = build_prompt(
+            Some("free"),
+            "Hello",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+        );
+        assert!(!p.contains("Always write your entire response"));
     }
 }
