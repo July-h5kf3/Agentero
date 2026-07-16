@@ -23,7 +23,7 @@
 		"minimize": "最小化",
 		"maximize": "最大化",
 		"restore": "还原",
-		"close": "关闭"
+		"close": "关闭",
 		"layout": "布局",
 		"layoutHint": "配置面板",
 		"layoutPanels": "面板",

@@ -81,8 +81,6 @@ import {
 import { revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
-import { isMacOS, isTauri } from "@/lib/tauri";
-import { resolveShortcutId } from "@/lib/shortcuts";
 import {
 	basenameOf,
 	type DocTab,
@@ -93,7 +91,7 @@ import {
 	tabIsPaperNotes,
 	tabNotesEligible,
 } from "@/lib/tabs";
-import { isTauri } from "@/lib/tauri";
+import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
 	createVault,
