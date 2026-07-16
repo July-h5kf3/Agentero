@@ -176,6 +176,7 @@ export function PdfViewer({
 	const [currentPage, setCurrentPage] = useState(1);
 	const [pageField, setPageField] = useState("1");
 	const [firstPageAspect, setFirstPageAspect] = useState(1.3);
+	const [renderScale, setRenderScale] = useState(1);
 	const [outline, setOutline] = useState<PdfOutlineNode[] | null>(null);
 	const [showOutline, setShowOutline] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
@@ -189,6 +190,9 @@ export function PdfViewer({
 
 	const pageWidth = Math.max(200, fitWidth);
 	const shellWidth = pageWidth * zoom;
+	const renderDpr =
+		(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1) *
+		renderScale;
 	const shellHeight = Math.max(0, contentHeight * zoom);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
@@ -334,6 +338,15 @@ export function PdfViewer({
 			scrollEl.scrollTop = 0;
 		}
 	}, [fileUrl]);
+
+	// Re-rasterize pages at higher resolution once a zoom gesture settles, so
+	// CSS-scaled canvases stay crisp instead of blurry when zoomed in.
+	useEffect(() => {
+		const target = Math.min(3, Math.max(1, Math.ceil(zoom * 2) / 2));
+		if (target === renderScale) return;
+		const id = window.setTimeout(() => setRenderScale(target), 180);
+		return () => window.clearTimeout(id);
+	}, [zoom, renderScale]);
 
 	// Measure unscaled content height for scroll shell
 	// biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when page set / width changes
@@ -1411,6 +1424,7 @@ export function PdfViewer({
 														width={pageWidth}
 														renderTextLayer
 														renderAnnotationLayer
+														devicePixelRatio={renderDpr}
 														loading={
 															<div
 																className="bg-muted/40"
@@ -1432,7 +1446,7 @@ export function PdfViewer({
 														{findHighlight.rects.map((r) => (
 															<div
 																key={`find-${r.x}-${r.y}-${r.w}-${r.h}`}
-																className="absolute rounded-[1px] bg-yellow-300/60 dark:bg-yellow-500/40"
+																className="absolute rounded-[1px] bg-yellow-300/70 mix-blend-multiply"
 																style={{
 																	left: `${r.x * 100}%`,
 																	top: `${r.y * 100}%`,
