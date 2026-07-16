@@ -1,5 +1,10 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { clientRectsToNormalized, findPageElByNumber } from "@/lib/pdf-ask";
+import {
+	clientRectsToNormalized,
+	findPageElByNumber,
+	findPageElement,
+	pageNumberOf,
+} from "@/lib/pdf-ask";
 import type { PdfAskNormalizedRect } from "@/lib/pdf-ask/types";
 
 /** One occurrence of the query: `occ`-th match on `page` (both 0/1-based as noted). */
@@ -59,7 +64,7 @@ export async function findAllMatches(
  * line. Overlapping semi-transparent rects would otherwise stack into uneven
  * dark/light patches; one union rect per line keeps the highlight flat.
  */
-function mergeRectsByLine(
+export function mergeRectsByLine(
 	rects: PdfAskNormalizedRect[],
 ): PdfAskNormalizedRect[] {
 	if (rects.length <= 1) return rects;
@@ -149,4 +154,43 @@ export function matchRectsOnPage(
 	} catch {
 		return null;
 	}
+}
+
+/** Merged selection rects grouped by page for a smooth (Zotero-like) overlay. */
+export function selectionRectsByPage(
+	host: HTMLElement,
+): Array<{ page: number; rects: PdfAskNormalizedRect[] }> {
+	const sel = typeof window !== "undefined" ? window.getSelection() : null;
+	if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return [];
+	const range = sel.getRangeAt(0);
+	if (!host.contains(range.commonAncestorContainer)) return [];
+	const rects = Array.from(range.getClientRects()).filter(
+		(r) => r.width > 0 && r.height > 0,
+	);
+	if (rects.length === 0) return [];
+
+	const byPage = new Map<HTMLElement, DOMRect[]>();
+	const singlePage = findPageElement(range.commonAncestorContainer, host);
+	if (singlePage) {
+		byPage.set(singlePage, rects);
+	} else {
+		for (const r of rects) {
+			const el = document.elementFromPoint(
+				r.left + r.width / 2,
+				r.top + r.height / 2,
+			);
+			const pageEl = findPageElement(el, host);
+			if (!pageEl || !host.contains(pageEl)) continue;
+			const arr = byPage.get(pageEl) ?? [];
+			arr.push(r);
+			byPage.set(pageEl, arr);
+		}
+	}
+
+	const out: Array<{ page: number; rects: PdfAskNormalizedRect[] }> = [];
+	for (const [pageEl, rs] of byPage) {
+		const norm = mergeRectsByLine(clientRectsToNormalized(pageEl, rs));
+		if (norm.length > 0) out.push({ page: pageNumberOf(pageEl), rects: norm });
+	}
+	return out;
 }

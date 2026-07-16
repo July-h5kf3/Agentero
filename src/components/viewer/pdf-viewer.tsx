@@ -66,6 +66,7 @@ import {
 	type FindMatch,
 	findAllMatches,
 	matchRectsOnPage,
+	selectionRectsByPage,
 } from "@/lib/pdf-find";
 import {
 	createHighlight,
@@ -152,6 +153,10 @@ function OutlineTree({
 	);
 }
 
+/** Hide the browser's choppy per-span selection; a smooth overlay replaces it. */
+const SELECTION_CSS =
+	".textLayer ::selection,.react-pdf__Page__textContent ::selection{background-color:transparent !important}.textLayer ::-moz-selection,.react-pdf__Page__textContent ::-moz-selection{background-color:transparent !important}";
+
 export function PdfViewer({
 	source,
 	paperAbsPath = null,
@@ -187,6 +192,9 @@ export function PdfViewer({
 		page: number;
 		rects: PdfAskNormalizedRect[];
 	} | null>(null);
+	const [selectionOverlay, setSelectionOverlay] = useState<
+		Array<{ page: number; rects: PdfAskNormalizedRect[] }>
+	>([]);
 
 	const pageWidth = Math.max(200, fitWidth);
 	// Pages render at the real (settled) scale so the text layer stays crisp and
@@ -332,12 +340,34 @@ export function PdfViewer({
 		setFindMatches([]);
 		setFindIndex(-1);
 		setFindHighlight(null);
+		setSelectionOverlay([]);
 		pageTextCacheRef.current = new Map();
 		const scrollEl = scrollRef.current;
 		if (scrollEl) {
 			scrollEl.scrollLeft = 0;
 			scrollEl.scrollTop = 0;
 		}
+	}, [fileUrl]);
+
+	// Smooth (Zotero-like) selection: mirror the native selection as one merged
+	// band per line; the native ::selection is hidden via SELECTION_CSS.
+	useEffect(() => {
+		if (!fileUrl) return;
+		let raf = 0;
+		const update = () => {
+			raf = 0;
+			const host = hostRef.current;
+			setSelectionOverlay(host ? selectionRectsByPage(host) : []);
+		};
+		const onSelChange = () => {
+			if (raf) return;
+			raf = requestAnimationFrame(update);
+		};
+		document.addEventListener("selectionchange", onSelChange);
+		return () => {
+			document.removeEventListener("selectionchange", onSelChange);
+			if (raf) cancelAnimationFrame(raf);
+		};
 	}, [fileUrl]);
 
 	// Once a zoom gesture settles, re-render pages at the real scale (the
@@ -1163,6 +1193,7 @@ export function PdfViewer({
 			id="agentero-pdf-host"
 			className={cn("relative flex h-full min-h-0 flex-col", className)}
 		>
+			<style>{SELECTION_CSS}</style>
 			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
 				<TooltipProvider delayDuration={200}>
 					<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
@@ -1453,6 +1484,26 @@ export function PdfViewer({
 																}}
 															/>
 														))}
+													</div>
+												) : null}
+												{selectionOverlay.some((s) => s.page === pageNumber) ? (
+													<div className="pointer-events-none absolute inset-0 z-[8]">
+														{selectionOverlay
+															.filter((s) => s.page === pageNumber)
+															.flatMap((s) =>
+																s.rects.map((r) => (
+																	<div
+																		key={`sel-${pageNumber}-${r.x}-${r.y}-${r.w}`}
+																		className="absolute rounded-[1px] bg-blue-500/30"
+																		style={{
+																			left: `${r.x * 100}%`,
+																			top: `${r.y * 100}%`,
+																			width: `${r.w * 100}%`,
+																			height: `${r.h * 100}%`,
+																		}}
+																	/>
+																)),
+															)}
 													</div>
 												) : null}
 												<div data-pdf-ask-ui="">
