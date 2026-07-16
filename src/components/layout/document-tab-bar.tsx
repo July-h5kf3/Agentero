@@ -34,7 +34,7 @@ export function DocumentTabBar({
 
 	return (
 		<div
-			className="agentero-scroll flex h-9 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b bg-muted/20 px-1"
+			className="agentero-scroll flex h-10 shrink-0 items-stretch gap-0.5 overflow-x-auto border-b bg-muted/20 px-1"
 			role="tablist"
 			aria-label={t("app:tabs.strip")}
 		>
