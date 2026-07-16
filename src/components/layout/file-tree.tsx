@@ -429,17 +429,6 @@ export function FileTree({
 		[byPath, onSelectFile, onSelectLibrary],
 	);
 
-	const handleToggleSelect = useCallback((path: string) => {
-		if (path === LIBRARY_VIRTUAL_PATH) return;
-		setSelected((prev) => {
-			const next = new Set(prev);
-			if (next.has(path)) next.delete(path);
-			else next.add(path);
-			return next;
-		});
-		setAnchor(path);
-	}, []);
-
 	const handleSelectRow = useCallback(
 		(path: string, mods: { meta: boolean; ctrl: boolean; shift: boolean }) => {
 			if (createDraft) return;
@@ -458,7 +447,23 @@ export function FileTree({
 				}
 			}
 			if (mods.meta || mods.ctrl) {
-				handleToggleSelect(path);
+				setSelected((prev) => {
+					const next = new Set(prev);
+					// Fold the current open/anchored row into a fresh multi-selection
+					// so the count matches the highlighted rows.
+					if (
+						next.size === 0 &&
+						anchor &&
+						anchor !== path &&
+						selectableOrder.includes(anchor)
+					) {
+						next.add(anchor);
+					}
+					if (next.has(path)) next.delete(path);
+					else next.add(path);
+					return next;
+				});
+				setAnchor(path);
 				return;
 			}
 			// Plain click: drop any multi-selection and open the row.
@@ -470,7 +475,6 @@ export function FileTree({
 			anchor,
 			clearSelection,
 			createDraft,
-			handleToggleSelect,
 			onSelectLibrary,
 			openRow,
 			selectableOrder,

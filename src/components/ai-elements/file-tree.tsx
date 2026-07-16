@@ -218,8 +218,9 @@ export const FileTreeFolder = ({
 		onRowDragEnd,
 	} = useContext(FileTreeContext);
 	const isExpanded = expandedPaths.has(path);
+	const selCount = selectedPaths?.size ?? 0;
 	const isSelected =
-		selectedPath === path || (selectedPaths?.has(path) ?? false);
+		selCount > 0 ? (selectedPaths?.has(path) ?? false) : selectedPath === path;
 
 	const folderContextValue = useMemo(
 		() => ({ isExpanded, name, path }),
@@ -324,8 +325,9 @@ export const FileTreeFile = ({
 		onRowDrop,
 		onRowDragEnd,
 	} = useContext(FileTreeContext);
+	const selCount = selectedPaths?.size ?? 0;
 	const isSelected =
-		selectedPath === path || (selectedPaths?.has(path) ?? false);
+		selCount > 0 ? (selectedPaths?.has(path) ?? false) : selectedPath === path;
 
 	const handleClick = useCallback(
 		(e: MouseEvent) => {
