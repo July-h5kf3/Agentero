@@ -79,7 +79,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`、`window_new`、`set_locale`。  
+> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
@@ -169,6 +169,15 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **`path_untrash` 返回**（`ApiResult<{ restored: number }>`）
   - 把该批次文件移回原位并 `upsert` 恢复 catalog 行。
   - **预检**：若任一原路径已被重新占用，整批中止且不改动任何内容（不覆盖新内容）。
+
+#### `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`（已落地）
+
+回收站浏览：`RecycleBinDialog` 用这些命令列出 / 恢复 / 永久删除已删项。
+
+- **`path_list_trash`**（`{ vaultPath }` → `ApiResult<TrashEntry[]>`）：展平所有批次为逐项条目 `{ id, batchId, stored, rel, name, deletedAt, isDir }`，按删除时间倒序。
+- **`path_restore_item`**（`{ vaultPath, batchId, stored }` → `ApiResult<{ rel: string }>`）：把单项移回原位并 `upsert` 恢复其 catalog 行；原路径已占用则报错；批次清空后删除批次目录。
+- **`path_purge_item`**（`{ vaultPath, batchId, stored }` → `ApiResult<null>`）：永久删除单项（不可恢复）。
+- **`path_purge_trash`**（`{ vaultPath }` → `ApiResult<null>`）：清空整个回收站（不可恢复）。
 
 #### `window_new`（已实现）
 

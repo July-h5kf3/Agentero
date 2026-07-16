@@ -41,6 +41,7 @@
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
+  - **回收站** → `Trash2`（最右；打开 `RecycleBinDialog` 浏览 / 恢复 / 永久删除已删项，见「删除」）
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
 - **在系统文件管理器中显示**（`revealItemInDir` / `src/lib/reveal.ts`）：
   - **右键**真实文件 / 文件夹 / paper 行 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
@@ -59,6 +60,7 @@
   - **撤销**：Toast 内点「撤销」→ `path_untrash` 把文件移回原位并恢复 catalog 行；若原路径已被重新占用则整批中止、不覆盖新内容。
   - `papers/` 下的项移入回收站时**快照并移除** catalog 对应行（含嵌套 paper），撤销时一并恢复；随后刷新文件树、Library 与双链索引。
   - `⌘⌫` 在编辑器 / 输入框聚焦时不拦截（保留系统删行首行为）。
+  - **回收站浏览**：侧栏头部 `Trash2` 图标打开 `RecycleBinDialog` → 列出全部已删项（名称 / 原路径 / 删除时间），逐项**恢复**（`path_restore_item`，恢复文件 + catalog 行）或**永久删除**（`path_purge_item`），底部可**清空回收站**（`path_purge_trash`，不可撤销、需确认）。撤销 Toast 错过后仍可从这里找回。
   - 不可删：虚拟 Library、Vault 根。
 - **多选与批量操作**（`file-tree.tsx` + 原语 `ai-elements/file-tree.tsx`）：
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
