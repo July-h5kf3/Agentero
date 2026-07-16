@@ -171,6 +171,30 @@ pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppErro
     Ok(n)
 }
 
+/// Remove catalog rows whose paper folder no longer exists on disk (orphans left
+/// by deleting folders outside the app). Returns the number of rows removed.
+pub fn prune_missing(vault_root: &Path) -> Result<usize, AppError> {
+    let conn = ensure_catalog(vault_root)?;
+    let mut stmt = conn
+        .prepare("SELECT path FROM papers")
+        .map_err(AppError::from)?;
+    let paths = stmt
+        .query_map([], |r| r.get::<_, String>(0))
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(AppError::from)?;
+    drop(stmt);
+    let mut removed = 0usize;
+    for path in paths {
+        if !vault_root.join(&path).is_dir() {
+            removed += conn
+                .execute("DELETE FROM papers WHERE path = ?1", params![path])
+                .map_err(AppError::from)?;
+        }
+    }
+    Ok(removed)
+}
+
 fn upsert_conn(conn: &Connection, r: &PaperRecord) -> Result<(), AppError> {
     let authors_json =
         serde_json::to_string(&r.authors).map_err(|e| AppError::message(e.to_string()))?;

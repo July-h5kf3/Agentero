@@ -58,6 +58,8 @@ pub struct ZoteroMigrateResult {
     pub imported: usize,
     pub skipped: usize,
     pub copied_pdfs: usize,
+    /// Orphan catalog rows removed before import (paper folder gone from disk).
+    pub pruned: usize,
     pub paths: Vec<String>,
     pub errors: Vec<String>,
 }
@@ -103,12 +105,19 @@ pub async fn migrate_zotero(args: ZoteroMigrateArgs) -> Result<ZoteroMigrateResu
 
     let items = read_all_items(&zotero_dir)?;
 
+    // Deleting paper folders outside the app leaves orphan catalog rows; drop them
+    // first so dedup does not block re-import and the Library shows no ghosts.
+    let pruned = papers::prune_missing(&vault).unwrap_or(0);
+
     // Dedup against the existing catalog (and within this run) by strong ids +
     // normalized title, so re-runs and pre-existing papers are skipped without
     // losing distinct papers that happen to share a citekey.
     let mut dedup = Dedup::from_catalog(&vault);
 
-    let mut out = ZoteroMigrateResult::default();
+    let mut out = ZoteroMigrateResult {
+        pruned,
+        ..Default::default()
+    };
     for item in items {
         match migrate_one(
             &vault,
