@@ -123,3 +123,30 @@ pub fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
         Err(e) => map_err(e),
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaperSetTagsArgs {
+    pub vault_path: String,
+    /// Vault-relative paper folder path.
+    pub path: String,
+    /// Full replacement list (not a patch merge).
+    pub tags: Vec<String>,
+}
+
+/// Replace catalog tags for a paper (syncs metadata.json projection).
+#[tauri::command]
+pub fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    let path = args.path.trim().trim_matches('/').replace('\\', "/");
+    if path.is_empty() {
+        return map_err(AppError::message("path is required"));
+    }
+    match papers::set_tags(&vault, &path, &args.tags) {
+        Ok(row) => ApiResult::ok(row),
+        Err(e) => map_err(e),
+    }
+}

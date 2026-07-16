@@ -41,6 +41,7 @@
    - [x] 表头排序；横向/纵向滚动。
    - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
    - [x] Library 行批量补资源（与 2b 联动）。
+   - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选。
 
 2d. **文件树与侧栏 UX** ✅
    - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）。

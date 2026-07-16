@@ -85,6 +85,7 @@ import {
 	isLibraryVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
+	setPaperTags,
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
@@ -255,6 +256,8 @@ export default function App() {
 	const [libraryLoading, setLibraryLoading] = useState(false);
 	/** Title search query for the papers library view. */
 	const [libraryQuery, setLibraryQuery] = useState("");
+	/** Tag filter for the papers library view (exact match). */
+	const [libraryTagFilter, setLibraryTagFilter] = useState<string | null>(null);
 	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
 	const [showNotes, setShowNotes] = useState(true);
 	const showNotesRef = useRef(showNotes);
@@ -815,6 +818,8 @@ export default function App() {
 			setTabs([]);
 			setActiveTabId(null);
 			setTreeSelectedPath(null);
+			setLibraryQuery("");
+			setLibraryTagFilter(null);
 			setRecentVaults(getRecentVaults());
 			await rebuildWikiAndNotify(path);
 		},
@@ -1688,6 +1693,41 @@ export default function App() {
 		[vaultPath, openPaper],
 	);
 
+	/** Persist tags from Paper Info and keep library + open tabs in sync. */
+	const handlePaperTagsChange = useCallback(
+		async (tags: string[]) => {
+			if (!vaultPath || !paperMeta?.path) return;
+			const path = paperMeta.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+			try {
+				const updated = await setPaperTags(vaultPath, path, tags);
+				setLibraryPapers((prev) =>
+					prev.map((p) => {
+						const key = (p.path ?? "")
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						return key === path ? { ...p, ...updated } : p;
+					}),
+				);
+				setTabs((prev) =>
+					prev.map((tab) => {
+						if (!tab.paperMeta?.path) return tab;
+						const key = tab.paperMeta.path
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						if (key !== path) return tab;
+						return {
+							...tab,
+							paperMeta: { ...tab.paperMeta, ...updated },
+						};
+					}),
+				);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : String(e));
+			}
+		},
+		[vaultPath, paperMeta],
+	);
+
 	const openPath = useCallback(
 		(absoluteOrDemoPath: string) => {
 			openTab(absoluteOrDemoPath, {
@@ -1995,6 +2035,8 @@ export default function App() {
 					papers={libraryPapers}
 					loading={libraryLoading}
 					query={libraryQuery}
+					tagFilter={libraryTagFilter}
+					onTagFilterChange={setLibraryTagFilter}
 					onOpenPaper={handleOpenLibraryPaper}
 					className="bg-muted/20"
 				/>
@@ -2351,7 +2393,12 @@ export default function App() {
 									/>
 								</div>
 								{/* Paper info only when a specific paper is selected */}
-								{paperMeta ? <PaperInfoPanel meta={paperMeta} /> : null}
+								{paperMeta ? (
+									<PaperInfoPanel
+										meta={paperMeta}
+										onTagsChange={handlePaperTagsChange}
+									/>
+								) : null}
 							</aside>
 						</ResizablePanel>
 

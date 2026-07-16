@@ -171,6 +171,34 @@ pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<Paper
     upsert_paper(vault_root, &row)
 }
 
+/// Replace tags for a paper path; returns the updated row.
+/// Tags are trimmed, empty strings dropped, and de-duplicated case-insensitively
+/// (first occurrence keeps its original casing).
+pub fn set_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperRecord, AppError> {
+    let path = path.replace('\\', "/").trim_matches('/').to_string();
+    let Some(mut row) = get_by_path(vault_root, &path)? else {
+        return Err(AppError::message("paper not found in catalog"));
+    };
+    row.tags = normalize_tags(tags);
+    row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    upsert_paper(vault_root, &row)
+}
+
+fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for raw in tags {
+        let t = raw.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if out.iter().any(|existing| existing.eq_ignore_ascii_case(t)) {
+            continue;
+        }
+        out.push(t.to_string());
+    }
+    out
+}
+
 /// Delete a paper row and any papers nested under `path/` (org folder delete).
 /// Returns the number of catalog rows removed.
 pub fn delete_under_path(vault_root: &Path, path: &str) -> Result<usize, AppError> {
@@ -416,4 +444,23 @@ pub fn sync_metadata_json(vault_root: &Path, record: &PaperRecord) -> Result<(),
         serde_json::to_string_pretty(&file_copy).map_err(|e| AppError::message(e.to_string()))?;
     fs::write(paper_dir.join("metadata.json"), format!("{json}\n"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_tags;
+
+    #[test]
+    fn normalize_tags_trims_dedupes_case_insensitive() {
+        let tags = normalize_tags(&[
+            "  NLP ".into(),
+            "nlp".into(),
+            "".into(),
+            "  ".into(),
+            "RL".into(),
+            "rl".into(),
+            "CV".into(),
+        ]);
+        assert_eq!(tags, vec!["NLP", "RL", "CV"]);
+    }
 }

@@ -27,6 +27,7 @@
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
+- 标签：`paper_set_tags`（catalog `tags` 整表替换）；Paper Info 编辑，Library 展示与筛选。
 - **双链**索引（`graph_*`）与规划中的 **文献引用图**（roadmap V0.7）分层；后者不复用双链边语义。
 
 ## 本分区文档

@@ -107,7 +107,8 @@
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
   - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
   - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
-  - **列**：标题、作者、年份、类型、标识符；点击行打开对应 paper 文件夹。
+  - **列**：标题、作者、年份、**标签**、类型、标识符；点击行打开对应 paper 文件夹。
+  - **标签筛选**：表上方汇总库内全部 tag 为可点 chip（再点取消）；单元格内 tag 也可筛选。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
   - **滚动**：容器 `.agentero-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
   - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
@@ -115,7 +116,7 @@
   - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
   - **从 Zotero 迁移**（`Import` 图标，论文库工具栏左侧；仅 Library 视图）：`ZoteroMigrateDialog` → 选 Zotero 数据目录 → 预览文献/PDF 计数 + 「把 PDF 复制进知识库」勾选（默认开）→ `zotero_migrate`（直读 `zotero.sqlite`，见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
 - **Paper Info / Notes——仅具体论文**：
-  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。
+  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威，同步 `metadata.json`）。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
   - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 关闭当前标签（等价 `⌥⌘W`）；论文库视图与欢迎页不显示。

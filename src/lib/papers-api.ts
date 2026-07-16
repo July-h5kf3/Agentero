@@ -85,6 +85,28 @@ export async function setPaperIsRead(
 	return res.data;
 }
 
+/**
+ * Replace paper tags in catalog (full list; Host normalizes trim/dedupe).
+ */
+export async function setPaperTags(
+	vaultPath: string,
+	path: string,
+	tags: string[],
+): Promise<PaperMetadata> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:paperInfo.tagsDesktopOnly"));
+	}
+	const res = await invoke<ApiResult<PaperMetadata>>("paper_set_tags", {
+		args: { vaultPath, path, tags },
+	});
+	if (!res.ok || !res.data) {
+		throw new Error(
+			res.error?.message ?? i18n.t("sidebar:paperInfo.tagsSaveFailed"),
+		);
+	}
+	return res.data;
+}
+
 export type PaperExportResult = {
 	format: string;
 	content: string;

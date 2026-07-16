@@ -738,6 +738,26 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - **手动**：文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
   - 实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
+#### `paper_set_tags`（已落地）
+
+整表替换 catalog 中单篇论文的 **`tags`**（`tags_json`）。成功后同步 `metadata.json` 投影。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  vaultPath: string;
+  /** paper 文件夹 Vault 相对路径 */
+  path: string;
+  /** 完整标签列表（非增量 patch） */
+  tags: string[];
+}
+```
+
+- **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
+- **规范化**：trim 空白；丢弃空串；大小写不敏感去重（保留首次出现的写法）。
+- **前端**：`src/lib/papers-api.ts` → `setPaperTags`；Paper Info 面板可增删；Library 表格展示 + 标签筛选。
+
 #### `paper:list`（扩展规划）
 
 带过滤与分页的列表（尚未实现；现网用 `paper_list`）。

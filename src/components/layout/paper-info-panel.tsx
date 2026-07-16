@@ -7,8 +7,15 @@ import {
 	Info,
 	Tag,
 	Users,
+	X,
 } from "lucide-react";
-import { type ComponentType, type ReactNode, useEffect, useState } from "react";
+import {
+	type ComponentType,
+	type KeyboardEvent,
+	type ReactNode,
+	useEffect,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -16,6 +23,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +32,8 @@ type PaperInfoPanelProps = {
 	className?: string;
 	/** Expand when a paper is selected (default true). */
 	autoOpen?: boolean;
+	/** Persist tags to catalog. Required for editing. */
+	onTagsChange?: (tags: string[]) => Promise<void> | void;
 };
 
 function MetaRow({
@@ -71,10 +81,120 @@ function LinkChip({ href, label }: { href: string; label: string }) {
 	);
 }
 
+function normalizeTagList(tags: string[]): string[] {
+	const out: string[] = [];
+	for (const raw of tags) {
+		const t = raw.trim();
+		if (!t) continue;
+		if (out.some((x) => x.toLocaleLowerCase() === t.toLocaleLowerCase())) {
+			continue;
+		}
+		out.push(t);
+	}
+	return out;
+}
+
+function TagsEditor({
+	tags,
+	disabled,
+	onChange,
+}: {
+	tags: string[];
+	disabled?: boolean;
+	onChange: (tags: string[]) => void;
+}) {
+	const { t } = useTranslation("sidebar");
+	const [draft, setDraft] = useState("");
+	const [busy, setBusy] = useState(false);
+
+	const commit = async (next: string[]) => {
+		const normalized = normalizeTagList(next);
+		setBusy(true);
+		try {
+			await onChange(normalized);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const addTag = () => {
+		const value = draft.trim();
+		if (!value || busy || disabled) return;
+		setDraft("");
+		void commit([...tags, value]);
+	};
+
+	const removeTag = (tag: string) => {
+		if (busy || disabled) return;
+		void commit(tags.filter((x) => x !== tag));
+	};
+
+	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			addTag();
+		} else if (e.key === "Backspace" && !draft && tags.length > 0) {
+			const last = tags[tags.length - 1];
+			if (last) removeTag(last);
+		}
+	};
+
+	return (
+		<div className="flex flex-col gap-1.5">
+			{tags.length > 0 ? (
+				<div className="flex flex-wrap gap-1">
+					{tags.map((tag) => (
+						<span
+							key={tag}
+							className={cn(
+								"inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5",
+								"text-[10px] text-muted-foreground",
+							)}
+						>
+							#{tag}
+							{disabled ? null : (
+								<button
+									type="button"
+									className={cn(
+										"rounded p-0.5 text-muted-foreground/70 transition-colors",
+										"hover:bg-background hover:text-foreground",
+										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+										"disabled:pointer-events-none disabled:opacity-50",
+									)}
+									aria-label={t("paperInfo.removeTag", { tag })}
+									disabled={busy}
+									onClick={() => removeTag(tag)}
+								>
+									<X className="size-2.5" aria-hidden />
+								</button>
+							)}
+						</span>
+					))}
+				</div>
+			) : null}
+			{disabled ? null : (
+				<Input
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onKeyDown={onKeyDown}
+					onBlur={() => {
+						if (draft.trim()) addTag();
+					}}
+					placeholder={t("paperInfo.addTag")}
+					aria-label={t("paperInfo.addTag")}
+					disabled={busy}
+					className="h-6 border-dashed px-1.5 text-[11px]"
+				/>
+			)}
+		</div>
+	);
+}
+
 export function PaperInfoPanel({
 	meta,
 	className,
 	autoOpen = true,
+	onTagsChange,
 }: PaperInfoPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const [open, setOpen] = useState(Boolean(meta) && autoOpen);
@@ -120,7 +240,7 @@ export function PaperInfoPanel({
 							{t("paperInfo.selectPrompt")}
 						</p>
 					) : (
-						<div className="agentero-scroll max-h-48 overflow-y-auto border-t pb-2">
+						<div className="agentero-scroll max-h-56 overflow-y-auto border-t pb-2">
 							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
 								<span className="font-medium">{meta.title}</span>
 							</MetaRow>
@@ -136,20 +256,15 @@ export function PaperInfoPanel({
 									{meta.year}
 								</MetaRow>
 							) : null}
-							{meta.tags?.length ? (
-								<MetaRow icon={Tag} label={t("paperInfo.tags")}>
-									<div className="flex flex-wrap gap-1">
-										{meta.tags.map((t) => (
-											<span
-												key={t}
-												className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-											>
-												#{t}
-											</span>
-										))}
-									</div>
-								</MetaRow>
-							) : null}
+							<MetaRow icon={Tag} label={t("paperInfo.tags")}>
+								<TagsEditor
+									tags={meta.tags ?? []}
+									disabled={!onTagsChange || !meta.path}
+									onChange={async (tags) => {
+										if (onTagsChange) await onTagsChange(tags);
+									}}
+								/>
+							</MetaRow>
 							{meta.abstract ? (
 								<MetaRow icon={FileText} label={t("paperInfo.abstract")}>
 									<p className="line-clamp-4 text-muted-foreground">
