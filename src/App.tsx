@@ -3,7 +3,6 @@ import {
 	Download,
 	Focus,
 	FolderOpen,
-	Import,
 	Link2,
 	Loader2,
 	NotebookPen,
@@ -22,6 +21,7 @@ import {
 	type MarkdownEditorHandle,
 } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
@@ -2390,7 +2390,7 @@ export default function App() {
 																disabled={!vaultPath}
 																onClick={() => setZoteroOpen(true)}
 															>
-																<Import className="size-3.5" />
+																<ZoteroIcon className="size-3.5" />
 															</Button>
 														</TooltipTrigger>
 														<TooltipContent side="bottom">
