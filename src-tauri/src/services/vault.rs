@@ -9,7 +9,7 @@ use std::path::Path;
 /// Default AGENTS.md template written on Create Vault (only if missing).
 pub const AGENTS_MD_TEMPLATE: &str = r#"# AGENTS.md
 
-This file is the L0 map for agents working in this Motif research vault.
+This file is the L0 map for agents working in this Agentero research vault.
 
 ## Layout
 
@@ -17,7 +17,7 @@ This file is the L0 map for agents working in this Motif research vault.
 - `notes/` — free-form concept notes and ideas (`[[wikilinks]]` welcome).
 - `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
-- `.motif/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
+- `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
 
 ## Progressive disclosure
 
@@ -57,11 +57,11 @@ fn join_rel(root: &Path, rel: &str) -> std::path::PathBuf {
     p
 }
 
-/// Create Motif vault skeleton under `path` without overwriting existing user files.
+/// Create Agentero vault skeleton under `path` without overwriting existing user files.
 ///
-/// Creates: `papers/`, `notes/`, `plans/`, `.motif/`, `.agents/` (+ `skills/`),
+/// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md`, and initializes
-/// `.motif/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
+/// `.agentero/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
 pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     if !path.exists() {
         fs::create_dir_all(path)?;
@@ -79,7 +79,7 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         "papers",
         "notes",
         "plans",
-        ".motif",
+        ".agentero",
         ".agents",
         ".agents/skills",
     ] {
@@ -118,7 +118,7 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     let conn = catalog::ensure_catalog(path)?;
     drop(conn);
     if !db_existed && db_path.exists() {
-        created.push(".motif/catalog.sqlite".into());
+        created.push(".agentero/catalog.sqlite".into());
     }
 
     let path_str = path
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn create_vault_scaffolds_dirs_and_catalog() {
-        let dir = env::temp_dir().join(format!("motif-vault-create-{}", std::process::id()));
+        let dir = env::temp_dir().join(format!("agentero-vault-create-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
@@ -149,13 +149,13 @@ mod tests {
         assert!(dir.join("papers").is_dir());
         assert!(dir.join("notes").is_dir());
         assert!(dir.join("plans").is_dir());
-        assert!(dir.join(".motif").is_dir());
+        assert!(dir.join(".agentero").is_dir());
         assert!(dir.join(".agents").is_dir());
         assert!(dir.join(".agents/skills").is_dir());
         assert!(dir.join(".agents/README.md").is_file());
         assert!(dir.join(".agents/skills/paper-reader/SKILL.md").is_file());
         assert!(dir.join("AGENTS.md").is_file());
-        assert!(dir.join(".motif/catalog.sqlite").is_file());
+        assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(!dir.join("PAPERS.md").exists());
         assert!(!dir.join("library.bib").exists());
         assert!(r
@@ -179,18 +179,18 @@ mod tests {
     }
 
     /// Optional smoke write:
-    /// `MOTIF_TEST_VAULT_PATH=$HOME/Downloads/motif-from-rust cargo test create_vault_at_env_path -- --ignored --nocapture`
+    /// `AGENTERO_TEST_VAULT_PATH=$HOME/Downloads/agentero-from-rust cargo test create_vault_at_env_path -- --ignored --nocapture`
     #[test]
-    #[ignore = "set MOTIF_TEST_VAULT_PATH to write a real vault (e.g. under Downloads)"]
+    #[ignore = "set AGENTERO_TEST_VAULT_PATH to write a real vault (e.g. under Downloads)"]
     fn create_vault_at_env_path() {
-        let raw = env::var("MOTIF_TEST_VAULT_PATH").expect("set MOTIF_TEST_VAULT_PATH");
+        let raw = env::var("AGENTERO_TEST_VAULT_PATH").expect("set AGENTERO_TEST_VAULT_PATH");
         let dir = Path::new(&raw);
         if dir.exists() {
             let _ = fs::remove_dir_all(dir);
         }
         fs::create_dir_all(dir).unwrap();
         let r = create_vault(dir).expect("create");
-        assert!(dir.join(".motif/catalog.sqlite").is_file());
+        assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join("papers").is_dir());
         assert!(!dir.join("PAPERS.md").exists());

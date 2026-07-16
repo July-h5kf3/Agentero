@@ -3,7 +3,7 @@ export type ThemePreference = "system" | "light" | "dark";
 export type LocalePreference = "system" | "en" | "zh-CN";
 
 /**
- * How Motif responds to agent permission escalations.
+ * How Agentero responds to agent permission escalations.
  * - `restricted`: decline requests (Codex uses workspace-write).
  * - `auto`: auto-approve every request (YOLO; Codex uses danger-full-access).
  */
@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	shareCrashReports: false,
 };
 
-const SETTINGS_KEY = "motif-settings";
+const SETTINGS_KEY = "agentero-settings";
 
 export function loadSettings(): AppSettings {
 	try {

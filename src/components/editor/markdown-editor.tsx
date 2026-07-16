@@ -115,7 +115,7 @@ export function MarkdownEditor({
 			<div className={cn("flex h-full min-h-0 flex-col", className)}>
 				{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
 				<EditorContainer
-					className="motif-scroll min-h-0 flex-1"
+					className="agentero-scroll min-h-0 flex-1"
 					onKeyDown={readOnly ? undefined : handleKeyDown}
 				>
 					<Editor

@@ -44,7 +44,7 @@
 |---|---|
 | `react-pdf` + `pdfjs-dist`（已开 `renderTextLayer`） | 选区与字符坐标来源 |
 | `PdfViewer`（`src/components/viewer/pdf-viewer.tsx`） | 扩展为带交互层的阅读器，而非平行第二套渲染 |
-| ACP / `agent_run_once` + `agent:stream` 等 | 问答传输；**不**新建模型 SDK、**不**在 Motif 存 API Key |
+| ACP / `agent_run_once` + `agent:stream` 等 | 问答传输；**不**新建模型 SDK、**不**在 Agentero 存 API Key |
 | AI Elements（Conversation / Message / PromptInput） | 迷你卡内消息列表与输入；传输仍是 ACP，不是 Vercel `useChat` |
 | Paper 文件夹 / Vault 文件 | 线程 JSON 落在 paper 目录，local-first |
 | `highlights.md`（L2.5 标注） | **首版不混写**；可选后续把「值得保留的引文」导出为 highlight |
@@ -70,7 +70,7 @@
 | 方案 | 不采用原因 |
 |---|---|
 | 在 PDF 内嵌 XFDF/注解 | 污染用户原始 PDF；与 local-first「人可读旁路文件」冲突 |
-| 仅存 `.motif/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
+| 仅存 `.agentero/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
 | 全部写入 `highlights.md` | Markdown 不便表达多轮消息与流式元数据；首版 JSON 更干净；可后续互导 |
 | 浏览器扩展式划词 | 应用内 Webview 已有 PDF，无需跨页面扩展 |
 | 自研 Canvas 文本命中 | TextLayer 已够用；仅在无文本层时再考虑坐标-only |
@@ -135,7 +135,7 @@ papers/<id>/
 
 - **事实来源**：`asks/<threadId>.json`（人产生的问答）。
 - **可选索引**：`asks/index.json` 加速页边渲染（仅 id/page/y/preview）；丢失时可扫目录重建。
-- **不**把全文塞进 `.motif/catalog.sqlite`；catalog 不承载对话正文。
+- **不**把全文塞进 `.agentero/catalog.sqlite`；catalog 不承载对话正文。
 
 ### 5.2 线程 JSON Schema（逻辑）
 
@@ -302,6 +302,6 @@ src/lib/pdf-ask/
 1. **渲染**：继续 `react-pdf` TextLayer，不引入第二套 PDF 引擎。  
 2. **交互**：选区 / 双击 / 悬停三触发 → 迷你问答卡 → 结束变页边圆片。  
 3. **存储**：`papers/<id>/asks/<threadId>.json`（用户要求的 JSON）；坐标归一化可重建。  
-4. **智能**：复用 ACP BYOA，不在 Motif 内嵌模型 Key。  
+4. **智能**：复用 ACP BYOA，不在 Agentero 内嵌模型 Key。  
 5. **UI**：AI Elements + shadcn；飞书式边注心智，不做完整批注产品首版。  
 6. **与 highlights**：分离；后续可选导出。

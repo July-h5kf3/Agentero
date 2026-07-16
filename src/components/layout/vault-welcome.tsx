@@ -26,7 +26,7 @@ export function VaultWelcome({
 	return (
 		<div
 			className={cn(
-				"motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center bg-muted/20 p-8",
+				"agentero-scroll flex min-h-0 flex-1 flex-col items-center justify-center bg-muted/20 p-8",
 				className,
 			)}
 		>

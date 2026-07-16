@@ -16,7 +16,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-const USER_AGENT: &str = "motif-lookup/0.1 (+https://github.com/poco-ai/motif)";
+const USER_AGENT: &str = "agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)";
 
 /// Formats accepted by translation-server `?format=` (see zotero/translation-server formats.js).
 pub const EXPORT_FORMATS: &[&str] = &[
@@ -127,7 +127,7 @@ pub async fn export_catalog(args: PaperExportArgs) -> Result<PaperExportResult, 
         format: format.clone(),
         content: text,
         count: items.len(),
-        filename: format!("motif-library.{ext}"),
+        filename: format!("agentero-library.{ext}"),
     })
 }
 
@@ -370,7 +370,7 @@ pub fn paper_record_to_zotero_item(r: &PaperRecord) -> Value {
     if let Some(v) = r.meta_source.as_ref().filter(|s| !s.is_empty()) {
         map.insert("libraryCatalog".into(), json!(v));
     } else {
-        map.insert("libraryCatalog".into(), json!("Motif"));
+        map.insert("libraryCatalog".into(), json!("Agentero"));
     }
     if !extra_parts.is_empty() {
         map.insert("extra".into(), json!(extra_parts.join("\n")));

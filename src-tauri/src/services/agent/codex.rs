@@ -21,14 +21,14 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::watch;
 
-const CLIENT_INFO: &str = "motif";
-const MOTIF_THREAD_INDEX_PATH: &str = ".motif/agent-sessions/codex.json";
+const CLIENT_INFO: &str = "agentero";
+const AGENTERO_THREAD_INDEX_PATH: &str = ".agentero/agent-sessions/codex.json";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
-static MOTIF_THREAD_INDEX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static AGENTERO_THREAD_INDEX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MotifCodexThreadIndex {
+struct AgenteroCodexThreadIndex {
     #[serde(default = "default_thread_index_version")]
     version: u8,
     #[serde(default)]
@@ -244,12 +244,12 @@ impl CodexClient {
                 ));
             }
             (Some(method), Some(id)) => {
-                // Motif has no per-request approval surface yet. Explicitly decline rather
+                // Agentero has no per-request approval surface yet. Explicitly decline rather
                 // than silently granting an escalation; YOLO uses approvalPolicy=never.
                 self.write(json!({
                     "jsonrpc": "2.0",
                     "id": id,
-                    "error": { "code": -32601, "message": format!("Motif cannot handle Codex server request: {method}") }
+                    "error": { "code": -32601, "message": format!("Agentero cannot handle Codex server request: {method}") }
                 })).await?;
             }
             _ => {}
@@ -292,7 +292,7 @@ fn turn_completion(params: &Value) -> TurnNotification {
 }
 
 fn approval_policy(_auto_approve: bool) -> &'static str {
-    // Motif has no interactive approval surface. `never` makes Codex reject
+    // Agentero has no interactive approval surface. `never` makes Codex reject
     // escalations using its native policy instead of issuing server requests.
     "never"
 }
@@ -476,26 +476,26 @@ fn find_transcript(root: &Path, thread_id: &str) -> Option<PathBuf> {
     None
 }
 
-fn motif_thread_index_path(vault_path: Option<&str>) -> Option<PathBuf> {
+fn agentero_thread_index_path(vault_path: Option<&str>) -> Option<PathBuf> {
     vault_path
         .map(Path::new)
         .filter(|path| path.is_dir())
-        .map(|path| path.join(MOTIF_THREAD_INDEX_PATH))
+        .map(|path| path.join(AGENTERO_THREAD_INDEX_PATH))
 }
 
-fn motif_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
-    let Ok(_guard) = MOTIF_THREAD_INDEX_LOCK
+fn agentero_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
+    let Ok(_guard) = AGENTERO_THREAD_INDEX_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
     else {
         return HashSet::new();
     };
-    let Some(path) = motif_thread_index_path(vault_path) else {
+    let Some(path) = agentero_thread_index_path(vault_path) else {
         return HashSet::new();
     };
     fs::read_to_string(path)
         .ok()
-        .and_then(|content| serde_json::from_str::<MotifCodexThreadIndex>(&content).ok())
+        .and_then(|content| serde_json::from_str::<AgenteroCodexThreadIndex>(&content).ok())
         .unwrap_or_default()
         .thread_ids
         .into_iter()
@@ -503,17 +503,17 @@ fn motif_thread_ids(vault_path: Option<&str>) -> HashSet<String> {
         .collect()
 }
 
-fn remember_motif_thread(vault_path: Option<&str>, thread_id: &str) -> Result<(), AppError> {
-    let _guard = MOTIF_THREAD_INDEX_LOCK
+fn remember_agentero_thread(vault_path: Option<&str>, thread_id: &str) -> Result<(), AppError> {
+    let _guard = AGENTERO_THREAD_INDEX_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .map_err(|_| AppError::message("Motif Codex session index lock poisoned"))?;
-    let Some(path) = motif_thread_index_path(vault_path) else {
+        .map_err(|_| AppError::message("Agentero Codex session index lock poisoned"))?;
+    let Some(path) = agentero_thread_index_path(vault_path) else {
         return Ok(());
     };
     let mut index = fs::read_to_string(&path)
         .ok()
-        .and_then(|content| serde_json::from_str::<MotifCodexThreadIndex>(&content).ok())
+        .and_then(|content| serde_json::from_str::<AgenteroCodexThreadIndex>(&content).ok())
         .unwrap_or_default();
     if !index.thread_ids.iter().any(|id| id == thread_id) {
         index.thread_ids.push(thread_id.to_string());
@@ -521,7 +521,7 @@ fn remember_motif_thread(vault_path: Option<&str>, thread_id: &str) -> Result<()
     index.version = default_thread_index_version();
     let parent = path
         .parent()
-        .ok_or_else(|| AppError::message("Motif Codex session path has no parent"))?;
+        .ok_or_else(|| AppError::message("Agentero Codex session path has no parent"))?;
     fs::create_dir_all(parent).map_err(AppError::Io)?;
     let content = serde_json::to_string_pretty(&index).map_err(|error| {
         AppError::message(format!("failed to encode Codex session metadata: {error}"))
@@ -596,8 +596,8 @@ pub async fn prepare_codex_thread(
     });
     match thread_id {
         Ok(thread_id) => {
-            if let Err(error) = remember_motif_thread(vault_path.as_deref(), &thread_id) {
-                eprintln!("[motif codex] failed to save native thread metadata: {error}");
+            if let Err(error) = remember_agentero_thread(vault_path.as_deref(), &thread_id) {
+                eprintln!("[agentero codex] failed to save native thread metadata: {error}");
             }
             Ok(PreparedCodexThread { thread_id, client })
         }
@@ -954,7 +954,7 @@ pub async fn codex_list_threads(
     let vault_path = vault_path
         .filter(|path| Path::new(path).is_dir())
         .ok_or_else(|| AppError::message("Open a Vault before loading Codex history"))?;
-    let motif_thread_ids = (!include_external).then(|| motif_thread_ids(Some(&vault_path)));
+    let agentero_thread_ids = (!include_external).then(|| agentero_thread_ids(Some(&vault_path)));
     let mut client = CodexClient::spawn(desc, Some(&vault_path)).await?;
     let result = client.request("thread/list", json!({ "cwd": vault_path, "limit": 100, "archived": false, "sortKey": "recency_at", "sortDirection": "desc" })).await?;
     client.shutdown().await;
@@ -965,7 +965,7 @@ pub async fn codex_list_threads(
         .flatten()
         .filter_map(thread_info)
         .filter(|thread| {
-            motif_thread_ids
+            agentero_thread_ids
                 .as_ref()
                 .is_none_or(|ids| ids.contains(&thread.id))
         })
@@ -981,7 +981,7 @@ pub async fn codex_read_thread(
     let vault_path = vault_path
         .filter(|path| Path::new(path).is_dir())
         .ok_or_else(|| AppError::message("Open a Vault before loading Codex history"))?;
-    if !include_external && !motif_thread_ids(Some(&vault_path)).contains(thread_id.as_str()) {
+    if !include_external && !agentero_thread_ids(Some(&vault_path)).contains(thread_id.as_str()) {
         return Err(AppError::message(
             "Codex thread is not indexed for the current Vault",
         ));

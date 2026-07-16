@@ -47,8 +47,8 @@
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
 		"createDesktopOnly": "创建知识库仅在 Tauri 应用中可用。",
-		"dialogTitle": "选择 Motif 知识库文件夹",
-		"createDialogTitle": "选择新建 Motif 知识库的文件夹",
+		"dialogTitle": "选择 Agentero 知识库文件夹",
+		"createDialogTitle": "选择新建 Agentero 知识库的文件夹",
 		"createFailed": "创建知识库失败。",
 		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
 		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",

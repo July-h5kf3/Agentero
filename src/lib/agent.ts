@@ -482,7 +482,7 @@ export async function listenAgentFastMode(
 	return listenAgentEvent("agent:fast-mode", handler);
 }
 
-const MODEL_PREF_KEY = "motif-agent-model-pref";
+const MODEL_PREF_KEY = "agentero-agent-model-pref";
 
 /** Persist last chosen model id per agent. */
 export function loadModelPref(agentId: string | null): string | null {
@@ -508,9 +508,9 @@ export function saveModelPref(agentId: string, modelId: string): void {
 	}
 }
 
-const MODEL_CATALOG_KEY = "motif-agent-model-catalog";
+const MODEL_CATALOG_KEY = "agentero-agent-model-catalog";
 const EXTERNAL_CODEX_HISTORY_PREF_KEY =
-	"motif-agent-external-codex-history-pref";
+	"agentero-agent-external-codex-history-pref";
 
 export type CachedModelCatalog = {
 	configId: string;
@@ -549,7 +549,7 @@ export function saveModelCatalog(
 	}
 }
 
-/** Persist whether a Codex registration includes non-Motif Vault threads. */
+/** Persist whether a Codex registration includes non-Agentero Vault threads. */
 export function loadExternalCodexHistoryPref(agentId: string | null): boolean {
 	if (!agentId) return false;
 	try {

@@ -122,8 +122,8 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
-const STORAGE_KEY = "motif-editor-content";
-const OPEN_FILE_KEY = "motif-open-file";
+const STORAGE_KEY = "agentero-editor-content";
+const OPEN_FILE_KEY = "agentero-open-file";
 
 const defaultMarkdown = `### Title
 
@@ -992,7 +992,7 @@ export default function App() {
 		toggleSidebar,
 	]);
 
-	// Native menu bar (motif → Settings…, File, View) — desktop only
+	// Native menu bar (agentero → Settings…, File, View) — desktop only
 	useEffect(() => {
 		if (!isTauri()) return;
 
@@ -2046,7 +2046,7 @@ export default function App() {
 										lookupOpenSignal={lookupOpenSignal}
 									/>
 								</div>
-								<div className="motif-scroll min-h-0 flex-1 px-1">
+								<div className="agentero-scroll min-h-0 flex-1 px-1">
 									<FileTree
 										nodes={tree}
 										selectedPath={selectedPath}
@@ -2205,7 +2205,7 @@ export default function App() {
 											onRemoveRecent={handleRemoveRecentVault}
 										/>
 									) : (
-										<div className="motif-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
+										<div className="agentero-scroll flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-muted/30 p-6 text-center">
 											<FolderOpen className="size-10 text-muted-foreground" />
 											<div className="max-w-xs space-y-2">
 												<p className="font-medium text-sm">
@@ -2241,7 +2241,7 @@ export default function App() {
 															? `notes-center-${notesKey}`
 															: editorKey
 													}
-													className="motif-scroll h-full min-h-0"
+													className="agentero-scroll h-full min-h-0"
 													initialMarkdown={
 														centerIsPaperNotes ? paperNotes : markdown
 													}
@@ -2375,7 +2375,7 @@ export default function App() {
 										{/* Live WYSIWYG NOTES.md — no separate read-only preview pane */}
 										<MarkdownEditor
 											key={`notes-${notesKey}`}
-											className="motif-scroll h-full min-h-0"
+											className="agentero-scroll h-full min-h-0"
 											initialMarkdown={paperNotes}
 											filePath={notesPath}
 											fontSize={editorFontSize}

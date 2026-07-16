@@ -1,6 +1,6 @@
 use crate::models::agent::{AgentTemplate, AgentTemplateInfo};
 
-/// Preset command templates only — binaries are never bundled with Motif.
+/// Preset command templates only — binaries are never bundled with Agentero.
 ///
 /// `detect_command` is used for "installed on PATH" status when the ACP entrypoint
 /// differs (e.g. Claude/Codex via npx adapters still want to show the host CLI).
@@ -37,7 +37,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             command: "codex".to_string(),
             args: vec!["app-server".to_string()],
             detect_command: Some("codex".to_string()),
-            install_hint: "Install Codex CLI and sign in; Motif starts `codex app-server`."
+            install_hint: "Install Codex CLI and sign in; Agentero starts `codex app-server`."
                 .to_string(),
         },
         AgentTemplateInfo {

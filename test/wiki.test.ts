@@ -72,7 +72,7 @@ describe("wikilink resolution", () => {
 });
 
 describe("wikilink preview rewrite", () => {
-	it("rewrites real links to motif hrefs without touching code", async () => {
+	it("rewrites real links to agentero hrefs without touching code", async () => {
 		const vault = await createTestVault({
 			"notes/Source.md": "See [[notes/Target#Intro|Target Note]].",
 			"notes/Target.md": "# Target",
@@ -90,11 +90,11 @@ describe("wikilink preview rewrite", () => {
 				files,
 			);
 
-			expect(rewritten).toContain("[Target Note](motif-wiki:");
+			expect(rewritten).toContain("[Target Note](agentero-wiki:");
 			expect(rewritten).toContain("`[[ignored-inline]]`");
 			expect(rewritten).toContain("[[ignored-fence]]");
 
-			const href = rewritten.match(/\((motif-wiki:[^)]+)\)/)?.[1];
+			const href = rewritten.match(/\((agentero-wiki:[^)]+)\)/)?.[1];
 			expect(href?.startsWith(WIKI_HREF_PREFIX)).toBe(true);
 			expect(parseWikiHref(href ?? "")).toEqual({
 				targetRaw: "notes/Target",

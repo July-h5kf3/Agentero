@@ -1,6 +1,6 @@
 # 后端
 
-后端是 Motif 的 Tauri Host 层，负责 Rust command、本地文件系统访问、可重建索引、Agent 进程编排，以及 Vault 数据模型。
+后端是 Agentero 的 Tauri Host 层，负责 Rust command、本地文件系统访问、可重建索引、Agent 进程编排，以及 Vault 数据模型。
 
 ## 技术选型
 
@@ -11,9 +11,9 @@
 | Tauri 文件系统 | [`tauri-plugin-fs`](https://v2.tauri.app/plugin/file-system/) | 读写用户选择的 Vault 文件。 |
 | Tauri 对话框 | [`tauri-plugin-dialog`](https://v2.tauri.app/plugin/dialog/) | 原生文件夹 / 文件选择。 |
 | Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 已接入插件；最近 Vault / 设置目前仍以前端 `localStorage` 为主，后续迁 Store。 |
-| Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Motif 作为 Client 连接用户本机 BYOA Agent。 |
+| Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Agentero 作为 Client 连接用户本机 BYOA Agent。 |
 | Markdown 图谱 | Rust Wiki 索引 + Markdown 解析 | 反链和图谱必须从 Vault Markdown 派生。 |
-| 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.motif/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |
+| 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.agentero/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |
 | 标识符查元数据 | 本机 [Zotero Translators](https://www.zotero.org/support/dev/translators) Runtime（旁路进程） | 魔棒：DOI / ISBN / PMID / arXiv 等；不链进主二进制。见 [`identifier-lookup.md`](identifier-lookup.md)。 |
 | PDF 解析 | 计划使用 `liteparse` / MinerU BYOK | 默认本地优先，可选云端提高解析质量。 |
 

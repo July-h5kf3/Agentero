@@ -15,7 +15,7 @@ use tauri::{
 fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let labels = menu_labels(lang);
 
-    // Appears under the app name menu on macOS (e.g. "motif").
+    // Appears under the app name menu on macOS (e.g. "Agentero").
     let settings = MenuItemBuilder::with_id("settings", labels.settings)
         .accelerator("CmdOrCtrl+,")
         .build(app)?;

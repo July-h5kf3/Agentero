@@ -5,7 +5,7 @@ import { readVaultFile } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
 
 /**
- * Paper metadata: **authoritative store is** Vault `.motif/catalog.sqlite`.
+ * Paper metadata: **authoritative store is** Vault `.agentero/catalog.sqlite`.
  * `metadata.json` is a projection synced after catalog writes (not the read path).
  *
  * **Paper folder = minimal unit** under `papers/` at any depth.

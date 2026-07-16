@@ -1,4 +1,4 @@
-# Motif / notemd 后端 API 规范
+# Agentero / notemd 后端 API 规范
 
 > 本文档基于 `docs/development/technical-plan.md`、`docs/development/prd.md`、`docs/development/roadmap.md` 编写，定义 Host（Tauri + Rust）暴露给前端的 Tauri invoke 命令与事件。
 
@@ -109,23 +109,23 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`、**`.agents/`**、**`.agents/skills/`**。
-  - 初始化 `.motif/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.agentero/`、**`.agents/`**、**`.agents/skills/`**。
+  - 初始化 `.agentero/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md`（若不存在）。
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
-  - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
+  - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
 
 #### `window_new`（已实现）
 
-打开一个新的 Motif 窗口（菜单 **File → New Window** / `⌘N`）。
+打开一个新的 Agentero 窗口（菜单 **File → New Window** / `⌘N`）。
 
 - **参数**：无
 - **返回**：`Result<(), String>`
 - **行为**
-  - 创建 label 为 `motif-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
+  - 创建 label 为 `agentero-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
   - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
-  - Capability 覆盖 `main` 与 `motif-*`（见 `src-tauri/capabilities/default.json`）。
+  - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
 
 #### `vault:open`（规划）
@@ -153,7 +153,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.motif/catalog.sqlite` 可打开或可初始化）。
+  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.agentero/catalog.sqlite` 可打开或可初始化）。
   - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
   - 启动文件监听（后续）。
   - 返回完整文件树。
@@ -181,7 +181,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 }
 ```
 
-- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `motif-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
+- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `agentero-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
 
 #### `vault:info`（规划）
 
@@ -592,7 +592,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   }
   ```
 - **返回**：`{ ok: true; data: { format, content, count, filename } }`
-- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Motif `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
+- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Agentero `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
 
 #### `paper_import`（已落地）
 
@@ -612,7 +612,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 ### 3.6 论文
 
-论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
+论文**集合与元数据**存于 `.agentero/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
 #### `paper_get`（已落地）
 
@@ -831,7 +831,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - **Codex** → `$skill-id` 前缀 + 注入正文；
   - **Claude ACP** → `/skill-id` 前缀 + 注入正文；
   - **其它** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
-  - Composer 的 `$` 仅是 Motif UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
+  - Composer 的 `$` 仅是 Agentero UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
 - **权限策略**：默认取消 ACP 权限请求。设置 → Agent 提供全局「权限模式」（受限默认 / 自动批准），对所有 Agent 生效，并在每次运行中通过 `autoApprove`（自动批准 → `true`）传入；逐项权限确认仍未实现。
 
@@ -841,7 +841,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_codex_list_threads`
 
-列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Motif 在 `.motif/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
+列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Agentero 在 `.agentero/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
 
 ```ts
 { agentId?: string; vaultPath?: string; includeExternal?: boolean }
@@ -1241,7 +1241,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **返回**：`Result<(), String>`（成功为 `()`，失败返回错误信息字符串）。
-- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `motif-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
+- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `agentero-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
 
 #### 菜单事件
 

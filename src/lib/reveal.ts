@@ -20,7 +20,7 @@ export function revealInOsLabelKey():
  */
 export async function revealInFileManager(path: string): Promise<void> {
 	const trimmed = path.trim();
-	if (!trimmed || trimmed.startsWith("motif:")) {
+	if (!trimmed || trimmed.startsWith("agentero:")) {
 		throw new Error("Cannot reveal a virtual path.");
 	}
 	if (!isTauri()) {

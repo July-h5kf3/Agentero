@@ -1,6 +1,6 @@
 # 论文目录库（Catalog SQLite）
 
-> 定义 Vault 内论文**集合索引**与**结构化元数据**的权威存储：`.motif/catalog.sqlite`。  
+> 定义 Vault 内论文**集合索引**与**结构化元数据**的权威存储：`.agentero/catalog.sqlite`。  
 > `PAPERS.md` / `library.bib` **不再默认落盘**；需要时由导出命令生成。单篇正文仍是 `PAPER.md`（文件），不进库。
 
 相关文档：[`data-model.md`](data-model.md)、[`api.md`](api.md)、[`../development/technical-plan.md`](../development/technical-plan.md)。
@@ -24,7 +24,7 @@
 | 层级 | 内容 | 落盘 |
 |---|---|---|
 | **Tier 1a 人的知识 / 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`source/` | 文件 |
-| **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.motif/catalog.sqlite`** |
+| **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
 | **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、`assets/` | 按需生成；非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表，或后续独立；可整删后从文件+catalog 重建 |
 
@@ -41,7 +41,7 @@
 ## 3. 文件位置与 Vault 校验
 
 ```text
-motif-vault/
+agentero-vault/
 ├── AGENTS.md
 ├── papers/               # 可含任意深度组织目录；paper 文件夹为最小单元
 │   ├── 1706.03762/       # 一级：直接在 papers/ 下
@@ -50,7 +50,7 @@ motif-vault/
 │           └── 1706.03762/  # 嵌套：仍是一个 paper 单元（含 NOTES.md 等）
 ├── notes/
 ├── plans/
-└── .motif/
+└── .agentero/
     ├── catalog.sqlite    # 论文集合 + metadata（必备，Create/Open 时确保存在）
     └── config.json       # 库级设置（非机密，可选）
 ```
@@ -68,11 +68,11 @@ motif-vault/
 
 - 存在 `papers/`、`notes/`、`plans/`（目录可空）
 - 存在 `AGENTS.md`（建议；缺失时可提示补模板）
-- 存在或可初始化 `.motif/catalog.sqlite`（schema 版本匹配）
+- 存在或可初始化 `.agentero/catalog.sqlite`（schema 版本匹配）
 
 **不再要求**：根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。
 
-文件树 UI **忽略** `.motif/`（与现网一致），避免把 sqlite 当普通笔记展示。
+文件树 UI **忽略** `.agentero/`（与现网一致），避免把 sqlite 当普通笔记展示。
 
 ---
 
@@ -84,7 +84,7 @@ motif-vault/
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `key` | TEXT PRIMARY KEY | 如 `schema_version`、`motif_app` |
+| `key` | TEXT PRIMARY KEY | 如 `schema_version`、`agentero_app` |
 | `value` | TEXT NOT NULL | |
 
 当前 **`schema_version = 3`**（v1→v2 Translator 列；v2→v3 `is_read`）。打开 Vault 时：
@@ -205,7 +205,7 @@ src-tauri/src/
 | 入库完成 | 事务内 `INSERT OR REPLACE` papers 行 + 文件系统写 NOTES/source |
 | UI 改标签/标题 | `paper:update` 只更新 SQLite（及 `updated_at`） |
 
-路径：`{vault_root}/.motif/catalog.sqlite`。  
+路径：`{vault_root}/.agentero/catalog.sqlite`。  
 使用 `PRAGMA foreign_keys = ON`；写操作包在事务中，与「先落盘笔记再改 status」的顺序在 importer 中约定（建议：目录与 NOTES 成功后再把 `status` 置 `completed`）。
 
 ### 5.3 列表与查询（应用内 L1）
@@ -247,7 +247,7 @@ src-tauri/src/
 
 - **Create Vault / 日常入库：不写这两份文件。**
 - 用户在设置或命令面板触发「导出论文索引 / 导出 BibTeX」时生成。
-- Agent 工作流若需要文件形态 L1：可在 prompt 前 **临时导出到** `.motif/export/PAPERS.md`（gitignore 友好）或会话临时目录，而不污染 Vault 根。
+- Agent 工作流若需要文件形态 L1：可在 prompt 前 **临时导出到** `.agentero/export/PAPERS.md`（gitignore 友好）或会话临时目录，而不污染 Vault 根。
 
 ### 5.5 与 importer 的写路径
 
@@ -266,8 +266,8 @@ import paper（魔棒 lookup_import）
 
 | 路径 | 建议 |
 |---|---|
-| `.motif/catalog.sqlite` | **纳入备份**；若用 Git 管理 Vault，应提交或 LFS（团队自定） |
-| `.motif/export/` | 可 gitignore；纯派生 |
+| `.agentero/catalog.sqlite` | **纳入备份**；若用 Git 管理 Vault，应提交或 LFS（团队自定） |
+| `.agentero/export/` | 可 gitignore；纯派生 |
 | 根级 `PAPERS.md` / `library.bib` | 仅在用户显式导出后出现；可提交作可读快照 |
 
 提供 `catalog:export_*` 后，用户可选择「只提交 Markdown 导出、不提交 sqlite」——但此时 **clone 后需 import 导出文件才能恢复 catalog**（v1 可不做 import-from-md；文档标明限制即可）。
@@ -278,7 +278,7 @@ import paper（魔棒 lookup_import）
 
 | 数据 | 权威来源 | 存储 |
 |---|---|---|
-| 论文 meta / 集合 | catalog | `.motif/catalog.sqlite` → `papers` |
+| 论文 meta / 集合 | catalog | `.agentero/catalog.sqlite` → `papers` |
 | 双链边 / 反链 | Vault 内 Markdown `[[...]]` | 当前内存索引；可后续写入同库 `wiki_edges`（**可重建**） |
 | Paper 节点 label | catalog.title | `graph_get_graph` 解析时 join / 查询 catalog |
 
@@ -318,7 +318,7 @@ import paper（魔棒 lookup_import）
 
 ## 9. 验收要点
 
-- [x] Create Vault 生成 `.motif/catalog.sqlite`（schema 当前版本），**不**生成 `PAPERS.md` / `library.bib`。
+- [x] Create Vault 生成 `.agentero/catalog.sqlite`（schema 当前版本），**不**生成 `PAPERS.md` / `library.bib`。
 - [x] 魔棒 / `lookup_import` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
 - [x] 读路径走 `paper_get` / `paper_list`；`metadata.json` 仅为 upsert 后投影（非 UI 主源）。
 - [x] 入库默认写 PDF（及 arXiv TeX）到 `source/`；`paper_download_assets` 可补缺失。

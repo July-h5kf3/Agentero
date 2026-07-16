@@ -1,6 +1,6 @@
 # 前端
 
-前端是 Motif 的 Tauri Webview UI，负责浏览 Vault、阅读论文、编辑 Markdown、导航反链/图谱，以及与本地 ACP Agent 对话。
+前端是 Agentero 的 Tauri Webview UI，负责浏览 Vault、阅读论文、编辑 Markdown、导航反链/图谱，以及与本地 ACP Agent 对话。
 
 ## 技术选型
 

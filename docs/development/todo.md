@@ -1,13 +1,13 @@
-# Motif TODO
+# Agentero TODO
 
 可执行 backlog。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)。
 
 ## P0 — 近期闭环
 
 1. **Create Vault 初始化** ✅
-   - 创建标准目录：`papers/`、`notes/`、`plans/`、`.motif/`、`.agents/`、`.agents/skills/`。
+   - 创建标准目录：`papers/`、`notes/`、`plans/`、`.agentero/`、`.agents/`、`.agents/skills/`。
    - 生成 Vault 内 `AGENTS.md` 模板；种子 `.agents/README.md`（`templates/vault/.agents/`）。
-   - 初始化 `.motif/catalog.sqlite`（schema 当前版本，`path` 主键）。
+   - 初始化 `.agentero/catalog.sqlite`（schema 当前版本，`path` 主键）。
    - **不**默认生成 `PAPERS.md` / `library.bib`（导出能力另做）。
    - 初始化后打开 `AGENTS.md`。
 
@@ -37,7 +37,7 @@
    - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
 2c. **论文库表格 UI** ✅
-   - [x] 虚拟节点 `motif:library`；中间栏 catalog 表（`paper_list`）。
+   - [x] 虚拟节点 `agentero:library`；中间栏 catalog 表（`paper_list`）。
    - [x] 表头排序；横向/纵向滚动。
    - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）。
    - [x] Library 行批量补资源（与 2b 联动）。
@@ -97,7 +97,7 @@
 
 5. **引用关系 / Connected Papers**（roadmap V0.7）
    - [ ] **文内引用 hover → 右侧 Paper Info**：PDF/HTML/`PAPER.md` 中识别 `[n]` / Author-year / DOI·arXiv 链接；hover 时侧栏展示目标论文 Info（库内 path / 远程缓存 metadata、入库或打开）。
-   - [ ] **引用图数据**：cites / cited_by 可重建缓存（catalog 扩展表或 `.motif/`）；外部 API 可插拔（Semantic Scholar / OpenAlex 等），失败可降级 TeX/参考文献解析。
+   - [ ] **引用图数据**：cites / cited_by 可重建缓存（catalog 扩展表或 `.agentero/`）；外部 API 可插拔（Semantic Scholar / OpenAlex 等），失败可降级 TeX/参考文献解析。
    - [ ] **Connected Papers 式邻域 UI**：以当前 paper 为中心展示引用/被引列表 + 简易图；节点可打开 / 入库 / 进阅读队列。
    - [ ] 与 V0.4 **双链 Graph** 区分：双链 = `[[wikilinks]]`；本项 = bibliographic 引用边。
 
@@ -116,7 +116,7 @@
 
 1. **Zotero/BibTeX 迁移工具**
    - 解析 Zotero export 或 BibTeX。
-   - 由 Agent 辅助重组为 Motif vault。
+   - 由 Agent 辅助重组为 Agentero vault。
    - 保留原始附件与引用 key 映射。
 
 2. **用户友好的 Skills / Workflows**

@@ -1,13 +1,13 @@
 # `.agents/` — vault-local agent assets
 
-Motif (and many ACP agents) look here for **vault-scoped** agent configuration.
+Agentero (and many ACP agents) look here for **vault-scoped** agent configuration.
 
 ## Layout
 
 ```text
 .agents/
 ├── README.md          # this file
-└── skills/            # optional Motif / Codex-style skills
+└── skills/            # optional Agentero / Codex-style skills
     └── <skill-id>/
         └── SKILL.md
 ```
@@ -17,12 +17,12 @@ Motif (and many ACP agents) look here for **vault-scoped** agent configuration.
 - Each skill is a folder under `skills/` containing a `SKILL.md` file.
 - Chat Composer: type `$` to pick skills from this vault, plus global
   `~/.agents/skills` and `${CODEX_HOME:-~/.codex}/skills`.
-- Keep each `SKILL.md` small (Motif loads at most 64 KiB per skill, 5 per prompt).
+- Keep each `SKILL.md` small (Agentero loads at most 64 KiB per skill, 5 per prompt).
 - **Bundled**: Create Vault seeds `skills/paper-reader/` for the file-tree
   Eye (精读) workflow. Existing vaults can copy that folder, or install
   globally under `~/.agents/skills/paper-reader/`.
 - **Runtime triggers** (not the Composer `$` picker): Codex uses `$paper-reader`,
-  Claude ACP often uses `/paper-reader`; other agents follow Motif-injected body.
+  Claude ACP often uses `/paper-reader`; other agents follow Agentero-injected body.
 
 Add a skill:
 
@@ -40,4 +40,4 @@ description: Short description for the picker
 ...
 ```
 
-Do not put model API keys here — Motif is BYOA; keys stay with the agent CLI.
+Do not put model API keys here — Agentero is BYOA; keys stay with the agent CLI.

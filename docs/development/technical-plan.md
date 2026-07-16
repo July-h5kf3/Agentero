@@ -1,4 +1,4 @@
-# Motif / notemd 技术方案
+# Agentero / notemd 技术方案
 
 > 本文档基于 `docs/development/prd.md`、`docs/frontend/ui.md`、`docs/development/roadmap.md` 与当前仓库现状编写，用于指导 MVP 及后续演进的技术选型与模块划分。
 
@@ -7,7 +7,7 @@
 - **本地优先（Local-first）**：Vault 以 Markdown + 源文件为事实来源，数据库/索引仅作为缓存。
 - **跨平台但 Mac 优先**：MVP 以 macOS 桌面应用为主，技术栈保留向 iPadOS 扩展的能力。
 - **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引，并以 **ACP Client** 身份连接本机已有 Agent。
-- **BYOA（Bring Your Own Agent）**：Motif **不内置、不捆绑**任何 coding agent 二进制；通用 provider 使用本机 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、自定义 command），Codex 使用用户本机的 `codex app-server`。密钥与模型由各 Agent CLI 自行管理。
+- **BYOA（Bring Your Own Agent）**：Agentero **不内置、不捆绑**任何 coding agent 二进制；通用 provider 使用本机 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、自定义 command），Codex 使用用户本机的 `codex app-server`。密钥与模型由各 Agent CLI 自行管理。
 - **可迁移**：Vault 离开应用后仍能被 Obsidian、VS Code、Cursor 直接打开。
 
 ## 2. 整体架构
@@ -34,14 +34,14 @@
 └───────────────────────────┬─────────────────────────────────┘
 │                           │ Provider runtime (JSON-RPC 2.0 over stdio)
 ┌───────────────────────────▼─────────────────────────────────┐
-│     用户本机已安装的 Agent（BYOA，Motif 不打包）               │
+│     用户本机已安装的 Agent（BYOA，Agentero 不打包）               │
 │  - ACP: OpenCode / Gemini CLI / Claude ACP / 自定义           │
 │  - Native: Codex App Server                                   │
 │  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Motif 始终作为 **Client**，Agent CLI 作为 **Server**。
+> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Agentero 始终作为 **Client**，Agent CLI 作为 **Server**。
 
 ### 2.1 为什么选 Tauri 2
 
@@ -85,7 +85,7 @@
 | **AI Elements** | [elements.ai-sdk.dev](https://elements.ai-sdk.dev/) | Chat / Prompt / Sources / **FileTree** 等；落盘 `src/components/ai-elements/` |
 | streamdown + `@streamdown/*` | Markdown 流式渲染 | `MessageResponse` |
 | `use-stick-to-bottom` | 对话贴底 | `Conversation` |
-| `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Motif 默认 HTTP 传输 |
+| `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Agentero 默认 HTTP 传输 |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
 | `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 中间内容（论文库或编辑器）/ Notes（仅具体论文）/ 可选右侧栏（Agent 或 Backlinks+Graph） |
@@ -105,7 +105,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
   → 本机 Agent CLI
 ```
 
-- **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
+- **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Agentero 默认传输层。
 - 流式：`agent:stream`（`kind: message | thought`）/ `agent:completed` / `agent:failed` 映射到 `Reasoning` + `MessageResponse` + `Sources`。
 - 组件规范与安装：`docs/frontend/components.md`。
 
@@ -124,7 +124,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 1. 左侧可拖拽伸缩（可折叠）侧边栏展示 Vault 文件树；右侧 Agent/Backlinks 同为 collapsible 常驻面板（避免条件卸载冲掉折叠态）。  
 2. 「Open vault…」通过 `@tauri-apps/plugin-dialog` 选择本地文件夹。  
-3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.motif` 等。  
+3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.agentero` 等。  
 4. 点击文本类文件用 `readTextFile` 载入中间 Markdown 面板（Plate WYSIWYG）；写回 `writeTextFile`。  
 5. 双击 / 右键 / `⌥⌘R`：`revealItemInDir` 在 Finder 中显示；右键 / `⌘⌫`：确认后 `remove` + 可选 `paper_delete`。  
 6. 非 Tauri 环境（纯浏览器 `pnpm dev`）能力受限；真实读盘需 `pnpm tauri dev`。  
@@ -250,7 +250,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `tempfile` | Agent 生成内容临时文件，确认后写入 |
 | `walkdir` | 遍历 Vault 构建索引 |
 | `liteparse` | 默认本地 PDF 解析后端：提取结构化文本 + bounding box，输出 Markdown/JSON/Text，内置 OCR |
-| `rusqlite`（`bundled`） | **Catalog**：`.motif/catalog.sqlite` 论文集合 + metadata；可选 FTS / 双链缓存表 |
+| `rusqlite`（`bundled`） | **Catalog**：`.agentero/catalog.sqlite` 论文集合 + metadata；可选 FTS / 双链缓存表 |
 
 ### 4.3 核心 Rust 模块设计
 
@@ -268,7 +268,7 @@ src-tauri/src/
     graph.rs       # 图谱节点/边查询
   services/        # 业务逻辑
     vault.rs       # Vault 初始化与校验
-    catalog/       # .motif/catalog.sqlite：schema、papers CRUD、export
+    catalog/       # .agentero/catalog.sqlite：schema、papers CRUD、export
     fs.rs          # 安全文件操作（路径白名单）
     input.rs       # 输入分类、意图解析、候选检索
     importer/      # 入库来源抽象（统一落盘结构与状态契约）
@@ -308,8 +308,8 @@ src-tauri/src/
 
 - **路径白名单**：Tauri `fs` 权限仅允许访问用户显式选择的 Vault 目录及其子目录。
 - **CSP 配置**：`tauri.conf.json` 中设置合理的 Content-Security-Policy，限制本地 Webview 加载外部资源。
-- **密钥边界**：Motif **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
-- **网络范围**：Agent 网络访问由 agent 进程自身控制；Motif 自身 arXiv 抓取限定于 `arxiv.org` 域名。
+- **密钥边界**：Agentero **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
+- **网络范围**：Agent 网络访问由 agent 进程自身控制；Agentero 自身 arXiv 抓取限定于 `arxiv.org` 域名。
 
 ## 4.5 本地存储分层：Tauri Store vs Catalog SQLite
 
@@ -322,7 +322,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 | 典型容量 | 几十到几百条记录 | 可扩展到数万条论文 |
 | 查询能力 | 按 key 读取 | 按作者、年份、标签、关键词过滤与列表分页 |
 | 事实来源 | 是（配置类无其他来源） | **是**（论文 meta / 集合）；笔记与 source 仍是文件 |
-| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/catalog.sqlite` |
+| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.agentero/catalog.sqlite` |
 | 损坏处理 | 丢失后用户重新配置 | meta 需备份/export；笔记目录仍在。双链缓存表可删重建 |
 
 **使用原则**：
@@ -341,7 +341,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```text
 用户选择目录
   → Rust: dialog.open({ directory: true })
-  → Rust: 初始化 AGENTS.md / papers / notes / plans / .motif/catalog.sqlite
+  → Rust: 初始化 AGENTS.md / papers / notes / plans / .agentero/catalog.sqlite
   → Rust: store.set('recent-vaults', [...])
   → Frontend: 加载文件树；打开 AGENTS.md 或空状态（无默认 PAPERS.md）
 ```
@@ -441,12 +441,12 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.7 Agent 工作流（ACP Client + BYOA）
 
-Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Motif **不打包** 任何 agent 二进制。
+Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Agentero **不打包** 任何 agent 二进制。
 
 **BYOA 原则**：
 - 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
 - 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `papers/` 等本地资产（无默认 PAPERS.md）。
-- 模型与 API Key 完全由 Agent CLI 管理；Motif 只负责 Client 侧会话、权限 UX 与工作流 prompt。
+- 模型与 API Key 完全由 Agent CLI 管理；Agentero 只负责 Client 侧会话、权限 UX 与工作流 prompt。
 
 ```text
 用户首次打开 Agent 面板 / 进入设置
@@ -492,7 +492,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 
 ### 5.8 Agent 配置（注册表，非模型 BYOK）
 
-Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
+Agentero 配置的是 **如何启动本机 Agent**，不是模型 API Key。
 
 | 配置项 | 说明 | 示例 |
 |---|---|---|
@@ -508,7 +508,7 @@ Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
 | `agent.enabled` | Agent 总开关 | `true` |
 
 - 持久化：`tauri-plugin-store`（或后续等价本地配置）。
-- **不** 要求用户在 Motif 内填写 `CLAUDE_API_KEY` / `OPENCODE_API_KEY` 等模型密钥；若某 agent 需要环境变量，由用户在系统或自定义 `env` 中自行配置，文档明确风险。
+- **不** 要求用户在 Agentero 内填写 `CLAUDE_API_KEY` / `OPENCODE_API_KEY` 等模型密钥；若某 agent 需要环境变量，由用户在系统或自定义 `env` 中自行配置，文档明确风险。
 - 探测：Host 在 PATH（及可选用户指定绝对路径）上检查 `command` 是否可执行；失败时 UI 展示安装文档链接，不阻塞应用其他功能。
 
 ## 6. 平台策略：Mac 优先 + iPadOS 扩展
@@ -645,7 +645,7 @@ pulldown-cmark = "0.12"
 regex = "1"
 liteparse = "2.5"
 agent-client-protocol = "0.2"
-rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.motif/catalog.sqlite
+rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.agentero/catalog.sqlite
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -670,7 +670,7 @@ tempfile = "3"
 | 数学公式渲染 | Plate math 插件 + `katex` |
 | 全文搜索 | `minisearch`（前端）或 Rust `tantivy` / SQLite FTS5 |
 | 加密存储产品侧密钥（如 MinerU） | `keyring` crate |
-| 本机 Agent（用户自装，不随 Motif 分发） | OpenCode、Gemini CLI、Claude ACP、Codex App Server、自定义 CLI |
+| 本机 Agent（用户自装，不随 Agentero 分发） | OpenCode、Gemini CLI、Claude ACP、Codex App Server、自定义 CLI |
 | iOS 原生能力 | `tauri-plugin-os`、Swift 桥接 |
 
 ## 9. 与 Roadmap 的对应关系

@@ -225,7 +225,7 @@ async fn resolve_metadata(
 async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
-        .user_agent("motif-lookup/0.1 (+https://github.com/poco-ai/motif)")
+        .user_agent("agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)")
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
 
@@ -297,7 +297,7 @@ async fn fetch_arxiv_metadata(arxiv_id: &str) -> Result<PaperMeta, AppError> {
     );
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
-        .user_agent("motif-lookup/0.1")
+        .user_agent("agentero-lookup/0.1")
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
     let xml = client

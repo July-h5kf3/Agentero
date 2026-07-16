@@ -91,7 +91,7 @@ export type TreeCreateDraft = {
 	parentPath: string;
 };
 
-function MotifLogo({ className }: { className?: string }) {
+function AgenteroLogo({ className }: { className?: string }) {
 	return (
 		<svg
 			viewBox="0 0 64 64"
@@ -430,7 +430,7 @@ export function FileTree({
 	);
 
 	const canRevealPath = useCallback((path: string) => {
-		return Boolean(path) && !path.startsWith("motif:");
+		return Boolean(path) && !path.startsWith("agentero:");
 	}, []);
 
 	const handleReveal = useCallback(
@@ -1029,7 +1029,7 @@ export function VaultSidebarHeader({
 						</>
 					}
 				>
-					<MotifLogo className="size-4 shrink-0 text-foreground" />
+					<AgenteroLogo className="size-4 shrink-0 text-foreground" />
 					<span className="truncate font-medium text-sm" title={title}>
 						{title}
 					</span>

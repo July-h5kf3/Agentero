@@ -24,7 +24,9 @@ impl AgentRegistry {
         state.enabled = true;
         if migrated {
             if let Err(error) = persist(&path, &state) {
-                eprintln!("[motif agent] failed to persist Codex registration migration: {error}");
+                eprintln!(
+                    "[agentero agent] failed to persist Codex registration migration: {error}"
+                );
             }
         }
         Self {
@@ -480,7 +482,7 @@ fn chrono_like_now() -> String {
 fn config_path() -> PathBuf {
     let base = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("motif");
+        .join("agentero");
     let _ = fs::create_dir_all(&base);
     base.join("agents.json")
 }

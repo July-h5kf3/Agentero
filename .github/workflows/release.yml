@@ -55,7 +55,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Motif ${{ github.ref_name }}
-          releaseBody: Installers for Motif ${{ github.ref_name }}.
+          releaseName: Agentero ${{ github.ref_name }}
+          releaseBody: Installers for Agentero ${{ github.ref_name }}.
           releaseDraft: true
           prerelease: false

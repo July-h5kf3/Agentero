@@ -1,4 +1,4 @@
-# Motif UI 规范
+# Agentero UI 规范
 
 ## 1. 主题与设计系统
 
@@ -11,7 +11,7 @@
   - 落盘：`src/components/ai-elements/`（`conversation`、`message`、`prompt-input`、`sources`、`file-tree` 等）
   - 安装：`pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`
   - 主题 **不单独配置**：继续读 shadcn CSS token，随 System / Light / Dark。
-  - 传输层是 Motif **ACP Client**（`agent_run_once` + 事件流），**不是** Vercel AI SDK `useChat`。
+  - 传输层是 Agentero **ACP Client**（`agent_run_once` + 事件流），**不是** Vercel AI SDK `useChat`。
   - **禁止**用自研 `src/components/ai/*` 或官方 `ui/message`+`bubble` 搭新 Chat。
 - 视觉原则：**尽量简约，减少不必要的元素**。
 - 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
@@ -28,7 +28,7 @@
 ### 2.1 侧边栏文件树
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
-- **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `motif:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
+- **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**：下列任一成立即显示，hover 列出原因：
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
@@ -46,7 +46,7 @@
   - **双击**真实文件 / 文件夹 / paper 行 → 在 Finder（macOS）/ Explorer（Windows）/ 文件管理器（Linux）中定位并选中。
   - **右键**同上节点 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
   - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
-  - 虚拟节点 **Library**（`motif:library`）不提供此操作；仅桌面端可用。
+  - 虚拟节点 **Library**（`agentero:library`）不提供此操作；仅桌面端可用。
 - **删除**（`remove` + 可选 `paper_delete`）：
   - **右键**真实节点 →「删除」（旁注 `⌘⌫`）；确认后删盘。
   - **`⌘⌫`**：删除当前选中项（编辑器 / 输入框聚焦时不拦截，保留系统删行首行为）。
@@ -82,7 +82,7 @@
 | File | Open Vault… | `⌘O` | 选择已有文件夹并打开 |
 | File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
 | File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
-| motif | Settings… | `⌘,` | 设置 sheet |
+| agentero | Settings… | `⌘,` | 设置 sheet |
 
 **窗口与路径状态**（`src/lib/vault.ts`）：
 
@@ -98,11 +98,11 @@
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间与 Notes 随内容切换。
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
-  - **入口**：文件树虚拟节点 `motif:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
+  - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
   - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。
   - **列**：标题、作者、年份、类型、标识符；点击行打开对应 paper 文件夹。
   - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
-  - **滚动**：容器 `.motif-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
+  - **滚动**：容器 `.agentero-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
   - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
     - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存对话框写 `.bib`。
   - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
@@ -128,8 +128,8 @@
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
 - **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
 - **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
-  - 默认竖向：`.motif-scroll`（`overflow-x: hidden; overflow-y: auto`）。
-  - 需双向滚动（论文库表）：`.motif-scroll-both`。
+  - 默认竖向：`.agentero-scroll`（`overflow-x: hidden; overflow-y: auto`）。
+  - 需双向滚动（论文库表）：`.agentero-scroll-both`。
 - **中间栏视图切换**（纯图标 + Tooltip）：**仅 PDF · HTML**（`ViewModeToggle`）；无 PDF/HTML 时不显示切换。论文库视图下不显示。
   - Notes / 普通 Markdown 文件：**所见即所得富文本编辑**（Plate），在 Notes 侧栏或打开 `.md` 时编辑；不占中间栏切换卡片。
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
@@ -229,9 +229,9 @@ PromptInput → Body / Footer / Submit
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
-**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Motif 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
-**本机技能**：Composer 统一用 `$` 打开技能选择器（Motif UI 约定，与运行时触发语法无关）。可选来源：`~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills`、当前 Vault `.agents/skills`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小，并**按当前 Agent 模板**组装 prompt：
+**本机技能**：Composer 统一用 `$` 打开技能选择器（Agentero UI 约定，与运行时触发语法无关）。可选来源：`~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills`、当前 Vault `.agents/skills`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小，并**按当前 Agent 模板**组装 prompt：
 
 | Agent 模板 | 运行时 skill 提及 | Host 行为 |
 |---|---|---|
@@ -241,15 +241,15 @@ PromptInput → Body / Footer / Submit
 
 paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex 的 `$` 误写成 Claude 的 `/`，或反向。
 
-**斜杠命令**：Motif 不实现自己的 `/` 命令菜单。用户手打的 `/…` 原样透传；Claude 路径上 Host 也可能主动加上 `/skill-id` 前缀以对齐其 skill 语法。Codex 使用 App Server native thread，skill 侧以 `$` 为准。
+**斜杠命令**：Agentero 不实现自己的 `/` 命令菜单。用户手打的 `/…` 原样透传；Claude 路径上 Host 也可能主动加上 `/skill-id` 前缀以对齐其 skill 语法。Codex 使用 App Server native thread，skill 侧以 `$` 为准。
 
-**权限模式**：**设置 → Agent** 提供一个全局「权限模式」下拉，对**所有 Agent** 的运行生效（存于 app settings，默认 **受限**）。**受限（默认）**时，Motif 取消 ACP 的权限请求（Codex 走原生策略、沙箱为 `workspace-write`）；**自动批准**时自动选择 Agent 给出的第一个权限选项（Codex 沙箱切换为 `danger-full-access`）。选 **自动批准** 时面板下方显示一行风险说明。逐项权限确认需要由保持 ACP 会话的后续实现提供；届时可在此下拉新增「每次询问」档。
+**权限模式**：**设置 → Agent** 提供一个全局「权限模式」下拉，对**所有 Agent** 的运行生效（存于 app settings，默认 **受限**）。**受限（默认）**时，Agentero 取消 ACP 的权限请求（Codex 走原生策略、沙箱为 `workspace-write`）；**自动批准**时自动选择 Agent 给出的第一个权限选项（Codex 沙箱切换为 `danger-full-access`）。选 **自动批准** 时面板下方显示一行风险说明。逐项权限确认需要由保持 ACP 会话的后续实现提供；届时可在此下拉新增「每次询问」档。
 
 **回答语言**：**设置 → Agent** 提供一个全局「回答语言」下拉（**自动 / English / 简体中文**，存于 app settings，默认 **自动**），**独立于界面语言**，对**所有 Agent** 交互生效（Composer 对话、精读、summary/QA、PDF 划词问答）。前端 `runOnce` 统一读取该设置并透传，Host 在 `build_prompt` 为所有 workflow 追加一句语言指令；选 **自动** 时不注入任何指令，交由 Agent 依据内容决定。
 
 **Codex 控件**：只有选中 `codex-acp` 时，底栏才显示 App Server `model/list` 提供的模型与 reasoning effort，以及仅在闪电图标内填充黄色的 Fast toggle。选择在下一次 native turn 中传给 App Server；其他 Agent 不显示也不接收这些偏好。
 
-**Codex 历史**：Motif 会将它创建或继续运行的 native thread id 记录在 Vault 的 `.motif/agent-sessions/codex.json`。历史列表默认只显示这份索引中的会话，避免混入同一 Vault 工作目录下由 Codex CLI、编辑器或其它应用创建的 thread。历史面板的“External”开关仅对 Codex 生效；开启后显示 App Server 返回的全部 Vault-scoped thread。开关偏好按 Codex provider 注册项保存在本机浏览器中。
+**Codex 历史**：Agentero 会将它创建或继续运行的 native thread id 记录在 Vault 的 `.agentero/agent-sessions/codex.json`。历史列表默认只显示这份索引中的会话，避免混入同一 Vault 工作目录下由 Codex CLI、编辑器或其它应用创建的 thread。历史面板的“External”开关仅对 Codex 生效；开启后显示 App Server 返回的全部 Vault-scoped thread。开关偏好按 Codex provider 注册项保存在本机浏览器中。
 
 ### 3.3 Backlinks + Graph 右侧栏
 
@@ -267,7 +267,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | 顶部菜单栏 **motif → Settings…**，或 `⌘,`（不在侧边栏放设置图标） |
+| 入口 | 顶部菜单栏 **agentero → Settings…**，或 `⌘,`（不在侧边栏放设置图标） |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
 | 分类 | General · Appearance · Agent · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
@@ -285,7 +285,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
   - 仅保留 **Probe** 文字按钮（无 icon）；无逐行 Probe、无 command/路径/Handshake 详情文案。
   - **Use default** 纯文字（无 icon）。
   - Custom 区：添加任意 ACP command/args。
-  - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Motif 内填写。
+  - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Agentero 内填写。
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。

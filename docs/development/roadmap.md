@@ -1,4 +1,4 @@
-# Motif / notemd Roadmap
+# Agentero / notemd Roadmap
 
 ## 1. Roadmap 原则
 
@@ -6,7 +6,7 @@
 - 先做好 arXiv，不急于覆盖所有论文来源。
 - 所有核心数据必须能从本地 Markdown 重建。
 - 阅读器服务于审阅和修正，不在早期追求完整 Zotero/PDF 批注体验。
-- Agent 采用 **BYOA**：Motif 只做 ACP Client，不捆绑 Agent；能力必须可解释、可追溯、可被用户修正。
+- Agent 采用 **BYOA**：Agentero 只做 ACP Client，不捆绑 Agent；能力必须可解释、可追溯、可被用户修正。
 - UI 以“少入口、强上下文”为原则：右侧栏只保留 Agent 与 Backlinks 两个入口，Backlinks 下方承载 Graph。
 
 ## 2. 当前状态快照
@@ -33,7 +33,7 @@
 关键交付：
 
 - [x] 打开本地 Vault。
-- [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.motif/catalog.sqlite`。
+- [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.agentero/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
@@ -42,7 +42,7 @@
 - [x] 文件树：**在 Finder 中显示**（双击 / 右键 / `⌥⌘R`）；**删除**（右键 / `⌘⌫`，`papers/` 同步 `paper_delete`）。
 - [x] Paper-centric 视图：选中 paper 后中间显示远程 PDF/HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
-- [x] 论文库表格：虚拟节点 `motif:library`、`paper_list`、表头排序、双向滚动。
+- [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、双向滚动。
 - [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）。
 - [x] 后台任务条（左下角）：下载 / 入库 / 导入导出 / paper-reader 等长操作进度；收起态 hover 保持实色不透明。
 
@@ -102,14 +102,14 @@
 
 ## V0.3 Agent 工作流（ACP Client + BYOA）
 
-目标：将 Motif 实现为 **ACP Client**，连接用户本机已安装的 Agent，按 Vault 规则完成总结 / 问答 / Related Work。
+目标：将 Agentero 实现为 **ACP Client**，连接用户本机已安装的 Agent，按 Vault 规则完成总结 / 问答 / Related Work。
 
 关键交付：
 
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
 - [x] Codex 原生 runtime：`codex app-server` 的 thread start/resume、流式 turn、原生 history 列表与 JSONL transcript 回放；不再经 ACP adapter 启动 Codex。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
-- [x] 可执行文件探测与空状态安装指引（Motif **不打包** agent 二进制）。
+- [x] 可执行文件探测与空状态安装指引（Agentero **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
 - [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast。
 - [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `autoApprove`）；对所有 Agent 生效；经 `autoApprove` 传入运行；逐项「每次询问」仍待。
@@ -124,7 +124,7 @@
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿（引用类 workflow 见 V0.7）。
 - [x] Agent 读取路径回显（Sources）。
-- [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Motif 不要求模型 BYOK 表单。
+- [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Agentero 不要求模型 BYOK 表单。
 
 验收标准：
 
@@ -254,7 +254,7 @@
 
 ### B. Connected Papers 式引用关系
 
-- [ ] **引用图数据模型**：paper → cites / cited_by（至少存 id、title、year、doi/arxiv、edge 来源）；可挂 catalog 扩展表或 `.motif/` 可重建缓存。
+- [ ] **引用图数据模型**：paper → cites / cited_by（至少存 id、title、year、doi/arxiv、edge 来源）；可挂 catalog 扩展表或 `.agentero/` 可重建缓存。
 - [ ] **拉取**：对当前 paper 查询引用/被引（API 可插拔；失败时降级为 TeX/PDF 参考文献解析）。
 - [ ] **UI**：从当前 paper 打开「引用关系」视图——中心节点 + 邻居（类似 Connected Papers 的 force / 聚类视图可后置；MVP 可用列表 + 简易图）。
 - [ ] 节点操作：打开库内 paper / 入库 / 加入阅读队列 / 在 Graph（双链）中对照。
@@ -303,7 +303,7 @@
 
 ### Milestone C：Agent 可协作 🟡
 
-包含 V0.3。完成后，Motif 可作为 ACP Client 连接本机 Agent，基于本地库问答和写作（workflow / 写入确认仍待）。
+包含 V0.3。完成后，Agentero 可作为 ACP Client 连接本机 Agent，基于本地库问答和写作（workflow / 写入确认仍待）。
 
 ### Milestone D：知识可导航 ✅
 
@@ -325,7 +325,7 @@
 
 ### 近期优先级 P0
 
-- [x] Create Vault：标准目录 + `AGENTS.md` + `.motif/catalog.sqlite`。
+- [x] Create Vault：标准目录 + `AGENTS.md` + `.agentero/catalog.sqlite`。
 - [x] 多窗口（⌘N）+ 欢迎页最近 Vault 列表（前端 MRU；Store 迁移仍待做）。
 - [x] arXiv/标识符精确入库（魔棒 + Translator + catalog + 默认 PDF/LaTeX）。
 - [x] 论文库 UI：`paper_list` + Library 虚拟节点 + 表头排序 + 双向滚动。

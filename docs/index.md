@@ -1,11 +1,11 @@
-# Motif 文档
+# Agentero 文档
 
-Motif 是一个本地优先、Agent-first 的科研工作台，由 Tauri 桌面 Host、React 前端和普通文件组成的 Vault 数据模型构成。本文档按工作边界分层：前端 UI、后端/Host 数据契约、开发与产品流程。
+Agentero 是一个本地优先、Agent-first 的科研工作台，由 Tauri 桌面 Host、React 前端和普通文件组成的 Vault 数据模型构成。本文档按工作边界分层：前端 UI、后端/Host 数据契约、开发与产品流程。
 
 ## 技术框架
 
 ```text
-Motif 桌面应用
+Agentero 桌面应用
 ├── Frontend Webview
 │   ├── React 19 + TypeScript + Vite
 │   ├── Tailwind CSS 4 + shadcn/ui + AI Elements
@@ -20,7 +20,7 @@ Motif 桌面应用
 │   └── 本地配置与可重建缓存
 └── Vault
     ├── Markdown 笔记与 paper notes / source
-    ├── .motif/catalog.sqlite（论文集合 + metadata 权威）
+    ├── .agentero/catalog.sqlite（论文集合 + metadata 权威）
     ├── 可选导出 PAPERS.md / library.bib（非默认）
     └── papers/<id>/ 下 NOTES、highlights、可选 PAPER.md、source/
 ```

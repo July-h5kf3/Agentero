@@ -1,4 +1,4 @@
-# Motif
+# Agentero
 
 <p align="center">
   <strong>Agent-first 本地科研文献库</strong><br />
@@ -6,12 +6,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/poco-ai/motif/stargazers"><img src="https://img.shields.io/github/stars/poco-ai/motif?style=flat&logo=github" alt="GitHub stars" /></a>
-  <a href="https://github.com/poco-ai/motif/network/members"><img src="https://img.shields.io/github/forks/poco-ai/motif?style=flat&logo=github" alt="GitHub forks" /></a>
-  <a href="https://github.com/poco-ai/motif/issues"><img src="https://img.shields.io/github/issues/poco-ai/motif?style=flat" alt="GitHub issues" /></a>
-  <a href="https://github.com/poco-ai/motif/pulls"><img src="https://img.shields.io/github/issues-pr/poco-ai/motif?style=flat" alt="GitHub pull requests" /></a>
+  <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://img.shields.io/github/stars/poco-ai/agentero?style=flat&logo=github" alt="GitHub stars" /></a>
+  <a href="https://github.com/poco-ai/agentero/network/members"><img src="https://img.shields.io/github/forks/poco-ai/agentero?style=flat&logo=github" alt="GitHub forks" /></a>
+  <a href="https://github.com/poco-ai/agentero/issues"><img src="https://img.shields.io/github/issues/poco-ai/agentero?style=flat" alt="GitHub issues" /></a>
+  <a href="https://github.com/poco-ai/agentero/pulls"><img src="https://img.shields.io/github/issues-pr/poco-ai/agentero?style=flat" alt="GitHub pull requests" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
-  <a href="https://github.com/poco-ai/motif/releases"><img src="https://img.shields.io/github/v/release/poco-ai/motif?include_prereleases&style=flat" alt="Release" /></a>
+  <a href="https://github.com/poco-ai/agentero/releases"><img src="https://img.shields.io/github/v/release/poco-ai/agentero?include_prereleases&style=flat" alt="Release" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ---
 
-## 为什么做 Motif？
+## 为什么做 Agentero？
 
 传统文献管理器擅长**存 PDF**，但 Agent 工作流需要更稳定、可寻址、可复用的本地知识结构：
 
@@ -32,11 +32,11 @@
 - 每次对话都要重新提供上下文，缺少稳定的本地知识地图。
 - PDF 对人友好，但对模型有排版噪音；结构、链接、引用路径应该可寻址。
 
-**Motif** 是面向人和 Agent 共用的本地优先研究工作台。论文、笔记、索引都以 Markdown 和源文件形式存在于用户控制的 Vault 中。Agent 采用 **BYOA**（Bring Your Own Agent）：Motif 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
+**Agentero** 是面向人和 Agent 共用的本地优先研究工作台。论文、笔记、索引都以 Markdown 和源文件形式存在于用户控制的 Vault 中。Agent 采用 **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
 
 ## 功能
 
-- **本地 Vault**：打开或创建文件夹；Create Vault 初始化目录与 `.motif/catalog.sqlite`。
+- **本地 Vault**：打开或创建文件夹；Create Vault 初始化目录与 `.agentero/catalog.sqlite`。
 - **多窗口**：`⌘N` 新建窗口（不自动恢复上次 Vault）；欢迎页列出最近路径。
 - **Markdown 工作台**：文件树（虚拟 Library 节点、内联新建文件/文件夹；刷新走 ⌘R）、中间 Markdown/PDF/HTML 或论文库表格、可选右侧栏（当前为**单槽**中间栏）。
 - **论文库**：catalog 表格（`paper_list`）；表头排序；双向滚动；点击行打开 paper。
@@ -61,8 +61,8 @@
 ### 安装与运行
 
 ```bash
-git clone https://github.com/poco-ai/motif.git
-cd motif
+git clone https://github.com/poco-ai/agentero.git
+cd agentero
 pnpm install
 
 # 桌面应用（推荐）
@@ -89,7 +89,7 @@ pnpm dev
 ## 项目结构
 
 ```text
-motif/
+agentero/
 ├── AGENTS.md             # 面向 Agent / 开发者的仓库指南
 ├── mkdocs.yml            # MkDocs 文档站配置
 ├── src/                  # React + TypeScript 前端
@@ -142,4 +142,4 @@ mkdocs serve
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=poco-ai/motif&type=Date)](https://www.star-history.com/#poco-ai/motif&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=poco-ai/agentero&type=Date)](https://www.star-history.com/#poco-ai/agentero&Date)

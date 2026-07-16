@@ -1,7 +1,7 @@
-site_name: Motif 文档
-site_description: Motif 本地优先 Agent 科研工作台文档
-repo_url: https://github.com/poco-ai/motif
-repo_name: poco-ai/motif
+site_name: Agentero 文档
+site_description: Agentero 本地优先 Agent 科研工作台文档
+repo_url: https://github.com/poco-ai/agentero
+repo_name: poco-ai/agentero
 edit_uri: edit/main/docs/
 
 theme:

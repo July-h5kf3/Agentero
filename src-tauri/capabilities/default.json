@@ -1,8 +1,8 @@
 {
 	"$schema": "../gen/schemas/desktop-schema.json",
 	"identifier": "default",
-	"description": "Capability for Motif windows (main + ⌘N windows)",
-	"windows": ["main", "motif-*"],
+	"description": "Capability for Agentero windows (main + ⌘N windows)",
+	"windows": ["main", "agentero-*"],
 	"permissions": [
 		"core:default",
 		"core:window:allow-start-dragging",
