@@ -3,6 +3,7 @@ import {
 	Download,
 	Focus,
 	FolderOpen,
+	Import,
 	Link2,
 	Loader2,
 	NotebookPen,
@@ -42,6 +43,7 @@ import {
 } from "@/components/layout/resizable";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
 import { WindowControls } from "@/components/layout/window-controls";
+import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
 import {
 	type SettingsSection,
 	SettingsWindow,
@@ -275,6 +277,8 @@ export default function App() {
 	const [wikiIndexRevision, setWikiIndexRevision] = useState(0);
 	/** Increment to open magic-wand popover (⇧⌘I). */
 	const [lookupOpenSignal, setLookupOpenSignal] = useState(0);
+	/** Zotero one-click migration dialog. */
+	const [zoteroOpen, setZoteroOpen] = useState(false);
 	const sidebarPanelRef = usePanelRef();
 	const rightSidebarPanelRef = usePanelRef();
 	const sourcePanelRef = usePanelRef();
@@ -2305,6 +2309,59 @@ export default function App() {
 									/>
 								) : null}
 								{/* Single-row header: toggle left, title right — same 28px line box */}
+								<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+									<div className="flex h-7 shrink-0 items-center">
+										{showLibrary ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														className="size-7 shrink-0"
+														aria-label={t("sidebar:zoteroMigrate.button")}
+														disabled={!vaultPath}
+														onClick={() => setZoteroOpen(true)}
+													>
+														<Import className="size-3.5" />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">
+													{t("sidebar:zoteroMigrate.button")}
+												</TooltipContent>
+											</Tooltip>
+										) : (
+											<ViewModeToggle
+												value={centerMode}
+												onChange={handleCenterModeChange}
+												available={modeAvailable}
+											/>
+										)}
+									</div>
+									<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
+										{!showLibrary &&
+										centerMode === "markdown" &&
+										(centerIsPaperNotes ? notesDirty : markdownDirty) ? (
+											<span
+												className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
+												role="img"
+												aria-label={t("editor.unsaved")}
+												title={t("editor.unsaved")}
+											/>
+										) : null}
+										{showLibrary ? (
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														type="button"
+														variant="ghost"
+														size="icon-xs"
+														className="size-7 shrink-0"
+														aria-label={t("sidebar:papersLibrary.export")}
+														disabled={
+															!vaultPath ||
+															libraryIoBusy !== null ||
+															libraryPapers.length === 0
 								{vaultPath && activeTab ? (
 									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 										<div
@@ -2676,6 +2733,13 @@ export default function App() {
 					onClose={closeSettings}
 					settings={settings}
 					onChange={updateSettings}
+				/>
+
+				<ZoteroMigrateDialog
+					open={zoteroOpen}
+					onOpenChange={setZoteroOpen}
+					vaultPath={vaultPath}
+					onDone={handleRefresh}
 				/>
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}

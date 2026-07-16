@@ -714,4 +714,24 @@ arXiv URL 推导：
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
 | 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |
+| 2026-07-16 | 从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`；`zotero_scan` / `zotero_migrate`；可选拷 PDF） |
+
+---
+
+## 16. 从本地 Zotero 迁移（直读 zotero.sqlite）
+
+> 状态：**已落地**。一键把本地 Zotero 文库迁入当前 Vault，全程本地、**不经 Translator**。
+
+- 入口：论文库工具栏 **Migrate from Zotero**（`ZoteroMigrateDialog`）。打开时自动探测默认 `~/Zotero` 目录（否则手动选含 `zotero.sqlite` + `storage/` 的目录）；扫描预览以 chips 显示文献 / PDF / 笔记数，迁移后展示结果小结（导入 / 补笔记 / 拷 PDF / 清理）。
+- Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `services/lookup/zotero_db.rs`。
+- 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型。
+- 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
+- PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
+- 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。
+- 自愈：迁移前 `prune_missing` 清掉「文件夹已被手动删除」的 catalog 孤儿行，防止幽灵条目占位、去重误跳过导致无法重导（结果含 `pruned` 计数）。
+- 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（默认开）→ 在目标目录下还原 collection 层级（`{parent}/<collection 路径>/<id>/`），collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（全路径字典序最小）。
+- 选择性导入：`zotero_scan` 预览返回各 collection（含「未分类」= id 0）及条目数，并返回逐条 `items`（id/title/year/hasPdf/notes/collections）；对话框提供**搜索 + 文件夹筛选 + 逐条勾选**（`include_items` 优先于 `include_collections`，缺省 = 全部）；迁移经 Tauri Channel 回传 `{current,total}` 进度，选项记于 localStorage。
+- 笔记：对话框「迁移 Zotero 笔记」勾选项（默认开）→ 每篇挂载的子笔记（`itemNotes`）HTML 经 `htmd` 转 Markdown，追加进该篇 `NOTES.md`（以 `---` 分隔）；`zotero_scan` 预览显示笔记总数。仅处理有父条目的子笔记。
+- 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：`highlights.md` 渲染系统尚未落地，故批注文本暂入 `NOTES.md`。
+- 非目标（v1）：Zotero 批注的**原位高亮渲染**（现仅迁移文本入 NOTES.md）、独立笔记（无父条目）、群组库。
 | 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Eye 手动；任务条 lookup/download → paperRead 衔接 |

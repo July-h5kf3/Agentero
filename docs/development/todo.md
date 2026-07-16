@@ -153,6 +153,14 @@
 
 ## P2 — 长期方向
 
+1. **Zotero/BibTeX 迁移工具** 🟡
+   - [x] 一键从本地 Zotero 迁移：直读 `zotero.sqlite` + `storage/` → catalog，可选拷本地 PDF（`zotero_scan` / `zotero_migrate`；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
+   - [ ] 解析 Zotero export / 独立 BibTeX 文件路径（Library 导入已覆盖 Bib/RIS 文本）。
+   - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）。
+   - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）。
+   - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）。
+   - [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项。
+   - [ ] 批注原位高亮渲染（highlights.md 系统）与引用 key 映射。
 1. **Zotero/BibTeX 迁移工具**
    - 解析 Zotero export 或 BibTeX。
    - 由 Agent 辅助重组为 Agentero vault。

@@ -5,9 +5,14 @@
 mod assets;
 mod map;
 mod parse;
+mod zotero_db;
 mod zotero_io;
 
 pub use assets::{ensure_paper_assets, has_local_pdf, has_local_tex, AssetDownloadResult};
+pub use zotero_db::{
+    migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
+    ZoteroScan, ZoteroScanArgs,
+};
 pub use zotero_io::{
     export_catalog, import_catalog, PaperExportArgs, PaperExportResult, PaperImportArgs,
     PaperImportResult,
