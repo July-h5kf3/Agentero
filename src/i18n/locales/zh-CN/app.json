@@ -23,12 +23,29 @@
 		"minimize": "最小化",
 		"maximize": "最大化",
 		"restore": "还原",
-		"close": "关闭"
+		"close": "关闭",
+		"layout": "布局",
+		"layoutHint": "配置面板",
+		"layoutPanels": "面板",
+		"layoutLeftSidebar": "左侧边栏",
+		"layoutRightSidebar": "右侧边栏",
+		"closeDocument": "关闭",
+		"closeDocumentHint": "关闭当前标签",
+		"showNotes": "显示笔记",
+		"hideNotes": "隐藏笔记",
+		"showNotesHint": "显示笔记栏",
+		"hideNotesHint": "隐藏笔记栏"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",
 		"notesPlaceholder": "在此撰写这篇论文的笔记……",
 		"unsaved": "有未保存的更改"
+	},
+	"tabs": {
+		"strip": "已打开的文档",
+		"close": "关闭 {{title}}",
+		"emptyTitle": "未打开任何文档",
+		"emptyHint": "从侧边栏选择文件或论文即可在标签中打开。"
 	},
 	"errors": {
 		"openVaultDesktopOnly": "打开知识库需要 Tauri 桌面应用（pnpm tauri dev）。",
@@ -40,8 +57,8 @@
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
 		"createDesktopOnly": "创建知识库仅在 Tauri 应用中可用。",
-		"dialogTitle": "选择 Motif 知识库文件夹",
-		"createDialogTitle": "选择新建 Motif 知识库的文件夹",
+		"dialogTitle": "选择 Agentero 知识库文件夹",
+		"createDialogTitle": "选择新建 Agentero 知识库的文件夹",
 		"createFailed": "创建知识库失败。",
 		"readDesktopOnly": "读取本地文件需要 Tauri 应用。",
 		"writeDesktopOnly": "写入本地文件需要 Tauri 应用。",
@@ -71,7 +88,10 @@
 		"downloadPaper": "下载论文资源",
 		"downloadAll": "下载缺失资源",
 		"downloadProgress": "{{current}} / {{total}}",
+		"downloadRefreshing": "正在刷新论文库… · {{path}}",
 		"lookupImport": "添加论文",
+		"lookupFetching": "正在拉取元数据与资源… · {{id}}",
+		"lookupRefreshing": "正在刷新论文库… · {{title}}",
 		"libraryImport": "导入文献库",
 		"libraryExport": "导出文献库",
 		"paperRead": "精读论文",

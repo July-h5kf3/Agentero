@@ -69,7 +69,7 @@ export function BacklinksPanel({
 	const body = (
 		<div
 			className={cn(
-				"motif-scroll min-h-0 flex-1 overflow-y-auto",
+				"agentero-scroll min-h-0 flex-1 overflow-y-auto",
 				variant === "sidebar" ? "px-2 py-2" : "px-2 pb-2",
 			)}
 		>

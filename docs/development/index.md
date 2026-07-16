@@ -1,6 +1,6 @@
 # 开发
 
-开发分区说明 Motif 要构建什么、当前完成了什么、还剩什么，以及发布和文档如何维护。
+开发分区说明 Agentero 要构建什么、当前完成了什么、还剩什么，以及发布和文档如何维护。
 
 ## 技术与流程选型
 
@@ -20,11 +20,15 @@
 |---|---|---|
 | V0.1 工作台 | ✅ | 文件树（Finder / 删除 / 内联新建）、Markdown IO、paper 预览/Notes、**Library 论文表**、左右侧栏 collapsible 隔离、多窗口、Create Vault + catalog、后台任务条 |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
-| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources；workflow 与写入确认仍待 |
+| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader 自动+Eye**、**全局权限模式**；面板 workflow 与写入确认仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
 | 阅读增强 | 🟡 | PDF **缩放**；**划词提问** MVP（`asks/*.json` + 锚点图标 + ACP）；完整 `highlights.md` 批注仍待 |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
-| Release CI | ✅ | `v*` tag → 三平台安装包草稿 Release |
+| V0.6 标签页与分屏 | ⏳ | 中间栏多文档 tab + 2 格分屏（规划中） |
+| V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
+| CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export；无 BYOA（见 [`cli.md`](cli.md)） |
+| Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
+| Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
 
@@ -34,8 +38,9 @@
 - [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
 - [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
+- [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
-- [`hypothesis.md`](hypothesis.md)：简短产品假设。
+- [`.md`](.md)：简短产品假设。
 
 ## 交叉引用
 

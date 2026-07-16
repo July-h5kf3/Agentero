@@ -48,6 +48,8 @@ import {
 } from "@/lib/agent";
 import { revealInOsLabelKey } from "@/lib/reveal";
 import {
+	type AgentPermissionMode,
+	type AiResponseLanguage,
 	type AppSettings,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
@@ -396,6 +398,16 @@ function AppearancePane({
 						onCheckedChange={(v) => patch({ showLineNumbers: v })}
 					/>
 				</SettingsRow>
+				<SettingsRow
+					label={t("appearance.editorToolbar.label")}
+					htmlFor="editor-toolbar"
+				>
+					<Switch
+						id="editor-toolbar"
+						checked={settings.showEditorToolbar}
+						onCheckedChange={(v) => patch({ showEditorToolbar: v })}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 		</>
 	);
@@ -644,6 +656,56 @@ function AgentPane({
 							onCheckedChange={(v) => void onToggleProxy(v)}
 						/>
 					</div>
+				</SettingsRow>
+				<SettingsRow label={t("agent.permission.label")} htmlFor="agent-perm">
+					<Select
+						value={settings.agentPermissionMode}
+						onValueChange={(v) =>
+							patch({ agentPermissionMode: v as AgentPermissionMode })
+						}
+					>
+						<SelectTrigger id="agent-perm" size="sm" className="min-w-[140px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="restricted">
+								{t("agent.permission.restricted.label")}
+							</SelectItem>
+							<SelectItem value="auto">
+								{t("agent.permission.auto.label")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.responseLanguage.label")}
+					htmlFor="agent-response-language"
+				>
+					<Select
+						value={settings.aiResponseLanguage}
+						onValueChange={(v) =>
+							patch({ aiResponseLanguage: v as AiResponseLanguage })
+						}
+					>
+						<SelectTrigger
+							id="agent-response-language"
+							size="sm"
+							className="min-w-[140px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="auto">
+								{t("agent.responseLanguage.auto")}
+							</SelectItem>
+							<SelectItem value="en">
+								{t("agent.responseLanguage.en")}
+							</SelectItem>
+							<SelectItem value="zh-CN">
+								{t("agent.responseLanguage.zhCN")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
 				</SettingsRow>
 			</SettingsGroup>
 
@@ -932,7 +994,7 @@ function AboutPane() {
 			<PageTitle title={t("about.title")} />
 			<SettingsGroup>
 				<div className="space-y-1 px-3.5 py-4 text-center">
-					<p className="font-semibold text-base tracking-tight">Motif</p>
+					<p className="font-semibold text-base tracking-tight">Agentero</p>
 					<p className="text-muted-foreground text-sm">
 						{t("about.version", { version: "0.1.0" })}
 					</p>

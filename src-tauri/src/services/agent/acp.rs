@@ -203,7 +203,7 @@ fn dedupe_model_choices(models: Vec<AgentModelChoice>) -> Vec<AgentModelChoice> 
 
     if dropped > 0 {
         eprintln!(
-            "[motif acp] model catalog deduped: kept={}, dropped_duplicates={}",
+            "[agentero acp] model catalog deduped: kept={}, dropped_duplicates={}",
             out.len(),
             dropped
         );
@@ -269,7 +269,7 @@ fn models_from_config_options(
         }
         if raw_len != models.len() {
             eprintln!(
-                "[motif acp] agent={} config_id={} model list: raw={} unique={}",
+                "[agentero acp] agent={} config_id={} model list: raw={} unique={}",
                 agent_id,
                 opt.id,
                 raw_len,
@@ -488,7 +488,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
 
     let connect = agent_client_protocol::Client
         .builder()
-        .name("motif")
+        .name("agentero")
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));
@@ -581,6 +581,7 @@ pub async fn run_once(
     fast_mode: Option<bool>,
     skill_ids: Vec<String>,
     auto_approve: bool,
+    response_language: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
@@ -614,6 +615,7 @@ pub async fn run_once(
             target.as_deref(),
             skill_style,
             &skill_ids,
+            response_language.as_deref(),
         ),
         skill_instructions
     );
@@ -654,7 +656,7 @@ pub async fn run_once(
 
     let run_result = agent_client_protocol::Client
         .builder()
-        .name("motif")
+        .name("agentero")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let Some((chunk, kind)) = stream_from_update(&notification.update) {
@@ -994,7 +996,7 @@ pub async fn warm_agent(
 
     let result = agent_client_protocol::Client
         .builder()
-        .name("motif")
+        .name("agentero")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let SessionUpdate::UsageUpdate(u) = &notification.update {

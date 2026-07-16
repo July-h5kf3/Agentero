@@ -223,7 +223,7 @@ export function resolveWikiTarget(
 }
 
 /** Protocol for preview-only markdown links generated from `[[wikilinks]]`. */
-export const WIKI_HREF_PREFIX = "motif-wiki:";
+export const WIKI_HREF_PREFIX = "agentero-wiki:";
 
 export type WikiNavTarget = {
 	targetRaw: string;

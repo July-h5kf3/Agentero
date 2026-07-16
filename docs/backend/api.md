@@ -1,4 +1,4 @@
-# Motif / notemd 后端 API 规范
+# Agentero / notemd 后端 API 规范
 
 > 本文档基于 `docs/development/technical-plan.md`、`docs/development/prd.md`、`docs/development/roadmap.md` 编写，定义 Host（Tauri + Rust）暴露给前端的 Tauri invoke 命令与事件。
 
@@ -109,23 +109,23 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.motif/`、**`.agents/`**、**`.agents/skills/`**。
-  - 初始化 `.motif/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
+  - 确保目录存在；脚手架 `papers/`、`notes/`、`plans/`、`.agentero/`、**`.agents/`**、**`.agents/skills/`**。
+  - 初始化 `.agentero/catalog.sqlite`（schema 当前版本，含 Translator 元数据列）。详见 [`catalog.md`](catalog.md)。
   - 写入默认 `AGENTS.md`（若不存在）。
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
-  - 最近列表由前端在成功打开后写入 `localStorage`（`motif-recent-vaults`）。
+  - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
 
 #### `window_new`（已实现）
 
-打开一个新的 Motif 窗口（菜单 **File → New Window** / `⌘N`）。
+打开一个新的 Agentero 窗口（菜单 **File → New Window** / `⌘N`）。
 
 - **参数**：无
 - **返回**：`Result<(), String>`
 - **行为**
-  - 创建 label 为 `motif-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
+  - 创建 label 为 `agentero-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
   - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
-  - Capability 覆盖 `main` 与 `motif-*`（见 `src-tauri/capabilities/default.json`）。
+  - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
 
 #### `vault:open`（规划）
@@ -153,7 +153,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **行为**
-  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.motif/catalog.sqlite` 可打开或可初始化）。
+  - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.agentero/catalog.sqlite` 可打开或可初始化）。
   - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
   - 启动文件监听（后续）。
   - 返回完整文件树。
@@ -181,7 +181,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 }
 ```
 
-- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `motif-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
+- **当前实现**：渲染层 `getRecentVaults()` / `rememberRecentVault()` 读写 `localStorage` 键 `agentero-recent-vaults`（MRU，最多 8 条）。后续迁 Host / Tauri Store 时保持该语义。
 
 #### `vault:info`（规划）
 
@@ -556,7 +556,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   }
   ```
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
-- **行为**：读 catalog 取 `pdf_url` / `arxiv_id`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。
+- **行为**：读 catalog 取 `pdf_url` / `arxiv_id`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。
 
 #### `paper_parse_body`（已落地）
 
@@ -592,7 +592,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   }
   ```
 - **返回**：`{ ok: true; data: { format, content, count, filename } }`
-- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Motif `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
+- **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Agentero `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
 
 #### `paper_import`（已落地）
 
@@ -612,7 +612,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 ### 3.6 论文
 
-论文**集合与元数据**存于 `.motif/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
+论文**集合与元数据**存于 `.agentero/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。
 
 #### `paper_get`（已落地）
 
@@ -710,7 +710,10 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 - **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
 - **前端**：`src/lib/papers-api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
-- **说明**：与 `status`（入库态）无关；默认 `false`。文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
+- **说明**：与 `status`（入库态）无关；默认 `false`。触发路径：
+  - **自动**：魔棒 `lookup_import` / 单篇 `paper_download_assets` 成功且资源就绪时，前端 `maybeAutoRunPaperReader`（批量导入/批量 Download 不连跑）。
+  - **手动**：文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
+  - 实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
 #### `paper:list`（扩展规划）
 
@@ -817,6 +820,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
+  responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
 }
 ```
 
@@ -827,15 +831,17 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - **Codex** → `$skill-id` 前缀 + 注入正文；
   - **Claude ACP** → `/skill-id` 前缀 + 注入正文；
   - **其它** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
-  - Composer 的 `$` 仅是 Motif UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
+  - Composer 的 `$` 仅是 Agentero UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
-- **权限策略**：默认取消 ACP 权限请求。Composer 按 provider 持久化 YOLO 偏好，并在每次运行中通过 `autoApprove` 传入；逐项权限确认仍未实现。
+- **权限策略**：默认取消 ACP 权限请求。设置 → Agent 提供全局「权限模式」（受限默认 / 自动批准），对所有 Agent 生效，并在每次运行中通过 `autoApprove`（自动批准 → `true`）传入；逐项权限确认仍未实现。
+
+- **回答语言**：设置 → Agent 提供全局「回答语言」（自动 / English / 简体中文，独立于界面语言）。前端 `runOnce` 统一读取该设置并透传 `responseLanguage`；Host 在 `build_prompt`（`prompts.rs`）为所有 workflow 追加一句语言指令，`auto` 时不注入。
 
 - **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
 
 #### `agent_codex_list_threads`
 
-列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Motif 在 `.motif/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
+列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Agentero 在 `.agentero/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
 
 ```ts
 { agentId?: string; vaultPath?: string; includeExternal?: boolean }
@@ -1235,7 +1241,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **返回**：`Result<(), String>`（成功为 `()`，失败返回错误信息字符串）。
-- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `motif-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
+- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `agentero-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
 
 #### 菜单事件
 
@@ -1252,6 +1258,23 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
 前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒。
+
+## 3.x Headless CLI（对照）
+
+> 完整语义见 [`../development/cli.md`](../development/cli.md)。CLI **不**走 Tauri invoke，直接 path 依赖 `agentero_lib::services`（无 BYOA）。
+
+| CLI | Host service / command 锚点 |
+|---|---|
+| `vault create` | `services::vault::create_vault` / `vault_create` |
+| `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
+| `tree` | 磁盘扫描（非 Library 虚拟节点） |
+| `paper list\|get\|paths\|delete\|set-read` | `catalog::papers::*` / `paper_*` |
+| `paper download\|parse` | `lookup::download_paper_assets` / `pdf_parse::parse_paper_body` |
+| `import id\|bib` | `lookup::import_by_identifier` / `import_catalog` |
+| `export bib` | `lookup::export_catalog`（`-o`/`--out` 写文件；全局格式用 `--json`） |
+| `config show\|set` | `~/.config/agentero/config.toml`（与 GUI 隔离） |
+
+构建：`cargo build -p agentero-cli` → bin `agentero`。
 
 ## 4. 数据模型
 
@@ -1273,14 +1296,17 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 |---|---|
 | V0.1 | 实现 `vault:*`、`file:*`、`config:*`。 |
 | V0.2 | 增加 `arxiv:*`、`paper:*` 命令与异步任务事件；定义 `Paper` 数据结构。 |
-| V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流。 |
-| V0.4 | 增加 `graph:*` 命令。 |
+| V0.3 | ACP Client + BYOA：`agent:list_agents` / `upsert_agent` / `discover` / 会话与权限 / 工作流；`paper_set_is_read` + paper-reader（自动/手动）。 |
+| V0.4 | 增加 `graph:*` 命令（双链 / 反链 / 图谱；与 bibliographic 引用图分离）。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
+| V0.6 | 主要为前端工作区状态（文档 tab / 分屏布局持久化）；Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
+| V0.7 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 
 后续扩展：
 - `importer:import` 统一来源入口。
 - `lookup:*` 与 PDF prepare 共用元数据管道。
+- `citation:fetch` / `citation:list_neighbors`（名称待定）：引用/被引邻域与缓存刷新（V0.7）。
 - `search:full_text` 本地全文搜索。
 - `reader:annotations` 标注（`highlights.md`）读写。
 - `sync:*` 多设备同步（远期）。

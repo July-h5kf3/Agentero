@@ -18,7 +18,10 @@ export type ShortcutId =
 	| "closeSheet"
 	| "focusSidebar"
 	| "focusEditor"
-	| "focusNotes";
+	| "focusNotes"
+	| "closeTab"
+	| "nextTab"
+	| "prevTab";
 
 export type ShortcutGroup = "App" | "Navigation" | "Vault";
 
@@ -153,6 +156,33 @@ export const SHORTCUTS: ShortcutDef[] = [
 		meta: true,
 		whenSettingsClosed: true,
 	},
+	{
+		id: "closeTab",
+		group: "Navigation",
+		// ⌥⌘W — close the active document tab (⌘W is reserved for closing the window).
+		key: "w",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "nextTab",
+		group: "Navigation",
+		// ⌥⌘→ — next document tab
+		key: "ArrowRight",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "prevTab",
+		group: "Navigation",
+		// ⌥⌘← — previous document tab
+		key: "ArrowLeft",
+		meta: true,
+		alt: true,
+		whenSettingsClosed: true,
+	},
 ];
 
 /** Secondary aliases that still work (documented lightly). */
@@ -190,9 +220,13 @@ export function formatShortcut(def: ShortcutDef): string {
 					: "Backspace"
 				: def.key === "Escape"
 					? "Esc"
-					: def.key.length === 1
-						? def.key.toUpperCase()
-						: def.key;
+					: def.key === "ArrowRight"
+						? "→"
+						: def.key === "ArrowLeft"
+							? "←"
+							: def.key.length === 1
+								? def.key.toUpperCase()
+								: def.key;
 	parts.push(keyLabel);
 	return parts.join(isMac ? "" : "+");
 }

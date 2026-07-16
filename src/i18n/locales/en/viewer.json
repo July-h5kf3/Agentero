@@ -27,6 +27,16 @@
 		"pillAria": "Open ask: {{preview}}",
 		"pillFallback": "Ask thread"
 	},
+	"selection": {
+		"menuLabel": "Selection actions",
+		"highlight": "Highlight",
+		"note": "Add to notes",
+		"ask": "Ask",
+		"translate": "Translate",
+		"noteAdded": "Added to notes",
+		"removeHighlight": "Remove highlight",
+		"translateAction": "Translate this passage"
+	},
 	"html": {
 		"empty": "No paper available.",
 		"sandboxTitle": "HTML paper sandbox"

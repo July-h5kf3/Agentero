@@ -1,8 +1,8 @@
 # PDF 划词提问（Selection Ask）
 
-> 状态：**MVP 已落地（前端 + 文件 IO）**  
-> 范围：阅读 PDF 时选中/双击/悬停触发提问 → 小对话框问答 → JSON 落盘 → 页边圆片回访（飞书式边注）。  
-> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/lib/pdf-ask/`、`src/components/viewer/pdf-ask/`。  
+> 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 笔记 / 提问 / 翻译），不再默认套用琥珀高亮。  
+> 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 笔记（追加 `NOTES.md`）/ 提问（迷你对话框）/ 翻译（复用对话框走 Agent）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）。  
+> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`）、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
 > 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
 
 ## 1. 产品目标
@@ -11,12 +11,13 @@
 
 | 交互 | 行为 |
 |---|---|
-| **划词** | 选中 PDF 文本后，在选区旁弹出迷你问答卡 |
+| **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（高亮 / 笔记 / 提问 / 翻译）；不默认高亮，只保留浏览器原生选区 |
+| **操作菜单** | 高亮→JSON 落盘并渲染琥珀覆盖层；笔记→原文以 `> …` 追加进 `NOTES.md`（菜单内联「已加入」）；提问→打开迷你问答卡；翻译→建线程后复用问答卡走 Agent 流式 |
 | **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
 | **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
 | **键入提问** | 卡内输入问题并发送；**仅发送过问题的线程**保留对话图标 |
 | **对话图标** | 锚在选区附近；Hover 打开，离开约 1s 后隐藏 |
-| **回访** | Hover 图标打开线程；隐藏 / 删除 |
+| **回访** | Hover 图标打开线程；隐藏 / 删除；点击已有高亮出现删除浮层 |
 
 参考形态：浮层卡片 + 底部输入（类似常见 AI 浮层；本应用内需对齐 shadcn / AI Elements，且不引入外部 Chat 产品壳）。
 
@@ -44,7 +45,7 @@
 |---|---|
 | `react-pdf` + `pdfjs-dist`（已开 `renderTextLayer`） | 选区与字符坐标来源 |
 | `PdfViewer`（`src/components/viewer/pdf-viewer.tsx`） | 扩展为带交互层的阅读器，而非平行第二套渲染 |
-| ACP / `agent_run_once` + `agent:stream` 等 | 问答传输；**不**新建模型 SDK、**不**在 Motif 存 API Key |
+| ACP / `agent_run_once` + `agent:stream` 等 | 问答传输；**不**新建模型 SDK、**不**在 Agentero 存 API Key |
 | AI Elements（Conversation / Message / PromptInput） | 迷你卡内消息列表与输入；传输仍是 ACP，不是 Vercel `useChat` |
 | Paper 文件夹 / Vault 文件 | 线程 JSON 落在 paper 目录，local-first |
 | `highlights.md`（L2.5 标注） | **首版不混写**；可选后续把「值得保留的引文」导出为 highlight |
@@ -70,7 +71,7 @@
 | 方案 | 不采用原因 |
 |---|---|
 | 在 PDF 内嵌 XFDF/注解 | 污染用户原始 PDF；与 local-first「人可读旁路文件」冲突 |
-| 仅存 `.motif/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
+| 仅存 `.agentero/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
 | 全部写入 `highlights.md` | Markdown 不便表达多轮消息与流式元数据；首版 JSON 更干净；可后续互导 |
 | 浏览器扩展式划词 | 应用内 Webview 已有 PDF，无需跨页面扩展 |
 | 自研 Canvas 文本命中 | TextLayer 已够用；仅在无文本层时再考虑坐标-only |
@@ -83,7 +84,7 @@
    - 运行时：`DOMRect` → 相对当前 `Page` 容器的 `(x, y, w, h)` → 除以 `viewport.width/height` 得 `0–1` 归一化 rects。
    - 回放：页渲染完成 + `width` 变化时，用同一归一化 rects × 当前 viewport 重定位圆片与高亮。
 4. **多矩形选区**：跨行选区可能多个 `ClientRect`；全部保存为 `rects[]`，圆片锚点取首段中线 y 或包围盒中心。
-5. **远程 PDF CORS**：当前预览走远程 `pdf_url`；TextLayer 抽取依赖 PDF.js 能读文本。若 CORS/范围请求失败，需降级提示；本地归档 PDF（`{paper}/{id}.pdf`）未来可用 `convertFileSrc` 增强稳定性（与阅读器演进一致）。
+5. **PDF 源与 CORS**：预览 **本地优先**（fs `readFile` → `blob:` 读 `{paper}/*.pdf`；不用 `asset://`，PDF.js 对其 XHR 会 `Unexpected server response (0)`）；无本地时尝试下载，失败再回退远程 `pdf_url`。TextLayer 抽取依赖 PDF.js 能读文本。远程路径若 CORS/范围请求失败，可提示用户补下本地 PDF 后重开。
 
 ## 4. 交互状态机
 
@@ -135,7 +136,7 @@ papers/<id>/
 
 - **事实来源**：`asks/<threadId>.json`（人产生的问答）。
 - **可选索引**：`asks/index.json` 加速页边渲染（仅 id/page/y/preview）；丢失时可扫目录重建。
-- **不**把全文塞进 `.motif/catalog.sqlite`；catalog 不承载对话正文。
+- **不**把全文塞进 `.agentero/catalog.sqlite`；catalog 不承载对话正文。
 
 ### 5.2 线程 JSON Schema（逻辑）
 
@@ -269,6 +270,7 @@ src/lib/pdf-ask/
 | **M3 ACP 接入** | 真流式回答；多轮；结束写盘 | 与 Agent 面板共用 provider 配置 | ✅ |
 | **M4 双击 / 悬停** | 触发完善；阈值暂固定（约 700ms） | 防误触可接受 | ✅ |
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
+| **M6 选区菜单** | 划词弹菜单：高亮（`highlights/*.json`）/ 笔记（追加 `NOTES.md`）/ 提问 / 翻译；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除；笔记不覆盖未存改动 | ✅ |
 
 ## 10. 风险与降级
 
@@ -302,6 +304,6 @@ src/lib/pdf-ask/
 1. **渲染**：继续 `react-pdf` TextLayer，不引入第二套 PDF 引擎。  
 2. **交互**：选区 / 双击 / 悬停三触发 → 迷你问答卡 → 结束变页边圆片。  
 3. **存储**：`papers/<id>/asks/<threadId>.json`（用户要求的 JSON）；坐标归一化可重建。  
-4. **智能**：复用 ACP BYOA，不在 Motif 内嵌模型 Key。  
+4. **智能**：复用 ACP BYOA，不在 Agentero 内嵌模型 Key。  
 5. **UI**：AI Elements + shadcn；飞书式边注心智，不做完整批注产品首版。  
 6. **与 highlights**：分离；后续可选导出。

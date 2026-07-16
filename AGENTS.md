@@ -2,27 +2,30 @@
 
 ## 项目概览
 
-Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中：人的笔记与 source 以 Markdown/文件为准；论文集合与结构化 metadata 以 `.motif/catalog.sqlite` 为准（可导出 `PAPERS.md` / BibTeX，非默认落盘）。离开应用后笔记与源文件仍可被外部工具读取。
+Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中：人的笔记与 source 以 Markdown/文件为准；论文集合与结构化 metadata 以 `.agentero/catalog.sqlite` 为准（可导出 `PAPERS.md` / BibTeX，非默认落盘）。离开应用后笔记与源文件仍可被外部工具读取。
 
 ## 当前应用形态
 
 - 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
+- CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
   - 左侧：Vault 文件树（顶部虚拟 **Library** 节点、魔棒、新建文件/文件夹；右键 **Finder 显示 / 删除**）+ 选中论文时 **Paper Info**；
   - 中间：无 Vault 时欢迎页；有 Vault 时为 **论文库表格**（Library / 根 / `papers/`）或论文 **PDF / HTML** / 打开的 Markdown 笔记；
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
   - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Focus）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话。
-- 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `motif:library` 不写盘。
+  - 中间栏为**文档标签页**（浏览器式多 tab）：可同时打开多个 paper / PDF / HTML / Markdown / Library，切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：关闭标签 `⌥⌘W`、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
+- 论文库：`paper_list` 读 catalog；表头排序；横向/纵向滚动。虚拟路径 `agentero:library` 不写盘。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
-- **精读工作流**：资源齐全且 catalog `is_read === false` 时，文件树 paper 行显示 **Eye**；点击后用默认 Agent + paper-reader skill 精读并写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`（Composer 的 `$` 只是 UI 选 skill，不等于所有 CLI 的触发方式）。
+- **精读工作流**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时文件树仍显示 **Eye** 可手动重跑。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（入库/下载 → 精读衔接；**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
+- **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。
 - 文件树：双击 / `⌥⌘R` 在 Finder 中显示；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
-- PDF：缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
-- 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。
+- PDF：预览 **本地优先**（fs `readFile` → `blob:`，避免 `asset://`）→ 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
+- 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。规划中：**V0.6 分屏（split，标签页已落地）**、**V0.7 引用关系（hover Info / Connected Papers / Agent 引用工作流）**。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
-- Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab。
+- Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。
 - Graph 数据必须来自 Markdown 双链或可重建索引，不能来自手工维护的图数据库。
 
 ## 开发规则
@@ -31,7 +34,7 @@ Motif 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 
 - 保持 local-first：不要引入私有存储作为事实来源。
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
-- Agent 集成采用 BYOA：Motif 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Motif 内填写模型 API Key。
+- Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。
 - UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。
 - 国际化（i18n）：所有面向用户的文案都必须经 `t()` 走 `react-i18next`，禁止硬编码字符串。English（`en`）为源语言，新增文案先登记 `en` 词条再同步 `zh-CN`（`src/i18n/locales/`）。跨命名空间用 `t("ns:key")` 并在 `useTranslation([...])` 声明；React 之外用全局 `i18n.t()`。数字/日期用 `i18n.language` 格式化。详见 `docs/frontend/ui.md` §4.1。
 - 修改后需要同步更新相关文档。如果修改了 UI、数据契约、发布流程或 Vault 语义，必须同步更新相关文档。并检查 Roadmap 和 Todo。
@@ -46,6 +49,11 @@ pnpm build
 pnpm lint
 pnpm format
 pnpm tauri build
+
+# Headless CLI（仓库根 workspace）
+cargo build -p agentero-cli
+cargo run -p agentero-cli -- vault which --json
+cargo test -p agentero-cli
 ```
 
 完成实现前运行最小必要验证。UI 改动优先启动应用并检查对应流程；如果 dev 端口被占用或无法做浏览器级验证，需要明确说明。
@@ -61,12 +69,13 @@ pnpm tauri build
 - `docs/backend/api.md`：Tauri command 与 event 契约。
 - `docs/backend/wikilinks.md`：双链、反链与图谱设计。
 - `docs/backend/data-model.md`：Vault 文件模型。
-- `docs/backend/catalog.md`：论文目录库（`.motif/catalog.sqlite`）与导出。
+- `docs/backend/catalog.md`：论文目录库（`.agentero/catalog.sqlite`）与导出。
 - `docs/development/index.md`：产品、路线图、开发和发布流程入口。
 - `docs/development/roadmap.md`：实现状态与路线图。
 - `docs/development/todo.md`：可执行 backlog。
 - `docs/development/technical-plan.md`：跨前后端技术方案。
 - `docs/development/prd.md`：产品需求和验收标准。
+- `docs/development/cli.md`：headless CLI 语义与实现（`cli/`）。
 
 当修改 UI、数据契约、发布流程或 Vault 语义时，必须同步更新相关文档。
 

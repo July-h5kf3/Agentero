@@ -1,8 +1,8 @@
-# Motif / notemd Agent-first 文献库 MVP PRD
+# Agentero / notemd Agent-first 文献库 MVP PRD
 
 ## 1. 背景与定位
 
-Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它不是传统 Zotero 的替代品，而是围绕 Agent 的信息处理方式重新组织文献、笔记、索引和引用路径。
+Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。它不是传统 Zotero 的替代品，而是围绕 Agent 的信息处理方式重新组织文献、笔记、索引和引用路径。
 
 传统文献工具主要解决“存储文献”的问题，但在 Agent 工作流里会出现三个断层：
 
@@ -68,7 +68,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 当输入不是精确 ID/URL 时，调用 Agent 检索 arXiv 候选论文并返回列表供用户确认。
 - Agent 应给出候选论文的标题、作者、摘要片段及推荐理由，用户确认后再进入入库流程。
 - 为每篇论文创建独立目录：`papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey）。
-- 将 metadata 写入 `.motif/catalog.sqlite`，作为该篇结构化元数据的事实来源。
+- 将 metadata 写入 `.agentero/catalog.sqlite`，作为该篇结构化元数据的事实来源。
 - 优先获取 arXiv LaTeX source 作为结构化来源；HTML/PDF 作为人类阅读补充。
 - 仅在无 LaTeX source 或 Agent/用户需要时才生成 `PAPER.md`；有 source 时直接保留原始 `.tex`。
 - 生成 `NOTES.md`（默认三段论结构），并创建空的 `highlights.md` 供标注写入。
@@ -106,13 +106,15 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 
 #### Agent 集成（ACP Client + BYOA）
 
-- Motif 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
-- **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Motif 不持有模型密钥。
+- Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
+- **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- MVP 提供 3 个内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
+- 已落地：**paper-reader 精读**（魔棒/单篇 Download 后自动 + 文件树 Eye 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / 自动批准）。
+- MVP 仍规划面板可点的内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
   - 总结当前论文。
   - 基于本地库问答。
   - 生成带本地路径引用的 Related Work 草稿。
+- 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `highlights.md` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
 - Agent 输出必须展示读取过的文件路径；写回 Vault 前需用户确认（临时草稿 → 正式文件）。
 - 未检测到可用 Agent 时，设置与 Agent 面板展示安装/配置指引，不阻塞 Vault 与阅读功能。
@@ -122,18 +124,27 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 - 支持在应用内打开 PDF。
 - 支持在应用内打开 arXiv HTML 或本地 HTML。
 - 支持基础搜索、缩放、页内定位。
-- 标注（引文 + 想法）以 `highlights.md` 落盘，坐标缓存于 `.motif/`；MVP 提供轻量标注捕获，不做完整 PDF 批注同步系统。
+- 标注（引文 + 想法）以 `highlights.md` 落盘，坐标缓存于 `.agentero/`；MVP 提供轻量标注捕获，不做完整 PDF 批注同步系统。
+- 划词提问 MVP 已落地（`asks/*.json`）；完整批注同步仍属后续。
 
 #### 关系图谱
 
-- 基于 Markdown 双链和论文索引生成图谱。
+- 基于 Markdown 双链和论文索引生成图谱（**双链图**）。
 - 节点至少包括 Paper、Note、Concept/Stub。
 - 点击节点可以打开对应 Markdown。
 - 图谱数据必须能从本地 Markdown 重建。
 - MVP UI 中图谱位于 Backlinks 右侧栏下方，与当前文件反链共享上下文。
+- **文献引用图**（bibliographic cites/cited_by、Connected Papers 式邻域、文内引用 hover→Info）见 roadmap **V0.7**，与双链 Graph 分离。
 
-### 4.2 P1 暂缓
+#### 工作区（规划）
 
+- 当前中间栏为单槽：打开项互斥替换。
+- 规划（roadmap **V0.6**）：文档标签页管理打开内容，并支持分屏并排（PDF | NOTES 等）。
+
+### 4.2 P1 暂缓 / 后续版本
+
+- 文档标签页与分屏（升格为 roadmap V0.6）。
+- 文献引用关系探索与 hover Paper Info（升格为 roadmap V0.7）。
 - Zotero 全量替代能力。
 - 云同步、多人协作、权限管理。
 - 浏览器插件。
@@ -148,7 +159,7 @@ Motif / notemd 是一个面向人和 Agent 共用的本地科研文献库。它�
 ### 5.1 Vault 结构
 
 ```text
-motif-vault/
+agentero-vault/
   AGENTS.md              # L0 Agent 行为规范与读取协议
   papers/
     1706.03762/          # arxiv 用 arXiv ID；非 arxiv 用 citekey
@@ -165,7 +176,7 @@ motif-vault/
     *.md
   plans/
     *.md
-  .motif/
+  .agentero/
     catalog.sqlite       # 论文集合 + metadata（权威）
     config.json          # 库级设置（可选）
   # 可选导出（非默认）：PAPERS.md、library.bib
@@ -175,7 +186,7 @@ motif-vault/
 
 #### 论文集合与 metadata（Catalog）
 
-权威存储：`.motif/catalog.sqlite`（见 `docs/backend/catalog.md`）。UI 列表与筛选读 catalog；**默认不**落盘根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。需要时用导出命令生成 Markdown 表或 BibTeX。
+权威存储：`.agentero/catalog.sqlite`（见 `docs/backend/catalog.md`）。UI 列表与筛选读 catalog；**默认不**落盘根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。需要时用导出命令生成 Markdown 表或 BibTeX。
 
 #### `NOTES.md`（L2，事实来源）
 
@@ -193,7 +204,7 @@ motif-vault/
 
 #### `highlights.md`（L2.5，事实来源）
 
-单篇论文的标注层，与 `NOTES.md` 分开存放：笔记是「熟的」综合知识，标注是「生的」原始证据（锚定原文位置的引文 + 想法）。引文与想法留在 Markdown（事实来源），页码/bbox 等坐标缓存于 `.motif/`（可由引文检索重建）；用 Obsidian 块引用 `^id`，让 `NOTES.md` 能精确引用某条标注。
+单篇论文的标注层，与 `NOTES.md` 分开存放：笔记是「熟的」综合知识，标注是「生的」原始证据（锚定原文位置的引文 + 想法）。引文与想法留在 Markdown（事实来源），页码/bbox 等坐标缓存于 `.agentero/`（可由引文检索重建）；用 Obsidian 块引用 `^id`，让 `NOTES.md` 能精确引用某条标注。
 
 #### `PAPER.md`（L3，派生）
 
@@ -216,7 +227,7 @@ Vault 内的 Agent 行为规范，至少包含：
 1. 用户打开应用。
 2. 选择“创建 Vault”。
 3. 选择本地目录。
-4. 系统初始化 `AGENTS.md`、`papers/`、`notes/`、`plans/`、`.motif/catalog.sqlite`。
+4. 系统初始化 `AGENTS.md`、`papers/`、`notes/`、`plans/`、`.agentero/catalog.sqlite`。
 5. 进入三栏工作台。
 
 ### 6.2 arXiv 论文入库

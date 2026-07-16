@@ -1,9 +1,9 @@
-# Motif 双链设计（Obsidian 兼容）
+# Agentero 双链设计（Obsidian 兼容）
 
 > 状态：**Phase A–B 已实现**（索引 + 反链 + 预览可点）/ **Phase D 基本完成**（GraphPanel + `graph_get_graph`）/ Phase C 待增强  
 > 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.7 · `docs/backend/data-model.md`
 
-本文定义 Motif 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
+本文定义 Agentero 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
 
 ---
 
@@ -11,7 +11,7 @@
 
 ### 1.1 目标
 
-- 用户在 Markdown 中书写 `[[...]]`，与 **Obsidian 兼容**，可在 Motif / Obsidian 间互开 Vault。
+- 用户在 Markdown 中书写 `[[...]]`，与 **Obsidian 兼容**，可在 Agentero / Obsidian 间互开 Vault。
 - 点击双链可跳转到 Vault 内目标文件；目标不存在时可创建。
 - 查看某文件的 **反链（backlinks）**：谁引用了我。
 - 图谱视图展示节点与 `links_to` 等边；**可从 Markdown 全量重建**。
@@ -97,7 +97,7 @@ backlinks(path) = { e.source | e.target_path == path }
 
 ### 3.2 缓存位置
 
-- 双链边：当前为**内存索引**；后续可落入 `.motif/catalog.sqlite` 的可重建表（与 `papers` 权威表区分，见 [`catalog.md`](catalog.md) §6）。
+- 双链边：当前为**内存索引**；后续可落入 `.agentero/catalog.sqlite` 的可重建表（与 `papers` 权威表区分，见 [`catalog.md`](catalog.md) §6）。
 - **Paper 标题**：读 catalog `papers.title`，不读 `metadata.json`。
 - 可整删重建（仅边表）：重扫全部 Markdown 中的 `[[...]]` + join catalog 取 label。
 - 增量：文件 mtime / fs 事件变化时，仅重算该 `source` 的出边。
@@ -181,7 +181,7 @@ backlinks(path) = { e.source | e.target_path == path }
 | [landakram/remark-wiki-link](https://github.com/landakram/remark-wiki-link) | remark 管线解析/渲染 `[[wiki]]` |
 | [landakram/micromark-extension-wiki-link](https://github.com/landakram/micromark-extension-wiki-link) | micromark 层 token |
 
-Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图谱 **不**依赖 remark-wiki-link。
+Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图谱 **不**依赖 remark-wiki-link。
 
 ### 6.2 架构参考（不必整包嵌入）
 
@@ -215,11 +215,21 @@ Motif 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；图�
 - **Paper 标签**：优先读 catalog `papers.title`（按 path）；缺失时回退逻辑 id / 文件夹名。
 - 折叠后自环（同 paper 内文件互链）丢弃。
 
-### 6.5 不采用
+### 6.5 与文献引用图的边界
+
+本设计只覆盖 **Obsidian 式 `[[wikilinks]]`**（用户/Agent 写在 Markdown 里的概念与文件链接）。
+
+**文献引用图**（paper cites / cited_by、Connected Papers 式邻域、文内 `[12]` hover → Paper Info）是另一条能力线，见 [`../development/roadmap.md`](../development/roadmap.md) **V0.7**。二者可在 UI 上对照展示，但：
+
+- 数据源不同：双链边来自 Markdown 解析；引用边来自外部 API 或参考文献解析，缓存于 catalog / `.agentero/` 可重建结构。
+- API 不同：现有 `graph_*` 服务双链；引用图使用独立 `citation:*`（名称待定），不污染双链索引语义。
+
+### 6.6 不采用
 
 - 为双链替换整个编辑器栈。
 - 自动改写目标文件插入回链（除非未来产品单独立项）。
 - 图谱常驻第四主栏或独立顶层 Graph tab（当前默认嵌在 Backlinks 下方）。
+- 用双链 Graph 冒充 bibliographic 引用关系（引用探索走 V0.7）。
 
 ---
 

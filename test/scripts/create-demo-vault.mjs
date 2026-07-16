@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Create a Motif demo vault matching the current data model:
- * - AGENTS.md, papers/, notes/, plans/, .motif/catalog.sqlite
+ * Create a Agentero demo vault matching the current data model:
+ * - AGENTS.md, papers/, notes/, plans/, .agentero/catalog.sqlite
  * - No default PAPERS.md / library.bib
  * - Paper folders as minimal units (flat + nested under papers/)
  * - Optional metadata.json for transition / external tools
@@ -13,8 +13,8 @@
  *   node test/scripts/create-demo-vault.mjs --verify [path]
  *
  * Defaults:
- *   --downloads → ~/Downloads/motif-demo-vault
- *   no path     → ./tmp/motif-demo-vault
+ *   --downloads → ~/Downloads/agentero-demo-vault
+ *   no path     → ./tmp/agentero-demo-vault
  */
 
 import { execFileSync } from "node:child_process";
@@ -247,14 +247,14 @@ ImageNet 等视觉任务显著提升，成为骨干网络。
 
 const AGENTS_MD = `# AGENTS.md
 
-This file is the L0 map for agents working in this Motif research vault.
+This file is the L0 map for agents working in this Agentero research vault.
 
 ## Layout
 
 - \`papers/\` — paper folders at **any depth**. A paper folder is the minimal unit (has \`NOTES.md\`, optional \`highlights.md\` / \`PAPER.md\`, and \`source/\`).
 - \`notes/\` — free-form concept notes (\`[[wikilinks]]\` welcome).
 - \`plans/\` — research plans and drafts.
-- \`.motif/catalog.sqlite\` — paper **catalog** (collection + metadata). There is usually **no** root \`PAPERS.md\` unless exported.
+- \`.agentero/catalog.sqlite\` — paper **catalog** (collection + metadata). There is usually **no** root \`PAPERS.md\` unless exported.
 
 ## Progressive disclosure
 
@@ -339,7 +339,7 @@ function buildCatalogSql(papers) {
 	const lines = [
 		DDL.trim(),
 		`INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '${SCHEMA_VERSION}');`,
-		`INSERT OR REPLACE INTO schema_meta(key, value) VALUES('motif_app', 'motif');`,
+		`INSERT OR REPLACE INTO schema_meta(key, value) VALUES('agentero_app', 'agentero');`,
 	];
 	for (const p of papers) {
 		const added = "2026-07-01T10:00:00.000Z";
@@ -396,11 +396,11 @@ async function ensureDir(root, rel) {
 
 /** Skeleton equivalent to Create Vault (no sample papers). */
 async function scaffoldEmpty(root) {
-	for (const d of ["papers", "notes", "plans", ".motif"]) {
+	for (const d of ["papers", "notes", "plans", ".agentero"]) {
 		await ensureDir(root, d);
 	}
 	await writeText(root, "AGENTS.md", AGENTS_MD);
-	const dbPath = path.join(root, ".motif", "catalog.sqlite");
+	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
 	runSqlite(dbPath, buildCatalogSql([]));
 }
 
@@ -428,7 +428,7 @@ async function scaffoldDemo(root) {
 		);
 	}
 
-	const dbPath = path.join(root, ".motif", "catalog.sqlite");
+	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
 	runSqlite(dbPath, buildCatalogSql(PAPERS));
 }
 
@@ -442,12 +442,12 @@ async function pathExists(p) {
 }
 
 /**
- * Verify vault layout + catalog against current Motif conventions.
+ * Verify vault layout + catalog against current Agentero conventions.
  * @returns {Promise<{ ok: boolean; checks: { name: string; ok: boolean; detail?: string }[] }>}
  */
 async function verifyVault(root) {
 	const checks = [];
-	const needDirs = ["papers", "notes", "plans", ".motif"];
+	const needDirs = ["papers", "notes", "plans", ".agentero"];
 	for (const d of needDirs) {
 		const full = path.join(root, d);
 		const ok = await pathExists(full);
@@ -478,7 +478,7 @@ async function verifyVault(root) {
 		ok: !(await pathExists(bib)),
 	});
 
-	const dbPath = path.join(root, ".motif", "catalog.sqlite");
+	const dbPath = path.join(root, ".agentero", "catalog.sqlite");
 	const dbOk = await pathExists(dbPath);
 	checks.push({ name: "catalog.sqlite", ok: dbOk });
 
@@ -562,7 +562,7 @@ async function collectPaperFolders(root) {
 		for (const e of entries) {
 			if (!e.isDirectory() || e.name.startsWith(".")) continue;
 			const childRel = rel ? `${rel}/${e.name}` : e.name;
-			if (childRel === ".motif") continue;
+			if (childRel === ".agentero") continue;
 			await walk(path.join(dir, e.name), childRel);
 		}
 	}
@@ -581,25 +581,25 @@ function parseArgs(argv) {
 }
 
 function defaultDownloadsPath() {
-	return path.join(os.homedir(), "Downloads", "motif-demo-vault");
+	return path.join(os.homedir(), "Downloads", "agentero-demo-vault");
 }
 
 function printHelp() {
-	console.log(`Create Motif demo vault
+	console.log(`Create Agentero demo vault
 
 Usage:
   node test/scripts/create-demo-vault.mjs [options] [path]
 
 Options:
-  --downloads   Use ~/Downloads/motif-demo-vault
+  --downloads   Use ~/Downloads/agentero-demo-vault
   --empty       Skeleton only (Create Vault equivalent)
   --verify      Verify an existing vault (no write unless path missing + create)
   --help        Show this help
 
 Examples:
   node test/scripts/create-demo-vault.mjs --downloads
-  node test/scripts/create-demo-vault.mjs --empty ~/Downloads/motif-empty-vault
-  node test/scripts/create-demo-vault.mjs --verify ~/Downloads/motif-demo-vault
+  node test/scripts/create-demo-vault.mjs --empty ~/Downloads/agentero-empty-vault
+  node test/scripts/create-demo-vault.mjs --verify ~/Downloads/agentero-demo-vault
 `);
 }
 
@@ -615,7 +615,7 @@ async function main() {
 		target = defaultDownloadsPath();
 	}
 	if (!target) {
-		target = path.join(REPO_ROOT, "tmp", "motif-demo-vault");
+		target = path.join(REPO_ROOT, "tmp", "agentero-demo-vault");
 	}
 
 	const root = path.resolve(target);
@@ -636,10 +636,10 @@ async function main() {
 
 	if (flags.has("empty")) {
 		await scaffoldEmpty(root);
-		console.log(`Empty Motif vault created at ${root}`);
+		console.log(`Empty Agentero vault created at ${root}`);
 	} else {
 		await scaffoldDemo(root);
-		console.log(`Demo Motif vault created at ${root}`);
+		console.log(`Demo Agentero vault created at ${root}`);
 		console.log(`  papers: ${PAPERS.length} (nested under papers/<topic>/…)`);
 	}
 
@@ -652,7 +652,7 @@ async function main() {
 		console.error("Verification failed");
 		process.exit(1);
 	}
-	console.log("\nOpen in Motif: File → Open Vault… → select this folder");
+	console.log("\nOpen in Agentero: File → Open Vault… → select this folder");
 	console.log(`  ${root}`);
 }
 

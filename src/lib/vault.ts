@@ -31,15 +31,15 @@ const IGNORE_NAMES = new Set([
 	"node_modules",
 	"target",
 	"dist",
-	".motif",
+	".agentero",
 ]);
 
 /** Per-window vault (sessionStorage — isolated across ⌘N windows). */
-const SESSION_VAULT_KEY = "motif-vault-path";
+const SESSION_VAULT_KEY = "agentero-vault-path";
 /** Last opened vault for “restore last vault” on the primary window. */
-const LAST_VAULT_KEY = "motif-vault-path";
+const LAST_VAULT_KEY = "agentero-vault-path";
 /** MRU list for welcome screen (localStorage, shared). */
-const RECENT_VAULTS_KEY = "motif-recent-vaults";
+const RECENT_VAULTS_KEY = "agentero-recent-vaults";
 const MAX_RECENT_VAULTS = 8;
 
 /** True when this window was opened via ⌘N / New Window (`?fresh=1`). */
@@ -144,7 +144,7 @@ export function saveVaultPath(path: string | null): void {
 	}
 }
 
-/** Open a new Motif window without restoring a vault (desktop only). */
+/** Open a new Agentero window without restoring a vault (desktop only). */
 export async function openNewWindow(): Promise<void> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.openDesktopOnly"));
@@ -214,7 +214,7 @@ export async function pickVaultDirectory(): Promise<string | null> {
 	return path ?? null;
 }
 
-/** Pick a directory that will be scaffolded as a new Motif vault. */
+/** Pick a directory that will be scaffolded as a new Agentero vault. */
 export async function pickCreateVaultDirectory(): Promise<string | null> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.createDesktopOnly"));
@@ -232,8 +232,8 @@ export async function pickCreateVaultDirectory(): Promise<string | null> {
 }
 
 /**
- * Scaffold a Motif vault at `path` (Host: vault_create).
- * Creates papers/notes/plans/.motif, AGENTS.md, catalog.sqlite.
+ * Scaffold a Agentero vault at `path` (Host: vault_create).
+ * Creates papers/notes/plans/.agentero, AGENTS.md, catalog.sqlite.
  * Does not create PAPERS.md / library.bib.
  */
 export async function createVault(path: string): Promise<CreateVaultResult> {
@@ -313,7 +313,7 @@ export async function removeVaultPath(path: string): Promise<void> {
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 	const trimmed = path.trim();
-	if (!trimmed || trimmed.startsWith("motif:")) {
+	if (!trimmed || trimmed.startsWith("agentero:")) {
 		throw new Error(i18n.t("sidebar:fileTree.deleteInvalid"));
 	}
 	const { remove } = await import("@tauri-apps/plugin-fs");

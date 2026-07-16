@@ -1,9 +1,13 @@
 mod commands;
-mod error;
+/// Shared error types (used by Host commands and the headless CLI).
+pub mod error;
 #[cfg(target_os = "macos")]
 mod i18n;
 mod models;
-mod services;
+/// Domain services (Vault / Catalog / Lookup / Wiki / …).
+/// The CLI path-depends on this crate and may `use agentero_lib::services::{vault,catalog,…}`;
+/// it must **not** use `services::agent` (BYOA is desktop-only).
+pub mod services;
 
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
@@ -17,7 +21,7 @@ use tauri::{Emitter, Manager};
 fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let labels = menu_labels(lang);
 
-    // Appears under the app name menu on macOS (e.g. "motif").
+    // Appears under the app name menu on macOS (e.g. "Agentero").
     let settings = MenuItemBuilder::with_id("settings", labels.settings)
         .accelerator("CmdOrCtrl+,")
         .build(app)?;

@@ -1,7 +1,7 @@
-site_name: Motif 文档
-site_description: Motif 本地优先 Agent 科研工作台文档
-repo_url: https://github.com/poco-ai/motif
-repo_name: poco-ai/motif
+site_name: Agentero 文档
+site_description: Agentero 本地优先 Agent 科研工作台文档
+repo_url: https://github.com/poco-ai/agentero
+repo_name: poco-ai/agentero
 edit_uri: edit/main/docs/
 
 theme:
@@ -27,10 +27,10 @@ nav:
       - 概览: development/index.md
       - 产品需求: development/prd.md
       - 技术方案: development/technical-plan.md
+      - CLI 设计: development/cli.md
       - PDF 划词提问: development/pdf-ask.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
-      - 产品假设: development/hypothesis.md
 
 markdown_extensions:
   - admonition

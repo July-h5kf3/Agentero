@@ -4,7 +4,7 @@ import type {
 	PdfAskTrigger,
 } from "@/lib/pdf-ask/types";
 
-export const PDF_PAGE_ATTR = "data-motif-pdf-page";
+export const PDF_PAGE_ATTR = "data-agentero-pdf-page";
 
 export function findPageElement(
 	node: Node | null,
@@ -111,6 +111,25 @@ export function anchorFromPoint(
 		rects: [{ x, y, w: size, h: size }],
 		quote: quote?.trim() || undefined,
 		trigger,
+	};
+}
+
+/** Map a client point to the page under it, returning normalized coords. */
+export function clientPointInPage(
+	clientX: number,
+	clientY: number,
+	host: HTMLElement,
+): { page: number; x: number; y: number } | null {
+	const target = document.elementFromPoint(clientX, clientY);
+	const pageEl = findPageElement(target, host);
+	if (!pageEl || !host.contains(pageEl)) return null;
+	const box = pageEl.getBoundingClientRect();
+	const pw = box.width || 1;
+	const ph = box.height || 1;
+	return {
+		page: pageNumberOf(pageEl),
+		x: clamp01((clientX - box.left) / pw),
+		y: clamp01((clientY - box.top) / ph),
 	};
 }
 

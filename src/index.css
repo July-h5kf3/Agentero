@@ -142,7 +142,7 @@
 }
 
 /* Subtle, independent pane scrollbars (VS Code / Cursor style) */
-.motif-scroll {
+.agentero-scroll {
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
@@ -152,7 +152,7 @@
 }
 
 /* Both axes (e.g. papers library table) */
-.motif-scroll-both {
+.agentero-scroll-both {
 	overflow: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
@@ -160,19 +160,19 @@
 		transparent;
 }
 
-.motif-scroll::-webkit-scrollbar,
-.motif-scroll-both::-webkit-scrollbar {
+.agentero-scroll::-webkit-scrollbar,
+.agentero-scroll-both::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
 }
 
-.motif-scroll::-webkit-scrollbar-track,
-.motif-scroll-both::-webkit-scrollbar-track {
+.agentero-scroll::-webkit-scrollbar-track,
+.agentero-scroll-both::-webkit-scrollbar-track {
 	background: transparent;
 }
 
-.motif-scroll::-webkit-scrollbar-thumb,
-.motif-scroll-both::-webkit-scrollbar-thumb {
+.agentero-scroll::-webkit-scrollbar-thumb,
+.agentero-scroll-both::-webkit-scrollbar-thumb {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 28%,
@@ -183,8 +183,8 @@
 	background-clip: content-box;
 }
 
-.motif-scroll::-webkit-scrollbar-thumb:hover,
-.motif-scroll-both::-webkit-scrollbar-thumb:hover {
+.agentero-scroll::-webkit-scrollbar-thumb:hover,
+.agentero-scroll-both::-webkit-scrollbar-thumb:hover {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 48%,
@@ -194,7 +194,7 @@
 	background-clip: content-box;
 }
 
-.motif-scroll::-webkit-scrollbar-corner,
-.motif-scroll-both::-webkit-scrollbar-corner {
+.agentero-scroll::-webkit-scrollbar-corner,
+.agentero-scroll-both::-webkit-scrollbar-corner {
 	background: transparent;
 }

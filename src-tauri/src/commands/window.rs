@@ -2,14 +2,14 @@
 
 use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 
-/// Open a fresh Motif window without restoring the last vault (`?fresh=1`).
+/// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 #[tauri::command]
 pub fn window_new(app: AppHandle) -> Result<(), String> {
-    let label = format!("motif-{}", uuid::Uuid::new_v4().simple());
+    let label = format!("agentero-{}", uuid::Uuid::new_v4().simple());
 
     let mut builder =
         WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?fresh=1".into()))
-            .title("motif")
+            .title("Agentero")
             .inner_size(1280.0, 800.0)
             .min_inner_size(800.0, 520.0)
             .resizable(true)

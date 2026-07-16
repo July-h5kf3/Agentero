@@ -3,7 +3,7 @@ name: Build installers
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -55,7 +55,64 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Motif ${{ github.ref_name }}
-          releaseBody: Installers for Motif ${{ github.ref_name }}.
+          releaseName: Agentero ${{ github.ref_name }}
+          releaseBody: |
+            Installers and CLI for Agentero ${{ github.ref_name }}.
+
+            ## Desktop
+            Platform installers from Tauri (see assets below).
+
+            ## CLI (`agentero`)
+            Headless Vault / Catalog machine interface (no BYOA).
+            Download the matching `agentero-*-…` archive, extract, and put `agentero` on your `PATH`.
+
+            ```bash
+            agentero --version
+            agentero vault which --json
+            ```
+
+            Source install (slow; pulls desktop Rust deps):
+            ```bash
+            cargo install --git https://github.com/${{ github.repository }} --tag ${{ github.ref_name }} --locked --package agentero-cli
+            ```
           releaseDraft: true
           prerelease: false
+
+      # --- Headless CLI: attach prebuilt bin to the same draft release ---
+      - name: Build agentero CLI (release)
+        run: cargo build -p agentero-cli --release
+
+      - name: Package CLI artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          HOST="$(rustc -vV | sed -n 's/^host: //p')"
+          OUT_DIR="dist-cli"
+          mkdir -p "$OUT_DIR"
+
+          STAGE="agentero-${VERSION}-${HOST}"
+          mkdir -p "$STAGE"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp "target/release/agentero.exe" "$STAGE/agentero.exe"
+            # Prefer PowerShell zip for portability on windows-latest
+            powershell.exe -NoProfile -Command \
+              "Compress-Archive -Path '${STAGE}/agentero.exe' -DestinationPath '${OUT_DIR}/${STAGE}.zip' -Force"
+            echo "CLI_ASSET=${OUT_DIR}/${STAGE}.zip" >> "$GITHUB_ENV"
+          else
+            cp "target/release/agentero" "$STAGE/agentero"
+            chmod +x "$STAGE/agentero"
+            tar -C "$STAGE" -czf "${OUT_DIR}/${STAGE}.tar.gz" agentero
+            echo "CLI_ASSET=${OUT_DIR}/${STAGE}.tar.gz" >> "$GITHUB_ENV"
+          fi
+          ls -la "$OUT_DIR"
+
+      - name: Upload CLI to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: ${{ env.CLI_ASSET }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -23,12 +23,29 @@
 		"minimize": "Minimize",
 		"maximize": "Maximize",
 		"restore": "Restore",
-		"close": "Close"
+		"close": "Close",
+		"layout": "Layout",
+		"layoutHint": "Configure panels",
+		"layoutPanels": "Panels",
+		"layoutLeftSidebar": "Left sidebar",
+		"layoutRightSidebar": "Right sidebar",
+		"closeDocument": "Close",
+		"closeDocumentHint": "Close tab",
+		"showNotes": "Show notes",
+		"hideNotes": "Hide notes",
+		"showNotesHint": "Show notes panel",
+		"hideNotesHint": "Hide notes panel"
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",
 		"notesPlaceholder": "Write notes for this paper...",
 		"unsaved": "Unsaved changes"
+	},
+	"tabs": {
+		"strip": "Open documents",
+		"close": "Close {{title}}",
+		"emptyTitle": "No document open",
+		"emptyHint": "Pick a file or paper from the sidebar to open it in a tab."
 	},
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",
@@ -40,8 +57,8 @@
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",
 		"createDesktopOnly": "Create vault is only available in the Tauri app.",
-		"dialogTitle": "Select Motif vault folder",
-		"createDialogTitle": "Choose folder for new Motif vault",
+		"dialogTitle": "Select Agentero vault folder",
+		"createDialogTitle": "Choose folder for new Agentero vault",
 		"createFailed": "Failed to create vault.",
 		"readDesktopOnly": "Reading local files requires the Tauri app.",
 		"writeDesktopOnly": "Writing local files requires the Tauri app.",
@@ -71,7 +88,10 @@
 		"downloadPaper": "Download paper assets",
 		"downloadAll": "Download missing assets",
 		"downloadProgress": "{{current}} / {{total}}",
+		"downloadRefreshing": "Refreshing library… · {{path}}",
 		"lookupImport": "Add paper",
+		"lookupFetching": "Fetching metadata & assets… · {{id}}",
+		"lookupRefreshing": "Refreshing library… · {{title}}",
 		"libraryImport": "Import bibliography",
 		"libraryExport": "Export library",
 		"paperRead": "Reading paper",

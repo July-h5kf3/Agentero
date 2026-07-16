@@ -1,13 +1,13 @@
-# Motif / notemd 数据模型
+# Agentero / notemd 数据模型
 
 > 定义 Vault 的落盘结构、事实来源分层与核心数据类型。时间戳统一为 ISO 8601 字符串。  
-> **论文集合与结构化元数据**见专题 [`catalog.md`](catalog.md)（`.motif/catalog.sqlite`）。
+> **论文集合与结构化元数据**见专题 [`catalog.md`](catalog.md)（`.agentero/catalog.sqlite`）。
 
 ## 0. 设计原则
 
-Motif 的存储遵循两条原则:
+Agentero 的存储遵循两条原则:
 
-1. **人的知识与原始归档以文件为准；结构化论文目录以 Catalog SQLite 为准**:笔记、标注、源文件必须是普通文件，可被外部编辑器打开；论文集合与 metadata 进入 `.motif/catalog.sqlite`，支持查询与入库事务。这与 Zotero（几乎一切锁在单一 sqlite、笔记不可便携）不同：**笔记层仍是 Markdown**。
+1. **人的知识与原始归档以文件为准；结构化论文目录以 Catalog SQLite 为准**:笔记、标注、源文件必须是普通文件，可被外部编辑器打开；论文集合与 metadata 进入 `.agentero/catalog.sqlite`，支持查询与入库事务。这与 Zotero（几乎一切锁在单一 sqlite、笔记不可便携）不同：**笔记层仍是 Markdown**。
 2. **渐进式披露(Progressive Disclosure)**:目录与 catalog 共同构成 Agent 接口。信息按"体量递增、成本递增"分层,Agent 按需逐层下钻,而不是一次性加载整篇论文。
 
 ### 0.1 渐进式披露分层
@@ -30,7 +30,7 @@ Motif 的存储遵循两条原则:
 | 层级 | 内容 | 落盘 |
 |---|---|---|
 | **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`.agents/`（skills 等）、`source/` | 文件 |
-| **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.motif/catalog.sqlite`** |
+| **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
 | **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、`assets/` | **按需**生成，非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表；可整删后重建 |
 
@@ -42,7 +42,7 @@ Motif 的存储遵循两条原则:
 ## 1. Vault 结构
 
 ```text
-motif-vault/
+agentero-vault/
 ├── AGENTS.md              # L0 Agent 行为规范与读取协议
 ├── papers/                # 文献区；可含组织子目录
 │   ├── 1706.03762/        # paper 单元（一级）
@@ -61,7 +61,7 @@ motif-vault/
 ├── .agents/               # Vault 本地 Agent 资产（Create Vault 脚手架）
 │   ├── README.md
 │   └── skills/            # `$` 技能：`skills/<id>/SKILL.md`
-└── .motif/
+└── .agentero/
     ├── catalog.sqlite     # path = paper 文件夹相对路径
     └── config.json
 ```
@@ -87,11 +87,11 @@ Vault 内的 Agent 行为规范,至少包含:
 
 ### 论文集合与 metadata（Catalog，非 Markdown 文件）
 
-权威存储：**`.motif/catalog.sqlite`** 的 `papers` 表。  
+权威存储：**`.agentero/catalog.sqlite`** 的 `papers` 表。  
 字段、schema、导出与实现见 **[`catalog.md`](catalog.md)**。  
 UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`）均读 catalog，不扫 `metadata.json`。
 
-其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示眼睛图标，点击后启动默认 Agent 精读并写入 `NOTES.md`，成功后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条。
+其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`。触发：魔棒入库 / 单篇 Download 资源就绪后可**自动**精读；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时仍显示眼睛图标供**手动**重跑。成功写入 `NOTES.md` 后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条（可与入库/下载任务衔接）。
 
 Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`（亦可放在 `~/.agents/skills` / `~/.claude/skills`）。
 
@@ -123,7 +123,7 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 单篇论文的标注层,与 `NOTES.md` **分开存放**:笔记是"熟的"综合知识,标注是"生的"原始证据(锚定原文位置的引文 + 想法),数量多、带定位。
 
 - **引文 + 想法**留在 `highlights.md`,是事实来源,保持便携 Markdown。
-- **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.motif/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
+- **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.agentero/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
 - 用 Obsidian 块引用 `^id`,让 `NOTES.md` 能精确引用某条标注:`[[papers/1706.03762/highlights#^h12]]`。
 
 ### `asks/`（已落地 MVP：PDF 划词提问）
@@ -133,6 +133,16 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 - 路径：`papers/<id>/asks/<threadId>.json`（可选 `asks/index.json` 目录）。
 - 含锚点（page + 归一化 rects + quote）与 `messages[]`；**不**写入 PDF 二进制，**不**进 catalog 正文。
 - 触发：划词 / 框选 / 双击 / 悬停；发送过问题后锚点旁对话图标可回访。
+
+### `highlights/`（已落地：PDF 划词高亮）
+
+划词后弹出的操作菜单（**高亮 / 笔记 / 提问 / 翻译**）中，「高亮」写入的持久化标注。与多轮问答 `asks/` 分离，是纯视觉标注（不含对话）。
+
+- 路径：`papers/<id>/highlights/<id>.json`（pretty JSON，便于 Git diff）。
+- 字段：`version:1`、`id`、`paperPath`、`createdAt/updatedAt`、`page`、归一化 `rects[]`、`quote`、可选 `color`（预留调色板，缺省琥珀）。
+- 归一化坐标可在缩放/重开后重定位；页面上点击已有高亮出现「删除」浮层。
+- **不**污染原始 PDF、**不**进 catalog；坏文件读取时跳过。
+- 「笔记」操作把选中原文以块引用 `> …` 追加进该篇 `NOTES.md`（经编辑器实例写入，避免覆盖未存改动）；「翻译」复用 asks 弹层走 Agent 流式，不额外落盘。
 
 格式示例:
 
@@ -157,9 +167,9 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 - PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
-- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；资源齐全且 `is_read=false` → Eye 精读
+- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Eye 手动精读
 
-正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 PDF/HTML **预览**仍可走 catalog 远程 URL。
+正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
 
 ## 3. 数据类型
 
@@ -186,7 +196,7 @@ interface FileNode {
 
 ### 3.3 论文元数据 (Catalog `papers` 行)
 
-与 `.motif/catalog.sqlite` 中一行对应,是单篇论文结构化元数据的事实来源（不再默认落盘 `metadata.json`）。
+与 `.agentero/catalog.sqlite` 中一行对应,是单篇论文结构化元数据的事实来源（不再默认落盘 `metadata.json`）。
 
 ```ts
 interface PaperMetadata {
@@ -220,14 +230,14 @@ interface PaperMetadata {
   series?: string;
   language?: string;
 
-  // 来源链接（UI 阅读器 PDF/HTML 模式以此为准；只存 URL，不落盘）
+  // 来源链接（catalog 存远程 URL；PDF 预览优先本地文件）
   /**
-   * 远程 PDF URL（UI 仅流式预览，不落盘）。
+   * 远程 PDF URL：下载候选；本地 PDF 缺失且下载失败时作预览回退。
    * 推荐 arXiv: `https://arxiv.org/pdf/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
    */
   pdf_url?: string;
   /**
-   * 远程 HTML URL（iframe 预览，不落盘）。
+   * 远程 HTML URL（iframe 预览，不强制本地下载）。
    * 推荐 arXiv: `https://arxiv.org/html/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
    */
   html_url?: string;
@@ -282,7 +292,7 @@ interface Paper extends PaperMetadata {
 
 ### 3.5 标注 (Highlight)
 
-`highlights.md` 中每条标注的逻辑结构。`quote` / `comment` / `links` 来自 Markdown(事实来源);`page` / `bbox` 是缓存于 `.motif/` 的渲染坐标,可由 `quote` 全文检索重建。
+`highlights.md` 中每条标注的逻辑结构。`quote` / `comment` / `links` 来自 Markdown(事实来源);`page` / `bbox` 是缓存于 `.agentero/` 的渲染坐标,可由 `quote` 全文检索重建。
 
 ```ts
 interface Highlight {
@@ -292,7 +302,7 @@ interface Highlight {
   comment?: string;    // 想法 / 评论
   links: string[];     // 双链目标,如 ['Self-Attention']
 
-  // 以下为渲染定位,缓存于 .motif,可重建
+  // 以下为渲染定位,缓存于 .agentero,可重建
   page?: number;
   bbox?: [number, number, number, number];
 }
@@ -302,7 +312,7 @@ interface Highlight {
 
 详见 [`catalog.md`](catalog.md)。摘要:
 
-1. **Catalog（`papers` 表）是结构化目录的权威来源**，备份应包含 `.motif/catalog.sqlite`。
+1. **Catalog（`papers` 表）是结构化目录的权威来源**，备份应包含 `.agentero/catalog.sqlite`。
 2. **入库与改 meta**：写 SQLite；文件系统负责对应 paper 文件夹下笔记与 source。
 3. **导出** `PAPERS.md` / `library.bib` 为只读投影，默认不生成、不自动刷新。
 4. **双链等 Tier 3**：可从 Markdown 重建；与 catalog 冲突时，**笔记文件赢**（链接文本）、**paper 标题以 catalog 为准**。

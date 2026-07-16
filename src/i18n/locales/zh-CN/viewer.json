@@ -27,6 +27,16 @@
 		"pillAria": "打开提问：{{preview}}",
 		"pillFallback": "提问线程"
 	},
+	"selection": {
+		"menuLabel": "选区操作",
+		"highlight": "高亮",
+		"note": "加入笔记",
+		"ask": "提问",
+		"translate": "翻译",
+		"noteAdded": "已加入笔记",
+		"removeHighlight": "删除高亮",
+		"translateAction": "翻译这段文字"
+	},
 	"html": {
 		"empty": "暂无论文。",
 		"sandboxTitle": "HTML 论文沙箱"

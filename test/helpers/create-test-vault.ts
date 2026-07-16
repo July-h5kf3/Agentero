@@ -11,7 +11,7 @@ type TestVault = {
 export async function createTestVault(
 	files: Record<string, string>,
 ): Promise<TestVault> {
-	const root = await mkdtemp(path.join(tmpdir(), "motif-vault-"));
+	const root = await mkdtemp(path.join(tmpdir(), "agentero-vault-"));
 
 	for (const [rel, content] of Object.entries(files)) {
 		const fullPath = path.join(root, rel);

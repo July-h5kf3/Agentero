@@ -98,20 +98,38 @@ pub fn get_by_path(vault_root: &Path, path: &str) -> Result<Option<PaperRecord>,
     get_conn(&conn, &path)
 }
 
+/// First paper with the given logical `id` (ordered by path). For ambiguity, use [`list_by_id`].
 pub fn get_by_id(vault_root: &Path, id: &str) -> Result<Option<PaperRecord>, AppError> {
+    Ok(list_by_id(vault_root, id)?.into_iter().next())
+}
+
+/// All catalog rows with the given logical `id` (may be multiple paths).
+pub fn list_by_id(vault_root: &Path, id: &str) -> Result<Vec<PaperRecord>, AppError> {
     let conn = ensure_catalog(vault_root)?;
-    let path: Option<String> = conn
-        .query_row(
-            "SELECT path FROM papers WHERE id = ?1 LIMIT 1",
-            params![id],
-            |row| row.get(0),
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT
+                path, id, type, title, authors_json, year, abstract, tags_json,
+                arxiv_id, doi, pdf_url, html_url, source_url,
+                body_source, body_quality, bibtex_key, citation_count, status, summary,
+                added_at, updated_at,
+                creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
+                publisher, place, series, language, zotero_item_type, meta_source, extra,
+                is_read
+            FROM papers
+            WHERE id = ?1
+            ORDER BY path ASC
+            "#,
         )
-        .optional()
         .map_err(AppError::from)?;
-    match path {
-        Some(p) => get_conn(&conn, &p),
-        None => Ok(None),
-    }
+
+    let rows = stmt
+        .query_map(params![id], map_row)
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    Ok(rows)
 }
 
 /// List all papers for library table (newest first).

@@ -3,7 +3,7 @@ name: paper-reader
 description: >-
   Read and explain a research paper clearly (prefer TeX, else PAPER.md/PDF).
   Use for core contribution, method deep-dive, experiments, limitations, and
-  lecture-style notes written to the paper's NOTES.md in a Motif vault.
+  lecture-style notes written to the paper's NOTES.md in a Agentero vault.
 ---
 
 # Paper Reader
@@ -14,21 +14,21 @@ You are a senior researcher who explains complex papers with extreme clarity:
 high-level first, then details. Professional but approachable — like a mentor
 who refuses vague academic filler. Prefer concrete examples over empty jargon.
 
-## Inputs (Motif vault)
+## Inputs (Agentero vault)
 
 - Target is a **paper folder** under `papers/` (Vault-relative path, e.g. `papers/1706.03762` or nested `papers/nlp/1706.03762`).
 - **Read order (prefer earlier):**
   1. `source/**/*.{tex,ltx}` (arXiv e-print / LaTeX)
   2. `{paper}/PAPER.md` (liteparse / structured body)
   3. Local PDF under the paper folder (e.g. `{id}.pdf`)
-- Existing `{paper}/NOTES.md` may already have a title/abstract shell from Motif import.
+- Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
 - Do not delete `highlights.md`, `source/`, assets, or binary files.
 
 ## Activation notes (CLI differences)
 
-Motif may inject this entire SKILL.md into the prompt. Depending on the agent:
+Agentero may inject this entire SKILL.md into the prompt. Depending on the agent:
 
 - **Codex**: skill trigger is `$paper-reader`
 - **Claude**: skill trigger is often `/paper-reader`
@@ -38,7 +38,7 @@ Always execute the workflow even if no native skill runtime fires.
 
 ## Fixed output structure
 
-Write into **`{paper}/NOTES.md`** (Motif convention — not `notes.md`).
+Write into **`{paper}/NOTES.md`** (Agentero convention — not `notes.md`).
 Use these headings **in order**, with clear markdown `##` / `###` separators.
 
 ### 1. 30-second High-Level Summary
@@ -78,7 +78,7 @@ If you cannot spawn subagents, simulate the teacher–student dialogue inline un
 
 ## Workflow
 
-1. Resolve the paper folder path (from user / Motif target).
+1. Resolve the paper folder path (from user / Agentero target).
 2. Locate content: TeX → `PAPER.md` → PDF.
 3. Read enough of the paper to support all five sections (progressive: abstract/intro first, then method, then experiments).
 4. Generate the structured notes.

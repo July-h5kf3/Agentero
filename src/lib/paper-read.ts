@@ -5,7 +5,7 @@
  * Skill activation syntax is provider-specific (Host also adapts):
  * - Codex: `$paper-reader`
  * - Claude ACP: `/paper-reader`
- * - others: Motif injects SKILL.md body (no native $ / / trigger)
+ * - others: Agentero injects SKILL.md body (no native $ / / trigger)
  */
 import i18n from "@/i18n";
 import {
@@ -29,12 +29,17 @@ import {
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/background-tasks";
+import { loadPaperMetadata } from "@/lib/paper-metadata";
 import { setPaperIsRead } from "@/lib/papers-api";
 import { isTauri } from "@/lib/tauri";
+import { joinVaultPath } from "@/lib/vault";
 
 export const PAPER_READER_SKILL_ID = "paper-reader";
 
-/** How this Motif agent template expects skills to be named in the user prompt. */
+/** Prevent concurrent reads of the same paper (auto + Eye). */
+const inflightReads = new Set<string>();
+
+/** How this Agentero agent template expects skills to be named in the user prompt. */
 export type SkillMentionStyle = "dollar" | "slash" | "injected";
 
 export function skillMentionStyleForTemplate(
@@ -78,7 +83,7 @@ export function buildPaperReaderUserPrompt(
 			? `Activate and follow ${mention} (this agent uses $skill-id syntax).`
 			: style === "slash"
 				? `Activate and follow ${mention} (this agent uses /skill-id syntax).`
-				: `Follow the paper-reader skill instructions Motif injects into this prompt (${mention}). Do not wait for a separate $ or / command.`;
+				: `Follow the paper-reader skill instructions Agentero injects into this prompt (${mention}). Do not wait for a separate $ or / command.`;
 
 	return [
 		skillLine,
@@ -217,6 +222,10 @@ export async function runPaperReaderWorkflow(opts: {
 	if (!paperRel) {
 		throw new Error(i18n.t("sidebar:fileTree.readFailed"));
 	}
+	if (inflightReads.has(paperRel)) {
+		return;
+	}
+	inflightReads.add(paperRel);
 
 	const taskId = startBackgroundTask({
 		kind: "paperRead",
@@ -285,5 +294,51 @@ export async function runPaperReaderWorkflow(opts: {
 		const msg = e instanceof Error ? e.message : String(e);
 		failBackgroundTask(taskId, msg);
 		throw e;
+	} finally {
+		inflightReads.delete(paperRel);
 	}
+}
+
+/**
+ * Whether local assets are enough to start paper-reader
+ * (TeX, PAPER.md, or PDF — matching skill read order).
+ */
+export function paperAssetsReadyForReader(flags: {
+	pdf?: boolean | null;
+	tex?: boolean | null;
+	paperMd?: boolean | null;
+}): boolean {
+	return Boolean(flags.tex || flags.paperMd || flags.pdf);
+}
+
+/**
+ * After import / download: if assets are ready and catalog `is_read` is false,
+ * start paper-reader (shows left-bottom progress). Returns true when a run started.
+ *
+ * Does not throw on skip; rethrows agent/workflow failures so callers can surface errors.
+ */
+export async function maybeAutoRunPaperReader(opts: {
+	vaultRoot: string;
+	/** Vault-relative paper folder */
+	paperPath: string;
+	/** Caller-known asset flags after ingest */
+	assetsReady: boolean;
+}): Promise<boolean> {
+	if (!opts.assetsReady || !isTauri()) return false;
+	const paperRel = opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!paperRel || inflightReads.has(paperRel)) return false;
+
+	const abs = joinVaultPath(opts.vaultRoot, paperRel);
+	try {
+		const meta = await loadPaperMetadata(abs, opts.vaultRoot);
+		if (meta?.is_read === true) return false;
+	} catch {
+		// No catalog row / unreadable — still try (workflow may work; mark may fail)
+	}
+
+	await runPaperReaderWorkflow({
+		vaultRoot: opts.vaultRoot,
+		paperPath: paperRel,
+	});
+	return true;
 }

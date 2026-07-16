@@ -1,4 +1,4 @@
-# Motif / notemd 技术方案
+# Agentero / notemd 技术方案
 
 > 本文档基于 `docs/development/prd.md`、`docs/frontend/ui.md`、`docs/development/roadmap.md` 与当前仓库现状编写，用于指导 MVP 及后续演进的技术选型与模块划分。
 
@@ -7,7 +7,7 @@
 - **本地优先（Local-first）**：Vault 以 Markdown + 源文件为事实来源，数据库/索引仅作为缓存。
 - **跨平台但 Mac 优先**：MVP 以 macOS 桌面应用为主，技术栈保留向 iPadOS 扩展的能力。
 - **Agent-first**：前端为人类提供审阅、编辑、导航界面；后端 Rust 宿主提供文件系统、网络、索引，并以 **ACP Client** 身份连接本机已有 Agent。
-- **BYOA（Bring Your Own Agent）**：Motif **不内置、不捆绑**任何 coding agent 二进制；通用 provider 使用本机 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、自定义 command），Codex 使用用户本机的 `codex app-server`。密钥与模型由各 Agent CLI 自行管理。
+- **BYOA（Bring Your Own Agent）**：Agentero **不内置、不捆绑**任何 coding agent 二进制；通用 provider 使用本机 ACP-compatible CLI（OpenCode、Gemini CLI、Claude ACP 适配器、自定义 command），Codex 使用用户本机的 `codex app-server`。密钥与模型由各 Agent CLI 自行管理。
 - **可迁移**：Vault 离开应用后仍能被 Obsidian、VS Code、Cursor 直接打开。
 
 ## 2. 整体架构
@@ -34,14 +34,14 @@
 └───────────────────────────┬─────────────────────────────────┘
 │                           │ Provider runtime (JSON-RPC 2.0 over stdio)
 ┌───────────────────────────▼─────────────────────────────────┐
-│     用户本机已安装的 Agent（BYOA，Motif 不打包）               │
+│     用户本机已安装的 Agent（BYOA，Agentero 不打包）               │
 │  - ACP: OpenCode / Gemini CLI / Claude ACP / 自定义           │
 │  - Native: Codex App Server                                   │
 │  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Motif 始终作为 **Client**，Agent CLI 作为 **Server**。
+> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Agentero 始终作为 **Client**，Agent CLI 作为 **Server**。
 
 ### 2.1 为什么选 Tauri 2
 
@@ -85,7 +85,7 @@
 | **AI Elements** | [elements.ai-sdk.dev](https://elements.ai-sdk.dev/) | Chat / Prompt / Sources / **FileTree** 等；落盘 `src/components/ai-elements/` |
 | streamdown + `@streamdown/*` | Markdown 流式渲染 | `MessageResponse` |
 | `use-stick-to-bottom` | 对话贴底 | `Conversation` |
-| `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Motif 默认 HTTP 传输 |
+| `ai`（AI SDK 类型） | 可选类型借用 | **不**作 Agentero 默认 HTTP 传输 |
 | Radix UI / `radix-ui` | shadcn 底层 | 可访问性、键盘、弹层 |
 | Lucide React | 图标库 | 工具栏、文件树、Chat 操作 |
 | `react-resizable-panels` | 可拖拽分隔面板 | 文件树 / 中间内容（论文库或编辑器）/ Notes（仅具体论文）/ 可选右侧栏（Agent 或 Backlinks+Graph） |
@@ -105,7 +105,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
   → 本机 Agent CLI
 ```
 
-- **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Motif 默认传输层。
+- **不要**把 Vercel AI SDK 的 `useChat` HTTP 后端当作 Agentero 默认传输层。
 - 流式：`agent:stream`（`kind: message | thought`）/ `agent:completed` / `agent:failed` 映射到 `Reasoning` + `MessageResponse` + `Sources`。
 - 组件规范与安装：`docs/frontend/components.md`。
 
@@ -124,7 +124,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 1. 左侧可拖拽伸缩（可折叠）侧边栏展示 Vault 文件树；右侧 Agent/Backlinks 同为 collapsible 常驻面板（避免条件卸载冲掉折叠态）。  
 2. 「Open vault…」通过 `@tauri-apps/plugin-dialog` 选择本地文件夹。  
-3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.motif` 等。  
+3. 通过 `@tauri-apps/plugin-fs` 的 `readDir` 递归构建树；忽略 `.git` / `node_modules` / `target` / `dist` / `.agentero` 等。  
 4. 点击文本类文件用 `readTextFile` 载入中间 Markdown 面板（Plate WYSIWYG）；写回 `writeTextFile`。  
 5. 双击 / 右键 / `⌥⌘R`：`revealItemInDir` 在 Finder 中显示；右键 / `⌘⌫`：确认后 `remove` + 可选 `paper_delete`。  
 6. 非 Tauri 环境（纯浏览器 `pnpm dev`）能力受限；真实读盘需 `pnpm tauri dev`。  
@@ -167,19 +167,19 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：预览按 **远程 `pdf_url`** 流式渲染；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
-| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；与预览路径分离） |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：**本地优先**（`findLocalPdf` + fs `readFile` → `blob:`；避免 `asset://`）→ 无本地时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
+| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；预览与归档同一文件） |
 | arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
-| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用）；与预览路径分离 |
+| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用；与 Webview 预览分离） |
 | HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
-| 中间栏切换 | `ViewModeToggle`；URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
+| 中间栏切换 | `ViewModeToggle`；PDF 源见上；HTML URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
 | arXiv 资源 | `pdf` / `html` / `abs` / `e-print` 规范 URL |
 | PDF 划词提问 | **MVP 已落地**：`src/lib/pdf-ask/` + `PdfViewer` 交互层；`asks/*.json`；ACP 流式 |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源；资源齐全且未读时 Eye 启动 paper-reader 精读（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Eye 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
@@ -250,7 +250,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `tempfile` | Agent 生成内容临时文件，确认后写入 |
 | `walkdir` | 遍历 Vault 构建索引 |
 | `liteparse` | 默认本地 PDF 解析后端：提取结构化文本 + bounding box，输出 Markdown/JSON/Text，内置 OCR |
-| `rusqlite`（`bundled`） | **Catalog**：`.motif/catalog.sqlite` 论文集合 + metadata；可选 FTS / 双链缓存表 |
+| `rusqlite`（`bundled`） | **Catalog**：`.agentero/catalog.sqlite` 论文集合 + metadata；可选 FTS / 双链缓存表 |
 
 ### 4.3 核心 Rust 模块设计
 
@@ -268,7 +268,7 @@ src-tauri/src/
     graph.rs       # 图谱节点/边查询
   services/        # 业务逻辑
     vault.rs       # Vault 初始化与校验
-    catalog/       # .motif/catalog.sqlite：schema、papers CRUD、export
+    catalog/       # .agentero/catalog.sqlite：schema、papers CRUD、export
     fs.rs          # 安全文件操作（路径白名单）
     input.rs       # 输入分类、意图解析、候选检索
     importer/      # 入库来源抽象（统一落盘结构与状态契约）
@@ -308,8 +308,8 @@ src-tauri/src/
 
 - **路径白名单**：Tauri `fs` 权限仅允许访问用户显式选择的 Vault 目录及其子目录。
 - **CSP 配置**：`tauri.conf.json` 中设置合理的 Content-Security-Policy，限制本地 Webview 加载外部资源。
-- **密钥边界**：Motif **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
-- **网络范围**：Agent 网络访问由 agent 进程自身控制；Motif 自身 arXiv 抓取限定于 `arxiv.org` 域名。
+- **密钥边界**：Agentero **不持有、不转发** 模型 API Key。认证由用户本机 Agent CLI 自行管理（各 agent 自己的 login / config）。Host 仅持久化 agent 启动参数（command / args / env 中非敏感项）与 UI 偏好；MinerU 等产品侧 BYOK 仍走 `tauri-plugin-store`（后续可迁系统钥匙串）。
+- **网络范围**：Agent 网络访问由 agent 进程自身控制；Agentero 自身 arXiv 抓取限定于 `arxiv.org` 域名。
 
 ## 4.5 本地存储分层：Tauri Store vs Catalog SQLite
 
@@ -322,7 +322,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 | 典型容量 | 几十到几百条记录 | 可扩展到数万条论文 |
 | 查询能力 | 按 key 读取 | 按作者、年份、标签、关键词过滤与列表分页 |
 | 事实来源 | 是（配置类无其他来源） | **是**（论文 meta / 集合）；笔记与 source 仍是文件 |
-| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.motif/catalog.sqlite` |
+| 存放位置 | 应用配置目录（`dirs::config_dir`） | Vault 内 `.agentero/catalog.sqlite` |
 | 损坏处理 | 丢失后用户重新配置 | meta 需备份/export；笔记目录仍在。双链缓存表可删重建 |
 
 **使用原则**：
@@ -341,7 +341,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```text
 用户选择目录
   → Rust: dialog.open({ directory: true })
-  → Rust: 初始化 AGENTS.md / papers / notes / plans / .motif/catalog.sqlite
+  → Rust: 初始化 AGENTS.md / papers / notes / plans / .agentero/catalog.sqlite
   → Rust: store.set('recent-vaults', [...])
   → Frontend: 加载文件树；打开 AGENTS.md 或空状态（无默认 PAPERS.md）
 ```
@@ -355,7 +355,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → lookup_import → Translator（或 arXiv Atom fallback）
   → catalog upsert + NOTES.md / highlights.md 壳
   → ensure_paper_assets：PDF → {paper}/{id}.pdf；e-print TeX → 解压 LaTeX 到 source/
-  → 刷新文件树；打开 paper（预览可用远程 pdf_url）
+  → 刷新文件树；打开 paper（PDF 预览优先本地文件）
 ```
 
 **规划中（关键词 / Agent 候选）**：
@@ -441,12 +441,12 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.7 Agent 工作流（ACP Client + BYOA）
 
-Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Motif **不打包** 任何 agent 二进制。
+Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Agentero **不打包** 任何 agent 二进制。
 
 **BYOA 原则**：
 - 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
 - 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `papers/` 等本地资产（无默认 PAPERS.md）。
-- 模型与 API Key 完全由 Agent CLI 管理；Motif 只负责 Client 侧会话、权限 UX 与工作流 prompt。
+- 模型与 API Key 完全由 Agent CLI 管理；Agentero 只负责 Client 侧会话、权限 UX 与工作流 prompt。
 
 ```text
 用户首次打开 Agent 面板 / 进入设置
@@ -482,8 +482,8 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 - ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
 
 **权限与写入**：
-- ACP 权限请求经 Host 转发给前端确认（可记住会话内策略）。
-- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致）。
+- **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）时取消 ACP 权限请求 / Codex `workspace-write`；**自动批准**时选 Agent 给出的第一项 / Codex `danger-full-access`。运行经 `autoApprove` 传入。逐项「每次询问」仍待。
+- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致；草稿确认 UX 仍待补齐）。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
@@ -492,7 +492,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 
 ### 5.8 Agent 配置（注册表，非模型 BYOK）
 
-Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
+Agentero 配置的是 **如何启动本机 Agent**，不是模型 API Key。
 
 | 配置项 | 说明 | 示例 |
 |---|---|---|
@@ -508,7 +508,7 @@ Motif 配置的是 **如何启动本机 Agent**，不是模型 API Key。
 | `agent.enabled` | Agent 总开关 | `true` |
 
 - 持久化：`tauri-plugin-store`（或后续等价本地配置）。
-- **不** 要求用户在 Motif 内填写 `CLAUDE_API_KEY` / `OPENCODE_API_KEY` 等模型密钥；若某 agent 需要环境变量，由用户在系统或自定义 `env` 中自行配置，文档明确风险。
+- **不** 要求用户在 Agentero 内填写 `CLAUDE_API_KEY` / `OPENCODE_API_KEY` 等模型密钥；若某 agent 需要环境变量，由用户在系统或自定义 `env` 中自行配置，文档明确风险。
 - 探测：Host 在 PATH（及可选用户指定绝对路径）上检查 `command` 是否可执行；失败时 UI 展示安装文档链接，不阻塞应用其他功能。
 
 ## 6. 平台策略：Mac 优先 + iPadOS 扩展
@@ -542,7 +542,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 | 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
 | 鼠标悬停提示 | 长按菜单替代 |
 | 小点击区域 | 增大按钮/节点热区至 44pt |
-| 多窗口自由拖拽 | 分屏/Split View 适配；暂不支持多独立窗口 |
+| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口；**中间栏文档分屏 / 标签页** 规划见 roadmap V0.6（当前仍为单槽） |
 | PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
 | 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
 
@@ -645,7 +645,7 @@ pulldown-cmark = "0.12"
 regex = "1"
 liteparse = "2.5"
 agent-client-protocol = "0.2"
-rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.motif/catalog.sqlite
+rusqlite = { version = "0.32", features = ["bundled"] } # Catalog：.agentero/catalog.sqlite
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -670,7 +670,7 @@ tempfile = "3"
 | 数学公式渲染 | Plate math 插件 + `katex` |
 | 全文搜索 | `minisearch`（前端）或 Rust `tantivy` / SQLite FTS5 |
 | 加密存储产品侧密钥（如 MinerU） | `keyring` crate |
-| 本机 Agent（用户自装，不随 Motif 分发） | OpenCode、Gemini CLI、Claude ACP、Codex App Server、自定义 CLI |
+| 本机 Agent（用户自装，不随 Agentero 分发） | OpenCode、Gemini CLI、Claude ACP、Codex App Server、自定义 CLI |
 | iOS 原生能力 | `tauri-plugin-os`、Swift 桥接 |
 
 ## 9. 与 Roadmap 的对应关系
@@ -679,11 +679,13 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/Notes、Library 表、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）；文件监听仍待。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader 精读**（Eye + `is_read`）、**SkillMentionStyle**（Codex `$` / Claude `/` / 其它注入）已接入；面板内其它 workflow、逐项权限确认、写入草稿待补。 |
-| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Eye 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
+| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
+| V0.6 | 中间栏从单槽升级为**文档标签页 + 2 格分屏**；布局/滚动状态可恢复；与 Agent 会话标签分离；多窗口各自独立 tab 集。 |
+| V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
-| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行。 |
+| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局、>2 格分屏。 |
 
 ## 10. 风险与技术对策
 

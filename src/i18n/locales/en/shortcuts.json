@@ -19,6 +19,9 @@
 		"toggleAgentZen": "Agent zen mode",
 		"focusSidebar": "Focus sidebar",
 		"focusEditor": "Focus editor",
-		"focusNotes": "Focus notes"
+		"focusNotes": "Focus notes",
+		"closeTab": "Close tab",
+		"nextTab": "Next tab",
+		"prevTab": "Previous tab"
 	}
 }

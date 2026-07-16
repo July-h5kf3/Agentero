@@ -15,7 +15,7 @@ export function buildPdfAskPrompt(
 		.join("\n\n");
 
 	const parts = [
-		"You are helping the user read a research paper PDF in Motif.",
+		"You are helping the user read a research paper PDF in Agentero.",
 		`Page: ${page}`,
 	];
 	if (quote) {
@@ -31,4 +31,24 @@ export function buildPdfAskPrompt(
 		"Answer based on the quote and prior turns when possible. Be concise. If uncertain, say so.",
 	);
 	return parts.join("\n\n");
+}
+
+/**
+ * Build a translate prompt for a quoted PDF passage.
+ * `targetLang` is a human-readable language name (e.g. "Chinese", "English").
+ */
+export function buildPdfTranslatePrompt(
+	quote: string,
+	page: number,
+	targetLang: string,
+): string {
+	return [
+		"You are helping the user read a research paper PDF in Agentero.",
+		`Page: ${page}`,
+		"Translate the quoted text below into " +
+			`${targetLang}. Preserve technical terms and formulas.`,
+		"Return only the translation, without commentary.",
+		"Quoted text from the PDF:",
+		`> ${quote.trim()}`,
+	].join("\n\n");
 }
