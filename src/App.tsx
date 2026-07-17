@@ -62,14 +62,9 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
+import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
-import {
-	startVaultWatch,
-	stopVaultWatch,
-	VAULT_FILE_CHANGED_EVENT,
-	type VaultFileChangedPayload,
-} from "@/lib/fs-watch";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import {
@@ -775,42 +770,12 @@ export default function App() {
 	}, []);
 
 	// Start/stop the Host Vault filesystem watcher for this window's active Vault.
-	// start() replaces any existing watcher for this window, so a Vault switch needs
-	// only a fresh start (no cleanup-stop, which could race the new start). Window
-	// close is handled by the Host's on_window_event(Destroyed).
-	useEffect(() => {
-		if (!isTauri()) return;
-		if (!vaultPath) {
-			void stopVaultWatch().catch(() => {});
-			return;
-		}
-		void startVaultWatch(vaultPath).catch(() => {
-			// watcher is best-effort; editor still works without live reload
-		});
-	}, [vaultPath]);
-
-	// Reload open editors + file tree when files change on disk (external / Agent).
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<VaultFileChangedPayload>(
-				VAULT_FILE_CHANGED_EVENT,
-				({ payload }) => {
-					for (const p of payload.paths) void applyDiskChange(p);
-					// Structural changes affect the tree; plain content edits don't.
-					if (payload.kind !== "modify") scheduleTreeRefresh();
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [applyDiskChange, scheduleTreeRefresh]);
+	// Live-reload open editors + file tree when files change on disk (external / Agent).
+	useVaultFileEvents({
+		vaultPath,
+		onDiskChange: applyDiskChange,
+		onStructuralChange: scheduleTreeRefresh,
+	});
 
 	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
 	const rebuildWikiAndNotify = useCallback(async (path: string) => {
