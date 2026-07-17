@@ -103,6 +103,13 @@ function clampZoom(z: number): number {
 	return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, rounded));
 }
 
+export type PdfViewerHandle = {
+	getHighlights: () => PdfHighlight[];
+	scrollToHighlight: (id: string) => void;
+	editComment: (id: string) => void;
+	deleteHighlight: (id: string) => void;
+};
+
 type PdfViewerProps = {
 	/**
 	 * PDF.js file source: local `blob:` (bytes via fs) or remote https.
@@ -117,6 +124,10 @@ type PdfViewerProps = {
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
 	className?: string;
+	/** Register/unregister an imperative handle for the annotations panel */
+	onHandle?: (handle: PdfViewerHandle | null) => void;
+	/** Called whenever the highlight list changes (for the annotations panel) */
+	onHighlightsChange?: (highlights: PdfHighlight[]) => void;
 };
 
 type PdfOutlineNode = {
@@ -168,6 +179,8 @@ export function PdfViewer({
 	paperRelPath = null,
 	vaultPath = null,
 	className,
+	onHandle,
+	onHighlightsChange,
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -1098,7 +1111,7 @@ export function PdfViewer({
 		[upsertThread, openThread, cancelHoverHide],
 	);
 
-	// --- Selection action menu (highlight / note / ask / translate) ---
+	// --- Selection action menu (highlight / annotate / ask / translate) ---
 
 	const handleMenuAsk = useCallback(() => {
 		const sm = selectionMenu;
@@ -1126,6 +1139,18 @@ export function PdfViewer({
 			buildPdfTranslatePrompt(quote, sm.anchor.page, targetLang),
 		);
 	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
+
+	const scrollToHighlight = useCallback((id: string) => {
+		const host = contentRef.current;
+		const hl = highlightsRef.current.find((h) => h.id === id);
+		if (!host || !hl) return;
+		const pageEl = findPageElByNumber(host, hl.page);
+		pageEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+		setActiveHighlightId(id);
+		window.setTimeout(() => {
+			setActiveHighlightId((cur) => (cur === id ? null : cur));
+		}, 1600);
+	}, []);
 
 	const openCommentEditorFor = useCallback((id: string) => {
 		const host = contentRef.current;
@@ -1222,6 +1247,21 @@ export function PdfViewer({
 		},
 		[paperAbsPath],
 	);
+
+	useEffect(() => {
+		onHighlightsChange?.(highlights);
+	}, [highlights, onHighlightsChange]);
+
+	useEffect(() => {
+		if (!onHandle) return;
+		onHandle({
+			getHighlights: () => highlightsRef.current,
+			scrollToHighlight,
+			editComment: openCommentEditorFor,
+			deleteHighlight: removeHighlight,
+		});
+		return () => onHandle(null);
+	}, [onHandle, scrollToHighlight, openCommentEditorFor, removeHighlight]);
 
 	// Dismiss menus on outside pointerdown / Escape / scroll
 	useEffect(() => {
