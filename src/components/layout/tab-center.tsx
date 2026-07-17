@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { PapersLibrary } from "@/components/layout/papers-library";
 import { RecycleBinView } from "@/components/layout/recycle-bin-view";
@@ -14,7 +15,7 @@ import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 
 type TabCenterProps = {
 	tab: DocTab;
-	activeTabId: string | null;
+	active: boolean;
 	vaultPath: string | null;
 	/** Papers library (only used by the Library tab). */
 	libraryPapers: PaperMetadata[];
@@ -43,9 +44,9 @@ type TabCenterProps = {
 };
 
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
-export function TabCenter({
+export const TabCenter = memo(function TabCenter({
 	tab,
-	activeTabId,
+	active,
 	vaultPath,
 	libraryPapers,
 	libraryLoading,
@@ -88,7 +89,7 @@ export function TabCenter({
 		return (
 			<RecycleBinView
 				vaultPath={vaultPath}
-				active={tab.id === activeTabId}
+				active={active}
 				onChanged={onTrashChanged}
 				className="bg-muted/20"
 			/>
@@ -162,4 +163,4 @@ export function TabCenter({
 			<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
 		</div>
 	);
-}
+});

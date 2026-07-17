@@ -784,6 +784,15 @@ export default function App() {
 		}
 	}, []);
 
+	const handleEditorAssetsChanged = useCallback(() => {
+		if (vaultPath) void refreshTree(vaultPath);
+	}, [vaultPath, refreshTree]);
+
+	const openAnnotationsTab = useCallback(
+		() => openRightTab("annotations"),
+		[openRightTab],
+	);
+
 	/**
 	 * Reload an open editor when its file changed on disk (external editor / Agent).
 	 * Reseeds only when disk content differs from the current seed — equal content
@@ -2308,7 +2317,7 @@ export default function App() {
 											>
 												<TabCenter
 													tab={tab}
-													activeTabId={activeTabId}
+													active={tab.id === activeTabId}
 													vaultPath={vaultPath}
 													libraryPapers={libraryPapers}
 													libraryLoading={libraryLoading}
@@ -2317,20 +2326,18 @@ export default function App() {
 													rescanning={rescanning}
 													onLibraryTagFilterChange={setLibraryTagFilter}
 													onOpenLibraryPaper={handleOpenLibraryPaper}
-													onRescanPapers={() => void handleRescanPapers()}
+													onRescanPapers={handleRescanPapers}
 													onTrashChanged={handleTrashChanged}
 													editorFontSize={editorFontSize}
 													showEditorToolbar={settings.showEditorToolbar}
 													notesPlaceholder={t("editor.notesPlaceholder")}
 													markdownPlaceholder={t("editor.markdownPlaceholder")}
 													onPersistFile={persistFile}
-													onEditorAssetsChanged={() => {
-														if (vaultPath) void refreshTree(vaultPath);
-													}}
+													onEditorAssetsChanged={handleEditorAssetsChanged}
 													onTabPatch={updateTab}
 													pdfZen={pdfZenMode}
 													onTogglePdfZen={togglePdfZen}
-													onOpenAnnotations={() => openRightTab("annotations")}
+													onOpenAnnotations={openAnnotationsTab}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
 												/>
