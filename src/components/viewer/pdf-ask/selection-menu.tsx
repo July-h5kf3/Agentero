@@ -29,6 +29,7 @@ type SelectionMenuProps = {
 	onHighlight: (color: HighlightColor) => void;
 	/** Copy the selected text to the clipboard */
 	onCopy: () => void;
+	/** Annotate: create a highlight and open its inline note editor */
 	onNote: () => void;
 	onAsk: () => void;
 	onTranslate: () => void;
@@ -41,8 +42,8 @@ const BAR_H = 40;
 
 /**
  * Floating action bar shown next to a text selection: a row of color swatches
- * (highlight), then Copy / Note / Ask / Translate. Copy and Note flash a brief
- * inline confirmation before the menu closes.
+ * (highlight), then Copy / Annotate / Ask / Translate. Copy flashes a brief
+ * inline confirmation; Annotate opens the inline note editor.
  */
 export function SelectionMenu({
 	screen,
@@ -82,10 +83,11 @@ export function SelectionMenu({
 		flashThenClose(t("selection.copied"));
 	}, [onCopy, flashThenClose, t]);
 
+	// Annotate opens the inline note editor in the viewer, so just close the menu.
 	const handleNote = useCallback(() => {
 		onNote();
-		flashThenClose(t("selection.noteAdded"));
-	}, [onNote, flashThenClose, t]);
+		onClose();
+	}, [onNote, onClose]);
 
 	const colorLabel = (c: HighlightColor): string => {
 		switch (c) {

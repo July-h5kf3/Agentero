@@ -161,15 +161,16 @@ Vault 技能种子：Create Vault 写入 `.agents/skills/paper-reader/SKILL.md`�
 - 含锚点（page + 归一化 rects + quote）与 `messages[]`；**不**写入 PDF 二进制，**不**进 catalog 正文。
 - 触发：划词 / 框选 / 双击 / 悬停；发送过问题后锚点旁对话图标可回访。
 
-### `highlights/`（已落地：PDF 划词高亮）
+### `highlights/`（已落地：PDF 划词高亮 + 批注）
 
-划词后弹出的操作菜单（**高亮 / 笔记 / 提问 / 翻译**）中，「高亮」写入的持久化标注。与多轮问答 `asks/` 分离，是纯视觉标注（不含对话）。
+划词后弹出的操作菜单（**高亮 / 批注 / 提问 / 翻译**）中，「高亮」与「批注」写入的持久化标注。与多轮问答 `asks/` 分离；「批注」= `comment` 非空的高亮（高亮 + 内联评论），纯高亮则 `comment` 为空。
 
 - 路径：`papers/<id>/highlights/<id>.json`（pretty JSON，便于 Git diff）。
-- 字段：`version:1`、`id`、`paperPath`、`createdAt/updatedAt`、`page`、归一化 `rects[]`、`quote`、可选 `color`（预留调色板，缺省琥珀）。
-- 归一化坐标可在缩放/重开后重定位；页面上点击已有高亮出现「删除」浮层。
-- **不**污染原始 PDF、**不**进 catalog；坏文件读取时跳过。
-- 「笔记」操作把选中原文以块引用 `> …` 追加进该篇 `NOTES.md`（经编辑器实例写入，避免覆盖未存改动）；「翻译」复用 asks 弹层走 Agent 流式，不额外落盘。
+- 字段：`version:1`、`id`、`paperPath`、`createdAt/updatedAt`、`page`、归一化 `rects[]`、`quote`、可选 `color`（预留调色板，缺省琥珀）、**可选 `comment?: string`**（非空 ⇒ 批注；`version` 保持 `1`，向后兼容）。
+- 归一化坐标可在缩放/重开后重定位；页面上点击已有高亮出现「删除」浮层；`comment` 非空的高亮在页边渲染**批注针**，点击打开内联编辑器读/改评论。
+- 右侧「批注」面板列出**当前活动 PDF tab** 的批注卡（页码 + 引文 + 评论），点击跳转闪烁、可编辑 / 删除；由 `PdfViewerHandle` + `onHighlightsChange` 驱动。
+- **不**污染原始 PDF、**不**进 catalog、**不**写入 `NOTES.md`（旧「追加引文到 `NOTES.md`」行为已移除）；坏文件读取时跳过。
+- 「翻译」复用 asks 弹层走 Agent 流式，不额外落盘。
 
 格式示例:
 

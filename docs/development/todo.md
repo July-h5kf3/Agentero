@@ -58,7 +58,7 @@
    - [x] 页码导航：底部 pill + 跳转输入；`PageDown/PageUp` / `Home/End`。
    - [x] 大纲（书签）左侧浮层；文档内查找 `⌘/Ctrl+F` + 命中高亮（`pdf-find.ts`）。
    - [x] 平滑划词覆盖层（Zotero 风格；隐藏原生 `::selection` 行间缝隙）。
-   - [x] 划词操作菜单 MVP：高亮 / 笔记 / 提问 / 翻译（见 3. PDF 划词提问）。
+   - [x] 划词操作菜单 MVP：高亮 / 批注 / 提问 / 翻译（见 3. PDF 划词提问）。
    - [x] 本地 PDF 直接预览（优先本地 → 无本地时 `paper_download_assets` → 失败再远程 `pdf_url`）。
 
 2f. **Markdown 内嵌图片** ✅
@@ -200,12 +200,14 @@
    - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘。
    - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）。
    - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer。
-   - [x] M6：划词操作菜单（高亮 / 笔记 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；笔记追加 `NOTES.md`（经编辑器实例，防覆盖）；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区。
+   - [x] M6：划词操作菜单（高亮 / 批注 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区。
+   - [x] M7：Zotero 式批注 —「批注」= 建高亮 + 内联编辑器（`annotation-editor.tsx`）写可选 `comment`；页边批注针（`annotation-gutter.tsx`）；右侧「批注」面板（`annotations-panel.tsx`，活动 PDF tab）列卡、跳转闪烁、编辑 / 删除，经 `PdfViewerHandle` + `onHighlightsChange` 驱动；**不写 `NOTES.md`**（旧追加行为已移除）。
 
 4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。
-   - 标注正文进入 `highlights.md`，坐标/锚点缓存可重建。
-   - PDF.js / HTML iframe 都需要统一标注模型。
+   - [x] PDF 就地批注已落地（高亮 + `comment` + 页边针 + 右侧面板）；标注落 `highlights/*.json`。
+   - [ ] 标注正文进入 `highlights.md` / 导出到 `NOTES.md`（**暂不做**，可能的后续），坐标/锚点缓存可重建。
+   - [ ] PDF.js / HTML iframe 统一标注模型（HTML iframe 标注仍待）。
    - 与划词提问（asks JSON）边界清晰，可互导。
 
 5. **更大范围导入**

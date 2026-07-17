@@ -11,10 +11,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import {
-	MarkdownEditor,
-	type MarkdownEditorHandle,
-} from "@/components/editor/markdown-editor";
+import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
@@ -50,6 +47,11 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	type AnnotationRow,
+	AnnotationsPanel,
+} from "@/components/viewer/annotations-panel";
+import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -90,6 +92,7 @@ import {
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
 } from "@/lib/papers-api";
+import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import {
@@ -195,9 +198,9 @@ export default function App() {
 	 * Collapsed by default; top-bar icons open a tab.
 	 */
 	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
-	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
-		"agent",
-	);
+	const [rightSidebarTab, setRightSidebarTab] = useState<
+		"agent" | "backlinks" | "annotations"
+	>("agent");
 	/**
 	 * Agent zen / quest mode: hide vault chrome, full-width Agent chat
 	 * (Cursor Agents Window / VS Code zen — distraction-free single surface).
@@ -353,6 +356,12 @@ export default function App() {
 			setActiveTabId(activeId);
 			return tabs;
 		});
+		setPdfHighlightsByTab((prev) => {
+			if (!(id in prev)) return prev;
+			const next = { ...prev };
+			delete next[id];
+			return next;
+		});
 	}, []);
 
 	/** Close every tab whose path is at or under the given path. */
@@ -366,6 +375,17 @@ export default function App() {
 			if (!removed.length) return prev;
 			for (const t of removed) revokeTabPdfSource(t);
 			setActiveTabId(activeId);
+			setPdfHighlightsByTab((prevHl) => {
+				let changed = false;
+				const next = { ...prevHl };
+				for (const t of removed) {
+					if (t.id in next) {
+						delete next[t.id];
+						changed = true;
+					}
+				}
+				return changed ? next : prevHl;
+			});
 			return tabs;
 		});
 	}, []);
@@ -386,6 +406,50 @@ export default function App() {
 	tabsRef.current = tabs;
 	const activeTabIdRef = useRef(activeTabId);
 	activeTabIdRef.current = activeTabId;
+
+	/** PDF viewer imperative handles by tab id (for the annotations panel). */
+	const pdfViewerHandles = useRef(new Map<string, PdfViewerHandle>());
+	/** Latest highlights per PDF tab id, for the annotations panel. */
+	const [pdfHighlightsByTab, setPdfHighlightsByTab] = useState<
+		Record<string, PdfHighlight[]>
+	>({});
+
+	const activeAnnotations = useMemo<AnnotationRow[]>(() => {
+		const list = activeTabId ? pdfHighlightsByTab[activeTabId] : undefined;
+		if (!list) return [];
+		return list
+			.filter((h) => h.comment?.trim())
+			.map((h) => ({
+				id: h.id,
+				page: h.page,
+				quote: h.quote,
+				comment: h.comment ?? "",
+			}))
+			.sort((a, b) => a.page - b.page);
+	}, [activeTabId, pdfHighlightsByTab]);
+
+	const annotationAction = useCallback(
+		(fn: (h: PdfViewerHandle) => void) => {
+			if (!activeTabId) return;
+			const h = pdfViewerHandles.current.get(activeTabId);
+			if (h) fn(h);
+		},
+		[activeTabId],
+	);
+
+	const registerPdfHandle = useCallback(
+		(tabId: string, handle: PdfViewerHandle | null) => {
+			if (handle) pdfViewerHandles.current.set(tabId, handle);
+			else pdfViewerHandles.current.delete(tabId);
+		},
+		[],
+	);
+	const handlePdfHighlightsChange = useCallback(
+		(tabId: string, list: PdfHighlight[]) => {
+			setPdfHighlightsByTab((prev) => ({ ...prev, [tabId]: list }));
+		},
+		[],
+	);
 
 	/** Cycle the active tab by delta (wraps). */
 	const cycleActiveTab = useCallback((delta: number) => {
@@ -420,9 +484,6 @@ export default function App() {
 		})();
 	}, [closeTab]);
 
-	/** NOTES editor imperative handles by tab id (for PDF "add note"). */
-	const notesEditorHandles = useRef(new Map<string, MarkdownEditorHandle>());
-
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
 		setTabs((prev) => reseedNotesTab(prev, paperDir, content));
@@ -432,37 +493,6 @@ export default function App() {
 	const refreshTabMarkdown = useCallback((absPath: string, content: string) => {
 		setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
 	}, []);
-
-	/** Append a selected PDF passage to a paper's NOTES.md as a blockquote. */
-	const handleAddPdfNote = useCallback(
-		async (tab: DocTab, quote: string) => {
-			const q = quote.replace(/\s+/g, " ").trim();
-			if (!q || !tab.notesPath) return;
-			// Preferred: route through the mounted editor (single writer, no clobber)
-			const handle = notesEditorHandles.current.get(tab.id);
-			if (handle) {
-				handle.appendMarkdown(`> ${q}`);
-				return;
-			}
-			// Fallback: editor not mounted → append on disk and reseed
-			const paperDir = tab.notesPath.replace(/[\\/]NOTES\.md$/i, "");
-			try {
-				let current = "";
-				try {
-					current = await readVaultFile(tab.notesPath);
-				} catch {
-					// missing NOTES.md → start fresh
-				}
-				const base = current.replace(/\s+$/, "");
-				const next = `${base}${base ? "\n\n" : ""}> ${q}\n`;
-				await writeVaultFile(tab.notesPath, next);
-				refreshTabNotes(paperDir, next);
-			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
-			}
-		},
-		[refreshTabNotes],
-	);
 
 	// Restore the previous window's open tabs once on mount (per-window session).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
@@ -589,7 +619,7 @@ export default function App() {
 
 	/** Open right sidebar on a tab (or switch tab if already open). */
 	const openRightTab = useCallback(
-		(tab: "agent" | "backlinks") => {
+		(tab: "agent" | "backlinks" | "annotations") => {
 			setRightSidebarTab(tab);
 			if (tab === "agent") setAgentPanelMounted(true);
 			if (!rightSidebarOpen) {
@@ -2294,9 +2324,10 @@ export default function App() {
 														if (vaultPath) void refreshTree(vaultPath);
 													}}
 													onTabPatch={updateTab}
-													onAddPdfNote={handleAddPdfNote}
 													pdfZen={pdfZenMode}
 													onTogglePdfZen={togglePdfZen}
+													registerPdfHandle={registerPdfHandle}
+													onPdfHighlightsChange={handlePdfHighlightsChange}
 												/>
 											</div>
 										))}
@@ -2377,10 +2408,6 @@ export default function App() {
 												>
 													<MarkdownEditor
 														key={`notes-${tab.id}-${tab.notesKey}`}
-														ref={(h) => {
-															if (h) notesEditorHandles.current.set(tab.id, h);
-															else notesEditorHandles.current.delete(tab.id);
-														}}
 														className="agentero-scroll h-full min-h-0"
 														initialMarkdown={tab.notesSeed}
 														filePath={tab.notesPath}
@@ -2489,6 +2516,20 @@ export default function App() {
 										wikiIndexRevision={wikiIndexRevision}
 									/>
 								</div>
+							) : null}
+							{rightSidebarOpen &&
+							!agentZenMode &&
+							rightSidebarTab === "annotations" ? (
+								<AnnotationsPanel
+									items={activeAnnotations}
+									onJump={(id) =>
+										annotationAction((h) => h.scrollToHighlight(id))
+									}
+									onEdit={(id) => annotationAction((h) => h.editComment(id))}
+									onDelete={(id) =>
+										annotationAction((h) => h.deleteHighlight(id))
+									}
+								/>
 							) : null}
 						</ResizablePanel>
 					</ResizableGroup>

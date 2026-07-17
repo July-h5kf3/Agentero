@@ -1,8 +1,8 @@
 # PDF 划词提问（Selection Ask）
 
-> 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 笔记 / 提问 / 翻译），不再默认套用琥珀高亮。  
-> 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 笔记（追加 `NOTES.md`）/ 提问（迷你对话框）/ 翻译（复用对话框走 Agent）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）。  
-> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`）、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
+> 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 批注 / 提问 / 翻译），不再默认套用琥珀高亮。  
+> 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 批注（高亮 + 内联评论）/ 提问（迷你对话框）/ 翻译（复用对话框走 Agent）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）；**批注 = `comment` 非空的高亮**，页边批注针 + 右侧「批注」面板回访。  
+> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`、`annotation-editor.tsx`、`annotation-gutter.tsx`）、`src/components/viewer/annotations-panel.tsx`、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
 > 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
 
 ## 1. 产品目标
@@ -11,8 +11,8 @@
 
 | 交互 | 行为 |
 |---|---|
-| **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（高亮 / 笔记 / 提问 / 翻译）；不默认高亮，只保留浏览器原生选区 |
-| **操作菜单** | 高亮→JSON 落盘（含 `color`）并渲染半透明色带覆盖层；笔记→原文以 `> …` 追加进 `NOTES.md`（菜单内联「已加入」）；提问→打开迷你问答卡；翻译→建线程后复用问答卡走 Agent 流式 |
+| **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（5 色高亮 / 复制 / 批注 / 提问 / 翻译）；不默认高亮，只保留平滑蓝色选区覆盖层 |
+| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注→先建高亮，再在选区旁弹出**内联编辑器**（`annotation-editor.tsx`）写评论，保存后 `comment` 落盘（留空则退化为纯高亮），**不写 `NOTES.md`**；提问→打开迷你问答卡；翻译→建线程后复用问答卡走 Agent 流式 |
 | **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
 | **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
 | **键入提问** | 卡内输入问题并发送；**仅发送过问题的线程**保留对话图标 |
@@ -188,12 +188,18 @@ interface PdfAskMessage {
 
 ```text
 src/components/viewer/
-  pdf-viewer.tsx              # 现有；挂载交互层与 gutter
+  pdf-viewer.tsx              # 现有；挂载交互层与 gutter；暴露命令式 `PdfViewerHandle`
+                             #   （getHighlights / scrollToHighlight / editComment / deleteHighlight）
+                             #   + `onHighlightsChange` 回调，App.tsx 按 tab 保存 handle + highlights 驱动面板
+  annotations-panel.tsx       # 右侧「批注」tab：列出**当前活动 PDF tab** 的批注卡（页码 + 引文 + 评论）；
+                             #   点击卡片滚动到原文并闪烁；卡片可编辑 / 删除
   pdf-ask/
     ask-layer.tsx             # 捕获 selection / dblclick / dwell
     ask-popover.tsx           # 迷你对话框（消息 + 输入）
     ask-gutter.tsx            # 右侧圆片列表
     ask-highlight.tsx         # 选区/已锚定高亮 overlay（可选）
+    annotation-editor.tsx     # 内联评论编辑器（选区旁 popover；新建/读取/编辑批注）
+    annotation-gutter.tsx     # 页边**批注针**（仅 comment 非空的高亮）；点击打开内联编辑器
     use-pdf-geometry.ts       # DOMRect ↔ 归一化坐标
     use-pdf-ask-store.ts      # 当前 paper 的 threads 加载/保存
 src/lib/pdf-ask/
@@ -270,7 +276,8 @@ src/lib/pdf-ask/
 | **M3 ACP 接入** | 真流式回答；多轮；结束写盘 | 与 Agent 面板共用 provider 配置 | ✅ |
 | **M4 双击 / 悬停** | 触发完善；阈值暂固定（约 700ms） | 防误触可接受 | ✅ |
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
-| **M6 选区菜单** | 划词弹菜单：高亮（`highlights/*.json`）/ 笔记（追加 `NOTES.md`）/ 提问 / 翻译；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除；笔记不覆盖未存改动 | ✅ |
+| **M6 选区菜单** | 划词弹菜单：高亮（`highlights/*.json`）/ 批注 / 提问 / 翻译；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除 | ✅ |
+| **M7 批注（Zotero 式）** | 「批注」= 建高亮 + 内联编辑器写 `comment`；页边批注针；右侧「批注」面板（活动 PDF tab）列卡、跳转闪烁、编辑/删除；**不写 `NOTES.md`** | 新建/编辑/面板跳转/删除闭环；`comment` 落盘且 `version` 兼容 | ✅ |
 
 ## 10. 风险与降级
 
@@ -285,8 +292,9 @@ src/lib/pdf-ask/
 
 ## 11. 测试要点
 
-- 单元：归一化坐标往返、`schema` 校验、index 重建。
+- 单元：归一化坐标往返、`schema` 校验（含可选 `comment`）、index 重建。
 - 组件：selection → open popover；write → gutter 出现；click → 消息恢复。
+- 批注：批注→内联编辑器写 `comment` 落盘并出现页边批注针；右侧「批注」面板列卡、点击跳转并闪烁、编辑 / 删除闭环。
 - 集成：mock `agent:stream` 完成一轮后文件存在且可再读。
 - 手工：长 PDF 滚动、窗口缩放、中英混排选区、双栏论文（rects 多段）。
 

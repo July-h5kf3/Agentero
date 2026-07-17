@@ -3,8 +3,12 @@ import { PapersLibrary } from "@/components/layout/papers-library";
 import { RecycleBinView } from "@/components/layout/recycle-bin-view";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
-import { PdfViewer } from "@/components/viewer/pdf-viewer";
+import {
+	PdfViewer,
+	type PdfViewerHandle,
+} from "@/components/viewer/pdf-viewer";
 import type { PaperMetadata } from "@/lib/paper-metadata";
+import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { type DocTab, tabIsPaperNotes } from "@/lib/tabs";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 
@@ -30,10 +34,11 @@ type TabCenterProps = {
 	onPersistFile: (path: string, md: string) => void;
 	onEditorAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
-	onAddPdfNote: (tab: DocTab, quote: string) => void;
 	/** Immersive full-window PDF reading. */
 	pdfZen: boolean;
 	onTogglePdfZen: () => void;
+	registerPdfHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
+	onPdfHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
 };
 
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
@@ -57,9 +62,10 @@ export function TabCenter({
 	onPersistFile,
 	onEditorAssetsChanged,
 	onTabPatch,
-	onAddPdfNote,
 	pdfZen,
 	onTogglePdfZen,
+	registerPdfHandle,
+	onPdfHighlightsChange,
 }: TabCenterProps) {
 	if (tab.kind === "library") {
 		return (
@@ -128,10 +134,11 @@ export function TabCenter({
 						tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
 					}
 					vaultPath={vaultPath}
-					onAddNote={(quote) => onAddPdfNote(tab, quote)}
 					zen={pdfZen}
 					onToggleZen={onTogglePdfZen}
 					className="h-full w-full"
+					onHandle={(h) => registerPdfHandle(tab.id, h)}
+					onHighlightsChange={(list) => onPdfHighlightsChange(tab.id, list)}
 				/>
 			</div>
 		);

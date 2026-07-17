@@ -36,6 +36,7 @@ export function createHighlight(input: {
 	rects: PdfHighlightRect[];
 	quote: string;
 	color?: string;
+	comment?: string;
 	id?: string;
 }): PdfHighlight {
 	const now = new Date().toISOString();
@@ -50,6 +51,7 @@ export function createHighlight(input: {
 		quote: input.quote,
 	};
 	if (input.color) highlight.color = input.color;
+	if (input.comment?.trim()) highlight.comment = input.comment.trim();
 	return highlight;
 }
 

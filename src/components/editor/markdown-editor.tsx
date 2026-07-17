@@ -5,11 +5,9 @@ import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
-	forwardRef,
 	type KeyboardEvent,
 	useCallback,
 	useEffect,
-	useImperativeHandle,
 	useMemo,
 	useRef,
 } from "react";
@@ -50,32 +48,20 @@ export type MarkdownEditorProps = {
 	onAssetsChanged?: () => void;
 };
 
-/** Imperative handle for appending content without clobbering unsaved edits. */
-export type MarkdownEditorHandle = {
-	/** Append a Markdown fragment to the end of the document and persist. */
-	appendMarkdown: (markdown: string) => void;
-};
-
 const CHANGE_DEBOUNCE_MS = 500;
 
-export const MarkdownEditor = forwardRef<
-	MarkdownEditorHandle,
-	MarkdownEditorProps
->(function MarkdownEditor(
-	{
-		initialMarkdown,
-		filePath,
-		readOnly,
-		placeholder,
-		className,
-		fontSize,
-		showToolbar,
-		onPersist,
-		onDirtyChange,
-		onAssetsChanged,
-	},
-	ref,
-) {
+export function MarkdownEditor({
+	initialMarkdown,
+	filePath,
+	readOnly,
+	placeholder,
+	className,
+	fontSize,
+	showToolbar,
+	onPersist,
+	onDirtyChange,
+	onAssetsChanged,
+}: MarkdownEditorProps) {
 	const frontmatterRef = useRef("");
 	const savedRef = useRef(initialMarkdown);
 	const readyRef = useRef(false);
@@ -146,29 +132,6 @@ export const MarkdownEditor = forwardRef<
 	// Latest persist closure, for the unmount flush (captures this file's path).
 	const persistRef = useRef(persist);
 	persistRef.current = persist;
-
-	useImperativeHandle(
-		ref,
-		() => ({
-			appendMarkdown: (markdown: string) => {
-				if (readOnly) return;
-				const fragment = markdown.trim();
-				if (!fragment) return;
-				const nodes = editor
-					.getApi(MarkdownPlugin)
-					.markdown.deserialize(fragment);
-				if (!Array.isArray(nodes) || !nodes.length) return;
-				editor.tf.insertNodes(nodes, { at: [editor.children.length] });
-				if (timerRef.current) {
-					clearTimeout(timerRef.current);
-					timerRef.current = null;
-				}
-				onDirtyChange?.(false);
-				persistRef.current();
-			},
-		}),
-		[editor, readOnly, onDirtyChange],
-	);
 
 	// Mark ready after the initial normalization pass so opening a file never saves.
 	// Seed image URL counts so we only GC assets removed after open.
@@ -249,4 +212,4 @@ export const MarkdownEditor = forwardRef<
 			</Plate>
 		</MarkdownDocProvider>
 	);
-});
+}
