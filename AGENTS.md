@@ -25,7 +25,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。
 - 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；侧栏 `Trash2` 打开中间栏回收站视图（恢复 / 永久删除 / 清空）。
 - 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
-- PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 笔记 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。
+- PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 批注 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。**批注** = 高亮 + 内联评论（`comment`），带 comment 的高亮显示页边批注针，右侧 **批注** 面板列出当前 PDF 的批注卡（跳转 / 编辑 / 删除），不写入 `NOTES.md`。
 - 图片：常见格式任意路径 `blob:` 中间栏预览。
 - **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown-image.ts`）。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘内容变化则重载（**覆盖本地未存改动**，内容相等抑制自写回声）；create/remove/rename 去抖刷新文件树。
