@@ -137,7 +137,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - `opener:default`（含 `revealItemInDir`）
 - `dialog:default` 打开文件夹对话框
 
-**未做（后续）**：文件监听热更新、按 Vault 白名单动态收紧 scope、Zustand 全局状态。
+**未做（后续）**：按 Vault 白名单动态收紧 scope、Zustand 全局状态、索引增量刷新（文件监听热更新已落地：`notify` → `vault:file-changed`）。
 
 ### 3.3 Markdown 编辑与预览
 
@@ -690,7 +690,7 @@ tempfile = "3"
 
 | Roadmap 版本 | 技术重点 |
 |---|---|
-| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听仍待。 |
+| V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听（`notify` → `vault:file-changed`，编辑器/文件树自动重载）已落地。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、`paper_set_tags`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
 | V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Zap 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）、模型收藏已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |

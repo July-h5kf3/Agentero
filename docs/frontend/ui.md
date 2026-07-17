@@ -240,6 +240,7 @@
 - **状态派生**：`activeTab` 驱动 `selectedPath` / `centerMode` / `paperMeta` / Notes；文件树选中与「新建父目录」上下文用独立的 `treeSelectedPath`（跟随激活文档，folder 新建时可指向文件夹）。
 - **持久化**：`agentero-open-tabs`（`{tabs:[{path,mode}], activeIndex}`）按窗口保存，重开窗口恢复 tab 集与激活项；`⌘N` 各窗口独立。
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
+- **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同则从盘重载（key bump 重挂载），**自动覆盖本地未保存修改**；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
 
 规划中（尚未实现）：
 

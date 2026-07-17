@@ -64,6 +64,12 @@ import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
+import {
+	startVaultWatch,
+	stopVaultWatch,
+	VAULT_FILE_CHANGED_EVENT,
+	type VaultFileChangedPayload,
+} from "@/lib/fs-watch";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import {
@@ -339,6 +345,12 @@ export default function App() {
 	treeRef.current = tree;
 	const vaultPathRef = useRef(vaultPath);
 	vaultPathRef.current = vaultPath;
+	/** Normalized paths currently being reloaded from disk; suppresses the editor
+	 * unmount-flush so an external/Agent write is never clobbered by stale in-memory text. */
+	const reseedGuardRef = useRef<Set<string>>(new Set());
+	const treeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
 
 	/** Merge a patch into the tab with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
@@ -548,6 +560,23 @@ export default function App() {
 							notesSeed: content,
 							notesDirty: false,
 							notesKey: t.notesKey + 1,
+						}
+					: t,
+			),
+		);
+	}, []);
+
+	/** Reseed an open plain-Markdown tab after an external/Agent write. */
+	const refreshTabMarkdown = useCallback((absPath: string, content: string) => {
+		const id = tabIdForPath(absPath);
+		setTabs((prev) =>
+			prev.map((t) =>
+				t.id === id
+					? {
+							...t,
+							markdownSeed: content,
+							markdownDirty: false,
+							seedKey: t.seedKey + 1,
 						}
 					: t,
 			),
@@ -825,6 +854,103 @@ export default function App() {
 			setBusy(false);
 		}
 	}, []);
+
+	/**
+	 * Reload an open editor when its file changed on disk (external editor / Agent).
+	 * Reseeds only when disk content differs from the current seed — equal content
+	 * means it was our own autosave, so we skip to avoid a remount echo. The path is
+	 * guarded briefly so the remount's unmount-flush cannot overwrite the fresh disk text.
+	 */
+	const applyDiskChange = useCallback(
+		async (absPath: string) => {
+			const norm = normalizeTabPath(absPath);
+			const openTabs = tabsRef.current;
+			const notesTab = openTabs.find(
+				(t) => t.notesPath && normalizeTabPath(t.notesPath) === norm,
+			);
+			const mdTab = openTabs.find(
+				(t) => normalizeTabPath(t.path) === norm && isMarkdownPath(t.path),
+			);
+			if (!notesTab && !mdTab) return;
+			let content: string;
+			try {
+				content = await readVaultFile(absPath);
+			} catch {
+				// File removed / unreadable → leave editor; tree refresh reflects removal.
+				return;
+			}
+			const guard = () => {
+				reseedGuardRef.current.add(norm);
+				window.setTimeout(() => reseedGuardRef.current.delete(norm), 500);
+			};
+			if (notesTab && content !== notesTab.notesSeed) {
+				guard();
+				const paperDir = (notesTab.notesPath ?? "").replace(
+					/[\\/]NOTES\.md$/i,
+					"",
+				);
+				refreshTabNotes(paperDir, content);
+			}
+			if (mdTab && content !== mdTab.markdownSeed) {
+				guard();
+				refreshTabMarkdown(absPath, content);
+			}
+		},
+		[refreshTabNotes, refreshTabMarkdown],
+	);
+
+	/** Debounced, quiet file-tree reload (no busy flicker) for external create/delete/rename. */
+	const scheduleTreeRefresh = useCallback(() => {
+		if (treeRefreshTimerRef.current) clearTimeout(treeRefreshTimerRef.current);
+		treeRefreshTimerRef.current = setTimeout(() => {
+			treeRefreshTimerRef.current = null;
+			const vault = vaultPathRef.current;
+			if (!vault) return;
+			void loadVaultTree(vault)
+				.then((nodes) => setTree(nodes))
+				.catch(() => {
+					// best-effort background refresh
+				});
+		}, 400);
+	}, []);
+
+	// Start/stop the Host Vault filesystem watcher for this window's active Vault.
+	// start() replaces any existing watcher for this window, so a Vault switch needs
+	// only a fresh start (no cleanup-stop, which could race the new start). Window
+	// close is handled by the Host's on_window_event(Destroyed).
+	useEffect(() => {
+		if (!isTauri()) return;
+		if (!vaultPath) {
+			void stopVaultWatch().catch(() => {});
+			return;
+		}
+		void startVaultWatch(vaultPath).catch(() => {
+			// watcher is best-effort; editor still works without live reload
+		});
+	}, [vaultPath]);
+
+	// Reload open editors + file tree when files change on disk (external / Agent).
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		let unsub: (() => void) | undefined;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<VaultFileChangedPayload>(
+				VAULT_FILE_CHANGED_EVENT,
+				({ payload }) => {
+					for (const p of payload.paths) void applyDiskChange(p);
+					// Structural changes affect the tree; plain content edits don't.
+					if (payload.kind !== "modify") scheduleTreeRefresh();
+				},
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, [applyDiskChange, scheduleTreeRefresh]);
 
 	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
 	const rebuildWikiAndNotify = useCallback(async (path: string) => {
@@ -1387,6 +1513,9 @@ export default function App() {
 	const persistFile = useCallback(
 		(path: string, md: string) => {
 			if (!isTauri() || !vaultPath || !path) return;
+			// Skip while this path is being reloaded from disk (external/Agent write):
+			// the remount's unmount-flush must not clobber the fresh disk content.
+			if (reseedGuardRef.current.has(normalizeTabPath(path))) return;
 			// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
 			const key = path.replace(/\\/g, "/").toLowerCase();
 			setTabs((prev) =>

@@ -12,6 +12,7 @@ pub mod services;
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
+use services::watcher::FsWatchController;
 use services::wiki::WikiIndexState;
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -138,6 +139,7 @@ pub fn run() {
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(WikiIndexState::new())
+        .manage(FsWatchController::new())
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
@@ -184,6 +186,8 @@ pub fn run() {
             commands::paper::paper_rescan,
             commands::zotero::zotero_scan,
             commands::zotero::zotero_migrate,
+            commands::watcher::fs_watch_start,
+            commands::watcher::fs_watch_stop,
             set_locale,
         ])
         .setup(|app| {
@@ -216,6 +220,11 @@ pub fn run() {
                 return;
             }
             let _ = app.emit(id, ());
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window.state::<FsWatchController>().stop(window.label());
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -27,6 +27,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - PDF：Vault **任意路径** `.pdf` 均可 `readFile` → `blob:` 预览；论文单元额外 **本地优先** → 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
 - 图片：常见格式（png/jpg/gif/webp/bmp/svg/avif/ico）任意路径 `blob:` 中间栏预览。
 - **Markdown 内嵌图片**：粘贴 / 工具栏插入 → 写入当前 `.md` 旁 `./assets/`，正文 `![](./assets/…)`；选中节点显示源码；删除节点且无其它引用时 GC 磁盘文件（见 `src/lib/markdown-image.ts`、`docs/backend/data-model.md`）。
+- **外部/Agent 改动自动重载**：Host 用 `notify` 递归监听当前 Vault，按窗口发 `vault:file-changed`（见 `src-tauri/src/services/watcher.rs`、`src/lib/fs-watch.ts`）。打开中的 `.md`/`NOTES.md` 编辑器据此从磁盘重载（**自动覆盖本地未保存修改**，用内容对比抑制自写回声）；外部新建/删除/重命名则刷新左侧文件树。随 `vaultPath` 启停，窗口关闭自动停。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。规划中：**V0.6 分屏（split，标签页已落地）**、**V0.7 引用关系（hover Info / Connected Papers / Agent 引用工作流）**。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。

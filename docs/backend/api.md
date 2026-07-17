@@ -41,7 +41,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 | 事件名 | 触发时机 | payload 关键字段 |
 |---|---|---|
-| `fs:changed` | Vault 内文件被外部修改 | `{ path: string, kind: 'created' \| 'modified' \| 'removed' }` |
+| `vault:file-changed`（已实现） | Vault 内文件被外部/Agent 改动（Host `notify` 监听，按窗口 `emit_to` 定向） | `{ paths: string[], kind: 'create' \| 'modify' \| 'remove' \| 'rename' \| 'other' }`（绝对路径；`.agentero/`、`.git/`、`node_modules/` 已过滤） |
 | `arxiv:progress` | arXiv 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
 | `arxiv:completed` | 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
 | `arxiv:failed` | 入库失败 | `{ job_id: string, error: AppError }` |
@@ -190,6 +190,20 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
+
+#### `fs_watch_start` / `fs_watch_stop`（已实现）
+
+按窗口启停 Vault 文件系统监听（Rust `notify` 递归监听），用于外部编辑器 / Agent 写盘后自动重载编辑器与文件树。
+
+- **`fs_watch_start`**
+  - **参数**：`{ vaultPath: string }`
+  - **返回**：`Result<(), String>`
+  - **行为**：为当前窗口（label）启动递归监听；若该窗口已有监听则先停止再重建。命中变更时按窗口 `emit_to` 发送 `vault:file-changed`（去抖 ~300ms，过滤 `.agentero/`、`.git/`、`node_modules/`）。
+- **`fs_watch_stop`**
+  - **参数**：无
+  - **返回**：`Result<(), String>`
+  - **行为**：停止并释放当前窗口的监听（无监听时 no-op）。窗口 `Destroyed` 时 Host 亦自动停止，避免线程泄漏。
+- **前端**：`src/lib/fs-watch.ts` 封装 `startVaultWatch` / `stopVaultWatch`；`App.tsx` 随 `vaultPath` 生命周期启停，并监听 `vault:file-changed`。
 
 #### `vault:open`（规划）
 

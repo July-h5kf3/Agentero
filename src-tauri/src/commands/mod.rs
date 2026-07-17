@@ -5,5 +5,6 @@ pub mod paper;
 pub mod terminal;
 pub mod trash;
 pub mod vault;
+pub mod watcher;
 pub mod window;
 pub mod zotero;

@@ -462,7 +462,8 @@
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
 - [ ] Agent 写入草稿确认与拒绝路径。
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
-- [ ] 文件监听与索引增量刷新。
+- [x] 文件监听（`notify`）：外部/Agent 改动经 `vault:file-changed` 自动重载打开的编辑器（覆盖本地未存改动）与文件树。
+- [ ] 索引增量刷新：文件变更后增量重建 wiki 双链 / Backlinks 索引（当前仅编辑器与文件树重载）。
 - [x] **CLI MVP**（[`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export` / `config`；`--json`；path 复用 services，**不迁 core、无 Agent**。
 - [ ] **Vault 采纳（发现）**：打开文件夹时 inspect——合法 Vault / 半结构 / 散落 PDF / 未知；安全自动项（ensure catalog、缺目录脚手架、不覆盖种子）。
 
