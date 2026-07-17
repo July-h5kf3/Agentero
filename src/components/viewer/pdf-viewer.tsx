@@ -103,6 +103,14 @@ const ZOOM_STEP = 0.15;
  */
 const WHEEL_ZOOM_SENSITIVITY = 0.0032;
 
+/**
+ * Page windowing: only render the real <Page> (canvas + text + annotation
+ * layers) for pages within this many pages of the current page; others render
+ * an equal-height placeholder. Keeps large PDFs from mounting hundreds of
+ * canvases at once (and re-rasterizing all of them on every zoom change).
+ */
+const PAGE_WINDOW = 4;
+
 function clampZoom(z: number): number {
 	const rounded = Math.round(z * 1000) / 1000;
 	return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, rounded));
@@ -1675,21 +1683,30 @@ export function PdfViewer({
 												}}
 											>
 												<div className="overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10">
-													<Page
-														pageNumber={pageNumber}
-														width={pageDisplayWidth}
-														renderTextLayer
-														renderAnnotationLayer
-														loading={
-															<div
-																className="bg-muted/40"
-																style={{
-																	width: pageDisplayWidth,
-																	height: pageDisplayWidth * 1.3,
-																}}
-															/>
-														}
-													/>
+													{Math.abs(pageNumber - currentPage) <= PAGE_WINDOW ? (
+														<Page
+															pageNumber={pageNumber}
+															width={pageDisplayWidth}
+															renderTextLayer
+															renderAnnotationLayer
+															loading={
+																<div
+																	className="bg-muted/40"
+																	style={{
+																		width: pageDisplayWidth,
+																		height: pageDisplayWidth * firstPageAspect,
+																	}}
+																/>
+															}
+														/>
+													) : (
+														<div
+															style={{
+																width: pageDisplayWidth,
+																height: pageDisplayWidth * firstPageAspect,
+															}}
+														/>
+													)}
 												</div>
 												{/* Persisted highlights (visual only; removal via click hit-test) */}
 												<HighlightLayer
