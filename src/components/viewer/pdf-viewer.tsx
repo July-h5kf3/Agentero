@@ -13,6 +13,8 @@ import {
 	ChevronRight,
 	ChevronUp,
 	List,
+	Maximize2,
+	Minimize2,
 	Minus,
 	MoveVertical,
 	Plus,
@@ -114,6 +116,10 @@ type PdfViewerProps = {
 	vaultPath?: string | null;
 	/** Append a quoted passage to the paper's NOTES.md (handled by parent) */
 	onAddNote?: (quote: string) => void;
+	/** Immersive full-window reading mode (adapts width + hides app chrome). */
+	zen?: boolean;
+	/** Toggle immersive mode; when provided a toolbar button is shown. */
+	onToggleZen?: () => void;
 	className?: string;
 };
 
@@ -166,6 +172,8 @@ export function PdfViewer({
 	paperRelPath = null,
 	vaultPath = null,
 	onAddNote,
+	zen = false,
+	onToggleZen,
 	className,
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
@@ -199,7 +207,7 @@ export function PdfViewer({
 		Array<{ page: number; rects: PdfAskNormalizedRect[] }>
 	>([]);
 
-	const pageWidth = Math.max(200, fitWidth);
+	const pageWidth = Math.max(200, zen ? Math.min(fitWidth, 1100) : fitWidth);
 	// Pages render at the real (settled) scale so the text layer stays crisp and
 	// selection is smooth; a transient transform ratio covers the live gesture.
 	const pageDisplayWidth = Math.round(pageWidth * renderZoom);
@@ -1277,6 +1285,29 @@ export function PdfViewer({
 								{t("pdf.zoomFitPage")}
 							</TooltipContent>
 						</Tooltip>
+						{onToggleZen ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
+										aria-pressed={zen}
+										onClick={onToggleZen}
+									>
+										{zen ? (
+											<Minimize2 className="size-3.5" />
+										) : (
+											<Maximize2 className="size-3.5" />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
+								</TooltipContent>
+							</Tooltip>
+						) : null}
 					</div>
 				</TooltipProvider>
 			</div>

@@ -197,6 +197,8 @@ export default function App() {
 	 * (Cursor Agents Window / VS Code zen — distraction-free single surface).
 	 */
 	const [agentZenMode, setAgentZenMode] = useState(false);
+	/** Immersive full-window PDF reading: hide chrome, center a comfortable width. */
+	const [pdfZenMode, setPdfZenMode] = useState(false);
 	/** Keep AgentPanel mounted across sidebar ↔ zen so chat history is not lost. */
 	const [agentPanelMounted, setAgentPanelMounted] = useState(false);
 	/** Bumped after graph_rebuild so Backlinks/Graph re-fetch. */
@@ -213,6 +215,10 @@ export default function App() {
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
 	const agentZenModeRef = useRef(false);
+	const pdfZenModeRef = useRef(false);
+	pdfZenModeRef.current = pdfZenMode;
+	const leftCollapsedBeforePdfZenRef = useRef(false);
+	const rightOpenBeforePdfZenRef = useRef(false);
 	const leftCollapsedBeforeZenRef = useRef(false);
 	/** Last expanded left-rail width in px (survive Notes mount remount). */
 	const leftWidthPxRef = useRef(200);
@@ -678,6 +684,51 @@ export default function App() {
 		if (agentZenMode) exitAgentZen();
 		else enterAgentZen();
 	}, [agentZenMode, enterAgentZen, exitAgentZen]);
+
+	/**
+	 * Immersive PDF reading: collapse both side rails and hide the center header
+	 * so the viewer fills the window (the PdfViewer caps its own width + centers).
+	 */
+	const enterPdfZen = useCallback(() => {
+		leftCollapsedBeforePdfZenRef.current = sidebarCollapsed;
+		rightOpenBeforePdfZenRef.current = rightSidebarOpen;
+		setPdfZenMode(true);
+		setLeftSidebarCollapsed(true);
+		setRightSidebarCollapsed(true);
+	}, [
+		sidebarCollapsed,
+		rightSidebarOpen,
+		setLeftSidebarCollapsed,
+		setRightSidebarCollapsed,
+	]);
+
+	const exitPdfZen = useCallback(() => {
+		setPdfZenMode(false);
+		if (!leftCollapsedBeforePdfZenRef.current) setLeftSidebarCollapsed(false);
+		if (rightOpenBeforePdfZenRef.current) setRightSidebarCollapsed(false);
+	}, [setLeftSidebarCollapsed, setRightSidebarCollapsed]);
+
+	const togglePdfZen = useCallback(() => {
+		if (pdfZenModeRef.current) exitPdfZen();
+		else enterPdfZen();
+	}, [enterPdfZen, exitPdfZen]);
+
+	// Leave immersive reading on Escape, or when the active tab stops being a PDF.
+	useEffect(() => {
+		if (!pdfZenMode) return;
+		if (activeTab?.mode !== "pdf") {
+			exitPdfZen();
+			return;
+		}
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				exitPdfZen();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [pdfZenMode, activeTab, exitPdfZen]);
 
 	const refreshTree = useCallback(async (path: string) => {
 		setBusy(true);
@@ -1984,7 +2035,9 @@ export default function App() {
 							</aside>
 						</ResizablePanel>
 
-						{sidebarCollapsed || agentZenMode ? null : <ResizableHandle />}
+						{sidebarCollapsed || agentZenMode || pdfZenMode ? null : (
+							<ResizableHandle />
+						)}
 
 						<ResizablePanel
 							id="source"
@@ -1998,7 +2051,7 @@ export default function App() {
 							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
 								{/* Document tabs live in the window title bar (same row as zen icon). */}
 								{/* Center header: library search / view mode left; actions right */}
-								{vaultPath && activeTab ? (
+								{vaultPath && activeTab && !pdfZenMode ? (
 									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 										<div
 											className={cn(
@@ -2218,6 +2271,8 @@ export default function App() {
 													}}
 													onTabPatch={updateTab}
 													onAddPdfNote={handleAddPdfNote}
+													pdfZen={pdfZenMode}
+													onTogglePdfZen={togglePdfZen}
 												/>
 											</div>
 										))}
@@ -2226,9 +2281,11 @@ export default function App() {
 							</div>
 						</ResizablePanel>
 
-						{showNotesOnRight && !agentZenMode ? <ResizableHandle /> : null}
+						{showNotesOnRight && !agentZenMode && !pdfZenMode ? (
+							<ResizableHandle />
+						) : null}
 
-						{showNotesOnRight && !agentZenMode ? (
+						{showNotesOnRight && !agentZenMode && !pdfZenMode ? (
 							<ResizablePanel
 								id="notes"
 								defaultSize={rightSidebarOpen ? NOTES_DEFAULT_PCT : "40"}
@@ -2326,12 +2383,14 @@ export default function App() {
 						  Conditional mount used to remount the Group when toggling ⌘L,
 						  which redistributed left panel size and caused visual overlap.
 						*/}
-						{rightSidebarOpen && !agentZenMode ? <ResizableHandle /> : null}
+						{rightSidebarOpen && !agentZenMode && !pdfZenMode ? (
+							<ResizableHandle />
+						) : null}
 						<ResizablePanel
 							id="right-sidebar"
 							panelRef={rightSidebarPanelRef}
 							defaultSize={0}
-							minSize={agentZenMode ? 0 : 260}
+							minSize={agentZenMode || pdfZenMode ? 0 : 260}
 							maxSize={agentZenMode ? "100%" : 520}
 							collapsible
 							collapsedSize={0}

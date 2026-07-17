@@ -18,6 +18,8 @@
 		"goToPage": "Go to page",
 		"zoomFitPage": "Fit page",
 		"outline": "Outline",
+		"zenEnter": "Immersive reading",
+		"zenExit": "Exit immersive",
 		"findPlaceholder": "Find in document",
 		"findPrev": "Previous match",
 		"findNext": "Next match",

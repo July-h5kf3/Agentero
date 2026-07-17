@@ -31,6 +31,9 @@ type TabCenterProps = {
 	onEditorAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
 	onAddPdfNote: (tab: DocTab, quote: string) => void;
+	/** Immersive full-window PDF reading. */
+	pdfZen: boolean;
+	onTogglePdfZen: () => void;
 };
 
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
@@ -55,6 +58,8 @@ export function TabCenter({
 	onEditorAssetsChanged,
 	onTabPatch,
 	onAddPdfNote,
+	pdfZen,
+	onTogglePdfZen,
 }: TabCenterProps) {
 	if (tab.kind === "library") {
 		return (
@@ -124,6 +129,8 @@ export function TabCenter({
 					}
 					vaultPath={vaultPath}
 					onAddNote={(quote) => onAddPdfNote(tab, quote)}
+					zen={pdfZen}
+					onToggleZen={onTogglePdfZen}
 					className="h-full w-full"
 				/>
 			</div>
