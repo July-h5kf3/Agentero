@@ -14,6 +14,7 @@ import {
 	ChevronUp,
 	List,
 	Maximize2,
+	MessageSquareText,
 	Minimize2,
 	Minus,
 	MoveVertical,
@@ -131,6 +132,8 @@ type PdfViewerProps = {
 	zen?: boolean;
 	/** Toggle immersive mode; when provided a toolbar button is shown. */
 	onToggleZen?: () => void;
+	/** Open the annotations overview (App-level right sidebar tab). */
+	onOpenAnnotations?: () => void;
 	className?: string;
 	/** Register/unregister an imperative handle for the annotations panel */
 	onHandle?: (handle: PdfViewerHandle | null) => void;
@@ -188,6 +191,7 @@ export function PdfViewer({
 	vaultPath = null,
 	zen = false,
 	onToggleZen,
+	onOpenAnnotations,
 	className,
 	onHandle,
 	onHighlightsChange,
@@ -1451,6 +1455,24 @@ export function PdfViewer({
 								</TooltipTrigger>
 								<TooltipContent side="bottom">
 									{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
+								</TooltipContent>
+							</Tooltip>
+						) : null}
+						{onOpenAnnotations ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={t("annotations.title")}
+										onClick={onOpenAnnotations}
+									>
+										<MessageSquareText className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{t("annotations.title")}
 								</TooltipContent>
 							</Tooltip>
 						) : null}

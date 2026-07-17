@@ -2330,6 +2330,7 @@ export default function App() {
 													onTabPatch={updateTab}
 													pdfZen={pdfZenMode}
 													onTogglePdfZen={togglePdfZen}
+													onOpenAnnotations={() => openRightTab("annotations")}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
 												/>

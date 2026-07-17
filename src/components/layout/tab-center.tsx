@@ -37,6 +37,7 @@ type TabCenterProps = {
 	/** Immersive full-window PDF reading. */
 	pdfZen: boolean;
 	onTogglePdfZen: () => void;
+	onOpenAnnotations: () => void;
 	registerPdfHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
 	onPdfHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
 };
@@ -64,6 +65,7 @@ export function TabCenter({
 	onTabPatch,
 	pdfZen,
 	onTogglePdfZen,
+	onOpenAnnotations,
 	registerPdfHandle,
 	onPdfHighlightsChange,
 }: TabCenterProps) {
@@ -136,6 +138,7 @@ export function TabCenter({
 					vaultPath={vaultPath}
 					zen={pdfZen}
 					onToggleZen={onTogglePdfZen}
+					onOpenAnnotations={onOpenAnnotations}
 					className="h-full w-full"
 					onHandle={(h) => registerPdfHandle(tab.id, h)}
 					onHighlightsChange={(list) => onPdfHighlightsChange(tab.id, list)}
