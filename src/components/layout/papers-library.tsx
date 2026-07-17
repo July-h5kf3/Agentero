@@ -3,8 +3,9 @@
  * Click column headers to sort ascending / descending.
  * Optional tag filter chips above the table.
  */
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { PaperMetadata } from "@/lib/paper-metadata";
@@ -238,6 +239,21 @@ export function PapersLibrary({
 		return copy;
 	}, [papers, sortKey, sortDir, normalizedQuery, tagFilter]);
 
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const rowVirtualizer = useVirtualizer({
+		count: rows.length,
+		getScrollElement: () => scrollRef.current,
+		estimateSize: () => 52,
+		overscan: 12,
+	});
+	const virtualRows = rowVirtualizer.getVirtualItems();
+	const totalSize = rowVirtualizer.getTotalSize();
+	const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+	const paddingBottom =
+		virtualRows.length > 0
+			? totalSize - virtualRows[virtualRows.length - 1].end
+			: 0;
+
 	if (loading) {
 		return (
 			<div
@@ -334,7 +350,10 @@ export function PapersLibrary({
 					<p className="font-medium text-sm">{t("papersLibrary.noMatch")}</p>
 				</div>
 			) : (
-				<div className="agentero-scroll-both min-h-0 min-w-0 flex-1">
+				<div
+					ref={scrollRef}
+					className="agentero-scroll-both min-h-0 min-w-0 flex-1"
+				>
 					{/* w-max + column min-widths: grow past pane for horizontal scroll */}
 					<table className="w-max min-w-full border-collapse text-left text-sm">
 						<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
@@ -375,71 +394,94 @@ export function PapersLibrary({
 							</tr>
 						</thead>
 						<tbody>
-							{rows.map((p) => (
-								<tr
-									key={p.path ?? p.id}
-									className="cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50"
-									onClick={() => onOpenPaper(p)}
-								>
-									<td className="max-w-[420px] px-3 py-2.5">
-										<div className="font-medium" title={p.title}>
-											{p.title}
-										</div>
-										{p.publication ? (
-											<div
-												className="text-muted-foreground text-xs"
-												title={p.publication}
-											>
-												{p.publication}
-											</div>
-										) : null}
-									</td>
-									<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
-										<span title={p.authors?.join(", ")}>
-											{formatAuthors(p.authors)}
-										</span>
-									</td>
-									<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
-										{p.year ?? "—"}
-									</td>
-									<td className="max-w-[200px] px-3 py-2.5">
-										{p.tags?.length ? (
-											<div className="flex flex-wrap gap-1">
-												{p.tags.map((tag) => (
-													<TagChip
-														key={tag}
-														tag={tag}
-														active={
-															tagFilter != null &&
-															tag.toLocaleLowerCase() ===
-																tagFilter.toLocaleLowerCase()
-														}
-														onClick={
-															onTagFilterChange
-																? () => {
-																		const active =
-																			tagFilter != null &&
-																			tag.toLocaleLowerCase() ===
-																				tagFilter.toLocaleLowerCase();
-																		onTagFilterChange(active ? null : tag);
-																	}
-																: undefined
-														}
-													/>
-												))}
-											</div>
-										) : (
-											<span className="text-muted-foreground text-xs">—</span>
-										)}
-									</td>
-									<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
-										{p.type}
-									</td>
-									<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
-										<span title={identifierLabel(p)}>{identifierLabel(p)}</span>
-									</td>
+							{paddingTop > 0 ? (
+								<tr aria-hidden>
+									<td
+										colSpan={SORT_COLUMNS.length}
+										style={{ height: paddingTop }}
+									/>
 								</tr>
-							))}
+							) : null}
+							{virtualRows.map((vr) => {
+								const p = rows[vr.index];
+								return (
+									<tr
+										key={p.path ?? p.id}
+										data-index={vr.index}
+										ref={rowVirtualizer.measureElement}
+										className="cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50"
+										onClick={() => onOpenPaper(p)}
+									>
+										<td className="max-w-[420px] px-3 py-2.5">
+											<div className="font-medium" title={p.title}>
+												{p.title}
+											</div>
+											{p.publication ? (
+												<div
+													className="text-muted-foreground text-xs"
+													title={p.publication}
+												>
+													{p.publication}
+												</div>
+											) : null}
+										</td>
+										<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
+											<span title={p.authors?.join(", ")}>
+												{formatAuthors(p.authors)}
+											</span>
+										</td>
+										<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
+											{p.year ?? "—"}
+										</td>
+										<td className="max-w-[200px] px-3 py-2.5">
+											{p.tags?.length ? (
+												<div className="flex flex-wrap gap-1">
+													{p.tags.map((tag) => (
+														<TagChip
+															key={tag}
+															tag={tag}
+															active={
+																tagFilter != null &&
+																tag.toLocaleLowerCase() ===
+																	tagFilter.toLocaleLowerCase()
+															}
+															onClick={
+																onTagFilterChange
+																	? () => {
+																			const active =
+																				tagFilter != null &&
+																				tag.toLocaleLowerCase() ===
+																					tagFilter.toLocaleLowerCase();
+																			onTagFilterChange(active ? null : tag);
+																		}
+																	: undefined
+															}
+														/>
+													))}
+												</div>
+											) : (
+												<span className="text-muted-foreground text-xs">—</span>
+											)}
+										</td>
+										<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
+											{p.type}
+										</td>
+										<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
+											<span title={identifierLabel(p)}>
+												{identifierLabel(p)}
+											</span>
+										</td>
+									</tr>
+								);
+							})}
+							{paddingBottom > 0 ? (
+								<tr aria-hidden>
+									<td
+										colSpan={SORT_COLUMNS.length}
+										style={{ height: paddingBottom }}
+									/>
+								</tr>
+							) : null}
 						</tbody>
 					</table>
 					<p className="sticky left-0 px-3 py-2 text-muted-foreground text-xs">
