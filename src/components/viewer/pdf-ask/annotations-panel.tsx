@@ -1,4 +1,4 @@
-import { Download, Trash2, X } from "lucide-react";
+import { NotebookPen, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function PdfAnnotationsPanel({
 						disabled={highlights.length === 0}
 						onClick={onExport}
 					>
-						<Download className="size-3.5" />
+						<NotebookPen className="size-3.5" />
 					</Button>
 					<Button
 						type="button"
