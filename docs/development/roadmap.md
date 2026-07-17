@@ -13,7 +13,7 @@
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/图片/Notes、WYSIWYG Markdown、**论文库表格 + tags + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、**全局错误 Toast**（`notifyError`）、Preview/Info 仅在具体论文时显示。 |
+| V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Zap 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
@@ -42,15 +42,15 @@
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
-- [x] 文件树：**在 Finder 中显示**（右键 / `⌥⌘R`，无双击）；**在终端中打开**（右键 / `⌥⌘T`；文件夹 = 自身 / 文件 = 父目录）；**删除**（右键 / `⌘⌫`，移入回收站 `.agentero/.trash/`（不弹提示）；侧栏 `Trash2` 打开**回收站**中间栏视图可浏览 / 恢复 / 永久删除 / 清空；`papers/` 行随删随快照 catalog）。
-- [x] Paper-centric 视图：选中 paper 后中间显示 PDF（本地优先 / 远程回退）或 HTML，右侧显示该篇 `NOTES.md`（**仅具体论文**时显示 Preview/Info）。
+- [x] 文件树：**Finder 显示**（`⌥⌘R`）；**终端打开**（`⌥⌘T`）；**多选 + 拖拽移动**；**删除**走回收站（`path_trash`，无确认 / 无 Undo toast；侧栏 `Trash2` → 中间栏浏览 / 恢复 / 清空；`papers/` 快照 catalog）。
+- [x] Paper-centric 视图：选中 paper 后中间 PDF（本地优先 / 远程回退）或 HTML，右侧 `NOTES.md`（**仅具体论文**）。
 - [x] Vault **任意路径** PDF / 常见图片中间栏预览（`blob:`）。
-- [x] **PDF 阅读操作**：页码导航（底部 pill 跳转 + `PageDown/PageUp`、`Home/End`）、**适应宽度 / 适应整页**、**大纲（书签）**左侧浮层跳页、**文档内查找**（`⌘/Ctrl+F` + 命中高亮）。
-- [x] 侧边栏折叠、标题栏快捷按钮、Settings 窗口；左右侧栏 **常驻 collapsible + preserve-pixel-size**（交替快捷键互不冲态）。
-- [x] 论文库表格：虚拟节点 `agentero:library`、`paper_list`、表头排序、**tags 列 + chip 筛选**、双向滚动。
-- [x] Paper Info / Notes 仅在选中具体论文时显示（Library 视图隐藏）；Paper Info **Tags** 可编辑（`paper_set_tags`）。
-- [x] 后台任务条（左下角）：下载 / 入库 / 导入导出 / paper-reader 等长操作进度；收起态 hover 保持实色不透明。
-- [x] 全局错误 Toast（右上角 Sonner + `notifyError`）；操作失败不占侧栏 header。
+- [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**。
+- [x] 侧边栏折叠、标题栏快捷按钮、Settings；左右侧栏 **常驻 collapsible + preserve-pixel-size**。
+- [x] 论文库表格：`agentero:library`、`paper_list`、表头排序、**tags 筛选**、**Rescan**（`paper_rescan`）、双向滚动。
+- [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。
+- [x] 后台任务条（含 paper-reader；hover 实色）；**全局错误 Toast**。
+- [x] **Vault 文件监听**（`notify` → `vault:file-changed`）：外部/Agent 改盘自动重载打开的 Markdown 与文件树。
 
 验收标准：
 
@@ -85,7 +85,7 @@
 - [x] **paper-reader 精读**：入库/单篇 Download 后可自动；资源齐全且 `is_read=false` 时文件树 Zap 手动（见 V0.3）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误经全局 Toast（`notifyError`）展示；重复不覆盖用户 `NOTES.md`。
-- [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
+- [x] 删除 paper / 组织目录：移入回收站 + catalog 快照移除（恢复时 upsert；含嵌套 path）。
 
 ### 未完成
 
@@ -393,7 +393,7 @@
 
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - 浏览器插件，一键收集网页和论文。
-- ~~**PDF 划词提问** MVP~~ ✅（划词弹操作菜单：高亮 / 笔记 / 提问 / 翻译 → `asks/*.json` 问答线程 + `highlights/*.json` 高亮 → 锚点对话图标；去掉默认琥珀高亮，仅原生选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、本地 PDF TextLayer 增强。
+- ~~**PDF 划词提问** MVP~~ ✅（划词弹操作菜单：高亮 / 笔记 / 提问 / 翻译 → `asks/*.json` + `highlights/*.json`；**平滑蓝色选区覆盖层**（非默认琥珀高亮）；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、TextLayer 增强。
 - 完整 PDF 高亮、批注、摘录同步（`highlights.md`；可与划词提问互导）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。

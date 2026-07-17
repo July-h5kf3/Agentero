@@ -47,13 +47,18 @@
 2d. **文件树与侧栏 UX** ✅
    - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）。
    - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）。
-   - [x] 删除：右键 / `⌘⌫`；确认；`papers/` 下同步 `paper_delete`。
+   - [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；侧栏 `Trash2` → 中间栏 `RecycleBinView` 恢复 / 永久删除 / 清空。
+   - [x] 多选（⌘/Shift 行高亮）+ 拖拽移动到 `papers/` 组织夹 + 批量移动对话框。
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
    - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。
+   - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行。
 
 2e. **PDF 阅读增强** ✅
-   - [x] 缩放：工具栏 +/- / 重置；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）。
-   - [x] 划词提问 MVP：M1–M4（见 3. PDF 划词提问）。
+   - [x] 缩放：+/- / 适应宽度 / **适应整页**；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）；真实 scale 重渲染 + 放大后双向平移。
+   - [x] 页码导航：底部 pill + 跳转输入；`PageDown/PageUp` / `Home/End`。
+   - [x] 大纲（书签）左侧浮层；文档内查找 `⌘/Ctrl+F` + 命中高亮（`pdf-find.ts`）。
+   - [x] 平滑划词覆盖层（Zotero 风格；隐藏原生 `::selection` 行间缝隙）。
+   - [x] 划词操作菜单 MVP：高亮 / 笔记 / 提问 / 翻译（见 3. PDF 划词提问）。
    - [x] 本地 PDF 直接预览（优先本地 → 无本地时 `paper_download_assets` → 失败再远程 `pdf_url`）。
 
 2f. **Markdown 内嵌图片** ✅
@@ -61,6 +66,10 @@
    - [x] 选中图片节点显示 Markdown 源码；未选中 `blob:` 预览。
    - [x] 删除节点且引用计数归零时 GC managed assets 文件并刷新文件树。
    - [x] 单测 + 文档（data-model / ui / technical-plan / test 冒烟表）。
+
+2g. **Library Rescan** ✅
+   - [x] Host `paper_rescan`：扫 `papers/` + `metadata.json` 补齐 catalog（盘上有、库内无）。
+   - [x] Library 空态 / 工具栏 Rescan 入口 + i18n。
 
 3. **Agent 工作流入口**
    - [x] **paper-reader 精读**：入库/单篇 Download **自动** + 文件树 Zap 手动（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度（lookup/download → paperRead）。
@@ -229,12 +238,12 @@
 
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
-| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**删除（回收站 + 撤销 + 浏览恢复）**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**（`notifyError`） | 最近 Vault 迁 Tauri Store；文件监听；**打开已有夹自动发现/整理**（P0-4b / P1-2b） |
-| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`、选中源码、删节点 GC）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
-| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、左右侧栏 collapsible、后台任务条、**全局错误 Toast** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；冲突提示（当前静默覆盖本地未存） |
+| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Zap）、**全局权限模式**、模型收藏、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
-| 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮 |
+| 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；文件变更后增量重建索引 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
-| PDF / 媒体 | 任意路径 PDF + 常见图片预览；缩放；划词操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |
+| PDF / 媒体 | 任意路径预览；导航 / 适应宽·整页 / 大纲 / ⌘F；真实 scale + 平滑划词；操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |
 | **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、`paper set-tags` / `tags`、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |
 | 发布 | tag → 三平台草稿 Release | 签名/公证/changelog；可选附带 `agentero` bin |

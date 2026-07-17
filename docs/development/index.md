@@ -18,11 +18,11 @@
 
 | 区域 | 状态 | 摘要 |
 |---|---|---|
-| V0.1 工作台 | ✅ | 文件树（Finder / 删除 / 内联新建）、Markdown IO、**内嵌图 `./assets/`**、paper 预览/Notes、**Library 论文表 + tags**、左右侧栏 collapsible 隔离、多窗口、Create Vault + catalog、后台任务条、**全局错误 Toast** |
+| V0.1 工作台 | ✅ | 文件树（Finder / **回收站** / 多选拖拽）、Markdown IO + **内嵌图**、**文件监听**、Library + tags + **Rescan**、多窗口、catalog、后台任务条、全局 Toast |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
 | V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader 自动+Zap**、**全局权限模式**、模型收藏；面板 workflow 与写入确认仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
-| 阅读增强 | 🟡 | 任意路径 PDF + 图片预览；PDF **缩放**；**划词操作菜单** MVP；完整 `highlights.md` 批注仍待 |
+| 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 MVP；`highlights.md` 导出仍待 |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
 | V0.6 标签页与分屏 | 🟡 标签页 ✅ | **文档标签页已落地**（`⌘W` 关 tab / 无 tab 关窗）；**分屏（split）** 仍待 |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |

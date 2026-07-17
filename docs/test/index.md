@@ -96,10 +96,15 @@ cargo test --manifest-path src-tauri/Cargo.toml
 |---|---|
 | 打开 demo vault | catalog 5 篇、Library 可见、tags 可筛 |
 | 点 `assets/sample.pdf` / `notes/attachments/*.pdf` | 中间栏 PDF 预览（非 papers 路径） |
+| PDF 工具栏：页码 / 适应整页 / 大纲 / `⌘F` | 跳页、缩放、书签跳转、命中高亮 |
+| PDF 划词 | 平滑蓝色选区 + 操作菜单（高亮/笔记/提问/翻译） |
 | 点 `assets/figures/*` 图片 | 中间栏图片预览 |
 | Notes / `.md` 中粘贴图片 | 生成 `{mdDir}/assets/*`，正文 `![](./assets/…)`；文件树可见新文件 |
 | 选中文档中的图片节点 | 显示 Markdown 源码而非位图；取消选中恢复预览 |
 | 删除文档中的图片节点 | 若无其它引用，磁盘 `./assets/` 文件同步删除并刷新树 |
+| 文件树删除一项 | 无确认弹窗；项进回收站；侧栏 Trash 中间栏可见并可恢复 |
+| Library Rescan | 盘上有 catalog 无的 paper 重新出现在表中 |
+| 外部编辑器改打开的 `.md` | 应用内编辑器自动重载为磁盘内容 |
 | 打开多 tab 后连按 `⌘W` | 逐个关 tab；无 tab 后再按关窗口 |
 | 触发删除失败 / 无 Vault 操作等 | 右上角 Toast，不出现侧栏 header 错误条 |
 

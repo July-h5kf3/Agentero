@@ -209,7 +209,7 @@
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
-| `⌘⌫` | 删除选中项 | 文件树选中项；移入回收站 `.agentero/.trash/` + 「撤销」Toast；`papers/` 行随删随快照；编辑区不拦截 |
+| `⌘⌫` | 删除选中项 | 文件树选中项；移入回收站 `.agentero/.trash/`（**无确认 / 无 Undo toast**；从回收站视图恢复）；`papers/` 行随删随快照 catalog；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |

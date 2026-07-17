@@ -41,19 +41,20 @@ Agentero 桌面应用
 - 默认工作台：文件树 + **文档标签页**中间内容 +（按需）Notes + 可选右侧栏。
 - **文档标签**：标题栏浏览器式多 tab（paper / PDF / HTML / Markdown / Library / 图片）；常驻挂载，切换保留 PDF 滚动/缩放与编辑器状态。`⌘W` 逐个关标签，无标签时关当前窗口；`⌥⌘←/→` 切换。**分屏（split）** 仍规划见 V0.6。
 - 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 列 + chip 筛选、双向滚动），数据来自 `paper_list`。
-- 文件树：右键 / `⌥⌘R` **在 Finder 中显示**；右键 / `⌥⌘T` **在终端中打开**；右键 / `⌘⌫` **删除**（`papers/` 同步 `paper_delete`）。
-- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑（`paper_set_tags`）。
+- 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（侧栏 `Trash2` → 中间栏回收站视图恢复 / 清空，无 Undo toast）。
+- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑（`paper_set_tags`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
 - 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
-- 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download（hover 列原因）；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`（见 [`backend/identifier-lookup.md`](backend/identifier-lookup.md)）。
-- **精读**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时 paper 行仍显示 **Zap** 可手动。Skill 按 provider（**Codex `$` / Claude `/` / 其它注入正文**）→ 写 `NOTES.md` → `is_read=true`；进度在左下角任务条（入库/下载 → 精读衔接；hover 实色）。
+- 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
+- **精读**：入库 / 单篇 Download 后可自动 paper-reader；资源齐全且未读时 **Zap** 手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
-- 预览：Vault **任意路径** `.pdf` 与常见图片（png/jpg/gif/webp/bmp/svg/avif/ico）中间栏 `blob:` 预览；PDF 另支持缩放与**划词提问** MVP（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
-- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC 文件（见 [`backend/data-model.md`](backend/data-model.md)、[`frontend/ui.md`](frontend/ui.md)）。
-- **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）；表单就地校验除外（见 [`frontend/ui.md`](frontend/ui.md) §2.1.2）。
-- **规划中**（见 roadmap）：**V0.6** 分屏（标签页已落地）；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式引用邻域与 Agent 引用工作流。
+- 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
+- **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
+- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树（见 [`frontend/ui.md`](frontend/ui.md)）。
+- **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
+- **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
 ## 关键三方技术

@@ -23,11 +23,12 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
 - **精读工作流**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时文件树仍显示 **Zap** 可手动重跑。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（入库/下载 → 精读衔接；**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
 - **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。
-- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
-- PDF：Vault **任意路径** `.pdf` 均可 `readFile` → `blob:` 预览；论文单元额外 **本地优先** → 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。
-- 图片：常见格式（png/jpg/gif/webp/bmp/svg/avif/ico）任意路径 `blob:` 中间栏预览。
-- **Markdown 内嵌图片**：粘贴 / 工具栏插入 → 写入当前 `.md` 旁 `./assets/`，正文 `![](./assets/…)`；选中节点显示源码；删除节点且无其它引用时 GC 磁盘文件（见 `src/lib/markdown-image.ts`、`docs/backend/data-model.md`）。
-- **外部/Agent 改动自动重载**：Host 用 `notify` 递归监听当前 Vault，按窗口发 `vault:file-changed`（见 `src-tauri/src/services/watcher.rs`、`src/lib/fs-watch.ts`）。打开中的 `.md`/`NOTES.md` 编辑器据此从磁盘重载（**自动覆盖本地未保存修改**，用内容对比抑制自写回声）；外部新建/删除/重命名则刷新左侧文件树。随 `vaultPath` 启停，窗口关闭自动停。
+- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；侧栏 `Trash2` 打开中间栏回收站视图（恢复 / 永久删除 / 清空）。
+- 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
+- PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 笔记 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。
+- 图片：常见格式任意路径 `blob:` 中间栏预览。
+- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown-image.ts`）。
+- **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘内容变化则重载（**覆盖本地未存改动**，内容相等抑制自写回声）；create/remove/rename 去抖刷新文件树。
 - 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（改能力时同步勾选）。规划中：**V0.6 分屏（split，标签页已落地）**、**V0.7 引用关系（hover Info / Connected Papers / Agent 引用工作流）**。
 - 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
 - Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。

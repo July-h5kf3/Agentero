@@ -15,7 +15,7 @@
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat；`variant="sidebar" \| "zen"` 禅模式全屏对话；全局权限模式）、`layout/file-tree`（Vault 树 + 虚拟 Library + 魔棒 + paper **Download / Zap 精读**）、`layout/papers-library`（catalog 论文表 + tags 筛选）、`layout/paper-info-panel`（选中论文元信息 / 可编辑 Tags；V0.7 规划支持 hover 引用切换）、`layout/document-tab-bar`（标题栏文档 tab）、`layout/backlinks-panel`（反链）、`layout/graph-panel`（**双链**图谱）、`layout/background-tasks-panel`（左下角后台任务；lookup/download → paperRead 衔接；实色 hover） |
+| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`；全局权限模式）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 回收站入口）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + tags + **Rescan**）、`layout/paper-info-panel`、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词） |
 | 全局通知 | shadcn `ui/sonner` + `src/lib/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 

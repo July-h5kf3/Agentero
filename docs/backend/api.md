@@ -141,7 +141,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `path_trash` / `path_untrash`（已落地）
 
-可撤销删除：把项移入 Vault 回收站 `.agentero/.trash/<batchId>/`（带 `manifest.json` 记录原路径与被删 catalog 行快照），而非物理删除。前端删除后弹「已删除 N 项 · 撤销」Toast。
+可恢复删除：把项移入 Vault 回收站 `.agentero/.trash/<batchId>/`（带 `manifest.json` 记录原路径与被删 catalog 行快照），而非物理删除。**前端不弹 Undo toast**——用户从侧栏 `Trash2` 打开的**中间栏回收站视图**（`RecycleBinView`）浏览 / 恢复 / 永久删除 / 清空。
 
 - **`path_trash` 参数**
 
@@ -153,8 +153,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ```
 
 - **`path_trash` 返回**（`ApiResult<{ batchId: string; count: number }>`）
-  - `batchId` 用于撤销；`count` 为实际移入回收站的项数。
-  - `papers/` 下的项：移动前**快照并删除** catalog 行（含嵌套 paper）。
+  - `batchId` 标识批次（浏览/恢复用）；`count` 为实际移入回收站的项数。
+  - `papers/` 下的项：**先移文件**，再快照并删除 catalog 行（含嵌套 paper），避免幽灵 catalog。
   - 跳过空 / 含 `..` / `.agentero` / `papers` 根 / 不存在的路径。
 
 - **`path_untrash` 参数**
@@ -172,7 +172,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`（已落地）
 
-回收站浏览：`RecycleBinDialog` 用这些命令列出 / 恢复 / 永久删除已删项。
+回收站浏览：中间栏 `RecycleBinView`（虚拟 tab `agentero:trash`）用这些命令列出 / 恢复 / 永久删除已删项。
 
 - **`path_list_trash`**（`{ vaultPath }` → `ApiResult<TrashEntry[]>`）：展平所有批次为逐项条目 `{ id, batchId, stored, rel, name, deletedAt, isDir }`，按删除时间倒序。
 - **`path_restore_item`**（`{ vaultPath, batchId, stored }` → `ApiResult<{ rel: string }>`）：把单项移回原位并 `upsert` 恢复其 catalog 行；原路径已占用则报错；批次清空后删除批次目录。
@@ -232,7 +232,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **行为**
   - 校验 Vault 结构（至少存在 `papers/`、`notes/`、`plans/`；确保 `.agentero/catalog.sqlite` 可打开或可初始化）。
   - 打开 catalog、执行 schema migration；若存在历史 `papers/*/metadata.json` 且 catalog 为空则导入（见 catalog 迁移）。
-  - 启动文件监听（后续）。
+  - 文件监听由前端打开 Vault 后调用 `fs_watch_start`（已落地；见上），非本命令内隐式启动。
   - 返回完整文件树。
 
 #### `vault:close`（规划）
@@ -639,7 +639,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 对**无本地 TeX** 的 paper，用 liteparse 从本地 PDF 生成 `{paper}/PAPER.md`。在 `paper_download_assets` / `lookup_import` 下载后自动触发，亦可手动 `paper_parse_body`。
 
-> **眼睛图标**现用于 **paper-reader 精读**（资源齐全且未读时显示），不再表示「生成 PAPER.md」。
+> **Zap 图标**现用于 **paper-reader 精读**（资源齐全且未读时显示），不再表示「生成 PAPER.md」。
 
 - **参数**（invoke 字段名 `args`）：
   ```ts
@@ -820,7 +820,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **前端**：`src/lib/papers-api.ts` → `setPaperIsRead`；paper-reader 工作流成功结束后置 `true`。
 - **说明**：与 `status`（入库态）无关；默认 `false`。触发路径：
   - **自动**：魔棒 `lookup_import` / 单篇 `paper_download_assets` 成功且资源就绪时，前端 `maybeAutoRunPaperReader`（批量导入/批量 Download 不连跑）。
-  - **手动**：文件树在「资源齐全且 `is_read === false`」时显示眼睛图标。
+  - **手动**：文件树在「资源齐全且 `is_read === false`」时显示 **Zap** 图标。
   - 实现：`src/lib/paper-read.ts`（进度 `kind=paperRead`；可与 lookup/download 任务衔接）；skill 触发按当前默认 Agent 的 `SkillMentionStyle`。
 
 #### `paper_set_tags`（已落地）

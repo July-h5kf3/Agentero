@@ -180,14 +180,14 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：**本地优先**（`findLocalPdf` + fs `readFile` → `blob:`；避免 `asset://`）→ 无本地时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；工具栏缩放 + ⌘/Ctrl+滚轮（0.5×–3×，100%=适应栏宽） |
-| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf`（论文根目录；预览与归档同一文件） |
-| arXiv LaTeX 归档 | e-print 下载 + gzip/tar 解压到 `source/`（`lookup/assets.rs`） |
-| PDF 解析（Rust） | 可插拔 `PdfParser`（入库生成 PAPER.md 用；与 Webview 预览分离） |
-| HTML 预览 | 远程 `html_url` → 独立 iframe（HTML 本身不强制本地下载） |
-| 中间栏切换 | `ViewModeToggle`；PDF 源见上；HTML URL 来自 metadata / `arxiv_id` 推导（`arxiv.ts`） |
-| arXiv 资源 | `pdf` / `html` / `abs` / `e-print` 规范 URL |
-| PDF 划词提问 | **MVP 已落地**：`src/lib/pdf-ask/` + `PdfViewer` 交互层；`asks/*.json`；ACP 流式 |
+| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：本地优先 `blob:` → 自动下载 → 远程回退；**真实 scale 重渲染**（缩放停后 `width = 基准×缩放`）；放大后双向滚动 |
+| PDF 工具栏 | 适应宽 / **适应整页**；页码 pill + 跳转；`PageDown/Up`；大纲浮层；**⌘F 查找**（`pdf-find.ts` + 文本层 rects 高亮） |
+| PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf` |
+| arXiv LaTeX 归档 | e-print 解压到 `source/`（`lookup/assets.rs`） |
+| PDF 解析（Rust） | 可插拔 `PdfParser`（生成 PAPER.md；与预览分离） |
+| HTML 预览 | 远程 `html_url` → iframe |
+| 中间栏切换 | `ViewModeToggle`；HTML URL 来自 catalog / `arxiv.ts` |
+| PDF 划词 | 平滑选区覆盖层 + 操作菜单；`pdf-ask` / `highlights` JSON；ACP 流式 |
 
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
@@ -240,7 +240,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 
 | 插件 | 用途 |
 |---|---|
-| `tauri-plugin-fs` | 读/写 Vault 目录树与文本文件、mkdir、remove（**已用于文件树**）；监听热更新后续 |
+| `tauri-plugin-fs` | 读/写 Vault 目录树与文本/二进制、mkdir、remove（文件树、Markdown assets、回收站） |
 | `tauri-plugin-dialog` | 选择 Vault 文件夹（**已用于 Open vault**） |
 | `tauri-plugin-store` | 持久化用户配置、最近 Vault、API Key（加密存储后续补充；当前最近路径仍用 localStorage） |
 | `tauri-plugin-opener` | 打开外部链接（已配置） |
@@ -258,7 +258,7 @@ MVP 为单窗口桌面应用，暂不使用前端路由。若后续需要多视�
 | `pulldown-cmark` 或 `comrak` | Markdown 解析、提取双链、标题、frontmatter |
 | `regex` | 双链、arXiv ID 解析 |
 | `thiserror` / `anyhow` | 错误处理 |
-| `notify` | 文件系统监听，实时同步外部编辑器修改 |
+| `notify` | Host 递归监听 Vault → `vault:file-changed`（编辑器 / 文件树热更新；`services/watcher.rs`） |
 | `dirs` | 获取系统配置/缓存目录 |
 | `tempfile` | Agent 生成内容临时文件，确认后写入 |
 | `walkdir` | 遍历 Vault 构建索引 |
