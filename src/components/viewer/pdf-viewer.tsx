@@ -81,6 +81,7 @@ import {
 	writePdfHighlight,
 } from "@/lib/pdf-highlight";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+import { readReadingPage, writeReadingPage } from "@/lib/pdf-reading-position";
 import { cn } from "@/lib/utils";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -260,12 +261,15 @@ export function PdfViewer({
 	const currentPageRef = useRef(1);
 	currentPageRef.current = currentPage;
 	const pageFocusedRef = useRef(false);
+	const restoredRef = useRef(false);
 	const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 	const findInputRef = useRef<HTMLInputElement>(null);
 	const pageTextCacheRef = useRef<Map<number, string>>(new Map());
 	const findReqRef = useRef(0);
 
 	const fileUrl = isPdfViewerSource(source) ? source.trim() : null;
+	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
+	const paperKey = paperRelPath || paperAbsPath || null;
 
 	const activeThread = useMemo(
 		() => threads.find((th) => th.id === activeThreadId) ?? null,
@@ -354,6 +358,7 @@ export function PdfViewer({
 		setShowAnnotations(false);
 		setActiveHighlightId(null);
 		pdfDocRef.current = null;
+		restoredRef.current = false;
 		setFindOpen(false);
 		setFindQuery("");
 		setFindMatches([]);
@@ -633,6 +638,29 @@ export function PdfViewer({
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [fileUrl, numPages, goToPage, openFind]);
+
+	// Restore the last-read page for this paper once its pages exist.
+	useEffect(() => {
+		if (!fileUrl || numPages === 0 || restoredRef.current) return;
+		const saved = paperKey ? readReadingPage(paperKey) : 0;
+		if (saved > 1 && saved <= numPages) {
+			const id = window.setTimeout(() => {
+				goToPage(saved);
+				restoredRef.current = true;
+			}, 200);
+			return () => window.clearTimeout(id);
+		}
+		restoredRef.current = true;
+	}, [fileUrl, numPages, paperKey, goToPage]);
+
+	// Persist the current page (only after restore) so reopening resumes here.
+	useEffect(() => {
+		if (!restoredRef.current || !paperKey) return;
+		const id = window.setTimeout(() => {
+			writeReadingPage(paperKey, currentPage);
+		}, 400);
+		return () => window.clearTimeout(id);
+	}, [currentPage, paperKey]);
 
 	useEffect(() => {
 		let cancelled = false;
