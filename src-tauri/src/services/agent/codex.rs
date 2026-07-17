@@ -1139,7 +1139,10 @@ pub async fn warm_codex(
 
 #[cfg(test)]
 mod tests {
-    use super::{turn_completion, TurnNotification};
+    use super::{
+        approval_policy, content_text, sandbox, scalar_string, string, thread_info,
+        turn_completion, TurnNotification,
+    };
     use serde_json::json;
 
     #[test]
@@ -1158,5 +1161,69 @@ mod tests {
             })),
             TurnNotification::Failed("boom".to_string())
         );
+    }
+
+    #[test]
+    fn approval_policy_is_always_never() {
+        assert_eq!(approval_policy(false), "never");
+        assert_eq!(approval_policy(true), "never");
+    }
+
+    #[test]
+    fn sandbox_reflects_auto_approve() {
+        assert_eq!(sandbox(false), "workspace-write");
+        assert_eq!(sandbox(true), "danger-full-access");
+    }
+
+    #[test]
+    fn string_returns_first_matching_string_key() {
+        let value = json!({ "a": 3, "b": "second" });
+        // "a" is a number → skipped; "b" is the first string match.
+        assert_eq!(string(&value, &["a", "b"]), Some("second".to_string()));
+        assert_eq!(string(&value, &["missing"]), None);
+    }
+
+    #[test]
+    fn scalar_string_accepts_strings_and_numbers_only() {
+        let value = json!({ "s": "hi", "n": 42, "b": true });
+        assert_eq!(scalar_string(&value, &["s"]), Some("hi".to_string()));
+        assert_eq!(scalar_string(&value, &["n"]), Some("42".to_string()));
+        assert_eq!(scalar_string(&value, &["b"]), None);
+        assert_eq!(
+            scalar_string(&value, &["missing", "n"]),
+            Some("42".to_string())
+        );
+    }
+
+    #[test]
+    fn thread_info_builds_and_falls_back_title_to_id() {
+        let info = thread_info(&json!({ "id": "t1", "cwd": "/v" })).expect("thread info");
+        assert_eq!(info.id, "t1");
+        assert_eq!(info.title, "t1");
+        assert_eq!(info.cwd.as_deref(), Some("/v"));
+
+        let info = thread_info(&json!({
+            "threadId": "t2",
+            "title": "Hello",
+            "createdAt": "2024",
+            "updatedAt": 5,
+        }))
+        .expect("thread info");
+        assert_eq!(info.id, "t2");
+        assert_eq!(info.title, "Hello");
+        assert_eq!(info.created_at.as_deref(), Some("2024"));
+        assert_eq!(info.updated_at.as_deref(), Some("5"));
+
+        assert!(thread_info(&json!({ "name": "no id" })).is_none());
+    }
+
+    #[test]
+    fn content_text_flattens_strings_arrays_and_objects() {
+        assert_eq!(content_text(&json!("plain")), "plain");
+        assert_eq!(content_text(&json!({ "text": "t" })), "t");
+        assert_eq!(content_text(&json!({ "content": { "text": "c" } })), "c");
+        assert_eq!(content_text(&json!({ "message": { "text": "m" } })), "m");
+        assert_eq!(content_text(&json!(["a", "", { "text": "b" }])), "a\nb");
+        assert_eq!(content_text(&json!(42)), "");
     }
 }
