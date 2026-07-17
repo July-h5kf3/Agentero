@@ -1,3 +1,7 @@
+import {
+	highlightFillClass,
+	underlineColorClass,
+} from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { cn } from "@/lib/utils";
 
@@ -18,25 +22,39 @@ export function HighlightLayer({ items, activeId }: HighlightLayerProps) {
 
 	return (
 		<div className="pointer-events-none absolute inset-0 z-[6]">
-			{items.map((h) =>
-				h.rects.map((r) => (
+			{items.map((h) => {
+				const isActive = activeId === h.id;
+				const underline = h.kind === "underline";
+				const className = underline
+					? cn(
+							"absolute rounded-full",
+							underlineColorClass(h.color),
+							isActive ? "opacity-100" : "opacity-90",
+						)
+					: cn("absolute rounded-[2px]", highlightFillClass(h.color, isActive));
+				return h.rects.map((r) => (
 					<div
 						key={`${h.id}-${r.x}-${r.y}-${r.w}-${r.h}`}
-						className={cn(
-							"absolute rounded-[2px]",
-							activeId === h.id
-								? "bg-amber-300/60 dark:bg-amber-400/45"
-								: "bg-amber-300/40 dark:bg-amber-400/30",
-						)}
-						style={{
-							left: `${r.x * 100}%`,
-							top: `${r.y * 100}%`,
-							width: `${r.w * 100}%`,
-							height: `${r.h * 100}%`,
-						}}
+						className={className}
+						style={
+							underline
+								? {
+										left: `${r.x * 100}%`,
+										top: `${(r.y + r.h) * 100}%`,
+										width: `${r.w * 100}%`,
+										height: "2px",
+										transform: "translateY(-2px)",
+									}
+								: {
+										left: `${r.x * 100}%`,
+										top: `${r.y * 100}%`,
+										width: `${r.w * 100}%`,
+										height: `${r.h * 100}%`,
+									}
+						}
 					/>
-				)),
-			)}
+				));
+			})}
 		</div>
 	);
 }

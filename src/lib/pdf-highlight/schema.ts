@@ -38,5 +38,8 @@ export function parsePdfHighlight(raw: unknown): PdfHighlight | null {
 		quote: raw.quote,
 	};
 	if (typeof raw.color === "string") highlight.color = raw.color;
+	if (raw.kind === "highlight" || raw.kind === "underline") {
+		highlight.kind = raw.kind;
+	}
 	return highlight;
 }

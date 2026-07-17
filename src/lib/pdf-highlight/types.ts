@@ -21,6 +21,8 @@ export type PdfHighlight = {
 	rects: PdfHighlightRect[];
 	/** Highlighted source text */
 	quote: string;
-	/** Reserved for future color palette; defaults to amber when absent */
+	/** Palette key (see pdf-highlight/palette); defaults to yellow when absent */
 	color?: string;
+	/** Annotation style; defaults to "highlight" when absent */
+	kind?: "highlight" | "underline";
 };
