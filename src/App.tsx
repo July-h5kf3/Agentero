@@ -57,7 +57,12 @@ import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
-import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
+import {
+	notifyError,
+	notifySuccess,
+	notifyUndo,
+	notifyWarning,
+} from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
 	collectPapersNeedingAssetDownload,
@@ -773,20 +778,36 @@ export default function App() {
 				reseedGuardRef.current.add(norm);
 				window.setTimeout(() => reseedGuardRef.current.delete(norm), 500);
 			};
+			const promptReload = (reload: () => void) => {
+				const name = absPath.split(/[\\/]/).pop() ?? absPath;
+				notifyUndo(t("diskConflict.title", { name }), {
+					actionLabel: t("diskConflict.reload"),
+					onAction: reload,
+					duration: 12000,
+				});
+			};
 			if (notesTab && content !== notesTab.notesSeed) {
-				guard();
 				const paperDir = (notesTab.notesPath ?? "").replace(
 					/[\\/]NOTES\.md$/i,
 					"",
 				);
-				refreshTabNotes(paperDir, content);
+				const reload = () => {
+					guard();
+					refreshTabNotes(paperDir, content);
+				};
+				if (notesTab.notesDirty) promptReload(reload);
+				else reload();
 			}
 			if (mdTab && content !== mdTab.markdownSeed) {
-				guard();
-				refreshTabMarkdown(absPath, content);
+				const reload = () => {
+					guard();
+					refreshTabMarkdown(absPath, content);
+				};
+				if (mdTab.markdownDirty) promptReload(reload);
+				else reload();
 			}
 		},
-		[refreshTabNotes, refreshTabMarkdown],
+		[refreshTabNotes, refreshTabMarkdown, t],
 	);
 
 	/** Debounced, quiet file-tree reload (no busy flicker) for external create/delete/rename. */

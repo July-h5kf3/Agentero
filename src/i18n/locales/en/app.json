@@ -41,6 +41,10 @@
 		"notesPlaceholder": "Write notes for this paper...",
 		"unsaved": "Unsaved changes"
 	},
+	"diskConflict": {
+		"title": "“{{name}}” changed on disk — kept your unsaved edits",
+		"reload": "Load disk version"
+	},
 	"tabs": {
 		"strip": "Open documents",
 		"close": "Close {{title}}",

@@ -41,6 +41,10 @@
 		"notesPlaceholder": "在此撰写这篇论文的笔记……",
 		"unsaved": "有未保存的更改"
 	},
+	"diskConflict": {
+		"title": "“{{name}}” 已被外部修改（已保留你的未存改动）",
+		"reload": "载入磁盘版"
+	},
 	"tabs": {
 		"strip": "已打开的文档",
 		"close": "关闭 {{title}}",
