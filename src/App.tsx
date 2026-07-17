@@ -62,6 +62,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
+import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
@@ -97,7 +98,7 @@ import {
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
-import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
+import { formatShortcutById } from "@/lib/shortcuts";
 import {
 	basenameOf,
 	cycleActiveTabId,
@@ -1134,121 +1135,6 @@ export default function App() {
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
 	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const id = resolveShortcutId(event, {
-				settingsOpen: settingsOpenRef.current,
-			});
-			if (!id) return;
-
-			// ⌘⌫ is "delete to line start" in editors — only claim it outside text fields.
-			if (id === "deleteTreeItem") {
-				const el = event.target;
-				if (
-					el instanceof HTMLElement &&
-					el.closest(
-						"input, textarea, select, [contenteditable='true'], [role='textbox']",
-					)
-				) {
-					return;
-				}
-			}
-
-			event.preventDefault();
-
-			switch (id) {
-				case "settings":
-					if (settingsOpenRef.current) closeSettings();
-					else openSettings();
-					break;
-				case "closeSheet":
-					closeSettings();
-					break;
-				case "newWindow":
-					void handleNewWindow();
-					break;
-				case "openVault":
-					void handleOpenVault();
-					break;
-				case "refreshTree":
-					handleRefresh();
-					break;
-				case "revealInFinder":
-					handleRevealInFinder();
-					break;
-				case "openInTerminal":
-					handleOpenInTerminal();
-					break;
-				case "deleteTreeItem":
-					handleDeleteSelected();
-					break;
-				case "magicWand":
-					openMagicWand();
-					break;
-				case "toggleSidebar":
-					toggleSidebar();
-					break;
-				case "toggleChat":
-					toggleChat();
-					break;
-				case "toggleAgentZen":
-					toggleAgentZen();
-					break;
-				case "focusSidebar":
-					expandSidebar();
-					break;
-				case "focusEditor":
-					editorPaneRef.current
-						?.querySelector<HTMLElement>("[contenteditable='true']")
-						?.focus();
-					break;
-				case "focusNotes": {
-					const focusNotesEditor = () =>
-						notesPaneRef.current
-							?.querySelector<HTMLElement>("[contenteditable='true']")
-							?.focus();
-					if (!showNotesRef.current) {
-						// Notes hidden: reveal it first, then focus once it mounts.
-						setShowNotes(true);
-						requestAnimationFrame(() =>
-							requestAnimationFrame(focusNotesEditor),
-						);
-					} else {
-						focusNotesEditor();
-					}
-					break;
-				}
-				case "closeTab":
-					closeTabOrWindow();
-					break;
-				case "nextTab":
-					cycleActiveTab(1);
-					break;
-				case "prevTab":
-					cycleActiveTab(-1);
-					break;
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [
-		closeSettings,
-		expandSidebar,
-		handleNewWindow,
-		handleOpenVault,
-		handleDeleteSelected,
-		handleRefresh,
-		handleRevealInFinder,
-		handleOpenInTerminal,
-		openMagicWand,
-		openSettings,
-		toggleAgentZen,
-		toggleChat,
-		toggleSidebar,
-		closeTabOrWindow,
-		cycleActiveTab,
-	]);
-
-	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
 			return;
@@ -1786,19 +1672,45 @@ export default function App() {
 		}
 	}, [activateVault, openPath, t]);
 
-	// Create Vault shortcut + native menu (after handler is defined)
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const id = resolveShortcutId(event, {
-				settingsOpen: settingsOpenRef.current,
-			});
-			if (id !== "createVault") return;
-			event.preventDefault();
-			void handleCreateVault();
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [handleCreateVault]);
+	useAppShortcuts(settingsOpen, {
+		settings: () => {
+			if (settingsOpenRef.current) closeSettings();
+			else openSettings();
+		},
+		closeSheet: closeSettings,
+		newWindow: () => void handleNewWindow(),
+		openVault: () => void handleOpenVault(),
+		createVault: () => void handleCreateVault(),
+		refreshTree: handleRefresh,
+		revealInFinder: handleRevealInFinder,
+		openInTerminal: handleOpenInTerminal,
+		deleteTreeItem: handleDeleteSelected,
+		magicWand: openMagicWand,
+		toggleSidebar,
+		toggleChat,
+		toggleAgentZen,
+		focusSidebar: expandSidebar,
+		focusEditor: () =>
+			editorPaneRef.current
+				?.querySelector<HTMLElement>("[contenteditable='true']")
+				?.focus(),
+		focusNotes: () => {
+			const focusNotesEditor = () =>
+				notesPaneRef.current
+					?.querySelector<HTMLElement>("[contenteditable='true']")
+					?.focus();
+			if (!showNotesRef.current) {
+				// Notes hidden: reveal it first, then focus once it mounts.
+				setShowNotes(true);
+				requestAnimationFrame(() => requestAnimationFrame(focusNotesEditor));
+			} else {
+				focusNotesEditor();
+			}
+		},
+		closeTab: closeTabOrWindow,
+		nextTab: () => cycleActiveTab(1),
+		prevTab: () => cycleActiveTab(-1),
+	});
 
 	useNativeMenuEvents({
 		onSettings: openSettings,
