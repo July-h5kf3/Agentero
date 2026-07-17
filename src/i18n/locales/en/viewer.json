@@ -57,6 +57,8 @@
 			"pink": "Pink",
 			"purple": "Purple"
 		},
+		"copy": "Copy",
+		"copied": "Copied",
 		"note": "Add to notes",
 		"ask": "Ask",
 		"translate": "Translate",

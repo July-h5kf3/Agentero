@@ -1,4 +1,10 @@
-import { Check, Languages, MessageSquare, NotebookPen } from "lucide-react";
+import {
+	Check,
+	Copy,
+	Languages,
+	MessageSquare,
+	NotebookPen,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -21,6 +27,8 @@ type SelectionMenuProps = {
 	screen: { x: number; y: number };
 	/** Create a highlight in the chosen color */
 	onHighlight: (color: HighlightColor) => void;
+	/** Copy the selected text to the clipboard */
+	onCopy: () => void;
 	onNote: () => void;
 	onAsk: () => void;
 	onTranslate: () => void;
@@ -28,23 +36,25 @@ type SelectionMenuProps = {
 	onClose: () => void;
 };
 
-const BAR_W = 260;
+const BAR_W = 300;
 const BAR_H = 40;
 
 /**
  * Floating action bar shown next to a text selection: a row of color swatches
- * (clicking one highlights in that color), then Note / Ask / Translate.
+ * (highlight), then Copy / Note / Ask / Translate. Copy and Note flash a brief
+ * inline confirmation before the menu closes.
  */
 export function SelectionMenu({
 	screen,
 	onHighlight,
+	onCopy,
 	onNote,
 	onAsk,
 	onTranslate,
 	onClose,
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
-	const [noted, setNoted] = useState(false);
+	const [confirmText, setConfirmText] = useState<string | null>(null);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
@@ -55,15 +65,27 @@ export function SelectionMenu({
 	let top = screen.y - BAR_H - 10;
 	if (top < 12) top = Math.min(vh - BAR_H - 12, screen.y + 18);
 
+	const flashThenClose = useCallback(
+		(text: string) => {
+			setConfirmText(text);
+			if (timerRef.current) clearTimeout(timerRef.current);
+			timerRef.current = setTimeout(() => {
+				timerRef.current = null;
+				onClose();
+			}, 1000);
+		},
+		[onClose],
+	);
+
+	const handleCopy = useCallback(() => {
+		onCopy();
+		flashThenClose(t("selection.copied"));
+	}, [onCopy, flashThenClose, t]);
+
 	const handleNote = useCallback(() => {
 		onNote();
-		setNoted(true);
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			timerRef.current = null;
-			onClose();
-		}, 1000);
-	}, [onNote, onClose]);
+		flashThenClose(t("selection.noteAdded"));
+	}, [onNote, flashThenClose, t]);
 
 	const colorLabel = (c: HighlightColor): string => {
 		switch (c) {
@@ -90,10 +112,10 @@ export function SelectionMenu({
 			aria-label={t("selection.menuLabel")}
 			onMouseDown={(e) => e.stopPropagation()}
 		>
-			{noted ? (
+			{confirmText ? (
 				<span className="flex items-center gap-1.5 px-2 text-emerald-600 text-xs dark:text-emerald-400">
 					<Check className="size-3.5" />
-					{t("selection.noteAdded")}
+					{confirmText}
 				</span>
 			) : (
 				<TooltipProvider delayDuration={200}>
@@ -114,6 +136,20 @@ export function SelectionMenu({
 						</Tooltip>
 					))}
 					<div className="mx-1 h-5 w-px shrink-0 bg-border" />
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={t("selection.copy")}
+								onClick={handleCopy}
+							>
+								<Copy className="size-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top">{t("selection.copy")}</TooltipContent>
+					</Tooltip>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button

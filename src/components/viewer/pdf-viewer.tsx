@@ -1165,6 +1165,13 @@ export function PdfViewer({
 		// SelectionMenu shows its own confirmation, then calls onClose.
 	}, [selectionMenu, onAddNote]);
 
+	const handleMenuCopy = useCallback(() => {
+		const quote = selectionMenu?.anchor.quote?.trim();
+		if (quote && typeof navigator !== "undefined" && navigator.clipboard) {
+			void navigator.clipboard.writeText(quote).catch(() => undefined);
+		}
+	}, [selectionMenu]);
+
 	const jumpToHighlight = useCallback(
 		(h: PdfHighlight) => {
 			goToPage(h.page);
@@ -1747,6 +1754,7 @@ export function PdfViewer({
 					<SelectionMenu
 						screen={selectionMenu.screen}
 						onHighlight={handleMenuHighlight}
+						onCopy={handleMenuCopy}
 						onNote={handleMenuNote}
 						onAsk={handleMenuAsk}
 						onTranslate={handleMenuTranslate}
