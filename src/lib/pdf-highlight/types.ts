@@ -23,4 +23,6 @@ export type PdfHighlight = {
 	quote: string;
 	/** Reserved for future color palette; defaults to amber when absent */
 	color?: string;
+	/** Zotero-style annotation note; non-empty means this highlight is an annotation */
+	comment?: string;
 };
