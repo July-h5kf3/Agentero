@@ -40,7 +40,6 @@
 	"selection": {
 		"menuLabel": "选区操作",
 		"highlight": "高亮",
-		"underline": "下划线",
 		"color": {
 			"yellow": "黄色",
 			"green": "绿色",

@@ -23,6 +23,4 @@ export type PdfHighlight = {
 	quote: string;
 	/** Palette key (see pdf-highlight/palette); defaults to yellow when absent */
 	color?: string;
-	/** Annotation style; defaults to "highlight" when absent */
-	kind?: "highlight" | "underline";
 };

@@ -38,14 +38,6 @@ const FILL_ACTIVE: Record<HighlightColor, string> = {
 	purple: "bg-purple-300/60 dark:bg-purple-400/45",
 };
 
-const LINE: Record<HighlightColor, string> = {
-	yellow: "bg-amber-500",
-	green: "bg-green-500",
-	blue: "bg-sky-500",
-	pink: "bg-pink-500",
-	purple: "bg-purple-500",
-};
-
 const SWATCH: Record<HighlightColor, string> = {
 	yellow: "bg-amber-400",
 	green: "bg-green-400",
@@ -61,11 +53,6 @@ export function highlightFillClass(
 ): string {
 	const c = normalizeHighlightColor(color);
 	return active ? FILL_ACTIVE[c] : FILL[c];
-}
-
-/** Solid bar class for an underline annotation. */
-export function underlineColorClass(color: string | undefined): string {
-	return LINE[normalizeHighlightColor(color)];
 }
 
 /** Solid dot class for the color picker swatch. */

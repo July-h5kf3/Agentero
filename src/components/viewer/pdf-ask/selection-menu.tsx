@@ -1,10 +1,4 @@
-import {
-	Check,
-	Languages,
-	MessageSquare,
-	NotebookPen,
-	Underline,
-} from "lucide-react";
+import { Check, Languages, MessageSquare, NotebookPen } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,11 +19,8 @@ import { cn } from "@/lib/utils";
 type SelectionMenuProps = {
 	/** Screen point near the end of the selection */
 	screen: { x: number; y: number };
-	/** Create a highlight (or underline when that toggle is on) in a color */
-	onAnnotate: (opts: {
-		kind: "highlight" | "underline";
-		color: HighlightColor;
-	}) => void;
+	/** Create a highlight in the chosen color */
+	onHighlight: (color: HighlightColor) => void;
 	onNote: () => void;
 	onAsk: () => void;
 	onTranslate: () => void;
@@ -37,17 +28,16 @@ type SelectionMenuProps = {
 	onClose: () => void;
 };
 
-const BAR_W = 300;
+const BAR_W = 260;
 const BAR_H = 40;
 
 /**
- * Floating action bar shown next to a text selection: an Underline toggle, a
- * row of color swatches (clicking one highlights — or underlines when the
- * toggle is on — in that color), then Note / Ask / Translate.
+ * Floating action bar shown next to a text selection: a row of color swatches
+ * (clicking one highlights in that color), then Note / Ask / Translate.
  */
 export function SelectionMenu({
 	screen,
-	onAnnotate,
+	onHighlight,
 	onNote,
 	onAsk,
 	onTranslate,
@@ -55,7 +45,6 @@ export function SelectionMenu({
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
 	const [noted, setNoted] = useState(false);
-	const [underline, setUnderline] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
@@ -91,8 +80,6 @@ export function SelectionMenu({
 		}
 	};
 
-	const kind = underline ? "underline" : "highlight";
-
 	return (
 		<div
 			className={cn(
@@ -110,24 +97,6 @@ export function SelectionMenu({
 				</span>
 			) : (
 				<TooltipProvider delayDuration={200}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("selection.underline")}
-								aria-pressed={underline}
-								className={cn(underline && "bg-accent text-accent-foreground")}
-								onClick={() => setUnderline((v) => !v)}
-							>
-								<Underline className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="top">
-							{t("selection.underline")}
-						</TooltipContent>
-					</Tooltip>
 					{HIGHLIGHT_COLORS.map((c) => (
 						<Tooltip key={c}>
 							<TooltipTrigger asChild>
@@ -138,7 +107,7 @@ export function SelectionMenu({
 										"mx-0.5 size-4 shrink-0 rounded-full ring-1 ring-black/15 transition hover:scale-110 dark:ring-white/25",
 										swatchColorClass(c),
 									)}
-									onClick={() => onAnnotate({ kind, color: c })}
+									onClick={() => onHighlight(c)}
 								/>
 							</TooltipTrigger>
 							<TooltipContent side="top">{colorLabel(c)}</TooltipContent>

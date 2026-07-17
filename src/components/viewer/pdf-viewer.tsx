@@ -1115,14 +1115,8 @@ export function PdfViewer({
 		);
 	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
 
-	const handleMenuAnnotate = useCallback(
-		({
-			kind,
-			color,
-		}: {
-			kind: "highlight" | "underline";
-			color: HighlightColor;
-		}) => {
+	const handleMenuHighlight = useCallback(
+		(color: HighlightColor) => {
 			const sm = selectionMenu;
 			if (!sm) return;
 			setSelectionMenu(null);
@@ -1139,7 +1133,6 @@ export function PdfViewer({
 				),
 				quote,
 				color,
-				kind,
 			});
 			setHighlights((prev) => [hl, ...prev]);
 			window.getSelection()?.removeAllRanges();
@@ -1645,7 +1638,7 @@ export function PdfViewer({
 				<div data-pdf-ask-ui="">
 					<SelectionMenu
 						screen={selectionMenu.screen}
-						onAnnotate={handleMenuAnnotate}
+						onHighlight={handleMenuHighlight}
 						onNote={handleMenuNote}
 						onAsk={handleMenuAsk}
 						onTranslate={handleMenuTranslate}

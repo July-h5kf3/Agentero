@@ -40,7 +40,6 @@
 	"selection": {
 		"menuLabel": "Selection actions",
 		"highlight": "Highlight",
-		"underline": "Underline",
 		"color": {
 			"yellow": "Yellow",
 			"green": "Green",
