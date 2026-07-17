@@ -116,8 +116,6 @@ type PdfViewerProps = {
 	paperRelPath?: string | null;
 	/** Current vault root for ACP cwd */
 	vaultPath?: string | null;
-	/** Append a quoted passage to the paper's NOTES.md (handled by parent) */
-	onAddNote?: (quote: string) => void;
 	className?: string;
 };
 

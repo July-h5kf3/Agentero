@@ -11,10 +11,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import {
-	MarkdownEditor,
-	type MarkdownEditorHandle,
-} from "@/components/editor/markdown-editor";
+import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
@@ -408,9 +405,6 @@ export default function App() {
 		})();
 	}, [closeTab]);
 
-	/** NOTES editor imperative handles by tab id (for PDF "add note"). */
-	const notesEditorHandles = useRef(new Map<string, MarkdownEditorHandle>());
-
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
 		setTabs((prev) => reseedNotesTab(prev, paperDir, content));
@@ -420,37 +414,6 @@ export default function App() {
 	const refreshTabMarkdown = useCallback((absPath: string, content: string) => {
 		setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
 	}, []);
-
-	/** Append a selected PDF passage to a paper's NOTES.md as a blockquote. */
-	const handleAddPdfNote = useCallback(
-		async (tab: DocTab, quote: string) => {
-			const q = quote.replace(/\s+/g, " ").trim();
-			if (!q || !tab.notesPath) return;
-			// Preferred: route through the mounted editor (single writer, no clobber)
-			const handle = notesEditorHandles.current.get(tab.id);
-			if (handle) {
-				handle.appendMarkdown(`> ${q}`);
-				return;
-			}
-			// Fallback: editor not mounted → append on disk and reseed
-			const paperDir = tab.notesPath.replace(/[\\/]NOTES\.md$/i, "");
-			try {
-				let current = "";
-				try {
-					current = await readVaultFile(tab.notesPath);
-				} catch {
-					// missing NOTES.md → start fresh
-				}
-				const base = current.replace(/\s+$/, "");
-				const next = `${base}${base ? "\n\n" : ""}> ${q}\n`;
-				await writeVaultFile(tab.notesPath, next);
-				refreshTabNotes(paperDir, next);
-			} catch (e) {
-				notifyError(e instanceof Error ? e.message : String(e));
-			}
-		},
-		[refreshTabNotes],
-	);
 
 	// Restore the previous window's open tabs once on mount (per-window session).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
@@ -2217,7 +2180,6 @@ export default function App() {
 														if (vaultPath) void refreshTree(vaultPath);
 													}}
 													onTabPatch={updateTab}
-													onAddPdfNote={handleAddPdfNote}
 												/>
 											</div>
 										))}
@@ -2296,10 +2258,6 @@ export default function App() {
 												>
 													<MarkdownEditor
 														key={`notes-${tab.id}-${tab.notesKey}`}
-														ref={(h) => {
-															if (h) notesEditorHandles.current.set(tab.id, h);
-															else notesEditorHandles.current.delete(tab.id);
-														}}
 														className="agentero-scroll h-full min-h-0"
 														initialMarkdown={tab.notesSeed}
 														filePath={tab.notesPath}

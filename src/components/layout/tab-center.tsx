@@ -30,7 +30,6 @@ type TabCenterProps = {
 	onPersistFile: (path: string, md: string) => void;
 	onEditorAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
-	onAddPdfNote: (tab: DocTab, quote: string) => void;
 };
 
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
@@ -54,7 +53,6 @@ export function TabCenter({
 	onPersistFile,
 	onEditorAssetsChanged,
 	onTabPatch,
-	onAddPdfNote,
 }: TabCenterProps) {
 	if (tab.kind === "library") {
 		return (
@@ -123,7 +121,6 @@ export function TabCenter({
 						tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
 					}
 					vaultPath={vaultPath}
-					onAddNote={(quote) => onAddPdfNote(tab, quote)}
 					className="h-full w-full"
 				/>
 			</div>
