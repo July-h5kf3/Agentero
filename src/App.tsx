@@ -104,10 +104,21 @@ import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
 import {
 	basenameOf,
+	cycleActiveTabId,
 	type DocTab,
+	insertPlaceholderTab,
+	loadPersistedTabs,
 	loadTabResources,
+	moveTab,
 	normalizeTabPath,
+	patchTab,
+	removeTab,
+	removeTabsUnderPath,
+	reseedMarkdownTab,
+	reseedNotesTab,
 	revokeTabPdfSource,
+	savePersistedTabs,
+	syncTabSeedsForPath,
 	tabIdForPath,
 	tabIsPaperNotes,
 	tabNotesEligible,
@@ -149,23 +160,6 @@ import { WikiNavContext } from "@/lib/wiki-nav-context";
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
-
-const TABS_KEY = "agentero-open-tabs";
-
-type PersistedTab = { path: string; mode: CenterViewMode };
-type PersistedTabs = { tabs: PersistedTab[]; activeIndex: number };
-
-function loadPersistedTabs(): PersistedTabs | null {
-	try {
-		const raw = localStorage.getItem(TABS_KEY);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as PersistedTabs;
-		if (!parsed || !Array.isArray(parsed.tabs)) return null;
-		return parsed;
-	} catch {
-		return null;
-	}
-}
 
 /** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
 function normalizePathKey(path: string): string {
@@ -354,7 +348,7 @@ export default function App() {
 
 	/** Merge a patch into the tab with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
-		setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+		setTabs((prev) => patchTab(prev, id, patch));
 	}, []);
 
 	/**
@@ -367,30 +361,9 @@ export default function App() {
 			const id = tabIdForPath(path);
 			let exists = false;
 			setTabs((prev) => {
-				if (prev.some((t) => t.id === id)) {
-					exists = true;
-					return prev;
-				}
-				const placeholder: DocTab = {
-					id,
-					path: isLibraryVirtualPath(path) ? LIBRARY_VIRTUAL_PATH : path,
-					kind: isLibraryVirtualPath(path) ? "library" : "file",
-					title: isLibraryVirtualPath(path) ? "Library" : basenameOf(path),
-					mode: opts?.preferMode ?? "markdown",
-					paperMeta: null,
-					pdfUrl: null,
-					htmlUrl: null,
-					imageUrl: null,
-					notesPath: null,
-					notesSeed: "",
-					markdownSeed: "",
-					markdownDirty: false,
-					notesDirty: false,
-					seedKey: 0,
-					notesKey: 0,
-					loaded: false,
-				};
-				return [...prev, placeholder];
+				const result = insertPlaceholderTab(prev, path, opts?.preferMode);
+				exists = result.exists;
+				return result.tabs;
 			});
 			setActiveTabId(id);
 
@@ -440,60 +413,35 @@ export default function App() {
 	/** Close a tab; move focus to a neighbor, or Library when emptied. */
 	const closeTab = useCallback((id: string) => {
 		setTabs((prev) => {
-			const idx = prev.findIndex((t) => t.id === id);
-			if (idx < 0) return prev;
-			const closing = prev[idx];
-			if (closing) revokeTabPdfSource(closing);
-			const next = prev.filter((t) => t.id !== id);
-			setActiveTabId((curActive) => {
-				if (curActive !== id) return curActive;
-				if (!next.length) return null;
-				const neighbor = next[Math.min(idx, next.length - 1)];
-				return neighbor?.id ?? null;
-			});
-			return next;
+			const { tabs, removed, activeId } = removeTab(
+				prev,
+				id,
+				activeTabIdRef.current,
+			);
+			if (!removed) return prev;
+			revokeTabPdfSource(removed);
+			setActiveTabId(activeId);
+			return tabs;
 		});
 	}, []);
 
 	/** Close every tab whose path is at or under the given path. */
 	const closeTabsUnderPath = useCallback((path: string) => {
-		const key = normalizeTabPath(path);
 		setTabs((prev) => {
-			const survivors: DocTab[] = [];
-			let changed = false;
-			for (const t of prev) {
-				if (isLibraryVirtualPath(t.path)) {
-					survivors.push(t);
-					continue;
-				}
-				const tk = normalizeTabPath(t.path);
-				if (tk === key || tk.startsWith(`${key}/`)) {
-					revokeTabPdfSource(t);
-					changed = true;
-					continue;
-				}
-				survivors.push(t);
-			}
-			if (!changed) return prev;
-			setActiveTabId((curActive) =>
-				survivors.some((t) => t.id === curActive)
-					? curActive
-					: (survivors[survivors.length - 1]?.id ?? null),
+			const { tabs, removed, activeId } = removeTabsUnderPath(
+				prev,
+				path,
+				activeTabIdRef.current,
 			);
-			return survivors;
+			if (!removed.length) return prev;
+			for (const t of removed) revokeTabPdfSource(t);
+			setActiveTabId(activeId);
+			return tabs;
 		});
 	}, []);
 
 	const reorderTabs = useCallback((fromId: string, toId: string) => {
-		setTabs((prev) => {
-			const from = prev.findIndex((t) => t.id === fromId);
-			const to = prev.findIndex((t) => t.id === toId);
-			if (from < 0 || to < 0 || from === to) return prev;
-			const next = [...prev];
-			const [moved] = next.splice(from, 1);
-			next.splice(to, 0, moved);
-			return next;
-		});
+		setTabs((prev) => moveTab(prev, fromId, toId));
 	}, []);
 
 	const setActiveTabMode = useCallback(
@@ -511,11 +459,7 @@ export default function App() {
 
 	/** Cycle the active tab by delta (wraps). */
 	const cycleActiveTab = useCallback((delta: number) => {
-		const list = tabsRef.current;
-		if (list.length < 2) return;
-		const idx = list.findIndex((t) => t.id === activeTabIdRef.current);
-		const nextIdx = (idx + delta + list.length) % list.length;
-		setActiveTabId(list[nextIdx].id);
+		setActiveTabId((cur) => cycleActiveTabId(tabsRef.current, cur, delta));
 	}, []);
 
 	/**
@@ -551,36 +495,12 @@ export default function App() {
 
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
-		const id = tabIdForPath(paperDir);
-		setTabs((prev) =>
-			prev.map((t) =>
-				t.id === id
-					? {
-							...t,
-							notesSeed: content,
-							notesDirty: false,
-							notesKey: t.notesKey + 1,
-						}
-					: t,
-			),
-		);
+		setTabs((prev) => reseedNotesTab(prev, paperDir, content));
 	}, []);
 
 	/** Reseed an open plain-Markdown tab after an external/Agent write. */
 	const refreshTabMarkdown = useCallback((absPath: string, content: string) => {
-		const id = tabIdForPath(absPath);
-		setTabs((prev) =>
-			prev.map((t) =>
-				t.id === id
-					? {
-							...t,
-							markdownSeed: content,
-							markdownDirty: false,
-							seedKey: t.seedKey + 1,
-						}
-					: t,
-			),
-		);
+		setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
 	}, []);
 
 	/** Append a selected PDF passage to a paper's NOTES.md as a blockquote. */
@@ -1489,22 +1409,7 @@ export default function App() {
 	}, [vaultPath, refreshTree]);
 
 	useEffect(() => {
-		try {
-			const payload: PersistedTabs = {
-				tabs: tabs.map((t) => ({ path: t.path, mode: t.mode })),
-				activeIndex: Math.max(
-					0,
-					tabs.findIndex((t) => t.id === activeTabId),
-				),
-			};
-			if (payload.tabs.length) {
-				localStorage.setItem(TABS_KEY, JSON.stringify(payload));
-			} else {
-				localStorage.removeItem(TABS_KEY);
-			}
-		} catch {
-			// localStorage may be unavailable; tab restore is best-effort.
-		}
+		savePersistedTabs(tabs, activeTabId);
 	}, [tabs, activeTabId]);
 
 	// Persist a specific file's Markdown to disk. The MarkdownEditor calls this with
@@ -1517,17 +1422,7 @@ export default function App() {
 			// the remount's unmount-flush must not clobber the fresh disk content.
 			if (reseedGuardRef.current.has(normalizeTabPath(path))) return;
 			// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
-			const key = path.replace(/\\/g, "/").toLowerCase();
-			setTabs((prev) =>
-				prev.map((tab) => {
-					const notesKey = tab.notesPath?.replace(/\\/g, "/").toLowerCase();
-					if (notesKey === key) return { ...tab, notesSeed: md };
-					if (normalizeTabPath(tab.path) === normalizeTabPath(path)) {
-						return { ...tab, markdownSeed: md };
-					}
-					return tab;
-				}),
-			);
+			setTabs((prev) => syncTabSeedsForPath(prev, path, md));
 			void writeVaultFile(path, md).catch((e) => {
 				notifyError(e instanceof Error ? e.message : String(e));
 			});

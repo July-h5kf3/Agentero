@@ -403,3 +403,228 @@ export function tabNotesEligible(tab: DocTab | null): boolean {
 export function tabIsPaperNotes(tab: DocTab | null): boolean {
 	return Boolean(tab?.paperMeta) && tab?.mode === "markdown";
 }
+
+// --- Pure tab-list operations (unit-tested in test/tabs.test.ts) ---
+
+/** Placeholder tab shown immediately while its resources load asynchronously. */
+export function createPlaceholderTab(
+	path: string,
+	preferMode: CenterViewMode = "markdown",
+): DocTab {
+	const isLibrary = isLibraryVirtualPath(path);
+	return {
+		id: tabIdForPath(path),
+		path: isLibrary ? LIBRARY_VIRTUAL_PATH : path,
+		kind: isLibrary ? "library" : "file",
+		title: isLibrary ? "Library" : basenameOf(path),
+		mode: preferMode,
+		paperMeta: null,
+		pdfUrl: null,
+		htmlUrl: null,
+		imageUrl: null,
+		notesPath: null,
+		notesSeed: "",
+		markdownSeed: "",
+		markdownDirty: false,
+		notesDirty: false,
+		seedKey: 0,
+		notesKey: 0,
+		loaded: false,
+	};
+}
+
+/** Insert a placeholder tab for `path` unless a tab for it already exists. */
+export function insertPlaceholderTab(
+	prev: DocTab[],
+	path: string,
+	preferMode: CenterViewMode = "markdown",
+): { tabs: DocTab[]; id: string; exists: boolean } {
+	const id = tabIdForPath(path);
+	if (prev.some((t) => t.id === id)) return { tabs: prev, id, exists: true };
+	return {
+		tabs: [...prev, createPlaceholderTab(path, preferMode)],
+		id,
+		exists: false,
+	};
+}
+
+/** Merge a patch into the tab with the given id. */
+export function patchTab(
+	prev: DocTab[],
+	id: string,
+	patch: Partial<DocTab>,
+): DocTab[] {
+	return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
+}
+
+/** Remove a tab and pick the next active id (a neighbor, or null when emptied). */
+export function removeTab(
+	prev: DocTab[],
+	id: string,
+	activeId: string | null,
+): { tabs: DocTab[]; removed: DocTab | null; activeId: string | null } {
+	const idx = prev.findIndex((t) => t.id === id);
+	if (idx < 0) return { tabs: prev, removed: null, activeId };
+	const removed = prev[idx] ?? null;
+	const tabs = prev.filter((t) => t.id !== id);
+	let nextActiveId = activeId;
+	if (activeId === id) {
+		nextActiveId = tabs.length
+			? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null)
+			: null;
+	}
+	return { tabs, removed, activeId: nextActiveId };
+}
+
+/** Remove every tab at or under `path`; Library/Trash virtual tabs are kept. */
+export function removeTabsUnderPath(
+	prev: DocTab[],
+	path: string,
+	activeId: string | null,
+): { tabs: DocTab[]; removed: DocTab[]; activeId: string | null } {
+	const key = normalizeTabPath(path);
+	const survivors: DocTab[] = [];
+	const removed: DocTab[] = [];
+	for (const t of prev) {
+		if (isLibraryVirtualPath(t.path)) {
+			survivors.push(t);
+			continue;
+		}
+		const tk = normalizeTabPath(t.path);
+		if (tk === key || tk.startsWith(`${key}/`)) {
+			removed.push(t);
+			continue;
+		}
+		survivors.push(t);
+	}
+	if (!removed.length) return { tabs: prev, removed, activeId };
+	const nextActiveId = survivors.some((t) => t.id === activeId)
+		? activeId
+		: (survivors[survivors.length - 1]?.id ?? null);
+	return { tabs: survivors, removed, activeId: nextActiveId };
+}
+
+/** Move the tab `fromId` to the current position of `toId`. */
+export function moveTab(
+	prev: DocTab[],
+	fromId: string,
+	toId: string,
+): DocTab[] {
+	const from = prev.findIndex((t) => t.id === fromId);
+	const to = prev.findIndex((t) => t.id === toId);
+	if (from < 0 || to < 0 || from === to) return prev;
+	const next = [...prev];
+	const [moved] = next.splice(from, 1);
+	next.splice(to, 0, moved);
+	return next;
+}
+
+/** Active tab id after cycling by `delta` (wraps); unchanged with fewer than 2 tabs. */
+export function cycleActiveTabId(
+	list: DocTab[],
+	activeId: string | null,
+	delta: number,
+): string | null {
+	if (list.length < 2) return activeId;
+	const idx = list.findIndex((t) => t.id === activeId);
+	const nextIdx = (idx + delta + list.length) % list.length;
+	return list[nextIdx]?.id ?? activeId;
+}
+
+/** Reseed an open paper tab's NOTES editor (bumps notesKey to remount). */
+export function reseedNotesTab(
+	prev: DocTab[],
+	paperDir: string,
+	content: string,
+): DocTab[] {
+	const id = tabIdForPath(paperDir);
+	return prev.map((t) =>
+		t.id === id
+			? {
+					...t,
+					notesSeed: content,
+					notesDirty: false,
+					notesKey: t.notesKey + 1,
+				}
+			: t,
+	);
+}
+
+/** Reseed an open plain-Markdown tab (bumps seedKey to remount). */
+export function reseedMarkdownTab(
+	prev: DocTab[],
+	absPath: string,
+	content: string,
+): DocTab[] {
+	const id = tabIdForPath(absPath);
+	return prev.map((t) =>
+		t.id === id
+			? {
+					...t,
+					markdownSeed: content,
+					markdownDirty: false,
+					seedKey: t.seedKey + 1,
+				}
+			: t,
+	);
+}
+
+/** Keep the seed of the tab(s) owning `path` in sync after a disk write. */
+export function syncTabSeedsForPath(
+	prev: DocTab[],
+	path: string,
+	content: string,
+): DocTab[] {
+	const key = path.replace(/\\/g, "/").toLowerCase();
+	return prev.map((tab) => {
+		const notesKey = tab.notesPath?.replace(/\\/g, "/").toLowerCase();
+		if (notesKey === key) return { ...tab, notesSeed: content };
+		if (normalizeTabPath(tab.path) === normalizeTabPath(path)) {
+			return { ...tab, markdownSeed: content };
+		}
+		return tab;
+	});
+}
+
+// --- Tab session persistence (per-window, best-effort localStorage) ---
+
+const TABS_STORAGE_KEY = "agentero-open-tabs";
+
+export type PersistedTab = { path: string; mode: CenterViewMode };
+export type PersistedTabs = { tabs: PersistedTab[]; activeIndex: number };
+
+/** Read and validate the previously persisted open tabs for this window. */
+export function loadPersistedTabs(): PersistedTabs | null {
+	try {
+		const raw = localStorage.getItem(TABS_STORAGE_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as PersistedTabs;
+		if (!parsed || !Array.isArray(parsed.tabs)) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
+/** Persist the current open tabs and active index (best-effort). */
+export function savePersistedTabs(
+	tabs: DocTab[],
+	activeTabId: string | null,
+): void {
+	try {
+		const payload: PersistedTabs = {
+			tabs: tabs.map((t) => ({ path: t.path, mode: t.mode })),
+			activeIndex: Math.max(
+				0,
+				tabs.findIndex((t) => t.id === activeTabId),
+			),
+		};
+		if (payload.tabs.length) {
+			localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(payload));
+		} else {
+			localStorage.removeItem(TABS_STORAGE_KEY);
+		}
+	} catch {
+		// localStorage may be unavailable; tab restore is best-effort.
+	}
+}
