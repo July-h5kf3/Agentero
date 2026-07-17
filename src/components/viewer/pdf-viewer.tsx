@@ -66,6 +66,7 @@ import {
 	type FindMatch,
 	findAllMatches,
 	matchRectsOnPage,
+	mergeRectsByLine,
 	selectionRectsByPage,
 } from "@/lib/pdf-find";
 import {
@@ -1123,7 +1124,12 @@ export function PdfViewer({
 		const hl = createHighlight({
 			paperPath,
 			page: sm.anchor.page,
-			rects: sm.anchor.rects,
+			// Same shape as the selection overlay: drop zero-width caret rects
+			// (which sit at x=0 and would stretch the band to the left), then
+			// merge per line so the amber highlight matches the blue selection.
+			rects: mergeRectsByLine(
+				sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
+			),
 			quote,
 		});
 		setHighlights((prev) => [hl, ...prev]);
