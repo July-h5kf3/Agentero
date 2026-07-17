@@ -77,10 +77,10 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 - **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
-**精读（Eye 图标 + 自动触发）**：
-- **显示条件（Eye）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
+**精读（Zap 图标 + 自动触发）**：
+- **显示条件（Zap）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
 - **自动触发**：`lookup_import`（魔棒）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
-- **手动**：点击 Eye → 同上。
+- **手动**：点击 Zap → 同上。
 - **实现**：`src/lib/paper-read.ts` → `agent_run_once` + skill；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md` → 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`。
 - **进度**：左下角后台任务条——入库/下载阶段 `kind=lookup|download`（分阶段 detail/progress），随后精读 `kind=paperRead`。
 
@@ -734,4 +734,4 @@ arXiv URL 推导：
 - 笔记：对话框「迁移 Zotero 笔记」勾选项（默认开）→ 每篇挂载的子笔记（`itemNotes`）HTML 经 `htmd` 转 Markdown，追加进该篇 `NOTES.md`（以 `---` 分隔）；`zotero_scan` 预览显示笔记总数。仅处理有父条目的子笔记。
 - 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：`highlights.md` 渲染系统尚未落地，故批注文本暂入 `NOTES.md`。
 - 非目标（v1）：Zotero 批注的**原位高亮渲染**（现仅迁移文本入 NOTES.md）、独立笔记（无父条目）、群组库。
-| 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Eye 手动；任务条 lookup/download → paperRead 衔接 |
+| 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Zap 手动；任务条 lookup/download → paperRead 衔接 |

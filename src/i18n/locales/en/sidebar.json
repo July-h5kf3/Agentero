@@ -14,8 +14,7 @@
 			"noPdf": "Missing PDF",
 			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
 		},
-		"readPaper": "Read paper with paper-reader",
-		"readPaperHint": "Local assets ready. Run paper-reader to write structured notes to NOTES.md.",
+		"readPaper": "Read paper and write notes",
 		"readDesktopOnly": "Paper reading requires the desktop app.",
 		"readFailed": "Failed to start paper reading.",
 		"readMarkFailed": "Failed to mark paper as read.",

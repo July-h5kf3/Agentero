@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / **Finder 显示 / 删除**、PDF/HTML/图片/Notes、WYSIWYG Markdown、**论文库表格 + tags + 虚拟 Library 节点**、左右侧栏 collapsible 隔离、后台任务条（含 paper-reader；hover 实色）、**全局错误 Toast**（`notifyError`）、Preview/Info 仅在具体论文时显示。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Eye 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Zap 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 先关 tab 再关窗）；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
@@ -82,7 +82,7 @@
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
 - [x] 按需补下：`paper_download_assets`；paper 行缺 PDF 或 arXiv 缺 TeX 时 Download；**Library 行批量补下全部缺失**。
 - [x] **无 TeX 时 liteparse → `PAPER.md`**：下载后自动；`paper_parse_body`（Download 流程内触发）。
-- [x] **paper-reader 精读**：入库/单篇 Download 后可自动；资源齐全且 `is_read=false` 时文件树 Eye 手动（见 V0.3）。
+- [x] **paper-reader 精读**：入库/单篇 Download 后可自动；资源齐全且 `is_read=false` 时文件树 Zap 手动（见 V0.3）。
 - [x] Library 导入/导出：`paper_import` / `paper_export`（Translator `/import` + `/export`，Zotero JSON 数组）。
 - [x] 入库错误经全局 Toast（`notifyError`）展示；重复不覆盖用户 `NOTES.md`。
 - [x] 删除 paper / 组织目录：磁盘 `remove` + catalog `paper_delete`（含嵌套 path）。
@@ -125,7 +125,7 @@
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [x] **paper-reader 精读工作流**：
   - 魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 时**自动**启动（`maybeAutoRunPaperReader`；批量导入/批量 Download **不**连跑）。
-  - 资源齐全且未读时文件树 **Eye** 可手动重跑。
+  - 资源齐全且未读时文件树 **Zap** 可手动重跑。
   - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿（引用类 workflow 见 V0.7）。
@@ -137,14 +137,14 @@
 - [x] 用户配置并成功探测至少一个本机 Agent 后，可发起 Agent 对话。
 - [x] 未安装 Agent 时有清晰空状态与配置入口，应用其余功能可用。
 - [x] Agent 问答展示读取过的本地文件路径（Agent 返回 Sources 时）。
-- [x] 下载完成且未读的 paper 行显示 Eye；点击后精读并标记已读。
+- [x] 下载完成且未读的 paper 行显示 Zap；点击后精读并标记已读。
 - [x] 魔棒/单篇 Download 成功后可自动进入精读（有默认 Agent 时）。
 - [ ] Related Work 草稿必须包含本地路径引用。
 - [ ] Agent 失败或用户拒绝写入时，不会覆盖已有 Markdown。
 
 细化 TODO：
 
-- [x] paper-reader：自动触发 + 文件树 Eye + `is_read` + 后台任务进度。
+- [x] paper-reader：自动触发 + 文件树 Zap + `is_read` + 后台任务进度。
 - [x] 全局权限模式替代 per-provider YOLO 开关。
 - [ ] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
@@ -456,7 +456,7 @@
 - [x] 文件树：Finder 显示、删除 + `paper_delete`、左右侧栏隔离。
 - [x] PDF 缩放（工具栏 / `⌘`+滚轮）。
 - [x] PDF 划词提问 MVP（M1–M4；见 [`pdf-ask.md`](pdf-ask.md)）。
-- [x] paper-reader 精读：自动（入库/单篇 Download）+ Eye 手动；`is_read`；任务条进度。
+- [x] paper-reader 精读：自动（入库/单篇 Download）+ Zap 手动；`is_read`；任务条进度。
 - [x] Agent 全局权限模式（受限 / 自动批准）。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
 - [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。

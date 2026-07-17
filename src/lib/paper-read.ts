@@ -36,7 +36,7 @@ import { joinVaultPath } from "@/lib/vault";
 
 export const PAPER_READER_SKILL_ID = "paper-reader";
 
-/** Prevent concurrent reads of the same paper (auto + Eye). */
+/** Prevent concurrent reads of the same paper (auto + Zap). */
 const inflightReads = new Set<string>();
 
 /** How this Agentero agent template expects skills to be named in the user prompt. */

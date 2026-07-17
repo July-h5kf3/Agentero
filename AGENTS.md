@@ -21,7 +21,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 标签：Paper Info 增删 → Host `paper_set_tags`（catalog `tags_json` 权威）；Library 展示与筛选；CLI `paper set-tags` / `list --tag` / `tags`。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
-- **精读工作流**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时文件树仍显示 **Eye** 可手动重跑。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（入库/下载 → 精读衔接；**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
+- **精读工作流**：魔棒入库 / 单篇 Download 资源就绪后**自动** paper-reader；资源齐全且 `is_read === false` 时文件树仍显示 **Zap** 可手动重跑。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（入库/下载 → 精读衔接；**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
 - **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。
 - 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；`⌘⌫` / 右键删除（`papers/` 同步 `paper_delete`）。
 - PDF：Vault **任意路径** `.pdf` 均可 `readFile` → `blob:` 预览；论文单元额外 **本地优先** → 无本地时自动下载 → 失败回退远程 `pdf_url`；缩放（工具栏 / `⌘`+滚轮）；划词提问 MVP（`asks/*.json`，见 `docs/development/pdf-ask.md`）。

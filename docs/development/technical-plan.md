@@ -192,7 +192,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 **分工说明**：
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Eye 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
@@ -692,7 +692,7 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听仍待。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、`paper_set_tags`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Eye 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）、模型收藏已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Zap 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）、模型收藏已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | V0.6 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 关 tab / 无 tab 关窗、多窗口独立 tab 集）；**2 格分屏**仍待；与 Agent 会话标签分离。 |

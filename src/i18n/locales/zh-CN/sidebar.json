@@ -14,8 +14,7 @@
 			"noPdf": "缺少 PDF",
 			"noBody": "缺少 TeX 与 PAPER.md（有其一即可，优先 TeX）"
 		},
-		"readPaper": "用 paper-reader 精读论文",
-		"readPaperHint": "本地资源已齐全。运行 paper-reader，将结构化笔记写入 NOTES.md。",
+		"readPaper": "精读论文并写入笔记",
 		"readDesktopOnly": "精读需要桌面应用。",
 		"readFailed": "无法启动精读。",
 		"readMarkFailed": "标记已读失败。",

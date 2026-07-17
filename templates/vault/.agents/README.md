@@ -19,7 +19,7 @@ Agentero (and many ACP agents) look here for **vault-scoped** agent configuratio
   `~/.agents/skills` and `${CODEX_HOME:-~/.codex}/skills`.
 - Keep each `SKILL.md` small (Agentero loads at most 64 KiB per skill, 5 per prompt).
 - **Bundled** (Create Vault seeds; no overwrite if already present):
-  - `skills/paper-reader/` — file-tree Eye (精读) → structured `NOTES.md`.
+  - `skills/paper-reader/` — file-tree Zap (精读) → structured `NOTES.md`.
   - `skills/agentero-cli/` — how external agents use the headless `agentero` CLI
     (vault discover / paper list / import; **no** BYOA). Design: `docs/development/cli.md`.
   Existing vaults can copy those folders, or install under `~/.agents/skills/<id>/`.

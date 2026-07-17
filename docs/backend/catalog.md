@@ -134,7 +134,7 @@ agentero-vault/
 | `extra` | TEXT | v2：Translator `extra` 残余 |
 | `status` | TEXT NOT NULL | `pending` \| `importing` \| `completed` \| `failed` |
 | `summary` | TEXT | 短摘要/一行说明（可选，供列表与导出表） |
-| `is_read` | INTEGER NOT NULL DEFAULT 0 | v3：是否已完成 paper-reader 精读（0/1 → bool）；入库/单篇 Download 可自动精读，Eye 可手动 |
+| `is_read` | INTEGER NOT NULL DEFAULT 0 | v3：是否已完成 paper-reader 精读（0/1 → bool）；入库/单篇 Download 可自动精读，Zap 可手动 |
 | `added_at` | TEXT NOT NULL | ISO 8601 |
 | `updated_at` | TEXT NOT NULL | ISO 8601 |
 

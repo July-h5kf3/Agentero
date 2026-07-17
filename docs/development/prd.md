@@ -109,7 +109,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- 已落地：**paper-reader 精读**（魔棒/单篇 Download 后自动 + 文件树 Eye 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / 自动批准）。
+- 已落地：**paper-reader 精读**（魔棒/单篇 Download 后自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / 自动批准）。
 - MVP 仍规划面板可点的内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
   - 总结当前论文。
   - 基于本地库问答。

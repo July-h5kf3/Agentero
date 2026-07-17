@@ -37,7 +37,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 /// Scaffold for `.agents/README.md` (only if missing).
 pub const AGENTS_DIR_README: &str = include_str!("../../../templates/vault/.agents/README.md");
 
-/// Bundled paper-reader skill (file-tree Eye workflow).
+/// Bundled paper-reader skill (file-tree Zap workflow).
 pub const PAPER_READER_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
 
@@ -108,7 +108,7 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         created.push(".agents/README.md".into());
     }
 
-    // Seed paper-reader skill for Eye / 精读 workflow (no overwrite).
+    // Seed paper-reader skill for Zap / 精读 workflow (no overwrite).
     let paper_reader_dir = join_rel(path, ".agents/skills/paper-reader");
     let paper_reader_skill = paper_reader_dir.join("SKILL.md");
     if !paper_reader_skill.exists() {

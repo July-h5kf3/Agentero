@@ -33,7 +33,7 @@
 - 多窗口：`⌘N` 新开窗口，当前 Vault 按窗口隔离（sessionStorage）；各窗独立 tab 集。
 - 左下角：后台任务条（下载 / 入库 / 导入导出 / paper-reader 精读等；`BackgroundTasksPanel`；hover 保持实色不透明）。
 - 右上角：全局错误 Toast（`notifyError` / Sonner；见 [`ui.md`](ui.md) §2.1.2）。
-- 文件树 paper 行：资源不齐 → Download；资源齐且未读 → Eye（精读；入库/单篇 Download 亦可**自动**精读）。
+- 文件树 paper 行：资源不齐 → Download；资源齐且未读 → Zap（精读；入库/单篇 Download 亦可**自动**精读）。
 
 ## 本分区文档
 

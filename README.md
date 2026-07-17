@@ -21,7 +21,7 @@
 ## 功能
 
 - **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
-  - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Eye 可手动；写 `NOTES.md` 并标记 `is_read`。
+  - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 Zap 可手动；写 `NOTES.md` 并标记 `is_read`。
 - **魔棒入库**：与 Zotero 当中能力一致；catalog 权威 + 默认 PDF / arXiv TeX。
 - **文档标签页**：多文档 tab（`⌘W` 关标签；无标签时关窗口）；Library / PDF / 图片 / Markdown。
 - **Markdown 内嵌图片**：粘贴 / 工具栏写入笔记旁 `./assets/`；选中显示源码；删除节点可 GC 文件。

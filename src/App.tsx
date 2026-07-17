@@ -1592,7 +1592,7 @@ export default function App() {
 		return set;
 	}, [libraryPapers]);
 
-	/** Catalog rows by vault-relative path (for Eye / is_read). */
+	/** Catalog rows by vault-relative path (for Zap / is_read). */
 	const paperMetaByRelPath = useMemo(() => {
 		const map = new Map<string, PaperMetadata>();
 		for (const p of libraryPapers) {
@@ -1604,7 +1604,7 @@ export default function App() {
 	}, [libraryPapers]);
 
 	/**
-	 * paper-reader workflow: Eye on complete + unread papers.
+	 * paper-reader workflow: Zap on complete + unread papers.
 	 * Progress surfaces in the bottom-left background tasks panel.
 	 */
 	const handleReadPaper = useCallback(

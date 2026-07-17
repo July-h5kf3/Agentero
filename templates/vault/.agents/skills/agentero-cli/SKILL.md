@@ -15,7 +15,7 @@ description: >-
 You use the **`agentero` CLI** as a stable machine interface to an Agentero vault.
 You do **not** treat the CLI as a chat runtime: it has **no BYOA**, no ACP, no
 paper-reader. Reading and writing lecture-style `NOTES.md` is **your** job (or
-use the separate `paper-reader` skill / desktop Eye workflow).
+use the separate `paper-reader` skill / desktop Zap workflow).
 
 Design reference (repo): `docs/development/cli.md`.
 

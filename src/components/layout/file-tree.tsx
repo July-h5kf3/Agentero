@@ -1,6 +1,5 @@
 import {
 	Download,
-	Eye,
 	FileCode2,
 	FileImage,
 	FileJson,
@@ -16,6 +15,7 @@ import {
 	Upload,
 	WandSparkles,
 	X,
+	Zap,
 } from "lucide-react";
 import {
 	type DragEvent as ReactDragEvent,
@@ -276,7 +276,7 @@ type FileTreeProps = {
 	/** Download missing assets for every incomplete paper (Library row). */
 	onDownloadAllMissingAssets?: () => Promise<void>;
 	/**
-	 * Catalog paper rows keyed by vault-relative path (for `is_read` / Eye icon).
+	 * Catalog paper rows keyed by vault-relative path (for `is_read` / read trigger).
 	 * Paths normalized without leading/trailing slashes.
 	 */
 	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata>;
@@ -1006,15 +1006,12 @@ export function FileTree({
 												{isReading ? (
 													<Loader2 className="size-3.5 animate-spin" />
 												) : (
-													<Eye className="size-3.5" />
+													<Zap className="size-3.5" />
 												)}
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="right" className="max-w-xs">
 											<p className="font-medium">{t("fileTree.readPaper")}</p>
-											<p className="mt-1 text-xs opacity-90">
-												{t("fileTree.readPaperHint")}
-											</p>
 										</TooltipContent>
 									</Tooltip>
 								) : null}

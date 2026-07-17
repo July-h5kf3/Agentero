@@ -34,8 +34,8 @@
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
   - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
   - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
-- **Paper 行 Eye（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Eye` 图标；点击可**手动**启动 **paper-reader**。
-- **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Eye 消失。
+- **Paper 行 Zap（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Zap` 图标；点击可**手动**启动 **paper-reader**。
+- **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Zap 消失。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
@@ -229,7 +229,7 @@
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
-- **论文行 Eye（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。魔棒入库 / 单篇 Download 成功后会**自动**同一工作流（批量不连跑）。进度在左下角后台任务条（lookup/download → paperRead）。
+- **论文行 Zap（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。魔棒入库 / 单篇 Download 成功后会**自动**同一工作流（批量不连跑）。进度在左下角后台任务条（lookup/download → paperRead）。
 
 ### 3.1.1 文档标签页（已落地）与分屏（规划，roadmap V0.6）
 

@@ -200,7 +200,7 @@ export function paperAssetsComplete(node: TreeWalkNode): boolean {
 }
 
 /**
- * Show file-tree Eye when assets are complete and catalog says not yet read.
+ * Show file-tree Zap when assets are complete and catalog says not yet read.
  */
 export function paperNeedsRead(
 	node: TreeWalkNode,
