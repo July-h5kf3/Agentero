@@ -432,6 +432,9 @@ export default function App() {
 			}));
 	}, [activeTabId, pdfHighlightsByTab]);
 
+	/** Stable empty list so non-library tabs don't re-render on library changes. */
+	const noPapers = useMemo<PaperMetadata[]>(() => [], []);
+
 	const annotationAction = useCallback(
 		(fn: (h: PdfViewerHandle) => void) => {
 			if (!activeTabId) return;
@@ -2324,11 +2327,21 @@ export default function App() {
 													tab={tab}
 													active={tab.id === activeTabId}
 													vaultPath={vaultPath}
-													libraryPapers={libraryPapers}
-													libraryLoading={libraryLoading}
-													libraryQuery={libraryQuery}
-													libraryTagFilter={libraryTagFilter}
-													rescanning={rescanning}
+													libraryPapers={
+														tab.kind === "library" ? libraryPapers : noPapers
+													}
+													libraryLoading={
+														tab.kind === "library" ? libraryLoading : false
+													}
+													libraryQuery={
+														tab.kind === "library" ? libraryQuery : ""
+													}
+													libraryTagFilter={
+														tab.kind === "library" ? libraryTagFilter : null
+													}
+													rescanning={
+														tab.kind === "library" ? rescanning : false
+													}
 													onLibraryTagFilterChange={setLibraryTagFilter}
 													onOpenLibraryPaper={handleOpenLibraryPaper}
 													onRescanPapers={handleRescanPapers}
