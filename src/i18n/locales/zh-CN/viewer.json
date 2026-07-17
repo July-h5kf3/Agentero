@@ -26,6 +26,14 @@
 		"findClose": "关闭查找",
 		"findNoResults": "无结果"
 	},
+	"annotations": {
+		"title": "标注",
+		"open": "标注面板",
+		"export": "导出到 NOTES.md",
+		"close": "关闭",
+		"empty": "还没有高亮。划选文字即可高亮。",
+		"delete": "删除高亮"
+	},
 	"pdfAsk": {
 		"dialogLabel": "划词提问",
 		"newTitle": "新提问",

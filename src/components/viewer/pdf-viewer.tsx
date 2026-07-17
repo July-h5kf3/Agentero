@@ -12,6 +12,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	ChevronUp,
+	Highlighter,
 	List,
 	Maximize2,
 	Minimize2,
@@ -30,6 +31,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { PdfAnnotationsPanel } from "@/components/viewer/pdf-ask/annotations-panel";
 import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
@@ -195,6 +197,10 @@ export function PdfViewer({
 	const [renderZoom, setRenderZoom] = useState(1);
 	const [outline, setOutline] = useState<PdfOutlineNode[] | null>(null);
 	const [showOutline, setShowOutline] = useState(false);
+	const [showAnnotations, setShowAnnotations] = useState(false);
+	const [activeHighlightId, setActiveHighlightId] = useState<string | null>(
+		null,
+	);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findQuery, setFindQuery] = useState("");
 	const [findMatches, setFindMatches] = useState<FindMatch[]>([]);
@@ -345,6 +351,8 @@ export function PdfViewer({
 		setCurrentPage(1);
 		setShowOutline(false);
 		setOutline(null);
+		setShowAnnotations(false);
+		setActiveHighlightId(null);
 		pdfDocRef.current = null;
 		setFindOpen(false);
 		setFindQuery("");
@@ -1157,6 +1165,47 @@ export function PdfViewer({
 		// SelectionMenu shows its own confirmation, then calls onClose.
 	}, [selectionMenu, onAddNote]);
 
+	const jumpToHighlight = useCallback(
+		(h: PdfHighlight) => {
+			goToPage(h.page);
+			setActiveHighlightId(h.id);
+			window.setTimeout(() => setActiveHighlightId(null), 1600);
+		},
+		[goToPage],
+	);
+
+	const recolorHighlight = useCallback(
+		(id: string, color: HighlightColor) => {
+			setHighlights((prev) =>
+				prev.map((h) =>
+					h.id === id
+						? { ...h, color, updatedAt: new Date().toISOString() }
+						: h,
+				),
+			);
+			const target = highlightsRef.current.find((h) => h.id === id);
+			if (paperAbsPath && target) {
+				void writePdfHighlight(paperAbsPath, {
+					...target,
+					color,
+					updatedAt: new Date().toISOString(),
+				}).catch(() => undefined);
+			}
+		},
+		[paperAbsPath],
+	);
+
+	const exportHighlights = useCallback(() => {
+		if (!onAddNote) return;
+		const ordered = [...highlightsRef.current].sort(
+			(a, b) => a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+		);
+		for (const h of ordered) {
+			const q = h.quote?.trim();
+			if (q) onAddNote(q);
+		}
+	}, [onAddNote]);
+
 	const removeHighlight = useCallback(
 		(id: string) => {
 			setHighlights((prev) => prev.filter((h) => h.id !== id));
@@ -1308,6 +1357,23 @@ export function PdfViewer({
 								</TooltipContent>
 							</Tooltip>
 						) : null}
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={t("annotations.open")}
+									aria-pressed={showAnnotations}
+									onClick={() => setShowAnnotations((v) => !v)}
+								>
+									<Highlighter className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("annotations.open")}
+							</TooltipContent>
+						</Tooltip>
 					</div>
 				</TooltipProvider>
 			</div>
@@ -1421,6 +1487,17 @@ export function PdfViewer({
 					</div>
 				</TooltipProvider>
 			) : null}
+			{showAnnotations && numPages > 0 ? (
+				<PdfAnnotationsPanel
+					highlights={highlights}
+					activeId={activeHighlightId}
+					onJump={jumpToHighlight}
+					onRecolor={recolorHighlight}
+					onDelete={removeHighlight}
+					onExport={exportHighlights}
+					onClose={() => setShowAnnotations(false)}
+				/>
+			) : null}
 			<div
 				ref={scrollRef}
 				className="agentero-scroll-both min-h-0 flex-1 bg-muted/20"
@@ -1510,7 +1587,7 @@ export function PdfViewer({
 												{/* Persisted highlights (visual only; removal via click hit-test) */}
 												<HighlightLayer
 													items={pageHighlights}
-													activeId={highlightMenu?.id ?? null}
+													activeId={highlightMenu?.id ?? activeHighlightId}
 												/>
 												{findHighlight?.page === pageNumber ? (
 													<div className="pointer-events-none absolute inset-0 z-[7]">

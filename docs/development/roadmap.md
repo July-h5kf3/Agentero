@@ -45,7 +45,7 @@
 - [x] 文件树：**Finder 显示**（`⌥⌘R`）；**终端打开**（`⌥⌘T`）；**多选 + 拖拽移动**；**删除**走回收站（`path_trash`，无确认 / 无 Undo toast；侧栏 `Trash2` → 中间栏浏览 / 恢复 / 清空；`papers/` 快照 catalog）。
 - [x] Paper-centric 视图：选中 paper 后中间 PDF（本地优先 / 远程回退）或 HTML，右侧 `NOTES.md`（**仅具体论文**）。
 - [x] Vault **任意路径** PDF / 常见图片中间栏预览（`blob:`）。
-- [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**；**沉浸式阅读**（全屏 + 限宽居中）。
+- [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**；**沉浸式阅读**（全屏 + 限宽居中）；**标注面板**（高亮总览·改色·导出 NOTES）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings；左右侧栏 **常驻 collapsible + preserve-pixel-size**。
 - [x] 论文库表格：`agentero:library`、`paper_list`、表头排序、**tags 筛选**、**Rescan**（`paper_rescan`）、双向滚动。
 - [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。

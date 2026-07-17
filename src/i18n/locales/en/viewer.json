@@ -26,6 +26,14 @@
 		"findClose": "Close find",
 		"findNoResults": "No results"
 	},
+	"annotations": {
+		"title": "Annotations",
+		"open": "Annotations",
+		"export": "Export to NOTES.md",
+		"close": "Close",
+		"empty": "No highlights yet. Select text to highlight.",
+		"delete": "Delete highlight"
+	},
 	"pdfAsk": {
 		"dialogLabel": "Ask about selection",
 		"newTitle": "New question",
