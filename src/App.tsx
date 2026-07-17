@@ -1,13 +1,8 @@
 import {
-	Bot,
 	Download,
-	Focus,
 	FolderOpen,
-	Link2,
 	Loader2,
 	NotebookPen,
-	PanelLeft,
-	PanelRight,
 	PanelTop,
 	Search,
 	X,
@@ -25,14 +20,12 @@ import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
-import { DocumentTabBar } from "@/components/layout/document-tab-bar";
 import {
 	FileTree,
 	type TreeCreateDraft,
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
-import { LayoutMenu } from "@/components/layout/layout-menu";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
@@ -43,7 +36,7 @@ import {
 } from "@/components/layout/resizable";
 import { TabCenter } from "@/components/layout/tab-center";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
-import { WindowControls } from "@/components/layout/window-controls";
+import { WorkspaceHeader } from "@/components/layout/workspace-header";
 import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
 import {
 	type SettingsSection,
@@ -54,7 +47,6 @@ import { Input } from "@/components/ui/input";
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
@@ -94,7 +86,6 @@ import {
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
-import { formatShortcutById } from "@/lib/shortcuts";
 import {
 	basenameOf,
 	cycleActiveTabId,
@@ -150,11 +141,6 @@ import {
 	type WikiNavTarget,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
-
-/** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
-const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
-const CHAT_SHORTCUT = formatShortcutById("toggleChat");
-const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
 
 export default function App() {
 	const { t } = useTranslation(["app", "sidebar", "editor"]);
@@ -1909,204 +1895,29 @@ export default function App() {
 				  Title bar height must match trafficLightPosition math in tao:
 				  titleBarH ≈ closeButtonH(~14) + y(18) ≈ 32 → h-8
 				*/}
-				<header className="flex h-8 shrink-0 items-center border-b select-none">
-					{/*
-					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
-					  Keep extra gap so the sidebar toggle never hugs the lights.
-					*/}
-					{isMacDesktop ? (
-						<div
-							className="w-[92px] shrink-0 self-stretch"
-							data-tauri-drag-region
-						/>
-					) : (
-						<div className="w-2 shrink-0 self-stretch" data-tauri-drag-region />
-					)}
-					<TooltipProvider delayDuration={250}>
-						{agentZenMode ? (
-							<>
-								{/* Zen: drag strip + exit only — chat chrome lives in AgentPanel */}
-								<div
-									className="min-w-0 flex-1 self-stretch"
-									data-tauri-drag-region
-								/>
-								<div className="flex shrink-0 items-center gap-0.5 pr-2">
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.exitAgentZen")}
-												onClick={exitAgentZen}
-											>
-												<X className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("titlebar.exitAgentZenHint", {
-												shortcut: ZEN_SHORTCUT,
-											})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-							</>
-						) : (
-							<>
-								<div className="flex shrink-0 items-center gap-0.5 pr-1">
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={
-													sidebarCollapsed
-														? t("titlebar.showLeftSidebar")
-														: t("titlebar.hideLeftSidebar")
-												}
-												aria-pressed={!sidebarCollapsed}
-												onClick={toggleSidebar}
-											>
-												<PanelLeft className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{sidebarCollapsed
-												? t("titlebar.showSidebarHint", {
-														shortcut: SIDEBAR_SHORTCUT,
-													})
-												: t("titlebar.hideSidebarHint", {
-														shortcut: SIDEBAR_SHORTCUT,
-													})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								{/* Document tabs share the title bar row with zen / layout icons */}
-								{vaultPath && tabs.length ? (
-									<DocumentTabBar
-										tabs={tabs}
-										activeId={activeTabId}
-										onSelect={setActiveTabId}
-										onClose={closeTab}
-										onReorder={reorderTabs}
-									/>
-								) : (
-									<div
-										className="min-w-0 flex-1 self-stretch"
-										data-tauri-drag-region
-									/>
-								)}
-								<div className="flex shrink-0 items-center gap-0.5 pr-2">
-									<LayoutMenu
-										leftSidebarOpen={!sidebarCollapsed}
-										onToggleLeftSidebar={toggleSidebar}
-										notesAvailable={notesEligible}
-										notesOpen={showNotes}
-										onToggleNotes={(v) => setShowNotes(v)}
-										rightSidebarOpen={rightSidebarOpen}
-										onToggleRightSidebar={toggleRightSidebar}
-										zenMode={agentZenMode}
-										onToggleZen={toggleAgentZen}
-									/>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.enterAgentZen")}
-												aria-pressed={agentZenMode}
-												onClick={enterAgentZen}
-											>
-												<Focus className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("titlebar.enterAgentZenHint", {
-												shortcut: ZEN_SHORTCUT,
-											})}
-										</TooltipContent>
-									</Tooltip>
-									{rightSidebarOpen ? (
-										<>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={t("titlebar.agentPanel")}
-														aria-pressed={rightSidebarTab === "agent"}
-														className={cn(
-															rightSidebarTab === "agent" &&
-																"bg-muted text-foreground",
-														)}
-														onClick={() => openRightTab("agent")}
-													>
-														<Bot className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{t("labels.agent")}
-												</TooltipContent>
-											</Tooltip>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={t("titlebar.backlinksPanel")}
-														aria-pressed={rightSidebarTab === "backlinks"}
-														className={cn(
-															rightSidebarTab === "backlinks" &&
-																"bg-muted text-foreground",
-														)}
-														onClick={() => openRightTab("backlinks")}
-													>
-														<Link2 className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{t("labels.backlinks")}
-												</TooltipContent>
-											</Tooltip>
-										</>
-									) : null}
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={
-													rightSidebarOpen
-														? t("titlebar.hideRightSidebar")
-														: t("titlebar.showRightSidebar")
-												}
-												aria-pressed={rightSidebarOpen}
-												onClick={toggleRightSidebar}
-											>
-												<PanelRight className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{rightSidebarOpen
-												? t("titlebar.hideRightSidebarHint", {
-														shortcut: CHAT_SHORTCUT,
-													})
-												: t("titlebar.showRightSidebarHint", {
-														shortcut: CHAT_SHORTCUT,
-													})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-							</>
-						)}
-						{showWindowControls ? <WindowControls /> : null}
-					</TooltipProvider>
-				</header>
+				<WorkspaceHeader
+					isMacDesktop={isMacDesktop}
+					showWindowControls={showWindowControls}
+					agentZenMode={agentZenMode}
+					sidebarCollapsed={sidebarCollapsed}
+					hasVault={Boolean(vaultPath)}
+					tabs={tabs}
+					activeTabId={activeTabId}
+					notesEligible={notesEligible}
+					showNotes={showNotes}
+					rightSidebarOpen={rightSidebarOpen}
+					rightSidebarTab={rightSidebarTab}
+					onExitAgentZen={exitAgentZen}
+					onToggleSidebar={toggleSidebar}
+					onSelectTab={setActiveTabId}
+					onCloseTab={closeTab}
+					onReorderTabs={reorderTabs}
+					onToggleNotes={setShowNotes}
+					onToggleRightSidebar={toggleRightSidebar}
+					onToggleAgentZen={toggleAgentZen}
+					onEnterAgentZen={enterAgentZen}
+					onOpenRightTab={openRightTab}
+				/>
 
 				<ErrorBoundary label="workspace">
 					<ResizableGroup
