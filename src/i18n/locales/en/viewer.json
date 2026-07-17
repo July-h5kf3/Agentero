@@ -41,7 +41,7 @@
 	},
 	"annotations": {
 		"title": "Annotations",
-		"empty": "No annotations yet. Select text in the PDF and choose Annotate.",
+		"empty": "No highlights or annotations yet. Select text in the PDF to highlight or annotate.",
 		"placeholder": "Write a note…",
 		"save": "Save",
 		"cancel": "Cancel",

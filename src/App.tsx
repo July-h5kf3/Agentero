@@ -92,6 +92,7 @@ import {
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
 } from "@/lib/papers-api";
+import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
@@ -417,15 +418,18 @@ export default function App() {
 	const activeAnnotations = useMemo<AnnotationRow[]>(() => {
 		const list = activeTabId ? pdfHighlightsByTab[activeTabId] : undefined;
 		if (!list) return [];
-		return list
-			.filter((h) => h.comment?.trim())
+		return [...list]
+			.sort(
+				(a, b) =>
+					a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+			)
 			.map((h) => ({
 				id: h.id,
 				page: h.page,
 				quote: h.quote,
 				comment: h.comment ?? "",
-			}))
-			.sort((a, b) => a.page - b.page);
+				color: normalizeHighlightColor(h.color),
+			}));
 	}, [activeTabId, pdfHighlightsByTab]);
 
 	const annotationAction = useCallback(
