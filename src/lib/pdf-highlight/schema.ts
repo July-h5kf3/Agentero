@@ -39,7 +39,7 @@ export function parsePdfHighlight(raw: unknown): PdfHighlight | null {
 	};
 	if (typeof raw.color === "string") highlight.color = raw.color;
 	if (typeof raw.comment === "string" && raw.comment.trim()) {
-		highlight.comment = raw.comment;
+		highlight.comment = raw.comment.trim();
 	}
 	return highlight;
 }

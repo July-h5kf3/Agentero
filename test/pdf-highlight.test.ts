@@ -32,6 +32,15 @@ describe("pdf-highlight schema", () => {
 		expect(h?.comment).toBeUndefined();
 	});
 
+	it("drops or trims whitespace comments", () => {
+		expect(
+			parsePdfHighlight({ ...base, comment: "   " })?.comment,
+		).toBeUndefined();
+		expect(parsePdfHighlight({ ...base, comment: "  hi  " })?.comment).toBe(
+			"hi",
+		);
+	});
+
 	it("createHighlight carries an optional comment", () => {
 		const h = createHighlight({
 			paperPath: "papers/x",

@@ -51,7 +51,7 @@ export function createHighlight(input: {
 		quote: input.quote,
 	};
 	if (input.color) highlight.color = input.color;
-	if (input.comment?.trim()) highlight.comment = input.comment;
+	if (input.comment?.trim()) highlight.comment = input.comment.trim();
 	return highlight;
 }
 
