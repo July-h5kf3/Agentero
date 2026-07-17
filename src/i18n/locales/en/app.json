@@ -12,6 +12,7 @@
 		"hideSidebarHint": "Hide sidebar ({{shortcut}})",
 		"agentPanel": "Agent panel",
 		"backlinksPanel": "Backlinks panel",
+		"annotationsPanel": "Annotations",
 		"showRightSidebar": "Show right sidebar",
 		"hideRightSidebar": "Hide right sidebar",
 		"showRightSidebarHint": "Show right sidebar ({{shortcut}})",

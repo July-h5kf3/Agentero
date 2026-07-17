@@ -46,6 +46,11 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	type AnnotationRow,
+	AnnotationsPanel,
+} from "@/components/viewer/annotations-panel";
+import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -81,6 +86,7 @@ import {
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
 } from "@/lib/papers-api";
+import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import {
@@ -186,9 +192,9 @@ export default function App() {
 	 * Collapsed by default; top-bar icons open a tab.
 	 */
 	const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
-	const [rightSidebarTab, setRightSidebarTab] = useState<"agent" | "backlinks">(
-		"agent",
-	);
+	const [rightSidebarTab, setRightSidebarTab] = useState<
+		"agent" | "backlinks" | "annotations"
+	>("agent");
 	/**
 	 * Agent zen / quest mode: hide vault chrome, full-width Agent chat
 	 * (Cursor Agents Window / VS Code zen — distraction-free single surface).
@@ -372,6 +378,36 @@ export default function App() {
 	const activeTabIdRef = useRef(activeTabId);
 	activeTabIdRef.current = activeTabId;
 
+	/** PDF viewer imperative handles by tab id (for the annotations panel). */
+	const pdfViewerHandles = useRef(new Map<string, PdfViewerHandle>());
+	/** Latest highlights per PDF tab id, for the annotations panel. */
+	const [pdfHighlightsByTab, setPdfHighlightsByTab] = useState<
+		Record<string, PdfHighlight[]>
+	>({});
+
+	const activeAnnotations = useMemo<AnnotationRow[]>(() => {
+		const list = activeTabId ? pdfHighlightsByTab[activeTabId] : undefined;
+		if (!list) return [];
+		return list
+			.filter((h) => h.comment?.trim())
+			.map((h) => ({
+				id: h.id,
+				page: h.page,
+				quote: h.quote,
+				comment: h.comment ?? "",
+			}))
+			.sort((a, b) => a.page - b.page);
+	}, [activeTabId, pdfHighlightsByTab]);
+
+	const annotationAction = useCallback(
+		(fn: (h: PdfViewerHandle) => void) => {
+			if (!activeTabId) return;
+			const h = pdfViewerHandles.current.get(activeTabId);
+			if (h) fn(h);
+		},
+		[activeTabId],
+	);
+
 	/** Cycle the active tab by delta (wraps). */
 	const cycleActiveTab = useCallback((delta: number) => {
 		setActiveTabId((cur) => cycleActiveTabId(tabsRef.current, cur, delta));
@@ -540,7 +576,7 @@ export default function App() {
 
 	/** Open right sidebar on a tab (or switch tab if already open). */
 	const openRightTab = useCallback(
-		(tab: "agent" | "backlinks") => {
+		(tab: "agent" | "backlinks" | "annotations") => {
 			setRightSidebarTab(tab);
 			if (tab === "agent") setAgentPanelMounted(true);
 			if (!rightSidebarOpen) {
@@ -2180,6 +2216,17 @@ export default function App() {
 														if (vaultPath) void refreshTree(vaultPath);
 													}}
 													onTabPatch={updateTab}
+													registerPdfHandle={(tabId, handle) => {
+														if (handle)
+															pdfViewerHandles.current.set(tabId, handle);
+														else pdfViewerHandles.current.delete(tabId);
+													}}
+													onPdfHighlightsChange={(tabId, list) =>
+														setPdfHighlightsByTab((prev) => ({
+															...prev,
+															[tabId]: list,
+														}))
+													}
 												/>
 											</div>
 										))}
@@ -2364,6 +2411,20 @@ export default function App() {
 										wikiIndexRevision={wikiIndexRevision}
 									/>
 								</div>
+							) : null}
+							{rightSidebarOpen &&
+							!agentZenMode &&
+							rightSidebarTab === "annotations" ? (
+								<AnnotationsPanel
+									items={activeAnnotations}
+									onJump={(id) =>
+										annotationAction((h) => h.scrollToHighlight(id))
+									}
+									onEdit={(id) => annotationAction((h) => h.editComment(id))}
+									onDelete={(id) =>
+										annotationAction((h) => h.deleteHighlight(id))
+									}
+								/>
 							) : null}
 						</ResizablePanel>
 					</ResizableGroup>

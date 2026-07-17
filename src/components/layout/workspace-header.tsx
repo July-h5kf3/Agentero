@@ -1,4 +1,12 @@
-import { Bot, Focus, Link2, PanelLeft, PanelRight, X } from "lucide-react";
+import {
+	Bot,
+	Focus,
+	Link2,
+	MessageSquareText,
+	PanelLeft,
+	PanelRight,
+	X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DocumentTabBar } from "@/components/layout/document-tab-bar";
 import { LayoutMenu } from "@/components/layout/layout-menu";
@@ -30,7 +38,7 @@ type WorkspaceHeaderProps = {
 	notesEligible: boolean;
 	showNotes: boolean;
 	rightSidebarOpen: boolean;
-	rightSidebarTab: "agent" | "backlinks";
+	rightSidebarTab: "agent" | "backlinks" | "annotations";
 	onExitAgentZen: () => void;
 	onToggleSidebar: () => void;
 	onSelectTab: (id: string) => void;
@@ -40,7 +48,7 @@ type WorkspaceHeaderProps = {
 	onToggleRightSidebar: () => void;
 	onToggleAgentZen: () => void;
 	onEnterAgentZen: () => void;
-	onOpenRightTab: (tab: "agent" | "backlinks") => void;
+	onOpenRightTab: (tab: "agent" | "backlinks" | "annotations") => void;
 };
 
 /** Title-bar row: window chrome, sidebar toggles, document tabs, layout + agent controls. */
@@ -227,6 +235,27 @@ export function WorkspaceHeader({
 										</TooltipTrigger>
 										<TooltipContent side="bottom">
 											{t("labels.backlinks")}
+										</TooltipContent>
+									</Tooltip>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label={t("titlebar.annotationsPanel")}
+												aria-pressed={rightSidebarTab === "annotations"}
+												className={cn(
+													rightSidebarTab === "annotations" &&
+														"bg-muted text-foreground",
+												)}
+												onClick={() => onOpenRightTab("annotations")}
+											>
+												<MessageSquareText className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{t("annotations.title", { ns: "viewer" })}
 										</TooltipContent>
 									</Tooltip>
 								</>
