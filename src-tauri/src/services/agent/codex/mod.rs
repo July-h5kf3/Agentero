@@ -21,6 +21,9 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::watch;
 
+mod value;
+use value::{content_text, scalar_string, string};
+
 const CLIENT_INFO: &str = "agentero";
 const AGENTERO_THREAD_INDEX_PATH: &str = ".agentero/agent-sessions/codex.json";
 const RPC_TIMEOUT: Duration = Duration::from_secs(15);
@@ -314,19 +317,6 @@ fn sandbox(auto_approve: bool) -> &'static str {
     }
 }
 
-fn string(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(Value::as_str).map(str::to_string))
-}
-
-fn scalar_string(value: &Value, keys: &[&str]) -> Option<String> {
-    keys.iter().find_map(|key| match value.get(*key) {
-        Some(Value::String(value)) => Some(value.clone()),
-        Some(Value::Number(value)) => Some(value.to_string()),
-        _ => None,
-    })
-}
-
 fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
     let id = string(value, &["id", "threadId"])?;
     Some(CodexThreadInfo {
@@ -361,31 +351,6 @@ fn validate_thread_vault(
         ));
     }
     Ok(())
-}
-
-fn content_text(value: &Value) -> String {
-    match value {
-        Value::String(value) => value.clone(),
-        Value::Array(values) => values
-            .iter()
-            .map(content_text)
-            .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        Value::Object(map) => {
-            if let Some(text) = map.get("text").and_then(Value::as_str) {
-                return text.to_string();
-            }
-            if let Some(content) = map.get("content") {
-                return content_text(content);
-            }
-            if let Some(message) = map.get("message") {
-                return content_text(message);
-            }
-            String::new()
-        }
-        _ => String::new(),
-    }
 }
 
 fn codex_home(desc: &AgentDescriptor) -> Option<PathBuf> {
@@ -1139,7 +1104,7 @@ pub async fn warm_codex(
 
 #[cfg(test)]
 mod tests {
-    use super::{turn_completion, TurnNotification};
+    use super::{approval_policy, sandbox, thread_info, turn_completion, TurnNotification};
     use serde_json::json;
 
     #[test]
@@ -1158,5 +1123,39 @@ mod tests {
             })),
             TurnNotification::Failed("boom".to_string())
         );
+    }
+
+    #[test]
+    fn approval_policy_is_always_never() {
+        assert_eq!(approval_policy(false), "never");
+        assert_eq!(approval_policy(true), "never");
+    }
+
+    #[test]
+    fn sandbox_reflects_auto_approve() {
+        assert_eq!(sandbox(false), "workspace-write");
+        assert_eq!(sandbox(true), "danger-full-access");
+    }
+
+    #[test]
+    fn thread_info_builds_and_falls_back_title_to_id() {
+        let info = thread_info(&json!({ "id": "t1", "cwd": "/v" })).expect("thread info");
+        assert_eq!(info.id, "t1");
+        assert_eq!(info.title, "t1");
+        assert_eq!(info.cwd.as_deref(), Some("/v"));
+
+        let info = thread_info(&json!({
+            "threadId": "t2",
+            "title": "Hello",
+            "createdAt": "2024",
+            "updatedAt": 5,
+        }))
+        .expect("thread info");
+        assert_eq!(info.id, "t2");
+        assert_eq!(info.title, "Hello");
+        assert_eq!(info.created_at.as_deref(), Some("2024"));
+        assert_eq!(info.updated_at.as_deref(), Some("5"));
+
+        assert!(thread_info(&json!({ "name": "no id" })).is_none());
     }
 }

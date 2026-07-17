@@ -4,6 +4,7 @@ import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/tauri";
+import { toVaultRelative } from "@/lib/wiki";
 
 export type CreateVaultResult = {
 	path: string;
@@ -373,4 +374,74 @@ export function vaultDisplayName(rootPath: string | null): string {
 	if (!rootPath) return i18n.t("app:vault.noVaultName");
 	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
 	return parts[parts.length - 1] || rootPath;
+}
+
+// --- File-tree path helpers (unit-tested in test/vault-tree.test.ts) ---
+
+/** Normalize an absolute path for case-insensitive equality (forward slashes, no trailing slash). */
+export function normalizePathKey(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** Find a tree node by absolute path (case-insensitive, separator-agnostic). */
+export function treeFindNode(
+	nodes: FileNode[],
+	path: string,
+): FileNode | undefined {
+	const key = normalizePathKey(path);
+	const walk = (list: FileNode[]): FileNode | undefined => {
+		for (const n of list) {
+			if (normalizePathKey(n.path) === key) return n;
+			if (n.children?.length) {
+				const hit = walk(n.children);
+				if (hit) return hit;
+			}
+		}
+		return undefined;
+	};
+	return walk(nodes);
+}
+
+/** Parent dir for a new file/folder: selected folder, or parent of selected file, else vault root. */
+export function resolveCreateParent(
+	vaultRoot: string,
+	selectedPath: string | null,
+	tree: FileNode[],
+): string {
+	if (!selectedPath) return vaultRoot;
+	const node = treeFindNode(tree, selectedPath);
+	if (node?.kind === "directory") return selectedPath;
+	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
+	return parent && parent !== selectedPath ? parent : vaultRoot;
+}
+
+/** Flatten the tree to vault-relative Markdown paths (for wikilink resolution). */
+export function collectMarkdownRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind === "directory" && n.children) walk(n.children);
+			else if (n.kind === "file" && isMarkdownPath(n.path)) {
+				out.push(toVaultRelative(vaultPath, n.path));
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
+/** Vault-relative paper folder path derived from a `.../NOTES.md` absolute path. */
+export function paperRelFromNotes(
+	notesPath: string | null,
+	vaultPath: string | null,
+): string | null {
+	if (!notesPath || !vaultPath) return null;
+	const abs = notesPath.replace(/[\\/]NOTES\.md$/i, "").replace(/\\/g, "/");
+	const root = vaultPath.replace(/\\/g, "/").replace(/\/$/, "");
+	if (abs === root) return "";
+	if (abs.startsWith(`${root}/`)) return abs.slice(root.length + 1);
+	return abs;
 }

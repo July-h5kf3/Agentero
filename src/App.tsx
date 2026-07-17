@@ -1,13 +1,8 @@
 import {
-	Bot,
 	Download,
-	Focus,
 	FolderOpen,
-	Link2,
 	Loader2,
 	NotebookPen,
-	PanelLeft,
-	PanelRight,
 	PanelTop,
 	Search,
 	X,
@@ -25,26 +20,23 @@ import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
-import { DocumentTabBar } from "@/components/layout/document-tab-bar";
 import {
 	FileTree,
 	type TreeCreateDraft,
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
-import { LayoutMenu } from "@/components/layout/layout-menu";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
-import { PapersLibrary } from "@/components/layout/papers-library";
-import { RecycleBinView } from "@/components/layout/recycle-bin-view";
 import {
 	ResizableGroup,
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import { TabCenter } from "@/components/layout/tab-center";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
-import { WindowControls } from "@/components/layout/window-controls";
+import { WorkspaceHeader } from "@/components/layout/workspace-header";
 import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
 import {
 	type SettingsSection,
@@ -55,31 +47,24 @@ import { Input } from "@/components/ui/input";
 import {
 	Tooltip,
 	TooltipContent,
-	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { HtmlViewer } from "@/components/viewer/html-viewer";
-import { ImageViewer } from "@/components/viewer/image-viewer";
-import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
+import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
+import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
+import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
-import {
-	startVaultWatch,
-	stopVaultWatch,
-	VAULT_FILE_CHANGED_EVENT,
-	type VaultFileChangedPayload,
-} from "@/lib/fs-watch";
 import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
+	collectPapersNeedingAssetDownload,
 	detectPaperDirectory,
 	isPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
-	paperNeedsAssetDownload,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import {
@@ -101,13 +86,23 @@ import {
 } from "@/lib/papers-api";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
-import { formatShortcutById, resolveShortcutId } from "@/lib/shortcuts";
 import {
 	basenameOf,
+	cycleActiveTabId,
 	type DocTab,
+	insertPlaceholderTab,
+	loadPersistedTabs,
 	loadTabResources,
+	moveTab,
 	normalizeTabPath,
+	patchTab,
+	removeTab,
+	removeTabsUnderPath,
+	reseedMarkdownTab,
+	reseedNotesTab,
 	revokeTabPdfSource,
+	savePersistedTabs,
+	syncTabSeedsForPath,
 	tabIdForPath,
 	tabIsPaperNotes,
 	tabNotesEligible,
@@ -115,6 +110,7 @@ import {
 import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
 	type FileNode,
@@ -129,6 +125,7 @@ import {
 	pickVaultDirectory,
 	readVaultFile,
 	removeRecentVault,
+	resolveCreateParent,
 	saveVaultPath,
 	vaultDisplayName,
 	vaultRelativePath,
@@ -144,91 +141,6 @@ import {
 	type WikiNavTarget,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
-
-/** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
-const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
-const CHAT_SHORTCUT = formatShortcutById("toggleChat");
-const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
-
-const TABS_KEY = "agentero-open-tabs";
-
-type PersistedTab = { path: string; mode: CenterViewMode };
-type PersistedTabs = { tabs: PersistedTab[]; activeIndex: number };
-
-function loadPersistedTabs(): PersistedTabs | null {
-	try {
-		const raw = localStorage.getItem(TABS_KEY);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as PersistedTabs;
-		if (!parsed || !Array.isArray(parsed.tabs)) return null;
-		return parsed;
-	} catch {
-		return null;
-	}
-}
-
-/** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
-function normalizePathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-function treeFindNode(nodes: FileNode[], path: string): FileNode | undefined {
-	const key = normalizePathKey(path);
-	const walk = (list: FileNode[]): FileNode | undefined => {
-		for (const n of list) {
-			if (normalizePathKey(n.path) === key) return n;
-			if (n.children?.length) {
-				const hit = walk(n.children);
-				if (hit) return hit;
-			}
-		}
-		return undefined;
-	};
-	return walk(nodes);
-}
-
-/** Parent directory for new file/folder: selected folder, or parent of selected file, else vault root. */
-function resolveCreateParent(
-	vaultRoot: string,
-	selectedPath: string | null,
-	tree: FileNode[],
-): string {
-	if (!selectedPath) return vaultRoot;
-	const node = treeFindNode(tree, selectedPath);
-	if (node?.kind === "directory") return selectedPath;
-	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
-	return parent && parent !== selectedPath ? parent : vaultRoot;
-}
-
-function collectMarkdownRelPaths(
-	nodes: FileNode[],
-	vaultPath: string | null,
-): string[] {
-	const out: string[] = [];
-	const walk = (list: FileNode[]) => {
-		for (const n of list) {
-			if (n.kind === "directory" && n.children) walk(n.children);
-			else if (n.kind === "file" && isMarkdownPath(n.path)) {
-				out.push(toVaultRelative(vaultPath, n.path));
-			}
-		}
-	};
-	walk(nodes);
-	return out;
-}
-
-/** Vault-relative paper folder path derived from a `.../NOTES.md` absolute path. */
-function paperRelFromNotes(
-	notesPath: string | null,
-	vaultPath: string | null,
-): string | null {
-	if (!notesPath || !vaultPath) return null;
-	const abs = notesPath.replace(/[\\/]NOTES\.md$/i, "").replace(/\\/g, "/");
-	const root = vaultPath.replace(/\\/g, "/").replace(/\/$/, "");
-	if (abs === root) return "";
-	if (abs.startsWith(`${root}/`)) return abs.slice(root.length + 1);
-	return abs;
-}
 
 export default function App() {
 	const { t } = useTranslation(["app", "sidebar", "editor"]);
@@ -354,7 +266,7 @@ export default function App() {
 
 	/** Merge a patch into the tab with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
-		setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+		setTabs((prev) => patchTab(prev, id, patch));
 	}, []);
 
 	/**
@@ -367,30 +279,9 @@ export default function App() {
 			const id = tabIdForPath(path);
 			let exists = false;
 			setTabs((prev) => {
-				if (prev.some((t) => t.id === id)) {
-					exists = true;
-					return prev;
-				}
-				const placeholder: DocTab = {
-					id,
-					path: isLibraryVirtualPath(path) ? LIBRARY_VIRTUAL_PATH : path,
-					kind: isLibraryVirtualPath(path) ? "library" : "file",
-					title: isLibraryVirtualPath(path) ? "Library" : basenameOf(path),
-					mode: opts?.preferMode ?? "markdown",
-					paperMeta: null,
-					pdfUrl: null,
-					htmlUrl: null,
-					imageUrl: null,
-					notesPath: null,
-					notesSeed: "",
-					markdownSeed: "",
-					markdownDirty: false,
-					notesDirty: false,
-					seedKey: 0,
-					notesKey: 0,
-					loaded: false,
-				};
-				return [...prev, placeholder];
+				const result = insertPlaceholderTab(prev, path, opts?.preferMode);
+				exists = result.exists;
+				return result.tabs;
 			});
 			setActiveTabId(id);
 
@@ -440,60 +331,35 @@ export default function App() {
 	/** Close a tab; move focus to a neighbor, or Library when emptied. */
 	const closeTab = useCallback((id: string) => {
 		setTabs((prev) => {
-			const idx = prev.findIndex((t) => t.id === id);
-			if (idx < 0) return prev;
-			const closing = prev[idx];
-			if (closing) revokeTabPdfSource(closing);
-			const next = prev.filter((t) => t.id !== id);
-			setActiveTabId((curActive) => {
-				if (curActive !== id) return curActive;
-				if (!next.length) return null;
-				const neighbor = next[Math.min(idx, next.length - 1)];
-				return neighbor?.id ?? null;
-			});
-			return next;
+			const { tabs, removed, activeId } = removeTab(
+				prev,
+				id,
+				activeTabIdRef.current,
+			);
+			if (!removed) return prev;
+			revokeTabPdfSource(removed);
+			setActiveTabId(activeId);
+			return tabs;
 		});
 	}, []);
 
 	/** Close every tab whose path is at or under the given path. */
 	const closeTabsUnderPath = useCallback((path: string) => {
-		const key = normalizeTabPath(path);
 		setTabs((prev) => {
-			const survivors: DocTab[] = [];
-			let changed = false;
-			for (const t of prev) {
-				if (isLibraryVirtualPath(t.path)) {
-					survivors.push(t);
-					continue;
-				}
-				const tk = normalizeTabPath(t.path);
-				if (tk === key || tk.startsWith(`${key}/`)) {
-					revokeTabPdfSource(t);
-					changed = true;
-					continue;
-				}
-				survivors.push(t);
-			}
-			if (!changed) return prev;
-			setActiveTabId((curActive) =>
-				survivors.some((t) => t.id === curActive)
-					? curActive
-					: (survivors[survivors.length - 1]?.id ?? null),
+			const { tabs, removed, activeId } = removeTabsUnderPath(
+				prev,
+				path,
+				activeTabIdRef.current,
 			);
-			return survivors;
+			if (!removed.length) return prev;
+			for (const t of removed) revokeTabPdfSource(t);
+			setActiveTabId(activeId);
+			return tabs;
 		});
 	}, []);
 
 	const reorderTabs = useCallback((fromId: string, toId: string) => {
-		setTabs((prev) => {
-			const from = prev.findIndex((t) => t.id === fromId);
-			const to = prev.findIndex((t) => t.id === toId);
-			if (from < 0 || to < 0 || from === to) return prev;
-			const next = [...prev];
-			const [moved] = next.splice(from, 1);
-			next.splice(to, 0, moved);
-			return next;
-		});
+		setTabs((prev) => moveTab(prev, fromId, toId));
 	}, []);
 
 	const setActiveTabMode = useCallback(
@@ -511,11 +377,7 @@ export default function App() {
 
 	/** Cycle the active tab by delta (wraps). */
 	const cycleActiveTab = useCallback((delta: number) => {
-		const list = tabsRef.current;
-		if (list.length < 2) return;
-		const idx = list.findIndex((t) => t.id === activeTabIdRef.current);
-		const nextIdx = (idx + delta + list.length) % list.length;
-		setActiveTabId(list[nextIdx].id);
+		setActiveTabId((cur) => cycleActiveTabId(tabsRef.current, cur, delta));
 	}, []);
 
 	/**
@@ -551,36 +413,12 @@ export default function App() {
 
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
-		const id = tabIdForPath(paperDir);
-		setTabs((prev) =>
-			prev.map((t) =>
-				t.id === id
-					? {
-							...t,
-							notesSeed: content,
-							notesDirty: false,
-							notesKey: t.notesKey + 1,
-						}
-					: t,
-			),
-		);
+		setTabs((prev) => reseedNotesTab(prev, paperDir, content));
 	}, []);
 
 	/** Reseed an open plain-Markdown tab after an external/Agent write. */
 	const refreshTabMarkdown = useCallback((absPath: string, content: string) => {
-		const id = tabIdForPath(absPath);
-		setTabs((prev) =>
-			prev.map((t) =>
-				t.id === id
-					? {
-							...t,
-							markdownSeed: content,
-							markdownDirty: false,
-							seedKey: t.seedKey + 1,
-						}
-					: t,
-			),
-		);
+		setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
 	}, []);
 
 	/** Append a selected PDF passage to a paper's NOTES.md as a blockquote. */
@@ -915,42 +753,12 @@ export default function App() {
 	}, []);
 
 	// Start/stop the Host Vault filesystem watcher for this window's active Vault.
-	// start() replaces any existing watcher for this window, so a Vault switch needs
-	// only a fresh start (no cleanup-stop, which could race the new start). Window
-	// close is handled by the Host's on_window_event(Destroyed).
-	useEffect(() => {
-		if (!isTauri()) return;
-		if (!vaultPath) {
-			void stopVaultWatch().catch(() => {});
-			return;
-		}
-		void startVaultWatch(vaultPath).catch(() => {
-			// watcher is best-effort; editor still works without live reload
-		});
-	}, [vaultPath]);
-
-	// Reload open editors + file tree when files change on disk (external / Agent).
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<VaultFileChangedPayload>(
-				VAULT_FILE_CHANGED_EVENT,
-				({ payload }) => {
-					for (const p of payload.paths) void applyDiskChange(p);
-					// Structural changes affect the tree; plain content edits don't.
-					if (payload.kind !== "modify") scheduleTreeRefresh();
-				},
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [applyDiskChange, scheduleTreeRefresh]);
+	// Live-reload open editors + file tree when files change on disk (external / Agent).
+	useVaultFileEvents({
+		vaultPath,
+		onDiskChange: applyDiskChange,
+		onStructuralChange: scheduleTreeRefresh,
+	});
 
 	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
 	const rebuildWikiAndNotify = useCallback(async (path: string) => {
@@ -1308,179 +1116,6 @@ export default function App() {
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
 	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const id = resolveShortcutId(event, {
-				settingsOpen: settingsOpenRef.current,
-			});
-			if (!id) return;
-
-			// ⌘⌫ is "delete to line start" in editors — only claim it outside text fields.
-			if (id === "deleteTreeItem") {
-				const el = event.target;
-				if (
-					el instanceof HTMLElement &&
-					el.closest(
-						"input, textarea, select, [contenteditable='true'], [role='textbox']",
-					)
-				) {
-					return;
-				}
-			}
-
-			event.preventDefault();
-
-			switch (id) {
-				case "settings":
-					if (settingsOpenRef.current) closeSettings();
-					else openSettings();
-					break;
-				case "closeSheet":
-					closeSettings();
-					break;
-				case "newWindow":
-					void handleNewWindow();
-					break;
-				case "openVault":
-					void handleOpenVault();
-					break;
-				case "refreshTree":
-					handleRefresh();
-					break;
-				case "revealInFinder":
-					handleRevealInFinder();
-					break;
-				case "openInTerminal":
-					handleOpenInTerminal();
-					break;
-				case "deleteTreeItem":
-					handleDeleteSelected();
-					break;
-				case "magicWand":
-					openMagicWand();
-					break;
-				case "toggleSidebar":
-					toggleSidebar();
-					break;
-				case "toggleChat":
-					toggleChat();
-					break;
-				case "toggleAgentZen":
-					toggleAgentZen();
-					break;
-				case "focusSidebar":
-					expandSidebar();
-					break;
-				case "focusEditor":
-					editorPaneRef.current
-						?.querySelector<HTMLElement>("[contenteditable='true']")
-						?.focus();
-					break;
-				case "focusNotes": {
-					const focusNotesEditor = () =>
-						notesPaneRef.current
-							?.querySelector<HTMLElement>("[contenteditable='true']")
-							?.focus();
-					if (!showNotesRef.current) {
-						// Notes hidden: reveal it first, then focus once it mounts.
-						setShowNotes(true);
-						requestAnimationFrame(() =>
-							requestAnimationFrame(focusNotesEditor),
-						);
-					} else {
-						focusNotesEditor();
-					}
-					break;
-				}
-				case "closeTab":
-					closeTabOrWindow();
-					break;
-				case "nextTab":
-					cycleActiveTab(1);
-					break;
-				case "prevTab":
-					cycleActiveTab(-1);
-					break;
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [
-		closeSettings,
-		expandSidebar,
-		handleNewWindow,
-		handleOpenVault,
-		handleDeleteSelected,
-		handleRefresh,
-		handleRevealInFinder,
-		handleOpenInTerminal,
-		openMagicWand,
-		openSettings,
-		toggleAgentZen,
-		toggleChat,
-		toggleSidebar,
-		closeTabOrWindow,
-		cycleActiveTab,
-	]);
-
-	// Native menu bar (agentero → Settings…, File, View) — desktop only
-	useEffect(() => {
-		if (!isTauri()) return;
-
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-
-			unsubs.push(
-				await listen("settings", () => {
-					openSettings();
-				}),
-			);
-			// new_window is handled natively in Rust (creates the window directly).
-			unsubs.push(
-				await listen("open_vault", () => {
-					void handleOpenVault();
-				}),
-			);
-			unsubs.push(
-				await listen("refresh_tree", () => {
-					handleRefresh();
-				}),
-			);
-			unsubs.push(
-				await listen("toggle_sidebar", () => {
-					toggleSidebar();
-				}),
-			);
-			unsubs.push(
-				await listen("toggle_chat", () => {
-					toggleChat();
-				}),
-			);
-			// File → Close / ⌘W (macOS menu accelerator; keydown also handles non-macOS)
-			unsubs.push(
-				await listen("close_tab_or_window", () => {
-					closeTabOrWindow();
-				}),
-			);
-		})();
-
-		return () => {
-			cancelled = true;
-			for (const unsub of unsubs) unsub();
-		};
-	}, [
-		closeTabOrWindow,
-		handleOpenVault,
-		handleRefresh,
-		openSettings,
-		toggleChat,
-		toggleSidebar,
-	]);
-
-	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
 			return;
@@ -1489,22 +1124,7 @@ export default function App() {
 	}, [vaultPath, refreshTree]);
 
 	useEffect(() => {
-		try {
-			const payload: PersistedTabs = {
-				tabs: tabs.map((t) => ({ path: t.path, mode: t.mode })),
-				activeIndex: Math.max(
-					0,
-					tabs.findIndex((t) => t.id === activeTabId),
-				),
-			};
-			if (payload.tabs.length) {
-				localStorage.setItem(TABS_KEY, JSON.stringify(payload));
-			} else {
-				localStorage.removeItem(TABS_KEY);
-			}
-		} catch {
-			// localStorage may be unavailable; tab restore is best-effort.
-		}
+		savePersistedTabs(tabs, activeTabId);
 	}, [tabs, activeTabId]);
 
 	// Persist a specific file's Markdown to disk. The MarkdownEditor calls this with
@@ -1517,17 +1137,7 @@ export default function App() {
 			// the remount's unmount-flush must not clobber the fresh disk content.
 			if (reseedGuardRef.current.has(normalizeTabPath(path))) return;
 			// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
-			const key = path.replace(/\\/g, "/").toLowerCase();
-			setTabs((prev) =>
-				prev.map((tab) => {
-					const notesKey = tab.notesPath?.replace(/\\/g, "/").toLowerCase();
-					if (notesKey === key) return { ...tab, notesSeed: md };
-					if (normalizeTabPath(tab.path) === normalizeTabPath(path)) {
-						return { ...tab, markdownSeed: md };
-					}
-					return tab;
-				}),
-			);
+			setTabs((prev) => syncTabSeedsForPath(prev, path, md));
 			void writeVaultFile(path, md).catch((e) => {
 				notifyError(e instanceof Error ? e.message : String(e));
 			});
@@ -1849,19 +1459,7 @@ export default function App() {
 
 	const handleDownloadAllMissingAssets = useCallback(async () => {
 		if (!vaultPath) return;
-		const queue: FileNode[] = [];
-		const walk = (list: FileNode[]) => {
-			for (const n of list) {
-				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-					if (paperNeedsAssetDownload(n)) {
-						queue.push(n);
-					}
-				} else if (n.children?.length) {
-					walk(n.children);
-				}
-			}
-		};
-		walk(tree);
+		const queue = collectPapersNeedingAssetDownload(tree);
 		if (!queue.length) return;
 
 		const errors: string[] = [];
@@ -1877,8 +1475,8 @@ export default function App() {
 				},
 				async ({ setProgress, setDetail }) => {
 					let i = 0;
-					for (const node of queue) {
-						const rel = toVaultRelative(vaultPath, node.path)
+					for (const paperPath of queue) {
+						const rel = toVaultRelative(vaultPath, paperPath)
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");
 						i += 1;
@@ -2043,36 +1641,55 @@ export default function App() {
 		}
 	}, [activateVault, openPath, t]);
 
-	// Create Vault shortcut + native menu (after handler is defined)
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			const id = resolveShortcutId(event, {
-				settingsOpen: settingsOpenRef.current,
-			});
-			if (id !== "createVault") return;
-			event.preventDefault();
-			void handleCreateVault();
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [handleCreateVault]);
+	useAppShortcuts(settingsOpen, {
+		settings: () => {
+			if (settingsOpenRef.current) closeSettings();
+			else openSettings();
+		},
+		closeSheet: closeSettings,
+		newWindow: () => void handleNewWindow(),
+		openVault: () => void handleOpenVault(),
+		createVault: () => void handleCreateVault(),
+		refreshTree: handleRefresh,
+		revealInFinder: handleRevealInFinder,
+		openInTerminal: handleOpenInTerminal,
+		deleteTreeItem: handleDeleteSelected,
+		magicWand: openMagicWand,
+		toggleSidebar,
+		toggleChat,
+		toggleAgentZen,
+		focusSidebar: expandSidebar,
+		focusEditor: () =>
+			editorPaneRef.current
+				?.querySelector<HTMLElement>("[contenteditable='true']")
+				?.focus(),
+		focusNotes: () => {
+			const focusNotesEditor = () =>
+				notesPaneRef.current
+					?.querySelector<HTMLElement>("[contenteditable='true']")
+					?.focus();
+			if (!showNotesRef.current) {
+				// Notes hidden: reveal it first, then focus once it mounts.
+				setShowNotes(true);
+				requestAnimationFrame(() => requestAnimationFrame(focusNotesEditor));
+			} else {
+				focusNotesEditor();
+			}
+		},
+		closeTab: closeTabOrWindow,
+		nextTab: () => cycleActiveTab(1),
+		prevTab: () => cycleActiveTab(-1),
+	});
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen("create_vault", () => {
-				void handleCreateVault();
-			});
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [handleCreateVault]);
+	useNativeMenuEvents({
+		onSettings: openSettings,
+		onOpenVault: handleOpenVault,
+		onCreateVault: handleCreateVault,
+		onRefresh: handleRefresh,
+		onToggleSidebar: toggleSidebar,
+		onToggleChat: toggleChat,
+		onCloseTabOrWindow: closeTabOrWindow,
+	});
 
 	const handleSelectLibrary = useCallback(() => {
 		setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
@@ -2254,111 +1871,6 @@ export default function App() {
 
 	const editorFontSize = settings.editorFontSize;
 
-	/** Center content for one tab (kept mounted; hidden when not active). */
-	const renderTabCenter = (tab: DocTab) => {
-		if (tab.kind === "library") {
-			return (
-				<PapersLibrary
-					papers={libraryPapers}
-					loading={libraryLoading}
-					query={libraryQuery}
-					tagFilter={libraryTagFilter}
-					onTagFilterChange={setLibraryTagFilter}
-					onOpenPaper={handleOpenLibraryPaper}
-					onRescan={() => void handleRescanPapers()}
-					rescanning={rescanning}
-					className="bg-muted/20"
-				/>
-			);
-		}
-		if (tab.kind === "trash") {
-			return (
-				<RecycleBinView
-					vaultPath={vaultPath}
-					active={tab.id === activeTabId}
-					onChanged={handleTrashChanged}
-					className="bg-muted/20"
-				/>
-			);
-		}
-		const isNotes = tabIsPaperNotes(tab);
-		if (tab.mode === "markdown") {
-			return (
-				<div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
-					<MarkdownEditor
-						key={
-							isNotes
-								? `notes-center-${tab.id}-${tab.notesKey}`
-								: `file-${tab.id}-${tab.seedKey}`
-						}
-						className="agentero-scroll h-full min-h-0"
-						initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
-						filePath={
-							isNotes
-								? tab.notesPath
-								: isMarkdownPath(tab.path)
-									? tab.path
-									: null
-						}
-						fontSize={editorFontSize}
-						showToolbar={settings.showEditorToolbar}
-						placeholder={
-							isNotes
-								? t("editor.notesPlaceholder")
-								: t("editor.markdownPlaceholder")
-						}
-						onPersist={persistFile}
-						onAssetsChanged={() => {
-							if (vaultPath) void refreshTree(vaultPath);
-						}}
-						onDirtyChange={(d) =>
-							updateTab(
-								tab.id,
-								isNotes ? { notesDirty: d } : { markdownDirty: d },
-							)
-						}
-					/>
-				</div>
-			);
-		}
-		if (tab.mode === "pdf") {
-			return (
-				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-					<PdfViewer
-						source={tab.pdfUrl}
-						paperAbsPath={
-							tab.notesPath
-								? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "")
-								: null
-						}
-						paperRelPath={
-							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
-						}
-						vaultPath={vaultPath}
-						onAddNote={(quote) => void handleAddPdfNote(tab, quote)}
-						className="h-full w-full"
-					/>
-				</div>
-			);
-		}
-		if (tab.mode === "image") {
-			return (
-				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-					<ImageViewer
-						source={tab.imageUrl}
-						alt={tab.title}
-						className="h-full w-full"
-					/>
-				</div>
-			);
-		}
-		return (
-			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-				<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
-			</div>
-		);
-	};
-
 	return (
 		<WikiNavContext.Provider value={wikiNavValue}>
 			<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -2371,204 +1883,29 @@ export default function App() {
 				  Title bar height must match trafficLightPosition math in tao:
 				  titleBarH ≈ closeButtonH(~14) + y(18) ≈ 32 → h-8
 				*/}
-				<header className="flex h-8 shrink-0 items-center border-b select-none">
-					{/*
-					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
-					  Keep extra gap so the sidebar toggle never hugs the lights.
-					*/}
-					{isMacDesktop ? (
-						<div
-							className="w-[92px] shrink-0 self-stretch"
-							data-tauri-drag-region
-						/>
-					) : (
-						<div className="w-2 shrink-0 self-stretch" data-tauri-drag-region />
-					)}
-					<TooltipProvider delayDuration={250}>
-						{agentZenMode ? (
-							<>
-								{/* Zen: drag strip + exit only — chat chrome lives in AgentPanel */}
-								<div
-									className="min-w-0 flex-1 self-stretch"
-									data-tauri-drag-region
-								/>
-								<div className="flex shrink-0 items-center gap-0.5 pr-2">
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.exitAgentZen")}
-												onClick={exitAgentZen}
-											>
-												<X className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("titlebar.exitAgentZenHint", {
-												shortcut: ZEN_SHORTCUT,
-											})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-							</>
-						) : (
-							<>
-								<div className="flex shrink-0 items-center gap-0.5 pr-1">
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={
-													sidebarCollapsed
-														? t("titlebar.showLeftSidebar")
-														: t("titlebar.hideLeftSidebar")
-												}
-												aria-pressed={!sidebarCollapsed}
-												onClick={toggleSidebar}
-											>
-												<PanelLeft className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{sidebarCollapsed
-												? t("titlebar.showSidebarHint", {
-														shortcut: SIDEBAR_SHORTCUT,
-													})
-												: t("titlebar.hideSidebarHint", {
-														shortcut: SIDEBAR_SHORTCUT,
-													})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-								{/* Document tabs share the title bar row with zen / layout icons */}
-								{vaultPath && tabs.length ? (
-									<DocumentTabBar
-										tabs={tabs}
-										activeId={activeTabId}
-										onSelect={setActiveTabId}
-										onClose={closeTab}
-										onReorder={reorderTabs}
-									/>
-								) : (
-									<div
-										className="min-w-0 flex-1 self-stretch"
-										data-tauri-drag-region
-									/>
-								)}
-								<div className="flex shrink-0 items-center gap-0.5 pr-2">
-									<LayoutMenu
-										leftSidebarOpen={!sidebarCollapsed}
-										onToggleLeftSidebar={toggleSidebar}
-										notesAvailable={notesEligible}
-										notesOpen={showNotes}
-										onToggleNotes={(v) => setShowNotes(v)}
-										rightSidebarOpen={rightSidebarOpen}
-										onToggleRightSidebar={toggleRightSidebar}
-										zenMode={agentZenMode}
-										onToggleZen={toggleAgentZen}
-									/>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.enterAgentZen")}
-												aria-pressed={agentZenMode}
-												onClick={enterAgentZen}
-											>
-												<Focus className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("titlebar.enterAgentZenHint", {
-												shortcut: ZEN_SHORTCUT,
-											})}
-										</TooltipContent>
-									</Tooltip>
-									{rightSidebarOpen ? (
-										<>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={t("titlebar.agentPanel")}
-														aria-pressed={rightSidebarTab === "agent"}
-														className={cn(
-															rightSidebarTab === "agent" &&
-																"bg-muted text-foreground",
-														)}
-														onClick={() => openRightTab("agent")}
-													>
-														<Bot className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{t("labels.agent")}
-												</TooltipContent>
-											</Tooltip>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={t("titlebar.backlinksPanel")}
-														aria-pressed={rightSidebarTab === "backlinks"}
-														className={cn(
-															rightSidebarTab === "backlinks" &&
-																"bg-muted text-foreground",
-														)}
-														onClick={() => openRightTab("backlinks")}
-													>
-														<Link2 className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{t("labels.backlinks")}
-												</TooltipContent>
-											</Tooltip>
-										</>
-									) : null}
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={
-													rightSidebarOpen
-														? t("titlebar.hideRightSidebar")
-														: t("titlebar.showRightSidebar")
-												}
-												aria-pressed={rightSidebarOpen}
-												onClick={toggleRightSidebar}
-											>
-												<PanelRight className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{rightSidebarOpen
-												? t("titlebar.hideRightSidebarHint", {
-														shortcut: CHAT_SHORTCUT,
-													})
-												: t("titlebar.showRightSidebarHint", {
-														shortcut: CHAT_SHORTCUT,
-													})}
-										</TooltipContent>
-									</Tooltip>
-								</div>
-							</>
-						)}
-						{showWindowControls ? <WindowControls /> : null}
-					</TooltipProvider>
-				</header>
+				<WorkspaceHeader
+					isMacDesktop={isMacDesktop}
+					showWindowControls={showWindowControls}
+					agentZenMode={agentZenMode}
+					sidebarCollapsed={sidebarCollapsed}
+					hasVault={Boolean(vaultPath)}
+					tabs={tabs}
+					activeTabId={activeTabId}
+					notesEligible={notesEligible}
+					showNotes={showNotes}
+					rightSidebarOpen={rightSidebarOpen}
+					rightSidebarTab={rightSidebarTab}
+					onExitAgentZen={exitAgentZen}
+					onToggleSidebar={toggleSidebar}
+					onSelectTab={setActiveTabId}
+					onCloseTab={closeTab}
+					onReorderTabs={reorderTabs}
+					onToggleNotes={setShowNotes}
+					onToggleRightSidebar={toggleRightSidebar}
+					onToggleAgentZen={toggleAgentZen}
+					onEnterAgentZen={enterAgentZen}
+					onOpenRightTab={openRightTab}
+				/>
 
 				<ErrorBoundary label="workspace">
 					<ResizableGroup
@@ -2858,7 +2195,30 @@ export default function App() {
 												ref={tab.id === activeTabId ? editorPaneRef : undefined}
 												className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden"
 											>
-												{renderTabCenter(tab)}
+												<TabCenter
+													tab={tab}
+													activeTabId={activeTabId}
+													vaultPath={vaultPath}
+													libraryPapers={libraryPapers}
+													libraryLoading={libraryLoading}
+													libraryQuery={libraryQuery}
+													libraryTagFilter={libraryTagFilter}
+													rescanning={rescanning}
+													onLibraryTagFilterChange={setLibraryTagFilter}
+													onOpenLibraryPaper={handleOpenLibraryPaper}
+													onRescanPapers={() => void handleRescanPapers()}
+													onTrashChanged={handleTrashChanged}
+													editorFontSize={editorFontSize}
+													showEditorToolbar={settings.showEditorToolbar}
+													notesPlaceholder={t("editor.notesPlaceholder")}
+													markdownPlaceholder={t("editor.markdownPlaceholder")}
+													onPersistFile={persistFile}
+													onEditorAssetsChanged={() => {
+														if (vaultPath) void refreshTree(vaultPath);
+													}}
+													onTabPatch={updateTab}
+													onAddPdfNote={handleAddPdfNote}
+												/>
 											</div>
 										))}
 									</div>
