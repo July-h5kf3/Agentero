@@ -37,14 +37,26 @@
 		"pillAria": "Open ask: {{preview}}",
 		"pillFallback": "Ask thread"
 	},
+	"annotations": {
+		"title": "Annotations",
+		"empty": "No annotations yet. Select text in the PDF and choose Annotate.",
+		"placeholder": "Write a note…",
+		"save": "Save",
+		"cancel": "Cancel",
+		"delete": "Delete",
+		"editorLabel": "Annotation note",
+		"pinAria": "Open annotation: {{preview}}",
+		"panelAria": "Annotations for this paper"
+	},
 	"selection": {
 		"menuLabel": "Selection actions",
 		"highlight": "Highlight",
-		"note": "Add to notes",
+		"note": "Annotate",
 		"ask": "Ask",
 		"translate": "Translate",
 		"noteAdded": "Added to notes",
 		"removeHighlight": "Remove highlight",
+		"editComment": "Edit note",
 		"translateAction": "Translate this passage"
 	},
 	"html": {

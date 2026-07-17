@@ -37,14 +37,26 @@
 		"pillAria": "打开提问：{{preview}}",
 		"pillFallback": "提问线程"
 	},
+	"annotations": {
+		"title": "批注",
+		"empty": "还没有批注。在 PDF 中选中文本并点「批注」。",
+		"placeholder": "写点备注…",
+		"save": "保存",
+		"cancel": "取消",
+		"delete": "删除",
+		"editorLabel": "批注备注",
+		"pinAria": "打开批注：{{preview}}",
+		"panelAria": "本论文的批注"
+	},
 	"selection": {
 		"menuLabel": "选区操作",
 		"highlight": "高亮",
-		"note": "加入笔记",
+		"note": "批注",
 		"ask": "提问",
 		"translate": "翻译",
 		"noteAdded": "已加入笔记",
 		"removeHighlight": "删除高亮",
+		"editComment": "编辑批注",
 		"translateAction": "翻译这段文字"
 	},
 	"html": {
