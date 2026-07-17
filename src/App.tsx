@@ -126,6 +126,7 @@ import {
 import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
 	type FileNode,
@@ -136,10 +137,12 @@ import {
 	joinVaultPath,
 	loadVaultTree,
 	openNewWindow,
+	paperRelFromNotes,
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
 	removeRecentVault,
+	resolveCreateParent,
 	saveVaultPath,
 	vaultDisplayName,
 	vaultRelativePath,
@@ -160,69 +163,6 @@ import { WikiNavContext } from "@/lib/wiki-nav-context";
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
-
-/** Flatten tree to vault-relative Markdown paths for wikilink resolve. */
-function normalizePathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-function treeFindNode(nodes: FileNode[], path: string): FileNode | undefined {
-	const key = normalizePathKey(path);
-	const walk = (list: FileNode[]): FileNode | undefined => {
-		for (const n of list) {
-			if (normalizePathKey(n.path) === key) return n;
-			if (n.children?.length) {
-				const hit = walk(n.children);
-				if (hit) return hit;
-			}
-		}
-		return undefined;
-	};
-	return walk(nodes);
-}
-
-/** Parent directory for new file/folder: selected folder, or parent of selected file, else vault root. */
-function resolveCreateParent(
-	vaultRoot: string,
-	selectedPath: string | null,
-	tree: FileNode[],
-): string {
-	if (!selectedPath) return vaultRoot;
-	const node = treeFindNode(tree, selectedPath);
-	if (node?.kind === "directory") return selectedPath;
-	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
-	return parent && parent !== selectedPath ? parent : vaultRoot;
-}
-
-function collectMarkdownRelPaths(
-	nodes: FileNode[],
-	vaultPath: string | null,
-): string[] {
-	const out: string[] = [];
-	const walk = (list: FileNode[]) => {
-		for (const n of list) {
-			if (n.kind === "directory" && n.children) walk(n.children);
-			else if (n.kind === "file" && isMarkdownPath(n.path)) {
-				out.push(toVaultRelative(vaultPath, n.path));
-			}
-		}
-	};
-	walk(nodes);
-	return out;
-}
-
-/** Vault-relative paper folder path derived from a `.../NOTES.md` absolute path. */
-function paperRelFromNotes(
-	notesPath: string | null,
-	vaultPath: string | null,
-): string | null {
-	if (!notesPath || !vaultPath) return null;
-	const abs = notesPath.replace(/[\\/]NOTES\.md$/i, "").replace(/\\/g, "/");
-	const root = vaultPath.replace(/\\/g, "/").replace(/\/$/, "");
-	if (abs === root) return "";
-	if (abs.startsWith(`${root}/`)) return abs.slice(root.length + 1);
-	return abs;
-}
 
 export default function App() {
 	const { t } = useTranslation(["app", "sidebar", "editor"]);
