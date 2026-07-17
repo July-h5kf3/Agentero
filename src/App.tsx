@@ -36,13 +36,12 @@ import { LayoutMenu } from "@/components/layout/layout-menu";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
-import { PapersLibrary } from "@/components/layout/papers-library";
-import { RecycleBinView } from "@/components/layout/recycle-bin-view";
 import {
 	ResizableGroup,
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import { TabCenter } from "@/components/layout/tab-center";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
 import { WindowControls } from "@/components/layout/window-controls";
 import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
@@ -58,9 +57,6 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { HtmlViewer } from "@/components/viewer/html-viewer";
-import { ImageViewer } from "@/components/viewer/image-viewer";
-import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -134,7 +130,6 @@ import {
 	joinVaultPath,
 	loadVaultTree,
 	openNewWindow,
-	paperRelFromNotes,
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
@@ -1902,111 +1897,6 @@ export default function App() {
 
 	const editorFontSize = settings.editorFontSize;
 
-	/** Center content for one tab (kept mounted; hidden when not active). */
-	const renderTabCenter = (tab: DocTab) => {
-		if (tab.kind === "library") {
-			return (
-				<PapersLibrary
-					papers={libraryPapers}
-					loading={libraryLoading}
-					query={libraryQuery}
-					tagFilter={libraryTagFilter}
-					onTagFilterChange={setLibraryTagFilter}
-					onOpenPaper={handleOpenLibraryPaper}
-					onRescan={() => void handleRescanPapers()}
-					rescanning={rescanning}
-					className="bg-muted/20"
-				/>
-			);
-		}
-		if (tab.kind === "trash") {
-			return (
-				<RecycleBinView
-					vaultPath={vaultPath}
-					active={tab.id === activeTabId}
-					onChanged={handleTrashChanged}
-					className="bg-muted/20"
-				/>
-			);
-		}
-		const isNotes = tabIsPaperNotes(tab);
-		if (tab.mode === "markdown") {
-			return (
-				<div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
-					<MarkdownEditor
-						key={
-							isNotes
-								? `notes-center-${tab.id}-${tab.notesKey}`
-								: `file-${tab.id}-${tab.seedKey}`
-						}
-						className="agentero-scroll h-full min-h-0"
-						initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
-						filePath={
-							isNotes
-								? tab.notesPath
-								: isMarkdownPath(tab.path)
-									? tab.path
-									: null
-						}
-						fontSize={editorFontSize}
-						showToolbar={settings.showEditorToolbar}
-						placeholder={
-							isNotes
-								? t("editor.notesPlaceholder")
-								: t("editor.markdownPlaceholder")
-						}
-						onPersist={persistFile}
-						onAssetsChanged={() => {
-							if (vaultPath) void refreshTree(vaultPath);
-						}}
-						onDirtyChange={(d) =>
-							updateTab(
-								tab.id,
-								isNotes ? { notesDirty: d } : { markdownDirty: d },
-							)
-						}
-					/>
-				</div>
-			);
-		}
-		if (tab.mode === "pdf") {
-			return (
-				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-					<PdfViewer
-						source={tab.pdfUrl}
-						paperAbsPath={
-							tab.notesPath
-								? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "")
-								: null
-						}
-						paperRelPath={
-							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
-						}
-						vaultPath={vaultPath}
-						onAddNote={(quote) => void handleAddPdfNote(tab, quote)}
-						className="h-full w-full"
-					/>
-				</div>
-			);
-		}
-		if (tab.mode === "image") {
-			return (
-				<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-					<ImageViewer
-						source={tab.imageUrl}
-						alt={tab.title}
-						className="h-full w-full"
-					/>
-				</div>
-			);
-		}
-		return (
-			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-				<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
-			</div>
-		);
-	};
-
 	return (
 		<WikiNavContext.Provider value={wikiNavValue}>
 			<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -2506,7 +2396,30 @@ export default function App() {
 												ref={tab.id === activeTabId ? editorPaneRef : undefined}
 												className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden"
 											>
-												{renderTabCenter(tab)}
+												<TabCenter
+													tab={tab}
+													activeTabId={activeTabId}
+													vaultPath={vaultPath}
+													libraryPapers={libraryPapers}
+													libraryLoading={libraryLoading}
+													libraryQuery={libraryQuery}
+													libraryTagFilter={libraryTagFilter}
+													rescanning={rescanning}
+													onLibraryTagFilterChange={setLibraryTagFilter}
+													onOpenLibraryPaper={handleOpenLibraryPaper}
+													onRescanPapers={() => void handleRescanPapers()}
+													onTrashChanged={handleTrashChanged}
+													editorFontSize={editorFontSize}
+													showEditorToolbar={settings.showEditorToolbar}
+													notesPlaceholder={t("editor.notesPlaceholder")}
+													markdownPlaceholder={t("editor.markdownPlaceholder")}
+													onPersistFile={persistFile}
+													onEditorAssetsChanged={() => {
+														if (vaultPath) void refreshTree(vaultPath);
+													}}
+													onTabPatch={updateTab}
+													onAddPdfNote={handleAddPdfNote}
+												/>
 											</div>
 										))}
 									</div>
