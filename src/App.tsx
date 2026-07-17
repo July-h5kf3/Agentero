@@ -62,6 +62,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { PdfViewer } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
+import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
@@ -1247,64 +1248,6 @@ export default function App() {
 		cycleActiveTab,
 	]);
 
-	// Native menu bar (agentero → Settings…, File, View) — desktop only
-	useEffect(() => {
-		if (!isTauri()) return;
-
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-
-			unsubs.push(
-				await listen("settings", () => {
-					openSettings();
-				}),
-			);
-			// new_window is handled natively in Rust (creates the window directly).
-			unsubs.push(
-				await listen("open_vault", () => {
-					void handleOpenVault();
-				}),
-			);
-			unsubs.push(
-				await listen("refresh_tree", () => {
-					handleRefresh();
-				}),
-			);
-			unsubs.push(
-				await listen("toggle_sidebar", () => {
-					toggleSidebar();
-				}),
-			);
-			unsubs.push(
-				await listen("toggle_chat", () => {
-					toggleChat();
-				}),
-			);
-			// File → Close / ⌘W (macOS menu accelerator; keydown also handles non-macOS)
-			unsubs.push(
-				await listen("close_tab_or_window", () => {
-					closeTabOrWindow();
-				}),
-			);
-		})();
-
-		return () => {
-			cancelled = true;
-			for (const unsub of unsubs) unsub();
-		};
-	}, [
-		closeTabOrWindow,
-		handleOpenVault,
-		handleRefresh,
-		openSettings,
-		toggleChat,
-		toggleSidebar,
-	]);
-
 	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
@@ -1857,22 +1800,15 @@ export default function App() {
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [handleCreateVault]);
 
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		let unsub: (() => void) | undefined;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen("create_vault", () => {
-				void handleCreateVault();
-			});
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, [handleCreateVault]);
+	useNativeMenuEvents({
+		onSettings: openSettings,
+		onOpenVault: handleOpenVault,
+		onCreateVault: handleCreateVault,
+		onRefresh: handleRefresh,
+		onToggleSidebar: toggleSidebar,
+		onToggleChat: toggleChat,
+		onCloseTabOrWindow: closeTabOrWindow,
+	});
 
 	const handleSelectLibrary = useCallback(() => {
 		setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
