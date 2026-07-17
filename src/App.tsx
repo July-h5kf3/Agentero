@@ -11,7 +11,6 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
@@ -24,6 +23,7 @@ import {
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
+import { NotesEditorTab } from "@/components/layout/notes-editor-tab";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import {
@@ -791,6 +791,11 @@ export default function App() {
 	const openAnnotationsTab = useCallback(
 		() => openRightTab("annotations"),
 		[openRightTab],
+	);
+
+	const handleNotesDirty = useCallback(
+		(id: string, dirty: boolean) => updateTab(id, { notesDirty: dirty }),
+		[updateTab],
 	);
 
 	/**
@@ -2413,28 +2418,17 @@ export default function App() {
 										{tabs
 											.filter((tab) => tab.notesPath)
 											.map((tab) => (
-												<div
+												<NotesEditorTab
 													key={tab.id}
-													hidden={tab.id !== activeTabId}
-													className="absolute inset-0"
-												>
-													<MarkdownEditor
-														key={`notes-${tab.id}-${tab.notesKey}`}
-														className="agentero-scroll h-full min-h-0"
-														initialMarkdown={tab.notesSeed}
-														filePath={tab.notesPath}
-														fontSize={editorFontSize}
-														showToolbar={settings.showEditorToolbar}
-														placeholder={t("editor.notesPlaceholder")}
-														onPersist={persistFile}
-														onAssetsChanged={() => {
-															if (vaultPath) void refreshTree(vaultPath);
-														}}
-														onDirtyChange={(d) =>
-															updateTab(tab.id, { notesDirty: d })
-														}
-													/>
-												</div>
+													tab={tab}
+													active={tab.id === activeTabId}
+													fontSize={editorFontSize}
+													showToolbar={settings.showEditorToolbar}
+													placeholder={t("editor.notesPlaceholder")}
+													onPersist={persistFile}
+													onAssetsChanged={handleEditorAssetsChanged}
+													onDirty={handleNotesDirty}
+												/>
 											))}
 									</div>
 								</div>
