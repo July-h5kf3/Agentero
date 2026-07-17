@@ -28,6 +28,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
+import {
+	AnnotationGutter,
+	type AnnotationPin,
+} from "@/components/viewer/pdf-ask/annotation-gutter";
 import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
@@ -164,7 +169,6 @@ export function PdfViewer({
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
-	onAddNote,
 	className,
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
@@ -225,6 +229,15 @@ export function PdfViewer({
 		id: string;
 		screen: { x: number; y: number };
 	} | null>(null);
+	/** Inline note editor for an annotation, anchored to a highlight */
+	const [commentEditor, setCommentEditor] = useState<{
+		id: string;
+		screen: { x: number; y: number };
+	} | null>(null);
+	/** Transient focus flash after jump-to-highlight from the panel */
+	const [activeHighlightId, setActiveHighlightId] = useState<string | null>(
+		null,
+	);
 	const highlightsRef = useRef(highlights);
 	highlightsRef.current = highlights;
 
@@ -627,6 +640,8 @@ export function PdfViewer({
 		setHighlights([]);
 		setSelectionMenu(null);
 		setHighlightMenu(null);
+		setCommentEditor(null);
+		setActiveHighlightId(null);
 		activeSessionRef.current = null;
 
 		if (!paperAbsPath) return;
@@ -1114,6 +1129,40 @@ export function PdfViewer({
 		);
 	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
 
+	const openCommentEditorFor = useCallback((id: string) => {
+		const host = contentRef.current;
+		const hl = highlightsRef.current.find((h) => h.id === id);
+		if (!host || !hl) return;
+		const pageEl = findPageElByNumber(host, hl.page);
+		const screen = popoverScreenPoint(pageEl, hl.rects);
+		if (screen) {
+			setHighlightMenu(null);
+			setCommentEditor({ id, screen });
+		}
+	}, []);
+
+	const saveComment = useCallback(
+		(id: string, text: string) => {
+			const comment = text.trim();
+			setHighlights((prev) =>
+				prev.map((h) =>
+					h.id === id ? { ...h, comment: comment || undefined } : h,
+				),
+			);
+			setCommentEditor(null);
+			if (paperAbsPath) {
+				const hl = highlightsRef.current.find((h) => h.id === id);
+				if (hl) {
+					void writePdfHighlight(paperAbsPath, {
+						...hl,
+						comment: comment || undefined,
+					}).catch(() => undefined);
+				}
+			}
+		},
+		[paperAbsPath],
+	);
+
 	const handleMenuHighlight = useCallback(() => {
 		const sm = selectionMenu;
 		if (!sm) return;
@@ -1139,11 +1188,31 @@ export function PdfViewer({
 		}
 	}, [selectionMenu, paperAbsPath, paperRelPath]);
 
-	const handleMenuNote = useCallback(() => {
-		const quote = selectionMenu?.anchor.quote?.trim();
-		if (quote) onAddNote?.(quote);
-		// SelectionMenu shows its own confirmation, then calls onClose.
-	}, [selectionMenu, onAddNote]);
+	const handleMenuAnnotate = useCallback(() => {
+		const sm = selectionMenu;
+		if (!sm) return;
+		setSelectionMenu(null);
+		const quote = sm.anchor.quote?.trim();
+		if (!quote || !sm.anchor.rects.length) return;
+		const paperPath = paperRelPath || paperAbsPath || "paper";
+		const hl = createHighlight({
+			paperPath,
+			page: sm.anchor.page,
+			rects: mergeRectsByLine(
+				sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
+			),
+			quote,
+		});
+		setHighlights((prev) => [hl, ...prev]);
+		window.getSelection()?.removeAllRanges();
+		if (paperAbsPath) {
+			void writePdfHighlight(paperAbsPath, hl).catch(() => undefined);
+		}
+		const host = contentRef.current;
+		const pageEl = host ? findPageElByNumber(host, hl.page) : null;
+		const screen = popoverScreenPoint(pageEl, hl.rects);
+		if (screen) setCommentEditor({ id: hl.id, screen });
+	}, [selectionMenu, paperAbsPath, paperRelPath]);
 
 	const removeHighlight = useCallback(
 		(id: string) => {
@@ -1447,6 +1516,22 @@ export function PdfViewer({
 										const pageHighlights = highlights.filter(
 											(h) => h.page === pageNumber,
 										);
+										const pageAnnotations: AnnotationPin[] = pageHighlights
+											.filter((h) => h.comment?.trim())
+											.map((h) => {
+												const r = h.rects[0] ?? {
+													x: 0,
+													y: 0,
+													w: 0,
+													h: 0,
+												};
+												return {
+													id: h.id,
+													x: r.x + r.w,
+													y: r.y,
+													preview: h.comment ?? "",
+												};
+											});
 										return (
 											<div
 												key={`${fileUrl}-p${pageNumber}`}
@@ -1475,7 +1560,11 @@ export function PdfViewer({
 												{/* Persisted highlights (visual only; removal via click hit-test) */}
 												<HighlightLayer
 													items={pageHighlights}
-													activeId={highlightMenu?.id ?? null}
+													activeId={
+														highlightMenu?.id ??
+														commentEditor?.id ??
+														activeHighlightId
+													}
 												/>
 												{findHighlight?.page === pageNumber ? (
 													<div className="pointer-events-none absolute inset-0 z-[7]">
@@ -1520,6 +1609,11 @@ export function PdfViewer({
 														onOpen={handleOpenPill}
 														onEnter={cancelHoverHide}
 														onLeave={scheduleHoverHide}
+													/>
+													<AnnotationGutter
+														items={pageAnnotations}
+														activeId={commentEditor?.id ?? activeHighlightId}
+														onOpen={openCommentEditorFor}
 													/>
 												</div>
 											</div>
@@ -1635,13 +1729,32 @@ export function PdfViewer({
 					<SelectionMenu
 						screen={selectionMenu.screen}
 						onHighlight={handleMenuHighlight}
-						onNote={handleMenuNote}
+						onNote={handleMenuAnnotate}
 						onAsk={handleMenuAsk}
 						onTranslate={handleMenuTranslate}
 						onClose={() => setSelectionMenu(null)}
 					/>
 				</div>
 			) : null}
+
+			{commentEditor
+				? (() => {
+						const hl = highlights.find((h) => h.id === commentEditor.id);
+						if (!hl) return null;
+						return (
+							<div data-pdf-ask-ui="">
+								<AnnotationEditor
+									screen={commentEditor.screen}
+									quote={hl.quote}
+									initialComment={hl.comment}
+									onSave={(text) => saveComment(hl.id, text)}
+									onDelete={() => removeHighlight(hl.id)}
+									onClose={() => setCommentEditor(null)}
+								/>
+							</div>
+						);
+					})()
+				: null}
 
 			{highlightMenu ? (
 				<div data-pdf-ask-ui="">

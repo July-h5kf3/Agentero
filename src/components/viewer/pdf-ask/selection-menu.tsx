@@ -1,11 +1,10 @@
 import {
-	Check,
 	Highlighter,
 	Languages,
 	MessageSquare,
 	NotebookPen,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -44,8 +43,6 @@ export function SelectionMenu({
 	onClose,
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
-	const [noted, setNoted] = useState(false);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -57,12 +54,7 @@ export function SelectionMenu({
 
 	const handleNote = useCallback(() => {
 		onNote();
-		setNoted(true);
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			timerRef.current = null;
-			onClose();
-		}, 1000);
+		onClose();
 	}, [onNote, onClose]);
 
 	return (
@@ -75,75 +67,64 @@ export function SelectionMenu({
 			aria-label={t("selection.menuLabel")}
 			onMouseDown={(e) => e.stopPropagation()}
 		>
-			{noted ? (
-				<span className="flex items-center gap-1.5 px-2 text-emerald-600 text-xs dark:text-emerald-400">
-					<Check className="size-3.5" />
-					{t("selection.noteAdded")}
-				</span>
-			) : (
-				<TooltipProvider delayDuration={200}>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("selection.highlight")}
-								onClick={onHighlight}
-							>
-								<Highlighter className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="top">
-							{t("selection.highlight")}
-						</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("selection.note")}
-								onClick={handleNote}
-							>
-								<NotebookPen className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="top">{t("selection.note")}</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("selection.ask")}
-								onClick={onAsk}
-							>
-								<MessageSquare className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
-					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("selection.translate")}
-								onClick={onTranslate}
-							>
-								<Languages className="size-4" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="top">
-							{t("selection.translate")}
-						</TooltipContent>
-					</Tooltip>
-				</TooltipProvider>
-			)}
+			<TooltipProvider delayDuration={200}>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.highlight")}
+							onClick={onHighlight}
+						>
+							<Highlighter className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.highlight")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.note")}
+							onClick={handleNote}
+						>
+							<NotebookPen className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.note")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.ask")}
+							onClick={onAsk}
+						>
+							<MessageSquare className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.translate")}
+							onClick={onTranslate}
+						>
+							<Languages className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.translate")}</TooltipContent>
+				</Tooltip>
+			</TooltipProvider>
 		</div>
 	);
 }
