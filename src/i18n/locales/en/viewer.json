@@ -42,6 +42,7 @@
 	"annotations": {
 		"title": "Annotations",
 		"pageLabel": "Page {{page}}",
+		"close": "Close",
 		"empty": "No highlights or annotations yet. Select text in the PDF to highlight or annotate.",
 		"placeholder": "Write a note…",
 		"save": "Save",

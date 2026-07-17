@@ -2534,6 +2534,7 @@ export default function App() {
 									onDelete={(id) =>
 										annotationAction((h) => h.deleteHighlight(id))
 									}
+									onClose={() => setRightSidebarCollapsed(true)}
 								/>
 							) : null}
 						</ResizablePanel>

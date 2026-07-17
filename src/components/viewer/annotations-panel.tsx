@@ -1,4 +1,4 @@
-import { MessageSquareText, Pencil, Trash2 } from "lucide-react";
+import { MessageSquareText, Pencil, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ type AnnotationsPanelProps = {
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
+	/** Collapse the right sidebar (close the panel). */
+	onClose?: () => void;
 	className?: string;
 };
 
@@ -36,6 +38,7 @@ export function AnnotationsPanel({
 	onJump,
 	onEdit,
 	onDelete,
+	onClose,
 	className,
 }: AnnotationsPanelProps) {
 	const { t } = useTranslation("viewer");
@@ -56,11 +59,25 @@ export function AnnotationsPanel({
 				<span className="font-semibold text-foreground text-sm tracking-tight">
 					{t("annotations.title")}
 				</span>
-				{items.length > 0 ? (
-					<span className="ml-auto min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center font-medium text-[11px] text-muted-foreground tabular-nums">
-						{items.length}
-					</span>
-				) : null}
+				<div className="ml-auto flex items-center gap-1">
+					{items.length > 0 ? (
+						<span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center font-medium text-[11px] text-muted-foreground tabular-nums">
+							{items.length}
+						</span>
+					) : null}
+					{onClose ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-foreground"
+							aria-label={t("annotations.close")}
+							onClick={onClose}
+						>
+							<X className="size-4" />
+						</Button>
+					) : null}
+				</div>
 			</header>
 
 			{items.length === 0 ? (
