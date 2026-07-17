@@ -344,6 +344,12 @@ export default function App() {
 			setActiveTabId(activeId);
 			return tabs;
 		});
+		setPdfHighlightsByTab((prev) => {
+			if (!(id in prev)) return prev;
+			const next = { ...prev };
+			delete next[id];
+			return next;
+		});
 	}, []);
 
 	/** Close every tab whose path is at or under the given path. */
@@ -357,6 +363,17 @@ export default function App() {
 			if (!removed.length) return prev;
 			for (const t of removed) revokeTabPdfSource(t);
 			setActiveTabId(activeId);
+			setPdfHighlightsByTab((prevHl) => {
+				let changed = false;
+				const next = { ...prevHl };
+				for (const t of removed) {
+					if (t.id in next) {
+						delete next[t.id];
+						changed = true;
+					}
+				}
+				return changed ? next : prevHl;
+			});
 			return tabs;
 		});
 	}, []);
@@ -406,6 +423,20 @@ export default function App() {
 			if (h) fn(h);
 		},
 		[activeTabId],
+	);
+
+	const registerPdfHandle = useCallback(
+		(tabId: string, handle: PdfViewerHandle | null) => {
+			if (handle) pdfViewerHandles.current.set(tabId, handle);
+			else pdfViewerHandles.current.delete(tabId);
+		},
+		[],
+	);
+	const handlePdfHighlightsChange = useCallback(
+		(tabId: string, list: PdfHighlight[]) => {
+			setPdfHighlightsByTab((prev) => ({ ...prev, [tabId]: list }));
+		},
+		[],
 	);
 
 	/** Cycle the active tab by delta (wraps). */
@@ -2216,17 +2247,8 @@ export default function App() {
 														if (vaultPath) void refreshTree(vaultPath);
 													}}
 													onTabPatch={updateTab}
-													registerPdfHandle={(tabId, handle) => {
-														if (handle)
-															pdfViewerHandles.current.set(tabId, handle);
-														else pdfViewerHandles.current.delete(tabId);
-													}}
-													onPdfHighlightsChange={(tabId, list) =>
-														setPdfHighlightsByTab((prev) => ({
-															...prev,
-															[tabId]: list,
-														}))
-													}
+													registerPdfHandle={registerPdfHandle}
+													onPdfHighlightsChange={handlePdfHighlightsChange}
 												/>
 											</div>
 										))}

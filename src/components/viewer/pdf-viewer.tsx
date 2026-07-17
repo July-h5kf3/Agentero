@@ -251,6 +251,10 @@ export function PdfViewer({
 	);
 	const highlightsRef = useRef(highlights);
 	highlightsRef.current = highlights;
+	const onHandleRef = useRef(onHandle);
+	onHandleRef.current = onHandle;
+	const onHighlightsChangeRef = useRef(onHighlightsChange);
+	onHighlightsChangeRef.current = onHighlightsChange;
 
 	const activeSessionRef = useRef<string | null>(null);
 	const suppressSelectionUntilRef = useRef(0);
@@ -1249,19 +1253,18 @@ export function PdfViewer({
 	);
 
 	useEffect(() => {
-		onHighlightsChange?.(highlights);
-	}, [highlights, onHighlightsChange]);
+		onHighlightsChangeRef.current?.(highlights);
+	}, [highlights]);
 
 	useEffect(() => {
-		if (!onHandle) return;
-		onHandle({
+		onHandleRef.current?.({
 			getHighlights: () => highlightsRef.current,
 			scrollToHighlight,
 			editComment: openCommentEditorFor,
 			deleteHighlight: removeHighlight,
 		});
-		return () => onHandle(null);
-	}, [onHandle, scrollToHighlight, openCommentEditorFor, removeHighlight]);
+		return () => onHandleRef.current?.(null);
+	}, [scrollToHighlight, openCommentEditorFor, removeHighlight]);
 
 	// Dismiss menus on outside pointerdown / Escape / scroll
 	useEffect(() => {
