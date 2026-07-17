@@ -1,9 +1,9 @@
 import {
 	Check,
-	Highlighter,
 	Languages,
 	MessageSquare,
 	NotebookPen,
+	Underline,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,12 +15,21 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	HIGHLIGHT_COLORS,
+	type HighlightColor,
+	swatchColorClass,
+} from "@/lib/pdf-highlight/palette";
 import { cn } from "@/lib/utils";
 
 type SelectionMenuProps = {
 	/** Screen point near the end of the selection */
 	screen: { x: number; y: number };
-	onHighlight: () => void;
+	/** Create a highlight (or underline when that toggle is on) in a color */
+	onAnnotate: (opts: {
+		kind: "highlight" | "underline";
+		color: HighlightColor;
+	}) => void;
 	onNote: () => void;
 	onAsk: () => void;
 	onTranslate: () => void;
@@ -28,16 +37,17 @@ type SelectionMenuProps = {
 	onClose: () => void;
 };
 
-const BAR_W = 176;
+const BAR_W = 300;
 const BAR_H = 40;
 
 /**
- * Floating action bar shown next to a text selection.
- * Highlight / Note / Ask / Translate. Note shows a brief inline confirmation.
+ * Floating action bar shown next to a text selection: an Underline toggle, a
+ * row of color swatches (clicking one highlights — or underlines when the
+ * toggle is on — in that color), then Note / Ask / Translate.
  */
 export function SelectionMenu({
 	screen,
-	onHighlight,
+	onAnnotate,
 	onNote,
 	onAsk,
 	onTranslate,
@@ -45,6 +55,7 @@ export function SelectionMenu({
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
 	const [noted, setNoted] = useState(false);
+	const [underline, setUnderline] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
@@ -64,6 +75,23 @@ export function SelectionMenu({
 			onClose();
 		}, 1000);
 	}, [onNote, onClose]);
+
+	const colorLabel = (c: HighlightColor): string => {
+		switch (c) {
+			case "yellow":
+				return t("selection.color.yellow");
+			case "green":
+				return t("selection.color.green");
+			case "blue":
+				return t("selection.color.blue");
+			case "pink":
+				return t("selection.color.pink");
+			default:
+				return t("selection.color.purple");
+		}
+	};
+
+	const kind = underline ? "underline" : "highlight";
 
 	return (
 		<div
@@ -88,16 +116,35 @@ export function SelectionMenu({
 								type="button"
 								variant="ghost"
 								size="icon-sm"
-								aria-label={t("selection.highlight")}
-								onClick={onHighlight}
+								aria-label={t("selection.underline")}
+								aria-pressed={underline}
+								className={cn(underline && "bg-accent text-accent-foreground")}
+								onClick={() => setUnderline((v) => !v)}
 							>
-								<Highlighter className="size-4" />
+								<Underline className="size-4" />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="top">
-							{t("selection.highlight")}
+							{t("selection.underline")}
 						</TooltipContent>
 					</Tooltip>
+					{HIGHLIGHT_COLORS.map((c) => (
+						<Tooltip key={c}>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									aria-label={colorLabel(c)}
+									className={cn(
+										"mx-0.5 size-4 shrink-0 rounded-full ring-1 ring-black/15 transition hover:scale-110 dark:ring-white/25",
+										swatchColorClass(c),
+									)}
+									onClick={() => onAnnotate({ kind, color: c })}
+								/>
+							</TooltipTrigger>
+							<TooltipContent side="top">{colorLabel(c)}</TooltipContent>
+						</Tooltip>
+					))}
+					<div className="mx-1 h-5 w-px shrink-0 bg-border" />
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button

@@ -72,6 +72,7 @@ import {
 import {
 	createHighlight,
 	deletePdfHighlight,
+	type HighlightColor,
 	listPdfHighlights,
 	writePdfHighlight,
 } from "@/lib/pdf-highlight";
@@ -1114,30 +1115,40 @@ export function PdfViewer({
 		);
 	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
 
-	const handleMenuHighlight = useCallback(() => {
-		const sm = selectionMenu;
-		if (!sm) return;
-		setSelectionMenu(null);
-		const quote = sm.anchor.quote?.trim();
-		if (!quote || !sm.anchor.rects.length) return;
-		const paperPath = paperRelPath || paperAbsPath || "paper";
-		const hl = createHighlight({
-			paperPath,
-			page: sm.anchor.page,
-			// Same shape as the selection overlay: drop zero-width caret rects
-			// (which sit at x=0 and would stretch the band to the left), then
-			// merge per line so the amber highlight matches the blue selection.
-			rects: mergeRectsByLine(
-				sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
-			),
-			quote,
-		});
-		setHighlights((prev) => [hl, ...prev]);
-		window.getSelection()?.removeAllRanges();
-		if (paperAbsPath) {
-			void writePdfHighlight(paperAbsPath, hl).catch(() => undefined);
-		}
-	}, [selectionMenu, paperAbsPath, paperRelPath]);
+	const handleMenuAnnotate = useCallback(
+		({
+			kind,
+			color,
+		}: {
+			kind: "highlight" | "underline";
+			color: HighlightColor;
+		}) => {
+			const sm = selectionMenu;
+			if (!sm) return;
+			setSelectionMenu(null);
+			const quote = sm.anchor.quote?.trim();
+			if (!quote || !sm.anchor.rects.length) return;
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const hl = createHighlight({
+				paperPath,
+				page: sm.anchor.page,
+				// Match the selection overlay: drop zero-width caret rects (which sit
+				// at x=0 and would stretch the band left), then merge per line.
+				rects: mergeRectsByLine(
+					sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
+				),
+				quote,
+				color,
+				kind,
+			});
+			setHighlights((prev) => [hl, ...prev]);
+			window.getSelection()?.removeAllRanges();
+			if (paperAbsPath) {
+				void writePdfHighlight(paperAbsPath, hl).catch(() => undefined);
+			}
+		},
+		[selectionMenu, paperAbsPath, paperRelPath],
+	);
 
 	const handleMenuNote = useCallback(() => {
 		const quote = selectionMenu?.anchor.quote?.trim();
@@ -1634,7 +1645,7 @@ export function PdfViewer({
 				<div data-pdf-ask-ui="">
 					<SelectionMenu
 						screen={selectionMenu.screen}
-						onHighlight={handleMenuHighlight}
+						onAnnotate={handleMenuAnnotate}
 						onNote={handleMenuNote}
 						onAsk={handleMenuAsk}
 						onTranslate={handleMenuTranslate}

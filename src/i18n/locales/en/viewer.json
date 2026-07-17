@@ -40,6 +40,14 @@
 	"selection": {
 		"menuLabel": "Selection actions",
 		"highlight": "Highlight",
+		"underline": "Underline",
+		"color": {
+			"yellow": "Yellow",
+			"green": "Green",
+			"blue": "Blue",
+			"pink": "Pink",
+			"purple": "Purple"
+		},
 		"note": "Add to notes",
 		"ask": "Ask",
 		"translate": "Translate",

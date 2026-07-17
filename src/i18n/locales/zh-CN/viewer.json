@@ -40,6 +40,14 @@
 	"selection": {
 		"menuLabel": "选区操作",
 		"highlight": "高亮",
+		"underline": "下划线",
+		"color": {
+			"yellow": "黄色",
+			"green": "绿色",
+			"blue": "蓝色",
+			"pink": "粉色",
+			"purple": "紫色"
+		},
 		"note": "加入笔记",
 		"ask": "提问",
 		"translate": "翻译",
