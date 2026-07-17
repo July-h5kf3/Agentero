@@ -59,12 +59,12 @@ import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/notify";
 import {
 	collectPaperFoldersFromTree,
+	collectPapersNeedingAssetDownload,
 	detectPaperDirectory,
 	isPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
-	paperNeedsAssetDownload,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
 import {
@@ -1459,19 +1459,7 @@ export default function App() {
 
 	const handleDownloadAllMissingAssets = useCallback(async () => {
 		if (!vaultPath) return;
-		const queue: FileNode[] = [];
-		const walk = (list: FileNode[]) => {
-			for (const n of list) {
-				if (n.kind === "directory" && isPaperDirectory(n.path, n.children)) {
-					if (paperNeedsAssetDownload(n)) {
-						queue.push(n);
-					}
-				} else if (n.children?.length) {
-					walk(n.children);
-				}
-			}
-		};
-		walk(tree);
+		const queue = collectPapersNeedingAssetDownload(tree);
 		if (!queue.length) return;
 
 		const errors: string[] = [];
@@ -1487,8 +1475,8 @@ export default function App() {
 				},
 				async ({ setProgress, setDetail }) => {
 					let i = 0;
-					for (const node of queue) {
-						const rel = toVaultRelative(vaultPath, node.path)
+					for (const paperPath of queue) {
+						const rel = toVaultRelative(vaultPath, paperPath)
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");
 						i += 1;

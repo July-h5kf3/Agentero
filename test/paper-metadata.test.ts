@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
 	collectPaperFoldersFromTree,
+	collectPapersNeedingAssetDownload,
 	directoryHasPaperMarkers,
 	isPaperDirectory,
 	isPapersRoot,
 	isUnderPapers,
 	paperDirFromPath,
 } from "@/lib/paper-metadata";
+import type { FileNode } from "@/lib/vault";
 
 describe("paper folder minimal unit", () => {
 	it("detects papers root and under-papers", () => {
@@ -107,5 +109,41 @@ describe("paper folder minimal unit", () => {
 		expect(folders.sort()).toEqual(
 			["/v/papers/nlp/1706.03762", "/v/papers/vaswani2017"].sort(),
 		);
+	});
+
+	it("collects only paper folders still missing assets", () => {
+		const file = (name: string): FileNode => ({
+			id: name,
+			name,
+			path: `x/${name}`,
+			kind: "file",
+		});
+		const tree: FileNode[] = [
+			{
+				id: "/v/papers/nlp",
+				name: "nlp",
+				path: "/v/papers/nlp",
+				kind: "directory",
+				children: [
+					{
+						id: "/v/papers/nlp/needy",
+						name: "needy",
+						path: "/v/papers/nlp/needy",
+						kind: "directory",
+						children: [file("NOTES.md")],
+					},
+					{
+						id: "/v/papers/nlp/complete",
+						name: "complete",
+						path: "/v/papers/nlp/complete",
+						kind: "directory",
+						children: [file("NOTES.md"), file("a.pdf"), file("b.tex")],
+					},
+				],
+			},
+		];
+		expect(collectPapersNeedingAssetDownload(tree)).toEqual([
+			"/v/papers/nlp/needy",
+		]);
 	});
 });
