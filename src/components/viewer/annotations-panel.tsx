@@ -35,7 +35,7 @@ export function AnnotationsPanel({
 			aria-label={t("annotations.panelAria")}
 		>
 			<div className="flex items-center gap-2 border-b px-3 py-2 text-muted-foreground text-xs">
-				<MessageSquareText className="size-3.5" />
+				<MessageSquareText className="size-3.5" aria-hidden />
 				{t("annotations.title")}
 			</div>
 			{items.length === 0 ? (
@@ -47,10 +47,18 @@ export function AnnotationsPanel({
 					{items.map((a) => (
 						<li key={a.id} className="mb-2">
 							<div className="group rounded-lg border border-border/70 p-2 hover:border-border">
-								<button
-									type="button"
-									className="block w-full text-left"
+								{/* biome-ignore lint/a11y/useSemanticElements: a native <button> cannot wrap the blockquote/p flow content, so a div with role/button semantics is used */}
+								<div
+									role="button"
+									tabIndex={0}
+									className="block w-full cursor-pointer text-left"
 									onClick={() => onJump(a.id)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.preventDefault();
+											onJump(a.id);
+										}
+									}}
 								>
 									<span className="text-[10px] text-muted-foreground uppercase">
 										p.{a.page}
@@ -61,7 +69,7 @@ export function AnnotationsPanel({
 									<p className="mt-1 whitespace-pre-wrap text-foreground text-sm">
 										{a.comment}
 									</p>
-								</button>
+								</div>
 								<div className="mt-1 flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
 									<Button
 										type="button"
