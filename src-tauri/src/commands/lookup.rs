@@ -3,9 +3,9 @@
 
 use crate::error::{map_err, ApiResult};
 use crate::services::lookup::{
-    self, AssetDownloadResult, LookupImportArgs, LookupImportResult, PaperDownloadAssetsArgs,
-    PaperExportArgs, PaperExportResult, PaperImportArgs, PaperImportResult,
-    DEFAULT_TRANSLATOR_BASE_URL,
+    self, AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
+    LookupImportResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
+    PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use crate::services::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
 use serde::Serialize;
@@ -42,6 +42,15 @@ pub async fn paper_download_assets(
     args: PaperDownloadAssetsArgs,
 ) -> ApiResult<AssetDownloadResult> {
     match lookup::download_paper_assets(args).await {
+        Ok(r) => ApiResult::ok(r),
+        Err(e) => map_err(e),
+    }
+}
+
+/// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).
+#[tauri::command]
+pub async fn paper_import_local_pdf(args: ImportLocalPdfArgs) -> ApiResult<ImportLocalPdfResult> {
+    match lookup::import_local_pdfs(args).await {
         Ok(r) => ApiResult::ok(r),
         Err(e) => map_err(e),
     }

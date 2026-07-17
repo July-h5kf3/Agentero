@@ -58,7 +58,11 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
-import { addPaperByIdentifier, downloadPaperAssets } from "@/lib/lookup";
+import {
+	addPaperByIdentifier,
+	downloadPaperAssets,
+	importLocalPdfs,
+} from "@/lib/lookup";
 import {
 	notifyError,
 	notifySuccess,
@@ -1506,7 +1510,7 @@ export default function App() {
 	 * Walks the file tree so local source/ presence matches the row icons.
 	 */
 	const [libraryIoBusy, setLibraryIoBusy] = useState<
-		"import" | "export" | null
+		"import" | "export" | "import-pdf" | null
 	>(null);
 
 	const handleLibraryExport = useCallback(async () => {
@@ -1579,6 +1583,60 @@ export default function App() {
 		lookupParentDir,
 		refreshTree,
 		refreshLibrary,
+		t,
+	]);
+
+	/** Import local PDF file(s) via native picker → paper folders + catalog + PAPER.md. */
+	const handleImportLocalPdf = useCallback(async () => {
+		if (!vaultPath || libraryIoBusy) return;
+		setLibraryIoBusy("import-pdf");
+		try {
+			const result = await runBackgroundTask(
+				{
+					kind: "import",
+					title: t("tasks.importPdf"),
+				},
+				async ({ setDetail, setProgress }) => {
+					setProgress(10);
+					const r = await importLocalPdfs({
+						vaultRoot: vaultPath,
+						parentDir: lookupParentDir,
+					});
+					if (!r) return null;
+					setProgress(70);
+					setDetail(
+						t("sidebar:papersLibrary.importPdfDone", {
+							count: r.papers.length,
+						}),
+					);
+					await refreshTree(vaultPath);
+					await rebuildWikiAndNotify(vaultPath);
+					await refreshLibrary();
+					setProgress(100);
+					return r;
+				},
+			);
+			if (result) {
+				if (result.papers[0]) openPaper(result.papers[0].paperDir);
+				if (result.errors.length) {
+					notifyWarning(
+						`${t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,
+					);
+				}
+			}
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLibraryIoBusy(null);
+		}
+	}, [
+		vaultPath,
+		libraryIoBusy,
+		lookupParentDir,
+		refreshTree,
+		refreshLibrary,
+		rebuildWikiAndNotify,
+		openPaper,
 		t,
 	]);
 
@@ -2070,7 +2128,9 @@ export default function App() {
 										lookupParentDir={lookupParentDir}
 										onLookupSubmit={handleLookupSubmit}
 										onImportBibliography={() => void handleLibraryImport()}
+										onImportLocalPdf={() => void handleImportLocalPdf()}
 										importBusy={libraryIoBusy === "import"}
+										importPdfBusy={libraryIoBusy === "import-pdf"}
 										busy={
 											busy || Boolean(createDraft) || libraryIoBusy !== null
 										}

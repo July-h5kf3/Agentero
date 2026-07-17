@@ -7,6 +7,7 @@ import {
 	FilePlus2,
 	FileText,
 	FileType2,
+	FileUp,
 	FolderInput,
 	FolderPlus,
 	Library,
@@ -1270,7 +1271,10 @@ export function VaultSidebarHeader({
 	onLookupSubmit,
 	/** Bibliography import (bottom-left of magic-wand popover). */
 	onImportBibliography,
+	/** Local PDF import (bottom-left of magic-wand popover). */
+	onImportLocalPdf,
 	importBusy,
+	importPdfBusy,
 	busy,
 	isDemo,
 	/**
@@ -1286,7 +1290,9 @@ export function VaultSidebarHeader({
 	lookupParentDir: string;
 	onLookupSubmit: (text: string) => Promise<void>;
 	onImportBibliography?: () => void | Promise<void>;
+	onImportLocalPdf?: () => void | Promise<void>;
 	importBusy?: boolean;
+	importPdfBusy?: boolean;
 	busy?: boolean;
 	isDemo: boolean;
 	lookupOpenSignal?: number;
@@ -1296,7 +1302,12 @@ export function VaultSidebarHeader({
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
 	const [lookupError, setLookupError] = useState<string | null>(null);
-	const actionsDisabled = busy || isDemo || lookupBusy || Boolean(importBusy);
+	const actionsDisabled =
+		busy ||
+		isDemo ||
+		lookupBusy ||
+		Boolean(importBusy) ||
+		Boolean(importPdfBusy);
 	const magicWandShortcut = useMemo(() => {
 		const def = SHORTCUTS.find((s) => s.id === "magicWand");
 		return def ? formatShortcut(def) : "⇧⌘I";
@@ -1386,40 +1397,69 @@ export function VaultSidebarHeader({
 												{lookupError}
 											</p>
 										) : null}
-										{/* Import (file) bottom-left · Add (identifier) bottom-right */}
+										{/* Imports bottom-left (PDF · bibliography) · Add bottom-right */}
 										<div className="flex items-center justify-between gap-2">
-											{onImportBibliography ? (
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													className="h-7 gap-1 px-2 text-xs"
-													disabled={lookupBusy || importBusy || isDemo}
-													aria-label={t("papersLibrary.import")}
-													onClick={() => {
-														void onImportBibliography();
-													}}
-												>
-													{importBusy ? (
-														<Loader2 className="size-3.5 animate-spin" />
-													) : (
-														<Upload className="size-3.5" />
-													)}
-													<span>
-														{importBusy
-															? t("papersLibrary.importing")
-															: t("papersLibrary.import")}
-													</span>
-												</Button>
-											) : (
-												<span />
-											)}
+											<div className="flex items-center gap-1">
+												{onImportLocalPdf ? (
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="ghost"
+																size="icon-xs"
+																disabled={actionsDisabled}
+																aria-label={t("papersLibrary.importPdf")}
+																onClick={() => {
+																	void onImportLocalPdf();
+																}}
+															>
+																{importPdfBusy ? (
+																	<Loader2 className="size-3.5 animate-spin" />
+																) : (
+																	<FileUp className="size-3.5" />
+																)}
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent side="bottom">
+															{t("papersLibrary.importPdf")}
+														</TooltipContent>
+													</Tooltip>
+												) : null}
+												{onImportBibliography ? (
+													<Tooltip>
+														<TooltipTrigger asChild>
+															<Button
+																type="button"
+																variant="ghost"
+																size="icon-xs"
+																disabled={actionsDisabled}
+																aria-label={t("papersLibrary.import")}
+																onClick={() => {
+																	void onImportBibliography();
+																}}
+															>
+																{importBusy ? (
+																	<Loader2 className="size-3.5 animate-spin" />
+																) : (
+																	<Upload className="size-3.5" />
+																)}
+															</Button>
+														</TooltipTrigger>
+														<TooltipContent side="bottom">
+															{t("papersLibrary.import")}
+														</TooltipContent>
+													</Tooltip>
+												) : null}
+											</div>
 											<Button
 												type="submit"
 												size="sm"
 												className="h-7 px-2.5 text-xs"
 												disabled={
-													lookupBusy || importBusy || !lookupText.trim()
+													lookupBusy ||
+													importBusy ||
+													importPdfBusy ||
+													!lookupText.trim()
 												}
 											>
 												{lookupBusy ? t("lookup.adding") : t("lookup.add")}

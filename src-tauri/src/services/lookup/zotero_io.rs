@@ -203,6 +203,7 @@ async fn import_one_item(
         &id,
         meta.arxiv_id.as_deref(),
         meta.pdf_url.as_deref(),
+        meta.doi.as_deref(),
     )
     .await;
     let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(

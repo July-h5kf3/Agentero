@@ -11,7 +11,9 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
 
-const USER_AGENT: &str = "agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)";
+// Browser-like UA: several non-arXiv publishers (PLOS, IEEE, Springer, …)
+// reject non-browser agents with HTTP 403, which blocked DOI PDF downloads.
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +71,7 @@ pub async fn ensure_paper_assets(
     id: &str,
     arxiv_id: Option<&str>,
     pdf_url: Option<&str>,
+    doi: Option<&str>,
 ) -> Result<AssetDownloadResult, AppError> {
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
@@ -77,34 +80,28 @@ pub async fn ensure_paper_assets(
     let need_tex = !has_local_tex(paper_dir);
 
     if need_pdf {
-        let candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
-        if candidates.is_empty() {
-            out.messages.push("pdf: no url".into());
-        } else {
-            let mut last_err = String::new();
-            let mut ok = false;
-            for url in &candidates {
-                // PDF lives next to NOTES.md, not under source/
-                match download_pdf(paper_dir, id, url).await {
-                    Ok(()) => {
-                        out.pdf = true;
-                        out.messages.push(format!("pdf ok ({url})"));
-                        ok = true;
-                        break;
-                    }
-                    Err(e) => {
-                        last_err = e.to_string();
-                        out.messages
-                            .push(format!("pdf candidate failed ({url}): {e}"));
-                    }
+        let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
+        let mut ok = try_download_candidates(paper_dir, id, &candidates, &mut out).await;
+        // DOI fallback: Crossref often lists a direct / open-access PDF link even
+        // when the Translator gave no pdf_url (or the publisher landing page failed).
+        if !ok {
+            if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+                let extra: Vec<String> = crossref_pdf_urls(doi)
+                    .await
+                    .into_iter()
+                    .filter(|u| !candidates.iter().any(|c| c == u))
+                    .collect();
+                if extra.is_empty() {
+                    out.messages
+                        .push("pdf: no Crossref PDF link for DOI".into());
+                } else {
+                    ok = try_download_candidates(paper_dir, id, &extra, &mut out).await;
+                    candidates.extend(extra);
                 }
             }
-            if !ok {
-                out.messages.push(format!(
-                    "pdf failed after {} attempt(s): {last_err}",
-                    candidates.len()
-                ));
-            }
+        }
+        if !ok && candidates.is_empty() {
+            out.messages.push("pdf: no url".into());
         }
     } else {
         out.pdf = true;
@@ -174,6 +171,87 @@ fn pdf_url_candidates(id: &str, arxiv_id: Option<&str>, pdf_url: Option<&str>) -
     }
 
     out
+}
+
+/// Try each PDF URL in order; write on first success. Returns true when a PDF was saved.
+async fn try_download_candidates(
+    paper_dir: &Path,
+    id: &str,
+    urls: &[String],
+    out: &mut AssetDownloadResult,
+) -> bool {
+    for url in urls {
+        // PDF lives next to NOTES.md, not under source/
+        match download_pdf(paper_dir, id, url).await {
+            Ok(()) => {
+                out.pdf = true;
+                out.messages.push(format!("pdf ok ({url})"));
+                return true;
+            }
+            Err(e) => {
+                out.messages
+                    .push(format!("pdf candidate failed ({url}): {e}"));
+            }
+        }
+    }
+    false
+}
+
+/// Query Crossref for a DOI's direct / open-access PDF links (no API key needed).
+/// Prefers links whose content-type is application/pdf; falls back to any link URL.
+async fn crossref_pdf_urls(doi: &str) -> Vec<String> {
+    let api = format!(
+        "https://api.crossref.org/works/{}",
+        doi.trim().replace(' ', "%20")
+    );
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent(USER_AGENT)
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+    else {
+        return Vec::new();
+    };
+    let Ok(res) = client
+        .get(&api)
+        .header("Accept", "application/json")
+        .send()
+        .await
+    else {
+        return Vec::new();
+    };
+    if !res.status().is_success() {
+        return Vec::new();
+    }
+    let Ok(text) = res.text().await else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let mut pdf_links = Vec::new();
+    let mut other_links = Vec::new();
+    if let Some(links) = value.pointer("/message/link").and_then(|v| v.as_array()) {
+        for l in links {
+            let url = l.get("URL").and_then(|v| v.as_str()).unwrap_or("").trim();
+            if url.is_empty() {
+                continue;
+            }
+            let ct = l.get("content-type").and_then(|v| v.as_str()).unwrap_or("");
+            if ct.eq_ignore_ascii_case("application/pdf")
+                || url.to_ascii_lowercase().ends_with(".pdf")
+            {
+                pdf_links.push(url.to_string());
+            } else {
+                other_links.push(url.to_string());
+            }
+        }
+    }
+    if pdf_links.is_empty() {
+        other_links
+    } else {
+        pdf_links
+    }
 }
 
 fn looks_like_arxiv_id(s: &str) -> bool {

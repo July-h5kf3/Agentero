@@ -5,6 +5,7 @@
  * @see docs/backend/identifier-lookup.md
  */
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import i18n from "@/i18n";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
@@ -68,6 +69,21 @@ function resolveTranslatorBaseUrl(
 	return raw.replace(/\/+$/, "");
 }
 
+function toLookupAddResult(d: HostLookupResult): LookupAddResult {
+	return {
+		paperDir: d.paperDir,
+		path: d.path,
+		id: d.id,
+		title: d.title,
+		usedTranslator: d.usedTranslator,
+		translatorBaseUrl: d.translatorBaseUrl,
+		pdf: d.pdf,
+		tex: d.tex,
+		paperMd: d.paperMd,
+		assetMessages: d.assetMessages,
+	};
+}
+
 /**
  * Add a paper by identifier/URL into `vaultRoot/parentDir/<id>/`.
  * Host calls Translator at Settings `translatorBaseUrl`
@@ -113,18 +129,7 @@ export async function addPaperByIdentifier(opts: {
 		);
 	}
 
-	return {
-		paperDir: result.data.paperDir,
-		path: result.data.path,
-		id: result.data.id,
-		title: result.data.title,
-		usedTranslator: result.data.usedTranslator,
-		translatorBaseUrl: result.data.translatorBaseUrl,
-		pdf: result.data.pdf,
-		tex: result.data.tex,
-		paperMd: result.data.paperMd,
-		assetMessages: result.data.assetMessages,
-	};
+	return toLookupAddResult(result.data);
 }
 
 /**
@@ -183,4 +188,58 @@ export async function parsePaperBody(opts: {
 		);
 	}
 	return result.data;
+}
+
+type HostLocalPdfImportResult = {
+	papers: HostLookupResult[];
+	errors?: string[];
+};
+
+export type LocalPdfImportResult = {
+	papers: LookupAddResult[];
+	/** `"<file>: <reason>"` for each PDF that failed to import. */
+	errors: string[];
+};
+
+/**
+ * Import local PDF file(s) into `vaultRoot/parentDir/<slug>/` (copy + catalog + liteparse).
+ * Opens a native PDF picker (multi-select). Returns null when the user cancels.
+ */
+export async function importLocalPdfs(opts: {
+	vaultRoot: string;
+	/** Vault-relative, e.g. `papers` or `papers/nlp` */
+	parentDir: string;
+}): Promise<LocalPdfImportResult | null> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
+	}
+	const selected = await open({
+		multiple: true,
+		filters: [{ name: "PDF", extensions: ["pdf"] }],
+	});
+	if (!selected) return null;
+	const filePaths = (Array.isArray(selected) ? selected : [selected]).filter(
+		(p): p is string => Boolean(p),
+	);
+	if (!filePaths.length) return null;
+
+	const result = await invoke<ApiResult<HostLocalPdfImportResult>>(
+		"paper_import_local_pdf",
+		{
+			args: {
+				vaultPath: opts.vaultRoot,
+				parentDir: opts.parentDir.replace(/\\/g, "/"),
+				filePaths,
+			},
+		},
+	);
+	if (!result.ok || !result.data) {
+		throw new Error(
+			result.error?.message ?? i18n.t("sidebar:lookup.fetchFailed"),
+		);
+	}
+	return {
+		papers: result.data.papers.map(toLookupAddResult),
+		errors: result.data.errors ?? [],
+	};
 }

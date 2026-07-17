@@ -116,10 +116,10 @@
    - [ ] 可选 FTS5；Agent 工作流临时导出 L1 列表。
 
 2. **本地 PDF importer**
-   - 文件选择 / 拖拽 / 批量导入。
-   - DOI / arXiv ID 识别，元数据确认面板。
-   - 生成 citekey、`PAPER.md`、`NOTES.md`；metadata 写入 catalog。
-   - 默认本地解析，MinerU BYOK 后可选云端解析。
+   - [x] 文件选择 / 批量导入（魔棒弹层 `FileUp` → `paper_import_local_pdf`，多选）；拖拽待增强。
+   - [ ] DOI / arXiv ID 识别，元数据确认面板。
+   - [x] 生成 citekey slug（重复 `-2`/`-3`）、liteparse `PAPER.md`、`NOTES.md`；metadata 写入 catalog（type `pdf`）。
+   - [ ] 默认本地解析，MinerU BYOK 后可选云端解析。
    - 与 **Vault 采纳** 边界：importer = 用户显式导入源；采纳 = 整夹扫描改造。
 
 2b. **Vault 采纳 / 整理（确认迁移 + Skill 可选）** — 接 P0-4b
@@ -242,7 +242,7 @@
 |---|---|---|
 | Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、左右侧栏 collapsible、后台任务条、**全局错误 Toast** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；冲突提示（当前静默覆盖本地未存） |
 | 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
-| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF importer；部分非 arXiv PDF 下载 |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、**本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF 拖拽 / DOI 识别与元数据确认；MinerU 云端解析 |
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Zap）、**全局权限模式**、模型收藏、Skill 提及分流、会话标签（Agent 内） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；文件变更后增量重建索引 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |

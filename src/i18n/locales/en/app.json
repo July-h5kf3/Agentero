@@ -98,6 +98,7 @@
 		"lookupFetching": "Fetching metadata & assets… · {{id}}",
 		"lookupRefreshing": "Refreshing library… · {{title}}",
 		"libraryImport": "Import bibliography",
+		"importPdf": "Import PDF",
 		"libraryExport": "Export library",
 		"paperRead": "Reading paper",
 		"paperReadStarting": "Starting paper-reader…",

@@ -384,6 +384,47 @@ pub fn map_arxiv_atom(xml: &str, bare_id: &str) -> Result<PaperMeta, AppError> {
     })
 }
 
+/// Minimal metadata for a locally-imported PDF (no Translator lookup).
+/// `id` is a folder-safe slug; `title` is derived from the filename.
+pub fn local_pdf_meta(id: String, title: String) -> PaperMeta {
+    let now = chrono_lite_now();
+    PaperMeta {
+        id,
+        paper_type: "pdf".into(),
+        title,
+        authors: Vec::new(),
+        creators: None,
+        year: None,
+        date: None,
+        abstract_text: None,
+        tags: Vec::new(),
+        arxiv_id: None,
+        doi: None,
+        isbn: None,
+        issn: None,
+        pmid: None,
+        publication: None,
+        volume: None,
+        issue: None,
+        pages: None,
+        publisher: None,
+        place: None,
+        series: None,
+        language: None,
+        pdf_url: None,
+        html_url: None,
+        source_url: None,
+        bibtex_key: None,
+        zotero_item_type: None,
+        meta_source: Some("local".into()),
+        extra: None,
+        summary: None,
+        status: "completed".into(),
+        added_at: now.clone(),
+        updated_at: now,
+    }
+}
+
 fn str_field(item: &Value, key: &str) -> Option<String> {
     item.get(key)
         .and_then(|v| v.as_str())

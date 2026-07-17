@@ -17,7 +17,7 @@
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Zap 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
-| V0.5 Importer 架构与本地 PDF 入库 | ⏳ 待实现 | Importer trait、本地 PDF 拖拽入库、PdfParser（liteparse / MinerU）仍在规划；魔棒 v0 已可复用部分写盘路径。 |
+| V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、拖拽导入、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 先关 tab 再关窗）；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
@@ -94,7 +94,7 @@
 - [ ] `catalog:export_papers_md`（Markdown 表形态；BibTeX 已由 Library 导出覆盖）。
 - [x] 入库后刷新 Backlinks/Graph 索引
 - [x] 魔棒快捷键 `⇧⌘I`；
-- [ ] 非 arxiv 下载 PDF 有问题（10.1371/journal.pbio.0040157）
+- [x] 非 arxiv 下载 PDF：下载改用浏览器 UA（绕开出版商 403）+ DOI 走 Crossref 取直链 / OA PDF 兜底（如 10.1371/journal.pbio.0040157）。
 
 验收标准：
 
@@ -193,7 +193,7 @@
 
 - [ ] 抽象 importer 接口。
 - [ ] 将 arXiv 入库实现迁移为第一个 importer。
-- [ ] 实现本地 PDF importer：文件选择/拖拽/批量导入、citekey 生成与重复检测。
+- [x] 本地 PDF 导入：魔棒弹层文件选择（多选，`paper_import_local_pdf`）、citekey slug 生成 + 重复检测（`-2`/`-3`）、复制 PDF + catalog + liteparse `PAPER.md`；拖拽 / DOI 识别待增强。
 - [ ] 可插拔 `PdfParser`：默认本地 liteparse，配置 MinerU API Key 后优先云端 MinerU，失败自动降级。
 - [ ] PDF 元数据混合获取：DOI/arXiv 标识符查询 Crossref/arXiv + Agent 正文抽取，入库前用户确认。
 - [ ] 预留本地 HTML importer。
@@ -205,7 +205,7 @@
 验收标准：
 
 - [ ] arXiv importer 行为与 V0.2 精确路径保持兼容。
-- [ ] 导入本地 PDF 能生成 `papers/<citekey>/`（含必定生成的 `PAPER.md`）并进入笔记审阅。
+- [x] 导入本地 PDF 生成 `papers/<citekey>/`（复制 PDF + liteparse `PAPER.md`）并进入笔记审阅。
 - [ ] 配置 MinerU API Key 后 PDF 默认走云端解析，未配置或失败时自动降级本地且不中断。
 - [ ] 新 importer 可以复用同一套输出结构。
 - [ ] UI 不需要为每种来源重写入库流程。

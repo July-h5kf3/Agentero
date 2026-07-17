@@ -20,7 +20,7 @@ pub use zotero_io::{
 
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
-use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
+use map::{enrich_remote_urls, local_pdf_meta, map_zotero_item, PaperMeta};
 use parse::{extract_primary_identifier, IdentifierKind};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -49,6 +49,26 @@ pub struct PaperDownloadAssetsArgs {
     pub vault_path: String,
     /// Vault-relative paper folder, e.g. `papers/1706.03762`.
     pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportLocalPdfArgs {
+    pub vault_path: String,
+    /// Vault-relative parent, e.g. `papers` or `papers/nlp`.
+    pub parent_dir: String,
+    /// Absolute paths to local PDF files chosen by the user.
+    pub file_paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportLocalPdfResult {
+    /// One entry per successfully imported PDF.
+    pub papers: Vec<LookupImportResult>,
+    /// `"<file>: <reason>"` for each file that failed to import.
+    #[serde(default)]
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -120,6 +140,7 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
         &id,
         meta.arxiv_id.as_deref(),
         meta.pdf_url.as_deref(),
+        meta.doi.as_deref(),
     )
     .await
     .unwrap_or_else(|e| {
@@ -175,8 +196,9 @@ pub async fn download_paper_assets(
         return Err(AppError::message("paper folder not found"));
     }
 
-    let (id, arxiv_id, pdf_url) = if let Ok(Some(row)) = papers::get_by_path(&vault, &path_rel) {
-        (row.id, row.arxiv_id, row.pdf_url)
+    let (id, arxiv_id, pdf_url, doi) = if let Ok(Some(row)) = papers::get_by_path(&vault, &path_rel)
+    {
+        (row.id, row.arxiv_id, row.pdf_url, row.doi)
     } else {
         // Fallback: folder name as id; treat as arXiv if it looks like one
         let name = paper_dir
@@ -188,11 +210,17 @@ pub async fn download_paper_assets(
         let pdf = arxiv
             .as_ref()
             .map(|a| format!("https://arxiv.org/pdf/{}", a));
-        (name, arxiv, pdf)
+        (name, arxiv, pdf, None)
     };
 
-    let mut result =
-        ensure_paper_assets(&paper_dir, &id, arxiv_id.as_deref(), pdf_url.as_deref()).await?;
+    let mut result = ensure_paper_assets(
+        &paper_dir,
+        &id,
+        arxiv_id.as_deref(),
+        pdf_url.as_deref(),
+        doi.as_deref(),
+    )
+    .await?;
 
     // After download: no TeX + has PDF → liteparse PAPER.md
     let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
@@ -204,6 +232,144 @@ pub async fn download_paper_assets(
         result.messages.push(m);
     }
     Ok(result)
+}
+
+/// Import one or more local PDF files as paper folders (copy + catalog + liteparse).
+/// Filename-derived title/id; no network lookup. Each PDF becomes `{parent}/{slug}/{slug}.pdf`.
+pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPdfResult, AppError> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+    let parent_rel = normalize_parent_dir(&args.parent_dir)?;
+
+    let mut papers_out = Vec::new();
+    let mut errors = Vec::new();
+    for src in &args.file_paths {
+        match import_one_local_pdf(&vault, &parent_rel, src).await {
+            Ok(r) => papers_out.push(r),
+            Err(e) => {
+                let name = Path::new(src.trim())
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(src.as_str());
+                errors.push(format!("{name}: {e}"));
+            }
+        }
+    }
+    // All failed → surface as an error; partial success returns per-file errors.
+    if papers_out.is_empty() && !errors.is_empty() {
+        return Err(AppError::message(errors.join("; ")));
+    }
+    Ok(ImportLocalPdfResult {
+        papers: papers_out,
+        errors,
+    })
+}
+
+async fn import_one_local_pdf(
+    vault: &Path,
+    parent_rel: &str,
+    src_path: &str,
+) -> Result<LookupImportResult, AppError> {
+    let src = PathBuf::from(src_path.trim());
+    if !src.is_file() {
+        return Err(AppError::message("file not found"));
+    }
+    let is_pdf = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    if !is_pdf {
+        return Err(AppError::message("not a PDF file"));
+    }
+
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("paper");
+    let title = title_from_stem(stem);
+    let base_id = slug_from_stem(stem);
+    let (id, path_rel, paper_dir) = unique_paper_path(vault, parent_rel, &base_id);
+    fs::create_dir_all(&paper_dir)?;
+
+    // PDF lives in the paper folder root as `{id}.pdf` (same as downloaded PDFs).
+    fs::copy(&src, paper_dir.join(format!("{id}.pdf")))
+        .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
+
+    let meta = local_pdf_meta(id.clone(), title.clone());
+    write_paper_shell(&paper_dir, &meta)?;
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(vault, &record)?;
+
+    // No TeX + has PDF → liteparse PAPER.md so the paper has a readable body.
+    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+        vault, &path_rel, &paper_dir,
+    )
+    .await;
+
+    Ok(LookupImportResult {
+        paper_dir: paper_dir.to_string_lossy().to_string(),
+        path: path_rel,
+        id: meta.id,
+        title: meta.title,
+        used_translator: false,
+        translator_base_url: String::new(),
+        pdf: true,
+        tex: false,
+        paper_md: parse.paper_md,
+        asset_messages: parse.messages,
+    })
+}
+
+/// Folder-safe slug from a filename stem (alphanumerics + dots; other runs → `-`).
+fn slug_from_stem(stem: &str) -> String {
+    let mut s = String::new();
+    let mut prev_sep = true; // suppress leading separators
+    for c in stem.trim().chars() {
+        if c.is_ascii_alphanumeric() || c == '.' {
+            s.push(c);
+            prev_sep = false;
+        } else if !prev_sep {
+            s.push('-');
+            prev_sep = true;
+        }
+    }
+    let s: String = s.chars().take(60).collect();
+    let s = s.trim_matches(|c| c == '-' || c == '.').to_string();
+    if s.is_empty() {
+        "paper".into()
+    } else {
+        s
+    }
+}
+
+/// Human title from a filename stem (underscores → spaces, whitespace collapsed).
+fn title_from_stem(stem: &str) -> String {
+    let spaced: String = stem
+        .trim()
+        .chars()
+        .map(|c| if c == '_' { ' ' } else { c })
+        .collect();
+    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "Untitled".into()
+    } else {
+        collapsed
+    }
+}
+
+/// Pick a non-existing `{parent}/{id}` folder, suffixing `-2`, `-3`, … on collision.
+/// Returns `(id, path_rel, absolute_dir)`.
+fn unique_paper_path(vault: &Path, parent_rel: &str, base_id: &str) -> (String, String, PathBuf) {
+    let mut id = base_id.to_string();
+    let mut n = 2;
+    loop {
+        let path_rel = format!("{parent_rel}/{id}");
+        let dir = vault.join(&path_rel);
+        if !dir.exists() || n > 999 {
+            return (id, path_rel, dir);
+        }
+        id = format!("{base_id}-{n}");
+        n += 1;
+    }
 }
 
 async fn resolve_metadata(
@@ -408,4 +574,34 @@ pub(crate) fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
     Err(AppError::message(
         "parent_dir must be papers or under papers/",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slug_from_stem_basic() {
+        assert_eq!(
+            slug_from_stem("Attention Is All You Need"),
+            "Attention-Is-All-You-Need"
+        );
+        assert_eq!(
+            slug_from_stem("vaswani_2017_attention"),
+            "vaswani-2017-attention"
+        );
+        assert_eq!(slug_from_stem("1706.03762"), "1706.03762");
+        assert_eq!(slug_from_stem("  spaced  "), "spaced");
+        assert_eq!(slug_from_stem("!!!"), "paper");
+    }
+
+    #[test]
+    fn title_from_stem_basic() {
+        assert_eq!(
+            title_from_stem("vaswani_2017_attention"),
+            "vaswani 2017 attention"
+        );
+        assert_eq!(title_from_stem("  Hello   World  "), "Hello World");
+        assert_eq!(title_from_stem("   "), "Untitled");
+    }
 }
