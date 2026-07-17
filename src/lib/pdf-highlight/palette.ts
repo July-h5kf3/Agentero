@@ -46,6 +46,14 @@ const SWATCH: Record<HighlightColor, string> = {
 	purple: "bg-purple-400",
 };
 
+const BORDER: Record<HighlightColor, string> = {
+	yellow: "border-amber-400",
+	green: "border-green-400",
+	blue: "border-sky-400",
+	pink: "border-pink-400",
+	purple: "border-purple-400",
+};
+
 /** Translucent fill class for a highlight band. */
 export function highlightFillClass(
 	color: string | undefined,
@@ -58,4 +66,9 @@ export function highlightFillClass(
 /** Solid dot class for the color picker swatch. */
 export function swatchColorClass(color: HighlightColor): string {
 	return SWATCH[color];
+}
+
+/** Border-color class matching a highlight color (e.g. quoted-text rule). */
+export function swatchBorderClass(color: HighlightColor): string {
+	return BORDER[color];
 }

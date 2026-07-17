@@ -41,6 +41,7 @@
 	},
 	"annotations": {
 		"title": "批注",
+		"pageLabel": "第 {{page}} 页",
 		"empty": "还没有高亮或批注。在 PDF 中划选文字即可高亮或批注。",
 		"placeholder": "写点备注…",
 		"save": "保存",
