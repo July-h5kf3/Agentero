@@ -203,6 +203,7 @@
 | 快捷键 | 作用 | 说明 |
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
+| `⌘/` | 键盘快捷键速查 | 打开快捷键清单对话框（`ShortcutsDialog`） |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |

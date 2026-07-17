@@ -34,6 +34,7 @@ import {
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
+import { ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
 import { TabCenter } from "@/components/layout/tab-center";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
 import { WorkspaceHeader } from "@/components/layout/workspace-header";
@@ -1064,6 +1065,7 @@ export default function App() {
 
 	/** Paths queued for the "move to folder" dialog (null = closed). */
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
+	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
 	/** Refresh tree / library / wiki after a recycle-bin restore. */
 	const handleTrashChanged = useCallback(async () => {
@@ -1698,6 +1700,7 @@ export default function App() {
 			else openSettings();
 		},
 		closeSheet: closeSettings,
+		showShortcuts: () => setShortcutsOpen(true),
 		newWindow: () => void handleNewWindow(),
 		openVault: () => void handleOpenVault(),
 		createVault: () => void handleCreateVault(),
@@ -2497,6 +2500,8 @@ export default function App() {
 					sourcePaths={movePaths ?? []}
 					onConfirm={(dest) => void runMovePaths(dest)}
 				/>
+
+				<ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}
 				{agentZenMode ? null : <BackgroundTasksPanel />}

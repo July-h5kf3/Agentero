@@ -6,6 +6,7 @@
 	},
 	"labels": {
 		"settings": "Settings…",
+		"showShortcuts": "Keyboard shortcuts",
 		"closeSheet": "Close settings",
 		"newWindow": "New window",
 		"openVault": "Open vault…",

@@ -6,6 +6,7 @@
 	},
 	"labels": {
 		"settings": "设置…",
+		"showShortcuts": "键盘快捷键",
 		"closeSheet": "关闭设置",
 		"newWindow": "新建窗口",
 		"openVault": "打开知识库…",
