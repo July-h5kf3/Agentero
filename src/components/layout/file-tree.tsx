@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
 	Download,
 	FileCode2,
@@ -33,7 +34,7 @@ import {
 	FileTree as AiFileTree,
 	FileTreeActions,
 	FileTreeFile,
-	FileTreeFolder,
+	FileTreeFolderRow,
 	FileTreeIcon,
 	FileTreeName,
 } from "@/components/ai-elements/file-tree";
@@ -100,6 +101,18 @@ export type TreeCreateDraft = {
 	/** Absolute path of the parent directory (vault root or folder). */
 	parentPath: string;
 };
+
+/** One flattened, windowable tree row in display order. */
+type FlatRow =
+	| { key: string; kind: "library" }
+	| { key: string; kind: "create"; depth: number }
+	| {
+			key: string;
+			kind: "node";
+			depth: number;
+			node: FileNode;
+			paperLeaf: boolean;
+	  };
 
 function AgenteroLogo({ className }: { className?: string }) {
 	return (
@@ -417,6 +430,50 @@ export function FileTree({
 		return out;
 	}, [nodes, expanded]);
 
+	/** Flattened rows in display order (respects expand state + inline drafts). */
+	const flatRows = useMemo<FlatRow[]>(() => {
+		const out: FlatRow[] = [{ key: "__library__", kind: "library" }];
+		const draftAt = (parent: string) =>
+			Boolean(
+				createDraft && pathKey(createDraft.parentPath) === pathKey(parent),
+			);
+		if (vaultPath && draftAt(vaultPath)) {
+			out.push({ key: "__create_root__", kind: "create", depth: 0 });
+		}
+		const walk = (list: FileNode[], depth: number) => {
+			for (const n of list) {
+				const paper =
+					n.kind === "directory" && isPaperDirectory(n.path, n.children);
+				out.push({ key: n.id, kind: "node", depth, node: n, paperLeaf: paper });
+				if (n.kind === "directory" && draftAt(n.path)) {
+					out.push({
+						key: `create-${n.path}`,
+						kind: "create",
+						depth: depth + 1,
+					});
+				}
+				if (
+					n.kind === "directory" &&
+					!paper &&
+					expanded.has(n.path) &&
+					n.children?.length
+				) {
+					walk(n.children, depth + 1);
+				}
+			}
+		};
+		walk(nodes, 0);
+		return out;
+	}, [nodes, expanded, createDraft, vaultPath]);
+
+	const treeScrollRef = useRef<HTMLDivElement>(null);
+	const rowVirtualizer = useVirtualizer({
+		count: flatRows.length,
+		getScrollElement: () => treeScrollRef.current,
+		estimateSize: () => 28,
+		overscan: 15,
+	});
+
 	const clearSelection = useCallback(() => {
 		setSelected(new Set());
 		setAnchor(null);
@@ -611,14 +668,6 @@ export function FileTree({
 		setDragging(null);
 		setDropTarget(null);
 	}, []);
-
-	const draftHere = useCallback(
-		(parentAbs: string) =>
-			Boolean(
-				createDraft && pathKey(createDraft.parentPath) === pathKey(parentAbs),
-			),
-		[createDraft],
-	);
 
 	const createRow =
 		createDraft && vaultPath ? (
@@ -910,134 +959,116 @@ export function FileTree({
 		</FileTreeFile>
 	);
 
-	const renderNode = (node: FileNode): ReactNode => {
-		// Paper folder (any depth under papers/) → leaf; org folders expand
-		if (
-			node.kind === "directory" &&
-			isPaperDirectory(node.path, node.children)
-		) {
-			const creatingInside = draftHere(node.path);
-			const downloadReasons = paperAssetDownloadReasons(node);
-			const showDownload =
-				Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
-			const rel = relPathForNode(node.path);
-			const meta = paperMetaByRelPath?.get(rel) ?? null;
-			const showRead =
-				Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
-			const isDownloading = downloadingPath === node.path || downloadingAll;
-			const isReading = readingPath === node.path;
-			const rowBusy =
-				isDownloading ||
-				isReading ||
-				Boolean(downloadingPath) ||
-				downloadingAll ||
-				Boolean(readingPath);
-			const reasonTip = downloadReasons.length
-				? downloadReasons.map((r) => t(DOWNLOAD_REASON_KEYS[r])).join(" · ")
-				: t("fileTree.downloadAssets");
-			const showActions = showDownload || showRead;
-			return (
-				<div key={node.id}>
-					<FileTreeFile path={node.path} name={node.name}>
-						<span className="size-4 shrink-0" />
-						<FileTreeIcon>
-							<ScrollText className="size-4 text-muted-foreground" />
-						</FileTreeIcon>
-						<FileTreeName className="min-w-0 flex-1 truncate">
-							{node.name}
-						</FileTreeName>
-						{showActions ? (
-							<FileTreeActions
-								className="shrink-0"
-								onClick={(e) => {
-									e.stopPropagation();
-								}}
-								onKeyDown={(e) => e.stopPropagation()}
-							>
-								{showDownload ? (
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												className="size-6"
-												aria-label={reasonTip}
-												disabled={rowBusy}
-												onClick={(e) => {
-													e.stopPropagation();
-													void handleDownload(node);
-												}}
-											>
-												{isDownloading ? (
-													<Loader2 className="size-3.5 animate-spin" />
-												) : (
-													<Download className="size-3.5" />
-												)}
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="right" className="max-w-xs">
-											<p className="font-medium">
-												{t("fileTree.downloadAssets")}
-											</p>
-											<ul className="mt-1 list-disc space-y-0.5 pl-3 text-xs opacity-90">
-												{downloadReasons.map((r) => (
-													<li key={r}>{t(DOWNLOAD_REASON_KEYS[r])}</li>
-												))}
-											</ul>
-										</TooltipContent>
-									</Tooltip>
-								) : null}
-								{showRead ? (
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												className="size-6"
-												aria-label={t("fileTree.readPaper")}
-												disabled={rowBusy}
-												onClick={(e) => {
-													e.stopPropagation();
-													void handleReadPaper(node);
-												}}
-											>
-												{isReading ? (
-													<Loader2 className="size-3.5 animate-spin" />
-												) : (
-													<Zap className="size-3.5" />
-												)}
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="right" className="max-w-xs">
-											<p className="font-medium">{t("fileTree.readPaper")}</p>
-										</TooltipContent>
-									</Tooltip>
-								) : null}
-							</FileTreeActions>
+	const renderPaperRow = (node: FileNode): ReactNode => {
+		const downloadReasons = paperAssetDownloadReasons(node);
+		const showDownload =
+			Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
+		const rel = relPathForNode(node.path);
+		const meta = paperMetaByRelPath?.get(rel) ?? null;
+		const showRead =
+			Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
+		const isDownloading = downloadingPath === node.path || downloadingAll;
+		const isReading = readingPath === node.path;
+		const rowBusy =
+			isDownloading ||
+			isReading ||
+			Boolean(downloadingPath) ||
+			downloadingAll ||
+			Boolean(readingPath);
+		const reasonTip = downloadReasons.length
+			? downloadReasons.map((r) => t(DOWNLOAD_REASON_KEYS[r])).join(" · ")
+			: t("fileTree.downloadAssets");
+		const showActions = showDownload || showRead;
+		return (
+			<FileTreeFile path={node.path} name={node.name}>
+				<span className="size-4 shrink-0" />
+				<FileTreeIcon>
+					<ScrollText className="size-4 text-muted-foreground" />
+				</FileTreeIcon>
+				<FileTreeName className="min-w-0 flex-1 truncate">
+					{node.name}
+				</FileTreeName>
+				{showActions ? (
+					<FileTreeActions
+						className="shrink-0"
+						onClick={(e) => {
+							e.stopPropagation();
+						}}
+						onKeyDown={(e) => e.stopPropagation()}
+					>
+						{showDownload ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6"
+										aria-label={reasonTip}
+										disabled={rowBusy}
+										onClick={(e) => {
+											e.stopPropagation();
+											void handleDownload(node);
+										}}
+									>
+										{isDownloading ? (
+											<Loader2 className="size-3.5 animate-spin" />
+										) : (
+											<Download className="size-3.5" />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="right" className="max-w-xs">
+									<p className="font-medium">{t("fileTree.downloadAssets")}</p>
+									<ul className="mt-1 list-disc space-y-0.5 pl-3 text-xs opacity-90">
+										{downloadReasons.map((r) => (
+											<li key={r}>{t(DOWNLOAD_REASON_KEYS[r])}</li>
+										))}
+									</ul>
+								</TooltipContent>
+							</Tooltip>
 						) : null}
-					</FileTreeFile>
-					{creatingInside ? (
-						<div className="ml-4 border-l pl-2">{createRow}</div>
-					) : null}
-				</div>
-			);
-		}
+						{showRead ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-6"
+										aria-label={t("fileTree.readPaper")}
+										disabled={rowBusy}
+										onClick={(e) => {
+											e.stopPropagation();
+											void handleReadPaper(node);
+										}}
+									>
+										{isReading ? (
+											<Loader2 className="size-3.5 animate-spin" />
+										) : (
+											<Zap className="size-3.5" />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="right" className="max-w-xs">
+									<p className="font-medium">{t("fileTree.readPaper")}</p>
+								</TooltipContent>
+							</Tooltip>
+						) : null}
+					</FileTreeActions>
+				) : null}
+			</FileTreeFile>
+		);
+	};
 
+	const renderNodeRow = (node: FileNode, paperLeaf: boolean): ReactNode => {
+		if (paperLeaf) return renderPaperRow(node);
 		if (node.kind === "directory") {
-			return (
-				<FileTreeFolder key={node.id} path={node.path} name={node.name}>
-					{draftHere(node.path) ? createRow : null}
-					{node.children?.map((child) => renderNode(child))}
-				</FileTreeFolder>
-			);
+			return <FileTreeFolderRow path={node.path} name={node.name} />;
 		}
-
 		const Icon = fileIcon(node.name);
 		return (
 			<FileTreeFile
-				key={node.id}
 				path={node.path}
 				name={node.name}
 				icon={<Icon className="size-4 text-muted-foreground" />}
@@ -1045,14 +1076,16 @@ export function FileTree({
 		);
 	};
 
-	const rootCreate =
-		createDraft && vaultPath && draftHere(vaultPath) ? createRow : null;
-
 	return (
 		<TooltipProvider delayDuration={300}>
-			<div className={cn("select-none py-1 text-sm", className)}>
+			<div
+				className={cn(
+					"flex min-h-0 flex-1 flex-col select-none text-sm",
+					className,
+				)}
+			>
 				{selected.size > 0 ? (
-					<div className="-mx-1 sticky top-0 z-20 mb-1 flex items-center gap-1 border-b bg-muted/95 px-3 py-1.5 backdrop-blur-sm">
+					<div className="mb-1 flex shrink-0 items-center gap-1 border-b bg-muted/95 px-3 py-1.5">
 						<span className="text-muted-foreground text-xs">
 							{t("fileTree.selectedCount", { count: selected.size })}
 						</span>
@@ -1117,9 +1150,31 @@ export function FileTree({
 						</div>
 					</div>
 				) : null}
-				{nodes.length === 0 && !createDraft ? (
-					<>
-						{/* Virtual library node always available (empty vault or no vault yet) */}
+				<div
+					ref={treeScrollRef}
+					className="agentero-scroll min-h-0 flex-1 overflow-y-auto py-1"
+				>
+					{nodes.length === 0 && !createDraft ? (
+						<>
+							{/* Virtual library node always available (empty vault or no vault yet) */}
+							<AiFileTree
+								selectedPath={treeSelectedPath}
+								selectedPaths={selected}
+								expanded={expanded}
+								onExpandedChange={setExpanded}
+								onContextMenuPath={handleContextMenuPath}
+								onSelectRow={handleSelectRow}
+							>
+								{libraryRow}
+							</AiFileTree>
+							{/* Only when a vault is open but has no files — not before open/create. */}
+							{vaultPath ? (
+								<p className="px-3 py-2 text-muted-foreground text-xs">
+									{t("fileTree.empty")}
+								</p>
+							) : null}
+						</>
+					) : (
 						<AiFileTree
 							selectedPath={treeSelectedPath}
 							selectedPaths={selected}
@@ -1127,41 +1182,48 @@ export function FileTree({
 							onExpandedChange={setExpanded}
 							onContextMenuPath={handleContextMenuPath}
 							onSelectRow={handleSelectRow}
+							dropTargetPath={dropTarget}
+							onRowDragStart={handleRowDragStart}
+							onRowDragOver={handleRowDragOver}
+							onRowDrop={handleRowDrop}
+							onRowDragEnd={handleRowDragEnd}
 						>
-							{libraryRow}
+							<div
+								className="relative w-full"
+								style={{ height: rowVirtualizer.getTotalSize() }}
+							>
+								{rowVirtualizer.getVirtualItems().map((vi) => {
+									const row = flatRows[vi.index];
+									if (!row) return null;
+									const depth = row.kind === "library" ? 0 : row.depth;
+									return (
+										<div
+											key={row.key}
+											data-index={vi.index}
+											ref={rowVirtualizer.measureElement}
+											className="absolute top-0 left-0 w-full"
+											style={{
+												transform: `translateY(${vi.start}px)`,
+												paddingLeft: depth * 12,
+											}}
+										>
+											{row.kind === "library"
+												? libraryRow
+												: row.kind === "create"
+													? createRow
+													: renderNodeRow(row.node, row.paperLeaf)}
+										</div>
+									);
+								})}
+							</div>
 						</AiFileTree>
-						{/* Only when a vault is open but has no files — not before open/create. */}
-						{vaultPath ? (
-							<p className="px-3 py-2 text-muted-foreground text-xs">
-								{t("fileTree.empty")}
-							</p>
-						) : null}
-					</>
-				) : (
-					<AiFileTree
-						selectedPath={treeSelectedPath}
-						selectedPaths={selected}
-						expanded={expanded}
-						onExpandedChange={setExpanded}
-						onContextMenuPath={handleContextMenuPath}
-						onSelectRow={handleSelectRow}
-						dropTargetPath={dropTarget}
-						onRowDragStart={handleRowDragStart}
-						onRowDragOver={handleRowDragOver}
-						onRowDrop={handleRowDrop}
-						onRowDragEnd={handleRowDragEnd}
-					>
-						{/* Virtual root: papers library table (not a real folder) */}
-						{libraryRow}
-						{rootCreate}
-						{nodes.map((node) => renderNode(node))}
-					</AiFileTree>
-				)}
-				{revealError ? (
-					<p className="px-3 py-1 text-destructive text-xs leading-snug">
-						{revealError}
-					</p>
-				) : null}
+					)}
+					{revealError ? (
+						<p className="px-3 py-1 text-destructive text-xs leading-snug">
+							{revealError}
+						</p>
+					) : null}
+				</div>
 				{contextMenuPortal}
 			</div>
 		</TooltipProvider>

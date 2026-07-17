@@ -288,6 +288,91 @@ export const FileTreeFolder = ({
 	);
 };
 
+/**
+ * Flat folder ROW (no nested children) for virtualized rendering: renders the
+ * folder button only; its children are separate flattened rows. Reads the same
+ * FileTreeContext as {@link FileTreeFolder}.
+ */
+export const FileTreeFolderRow = ({
+	path,
+	name,
+	className,
+}: {
+	path: string;
+	name: string;
+	className?: string;
+}) => {
+	const {
+		expandedPaths,
+		togglePath,
+		selectedPath,
+		selectedPaths,
+		onSelectRow,
+		onDoubleClickPath,
+		onContextMenuPath,
+		dropTargetPath,
+		onRowDragStart,
+		onRowDragOver,
+		onRowDrop,
+		onRowDragEnd,
+	} = useContext(FileTreeContext);
+	const isExpanded = expandedPaths.has(path);
+	const selCount = selectedPaths?.size ?? 0;
+	const isSelected =
+		selCount > 0 ? (selectedPaths?.has(path) ?? false) : selectedPath === path;
+	return (
+		<button
+			type="button"
+			data-path={path}
+			draggable
+			className={cn(
+				"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50",
+				isSelected && "bg-muted",
+				dropTargetPath === path && DROP_RING,
+				className,
+			)}
+			onClick={(e) => {
+				if ((e.metaKey || e.ctrlKey || e.shiftKey) && onSelectRow) {
+					onSelectRow(path, {
+						meta: e.metaKey,
+						ctrl: e.ctrlKey,
+						shift: e.shiftKey,
+					});
+				} else {
+					togglePath(path);
+				}
+			}}
+			onDoubleClick={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				onDoubleClickPath?.(path);
+			}}
+			onContextMenu={(e) => onContextMenuPath?.(path, e)}
+			onDragStart={(e) => onRowDragStart?.(path, e)}
+			onDragOver={(e) => onRowDragOver?.(path, e)}
+			onDrop={(e) => onRowDrop?.(path, e)}
+			onDragEnd={() => onRowDragEnd?.()}
+			aria-expanded={isExpanded}
+			role="treeitem"
+		>
+			<ChevronRightIcon
+				className={cn(
+					"size-4 shrink-0 text-muted-foreground transition-transform",
+					isExpanded && "rotate-90",
+				)}
+			/>
+			<FileTreeIcon>
+				{isExpanded ? (
+					<FolderOpenIcon className="size-4 text-blue-500" />
+				) : (
+					<FolderIcon className="size-4 text-blue-500" />
+				)}
+			</FileTreeIcon>
+			<FileTreeName>{name}</FileTreeName>
+		</button>
+	);
+};
+
 interface FileTreeFileContextType {
 	path: string;
 	name: string;

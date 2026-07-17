@@ -2062,7 +2062,7 @@ export default function App() {
 										onOpenRecycleBin={handleSelectTrash}
 									/>
 								</div>
-								<div className="agentero-scroll min-h-0 flex-1 px-1">
+								<div className="flex min-h-0 flex-1 flex-col px-1">
 									<FileTree
 										nodes={tree}
 										selectedPath={treeSelectedPath}
