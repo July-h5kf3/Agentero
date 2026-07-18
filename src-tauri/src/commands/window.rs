@@ -5,6 +5,9 @@ use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 #[tauri::command]
 pub fn window_new(app: AppHandle) -> Result<(), String> {
+    use crate::log_util::OpTimer;
+
+    let op = OpTimer::start("window_new");
     let label = format!("agentero-{}", uuid::Uuid::new_v4().simple());
 
     let mut builder =
@@ -30,7 +33,13 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
         builder = builder.decorations(false);
     }
 
-    let window = builder.build().map_err(|e| e.to_string())?;
+    let window = match builder.build() {
+        Ok(w) => w,
+        Err(e) => {
+            op.finish_err_msg("window", &e);
+            return Err(e.to_string());
+        }
+    };
     let _ = window.set_focus();
 
     // Native menu is macOS-only; other platforms drive actions from the React
@@ -40,5 +49,6 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
         let _ = window.set_menu(menu);
     }
 
+    op.finish_ok_extra(format!("label={label}"));
     Ok(())
 }

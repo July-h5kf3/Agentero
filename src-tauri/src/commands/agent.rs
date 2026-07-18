@@ -258,13 +258,29 @@ pub async fn agent_run_once(
     runs: State<'_, AgentRunController>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
+    use crate::log_util::{trunc, OpTimer};
+
+    let op = OpTimer::start_with(
+        "agent_run_once",
+        format!(
+            "agent_id={} prompt_len={} images={}",
+            request.agent_id.as_deref().unwrap_or("default"),
+            request.prompt.chars().count(),
+            request.images.len()
+        ),
+    );
     if request.prompt.trim().is_empty() && request.images.is_empty() {
-        return Ok(map_err(AppError::message("prompt or images are required")));
+        let err = AppError::message("prompt or images are required");
+        op.finish_err(&err);
+        return Ok(map_err(err));
     }
 
     let desc = match registry.resolve_default(request.agent_id.as_deref()) {
         Ok(d) => d,
-        Err(e) => return Ok(map_err(e)),
+        Err(e) => {
+            op.finish_err(&e);
+            return Ok(map_err(e));
+        }
     };
 
     let (generated_session_id, message_id) = new_ids();
@@ -280,7 +296,10 @@ pub async fn agent_run_once(
         .await
         {
             Ok(thread) => Some(thread),
-            Err(error) => return Ok(map_err(error)),
+            Err(error) => {
+                op.finish_err(&error);
+                return Ok(map_err(error));
+            }
         }
     } else {
         None
@@ -301,12 +320,16 @@ pub async fn agent_run_once(
             if let Some(thread) = prepared_codex_thread {
                 thread.shutdown().await;
             }
+            op.finish_err(&error);
             return Ok(map_err(error));
         }
     };
 
     let app_handle = window.app_handle().clone();
     let events = AgentEventEmitter::new(app_handle.clone(), window.label());
+    let log_session_id = session_id.clone();
+    let log_agent_id = desc.id.clone();
+    let session_agent_id = log_agent_id.clone();
     tauri::async_runtime::spawn(async move {
         if desc.template == AgentTemplate::CodexAcp {
             if let Some(prepared_codex_thread) = prepared_codex_thread {
@@ -351,8 +374,19 @@ pub async fn agent_run_once(
             .await;
         }
         let _ = app_handle.state::<AgentRunController>().finish(&session_id);
+        log::info!(
+            target: "agentero::op",
+            "op end agent_run_session session_id={} agent_id={}",
+            trunc(&session_id, 48),
+            trunc(&session_agent_id, 48)
+        );
     });
 
+    op.finish_ok_extra(format!(
+        "session_id={} agent_id={} accepted=true",
+        trunc(&log_session_id, 48),
+        trunc(&log_agent_id, 48)
+    ));
     Ok(ApiResult::ok(accepted))
 }
 

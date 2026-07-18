@@ -3,6 +3,8 @@
  * No external state lib — useSyncExternalStore for React subscriptions.
  */
 
+import { logger } from "@/lib/logger";
+
 export type BackgroundTaskKind =
 	| "download"
 	| "downloadAll"
@@ -208,6 +210,10 @@ export async function runBackgroundTask<T>(
 		running: true,
 		progress: null,
 	});
+	const start = performance.now();
+	logger.info(
+		`op start background_task kind=${input.kind} task_id=${id} title=${input.title}`,
+	);
 	try {
 		const result = await fn({
 			id,
@@ -215,10 +221,18 @@ export async function runBackgroundTask<T>(
 			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
 		});
 		completeBackgroundTask(id);
+		const ms = Math.round(performance.now() - start);
+		logger.info(
+			`op end background_task ok=true duration_ms=${ms} kind=${input.kind} task_id=${id}`,
+		);
 		return result;
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : String(e);
 		failBackgroundTask(id, msg);
+		const ms = Math.round(performance.now() - start);
+		logger.error(
+			`op end background_task ok=false duration_ms=${ms} kind=${input.kind} task_id=${id} error=${msg}`,
+		);
 		throw e;
 	}
 }

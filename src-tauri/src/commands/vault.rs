@@ -1,4 +1,5 @@
 use crate::error::{map_err, ApiResult, AppError};
+use crate::log_util::{trunc, OpTimer};
 use crate::services::vault::{self, CreateVaultResult};
 use std::path::PathBuf;
 
@@ -6,11 +7,11 @@ use std::path::PathBuf;
 #[tauri::command]
 pub fn vault_create(path: String) -> ApiResult<CreateVaultResult> {
     let p = PathBuf::from(path.trim());
+    let op = OpTimer::start_with("vault_create", format!("path={}", trunc(&path, 200)));
     if p.as_os_str().is_empty() {
-        return map_err(AppError::message("path is required"));
+        let err = AppError::message("path is required");
+        op.finish_err(&err);
+        return map_err(err);
     }
-    match vault::create_vault(&p) {
-        Ok(r) => ApiResult::ok(r),
-        Err(e) => map_err(e),
-    }
+    op.finish_result(vault::create_vault(&p))
 }

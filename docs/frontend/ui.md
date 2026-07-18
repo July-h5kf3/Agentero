@@ -99,6 +99,7 @@
   - `errorMessage(err)` — `catch` 值转可读字符串
 - **约定**：跨页面的**操作失败**统一 toast；**表单字段校验**（如树内联新建命名、Popover 内输入）仍可就地 `text-destructive`。
 - **禁止**再在侧栏 header 下挂常驻 error 条（已移除）。
+- **诊断日志**（非 UX）：`src/lib/logger.ts` + Host `tauri-plugin-log`；关键操作 `op start` / `op end`。看日志方式见 [`../development/logging.md`](../development/logging.md)。失败时仍应 toast，logger 不替代本小节。
 
 ### 2.2 无 Vault 欢迎页
 

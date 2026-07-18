@@ -24,7 +24,26 @@ pub fn connector_set_enabled(
     ctrl: State<'_, Arc<ConnectorController>>,
     args: ConnectorSetEnabledArgs,
 ) -> ApiResult<ConnectorStatus> {
-    ApiResult::ok(ctrl.set_enabled(args.enabled))
+    use crate::log_util::OpTimer;
+
+    let op = OpTimer::start_with("connector_set_enabled", format!("enabled={}", args.enabled));
+    let status = ctrl.set_enabled(args.enabled);
+    if let Some(err) = status.last_error.as_deref() {
+        if !err.is_empty() && args.enabled {
+            op.finish_err_msg("connector", err);
+        } else {
+            op.finish_ok_extra(format!(
+                "listening={} port={}",
+                status.listening, status.port
+            ));
+        }
+    } else {
+        op.finish_ok_extra(format!(
+            "listening={} port={}",
+            status.listening, status.port
+        ));
+    }
+    ApiResult::ok(status)
 }
 
 #[derive(Debug, Deserialize)]

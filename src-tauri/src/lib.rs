@@ -3,6 +3,8 @@ mod commands;
 pub mod error;
 #[cfg(target_os = "macos")]
 mod i18n;
+/// Operation start/end helpers (`docs/development/logging.md`).
+mod log_util;
 mod models;
 /// Domain services (Vault / Catalog / Lookup / Wiki / …).
 /// The CLI path-depends on this crate and may `use agentero_lib::services::{vault,catalog,…}`;
@@ -130,6 +132,41 @@ fn set_locale(app: tauri::AppHandle, locale: String) -> Result<(), String> {
     Ok(())
 }
 
+fn build_log_plugin() -> tauri_plugin_log::Builder {
+    use tauri_plugin_log::{Target, TargetKind};
+
+    let default_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Debug
+    } else {
+        log::LevelFilter::Info
+    };
+    let agent_level = if cfg!(debug_assertions) {
+        log::LevelFilter::Trace
+    } else {
+        log::LevelFilter::Info
+    };
+
+    let mut builder = tauri_plugin_log::Builder::new()
+        .level(default_level)
+        .level_for("agentero_lib::services::agent", agent_level)
+        .level_for("agentero::op", log::LevelFilter::Info)
+        .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+        .max_file_size(5_000_000)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+        .clear_targets()
+        .target(Target::new(TargetKind::Stdout))
+        .target(Target::new(TargetKind::LogDir {
+            file_name: Some("agentero".into()),
+        }));
+
+    // Dev: also mirror into the webview console (frontend calls attachConsole).
+    if cfg!(debug_assertions) {
+        builder = builder.target(Target::new(TargetKind::Webview));
+    }
+
+    builder
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -138,6 +175,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(build_log_plugin().build())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(WikiIndexState::new())
@@ -222,13 +260,18 @@ pub fn run() {
             let _ = app.state::<WikiIndexState>();
             let connector = app.state::<Arc<ConnectorController>>();
             connector.set_app_handle(app.handle().clone());
+            log::info!(
+                target: "agentero::op",
+                "op start app_ready debug={}",
+                cfg!(debug_assertions)
+            );
             Ok(())
         })
         .on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if id == "new_window" {
                 if let Err(e) = commands::window::window_new(app.clone()) {
-                    eprintln!("window_new failed: {e}");
+                    log::error!(target: "agentero::op", "op end window_new ok=false error={e}");
                 }
                 return;
             }

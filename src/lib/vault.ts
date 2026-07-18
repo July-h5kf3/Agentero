@@ -242,13 +242,18 @@ export async function createVault(path: string): Promise<CreateVaultResult> {
 		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
 
-	const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
-		path,
+	const { logOp } = await import("@/lib/logger");
+	return logOp("createVault", { path }, async () => {
+		const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
+			path,
+		});
+		if (!result.ok || !result.data) {
+			throw new Error(
+				result.error?.message ?? i18n.t("app:vault.createFailed"),
+			);
+		}
+		return result.data;
 	});
-	if (!result.ok || !result.data) {
-		throw new Error(result.error?.message ?? i18n.t("app:vault.createFailed"));
-	}
-	return result.data;
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {

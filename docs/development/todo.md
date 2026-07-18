@@ -116,6 +116,16 @@
    - [x] README / 本仓库开发说明：`cargo build -p agentero-cli`。
    - [x] Vault skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`；Create Vault 种子；README Quick Start 已写协议。
 
+6. **运行日志（Logging）** — [`logging.md`](logging.md)；**P0 已落地**
+   - 分层：log（诊断）≠ `ApiResult` / CLI envelope ≠ `notifyError` / 任务条 / Agent error 行。
+   - 栈：`tauri-plugin-log` + `log` + `@tauri-apps/plugin-log`；CLI `env_logger` / `RUST_LOG`；默认无远程遥测。
+   - [x] Host：插件注册、capabilities `log:default`、dev/release level 与 LogDir。
+   - [x] 前端：`src/lib/logger.ts` + `logOp`；ErrorBoundary 打 error。
+   - [x] **关键操作成对** `op start` / `op end`（`ok`、`duration_ms`）；`runBackgroundTask` 横切自动埋点。
+   - [x] Host 写/长耗时 command（vault、lookup、agent_run、trash、zotero、parse…）与 CLI 每命令 op 对。
+   - [x] 隐私：不写 Vault；不记 NOTES/PDF/prompt 全文（仅 path/id/len）。
+   - [ ] P1：设置「打开/导出日志文件夹」。
+
 ## P1 — 中期增强
 
 1. **Catalog 导出与检索**

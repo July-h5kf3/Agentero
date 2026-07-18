@@ -4,9 +4,14 @@ import ReactDOM from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { initLogger, logger } from "@/lib/logger";
 import App from "./App";
 import i18n from "./i18n";
 import "./index.css";
+
+void initLogger().then(() => {
+	logger.info("op start frontend_boot");
+});
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

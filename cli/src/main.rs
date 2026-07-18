@@ -177,7 +177,21 @@ enum Commands {
     },
 }
 
+fn init_logging() {
+    // Logs go to stderr so `--json` stdout stays a pure business envelope.
+    // Example: RUST_LOG=info agentero vault create /tmp/v
+    // Custom op logs use target `agentero::op`; crate modules use package names.
+    let _ = env_logger::Builder::from_env(
+        env_logger::Env::default()
+            .default_filter_or("warn,agentero_cli=info,agentero_lib=info,agentero::op=info"),
+    )
+    .format_timestamp_secs()
+    .try_init();
+}
+
 fn main() -> StdExitCode {
+    init_logging();
+
     // Apply color choice before parse so `--help` / usage errors use the same styles.
     let mut cmd = Cli::command()
         .styles(clap_styles())
@@ -210,25 +224,65 @@ fn main() -> StdExitCode {
     {
         Ok(rt) => rt,
         Err(e) => {
+            log::error!("failed to start async runtime: {e}");
             eprintln!("failed to start async runtime: {e}");
             return StdExitCode::from(ExitCode::Business as u8);
         }
     };
 
+    let cmd_name = command_label(&cli.command);
+    let start = std::time::Instant::now();
+    log::info!(target: "agentero::op", "op start {cmd_name}");
+
     let result = rt.block_on(run(cli.command, &globals));
     match result {
         Ok(value) => {
             if let Err(e) = emit_ok(&globals, &value) {
+                log::error!(
+                    target: "agentero::op",
+                    "op end {cmd_name} ok=false duration_ms={} error={}",
+                    start.elapsed().as_millis(),
+                    e
+                );
                 eprintln!("{e}");
                 return StdExitCode::from(ExitCode::Business as u8);
             }
+            log::info!(
+                target: "agentero::op",
+                "op end {cmd_name} ok=true duration_ms={}",
+                start.elapsed().as_millis()
+            );
             StdExitCode::SUCCESS
         }
         Err(err) => {
+            log::error!(
+                target: "agentero::op",
+                "op end {cmd_name} ok=false duration_ms={} error_code={} error={}",
+                start.elapsed().as_millis(),
+                err.code,
+                err.message
+            );
             let code = err.exit_code();
             let _ = emit_err(&globals, &err);
             StdExitCode::from(code as u8)
         }
+    }
+}
+
+fn command_label(cmd: &Commands) -> &'static str {
+    match cmd {
+        Commands::Vault { cmd } => match cmd {
+            commands::vault::VaultCmd::Create { .. } => "cli.vault.create",
+            commands::vault::VaultCmd::Which => "cli.vault.which",
+            commands::vault::VaultCmd::Info => "cli.vault.info",
+            commands::vault::VaultCmd::Check => "cli.vault.check",
+            commands::vault::VaultCmd::Use { .. } => "cli.vault.use",
+        },
+        Commands::Tree { .. } => "cli.tree",
+        Commands::Paper { .. } => "cli.paper",
+        Commands::Import { .. } => "cli.import",
+        Commands::Export { .. } => "cli.export",
+        Commands::Config { .. } => "cli.config",
     }
 }
 

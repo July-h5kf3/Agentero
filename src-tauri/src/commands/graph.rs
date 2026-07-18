@@ -42,12 +42,26 @@ pub fn graph_rebuild(
     index: State<'_, WikiIndexState>,
     vault_path: String,
 ) -> ApiResult<RebuildResult> {
+    use crate::log_util::OpTimer;
+
+    let op = OpTimer::start("graph_rebuild");
     let mut guard = match index.inner.lock() {
         Ok(g) => g,
-        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+        Err(e) => {
+            let err = AppError::message(format!("wiki index lock: {e}"));
+            op.finish_err(&err);
+            return map_err(err);
+        }
     };
     match guard.rebuild(&vault_path) {
-        Ok(r) => ApiResult::ok(r),
-        Err(e) => map_err(AppError::message(e)),
+        Ok(r) => {
+            op.finish_ok();
+            ApiResult::ok(r)
+        }
+        Err(e) => {
+            let err = AppError::message(e);
+            op.finish_err(&err);
+            map_err(err)
+        }
     }
 }

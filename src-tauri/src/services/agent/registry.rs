@@ -24,8 +24,9 @@ impl AgentRegistry {
         state.enabled = true;
         if migrated {
             if let Err(error) = persist(&path, &state) {
-                eprintln!(
-                    "[agentero agent] failed to persist Codex registration migration: {error}"
+                log::error!(
+                    target: "agentero::agent",
+                    "failed to persist Codex registration migration: {error}"
                 );
             }
         }

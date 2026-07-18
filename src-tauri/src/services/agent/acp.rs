@@ -202,8 +202,9 @@ fn dedupe_model_choices(models: Vec<AgentModelChoice>) -> Vec<AgentModelChoice> 
     }
 
     if dropped > 0 {
-        eprintln!(
-            "[agentero acp] model catalog deduped: kept={}, dropped_duplicates={}",
+        log::debug!(
+            target: "agentero::agent",
+            "model catalog deduped: kept={}, dropped_duplicates={}",
             out.len(),
             dropped
         );
@@ -268,8 +269,9 @@ fn models_from_config_options(
             continue;
         }
         if raw_len != models.len() {
-            eprintln!(
-                "[agentero acp] agent={} config_id={} model list: raw={} unique={}",
+            log::debug!(
+                target: "agentero::agent",
+                "agent={} config_id={} model list: raw={} unique={}",
                 agent_id,
                 opt.id,
                 raw_len,
