@@ -23,14 +23,23 @@ export const Conversation = ({ className, ...props }: ConversationProps) => (
 
 export type ConversationContentProps = ComponentProps<
 	typeof StickToBottom.Content
->;
+> & {
+	/** Class on the scroll viewport (scrollbar lives here — use full width of the chat pane). */
+	scrollClassName?: string;
+};
 
 export const ConversationContent = ({
 	className,
+	scrollClassName,
 	...props
 }: ConversationContentProps) => (
 	<StickToBottom.Content
 		className={cn("flex flex-col gap-8 p-4", className)}
+		scrollClassName={cn(
+			// Right-edge scrollbar (agentero thin style); stable gutter so layout does not jump.
+			"agentero-scroll [scrollbar-gutter:stable]",
+			scrollClassName,
+		)}
 		{...props}
 	/>
 );

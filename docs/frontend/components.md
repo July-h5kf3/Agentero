@@ -15,7 +15,7 @@
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`；全局权限模式）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 回收站入口）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + tags + **Rescan**）、`layout/paper-info-panel`、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词） |
+| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation` 滚动；无会话数字标签；`hideFromChatHistory` 过滤后台运行；全局权限模式）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 回收站入口）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + tags + **Rescan**）、`layout/paper-info-panel`、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；划词提问 `hideFromChatHistory`） |
 | 全局通知 | shadcn `ui/sonner` + `src/lib/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
@@ -37,7 +37,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 | 组件 | Registry | 说明 | Agentero |
 |---|---|---|---|
-| [Conversation](https://elements.ai-sdk.dev/components/conversation) | `conversation` | 消息列表容器；贴底滚动、空状态、滚动按钮 | ✅ Chat 列表 |
+| [Conversation](https://elements.ai-sdk.dev/components/conversation) | `conversation` | 消息列表容器；贴底滚动、空状态、滚动按钮；`scrollClassName` 接 `agentero-scroll`（禅模式全宽视口、滚动条贴右） | ✅ Chat 列表 |
 | [Message](https://elements.ai-sdk.dev/components/message) | `message` | 单条消息：`from`、内容、`MessageResponse`（Streamdown）、操作/分支 | ✅ 用户/助手气泡 |
 | [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) | `prompt-input` | Composer：输入、附件、提交状态、工具槽 | ✅ 底部输入 |
 | [Sources](https://elements.ai-sdk.dev/components/sources) | `sources` | 折叠展示引用来源列表 | ✅ Vault 路径引用 |

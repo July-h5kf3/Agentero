@@ -1,11 +1,11 @@
 import {
+	ArrowLeft,
 	Bot,
 	Focus,
 	Link2,
 	MessageSquareText,
 	PanelLeft,
 	PanelRight,
-	X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DocumentTabBar } from "@/components/layout/document-tab-bar";
@@ -94,7 +94,7 @@ export function WorkspaceHeader({
 			<TooltipProvider delayDuration={250}>
 				{agentZenMode ? (
 					<>
-						{/* Zen: drag strip + exit only — chat chrome lives in AgentPanel */}
+						{/* Zen: drag strip + back — chat chrome lives in AgentPanel */}
 						<div
 							className="min-w-0 flex-1 self-stretch"
 							data-tauri-drag-region
@@ -109,7 +109,7 @@ export function WorkspaceHeader({
 										aria-label={t("titlebar.exitAgentZen")}
 										onClick={onExitAgentZen}
 									>
-										<X className="size-3.5" />
+										<ArrowLeft className="size-3.5" />
 									</Button>
 								</TooltipTrigger>
 								<TooltipContent side="bottom">

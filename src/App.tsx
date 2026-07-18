@@ -1280,10 +1280,13 @@ export default function App() {
 		[vaultPath],
 	);
 
-	/** Open a paper folder in a tab: center PDF, right Notes (resolved on load). */
+	/** Open a paper folder in a tab: center PDF, right Notes (resolved on load).
+	 *  Also selects/reveals the paper in the left file tree. */
 	const openPaper = useCallback(
 		(paperDir: string) => {
-			openTab(paperDir, { preferMode: "pdf" });
+			const abs = paperDir.replace(/\\/g, "/").replace(/\/+$/, "");
+			setTreeSelectedPath(abs);
+			openTab(abs, { preferMode: "pdf" });
 		},
 		[openTab],
 	);
@@ -1323,7 +1326,15 @@ export default function App() {
 					return r;
 				},
 			);
-			openPaper(result.paperDir);
+			// Prefer absolute paperDir; fall back to vault + relative path.
+			const paperAbs =
+				result.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
+				`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
+					result.path || ""
+				)
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "")}`;
+			openPaper(paperAbs);
 			// Surface download failure without failing the whole import
 			if (result.pdf === false) {
 				const detail =
@@ -2592,20 +2603,6 @@ export default function App() {
 										autoFocus={
 											agentZenMode ||
 											(rightSidebarOpen && rightSidebarTab === "agent")
-										}
-										headerActions={
-											agentZenMode ? (
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													className="size-7"
-													aria-label={t("titlebar.exitAgentZen")}
-													onClick={exitAgentZen}
-												>
-													<X className="size-3.5" />
-												</Button>
-											) : undefined
 										}
 									/>
 								</div>

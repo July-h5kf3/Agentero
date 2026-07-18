@@ -39,7 +39,7 @@
   - **既没有 TeX 也没有 `PAPER.md`**（二者有其一即可，**优先 TeX**）；
   - 点击后：PDF 写入论文根目录 → arXiv 尽量下 TeX 到 `source/` → **无 TeX** 时 liteparse 写 `PAPER.md`。
 - **Paper 行 Zap（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Zap` 图标；点击可**手动**启动 **paper-reader**。
-- **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Zap 消失。
+- **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Zap 消失。精读与 PDF 划词提问等非 Composer 运行 **`hideFromChatHistory`**，不出现在 Agent 对话记录。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 图标按钮点击反馈：统一走 `Button`（`variant="ghost"` + `size="icon-xs"` 等）的 **active** 态（背景加深 + 轻微缩放）；文件树行同样有 `active:bg-muted/80`。
 - 动作映射（Lucide），从左到右：
@@ -158,11 +158,15 @@
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 Focus 图标）：
-  - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + 退出；隐藏后台任务条与 Notes。
+  - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + **返回**（`ArrowLeft`，不再用关闭 `X`）；隐藏后台任务条与 Notes；Agent 面板头**无**重复退出按钮。
   - **同一** `AgentPanel` 实例保持挂载（CSS 切换 / 不 remount），会话与流式状态不丢。
-  - **布局**（`variant="zen"`）：浅底全幅画布；顶栏工具与对话列同宽居中（`max-w-2xl`）；空态垂直居中；底部 Composer 圆角悬浮（无侧栏式 `border-t` 底条）。
-  - 仍用 AI Elements：`Conversation` / `Message` / `PromptInput` / `Suggestion` 等。
-  - 退出：标题栏 / 面板头 **X**，或再次 `⌥⌘Z`；恢复进入前左栏折叠意图与右栏默认宽度。
+  - **布局**（`variant="zen"`）：
+    - **左侧栏**（Quest 式弱对比）：浅灰底；顶部 pill「新建会话」；下方静音分区标题 + **单行**历史标题列表（当前会话高亮；运行中小绿点）。无「外部会话」开关；无 agent/状态/时间元信息堆叠。
+    - **主区顶栏**：仅 **Agent 切换**（**无** 1/2/3 会话数字标签页；历史切换走左侧列表或侧栏 History 弹出层）。
+    - **对话区**（AI Elements）：`Conversation` 视口**全宽**（滚动条贴主区最右，`agentero-scroll`）；消息 / Composer 内容 `max-w-2xl` 居中；空态垂直居中；组件：`Message` / `Reasoning` / `Plan` / `Tool` / `PromptInput` / `Suggestion` / `Sources` / `Checkpoint` 等。
+  - **侧栏模式**（非禅）：顶栏仍为 Agent 切换 + 新建 + History 弹出层（Codex 可开「外部会话」）；无 1/2/3 数字标签。
+  - **历史过滤**：精读 `paper_reader`、PDF 划词提问等非 Composer 工作流传 `hideFromChatHistory`，不写入 Codex 会话索引、不出现在对话记录（含旧标题启发式过滤）；进度只走左下角后台任务条。
+  - 退出：标题栏 **返回图标**，或再次 `⌥⌘Z`；恢复进入前左栏折叠意图与右栏默认宽度。
 - **左右侧栏隔离**（`react-resizable-panels`）：
   - 左栏（文件树）与右栏（Agent/Backlinks）均为 **常驻 collapsible 面板**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**对右栏做条件卸载整块 `ResizablePanel`（否则 Group 重排会冲掉左栏折叠态）。
   - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，并把上次展开像素宽记入 ref；中间主栏保持默认相对尺寸。

@@ -573,35 +573,59 @@ export function FileTree({
 	});
 
 	/**
-	 * When the active document changes, expand ancestor folders so the matching
-	 * tree row is visible, then scroll it into view (IDE-style reveal).
+	 * When the active document changes (or tree data refreshes after import),
+	 * expand ancestor folders so the matching tree row is visible, then scroll
+	 * it into view (IDE-style reveal — e.g. after magic-wand lookup import).
 	 */
 	const pendingRevealPathRef = useRef<string | null>(null);
+	const expandAncestorsOf = useCallback(
+		(target: string) => {
+			if (isVirtualTreePath(target)) return;
+			const parents = ancestorPaths(target, vaultPath);
+			if (parents.length === 0) return;
+			setExpanded((prev) => {
+				let changed = false;
+				const next = new Set(prev);
+				for (const parent of parents) {
+					const node = byPathKey.get(pathKey(parent));
+					if (node?.kind !== "directory") continue;
+					// Paper folders stay leaves — never expand them.
+					if (isPaperDirectory(node.path, node.children)) continue;
+					if (!next.has(node.path)) {
+						next.add(node.path);
+						changed = true;
+					}
+				}
+				return changed ? next : prev;
+			});
+		},
+		[vaultPath, byPathKey],
+	);
+
 	useEffect(() => {
 		if (!treeSelectedPath) return;
 		pendingRevealPathRef.current = treeSelectedPath;
+		expandAncestorsOf(treeSelectedPath);
+	}, [treeSelectedPath, expandAncestorsOf]);
 
-		if (isVirtualTreePath(treeSelectedPath)) return;
-
-		const parents = ancestorPaths(treeSelectedPath, vaultPath);
-		if (parents.length === 0) return;
-
-		setExpanded((prev) => {
-			let changed = false;
-			const next = new Set(prev);
-			for (const parent of parents) {
-				const node = byPathKey.get(pathKey(parent));
-				if (node?.kind !== "directory") continue;
-				// Paper folders stay leaves — never expand them.
-				if (isPaperDirectory(node.path, node.children)) continue;
-				if (!next.has(node.path)) {
-					next.add(node.path);
-					changed = true;
-				}
-			}
-			return changed ? next : prev;
+	// After tree refresh (import / rescan), re-queue reveal only when the
+	// selected path is not yet a visible flat row (parents collapsed, or the
+	// node just appeared after magic-wand import).
+	useEffect(() => {
+		if (!treeSelectedPath || isVirtualTreePath(treeSelectedPath)) return;
+		const targetKey = pathKey(treeSelectedPath);
+		const visible = flatRows.some((row) => {
+			if (row.kind === "library")
+				return targetKey === pathKey(LIBRARY_VIRTUAL_PATH);
+			if (row.kind === "trash")
+				return targetKey === pathKey(TRASH_VIRTUAL_PATH);
+			if (row.kind === "node") return pathKey(row.node.path) === targetKey;
+			return false;
 		});
-	}, [treeSelectedPath, vaultPath, byPathKey]);
+		if (visible) return;
+		pendingRevealPathRef.current = treeSelectedPath;
+		expandAncestorsOf(treeSelectedPath);
+	}, [treeSelectedPath, expandAncestorsOf, flatRows]);
 
 	// treeSelectedPath: re-run when selection changes even if flatRows is unchanged
 	// (path already visible / ancestors already expanded).
@@ -612,17 +636,24 @@ export function FileTree({
 
 		const targetKey = pathKey(target);
 		const idx = flatRows.findIndex((row) => {
-			if (row.kind === "library") return target === LIBRARY_VIRTUAL_PATH;
-			if (row.kind === "trash") return target === TRASH_VIRTUAL_PATH;
+			if (row.kind === "library")
+				return targetKey === pathKey(LIBRARY_VIRTUAL_PATH);
+			if (row.kind === "trash")
+				return targetKey === pathKey(TRASH_VIRTUAL_PATH);
 			if (row.kind === "node") return pathKey(row.node.path) === targetKey;
 			return false;
 		});
 		if (idx < 0) return;
 
 		pendingRevealPathRef.current = null;
-		// Defer one frame so virtualizer sees updated row count after expand.
+		// Double rAF: first for expand→flatRows layout, second for virtualizer measure.
 		requestAnimationFrame(() => {
-			rowVirtualizer.scrollToIndex(idx, { align: "auto", behavior: "smooth" });
+			requestAnimationFrame(() => {
+				rowVirtualizer.scrollToIndex(idx, {
+					align: "center",
+					behavior: "smooth",
+				});
+			});
 		});
 	}, [flatRows, rowVirtualizer, treeSelectedPath]);
 

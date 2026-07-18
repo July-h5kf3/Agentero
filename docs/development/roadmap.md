@@ -123,6 +123,7 @@
 - [x] 消息编辑与重发：会话空闲时 hover 用户消息可 **Edit**，就地编辑后重发（丢弃该消息及其之后内容并发起全新 turn）。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
+- [x] **Agent 禅模式 UI**：左侧历史栏（Quest 式）、返回图标退出、全宽 Conversation 滚动、无 1/2/3 数字标签；精读/划词等 `hideFromChatHistory`。
 - [x] **paper-reader 精读工作流**：
   - 魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 时**自动**启动（`maybeAutoRunPaperReader`；批量导入/批量 Download **不**连跑）。
   - 资源齐全且未读时文件树 **Zap** 可手动重跑。
