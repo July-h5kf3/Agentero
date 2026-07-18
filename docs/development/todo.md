@@ -83,10 +83,10 @@
    - [x] **paper-reader 精读**：设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 自动；文件树 Zap 手动（资源齐全 + `is_read=false`）→ skill → `NOTES.md` → `paper_set_is_read`；左下角任务进度；**`hideFromChatHistory`**。
    - [x] skill 运行时语法按 Agent 模板分流（Host `SkillMentionStyle`）。
    - [x] **全局权限模式**：设置 → Agent（`restricted` / `autoApprove`），替代 per-provider YOLO。
-   - [ ] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
+   - [x] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”（建议按钮接通后端 `summary`/`qa`/`related_work` workflow）。
    - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`。
-   - [ ] 输出必须包含 Sources；写入前先进入草稿确认。
-   - [ ] 权限「每次询问」档 + 逐项确认 UI。
+   - [x] 输出必须包含 Sources（workflow prompt 已要求 `## Sources`）；写入前先进入草稿确认（写后审阅：`agent:notes-review` 保留/还原）。
+   - [x] 权限「每次询问」档（`agentPermissionMode: ask` → `agent:permission-request` 对话框 + `agent_respond_permission`）；逐项确认 UI 同此。
 
 4. **文件与索引同步**
    - 将最近 Vault、UI 偏好迁到 Tauri Store。
