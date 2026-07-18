@@ -13,7 +13,7 @@
 
 1b. **多窗口与欢迎页** ✅
    - `⌘N` / File → New Window → Host `window_new`（`?fresh=1`）。
-   - 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建（无常驻说明文案）。
+   - 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建 / **从 Zotero 迁移**（同一行；迁移前先创建 Vault）（无常驻说明文案）。
    - 当前窗口 Vault 用 `sessionStorage`；最近列表 / 上次路径用 `localStorage`。
 
 2. **精确标识符入库（arXiv / DOI 等）** ✅ 魔棒路径

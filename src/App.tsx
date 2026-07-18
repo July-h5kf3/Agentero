@@ -1830,6 +1830,27 @@ export default function App() {
 		}
 	}, [activateVault, openPath, t]);
 
+	/** Welcome-page entry: create a vault, then open the Zotero migrate dialog. */
+	const handleMigrateZoteroFromWelcome = useCallback(async () => {
+		try {
+			if (!isTauri()) {
+				notifyError(t("errors.openVaultDesktopOnly"));
+				return;
+			}
+			setBusy(true);
+			const path = await pickCreateVaultDirectory();
+			if (!path) return;
+			const result = await createVault(path);
+			const root = result.path || path;
+			await activateVault(root);
+			setZoteroOpen(true);
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setBusy(false);
+		}
+	}, [activateVault, t]);
+
 	useAppShortcuts(settingsOpen, {
 		settings: () => {
 			if (settingsOpenRef.current) closeSettings();
@@ -2360,6 +2381,9 @@ export default function App() {
 											busy={busy}
 											onOpenVault={() => void handleOpenVault()}
 											onCreateVault={() => void handleCreateVault()}
+											onMigrateZotero={() =>
+												void handleMigrateZoteroFromWelcome()
+											}
 											onOpenRecent={(path) => void handleOpenRecentVault(path)}
 											onRemoveRecent={handleRemoveRecentVault}
 										/>

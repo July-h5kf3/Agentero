@@ -1,5 +1,6 @@
 import { FolderOpen, FolderPlus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { vaultDisplayName } from "@/lib/vault";
@@ -9,6 +10,7 @@ export function VaultWelcome({
 	busy,
 	onOpenVault,
 	onCreateVault,
+	onMigrateZotero,
 	onOpenRecent,
 	onRemoveRecent,
 	className,
@@ -17,11 +19,12 @@ export function VaultWelcome({
 	busy?: boolean;
 	onOpenVault: () => void;
 	onCreateVault: () => void;
+	onMigrateZotero: () => void;
 	onOpenRecent: (path: string) => void;
 	onRemoveRecent: (path: string) => void;
 	className?: string;
 }) {
-	const { t } = useTranslation("app");
+	const { t } = useTranslation(["app", "sidebar"]);
 
 	return (
 		<div
@@ -30,7 +33,7 @@ export function VaultWelcome({
 				className,
 			)}
 		>
-			<div className="flex w-full max-w-md flex-col gap-6">
+			<div className="flex w-full max-w-lg flex-col gap-6">
 				<div className="mx-auto flex size-12 items-center justify-center rounded-xl border bg-background shadow-sm">
 					<FolderOpen className="size-6 text-muted-foreground" />
 				</div>
@@ -44,7 +47,7 @@ export function VaultWelcome({
 						onClick={onCreateVault}
 					>
 						<FolderPlus className="size-3.5" />
-						{t("vault.createVaultButton")}
+						{t("app:vault.createVaultButton")}
 					</Button>
 					<Button
 						type="button"
@@ -54,7 +57,17 @@ export function VaultWelcome({
 						onClick={onOpenVault}
 					>
 						<FolderOpen className="size-3.5" />
-						{t("vault.openVaultButton")}
+						{t("app:vault.openVaultButton")}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={busy}
+						onClick={onMigrateZotero}
+					>
+						<ZoteroIcon className="size-3.5" />
+						{t("sidebar:zoteroMigrate.button")}
 					</Button>
 				</div>
 

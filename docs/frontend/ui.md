@@ -102,7 +102,8 @@
 
 当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/vault-welcome.tsx`）：
 
-- **内容**：图标 + **Create vault** / **Open vault** 按钮 + **Recent** 路径列表（可点打开，可从列表移除）。
+- **内容**：图标 + **Create vault** / **Open vault** / **Migrate from Zotero** 同一行按钮 + **Recent** 路径列表（可点打开，可从列表移除）。
+- **从 Zotero 迁移**（欢迎页）：先选目录创建 Vault，再打开 `ZoteroMigrateDialog`（与论文库工具栏入口共用对话框）。
 - **不加**常驻说明文案、标题口号或快捷键提示（保持空状态极简）。
 - 点选最近路径时若目录不存在：提示错误并从列表剔除。
 
