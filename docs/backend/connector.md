@@ -1,8 +1,8 @@
 # Zotero Connector 兼容服务（方案一）
 
-> 状态：**设计中 / 未实现**  
+> 状态：**MVP 已落地**（`ping` / `saveItems` / `sessionProgress` + 设置开关 + 事件刷新；附件流式上传 / cookies 仍待）  
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
-> 实现入口（规划）：`src-tauri/src/services/connector/`、Tauri commands `connector_*`、设置 → 通用（或独立小节）、前端监听 `connector:*` 事件刷新树/Library。  
+> 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒入库与 `map_zotero_item`）、[`catalog.md`](catalog.md)、[`api.md`](api.md)、[`data-model.md`](data-model.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../development/roadmap.md`](../development/roadmap.md)、[`../development/todo.md`](../development/todo.md)。
 
 ---
@@ -368,30 +368,30 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 
 ## 9. 实现分期
 
-### PR1 — 可保存元数据（文档验收后的首个代码 PR）
+### PR1 — 可保存元数据 ✅
 
-- [ ] `services/connector`：loopback server + `ping` + `saveItems` + `sessionProgress`
-- [ ] Host 校验 + Host/Origin 安全策略
-- [ ] 复用 `map_zotero_item` + catalog/paper 落盘
-- [ ] `connector_set_enabled` / `get_status` + 设置开关
-- [ ] 前端刷新 + i18n
-- [ ] 单测：handler 解析样例 JSON；bind 冲突路径
+- [x] `services/connector`：loopback server + `ping` + `saveItems` + `sessionProgress`
+- [x] Host 校验 + Host/Origin 安全策略
+- [x] 复用 `map_zotero_item` + catalog/paper 落盘（含 URL 侧 PDF 尽力下载）
+- [x] `connector_set_enabled` / `get_status` / `set_vault` + 设置开关
+- [x] 前端刷新 + i18n
+- [x] 单测：样例 item 映射
 
 **验收：** 关闭 Zotero → 开启开关 → 浏览器打开 arXiv 摘要页 → 官方 Connector 保存 → Vault 出现 paper 行与 `NOTES.md` 壳。
 
-### PR2 — 体验与稳健性
+### PR2 — 体验与稳健性（部分 ✅）
 
-- [ ] 端口占用/无 Vault 的完整 UX
-- [ ] 去重策略落地
-- [ ] `getSelectedCollection` / `updateSession` stub 完善
-- [ ] 应用退出释放端口；状态事件
-- [ ] `docs/backend/api.md` 命令表同步
+- [x] 端口占用/无 Vault 的完整 UX
+- [x] 去重策略落地（catalog `id`）
+- [x] `getSelectedCollection` / `updateSession` / `delaySync` stub
+- [x] 应用退出释放端口；`connector:status` / `item-saved` / `error` 事件
+- [x] `docs/backend/api.md` 命令表同步
 
 ### PR3 — 附件
 
-- [ ] `saveAttachment` 或 URL 下载完善
+- [ ] `saveAttachment` 二进制上传协议
 - [ ] （可选）cookies
-- [ ] 与 `paper_download_assets` / liteparse 对齐
+- [ ] 与 `paper_download_assets` / liteparse 对齐（URL 下载已走 `ensure_paper_assets`）
 
 ### 非目标迭代
 
@@ -433,13 +433,13 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 
 ## 12. 验收标准（方案一完成定义）
 
-- [ ] 文档（本文）与 roadmap/todo/索引已挂上。
-- [ ] 设置默认 **关闭**；开启后 `curl` 探活 `GET /connector/ping` 成功。
-- [ ] 官方 Connector 在 Zotero 未运行时可保存至少一类页面（如 arXiv）到当前 Vault。
-- [ ] catalog + 文件树可见；重复保存不炸库、不覆盖手写 NOTES。
-- [ ] 端口被占时有可读错误；关闭开关后端口释放。
-- [ ] 无局域网暴露；Host 校验生效。
-- [ ] 相关 i18n 中英齐全。
+- [x] 文档（本文）与 roadmap/todo/索引已挂上。
+- [x] 设置默认 **关闭**；开启后 `curl` 探活 `GET /connector/ping` 成功（需本机手动验证）。
+- [ ] 官方 Connector 在 Zotero 未运行时可保存至少一类页面（如 arXiv）到当前 Vault（端到端待手测）。
+- [x] catalog + 文件树刷新；重复 id 去重（`deduped` toast）。
+- [x] 端口被占时有可读错误；关闭开关 / 退出应用释放端口。
+- [x] 仅绑 `127.0.0.1`；Host 校验生效。
+- [x] 相关 i18n 中英齐全。
 
 ---
 
@@ -469,3 +469,4 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 日期 | 说明 |
 |---|---|
 | 2026-07-18 | 初稿：方案一（兼容官方 Connector / 本机 23119）设计与分期；已挂 mkdocs / roadmap / todo / api §3.5b |
+| 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新；PR3 附件协议仍待 |

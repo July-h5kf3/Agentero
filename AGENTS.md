@@ -20,7 +20,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 论文库：`paper_list` 读 catalog 一次进内存；表头排序；横向/纵向滚动；**tags** 列 + chip 筛选；**文件夹作用域**按 `paper.path` 前缀过滤（不扫盘、无 per-folder RPC）。虚拟路径 `agentero:library` 不写盘。
 - 标签：Paper Info 增删 → Host `paper_set_tags`（catalog `tags_json` 权威）；Library 展示与筛选；CLI `paper set-tags` / `list --tag` / `tags`。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。入库成功后刷新树并 `openPaper`，左侧文件树**展开并滚到新论文**。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
-- **规划**：Zotero Connector 兼容服务（本机 `127.0.0.1:23119`，官方浏览器扩展保存到当前 Vault；与 Zotero 桌面端口互斥、默认关）— 设计见 `docs/backend/connector.md`。
+- **Zotero Connector 兼容**（MVP）：设置 → 通用开关（默认关）；Host 在 `127.0.0.1:23119` 收官方浏览器扩展 `saveItems` → 当前 Vault；与 Zotero 桌面端口互斥。见 `docs/backend/connector.md`。
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
 - **精读工作流**：设置 → Agent **`autoPaperReader`**（**默认关**）；开启后魔棒入库 / 单篇 Download 资源就绪且未读时自动 paper-reader。资源齐全且 `is_read === false` 时文件树 **Zap** 可手动。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
 - **Agent 权限**：设置 → Agent **全局权限模式**（受限默认 / 自动批准）；非 per-provider YOLO。逐项「每次询问」仍待。

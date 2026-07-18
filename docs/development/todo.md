@@ -193,10 +193,11 @@
 
 1b. **Zotero Connector 兼容服务**（方案一）— 设计见 [`../backend/connector.md`](../backend/connector.md)
    - [x] C0：设计文档（本机 `23119`、互斥 Zotero 桌面、默认关、MVP endpoints、映射与分期）。
-   - [ ] C1：Host `services/connector` — `ping` / `saveItems` / `sessionProgress` + loopback 安全策略；复用 `map_zotero_item` 落盘。
-   - [ ] C2：设置开关 `connectorEnabled` + `connector_get_status` / `connector_set_enabled`；端口冲突 / 无 Vault UX；i18n。
-   - [ ] C3：前端 `connector:item-saved` 刷新树/Library；退出释放端口；`api.md` 命令表。
-   - [ ] C4（P1）：`saveAttachment` 或完善 PDF URL 下载；去重策略；stub `getSelectedCollection` / `updateSession`。
+   - [x] C1：Host `services/connector` — `ping` / `saveItems` / `sessionProgress` + loopback 安全策略；复用 `map_zotero_item` 落盘。
+   - [x] C2：设置开关 `connectorEnabled` + `connector_get_status` / `connector_set_enabled` / `set_vault`；端口冲突 / 无 Vault UX；i18n。
+   - [x] C3：前端 `connector:item-saved` 刷新树/Library；退出释放端口；`api.md` 命令表。
+   - [x] C4a：catalog id 去重 + stub `getSelectedCollection` / `updateSession`；URL 附件走 `ensure_paper_assets`。
+   - [ ] C4b（P1）：`saveAttachment` 二进制上传协议。
    - [ ] C5（可选）：`detailedCookies`、快照降级策略、可配置端口（需用户改插件 URL）。
 
 2. **用户友好的 Skills / Workflows**

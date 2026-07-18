@@ -602,15 +602,48 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **返回**：`{ ok: true; data: { text: string; provider: string } }`
 - **约束**：单次约 ≤ 5000 字符（CNKI ≤800）；默认超时约 30s。无付费 API Key；免费引擎为非官方网页接口。设置页打开默认服务下拉时，对全部免费引擎并行 probe（`timeoutMs=5000`，不含 Agent）。
 
-### 3.5b Zotero Connector 兼容服务（设计中 / 未实现）
+### 3.5b Zotero Connector 兼容服务（MVP 已落地）
 
 **目标**：Host 在本机 `127.0.0.1:23119` 兼容 [Zotero Connector HTTP Server](https://www.zotero.org/support/dev/client_coding/connector_http_server)，使官方浏览器扩展把保存请求写入当前 Vault。
 
 - **HTTP 契约、安全模型、分期**：见 [`connector.md`](connector.md)（权威）。
 - **与魔棒关系**：元数据映射复用 `map_zotero_item`；入口不同（插件 vs ⇧⌘I）。
-- **规划 commands**（落地时以 `src-tauri` 为准）：`connector_get_status`、`connector_set_enabled`（及可选 options）。
-- **规划 events**：`connector:status`、`connector:item-saved`、`connector:error`（可选 `connector:progress`）。
 - **设置**：`connectorEnabled` 默认 `false`；与 Zotero 桌面端 **端口互斥**。
+- **实现**：`services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`。
+
+#### `connector_get_status`
+
+- **返回**：`{ ok: true; data: ConnectorStatus }`
+  ```ts
+  type ConnectorStatus = {
+    enabled: boolean;
+    listening: boolean;
+    port: number;                 // 23119
+    boundAddress: string | null;  // "127.0.0.1:23119"
+    lastError: string | null;
+    vaultPath: string | null;
+    parentDir: string;            // default "papers"
+  };
+  ```
+
+#### `connector_set_enabled`
+
+- **参数**（`args`）：`{ enabled: boolean }`
+- **返回**：`{ ok: true; data: ConnectorStatus }`（bind 失败时 `listening=false` 且 `lastError` 有文案）
+
+#### `connector_set_vault`
+
+- **参数**（`args`）：`{ vaultPath: string | null }`
+- **返回**：`{ ok: true; data: null }`
+- **说明**：保存目标 Vault；无 Vault 时 HTTP `saveItems` 返回 503。
+
+#### Events
+
+| 事件 | payload |
+|---|---|
+| `connector:status` | `ConnectorStatus` |
+| `connector:item-saved` | `{ path, id, title, deduped, sessionId }` |
+| `connector:error` | `{ message, sessionId? }` |
 
 ### 3.6 魔棒 / 标识符入库（已落地 v0）
 
