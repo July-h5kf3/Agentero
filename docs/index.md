@@ -51,6 +51,7 @@ Agentero 桌面应用
 - **精读**：入库 / 单篇 Download 后可自动 paper-reader；资源齐全且未读时 **Zap** 手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
+- **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。
 - **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
 - **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树（见 [`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
@@ -78,4 +79,5 @@ Agentero 桌面应用
 - 论文目录库：[`backend/catalog.md`](backend/catalog.md)
 - 魔棒入库与 Translator：[`backend/identifier-lookup.md`](backend/identifier-lookup.md)
 - PDF 划词提问（MVP 已落地）：[`development/pdf-ask.md`](development/pdf-ask.md)
+- 翻译服务（首版；免费 + Agent）：[`development/translate.md`](development/translate.md)
 - 测试与验证：[`test/index.md`](test/index.md)

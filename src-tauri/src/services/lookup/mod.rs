@@ -127,7 +127,7 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
     let paper_dir = vault.join(&path_rel);
     fs::create_dir_all(&paper_dir)?;
 
-    write_paper_shell(&paper_dir, &meta)?;
+    write_paper_shell(&paper_dir, &meta).await?;
 
     // 1) Catalog SQLite is authoritative; metadata.json is a projection
     let record = paper_record_from_meta(&path_rel, &meta);
@@ -295,7 +295,7 @@ async fn import_one_local_pdf(
         .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
 
     let meta = local_pdf_meta(id.clone(), title.clone());
-    write_paper_shell(&paper_dir, &meta)?;
+    write_paper_shell(&paper_dir, &meta).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
 
@@ -545,18 +545,65 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
     }
 }
 
-pub(crate) fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
-    let notes = format!(
-        "# {}\n\n{}\n",
-        meta.title,
-        meta.abstract_text
-            .as_deref()
-            .map(|a| format!("> {a}\n\n"))
-            .unwrap_or_default()
-    );
+/// Write `{paper}/NOTES.md` shell + empty `highlights.md`.
+/// Abstract is shown in **Chinese** when free-MT succeeds (fallback: original text).
+/// Catalog still stores the original `abstract_text`.
+pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
+    let abstract_block = match meta
+        .abstract_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(a) => {
+            let display = abstract_for_notes(a).await;
+            format!("> {display}\n\n")
+        }
+        None => String::new(),
+    };
+    let notes = format!("# {}\n\n{abstract_block}", meta.title);
     fs::write(paper_dir.join("NOTES.md"), notes)?;
     fs::write(paper_dir.join("highlights.md"), "")?;
     Ok(())
+}
+
+/// Prefer zh-CN translation of the abstract for NOTES.md display.
+async fn abstract_for_notes(text: &str) -> String {
+    if looks_mostly_cjk(text) {
+        return text.to_string();
+    }
+    let slice: String = text
+        .chars()
+        .take(crate::services::translate::MAX_TEXT_CHARS)
+        .collect();
+    match crate::services::translate::translate_text(
+        crate::services::translate::TranslateTextArgs {
+            text: slice,
+            source_lang: "auto".into(),
+            target_lang: "zh-CN".into(),
+            provider: "googleapi".into(),
+            free_base_url: None,
+        },
+    )
+    .await
+    {
+        Ok(r) if !r.text.trim().is_empty() => r.text.trim().to_string(),
+        _ => text.to_string(),
+    }
+}
+
+/// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
+fn looks_mostly_cjk(s: &str) -> bool {
+    let mut cjk = 0usize;
+    let mut letters = 0usize;
+    for c in s.chars() {
+        if ('\u{4e00}'..='\u{9fff}').contains(&c) {
+            cjk += 1;
+        } else if c.is_ascii_alphabetic() {
+            letters += 1;
+        }
+    }
+    cjk > 0 && cjk >= letters
 }
 
 pub(crate) fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
@@ -603,5 +650,14 @@ mod tests {
         );
         assert_eq!(title_from_stem("  Hello   World  "), "Hello World");
         assert_eq!(title_from_stem("   "), "Untitled");
+    }
+
+    #[test]
+    fn looks_mostly_cjk_detects_chinese() {
+        assert!(looks_mostly_cjk("本文提出了一种新的注意力机制。"));
+        assert!(!looks_mostly_cjk(
+            "We propose a new attention mechanism for sequence transduction."
+        ));
+        assert!(!looks_mostly_cjk(""));
     }
 }

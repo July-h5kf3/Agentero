@@ -204,7 +204,7 @@
   - **PDF 沉浸式阅读**（工具栏 `Maximize2` 进入 / `Minimize2` 或 `Esc` 退出）：折叠左右侧栏 + 隐藏中间栏头，PDF 铺满窗口；正文**限宽 ≤ 1100px 居中**（舒适阅读 + 两侧留白），缩放 / 页码 / 大纲 / 查找浮层照常；切到非 PDF tab 自动退出。i18n `viewer:pdf.zenEnter/zenExit`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
-    - 高亮：`papers/<id>/highlights/<id>.json`（含 `color`（yellow/green/blue/pink/purple），归一化坐标可重定位；调色板 `lib/pdf-highlight/palette.ts`）→ 页面半透明色带覆盖层；点击已有高亮出现「删除」浮层。**标注总览**：标题栏或 PDF 工具栏 💬（`MessageSquareText`）打开右侧栏「批注」tab（`viewer/annotations-panel.tsx`）→ 总览本篇全部高亮（颜色色条 + 页码 + 引文 + 可选备注），点击跳转闪烁 / 编辑备注 / 删除。批注：选中→「批注」= 建高亮 + 内联备注编辑器写 `comment`（**不写 `NOTES.md`**），页边批注针。提问 / 翻译复用迷你问答卡（ACP 流式）；发送过问题后锚点旁保留对话图标（Hover 回访）。
+    - 高亮：`papers/<id>/highlights/<id>.json`（含 `color`（yellow/green/blue/pink/purple），归一化坐标可重定位；调色板 `lib/pdf-highlight/palette.ts`）→ 页面半透明色带覆盖层；点击已有高亮出现「删除」浮层。**标注总览**：标题栏或 PDF 工具栏 💬（`MessageSquareText`）打开右侧栏「批注」tab（`viewer/annotations-panel.tsx`）→ 总览本篇全部高亮（颜色色条 + 页码 + 引文 + 可选备注），点击跳转闪烁 / 编辑备注 / 删除。批注：选中→「批注」= 建高亮 + 内联备注编辑器写 `comment`（**不写 `NOTES.md`**），页边批注针。提问复用迷你问答卡（ACP 流式）；**翻译**当前走 Agent，规划改为调用应用级翻译服务（免费 MT / BYOA Agent，设置 → Translate，见 [`../development/translate.md`](../development/translate.md)）；发送过问题后锚点旁保留对话图标（Hover 回访）。
     - 提问线程落盘 `papers/<id>/asks/<threadId>.json`；高亮 / 提问 / 笔记均**不**写 PDF 二进制。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
@@ -274,7 +274,7 @@
 | 要求 | 说明 |
 |---|---|
 | 入口 | `⌘L`、标题栏右侧 Agent 图标、菜单 **View → Toggle Chat** |
-| 结构 | 会话标签 · Agent 选择 / 新建 / 历史操作 + 消息列表 + Composer |
+| 结构 | 顶栏：ACP 后端选择 · 新建 · 历史 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
 | 输入 | 单层 Composer：当前文件以可切换 chip 呈现（打开文件时默认未选中的虚线态，点击加入/移出上下文），`@` 文件提及和 `$` 本机技能显示为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性上下文；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
@@ -296,7 +296,7 @@ Conversation
 PromptInput → Body / Footer / Submit
 ```
 
-**Agent 切换**：点击 Composer 上方的 Agent 图标打开下拉，列表来自 catalog + 注册表；选择后设为默认并用于后续 `runOnce`。
+**Agent 切换**：顶栏左侧当前 ACP 后端名打开下拉（列表来自 catalog + 注册表）；选择后设为默认并用于后续 `runOnce`。下拉 **「ACP backend」标题行最右侧** 齿轮（`Settings`）→ **设置 → Agent**（`onOpenAgentSettings`）。
 
 **消息编辑与重发**：会话空闲时（发送成功、停止或失败后）hover 已发送的用户消息会显示 **Edit（铅笔）** 与 **Copy** 两个图标按钮；运行中不显示 Edit，须先按 `Esc` / 点击停止。点击 Edit 就地把气泡替换为文本框（`↵` 重新发送、`⇧↵` 换行、`Esc` 取消），重发时会丢弃**该消息及其之后的所有内容**（旧回答 / 被中断的运行）并以新文本发起一次全新的 turn，用于修正发错的输入。切换会话 / 标签 / 新建对话会自动取消未完成的编辑。（重发沿用普通发送的 session 续接规则：非 Codex 每次新建 session；Codex 续接原生 thread，因此可见转录被截断但 Agent 侧线程记忆不随之回退。）
 
@@ -342,7 +342,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 |---|---|
 | 入口 | 顶部菜单栏 **agentero → Settings…**，或 `⌘,`（不在侧边栏放设置图标） |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
-| 分类 | General · Appearance · Agent · Keyboard · Privacy · About |
+| 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
 | 关闭 | 右上角 `X`、点遮罩、`Esc`、再次 `⌘,` |
@@ -354,11 +354,19 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
-  - **Common agents** 目录表：名称 + 状态徽章（installed / ACP ready / missing 等）；打开页自动 Probe（**并行**；每完成一个即 `scanCatalog` 刷新该批徽章，不必等全部结束）。
+  - **Common agents** 目录表：名称 + 状态徽章（installed / ACP ready / missing 等）；打开页**只 scan**（PATH + 上次 probe 缓存），**不**自动 spawn Probe。用户点 **Refresh** 才并行 Probe（每完成一个刷新徽章）。代理开关不因 Probe busy 禁用。
   - **Claude**：`detect` 用本机 `claude`（Claude Code）；ACP 入口为 `claude-agent-acp`。若已装 Claude Code 但缺适配器，显示 **ACP adapter missing** 徽章 + **Install ACP** 小按钮 → Host `agent_open_install_terminal` 打开系统终端，展示 `npm i -g @agentclientprotocol/claude-agent-acp`，**等待用户按 Enter 才执行**（不静默安装）。装完后用户点 Refresh 再 Probe。
   - 顶部 **Refresh**（Rescan + Probe）；**Use default** 纯文字（无 icon）。
   - Custom 区：添加任意 ACP command/args。
   - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Agentero 内填写。
+- **Translate（翻译）**（应用级翻译服务，见 [`../development/translate.md`](../development/translate.md)）：
+  - **默认翻译服务**：多引擎免费 MT + **Agent（BYOA）**。
+  - **目标语言**、PDF 划词自动译、条件显示的自定义端点（libre / deeplx）。
+  - **当服务 = Agent 时**（渐进披露，见 translate.md §7.6）：
+    - **Agent**：下拉；默认「跟随默认 (当前 default 名)」；选项 = 本机可用 Agent；空则提示去 Agent 页。
+    - **模型**：下拉；默认「跟随 Agent 默认」（`loadModelPref`）；选项 = 该 Agent 的 `loadModelCatalog`；无缓存则仅跟随项 + 一句「在 Chat 打开过一次后可选模型」。
+    - 不在此页 Probe / 装适配器 / 填 API Key；不复制 Chat 完整 ModelSelector。
+  - 运行时：翻译偏好独立于 Chat 当前选中；未指定则回落 default Agent + 该 Agent 模型偏好。
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。

@@ -2,8 +2,20 @@ import {
 	isPaperTreeLabelMode,
 	type PaperTreeLabelMode,
 } from "@/lib/paper-metadata";
+import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
+import { isTranslateProviderId } from "@/lib/translate/services";
+import type {
+	TranslateProviderId,
+	TranslateSettings,
+	TranslateTargetLang,
+} from "@/lib/translate/types";
 
-export type { PaperTreeLabelMode };
+export type {
+	PaperTreeLabelMode,
+	TranslateProviderId,
+	TranslateSettings,
+	TranslateTargetLang,
+};
 
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -52,6 +64,8 @@ export type AppSettings = {
 	// Privacy
 	analyticsEnabled: boolean;
 	shareCrashReports: boolean;
+	/** Application-level translation service (free MT + BYOA Agent). */
+	translate: TranslateSettings;
 };
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
@@ -72,6 +86,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	aiResponseLanguage: "auto",
 	analyticsEnabled: false,
 	shareCrashReports: false,
+	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 };
 
 const SETTINGS_KEY = "agentero-settings";
@@ -119,6 +134,7 @@ export function loadSettings(): AppSettings {
 		if (!isPaperTreeLabelMode(merged.paperTreeLabelMode)) {
 			merged.paperTreeLabelMode = DEFAULT_SETTINGS.paperTreeLabelMode;
 		}
+		merged.translate = normalizeTranslateSettings(parsed.translate);
 		return merged;
 	} catch {
 		return { ...DEFAULT_SETTINGS };
@@ -131,4 +147,38 @@ export function saveSettings(settings: AppSettings): void {
 	} catch {
 		// ignore
 	}
+}
+
+function isTranslateTargetLang(v: unknown): v is TranslateTargetLang {
+	return v === "ui" || v === "en" || v === "zh-CN";
+}
+
+function normalizeTranslateSettings(
+	raw: Partial<TranslateSettings> | undefined,
+): TranslateSettings {
+	const base = { ...DEFAULT_TRANSLATE_SETTINGS };
+	if (!raw || typeof raw !== "object") return base;
+	if (raw.provider && isTranslateProviderId(raw.provider)) {
+		// Migrate legacy "free" alias → googleapi
+		base.provider = raw.provider === "free" ? "googleapi" : raw.provider;
+	}
+	if (raw.targetLang && isTranslateTargetLang(raw.targetLang)) {
+		base.targetLang = raw.targetLang;
+	}
+	if (raw.sourceLang === "auto") {
+		base.sourceLang = "auto";
+	}
+	if (typeof raw.freeBaseUrl === "string") {
+		base.freeBaseUrl = raw.freeBaseUrl.trim().replace(/\/+$/, "");
+	}
+	if (typeof raw.autoTranslateSelection === "boolean") {
+		base.autoTranslateSelection = raw.autoTranslateSelection;
+	}
+	if (typeof raw.agentId === "string") {
+		base.agentId = raw.agentId.trim();
+	}
+	if (typeof raw.modelId === "string") {
+		base.modelId = raw.modelId.trim();
+	}
+	return base;
 }

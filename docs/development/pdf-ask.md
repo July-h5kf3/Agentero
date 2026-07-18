@@ -3,7 +3,7 @@
 > 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 批注 / 提问 / 翻译），不再默认套用琥珀高亮。  
 > 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 批注（高亮 + 内联评论）/ 提问（迷你对话框）/ 翻译（复用对话框走 Agent）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）；**批注 = `comment` 非空的高亮**，页边批注针 + 右侧「批注」面板回访。  
 > 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`、`annotation-editor.tsx`、`annotation-gutter.tsx`）、`src/components/viewer/annotations-panel.tsx`、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
-> 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
+> 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`translate.md`](translate.md)（应用级翻译服务；本菜单为消费方之一）、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
 
 ## 1. 产品目标
 
@@ -12,7 +12,7 @@
 | 交互 | 行为 |
 |---|---|
 | **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（5 色高亮 / 复制 / 批注 / 提问 / 翻译）；不默认高亮，只保留平滑蓝色选区覆盖层 |
-| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注→先建高亮，再在选区旁弹出**内联编辑器**（`annotation-editor.tsx`）写评论，保存后 `comment` 落盘（留空则退化为纯高亮），**不写 `NOTES.md`**；提问→打开迷你问答卡；翻译→建线程后复用问答卡走 Agent 流式 |
+| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注→先建高亮，再在选区旁弹出**内联编辑器**（`annotation-editor.tsx`）写评论，保存后 `comment` 落盘（留空则退化为纯高亮），**不写 `NOTES.md`**；提问→打开迷你问答卡；翻译→应用级翻译服务（默认 free 单次 / agent 流式，见 [`translate.md`](translate.md)） |
 | **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
 | **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
 | **键入提问** | 卡内输入问题并发送（`runOnce` + **`hideFromChatHistory`**，不进 Agent 对话历史）；**仅发送过问题的线程**保留对话图标 |

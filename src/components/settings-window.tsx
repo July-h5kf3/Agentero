@@ -2,6 +2,7 @@ import {
 	Bot,
 	Info,
 	Keyboard,
+	Languages,
 	Loader2,
 	Paintbrush,
 	Plus,
@@ -34,11 +35,15 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+	type AgentListResponse,
 	type AgentTemplate,
 	acpStatusLabel,
 	type CatalogEntry,
 	type CatalogScanResponse,
 	ensureCatalogAgent,
+	listAgents,
+	loadModelCatalog,
+	openInstallTerminal,
 	probeAgent,
 	probeCatalogAgent,
 	removeAgent,
@@ -46,6 +51,7 @@ import {
 	setAgentEnabled,
 	setAgentProxy,
 	upsertAgent,
+	warmAgent,
 } from "@/lib/agent";
 import { notifyError } from "@/lib/notify";
 import {
@@ -60,6 +66,8 @@ import {
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
 	type ThemePreference,
+	type TranslateProviderId,
+	type TranslateTargetLang,
 } from "@/lib/settings";
 import {
 	formatShortcut,
@@ -68,12 +76,14 @@ import {
 	shortcutsByGroup,
 } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
+import { listAvailableAgents, listSelectableProviders } from "@/lib/translate";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
 	| "general"
 	| "appearance"
 	| "agent"
+	| "translate"
 	| "keyboard"
 	| "privacy"
 	| "about";
@@ -85,6 +95,7 @@ const NAV: {
 	{ id: "general", icon: SlidersHorizontal },
 	{ id: "appearance", icon: Paintbrush },
 	{ id: "agent", icon: Bot },
+	{ id: "translate", icon: Languages },
 	{ id: "keyboard", icon: Keyboard },
 	{ id: "privacy", icon: Shield },
 	{ id: "about", icon: Info },
@@ -200,6 +211,13 @@ export function SettingsWindow({
 						)}
 						{section === "agent" && (
 							<AgentPane settings={settings} patch={patch} />
+						)}
+						{section === "translate" && (
+							<TranslatePane
+								settings={settings}
+								patch={patch}
+								onOpenAgentSettings={() => onSectionChange("agent")}
+							/>
 						)}
 						{section === "keyboard" && <KeyboardPane />}
 						{section === "privacy" && (
@@ -480,6 +498,316 @@ function catalogStatusTone(
 	}
 }
 
+const TRANSLATE_FOLLOW_AGENT = "__follow_default__";
+const TRANSLATE_FOLLOW_MODEL = "__follow_model__";
+
+function TranslatePane({
+	settings,
+	patch,
+	onOpenAgentSettings,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+	onOpenAgentSettings?: () => void;
+}) {
+	const { t } = useTranslation("settings");
+	const tr = settings.translate;
+	const providers = listSelectableProviders();
+	const patchTranslate = useCallback(
+		(partial: Partial<typeof tr>) =>
+			patch({ translate: { ...tr, ...partial } }),
+		[patch, tr],
+	);
+	const showEndpoint =
+		tr.provider === "libre" ||
+		tr.provider === "deeplx" ||
+		tr.freeBaseUrl.length > 0;
+	const showAgent = tr.provider === "agent";
+
+	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
+	const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+
+	// Load agent registry when Agent provider is selected
+	useEffect(() => {
+		if (!showAgent || !isTauri()) {
+			setRegistry(null);
+			return;
+		}
+		let cancelled = false;
+		void listAgents()
+			.then((r) => {
+				if (!cancelled) setRegistry(r);
+			})
+			.catch(() => {
+				if (!cancelled) setRegistry(null);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [showAgent]);
+
+	const availableAgents = listAvailableAgents(registry);
+	const defaultAgent = registry?.defaultId
+		? (availableAgents.find((a) => a.id === registry.defaultId) ??
+			registry.agents.find((a) => a.id === registry.defaultId))
+		: undefined;
+	const resolvedAgentId = tr.agentId.trim() || registry?.defaultId || "";
+
+	// Load model catalog for resolved agent; optional warm in background
+	useEffect(() => {
+		if (!showAgent || !resolvedAgentId) {
+			setModels([]);
+			return;
+		}
+		const cached = loadModelCatalog(resolvedAgentId);
+		setModels(cached?.models ?? []);
+		if (!isTauri()) return;
+		let cancelled = false;
+		void warmAgent({ agentId: resolvedAgentId }).catch(() => undefined);
+		// Re-read catalog after a short delay (warm may fill it via events elsewhere;
+		// settings pane only sees localStorage cache from prior Chat sessions).
+		const tmr = window.setTimeout(() => {
+			if (cancelled) return;
+			const next = loadModelCatalog(resolvedAgentId);
+			if (next?.models?.length) setModels(next.models);
+		}, 800);
+		return () => {
+			cancelled = true;
+			window.clearTimeout(tmr);
+		};
+	}, [showAgent, resolvedAgentId]);
+
+	// Drop stale agentId / modelId
+	useEffect(() => {
+		if (!showAgent || !registry) return;
+		if (tr.agentId && !availableAgents.some((a) => a.id === tr.agentId)) {
+			patchTranslate({ agentId: "", modelId: "" });
+			return;
+		}
+		if (
+			tr.modelId &&
+			models.length > 0 &&
+			!models.some((m) => m.id === tr.modelId)
+		) {
+			patchTranslate({ modelId: "" });
+		}
+	}, [
+		showAgent,
+		registry,
+		availableAgents,
+		models,
+		tr.agentId,
+		tr.modelId,
+		patchTranslate,
+	]);
+
+	const agentSelectValue = tr.agentId.trim()
+		? tr.agentId
+		: TRANSLATE_FOLLOW_AGENT;
+	const modelSelectValue = tr.modelId.trim()
+		? tr.modelId
+		: TRANSLATE_FOLLOW_MODEL;
+
+	return (
+		<>
+			<PageTitle title={t("translate.title")} />
+			<SettingsGroup>
+				<SettingsRow label={t("translate.provider.label")}>
+					<Select
+						value={tr.provider === "free" ? "googleapi" : tr.provider}
+						onValueChange={(v) =>
+							patchTranslate({ provider: v as TranslateProviderId })
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[200px] max-w-[280px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{providers.map((s) => (
+								<SelectItem key={s.id} value={s.id}>
+									{t(
+										`translate.provider.${s.nameKey}` as "translate.provider.googleapi",
+									)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow label={t("translate.targetLang.label")}>
+					<Select
+						value={tr.targetLang}
+						onValueChange={(v) =>
+							patchTranslate({ targetLang: v as TranslateTargetLang })
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[160px] max-w-[220px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="ui">{t("translate.targetLang.ui")}</SelectItem>
+							<SelectItem value="en">{t("translate.targetLang.en")}</SelectItem>
+							<SelectItem value="zh-CN">
+								{t("translate.targetLang.zhCN")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("translate.autoSelection.label")}
+					htmlFor="translate-auto-selection"
+				>
+					<Switch
+						id="translate-auto-selection"
+						checked={tr.autoTranslateSelection}
+						onCheckedChange={(v) =>
+							patchTranslate({ autoTranslateSelection: v })
+						}
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+
+			{showAgent && (
+				<>
+					<SettingsGroup>
+						{availableAgents.length === 0 && isTauri() ? (
+							<div className="flex flex-col gap-2 px-3.5 py-2.5">
+								<p className="text-muted-foreground text-xs leading-relaxed">
+									{t("translate.agentId.empty")}
+								</p>
+								{onOpenAgentSettings && (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="w-fit"
+										onClick={onOpenAgentSettings}
+									>
+										{t("translate.agentId.openAgentSettings")}
+									</Button>
+								)}
+							</div>
+						) : !isTauri() ? (
+							<div className="px-3.5 py-2.5 text-muted-foreground text-xs">
+								{t("agent.desktopOnly")}
+							</div>
+						) : (
+							<>
+								<SettingsRow label={t("translate.agentId.label")}>
+									<Select
+										value={agentSelectValue}
+										onValueChange={(v) => {
+											if (v === TRANSLATE_FOLLOW_AGENT) {
+												patchTranslate({ agentId: "", modelId: "" });
+											} else {
+												patchTranslate({ agentId: v, modelId: "" });
+											}
+										}}
+									>
+										<SelectTrigger
+											size="sm"
+											className="min-w-[200px] max-w-[280px]"
+										>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value={TRANSLATE_FOLLOW_AGENT}>
+												{defaultAgent?.name
+													? t("translate.agentId.followDefaultNamed", {
+															name: defaultAgent.name,
+														})
+													: t("translate.agentId.followDefault")}
+											</SelectItem>
+											{availableAgents.map((a) => (
+												<SelectItem key={a.id} value={a.id}>
+													{a.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</SettingsRow>
+								<SettingsRow label={t("translate.modelId.label")}>
+									<Select
+										value={modelSelectValue}
+										onValueChange={(v) => {
+											patchTranslate({
+												modelId: v === TRANSLATE_FOLLOW_MODEL ? "" : v,
+											});
+										}}
+									>
+										<SelectTrigger
+											size="sm"
+											className="min-w-[200px] max-w-[280px]"
+										>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value={TRANSLATE_FOLLOW_MODEL}>
+												{t("translate.modelId.followAgent")}
+											</SelectItem>
+											{models.map((m) => (
+												<SelectItem key={m.id} value={m.id}>
+													{m.name || m.id}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</SettingsRow>
+							</>
+						)}
+					</SettingsGroup>
+					{showAgent && availableAgents.length > 0 && models.length === 0 && (
+						<p className="mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
+							{t("translate.modelId.needWarm")}
+						</p>
+					)}
+				</>
+			)}
+
+			{showEndpoint && (
+				<>
+					<SettingsGroup>
+						<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+							<Label
+								htmlFor="translate-free-base-url"
+								className="font-normal text-[13px]"
+							>
+								{t("translate.freeBaseUrl.label")}
+							</Label>
+							<Input
+								id="translate-free-base-url"
+								value={tr.freeBaseUrl}
+								onChange={(e) =>
+									patchTranslate({ freeBaseUrl: e.target.value })
+								}
+								onBlur={() => {
+									const trimmed = tr.freeBaseUrl.trim().replace(/\/+$/, "");
+									if (trimmed !== tr.freeBaseUrl) {
+										patchTranslate({ freeBaseUrl: trimmed });
+									}
+								}}
+								placeholder={
+									tr.provider === "deeplx"
+										? "https://www2.deepl.com/jsonrpc"
+										: "https://libretranslate.example"
+								}
+								className="h-8 font-mono text-xs"
+								spellCheck={false}
+								autoComplete="off"
+							/>
+						</div>
+					</SettingsGroup>
+					<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+						{t("translate.freeBaseUrl.hint")}
+					</p>
+				</>
+			)}
+			<p className="mt-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("translate.footer")}
+			</p>
+		</>
+	);
+}
+
 function AgentPane({
 	settings,
 	patch,
@@ -570,11 +898,20 @@ function AgentPane({
 		}
 	}, [probeInstalled, scanOnce, t]);
 
+	// Open page: scan PATH + cached probe badges only. Do not auto-spawn agents.
+	// Full ACP probe is manual via the Refresh button.
 	useEffect(() => {
 		if (autoProbedRef.current) return;
 		autoProbedRef.current = true;
-		void rescanAndProbe();
-	}, [rescanAndProbe]);
+		void (async () => {
+			setLoading(true);
+			try {
+				await scanOnce();
+			} finally {
+				setLoading(false);
+			}
+		})();
+	}, [scanOnce]);
 
 	const onToggleEnabled = async (v: boolean) => {
 		patch({ agentEnabled: v });
@@ -590,22 +927,18 @@ function AgentPane({
 		}
 	};
 
+	/** Persist proxy only — no full re-probe (that used to lock the switch). */
 	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
-		setLoading(true);
 		try {
 			const saved = await setAgentProxy(enabled, url);
 			setProxyEnabled(saved.proxyEnabled);
 			setProxyUrl(saved.proxyUrl);
-			const scan = await scanOnce();
-			if (scan) {
-				await probeInstalled(scan);
-				await scanOnce();
-			}
+			await scanOnce();
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setLoading(false);
+			// Re-sync UI from host if save failed.
+			await scanOnce();
 		}
 	};
 
@@ -716,13 +1049,13 @@ function AgentPane({
 							placeholder="http://127.0.0.1:7890"
 							spellCheck={false}
 							autoComplete="off"
-							disabled={!proxyEnabled || busy || !isTauri()}
+							disabled={!proxyEnabled || !isTauri()}
 							className="h-8 w-48 text-xs"
 						/>
 						<Switch
 							id="agent-proxy-enabled"
 							checked={proxyEnabled}
-							disabled={busy || !isTauri()}
+							disabled={!isTauri()}
 							onCheckedChange={(v) => void onToggleProxy(v)}
 						/>
 					</div>

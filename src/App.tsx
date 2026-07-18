@@ -2630,6 +2630,7 @@ export default function App() {
 											agentZenMode ||
 											(rightSidebarOpen && rightSidebarTab === "agent")
 										}
+										onOpenAgentSettings={() => openSettings("agent")}
 									/>
 								</div>
 							)}

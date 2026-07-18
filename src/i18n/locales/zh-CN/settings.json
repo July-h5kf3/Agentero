@@ -5,6 +5,7 @@
 		"general": "通用",
 		"appearance": "外观",
 		"agent": "Agent",
+		"translate": "翻译",
 		"keyboard": "键盘",
 		"privacy": "隐私",
 		"about": "关于"
@@ -102,6 +103,50 @@
 			"command": "命令",
 			"args": "参数"
 		}
+	},
+	"translate": {
+		"title": "翻译",
+		"provider": {
+			"label": "默认服务",
+			"googleapi": "Google 翻译（API）",
+			"google": "Google 翻译",
+			"bing": "Bing（Edge 免费）",
+			"youdao": "有道",
+			"haici": "海词",
+			"cnki": "CNKI 学术",
+			"deeplx": "DeepLX",
+			"huoshanweb": "火山翻译 Web",
+			"tencenttransmart": "腾讯交互翻译",
+			"libre": "LibreTranslate",
+			"agent": "Agent（BYOA）",
+			"free": "Google 翻译（API）"
+		},
+		"targetLang": {
+			"label": "目标语言",
+			"ui": "跟随界面语言",
+			"en": "English",
+			"zhCN": "简体中文"
+		},
+		"autoSelection": {
+			"label": "PDF 划词后自动翻译"
+		},
+		"freeBaseUrl": {
+			"label": "自定义端点（可选）",
+			"hint": "LibreTranslate：填写根地址（POST /translate）。DeepLX：可填 JSON-RPC 或自建 DeepLX 地址。与「通用 → Translator」（文献元数据）无关。"
+		},
+		"agentId": {
+			"label": "Agent",
+			"followDefault": "跟随默认",
+			"followDefaultNamed": "跟随默认（{{name}}）",
+			"empty": "暂无可用 Agent，请先在 Agent 设置中配置。",
+			"openAgentSettings": "打开 Agent 设置"
+		},
+		"modelId": {
+			"label": "模型",
+			"followAgent": "跟随 Agent 默认",
+			"needWarm": "在 Chat 中打开过该 Agent 后，可在此选择具体模型。"
+		},
+		"footer": "免费引擎使用非官方网页接口，可能限流或失效。Agent 路径仅经本机 CLI；Agent/模型留空则跟随应用默认。本版不接入付费翻译 API。"
 	},
 	"keyboard": {
 		"title": "键盘"

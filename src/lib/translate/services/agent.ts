@@ -1,0 +1,41 @@
+import { buildTranslatePrompt } from "@/lib/translate/prompt";
+import type { TranslateService } from "@/lib/translate/types";
+
+/**
+ * BYOA Agent adapter.
+ * Callers that need streaming (PDF popover) should use {@link buildTranslatePrompt}
+ * + ACP directly; this path is for non-streaming `runTranslate`.
+ */
+export const AgentTranslateService: TranslateService = {
+	id: "agent",
+	type: "sentence",
+	nameKey: "agent",
+	requireSecret: false,
+	requireExternalConfig: true,
+	kind: "agent",
+	async translate(task, opts) {
+		const text = task.text.trim();
+		if (!text) {
+			throw new Error("Empty text");
+		}
+		if (!opts.agent?.runOnce) {
+			throw new Error(
+				"Agent translation requires a configured Agent runner (BYOA).",
+			);
+		}
+		const targetLangName =
+			task.targetLang === "zh-CN" || task.targetLang === "zh"
+				? "Chinese"
+				: task.targetLang === "en"
+					? "English"
+					: task.targetLang;
+		const prompt = buildTranslatePrompt({
+			text,
+			targetLangName,
+			page: task.context?.page,
+			surface: task.context?.surface,
+		});
+		const result = await opts.agent.runOnce(prompt);
+		task.result = result.trim();
+	},
+};

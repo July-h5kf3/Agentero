@@ -395,6 +395,7 @@
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - 浏览器插件，一键收集网页和论文。
 - ~~**PDF 划词提问** MVP~~ ✅（划词弹操作菜单：高亮 / 批注 / 提问 / 翻译 → `asks/*.json` + `highlights/*.json`；**平滑蓝色选区覆盖层**（非默认琥珀高亮）；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、TextLayer 增强。
+- ~~**翻译服务**~~ ✅ 首版（见 [`translate.md`](translate.md)）：应用级可插拔 `TranslateService`；**免费 MT + BYOA Agent**（无付费 API）；设置 → **Translate**；PDF 划词为首个消费方。T4+ 更多引擎/消费方仍待。
 - ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板）。仍待：`highlights.md` 摘录同步 / 导出到 `NOTES.md`（暂不做）、与划词提问互导。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。

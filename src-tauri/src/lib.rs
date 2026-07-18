@@ -172,6 +172,7 @@ pub fn run() {
             commands::trash::path_purge_item,
             commands::trash::path_purge_trash,
             commands::window::window_new,
+            commands::translate::translate_text,
             commands::lookup::lookup_import,
             commands::lookup::lookup_translator_config,
             commands::lookup::paper_download_assets,

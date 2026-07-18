@@ -8,6 +8,7 @@ import {
 	History,
 	Pencil,
 	Plus,
+	Settings,
 	Star,
 	X,
 	Zap,
@@ -114,7 +115,6 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -190,6 +190,8 @@ type AgentPanelProps = {
 	 * `zen` — full-workbench focus: centered conversation column (AI Elements layout).
 	 */
 	variant?: "sidebar" | "zen";
+	/** Open Settings → Agent (ACP backend registry). */
+	onOpenAgentSettings?: () => void;
 };
 
 type ToolUiState = {
@@ -567,6 +569,7 @@ export function AgentPanel({
 	autoFocus = false,
 	title = "Chat",
 	variant = "sidebar",
+	onOpenAgentSettings,
 }: AgentPanelProps) {
 	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
@@ -2116,9 +2119,23 @@ export function AgentPanel({
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start" className="min-w-[200px]">
-				<DropdownMenuLabel className="text-muted-foreground text-xs">
-					{t("agentMenu.title")}
-				</DropdownMenuLabel>
+				{/* Match DropdownMenuLabel height (px-1.5 py-1 text-xs); keep gear inside the row. */}
+				<div className="flex h-6 items-center justify-between gap-1 px-1.5">
+					<span className="min-w-0 truncate font-medium text-muted-foreground text-xs leading-none">
+						{t("agentMenu.title")}
+					</span>
+					{onOpenAgentSettings ? (
+						<button
+							type="button"
+							className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+							aria-label={t("agentMenu.openSettings")}
+							title={t("agentMenu.openSettings")}
+							onClick={() => onOpenAgentSettings()}
+						>
+							<Settings className="size-3" />
+						</button>
+					) : null}
+				</div>
 				<DropdownMenuSeparator />
 				{options.length === 0 ? (
 					<div className="px-2 py-1.5 text-muted-foreground text-xs">

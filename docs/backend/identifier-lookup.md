@@ -619,7 +619,7 @@ papers/
 ```
 
 1. `path = {parent_dir}/{id}`（§1.2 + §6.3）。
-2. 写 `NOTES.md` + `highlights.md`。
+2. 写 `NOTES.md` + `highlights.md`（`NOTES.md` 中摘要 blockquote 优先经 Host 免费 MT 译为中文，失败保留原文；catalog `abstract` 仍为原文）。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
 4. 下载按 §1.3：**始终 PDF**；**arXiv 另解压 LaTeX**。
 5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。

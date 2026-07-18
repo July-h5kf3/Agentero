@@ -206,6 +206,15 @@
    - [x] M6：划词操作菜单（高亮 / 批注 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区。
    - [x] M7：Zotero 式批注 —「批注」= 建高亮 + 内联编辑器（`annotation-editor.tsx`）写可选 `comment`；页边批注针（`annotation-gutter.tsx`）；右侧「批注」面板（`annotations-panel.tsx`，活动 PDF tab）列卡、跳转闪烁、编辑 / 删除，经 `PdfViewerHandle` + `onHighlightsChange` 驱动；**不写 `NOTES.md`**（旧追加行为已移除）。
 
+3b. **翻译服务（Translate Service）** — 设计见 [`translate.md`](translate.md)（应用级能力，非仅划词）
+   - [x] T0：设计文档（可插拔 `TranslateService`；首版 free + agent；设置 → 翻译页；消费方模型）。
+   - [x] T1：`src/lib/translate/` 注册表 + `agent` adapter；设置页 **Translate**（`provider` / `targetLang` / 自动译 / freeBaseUrl）；PDF 划词接服务层。
+   - [x] T2：Host `translate_text` + `free` adapter（内置 Google gtx 或 LibreTranslate URL）；默认 `provider=free`。
+   - [x] T3：PDF free 单次结果 / agent 流式；`autoTranslateSelection`；与 `translatorBaseUrl` 命名隔离。
+   - [x] T3.5 设计：翻译用 **Agent 座 + 模型** 最小选择（跟随默认 / 渐进披露；见 [`translate.md`](translate.md) §5.4 · §7.6）。
+   - [ ] T3.6：实现 `translate.agentId` / `modelId` 设置项 + Translate 页两行 Select + PDF `runOnce` 传参。
+   - [ ] T4+（可选）：更多 adapter（DeepL 等）/ 更多消费方（标题·摘要等）；`type: word` 词典。
+
 4. **PDF / HTML 标注系统**
    - 参考 Hypothesis 风格的边注、评论、锚点。
    - [x] PDF 就地批注已落地（高亮 + `comment` + 页边针 + 右侧面板）；标注落 `highlights/*.json`。

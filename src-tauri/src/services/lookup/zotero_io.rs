@@ -195,7 +195,7 @@ async fn import_one_item(
     }
 
     fs::create_dir_all(&paper_dir)?;
-    write_paper_shell(&paper_dir, &meta)?;
+    write_paper_shell(&paper_dir, &meta).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
     let _ = ensure_paper_assets(

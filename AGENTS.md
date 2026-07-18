@@ -26,6 +26,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；Library 下方虚拟节点 **Recycle Bin**（`agentero:trash`）打开中间栏回收站视图（恢复 / 永久删除 / 清空）。打开 Vault 时默认只展开 `papers/` 及其一级子目录；激活文档变化时树展开祖先并滚到对应行。Paper 行标签默认 **标题 · 作者**（设置 → 通用 `paperTreeLabelMode`，展示用、不改磁盘名）。
 - 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
 - PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 批注 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。**批注** = 高亮 + 内联评论（`comment`），带 comment 的高亮显示页边批注针，右侧 **批注** 面板列出当前 PDF 的批注卡（跳转 / 编辑 / 删除），不写入 `NOTES.md`。
+- **翻译服务**：应用级可插拔 `TranslateService`（免费 MT + BYOA Agent，无付费 API），设置 → 翻译；PDF 划词等为消费方；见 `docs/development/translate.md`。
 - 图片：常见格式任意路径 `blob:` 中间栏预览。
 - **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown-image.ts`）。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘内容变化则重载（**覆盖本地未存改动**，内容相等抑制自写回声）；create/remove/rename 去抖刷新文件树。
@@ -82,6 +83,8 @@ cargo test -p agentero-cli
 - `docs/development/technical-plan.md`：跨前后端技术方案。
 - `docs/development/prd.md`：产品需求和验收标准。
 - `docs/development/cli.md`：headless CLI 语义与实现（`cli/`）。
+- `docs/development/pdf-ask.md`：PDF 划词提问与批注。
+- `docs/development/translate.md`：翻译服务（应用级可插拔 free + Agent；设置 → 翻译）。
 
 当修改 UI、数据契约、发布流程或 Vault 语义时，必须同步更新相关文档。
 

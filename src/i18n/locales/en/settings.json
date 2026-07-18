@@ -5,6 +5,7 @@
 		"general": "General",
 		"appearance": "Appearance",
 		"agent": "Agent",
+		"translate": "Translate",
 		"keyboard": "Keyboard",
 		"privacy": "Privacy",
 		"about": "About"
@@ -102,6 +103,50 @@
 			"command": "Command",
 			"args": "Args"
 		}
+	},
+	"translate": {
+		"title": "Translate",
+		"provider": {
+			"label": "Default service",
+			"googleapi": "Google Translate (API)",
+			"google": "Google Translate",
+			"bing": "Bing (Edge free)",
+			"youdao": "Youdao",
+			"haici": "Haici",
+			"cnki": "CNKI",
+			"deeplx": "DeepLX",
+			"huoshanweb": "Volcengine Web",
+			"tencenttransmart": "Tencent Transmart",
+			"libre": "LibreTranslate",
+			"agent": "Agent (BYOA)",
+			"free": "Google Translate (API)"
+		},
+		"targetLang": {
+			"label": "Target language",
+			"ui": "Follow interface language",
+			"en": "English",
+			"zhCN": "简体中文"
+		},
+		"autoSelection": {
+			"label": "Auto-translate PDF selection"
+		},
+		"freeBaseUrl": {
+			"label": "Custom endpoint (optional)",
+			"hint": "LibreTranslate: base URL with POST /translate. DeepLX: JSON-RPC or self-hosted DeepLX URL (default official unofficial endpoint). Separate from General → Translator (paper metadata)."
+		},
+		"agentId": {
+			"label": "Agent",
+			"followDefault": "Follow default",
+			"followDefaultNamed": "Follow default ({{name}})",
+			"empty": "No available agents. Configure one in Agent settings.",
+			"openAgentSettings": "Open Agent settings"
+		},
+		"modelId": {
+			"label": "Model",
+			"followAgent": "Follow agent default",
+			"needWarm": "Open this agent in Chat once to list models here."
+		},
+		"footer": "Free engines use unofficial web endpoints (may rate-limit or break). Agent path uses your local Agent CLI only; empty Agent/Model follow the app default. No paid API keys in this release."
 	},
 	"keyboard": {
 		"title": "Keyboard"

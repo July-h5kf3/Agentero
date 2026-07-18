@@ -34,7 +34,8 @@
 	},
 	"agentMenu": {
 		"title": "ACP backend",
-		"empty": "No ready ACP agents. Configure one in Settings."
+		"empty": "No ready ACP agents. Configure one in Settings.",
+		"openSettings": "Open Agent settings"
 	},
 	"composer": {
 		"placeholder": "How can I help you today?",

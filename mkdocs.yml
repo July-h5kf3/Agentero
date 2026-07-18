@@ -29,6 +29,7 @@ nav:
       - 技术方案: development/technical-plan.md
       - CLI 设计: development/cli.md
       - PDF 划词提问: development/pdf-ask.md
+      - 翻译服务: development/translate.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
 

@@ -34,7 +34,8 @@
 	},
 	"agentMenu": {
 		"title": "ACP 后端",
-		"empty": "没有就绪的 ACP Agent。请在设置中配置。"
+		"empty": "没有就绪的 ACP Agent。请在设置中配置。",
+		"openSettings": "打开 Agent 设置"
 	},
 	"composer": {
 		"placeholder": "今天想做些什么？",

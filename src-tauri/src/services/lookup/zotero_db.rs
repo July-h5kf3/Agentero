@@ -319,7 +319,7 @@ async fn migrate_one(
     let path_rel = free_path(vault, &base_parent, &id);
     let paper_dir = vault.join(&path_rel);
     fs::create_dir_all(&paper_dir)?;
-    write_paper_shell(&paper_dir, &meta)?;
+    write_paper_shell(&paper_dir, &meta).await?;
     if !blocks.is_empty() {
         append_markdown_blocks(&paper_dir.join("NOTES.md"), &blocks);
     }

@@ -40,14 +40,15 @@ import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
-import i18n from "@/i18n";
 import {
 	cancelAgentRun,
+	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
+import { notifyError } from "@/lib/notify";
 import { isPdfViewerSource } from "@/lib/paper-metadata";
 import {
 	anchorFromPoint,
@@ -64,10 +65,7 @@ import {
 	toSummaries,
 	writePdfAskThread,
 } from "@/lib/pdf-ask";
-import {
-	buildPdfAskPrompt,
-	buildPdfTranslatePrompt,
-} from "@/lib/pdf-ask/prompt";
+import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf-ask/schema";
 import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf-ask/types";
 import {
@@ -86,6 +84,13 @@ import {
 } from "@/lib/pdf-highlight";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf-reading-position";
+import { loadSettings } from "@/lib/settings";
+import {
+	buildTranslatePrompt,
+	prepareTranslateTask,
+	resolveTranslateAgent,
+	runTranslate,
+} from "@/lib/translate";
 import { cn } from "@/lib/utils";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -966,7 +971,12 @@ export function PdfViewer({
 	}, [activeThread, placePopover, zoom, pageWidth]);
 
 	const sendToThread = useCallback(
-		async (thread: PdfAskThread, question: string, promptOverride?: string) => {
+		async (
+			thread: PdfAskThread,
+			question: string,
+			promptOverride?: string,
+			agentOpts?: { agentId?: string; modelId?: string },
+		) => {
 			const threadId = thread.id;
 			if (!question.trim()) return;
 
@@ -993,6 +1003,8 @@ export function PdfViewer({
 			try {
 				const accepted = await runOnce({
 					prompt,
+					agentId: agentOpts?.agentId,
+					modelId: agentOpts?.modelId,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
@@ -1186,15 +1198,117 @@ export function PdfViewer({
 		const thread = createEmptyThread({ paperPath, anchor: sm.anchor });
 		setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
 		openThread(thread);
-		const targetLang = i18n.language?.toLowerCase().startsWith("zh")
-			? "Chinese"
-			: "English";
-		void sendToThread(
-			thread,
-			t("selection.translateAction"),
-			buildPdfTranslatePrompt(quote, sm.anchor.page, targetLang),
-		);
-	}, [selectionMenu, paperAbsPath, paperRelPath, openThread, sendToThread, t]);
+
+		const { providerId, targetLangName } = prepareTranslateTask({
+			text: quote,
+			context: {
+				page: sm.anchor.page,
+				surface: "pdf-selection",
+			},
+		});
+		const userLabel = t("selection.translateAction");
+
+		if (providerId === "agent") {
+			const prompt = buildTranslatePrompt({
+				text: quote,
+				targetLangName,
+				page: sm.anchor.page,
+				surface: "pdf-selection",
+			});
+			void (async () => {
+				try {
+					const registry = await listAgents().catch(() => null);
+					const tr = loadSettings().translate;
+					const resolved = resolveTranslateAgent(tr, registry);
+					if (!resolved.agentId) {
+						const msg = t("selection.translateNoAgent");
+						notifyError(msg);
+						setAskError(msg);
+						return;
+					}
+					void sendToThread(thread, userLabel, prompt, {
+						agentId: resolved.agentId,
+						modelId: resolved.modelId,
+					});
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					notifyError(message);
+					setAskError(message);
+				}
+			})();
+			return;
+		}
+
+		// Free MT engines: single-shot via Host (no Agent stream).
+		void (async () => {
+			const userMsg = {
+				id: newMessageId(),
+				role: "user" as const,
+				content: userLabel,
+				createdAt: new Date().toISOString(),
+			};
+			const withUser: PdfAskThread = {
+				...thread,
+				status: "open",
+				messages: [...thread.messages, userMsg],
+				updatedAt: new Date().toISOString(),
+			};
+			upsertThread(withUser);
+			void persist(withUser);
+			setAskError(null);
+			setStreaming(true);
+			const assistantId = newMessageId();
+			try {
+				const result = await runTranslate(
+					{
+						text: quote,
+						context: {
+							page: sm.anchor.page,
+							surface: "pdf-selection",
+						},
+					},
+					{ providerId },
+				);
+				const done: PdfAskThread = {
+					...withUser,
+					messages: [
+						...withUser.messages,
+						{
+							id: assistantId,
+							role: "assistant",
+							content: result,
+							createdAt: new Date().toISOString(),
+						},
+					],
+					updatedAt: new Date().toISOString(),
+				};
+				upsertThread(done);
+				void persist(done);
+			} catch (e) {
+				const message = e instanceof Error ? e.message : String(e);
+				setAskError(message);
+				notifyError(message);
+			} finally {
+				setStreaming(false);
+			}
+		})();
+	}, [
+		selectionMenu,
+		paperAbsPath,
+		paperRelPath,
+		openThread,
+		sendToThread,
+		t,
+		upsertThread,
+		persist,
+	]);
+
+	// Optional: auto-run translate when a PDF selection menu opens.
+	useEffect(() => {
+		if (!selectionMenu?.anchor.quote?.trim()) return;
+		if (!loadSettings().translate.autoTranslateSelection) return;
+		handleMenuTranslate();
+	}, [selectionMenu, handleMenuTranslate]);
 
 	const handleMenuHighlight = useCallback(
 		(color: HighlightColor) => {

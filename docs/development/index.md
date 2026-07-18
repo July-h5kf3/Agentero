@@ -23,6 +23,7 @@
 | V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader 自动+Zap**、**全局权限模式**、模型收藏；面板 workflow 与写入确认仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
 | 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 MVP；`highlights.md` 导出仍待 |
+| 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
 | V0.6 标签页与分屏 | 🟡 标签页 ✅ | **文档标签页已落地**（`⌘W` 关 tab / 无 tab 关窗）；**分屏（split）** 仍待 |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
@@ -40,6 +41,7 @@
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
 - [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
+- [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`.md`](.md)：简短产品假设。
 
 ## 交叉引用
