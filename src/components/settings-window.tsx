@@ -891,20 +891,13 @@ function AgentPane({
 		}
 	}, [probeInstalled, scanOnce, t]);
 
-	// Open page: scan PATH + cached probe badges only. Do not auto-spawn agents.
-	// Full ACP probe is manual via the Refresh button.
+	// Open page: scan + parallel ACP probe once (live badge updates).
+	// Proxy switch stays usable during busy; Refresh re-runs the same path.
 	useEffect(() => {
 		if (autoProbedRef.current) return;
 		autoProbedRef.current = true;
-		void (async () => {
-			setLoading(true);
-			try {
-				await scanOnce();
-			} finally {
-				setLoading(false);
-			}
-		})();
-	}, [scanOnce]);
+		void rescanAndProbe();
+	}, [rescanAndProbe]);
 
 	const onToggleEnabled = async (v: boolean) => {
 		patch({ agentEnabled: v });
