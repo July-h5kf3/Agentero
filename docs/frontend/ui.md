@@ -32,6 +32,7 @@
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
 - **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex` 滚入视口。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
+- **虚拟节点 Recycle Bin**：紧挨 **Library** 下方固定一项 **Recycle Bin / 回收站**（路径常量 `agentero:trash`，非真实目录、不写盘）。图标 `Trash2`。选中后中间栏显示回收站视图（见「删除」）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**：下列任一成立即显示，hover 列出原因：
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
@@ -40,11 +41,13 @@
 - **Paper 行 Zap（精读）**：当本地资源**已齐全**（有 PDF，且有 TeX 或 `PAPER.md`）且 catalog **`is_read === false`** 时显示 `Zap` 图标；点击可**手动**启动 **paper-reader**。
 - **自动精读**：魔棒入库 / 单篇 Download 在 PDF（或 TeX / `PAPER.md`）就绪且 `is_read === false` 时**自动**启动同一工作流；左下角先显示入库/下载任务进度，完成后接上 `paperRead` 精读进度。运行时 skill 触发按 provider：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`。成功后 `is_read = true`，Zap 消失。
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
+- 图标按钮点击反馈：统一走 `Button`（`variant="ghost"` + `size="icon-xs"` 等）的 **active** 态（背景加深 + 轻微缩放）；文件树行同样有 `active:bg-muted/80`。
 - 动作映射（Lucide），从左到右：
   - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
-  - **回收站** → `Trash2`（最右；像点「论文库」一样在**中间栏**打开回收站视图（非弹窗）→ 浏览 / 恢复 / 永久删除已删项，见「删除」）
+- **内联新建进行中**时，顶栏其它图标（魔棒 / 新建文件 / 新建文件夹）**保持可点**（可切换新建类型或打开魔棒）；仅在全局 `busy` 或文献导入进行中时禁用。
+- **回收站入口**：文件树中 **Library 下方** 虚拟节点 `Trash2`（不在侧栏 Header）；点击后中间栏打开 `RecycleBinView`（见「删除」）。
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
 - **在系统文件管理器中显示**（`revealItemInDir` / `src/lib/reveal.ts`）：
   - **右键**真实文件 / 文件夹 / paper 行 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
@@ -62,7 +65,7 @@
   - **右键**「删除」（旁注 `⌘⌫`）、**`⌘⌫`**、批量条 / 右键「删除 N 项」：均**移入 Vault 回收站** `.agentero/.trash/<批次>/`，**不弹确认、不弹提示**（随时可从回收站找回）。
   - `papers/` 下的项移入回收站时**快照并移除** catalog 对应行（含嵌套 paper），从回收站恢复时一并恢复；随后刷新文件树、Library 与双链索引。
   - `⌘⌫` 在编辑器 / 输入框聚焦时不拦截（保留系统删行首行为）。
-  - **回收站浏览**：侧栏头部 `Trash2` 图标在**中间栏**打开回收站视图（`RecycleBinView`，`kind:"trash"` 虚拟 tab，与论文库同一位置、Zotero 风格；**非弹窗**）→ 列出全部已删项（名称 / 原路径 / 删除时间），逐项**恢复**（`path_restore_item`，恢复文件 + catalog 行）或**永久删除**（`path_purge_item`），顶部可**清空回收站**（`path_purge_trash`，不可撤销、需确认）。删除后从这里找回。
+  - **回收站浏览**：文件树中 Library 下方虚拟节点 `agentero:trash` 在**中间栏**打开回收站视图（`RecycleBinView`，`kind:"trash"` 虚拟 tab，与论文库同一位置、Zotero 风格；**非弹窗**；中间栏不重复标题/关闭行，工具栏在视图内）→ 列出全部已删项（名称 / 原路径 / 删除时间），逐项**恢复**（`path_restore_item`，恢复文件 + catalog 行）或**永久删除**（`path_purge_item`），顶部可**清空回收站**（`path_purge_trash`，不可撤销、需确认）。删除后从这里找回。
   - 不可删：虚拟 Library、Vault 根。
 - **多选与批量操作**（`file-tree.tsx` + 原语 `ai-elements/file-tree.tsx`）：
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。

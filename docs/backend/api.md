@@ -141,7 +141,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `path_trash` / `path_untrash`（已落地）
 
-可恢复删除：把项移入 Vault 回收站 `.agentero/.trash/<batchId>/`（带 `manifest.json` 记录原路径与被删 catalog 行快照），而非物理删除。**前端不弹 Undo toast**——用户从侧栏 `Trash2` 打开的**中间栏回收站视图**（`RecycleBinView`）浏览 / 恢复 / 永久删除 / 清空。
+可恢复删除：把项移入 Vault 回收站 `.agentero/.trash/<batchId>/`（带 `manifest.json` 记录原路径与被删 catalog 行快照），而非物理删除。**前端不弹 Undo toast**——用户从文件树虚拟节点 `agentero:trash` 打开的**中间栏回收站视图**（`RecycleBinView`）浏览 / 恢复 / 永久删除 / 清空。
 
 - **`path_trash` 参数**
 

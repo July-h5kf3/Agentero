@@ -1,6 +1,7 @@
 import { FileIcon, FolderIcon, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -135,20 +136,26 @@ export function RecycleBinView({
 
 	return (
 		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-			<div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-				<span className="font-medium text-sm">{t("recycleBin.title")}</span>
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="h-7 gap-1 px-2 text-destructive text-xs"
-					disabled={items.length === 0 || Boolean(busyId)}
-					onClick={() => void handleEmpty()}
-				>
-					<Trash2 className="size-3.5" />
-					{t("recycleBin.emptyTrash")}
-				</Button>
-			</div>
+			{/* Same h-10 bar as VaultSidebarHeader / other pane headers. */}
+			<PaneHeader
+				trailing={
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="h-7 gap-1 px-2 text-destructive text-xs leading-none"
+						disabled={items.length === 0 || Boolean(busyId)}
+						onClick={() => void handleEmpty()}
+					>
+						<Trash2 className="size-3.5 shrink-0" aria-hidden />
+						<span className="leading-none">{t("recycleBin.emptyTrash")}</span>
+					</Button>
+				}
+			>
+				<span className="truncate font-medium text-sm">
+					{t("recycleBin.title")}
+				</span>
+			</PaneHeader>
 
 			{loading ? (
 				<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">

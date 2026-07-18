@@ -20,7 +20,7 @@
 
 ## 布局模型
 
-- 左侧栏：Vault 文件树（虚拟 **Library**；魔棒 / 新建；右键 Finder / 终端 / **删除→回收站**；`Trash2` 开回收站视图；多选拖拽）+ 选中论文时 **Paper Info**（Tags 可编辑）。
+- 左侧栏：Vault 文件树（虚拟 **Library** + 其下 **Recycle Bin**；魔棒 / 新建；右键 Finder / 终端 / **删除→回收站**；多选拖拽）+ 选中论文时 **Paper Info**（Tags 可编辑）。
 - 中间栏：**文档标签页**（标题栏；常驻挂载）。无 Vault 时欢迎页；可开 **Library** / Markdown / PDF / HTML / **图片** / **回收站**。
   - PDF：任意路径本地预览；**导航 / 适应宽·整页 / 大纲 / ⌘F**；真实 scale + 平滑划词；**操作菜单**（高亮 / 笔记 / 提问 / 翻译）。
   - 图片文件：常见格式 `blob:` 预览（`ImageViewer`）。

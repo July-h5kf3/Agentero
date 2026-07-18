@@ -88,6 +88,7 @@ import {
 	exportLibraryToFile,
 	importLibraryFromFile,
 	isLibraryVirtualPath,
+	isTrashVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
 	movePaperFolder,
@@ -1026,7 +1027,7 @@ export default function App() {
 	/** ⌥⌘R — reveal selected vault path in Finder / Explorer. */
 	const handleRevealInFinder = useCallback(() => {
 		const path = treeSelectedPath;
-		if (!path || isLibraryVirtualPath(path)) return;
+		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.revealDesktopOnly"));
 			return;
@@ -1043,7 +1044,7 @@ export default function App() {
 	/** ⌥⌘T — open system terminal at selected path (dir = self, file = parent). */
 	const handleOpenInTerminal = useCallback(() => {
 		const path = treeSelectedPath;
-		if (!path || isLibraryVirtualPath(path)) return;
+		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
 			return;
@@ -1074,6 +1075,7 @@ export default function App() {
 					(p) =>
 						p &&
 						!isLibraryVirtualPath(p) &&
+						!isTrashVirtualPath(p) &&
 						p !== rootNorm &&
 						p.startsWith(`${rootNorm}/`),
 				);
@@ -1125,7 +1127,7 @@ export default function App() {
 
 	const handleDeleteSelected = useCallback(() => {
 		const path = treeSelectedPath;
-		if (!path || isLibraryVirtualPath(path)) {
+		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) {
 			notifyError(t("sidebar:fileTree.deleteNeedsSelection"));
 			return;
 		}
@@ -1153,7 +1155,9 @@ export default function App() {
 	}, [vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary]);
 
 	const handleMovePaths = useCallback((paths: string[]) => {
-		const valid = paths.filter((p) => !isLibraryVirtualPath(p));
+		const valid = paths.filter(
+			(p) => !isLibraryVirtualPath(p) && !isTrashVirtualPath(p),
+		);
 		if (valid.length === 0) return;
 		setMovePaths(valid);
 	}, []);
@@ -1162,7 +1166,9 @@ export default function App() {
 	const movePathsTo = useCallback(
 		async (rawPaths: string[], destParentRel: string) => {
 			if (!vaultPath) return;
-			const paths = rawPaths.filter((p) => !isLibraryVirtualPath(p));
+			const paths = rawPaths.filter(
+				(p) => !isLibraryVirtualPath(p) && !isTrashVirtualPath(p),
+			);
 			if (paths.length === 0) return;
 			setBusy(true);
 			let failed = 0;
@@ -1891,6 +1897,10 @@ export default function App() {
 			handleSelectLibrary();
 			return;
 		}
+		if (isTrashVirtualPath(node.path)) {
+			handleSelectTrash();
+			return;
+		}
 		if (
 			node.kind === "directory" &&
 			isPaperDirectory(node.path, node.children)
@@ -1999,6 +2009,7 @@ export default function App() {
 	};
 
 	const showLibrary = Boolean(vaultPath) && activeTab?.kind === "library";
+	const showTrash = Boolean(vaultPath) && activeTab?.kind === "trash";
 	/** Notes column is relevant: paper open + PDF/HTML center (not when Notes is already center). */
 	const notesEligible = tabNotesEligible(activeTab);
 	/** Side Notes column actually renders when relevant and the user hasn't hidden it. */
@@ -2131,12 +2142,9 @@ export default function App() {
 										onImportLocalPdf={() => void handleImportLocalPdf()}
 										importBusy={libraryIoBusy === "import"}
 										importPdfBusy={libraryIoBusy === "import-pdf"}
-										busy={
-											busy || Boolean(createDraft) || libraryIoBusy !== null
-										}
+										busy={busy || libraryIoBusy !== null}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
-										onOpenRecycleBin={handleSelectTrash}
 									/>
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">
@@ -2153,6 +2161,7 @@ export default function App() {
 										onMoveTo={(paths, dest) => void movePathsTo(paths, dest)}
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
+										onSelectTrash={handleSelectTrash}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
 										arxivPaperRelPaths={arxivPaperRelPaths}
@@ -2185,8 +2194,10 @@ export default function App() {
 						>
 							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
 								{/* Document tabs live in the window title bar (same row as zen icon). */}
-								{/* Center header: library search / view mode left; actions right */}
-								{vaultPath && activeTab && !pdfZenMode ? (
+								{/* Center header: library search / view mode left; actions right.
+								    Trash has its own toolbar inside RecycleBinView — skip the
+								    redundant title + close row here. */}
+								{vaultPath && activeTab && !pdfZenMode && !showTrash ? (
 									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
 										<div
 											className={cn(

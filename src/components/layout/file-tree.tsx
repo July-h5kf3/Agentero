@@ -61,7 +61,7 @@ import {
 	paperNeedsAssetDownload,
 	paperNeedsRead,
 } from "@/lib/paper-metadata";
-import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/papers-api";
 import {
 	openInTerminal,
 	revealInFileManager,
@@ -106,6 +106,7 @@ export type TreeCreateDraft = {
 /** One flattened, windowable tree row in display order. */
 type FlatRow =
 	| { key: string; kind: "library" }
+	| { key: string; kind: "trash" }
 	| { key: string; kind: "create"; depth: number }
 	| {
 			key: string;
@@ -116,7 +117,7 @@ type FlatRow =
 	  };
 
 function isVirtualTreePath(path: string): boolean {
-	return path === LIBRARY_VIRTUAL_PATH;
+	return path === LIBRARY_VIRTUAL_PATH || path === TRASH_VIRTUAL_PATH;
 }
 
 function AgenteroLogo({ className }: { className?: string }) {
@@ -311,6 +312,8 @@ type FileTreeProps = {
 	onSelectFile: (node: FileNode) => void;
 	/** Virtual library node → papers table in center pane. */
 	onSelectLibrary?: () => void;
+	/** Virtual trash node → recycle bin view in center pane. */
+	onSelectTrash?: () => void;
 	/** Download PDF (+ TeX if arXiv); no TeX → liteparse PAPER.md. */
 	onDownloadPaperAssets?: (paperNode: FileNode) => Promise<void>;
 	/**
@@ -352,6 +355,7 @@ export function FileTree({
 	onCancelCreate,
 	onSelectFile,
 	onSelectLibrary,
+	onSelectTrash,
 	onDownloadPaperAssets,
 	onDownloadAllMissingAssets,
 	paperMetaByRelPath,
@@ -450,7 +454,7 @@ export function FileTree({
 
 	/**
 	 * Row to highlight / scroll to:
-	 * - virtual Library as-is;
+	 * - virtual Library / Trash as-is;
 	 * - any path under a paper folder → that paper (papers are tree leaves);
 	 * - otherwise the path itself if present, else nearest existing ancestor.
 	 */
@@ -522,7 +526,11 @@ export function FileTree({
 
 	/** Flattened rows in display order (respects expand state + inline drafts). */
 	const flatRows = useMemo<FlatRow[]>(() => {
-		const out: FlatRow[] = [{ key: "__library__", kind: "library" }];
+		// Virtual Library + Recycle Bin sit at the top (Library, then trash).
+		const out: FlatRow[] = [
+			{ key: "__library__", kind: "library" },
+			{ key: "__trash__", kind: "trash" },
+		];
 		const draftAt = (parent: string) =>
 			Boolean(
 				createDraft && pathKey(createDraft.parentPath) === pathKey(parent),
@@ -605,6 +613,7 @@ export function FileTree({
 		const targetKey = pathKey(target);
 		const idx = flatRows.findIndex((row) => {
 			if (row.kind === "library") return target === LIBRARY_VIRTUAL_PATH;
+			if (row.kind === "trash") return target === TRASH_VIRTUAL_PATH;
 			if (row.kind === "node") return pathKey(row.node.path) === targetKey;
 			return false;
 		});
@@ -628,13 +637,17 @@ export function FileTree({
 				onSelectLibrary?.();
 				return;
 			}
+			if (path === TRASH_VIRTUAL_PATH) {
+				onSelectTrash?.();
+				return;
+			}
 			const node = byPath.get(path);
 			if (!node) return;
 			if (node.kind === "file" || isPaperDirectory(node.path, node.children)) {
 				onSelectFile(node);
 			}
 		},
-		[byPath, onSelectFile, onSelectLibrary],
+		[byPath, onSelectFile, onSelectLibrary, onSelectTrash],
 	);
 
 	const handleSelectRow = useCallback(
@@ -1094,6 +1107,18 @@ export function FileTree({
 		</FileTreeFile>
 	);
 
+	const trashRow = (
+		<FileTreeFile path={TRASH_VIRTUAL_PATH} name={t("recycleBin.title")}>
+			<span className="size-4 shrink-0" />
+			<FileTreeIcon>
+				<Trash2 className="size-4 text-muted-foreground" />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate">
+				{t("recycleBin.title")}
+			</FileTreeName>
+		</FileTreeFile>
+	);
+
 	const renderPaperRow = (node: FileNode): ReactNode => {
 		const downloadReasons = paperAssetDownloadReasons(node);
 		const showDownload =
@@ -1291,7 +1316,7 @@ export function FileTree({
 				>
 					{nodes.length === 0 && !createDraft ? (
 						<>
-							{/* Virtual library node always available (empty vault or no vault yet) */}
+							{/* Virtual library + trash always available (empty vault or no vault yet) */}
 							<AiFileTree
 								selectedPath={treeSelectedPath}
 								selectedPaths={selected}
@@ -1301,6 +1326,7 @@ export function FileTree({
 								onSelectRow={handleSelectRow}
 							>
 								{libraryRow}
+								{trashRow}
 							</AiFileTree>
 							{/* Only when a vault is open but has no files — not before open/create. */}
 							{vaultPath ? (
@@ -1330,7 +1356,10 @@ export function FileTree({
 								{rowVirtualizer.getVirtualItems().map((vi) => {
 									const row = flatRows[vi.index];
 									if (!row) return null;
-									const depth = row.kind === "library" ? 0 : row.depth;
+									const depth =
+										row.kind === "library" || row.kind === "trash"
+											? 0
+											: row.depth;
 									return (
 										<div
 											key={row.key}
@@ -1344,9 +1373,11 @@ export function FileTree({
 										>
 											{row.kind === "library"
 												? libraryRow
-												: row.kind === "create"
-													? createRow
-													: renderNodeRow(row.node, row.paperLeaf)}
+												: row.kind === "trash"
+													? trashRow
+													: row.kind === "create"
+														? createRow
+														: renderNodeRow(row.node, row.paperLeaf)}
 										</div>
 									);
 								})}
@@ -1399,7 +1430,6 @@ export function VaultSidebarHeader({
 	title,
 	onNewFile,
 	onNewFolder,
-	onOpenRecycleBin,
 	/** Vault-relative papers parent, e.g. `papers` or `papers/nlp` */
 	lookupParentDir,
 	onLookupSubmit,
@@ -1420,7 +1450,6 @@ export function VaultSidebarHeader({
 	title: string;
 	onNewFile: () => void;
 	onNewFolder: () => void;
-	onOpenRecycleBin?: () => void;
 	lookupParentDir: string;
 	onLookupSubmit: (text: string) => Promise<void>;
 	onImportBibliography?: () => void | Promise<void>;
@@ -1616,15 +1645,6 @@ export function VaultSidebarHeader({
 							>
 								<FolderPlus className="size-3.5" />
 							</IconAction>
-							{onOpenRecycleBin ? (
-								<IconAction
-									label={t("recycleBin.open")}
-									onClick={onOpenRecycleBin}
-									disabled={busy || isDemo}
-								>
-									<Trash2 className="size-3.5" />
-								</IconAction>
-							) : null}
 						</>
 					}
 				>
