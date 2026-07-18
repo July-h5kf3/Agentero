@@ -3,6 +3,8 @@ import {
 	collectPaperFoldersFromTree,
 	collectPapersNeedingAssetDownload,
 	directoryHasPaperMarkers,
+	formatAuthorsShort,
+	formatPaperTreeLabel,
 	isPaperDirectory,
 	isPapersRoot,
 	isUnderPapers,
@@ -145,5 +147,54 @@ describe("paper folder minimal unit", () => {
 		expect(collectPapersNeedingAssetDownload(tree)).toEqual([
 			"/v/papers/nlp/needy",
 		]);
+	});
+});
+
+describe("formatPaperTreeLabel", () => {
+	const meta = {
+		title: "Attention Is All You Need",
+		authors: ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar"],
+		year: 2017,
+	};
+
+	it("formats authors compactly", () => {
+		expect(formatAuthorsShort(["A"])).toBe("A");
+		expect(formatAuthorsShort(["A", "B"])).toBe("A, B");
+		expect(formatAuthorsShort(["A", "B", "C"])).toBe("A et al.");
+		expect(formatAuthorsShort([])).toBe("");
+	});
+
+	it("title-author uses title and short authors", () => {
+		expect(formatPaperTreeLabel("title-author", meta, "1706.03762")).toBe(
+			"Attention Is All You Need · Ashish Vaswani et al.",
+		);
+	});
+
+	it("title only", () => {
+		expect(formatPaperTreeLabel("title", meta, "1706.03762")).toBe(
+			"Attention Is All You Need",
+		);
+	});
+
+	it("author-year-title", () => {
+		expect(formatPaperTreeLabel("author-year-title", meta, "1706.03762")).toBe(
+			"Ashish Vaswani et al. (2017) · Attention Is All You Need",
+		);
+	});
+
+	it("folder mode and missing meta fall back to folder name", () => {
+		expect(formatPaperTreeLabel("folder", meta, "1706.03762")).toBe(
+			"1706.03762",
+		);
+		expect(formatPaperTreeLabel("title-author", null, "25.23211")).toBe(
+			"25.23211",
+		);
+		expect(
+			formatPaperTreeLabel(
+				"title",
+				{ title: "", authors: [], year: undefined },
+				"25.23211",
+			),
+		).toBe("25.23211");
 	});
 });

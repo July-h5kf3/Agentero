@@ -803,6 +803,79 @@ export async function detectPaperDirectory(path: string): Promise<boolean> {
 }
 
 /**
+ * How paper folders are labeled in the file tree (Settings → General).
+ * Disk folder names stay unchanged; this is display-only.
+ */
+export type PaperTreeLabelMode =
+	| "title-author"
+	| "title"
+	| "author-year-title"
+	| "folder";
+
+export const PAPER_TREE_LABEL_MODES: readonly PaperTreeLabelMode[] = [
+	"title-author",
+	"title",
+	"author-year-title",
+	"folder",
+] as const;
+
+export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
+	return (
+		typeof v === "string" &&
+		(PAPER_TREE_LABEL_MODES as readonly string[]).includes(v)
+	);
+}
+
+/** Compact author list for tree rows (1–2 names, else first + et al.). */
+export function formatAuthorsShort(
+	authors: string[] | undefined | null,
+): string {
+	if (!authors?.length) return "";
+	const clean = authors.map((a) => a.trim()).filter(Boolean);
+	if (clean.length === 0) return "";
+	if (clean.length === 1) return clean[0] ?? "";
+	if (clean.length === 2) return `${clean[0]}, ${clean[1]}`;
+	return `${clean[0]} et al.`;
+}
+
+/**
+ * Display label for a paper folder in the file tree.
+ * Falls back to `folderName` when catalog metadata / title is missing.
+ */
+export function formatPaperTreeLabel(
+	mode: PaperTreeLabelMode,
+	meta: Pick<PaperMetadata, "title" | "authors" | "year"> | null | undefined,
+	folderName: string,
+): string {
+	const folder = folderName.trim() || folderName;
+	if (mode === "folder" || !meta) return folder;
+
+	const title = (meta.title ?? "").trim();
+	const authors = formatAuthorsShort(meta.authors);
+	const year =
+		typeof meta.year === "number" && Number.isFinite(meta.year)
+			? String(meta.year)
+			: "";
+
+	if (mode === "title") {
+		return title || folder;
+	}
+
+	if (mode === "title-author") {
+		if (title && authors) return `${title} · ${authors}`;
+		return title || authors || folder;
+	}
+
+	// author-year-title — e.g. "Vaswani et al. (2017) · Attention Is All You Need"
+	const headParts: string[] = [];
+	if (authors) headParts.push(authors);
+	if (year) headParts.push(`(${year})`);
+	const head = headParts.join(" ");
+	if (head && title) return `${head} · ${title}`;
+	return head || title || folder;
+}
+
+/**
  * Remote PDF/HTML URLs from catalog metadata.
  * Prefer metadata fields; fall back to arxiv_id-derived URLs.
  * PDF remote URL is a **download candidate / fallback**, not the only preview path.

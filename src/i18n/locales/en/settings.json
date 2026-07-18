@@ -17,6 +17,14 @@
 		"confirmClose": {
 			"label": "Confirm before quit"
 		},
+		"paperTreeLabelMode": {
+			"label": "Paper labels in file tree",
+			"hint": "Display-only. Folder names on disk stay the same; missing metadata falls back to the folder name.",
+			"title-author": "Title · Author",
+			"title": "Title",
+			"author-year-title": "Author (year) · Title",
+			"folder": "Folder name"
+		},
 		"translatorBaseUrl": {
 			"label": "Translator service URL",
 			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn. Adding a paper always downloads PDF; arXiv also unpacks LaTeX into source/."

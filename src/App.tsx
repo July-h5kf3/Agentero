@@ -2198,6 +2198,7 @@ export default function App() {
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
 										arxivPaperRelPaths={arxivPaperRelPaths}
 										paperMetaByRelPath={paperMetaByRelPath}
+										paperTreeLabelMode={settings.paperTreeLabelMode}
 										onReadPaper={handleReadPaper}
 									/>
 								</div>

@@ -47,6 +47,10 @@ import {
 	upsertAgent,
 } from "@/lib/agent";
 import { notifyError } from "@/lib/notify";
+import {
+	PAPER_TREE_LABEL_MODES,
+	type PaperTreeLabelMode,
+} from "@/lib/paper-metadata";
 import { revealInOsLabelKey } from "@/lib/reveal";
 import {
 	type AgentPermissionMode,
@@ -273,7 +277,29 @@ function GeneralPane({
 						onCheckedChange={(v) => patch({ confirmBeforeClose: v })}
 					/>
 				</SettingsRow>
+				<SettingsRow label={t("general.paperTreeLabelMode.label")}>
+					<Select
+						value={settings.paperTreeLabelMode}
+						onValueChange={(v) =>
+							patch({ paperTreeLabelMode: v as PaperTreeLabelMode })
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{PAPER_TREE_LABEL_MODES.map((mode) => (
+								<SelectItem key={mode} value={mode}>
+									{t(`general.paperTreeLabelMode.${mode}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
 			</SettingsGroup>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.paperTreeLabelMode.hint")}
+			</p>
 			<SettingsGroup>
 				<div className="flex flex-col gap-1.5 border-b px-3.5 py-2.5 last:border-b-0">
 					<Label

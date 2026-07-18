@@ -1,3 +1,10 @@
+import {
+	isPaperTreeLabelMode,
+	type PaperTreeLabelMode,
+} from "@/lib/paper-metadata";
+
+export type { PaperTreeLabelMode };
+
 export type ThemePreference = "system" | "light" | "dark";
 
 export type LocalePreference = "system" | "en" | "zh-CN";
@@ -24,6 +31,11 @@ export type AppSettings = {
 	 * Default: hosted poco-ai service.
 	 */
 	translatorBaseUrl: string;
+	/**
+	 * How paper folders are labeled in the file tree (display-only).
+	 * Default: title · author.
+	 */
+	paperTreeLabelMode: PaperTreeLabelMode;
 	// Appearance
 	theme: ThemePreference;
 	locale: LocalePreference;
@@ -49,6 +61,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
 	confirmBeforeClose: false,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
+	paperTreeLabelMode: "title-author",
 	theme: "system",
 	locale: "system",
 	editorFontSize: 14,
@@ -102,6 +115,9 @@ export function loadSettings(): AppSettings {
 			merged.translatorBaseUrl = merged.translatorBaseUrl
 				.trim()
 				.replace(/\/+$/, "");
+		}
+		if (!isPaperTreeLabelMode(merged.paperTreeLabelMode)) {
+			merged.paperTreeLabelMode = DEFAULT_SETTINGS.paperTreeLabelMode;
 		}
 		return merged;
 	} catch {

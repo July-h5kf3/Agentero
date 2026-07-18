@@ -52,6 +52,7 @@
    - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）。
    - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）。
    - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行。
+   - [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者(年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）。
 
 2e. **PDF 阅读增强** ✅
    - [x] 缩放：+/- / 适应宽度 / **适应整页**；`⌘/Ctrl`+滚轮（0.5×–3×，100%=适应栏宽）；真实 scale 重渲染 + 放大后双向平移。

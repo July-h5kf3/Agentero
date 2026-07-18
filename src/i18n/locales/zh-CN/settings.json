@@ -17,6 +17,14 @@
 		"confirmClose": {
 			"label": "退出前确认"
 		},
+		"paperTreeLabelMode": {
+			"label": "文件树论文显示",
+			"hint": "仅影响展示，不改磁盘文件夹名；无元数据时回退为文件夹名。",
+			"title-author": "标题 · 作者",
+			"title": "标题",
+			"author-year-title": "作者 (年份) · 标题",
+			"folder": "文件夹名"
+		},
 		"translatorBaseUrl": {
 			"label": "Translator 服务地址",
 			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"

@@ -54,9 +54,11 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+	formatPaperTreeLabel,
 	isPaperDirectory,
 	isPapersRoot,
 	type PaperMetadata,
+	type PaperTreeLabelMode,
 	paperAssetDownloadReasons,
 	paperNeedsAssetDownload,
 	paperNeedsRead,
@@ -327,6 +329,11 @@ type FileTreeProps = {
 	 * Paths normalized without leading/trailing slashes.
 	 */
 	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata>;
+	/**
+	 * How paper folder rows are labeled (Settings → General).
+	 * Display-only; disk folder names are unchanged.
+	 */
+	paperTreeLabelMode?: PaperTreeLabelMode;
 	/** Start paper-reader workflow for a paper folder with complete local assets. */
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
@@ -359,6 +366,7 @@ export function FileTree({
 	onDownloadPaperAssets,
 	onDownloadAllMissingAssets,
 	paperMetaByRelPath,
+	paperTreeLabelMode = "title-author",
 	onReadPaper,
 	onDeletePath,
 	onDeletePaths,
@@ -1156,6 +1164,7 @@ export function FileTree({
 			Boolean(onDownloadPaperAssets) && downloadReasons.length > 0;
 		const rel = relPathForNode(node.path);
 		const meta = paperMetaByRelPath?.get(rel) ?? null;
+		const label = formatPaperTreeLabel(paperTreeLabelMode, meta, node.name);
 		const showRead =
 			Boolean(onReadPaper) && !showDownload && paperNeedsRead(node, meta);
 		const isDownloading = downloadingPath === node.path || downloadingAll;
@@ -1171,13 +1180,13 @@ export function FileTree({
 			: t("fileTree.downloadAssets");
 		const showActions = showDownload || showRead;
 		return (
-			<FileTreeFile path={node.path} name={node.name}>
+			<FileTreeFile path={node.path} name={label}>
 				<span className="size-4 shrink-0" />
 				<FileTreeIcon>
 					<ScrollText className="size-4 text-muted-foreground" />
 				</FileTreeIcon>
-				<FileTreeName className="min-w-0 flex-1 truncate">
-					{node.name}
+				<FileTreeName className="min-w-0 flex-1 truncate" title={label}>
+					{label}
 				</FileTreeName>
 				{showActions ? (
 					<FileTreeActions
