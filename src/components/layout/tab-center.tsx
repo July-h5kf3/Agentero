@@ -21,6 +21,8 @@ type TabCenterProps = {
 	libraryPapers: PaperMetadata[];
 	libraryLoading: boolean;
 	libraryQuery: string;
+	/** Vault-relative folder scope; null = full library. */
+	libraryScopePath: string | null;
 	libraryTagFilter: string | null;
 	rescanning: boolean;
 	onLibraryTagFilterChange: (tag: string | null) => void;
@@ -51,6 +53,7 @@ export const TabCenter = memo(function TabCenter({
 	libraryPapers,
 	libraryLoading,
 	libraryQuery,
+	libraryScopePath,
 	libraryTagFilter,
 	rescanning,
 	onLibraryTagFilterChange,
@@ -76,6 +79,7 @@ export const TabCenter = memo(function TabCenter({
 				papers={libraryPapers}
 				loading={libraryLoading}
 				query={libraryQuery}
+				scopePath={libraryScopePath}
 				tagFilter={libraryTagFilter}
 				onTagFilterChange={onLibraryTagFilterChange}
 				onOpenPaper={onOpenLibraryPaper}

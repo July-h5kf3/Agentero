@@ -106,6 +106,7 @@ import {
 	basenameOf,
 	cycleActiveTabId,
 	type DocTab,
+	ensureFullLibraryTab,
 	insertPlaceholderTab,
 	loadPersistedTabs,
 	loadTabResources,
@@ -196,6 +197,11 @@ export default function App() {
 	const [libraryQuery, setLibraryQuery] = useState("");
 	/** Tag filter for the papers library view (exact match). */
 	const [libraryTagFilter, setLibraryTagFilter] = useState<string | null>(null);
+	/**
+	 * Vault-relative folder filter for the single Library tab (e.g. `papers/nlp/pretrain`).
+	 * Null = full library. Set by clicking org folders in the tree — does not open new tabs.
+	 */
+	const [libraryScopePath, setLibraryScopePath] = useState<string | null>(null);
 	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
 	const [showNotes, setShowNotes] = useState(true);
 	const showNotesRef = useRef(showNotes);
@@ -262,9 +268,15 @@ export default function App() {
 	const paperMeta = activeTab?.paperMeta ?? null;
 
 	// Tree selection / create-parent follows the active document.
+	// Scoped library keeps the tree highlight on the org folder, not agentero:library.
 	useEffect(() => {
-		if (selectedPath) setTreeSelectedPath(selectedPath);
-	}, [selectedPath]);
+		if (!selectedPath) return;
+		if (isLibraryVirtualPath(selectedPath) && libraryScopePath && vaultPath) {
+			setTreeSelectedPath(joinVaultPath(vaultPath, libraryScopePath));
+			return;
+		}
+		setTreeSelectedPath(selectedPath);
+	}, [selectedPath, libraryScopePath, vaultPath]);
 
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
@@ -350,7 +362,7 @@ export default function App() {
 		[t, updateTab],
 	);
 
-	/** Close a tab; move focus to a neighbor, or Library when emptied. */
+	/** Close a tab; move focus to a neighbor, or full Library when emptied. */
 	const closeTab = useCallback((id: string) => {
 		setTabs((prev) => {
 			const { tabs, removed, activeId } = removeTab(
@@ -360,6 +372,11 @@ export default function App() {
 			);
 			if (!removed) return prev;
 			revokeTabPdfSource(removed);
+			if (tabs.length === 0 && vaultPathRef.current) {
+				const ensured = ensureFullLibraryTab([]);
+				setActiveTabId(ensured.activeId);
+				return ensured.tabs;
+			}
 			setActiveTabId(activeId);
 			return tabs;
 		});
@@ -381,6 +398,22 @@ export default function App() {
 			);
 			if (!removed.length) return prev;
 			for (const t of removed) revokeTabPdfSource(t);
+			if (tabs.length === 0 && vaultPathRef.current) {
+				const ensured = ensureFullLibraryTab([]);
+				setActiveTabId(ensured.activeId);
+				setPdfHighlightsByTab((prevHl) => {
+					let changed = false;
+					const next = { ...prevHl };
+					for (const t of removed) {
+						if (t.id in next) {
+							delete next[t.id];
+							changed = true;
+						}
+					}
+					return changed ? next : prevHl;
+				});
+				return ensured.tabs;
+			}
 			setActiveTabId(activeId);
 			setPdfHighlightsByTab((prevHl) => {
 				let changed = false;
@@ -471,21 +504,12 @@ export default function App() {
 
 	/**
 	 * ⌘W / File → Close: close the active document tab one at a time.
-	 * When no tabs remain, close the current window (ends the app UI if last window).
+	 * Sole full-library tab → close window (Library is the default page).
+	 * Closing the last non-library tab reopens full Library via `closeTab`.
 	 * Debounced so macOS menu accelerator + keydown do not close two tabs at once.
 	 */
 	const lastCloseTabOrWindowAt = useRef(0);
-	const closeTabOrWindow = useCallback(() => {
-		const now = Date.now();
-		if (now - lastCloseTabOrWindowAt.current < 80) return;
-		lastCloseTabOrWindowAt.current = now;
-
-		const list = tabsRef.current;
-		if (list.length > 0) {
-			const id = activeTabIdRef.current ?? list[list.length - 1]?.id;
-			if (id) closeTab(id);
-			return;
-		}
+	const closeWindow = useCallback(() => {
 		if (!isTauri()) return;
 		void (async () => {
 			try {
@@ -495,7 +519,43 @@ export default function App() {
 				// window close unavailable outside the desktop shell
 			}
 		})();
-	}, [closeTab]);
+	}, []);
+
+	const closeTabOrWindow = useCallback(() => {
+		const now = Date.now();
+		if (now - lastCloseTabOrWindowAt.current < 80) return;
+		lastCloseTabOrWindowAt.current = now;
+
+		const list = tabsRef.current;
+		const sole = list.length === 1 ? list[0] : null;
+		if (sole && isLibraryVirtualPath(sole.path)) {
+			closeWindow();
+			return;
+		}
+		if (list.length > 0) {
+			const id = activeTabIdRef.current ?? list[list.length - 1]?.id;
+			if (id) closeTab(id);
+			return;
+		}
+		closeWindow();
+	}, [closeTab, closeWindow]);
+
+	/** Tab strip X: same as ⌘W when sole full Library; otherwise close that tab. */
+	const handleCloseTab = useCallback(
+		(id: string) => {
+			const list = tabsRef.current;
+			if (
+				list.length === 1 &&
+				list[0]?.id === id &&
+				isLibraryVirtualPath(list[0].path)
+			) {
+				closeTabOrWindow();
+				return;
+			}
+			closeTab(id);
+		},
+		[closeTab, closeTabOrWindow],
+	);
 
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
@@ -512,13 +572,28 @@ export default function App() {
 	useEffect(() => {
 		if (!isTauri() || !vaultPathRef.current) return;
 		const persisted = loadPersistedTabs();
-		if (!persisted?.tabs.length) return;
+		if (!persisted?.tabs.length) {
+			// No saved layout → default page is full Library.
+			const ensured = ensureFullLibraryTab([]);
+			setTabs(ensured.tabs);
+			setActiveTabId(ensured.activeId);
+			return;
+		}
 		for (const pt of persisted.tabs) {
 			openTab(pt.path, { preferMode: pt.mode });
 		}
 		const active = persisted.tabs[persisted.activeIndex];
 		if (active) setActiveTabId(tabIdForPath(active.path));
 	}, []);
+
+	// Default page: whenever the strip is empty with a Vault open, show full Library.
+	useEffect(() => {
+		if (!vaultPath) return;
+		if (tabs.length > 0) return;
+		const ensured = ensureFullLibraryTab([]);
+		setTabs(ensured.tabs);
+		setActiveTabId(ensured.activeId);
+	}, [vaultPath, tabs.length]);
 
 	useEffect(() => {
 		setTheme(settings.theme);
@@ -909,6 +984,7 @@ export default function App() {
 			setTreeSelectedPath(null);
 			setLibraryQuery("");
 			setLibraryTagFilter(null);
+			setLibraryScopePath(null);
 			setRecentVaults(getRecentVaults());
 			await rebuildWikiAndNotify(path);
 		},
@@ -1940,6 +2016,7 @@ export default function App() {
 
 	const handleSelectLibrary = useCallback(() => {
 		setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
+		setLibraryScopePath(null);
 		openTab(LIBRARY_VIRTUAL_PATH);
 		void refreshLibrary();
 	}, [openTab, refreshLibrary]);
@@ -1948,6 +2025,27 @@ export default function App() {
 		setTreeSelectedPath(TRASH_VIRTUAL_PATH);
 		openTab(TRASH_VIRTUAL_PATH);
 	}, [openTab]);
+
+	/**
+	 * Org folder click: expand happens in the tree; center shows the same Library
+	 * tab filtered by path prefix — never opens a new tab for the folder.
+	 */
+	const openFolderLibrary = useCallback(
+		(folderAbs: string) => {
+			const abs = folderAbs.replace(/\\/g, "/").replace(/\/+$/, "");
+			setTreeSelectedPath(abs);
+			const vault = vaultPathRef.current;
+			const rel = vault
+				? toVaultRelative(vault, abs)
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "")
+				: "";
+			setLibraryScopePath(rel || null);
+			// Reuse / focus the single full-library tab only.
+			openTab(LIBRARY_VIRTUAL_PATH);
+		},
+		[openTab],
+	);
 
 	const handleSelectFile = (node: FileNode) => {
 		if (isLibraryVirtualPath(node.path)) {
@@ -1963,6 +2061,11 @@ export default function App() {
 			isPaperDirectory(node.path, node.children)
 		) {
 			openPaper(node.path);
+			return;
+		}
+		// Org / plain folders → in-place scope on the Library tab (no new tab).
+		if (node.kind === "directory") {
+			openFolderLibrary(node.path);
 			return;
 		}
 		if (node.kind !== "file") return;
@@ -2066,6 +2169,8 @@ export default function App() {
 	};
 
 	const showLibrary = Boolean(vaultPath) && activeTab?.kind === "library";
+	/** Full catalog (no folder scope); Zotero migrate only here. */
+	const showFullLibrary = showLibrary && !libraryScopePath;
 	const showTrash = Boolean(vaultPath) && activeTab?.kind === "trash";
 	/** Notes column is relevant: paper open + PDF/HTML center (not when Notes is already center). */
 	const notesEligible = tabNotesEligible(activeTab);
@@ -2150,7 +2255,7 @@ export default function App() {
 					onExitAgentZen={exitAgentZen}
 					onToggleSidebar={toggleSidebar}
 					onSelectTab={setActiveTabId}
-					onCloseTab={closeTab}
+					onCloseTab={handleCloseTab}
 					onReorderTabs={reorderTabs}
 					onToggleNotes={setShowNotes}
 					onToggleRightSidebar={toggleRightSidebar}
@@ -2301,24 +2406,26 @@ export default function App() {
 											) : null}
 											{showLibrary ? (
 												<>
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																className="size-7 shrink-0"
-																aria-label={t("sidebar:zoteroMigrate.button")}
-																disabled={!vaultPath}
-																onClick={() => setZoteroOpen(true)}
-															>
-																<ZoteroIcon className="size-3.5" />
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{t("sidebar:zoteroMigrate.button")}
-														</TooltipContent>
-													</Tooltip>
+													{showFullLibrary ? (
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	type="button"
+																	variant="ghost"
+																	size="icon-xs"
+																	className="size-7 shrink-0"
+																	aria-label={t("sidebar:zoteroMigrate.button")}
+																	disabled={!vaultPath}
+																	onClick={() => setZoteroOpen(true)}
+																>
+																	<ZoteroIcon className="size-3.5" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent side="bottom">
+																{t("sidebar:zoteroMigrate.button")}
+															</TooltipContent>
+														</Tooltip>
+													) : null}
 													<Tooltip>
 														<TooltipTrigger asChild>
 															<Button
@@ -2396,7 +2503,7 @@ export default function App() {
 																className="size-7 shrink-0"
 																aria-label={t("titlebar.closeDocument")}
 																onClick={() =>
-																	activeTabId && closeTab(activeTabId)
+																	activeTabId && handleCloseTab(activeTabId)
 																}
 															>
 																<X className="size-3.5" />
@@ -2467,6 +2574,9 @@ export default function App() {
 													}
 													libraryQuery={
 														tab.kind === "library" ? libraryQuery : ""
+													}
+													libraryScopePath={
+														tab.kind === "library" ? libraryScopePath : null
 													}
 													libraryTagFilter={
 														tab.kind === "library" ? libraryTagFilter : null

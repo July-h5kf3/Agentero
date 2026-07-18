@@ -682,9 +682,9 @@ export function FileTree({
 			}
 			const node = byPath.get(path);
 			if (!node) return;
-			if (node.kind === "file" || isPaperDirectory(node.path, node.children)) {
-				onSelectFile(node);
-			}
+			// Files, paper folders, and org folders (e.g. papers/nlp/pretrain) —
+			// parent opens paper / scoped library via onSelectFile.
+			onSelectFile(node);
 		},
 		[byPath, onSelectFile, onSelectLibrary, onSelectTrash],
 	);

@@ -246,9 +246,15 @@ export const FileTreeFolder = ({
 								ctrl: e.ctrlKey,
 								shift: e.shiftKey,
 							});
-						} else {
-							togglePath(path);
+							return;
 						}
+						// Expand/collapse + select so host can open scoped library.
+						togglePath(path);
+						onSelectRow?.(path, {
+							meta: false,
+							ctrl: false,
+							shift: false,
+						});
 					}}
 					onDoubleClick={(e) => {
 						e.preventDefault();
@@ -338,9 +344,16 @@ export const FileTreeFolderRow = ({
 						ctrl: e.ctrlKey,
 						shift: e.shiftKey,
 					});
-				} else {
-					togglePath(path);
+					return;
 				}
+				// Expand/collapse children in the tree AND notify selection so the
+				// host can open a folder-scoped paper list in the center pane.
+				togglePath(path);
+				onSelectRow?.(path, {
+					meta: false,
+					ctrl: false,
+					shift: false,
+				});
 			}}
 			onDoubleClick={(e) => {
 				e.preventDefault();

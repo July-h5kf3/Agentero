@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { isLibraryVirtualPath } from "@/lib/papers-api";
 import type { DocTab } from "@/lib/tabs";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +60,7 @@ export function DocumentTabBar({
 					const active = tab.id === activeId;
 					const dirty = tab.markdownDirty || tab.notesDirty;
 					const label =
-						tab.kind === "library"
+						tab.kind === "library" && isLibraryVirtualPath(tab.path)
 							? t("sidebar:papersLibrary.title")
 							: tab.kind === "trash"
 								? t("sidebar:recycleBin.title")
