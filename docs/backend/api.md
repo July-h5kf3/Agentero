@@ -596,10 +596,11 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
     targetLang: string;      // e.g. "zh-CN" | "en"
     provider?: string;       // bing (default) | youdao | huoshanweb | tencenttransmart | googleapi | google | libre
     freeBaseUrl?: string | null; // libre 必填
+    timeoutMs?: number | null;   // optional; clamped 1s–30s server-side (default 30s); settings probe uses 5000
   }
   ```
 - **返回**：`{ ok: true; data: { text: string; provider: string } }`
-- **约束**：单次约 ≤ 5000 字符（CNKI ≤800）；超时约 30s。无付费 API Key；免费引擎为非官方网页接口。
+- **约束**：单次约 ≤ 5000 字符（CNKI ≤800）；默认超时约 30s。无付费 API Key；免费引擎为非官方网页接口。设置页打开默认服务下拉时，对全部免费引擎并行 probe（`timeoutMs=5000`，不含 Agent）。
 
 ### 3.5b Zotero Connector 兼容服务（设计中 / 未实现）
 

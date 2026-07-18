@@ -9,6 +9,7 @@ import {
 	YoudaoTranslateService,
 } from "@/lib/translate/services/free";
 import type {
+	FreeTranslateProviderId,
 	TranslateProviderId,
 	TranslateService,
 } from "@/lib/translate/types";
@@ -35,7 +36,7 @@ export function isTranslateProviderId(id: string): id is TranslateProviderId {
 	return (FREE_MT_PROVIDER_IDS as string[]).includes(id);
 }
 
-export function isFreeMtProvider(id: string): boolean {
+export function isFreeMtProvider(id: string): id is FreeTranslateProviderId {
 	return id !== "agent" && isTranslateProviderId(id);
 }
 

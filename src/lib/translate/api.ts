@@ -22,6 +22,8 @@ export async function invokeTranslateText(args: {
 	targetLang: string;
 	provider: string;
 	freeBaseUrl?: string;
+	/** Host request timeout (ms); clamped 1s–30s server-side. */
+	timeoutMs?: number;
 }): Promise<string> {
 	if (!isTauri()) {
 		throw new Error("Free translation requires the Tauri desktop app.");
@@ -33,6 +35,7 @@ export async function invokeTranslateText(args: {
 			targetLang: args.targetLang,
 			provider: args.provider,
 			freeBaseUrl: args.freeBaseUrl?.trim() || null,
+			timeoutMs: args.timeoutMs ?? null,
 		},
 	});
 	if (!res.ok || !res.data) {

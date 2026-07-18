@@ -37,6 +37,10 @@ pub struct TranslateTextArgs {
     /// LibreTranslate base URL when provider=libre.
     #[serde(default)]
     pub free_base_url: Option<String>,
+    /// Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
+    /// Settings probe uses a shorter value for snappy parallel checks.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 fn default_source() -> String {
@@ -82,24 +86,40 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
+    let timeout = resolve_timeout(args.timeout_ms);
+
     let translated = match provider.as_str() {
         "google" => {
-            translate_google("https://translate.google.com", text, &source, &target).await?
+            translate_google(
+                "https://translate.google.com",
+                text,
+                &source,
+                &target,
+                timeout,
+            )
+            .await?
         }
         "googleapi" => {
-            translate_google("https://translate.googleapis.com", text, &source, &target).await?
+            translate_google(
+                "https://translate.googleapis.com",
+                text,
+                &source,
+                &target,
+                timeout,
+            )
+            .await?
         }
-        "bing" => translate_bing(text, &source, &target).await?,
-        "youdao" => translate_youdao(text, &source, &target).await?,
-        "huoshanweb" => translate_huoshan_web(text, &source, &target).await?,
-        "tencenttransmart" => translate_tencent_transmart(text, &source, &target).await?,
+        "bing" => translate_bing(text, &source, &target, timeout).await?,
+        "youdao" => translate_youdao(text, &source, &target, timeout).await?,
+        "huoshanweb" => translate_huoshan_web(text, &source, &target, timeout).await?,
+        "tencenttransmart" => translate_tencent_transmart(text, &source, &target, timeout).await?,
         "libre" => {
             let Some(url) = base else {
                 return Err(AppError::message(
                     "LibreTranslate requires freeBaseUrl (Settings → Translate)",
                 ));
             };
-            translate_libre(url, text, &source, &target).await?
+            translate_libre(url, text, &source, &target, timeout).await?
         }
         other => {
             return Err(AppError::message(format!(
@@ -144,9 +164,17 @@ fn lang_base(code: &str) -> &str {
     code.split('-').next().unwrap_or(code)
 }
 
-fn http_client() -> Result<reqwest::Client, AppError> {
+/// Clamp optional timeout_ms to 1s–30s; default 30s.
+fn resolve_timeout(timeout_ms: Option<u64>) -> Duration {
+    match timeout_ms {
+        Some(ms) => Duration::from_millis(ms.clamp(1_000, 30_000)),
+        None => Duration::from_secs(30),
+    }
+}
+
+fn http_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(timeout)
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))
@@ -173,8 +201,9 @@ async fn translate_google(
     text: &str,
     source: &str,
     target: &str,
+    timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client()?;
+    let client = http_client(timeout)?;
     let sl = if source == "auto" { "auto" } else { source };
     let tl = target;
     let url = format!("{}/translate_a/single", host.trim_end_matches('/'));
@@ -225,7 +254,7 @@ struct BingTokenCache {
 
 static BING_TOKEN: Mutex<Option<BingTokenCache>> = Mutex::new(None);
 
-async fn bing_auth_token() -> Result<String, AppError> {
+async fn bing_auth_token(timeout: Duration) -> Result<String, AppError> {
     {
         let guard = BING_TOKEN.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(c) = guard.as_ref() {
@@ -234,7 +263,7 @@ async fn bing_auth_token() -> Result<String, AppError> {
             }
         }
     }
-    let client = http_client()?;
+    let client = http_client(timeout)?;
     let resp = client
         .get("https://edge.microsoft.com/translate/auth")
         .header("User-Agent", UA)
@@ -255,9 +284,14 @@ async fn bing_auth_token() -> Result<String, AppError> {
     Ok(token)
 }
 
-async fn translate_bing(text: &str, source: &str, target: &str) -> Result<String, AppError> {
-    let token = bing_auth_token().await?;
-    let client = http_client()?;
+async fn translate_bing(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+) -> Result<String, AppError> {
+    let token = bing_auth_token(timeout).await?;
+    let client = http_client(timeout)?;
     let from = if source == "auto" { "" } else { source };
     let mut url = format!(
         "https://api-edge.cognitive.microsofttranslator.com/translate?to={}&api-version=3.0&includeSentenceLength=true",
@@ -293,8 +327,13 @@ async fn translate_bing(text: &str, source: &str, target: &str) -> Result<String
 
 // ─── Youdao free web ────────────────────────────────────────────────────────
 
-async fn translate_youdao(text: &str, source: &str, target: &str) -> Result<String, AppError> {
-    let client = http_client()?;
+async fn translate_youdao(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+) -> Result<String, AppError> {
+    let client = http_client(timeout)?;
     let from = youdao_lang(source);
     let to = youdao_lang(target);
     let typ = format!("{from}2{to}");
@@ -344,8 +383,13 @@ fn youdao_lang(code: &str) -> String {
 
 // ─── Volcengine / Huoshan web ───────────────────────────────────────────────
 
-async fn translate_huoshan_web(text: &str, source: &str, target: &str) -> Result<String, AppError> {
-    let client = http_client()?;
+async fn translate_huoshan_web(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+) -> Result<String, AppError> {
+    let client = http_client(timeout)?;
     let from = if source == "auto" {
         "auto".to_string()
     } else {
@@ -383,8 +427,9 @@ async fn translate_tencent_transmart(
     text: &str,
     source: &str,
     target: &str,
+    timeout: Duration,
 ) -> Result<String, AppError> {
-    let client = http_client()?;
+    let client = http_client(timeout)?;
     let from = if source == "auto" {
         "auto".to_string()
     } else {
@@ -447,10 +492,11 @@ async fn translate_libre(
     text: &str,
     source: &str,
     target: &str,
+    timeout: Duration,
 ) -> Result<String, AppError> {
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}/translate");
-    let client = http_client()?;
+    let client = http_client(timeout)?;
     let lt_target =
         if target.eq_ignore_ascii_case("zh-CN") || target.eq_ignore_ascii_case("zh-Hans") {
             "zh"

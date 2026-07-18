@@ -120,7 +120,11 @@
 			"googleapi": "Google Translate (API)",
 			"google": "Google Translate",
 			"libre": "LibreTranslate",
-			"agent": "Agent (BYOA)"
+			"agent": "Agent (BYOA)",
+			"probeIdle": "Not checked yet",
+			"probeOk": "Available",
+			"probeFail": "Unavailable",
+			"probeProbing": "Checking availability…"
 		},
 		"targetLang": {
 			"label": "Target language",

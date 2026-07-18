@@ -327,7 +327,7 @@ resolveTranslateModel(id):
 ```text
 ┌ Settings › Translate ─────────────────────────────┐
 │                                                   │
-│  默认服务     [ Google Translate (API)        ▾ ] │  ← 全引擎列表（含 Agent）
+│  默认服务     [ ✓ Bing (Edge free)            ▾ ] │  ← 打开下拉：并行 probe 免费引擎；可用显示 ✓
 │  目标语言     [ 跟随界面语言                   ▾ ] │
 │  划词自动译   [ 关 ]                              │
 │                                                   │
@@ -344,7 +344,7 @@ resolveTranslateModel(id):
 
 **不采用**（刻意砍掉）：
 
-- 服务对比表 / 多引擎并行试译
+- 服务对比表 / 多引擎并行**试译**（质量对比）；仅做可用性 probe 图标
 - 翻译页内完整 ModelSelector（搜索、收藏星标、分组）— Chat 已有，此处只用 **短 Select**
 - 翻译专用「权限 / 温度 / system prompt」高级项
 - 在翻译页维护第二套 API Key
@@ -353,9 +353,18 @@ resolveTranslateModel(id):
 
 | 控件 | 设置键 | 默认 | 说明 |
 |---|---|---|---|
-| 默认翻译服务 | `translate.provider` | `googleapi` | 全引擎 Select（含 `agent`） |
+| 默认翻译服务 | `translate.provider` | `bing` | 全引擎 Select（含 `agent`） |
 | 目标语言 | `translate.targetLang` | `ui` | 跟随界面 / en / zh-CN |
 | PDF 划词后自动翻译 | `translate.autoTranslateSelection` | `false` | 仅 PDF 消费方 |
+
+**默认服务下拉 · 并行可用性 probe**：
+
+- 触发：用户 **打开**「默认服务」Select（`onOpenChange(true)`）。
+- 范围：`FREE_MT_PROVIDER_IDS` 全部免费引擎；**不** probe `agent`。
+- 实现：`probeFreeMtProviders`（`src/lib/translate/probe.ts`）对每引擎 `translate_text` 短样例（`Hi` en→zh-CN），`timeoutMs=5000`，`Promise.all` 并行；结果经 `onResult` 渐进更新。
+- Libre：未配置 `freeBaseUrl` 时直接记为不可用，不发请求。
+- UI（免费引擎均显示状态图标；Agent 无图标）：未探测灰色 `Circle`；探测中 `Loader2`；可用绿色 `CheckCircle2`；失败红色 `XCircle`。
+- 并发：同一时刻只跑一轮 probe（`probingRef`）；卸载 abort。
 
 ### 7.5 分组 B：端点（条件显示）
 
@@ -495,6 +504,7 @@ src/lib/translate/
   types.ts              # TranslateTask, TranslateService, ...
   run.ts                # runTranslate(task, opts)  — 应用统一入口
   prompt.ts             # Agent 译 prompt（通用 + 可选 surface 变体）
+  probe.ts              # 设置页：并行 probe 免费引擎可用性
   services/
     index.ts            # 注册表
     free.ts

@@ -6,6 +6,16 @@ export {
 	resolveTargetLangCode,
 	resolveTargetLangName,
 } from "@/lib/translate/lang";
+export type {
+	FreeMtProbeMap,
+	FreeMtProbeStatus,
+	ProbeFreeMtOptions,
+} from "@/lib/translate/probe";
+export {
+	canProbeFreeMtProvider,
+	probeFreeMtProviders,
+	TRANSLATE_PROBE_TIMEOUT_MS,
+} from "@/lib/translate/probe";
 export {
 	buildPdfTranslatePrompt,
 	buildTranslatePrompt,

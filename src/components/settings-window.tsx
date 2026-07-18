@@ -1,6 +1,8 @@
 import {
 	Bot,
 	Check,
+	CheckCircle2,
+	Circle,
 	Info,
 	Keyboard,
 	Languages,
@@ -13,6 +15,7 @@ import {
 	Terminal,
 	Trash2,
 	X,
+	XCircle,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -77,7 +80,15 @@ import {
 	shortcutsByGroup,
 } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
-import { listAvailableAgents, listSelectableProviders } from "@/lib/translate";
+import {
+	FREE_MT_PROVIDER_IDS,
+	type FreeMtProbeMap,
+	type FreeMtProbeStatus,
+	isFreeMtProvider,
+	listAvailableAgents,
+	listSelectableProviders,
+	probeFreeMtProviders,
+} from "@/lib/translate";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
@@ -515,6 +526,53 @@ function catalogStatusTone(
 const TRANSLATE_FOLLOW_AGENT = "__follow_default__";
 const TRANSLATE_FOLLOW_MODEL = "__follow_model__";
 
+/** Availability icon for free-MT providers in the default-service Select. */
+function ProviderProbeIcon({
+	status,
+	labelIdle,
+	labelOk,
+	labelFail,
+	labelProbing,
+}: {
+	status: FreeMtProbeStatus;
+	labelIdle: string;
+	labelOk: string;
+	labelFail: string;
+	labelProbing: string;
+}) {
+	if (status === "probing") {
+		return (
+			<Loader2
+				className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+				aria-label={labelProbing}
+			/>
+		);
+	}
+	if (status === "ok") {
+		return (
+			<CheckCircle2
+				className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+				aria-label={labelOk}
+			/>
+		);
+	}
+	if (status === "fail") {
+		return (
+			<XCircle
+				className="size-3.5 shrink-0 text-destructive/80"
+				aria-label={labelFail}
+			/>
+		);
+	}
+	// idle (not yet probed)
+	return (
+		<Circle
+			className="size-3.5 shrink-0 text-muted-foreground/50"
+			aria-label={labelIdle}
+		/>
+	);
+}
+
 function TranslatePane({
 	settings,
 	patch,
@@ -537,6 +595,47 @@ function TranslatePane({
 
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [models, setModels] = useState<{ id: string; name: string }[]>([]);
+	/** Free-MT probe status (Agent never probed here). */
+	const [probeMap, setProbeMap] = useState<FreeMtProbeMap>({});
+	const probeAbortRef = useRef<AbortController | null>(null);
+	const probingRef = useRef(false);
+
+	/** Parallel free-MT probe when the default-service Select opens. */
+	const runFreeMtProbe = useCallback(() => {
+		if (!isTauri() || probingRef.current) return;
+		probingRef.current = true;
+		probeAbortRef.current?.abort();
+		const ac = new AbortController();
+		probeAbortRef.current = ac;
+
+		const initial: FreeMtProbeMap = {};
+		for (const id of FREE_MT_PROVIDER_IDS) {
+			initial[id] = "probing";
+		}
+		setProbeMap(initial);
+
+		void probeFreeMtProviders({
+			freeBaseUrl: tr.freeBaseUrl,
+			signal: ac.signal,
+			onResult: (id, ok) => {
+				if (ac.signal.aborted) return;
+				setProbeMap((prev) => ({
+					...prev,
+					[id]: ok ? "ok" : "fail",
+				}));
+			},
+		}).finally(() => {
+			if (probeAbortRef.current === ac) {
+				probingRef.current = false;
+			}
+		});
+	}, [tr.freeBaseUrl]);
+
+	useEffect(() => {
+		return () => {
+			probeAbortRef.current?.abort();
+		};
+	}, []);
 
 	// Load agent registry when Agent provider is selected
 	useEffect(() => {
@@ -629,18 +728,40 @@ function TranslatePane({
 						onValueChange={(v) =>
 							patchTranslate({ provider: v as TranslateProviderId })
 						}
+						onOpenChange={(open) => {
+							if (open) runFreeMtProbe();
+						}}
 					>
 						<SelectTrigger size="sm" className="min-w-[200px] max-w-[280px]">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent className="max-h-72">
-							{providers.map((s) => (
-								<SelectItem key={s.id} value={s.id}>
-									{t(
-										`translate.provider.${s.nameKey}` as "translate.provider.bing",
-									)}
-								</SelectItem>
-							))}
+							{providers.map((s) => {
+								const freeId = isFreeMtProvider(s.id) ? s.id : null;
+								const status: FreeMtProbeStatus | undefined = freeId
+									? (probeMap[freeId] ?? "idle")
+									: undefined;
+								return (
+									<SelectItem key={s.id} value={s.id}>
+										<span className="flex min-w-0 items-center gap-1.5">
+											{status != null ? (
+												<ProviderProbeIcon
+													status={status}
+													labelIdle={t("translate.provider.probeIdle")}
+													labelOk={t("translate.provider.probeOk")}
+													labelFail={t("translate.provider.probeFail")}
+													labelProbing={t("translate.provider.probeProbing")}
+												/>
+											) : null}
+											<span className="truncate">
+												{t(
+													`translate.provider.${s.nameKey}` as "translate.provider.bing",
+												)}
+											</span>
+										</span>
+									</SelectItem>
+								);
+							})}
 						</SelectContent>
 					</Select>
 				</SettingsRow>

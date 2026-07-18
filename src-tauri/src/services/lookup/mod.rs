@@ -9,6 +9,7 @@ mod zotero_db;
 mod zotero_io;
 
 pub use assets::{ensure_paper_assets, has_local_pdf, has_local_tex, AssetDownloadResult};
+pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 pub use zotero_db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
     ZoteroScan, ZoteroScanArgs,
@@ -20,7 +21,7 @@ pub use zotero_io::{
 
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
-use map::{enrich_remote_urls, local_pdf_meta, map_zotero_item, PaperMeta};
+use map::local_pdf_meta;
 use parse::{extract_primary_identifier, IdentifierKind};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -583,6 +584,7 @@ async fn abstract_for_notes(text: &str) -> String {
             target_lang: "zh-CN".into(),
             provider: "googleapi".into(),
             free_base_url: None,
+            timeout_ms: None,
         },
     )
     .await

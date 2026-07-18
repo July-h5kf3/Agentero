@@ -120,7 +120,11 @@
 			"googleapi": "Google 翻译（API）",
 			"google": "Google 翻译",
 			"libre": "LibreTranslate",
-			"agent": "Agent（BYOA）"
+			"agent": "Agent（BYOA）",
+			"probeIdle": "尚未检测",
+			"probeOk": "可用",
+			"probeFail": "不可用",
+			"probeProbing": "正在检测可用性…"
 		},
 		"targetLang": {
 			"label": "目标语言",

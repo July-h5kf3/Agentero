@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	buildPdfTranslatePrompt,
 	buildTranslatePrompt,
+	canProbeFreeMtProvider,
 	FREE_MT_PROVIDER_IDS,
 	getTranslateService,
 	isFreeMtProvider,
@@ -64,6 +65,14 @@ describe("translate services registry", () => {
 		expect(DEFAULT_TRANSLATE_SETTINGS.provider).toBe("bing");
 		expect(DEFAULT_TRANSLATE_SETTINGS.agentId).toBe("");
 		expect(DEFAULT_TRANSLATE_SETTINGS.modelId).toBe("");
+	});
+
+	it("can probe free engines; libre needs endpoint", () => {
+		expect(canProbeFreeMtProvider("bing")).toBe(true);
+		expect(canProbeFreeMtProvider("googleapi")).toBe(true);
+		expect(canProbeFreeMtProvider("libre")).toBe(false);
+		expect(canProbeFreeMtProvider("libre", "")).toBe(false);
+		expect(canProbeFreeMtProvider("libre", "https://lt.example")).toBe(true);
 	});
 });
 
