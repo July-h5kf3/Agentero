@@ -997,7 +997,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_codex_read_thread`
 
-按 native thread id 恢复对话显示。Host 用 `thread/read` 校验 thread 与当前 Vault 的 canonical 工作目录，并从对应 Codex JSONL transcript 回放 user、assistant 与 reasoning 文本。默认只允许读取 Vault 索引中的 thread；`includeExternal: true` 可读取同一 Vault 下由其他 Codex 客户端创建的 thread。
+按 native thread id 恢复对话显示。Host 用 `thread/read` 校验 thread 与当前 Vault 的 canonical 工作目录，并从对应 Codex JSONL transcript 回放 user、assistant 与 reasoning 文本。**用户轮**经 `strip_prompt_envelope_for_display` 去掉 Host 系统信封，只返回 `User request:` 后的人类原文。默认只允许读取 Vault 索引中的 thread；`includeExternal: true` 可读取同一 Vault 下由其他 Codex 客户端创建的 thread。
 
 ```ts
 { agentId?: string; threadId: string; vaultPath?: string; includeExternal?: boolean }

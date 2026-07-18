@@ -6,7 +6,9 @@ use crate::models::agent::{
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::events::AgentEventEmitter;
-use crate::services::agent::prompts::{build_prompt, extract_sources};
+use crate::services::agent::prompts::{
+    build_prompt, extract_sources, strip_prompt_envelope_for_display,
+};
 use crate::services::agent::skills::{
     load_skill_instructions, skill_activation_prefix, SkillMentionStyle,
 };
@@ -319,9 +321,25 @@ fn sandbox(auto_approve: bool) -> &'static str {
 
 fn thread_info(value: &Value) -> Option<CodexThreadInfo> {
     let id = string(value, &["id", "threadId"])?;
+    let raw_title =
+        string(value, &["name", "title", "summary", "preview"]).unwrap_or_else(|| id.clone());
+    // Titles often come from the first user turn (full Host envelope) — show the human line only.
+    let title = {
+        let cleaned = strip_prompt_envelope_for_display(&raw_title);
+        let first = cleaned
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or("")
+            .to_string();
+        if first.is_empty() {
+            id.clone()
+        } else {
+            first.chars().take(120).collect()
+        }
+    };
     Some(CodexThreadInfo {
-        title: string(value, &["name", "title", "summary", "preview"])
-            .unwrap_or_else(|| id.clone()),
+        title,
         created_at: scalar_string(value, &["createdAt", "created_at"]),
         updated_at: scalar_string(
             value,
@@ -407,9 +425,16 @@ fn history_from_jsonl(desc: &AgentDescriptor, thread_id: &str) -> Vec<CodexHisto
                 if role != "user" && role != "assistant" {
                     continue;
                 }
-                let text = content_text(payload.get("content").unwrap_or(&Value::Null));
+                let mut text = content_text(payload.get("content").unwrap_or(&Value::Null));
                 if text.is_empty() {
                     continue;
+                }
+                // Chat UI shows the human turn only — never the Host system envelope.
+                if role == "user" {
+                    text = strip_prompt_envelope_for_display(&text);
+                    if text.is_empty() {
+                        continue;
+                    }
                 }
                 let reasoning = (role == "assistant" && !pending_reasoning.is_empty())
                     .then(|| std::mem::take(&mut pending_reasoning));

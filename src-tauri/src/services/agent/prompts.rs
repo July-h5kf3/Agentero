@@ -63,6 +63,105 @@ pub fn build_prompt(
     format!("{system}\n\n{target_line}User request:\n{user_prompt}")
 }
 
+/// Marker Host always inserts before the real user text in `build_prompt`.
+pub const USER_REQUEST_MARKER: &str = "User request:\n";
+
+/// Codex injects a separate user turn with only this block; never show it in Chat.
+fn strip_environment_context_blocks(text: &str) -> String {
+    let mut out = text.to_string();
+    // Repeatedly remove <environment_context>…</environment_context> (and self-closing variants).
+    loop {
+        let lower = out.to_ascii_lowercase();
+        let Some(start) = lower.find("<environment_context") else {
+            break;
+        };
+        let after_open = &out[start..];
+        let close = after_open
+            .to_ascii_lowercase()
+            .find("</environment_context>")
+            .map(|i| start + i + "</environment_context>".len());
+        let end = close.unwrap_or(out.len());
+        out = format!("{}{}", &out[..start], &out[end..]);
+    }
+    out
+}
+
+fn looks_like_machine_only_user_turn(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() {
+        return true;
+    }
+    let lower = t.to_ascii_lowercase();
+    // Pure Codex environment / permissions / skill dumps.
+    if lower.starts_with("<environment_context") && lower.contains("</environment_context>") {
+        let without = strip_environment_context_blocks(t);
+        if without.trim().is_empty() {
+            return true;
+        }
+    }
+    if lower.starts_with("<permissions instructions>")
+        || lower.starts_with("<skills_instructions>")
+        || lower.starts_with("<multi_agent_mode>")
+    {
+        return true;
+    }
+    false
+}
+
+/// Recover the human-visible user text from a stored Agentero / Codex turn body.
+/// Codex transcripts store environment_context turns and Host `build_prompt` envelopes;
+/// the chat UI must show only the human request (or empty → skip the line).
+pub fn strip_prompt_envelope_for_display(text: &str) -> String {
+    let mut text = strip_environment_context_blocks(text.trim())
+        .trim()
+        .to_string();
+    if text.is_empty() || looks_like_machine_only_user_turn(&text) {
+        return String::new();
+    }
+    if let Some(idx) = text.rfind(USER_REQUEST_MARKER) {
+        text = text[idx + USER_REQUEST_MARKER.len()..].trim().to_string();
+        // Skill bodies are appended *after* the envelope; cut common injection headers.
+        for marker in [
+            "\n\n## Skill:",
+            "\n\n# Skill:",
+            "\n\n### Skill:",
+            "\n\n<skill",
+            "\n\nActive skills use the $ trigger",
+            "\n\nActive skills use the / trigger",
+            "\n\nAgentero injects skill instructions",
+        ] {
+            if let Some(cut) = text.find(marker) {
+                text = text[..cut].trim().to_string();
+            }
+        }
+        return text;
+    }
+    // Older / partial envelopes without the exact marker.
+    for prefix in [
+        "You are an assistant working inside a Agentero research Vault",
+        "You are an assistant working inside a Motif research Vault",
+        "You are running the Agentero paper-reader workflow",
+        "You are helping with a research vault",
+        "You are answering questions about a local research vault",
+        "Draft a Related Work section from local papers",
+    ] {
+        if text.starts_with(prefix) {
+            if let Some(rest) = text.rsplit("\n\n").next() {
+                let rest = rest.trim();
+                if !rest.is_empty() && rest != text && !looks_like_machine_only_user_turn(rest) {
+                    return rest.to_string();
+                }
+            }
+            // Preamble only — nothing human to show.
+            return String::new();
+        }
+    }
+    if looks_like_machine_only_user_turn(&text) {
+        return String::new();
+    }
+    text
+}
+
 /// A trailing system instruction forcing the response/notes language.
 /// Empty for unknown / `None` codes so `auto` keeps current behavior.
 fn language_directive(code: Option<&str>) -> String {
@@ -249,5 +348,49 @@ mod tests {
             None,
         );
         assert!(!p.contains("Always write your entire response"));
+    }
+
+    #[test]
+    fn strip_prompt_envelope_keeps_user_text_only() {
+        let p = build_prompt(
+            Some("free"),
+            "123 check rendering",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+        );
+        assert!(p.contains("You are an assistant"));
+        assert_eq!(strip_prompt_envelope_for_display(&p), "123 check rendering");
+    }
+
+    #[test]
+    fn strip_prompt_envelope_passthrough_plain() {
+        assert_eq!(
+            strip_prompt_envelope_for_display("just a normal message"),
+            "just a normal message"
+        );
+    }
+
+    #[test]
+    fn strip_drops_codex_environment_context_only_turn() {
+        let env = r#"<environment_context>
+  <cwd>/Users/philfan/Downloads/paper</cwd>
+  <shell>zsh</shell>
+</environment_context>"#;
+        assert_eq!(strip_prompt_envelope_for_display(env), "");
+    }
+
+    #[test]
+    fn strip_removes_env_block_before_user_request() {
+        let mixed = r#"<environment_context>
+  <cwd>/tmp</cwd>
+</environment_context>
+
+You are an assistant working inside a Agentero research Vault.
+
+User request:
+hello world"#;
+        assert_eq!(strip_prompt_envelope_for_display(mixed), "hello world");
     }
 }
