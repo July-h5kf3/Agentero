@@ -91,6 +91,10 @@
 				"label": "Auto-approve"
 			}
 		},
+		"autoPaperReader": {
+			"label": "Auto paper-reader after import",
+			"hint": "Magic-wand and single Download only. Zap still works when off."
+		},
 		"responseLanguage": {
 			"label": "Response language",
 			"auto": "Auto (follow content)",

@@ -31,6 +31,7 @@ import {
 } from "@/lib/background-tasks";
 import { loadPaperMetadata } from "@/lib/paper-metadata";
 import { setPaperIsRead } from "@/lib/papers-api";
+import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 import { joinVaultPath } from "@/lib/vault";
 
@@ -315,10 +316,13 @@ export function paperAssetsReadyForReader(flags: {
 }
 
 /**
- * After import / download: if assets are ready and catalog `is_read` is false,
- * start paper-reader (shows left-bottom progress). Returns true when a run started.
+ * After import / download: if Settings → Agent → auto paper-reader is on,
+ * assets are ready, and catalog `is_read` is false, start paper-reader
+ * (shows left-bottom progress). Returns true when a run started.
  *
- * Does not throw on skip; rethrows agent/workflow failures so callers can surface errors.
+ * Default setting is **off**. Does not throw on skip; rethrows agent/workflow
+ * failures so callers can surface errors. Manual Zap always uses
+ * {@link runPaperReaderWorkflow} directly.
  */
 export async function maybeAutoRunPaperReader(opts: {
 	vaultRoot: string;
@@ -328,6 +332,7 @@ export async function maybeAutoRunPaperReader(opts: {
 	assetsReady: boolean;
 }): Promise<boolean> {
 	if (!opts.assetsReady || !isTauri()) return false;
+	if (!loadSettings().autoPaperReader) return false;
 	const paperRel = opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 	if (!paperRel || inflightReads.has(paperRel)) return false;
 

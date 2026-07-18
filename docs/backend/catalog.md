@@ -63,6 +63,7 @@ agentero-vault/
 - **不是 paper**：仅作分类的中间目录（如 `papers/nlp/`），无上述标记，文件树中可展开。
 - **Catalog 主键**：Vault 相对路径 `path`（如 `papers/nlp/transformers/1706.03762`），不是「仅叶子目录名」。
 - **逻辑 `id`**：arXiv ID / citekey，用于展示与去重；可与目录名相同，但**唯一标识落盘位置的是 `path`**。
+- **UI 作用域过滤**：文件树单击组织文件夹时，中间栏论文表用 `path` **前缀匹配**（`paper.path === scope || paper.path.startsWith(scope + "/")`）在已拉取的 `paper_list` 结果上过滤；catalog 主键即组织关系，无需按目录再查库或扫盘。详见 [`../frontend/ui.md`](../frontend/ui.md) §3。
 
 **合法 Vault 最低条件**（打开目录 / `vault_create`）：
 
@@ -134,7 +135,7 @@ agentero-vault/
 | `extra` | TEXT | v2：Translator `extra` 残余 |
 | `status` | TEXT NOT NULL | `pending` \| `importing` \| `completed` \| `failed` |
 | `summary` | TEXT | 短摘要/一行说明（可选，供列表与导出表） |
-| `is_read` | INTEGER NOT NULL DEFAULT 0 | v3：是否已完成 paper-reader 精读（0/1 → bool）；入库/单篇 Download 可自动精读，Zap 可手动 |
+| `is_read` | INTEGER NOT NULL DEFAULT 0 | v3：是否已完成 paper-reader 精读（0/1 → bool）；设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 可自动精读，Zap 可手动 |
 | `added_at` | TEXT NOT NULL | ISO 8601 |
 | `updated_at` | TEXT NOT NULL | ISO 8601 |
 

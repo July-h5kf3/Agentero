@@ -32,7 +32,7 @@
    - [x] 设置：`translatorBaseUrl`（默认 `https://translator.philfan.cn`）；**无**「是否本地下载」开关。
    - [x] 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 原因）。
    - [x] 无 TeX + 有 PDF：下载后 liteparse 生成 `PAPER.md`（Download 路径内）。
-   - [x] 精读：魔棒/单篇 Download 后自动 paper-reader；资源齐全且未读时 Zap 可手动 → `is_read`。
+   - [x] 精读：设置 `autoPaperReader`（默认关）+ 魔棒/单篇 Download 自动；资源齐全且未读时 Zap 可手动 → `is_read`。
    - [x] Library 行：库内任一篇仍缺资源 → 批量 Download。
    - [x] 快捷键 `⇧⌘I`（打开魔棒）；本机 Translator sidecar 捆绑仍待。
 
@@ -75,7 +75,7 @@
    - [x] Library 空态 / 工具栏 Rescan 入口 + i18n。
 
 3. **Agent 工作流入口**
-   - [x] **paper-reader 精读**：入库/单篇 Download **自动** + 文件树 Zap 手动（资源齐全 + `is_read=false`）→ paper-reader skill（Codex `$` / Claude `/` / 其它注入）→ `NOTES.md` → `paper_set_is_read`；左下角任务进度（lookup/download → paperRead）；**`hideFromChatHistory`** 不进 Agent 历史。
+   - [x] **paper-reader 精读**：设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 自动；文件树 Zap 手动（资源齐全 + `is_read=false`）→ skill → `NOTES.md` → `paper_set_is_read`；左下角任务进度；**`hideFromChatHistory`**。
    - [x] skill 运行时语法按 Agent 模板分流（Host `SkillMentionStyle`）。
    - [x] **全局权限模式**：设置 → Agent（`restricted` / `autoApprove`），替代 per-provider YOLO。
    - [ ] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”。
@@ -255,7 +255,7 @@
 | Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、左右侧栏 collapsible、后台任务条、**全局错误 Toast** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；冲突提示（当前静默覆盖本地未存） |
 | 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
 | 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、**本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF 拖拽 / DOI 识别与元数据确认；MinerU 云端解析 |
-| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（自动+Zap；**不进对话历史**）、**全局权限模式**、模型收藏、Skill 提及分流、**禅模式左侧历史栏**（无 1/2/3 数字标签） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
+| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（Zap + 可选自动默认关；**不进对话历史**）、**全局权限模式**、模型收藏、Skill 提及分流、**禅模式左侧历史栏**（无 1/2/3 数字标签） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；文件变更后增量重建索引 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
 | PDF / 媒体 | 任意路径预览；导航 / 适应宽·整页 / 大纲 / ⌘F；真实 scale + 平滑划词；操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |

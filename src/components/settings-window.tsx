@@ -248,17 +248,27 @@ function SettingsGroup({ children }: { children: ReactNode }) {
 function SettingsRow({
 	label,
 	htmlFor,
+	description,
 	children,
 }: {
 	label: string;
 	htmlFor?: string;
+	/** Optional muted secondary line under the label. */
+	description?: string;
 	children: ReactNode;
 }) {
 	return (
 		<div className="flex items-center justify-between gap-4 border-b px-3.5 py-2.5 last:border-b-0">
-			<Label htmlFor={htmlFor} className="min-w-0 font-normal text-[13px]">
-				{label}
-			</Label>
+			<div className="min-w-0">
+				<Label htmlFor={htmlFor} className="font-normal text-[13px]">
+					{label}
+				</Label>
+				{description ? (
+					<p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
+						{description}
+					</p>
+				) : null}
+			</div>
 			<div className="shrink-0">{children}</div>
 		</div>
 	);
@@ -1065,6 +1075,17 @@ function AgentPane({
 							</SelectItem>
 						</SelectContent>
 					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.autoPaperReader.label")}
+					htmlFor="agent-auto-paper-reader"
+					description={t("agent.autoPaperReader.hint")}
+				>
+					<Switch
+						id="agent-auto-paper-reader"
+						checked={settings.autoPaperReader}
+						onCheckedChange={(v) => patch({ autoPaperReader: v })}
+					/>
 				</SettingsRow>
 				<SettingsRow
 					label={t("agent.responseLanguage.label")}

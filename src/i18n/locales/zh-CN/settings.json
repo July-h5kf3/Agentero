@@ -91,6 +91,10 @@
 				"label": "自动批准"
 			}
 		},
+		"autoPaperReader": {
+			"label": "入库后自动精读",
+			"hint": "仅魔棒与单篇 Download；关闭时仍可用 Zap 手动精读。"
+		},
 		"responseLanguage": {
 			"label": "回答语言",
 			"auto": "自动（跟随内容）",

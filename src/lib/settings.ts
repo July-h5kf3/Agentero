@@ -59,6 +59,12 @@ export type AppSettings = {
 	agentEnabled: boolean;
 	/** Global permission handling applied to every agent run. */
 	agentPermissionMode: AgentPermissionMode;
+	/**
+	 * After magic-wand import / single-paper Download, auto-run paper-reader
+	 * when assets are ready and catalog `is_read` is false.
+	 * Default **off**; Zap still works for manual runs.
+	 */
+	autoPaperReader: boolean;
 	/** Language forced onto every agent response and generated notes. */
 	aiResponseLanguage: AiResponseLanguage;
 	// Privacy
@@ -83,6 +89,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	showEditorToolbar: true,
 	agentEnabled: true,
 	agentPermissionMode: "restricted",
+	autoPaperReader: false,
 	aiResponseLanguage: "auto",
 	analyticsEnabled: false,
 	shareCrashReports: false,
@@ -133,6 +140,9 @@ export function loadSettings(): AppSettings {
 		}
 		if (!isPaperTreeLabelMode(merged.paperTreeLabelMode)) {
 			merged.paperTreeLabelMode = DEFAULT_SETTINGS.paperTreeLabelMode;
+		}
+		if (typeof parsed.autoPaperReader !== "boolean") {
+			merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;
 		}
 		merged.translate = normalizeTranslateSettings(parsed.translate);
 		return merged;

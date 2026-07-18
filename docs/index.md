@@ -48,7 +48,7 @@ Agentero 桌面应用
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
-- **精读**：入库 / 单篇 Download 后可自动 paper-reader；资源齐全且未读时 **Zap** 手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
+- **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。
