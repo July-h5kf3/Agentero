@@ -76,6 +76,7 @@ import {
 	isPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
+	paperCatalogPath,
 	paperDirFromPath,
 	resolvePapersParentDir,
 } from "@/lib/paper-metadata";
@@ -1720,8 +1721,23 @@ export default function App() {
 	/** Persist tags from Paper Info and keep library + open tabs in sync. */
 	const handlePaperTagsChange = useCallback(
 		async (tags: string[]) => {
-			if (!vaultPath || !paperMeta?.path) return;
-			const path = paperMeta.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+			if (!vaultPath || !paperMeta) return;
+			// Prefer catalog path on meta; fall back to the open paper folder so
+			// Zotero/legacy rows whose projection omitted `path` can still be edited.
+			let path = (paperMeta.path ?? "")
+				.replace(/\\/g, "/")
+				.replace(/^\/+|\/+$/g, "");
+			if (!path && selectedPath) {
+				let paperDir = paperDirFromPath(selectedPath, paperFolders);
+				if (!paperDir && (await detectPaperDirectory(selectedPath))) {
+					paperDir = selectedPath.replace(/[\\/]+$/, "");
+				}
+				path = paperCatalogPath(paperDir ?? "", vaultPath) ?? "";
+			}
+			if (!path) {
+				notifyError(t("sidebar:paperInfo.tagsSaveFailed"));
+				return;
+			}
 			try {
 				const updated = await setPaperTags(vaultPath, path, tags);
 				setLibraryPapers((prev) =>
@@ -1734,14 +1750,23 @@ export default function App() {
 				);
 				setTabs((prev) =>
 					prev.map((tab) => {
-						if (!tab.paperMeta?.path) return tab;
-						const key = tab.paperMeta.path
+						if (!tab.paperMeta) return tab;
+						const key = (tab.paperMeta.path ?? "")
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");
-						if (key !== path) return tab;
+						const samePath = key === path;
+						const sameOpenPaper =
+							!key &&
+							tab.id === activeTabId &&
+							tab.paperMeta.id === paperMeta.id;
+						if (!samePath && !sameOpenPaper) return tab;
 						return {
 							...tab,
-							paperMeta: { ...tab.paperMeta, ...updated },
+							paperMeta: {
+								...tab.paperMeta,
+								...updated,
+								path: updated.path ?? path,
+							},
 						};
 					}),
 				);
@@ -1749,7 +1774,7 @@ export default function App() {
 				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[vaultPath, paperMeta],
+		[vaultPath, paperMeta, selectedPath, paperFolders, activeTabId, t],
 	);
 
 	const openPath = useCallback(

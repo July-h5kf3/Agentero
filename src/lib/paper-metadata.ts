@@ -740,8 +740,27 @@ type ApiResult<T> = {
 };
 
 /**
+ * Vault-relative paper folder path for catalog APIs.
+ * `metadata.json` omits `path` (folder identity is the path); callers must re-inject it.
+ */
+export function paperCatalogPath(
+	paperDir: string,
+	vaultRoot?: string | null,
+): string | undefined {
+	if (!vaultRoot) return undefined;
+	const path = toVaultRelative(vaultRoot, paperDir)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!path || path === ".") return undefined;
+	return path;
+}
+
+/**
  * Load paper metadata. Prefer catalog.sqlite via Host `paper_get`.
  * Falls back to `metadata.json` only when catalog has no row (legacy).
+ *
+ * Always sets `path` (vault-relative) when `vaultRoot` is known so Paper Info
+ * can edit tags even when the projection file has no path field.
  *
  * @param paperDir absolute paper folder path
  * @param vaultRoot absolute vault root (needed for catalog lookup)
@@ -750,33 +769,35 @@ export async function loadPaperMetadata(
 	paperDir: string,
 	vaultRoot?: string | null,
 ): Promise<PaperMetadata | null> {
+	const path = paperCatalogPath(paperDir, vaultRoot);
+
 	// Primary: SQLite catalog
-	if (isTauri() && vaultRoot) {
-		const path = toVaultRelative(vaultRoot, paperDir).replace(/\\/g, "/");
-		if (path && path !== ".") {
-			try {
-				const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
-					args: { vaultPath: vaultRoot, path },
+	if (isTauri() && vaultRoot && path) {
+		try {
+			const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
+				args: { vaultPath: vaultRoot, path },
+			});
+			if (res.ok && res.data?.id) {
+				return enrichArxivUrls({
+					...res.data,
+					path: res.data.path ?? path,
 				});
-				if (res.ok && res.data?.id) {
-					return enrichArxivUrls({
-						...res.data,
-						path: res.data.path ?? path,
-					});
-				}
-			} catch {
-				// fall through
 			}
+		} catch {
+			// fall through
 		}
 	}
 
-	// Legacy projection only
+	// Legacy projection only (path is intentionally omitted from the file)
 	try {
 		const raw = await readVaultFile(metadataPathForPaper(paperDir));
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
 		const data = normalizeMetadataKeys(parsed) as unknown as PaperMetadata;
 		if (!data?.id) return null;
-		return enrichArxivUrls(data);
+		return enrichArxivUrls({
+			...data,
+			path: data.path ?? path,
+		});
 	} catch {
 		return null;
 	}

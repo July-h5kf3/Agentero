@@ -106,6 +106,10 @@ function TagsEditor({
 	const { t } = useTranslation("sidebar");
 	const [draft, setDraft] = useState("");
 	const [busy, setBusy] = useState(false);
+	// Defensive: catalog / legacy JSON may occasionally yield non-array tags.
+	const list = Array.isArray(tags)
+		? tags.filter((x): x is string => typeof x === "string")
+		: [];
 
 	const commit = async (next: string[]) => {
 		const normalized = normalizeTagList(next);
@@ -121,29 +125,44 @@ function TagsEditor({
 		const value = draft.trim();
 		if (!value || busy || disabled) return;
 		setDraft("");
-		void commit([...tags, value]);
+		void commit([...list, value]);
 	};
 
 	const removeTag = (tag: string) => {
 		if (busy || disabled) return;
-		void commit(tags.filter((x) => x !== tag));
+		void commit(list.filter((x) => x !== tag));
 	};
 
 	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === "Enter") {
 			e.preventDefault();
 			addTag();
-		} else if (e.key === "Backspace" && !draft && tags.length > 0) {
-			const last = tags[tags.length - 1];
+		} else if (e.key === "Backspace" && !draft && list.length > 0) {
+			const last = list[list.length - 1];
 			if (last) removeTag(last);
 		}
 	};
 
 	return (
 		<div className="flex flex-col gap-1.5">
-			{tags.length > 0 ? (
+			{/* Input first so Zotero papers with many imported tags still show "Add tag…" without scrolling past chips. */}
+			{disabled ? null : (
+				<Input
+					value={draft}
+					onChange={(e) => setDraft(e.target.value)}
+					onKeyDown={onKeyDown}
+					onBlur={() => {
+						if (draft.trim()) addTag();
+					}}
+					placeholder={t("paperInfo.addTag")}
+					aria-label={t("paperInfo.addTag")}
+					disabled={busy}
+					className="h-6 border-dashed px-1.5 text-[11px]"
+				/>
+			)}
+			{list.length > 0 ? (
 				<div className="flex flex-wrap gap-1">
-					{tags.map((tag) => (
+					{list.map((tag) => (
 						<span
 							key={tag}
 							className={cn(
@@ -172,20 +191,6 @@ function TagsEditor({
 					))}
 				</div>
 			) : null}
-			{disabled ? null : (
-				<Input
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					onKeyDown={onKeyDown}
-					onBlur={() => {
-						if (draft.trim()) addTag();
-					}}
-					placeholder={t("paperInfo.addTag")}
-					aria-label={t("paperInfo.addTag")}
-					disabled={busy}
-					className="h-6 border-dashed px-1.5 text-[11px]"
-				/>
-			)}
 		</div>
 	);
 }
@@ -259,7 +264,9 @@ export function PaperInfoPanel({
 							<MetaRow icon={Tag} label={t("paperInfo.tags")}>
 								<TagsEditor
 									tags={meta.tags ?? []}
-									disabled={!onTagsChange || !meta.path}
+									// Editable whenever parent can persist; path is resolved in App
+									// (catalog path or paper folder) so Zotero/legacy rows still work.
+									disabled={!onTagsChange}
 									onChange={async (tags) => {
 										if (onTagsChange) await onTagsChange(tags);
 									}}
