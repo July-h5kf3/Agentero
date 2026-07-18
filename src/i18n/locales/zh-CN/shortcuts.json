@@ -16,6 +16,7 @@
 		"openInTerminal": "在终端中打开",
 		"deleteTreeItem": "删除选中项",
 		"magicWand": "按标识符添加论文",
+		"commandPalette": "搜索 / 快速打开",
 		"toggleSidebar": "显示 / 隐藏侧边栏",
 		"toggleChat": "显示 / 隐藏对话",
 		"toggleAgentZen": "Agent 禅模式",

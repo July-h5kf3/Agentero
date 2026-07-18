@@ -14,6 +14,7 @@ export type ShortcutId =
 	| "openInTerminal"
 	| "deleteTreeItem"
 	| "magicWand"
+	| "commandPalette"
 	| "toggleSidebar"
 	| "toggleChat"
 	| "toggleAgentZen"
@@ -129,6 +130,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
+		id: "commandPalette",
+		group: "Navigation",
+		// ⌘K — command palette: quick-open papers + full-text search
+		key: "k",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
 		id: "toggleSidebar",
 		group: "Navigation",
 		// Apple Mail / Preview family uses ⌥⌘S; many Mac productivity apps use ⌘B.
@@ -205,6 +214,16 @@ export const SHORTCUTS: ShortcutDef[] = [
 
 /** Secondary aliases that still work (documented lightly). */
 const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
+	commandPalette: [
+		{
+			id: "commandPalette",
+			group: "Navigation",
+			// ⌘P — alias for the command palette (quick-open)
+			key: "p",
+			meta: true,
+			whenSettingsClosed: true,
+		},
+	],
 	toggleSidebar: [
 		{
 			id: "toggleSidebar",

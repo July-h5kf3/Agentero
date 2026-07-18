@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod connector;
 pub mod lookup;
 pub mod pdf_parse;
+pub mod search;
 pub mod terminal;
 pub mod translate;
 pub mod trash;

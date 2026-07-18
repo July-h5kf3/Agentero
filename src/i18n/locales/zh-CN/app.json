@@ -5,6 +5,16 @@
 		"notes": "笔记",
 		"untitled": "未命名"
 	},
+	"commandPalette": {
+		"title": "搜索",
+		"placeholder": "搜索论文与笔记正文…",
+		"papers": "论文",
+		"recent": "最近论文",
+		"contents": "正文匹配",
+		"searching": "搜索中…",
+		"noResults": "无匹配",
+		"empty": "输入以搜索论文与笔记正文"
+	},
 	"titlebar": {
 		"showLeftSidebar": "显示左侧边栏",
 		"hideLeftSidebar": "隐藏左侧边栏",

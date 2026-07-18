@@ -48,6 +48,7 @@
 - [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**；**沉浸式阅读**（全屏 + 限宽居中）；**标注面板**（高亮总览·改色·导出 NOTES）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings；左右侧栏 **常驻 collapsible + preserve-pixel-size**。
 - [x] 论文库表格：`agentero:library`、`paper_list`、表头排序、**tags 筛选**、**Rescan**（`paper_rescan`）、双向滚动。
+- [x] **全库搜索 + 快速打开**：命令面板 `⌘K`/`⌘P`（论文标题/作者即时 quick-open + `vault_search` 全文正文匹配；命中论文映射为打开该论文）。
 - [x] **论文库默认页**：关光文档 tab 后回到全库；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：单击非 paper 目录 → 同 Library 表，`path` 前缀过滤内存 `libraryPapers`。
 - [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。

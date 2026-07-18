@@ -16,6 +16,7 @@
 		"openInTerminal": "Open in Terminal",
 		"deleteTreeItem": "Delete selected item",
 		"magicWand": "Add paper by identifier",
+		"commandPalette": "Search / quick open",
 		"toggleSidebar": "Show / hide sidebar",
 		"toggleChat": "Show / hide chat",
 		"toggleAgentZen": "Agent zen mode",

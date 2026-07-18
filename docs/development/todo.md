@@ -121,7 +121,8 @@
 1. **Catalog 导出与检索**
    - [x] Library UI：Translator `/export` BibTeX + `/import` Bib/RIS（`paper_export` / `paper_import`）。
    - [ ] `catalog:export_papers_md`（Markdown 表）等其它形态。
-   - [ ] 可选 FTS5；Agent 工作流临时导出 L1 列表。
+   - [x] **全库搜索 + 快速打开**：命令面板 `⌘K`/`⌘P`（论文 quick-open + `vault_search` walk 全文；`SearchHit` 带片段/行号）；FTS5 可后续替换。
+   - [ ] Agent 工作流临时导出 L1 列表；PDF 正文层检索；搜索历史 / 过滤。
 
 2. **本地 PDF importer**
    - [x] 文件选择 / 批量导入（魔棒弹层 `FileUp` → `paper_import_local_pdf`，多选）；拖拽待增强。
@@ -269,6 +270,7 @@
 |---|---|---|
 | Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、左右侧栏 collapsible、后台任务条、**全局错误 Toast** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；冲突提示（当前静默覆盖本地未存） |
 | 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| 查找 | **命令面板 `⌘K`/`⌘P`**：论文 quick-open + `vault_search` 全文正文匹配（命中论文 → 打开论文） | FTS5 索引、PDF 正文层检索、搜索历史 / 过滤 |
 | 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、**本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF 拖拽 / DOI 识别与元数据确认；MinerU 云端解析 |
 | Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（Zap + 可选自动默认关；**不进对话历史**）、**全局权限模式**、模型收藏、Skill 提及分流、**禅模式左侧历史栏**（无 1/2/3 数字标签） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
 | 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；文件变更后增量重建索引 |

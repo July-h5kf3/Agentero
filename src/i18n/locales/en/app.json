@@ -5,6 +5,16 @@
 		"notes": "Notes",
 		"untitled": "Untitled"
 	},
+	"commandPalette": {
+		"title": "Search",
+		"placeholder": "Search papers and note contents…",
+		"papers": "Papers",
+		"recent": "Recent papers",
+		"contents": "In contents",
+		"searching": "Searching…",
+		"noResults": "No matches",
+		"empty": "Type to search papers and note contents"
+	},
 	"titlebar": {
 		"showLeftSidebar": "Show left sidebar",
 		"hideLeftSidebar": "Hide left sidebar",

@@ -223,6 +223,7 @@
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
 | `⌘/` | 键盘快捷键速查 | 打开快捷键清单对话框（`ShortcutsDialog`） |
+| `⌘K` / `⌘P` | 命令面板：搜索 / 快速打开 | 论文标题·作者即时 quick-open + `vault_search` 全文正文匹配（`CommandPalette`；`shortcuts.ts` → `commandPalette`） |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |

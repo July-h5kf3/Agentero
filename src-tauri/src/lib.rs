@@ -190,6 +190,7 @@ pub fn run() {
             commands::paper::paper_set_is_read,
             commands::paper::paper_set_tags,
             commands::paper::paper_rescan,
+            commands::search::vault_search,
             commands::zotero::zotero_scan,
             commands::zotero::zotero_migrate,
             commands::watcher::fs_watch_start,

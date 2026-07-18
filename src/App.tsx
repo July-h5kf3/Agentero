@@ -16,6 +16,7 @@ import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
+import { CommandPalette } from "@/components/layout/command-palette";
 import {
 	FileTree,
 	type TreeCreateDraft,
@@ -1302,6 +1303,7 @@ export default function App() {
 	/** Paths queued for the "move to folder" dialog (null = closed). */
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
 	const [shortcutsOpen, setShortcutsOpen] = useState(false);
+	const [commandOpen, setCommandOpen] = useState(false);
 
 	/** Refresh tree / library / wiki after a recycle-bin restore. */
 	const handleTrashChanged = useCallback(async () => {
@@ -2059,6 +2061,7 @@ export default function App() {
 		openInTerminal: handleOpenInTerminal,
 		deleteTreeItem: handleDeleteSelected,
 		magicWand: openMagicWand,
+		commandPalette: () => setCommandOpen((v) => !v),
 		toggleSidebar,
 		toggleChat,
 		toggleAgentZen,
@@ -2894,6 +2897,18 @@ export default function App() {
 				/>
 
 				<ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+
+				<CommandPalette
+					open={commandOpen}
+					onOpenChange={setCommandOpen}
+					vaultPath={vaultPath}
+					papers={libraryPapers}
+					onOpenPaper={(rel) => {
+						if (vaultPath)
+							openPaper(`${vaultPath.replace(/[\\/]+$/, "")}/${rel}`);
+					}}
+					onOpenVaultRel={handleOpenVaultRel}
+				/>
 
 				{/* IDE-style background tasks (bottom-left floater); hide in zen */}
 				{agentZenMode ? null : <BackgroundTasksPanel />}

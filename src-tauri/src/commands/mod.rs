@@ -3,6 +3,7 @@ pub mod connector;
 pub mod graph;
 pub mod lookup;
 pub mod paper;
+pub mod search;
 pub mod terminal;
 pub mod translate;
 pub mod trash;
