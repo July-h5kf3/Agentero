@@ -27,6 +27,41 @@ export function isTrashVirtualPath(path: string | null | undefined): boolean {
 	return path === TRASH_VIRTUAL_PATH;
 }
 
+/** Normalize vault-relative path for library scope comparisons. */
+export function normalizeLibraryScope(path: string): string {
+	return path
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "")
+		.toLowerCase();
+}
+
+/**
+ * Whether a catalog paper path falls under a folder scope (recursive).
+ * `scopeRel` is vault-relative (e.g. `papers/nlp`); empty/null = full library.
+ */
+export function paperInLibraryScope(
+	paperPath: string | undefined,
+	scopeRel: string | null | undefined,
+): boolean {
+	if (scopeRel == null || scopeRel === "") return true;
+	if (!paperPath) return false;
+	const p = normalizeLibraryScope(paperPath);
+	const s = normalizeLibraryScope(scopeRel);
+	if (!s) return true;
+	return p === s || p.startsWith(`${s}/`);
+}
+
+/** Filter catalog rows to those under a vault-relative folder (recursive). */
+export function filterPapersByScope(
+	papers: PaperMetadata[],
+	scopeRel: string | null | undefined,
+): PaperMetadata[] {
+	if (scopeRel == null || scopeRel === "") return papers;
+	const s = normalizeLibraryScope(scopeRel);
+	if (!s) return papers;
+	return papers.filter((p) => paperInLibraryScope(p.path, s));
+}
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;

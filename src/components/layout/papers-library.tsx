@@ -9,12 +9,19 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { PaperMetadata } from "@/lib/paper-metadata";
+import { filterPapersByScope } from "@/lib/papers-api";
 import { cn } from "@/lib/utils";
 
 export type PapersLibraryProps = {
+	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
 	papers: PaperMetadata[];
 	loading?: boolean;
 	query?: string;
+	/**
+	 * Vault-relative folder scope (e.g. `papers/nlp`).
+	 * Null/empty = full library. Filters by catalog `path` prefix (recursive).
+	 */
+	scopePath?: string | null;
 	/** Active tag filter (exact match, case-insensitive). */
 	tagFilter?: string | null;
 	onTagFilterChange?: (tag: string | null) => void;
@@ -181,6 +188,7 @@ export function PapersLibrary({
 	papers,
 	loading,
 	query,
+	scopePath = null,
 	tagFilter = null,
 	onTagFilterChange,
 	onOpenPaper,
@@ -205,9 +213,15 @@ export function PapersLibrary({
 		[sortKey],
 	);
 
+	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
+	const scopedPapers = useMemo(
+		() => filterPapersByScope(papers, scopePath),
+		[papers, scopePath],
+	);
+
 	const allTags = useMemo(() => {
 		const map = new Map<string, string>();
-		for (const p of papers) {
+		for (const p of scopedPapers) {
 			for (const tag of p.tags ?? []) {
 				const key = tag.toLocaleLowerCase();
 				if (!map.has(key)) map.set(key, tag);
@@ -216,12 +230,12 @@ export function PapersLibrary({
 		return [...map.values()].sort((a, b) =>
 			a.localeCompare(b, undefined, { sensitivity: "base" }),
 		);
-	}, [papers]);
+	}, [scopedPapers]);
 
 	const normalizedQuery = (query ?? "").trim().toLocaleLowerCase();
 
 	const rows = useMemo(() => {
-		let filtered = papers;
+		let filtered = scopedPapers;
 		if (normalizedQuery) {
 			filtered = filtered.filter((p) => {
 				const title = (p.title ?? "").toLocaleLowerCase();
@@ -237,7 +251,7 @@ export function PapersLibrary({
 		const copy = [...filtered];
 		copy.sort((a, b) => comparePapers(a, b, sortKey, sortDir));
 		return copy;
-	}, [papers, sortKey, sortDir, normalizedQuery, tagFilter]);
+	}, [scopedPapers, sortKey, sortDir, normalizedQuery, tagFilter]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const rowVirtualizer = useVirtualizer({
