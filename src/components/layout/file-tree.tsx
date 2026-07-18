@@ -58,7 +58,6 @@ import {
 	isPapersRoot,
 	type PaperMetadata,
 	paperAssetDownloadReasons,
-	paperDirFromPath,
 	paperNeedsAssetDownload,
 	paperNeedsRead,
 } from "@/lib/paper-metadata";
@@ -116,6 +115,10 @@ type FlatRow =
 			paperLeaf: boolean;
 	  };
 
+function isVirtualTreePath(path: string): boolean {
+	return path === LIBRARY_VIRTUAL_PATH;
+}
+
 function AgenteroLogo({ className }: { className?: string }) {
 	return (
 		<svg
@@ -168,6 +171,22 @@ function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
 		}
 		return;
 	}
+}
+
+/** Parent directory paths of `target` (absolute), nearest-first excluded. Root-ward order. */
+function ancestorPaths(target: string, vaultRoot: string | null): string[] {
+	const norm = target.replace(/\\/g, "/").replace(/\/+$/, "");
+	const rootKey = vaultRoot ? pathKey(vaultRoot) : null;
+	const out: string[] = [];
+	let current = norm;
+	while (true) {
+		const idx = current.lastIndexOf("/");
+		if (idx <= 0) break;
+		current = current.slice(0, idx);
+		if (rootKey && pathKey(current) === rootKey) break;
+		if (current) out.push(current);
+	}
+	return out.reverse();
 }
 
 /** Inline name input — VS Code / Cursor style create. */
@@ -358,7 +377,8 @@ export function FileTree({
 
 	/**
 	 * Apply default expansion once per Vault open (when tree first has nodes).
-	 * Do not reset on every tree refresh — that would collapse user-expanded folders.
+	 * Do not reset on every tree refresh — that would collapse user-expanded folders
+	 * and wipe ancestors opened for scroll-into-view.
 	 */
 	const defaultAppliedForVaultRef = useRef<string | null>(null);
 	useEffect(() => {
@@ -400,6 +420,19 @@ export function FileTree({
 		return map;
 	}, [nodes]);
 
+	/** Case-insensitive path → node (for selection resolve / ancestor expand). */
+	const byPathKey = useMemo(() => {
+		const map = new Map<string, FileNode>();
+		const walk = (list: FileNode[]) => {
+			for (const n of list) {
+				map.set(pathKey(n.path), n);
+				if (n.children) walk(n.children);
+			}
+		};
+		walk(nodes);
+		return map;
+	}, [nodes]);
+
 	const relPathForNode = useCallback(
 		(absPath: string): string => {
 			if (!vaultPath) return absPath.replace(/\\/g, "/");
@@ -415,14 +448,46 @@ export function FileTree({
 		[vaultPath],
 	);
 
-	/** Highlight paper folder when any file under it is open; keep virtual library selected. */
+	/**
+	 * Row to highlight / scroll to:
+	 * - virtual Library as-is;
+	 * - any path under a paper folder → that paper (papers are tree leaves);
+	 * - otherwise the path itself if present, else nearest existing ancestor.
+	 */
 	const treeSelectedPath = useMemo(() => {
 		if (!selectedPath) return undefined;
-		if (selectedPath === LIBRARY_VIRTUAL_PATH) return LIBRARY_VIRTUAL_PATH;
-		const paperDir = paperDirFromPath(selectedPath);
-		if (paperDir) return paperDir;
+		if (isVirtualTreePath(selectedPath)) return selectedPath;
+
+		// Prefer paper folder: children of papers are not listed in the tree.
+		let cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+		while (cursor) {
+			const node = byPathKey.get(pathKey(cursor));
+			if (
+				node &&
+				node.kind === "directory" &&
+				isPaperDirectory(node.path, node.children)
+			) {
+				return node.path;
+			}
+			const idx = cursor.lastIndexOf("/");
+			if (idx <= 0) break;
+			cursor = cursor.slice(0, idx);
+		}
+
+		const exact = byPathKey.get(pathKey(selectedPath));
+		if (exact) return exact.path;
+
+		// Deleted / not-yet-in-tree: nearest existing ancestor.
+		cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
+		while (true) {
+			const idx = cursor.lastIndexOf("/");
+			if (idx <= 0) break;
+			cursor = cursor.slice(0, idx);
+			const node = byPathKey.get(pathKey(cursor));
+			if (node) return node.path;
+		}
 		return selectedPath;
-	}, [selectedPath]);
+	}, [selectedPath, byPathKey]);
 
 	// ---- Multi-selection (Ctrl/Cmd/Shift click) -----------------------------
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -499,6 +564,59 @@ export function FileTree({
 		overscan: 15,
 	});
 
+	/**
+	 * When the active document changes, expand ancestor folders so the matching
+	 * tree row is visible, then scroll it into view (IDE-style reveal).
+	 */
+	const pendingRevealPathRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (!treeSelectedPath) return;
+		pendingRevealPathRef.current = treeSelectedPath;
+
+		if (isVirtualTreePath(treeSelectedPath)) return;
+
+		const parents = ancestorPaths(treeSelectedPath, vaultPath);
+		if (parents.length === 0) return;
+
+		setExpanded((prev) => {
+			let changed = false;
+			const next = new Set(prev);
+			for (const parent of parents) {
+				const node = byPathKey.get(pathKey(parent));
+				if (node?.kind !== "directory") continue;
+				// Paper folders stay leaves — never expand them.
+				if (isPaperDirectory(node.path, node.children)) continue;
+				if (!next.has(node.path)) {
+					next.add(node.path);
+					changed = true;
+				}
+			}
+			return changed ? next : prev;
+		});
+	}, [treeSelectedPath, vaultPath, byPathKey]);
+
+	// treeSelectedPath: re-run when selection changes even if flatRows is unchanged
+	// (path already visible / ancestors already expanded).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+	useEffect(() => {
+		const target = pendingRevealPathRef.current;
+		if (!target) return;
+
+		const targetKey = pathKey(target);
+		const idx = flatRows.findIndex((row) => {
+			if (row.kind === "library") return target === LIBRARY_VIRTUAL_PATH;
+			if (row.kind === "node") return pathKey(row.node.path) === targetKey;
+			return false;
+		});
+		if (idx < 0) return;
+
+		pendingRevealPathRef.current = null;
+		// Defer one frame so virtualizer sees updated row count after expand.
+		requestAnimationFrame(() => {
+			rowVirtualizer.scrollToIndex(idx, { align: "auto", behavior: "smooth" });
+		});
+	}, [flatRows, rowVirtualizer, treeSelectedPath]);
+
 	const clearSelection = useCallback(() => {
 		setSelected(new Set());
 		setAnchor(null);
@@ -522,9 +640,9 @@ export function FileTree({
 	const handleSelectRow = useCallback(
 		(path: string, mods: { meta: boolean; ctrl: boolean; shift: boolean }) => {
 			if (createDraft) return;
-			if (path === LIBRARY_VIRTUAL_PATH) {
+			if (isVirtualTreePath(path)) {
 				clearSelection();
-				onSelectLibrary?.();
+				openRow(path);
 				return;
 			}
 			if (mods.shift && anchor) {
@@ -561,14 +679,7 @@ export function FileTree({
 			setAnchor(path);
 			openRow(path);
 		},
-		[
-			anchor,
-			clearSelection,
-			createDraft,
-			onSelectLibrary,
-			openRow,
-			selectableOrder,
-		],
+		[anchor, clearSelection, createDraft, openRow, selectableOrder],
 	);
 
 	const orderedSelected = useCallback(
@@ -628,8 +739,7 @@ export function FileTree({
 	/** A row is a valid drop target only if it is an org folder under papers/. */
 	const canDrop = useCallback(
 		(targetPath: string, paths: string[]): boolean => {
-			if (paths.length === 0 || targetPath === LIBRARY_VIRTUAL_PATH)
-				return false;
+			if (paths.length === 0 || isVirtualTreePath(targetPath)) return false;
 			const node = byPath.get(targetPath);
 			if (node?.kind !== "directory") return false;
 			if (isPaperDirectory(node.path, node.children)) return false;
@@ -646,7 +756,7 @@ export function FileTree({
 
 	const handleRowDragStart = useCallback(
 		(path: string, e: ReactDragEvent) => {
-			if (createDraft || path === LIBRARY_VIRTUAL_PATH) {
+			if (createDraft || isVirtualTreePath(path)) {
 				e.preventDefault();
 				return;
 			}
