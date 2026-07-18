@@ -57,6 +57,11 @@ import {
 	upsertAgent,
 	warmAgent,
 } from "@/lib/agent";
+import {
+	type ConnectorStatus,
+	connectorGetStatus,
+	connectorSetEnabled,
+} from "@/lib/connector";
 import { notifyError } from "@/lib/notify";
 import {
 	PAPER_TREE_LABEL_MODES,
@@ -372,6 +377,120 @@ function GeneralPane({
 			</SettingsGroup>
 			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.translatorBaseUrl.hint")}
+			</p>
+			<ConnectorSettingsBlock settings={settings} patch={patch} />
+		</>
+	);
+}
+
+function ConnectorSettingsBlock({
+	settings,
+	patch,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+}) {
+	const { t } = useTranslation("settings");
+	const [status, setStatus] = useState<ConnectorStatus | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	const refresh = useCallback(async () => {
+		if (!isTauri()) return;
+		try {
+			setStatus(await connectorGetStatus());
+		} catch {
+			// ignore probe failures in settings
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsubs.push(
+				await listen<ConnectorStatus>("connector:status", (e) => {
+					setStatus(e.payload);
+				}),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			for (const u of unsubs) u();
+		};
+	}, []);
+
+	const onToggle = async (enabled: boolean) => {
+		patch({ connectorEnabled: enabled });
+		if (!isTauri()) return;
+		setBusy(true);
+		try {
+			const next = await connectorSetEnabled(enabled);
+			setStatus(next);
+			if (enabled && next.lastError) {
+				notifyError(next.lastError);
+			}
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+			patch({ connectorEnabled: false });
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const statusLine = (() => {
+		if (!isTauri()) return t("general.connector.desktopOnly");
+		if (!status) {
+			return settings.connectorEnabled
+				? t("general.connector.statusStarting")
+				: t("general.connector.statusOff");
+		}
+		if (status.lastError) {
+			return t("general.connector.statusError", {
+				message: status.lastError,
+			});
+		}
+		if (status.listening) {
+			const base = t("general.connector.statusListening", {
+				address: status.boundAddress ?? `127.0.0.1:${status.port}`,
+			});
+			if (!status.vaultPath) {
+				return `${base} · ${t("general.connector.statusNoVault")}`;
+			}
+			return base;
+		}
+		if (settings.connectorEnabled) {
+			return t("general.connector.statusStarting");
+		}
+		return t("general.connector.statusOff");
+	})();
+
+	return (
+		<>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("general.connector.label")}
+					htmlFor="connector-enabled"
+				>
+					<Switch
+						id="connector-enabled"
+						checked={settings.connectorEnabled}
+						disabled={busy}
+						onCheckedChange={(v) => void onToggle(v)}
+					/>
+				</SettingsRow>
+			</SettingsGroup>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.connector.hint")}
+			</p>
+			<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
+				{statusLine}
 			</p>
 		</>
 	);

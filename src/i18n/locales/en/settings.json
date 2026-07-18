@@ -29,6 +29,16 @@
 		"translatorBaseUrl": {
 			"label": "Translator service URL",
 			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn. Adding a paper always downloads PDF; arXiv also unpacks LaTeX into source/."
+		},
+		"connector": {
+			"label": "Zotero Connector compatibility",
+			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Local only; off by default.",
+			"statusListening": "Listening on {{address}}",
+			"statusOff": "Off",
+			"statusStarting": "Starting…",
+			"statusError": "Error: {{message}}",
+			"statusNoVault": "Open a vault to accept saves",
+			"desktopOnly": "Requires the desktop app."
 		}
 	},
 	"appearance": {

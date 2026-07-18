@@ -105,6 +105,10 @@
 		"exportFailed": "导出失败",
 		"desktopOnly": "导入/导出需要桌面应用。"
 	},
+	"connector": {
+		"saved": "已从浏览器保存「{{title}}」",
+		"deduped": "库中已有：「{{title}}」"
+	},
 	"zoteroMigrate": {
 		"button": "从 Zotero 迁移",
 		"title": "从 Zotero 迁移",

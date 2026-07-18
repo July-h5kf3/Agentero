@@ -48,6 +48,11 @@ export type AppSettings = {
 	 * Default: title · author.
 	 */
 	paperTreeLabelMode: PaperTreeLabelMode;
+	/**
+	 * Host local HTTP server compatible with the official Zotero Connector
+	 * (loopback :23119). Default **off**; mutually exclusive with Zotero desktop.
+	 */
+	connectorEnabled: boolean;
 	// Appearance
 	theme: ThemePreference;
 	locale: LocalePreference;
@@ -82,6 +87,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	confirmBeforeClose: false,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
+	connectorEnabled: false,
 	theme: "system",
 	locale: "system",
 	editorFontSize: 14,
@@ -143,6 +149,9 @@ export function loadSettings(): AppSettings {
 		}
 		if (typeof parsed.autoPaperReader !== "boolean") {
 			merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;
+		}
+		if (typeof parsed.connectorEnabled !== "boolean") {
+			merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
 		}
 		merged.translate = normalizeTranslateSettings(parsed.translate);
 		return merged;

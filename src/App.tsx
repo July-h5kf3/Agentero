@@ -59,6 +59,11 @@ import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import {
+	type ConnectorItemSaved,
+	connectorSetEnabled,
+	connectorSetVault,
+} from "@/lib/connector";
+import {
 	addPaperByIdentifier,
 	downloadPaperAssets,
 	importLocalPdfs,
@@ -1065,6 +1070,66 @@ export default function App() {
 			setLibraryLoading(false);
 		}
 	}, [vaultPath]);
+
+	// Sync active vault into the Connector server (save target).
+	useEffect(() => {
+		if (!isTauri()) return;
+		void connectorSetVault(vaultPath).catch(() => {
+			/* ignore */
+		});
+	}, [vaultPath]);
+
+	// Restore Connector server from settings on launch / toggle.
+	useEffect(() => {
+		if (!isTauri()) return;
+		void connectorSetEnabled(settings.connectorEnabled)
+			.then((st) => {
+				if (settings.connectorEnabled && st.lastError) {
+					notifyError(st.lastError);
+				}
+			})
+			.catch((e) => {
+				notifyError(e instanceof Error ? e.message : String(e));
+			});
+	}, [settings.connectorEnabled]);
+
+	// Refresh tree/library when the official Zotero Connector saves into the vault.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsubs.push(
+				await listen<ConnectorItemSaved>("connector:item-saved", (ev) => {
+					const p = ev.payload;
+					const vault = vaultPathRef.current;
+					if (vault) {
+						void refreshTree(vault);
+						void refreshLibrary();
+					}
+					if (p?.title) {
+						notifySuccess(
+							p.deduped
+								? t("sidebar:connector.deduped", { title: p.title })
+								: t("sidebar:connector.saved", { title: p.title }),
+						);
+					}
+				}),
+			);
+			unsubs.push(
+				await listen<{ message?: string }>("connector:error", (ev) => {
+					const msg = ev.payload?.message?.trim();
+					if (msg) notifyError(msg);
+				}),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			for (const u of unsubs) u();
+		};
+	}, [refreshTree, refreshLibrary, t]);
 
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;

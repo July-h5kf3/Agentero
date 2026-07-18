@@ -105,6 +105,10 @@
 		"exportFailed": "Export failed",
 		"desktopOnly": "Import/export requires the desktop app."
 	},
+	"connector": {
+		"saved": "Saved “{{title}}” from browser",
+		"deduped": "Already in library: “{{title}}”"
+	},
 	"zoteroMigrate": {
 		"button": "Migrate from Zotero",
 		"title": "Migrate from Zotero",
