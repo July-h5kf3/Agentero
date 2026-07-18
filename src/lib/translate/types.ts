@@ -9,14 +9,9 @@ export type FreeTranslateProviderId =
 	| "googleapi"
 	| "bing"
 	| "youdao"
-	| "haici"
-	| "cnki"
-	| "deeplx"
 	| "huoshanweb"
 	| "tencenttransmart"
-	| "libre"
-	/** @deprecated prefer googleapi */
-	| "free";
+	| "libre";
 
 export type TranslateProviderId = FreeTranslateProviderId | "agent";
 
@@ -32,7 +27,6 @@ export type TranslateSettings = {
 	/**
 	 * Optional endpoint override:
 	 * - provider `libre`: LibreTranslate base URL (required)
-	 * - provider `deeplx`: custom DeepL JSON-RPC / DeepLX URL
 	 * - otherwise unused
 	 */
 	freeBaseUrl: string;
@@ -97,16 +91,13 @@ export type TranslateService = {
 	translate: (task: TranslateTask, opts: TranslateRunOptions) => Promise<void>;
 };
 
-/** Ordered list for settings UI (free engines + agent last). */
+/** Ordered list for settings UI (free engines; agent registered separately). */
 export const FREE_MT_PROVIDER_IDS: FreeTranslateProviderId[] = [
-	"googleapi",
-	"google",
 	"bing",
 	"youdao",
-	"haici",
-	"cnki",
-	"deeplx",
 	"huoshanweb",
 	"tencenttransmart",
+	"googleapi",
+	"google",
 	"libre",
 ];

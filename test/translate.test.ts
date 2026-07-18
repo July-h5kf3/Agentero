@@ -54,18 +54,14 @@ describe("translate services registry", () => {
 		const ids = listSelectableProviders().map((s) => s.id);
 		expect(ids).toContain("googleapi");
 		expect(ids).toContain("bing");
-		expect(ids).toContain("cnki");
-		expect(ids).toContain("deeplx");
+		expect(ids).toContain("youdao");
 		expect(ids).toContain("huoshanweb");
 		expect(ids).toContain("tencenttransmart");
 		expect(ids).toContain("agent");
-		expect(ids).not.toContain("free");
-		// full registry still resolves free
-		expect(TRANSLATE_SERVICES.some((s) => s.id === "free")).toBe(true);
 	});
 
-	it("defaults to googleapi", () => {
-		expect(DEFAULT_TRANSLATE_SETTINGS.provider).toBe("googleapi");
+	it("defaults to bing free engine", () => {
+		expect(DEFAULT_TRANSLATE_SETTINGS.provider).toBe("bing");
 		expect(DEFAULT_TRANSLATE_SETTINGS.agentId).toBe("");
 		expect(DEFAULT_TRANSLATE_SETTINGS.modelId).toBe("");
 	});

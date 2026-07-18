@@ -108,18 +108,14 @@
 		"title": "Translate",
 		"provider": {
 			"label": "Default service",
-			"googleapi": "Google Translate (API)",
-			"google": "Google Translate",
 			"bing": "Bing (Edge free)",
 			"youdao": "Youdao",
-			"haici": "Haici",
-			"cnki": "CNKI",
-			"deeplx": "DeepLX",
 			"huoshanweb": "Volcengine Web",
 			"tencenttransmart": "Tencent Transmart",
+			"googleapi": "Google Translate (API)",
+			"google": "Google Translate",
 			"libre": "LibreTranslate",
-			"agent": "Agent (BYOA)",
-			"free": "Google Translate (API)"
+			"agent": "Agent (BYOA)"
 		},
 		"targetLang": {
 			"label": "Target language",
@@ -132,7 +128,7 @@
 		},
 		"freeBaseUrl": {
 			"label": "Custom endpoint (optional)",
-			"hint": "LibreTranslate: base URL with POST /translate. DeepLX: JSON-RPC or self-hosted DeepLX URL (default official unofficial endpoint). Separate from General → Translator (paper metadata)."
+			"hint": "LibreTranslate: base URL with POST /translate. Separate from General → Translator (paper metadata)."
 		},
 		"agentId": {
 			"label": "Agent",

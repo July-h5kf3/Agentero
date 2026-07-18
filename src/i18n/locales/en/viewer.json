@@ -70,7 +70,8 @@
 		"noteAdded": "Added to notes",
 		"removeHighlight": "Remove highlight",
 		"editComment": "Edit note",
-		"translateAction": "Translate this passage"
+		"translateAction": "Translate this passage",
+		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent."
 	},
 	"html": {
 		"empty": "No paper available.",

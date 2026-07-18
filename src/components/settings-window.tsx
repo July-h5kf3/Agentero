@@ -518,10 +518,7 @@ function TranslatePane({
 			patch({ translate: { ...tr, ...partial } }),
 		[patch, tr],
 	);
-	const showEndpoint =
-		tr.provider === "libre" ||
-		tr.provider === "deeplx" ||
-		tr.freeBaseUrl.length > 0;
+	const showEndpoint = tr.provider === "libre" || tr.freeBaseUrl.length > 0;
 	const showAgent = tr.provider === "agent";
 
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
@@ -614,7 +611,7 @@ function TranslatePane({
 			<SettingsGroup>
 				<SettingsRow label={t("translate.provider.label")}>
 					<Select
-						value={tr.provider === "free" ? "googleapi" : tr.provider}
+						value={tr.provider}
 						onValueChange={(v) =>
 							patchTranslate({ provider: v as TranslateProviderId })
 						}
@@ -622,11 +619,11 @@ function TranslatePane({
 						<SelectTrigger size="sm" className="min-w-[200px] max-w-[280px]">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent className="max-h-72">
 							{providers.map((s) => (
 								<SelectItem key={s.id} value={s.id}>
 									{t(
-										`translate.provider.${s.nameKey}` as "translate.provider.googleapi",
+										`translate.provider.${s.nameKey}` as "translate.provider.bing",
 									)}
 								</SelectItem>
 							))}
@@ -785,11 +782,7 @@ function TranslatePane({
 										patchTranslate({ freeBaseUrl: trimmed });
 									}
 								}}
-								placeholder={
-									tr.provider === "deeplx"
-										? "https://www2.deepl.com/jsonrpc"
-										: "https://libretranslate.example"
-								}
+								placeholder="https://libretranslate.example"
 								className="h-8 font-mono text-xs"
 								spellCheck={false}
 								autoComplete="off"

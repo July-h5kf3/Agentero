@@ -159,8 +159,7 @@ function normalizeTranslateSettings(
 	const base = { ...DEFAULT_TRANSLATE_SETTINGS };
 	if (!raw || typeof raw !== "object") return base;
 	if (raw.provider && isTranslateProviderId(raw.provider)) {
-		// Migrate legacy "free" alias → googleapi
-		base.provider = raw.provider === "free" ? "googleapi" : raw.provider;
+		base.provider = raw.provider;
 	}
 	if (raw.targetLang && isTranslateTargetLang(raw.targetLang)) {
 		base.targetLang = raw.targetLang;

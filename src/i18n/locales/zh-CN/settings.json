@@ -108,18 +108,14 @@
 		"title": "翻译",
 		"provider": {
 			"label": "默认服务",
-			"googleapi": "Google 翻译（API）",
-			"google": "Google 翻译",
 			"bing": "Bing（Edge 免费）",
 			"youdao": "有道",
-			"haici": "海词",
-			"cnki": "CNKI 学术",
-			"deeplx": "DeepLX",
 			"huoshanweb": "火山翻译 Web",
 			"tencenttransmart": "腾讯交互翻译",
+			"googleapi": "Google 翻译（API）",
+			"google": "Google 翻译",
 			"libre": "LibreTranslate",
-			"agent": "Agent（BYOA）",
-			"free": "Google 翻译（API）"
+			"agent": "Agent（BYOA）"
 		},
 		"targetLang": {
 			"label": "目标语言",
@@ -132,7 +128,7 @@
 		},
 		"freeBaseUrl": {
 			"label": "自定义端点（可选）",
-			"hint": "LibreTranslate：填写根地址（POST /translate）。DeepLX：可填 JSON-RPC 或自建 DeepLX 地址。与「通用 → Translator」（文献元数据）无关。"
+			"hint": "LibreTranslate：填写根地址（POST /translate）。与「通用 → Translator」（文献元数据）无关。"
 		},
 		"agentId": {
 			"label": "Agent",

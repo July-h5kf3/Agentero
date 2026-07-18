@@ -26,13 +26,11 @@ function makeFreeMtService(
 					`Text too long for free translation (max ${MAX_CHARS} characters)`,
 				);
 			}
-			// Host maps legacy "free" → googleapi
-			const provider = id === "free" ? "googleapi" : id;
 			const result = await invokeTranslateText({
 				text,
 				sourceLang: task.sourceLang || "auto",
 				targetLang: task.targetLang,
-				provider,
+				provider: id,
 				freeBaseUrl: opts.freeBaseUrl,
 			});
 			task.result = result;
@@ -40,16 +38,8 @@ function makeFreeMtService(
 	};
 }
 
-export const GoogleApiTranslateService = makeFreeMtService(
-	"googleapi",
-	"googleapi",
-);
-export const GoogleTranslateService = makeFreeMtService("google", "google");
 export const BingTranslateService = makeFreeMtService("bing", "bing");
 export const YoudaoTranslateService = makeFreeMtService("youdao", "youdao");
-export const HaiciTranslateService = makeFreeMtService("haici", "haici");
-export const CnkiTranslateService = makeFreeMtService("cnki", "cnki");
-export const DeeplxTranslateService = makeFreeMtService("deeplx", "deeplx");
 export const HuoshanWebTranslateService = makeFreeMtService(
 	"huoshanweb",
 	"huoshanweb",
@@ -58,7 +48,9 @@ export const TencentTransmartTranslateService = makeFreeMtService(
 	"tencenttransmart",
 	"tencenttransmart",
 );
+export const GoogleApiTranslateService = makeFreeMtService(
+	"googleapi",
+	"googleapi",
+);
+export const GoogleTranslateService = makeFreeMtService("google", "google");
 export const LibreTranslateService = makeFreeMtService("libre", "libre");
-
-/** @deprecated alias of googleapi */
-export const FreeTranslateService = makeFreeMtService("free", "googleapi");

@@ -1,7 +1,8 @@
 import type { TranslateSettings } from "@/lib/translate/types";
 
 export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
-	provider: "googleapi",
+	/** Prefer Bing free (works in more networks than Google gtx). */
+	provider: "bing",
 	targetLang: "ui",
 	sourceLang: "auto",
 	freeBaseUrl: "",

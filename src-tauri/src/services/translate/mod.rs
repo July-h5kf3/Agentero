@@ -1,16 +1,12 @@
 //! Free machine-translation backends (no paid API keys).
-//! Endpoints mirror the free web engines used by zotero-pdf-translate
-//! (Google / Bing Edge / Youdao / Haici / CNKI / DeepLX / Volcengine / Tencent Transmart).
-//! All are unofficial / best-effort and may break or rate-limit.
+//! Google / Bing Edge / Youdao / Volcengine / Tencent Transmart / LibreTranslate.
+//! Unofficial / best-effort; may break or rate-limit.
 
 use crate::error::AppError;
-use aes::cipher::{BlockEncrypt, KeyInit};
-use aes::Aes128;
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 /// Soft cap for a single free-MT request (characters).
 pub const MAX_TEXT_CHARS: usize = 5000;
@@ -23,14 +19,9 @@ pub const FREE_PROVIDERS: &[&str] = &[
     "googleapi",
     "bing",
     "youdao",
-    "haici",
-    "cnki",
-    "deeplx",
     "huoshanweb",
     "tencenttransmart",
     "libre",
-    // Legacy alias → googleapi
-    "free",
 ];
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -40,10 +31,10 @@ pub struct TranslateTextArgs {
     #[serde(default = "default_source")]
     pub source_lang: String,
     pub target_lang: String,
-    /// Free engine id: google | googleapi | bing | youdao | haici | cnki | deeplx | huoshanweb | tencenttransmart | libre | free
+    /// Free engine id: google | googleapi | bing | youdao | huoshanweb | tencenttransmart | libre
     #[serde(default = "default_provider")]
     pub provider: String,
-    /// LibreTranslate base, or DeepLX custom JSON-RPC endpoint when provider=deeplx.
+    /// LibreTranslate base URL when provider=libre.
     #[serde(default)]
     pub free_base_url: Option<String>,
 }
@@ -53,7 +44,7 @@ fn default_source() -> String {
 }
 
 fn default_provider() -> String {
-    "googleapi".to_string()
+    "bing".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,8 +66,8 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
     }
 
     let mut provider = args.provider.trim().to_ascii_lowercase();
-    if provider.is_empty() || provider == "free" {
-        provider = "googleapi".to_string();
+    if provider.is_empty() {
+        provider = "bing".to_string();
     }
 
     let source = normalize_lang(&args.source_lang, true);
@@ -100,12 +91,6 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
         }
         "bing" => translate_bing(text, &source, &target).await?,
         "youdao" => translate_youdao(text, &source, &target).await?,
-        "haici" => translate_haici(text, &source, &target).await?,
-        "cnki" => translate_cnki(text).await?,
-        "deeplx" => {
-            let endpoint = base.unwrap_or("https://www2.deepl.com/jsonrpc");
-            translate_deeplx(endpoint, text, &source, &target).await?
-        }
         "huoshanweb" => translate_huoshan_web(text, &source, &target).await?,
         "tencenttransmart" => translate_tencent_transmart(text, &source, &target).await?,
         "libre" => {
@@ -357,314 +342,6 @@ fn youdao_lang(code: &str) -> String {
     }
 }
 
-// ─── Haici (dict.cn via legacy MS Ajax API) ─────────────────────────────────
-
-struct HaiciAppIdCache {
-    app_id: String,
-    exp: Instant,
-}
-
-static HAICI_APP_ID: Mutex<Option<HaiciAppIdCache>> = Mutex::new(None);
-
-async fn haici_app_id() -> Result<String, AppError> {
-    {
-        let guard = HAICI_APP_ID.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(c) = guard.as_ref() {
-            if Instant::now() < c.exp {
-                return Ok(c.app_id.clone());
-            }
-        }
-    }
-    let client = http_client()?;
-    let resp = client
-        .get("http://capi.dict.cn/fanyi.php")
-        .header("Referer", "http://fanyi.dict.cn/")
-        .header("User-Agent", UA)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("Haici appId request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "Haici appId"));
-    }
-    // body like: "xxxx-app-id"
-    let app_id = body
-        .trim()
-        .trim_matches(|c| c == '"' || c == '\'')
-        .to_string();
-    if app_id.is_empty() {
-        // try match "(.+)"
-        if let Some(cap) = body.split('"').nth(1) {
-            let id = cap.to_string();
-            if !id.is_empty() {
-                cache_haici(&id);
-                return Ok(id);
-            }
-        }
-        return Err(AppError::message("Haici appId empty"));
-    }
-    cache_haici(&app_id);
-    Ok(app_id)
-}
-
-fn cache_haici(app_id: &str) {
-    if let Ok(mut guard) = HAICI_APP_ID.lock() {
-        *guard = Some(HaiciAppIdCache {
-            app_id: app_id.to_string(),
-            exp: Instant::now() + Duration::from_secs(50 * 60),
-        });
-    }
-}
-
-async fn translate_haici(text: &str, source: &str, target: &str) -> Result<String, AppError> {
-    let app_id = haici_app_id().await?;
-    let client = http_client()?;
-    let from = if source == "auto" { "" } else { source };
-    // Escape quotes for JSON array of strings in query
-    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
-    let texts = format!("[\"{escaped}\"]");
-    let url = format!(
-        "http://api.microsofttranslator.com/V2/Ajax.svc/TranslateArray?appId={}&from={}&to={}&texts={}",
-        urlencoding_minimal(&app_id),
-        urlencoding_minimal(from),
-        urlencoding_minimal(target),
-        urlencoding_minimal(&texts),
-    );
-    let resp = client
-        .get(&url)
-        .header("User-Agent", UA)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("Haici request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "Haici"));
-    }
-    // Response may be JSON array with TranslatedText fields; sometimes prefixed with BOM
-    let cleaned = body.trim().trim_start_matches('\u{feff}');
-    let v: Value = serde_json::from_str(cleaned)
-        .map_err(|e| AppError::message(format!("Haici parse: {e}")))?;
-    let mut out = String::new();
-    if let Some(arr) = v.as_array() {
-        for line in arr {
-            if let Some(t) = line.get("TranslatedText").and_then(|x| x.as_str()) {
-                out.push_str(t);
-            }
-        }
-    }
-    if out.is_empty() {
-        return Err(AppError::message("Unexpected Haici translation response"));
-    }
-    Ok(out)
-}
-
-// ─── CNKI dict (AES-ECB encrypt words) ──────────────────────────────────────
-
-struct CnkiTokenCache {
-    token: String,
-    exp: Instant,
-}
-
-static CNKI_TOKEN: Mutex<Option<CnkiTokenCache>> = Mutex::new(None);
-
-async fn cnki_token() -> Result<String, AppError> {
-    {
-        let guard = CNKI_TOKEN.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(c) = guard.as_ref() {
-            if Instant::now() < c.exp {
-                return Ok(c.token.clone());
-            }
-        }
-    }
-    let client = http_client()?;
-    let resp = client
-        .get("https://dict.cnki.net/fyzs-front-api/getToken")
-        .header("User-Agent", UA)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("CNKI token request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "CNKI token"));
-    }
-    let v: Value = serde_json::from_str(&body)
-        .map_err(|e| AppError::message(format!("CNKI token parse: {e}")))?;
-    // Zotero stores xhr.response.data as token in one branch and xhr.response.token in another
-    let token = v
-        .get("data")
-        .and_then(|x| x.as_str())
-        .or_else(|| v.get("token").and_then(|x| x.as_str()))
-        .unwrap_or("")
-        .to_string();
-    if token.is_empty() {
-        return Err(AppError::message("CNKI token empty"));
-    }
-    if let Ok(mut guard) = CNKI_TOKEN.lock() {
-        *guard = Some(CnkiTokenCache {
-            token: token.clone(),
-            exp: Instant::now() + Duration::from_secs(4 * 60),
-        });
-    }
-    Ok(token)
-}
-
-/// AES-128-ECB PKCS7, base64 with URL-safe-ish replacements (CNKI).
-fn cnki_encrypt_words(text: &str) -> Result<String, AppError> {
-    const KEY: &[u8; 16] = b"4e87183cfd3a45fe";
-    let cipher =
-        Aes128::new_from_slice(KEY).map_err(|e| AppError::message(format!("CNKI AES key: {e}")))?;
-    let mut buf = text.as_bytes().to_vec();
-    // PKCS7 pad to 16
-    let pad = 16 - (buf.len() % 16);
-    buf.extend(std::iter::repeat_n(pad as u8, pad));
-    for chunk in buf.chunks_exact_mut(16) {
-        let block = aes::Block::from_mut_slice(chunk);
-        cipher.encrypt_block(block);
-    }
-    let b64 = B64.encode(&buf);
-    Ok(b64.replace('/', "_").replace('+', "-"))
-}
-
-async fn translate_cnki(text: &str) -> Result<String, AppError> {
-    // CNKI free web is limited ~800 chars
-    let slice: String = text.chars().take(800).collect();
-    let token = cnki_token().await?;
-    let words = cnki_encrypt_words(&slice)?;
-    let client = http_client()?;
-    let body = serde_json::json!({
-        "words": words,
-        "translateType": null,
-    });
-    let resp = client
-        .post("https://dict.cnki.net/fyzs-front-api/translate/literaltranslation")
-        .header("Content-Type", "application/json;charset=UTF-8")
-        .header("Token", &token)
-        .header("User-Agent", UA)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("CNKI request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "CNKI"));
-    }
-    let v: Value =
-        serde_json::from_str(&body).map_err(|e| AppError::message(format!("CNKI parse: {e}")))?;
-    if v.pointer("/data/isInputVerificationCode")
-        .and_then(|x| x.as_bool())
-        == Some(true)
-    {
-        return Err(AppError::message(
-            "CNKI requires human verification (temporarily banned). Open https://dict.cnki.net/ and pass the captcha, then retry.",
-        ));
-    }
-    v.pointer("/data/mResult")
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| AppError::message("Unexpected CNKI translation response"))
-}
-
-// ─── DeepLX (unofficial DeepL JSON-RPC) ─────────────────────────────────────
-
-fn deepl_map_lang(code: &str) -> String {
-    match code {
-        "zh-CN" | "zh" | "zh-Hans" => "ZH-HANS".to_string(),
-        "zh-TW" | "zh-HK" | "zh-MO" | "zh-Hant" => "ZH-HANT".to_string(),
-        "pt-BR" => "PT-BR".to_string(),
-        "pt-PT" => "PT-PT".to_string(),
-        "auto" => "auto".to_string(),
-        other => lang_base(other).to_ascii_uppercase(),
-    }
-}
-
-async fn translate_deeplx(
-    endpoint: &str,
-    text: &str,
-    source: &str,
-    target: &str,
-) -> Result<String, AppError> {
-    let client = http_client()?;
-    let id = 1000 * (fastrand_u32(8300000, 8300000 + 99999)) + 1;
-    let i_counts = text.matches('i').count() as u64 + 1;
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    let timestamp = ts - (ts % i_counts) + i_counts;
-
-    let mut req_body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "LMT_handle_texts",
-        "id": id,
-        "params": {
-            "texts": [{ "text": text, "requestAlternatives": 3 }],
-            "splitting": "newlines",
-            "lang": {
-                "source_lang_user_selected": deepl_map_lang(source),
-                "target_lang": deepl_map_lang(target),
-            },
-            "timestamp": timestamp,
-            "commonJobParams": {
-                "wasSpoken": false,
-                "transcribe_as": "",
-            },
-        },
-    })
-    .to_string();
-
-    // DeepL browser-extension quirk
-    if (id + 5).is_multiple_of(29) || (id + 3).is_multiple_of(13) {
-        req_body = req_body.replace("\"method\":\"", "\"method\" : \"");
-    } else {
-        req_body = req_body.replace("\"method\":\"", "\"method\": \"");
-    }
-
-    let url = if endpoint.contains('?') {
-        endpoint.to_string()
-    } else {
-        format!(
-            "{}?client=chrome-extension,1.28.0&method=LMT_handle_jobs",
-            endpoint.trim_end_matches('/')
-        )
-    };
-
-    let resp = client
-        .post(&url)
-        .header("Accept", "*/*")
-        .header("Authorization", "None")
-        .header("Content-Type", "application/json")
-        .header("Origin", "chrome-extension://cofdbpoegempjloogbagkncekinflcnj")
-        .header("Referer", "https://www.deepl.com/")
-        .header(
-            "User-Agent",
-            "DeepLBrowserExtension/1.28.0 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-        )
-        .body(req_body)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("DeepLX request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "DeepLX"));
-    }
-    let v: Value =
-        serde_json::from_str(&body).map_err(|e| AppError::message(format!("DeepLX parse: {e}")))?;
-    v.pointer("/result/texts/0/text")
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| AppError::message("Unexpected DeepLX translation response"))
-}
-
-/// Simple non-crypto PRNG for DeepLX id (no extra deps).
-fn fastrand_u32(min: u32, max_inclusive: u32) -> u32 {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(1);
-    let span = max_inclusive.saturating_sub(min).saturating_add(1);
-    min + (nanos % span)
-}
-
 // ─── Volcengine / Huoshan web ───────────────────────────────────────────────
 
 async fn translate_huoshan_web(text: &str, source: &str, target: &str) -> Result<String, AppError> {
@@ -846,22 +523,9 @@ mod tests {
     }
 
     #[test]
-    fn cnki_encrypt_not_empty() {
-        let e = cnki_encrypt_words("hello").unwrap();
-        assert!(!e.is_empty());
-        assert!(!e.contains('/'));
-        assert!(!e.contains('+'));
-    }
-
-    #[test]
-    fn deepl_lang_map() {
-        assert_eq!(deepl_map_lang("zh-CN"), "ZH-HANS");
-        assert_eq!(deepl_map_lang("en"), "EN");
-    }
-
-    #[test]
     fn free_providers_listed() {
         assert!(FREE_PROVIDERS.contains(&"bing"));
-        assert!(FREE_PROVIDERS.contains(&"deeplx"));
+        assert!(FREE_PROVIDERS.contains(&"youdao"));
+        assert!(FREE_PROVIDERS.contains(&"huoshanweb"));
     }
 }
