@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/tooltip";
 import {
 	isPaperDirectory,
+	isPapersRoot,
 	type PaperMetadata,
 	paperAssetDownloadReasons,
 	paperDirFromPath,
@@ -149,13 +150,23 @@ function pathKey(path: string): string {
 	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-/** Expand folders by default, but never expand individual paper folders. */
+/**
+ * Default open folders when a Vault is first opened:
+ * expand `papers/` and its first-level children (org folders) so papers one
+ * level down are visible. Deeper nesting, `notes/`, etc. stay collapsed.
+ * Paper folders are never expanded (they render as leaves).
+ */
 function collectDefaultExpanded(nodes: FileNode[], into: Set<string>) {
 	for (const n of nodes) {
-		if (n.kind !== "directory") continue;
-		if (isPaperDirectory(n.path, n.children)) continue;
+		if (n.kind !== "directory" || !isPapersRoot(n.path)) continue;
 		into.add(n.path);
-		if (n.children?.length) collectDefaultExpanded(n.children, into);
+		for (const child of n.children ?? []) {
+			if (child.kind !== "directory") continue;
+			// Paper units are leaves — expanding them is a no-op for the UI.
+			if (isPaperDirectory(child.path, child.children)) continue;
+			into.add(child.path);
+		}
+		return;
 	}
 }
 
@@ -339,17 +350,30 @@ export function FileTree({
 	const [contextMenu, setContextMenu] = useState<TreeContextMenu | null>(null);
 	const [revealError, setRevealError] = useState<string | null>(null);
 	const contextMenuRef = useRef<HTMLDivElement>(null);
-	const defaultExpanded = useMemo(() => {
+	const [expanded, setExpanded] = useState<Set<string>>(() => {
 		const open = new Set<string>();
 		collectDefaultExpanded(nodes, open);
 		return open;
-	}, [nodes]);
+	});
 
-	const [expanded, setExpanded] = useState<Set<string>>(defaultExpanded);
-
+	/**
+	 * Apply default expansion once per Vault open (when tree first has nodes).
+	 * Do not reset on every tree refresh — that would collapse user-expanded folders.
+	 */
+	const defaultAppliedForVaultRef = useRef<string | null>(null);
 	useEffect(() => {
-		setExpanded(defaultExpanded);
-	}, [defaultExpanded]);
+		if (!vaultPath) {
+			defaultAppliedForVaultRef.current = null;
+			setExpanded(new Set());
+			return;
+		}
+		if (defaultAppliedForVaultRef.current === vaultPath) return;
+		if (nodes.length === 0) return;
+		const open = new Set<string>();
+		collectDefaultExpanded(nodes, open);
+		setExpanded(open);
+		defaultAppliedForVaultRef.current = vaultPath;
+	}, [vaultPath, nodes]);
 
 	// Expand parent folder when starting inline create (IDE-like).
 	useEffect(() => {
