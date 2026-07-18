@@ -594,8 +594,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
     text: string;
     sourceLang?: string;     // default "auto"
     targetLang: string;      // e.g. "zh-CN" | "en"
-    provider?: string;       // googleapi (default) | google | bing | youdao | haici | cnki | deeplx | huoshanweb | tencenttransmart | libre | free
-    freeBaseUrl?: string | null; // libre 必填；deeplx 可覆盖 endpoint
+    provider?: string;       // bing (default) | youdao | huoshanweb | tencenttransmart | googleapi | google | libre
+    freeBaseUrl?: string | null; // libre 必填
   }
   ```
 - **返回**：`{ ok: true; data: { text: string; provider: string } }`

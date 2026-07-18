@@ -212,7 +212,7 @@
    - [x] T2：Host `translate_text` + `free` adapter（内置 Google gtx 或 LibreTranslate URL）；默认 `provider=free`。
    - [x] T3：PDF free 单次结果 / agent 流式；`autoTranslateSelection`；与 `translatorBaseUrl` 命名隔离。
    - [x] T3.5 设计：翻译用 **Agent 座 + 模型** 最小选择（跟随默认 / 渐进披露；见 [`translate.md`](translate.md) §5.4 · §7.6）。
-   - [ ] T3.6：实现 `translate.agentId` / `modelId` 设置项 + Translate 页两行 Select + PDF `runOnce` 传参。
+   - [x] T3.6：实现 `translate.agentId` / `modelId` + Translate 页两行 Select + PDF `runOnce` 传参；临时探测脚本 `scripts/probe-translate-free.mjs`。
    - [ ] T4+（可选）：更多 adapter（DeepL 等）/ 更多消费方（标题·摘要等）；`type: word` 词典。
 
 4. **PDF / HTML 标注系统**

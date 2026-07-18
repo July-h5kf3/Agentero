@@ -361,7 +361,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
   - 页脚说明：模型与 API Key 由各 Agent CLI 自行管理，不在 Agentero 内填写。
 - **Translate（翻译）**（应用级翻译服务，见 [`../development/translate.md`](../development/translate.md)）：
   - **默认翻译服务**：多引擎免费 MT + **Agent（BYOA）**。
-  - **目标语言**、PDF 划词自动译、条件显示的自定义端点（libre / deeplx）。
+  - **目标语言**、PDF 划词自动译、条件显示的自定义端点（libre）。
   - **当服务 = Agent 时**（渐进披露，见 translate.md §7.6）：
     - **Agent**：下拉；默认「跟随默认 (当前 default 名)」；选项 = 本机可用 Agent；空则提示去 Agent 页。
     - **模型**：下拉；默认「跟随 Agent 默认」（`loadModelPref`）；选项 = 该 Agent 的 `loadModelCatalog`；无缓存则仅跟随项 + 一句「在 Chat 打开过一次后可选模型」。

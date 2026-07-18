@@ -144,7 +144,7 @@ export type TranslateService = {
 
 export type TranslateRunOptions = {
   settings: AppSettings;
-  /** 覆盖设置中的默认 provider（某次调用强制 free/agent） */
+  /** 覆盖设置中的默认 provider（某次调用强制某引擎 / agent） */
   providerId?: string;
   /** Agent 路径需要的 runOnce 等由调用方注入，避免 lib 循环依赖 */
   agent?: {
@@ -158,7 +158,7 @@ export type TranslateRunOptions = {
 ```ts
 // src/lib/translate/services/index.ts
 export const TRANSLATE_SERVICES: TranslateService[] = [
-  FreeTranslateService,
+  BingTranslateService,
   AgentTranslateService,
 ];
 
@@ -185,25 +185,22 @@ export function getTranslateService(id: string): TranslateService | undefined {
 
 | `id` | 类型 | Secret | 说明 |
 |---|---|---|---|
-| **`googleapi`** | sentence | 否 | **默认**。`translate.googleapis.com` gtx |
-| **`google`** | sentence | 否 | `translate.google.com` gtx |
-| **`bing`** | sentence | 否 | Edge 免费 token + Microsoft Translator |
+| **`bing`** | sentence | 否 | **默认**。Edge 免费 token + Microsoft Translator |
 | **`youdao`** | sentence | 否 | 有道网页接口 |
-| **`haici`** | sentence | 否 | 海词 / 旧 MS Ajax |
-| **`cnki`** | sentence | 否 | 知网词典（学术向；≤800 字） |
-| **`deeplx`** | sentence | 否 | DeepL 非官方 JSON-RPC；可自建 endpoint |
 | **`huoshanweb`** | sentence | 否 | 火山 / 火山引擎 Web |
 | **`tencenttransmart`** | sentence | 否 | 腾讯交互翻译 Web |
+| **`googleapi`** | sentence | 否 | `translate.googleapis.com` gtx |
+| **`google`** | sentence | 否 | `translate.google.com` gtx |
 | **`libre`** | sentence | 否 | 需配置 LibreTranslate `freeBaseUrl` |
 | **`agent`** | sentence | 否（BYOA） | 本机 Agent；prompt 见 `src/lib/translate/prompt.ts` |
 
-以上免费引擎均为**非官方网页接口**（与 zotero-pdf-translate 同类），可能限流或失效。**不含** DeepL 官方 Key、百度/阿里付费等。
+以上免费引擎为**非官方网页接口**，可能限流或失效。
 
 ### 3.4 默认与回退
 
 | 规则 | 行为 |
 |---|---|
-| 默认服务 | `translate.provider = "googleapi"`（开箱即用） |
+| 默认服务 | `translate.provider = "bing"`（开箱即用；较 Google gtx 在更多网络可用） |
 | 调用覆盖 | `runTranslate(..., { providerId })` 可单次指定，不改全局默认 |
 | Agent 不可用 | 若选用 `agent` 但未配置/未启用 Agent → 错误返回 / Toast，并提示设置 → 翻译或 Agent |
 | 免费失败 | Toast；可选后续：「用 Agent 再试」（非首版必做） |
@@ -450,8 +447,6 @@ agentId: ""
 modelId: ""
 ```
 
-迁移：缺字段 → `""`。
-
 ### 7.8 运行时接线（PDF / runTranslate）
 
 ```ts
@@ -529,7 +524,7 @@ src/components/viewer/pdf-viewer.tsx / pdf-ask/  → 调用 runTranslate
 |---|---|---|
 | **T0 文档** | 本文 + 交叉引用 | 设计可评审 |
 | **T1 服务层 + Agent adapter** | `TranslateService` 注册表；`agent`；设置页骨架（`provider` / `targetLang`）；PDF 划词改调 `runTranslate` | 设为 agent 时与今日行为一致；可切换目标语言 |
-| **T2 免费服务** | Host `translate_text` + `free` adapter；默认 provider=`free` | 无 Agent 也能完成翻译；失败 Toast |
+| **T2 免费服务** | Host `translate_text` + 多引擎 free-MT；默认 provider=`bing` | 无 Agent 也能完成翻译；失败 Toast |
 | **T3 体验** | 消费方结果 UI 细化；自动译等场景选项；可选 `provider` 落盘字段 | 设置项生效；Agent 路径不进主对话历史 |
 | **T4+** | 更多服务 adapter；更多消费方（标题/摘要等） | 只加 adapter / 新入口，不改核心契约 |
 
