@@ -181,9 +181,10 @@ fn init_logging() {
     // Logs go to stderr so `--json` stdout stays a pure business envelope.
     // Example: RUST_LOG=info agentero vault create /tmp/v
     // Custom op logs use target `agentero::op`; crate modules use package names.
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(
-        "warn,agentero_cli=info,agentero_lib=info,agentero::op=info",
-    ))
+    let _ = env_logger::Builder::from_env(
+        env_logger::Env::default()
+            .default_filter_or("warn,agentero_cli=info,agentero_lib=info,agentero::op=info"),
+    )
     .format_timestamp_secs()
     .try_init();
 }
