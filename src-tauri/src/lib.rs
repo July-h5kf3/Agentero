@@ -154,6 +154,7 @@ pub fn run() {
             commands::agent::agent_discover,
             commands::agent::agent_probe,
             commands::agent::agent_probe_catalog,
+            commands::agent::agent_open_install_terminal,
             commands::agent::agent_run_once,
             commands::agent::agent_codex_list_threads,
             commands::agent::agent_codex_read_thread,

@@ -1080,6 +1080,18 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
+#### `agent_open_install_terminal`（已实现）
+
+打开系统终端，展示指定 catalog 模板的 **安装命令**，并 **等待用户按 Enter（Windows：任意键）后才执行**。不静默安装；UI 不得传入任意 shell——仅允许模板内置的 `install_command`。
+
+- **参数**：`{ templateId: string }`（如 `claude-acp`）
+- **返回**：`{ ok: true; data: null }`
+- **行为**
+  - 查找内置模板的 `installCommand`；无则报错。
+  - 写入临时脚本 → 打开系统默认终端运行该脚本（打印命令 → 确认 → 执行 → 提示回到 Settings 点 Refresh）。
+  - Claude：`npm i -g @agentclientprotocol/claude-agent-acp`（需本机已装 Claude Code 与 npm）。
+- **Catalog 扫描字段**（`agent_scan_catalog`）：`detect` 对 Claude 使用 `claude`；`command` 仍为 `claude-agent-acp`。当 `binaryAvailable && !acpCommandAvailable && installCommand` 时 `offerInstall: true`。
+
 #### `agent:list_sessions`
 
 列出当前 Vault 中的 Agent 会话。

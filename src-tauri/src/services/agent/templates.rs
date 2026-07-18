@@ -4,6 +4,9 @@ use crate::models::agent::{AgentTemplate, AgentTemplateInfo};
 ///
 /// `detect_command` is used for "installed on PATH" status when the ACP entrypoint
 /// differs (e.g. Claude/Codex via npx adapters still want to show the host CLI).
+/// Official Claude Code ACP adapter package (global npm install).
+pub const CLAUDE_ACP_INSTALL_COMMAND: &str = "npm i -g @agentclientprotocol/claude-agent-acp";
+
 pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
     vec![
         AgentTemplateInfo {
@@ -20,18 +23,20 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "brew install opencode  ·  https://opencode.ai"
             })
             .to_string(),
+            install_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::ClaudeAcp.as_str().to_string(),
             name: "Claude".to_string(),
             description: "Claude Code via official ACP adapter (`claude-agent-acp`).".to_string(),
-            // Prefer global install: npm i -g @agentclientprotocol/claude-agent-acp
+            // ACP entrypoint is the adapter; "installed" badge uses host Claude Code.
             command: "claude-agent-acp".to_string(),
             args: vec![],
-            detect_command: Some("claude-agent-acp".to_string()),
-            install_hint:
-                "npm i -g @agentclientprotocol/claude-agent-acp  (needs Claude Code auth)"
-                    .to_string(),
+            detect_command: Some("claude".to_string()),
+            install_hint: format!(
+                "{CLAUDE_ACP_INSTALL_COMMAND}  (needs Claude Code auth)"
+            ),
+            install_command: Some(CLAUDE_ACP_INSTALL_COMMAND.to_string()),
         },
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),
@@ -44,6 +49,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             detect_command: Some("codex".to_string()),
             install_hint: "Install Codex CLI and sign in; Agentero starts `codex app-server`."
                 .to_string(),
+            install_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::Gemini.as_str().to_string(),
@@ -53,6 +59,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             args: vec!["--experimental-acp".to_string()],
             detect_command: Some("gemini".to_string()),
             install_hint: "Install Google Gemini CLI (with ACP support).".to_string(),
+            install_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::QoderCli.as_str().to_string(),
@@ -64,6 +71,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_hint:
                 "Install Qoder CLI, then `qodercli login`  ·  https://docs.qoder.com/en/cli/acp"
                     .to_string(),
+            install_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::GrokBuild.as_str().to_string(),
@@ -81,6 +89,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_hint:
                 "Run with `npx @xai-official/grok@0.2.100 agent stdio`  ·  https://zed.dev/acp/agent/grok-build"
                     .to_string(),
+            install_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
@@ -90,6 +99,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             args: vec![],
             detect_command: None,
             install_hint: "Provide command and args for your local ACP agent.".to_string(),
+            install_command: None,
         },
     ]
 }

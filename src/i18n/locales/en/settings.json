@@ -72,10 +72,14 @@
 		"probing": "Probing…",
 		"scanning": "Scanning…",
 		"useDefault": "Use default",
+		"installAdapter": "Install ACP",
+		"installAdapterAria": "Install ACP adapter for {{name}} in Terminal",
+		"installAdapterTitle": "Open Terminal: {{command}} (press Enter to confirm)",
 		"badges": {
 			"default": "default",
 			"installed": "installed",
-			"notOnPath": "not on PATH"
+			"notOnPath": "not on PATH",
+			"adapterMissing": "ACP adapter missing"
 		},
 		"permission": {
 			"label": "Permission mode",

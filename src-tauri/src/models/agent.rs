@@ -111,6 +111,10 @@ pub struct AgentTemplateInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detect_command: Option<String>,
     pub install_hint: String,
+    /// Optional shell command to install a missing ACP adapter (opened in the
+    /// system terminal with a confirmation prompt — never run silently).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_command: Option<String>,
 }
 
 /// Status for a common agent row in Settings.
@@ -136,6 +140,12 @@ pub struct CatalogEntry {
     pub command: String,
     pub args: Vec<String>,
     pub install_hint: String,
+    /// Shell install command for a missing ACP adapter (from the template).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_command: Option<String>,
+    /// Host CLI present but ACP entrypoint missing — Settings may offer install.
+    #[serde(default)]
+    pub offer_install: bool,
     /// Primary CLI found on PATH (detect_command or command).
     pub binary_available: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

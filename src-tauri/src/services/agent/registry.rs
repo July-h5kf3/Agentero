@@ -349,6 +349,14 @@ impl AgentRegistry {
                     }
                 } else if acp_command_available {
                     (CatalogAcpStatus::NotProbed, None, None, None)
+                } else if binary_available {
+                    // Host CLI present (e.g. `claude`) but ACP entrypoint missing.
+                    (
+                        CatalogAcpStatus::Missing,
+                        None,
+                        Some(format!("ACP command `{}` not found", info.command)),
+                        None,
+                    )
                 } else {
                     (
                         CatalogAcpStatus::Missing,
@@ -364,6 +372,13 @@ impl AgentRegistry {
                 .zip(default_id.as_ref())
                 .is_some_and(|(a, d)| a == d);
 
+            let offer_install = binary_available
+                && !acp_command_available
+                && info
+                    .install_command
+                    .as_ref()
+                    .is_some_and(|c| !c.trim().is_empty());
+
             entries.push(CatalogEntry {
                 template_id: info.id,
                 name: info.name,
@@ -371,6 +386,8 @@ impl AgentRegistry {
                 command: info.command,
                 args: info.args,
                 install_hint: info.install_hint,
+                install_command: info.install_command,
+                offer_install,
                 binary_available,
                 resolved_path: detect_path.map(|p| p.display().to_string()),
                 acp_command_available,

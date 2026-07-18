@@ -72,10 +72,14 @@
 		"probing": "探测中…",
 		"scanning": "扫描中…",
 		"useDefault": "设为默认",
+		"installAdapter": "安装 ACP",
+		"installAdapterAria": "在终端中安装 {{name}} 的 ACP 适配器",
+		"installAdapterTitle": "打开终端：{{command}}（按 Enter 确认）",
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",
-			"notOnPath": "不在 PATH"
+			"notOnPath": "不在 PATH",
+			"adapterMissing": "缺 ACP 适配器"
 		},
 		"permission": {
 			"label": "权限模式",

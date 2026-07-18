@@ -8,6 +8,7 @@ import {
 	RefreshCw,
 	Shield,
 	SlidersHorizontal,
+	Terminal,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -489,7 +490,6 @@ function AgentPane({
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [probing, setProbing] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
@@ -498,26 +498,29 @@ function AgentPane({
 	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const autoProbedRef = useRef(false);
 
-	const refresh = useCallback(async (): Promise<CatalogScanResponse | null> => {
-		if (!isTauri()) {
-			notifyError(t("agent.desktopOnly"));
-			return null;
-		}
-		setLoading(true);
-		try {
-			const scan = await scanCatalog();
-			setCatalog(scan);
-			setProxyEnabled(scan.proxyEnabled);
-			setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
-			return scan;
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
-			return null;
-		} finally {
-			setLoading(false);
-		}
-	}, [t]);
+	/** Scan only — does not toggle busy; callers own the loading flag. */
+	const scanOnce =
+		useCallback(async (): Promise<CatalogScanResponse | null> => {
+			if (!isTauri()) {
+				notifyError(t("agent.desktopOnly"));
+				return null;
+			}
+			try {
+				const scan = await scanCatalog();
+				setCatalog(scan);
+				setProxyEnabled(scan.proxyEnabled);
+				setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
+				return scan;
+			} catch (e) {
+				notifyError(e instanceof Error ? e.message : String(e));
+				return null;
+			}
+		}, [t]);
 
+	/**
+	 * Probe candidates in parallel; refresh catalog after each finishes so
+	 * badges update one-by-one instead of waiting for the whole batch.
+	 */
 	const probeInstalled = useCallback(
 		async (scan: CatalogScanResponse) => {
 			if (!isTauri()) return;
@@ -527,37 +530,63 @@ function AgentPane({
 			const custom = scan.customAgents.filter((a) => a.available);
 			if (candidates.length === 0 && custom.length === 0) return;
 
-			setProbing(true);
-			try {
-				await Promise.allSettled([
-					...candidates.map((entry) => probeCatalogAgent(entry.templateId)),
-					...custom.map((agent) => probeAgent(agent.id)),
-				]);
-				await refresh();
-			} finally {
-				setProbing(false);
-			}
+			await Promise.allSettled([
+				...candidates.map(async (entry) => {
+					try {
+						await probeCatalogAgent(entry.templateId);
+					} finally {
+						// Host has persisted this probe; pull badges immediately.
+						await scanOnce();
+					}
+				}),
+				...custom.map(async (agent) => {
+					try {
+						await probeAgent(agent.id);
+					} finally {
+						await scanOnce();
+					}
+				}),
+			]);
 		},
-		[refresh],
+		[scanOnce],
 	);
+
+	/** Full rescan → parallel probe (live badge updates) → final scan. */
+	const rescanAndProbe = useCallback(async () => {
+		if (!isTauri()) {
+			notifyError(t("agent.desktopOnly"));
+			return;
+		}
+		setLoading(true);
+		try {
+			const scan = await scanOnce();
+			if (scan) {
+				await probeInstalled(scan);
+				// One last pass in case a concurrent scan raced mid-batch.
+				await scanOnce();
+			}
+		} finally {
+			setLoading(false);
+		}
+	}, [probeInstalled, scanOnce, t]);
 
 	useEffect(() => {
 		if (autoProbedRef.current) return;
 		autoProbedRef.current = true;
-		void (async () => {
-			const scan = await refresh();
-			if (scan) await probeInstalled(scan);
-		})();
-	}, [refresh, probeInstalled]);
+		void rescanAndProbe();
+	}, [rescanAndProbe]);
 
 	const onToggleEnabled = async (v: boolean) => {
 		patch({ agentEnabled: v });
 		if (!isTauri()) return;
+		setLoading(true);
 		try {
 			await setAgentEnabled(v);
-			await refresh();
+			await scanOnce();
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
 		}
 	};
 
@@ -568,8 +597,11 @@ function AgentPane({
 			const saved = await setAgentProxy(enabled, url);
 			setProxyEnabled(saved.proxyEnabled);
 			setProxyUrl(saved.proxyUrl);
-			const scan = await refresh();
-			if (scan) await probeInstalled(scan);
+			const scan = await scanOnce();
+			if (scan) {
+				await probeInstalled(scan);
+				await scanOnce();
+			}
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -587,15 +619,26 @@ function AgentPane({
 	};
 
 	const onRescanAndProbe = async () => {
-		const scan = await refresh();
-		if (scan) await probeInstalled(scan);
+		await rescanAndProbe();
 	};
 
 	const onUseDefault = async (entry: CatalogEntry) => {
 		if (!isTauri()) return;
+		setLoading(true);
 		try {
 			await ensureCatalogAgent(entry.templateId, true);
-			await refresh();
+			await scanOnce();
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const onInstallAdapter = async (entry: CatalogEntry) => {
+		if (!isTauri()) return;
+		try {
+			await openInstallTerminal(entry.templateId);
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		}
@@ -603,11 +646,14 @@ function AgentPane({
 
 	const onRemove = async (id: string) => {
 		if (!isTauri()) return;
+		setLoading(true);
 		try {
 			await removeAgent(id);
-			await refresh();
+			await scanOnce();
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
 		}
 	};
 
@@ -626,8 +672,11 @@ function AgentPane({
 			setAdding(false);
 			setFormCommand("");
 			setFormArgs("");
-			const scan = await refresh();
-			if (scan) await probeInstalled(scan);
+			const scan = await scanOnce();
+			if (scan) {
+				await probeInstalled(scan);
+				await scanOnce();
+			}
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
@@ -637,7 +686,7 @@ function AgentPane({
 
 	const entries = catalog?.entries ?? [];
 	const customAgents = catalog?.customAgents ?? [];
-	const busy = loading || probing;
+	const busy = loading;
 
 	return (
 		<>
@@ -749,15 +798,20 @@ function AgentPane({
 					disabled={busy || !isTauri()}
 					onClick={() => void onRescanAndProbe()}
 				>
-					<RefreshCw className={cn("size-3.5", busy && "animate-spin")} />
+					{/* Loader2 while busy — avoid RefreshCw+spin (looks like two arrows, one stuck). */}
+					{busy ? (
+						<Loader2 className="size-3.5 animate-spin" aria-hidden />
+					) : (
+						<RefreshCw className="size-3.5" aria-hidden />
+					)}
 				</Button>
 			</div>
 
 			<SettingsGroup>
 				{entries.length === 0 && busy ? (
 					<div className="flex items-center gap-2 px-3.5 py-4 text-muted-foreground text-xs">
-						<Loader2 className="size-3.5 animate-spin" />
-						{probing ? t("agent.probing") : t("agent.scanning")}
+						<Loader2 className="size-3.5 animate-spin" aria-hidden />
+						{t("agent.scanning")}
 					</div>
 				) : null}
 				{entries.map((entry) => {
@@ -765,6 +819,7 @@ function AgentPane({
 						entry.binaryAvailable ||
 						entry.acpCommandAvailable ||
 						entry.acpStatus === "ready";
+					const showInstall = Boolean(entry.offerInstall);
 					return (
 						<div
 							key={entry.templateId}
@@ -789,18 +844,48 @@ function AgentPane({
 										{t("agent.badges.notOnPath")}
 									</StatusBadge>
 								)}
+								{showInstall ? (
+									<StatusBadge tone="warn">
+										{t("agent.badges.adapterMissing")}
+									</StatusBadge>
+								) : null}
 							</div>
-							{!entry.isDefault && canUse ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="h-7 shrink-0 px-2 text-xs"
-									onClick={() => void onUseDefault(entry)}
-								>
-									{t("agent.useDefault")}
-								</Button>
-							) : null}
+							<div className="flex shrink-0 items-center gap-1">
+								{showInstall ? (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										aria-label={t("agent.installAdapterAria", {
+											name: entry.name,
+										})}
+										title={
+											entry.installCommand
+												? t("agent.installAdapterTitle", {
+														command: entry.installCommand,
+													})
+												: t("agent.installAdapter")
+										}
+										disabled={busy || !isTauri()}
+										onClick={() => void onInstallAdapter(entry)}
+									>
+										<Terminal className="size-3" />
+										{t("agent.installAdapter")}
+									</Button>
+								) : null}
+								{!entry.isDefault && canUse && !showInstall ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 shrink-0 px-2 text-xs"
+										onClick={() => void onUseDefault(entry)}
+									>
+										{t("agent.useDefault")}
+									</Button>
+								) : null}
+							</div>
 						</div>
 					);
 				})}

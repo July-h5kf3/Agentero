@@ -54,6 +54,10 @@ export type CatalogEntry = {
 	command: string;
 	args: string[];
 	installHint: string;
+	/** Shell command for guided install (e.g. Claude ACP adapter via npm). */
+	installCommand?: string | null;
+	/** Host CLI present but ACP entrypoint missing — show install button. */
+	offerInstall?: boolean;
 	binaryAvailable: boolean;
 	resolvedPath?: string | null;
 	acpCommandAvailable: boolean;
@@ -306,6 +310,14 @@ export async function probeCatalogAgent(
 	templateId: string,
 ): Promise<ProbeResult> {
 	return invokeApi("agent_probe_catalog", { templateId });
+}
+
+/**
+ * Open the system terminal with the template's install command and wait for
+ * the user to confirm (Enter) before running. Host only allows known templates.
+ */
+export async function openInstallTerminal(templateId: string): Promise<void> {
+	await invokeApi("agent_open_install_terminal", { templateId });
 }
 
 export type PromptImage = {

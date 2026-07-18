@@ -1,6 +1,7 @@
-//! Open the system default terminal at a local path.
+//! Open the system default terminal at a local path, or with a confirm-then-run command.
 
 use crate::error::AppError;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -25,6 +26,219 @@ pub fn open_in_terminal(path: &Path) -> Result<PathBuf, AppError> {
     let cwd = terminal_cwd_for_path(path)?;
     open_terminal_at(&cwd)?;
     Ok(cwd)
+}
+
+/// Open a system terminal that prints `command`, waits for Enter (or Ctrl+C), then runs it.
+///
+/// Used for guided installs (e.g. Claude ACP adapter). The shell never auto-runs without
+/// confirmation. Only trusted Host-side callers should pass commands.
+pub fn open_terminal_confirm_command(command: &str) -> Result<(), AppError> {
+    let command = command.trim();
+    if command.is_empty() {
+        return Err(AppError::message("install command is required"));
+    }
+    // Reject multi-line / shell metacharacter abuse from unexpected callers.
+    if command.contains('\n') || command.contains('\r') || command.contains(';') {
+        return Err(AppError::message(
+            "install command contains disallowed characters",
+        ));
+    }
+
+    #[cfg(windows)]
+    {
+        open_terminal_confirm_command_windows(command)
+    }
+    #[cfg(not(windows))]
+    {
+        open_terminal_confirm_command_unix(command)
+    }
+}
+
+#[cfg(not(windows))]
+fn open_terminal_confirm_command_unix(command: &str) -> Result<(), AppError> {
+    let script_path = write_confirm_script_unix(command)?;
+    let script = script_path.to_string_lossy().replace('\'', "'\\''");
+
+    #[cfg(target_os = "macos")]
+    {
+        // Terminal.app: run the script in a new window (user must press Enter to install).
+        let apple = format!("tell application \"Terminal\" to do script \"bash '{script}'\"");
+        let status = Command::new("osascript")
+            .arg("-e")
+            .arg(&apple)
+            .status()
+            .map_err(|e| AppError::message(format!("failed to open Terminal: {e}")))?;
+        if !status.success() {
+            return Err(AppError::message(format!(
+                "failed to open Terminal (exit {status})"
+            )));
+        }
+        // Bring Terminal to front.
+        let _ = Command::new("osascript")
+            .args(["-e", "tell application \"Terminal\" to activate"])
+            .status();
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let bash_cmd = format!("bash '{script}'; exec bash");
+        if Command::new("xdg-terminal-exec")
+            .args(["bash", "-lc", &bash_cmd])
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+        if let Ok(term) = std::env::var("TERMINAL") {
+            if !term.is_empty()
+                && Command::new(&term)
+                    .args(["-e", "bash", "-lc", &bash_cmd])
+                    .spawn()
+                    .is_ok()
+            {
+                return Ok(());
+            }
+        }
+        let candidates: &[(&str, fn(&str) -> Command)] = &[
+            ("gnome-terminal", |c| {
+                let mut cmd = Command::new("gnome-terminal");
+                cmd.args(["--", "bash", "-lc", c]);
+                cmd
+            }),
+            ("konsole", |c| {
+                let mut cmd = Command::new("konsole");
+                cmd.args(["-e", "bash", "-lc", c]);
+                cmd
+            }),
+            ("xfce4-terminal", |c| {
+                let mut cmd = Command::new("xfce4-terminal");
+                cmd.args(["-e", &format!("bash -lc {c:?}")]);
+                cmd
+            }),
+            ("alacritty", |c| {
+                let mut cmd = Command::new("alacritty");
+                cmd.args(["-e", "bash", "-lc", c]);
+                cmd
+            }),
+            ("kitty", |c| {
+                let mut cmd = Command::new("kitty");
+                cmd.args(["bash", "-lc", c]);
+                cmd
+            }),
+            ("x-terminal-emulator", |c| {
+                let mut cmd = Command::new("x-terminal-emulator");
+                cmd.args(["-e", "bash", "-lc", c]);
+                cmd
+            }),
+        ];
+        for (bin, build) in candidates {
+            if build(&bash_cmd).spawn().is_ok() {
+                let _ = bin;
+                return Ok(());
+            }
+        }
+        return Err(AppError::message(
+            "no terminal emulator found (install xdg-terminal-exec or set $TERMINAL)",
+        ));
+    }
+
+    #[allow(unreachable_code)]
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn write_confirm_script_unix(command: &str) -> Result<PathBuf, AppError> {
+    let dir = std::env::temp_dir().join("agentero-install");
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::message(format!("failed to create temp dir: {e}")))?;
+    let path = dir.join(format!("install-{}.sh", std::process::id()));
+    // Single-quoted shell literal for the command display/run.
+    let quoted = command.replace('\'', "'\\''");
+    let body = format!(
+        r#"#!/usr/bin/env bash
+set +e
+echo ""
+echo "Agentero — install helper"
+echo "Command:"
+echo "  {command}"
+echo ""
+printf '%s' "Press Enter to run, or Ctrl+C to cancel… "
+read -r _
+echo ""
+echo "Running…"
+bash -lc '{quoted}'
+status=$?
+echo ""
+if [ "$status" -eq 0 ]; then
+  echo "Done. Return to Agentero → Settings → Agent and click Refresh."
+else
+  echo "Command exited with status $status."
+fi
+echo "You can close this window."
+"#
+    );
+    fs::write(&path, body)
+        .map_err(|e| AppError::message(format!("failed to write install script: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&path)
+            .map_err(|e| AppError::message(format!("failed to stat install script: {e}")))?
+            .permissions();
+        perms.set_mode(0o700);
+        fs::set_permissions(&path, perms)
+            .map_err(|e| AppError::message(format!("failed to chmod install script: {e}")))?;
+    }
+    Ok(path)
+}
+
+#[cfg(windows)]
+fn open_terminal_confirm_command_windows(command: &str) -> Result<(), AppError> {
+    let dir = std::env::temp_dir().join("agentero-install");
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::message(format!("failed to create temp dir: {e}")))?;
+    let path = dir.join(format!("install-{}.cmd", std::process::id()));
+    // Escape ^ and & for cmd.exe display; the install command itself is simple npm.
+    let body = format!(
+        "@echo off\r\n\
+echo.\r\n\
+echo Agentero - install helper\r\n\
+echo Command:\r\n\
+echo   {command}\r\n\
+echo.\r\n\
+echo Press any key to run, or close this window to cancel...\r\n\
+pause >nul\r\n\
+echo.\r\n\
+echo Running...\r\n\
+{command}\r\n\
+set STATUS=%ERRORLEVEL%\r\n\
+echo.\r\n\
+if %STATUS%==0 (\r\n\
+  echo Done. Return to Agentero Settings - Agent and click Refresh.\r\n\
+) else (\r\n\
+  echo Command exited with status %STATUS%.\r\n\
+)\r\n\
+echo You can close this window.\r\n\
+pause\r\n"
+    );
+    fs::write(&path, body)
+        .map_err(|e| AppError::message(format!("failed to write install script: {e}")))?;
+
+    if Command::new("wt")
+        .args(["-d", "%USERPROFILE%", "cmd", "/K"])
+        .arg(&path)
+        .spawn()
+        .is_ok()
+    {
+        return Ok(());
+    }
+    Command::new("cmd")
+        .args(["/C", "start", "", "cmd", "/K"])
+        .arg(&path)
+        .spawn()
+        .map_err(|e| AppError::message(format!("failed to open terminal: {e}")))?;
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

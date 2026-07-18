@@ -5,11 +5,13 @@ use crate::models::agent::{
     WarmRequest, WarmResult,
 };
 use crate::services::agent::codex::{CodexThreadHistory, CodexThreadInfo};
+use crate::services::agent::templates::template_info;
 use crate::services::agent::{
     builtin_templates, codex_list_threads, codex_read_thread, list_agent_skills, new_ids,
     prepare_codex_thread, probe_agent, probe_codex, run_codex_turn, run_once, warm_agent,
     warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController,
 };
+use crate::services::terminal;
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -188,6 +190,33 @@ pub async fn agent_probe(
     };
     let _ = registry.apply_probe_result(&id, &result);
     Ok(ApiResult::ok(result))
+}
+
+/// Open a system terminal that shows the template's install command and waits for
+/// the user to press Enter before running it. Only templates with a registered
+/// `install_command` are allowed (no free-form shell from the UI).
+#[tauri::command]
+pub fn agent_open_install_terminal(template_id: String) -> ApiResult<serde_json::Value> {
+    let info = match template_info(&template_id) {
+        Some(t) => t,
+        None => {
+            return map_err(AppError::message(format!(
+                "unknown catalog template: {template_id}"
+            )));
+        }
+    };
+    let command = match info.install_command {
+        Some(c) if !c.trim().is_empty() => c,
+        _ => {
+            return map_err(AppError::message(format!(
+                "no install command for template: {template_id}"
+            )));
+        }
+    };
+    match terminal::open_terminal_confirm_command(&command) {
+        Ok(()) => ApiResult::ok(serde_json::Value::Null),
+        Err(e) => map_err(e),
+    }
 }
 
 /// Ensure catalog agent is registered, then run ACP initialize probe.
