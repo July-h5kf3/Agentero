@@ -191,14 +191,18 @@
    - [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项。
    - [ ] 批注原位高亮渲染（highlights.md 系统）与引用 key 映射。
 
-1b. **Zotero Connector 兼容服务**（方案一）— 设计见 [`../backend/connector.md`](../backend/connector.md)
+1b. **Zotero Connector 兼容服务**（方案一）— 设计见 [`../backend/connector.md`](../backend/connector.md) **§4.5 覆盖总表**
    - [x] C0：设计文档（本机 `23119`、互斥 Zotero 桌面、默认关、MVP endpoints、映射与分期）。
    - [x] C1：Host `services/connector` — `ping` / `saveItems` / `sessionProgress` + loopback 安全策略；复用 `map_zotero_item` 落盘。
    - [x] C2：设置开关 `connectorEnabled` + `connector_get_status` / `connector_set_enabled` / `set_vault`；端口冲突 / 无 Vault UX；i18n。
    - [x] C3：前端 `connector:item-saved` 刷新树/Library；退出释放端口；`api.md` 命令表。
-   - [x] C4a：catalog id 去重 + stub `getSelectedCollection` / `updateSession`；URL 附件走 `ensure_paper_assets`。
-   - [ ] C4b（P1）：`saveAttachment` 二进制上传协议。
-   - [ ] C5（可选）：`detailedCookies`、快照降级策略、可配置端口（需用户改插件 URL）。
+   - [x] C4a：catalog id 去重；URL 附件后台 `ensure_paper_assets`；防插件 15s 超时（NOTES 无实时 MT）。
+   - [x] C4a2：`getSelectedCollection.targets` 列出 `papers/` 组织子文件夹；`updateSession` 移动 paper；`connector_set_parent_dir` + Library 作用域同步。
+   - [ ] C4b（P0）：`saveAttachment` 二进制上传协议。
+   - [ ] C4c（P0）：`saveSnapshot` / `saveSingleFile`（可降级为元数据 + `html_url`）。
+   - [ ] C5a（P0）：`detailedCookies` 注入下载。
+   - [ ] C5b（P1）：`detect` / `savePage` / `selectItems`；`attachmentProgress`。
+   - [ ] C5c（可选）：`getTranslators` / proxies；可配置端口；`updateSession.tags` 写入 catalog。
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Zap + catalog `is_read`）。

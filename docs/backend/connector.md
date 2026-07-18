@@ -1,8 +1,9 @@
 # Zotero Connector 兼容服务（方案一）
 
-> 状态：**MVP 已落地**（`ping` / `saveItems` / `sessionProgress` + 设置开关 + 事件刷新；附件流式上传 / cookies 仍待）  
+> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避；**附件二进制 / 快照 / cookies 仍待**）  
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
 > 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
+> **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
 > 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒入库与 `map_zotero_item`）、[`catalog.md`](catalog.md)、[`api.md`](api.md)、[`data-model.md`](data-model.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../development/roadmap.md`](../development/roadmap.md)、[`../development/todo.md`](../development/todo.md)。
 
 ---
@@ -195,27 +196,82 @@ Tauri event: connector:item-saved / connector:error
 | **用途** | 插件进度条；`done: true` 后插件停止轮询 |
 | **MVP** | 元数据写入完成后即可 `done: true`；附件未完时可阶段性更新百分比 |
 
-#### Stub（建议实现最小合法响应，避免插件报错）
+#### 已实现的集合与会话
 
-| Endpoint | MVP 行为 |
+| Endpoint | 行为 |
 |---|---|
-| `POST /connector/getSelectedCollection` | 返回固定「当前库」：`libraryID`/`name` 可用常量；`targets` 可单元素列表（显示名如当前 Vault 名） |
-| `POST /connector/updateSession` | 接受 `sessionID` + `target` + `tags`；MVP 可忽略 target 变更，仅把 tags 并入 catalog（可选）或 no-op 200 |
-| `POST /connector/delaySync` | `204` 空 |
+| `POST /connector/getSelectedCollection` | 当前选中父目录 + **`targets`**：`L1`=`papers`，`Dpapers/…`=组织子文件夹（跳过 paper 单元：`NOTES.md` / `metadata.json` / `{id}.pdf`）；供插件保存位置下拉 |
+| `POST /connector/updateSession` | `sessionID` + `target`：解析目标并 **移动** 本 session 已写入的 paper 文件夹 + 更新 catalog path；同时记住默认 `parent_dir`；`tags` 暂未写入 catalog |
+| `POST /connector/delaySync` | `204` 空（无真实 sync） |
 
-### 4.3 第二阶段 endpoints（附件与快照）
+### 4.3 下一阶段 endpoints（未实现 — 附件与快照）
 
-| Endpoint | 说明 |
+| Endpoint | 说明 | 优先级 |
+|---|---|---|
+| `POST /connector/saveAttachment` | 二进制 PDF + `X-Metadata`（`sessionID`, `parentItemID`, `title`, `url`）→ `{paper}/{id}.pdf` | **P0** |
+| `POST /connector/saveSnapshot` | 网页条目 + 可选快照 | **P0** |
+| `POST /connector/saveSingleFile` | SingleFile 整页 HTML | **P0**（可降级为仅元数据 + `html_url`） |
+| `detailedCookies`（在 `saveItems` 内消费） | 用浏览器 cookie 下 PDF | **P0** |
+| `POST /connector/detect` | 服务端 HTML 检测 translator | P1 |
+| `POST /connector/savePage` | 服务端翻译整页；多选时 300 | P1 |
+| `POST /connector/selectItems` | 多条目勾选后续 | P1 |
+| `POST /connector/attachmentProgress` | 旧版按 id 查附件进度 | P1（新版多用 `sessionProgress`） |
+
+### 4.4 低优先级 / 明确不做
+
+| Endpoint / 能力 | 说明 |
 |---|---|
-| `POST /connector/saveAttachment` | 二进制 PDF + `X-Metadata`（`sessionID`, `parentItemID`, `title`, `url`）；写入 `{paper}/{id}.pdf` |
-| `POST /connector/saveSnapshot` / `saveSingleFile` | 网页快照；Agentero 首版可 **显式降级**（存 metadata + `html_url`，不存巨型 HTML），或后续写入 `source/` |
-| `POST /connector/getTranslators` / `getTranslatorCode` | **非必须**：现代 Connector 自带/自更新 translator；桌面不可用时才依赖 server |
+| `POST /connector/getTranslators` | 桌面拉 translator 列表；现代插件多自带缓存 |
+| `POST /connector/getTranslatorCode` | 拉单个 translator 源码 |
+| `POST /connector/proxies` | 代理规则列表 |
+| `POST /connector/getClientHostnames` | 本机反解 hostname |
+| `POST /connector/import` | 任意格式导入（与 Library BibTeX 分离） |
+| `POST /connector/installStyle` | 安装 CSL |
+| `GET /connector/ieHack` | 极旧 IE bookmarklet |
+| `/connector/document/*` | Word / Google Docs **引用插入**（另案） |
+| `/api/*` Local Read API | 读库；勿与 connector 写路径混在同一开关文案 |
 
-### 4.4 明确不做的上游能力（文档层拒绝）
+### 4.5 上游 API 覆盖总表（实现 vs 缺口）
 
-- `/connector/document/*`（字处理集成）
-- `/connector/import` 任意格式导入（与 Library BibTeX 导入分离）
-- `/api/*` Local Read API（Zotero 7+ 偏好项）；若未来只读库，另开设计，**不要**与 connector 保存混在同一开关文案里
+对照官方桌面端 `server_connector.js` 与社区常用扩展路径。路由以本机 `http://127.0.0.1:23119` 为准。
+
+| Endpoint | Agentero | 备注 |
+|---|---|---|
+| `GET/POST /connector/ping` | ✅ | HTML 探活 + prefs JSON |
+| `POST /connector/saveItems` | ✅ 基本 | 元数据同步落盘；PDF URL **后台**下；无 cookie；NOTES 不做实时 MT（防 15s 超时） |
+| `POST /connector/sessionProgress` | ✅ 简版 | `done` 在元数据完成后即为 true；附件进度多为占位 |
+| `POST /connector/getSelectedCollection` | ✅ | `targets` 含组织子文件夹 |
+| `POST /connector/updateSession` | ✅ | 切换 target 移动 paper；tags 未写 |
+| `POST /connector/delaySync` | ✅ stub | `204` |
+| `POST /connector/saveAttachment` | ❌ | **最大缺口**：登录墙 PDF |
+| `POST /connector/saveSnapshot` | ❌ | 普通网页保存 |
+| `POST /connector/saveSingleFile` | ❌ | 插件 snapshot 链路 |
+| `POST /connector/detect` | ❌ | 旧/bookmarklet 路径 |
+| `POST /connector/savePage` | ❌ | 服务端翻译 + 多选 |
+| `POST /connector/selectItems` | ❌ | 配合 savePage 300 |
+| `POST /connector/attachmentProgress` | ❌ | 旧附件进度 |
+| `POST /connector/getTranslators` | ❌ | 现代插件通常不依赖 |
+| `POST /connector/getTranslatorCode` | ❌ | 同上 |
+| `POST /connector/proxies` | ❌ | 可选 |
+| `POST /connector/getClientHostnames` | ❌ | 可选 |
+| `POST /connector/import` | ❌ | 另有 Library 导入 |
+| `POST /connector/installStyle` | ❌ | 不做 |
+| `GET /connector/ieHack` | ❌ | 不做 |
+| `/connector/document/*` | ❌ | 引用集成另案 |
+| `/api/*` | ❌ | Local Read 另案 |
+
+**已实现路径上的行为缺口（有路由但不完整）：**
+
+| 能力 | 现状 |
+|---|---|
+| 订阅站 / 登录墙 PDF | 无 `saveAttachment`、无 `detailedCookies` |
+| `singleFile: true` | 固定回 `false`，不接 `saveSingleFile` |
+| 摘要中文 MT | Connector 路径关闭（超时纪律） |
+| `updateSession.tags` | 忽略 |
+| 附件真实 progress % | 占位；URL 下载在后台 |
+| 可配置端口 | 写死 `23119` |
+
+**建议补齐顺序：** `saveAttachment` → `saveSnapshot` / `saveSingleFile`（可降级）→ `detailedCookies` →（按需）`detect`/`savePage`/`selectItems`。
 
 ---
 
@@ -244,10 +300,15 @@ Tauri event: connector:item-saved / connector:error
 
 | 策略 | 行为 |
 |---|---|
-| **默认（MVP）** | 固定 `papers`（或设置项 `connectorParentDir`，默认 `papers`） |
-| **可选增强** | 记忆上次保存子文件夹；或与前端「当前 Library 作用域」同步（需 event/command 回传） |
+| **默认** | `papers` |
+| **插件下拉** | `getSelectedCollection.targets`：`L1` → `papers`；`Dpapers/nlp` → `papers/nlp`（见 `services/connector/targets.rs`） |
+| **updateSession** | 改 session + 全局默认 parent；已写入 paper **fs rename** + catalog `move_under_path` |
+| **前端同步** | Library 作用域 / `connector_set_parent_dir` 写入默认 parent |
 
-Connector 的 collection 树（`updateSession` target）**不**映射为 Zotero collection ID；最多映射为 Vault 相对路径约定（若做，须单独表：`L1`/`C23` 风格 ID → `papers/...`，首版不做）。
+target id 约定（非 Zotero collection 数字 ID）：
+
+- `L1` = 库根 = `papers`
+- `D` + vault 相对路径 = 组织文件夹，如 `Dpapers/nlp/pretrain`
 
 ### 5.3 去重
 
@@ -261,8 +322,9 @@ Connector 的 collection 树（`updateSession` target）**不**映射为 Zotero 
 
 ### 5.4 附件与 cookie
 
-- MVP：有 `pdf_url` 则 `reqwest` 下载；**可不**实现 `detailedCookies`（校园网登录 PDF 可能失败 → 元数据仍保留 + Download 补下）。
-- P1：解析 `detailedCookies` 注入下载客户端（注意仅用于用户显式保存的 URL，日志脱敏）。
+- **当前**：`saveItems` 元数据返回后，后台 `ensure_paper_assets`（公开 PDF URL / arXiv）；**不**阻塞 201。
+- **未做**：`saveAttachment` 二进制；`detailedCookies` 注入（校园网 PDF 仍可能失败 → 用户可 Download 补下）。
+- **纪律**：`saveItems` 同步路径禁止摘要 MT + 同步大附件，以免官方插件 **15s 超时**。
 
 ### 5.5 精读自动触发
 
@@ -307,15 +369,16 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 
 ## 7. Host API（Tauri）与事件
 
-### 7.1 Commands（规划名，实现以 `src-tauri` 为准）
+### 7.1 Commands（已落地）
 
 | Command | 方向 | 说明 |
 |---|---|---|
-| `connector_get_status` | 读 | `{ enabled, listening, port, boundAddress, lastError?, vaultPath? }` |
-| `connector_set_enabled` | 写 | `{ enabled: bool }` → 启停 server；持久化进设置 |
-| `connector_set_options` | 写 | 可选：`parentDir`、端口（若支持） |
+| `connector_get_status` | 读 | `{ enabled, listening, port, boundAddress, lastError?, vaultPath?, parentDir }` |
+| `connector_set_enabled` | 写 | `{ enabled: bool }` → 启停 server |
+| `connector_set_vault` | 写 | `{ vaultPath: string \| null }` |
+| `connector_set_parent_dir` | 写 | `{ parentDir: string }` — 默认保存父目录 |
 
-设置权威：**前端 `agentero-settings`（或后续 Tauri Store）** 存 `connectorEnabled`；启动时前端/Host 读设置并 `set_enabled`。也可 Host 直接读 store——二选一，实现时定一处权威并写进 `api.md`。
+设置权威：**前端 `agentero-settings`** 存 `connectorEnabled`；启动时 `App` 调 `set_enabled`；Vault / Library 作用域同步 vault 与 parent。类型细节见 [`api.md`](api.md) §3.5b。
 
 ### 7.2 Events
 
@@ -379,23 +442,32 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 
 **验收：** 关闭 Zotero → 开启开关 → 浏览器打开 arXiv 摘要页 → 官方 Connector 保存 → Vault 出现 paper 行与 `NOTES.md` 壳。
 
-### PR2 — 体验与稳健性（部分 ✅）
+### PR2 — 体验与稳健性 ✅
 
 - [x] 端口占用/无 Vault 的完整 UX
 - [x] 去重策略落地（catalog `id`）
-- [x] `getSelectedCollection` / `updateSession` / `delaySync` stub
-- [x] 应用退出释放端口；`connector:status` / `item-saved` / `error` 事件
+- [x] `getSelectedCollection` 列出组织子文件夹；`updateSession` 移动 paper
+- [x] `delaySync` stub；退出释放端口；`connector:*` 事件
+- [x] `saveItems` 防 15s 超时（后台资产、无 NOTES MT）
+- [x] Library 作用域 → `connector_set_parent_dir`
 - [x] `docs/backend/api.md` 命令表同步
 
-### PR3 — 附件
+### PR3 — 附件与快照（未做）
 
-- [ ] `saveAttachment` 二进制上传协议
-- [ ] （可选）cookies
-- [ ] 与 `paper_download_assets` / liteparse 对齐（URL 下载已走 `ensure_paper_assets`）
+- [ ] **C4b** `saveAttachment` 二进制上传
+- [ ] **C4c** `saveSnapshot` / `saveSingleFile`（可降级）
+- [ ] **C5a** `detailedCookies`
+- [ ] （可选）`sessionProgress` 真实附件百分比；后台任务条
 
-### 非目标迭代
+### PR4 — 可选 / 低优先级
 
-- document 集成、完整 snapshot、改端口高级模式、自研扩展。
+- [ ] `detect` / `savePage` / `selectItems`
+- [ ] `getTranslators` / `getTranslatorCode` / proxies
+- [ ] 可配置端口（须用户改插件 `connector.url`）
+
+### 非目标
+
+- `/connector/document/*` 引用集成、完整 CSL install、IE hack、自研浏览器扩展为 MVP 前提。
 
 ---
 
@@ -426,6 +498,8 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 误收非学术网页 | 与 Zotero 相同；用户责任；可后续过滤 `itemType` |
 | 覆盖用户笔记 | 去重 skip；不覆盖已有 `NOTES.md` 正文 |
 | 多 Vault 写错库 | 单例 + 明确「当前 Vault」规则 |
+| Connector **15s 超时** | `saveItems` 仅同步写 catalog + NOTES 壳；PDF/TeX/liteparse **后台**下载；NOTES 摘要不做实时 MT |
+| 系统 HTTP 代理劫持 `127.0.0.1` | 本机 Clash/Surge 等若代理 localhost，探活/保存会 502；需在代理规则中 **绕过 127.0.0.1 / localhost**（与官方 Zotero 相同） |
 
 **Local-first：** 落盘仍是普通 Markdown + catalog，可被 Vault 外工具读取。
 
@@ -470,3 +544,4 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 |---|---|
 | 2026-07-18 | 初稿：方案一（兼容官方 Connector / 本机 23119）设计与分期；已挂 mkdocs / roadmap / todo / api §3.5b |
 | 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新；PR3 附件协议仍待 |
+| 2026-07-18 | 防 15s 超时（后台资产）；`targets` 子文件夹 + `updateSession` 移动；§4.5 上游 API 覆盖总表 |

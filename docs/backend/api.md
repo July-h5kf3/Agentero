@@ -606,10 +606,12 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 **目标**：Host 在本机 `127.0.0.1:23119` 兼容 [Zotero Connector HTTP Server](https://www.zotero.org/support/dev/client_coding/connector_http_server)，使官方浏览器扩展把保存请求写入当前 Vault。
 
-- **HTTP 契约、安全模型、分期**：见 [`connector.md`](connector.md)（权威）。
+- **HTTP 契约、安全模型、实现 vs 缺口总表**：见 [`connector.md`](connector.md) **§4.5**（权威）。
 - **与魔棒关系**：元数据映射复用 `map_zotero_item`；入口不同（插件 vs ⇧⌘I）。
 - **设置**：`connectorEnabled` 默认 `false`；与 Zotero 桌面端 **端口互斥**。
 - **实现**：`services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`。
+- **已挂 HTTP**：`ping`、`saveItems`、`sessionProgress`、`getSelectedCollection`（含子文件夹 targets）、`updateSession`、`delaySync`。
+- **未挂 HTTP（P0）**：`saveAttachment`、`saveSnapshot`、`saveSingleFile`；`detailedCookies`。
 
 #### `connector_get_status`
 
@@ -636,6 +638,12 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **参数**（`args`）：`{ vaultPath: string | null }`
 - **返回**：`{ ok: true; data: null }`
 - **说明**：保存目标 Vault；无 Vault 时 HTTP `saveItems` 返回 503。
+
+#### `connector_set_parent_dir`
+
+- **参数**（`args`）：`{ parentDir: string }` — `papers` 或 `papers/…` 组织文件夹
+- **返回**：`{ ok: true; data: null }`
+- **说明**：默认保存位置；前端 Library 作用域会同步；插件 `getSelectedCollection.targets` 列出全部组织子文件夹（`L1` / `Dpapers/…`）。
 
 #### Events
 
