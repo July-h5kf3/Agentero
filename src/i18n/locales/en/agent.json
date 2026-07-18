@@ -16,6 +16,15 @@
 			"rejectAlways": "Always reject"
 		}
 	},
+	"review": {
+		"title": "Review note changes",
+		"description": "The agent rewrote “{{name}}”. Keep the new version or revert to the original.",
+		"before": "Before",
+		"after": "Agent version",
+		"keep": "Keep",
+		"revert": "Revert",
+		"empty": "(empty)"
+	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
 	"suggestions": {

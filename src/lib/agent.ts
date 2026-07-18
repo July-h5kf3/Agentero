@@ -223,6 +223,13 @@ export type PermissionRequest = {
 	options: PermissionOption[];
 };
 
+/** A note an agent rewrote during a run, offered for keep / revert. */
+export type NotesReview = {
+	path: string;
+	before: string;
+	after: string;
+};
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;
@@ -441,6 +448,12 @@ export async function respondPermission(
 	await invokeApi<{ resolved: boolean }>("agent_respond_permission", {
 		request: { requestId, optionId },
 	});
+}
+
+/** Revert a note the agent rewrote (trust loop) by restoring `content`. */
+export async function revertNote(path: string, content: string): Promise<void> {
+	const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+	await writeTextFile(path, content);
 }
 
 export type WarmResult = {

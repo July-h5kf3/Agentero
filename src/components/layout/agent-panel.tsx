@@ -165,9 +165,11 @@ import {
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
+	type NotesReview,
 	type PermissionRequest,
 	readCodexThread,
 	respondPermission,
+	revertNote,
 	runOnce,
 	saveExternalCodexHistoryPref,
 	saveModelCatalog,
@@ -1619,6 +1621,8 @@ export function AgentPanel({
 	// Forward ACP permission requests (ask mode) to the user for an explicit decision.
 	const [permissionRequest, setPermissionRequest] =
 		useState<PermissionRequest | null>(null);
+	// Trust loop: review a note the agent rewrote (keep / revert).
+	const [notesReview, setNotesReview] = useState<NotesReview | null>(null);
 	useEffect(() => {
 		if (!isTauri()) return;
 		let unsub: (() => void) | undefined;
@@ -1629,6 +1633,24 @@ export function AgentPanel({
 			unsub = await listen<PermissionRequest>(
 				"agent:permission-request",
 				({ payload }) => setPermissionRequest(payload),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
+	// Trust loop: surface agent note rewrites for keep / revert review.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<NotesReview>("agent:notes-review", ({ payload }) =>
+				setNotesReview(payload),
 			);
 		})();
 		return () => {
@@ -3290,6 +3312,60 @@ export function AgentPanel({
 									}}
 								>
 									{t("permission.deny")}
+								</Button>
+							</DialogFooter>
+						</>
+					) : null}
+				</DialogContent>
+			</Dialog>
+			<Dialog
+				open={notesReview !== null}
+				onOpenChange={(open) => {
+					if (!open) setNotesReview(null);
+				}}
+			>
+				<DialogContent className="max-w-3xl">
+					{notesReview ? (
+						<>
+							<DialogHeader>
+								<DialogTitle>{t("review.title")}</DialogTitle>
+								<DialogDescription>
+									{t("review.description", {
+										name:
+											notesReview.path.split(/[\\/]/).pop() ?? notesReview.path,
+									})}
+								</DialogDescription>
+							</DialogHeader>
+							<div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-hidden">
+								<div className="flex min-h-0 flex-col">
+									<p className="mb-1 font-medium text-muted-foreground text-xs">
+										{t("review.before")}
+									</p>
+									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
+										{notesReview.before || t("review.empty")}
+									</pre>
+								</div>
+								<div className="flex min-h-0 flex-col">
+									<p className="mb-1 font-medium text-muted-foreground text-xs">
+										{t("review.after")}
+									</p>
+									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
+										{notesReview.after || t("review.empty")}
+									</pre>
+								</div>
+							</div>
+							<DialogFooter>
+								<Button
+									variant="outline"
+									onClick={() => {
+										void revertNote(notesReview.path, notesReview.before);
+										setNotesReview(null);
+									}}
+								>
+									{t("review.revert")}
+								</Button>
+								<Button onClick={() => setNotesReview(null)}>
+									{t("review.keep")}
 								</Button>
 							</DialogFooter>
 						</>
