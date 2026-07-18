@@ -1,6 +1,6 @@
 # Agentero TODO
 
-可执行 backlog。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)。
+可执行 backlog。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；Zotero Connector 兼容见 [`../backend/connector.md`](../backend/connector.md)。
 
 ## P0 — 近期闭环
 
@@ -190,10 +190,14 @@
    - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）。
    - [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项。
    - [ ] 批注原位高亮渲染（highlights.md 系统）与引用 key 映射。
-1. **Zotero/BibTeX 迁移工具**
-   - 解析 Zotero export 或 BibTeX。
-   - 由 Agent 辅助重组为 Agentero vault。
-   - 保留原始附件与引用 key 映射。
+
+1b. **Zotero Connector 兼容服务**（方案一）— 设计见 [`../backend/connector.md`](../backend/connector.md)
+   - [x] C0：设计文档（本机 `23119`、互斥 Zotero 桌面、默认关、MVP endpoints、映射与分期）。
+   - [ ] C1：Host `services/connector` — `ping` / `saveItems` / `sessionProgress` + loopback 安全策略；复用 `map_zotero_item` 落盘。
+   - [ ] C2：设置开关 `connectorEnabled` + `connector_get_status` / `connector_set_enabled`；端口冲突 / 无 Vault UX；i18n。
+   - [ ] C3：前端 `connector:item-saved` 刷新树/Library；退出释放端口；`api.md` 命令表。
+   - [ ] C4（P1）：`saveAttachment` 或完善 PDF URL 下载；去重策略；stub `getSelectedCollection` / `updateSession`。
+   - [ ] C5（可选）：`detailedCookies`、快照降级策略、可配置端口（需用户改插件 URL）。
 
 2. **用户友好的 Skills / Workflows**
    - [x] 精读论文（paper-reader：文件树 Zap + catalog `is_read`）。

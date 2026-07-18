@@ -20,6 +20,7 @@ nav:
       - 数据模型: backend/data-model.md
       - 论文目录库: backend/catalog.md
       - 魔棒与 Translator: backend/identifier-lookup.md
+      - Zotero Connector 兼容: backend/connector.md
       - 双链与图谱: backend/wikilinks.md
   - 测试:
       - 概览: test/index.md

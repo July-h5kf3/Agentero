@@ -47,6 +47,7 @@ Agentero 桌面应用
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
+- **规划**：Zotero Connector 兼容服务（本机 `23119`，官方浏览器扩展一键保存到 Vault；与 Zotero 桌面互斥）— 见 [`backend/connector.md`](backend/connector.md)。
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
 - **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
@@ -78,6 +79,7 @@ Agentero 桌面应用
 - Vault 数据模型：[`backend/data-model.md`](backend/data-model.md)
 - 论文目录库：[`backend/catalog.md`](backend/catalog.md)
 - 魔棒入库与 Translator：[`backend/identifier-lookup.md`](backend/identifier-lookup.md)
+- Zotero Connector 兼容（设计中）：[`backend/connector.md`](backend/connector.md)
 - PDF 划词提问（MVP 已落地）：[`development/pdf-ask.md`](development/pdf-ask.md)
 - 翻译服务（首版；免费 + Agent）：[`development/translate.md`](development/translate.md)
 - 测试与验证：[`test/index.md`](test/index.md)
