@@ -6,6 +6,16 @@
 		"notInstalled": "Not installed"
 	},
 	"defaultName": "Agent",
+	"permission": {
+		"title": "Agent permission",
+		"deny": "Deny",
+		"kind": {
+			"allowOnce": "Allow once",
+			"allowAlways": "Always allow",
+			"rejectOnce": "Reject once",
+			"rejectAlways": "Always reject"
+		}
+	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
 	"suggestions": {

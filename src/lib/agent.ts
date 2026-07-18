@@ -206,6 +206,23 @@ export type AgentFailedEvent = {
 	error: string;
 };
 
+export type PermissionOption = {
+	optionId: string;
+	name: string;
+	/** allow_once | allow_always | reject_once | reject_always | other */
+	kind: string;
+};
+
+/** ACP permission request forwarded to the user in "ask" mode. */
+export type PermissionRequest = {
+	requestId: string;
+	sessionId: string;
+	title: string;
+	kind?: string | null;
+	paths: string[];
+	options: PermissionOption[];
+};
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;
@@ -346,6 +363,8 @@ export async function runOnce(request: {
 	skillIds?: string[];
 	/** Select the agent's first ACP permission option for this run. */
 	autoApprove?: boolean;
+	/** ACP permission handling: "restricted" | "ask" | "auto" (from settings). */
+	permissionMode?: string;
 	/**
 	 * Force the language of the agent response and any generated notes.
 	 * When omitted, runOnce falls back to the global `aiResponseLanguage`
@@ -376,6 +395,7 @@ export async function runOnce(request: {
 			fastMode: request.fastMode,
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
+			permissionMode: request.permissionMode,
 			responseLanguage,
 			hideFromChatHistory: request.hideFromChatHistory ?? false,
 		},
@@ -411,6 +431,16 @@ export async function readCodexThread(request: {
 /** Request cooperative cancellation of the active ACP session. */
 export async function cancelAgentRun(sessionId: string): Promise<void> {
 	await invokeApi<boolean>("agent_cancel_run", { sessionId });
+}
+
+/** Answer a pending ACP permission request (ask mode). `optionId = null` cancels. */
+export async function respondPermission(
+	requestId: string,
+	optionId: string | null,
+): Promise<void> {
+	await invokeApi<{ resolved: boolean }>("agent_respond_permission", {
+		request: { requestId, optionId },
+	});
 }
 
 export type WarmResult = {

@@ -9,7 +9,8 @@ use crate::services::agent::templates::template_info;
 use crate::services::agent::{
     builtin_templates, codex_list_threads, codex_read_thread, list_agent_skills, new_ids,
     prepare_codex_thread, probe_agent, probe_codex, run_codex_turn, run_once, warm_agent,
-    warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController,
+    warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate,
+    PermissionPolicy,
 };
 use crate::services::terminal;
 use serde::Serialize;
@@ -256,6 +257,7 @@ pub async fn agent_run_once(
     window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
     runs: State<'_, AgentRunController>,
+    gate: State<'_, PermissionGate>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
     use crate::log_util::{trunc, OpTimer};
@@ -327,6 +329,14 @@ pub async fn agent_run_once(
 
     let app_handle = window.app_handle().clone();
     let events = AgentEventEmitter::new(app_handle.clone(), window.label());
+    let permission_gate = gate.inner().clone();
+    let permission_policy = match request.permission_mode.as_deref() {
+        Some("auto") => PermissionPolicy::Auto,
+        Some("ask") => PermissionPolicy::Ask,
+        // Back-compat: older clients only send `auto_approve`.
+        _ if request.auto_approve => PermissionPolicy::Auto,
+        _ => PermissionPolicy::Restricted,
+    };
     let log_session_id = session_id.clone();
     let log_agent_id = desc.id.clone();
     let session_agent_id = log_agent_id.clone();
@@ -367,7 +377,8 @@ pub async fn agent_run_once(
                 request.reasoning_effort,
                 request.fast_mode,
                 request.skill_ids,
-                request.auto_approve,
+                permission_policy,
+                permission_gate.clone(),
                 request.response_language,
                 cancellation,
             )
@@ -449,6 +460,31 @@ pub fn agent_cancel_run(
         Ok(()) => ApiResult::ok(true),
         Err(e) => map_err(e),
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionResponseRequest {
+    pub request_id: String,
+    /// Chosen option id; `None` cancels the request.
+    #[serde(default)]
+    pub option_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionResponded {
+    pub resolved: bool,
+}
+
+/// Answer a pending ACP permission request (ask mode). `option_id = None` cancels.
+#[tauri::command]
+pub fn agent_respond_permission(
+    gate: State<'_, PermissionGate>,
+    request: PermissionResponseRequest,
+) -> ApiResult<PermissionResponded> {
+    let resolved = gate.resolve(&request.request_id, request.option_id);
+    ApiResult::ok(PermissionResponded { resolved })
 }
 
 /// Background ACP start when Chat opens — loads models/context without a user prompt.

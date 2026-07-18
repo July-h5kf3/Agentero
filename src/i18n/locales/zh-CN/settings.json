@@ -98,6 +98,9 @@
 			"restricted": {
 				"label": "受限（默认）"
 			},
+			"ask": {
+				"label": "每次询问"
+			},
 			"auto": {
 				"label": "自动批准"
 			}

@@ -24,9 +24,10 @@ export type LocalePreference = "system" | "en" | "zh-CN";
 /**
  * How Agentero responds to agent permission escalations.
  * - `restricted`: decline requests (Codex uses workspace-write).
+ * - `ask`: forward each request to the user for an explicit decision.
  * - `auto`: auto-approve every request (YOLO; Codex uses danger-full-access).
  */
-export type AgentPermissionMode = "restricted" | "auto";
+export type AgentPermissionMode = "restricted" | "ask" | "auto";
 
 /**
  * Language every agent response (and notes written to files) should use.

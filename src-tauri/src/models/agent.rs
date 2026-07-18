@@ -249,6 +249,10 @@ pub struct RunOnceRequest {
     /// When enabled, automatically select the first ACP permission option for this run.
     #[serde(default)]
     pub auto_approve: bool,
+    /// ACP permission handling: "restricted" (decline), "auto" (approve all),
+    /// or "ask" (forward each request to the user). Defaults to "restricted".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<String>,
     /// Language every response and generated note must use (e.g. `zh-CN`).
     /// Resolved from the global setting on the frontend; `None` = no directive.
     #[serde(default, skip_serializing_if = "Option::is_none")]

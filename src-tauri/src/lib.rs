@@ -178,6 +178,7 @@ pub fn run() {
         .plugin(build_log_plugin().build())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
+        .manage(services::agent::PermissionGate::new())
         .manage(WikiIndexState::new())
         .manage(FsWatchController::new())
         .manage(Arc::new(ConnectorController::new()))
@@ -200,6 +201,7 @@ pub fn run() {
             commands::agent::agent_codex_list_threads,
             commands::agent::agent_codex_read_thread,
             commands::agent::agent_cancel_run,
+            commands::agent::agent_respond_permission,
             commands::agent::agent_warm,
             commands::graph::graph_get_backlinks,
             commands::graph::graph_get_graph,

@@ -112,6 +112,14 @@ import {
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -157,7 +165,9 @@ import {
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
+	type PermissionRequest,
 	readCodexThread,
+	respondPermission,
 	runOnce,
 	saveExternalCodexHistoryPref,
 	saveModelCatalog,
@@ -1606,6 +1616,27 @@ export function AgentPanel({
 		}
 	};
 
+	// Forward ACP permission requests (ask mode) to the user for an explicit decision.
+	const [permissionRequest, setPermissionRequest] =
+		useState<PermissionRequest | null>(null);
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unsub: (() => void) | undefined;
+		let cancelled = false;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<PermissionRequest>(
+				"agent:permission-request",
+				({ payload }) => setPermissionRequest(payload),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
+	}, []);
+
 	const send = async (
 		textRaw: string,
 		baseLinesOverride?: ChatLine[],
@@ -1722,6 +1753,7 @@ export function AgentPanel({
 				fastMode: isCodexAgent && fastAvailable ? fastEnabled : undefined,
 				skillIds: submittedComposerState.selectedSkillIds,
 				autoApprove: loadSettings().agentPermissionMode === "auto",
+				permissionMode: loadSettings().agentPermissionMode,
 			});
 			if (
 				sessionContextGeneration !== sessionContextGenRef.current ||
@@ -2239,6 +2271,21 @@ export function AgentPanel({
 			{headerActions}
 		</>
 	);
+
+	const formatPermissionKind = (kind: string): string => {
+		switch (kind) {
+			case "allow_once":
+				return t("permission.kind.allowOnce");
+			case "allow_always":
+				return t("permission.kind.allowAlways");
+			case "reject_once":
+				return t("permission.kind.rejectOnce");
+			case "reject_always":
+				return t("permission.kind.rejectAlways");
+			default:
+				return kind;
+		}
+	};
 
 	return (
 		<section
@@ -3188,6 +3235,67 @@ export function AgentPanel({
 					</div>
 				</div>
 			</div>
+			<Dialog
+				open={permissionRequest !== null}
+				onOpenChange={(open) => {
+					if (!open && permissionRequest) {
+						void respondPermission(permissionRequest.requestId, null);
+						setPermissionRequest(null);
+					}
+				}}
+			>
+				<DialogContent className="max-w-md">
+					{permissionRequest ? (
+						<>
+							<DialogHeader>
+								<DialogTitle>{t("permission.title")}</DialogTitle>
+								<DialogDescription>{permissionRequest.title}</DialogDescription>
+							</DialogHeader>
+							{permissionRequest.paths.length ? (
+								<div className="flex flex-col gap-1">
+									{permissionRequest.paths.map((p) => (
+										<code
+											key={p}
+											className="truncate rounded bg-muted px-1.5 py-0.5 text-xs"
+											title={p}
+										>
+											{p}
+										</code>
+									))}
+								</div>
+							) : null}
+							<DialogFooter className="flex-col items-stretch gap-2 sm:flex-col">
+								{permissionRequest.options.map((opt) => (
+									<Button
+										key={opt.optionId}
+										variant={
+											opt.kind.startsWith("allow") ? "default" : "outline"
+										}
+										onClick={() => {
+											void respondPermission(
+												permissionRequest.requestId,
+												opt.optionId,
+											);
+											setPermissionRequest(null);
+										}}
+									>
+										{opt.name || formatPermissionKind(opt.kind)}
+									</Button>
+								))}
+								<Button
+									variant="ghost"
+									onClick={() => {
+										void respondPermission(permissionRequest.requestId, null);
+										setPermissionRequest(null);
+									}}
+								>
+									{t("permission.deny")}
+								</Button>
+							</DialogFooter>
+						</>
+					) : null}
+				</DialogContent>
+			</Dialog>
 		</section>
 	);
 }

@@ -98,6 +98,9 @@
 			"restricted": {
 				"label": "Restricted (default)"
 			},
+			"ask": {
+				"label": "Ask every time"
+			},
 			"auto": {
 				"label": "Auto-approve"
 			}

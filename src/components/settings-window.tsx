@@ -1314,6 +1314,9 @@ function AgentPane({
 							<SelectItem value="restricted">
 								{t("agent.permission.restricted.label")}
 							</SelectItem>
+							<SelectItem value="ask">
+								{t("agent.permission.ask.label")}
+							</SelectItem>
 							<SelectItem value="auto">
 								{t("agent.permission.auto.label")}
 							</SelectItem>
