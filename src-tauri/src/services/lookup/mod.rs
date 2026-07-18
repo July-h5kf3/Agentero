@@ -550,6 +550,17 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
 /// Abstract is shown in **Chinese** when free-MT succeeds (fallback: original text).
 /// Catalog still stores the original `abstract_text`.
 pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
+    write_paper_shell_opts(paper_dir, meta, true).await
+}
+
+/// Same as [`write_paper_shell`], with optional abstract MT.
+/// Connector saves must stay under the browser extension's ~15s timeout, so they
+/// pass `translate_abstract = false` and fetch assets asynchronously.
+pub(crate) async fn write_paper_shell_opts(
+    paper_dir: &Path,
+    meta: &PaperMeta,
+    translate_abstract: bool,
+) -> Result<(), AppError> {
     let abstract_block = match meta
         .abstract_text
         .as_deref()
@@ -557,7 +568,11 @@ pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Res
         .filter(|s| !s.is_empty())
     {
         Some(a) => {
-            let display = abstract_for_notes(a).await;
+            let display = if translate_abstract {
+                abstract_for_notes(a).await
+            } else {
+                a.to_string()
+            };
             format!("> {display}\n\n")
         }
         None => String::new(),

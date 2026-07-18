@@ -4,11 +4,11 @@ use crate::error::AppError;
 use crate::services::catalog::papers;
 use crate::services::lookup::{
     enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
-    paper_record_from_meta, write_paper_shell,
+    paper_record_from_meta, write_paper_shell_opts,
 };
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct ConnectorImportResult {
@@ -21,6 +21,10 @@ pub struct ConnectorImportResult {
 }
 
 /// Import one Zotero-shaped item JSON into the vault.
+///
+/// Returns as soon as catalog + NOTES shell are written. PDF / TeX / PAPER.md
+/// download runs in a background task so the official Connector (≈15s timeout)
+/// does not hang or fail on slow network / abstract MT.
 pub async fn import_connector_item(
     vault: &Path,
     parent_dir: &str,
@@ -78,23 +82,20 @@ pub async fn import_connector_item(
         meta.id = folder_id.clone();
     }
 
-    write_paper_shell(&paper_dir, &meta).await?;
+    // No abstract MT here — free MT can exceed the Connector's 15s request timeout.
+    write_paper_shell_opts(&paper_dir, &meta, false).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
 
-    // Best-effort assets (do not fail the whole save)
-    let _ = ensure_paper_assets(
-        &paper_dir,
-        &meta.id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
-    )
-    .await;
-    let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-        vault, &path_rel, &paper_dir,
-    )
-    .await;
+    schedule_asset_download(
+        vault.to_path_buf(),
+        path_rel.clone(),
+        paper_dir,
+        meta.id.clone(),
+        meta.arxiv_id.clone(),
+        meta.pdf_url.clone(),
+        meta.doi.clone(),
+    );
 
     Ok(ConnectorImportResult {
         path: path_rel,
@@ -104,6 +105,32 @@ pub async fn import_connector_item(
         connector_item_id,
         item_type,
     })
+}
+
+/// Fire-and-forget PDF / TeX / PAPER.md fetch after HTTP 201 is free to return.
+fn schedule_asset_download(
+    vault: PathBuf,
+    path_rel: String,
+    paper_dir: PathBuf,
+    id: String,
+    arxiv_id: Option<String>,
+    pdf_url: Option<String>,
+    doi: Option<String>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let _ = ensure_paper_assets(
+            &paper_dir,
+            &id,
+            arxiv_id.as_deref(),
+            pdf_url.as_deref(),
+            doi.as_deref(),
+        )
+        .await;
+        let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+            &vault, &path_rel, &paper_dir,
+        )
+        .await;
+    });
 }
 
 fn unique_paper_path(vault: &Path, parent_rel: &str, id: &str) -> Result<String, AppError> {
