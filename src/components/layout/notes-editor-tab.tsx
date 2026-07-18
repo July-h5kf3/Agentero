@@ -10,7 +10,7 @@ type NotesEditorTabProps = {
 	fontSize: number;
 	showToolbar: boolean;
 	placeholder: string;
-	onPersist: (path: string, md: string) => void;
+	onPersist: (path: string, md: string, lastSaved: string) => void;
 	onAssetsChanged: () => void;
 	onDirty: (id: string, dirty: boolean) => void;
 };

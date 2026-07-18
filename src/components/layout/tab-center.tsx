@@ -34,7 +34,7 @@ type TabCenterProps = {
 	showEditorToolbar: boolean;
 	notesPlaceholder: string;
 	markdownPlaceholder: string;
-	onPersistFile: (path: string, md: string) => void;
+	onPersistFile: (path: string, md: string, lastSaved: string) => void;
 	onEditorAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
 	/** Immersive full-window PDF reading. */

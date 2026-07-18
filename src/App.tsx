@@ -304,6 +304,14 @@ export default function App() {
 	const treeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** Debounced wiki/backlinks/graph index rebuild after on-disk changes. */
+	const wikiRebuildTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	/** Latest rebuildWikiAndNotify (defined below) for the stable wiki scheduler. */
+	const rebuildWikiRef = useRef<(path: string) => Promise<void>>(
+		async () => {},
+	);
 
 	/** Merge a patch into the tab with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
@@ -964,12 +972,29 @@ export default function App() {
 		}, 400);
 	}, []);
 
+	/**
+	 * Debounced wiki / backlinks / graph index rebuild after any on-disk change
+	 * (external edit or Agent write). Only `.md` files carry wikilinks, so other
+	 * extensions are ignored; the rebuild is full but cheap for a research vault.
+	 */
+	const scheduleWikiRebuild = useCallback((absPath: string) => {
+		if (!/\.md$/i.test(absPath)) return;
+		if (wikiRebuildTimerRef.current) clearTimeout(wikiRebuildTimerRef.current);
+		wikiRebuildTimerRef.current = setTimeout(() => {
+			wikiRebuildTimerRef.current = null;
+			const vault = vaultPathRef.current;
+			if (!vault) return;
+			void rebuildWikiRef.current(vault);
+		}, 900);
+	}, []);
+
 	// Start/stop the Host Vault filesystem watcher for this window's active Vault.
-	// Live-reload open editors + file tree when files change on disk (external / Agent).
+	// Live-reload open editors + file tree, and keep the wiki index fresh.
 	useVaultFileEvents({
 		vaultPath,
 		onDiskChange: applyDiskChange,
 		onStructuralChange: scheduleTreeRefresh,
+		onWikiChange: scheduleWikiRebuild,
 	});
 
 	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
@@ -981,6 +1006,7 @@ export default function App() {
 			// Index rebuild is best-effort; panels re-fetch on next path change.
 		}
 	}, []);
+	rebuildWikiRef.current = rebuildWikiAndNotify;
 
 	const activateVault = useCallback(
 		async (path: string) => {
@@ -1426,18 +1452,36 @@ export default function App() {
 	// its own fixed path (debounced autosave, ⌘S, and unmount flush), so writes always
 	// target the correct file even when switching files quickly.
 	const persistFile = useCallback(
-		(path: string, md: string) => {
+		(path: string, md: string, lastSaved: string) => {
 			if (!isTauri() || !vaultPath || !path) return;
 			// Skip while this path is being reloaded from disk (external/Agent write):
 			// the remount's unmount-flush must not clobber the fresh disk content.
 			if (reseedGuardRef.current.has(normalizeTabPath(path))) return;
-			// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
-			setTabs((prev) => syncTabSeedsForPath(prev, path, md));
-			void writeVaultFile(path, md).catch((e) => {
-				notifyError(e instanceof Error ? e.message : String(e));
-			});
+			void (async () => {
+				// Conflict guard: if the file changed on disk since we last saved
+				// (external editor / Agent), do NOT silently overwrite — keep the
+				// user's in-memory edit and warn. (readVaultFile throws when the file
+				// is missing → treat as no conflict and create it.)
+				try {
+					const disk = await readVaultFile(path);
+					if (disk !== lastSaved) {
+						const name = path.split(/[\\/]/).pop() ?? path;
+						notifyWarning(t("diskConflict.saveBlocked", { name }));
+						return;
+					}
+				} catch {
+					// Missing/unreadable file → no conflict to guard against.
+				}
+				// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
+				setTabs((prev) => syncTabSeedsForPath(prev, path, md));
+				try {
+					await writeVaultFile(path, md);
+				} catch (e) {
+					notifyError(e instanceof Error ? e.message : String(e));
+				}
+			})();
 		},
-		[vaultPath],
+		[vaultPath, t],
 	);
 
 	/** Open a paper folder in a tab: center PDF, right Notes (resolved on load).

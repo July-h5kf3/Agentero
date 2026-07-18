@@ -13,6 +13,11 @@ type VaultFileEventsParams = {
 	onDiskChange: (absPath: string) => void;
 	/** Refresh the file tree after a structural change (create/delete/rename). */
 	onStructuralChange: () => void;
+	/**
+	 * Any touched path (content or structural). Used to (debounced) rebuild the
+	 * wiki / backlinks / graph index so it never goes stale after external writes.
+	 */
+	onWikiChange?: (absPath: string) => void;
 };
 
 /**
@@ -23,6 +28,7 @@ export function useVaultFileEvents({
 	vaultPath,
 	onDiskChange,
 	onStructuralChange,
+	onWikiChange,
 }: VaultFileEventsParams): void {
 	// start() replaces any existing watcher for this window, so a Vault switch needs
 	// only a fresh start (no cleanup-stop, which could race the new start). Window
@@ -47,7 +53,10 @@ export function useVaultFileEvents({
 			unsub = await listen<VaultFileChangedPayload>(
 				VAULT_FILE_CHANGED_EVENT,
 				({ payload }) => {
-					for (const p of payload.paths) onDiskChange(p);
+					for (const p of payload.paths) {
+						onDiskChange(p);
+						onWikiChange?.(p);
+					}
 					// Structural changes affect the tree; plain content edits don't.
 					if (payload.kind !== "modify") onStructuralChange();
 				},
@@ -57,5 +66,5 @@ export function useVaultFileEvents({
 			cancelled = true;
 			unsub?.();
 		};
-	}, [onDiskChange, onStructuralChange]);
+	}, [onDiskChange, onStructuralChange, onWikiChange]);
 }

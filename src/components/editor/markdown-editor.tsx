@@ -41,8 +41,13 @@ export type MarkdownEditorProps = {
 	fontSize?: number | string;
 	/** Show the WYSIWYG formatting toolbar above the editor. */
 	showToolbar?: boolean;
-	/** Persist serialized Markdown (frontmatter re-attached) to `path`. */
-	onPersist?: (path: string, markdown: string) => void;
+	/**
+	 * Persist serialized Markdown (frontmatter re-attached) to `path`.
+	 * `lastSaved` is the content currently believed to be on disk (the previous
+	 * persist / load seed) so the host can detect external modifications and avoid
+	 * silently overwriting them.
+	 */
+	onPersist?: (path: string, markdown: string, lastSaved: string) => void;
 	onDirtyChange?: (dirty: boolean) => void;
 	/** After writing an image under `./assets/` (refresh file tree). */
 	onAssetsChanged?: () => void;
@@ -124,9 +129,10 @@ export function MarkdownEditor({
 		const md = serialize();
 		if (md === savedRef.current) return;
 		if (!md.trim() && savedRef.current.trim()) return;
+		const lastSaved = savedRef.current;
 		savedRef.current = md;
 		onDirtyChange?.(false);
-		if (filePath && onPersist) onPersist(filePath, md);
+		if (filePath && onPersist) onPersist(filePath, md, lastSaved);
 	}, [readOnly, serialize, filePath, onPersist, onDirtyChange]);
 
 	// Latest persist closure, for the unmount flush (captures this file's path).
