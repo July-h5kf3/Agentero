@@ -30,7 +30,7 @@
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **性能（虚拟化）**：树把可见节点**拍平为一维列表 + 窗口化**（`@tanstack/react-virtual`），只渲染视口内的行；FileTree 自持滚动容器（`treeScrollRef`），折叠文件夹用扫平行组件 `FileTreeFolderRow`（`ai-elements/file-tree.tsx`）。避免大 Vault（成百上千篇）时常驻海量 DOM，以及选中/展开/拖拽时的全树重渲染。
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
-- **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex` 滚入视口。
+- **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件、**魔棒 / 本地 PDF 入库完成后 `openPaper`**），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex`（`align: "center"`）滚入视口。树刷新后若目标行尚未出现在拍平行中，会重新展开祖先再滚一次（覆盖入库刚写入磁盘的竞态）。
 - **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（`agentero-settings`）。
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
 - **虚拟节点 Recycle Bin**：紧挨 **Library** 下方固定一项 **Recycle Bin / 回收站**（路径常量 `agentero:trash`，非真实目录、不写盘）。图标 `Trash2`。选中后中间栏显示回收站视图（见「删除」）。空 Vault 时仍显示该节点。
@@ -66,7 +66,7 @@
   - **右键**「删除」（旁注 `⌘⌫`）、**`⌘⌫`**、批量条 / 右键「删除 N 项」：均**移入 Vault 回收站** `.agentero/.trash/<批次>/`，**不弹确认、不弹提示**（随时可从回收站找回）。
   - `papers/` 下的项移入回收站时**快照并移除** catalog 对应行（含嵌套 paper），从回收站恢复时一并恢复；随后刷新文件树、Library 与双链索引。
   - `⌘⌫` 在编辑器 / 输入框聚焦时不拦截（保留系统删行首行为）。
-  - **回收站浏览**：文件树中 Library 下方虚拟节点 `agentero:trash` 在**中间栏**打开回收站视图（`RecycleBinView`，`kind:"trash"` 虚拟 tab，与论文库同一位置、Zotero 风格；**非弹窗**；中间栏不重复标题/关闭行，工具栏在视图内）→ 列出全部已删项（名称 / 原路径 / 删除时间），逐项**恢复**（`path_restore_item`，恢复文件 + catalog 行）或**永久删除**（`path_purge_item`），顶部可**清空回收站**（`path_purge_trash`，不可撤销、需确认）。删除后从这里找回。
+  - **回收站浏览**：文件树中 Library 下方虚拟节点 `agentero:trash` 在**中间栏**打开回收站视图（`RecycleBinView`，`kind:"trash"` 虚拟 tab，与论文库同一位置、Zotero 风格；**非弹窗**；中间栏不重复文档级 title/关闭行；视图内 `PaneHeader` 与侧栏 Header 同高 `h-10`，右侧「清空回收站」）→ 列出全部已删项（名称 / 原路径 / 删除时间），逐项**恢复**（`path_restore_item`，恢复文件 + catalog 行）或**永久删除**（`path_purge_item`），顶部可**清空回收站**（`path_purge_trash`，不可撤销、需确认）。删除后从这里找回。
   - 不可删：虚拟 Library、Vault 根。
 - **多选与批量操作**（`file-tree.tsx` + 原语 `ai-elements/file-tree.tsx`）：
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
@@ -243,6 +243,7 @@
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
   - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
+  - **完成后**：刷新文件树 / Library / wiki → `openPaper(paperDir)`（打开 PDF tab，并 `setTreeSelectedPath`）→ 左侧树**展开祖先并滚到新论文行**（见 §2.1 选中同步）。本地 PDF 导入同样走 `openPaper`。  
   - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
 - **论文行 Zap（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Codex 用 `$paper-reader`，Claude 用 `/paper-reader`，其它靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。魔棒入库 / 单篇 Download 成功后会**自动**同一工作流（批量不连跑）。进度在左下角后台任务条（lookup/download → paperRead）。

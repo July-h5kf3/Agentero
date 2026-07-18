@@ -21,7 +21,7 @@
    - [x] Translator → `PaperMetadata` → catalog `papers` 表。
    - [x] 写入默认 `NOTES.md`、空 `highlights.md`。
    - [x] **始终下载 PDF**；**arXiv 解压 e-print LaTeX** 到 `source/`。
-   - [x] 入库后刷新文件树并打开 paper。
+   - [x] 入库后刷新文件树并打开 paper；**左侧树展开祖先并滚到新论文行**（`openPaper` → `setTreeSelectedPath` + FileTree reveal）。
    - [x] 入库后刷新 Backlinks/Graph 索引。
    - [ ] 关键词/描述 Agent 候选列表确认。
 
@@ -45,6 +45,8 @@
    - [x] **Tags CLI**：`paper set-tags` / `list --tag` / `tags`（与 Host 共用 `papers::set_tags`）。
 
 2d. **文件树与侧栏 UX** ✅
+   - [x] **回收站虚拟节点**：Library 下方 `agentero:trash`（不在侧栏 Header）；`RecycleBinView` 自持 `PaneHeader`（与侧栏同高）；中间栏不重复 title/关闭行。
+   - [x] **选中同步 / 定位**：激活文档与入库完成后树展开祖先并 `scrollToIndex`。
    - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）。
    - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）。
    - [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除 / 清空。

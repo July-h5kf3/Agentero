@@ -550,7 +550,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
   → 用户 Enter 或点「添加」
   → lookup:search（Translator）→ 可选极简预览
   → lookup_import({ parent_dir, text, translatorBaseUrl })
-  → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树；打开 paper（PDF 预览优先本地文件）
+  → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树 / Library / wiki；`openPaper` 打开 paper（PDF 预览优先本地）并 **左侧树展开祖先、滚到新论文行**
   → 失败：全局 Toast（`notifyError`，见 [`../frontend/ui.md`](../frontend/ui.md) §2.1.2）；Popover 内字段校验可仍就地显示
 ```
 
@@ -653,7 +653,7 @@ arXiv URL 推导：
 
 ### Phase C — 体验打磨
 
-- [x] 入库后刷新文件树；可打开 paper
+- [x] 入库后刷新文件树；可打开 paper；树选中并滚到新论文行
 - [x] 入库后 `graph_rebuild` 并刷新 Backlinks/Graph
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
