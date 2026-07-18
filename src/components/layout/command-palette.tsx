@@ -177,9 +177,11 @@ export function CommandPalette({
 
 					{!loading && !hasResults ? (
 						<div className="px-3 py-6 text-center text-muted-foreground text-sm">
-							{query
-								? t("commandPalette.noResults")
-								: t("commandPalette.empty")}
+							{!vaultPath
+								? t("commandPalette.noVault")
+								: query
+									? t("commandPalette.noResults")
+									: t("commandPalette.empty")}
 						</div>
 					) : null}
 				</CommandList>

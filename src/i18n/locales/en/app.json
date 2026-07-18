@@ -13,6 +13,7 @@
 		"contents": "In contents",
 		"searching": "Searching…",
 		"noResults": "No matches",
+		"noVault": "Open a vault to search",
 		"empty": "Type to search papers and note contents"
 	},
 	"titlebar": {

@@ -13,6 +13,7 @@
 		"contents": "正文匹配",
 		"searching": "搜索中…",
 		"noResults": "无匹配",
+		"noVault": "请先打开 Vault 再搜索",
 		"empty": "输入以搜索论文与笔记正文"
 	},
 	"titlebar": {
