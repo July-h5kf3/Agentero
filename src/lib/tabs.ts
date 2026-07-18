@@ -86,11 +86,11 @@ export function basenameOf(path: string): string {
 	);
 }
 
-function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
+function findNode(nodes: FileNode[], path: string): FileNode | undefined {
 	const key = normalizeTabPath(path);
-	const walk = (list: FileNode[]): FileNode[] | undefined => {
+	const walk = (list: FileNode[]): FileNode | undefined => {
 		for (const n of list) {
-			if (normalizeTabPath(n.path) === key) return n.children;
+			if (normalizeTabPath(n.path) === key) return n;
 			if (n.children?.length) {
 				const hit = walk(n.children);
 				if (hit) return hit;
@@ -99,6 +99,10 @@ function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
 		return undefined;
 	};
 	return walk(nodes);
+}
+
+function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
+	return findNode(nodes, path)?.children;
 }
 
 /** Fields loadTabResources fills in on top of a placeholder tab. */
@@ -236,6 +240,44 @@ export async function loadTabResources(
 	let paperDir = paperDirFromPath(path, paperFolders);
 	if (!paperDir && (await detectPaperDirectory(path))) {
 		paperDir = path.replace(/[\\/]+$/, "");
+	}
+
+	const treeNode = findNode(tree, path);
+	// Tree markers can identify a paper folder before paperFolders refreshes.
+	if (
+		!paperDir &&
+		treeNode?.kind === "directory" &&
+		isPaperDirectory(path, treeNode.children)
+	) {
+		paperDir = path.replace(/[\\/]+$/, "");
+	}
+
+	// Non-paper directory (org folder under papers/, notes/, etc.) → scoped library.
+	// Tree may be empty during tab restore before refreshTree completes: fall back to
+	// "not an openable file" so folder paths still reopen as library scope tabs.
+	const looksLikeOpenableFile =
+		isPdfPath(path) ||
+		isImagePath(path) ||
+		isHtmlPath(path) ||
+		isTextOpenable(path);
+	if (
+		!paperDir &&
+		(treeNode?.kind === "directory" ||
+			(treeNode == null && !looksLikeOpenableFile))
+	) {
+		return {
+			kind: "library",
+			title: treeNode?.name || basenameOf(path),
+			mode: "markdown",
+			paperMeta: null,
+			pdfUrl: null,
+			htmlUrl: null,
+			imageUrl: null,
+			notesPath: null,
+			notesSeed: "",
+			markdownSeed: "",
+			loaded: true,
+		};
 	}
 
 	if (paperDir) {
@@ -412,11 +454,16 @@ export function createPlaceholderTab(
 	preferMode: CenterViewMode = "markdown",
 ): DocTab {
 	const isLibrary = isLibraryVirtualPath(path);
+	const isTrash = isTrashVirtualPath(path);
 	return {
 		id: tabIdForPath(path),
-		path: isLibrary ? LIBRARY_VIRTUAL_PATH : path,
-		kind: isLibrary ? "library" : "file",
-		title: isLibrary ? "Library" : basenameOf(path),
+		path: isLibrary
+			? LIBRARY_VIRTUAL_PATH
+			: isTrash
+				? TRASH_VIRTUAL_PATH
+				: path,
+		kind: isLibrary ? "library" : isTrash ? "trash" : "file",
+		title: isLibrary ? "Library" : isTrash ? "Recycle Bin" : basenameOf(path),
 		mode: preferMode,
 		paperMeta: null,
 		pdfUrl: null,
@@ -431,6 +478,28 @@ export function createPlaceholderTab(
 		notesKey: 0,
 		loaded: false,
 	};
+}
+
+/**
+ * Ensure the full-library tab exists; returns the next tabs + active id.
+ * Used when the tab strip would otherwise be empty (default page).
+ */
+export function ensureFullLibraryTab(prev: DocTab[]): {
+	tabs: DocTab[];
+	activeId: string;
+	inserted: boolean;
+} {
+	const existing = prev.find((t) => isLibraryVirtualPath(t.path));
+	if (existing) {
+		return { tabs: prev, activeId: existing.id, inserted: false };
+	}
+	const tab: DocTab = {
+		...createPlaceholderTab(LIBRARY_VIRTUAL_PATH),
+		kind: "library",
+		title: "Library",
+		loaded: true,
+	};
+	return { tabs: [...prev, tab], activeId: tab.id, inserted: true };
 }
 
 /** Insert a placeholder tab for `path` unless a tab for it already exists. */
