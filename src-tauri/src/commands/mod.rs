@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod connector;
 pub mod graph;
 pub mod lookup;
 pub mod paper;

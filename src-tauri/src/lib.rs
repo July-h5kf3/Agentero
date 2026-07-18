@@ -12,8 +12,10 @@ pub mod services;
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
+use services::connector::ConnectorController;
 use services::watcher::FsWatchController;
 use services::wiki::WikiIndexState;
+use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
@@ -140,6 +142,7 @@ pub fn run() {
         .manage(AgentRunController::new())
         .manage(WikiIndexState::new())
         .manage(FsWatchController::new())
+        .manage(Arc::new(ConnectorController::new()))
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
@@ -191,6 +194,9 @@ pub fn run() {
             commands::zotero::zotero_migrate,
             commands::watcher::fs_watch_start,
             commands::watcher::fs_watch_stop,
+            commands::connector::connector_get_status,
+            commands::connector::connector_set_enabled,
+            commands::connector::connector_set_vault,
             set_locale,
         ])
         .setup(|app| {
@@ -212,6 +218,8 @@ pub fn run() {
             // Ensure registry is loaded early.
             let _ = app.state::<AgentRegistry>();
             let _ = app.state::<WikiIndexState>();
+            let connector = app.state::<Arc<ConnectorController>>();
+            connector.set_app_handle(app.handle().clone());
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -229,6 +237,14 @@ pub fn run() {
                 window.state::<FsWatchController>().stop(window.label());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                app.state::<Arc<ConnectorController>>().stop();
+            }
+        });
 }

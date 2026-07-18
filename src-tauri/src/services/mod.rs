@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod catalog;
+pub mod connector;
 pub mod lookup;
 pub mod pdf_parse;
 pub mod terminal;
