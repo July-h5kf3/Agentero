@@ -1,6 +1,6 @@
 # Zotero Connector 兼容服务（方案一）
 
-> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避；**附件二进制 / 快照 / cookies 仍待**）  
+> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`**；**快照 / cookies 仍待**）  
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
 > 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
@@ -204,11 +204,18 @@ Tauri event: connector:item-saved / connector:error
 | `POST /connector/updateSession` | `sessionID` + `target`：解析目标并 **移动** 本 session 已写入的 paper 文件夹 + 更新 catalog path；同时记住默认 `parent_dir`；`tags` 暂未写入 catalog |
 | `POST /connector/delaySync` | `204` 空（无真实 sync） |
 
-### 4.3 下一阶段 endpoints（未实现 — 附件与快照）
+### 4.3 下一阶段 endpoints（快照 / cookies 未实现）
+
+**已实现（PR3 C4b）：**
+
+| Endpoint | 行为 |
+|---|---|
+| `POST /connector/saveAttachment` | 浏览器上传的附件（登录墙 PDF，插件用页面 cookie 拉取）。Body = 原始字节；`X-Metadata` 头携 `{ sessionID, parentItemID, title, url }`。按 `parentItemID` → session item 映射解析目标 paper（无映射时回退本 session 最近一篇），校验 `%PDF` magic 后写 `{paper}/{id}.pdf`，触发 `PAPER.md`（幂等）+ `connector:item-saved`。`ping` 回 `supportsAttachmentUpload: true`；body 上限 200 MiB。 |
+
+**未实现：**
 
 | Endpoint | 说明 | 优先级 |
 |---|---|---|
-| `POST /connector/saveAttachment` | 二进制 PDF + `X-Metadata`（`sessionID`, `parentItemID`, `title`, `url`）→ `{paper}/{id}.pdf` | **P0** |
 | `POST /connector/saveSnapshot` | 网页条目 + 可选快照 | **P0** |
 | `POST /connector/saveSingleFile` | SingleFile 整页 HTML | **P0**（可降级为仅元数据 + `html_url`） |
 | `detailedCookies`（在 `saveItems` 内消费） | 用浏览器 cookie 下 PDF | **P0** |
@@ -243,7 +250,7 @@ Tauri event: connector:item-saved / connector:error
 | `POST /connector/getSelectedCollection` | ✅ | `targets` 含组织子文件夹 |
 | `POST /connector/updateSession` | ✅ | 切换 target 移动 paper；tags 未写 |
 | `POST /connector/delaySync` | ✅ stub | `204` |
-| `POST /connector/saveAttachment` | ❌ | **最大缺口**：登录墙 PDF |
+| `POST /connector/saveAttachment` | ✅ | 登录墙 PDF：浏览器字节上传；`parentItemID`→paper；`%PDF` 校验；触发 PAPER.md |
 | `POST /connector/saveSnapshot` | ❌ | 普通网页保存 |
 | `POST /connector/saveSingleFile` | ❌ | 插件 snapshot 链路 |
 | `POST /connector/detect` | ❌ | 旧/bookmarklet 路径 |
@@ -264,14 +271,14 @@ Tauri event: connector:item-saved / connector:error
 
 | 能力 | 现状 |
 |---|---|
-| 订阅站 / 登录墙 PDF | 无 `saveAttachment`、无 `detailedCookies` |
+| 订阅站 / 登录墙 PDF | ✅ `saveAttachment` 浏览器上传；`detailedCookies` 仍未做 |
 | `singleFile: true` | 固定回 `false`，不接 `saveSingleFile` |
 | 摘要中文 MT | Connector 路径关闭（超时纪律） |
 | `updateSession.tags` | 忽略 |
 | 附件真实 progress % | 占位；URL 下载在后台 |
 | 可配置端口 | 写死 `23119` |
 
-**建议补齐顺序：** `saveAttachment` → `saveSnapshot` / `saveSingleFile`（可降级）→ `detailedCookies` →（按需）`detect`/`savePage`/`selectItems`。
+**建议补齐顺序：** ~~`saveAttachment`~~ ✅ → `saveSnapshot` / `saveSingleFile`（可降级）→ `detailedCookies` →（按需）`detect`/`savePage`/`selectItems`。
 
 ---
 
@@ -452,9 +459,9 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 - [x] Library 作用域 → `connector_set_parent_dir`
 - [x] `docs/backend/api.md` 命令表同步
 
-### PR3 — 附件与快照（未做）
+### PR3 — 附件与快照（C4b 已做）
 
-- [ ] **C4b** `saveAttachment` 二进制上传
+- [x] **C4b** `saveAttachment` 二进制上传
 - [ ] **C4c** `saveSnapshot` / `saveSingleFile`（可降级）
 - [ ] **C5a** `detailedCookies`
 - [ ] （可选）`sessionProgress` 真实附件百分比；后台任务条
@@ -545,3 +552,4 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 2026-07-18 | 初稿：方案一（兼容官方 Connector / 本机 23119）设计与分期；已挂 mkdocs / roadmap / todo / api §3.5b |
 | 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新；PR3 附件协议仍待 |
 | 2026-07-18 | 防 15s 超时（后台资产）；`targets` 子文件夹 + `updateSession` 移动；§4.5 上游 API 覆盖总表 |
+| 2026-07-18 | **C4b `saveAttachment`**：浏览器上传登录墙 PDF（`X-Metadata` `parentItemID`→paper；`%PDF` 校验；触发 PAPER.md；`supportsAttachmentUpload: true`；200 MiB body 上限） |

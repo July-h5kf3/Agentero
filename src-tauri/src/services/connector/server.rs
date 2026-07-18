@@ -3,8 +3,8 @@
 use super::import::import_connector_item;
 use super::state::{ConnectorController, ConnectorItemSaved, ProgressAttachment, ProgressItem};
 use crate::error::AppError;
-use axum::body::Body;
-use axum::extract::State;
+use axum::body::{Body, Bytes};
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -14,6 +14,9 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+
+/// Max uploaded attachment (browser PDF). axum's default 2 MiB is too small.
+const MAX_ATTACHMENT_BYTES: usize = 200 * 1024 * 1024;
 
 #[derive(Clone)]
 struct AppState {
@@ -29,6 +32,10 @@ pub async fn serve(
     let app = Router::new()
         .route("/connector/ping", get(ping_get).post(ping_post))
         .route("/connector/saveItems", post(save_items))
+        .route(
+            "/connector/saveAttachment",
+            post(save_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BYTES)),
+        )
         .route("/connector/sessionProgress", post(session_progress))
         .route(
             "/connector/getSelectedCollection",
@@ -171,7 +178,7 @@ async fn ping_post(headers: HeaderMap) -> Response {
             "prefs": {
                 "automaticSnapshots": false,
                 "downloadAssociatedFiles": true,
-                "supportsAttachmentUpload": false,
+                "supportsAttachmentUpload": true,
                 "supportsTagsAutocomplete": false,
                 "canUserAddNote": false,
                 "reportActiveURL": false
@@ -300,6 +307,12 @@ async fn save_items(
                 if !r.deduped {
                     state.ctrl.record_session_paper(&session_id, &r.path);
                 }
+                // Remember connector item id → paper so saveAttachment can resolve parentItemID.
+                state.ctrl.record_session_item_paper(
+                    &session_id,
+                    &r.connector_item_id.to_string(),
+                    &r.path,
+                );
                 state.ctrl.emit_item_saved(ConnectorItemSaved {
                     path: r.path.clone(),
                     id: r.id.clone(),
@@ -439,6 +452,67 @@ async fn update_session(
             } else {
                 json_response(StatusCode::BAD_REQUEST, json!({ "error": msg }))
             }
+        }
+    }
+}
+
+/// Browser-uploaded attachment (login-wall PDFs the Connector fetched with the
+/// page's cookies). Body = raw bytes; `X-Metadata` header carries
+/// `{ sessionID, parentItemID, title, url }`.
+async fn save_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+
+    let meta: Value = headers
+        .get("x-metadata")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(Value::Null);
+
+    let session_id = meta
+        .get("sessionID")
+        .or_else(|| meta.get("sessionId"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("")
+        .to_string();
+    if session_id.is_empty() {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+        );
+    }
+
+    // parentItemID may be a string or a number depending on the Connector version.
+    let parent_item_id = meta
+        .get("parentItemID")
+        .or_else(|| meta.get("parentItemId"))
+        .map(|v| match v {
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        })
+        .filter(|s| !s.is_empty());
+
+    match state
+        .ctrl
+        .write_attachment_pdf(&session_id, parent_item_id.as_deref(), &body)
+    {
+        Ok(path) => json_response(StatusCode::CREATED, json!({ "path": path })),
+        Err(e) => {
+            let msg = e.to_string();
+            state.ctrl.emit_error(&msg, Some(&session_id));
+            let status = if msg.contains("SESSION_NOT_FOUND") {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            json_response(status, json!({ "error": msg }))
         }
     }
 }

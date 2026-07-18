@@ -63,6 +63,8 @@ pub struct SaveSession {
     pub parent_dir: String,
     /// Paper folders created in this session (vault-relative), for updateSession moves.
     pub paper_paths: Vec<String>,
+    /// Connector item id (stringified) → paper folder path; resolves `saveAttachment` `parentItemID`.
+    pub item_map: HashMap<String, String>,
 }
 
 struct Inner {
@@ -318,6 +320,7 @@ impl ConnectorController {
                 done: false,
                 parent_dir,
                 paper_paths: Vec::new(),
+                item_map: HashMap::new(),
             },
         );
         Ok(())
@@ -338,6 +341,94 @@ impl ConnectorController {
                 s.paper_paths.push(paper_path.replace('\\', "/"));
             }
         }
+    }
+
+    /// Map a Connector item id (stringified) to its paper folder, so a later
+    /// `saveAttachment` can resolve `parentItemID` → paper.
+    pub fn record_session_item_paper(
+        &self,
+        session_id: &str,
+        connector_item_id: &str,
+        paper_path: &str,
+    ) {
+        if connector_item_id.is_empty() {
+            return;
+        }
+        if let Ok(mut g) = self.inner.lock() {
+            if let Some(s) = g.sessions.get_mut(session_id) {
+                s.item_map
+                    .insert(connector_item_id.to_string(), paper_path.replace('\\', "/"));
+            }
+        }
+    }
+
+    /// Resolve the target paper folder for a `saveAttachment` upload.
+    /// Prefers the `parentItemID` mapping; falls back to the most recent paper
+    /// in the session (single-item saves).
+    fn resolve_attachment_dir(
+        &self,
+        session_id: &str,
+        parent_item_id: Option<&str>,
+    ) -> Result<(PathBuf, String), AppError> {
+        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let vault = g
+            .vault_path
+            .clone()
+            .ok_or_else(|| AppError::message("No vault open"))?;
+        let session = g
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
+        let rel = parent_item_id
+            .and_then(|pid| session.item_map.get(pid))
+            .cloned()
+            .or_else(|| session.paper_paths.last().cloned())
+            .ok_or_else(|| AppError::message("no paper folder for attachment"))?;
+        Ok((vault.join(&rel), rel))
+    }
+
+    /// Write a browser-uploaded attachment as the paper's `{id}.pdf` (login-wall PDFs).
+    /// Emits `connector:item-saved` and best-effort generates `PAPER.md`.
+    pub fn write_attachment_pdf(
+        &self,
+        session_id: &str,
+        parent_item_id: Option<&str>,
+        bytes: &[u8],
+    ) -> Result<String, AppError> {
+        if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
+            return Err(AppError::message("uploaded attachment is not a PDF"));
+        }
+        let (paper_dir, rel) = self.resolve_attachment_dir(session_id, parent_item_id)?;
+        if !paper_dir.is_dir() {
+            return Err(AppError::message("paper folder missing"));
+        }
+        let id = rel.rsplit('/').next().unwrap_or("paper").to_string();
+        std::fs::write(paper_dir.join(format!("{id}.pdf")), bytes)?;
+
+        self.emit_item_saved(ConnectorItemSaved {
+            path: rel.clone(),
+            id: id.clone(),
+            title: id.clone(),
+            deduped: false,
+            session_id: session_id.to_string(),
+        });
+
+        // Best-effort readable body (idempotent; skips when TeX/PAPER.md present).
+        let vault = {
+            let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            g.vault_path.clone()
+        };
+        if let Some(vault) = vault {
+            let rel_bg = rel.clone();
+            let dir_bg = paper_dir.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+                    &vault, &rel_bg, &dir_bg,
+                )
+                .await;
+            });
+        }
+        Ok(rel)
     }
 
     pub fn mark_session_done(&self, session_id: &str) {
