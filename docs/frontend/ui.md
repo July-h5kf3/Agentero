@@ -32,7 +32,8 @@
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
 - **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件、**魔棒 / 本地 PDF 入库完成后 `openPaper`**），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex`（`align: "center"`）滚入视口。树刷新后若目标行尚未出现在拍平行中，会重新展开祖先再滚一次（覆盖入库刚写入磁盘的竞态）。
 - **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（`agentero-settings`）。
-- **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示论文库表格（见 §3）。空 Vault 时仍显示该节点。
+- **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示**全库**论文表格（见 §3）。空 Vault 时仍显示该节点。
+- **组织文件夹 → 作用域论文库**：单击**非 paper** 目录（如 `papers/`、`papers/nlp/`、`papers/nlp/pretrain`）时 **同时**：(1) 树内展开/折叠子节点；(2) **同一** Library 标签页（`agentero:library`）就地按路径前缀筛选，**不**为文件夹新建 tab。点顶栏 Library 虚拟节点清除筛选回全库。**paper 文件夹**仍打开该篇 PDF/Notes（叶子、不展开）。
 - **虚拟节点 Recycle Bin**：紧挨 **Library** 下方固定一项 **Recycle Bin / 回收站**（路径常量 `agentero:trash`，非真实目录、不写盘）。图标 `Trash2`。选中后中间栏显示回收站视图（见「删除」）。空 Vault 时仍显示该节点。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**：下列任一成立即显示，hover 列出原因：
@@ -133,17 +134,21 @@
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
-  - **入口**：文件树虚拟节点 `agentero:library`；亦在选中 Vault 根 / `papers/` / 未选文件时作为中间栏默认视图。
-  - **性能（虚拟化）**：表格行用 `@tanstack/react-virtual` 窗口化（spacer-row 方案，保留 `<table>` 语义与横向滚动；`measureElement` 动态测高），大库不卡。
-  - **数据**：Host `paper_list` → catalog.sqlite（不扫盘拼表）。前端封装 `src/lib/papers-api.ts`。**catalog 权威**：盘上有、catalog 无的论文不会显示；空态提供「重新扫描 papers/」（`paper_rescan`）从各 `metadata.json` 重建 catalog。
+  - **入口**：
+    1. 虚拟节点 `agentero:library` → **全库**（清除 `libraryScopePath`）；
+    2. 单击**非 paper** 目录 → 聚焦**同一** Library tab，设置 `libraryScopePath` 做前缀过滤（**不新建 tab**）；
+    3. **默认页**：有 Vault 且 tab 条为空时自动 `ensureFullLibraryTab()`。
+  - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
+  - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
+  - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
   - **列**：标题、作者、年份、**标签**、类型、标识符；点击行打开对应 paper 文件夹。
-  - **标签筛选**：表上方汇总库内全部 tag 为可点 chip（再点取消）；单元格内 tag 也可筛选。标题搜索同时匹配 tag 子串。
-  - **排序**：点击表头按该列升序 / 降序切换；同一列再点切换方向。年份列首次点击为降序（新→旧）；文字列默认升序。
-  - **滚动**：容器 `.agentero-scroll-both`（**横向 + 纵向** `overflow: auto`）。表格 `w-max min-w-full` + 列 `min-width`，宽表可左右滑。
-  - **中间栏 header（右侧）**：仅 **导出**（Download 图标），无「Library」文案。
-    - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存对话框写 `.bib`。
-  - **导入**（Upload）：在侧栏**魔棒 Popover 卡片左下角**（与「添加」按钮同一行）；打开 `.bib`/`.ris`/… → `paper_import` → Translator `/import` → catalog + paper 文件夹（默认下 PDF/TeX）。
-  - **从 Zotero 迁移**（`Import` 图标，论文库工具栏左侧；仅 Library 视图）：`ZoteroMigrateDialog` → 选 Zotero 数据目录 → 预览文献/PDF 计数 + 「把 PDF 复制进知识库」勾选（默认开）→ `zotero_migrate`（直读 `zotero.sqlite`，见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）。
+  - **标签筛选**：表上方汇总**当前作用域** tag chip；单元格 tag 也可筛选。标题搜索同时匹配 tag 子串。
+  - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
+  - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
+  - **中间栏 header**：搜索框；全库另有 Zotero 迁移；**导出**（Download 图标）。
+    - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`。
+  - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
+  - **从 Zotero 迁移**：仅**全库**视图工具栏。
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入框在 chip 上方（多标签时无需先滚动）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威，同步 `metadata.json`）。`loadPaperMetadata` 会注入 vault-relative `path`（`metadata.json` 投影本身不含 path），Zotero 导入等路径也可持续编辑。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
@@ -231,7 +236,7 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
-| `⌘W` | 关闭当前标签 / 窗口（`closeTab`） | 有打开标签时逐个关闭当前标签；无标签时关闭当前窗口（File → Close 同源） |
+| `⌘W` | 关闭当前标签 / 窗口（`closeTab`） | 仅剩全库 Library 时关窗；否则关当前 tab，关空后自动全库（File → Close 同源） |
 | `⌥⌘→` / `⌥⌘←` | 下一 / 上一标签（`nextTab` / `prevTab`） | 在打开的文档标签间循环 |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
@@ -252,10 +257,14 @@
 
 **浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与禅模式 Focus 图标同行）：
 
-- **多 tab**：paper / Markdown / PDF / HTML / Library 各占一个 tab，可切换、关闭（`X` / 中键 / `⌘W`）、拖拽重排；同一路径已开则聚焦其 tab（不重复打开）。无标签时再按 `⌘W` 关闭窗口。
-- **常驻挂载**：每个 tab 的内容组件保持 mounted（非激活 `hidden`），切换瞬时并保留 **PDF 滚动位置/缩放** 与编辑器状态。PDF 多篇同开会同时占用内存（符合浏览器式取舍）。
-- **状态派生**：`activeTab` 驱动 `selectedPath` / `centerMode` / `paperMeta` / Notes；文件树选中与「新建父目录」上下文用独立的 `treeSelectedPath`（跟随激活文档，folder 新建时可指向文件夹）。激活路径变化时左侧树会展开祖先并滚到对应行（见 §2.1）。
-- **持久化**：`agentero-open-tabs`（`{tabs:[{path,mode}], activeIndex}`）按窗口保存，重开窗口恢复 tab 集与激活项；`⌘N` 各窗口独立。
+- **多 tab**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** 各占一个 tab，可切换、关闭（`X` / 中键 / `⌘W`）、拖拽重排；同一路径已开则聚焦其 tab。
+- **默认页 = 全库 Library**：
+  - 打开 Vault 无持久化 tab → `ensureFullLibraryTab()`。
+  - 关 tab 后列表为空 → 自动打开全库（无「无标签」空态）。
+  - **`⌘W` / tab X**：仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
+- **常驻挂载**：每个 tab 保持 mounted（非激活 `hidden`）；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
+- **状态派生**：`activeTab` 驱动路径 / 模式 / Notes；作用域 Library 的 `path` 为文件夹绝对路径，树高亮该组织夹。
+- **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
 - **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
 
@@ -354,7 +363,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
-  - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（已安装 / 未安装 + ACP ready/failed/not-probed + adapter missing）；未安装整行置灰；默认 Agent 右侧对勾（无 default 徽章）。打开页自动 scan + 并行 Probe；Refresh 可再跑。表下小字：ACP 失败时可试代理。代理开关不因 Probe busy 禁用；改代理只持久化 + scan。
+  - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列仅 ready/failed/not-probed，不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页自动 scan + 并行 Probe；Refresh 可再跑。表下小字：ACP 失败时可试代理。代理开关不因 Probe busy 禁用；改代理只持久化 + scan。
   - **Claude**：`detect` 用本机 `claude`（Claude Code）；ACP 入口为 `claude-agent-acp`。若已装 Claude Code 但缺适配器，显示 **ACP adapter missing** 徽章 + **Install ACP** 小按钮 → Host `agent_open_install_terminal` 打开系统终端，展示 `npm i -g @agentclientprotocol/claude-agent-acp`，**等待用户按 Enter 才执行**（不静默安装）。装完后用户点 Refresh 再 Probe。
   - 顶部 **Refresh**（Rescan + Probe）；**Use default** 纯文字（无 icon）。
   - Custom 区：添加任意 ACP command/args。

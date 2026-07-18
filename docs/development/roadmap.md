@@ -18,7 +18,7 @@
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Zap 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / 自动批准）；模型收藏；其它内置工作流、逐项权限确认 UI、写入草稿确认仍待。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、拖拽导入、DOI 识别、PdfParser（MinerU）仍在规划。 |
-| V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 先关 tab 再关窗）；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
+| V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
@@ -48,6 +48,8 @@
 - [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**；**沉浸式阅读**（全屏 + 限宽居中）；**标注面板**（高亮总览·改色·导出 NOTES）。
 - [x] 侧边栏折叠、标题栏快捷按钮、Settings；左右侧栏 **常驻 collapsible + preserve-pixel-size**。
 - [x] 论文库表格：`agentero:library`、`paper_list`、表头排序、**tags 筛选**、**Rescan**（`paper_rescan`）、双向滚动。
+- [x] **论文库默认页**：关光文档 tab 后回到全库；仅剩全库时 `⌘W` 关窗。
+- [x] **文件夹作用域库**：单击非 paper 目录 → 同 Library 表，`path` 前缀过滤内存 `libraryPapers`。
 - [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。
 - [x] 后台任务条（含 paper-reader；hover 实色）；**全局错误 Toast**。
 - [x] **Vault 文件监听**（`notify` → `vault:file-changed`）：外部/Agent 改盘自动重载打开的 Markdown 与文件树。
@@ -59,6 +61,7 @@
 - [x] 重启应用后可以回到最近使用的 Vault（设置开启时）。
 - [x] `⌘N` 打开的新窗口不自动占用上一窗口的 Vault，欢迎页可点最近路径。
 - [x] 打开 Vault 后可在 Library 视图看到 catalog 中的论文列表。
+- [x] 关光文档 tab 后中间栏为全库 Library；点组织文件夹只显示该路径下论文且不重新 `paper_list`。
 
 后续 TODO：
 
@@ -217,7 +220,7 @@
 
 现状对照：
 
-- **标签页已落地**（浏览器式多 tab，常驻挂载）：中间区可同时打开 Library / PDF / HTML / Markdown 多个文档，切换保留 PDF 滚动/缩放与编辑器状态。**分屏（split）仍待实现**。
+- **标签页 + 默认全库 + 文件夹作用域库已落地**。**分屏（split）仍待实现**。
 - 左右侧栏已是常驻 collapsible（`preserve-pixel-size`）；Agent 禅模式是全屏 Agent，不是编辑区分屏。
 - Agent 面板内部已有 **会话标签**（多 session），与「文档标签页」是不同概念。
 
@@ -225,14 +228,17 @@
 
 - [x] **文档标签栏**：打开 paper / Markdown / PDF / HTML / Library 时在标题栏（与禅模式图标同行）以 tab 呈现，可关闭、切换、拖拽重排。（`src/components/layout/document-tab-bar.tsx`、`src/lib/tabs.ts`）
 - [x] **标签状态**：每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush），关闭不丢内容。
+- [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
+- [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。
 - [ ] **分屏（split）**：水平或垂直拆成 2 格（MVP 可先 2 格；后续可扩展 3–4 格），每格独立 tab 栈或共享 tab 池。
-- [x] **快捷键**：关闭 tab `⌘W`（无 tab 时关窗口）、下一/上一 tab `⌥⌘→ / ⌥⌘←`；分屏快捷键随 split 一并补。
+- [x] **快捷键**：关闭 tab `⌘W`（仅剩全库关窗）、下一/上一 tab `⌥⌘→ / ⌥⌘←`；分屏快捷键随 split 一并补。
 - [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 tab。
 - [x] **多窗口兼容**：`⌘N` 窗口各自有独立 tab 集（`agentero-open-tabs` 按窗口 localStorage 恢复）。
 
 验收标准：
 
 - [x] 可同时打开至少 3 个文档标签并在其间切换而不丢滚动位置。
+- [x] 关光文档 tab 后中间栏为全库；点组织文件夹只看到该路径下论文且不重新 `paper_list`。
 - [ ] 分屏下左格读 PDF、右格写 `NOTES.md`（或两篇 paper 并排）可用。
 - [x] 关闭 Vault / 关窗不损坏磁盘文件；tab 布局可恢复（localStorage）。
 
