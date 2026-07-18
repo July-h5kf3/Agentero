@@ -965,10 +965,13 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
   responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
+  hideFromChatHistory?: boolean; // 默认 false；true 时不写入 Vault Codex 会话索引（精读 / PDF 划词提问等）
 }
 ```
 
 - **返回**：`{ ok: true, data: { sessionId, messageId, agentId } }`
+
+- **`hideFromChatHistory`**：为 `true` 时，Codex 路径不把该 native thread 记入 `.agentero/agent-sessions/codex.json`，因此默认 `agent_codex_list_threads` 不会列出；前端 Agent 面板也不会把这类流式事件并入对话记录。用于 **paper-reader 精读**、**PDF 划词提问** 等非 Composer 发起的运行。Composer 对话保持默认 `false`。
 
 - **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
 - **技能提及按 provider 分流**（`SkillMentionStyle`，见 Host `skills.rs`）：
@@ -985,7 +988,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_codex_list_threads`
 
-列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Agentero 在 `.agentero/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
+列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Agentero 在 `.agentero/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread（**不含** `hideFromChatHistory` 的后台运行）；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
 
 ```ts
 { agentId?: string; vaultPath?: string; includeExternal?: boolean }

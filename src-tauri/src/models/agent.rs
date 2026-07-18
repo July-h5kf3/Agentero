@@ -243,6 +243,10 @@ pub struct RunOnceRequest {
     /// Resolved from the global setting on the frontend; `None` = no directive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_language: Option<String>,
+    /// When true, do not list this Codex thread in Agent chat history
+    /// (paper-reader and other non-composer workflows).
+    #[serde(default)]
+    pub hide_from_chat_history: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

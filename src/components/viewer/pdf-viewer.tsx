@@ -996,6 +996,8 @@ export function PdfViewer({
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
+					// PDF ask lives on the reader surface — keep out of Agent chat history.
+					hideFromChatHistory: true,
 				});
 				activeSessionRef.current = accepted.sessionId;
 

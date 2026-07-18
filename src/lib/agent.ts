@@ -340,6 +340,11 @@ export async function runOnce(request: {
 	 * setting; `"auto"` (or omitting) sends no directive.
 	 */
 	responseLanguage?: string;
+	/**
+	 * When true, Codex thread is not indexed into Agent chat history
+	 * (paper-reader and other non-composer workflows).
+	 */
+	hideFromChatHistory?: boolean;
 }): Promise<RunOnceAccepted> {
 	const language =
 		request.responseLanguage ?? loadSettings().aiResponseLanguage;
@@ -360,6 +365,7 @@ export async function runOnce(request: {
 			skillIds: request.skillIds ?? [],
 			autoApprove: request.autoApprove ?? false,
 			responseLanguage,
+			hideFromChatHistory: request.hideFromChatHistory ?? false,
 		},
 	});
 }

@@ -254,6 +254,8 @@ export async function runPaperReaderWorkflow(opts: {
 				prompt: userPrompt,
 				skillIds: [PAPER_READER_SKILL_ID],
 				autoApprove: true,
+				// Background workflow — never surface in Agent chat history.
+				hideFromChatHistory: true,
 			});
 		} catch (skillErr) {
 			// Skill may be missing on older vaults — retry with workflow prompt only.
@@ -272,6 +274,7 @@ export async function runPaperReaderWorkflow(opts: {
 				prompt: userPrompt,
 				skillIds: [],
 				autoApprove: true,
+				hideFromChatHistory: true,
 			});
 		}
 

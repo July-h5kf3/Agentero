@@ -246,6 +246,7 @@ pub async fn agent_run_once(
             request.vault_path.clone(),
             request.model_id.clone(),
             request.auto_approve,
+            !request.hide_from_chat_history,
         )
         .await
         {

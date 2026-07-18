@@ -525,12 +525,15 @@ pub async fn probe_codex(desc: &AgentDescriptor) -> ProbeResult {
     }
 }
 
+/// Prepare a Codex thread. When `list_in_chat_history` is false (paper-reader /
+/// background workflows), the thread is not written to the vault chat index.
 pub async fn prepare_codex_thread(
     desc: &AgentDescriptor,
     session_id: Option<String>,
     vault_path: Option<String>,
     model_id: Option<String>,
     auto_approve: bool,
+    list_in_chat_history: bool,
 ) -> Result<PreparedCodexThread, AppError> {
     let mut client = CodexClient::spawn(desc, vault_path.as_deref()).await?;
     let session_id = session_id.filter(|id| !id.trim().is_empty());
@@ -570,8 +573,10 @@ pub async fn prepare_codex_thread(
     });
     match thread_id {
         Ok(thread_id) => {
-            if let Err(error) = remember_agentero_thread(vault_path.as_deref(), &thread_id) {
-                eprintln!("[agentero codex] failed to save native thread metadata: {error}");
+            if list_in_chat_history {
+                if let Err(error) = remember_agentero_thread(vault_path.as_deref(), &thread_id) {
+                    eprintln!("[agentero codex] failed to save native thread metadata: {error}");
+                }
             }
             Ok(PreparedCodexThread { thread_id, client })
         }
