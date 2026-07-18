@@ -1,5 +1,6 @@
 import {
 	Bot,
+	Check,
 	Info,
 	Keyboard,
 	Languages,
@@ -472,20 +473,23 @@ function AppearancePane({
 function StatusBadge({
 	tone,
 	children,
+	className,
 }: {
 	tone: "ok" | "warn" | "err" | "muted" | "primary";
 	children: ReactNode;
+	className?: string;
 }) {
 	return (
 		<span
 			className={cn(
-				"shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
+				"inline-flex shrink-0 items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
 				tone === "ok" &&
 					"bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
 				tone === "warn" && "bg-amber-500/15 text-amber-800 dark:text-amber-400",
 				tone === "err" && "bg-destructive/15 text-destructive",
 				tone === "muted" && "bg-muted text-muted-foreground",
 				tone === "primary" && "bg-primary/10 text-primary",
+				className,
 			)}
 		>
 			{children}
@@ -1160,37 +1164,47 @@ function AgentPane({
 						entry.acpCommandAvailable ||
 						entry.acpStatus === "ready";
 					const showInstall = Boolean(entry.offerInstall);
+					const notInstalled = !entry.binaryAvailable;
 					return (
 						<div
 							key={entry.templateId}
-							className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
+							className={cn(
+								"flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0",
+								notInstalled && "opacity-50",
+							)}
 						>
-							<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-								<span className="font-medium text-[13px]">{entry.name}</span>
-								{entry.isDefault ? (
-									<StatusBadge tone="primary">
-										{t("agent.badges.default")}
-									</StatusBadge>
-								) : null}
-								<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
-									{acpStatusLabel(entry.acpStatus)}
-								</StatusBadge>
-								{entry.binaryAvailable ? (
-									<StatusBadge tone="ok">
-										{t("agent.badges.installed")}
-									</StatusBadge>
-								) : (
-									<StatusBadge tone="muted">
-										{t("agent.badges.notOnPath")}
-									</StatusBadge>
-								)}
-								{showInstall ? (
-									<StatusBadge tone="warn">
-										{t("agent.badges.adapterMissing")}
-									</StatusBadge>
-								) : null}
+							<div className="flex min-w-0 flex-1 items-center gap-4">
+								<span
+									className={cn(
+										"w-24 shrink-0 truncate font-medium text-[13px]",
+										notInstalled && "text-muted-foreground",
+									)}
+								>
+									{entry.name}
+								</span>
+								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+									{entry.binaryAvailable ? (
+										<StatusBadge tone="ok">
+											{t("agent.badges.installed")}
+										</StatusBadge>
+									) : (
+										<StatusBadge tone="muted">
+											{t("agent.badges.notInstalled")}
+										</StatusBadge>
+									)}
+									{entry.acpStatus !== "missing" ? (
+										<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
+											{acpStatusLabel(entry.acpStatus)}
+										</StatusBadge>
+									) : null}
+									{showInstall ? (
+										<StatusBadge tone="warn">
+											{t("agent.badges.adapterMissing")}
+										</StatusBadge>
+									) : null}
+								</div>
 							</div>
-							<div className="flex shrink-0 items-center gap-1">
+							<div className="flex shrink-0 items-center justify-end gap-1">
 								{showInstall ? (
 									<Button
 										type="button"
@@ -1214,7 +1228,16 @@ function AgentPane({
 										{t("agent.installAdapter")}
 									</Button>
 								) : null}
-								{!entry.isDefault && canUse && !showInstall ? (
+								{entry.isDefault ? (
+									<span
+										className="flex size-7 items-center justify-center text-primary"
+										title={t("agent.badges.default")}
+										role="img"
+										aria-label={t("agent.badges.default")}
+									>
+										<Check className="size-4" aria-hidden />
+									</span>
+								) : canUse && !showInstall ? (
 									<Button
 										type="button"
 										variant="ghost"
@@ -1230,6 +1253,9 @@ function AgentPane({
 					);
 				})}
 			</SettingsGroup>
+			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.commonAgentsHint")}
+			</p>
 
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">

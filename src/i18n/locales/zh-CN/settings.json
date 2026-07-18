@@ -67,6 +67,7 @@
 		"desktopOnly": "Agent 注册表需要桌面应用。",
 		"desktopHint": "运行 `pnpm tauri dev` 以扫描本机上的 Agent。",
 		"commonAgents": "常用 Agent",
+		"commonAgentsHint": "若 ACP 失败，可尝试配置代理。",
 		"custom": "自定义",
 		"addCustom": "添加自定义 Agent",
 		"probe": "刷新",
@@ -79,7 +80,7 @@
 		"badges": {
 			"default": "默认",
 			"installed": "已安装",
-			"notOnPath": "不在 PATH",
+			"notInstalled": "未安装",
 			"adapterMissing": "缺 ACP 适配器"
 		},
 		"permission": {
