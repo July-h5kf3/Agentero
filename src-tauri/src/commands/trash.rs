@@ -1,6 +1,7 @@
 //! Recycle-bin commands: undoable delete + restore.
 
 use crate::error::{map_err, ApiResult};
+use crate::log_util::{trunc, OpTimer};
 use crate::services::trash;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -17,10 +18,11 @@ pub struct PathTrashArgs {
 #[tauri::command]
 pub fn path_trash(args: PathTrashArgs) -> ApiResult<trash::TrashResult> {
     let vault = PathBuf::from(args.vault_path.trim());
-    match trash::trash_paths(&vault, &args.rels) {
-        Ok(res) => ApiResult::ok(res),
-        Err(e) => map_err(e),
-    }
+    let n = args.rels.len();
+    let op = OpTimer::start_with("path_trash", format!("count={n}"));
+    op.finish_result_ok_extra(trash::trash_paths(&vault, &args.rels), |res| {
+        format!("batch_id={} count={}", trunc(&res.batch_id, 40), res.count)
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,9 +44,19 @@ pub struct PathUntrashResult {
 #[tauri::command]
 pub fn path_untrash(args: PathUntrashArgs) -> ApiResult<PathUntrashResult> {
     let vault = PathBuf::from(args.vault_path.trim());
+    let op = OpTimer::start_with(
+        "path_untrash",
+        format!("batch_id={}", trunc(&args.batch_id, 40)),
+    );
     match trash::restore_batch(&vault, &args.batch_id) {
-        Ok(restored) => ApiResult::ok(PathUntrashResult { restored }),
-        Err(e) => map_err(e),
+        Ok(restored) => {
+            op.finish_ok_extra(format!("restored={restored}"));
+            ApiResult::ok(PathUntrashResult { restored })
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            map_err(e)
+        }
     }
 }
 
@@ -68,10 +80,8 @@ pub fn path_list_trash(args: TrashVaultArgs) -> ApiResult<Vec<trash::TrashEntry>
 #[tauri::command]
 pub fn path_purge_trash(args: TrashVaultArgs) -> ApiResult<()> {
     let vault = PathBuf::from(args.vault_path.trim());
-    match trash::purge_all(&vault) {
-        Ok(()) => ApiResult::ok(()),
-        Err(e) => map_err(e),
-    }
+    let op = OpTimer::start("path_purge_trash");
+    op.finish_result(trash::purge_all(&vault))
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,9 +104,23 @@ pub struct PathRestoreItemResult {
 #[tauri::command]
 pub fn path_restore_item(args: TrashItemArgs) -> ApiResult<PathRestoreItemResult> {
     let vault = PathBuf::from(args.vault_path.trim());
+    let op = OpTimer::start_with(
+        "path_restore_item",
+        format!(
+            "batch_id={} stored={}",
+            trunc(&args.batch_id, 40),
+            trunc(&args.stored, 80)
+        ),
+    );
     match trash::restore_item(&vault, &args.batch_id, &args.stored) {
-        Ok(rel) => ApiResult::ok(PathRestoreItemResult { rel }),
-        Err(e) => map_err(e),
+        Ok(rel) => {
+            op.finish_ok_extra(format!("rel={}", trunc(&rel, 120)));
+            ApiResult::ok(PathRestoreItemResult { rel })
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            map_err(e)
+        }
     }
 }
 
@@ -104,8 +128,13 @@ pub fn path_restore_item(args: TrashItemArgs) -> ApiResult<PathRestoreItemResult
 #[tauri::command]
 pub fn path_purge_item(args: TrashItemArgs) -> ApiResult<()> {
     let vault = PathBuf::from(args.vault_path.trim());
-    match trash::purge_item(&vault, &args.batch_id, &args.stored) {
-        Ok(()) => ApiResult::ok(()),
-        Err(e) => map_err(e),
-    }
+    let op = OpTimer::start_with(
+        "path_purge_item",
+        format!(
+            "batch_id={} stored={}",
+            trunc(&args.batch_id, 40),
+            trunc(&args.stored, 80)
+        ),
+    );
+    op.finish_result(trash::purge_item(&vault, &args.batch_id, &args.stored))
 }

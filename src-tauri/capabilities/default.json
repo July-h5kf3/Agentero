@@ -35,6 +35,7 @@
 		},
 		"shell:default",
 		"store:default",
-		"dialog:default"
+		"dialog:default",
+		"log:default"
 	]
 }

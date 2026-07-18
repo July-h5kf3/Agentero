@@ -600,7 +600,10 @@ pub async fn prepare_codex_thread(
         Ok(thread_id) => {
             if list_in_chat_history {
                 if let Err(error) = remember_agentero_thread(vault_path.as_deref(), &thread_id) {
-                    eprintln!("[agentero codex] failed to save native thread metadata: {error}");
+                    log::error!(
+                        target: "agentero::agent",
+                        "failed to save native thread metadata: {error}"
+                    );
                 }
             }
             Ok(PreparedCodexThread { thread_id, client })

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import i18n from "@/i18n";
+import { logger } from "@/lib/logger";
 
 type Props = {
 	children: ReactNode;
@@ -20,11 +21,11 @@ export class ErrorBoundary extends Component<Props, State> {
 	}
 
 	componentDidCatch(error: Error, info: ErrorInfo) {
-		console.error(
-			`[ErrorBoundary${this.props.label ? `:${this.props.label}` : ""}]`,
-			error,
-			info,
+		const label = this.props.label ? `:${this.props.label}` : "";
+		logger.error(
+			`ErrorBoundary${label} ${error.message} componentStack=${(info.componentStack ?? "").trim().slice(0, 400)}`,
 		);
+		console.error(`[ErrorBoundary${label}]`, error, info);
 	}
 
 	render() {

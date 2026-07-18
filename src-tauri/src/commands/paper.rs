@@ -245,12 +245,23 @@ pub struct PaperRescanResult {
 /// on disk but missing from the catalog (added externally, or a lost row).
 #[tauri::command]
 pub fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
+    use crate::log_util::OpTimer;
+
     let vault = PathBuf::from(args.vault_path.trim());
+    let op = OpTimer::start("paper_rescan");
     if !vault.is_dir() {
-        return map_err(AppError::message("vault path is not a directory"));
+        let err = AppError::message("vault path is not a directory");
+        op.finish_err(&err);
+        return map_err(err);
     }
     match papers::rebuild_from_disk(&vault) {
-        Ok(count) => ApiResult::ok(PaperRescanResult { count }),
-        Err(e) => map_err(e),
+        Ok(count) => {
+            op.finish_ok_extra(format!("count={count}"));
+            ApiResult::ok(PaperRescanResult { count })
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            map_err(e)
+        }
     }
 }

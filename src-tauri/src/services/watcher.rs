@@ -69,7 +69,7 @@ impl FsWatchController {
                 let mut debouncer = match new_debouncer(Duration::from_millis(300), None, tx) {
                     Ok(d) => d,
                     Err(e) => {
-                        eprintln!("vault watcher init failed: {e}");
+                        log::error!(target: "agentero::watcher", "vault watcher init failed: {e}");
                         return;
                     }
                 };
@@ -77,7 +77,7 @@ impl FsWatchController {
                     .watcher()
                     .watch(std::path::Path::new(&watch_root), RecursiveMode::Recursive)
                 {
-                    eprintln!("vault watcher watch failed: {e}");
+                    log::error!(target: "agentero::watcher", "vault watcher watch failed: {e}");
                     return;
                 }
                 // Keep the debouncer alive for the lifetime of this loop.
