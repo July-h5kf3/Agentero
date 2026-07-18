@@ -10,8 +10,9 @@
 	"switchAgent": "Switch ACP agent",
 	"suggestions": {
 		"summarizePaper": "Summarize the open paper",
+		"askLibrary": "Ask a question across my library",
 		"listClaims": "List key claims and evidence",
-		"findRelated": "Find related notes in this vault"
+		"draftRelatedWork": "Draft a Related Work section"
 	},
 	"history": {
 		"aria": "Open chat history",

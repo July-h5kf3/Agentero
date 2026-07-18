@@ -10,8 +10,9 @@
 	"switchAgent": "切换 ACP Agent",
 	"suggestions": {
 		"summarizePaper": "总结当前论文",
+		"askLibrary": "就我的文献库提问",
 		"listClaims": "列出关键论点与证据",
-		"findRelated": "在此知识库中查找相关笔记"
+		"draftRelatedWork": "撰写相关工作（Related Work）"
 	},
 	"history": {
 		"aria": "打开对话历史",

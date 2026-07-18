@@ -279,12 +279,27 @@ function isBackgroundWorkflowHistoryTitle(title: string): boolean {
 	);
 }
 
-/** Empty-state suggestion chips — one per row (3 lines). Labels via i18n. */
+/** Empty-state suggestion chips — one per row. Labels via i18n. */
 const SUGGESTION_KEYS = [
 	"summarizePaper",
+	"askLibrary",
 	"listClaims",
-	"findRelated",
+	"draftRelatedWork",
 ] as const;
+
+type SuggestionKey = (typeof SUGGESTION_KEYS)[number];
+
+/**
+ * Each suggestion routes to a purpose-built backend workflow so the agent gets
+ * the right system prompt (progressive disclosure, citation discipline, …)
+ * instead of a generic free-form chat.
+ */
+const SUGGESTION_WORKFLOW: Record<SuggestionKey, string> = {
+	summarizePaper: "summary",
+	askLibrary: "qa",
+	listClaims: "qa",
+	draftRelatedWork: "related_work",
+};
 
 type AgentOption = {
 	key: string;
@@ -1594,6 +1609,7 @@ export function AgentPanel({
 	const send = async (
 		textRaw: string,
 		baseLinesOverride?: ChatLine[],
+		workflow?: string,
 	): Promise<boolean> => {
 		const text = textRaw.trim();
 		if (
@@ -1680,6 +1696,11 @@ export function AgentPanel({
 						.map((path) => `- ${path}`)
 						.join("\n")}`
 				: text;
+			// Workflow suggestions act on the focused paper / mentioned paths so
+			// “Summarize” targets the open paper even without an explicit @mention.
+			const workflowTarget = workflow
+				? (contextPaths[0] ?? selectedVaultPath ?? undefined)
+				: contextPaths[0];
 			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
 			const sessionStartLines = [...(baseLinesOverride ?? lines), userLine];
 			setLines(sessionStartLines);
@@ -1693,8 +1714,8 @@ export function AgentPanel({
 					: undefined,
 				prompt,
 				vaultPath: vaultPath ?? undefined,
-				workflow: "free",
-				target: contextPaths[0],
+				workflow: workflow ?? "free",
+				target: workflowTarget,
 				modelId: modelId ?? undefined,
 				reasoningEffort:
 					isCodexAgent && reasoningEffort ? reasoningEffort : undefined,
@@ -2351,7 +2372,13 @@ export function AgentPanel({
 															key={key}
 															suggestion={label}
 															className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
-															onClick={(v) => void send(v)}
+															onClick={(v) =>
+																void send(
+																	v,
+																	undefined,
+																	SUGGESTION_WORKFLOW[key],
+																)
+															}
 															disabled={activeTabIsRunning}
 														/>
 													);
@@ -2736,7 +2763,9 @@ export function AgentPanel({
 										<Suggestion
 											key={key}
 											suggestion={label}
-											onClick={(v) => void send(v)}
+											onClick={(v) =>
+												void send(v, undefined, SUGGESTION_WORKFLOW[key])
+											}
 											disabled={activeTabIsRunning || switching}
 										/>
 									);
