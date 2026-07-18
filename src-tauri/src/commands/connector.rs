@@ -41,3 +41,20 @@ pub fn connector_set_vault(
     ctrl.set_vault(args.vault_path);
     ApiResult::ok(())
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorSetParentDirArgs {
+    /// Vault-relative parent, e.g. `papers` or `papers/nlp`.
+    pub parent_dir: String,
+}
+
+/// Remember the default save location (also exposed as selected collection).
+#[tauri::command]
+pub fn connector_set_parent_dir(
+    ctrl: State<'_, Arc<ConnectorController>>,
+    args: ConnectorSetParentDirArgs,
+) -> ApiResult<()> {
+    ctrl.set_parent_dir(args.parent_dir);
+    ApiResult::ok(())
+}

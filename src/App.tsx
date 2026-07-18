@@ -61,6 +61,7 @@ import { runBackgroundTask } from "@/lib/background-tasks";
 import {
 	type ConnectorItemSaved,
 	connectorSetEnabled,
+	connectorSetParentDir,
 	connectorSetVault,
 } from "@/lib/connector";
 import {
@@ -1078,6 +1079,21 @@ export default function App() {
 			/* ignore */
 		});
 	}, [vaultPath]);
+
+	// Mirror Library folder scope → Connector default collection (org folders under papers/).
+	useEffect(() => {
+		if (!isTauri() || !settings.connectorEnabled) return;
+		const scope = libraryScopePath
+			?.replace(/\\/g, "/")
+			.replace(/^\/+|\/+$/g, "");
+		const parent =
+			scope && (scope === "papers" || scope.startsWith("papers/"))
+				? scope
+				: "papers";
+		void connectorSetParentDir(parent).catch(() => {
+			/* ignore */
+		});
+	}, [libraryScopePath, settings.connectorEnabled]);
 
 	// Restore Connector server from settings on launch / toggle.
 	useEffect(() => {

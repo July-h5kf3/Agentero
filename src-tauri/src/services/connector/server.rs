@@ -221,7 +221,7 @@ async fn save_items(
         return json_response(StatusCode::BAD_REQUEST, json!({ "error": "NO_ITEMS" }));
     }
 
-    let (vault, parent_dir) = match state.ctrl.vault_and_parent() {
+    let (vault, _) = match state.ctrl.vault_and_parent() {
         Ok(v) => v,
         Err(e) => {
             state.ctrl.emit_error(&e.to_string(), Some(&session_id));
@@ -290,10 +290,16 @@ async fn save_items(
         );
     }
 
+    // Session inherits controller parent_dir (last picker choice / default papers).
+    let parent_dir = state.ctrl.session_parent_dir(&session_id);
+
     let mut out_items: Vec<Value> = Vec::new();
     for item in &body.items {
         match import_connector_item(&vault, &parent_dir, item, page_uri).await {
             Ok(r) => {
+                if !r.deduped {
+                    state.ctrl.record_session_paper(&session_id, &r.path);
+                }
                 state.ctrl.emit_item_saved(ConnectorItemSaved {
                     path: r.path.clone(),
                     id: r.id.clone(),
@@ -375,34 +381,66 @@ async fn session_progress(
     }
 }
 
-async fn get_selected_collection(headers: HeaderMap) -> Response {
+async fn get_selected_collection(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if let Some(r) = guard(&headers, &Method::POST) {
         return r;
     }
-    json_response(
-        StatusCode::OK,
-        json!({
-            "libraryID": 1,
-            "libraryName": "Agentero Vault",
-            "libraryEditable": true,
-            "editable": true,
-            "id": null,
-            "name": "Agentero Vault",
-            "targets": [{
-                "id": "L1",
-                "name": "Agentero Vault",
-                "level": 0
-            }]
-        }),
-    )
+    json_response(StatusCode::OK, state.ctrl.selected_collection_json())
 }
 
-async fn update_session(headers: HeaderMap) -> Response {
+#[derive(Debug, Deserialize)]
+struct UpdateSessionBody {
+    #[serde(default, alias = "sessionId", rename = "sessionID")]
+    session_id: Option<String>,
+    #[serde(default)]
+    target: Option<String>,
+    #[serde(default)]
+    tags: Option<String>,
+}
+
+async fn update_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<UpdateSessionBody>,
+) -> Response {
     if let Some(r) = guard(&headers, &Method::POST) {
         return r;
     }
-    // MVP: accept and ignore target/tags changes.
-    json_response(StatusCode::OK, json!({}))
+    let _ = body.tags; // tags optional; catalog merge can wait
+    let Some(sid) = body
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+        );
+    };
+    let Some(target) = body
+        .target
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        // No target change — still 200 (plugin may only send tags).
+        return json_response(StatusCode::OK, json!({}));
+    };
+    match state.ctrl.update_session_target(sid, target) {
+        Ok(_) => json_response(StatusCode::OK, json!({})),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("SESSION_NOT_FOUND") {
+                json_response(
+                    StatusCode::BAD_REQUEST,
+                    json!({ "error": "SESSION_NOT_FOUND" }),
+                )
+            } else {
+                json_response(StatusCode::BAD_REQUEST, json!({ "error": msg }))
+            }
+        }
+    }
 }
 
 async fn delay_sync(headers: HeaderMap) -> Response {

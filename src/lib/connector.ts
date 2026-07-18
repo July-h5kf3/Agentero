@@ -75,3 +75,18 @@ export async function connectorSetVault(
 		}),
 	);
 }
+
+/** Default save parent for Connector (`papers` or `papers/…` org folder). */
+export async function connectorSetParentDir(parentDir: string): Promise<void> {
+	if (!isTauri()) return;
+	const dir = parentDir
+		.trim()
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!dir) return;
+	await unwrap(
+		invoke<ApiResult<null>>("connector_set_parent_dir", {
+			args: { parentDir: dir },
+		}),
+	);
+}

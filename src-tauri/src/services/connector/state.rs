@@ -59,6 +59,10 @@ pub struct SaveSession {
     pub created: std::time::Instant,
     pub items: Vec<ProgressItem>,
     pub done: bool,
+    /// Vault-relative parent (`papers` or `papers/…`) for this save session.
+    pub parent_dir: String,
+    /// Paper folders created in this session (vault-relative), for updateSession moves.
+    pub paper_paths: Vec<String>,
 }
 
 struct Inner {
@@ -305,15 +309,35 @@ impl ConnectorController {
         if g.sessions.contains_key(session_id) {
             return Err(AppError::message("SESSION_EXISTS"));
         }
+        let parent_dir = g.parent_dir.clone();
         g.sessions.insert(
             session_id.to_string(),
             SaveSession {
                 created: std::time::Instant::now(),
                 items,
                 done: false,
+                parent_dir,
+                paper_paths: Vec::new(),
             },
         );
         Ok(())
+    }
+
+    /// Parent dir for a live session (falls back to global default).
+    pub fn session_parent_dir(&self, session_id: &str) -> String {
+        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        g.sessions
+            .get(session_id)
+            .map(|s| s.parent_dir.clone())
+            .unwrap_or_else(|| g.parent_dir.clone())
+    }
+
+    pub fn record_session_paper(&self, session_id: &str, paper_path: &str) {
+        if let Ok(mut g) = self.inner.lock() {
+            if let Some(s) = g.sessions.get_mut(session_id) {
+                s.paper_paths.push(paper_path.replace('\\', "/"));
+            }
+        }
     }
 
     pub fn mark_session_done(&self, session_id: &str) {
@@ -322,6 +346,110 @@ impl ConnectorController {
                 s.done = true;
             }
         }
+    }
+
+    /// Apply Connector collection picker change: remember parent + move papers already saved.
+    pub fn update_session_target(
+        &self,
+        session_id: &str,
+        target: &str,
+    ) -> Result<String, AppError> {
+        let parent = super::targets::resolve_target_parent(target).ok_or_else(|| {
+            AppError::message(format!("unknown or invalid save target: {target}"))
+        })?;
+
+        let (vault, paths_to_move) = {
+            let mut g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            g.parent_dir = parent.clone();
+            let vault = g
+                .vault_path
+                .clone()
+                .ok_or_else(|| AppError::message("No vault open"))?;
+            let session = g
+                .sessions
+                .get_mut(session_id)
+                .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
+            session.parent_dir = parent.clone();
+            let paths = session.paper_paths.clone();
+            (vault, paths)
+        };
+
+        let mut new_paths = Vec::new();
+        for from in &paths_to_move {
+            match move_paper_folder(&vault, from, &parent) {
+                Ok(new_rel) => new_paths.push(new_rel),
+                Err(e) => {
+                    // Keep going; surface soft error via event.
+                    self.emit_error(&format!("move {from}: {e}"), Some(session_id));
+                    new_paths.push(from.clone());
+                }
+            }
+        }
+
+        if !new_paths.is_empty() {
+            if let Ok(mut g) = self.inner.lock() {
+                if let Some(s) = g.sessions.get_mut(session_id) {
+                    s.paper_paths = new_paths.clone();
+                }
+            }
+            for path in &new_paths {
+                // Refresh UI for each moved paper.
+                if let Some(id) = path.rsplit('/').next() {
+                    self.emit_item_saved(ConnectorItemSaved {
+                        path: path.clone(),
+                        id: id.to_string(),
+                        title: id.to_string(),
+                        deduped: false,
+                        session_id: session_id.to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok(parent)
+    }
+
+    /// JSON body for `/connector/getSelectedCollection`.
+    pub fn selected_collection_json(&self) -> serde_json::Value {
+        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let parent = g.parent_dir.clone();
+        let vault_name = g
+            .vault_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .unwrap_or("Agentero Vault");
+
+        let targets = if let Some(vault) = &g.vault_path {
+            super::targets::list_save_targets(vault)
+        } else {
+            vec![super::targets::SaveTarget {
+                id: "L1".into(),
+                name: "papers".into(),
+                level: 0,
+            }]
+        };
+
+        let (sel_id, sel_name) = if parent == "papers" {
+            ("L1".to_string(), "papers".to_string())
+        } else {
+            let name = parent
+                .rsplit('/')
+                .next()
+                .unwrap_or(parent.as_str())
+                .to_string();
+            (format!("D{parent}"), name)
+        };
+
+        serde_json::json!({
+            "libraryID": 1,
+            "libraryName": vault_name,
+            "libraryEditable": true,
+            "editable": true,
+            "id": if parent == "papers" { serde_json::Value::Null } else { serde_json::json!(sel_id) },
+            "name": sel_name,
+            "targets": targets,
+        })
     }
 
     pub fn session_progress_json(&self, session_id: &str) -> Result<serde_json::Value, AppError> {
@@ -407,4 +535,40 @@ impl ConnectorController {
             ("X-Zotero-Connector-API-Version", CONNECTOR_API_VERSION),
         ]
     }
+}
+
+/// Move a paper folder under a new org parent and rewrite catalog paths.
+fn move_paper_folder(
+    vault: &std::path::Path,
+    from_rel: &str,
+    dest_parent: &str,
+) -> Result<String, AppError> {
+    use crate::services::catalog::papers;
+
+    let from = from_rel.trim().trim_matches('/').replace('\\', "/");
+    let dest_parent = dest_parent.trim().trim_matches('/').replace('\\', "/");
+    if from.is_empty() {
+        return Err(AppError::message("empty paper path"));
+    }
+    let base = from.rsplit('/').next().unwrap_or(from.as_str()).to_string();
+    let new_rel = format!("{dest_parent}/{base}");
+    if new_rel == from {
+        return Ok(from);
+    }
+    let from_abs = vault.join(&from);
+    let new_abs = vault.join(&new_rel);
+    if !from_abs.is_dir() {
+        return Err(AppError::message(format!("paper folder missing: {from}")));
+    }
+    if new_abs.exists() {
+        return Err(AppError::message(format!(
+            "destination already exists: {new_rel}"
+        )));
+    }
+    if let Some(parent) = new_abs.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&from_abs, &new_abs)?;
+    let _ = papers::move_under_path(vault, &from, &new_rel);
+    Ok(new_rel)
 }
