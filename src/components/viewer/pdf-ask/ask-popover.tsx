@@ -63,12 +63,15 @@ export function AskPopover({
 			screen={screen}
 			width={360}
 			height={360}
+			// Fixed height so StickToBottom’s height:100% scroll viewport gets a
+			// definite size (maxHeight-only content-sizing was clipping without a bar).
+			lockHeight
 			title={title}
 			icon={MessageSquareIcon}
 			ariaLabel={t("pdfAsk.dialogLabel")}
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
-			// Conversation owns scroll; body must not grow past the viewport cap.
+			// Conversation owns scroll; body only constrains the flex chain.
 			bodyClassName="min-h-0 overflow-hidden p-0"
 			actions={[
 				{
@@ -120,7 +123,8 @@ export function AskPopover({
 				</PromptInput>
 			}
 		>
-			<Conversation className="min-h-0 min-w-0 flex-1 overflow-y-hidden">
+			{/* h-full: StickToBottom.Content uses height:100% for the scrollport */}
+			<Conversation className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
 				<ConversationContent className="gap-3 px-3 py-2.5">
 					{thread.messages.map((m) => {
 						if (m.role === "system") {

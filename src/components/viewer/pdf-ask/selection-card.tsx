@@ -105,6 +105,12 @@ export type SelectionCardProps = {
 	width?: number;
 	/** Preferred max height; actual height is min(this, viewport remainder). */
 	height?: number;
+	/**
+	 * Pin the card to the computed max height (not content-sized).
+	 * Needed when the body hosts StickToBottom / `height: 100%` scrollers
+	 * (e.g. PDF Ask conversation) so the scrollbar has a definite viewport.
+	 */
+	lockHeight?: boolean;
 	preferRight?: boolean;
 	title: string;
 	icon: LucideIcon;
@@ -127,12 +133,14 @@ export type SelectionCardProps = {
  * Shared floating card chrome for PDF selection workflows:
  * Ask / Translate / Annotate. Same shell, different body/footer.
  *
- * Always viewport-bounded: `maxHeight` from placement + body scroll.
+ * Always viewport-bounded: `maxHeight` from placement + body scroll
+ * (or nested scroller when `lockHeight` + `overflow-hidden` body).
  */
 export function SelectionCard({
 	screen,
 	width = 320,
 	height = SELECTION_CARD_DEFAULT_MAX_HEIGHT,
+	lockHeight = false,
 	preferRight = true,
 	title,
 	icon: Icon,
@@ -164,6 +172,8 @@ export function SelectionCard({
 				top,
 				width: `min(${width}px, calc(100vw - ${SELECTION_CARD_EDGE * 2}px))`,
 				maxHeight,
+				// Definite height so flex-1 + nested height:100% scroll areas work.
+				...(lockHeight ? { height: maxHeight } : null),
 			}}
 			role="dialog"
 			aria-label={ariaLabel ?? title}
