@@ -57,7 +57,7 @@ import {
 	TableRowPlugin,
 } from "@platejs/table/react";
 import { common, createLowlight } from "lowlight";
-import { KEYS } from "platejs";
+import { KEYS, TrailingBlockPlugin } from "platejs";
 import { ParagraphPlugin } from "platejs/react";
 import { BlockList } from "@/components/editor/block-list";
 import { BlockquoteElement } from "@/components/editor/blockquote-node";
@@ -255,6 +255,12 @@ export const MarkdownEditorKit = [
 	MentionPlugin.withComponent(MentionElement),
 	WikiLinkPlugin,
 	LinkPlugin,
+
+	// Always end with a paragraph so void blocks (image / HR / table) leave a
+	// place to click, arrow-down, or type after the last content.
+	TrailingBlockPlugin.configure({
+		options: { type: KEYS.p },
+	}),
 
 	// Markdown serialization (MarkdownPlugin + footnotes + wikilink rules)
 	...MarkdownKit,
