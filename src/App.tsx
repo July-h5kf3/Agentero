@@ -50,6 +50,7 @@ import {
 import {
 	type AnnotationRow,
 	AnnotationsPanel,
+	type AskRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
@@ -85,6 +86,7 @@ import {
 	isPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
+	type PaperTag,
 	paperCatalogPath,
 	paperDirFromPath,
 	resolvePapersParentDir,
@@ -107,6 +109,7 @@ import {
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
 } from "@/lib/papers-api";
+import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
@@ -136,6 +139,7 @@ import {
 import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
@@ -264,8 +268,21 @@ export default function App() {
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
+	/** Directory paths for Agent context chip folder icons. */
+	const vaultDirPaths = useMemo(
+		() => collectDirectoryRelPaths(tree, vaultPath),
+		[tree, vaultPath],
+	);
 	/** Paper folders at any depth under papers/ (marker-based). */
 	const paperFolders = useMemo(() => collectPaperFoldersFromTree(tree), [tree]);
+	/** Vault-relative paper paths for Agent chip paper (ScrollText) icons. */
+	const vaultPaperPaths = useMemo(
+		() =>
+			paperFolders
+				.map((p) => toVaultRelative(vaultPath, p))
+				.filter((p) => p.length > 0),
+		[paperFolders, vaultPath],
+	);
 
 	const activeTab = useMemo(
 		() => tabs.find((t) => t.id === activeTabId) ?? null,
@@ -470,6 +487,10 @@ export default function App() {
 	const [pdfHighlightsByTab, setPdfHighlightsByTab] = useState<
 		Record<string, PdfHighlight[]>
 	>({});
+	/** Latest PDF ask threads per tab (for the annotations panel conversations). */
+	const [pdfAsksByTab, setPdfAsksByTab] = useState<
+		Record<string, PdfAskThread[]>
+	>({});
 
 	const activeAnnotations = useMemo<AnnotationRow[]>(() => {
 		const list = activeTabId ? pdfHighlightsByTab[activeTabId] : undefined;
@@ -487,6 +508,30 @@ export default function App() {
 				color: normalizeHighlightColor(h.color),
 			}));
 	}, [activeTabId, pdfHighlightsByTab]);
+
+	const activeAsks = useMemo<AskRow[]>(() => {
+		const list = activeTabId ? pdfAsksByTab[activeTabId] : undefined;
+		if (!list) return [];
+		return [...list]
+			.sort(
+				(a, b) =>
+					a.anchor.page - b.anchor.page ||
+					(a.anchor.rects[0]?.y ?? 0) - (b.anchor.rects[0]?.y ?? 0),
+			)
+			.map((th) => {
+				const firstUser = th.messages.find((m) => m.role === "user");
+				const preview =
+					firstUser?.content.trim() || th.anchor.quote?.trim() || th.id;
+				return {
+					id: th.id,
+					page: th.anchor.page,
+					preview,
+					messageCount: th.messages.filter(
+						(m) => m.role === "user" || m.role === "assistant",
+					).length,
+				};
+			});
+	}, [activeTabId, pdfAsksByTab]);
 
 	/** Stable empty list so non-library tabs don't re-render on library changes. */
 	const noPapers = useMemo<PaperMetadata[]>(() => [], []);
@@ -510,6 +555,12 @@ export default function App() {
 	const handlePdfHighlightsChange = useCallback(
 		(tabId: string, list: PdfHighlight[]) => {
 			setPdfHighlightsByTab((prev) => ({ ...prev, [tabId]: list }));
+		},
+		[],
+	);
+	const handlePdfAsksChange = useCallback(
+		(tabId: string, list: PdfAskThread[]) => {
+			setPdfAsksByTab((prev) => ({ ...prev, [tabId]: list }));
 		},
 		[],
 	);
@@ -1944,7 +1995,7 @@ export default function App() {
 
 	/** Persist tags from Paper Info and keep library + open tabs in sync. */
 	const handlePaperTagsChange = useCallback(
-		async (tags: string[]) => {
+		async (tags: PaperTag[]) => {
 			if (!vaultPath || !paperMeta) return;
 			// Prefer catalog path on meta; fall back to the open paper folder so
 			// Zotero/legacy rows whose projection omitted `path` can still be edited.
@@ -2587,7 +2638,6 @@ export default function App() {
 					onToggleNotes={setShowNotes}
 					onToggleRightSidebar={toggleRightSidebar}
 					onToggleAgentZen={toggleAgentZen}
-					onEnterAgentZen={enterAgentZen}
 					onOpenRightTab={openRightTab}
 				/>
 
@@ -2915,6 +2965,7 @@ export default function App() {
 													onOpenAnnotations={openAnnotationsTab}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
+													onPdfAsksChange={handlePdfAsksChange}
 												/>
 											</div>
 										))}
@@ -3052,6 +3103,8 @@ export default function App() {
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
 										vaultMarkdownPaths={vaultMdFiles}
+										vaultDirectoryPaths={vaultDirPaths}
+										vaultPaperPaths={vaultPaperPaths}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
 										variant={agentZenMode ? "zen" : "sidebar"}
@@ -3089,6 +3142,7 @@ export default function App() {
 							rightSidebarTab === "annotations" ? (
 								<AnnotationsPanel
 									items={activeAnnotations}
+									asks={activeAsks}
 									onJump={(id) =>
 										annotationAction((h) => h.scrollToHighlight(id))
 									}
@@ -3096,6 +3150,8 @@ export default function App() {
 									onDelete={(id) =>
 										annotationAction((h) => h.deleteHighlight(id))
 									}
+									onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
+									onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
 									onClose={() => setRightSidebarCollapsed(true)}
 								/>
 							) : null}

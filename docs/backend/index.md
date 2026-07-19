@@ -27,7 +27,7 @@
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
-- 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换）；Paper Info 编辑；Library 展示与筛选；CLI `set-tags` / `list --tag` / `tags`。
+- 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换；元素可为字符串或 `{name,color?}` Apple 8 色）；Paper Info 增删与选色；Library 染色 chip 与筛选；CLI `set-tags` / `list --tag` / `tags`（CLI 仅名称）。
 - **Zotero Connector 兼容服务**（MVP）：本机 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；见 [`connector.md`](connector.md)。
 - **Paper 入库流水线统一**（设计）：多入口应收敛为 Host `paper_commit` + 前端 `afterPaperImport`；见 [`paper-import-pipeline.md`](paper-import-pipeline.md)。
 - 原生菜单 Close（`close_tab_or_window` / `⌘W`）：由前端先关文档 tab，无 tab 时关窗口（见 [`api.md`](api.md) §3.10）。

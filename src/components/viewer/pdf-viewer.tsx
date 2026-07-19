@@ -31,14 +31,10 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
-import {
-	AnnotationGutter,
-	type AnnotationPin,
-} from "@/components/viewer/pdf-ask/annotation-gutter";
-import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
 import { HighlightMenu } from "@/components/viewer/pdf-ask/highlight-menu";
+import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
 import {
@@ -85,6 +81,19 @@ import {
 } from "@/lib/pdf-highlight";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf-reading-position";
+import {
+	type ActiveSelectionCard,
+	pinFromRects,
+	type SelectionPin,
+} from "@/lib/pdf-selection";
+import {
+	createTranslateRecord,
+	deletePdfTranslate,
+	listPdfTranslates,
+	writePdfTranslate,
+} from "@/lib/pdf-translate";
+import type { PdfTranslateRecord } from "@/lib/pdf-translate/types";
+import { writeReadingMetaPageCount } from "@/lib/reading-heatmap";
 import { loadSettings } from "@/lib/settings";
 import {
 	buildTranslatePrompt,
@@ -127,6 +136,9 @@ export type PdfViewerHandle = {
 	scrollToHighlight: (id: string) => void;
 	editComment: (id: string) => void;
 	deleteHighlight: (id: string) => void;
+	/** Jump to an ask pin and reopen its conversation card. */
+	scrollToAsk: (id: string) => void;
+	deleteAsk: (id: string) => void;
 };
 
 type PdfViewerProps = {
@@ -136,7 +148,7 @@ type PdfViewerProps = {
 	 * Do not pass `asset://` — PDF.js XHR fails on Tauri asset protocol.
 	 */
 	source: string | null;
-	/** Absolute path to paper folder for asks/*.json persistence */
+	/** Absolute path to paper folder for marks/*.json persistence */
 	paperAbsPath?: string | null;
 	/** Vault-relative paper path stored inside JSON */
 	paperRelPath?: string | null;
@@ -153,6 +165,8 @@ type PdfViewerProps = {
 	onHandle?: (handle: PdfViewerHandle | null) => void;
 	/** Called whenever the highlight list changes (for the annotations panel) */
 	onHighlightsChange?: (highlights: PdfHighlight[]) => void;
+	/** Called whenever PDF ask threads change (for the annotations panel) */
+	onAsksChange?: (threads: PdfAskThread[]) => void;
 };
 
 type PdfOutlineNode = {
@@ -209,6 +223,7 @@ export function PdfViewer({
 	className,
 	onHandle,
 	onHighlightsChange,
+	onAsksChange,
 }: PdfViewerProps) {
 	const { t } = useTranslation("viewer");
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -249,22 +264,24 @@ export function PdfViewer({
 	const shellHeight = Math.max(0, (contentHeight * zoom) / renderZoom);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
-	const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-	const [popoverScreen, setPopoverScreen] = useState<{
+	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
+	/** Persisted translate records (reopenable like asks) */
+	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
+	/**
+	 * Single active selection dialog (ask / annotate / translate).
+	 * Screen position is derived and updated on scroll/zoom.
+	 */
+	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
+		null,
+	);
+	const [cardScreen, setCardScreen] = useState<{
 		x: number;
 		y: number;
 	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
-
-	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
-	/** Ephemeral PDF selection translation card (not an ask thread) */
-	const [translateCard, setTranslateCard] = useState<{
-		result: string;
-		streaming: boolean;
-		error: string | null;
-		screen: { x: number; y: number };
-	} | null>(null);
+	const [translateStreaming, setTranslateStreaming] = useState(false);
+	const [translateError, setTranslateError] = useState<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
 
 	/** Selection action menu (highlight/note/ask/translate) near a selection */
@@ -277,21 +294,20 @@ export function PdfViewer({
 		id: string;
 		screen: { x: number; y: number };
 	} | null>(null);
-	/** Inline note editor for an annotation, anchored to a highlight */
-	const [commentEditor, setCommentEditor] = useState<{
-		id: string;
-		screen: { x: number; y: number };
-	} | null>(null);
 	/** Transient focus flash after jump-to-highlight from the panel */
 	const [activeHighlightId, setActiveHighlightId] = useState<string | null>(
 		null,
 	);
 	const highlightsRef = useRef(highlights);
 	highlightsRef.current = highlights;
+	const translatesRef = useRef(translates);
+	translatesRef.current = translates;
 	const onHandleRef = useRef(onHandle);
 	onHandleRef.current = onHandle;
 	const onHighlightsChangeRef = useRef(onHighlightsChange);
 	onHighlightsChangeRef.current = onHighlightsChange;
+	const onAsksChangeRef = useRef(onAsksChange);
+	onAsksChangeRef.current = onAsksChange;
 
 	const activeSessionRef = useRef<string | null>(null);
 	const suppressSelectionUntilRef = useRef(0);
@@ -299,8 +315,9 @@ export function PdfViewer({
 	const dwellOriginRef = useRef<{ x: number; y: number } | null>(null);
 	const threadsRef = useRef(threads);
 	threadsRef.current = threads;
-	const activeThreadIdRef = useRef<string | null>(null);
-	/** Delayed hide after leave pin / dialog (hover UX) */
+	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
+	activeCardRef.current = activeCard;
+	/** Delayed hide after leave pin / dialog (ask hover UX) */
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -320,14 +337,23 @@ export function PdfViewer({
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
 
-	const activeThread = useMemo(
-		() => threads.find((th) => th.id === activeThreadId) ?? null,
-		[threads, activeThreadId],
-	);
-	activeThreadIdRef.current = activeThreadId;
+	const activeThread = useMemo(() => {
+		if (activeCard?.kind !== "ask") return null;
+		return threads.find((th) => th.id === activeCard.id) ?? null;
+	}, [threads, activeCard]);
+
+	const activeTranslate = useMemo(() => {
+		if (activeCard?.kind !== "translate") return null;
+		return translates.find((tr) => tr.id === activeCard.id) ?? null;
+	}, [translates, activeCard]);
+
+	const activeAnnotation = useMemo(() => {
+		if (activeCard?.kind !== "annotate") return null;
+		return highlights.find((h) => h.id === activeCard.id) ?? null;
+	}, [highlights, activeCard]);
 
 	// Only threads with a real user question keep a pin
-	const summaries = useMemo(
+	const askSummaries = useMemo(
 		() => toSummaries(threads.filter(threadHasUserQuestion)),
 		[threads],
 	);
@@ -713,16 +739,17 @@ export function PdfViewer({
 	useEffect(() => {
 		let cancelled = false;
 		setThreads([]);
-		setActiveThreadId(null);
-		setPopoverScreen(null);
-		setAskError(null);
-		setStreaming(false);
 		setHighlights([]);
+		setTranslates([]);
+		setActiveCard(null);
+		setCardScreen(null);
+		setAskError(null);
+		setTranslateError(null);
+		setStreaming(false);
+		setTranslateStreaming(false);
 		setSelectionMenu(null);
 		setHighlightMenu(null);
-		setCommentEditor(null);
 		setActiveHighlightId(null);
-		setTranslateCard(null);
 		translateSessionRef.current = null;
 		activeSessionRef.current = null;
 
@@ -735,6 +762,10 @@ export function PdfViewer({
 		void (async () => {
 			const list = await listPdfHighlights(paperAbsPath);
 			if (!cancelled) setHighlights(list);
+		})();
+		void (async () => {
+			const list = await listPdfTranslates(paperAbsPath);
+			if (!cancelled) setTranslates(list);
 		})();
 
 		return () => {
@@ -764,15 +795,37 @@ export function PdfViewer({
 		});
 	}, []);
 
-	const placePopover = useCallback((thread: PdfAskThread) => {
+	/** Place the active selection card next to its anchor (ask / annotate / translate). */
+	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
 		const host = hostRef.current;
 		if (!host) return;
-		const pageEl = findPageElByNumber(host, thread.anchor.page);
-		// Dialog sits next to the pin (near selection), not the page margin
-		const pin = threadPin(thread);
-		const pt = popoverScreenPoint(pageEl, thread.anchor.rects, pin);
-		if (pt) setPopoverScreen(pt);
-		else setPopoverScreen({ x: 80, y: 120 });
+		let page = 1;
+		let rects: PdfAskNormalizedRect[] = [];
+		let pin: { x: number; y: number } | null = null;
+
+		if (card.kind === "ask") {
+			const thread = threadsRef.current.find((th) => th.id === card.id);
+			if (!thread) return;
+			page = thread.anchor.page;
+			rects = thread.anchor.rects;
+			pin = threadPin(thread);
+		} else if (card.kind === "annotate") {
+			const hl = highlightsRef.current.find((h) => h.id === card.id);
+			if (!hl) return;
+			page = hl.page;
+			rects = hl.rects;
+			pin = pinFromRects(hl.rects);
+		} else {
+			const tr = translatesRef.current.find((r) => r.id === card.id);
+			if (!tr) return;
+			page = tr.page;
+			rects = tr.rects;
+			pin = pinFromRects(tr.rects);
+		}
+
+		const pageEl = findPageElByNumber(host, page);
+		const pt = popoverScreenPoint(pageEl, rects, pin);
+		setCardScreen(pt ?? { x: 80, y: 120 });
 	}, []);
 
 	const cancelHoverHide = useCallback(() => {
@@ -790,26 +843,62 @@ export function PdfViewer({
 		setThreads((prev) => prev.filter((t) => t.id !== threadId));
 	}, []);
 
-	/** Leave pin or dialog → hide after a short grace period */
+	const hideActiveCard = useCallback(() => {
+		const cur = activeCardRef.current;
+		if (cur?.kind === "ask") {
+			discardIfEmptyDraft(cur.id);
+			setAskError(null);
+		}
+		if (cur?.kind === "translate") {
+			setTranslateError(null);
+		}
+		setActiveCard(null);
+		setCardScreen(null);
+	}, [discardIfEmptyDraft]);
+
+	/**
+	 * Leave pin / dialog → hide after a short grace period.
+	 * Same for ask / annotate / translate (matches ask card UX).
+	 */
 	const scheduleHoverHide = useCallback(() => {
 		cancelHoverHide();
 		hidePopoverTimerRef.current = setTimeout(() => {
 			hidePopoverTimerRef.current = null;
-			discardIfEmptyDraft(activeThreadIdRef.current);
-			setActiveThreadId(null);
-			setPopoverScreen(null);
-			setAskError(null);
+			hideActiveCard();
 		}, 1000);
-	}, [cancelHoverHide, discardIfEmptyDraft]);
+	}, [cancelHoverHide, hideActiveCard]);
+
+	const openCard = useCallback(
+		(card: ActiveSelectionCard) => {
+			cancelHoverHide();
+			// Opening another kind cancels in-flight translate streaming session only when leaving translate.
+			if (
+				activeCardRef.current?.kind === "translate" &&
+				(card.kind !== "translate" || card.id !== activeCardRef.current.id)
+			) {
+				const sid = translateSessionRef.current;
+				if (sid) {
+					void cancelAgentRun(sid).catch(() => undefined);
+					if (activeSessionRef.current === sid) {
+						activeSessionRef.current = null;
+					}
+					translateSessionRef.current = null;
+				}
+				setTranslateStreaming(false);
+			}
+			setActiveCard(card);
+			if (card.kind === "ask") setAskError(null);
+			if (card.kind === "translate") setTranslateError(null);
+			placeActiveCard(card);
+		},
+		[cancelHoverHide, placeActiveCard],
+	);
 
 	const openThread = useCallback(
 		(thread: PdfAskThread) => {
-			cancelHoverHide();
-			setActiveThreadId(thread.id);
-			setAskError(null);
-			placePopover(thread);
+			openCard({ kind: "ask", id: thread.id });
 		},
-		[placePopover, cancelHoverHide],
+		[openCard],
 	);
 
 	const startFromAnchor = useCallback(
@@ -965,12 +1054,12 @@ export function PdfViewer({
 		};
 	}, [fileUrl, startFromAnchor]);
 
+	// Re-anchor ask / annotate / translate cards after scroll / zoom / layout
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor dialog after zoom/layout
 	useEffect(() => {
-		if (!activeThread) return;
+		if (!activeCard) return;
 		const scrollEl = scrollRef.current;
-		const reposition = () => placePopover(activeThread);
-		// After zoom, layout may lag one frame — schedule twice
+		const reposition = () => placeActiveCard(activeCard);
 		reposition();
 		const raf = requestAnimationFrame(reposition);
 		scrollEl?.addEventListener("scroll", reposition, { passive: true });
@@ -980,7 +1069,7 @@ export function PdfViewer({
 			scrollEl?.removeEventListener("scroll", reposition);
 			window.removeEventListener("resize", reposition);
 		};
-	}, [activeThread, placePopover, zoom, pageWidth]);
+	}, [activeCard, placeActiveCard, zoom, pageWidth]);
 
 	const sendToThread = useCallback(
 		async (
@@ -1126,7 +1215,8 @@ export function PdfViewer({
 
 	const handleSend = useCallback(
 		(question: string) => {
-			const threadId = activeThreadId;
+			const card = activeCardRef.current;
+			const threadId = card?.kind === "ask" ? card.id : null;
 			if (!threadId) return;
 			const thread = threadsRef.current.find((th) => th.id === threadId);
 			if (!thread) return;
@@ -1155,24 +1245,28 @@ export function PdfViewer({
 				}
 			})();
 		},
-		[activeThreadId, sendToThread, t],
+		[sendToThread, t],
 	);
 
-	const dismissPopoverChrome = useCallback(() => {
+	const dismissAskChrome = useCallback(() => {
 		if (activeSessionRef.current) {
 			void cancelAgentRun(activeSessionRef.current).catch(() => undefined);
 			activeSessionRef.current = null;
 		}
 		setStreaming(false);
-		setActiveThreadId(null);
-		setPopoverScreen(null);
 		setAskError(null);
+		if (activeCardRef.current?.kind === "ask") {
+			setActiveCard(null);
+			setCardScreen(null);
+		}
 	}, []);
 
-	/** Hide dialog: keep pin only if user already asked; else discard draft */
+	/** Hide ask dialog: keep pin only if user already asked; else discard draft */
 	const handleHide = useCallback(() => {
-		if (activeThreadId) {
-			const thread = threadsRef.current.find((th) => th.id === activeThreadId);
+		const id =
+			activeCardRef.current?.kind === "ask" ? activeCardRef.current.id : null;
+		if (id) {
+			const thread = threadsRef.current.find((th) => th.id === id);
 			if (thread) {
 				if (!threadHasUserQuestion(thread)) {
 					setThreads((prev) => prev.filter((t) => t.id !== thread.id));
@@ -1187,31 +1281,35 @@ export function PdfViewer({
 				}
 			}
 		}
-		dismissPopoverChrome();
-	}, [activeThreadId, upsertThread, persist, dismissPopoverChrome]);
+		dismissAskChrome();
+	}, [upsertThread, persist, dismissAskChrome]);
 
-	/** Delete thread permanently (file + pin) */
+	/** Delete ask thread permanently (file + pin) */
 	const handleDelete = useCallback(() => {
-		const id = activeThreadId;
+		const id =
+			activeCardRef.current?.kind === "ask" ? activeCardRef.current.id : null;
 		if (id) {
 			setThreads((prev) => prev.filter((th) => th.id !== id));
 			if (paperAbsPath) {
 				void deletePdfAskThread(paperAbsPath, id);
 			}
 		}
-		dismissPopoverChrome();
-	}, [activeThreadId, paperAbsPath, dismissPopoverChrome]);
+		dismissAskChrome();
+	}, [paperAbsPath, dismissAskChrome]);
 
-	const handleOpenPill = useCallback(
-		(id: string) => {
-			cancelHoverHide();
-			const thread = threadsRef.current.find((th) => th.id === id);
-			if (!thread) return;
-			const open: PdfAskThread = { ...thread, status: "open" };
-			upsertThread(open);
-			openThread(open);
+	const handleOpenPin = useCallback(
+		(pin: SelectionPin) => {
+			if (pin.kind === "ask") {
+				const thread = threadsRef.current.find((th) => th.id === pin.id);
+				if (!thread) return;
+				const open: PdfAskThread = { ...thread, status: "open" };
+				upsertThread(open);
+				openThread(open);
+				return;
+			}
+			openCard({ kind: pin.kind, id: pin.id });
 		},
-		[upsertThread, openThread, cancelHoverHide],
+		[upsertThread, openThread, openCard],
 	);
 
 	// --- Selection action menu (highlight / annotate / ask / translate) ---
@@ -1223,7 +1321,29 @@ export function PdfViewer({
 		startFromAnchor(sm.anchor);
 	}, [selectionMenu, startFromAnchor]);
 
-	const closeTranslateCard = useCallback(() => {
+	const upsertTranslate = useCallback((rec: PdfTranslateRecord) => {
+		setTranslates((prev) => {
+			const i = prev.findIndex((x) => x.id === rec.id);
+			if (i < 0) return [rec, ...prev];
+			const next = [...prev];
+			next[i] = rec;
+			return next;
+		});
+	}, []);
+
+	const persistTranslate = useCallback(
+		async (rec: PdfTranslateRecord) => {
+			if (!paperAbsPath) return;
+			try {
+				await writePdfTranslate(paperAbsPath, rec);
+			} catch {
+				// keep UI responsive
+			}
+		},
+		[paperAbsPath],
+	);
+
+	const stopTranslateSession = useCallback(() => {
 		const sid = translateSessionRef.current;
 		if (sid) {
 			void cancelAgentRun(sid).catch(() => undefined);
@@ -1232,8 +1352,21 @@ export function PdfViewer({
 			}
 			translateSessionRef.current = null;
 		}
-		setTranslateCard(null);
+		setTranslateStreaming(false);
 	}, []);
+
+	const deleteTranslateCard = useCallback(() => {
+		const id =
+			activeCardRef.current?.kind === "translate"
+				? activeCardRef.current.id
+				: null;
+		stopTranslateSession();
+		if (id) {
+			setTranslates((prev) => prev.filter((r) => r.id !== id));
+			if (paperAbsPath) void deletePdfTranslate(paperAbsPath, id);
+		}
+		hideActiveCard();
+	}, [paperAbsPath, stopTranslateSession, hideActiveCard]);
 
 	const handleMenuTranslate = useCallback(() => {
 		const sm = selectionMenu;
@@ -1243,22 +1376,41 @@ export function PdfViewer({
 		if (!quote) return;
 
 		// Cancel any in-flight translation before starting a new one.
-		const prevSid = translateSessionRef.current;
-		if (prevSid) {
-			void cancelAgentRun(prevSid).catch(() => undefined);
-			if (activeSessionRef.current === prevSid) {
-				activeSessionRef.current = null;
-			}
-			translateSessionRef.current = null;
-		}
+		stopTranslateSession();
 
-		const screen = sm.screen;
-		setTranslateCard({
-			result: "",
-			streaming: true,
-			error: null,
-			screen,
+		const paperPath = paperRelPath || paperAbsPath || "paper";
+		const rects = mergeRectsByLine(
+			sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
+		);
+		const rec = createTranslateRecord({
+			paperPath,
+			page: sm.anchor.page,
+			rects,
+			quote,
 		});
+		upsertTranslate(rec);
+		if (paperAbsPath) void persistTranslate(rec);
+		openCard({ kind: "translate", id: rec.id });
+		setTranslateStreaming(true);
+		setTranslateError(null);
+
+		const patchRec = (partial: Partial<PdfTranslateRecord>) => {
+			const next: PdfTranslateRecord = {
+				...rec,
+				...partial,
+				updatedAt: new Date().toISOString(),
+			};
+			// Merge with latest in-memory if stream already patched result.
+			const latest = translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+			const merged: PdfTranslateRecord = {
+				...latest,
+				...partial,
+				updatedAt: new Date().toISOString(),
+			};
+			upsertTranslate(merged);
+			void persistTranslate(merged);
+			return next;
+		};
 
 		const { providerId, targetLangName } = prepareTranslateTask({
 			text: quote,
@@ -1283,9 +1435,9 @@ export function PdfViewer({
 					if (!resolved.agentId) {
 						const msg = t("selection.translateNoAgent");
 						notifyError(msg);
-						setTranslateCard((cur) =>
-							cur ? { ...cur, streaming: false, error: msg } : cur,
-						);
+						setTranslateStreaming(false);
+						setTranslateError(msg);
+						patchRec({ error: msg });
 						return;
 					}
 					const accepted = await runOnce({
@@ -1310,38 +1462,42 @@ export function PdfViewer({
 						if (activeSessionRef.current === sessionId) {
 							activeSessionRef.current = null;
 						}
-						setTranslateCard((cur) =>
-							cur ? { ...cur, streaming: false } : cur,
-						);
+						setTranslateStreaming(false);
 					};
 
 					unsubs.push(
 						await listenAgentStream((ev) => {
 							if (ev.sessionId !== sessionId) return;
 							if ((ev.kind ?? "message") === "thought") return;
-							setTranslateCard((cur) =>
-								cur
-									? {
-											...cur,
-											result: cur.result + ev.chunk,
-										}
-									: cur,
-							);
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							const next = {
+								...latest,
+								result: (latest.result ?? "") + ev.chunk,
+								updatedAt: new Date().toISOString(),
+								error: undefined,
+							};
+							upsertTranslate(next);
 						}),
 					);
 					unsubs.push(
 						await listenAgentCompleted((ev) => {
 							if (ev.sessionId !== sessionId) return;
-							setTranslateCard((cur) =>
-								cur
-									? {
-											...cur,
-											result: (ev.content || cur.result).trim() || cur.result,
-											streaming: false,
-											error: null,
-										}
-									: cur,
-							);
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							const result =
+								(ev.content || latest.result || "").trim() ||
+								latest.result ||
+								"";
+							const next = {
+								...latest,
+								result,
+								updatedAt: new Date().toISOString(),
+								error: undefined,
+							};
+							upsertTranslate(next);
+							void persistTranslate(next);
+							setTranslateError(null);
 							cleanup();
 						}),
 					);
@@ -1349,19 +1505,26 @@ export function PdfViewer({
 						await listenAgentFailed((ev) => {
 							if (ev.sessionId !== sessionId) return;
 							const msg = ev.error || t("pdfAsk.agentFailed");
-							setTranslateCard((cur) =>
-								cur ? { ...cur, streaming: false, error: msg } : cur,
-							);
+							setTranslateError(msg);
 							notifyError(msg);
+							const latest =
+								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+							const next = {
+								...latest,
+								error: msg,
+								updatedAt: new Date().toISOString(),
+							};
+							upsertTranslate(next);
+							void persistTranslate(next);
 							cleanup();
 						}),
 					);
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
 					notifyError(message);
-					setTranslateCard((cur) =>
-						cur ? { ...cur, streaming: false, error: message } : cur,
-					);
+					setTranslateStreaming(false);
+					setTranslateError(message);
+					patchRec({ error: message });
 				}
 			})();
 			return;
@@ -1380,25 +1543,35 @@ export function PdfViewer({
 					},
 					{ providerId },
 				);
-				setTranslateCard((cur) =>
-					cur
-						? {
-								...cur,
-								result: result.trim(),
-								streaming: false,
-								error: null,
-							}
-						: cur,
-				);
+				const next = {
+					...rec,
+					result: result.trim(),
+					updatedAt: new Date().toISOString(),
+					error: undefined,
+				};
+				upsertTranslate(next);
+				void persistTranslate(next);
+				setTranslateStreaming(false);
+				setTranslateError(null);
 			} catch (e) {
 				const message = e instanceof Error ? e.message : String(e);
 				notifyError(message);
-				setTranslateCard((cur) =>
-					cur ? { ...cur, streaming: false, error: message } : cur,
-				);
+				setTranslateStreaming(false);
+				setTranslateError(message);
+				patchRec({ error: message });
 			}
 		})();
-	}, [selectionMenu, t, vaultPath]);
+	}, [
+		selectionMenu,
+		t,
+		vaultPath,
+		paperAbsPath,
+		paperRelPath,
+		stopTranslateSession,
+		upsertTranslate,
+		persistTranslate,
+		openCard,
+	]);
 
 	// Optional: auto-run translate when a PDF selection menu opens.
 	useEffect(() => {
@@ -1447,17 +1620,51 @@ export function PdfViewer({
 		}, 1600);
 	}, []);
 
-	const openCommentEditorFor = useCallback((id: string) => {
-		const host = contentRef.current;
-		const hl = highlightsRef.current.find((h) => h.id === id);
-		if (!host || !hl) return;
-		const pageEl = findPageElByNumber(host, hl.page);
-		const screen = popoverScreenPoint(pageEl, hl.rects);
-		if (screen) {
+	/** Jump to an ask pin, open the conversation card (annotations panel). */
+	const scrollToAsk = useCallback(
+		(id: string) => {
+			const host = contentRef.current;
+			const thread = threadsRef.current.find((th) => th.id === id);
+			if (!host || !thread || !threadHasUserQuestion(thread)) return;
+			const pageEl = findPageElByNumber(host, thread.anchor.page);
+			pageEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+			const open: PdfAskThread = {
+				...thread,
+				status: "open",
+				updatedAt: new Date().toISOString(),
+			};
+			upsertThread(open);
+			openThread(open);
+		},
+		[upsertThread, openThread],
+	);
+
+	const deleteAsk = useCallback(
+		(id: string) => {
+			setThreads((prev) => prev.filter((th) => th.id !== id));
+			if (
+				activeCardRef.current?.kind === "ask" &&
+				activeCardRef.current.id === id
+			) {
+				setActiveCard(null);
+				setCardScreen(null);
+			}
+			if (paperAbsPath) {
+				void deletePdfAskThread(paperAbsPath, id).catch(() => undefined);
+			}
+		},
+		[paperAbsPath],
+	);
+
+	const openCommentEditorFor = useCallback(
+		(id: string) => {
+			const hl = highlightsRef.current.find((h) => h.id === id);
+			if (!hl) return;
 			setHighlightMenu(null);
-			setCommentEditor({ id, screen });
-		}
-	}, []);
+			openCard({ kind: "annotate", id });
+		},
+		[openCard],
+	);
 
 	const saveComment = useCallback(
 		(id: string, text: string) => {
@@ -1467,7 +1674,10 @@ export function PdfViewer({
 					h.id === id ? { ...h, comment: comment || undefined } : h,
 				),
 			);
-			setCommentEditor(null);
+			if (activeCardRef.current?.kind === "annotate") {
+				setActiveCard(null);
+				setCardScreen(null);
+			}
 			if (paperAbsPath) {
 				const hl = highlightsRef.current.find((h) => h.id === id);
 				if (hl) {
@@ -1501,11 +1711,8 @@ export function PdfViewer({
 		if (paperAbsPath) {
 			void writePdfHighlight(paperAbsPath, hl).catch(() => undefined);
 		}
-		const host = contentRef.current;
-		const pageEl = host ? findPageElByNumber(host, hl.page) : null;
-		const screen = popoverScreenPoint(pageEl, hl.rects);
-		if (screen) setCommentEditor({ id: hl.id, screen });
-	}, [selectionMenu, paperAbsPath, paperRelPath]);
+		openCard({ kind: "annotate", id: hl.id });
+	}, [selectionMenu, paperAbsPath, paperRelPath, openCard]);
 
 	const handleMenuCopy = useCallback(() => {
 		const quote = selectionMenu?.anchor.quote?.trim();
@@ -1550,7 +1757,13 @@ export function PdfViewer({
 		(id: string) => {
 			setHighlights((prev) => prev.filter((h) => h.id !== id));
 			setHighlightMenu(null);
-			setCommentEditor((cur) => (cur?.id === id ? null : cur));
+			if (
+				activeCardRef.current?.kind === "annotate" &&
+				activeCardRef.current.id === id
+			) {
+				setActiveCard(null);
+				setCardScreen(null);
+			}
 			if (paperAbsPath) {
 				void deletePdfHighlight(paperAbsPath, id).catch(() => undefined);
 			}
@@ -1563,41 +1776,53 @@ export function PdfViewer({
 	}, [highlights]);
 
 	useEffect(() => {
+		// Only surface threads the user actually asked about (same as gutter pins).
+		onAsksChangeRef.current?.(threads.filter(threadHasUserQuestion));
+	}, [threads]);
+
+	useEffect(() => {
 		onHandleRef.current?.({
 			getHighlights: () => highlightsRef.current,
 			scrollToHighlight,
 			editComment: openCommentEditorFor,
 			deleteHighlight: removeHighlight,
+			scrollToAsk,
+			deleteAsk,
 		});
 		return () => onHandleRef.current?.(null);
-	}, [scrollToHighlight, openCommentEditorFor, removeHighlight]);
+	}, [
+		scrollToHighlight,
+		openCommentEditorFor,
+		removeHighlight,
+		scrollToAsk,
+		deleteAsk,
+	]);
 
-	// Dismiss menus / translate card on outside pointerdown / Escape / scroll
+	// Dismiss toolbars only (not selection cards) on outside click / Escape / scroll.
+	// Ask / annotate / translate cards reposition on scroll instead of closing.
 	useEffect(() => {
-		if (!selectionMenu && !highlightMenu && !translateCard) return;
-		const closeAll = () => {
+		if (!selectionMenu && !highlightMenu) return;
+		const closeMenus = () => {
 			setSelectionMenu(null);
 			setHighlightMenu(null);
-			if (translateCard) closeTranslateCard();
 		};
 		const onDocPointerDown = (e: PointerEvent) => {
-			// Clicks inside selection menu, translate card, ask UI, etc. stay open
 			if ((e.target as HTMLElement).closest?.("[data-pdf-ask-ui]")) return;
-			closeAll();
+			closeMenus();
 		};
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") closeAll();
+			if (e.key === "Escape") closeMenus();
 		};
 		const scrollEl = scrollRef.current;
 		window.addEventListener("pointerdown", onDocPointerDown, true);
 		window.addEventListener("keydown", onKey);
-		scrollEl?.addEventListener("scroll", closeAll, { passive: true });
+		scrollEl?.addEventListener("scroll", closeMenus, { passive: true });
 		return () => {
 			window.removeEventListener("pointerdown", onDocPointerDown, true);
 			window.removeEventListener("keydown", onKey);
-			scrollEl?.removeEventListener("scroll", closeAll);
+			scrollEl?.removeEventListener("scroll", closeMenus);
 		};
-	}, [selectionMenu, highlightMenu, translateCard, closeTranslateCard]);
+	}, [selectionMenu, highlightMenu]);
 
 	if (!fileUrl) {
 		return (
@@ -1883,6 +2108,12 @@ export function PdfViewer({
 									setNumPages(doc.numPages);
 									setError(null);
 									pdfDocRef.current = doc;
+									if (paperAbsPath && doc.numPages > 0) {
+										void writeReadingMetaPageCount(
+											paperAbsPath,
+											doc.numPages,
+										).catch(() => undefined);
+									}
 									void doc.getOutline().then((o) => {
 										setOutline((o as PdfOutlineNode[] | null) ?? []);
 									});
@@ -1900,28 +2131,48 @@ export function PdfViewer({
 							>
 								{Array.from({ length: numPages }, (_, i) => i + 1).map(
 									(pageNumber) => {
-										const pageSummaries = summaries.filter(
-											(s) => s.page === pageNumber,
-										);
 										const pageHighlights = highlights.filter(
 											(h) => h.page === pageNumber,
 										);
-										const pageAnnotations: AnnotationPin[] = pageHighlights
-											.filter((h) => h.comment?.trim())
-											.map((h) => {
-												const r = h.rects[0] ?? {
-													x: 0,
-													y: 0,
-													w: 0,
-													h: 0,
-												};
-												return {
-													id: h.id,
-													x: r.x + r.w,
-													y: r.y,
-													preview: h.comment ?? "",
-												};
-											});
+										const pagePins: SelectionPin[] = [
+											...askSummaries
+												.filter((s) => s.page === pageNumber)
+												.map(
+													(s): SelectionPin => ({
+														id: s.id,
+														kind: "ask",
+														x: s.x,
+														y: s.y,
+														preview: s.preview,
+														ended: s.status === "ended",
+													}),
+												),
+											...pageHighlights
+												.filter((h) => h.comment?.trim())
+												.map((h): SelectionPin => {
+													const pin = pinFromRects(h.rects);
+													return {
+														id: h.id,
+														kind: "annotate",
+														x: pin.x,
+														y: pin.y,
+														preview: h.comment ?? "",
+													};
+												}),
+											...translates
+												.filter((tr) => tr.page === pageNumber)
+												.map((tr): SelectionPin => {
+													const pin = pinFromRects(tr.rects);
+													return {
+														id: tr.id,
+														kind: "translate",
+														x: pin.x,
+														y: pin.y,
+														preview:
+															tr.result?.trim() || tr.quote?.trim() || tr.id,
+													};
+												}),
+										];
 										return (
 											<div
 												key={`${fileUrl}-p${pageNumber}`}
@@ -1961,7 +2212,9 @@ export function PdfViewer({
 													items={pageHighlights}
 													activeId={
 														highlightMenu?.id ??
-														commentEditor?.id ??
+														(activeCard?.kind === "annotate"
+															? activeCard.id
+															: null) ??
 														activeHighlightId
 													}
 												/>
@@ -2002,17 +2255,14 @@ export function PdfViewer({
 													</div>
 												) : null}
 												<div data-pdf-ask-ui="">
-													<AskGutter
-														items={pageSummaries}
-														activeId={activeThreadId}
-														onOpen={handleOpenPill}
-														onEnter={cancelHoverHide}
-														onLeave={scheduleHoverHide}
-													/>
-													<AnnotationGutter
-														items={pageAnnotations}
-														activeId={commentEditor?.id ?? activeHighlightId}
-														onOpen={openCommentEditorFor}
+													<SelectionGutter
+														items={pagePins}
+														activeId={
+															activeCard?.id ?? activeHighlightId ?? null
+														}
+														onOpen={handleOpenPin}
+														onEnter={() => cancelHoverHide()}
+														onLeave={() => scheduleHoverHide()}
 													/>
 												</div>
 											</div>
@@ -2092,11 +2342,12 @@ export function PdfViewer({
 				</div>
 			) : null}
 
-			{activeThread && popoverScreen ? (
+			{/* Shared selection card frame: ask / translate / annotate */}
+			{activeThread && cardScreen ? (
 				<div data-pdf-ask-ui="">
 					<AskPopover
 						thread={activeThread}
-						screen={popoverScreen}
+						screen={cardScreen}
 						streaming={streaming}
 						error={askError}
 						initialPrompt={
@@ -2123,14 +2374,32 @@ export function PdfViewer({
 				</div>
 			) : null}
 
-			{translateCard ? (
+			{activeTranslate && cardScreen ? (
 				<div data-pdf-ask-ui="">
 					<TranslateCard
-						screen={translateCard.screen}
-						result={translateCard.result}
-						streaming={translateCard.streaming}
-						error={translateCard.error}
-						onClose={closeTranslateCard}
+						screen={cardScreen}
+						quote={activeTranslate.quote}
+						result={activeTranslate.result ?? ""}
+						streaming={translateStreaming}
+						error={translateError ?? activeTranslate.error ?? null}
+						onHide={hideActiveCard}
+						onDelete={deleteTranslateCard}
+						onPointerEnter={cancelHoverHide}
+						onPointerLeave={scheduleHoverHide}
+					/>
+				</div>
+			) : null}
+
+			{activeAnnotation && cardScreen ? (
+				<div data-pdf-ask-ui="">
+					<AnnotationEditor
+						screen={cardScreen}
+						quote={activeAnnotation.quote}
+						initialComment={activeAnnotation.comment}
+						onSave={(text) => saveComment(activeAnnotation.id, text)}
+						onClose={hideActiveCard}
+						onPointerEnter={cancelHoverHide}
+						onPointerLeave={scheduleHoverHide}
 					/>
 				</div>
 			) : null}
@@ -2148,24 +2417,6 @@ export function PdfViewer({
 					/>
 				</div>
 			) : null}
-
-			{commentEditor
-				? (() => {
-						const hl = highlights.find((h) => h.id === commentEditor.id);
-						if (!hl) return null;
-						return (
-							<div data-pdf-ask-ui="">
-								<AnnotationEditor
-									screen={commentEditor.screen}
-									quote={hl.quote}
-									initialComment={hl.comment}
-									onSave={(text) => saveComment(hl.id, text)}
-									onClose={() => setCommentEditor(null)}
-								/>
-							</div>
-						);
-					})()
-				: null}
 
 			{highlightMenu ? (
 				<div data-pdf-ask-ui="">

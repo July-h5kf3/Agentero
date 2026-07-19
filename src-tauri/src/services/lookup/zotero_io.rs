@@ -313,7 +313,11 @@ pub fn paper_record_to_zotero_item(r: &PaperRecord) -> Value {
         "itemType": item_type,
         "title": r.title,
         "creators": creators,
-        "tags": r.tags.iter().map(|t| json!({ "tag": t })).collect::<Vec<_>>(),
+        "tags": r
+            .tags
+            .iter()
+            .map(|t| json!({ "tag": t.name }))
+            .collect::<Vec<_>>(),
     });
 
     let map = obj.as_object_mut().unwrap();

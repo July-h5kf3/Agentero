@@ -514,7 +514,11 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
         year: meta.year,
         date: meta.date.clone(),
         abstract_text: meta.abstract_text.clone(),
-        tags: meta.tags.clone(),
+        tags: meta
+            .tags
+            .iter()
+            .map(crate::services::catalog::papers::PaperTag::new)
+            .collect(),
         arxiv_id: meta.arxiv_id.clone(),
         doi: meta.doi.clone(),
         isbn: meta.isbn.clone(),

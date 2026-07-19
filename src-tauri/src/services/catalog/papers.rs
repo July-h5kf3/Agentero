@@ -8,6 +8,93 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// Apple system color–inspired tag color ids (frontend palette).
+const TAG_COLOR_IDS: &[&str] = &[
+    "red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple",
+];
+
+/// One catalog tag: display name + optional color id.
+/// JSON: bare string when uncolored; `{"name","color"}` when colored (backward compatible).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaperTag {
+    pub name: String,
+    pub color: Option<String>,
+}
+
+impl PaperTag {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            color: None,
+        }
+    }
+}
+
+impl From<&str> for PaperTag {
+    fn from(s: &str) -> Self {
+        PaperTag::new(s)
+    }
+}
+
+impl From<String> for PaperTag {
+    fn from(s: String) -> Self {
+        PaperTag::new(s)
+    }
+}
+
+impl Serialize for PaperTag {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self
+            .color
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+        {
+            Some(color) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("name", &self.name)?;
+                map.serialize_entry("color", color)?;
+                map.end()
+            }
+            None => self.name.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PaperTag {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let v = serde_json::Value::deserialize(deserializer)?;
+        match v {
+            serde_json::Value::String(s) => Ok(PaperTag::new(s)),
+            serde_json::Value::Object(map) => {
+                let name = map
+                    .get("name")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let color = map
+                    .get("color")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string());
+                Ok(PaperTag { name, color })
+            }
+            _ => Ok(PaperTag::new("")),
+        }
+    }
+}
+
+fn normalize_color(color: Option<&str>) -> Option<String> {
+    let c = color?.trim().to_ascii_lowercase();
+    if c.is_empty() {
+        return None;
+    }
+    TAG_COLOR_IDS
+        .iter()
+        .find(|id| **id == c.as_str())
+        .map(|id| (*id).to_string())
+}
+
 /// API / frontend shape (snake_case, matches PaperMetadata).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaperRecord {
@@ -27,7 +114,7 @@ pub struct PaperRecord {
     #[serde(skip_serializing_if = "Option::is_none", rename = "abstract")]
     pub abstract_text: Option<String>,
     #[serde(default)]
-    pub tags: Vec<String>,
+    pub tags: Vec<PaperTag>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arxiv_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -227,7 +314,7 @@ pub fn set_is_read(vault_root: &Path, path: &str, is_read: bool) -> Result<Paper
 /// Replace tags for a paper path; returns the updated row.
 /// Tags are trimmed, empty strings dropped, and de-duplicated case-insensitively
 /// (first occurrence keeps its original casing).
-pub fn set_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperRecord, AppError> {
+pub fn set_tags(vault_root: &Path, path: &str, tags: &[PaperTag]) -> Result<PaperRecord, AppError> {
     let path = path.replace('\\', "/").trim_matches('/').to_string();
     let Some(mut row) = get_by_path(vault_root, &path)? else {
         return Err(AppError::message("paper not found in catalog"));
@@ -238,7 +325,7 @@ pub fn set_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperR
 }
 
 /// Append tags to a paper (trim + case-insensitive dedupe). Returns the updated row.
-pub fn add_tags(vault_root: &Path, path: &str, tags: &[String]) -> Result<PaperRecord, AppError> {
+pub fn add_tags(vault_root: &Path, path: &str, tags: &[PaperTag]) -> Result<PaperRecord, AppError> {
     let path = path.replace('\\', "/").trim_matches('/').to_string();
     let Some(mut row) = get_by_path(vault_root, &path)? else {
         return Err(AppError::message("paper not found in catalog"));
@@ -266,7 +353,7 @@ pub fn remove_tags(
         .filter(|t| !t.is_empty())
         .collect();
     row.tags
-        .retain(|existing| !drop.iter().any(|d| d.eq_ignore_ascii_case(existing)));
+        .retain(|existing| !drop.iter().any(|d| d.eq_ignore_ascii_case(&existing.name)));
     row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     upsert_paper(vault_root, &row)
 }
@@ -279,10 +366,10 @@ pub fn list_all_tags(vault_root: &Path) -> Result<Vec<(String, usize)>, AppError
         std::collections::BTreeMap::new();
     for r in rows {
         for tag in r.tags {
-            let key = tag.to_ascii_lowercase();
+            let key = tag.name.to_ascii_lowercase();
             map.entry(key)
                 .and_modify(|(_, n)| *n += 1)
-                .or_insert((tag, 1));
+                .or_insert((tag.name, 1));
         }
     }
     Ok(map.into_values().collect())
@@ -295,21 +382,31 @@ pub fn paper_has_all_tags(paper: &PaperRecord, required: &[String]) -> bool {
         if n.is_empty() {
             return true;
         }
-        paper.tags.iter().any(|t| t.eq_ignore_ascii_case(n))
+        paper.tags.iter().any(|t| t.name.eq_ignore_ascii_case(n))
     })
 }
 
-pub fn normalize_tags(tags: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+pub fn normalize_tags(tags: &[PaperTag]) -> Vec<PaperTag> {
+    let mut out: Vec<PaperTag> = Vec::new();
     for raw in tags {
-        let t = raw.trim();
+        let t = raw.name.trim();
         if t.is_empty() {
             continue;
         }
-        if out.iter().any(|existing| existing.eq_ignore_ascii_case(t)) {
+        if let Some(existing) = out
+            .iter_mut()
+            .find(|existing| existing.name.eq_ignore_ascii_case(t))
+        {
+            // First-seen casing wins; fill color if the earlier entry had none.
+            if existing.color.is_none() {
+                existing.color = normalize_color(raw.color.as_deref());
+            }
             continue;
         }
-        out.push(t.to_string());
+        out.push(PaperTag {
+            name: t.to_string(),
+            color: normalize_color(raw.color.as_deref()),
+        });
     }
     out
 }
@@ -676,7 +773,10 @@ mod tests {
     #[test]
     fn normalize_tags_trims_dedupes_case_insensitive() {
         let tags = normalize_tags(&[
-            "  NLP ".into(),
+            PaperTag {
+                name: "  NLP ".into(),
+                color: Some("green".into()),
+            },
             "nlp".into(),
             "".into(),
             "  ".into(),
@@ -684,7 +784,34 @@ mod tests {
             "rl".into(),
             "CV".into(),
         ]);
-        assert_eq!(tags, vec!["NLP", "RL", "CV"]);
+        assert_eq!(
+            tags,
+            vec![
+                PaperTag {
+                    name: "NLP".into(),
+                    color: Some("green".into()),
+                },
+                PaperTag::new("RL"),
+                PaperTag::new("CV"),
+            ]
+        );
+    }
+
+    #[test]
+    fn paper_tag_json_roundtrip_string_and_object() {
+        let raw = r#"["NLP",{"name":"survey","color":"red"},"x"]"#;
+        let tags: Vec<PaperTag> = serde_json::from_str(raw).unwrap();
+        assert_eq!(tags[0], PaperTag::new("NLP"));
+        assert_eq!(
+            tags[1],
+            PaperTag {
+                name: "survey".into(),
+                color: Some("red".into()),
+            }
+        );
+        let out = serde_json::to_string(&tags).unwrap();
+        assert!(out.contains(r#""NLP""#));
+        assert!(out.contains(r#""color":"red""#));
     }
 
     #[test]
@@ -699,7 +826,7 @@ mod tests {
             year: None,
             date: None,
             abstract_text: None,
-            tags: vec!["NLP".into(), "rl".into()],
+            tags: vec![PaperTag::new("NLP"), PaperTag::new("rl")],
             arxiv_id: None,
             doi: None,
             isbn: None,

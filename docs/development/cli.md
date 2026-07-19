@@ -256,13 +256,13 @@ agentero
 **`paper list`**
 
 - L1 索引：读 catalog，不扫全文
-- text 列：`path` `id` `title` `year` `tags` `is_read`（`tags` 逗号拼接，空为 `-`）
+- text 列：`path` `id` `title` `year` `tags` `is_read`（`tags` 为**名称**逗号拼接，空为 `-`；不展示 color）
 - 过滤：
   - `--unread`：仅 `is_read = false`
   - `--status <s>`：status 字段（ignore case）
-  - `--query <q>`：title / authors / id / path / **tags** 子串（ignore case）
-  - `--tag <name>`：**可重复**；每篇须 **同时含** 全部给定 tag（AND；精确匹配、ignore case）
-- JSON：`PaperRecord[]`（字段与 Host 对齐，**稳定**；含 `tags: string[]`）
+  - `--query <q>`：title / authors / id / path / **tags 名称** 子串（ignore case）
+  - `--tag <name>`：**可重复**；每篇须 **同时含** 全部给定 tag 名（AND；精确匹配、ignore case）
+- JSON：`PaperRecord[]`（字段与 Host 对齐；`tags` 元素为字符串或 `{name,color?}`，与 catalog 序列化一致）
 
 **`paper tags`**
 
@@ -334,12 +334,12 @@ agentero
 **`paper set-tags`**
 
 - **仅**更新 catalog `tags`（`tags_json`）；同步 `metadata.json` 投影（与 Host `paper_set_tags` / `papers::set_tags` 同一 service）
-- **默认 = 整表替换**：`agentero paper set-tags <ref> nlp rl` → tags 变为 `["nlp","rl"]`
+- **默认 = 整表替换**：`agentero paper set-tags <ref> nlp rl` → tags 变为 `["nlp","rl"]`（CLI 只写名称，**不设 color**）
 - **清空**：`agentero paper set-tags <ref>`（无额外 tag 参数）
 - **增量**（与 replace 互斥）：
-  - `--add t1 t2`：在现有列表上追加（trim + 大小写不敏感去重）
-  - `--remove t1 t2`：按 ignore-case 移除
-- 规范化与 Host 一致：trim 空白、丢弃空串、大小写不敏感去重（保留首次写法）
+  - `--add t1 t2`：在现有列表上追加（trim + 大小写不敏感去重；新 tag 无色）
+  - `--remove t1 t2`：按 ignore-case 按**名称**移除
+- 规范化与 Host 一致：trim 空白、丢弃空串、大小写不敏感去重（保留首次写法）；有色标签需在桌面 Paper Info 设置
 - 不触发精读、不改 NOTES
 
 **`graph *`**

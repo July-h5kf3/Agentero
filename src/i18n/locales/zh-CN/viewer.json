@@ -44,14 +44,20 @@
 		"title": "批注",
 		"pageLabel": "第 {{page}} 页",
 		"close": "关闭",
-		"empty": "还没有高亮或批注。在 PDF 中划选文字即可高亮或批注。",
+		"empty": "还没有高亮、批注或提问。在 PDF 中划选文字即可高亮、批注或提问。",
 		"placeholder": "写点备注…",
 		"save": "保存",
 		"cancel": "取消",
 		"delete": "删除",
+		"deleteAsk": "删除对话",
 		"editorLabel": "批注备注",
 		"pinAria": "打开批注：{{preview}}",
-		"panelAria": "本论文的批注"
+		"panelAria": "本论文的批注与提问",
+		"sectionHighlights": "高亮与批注",
+		"sectionAsks": "对话",
+		"askTurns": "{{count}} 条消息",
+		"expandNote": "展开备注",
+		"collapseNote": "收起备注"
 	},
 	"selection": {
 		"menuLabel": "选区操作",
@@ -75,6 +81,9 @@
 		"translateTitle": "翻译",
 		"translating": "翻译中…",
 		"translateClose": "关闭",
+		"translateHide": "收起",
+		"translateDelete": "删除",
+		"translatePinAria": "打开翻译：{{preview}}",
 		"translateNoAgent": "没有可用的 Agent 进行翻译，请先在设置 → Agent 中配置。"
 	},
 	"html": {

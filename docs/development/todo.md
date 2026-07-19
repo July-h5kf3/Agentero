@@ -54,6 +54,7 @@
 - [x] Library 行批量补资源（与 2b 联动）
 - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选
 - [x] **Tags CLI**：`paper set-tags` / `list --tag` / `tags`（与 Host 共用 `papers::set_tags`）
+- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/tag-colors.ts`）
 
 ### 2c-2. 论文库默认页 + 文件夹作用域库
 
@@ -280,12 +281,12 @@
 设计见 [`pdf-ask.md`](pdf-ask.md)。
 
 - [x] M1：划词弹出迷你问答卡
-- [x] M2：`papers/<id>/asks/<threadId>.json` 读写 + 页边圆片锚点（归一化坐标）
+- [x] M2：`papers/<id>/marks/<id>.json` 读写 + 页边针（归一化坐标）
 - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘
 - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）
 - [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer
 - [x] M6：划词操作菜单（高亮 / 批注 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区
-- [x] M7：Zotero 式批注 —「批注」= 建高亮 + 内联编辑器（`annotation-editor.tsx`）写可选 `comment`；页边批注针（`annotation-gutter.tsx`）；右侧「批注」面板（`annotations-panel.tsx`，活动 PDF tab）列卡、跳转闪烁、编辑 / 删除，经 `PdfViewerHandle` + `onHighlightsChange` 驱动；**不写 `NOTES.md`**（旧追加行为已移除）
+- [x] M7：Zotero 式批注 —「批注」= 建高亮 + 内联编辑器（`annotation-editor.tsx`）写可选 `comment`；页边针（`selection-gutter.tsx`）；右侧「批注」面板（`annotations-panel.tsx`）；落盘 `marks/`（`kind: highlight`）；**不写 `NOTES.md`**
 
 ### 3b. 翻译服务（Translate Service）
 
@@ -302,7 +303,7 @@
 ### 4. PDF / HTML 标注系统
 
 - [ ] 参考 Hypothesis 风格的边注、评论、锚点（完整体系）
-- [x] PDF 就地批注已落地（高亮 + `comment` + 页边针 + 右侧面板）；标注落 `highlights/*.json`
+- [x] PDF 就地批注已落地（高亮 + `comment` + 页边针 + 右侧面板）；标注落 `marks/`（`kind: highlight`）
 - [ ] 标注正文进入 `highlights.md` / 导出到 `NOTES.md`（**暂不做**，可能的后续），坐标/锚点缓存可重建
 - [ ] PDF.js / HTML iframe 统一标注模型（HTML iframe 标注仍待）
 - [ ] 与划词提问（asks JSON）边界清晰，可互导

@@ -157,7 +157,9 @@ fn list(
                 || r.authors
                     .iter()
                     .any(|a| a.to_ascii_lowercase().contains(&q))
-                || r.tags.iter().any(|t| t.to_ascii_lowercase().contains(&q))
+                || r.tags
+                    .iter()
+                    .any(|t| t.name.to_ascii_lowercase().contains(&q))
         });
     }
 
@@ -172,7 +174,11 @@ fn list(
             let tags = if r.tags.is_empty() {
                 "-".into()
             } else {
-                r.tags.join(",")
+                r.tags
+                    .iter()
+                    .map(|t| t.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
             };
             format!(
                 "{}\t{}\t{}\t{}\t{}\t{}",
@@ -328,23 +334,31 @@ fn set_tags(
             "--add and --remove are mutually exclusive",
         ));
     }
+    let tag_objs: Vec<papers::PaperTag> = tags.iter().map(papers::PaperTag::new).collect();
     let row = if add {
         if tags.is_empty() {
             return Err(CliError::message("--add requires at least one tag"));
         }
-        papers::add_tags(&vault, &paper.path, tags)?
+        papers::add_tags(&vault, &paper.path, &tag_objs)?
     } else if remove {
         if tags.is_empty() {
             return Err(CliError::message("--remove requires at least one tag"));
         }
         papers::remove_tags(&vault, &paper.path, tags)?
     } else {
-        papers::set_tags(&vault, &paper.path, tags)?
+        papers::set_tags(&vault, &paper.path, &tag_objs)?
     };
     let tags_disp = if row.tags.is_empty() {
         "[]".into()
     } else {
-        format!("[{}]", row.tags.join(", "))
+        format!(
+            "[{}]",
+            row.tags
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     };
     let mut v = to_value(&row)?;
     if let Some(obj) = v.as_object_mut() {

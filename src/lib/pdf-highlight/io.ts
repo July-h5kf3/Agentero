@@ -1,21 +1,17 @@
-import { readDir } from "@tauri-apps/plugin-fs";
 import { nanoid } from "nanoid";
 
 import { parsePdfHighlight } from "@/lib/pdf-highlight/schema";
 import type { PdfHighlight, PdfHighlightRect } from "@/lib/pdf-highlight/types";
+import {
+	deleteMarkFile,
+	listMarkRaw,
+	readMarkRaw,
+	writeMarkFile,
+} from "@/lib/pdf-selection/marks-io";
 import { isTauri } from "@/lib/tauri";
-import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
 /** In-memory fallback when not running under Tauri (browser dev). */
 const memoryStore = new Map<string, Map<string, PdfHighlight>>();
-
-function highlightsDir(paperAbsPath: string): string {
-	return joinVaultPath(paperAbsPath, "highlights");
-}
-
-function highlightPath(paperAbsPath: string, id: string): string {
-	return joinVaultPath(highlightsDir(paperAbsPath), `${id}.json`);
-}
 
 function memoryBucket(paperAbsPath: string): Map<string, PdfHighlight> {
 	let b = memoryStore.get(paperAbsPath);
@@ -42,6 +38,7 @@ export function createHighlight(input: {
 	const now = new Date().toISOString();
 	const highlight: PdfHighlight = {
 		version: 1,
+		kind: "highlight",
 		id: input.id ?? newHighlightId(),
 		paperPath: input.paperPath,
 		createdAt: now,
@@ -66,26 +63,10 @@ export async function listPdfHighlights(
 		);
 	}
 
-	const dir = highlightsDir(paperAbsPath);
-	let names: string[] = [];
-	try {
-		const entries = await readDir(dir);
-		names = entries
-			.map((e) => e.name)
-			.filter((n): n is string => Boolean(n?.endsWith(".json")));
-	} catch {
-		return [];
-	}
-
 	const highlights: PdfHighlight[] = [];
-	for (const name of names) {
-		try {
-			const raw = await readVaultFile(joinVaultPath(dir, name));
-			const parsed = parsePdfHighlight(JSON.parse(raw) as unknown);
-			if (parsed) highlights.push(parsed);
-		} catch {
-			// skip corrupt
-		}
+	for (const raw of await listMarkRaw(paperAbsPath)) {
+		const parsed = parsePdfHighlight(raw);
+		if (parsed) highlights.push(parsed);
 	}
 	highlights.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 	return highlights;
@@ -97,6 +78,7 @@ export async function writePdfHighlight(
 ): Promise<void> {
 	const next: PdfHighlight = {
 		...highlight,
+		kind: "highlight",
 		updatedAt: new Date().toISOString(),
 	};
 
@@ -105,8 +87,7 @@ export async function writePdfHighlight(
 		return;
 	}
 
-	const path = highlightPath(paperAbsPath, next.id);
-	await writeVaultFile(path, `${JSON.stringify(next, null, 2)}\n`);
+	await writeMarkFile(paperAbsPath, next.id, next);
 }
 
 export async function deletePdfHighlight(
@@ -117,10 +98,16 @@ export async function deletePdfHighlight(
 		memoryBucket(paperAbsPath).delete(id);
 		return;
 	}
-	try {
-		const { remove } = await import("@tauri-apps/plugin-fs");
-		await remove(highlightPath(paperAbsPath, id));
-	} catch {
-		// missing file is fine
+	await deleteMarkFile(paperAbsPath, id);
+}
+
+export async function readPdfHighlight(
+	paperAbsPath: string,
+	id: string,
+): Promise<PdfHighlight | null> {
+	if (!isTauri()) {
+		return memoryBucket(paperAbsPath).get(id) ?? null;
 	}
+	const raw = await readMarkRaw(paperAbsPath, id);
+	return raw ? parsePdfHighlight(raw) : null;
 }

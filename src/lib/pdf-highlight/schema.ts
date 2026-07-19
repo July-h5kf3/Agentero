@@ -18,6 +18,7 @@ function isRect(v: unknown): v is PdfHighlightRect {
 export function parsePdfHighlight(raw: unknown): PdfHighlight | null {
 	if (!isRecord(raw)) return null;
 	if (raw.version !== 1) return null;
+	if (raw.kind !== "highlight") return null;
 	if (typeof raw.id !== "string" || !raw.id) return null;
 	if (typeof raw.paperPath !== "string") return null;
 	if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") {
@@ -29,6 +30,7 @@ export function parsePdfHighlight(raw: unknown): PdfHighlight | null {
 
 	const highlight: PdfHighlight = {
 		version: 1,
+		kind: "highlight",
 		id: raw.id,
 		paperPath: raw.paperPath,
 		createdAt: raw.createdAt,

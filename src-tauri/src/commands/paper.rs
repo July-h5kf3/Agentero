@@ -208,7 +208,8 @@ pub struct PaperSetTagsArgs {
     /// Vault-relative paper folder path.
     pub path: String,
     /// Full replacement list (not a patch merge).
-    pub tags: Vec<String>,
+    /// Each item may be a bare string or `{ name, color? }` (Apple-style color id).
+    pub tags: Vec<papers::PaperTag>,
 }
 
 /// Replace catalog tags for a paper (syncs metadata.json projection).

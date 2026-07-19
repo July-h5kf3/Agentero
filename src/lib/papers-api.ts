@@ -6,8 +6,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import i18n from "@/i18n";
-import type { PaperMetadata } from "@/lib/paper-metadata";
+import { type PaperMetadata, withNormalizedTags } from "@/lib/paper-metadata";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
+import type { PaperTagInput } from "@/lib/tag-colors";
 import { isTauri } from "@/lib/tauri";
 
 /**
@@ -76,7 +77,7 @@ export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 	if (!res.ok || !res.data) {
 		throw new Error(res.error?.message ?? "paper_list failed");
 	}
-	return res.data;
+	return res.data.map(withNormalizedTags);
 }
 
 export type PaperRescanResult = { count: number };
@@ -286,12 +287,13 @@ export async function setPaperIsRead(
 }
 
 /**
- * Replace paper tags in catalog (full list; Host normalizes trim/dedupe).
+ * Replace paper tags in catalog (full list; Host normalizes trim/dedupe/color).
+ * Items may be bare strings or `{ name, color? }`.
  */
 export async function setPaperTags(
 	vaultPath: string,
 	path: string,
-	tags: string[],
+	tags: PaperTagInput[],
 ): Promise<PaperMetadata> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:paperInfo.tagsDesktopOnly"));
@@ -304,7 +306,7 @@ export async function setPaperTags(
 			res.error?.message ?? i18n.t("sidebar:paperInfo.tagsSaveFailed"),
 		);
 	}
-	return res.data;
+	return withNormalizedTags(res.data);
 }
 
 export type PaperExportResult = {

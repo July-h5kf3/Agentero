@@ -438,6 +438,26 @@ export function collectMarkdownRelPaths(
 	return out;
 }
 
+/**
+ * Flatten the tree to vault-relative **directory** paths
+ * (Agent composer context chips / drop targets use this for folder icons).
+ */
+export function collectDirectoryRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind !== "directory") continue;
+			out.push(toVaultRelative(vaultPath, n.path));
+			if (n.children) walk(n.children);
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
 /** Vault-relative paper folder path derived from a `.../NOTES.md` absolute path. */
 export function paperRelFromNotes(
 	notesPath: string | null,

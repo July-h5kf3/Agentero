@@ -1,19 +1,18 @@
-import { MessageSquare } from "lucide-react";
+import { Languages, MessageSquare, MessageSquareText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { PdfAskThreadSummary } from "@/lib/pdf-ask/types";
+import type { SelectionPin } from "@/lib/pdf-selection";
 import { cn } from "@/lib/utils";
 
-type AskGutterProps = {
-	/** Summaries for this page only */
-	items: PdfAskThreadSummary[];
+type SelectionGutterProps = {
+	/** Pins for this page only (ask + annotate + translate) */
+	items: SelectionPin[];
 	activeId: string | null;
-	/** Hover / click opens the dialog */
-	onOpen: (id: string) => void;
-	/** Leave pin — parent schedules delayed hide */
-	onLeave?: () => void;
+	onOpen: (pin: SelectionPin) => void;
+	/** Leave pin — parent may schedule delayed hide (ask hover UX) */
+	onLeave?: (pin: SelectionPin) => void;
 	/** Enter pin — cancel pending hide */
-	onEnter?: () => void;
+	onEnter?: (pin: SelectionPin) => void;
 };
 
 const PILL = 20;
@@ -24,7 +23,7 @@ const GAP = 4;
  * Positions are page-normalized 0–1; page size used only for collision in px.
  */
 function layoutPins(
-	items: PdfAskThreadSummary[],
+	items: SelectionPin[],
 	pageW: number,
 	pageH: number,
 ): Array<{ id: string; leftPct: number; topPct: number }> {
@@ -61,23 +60,32 @@ function layoutPins(
 	}));
 }
 
+function pinIcon(kind: SelectionPin["kind"]) {
+	switch (kind) {
+		case "ask":
+			return MessageSquare;
+		case "annotate":
+			return MessageSquareText;
+		case "translate":
+			return Languages;
+	}
+}
+
 /**
- * Chat icons sit on the page near each selection.
- * Hover shows dialog; leave schedules delayed hide (parent).
+ * Unified page pins for selection workflows: ask / annotate / translate.
+ * Hover opens ask (parent decides); click opens any kind.
  */
-export function AskGutter({
+export function SelectionGutter({
 	items,
 	activeId,
 	onOpen,
 	onLeave,
 	onEnter,
-}: AskGutterProps) {
+}: SelectionGutterProps) {
 	const { t } = useTranslation("viewer");
 	if (!items.length) return null;
 
-	const pageW = 600;
-	const pageH = 800;
-	const laid = layoutPins(items, pageW, pageH);
+	const laid = layoutPins(items, 600, 800);
 	const byId = new Map(items.map((it) => [it.id, it]));
 
 	return (
@@ -88,35 +96,46 @@ export function AskGutter({
 			{laid.map((pos) => {
 				const item = byId.get(pos.id);
 				if (!item) return null;
+				const Icon = pinIcon(item.kind);
+				const aria =
+					item.kind === "ask"
+						? t("pdfAsk.pillAria", { preview: item.preview })
+						: item.kind === "annotate"
+							? t("annotations.pinAria", { preview: item.preview })
+							: t("selection.translatePinAria", { preview: item.preview });
+
 				return (
 					<button
-						key={item.id}
+						key={`${item.kind}-${item.id}`}
 						type="button"
 						className={cn(
 							"pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border shadow-sm transition-transform hover:scale-110",
-							item.status === "ended"
+							item.kind === "ask" && item.ended
 								? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
-								: "border-border/80 bg-background text-primary",
+								: item.kind === "translate"
+									? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
+									: "border-border/80 bg-background text-primary",
 							activeId === item.id && "ring-2 ring-ring ring-offset-1",
 						)}
 						style={{ left: `${pos.leftPct}%`, top: `${pos.topPct}%` }}
-						aria-label={t("pdfAsk.pillAria", { preview: item.preview })}
+						aria-label={aria}
 						onMouseEnter={() => {
-							onEnter?.();
-							onOpen(item.id);
+							onEnter?.(item);
+							// Hover opens any pin kind (same as ask); leave schedules hide.
+							onOpen(item);
 						}}
-						onMouseLeave={() => onLeave?.()}
+						onMouseLeave={() => onLeave?.(item)}
 						onFocus={() => {
-							onEnter?.();
-							onOpen(item.id);
+							onEnter?.(item);
+							onOpen(item);
 						}}
 						onClick={(e) => {
 							e.stopPropagation();
-							onEnter?.();
-							onOpen(item.id);
+							onEnter?.(item);
+							onOpen(item);
 						}}
 					>
-						<MessageSquare className="size-3.5" strokeWidth={2} />
+						<Icon className="size-3.5" strokeWidth={2} />
 					</button>
 				);
 			})}

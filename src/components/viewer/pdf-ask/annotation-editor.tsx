@@ -16,6 +16,9 @@ type AnnotationEditorProps = {
 	onSave: (text: string) => void;
 	/** Cancel edit: close without saving and without deleting the highlight */
 	onClose: () => void;
+	/** Same hover-hide contract as ask / translate cards */
+	onPointerEnter?: () => void;
+	onPointerLeave?: () => void;
 };
 
 /**
@@ -28,6 +31,8 @@ export function AnnotationEditor({
 	initialComment,
 	onSave,
 	onClose,
+	onPointerEnter,
+	onPointerLeave,
 }: AnnotationEditorProps) {
 	const { t } = useTranslation("viewer");
 	const [text, setText] = useState(initialComment ?? "");
@@ -51,6 +56,8 @@ export function AnnotationEditor({
 			title={t("annotations.editorLabel")}
 			icon={NotebookPen}
 			ariaLabel={t("annotations.editorLabel")}
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
 			bodyClassName="gap-2 px-3 py-2.5"
 			footer={
 				<div className="flex items-center justify-end gap-1">

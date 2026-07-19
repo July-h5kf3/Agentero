@@ -15,6 +15,7 @@ describe("pdf-ask schema", () => {
 	it("parses a valid thread", () => {
 		const raw = {
 			version: 1,
+			kind: "ask",
 			id: "t1",
 			paperPath: "papers/1706.03762",
 			createdAt: "2026-01-01T00:00:00.000Z",

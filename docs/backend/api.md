@@ -950,15 +950,20 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   vaultPath: string;
   /** paper 文件夹 Vault 相对路径 */
   path: string;
-  /** 完整标签列表（非增量 patch） */
-  tags: string[];
+  /**
+   * 完整标签列表（非增量 patch）。
+   * 元素可为裸字符串（无色）或 `{ name: string; color?: TagColorId }`。
+   * `color` 为 Apple 风格预置 id：`red` | `orange` | `yellow` | `green` |
+   * `teal` | `blue` | `indigo` | `purple`；非法 / 空则视为无色。
+   */
+  tags: Array<string | { name: string; color?: string }>;
 }
 ```
 
-- **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行）。
-- **规范化**：trim 空白；丢弃空串；大小写不敏感去重（保留首次出现的写法）。
-- **前端**：`src/lib/papers-api.ts` → `setPaperTags`；Paper Info 面板可增删；Library 表格展示 + 标签筛选。
-- **CLI**：`agentero paper set-tags <ref> [tags…]`（默认 replace；`--add` / `--remove` 增量）；`paper list --tag` 筛选；`paper tags` 汇总。见 [`../development/cli.md`](../development/cli.md)。
+- **返回**：`{ ok: true; data: PaperMetadata }`（更新后的整行；`tags` 序列化：无色为字符串，有色为 `{name,color}`）。
+- **规范化**：trim 空白；丢弃空串；大小写不敏感去重（保留首次出现的写法与颜色；同名后续项仅在先无色时补色）；`color` 白名单校验。
+- **前端**：`src/lib/papers-api.ts` → `setPaperTags`；Paper Info 增删 + 色盘；Library 染色 chip + 筛选；`src/lib/tag-colors.ts`。
+- **CLI**：`agentero paper set-tags <ref> [tags…]`（默认 replace；`--add` / `--remove` 增量；CLI 仅传裸名称，不设色）；`paper list --tag` 筛选；`paper tags` 汇总。见 [`../development/cli.md`](../development/cli.md)。
 
 #### `paper:list`（扩展规划）
 

@@ -171,8 +171,9 @@
   - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
-  - **列**：标题、作者、年份、**标签**、类型、标识符；**双击**行打开对应 paper 文件夹。
-  - **标签筛选**：表上方汇总**当前作用域** tag chip；单元格 tag 也可筛选。标题搜索同时匹配 tag 子串。
+  - **列**：标题、作者、年份、**标签**、类型、标识符、**阅读热力图**；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签）；**双击**行打开对应 paper 文件夹。
+  - **阅读热力图**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成横向文档脊条（左=文首、右=文末；强度用主题 `primary` 的 `color-mix`，随 light/dark 变化）。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度；无元数据时用活动最大页。全库与文件夹作用域均显示。实现：`src/lib/reading-heatmap/`、`ReadingHeatmapBar`。
+  - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
   - **中间栏 header**：搜索框；全库另有 Zotero 迁移；**导出**（Download 图标）。
@@ -180,7 +181,7 @@
   - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
   - **从 Zotero 迁移**：仅**全库**视图工具栏。
 - **Paper Info / Notes——仅具体论文**：
-  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入框在 chip 上方（多标签时无需先滚动）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威，同步 `metadata.json`）。`loadPaperMetadata` 会注入 vault-relative `path`（`metadata.json` 投影本身不含 path），Zotero 导入等路径也可持续编辑。
+  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入框在 chip 上方（多标签时无需先滚动）；输入框**右侧圆形色点**打开上方色盘（Apple 风格预置 8 色：`red`/`orange`/`yellow`/`green`/`teal`/`blue`/`indigo`/`purple` + 默认）；有色标签前导小圆点且 chip 背景/文字染色，未选色则默认 `muted`。回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`，同步 `metadata.json`）。`loadPaperMetadata` 会注入 vault-relative `path`（`metadata.json` 投影本身不含 path），Zotero 导入等路径也可持续编辑。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表、**插入图片**等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
   - **Markdown 图片**（已落地）：
@@ -193,7 +194,7 @@
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
-- **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 Focus 图标）：
+- **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 **Layout / 面板** 菜单中的禅模式项）：
   - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + **返回**（`ArrowLeft`，不再用关闭 `X`）；隐藏后台任务条与 Notes；Agent 面板头**无**重复退出按钮。
   - **同一** `AgentPanel` 实例保持挂载（CSS 切换 / 不 remount），会话与流式状态不丢。
   - **布局**（`variant="zen"`）：
@@ -239,8 +240,7 @@
   - **PDF 沉浸式阅读**（工具栏 `Maximize2` 进入 / `Minimize2` 或 `Esc` 退出）：折叠左右侧栏 + 隐藏中间栏头，PDF 铺满窗口；正文**限宽 ≤ 1100px 居中**（舒适阅读 + 两侧留白），缩放 / 页码 / 大纲 / 查找浮层照常；切到非 PDF tab 自动退出。i18n `viewer:pdf.zenEnter/zenExit`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
-    - 高亮：`papers/<id>/highlights/<id>.json`（含 `color`（yellow/green/blue/pink/purple），归一化坐标可重定位；调色板 `lib/pdf-highlight/palette.ts`）→ 页面半透明色带覆盖层；点击已有高亮出现「删除」浮层。**标注总览**：标题栏或 PDF 工具栏 💬（`MessageSquareText`）打开右侧栏「批注」tab（`viewer/annotations-panel.tsx`）→ 总览本篇全部高亮（颜色色条 + 页码 + 引文 + 可选备注），点击跳转闪烁 / 编辑备注 / 删除。批注：选中→「批注」= 建高亮 + 内联备注编辑器写 `comment`（**不写 `NOTES.md`**），页边批注针。提问复用迷你问答卡（ACP 流式）；**翻译**当前走 Agent，规划改为调用应用级翻译服务（免费 MT / BYOA Agent，设置 → Translate，见 [`../development/translate.md`](../development/translate.md)）；发送过问题后锚点旁保留对话图标（Hover 回访）。
-    - 提问线程落盘 `papers/<id>/asks/<threadId>.json`；高亮 / 提问 / 笔记均**不**写 PDF 二进制。
+    - 划词标记统一落盘 **`papers/<id>/marks/<id>.json`**（`kind`: `highlight` / `ask` / `translate`）。高亮含 `color` 调色板；批注 = `comment` 非空；提问为多轮 `messages`；翻译含 `result` 可回访。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
@@ -287,7 +287,7 @@
 
 ### 3.1.1 文档标签页（已落地）与分屏（规划，roadmap V0.6）
 
-**浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与禅模式 Focus 图标同行）：
+**浏览器式文档标签页**（`src/components/layout/document-tab-bar.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与 Layout / 侧栏图标同行）：
 
 - **多 tab**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** 各占一个 tab，可切换、关闭（`X` / 中键 / `⌘W`）、拖拽重排；同一路径已开则聚焦其 tab。
 - **默认页 = 全库 Library**：
@@ -345,7 +345,9 @@ PromptInput → Body / Footer / Submit
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
-**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 context chip。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 **context chip**（图标 + Vault 相对路径，可移除）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+
+> **不**接 AI Elements `Attachments` 做 Vault 上下文：那套组件面向 `FileUIPart` 二进制附件（`prompt-input` 已装未对 ACP 传文件）；本产品上下文是 **路径引用**，与 `@` chip / `composer.contextInstruction` 一致。
 
 **本机技能**：Composer 统一用 `$` 打开技能选择器（Agentero UI 约定，与运行时触发语法无关）。可选来源：`~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills`、当前 Vault `.agents/skills`。选中后显示为 context chip；发送时 Host 重新解析技能 id、校验文件大小，并**按当前 Agent 模板**组装 prompt：
 
@@ -418,7 +420,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
   - **回答语言**（自动 / English / 简体中文，独立于界面语言）。
   - **入库后自动精读**（`autoPaperReader`，**默认关**）：开启后魔棒 / 单篇 Download 资源就绪且未读时自动 paper-reader；Zap 始终可手动。
   - **PDF 划词提问**（`pdfAsk.agentId` / `pdfAsk.modelId`）：划词「提问」对话框专用 Agent 与模型；空则跟随默认 Agent / 该 Agent 的模型偏好；与 Chat 当前选择、翻译用 Agent **相互独立**。
-  - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列仅 ready/failed/not-probed，不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页自动 scan + 并行 Probe；Refresh 可再跑。表下小字：ACP 失败时可试代理。代理开关不因 Probe busy 禁用；改代理只持久化 + scan。
+  - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列 ready/failed/**探测中**（含旋转 Loader，取代静态「未探测」）；不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页 soft probe（**跳过已 ready**，只测 not-probed/failed）；Refresh / 改代理 **force** 全量再 Probe。badge 用 `ProbeResult` 就地更新（不全量 scan 每行）；结束再 reconcile scan 一次。代理开关不因 Probe busy 禁用。
   - **Claude**：`detect` 用本机 `claude`（Claude Code）；ACP 入口为 `claude-agent-acp`。若已装 Claude Code 但缺适配器，显示 **ACP adapter missing** 徽章 + **Install ACP** 小按钮 → Host `agent_open_install_terminal` 打开系统终端，展示 `npm i -g @agentclientprotocol/claude-agent-acp`，**等待用户按 Enter 才执行**（不静默安装）。装完后用户点 Refresh 再 Probe。
   - 顶部 **Refresh**（Rescan + Probe）；**Use default** 纯文字（无 icon）。
   - Custom 区：添加任意 ACP command/args。

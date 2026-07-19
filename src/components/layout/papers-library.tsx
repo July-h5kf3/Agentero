@@ -1,21 +1,46 @@
 /**
  * Vault library: table of all papers from catalog.sqlite (display only).
  * Click column headers to sort ascending / descending.
- * Double-click a row to open the paper.
+ * Single-click a cell to copy that field; double-click a row to open the paper.
+ * Reading heatmap column: highlight / ask / translate intensity along the PDF.
  * Optional tag filter chips above the table.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+	type MouseEvent as ReactMouseEvent,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
+import { ReadingHeatmapBar } from "@/components/layout/reading-heatmap";
 import { Button } from "@/components/ui/button";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { filterPapersByScope } from "@/lib/papers-api";
+import {
+	heatmapCacheKey,
+	loadReadingHeatmaps,
+	type ReadingHeatmap,
+} from "@/lib/reading-heatmap";
+import {
+	coercePaperTags,
+	type PaperTag,
+	tagChipStyle,
+	tagSwatchStyle,
+} from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
 	papers: PaperMetadata[];
+	/** Vault root; required to load per-paper reading heatmaps. */
+	vaultPath?: string | null;
+	/** When the Library tab is focused — reload heatmaps (after PDF activity). */
+	active?: boolean;
 	loading?: boolean;
 	query?: string;
 	/**
@@ -32,6 +57,9 @@ export type PapersLibraryProps = {
 	rescanning?: boolean;
 	className?: string;
 };
+
+/** Data columns + fixed reading-heatmap column (not sortable). */
+const TABLE_COL_COUNT = 7;
 
 type SortKey = "title" | "authors" | "year" | "type" | "id" | "tags";
 type SortDir = "asc" | "desc";
@@ -75,6 +103,12 @@ function formatAuthors(authors: string[] | undefined): string {
 	return `${authors[0]} et al.`;
 }
 
+/** Full author list for clipboard (not the abbreviated display form). */
+function authorsCopyText(authors: string[] | undefined): string | null {
+	if (!authors?.length) return null;
+	return authors.join(", ");
+}
+
 function identifierLabel(p: PaperMetadata): string {
 	if (p.arxiv_id) return p.arxiv_id;
 	if (p.doi) return p.doi;
@@ -82,9 +116,20 @@ function identifierLabel(p: PaperMetadata): string {
 	return p.id || "—";
 }
 
+function identifierCopyText(p: PaperMetadata): string | null {
+	const label = identifierLabel(p);
+	return label && label !== "—" ? label : null;
+}
+
 function paperHasTag(p: PaperMetadata, tag: string): boolean {
 	const needle = tag.toLocaleLowerCase();
-	return (p.tags ?? []).some((t) => t.toLocaleLowerCase() === needle);
+	return coercePaperTags(p.tags).some(
+		(t) => t.name.toLocaleLowerCase() === needle,
+	);
+}
+
+function paperTagNames(p: PaperMetadata): string[] {
+	return coercePaperTags(p.tags).map((t) => t.name);
 }
 
 function sortValue(p: PaperMetadata, key: SortKey): string | number {
@@ -100,7 +145,7 @@ function sortValue(p: PaperMetadata, key: SortKey): string | number {
 		case "id":
 			return identifierLabel(p).toLocaleLowerCase();
 		case "tags":
-			return (p.tags ?? []).join(", ").toLocaleLowerCase();
+			return paperTagNames(p).join(", ").toLocaleLowerCase();
 	}
 }
 
@@ -144,24 +189,42 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 function TagChip({
 	tag,
+	color,
 	active,
 	onClick,
 }: {
 	tag: string;
+	color?: PaperTag["color"];
 	active?: boolean;
 	onClick?: () => void;
 }) {
+	const colored = !active ? tagChipStyle(color) : undefined;
+	const body = (
+		<>
+			{color && !active ? (
+				<span
+					className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+					style={tagSwatchStyle(color)}
+					aria-hidden
+				/>
+			) : null}
+			{tag}
+		</>
+	);
 	if (!onClick) {
 		return (
 			<span
 				className={cn(
-					"inline-flex items-center rounded px-1.5 py-0.5 text-[10px] leading-none",
+					"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
 					active
 						? "bg-foreground text-background"
-						: "bg-muted text-muted-foreground",
+						: colored
+							? "font-medium"
+							: "bg-muted text-muted-foreground",
 				)}
+				style={colored}
 			>
-				#{tag}
+				{body}
 			</span>
 		);
 	}
@@ -173,20 +236,25 @@ function TagChip({
 				onClick();
 			}}
 			className={cn(
-				"inline-flex items-center rounded px-1.5 py-0.5 text-[10px] leading-none",
+				"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
 				"cursor-pointer transition-colors",
 				active
 					? "bg-foreground text-background hover:bg-foreground/90"
-					: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+					: colored
+						? "font-medium hover:opacity-90"
+						: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
 			)}
+			style={colored}
 		>
-			#{tag}
+			{body}
 		</button>
 	);
 }
 
 export function PapersLibrary({
 	papers,
+	vaultPath = null,
+	active = true,
 	loading,
 	query,
 	scopePath = null,
@@ -200,6 +268,9 @@ export function PapersLibrary({
 	const { t, i18n } = useTranslation("sidebar");
 	const [sortKey, setSortKey] = useState<SortKey>("title");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
+	const [heatmaps, setHeatmaps] = useState<Map<string, ReadingHeatmap>>(
+		() => new Map(),
+	);
 
 	const handleSort = useCallback(
 		(key: SortKey) => {
@@ -214,22 +285,75 @@ export function PapersLibrary({
 		[sortKey],
 	);
 
+	/** Single-click a cell → copy that field; skip empty placeholders. */
+	const copyField = useCallback(
+		async (text: string | null | undefined, label: string) => {
+			const value = text?.trim();
+			if (!value || value === "—") return;
+			try {
+				if (
+					typeof navigator === "undefined" ||
+					!navigator.clipboard?.writeText
+				) {
+					throw new Error("clipboard unavailable");
+				}
+				await navigator.clipboard.writeText(value);
+				notifySuccess(t("papersLibrary.copied", { label }), {
+					duration: 1500,
+					id: "papers-library-copied",
+				});
+			} catch {
+				notifyError(t("papersLibrary.copyFailed"));
+			}
+		},
+		[t],
+	);
+
+	const onCellCopy = useCallback(
+		(e: ReactMouseEvent, text: string | null | undefined, label: string) => {
+			// Skip the second click of a double-click (row still opens paper).
+			if (e.detail > 1) return;
+			void copyField(text, label);
+		},
+		[copyField],
+	);
+
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
 	const scopedPapers = useMemo(
 		() => filterPapersByScope(papers, scopePath),
 		[papers, scopePath],
 	);
 
+	/** Load reading heatmaps for the current folder scope (full library or org folder). */
+	useEffect(() => {
+		if (!active) return;
+		if (!vaultPath || !scopedPapers.length) {
+			setHeatmaps(new Map());
+			return;
+		}
+		let cancelled = false;
+		void loadReadingHeatmaps(vaultPath, scopedPapers, { concurrency: 6 }).then(
+			(map) => {
+				if (!cancelled) setHeatmaps(map);
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [vaultPath, scopedPapers, active]);
+
 	const allTags = useMemo(() => {
-		const map = new Map<string, string>();
+		/** name → first-seen PaperTag (keeps color for filter chips). */
+		const map = new Map<string, PaperTag>();
 		for (const p of scopedPapers) {
-			for (const tag of p.tags ?? []) {
-				const key = tag.toLocaleLowerCase();
+			for (const tag of coercePaperTags(p.tags)) {
+				const key = tag.name.toLocaleLowerCase();
 				if (!map.has(key)) map.set(key, tag);
+				else if (!map.get(key)?.color && tag.color) map.set(key, tag);
 			}
 		}
 		return [...map.values()].sort((a, b) =>
-			a.localeCompare(b, undefined, { sensitivity: "base" }),
+			a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
 		);
 	}, [scopedPapers]);
 
@@ -240,7 +364,7 @@ export function PapersLibrary({
 		if (normalizedQuery) {
 			filtered = filtered.filter((p) => {
 				const title = (p.title ?? "").toLocaleLowerCase();
-				const tags = (p.tags ?? []).join(" ").toLocaleLowerCase();
+				const tags = paperTagNames(p).join(" ").toLocaleLowerCase();
 				return (
 					title.includes(normalizedQuery) || tags.includes(normalizedQuery)
 				);
@@ -331,13 +455,14 @@ export function PapersLibrary({
 					{allTags.map((tag) => {
 						const active =
 							tagFilter != null &&
-							tag.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
+							tag.name.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
 						return (
 							<TagChip
-								key={tag}
-								tag={tag}
+								key={tag.name}
+								tag={tag.name}
+								color={tag.color}
 								active={active}
-								onClick={() => onTagFilterChange(active ? null : tag)}
+								onClick={() => onTagFilterChange(active ? null : tag.name)}
 							/>
 						);
 					})}
@@ -406,85 +531,267 @@ export function PapersLibrary({
 										</th>
 									);
 								})}
+								<th
+									className="min-w-[88px] px-3 py-2 font-medium"
+									title={t("papersLibrary.colHeatmapHint")}
+								>
+									<span className="truncate">
+										{t("papersLibrary.colHeatmap")}
+									</span>
+								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{paddingTop > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={SORT_COLUMNS.length}
+										colSpan={TABLE_COL_COUNT}
 										style={{ height: paddingTop }}
 									/>
 								</tr>
 							) : null}
 							{virtualRows.map((vr) => {
 								const p = rows[vr.index];
+								const heat = heatmaps.get(heatmapCacheKey(p));
 								return (
 									<tr
 										key={p.path ?? p.id}
 										data-index={vr.index}
 										ref={rowVirtualizer.measureElement}
-										className="cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50"
+										className="border-b border-border/60 transition-colors hover:bg-muted/50"
 										onDoubleClick={() => onOpenPaper(p)}
 									>
 										<td className="max-w-[420px] px-3 py-2.5">
-											<div className="font-medium" title={p.title}>
-												{p.title}
-											</div>
+											<button
+												type="button"
+												className={cn(
+													"block w-full cursor-pointer rounded-sm text-left font-medium",
+													"hover:bg-muted/60",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												)}
+												title={
+													p.title
+														? t("papersLibrary.copyHint", {
+																label: t("papersLibrary.colTitle"),
+															})
+														: undefined
+												}
+												aria-label={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colTitle"),
+												})}
+												onClick={(e) =>
+													onCellCopy(e, p.title, t("papersLibrary.colTitle"))
+												}
+											>
+												<span className="line-clamp-2" title={p.title}>
+													{p.title}
+												</span>
+											</button>
 											{p.publication ? (
-												<div
-													className="text-muted-foreground text-xs"
-													title={p.publication}
+												<button
+													type="button"
+													className={cn(
+														"mt-0.5 block w-full cursor-pointer rounded-sm text-left text-muted-foreground text-xs",
+														"hover:bg-muted/60 hover:text-foreground",
+														"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+													)}
+													title={t("papersLibrary.copyHint", {
+														label: t("papersLibrary.colPublication"),
+													})}
+													aria-label={t("papersLibrary.copyHint", {
+														label: t("papersLibrary.colPublication"),
+													})}
+													onClick={(e) =>
+														onCellCopy(
+															e,
+															p.publication,
+															t("papersLibrary.colPublication"),
+														)
+													}
 												>
-													{p.publication}
-												</div>
+													<span className="line-clamp-1" title={p.publication}>
+														{p.publication}
+													</span>
+												</button>
 											) : null}
 										</td>
 										<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
-											<span title={p.authors?.join(", ")}>
-												{formatAuthors(p.authors)}
-											</span>
+											<button
+												type="button"
+												className={cn(
+													"block w-full cursor-pointer rounded-sm text-left",
+													"hover:bg-muted/60 hover:text-foreground",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												)}
+												title={
+													authorsCopyText(p.authors)
+														? t("papersLibrary.copyHint", {
+																label: t("papersLibrary.colAuthors"),
+															})
+														: undefined
+												}
+												aria-label={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colAuthors"),
+												})}
+												onClick={(e) =>
+													onCellCopy(
+														e,
+														authorsCopyText(p.authors),
+														t("papersLibrary.colAuthors"),
+													)
+												}
+											>
+												<span title={p.authors?.join(", ")}>
+													{formatAuthors(p.authors)}
+												</span>
+											</button>
 										</td>
 										<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
-											{p.year ?? "—"}
+											<button
+												type="button"
+												className={cn(
+													"cursor-pointer rounded-sm px-0.5",
+													"hover:bg-muted/60 hover:text-foreground",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												)}
+												title={
+													p.year != null
+														? t("papersLibrary.copyHint", {
+																label: t("papersLibrary.colYear"),
+															})
+														: undefined
+												}
+												aria-label={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colYear"),
+												})}
+												onClick={(e) =>
+													onCellCopy(
+														e,
+														p.year != null ? String(p.year) : null,
+														t("papersLibrary.colYear"),
+													)
+												}
+											>
+												{p.year ?? "—"}
+											</button>
 										</td>
 										<td className="max-w-[200px] px-3 py-2.5">
-											{p.tags?.length ? (
+											{coercePaperTags(p.tags).length ? (
 												<div className="flex flex-wrap gap-1">
-													{p.tags.map((tag) => (
-														<TagChip
-															key={tag}
-															tag={tag}
-															active={
-																tagFilter != null &&
-																tag.toLocaleLowerCase() ===
-																	tagFilter.toLocaleLowerCase()
-															}
-															onClick={
-																onTagFilterChange
-																	? () => {
-																			const active =
-																				tagFilter != null &&
-																				tag.toLocaleLowerCase() ===
-																					tagFilter.toLocaleLowerCase();
-																			onTagFilterChange(active ? null : tag);
-																		}
-																	: undefined
-															}
-														/>
-													))}
+													{coercePaperTags(p.tags).map((tag) => {
+														const active =
+															tagFilter != null &&
+															tag.name.toLocaleLowerCase() ===
+																tagFilter.toLocaleLowerCase();
+														const colored = !active
+															? tagChipStyle(tag.color)
+															: undefined;
+														return (
+															<button
+																key={tag.name}
+																type="button"
+																className={cn(
+																	"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+																	"cursor-pointer transition-colors",
+																	"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+																	active
+																		? "bg-foreground text-background hover:bg-foreground/90"
+																		: colored
+																			? "font-medium hover:opacity-90"
+																			: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+																)}
+																style={colored}
+																title={t("papersLibrary.copyHint", {
+																	label: t("papersLibrary.colTags"),
+																})}
+																aria-label={t("papersLibrary.copyHint", {
+																	label: tag.name,
+																})}
+																onClick={(e) =>
+																	onCellCopy(
+																		e,
+																		tag.name,
+																		t("papersLibrary.colTags"),
+																	)
+																}
+															>
+																{tag.color && !active ? (
+																	<span
+																		className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+																		style={tagSwatchStyle(tag.color)}
+																		aria-hidden
+																	/>
+																) : null}
+																{tag.name}
+															</button>
+														);
+													})}
 												</div>
 											) : (
 												<span className="text-muted-foreground text-xs">—</span>
 											)}
 										</td>
 										<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
-											{p.type}
+											<button
+												type="button"
+												className={cn(
+													"cursor-pointer rounded-sm px-0.5",
+													"hover:bg-muted/60 hover:text-foreground",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												)}
+												title={
+													p.type
+														? t("papersLibrary.copyHint", {
+																label: t("papersLibrary.colType"),
+															})
+														: undefined
+												}
+												aria-label={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colType"),
+												})}
+												onClick={(e) =>
+													onCellCopy(e, p.type, t("papersLibrary.colType"))
+												}
+											>
+												{p.type || "—"}
+											</button>
 										</td>
 										<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
-											<span title={identifierLabel(p)}>
-												{identifierLabel(p)}
-											</span>
+											<button
+												type="button"
+												className={cn(
+													"block w-full cursor-pointer rounded-sm text-left",
+													"hover:bg-muted/60 hover:text-foreground",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+												)}
+												title={
+													identifierCopyText(p)
+														? t("papersLibrary.copyHint", {
+																label: t("papersLibrary.colId"),
+															})
+														: undefined
+												}
+												aria-label={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colId"),
+												})}
+												onClick={(e) =>
+													onCellCopy(
+														e,
+														identifierCopyText(p),
+														t("papersLibrary.colId"),
+													)
+												}
+											>
+												<span
+													className="line-clamp-1"
+													title={identifierLabel(p)}
+												>
+													{identifierLabel(p)}
+												</span>
+											</button>
+										</td>
+										<td className="whitespace-nowrap px-3 py-2.5 align-middle">
+											<ReadingHeatmapBar heatmap={heat} />
 										</td>
 									</tr>
 								);
@@ -492,7 +799,7 @@ export function PapersLibrary({
 							{paddingBottom > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={SORT_COLUMNS.length}
+										colSpan={TABLE_COL_COUNT}
 										style={{ height: paddingBottom }}
 									/>
 								</tr>

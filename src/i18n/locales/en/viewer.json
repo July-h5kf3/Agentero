@@ -44,14 +44,20 @@
 		"title": "Annotations",
 		"pageLabel": "Page {{page}}",
 		"close": "Close",
-		"empty": "No highlights or annotations yet. Select text in the PDF to highlight or annotate.",
+		"empty": "No highlights, notes, or asks yet. Select text in the PDF to highlight, annotate, or ask.",
 		"placeholder": "Write a note…",
 		"save": "Save",
 		"cancel": "Cancel",
 		"delete": "Delete",
+		"deleteAsk": "Delete conversation",
 		"editorLabel": "Annotation note",
 		"pinAria": "Open annotation: {{preview}}",
-		"panelAria": "Annotations for this paper"
+		"panelAria": "Annotations and asks for this paper",
+		"sectionHighlights": "Highlights & notes",
+		"sectionAsks": "Conversations",
+		"askTurns": "{{count}} messages",
+		"expandNote": "Expand note",
+		"collapseNote": "Collapse note"
 	},
 	"selection": {
 		"menuLabel": "Selection actions",
@@ -75,6 +81,9 @@
 		"translateTitle": "Translation",
 		"translating": "Translating…",
 		"translateClose": "Close",
+		"translateHide": "Hide",
+		"translateDelete": "Delete",
+		"translatePinAria": "Open translation: {{preview}}",
 		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent."
 	},
 	"html": {
