@@ -41,9 +41,9 @@ Agentero 桌面应用
 
 - 默认工作台：文件树 + **文档标签页**中间内容 +（按需）Notes + 可选右侧栏。
 - **文档标签**：标题栏浏览器式多 tab（paper / PDF / HTML / Markdown / Library / 图片）；常驻挂载，切换保留 PDF 滚动/缩放与编辑器状态。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`：设置 / 快捷键清单 / 命令面板 / 迁移对话框等），否则逐个关标签，仅剩全库时关窗；`⌥⌘←/→` 切换。**分屏（split）** 仍规划见 V0.6。
-- 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 列 + chip 筛选、双向滚动），数据来自 `paper_list`。
+- 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 染色 chip + 筛选、双向滚动），数据来自 `paper_list`。
 - 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下虚拟节点 `agentero:trash` → 中间栏回收站视图恢复 / 清空，无 Undo toast）。Paper 行默认 **标题 · 作者**（设置 → 通用可切换标签/排序预设，不改磁盘文件夹名）。
-- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑（`paper_set_tags`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
+- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑并可设 **Apple 8 色**（`paper_set_tags`，`tags_json` 字符串或 `{name,color}`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
 - 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建 / 从 Zotero 迁移）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。

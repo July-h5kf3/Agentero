@@ -15,7 +15,7 @@
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation`；无会话数字标签；`hideFromChatHistory` 过滤后台运行；**权限三档** + `agent:permission-request` 对话框；**空态 suggestion → workflow**；**`agent:notes-review` Keep/Revert**）、`layout/command-palette`（`⌘K`/`⌘P` 论文 quick-open + `vault_search`）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 回收站入口）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + tags + **Rescan** + 文件夹作用域）、`layout/paper-info-panel`、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；划词提问 `hideFromChatHistory`） |
+| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation`；无会话数字标签；`hideFromChatHistory` 过滤后台运行；**权限三档** + `agent:permission-request` 对话框；**空态 suggestion → workflow**；**`agent:notes-review` Keep/Revert**；Composer **`@` / 文件树拖入 → context chip**）、`layout/command-palette`（`⌘K`/`⌘P` 论文 quick-open + `vault_search`）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 回收站入口）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + **染色 tags** + **Rescan** + 文件夹作用域）、`layout/paper-info-panel`（Tags 色盘）、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；划词提问 `hideFromChatHistory`） |
 | 全局通知 | shadcn `ui/sonner` + `src/lib/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
@@ -41,7 +41,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Message](https://elements.ai-sdk.dev/components/message) | `message` | 单条消息：`from`、内容、`MessageResponse`（Streamdown）、操作/分支 | ✅ 用户/助手气泡 |
 | [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) | `prompt-input` | Composer：输入、附件、提交状态、工具槽 | ✅ 底部输入 |
 | [Sources](https://elements.ai-sdk.dev/components/sources) | `sources` | 折叠展示引用来源列表 | ✅ Vault 路径引用 |
-| [Attachments](https://elements.ai-sdk.dev/components/attachments) | `attachments` | 附件网格/列表/预览 | 📦（Prompt 已支持，ACP 暂不传文件） |
+| [Attachments](https://elements.ai-sdk.dev/components/attachments) | `attachments` | 附件网格/列表/预览 | 📦（Prompt 已支持，ACP 暂不传文件；Vault 路径上下文用 Composer context chip，见 ui.md） |
 | [Suggestion](https://elements.ai-sdk.dev/components/suggestion) | `suggestion` | 快捷建议 chip | ✅ 空态：Summarize / Ask library / List claims / Draft Related Work → `summary`/`qa`/`related_work` |
 | [Shimmer](https://elements.ai-sdk.dev/components/shimmer) | `shimmer` | 加载占位闪光文案 | ✅ 等待正文 |
 | [Inline Citation](https://elements.ai-sdk.dev/components/inline-citation) | `inline-citation` | 正文内可悬停引用 | ✅ 回复末尾徽章 + Hover 轮播 |

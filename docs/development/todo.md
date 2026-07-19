@@ -54,6 +54,7 @@
 - [x] Library 行批量补资源（与 2b 联动）
 - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选
 - [x] **Tags CLI**：`paper set-tags` / `list --tag` / `tags`（与 Host 共用 `papers::set_tags`）
+- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/tag-colors.ts`）
 
 ### 2c-2. 论文库默认页 + 文件夹作用域库
 

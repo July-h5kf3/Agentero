@@ -249,7 +249,12 @@ interface PaperMetadata {
   /** 原始日期串（Translator `date`） */
   date?: string;
   abstract?: string;
-  tags: string[];
+  /**
+   * Catalog 标签。序列化兼容：无色为字符串，有色为 `{ name, color }`。
+   * `color` 预置 id：red/orange/yellow/green/teal/blue/indigo/purple。
+   * 前端读写经 `coercePaperTags` / `normalizePaperTags`（`src/lib/tag-colors.ts`）。
+   */
+  tags: Array<string | { name: string; color?: string }>;
 
   // 标识符
   arxiv_id?: string;
