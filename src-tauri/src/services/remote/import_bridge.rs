@@ -405,7 +405,7 @@ fn title_from_stem(stem: &str) -> String {
     }
 }
 
-async fn unique_remote_paper_path(
+pub async fn unique_remote_paper_path(
     fs: &dyn VaultFs,
     parent_rel: &str,
     base_id: &str,
@@ -422,7 +422,8 @@ async fn unique_remote_paper_path(
     }
 }
 
-async fn upload_tree(
+/// Upload a local directory tree to a vault-relative remote path (SFTP / local-sim).
+pub async fn upload_tree(
     fs: &dyn VaultFs,
     local_root: &Path,
     remote_rel: &str,

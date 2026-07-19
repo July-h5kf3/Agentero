@@ -1,6 +1,6 @@
 # Zotero Connector 兼容服务（方案一）
 
-> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`**；**快照 / cookies 仍待**）  
+> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`** + **远程 Vault（SSH）**；**快照 / cookies 仍待**）  
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
 > 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
@@ -23,11 +23,11 @@
 
 ### 1.2 用户故事
 
-1. 用户打开 Agentero，打开某个 Vault。
+1. 用户打开 Agentero，打开某个 Vault（**本地路径**或 **Open Remote Vault**）。
 2. 在 **设置** 中开启「兼容 Zotero Connector」（**默认关**）。
 3. Host 在 `127.0.0.1:23119` 启动 Connector 兼容服务；若端口被 Zotero 占用则明确失败提示。
 4. 用户在浏览器使用 **官方 Zotero Connector** 点保存（arXiv、DOI 页、期刊站等）。
-5. Connector 将 translator 产出的 items JSON POST 到本机；Agentero 写入 `papers/…` + catalog，并按现有策略尽量下载 PDF。
+5. Connector 将 translator 产出的 items JSON POST 到本机；Agentero 写入 `papers/…` + catalog，并按现有策略尽量下载 PDF。**远程 Vault** 时先 stage 再 SFTP 上传，catalog 经 work mirror PUT。
 6. Agentero 刷新文件树 / Library；**`openPaper` 打开（或聚焦）该论文标签页**（与魔棒入库一致；附件 `saveAttachment` / 会话移动再次发出事件时亦会聚焦）；可选 toast 成功摘要。
 7. 用户关闭开关或退出应用时释放端口。
 

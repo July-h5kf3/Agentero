@@ -285,6 +285,8 @@ pub fn run() {
             let _ = app.state::<WikiIndexState>();
             let connector = app.state::<Arc<ConnectorController>>();
             connector.set_app_handle(app.handle().clone());
+            let remote = app.state::<Arc<RemoteRegistry>>();
+            connector.set_remote_registry(Arc::clone(&remote));
             log::info!(
                 target: "agentero::op",
                 "op start app_ready debug={}",

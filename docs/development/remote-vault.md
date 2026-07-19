@@ -1,6 +1,6 @@
 # 远程 Vault（SSH / SFTP）与远端 BYOA
 
-> **状态**：**MVP 已落地**（M0–M3）；M4 加固中（远端 trash ✅、入库写远端 ✅、blob LRU ✅；Codex-SSH / Connector 远程 待办）  
+> **状态**：**MVP 已落地**（M0–M3）；M4 加固中（远端 trash ✅、入库写远端 ✅、blob LRU ✅、Connector 远程 ✅；Codex-SSH 待办）  
 > **分支**：`docs/remote-vault-ssh`  
 > **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
 > **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO
@@ -465,5 +465,4 @@ cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 
 - Codex App Server 经 SSH  
 - 更完整设置页远程偏好（默认 identity 等）  
-- 更广的 `std::fs` → `VaultFs` 迁移  
-- Zotero Connector 绑定远程会话 
+- 更广的 `std::fs` → `VaultFs` 迁移 

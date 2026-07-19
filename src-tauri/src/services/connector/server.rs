@@ -1,8 +1,9 @@
 //! Minimal axum HTTP server compatible with Zotero Connector endpoints.
 
-use super::import::import_connector_item;
+use super::import::{import_connector_item, import_connector_item_remote};
 use super::state::{ConnectorController, ConnectorItemSaved, ProgressAttachment, ProgressItem};
 use crate::error::AppError;
+use crate::services::remote::parse_remote_handle;
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
@@ -228,7 +229,7 @@ async fn save_items(
         return json_response(StatusCode::BAD_REQUEST, json!({ "error": "NO_ITEMS" }));
     }
 
-    let (vault, _) = match state.ctrl.vault_and_parent() {
+    let (vault_handle, _) = match state.ctrl.vault_handle_and_parent() {
         Ok(v) => v,
         Err(e) => {
             state.ctrl.emit_error(&e.to_string(), Some(&session_id));
@@ -302,7 +303,33 @@ async fn save_items(
 
     let mut out_items: Vec<Value> = Vec::new();
     for item in &body.items {
-        match import_connector_item(&vault, &parent_dir, item, page_uri).await {
+        let import_result = if let Some(sid) = parse_remote_handle(&vault_handle) {
+            let reg = match state.ctrl.remote_registry() {
+                Some(r) => r,
+                None => {
+                    let msg = "remote registry unavailable";
+                    state.ctrl.emit_error(msg, Some(&session_id));
+                    state.ctrl.mark_session_done(&session_id);
+                    return json_response(StatusCode::SERVICE_UNAVAILABLE, json!({ "error": msg }));
+                }
+            };
+            match reg.get(sid).await {
+                Ok(session) => {
+                    import_connector_item_remote(session, &parent_dir, item, page_uri).await
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            import_connector_item(
+                std::path::Path::new(&vault_handle),
+                &parent_dir,
+                item,
+                page_uri,
+            )
+            .await
+        };
+
+        match import_result {
             Ok(r) => {
                 if !r.deduped {
                     state.ctrl.record_session_paper(&session_id, &r.path);
@@ -398,7 +425,7 @@ async fn get_selected_collection(State(state): State<AppState>, headers: HeaderM
     if let Some(r) = guard(&headers, &Method::POST) {
         return r;
     }
-    json_response(StatusCode::OK, state.ctrl.selected_collection_json())
+    json_response(StatusCode::OK, state.ctrl.selected_collection_json().await)
 }
 
 #[derive(Debug, Deserialize)]
@@ -440,7 +467,7 @@ async fn update_session(
         // No target change — still 200 (plugin may only send tags).
         return json_response(StatusCode::OK, json!({}));
     };
-    match state.ctrl.update_session_target(sid, target) {
+    match state.ctrl.update_session_target(sid, target).await {
         Ok(_) => json_response(StatusCode::OK, json!({})),
         Err(e) => {
             let msg = e.to_string();
@@ -502,6 +529,7 @@ async fn save_attachment(
     match state
         .ctrl
         .write_attachment_pdf(&session_id, parent_item_id.as_deref(), &body)
+        .await
     {
         Ok(path) => json_response(StatusCode::CREATED, json!({ "path": path })),
         Err(e) => {

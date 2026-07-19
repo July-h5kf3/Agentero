@@ -432,6 +432,7 @@
 - [x] **M4** 远端 recycle bin（`.agentero/.trash/` via SFTP，与本地语义对齐）
 - [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）
 - [x] **M4** blob LRU（2 GiB/库）+ 设置页「清除远程缓存」
+- [x] **M4** Zotero Connector 绑定远程会话（saveItems / saveAttachment / targets）
 - [ ] **M4** Codex-SSH、更完整远程偏好
 
 ### 发布
