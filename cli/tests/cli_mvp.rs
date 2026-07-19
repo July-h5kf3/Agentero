@@ -29,6 +29,10 @@ fn vault_create_which_info_check() {
     assert!(vault.join(".agentero").join("catalog.sqlite").is_file());
     assert!(vault.join("AGENTS.md").is_file());
     assert!(vault.join(".agents/skills/agentero-cli/SKILL.md").is_file());
+    assert!(vault.join(".agents/skills/paper-reader/SKILL.md").is_file());
+    assert!(vault.join(".agents/skills/idea-evaluator/SKILL.md").is_file());
+    assert!(vault.join(".agents/skills/deep-research/SKILL.md").is_file());
+    assert!(vault.join(".agents/skills/README.md").is_file());
 
     let which = agentero()
         .args([

@@ -146,6 +146,7 @@
 - [x] 按需放宽 service `pub`（`lib.rs` 导出 `services` / `error`；`list_by_id`）
 - [x] README / 本仓库开发说明：`cargo build -p agentero-cli`
 - [x] Vault skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`；Create Vault 种子；README Quick Start 已写协议
+- [x] 预制 skills 扩展：`idea-evaluator` + `deep-research`（vendored [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，CC BY-NC-SA 4.0；`skills/README.md` + LICENSE 说明）
 
 ### 6. 运行日志（Logging）— P0
 

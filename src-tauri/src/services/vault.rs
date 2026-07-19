@@ -37,6 +37,14 @@ This file is the L0 map for agents working in this Agentero research vault.
 /// Scaffold for `.agents/README.md` (only if missing).
 pub const AGENTS_DIR_README: &str = include_str!("../../../templates/vault/.agents/README.md");
 
+/// Skills index: bundled presets, third-party source + LICENSE.
+pub const SKILLS_DIR_README: &str =
+    include_str!("../../../templates/vault/.agents/skills/README.md");
+
+/// Supervisor-Skills (HKUSTDial) CC BY-NC-SA 4.0 text.
+pub const SUPERVISOR_SKILLS_LICENSE: &str =
+    include_str!("../../../templates/vault/.agents/skills/LICENSE-Supervisor-Skills.txt");
+
 /// Bundled paper-reader skill (file-tree Zap workflow).
 pub const PAPER_READER_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
@@ -44,6 +52,146 @@ pub const PAPER_READER_SKILL: &str =
 /// Bundled agentero-cli skill (headless vault discover/import via CLI).
 pub const AGENTERO_CLI_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
+
+/// Bundled idea-evaluator skill (from Supervisor-Skills).
+pub const IDEA_EVALUATOR_SKILL: &str =
+    include_str!("../../../templates/vault/.agents/skills/idea-evaluator/SKILL.md");
+
+/// Bundled deep-research skill (from Supervisor-Skills).
+pub const DEEP_RESEARCH_SKILL: &str =
+    include_str!("../../../templates/vault/.agents/skills/deep-research/SKILL.md");
+
+/// Vault-relative path → content for Create Vault skill seeding (no overwrite).
+/// Paths are under the vault root (e.g. `.agents/skills/...`).
+fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
+    &[
+        (".agents/skills/README.md", SKILLS_DIR_README),
+        (
+            ".agents/skills/LICENSE-Supervisor-Skills.txt",
+            SUPERVISOR_SKILLS_LICENSE,
+        ),
+        (".agents/skills/paper-reader/SKILL.md", PAPER_READER_SKILL),
+        (".agents/skills/agentero-cli/SKILL.md", AGENTERO_CLI_SKILL),
+        // idea-evaluator (Supervisor-Skills)
+        (
+            ".agents/skills/idea-evaluator/SKILL.md",
+            IDEA_EVALUATOR_SKILL,
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/domain-evaluation-frameworks.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/domain-evaluation-frameworks.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/fatal-flaws.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/fatal-flaws.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/five-dimensions.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/five-dimensions.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/lifecycle-capability-matching.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/lifecycle-capability-matching.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-elephant.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-elephant.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-examples.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-examples.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-first-principles.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-first-principles.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-hamming.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-hamming.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-shift-probe.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-shift-probe.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/paradigm-technology-cycle.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-technology-cycle.md"
+            ),
+        ),
+        (
+            ".agents/skills/idea-evaluator/references/worked-examples.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/idea-evaluator/references/worked-examples.md"
+            ),
+        ),
+        // deep-research (Supervisor-Skills)
+        (
+            ".agents/skills/deep-research/SKILL.md",
+            DEEP_RESEARCH_SKILL,
+        ),
+        (
+            ".agents/skills/deep-research/references/citation-protocol.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/citation-protocol.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/hedge-calibration.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/hedge-calibration.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/output-structure.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/output-structure.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/quality-gates.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/quality-gates.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/search-strategy.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/search-strategy.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/self-adversarial.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/self-adversarial.md"
+            ),
+        ),
+        (
+            ".agents/skills/deep-research/references/synthesis-framework.md",
+            include_str!(
+                "../../../templates/vault/.agents/skills/deep-research/references/synthesis-framework.md"
+            ),
+        ),
+    ]
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,10 +210,29 @@ fn join_rel(root: &Path, rel: &str) -> std::path::PathBuf {
     p
 }
 
+/// Write `rel` under `root` if missing. Creates parent dirs. Records `rel` in `created`.
+fn seed_file_if_missing(
+    root: &Path,
+    rel: &str,
+    content: &str,
+    created: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let path = join_rel(root, rel);
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, content)?;
+    created.push(rel.into());
+    Ok(())
+}
+
 /// Create Agentero vault skeleton under `path` without overwriting existing user files.
 ///
 /// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
-/// `AGENTS.md` (if missing), seeds `.agents/README.md`, and initializes
+/// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills, and initializes
 /// `.agentero/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
 pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     if !path.exists() {
@@ -102,28 +269,9 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     }
 
     // Seed vault-local agent layout from `templates/vault/.agents/` (no overwrite).
-    let agents_readme = join_rel(path, ".agents/README.md");
-    if !agents_readme.exists() {
-        fs::write(&agents_readme, AGENTS_DIR_README)?;
-        created.push(".agents/README.md".into());
-    }
-
-    // Seed paper-reader skill for Zap / 精读 workflow (no overwrite).
-    let paper_reader_dir = join_rel(path, ".agents/skills/paper-reader");
-    let paper_reader_skill = paper_reader_dir.join("SKILL.md");
-    if !paper_reader_skill.exists() {
-        fs::create_dir_all(&paper_reader_dir)?;
-        fs::write(&paper_reader_skill, PAPER_READER_SKILL)?;
-        created.push(".agents/skills/paper-reader/SKILL.md".into());
-    }
-
-    // Seed agentero-cli skill for headless vault discover / import (no overwrite).
-    let agentero_cli_dir = join_rel(path, ".agents/skills/agentero-cli");
-    let agentero_cli_skill = agentero_cli_dir.join("SKILL.md");
-    if !agentero_cli_skill.exists() {
-        fs::create_dir_all(&agentero_cli_dir)?;
-        fs::write(&agentero_cli_skill, AGENTERO_CLI_SKILL)?;
-        created.push(".agents/skills/agentero-cli/SKILL.md".into());
+    seed_file_if_missing(path, ".agents/README.md", AGENTS_DIR_README, &mut created)?;
+    for (rel, content) in bundled_skill_files() {
+        seed_file_if_missing(path, rel, content, &mut created)?;
     }
 
     // Catalog: always ensure schema (may create catalog.sqlite)
@@ -167,8 +315,20 @@ mod tests {
         assert!(dir.join(".agents").is_dir());
         assert!(dir.join(".agents/skills").is_dir());
         assert!(dir.join(".agents/README.md").is_file());
+        assert!(dir.join(".agents/skills/README.md").is_file());
+        assert!(dir
+            .join(".agents/skills/LICENSE-Supervisor-Skills.txt")
+            .is_file());
         assert!(dir.join(".agents/skills/paper-reader/SKILL.md").is_file());
         assert!(dir.join(".agents/skills/agentero-cli/SKILL.md").is_file());
+        assert!(dir.join(".agents/skills/idea-evaluator/SKILL.md").is_file());
+        assert!(dir
+            .join(".agents/skills/idea-evaluator/references/five-dimensions.md")
+            .is_file());
+        assert!(dir.join(".agents/skills/deep-research/SKILL.md").is_file());
+        assert!(dir
+            .join(".agents/skills/deep-research/references/quality-gates.md")
+            .is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(!dir.join("PAPERS.md").exists());
