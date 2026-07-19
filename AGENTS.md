@@ -110,6 +110,6 @@ cargo test -p agentero-cli
 
 ## 应用发布流程
 
-推送 `v*` tag 会触发 `.github/workflows/release.yml`，在 macOS、Ubuntu、Windows 上构建 Tauri 安装包，并上传到草稿 GitHub Release。
+推送 `v*` tag 会触发 `.github/workflows/release.yml`（Release）：先 **prepare** 草稿 Release，再并行 **installers**（Tauri）与 **cli**（`agentero` 预编译包），上传到同一草稿。
 
 不要在未补充文档和 secrets 说明的情况下加入签名、公证或自动发布步骤；本地开发构建不能依赖发布凭据。

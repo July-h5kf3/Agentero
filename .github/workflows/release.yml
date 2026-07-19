@@ -1,4 +1,4 @@
-name: Build installers
+name: Release
 
 on:
   push:
@@ -9,8 +9,43 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build installers (${{ matrix.platform }})
+  # Shared draft so installers + CLI can upload in parallel without racing create.
+  prepare:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Agentero ${{ github.ref_name }}
+          draft: true
+          prerelease: false
+          body: |
+            Installers and CLI for Agentero ${{ github.ref_name }}.
+
+            ## Desktop
+            Platform installers from Tauri (see assets below).
+
+            ## CLI (`agentero`)
+            Headless Vault / Catalog machine interface (no BYOA).
+            Download the matching `agentero-*-…` archive, extract, and put `agentero` on your `PATH`.
+
+            ```bash
+            agentero --version
+            agentero vault which --json
+            ```
+
+            Source install (slow; pulls desktop Rust deps):
+            ```bash
+            cargo install --git https://github.com/${{ github.repository }} --tag ${{ github.ref_name }} --locked --package agentero-cli
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  installers:
+    name: Installers (${{ matrix.platform }})
+    needs: prepare
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -56,29 +91,37 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Agentero ${{ github.ref_name }}
-          releaseBody: |
-            Installers and CLI for Agentero ${{ github.ref_name }}.
-
-            ## Desktop
-            Platform installers from Tauri (see assets below).
-
-            ## CLI (`agentero`)
-            Headless Vault / Catalog machine interface (no BYOA).
-            Download the matching `agentero-*-…` archive, extract, and put `agentero` on your `PATH`.
-
-            ```bash
-            agentero --version
-            agentero vault which --json
-            ```
-
-            Source install (slow; pulls desktop Rust deps):
-            ```bash
-            cargo install --git https://github.com/${{ github.repository }} --tag ${{ github.ref_name }} --locked --package agentero-cli
-            ```
+          # Body is set by the prepare job; keep draft + same tag.
           releaseDraft: true
           prerelease: false
 
-      # --- Headless CLI: attach prebuilt bin to the same draft release ---
+  cli:
+    name: CLI (${{ matrix.platform }})
+    needs: prepare
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # agentero-cli path-depends agentero_lib (Tauri), so Linux still needs WebKit link libs.
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
       - name: Build agentero CLI (release)
         run: cargo build -p agentero-cli --release
 
@@ -95,7 +138,6 @@ jobs:
           mkdir -p "$STAGE"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             cp "target/release/agentero.exe" "$STAGE/agentero.exe"
-            # Prefer PowerShell zip for portability on windows-latest
             powershell.exe -NoProfile -Command \
               "Compress-Archive -Path '${STAGE}/agentero.exe' -DestinationPath '${OUT_DIR}/${STAGE}.zip' -Force"
             echo "CLI_ASSET=${OUT_DIR}/${STAGE}.zip" >> "$GITHUB_ENV"
