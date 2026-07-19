@@ -70,6 +70,12 @@ export function MarkdownEditor({
 	const frontmatterRef = useRef("");
 	const savedRef = useRef(initialMarkdown);
 	const readyRef = useRef(false);
+	/**
+	 * Tracks the dirty flag so `onDirtyChange` fires only on a real transition.
+	 * Without this, every keystroke would call it and re-render the whole app
+	 * (the tab-bar unsaved indicator), which made editing laggy on large notes.
+	 */
+	const dirtyRef = useRef(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const filePathRef = useRef(filePath ?? null);
 	filePathRef.current = filePath ?? null;
@@ -131,7 +137,10 @@ export function MarkdownEditor({
 		if (!md.trim() && savedRef.current.trim()) return;
 		const lastSaved = savedRef.current;
 		savedRef.current = md;
-		onDirtyChange?.(false);
+		if (dirtyRef.current) {
+			dirtyRef.current = false;
+			onDirtyChange?.(false);
+		}
 		if (filePath && onPersist) onPersist(filePath, md, lastSaved);
 	}, [readOnly, serialize, filePath, onPersist, onDirtyChange]);
 
@@ -162,15 +171,23 @@ export function MarkdownEditor({
 		const prevCounts = imageCountsRef.current;
 		imageCountsRef.current = nextCounts;
 		const mdPath = filePathRef.current;
-		if (prevCounts && mdPath) {
-			void deleteRemovedManagedAssets(mdPath, prevCounts, nextCounts).then(
-				(n) => {
-					if (n > 0) onAssetsChangedRef.current?.();
-				},
-			);
+		// Skip the (async) diff entirely for image-free notes — the common case —
+		// so typing does not pay for asset-GC bookkeeping.
+		if (mdPath && (prevCounts?.size || nextCounts.size)) {
+			void deleteRemovedManagedAssets(
+				mdPath,
+				prevCounts ?? new Map(),
+				nextCounts,
+			).then((n) => {
+				if (n > 0) onAssetsChangedRef.current?.();
+			});
 		}
 
-		onDirtyChange?.(true);
+		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
+		if (!dirtyRef.current) {
+			dirtyRef.current = true;
+			onDirtyChange?.(true);
+		}
 		if (timerRef.current) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(() => {
 			timerRef.current = null;
