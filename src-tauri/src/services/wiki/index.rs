@@ -340,14 +340,13 @@ impl WikiIndex {
 
 /// Discover paper folder roots under `papers/` (any depth).
 ///
-/// A paper folder is the parent of marker files (`NOTES.md`, `highlights.md`,
-/// `PAPER.md`, `metadata.json`) or of `source/` / `assets/` path segments.
+/// A paper folder is the parent of marker files (`NOTES.md`, `PAPER.md`,
+/// `metadata.json`) or of `source/` / `assets/` / `marks/` path segments.
 fn discover_paper_folders(vault_root: &Path, md_files: &[String]) -> Vec<String> {
     let mut set: HashSet<String> = HashSet::new();
 
     let markers = [
         "NOTES.md",
-        "highlights.md",
         "PAPER.md",
         "metadata.json",
         "notes.md",
@@ -440,7 +439,7 @@ fn dir_has_paper_markers(names: &[String]) -> bool {
         let lower = n.to_ascii_lowercase();
         if matches!(
             lower.as_str(),
-            "notes.md" | "highlights.md" | "paper.md" | "metadata.json" | "source" | "assets"
+            "notes.md" | "paper.md" | "metadata.json" | "source" | "assets" | "marks"
         ) {
             return true;
         }

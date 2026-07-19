@@ -14,7 +14,7 @@ const TAG_COLOR_IDS: &[&str] = &[
 ];
 
 /// One catalog tag: display name + optional color id.
-/// JSON: bare string when uncolored; `{"name","color"}` when colored (backward compatible).
+/// JSON: bare string when uncolored; `{"name","color"}` when colored.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaperTag {
     pub name: String,

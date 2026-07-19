@@ -84,7 +84,8 @@ struct Assets {
     tex: bool,
     paper_md: bool,
     notes_md: bool,
-    highlights_md: bool,
+    /// Reader annotations dir: `{paper}/marks/*.json`.
+    marks_dir: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -235,8 +236,12 @@ fn get(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
             json!([
                 format!("{} — {}", paper.path, paper.title),
                 format!(
-                    "assets: pdf={} tex={} paperMd={} notesMd={}",
-                    data.assets.pdf, data.assets.tex, data.assets.paper_md, data.assets.notes_md
+                    "assets: pdf={} tex={} paperMd={} notesMd={} marksDir={}",
+                    data.assets.pdf,
+                    data.assets.tex,
+                    data.assets.paper_md,
+                    data.assets.notes_md,
+                    data.assets.marks_dir
                 ),
                 format!("suggestedReads: {}", suggested_reads.join(", ")),
             ]),
@@ -253,11 +258,14 @@ fn paths(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
 
     let mut paths = Vec::new();
     paths.push(paper.path.clone());
-    for name in ["NOTES.md", "highlights.md", "PAPER.md"] {
+    for name in ["NOTES.md", "PAPER.md"] {
         let rel = format!("{}/{}", paper.path, name);
         if vault.join(&rel).is_file() {
             paths.push(rel);
         }
+    }
+    if assets.marks_dir {
+        paths.push(format!("{}/marks", paper.path));
     }
     if let Some(pdf) = pdf_parse::find_local_pdf(&dir) {
         if let Ok(rel) = pdf.strip_prefix(&vault) {
@@ -432,7 +440,7 @@ fn probe_assets(dir: &std::path::Path) -> Assets {
         tex: lookup::has_local_tex(dir),
         paper_md: pdf_parse::has_paper_md(dir),
         notes_md: dir.join("NOTES.md").is_file(),
-        highlights_md: dir.join("highlights.md").is_file(),
+        marks_dir: dir.join("marks").is_dir(),
     }
 }
 
@@ -441,8 +449,9 @@ fn suggested_reads(path: &str, assets: &Assets) -> Vec<String> {
     if assets.notes_md {
         out.push(format!("{path}/NOTES.md"));
     }
-    if assets.highlights_md {
-        out.push(format!("{path}/highlights.md"));
+    // L2.5: reader marks (highlight / ask / translate JSON)
+    if assets.marks_dir {
+        out.push(format!("{path}/marks"));
     }
     if assets.paper_md {
         out.push(format!("{path}/PAPER.md"));

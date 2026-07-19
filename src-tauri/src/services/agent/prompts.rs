@@ -24,7 +24,7 @@ pub fn build_prompt(
         "summary" => {
             format!(
                 "You are helping with a research vault. Summarize the target paper using \
-                 progressive disclosure: AGENTS.md → papers/<id>/NOTES.md → highlights.md → \
+                 progressive disclosure: AGENTS.md → papers/<id>/NOTES.md → marks/ → \
                  PAPER.md → source/ (there is usually no root PAPERS.md; paper list lives in the app catalog). \
                  Keep [[wikilinks]]. End with a `## Sources` list of Vault-relative paths you read.{skill_hint}"
             )

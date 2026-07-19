@@ -31,6 +31,9 @@ describe("paper folder minimal unit", () => {
 			]),
 		).toBe(true);
 		expect(
+			directoryHasPaperMarkers([{ name: "marks", kind: "directory" }]),
+		).toBe(true);
+		expect(
 			directoryHasPaperMarkers([{ name: "readme.md", kind: "file" }]),
 		).toBe(false);
 		expect(
@@ -56,7 +59,7 @@ describe("paper folder minimal unit", () => {
 				"/vault/papers/nlp/transformers/1706.03762/source/original.pdf",
 			),
 		).toBe("/vault/papers/nlp/transformers/1706.03762");
-		expect(paperDirFromPath("papers/a/b/highlights.md")).toBe("papers/a/b");
+		expect(paperDirFromPath("papers/a/b/marks/hl-1.json")).toBe("papers/a/b");
 		expect(paperDirFromPath("/vault/notes/idea.md")).toBe(null);
 	});
 

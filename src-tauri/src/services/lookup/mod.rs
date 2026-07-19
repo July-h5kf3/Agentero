@@ -91,7 +91,7 @@ pub struct ImportLocalPdfArgs {
     pub vault_path: String,
     /// Vault-relative parent, e.g. `papers` or `papers/nlp`.
     pub parent_dir: String,
-    /// Absolute paths to local PDF files (picker / legacy). Ignored when `entries` is non-empty.
+    /// Absolute paths to local PDF files (picker). Ignored when `entries` is non-empty.
     #[serde(default)]
     pub file_paths: Vec<String>,
     /// Preferred: path + optional title/authors/year/id from the confirm dialog.
@@ -675,9 +675,11 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
     }
 }
 
-/// Write `{paper}/NOTES.md` shell + empty `highlights.md`.
+/// Write `{paper}/NOTES.md` shell (title + optional abstract blockquote).
 /// Abstract is shown in **Chinese** when free-MT succeeds (fallback: original text).
 /// Catalog still stores the original `abstract_text`.
+///
+/// Annotations live in `{paper}/marks/*.json` at runtime (not part of the shell).
 pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
     write_paper_shell_opts(paper_dir, meta, true).await
 }
@@ -708,7 +710,6 @@ pub(crate) async fn write_paper_shell_opts(
     };
     let notes = format!("# {}\n\n{abstract_block}", meta.title);
     fs::write(paper_dir.join("NOTES.md"), notes)?;
-    fs::write(paper_dir.join("highlights.md"), "")?;
     Ok(())
 }
 

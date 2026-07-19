@@ -47,12 +47,13 @@ directly; do not invent catalog rows.
 1. **L0** — `AGENTS.md` (if present)
 2. **L1** — `agentero paper list --json` (catalog; no full-text)
 3. **L2** — `{paper}/NOTES.md`
-4. **L2.5** — `{paper}/highlights.md`
+4. **L2.5** — `{paper}/marks/*.json` (reader highlights / asks / translates)
 5. **L3** — `{paper}/PAPER.md` (if no TeX)
 6. **L4** — `{paper}/source/**` (TeX preferred when present)
 
-After `paper get --json`, use `data.suggestedReads` / `paper paths` then
-`read_file` those paths. Do **not** paste whole sources unless needed.
+After `paper get --json`, use `data.assets` (`marksDir` = reader annotations),
+`data.suggestedReads` / `paper paths`, then `read_file` those paths. Do **not**
+paste whole sources unless needed.
 
 ## Default agent protocol
 
@@ -71,7 +72,7 @@ agentero paper get <path|id> --json
 # minimal paths only:
 agentero paper paths <path|id> --json
 
-# 4) Read files yourself in order: NOTES → highlights → PAPER.md / TeX
+# 4) Read files yourself in order: NOTES → marks/ → PAPER.md / TeX
 
 # 5) Import (exact id / DOI / URL) — creates shell NOTES, not lecture body
 agentero import id <arxiv|doi|url> --json
@@ -146,7 +147,7 @@ Common codes: `vault_not_found`, `vault_invalid`, `paper_not_found`,
 
 1. `import id <ref> --json` → note `data.path`
 2. If needed: `paper download` / `paper parse`
-3. Write or update `{path}/NOTES.md` (preserve user prose; do not wipe highlights)
+3. Write or update `{path}/NOTES.md` (preserve user prose; do not wipe `marks/`)
 4. Optional: `paper set-read <path>` only after notes are done
 5. For full lecture structure, invoke **`paper-reader`** skill instead of expecting CLI to write it
 
