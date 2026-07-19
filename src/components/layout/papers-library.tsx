@@ -26,6 +26,12 @@ import {
 	loadReadingHeatmaps,
 	type ReadingHeatmap,
 } from "@/lib/reading-heatmap";
+import {
+	coercePaperTags,
+	type PaperTag,
+	tagChipStyle,
+	tagSwatchStyle,
+} from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
 
 export type PapersLibraryProps = {
@@ -117,7 +123,13 @@ function identifierCopyText(p: PaperMetadata): string | null {
 
 function paperHasTag(p: PaperMetadata, tag: string): boolean {
 	const needle = tag.toLocaleLowerCase();
-	return (p.tags ?? []).some((t) => t.toLocaleLowerCase() === needle);
+	return coercePaperTags(p.tags).some(
+		(t) => t.name.toLocaleLowerCase() === needle,
+	);
+}
+
+function paperTagNames(p: PaperMetadata): string[] {
+	return coercePaperTags(p.tags).map((t) => t.name);
 }
 
 function sortValue(p: PaperMetadata, key: SortKey): string | number {
@@ -133,7 +145,7 @@ function sortValue(p: PaperMetadata, key: SortKey): string | number {
 		case "id":
 			return identifierLabel(p).toLocaleLowerCase();
 		case "tags":
-			return (p.tags ?? []).join(", ").toLocaleLowerCase();
+			return paperTagNames(p).join(", ").toLocaleLowerCase();
 	}
 }
 
@@ -177,24 +189,42 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 function TagChip({
 	tag,
+	color,
 	active,
 	onClick,
 }: {
 	tag: string;
+	color?: PaperTag["color"];
 	active?: boolean;
 	onClick?: () => void;
 }) {
+	const colored = !active ? tagChipStyle(color) : undefined;
+	const body = (
+		<>
+			{color && !active ? (
+				<span
+					className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+					style={tagSwatchStyle(color)}
+					aria-hidden
+				/>
+			) : null}
+			{tag}
+		</>
+	);
 	if (!onClick) {
 		return (
 			<span
 				className={cn(
-					"inline-flex items-center rounded px-1.5 py-0.5 text-[10px] leading-none",
+					"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
 					active
 						? "bg-foreground text-background"
-						: "bg-muted text-muted-foreground",
+						: colored
+							? "font-medium"
+							: "bg-muted text-muted-foreground",
 				)}
+				style={colored}
 			>
-				{tag}
+				{body}
 			</span>
 		);
 	}
@@ -206,14 +236,17 @@ function TagChip({
 				onClick();
 			}}
 			className={cn(
-				"inline-flex items-center rounded px-1.5 py-0.5 text-[10px] leading-none",
+				"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
 				"cursor-pointer transition-colors",
 				active
 					? "bg-foreground text-background hover:bg-foreground/90"
-					: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+					: colored
+						? "font-medium hover:opacity-90"
+						: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
 			)}
+			style={colored}
 		>
-			{tag}
+			{body}
 		</button>
 	);
 }
@@ -310,15 +343,17 @@ export function PapersLibrary({
 	}, [vaultPath, scopedPapers, active]);
 
 	const allTags = useMemo(() => {
-		const map = new Map<string, string>();
+		/** name → first-seen PaperTag (keeps color for filter chips). */
+		const map = new Map<string, PaperTag>();
 		for (const p of scopedPapers) {
-			for (const tag of p.tags ?? []) {
-				const key = tag.toLocaleLowerCase();
+			for (const tag of coercePaperTags(p.tags)) {
+				const key = tag.name.toLocaleLowerCase();
 				if (!map.has(key)) map.set(key, tag);
+				else if (!map.get(key)?.color && tag.color) map.set(key, tag);
 			}
 		}
 		return [...map.values()].sort((a, b) =>
-			a.localeCompare(b, undefined, { sensitivity: "base" }),
+			a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
 		);
 	}, [scopedPapers]);
 
@@ -329,7 +364,7 @@ export function PapersLibrary({
 		if (normalizedQuery) {
 			filtered = filtered.filter((p) => {
 				const title = (p.title ?? "").toLocaleLowerCase();
-				const tags = (p.tags ?? []).join(" ").toLocaleLowerCase();
+				const tags = paperTagNames(p).join(" ").toLocaleLowerCase();
 				return (
 					title.includes(normalizedQuery) || tags.includes(normalizedQuery)
 				);
@@ -420,13 +455,14 @@ export function PapersLibrary({
 					{allTags.map((tag) => {
 						const active =
 							tagFilter != null &&
-							tag.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
+							tag.name.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
 						return (
 							<TagChip
-								key={tag}
-								tag={tag}
+								key={tag.name}
+								tag={tag.name}
+								color={tag.color}
 								active={active}
-								onClick={() => onTagFilterChange(active ? null : tag)}
+								onClick={() => onTagFilterChange(active ? null : tag.name)}
 							/>
 						);
 					})}
@@ -640,36 +676,53 @@ export function PapersLibrary({
 											</button>
 										</td>
 										<td className="max-w-[200px] px-3 py-2.5">
-											{p.tags?.length ? (
+											{coercePaperTags(p.tags).length ? (
 												<div className="flex flex-wrap gap-1">
-													{p.tags.map((tag) => {
+													{coercePaperTags(p.tags).map((tag) => {
 														const active =
 															tagFilter != null &&
-															tag.toLocaleLowerCase() ===
+															tag.name.toLocaleLowerCase() ===
 																tagFilter.toLocaleLowerCase();
+														const colored = !active
+															? tagChipStyle(tag.color)
+															: undefined;
 														return (
 															<button
-																key={tag}
+																key={tag.name}
 																type="button"
 																className={cn(
-																	"inline-flex items-center rounded px-1.5 py-0.5 text-[10px] leading-none",
+																	"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
 																	"cursor-pointer transition-colors",
 																	"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 																	active
 																		? "bg-foreground text-background hover:bg-foreground/90"
-																		: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+																		: colored
+																			? "font-medium hover:opacity-90"
+																			: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
 																)}
+																style={colored}
 																title={t("papersLibrary.copyHint", {
 																	label: t("papersLibrary.colTags"),
 																})}
 																aria-label={t("papersLibrary.copyHint", {
-																	label: tag,
+																	label: tag.name,
 																})}
 																onClick={(e) =>
-																	onCellCopy(e, tag, t("papersLibrary.colTags"))
+																	onCellCopy(
+																		e,
+																		tag.name,
+																		t("papersLibrary.colTags"),
+																	)
 																}
 															>
-																{tag}
+																{tag.color && !active ? (
+																	<span
+																		className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+																		style={tagSwatchStyle(tag.color)}
+																		aria-hidden
+																	/>
+																) : null}
+																{tag.name}
 															</button>
 														);
 													})}

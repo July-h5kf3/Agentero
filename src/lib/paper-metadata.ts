@@ -1,9 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import { arxivUrls } from "@/lib/arxiv";
+import {
+	coercePaperTags,
+	type PaperTag,
+	type PaperTagInput,
+} from "@/lib/tag-colors";
 import { isTauri } from "@/lib/tauri";
 import { type FileNode, readVaultFile } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
+
+export type { PaperTag, PaperTagInput };
+
+/** Ensure `tags` is a normalized `PaperTag[]` (handles legacy string elements). */
+export function withNormalizedTags(meta: PaperMetadata): PaperMetadata {
+	return {
+		...meta,
+		tags: coercePaperTags(meta.tags),
+	};
+}
 
 /**
  * Paper metadata: **authoritative store is** Vault `.agentero/catalog.sqlite`.
@@ -39,7 +54,11 @@ export type PaperMetadata = {
 	/** Raw date string from Translator */
 	date?: string;
 	abstract?: string;
-	tags: string[];
+	/**
+	 * Tags from catalog. May arrive as bare strings (legacy) or
+	 * `{ name, color? }` (colored). UI should coerce via `coercePaperTags`.
+	 */
+	tags: PaperTagInput[];
 	arxiv_id?: string;
 	doi?: string;
 	isbn?: string;
@@ -778,10 +797,12 @@ export async function loadPaperMetadata(
 				args: { vaultPath: vaultRoot, path },
 			});
 			if (res.ok && res.data?.id) {
-				return enrichArxivUrls({
-					...res.data,
-					path: res.data.path ?? path,
-				});
+				return withNormalizedTags(
+					enrichArxivUrls({
+						...res.data,
+						path: res.data.path ?? path,
+					}),
+				);
 			}
 		} catch {
 			// fall through
@@ -794,10 +815,12 @@ export async function loadPaperMetadata(
 		const parsed = JSON.parse(raw) as Record<string, unknown>;
 		const data = normalizeMetadataKeys(parsed) as unknown as PaperMetadata;
 		if (!data?.id) return null;
-		return enrichArxivUrls({
-			...data,
-			path: data.path ?? path,
-		});
+		return withNormalizedTags(
+			enrichArxivUrls({
+				...data,
+				path: data.path ?? path,
+			}),
+		);
 	} catch {
 		return null;
 	}

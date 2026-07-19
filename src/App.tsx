@@ -85,6 +85,7 @@ import {
 	isPaperDirectory,
 	notesPathForPaper,
 	type PaperMetadata,
+	type PaperTag,
 	paperCatalogPath,
 	paperDirFromPath,
 	resolvePapersParentDir,
@@ -1944,7 +1945,7 @@ export default function App() {
 
 	/** Persist tags from Paper Info and keep library + open tabs in sync. */
 	const handlePaperTagsChange = useCallback(
-		async (tags: string[]) => {
+		async (tags: PaperTag[]) => {
 			if (!vaultPath || !paperMeta) return;
 			// Prefer catalog path on meta; fall back to the open paper folder so
 			// Zotero/legacy rows whose projection omitted `path` can still be edited.
