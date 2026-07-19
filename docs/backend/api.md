@@ -1092,7 +1092,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `restricted`（默认）：取消所有 ACP 权限请求；
   - `ask`（每次询问）：每个权限请求经 `agent:permission-request` 事件转交前端，用户点选后由 `agent_respond_permission` 回传（超时 5 分钟未应答则取消）；
   - `auto`（自动批准）：选择第一个 AllowOnce 选项（等价旧 `autoApprove: true`）。
-- **笔记写后审阅（信任闭环）**：运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`），运行结束后若被 Agent 重写则 emit `agent:notes-review`，前端弹「原文 / Agent 版本」对照，可保留或还原。
+- **笔记写后审阅（信任闭环）**：运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`），运行结束后若被 Agent 重写则 emit `agent:notes-review`，前端弹**统一 Diff**（行级增删），可保留或还原。
 
 - **回答语言**：设置 → Agent 提供全局「回答语言」（自动 / English / 简体中文，独立于界面语言）。前端 `runOnce` 统一读取该设置并透传 `responseLanguage`；Host 在 `build_prompt`（`prompts.rs`）为所有 workflow 追加一句语言指令，`auto` 时不注入。
 - **个人偏好提示词**：设置 → Agent 多行文本（`agentPersonalPrompt`，默认空）。非空时前端 `runOnce` 透传 `personalPrompt`；Host 在 `build_prompt` system envelope 追加 `User preference instructions` 块（所有 workflow）。留空不注入；Chat 展示剥离 envelope，不出现在对话记录。

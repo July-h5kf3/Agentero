@@ -135,7 +135,7 @@
   - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [x] **面板内置工作流入口**（建议 chips → 后端 workflow）：Summarize → `summary`；Ask library / List claims → `qa`；Draft Related Work → `related_work`；目标为当前聚焦 paper（提及路径或选中路径）。引用类 workflow 见 V0.7。
-- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端 Before/After 对照，**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
+- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端**统一 Diff**（`NotesReviewDiff`），**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Agentero 不要求模型 BYOK 表单。
 
