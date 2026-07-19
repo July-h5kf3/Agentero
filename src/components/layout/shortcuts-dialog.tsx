@@ -6,6 +6,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import {
 	formatShortcut,
 	type ShortcutDef,
@@ -29,6 +30,8 @@ export function ShortcutsDialog({
 }) {
 	const { t } = useTranslation(["shortcuts", "settings"]);
 	const groups = shortcutsByGroup();
+
+	useOverlayRegistration("shortcuts", open, () => onOpenChange(false));
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>

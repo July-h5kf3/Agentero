@@ -7,20 +7,24 @@ export type ShortcutHandlers = Record<ShortcutId, () => void>;
 /**
  * Bind the global keyboard shortcuts once and dispatch each to its handler.
  * Handlers are read from a ref so the listener never needs to re-bind.
+ *
+ * @param overlayOpen - any app modal/sheet open (settings, dialogs, palette…).
+ *   Gates `whenSettingsOpen` / `whenSettingsClosed` shortcut rules.
  */
 export function useAppShortcuts(
-	settingsOpen: boolean,
+	overlayOpen: boolean,
 	handlers: ShortcutHandlers,
 ): void {
-	const settingsOpenRef = useRef(settingsOpen);
-	settingsOpenRef.current = settingsOpen;
+	const overlayOpenRef = useRef(overlayOpen);
+	overlayOpenRef.current = overlayOpen;
 	const handlersRef = useRef(handlers);
 	handlersRef.current = handlers;
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			const id = resolveShortcutId(event, {
-				settingsOpen: settingsOpenRef.current,
+				settingsOpen: overlayOpenRef.current,
+				overlayOpen: overlayOpenRef.current,
 			});
 			if (!id) return;
 

@@ -58,7 +58,6 @@ export type AppSettings = {
 	theme: ThemePreference;
 	locale: LocalePreference;
 	editorFontSize: number;
-	showLineNumbers: boolean;
 	/** Show the WYSIWYG formatting toolbar above Markdown/notes editors. */
 	showEditorToolbar: boolean;
 	// Agent (local UI prefs; registry lives in Host)
@@ -111,7 +110,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	theme: "system",
 	locale: "system",
 	editorFontSize: 14,
-	showLineNumbers: false,
 	showEditorToolbar: true,
 	agentEnabled: true,
 	agentPermissionMode: "restricted",

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { isPaperDirectory } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";
 import { type FileNode, vaultRelativePath } from "@/lib/vault";
@@ -41,6 +42,8 @@ export function MovePapersDialog({
 	const { t } = useTranslation("sidebar");
 	const [selected, setSelected] = useState("papers");
 	const [newFolder, setNewFolder] = useState("");
+
+	useOverlayRegistration("move-papers", open, () => onOpenChange(false));
 
 	// Reset the form each time the dialog opens.
 	useEffect(() => {

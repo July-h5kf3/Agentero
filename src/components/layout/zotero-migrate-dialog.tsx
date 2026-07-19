@@ -30,6 +30,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { runBackgroundTask } from "@/lib/background-tasks";
 import { isTauri } from "@/lib/tauri";
 import {
@@ -124,6 +125,8 @@ export function ZoteroMigrateDialog({
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [result, setResult] = useState<ZoteroMigrateResult | null>(null);
+
+	useOverlayRegistration("zotero-migrate", open, () => onOpenChange(false));
 
 	const reset = () => {
 		setDir(null);

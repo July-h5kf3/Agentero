@@ -45,6 +45,7 @@
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
+- [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
 - [`.md`](.md)：简短产品假设。
 
 ## 交叉引用

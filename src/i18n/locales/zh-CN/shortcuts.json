@@ -6,8 +6,8 @@
 	},
 	"labels": {
 		"settings": "设置…",
-		"showShortcuts": "键盘快捷键",
-		"closeSheet": "关闭设置",
+		"showShortcuts": "键盘快捷键（开关）",
+		"closeSheet": "关闭对话框 / 设置",
 		"newWindow": "新建窗口",
 		"openVault": "打开知识库…",
 		"createVault": "创建知识库…",
@@ -16,14 +16,15 @@
 		"openInTerminal": "在终端中打开",
 		"deleteTreeItem": "删除选中项",
 		"magicWand": "按标识符添加论文",
-		"commandPalette": "搜索 / 快速打开",
+		"quickOpen": "快速打开（论文 / 正文）",
+		"commandPalette": "命令面板",
 		"toggleSidebar": "显示 / 隐藏侧边栏",
 		"toggleChat": "显示 / 隐藏对话",
 		"toggleAgentZen": "Agent 禅模式",
 		"focusSidebar": "聚焦侧边栏",
 		"focusEditor": "聚焦编辑器",
 		"focusNotes": "聚焦笔记",
-		"closeTab": "关闭设置 / 标签 / 窗口",
+		"closeTab": "关闭对话框 / 标签 / 窗口",
 		"nextTab": "下一个标签",
 		"prevTab": "上一个标签"
 	}

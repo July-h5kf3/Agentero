@@ -118,7 +118,7 @@
 | File | Open Vault… | `⌘O` | 选择已有文件夹并打开 |
 | File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
 | File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
-| File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：设置打开时先关设置；否则先关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
+| File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：有弹层时先关最顶层（`overlay-stack`）；否则关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
 | agentero | Settings… | `⌘,` | 设置 sheet |
 
 **窗口与路径状态**（`src/lib/vault.ts`）：
@@ -223,10 +223,11 @@
 | 快捷键 | 作用 | 说明 |
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
-| `⌘/` | 键盘快捷键速查 | 打开快捷键清单对话框（`ShortcutsDialog`） |
-| `⌘K` / `⌘P` | 命令面板：搜索 / 快速打开 | 无 Vault 时提示先打开 Vault；有 Vault 时：论文标题·作者·id **即时** quick-open + 去抖 `vault_search` Markdown 全文（片段/行号；`papers/` 命中打开 paper）（`CommandPalette`；`shortcuts.ts` → `commandPalette`） |
-| `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
-| `⌘W` | 关闭 Settings（优先）/ 标签 / 窗口 | 设置打开时先关设置；否则关当前 tab；仅剩全库 Library 时关窗（File → Close 同源） |
+| `⌘/` | 键盘快捷键速查（开关） | 再按关闭；`ShortcutsDialog` |
+| `⌘P` / `⌘K` | 快速打开（开关） | 论文标题·作者·id 即时 quick-open + 去抖 `vault_search` 全文；输入 `>` 可切命令模式（`CommandPalette` · `quickOpen`） |
+| `⇧⌘P` | 命令面板（开关） | 执行应用命令（设置 / 侧栏 / Vault / 标签…）；与快速打开共用浮层（`commandPalette`） |
+| `Esc` | 关闭最顶层弹层 | 统一经 `overlay-stack`：设置 / 快捷键清单 / 命令面板 / Zotero 迁移 / 移动论文 / Agent 权限与笔记审阅等 |
+| `⌘W` | 关闭最顶层弹层 / 标签 / 窗口 | 有注册弹层时先关弹层；否则关当前 tab；仅剩全库 Library 时关窗（File → Close 同源） |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
@@ -381,7 +382,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
-- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
+- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。

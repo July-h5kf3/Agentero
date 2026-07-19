@@ -135,6 +135,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	type AgentEffortChoice,
@@ -1623,6 +1624,19 @@ export function AgentPanel({
 		useState<PermissionRequest | null>(null);
 	// Trust loop: review a note the agent rewrote (keep / revert).
 	const [notesReview, setNotesReview] = useState<NotesReview | null>(null);
+
+	const permissionRequestRef = useRef(permissionRequest);
+	permissionRequestRef.current = permissionRequest;
+	useOverlayRegistration("agent-permission", permissionRequest !== null, () => {
+		const req = permissionRequestRef.current;
+		if (!req) return;
+		void respondPermission(req.requestId, null);
+		setPermissionRequest(null);
+	});
+	useOverlayRegistration("notes-review", notesReview !== null, () => {
+		setNotesReview(null);
+	});
+
 	useEffect(() => {
 		if (!isTauri()) return;
 		let unsub: (() => void) | undefined;

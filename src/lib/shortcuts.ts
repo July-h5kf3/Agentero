@@ -14,6 +14,9 @@ export type ShortcutId =
 	| "openInTerminal"
 	| "deleteTreeItem"
 	| "magicWand"
+	/** ⌘P / ⌘K — quick open papers & contents */
+	| "quickOpen"
+	/** ⇧⌘P — run app commands */
 	| "commandPalette"
 	| "toggleSidebar"
 	| "toggleChat"
@@ -38,9 +41,15 @@ export type ShortcutDef = {
 	ctrl?: boolean;
 	alt?: boolean;
 	shift?: boolean;
-	/** When true, only matches if settings/modal is open */
+	/**
+	 * When true, only matches if any app overlay is open
+	 * (settings, dialogs, command palette — see overlay-stack).
+	 */
 	whenSettingsOpen?: boolean;
-	/** When true, only matches if settings is closed */
+	/**
+	 * When true, only matches if no app overlay is open.
+	 * Name kept for compatibility; means “when overlays closed”.
+	 */
 	whenSettingsClosed?: boolean;
 };
 
@@ -54,14 +63,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "showShortcuts",
 		group: "App",
-		// ⌘/ — open the keyboard shortcuts cheat sheet
+		// ⌘/ — toggle keyboard shortcuts cheat sheet (open and close)
 		key: "/",
 		meta: true,
-		whenSettingsClosed: true,
+		// No whenSettingsClosed: must fire while open so the same key can dismiss.
 	},
 	{
 		id: "closeSheet",
 		group: "App",
+		// Esc — dismiss the topmost registered overlay (settings, dialogs, palette…)
 		key: "Escape",
 		whenSettingsOpen: true,
 	},
@@ -130,12 +140,21 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
+		id: "quickOpen",
+		group: "Navigation",
+		// ⌘P — quick open papers + contents (VS Code Go to File)
+		key: "p",
+		meta: true,
+		// No whenSettingsClosed: same key dismisses while palette is open.
+	},
+	{
 		id: "commandPalette",
 		group: "Navigation",
-		// ⌘K — command palette: quick-open papers + full-text search
-		key: "k",
+		// ⇧⌘P — run app commands (VS Code Command Palette)
+		key: "p",
 		meta: true,
-		whenSettingsClosed: true,
+		shift: true,
+		// No whenSettingsClosed: same key dismisses while palette is open.
 	},
 	{
 		id: "toggleSidebar",
@@ -187,8 +206,8 @@ export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "closeTab",
 		group: "Navigation",
-		// ⌘W — if settings open, close settings first; else close active tab / window.
-		// Intentionally NOT whenSettingsClosed: settings takes priority over tabs.
+		// ⌘W — close top overlay first; else active tab / window.
+		// Intentionally NOT whenSettingsClosed: overlays take priority over tabs.
 		key: "w",
 		meta: true,
 	},
@@ -214,14 +233,13 @@ export const SHORTCUTS: ShortcutDef[] = [
 
 /** Secondary aliases that still work (documented lightly). */
 const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
-	commandPalette: [
+	quickOpen: [
 		{
-			id: "commandPalette",
+			id: "quickOpen",
 			group: "Navigation",
-			// ⌘P — alias for the command palette (quick-open)
-			key: "p",
+			// ⌘K — alias for quick open (Agentero habit)
+			key: "k",
 			meta: true,
-			whenSettingsClosed: true,
 		},
 	],
 	toggleSidebar: [
@@ -304,16 +322,25 @@ export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
 
 export function resolveShortcutId(
 	event: KeyboardEvent,
-	opts: { settingsOpen: boolean },
+	opts: {
+		/**
+		 * Any app overlay open (settings / dialogs / palette).
+		 * Historically named settingsOpen; kept for call-site compatibility.
+		 */
+		settingsOpen: boolean;
+		/** @deprecated use settingsOpen — alias for any overlay */
+		overlayOpen?: boolean;
+	},
 ): ShortcutId | null {
+	const overlayOpen = opts.overlayOpen ?? opts.settingsOpen;
 	const candidates = SHORTCUTS.flatMap((def) => {
 		const aliases = ALIASES[def.id] ?? [];
 		return [def, ...aliases];
 	});
 
 	for (const def of candidates) {
-		if (def.whenSettingsOpen && !opts.settingsOpen) continue;
-		if (def.whenSettingsClosed && opts.settingsOpen) continue;
+		if (def.whenSettingsOpen && !overlayOpen) continue;
+		if (def.whenSettingsClosed && overlayOpen) continue;
 		if (matchShortcut(event, def)) return def.id;
 	}
 	return null;

@@ -55,9 +55,11 @@ import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
+import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import { runBackgroundTask } from "@/lib/background-tasks";
+import type { AppCommand, PaletteMode } from "@/lib/commands/types";
 import {
 	type ConnectorItemSaved,
 	connectorSetEnabled,
@@ -75,6 +77,7 @@ import {
 	notifyUndo,
 	notifyWarning,
 } from "@/lib/notify";
+import { closeTopOverlay } from "@/lib/overlay-stack";
 import {
 	collectPaperFoldersFromTree,
 	collectPapersNeedingAssetDownload,
@@ -518,7 +521,7 @@ export default function App() {
 
 	/**
 	 * ⌘W / File → Close:
-	 * 1. Settings open → close settings (higher priority than tabs).
+	 * 1. Top app overlay (settings / dialogs / palette) → dismiss it.
 	 * 2. Else close the active document tab one at a time.
 	 * Sole full-library tab → close window (Library is the default page).
 	 * Closing the last non-library tab reopens full Library via `closeTab`.
@@ -542,11 +545,8 @@ export default function App() {
 		if (now - lastCloseTabOrWindowAt.current < 80) return;
 		lastCloseTabOrWindowAt.current = now;
 
-		// Settings sheet takes priority over document tabs (keyboard + File → Close).
-		if (settingsOpenRef.current) {
-			setSettingsOpen(false);
-			return;
-		}
+		// Any registered overlay (settings, shortcuts, palette, dialogs…) first.
+		if (closeTopOverlay()) return;
 
 		const list = tabsRef.current;
 		const sole = list.length === 1 ? list[0] : null;
@@ -1337,6 +1337,9 @@ export default function App() {
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
 	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	const [commandOpen, setCommandOpen] = useState(false);
+	const [commandMode, setCommandMode] = useState<PaletteMode>("go");
+	const commandModeRef = useRef(commandMode);
+	commandModeRef.current = commandMode;
 
 	/** Refresh tree / library / wiki after a recycle-bin restore. */
 	const handleTrashChanged = useCallback(async () => {
@@ -2097,13 +2100,205 @@ export default function App() {
 		}
 	}, [activateVault, t]);
 
-	useAppShortcuts(settingsOpen, {
+	const anyOverlayOpen = useAnyOverlayOpen();
+
+	const focusNotesEditor = useCallback(() => {
+		const focus = () =>
+			notesPaneRef.current
+				?.querySelector<HTMLElement>("[contenteditable='true']")
+				?.focus();
+		if (!showNotesRef.current) {
+			setShowNotes(true);
+			requestAnimationFrame(() => requestAnimationFrame(focus));
+		} else {
+			focus();
+		}
+	}, []);
+
+	const focusEditorPane = useCallback(() => {
+		editorPaneRef.current
+			?.querySelector<HTMLElement>("[contenteditable='true']")
+			?.focus();
+	}, []);
+
+	const openPalette = useCallback(
+		(mode: PaletteMode) => {
+			if (commandOpen && commandModeRef.current === mode) {
+				setCommandOpen(false);
+				return;
+			}
+			setCommandMode(mode);
+			setCommandOpen(true);
+		},
+		[commandOpen],
+	);
+
+	const paletteCommands = useMemo((): AppCommand[] => {
+		const hasVault = () => Boolean(vaultPath);
+		return [
+			{
+				id: "settings.open",
+				titleKey: "commands.settingsOpen",
+				categoryKey: "commands.catApp",
+				keywords: ["preferences", "settings"],
+				run: () => openSettings(),
+			},
+			{
+				id: "settings.close",
+				titleKey: "commands.settingsClose",
+				categoryKey: "commands.catApp",
+				when: () => settingsOpenRef.current,
+				run: () => closeSettings(),
+			},
+			{
+				id: "shortcuts.show",
+				titleKey: "commands.shortcutsShow",
+				categoryKey: "commands.catApp",
+				keywords: ["hotkeys", "keyboard"],
+				run: () => setShortcutsOpen(true),
+			},
+			{
+				id: "vault.open",
+				titleKey: "commands.vaultOpen",
+				categoryKey: "commands.catVault",
+				run: () => void handleOpenVault(),
+			},
+			{
+				id: "vault.create",
+				titleKey: "commands.vaultCreate",
+				categoryKey: "commands.catVault",
+				run: () => void handleCreateVault(),
+			},
+			{
+				id: "vault.refresh",
+				titleKey: "commands.vaultRefresh",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				run: () => handleRefresh(),
+			},
+			{
+				id: "vault.reveal",
+				titleKey: "commands.vaultReveal",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				run: () => handleRevealInFinder(),
+			},
+			{
+				id: "vault.terminal",
+				titleKey: "commands.vaultTerminal",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				run: () => handleOpenInTerminal(),
+			},
+			{
+				id: "view.toggleSidebar",
+				titleKey: "commands.viewToggleSidebar",
+				categoryKey: "commands.catView",
+				run: () => toggleSidebar(),
+			},
+			{
+				id: "view.toggleChat",
+				titleKey: "commands.viewToggleChat",
+				categoryKey: "commands.catView",
+				keywords: ["agent", "chat"],
+				run: () => toggleChat(),
+			},
+			{
+				id: "view.agentZen",
+				titleKey: "commands.viewAgentZen",
+				categoryKey: "commands.catView",
+				run: () => toggleAgentZen(),
+			},
+			{
+				id: "view.focusSidebar",
+				titleKey: "commands.viewFocusSidebar",
+				categoryKey: "commands.catView",
+				run: () => expandSidebar(),
+			},
+			{
+				id: "view.focusEditor",
+				titleKey: "commands.viewFocusEditor",
+				categoryKey: "commands.catView",
+				run: () => focusEditorPane(),
+			},
+			{
+				id: "view.focusNotes",
+				titleKey: "commands.viewFocusNotes",
+				categoryKey: "commands.catView",
+				run: () => focusNotesEditor(),
+			},
+			{
+				id: "library.focus",
+				titleKey: "commands.libraryFocus",
+				categoryKey: "commands.catLibrary",
+				when: hasVault,
+				run: () => {
+					setTreeSelectedPath(LIBRARY_VIRTUAL_PATH);
+					setLibraryScopePath(null);
+					openTab(LIBRARY_VIRTUAL_PATH);
+					void refreshLibrary();
+				},
+			},
+			{
+				id: "tab.close",
+				titleKey: "commands.tabClose",
+				categoryKey: "commands.catTab",
+				run: () => closeTabOrWindow(),
+			},
+			{
+				id: "tab.next",
+				titleKey: "commands.tabNext",
+				categoryKey: "commands.catTab",
+				run: () => cycleActiveTab(1),
+			},
+			{
+				id: "tab.prev",
+				titleKey: "commands.tabPrev",
+				categoryKey: "commands.catTab",
+				run: () => cycleActiveTab(-1),
+			},
+			{
+				id: "wand.open",
+				titleKey: "commands.wandOpen",
+				categoryKey: "commands.catVault",
+				keywords: ["import", "arxiv", "doi", "lookup"],
+				when: hasVault,
+				run: () => openMagicWand(),
+			},
+		];
+	}, [
+		vaultPath,
+		openSettings,
+		closeSettings,
+		handleOpenVault,
+		handleCreateVault,
+		handleRefresh,
+		handleRevealInFinder,
+		handleOpenInTerminal,
+		toggleSidebar,
+		toggleChat,
+		toggleAgentZen,
+		expandSidebar,
+		focusEditorPane,
+		focusNotesEditor,
+		openTab,
+		refreshLibrary,
+		closeTabOrWindow,
+		cycleActiveTab,
+		openMagicWand,
+	]);
+
+	useAppShortcuts(anyOverlayOpen, {
 		settings: () => {
 			if (settingsOpenRef.current) closeSettings();
 			else openSettings();
 		},
-		closeSheet: closeSettings,
-		showShortcuts: () => setShortcutsOpen(true),
+		// Esc → dismiss top overlay (settings, shortcuts, palette, dialogs…)
+		closeSheet: () => {
+			closeTopOverlay();
+		},
+		// ⌘/ toggles the cheat sheet open and closed
+		showShortcuts: () => setShortcutsOpen((v) => !v),
 		newWindow: () => void handleNewWindow(),
 		openVault: () => void handleOpenVault(),
 		createVault: () => void handleCreateVault(),
@@ -2112,28 +2307,14 @@ export default function App() {
 		openInTerminal: handleOpenInTerminal,
 		deleteTreeItem: handleDeleteSelected,
 		magicWand: openMagicWand,
-		commandPalette: () => setCommandOpen((v) => !v),
+		quickOpen: () => openPalette("go"),
+		commandPalette: () => openPalette("commands"),
 		toggleSidebar,
 		toggleChat,
 		toggleAgentZen,
 		focusSidebar: expandSidebar,
-		focusEditor: () =>
-			editorPaneRef.current
-				?.querySelector<HTMLElement>("[contenteditable='true']")
-				?.focus(),
-		focusNotes: () => {
-			const focusNotesEditor = () =>
-				notesPaneRef.current
-					?.querySelector<HTMLElement>("[contenteditable='true']")
-					?.focus();
-			if (!showNotesRef.current) {
-				// Notes hidden: reveal it first, then focus once it mounts.
-				setShowNotes(true);
-				requestAnimationFrame(() => requestAnimationFrame(focusNotesEditor));
-			} else {
-				focusNotesEditor();
-			}
-		},
+		focusEditor: focusEditorPane,
+		focusNotes: focusNotesEditor,
 		closeTab: closeTabOrWindow,
 		nextTab: () => cycleActiveTab(1),
 		prevTab: () => cycleActiveTab(-1),
@@ -2943,8 +3124,10 @@ export default function App() {
 				<CommandPalette
 					open={commandOpen}
 					onOpenChange={setCommandOpen}
+					mode={commandMode}
 					vaultPath={vaultPath}
 					papers={libraryPapers}
+					commands={paletteCommands}
 					onOpenPaper={(rel) => {
 						if (vaultPath)
 							openPaper(`${vaultPath.replace(/[\\/]+$/, "")}/${rel}`);

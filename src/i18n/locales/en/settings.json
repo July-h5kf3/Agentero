@@ -62,9 +62,6 @@
 			"label": "Editor font size",
 			"value": "{{size}} px"
 		},
-		"lineNumbers": {
-			"label": "Line numbers"
-		},
 		"editorToolbar": {
 			"label": "Formatting toolbar"
 		}

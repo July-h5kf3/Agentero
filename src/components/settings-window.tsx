@@ -38,6 +38,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import {
 	type AgentListResponse,
 	type AgentTemplate,
@@ -144,6 +145,8 @@ export function SettingsWindow({
 }: SettingsWindowProps) {
 	const { t } = useTranslation(["settings", "common"]);
 	const titleId = useId();
+
+	useOverlayRegistration("settings", open, onClose);
 
 	useEffect(() => {
 		if (!open) return;
@@ -581,16 +584,6 @@ function AppearancePane({
 							})}
 						</span>
 					</div>
-				</SettingsRow>
-				<SettingsRow
-					label={t("appearance.lineNumbers.label")}
-					htmlFor="line-numbers"
-				>
-					<Switch
-						id="line-numbers"
-						checked={settings.showLineNumbers}
-						onCheckedChange={(v) => patch({ showLineNumbers: v })}
-					/>
 				</SettingsRow>
 				<SettingsRow
 					label={t("appearance.editorToolbar.label")}

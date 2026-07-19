@@ -62,9 +62,6 @@
 			"label": "编辑器字号",
 			"value": "{{size}} px"
 		},
-		"lineNumbers": {
-			"label": "行号"
-		},
 		"editorToolbar": {
 			"label": "格式工具栏"
 		}
