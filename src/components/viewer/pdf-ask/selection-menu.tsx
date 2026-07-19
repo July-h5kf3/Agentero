@@ -5,7 +5,7 @@ import {
 	MessageSquare,
 	NotebookPen,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,6 @@ import { cn } from "@/lib/utils";
 type SelectionMenuProps = {
 	/** Screen point near the top-center of the selection (toolbar anchor) */
 	screen: { x: number; y: number };
-	/** Bottom-right of the selection (for the “copied” chip) */
-	selectionEnd: { x: number; y: number };
 	/** Create a highlight in the chosen color */
 	onHighlight: (color: HighlightColor) => void;
 	/** Copy the selected text to the clipboard */
@@ -41,17 +39,15 @@ type SelectionMenuProps = {
 
 const BAR_W = 300;
 const BAR_H = 40;
-const CHIP_W = 72;
-const CHIP_H = 28;
+const COPIED_FLASH_MS = 1500;
 
 /**
  * Floating action bar shown next to a text selection: a row of color swatches
- * (highlight), then Copy / Annotate / Ask / Translate. Copy shows a brief
- * neutral chip at the selection’s bottom-right.
+ * (highlight), then Copy / Annotate / Ask / Translate.
+ * Copy keeps the bar open and swaps the copy icon for a check briefly.
  */
 export function SelectionMenu({
 	screen,
-	selectionEnd,
 	onHighlight,
 	onCopy,
 	onNote,
@@ -63,37 +59,29 @@ export function SelectionMenu({
 	const [copied, setCopied] = useState(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+	useEffect(() => {
+		return () => {
+			if (timerRef.current) clearTimeout(timerRef.current);
+		};
+	}, []);
+
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-
 	let left = screen.x - BAR_W / 2;
 	left = Math.min(Math.max(12, left), vw - BAR_W - 12);
 	// Prefer just above the selection; flip below if near the top edge
 	let top = screen.y - BAR_H - 10;
 	if (top < 12) top = Math.min(vh - BAR_H - 12, screen.y + 18);
 
-	// Chip sits just below and left-aligned to the selection’s bottom-right corner
-	let chipLeft = selectionEnd.x - CHIP_W;
-	chipLeft = Math.min(Math.max(12, chipLeft), vw - CHIP_W - 12);
-	let chipTop = selectionEnd.y + 6;
-	if (chipTop + CHIP_H > vh - 12) {
-		chipTop = Math.max(12, selectionEnd.y - CHIP_H - 6);
-	}
-
-	const flashCopied = useCallback(() => {
+	const handleCopy = useCallback(() => {
+		onCopy();
 		setCopied(true);
 		if (timerRef.current) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(() => {
 			timerRef.current = null;
 			setCopied(false);
-			onClose();
-		}, 1000);
-	}, [onClose]);
-
-	const handleCopy = useCallback(() => {
-		onCopy();
-		flashCopied();
-	}, [onCopy, flashCopied]);
+		}, COPIED_FLASH_MS);
+	}, [onCopy]);
 
 	// Annotate opens the inline note editor in the viewer, so just close the menu.
 	const handleNote = useCallback(() => {
@@ -115,23 +103,6 @@ export function SelectionMenu({
 				return t("selection.color.purple");
 		}
 	};
-
-	if (copied) {
-		return (
-			<div
-				className={cn(
-					"fixed z-50 flex h-7 items-center gap-1 rounded-md border border-border/80 bg-background px-2 text-foreground text-xs shadow-md ring-1 ring-black/5 dark:ring-white/10",
-				)}
-				style={{ left: chipLeft, top: chipTop }}
-				role="status"
-				aria-live="polite"
-				onMouseDown={(e) => e.stopPropagation()}
-			>
-				<Check className="size-3.5 text-muted-foreground" aria-hidden />
-				<span>{t("selection.copied")}</span>
-			</div>
-		);
-	}
 
 	return (
 		<div
@@ -161,20 +132,39 @@ export function SelectionMenu({
 					</Tooltip>
 				))}
 				<div className="mx-1 h-5 w-px shrink-0 bg-border" />
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-sm"
-							aria-label={t("selection.copy")}
-							onClick={handleCopy}
+				<div className="relative">
+					{copied ? (
+						<span
+							className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/80 bg-background px-1.5 py-0.5 text-[11px] text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+							role="status"
+							aria-live="polite"
 						>
-							<Copy className="size-4" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent side="top">{t("selection.copy")}</TooltipContent>
-				</Tooltip>
+							{t("selection.copied")}
+						</span>
+					) : null}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={
+									copied ? t("selection.copied") : t("selection.copy")
+								}
+								onClick={handleCopy}
+							>
+								{copied ? (
+									<Check className="size-4 text-foreground" aria-hidden />
+								) : (
+									<Copy className="size-4" />
+								)}
+							</Button>
+						</TooltipTrigger>
+						{!copied ? (
+							<TooltipContent side="top">{t("selection.copy")}</TooltipContent>
+						) : null}
+					</Tooltip>
+				</div>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

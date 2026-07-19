@@ -270,10 +270,7 @@ export function PdfViewer({
 	/** Selection action menu (highlight/note/ask/translate) near a selection */
 	const [selectionMenu, setSelectionMenu] = useState<{
 		anchor: PdfAskAnchor;
-		/** Toolbar: top-center of the selection */
 		screen: { x: number; y: number };
-		/** “Copied” chip: bottom-right of the selection */
-		selectionEnd: { x: number; y: number };
 	} | null>(null);
 	/** Floating remove button for a clicked highlight */
 	const [highlightMenu, setHighlightMenu] = useState<{
@@ -863,7 +860,6 @@ export function PdfViewer({
 					setSelectionMenu({
 						anchor,
 						screen: { x: rect.left + rect.width / 2, y: rect.top },
-						selectionEnd: { x: rect.right, y: rect.bottom },
 					});
 					return;
 				}
@@ -1503,7 +1499,7 @@ export function PdfViewer({
 		if (quote && typeof navigator !== "undefined" && navigator.clipboard) {
 			void navigator.clipboard.writeText(quote).catch(() => undefined);
 		}
-		setHighlightMenu(null);
+		// Keep highlight toolbar open; icon flash is handled inside HighlightMenu.
 	}, [highlightMenu]);
 
 	const handleHighlightMenuNote = useCallback(() => {
@@ -2120,7 +2116,6 @@ export function PdfViewer({
 				<div data-pdf-ask-ui="">
 					<SelectionMenu
 						screen={selectionMenu.screen}
-						selectionEnd={selectionMenu.selectionEnd}
 						onHighlight={handleMenuHighlight}
 						onCopy={handleMenuCopy}
 						onNote={handleMenuAnnotate}
