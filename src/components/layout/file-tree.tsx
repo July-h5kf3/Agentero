@@ -70,9 +70,11 @@ import {
 	isPapersRoot,
 	type PaperMetadata,
 	type PaperTreeLabelMode,
+	type PaperTreeSortMode,
 	paperAssetDownloadReasons,
 	paperNeedsAssetDownload,
 	paperNeedsRead,
+	sortFileTreeNodes,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/papers-api";
 import {
@@ -345,6 +347,11 @@ type FileTreeProps = {
 	 * Display-only; disk folder names are unchanged.
 	 */
 	paperTreeLabelMode?: PaperTreeLabelMode;
+	/**
+	 * How siblings under each folder are ordered (Settings → General).
+	 * Display-only; does not rename or move disk folders.
+	 */
+	paperTreeSortMode?: PaperTreeSortMode;
 	/** Start paper-reader workflow for a paper folder with complete local assets. */
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
@@ -378,6 +385,7 @@ export function FileTree({
 	onDownloadAllMissingAssets,
 	paperMetaByRelPath,
 	paperTreeLabelMode = "title-author",
+	paperTreeSortMode = "folder",
 	onReadPaper,
 	onDeletePath,
 	onDeletePaths,
@@ -471,6 +479,18 @@ export function FileTree({
 		[vaultPath],
 	);
 
+	/** Display order under each folder (Settings → paperTreeSortMode). */
+	const displayNodes = useMemo(
+		() =>
+			sortFileTreeNodes(
+				nodes,
+				paperTreeSortMode,
+				paperMetaByRelPath,
+				relPathForNode,
+			),
+		[nodes, paperTreeSortMode, paperMetaByRelPath, relPathForNode],
+	);
+
 	/**
 	 * Row to highlight / scroll to:
 	 * - virtual Library / Trash as-is;
@@ -539,9 +559,9 @@ export function FileTree({
 				}
 			}
 		};
-		walk(nodes);
+		walk(displayNodes);
 		return out;
-	}, [nodes, expanded]);
+	}, [displayNodes, expanded]);
 
 	/** Flattened rows in display order (respects expand state + inline drafts). */
 	const flatRows = useMemo<FlatRow[]>(() => {
@@ -579,9 +599,9 @@ export function FileTree({
 				}
 			}
 		};
-		walk(nodes, 0);
+		walk(displayNodes, 0);
 		return out;
-	}, [nodes, expanded, createDraft, vaultPath]);
+	}, [displayNodes, expanded, createDraft, vaultPath]);
 
 	const treeScrollRef = useRef<HTMLDivElement>(null);
 	const rowVirtualizer = useVirtualizer({

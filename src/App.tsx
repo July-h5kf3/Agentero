@@ -2651,6 +2651,7 @@ export default function App() {
 										arxivPaperRelPaths={arxivPaperRelPaths}
 										paperMetaByRelPath={paperMetaByRelPath}
 										paperTreeLabelMode={settings.paperTreeLabelMode}
+										paperTreeSortMode={settings.paperTreeSortMode}
 										onReadPaper={handleReadPaper}
 									/>
 								</div>

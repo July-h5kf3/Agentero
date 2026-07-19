@@ -8,7 +8,9 @@ import {
 	isPaperDirectory,
 	isPapersRoot,
 	isUnderPapers,
+	type PaperMetadata,
 	paperDirFromPath,
+	sortFileTreeNodes,
 } from "@/lib/paper-metadata";
 import type { FileNode } from "@/lib/vault";
 
@@ -196,5 +198,177 @@ describe("formatPaperTreeLabel", () => {
 				"25.23211",
 			),
 		).toBe("25.23211");
+	});
+});
+
+describe("sortFileTreeNodes", () => {
+	const paper = (name: string): FileNode => ({
+		id: `/v/papers/${name}`,
+		name,
+		path: `/v/papers/${name}`,
+		kind: "directory",
+		children: [
+			{
+				id: `/v/papers/${name}/NOTES.md`,
+				name: "NOTES.md",
+				path: `/v/papers/${name}/NOTES.md`,
+				kind: "file",
+			},
+		],
+	});
+
+	const org = (name: string, children: FileNode[]): FileNode => ({
+		id: `/v/papers/${name}`,
+		name,
+		path: `/v/papers/${name}`,
+		kind: "directory",
+		children,
+	});
+
+	const meta = (
+		partial: Partial<PaperMetadata> & Pick<PaperMetadata, "title">,
+	): PaperMetadata =>
+		({
+			id: partial.id ?? "x",
+			type: "arxiv",
+			title: partial.title,
+			authors: partial.authors ?? [],
+			tags: [],
+			status: "completed",
+			added_at: partial.added_at ?? "2020-01-01T00:00:00Z",
+			updated_at: partial.updated_at ?? "2020-01-01T00:00:00Z",
+			year: partial.year,
+			path: partial.path,
+		}) as PaperMetadata;
+
+	const siblings: FileNode[] = [
+		paper("zeta-paper"),
+		paper("alpha-paper"),
+		paper("mid-paper"),
+		org("beta-org", [paper("nested")]),
+	];
+
+	const byRel = new Map<string, PaperMetadata>([
+		[
+			"papers/zeta-paper",
+			meta({
+				title: "Zebra Methods",
+				authors: ["Zulu"],
+				year: 2018,
+				added_at: "2024-01-01T00:00:00Z",
+			}),
+		],
+		[
+			"papers/alpha-paper",
+			meta({
+				title: "Attention",
+				authors: ["Vaswani"],
+				year: 2017,
+				added_at: "2023-06-01T00:00:00Z",
+			}),
+		],
+		[
+			"papers/mid-paper",
+			meta({
+				title: "BERT",
+				authors: ["Devlin"],
+				year: 2019,
+				added_at: "2025-01-01T00:00:00Z",
+			}),
+		],
+	]);
+
+	const toRel = (abs: string) => abs.replace(/^\/v\//, "");
+
+	it("folder mode sorts directories by name (org + paper mixed)", () => {
+		const names = sortFileTreeNodes(siblings, "folder").map((n) => n.name);
+		expect(names).toEqual([
+			"alpha-paper",
+			"beta-org",
+			"mid-paper",
+			"zeta-paper",
+		]);
+	});
+
+	it("title mode: org folders first, then papers by title", () => {
+		const names = sortFileTreeNodes(siblings, "title", byRel, toRel).map(
+			(n) => n.name,
+		);
+		expect(names).toEqual([
+			"beta-org",
+			"alpha-paper", // Attention
+			"mid-paper", // BERT
+			"zeta-paper", // Zebra Methods
+		]);
+	});
+
+	it("year-desc: newest year first; org first", () => {
+		const names = sortFileTreeNodes(siblings, "year-desc", byRel, toRel).map(
+			(n) => n.name,
+		);
+		expect(names).toEqual([
+			"beta-org",
+			"mid-paper", // 2019
+			"zeta-paper", // 2018
+			"alpha-paper", // 2017
+		]);
+	});
+
+	it("year-asc: oldest first", () => {
+		const names = sortFileTreeNodes(siblings, "year-asc", byRel, toRel).map(
+			(n) => n.name,
+		);
+		expect(names).toEqual([
+			"beta-org",
+			"alpha-paper",
+			"zeta-paper",
+			"mid-paper",
+		]);
+	});
+
+	it("author mode by first author", () => {
+		const names = sortFileTreeNodes(siblings, "author", byRel, toRel).map(
+			(n) => n.name,
+		);
+		expect(names).toEqual([
+			"beta-org",
+			"mid-paper", // Devlin
+			"alpha-paper", // Vaswani
+			"zeta-paper", // Zulu
+		]);
+	});
+
+	it("added-desc by catalog added_at", () => {
+		const names = sortFileTreeNodes(siblings, "added-desc", byRel, toRel).map(
+			(n) => n.name,
+		);
+		expect(names).toEqual([
+			"beta-org",
+			"mid-paper", // 2025
+			"zeta-paper", // 2024
+			"alpha-paper", // 2023
+		]);
+	});
+
+	it("directories before files; does not mutate input", () => {
+		const input: FileNode[] = [
+			{
+				id: "/v/a.md",
+				name: "a.md",
+				path: "/v/a.md",
+				kind: "file",
+			},
+			{
+				id: "/v/z-dir",
+				name: "z-dir",
+				path: "/v/z-dir",
+				kind: "directory",
+				children: [],
+			},
+		];
+		const before = input.map((n) => n.name);
+		const names = sortFileTreeNodes(input, "folder").map((n) => n.name);
+		expect(names).toEqual(["z-dir", "a.md"]);
+		expect(input.map((n) => n.name)).toEqual(before);
 	});
 });

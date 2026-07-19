@@ -26,6 +26,16 @@
 			"author-year-title": "Author (year) · Title",
 			"folder": "Folder name"
 		},
+		"paperTreeSortMode": {
+			"label": "Sort papers in file tree",
+			"hint": "Display-only order under each folder. Does not rename or move folders. Missing metadata sorts by folder name (or last for year / date).",
+			"folder": "Folder name A–Z",
+			"title": "Title A–Z",
+			"author": "Author A–Z",
+			"year-desc": "Year (newest first)",
+			"year-asc": "Year (oldest first)",
+			"added-desc": "Date added (newest first)"
+		},
 		"translatorBaseUrl": {
 			"label": "Translator service URL",
 			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn. Adding a paper always downloads PDF; arXiv also unpacks LaTeX into source/."

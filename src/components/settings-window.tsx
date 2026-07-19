@@ -66,7 +66,9 @@ import {
 import { notifyError } from "@/lib/notify";
 import {
 	PAPER_TREE_LABEL_MODES,
+	PAPER_TREE_SORT_MODES,
 	type PaperTreeLabelMode,
+	type PaperTreeSortMode,
 } from "@/lib/paper-metadata";
 import { revealInOsLabelKey } from "@/lib/reveal";
 import {
@@ -346,9 +348,31 @@ function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow label={t("general.paperTreeSortMode.label")}>
+					<Select
+						value={settings.paperTreeSortMode}
+						onValueChange={(v) =>
+							patch({ paperTreeSortMode: v as PaperTreeSortMode })
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{PAPER_TREE_SORT_MODES.map((mode) => (
+								<SelectItem key={mode} value={mode}>
+									{t(`general.paperTreeSortMode.${mode}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
 			</SettingsGroup>
 			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.paperTreeLabelMode.hint")}
+			</p>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.paperTreeSortMode.hint")}
 			</p>
 			<SettingsGroup>
 				<div className="flex flex-col gap-1.5 border-b px-3.5 py-2.5 last:border-b-0">
