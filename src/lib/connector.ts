@@ -31,8 +31,12 @@ type ApiResult<T> = {
 
 async function unwrap<T>(promise: Promise<ApiResult<T>>): Promise<T> {
 	const res = await promise;
-	if (!res?.ok || res.data === undefined) {
+	if (!res?.ok) {
 		throw new Error(res?.error?.message ?? "connector command failed");
+	}
+	// Unit commands (`ApiResult<()>` / null data) still count as success.
+	if (res.data === undefined || res.data === null) {
+		return undefined as T;
 	}
 	return res.data;
 }

@@ -157,14 +157,20 @@ impl ConnectorController {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
-            g.vault_handle = raw;
-            // Clear stale remote-only error when rebinding.
-            if g.last_error
-                .as_deref()
-                .is_some_and(|e| e.contains("remote vault is not supported"))
-            {
+            g.vault_handle = raw.clone();
+            // Clear stale remote-only error / previous bind errors when rebinding.
+            if g.last_error.as_deref().is_some_and(|e| {
+                e.contains("remote vault is not supported")
+                    || e.contains("No vault open")
+                    || e.contains("remote session not found")
+            }) {
                 g.last_error = None;
             }
+            log::debug!(
+                target: "agentero::connector",
+                "set_vault handle={}",
+                raw.as_deref().unwrap_or("(none)")
+            );
         }
         self.emit_status();
     }
@@ -185,10 +191,11 @@ impl ConnectorController {
     /// Vault handle string (local path or `remote:…`) + parent dir.
     pub fn vault_handle_and_parent(&self) -> Result<(String, String), AppError> {
         let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let handle = g
-            .vault_handle
-            .clone()
-            .ok_or_else(|| AppError::message("No vault open — open a vault in Agentero first"))?;
+        let handle = g.vault_handle.clone().ok_or_else(|| {
+            AppError::message(
+                "No vault open — open a local or remote vault in Agentero first (Connector needs an active vault)",
+            )
+        })?;
         Ok((handle, g.parent_dir.clone()))
     }
 
@@ -764,4 +771,28 @@ fn move_paper_folder(
     std::fs::rename(&from_abs, &new_abs)?;
     let _ = papers::move_under_path(vault, &from, &new_rel);
     Ok(new_rel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_vault_accepts_remote_handle() {
+        let ctrl = ConnectorController::new();
+        ctrl.set_vault(Some("remote:sess-abc".into()));
+        let (handle, parent) = ctrl.vault_handle_and_parent().expect("bound");
+        assert_eq!(handle, "remote:sess-abc");
+        assert_eq!(parent, "papers");
+        assert!(ctrl.is_remote_vault());
+        assert_eq!(ctrl.status().vault_path.as_deref(), Some("remote:sess-abc"));
+    }
+
+    #[test]
+    fn set_vault_none_reports_no_vault() {
+        let ctrl = ConnectorController::new();
+        ctrl.set_vault(None);
+        let err = ctrl.vault_handle_and_parent().unwrap_err().to_string();
+        assert!(err.contains("No vault open"), "{err}");
+    }
 }

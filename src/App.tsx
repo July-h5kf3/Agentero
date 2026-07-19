@@ -1215,10 +1215,11 @@ export default function App() {
 	}, [vaultPath]);
 
 	// Sync active vault into the Connector server (save target).
+	// When Connector is toggled on, the enable effect re-binds vaultPathRef below.
 	useEffect(() => {
 		if (!isTauri()) return;
-		void connectorSetVault(vaultPath).catch(() => {
-			/* ignore */
+		void connectorSetVault(vaultPath).catch((e) => {
+			console.warn("[connector] setVault failed", e);
 		});
 	}, [vaultPath]);
 
@@ -1241,9 +1242,17 @@ export default function App() {
 	useEffect(() => {
 		if (!isTauri()) return;
 		void connectorSetEnabled(settings.connectorEnabled)
-			.then((st) => {
+			.then(async (st) => {
 				if (settings.connectorEnabled && st.lastError) {
 					notifyError(st.lastError);
+				}
+				// After the HTTP server starts, re-bind vault (Host may have been unbound).
+				if (settings.connectorEnabled && vaultPathRef.current) {
+					try {
+						await connectorSetVault(vaultPathRef.current);
+					} catch (e) {
+						console.warn("[connector] re-bind vault after enable failed", e);
+					}
 				}
 			})
 			.catch((e) => {

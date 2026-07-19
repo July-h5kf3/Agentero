@@ -31,6 +31,8 @@
 6. Agentero 刷新文件树 / Library；**`openPaper` 打开（或聚焦）该论文标签页**（与魔棒入库一致；附件 `saveAttachment` / 会话移动再次发出事件时亦会聚焦）；可选 toast 成功摘要。
 7. 用户关闭开关或退出应用时释放端口。
 
+**Vault 绑定**：`connector_set_vault` 接受本地绝对路径或 `remote:<sessionId>`。`remote_connect` 成功时 Host **立即**绑定 Connector；前端在 `vaultPath` 变化与 Connector 开启时再次同步。设置状态应显示 Listening 且带 vault（远程为 `remote:…`）；若提示 *No vault open*，请确认已打开知识库并已开启 Connector，远程场景请重新连接一次远程库。
+
 ### 1.3 与其它入库路径的边界
 
 | 路径 | 入口 | 元数据来源 | 与本方案关系 |

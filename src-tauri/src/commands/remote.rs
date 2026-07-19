@@ -27,6 +27,7 @@ pub struct RemoteConnectArgs {
 #[tauri::command]
 pub async fn remote_connect(
     registry: State<'_, Arc<RemoteRegistry>>,
+    connector: State<'_, Arc<crate::services::connector::ConnectorController>>,
     args: RemoteConnectArgs,
 ) -> Result<ApiResult<RemoteSessionInfo>, String> {
     let op = OpTimer::start_with(
@@ -42,6 +43,13 @@ pub async fn remote_connect(
         .await
     {
         Ok(info) => {
+            // Bind Zotero Connector save target on Host (do not rely only on frontend).
+            connector.set_vault(Some(info.vault_handle.clone()));
+            log::info!(
+                target: "agentero::op",
+                "connector vault bound to {}",
+                trunc(&info.vault_handle, 80)
+            );
             op.finish_ok();
             Ok(ApiResult::ok(info))
         }
@@ -61,14 +69,24 @@ pub struct RemoteSessionArgs {
 #[tauri::command]
 pub async fn remote_disconnect(
     registry: State<'_, Arc<RemoteRegistry>>,
+    connector: State<'_, Arc<crate::services::connector::ConnectorController>>,
     args: RemoteSessionArgs,
 ) -> Result<ApiResult<()>, String> {
     let op = OpTimer::start_with(
         "remote_disconnect",
         format!("session={}", trunc(&args.session_id, 40)),
     );
+    let handle = format!("remote:{}", args.session_id.trim());
+    let bound_here = connector
+        .status()
+        .vault_path
+        .as_deref()
+        .is_some_and(|p| p == handle);
     match registry.disconnect(&args.session_id).await {
         Ok(()) => {
+            if bound_here {
+                connector.set_vault(None);
+            }
             op.finish_ok();
             Ok(ApiResult::ok(()))
         }
