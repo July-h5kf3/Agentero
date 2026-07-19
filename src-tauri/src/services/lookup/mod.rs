@@ -584,6 +584,10 @@ pub(crate) async fn write_paper_shell_opts(
 }
 
 /// Prefer zh-CN translation of the abstract for NOTES.md display.
+///
+/// Free MT endpoints are unofficial and any single one may be blocked or
+/// rate-limited (e.g. Google is unreachable from mainland China), so try a
+/// small fallback chain and keep the original text only when every engine fails.
 async fn abstract_for_notes(text: &str) -> String {
     if looks_mostly_cjk(text) {
         return text.to_string();
@@ -592,21 +596,32 @@ async fn abstract_for_notes(text: &str) -> String {
         .chars()
         .take(crate::services::translate::MAX_TEXT_CHARS)
         .collect();
-    match crate::services::translate::translate_text(
-        crate::services::translate::TranslateTextArgs {
-            text: slice,
-            source_lang: "auto".into(),
-            target_lang: "zh-CN".into(),
-            provider: "googleapi".into(),
-            free_base_url: None,
-            timeout_ms: None,
-        },
-    )
-    .await
-    {
-        Ok(r) if !r.text.trim().is_empty() => r.text.trim().to_string(),
-        _ => text.to_string(),
+    for provider in [
+        "googleapi",
+        "bing",
+        "youdao",
+        "huoshanweb",
+        "tencenttransmart",
+    ] {
+        if let Ok(r) = crate::services::translate::translate_text(
+            crate::services::translate::TranslateTextArgs {
+                text: slice.clone(),
+                source_lang: "auto".into(),
+                target_lang: "zh-CN".into(),
+                provider: provider.into(),
+                free_base_url: None,
+                timeout_ms: Some(15_000),
+            },
+        )
+        .await
+        {
+            let t = r.text.trim();
+            if !t.is_empty() {
+                return t.to_string();
+            }
+        }
     }
+    text.to_string()
 }
 
 /// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
