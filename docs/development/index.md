@@ -41,12 +41,14 @@
 - [`prd.md`](prd.md)：产品需求、范围、用户流程、验收标准。
 - [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
 - [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
+- [`github-project.md`](github-project.md)：GitHub Project「Agentero」结构、标签、Issue 草案目录（**结构已沉淀；Issue 批量创建另议**）。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
 - [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
+- [`bug.md`](bug.md)：待处理现象语料（与 Project / Issue 草案对照）。
 - [`.md`](.md)：简短产品假设。
 - Bug 修复记录：[`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）。
 - Paper 入库流水线统一：[`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
