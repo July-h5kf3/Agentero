@@ -182,7 +182,7 @@ papers/<id>/marks/<id>.json
 - **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
 - 坐标均为页内归一化 0–1，缩放/重开可重建。
 - 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight` / `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
-- **阅读热力图**：聚合上述三类 mark 的 page + y；可选 `{paper}/reading-meta.json`（`pageCount`）。
+- **阅读热力**：聚合上述三类 mark 的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
 ### `highlights.md`（L2.5，规划中的 Markdown 证据层）
 

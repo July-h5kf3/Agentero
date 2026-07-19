@@ -1,8 +1,9 @@
 /**
- * Compact document-spine reading heatmap for the papers library.
- * Intensity maps PDF highlight / ask / translate activity along page order.
+ * Title-background reading heat for the papers library.
+ * Horizontal spine under the title: left = document start, right = end;
+ * local color depth = interaction intensity at that position.
  */
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Tooltip,
@@ -12,40 +13,82 @@ import {
 import { isEmptyHeatmap, type ReadingHeatmap } from "@/lib/reading-heatmap";
 import { cn } from "@/lib/utils";
 
-export type ReadingHeatmapBarProps = {
-	heatmap: ReadingHeatmap | null | undefined;
-	className?: string;
-	/** Wider bar for dense tables */
-	size?: "sm" | "md";
-};
+/**
+ * Apple system green (HIG / SF Symbols green family).
+ * Matches tag palette `green` swatch: ~#34C759 light, close to systemGreen.
+ * @see src/lib/tag-colors.ts green token
+ */
+const APPLE_SYSTEM_GREEN = "oklch(0.65 0.17 145)";
 
 /**
- * Theme-aligned heat: track = muted, cells use primary via color-mix so
- * light/dark and custom themes stay consistent without hard-coded hues.
+ * Soft light-green fill for one bin intensity (0–1).
+ * Low mix keeps the wash pale (浅绿色), not solid system green.
  */
-function binStyle(intensity: number): CSSProperties {
-	if (intensity <= 0) {
-		return { backgroundColor: "transparent" };
+function binFill(intensity: number): string {
+	if (intensity <= 0) return "transparent";
+	// Soft floor so sparse activity is faintly visible; peak stays restrained.
+	const pct = Math.round(12 + intensity * 30); // ~12%–42%
+	return `color-mix(in oklch, ${APPLE_SYSTEM_GREEN} ${pct}%, transparent)`;
+}
+
+/**
+ * Left→right linear-gradient spine from fixed bins.
+ * Each bin is a hard stop segment so position along the title maps to the PDF.
+ */
+export function titleReadingSpineStyle(
+	bins: readonly number[] | undefined,
+): CSSProperties | undefined {
+	if (!bins?.length) return undefined;
+	let any = false;
+	for (const v of bins) {
+		if (v > 0) {
+			any = true;
+			break;
+		}
 	}
-	// Soft floor so sparse activity is still visible; peak → solid primary.
-	const pct = Math.round(18 + intensity * 82);
+	if (!any) return undefined;
+
+	const n = bins.length;
+	const stops: string[] = [];
+	for (let i = 0; i < n; i++) {
+		const start = (i / n) * 100;
+		const end = ((i + 1) / n) * 100;
+		const color = binFill(bins[i] ?? 0);
+		stops.push(`${color} ${start}%`, `${color} ${end}%`);
+	}
+
 	return {
-		backgroundColor: `color-mix(in oklch, var(--primary) ${pct}%, transparent)`,
+		backgroundImage: `linear-gradient(to right, ${stops.join(", ")})`,
+		backgroundRepeat: "no-repeat",
+		backgroundSize: "100% 100%",
+		borderRadius: "0.2rem",
+		boxDecorationBreak: "clone",
+		WebkitBoxDecorationBreak: "clone",
 	};
 }
 
-export function ReadingHeatmapBar({
+export type ReadingTitleHeatProps = {
+	heatmap: ReadingHeatmap | null | undefined;
+	children: ReactNode;
+	className?: string;
+};
+
+/**
+ * Wraps title text with a document-spine background (front → back) and tooltip.
+ * Empty / missing heatmaps render children unchanged (no tooltip).
+ */
+export function ReadingTitleHeat({
 	heatmap,
+	children,
 	className,
-	size = "sm",
-}: ReadingHeatmapBarProps) {
+}: ReadingTitleHeatProps) {
 	const { t } = useTranslation("sidebar");
 	const empty = isEmptyHeatmap(heatmap);
-	const bins = heatmap?.bins ?? [];
+	const style = empty ? undefined : titleReadingSpineStyle(heatmap?.bins);
 	const by = heatmap?.byKind;
 
-	const label = empty
-		? t("papersLibrary.heatmapEmpty")
+	const heatLabel = empty
+		? null
 		: t("papersLibrary.heatmapTooltip", {
 				total: Math.round(heatmap?.total ?? 0),
 				highlights: Math.round(by?.highlight ?? 0),
@@ -53,34 +96,26 @@ export function ReadingHeatmapBar({
 				translates: Math.round(by?.translate ?? 0),
 			});
 
-	const bar = (
-		<div
-			role="img"
-			aria-label={label}
+	const text = (
+		<span
 			className={cn(
-				"flex overflow-hidden rounded-sm bg-muted/70 ring-1 ring-border/60",
-				size === "sm" ? "h-2 w-[4.5rem]" : "h-2.5 w-[5.5rem]",
+				"line-clamp-2 block w-full px-0.5 -mx-0.5",
+				style && "rounded-sm",
 				className,
 			)}
+			style={style}
 		>
-			{bins.map((intensity, i) => (
-				<div
-					// biome-ignore lint/suspicious/noArrayIndexKey: fixed-length bin strip
-					key={i}
-					className="h-full min-w-0 flex-1"
-					style={binStyle(intensity)}
-				/>
-			))}
-		</div>
+			{children}
+		</span>
 	);
+
+	if (!heatLabel) return text;
 
 	return (
 		<Tooltip>
-			<TooltipTrigger asChild>
-				<span className="inline-flex">{bar}</span>
-			</TooltipTrigger>
+			<TooltipTrigger asChild>{text}</TooltipTrigger>
 			<TooltipContent side="top" className="max-w-xs text-xs">
-				{label}
+				{heatLabel}
 			</TooltipContent>
 		</Tooltip>
 	);

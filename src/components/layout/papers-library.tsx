@@ -3,7 +3,7 @@
  * Click column headers to sort ascending / descending.
  * Single-click a cell to copy that field (deferred so double-click can cancel);
  * double-click a row to open the paper without copying.
- * Reading heatmap column: highlight / ask / translate intensity along the PDF.
+ * Reading heat: title text background as a left→right spine (doc start→end).
  * Optional tag filter chips above the table.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -17,7 +17,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ReadingHeatmapBar } from "@/components/layout/reading-heatmap";
+import { ReadingTitleHeat } from "@/components/layout/reading-heatmap";
 import { Button } from "@/components/ui/button";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { PaperMetadata } from "@/lib/paper-metadata";
@@ -59,8 +59,8 @@ export type PapersLibraryProps = {
 	className?: string;
 };
 
-/** Data columns + fixed reading-heatmap column (not sortable). */
-const TABLE_COL_COUNT = 7;
+/** Sortable data columns (title / authors / year / tags / type / id). */
+const TABLE_COL_COUNT = 6;
 
 /**
  * Delay before committing a cell-copy click.
@@ -572,14 +572,6 @@ export function PapersLibrary({
 										</th>
 									);
 								})}
-								<th
-									className="min-w-[88px] px-3 py-2 font-medium"
-									title={t("papersLibrary.colHeatmapHint")}
-								>
-									<span className="truncate">
-										{t("papersLibrary.colHeatmap")}
-									</span>
-								</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -624,9 +616,9 @@ export function PapersLibrary({
 													onCellCopy(e, p.title, t("papersLibrary.colTitle"))
 												}
 											>
-												<span className="line-clamp-2" title={p.title}>
-													{p.title}
-												</span>
+												<ReadingTitleHeat heatmap={heat}>
+													<span title={p.title}>{p.title}</span>
+												</ReadingTitleHeat>
 											</button>
 											{p.publication ? (
 												<button
@@ -830,9 +822,6 @@ export function PapersLibrary({
 													{identifierLabel(p)}
 												</span>
 											</button>
-										</td>
-										<td className="whitespace-nowrap px-3 py-2.5 align-middle">
-											<ReadingHeatmapBar heatmap={heat} />
 										</td>
 									</tr>
 								);

@@ -171,8 +171,8 @@
   - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
-  - **列**：标题、作者、年份、**标签**、类型、标识符、**阅读热力图**；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签；复制**短延迟提交**，双击打开论文时取消，避免与双击冲突）；**双击**行打开对应 paper 文件夹。
-  - **阅读热力图**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成横向文档脊条（左=文首、右=文末；强度用主题 `primary` 的 `color-mix`，随 light/dark 变化）。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度；无元数据时用活动最大页。全库与文件夹作用域均显示。实现：`src/lib/reading-heatmap/`、`ReadingHeatmapBar`。
+  - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签；复制**短延迟提交**，双击打开论文时取消，避免与双击冲突）；**双击**行打开对应 paper 文件夹。
+  - **阅读热力（标题背景）**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成**标题文字横向背景脊条**（左=文首、右=文末；局部深浅=该位置交互强度）。颜色为 **Apple system green** 浅色洗（`oklch(0.65 0.17 145)` ≈ `#34C759`，与标签 green 同系，低比例 `color-mix` 保持浅色不抢眼）。悬停标题可看高亮 / 对话 / 翻译分项。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度。实现：`src/lib/reading-heatmap/`、`ReadingTitleHeat`。
   - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
@@ -264,7 +264,7 @@
 | `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
 | `⌘←` | 折叠选中文件夹 | `collapseTreeCurrent`：已展开的组织夹折叠自身；叶子 / 已折叠则折最近展开的父级（对齐 VS Code `list.collapse` 心智）。编辑区不拦截（保留 ⌘← 行首） |
-| `⇧⌘←` | 折叠文件树至默认 | `collapseTreeDefault`：仅展开 `papers/` 及其一级子目录（与打开 Vault 时一致）；更深嵌套与 `notes/` 等收起。编辑区不拦截 |
+| `⇧⌘←` | 折叠文件树至默认 | `collapseTreeDefault`：只展开 `papers/`，列出其直接子项，**不**展开组织子目录；`notes/` 等收起。编辑区不拦截 |
 | `⌘⌫` | 删除选中项 | 文件树选中项；移入回收站 `.agentero/.trash/`（**无确认 / 无 Undo toast**；从回收站视图恢复）；`papers/` 行随删随快照 catalog；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
