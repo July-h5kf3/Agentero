@@ -184,6 +184,11 @@ import {
 	displayHistoryTitle,
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent-prompt-display";
+import {
+	classifyStreamChunk,
+	promoteOrphanThoughtToText,
+	ThinkTagParser,
+} from "@/lib/agent-stream-parse";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
@@ -679,6 +684,8 @@ export function AgentPanel({
 	);
 	const pendingSubmissionSessionIdRef = useRef<string | null>(null);
 	const knownSessionIdsRef = useRef(new Set<string>());
+	/** Per-session <think> tag parsers for message-channel reasoning (DeepSeek etc.). */
+	const thinkParsersRef = useRef(new Map<string, ThinkTagParser>());
 	const sessionHistoryRef = useRef<ChatSessionHistoryItem[]>([]);
 	const vaultPathRef = useRef(vaultPath);
 	const includeExternalCodexHistoryRef = useRef(includeExternalCodexHistory);
@@ -813,6 +820,7 @@ export function AgentPanel({
 		pendingSessionEventsRef.current.clear();
 		pendingSubmissionSessionIdRef.current = null;
 		knownSessionIdsRef.current.clear();
+		thinkParsersRef.current.clear();
 		setSubmitting(false);
 		setLines([]);
 		setSessionHistory([]);
@@ -948,14 +956,25 @@ export function AgentPanel({
 		(ev: AgentStreamEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
 			const streamKind = ev.kind ?? "message";
+			let parser = thinkParsersRef.current.get(ev.sessionId);
+			if (!parser) {
+				parser = new ThinkTagParser();
+				thinkParsersRef.current.set(ev.sessionId, parser);
+			}
+			const slices = classifyStreamChunk(streamKind, ev.chunk, parser);
+			if (slices.length === 0) return;
 			updateSessionLines(ev.sessionId, (prev) => {
 				const next = [...prev];
 				const last = next[next.length - 1];
 				if (last?.kind !== "agent" || !last.streaming) return prev;
-				const partKind = streamKind === "thought" ? "reasoning" : "text";
+				let parts = last.parts;
+				for (const slice of slices) {
+					if (!slice.text) continue;
+					parts = appendStreamPart(parts, slice.kind, slice.text);
+				}
 				next[next.length - 1] = {
 					...last,
-					parts: appendStreamPart(last.parts, partKind, ev.chunk),
+					parts,
 				};
 				return next;
 			});
@@ -1045,6 +1064,7 @@ export function AgentPanel({
 				);
 				return;
 			}
+			thinkParsersRef.current.delete(ev.sessionId);
 			updateSessionLines(ev.sessionId, (prev) => {
 				const next = [...prev];
 				const last = next[next.length - 1];
@@ -1065,14 +1085,30 @@ export function AgentPanel({
 						];
 					}
 					if (agentTextFromParts(parts).trim().length === 0) {
-						parts = [
-							...parts,
-							{
-								type: "text",
-								id: nextPartId("text"),
-								text: ev.content || "(empty response)",
-							},
-						];
+						const content = (ev.content ?? "").trim();
+						if (content) {
+							parts = [
+								...parts,
+								{
+									type: "text",
+									id: nextPartId("text"),
+									text: ev.content || content,
+								},
+							];
+						} else {
+							// DeepSeek / ACP mis-tag: answer only arrived as thought chunks.
+							parts = promoteOrphanThoughtToText(parts) as AgentPart[];
+							if (agentTextFromParts(parts).trim().length === 0) {
+								parts = [
+									...parts,
+									{
+										type: "text",
+										id: nextPartId("text"),
+										text: "(empty response)",
+									},
+								];
+							}
+						}
 					}
 					next[next.length - 1] = {
 						...last,
@@ -1587,6 +1623,7 @@ export function AgentPanel({
 			pendingSessionEventsRef.current.clear();
 			pendingSubmissionSessionIdRef.current = null;
 			knownSessionIdsRef.current.clear();
+			thinkParsersRef.current.clear();
 			selectedAgentIdRef.current = agentId;
 			activeConversationRef.current = null;
 			activateComposerSession("draft");

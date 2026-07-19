@@ -48,6 +48,7 @@
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
 - [`.md`](.md)：简短产品假设。
+- Bug 修复记录：[`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）。
 
 ## 交叉引用
 
