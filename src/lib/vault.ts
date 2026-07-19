@@ -72,10 +72,23 @@ export function getSessionVaultPath(): string | null {
 	}
 }
 
+/**
+ * Remote vault handles (`remote:<sessionId>`) are ephemeral: a new UUID is
+ * issued on every SSH connect. They must not pollute the durable "recent local
+ * vaults" list or "restore last vault" — remote recents live in
+ * `agentero-recent-remote-vaults` (host + remotePath).
+ */
+function isEphemeralRemoteHandle(path: string): boolean {
+	return path.startsWith("remote:");
+}
+
 /** Last vault path (localStorage) — used when restore-last is enabled. */
 export function getLastVaultPath(): string | null {
 	try {
-		return localStorage.getItem(LAST_VAULT_KEY);
+		const last = localStorage.getItem(LAST_VAULT_KEY);
+		// Drop stale remote handles left by older builds (session no longer exists).
+		if (last && isEphemeralRemoteHandle(last)) return null;
+		return last;
 	} catch {
 		return null;
 	}
@@ -91,9 +104,11 @@ export function getSavedVaultPath(opts?: {
 	allowRestore?: boolean;
 }): string | null {
 	const session = getSessionVaultPath();
+	// Keep whatever this window already opened (incl. live `remote:<id>` handle).
 	if (session) return session;
 	if (isFreshWindow()) return null;
 	if (opts?.allowRestore === false) return null;
+	// Cross-launch restore: local path only (remote needs SSH re-connect).
 	return getLastVaultPath();
 }
 
@@ -107,9 +122,19 @@ export function getRecentVaults(): string[] {
 		}
 		const parsed = JSON.parse(raw) as unknown;
 		if (!Array.isArray(parsed)) return [];
-		return parsed.filter(
-			(p): p is string => typeof p === "string" && p.length > 0,
+		const list = parsed.filter(
+			(p): p is string =>
+				typeof p === "string" && p.length > 0 && !isEphemeralRemoteHandle(p),
 		);
+		// Self-heal: strip remote handles written by older builds.
+		if (list.length !== parsed.length) {
+			try {
+				localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(list));
+			} catch {
+				// ignore
+			}
+		}
+		return list;
 	} catch {
 		return [];
 	}
@@ -117,7 +142,7 @@ export function getRecentVaults(): string[] {
 
 export function rememberRecentVault(path: string): void {
 	const normalized = path.replace(/[\\/]+$/, "");
-	if (!normalized) return;
+	if (!normalized || isEphemeralRemoteHandle(normalized)) return;
 	try {
 		const next = [
 			normalized,
@@ -146,9 +171,13 @@ export function removeRecentVault(path: string): void {
 export function saveVaultPath(path: string | null): void {
 	try {
 		if (path) {
+			// Always keep window-session binding (local path or live remote handle).
 			sessionStorage.setItem(SESSION_VAULT_KEY, path);
-			localStorage.setItem(LAST_VAULT_KEY, path);
-			rememberRecentVault(path);
+			// Durable "last / recent local" only for real filesystem roots.
+			if (!isEphemeralRemoteHandle(path)) {
+				localStorage.setItem(LAST_VAULT_KEY, path);
+				rememberRecentVault(path);
+			}
 		} else {
 			sessionStorage.removeItem(SESSION_VAULT_KEY);
 		}
