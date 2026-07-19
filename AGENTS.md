@@ -24,6 +24,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
 - **精读工作流**：设置 → Agent **`autoPaperReader`**（**默认关**）；开启后魔棒入库 / 单篇 Download 资源就绪且未读时自动 paper-reader。资源齐全且 `is_read === false` 时文件树 **Zap** 可手动。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（**hover 实色不透明**）。Skill 运行时语法按 Agent：**Codex `$id`**、**Claude `/id`**、其它仅注入 `SKILL.md`。
 - **Agent 权限**：设置 → Agent **全局权限模式**（`restricted` 默认 / **`ask` 每次询问** / `auto` 自动批准）；非 per-provider YOLO。`ask` 时弹权限对话框 → `agent_respond_permission`。
+- **个人偏好提示词**：设置 → Agent **`agentPersonalPrompt`**（多行，默认空）；非空时经 `runOnce` → Host `build_prompt` 注入 envelope（所有 workflow）；留空不注入，Chat 不展示该块。
 - **Agent 面板工作流**：空态建议 chips → `summary` / `qa` / `related_work`（Summarize、Ask library、Draft Related Work 等）；目标为当前聚焦 paper。Composer：**当前论文默认加入**上下文（实心 chip + paper-name/标题，无加号切换；可 X 移除）；`@` 提及与从文件树**拖入**路径均为可移除 context chip（路径引用，非 AI Elements Attachments 二进制）；chip 展示虚拟名（paper-name），prompt 仍用 Vault 相对路径；图标见 `context-path-icon`（**paper** → `ScrollText`，其它文件夹 → `Folder`，文件按扩展名）。
 - **笔记写后审阅**：Agent 改写目标笔记后 `agent:notes-review` 对照，Keep / Revert。
 - **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索（`vault_search`）。

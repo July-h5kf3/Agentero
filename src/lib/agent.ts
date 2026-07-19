@@ -379,15 +379,23 @@ export async function runOnce(request: {
 	 */
 	responseLanguage?: string;
 	/**
+	 * User preference instructions injected into the prompt envelope.
+	 * When omitted, runOnce falls back to `agentPersonalPrompt` settings;
+	 * empty / whitespace-only is not sent.
+	 */
+	personalPrompt?: string;
+	/**
 	 * When true, Codex thread is not indexed into Agent chat history
 	 * (paper-reader and other non-composer workflows).
 	 */
 	hideFromChatHistory?: boolean;
 }): Promise<RunOnceAccepted> {
-	const language =
-		request.responseLanguage ?? loadSettings().aiResponseLanguage;
+	const settings = loadSettings();
+	const language = request.responseLanguage ?? settings.aiResponseLanguage;
 	const responseLanguage =
 		language && language !== "auto" ? language : undefined;
+	const personalRaw = request.personalPrompt ?? settings.agentPersonalPrompt;
+	const personalPrompt = personalRaw?.trim() ? personalRaw.trim() : undefined;
 	return invokeApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
@@ -404,6 +412,7 @@ export async function runOnce(request: {
 			autoApprove: request.autoApprove ?? false,
 			permissionMode: request.permissionMode,
 			responseLanguage,
+			personalPrompt,
 			hideFromChatHistory: request.hideFromChatHistory ?? false,
 		},
 	});

@@ -81,6 +81,11 @@ export type AppSettings = {
 	/** Language forced onto every agent response and generated notes. */
 	aiResponseLanguage: AiResponseLanguage;
 	/**
+	 * Free-form user preference instructions injected into every agent
+	 * prompt envelope (Composer, paper-reader, workflows, …). Empty = off.
+	 */
+	agentPersonalPrompt: string;
+	/**
 	 * Agent seat + model for PDF selection Ask dialogs (划词提问).
 	 * Independent of Chat's current agent and of translate.agentId.
 	 * Empty agentId / modelId = follow app default agent / that agent's model pref.
@@ -124,6 +129,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	agentPermissionMode: "restricted",
 	autoPaperReader: false,
 	aiResponseLanguage: "auto",
+	agentPersonalPrompt: "",
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 	analyticsEnabled: false,
 	shareCrashReports: false,
@@ -180,6 +186,12 @@ export function loadSettings(): AppSettings {
 		}
 		if (typeof parsed.autoPaperReader !== "boolean") {
 			merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;
+		}
+		if (typeof parsed.agentPersonalPrompt !== "string") {
+			merged.agentPersonalPrompt = DEFAULT_SETTINGS.agentPersonalPrompt;
+		} else {
+			// Cap extreme values from hand-edited storage; UI does not enforce a hard max.
+			merged.agentPersonalPrompt = parsed.agentPersonalPrompt.slice(0, 8000);
 		}
 		if (typeof parsed.connectorEnabled !== "boolean") {
 			merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;

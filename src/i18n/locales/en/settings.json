@@ -125,6 +125,11 @@
 			"en": "English",
 			"zhCN": "简体中文"
 		},
+		"personalPrompt": {
+			"label": "Personal preference prompt",
+			"hint": "Optional free-form instructions injected into every Agent turn (chat, paper-reader, workflows). Leave empty to disable. Not shown in the chat transcript.",
+			"placeholder": "e.g. Prefer concise bullet points; always keep [[wikilinks]]; cite Vault paths."
+		},
 		"pdfAsk": {
 			"section": "PDF selection Ask",
 			"hint": "Agent and model used by the PDF highlight Ask dialog (independent of Chat and Translate).",

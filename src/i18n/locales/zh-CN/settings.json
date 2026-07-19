@@ -125,6 +125,11 @@
 			"en": "English",
 			"zhCN": "简体中文"
 		},
+		"personalPrompt": {
+			"label": "个人偏好提示词",
+			"hint": "可选的自由文本，会注入到每一次 Agent 对话（Chat、精读、工作流等）。留空则不注入；不会显示在对话记录里。",
+			"placeholder": "例如：优先简洁要点列表；始终保留 [[双链]]；引用 Vault 路径。"
+		},
 		"pdfAsk": {
 			"section": "PDF 划词提问",
 			"hint": "PDF 划词「提问」对话框使用的 Agent 与模型（与 Chat、翻译设置相互独立）。",

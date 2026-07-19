@@ -630,6 +630,7 @@ pub async fn run_codex_turn(
     skill_ids: Vec<String>,
     auto_approve: bool,
     response_language: Option<String>,
+    personal_prompt: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) {
     let PreparedCodexThread {
@@ -651,6 +652,7 @@ pub async fn run_codex_turn(
         skill_ids,
         auto_approve,
         response_language,
+        personal_prompt,
         &mut cancellation,
     )
     .await;
@@ -711,6 +713,7 @@ async fn run_codex_turn_inner(
     skill_ids: Vec<String>,
     auto_approve: bool,
     response_language: Option<String>,
+    personal_prompt: Option<String>,
     cancellation: &mut watch::Receiver<bool>,
 ) -> Result<(), AppError> {
     // Codex activates skills with `$skill-id` (dollar syntax).
@@ -727,6 +730,7 @@ async fn run_codex_turn_inner(
             skill_style,
             &skill_ids,
             response_language.as_deref(),
+            personal_prompt.as_deref(),
         ),
         skill_instructions
     );

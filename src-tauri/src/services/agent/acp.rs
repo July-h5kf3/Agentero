@@ -691,6 +691,7 @@ pub async fn run_once(
     permission_policy: PermissionPolicy,
     permission_gate: PermissionGate,
     response_language: Option<String>,
+    personal_prompt: Option<String>,
     mut cancellation: watch::Receiver<bool>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
@@ -725,6 +726,7 @@ pub async fn run_once(
             skill_style,
             &skill_ids,
             response_language.as_deref(),
+            personal_prompt.as_deref(),
         ),
         skill_instructions
     );

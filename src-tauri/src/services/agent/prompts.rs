@@ -11,6 +11,7 @@ pub fn build_prompt(
     skill_style: SkillMentionStyle,
     skill_ids: &[String],
     response_language: Option<&str>,
+    personal_prompt: Option<&str>,
 ) -> String {
     let workflow = workflow.unwrap_or("free");
     let target_line = target
@@ -58,7 +59,11 @@ pub fn build_prompt(
         }
     };
 
-    let system = format!("{system}{}", language_directive(response_language));
+    let system = format!(
+        "{system}{}{}",
+        language_directive(response_language),
+        personal_preference_directive(personal_prompt)
+    );
 
     format!("{system}\n\n{target_line}User request:\n{user_prompt}")
 }
@@ -176,6 +181,21 @@ fn language_directive(code: Option<&str>) -> String {
     )
 }
 
+/// Optional free-form user preference block (Settings → Agent → personal prompt).
+/// Empty / whitespace-only is omitted so the feature stays off by default.
+fn personal_preference_directive(personal: Option<&str>) -> String {
+    let Some(text) = personal.map(str::trim).filter(|s| !s.is_empty()) else {
+        return String::new();
+    };
+    // Cap length so a hand-edited client cannot bloat every turn unboundedly.
+    let text = if text.len() > 8000 {
+        &text[..8000]
+    } else {
+        text
+    };
+    format!("\n\nUser preference instructions (always honor when relevant):\n{text}")
+}
+
 fn skill_follow_hint(style: SkillMentionStyle, skill_ids: &[String]) -> String {
     if skill_ids.is_empty() {
         return String::new();
@@ -274,6 +294,7 @@ mod tests {
             SkillMentionStyle::InjectedOnly,
             &[],
             None,
+            None,
         );
         assert!(p.contains("What is attention?"));
         assert!(p.contains("papers/x/NOTES.md"));
@@ -287,6 +308,7 @@ mod tests {
             Some("papers/1706.03762"),
             SkillMentionStyle::Dollar,
             &["paper-reader".into()],
+            None,
             None,
         );
         assert!(p.contains("$paper-reader"));
@@ -303,6 +325,7 @@ mod tests {
             SkillMentionStyle::Slash,
             &["paper-reader".into()],
             None,
+            None,
         );
         assert!(p.contains("/paper-reader"));
         assert!(p.contains("**/skill-id**") || p.contains("/skill-id"));
@@ -316,6 +339,7 @@ mod tests {
             Some("papers/1706.03762"),
             SkillMentionStyle::InjectedOnly,
             &["paper-reader".into()],
+            None,
             None,
         );
         assert!(p.contains("Agentero injects") || p.contains("does not use Agentero Composer `$`"));
@@ -332,6 +356,7 @@ mod tests {
             SkillMentionStyle::InjectedOnly,
             &["paper-reader".into()],
             Some("zh-CN"),
+            None,
         );
         assert!(p.contains("Simplified Chinese"));
         assert!(p.contains("Always write your entire response"));
@@ -346,8 +371,40 @@ mod tests {
             SkillMentionStyle::InjectedOnly,
             &[],
             None,
+            None,
         );
         assert!(!p.contains("Always write your entire response"));
+    }
+
+    #[test]
+    fn personal_prompt_injects_block() {
+        let p = build_prompt(
+            Some("free"),
+            "Hello",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+            Some("Prefer concise bullet points."),
+        );
+        assert!(p.contains("User preference instructions"));
+        assert!(p.contains("Prefer concise bullet points."));
+        // Still only human text after the marker for chat display.
+        assert_eq!(strip_prompt_envelope_for_display(&p), "Hello");
+    }
+
+    #[test]
+    fn personal_prompt_empty_adds_nothing() {
+        let p = build_prompt(
+            Some("free"),
+            "Hello",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+            Some("   "),
+        );
+        assert!(!p.contains("User preference instructions"));
     }
 
     #[test]
@@ -358,6 +415,7 @@ mod tests {
             None,
             SkillMentionStyle::InjectedOnly,
             &[],
+            None,
             None,
         );
         assert!(p.contains("You are an assistant"));
