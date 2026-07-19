@@ -118,7 +118,7 @@
 | File | Open Vault… | `⌘O` | 选择已有文件夹并打开 |
 | File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
 | File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
-| File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：先关当前文档 tab；无 tab 时关当前窗口（非系统 CloseWindow） |
+| File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：设置打开时先关设置；否则先关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
 | agentero | Settings… | `⌘,` | 设置 sheet |
 
 **窗口与路径状态**（`src/lib/vault.ts`）：
@@ -160,7 +160,7 @@
     - **删除**：节点离开文档且 managed `./assets/` URL 引用计数归零 → 删磁盘文件 → 刷新文件树（`onAssetsChanged`）。
     - 实现：`src/lib/markdown-image.ts`、`markdown-editor.tsx`、`image-node.tsx`、`editor-toolbar.tsx`；i18n `editor:toolbar.image` / `editor:image.*`。
     - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
-  - **Notes 显示开关 / 快速打开 / 关闭文档**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前文档为中间栏 header 右侧的 `X`（`closeDocument`）→ 关闭当前标签（等价 `⌘W`）；论文库视图与欢迎页不显示。
+  - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
@@ -226,6 +226,7 @@
 | `⌘/` | 键盘快捷键速查 | 打开快捷键清单对话框（`ShortcutsDialog`） |
 | `⌘K` / `⌘P` | 命令面板：搜索 / 快速打开 | 无 Vault 时提示先打开 Vault；有 Vault 时：论文标题·作者·id **即时** quick-open + 去抖 `vault_search` Markdown 全文（片段/行号；`papers/` 命中打开 paper）（`CommandPalette`；`shortcuts.ts` → `commandPalette`） |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
+| `⌘W` | 关闭 Settings（优先）/ 标签 / 窗口 | 设置打开时先关设置；否则关当前 tab；仅剩全库 Library 时关窗（File → Close 同源） |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |
 | `⇧⌘N` | Create vault… | 创建并初始化新 Vault（含 catalog） |
@@ -238,7 +239,6 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
-| `⌘W` | 关闭当前标签 / 窗口（`closeTab`） | 仅剩全库 Library 时关窗；否则关当前 tab，关空后自动全库（File → Close 同源） |
 | `⌥⌘→` / `⌥⌘←` | 下一 / 上一标签（`nextTab` / `prevTab`） | 在打开的文档标签间循环 |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
@@ -263,7 +263,7 @@
 - **默认页 = 全库 Library**：
   - 打开 Vault 无持久化 tab → `ensureFullLibraryTab()`。
   - 关 tab 后列表为空 → 自动打开全库（无「无标签」空态）。
-  - **`⌘W` / tab X**：仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
+  - **`⌘W` / tab X**：设置打开时**先关设置**；否则仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
 - **常驻挂载**：每个 tab 保持 mounted（非激活 `hidden`）；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
 - **状态派生**：`activeTab` 驱动路径 / 模式 / Notes；作用域 Library 的 `path` 为文件夹绝对路径，树高亮该组织夹。
 - **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。

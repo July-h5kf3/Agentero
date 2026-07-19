@@ -41,8 +41,6 @@
 		"layoutPanels": "面板",
 		"layoutLeftSidebar": "左侧边栏",
 		"layoutRightSidebar": "右侧边栏",
-		"closeDocument": "关闭",
-		"closeDocumentHint": "关闭当前标签",
 		"showNotes": "显示笔记",
 		"hideNotes": "隐藏笔记",
 		"showNotesHint": "显示笔记栏",

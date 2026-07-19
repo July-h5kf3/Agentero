@@ -41,8 +41,6 @@
 		"layoutPanels": "Panels",
 		"layoutLeftSidebar": "Left sidebar",
 		"layoutRightSidebar": "Right sidebar",
-		"closeDocument": "Close",
-		"closeDocumentHint": "Close tab",
 		"showNotes": "Show notes",
 		"hideNotes": "Hide notes",
 		"showNotesHint": "Show notes panel",

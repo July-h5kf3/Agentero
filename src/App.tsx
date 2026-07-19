@@ -5,7 +5,6 @@ import {
 	NotebookPen,
 	PanelTop,
 	Search,
-	X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -518,7 +517,9 @@ export default function App() {
 	}, []);
 
 	/**
-	 * ⌘W / File → Close: close the active document tab one at a time.
+	 * ⌘W / File → Close:
+	 * 1. Settings open → close settings (higher priority than tabs).
+	 * 2. Else close the active document tab one at a time.
 	 * Sole full-library tab → close window (Library is the default page).
 	 * Closing the last non-library tab reopens full Library via `closeTab`.
 	 * Debounced so macOS menu accelerator + keydown do not close two tabs at once.
@@ -540,6 +541,12 @@ export default function App() {
 		const now = Date.now();
 		if (now - lastCloseTabOrWindowAt.current < 80) return;
 		lastCloseTabOrWindowAt.current = now;
+
+		// Settings sheet takes priority over document tabs (keyboard + File → Close).
+		if (settingsOpenRef.current) {
+			setSettingsOpen(false);
+			return;
+		}
 
 		const list = tabsRef.current;
 		const sole = list.length === 1 ? list[0] : null;
@@ -2628,25 +2635,6 @@ export default function App() {
 															</TooltipContent>
 														</Tooltip>
 													) : null}
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																className="size-7 shrink-0"
-																aria-label={t("titlebar.closeDocument")}
-																onClick={() =>
-																	activeTabId && handleCloseTab(activeTabId)
-																}
-															>
-																<X className="size-3.5" />
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{t("titlebar.closeDocumentHint")}
-														</TooltipContent>
-													</Tooltip>
 												</>
 											)}
 										</div>

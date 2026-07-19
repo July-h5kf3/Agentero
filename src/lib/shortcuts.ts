@@ -187,10 +187,10 @@ export const SHORTCUTS: ShortcutDef[] = [
 	{
 		id: "closeTab",
 		group: "Navigation",
-		// ⌘W — close the active document tab; with no open tabs, close the window.
+		// ⌘W — if settings open, close settings first; else close active tab / window.
+		// Intentionally NOT whenSettingsClosed: settings takes priority over tabs.
 		key: "w",
 		meta: true,
-		whenSettingsClosed: true,
 	},
 	{
 		id: "nextTab",
