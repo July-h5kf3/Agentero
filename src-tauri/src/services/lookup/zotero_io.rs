@@ -214,6 +214,15 @@ async fn import_one_item(
     Ok(Some((path_rel, meta.title)))
 }
 
+/// Fetch Zotero-shaped items from Translator `/import` (used by local + remote vault import).
+pub(crate) async fn translator_import_items(
+    content: &str,
+    translator_base_url: Option<&str>,
+) -> Result<Vec<Value>, AppError> {
+    let base = resolve_base(translator_base_url);
+    translator_import(content, &base).await
+}
+
 async fn translator_import(content: &str, base: &str) -> Result<Vec<Value>, AppError> {
     let client = http_client(Duration::from_secs(60))?;
     let url = format!("{base}/import");

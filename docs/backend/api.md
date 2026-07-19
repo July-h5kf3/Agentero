@@ -139,7 +139,19 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
 
-**魔棒 / 资源下载**：`lookup_import` / `paper_download_assets` 在 `vaultPath` 为 `remote:<sessionId>` 时走远程桥（本机 staging → SFTP 上传 → catalog PUT），返回的 `paperDir` 为 `remote:<sessionId>/papers/…`。
+**入库入口与远程 Vault**：
+
+| 入口 | Command | 远程 `remote:…` |
+|---|---|---|
+| 魔棒标识符 | `lookup_import` | ✅ staging → SFTP → catalog PUT |
+| 补资源 Download | `paper_download_assets` | ✅ |
+| 本地 PDF | `paper_import_local_pdf` | ✅ 本机选 PDF → 上传远端 |
+| Bib/RIS 库导入 | `paper_import` | ✅ Translator → 上传远端 |
+| Zotero 桌面迁移 | `zotero_migrate` | ❌ 仅本地路径 |
+| Zotero Connector | HTTP `saveItems` | ❌ 远程会话不绑定 vault（明确错误） |
+| CLI import | `agentero import` | ❌ 仅本地 vault 路径 |
+
+返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
 
 Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
 

@@ -135,12 +135,23 @@ impl ConnectorController {
     }
 
     /// Update the Vault path used by `saveItems` (None when no vault open).
+    /// Remote vaults (`remote:…`) are not supported by the Connector HTTP server.
     pub fn set_vault(&self, vault_path: Option<String>) {
         if let Ok(mut g) = self.inner.lock() {
-            g.vault_path = vault_path
-                .map(|s| s.trim().to_string())
+            let raw = vault_path
+                .as_deref()
+                .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .map(PathBuf::from);
+                .map(|s| s.to_string());
+            let is_remote = raw.as_deref().is_some_and(|s| s.starts_with("remote:"));
+            // Connector only writes local dirs; clear binding for remote sessions.
+            g.vault_path = raw.filter(|s| !s.starts_with("remote:")).map(PathBuf::from);
+            if is_remote {
+                g.last_error = Some(
+                    "Zotero Connector saves require a local vault (remote vault is not supported)"
+                        .into(),
+                );
+            }
         }
         self.emit_status();
     }

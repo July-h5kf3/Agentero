@@ -826,6 +826,180 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// All remote-capable import paths via local-sim (network for bib/arxiv).
+    #[tokio::test]
+    async fn local_sim_all_import_methods() {
+        use crate::services::lookup::{
+            ImportLocalPdfArgs, LookupImportArgs, PaperDownloadAssetsArgs, PaperImportArgs,
+        };
+        use crate::services::remote::import_bridge;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agentero-all-import-{n}"));
+        std::fs::create_dir_all(root.join("papers")).unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("AGENTS.md"), "# t\n").unwrap();
+
+        let pdf_path = root.join("_fixture.pdf");
+        std::fs::write(
+            &pdf_path,
+            b"%PDF-1.1\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n",
+        )
+        .unwrap();
+
+        let reg = RemoteRegistry::new();
+        let info = reg
+            .connect(LOCAL_SIM_HOST, None, &root.to_string_lossy())
+            .await
+            .expect("connect");
+        let session = reg.get(&info.session_id).await.unwrap();
+        let mut report: Vec<(String, bool, String)> = Vec::new();
+
+        // 1) Local PDF import (no network)
+        match import_bridge::import_local_pdfs_remote(
+            session.clone(),
+            ImportLocalPdfArgs {
+                vault_path: info.vault_handle.clone(),
+                parent_dir: "papers".into(),
+                file_paths: vec![pdf_path.to_string_lossy().into()],
+            },
+        )
+        .await
+        {
+            Ok(r) => {
+                let ok = r.papers.len() == 1 && r.errors.is_empty();
+                report.push((
+                    "local PDF import".into(),
+                    ok,
+                    format!("papers={} errs={:?}", r.papers.len(), r.errors),
+                ));
+                if ok {
+                    assert!(root.join(&r.papers[0].path).join("NOTES.md").is_file());
+                }
+            }
+            Err(e) => report.push(("local PDF import".into(), false, e.to_string())),
+        }
+
+        // 2) Magic wand arXiv (network)
+        if std::env::var("AGENTERO_SKIP_NETWORK").is_err() {
+            match import_bridge::import_by_identifier_remote(
+                session.clone(),
+                LookupImportArgs {
+                    vault_path: info.vault_handle.clone(),
+                    parent_dir: "papers".into(),
+                    text: "1602.07360".into(), // MobileNets - smaller
+                    translator_base_url: None,
+                },
+            )
+            .await
+            {
+                Ok(r) => report.push((
+                    "magic-wand arXiv".into(),
+                    r.path.starts_with("papers/") && r.pdf,
+                    format!("path={} pdf={}", r.path, r.pdf),
+                )),
+                Err(e) => report.push(("magic-wand arXiv".into(), false, e.to_string())),
+            }
+
+            // 3) Bib import via translator
+            let bib = r#"@article{remoteSmoke2024,
+  title={Remote Bib Import Smoke},
+  author={Doe, Jane},
+  year={2024},
+  journal={Smoke J}
+}
+"#;
+            match import_bridge::import_catalog_remote(
+                session.clone(),
+                PaperImportArgs {
+                    vault_path: info.vault_handle.clone(),
+                    parent_dir: Some("papers".into()),
+                    content: bib.into(),
+                    translator_base_url: None,
+                },
+            )
+            .await
+            {
+                Ok(r) => report.push((
+                    "bib/RIS catalog import".into(),
+                    r.imported >= 1 || r.skipped >= 1,
+                    format!(
+                        "imported={} skipped={} errs={:?}",
+                        r.imported, r.skipped, r.errors
+                    ),
+                )),
+                Err(e) => report.push(("bib/RIS catalog import".into(), false, e.to_string())),
+            }
+
+            // 4) Download assets for local-pdf paper if any
+            if let Ok(list) = crate::services::catalog::papers::list_all(&session.work_root) {
+                if let Some(p) = list.first() {
+                    match import_bridge::download_paper_assets_remote(
+                        session.clone(),
+                        PaperDownloadAssetsArgs {
+                            vault_path: info.vault_handle.clone(),
+                            path: p.path.clone(),
+                        },
+                    )
+                    .await
+                    {
+                        Ok(r) => report.push((
+                            "download assets".into(),
+                            true,
+                            format!("pdf={} tex={} msgs={:?}", r.pdf, r.tex, r.messages),
+                        )),
+                        Err(e) => report.push(("download assets".into(), false, e.to_string())),
+                    }
+                }
+            }
+        } else {
+            report.push((
+                "magic-wand arXiv".into(),
+                true,
+                "skipped (no network)".into(),
+            ));
+            report.push((
+                "bib/RIS catalog import".into(),
+                true,
+                "skipped (no network)".into(),
+            ));
+            report.push((
+                "download assets".into(),
+                true,
+                "skipped (no network)".into(),
+            ));
+        }
+
+        // 5) Rescan-style list
+        let listed = crate::services::catalog::papers::list_all(&session.work_root).unwrap();
+        report.push((
+            "catalog list after imports".into(),
+            !listed.is_empty(),
+            format!("count={}", listed.len()),
+        ));
+
+        eprintln!("\n=== IMPORT METHOD MATRIX ===");
+        let mut failed = 0usize;
+        for (name, ok, detail) in &report {
+            eprintln!(
+                "  {}  {} — {}",
+                if *ok { "PASS" } else { "FAIL" },
+                name,
+                detail
+            );
+            if !ok {
+                failed += 1;
+            }
+        }
+        reg.disconnect(&info.session_id).await.ok();
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(failed, 0, "import method failures: {report:?}");
+    }
+
     /// Live SSH magic-wand import smoke (env-driven; needs network).
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]

@@ -6,12 +6,13 @@ use crate::services::catalog::papers::{self, PaperRecord};
 use crate::services::fs::{VaultFs, WriteOpts};
 use crate::services::lookup::parse::extract_arxiv_id;
 use crate::services::lookup::{
-    enrich_remote_urls, ensure_paper_assets, normalize_parent_dir, paper_record_from_meta,
-    resolve_metadata, write_paper_shell, AssetDownloadResult, LookupImportArgs, LookupImportResult,
-    PaperDownloadAssetsArgs, DEFAULT_TRANSLATOR_BASE_URL,
+    enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
+    paper_record_from_meta, resolve_metadata, write_paper_shell, AssetDownloadResult,
+    ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs, LookupImportResult,
+    PaperDownloadAssetsArgs, PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use walkdir::WalkDir;
 
@@ -170,6 +171,238 @@ pub async fn download_paper_assets_remote(
     }
 
     Ok(result)
+}
+
+/// Import local PDF files into a remote vault (copy from user machine → stage → SFTP).
+pub async fn import_local_pdfs_remote(
+    session: Arc<RemoteSession>,
+    args: ImportLocalPdfArgs,
+) -> Result<ImportLocalPdfResult, AppError> {
+    let parent_rel = normalize_parent_dir(&args.parent_dir)?;
+    let mut papers_out = Vec::new();
+    let mut errors = Vec::new();
+
+    for src in &args.file_paths {
+        match import_one_local_pdf_remote(session.clone(), &parent_rel, src).await {
+            Ok(r) => papers_out.push(r),
+            Err(e) => {
+                let name = Path::new(src.trim())
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(src.as_str());
+                errors.push(format!("{name}: {e}"));
+            }
+        }
+    }
+    if papers_out.is_empty() && !errors.is_empty() {
+        return Err(AppError::message(errors.join("; ")));
+    }
+    {
+        let mut cat = session.catalog.lock().await;
+        cat.push(session.fs.clone()).await?;
+    }
+    Ok(ImportLocalPdfResult {
+        papers: papers_out,
+        errors,
+    })
+}
+
+async fn import_one_local_pdf_remote(
+    session: Arc<RemoteSession>,
+    parent_rel: &str,
+    src_path: &str,
+) -> Result<LookupImportResult, AppError> {
+    let src = PathBuf::from(src_path.trim());
+    if !src.is_file() {
+        return Err(AppError::message("file not found"));
+    }
+    let is_pdf = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    if !is_pdf {
+        return Err(AppError::message("not a PDF file"));
+    }
+
+    let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("paper");
+    let title = title_from_stem(stem);
+    let base_id = slug_from_stem(stem);
+    let (id, path_rel) =
+        unique_remote_paper_path(session.fs.as_ref(), parent_rel, &base_id).await?;
+
+    let staging = session.work_root.join(&path_rel);
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    fs::create_dir_all(&staging)?;
+    fs::copy(&src, staging.join(format!("{id}.pdf")))
+        .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
+
+    let meta = crate::services::lookup::local_pdf_meta_for_import(id.clone(), title);
+    write_paper_shell(&staging, &meta).await?;
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(&session.work_root, &record)?;
+
+    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+        &session.work_root,
+        &path_rel,
+        &staging,
+    )
+    .await;
+
+    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
+
+    Ok(LookupImportResult {
+        paper_dir: format!("remote:{}/{}", session.id, path_rel),
+        path: path_rel,
+        id: meta.id,
+        title: meta.title,
+        used_translator: false,
+        translator_base_url: String::new(),
+        pdf: true,
+        tex: false,
+        paper_md: parse.paper_md,
+        asset_messages: parse.messages,
+    })
+}
+
+/// BibTeX / RIS / … import via Translator into remote vault.
+pub async fn import_catalog_remote(
+    session: Arc<RemoteSession>,
+    args: PaperImportArgs,
+) -> Result<PaperImportResult, AppError> {
+    let content = args.content.trim();
+    if content.is_empty() {
+        return Err(AppError::message("import content is empty"));
+    }
+    let parent_rel = normalize_parent_dir(args.parent_dir.as_deref().unwrap_or("papers"))?;
+    let items = crate::services::lookup::zotero_io::translator_import_items(
+        content,
+        args.translator_base_url.as_deref(),
+    )
+    .await?;
+
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    let mut paths = Vec::new();
+    let mut titles = Vec::new();
+    let mut errors = Vec::new();
+
+    for item in items {
+        match import_one_zotero_item_remote(session.clone(), &parent_rel, &item).await {
+            Ok(Some((path, title))) => {
+                imported += 1;
+                paths.push(path);
+                titles.push(title);
+            }
+            Ok(None) => skipped += 1,
+            Err(e) => errors.push(e.to_string()),
+        }
+    }
+
+    {
+        let mut cat = session.catalog.lock().await;
+        cat.push(session.fs.clone()).await?;
+    }
+
+    Ok(PaperImportResult {
+        imported,
+        skipped,
+        paths,
+        titles,
+        errors,
+    })
+}
+
+async fn import_one_zotero_item_remote(
+    session: Arc<RemoteSession>,
+    parent_rel: &str,
+    item: &serde_json::Value,
+) -> Result<Option<(String, String)>, AppError> {
+    let mut meta = map_zotero_item(item)?;
+    enrich_remote_urls(&mut meta);
+    let base_id = meta.id.clone();
+    if base_id.is_empty() {
+        return Err(AppError::message("imported item has empty id"));
+    }
+
+    // Skip if catalog already has this path or NOTES exists remotely
+    let candidate = format!("{parent_rel}/{base_id}");
+    if papers::get_by_path(&session.work_root, &candidate)?.is_some()
+        || session
+            .fs
+            .exists(&format!("{candidate}/NOTES.md"))
+            .await
+            .unwrap_or(false)
+    {
+        return Ok(None);
+    }
+
+    let (id, path_rel) =
+        unique_remote_paper_path(session.fs.as_ref(), parent_rel, &base_id).await?;
+    meta.id = id.clone();
+
+    let staging = session.work_root.join(&path_rel);
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    fs::create_dir_all(&staging)?;
+    write_paper_shell(&staging, &meta).await?;
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(&session.work_root, &record)?;
+
+    let _ = ensure_paper_assets(
+        &staging,
+        &id,
+        meta.arxiv_id.as_deref(),
+        meta.pdf_url.as_deref(),
+        meta.doi.as_deref(),
+    )
+    .await;
+    let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+        &session.work_root,
+        &path_rel,
+        &staging,
+    )
+    .await;
+
+    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
+    Ok(Some((path_rel, meta.title)))
+}
+
+fn slug_from_stem(stem: &str) -> String {
+    let mut s = String::new();
+    let mut prev_sep = true;
+    for c in stem.trim().chars() {
+        if c.is_ascii_alphanumeric() || c == '.' {
+            s.push(c);
+            prev_sep = false;
+        } else if !prev_sep {
+            s.push('-');
+            prev_sep = true;
+        }
+    }
+    let s: String = s.chars().take(60).collect();
+    let s = s.trim_matches(|c| c == '-' || c == '.').to_string();
+    if s.is_empty() {
+        "paper".into()
+    } else {
+        s
+    }
+}
+
+fn title_from_stem(stem: &str) -> String {
+    let spaced: String = stem
+        .trim()
+        .chars()
+        .map(|c| if c == '_' { ' ' } else { c })
+        .collect();
+    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "Untitled".into()
+    } else {
+        collapsed
+    }
 }
 
 async fn unique_remote_paper_path(

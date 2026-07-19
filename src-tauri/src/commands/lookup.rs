@@ -80,12 +80,30 @@ pub async fn paper_download_assets(
 
 /// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).
 #[tauri::command]
-pub async fn paper_import_local_pdf(args: ImportLocalPdfArgs) -> ApiResult<ImportLocalPdfResult> {
+pub async fn paper_import_local_pdf(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: ImportLocalPdfArgs,
+) -> Result<ApiResult<ImportLocalPdfResult>, String> {
     let n = args.file_paths.len();
     let op = OpTimer::start_with("paper_import_local_pdf", format!("count={n}"));
-    op.finish_result_ok_extra(lookup::import_local_pdfs(args).await, |r| {
-        format!("imported={} errors={}", r.papers.len(), r.errors.len())
-    })
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(op.finish_result_ok_extra(
+            import_bridge::import_local_pdfs_remote(session, args).await,
+            |r| format!("imported={} errors={}", r.papers.len(), r.errors.len()),
+        ));
+    }
+    Ok(
+        op.finish_result_ok_extra(lookup::import_local_pdfs(args).await, |r| {
+            format!("imported={} errors={}", r.papers.len(), r.errors.len())
+        }),
+    )
 }
 
 /// Generate PAPER.md from local PDF via liteparse when the paper has no TeX.
@@ -106,9 +124,27 @@ pub async fn paper_export(args: PaperExportArgs) -> ApiResult<PaperExportResult>
 
 /// Import BibTeX/RIS/… via Translator `POST /import`, write papers into vault + catalog.
 #[tauri::command]
-pub async fn paper_import(args: PaperImportArgs) -> ApiResult<PaperImportResult> {
+pub async fn paper_import(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: PaperImportArgs,
+) -> Result<ApiResult<PaperImportResult>, String> {
     let op = OpTimer::start("paper_import");
-    op.finish_result_ok_extra(lookup::import_catalog(args).await, |r| {
-        format!("imported={} skipped={}", r.imported, r.skipped)
-    })
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(op.finish_result_ok_extra(
+            import_bridge::import_catalog_remote(session, args).await,
+            |r| format!("imported={} skipped={}", r.imported, r.skipped),
+        ));
+    }
+    Ok(
+        op.finish_result_ok_extra(lookup::import_catalog(args).await, |r| {
+            format!("imported={} skipped={}", r.imported, r.skipped)
+        }),
+    )
 }
