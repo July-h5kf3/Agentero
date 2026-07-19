@@ -84,6 +84,7 @@ cargo test -p agentero-cli
 - `docs/backend/wikilinks.md`：双链、反链与图谱设计。
 - `docs/backend/data-model.md`：Vault 文件模型。
 - `docs/backend/catalog.md`：论文目录库（`.agentero/catalog.sqlite`）与导出。
+- `docs/backend/paper-import-pipeline.md`：多入口入库现状与统一 `paper_commit` / `afterPaperImport` 设计。
 - `docs/development/index.md`：产品、路线图、开发和发布流程入口。
 - `docs/development/roadmap.md`：实现状态与路线图。
 - `docs/development/todo.md`：可执行 backlog。

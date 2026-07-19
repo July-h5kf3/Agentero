@@ -32,7 +32,7 @@ Agentero 桌面应用
 | 分层 | 目录 | 说明 |
 |---|---|---|
 | 前端 | [`frontend/`](frontend/index.md) | 工作台 UI、组件约定、AI Elements 接入、右侧栏行为。 |
-| 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、Catalog SQLite、双链/反链/图谱索引。 |
+| 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、Catalog SQLite、双链/反链/图谱索引、[入库流水线](backend/paper-import-pipeline.md)。 |
 | 测试 | [`test/`](test/index.md) | 前端 Vitest、Rust 单测、临时 Vault fixture 与验证策略。 |
 | 开发 | [`development/`](development/index.md) | 产品需求、路线图、实现 backlog、发布与开发流程。 |
 | Bug 修复 | [`bug_fix/`](bug_fix/deepseek-thinking-body.md) | 已修复问题的现象、根因、方案与参考资料。 |

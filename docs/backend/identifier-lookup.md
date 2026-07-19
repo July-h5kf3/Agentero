@@ -9,7 +9,8 @@
 - 入库命令与事件：[`api.md`](api.md) §3.5
 - Vault 文件模型：[`data-model.md`](data-model.md)
 - UI：[`../frontend/ui.md`](../frontend/ui.md)
-- **浏览器一键保存（规划）**：官方 Zotero Connector → 本机兼容服务 — [`connector.md`](connector.md)（与魔棒并存；元数据映射复用 `map_zotero_item`）
+- **浏览器一键保存**：官方 Zotero Connector → 本机兼容服务 — [`connector.md`](connector.md)（与魔棒并存；元数据映射复用 `map_zotero_item`）
+- **多入口入库统一方案**（魔棒 / Connector / 本地 PDF / Bib / 迁移 / CLI）— [`paper-import-pipeline.md`](paper-import-pipeline.md)
 
 ---
 

@@ -336,6 +336,7 @@ import paper（魔棒 lookup_import）
 - [`data-model.md`](data-model.md) — Vault 分层与类型
 - [`api.md`](api.md) — `paper_list` / `paper_get` / `lookup_import` 等已落地契约 + 规划扩展
 - [`identifier-lookup.md`](identifier-lookup.md) — 魔棒元数据 → catalog 写入路径
+- [`paper-import-pipeline.md`](paper-import-pipeline.md) — 多入口入库统一（`paper_commit` / 去重 / 前端后置）
 - [`../frontend/ui.md`](../frontend/ui.md) — 论文库表格与虚拟 Library 节点
 - [`../development/technical-plan.md`](../development/technical-plan.md) — 模块与依赖
 - [`../development/roadmap.md`](../development/roadmap.md) — 版本交付
