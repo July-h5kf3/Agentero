@@ -735,6 +735,141 @@ pub struct RemoteAgentBin {
     pub path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteAgentScanArgs {
+    pub session_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteHostIdentityArgs {
+    pub session_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteHostIdentity {
+    pub session_id: String,
+    pub destination: String,
+    /// `macos` | `windows` | `linux` | `other`
+    pub os: String,
+    /// Raw `uname -s` (or local-sim compile target).
+    pub uname: String,
+}
+
+/// Best-effort remote OS family for Settings host badge icons.
+#[tauri::command]
+pub async fn remote_host_identity(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteHostIdentityArgs,
+) -> Result<ApiResult<RemoteHostIdentity>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    if session.kind == "local-sim" {
+        let os = if cfg!(target_os = "macos") {
+            "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "linux") {
+            "linux"
+        } else {
+            "other"
+        };
+        return Ok(ApiResult::ok(RemoteHostIdentity {
+            session_id: args.session_id,
+            destination: "local-sim".into(),
+            os: os.into(),
+            uname: std::env::consts::OS.into(),
+        }));
+    }
+    let destination = session.host.clone();
+    match agent_exec::remote_uname(&destination).await {
+        Ok((uname, os)) => Ok(ApiResult::ok(RemoteHostIdentity {
+            session_id: args.session_id,
+            destination,
+            os,
+            uname,
+        })),
+        Err(e) => Ok(map_err(e)),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteAgentProbeArgs {
+    pub session_id: String,
+    pub template_id: String,
+}
+
+/// Catalog-style scan of common agents on the remote host (`command -v`).
+#[tauri::command]
+pub async fn remote_agent_scan(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteAgentScanArgs,
+) -> Result<ApiResult<crate::services::remote::agent_catalog::RemoteAgentScanResponse>, String> {
+    let op = OpTimer::start_with(
+        "remote_agent_scan",
+        format!("session={}", trunc(&args.session_id, 40)),
+    );
+    match crate::services::remote::agent_catalog::scan_remote_agents(
+        registry.inner(),
+        &args.session_id,
+    )
+    .await
+    {
+        Ok(r) => {
+            op.finish_ok_extra(format!("entries={}", r.entries.len()));
+            Ok(ApiResult::ok(r))
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            Ok(map_err(e))
+        }
+    }
+}
+
+/// ACP initialize probe for one catalog template on the remote vault host.
+#[tauri::command]
+pub async fn remote_agent_probe(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteAgentProbeArgs,
+) -> Result<ApiResult<crate::models::agent::ProbeResult>, String> {
+    let op = OpTimer::start_with(
+        "remote_agent_probe",
+        format!(
+            "session={} template={}",
+            trunc(&args.session_id, 40),
+            trunc(&args.template_id, 40)
+        ),
+    );
+    match crate::services::remote::agent_catalog::probe_remote_template(
+        registry.inner(),
+        &args.session_id,
+        &args.template_id,
+    )
+    .await
+    {
+        Ok(r) => {
+            if r.available {
+                op.finish_ok();
+            } else {
+                op.finish_ok_extra(format!(
+                    "fail={}",
+                    trunc(r.error.as_deref().unwrap_or("?"), 80)
+                ));
+            }
+            Ok(ApiResult::ok(r))
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            Ok(map_err(e))
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn remote_agent_discover(
     registry: State<'_, Arc<RemoteRegistry>>,

@@ -14,6 +14,7 @@ pub mod services;
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
+use services::app_settings::AppSettingsStore;
 use services::connector::ConnectorController;
 use services::remote::RemoteRegistry;
 use services::watcher::FsWatchController;
@@ -177,6 +178,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(build_log_plugin().build())
+        .manage(AppSettingsStore::load())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(services::agent::PermissionGate::new())
@@ -185,6 +187,10 @@ pub fn run() {
         .manage(Arc::new(ConnectorController::new()))
         .manage(Arc::new(RemoteRegistry::new()))
         .invoke_handler(tauri::generate_handler![
+            commands::settings::settings_get,
+            commands::settings::settings_set,
+            commands::settings::settings_path,
+            commands::settings::host_identity,
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
             commands::agent::agent_list_skills,
@@ -230,6 +236,9 @@ pub fn run() {
             commands::remote::remote_cache_stats,
             commands::remote::remote_cache_clear,
             commands::remote::remote_agent_discover,
+            commands::remote::remote_agent_scan,
+            commands::remote::remote_agent_probe,
+            commands::remote::remote_host_identity,
             commands::terminal::path_open_in_terminal,
             commands::trash::path_trash,
             commands::trash::path_untrash,

@@ -605,9 +605,27 @@ async fn await_user_permission(
 }
 
 /// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
-pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
+/// When `remote` is set, the agent process is launched on the remote host (SSH).
+pub async fn probe_agent(
+    desc: &AgentDescriptor,
+    remote: Option<&crate::services::remote::RemoteAgentTarget>,
+) -> ProbeResult {
     let agent_id = desc.id.clone();
-    let acp = match to_acp_agent(desc, None) {
+    if remote.is_some_and(|r| r.is_ssh())
+        && desc.template == crate::models::agent::AgentTemplate::CodexAcp
+    {
+        return ProbeResult {
+            agent_id,
+            available: false,
+            agent_name: None,
+            protocol_version: None,
+            error: Some(
+                "Codex on remote SSH vault is not supported yet; use an ACP agent (OpenCode / Claude) installed on the server"
+                    .into(),
+            ),
+        };
+    }
+    let acp = match to_acp_agent(desc, remote) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

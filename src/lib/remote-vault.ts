@@ -294,6 +294,73 @@ export async function remoteAgentDiscover(sessionId: string): Promise<{
 	);
 }
 
+/** Catalog-style scan of common agents on the remote host. */
+export type RemoteAgentScanResponse = {
+	sessionId: string;
+	destination: string;
+	entries: import("@/lib/agent").CatalogEntry[];
+};
+
+export async function remoteAgentScan(
+	sessionId: string,
+): Promise<RemoteAgentScanResponse> {
+	return unwrap(
+		invoke<ApiResult<RemoteAgentScanResponse>>("remote_agent_scan", {
+			args: { sessionId },
+		}),
+		"Failed to scan remote agents",
+	);
+}
+
+/** ACP initialize probe for one catalog template on the remote host. */
+export async function remoteAgentProbe(
+	sessionId: string,
+	templateId: string,
+): Promise<import("@/lib/agent").ProbeResult> {
+	return unwrap(
+		invoke<ApiResult<import("@/lib/agent").ProbeResult>>("remote_agent_probe", {
+			args: { sessionId, templateId },
+		}),
+		"Failed to probe remote agent",
+	);
+}
+
+export type HostOsKind = "macos" | "windows" | "linux" | "other";
+
+export type HostIdentity = {
+	hostname: string;
+	label: string;
+	/** Guest OS family for brand icon. */
+	os: HostOsKind | string;
+};
+
+/** Local machine hostname for Settings host badge. */
+export async function fetchHostIdentity(): Promise<HostIdentity> {
+	return unwrap(
+		invoke<ApiResult<HostIdentity>>("host_identity"),
+		"Failed to read host identity",
+	);
+}
+
+export type RemoteHostIdentity = {
+	sessionId: string;
+	destination: string;
+	os: HostOsKind | string;
+	uname: string;
+};
+
+/** Remote OS family (`uname -s`) for Settings host badge. */
+export async function fetchRemoteHostIdentity(
+	sessionId: string,
+): Promise<RemoteHostIdentity> {
+	return unwrap(
+		invoke<ApiResult<RemoteHostIdentity>>("remote_host_identity", {
+			args: { sessionId },
+		}),
+		"Failed to read remote host identity",
+	);
+}
+
 /** Download a remote file into Host cache; returns local absolute path. */
 export async function remoteCacheFile(
 	sessionId: string,

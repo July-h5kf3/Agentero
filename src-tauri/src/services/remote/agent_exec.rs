@@ -60,6 +60,52 @@ pub async fn spawn_remote_agent(
         .map_err(|e| AppError::message(format!("ssh spawn agent: {e}")))
 }
 
+/// Remote kernel name via `uname -s` (login shell), mapped to a Settings OS family.
+/// Returns `(raw_uname, os)` where `os` is `macos` | `windows` | `linux` | `other`.
+pub async fn remote_uname(destination: &str) -> Result<(String, String), AppError> {
+    let remote = format!("bash -lc {}", shell_quote("uname -s"));
+    let output = Command::new("ssh")
+        .arg("-T")
+        .arg("-o")
+        .arg("BatchMode=yes")
+        .arg("-o")
+        .arg("ConnectTimeout=15")
+        .arg(destination)
+        .arg(remote)
+        .output()
+        .await
+        .map_err(|e| AppError::message(format!("ssh uname: {e}")))?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(AppError::message(if err.is_empty() {
+            "ssh uname failed".into()
+        } else {
+            format!("ssh uname: {err}")
+        }));
+    }
+    let uname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let os = map_uname_to_os(&uname);
+    Ok((uname, os))
+}
+
+fn map_uname_to_os(uname: &str) -> String {
+    let u = uname.to_ascii_lowercase();
+    if u.contains("darwin") {
+        "macos".into()
+    } else if u.contains("linux") {
+        "linux".into()
+    } else if u.contains("mingw")
+        || u.contains("msys")
+        || u.contains("cygwin")
+        || u.contains("windows_nt")
+        || u.contains("windows")
+    {
+        "windows".into()
+    } else {
+        "other".into()
+    }
+}
+
 /// Discover whether a binary exists on the remote host (`command -v` in login shell).
 pub async fn remote_which(destination: &str, bin: &str) -> Result<Option<String>, AppError> {
     // login shell so ~/.local/bin and user profile PATH apply (BatchMode SSH is non-login).
@@ -107,5 +153,13 @@ mod tests {
         assert!(s.contains("bash -lc"));
         assert!(s.contains("/tmp/my vault"));
         assert!(s.contains("my agent"));
+    }
+
+    #[test]
+    fn maps_uname_families() {
+        assert_eq!(map_uname_to_os("Darwin"), "macos");
+        assert_eq!(map_uname_to_os("Linux"), "linux");
+        assert_eq!(map_uname_to_os("MINGW64_NT-10.0"), "windows");
+        assert_eq!(map_uname_to_os("FreeBSD"), "other");
     }
 }

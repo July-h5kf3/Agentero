@@ -192,7 +192,7 @@ pub async fn agent_probe(
     let result = if desc.template == AgentTemplate::CodexAcp {
         probe_codex(&desc).await
     } else {
-        probe_agent(&desc).await
+        probe_agent(&desc, None).await
     };
     let _ = registry.apply_probe_result(&id, &result);
     Ok(ApiResult::ok(result))
@@ -251,7 +251,7 @@ pub async fn agent_probe_catalog(
     let result = if desc.template == AgentTemplate::CodexAcp {
         probe_codex(&desc).await
     } else {
-        probe_agent(&desc).await
+        probe_agent(&desc, None).await
     };
     let _ = registry.apply_probe_result(&desc.id, &result);
     Ok(ApiResult::ok(result))

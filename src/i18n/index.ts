@@ -1,6 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import { type LocalePreference, loadSettings } from "@/lib/settings";
+import type { LocalePreference } from "@/lib/settings";
 
 import enAgent from "./locales/en/agent.json";
 import enAiElements from "./locales/en/aiElements.json";
@@ -61,20 +61,16 @@ export function resolveLocale(pref: LocalePreference): Locale {
 	return nav.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
-const initialLocale = resolveLocale(loadSettings().locale);
-
+// Locale is applied in `main.tsx` after `ensureSettingsLoaded()` (XDG file).
+// Boot with English until then to avoid a flash of the wrong language on first paint.
 i18n.use(initReactI18next).init({
 	resources,
-	lng: initialLocale,
+	lng: "en",
 	fallbackLng: "en",
 	defaultNS: DEFAULT_NS,
 	ns: Object.keys(resources.en),
 	interpolation: { escapeValue: false },
 	returnNull: false,
 });
-
-if (typeof document !== "undefined") {
-	document.documentElement.lang = initialLocale;
-}
 
 export default i18n;

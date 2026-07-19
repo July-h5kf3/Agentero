@@ -498,11 +498,12 @@ fn chrono_like_now() -> String {
 }
 
 fn config_path() -> PathBuf {
-    let base = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("agentero");
-    let _ = fs::create_dir_all(&base);
-    base.join("agents.json")
+    let path = crate::services::paths::agents_path();
+    crate::services::paths::migrate_legacy_file("agents.json", &path);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    path
 }
 
 fn read_state(path: &PathBuf) -> Result<AgentRegistryState, AppError> {
