@@ -3106,6 +3106,8 @@ export default function App() {
 										vaultMarkdownPaths={vaultMdFiles}
 										vaultDirectoryPaths={vaultDirPaths}
 										vaultPaperPaths={vaultPaperPaths}
+										paperMetaByRelPath={paperMetaByRelPath}
+										paperTreeLabelMode={settings.paperTreeLabelMode}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
 										variant={agentZenMode ? "zen" : "sidebar"}

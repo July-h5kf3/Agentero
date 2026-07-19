@@ -263,6 +263,8 @@
 | `⌘R` | 刷新文件树 | 刷新当前视图 |
 | `⌥⌘R` | 在 Finder 中显示 | 右键或快捷键定位当前选中文件/文件夹（无双击）；`shortcuts.ts` → `revealInFinder` |
 | `⌥⌘T` | 在终端中打开 | 文件夹 = 自身 cwd，文件 = 父目录；系统默认终端；`shortcuts.ts` → `openInTerminal` |
+| `⌘←` | 折叠选中文件夹 | `collapseTreeCurrent`：已展开的组织夹折叠自身；叶子 / 已折叠则折最近展开的父级（对齐 VS Code `list.collapse` 心智）。编辑区不拦截（保留 ⌘← 行首） |
+| `⇧⌘←` | 折叠文件树至默认 | `collapseTreeDefault`：仅展开 `papers/` 及其一级子目录（与打开 Vault 时一致）；更深嵌套与 `notes/` 等收起。编辑区不拦截 |
 | `⌘⌫` | 删除选中项 | 文件树选中项；移入回收站 `.agentero/.trash/`（**无确认 / 无 Undo toast**；从回收站视图恢复）；`papers/` 行随删随快照 catalog；编辑区不拦截 |
 | `⌥⌘S` | 显示 / 隐藏侧边栏 | 对齐 Mail / Preview 等侧边栏约定 |
 | `⌘B` | 显示 / 隐藏侧边栏（别名） | 兼容常见生产力应用 |
@@ -345,7 +347,7 @@ PromptInput → Body / Footer / Submit
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
-**上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 打开候选菜单：候选为 **论文文件夹 + 其它目录 + paper 外 Markdown**（paper 内 `NOTES.md` 等折叠为 paper 单元）；**空 `@`** 优先展示最近选用路径与浅层目录树（depth ≤ 2）；输入关键字按路径筛选。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+**上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 打开候选菜单：候选为 **论文文件夹 + 其它目录 + paper 外 Markdown**（paper 内 `NOTES.md` 等折叠为 paper 单元）；**空 `@`** 优先展示最近选用路径与浅层目录树（depth ≤ 2）；输入关键字按路径或论文显示名筛选。论文候选标签与文件树一致（设置 → 通用 `paperTreeLabelMode`：标题 · 作者等）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 > **不**接 AI Elements `Attachments` 做 Vault 上下文：那套组件面向 `FileUIPart` 二进制附件（`prompt-input` 已装未对 ACP 传文件）；本产品上下文是 **路径引用**，与 `@` chip / `composer.contextInstruction` 一致。
 

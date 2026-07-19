@@ -198,10 +198,15 @@ import {
 import {
 	contextPathDisplayName,
 	contextPathIcon,
+	contextPathLabel,
 	normalizeContextPath,
 	toPathSet,
 } from "@/lib/context-path-icon";
-import { paperDirFromPath } from "@/lib/paper-metadata";
+import {
+	type PaperMetadata,
+	type PaperTreeLabelMode,
+	paperDirFromPath,
+} from "@/lib/paper-metadata";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/papers-api";
 import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
@@ -226,6 +231,13 @@ type AgentPanelProps = {
 	 * Chips use the same ScrollText paper icon as the file tree.
 	 */
 	vaultPaperPaths?: string[];
+	/**
+	 * Catalog rows by vault-relative paper path — same source as the file tree.
+	 * Used so `@` / chips show paper titles per `paperTreeLabelMode`.
+	 */
+	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata> | null;
+	/** Settings → General: paper labels in file tree (display-only). */
+	paperTreeLabelMode?: PaperTreeLabelMode;
 	className?: string;
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
@@ -643,6 +655,8 @@ export function AgentPanel({
 	vaultMarkdownPaths = [],
 	vaultDirectoryPaths = [],
 	vaultPaperPaths = [],
+	paperMetaByRelPath = null,
+	paperTreeLabelMode = "title-author",
 	className,
 	headerActions,
 	autoFocus = false,
@@ -681,6 +695,31 @@ export function AgentPanel({
 		() => toPathSet(vaultPaperPaths),
 		[vaultPaperPaths],
 	);
+
+	/** Label options shared by chips and @ menu (matches file-tree settings). */
+	const pathLabelOptions = useMemo(
+		() => ({
+			paperPaths: paperPathSet,
+			paperMetaByRelPath,
+			paperTreeLabelMode,
+		}),
+		[paperMetaByRelPath, paperPathSet, paperTreeLabelMode],
+	);
+
+	const labelForPath = useCallback(
+		(path: string) => contextPathLabel(path, pathLabelOptions),
+		[pathLabelOptions],
+	);
+
+	/** Searchable labels for @ filter (paper titles, not only folder names). */
+	const mentionLabelsByPath = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const p of vaultPaperPaths) {
+			const label = contextPathLabel(p, pathLabelOptions);
+			if (label && label !== p) map.set(normalizeContextPath(p), label);
+		}
+		return map;
+	}, [pathLabelOptions, vaultPaperPaths]);
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -1504,15 +1543,19 @@ export function AgentPanel({
 	const currentFilePath =
 		includeSelectedFile && selectedVaultPath ? selectedVaultPath : null;
 
-	/** Prefer catalog paper title; fall back to paper folder / file basename. */
+	/** Same paper label mode as the file tree (settings); title fallback if meta missing. */
 	const currentFileLabel = useMemo(() => {
 		if (!currentFilePath) return "";
+		const labeled = labelForPath(currentFilePath);
+		if (labeled && labeled !== contextPathDisplayName(currentFilePath)) {
+			return labeled;
+		}
 		const title = selectedPaperTitle?.trim();
 		if (title && paperPathSet.has(normalizeContextPath(currentFilePath))) {
 			return title;
 		}
-		return contextPathDisplayName(currentFilePath);
-	}, [currentFilePath, paperPathSet, selectedPaperTitle]);
+		return labeled || contextPathDisplayName(currentFilePath);
+	}, [currentFilePath, labelForPath, paperPathSet, selectedPaperTitle]);
 
 	// Re-attach when the focused document/paper changes (user can still remove via X).
 	useEffect(() => {
@@ -1572,11 +1615,13 @@ export function AgentPanel({
 			query: mentionQuery,
 			exclude: contextPaths,
 			recent: recentMentionPaths,
+			labelsByPath: mentionLabelsByPath,
 			limit: 8,
 		});
 	}, [
 		contextPaths,
 		mentionCandidates,
+		mentionLabelsByPath,
 		mentionMatch,
 		mentionQuery,
 		recentMentionPaths,
@@ -3152,7 +3197,7 @@ export function AgentPanel({
 												</button>
 											) : null}
 											{mentionChipPaths.map((path) => {
-												const label = contextPathDisplayName(path);
+												const label = labelForPath(path);
 												return (
 													<button
 														key={path}
@@ -3210,7 +3255,7 @@ export function AgentPanel({
 											className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
 										>
 											{mentionOptions.map((path, index) => {
-												const label = contextPathDisplayName(path);
+												const label = labelForPath(path);
 												const showPathHint =
 													label !== path && path.includes("/");
 												return (

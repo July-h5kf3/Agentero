@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
 	contextPathDisplayName,
 	contextPathIcon,
+	contextPathLabel,
 	isDirectoryContextPath,
 	isPaperContextPath,
 	normalizeContextPath,
+	paperContextRoot,
 	toPathSet,
 } from "@/lib/context-path-icon";
 
@@ -22,6 +24,42 @@ describe("context-path-icon", () => {
 		expect(contextPathDisplayName("notes/ideas/todo.md")).toBe("todo.md");
 		expect(contextPathDisplayName("papers\\org\\foo\\")).toBe("foo");
 		expect(contextPathDisplayName("README.md")).toBe("README.md");
+	});
+
+	it("contextPathLabel uses file-tree paper label modes", () => {
+		const paper = "papers/org/1706.03762";
+		const papers = toPathSet([paper]);
+		const meta = new Map([
+			[
+				paper,
+				{
+					title: "Attention Is All You Need",
+					authors: ["Vaswani", "Shazeer"],
+					year: 2017,
+				},
+			],
+		]);
+		expect(paperContextRoot(`${paper}/NOTES.md`, papers)).toBe(paper);
+		expect(
+			contextPathLabel(paper, {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+				paperTreeLabelMode: "title-author",
+			}),
+		).toBe("Attention Is All You Need · Vaswani, Shazeer");
+		expect(
+			contextPathLabel(paper, {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+				paperTreeLabelMode: "folder",
+			}),
+		).toBe("1706.03762");
+		expect(
+			contextPathLabel("notes/todo.md", {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+			}),
+		).toBe("todo.md");
 	});
 
 	it("uses tree directory set for org folders without extension", () => {
