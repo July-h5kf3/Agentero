@@ -147,6 +147,7 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 |---|---|---|
 | 魔棒标识符 | `lookup_import` | ✅ staging → SFTP → catalog PUT |
 | 补资源 Download | `paper_download_assets` | ✅ |
+| 生成本地/远端 PAPER.md | `paper_parse_body` | ✅ 远端 pull PDF → liteparse → put |
 | 本地 PDF | `paper_import_local_pdf` | ✅ 本机选 PDF → 上传远端 |
 | Bib/RIS 库导入 | `paper_import` | ✅ Translator → 上传远端 |
 | Zotero 桌面迁移 | `zotero_migrate` | ❌ 仅本地路径 |

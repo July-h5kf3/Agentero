@@ -106,12 +106,28 @@ pub async fn paper_import_local_pdf(
     )
 }
 
-/// Generate PAPER.md from local PDF via liteparse when the paper has no TeX.
+/// Generate PAPER.md from PDF via liteparse when the paper has no TeX.
+/// Remote vaults: pull PDF to work mirror → parse → SFTP put `PAPER.md`.
 #[tauri::command]
-pub async fn paper_parse_body(args: PaperParseBodyArgs) -> ApiResult<PaperParseResult> {
+pub async fn paper_parse_body(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: PaperParseBodyArgs,
+) -> Result<ApiResult<PaperParseResult>, String> {
     let path = trunc(&args.path, 120);
     let op = OpTimer::start_with("paper_parse_body", format!("path={path}"));
-    op.finish_result(pdf_parse::parse_paper_body(args).await)
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(op.finish_result(
+            import_bridge::parse_paper_body_remote(session, &args.path, args.force).await,
+        ));
+    }
+    Ok(op.finish_result(pdf_parse::parse_paper_body(args).await))
 }
 
 /// Export catalog papers via Translator `POST /export` (Zotero JSON array → BibTeX/RIS/…).

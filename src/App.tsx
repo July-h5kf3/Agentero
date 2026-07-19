@@ -1668,7 +1668,9 @@ export default function App() {
 						}),
 					);
 					await refreshTree(vaultPath);
-					await rebuildWikiAndNotify(vaultPath);
+					if (!isRemoteVaultHandle(vaultPath)) {
+						await rebuildWikiAndNotify(vaultPath);
+					}
 					await refreshLibrary();
 					setProgress(100);
 					return r;

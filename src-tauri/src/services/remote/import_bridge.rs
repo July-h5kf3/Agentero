@@ -481,6 +481,78 @@ async fn pull_if_exists(
     Ok(())
 }
 
+/// Generate PAPER.md on a remote paper folder (pull PDF → liteparse → put).
+pub async fn parse_paper_body_remote(
+    session: Arc<RemoteSession>,
+    path_rel: &str,
+    force: bool,
+) -> Result<crate::services::pdf_parse::PaperParseResult, AppError> {
+    use crate::services::pdf_parse::{self, PaperParseBodyArgs};
+
+    let path_rel = path_rel
+        .trim()
+        .replace('\\', "/")
+        .trim_matches('/')
+        .to_string();
+    if path_rel.is_empty() || path_rel.split('/').any(|p| p == ".." || p.is_empty()) {
+        return Err(AppError::message("invalid paper path"));
+    }
+    if !session.fs.exists(&path_rel).await? {
+        return Err(AppError::message("paper folder not found"));
+    }
+
+    // Materialize remote paper into work_root for liteparse.
+    let staging = session.work_root.join(&path_rel);
+    let _ = fs::create_dir_all(&staging);
+    // Pull NOTES / common PDFs / existing PAPER.md
+    pull_if_exists(session.fs.as_ref(), &path_rel, &staging, "NOTES.md").await?;
+    pull_if_exists(session.fs.as_ref(), &path_rel, &staging, "PAPER.md").await?;
+    // List remote paper dir for PDFs
+    if let Ok(entries) = session.fs.list(&path_rel).await {
+        for e in entries {
+            if e.is_file && e.name.to_ascii_lowercase().ends_with(".pdf") {
+                pull_if_exists(session.fs.as_ref(), &path_rel, &staging, &e.name).await?;
+            }
+        }
+    }
+
+    let args = PaperParseBodyArgs {
+        vault_path: session.work_root.to_string_lossy().into_owned(),
+        path: path_rel.clone(),
+        force,
+    };
+    let result = pdf_parse::parse_paper_body(args).await?;
+    if result.paper_md {
+        let paper_md = staging.join("PAPER.md");
+        if paper_md.is_file() {
+            let bytes = fs::read(&paper_md)?;
+            session
+                .fs
+                .write(
+                    &format!("{path_rel}/PAPER.md"),
+                    &bytes,
+                    WriteOpts {
+                        create_parents: true,
+                    },
+                )
+                .await?;
+        }
+        // body_source/body_quality may be on catalog — push if work catalog changed
+        if let Ok(Some(mut row)) = papers::get_by_path(&session.work_root, &path_rel) {
+            if let Some(ref s) = result.body_source {
+                row.body_source = Some(s.clone());
+            }
+            if let Some(ref q) = result.body_quality {
+                row.body_quality = Some(q.clone());
+            }
+            let _ = papers::upsert_paper(&session.work_root, &row);
+            let mut cat = session.catalog.lock().await;
+            let _ = cat.push(session.fs.clone()).await;
+        }
+    }
+    Ok(result)
+}
+
 /// Allow catalog helpers to silence unused import warnings if PaperRecord used only via upsert.
 #[allow(dead_code)]
 fn _paper_record_type(_: &PaperRecord) {}
