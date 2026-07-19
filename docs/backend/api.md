@@ -137,6 +137,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - **只补缺失**：目录 / `AGENTS.md` / 模板里有而盘上没有的 skill 文件。
   - **从不覆盖**：用户改过的 `SKILL.md` 或 references 保持原样。
   - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
+  - 前端：若 `created` 含 `.agents/skills/<id>/…`，右上角 success toast（`vault.skillsSeeded`）提示新增 skill 名称；无新增则不打扰。
 
 #### `path_open_in_terminal`（已实现）
 

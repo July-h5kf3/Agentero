@@ -121,7 +121,8 @@
 		"openVaultButton": "Open vault…",
 		"createVaultButton": "Create vault",
 		"runTauriPrefix": "Run the app with",
-		"runTauriSuffix": "to open a vault."
+		"runTauriSuffix": "to open a vault.",
+		"skillsSeeded": "Installed {{count}} new skill(s): {{names}}"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"

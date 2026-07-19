@@ -121,7 +121,8 @@
 		"openVaultButton": "打开知识库…",
 		"createVaultButton": "创建知识库",
 		"runTauriPrefix": "运行",
-		"runTauriSuffix": "以打开知识库。"
+		"runTauriSuffix": "以打开知识库。",
+		"skillsSeeded": "已安装 {{count}} 个新技能：{{names}}"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"

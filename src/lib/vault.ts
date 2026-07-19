@@ -280,6 +280,20 @@ export async function ensureVault(path: string): Promise<CreateVaultResult> {
 	});
 }
 
+/**
+ * Skill package ids newly written under `.agents/skills/<id>/…`
+ * (from `CreateVaultResult.created`). Ignores top-level README/LICENSE.
+ */
+export function seededSkillIdsFromCreated(created: string[]): string[] {
+	const ids = new Set<string>();
+	for (const raw of created) {
+		const rel = raw.replace(/\\/g, "/");
+		const m = /^\.agents\/skills\/([^/]+)\//.exec(rel);
+		if (m?.[1]) ids.add(m[1]);
+	}
+	return [...ids].sort((a, b) => a.localeCompare(b));
+}
+
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
 	return buildTree(rootPath);
 }

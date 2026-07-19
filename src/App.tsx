@@ -166,6 +166,7 @@ import {
 	removeRecentVault,
 	resolveCreateParent,
 	saveVaultPath,
+	seededSkillIdsFromCreated,
 	vaultDisplayName,
 	vaultRelativePath,
 	writeVaultFile,
@@ -1095,13 +1096,29 @@ export default function App() {
 	/**
 	 * After app updates, seed any **new** bundled skills into `.agents/skills/`
 	 * (missing files only — never overwrite user edits). Runs on open / restore.
+	 * Toast only when at least one skill package was added.
 	 */
 	useEffect(() => {
 		if (!isTauri() || !vaultPath) return;
-		void ensureVault(vaultPath).catch(() => {
-			// Best-effort: opening the vault must not fail if seed is blocked.
-		});
-	}, [vaultPath]);
+		const path = vaultPath;
+		void ensureVault(path)
+			.then((result) => {
+				const skills = seededSkillIdsFromCreated(result.created);
+				if (skills.length === 0) return;
+				// Path may have changed while ensure was in flight.
+				if (vaultPathRef.current !== path) return;
+				notifySuccess(
+					t("vault.skillsSeeded", {
+						count: skills.length,
+						names: skills.join(", "),
+					}),
+					{ id: "vault-skills-seeded" },
+				);
+			})
+			.catch(() => {
+				// Best-effort: opening the vault must not fail if seed is blocked.
+			});
+	}, [vaultPath, t]);
 
 	const handleOpenVault = useCallback(async () => {
 		try {
