@@ -161,7 +161,7 @@ function TagChip({
 						: "bg-muted text-muted-foreground",
 				)}
 			>
-				#{tag}
+				{tag}
 			</span>
 		);
 	}
@@ -180,7 +180,7 @@ function TagChip({
 					: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
 			)}
 		>
-			#{tag}
+			{tag}
 		</button>
 	);
 }

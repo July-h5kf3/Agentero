@@ -170,7 +170,7 @@ function TagsEditor({
 								"text-[10px] text-muted-foreground",
 							)}
 						>
-							#{tag}
+							{tag}
 							{disabled ? null : (
 								<button
 									type="button"
