@@ -428,6 +428,8 @@
 - [x] **M3** ACP over SSH；skill materialize；notes-review；Codex-SSH 明确拒绝
 - [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
 - [x] 切换 Vault 时 disconnect 远程会话
+- [x] 侧栏「切换知识库」菜单：**打开远程…** + 最近远程 MRU（共用 `RemoteVaultDialog`）
+- [x] `remote:<sessionId>` 不写入本地 recent / restore-last（避免同一远端目录多条伪路径）
 - [x] i18n；[`api.md`](../backend/api.md) 远程 command 表
 - [x] **M4** 远端 recycle bin（`.agentero/.trash/` via SFTP，与本地语义对齐）
 - [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）

@@ -255,15 +255,19 @@ type RemoteAgentLaunch = {
 
 | 区域 | 行为 |
 |---|---|
-| 欢迎页 | **Open Remote Vault…**：选 SSH host（`~/.ssh/config` alias 优先）+ 远端路径 |
-| 最近列表 | `{ kind: "remote", host, remotePath, label }`，非本机绝对路径 |
-| 标题栏 | 远程徽章：`user@host:path`；连接中 / 重连 / 失败态 |
+| 欢迎页 | **Open remote…**（`RemoteVaultDialog`）：SSH host（`~/.ssh/config` alias 优先）+ 可选 user + 远端绝对路径 |
+| 侧栏切换知识库 | 同对话框 + 最近远程条目（`VaultSidebarHeader`）；与本地 Open / Create 并列 |
+| 最近远程 | `localStorage` `agentero-recent-remote-vaults`：`{ kind:"remote", host, user?, remotePath, label }` |
+| 最近本地 | **不得**收录 `remote:<sessionId>`（每次连接新 UUID；见 `rememberRecentVault` 过滤） |
+| 标题栏 / 树标题 | 远程展示 `displayName` + 「远程」徽章；会话内用伪路径 `remote:<sessionId>` |
 | 文件树 | 懒加载 list；隐藏 Finder / 系统终端菜单（`FsCaps`） |
-| Agent 面板 | 仅远端 transport；warm 显示 SSH 延迟 |
-| 设置 | 最近远程、默认 identity、缓存上限、「清除远程缓存」 |
+| Agent 面板 | 远端 transport；Codex+纯 SSH 暂拒 |
+| 设置 → 通用 | 「清除远程缓存」（blob LRU 2 GiB/库） |
 | i18n | 全部 `t()`；先 `en` 再 `zh-CN` |
 
 多窗口：每窗口独立 `RemoteSession`（对齐现有 vault session 隔离）。MVP **不**支持两窗口写同一 `host+remotePath`（可检测后警告）。
+
+**UI 细节**见 [`../frontend/ui.md`](../frontend/ui.md) §2.2 / §2.2.1。
 
 ---
 

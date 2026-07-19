@@ -2768,6 +2768,9 @@ export default function App() {
 										onRemoveRecent={handleRemoveRecentVault}
 										onOpenVault={() => void handleOpenVault()}
 										onCreateVault={() => void handleCreateVault()}
+										onOpenRemoteVault={(args) =>
+											void handleOpenRemoteVault(args)
+										}
 									/>
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">

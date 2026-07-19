@@ -106,10 +106,24 @@
 
 当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/vault-welcome.tsx`）：
 
-- **内容**：图标 + **Create vault** / **Open vault** / **Migrate from Zotero** 同一行按钮 + **Recent** 路径列表（可点打开，可从列表移除）。
+- **内容**：图标 + **Create vault** / **Open vault** / **Open remote…** / **Migrate from Zotero** 同一行按钮 + **Recent** 列表。
+- **Open remote…**：共用 `RemoteVaultDialog`（SSH host / 可选 user / 远端绝对路径）；成功后进入 `remote:<sessionId>` 会话。
+- **Recent**：本地绝对路径 + 远程条目（`host:remotePath` + 「远程」徽章）；可点打开 / 可从列表移除。
 - **从 Zotero 迁移**（欢迎页）：先选目录创建 Vault，再打开 `ZoteroMigrateDialog`（与论文库工具栏入口共用对话框）。
 - **不加**常驻说明文案、标题口号或快捷键提示（保持空状态极简）。
-- 点选最近路径时若目录不存在：提示错误并从列表剔除。
+- 点选最近**本地**路径时若目录不存在：提示错误并从列表剔除。
+
+### 2.2.1 侧栏切换知识库（有 Vault 时）
+
+左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/layout/file-tree.tsx`）为下拉菜单：
+
+| 区块 | 内容 |
+|---|---|
+| Recent | 远程 MRU（徽章）+ 本地 MRU；当前项 ✓；可单项移除 |
+| 操作 | **Open vault…** / **Open remote…** / **Create vault** |
+
+- **Open remote…** 与欢迎页共用 `RemoteVaultDialog`（`src/components/layout/remote-vault-dialog.tsx`）。
+- 远程会话伪路径 **`remote:<sessionId>` 不得**写入本地 recent（见 §2.3 存储表）；每次 SSH 连接都会换新 session id，误写入会导致「同一远端目录出现多条不同建议」。
 
 ### 2.3 原生菜单与多窗口
 
@@ -122,15 +136,18 @@
 | File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：有弹层时先关最顶层（`overlay-stack`）；否则关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
 | agentero | Settings… | `⌘,` | 设置 sheet |
 
-**窗口与路径状态**（`src/lib/vault.ts`）：
+**窗口与路径状态**（`src/lib/vault.ts`、`src/lib/remote-vault.ts`）：
 
 | 存储 | 键 / 用途 |
 |---|---|
-| `sessionStorage` | 当前窗口已打开的 Vault 路径（多窗口互不抢） |
-| `localStorage` | 最近 Vault 列表（MRU，欢迎页）、上次 Vault（主窗口「恢复最近」） |
+| `sessionStorage` | 当前窗口已打开的 Vault（本地绝对路径 **或** 存活中的 `remote:<sessionId>`；多窗口互不抢） |
+| `localStorage` `agentero-recent-vaults` | **仅本地**路径 MRU（欢迎页 / 切换菜单）；**排除** `remote:…` |
+| `localStorage` 上次 Vault 键 | 主窗口「恢复最近」——**仅本地**路径；远程不写、不自动恢复 |
+| `localStorage` `agentero-recent-remote-vaults` | 远程 MRU：`{ kind:"remote", host, user?, remotePath, label }` |
+| `sessionStorage` 远程 meta | 当前会话 `RemoteSessionInfo`（展示名 / host / path） |
 | 查询参数 `fresh=1` | 新建窗口标记：跳过自动恢复，直接欢迎页 |
 
-主窗口在设置开启「恢复上次 Vault」且非 `fresh` 时，用 `localStorage` 上次路径自动打开；`⌘N` 窗口始终从欢迎页开始。
+主窗口在设置开启「恢复上次 Vault」且非 `fresh` 时，用本地上次路径自动打开；**远程 Vault 须重新 SSH 连接**（欢迎页或切换菜单的远程 recent / Open remote…）。`⌘N` 窗口始终从欢迎页开始。
 
 ## 3. 布局
 
