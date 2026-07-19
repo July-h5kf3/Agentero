@@ -7,6 +7,7 @@ pub mod import_bridge;
 pub mod launch;
 pub mod session;
 pub mod sftp_fs;
+pub mod trash_bridge;
 
 pub use launch::{
     materialize_skills_to_work, notes_rel_from_target, read_remote_note, resolve_remote_target,

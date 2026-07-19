@@ -148,8 +148,9 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 | 本地 PDF | `paper_import_local_pdf` | ✅ 本机选 PDF → 上传远端 |
 | Bib/RIS 库导入 | `paper_import` | ✅ Translator → 上传远端 |
 | Zotero 桌面迁移 | `zotero_migrate` | ❌ 仅本地路径 |
-| Zotero Connector | HTTP `saveItems` | ❌ 远程会话不绑定 vault（明确错误） |
+| Zotero Connector | HTTP `saveItems` | ❌ 远程会话不绑定 vault（明确错误；M4 待做） |
 | CLI import | `agentero import` | ❌ 仅本地 vault 路径 |
+| 回收站 | `path_trash` / `path_list_trash` / restore / purge | ✅ 经 `trash_bridge` 写远端 `.agentero/.trash/` |
 
 返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
 

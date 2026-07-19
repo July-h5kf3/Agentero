@@ -1335,7 +1335,7 @@ export default function App() {
 	}, [treeSelectedPath, vaultPath, t]);
 
 	/**
-	 * Delete vault paths into the recycle bin (local), or SFTP remove (remote MVP).
+	 * Delete vault paths into the recycle bin (local or remote `.agentero/.trash/`).
 	 */
 	const trashPathsAndNotify = useCallback(
 		async (absPaths: string[]) => {
@@ -1360,25 +1360,7 @@ export default function App() {
 				const rels = valid
 					.map((p) => vaultRelativePath(vaultPath, p))
 					.filter((r): r is string => Boolean(r));
-				if (isRemoteVaultHandle(vaultPath)) {
-					// Remote MVP: direct SFTP remove (no recycle bin).
-					const { removeVaultPath } = await import("@/lib/vault");
-					const { deletePapersUnderPath } = await import("@/lib/papers-api");
-					for (const p of valid) {
-						await removeVaultPath(p);
-					}
-					for (const rel of rels) {
-						if (rel.startsWith("papers/") || rel === "papers") {
-							try {
-								await deletePapersUnderPath(vaultPath, rel);
-							} catch {
-								// catalog cleanup best-effort
-							}
-						}
-					}
-				} else {
-					await trashPaths(vaultPath, rels);
-				}
+				await trashPaths(vaultPath, rels);
 				for (const p of valid) closeTabsUnderPath(p);
 				const treeNorm = treeSelectedPath
 					?.replace(/\\/g, "/")

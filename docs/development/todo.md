@@ -429,7 +429,9 @@
 - [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
 - [x] 切换 Vault 时 disconnect 远程会话
 - [x] i18n；[`api.md`](../backend/api.md) 远程 command 表
-- [ ] **M4** 远端 recycle bin、魔棒入库写远端、blob LRU、Codex-SSH、设置页远程偏好
+- [x] **M4** 远端 recycle bin（`.agentero/.trash/` via SFTP，与本地语义对齐）
+- [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）
+- [ ] **M4** blob LRU、Codex-SSH、设置页远程偏好
 
 ### 发布
 
