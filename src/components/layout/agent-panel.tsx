@@ -3,6 +3,8 @@ import {
 	Check,
 	CheckIcon,
 	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
 	CopyIcon,
 	History,
 	Pencil,
@@ -184,6 +186,8 @@ import {
 	buildMentionCandidatePaths,
 	filterMentionOptions,
 	loadRecentMentionPaths,
+	mentionParentPath,
+	mentionPathHasChildren,
 	pushRecentMentionPath,
 } from "@/lib/agent-mention";
 import {
@@ -1594,7 +1598,15 @@ export function AgentPanel({
 		}
 	});
 
-	// Reload recents when Vault changes
+	/**
+	 * In-folder browse for `@` menu (null = root: recents + shallow tree).
+	 * Chevron on the right drills into directories; papers stay leaves.
+	 */
+	const [mentionBrowseRoot, setMentionBrowseRoot] = useState<string | null>(
+		null,
+	);
+
+	// Reload recents when Vault changes; leave any open folder browser.
 	useEffect(() => {
 		try {
 			setRecentMentionPaths(
@@ -1606,7 +1618,15 @@ export function AgentPanel({
 		} catch {
 			setRecentMentionPaths([]);
 		}
+		setMentionBrowseRoot(null);
 	}, [vaultPath]);
+
+	// Close folder browser when `@` is gone or the menu is dismissed.
+	useEffect(() => {
+		if (!mentionMatch || composerMenuDismissed) {
+			setMentionBrowseRoot(null);
+		}
+	}, [composerMenuDismissed, mentionMatch]);
 
 	const mentionOptions = useMemo(() => {
 		if (!mentionMatch) return [];
@@ -1616,16 +1636,32 @@ export function AgentPanel({
 			exclude: contextPaths,
 			recent: recentMentionPaths,
 			labelsByPath: mentionLabelsByPath,
+			browseRoot: mentionBrowseRoot,
 			limit: 8,
 		});
 	}, [
 		contextPaths,
+		mentionBrowseRoot,
 		mentionCandidates,
 		mentionLabelsByPath,
 		mentionMatch,
 		mentionQuery,
 		recentMentionPaths,
 	]);
+
+	const enterMentionFolder = useCallback((path: string) => {
+		setMentionBrowseRoot(path);
+		setMentionActiveIndex(0);
+		setComposerMenuDismissed(false);
+	}, []);
+
+	const leaveMentionFolder = useCallback(() => {
+		setMentionBrowseRoot((current) => {
+			if (!current) return null;
+			return mentionParentPath(current);
+		});
+		setMentionActiveIndex(0);
+	}, []);
 
 	const skillMatch = composerText.match(/(^|\s)\$([^\s]*)$/);
 	const skillQuery = skillMatch?.[2]?.toLocaleLowerCase() ?? "";
@@ -1641,7 +1677,10 @@ export function AgentPanel({
 			.slice(0, 6);
 	}, [selectedSkillIds, skillMatch, skillQuery, skills]);
 
-	const showMentionMenu = !composerMenuDismissed && mentionOptions.length > 0;
+	const showMentionMenu =
+		!composerMenuDismissed &&
+		Boolean(mentionMatch) &&
+		(mentionOptions.length > 0 || mentionBrowseRoot != null);
 	const showSkillMenu = !composerMenuDismissed && skillOptions.length > 0;
 
 	useEffect(() => {
@@ -2178,6 +2217,7 @@ export function AgentPanel({
 	const attachMention = useCallback(
 		(path: string) => {
 			attachContextPaths([path]);
+			setMentionBrowseRoot(null);
 		},
 		[attachContextPaths],
 	);
@@ -2256,13 +2296,37 @@ export function AgentPanel({
 
 		if (event.key === "Escape" && (showMentionMenu || showSkillMenu)) {
 			event.preventDefault();
+			// While browsing a folder, Esc steps up; only dismiss at root.
+			if (showMentionMenu && mentionBrowseRoot) {
+				leaveMentionFolder();
+				return;
+			}
 			setComposerMenuDismissed(true);
+			setMentionBrowseRoot(null);
 			return;
 		}
 
 		if (showMentionMenu) {
+			if (event.key === "ArrowLeft" && mentionBrowseRoot) {
+				event.preventDefault();
+				leaveMentionFolder();
+				return;
+			}
+			if (event.key === "ArrowRight") {
+				const path =
+					mentionOptions[mentionActiveIndex] ?? mentionOptions[0] ?? null;
+				if (
+					path &&
+					mentionPathHasChildren(path, mentionCandidates, paperPathSet)
+				) {
+					event.preventDefault();
+					enterMentionFolder(path);
+					return;
+				}
+			}
 			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 				event.preventDefault();
+				if (mentionOptions.length === 0) return;
 				setMentionActiveIndex((index) =>
 					event.key === "ArrowDown"
 						? (index + 1) % mentionOptions.length
@@ -3254,47 +3318,113 @@ export function AgentPanel({
 											role="listbox"
 											className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
 										>
-											{mentionOptions.map((path, index) => {
-												const label = labelForPath(path);
-												const showPathHint =
-													label !== path && path.includes("/");
-												return (
+											{mentionBrowseRoot ? (
+												<div className="mb-0.5 flex items-center gap-0.5 border-border/60 border-b px-0.5 pb-1">
 													<button
-														key={path}
-														id={`agent-mention-option-${index}`}
 														type="button"
-														role="option"
-														aria-selected={mentionActiveIndex === index}
-														className={cn(
-															"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-															mentionActiveIndex === index
-																? "bg-muted"
-																: "hover:bg-muted/70",
-														)}
-														onMouseEnter={() => setMentionActiveIndex(index)}
-														onClick={() => attachMention(path)}
+														className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+														aria-label={t("composer.mentionBack")}
+														title={t("composer.mentionBack")}
+														onClick={leaveMentionFolder}
 													>
-														<ContextPathIcon
-															path={path}
-															directoryPaths={directoryPathSet}
-															paperPaths={paperPathSet}
-														/>
-														<span className="min-w-0 flex-1 truncate">
-															<span className="block truncate" title={path}>
-																{label}
-															</span>
-															{showPathHint ? (
-																<span
-																	className="block truncate text-[11px] text-muted-foreground"
-																	title={path}
-																>
-																	{path}
-																</span>
-															) : null}
-														</span>
+														<ChevronLeft className="size-3.5" aria-hidden />
 													</button>
-												);
-											})}
+													<span
+														className="min-w-0 flex-1 truncate pr-1 text-muted-foreground text-xs"
+														title={mentionBrowseRoot}
+													>
+														{labelForPath(mentionBrowseRoot)}
+													</span>
+												</div>
+											) : null}
+											{mentionOptions.length === 0 ? (
+												<div className="px-2 py-2 text-muted-foreground text-xs">
+													{t("composer.mentionEmptyFolder")}
+												</div>
+											) : (
+												mentionOptions.map((path, index) => {
+													const label = labelForPath(path);
+													const showPathHint =
+														!mentionBrowseRoot &&
+														label !== path &&
+														path.includes("/");
+													const canEnter = mentionPathHasChildren(
+														path,
+														mentionCandidates,
+														paperPathSet,
+													);
+													return (
+														<div
+															key={path}
+															className={cn(
+																"flex w-full items-center gap-0.5 rounded-md text-sm",
+																mentionActiveIndex === index
+																	? "bg-muted"
+																	: "hover:bg-muted/70",
+															)}
+														>
+															<button
+																type="button"
+																id={`agent-mention-option-${index}`}
+																role="option"
+																aria-selected={mentionActiveIndex === index}
+																className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left focus-visible:outline-none"
+																onMouseEnter={() =>
+																	setMentionActiveIndex(index)
+																}
+																onClick={() => attachMention(path)}
+															>
+																<ContextPathIcon
+																	path={path}
+																	directoryPaths={directoryPathSet}
+																	paperPaths={paperPathSet}
+																/>
+																<span className="min-w-0 flex-1 truncate">
+																	<span className="block truncate" title={path}>
+																		{label}
+																	</span>
+																	{showPathHint ? (
+																		<span
+																			className="block truncate text-[11px] text-muted-foreground"
+																			title={path}
+																		>
+																			{path}
+																		</span>
+																	) : null}
+																</span>
+															</button>
+															{canEnter ? (
+																<button
+																	type="button"
+																	tabIndex={-1}
+																	className="mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+																	aria-label={t("composer.mentionEnterFolder", {
+																		name: label,
+																	})}
+																	title={t("composer.mentionEnterFolder", {
+																		name: label,
+																	})}
+																	onMouseEnter={() =>
+																		setMentionActiveIndex(index)
+																	}
+																	onClick={(e) => {
+																		e.preventDefault();
+																		e.stopPropagation();
+																		enterMentionFolder(path);
+																	}}
+																>
+																	<ChevronRight
+																		className="size-3.5"
+																		aria-hidden
+																	/>
+																</button>
+															) : (
+																<span className="mr-0.5 size-7 shrink-0" />
+															)}
+														</div>
+													);
+												})
+											)}
 										</div>
 									) : null}
 									{showSkillMenu ? (

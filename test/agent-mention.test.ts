@@ -3,8 +3,11 @@ import {
 	buildMentionCandidatePaths,
 	filterMentionOptions,
 	isUnderPaperPath,
+	listMentionChildren,
 	loadRecentMentionPaths,
+	mentionParentPath,
 	mentionPathDepth,
+	mentionPathHasChildren,
 	pushRecentMentionPath,
 } from "@/lib/agent-mention";
 
@@ -130,5 +133,60 @@ describe("agent-mention", () => {
 			"papers/x",
 		]);
 		expect(loadRecentMentionPaths(storage, "/other")).toEqual([]);
+	});
+
+	it("lists direct children for drill-down browse", () => {
+		const candidates = buildMentionCandidatePaths({
+			markdownPaths: md,
+			directoryPaths: dirs,
+			paperPaths: papers,
+		});
+		expect(listMentionChildren(null, candidates).sort()).toEqual(
+			["README.md", "notes", "papers"].sort(),
+		);
+		expect(listMentionChildren("papers", candidates)).toEqual(["papers/org"]);
+		expect(listMentionChildren("papers/org", candidates).sort()).toEqual(
+			["papers/org/alpha", "papers/org/beta"].sort(),
+		);
+		expect(listMentionChildren("notes", candidates)).toEqual(["notes/todo.md"]);
+	});
+
+	it("paper folders have no drill-down children; org folders do", () => {
+		const candidates = buildMentionCandidatePaths({
+			markdownPaths: md,
+			directoryPaths: dirs,
+			paperPaths: papers,
+		});
+		const paperSet = new Set(papers);
+		expect(mentionPathHasChildren("papers/org", candidates, paperSet)).toBe(
+			true,
+		);
+		expect(
+			mentionPathHasChildren("papers/org/alpha", candidates, paperSet),
+		).toBe(false);
+		expect(mentionPathHasChildren("notes", candidates, paperSet)).toBe(true);
+	});
+
+	it("browseRoot lists only that folder's children", () => {
+		const candidates = buildMentionCandidatePaths({
+			markdownPaths: md,
+			directoryPaths: dirs,
+			paperPaths: papers,
+		});
+		const ranked = filterMentionOptions({
+			candidates,
+			query: "",
+			browseRoot: "papers/org",
+			limit: 8,
+		});
+		expect(ranked.sort()).toEqual(
+			["papers/org/alpha", "papers/org/beta"].sort(),
+		);
+	});
+
+	it("mentionParentPath walks up segments", () => {
+		expect(mentionParentPath("papers/org/alpha")).toBe("papers/org");
+		expect(mentionParentPath("papers")).toBe(null);
+		expect(mentionParentPath("")).toBe(null);
 	});
 });

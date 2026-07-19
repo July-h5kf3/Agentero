@@ -115,10 +115,86 @@ function pathMatchesQuery(path: string, query: string): boolean {
 	return base.includes(q);
 }
 
+/** Parent vault-relative path (`papers/org/a` → `papers/org`; `papers` → null). */
+export function mentionParentPath(
+	path: string | null | undefined,
+): string | null {
+	const n = normPath(path ?? "");
+	if (!n) return null;
+	const idx = n.lastIndexOf("/");
+	if (idx <= 0) return null;
+	return n.slice(0, idx) || null;
+}
+
+/**
+ * Direct children of `parent` among candidates (and intermediate segments).
+ * `parent` null/empty → vault root (first path segment only).
+ */
+export function listMentionChildren(
+	parent: string | null | undefined,
+	candidates: readonly string[],
+): string[] {
+	const root = parent ? normPath(parent) : "";
+	const prefix = root ? `${root}/` : "";
+	const seen = new Set<string>();
+	const out: string[] = [];
+
+	for (const raw of candidates) {
+		const p = normPath(raw);
+		if (!p) continue;
+		if (root) {
+			if (p === root || !p.startsWith(prefix)) continue;
+			const rest = p.slice(prefix.length);
+			const slash = rest.indexOf("/");
+			const childRel = slash === -1 ? rest : rest.slice(0, slash);
+			if (!childRel) continue;
+			const child = `${root}/${childRel}`;
+			if (seen.has(child)) continue;
+			seen.add(child);
+			out.push(child);
+		} else {
+			const first = p.split("/").filter(Boolean)[0];
+			if (!first || seen.has(first)) continue;
+			seen.add(first);
+			out.push(first);
+		}
+	}
+
+	return out.sort((a, b) =>
+		a.localeCompare(b, undefined, { sensitivity: "base" }),
+	);
+}
+
+/**
+ * Whether a path can be drilled into in the @ menu.
+ * Paper folders are leaves (internals are not listed as candidates).
+ */
+export function mentionPathHasChildren(
+	path: string,
+	candidates: readonly string[],
+	paperPaths?: ReadonlySet<string> | Iterable<string> | null,
+): boolean {
+	const n = normPath(path);
+	if (!n) return false;
+	if (paperPaths) {
+		const set =
+			paperPaths instanceof Set
+				? paperPaths
+				: new Set([...paperPaths].map(normPath).filter(Boolean));
+		if (set.has(n)) return false;
+	}
+	const prefix = `${n}/`;
+	return candidates.some((c) => {
+		const p = normPath(c);
+		return Boolean(p && p !== n && p.startsWith(prefix));
+	});
+}
+
 /**
  * Rank and slice mention candidates for the composer menu.
  * Empty query → recents first, then shallow tree (depth ≤ 2), then the rest.
  * Non-empty query → path substring match; recents boosted.
+ * When `browseRoot` is set → list that folder's **direct children** (drill-down).
  */
 export function filterMentionOptions(options: {
 	candidates: readonly string[];
@@ -127,6 +203,11 @@ export function filterMentionOptions(options: {
 	recent?: readonly string[];
 	/** Extra searchable labels keyed by path (paper titles, …). */
 	labelsByPath?: ReadonlyMap<string, string> | null;
+	/**
+	 * When set, show only direct children of this directory (in-folder browse).
+	 * Ignores shallow/recent ranking.
+	 */
+	browseRoot?: string | null;
 	limit?: number;
 }): string[] {
 	const limit = options.limit ?? DEFAULT_MENU_LIMIT;
@@ -137,6 +218,7 @@ export function filterMentionOptions(options: {
 	const recentRank = new Map(recent.map((p, i) => [p, i]));
 	const query = (options.query ?? "").trim();
 	const labels = options.labelsByPath;
+	const browseRoot = options.browseRoot ? normPath(options.browseRoot) : null;
 
 	const matchesExtra = (path: string): boolean => {
 		if (!query || !labels) return false;
@@ -144,6 +226,14 @@ export function filterMentionOptions(options: {
 		if (!label) return false;
 		return label.includes(query.toLocaleLowerCase());
 	};
+
+	// Drill-down: list children of the browsed folder only.
+	if (browseRoot) {
+		const children = listMentionChildren(browseRoot, options.candidates)
+			.filter((p) => !exclude.has(p))
+			.filter((p) => !query || pathMatchesQuery(p, query) || matchesExtra(p));
+		return children.slice(0, Math.max(limit, 24));
+	}
 
 	const pool = options.candidates
 		.map(normPath)
