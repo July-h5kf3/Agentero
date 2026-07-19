@@ -24,7 +24,7 @@ Agentero 桌面应用
     ├── Markdown 笔记与 paper notes / source
     ├── .agentero/catalog.sqlite（论文集合 + metadata 权威）
     ├── 可选导出 PAPERS.md / library.bib（非默认）
-    └── papers/<id>/ 下 NOTES、highlights、可选 PAPER.md、source/
+    └── papers/<id>/ 下 NOTES、marks/、可选 PAPER.md、source/
 ```
 
 ## 文档分层

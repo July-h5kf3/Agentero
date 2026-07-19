@@ -17,7 +17,7 @@ Agentero 的存储遵循两条原则:
 | L0 指令 | `AGENTS.md` | 会话开始,总是 | 极小 |
 | L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小(每篇一行) |
 | L2 条目 | `{paper}/NOTES.md` | 锁定某篇之后 | 小 |
-| L2.5 证据 | `{paper}/marks/*.json`（运行时）；可选 `highlights.md` 导出 | 需要用户标注 / 精确引文 | 中 |
+| L2.5 证据 | `{paper}/marks/*.json`（划词高亮 / 批注 / 提问 / 翻译） | 需要用户标注 / 精确引文 | 中 |
 | L3 正文 | `{paper}/PAPER.md` | 需要公式 / 实验细节 / 原文 | 大 |
 | L4 原始 | `{paper}/source/*` | 需追溯或重新解析 | 很大 |
 
@@ -29,7 +29,7 @@ Agentero 的存储遵循两条原则:
 
 | 层级 | 内容 | 落盘 |
 |---|---|---|
-| **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`.agents/`（skills 等）、`source/`、**用户插入的** `{mdDir}/assets/*`（见下） | 文件 |
+| **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`marks/`、`notes/`、`plans/`、`.agents/`（skills 等）、`source/`、**用户插入的** `{mdDir}/assets/*`（见下） | 文件 |
 | **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
 | **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、**解析派生**的 `assets/` 图 | **按需**生成，非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表；可整删后重建 |
@@ -49,7 +49,6 @@ agentero-vault/
 │   ├── 1706.03762/        # paper 单元（一级）
 │   │   ├── NOTES.md
 │   │   ├── marks/         # 划词标记 JSON（ask/highlight/translate）
-│   │   ├── highlights.md  # 可选导出，非默认
 │   │   ├── PAPER.md       # 可选
 │   │   ├── assets/
 │   │   └── source/
@@ -75,7 +74,7 @@ agentero-vault/
 > **默认不生成**：根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。  
 > 需要可读索引或 BibTeX 时，使用 `catalog:export_papers_md` / `catalog:export_bibtex`（见 [`catalog.md`](catalog.md) §5.4）。
 
-> **Paper 文件夹**是最小单元：以标记文件/目录识别（`NOTES.md` / `highlights.md` / `source/` 等），可位于 `papers/` 下任意深度。  
+> **Paper 文件夹**是最小单元：以标记文件/目录识别（`NOTES.md` / `marks/` / `source/` / `assets/` 等），可位于 `papers/` 下任意深度。  
 > **Catalog `path`**（Vault 相对路径）标识位置；**`id`** 为逻辑 id（arXiv ID 或 citekey）。  
 > 默认入库可仍写 `papers/<id>/`；用户也可整理到 `papers/<topic>/…/<id>/`。citekey 冲突时追加字母后缀。
 
@@ -85,7 +84,7 @@ agentero-vault/
 
 Vault 内的 Agent 行为规范,至少包含:
 
-- **读取协议**:L1 以应用 catalog 为准（无默认 `PAPERS.md`）；锁定篇目后按 `NOTES.md → highlights.md → PAPER.md → source/` 下钻。
+- **读取协议**:L1 以应用 catalog 为准（无默认 `PAPERS.md`）；锁定篇目后按 `NOTES.md → marks/ → PAPER.md → source/` 下钻。
 - 笔记结构规范(三段论)。
 - 引用路径要求:回答必须列出读取过的本地文件路径。
 - 生成内容的双链要求:保留 `[[...]]` 格式。
@@ -158,15 +157,7 @@ Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_en
 
 与 PDF 解析派生资源共用同一 `assets/` 文件夹时互不冲突（文件名唯一）。用户插入图属 **Tier 1a**；勿把仅由解析生成的图误当成可随意 GC 的临时缓存（当前 GC **只**针对编辑器移除的 managed `./assets/` 链接）。
 
-### `highlights.md`(L2.5,事实来源)
-
-单篇论文的标注层,与 `NOTES.md` **分开存放**:笔记是"熟的"综合知识,标注是"生的"原始证据(锚定原文位置的引文 + 想法),数量多、带定位。
-
-- **引文 + 想法**留在 `highlights.md`,是事实来源,保持便携 Markdown。
-- **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.agentero/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
-- 用 Obsidian 块引用 `^id`,让 `NOTES.md` 能精确引用某条标注:`[[papers/1706.03762/highlights#^h12]]`。
-
-### `marks/`（统一：PDF 划词标记）
+### `marks/`（L2.5，PDF 划词标记 — 唯一运行时事实来源）
 
 划词后的 **提问 / 高亮·批注 / 翻译** 全部为 **JSON**，落在同一目录（pretty，便于 Git diff）：
 
@@ -187,17 +178,7 @@ papers/<id>/marks/<id>.json
 - 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight` / `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
 - **阅读热力**：聚合上述三类 mark 的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
-### `highlights.md`（L2.5，规划中的 Markdown 证据层）
 
-与 JSON marks **分离**：若将来导出引文块，可写便携 Markdown；当前阅读器标注以 `marks/` 为准。
-
-格式示例（导出形态，非默认落盘）:
-
-```md
-### ^h12 · p.3 §3.2
-> "The Transformer ... dispensing with recurrence entirely."
-想法:核心卖点是彻底抛弃 recurrence。→ [[Self-Attention]]
-```
 
 ### `PAPER.md`(L3,派生)
 
@@ -334,7 +315,7 @@ Host 返回给前端的运行时对象 = catalog 行 + 解析出的 Vault 相对
 interface Paper extends PaperMetadata {
   vault_path: string;        // = path，paper 文件夹
   notes_path: string;        // {path}/NOTES.md
-  highlights_path: string;   // {path}/highlights.md
+  marks_dir: string;         // {path}/marks/
   source_dir: string;        // {path}/source/
   paper_md_path?: string;    // {path}/PAPER.md
   pdf_path?: string;         // {path}/source/original.pdf
@@ -342,21 +323,22 @@ interface Paper extends PaperMetadata {
 }
 ```
 
-### 3.5 标注 (Highlight)
+### 3.5 标注（`marks/*.json`）
 
-`highlights.md` 中每条标注的逻辑结构。`quote` / `comment` / `links` 来自 Markdown(事实来源);`page` / `bbox` 是缓存于 `.agentero/` 的渲染坐标,可由 `quote` 全文检索重建。
+运行时标注见 §2 `marks/`：`kind` ∈ `highlight` | `ask` | `translate`。高亮/批注字段摘要：
 
 ```ts
-interface Highlight {
-  id: string;          // 块引用 id,对应 highlights.md 中的 ^id(如 h12)
-  paper_id: string;
-  quote: string;       // 引文原文(事实来源)
-  comment?: string;    // 想法 / 评论
-  links: string[];     // 双链目标,如 ['Self-Attention']
-
-  // 以下为渲染定位,缓存于 .agentero,可重建
-  page?: number;
-  bbox?: [number, number, number, number];
+interface PdfHighlight {
+  version: 1;
+  kind: "highlight";
+  id: string;
+  page: number;
+  rects: { x: number; y: number; w: number; h: number }[]; // 0–1 归一化
+  quote?: string;
+  color?: string;
+  comment?: string; // 非空 = 批注
+  createdAt: string;
+  updatedAt?: string;
 }
 ```
 

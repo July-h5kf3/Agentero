@@ -80,7 +80,7 @@
 - [x] 侧栏魔棒：粘贴 arXiv / DOI 等链接或编号 → Host `lookup_import`。
 - [x] Translator HTTP（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）+ arXiv Atom fallback。
 - [x] map → `PaperMetadata` → **catalog.sqlite 权威**；`metadata.json` 仅为投影。
-- [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` / `highlights.md` 壳。
+- [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` 壳（标注走 `marks/`）。
 - [x] **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文根目录）；**arXiv e-print 解压 LaTeX** 到 `source/`（无下载开关）。
 - [x] 中间栏 **PDF 预览本地优先**：本地 `{paper}/*.pdf` → 缺省时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；HTML 仍用远程 `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
@@ -412,9 +412,9 @@
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - **Zotero Connector 兼容服务**（方案一，**MVP 已落地**）：Host 在 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；组织子文件夹可选；**`saveAttachment` 浏览器上传登录墙 PDF 已做**；见 [`../backend/connector.md`](../backend/connector.md) **§4.5**。仍待 P0：`saveSnapshot` / `saveSingleFile` / cookies。
 - 浏览器插件（可选后续）：自研扩展或 fork，可共用入库核心、不必抢 23119。
-- ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级。
+- ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：无文本层降级。
 - ~~**翻译服务**~~ ✅ 首版（见 [`translate.md`](translate.md)）：应用级可插拔 `TranslateService`；**免费 MT + BYOA Agent**（无付费 API）；设置 → **Translate**；PDF 划词为首个消费方。T4+ 更多引擎/消费方仍待。
-- ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板）。仍待：`highlights.md` 摘录同步 / 导出到 `NOTES.md`（暂不做）、与划词提问互导。
+- ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板；统一 `marks/`）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。
 - ~~论文引用关系自动抽取~~ → 升格为 **V0.7**（引用图 + hover Info + Agent 工作流）。
@@ -524,7 +524,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 - [ ] 浏览器插件与网页 importer。
 - [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：划词操作菜单；统一 **`marks/*.json`**（kind: ask/highlight/translate）+ 页边针 + ACP；M5 增强仍待）。
 - [x] PDF 标注系统（Zotero 式）：阅读器内就地批注（高亮 + 内联评论 `comment`）+ 页边批注针 + 右侧「批注」面板（活动 PDF tab；跳转闪烁 / 编辑 / 删除）；标注落 **`marks/`**（`kind: highlight`），**不**写 `NOTES.md`。**导出到 `NOTES.md` 暂不做**。
-- [ ] PDF/HTML 统一标注系统与 `highlights.md` 互导（HTML iframe 标注仍待）。
+- [ ] HTML iframe 标注（PDF 侧 `marks/` 已落地）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。
 - [ ] 复杂分屏（>2 格）与命名工作区会话。

@@ -25,7 +25,7 @@
 - [x] **精确标识符入库（魔棒路径）**（整项核心）
 - [x] 支持输入 arXiv ID / URL 等（侧栏魔棒）
 - [x] Translator → `PaperMetadata` → catalog `papers` 表
-- [x] 写入默认 `NOTES.md`、空 `highlights.md`
+- [x] 写入默认 `NOTES.md` 壳（标注用 `marks/`）
 - [x] **始终下载 PDF**；**arXiv 解压 e-print LaTeX** 到 `source/`
 - [x] 入库后刷新文件树并打开 paper；**左侧树展开祖先并滚到新论文行**（`openPaper` → `setTreeSelectedPath` + FileTree reveal）
 - [x] 入库后刷新 Backlinks/Graph 索引
@@ -249,7 +249,7 @@
 - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）
 - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）
 - [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项
-- [ ] 批注原位高亮渲染（highlights.md 系统）与引用 key 映射
+- [x] 批注原位高亮渲染（`marks/` + 页边针 + 右侧批注面板）
 
 ### 1b. Zotero Connector 兼容服务（方案一）
 
@@ -284,8 +284,8 @@
 - [x] M2：`papers/<id>/marks/<id>.json` 读写 + 页边针（归一化坐标）
 - [x] M3：接入 ACP `agent_run_once` 流式多轮；结束会话落盘
 - [x] M4：双击 / 悬停停留触发 + 防误触（阈值暂固定 700ms）
-- [ ] M5（可选）：导出为 `highlights.md`；无文本层降级；本地 PDF TextLayer
-- [x] M6：划词操作菜单（高亮 / 批注 / 提问 / 翻译）；高亮落盘 `papers/<id>/highlights/<id>.json` + 覆盖层 + 点击删除；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区
+- [ ] M5（可选）：无文本层降级；本地 PDF TextLayer
+- [x] M6：划词操作菜单（高亮 / 批注 / 提问 / 翻译）；统一落盘 `papers/<id>/marks/<id>.json` + 覆盖层 + 点击删除；翻译复用问答卡走 Agent；去掉默认琥珀高亮，仅原生选区
 - [x] M7：Zotero 式批注 —「批注」= 建高亮 + 内联编辑器（`annotation-editor.tsx`）写可选 `comment`；页边针（`selection-gutter.tsx`）；右侧「批注」面板（`annotations-panel.tsx`）；落盘 `marks/`（`kind: highlight`）；**不写 `NOTES.md`**
 
 ### 3b. 翻译服务（Translate Service）
@@ -297,14 +297,14 @@
 - [x] T2：Host `translate_text` + `free` adapter（内置 Google gtx 或 LibreTranslate URL）；默认 `provider=free`
 - [x] T3：PDF free 单次结果 / agent 流式；`autoTranslateSelection`；与 `translatorBaseUrl` 命名隔离
 - [x] T3.5 设计：翻译用 **Agent 座 + 模型** 最小选择（跟随默认 / 渐进披露；见 [`translate.md`](translate.md) §5.4 · §7.6）
-- [x] T3.6：实现 `translate.agentId` / `modelId` + Translate 页两行 Select + PDF `runOnce` 传参；临时探测脚本 `scripts/probe-translate-free.mjs`
+- [x] T3.6：实现 `translate.agentId` / `modelId` + Translate 页两行 Select + PDF `runOnce` 传参
 - [ ] T4+（可选）：更多 adapter（DeepL 等）/ 更多消费方（标题·摘要等）；`type: word` 词典
 
 ### 4. PDF / HTML 标注系统
 
 - [ ] 参考 Hypothesis 风格的边注、评论、锚点（完整体系）
 - [x] PDF 就地批注已落地（高亮 + `comment` + 页边针 + 右侧面板）；标注落 `marks/`（`kind: highlight`）
-- [ ] 标注正文进入 `highlights.md` / 导出到 `NOTES.md`（**暂不做**，可能的后续），坐标/锚点缓存可重建
+- [x] 标注正文落盘 `marks/*.json`（坐标归一化可重建）；导出 Markdown / `NOTES.md` 互导暂不做
 - [ ] PDF.js / HTML iframe 统一标注模型（HTML iframe 标注仍待）
 - [ ] 与划词提问（asks JSON）边界清晰，可互导
 
@@ -409,8 +409,9 @@
 ### PDF / 媒体
 
 - [x] 任意路径预览；导航 / 适应宽·整页 / 大纲 / ⌘F
-- [x] 真实 scale + 平滑划词；操作菜单（asks + highlights JSON）
-- [ ] `highlights.md` 标注系统、M5
+- [x] 真实 scale + 平滑划词；操作菜单（统一 `marks/*.json`）
+- [x] 划词标注系统（`marks/`；CLI `marksDir`）
+- [ ] M5：无文本层降级
 
 ### CLI
 

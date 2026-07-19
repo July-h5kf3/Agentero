@@ -23,7 +23,7 @@
 
 **非目标（首版不做）**：
 
-- 完整 Zotero/Hypothesis 高亮批注系统（仍走后续 `highlights.md` 路线）。
+- 完整 Zotero/Hypothesis 原位高亮同步（导入侧暂迁文本到 `NOTES.md`；阅读器自用 `marks/`）。
 - 跨设备实时协作评论。
 - 扫描件 OCR 实时划词（无文本层时降级为「仅坐标提问」，见 §7）。
 - 在 PDF 二进制内写入注解（不改原始 PDF 文件）。
@@ -72,7 +72,7 @@
 |---|---|
 | 在 PDF 内嵌 XFDF/注解 | 污染用户原始 PDF；与 local-first「人可读旁路文件」冲突 |
 | 仅存 `.agentero/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
-| 全部写入 `highlights.md` | Markdown 不便表达多轮消息与流式元数据；首版 JSON 更干净；可后续互导 |
+| 全部写入 Markdown 文件 | 不便表达多轮消息与流式元数据；JSON `marks/` 更干净 |
 | 浏览器扩展式划词 | 应用内 Webview 已有 PDF，无需跨页面扩展 |
 | 自研 Canvas 文本命中 | TextLayer 已够用；仅在无文本层时再考虑坐标-only |
 
@@ -199,13 +199,13 @@ interface PdfTranslateRecord {
 
 实现：`src/lib/pdf-selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
 
-### 5.3 与 `highlights.md` 的边界
+### 5.3 存储边界
 
-| | `marks/*.json` | `highlights.md`（规划） |
+| | `marks/*.json` | `NOTES.md` |
 |---|---|---|
-| 目的 | 阅读器标注/问答/翻译（运行时事实来源） | 便携 Markdown 引文证据层 |
-| 默认 | **读写均用 marks** | **不自动写入** |
-| 后续 | 可选导出 quote+comment | Agent/双链 `^id` |
+| 目的 | 阅读器标注/问答/翻译（运行时事实来源） | 人写综合笔记 / 精读讲义 |
+| 默认 | **读写均用 marks** | **不**因划词自动写入 |
+| 导出 | 可选将来导出 quote+comment 为 Markdown | 独立 |
 
 ## 6. 前端模块
 
@@ -292,4 +292,4 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 3. **存储**：**仅** `papers/<id>/marks/<id>.json` + `kind`；坐标 0–1 归一化。  
 4. **智能**：ACP BYOA；不在应用内嵌模型 Key。  
 5. **UI**：SelectionCard / Gutter + AI Elements 提问卡。  
-6. **`highlights.md`**：可选将来导出，非运行时事实来源。
+6. **标注层唯一**：`marks/*.json`（不写 NOTES / 不另建 Markdown 证据文件）。

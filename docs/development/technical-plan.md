@@ -187,7 +187,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | PDF 解析（Rust） | 可插拔 `PdfParser`（生成 PAPER.md；与预览分离） |
 | HTML 预览 | 远程 `html_url` → iframe |
 | 中间栏切换 | `ViewModeToggle`；HTML URL 来自 catalog / `arxiv.ts` |
-| PDF 划词 | 平滑选区覆盖层 + 操作菜单；`pdf-ask` / `highlights` JSON；ACP 流式 |
+| PDF 划词 | 平滑选区覆盖层 + 操作菜单；`marks/*.json`（highlight/ask/translate）；ACP 流式 |
 | 翻译服务 | 应用级可插拔 `TranslateService`（free + agent）；见 [`translate.md`](translate.md) |
 
 **分工说明**：
@@ -312,7 +312,7 @@ src-tauri/src/
     vault.rs
     paper.rs
     note.rs
-    annotation.rs  # 标注/highlights
+    # 划词标注：前端 marks-io → papers/<id>/marks/*.json（无 Host annotation 模块）
     graph.rs
     agent.rs
     candidate.rs   # 候选论文/检索结果
@@ -344,7 +344,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 **使用原则**：
 - Tauri Store 只存配置和机密，不存论文元数据。
 - 论文集合与 metadata 的权威来源是 **catalog**；根级 `PAPERS.md` / `library.bib` **默认不生成**，仅 `catalog:export_*` 按需写出。
-- 人写笔记（`NOTES.md` / `highlights.md`）与 `source/` 仍是文件；`PAPER.md` 仍是可选派生文件。
+- 人写笔记（`NOTES.md`）与 `marks/`、`source/` 仍是文件；`PAPER.md` 仍是可选派生文件。
 - 入库：写 `papers/<id>/` 文件 + 事务写入 catalog；不维护自动同步的 Markdown 总表。
 - Agent 最终引用必须落回 Vault 相对文件路径；L1 总览可靠应用注入列表或临时导出。
 - 专题：[`docs/backend/catalog.md`](../backend/catalog.md)。
@@ -369,7 +369,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```text
 侧栏魔棒粘贴 arXiv ID/URL
   → lookup_import → Translator（或 arXiv Atom fallback）
-  → catalog upsert + NOTES.md / highlights.md 壳
+  → catalog upsert + NOTES.md 壳
   → ensure_paper_assets：PDF → {paper}/{id}.pdf；e-print TeX → 解压 LaTeX 到 source/
   → 刷新文件树；打开 paper（PDF 预览优先本地文件）
 ```
@@ -410,7 +410,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
   → Rust: 临时目录落位为 papers/<citekey>/，catalog 写入 type=pdf
   → Rust: 用当前 PdfParser 全文解析（默认 liteparse；配置并启用则优先 MinerU，失败降级）
           生成 papers/<citekey>/PAPER.md 与 assets/，记录 body_source / body_quality
-  → Rust: 调用 Agent 生成 NOTES.md（三段论），创建空的 highlights.md
+  → Rust: 调用 Agent 生成 NOTES.md（三段论）
   → Rust: 更新 catalog 行（不自动写 PAPERS.md / library.bib）
   → Frontend: 展示进度、成功、失败原因；自动打开 NOTES.md
 ```
@@ -476,7 +476,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
   → Rust: 创建/复用 ACP session
   → Rust: 注入工作流 prompt 模板 + AGENTS.md 约束
   → Agent: 按渐进式披露自行读取 Vault
-      （AGENTS.md → catalog/列表或导出 → NOTES.md → highlights.md → PAPER.md → source/）
+      （AGENTS.md → catalog/列表或导出 → NOTES.md → marks/ → PAPER.md → source/）
   → Rust: 转发权限请求到 Frontend（读/写/网络等）；写文件默认确认后落盘
   → Rust: 接收流式响应，汇总读取过的本地路径
   → Frontend: 展示结果与 Sources；用户确认后写入目标 Markdown

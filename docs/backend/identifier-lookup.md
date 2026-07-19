@@ -41,7 +41,7 @@
    - **上下文目标**：若文件树当前选中（或等价「当前打开」）的是 `papers/` 下的**组织子文件夹**（非 paper 本体），则写入  
      `papers/<该子路径>/<id>/`。
 5. **Catalog 写入** title / authors / year / doi / arxiv_id / **`pdf_url` / `html_url` / `source_url`** 等；中间栏 **PDF 预览本地优先**（见 [`../frontend/ui.md`](../frontend/ui.md)），`pdf_url` 作下载候选与失败回退；HTML 仍读远程 `html_url`。
-6. 本地只创建轻量 paper 壳：`NOTES.md`（占位或短摘要）、空 `highlights.md`；**不**强制 `source/` 下载、**不**因魔棒去抓 PDF/HTML 文件。
+6. 本地只创建轻量 paper 壳：`NOTES.md`（占位或短摘要）；**不**强制 `source/` 下载、**不**因魔棒去抓 PDF/HTML 文件。
 
 ### 1.2 目标文件夹解析规则
 
@@ -141,7 +141,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
         ▼
   catalog.papers UPSERT（sqlite，权威）
   + 同步投影 metadata.json 到 paper 文件夹
-  + papers/.../NOTES.md、highlights.md
+  + papers/.../NOTES.md
         │
         ▼
   下载（见 §1.3）：始终 PDF → 论文根目录；arXiv 另 e-print 解压 LaTeX 到 source/
@@ -483,7 +483,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 
 1. 规范化 `parent_dir`（必须位于 `papers` 下）。
 2. `path = {parent_dir}/{id}`。
-3. 创建目录 + 占位 `NOTES.md` + 空 `highlights.md`。
+3. 创建目录 + 占位 `NOTES.md`。
 4. **事务 upsert catalog**（远程 URL 仍存字符串供预览）。
 5. **始终** `ensure_paper_assets`：PDF → `{paper}/{id}.pdf`；有 `arxiv_id` 时 e-print TeX 解压到 `source/`。
 6. 返回 `path`；前端刷新并打开 paper。
@@ -613,15 +613,15 @@ papers/
 └── [optional-subfolders/]
     └── <id>/
         ├── NOTES.md
-        ├── highlights.md
         └── source/
             ├── {id}.pdf       # 默认下载
             └── …              # arXiv：e-print 解压后的 .tex 工程
 # catalog.papers：path, title, pdf_url, html_url, …
+# 划词标注运行时写入 marks/*.json（非入库壳）
 ```
 
 1. `path = {parent_dir}/{id}`（§1.2 + §6.3）。
-2. 写 `NOTES.md` + `highlights.md`（`NOTES.md` 中摘要 blockquote 优先经 Host 免费 MT 译为中文，多引擎兜底 googleapi → bing → youdao → 火山 → 腾讯，全失败才保留原文；catalog `abstract` 仍为原文）。
+2. 写 `NOTES.md` 壳（摘要 blockquote 优先经 Host 免费 MT 译为中文，多引擎兜底 googleapi → bing → youdao → 火山 → 腾讯，全失败才保留原文；catalog `abstract` 仍为原文）。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
 4. 下载按 §1.3：**始终 PDF**（候选：`pdf_url` → arXiv → Crossref 直链 → **Unpaywall OA**）；**arXiv 另解压 LaTeX**。
 5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。
@@ -740,6 +740,6 @@ arXiv URL 推导：
 - 分类：对话框 **“按 Zotero 分类建子文件夹”** 勾选项（**默认关**，避免把 Zotero 分组（如 logs/Archive）建成多余子文件夹）→ 勾选时在目标目录下还原 collection 层级（`{parent}/<collection 路径>/<id>/`），collection 名同时写入 tags（多归属不丢失）；关闭则平铺。条目在多个 collection 时取确定性的单一路径（全路径字典序最小）。
 - 选择性导入：`zotero_scan` 预览返回各 collection（含「未分类」= id 0）及条目数，并返回逐条 `items`（id/title/year/hasPdf/notes/collections）；对话框提供**搜索 + 文件夹筛选 + 逐条勾选**（`include_items` 优先于 `include_collections`，缺省 = 全部）；迁移经 Tauri Channel 回传 `{current,total}` 进度，选项记于 localStorage。
 - 笔记：对话框「迁移 Zotero 笔记」勾选项（默认开）→ 每篇挂载的子笔记（`itemNotes`）HTML 经 `htmd` 转 Markdown，追加进该篇 `NOTES.md`（以 `---` 分隔）；`zotero_scan` 预览显示笔记总数。仅处理有父条目的子笔记。
-- 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：`highlights.md` 渲染系统尚未落地，故批注文本暂入 `NOTES.md`。
+- 批注：对话框「迁移 PDF 高亮批注」勾选项（默认开）→ 读 `itemAnnotations`（高亮 text + comment + 页码）转 Markdown 引用块追加进 `NOTES.md`（与笔记共用幂等追加）。**注**：阅读器运行时批注为 `marks/*.json`；Zotero 导入侧暂只把文本迁入 `NOTES.md`，不做原位 PDF 高亮还原。
 - 非目标（v1）：Zotero 批注的**原位高亮渲染**（现仅迁移文本入 NOTES.md）、独立笔记（无父条目）、群组库。
 | 2026-07-16 | 精读：入库/单篇 Download 后自动 paper-reader + Zap 手动；任务条 lookup/download → paperRead 衔接 |
