@@ -308,6 +308,37 @@ export async function remoteCacheFile(
 	return r.localPath;
 }
 
+export type RemoteCacheStats = {
+	bytes: number;
+	files: number;
+	root: string;
+	maxBytes: number;
+};
+
+/** Stats for one session (or all remote blob caches when sessionId omitted). */
+export async function remoteCacheStats(
+	sessionId?: string | null,
+): Promise<RemoteCacheStats> {
+	return unwrap(
+		invoke<ApiResult<RemoteCacheStats>>("remote_cache_stats", {
+			args: { sessionId: sessionId ?? null },
+		}),
+		"Failed to read remote cache stats",
+	);
+}
+
+/** Clear PDF/blob cache for one session or all remote vaults. */
+export async function remoteCacheClear(
+	sessionId?: string | null,
+): Promise<{ freedBytes: number }> {
+	return unwrap(
+		invoke<ApiResult<{ freedBytes: number }>>("remote_cache_clear", {
+			args: { sessionId: sessionId ?? null },
+		}),
+		"Failed to clear remote cache",
+	);
+}
+
 /** Session-scoped display metadata (not the handle itself). */
 const SESSION_META_KEY = "agentero-remote-session-meta";
 

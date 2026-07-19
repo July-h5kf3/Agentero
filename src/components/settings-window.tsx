@@ -408,6 +408,96 @@ function GeneralPane({
 				{t("general.translatorBaseUrl.hint")}
 			</p>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
+			<RemoteCacheSettingsBlock />
+		</>
+	);
+}
+
+function formatBytes(n: number): string {
+	if (!Number.isFinite(n) || n < 0) return "0 B";
+	if (n < 1024) return `${n} B`;
+	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+	if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function RemoteCacheSettingsBlock() {
+	const { t } = useTranslation("settings");
+	const [stats, setStats] = useState<{
+		bytes: number;
+		files: number;
+		maxBytes: number;
+	} | null>(null);
+	const [busy, setBusy] = useState(false);
+
+	const refresh = useCallback(async () => {
+		if (!isTauri()) return;
+		try {
+			const { remoteCacheStats } = await import("@/lib/remote-vault");
+			const s = await remoteCacheStats();
+			setStats({ bytes: s.bytes, files: s.files, maxBytes: s.maxBytes });
+		} catch {
+			setStats(null);
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	const onClear = async () => {
+		if (!isTauri() || busy) return;
+		setBusy(true);
+		try {
+			const { remoteCacheClear } = await import("@/lib/remote-vault");
+			await remoteCacheClear();
+			await refresh();
+		} catch (e) {
+			notifyError(
+				e instanceof Error ? e.message : t("general.remoteCache.clearFailed"),
+			);
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const sizeLine = stats
+		? t("general.remoteCache.size", {
+				used: formatBytes(stats.bytes),
+				files: stats.files,
+				max: formatBytes(stats.maxBytes),
+			})
+		: t("general.remoteCache.sizeUnknown");
+
+	return (
+		<>
+			<div className="mt-4">
+				<p className="mb-2 px-0.5 font-medium text-[13px]">
+					{t("general.remoteCache.section")}
+				</p>
+				<SettingsGroup>
+					<SettingsRow label={t("general.remoteCache.label")}>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8"
+							disabled={busy || !isTauri()}
+							onClick={() => void onClear()}
+						>
+							{busy
+								? t("general.remoteCache.clearing")
+								: t("general.remoteCache.clear")}
+						</Button>
+					</SettingsRow>
+				</SettingsGroup>
+				<p className="mt-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
+					{t("general.remoteCache.hint")}
+				</p>
+				<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
+					{sizeLine}
+				</p>
+			</div>
 		</>
 	);
 }

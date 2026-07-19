@@ -42,13 +42,23 @@
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
-			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。仅本机；默认关闭。",
+			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。支持本地与远程 Vault；默认关闭。",
 			"statusListening": "监听中 {{address}}",
 			"statusOff": "已关闭",
 			"statusStarting": "启动中…",
 			"statusError": "错误：{{message}}",
 			"statusNoVault": "请先打开知识库才能接收保存",
 			"desktopOnly": "需要桌面应用。"
+		},
+		"remoteCache": {
+			"section": "远程 Vault 缓存",
+			"label": "PDF 预览缓存",
+			"hint": "远端 PDF 与大文件的本机临时副本。超过上限（每个远程库 2 GB）时按最近最少使用淘汰。",
+			"size": "已用 {{used}}，{{files}} 个文件（上限 {{max}}）",
+			"sizeUnknown": "无法读取缓存用量",
+			"clear": "清除远程缓存",
+			"clearing": "清除中…",
+			"clearFailed": "清除远程缓存失败"
 		}
 	},
 	"appearance": {

@@ -1,6 +1,6 @@
 # 远程 Vault（SSH / SFTP）与远端 BYOA
 
-> **状态**：**MVP 已落地**（M0–M3）；M4 加固中（远端 trash ✅、入库写远端 ✅；Codex-SSH / blob LRU / 设置页远程偏好待办）  
+> **状态**：**MVP 已落地**（M0–M3）；M4 加固中（远端 trash ✅、入库写远端 ✅、blob LRU ✅；Codex-SSH / Connector 远程 待办）  
 > **分支**：`docs/remote-vault-ssh`  
 > **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
 > **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO
@@ -294,7 +294,7 @@ type RemoteAgentLaunch = {
 | **M1** | SSH 连接、SFTP 树、md 读写、PDF blob 预览、远程徽章 | 文件远端 |
 | **M2** | catalog GET/PUT、`paper_list` / tags / rescan、冲突 stat | **含 sqlite 远端** |
 | **M3** | `SshStdio` ACP、远端 discover/warm、精读 Zap、permission/notes-review | 远端 BYOA |
-| **M4** | 连接复用、atomic catalog PUT、**trash ✅**、**入库写远端 ✅**、缓存 LRU | 加固 |
+| **M4** | 连接复用、atomic catalog PUT、**trash ✅**、**入库写远端 ✅**、**缓存 LRU ✅** | 加固 |
 
 **MVP 闭环** = M0–M3。M1 无 catalog 不算完整远程 Vault；M2 无 Agent 不满足「要 BYOA」。
 
@@ -463,8 +463,7 @@ cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 
 ## 15. 后续（非 MVP）
 
-- blob LRU + 设置页清除远程缓存  
 - Codex App Server 经 SSH  
-- 设置页远程偏好  
+- 更完整设置页远程偏好（默认 identity 等）  
 - 更广的 `std::fs` → `VaultFs` 迁移  
 - Zotero Connector 绑定远程会话 

@@ -472,18 +472,106 @@ pub async fn remote_cache_file(
         .and_then(|e| e.to_str())
         .unwrap_or("bin");
     let dest = session.blob_root.join(format!("{hash}.{ext}"));
-    if !dest.is_file() {
+    use crate::services::remote::blob_cache::{self, DEFAULT_MAX_BYTES};
+    if dest.is_file() {
+        blob_cache::touch_mtime(&dest);
+    } else {
         let bytes = match session.fs.read(&rel).await {
             Ok(b) => b,
             Err(e) => return Ok(map_err(e)),
         };
-        if let Err(e) = std::fs::write(&dest, bytes) {
-            return Ok(map_err(AppError::Io(e)));
+        if let Err(e) = blob_cache::put_or_touch(&dest, Some(&bytes)) {
+            return Ok(map_err(e));
+        }
+        if let Err(e) = blob_cache::enforce_lru(&session.blob_root, DEFAULT_MAX_BYTES) {
+            log::warn!("blob LRU enforce: {e}");
         }
     }
     Ok(ApiResult::ok(RemoteCacheFileResult {
         local_path: dest.to_string_lossy().into_owned(),
     }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCacheStatsArgs {
+    /// When set, stats for that session's blob dir; otherwise all remote caches.
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[tauri::command]
+pub async fn remote_cache_stats(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteCacheStatsArgs,
+) -> Result<ApiResult<crate::services::remote::blob_cache::BlobCacheStats>, String> {
+    use crate::services::remote::blob_cache;
+    if let Some(sid) = args
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => return Ok(map_err(e)),
+        };
+        Ok(ApiResult::ok(blob_cache::stats_for_root(
+            &session.blob_root,
+        )))
+    } else {
+        Ok(ApiResult::ok(blob_cache::stats_all()))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCacheClearArgs {
+    /// When set, clear that session's blobs; otherwise all remote blob caches.
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCacheClearResult {
+    pub freed_bytes: u64,
+}
+
+#[tauri::command]
+pub async fn remote_cache_clear(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteCacheClearArgs,
+) -> Result<ApiResult<RemoteCacheClearResult>, String> {
+    use crate::services::remote::blob_cache;
+    let op = OpTimer::start("remote_cache_clear");
+    let result = if let Some(sid) = args
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        blob_cache::clear_root(&session.blob_root)
+    } else {
+        blob_cache::clear_all()
+    };
+    match result {
+        Ok(freed) => {
+            op.finish_ok_extra(format!("freed_bytes={freed}"));
+            Ok(ApiResult::ok(RemoteCacheClearResult { freed_bytes: freed }))
+        }
+        Err(e) => {
+            op.finish_err(&e);
+            Ok(map_err(e))
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

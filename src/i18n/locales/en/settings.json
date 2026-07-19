@@ -42,13 +42,23 @@
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
-			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Local only; off by default.",
+			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Works with local and remote vaults; off by default.",
 			"statusListening": "Listening on {{address}}",
 			"statusOff": "Off",
 			"statusStarting": "Starting…",
 			"statusError": "Error: {{message}}",
 			"statusNoVault": "Open a vault to accept saves",
 			"desktopOnly": "Requires the desktop app."
+		},
+		"remoteCache": {
+			"section": "Remote vault cache",
+			"label": "PDF preview cache",
+			"hint": "Ephemeral local copies of remote PDFs and large files. Oldest files are removed when usage exceeds the cap (2 GB per remote vault).",
+			"size": "{{used}} in {{files}} files (cap {{max}})",
+			"sizeUnknown": "Cache size unavailable",
+			"clear": "Clear remote cache",
+			"clearing": "Clearing…",
+			"clearFailed": "Failed to clear remote cache"
 		}
 	},
 	"appearance": {

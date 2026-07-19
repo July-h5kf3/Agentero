@@ -431,7 +431,8 @@
 - [x] i18n；[`api.md`](../backend/api.md) 远程 command 表
 - [x] **M4** 远端 recycle bin（`.agentero/.trash/` via SFTP，与本地语义对齐）
 - [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）
-- [ ] **M4** blob LRU、Codex-SSH、设置页远程偏好
+- [x] **M4** blob LRU（2 GiB/库）+ 设置页「清除远程缓存」
+- [ ] **M4** Codex-SSH、更完整远程偏好
 
 ### 发布
 

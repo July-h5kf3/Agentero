@@ -134,7 +134,9 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `remote_mkdir` / `remote_remove` | 建目录 / 删除（可 recursive） |
 | `remote_paper_list` / `remote_paper_get` / `remote_paper_delete` | catalog 工作副本 |
 | `remote_paper_rescan` / `remote_paper_set_tags` / `remote_paper_set_is_read` | mutation 后 PUT 远端 |
-| `remote_cache_file` | PDF 等缓存到本机 ephemeral 路径 |
+| `remote_cache_file` | PDF 等缓存到本机 ephemeral 路径（mtime 键 + LRU 2 GiB） |
+| `remote_cache_stats` | `{ sessionId? }` → `{ bytes, files, root, maxBytes }`（无 session 则汇总全部） |
+| `remote_cache_clear` | `{ sessionId? }` → `{ freedBytes }` 清除 blob 缓存 |
 | `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
