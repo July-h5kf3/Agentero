@@ -686,13 +686,34 @@ fn read_creators(conn: &Connection, item_id: i64) -> Result<Vec<Value>, AppError
 }
 
 fn read_tags(conn: &Connection, item_id: i64) -> Result<Vec<String>, AppError> {
-    let mut stmt = conn.prepare(
-        "SELECT t.name FROM itemTags it JOIN tags t ON it.tagID = t.tagID WHERE it.itemID = ?1",
-    )?;
-    let rows = stmt.query_map(params![item_id], |r| r.get::<_, String>(0))?;
+    // Keep only manually-assigned tags. Zotero marks automatic tags (added by
+    // web translators, e.g. source/status tags) with a non-zero `type`; user
+    // tags are `type = 0`. Older libraries without a `type` column fall back to
+    // every tag.
+    let sql = "SELECT t.name, it.type FROM itemTags it JOIN tags t ON it.tagID = t.tagID WHERE it.itemID = ?1";
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(_) => {
+            let mut all = conn.prepare(
+                "SELECT t.name FROM itemTags it JOIN tags t ON it.tagID = t.tagID WHERE it.itemID = ?1",
+            )?;
+            let rows = all.query_map(params![item_id], |r| r.get::<_, String>(0))?;
+            let mut out = Vec::new();
+            for row in rows {
+                out.push(row?);
+            }
+            return Ok(out);
+        }
+    };
+    let rows = stmt.query_map(params![item_id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    })?;
     let mut out = Vec::new();
     for row in rows {
-        out.push(row?);
+        let (name, tag_type) = row?;
+        if tag_type == 0 {
+            out.push(name);
+        }
     }
     Ok(out)
 }
@@ -966,7 +987,7 @@ mod tests {
              CREATE TABLE creatorTypes (creatorTypeID INTEGER PRIMARY KEY, creatorType TEXT);
              CREATE TABLE itemCreators (itemID INTEGER, creatorID INTEGER, creatorTypeID INTEGER, orderIndex INTEGER);
              CREATE TABLE tags (tagID INTEGER PRIMARY KEY, name TEXT);
-             CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER);
+             CREATE TABLE itemTags (itemID INTEGER, tagID INTEGER, type INTEGER);
              CREATE TABLE itemAttachments (itemID INTEGER, parentItemID INTEGER, linkMode INTEGER, contentType TEXT, path TEXT);
              CREATE TABLE deletedItems (itemID INTEGER);
              CREATE TABLE collections (collectionID INTEGER PRIMARY KEY, collectionName TEXT, parentCollectionID INTEGER);
@@ -984,8 +1005,8 @@ mod tests {
              INSERT INTO itemData VALUES (10,1,100),(10,2,101),(10,3,102);
              INSERT INTO creators VALUES (1,'Ashish','Vaswani',0);
              INSERT INTO itemCreators VALUES (10,1,1,0);
-             INSERT INTO tags VALUES (1,'nlp');
-             INSERT INTO itemTags VALUES (10,1);
+             INSERT INTO tags VALUES (1,'nlp'),(2,'_to_read');
+             INSERT INTO itemTags VALUES (10,1,0),(10,2,1);
              INSERT INTO collections VALUES (1,'NLP',NULL),(2,'Transformers',1);
              INSERT INTO collectionItems VALUES (2,10,0);
              INSERT INTO itemNotes VALUES (12,10,'<p>Great <strong>paper</strong>.</p>','Great');
@@ -1052,6 +1073,8 @@ mod tests {
         let tags = it.json["tags"].as_array().unwrap();
         assert!(tags.iter().any(|t| t["tag"] == "Transformers"));
         assert!(tags.iter().any(|t| t["tag"] == "nlp"));
+        // Automatic Zotero tags (type != 0) are filtered out.
+        assert!(!tags.iter().any(|t| t["tag"] == "_to_read"));
     }
 
     #[test]
