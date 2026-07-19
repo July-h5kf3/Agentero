@@ -30,6 +30,16 @@
 - 系统级挂载（sshfs / FUSE）作为唯一路径
 - 在 Agentero 内填写模型 API Key（仍 BYOA：Key 在**服务器**上配置）
 - Finder 显示 / 系统终端打开远端路径（无本机 path 语义）
+- **Windows 客户端打开远程 Vault**（见下）
+
+### 1.2.1 平台支持
+
+| 客户端 OS | 本地 Vault | 远程 Vault（SSH/SFTP） |
+|---|---|---|
+| macOS / Linux | ✅ | ✅（`openssh` + `openssh-sftp-client`） |
+| Windows | ✅ | ❌ MVP：依赖的 `openssh`/`sendfd` 为 Unix-only；连接时返回明确错误。跨平台需后续迁 `russh`/`ssh2` 等 |
+
+依赖在 `src-tauri/Cargo.toml` 中以 `[target.'cfg(unix)'.dependencies]` 声明，避免 Windows release 构建失败。
 
 ### 1.3 产品表述（期望管理）
 
@@ -330,8 +340,8 @@ type RemoteAgentLaunch = {
 | 用途 | 候选 | 备注 |
 |---|---|---|
 | SSH 客户端 | [`russh`](https://github.com/Eugeny/russh) | 纯 Rust；与 r-shell 同栈；需自接 config/agent 或简化配置 |
-| SSH + 系统兼容 | [`openssh`](https://crates.io/crates/openssh) + 系统 `ssh` | **优先吃 `~/.ssh/config`、ProxyJump、ssh-agent**；MVP 打通快 |
-| SFTP | [`russh-sftp`](https://crates.io/crates/russh-sftp) 或 [`openssh-sftp-client`](https://crates.io/crates/openssh-sftp-client) | 与上表 SSH 选型配对 |
+| SSH + 系统兼容 | [`openssh`](https://crates.io/crates/openssh) + 系统 `ssh` | **优先吃 `~/.ssh/config`、ProxyJump、ssh-agent**；MVP 打通快；**Unix-only**（`sendfd`） |
+| SFTP | [`russh-sftp`](https://crates.io/crates/russh-sftp) 或 [`openssh-sftp-client`](https://crates.io/crates/openssh-sftp-client) | 与上表 SSH 选型配对；当前 MVP 用后者且仅 `cfg(unix)` |
 | 备选 | [`ssh2`](https://crates.io/crates/ssh2)（libssh2） | 成熟但 FFI / 构建链更重 |
 | 异步 | 现有 Tokio 运行时 | channel 泵与 SFTP 同 runtime |
 | 密钥 | ssh-agent / 本机 key 路径；密码入 keychain（后置） | **禁止**明文写进 Vault |

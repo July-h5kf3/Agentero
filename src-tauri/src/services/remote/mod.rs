@@ -8,6 +8,7 @@ pub mod catalog_mirror;
 pub mod import_bridge;
 pub mod launch;
 pub mod session;
+#[cfg(unix)]
 pub mod sftp_fs;
 pub mod trash_bridge;
 

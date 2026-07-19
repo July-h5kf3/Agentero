@@ -1,7 +1,6 @@
 //! Active remote vault sessions (SSH/SFTP or local-sim for tests).
 
 use super::catalog_mirror::CatalogMirror;
-use super::sftp_fs::SftpFs;
 use crate::error::AppError;
 use crate::services::fs::{FsCaps, LocalFs, VaultFs};
 use serde::Serialize;
@@ -120,13 +119,26 @@ impl RemoteRegistry {
             let display = format!("local-sim:{}", root.display());
             ("local-sim".into(), Arc::new(LocalFs::new(root)), display)
         } else {
-            let destination = match user.map(str::trim).filter(|s| !s.is_empty()) {
-                Some(u) => format!("{u}@{host}"),
-                None => host.to_string(),
-            };
-            let sftp = SftpFs::connect(&destination, remote_path).await?;
-            let display = format!("{destination}:{remote_path}");
-            ("ssh".into(), Arc::new(sftp), display)
+            #[cfg(unix)]
+            {
+                use super::sftp_fs::SftpFs;
+                let destination = match user.map(str::trim).filter(|s| !s.is_empty()) {
+                    Some(u) => format!("{u}@{host}"),
+                    None => host.to_string(),
+                };
+                let sftp = SftpFs::connect(&destination, remote_path).await?;
+                let display = format!("{destination}:{remote_path}");
+                ("ssh".into(), Arc::new(sftp) as Arc<dyn VaultFs>, display)
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = user;
+                return Err(AppError::message(
+                    "Remote vault over SSH is not supported on Windows yet \
+                     (openssh/SFTP client is Unix-only). Open a local vault, \
+                     or use Agentero on macOS/Linux for remote vaults.",
+                ));
+            }
         };
 
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -240,6 +252,7 @@ mod tests {
     /// AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault> \
     /// cargo test -p agentero --lib live_ssh_remote_vault -- --ignored --nocapture
     /// ```
+    #[cfg(unix)]
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
     async fn live_ssh_remote_vault() {
@@ -424,6 +437,7 @@ mod tests {
     /// AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault> \
     /// cargo test -p agentero --lib live_paper_features -- --ignored --nocapture
     /// ```
+    #[cfg(unix)]
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
     async fn live_paper_features() {
@@ -1002,6 +1016,7 @@ mod tests {
     }
 
     /// Live SSH magic-wand import smoke (env-driven; needs network).
+    #[cfg(unix)]
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
     async fn live_ssh_import_arxiv() {
