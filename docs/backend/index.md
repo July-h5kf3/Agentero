@@ -23,7 +23,7 @@
 - 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。笔记内嵌图由前端写入 `{mdDir}/assets/`（见 [`data-model.md`](data-model.md)「Markdown 内嵌图片」）；Host 提供 fs 权限，无独立 image Tauri command。
 - 从 Markdown 构建双链、反链和图谱索引（paper 标题可读 catalog）。
 - 向前端暴露 Tauri invoke commands 与 event streams。
-- 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
+- 启动并管理 **ACP-compatible Agent**（现网：本机进程；规划中：远程 Vault 时经 SSH 在**远端**启动），但不托管模型密钥（BYOA）。远程设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。

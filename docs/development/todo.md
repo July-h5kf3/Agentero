@@ -418,6 +418,18 @@
 - [x] Release 附带 `agentero` 二进制
 - [ ] graph / doctor / completions（P1-7）
 
+### 远程 Vault（SSH/SFTP）+ 远端 BYOA
+
+设计见 [`remote-vault.md`](remote-vault.md)（文档先行；未实现）。
+
+- [ ] **M0** `VaultFs` / `LocalFs` 抽象，关键读写迁 trait；本地零回归
+- [ ] **M1** SSH 连接 + SFTP 文件树 / md 读写 / PDF blob 预览 / 远程徽章与最近列表
+- [ ] **M2** catalog 会话 work 副本 + GET/PUT；`paper_list` / tags / rescan；mtime 冲突
+- [ ] **M3** ACP `SshStdio`：远端 discover / warm / run；精读 Zap；permission + notes-review
+- [ ] **M4** 连接复用、atomic catalog PUT、远端 trash、入库写远端、缓存 LRU
+- [ ] i18n（en → zh-CN）与设置页远程项
+- [ ] `docs/backend/api.md` 落地 command 契约
+
 ### 发布
 
 - [x] tag → 三平台草稿 Release
