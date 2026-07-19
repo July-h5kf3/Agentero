@@ -1143,44 +1143,6 @@ export default function App() {
 			});
 	}, [settings.connectorEnabled]);
 
-	// Refresh tree/library when the official Zotero Connector saves into the vault.
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		const unsubs: Array<() => void> = [];
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsubs.push(
-				await listen<ConnectorItemSaved>("connector:item-saved", (ev) => {
-					const p = ev.payload;
-					const vault = vaultPathRef.current;
-					if (vault) {
-						void refreshTree(vault);
-						void refreshLibrary();
-					}
-					if (p?.title) {
-						notifySuccess(
-							p.deduped
-								? t("sidebar:connector.deduped", { title: p.title })
-								: t("sidebar:connector.saved", { title: p.title }),
-						);
-					}
-				}),
-			);
-			unsubs.push(
-				await listen<{ message?: string }>("connector:error", (ev) => {
-					const msg = ev.payload?.message?.trim();
-					if (msg) notifyError(msg);
-				}),
-			);
-		})();
-		return () => {
-			cancelled = true;
-			for (const u of unsubs) u();
-		};
-	}, [refreshTree, refreshLibrary, t]);
-
 	const handleRefresh = useCallback(() => {
 		if (!vaultPath) return;
 		void (async () => {
@@ -1504,6 +1466,55 @@ export default function App() {
 		},
 		[openTab],
 	);
+
+	// Refresh tree/library when the official Zotero Connector saves into the vault;
+	// open the paper tab (same as magic-wand import).
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsubs.push(
+				await listen<ConnectorItemSaved>("connector:item-saved", (ev) => {
+					const p = ev.payload;
+					const vault = vaultPathRef.current;
+					if (vault) {
+						void refreshTree(vault);
+						void refreshLibrary();
+					}
+					// Open/focus the paper tab (metadata save, attachment upload, or move).
+					const rel = (p?.path ?? "")
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "");
+					if (vault && rel) {
+						const paperAbs = `${vault
+							.replace(/\\/g, "/")
+							.replace(/\/+$/, "")}/${rel}`;
+						openPaper(paperAbs);
+					}
+					if (p?.title) {
+						notifySuccess(
+							p.deduped
+								? t("sidebar:connector.deduped", { title: p.title })
+								: t("sidebar:connector.saved", { title: p.title }),
+						);
+					}
+				}),
+			);
+			unsubs.push(
+				await listen<{ message?: string }>("connector:error", (ev) => {
+					const msg = ev.payload?.message?.trim();
+					if (msg) notifyError(msg);
+				}),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			for (const u of unsubs) u();
+		};
+	}, [refreshTree, refreshLibrary, openPaper, t]);
 
 	const handleLookupSubmit = useCallback(
 		async (text: string) => {

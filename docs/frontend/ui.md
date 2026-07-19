@@ -410,7 +410,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：文件夹名 A–Z；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
+- **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：文件夹名 A–Z；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。

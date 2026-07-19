@@ -652,7 +652,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | 事件 | payload |
 |---|---|
 | `connector:status` | `ConnectorStatus` |
-| `connector:item-saved` | `{ path, id, title, deduped, sessionId }` |
+| `connector:item-saved` | `{ path, id, title, deduped, sessionId }` — 前端刷新树/Library 并 `openPaper` |
 | `connector:error` | `{ message, sessionId? }` |
 
 ### 3.5c 全库搜索（已落地）
