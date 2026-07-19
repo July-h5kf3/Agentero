@@ -342,7 +342,7 @@ mod tests {
             year: None,
             date: None,
             abstract_text: None,
-            tags: vec!["NLP".into()],
+            tags: vec![crate::services::catalog::papers::PaperTag::new("NLP")],
             arxiv_id: None,
             doi: None,
             isbn: None,
