@@ -61,7 +61,7 @@ mod acp_live {
                 d.env.insert(key.to_string(), v);
             }
         }
-        let result = probe_agent(&d).await;
+        let result = probe_agent(&d, None).await;
         eprintln!("probe result: {:?}", result);
         // Live probe is environment-dependent (network / proxy / cold start).
         if !result.available {

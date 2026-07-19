@@ -10,7 +10,7 @@
 | 系统语言 | [Rust](https://www.rust-lang.org/) | 适合安全本地 IO、异步服务和强约束命令契约。 |
 | Tauri 文件系统 | [`tauri-plugin-fs`](https://v2.tauri.app/plugin/file-system/) | 读写用户选择的 Vault 文件。 |
 | Tauri 对话框 | [`tauri-plugin-dialog`](https://v2.tauri.app/plugin/dialog/) | 原生文件夹 / 文件选择。 |
-| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 已接入插件；最近 Vault / 设置目前仍以前端 `localStorage` 为主，后续迁 Store。 |
+| Tauri Store | [`tauri-plugin-store`](https://v2.tauri.app/plugin/store/) | 已接入插件；**应用设置**与 **Agent 注册表**已迁 XDG 文件（`~/.config/agentero/`）；最近 Vault 等仍以前端 `localStorage` 为主。 |
 | Agent 协议 | [Agent Client Protocol](https://agentclientprotocol.com/) | Agentero 作为 Client 连接用户本机 BYOA Agent。 |
 | Markdown 图谱 | Rust Wiki 索引 + Markdown 解析 | 反链和图谱必须从 Vault Markdown 派生。 |
 | 论文目录库 | SQLite / [`rusqlite`](https://crates.io/crates/rusqlite)（bundled） | `.agentero/catalog.sqlite`：论文集合 + metadata 权威存储；可选导出 `PAPERS.md` / BibTeX。 |
@@ -23,7 +23,7 @@
 - 读写 Markdown 笔记与 source；维护 **catalog**（论文 meta / 集合）。笔记内嵌图由前端写入 `{mdDir}/assets/`（见 [`data-model.md`](data-model.md)「Markdown 内嵌图片」）；Host 提供 fs 权限，无独立 image Tauri command。
 - 从 Markdown 构建双链、反链和图谱索引（paper 标题可读 catalog）。
 - 向前端暴露 Tauri invoke commands 与 event streams。
-- 启动并管理本地 ACP-compatible Agent，但不托管模型密钥。
+- 启动并管理 **ACP-compatible Agent**（现网：本机进程；规划中：远程 Vault 时经 SSH 在**远端**启动），但不托管模型密钥（BYOA）。远程设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
 - 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。

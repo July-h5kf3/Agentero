@@ -1,6 +1,13 @@
 {
 	"title": "Settings",
 	"dismiss": "Dismiss settings",
+	"host": {
+		"thisComputer": "This computer",
+		"remote": "Remote",
+		"localTooltip": "Local host: {{name}}",
+		"remoteTooltip": "Remote host {{host}} · {{path}}",
+		"remoteContextHint": "Vault is open on {{host}} ({{path}}). App appearance stays local; Agent catalog below probes that host when you open the Agent section."
+	},
 	"nav": {
 		"general": "General",
 		"appearance": "Appearance",
@@ -42,13 +49,23 @@
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
-			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Local only; off by default.",
+			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Works with local and remote vaults; off by default.",
 			"statusListening": "Listening on {{address}}",
 			"statusOff": "Off",
 			"statusStarting": "Starting…",
 			"statusError": "Error: {{message}}",
 			"statusNoVault": "Open a vault to accept saves",
 			"desktopOnly": "Requires the desktop app."
+		},
+		"remoteCache": {
+			"section": "Remote vault cache",
+			"label": "PDF preview cache",
+			"hint": "Ephemeral local copies of remote PDFs and large files. Oldest files are removed when usage exceeds the cap (2 GB per remote vault).",
+			"size": "{{used}} in {{files}} files (cap {{max}})",
+			"sizeUnknown": "Cache size unavailable",
+			"clear": "Clear remote cache",
+			"clearing": "Clearing…",
+			"clearFailed": "Failed to clear remote cache"
 		}
 	},
 	"appearance": {
@@ -149,6 +166,16 @@
 			"name": "Name",
 			"command": "Command",
 			"args": "Args"
+		},
+		"remote": {
+			"banner": "Probing ACP agents on {{host}}. Binaries must be installed and logged in on the server (PATH / login shell). Codex over pure SSH is not supported yet.",
+			"commonAgents": "Agents on remote host",
+			"probeTitle": "Rescan & probe remote agents",
+			"empty": "No catalog results. Check the SSH session and remote PATH.",
+			"hint": "Refresh runs command -v then ACP initialize over SSH. If Claude shows “ACP adapter missing”, use Install ACP (opens Terminal → Enter → SSH install on the server). API keys stay on the remote machine (BYOA). If probe times out, enable Agent proxy (must be reachable from the server).",
+			"proxyHint": "Same proxy as local Agent settings. Injected as HTTP(S)_PROXY on the remote process — the URL must be reachable from the server (e.g. a proxy on the server, not only on this Mac).",
+			"installAdapterAria": "Install ACP adapter for {{name}} on remote host via Terminal",
+			"installAdapterTitle": "Open Terminal, then SSH to {{host}} and run: {{command}} (press Enter to confirm)"
 		}
 	},
 	"translate": {

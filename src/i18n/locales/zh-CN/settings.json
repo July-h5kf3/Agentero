@@ -1,6 +1,13 @@
 {
 	"title": "设置",
 	"dismiss": "关闭设置",
+	"host": {
+		"thisComputer": "本机",
+		"remote": "远端",
+		"localTooltip": "本机：{{name}}",
+		"remoteTooltip": "远端 {{host}} · {{path}}",
+		"remoteContextHint": "当前 Vault 在 {{host}}（{{path}}）。外观等仍为本机偏好；打开 Agent 分区时会对远端主机做探测。"
+	},
 	"nav": {
 		"general": "通用",
 		"appearance": "外观",
@@ -42,13 +49,23 @@
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
-			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。仅本机；默认关闭。",
+			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。支持本地与远程 Vault；默认关闭。",
 			"statusListening": "监听中 {{address}}",
 			"statusOff": "已关闭",
 			"statusStarting": "启动中…",
 			"statusError": "错误：{{message}}",
 			"statusNoVault": "请先打开知识库才能接收保存",
 			"desktopOnly": "需要桌面应用。"
+		},
+		"remoteCache": {
+			"section": "远程 Vault 缓存",
+			"label": "PDF 预览缓存",
+			"hint": "远端 PDF 与大文件的本机临时副本。超过上限（每个远程库 2 GB）时按最近最少使用淘汰。",
+			"size": "已用 {{used}}，{{files}} 个文件（上限 {{max}}）",
+			"sizeUnknown": "无法读取缓存用量",
+			"clear": "清除远程缓存",
+			"clearing": "清除中…",
+			"clearFailed": "清除远程缓存失败"
 		}
 	},
 	"appearance": {
@@ -149,6 +166,16 @@
 			"name": "名称",
 			"command": "命令",
 			"args": "参数"
+		},
+		"remote": {
+			"banner": "正在探测 {{host}} 上的 ACP Agent。二进制需在服务器安装并完成登录（login shell PATH）。纯 SSH 下暂不支持 Codex。",
+			"commonAgents": "远端主机上的 Agent",
+			"probeTitle": "重新扫描并探测远端 Agent",
+			"empty": "没有目录结果。请检查 SSH 会话与远端 PATH。",
+			"hint": "刷新会经 SSH 执行 command -v 与 ACP initialize。若 Claude 显示「ACP adapter missing」，点「Install ACP」（打开终端 → Enter → 经 SSH 在服务器安装）。密钥留在远端（BYOA）。若探测超时，可开启 Agent 代理（代理需从服务器可达）。",
+			"proxyHint": "与本地 Agent 设置共用同一代理。会以 HTTP(S)_PROXY 注入远端进程——地址必须从服务器可达（例如服务器上的代理，而非仅本机 127.0.0.1）。",
+			"installAdapterAria": "在终端中经 SSH 为 {{name}} 安装远端 ACP 适配器",
+			"installAdapterTitle": "打开终端，SSH 到 {{host}} 并执行：{{command}}（按 Enter 确认）"
 		}
 	},
 	"translate": {

@@ -35,7 +35,7 @@ Agentero 桌面应用
 | 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、Catalog SQLite、双链/反链/图谱索引、[入库流水线](backend/paper-import-pipeline.md)。 |
 | 测试 | [`test/`](test/index.md) | 前端 Vitest、Rust 单测、临时 Vault fixture 与验证策略。 |
 | 开发 | [`development/`](development/index.md) | 产品需求、路线图、实现 backlog、发布与开发流程。 |
-| Bug 修复 | [`bug_fix/`](bug_fix/deepseek-thinking-body.md) | 已修复问题的现象、根因、方案与参考资料。 |
+| Bug 修复 | [`bug_fix/`](bug_fix/) | 已修复问题的现象、根因、方案与参考资料（如 [DeepSeek Thinking](bug_fix/deepseek-thinking-body.md)、[远端 ACP PATH](bug_fix/remote-acp-path-ssh.md)）。 |
 
 ## 当前 UI 形态
 
@@ -44,7 +44,7 @@ Agentero 桌面应用
 - 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 染色 chip + 筛选、双向滚动），数据来自 `paper_list`。
 - 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下虚拟节点 `agentero:trash` → 中间栏回收站视图恢复 / 清空，无 Undo toast）。Paper 行默认 **标题 · 作者**（设置 → 通用可切换标签/排序预设，不改磁盘文件夹名）。
 - **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑并可设 **Apple 8 色**（`paper_set_tags`，`tags_json` 字符串或 `{name,color}`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
-- 无 Vault 时中间栏为欢迎页（最近路径 + 打开 / 创建 / 从 Zotero 迁移）；`⌘N` 可开多窗口。
+- 无 Vault 时中间栏为欢迎页（最近本地/远程 + 打开 / **打开远程** / 创建 / 从 Zotero 迁移）；有 Vault 时侧栏标题可切换知识库（含 **打开远程…**）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
@@ -60,6 +60,7 @@ Agentero 桌面应用
 - **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；`.md` 变更防抖重建 wiki 索引；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
 - **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
+- **远程 Vault（SSH/SFTP）+ 远端 BYOA**：**MVP 已落地**（见 [`development/remote-vault.md`](development/remote-vault.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
 ## 关键三方技术

@@ -14,7 +14,9 @@ pub mod services;
 #[cfg(target_os = "macos")]
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
+use services::app_settings::AppSettingsStore;
 use services::connector::ConnectorController;
+use services::remote::RemoteRegistry;
 use services::watcher::FsWatchController;
 use services::wiki::WikiIndexState;
 use std::sync::Arc;
@@ -176,13 +178,19 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(build_log_plugin().build())
+        .manage(AppSettingsStore::load())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(services::agent::PermissionGate::new())
         .manage(WikiIndexState::new())
         .manage(FsWatchController::new())
         .manage(Arc::new(ConnectorController::new()))
+        .manage(Arc::new(RemoteRegistry::new()))
         .invoke_handler(tauri::generate_handler![
+            commands::settings::settings_get,
+            commands::settings::settings_set,
+            commands::settings::settings_path,
+            commands::settings::host_identity,
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
             commands::agent::agent_list_skills,
@@ -208,6 +216,31 @@ pub fn run() {
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
             commands::vault::vault_ensure,
+            commands::remote::remote_connect,
+            commands::remote::remote_disconnect,
+            commands::remote::remote_status,
+            commands::remote::remote_list,
+            commands::remote::remote_stat,
+            commands::remote::remote_read_text,
+            commands::remote::remote_write_text,
+            commands::remote::remote_read_bytes,
+            commands::remote::remote_mkdir,
+            commands::remote::remote_remove,
+            commands::remote::remote_write_bytes,
+            commands::remote::remote_paper_list,
+            commands::remote::remote_paper_get,
+            commands::remote::remote_paper_delete,
+            commands::remote::remote_paper_rescan,
+            commands::remote::remote_paper_set_tags,
+            commands::remote::remote_paper_set_is_read,
+            commands::remote::remote_cache_file,
+            commands::remote::remote_cache_stats,
+            commands::remote::remote_cache_clear,
+            commands::remote::remote_agent_discover,
+            commands::remote::remote_agent_scan,
+            commands::remote::remote_agent_probe,
+            commands::remote::remote_agent_open_install_terminal,
+            commands::remote::remote_host_identity,
             commands::terminal::path_open_in_terminal,
             commands::trash::path_trash,
             commands::trash::path_untrash,
@@ -264,6 +297,8 @@ pub fn run() {
             let _ = app.state::<WikiIndexState>();
             let connector = app.state::<Arc<ConnectorController>>();
             connector.set_app_handle(app.handle().clone());
+            let remote = app.state::<Arc<RemoteRegistry>>();
+            connector.set_remote_registry(Arc::clone(&remote));
             log::info!(
                 target: "agentero::op",
                 "op start app_ready debug={}",

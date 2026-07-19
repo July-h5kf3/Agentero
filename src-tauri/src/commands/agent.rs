@@ -12,9 +12,13 @@ use crate::services::agent::{
     warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate,
     PermissionPolicy,
 };
+use crate::services::remote::{
+    notes_rel_from_target, read_remote_note, resolve_remote_target, RemoteRegistry,
+};
 use crate::services::terminal;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::{Manager, State};
 
 #[derive(Debug, Serialize)]
@@ -188,7 +192,7 @@ pub async fn agent_probe(
     let result = if desc.template == AgentTemplate::CodexAcp {
         probe_codex(&desc).await
     } else {
-        probe_agent(&desc).await
+        probe_agent(&desc, None).await
     };
     let _ = registry.apply_probe_result(&id, &result);
     Ok(ApiResult::ok(result))
@@ -247,7 +251,7 @@ pub async fn agent_probe_catalog(
     let result = if desc.template == AgentTemplate::CodexAcp {
         probe_codex(&desc).await
     } else {
-        probe_agent(&desc).await
+        probe_agent(&desc, None).await
     };
     let _ = registry.apply_probe_result(&desc.id, &result);
     Ok(ApiResult::ok(result))
@@ -259,6 +263,7 @@ pub async fn agent_run_once(
     registry: State<'_, AgentRegistry>,
     runs: State<'_, AgentRunController>,
     gate: State<'_, PermissionGate>,
+    remote_registry: State<'_, Arc<RemoteRegistry>>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
     use crate::log_util::{trunc, OpTimer};
@@ -286,12 +291,36 @@ pub async fn agent_run_once(
         }
     };
 
+    let remote_target_early =
+        match resolve_remote_target(remote_registry.inner(), request.vault_path.as_deref()).await {
+            Ok(t) => t,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+    if desc.template == AgentTemplate::CodexAcp
+        && remote_target_early.as_ref().is_some_and(|r| r.is_ssh())
+    {
+        let err = AppError::message(
+            "Codex on remote SSH vault is not supported yet; use an ACP agent installed on the server",
+        );
+        op.finish_err(&err);
+        return Ok(map_err(err));
+    }
+    // local-sim: Codex sees the real local directory path
+    let codex_vault_path = remote_target_early
+        .as_ref()
+        .filter(|r| !r.is_ssh())
+        .map(|r| r.remote_cwd.clone())
+        .or_else(|| request.vault_path.clone());
+
     let (generated_session_id, message_id) = new_ids();
     let prepared_codex_thread = if desc.template == AgentTemplate::CodexAcp {
         match prepare_codex_thread(
             &desc,
             request.session_id.clone(),
-            request.vault_path.clone(),
+            codex_vault_path,
             request.model_id.clone(),
             request.auto_approve,
             !request.hide_from_chat_history,
@@ -343,16 +372,38 @@ pub async fn agent_run_once(
     let session_agent_id = log_agent_id.clone();
     // Trust loop: snapshot the target note before the run so we can offer a
     // keep / revert review if the agent rewrites it.
-    let snapshot_path = request
-        .vault_path
-        .as_deref()
-        .zip(request.target.as_deref())
-        .and_then(|(v, t)| snapshot_notes_path(v, t));
+    let remote_target = remote_target_early;
+    let remote_for_spawn = remote_target.clone();
+    let snapshot_path = if remote_target.is_some() {
+        None
+    } else {
+        request
+            .vault_path
+            .as_deref()
+            .zip(request.target.as_deref())
+            .and_then(|(v, t)| snapshot_notes_path(v, t))
+    };
     let notes_before = snapshot_path.as_ref().and_then(|p| read_note_snapshot(p));
+    let remote_notes_rel = request
+        .target
+        .as_deref()
+        .filter(|_| remote_target.is_some())
+        .map(notes_rel_from_target);
+    let notes_before_remote =
+        if let (Some(rt), Some(rel)) = (remote_target.as_ref(), remote_notes_rel.as_ref()) {
+            read_remote_note(&rt.session, rel).await.ok().flatten()
+        } else {
+            None
+        };
+    // Codex native path still expects a real local cwd; remote SSH uses ACP-style
+    // ssh wrap only for generic ACP agents. For Codex + remote, rewrite vault_path
+    // to work_root for thread index and remote_cwd for process (via remote target).
     tauri::async_runtime::spawn(async move {
         if desc.template == AgentTemplate::CodexAcp {
             if let Some(prepared_codex_thread) = prepared_codex_thread {
                 // Codex turn path is text-first; image bytes are not forwarded yet.
+                // Remote vaults: codex still runs only for local-sim (local path);
+                // pure SSH remote is rejected earlier if prepare failed.
                 run_codex_turn(
                     events.clone(),
                     prepared_codex_thread,
@@ -381,7 +432,7 @@ pub async fn agent_run_once(
                 request.prompt,
                 request.images,
                 request.workflow,
-                request.target,
+                request.target.clone(),
                 request.vault_path,
                 request.model_id,
                 request.reasoning_effort,
@@ -392,6 +443,7 @@ pub async fn agent_run_once(
                 request.response_language,
                 request.personal_prompt,
                 cancellation,
+                remote_for_spawn,
             )
             .await;
         }
@@ -404,6 +456,23 @@ pub async fn agent_run_once(
                         "agent:notes-review",
                         NotesReviewEvent {
                             path: path.to_string_lossy().to_string(),
+                            before: before.clone(),
+                            after,
+                        },
+                    );
+                }
+            }
+        } else if let (Some(rt), Some(rel), Some(before)) = (
+            remote_target.as_ref(),
+            remote_notes_rel.as_ref(),
+            notes_before_remote.as_ref(),
+        ) {
+            if let Ok(Some(after)) = read_remote_note(&rt.session, rel).await {
+                if &after != before {
+                    let _ = events.emit(
+                        "agent:notes-review",
+                        NotesReviewEvent {
+                            path: rel.clone(),
                             before: before.clone(),
                             after,
                         },
@@ -548,6 +617,7 @@ fn read_note_snapshot(path: &std::path::Path) -> Option<String> {
 pub async fn agent_warm(
     window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
+    remote_registry: State<'_, Arc<RemoteRegistry>>,
     request: WarmRequest,
 ) -> Result<ApiResult<WarmResult>, String> {
     let desc = match registry.resolve_default(request.agent_id.as_deref()) {
@@ -564,11 +634,45 @@ pub async fn agent_warm(
         }
     };
 
+    let remote =
+        match resolve_remote_target(remote_registry.inner(), request.vault_path.as_deref()).await {
+            Ok(t) => t,
+            Err(e) => {
+                return Ok(ApiResult::ok(WarmResult {
+                    agent_id: desc.id,
+                    ok: false,
+                    models: None,
+                    usage_used: None,
+                    usage_size: None,
+                    error: Some(e.to_string()),
+                }));
+            }
+        };
+
     let events = AgentEventEmitter::new(window.app_handle().clone(), window.label());
     let result = if desc.template == AgentTemplate::CodexAcp {
-        warm_codex(events, desc, request.vault_path, request.model_id).await
+        if remote.as_ref().is_some_and(|r| r.is_ssh()) {
+            WarmResult {
+                agent_id: desc.id,
+                ok: false,
+                models: None,
+                usage_used: None,
+                usage_size: None,
+                error: Some(
+                    "Codex on remote SSH vault is not supported yet; use an ACP agent (OpenCode / Claude) installed on the server"
+                        .into(),
+                ),
+            }
+        } else {
+            // local-sim: use real local path as vault
+            let vault = remote
+                .as_ref()
+                .map(|r| r.remote_cwd.clone())
+                .or(request.vault_path);
+            warm_codex(events, desc, vault, request.model_id).await
+        }
     } else {
-        warm_agent(events, desc, request.vault_path, request.model_id).await
+        warm_agent(events, desc, request.vault_path, request.model_id, remote).await
     };
     Ok(ApiResult::ok(result))
 }

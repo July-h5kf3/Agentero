@@ -33,6 +33,7 @@
 | 全库搜索 / 命令面板 | ✅ Phase A | `⌘P`/`⌘K` 快速打开 + `⇧⌘P` 命令模式；`>` 前缀；见 [`command-palette.md`](command-palette.md) |
 | 应用弹层栈 | ✅ | `overlay-stack`：Esc/`⌘W` 统一关最顶层 sheet/Dialog；见 [`../frontend/ui.md`](../frontend/ui.md) §3.0 |
 | Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
+| 远程 Vault（SSH/SFTP） | ✅ MVP | 文件权威远端 + 远端 BYOA（ACP over SSH）；见 [`remote-vault.md`](remote-vault.md) |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
 
@@ -49,9 +50,12 @@
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
-- [`bug.md`](bug.md)：待处理现象语料（与 Project / Issue 草案对照）。
+- [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
+
 - [`.md`](.md)：简短产品假设。
-- Bug 修复记录：[`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）。
+- Bug 修复记录：
+  - [`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）
+  - [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)（远端 ACP：BatchMode SSH PATH / Linuxbrew / Install 引号）
 - Paper 入库流水线统一：[`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
 
 ## 交叉引用

@@ -4,9 +4,9 @@
 
 mod assets;
 mod map;
-mod parse;
+pub(crate) mod parse;
 mod zotero_db;
-mod zotero_io;
+pub(crate) mod zotero_io;
 
 pub use assets::{ensure_paper_assets, has_local_pdf, has_local_tex, AssetDownloadResult};
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
@@ -22,6 +22,11 @@ pub use zotero_io::{
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use map::local_pdf_meta;
+
+/// Public helper for remote PDF import staging.
+pub(crate) fn local_pdf_meta_for_import(id: String, title: String) -> PaperMeta {
+    local_pdf_meta(id, title)
+}
 use parse::{extract_primary_identifier, IdentifierKind};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -498,7 +503,7 @@ fn unique_paper_path(vault: &Path, parent_rel: &str, base_id: &str) -> (String, 
     }
 }
 
-async fn resolve_metadata(
+pub(crate) async fn resolve_metadata(
     text: &str,
     translator_base: &str,
 ) -> Result<(PaperMeta, bool), AppError> {

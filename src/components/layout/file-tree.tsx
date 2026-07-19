@@ -16,6 +16,7 @@ import {
 	Library,
 	Loader2,
 	ScrollText,
+	Server,
 	Trash2,
 	Upload,
 	WandSparkles,
@@ -45,6 +46,10 @@ import {
 	FileTreeName,
 } from "@/components/ai-elements/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
+import {
+	type OpenRemoteVaultArgs,
+	RemoteVaultDialog,
+} from "@/components/layout/remote-vault-dialog";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -85,6 +90,13 @@ import {
 	sortFileTreeNodes,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/papers-api";
+import {
+	getRecentRemoteVaults,
+	getRemoteSessionMeta,
+	isRemoteVaultHandle,
+	type RecentRemoteVault,
+	removeRecentRemoteVault,
+} from "@/lib/remote-vault";
 import {
 	openInTerminal,
 	revealInFileManager,
@@ -1707,6 +1719,7 @@ export function VaultSidebarHeader({
 	onRemoveRecent,
 	onOpenVault,
 	onCreateVault,
+	onOpenRemoteVault,
 }: {
 	title: string;
 	onNewFile: () => void;
@@ -1726,12 +1739,38 @@ export function VaultSidebarHeader({
 	onRemoveRecent: (path: string) => void;
 	onOpenVault: () => void;
 	onCreateVault: () => void;
+	/** Open remote vault via SSH (host + remote path). */
+	onOpenRemoteVault?: (args: OpenRemoteVaultArgs) => void | Promise<void>;
 }) {
 	const { t } = useTranslation(["sidebar", "shortcuts", "app"]);
 	const [wandOpen, setWandOpen] = useState(false);
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
 	const [lookupError, setLookupError] = useState<string | null>(null);
+	const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
+	const [recentRemotes, setRecentRemotes] = useState<RecentRemoteVault[]>(() =>
+		getRecentRemoteVaults(),
+	);
+
+	const refreshRecentRemotes = useCallback(() => {
+		setRecentRemotes(getRecentRemoteVaults());
+	}, []);
+
+	const isActiveRemote = useCallback(
+		(entry: RecentRemoteVault) => {
+			if (!vaultPath || !isRemoteVaultHandle(vaultPath)) return false;
+			const meta = getRemoteSessionMeta();
+			if (!meta) return false;
+			const pathMatch = meta.remotePath === entry.remotePath;
+			const hostMatch =
+				meta.host === entry.host ||
+				meta.host === `${entry.user ? `${entry.user}@` : ""}${entry.host}` ||
+				meta.host.endsWith(`@${entry.host}`) ||
+				meta.displayName.includes(`${entry.host}:`);
+			return pathMatch && hostMatch;
+		},
+		[vaultPath],
+	);
 	const actionsDisabled =
 		busy ||
 		isDemo ||
@@ -1915,7 +1954,11 @@ export function VaultSidebarHeader({
 						</>
 					}
 				>
-					<DropdownMenu>
+					<DropdownMenu
+						onOpenChange={(open) => {
+							if (open) refreshRecentRemotes();
+						}}
+					>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<DropdownMenuTrigger asChild>
@@ -1938,10 +1981,66 @@ export function VaultSidebarHeader({
 								{t("app:vault.switchVault")}
 							</TooltipContent>
 						</Tooltip>
-						<DropdownMenuContent align="start" className="w-64">
+						<DropdownMenuContent align="start" className="w-72">
 							<DropdownMenuLabel>
 								{t("app:vault.recentTitle")}
 							</DropdownMenuLabel>
+							{recentRemotes.length === 0 && recentVaults.length === 0 ? (
+								<div className="px-2 py-1.5 text-muted-foreground text-xs">
+									{t("app:vault.recentEmpty")}
+								</div>
+							) : null}
+							{recentRemotes.map((entry) => {
+								const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+								const name = entry.label || entry.remotePath;
+								const active = isActiveRemote(entry);
+								return (
+									<DropdownMenuItem
+										key={key}
+										onSelect={() => {
+											if (!onOpenRemoteVault) return;
+											void (async () => {
+												await onOpenRemoteVault({
+													host: entry.host,
+													user: entry.user,
+													remotePath: entry.remotePath,
+												});
+												refreshRecentRemotes();
+											})();
+										}}
+										className="group flex items-center gap-2"
+									>
+										{active ? (
+											<Check className="size-3.5 shrink-0" />
+										) : (
+											<Server className="size-3.5 shrink-0 text-muted-foreground" />
+										)}
+										<span className="min-w-0 flex-1">
+											<span className="flex items-center gap-1.5 truncate text-sm">
+												<span className="truncate">{name}</span>
+												<span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+													{t("app:vault.remoteBadge")}
+												</span>
+											</span>
+											<span className="block truncate text-muted-foreground text-xs">
+												{entry.host}:{entry.remotePath}
+											</span>
+										</span>
+										<button
+											type="button"
+											className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground group-hover:block"
+											aria-label={t("app:vault.removeRecent", { name })}
+											onClick={(e) => {
+												e.stopPropagation();
+												removeRecentRemoteVault(entry);
+												refreshRecentRemotes();
+											}}
+										>
+											<X className="size-3" />
+										</button>
+									</DropdownMenuItem>
+								);
+							})}
 							{recentVaults.map((p) => (
 								<DropdownMenuItem
 									key={p}
@@ -1981,12 +2080,34 @@ export function VaultSidebarHeader({
 								<FolderOpen className="size-3.5" />
 								{t("app:vault.openVaultButton")}
 							</DropdownMenuItem>
+							{onOpenRemoteVault ? (
+								<DropdownMenuItem
+									onSelect={() => {
+										// Defer so the dropdown can close before the dialog opens.
+										requestAnimationFrame(() => setRemoteDialogOpen(true));
+									}}
+								>
+									<Server className="size-3.5" />
+									{t("app:vault.openRemoteVaultButton")}
+								</DropdownMenuItem>
+							) : null}
 							<DropdownMenuItem onSelect={onCreateVault}>
 								<FolderPlus className="size-3.5" />
 								{t("app:vault.createVaultButton")}
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
+					{onOpenRemoteVault ? (
+						<RemoteVaultDialog
+							open={remoteDialogOpen}
+							onOpenChange={setRemoteDialogOpen}
+							busy={busy}
+							onConnect={async (args) => {
+								await onOpenRemoteVault(args);
+								refreshRecentRemotes();
+							}}
+						/>
+					) : null}
 				</PaneHeader>
 			</div>
 		</TooltipProvider>

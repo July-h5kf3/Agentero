@@ -120,6 +120,15 @@ import {
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+import {
+	clearRemoteSessionMeta,
+	isRemoteVaultHandle,
+	rememberRecentRemoteVault,
+	remoteConnect,
+	remoteDisconnect,
+	remoteSessionIdFromHandle,
+	saveRemoteSessionMeta,
+} from "@/lib/remote-vault";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import {
@@ -1079,6 +1088,19 @@ export default function App() {
 
 	const activateVault = useCallback(
 		async (path: string) => {
+			// Tear down previous remote session so work catalogs are flushed.
+			const prev = vaultPathRef.current;
+			if (prev && isRemoteVaultHandle(prev) && prev !== path) {
+				const prevId = remoteSessionIdFromHandle(prev);
+				if (prevId) {
+					try {
+						await remoteDisconnect(prevId);
+					} catch {
+						// best-effort
+					}
+				}
+				clearRemoteSessionMeta();
+			}
 			saveVaultPath(path);
 			setVaultPath(path);
 			setTabs([]);
@@ -1088,7 +1110,10 @@ export default function App() {
 			setLibraryTagFilter(null);
 			setLibraryScopePath(null);
 			setRecentVaults(getRecentVaults());
-			await rebuildWikiAndNotify(path);
+			// Wiki rebuild needs local fs watcher semantics; remote is best-effort / deferred.
+			if (!isRemoteVaultHandle(path)) {
+				await rebuildWikiAndNotify(path);
+			}
 		},
 		[rebuildWikiAndNotify],
 	);
@@ -1136,6 +1161,38 @@ export default function App() {
 			setBusy(false);
 		}
 	}, [t, activateVault]);
+
+	const handleOpenRemoteVault = useCallback(
+		async (args: { host: string; user?: string; remotePath: string }) => {
+			try {
+				if (!isTauri()) {
+					notifyError(t("errors.openVaultDesktopOnly"));
+					return;
+				}
+				setBusy(true);
+				const info = await remoteConnect(args);
+				saveRemoteSessionMeta(info);
+				rememberRecentRemoteVault({
+					kind: "remote",
+					host: args.host,
+					user: args.user,
+					remotePath: args.remotePath,
+					label: info.displayName,
+				});
+				// Store pseudo-handle so tree / IO route through Host remote_* commands.
+				await activateVault(info.vaultHandle);
+				// Prefer display name in recent list under handle key for reopen? handle is ephemeral.
+				// Reopen needs host+path — keep rememberRecentRemoteVault only.
+			} catch (e) {
+				notifyError(
+					e instanceof Error ? e.message : t("vault.remoteConnectFailed"),
+				);
+			} finally {
+				setBusy(false);
+			}
+		},
+		[t, activateVault],
+	);
 
 	const handleOpenRecentVault = useCallback(
 		async (path: string) => {
@@ -1196,10 +1253,11 @@ export default function App() {
 	}, [vaultPath]);
 
 	// Sync active vault into the Connector server (save target).
+	// When Connector is toggled on, the enable effect re-binds vaultPathRef below.
 	useEffect(() => {
 		if (!isTauri()) return;
-		void connectorSetVault(vaultPath).catch(() => {
-			/* ignore */
+		void connectorSetVault(vaultPath).catch((e) => {
+			console.warn("[connector] setVault failed", e);
 		});
 	}, [vaultPath]);
 
@@ -1222,9 +1280,17 @@ export default function App() {
 	useEffect(() => {
 		if (!isTauri()) return;
 		void connectorSetEnabled(settings.connectorEnabled)
-			.then((st) => {
+			.then(async (st) => {
 				if (settings.connectorEnabled && st.lastError) {
 					notifyError(st.lastError);
+				}
+				// After the HTTP server starts, re-bind vault (Host may have been unbound).
+				if (settings.connectorEnabled && vaultPathRef.current) {
+					try {
+						await connectorSetVault(vaultPathRef.current);
+					} catch (e) {
+						console.warn("[connector] re-bind vault after enable failed", e);
+					}
 				}
 			})
 			.catch((e) => {
@@ -1271,6 +1337,13 @@ export default function App() {
 	const handleRevealInFinder = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
+		if (
+			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
+			path.startsWith("remote:")
+		) {
+			notifyWarning(t("app:vault.remoteNoFinder"));
+			return;
+		}
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.revealDesktopOnly"));
 			return;
@@ -1282,12 +1355,19 @@ export default function App() {
 				notifyError(t("sidebar:fileTree.revealFailed"));
 			}
 		})();
-	}, [treeSelectedPath, t]);
+	}, [treeSelectedPath, vaultPath, t]);
 
 	/** ⌥⌘T — open system terminal at selected path (dir = self, file = parent). */
 	const handleOpenInTerminal = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
+		if (
+			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
+			path.startsWith("remote:")
+		) {
+			notifyWarning(t("app:vault.remoteNoTerminal"));
+			return;
+		}
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
 			return;
@@ -1299,11 +1379,10 @@ export default function App() {
 				notifyError(t("sidebar:fileTree.openInTerminalFailed"));
 			}
 		})();
-	}, [treeSelectedPath, t]);
+	}, [treeSelectedPath, vaultPath, t]);
 
 	/**
-	 * Delete vault paths into the recycle bin (`.agentero/.trash/`).
-	 * Recoverable from the Recycle Bin view; catalog rows are snapshotted too.
+	 * Delete vault paths into the recycle bin (local or remote `.agentero/.trash/`).
 	 */
 	const trashPathsAndNotify = useCallback(
 		async (absPaths: string[]) => {
@@ -1340,7 +1419,9 @@ export default function App() {
 					setTreeSelectedPath(null);
 				}
 				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
+				if (!isRemoteVaultHandle(vaultPath)) {
+					await rebuildWikiAndNotify(vaultPath);
+				}
 				await refreshLibrary();
 			} catch (e) {
 				notifyError(
@@ -1634,7 +1715,9 @@ export default function App() {
 						}),
 					);
 					await refreshTree(vaultPath);
-					await rebuildWikiAndNotify(vaultPath);
+					if (!isRemoteVaultHandle(vaultPath)) {
+						await rebuildWikiAndNotify(vaultPath);
+					}
 					await refreshLibrary();
 					setProgress(100);
 					return r;
@@ -2778,7 +2861,11 @@ export default function App() {
 							>
 								<div className="shrink-0">
 									<VaultSidebarHeader
-										title={vaultDisplayName(vaultPath)}
+										title={
+											vaultPath && isRemoteVaultHandle(vaultPath)
+												? `${vaultDisplayName(vaultPath)} · ${t("app:vault.remoteBadge")}`
+												: vaultDisplayName(vaultPath)
+										}
 										onNewFile={() => startCreate("file")}
 										onNewFolder={() => startCreate("folder")}
 										lookupParentDir={lookupParentDir}
@@ -2796,6 +2883,9 @@ export default function App() {
 										onRemoveRecent={handleRemoveRecentVault}
 										onOpenVault={() => void handleOpenVault()}
 										onCreateVault={() => void handleCreateVault()}
+										onOpenRemoteVault={(args) =>
+											void handleOpenRemoteVault(args)
+										}
 									/>
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">
@@ -2996,6 +3086,9 @@ export default function App() {
 											recentVaults={recentVaults}
 											busy={busy}
 											onOpenVault={() => void handleOpenVault()}
+											onOpenRemoteVault={(args) =>
+												void handleOpenRemoteVault(args)
+											}
 											onCreateVault={() => void handleCreateVault()}
 											onMigrateZotero={() =>
 												void handleMigrateZoteroFromWelcome()
@@ -3276,6 +3369,7 @@ export default function App() {
 					onClose={closeSettings}
 					settings={settings}
 					onChange={updateSettings}
+					vaultPath={vaultPath}
 				/>
 
 				<ZoteroMigrateDialog

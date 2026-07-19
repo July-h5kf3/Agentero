@@ -1,10 +1,13 @@
-//! Recycle-bin commands: undoable delete + restore.
+//! Recycle-bin commands: undoable delete + restore (local + remote).
 
-use crate::error::{map_err, ApiResult};
+use crate::error::{map_err, ApiResult, AppError};
 use crate::log_util::{trunc, OpTimer};
+use crate::services::remote::{parse_remote_handle, trash_bridge, RemoteRegistry};
 use crate::services::trash;
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::State;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,13 +19,51 @@ pub struct PathTrashArgs {
 
 /// Move files/folders into the vault recycle bin (undoable delete).
 #[tauri::command]
-pub fn path_trash(args: PathTrashArgs) -> ApiResult<trash::TrashResult> {
-    let vault = PathBuf::from(args.vault_path.trim());
+pub async fn path_trash(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: PathTrashArgs,
+) -> Result<ApiResult<trash::TrashResult>, String> {
     let n = args.rels.len();
     let op = OpTimer::start_with("path_trash", format!("count={n}"));
-    op.finish_result_ok_extra(trash::trash_paths(&vault, &args.rels), |res| {
-        format!("batch_id={} count={}", trunc(&res.batch_id, 40), res.count)
-    })
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        match trash_bridge::trash_paths(&session, &args.rels).await {
+            Ok(res) => {
+                op.finish_ok_extra(format!(
+                    "batch_id={} count={}",
+                    trunc(&res.batch_id, 40),
+                    res.count
+                ));
+                Ok(ApiResult::ok(res))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::trash_paths(&vault, &args.rels) {
+            Ok(res) => {
+                op.finish_ok_extra(format!(
+                    "batch_id={} count={}",
+                    trunc(&res.batch_id, 40),
+                    res.count
+                ));
+                Ok(ApiResult::ok(res))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,20 +83,43 @@ pub struct PathUntrashResult {
 
 /// Restore a recycle-bin batch (undo a delete).
 #[tauri::command]
-pub fn path_untrash(args: PathUntrashArgs) -> ApiResult<PathUntrashResult> {
-    let vault = PathBuf::from(args.vault_path.trim());
+pub async fn path_untrash(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: PathUntrashArgs,
+) -> Result<ApiResult<PathUntrashResult>, String> {
     let op = OpTimer::start_with(
         "path_untrash",
         format!("batch_id={}", trunc(&args.batch_id, 40)),
     );
-    match trash::restore_batch(&vault, &args.batch_id) {
-        Ok(restored) => {
-            op.finish_ok_extra(format!("restored={restored}"));
-            ApiResult::ok(PathUntrashResult { restored })
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        match trash_bridge::restore_batch(&session, &args.batch_id).await {
+            Ok(restored) => {
+                op.finish_ok_extra(format!("restored={restored}"));
+                Ok(ApiResult::ok(PathUntrashResult { restored }))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
         }
-        Err(e) => {
-            op.finish_err(&e);
-            map_err(e)
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::restore_batch(&vault, &args.batch_id) {
+            Ok(restored) => {
+                op.finish_ok_extra(format!("restored={restored}"));
+                Ok(ApiResult::ok(PathUntrashResult { restored }))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
         }
     }
 }
@@ -68,20 +132,66 @@ pub struct TrashVaultArgs {
 
 /// List every item currently in the recycle bin (Recycle Bin view).
 #[tauri::command]
-pub fn path_list_trash(args: TrashVaultArgs) -> ApiResult<Vec<trash::TrashEntry>> {
-    let vault = PathBuf::from(args.vault_path.trim());
-    match trash::list_trash(&vault) {
-        Ok(items) => ApiResult::ok(items),
-        Err(e) => map_err(e),
+pub async fn path_list_trash(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: TrashVaultArgs,
+) -> Result<ApiResult<Vec<trash::TrashEntry>>, String> {
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => return Ok(map_err(e)),
+        };
+        match trash_bridge::list_trash(&session).await {
+            Ok(items) => Ok(ApiResult::ok(items)),
+            Err(e) => Ok(map_err(e)),
+        }
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::list_trash(&vault) {
+            Ok(items) => Ok(ApiResult::ok(items)),
+            Err(e) => Ok(map_err(e)),
+        }
     }
 }
 
 /// Empty the entire recycle bin (permanent).
 #[tauri::command]
-pub fn path_purge_trash(args: TrashVaultArgs) -> ApiResult<()> {
-    let vault = PathBuf::from(args.vault_path.trim());
+pub async fn path_purge_trash(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: TrashVaultArgs,
+) -> Result<ApiResult<()>, String> {
     let op = OpTimer::start("path_purge_trash");
-    op.finish_result(trash::purge_all(&vault))
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        match trash_bridge::purge_all(&session).await {
+            Ok(()) => {
+                op.finish_ok();
+                Ok(ApiResult::ok(()))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::purge_all(&vault) {
+            Ok(()) => {
+                op.finish_ok();
+                Ok(ApiResult::ok(()))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,8 +212,10 @@ pub struct PathRestoreItemResult {
 
 /// Restore a single recycle-bin item to its original path.
 #[tauri::command]
-pub fn path_restore_item(args: TrashItemArgs) -> ApiResult<PathRestoreItemResult> {
-    let vault = PathBuf::from(args.vault_path.trim());
+pub async fn path_restore_item(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: TrashItemArgs,
+) -> Result<ApiResult<PathRestoreItemResult>, String> {
     let op = OpTimer::start_with(
         "path_restore_item",
         format!(
@@ -112,22 +224,45 @@ pub fn path_restore_item(args: TrashItemArgs) -> ApiResult<PathRestoreItemResult
             trunc(&args.stored, 80)
         ),
     );
-    match trash::restore_item(&vault, &args.batch_id, &args.stored) {
-        Ok(rel) => {
-            op.finish_ok_extra(format!("rel={}", trunc(&rel, 120)));
-            ApiResult::ok(PathRestoreItemResult { rel })
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        match trash_bridge::restore_item(&session, &args.batch_id, &args.stored).await {
+            Ok(rel) => {
+                op.finish_ok_extra(format!("rel={}", trunc(&rel, 120)));
+                Ok(ApiResult::ok(PathRestoreItemResult { rel }))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
         }
-        Err(e) => {
-            op.finish_err(&e);
-            map_err(e)
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::restore_item(&vault, &args.batch_id, &args.stored) {
+            Ok(rel) => {
+                op.finish_ok_extra(format!("rel={}", trunc(&rel, 120)));
+                Ok(ApiResult::ok(PathRestoreItemResult { rel }))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
         }
     }
 }
 
 /// Permanently delete a single recycle-bin item.
 #[tauri::command]
-pub fn path_purge_item(args: TrashItemArgs) -> ApiResult<()> {
-    let vault = PathBuf::from(args.vault_path.trim());
+pub async fn path_purge_item(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: TrashItemArgs,
+) -> Result<ApiResult<()>, String> {
     let op = OpTimer::start_with(
         "path_purge_item",
         format!(
@@ -136,5 +271,39 @@ pub fn path_purge_item(args: TrashItemArgs) -> ApiResult<()> {
             trunc(&args.stored, 80)
         ),
     );
-    op.finish_result(trash::purge_item(&vault, &args.batch_id, &args.stored))
+    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
+        let session = match registry.get(sid).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(map_err(e));
+            }
+        };
+        match trash_bridge::purge_item(&session, &args.batch_id, &args.stored).await {
+            Ok(()) => {
+                op.finish_ok();
+                Ok(ApiResult::ok(()))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    } else {
+        let vault = PathBuf::from(args.vault_path.trim());
+        match trash::purge_item(&vault, &args.batch_id, &args.stored) {
+            Ok(()) => {
+                op.finish_ok();
+                Ok(ApiResult::ok(()))
+            }
+            Err(e) => {
+                op.finish_err(&e);
+                Ok(map_err(e))
+            }
+        }
+    }
 }
+
+// Silence unused import when only used in type position in some builds.
+#[allow(dead_code)]
+fn _unused_app_error(_: AppError) {}

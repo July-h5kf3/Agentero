@@ -71,6 +71,14 @@ type ApiResult<T> = {
 
 export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 	if (!isTauri()) return [];
+	const { isRemoteVaultHandle, remotePaperList, remoteSessionIdFromHandle } =
+		await import("@/lib/remote-vault");
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) return [];
+		const rows = (await remotePaperList(sessionId)) as PaperMetadata[];
+		return rows.map(withNormalizedTags);
+	}
 	const res = await invoke<ApiResult<PaperMetadata[]>>("paper_list", {
 		args: { vaultPath },
 	});
@@ -85,6 +93,14 @@ export type PaperRescanResult = { count: number };
 /** Rebuild catalog rows from papers/ metadata.json (recover disk-only papers). */
 export async function rescanPapers(vaultPath: string): Promise<number> {
 	if (!isTauri()) return 0;
+	const { isRemoteVaultHandle, remotePaperRescan, remoteSessionIdFromHandle } =
+		await import("@/lib/remote-vault");
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) return 0;
+		const r = await remotePaperRescan(sessionId);
+		return r.count;
+	}
 	const res = await invoke<ApiResult<PaperRescanResult>>("paper_rescan", {
 		args: { vaultPath },
 	});
@@ -110,6 +126,25 @@ export async function deletePapersUnderPath(
 ): Promise<PaperDeleteResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:fileTree.deleteDesktopOnly"));
+	}
+	const { isRemoteVaultHandle, remoteSessionIdFromHandle } = await import(
+		"@/lib/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) {
+			throw new Error(i18n.t("sidebar:fileTree.deleteFailed"));
+		}
+		const res = await invoke<ApiResult<PaperDeleteResult>>(
+			"remote_paper_delete",
+			{ args: { sessionId, path } },
+		);
+		if (!res.ok || !res.data) {
+			throw new Error(
+				res.error?.message ?? i18n.t("sidebar:fileTree.deleteFailed"),
+			);
+		}
+		return res.data;
 	}
 	const res = await invoke<ApiResult<PaperDeleteResult>>("paper_delete", {
 		args: { vaultPath, path },
@@ -275,6 +310,25 @@ export async function setPaperIsRead(
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:fileTree.readDesktopOnly"));
 	}
+	const { isRemoteVaultHandle, remoteSessionIdFromHandle } = await import(
+		"@/lib/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) {
+			throw new Error(i18n.t("sidebar:fileTree.readMarkFailed"));
+		}
+		const res = await invoke<ApiResult<PaperMetadata>>(
+			"remote_paper_set_is_read",
+			{ args: { sessionId, path, isRead } },
+		);
+		if (!res.ok || !res.data) {
+			throw new Error(
+				res.error?.message ?? i18n.t("sidebar:fileTree.readMarkFailed"),
+			);
+		}
+		return withNormalizedTags(res.data);
+	}
 	const res = await invoke<ApiResult<PaperMetadata>>("paper_set_is_read", {
 		args: { vaultPath, path, isRead },
 	});
@@ -297,6 +351,25 @@ export async function setPaperTags(
 ): Promise<PaperMetadata> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:paperInfo.tagsDesktopOnly"));
+	}
+	const { isRemoteVaultHandle, remoteSessionIdFromHandle } = await import(
+		"@/lib/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) {
+			throw new Error(i18n.t("sidebar:paperInfo.tagsSaveFailed"));
+		}
+		const res = await invoke<ApiResult<PaperMetadata>>(
+			"remote_paper_set_tags",
+			{ args: { sessionId, path, tags } },
+		);
+		if (!res.ok || !res.data) {
+			throw new Error(
+				res.error?.message ?? i18n.t("sidebar:paperInfo.tagsSaveFailed"),
+			);
+		}
+		return withNormalizedTags(res.data);
 	}
 	const res = await invoke<ApiResult<PaperMetadata>>("paper_set_tags", {
 		args: { vaultPath, path, tags },

@@ -3,6 +3,18 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
+import {
+	getRemoteSessionMeta,
+	isRemoteVaultHandle,
+	parseRemoteJoinedPath,
+	remoteList,
+	remoteMkdir,
+	remoteReadText,
+	remoteRemove,
+	remoteSessionIdFromHandle,
+	remoteWriteBytes,
+	remoteWriteText,
+} from "@/lib/remote-vault";
 import { isTauri } from "@/lib/tauri";
 import { toVaultRelative } from "@/lib/wiki";
 
@@ -60,10 +72,23 @@ export function getSessionVaultPath(): string | null {
 	}
 }
 
+/**
+ * Remote vault handles (`remote:<sessionId>`) are ephemeral: a new UUID is
+ * issued on every SSH connect. They must not pollute the durable "recent local
+ * vaults" list or "restore last vault" — remote recents live in
+ * `agentero-recent-remote-vaults` (host + remotePath).
+ */
+function isEphemeralRemoteHandle(path: string): boolean {
+	return path.startsWith("remote:");
+}
+
 /** Last vault path (localStorage) — used when restore-last is enabled. */
 export function getLastVaultPath(): string | null {
 	try {
-		return localStorage.getItem(LAST_VAULT_KEY);
+		const last = localStorage.getItem(LAST_VAULT_KEY);
+		// Drop stale remote handles left by older builds (session no longer exists).
+		if (last && isEphemeralRemoteHandle(last)) return null;
+		return last;
 	} catch {
 		return null;
 	}
@@ -79,9 +104,11 @@ export function getSavedVaultPath(opts?: {
 	allowRestore?: boolean;
 }): string | null {
 	const session = getSessionVaultPath();
+	// Keep whatever this window already opened (incl. live `remote:<id>` handle).
 	if (session) return session;
 	if (isFreshWindow()) return null;
 	if (opts?.allowRestore === false) return null;
+	// Cross-launch restore: local path only (remote needs SSH re-connect).
 	return getLastVaultPath();
 }
 
@@ -95,9 +122,19 @@ export function getRecentVaults(): string[] {
 		}
 		const parsed = JSON.parse(raw) as unknown;
 		if (!Array.isArray(parsed)) return [];
-		return parsed.filter(
-			(p): p is string => typeof p === "string" && p.length > 0,
+		const list = parsed.filter(
+			(p): p is string =>
+				typeof p === "string" && p.length > 0 && !isEphemeralRemoteHandle(p),
 		);
+		// Self-heal: strip remote handles written by older builds.
+		if (list.length !== parsed.length) {
+			try {
+				localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(list));
+			} catch {
+				// ignore
+			}
+		}
+		return list;
 	} catch {
 		return [];
 	}
@@ -105,7 +142,7 @@ export function getRecentVaults(): string[] {
 
 export function rememberRecentVault(path: string): void {
 	const normalized = path.replace(/[\\/]+$/, "");
-	if (!normalized) return;
+	if (!normalized || isEphemeralRemoteHandle(normalized)) return;
 	try {
 		const next = [
 			normalized,
@@ -134,9 +171,13 @@ export function removeRecentVault(path: string): void {
 export function saveVaultPath(path: string | null): void {
 	try {
 		if (path) {
+			// Always keep window-session binding (local path or live remote handle).
 			sessionStorage.setItem(SESSION_VAULT_KEY, path);
-			localStorage.setItem(LAST_VAULT_KEY, path);
-			rememberRecentVault(path);
+			// Durable "last / recent local" only for real filesystem roots.
+			if (!isEphemeralRemoteHandle(path)) {
+				localStorage.setItem(LAST_VAULT_KEY, path);
+				rememberRecentVault(path);
+			}
 		} else {
 			sessionStorage.removeItem(SESSION_VAULT_KEY);
 		}
@@ -166,7 +207,22 @@ function sortNodes(nodes: FileNode[]): FileNode[] {
 	});
 }
 
-async function buildTree(dirPath: string, depth = 0): Promise<FileNode[]> {
+/** Absolute-style path under a remote handle: `remote:<id>/papers/...` */
+export function joinRemotePath(handle: string, rel: string): string {
+	const r = rel.replace(/^\/+/, "").replace(/\\/g, "/");
+	if (!r) return handle;
+	return `${handle}/${r}`;
+}
+
+/** Vault-relative path from a remote absolute-style path. */
+export function remoteRelFromJoined(handle: string, joined: string): string {
+	if (joined === handle) return "";
+	const prefix = `${handle}/`;
+	if (joined.startsWith(prefix)) return joined.slice(prefix.length);
+	return joined.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+async function buildTreeLocal(dirPath: string, depth = 0): Promise<FileNode[]> {
 	if (depth > 12) return [];
 
 	const entries = await readDir(dirPath);
@@ -178,7 +234,47 @@ async function buildTree(dirPath: string, depth = 0): Promise<FileNode[]> {
 
 		const path = joinPath(dirPath, entry.name);
 		if (entry.isDirectory) {
-			const children = await buildTree(path, depth + 1);
+			const children = await buildTreeLocal(path, depth + 1);
+			nodes.push({
+				id: path,
+				name: entry.name,
+				path,
+				kind: "directory",
+				children,
+			});
+		} else if (entry.isFile) {
+			nodes.push({
+				id: path,
+				name: entry.name,
+				path,
+				kind: "file",
+			});
+		}
+	}
+
+	return sortNodes(nodes);
+}
+
+async function buildTreeRemote(
+	handle: string,
+	rel: string,
+	depth = 0,
+): Promise<FileNode[]> {
+	if (depth > 12) return [];
+	const sessionId = remoteSessionIdFromHandle(handle);
+	if (!sessionId) return [];
+
+	const entries = await remoteList(sessionId, rel);
+	const nodes: FileNode[] = [];
+
+	for (const entry of entries) {
+		if (!entry.name || IGNORE_NAMES.has(entry.name)) continue;
+		if (entry.name.startsWith(".") && entry.name !== ".env.example") continue;
+
+		const childRel = entry.path;
+		const path = joinRemotePath(handle, childRel);
+		if (entry.isDir) {
+			const children = await buildTreeRemote(handle, childRel, depth + 1);
 			nodes.push({
 				id: path,
 				name: entry.name,
@@ -295,7 +391,10 @@ export function seededSkillIdsFromCreated(created: string[]): string[] {
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
-	return buildTree(rootPath);
+	if (isRemoteVaultHandle(rootPath)) {
+		return buildTreeRemote(rootPath, "");
+	}
+	return buildTreeLocal(rootPath);
 }
 
 export function isMarkdownPath(path: string): boolean {
@@ -314,6 +413,12 @@ export async function readVaultFile(path: string): Promise<string> {
 		throw new Error(i18n.t("app:vault.readDesktopOnly"));
 	}
 
+	const remoteRead = parseRemoteJoinedPath(path);
+	if (remoteRead) {
+		if (!remoteRead.rel) throw new Error("invalid remote path");
+		return remoteReadText(remoteRead.sessionId, remoteRead.rel);
+	}
+
 	return readTextFile(path);
 }
 
@@ -324,6 +429,13 @@ export async function writeVaultFile(
 ): Promise<void> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+
+	const remoteWrite = parseRemoteJoinedPath(path);
+	if (remoteWrite) {
+		if (!remoteWrite.rel) throw new Error("invalid remote path");
+		await remoteWriteText(remoteWrite.sessionId, remoteWrite.rel, content);
+		return;
 	}
 
 	const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
@@ -347,6 +459,13 @@ export async function writeVaultBytes(
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
+	const remote = parseRemoteJoinedPath(path);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteWriteBytes(remote.sessionId, remote.rel, bytes);
+		return;
+	}
+
 	const { mkdir, writeFile } = await import("@tauri-apps/plugin-fs");
 	const parent = path.replace(/[\\/][^\\/]+$/, "");
 	if (parent && parent !== path) {
@@ -365,6 +484,13 @@ export async function createVaultDirectory(path: string): Promise<void> {
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
+	const remote = parseRemoteJoinedPath(path);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteMkdir(remote.sessionId, remote.rel);
+		return;
+	}
+
 	const { mkdir } = await import("@tauri-apps/plugin-fs");
 	await mkdir(path, { recursive: true });
 }
@@ -372,6 +498,7 @@ export async function createVaultDirectory(path: string): Promise<void> {
 /**
  * Remove a file or directory under the vault.
  * Directories are removed recursively (including non-empty).
+ * Remote vaults use SFTP remove (no recycle bin in MVP).
  */
 export async function removeVaultPath(path: string): Promise<void> {
 	if (!isTauri()) {
@@ -380,6 +507,12 @@ export async function removeVaultPath(path: string): Promise<void> {
 	const trimmed = path.trim();
 	if (!trimmed || trimmed.startsWith("agentero:")) {
 		throw new Error(i18n.t("sidebar:fileTree.deleteInvalid"));
+	}
+	const remote = parseRemoteJoinedPath(trimmed);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteRemove(remote.sessionId, remote.rel, true);
+		return;
 	}
 	const { remove } = await import("@tauri-apps/plugin-fs");
 	await remove(trimmed, { recursive: true });
@@ -415,6 +548,11 @@ export function isValidVaultEntryName(name: string): boolean {
 
 export function vaultDisplayName(rootPath: string | null): string {
 	if (!rootPath) return i18n.t("app:vault.noVaultName");
+	if (isRemoteVaultHandle(rootPath)) {
+		const meta = getRemoteSessionMeta();
+		if (meta?.displayName) return meta.displayName;
+		return rootPath;
+	}
 	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
 	return parts[parts.length - 1] || rootPath;
 }

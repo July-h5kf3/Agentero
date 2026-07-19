@@ -569,7 +569,22 @@ export async function localBytesToViewerSource(
 ): Promise<string | null> {
 	if (!isTauri() || !absPath?.trim()) return null;
 	try {
-		const bytes = await readFile(absPath);
+		let bytes: Uint8Array;
+		if (absPath.startsWith("remote:")) {
+			const slash = absPath.indexOf("/", "remote:".length);
+			if (slash === -1) return null;
+			const handle = absPath.slice(0, slash);
+			const rel = absPath.slice(slash + 1);
+			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
+				"@/lib/remote-vault"
+			);
+			const sessionId = remoteSessionIdFromHandle(handle);
+			if (!sessionId) return null;
+			const localPath = await remoteCacheFile(sessionId, rel);
+			bytes = await readFile(localPath);
+		} else {
+			bytes = await readFile(absPath);
+		}
 		// Copy so Blob owns a stable ArrayBuffer (plugin may return a view)
 		const copy = new Uint8Array(bytes.byteLength);
 		copy.set(bytes);
@@ -628,6 +643,38 @@ export async function findLocalPdfPath(
 ): Promise<string | null> {
 	if (!isTauri() || !paperDir?.trim()) return null;
 	const root = paperDir.replace(/[/\\]+$/, "");
+	// Remote joined path: list via Host SFTP
+	if (root.startsWith("remote:")) {
+		const slash = root.indexOf("/", "remote:".length);
+		const handle = slash === -1 ? root : root.slice(0, slash);
+		const rel = slash === -1 ? "" : root.slice(slash + 1);
+		const { remoteList, remoteSessionIdFromHandle } = await import(
+			"@/lib/remote-vault"
+		);
+		const sessionId = remoteSessionIdFromHandle(handle);
+		if (!sessionId) return null;
+		try {
+			const entries = await remoteList(sessionId, rel);
+			const pdfs = entries
+				.filter((e) => e.isFile && PDF_NAME_RE.test(e.name))
+				.map((e) => `${handle}/${e.path}`)
+				.sort((a, b) => a.localeCompare(b));
+			if (pdfs[0]) return pdfs[0];
+			// shallow search source/
+			const source = entries.find((e) => e.isDir && e.name === "source");
+			if (source) {
+				const nested = await remoteList(sessionId, source.path);
+				const nestedPdf = nested
+					.filter((e) => e.isFile && PDF_NAME_RE.test(e.name))
+					.map((e) => `${handle}/${e.path}`)
+					.sort((a, b) => a.localeCompare(b));
+				return nestedPdf[0] ?? null;
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}
 	try {
 		const entries = await readDir(root);
 		const rootPdfs: string[] = [];
@@ -746,15 +793,27 @@ export async function loadPaperMetadata(
 	const path = paperCatalogPath(paperDir, vaultRoot);
 	if (!isTauri() || !vaultRoot || !path) return null;
 
+	// Primary: SQLite catalog (local vault path or remote work mirror)
 	try {
-		const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
-			args: { vaultPath: vaultRoot, path },
-		});
-		if (res.ok && res.data?.id) {
+		const { isRemoteVaultHandle, remotePaperGet, remoteSessionIdFromHandle } =
+			await import("@/lib/remote-vault");
+		let data: PaperMetadata | null = null;
+		if (isRemoteVaultHandle(vaultRoot)) {
+			const sessionId = remoteSessionIdFromHandle(vaultRoot);
+			if (sessionId) {
+				data = (await remotePaperGet(sessionId, { path })) as PaperMetadata;
+			}
+		} else {
+			const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
+				args: { vaultPath: vaultRoot, path },
+			});
+			if (res.ok && res.data) data = res.data;
+		}
+		if (data?.id) {
 			return withNormalizedTags(
 				enrichArxivUrls({
-					...res.data,
-					path: res.data.path ?? path,
+					...data,
+					path: data.path ?? path,
 				}),
 			);
 		}

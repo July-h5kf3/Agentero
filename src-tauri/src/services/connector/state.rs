@@ -4,7 +4,7 @@ use super::server;
 use crate::error::AppError;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
@@ -72,7 +72,8 @@ struct Inner {
     listening: bool,
     port: u16,
     last_error: Option<String>,
-    vault_path: Option<PathBuf>,
+    /// Local absolute path or `remote:<sessionId>` handle.
+    vault_handle: Option<String>,
     parent_dir: String,
     /// Cancels the accept loop when the server should stop.
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -85,6 +86,8 @@ pub struct ConnectorController {
     inner: Mutex<Inner>,
     /// Fast path for handlers without locking the full struct for vault checks.
     running: AtomicBool,
+    /// Remote vault registry (injected at app start) for `remote:…` saves.
+    remote_registry: Mutex<Option<Arc<crate::services::remote::RemoteRegistry>>>,
 }
 
 impl Default for ConnectorController {
@@ -101,13 +104,14 @@ impl ConnectorController {
                 listening: false,
                 port: DEFAULT_CONNECTOR_PORT,
                 last_error: None,
-                vault_path: None,
+                vault_handle: None,
                 parent_dir: "papers".into(),
                 shutdown_tx: None,
                 sessions: HashMap::new(),
                 app: None,
             }),
             running: AtomicBool::new(false),
+            remote_registry: Mutex::new(None),
         }
     }
 
@@ -115,6 +119,16 @@ impl ConnectorController {
         if let Ok(mut g) = self.inner.lock() {
             g.app = Some(app);
         }
+    }
+
+    pub fn set_remote_registry(&self, registry: Arc<crate::services::remote::RemoteRegistry>) {
+        if let Ok(mut g) = self.remote_registry.lock() {
+            *g = Some(registry);
+        }
+    }
+
+    pub fn remote_registry(&self) -> Option<Arc<crate::services::remote::RemoteRegistry>> {
+        self.remote_registry.lock().ok().and_then(|g| g.clone())
     }
 
     pub fn status(&self) -> ConnectorStatus {
@@ -129,18 +143,34 @@ impl ConnectorController {
                 None
             },
             last_error: g.last_error.clone(),
-            vault_path: g.vault_path.as_ref().map(|p| p.display().to_string()),
+            vault_path: g.vault_handle.clone(),
             parent_dir: g.parent_dir.clone(),
         }
     }
 
-    /// Update the Vault path used by `saveItems` (None when no vault open).
+    /// Update the Vault handle used by `saveItems` (None when no vault open).
+    /// Accepts local absolute paths and `remote:<sessionId>` handles.
     pub fn set_vault(&self, vault_path: Option<String>) {
         if let Ok(mut g) = self.inner.lock() {
-            g.vault_path = vault_path
-                .map(|s| s.trim().to_string())
+            let raw = vault_path
+                .as_deref()
+                .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .map(PathBuf::from);
+                .map(|s| s.to_string());
+            g.vault_handle = raw.clone();
+            // Clear stale remote-only error / previous bind errors when rebinding.
+            if g.last_error.as_deref().is_some_and(|e| {
+                e.contains("remote vault is not supported")
+                    || e.contains("No vault open")
+                    || e.contains("remote session not found")
+            }) {
+                g.last_error = None;
+            }
+            log::debug!(
+                target: "agentero::connector",
+                "set_vault handle={}",
+                raw.as_deref().unwrap_or("(none)")
+            );
         }
         self.emit_status();
     }
@@ -158,16 +188,38 @@ impl ConnectorController {
         }
     }
 
-    pub fn vault_and_parent(&self) -> Result<(PathBuf, String), AppError> {
+    /// Vault handle string (local path or `remote:…`) + parent dir.
+    pub fn vault_handle_and_parent(&self) -> Result<(String, String), AppError> {
         let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let vault = g
-            .vault_path
-            .clone()
-            .ok_or_else(|| AppError::message("No vault open — open a vault in Agentero first"))?;
+        let handle = g.vault_handle.clone().ok_or_else(|| {
+            AppError::message(
+                "No vault open — open a local or remote vault in Agentero first (Connector needs an active vault)",
+            )
+        })?;
+        Ok((handle, g.parent_dir.clone()))
+    }
+
+    /// Local vault absolute path + parent (errors if remote or missing).
+    pub fn vault_and_parent(&self) -> Result<(PathBuf, String), AppError> {
+        let (handle, parent) = self.vault_handle_and_parent()?;
+        if handle.starts_with("remote:") {
+            return Err(AppError::message(
+                "use remote import path for remote vault handles",
+            ));
+        }
+        let vault = PathBuf::from(&handle);
         if !vault.is_dir() {
             return Err(AppError::message("Vault path is not a directory"));
         }
-        Ok((vault, g.parent_dir.clone()))
+        Ok((vault, parent))
+    }
+
+    pub fn is_remote_vault(&self) -> bool {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|g| g.vault_handle.clone())
+            .is_some_and(|h| h.starts_with("remote:"))
     }
 
     /// Enable or disable the HTTP server. Idempotent.
@@ -217,7 +269,7 @@ impl ConnectorController {
                 None
             },
             last_error: g.last_error.clone(),
-            vault_path: g.vault_path.as_ref().map(|p| p.display().to_string()),
+            vault_path: g.vault_handle.clone(),
             parent_dir: g.parent_dir.clone(),
         }
     }
@@ -362,34 +414,27 @@ impl ConnectorController {
         }
     }
 
-    /// Resolve the target paper folder for a `saveAttachment` upload.
-    /// Prefers the `parentItemID` mapping; falls back to the most recent paper
-    /// in the session (single-item saves).
-    fn resolve_attachment_dir(
+    /// Resolve paper rel for a `saveAttachment` upload (session map / last paper).
+    fn resolve_attachment_rel(
         &self,
         session_id: &str,
         parent_item_id: Option<&str>,
-    ) -> Result<(PathBuf, String), AppError> {
+    ) -> Result<String, AppError> {
         let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let vault = g
-            .vault_path
-            .clone()
-            .ok_or_else(|| AppError::message("No vault open"))?;
         let session = g
             .sessions
             .get(session_id)
             .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
-        let rel = parent_item_id
+        parent_item_id
             .and_then(|pid| session.item_map.get(pid))
             .cloned()
             .or_else(|| session.paper_paths.last().cloned())
-            .ok_or_else(|| AppError::message("no paper folder for attachment"))?;
-        Ok((vault.join(&rel), rel))
+            .ok_or_else(|| AppError::message("no paper folder for attachment"))
     }
 
     /// Write a browser-uploaded attachment as the paper's `{id}.pdf` (login-wall PDFs).
-    /// Emits `connector:item-saved` and best-effort generates `PAPER.md`.
-    pub fn write_attachment_pdf(
+    /// Local vault: sync write. Remote vault: SFTP via async runtime.
+    pub async fn write_attachment_pdf(
         &self,
         session_id: &str,
         parent_item_id: Option<&str>,
@@ -398,7 +443,33 @@ impl ConnectorController {
         if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
             return Err(AppError::message("uploaded attachment is not a PDF"));
         }
-        let (paper_dir, rel) = self.resolve_attachment_dir(session_id, parent_item_id)?;
+        let rel = self.resolve_attachment_rel(session_id, parent_item_id)?;
+        let handle = {
+            let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            g.vault_handle
+                .clone()
+                .ok_or_else(|| AppError::message("No vault open"))?
+        };
+
+        if let Some(sid) = crate::services::remote::parse_remote_handle(&handle) {
+            let reg = self
+                .remote_registry()
+                .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+            let session = reg.get(sid).await?;
+            let rel = super::import::write_attachment_pdf_remote(session, &rel, bytes).await?;
+            let id = rel.rsplit('/').next().unwrap_or("paper").to_string();
+            self.emit_item_saved(ConnectorItemSaved {
+                path: rel.clone(),
+                id: id.clone(),
+                title: id,
+                deduped: false,
+                session_id: session_id.to_string(),
+            });
+            return Ok(rel);
+        }
+
+        let vault = PathBuf::from(&handle);
+        let paper_dir = vault.join(&rel);
         if !paper_dir.is_dir() {
             return Err(AppError::message("paper folder missing"));
         }
@@ -413,21 +484,14 @@ impl ConnectorController {
             session_id: session_id.to_string(),
         });
 
-        // Best-effort readable body (idempotent; skips when TeX/PAPER.md present).
-        let vault = {
-            let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            g.vault_path.clone()
-        };
-        if let Some(vault) = vault {
-            let rel_bg = rel.clone();
-            let dir_bg = paper_dir.clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-                    &vault, &rel_bg, &dir_bg,
-                )
-                .await;
-            });
-        }
+        let rel_bg = rel.clone();
+        let dir_bg = paper_dir;
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+                &vault, &rel_bg, &dir_bg,
+            )
+            .await;
+        });
         Ok(rel)
     }
 
@@ -440,7 +504,7 @@ impl ConnectorController {
     }
 
     /// Apply Connector collection picker change: remember parent + move papers already saved.
-    pub fn update_session_target(
+    pub async fn update_session_target(
         &self,
         session_id: &str,
         target: &str,
@@ -449,11 +513,11 @@ impl ConnectorController {
             AppError::message(format!("unknown or invalid save target: {target}"))
         })?;
 
-        let (vault, paths_to_move) = {
+        let (handle, paths_to_move) = {
             let mut g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
             g.parent_dir = parent.clone();
-            let vault = g
-                .vault_path
+            let handle = g
+                .vault_handle
                 .clone()
                 .ok_or_else(|| AppError::message("No vault open"))?;
             let session = g
@@ -462,17 +526,33 @@ impl ConnectorController {
                 .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
             session.parent_dir = parent.clone();
             let paths = session.paper_paths.clone();
-            (vault, paths)
+            (handle, paths)
         };
 
         let mut new_paths = Vec::new();
-        for from in &paths_to_move {
-            match move_paper_folder(&vault, from, &parent) {
-                Ok(new_rel) => new_paths.push(new_rel),
-                Err(e) => {
-                    // Keep going; surface soft error via event.
-                    self.emit_error(&format!("move {from}: {e}"), Some(session_id));
-                    new_paths.push(from.clone());
+        if let Some(sid) = crate::services::remote::parse_remote_handle(&handle) {
+            let reg = self
+                .remote_registry()
+                .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+            let session = reg.get(sid).await?;
+            for from in &paths_to_move {
+                match super::import::move_paper_folder_remote(&session, from, &parent).await {
+                    Ok(new_rel) => new_paths.push(new_rel),
+                    Err(e) => {
+                        self.emit_error(&format!("move {from}: {e}"), Some(session_id));
+                        new_paths.push(from.clone());
+                    }
+                }
+            }
+        } else {
+            let vault = PathBuf::from(&handle);
+            for from in &paths_to_move {
+                match move_paper_folder(&vault, from, &parent) {
+                    Ok(new_rel) => new_paths.push(new_rel),
+                    Err(e) => {
+                        self.emit_error(&format!("move {from}: {e}"), Some(session_id));
+                        new_paths.push(from.clone());
+                    }
                 }
             }
         }
@@ -484,7 +564,6 @@ impl ConnectorController {
                 }
             }
             for path in &new_paths {
-                // Refresh UI for each moved paper.
                 if let Some(id) = path.rsplit('/').next() {
                     self.emit_item_saved(ConnectorItemSaved {
                         path: path.clone(),
@@ -500,19 +579,49 @@ impl ConnectorController {
         Ok(parent)
     }
 
-    /// JSON body for `/connector/getSelectedCollection`.
-    pub fn selected_collection_json(&self) -> serde_json::Value {
-        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let parent = g.parent_dir.clone();
-        let vault_name = g
-            .vault_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|s| s.to_str())
-            .unwrap_or("Agentero Vault");
+    /// JSON body for `/connector/getSelectedCollection` (async for remote targets).
+    pub async fn selected_collection_json(&self) -> serde_json::Value {
+        let (parent, handle) = {
+            let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            (g.parent_dir.clone(), g.vault_handle.clone())
+        };
 
-        let targets = if let Some(vault) = &g.vault_path {
-            super::targets::list_save_targets(vault)
+        let vault_name_owned = handle.as_deref().and_then(|h| {
+            if h.starts_with("remote:") {
+                None
+            } else {
+                PathBuf::from(h)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+            }
+        });
+        let vault_name = if handle.as_deref().is_some_and(|h| h.starts_with("remote:")) {
+            "Agentero Remote Vault"
+        } else {
+            vault_name_owned.as_deref().unwrap_or("Agentero Vault")
+        };
+
+        let targets = if let Some(h) = handle.as_deref() {
+            if let Some(sid) = crate::services::remote::parse_remote_handle(h) {
+                if let Some(reg) = self.remote_registry() {
+                    match reg.get(sid).await {
+                        Ok(session) => super::import::list_save_targets_remote(&session).await,
+                        Err(_) => vec![super::targets::SaveTarget {
+                            id: "L1".into(),
+                            name: "papers".into(),
+                            level: 0,
+                        }],
+                    }
+                } else {
+                    vec![super::targets::SaveTarget {
+                        id: "L1".into(),
+                        name: "papers".into(),
+                        level: 0,
+                    }]
+                }
+            } else {
+                super::targets::list_save_targets(Path::new(h))
+            }
         } else {
             vec![super::targets::SaveTarget {
                 id: "L1".into(),
@@ -662,4 +771,28 @@ fn move_paper_folder(
     std::fs::rename(&from_abs, &new_abs)?;
     let _ = papers::move_under_path(vault, &from, &new_rel);
     Ok(new_rel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_vault_accepts_remote_handle() {
+        let ctrl = ConnectorController::new();
+        ctrl.set_vault(Some("remote:sess-abc".into()));
+        let (handle, parent) = ctrl.vault_handle_and_parent().expect("bound");
+        assert_eq!(handle, "remote:sess-abc");
+        assert_eq!(parent, "papers");
+        assert!(ctrl.is_remote_vault());
+        assert_eq!(ctrl.status().vault_path.as_deref(), Some("remote:sess-abc"));
+    }
+
+    #[test]
+    fn set_vault_none_reports_no_vault() {
+        let ctrl = ConnectorController::new();
+        ctrl.set_vault(None);
+        let err = ctrl.vault_handle_and_parent().unwrap_err().to_string();
+        assert!(err.contains("No vault open"), "{err}");
+    }
 }

@@ -31,8 +31,9 @@
 - **性能（虚拟化）**：树把可见节点**拍平为一维列表 + 窗口化**（`@tanstack/react-virtual`），只渲染视口内的行；FileTree 自持滚动容器（`treeScrollRef`），折叠文件夹用扫平行组件 `FileTreeFolderRow`（`ai-elements/file-tree.tsx`）。避免大 Vault（成百上千篇）时常驻海量 DOM，以及选中/展开/拖拽时的全树重渲染。
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
 - **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件、**魔棒 / 本地 PDF 入库完成后 `openPaper`**），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex`（`align: "center"`）滚入视口。树刷新后若目标行尚未出现在拍平行中，会重新展开祖先再滚一次（覆盖入库刚写入磁盘的竞态）。
-- **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（`agentero-settings`）。
+- **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（XDG `settings.json`）。
 - **文件树排序**（展示用，不改名不移动）：默认 **显示名称 A–Z**（与「论文显示」`paperTreeLabelMode` 一致，按树中所见标签排序，而非磁盘文件夹名）；设置 → **通用 → 文件树论文排序** 可选：`显示名称 A–Z` / `标题 A–Z` / `作者 A–Z` / `年份（新→旧）` / `年份（旧→新）` / `添加时间（新→旧）`。同目录下目录优先于文件；元数据排序时组织文件夹在前（按名）、paper 按所选键（缺元数据回退显示名，年份/添加时间缺失排最后）。实现：`sortFileTreeNodes`，偏好 `paperTreeSortMode` + `paperTreeLabelMode`。
+
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示**全库**论文表格（见 §3）。空 Vault 时仍显示该节点。
 - **组织文件夹 → 作用域论文库**：单击**非 paper** 目录（如 `papers/`、`papers/nlp/`、`papers/nlp/pretrain`）时 **同时**：(1) 树内展开/折叠子节点；(2) **同一** Library 标签页（`agentero:library`）就地按路径前缀筛选，**不**为文件夹新建 tab。点顶栏 Library 虚拟节点清除筛选回全库。**paper 文件夹**仍打开该篇 PDF/Notes（叶子、不展开）。
 - **虚拟节点 Recycle Bin**：紧挨 **Library** 下方固定一项 **Recycle Bin / 回收站**（路径常量 `agentero:trash`，非真实目录、不写盘）。图标 `Trash2`。选中后中间栏显示回收站视图（见「删除」）。空 Vault 时仍显示该节点。
@@ -108,10 +109,24 @@
 
 当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/vault-welcome.tsx`）：
 
-- **内容**：图标 + **Create vault** / **Open vault** / **Migrate from Zotero** 同一行按钮 + **Recent** 路径列表（可点打开，可从列表移除）。
+- **内容**：图标 + **Create vault** / **Open vault** / **Open remote…** / **Migrate from Zotero** 同一行按钮 + **Recent** 列表。
+- **Open remote…**：共用 `RemoteVaultDialog`（SSH host / 可选 user / 远端绝对路径）；成功后进入 `remote:<sessionId>` 会话。
+- **Recent**：本地绝对路径 + 远程条目（`host:remotePath` + 「远程」徽章）；可点打开 / 可从列表移除。
 - **从 Zotero 迁移**（欢迎页）：先选目录创建 Vault，再打开 `ZoteroMigrateDialog`（与论文库工具栏入口共用对话框）。
 - **不加**常驻说明文案、标题口号或快捷键提示（保持空状态极简）。
-- 点选最近路径时若目录不存在：提示错误并从列表剔除。
+- 点选最近**本地**路径时若目录不存在：提示错误并从列表剔除。
+
+### 2.2.1 侧栏切换知识库（有 Vault 时）
+
+左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/layout/file-tree.tsx`）为下拉菜单：
+
+| 区块 | 内容 |
+|---|---|
+| Recent | 远程 MRU（徽章）+ 本地 MRU；当前项 ✓；可单项移除 |
+| 操作 | **Open vault…** / **Open remote…** / **Create vault** |
+
+- **Open remote…** 与欢迎页共用 `RemoteVaultDialog`（`src/components/layout/remote-vault-dialog.tsx`）。
+- 远程会话伪路径 **`remote:<sessionId>` 不得**写入本地 recent（见 §2.3 存储表）；每次 SSH 连接都会换新 session id，误写入会导致「同一远端目录出现多条不同建议」。
 
 ### 2.3 原生菜单与多窗口
 
@@ -124,15 +139,18 @@
 | File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：有弹层时先关最顶层（`overlay-stack`）；否则关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
 | agentero | Settings… | `⌘,` | 设置 sheet |
 
-**窗口与路径状态**（`src/lib/vault.ts`）：
+**窗口与路径状态**（`src/lib/vault.ts`、`src/lib/remote-vault.ts`）：
 
 | 存储 | 键 / 用途 |
 |---|---|
-| `sessionStorage` | 当前窗口已打开的 Vault 路径（多窗口互不抢） |
-| `localStorage` | 最近 Vault 列表（MRU，欢迎页）、上次 Vault（主窗口「恢复最近」） |
+| `sessionStorage` | 当前窗口已打开的 Vault（本地绝对路径 **或** 存活中的 `remote:<sessionId>`；多窗口互不抢） |
+| `localStorage` `agentero-recent-vaults` | **仅本地**路径 MRU（欢迎页 / 切换菜单）；**排除** `remote:…` |
+| `localStorage` 上次 Vault 键 | 主窗口「恢复最近」——**仅本地**路径；远程不写、不自动恢复 |
+| `localStorage` `agentero-recent-remote-vaults` | 远程 MRU：`{ kind:"remote", host, user?, remotePath, label }` |
+| `sessionStorage` 远程 meta | 当前会话 `RemoteSessionInfo`（展示名 / host / path） |
 | 查询参数 `fresh=1` | 新建窗口标记：跳过自动恢复，直接欢迎页 |
 
-主窗口在设置开启「恢复上次 Vault」且非 `fresh` 时，用 `localStorage` 上次路径自动打开；`⌘N` 窗口始终从欢迎页开始。
+主窗口在设置开启「恢复上次 Vault」且非 `fresh` 时，用本地上次路径自动打开；**远程 Vault 须重新 SSH 连接**（欢迎页或切换菜单的远程 recent / Open remote…）。`⌘N` 窗口始终从欢迎页开始。
 
 ## 3. 布局
 
@@ -445,7 +463,21 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings-window.tsx`；持久化暂用 `localStorage`（`src/lib/settings.ts`，含 `locale` 偏好）。
+实现：`src/components/settings-window.tsx`；**应用设置**持久化为 Host 文件（XDG）：
+
+| 路径 | 说明 |
+|---|---|
+| `$XDG_CONFIG_HOME/agentero/settings.json` | UI 设置（通用 / 外观 / Agent 权限与语言 / 翻译 / 隐私等）；未设 env 时 Unix 默认 `~/.config/agentero/settings.json` |
+| `$XDG_CONFIG_HOME/agentero/agents.json` | BYOA Agent 注册表（默认 Agent、自定义 command、代理） |
+
+- 前端：`src/lib/settings.ts`（内存缓存 + `settings_get` / `settings_set`）；启动时 `ensureSettingsLoaded()`，旧 `localStorage` 键 `agentero-settings` **一次性迁移后删除**。
+- Host：`src-tauri/src/services/app_settings.rs`、`services/paths.rs`（XDG 解析）。
+
+**Host 上下文（本机 / 远端）**：
+
+- 设置侧栏**底部**显示 **Host**（系统图标 + 本机 hostname / 远端 `user@host`；本机用编译目标 OS，远端 `uname -s`）。
+- 当前 Vault 为 `remote:…` 时：Agent 分区切换为 **远端探测**（`remote_agent_scan` + `remote_agent_probe`；**代理**与本地共用并注入远端 env；**Install ACP** 经 SSH 装适配器）；外观等仍为本机 `settings.json`。PATH / Linuxbrew 注意见 [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)。
+- 本机 Vault / 无 Vault：Agent 分区为现有本机 catalog + probe。
 
 ## 4.1 国际化（i18n）
 

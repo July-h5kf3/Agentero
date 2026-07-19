@@ -19,6 +19,7 @@
 - [x] `⌘N` / File → New Window → Host `window_new`（`?fresh=1`）
 - [x] 无 Vault 欢迎页：最近路径 MRU + 打开 / 创建 / **从 Zotero 迁移**（同一行；迁移前先创建 Vault；无常驻说明文案）
 - [x] 当前窗口 Vault 用 `sessionStorage`；最近列表 / 上次路径用 `localStorage`
+- [x] **应用设置**迁出 `localStorage` → XDG `$XDG_CONFIG_HOME/agentero/settings.json`（`settings_get` / `settings_set`；旧键一次性迁移）
 
 ### 2. 精确标识符入库（arXiv / DOI 等）— 魔棒路径
 
@@ -418,6 +419,25 @@
 - [x] **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、`paper set-tags` / `tags`、无 BYOA）
 - [x] Release 附带 `agentero` 二进制
 - [ ] graph / doctor / completions（P1-7）
+
+### 远程 Vault（SSH/SFTP）+ 远端 BYOA
+
+设计见 [`remote-vault.md`](remote-vault.md)。**MVP 已完成**。
+
+- [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
+- [x] **M1** SSH/SFTP + `__local_sim__`；`remote_*`；欢迎页；树 / md / mkdir / remove / bytes
+- [x] **M2** catalog work mirror；list/get/delete/rescan/tags/is_read + PUT
+- [x] **M3** ACP over SSH；skill materialize；notes-review；Codex-SSH 明确拒绝
+- [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
+- [x] 切换 Vault 时 disconnect 远程会话
+- [x] 侧栏「切换知识库」菜单：**打开远程…** + 最近远程 MRU（共用 `RemoteVaultDialog`）
+- [x] `remote:<sessionId>` 不写入本地 recent / restore-last（避免同一远端目录多条伪路径）
+- [x] i18n；[`api.md`](../backend/api.md) 远程 command 表
+- [x] **M4** 远端 recycle bin（`.agentero/.trash/` via SFTP，与本地语义对齐）
+- [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）
+- [x] **M4** blob LRU（2 GiB/库）+ 设置页「清除远程缓存」
+- [x] **M4** Zotero Connector 绑定远程会话（saveItems / saveAttachment / targets）
+- [ ] **M4** Codex-SSH、更完整远程偏好
 
 ### 发布
 

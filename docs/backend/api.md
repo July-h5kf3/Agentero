@@ -139,6 +139,52 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
   - 前端：若 `created` 含 `.agents/skills/<id>/…`，右上角 success toast（`vault.skillsSeeded`）提示新增 skill 名称；无新增则不打扰。
 
+#### 远程 Vault（SSH/SFTP，MVP 已实现）
+
+设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。前端伪路径 `remote:<sessionId>`；文件权威在远端。
+
+| Command | 说明 |
+|---|---|
+| `remote_connect` | `{ host, user?, remotePath }` → `RemoteSessionInfo`（含 `vaultHandle`、`caps`） |
+| `remote_disconnect` | flush catalog + 拆会话 |
+| `remote_status` | 会话信息 |
+| `remote_list` / `remote_stat` | 列目录 / 元数据 |
+| `remote_read_text` / `remote_write_text` / `remote_write_bytes` | 读写 |
+| `remote_read_bytes` | 读二进制 |
+| `remote_mkdir` / `remote_remove` | 建目录 / 删除（可 recursive） |
+| `remote_paper_list` / `remote_paper_get` / `remote_paper_delete` | catalog 工作副本 |
+| `remote_paper_rescan` / `remote_paper_set_tags` / `remote_paper_set_is_read` | mutation 后 PUT 远端 |
+| `remote_cache_file` | PDF 等缓存到本机 ephemeral 路径（mtime 键 + LRU 2 GiB） |
+| `remote_cache_stats` | `{ sessionId? }` → `{ bytes, files, root, maxBytes }`（无 session 则汇总全部） |
+| `remote_cache_clear` | `{ sessionId? }` → `{ freedBytes }` 清除 blob 缓存 |
+| `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
+| `remote_agent_scan` | 目录模板 + 远端 PATH 扫描 → `CatalogEntry[]`（设置页远端 Agent） |
+| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env；Codex+SSH 拒绝） |
+| `remote_agent_open_install_terminal` | 本机终端确认后 `ssh -t` 在远端执行模板 `install_command`（如 Claude ACP 适配器） |
+| `host_identity` | 本机 hostname + `os`（macos/windows/linux）/ 设置 Host 徽章 |
+| `remote_host_identity` | 远端 `uname -s` → `os` 家族（Host 徽章系统图标） |
+
+Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
+
+**入库入口与远程 Vault**：
+
+| 入口 | Command | 远程 `remote:…` |
+|---|---|---|
+| 魔棒标识符 | `lookup_import` | ✅ staging → SFTP → catalog PUT |
+| 补资源 Download | `paper_download_assets` | ✅ |
+| 生成本地/远端 PAPER.md | `paper_parse_body` | ✅ 远端 pull PDF → liteparse → put |
+| 本地 PDF | `paper_import_local_pdf` | ✅ 本机选 PDF → 上传远端 |
+| Bib/RIS 库导入 | `paper_import` | ✅ Translator → 上传远端 |
+| Zotero 桌面迁移 | `zotero_migrate` | ❌ 仅本地路径 |
+| Zotero Connector | HTTP `saveItems` / `saveAttachment` | ✅ 绑定 `remote:<sessionId>`；stage → SFTP → catalog PUT |
+| CLI import | `agentero import` | ❌ 仅本地 vault 路径 |
+| 回收站 | `path_trash` / `path_list_trash` / restore / purge | ✅ 经 `trash_bridge` 写远端 `.agentero/.trash/` |
+
+返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
+
+Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
+
+
 #### `path_open_in_terminal`（已实现）
 
 在系统默认终端中打开本地路径（文件树右键 / `⌥⌘T`「在终端中打开」）。
@@ -1539,7 +1585,34 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
-### 3.10 界面与本地化（UI / i18n）
+### 3.10 应用设置（XDG）
+
+应用 UI 设置与 Agent 注册表落在 **XDG 配置目录**（非 Vault、非 `localStorage`）：
+
+| 文件 | 路径 |
+|---|---|
+| 应用设置 | `$XDG_CONFIG_HOME/agentero/settings.json`（未设 env 时 Unix：`~/.config/agentero/settings.json`） |
+| Agent 注册表 | `$XDG_CONFIG_HOME/agentero/agents.json` |
+
+Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macOS 路径 `~/Library/Application Support/agentero/` 在首次启动时 **best-effort 复制** 到 XDG 路径。
+
+#### `settings_get`（已实现）
+
+- **返回**（`ApiResult`）：`{ settings: AppSettings, path: string, existed: boolean }`
+- `existed === false` 时前端可将遗留 `localStorage` 的 `agentero-settings` 一次性写入并清除。
+
+#### `settings_set`（已实现）
+
+- **参数**：`{ settings: AppSettings }`（camelCase，与前端 `src/lib/settings.ts` 同构）
+- **返回**：规范化后的 `AppSettings`（写盘 + 更新 Host 内存）
+
+#### `settings_path`（已实现）
+
+- **返回**：设置文件绝对路径字符串（About / 诊断用）
+
+实现：`src-tauri/src/services/app_settings.rs`、`services/paths.rs`、`commands/settings.rs`。
+
+### 3.11 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）
 
@@ -1554,7 +1627,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **返回**：`Result<(), String>`（成功为 `()`，失败返回错误信息字符串）。
-- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `agentero-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
+- **说明**：locale 偏好存于 XDG `settings.json`（`settings_get` / `settings_set`）。Host 启动时以英文兜底构建菜单；前端在 `ensureSettingsLoaded` 后及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
 
 #### 菜单事件
 
