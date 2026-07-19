@@ -36,6 +36,7 @@
 		"delete": "Delete",
 		"thinking": "Thinking…",
 		"agentFailed": "Agent failed. Check Agent settings and try again.",
+		"noAgent": "No available Agent for PDF Ask. Configure one in Settings → Agent.",
 		"pillAria": "Open ask: {{preview}}",
 		"pillFallback": "Ask thread"
 	},

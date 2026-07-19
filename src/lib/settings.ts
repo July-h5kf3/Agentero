@@ -73,11 +73,30 @@ export type AppSettings = {
 	autoPaperReader: boolean;
 	/** Language forced onto every agent response and generated notes. */
 	aiResponseLanguage: AiResponseLanguage;
+	/**
+	 * Agent seat + model for PDF selection Ask dialogs (划词提问).
+	 * Independent of Chat's current agent and of translate.agentId.
+	 * Empty agentId / modelId = follow app default agent / that agent's model pref.
+	 */
+	pdfAsk: PdfAskSettings;
 	// Privacy
 	analyticsEnabled: boolean;
 	shareCrashReports: boolean;
 	/** Application-level translation service (free MT + BYOA Agent). */
 	translate: TranslateSettings;
+};
+
+/** PDF selection Ask (question popover) agent/model prefs. */
+export type PdfAskSettings = {
+	/** Empty = follow registry default agent. */
+	agentId: string;
+	/** Empty = follow loadModelPref(agentId). */
+	modelId: string;
+};
+
+export const DEFAULT_PDF_ASK_SETTINGS: PdfAskSettings = {
+	agentId: "",
+	modelId: "",
 };
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
@@ -98,6 +117,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	agentPermissionMode: "restricted",
 	autoPaperReader: false,
 	aiResponseLanguage: "auto",
+	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 	analyticsEnabled: false,
 	shareCrashReports: false,
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
@@ -154,6 +174,9 @@ export function loadSettings(): AppSettings {
 		if (typeof parsed.connectorEnabled !== "boolean") {
 			merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
 		}
+		merged.pdfAsk = normalizePdfAskSettings(
+			(parsed as { pdfAsk?: Partial<PdfAskSettings> }).pdfAsk,
+		);
 		merged.translate = normalizeTranslateSettings(parsed.translate);
 		return merged;
 	} catch {
@@ -171,6 +194,20 @@ export function saveSettings(settings: AppSettings): void {
 
 function isTranslateTargetLang(v: unknown): v is TranslateTargetLang {
 	return v === "ui" || v === "en" || v === "zh-CN";
+}
+
+function normalizePdfAskSettings(
+	raw: Partial<PdfAskSettings> | undefined,
+): PdfAskSettings {
+	const base = { ...DEFAULT_PDF_ASK_SETTINGS };
+	if (!raw || typeof raw !== "object") return base;
+	if (typeof raw.agentId === "string") {
+		base.agentId = raw.agentId.trim();
+	}
+	if (typeof raw.modelId === "string") {
+		base.modelId = raw.modelId.trim();
+	}
+	return base;
 }
 
 function normalizeTranslateSettings(

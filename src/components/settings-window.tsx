@@ -74,6 +74,7 @@ import {
 	type AppSettings,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
+	type PdfAskSettings,
 	type ThemePreference,
 	type TranslateProviderId,
 	type TranslateTargetLang,
@@ -554,6 +555,12 @@ function AppearancePane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+			</SettingsGroup>
+
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("appearance.markdownEditor.section")}
+			</p>
+			<SettingsGroup>
 				<SettingsRow label={t("appearance.fontSize.label")} htmlFor={fontId}>
 					<div className="flex items-center gap-2">
 						<input
@@ -1055,6 +1062,9 @@ function TranslatePane({
 	);
 }
 
+const PDF_ASK_FOLLOW_AGENT = "__pdf_ask_follow_default__";
+const PDF_ASK_FOLLOW_MODEL = "__pdf_ask_follow_model__";
+
 function AgentPane({
 	settings,
 	patch,
@@ -1072,6 +1082,19 @@ function AgentPane({
 	const [proxyEnabled, setProxyEnabled] = useState(false);
 	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const autoProbedRef = useRef(false);
+
+	// PDF Ask agent/model (same listAgents registry as Translate → Agent)
+	const [pdfAskRegistry, setPdfAskRegistry] =
+		useState<AgentListResponse | null>(null);
+	const [pdfAskModels, setPdfAskModels] = useState<
+		{ id: string; name: string }[]
+	>([]);
+	const pdfAsk = settings.pdfAsk;
+	const patchPdfAsk = useCallback(
+		(partial: Partial<PdfAskSettings>) =>
+			patch({ pdfAsk: { ...settings.pdfAsk, ...partial } }),
+		[patch, settings.pdfAsk],
+	);
 
 	/** Scan only — does not toggle busy; callers own the loading flag. */
 	const scanOnce =
@@ -1152,6 +1175,85 @@ function AgentPane({
 		autoProbedRef.current = true;
 		void rescanAndProbe();
 	}, [rescanAndProbe]);
+
+	const refreshPdfAskRegistry = useCallback(async () => {
+		if (!isTauri()) {
+			setPdfAskRegistry(null);
+			return;
+		}
+		try {
+			setPdfAskRegistry(await listAgents());
+		} catch {
+			setPdfAskRegistry(null);
+		}
+	}, []);
+
+	// Registry for PDF Ask agent/model selects (refresh when catalog changes)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-load after rescan/probe updates catalog
+	useEffect(() => {
+		void refreshPdfAskRegistry();
+	}, [catalog, refreshPdfAskRegistry]);
+
+	const pdfAskAvailable = listAvailableAgents(pdfAskRegistry);
+	const pdfAskDefault = pdfAskRegistry?.defaultId
+		? (pdfAskAvailable.find((a) => a.id === pdfAskRegistry.defaultId) ??
+			pdfAskRegistry.agents.find((a) => a.id === pdfAskRegistry.defaultId))
+		: undefined;
+	const pdfAskResolvedAgentId =
+		pdfAsk.agentId.trim() || pdfAskRegistry?.defaultId || "";
+
+	useEffect(() => {
+		if (!pdfAskResolvedAgentId) {
+			setPdfAskModels([]);
+			return;
+		}
+		const cached = loadModelCatalog(pdfAskResolvedAgentId);
+		setPdfAskModels(cached?.models ?? []);
+		if (!isTauri()) return;
+		let cancelled = false;
+		void warmAgent({ agentId: pdfAskResolvedAgentId }).catch(() => undefined);
+		const tmr = window.setTimeout(() => {
+			if (cancelled) return;
+			const next = loadModelCatalog(pdfAskResolvedAgentId);
+			if (next?.models?.length) setPdfAskModels(next.models);
+		}, 800);
+		return () => {
+			cancelled = true;
+			window.clearTimeout(tmr);
+		};
+	}, [pdfAskResolvedAgentId]);
+
+	useEffect(() => {
+		if (!pdfAskRegistry) return;
+		if (
+			pdfAsk.agentId &&
+			!pdfAskAvailable.some((a) => a.id === pdfAsk.agentId)
+		) {
+			patchPdfAsk({ agentId: "", modelId: "" });
+			return;
+		}
+		if (
+			pdfAsk.modelId &&
+			pdfAskModels.length > 0 &&
+			!pdfAskModels.some((m) => m.id === pdfAsk.modelId)
+		) {
+			patchPdfAsk({ modelId: "" });
+		}
+	}, [
+		pdfAskRegistry,
+		pdfAskAvailable,
+		pdfAskModels,
+		pdfAsk.agentId,
+		pdfAsk.modelId,
+		patchPdfAsk,
+	]);
+
+	const pdfAskAgentSelect = pdfAsk.agentId.trim()
+		? pdfAsk.agentId
+		: PDF_ASK_FOLLOW_AGENT;
+	const pdfAskModelSelect = pdfAsk.modelId.trim()
+		? pdfAsk.modelId
+		: PDF_ASK_FOLLOW_MODEL;
 
 	const onToggleEnabled = async (v: boolean) => {
 		patch({ agentEnabled: v });
@@ -1366,6 +1468,83 @@ function AgentPane({
 				</SettingsRow>
 			</SettingsGroup>
 
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.pdfAsk.section")}
+			</p>
+			<p className="mb-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.pdfAsk.hint")}
+			</p>
+			<SettingsGroup>
+				{pdfAskAvailable.length === 0 ? (
+					<p className="px-3 py-2 text-muted-foreground text-xs">
+						{t("agent.pdfAsk.agentId.empty")}
+					</p>
+				) : (
+					<>
+						<SettingsRow label={t("agent.pdfAsk.agentId.label")}>
+							<Select
+								value={pdfAskAgentSelect}
+								onValueChange={(v) => {
+									if (v === PDF_ASK_FOLLOW_AGENT) {
+										patchPdfAsk({ agentId: "", modelId: "" });
+									} else {
+										patchPdfAsk({ agentId: v, modelId: "" });
+									}
+								}}
+							>
+								<SelectTrigger
+									size="sm"
+									className="min-w-[200px] max-w-[280px]"
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value={PDF_ASK_FOLLOW_AGENT}>
+										{pdfAskDefault?.name
+											? t("agent.pdfAsk.agentId.followDefaultNamed", {
+													name: pdfAskDefault.name,
+												})
+											: t("agent.pdfAsk.agentId.followDefault")}
+									</SelectItem>
+									{pdfAskAvailable.map((a) => (
+										<SelectItem key={a.id} value={a.id}>
+											{a.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</SettingsRow>
+						<SettingsRow label={t("agent.pdfAsk.modelId.label")}>
+							<Select
+								value={pdfAskModelSelect}
+								onValueChange={(v) => {
+									patchPdfAsk({
+										modelId: v === PDF_ASK_FOLLOW_MODEL ? "" : v,
+									});
+								}}
+							>
+								<SelectTrigger
+									size="sm"
+									className="min-w-[200px] max-w-[280px]"
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value={PDF_ASK_FOLLOW_MODEL}>
+										{t("agent.pdfAsk.modelId.followAgent")}
+									</SelectItem>
+									{pdfAskModels.map((m) => (
+										<SelectItem key={m.id} value={m.id}>
+											{m.name || m.id}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</SettingsRow>
+					</>
+				)}
+			</SettingsGroup>
+
 			{!isTauri() ? (
 				<p className="mb-3 text-muted-foreground text-xs">
 					{t("agent.desktopHint")}
@@ -1412,7 +1591,7 @@ function AgentPane({
 						<div
 							key={entry.templateId}
 							className={cn(
-								"flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0",
+								"flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0",
 								notInstalled && "opacity-50",
 							)}
 						>
@@ -1447,7 +1626,13 @@ function AgentPane({
 									) : null}
 								</div>
 							</div>
-							<div className="flex shrink-0 items-center justify-end gap-1">
+							{/* Fixed action slot so icon-only rows align with “Use default” */}
+							<div
+								className={cn(
+									"flex h-7 shrink-0 items-center justify-center gap-1",
+									showInstall ? "min-w-0" : "w-20",
+								)}
+							>
 								{showInstall ? (
 									<Button
 										type="button"
@@ -1495,38 +1680,18 @@ function AgentPane({
 						</div>
 					);
 				})}
-			</SettingsGroup>
-			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("agent.commonAgentsHint")}
-			</p>
-
-			<div className="mb-2 flex items-center justify-between gap-2">
-				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-					{t("agent.custom")}
-				</p>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-xs"
-					aria-label={t("agent.addCustom")}
-					disabled={!isTauri()}
-					onClick={() => setAdding((v) => !v)}
-				>
-					<Plus className="size-3.5" />
-				</Button>
-			</div>
-
-			{customAgents.length > 0 ? (
-				<SettingsGroup>
-					{customAgents.map((agent) => {
-						const isDefault = catalog?.defaultId === agent.id;
-						return (
-							<div
-								key={agent.id}
-								className="flex items-center justify-between gap-3 border-b px-3.5 py-2.5 last:border-b-0"
-							>
-								<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-									<span className="font-medium text-[13px]">{agent.name}</span>
+				{customAgents.map((agent) => {
+					const isDefault = catalog?.defaultId === agent.id;
+					return (
+						<div
+							key={agent.id}
+							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
+						>
+							<div className="flex min-w-0 flex-1 items-center gap-4">
+								<span className="w-24 shrink-0 truncate font-medium text-[13px]">
+									{agent.name}
+								</span>
+								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 									{isDefault ? (
 										<StatusBadge tone="primary">
 											{t("agent.badges.default")}
@@ -1550,24 +1715,50 @@ function AgentPane({
 										</StatusBadge>
 									)}
 								</div>
+							</div>
+							<div className="flex h-7 w-20 shrink-0 items-center justify-center gap-1">
 								<Button
 									type="button"
 									variant="ghost"
 									size="icon-xs"
+									className="size-7"
 									aria-label={t("common:remove")}
 									onClick={() => void onRemove(agent.id)}
 								>
 									<Trash2 className="size-3.5" />
 								</Button>
 							</div>
-						);
-					})}
-				</SettingsGroup>
-			) : null}
-
-			{adding ? (
-				<SettingsGroup>
-					<div className="space-y-2.5 px-3.5 py-3">
+						</div>
+					);
+				})}
+				{/* Custom entry row — same row style as catalog agents; + expands the form */}
+				<div className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0">
+					<div className="flex min-w-0 flex-1 items-center gap-4">
+						<span className="w-24 shrink-0 truncate font-medium text-[13px]">
+							{t("agent.custom")}
+						</span>
+					</div>
+					<div className="flex h-7 w-20 shrink-0 items-center justify-center gap-1">
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-7"
+							disabled={!isTauri()}
+							aria-label={adding ? t("common:cancel") : t("agent.addCustom")}
+							title={adding ? t("common:cancel") : t("agent.addCustom")}
+							onClick={() => setAdding((v) => !v)}
+						>
+							{adding ? (
+								<X className="size-3.5" aria-hidden />
+							) : (
+								<Plus className="size-3.5" aria-hidden />
+							)}
+						</Button>
+					</div>
+				</div>
+				{adding ? (
+					<div className="space-y-2.5 border-b px-3.5 py-3 last:border-b-0">
 						<div className="space-y-1">
 							<Label className="font-normal text-[13px]">
 								{t("agent.form.name")}
@@ -1621,8 +1812,11 @@ function AgentPane({
 							</Button>
 						</div>
 					</div>
-				</SettingsGroup>
-			) : null}
+				) : null}
+			</SettingsGroup>
+			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.commonAgentsHint")}
+			</p>
 		</>
 	);
 }

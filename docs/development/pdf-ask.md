@@ -62,7 +62,7 @@
 | 迷你对话 UI | **AI Elements** 精简组合 + shadcn Card/Button/Tooltip | 与 Agent 面板视觉一致；图标 + Tooltip，无常驻说明文案 | 否 |
 | 状态 | React 局部 state + 可选轻量 store（若已有 Zustand 可复用） | 当前选区线程、打开中的 threadId、流式 buffer | 视实现而定 |
 | 持久化 | **Vault 内 JSON 文件**（见 §5） | 用户明确要求 JSON；结构化线程/坐标天然适合 JSON；外部工具仍可读 | 否（`plugin-fs` / Host 读写） |
-| 问答后端 | **BYOA ACP Client** | 与产品一致；上下文注入 quote + 页码 + 可选 `PAPER.md`/`NOTES.md` 摘要 | 否 |
+| 问答后端 | **BYOA ACP Client** | 与产品一致；上下文注入 quote + 页码 + 可选 `PAPER.md`/`NOTES.md` 摘要；**Agent/模型** 来自设置 → Agent → **PDF 划词提问**（`settings.pdfAsk`，独立于 Chat / 翻译） | 否 |
 | ID | 既有 `nanoid` | thread / message id | 否 |
 | i18n | `react-i18next` | 全部用户文案走 `t()`；en 源语言 | 否 |
 

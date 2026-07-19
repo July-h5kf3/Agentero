@@ -55,6 +55,9 @@
 			"en": "English",
 			"zhCN": "简体中文"
 		},
+		"markdownEditor": {
+			"section": "Markdown编辑器"
+		},
 		"fontSize": {
 			"label": "编辑器字号",
 			"value": "{{size}} px"
@@ -114,6 +117,20 @@
 			"auto": "自动（跟随内容）",
 			"en": "English",
 			"zhCN": "简体中文"
+		},
+		"pdfAsk": {
+			"section": "PDF 划词提问",
+			"hint": "PDF 划词「提问」对话框使用的 Agent 与模型（与 Chat、翻译设置相互独立）。",
+			"agentId": {
+				"label": "提问 Agent",
+				"followDefault": "跟随默认",
+				"followDefaultNamed": "跟随默认（{{name}}）",
+				"empty": "暂无可用 Agent，请先在上方添加。"
+			},
+			"modelId": {
+				"label": "提问模型",
+				"followAgent": "跟随 Agent 默认"
+			}
 		},
 		"form": {
 			"defaultName": "自定义 Agent",

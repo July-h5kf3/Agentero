@@ -381,12 +381,13 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
-- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
+- **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
   - **回答语言**（自动 / English / 简体中文，独立于界面语言）。
   - **入库后自动精读**（`autoPaperReader`，**默认关**）：开启后魔棒 / 单篇 Download 资源就绪且未读时自动 paper-reader；Zap 始终可手动。
+  - **PDF 划词提问**（`pdfAsk.agentId` / `pdfAsk.modelId`）：划词「提问」对话框专用 Agent 与模型；空则跟随默认 Agent / 该 Agent 的模型偏好；与 Chat 当前选择、翻译用 Agent **相互独立**。
   - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列仅 ready/failed/not-probed，不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页自动 scan + 并行 Probe；Refresh 可再跑。表下小字：ACP 失败时可试代理。代理开关不因 Probe busy 禁用；改代理只持久化 + scan。
   - **Claude**：`detect` 用本机 `claude`（Claude Code）；ACP 入口为 `claude-agent-acp`。若已装 Claude Code 但缺适配器，显示 **ACP adapter missing** 徽章 + **Install ACP** 小按钮 → Host `agent_open_install_terminal` 打开系统终端，展示 `npm i -g @agentclientprotocol/claude-agent-acp`，**等待用户按 Enter 才执行**（不静默安装）。装完后用户点 Refresh 再 Probe。
   - 顶部 **Refresh**（Rescan + Probe）；**Use default** 纯文字（无 icon）。

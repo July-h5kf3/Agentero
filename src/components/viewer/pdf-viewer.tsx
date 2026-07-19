@@ -1130,9 +1130,32 @@ export function PdfViewer({
 			if (!threadId) return;
 			const thread = threadsRef.current.find((th) => th.id === threadId);
 			if (!thread) return;
-			void sendToThread(thread, question);
+			// Resolve Agent + model from Settings → Agent → PDF selection Ask
+			void (async () => {
+				try {
+					const registry = await listAgents().catch(() => null);
+					const resolved = resolveTranslateAgent(
+						loadSettings().pdfAsk,
+						registry,
+					);
+					if (!resolved.agentId) {
+						const msg = t("pdfAsk.noAgent");
+						notifyError(msg);
+						setAskError(msg);
+						return;
+					}
+					void sendToThread(thread, question, undefined, {
+						agentId: resolved.agentId,
+						modelId: resolved.modelId,
+					});
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					notifyError(message);
+					setAskError(message);
+				}
+			})();
 		},
-		[activeThreadId, sendToThread],
+		[activeThreadId, sendToThread, t],
 	);
 
 	const dismissPopoverChrome = useCallback(() => {
