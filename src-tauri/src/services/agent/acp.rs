@@ -62,6 +62,9 @@ async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
     let _ = cancellation.changed().await;
 }
 
+/// Shared budget for ACP initialize / session RPCs and settings probe.
+const ACP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 async fn timed_acp_request<T, E>(
     label: &str,
     request: impl std::future::Future<Output = Result<T, E>>,
@@ -69,12 +72,12 @@ async fn timed_acp_request<T, E>(
 where
     E: std::fmt::Display,
 {
-    tokio::time::timeout(PROBE_TIMEOUT, request)
+    tokio::time::timeout(ACP_TIMEOUT, request)
         .await
         .map_err(|_| {
             acp_err(format!(
                 "{label} timed out after {}s",
-                PROBE_TIMEOUT.as_secs()
+                ACP_TIMEOUT.as_secs()
             ))
         })?
         .map_err(|error| acp_err(format!("{label}: {error}")))
@@ -572,8 +575,6 @@ async fn await_user_permission(
     RequestPermissionResponse::new(outcome)
 }
 
-const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
-
 /// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
 pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
     let agent_id = desc.id.clone();
@@ -625,7 +626,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
             }
         });
 
-    let result = match tokio::time::timeout(PROBE_TIMEOUT, connect).await {
+    let result = match tokio::time::timeout(ACP_TIMEOUT, connect).await {
         Ok(r) => r,
         Err(_) => {
             return ProbeResult {
@@ -635,7 +636,7 @@ pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
                 protocol_version: None,
                 error: Some(format!(
                     "probe timed out after {}s (check Agent proxy / network)",
-                    PROBE_TIMEOUT.as_secs()
+                    ACP_TIMEOUT.as_secs()
                 )),
             };
         }
