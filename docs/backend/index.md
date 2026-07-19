@@ -29,6 +29,7 @@
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
 - 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换）；Paper Info 编辑；Library 展示与筛选；CLI `set-tags` / `list --tag` / `tags`。
 - **Zotero Connector 兼容服务**（MVP）：本机 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；见 [`connector.md`](connector.md)。
+- **Paper 入库流水线统一**（设计）：多入口应收敛为 Host `paper_commit` + 前端 `afterPaperImport`；见 [`paper-import-pipeline.md`](paper-import-pipeline.md)。
 - 原生菜单 Close（`close_tab_or_window` / `⌘W`）：由前端先关文档 tab，无 tab 时关窗口（见 [`api.md`](api.md) §3.10）。
 - **双链**索引（`graph_*`）与规划中的 **文献引用图**（roadmap V0.7）分层；后者不复用双链边语义。
 
@@ -38,6 +39,7 @@
 - [`data-model.md`](data-model.md)：Vault 结构、paper 文件、分层规则、运行时类型。
 - [`catalog.md`](catalog.md)：Catalog SQLite schema、导出、Host 实现与迁移。
 - [`identifier-lookup.md`](identifier-lookup.md)：魔棒（Identifier Lookup）与 Translator 后端（v0 已落地 + 后续扩展）。
+- [`paper-import-pipeline.md`](paper-import-pipeline.md)：多入口入库现状、统一 `paper_commit` / `afterPaperImport` 设计与分期（**设计已落库**）。
 - [`connector.md`](connector.md)：Zotero Connector 兼容 HTTP 服务（方案一：本机 23119；MVP 已落地）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型（与 V0.7 文献引用图边界见文内 §6.5）。
 - CLI（MVP）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**（bin `agentero`）；不迁 core，复用 `services/*`；Vault 管理/发现/暴露；无 BYOA。

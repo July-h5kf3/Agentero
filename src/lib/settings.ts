@@ -1,6 +1,8 @@
 import {
 	isPaperTreeLabelMode,
+	isPaperTreeSortMode,
 	type PaperTreeLabelMode,
+	type PaperTreeSortMode,
 } from "@/lib/paper-metadata";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
 import { isTranslateProviderId } from "@/lib/translate/services";
@@ -12,6 +14,7 @@ import type {
 
 export type {
 	PaperTreeLabelMode,
+	PaperTreeSortMode,
 	TranslateProviderId,
 	TranslateSettings,
 	TranslateTargetLang,
@@ -49,6 +52,11 @@ export type AppSettings = {
 	 * Default: title · author.
 	 */
 	paperTreeLabelMode: PaperTreeLabelMode;
+	/**
+	 * How siblings under each folder are ordered in the file tree (display-only).
+	 * Default: folder name A–Z.
+	 */
+	paperTreeSortMode: PaperTreeSortMode;
 	/**
 	 * Host local HTTP server compatible with the official Zotero Connector
 	 * (loopback :23119). Default **off**; mutually exclusive with Zotero desktop.
@@ -106,6 +114,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	confirmBeforeClose: false,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
+	paperTreeSortMode: "folder",
 	connectorEnabled: false,
 	theme: "system",
 	locale: "system",
@@ -165,6 +174,9 @@ export function loadSettings(): AppSettings {
 		}
 		if (!isPaperTreeLabelMode(merged.paperTreeLabelMode)) {
 			merged.paperTreeLabelMode = DEFAULT_SETTINGS.paperTreeLabelMode;
+		}
+		if (!isPaperTreeSortMode(merged.paperTreeSortMode)) {
+			merged.paperTreeSortMode = DEFAULT_SETTINGS.paperTreeSortMode;
 		}
 		if (typeof parsed.autoPaperReader !== "boolean") {
 			merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;

@@ -26,6 +26,16 @@
 			"author-year-title": "作者 (年份) · 标题",
 			"folder": "文件夹名"
 		},
+		"paperTreeSortMode": {
+			"label": "文件树论文排序",
+			"hint": "仅影响各文件夹下的显示顺序，不改名、不移动。缺元数据时按文件夹名（年份 / 添加时间缺失则排在最后）。",
+			"folder": "文件夹名 A–Z",
+			"title": "标题 A–Z",
+			"author": "作者 A–Z",
+			"year-desc": "年份（新 → 旧）",
+			"year-asc": "年份（旧 → 新）",
+			"added-desc": "添加时间（新 → 旧）"
+		},
 		"translatorBaseUrl": {
 			"label": "Translator 服务地址",
 			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"

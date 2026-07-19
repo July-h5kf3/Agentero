@@ -70,9 +70,11 @@ import {
 	isPapersRoot,
 	type PaperMetadata,
 	type PaperTreeLabelMode,
+	type PaperTreeSortMode,
 	paperAssetDownloadReasons,
 	paperNeedsAssetDownload,
 	paperNeedsRead,
+	sortFileTreeNodes,
 } from "@/lib/paper-metadata";
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/papers-api";
 import {
@@ -131,28 +133,6 @@ type FlatRow =
 
 function isVirtualTreePath(path: string): boolean {
 	return path === LIBRARY_VIRTUAL_PATH || path === TRASH_VIRTUAL_PATH;
-}
-
-function AgenteroLogo({ className }: { className?: string }) {
-	return (
-		<svg
-			viewBox="0 0 64 64"
-			fill="none"
-			aria-hidden="true"
-			className={className}
-		>
-			<path
-				d="M10 46 L10 18 L32 40 L54 18 L54 46"
-				stroke="currentColor"
-				strokeWidth="5"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-			/>
-			<circle cx="10" cy="18" r="4" fill="currentColor" />
-			<circle cx="32" cy="40" r="4" fill="currentColor" />
-			<circle cx="54" cy="18" r="4" fill="currentColor" />
-		</svg>
-	);
 }
 
 function fileIcon(name: string) {
@@ -345,6 +325,11 @@ type FileTreeProps = {
 	 * Display-only; disk folder names are unchanged.
 	 */
 	paperTreeLabelMode?: PaperTreeLabelMode;
+	/**
+	 * How siblings under each folder are ordered (Settings → General).
+	 * Display-only; does not rename or move disk folders.
+	 */
+	paperTreeSortMode?: PaperTreeSortMode;
 	/** Start paper-reader workflow for a paper folder with complete local assets. */
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
@@ -378,6 +363,7 @@ export function FileTree({
 	onDownloadAllMissingAssets,
 	paperMetaByRelPath,
 	paperTreeLabelMode = "title-author",
+	paperTreeSortMode = "folder",
 	onReadPaper,
 	onDeletePath,
 	onDeletePaths,
@@ -471,6 +457,18 @@ export function FileTree({
 		[vaultPath],
 	);
 
+	/** Display order under each folder (Settings → paperTreeSortMode). */
+	const displayNodes = useMemo(
+		() =>
+			sortFileTreeNodes(
+				nodes,
+				paperTreeSortMode,
+				paperMetaByRelPath,
+				relPathForNode,
+			),
+		[nodes, paperTreeSortMode, paperMetaByRelPath, relPathForNode],
+	);
+
 	/**
 	 * Row to highlight / scroll to:
 	 * - virtual Library / Trash as-is;
@@ -539,9 +537,9 @@ export function FileTree({
 				}
 			}
 		};
-		walk(nodes);
+		walk(displayNodes);
 		return out;
-	}, [nodes, expanded]);
+	}, [displayNodes, expanded]);
 
 	/** Flattened rows in display order (respects expand state + inline drafts). */
 	const flatRows = useMemo<FlatRow[]>(() => {
@@ -579,9 +577,9 @@ export function FileTree({
 				}
 			}
 		};
-		walk(nodes, 0);
+		walk(displayNodes, 0);
 		return out;
-	}, [nodes, expanded, createDraft, vaultPath]);
+	}, [displayNodes, expanded, createDraft, vaultPath]);
 
 	const treeScrollRef = useRef<HTMLDivElement>(null);
 	const rowVirtualizer = useVirtualizer({
@@ -1720,7 +1718,6 @@ export function VaultSidebarHeader({
 										className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-muted"
 										aria-label={t("app:vault.switchVault")}
 									>
-										<AgenteroLogo className="size-4 shrink-0 text-foreground" />
 										<span
 											className="truncate font-medium text-sm"
 											title={title}

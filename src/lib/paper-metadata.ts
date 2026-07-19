@@ -847,6 +847,155 @@ export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
 	);
 }
 
+/**
+ * How children under each folder are ordered in the file tree (Settings → General).
+ * Display-only; does not rename or move disk folders.
+ *
+ * - `folder`: directory name A–Z (historical default)
+ * - `title` / `author`: catalog fields, missing → folder name
+ * - `year-desc` / `year-asc`: publication year; missing year last
+ * - `added-desc`: catalog `added_at` newest first; missing last
+ *
+ * Directories before files. `folder` mode mixes org folders and papers by name.
+ * Other modes: org folders first (by name), then papers by the chosen key.
+ */
+export type PaperTreeSortMode =
+	| "folder"
+	| "title"
+	| "author"
+	| "year-desc"
+	| "year-asc"
+	| "added-desc";
+
+export const PAPER_TREE_SORT_MODES: readonly PaperTreeSortMode[] = [
+	"folder",
+	"title",
+	"author",
+	"year-desc",
+	"year-asc",
+	"added-desc",
+] as const;
+
+export function isPaperTreeSortMode(v: unknown): v is PaperTreeSortMode {
+	return (
+		typeof v === "string" &&
+		(PAPER_TREE_SORT_MODES as readonly string[]).includes(v)
+	);
+}
+
+const LOCALE_CMP = { sensitivity: "base" as const };
+
+function cmpName(a: string, b: string): number {
+	return a.localeCompare(b, undefined, LOCALE_CMP);
+}
+
+function firstAuthorKey(meta: PaperMetadata | null | undefined): string {
+	if (!meta?.authors?.length) return "";
+	const first = meta.authors.find((a) => a.trim());
+	return first?.trim().toLowerCase() ?? "";
+}
+
+function yearValue(meta: PaperMetadata | null | undefined): number | null {
+	if (typeof meta?.year === "number" && Number.isFinite(meta.year)) {
+		return meta.year;
+	}
+	return null;
+}
+
+function addedMs(meta: PaperMetadata | null | undefined): number | null {
+	const raw = meta?.added_at?.trim();
+	if (!raw) return null;
+	const t = Date.parse(raw);
+	return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * Recursively sort a file-tree sibling list for display.
+ * Papers use catalog metadata when the sort mode needs it; everything else
+ * falls back to folder/file name. Does not mutate the input nodes.
+ */
+export function sortFileTreeNodes(
+	nodes: FileNode[],
+	mode: PaperTreeSortMode,
+	metaByRelPath?: ReadonlyMap<string, PaperMetadata> | null,
+	toRelPath?: (absPath: string) => string,
+): FileNode[] {
+	const relOf = (absPath: string) =>
+		toRelPath
+			? toRelPath(absPath)
+			: absPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+
+	const metaOf = (node: FileNode): PaperMetadata | null => {
+		if (!metaByRelPath) return null;
+		return metaByRelPath.get(relOf(node.path)) ?? null;
+	};
+
+	const compare = (a: FileNode, b: FileNode): number => {
+		if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+
+		// Files always by name
+		if (a.kind === "file") return cmpName(a.name, b.name);
+
+		// Historical default: all directories by folder name (org + paper mixed)
+		if (mode === "folder") return cmpName(a.name, b.name);
+
+		const aPaper = isPaperDirectory(a.path, a.children);
+		const bPaper = isPaperDirectory(b.path, b.children);
+
+		// Metadata modes: org folders first (by name), then papers by criterion
+		if (aPaper !== bPaper) return aPaper ? 1 : -1;
+		if (!aPaper && !bPaper) return cmpName(a.name, b.name);
+
+		const am = metaOf(a);
+		const bm = metaOf(b);
+
+		if (mode === "title") {
+			const at = (am?.title ?? "").trim() || a.name;
+			const bt = (bm?.title ?? "").trim() || b.name;
+			const c = cmpName(at, bt);
+			return c !== 0 ? c : cmpName(a.name, b.name);
+		}
+
+		if (mode === "author") {
+			const aa = firstAuthorKey(am) || a.name.toLowerCase();
+			const ba = firstAuthorKey(bm) || b.name.toLowerCase();
+			const c = cmpName(aa, ba);
+			return c !== 0 ? c : cmpName(a.name, b.name);
+		}
+
+		if (mode === "year-desc" || mode === "year-asc") {
+			const ay = yearValue(am);
+			const by = yearValue(bm);
+			const aMissing = ay === null;
+			const bMissing = by === null;
+			if (aMissing !== bMissing) return aMissing ? 1 : -1;
+			if (ay !== null && by !== null && ay !== by) {
+				return mode === "year-desc" ? by - ay : ay - by;
+			}
+			return cmpName(a.name, b.name);
+		}
+
+		// added-desc
+		const at = addedMs(am);
+		const bt = addedMs(bm);
+		const aMissing = at === null;
+		const bMissing = bt === null;
+		if (aMissing !== bMissing) return aMissing ? 1 : -1;
+		if (at !== null && bt !== null && at !== bt) return bt - at;
+		return cmpName(a.name, b.name);
+	};
+
+	return [...nodes].sort(compare).map((n) => {
+		if (!n.children?.length) return n;
+		// Paper leaves keep children for marker detection but are not expanded;
+		// still sort for consistency if inspected.
+		return {
+			...n,
+			children: sortFileTreeNodes(n.children, mode, metaByRelPath, toRelPath),
+		};
+	});
+}
+
 /** Compact author list for tree rows (1–2 names, else first + et al.). */
 export function formatAuthorsShort(
 	authors: string[] | undefined | null,

@@ -4,7 +4,7 @@
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
 > 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
-> 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒入库与 `map_zotero_item`）、[`catalog.md`](catalog.md)、[`api.md`](api.md)、[`data-model.md`](data-model.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../development/roadmap.md`](../development/roadmap.md)、[`../development/todo.md`](../development/todo.md)。
+> 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒入库与 `map_zotero_item`）、[`paper-import-pipeline.md`](paper-import-pipeline.md)（与其它入库入口的统一 `paper_commit` 方案）、[`catalog.md`](catalog.md)、[`api.md`](api.md)、[`data-model.md`](data-model.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../development/roadmap.md`](../development/roadmap.md)、[`../development/todo.md`](../development/todo.md)。
 
 ---
 
@@ -28,15 +28,15 @@
 3. Host 在 `127.0.0.1:23119` 启动 Connector 兼容服务；若端口被 Zotero 占用则明确失败提示。
 4. 用户在浏览器使用 **官方 Zotero Connector** 点保存（arXiv、DOI 页、期刊站等）。
 5. Connector 将 translator 产出的 items JSON POST 到本机；Agentero 写入 `papers/…` + catalog，并按现有策略尽量下载 PDF。
-6. Agentero 刷新文件树 / Library；可选 toast 成功摘要。
+6. Agentero 刷新文件树 / Library；**`openPaper` 打开（或聚焦）该论文标签页**（与魔棒入库一致；附件 `saveAttachment` / 会话移动再次发出事件时亦会聚焦）；可选 toast 成功摘要。
 7. 用户关闭开关或退出应用时释放端口。
 
 ### 1.3 与其它入库路径的边界
 
 | 路径 | 入口 | 元数据来源 | 与本方案关系 |
 |---|---|---|---|
-| 魔棒 `lookup_import` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；入库落盘应对齐同一 paper 单元语义 |
-| 本地 PDF 导入 | 魔棒弹层多选 | 文件名 + liteparse | 无关 |
+| 魔棒 `lookup_import` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；落盘应对齐同一 paper 单元语义（统一方案见 [`paper-import-pipeline.md`](paper-import-pipeline.md)） |
+| 本地 PDF 导入 | 魔棒弹层多选 | 文件名 + liteparse | 并存；目标共用 `paper_commit` |
 | Zotero 迁移 | 欢迎页 / 侧栏 | `zotero.sqlite` + storage | **存量**；本方案是 **增量** |
 | Connector 兼容（本方案） | 官方浏览器插件 | 插件侧 Translator → HTTP | 本文件 |
 | 自研浏览器扩展 | 未来 | 任意 | 不阻塞；可共用入库核心，不必抢 23119 |
@@ -114,7 +114,7 @@ services/connector  →  map_zotero_item（复用 lookup/map）
 Tauri event: connector:item-saved / connector:error
         │
         ▼
-前端：刷新树 / Library；Toast（成功或失败）
+前端：刷新树 / Library；openPaper（打开/聚焦论文 tab）；Toast（成功或失败）
 ```
 
 | 层 | 职责 |
@@ -393,7 +393,7 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 事件 | payload（概念） | 前端 |
 |---|---|---|
 | `connector:status` | 与 get_status 同形 | 设置页指示灯 |
-| `connector:item-saved` | `{ path, id, title, deduped?, sessionId }` | 刷新树、`paper_list`、可选 toast |
+| `connector:item-saved` | `{ path, id, title, deduped?, sessionId }` | 刷新树、`paper_list`、**`openPaper(path)` 打开/聚焦论文 tab**、可选 toast |
 | `connector:error` | `{ message, sessionId? }` | `notifyError` |
 | `connector:progress` | 可选，细粒度附件进度 | 后台任务条（P1） |
 

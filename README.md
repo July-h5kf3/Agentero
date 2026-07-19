@@ -20,21 +20,19 @@
 
 ## 功能
 
-- **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent，不绑定模型宿主。
+- **BYOA**（Bring Your Own Agent）：Agentero 只作为 ACP Client 连接用户本机 Agent。开箱即用。
   - **精读**：入库 / 单篇 Download 后可自动 paper-reader；文件树 **Zap** 可手动；写 `NOTES.md` 并标记 `is_read`。
-- **魔棒入库**：catalog 权威 + 默认 PDF / arXiv TeX。
-- **文档标签页**：多文档 tab（`⌘W` 关标签；无标签时关窗口）；Library / PDF / 图片 / Markdown。
-- **PDF 阅读**：页码导航、适应宽/整页、大纲、⌘F 查找、平滑划词与操作菜单。
-- **Markdown 内嵌图片**：`./assets/` 落盘；选中源码；删除 GC。
-- **回收站**：删除可恢复（中间栏浏览）；Library **Rescan** 补齐盘上论文。
+- **魔棒入库与 Zotero Connector**： 无缝使用 Zotero 生态工具
+- **预置翻译功能**
 - **双链与知识图谱**：Obsidian 风格双链与图谱。
-- **桌面原生体验**：全局错误 Toast、后台任务条、多窗口、Vault 文件监听自动重载。
-
-> 当前状态：早期 MVP
+- **PDF 阅读**：页码导航、适应宽/整页、大纲、⌘F 查找、平滑划词与操作菜单。
+- **桌面原生体验**：轻量化。
 
 ## Quick Start
 
 ### 桌面应用
+
+前往 [Agentero](https://agentero.poco-ai.com) 进行下载。
 
 ```bash
 git clone https://github.com/poco-ai/agentero.git
@@ -51,19 +49,6 @@ pnpm dev
 ### CLI
 
 Headless **Vault / Catalog 机器接口**：创建与发现库、列表与入库文献基础能力。**不含** BYOA / Agent 运行时。
-
-### 常用脚本
-
-| 命令 | 说明 |
-| --- | --- |
-| `pnpm tauri dev` | 启动桌面开发应用 |
-| `pnpm build` | 构建前端产物 |
-| `pnpm tauri build` | 构建桌面安装包 |
-| `pnpm demo:vault` | 生成 demo Vault（catalog schema v3 + 样例 paper / loose PDF / 图片） |
-| `cargo build -p agentero-cli` | 构建 CLI（bin `agentero`） |
-| `cargo test -p agentero-cli` | CLI 集成测试 |
-| `pnpm lint` | TypeScript（Biome）+ Rust（clippy）检查 |
-| `pnpm format` | 格式化 TypeScript + Rust |
 
 ## 项目结构
 

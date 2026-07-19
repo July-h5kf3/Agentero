@@ -20,6 +20,7 @@ nav:
       - 数据模型: backend/data-model.md
       - 论文目录库: backend/catalog.md
       - 魔棒与 Translator: backend/identifier-lookup.md
+      - Paper 入库流水线: backend/paper-import-pipeline.md
       - Zotero Connector 兼容: backend/connector.md
       - 双链与图谱: backend/wikilinks.md
   - 测试:
@@ -34,6 +35,8 @@ nav:
       - 运行日志: development/logging.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
+  - Bug 修复记录:
+      - DeepSeek 正文落入 Thinking: bug_fix/deepseek-thinking-body.md
 
 markdown_extensions:
   - admonition

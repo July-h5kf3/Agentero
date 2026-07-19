@@ -1,6 +1,6 @@
 # Agentero TODO
 
-可执行 backlog（GitHub Flavored Markdown checklist：`- [x]` 已完成 / `- [ ]` 未完成）。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；Zotero Connector 兼容见 [`../backend/connector.md`](../backend/connector.md)。
+可执行 backlog（GitHub Flavored Markdown checklist：`- [x]` 已完成 / `- [ ]` 未完成）。版本级状态与验收以 [`roadmap.md`](roadmap.md) 为准；魔棒设计见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；Zotero Connector 兼容见 [`../backend/connector.md`](../backend/connector.md)；多入口入库统一见 [`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
 
 ## P0 — 近期闭环
 
@@ -75,6 +75,7 @@
 - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）
 - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行
 - [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者(年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
+- [x] **文件树论文排序预设**：默认文件夹名 A–Z；设置 → 通用 `paperTreeSortMode`（标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；展示用、不移动磁盘（`sortFileTreeNodes`）
 
 ### 2e. PDF 阅读增强
 
@@ -145,6 +146,7 @@
 - [x] 按需放宽 service `pub`（`lib.rs` 导出 `services` / `error`；`list_by_id`）
 - [x] README / 本仓库开发说明：`cargo build -p agentero-cli`
 - [x] Vault skill 模板：`templates/vault/.agents/skills/agentero-cli/SKILL.md`；Create Vault 种子；README Quick Start 已写协议
+- [x] 预制 skills 扩展：`idea-evaluator` + `deep-research`（vendored [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，CC BY-NC-SA 4.0；`skills/README.md` + LICENSE 说明）
 
 ### 6. 运行日志（Logging）— P0
 
@@ -255,7 +257,7 @@
 - [x] C0：设计文档（本机 `23119`、互斥 Zotero 桌面、默认关、MVP endpoints、映射与分期）
 - [x] C1：Host `services/connector` — `ping` / `saveItems` / `sessionProgress` + loopback 安全策略；复用 `map_zotero_item` 落盘
 - [x] C2：设置开关 `connectorEnabled` + `connector_get_status` / `connector_set_enabled` / `set_vault`；端口冲突 / 无 Vault UX；i18n
-- [x] C3：前端 `connector:item-saved` 刷新树/Library；退出释放端口；`api.md` 命令表
+- [x] C3：前端 `connector:item-saved` 刷新树/Library + **`openPaper` 打开论文 tab**；退出释放端口；`api.md` 命令表
 - [x] C4a：catalog id 去重；URL 附件后台 `ensure_paper_assets`；防插件 15s 超时（NOTES 无实时 MT）
 - [x] C4a2：`getSelectedCollection.targets` 列出 `papers/` 组织子文件夹；`updateSession` 移动 paper；`connector_set_parent_dir` + Library 作用域同步
 - [x] C4b：`saveAttachment` 二进制上传协议（浏览器登录墙 PDF；`parentItemID`→paper；`%PDF` 校验；触发 PAPER.md）
@@ -370,7 +372,11 @@
 - [x] 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md
 - [x] **本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**
 - [x] Library 导入导出 Bib、`paper_set_tags`、`paper_rescan`
-- [x] **Zotero Connector MVP**（含 `saveAttachment`）
+- [x] **Zotero Connector MVP**（含 `saveAttachment`）+ **保存后 `openPaper`**
+- [x] **入库流水线统一设计**（[`paper-import-pipeline.md`](../backend/paper-import-pipeline.md)）
+- [ ] **P0** Host `paper_commit` + 魔棒 / Connector / 本地 PDF 迁入
+- [ ] **P1** 前端 `afterPaperImport` 策略表
+- [ ] **P2** Bib / CLI 走 commit；**P3** Zotero 迁移；**P4** `paper:imported` 事件
 - [ ] 关键词/Agent 候选
 - [ ] 本地 PDF 拖拽 / DOI 识别与元数据确认
 - [ ] MinerU 云端解析

@@ -201,26 +201,29 @@
 
 目标：抽象 Importer 接口，落地 arXiv 与本地 PDF 两个 importer，并为后续 HTML、DOI、Zotero/BibTeX 做架构准备。
 
+**入库编排统一（设计）**：多入口（魔棒 / Connector / 本地 PDF / Bib / 迁移 / CLI）收敛为 Host `paper_commit` + 前端 `afterPaperImport`——见 [`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。与下文「Importer trait」互补：trait 管 **元数据源**，`paper_commit` 管 **落盘与 UI 后置**。
+
 关键交付：
 
-- [ ] 抽象 importer 接口。
-- [ ] 将 arXiv 入库实现迁移为第一个 importer。
+- [ ] 抽象 importer 接口（Source adapter）。
+- [ ] 将 arXiv / 魔棒入库实现迁移为第一个 adapter + **`paper_commit`**。
 - [x] 本地 PDF 导入：魔棒弹层文件选择（多选，`paper_import_local_pdf`）、citekey slug 生成 + 重复检测（`-2`/`-3`）、复制 PDF + catalog + liteparse `PAPER.md`；拖拽 / DOI 识别待增强。
 - [ ] 可插拔 `PdfParser`：默认本地 liteparse，配置 MinerU API Key 后优先云端 MinerU，失败自动降级。
 - [ ] PDF 元数据混合获取：DOI/arXiv 标识符查询 Crossref/arXiv + Agent 正文抽取，入库前用户确认。
 - [ ] 预留本地 HTML importer。
-- [ ] 预留 BibTeX/Zotero importer。
+- [x] BibTeX / Zotero 形导入（`paper_import`、Connector、迁移）已落地入口；**编排尚未统一**。
 - [x] **魔棒 Identifier Lookup（v0）**：HTTP Translator + `lookup_import` + 默认 PDF/LaTeX + `paper_download_assets`（见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)）。
-- [ ] 将魔棒路径收编为正式 Importer 实现之一。
-- [ ] 统一入库状态、错误类型和输出文件契约。
+- [ ] 将魔棒 / Connector / 本地 PDF 收编为 adapter + 共用 `paper_commit`（pipeline P0）。
+- [ ] 前端 `afterPaperImport` 策略表（pipeline P1）。
+- [ ] 统一入库状态、错误类型和 `PaperCommitResult` 契约。
 
 验收标准：
 
-- [ ] arXiv importer 行为与 V0.2 精确路径保持兼容。
+- [ ] arXiv / 魔棒 importer 行为与 V0.2 精确路径保持兼容。
 - [x] 导入本地 PDF 生成 `papers/<citekey>/`（复制 PDF + liteparse `PAPER.md`）并进入笔记审阅。
 - [ ] 配置 MinerU API Key 后 PDF 默认走云端解析，未配置或失败时自动降级本地且不中断。
-- [ ] 新 importer 可以复用同一套输出结构。
-- [ ] UI 不需要为每种来源重写入库流程。
+- [ ] 新 adapter 只产出 meta / 资源意图，复用同一 `paper_commit` 输出结构。
+- [ ] UI 不需要为每种来源重写刷新 / openTab / toast / auto-reader 流程。
 
 ## V0.6 工作区标签页与分屏
 
