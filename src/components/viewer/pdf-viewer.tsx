@@ -21,7 +21,6 @@ import {
 	Plus,
 	RotateCcw,
 	Search,
-	Trash2,
 	X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +38,9 @@ import {
 import { AskGutter } from "@/components/viewer/pdf-ask/ask-gutter";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { HighlightLayer } from "@/components/viewer/pdf-ask/highlight-layer";
+import { HighlightMenu } from "@/components/viewer/pdf-ask/highlight-menu";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
+import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
 import {
 	cancelAgentRun,
 	listAgents,
@@ -257,10 +258,22 @@ export function PdfViewer({
 	const [askError, setAskError] = useState<string | null>(null);
 
 	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
+	/** Ephemeral PDF selection translation card (not an ask thread) */
+	const [translateCard, setTranslateCard] = useState<{
+		result: string;
+		streaming: boolean;
+		error: string | null;
+		screen: { x: number; y: number };
+	} | null>(null);
+	const translateSessionRef = useRef<string | null>(null);
+
 	/** Selection action menu (highlight/note/ask/translate) near a selection */
 	const [selectionMenu, setSelectionMenu] = useState<{
 		anchor: PdfAskAnchor;
+		/** Toolbar: top-center of the selection */
 		screen: { x: number; y: number };
+		/** “Copied” chip: bottom-right of the selection */
+		selectionEnd: { x: number; y: number };
 	} | null>(null);
 	/** Floating remove button for a clicked highlight */
 	const [highlightMenu, setHighlightMenu] = useState<{
@@ -712,6 +725,8 @@ export function PdfViewer({
 		setHighlightMenu(null);
 		setCommentEditor(null);
 		setActiveHighlightId(null);
+		setTranslateCard(null);
+		translateSessionRef.current = null;
 		activeSessionRef.current = null;
 
 		if (!paperAbsPath) return;
@@ -848,6 +863,7 @@ export function PdfViewer({
 					setSelectionMenu({
 						anchor,
 						screen: { x: rect.left + rect.width / 2, y: rect.top },
+						selectionEnd: { x: rect.right, y: rect.bottom },
 					});
 					return;
 				}
@@ -1188,16 +1204,42 @@ export function PdfViewer({
 		startFromAnchor(sm.anchor);
 	}, [selectionMenu, startFromAnchor]);
 
+	const closeTranslateCard = useCallback(() => {
+		const sid = translateSessionRef.current;
+		if (sid) {
+			void cancelAgentRun(sid).catch(() => undefined);
+			if (activeSessionRef.current === sid) {
+				activeSessionRef.current = null;
+			}
+			translateSessionRef.current = null;
+		}
+		setTranslateCard(null);
+	}, []);
+
 	const handleMenuTranslate = useCallback(() => {
 		const sm = selectionMenu;
 		if (!sm) return;
 		setSelectionMenu(null);
 		const quote = sm.anchor.quote?.trim();
 		if (!quote) return;
-		const paperPath = paperRelPath || paperAbsPath || "paper";
-		const thread = createEmptyThread({ paperPath, anchor: sm.anchor });
-		setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
-		openThread(thread);
+
+		// Cancel any in-flight translation before starting a new one.
+		const prevSid = translateSessionRef.current;
+		if (prevSid) {
+			void cancelAgentRun(prevSid).catch(() => undefined);
+			if (activeSessionRef.current === prevSid) {
+				activeSessionRef.current = null;
+			}
+			translateSessionRef.current = null;
+		}
+
+		const screen = sm.screen;
+		setTranslateCard({
+			result: "",
+			streaming: true,
+			error: null,
+			screen,
+		});
 
 		const { providerId, targetLangName } = prepareTranslateTask({
 			text: quote,
@@ -1206,7 +1248,6 @@ export function PdfViewer({
 				surface: "pdf-selection",
 			},
 		});
-		const userLabel = t("selection.translateAction");
 
 		if (providerId === "agent") {
 			const prompt = buildTranslatePrompt({
@@ -1223,17 +1264,85 @@ export function PdfViewer({
 					if (!resolved.agentId) {
 						const msg = t("selection.translateNoAgent");
 						notifyError(msg);
-						setAskError(msg);
+						setTranslateCard((cur) =>
+							cur ? { ...cur, streaming: false, error: msg } : cur,
+						);
 						return;
 					}
-					void sendToThread(thread, userLabel, prompt, {
+					const accepted = await runOnce({
+						prompt,
 						agentId: resolved.agentId,
 						modelId: resolved.modelId,
+						vaultPath: vaultPath ?? undefined,
+						workflow: "free",
+						autoApprove: true,
+						hideFromChatHistory: true,
 					});
+					const sessionId = accepted.sessionId;
+					translateSessionRef.current = sessionId;
+					activeSessionRef.current = sessionId;
+
+					const unsubs: UnlistenFn[] = [];
+					const cleanup = () => {
+						for (const u of unsubs) u();
+						if (translateSessionRef.current === sessionId) {
+							translateSessionRef.current = null;
+						}
+						if (activeSessionRef.current === sessionId) {
+							activeSessionRef.current = null;
+						}
+						setTranslateCard((cur) =>
+							cur ? { ...cur, streaming: false } : cur,
+						);
+					};
+
+					unsubs.push(
+						await listenAgentStream((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							if ((ev.kind ?? "message") === "thought") return;
+							setTranslateCard((cur) =>
+								cur
+									? {
+											...cur,
+											result: cur.result + ev.chunk,
+										}
+									: cur,
+							);
+						}),
+					);
+					unsubs.push(
+						await listenAgentCompleted((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							setTranslateCard((cur) =>
+								cur
+									? {
+											...cur,
+											result: (ev.content || cur.result).trim() || cur.result,
+											streaming: false,
+											error: null,
+										}
+									: cur,
+							);
+							cleanup();
+						}),
+					);
+					unsubs.push(
+						await listenAgentFailed((ev) => {
+							if (ev.sessionId !== sessionId) return;
+							const msg = ev.error || t("pdfAsk.agentFailed");
+							setTranslateCard((cur) =>
+								cur ? { ...cur, streaming: false, error: msg } : cur,
+							);
+							notifyError(msg);
+							cleanup();
+						}),
+					);
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
 					notifyError(message);
-					setAskError(message);
+					setTranslateCard((cur) =>
+						cur ? { ...cur, streaming: false, error: message } : cur,
+					);
 				}
 			})();
 			return;
@@ -1241,23 +1350,6 @@ export function PdfViewer({
 
 		// Free MT engines: single-shot via Host (no Agent stream).
 		void (async () => {
-			const userMsg = {
-				id: newMessageId(),
-				role: "user" as const,
-				content: userLabel,
-				createdAt: new Date().toISOString(),
-			};
-			const withUser: PdfAskThread = {
-				...thread,
-				status: "open",
-				messages: [...thread.messages, userMsg],
-				updatedAt: new Date().toISOString(),
-			};
-			upsertThread(withUser);
-			void persist(withUser);
-			setAskError(null);
-			setStreaming(true);
-			const assistantId = newMessageId();
 			try {
 				const result = await runTranslate(
 					{
@@ -1269,39 +1361,25 @@ export function PdfViewer({
 					},
 					{ providerId },
 				);
-				const done: PdfAskThread = {
-					...withUser,
-					messages: [
-						...withUser.messages,
-						{
-							id: assistantId,
-							role: "assistant",
-							content: result,
-							createdAt: new Date().toISOString(),
-						},
-					],
-					updatedAt: new Date().toISOString(),
-				};
-				upsertThread(done);
-				void persist(done);
+				setTranslateCard((cur) =>
+					cur
+						? {
+								...cur,
+								result: result.trim(),
+								streaming: false,
+								error: null,
+							}
+						: cur,
+				);
 			} catch (e) {
 				const message = e instanceof Error ? e.message : String(e);
-				setAskError(message);
 				notifyError(message);
-			} finally {
-				setStreaming(false);
+				setTranslateCard((cur) =>
+					cur ? { ...cur, streaming: false, error: message } : cur,
+				);
 			}
 		})();
-	}, [
-		selectionMenu,
-		paperAbsPath,
-		paperRelPath,
-		openThread,
-		sendToThread,
-		t,
-		upsertThread,
-		persist,
-	]);
+	}, [selectionMenu, t, vaultPath]);
 
 	// Optional: auto-run translate when a PDF selection menu opens.
 	useEffect(() => {
@@ -1417,6 +1495,38 @@ export function PdfViewer({
 		}
 	}, [selectionMenu]);
 
+	const handleHighlightMenuCopy = useCallback(() => {
+		const id = highlightMenu?.id;
+		if (!id) return;
+		const hl = highlightsRef.current.find((h) => h.id === id);
+		const quote = hl?.quote?.trim();
+		if (quote && typeof navigator !== "undefined" && navigator.clipboard) {
+			void navigator.clipboard.writeText(quote).catch(() => undefined);
+		}
+		setHighlightMenu(null);
+	}, [highlightMenu]);
+
+	const handleHighlightMenuNote = useCallback(() => {
+		const id = highlightMenu?.id;
+		if (!id) return;
+		setHighlightMenu(null);
+		openCommentEditorFor(id);
+	}, [highlightMenu, openCommentEditorFor]);
+
+	const handleHighlightMenuAsk = useCallback(() => {
+		const id = highlightMenu?.id;
+		if (!id) return;
+		const hl = highlightsRef.current.find((h) => h.id === id);
+		setHighlightMenu(null);
+		if (!hl) return;
+		startFromAnchor({
+			page: hl.page,
+			rects: hl.rects,
+			quote: hl.quote,
+			trigger: "selection",
+		});
+	}, [highlightMenu, startFromAnchor]);
+
 	const removeHighlight = useCallback(
 		(id: string) => {
 			setHighlights((prev) => prev.filter((h) => h.id !== id));
@@ -1443,14 +1553,16 @@ export function PdfViewer({
 		return () => onHandleRef.current?.(null);
 	}, [scrollToHighlight, openCommentEditorFor, removeHighlight]);
 
-	// Dismiss menus on outside pointerdown / Escape / scroll
+	// Dismiss menus / translate card on outside pointerdown / Escape / scroll
 	useEffect(() => {
-		if (!selectionMenu && !highlightMenu) return;
+		if (!selectionMenu && !highlightMenu && !translateCard) return;
 		const closeAll = () => {
 			setSelectionMenu(null);
 			setHighlightMenu(null);
+			if (translateCard) closeTranslateCard();
 		};
 		const onDocPointerDown = (e: PointerEvent) => {
+			// Clicks inside selection menu, translate card, ask UI, etc. stay open
 			if ((e.target as HTMLElement).closest?.("[data-pdf-ask-ui]")) return;
 			closeAll();
 		};
@@ -1466,7 +1578,7 @@ export function PdfViewer({
 			window.removeEventListener("keydown", onKey);
 			scrollEl?.removeEventListener("scroll", closeAll);
 		};
-	}, [selectionMenu, highlightMenu]);
+	}, [selectionMenu, highlightMenu, translateCard, closeTranslateCard]);
 
 	if (!fileUrl) {
 		return (
@@ -1992,10 +2104,23 @@ export function PdfViewer({
 				</div>
 			) : null}
 
+			{translateCard ? (
+				<div data-pdf-ask-ui="">
+					<TranslateCard
+						screen={translateCard.screen}
+						result={translateCard.result}
+						streaming={translateCard.streaming}
+						error={translateCard.error}
+						onClose={closeTranslateCard}
+					/>
+				</div>
+			) : null}
+
 			{selectionMenu ? (
 				<div data-pdf-ask-ui="">
 					<SelectionMenu
 						screen={selectionMenu.screen}
+						selectionEnd={selectionMenu.selectionEnd}
 						onHighlight={handleMenuHighlight}
 						onCopy={handleMenuCopy}
 						onNote={handleMenuAnnotate}
@@ -2017,7 +2142,6 @@ export function PdfViewer({
 									quote={hl.quote}
 									initialComment={hl.comment}
 									onSave={(text) => saveComment(hl.id, text)}
-									onCancel={() => removeHighlight(hl.id)}
 									onClose={() => setCommentEditor(null)}
 								/>
 							</div>
@@ -2027,23 +2151,13 @@ export function PdfViewer({
 
 			{highlightMenu ? (
 				<div data-pdf-ask-ui="">
-					<button
-						type="button"
-						className="fixed z-50 flex h-7 items-center gap-1 rounded-lg border border-border/80 bg-background px-2 text-muted-foreground text-xs shadow-2xl ring-1 ring-black/5 hover:text-foreground dark:ring-white/10"
-						style={{
-							left: Math.min(
-								Math.max(12, highlightMenu.screen.x - 40),
-								(typeof window !== "undefined" ? window.innerWidth : 1200) -
-									120,
-							),
-							top: highlightMenu.screen.y + 12,
-						}}
-						onMouseDown={(e) => e.stopPropagation()}
-						onClick={() => removeHighlight(highlightMenu.id)}
-					>
-						<Trash2 className="size-3.5" />
-						{t("selection.removeHighlight")}
-					</button>
+					<HighlightMenu
+						screen={highlightMenu.screen}
+						onCopy={handleHighlightMenuCopy}
+						onNote={handleHighlightMenuNote}
+						onAsk={handleHighlightMenuAsk}
+						onDelete={() => removeHighlight(highlightMenu.id)}
+					/>
 				</div>
 			) : null}
 		</div>

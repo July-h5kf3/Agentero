@@ -69,8 +69,11 @@
 		"translate": "Translate",
 		"noteAdded": "Added to notes",
 		"removeHighlight": "Remove highlight",
+		"highlightMenuLabel": "Highlight actions",
 		"editComment": "Edit note",
-		"translateAction": "Translate this passage",
+		"translateTitle": "Translation",
+		"translating": "Translating…",
+		"translateClose": "Close",
 		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent."
 	},
 	"html": {

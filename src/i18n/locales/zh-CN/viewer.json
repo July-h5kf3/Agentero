@@ -69,8 +69,11 @@
 		"translate": "翻译",
 		"noteAdded": "已加入笔记",
 		"removeHighlight": "删除高亮",
+		"highlightMenuLabel": "高亮操作",
 		"editComment": "编辑批注",
-		"translateAction": "翻译这段文字",
+		"translateTitle": "翻译",
+		"translating": "翻译中…",
+		"translateClose": "关闭",
 		"translateNoAgent": "没有可用的 Agent 进行翻译，请先在设置 → Agent 中配置。"
 	},
 	"html": {
