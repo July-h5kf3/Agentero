@@ -10,6 +10,13 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+/** Minimum inset from the viewport edges (px). */
+export const SELECTION_CARD_EDGE = 12;
+/** Default preferred max height when callers omit `height` (px). */
+export const SELECTION_CARD_DEFAULT_MAX_HEIGHT = 420;
+/** Floor so a clipped card remains usable on short viewports (px). */
+const SELECTION_CARD_MIN_HEIGHT = 120;
+
 export type SelectionCardAction = {
 	label: string;
 	onClick: () => void;
@@ -21,7 +28,7 @@ export type SelectionCardAction = {
 export type PlaceSelectionCardOptions = {
 	/** Preferred card width used for edge-flip (px). */
 	width: number;
-	/** Approximate height budget for vertical clamp (px). */
+	/** Preferred max height; clamped to remaining viewport (px). */
 	height?: number;
 	/** Open to the right of the anchor when there is room (default true). */
 	preferRight?: boolean;
@@ -29,35 +36,74 @@ export type PlaceSelectionCardOptions = {
 	gap?: number;
 };
 
+export type PlaceSelectionCardResult = {
+	left: number;
+	top: number;
+	/** Dynamic max height so the card never extends past the viewport. */
+	maxHeight: number;
+};
+
 /**
  * Shared viewport placement for PDF selection popovers
  * (ask / translate / annotate).
+ *
+ * Clamps left/top and returns a `maxHeight` that fits within the viewport
+ * from the chosen top — callers must apply it so tall content scrolls
+ * instead of overflowing the window.
  */
 export function placeSelectionCard(
 	screen: { x: number; y: number },
 	opts: PlaceSelectionCardOptions,
-): { left: number; top: number } {
-	const width = opts.width;
-	const height = opts.height ?? 220;
+): PlaceSelectionCardResult {
+	const preferredWidth = opts.width;
+	const preferredMaxH = opts.height ?? SELECTION_CARD_DEFAULT_MAX_HEIGHT;
 	const gap = opts.gap ?? 6;
 	const preferRight = opts.preferRight ?? true;
+	const edge = SELECTION_CARD_EDGE;
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
+	const width = Math.min(preferredWidth, Math.max(0, vw - edge * 2));
+
 	let left = preferRight ? screen.x + gap : screen.x;
-	if (preferRight && left + width > vw - 12) {
-		left = Math.max(12, screen.x - width - gap);
+	if (preferRight && left + width > vw - edge) {
+		left = Math.max(edge, screen.x - width - gap);
 	}
-	left = Math.min(Math.max(12, left), vw - width - 12);
-	const top = Math.min(Math.max(12, screen.y - 12), vh - height - 12);
-	return { left, top };
+	left = Math.min(Math.max(edge, left), Math.max(edge, vw - width - edge));
+
+	const viewportCap = Math.max(SELECTION_CARD_MIN_HEIGHT, vh - edge * 2);
+	let maxHeight = Math.min(preferredMaxH, viewportCap);
+
+	// Prefer slightly above the anchor; then pull up if the card would clip.
+	let top = screen.y - 12;
+	if (top + maxHeight > vh - edge) {
+		top = vh - edge - maxHeight;
+	}
+	if (top < edge) {
+		top = edge;
+	}
+
+	// Remaining space from the final top — this is the hard cap (no overflow).
+	maxHeight = Math.min(maxHeight, vh - edge - top);
+	if (
+		maxHeight < SELECTION_CARD_MIN_HEIGHT &&
+		vh - edge * 2 >= SELECTION_CARD_MIN_HEIGHT
+	) {
+		// Prefer min usable height by sliding further up when possible.
+		maxHeight = SELECTION_CARD_MIN_HEIGHT;
+		top = Math.max(edge, vh - edge - maxHeight);
+		maxHeight = Math.min(maxHeight, vh - edge - top);
+	}
+	maxHeight = Math.max(0, maxHeight);
+
+	return { left, top, maxHeight };
 }
 
 export type SelectionCardProps = {
 	screen: { x: number; y: number };
 	/** Visual width class / clamp target (px number for placement). */
 	width?: number;
-	/** Approximate height for placement clamp. */
+	/** Preferred max height; actual height is min(this, viewport remainder). */
 	height?: number;
 	preferRight?: boolean;
 	title: string;
@@ -80,11 +126,13 @@ export type SelectionCardProps = {
 /**
  * Shared floating card chrome for PDF selection workflows:
  * Ask / Translate / Annotate. Same shell, different body/footer.
+ *
+ * Always viewport-bounded: `maxHeight` from placement + body scroll.
  */
 export function SelectionCard({
 	screen,
 	width = 320,
-	height = 280,
+	height = SELECTION_CARD_DEFAULT_MAX_HEIGHT,
 	preferRight = true,
 	title,
 	icon: Icon,
@@ -98,7 +146,7 @@ export function SelectionCard({
 	bodyClassName,
 	children,
 }: SelectionCardProps) {
-	const { left, top } = placeSelectionCard(screen, {
+	const { left, top, maxHeight } = placeSelectionCard(screen, {
 		width,
 		height,
 		preferRight,
@@ -107,14 +155,15 @@ export function SelectionCard({
 	return (
 		<div
 			className={cn(
-				"fixed z-50 flex max-h-[min(420px,calc(100vh-24px))] flex-col overflow-hidden",
+				"fixed z-50 flex flex-col overflow-hidden",
 				"rounded-xl border border-border/80 bg-background text-foreground shadow-2xl ring-1 ring-black/5 dark:ring-white/10",
 				className,
 			)}
 			style={{
 				left,
 				top,
-				width: `min(${width}px, calc(100vw - 24px))`,
+				width: `min(${width}px, calc(100vw - ${SELECTION_CARD_EDGE * 2}px))`,
+				maxHeight,
 			}}
 			role="dialog"
 			aria-label={ariaLabel ?? title}
@@ -158,7 +207,7 @@ export function SelectionCard({
 
 			<div
 				className={cn(
-					"flex min-h-0 flex-1 flex-col overflow-y-auto",
+					"agentero-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto",
 					bodyClassName,
 				)}
 				aria-live={ariaLive === "off" ? undefined : ariaLive}

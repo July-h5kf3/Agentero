@@ -31,7 +31,7 @@ export function TranslateCard({
 		<SelectionCard
 			screen={screen}
 			width={320}
-			height={220}
+			height={360}
 			title={t("selection.translateTitle")}
 			icon={Languages}
 			ariaLive="polite"
@@ -51,7 +51,7 @@ export function TranslateCard({
 			) : null}
 
 			{showResult ? (
-				<p className="whitespace-pre-wrap break-words text-[13px] text-foreground leading-relaxed">
+				<p className="min-w-0 whitespace-pre-wrap break-words text-[13px] text-foreground leading-relaxed">
 					{result}
 				</p>
 			) : null}

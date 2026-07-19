@@ -46,7 +46,7 @@ export function AnnotationEditor({
 		<SelectionCard
 			screen={screen}
 			width={280}
-			height={260}
+			height={320}
 			preferRight={false}
 			title={t("annotations.editorLabel")}
 			icon={NotebookPen}
@@ -64,13 +64,13 @@ export function AnnotationEditor({
 			}
 		>
 			{quote.trim() ? (
-				<blockquote className="max-h-16 overflow-y-auto border-border/70 border-l-2 pl-2 text-muted-foreground text-xs leading-relaxed">
+				<blockquote className="agentero-scroll max-h-20 shrink-0 overflow-y-auto border-border/70 border-l-2 pl-2 text-muted-foreground text-xs leading-relaxed">
 					{quote.trim()}
 				</blockquote>
 			) : null}
 			<textarea
 				ref={ref}
-				className="min-h-16 w-full resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+				className="min-h-16 w-full min-w-0 flex-1 resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-ring"
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}

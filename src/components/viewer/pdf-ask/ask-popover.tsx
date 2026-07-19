@@ -68,6 +68,8 @@ export function AskPopover({
 			ariaLabel={t("pdfAsk.dialogLabel")}
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
+			// Conversation owns scroll; body must not grow past the viewport cap.
+			bodyClassName="min-h-0 overflow-hidden p-0"
 			actions={[
 				{
 					label: t("pdfAsk.delete"),
@@ -118,7 +120,7 @@ export function AskPopover({
 				</PromptInput>
 			}
 		>
-			<Conversation className="min-h-0 flex-1">
+			<Conversation className="min-h-0 min-w-0 flex-1 overflow-y-hidden">
 				<ConversationContent className="gap-3 px-3 py-2.5">
 					{thread.messages.map((m) => {
 						if (m.role === "system") {

@@ -12,7 +12,7 @@
 | 交互 | 行为 |
 |---|---|
 | **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（5 色高亮 / 复制 / 批注 / 提问 / 翻译）；不默认高亮，只保留平滑蓝色选区覆盖层 |
-| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注 / 提问 / 翻译共用 **`selection-card.tsx` 浮层壳**（定位、圆角、标题栏、footer 槽）：批注 = `annotation-editor.tsx`（原文摘录 + 笔记输入；取消=放弃修改不删高亮；保存写 `comment`）；提问 = `ask-popover.tsx`（对话 + 输入）；翻译 = `translate-card.tsx`（仅译文；free 单次 / agent 流式，见 [`translate.md`](translate.md)） |
+| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注 / 提问 / 翻译共用 **`selection-card.tsx` 浮层壳**（视口边缘 clamp、`maxHeight` 按剩余空间动态计算、body 可滚动，避免溢出窗口）：批注 = `annotation-editor.tsx`（原文摘录 + 笔记输入；取消=放弃修改不删高亮；保存写 `comment`）；提问 = `ask-popover.tsx`（对话 + 输入）；翻译 = `translate-card.tsx`（仅译文；free 单次 / agent 流式，见 [`translate.md`](translate.md)） |
 | **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
 | **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
 | **键入提问** | 卡内输入问题并发送（`runOnce` + **`hideFromChatHistory`**，不进 Agent 对话历史）；**仅发送过问题的线程**保留对话图标 |
