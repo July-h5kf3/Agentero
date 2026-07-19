@@ -52,7 +52,9 @@ type SavedOpts = {
 };
 const DEFAULT_OPTS: SavedOpts = {
 	copyPdfs: true,
-	preserveCollections: true,
+	// Off by default: recreating every Zotero collection as a subfolder clutters
+	// papers/ with grouping folders (e.g. “logs”/“Archive”). Opt in when wanted.
+	preserveCollections: false,
 	migrateNotes: true,
 	migrateAnnotations: true,
 	parentDir: "papers",
