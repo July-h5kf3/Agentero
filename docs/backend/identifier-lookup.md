@@ -623,7 +623,7 @@ papers/
 1. `path = {parent_dir}/{id}`（§1.2 + §6.3）。
 2. 写 `NOTES.md` + `highlights.md`（`NOTES.md` 中摘要 blockquote 优先经 Host 免费 MT 译为中文，多引擎兜底 googleapi → bing → youdao → 火山 → 腾讯，全失败才保留原文；catalog `abstract` 仍为原文）。
 3. **catalog 事务**：有则写入 `pdf_url` / `html_url`。
-4. 下载按 §1.3：**始终 PDF**；**arXiv 另解压 LaTeX**。
+4. 下载按 §1.3：**始终 PDF**（候选：`pdf_url` → arXiv → Crossref 直链 → **Unpaywall OA**）；**arXiv 另解压 LaTeX**。
 5. **不**写默认 `PAPERS.md` / `library.bib`；`metadata.json` 仅在 catalog upsert 后作为投影同步。
 6. 重复：`on_duplicate: skip | open_existing`，**不**覆盖用户 `NOTES.md`。
 
@@ -731,6 +731,8 @@ arXiv URL 推导：
 - Host：`zotero_scan`（只读预览：文献数 / 有本地 PDF 数）、`zotero_migrate`（执行）；实现在 `services/lookup/zotero_db.rs`。
 - 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型。
 - 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
+- 附件 PDF URL：`map_zotero_item` 未给出 `pdf_url` 时，采用 Connector `attachments[]` 里的 PDF 链接（浏览器侧捕获，ACM/IEEE 等常仅经此暴露）。
+- 中文摘要：为不超 Connector 15s 超时，壳先以原文写入；**后台**多引擎翻译摘要并安全替换 `NOTES.md` 的 `> ` 摘要块（mtime 守卫，用户已编辑则跳过）。
 - 标签：**仅保留手动标签**——Zotero 自动标签（网络翻译器加的来源/状态标签，`itemTags.type ≠ 0`）在导入时过滤；`type = 0` 的用户标签保留（旧库无 `type` 列时回退为全部）。collection 名仍作为组织标签补充。
 - PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
 - 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。

@@ -629,7 +629,7 @@ async fn abstract_for_notes(text: &str) -> String {
 }
 
 /// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
-fn looks_mostly_cjk(s: &str) -> bool {
+pub(crate) fn looks_mostly_cjk(s: &str) -> bool {
     let mut cjk = 0usize;
     let mut letters = 0usize;
     for c in s.chars() {
