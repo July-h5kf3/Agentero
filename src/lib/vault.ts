@@ -3,6 +3,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 
 import i18n from "@/i18n";
+import {
+	getRemoteSessionMeta,
+	isRemoteVaultHandle,
+	remoteList,
+	remoteReadText,
+	remoteSessionIdFromHandle,
+	remoteWriteText,
+} from "@/lib/remote-vault";
 import { isTauri } from "@/lib/tauri";
 import { toVaultRelative } from "@/lib/wiki";
 
@@ -166,7 +174,22 @@ function sortNodes(nodes: FileNode[]): FileNode[] {
 	});
 }
 
-async function buildTree(dirPath: string, depth = 0): Promise<FileNode[]> {
+/** Absolute-style path under a remote handle: `remote:<id>/papers/...` */
+export function joinRemotePath(handle: string, rel: string): string {
+	const r = rel.replace(/^\/+/, "").replace(/\\/g, "/");
+	if (!r) return handle;
+	return `${handle}/${r}`;
+}
+
+/** Vault-relative path from a remote absolute-style path. */
+export function remoteRelFromJoined(handle: string, joined: string): string {
+	if (joined === handle) return "";
+	const prefix = `${handle}/`;
+	if (joined.startsWith(prefix)) return joined.slice(prefix.length);
+	return joined.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+async function buildTreeLocal(dirPath: string, depth = 0): Promise<FileNode[]> {
 	if (depth > 12) return [];
 
 	const entries = await readDir(dirPath);
@@ -178,7 +201,47 @@ async function buildTree(dirPath: string, depth = 0): Promise<FileNode[]> {
 
 		const path = joinPath(dirPath, entry.name);
 		if (entry.isDirectory) {
-			const children = await buildTree(path, depth + 1);
+			const children = await buildTreeLocal(path, depth + 1);
+			nodes.push({
+				id: path,
+				name: entry.name,
+				path,
+				kind: "directory",
+				children,
+			});
+		} else if (entry.isFile) {
+			nodes.push({
+				id: path,
+				name: entry.name,
+				path,
+				kind: "file",
+			});
+		}
+	}
+
+	return sortNodes(nodes);
+}
+
+async function buildTreeRemote(
+	handle: string,
+	rel: string,
+	depth = 0,
+): Promise<FileNode[]> {
+	if (depth > 12) return [];
+	const sessionId = remoteSessionIdFromHandle(handle);
+	if (!sessionId) return [];
+
+	const entries = await remoteList(sessionId, rel);
+	const nodes: FileNode[] = [];
+
+	for (const entry of entries) {
+		if (!entry.name || IGNORE_NAMES.has(entry.name)) continue;
+		if (entry.name.startsWith(".") && entry.name !== ".env.example") continue;
+
+		const childRel = entry.path;
+		const path = joinRemotePath(handle, childRel);
+		if (entry.isDir) {
+			const children = await buildTreeRemote(handle, childRel, depth + 1);
 			nodes.push({
 				id: path,
 				name: entry.name,
@@ -257,7 +320,10 @@ export async function createVault(path: string): Promise<CreateVaultResult> {
 }
 
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
-	return buildTree(rootPath);
+	if (isRemoteVaultHandle(rootPath)) {
+		return buildTreeRemote(rootPath, "");
+	}
+	return buildTreeLocal(rootPath);
 }
 
 export function isMarkdownPath(path: string): boolean {
@@ -276,6 +342,19 @@ export async function readVaultFile(path: string): Promise<string> {
 		throw new Error(i18n.t("app:vault.readDesktopOnly"));
 	}
 
+	// Remote joined path: remote:<sessionId>/rel
+	if (path.startsWith("remote:")) {
+		const slash = path.indexOf("/", "remote:".length);
+		if (slash === -1) {
+			throw new Error("invalid remote path");
+		}
+		const handle = path.slice(0, slash);
+		const sessionId = remoteSessionIdFromHandle(handle);
+		if (!sessionId) throw new Error("invalid remote session");
+		const rel = path.slice(slash + 1);
+		return remoteReadText(sessionId, rel);
+	}
+
 	return readTextFile(path);
 }
 
@@ -286,6 +365,19 @@ export async function writeVaultFile(
 ): Promise<void> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
+	}
+
+	if (path.startsWith("remote:")) {
+		const slash = path.indexOf("/", "remote:".length);
+		if (slash === -1) {
+			throw new Error("invalid remote path");
+		}
+		const handle = path.slice(0, slash);
+		const sessionId = remoteSessionIdFromHandle(handle);
+		if (!sessionId) throw new Error("invalid remote session");
+		const rel = path.slice(slash + 1);
+		await remoteWriteText(sessionId, rel, content);
+		return;
 	}
 
 	const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
@@ -377,6 +469,11 @@ export function isValidVaultEntryName(name: string): boolean {
 
 export function vaultDisplayName(rootPath: string | null): string {
 	if (!rootPath) return i18n.t("app:vault.noVaultName");
+	if (isRemoteVaultHandle(rootPath)) {
+		const meta = getRemoteSessionMeta();
+		if (meta?.displayName) return meta.displayName;
+		return rootPath;
+	}
 	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
 	return parts[parts.length - 1] || rootPath;
 }

@@ -15,6 +15,7 @@ pub mod services;
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
 use services::connector::ConnectorController;
+use services::remote::RemoteRegistry;
 use services::watcher::FsWatchController;
 use services::wiki::WikiIndexState;
 use std::sync::Arc;
@@ -182,6 +183,7 @@ pub fn run() {
         .manage(WikiIndexState::new())
         .manage(FsWatchController::new())
         .manage(Arc::new(ConnectorController::new()))
+        .manage(Arc::new(RemoteRegistry::new()))
         .invoke_handler(tauri::generate_handler![
             commands::agent::agent_list_agents,
             commands::agent::agent_list_templates,
@@ -207,6 +209,18 @@ pub fn run() {
             commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
+            commands::remote::remote_connect,
+            commands::remote::remote_disconnect,
+            commands::remote::remote_status,
+            commands::remote::remote_list,
+            commands::remote::remote_stat,
+            commands::remote::remote_read_text,
+            commands::remote::remote_write_text,
+            commands::remote::remote_read_bytes,
+            commands::remote::remote_mkdir,
+            commands::remote::remote_paper_list,
+            commands::remote::remote_paper_rescan,
+            commands::remote::remote_agent_discover,
             commands::terminal::path_open_in_terminal,
             commands::trash::path_trash,
             commands::trash::path_untrash,

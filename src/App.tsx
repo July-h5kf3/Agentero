@@ -112,6 +112,12 @@ import {
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+import {
+	isRemoteVaultHandle,
+	rememberRecentRemoteVault,
+	remoteConnect,
+	saveRemoteSessionMeta,
+} from "@/lib/remote-vault";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
 import {
@@ -1077,7 +1083,10 @@ export default function App() {
 			setLibraryTagFilter(null);
 			setLibraryScopePath(null);
 			setRecentVaults(getRecentVaults());
-			await rebuildWikiAndNotify(path);
+			// Wiki rebuild needs local fs watcher semantics; remote is best-effort / deferred.
+			if (!isRemoteVaultHandle(path)) {
+				await rebuildWikiAndNotify(path);
+			}
 		},
 		[rebuildWikiAndNotify],
 	);
@@ -1098,6 +1107,38 @@ export default function App() {
 			setBusy(false);
 		}
 	}, [t, activateVault]);
+
+	const handleOpenRemoteVault = useCallback(
+		async (args: { host: string; user?: string; remotePath: string }) => {
+			try {
+				if (!isTauri()) {
+					notifyError(t("errors.openVaultDesktopOnly"));
+					return;
+				}
+				setBusy(true);
+				const info = await remoteConnect(args);
+				saveRemoteSessionMeta(info);
+				rememberRecentRemoteVault({
+					kind: "remote",
+					host: args.host,
+					user: args.user,
+					remotePath: args.remotePath,
+					label: info.displayName,
+				});
+				// Store pseudo-handle so tree / IO route through Host remote_* commands.
+				await activateVault(info.vaultHandle);
+				// Prefer display name in recent list under handle key for reopen? handle is ephemeral.
+				// Reopen needs host+path — keep rememberRecentRemoteVault only.
+			} catch (e) {
+				notifyError(
+					e instanceof Error ? e.message : t("vault.remoteConnectFailed"),
+				);
+			} finally {
+				setBusy(false);
+			}
+		},
+		[t, activateVault],
+	);
 
 	const handleOpenRecentVault = useCallback(
 		async (path: string) => {
@@ -2889,6 +2930,9 @@ export default function App() {
 											recentVaults={recentVaults}
 											busy={busy}
 											onOpenVault={() => void handleOpenVault()}
+											onOpenRemoteVault={(args) =>
+												void handleOpenRemoteVault(args)
+											}
 											onCreateVault={() => void handleCreateVault()}
 											onMigrateZotero={() =>
 												void handleMigrateZoteroFromWelcome()

@@ -1,7 +1,17 @@
-import { FolderOpen, FolderPlus, Trash2 } from "lucide-react";
+import { FolderOpen, FolderPlus, Server, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { vaultDisplayName } from "@/lib/vault";
 
@@ -9,6 +19,7 @@ export function VaultWelcome({
 	recentVaults,
 	busy,
 	onOpenVault,
+	onOpenRemoteVault,
 	onCreateVault,
 	onMigrateZotero,
 	onOpenRecent,
@@ -18,6 +29,12 @@ export function VaultWelcome({
 	recentVaults: string[];
 	busy?: boolean;
 	onOpenVault: () => void;
+	/** Connect via SSH/SFTP (host, optional user, remote path). */
+	onOpenRemoteVault: (args: {
+		host: string;
+		user?: string;
+		remotePath: string;
+	}) => void | Promise<void>;
 	onCreateVault: () => void;
 	onMigrateZotero: () => void;
 	onOpenRecent: (path: string) => void;
@@ -25,6 +42,28 @@ export function VaultWelcome({
 	className?: string;
 }) {
 	const { t } = useTranslation(["app", "sidebar"]);
+	const [remoteOpen, setRemoteOpen] = useState(false);
+	const [host, setHost] = useState("");
+	const [user, setUser] = useState("");
+	const [remotePath, setRemotePath] = useState("");
+	const [connecting, setConnecting] = useState(false);
+
+	const submitRemote = async () => {
+		const h = host.trim();
+		const p = remotePath.trim();
+		if (!h || !p) return;
+		setConnecting(true);
+		try {
+			await onOpenRemoteVault({
+				host: h,
+				user: user.trim() || undefined,
+				remotePath: p,
+			});
+			setRemoteOpen(false);
+		} finally {
+			setConnecting(false);
+		}
+	};
 
 	return (
 		<div
@@ -58,6 +97,16 @@ export function VaultWelcome({
 					>
 						<FolderOpen className="size-3.5" />
 						{t("app:vault.openVaultButton")}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={busy}
+						onClick={() => setRemoteOpen(true)}
+					>
+						<Server className="size-3.5" />
+						{t("app:vault.openRemoteVaultButton")}
 					</Button>
 					<Button
 						type="button"
@@ -118,11 +167,79 @@ export function VaultWelcome({
 						</ul>
 					</div>
 				) : (
-					<p className="text-center text-muted-foreground text-xs">
+					<p className="text-center text-muted-foreground text-sm">
 						{t("vault.recentEmpty")}
 					</p>
 				)}
 			</div>
+
+			<Dialog open={remoteOpen} onOpenChange={setRemoteOpen}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>{t("app:vault.remoteDialogTitle")}</DialogTitle>
+					</DialogHeader>
+					<div className="flex flex-col gap-3 py-1">
+						<div className="flex flex-col gap-1.5">
+							<Label htmlFor="remote-host">
+								{t("app:vault.remoteHostLabel")}
+							</Label>
+							<Input
+								id="remote-host"
+								value={host}
+								onChange={(e) => setHost(e.target.value)}
+								placeholder={t("app:vault.remoteHostPlaceholder")}
+								autoComplete="off"
+								disabled={connecting}
+							/>
+						</div>
+						<div className="flex flex-col gap-1.5">
+							<Label htmlFor="remote-user">
+								{t("app:vault.remoteUserLabel")}
+							</Label>
+							<Input
+								id="remote-user"
+								value={user}
+								onChange={(e) => setUser(e.target.value)}
+								placeholder={t("app:vault.remoteUserPlaceholder")}
+								autoComplete="username"
+								disabled={connecting}
+							/>
+						</div>
+						<div className="flex flex-col gap-1.5">
+							<Label htmlFor="remote-path">
+								{t("app:vault.remotePathLabel")}
+							</Label>
+							<Input
+								id="remote-path"
+								value={remotePath}
+								onChange={(e) => setRemotePath(e.target.value)}
+								placeholder={t("app:vault.remotePathPlaceholder")}
+								autoComplete="off"
+								disabled={connecting}
+							/>
+						</div>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={connecting}
+							onClick={() => setRemoteOpen(false)}
+						>
+							{t("app:vault.remoteCancel")}
+						</Button>
+						<Button
+							type="button"
+							disabled={connecting || !host.trim() || !remotePath.trim()}
+							onClick={() => void submitRemote()}
+						>
+							{connecting
+								? t("app:vault.remoteConnecting")
+								: t("app:vault.remoteConnect")}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

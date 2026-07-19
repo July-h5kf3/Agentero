@@ -1,8 +1,9 @@
 # 远程 Vault（SSH / SFTP）与远端 BYOA
 
-> **状态**：设计中（文档先行，未实现）  
+> **状态**：实现中（M0–M2 骨架 + UI 入口已落地；M3 远端 ACP 运行时未完整接线）  
 > **分支**：`docs/remote-vault-ssh`  
-> **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`
+> **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
+> **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO
 
 本文定义：如何通过 SSH 打开**服务器上的** Agentero Vault，并在**同一台远端机器**上运行 BYOA Agent（ACP），使文件权威与 Agent 工作目录始终同机。
 

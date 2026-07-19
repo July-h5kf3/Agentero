@@ -1,8 +1,10 @@
 pub mod agent;
 pub mod catalog;
 pub mod connector;
+pub mod fs;
 pub mod lookup;
 pub mod pdf_parse;
+pub mod remote;
 pub mod search;
 pub mod terminal;
 pub mod translate;

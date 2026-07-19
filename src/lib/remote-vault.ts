@@ -1,0 +1,271 @@
+/**
+ * Remote vault client (SSH/SFTP) — Host commands in `commands/remote.rs`.
+ * Design: `docs/development/remote-vault.md`
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+
+import { isTauri } from "@/lib/tauri";
+
+type ApiResult<T> = {
+	ok: boolean;
+	data?: T;
+	error?: { code: string; message: string };
+};
+
+export type FsCaps = {
+	atomicRename: boolean;
+	reliableWatch: boolean;
+	sqliteNative: boolean;
+	cheapRandomRead: boolean;
+	agentCwdLocal: boolean;
+	finderReveal: boolean;
+};
+
+export type RemoteSessionInfo = {
+	sessionId: string;
+	kind: string;
+	displayName: string;
+	host: string;
+	remotePath: string;
+	caps: FsCaps;
+	/** Pseudo path: `remote:<sessionId>` */
+	vaultHandle: string;
+};
+
+export type RemoteDirEntry = {
+	name: string;
+	isDir: boolean;
+	isFile: boolean;
+	path: string;
+};
+
+const REMOTE_PREFIX = "remote:";
+
+export function isRemoteVaultHandle(path: string | null | undefined): boolean {
+	return !!path && path.startsWith(REMOTE_PREFIX);
+}
+
+export function remoteSessionIdFromHandle(handle: string): string | null {
+	if (!isRemoteVaultHandle(handle)) return null;
+	const id = handle.slice(REMOTE_PREFIX.length).trim();
+	return id || null;
+}
+
+/** Recent-list storage for remote vaults (JSON in localStorage). */
+export type RecentRemoteVault = {
+	kind: "remote";
+	host: string;
+	user?: string;
+	remotePath: string;
+	label: string;
+};
+
+const RECENT_REMOTE_KEY = "agentero-recent-remote-vaults";
+const MAX_RECENT = 8;
+
+export function getRecentRemoteVaults(): RecentRemoteVault[] {
+	try {
+		const raw = localStorage.getItem(RECENT_REMOTE_KEY);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw) as unknown;
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter(
+			(x): x is RecentRemoteVault =>
+				!!x &&
+				typeof x === "object" &&
+				(x as RecentRemoteVault).kind === "remote" &&
+				typeof (x as RecentRemoteVault).host === "string" &&
+				typeof (x as RecentRemoteVault).remotePath === "string",
+		);
+	} catch {
+		return [];
+	}
+}
+
+export function rememberRecentRemoteVault(entry: RecentRemoteVault): void {
+	try {
+		const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+		const next = [
+			entry,
+			...getRecentRemoteVaults().filter(
+				(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
+			),
+		].slice(0, MAX_RECENT);
+		localStorage.setItem(RECENT_REMOTE_KEY, JSON.stringify(next));
+	} catch {
+		// ignore
+	}
+}
+
+export function removeRecentRemoteVault(entry: RecentRemoteVault): void {
+	try {
+		const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+		const next = getRecentRemoteVaults().filter(
+			(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
+		);
+		localStorage.setItem(RECENT_REMOTE_KEY, JSON.stringify(next));
+	} catch {
+		// ignore
+	}
+}
+
+async function unwrap<T>(
+	promise: Promise<ApiResult<T>>,
+	fallback: string,
+): Promise<T> {
+	const result = await promise;
+	if (!result.ok || result.data === undefined) {
+		throw new Error(result.error?.message ?? fallback);
+	}
+	return result.data;
+}
+
+export async function remoteConnect(args: {
+	host: string;
+	user?: string;
+	remotePath: string;
+}): Promise<RemoteSessionInfo> {
+	if (!isTauri()) {
+		throw new Error("Remote vault requires the desktop app");
+	}
+	return unwrap(
+		invoke<ApiResult<RemoteSessionInfo>>("remote_connect", { args }),
+		"Failed to connect remote vault",
+	);
+}
+
+export async function remoteDisconnect(sessionId: string): Promise<void> {
+	if (!isTauri()) return;
+	await unwrap(
+		invoke<ApiResult<null>>("remote_disconnect", {
+			args: { sessionId },
+		}),
+		"Failed to disconnect",
+	);
+}
+
+export async function remoteList(
+	sessionId: string,
+	path = "",
+): Promise<RemoteDirEntry[]> {
+	return unwrap(
+		invoke<ApiResult<RemoteDirEntry[]>>("remote_list", {
+			args: { sessionId, path },
+		}),
+		"Failed to list remote directory",
+	);
+}
+
+export async function remoteReadText(
+	sessionId: string,
+	path: string,
+): Promise<string> {
+	return unwrap(
+		invoke<ApiResult<string>>("remote_read_text", {
+			args: { sessionId, path },
+		}),
+		"Failed to read remote file",
+	);
+}
+
+export async function remoteWriteText(
+	sessionId: string,
+	path: string,
+	content: string,
+): Promise<void> {
+	await unwrap(
+		invoke<ApiResult<null>>("remote_write_text", {
+			args: { sessionId, path, content },
+		}),
+		"Failed to write remote file",
+	);
+}
+
+export async function remoteReadBytes(
+	sessionId: string,
+	path: string,
+): Promise<Uint8Array> {
+	const data = await unwrap(
+		invoke<ApiResult<number[]>>("remote_read_bytes", {
+			args: { sessionId, path },
+		}),
+		"Failed to read remote bytes",
+	);
+	return new Uint8Array(data);
+}
+
+export async function remoteMkdir(
+	sessionId: string,
+	path: string,
+): Promise<void> {
+	await unwrap(
+		invoke<ApiResult<null>>("remote_mkdir", {
+			args: { sessionId, path },
+		}),
+		"Failed to mkdir",
+	);
+}
+
+export async function remotePaperList(sessionId: string): Promise<unknown[]> {
+	return unwrap(
+		invoke<ApiResult<unknown[]>>("remote_paper_list", {
+			args: { sessionId },
+		}),
+		"Failed to list papers",
+	);
+}
+
+export async function remotePaperRescan(
+	sessionId: string,
+): Promise<{ count: number }> {
+	return unwrap(
+		invoke<ApiResult<{ count: number }>>("remote_paper_rescan", {
+			args: { sessionId },
+		}),
+		"Failed to rescan",
+	);
+}
+
+export async function remoteAgentDiscover(sessionId: string): Promise<{
+	destination: string;
+	found: { bin: string; path: string }[];
+}> {
+	return unwrap(
+		invoke<
+			ApiResult<{ destination: string; found: { bin: string; path: string }[] }>
+		>("remote_agent_discover", {
+			args: { sessionId, bins: [] },
+		}),
+		"Failed to discover remote agents",
+	);
+}
+
+/** Session-scoped display metadata (not the handle itself). */
+const SESSION_META_KEY = "agentero-remote-session-meta";
+
+export function saveRemoteSessionMeta(info: RemoteSessionInfo): void {
+	try {
+		sessionStorage.setItem(SESSION_META_KEY, JSON.stringify(info));
+	} catch {
+		// ignore
+	}
+}
+
+export function getRemoteSessionMeta(): RemoteSessionInfo | null {
+	try {
+		const raw = sessionStorage.getItem(SESSION_META_KEY);
+		if (!raw) return null;
+		return JSON.parse(raw) as RemoteSessionInfo;
+	} catch {
+		return null;
+	}
+}
+
+export function clearRemoteSessionMeta(): void {
+	try {
+		sessionStorage.removeItem(SESSION_META_KEY);
+	} catch {
+		// ignore
+	}
+}

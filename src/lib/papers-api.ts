@@ -71,6 +71,14 @@ type ApiResult<T> = {
 
 export async function listPapers(vaultPath: string): Promise<PaperMetadata[]> {
 	if (!isTauri()) return [];
+	const { isRemoteVaultHandle, remotePaperList, remoteSessionIdFromHandle } =
+		await import("@/lib/remote-vault");
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) return [];
+		const rows = (await remotePaperList(sessionId)) as PaperMetadata[];
+		return rows.map(withNormalizedTags);
+	}
 	const res = await invoke<ApiResult<PaperMetadata[]>>("paper_list", {
 		args: { vaultPath },
 	});

@@ -422,13 +422,16 @@
 
 设计见 [`remote-vault.md`](remote-vault.md)（文档先行；未实现）。
 
-- [ ] **M0** `VaultFs` / `LocalFs` 抽象，关键读写迁 trait；本地零回归
-- [ ] **M1** SSH 连接 + SFTP 文件树 / md 读写 / PDF blob 预览 / 远程徽章与最近列表
-- [ ] **M2** catalog 会话 work 副本 + GET/PUT；`paper_list` / tags / rescan；mtime 冲突
-- [ ] **M3** ACP `SshStdio`：远端 discover / warm / run；精读 Zap；permission + notes-review
-- [ ] **M4** 连接复用、atomic catalog PUT、远端 trash、入库写远端、缓存 LRU
-- [ ] i18n（en → zh-CN）与设置页远程项
+- [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
+- [x] **M1（Host + 部分 UI）** SSH/SFTP（`openssh`）+ `__local_sim__`；`remote_*` commands；欢迎页「打开远程」；树/读写 md 经 Host
+- [x] **M2（骨架）** catalog work mirror GET/PUT + conflict；`remote_paper_list` / `remote_paper_rescan`；单测
+- [x] **M3（部分）** `remote_agent_discover` + `agent_exec`（ssh spawn 工具函数）；**ACP 运行时尚未替换为 SshStdio**
+- [ ] **M4** 连接复用、atomic catalog 加固、远端 trash、入库写远端、PDF blob 缓存 LRU
+- [x] i18n（en + zh-CN）远程对话框文案
+- [ ] 设置页远程项 / 最近远程 reopen
 - [ ] `docs/backend/api.md` 落地 command 契约
+- [ ] 远端 Agent `agent_run_once` / warm 完整接线
+- [ ] PDF 预览 `remote_read_bytes` → blob 全链路
 
 ### 发布
 
