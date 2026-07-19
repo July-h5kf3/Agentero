@@ -499,7 +499,7 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 
 **权限与写入**：
 - **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）取消 ACP 权限请求 / Codex `workspace-write`；**每次询问**（`ask`）经 `agent:permission-request` + `agent_respond_permission` 对话框；**自动批准**（`auto`）选第一项 AllowOnce / Codex `danger-full-access`。运行经 `permissionMode` 传入（旧 `autoApprove` 仍兼容）。
-- **笔记写后审阅**：BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 对照 Keep/Revert。写前 dry-run / `agent:accept_draft` 路径仍可后续加强。
+- **笔记写后审阅**：BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 统一 Diff + Keep/Revert。写前 dry-run / `agent:accept_draft` 路径仍可后续加强。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
@@ -709,7 +709,7 @@ tempfile = "3"
 |---|---|
 | arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 catalog 中标记 `body_source`/`body_quality`。 |
 | 云端 MinerU 不可用或数据敏感 | 默认本地 `liteparse` 解析不外传；MinerU 失败自动降级本地；启用前提示 PDF 将上传第三方。 |
-| Agent 输出破坏用户笔记 | BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 对照 + Keep/Revert。写前 dry-run 拦截仍待。 |
+| Agent 输出破坏用户笔记 | BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 统一 Diff + Keep/Revert。写前 dry-run 拦截仍待。 |
 | 论文列表性能差 | Catalog SQLite 权威查询；双链边增量索引。 |
 | Catalog 损坏 | 启动校验 schema；提示从备份恢复；可选从历史 `metadata.json` 导入；导出 `PAPERS.md`/BibTeX 作可读快照。 |
 | iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |

@@ -111,6 +111,7 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
+import { NotesReviewDiff } from "@/components/layout/notes-review-diff";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -3792,24 +3793,10 @@ export function AgentPanel({
 									})}
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-hidden">
-								<div className="flex min-h-0 flex-col">
-									<p className="mb-1 font-medium text-muted-foreground text-xs">
-										{t("review.before")}
-									</p>
-									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
-										{notesReview.before || t("review.empty")}
-									</pre>
-								</div>
-								<div className="flex min-h-0 flex-col">
-									<p className="mb-1 font-medium text-muted-foreground text-xs">
-										{t("review.after")}
-									</p>
-									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
-										{notesReview.after || t("review.empty")}
-									</pre>
-								</div>
-							</div>
+							<NotesReviewDiff
+								before={notesReview.before}
+								after={notesReview.after}
+							/>
 							<DialogFooter>
 								<Button
 									variant="outline"

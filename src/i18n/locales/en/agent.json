@@ -21,6 +21,7 @@
 		"description": "The agent rewrote “{{name}}”. Keep the new version or revert to the original.",
 		"before": "Before",
 		"after": "Agent version",
+		"diffAria": "Unified diff of note changes",
 		"keep": "Keep",
 		"revert": "Revert",
 		"empty": "(empty)"

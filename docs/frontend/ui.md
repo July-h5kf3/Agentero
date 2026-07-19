@@ -380,7 +380,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 | List claims | `qa` | 当前 paper |
 | Draft Related Work | `related_work` | 当前 paper |
 
-**笔记写后审阅（信任闭环）**：BYOA Agent 直接写盘，无法可靠事前拦截。`agent_run_once` 运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`）；若内容被改写则 emit `agent:notes-review`。面板弹 **原文 / Agent 版本** 对照对话框：**Keep** 保留 Agent 版本；**Revert** 写回快照（文件监听随后重载打开的编辑器）。
+**笔记写后审阅（信任闭环）**：BYOA Agent 直接写盘，无法可靠事前拦截。`agent_run_once` 运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`）；若内容被改写则 emit `agent:notes-review`。面板弹 **统一 Diff** 对话框（`NotesReviewDiff`：行级 `+`/`-`/` `，红/绿底）：**Keep** 保留 Agent 版本；**Revert** 写回快照（文件监听随后重载打开的编辑器）。
 
 **回答语言**：**设置 → Agent** 提供一个全局「回答语言」下拉（**自动 / English / 简体中文**，存于 app settings，默认 **自动**），**独立于界面语言**，对**所有 Agent** 交互生效（Composer 对话、精读、summary/QA、PDF 划词问答）。前端 `runOnce` 统一读取该设置并透传，Host 在 `build_prompt` 为所有 workflow 追加一句语言指令；选 **自动** 时不注入任何指令，交由 Agent 依据内容决定。
 
