@@ -1,6 +1,7 @@
 /**
  * Vault library: table of all papers from catalog.sqlite (display only).
  * Click column headers to sort ascending / descending.
+ * Double-click a row to open the paper.
  * Optional tag filter chips above the table.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -424,7 +425,7 @@ export function PapersLibrary({
 										data-index={vr.index}
 										ref={rowVirtualizer.measureElement}
 										className="cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50"
-										onClick={() => onOpenPaper(p)}
+										onDoubleClick={() => onOpenPaper(p)}
 									>
 										<td className="max-w-[420px] px-3 py-2.5">
 											<div className="font-medium" title={p.title}>
