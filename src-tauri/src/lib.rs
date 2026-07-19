@@ -238,6 +238,7 @@ pub fn run() {
             commands::remote::remote_agent_discover,
             commands::remote::remote_agent_scan,
             commands::remote::remote_agent_probe,
+            commands::remote::remote_agent_open_install_terminal,
             commands::remote::remote_host_identity,
             commands::terminal::path_open_in_terminal,
             commands::trash::path_trash,

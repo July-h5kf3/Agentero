@@ -835,6 +835,7 @@ pub async fn remote_agent_scan(
 #[tauri::command]
 pub async fn remote_agent_probe(
     registry: State<'_, Arc<RemoteRegistry>>,
+    agent_registry: State<'_, crate::services::agent::AgentRegistry>,
     args: RemoteAgentProbeArgs,
 ) -> Result<ApiResult<crate::models::agent::ProbeResult>, String> {
     let op = OpTimer::start_with(
@@ -845,10 +846,16 @@ pub async fn remote_agent_probe(
             trunc(&args.template_id, 40)
         ),
     );
+    let (proxy_enabled, proxy_url) = match agent_registry.snapshot() {
+        Ok(s) => (s.proxy_enabled, s.proxy_url),
+        Err(_) => (false, String::new()),
+    };
     match crate::services::remote::agent_catalog::probe_remote_template(
         registry.inner(),
         &args.session_id,
         &args.template_id,
+        proxy_enabled,
+        &proxy_url,
     )
     .await
     {
@@ -867,6 +874,58 @@ pub async fn remote_agent_probe(
             op.finish_err(&e);
             Ok(map_err(e))
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteAgentInstallArgs {
+    pub session_id: String,
+    pub template_id: String,
+}
+
+/// Open a local terminal that SSHes into the remote host and runs the template's
+/// install command after the user presses Enter (same confirm UX as local install).
+#[tauri::command]
+pub async fn remote_agent_open_install_terminal(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteAgentInstallArgs,
+) -> Result<ApiResult<serde_json::Value>, String> {
+    use crate::services::agent::templates::template_info;
+    use crate::services::terminal;
+
+    let info = match template_info(&args.template_id) {
+        Some(t) => t,
+        None => {
+            return Ok(map_err(AppError::message(format!(
+                "unknown catalog template: {}",
+                args.template_id
+            ))));
+        }
+    };
+    let install = match info.install_command {
+        Some(c) if !c.trim().is_empty() => c.trim().to_string(),
+        _ => {
+            return Ok(map_err(AppError::message(format!(
+                "no install command for template: {}",
+                args.template_id
+            ))));
+        }
+    };
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    if session.kind == "local-sim" {
+        return Ok(match terminal::open_terminal_confirm_command(&install) {
+            Ok(()) => ApiResult::ok(serde_json::Value::Null),
+            Err(e) => map_err(e),
+        });
+    }
+    let destination = session.host.clone();
+    match terminal::open_terminal_confirm_remote_install(&destination, &install) {
+        Ok(()) => Ok(ApiResult::ok(serde_json::Value::Null)),
+        Err(e) => Ok(map_err(e)),
     }
 }
 

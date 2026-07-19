@@ -139,7 +139,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `remote_cache_clear` | `{ sessionId? }` → `{ freedBytes }` 清除 blob 缓存 |
 | `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
 | `remote_agent_scan` | 目录模板 + 远端 PATH 扫描 → `CatalogEntry[]`（设置页远端 Agent） |
-| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（Codex+SSH 拒绝） |
+| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env；Codex+SSH 拒绝） |
+| `remote_agent_open_install_terminal` | 本机终端确认后 `ssh -t` 在远端执行模板 `install_command`（如 Claude ACP 适配器） |
 | `host_identity` | 本机 hostname + `os`（macos/windows/linux）/ 设置 Host 徽章 |
 | `remote_host_identity` | 远端 `uname -s` → `os` 家族（Host 徽章系统图标） |
 

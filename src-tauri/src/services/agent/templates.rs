@@ -4,8 +4,10 @@ use crate::models::agent::{AgentTemplate, AgentTemplateInfo};
 ///
 /// `detect_command` is used for "installed on PATH" status when the ACP entrypoint
 /// differs (e.g. Claude/Codex via npx adapters still want to show the host CLI).
-/// Official Claude Code ACP adapter package (global npm install).
-pub const CLAUDE_ACP_INSTALL_COMMAND: &str = "npm i -g @agentclientprotocol/claude-agent-acp";
+/// Official Claude Code ACP adapter (user-prefix install → `~/.local/bin`, no root).
+/// System `npm i -g` often needs sudo and still leaves the bin off login PATH.
+pub const CLAUDE_ACP_INSTALL_COMMAND: &str =
+    "npm i -g @agentclientprotocol/claude-agent-acp --prefix \"$HOME/.local\"";
 
 pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
     vec![

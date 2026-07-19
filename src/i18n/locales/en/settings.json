@@ -167,7 +167,10 @@
 			"commonAgents": "Agents on remote host",
 			"probeTitle": "Rescan & probe remote agents",
 			"empty": "No catalog results. Check the SSH session and remote PATH.",
-			"hint": "Refresh runs command -v then ACP initialize over SSH. Install agents on the server; API keys stay on the remote machine (BYOA)."
+			"hint": "Refresh runs command -v then ACP initialize over SSH. If Claude shows “ACP adapter missing”, use Install ACP (opens Terminal → Enter → SSH install on the server). API keys stay on the remote machine (BYOA). If probe times out, enable Agent proxy (must be reachable from the server).",
+			"proxyHint": "Same proxy as local Agent settings. Injected as HTTP(S)_PROXY on the remote process — the URL must be reachable from the server (e.g. a proxy on the server, not only on this Mac).",
+			"installAdapterAria": "Install ACP adapter for {{name}} on remote host via Terminal",
+			"installAdapterTitle": "Open Terminal, then SSH to {{host}} and run: {{command}} (press Enter to confirm)"
 		}
 	},
 	"translate": {

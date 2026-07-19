@@ -78,6 +78,7 @@ import {
 	fetchRemoteHostIdentity,
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
+	remoteAgentOpenInstallTerminal,
 	remoteAgentProbe,
 	remoteAgentScan,
 	remoteSessionIdFromHandle,
@@ -2249,6 +2250,8 @@ function RemoteAgentPane({
 	const [entries, setEntries] = useState<CatalogEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [probingKeys, setProbingKeys] = useState<Set<string>>(() => new Set());
+	const [proxyEnabled, setProxyEnabled] = useState(false);
+	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const sessionId = hostContext.sessionId;
 
 	const clearProbingKey = useCallback((key: string) => {
@@ -2258,6 +2261,24 @@ function RemoteAgentPane({
 			next.delete(key);
 			return next;
 		});
+	}, []);
+
+	// Same registry proxy as local Agent settings (injected into remote process env).
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		void scanCatalog()
+			.then((scan) => {
+				if (cancelled) return;
+				setProxyEnabled(scan.proxyEnabled);
+				setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
+			})
+			.catch(() => {
+				/* ignore */
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	const scanOnce = useCallback(async (): Promise<CatalogEntry[] | null> => {
@@ -2349,6 +2370,40 @@ function RemoteAgentPane({
 		void rescanAndProbe(false);
 	}, [rescanAndProbe]);
 
+	const saveProxySettings = async (enabled: boolean, url: string) => {
+		if (!isTauri()) return;
+		setLoading(true);
+		try {
+			const saved = await setAgentProxy(enabled, url);
+			setProxyEnabled(saved.proxyEnabled);
+			setProxyUrl(saved.proxyUrl || "http://127.0.0.1:7890");
+			// Proxy is injected into remote agent env — re-probe after change.
+			await rescanAndProbe(true);
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const onToggleProxy = async (v: boolean) => {
+		setProxyEnabled(v);
+		await saveProxySettings(v, proxyUrl);
+	};
+
+	const onCommitProxyUrl = async () => {
+		await saveProxySettings(proxyEnabled, proxyUrl);
+	};
+
+	const onInstallAdapter = async (entry: CatalogEntry) => {
+		if (!isTauri()) return;
+		try {
+			await remoteAgentOpenInstallTerminal(sessionId, entry.templateId);
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
 	const busy = loading;
 
 	return (
@@ -2362,6 +2417,37 @@ function RemoteAgentPane({
 			</p>
 
 			<SettingsGroup>
+				<SettingsRow
+					label={t("agent.proxy.label")}
+					htmlFor="agent-proxy-enabled-r"
+				>
+					<div className="flex items-center gap-2">
+						<Input
+							value={proxyUrl}
+							onChange={(e) => setProxyUrl(e.target.value)}
+							onBlur={() => void onCommitProxyUrl()}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") {
+									e.currentTarget.blur();
+								}
+							}}
+							placeholder="http://127.0.0.1:7890"
+							spellCheck={false}
+							autoComplete="off"
+							disabled={!proxyEnabled || !isTauri()}
+							className="h-8 w-48 text-xs"
+						/>
+						<Switch
+							id="agent-proxy-enabled-r"
+							checked={proxyEnabled}
+							disabled={!isTauri()}
+							onCheckedChange={(v) => void onToggleProxy(v)}
+						/>
+					</div>
+				</SettingsRow>
+				<p className="border-b px-3.5 py-2 text-muted-foreground text-[11px] leading-relaxed last:border-b-0">
+					{t("agent.remote.proxyHint")}
+				</p>
 				<SettingsRow label={t("agent.permission.label")} htmlFor="agent-perm-r">
 					<Select
 						value={settings.agentPermissionMode}
@@ -2472,6 +2558,7 @@ function RemoteAgentPane({
 					</p>
 				) : null}
 				{entries.map((entry) => {
+					const showInstall = Boolean(entry.offerInstall);
 					const notInstalled =
 						!entry.binaryAvailable && !entry.acpCommandAvailable;
 					const isProbing =
@@ -2493,12 +2580,14 @@ function RemoteAgentPane({
 										"w-24 shrink-0 truncate font-medium text-[13px]",
 										notInstalled && "text-muted-foreground",
 									)}
-									title={entry.description || entry.name}
+									title={
+										entry.lastProbeError || entry.description || entry.name
+									}
 								>
 									{entry.name}
 								</span>
-								<div className="flex min-w-0 flex-wrap items-center gap-1">
-									{entry.binaryAvailable || entry.acpCommandAvailable ? (
+								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+									{entry.binaryAvailable ? (
 										<StatusBadge tone="ok">
 											{t("agent.badges.installed")}
 										</StatusBadge>
@@ -2509,29 +2598,53 @@ function RemoteAgentPane({
 									)}
 									{isProbing ? (
 										<ProbingBadge label={t("agent.probing")} />
-									) : entry.acpStatus === "ready" ? (
+									) : entry.acpStatus !== "missing" ? (
 										<StatusBadge
-											tone="ok"
-											title={entry.acpAgentName ?? undefined}
+											tone={catalogStatusTone(entry.acpStatus)}
+											title={
+												entry.lastProbeError ?? entry.acpAgentName ?? undefined
+											}
 										>
-											{entry.acpAgentName
-												? `${acpStatusLabel("ready")} · ${entry.acpAgentName}`
-												: acpStatusLabel("ready")}
+											{acpStatusLabel(entry.acpStatus)}
 										</StatusBadge>
-									) : entry.acpStatus === "failed" ? (
-										<StatusBadge
-											tone="err"
-											title={entry.lastProbeError ?? undefined}
-										>
-											{acpStatusLabel("failed")}
-										</StatusBadge>
-									) : entry.acpStatus === "not-probed" &&
-										(entry.binaryAvailable || entry.acpCommandAvailable) ? (
+									) : null}
+									{showInstall ? (
 										<StatusBadge tone="warn">
-											{acpStatusLabel("not-probed")}
+											{t("agent.badges.adapterMissing")}
 										</StatusBadge>
 									) : null}
 								</div>
+							</div>
+							<div
+								className={cn(
+									"flex h-7 shrink-0 items-center justify-center gap-1",
+									showInstall ? "min-w-0" : "w-8",
+								)}
+							>
+								{showInstall ? (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										aria-label={t("agent.remote.installAdapterAria", {
+											name: entry.name,
+										})}
+										title={
+											entry.installCommand
+												? t("agent.remote.installAdapterTitle", {
+														command: entry.installCommand,
+														host: hostContext.label,
+													})
+												: t("agent.installAdapter")
+										}
+										disabled={busy || !isTauri()}
+										onClick={() => void onInstallAdapter(entry)}
+									>
+										<Terminal className="size-3" />
+										{t("agent.installAdapter")}
+									</Button>
+								) : null}
 							</div>
 						</div>
 					);

@@ -167,7 +167,10 @@
 			"commonAgents": "远端主机上的 Agent",
 			"probeTitle": "重新扫描并探测远端 Agent",
 			"empty": "没有目录结果。请检查 SSH 会话与远端 PATH。",
-			"hint": "刷新会经 SSH 执行 command -v 与 ACP initialize。请在服务器上安装 Agent；密钥留在远端（BYOA）。"
+			"hint": "刷新会经 SSH 执行 command -v 与 ACP initialize。若 Claude 显示「ACP adapter missing」，点「Install ACP」（打开终端 → Enter → 经 SSH 在服务器安装）。密钥留在远端（BYOA）。若探测超时，可开启 Agent 代理（代理需从服务器可达）。",
+			"proxyHint": "与本地 Agent 设置共用同一代理。会以 HTTP(S)_PROXY 注入远端进程——地址必须从服务器可达（例如服务器上的代理，而非仅本机 127.0.0.1）。",
+			"installAdapterAria": "在终端中经 SSH 为 {{name}} 安装远端 ACP 适配器",
+			"installAdapterTitle": "打开终端，SSH 到 {{host}} 并执行：{{command}}（按 Enter 确认）"
 		}
 	},
 	"translate": {

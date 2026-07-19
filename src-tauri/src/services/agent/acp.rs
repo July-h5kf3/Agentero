@@ -60,7 +60,14 @@ fn to_acp_agent(
             if r.destination.is_empty() {
                 return Err(AppError::message("remote SSH destination is empty"));
             }
-            let shell = remote_agent_shell_command(&r.remote_cwd, &desc.command, &desc.args);
+            use crate::services::remote::agent_exec::proxy_env_from_map;
+            let proxy_pairs = proxy_env_from_map(&desc.env);
+            let env_refs: Vec<(&str, &str)> = proxy_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            let shell =
+                remote_agent_shell_command(&r.remote_cwd, &desc.command, &desc.args, &env_refs);
             let stdio = McpServerStdio::new(desc.name.clone(), PathBuf::from("ssh")).args(vec![
                 "-T".to_string(),
                 "-o".to_string(),

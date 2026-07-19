@@ -7,19 +7,98 @@ use crate::error::AppError;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 
+/// Prepend common tool install roots for non-interactive SSH.
+///
+/// BatchMode `bash -lc` often skips interactive-only brew/nvm snippets in
+/// `.bashrc`, so Linuxbrew (`/home/linuxbrew/.linuxbrew/bin`) is missing from
+/// PATH even when the binary exists — matching interactive `command -v` fails.
+const REMOTE_PATH_BOOTSTRAP: &str = r#"
+# Agentero: non-interactive SSH PATH bootstrap (brew / npm user prefixes / cargo).
+for _d in \
+  "$HOME/.local/bin" \
+  "$HOME/bin" \
+  "$HOME/.npm-global/bin" \
+  "$HOME/.cargo/bin" \
+  /home/linuxbrew/.linuxbrew/bin \
+  "$HOME/.linuxbrew/bin" \
+  /opt/homebrew/bin \
+  /usr/local/bin
+do
+  [ -d "$_d" ] || continue
+  case ":$PATH:" in *":$_d:"*) ;; *) PATH="$_d:$PATH" ;; esac
+done
+if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv 2>/dev/null)" || true
+elif [ -x "$HOME/.linuxbrew/bin/brew" ]; then
+  eval "$("$HOME/.linuxbrew/bin/brew" shellenv 2>/dev/null)" || true
+fi
+export PATH
+"#;
+
 /// Build a remote shell command that `cd`s into the vault and execs the agent.
 ///
-/// Uses `bash -lc` so non-interactive SSH still loads the user's login PATH
-/// (`~/.local/bin`, nvm, etc.).
-pub fn remote_agent_shell_command(remote_cwd: &str, command: &str, args: &[String]) -> String {
+/// Uses `bash -lc` plus {@link REMOTE_PATH_BOOTSTRAP} so non-interactive SSH still
+/// sees Linuxbrew / `~/.local/bin` (interactive-only profile snippets are skipped).
+///
+/// Optional `env_exports` (e.g. `HTTP_PROXY`) are applied on the remote before
+/// `cd` / `exec` so Settings → Agent proxy works for remote BYOA the same way
+/// as local (proxy must be reachable from the **server**).
+pub fn remote_agent_shell_command(
+    remote_cwd: &str,
+    command: &str,
+    args: &[String],
+    env_exports: &[(&str, &str)],
+) -> String {
     let mut parts = Vec::with_capacity(1 + args.len());
     parts.push(shell_quote(command));
     for a in args {
         parts.push(shell_quote(a));
     }
     let cmd = parts.join(" ");
-    let inner = format!("cd {} && exec {}", shell_quote(remote_cwd), cmd);
+    let mut prefix = String::new();
+    for (k, v) in env_exports {
+        if k.is_empty() || v.is_empty() {
+            continue;
+        }
+        // Only allow simple env keys (proxy vars from Host settings).
+        if !k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            continue;
+        }
+        prefix.push_str(&format!("export {}={}; ", k, shell_quote(v)));
+    }
+    let inner = format!(
+        "{bootstrap}{prefix}cd {} && exec {}",
+        shell_quote(remote_cwd),
+        cmd,
+        bootstrap = REMOTE_PATH_BOOTSTRAP,
+    );
     format!("bash -lc {}", shell_quote(&inner))
+}
+
+/// Proxy-related env keys mirrored into the remote agent process.
+pub const REMOTE_PROXY_ENV_KEYS: &[&str] = &[
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+];
+
+/// Collect proxy env pairs from an agent descriptor (after registry apply_proxy).
+pub fn proxy_env_from_map(
+    env: &std::collections::HashMap<String, String>,
+) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for key in REMOTE_PROXY_ENV_KEYS {
+        if let Some(v) = env.get(*key) {
+            let t = v.trim();
+            if !t.is_empty() {
+                out.push(((*key).to_string(), t.to_string()));
+            }
+        }
+    }
+    out
 }
 
 fn shell_quote(s: &str) -> String {
@@ -42,7 +121,7 @@ pub async fn spawn_remote_agent(
     command: &str,
     args: &[String],
 ) -> Result<Child, AppError> {
-    let remote = remote_agent_shell_command(remote_cwd, command, args);
+    let remote = remote_agent_shell_command(remote_cwd, command, args, &[]);
     let mut cmd = Command::new("ssh");
     cmd.arg("-T")
         .arg("-o")
@@ -106,13 +185,50 @@ fn map_uname_to_os(uname: &str) -> String {
     }
 }
 
-/// Discover whether a binary exists on the remote host (`command -v` in login shell).
+/// Discover whether a binary exists on the remote host.
+///
+/// Non-interactive SSH often omits Linuxbrew from PATH (interactive-only
+/// `brew shellenv` in `.bashrc`). We bootstrap PATH then `command -v`, and fall
+/// back to known install roots including `/home/linuxbrew/.linuxbrew/bin`.
 pub async fn remote_which(destination: &str, bin: &str) -> Result<Option<String>, AppError> {
-    // login shell so ~/.local/bin and user profile PATH apply (BatchMode SSH is non-login).
-    let remote = format!(
-        "bash -lc {}",
-        shell_quote(&format!("command -v {}", shell_quote(bin)))
+    let bin_q = shell_quote(bin);
+    // Keep the remote script free of unquoted user input.
+    let script = format!(
+        r#"
+set +e
+{bootstrap}
+if p=$(command -v {bin_q} 2>/dev/null) && [ -n "$p" ]; then
+  printf '%s\n' "$p"
+  exit 0
+fi
+# Explicit candidates if still missing (absolute checks).
+cands=()
+cands+=("$HOME/.local/bin/{bin_q}")
+cands+=("$HOME/bin/{bin_q}")
+cands+=("$HOME/.npm-global/bin/{bin_q}")
+cands+=("/home/linuxbrew/.linuxbrew/bin/{bin_q}")
+cands+=("$HOME/.linuxbrew/bin/{bin_q}")
+cands+=("/opt/homebrew/bin/{bin_q}")
+cands+=("/usr/local/bin/{bin_q}")
+if np=$(npm prefix -g 2>/dev/null); then
+  cands+=("$np/bin/{bin_q}")
+fi
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  for d in "$HOME"/.nvm/versions/node/*/bin; do
+    [ -d "$d" ] && cands+=("$d/{bin_q}")
+  done
+fi
+for p in "${{cands[@]}}"; do
+  if [ -x "$p" ] || [ -L "$p" ] || [ -f "$p" ]; then
+    printf '%s\n' "$p"
+    exit 0
+  fi
+done
+exit 1
+"#,
+        bootstrap = REMOTE_PATH_BOOTSTRAP,
     );
+    let remote = format!("bash -lc {}", shell_quote(script.trim()));
     let output = Command::new("ssh")
         .arg("-T")
         .arg("-o")
@@ -127,12 +243,12 @@ pub async fn remote_which(destination: &str, bin: &str) -> Result<Option<String>
     if !output.status.success() {
         return Ok(None);
     }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(path))
-    }
+    let path = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.contains('\0'))
+        .map(str::to_string);
+    Ok(path)
 }
 
 #[cfg(test)]
@@ -141,18 +257,33 @@ mod tests {
 
     #[test]
     fn quotes_and_builds_exec() {
-        let s = remote_agent_shell_command("/data/vault", "opencode", &["acp".into()]);
+        let s = remote_agent_shell_command("/data/vault", "opencode", &["acp".into()], &[]);
         assert!(s.contains("bash -lc"));
         assert!(s.contains("cd /data/vault"));
         assert!(s.contains("exec opencode acp"));
+        // PATH bootstrap so Linuxbrew bins are found under BatchMode SSH.
+        assert!(s.contains("linuxbrew"));
     }
 
     #[test]
     fn quotes_spaces() {
-        let s = remote_agent_shell_command("/tmp/my vault", "my agent", &[]);
+        let s = remote_agent_shell_command("/tmp/my vault", "my agent", &[], &[]);
         assert!(s.contains("bash -lc"));
         assert!(s.contains("/tmp/my vault"));
         assert!(s.contains("my agent"));
+    }
+
+    #[test]
+    fn exports_proxy_before_cd() {
+        let s = remote_agent_shell_command(
+            "/data/vault",
+            "opencode",
+            &["acp".into()],
+            &[("HTTP_PROXY", "http://127.0.0.1:7890")],
+        );
+        assert!(s.contains("export HTTP_PROXY="));
+        assert!(s.contains("127.0.0.1:7890"));
+        assert!(s.contains("cd /data/vault"));
     }
 
     #[test]

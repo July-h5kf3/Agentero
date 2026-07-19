@@ -325,6 +325,22 @@ export async function remoteAgentProbe(
 	);
 }
 
+/**
+ * Open Terminal: after Enter, `ssh -t` into the remote host and run the
+ * template install command (e.g. Claude ACP adapter via npm). Same confirm UX as local.
+ */
+export async function remoteAgentOpenInstallTerminal(
+	sessionId: string,
+	templateId: string,
+): Promise<void> {
+	await unwrap(
+		invoke<ApiResult<null>>("remote_agent_open_install_terminal", {
+			args: { sessionId, templateId },
+		}),
+		"Failed to open remote install terminal",
+	);
+}
+
 export type HostOsKind = "macos" | "windows" | "linux" | "other";
 
 export type HostIdentity = {

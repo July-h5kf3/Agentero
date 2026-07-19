@@ -83,10 +83,15 @@ pub async fn scan_remote_agents(
 }
 
 /// ACP initialize probe for one catalog template on the remote host.
+///
+/// `proxy_url` is injected as remote `HTTP(S)_PROXY` when `proxy_enabled` (same
+/// Settings → Agent proxy as local; the proxy must be reachable **from the server**).
 pub async fn probe_remote_template(
     registry: &RemoteRegistry,
     session_id: &str,
     template_id: &str,
+    proxy_enabled: bool,
+    proxy_url: &str,
 ) -> Result<ProbeResult, AppError> {
     let info = template_info(template_id)
         .ok_or_else(|| AppError::message(format!("unknown catalog template: {template_id}")))?;
@@ -96,7 +101,9 @@ pub async fn probe_remote_template(
         .await?
         .ok_or_else(|| AppError::message("remote session not found"))?;
 
-    let desc = descriptor_from_template(&info.id, &info.name, &info.command, &info.args);
+    let mut desc = descriptor_from_template(&info.id, &info.name, &info.command, &info.args);
+    apply_proxy_env(&mut desc, proxy_enabled, proxy_url);
+
     if desc.template == AgentTemplate::CodexAcp && remote.is_ssh() {
         return Ok(ProbeResult {
             agent_id: desc.id,
@@ -110,41 +117,84 @@ pub async fn probe_remote_template(
         });
     }
 
-    // Ensure binary exists before full ACP handshake (faster fail).
-    let which_bin = info
+    // Ensure binaries exist before full ACP handshake (faster fail + clearer errors).
+    let detect_bin = info
         .detect_command
         .as_deref()
         .filter(|s| !s.is_empty())
         .unwrap_or(info.command.as_str());
+    let acp_bin = info.command.as_str();
     let destination = if remote.is_ssh() {
         remote.destination.clone()
     } else {
         String::new()
     };
     if remote.is_ssh() {
-        if agent_exec::remote_which(&destination, which_bin)
+        let detect_ok = agent_exec::remote_which(&destination, detect_bin)
             .await?
-            .is_none()
-        {
+            .is_some();
+        let acp_ok = if acp_bin == detect_bin {
+            detect_ok
+        } else {
+            agent_exec::remote_which(&destination, acp_bin)
+                .await?
+                .is_some()
+        };
+        if !detect_ok && !acp_ok {
             return Ok(ProbeResult {
                 agent_id: desc.id,
                 available: false,
                 agent_name: None,
                 protocol_version: None,
-                error: Some(format!("`{which_bin}` not found on remote PATH")),
+                error: Some(format!("`{detect_bin}` not found on remote PATH")),
             });
         }
-    } else if which::which(which_bin).is_err() && which::which(&info.command).is_err() {
+        if detect_ok && !acp_ok {
+            let hint = info
+                .install_command
+                .as_deref()
+                .filter(|c| !c.is_empty())
+                .map(|c| {
+                    format!(" Install ACP adapter on the server (Settings → Install ACP): {c}")
+                })
+                .unwrap_or_default();
+            return Ok(ProbeResult {
+                agent_id: desc.id,
+                available: false,
+                agent_name: None,
+                protocol_version: None,
+                error: Some(format!(
+                    "ACP entrypoint `{acp_bin}` not found on remote PATH (host CLI `{detect_bin}` is present).{hint}"
+                )),
+            });
+        }
+    } else if which::which(detect_bin).is_err() && which::which(acp_bin).is_err() {
         return Ok(ProbeResult {
             agent_id: desc.id,
             available: false,
             agent_name: None,
             protocol_version: None,
-            error: Some(format!("`{which_bin}` not found on PATH")),
+            error: Some(format!("`{detect_bin}` not found on PATH")),
         });
     }
 
     Ok(probe_agent(&desc, Some(&remote)).await)
+}
+
+fn apply_proxy_env(desc: &mut AgentDescriptor, proxy_enabled: bool, proxy_url: &str) {
+    for key in agent_exec::REMOTE_PROXY_ENV_KEYS {
+        desc.env.remove(*key);
+    }
+    if !proxy_enabled {
+        return;
+    }
+    let url = proxy_url.trim();
+    if url.is_empty() {
+        return;
+    }
+    for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+        desc.env.insert(key.to_string(), url.to_string());
+    }
 }
 
 fn descriptor_from_template(
