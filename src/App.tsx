@@ -2791,6 +2791,10 @@ export default function App() {
 										}
 									>
 										<span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-sm">
+											<NotebookPen
+												className="size-4 shrink-0 text-muted-foreground"
+												aria-hidden
+											/>
 											{t("labels.notes")}
 											{activeTab?.notesDirty ? (
 												<span

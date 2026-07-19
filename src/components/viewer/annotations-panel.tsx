@@ -1,6 +1,7 @@
 import { MessageSquareText, Pencil, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	type HighlightColor,
@@ -51,34 +52,35 @@ export function AnnotationsPanel({
 			)}
 			aria-label={t("annotations.panelAria")}
 		>
-			<header className="flex shrink-0 items-center gap-2 border-b px-3.5 py-3">
+			<PaneHeader
+				trailing={
+					<>
+						{items.length > 0 ? (
+							<span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center font-medium text-[11px] text-muted-foreground tabular-nums">
+								{items.length}
+							</span>
+						) : null}
+						{onClose ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 text-muted-foreground hover:text-foreground"
+								aria-label={t("annotations.close")}
+								onClick={onClose}
+							>
+								<X className="size-4" />
+							</Button>
+						) : null}
+					</>
+				}
+			>
 				<MessageSquareText
 					className="size-4 text-muted-foreground"
 					aria-hidden
 				/>
-				<span className="font-semibold text-foreground text-sm tracking-tight">
-					{t("annotations.title")}
-				</span>
-				<div className="ml-auto flex items-center gap-1">
-					{items.length > 0 ? (
-						<span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center font-medium text-[11px] text-muted-foreground tabular-nums">
-							{items.length}
-						</span>
-					) : null}
-					{onClose ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="size-6 text-muted-foreground hover:text-foreground"
-							aria-label={t("annotations.close")}
-							onClick={onClose}
-						>
-							<X className="size-4" />
-						</Button>
-					) : null}
-				</div>
-			</header>
+				<span className="font-medium text-sm">{t("annotations.title")}</span>
+			</PaneHeader>
 
 			{items.length === 0 ? (
 				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
