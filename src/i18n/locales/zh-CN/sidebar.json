@@ -57,6 +57,20 @@
 			"cancel": "取消"
 		}
 	},
+	"importLocalPdf": {
+		"title": "导入 {{count}} 个 PDF",
+		"parentDir": "目标文件夹",
+		"parentHint": "Vault 相对路径（来自拖放落点，位于 papers/ 下）。",
+		"fieldTitle": "标题",
+		"fieldAuthors": "作者",
+		"authorsPlaceholder": "逗号分隔",
+		"fieldYear": "年份",
+		"fieldId": "文件夹 id",
+		"confirm": "导入",
+		"cancel": "取消",
+		"dropNoPath": "无法读取拖入的 PDF。请改用魔棒 → 导入 PDF，或从 Finder 再拖一次。",
+		"dropStageFailed": "无法准备拖入的 PDF：{{detail}}"
+	},
 	"recycleBin": {
 		"open": "回收站",
 		"title": "回收站",

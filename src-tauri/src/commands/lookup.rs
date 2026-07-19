@@ -6,7 +6,8 @@ use crate::log_util::{trunc, OpTimer};
 use crate::services::lookup::{
     self, AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
     LookupImportResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
-    PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+    PaperImportArgs, PaperImportResult, StageImportFileArgs, StageImportFileResult,
+    DEFAULT_TRANSLATOR_BASE_URL,
 };
 use crate::services::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
 use serde::Serialize;
@@ -54,6 +55,14 @@ pub async fn paper_import_local_pdf(args: ImportLocalPdfArgs) -> ApiResult<Impor
     op.finish_result_ok_extra(lookup::import_local_pdfs(args).await, |r| {
         format!("imported={} errors={}", r.papers.len(), r.errors.len())
     })
+}
+
+/// Stage a path-less OS drop (File bytes as base64) into `~/.agentero/import-tmp/`.
+#[tauri::command]
+pub fn paper_stage_import_file(args: StageImportFileArgs) -> ApiResult<StageImportFileResult> {
+    let name = trunc(&args.file_name, 80);
+    let op = OpTimer::start_with("paper_stage_import_file", format!("name={name}"));
+    op.finish_result(lookup::stage_import_file(args))
 }
 
 /// Generate PAPER.md from local PDF via liteparse when the paper has no TeX.

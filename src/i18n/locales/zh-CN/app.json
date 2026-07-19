@@ -99,7 +99,8 @@
 		"cannotPreview": "无法预览此文件类型：{{name}}",
 		"openVaultForLinks": "请先打开知识库，再导航知识库相对链接。",
 		"openVaultForGraph": "请先打开知识库，再导航图谱链接。",
-		"openVaultForCreate": "请先打开知识库，再创建双链目标。"
+		"openVaultForCreate": "请先打开知识库，再创建双链目标。",
+		"dropPdfNeedsVault": "请先打开知识库，再拖入 PDF 导入。"
 	},
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",

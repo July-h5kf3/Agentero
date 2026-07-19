@@ -10,6 +10,11 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
     let op = OpTimer::start("window_new");
     let label = format!("agentero-{}", uuid::Uuid::new_v4().simple());
 
+    // Main window uses tauri.conf.json `dragDropEnabled: false` so HTML5 DnD
+    // works (vault moves / agent chips). OS file drops are cancelled in the
+    // frontend so the webview never navigates to a dropped PDF.
+    // WebviewWindowBuilder in this Tauri version has no drag_drop_enabled();
+    // secondary windows inherit platform defaults — frontend still preventDefaults.
     let mut builder =
         WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?fresh=1".into()))
             .title("Agentero")

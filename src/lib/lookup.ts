@@ -201,27 +201,50 @@ export type LocalPdfImportResult = {
 	errors: string[];
 };
 
+/** Per-file metadata for local PDF import (confirm dialog / host overrides). */
+export type LocalPdfImportEntry = {
+	filePath: string;
+	title?: string;
+	authors?: string[];
+	year?: number;
+	id?: string;
+};
+
 /**
  * Import local PDF file(s) into `vaultRoot/parentDir/<slug>/` (copy + catalog + liteparse).
- * Opens a native PDF picker (multi-select). Returns null when the user cancels.
+ * Opens a native PDF picker unless `entries` or `filePaths` is provided.
+ * Returns null when the user cancels the picker.
  */
 export async function importLocalPdfs(opts: {
 	vaultRoot: string;
 	/** Vault-relative, e.g. `papers` or `papers/nlp` */
 	parentDir: string;
+	/** Absolute paths (skip native picker when non-empty; no metadata overrides). */
+	filePaths?: string[];
+	/** Preferred: path + optional title/authors/year/id from the confirm dialog. */
+	entries?: LocalPdfImportEntry[];
 }): Promise<LocalPdfImportResult | null> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
 	}
-	const selected = await open({
-		multiple: true,
-		filters: [{ name: "PDF", extensions: ["pdf"] }],
-	});
-	if (!selected) return null;
-	const filePaths = (Array.isArray(selected) ? selected : [selected]).filter(
-		(p): p is string => Boolean(p),
-	);
-	if (!filePaths.length) return null;
+	let entries = (opts.entries ?? [])
+		.map((e) => ({ ...e, filePath: e.filePath.trim() }))
+		.filter((e) => e.filePath);
+	if (!entries.length) {
+		let filePaths = (opts.filePaths ?? []).map((p) => p.trim()).filter(Boolean);
+		if (!filePaths.length) {
+			const selected = await open({
+				multiple: true,
+				filters: [{ name: "PDF", extensions: ["pdf"] }],
+			});
+			if (!selected) return null;
+			filePaths = (Array.isArray(selected) ? selected : [selected]).filter(
+				(p): p is string => Boolean(p),
+			);
+		}
+		entries = filePaths.map((filePath) => ({ filePath }));
+	}
+	if (!entries.length) return null;
 
 	const result = await invoke<ApiResult<HostLocalPdfImportResult>>(
 		"paper_import_local_pdf",
@@ -229,7 +252,8 @@ export async function importLocalPdfs(opts: {
 			args: {
 				vaultPath: opts.vaultRoot,
 				parentDir: opts.parentDir.replace(/\\/g, "/"),
-				filePaths,
+				filePaths: [],
+				entries,
 			},
 		},
 	);

@@ -67,6 +67,12 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+	dataTransferHasFiles,
+	resolveDroppedPdfPaths,
+	snapshotDataTransfer,
+} from "@/lib/external-file-drop";
+import { notifyError } from "@/lib/notify";
+import {
 	formatPaperTreeLabel,
 	isPaperDirectory,
 	isPapersRoot,
@@ -354,6 +360,15 @@ type FileTreeProps = {
 	onMovePaths?: (paths: string[]) => void;
 	/** Drag-and-drop move: relocate paths into an existing folder (no dialog). */
 	onMoveTo?: (paths: string[], destParentRel: string) => void;
+	/**
+	 * OS PDF drop onto a `papers/` org folder → open confirm dialog in parent.
+	 * `parentDir` is vault-relative (e.g. `papers` or `papers/nlp`).
+	 * `items` include absolute path + original filename for metadata defaults.
+	 */
+	onDropLocalPdfs?: (
+		items: Array<{ path: string; sourceName: string }>,
+		parentDir: string,
+	) => void;
 	className?: string;
 };
 
@@ -393,6 +408,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onDeletePaths,
 			onMovePaths,
 			onMoveTo,
+			onDropLocalPdfs,
 			className,
 		},
 		ref,
@@ -921,26 +937,34 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			return () => window.removeEventListener("keydown", onKey);
 		}, [selected.size, clearSelection, runBatchDelete]);
 
-		// ---- Drag and drop to move into a papers/ folder -------------------------
+		// ---- Drag and drop: vault move + OS PDF import into a papers/ folder ----
 		const [dragging, setDragging] = useState<string[] | null>(null);
 		const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-		/** A row is a valid drop target only if it is an org folder under papers/. */
-		const canDrop = useCallback(
-			(targetPath: string, paths: string[]): boolean => {
-				if (paths.length === 0 || isVirtualTreePath(targetPath)) return false;
+		/** Org folder under papers/ (not a paper unit, not virtual). */
+		const isPapersOrgFolder = useCallback(
+			(targetPath: string): boolean => {
+				if (isVirtualTreePath(targetPath)) return false;
 				const node = byPath.get(targetPath);
 				if (node?.kind !== "directory") return false;
 				if (isPaperDirectory(node.path, node.children)) return false;
 				const rel = relPathForNode(targetPath);
-				if (rel !== "papers" && !rel.startsWith("papers/")) return false;
+				return rel === "papers" || rel.startsWith("papers/");
+			},
+			[byPath, relPathForNode],
+		);
+
+		/** A row is a valid vault-move drop target only if it is an org folder under papers/. */
+		const canDrop = useCallback(
+			(targetPath: string, paths: string[]): boolean => {
+				if (paths.length === 0 || !isPapersOrgFolder(targetPath)) return false;
 				const norm = targetPath.replace(/\\/g, "/").replace(/\/+$/, "");
 				return !paths.some((d) => {
 					const dn = d.replace(/\\/g, "/").replace(/\/+$/, "");
 					return norm === dn || norm.startsWith(`${dn}/`);
 				});
 			},
-			[byPath, relPathForNode],
+			[isPapersOrgFolder],
 		);
 
 		const handleRowDragStart = useCallback(
@@ -964,28 +988,83 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 
 		const handleRowDragOver = useCallback(
 			(path: string, e: ReactDragEvent) => {
+				// Internal vault move takes priority while a tree drag is active.
 				if (dragging && canDrop(path, dragging)) {
 					e.preventDefault();
 					e.dataTransfer.dropEffect = "move";
 					if (dropTarget !== path) setDropTarget(path);
-				} else if (dropTarget) {
-					setDropTarget(null);
+					return;
 				}
+				// OS PDF → import parent (only when not mid vault-move).
+				if (
+					!dragging &&
+					onDropLocalPdfs &&
+					dataTransferHasFiles(e.dataTransfer) &&
+					isPapersOrgFolder(path)
+				) {
+					e.preventDefault();
+					e.stopPropagation();
+					e.dataTransfer.dropEffect = "copy";
+					if (dropTarget !== path) setDropTarget(path);
+					return;
+				}
+				if (dropTarget) setDropTarget(null);
 			},
-			[dragging, dropTarget, canDrop],
+			[dragging, dropTarget, canDrop, onDropLocalPdfs, isPapersOrgFolder],
 		);
 
 		const handleRowDrop = useCallback(
 			(path: string, e: ReactDragEvent) => {
 				e.preventDefault();
-				const paths = dragging;
+				const vaultMovePaths = dragging;
 				setDragging(null);
 				setDropTarget(null);
-				if (!paths || !onMoveTo || !canDrop(path, paths)) return;
-				const dest = relPathForNode(path) || "papers";
-				onMoveTo(paths, dest);
+
+				if (vaultMovePaths) {
+					if (!onMoveTo || !canDrop(path, vaultMovePaths)) return;
+					const dest = relPathForNode(path) || "papers";
+					onMoveTo(vaultMovePaths, dest);
+					return;
+				}
+
+				// External PDF drop onto papers/ org folder → confirm dialog in App.
+				// Snapshot DataTransfer **now** (WKWebView clears it after the handler).
+				// Prefer nativeEvent — React synthetic DataTransfer can hide FileList.
+				// Path-less Files are staged via Host `paper_stage_import_file`.
+				if (
+					onDropLocalPdfs &&
+					dataTransferHasFiles(e.dataTransfer) &&
+					isPapersOrgFolder(path)
+				) {
+					e.stopPropagation();
+					const dest = relPathForNode(path) || "papers";
+					const nativeDt =
+						(e.nativeEvent as DragEvent | undefined)?.dataTransfer ??
+						e.dataTransfer;
+					const snap = snapshotDataTransfer(nativeDt);
+					void (async () => {
+						try {
+							const pdfs = await resolveDroppedPdfPaths(snap);
+							if (!pdfs.length) {
+								notifyError(t("importLocalPdf.dropNoPath"));
+								return;
+							}
+							onDropLocalPdfs(pdfs, dest);
+						} catch (err) {
+							notifyError(err instanceof Error ? err.message : String(err));
+						}
+					})();
+				}
 			},
-			[dragging, onMoveTo, canDrop, relPathForNode],
+			[
+				dragging,
+				onMoveTo,
+				onDropLocalPdfs,
+				canDrop,
+				relPathForNode,
+				isPapersOrgFolder,
+				t,
+			],
 		);
 
 		const handleRowDragEnd = useCallback(() => {

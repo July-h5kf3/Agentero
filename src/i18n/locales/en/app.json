@@ -99,7 +99,8 @@
 		"cannotPreview": "Cannot preview this file type: {{name}}",
 		"openVaultForLinks": "Open a vault before navigating vault-relative links.",
 		"openVaultForGraph": "Open a vault before navigating graph links.",
-		"openVaultForCreate": "Open a vault before creating wikilink targets."
+		"openVaultForCreate": "Open a vault before creating wikilink targets.",
+		"dropPdfNeedsVault": "Open a vault before importing dropped PDFs."
 	},
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",

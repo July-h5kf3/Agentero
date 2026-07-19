@@ -220,6 +220,7 @@ pub fn run() {
             commands::lookup::lookup_translator_config,
             commands::lookup::paper_download_assets,
             commands::lookup::paper_import_local_pdf,
+            commands::lookup::paper_stage_import_file,
             commands::lookup::paper_parse_body,
             commands::lookup::paper_export,
             commands::lookup::paper_import,

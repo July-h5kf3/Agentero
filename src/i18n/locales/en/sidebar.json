@@ -57,6 +57,20 @@
 			"cancel": "Cancel"
 		}
 	},
+	"importLocalPdf": {
+		"title": "Import {{count}} PDF(s)",
+		"parentDir": "Destination folder",
+		"parentHint": "Vault-relative path under papers/ (from the drop target).",
+		"fieldTitle": "Title",
+		"fieldAuthors": "Authors",
+		"authorsPlaceholder": "Comma-separated",
+		"fieldYear": "Year",
+		"fieldId": "Folder id",
+		"confirm": "Import",
+		"cancel": "Cancel",
+		"dropNoPath": "Could not read the dropped PDF. Try the magic wand → Import PDF, or drop from Finder again.",
+		"dropStageFailed": "Could not prepare the dropped PDF: {{detail}}"
+	},
 	"recycleBin": {
 		"open": "Recycle Bin",
 		"title": "Recycle Bin",
