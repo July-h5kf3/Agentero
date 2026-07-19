@@ -2,11 +2,6 @@
 - ACM 和 IEEE 的插件下载还有问题
 - Note MD 在下载有问题时初始化有问题
 
-## 7. Zotero 导入
-- Zotero 爬取的标签太多，Archive 上拉的标签可以去掉
-- Zotero 导入时创建的 note.md 应为中文摘要
-- Zotero 的 logs 及其他文件夹也被导入
-
 ## 8. 性能
 - Markdown 编辑器在编辑时卡顿
 
