@@ -1,23 +1,23 @@
-# PDF 划词提问（Selection Ask）
+# PDF 划词（Selection：高亮 / 批注 / 提问 / 翻译）
 
-> 状态：**MVP 已落地（前端 + 文件 IO）**；划词现先弹**操作菜单**（高亮 / 批注 / 提问 / 翻译），不再默认套用琥珀高亮。  
-> 范围：阅读 PDF 时选中文本 → 选区操作菜单 → 分派到高亮（JSON 落盘）/ 批注（高亮 + 内联评论）/ 提问（迷你对话框）/ 翻译（轻量结果卡，仅展示译文）。提问线程 JSON 落盘 + 页边圆片回访（飞书式边注）；**批注 = `comment` 非空的高亮**，页边批注针 + 右侧「批注」面板回访。  
-> 实现入口：`src/components/viewer/pdf-viewer.tsx`、`src/components/viewer/pdf-ask/`（含 `selection-menu.tsx`、`highlight-layer.tsx`、`annotation-editor.tsx`、`annotation-gutter.tsx`）、`src/components/viewer/annotations-panel.tsx`、`src/lib/pdf-ask/`、`src/lib/pdf-highlight/`。  
-> 相关：[`technical-plan.md`](technical-plan.md) §3.4 阅读器、[`translate.md`](translate.md)（应用级翻译服务；本菜单为消费方之一）、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md) Agent 契约。
+> 状态：**MVP 已落地（前端 + Vault 文件 IO）**。  
+> 范围：阅读 PDF 时选中文本 → **操作菜单** → 高亮 / 批注 / 提问 / 翻译；共用 **`activeCard` + `SelectionCard` + `SelectionGutter`**。  
+> **落盘（唯一）**：`papers/<id>/marks/<id>.json`，`kind` ∈ `highlight` \| `ask` \| `translate`（pretty JSON；**无** `asks/` / `highlights/` / `translates/` 兼容路径）。  
+> 批注 = `kind: highlight` 且 `comment` 非空；提问 / 翻译 / 批注均可页边针回访。  
+> 实现：`pdf-viewer.tsx`、`pdf-ask/*`、`lib/pdf-selection`（路径）、`lib/pdf-ask|pdf-highlight|pdf-translate`（类型与 IO）、`annotations-panel.tsx`。  
+> 相关：[`technical-plan.md`](technical-plan.md)、[`translate.md`](translate.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md)（问答复用 `agent_run_once`）。
 
 ## 1. 产品目标
 
-在 **中间栏 PDF 阅读** 场景下，用户对论文原文发起「就地提问」，而不是先跳到右侧 Agent 面板再手工粘贴上下文。
+在 **中间栏 PDF 阅读** 场景下，对原文就地 **高亮 / 批注 / 提问 / 翻译**，结果全部落在论文目录的 `marks/` 下，可重开与回访。
 
 | 交互 | 行为 |
 |---|---|
-| **划词** | 选中 PDF 文本后，在选区旁弹出**操作菜单**（5 色高亮 / 复制 / 批注 / 提问 / 翻译）；不默认高亮，只保留平滑蓝色选区覆盖层 |
-| **操作菜单** | 高亮→JSON 落盘（含 `color`，5 色调色板）并渲染半透明色带覆盖层；复制→复制选中原文（菜单内联「已复制」）；批注 / 提问 / 翻译共用 **`selection-card.tsx` 浮层壳**（视口边缘 clamp、`maxHeight` 按剩余空间动态计算、body 可滚动，避免溢出窗口）：批注 = `annotation-editor.tsx`（原文摘录 + 笔记输入；取消=放弃修改不删高亮；保存写 `comment`）；提问 = `ask-popover.tsx`（对话 + 输入）；翻译 = `translate-card.tsx`（仅译文；free 单次 / agent 流式，见 [`translate.md`](translate.md)） |
-| **双击** | 双击打开对话框，输入框预填页码（不选词、不高亮整页） |
-| **悬停停留** | 指针在某处静止超过阈值 \(T\)，弹出迷你问答卡 |
-| **键入提问** | 卡内输入问题并发送（`runOnce` + **`hideFromChatHistory`**，不进 Agent 对话历史）；**仅发送过问题的线程**保留对话图标 |
-| **对话图标** | 锚在选区附近；Hover 打开，离开约 1s 后隐藏 |
-| **回访** | Hover 图标打开线程；隐藏 / 删除；点击已有高亮出现删除浮层 |
+| **划词** | 选中文本 → **操作菜单**（5 色高亮 / 复制 / 批注 / 提问 / 翻译）；平滑蓝色选区覆盖层 |
+| **操作菜单** | 共用框架；落盘 **`marks/<id>.json`**（`kind` 区分）；滚动/缩放 **重定位** 卡片不关闭 |
+| **双击 / 悬停** | 直接开提问卡（页码上下文；悬停有防误触阈值） |
+| **提问** | `runOnce` + `hideFromChatHistory`；有用户消息后保留页边提问针 |
+| **回访** | `SelectionGutter`：提问 Hover 打开；批注/翻译点击打开；Hide 留针、Delete 删盘 |
 
 参考形态：浮层卡片 + 底部输入（类似常见 AI 浮层；本应用内需对齐 shadcn / AI Elements，且不引入外部 Chat 产品壳）。
 
@@ -33,22 +33,22 @@
 ```text
 中间栏 PdfViewer（react-pdf + pdf.js TextLayer）
         │
-        ├─ 选区 / 双击 / 悬停  →  AskTrigger
-        ├─ 迷你问答卡          →  AskPopover（AI Elements 子集）
-        ├─ 页边圆片层          →  AskGutter
-        │
-        ├─ 会话 IO             →  Host 读写 papers/<id>/asks/*.json
-        └─ 模型回答            →  既有 ACP Client（agent_run_once + 流式事件）
+        ├─ 划词 → SelectionMenu
+        ├─ activeCard: ask | annotate | translate
+        │     ├─ AskPopover / AnnotationEditor / TranslateCard（SelectionCard）
+        │     └─ 滚动/缩放 → placeActiveCard（不关卡）
+        ├─ SelectionGutter → 页边针
+        ├─ marks IO        → papers/<id>/marks/<id>.json
+        └─ 提问 / Agent 译 → agent_run_once + stream（hideFromChatHistory）
 ```
 
 | 已有能力 | 本功能用法 |
 |---|---|
-| `react-pdf` + `pdfjs-dist`（已开 `renderTextLayer`） | 选区与字符坐标来源 |
-| `PdfViewer`（`src/components/viewer/pdf-viewer.tsx`） | 扩展为带交互层的阅读器，而非平行第二套渲染 |
-| ACP / `agent_run_once` + `agent:stream` 等 | 问答传输；**不**新建模型 SDK、**不**在 Agentero 存 API Key |
-| AI Elements（Conversation / Message / PromptInput） | 迷你卡内消息列表与输入；传输仍是 ACP，不是 Vercel `useChat` |
-| Paper 文件夹 / Vault 文件 | 线程 JSON 落在 paper 目录，local-first |
-| `highlights.md`（L2.5 标注） | **首版不混写**；可选后续把「值得保留的引文」导出为 highlight |
+| `react-pdf` TextLayer | 选区与坐标 |
+| `PdfViewer` | 菜单 / activeCard / gutter / 落盘 |
+| ACP `agent_run_once` | 提问与可选 Agent 翻译 |
+| AI Elements | 提问卡 Conversation / PromptInput |
+| Vault 文件 | **仅** `marks/*.json` |
 
 ## 3. 技术栈分析
 
@@ -113,152 +113,128 @@ anchored   ── 写盘；页边圆片；popover 关闭
 **互斥与边界**：
 
 - 打开迷你卡时，不自动抢右侧 Agent 大面板焦点；可选「在 Agent 面板打开」升级路径（后续）。
-- 滚动 / 缩放时：popover 跟随锚点或临时隐藏，圆片重算 y。
+- 滚动 / 缩放时：activeCard **跟随锚点重定位**（不关闭）；页边针按归一化坐标重算。
 - 切换论文 / 关闭 Vault：flush 未保存消息后卸载层。
 - 悬停触发需 **防误触**：移动超过阈值像素则取消计时；编辑 NOTES 时不触发。
 
 ## 5. 数据模型（JSON 落盘）
 
-### 5.1 路径约定
-
-建议（与 paper 绑定、可备份、不进 catalog 权威表）：
+### 5.1 路径（唯一）
 
 ```text
 papers/<id>/
   NOTES.md
-  highlights.md
-  asks/                    # 本功能
-    index.json             # 可选：线程目录（id、page、updatedAt）
-    <threadId>.json        # 单线程完整记录
-  highlights/              # 划词高亮 / 批注 JSON
-  translates/              # 翻译事件（阅读热力图；不存译文）
-  reading-meta.json        # 可选：PDF pageCount（热图跨度）
-  1706.03762.pdf
-  ...
+  marks/
+    <id>.json              # 必填 kind: ask | highlight | translate
+  reading-meta.json        # 可选：PDF pageCount（热图）
+  *.pdf
 ```
 
-- **事实来源**：`asks/<threadId>.json`（人产生的问答）。
-- **可选索引**：`asks/index.json` 加速页边渲染（仅 id/page/y/preview）；丢失时可扫目录重建。
-- **不**把全文塞进 `.agentero/catalog.sqlite`；catalog 不承载对话正文。
+| 规则 | 说明 |
+|------|------|
+| 目录 | **仅** `marks/`；不使用 `asks/`、`highlights/`、`translates/` |
+| 格式 | pretty JSON；便于 Git diff |
+| 判别 | 每条 **`kind` 必填**；解析时 `kind` 不符则丢弃 |
+| catalog | **不**把正文写入 SQLite |
 
-### 5.2 线程 JSON Schema（逻辑）
+### 5.2 Schema（逻辑）
 
 ```ts
-/** papers/<id>/asks/<threadId>.json */
+/** papers/<id>/marks/<id>.json */
+
+// kind: "ask"
 interface PdfAskThread {
   version: 1;
-  id: string;                 // nanoid
-  paperPath: string;          // vault 相对路径
-  createdAt: string;          // ISO 8601
+  kind: "ask";
+  id: string;
+  paperPath: string;
+  createdAt: string;
   updatedAt: string;
   status: "open" | "ended";
-
-  /** 锚点：可重建 UI 位置 */
   anchor: {
-    page: number;             // 1-based
-    /** 0–1 归一化矩形，相对该页 viewport */
-    rects: { x: number; y: number; w: number; h: number }[];
-    /** 划词原文；双击/悬停可为空或短上下文 */
+    page: number;
+    rects: { x: number; y: number; w: number; h: number }[]; // 0–1
     quote?: string;
-    /** 触发方式，便于分析与调试 */
     trigger: "selection" | "dblclick" | "dwell";
   };
-
-  messages: PdfAskMessage[];
+  messages: {
+    id: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    createdAt: string;
+    agentSessionId?: string;
+  }[];
 }
 
-interface PdfAskMessage {
+// kind: "highlight"（comment 非空 = 批注）
+interface PdfHighlight {
+  version: 1;
+  kind: "highlight";
   id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
+  paperPath: string;
   createdAt: string;
-  /** 可选：ACP session / message 关联，便于调试 */
-  agentSessionId?: string;
-  sources?: { title?: string; uri?: string }[];
+  updatedAt: string;
+  page: number;
+  rects: { x: number; y: number; w: number; h: number }[];
+  quote: string;
+  color?: string;   // yellow|green|blue|pink|purple
+  comment?: string;
+}
+
+// kind: "translate"
+interface PdfTranslateRecord {
+  version: 1;
+  kind: "translate";
+  id: string;
+  paperPath: string;
+  createdAt: string;
+  updatedAt?: string;
+  page: number;
+  rects: { x: number; y: number; w: number; h: number }[];
+  quote?: string;
+  result?: string;
+  error?: string;
 }
 ```
+
+实现：`src/lib/pdf-selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
 
 ### 5.3 与 `highlights.md` 的边界
 
-| | `asks/*.json` | `highlights.md` |
+| | `marks/*.json` | `highlights.md`（规划） |
 |---|---|---|
-| 目的 | 多轮就地问答 | 引文 + 想法证据层 |
-| 形态 | JSON 线程 | Markdown 块引用 |
-| 首版 | **本功能唯一落盘** | 不自动写入 |
-| 后续 | 「保存为标注」可导出 quote+comment | Agent/笔记引用 `^id` |
+| 目的 | 阅读器标注/问答/翻译（运行时事实来源） | 便携 Markdown 引文证据层 |
+| 默认 | **读写均用 marks** | **不自动写入** |
+| 后续 | 可选导出 quote+comment | Agent/双链 `^id` |
 
-## 6. 前端模块划分（建议）
+## 6. 前端模块
 
 ```text
 src/components/viewer/
-  pdf-viewer.tsx              # 现有；挂载交互层与 gutter；暴露命令式 `PdfViewerHandle`
-                             #   （getHighlights / scrollToHighlight / editComment / deleteHighlight）
-                             #   + `onHighlightsChange` 回调，App.tsx 按 tab 保存 handle + highlights 驱动面板
-  annotations-panel.tsx       # 右侧「批注」tab：总览**当前活动 PDF tab** 的全部高亮/批注卡（颜色色条 + 页码 + 引文 + 可选评论）；点击跳转、悬停改注/删除；
-                             #   点击卡片滚动到原文并闪烁；卡片可编辑 / 删除
+  pdf-viewer.tsx                 # SelectionMenu + activeCard + gutter + IO
+  annotations-panel.tsx          # 右侧批注/提问总览
   pdf-ask/
-    ask-layer.tsx             # 捕获 selection / dblclick / dwell
-    ask-popover.tsx           # 迷你对话框（消息 + 输入）
-    ask-gutter.tsx            # 右侧圆片列表
-    ask-highlight.tsx         # 选区/已锚定高亮 overlay（可选）
-    annotation-editor.tsx     # 内联评论编辑器（选区旁 popover；新建/读取/编辑批注）
-    annotation-gutter.tsx     # 页边**批注针**（仅 comment 非空的高亮）；点击打开内联编辑器
-    use-pdf-geometry.ts       # DOMRect ↔ 归一化坐标
-    use-pdf-ask-store.ts      # 当前 paper 的 threads 加载/保存
-src/lib/pdf-ask/
-  types.ts
-  schema.ts                   # 校验 version / 字段
-  prompt.ts                   # 组装发给 Agent 的 prompt（含 quote/page）
+    selection-menu.tsx
+    selection-card.tsx           # 共用浮层（lockHeight 等）
+    selection-gutter.tsx         # 共用页边针
+    ask-popover.tsx | annotation-editor.tsx | translate-card.tsx
+    highlight-layer.tsx | highlight-menu.tsx
+src/lib/pdf-selection/           # marks-io + pin + ActiveSelectionCard
+src/lib/pdf-ask|pdf-highlight|pdf-translate/
 ```
 
-**UI 约定**（对齐 [`../frontend/ui.md`](../frontend/ui.md)）：
+**UI**：i18n `viewer`；图标 + Tooltip；卡片 Esc/收起/删除；滚动重定位。
 
-- 圆片：小尺寸、低对比；Hover Tooltip 显示 quote 截断 + 首问摘要。
-- 提问框：圆角矩形，只保留模型选择和发送按钮，上方是对话框
-- 迷你卡：限制最大高度，内部滚动；底部输入；结束/关闭为图标按钮 + `aria-label`。
-- 文案全部 i18n（建议 namespace `viewer` 或新建 `pdfAsk`）。
+## 7. Agent / 翻译 API
 
-## 7. Host / API 契约（规划）
+落盘 **不**经 Host `pdf_ask_*` command（当前前端 `plugin-fs` + `marks-io`）。
 
-首版可两路径之一（实现时二选一，推荐 A 以统一权限与路径校验）：
+**提问 / Agent 翻译**复用：
 
-### A. Host commands（推荐）
-
-| Command | 作用 |
-|---|---|
-| `pdf_ask_list` | `{ paperPath }` → 线程摘要列表（供 gutter） |
-| `pdf_ask_read` | `{ paperPath, threadId }` → 完整线程 |
-| `pdf_ask_write` | `{ paperPath, thread }` → 原子写 `asks/<id>.json` + 更新 index |
-| `pdf_ask_delete` | `{ paperPath, threadId }` | 
-
-写盘规则：仅 Vault 内路径；不覆盖用户其他文件；JSON pretty-print 便于 Git diff。
-
-### B. 前端 `plugin-fs` 直写
-
-- 实现快，但路径校验与原子写分散；多窗口并发时更易冲突。  
-- 若采用，仍须集中在 `src/lib/pdf-ask/io.ts`，后续可无痛迁 Host。
-
-**问答**复用既有：
-
-- `agent_run_once`：`prompt` 由 `prompt.ts` 注入 quote / page / 用户问题。
-- 事件：`agent:stream` / `agent:completed` / `agent:failed`（窗口定向不变）。
-
-**Prompt 骨架（示意）**：
-
-```text
-你在帮助用户阅读论文 PDF。
-页码: {page}
-对应的原文路径在{这里写tex路径或PAPER.md路径}
-引用原文:
-> {quote}
-
-用户问题:
-{question}
-
-请基于引用作答；不确定时明确说明。回答简洁，必要时分点。
-```
-
-可选增强：附加 `NOTES.md` 摘要或 `PAPER.md` 邻近段落（需 Host 读文件，注意 token 预算）。
+- `agent_run_once`（`hideFromChatHistory: true`）
+- `agent:stream` / `agent:completed` / `agent:failed`
+- 提问 prompt：`src/lib/pdf-ask/prompt.ts`；Agent/模型：`settings.pdfAsk`
+- 翻译：应用级 `translate` 服务（免费 MT 或 BYOA Agent，见 [`translate.md`](translate.md)）
 
 ## 8. 页边圆片布局算法
 
@@ -279,7 +255,7 @@ src/lib/pdf-ask/
 | **M3 ACP 接入** | 真流式回答；多轮；结束写盘 | 与 Agent 面板共用 provider 配置 | ✅ |
 | **M4 双击 / 悬停** | 触发完善；阈值暂固定（约 700ms） | 防误触可接受 | ✅ |
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
-| **M6 选区菜单** | 划词弹菜单：高亮（`highlights/*.json`）/ 批注 / 提问 / 翻译；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除 | ✅ |
+| **M6 选区菜单** | 划词弹菜单：高亮 / 批注 / 提问 / 翻译 → 统一 `marks/*.json`；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除 | ✅ |
 | **M7 批注（Zotero 式）** | 「批注」= 建高亮 + 内联编辑器写 `comment`；页边批注针；右侧「批注」面板（活动 PDF tab）列卡、跳转闪烁、编辑/删除；**不写 `NOTES.md`** | 新建/编辑/面板跳转/删除闭环；`comment` 落盘且 `version` 兼容 | ✅ |
 
 ## 10. 风险与降级
@@ -301,20 +277,18 @@ src/lib/pdf-ask/
 - 集成：mock `agent:stream` 完成一轮后文件存在且可再读。
 - 手工：长 PDF 滚动、窗口缩放、中英混排选区、双栏论文（rects 多段）。
 
-## 12. 文档与代码入口（落地时同步）
+## 12. 文档与代码入口
 
-实现时需同步：
-
-- [`../backend/data-model.md`](../backend/data-model.md)：增加 `asks/` 文件约定与类型。
-- [`../backend/api.md`](../backend/api.md)：`pdf_ask_*` 与 Agent prompt 约定。
-- [`../frontend/ui.md`](../frontend/ui.md)：PDF 中间栏交互与圆片规则。
-- [`roadmap.md`](roadmap.md) / [`todo.md`](todo.md)：勾选进度。
+- [`../backend/data-model.md`](../backend/data-model.md)：`marks/` 约定  
+- [`../frontend/ui.md`](../frontend/ui.md)：PDF 划词 UI  
+- [`translate.md`](translate.md)：翻译服务  
+- [`roadmap.md`](roadmap.md) / [`todo.md`](todo.md)
 
 ## 13. 决策摘要
 
-1. **渲染**：继续 `react-pdf` TextLayer，不引入第二套 PDF 引擎。  
-2. **交互**：选区 / 双击 / 悬停三触发 → 迷你问答卡 → 结束变页边圆片。  
-3. **存储**：`papers/<id>/asks/<threadId>.json`（用户要求的 JSON）；坐标归一化可重建。  
-4. **智能**：复用 ACP BYOA，不在 Agentero 内嵌模型 Key。  
-5. **UI**：AI Elements + shadcn；飞书式边注心智，不做完整批注产品首版。  
-6. **与 highlights**：分离；后续可选导出。
+1. **渲染**：`react-pdf` TextLayer。  
+2. **交互**：划词菜单 + 统一 activeCard；页边针回访。  
+3. **存储**：**仅** `papers/<id>/marks/<id>.json` + `kind`；坐标 0–1 归一化。  
+4. **智能**：ACP BYOA；不在应用内嵌模型 Key。  
+5. **UI**：SelectionCard / Gutter + AI Elements 提问卡。  
+6. **`highlights.md`**：可选将来导出，非运行时事实来源。

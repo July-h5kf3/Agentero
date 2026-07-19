@@ -206,7 +206,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 > MVP 阅读器以审阅、定位与就地提问为主，不实现完整 Hypothesis 式批注系统。
 
-**PDF 划词提问（MVP 已落地）**：选区 / 框选 / 双击 / 悬停 → 迷你问答卡 → `papers/<id>/asks/*.json` → 锚点对话图标回访。复用 TextLayer + ACP BYOA，不写入 PDF 二进制。详设与分期见 [`pdf-ask.md`](pdf-ask.md)。
+**PDF 划词（MVP 已落地）**：选区菜单（高亮/批注/提问/翻译）→ 统一 `papers/<id>/marks/<id>.json`（`kind`）→ 页边针回访。复用 TextLayer + ACP BYOA，不写 PDF 二进制。详设见 [`pdf-ask.md`](pdf-ask.md)。
 
 **翻译服务（首版已落地）**：应用级可插拔 `TranslateService`；**免费 MT**（Host `translate_text`：内置 Google gtx 或 LibreTranslate URL）与 **BYOA Agent**；设置 → **Translate**；PDF 划词为首个消费方。详设见 [`translate.md`](translate.md)。
 

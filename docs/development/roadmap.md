@@ -412,7 +412,7 @@
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - **Zotero Connector 兼容服务**（方案一，**MVP 已落地**）：Host 在 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；组织子文件夹可选；**`saveAttachment` 浏览器上传登录墙 PDF 已做**；见 [`../backend/connector.md`](../backend/connector.md) **§4.5**。仍待 P0：`saveSnapshot` / `saveSingleFile` / cookies。
 - 浏览器插件（可选后续）：自研扩展或 fork，可共用入库核心、不必抢 23119。
-- ~~**PDF 划词提问** MVP~~ ✅（划词弹操作菜单：高亮 / 批注 / 提问 / 翻译 → `asks/*.json` + `highlights/*.json`；**平滑蓝色选区覆盖层**（非默认琥珀高亮）；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级、TextLayer 增强。
+- ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级。
 - ~~**翻译服务**~~ ✅ 首版（见 [`translate.md`](translate.md)）：应用级可插拔 `TranslateService`；**免费 MT + BYOA Agent**（无付费 API）；设置 → **Translate**；PDF 划词为首个消费方。T4+ 更多引擎/消费方仍待。
 - ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板）。仍待：`highlights.md` 摘录同步 / 导出到 `NOTES.md`（暂不做）、与划词提问互导。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
@@ -522,8 +522,8 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 
 - [x] 从本地 Zotero 迁移（`zotero_scan` / `zotero_migrate`：直读 sqlite、可选拷 PDF、按 collection 建子文件夹、笔记 HTML→MD、PDF 批注文本、逐条选择 / 进度）；批注原位高亮渲染仍待。
 - [ ] 浏览器插件与网页 importer。
-- [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：划词操作菜单 高亮/批注/提问/翻译；`asks/*.json` 线程 + `highlights/*.json` 高亮 + 锚点图标 + ACP；M5 增强仍待）。
-- [x] PDF 标注系统（Zotero 式）：阅读器内就地批注（高亮 + 内联评论 `comment`）+ 页边批注针 + 右侧「批注」面板（活动 PDF tab；跳转闪烁 / 编辑 / 删除）；标注落 `highlights/*.json`，**不**写 `NOTES.md`。**导出到 `NOTES.md` 暂不做**（可能的后续）。
+- [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：划词操作菜单；统一 **`marks/*.json`**（kind: ask/highlight/translate）+ 页边针 + ACP；M5 增强仍待）。
+- [x] PDF 标注系统（Zotero 式）：阅读器内就地批注（高亮 + 内联评论 `comment`）+ 页边批注针 + 右侧「批注」面板（活动 PDF tab；跳转闪烁 / 编辑 / 删除）；标注落 **`marks/`**（`kind: highlight`），**不**写 `NOTES.md`。**导出到 `NOTES.md` 暂不做**。
 - [ ] PDF/HTML 统一标注系统与 `highlights.md` 互导（HTML iframe 标注仍待）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。

@@ -17,7 +17,7 @@ Agentero 的存储遵循两条原则:
 | L0 指令 | `AGENTS.md` | 会话开始,总是 | 极小 |
 | L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小(每篇一行) |
 | L2 条目 | `{paper}/NOTES.md` | 锁定某篇之后 | 小 |
-| L2.5 证据 | `{paper}/highlights.md` | 需要用户标注 / 精确引文 | 中 |
+| L2.5 证据 | `{paper}/marks/*.json`（运行时）；可选 `highlights.md` 导出 | 需要用户标注 / 精确引文 | 中 |
 | L3 正文 | `{paper}/PAPER.md` | 需要公式 / 实验细节 / 原文 | 大 |
 | L4 原始 | `{paper}/source/*` | 需追溯或重新解析 | 很大 |
 
@@ -48,7 +48,8 @@ agentero-vault/
 ├── papers/                # 文献区；可含组织子目录
 │   ├── 1706.03762/        # paper 单元（一级）
 │   │   ├── NOTES.md
-│   │   ├── highlights.md
+│   │   ├── marks/         # 划词标记 JSON（ask/highlight/translate）
+│   │   ├── highlights.md  # 可选导出，非默认
 │   │   ├── PAPER.md       # 可选
 │   │   ├── assets/
 │   │   └── source/
@@ -162,27 +163,32 @@ Vault 技能种子（Create Vault，已存在不覆盖；模板见 `templates/va
 - **页码 / bbox 等渲染坐标是纯 UI 数据**,可缓存于 `.agentero/`（catalog 同库缓存表或旁路文件）,按标注 id 关联;丢失后可用引文全文检索重新锚定。
 - 用 Obsidian 块引用 `^id`,让 `NOTES.md` 能精确引用某条标注:`[[papers/1706.03762/highlights#^h12]]`。
 
-### `asks/`（已落地 MVP：PDF 划词提问）
+### `marks/`（统一：PDF 划词标记）
 
-多轮「就地问答」线程，与 `highlights.md` **分离**：asks 存对话 JSON，highlights 存引文证据。设计与实现见 [`../development/pdf-ask.md`](../development/pdf-ask.md)；前端 `src/lib/pdf-ask/` + `PdfViewer` 交互层。
+划词后的 **提问 / 高亮·批注 / 翻译** 全部为 **JSON**，落在同一目录（pretty，便于 Git diff）：
 
-- 路径：`papers/<id>/asks/<threadId>.json`（可选 `asks/index.json` 目录）。
-- 含锚点（page + 归一化 rects + quote）与 `messages[]`；**不**写入 PDF 二进制，**不**进 catalog 正文。
-- 触发：划词 / 框选 / 双击 / 悬停；发送过问题后锚点旁对话图标可回访。
+```text
+papers/<id>/marks/<id>.json
+```
 
-### `highlights/`（已落地：PDF 划词高亮 + 批注）
+每条带 **`kind`** 判别器：
 
-划词后弹出的操作菜单（**高亮 / 批注 / 提问 / 翻译**）中，「高亮」与「批注」写入的持久化标注。与多轮问答 `asks/` 分离；「批注」= `comment` 非空的高亮（高亮 + 内联评论），纯高亮则 `comment` 为空。
+| `kind` | 含义 | 主要字段 |
+|--------|------|----------|
+| `ask` | 多轮就地提问 | `anchor`（page/rects/quote）、`messages[]`、`status` |
+| `highlight` | 高亮；`comment` 非空 = 批注 | `page`、`rects`、`quote`、`color?`、`comment?` |
+| `translate` | 划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
 
-- 路径：`papers/<id>/highlights/<id>.json`（pretty JSON，便于 Git diff）。
-- 字段：`version:1`、`id`、`paperPath`、`createdAt/updatedAt`、`page`、归一化 `rects[]`、`quote`、可选 `color`（预留调色板，缺省琥珀）、**可选 `comment?: string`**（非空 ⇒ 批注；`version` 保持 `1`，向后兼容）。
-- 归一化坐标可在缩放/重开后重定位；页面上点击已有高亮出现「删除」浮层；`comment` 非空的高亮在页边渲染**批注针**，点击打开内联编辑器读/改评论。
-- 右侧「批注」面板列出**当前活动 PDF tab** 的批注卡（页码 + 引文 + 评论），点击跳转闪烁、可编辑 / 删除；由 `PdfViewerHandle` + `onHighlightsChange` 驱动。
-- **不**污染原始 PDF、**不**进 catalog、**不**写入 `NOTES.md`（旧「追加引文到 `NOTES.md`」行为已移除）；坏文件读取时跳过。
-- 「翻译」走独立翻译卡（免费 MT 或 BYOA Agent）；为阅读热力图额外落盘轻量记录 `papers/<id>/translates/<id>.json`（`page` + 归一化 `rects` + 可选 `quote`），**不**存译文正文。
-- **阅读热力图**（论文库列）：聚合 `highlights/` + `asks/` + `translates/` 的位置与频次；可选 `{paper}/reading-meta.json`（`pageCount`，打开 PDF 时写入）标定全文跨度。见 [`../frontend/ui.md`](../frontend/ui.md) §3。
+- **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
+- 坐标均为页内归一化 0–1，缩放/重开可重建。
+- 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight` / `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
+- **阅读热力图**：聚合上述三类 mark 的 page + y；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
-格式示例:
+### `highlights.md`（L2.5，规划中的 Markdown 证据层）
+
+与 JSON marks **分离**：若将来导出引文块，可写便携 Markdown；当前阅读器标注以 `marks/` 为准。
+
+格式示例（导出形态，非默认落盘）:
 
 ```md
 ### ^h12 · p.3 §3.2

@@ -172,7 +172,7 @@
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
   - **列**：标题、作者、年份、**标签**、类型、标识符、**阅读热力图**；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签）；**双击**行打开对应 paper 文件夹。
-  - **阅读热力图**：聚合该篇 `highlights/`（划词高亮/批注）、`asks/`（对话）、`translates/`（翻译）的**页码 + 页内 y**，画成横向文档脊条（左=文首、右=文末；强度用主题 `primary` 的 `color-mix`，随 light/dark 变化）。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度；无元数据时用活动最大页。全库与文件夹作用域均显示。实现：`src/lib/reading-heatmap/`、`ReadingHeatmapBar`。
+  - **阅读热力图**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成横向文档脊条（左=文首、右=文末；强度用主题 `primary` 的 `color-mix`，随 light/dark 变化）。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度；无元数据时用活动最大页。全库与文件夹作用域均显示。实现：`src/lib/reading-heatmap/`、`ReadingHeatmapBar`。
   - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
@@ -240,8 +240,7 @@
   - **PDF 沉浸式阅读**（工具栏 `Maximize2` 进入 / `Minimize2` 或 `Esc` 退出）：折叠左右侧栏 + 隐藏中间栏头，PDF 铺满窗口；正文**限宽 ≤ 1100px 居中**（舒适阅读 + 两侧留白），缩放 / 页码 / 大纲 / 查找浮层照常；切到非 PDF tab 自动退出。i18n `viewer:pdf.zenEnter/zenExit`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
-    - 高亮：`papers/<id>/highlights/<id>.json`（含 `color`（yellow/green/blue/pink/purple），归一化坐标可重定位；调色板 `lib/pdf-highlight/palette.ts`）→ 页面半透明色带覆盖层；点击已有高亮出现「删除」浮层。**标注总览**：标题栏或 PDF 工具栏 💬（`MessageSquareText`）打开右侧栏「批注」tab（`viewer/annotations-panel.tsx`）→ 总览本篇全部高亮（颜色色条 + 页码 + 引文 + 可选备注），点击跳转闪烁 / 编辑备注 / 删除。批注：选中→「批注」= 建高亮 + 内联备注编辑器写 `comment`（**不写 `NOTES.md`**），页边批注针。提问复用迷你问答卡（ACP 流式）；**翻译**当前走 Agent，规划改为调用应用级翻译服务（免费 MT / BYOA Agent，设置 → Translate，见 [`../development/translate.md`](../development/translate.md)）；发送过问题后锚点旁保留对话图标（Hover 回访）。
-    - 提问线程落盘 `papers/<id>/asks/<threadId>.json`；高亮 / 提问 / 笔记均**不**写 PDF 二进制。
+    - 划词标记统一落盘 **`papers/<id>/marks/<id>.json`**（`kind`: `highlight` / `ask` / `translate`）。高亮含 `color` 调色板；批注 = `comment` 非空；提问为多轮 `messages`；翻译含 `result` 可回访。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。

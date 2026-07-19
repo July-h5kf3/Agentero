@@ -122,7 +122,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - 支持在应用内打开 arXiv HTML 或本地 HTML。
 - 支持基础搜索、缩放、页内定位。
 - 标注（引文 + 想法）以 `highlights.md` 落盘，坐标缓存于 `.agentero/`；MVP 提供轻量标注捕获，不做完整 PDF 批注同步系统。
-- 划词提问 MVP 已落地（`asks/*.json`）；完整批注同步仍属后续。
+- 划词（高亮/批注/提问/翻译）MVP 已落地（`marks/*.json`）；导出 `highlights.md` 仍属后续。
 
 #### 关系图谱
 
