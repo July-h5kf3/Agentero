@@ -23,6 +23,7 @@ export function parsePdfTranslateRecord(
 ): PdfTranslateRecord | null {
 	if (!isRecord(raw)) return null;
 	if (raw.version !== 1) return null;
+	if (raw.kind !== "translate") return null;
 	if (typeof raw.id !== "string" || !raw.id) return null;
 	if (typeof raw.paperPath !== "string") return null;
 	if (typeof raw.createdAt !== "string") return null;
@@ -31,6 +32,7 @@ export function parsePdfTranslateRecord(
 
 	const rec: PdfTranslateRecord = {
 		version: 1,
+		kind: "translate",
 		id: raw.id,
 		paperPath: raw.paperPath,
 		createdAt: raw.createdAt,
@@ -38,5 +40,8 @@ export function parsePdfTranslateRecord(
 		rects: raw.rects as PdfTranslateRect[],
 	};
 	if (typeof raw.quote === "string") rec.quote = raw.quote;
+	if (typeof raw.updatedAt === "string") rec.updatedAt = raw.updatedAt;
+	if (typeof raw.result === "string") rec.result = raw.result;
+	if (typeof raw.error === "string") rec.error = raw.error;
 	return rec;
 }

@@ -1,4 +1,3 @@
-import { readDir } from "@tauri-apps/plugin-fs";
 import { nanoid } from "nanoid";
 
 import {
@@ -11,19 +10,16 @@ import type {
 	PdfAskThread,
 	PdfAskThreadSummary,
 } from "@/lib/pdf-ask/types";
+import {
+	deleteMarkFile,
+	listMarkRaw,
+	readMarkRaw,
+	writeMarkFile,
+} from "@/lib/pdf-selection/marks-io";
 import { isTauri } from "@/lib/tauri";
-import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
 /** In-memory fallback when not running under Tauri (browser dev). */
 const memoryStore = new Map<string, Map<string, PdfAskThread>>();
-
-function asksDir(paperAbsPath: string): string {
-	return joinVaultPath(paperAbsPath, "asks");
-}
-
-function threadPath(paperAbsPath: string, threadId: string): string {
-	return joinVaultPath(asksDir(paperAbsPath), `${threadId}.json`);
-}
 
 function memoryBucket(paperAbsPath: string): Map<string, PdfAskThread> {
 	let b = memoryStore.get(paperAbsPath);
@@ -50,6 +46,7 @@ export function createEmptyThread(input: {
 	const now = new Date().toISOString();
 	return {
 		version: 1,
+		kind: "ask",
 		id: input.id ?? newThreadId(),
 		paperPath: input.paperPath,
 		createdAt: now,
@@ -71,27 +68,10 @@ export async function listPdfAskThreads(
 		);
 	}
 
-	const dir = asksDir(paperAbsPath);
-	let names: string[] = [];
-	try {
-		const entries = await readDir(dir);
-		names = entries
-			.map((e) => e.name)
-			.filter((n): n is string => Boolean(n?.endsWith(".json")));
-	} catch {
-		return [];
-	}
-
 	const threads: PdfAskThread[] = [];
-	for (const name of names) {
-		if (name === "index.json") continue;
-		try {
-			const raw = await readVaultFile(joinVaultPath(dir, name));
-			const parsed = parsePdfAskThread(JSON.parse(raw) as unknown);
-			if (parsed) threads.push(parsed);
-		} catch {
-			// skip corrupt
-		}
+	for (const raw of await listMarkRaw(paperAbsPath)) {
+		const parsed = parsePdfAskThread(raw);
+		if (parsed) threads.push(parsed);
 	}
 	threads.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 	return threads;
@@ -100,19 +80,7 @@ export async function listPdfAskThreads(
 export async function listPdfAskSummaries(
 	paperAbsPath: string,
 ): Promise<PdfAskThreadSummary[]> {
-	const threads = await listPdfAskThreads(paperAbsPath);
-	return threads.map((t) => {
-		const pin = threadPin(t);
-		return {
-			id: t.id,
-			page: t.anchor.page,
-			x: pin.x,
-			y: pin.y,
-			preview: threadPreview(t),
-			updatedAt: t.updatedAt,
-			status: t.status,
-		};
-	});
+	return toSummaries(await listPdfAskThreads(paperAbsPath));
 }
 
 export async function readPdfAskThread(
@@ -122,12 +90,8 @@ export async function readPdfAskThread(
 	if (!isTauri()) {
 		return memoryBucket(paperAbsPath).get(threadId) ?? null;
 	}
-	try {
-		const raw = await readVaultFile(threadPath(paperAbsPath, threadId));
-		return parsePdfAskThread(JSON.parse(raw) as unknown);
-	} catch {
-		return null;
-	}
+	const raw = await readMarkRaw(paperAbsPath, threadId);
+	return raw ? parsePdfAskThread(raw) : null;
 }
 
 export async function writePdfAskThread(
@@ -136,6 +100,7 @@ export async function writePdfAskThread(
 ): Promise<void> {
 	const next: PdfAskThread = {
 		...thread,
+		kind: "ask",
 		updatedAt: new Date().toISOString(),
 	};
 
@@ -144,8 +109,7 @@ export async function writePdfAskThread(
 		return;
 	}
 
-	const path = threadPath(paperAbsPath, next.id);
-	await writeVaultFile(path, `${JSON.stringify(next, null, 2)}\n`);
+	await writeMarkFile(paperAbsPath, next.id, next);
 }
 
 export async function deletePdfAskThread(
@@ -156,12 +120,7 @@ export async function deletePdfAskThread(
 		memoryBucket(paperAbsPath).delete(threadId);
 		return;
 	}
-	try {
-		const { remove } = await import("@tauri-apps/plugin-fs");
-		await remove(threadPath(paperAbsPath, threadId));
-	} catch {
-		// missing file is fine
-	}
+	await deleteMarkFile(paperAbsPath, threadId);
 }
 
 export function toSummaries(threads: PdfAskThread[]): PdfAskThreadSummary[] {

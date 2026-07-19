@@ -10,6 +10,8 @@ export type PdfHighlightRect = {
 
 export type PdfHighlight = {
 	version: 1;
+	/** marks/ discriminator */
+	kind: "highlight";
 	id: string;
 	/** Vault-relative paper folder when known; else absolute hint */
 	paperPath: string;

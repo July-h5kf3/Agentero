@@ -32,6 +32,8 @@ export type PdfAskMessage = {
 
 export type PdfAskThread = {
 	version: 1;
+	/** marks/ discriminator */
+	kind: "ask";
 	id: string;
 	/** Vault-relative paper folder when known; else absolute hint */
 	paperPath: string;

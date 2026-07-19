@@ -1,5 +1,6 @@
 export {
 	createTranslateRecord,
+	deletePdfTranslate,
 	listPdfTranslates,
 	newTranslateId,
 	writePdfTranslate,

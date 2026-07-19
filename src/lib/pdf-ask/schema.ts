@@ -5,6 +5,7 @@ import type {
 	PdfAskThread,
 	PdfAskTrigger,
 } from "@/lib/pdf-ask/types";
+import { pinFromRects } from "@/lib/pdf-selection/pin";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -80,6 +81,7 @@ function parseAnchor(v: unknown): PdfAskAnchor | null {
 export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 	if (!isRecord(raw)) return null;
 	if (raw.version !== 1) return null;
+	if (raw.kind !== "ask") return null;
 	if (typeof raw.id !== "string" || !raw.id) return null;
 	if (typeof raw.paperPath !== "string") return null;
 	if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") {
@@ -97,6 +99,7 @@ export function parsePdfAskThread(raw: unknown): PdfAskThread | null {
 	}
 	return {
 		version: 1,
+		kind: "ask",
 		id: raw.id,
 		paperPath: raw.paperPath,
 		createdAt: raw.createdAt,
@@ -147,19 +150,7 @@ export function threadTitle(
 
 /** Pin near the end of the selection (right-center of union rects). */
 export function threadPin(thread: PdfAskThread): { x: number; y: number } {
-	const rects = thread.anchor.rects;
-	if (!rects.length) return { x: 0.5, y: 0.12 };
-	let minY = 1;
-	let maxX = 0;
-	let maxY = 0;
-	for (const r of rects) {
-		minY = Math.min(minY, r.y);
-		maxX = Math.max(maxX, r.x + r.w);
-		maxY = Math.max(maxY, r.y + r.h);
-	}
-	const x = Math.min(0.98, Math.max(0.02, maxX + 0.008));
-	const y = Math.min(0.98, Math.max(0.02, (minY + maxY) / 2));
-	return { x, y };
+	return pinFromRects(thread.anchor.rects);
 }
 
 /** @deprecated use threadPin().y */
