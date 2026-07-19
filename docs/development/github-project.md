@@ -1,7 +1,8 @@
 # GitHub Project 结构（Agentero）
 
 > **Project**：[`poco-ai/Agentero` → Org Project #1](https://github.com/orgs/poco-ai/projects/1)（标题 **Agentero**）  
-> **语料**：`docs/development/todo.md`（未勾选）、`docs/development/bug.md`、远程 Vault WIP（PR #6 / `remote-vault.md`）  
+> **Roadmap 导航**：[**#41 ROADMAP**](https://github.com/poco-ai/Agentero/issues/41)（现状 / 开放 issue 地图 / 建议顺序；2026-07 起）  
+> **语料**：`docs/development/todo.md`（未勾选）、`docs/development/bug.md`、`docs/development/roadmap.md`  
 > **原则**：相似问题合成 **一条 Issue**；子任务写在 Issue body checklist。  
 > **Issue 已创建**（2026-07-19）：规划 ID → GitHub number 见 §3.0；看板已灌入 Project #1。  
 > **已修复记录**（如 `docs/bug_fix/`）不进 backlog，仅作对照。
@@ -82,7 +83,8 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 
 | 规划 ID | GitHub | Status |
 |---|---|---|
-| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | **Partial**（拖入卡死已修；metadata/NOTES 初始化仍开） |
+| **ROADMAP** | [#41](https://github.com/poco-ai/Agentero/issues/41) | **导航**（汇总现状 + 开放 issue；非交付项） |
+| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) → 并入 [#16](https://github.com/poco-ai/Agentero/issues/16) | **Closed**（跟进见 #16） |
 | **B2, B4–B8** | [#8](https://github.com/poco-ai/Agentero/issues/8), [#10](https://github.com/poco-ai/Agentero/issues/10)–[#14](https://github.com/poco-ai/Agentero/issues/14) | **Done** |
 | **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | **Done**（`vault_ensure` 打开时补种缺失 skills） |
 | F1–F14 | [#15](https://github.com/poco-ai/Agentero/issues/15)–[#28](https://github.com/poco-ai/Agentero/issues/28) | Todo |
