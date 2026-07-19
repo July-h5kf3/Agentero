@@ -424,14 +424,15 @@
 
 - [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
 - [x] **M1（Host + 部分 UI）** SSH/SFTP（`openssh`）+ `__local_sim__`；`remote_*` commands；欢迎页「打开远程」；树/读写 md 经 Host
-- [x] **M2（骨架）** catalog work mirror GET/PUT + conflict；`remote_paper_list` / `remote_paper_rescan`；单测
-- [x] **M3（部分）** `remote_agent_discover` + `agent_exec`（ssh spawn 工具函数）；**ACP 运行时尚未替换为 SshStdio**
-- [ ] **M4** 连接复用、atomic catalog 加固、远端 trash、入库写远端、PDF blob 缓存 LRU
+- [x] **M2** catalog work mirror GET/PUT + conflict；`remote_paper_list` / rescan / set_tags / set_is_read
+- [x] **M3** ACP over SSH（`to_acp_agent` + `run_once` / `warm`）；skill materialize；notes-review 读远端；Codex-SSH 明确拒绝
+- [x] PDF：`remote_cache_file` + `localBytesToViewerSource` / `findLocalPdfPath` 远程分支
+- [x] 最近远程列表 reopen（欢迎页）
+- [ ] **M4** 连接复用、远端 trash、入库写远端、blob LRU 淘汰策略
 - [x] i18n（en + zh-CN）远程对话框文案
-- [ ] 设置页远程项 / 最近远程 reopen
+- [ ] 设置页远程项
 - [ ] `docs/backend/api.md` 落地 command 契约
-- [ ] 远端 Agent `agent_run_once` / warm 完整接线
-- [ ] PDF 预览 `remote_read_bytes` → blob 全链路
+- [ ] Codex App Server 经 SSH 的原生 runtime
 
 ### 发布
 

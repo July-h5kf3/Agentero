@@ -12,6 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	getRecentRemoteVaults,
+	type RecentRemoteVault,
+	removeRecentRemoteVault,
+} from "@/lib/remote-vault";
 import { cn } from "@/lib/utils";
 import { vaultDisplayName } from "@/lib/vault";
 
@@ -47,6 +52,9 @@ export function VaultWelcome({
 	const [user, setUser] = useState("");
 	const [remotePath, setRemotePath] = useState("");
 	const [connecting, setConnecting] = useState(false);
+	const [recentRemotes, setRecentRemotes] = useState<RecentRemoteVault[]>(() =>
+		getRecentRemoteVaults(),
+	);
 
 	const submitRemote = async () => {
 		const h = host.trim();
@@ -59,7 +67,22 @@ export function VaultWelcome({
 				user: user.trim() || undefined,
 				remotePath: p,
 			});
+			setRecentRemotes(getRecentRemoteVaults());
 			setRemoteOpen(false);
+		} finally {
+			setConnecting(false);
+		}
+	};
+
+	const openRecentRemote = async (entry: RecentRemoteVault) => {
+		setConnecting(true);
+		try {
+			await onOpenRemoteVault({
+				host: entry.host,
+				user: entry.user,
+				remotePath: entry.remotePath,
+			});
+			setRecentRemotes(getRecentRemoteVaults());
 		} finally {
 			setConnecting(false);
 		}
@@ -120,7 +143,7 @@ export function VaultWelcome({
 					</Button>
 				</div>
 
-				{recentVaults.length > 0 ? (
+				{recentVaults.length > 0 || recentRemotes.length > 0 ? (
 					<div className="overflow-hidden rounded-lg border bg-background shadow-sm">
 						<div className="border-b px-3 py-2">
 							<p className="font-medium text-muted-foreground text-xs">
@@ -128,6 +151,48 @@ export function VaultWelcome({
 							</p>
 						</div>
 						<ul className="max-h-56 divide-y overflow-y-auto">
+							{recentRemotes.map((entry) => {
+								const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+								const name = entry.label || entry.remotePath;
+								return (
+									<li key={key} className="group flex items-stretch">
+										<button
+											type="button"
+											disabled={busy || connecting}
+											onClick={() => void openRecentRemote(entry)}
+											className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-muted/60 disabled:opacity-50"
+										>
+											<span className="flex w-full items-center gap-1.5 truncate font-medium text-sm">
+												<Server className="size-3 shrink-0 text-muted-foreground" />
+												<span className="truncate">{name}</span>
+												<span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+													{t("app:vault.remoteBadge")}
+												</span>
+											</span>
+											<span
+												className="w-full truncate text-[11px] text-muted-foreground"
+												title={`${entry.host}:${entry.remotePath}`}
+											>
+												{entry.host}:{entry.remotePath}
+											</span>
+										</button>
+										<button
+											type="button"
+											disabled={busy}
+											aria-label={t("vault.removeRecent", { name })}
+											title={t("vault.removeRecent", { name })}
+											onClick={(e) => {
+												e.stopPropagation();
+												removeRecentRemoteVault(entry);
+												setRecentRemotes(getRecentRemoteVaults());
+											}}
+											className="flex shrink-0 items-center px-2.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted/60 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-50"
+										>
+											<Trash2 className="size-3.5" />
+										</button>
+									</li>
+								);
+							})}
 							{recentVaults.map((path) => {
 								const name = vaultDisplayName(path);
 								return (

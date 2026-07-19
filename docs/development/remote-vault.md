@@ -1,6 +1,6 @@
 # 远程 Vault（SSH / SFTP）与远端 BYOA
 
-> **状态**：实现中（M0–M2 骨架 + UI 入口已落地；M3 远端 ACP 运行时未完整接线）  
+> **状态**：实现中（M0–M3 主体已落地；M4 加固与 Codex-SSH 仍待）  
 > **分支**：`docs/remote-vault-ssh`  
 > **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
 > **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO

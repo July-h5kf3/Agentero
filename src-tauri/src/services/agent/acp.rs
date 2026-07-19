@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-fn to_acp_agent(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
+fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
     let command = resolve_command(&desc.command).unwrap_or_else(|| PathBuf::from(&desc.command));
     let mut child_env: HashMap<String, String> = desc.env.clone();
     if !child_env.contains_key("PATH") {
@@ -46,6 +46,35 @@ fn to_acp_agent(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
         .args(desc.args.clone())
         .env(env);
     Ok(AcpAgent::new(McpServer::Stdio(stdio)))
+}
+
+/// Build ACP agent process. When `remote` is SSH, wrap launch as `ssh … 'cd vault && exec agent'`.
+/// Local-sim remotes use a normal local process with cwd = remote vault path.
+fn to_acp_agent(
+    desc: &AgentDescriptor,
+    remote: Option<&crate::services::remote::RemoteAgentTarget>,
+) -> Result<AcpAgent, AppError> {
+    if let Some(r) = remote {
+        if r.is_ssh() {
+            use crate::services::remote::agent_exec::remote_agent_shell_command;
+            if r.destination.is_empty() {
+                return Err(AppError::message("remote SSH destination is empty"));
+            }
+            let shell = remote_agent_shell_command(&r.remote_cwd, &desc.command, &desc.args);
+            let stdio = McpServerStdio::new(desc.name.clone(), PathBuf::from("ssh")).args(vec![
+                "-T".to_string(),
+                "-o".to_string(),
+                "BatchMode=yes".to_string(),
+                "-o".to_string(),
+                "ConnectTimeout=30".to_string(),
+                r.destination.clone(),
+                shell,
+            ]);
+            return Ok(AcpAgent::new(McpServer::Stdio(stdio)));
+        }
+        // local-sim: local binary, cwd set via NewSessionRequest to remote_cwd
+    }
+    to_acp_agent_local(desc)
 }
 
 fn text_from_content_block(block: &ContentBlock) -> Option<String> {
@@ -578,7 +607,7 @@ async fn await_user_permission(
 /// Spawn agent, initialize ACP, report agent info. Does not send a user prompt.
 pub async fn probe_agent(desc: &AgentDescriptor) -> ProbeResult {
     let agent_id = desc.id.clone();
-    let acp = match to_acp_agent(desc) {
+    let acp = match to_acp_agent(desc, None) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {
@@ -692,10 +721,20 @@ pub async fn run_once(
     permission_gate: PermissionGate,
     response_language: Option<String>,
     mut cancellation: watch::Receiver<bool>,
+    remote: Option<crate::services::remote::RemoteAgentTarget>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
+    // Skills: local vault path, or remote work_root after materializing SKILL.md from SFTP.
+    let skill_vault = if let Some(ref r) = remote {
+        if let Err(e) = crate::services::remote::materialize_skills_to_work(&r.session).await {
+            log::warn!(target: "agentero::agent", "materialize remote skills: {e}");
+        }
+        Some(r.work_root.to_string_lossy().into_owned())
+    } else {
+        vault_path.clone()
+    };
     let skill_instructions =
-        match load_skill_instructions(&skill_ids, vault_path.as_deref(), skill_style) {
+        match load_skill_instructions(&skill_ids, skill_vault.as_deref(), skill_style) {
             Ok(instructions) => instructions,
             Err(error) => {
                 let _ = app.emit(
@@ -729,12 +768,17 @@ pub async fn run_once(
         skill_instructions
     );
     let prompt_images = images;
-    let cwd = vault_path
-        .map(PathBuf::from)
-        .filter(|p| p.is_dir())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let cwd = if let Some(ref r) = remote {
+        r.agent_cwd()
+    } else {
+        vault_path
+            .as_ref()
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    };
 
-    let acp = match to_acp_agent(&desc) {
+    let acp = match to_acp_agent(&desc, remote.as_ref()) {
         Ok(agent) => agent,
         Err(error) => {
             let _ = app.emit(
@@ -1083,15 +1127,20 @@ pub async fn warm_agent(
     desc: AgentDescriptor,
     vault_path: Option<String>,
     preferred_model_id: Option<String>,
+    remote: Option<crate::services::remote::RemoteAgentTarget>,
 ) -> WarmResult {
     let agent_id = desc.id.clone();
     let session_id = Uuid::new_v4().to_string();
-    let cwd = vault_path
-        .map(PathBuf::from)
-        .filter(|p| p.is_dir())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let cwd = if let Some(ref r) = remote {
+        r.agent_cwd()
+    } else {
+        vault_path
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    };
 
-    let acp = match to_acp_agent(&desc) {
+    let acp = match to_acp_agent(&desc, remote.as_ref()) {
         Ok(a) => a,
         Err(e) => {
             return WarmResult {

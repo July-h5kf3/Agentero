@@ -241,6 +241,20 @@ export async function remoteAgentDiscover(sessionId: string): Promise<{
 	);
 }
 
+/** Download a remote file into Host cache; returns local absolute path. */
+export async function remoteCacheFile(
+	sessionId: string,
+	path: string,
+): Promise<string> {
+	const r = await unwrap(
+		invoke<ApiResult<{ localPath: string }>>("remote_cache_file", {
+			args: { sessionId, path },
+		}),
+		"Failed to cache remote file",
+	);
+	return r.localPath;
+}
+
 /** Session-scoped display metadata (not the handle itself). */
 const SESSION_META_KEY = "agentero-remote-session-meta";
 

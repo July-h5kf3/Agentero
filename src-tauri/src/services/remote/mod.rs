@@ -3,9 +3,14 @@
 
 pub mod agent_exec;
 pub mod catalog_mirror;
+pub mod launch;
 pub mod session;
 pub mod sftp_fs;
 
+pub use launch::{
+    materialize_skills_to_work, notes_rel_from_target, read_remote_note, resolve_remote_target,
+    RemoteAgentTarget,
+};
 pub use session::{
     parse_remote_handle, RemoteRegistry, RemoteSession, RemoteSessionInfo, LOCAL_SIM_HOST,
 };

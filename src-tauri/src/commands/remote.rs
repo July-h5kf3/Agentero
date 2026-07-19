@@ -225,6 +225,131 @@ pub async fn remote_paper_list(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePaperSetTagsArgs {
+    pub session_id: String,
+    pub path: String,
+    pub tags: Vec<papers::PaperTag>,
+}
+
+#[tauri::command]
+pub async fn remote_paper_set_tags(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemotePaperSetTagsArgs,
+) -> Result<ApiResult<PaperRecord>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let path = args.path.trim().trim_matches('/').replace('\\', "/");
+    if path.is_empty() {
+        return Ok(map_err(AppError::message("path is required")));
+    }
+    let row = match papers::set_tags(&session.work_root, &path, &args.tags) {
+        Ok(r) => r,
+        Err(e) => return Ok(map_err(e)),
+    };
+    {
+        let mut cat = session.catalog.lock().await;
+        if let Err(e) = cat.push(session.fs.clone()).await {
+            return Ok(map_err(e));
+        }
+    }
+    Ok(ApiResult::ok(row))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePaperSetIsReadArgs {
+    pub session_id: String,
+    pub path: String,
+    pub is_read: bool,
+}
+
+#[tauri::command]
+pub async fn remote_paper_set_is_read(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemotePaperSetIsReadArgs,
+) -> Result<ApiResult<PaperRecord>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let path = args.path.trim().trim_matches('/').replace('\\', "/");
+    if path.is_empty() {
+        return Ok(map_err(AppError::message("path is required")));
+    }
+    let row = match papers::set_is_read(&session.work_root, &path, args.is_read) {
+        Ok(r) => r,
+        Err(e) => return Ok(map_err(e)),
+    };
+    {
+        let mut cat = session.catalog.lock().await;
+        if let Err(e) = cat.push(session.fs.clone()).await {
+            return Ok(map_err(e));
+        }
+    }
+    Ok(ApiResult::ok(row))
+}
+
+/// Ensure a remote PDF (or other file) is cached under the session blob dir; return local path.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCacheFileArgs {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteCacheFileResult {
+    /// Absolute local path to cached bytes (ephemeral).
+    pub local_path: String,
+}
+
+#[tauri::command]
+pub async fn remote_cache_file(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteCacheFileArgs,
+) -> Result<ApiResult<RemoteCacheFileResult>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let rel = args.path.trim().trim_matches('/').replace('\\', "/");
+    if rel.is_empty() || rel.contains("..") {
+        return Ok(map_err(AppError::message("invalid path")));
+    }
+    let meta = match session.fs.stat(&rel).await {
+        Ok(m) => m,
+        Err(e) => return Ok(map_err(e)),
+    };
+    // Cache key: path + size + mtime
+    let key = format!("{rel}\0{}\0{}", meta.size, meta.mtime);
+    let hash = {
+        use sha2::{Digest, Sha256};
+        hex::encode(Sha256::digest(key.as_bytes()))
+    };
+    let ext = std::path::Path::new(&rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin");
+    let dest = session.blob_root.join(format!("{hash}.{ext}"));
+    if !dest.is_file() {
+        let bytes = match session.fs.read(&rel).await {
+            Ok(b) => b,
+            Err(e) => return Ok(map_err(e)),
+        };
+        if let Err(e) = std::fs::write(&dest, bytes) {
+            return Ok(map_err(AppError::Io(e)));
+        }
+    }
+    Ok(ApiResult::ok(RemoteCacheFileResult {
+        local_path: dest.to_string_lossy().into_owned(),
+    }))
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemotePaperRescanResult {
