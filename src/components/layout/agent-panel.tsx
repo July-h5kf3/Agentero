@@ -181,6 +181,12 @@ import {
 	warmAgent,
 } from "@/lib/agent";
 import {
+	buildMentionCandidatePaths,
+	filterMentionOptions,
+	loadRecentMentionPaths,
+	pushRecentMentionPath,
+} from "@/lib/agent-mention";
+import {
 	displayHistoryTitle,
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent-prompt-display";
@@ -1520,14 +1526,61 @@ export function AgentPanel({
 	);
 
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
-	const mentionQuery = mentionMatch?.[2]?.toLocaleLowerCase() ?? "";
+	/** Raw @query (preserve case for display; matching is case-insensitive). */
+	const mentionQueryRaw = mentionMatch?.[2] ?? "";
+	const mentionQuery = mentionQueryRaw.toLocaleLowerCase();
+
+	const mentionCandidates = useMemo(
+		() =>
+			buildMentionCandidatePaths({
+				markdownPaths: vaultMarkdownPaths,
+				directoryPaths: vaultDirectoryPaths,
+				paperPaths: vaultPaperPaths,
+			}),
+		[vaultDirectoryPaths, vaultMarkdownPaths, vaultPaperPaths],
+	);
+
+	const [recentMentionPaths, setRecentMentionPaths] = useState<string[]>(() => {
+		try {
+			return loadRecentMentionPaths(
+				typeof localStorage === "undefined" ? null : localStorage,
+				vaultPath,
+			);
+		} catch {
+			return [];
+		}
+	});
+
+	// Reload recents when Vault changes
+	useEffect(() => {
+		try {
+			setRecentMentionPaths(
+				loadRecentMentionPaths(
+					typeof localStorage === "undefined" ? null : localStorage,
+					vaultPath,
+				),
+			);
+		} catch {
+			setRecentMentionPaths([]);
+		}
+	}, [vaultPath]);
+
 	const mentionOptions = useMemo(() => {
 		if (!mentionMatch) return [];
-		return vaultMarkdownPaths
-			.filter((path) => path.toLocaleLowerCase().includes(mentionQuery))
-			.filter((path) => !contextPaths.includes(path))
-			.slice(0, 6);
-	}, [contextPaths, mentionMatch, mentionQuery, vaultMarkdownPaths]);
+		return filterMentionOptions({
+			candidates: mentionCandidates,
+			query: mentionQuery,
+			exclude: contextPaths,
+			recent: recentMentionPaths,
+			limit: 8,
+		});
+	}, [
+		contextPaths,
+		mentionCandidates,
+		mentionMatch,
+		mentionQuery,
+		recentMentionPaths,
+	]);
 
 	const skillMatch = composerText.match(/(^|\s)\$([^\s]*)$/);
 	const skillQuery = skillMatch?.[2]?.toLocaleLowerCase() ?? "";
@@ -2056,6 +2109,18 @@ export function AgentPanel({
 				.filter((p) => p.length > 0);
 			if (!normalized.length) return;
 			setMentionedPaths((prev) => [...new Set([...prev, ...normalized])]);
+			// Remember for empty-`@` recent hints (per Vault).
+			try {
+				const storage =
+					typeof localStorage === "undefined" ? null : localStorage;
+				let recents: string[] = [];
+				for (const path of normalized) {
+					recents = pushRecentMentionPath(storage, vaultPath, path);
+				}
+				if (recents.length) setRecentMentionPaths(recents);
+			} catch {
+				// ignore quota / private mode
+			}
 			setComposerMenuDismissed(true);
 			// Clear an in-progress @ query so the menu closes after attach.
 			setComposerText((prev) =>
@@ -3144,35 +3209,47 @@ export function AgentPanel({
 											role="listbox"
 											className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
 										>
-											{mentionOptions.map((path, index) => (
-												<button
-													key={path}
-													id={`agent-mention-option-${index}`}
-													type="button"
-													role="option"
-													aria-selected={mentionActiveIndex === index}
-													className={cn(
-														"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-														mentionActiveIndex === index
-															? "bg-muted"
-															: "hover:bg-muted/70",
-													)}
-													onMouseEnter={() => setMentionActiveIndex(index)}
-													onClick={() => attachMention(path)}
-												>
-													<ContextPathIcon
-														path={path}
-														directoryPaths={directoryPathSet}
-														paperPaths={paperPathSet}
-													/>
-													<span
-														className="min-w-0 flex-1 truncate"
-														title={path}
+											{mentionOptions.map((path, index) => {
+												const label = contextPathDisplayName(path);
+												const showPathHint =
+													label !== path && path.includes("/");
+												return (
+													<button
+														key={path}
+														id={`agent-mention-option-${index}`}
+														type="button"
+														role="option"
+														aria-selected={mentionActiveIndex === index}
+														className={cn(
+															"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+															mentionActiveIndex === index
+																? "bg-muted"
+																: "hover:bg-muted/70",
+														)}
+														onMouseEnter={() => setMentionActiveIndex(index)}
+														onClick={() => attachMention(path)}
 													>
-														{contextPathDisplayName(path)}
-													</span>
-												</button>
-											))}
+														<ContextPathIcon
+															path={path}
+															directoryPaths={directoryPathSet}
+															paperPaths={paperPathSet}
+														/>
+														<span className="min-w-0 flex-1 truncate">
+															<span className="block truncate" title={path}>
+																{label}
+															</span>
+															{showPathHint ? (
+																<span
+																	className="block truncate text-[11px] text-muted-foreground"
+																	title={path}
+																>
+																	{path}
+																</span>
+															) : null}
+														</span>
+													</button>
+												);
+											})}
 										</div>
 									) : null}
 									{showSkillMenu ? (

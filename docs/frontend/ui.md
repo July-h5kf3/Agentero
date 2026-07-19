@@ -345,7 +345,7 @@ PromptInput → Body / Footer / Submit
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
-**上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 **context chip**（图标 + 显示名，可移除）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+**上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 打开候选菜单：候选为 **论文文件夹 + 其它目录 + paper 外 Markdown**（paper 内 `NOTES.md` 等折叠为 paper 单元）；**空 `@`** 优先展示最近选用路径与浅层目录树（depth ≤ 2）；输入关键字按路径筛选。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 > **不**接 AI Elements `Attachments` 做 Vault 上下文：那套组件面向 `FileUIPart` 二进制附件（`prompt-input` 已装未对 ACP 传文件）；本产品上下文是 **路径引用**，与 `@` chip / `composer.contextInstruction` 一致。
 
