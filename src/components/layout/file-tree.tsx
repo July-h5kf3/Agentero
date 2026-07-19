@@ -1,5 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+	Check,
+	ChevronsUpDown,
 	Download,
 	FileCode2,
 	FileImage,
@@ -9,6 +11,7 @@ import {
 	FileType2,
 	FileUp,
 	FolderInput,
+	FolderOpen,
 	FolderPlus,
 	Library,
 	Loader2,
@@ -41,6 +44,14 @@ import {
 } from "@/components/ai-elements/file-tree";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -72,7 +83,7 @@ import {
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import type { FileNode } from "@/lib/vault";
+import { type FileNode, vaultDisplayName } from "@/lib/vault";
 
 /** Paper folders that need Download (no PDF / no source / no PAPER.md). */
 function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
@@ -1486,6 +1497,12 @@ export function VaultSidebarHeader({
 	 * Only reacts to positive values after mount.
 	 */
 	lookupOpenSignal = 0,
+	recentVaults,
+	vaultPath,
+	onOpenRecent,
+	onRemoveRecent,
+	onOpenVault,
+	onCreateVault,
 }: {
 	title: string;
 	onNewFile: () => void;
@@ -1499,8 +1516,14 @@ export function VaultSidebarHeader({
 	busy?: boolean;
 	isDemo: boolean;
 	lookupOpenSignal?: number;
+	recentVaults: string[];
+	vaultPath: string | null;
+	onOpenRecent: (path: string) => void;
+	onRemoveRecent: (path: string) => void;
+	onOpenVault: () => void;
+	onCreateVault: () => void;
 }) {
-	const { t } = useTranslation(["sidebar", "shortcuts"]);
+	const { t } = useTranslation(["sidebar", "shortcuts", "app"]);
 	const [wandOpen, setWandOpen] = useState(false);
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
@@ -1688,10 +1711,79 @@ export function VaultSidebarHeader({
 						</>
 					}
 				>
-					<AgenteroLogo className="size-4 shrink-0 text-foreground" />
-					<span className="truncate font-medium text-sm" title={title}>
-						{title}
-					</span>
+					<DropdownMenu>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-muted"
+										aria-label={t("app:vault.switchVault")}
+									>
+										<AgenteroLogo className="size-4 shrink-0 text-foreground" />
+										<span
+											className="truncate font-medium text-sm"
+											title={title}
+										>
+											{title}
+										</span>
+										<ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" />
+									</button>
+								</DropdownMenuTrigger>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("app:vault.switchVault")}
+							</TooltipContent>
+						</Tooltip>
+						<DropdownMenuContent align="start" className="w-64">
+							<DropdownMenuLabel>
+								{t("app:vault.recentTitle")}
+							</DropdownMenuLabel>
+							{recentVaults.map((p) => (
+								<DropdownMenuItem
+									key={p}
+									onSelect={() => onOpenRecent(p)}
+									className="group flex items-center gap-2"
+								>
+									{p === vaultPath ? (
+										<Check className="size-3.5 shrink-0" />
+									) : (
+										<span className="size-3.5 shrink-0" />
+									)}
+									<span className="min-w-0 flex-1">
+										<span className="block truncate text-sm">
+											{vaultDisplayName(p)}
+										</span>
+										<span className="block truncate text-muted-foreground text-xs">
+											{p}
+										</span>
+									</span>
+									<button
+										type="button"
+										className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground group-hover:block"
+										aria-label={t("app:vault.removeRecent", {
+											name: vaultDisplayName(p),
+										})}
+										onClick={(e) => {
+											e.stopPropagation();
+											onRemoveRecent(p);
+										}}
+									>
+										<X className="size-3" />
+									</button>
+								</DropdownMenuItem>
+							))}
+							<DropdownMenuSeparator />
+							<DropdownMenuItem onSelect={onOpenVault}>
+								<FolderOpen className="size-3.5" />
+								{t("app:vault.openVaultButton")}
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={onCreateVault}>
+								<FolderPlus className="size-3.5" />
+								{t("app:vault.createVaultButton")}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</PaneHeader>
 			</div>
 		</TooltipProvider>

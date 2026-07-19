@@ -13,7 +13,7 @@
 		"contents": "正文匹配",
 		"searching": "搜索中…",
 		"noResults": "无匹配",
-		"noVault": "请先打开 Vault 再搜索",
+		"noVault": "请先打开知识库再搜索",
 		"empty": "输入以搜索论文与笔记正文"
 	},
 	"titlebar": {
@@ -86,7 +86,8 @@
 		"recentEmpty": "暂无最近使用的知识库。",
 		"removeRecent": "从最近列表移除 {{name}}",
 		"recentMissing": "文件夹已不存在：{{path}}",
-		"openVaultButton": "打开知识库",
+		"switchVault": "切换知识库",
+		"openVaultButton": "打开知识库…",
 		"createVaultButton": "创建知识库",
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开知识库。"

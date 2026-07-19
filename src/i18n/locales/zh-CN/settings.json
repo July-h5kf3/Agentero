@@ -32,12 +32,12 @@
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
-			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前 Vault。请先退出 Zotero 桌面端（同端口互斥）。仅本机；默认关闭。",
+			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。仅本机；默认关闭。",
 			"statusListening": "监听中 {{address}}",
 			"statusOff": "已关闭",
 			"statusStarting": "启动中…",
 			"statusError": "错误：{{message}}",
-			"statusNoVault": "请先打开 Vault 才能接收保存",
+			"statusNoVault": "请先打开知识库才能接收保存",
 			"desktopOnly": "需要桌面应用。"
 		}
 	},

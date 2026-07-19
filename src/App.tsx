@@ -2435,6 +2435,12 @@ export default function App() {
 										busy={busy || libraryIoBusy !== null}
 										isDemo={isDemo}
 										lookupOpenSignal={lookupOpenSignal}
+										recentVaults={recentVaults}
+										vaultPath={vaultPath}
+										onOpenRecent={(p) => void handleOpenRecentVault(p)}
+										onRemoveRecent={handleRemoveRecentVault}
+										onOpenVault={() => void handleOpenVault()}
+										onCreateVault={() => void handleCreateVault()}
 									/>
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">

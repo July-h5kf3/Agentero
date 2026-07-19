@@ -86,7 +86,8 @@
 		"recentEmpty": "No recent vaults yet.",
 		"removeRecent": "Remove {{name}} from recent",
 		"recentMissing": "Folder no longer exists: {{path}}",
-		"openVaultButton": "Open vault",
+		"switchVault": "Switch vault",
+		"openVaultButton": "Open vault…",
 		"createVaultButton": "Create vault",
 		"runTauriPrefix": "Run the app with",
 		"runTauriSuffix": "to open a vault."
