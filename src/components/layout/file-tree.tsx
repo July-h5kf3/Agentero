@@ -135,28 +135,6 @@ function isVirtualTreePath(path: string): boolean {
 	return path === LIBRARY_VIRTUAL_PATH || path === TRASH_VIRTUAL_PATH;
 }
 
-function AgenteroLogo({ className }: { className?: string }) {
-	return (
-		<svg
-			viewBox="0 0 64 64"
-			fill="none"
-			aria-hidden="true"
-			className={className}
-		>
-			<path
-				d="M10 46 L10 18 L32 40 L54 18 L54 46"
-				stroke="currentColor"
-				strokeWidth="5"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-			/>
-			<circle cx="10" cy="18" r="4" fill="currentColor" />
-			<circle cx="32" cy="40" r="4" fill="currentColor" />
-			<circle cx="54" cy="18" r="4" fill="currentColor" />
-		</svg>
-	);
-}
-
 function fileIcon(name: string) {
 	if (/\.pdf$/i.test(name)) return FileType2;
 	if (/\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(name)) return FileImage;
@@ -1740,7 +1718,6 @@ export function VaultSidebarHeader({
 										className="flex min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-muted"
 										aria-label={t("app:vault.switchVault")}
 									>
-										<AgenteroLogo className="size-4 shrink-0 text-foreground" />
 										<span
 											className="truncate font-medium text-sm"
 											title={title}
