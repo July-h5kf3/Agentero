@@ -34,9 +34,6 @@ export function toPathSet(
 	return set;
 }
 
-/** @deprecated Use `toPathSet` — same implementation. */
-export const toDirectoryPathSet = toPathSet;
-
 export type ContextPathIconOptions = {
 	/** Vault-relative directories (org folders, notes dirs, paper folders, …). */
 	directoryPaths?: ReadonlySet<string> | null;
@@ -182,27 +179,11 @@ export function contextPathLabel(
  * Paper folders → ScrollText (same as file tree); other folders → Folder;
  * files → type-specific (PDF, image, code, …).
  */
-function isPathSet(
-	value: ContextPathIconOptions | ReadonlySet<string> | null | undefined,
-): value is ReadonlySet<string> {
-	return (
-		value != null &&
-		typeof value === "object" &&
-		typeof (value as ReadonlySet<string>).has === "function" &&
-		typeof (value as ReadonlySet<string>).size === "number" &&
-		!("directoryPaths" in value) &&
-		!("paperPaths" in value)
-	);
-}
-
 export function contextPathIcon(
 	path: string,
-	options?: ContextPathIconOptions | ReadonlySet<string> | null,
+	options?: ContextPathIconOptions | null,
 ): LucideIcon {
-	// Backward-compatible: second arg may be a directory Set only.
-	const opts: ContextPathIconOptions = isPathSet(options)
-		? { directoryPaths: options }
-		: (options ?? {});
+	const opts = options ?? {};
 
 	if (isPaperContextPath(path, opts.paperPaths)) {
 		return ScrollText;

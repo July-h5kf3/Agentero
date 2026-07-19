@@ -50,10 +50,7 @@ export type ShortcutDef = {
 	 * (settings, dialogs, command palette — see overlay-stack).
 	 */
 	whenSettingsOpen?: boolean;
-	/**
-	 * When true, only matches if no app overlay is open.
-	 * Name kept for compatibility; means “when overlays closed”.
-	 */
+	/** When true, only matches if no app overlay is open. */
 	whenSettingsClosed?: boolean;
 };
 
@@ -344,16 +341,11 @@ export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
 export function resolveShortcutId(
 	event: KeyboardEvent,
 	opts: {
-		/**
-		 * Any app overlay open (settings / dialogs / palette).
-		 * Historically named settingsOpen; kept for call-site compatibility.
-		 */
+		/** Any app overlay open (settings / dialogs / palette). */
 		settingsOpen: boolean;
-		/** @deprecated use settingsOpen — alias for any overlay */
-		overlayOpen?: boolean;
 	},
 ): ShortcutId | null {
-	const overlayOpen = opts.overlayOpen ?? opts.settingsOpen;
+	const overlayOpen = opts.settingsOpen;
 	const candidates = SHORTCUTS.flatMap((def) => {
 		const aliases = ALIASES[def.id] ?? [];
 		return [def, ...aliases];

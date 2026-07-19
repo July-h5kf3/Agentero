@@ -21,19 +21,3 @@ export function buildTranslatePrompt(opts: {
 	parts.push("Text:", `> ${text}`);
 	return parts.join("\n\n");
 }
-
-/**
- * @deprecated Prefer {@link buildTranslatePrompt}; kept for pdf-ask re-exports.
- */
-export function buildPdfTranslatePrompt(
-	quote: string,
-	page: number,
-	targetLang: string,
-): string {
-	return buildTranslatePrompt({
-		text: quote,
-		targetLangName: targetLang,
-		page,
-		surface: "pdf-selection",
-	});
-}

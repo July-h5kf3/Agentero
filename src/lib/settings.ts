@@ -142,34 +142,8 @@ export function loadSettings(): AppSettings {
 	try {
 		const raw = localStorage.getItem(SETTINGS_KEY);
 		if (!raw) return { ...DEFAULT_SETTINGS };
-		const parsed = JSON.parse(raw) as Partial<AppSettings> & {
-			agentBaseUrl?: string;
-			agentApiKey?: string;
-			agentModel?: string;
-			/** @deprecated replaced by agentPermissionMode */
-			agentYolo?: boolean;
-			/** @deprecated always download PDF on import */
-			downloadFulltextToLocal?: boolean;
-			downloadFulltextWhenNoRemotePreview?: boolean;
-		};
-		// Drop legacy BYOK / download-toggle fields if present.
-		const {
-			agentBaseUrl: _u,
-			agentApiKey: _k,
-			agentModel: _m,
-			agentYolo: _y,
-			downloadFulltextToLocal: _d1,
-			downloadFulltextWhenNoRemotePreview: _d2,
-			...rest
-		} = parsed;
-		const merged = { ...DEFAULT_SETTINGS, ...rest };
-		// Migrate legacy boolean YOLO into the permission-mode enum.
-		if (
-			parsed.agentYolo !== undefined &&
-			rest.agentPermissionMode === undefined
-		) {
-			merged.agentPermissionMode = parsed.agentYolo ? "auto" : "restricted";
-		}
+		const parsed = JSON.parse(raw) as Partial<AppSettings>;
+		const merged = { ...DEFAULT_SETTINGS, ...parsed };
 		// Empty / missing URL → product default
 		if (!merged.translatorBaseUrl?.trim()) {
 			merged.translatorBaseUrl = DEFAULT_TRANSLATOR_BASE_URL;

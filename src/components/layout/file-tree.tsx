@@ -329,10 +329,6 @@ type FileTreeProps = {
 	onSelectTrash?: () => void;
 	/** Download PDF (+ TeX if arXiv); no TeX → liteparse PAPER.md. */
 	onDownloadPaperAssets?: (paperNode: FileNode) => Promise<void>;
-	/**
-	 * @deprecated No longer used for Download visibility (kept for App prop compat).
-	 */
-	arxivPaperRelPaths?: ReadonlySet<string>;
 	/** Download missing assets for every incomplete paper (Library row). */
 	onDownloadAllMissingAssets?: () => Promise<void>;
 	/**

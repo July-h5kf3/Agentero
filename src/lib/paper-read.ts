@@ -246,38 +246,16 @@ export async function runPaperReaderWorkflow(opts: {
 		const skillStyle = skillMentionStyleForTemplate(template);
 		const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
 
-		let accepted: RunOnceAccepted;
-		try {
-			accepted = await runOnce({
-				vaultPath: opts.vaultRoot,
-				workflow: "paper_reader",
-				target: paperRel,
-				prompt: userPrompt,
-				skillIds: [PAPER_READER_SKILL_ID],
-				autoApprove: true,
-				// Background workflow — never surface in Agent chat history.
-				hideFromChatHistory: true,
-			});
-		} catch (skillErr) {
-			// Skill may be missing on older vaults — retry with workflow prompt only.
-			const msg =
-				skillErr instanceof Error ? skillErr.message : String(skillErr);
-			if (!/skill|not found/i.test(msg)) throw skillErr;
-			updateBackgroundTask(taskId, {
-				detail: i18n.t("app:tasks.paperReadStarting"),
-				progress: 10,
-			});
-			accepted = await runOnce({
-				vaultPath: opts.vaultRoot,
-				workflow: "paper_reader",
-				target: paperRel,
-				// Without skillIds Host won't inject body; keep full task wording.
-				prompt: userPrompt,
-				skillIds: [],
-				autoApprove: true,
-				hideFromChatHistory: true,
-			});
-		}
+		const accepted: RunOnceAccepted = await runOnce({
+			vaultPath: opts.vaultRoot,
+			workflow: "paper_reader",
+			target: paperRel,
+			prompt: userPrompt,
+			skillIds: [PAPER_READER_SKILL_ID],
+			autoApprove: true,
+			// Background workflow — never surface in Agent chat history.
+			hideFromChatHistory: true,
+		});
 
 		updateBackgroundTask(taskId, {
 			detail: i18n.t("app:tasks.paperReadRunning"),

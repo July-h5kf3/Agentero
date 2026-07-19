@@ -24,7 +24,6 @@ export function useAppShortcuts(
 		const onKeyDown = (event: KeyboardEvent) => {
 			const id = resolveShortcutId(event, {
 				settingsOpen: overlayOpenRef.current,
-				overlayOpen: overlayOpenRef.current,
 			});
 			if (!id) return;
 

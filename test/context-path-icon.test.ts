@@ -115,8 +115,8 @@ describe("context-path-icon", () => {
 		expect(isDirectoryContextPath("NOTES.md")).toBe(false);
 	});
 
-	it("accepts legacy directory Set as second argument", () => {
+	it("uses directoryPaths option for folder icons", () => {
 		const dirs = toPathSet(["notes"]);
-		expect(contextPathIcon("notes", dirs)).toBe(Folder);
+		expect(contextPathIcon("notes", { directoryPaths: dirs })).toBe(Folder);
 	});
 });

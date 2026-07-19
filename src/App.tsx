@@ -1762,18 +1762,6 @@ export default function App() {
 		[vaultPath, refreshTree, refreshLibrary, refreshTabNotes, t],
 	);
 
-	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
-	const arxivPaperRelPaths = useMemo(() => {
-		const set = new Set<string>();
-		for (const p of libraryPapers) {
-			if (!p.path) continue;
-			if (p.arxiv_id || p.type === "arxiv") {
-				set.add(p.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
-			}
-		}
-		return set;
-	}, [libraryPapers]);
-
 	/** Catalog rows by vault-relative path (for Zap / is_read). */
 	const paperMetaByRelPath = useMemo(() => {
 		const map = new Map<string, PaperMetadata>();
@@ -2081,7 +2069,7 @@ export default function App() {
 		async (tags: PaperTag[]) => {
 			if (!vaultPath || !paperMeta) return;
 			// Prefer catalog path on meta; fall back to the open paper folder so
-			// Zotero/legacy rows whose projection omitted `path` can still be edited.
+			// Projection may omit `path`; fall back to the open paper folder.
 			let path = (paperMeta.path ?? "")
 				.replace(/\\/g, "/")
 				.replace(/^\/+|\/+$/g, "");
@@ -2812,7 +2800,6 @@ export default function App() {
 										onSelectTrash={handleSelectTrash}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
-										arxivPaperRelPaths={arxivPaperRelPaths}
 										paperMetaByRelPath={paperMetaByRelPath}
 										paperTreeLabelMode={settings.paperTreeLabelMode}
 										paperTreeSortMode={settings.paperTreeSortMode}
