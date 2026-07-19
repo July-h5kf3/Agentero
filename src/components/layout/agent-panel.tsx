@@ -4,7 +4,6 @@ import {
 	CheckIcon,
 	ChevronDown,
 	CopyIcon,
-	FileText,
 	History,
 	Pencil,
 	Plus,
@@ -190,6 +189,7 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent-stream-parse";
+import { contextPathIcon, toPathSet } from "@/lib/context-path-icon";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
@@ -200,6 +200,16 @@ type AgentPanelProps = {
 	vaultPath: string | null;
 	selectedPath?: string | null;
 	vaultMarkdownPaths?: string[];
+	/**
+	 * Vault-relative directory paths from the file tree.
+	 * Used so context chips show a folder icon for org / notes dirs.
+	 */
+	vaultDirectoryPaths?: string[];
+	/**
+	 * Vault-relative **paper** folder paths (marker-based under `papers/`).
+	 * Chips use the same ScrollText paper icon as the file tree.
+	 */
+	vaultPaperPaths?: string[];
 	className?: string;
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
@@ -212,6 +222,22 @@ type AgentPanelProps = {
 	/** Open Settings → Agent (ACP backend registry). */
 	onOpenAgentSettings?: () => void;
 };
+
+/** Shared chip / mention-row icon (paper / folder / typed file). */
+function ContextPathIcon({
+	path,
+	directoryPaths,
+	paperPaths,
+}: {
+	path: string;
+	directoryPaths: ReadonlySet<string>;
+	paperPaths: ReadonlySet<string>;
+}) {
+	const Icon = contextPathIcon(path, { directoryPaths, paperPaths });
+	return (
+		<Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+	);
+}
 
 type ToolUiState = {
 	id: string;
@@ -598,6 +624,8 @@ export function AgentPanel({
 	vaultPath,
 	selectedPath = null,
 	vaultMarkdownPaths = [],
+	vaultDirectoryPaths = [],
+	vaultPaperPaths = [],
 	className,
 	headerActions,
 	autoFocus = false,
@@ -612,6 +640,15 @@ export function AgentPanel({
 		const relative = toVaultRelative(vaultPath, selectedPath);
 		return relative || null;
 	}, [selectedPath, vaultPath]);
+	/** O(1) lookups for context chip icons (paper → ScrollText, dir → Folder). */
+	const directoryPathSet = useMemo(
+		() => toPathSet(vaultDirectoryPaths),
+		[vaultDirectoryPaths],
+	);
+	const paperPathSet = useMemo(
+		() => toPathSet(vaultPaperPaths),
+		[vaultPaperPaths],
+	);
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -3007,7 +3044,11 @@ export function AgentPanel({
 															: t("composer.currentFileAdd")
 													}
 												>
-													<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+													<ContextPathIcon
+														path={currentFilePath}
+														directoryPaths={directoryPathSet}
+														paperPaths={paperPathSet}
+													/>
 													<span className="truncate" title={currentFilePath}>
 														{currentFilePath}
 													</span>
@@ -3026,7 +3067,11 @@ export function AgentPanel({
 													onClick={() => removeContextPath(path)}
 													title={t("composer.removeContext", { path })}
 												>
-													<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+													<ContextPathIcon
+														path={path}
+														directoryPaths={directoryPathSet}
+														paperPaths={paperPathSet}
+													/>
 													<span className="max-w-[16rem] truncate" title={path}>
 														{path}
 													</span>
@@ -3082,7 +3127,11 @@ export function AgentPanel({
 													onMouseEnter={() => setMentionActiveIndex(index)}
 													onClick={() => attachMention(path)}
 												>
-													<FileText className="size-3.5 shrink-0 text-muted-foreground" />
+													<ContextPathIcon
+														path={path}
+														directoryPaths={directoryPathSet}
+														paperPaths={paperPathSet}
+													/>
 													<span className="truncate">{path}</span>
 												</button>
 											))}

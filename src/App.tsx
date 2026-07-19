@@ -137,6 +137,7 @@ import {
 import { isMacOS, isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
+	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
@@ -265,8 +266,21 @@ export default function App() {
 		() => collectMarkdownRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
+	/** Directory paths for Agent context chip folder icons. */
+	const vaultDirPaths = useMemo(
+		() => collectDirectoryRelPaths(tree, vaultPath),
+		[tree, vaultPath],
+	);
 	/** Paper folders at any depth under papers/ (marker-based). */
 	const paperFolders = useMemo(() => collectPaperFoldersFromTree(tree), [tree]);
+	/** Vault-relative paper paths for Agent chip paper (ScrollText) icons. */
+	const vaultPaperPaths = useMemo(
+		() =>
+			paperFolders
+				.map((p) => toVaultRelative(vaultPath, p))
+				.filter((p) => p.length > 0),
+		[paperFolders, vaultPath],
+	);
 
 	const activeTab = useMemo(
 		() => tabs.find((t) => t.id === activeTabId) ?? null,
@@ -3053,6 +3067,8 @@ export default function App() {
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
 										vaultMarkdownPaths={vaultMdFiles}
+										vaultDirectoryPaths={vaultDirPaths}
+										vaultPaperPaths={vaultPaperPaths}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
 										variant={agentZenMode ? "zen" : "sidebar"}
