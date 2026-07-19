@@ -1,7 +1,8 @@
 /**
  * Vault library: table of all papers from catalog.sqlite (display only).
  * Click column headers to sort ascending / descending.
- * Single-click a cell to copy that field; double-click a row to open the paper.
+ * Single-click a cell to copy that field (deferred so double-click can cancel);
+ * double-click a row to open the paper without copying.
  * Reading heatmap column: highlight / ask / translate intensity along the PDF.
  * Optional tag filter chips above the table.
  */
@@ -60,6 +61,13 @@ export type PapersLibraryProps = {
 
 /** Data columns + fixed reading-heatmap column (not sortable). */
 const TABLE_COL_COUNT = 7;
+
+/**
+ * Delay before committing a cell-copy click.
+ * Must outlast a typical double-click interval so the first half of a
+ * double-click does not copy before `detail > 1` / `dblclick` can cancel it.
+ */
+const CELL_COPY_CLICK_DELAY_MS = 320;
 
 type SortKey = "title" | "authors" | "year" | "type" | "id" | "tags";
 type SortDir = "asc" | "desc";
@@ -271,6 +279,19 @@ export function PapersLibrary({
 	const [heatmaps, setHeatmaps] = useState<Map<string, ReadingHeatmap>>(
 		() => new Map(),
 	);
+	/** Pending cell-copy timer — cleared when a double-click opens the paper. */
+	const pendingCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+
+	const cancelPendingCopy = useCallback(() => {
+		if (pendingCopyTimerRef.current != null) {
+			clearTimeout(pendingCopyTimerRef.current);
+			pendingCopyTimerRef.current = null;
+		}
+	}, []);
+
+	useEffect(() => () => cancelPendingCopy(), [cancelPendingCopy]);
 
 	const handleSort = useCallback(
 		(key: SortKey) => {
@@ -309,13 +330,33 @@ export function PapersLibrary({
 		[t],
 	);
 
+	/**
+	 * Cell click → schedule copy. Double-click fires a second click with
+	 * `detail > 1` plus `dblclick` on the row; both cancel the pending copy
+	 * so opening a paper does not also write the clipboard.
+	 */
 	const onCellCopy = useCallback(
 		(e: ReactMouseEvent, text: string | null | undefined, label: string) => {
-			// Skip the second click of a double-click (row still opens paper).
-			if (e.detail > 1) return;
-			void copyField(text, label);
+			// Second (or later) click of a multi-click: abort any scheduled copy.
+			if (e.detail > 1) {
+				cancelPendingCopy();
+				return;
+			}
+			cancelPendingCopy();
+			pendingCopyTimerRef.current = setTimeout(() => {
+				pendingCopyTimerRef.current = null;
+				void copyField(text, label);
+			}, CELL_COPY_CLICK_DELAY_MS);
 		},
-		[copyField],
+		[cancelPendingCopy, copyField],
+	);
+
+	const openPaperFromRow = useCallback(
+		(paper: PaperMetadata) => {
+			cancelPendingCopy();
+			onOpenPaper(paper);
+		},
+		[cancelPendingCopy, onOpenPaper],
 	);
 
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
@@ -559,7 +600,7 @@ export function PapersLibrary({
 										data-index={vr.index}
 										ref={rowVirtualizer.measureElement}
 										className="border-b border-border/60 transition-colors hover:bg-muted/50"
-										onDoubleClick={() => onOpenPaper(p)}
+										onDoubleClick={() => openPaperFromRow(p)}
 									>
 										<td className="max-w-[420px] px-3 py-2.5">
 											<button
