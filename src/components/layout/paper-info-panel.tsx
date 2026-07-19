@@ -365,7 +365,7 @@ export function PaperInfoPanel({
 								<TagsEditor
 									tags={meta.tags ?? []}
 									// Editable whenever parent can persist; path is resolved in App
-									// (catalog path or paper folder) so Zotero/legacy rows still work.
+									// Prefer catalog path; else open paper folder.
 									disabled={!onTagsChange}
 									onChange={async (tags) => {
 										if (onTagsChange) await onTagsChange(tags);

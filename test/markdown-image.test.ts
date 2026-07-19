@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	collectImageUrlCounts,
+	createManagedAssetGc,
 	deleteRemovedManagedAssets,
 	formatMarkdownImageSyntax,
 	isManagedMarkdownAssetUrl,
@@ -124,6 +125,63 @@ describe("markdown-image path helpers", () => {
 		// no Tauri → managed delete returns 0
 		const n = await deleteRemovedManagedAssets("/vault/notes/x.md", prev, next);
 		expect(n).toBe(0);
+	});
+});
+
+describe("createManagedAssetGc", () => {
+	it("schedules delete on drop and cancels when the url returns", async () => {
+		const deleted: string[] = [];
+		const timers = new Map<ReturnType<typeof setTimeout>, () => void>();
+		let id = 0;
+		const setTimer = ((fn: () => void, _ms?: number) => {
+			const handle = ++id as unknown as ReturnType<typeof setTimeout>;
+			timers.set(handle, fn);
+			return handle;
+		}) as typeof setTimeout;
+		const clearTimer = ((handle: ReturnType<typeof setTimeout>) => {
+			timers.delete(handle);
+		}) as typeof clearTimeout;
+
+		const gc = createManagedAssetGc({
+			debounceMs: 1000,
+			setTimer,
+			clearTimer,
+			deleteAsset: async (_md, url) => {
+				deleted.push(url);
+				return true;
+			},
+		});
+
+		const md = "/vault/notes/x.md";
+		const url = "./assets/a.png";
+		gc.observe(md, new Map([[url, 1]]), new Map());
+		expect(gc.pendingUrls()).toEqual([url]);
+		expect(deleted).toEqual([]);
+
+		// Paste / undo before timer → cancel
+		gc.observe(md, new Map(), new Map([[url, 1]]));
+		expect(gc.pendingUrls()).toEqual([]);
+		// fire any leftover timers (should be none)
+		for (const fn of timers.values()) fn();
+		expect(deleted).toEqual([]);
+
+		// Drop again and flush
+		gc.observe(md, new Map([[url, 1]]), new Map());
+		expect(gc.pendingUrls()).toEqual([url]);
+		const n = await gc.flush();
+		expect(n).toBe(1);
+		expect(deleted).toEqual([url]);
+		expect(gc.pendingUrls()).toEqual([]);
+	});
+
+	it("ignores remote urls", () => {
+		const gc = createManagedAssetGc({
+			debounceMs: 10,
+			deleteAsset: async () => true,
+		});
+		gc.observe("/vault/a.md", new Map([["https://x/y.png", 1]]), new Map());
+		expect(gc.pendingUrls()).toEqual([]);
+		gc.cancelAll();
 	});
 });
 

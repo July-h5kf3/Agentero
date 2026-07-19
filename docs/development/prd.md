@@ -71,7 +71,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - 将 metadata 写入 `.agentero/catalog.sqlite`，作为该篇结构化元数据的事实来源。
 - 优先获取 arXiv LaTeX source 作为结构化来源；HTML/PDF 作为人类阅读补充。
 - 仅在无 LaTeX source 或 Agent/用户需要时才生成 `PAPER.md`；有 source 时直接保留原始 `.tex`。
-- 生成 `NOTES.md`（默认三段论结构），并创建空的 `highlights.md` 供标注写入。
+- 生成 `NOTES.md`（默认三段论结构）；划词标注写入 `marks/*.json`。
 - 不自动写根目录 `PAPERS.md` / `library.bib`；需要时由 `catalog:export_*` 导出。
 - 对重复入库、网络失败、缺少 HTML/LaTeX、解析失败给出明确状态。
 
@@ -83,7 +83,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - 元数据混合获取 + 入库前确认：先从 PDF 提取 DOI / arXiv ID 并查询 Crossref / arXiv 获取权威元数据；无标识符或查询失败时由 Agent 从正文抽取候选；入库前弹出确认面板供用户校对、修正标题、作者、年份、摘要与标签。
 - 为每篇创建 `papers/<citekey>/` 目录（citekey 由作者、年份、标题派生，冲突时追加后缀），catalog 写入 `type=pdf`。
 - 原始 PDF 保存到 `source/`；因无 LaTeX source，PDF 来源必定生成 `PAPER.md` 作为唯一可读正文，并在 catalog 记录 `body_source`（`pdf`/`ocr`）与 `body_quality`。
-- 生成 `NOTES.md` 与空的 `highlights.md`，更新 catalog。
+- 生成 `NOTES.md` 壳，更新 catalog。
 - 使用云端 MinerU 前需明确提示用户 PDF 将上传至第三方服务；默认本地解析不外传数据。
 
 #### Markdown 工作台
@@ -109,10 +109,10 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（Keep / Revert）。
+- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（统一 Diff + Keep / Revert）；**当前论文默认 context** + **个人偏好提示词**（`agentPersonalPrompt`）。
 - 面板空态建议 chips 接通上述 workflow；`AGENTS.md` 自动注入 workflow prompt 仍待。
 - 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
-- Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `highlights.md` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
+- Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `marks/` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
 - Agent 输出必须展示读取过的文件路径；Agent 改写笔记后用户可在写后审阅中保留或还原（写前草稿拦截仍待加强）。
 - 未检测到可用 Agent 时，设置与 Agent 面板展示安装/配置指引，不阻塞 Vault 与阅读功能。
 
@@ -121,8 +121,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - 支持在应用内打开 PDF。
 - 支持在应用内打开 arXiv HTML 或本地 HTML。
 - 支持基础搜索、缩放、页内定位。
-- 标注（引文 + 想法）以 `highlights.md` 落盘，坐标缓存于 `.agentero/`；MVP 提供轻量标注捕获，不做完整 PDF 批注同步系统。
-- 划词（高亮/批注/提问/翻译）MVP 已落地（`marks/*.json`）；导出 `highlights.md` 仍属后续。
+- 划词（高亮/批注/提问/翻译）以 `marks/*.json` 落盘（坐标页内归一化）；不做完整 Zotero 原位批注同步。
 
 #### 关系图谱
 
@@ -162,7 +161,7 @@ agentero-vault/
   papers/
     1706.03762/          # arxiv 用 arXiv ID；非 arxiv 用 citekey
       NOTES.md           # L2 结构化笔记
-      highlights.md      # L2.5 标注：引文 + 想法
+      marks/             # L2.5 划词标注 JSON（highlight/ask/translate）
       PAPER.md           # L3 派生可读正文（可选）
       assets/            # 引用图：用户插入（NOTES 旁 ./assets）与/或解析派生
       source/            # L4 原始归档（始终存在，只增不改）
@@ -200,9 +199,9 @@ agentero-vault/
 # 效果怎么样
 ```
 
-#### `highlights.md`（L2.5，事实来源）
+#### `marks/`（L2.5，划词标注）
 
-单篇论文的标注层，与 `NOTES.md` 分开存放：笔记是「熟的」综合知识，标注是「生的」原始证据（锚定原文位置的引文 + 想法）。引文与想法留在 Markdown（事实来源），页码/bbox 等坐标缓存于 `.agentero/`（可由引文检索重建）；用 Obsidian 块引用 `^id`，让 `NOTES.md` 能精确引用某条标注。
+PDF 划词后的高亮 / 批注 / 提问 / 翻译，以 `marks/<id>.json`（`kind` 判别）落盘。与 `NOTES.md` 分开：笔记是综合知识，marks 是锚定原文位置的交互证据。详见 [`pdf-ask.md`](pdf-ask.md)。
 
 #### `PAPER.md`（L3，派生）
 
@@ -212,7 +211,7 @@ agentero-vault/
 
 Vault 内的 Agent 行为规范，至少包含：
 
-- 读取协议：L1 以 catalog / 可选导出为准；锁定篇目后按 `NOTES.md → highlights.md → PAPER.md → source/` 下钻。
+- 读取协议：L1 以 catalog / 可选导出为准；锁定篇目后按 `NOTES.md → marks/ → PAPER.md → source/` 下钻。
 - 笔记结构规范（三段论）。
 - 引用路径要求：回答必须列出读取过的本地文件路径。
 - 生成内容的双链要求。
@@ -240,7 +239,7 @@ Vault 内的 Agent 行为规范，至少包含：
 6. 系统创建 `papers/<id>/`（arxiv 用 arXiv ID，非 arxiv 用 citekey），metadata 写入 catalog。
 7. 系统**默认下载 PDF** 到 `source/`；arXiv **另下载 e-print 并解压 LaTeX** 到 `source/`（catalog 仍保留远程 URL 供预览）。
 8. 若无 LaTeX source 或需要可读结构化正文，系统可生成 `PAPER.md`（后续）。
-9. 生成占位 `NOTES.md`，并创建空的 `highlights.md`（Agent 深化仍规划）。
+9. 生成占位 `NOTES.md`（Agent 深化 / paper-reader 仍规划）。
 10. 系统将 metadata 写入 catalog；不自动写 `PAPERS.md` / `library.bib`（可按需导出）。
 11. 用户进入 paper 视图 / `NOTES.md` 审阅和修订。
 
@@ -252,7 +251,7 @@ Vault 内的 Agent 行为规范，至少包含：
 4. 系统弹出确认面板，展示标题、作者、年份、摘要、标签，用户校对并修正。
 5. 系统据此生成 citekey，检测重复（DOI / 标题指纹），创建 `papers/<citekey>/` 并将 metadata 写入 catalog。
 6. 原始 PDF 保存到 `source/`；按当前解析器（默认本地，配置 Key 后优先 MinerU）全文解析生成 `PAPER.md` 与 `assets/`。
-7. Agent 生成 `NOTES.md`，创建空的 `highlights.md`。
+7. Agent 生成 `NOTES.md`。
 8. 系统更新 catalog（可按需 export PAPERS.md / BibTeX）。
 9. 用户进入 `NOTES.md` 审阅和修订。
 
@@ -260,7 +259,7 @@ Vault 内的 Agent 行为规范，至少包含：
 
 1. 用户在 Agent 面板输入问题。
 2. Agent 先根据 catalog 列表或 `papers/*/NOTES.md` 锁定候选论文。
-3. Agent 读取相关 `NOTES.md`，必要时读取 `highlights.md` 获取用户标注。
+3. Agent 读取相关 `NOTES.md`，必要时读取 `marks/` 获取用户标注。
 4. 仅当需要公式、实验细节或原文时读取 `PAPER.md`，最后才进入 `source/`。
 5. Agent 输出答案。
 6. 答案末尾展示读取过的文件路径。

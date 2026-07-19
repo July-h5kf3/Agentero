@@ -54,20 +54,9 @@ function parseAnchor(v: unknown): PdfAskAnchor | null {
 	if (!isRecord(v)) return null;
 	if (typeof v.page !== "number" || !Number.isFinite(v.page)) return null;
 	if (!Array.isArray(v.rects) || !v.rects.every(isRect)) return null;
-	// Accept legacy "marquee" files as selection anchors (image crop removed)
 	const triggerRaw = v.trigger;
-	const trigger: PdfAskTrigger =
-		triggerRaw === "dblclick" || triggerRaw === "dwell"
-			? triggerRaw
-			: "selection";
-	if (
-		triggerRaw !== "selection" &&
-		triggerRaw !== "dblclick" &&
-		triggerRaw !== "dwell" &&
-		triggerRaw !== "marquee"
-	) {
-		if (!isTrigger(triggerRaw)) return null;
-	}
+	if (!isTrigger(triggerRaw)) return null;
+	const trigger: PdfAskTrigger = triggerRaw;
 	const anchor: PdfAskAnchor = {
 		page: Math.max(1, Math.floor(v.page)),
 		rects: v.rects as PdfAskNormalizedRect[],
@@ -151,9 +140,4 @@ export function threadTitle(
 /** Pin near the end of the selection (right-center of union rects). */
 export function threadPin(thread: PdfAskThread): { x: number; y: number } {
 	return pinFromRects(thread.anchor.rects);
-}
-
-/** @deprecated use threadPin().y */
-export function threadY(thread: PdfAskThread): number {
-	return threadPin(thread).y;
 }

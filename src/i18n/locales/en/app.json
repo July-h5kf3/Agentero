@@ -34,6 +34,8 @@
 		"vaultRefresh": "Refresh File Tree",
 		"vaultReveal": "Reveal in Finder",
 		"vaultTerminal": "Open in Terminal",
+		"vaultCollapseTreeCurrent": "Collapse Selected Folder",
+		"vaultCollapseTreeDefault": "Collapse Tree to papers/ Only",
 		"viewToggleSidebar": "Toggle Sidebar",
 		"viewToggleChat": "Toggle Chat",
 		"viewAgentZen": "Toggle Agent Zen Mode",
@@ -97,7 +99,8 @@
 		"cannotPreview": "Cannot preview this file type: {{name}}",
 		"openVaultForLinks": "Open a vault before navigating vault-relative links.",
 		"openVaultForGraph": "Open a vault before navigating graph links.",
-		"openVaultForCreate": "Open a vault before creating wikilink targets."
+		"openVaultForCreate": "Open a vault before creating wikilink targets.",
+		"dropPdfNeedsVault": "Open a vault before importing dropped PDFs."
 	},
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",
@@ -134,7 +137,8 @@
 		"remoteNoTerminal": "Open in Terminal is not available for remote vaults.",
 		"remoteDeleteDirect": "Remote delete removes files on the server (no recycle bin).",
 		"runTauriPrefix": "Run the app with",
-		"runTauriSuffix": "to open a vault."
+		"runTauriSuffix": "to open a vault.",
+		"skillsSeeded": "Installed {{count}} new skill(s): {{names}}"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"

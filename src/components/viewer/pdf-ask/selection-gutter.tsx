@@ -114,7 +114,7 @@ export function SelectionGutter({
 								? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
 								: item.kind === "translate"
 									? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
-									: "border-border/80 bg-background text-primary",
+									: "border-border/80 bg-background text-muted-foreground",
 							activeId === item.id && "ring-2 ring-ring ring-offset-1",
 						)}
 						style={{ left: `${pos.leftPct}%`, top: `${pos.topPct}%` }}

@@ -31,6 +31,9 @@ describe("paper folder minimal unit", () => {
 			]),
 		).toBe(true);
 		expect(
+			directoryHasPaperMarkers([{ name: "marks", kind: "directory" }]),
+		).toBe(true);
+		expect(
 			directoryHasPaperMarkers([{ name: "readme.md", kind: "file" }]),
 		).toBe(false);
 		expect(
@@ -56,7 +59,7 @@ describe("paper folder minimal unit", () => {
 				"/vault/papers/nlp/transformers/1706.03762/source/original.pdf",
 			),
 		).toBe("/vault/papers/nlp/transformers/1706.03762");
-		expect(paperDirFromPath("papers/a/b/highlights.md")).toBe("papers/a/b");
+		expect(paperDirFromPath("papers/a/b/marks/hl-1.json")).toBe("papers/a/b");
 		expect(paperDirFromPath("/vault/notes/idea.md")).toBe(null);
 	});
 
@@ -280,8 +283,31 @@ describe("sortFileTreeNodes", () => {
 
 	const toRel = (abs: string) => abs.replace(/^\/v\//, "");
 
-	it("folder mode sorts directories by name (org + paper mixed)", () => {
-		const names = sortFileTreeNodes(siblings, "folder").map((n) => n.name);
+	it("folder mode sorts by display label (labelMode) not disk folder name", () => {
+		// title-author labels: Attention, BERT, beta-org, Zebra (not disk alpha/mid/zeta)
+		const names = sortFileTreeNodes(
+			siblings,
+			"folder",
+			byRel,
+			toRel,
+			"title-author",
+		).map((n) => n.name);
+		expect(names).toEqual([
+			"alpha-paper", // Attention · Vaswani
+			"mid-paper", // BERT · Devlin
+			"beta-org",
+			"zeta-paper", // Zebra Methods · Zulu
+		]);
+	});
+
+	it("folder mode with labelMode folder keeps disk name order", () => {
+		const names = sortFileTreeNodes(
+			siblings,
+			"folder",
+			byRel,
+			toRel,
+			"folder",
+		).map((n) => n.name);
 		expect(names).toEqual([
 			"alpha-paper",
 			"beta-org",

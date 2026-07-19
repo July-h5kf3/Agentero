@@ -9,7 +9,8 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 const editorContainerVariants = cva(
-	"relative w-full cursor-text select-text overflow-y-auto caret-primary selection:bg-brand/25 focus-visible:outline-none [&_.slate-selection-area]:z-50 [&_.slate-selection-area]:border [&_.slate-selection-area]:border-brand/25 [&_.slate-selection-area]:bg-brand/15",
+	// Neutral selection (not brand blue) so selected text stays readable in light/dark.
+	"relative w-full cursor-text select-text overflow-y-auto caret-foreground selection:bg-foreground/15 focus-visible:outline-none [&_.slate-selection-area]:z-50 [&_.slate-selection-area]:border [&_.slate-selection-area]:border-foreground/20 [&_.slate-selection-area]:bg-foreground/10",
 	{
 		defaultVariants: {
 			variant: "default",

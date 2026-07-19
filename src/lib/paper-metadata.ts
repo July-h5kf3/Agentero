@@ -12,7 +12,7 @@ import { toVaultRelative } from "@/lib/wiki";
 
 export type { PaperTag, PaperTagInput };
 
-/** Ensure `tags` is a normalized `PaperTag[]` (handles legacy string elements). */
+/** Ensure `tags` is a normalized `PaperTag[]`. */
 export function withNormalizedTags(meta: PaperMetadata): PaperMetadata {
 	return {
 		...meta,
@@ -22,10 +22,10 @@ export function withNormalizedTags(meta: PaperMetadata): PaperMetadata {
 
 /**
  * Paper metadata: **authoritative store is** Vault `.agentero/catalog.sqlite`.
- * `metadata.json` is a projection synced after catalog writes (not the read path).
+ * `metadata.json` is a write-side projection for rescan / external tools (not the read path).
  *
  * **Paper folder = minimal unit** under `papers/` at any depth.
- * PDF preview: **local file first** → download if missing → remote `pdf_url` fallback.
+ * PDF preview: local file first → download if missing → remote `pdf_url`.
  * HTML preview: remote `html_url` only.
  */
 /** Creator from Translator / Zotero item mapping. */
@@ -55,8 +55,8 @@ export type PaperMetadata = {
 	date?: string;
 	abstract?: string;
 	/**
-	 * Tags from catalog. May arrive as bare strings (legacy) or
-	 * `{ name, color? }` (colored). UI should coerce via `coercePaperTags`.
+	 * Tags from catalog: bare string or `{ name, color? }`.
+	 * UI should coerce via `coercePaperTags`.
 	 */
 	tags: PaperTagInput[];
 	arxiv_id?: string;
@@ -90,10 +90,7 @@ export type PaperMetadata = {
 	extra?: string;
 	summary?: string;
 	status: "pending" | "importing" | "completed" | "failed";
-	/**
-	 * Whether paper-reader workflow has finished for this paper.
-	 * Catalog schema v3; default false when missing (legacy rows).
-	 */
+	/** Whether paper-reader workflow has finished for this paper. */
 	is_read?: boolean;
 	added_at: string;
 	updated_at: string;
@@ -108,13 +105,12 @@ export type PaperPdfOrigin = "local" | "remote";
 /** Direct-child names that mark a directory as a paper folder. */
 export const PAPER_FILE_MARKERS = [
 	"NOTES.md",
-	"highlights.md",
 	"PAPER.md",
 	"metadata.json",
 ] as const;
 
 /** Direct-child directory names that mark a paper folder. */
-export const PAPER_DIR_MARKERS = ["source", "assets"] as const;
+export const PAPER_DIR_MARKERS = ["source", "assets", "marks"] as const;
 
 const PDF_NAME_RE = /\.pdf$/i;
 const TEX_NAME_RE = /\.(tex|ltx)$/i;
@@ -199,14 +195,8 @@ export function paperAssetDownloadReasons(
 	return reasons;
 }
 
-/**
- * Show file-tree Download when PDF / source / readable body is incomplete.
- * (`canFetchTex` kept for call-site compatibility; no longer gates visibility.)
- */
-export function paperNeedsAssetDownload(
-	node: TreeWalkNode,
-	_opts?: { canFetchTex?: boolean },
-): boolean {
+/** Show file-tree Download when PDF / source / readable body is incomplete. */
+export function paperNeedsAssetDownload(node: TreeWalkNode): boolean {
 	return paperAssetDownloadReasons(node).length > 0;
 }
 
@@ -227,18 +217,6 @@ export function paperNeedsRead(
 ): boolean {
 	if (!paperAssetsComplete(node)) return false;
 	return !(meta?.is_read === true);
-}
-
-/**
- * @deprecated Prefer paperNeedsAssetDownload / paperNeedsRead.
- * Kept for residual callers: missing PAPER.md path when no TeX.
- */
-export function paperNeedsBodyParse(node: TreeWalkNode): boolean {
-	return (
-		paperHasLocalPdf(node) &&
-		!paperHasLocalTex(node) &&
-		!paperHasLocalPaperMd(node)
-	);
 }
 
 /** Folder-name heuristic: looks like bare arXiv id. */
@@ -374,7 +352,6 @@ export function directoryHasPaperMarkers(
 		const lower = name.toLowerCase();
 		if (
 			lower === "notes.md" ||
-			lower === "highlights.md" ||
 			lower === "paper.md" ||
 			lower === "metadata.json"
 		) {
@@ -383,8 +360,12 @@ export function directoryHasPaperMarkers(
 		const isDir =
 			c.kind === "directory" ||
 			// name-only lists: treat known dir markers as dirs
-			(!c.kind && (lower === "source" || lower === "assets"));
-		if (isDir && (lower === "source" || lower === "assets")) {
+			(!c.kind &&
+				(lower === "source" || lower === "assets" || lower === "marks"));
+		if (
+			isDir &&
+			(lower === "source" || lower === "assets" || lower === "marks")
+		) {
 			return true;
 		}
 	}
@@ -434,20 +415,22 @@ export function paperDirFromPath(
 	}
 
 	// Known paper-root files → parent is paper folder
-	const fileMarker = /\/(NOTES\.md|highlights\.md|PAPER\.md|metadata\.json)$/i;
+	const fileMarker = /\/(NOTES\.md|PAPER\.md|metadata\.json)$/i;
 	if (fileMarker.test(norm)) {
 		return norm.replace(fileMarker, "") || null;
 	}
 
-	// …/source/… or …/assets/… → paper is parent of source|assets
+	// …/source|assets|marks/… → paper is parent of that segment
 	const nestedAsset = norm.match(
-		/^(.*\/papers\/.+?)\/(source|assets)(?:\/|$)/i,
+		/^(.*\/papers\/.+?)\/(source|assets|marks)(?:\/|$)/i,
 	);
 	if (nestedAsset?.[1]) {
 		return nestedAsset[1];
 	}
-	// Vault-relative without leading drive: papers/…/source/…
-	const nestedAssetRel = norm.match(/^(papers\/.+?)\/(source|assets)(?:\/|$)/i);
+	// Vault-relative without leading drive: papers/…/source|marks/…
+	const nestedAssetRel = norm.match(
+		/^(papers\/.+?)\/(source|assets|marks)(?:\/|$)/i,
+	);
 	if (nestedAssetRel?.[1]) {
 		return nestedAssetRel[1];
 	}
@@ -653,7 +636,7 @@ function joinDir(parent: string, name: string): string {
 /**
  * Find first local PDF under a paper folder.
  * Prefer root-level `*.pdf` (canonical `{id}.pdf`), then shallow recursive
- * (legacy under `source/`, etc.). Max depth 4.
+ * under nested dirs (e.g. `source/`). Max depth 4.
  */
 export async function findLocalPdfPath(
 	paperDir: string,
@@ -762,33 +745,6 @@ export function canAttemptPdfDownload(
 	return false;
 }
 
-/** Normalize legacy camelCase keys from early Host writes. */
-function normalizeMetadataKeys(
-	raw: Record<string, unknown>,
-): Record<string, unknown> {
-	const out: Record<string, unknown> = { ...raw };
-	const aliases: [string, string][] = [
-		["pdfUrl", "pdf_url"],
-		["htmlUrl", "html_url"],
-		["sourceUrl", "source_url"],
-		["arxivId", "arxiv_id"],
-		["bibtexKey", "bibtex_key"],
-		["zoteroItemType", "zotero_item_type"],
-		["metaSource", "meta_source"],
-		["bodySource", "body_source"],
-		["bodyQuality", "body_quality"],
-		["citationCount", "citation_count"],
-		["addedAt", "added_at"],
-		["updatedAt", "updated_at"],
-	];
-	for (const [camel, snake] of aliases) {
-		if (out[snake] == null && out[camel] != null) {
-			out[snake] = out[camel];
-		}
-	}
-	return out;
-}
-
 function enrichArxivUrls(data: PaperMetadata): PaperMetadata {
 	if (!data.arxiv_id) return data;
 	const urls = arxivUrls(data.arxiv_id);
@@ -822,11 +778,10 @@ export function paperCatalogPath(
 }
 
 /**
- * Load paper metadata. Prefer catalog.sqlite via Host `paper_get`.
- * Falls back to `metadata.json` only when catalog has no row (legacy).
+ * Load paper metadata from catalog.sqlite via Host `paper_get`.
  *
- * Always sets `path` (vault-relative) when `vaultRoot` is known so Paper Info
- * can edit tags even when the projection file has no path field.
+ * Always sets `path` (vault-relative) when `vaultRoot` is known.
+ * Projection file `metadata.json` is write-only for rescan / external tools.
  *
  * @param paperDir absolute paper folder path
  * @param vaultRoot absolute vault root (needed for catalog lookup)
@@ -836,52 +791,36 @@ export async function loadPaperMetadata(
 	vaultRoot?: string | null,
 ): Promise<PaperMetadata | null> {
 	const path = paperCatalogPath(paperDir, vaultRoot);
+	if (!isTauri() || !vaultRoot || !path) return null;
 
 	// Primary: SQLite catalog (local vault path or remote work mirror)
-	if (isTauri() && vaultRoot && path) {
-		try {
-			const { isRemoteVaultHandle, remotePaperGet, remoteSessionIdFromHandle } =
-				await import("@/lib/remote-vault");
-			let data: PaperMetadata | null = null;
-			if (isRemoteVaultHandle(vaultRoot)) {
-				const sessionId = remoteSessionIdFromHandle(vaultRoot);
-				if (sessionId) {
-					data = (await remotePaperGet(sessionId, { path })) as PaperMetadata;
-				}
-			} else {
-				const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
-					args: { vaultPath: vaultRoot, path },
-				});
-				if (res.ok && res.data) data = res.data;
-			}
-			if (data?.id) {
-				return withNormalizedTags(
-					enrichArxivUrls({
-						...data,
-						path: data.path ?? path,
-					}),
-				);
-			}
-		} catch {
-			// fall through
-		}
-	}
-
-	// Legacy projection only (path is intentionally omitted from the file)
 	try {
-		const raw = await readVaultFile(metadataPathForPaper(paperDir));
-		const parsed = JSON.parse(raw) as Record<string, unknown>;
-		const data = normalizeMetadataKeys(parsed) as unknown as PaperMetadata;
-		if (!data?.id) return null;
-		return withNormalizedTags(
-			enrichArxivUrls({
-				...data,
-				path: data.path ?? path,
-			}),
-		);
+		const { isRemoteVaultHandle, remotePaperGet, remoteSessionIdFromHandle } =
+			await import("@/lib/remote-vault");
+		let data: PaperMetadata | null = null;
+		if (isRemoteVaultHandle(vaultRoot)) {
+			const sessionId = remoteSessionIdFromHandle(vaultRoot);
+			if (sessionId) {
+				data = (await remotePaperGet(sessionId, { path })) as PaperMetadata;
+			}
+		} else {
+			const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
+				args: { vaultPath: vaultRoot, path },
+			});
+			if (res.ok && res.data) data = res.data;
+		}
+		if (data?.id) {
+			return withNormalizedTags(
+				enrichArxivUrls({
+					...data,
+					path: data.path ?? path,
+				}),
+			);
+		}
 	} catch {
-		return null;
+		// catalog miss or Host error
 	}
+	return null;
 }
 
 /**
@@ -932,7 +871,7 @@ export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
  * How children under each folder are ordered in the file tree (Settings → General).
  * Display-only; does not rename or move disk folders.
  *
- * - `folder`: directory name A–Z (historical default)
+ * - `folder`: display label A–Z (uses `paperTreeLabelMode` for papers; org folders by name)
  * - `title` / `author`: catalog fields, missing → folder name
  * - `year-desc` / `year-asc`: publication year; missing year last
  * - `added-desc`: catalog `added_at` newest first; missing last
@@ -1000,6 +939,11 @@ export function sortFileTreeNodes(
 	mode: PaperTreeSortMode,
 	metaByRelPath?: ReadonlyMap<string, PaperMetadata> | null,
 	toRelPath?: (absPath: string) => string,
+	/**
+	 * How paper rows are labeled in the tree. Used when sorting by display name
+	 * (`folder` mode and name tie-breaks) so order matches what the user sees.
+	 */
+	labelMode: PaperTreeLabelMode = "title-author",
 ): FileNode[] {
 	const relOf = (absPath: string) =>
 		toRelPath
@@ -1011,14 +955,26 @@ export function sortFileTreeNodes(
 		return metaByRelPath.get(relOf(node.path)) ?? null;
 	};
 
+	/** Sort key for directories: papers use tree display label, orgs use folder name. */
+	const displayKey = (node: FileNode): string => {
+		if (node.kind === "file") return node.name;
+		if (isPaperDirectory(node.path, node.children)) {
+			return formatPaperTreeLabel(labelMode, metaOf(node), node.name);
+		}
+		return node.name;
+	};
+
 	const compare = (a: FileNode, b: FileNode): number => {
 		if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
 
 		// Files always by name
 		if (a.kind === "file") return cmpName(a.name, b.name);
 
-		// Historical default: all directories by folder name (org + paper mixed)
-		if (mode === "folder") return cmpName(a.name, b.name);
+		// Default: mixed org + paper by **display** name (matches tree labels)
+		if (mode === "folder") {
+			const c = cmpName(displayKey(a), displayKey(b));
+			return c !== 0 ? c : cmpName(a.name, b.name);
+		}
 
 		const aPaper = isPaperDirectory(a.path, a.children);
 		const bPaper = isPaperDirectory(b.path, b.children);
@@ -1031,15 +987,15 @@ export function sortFileTreeNodes(
 		const bm = metaOf(b);
 
 		if (mode === "title") {
-			const at = (am?.title ?? "").trim() || a.name;
-			const bt = (bm?.title ?? "").trim() || b.name;
+			const at = (am?.title ?? "").trim() || displayKey(a);
+			const bt = (bm?.title ?? "").trim() || displayKey(b);
 			const c = cmpName(at, bt);
 			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
 
 		if (mode === "author") {
-			const aa = firstAuthorKey(am) || a.name.toLowerCase();
-			const ba = firstAuthorKey(bm) || b.name.toLowerCase();
+			const aa = firstAuthorKey(am) || displayKey(a).toLowerCase();
+			const ba = firstAuthorKey(bm) || displayKey(b).toLowerCase();
 			const c = cmpName(aa, ba);
 			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
@@ -1053,7 +1009,8 @@ export function sortFileTreeNodes(
 			if (ay !== null && by !== null && ay !== by) {
 				return mode === "year-desc" ? by - ay : ay - by;
 			}
-			return cmpName(a.name, b.name);
+			const c = cmpName(displayKey(a), displayKey(b));
+			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
 
 		// added-desc
@@ -1063,7 +1020,8 @@ export function sortFileTreeNodes(
 		const bMissing = bt === null;
 		if (aMissing !== bMissing) return aMissing ? 1 : -1;
 		if (at !== null && bt !== null && at !== bt) return bt - at;
-		return cmpName(a.name, b.name);
+		const c = cmpName(displayKey(a), displayKey(b));
+		return c !== 0 ? c : cmpName(a.name, b.name);
 	};
 
 	return [...nodes].sort(compare).map((n) => {
@@ -1072,7 +1030,13 @@ export function sortFileTreeNodes(
 		// still sort for consistency if inspected.
 		return {
 			...n,
-			children: sortFileTreeNodes(n.children, mode, metaByRelPath, toRelPath),
+			children: sortFileTreeNodes(
+				n.children,
+				mode,
+				metaByRelPath,
+				toRelPath,
+				labelMode,
+			),
 		};
 	});
 }

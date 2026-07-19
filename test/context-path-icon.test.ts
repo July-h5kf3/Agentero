@@ -1,10 +1,13 @@
 import { FileText, FileType2, Folder, ScrollText } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import {
+	contextPathDisplayName,
 	contextPathIcon,
+	contextPathLabel,
 	isDirectoryContextPath,
 	isPaperContextPath,
 	normalizeContextPath,
+	paperContextRoot,
 	toPathSet,
 } from "@/lib/context-path-icon";
 
@@ -12,6 +15,51 @@ describe("context-path-icon", () => {
 	it("normalizes slashes and trailing separators", () => {
 		expect(normalizeContextPath("papers\\org\\")).toBe("papers/org");
 		expect(normalizeContextPath("./notes/a.md")).toBe("notes/a.md");
+	});
+
+	it("display name is the last path segment (paper-name / file name)", () => {
+		expect(contextPathDisplayName("papers/org/Smith2024_Title_2401")).toBe(
+			"Smith2024_Title_2401",
+		);
+		expect(contextPathDisplayName("notes/ideas/todo.md")).toBe("todo.md");
+		expect(contextPathDisplayName("papers\\org\\foo\\")).toBe("foo");
+		expect(contextPathDisplayName("README.md")).toBe("README.md");
+	});
+
+	it("contextPathLabel uses file-tree paper label modes", () => {
+		const paper = "papers/org/1706.03762";
+		const papers = toPathSet([paper]);
+		const meta = new Map([
+			[
+				paper,
+				{
+					title: "Attention Is All You Need",
+					authors: ["Vaswani", "Shazeer"],
+					year: 2017,
+				},
+			],
+		]);
+		expect(paperContextRoot(`${paper}/NOTES.md`, papers)).toBe(paper);
+		expect(
+			contextPathLabel(paper, {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+				paperTreeLabelMode: "title-author",
+			}),
+		).toBe("Attention Is All You Need · Vaswani, Shazeer");
+		expect(
+			contextPathLabel(paper, {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+				paperTreeLabelMode: "folder",
+			}),
+		).toBe("1706.03762");
+		expect(
+			contextPathLabel("notes/todo.md", {
+				paperPaths: papers,
+				paperMetaByRelPath: meta,
+			}),
+		).toBe("todo.md");
 	});
 
 	it("uses tree directory set for org folders without extension", () => {
@@ -67,8 +115,8 @@ describe("context-path-icon", () => {
 		expect(isDirectoryContextPath("NOTES.md")).toBe(false);
 	});
 
-	it("accepts legacy directory Set as second argument", () => {
+	it("uses directoryPaths option for folder icons", () => {
 		const dirs = toPathSet(["notes"]);
-		expect(contextPathIcon("notes", dirs)).toBe(Folder);
+		expect(contextPathIcon("notes", { directoryPaths: dirs })).toBe(Folder);
 	});
 });

@@ -100,6 +100,24 @@ pub async fn ensure_paper_assets(
                 }
             }
         }
+        // Unpaywall fallback: open-access PDF for DOI papers (helps some ACM/IEEE
+        // and other paywalled papers that have an OA copy; no API key required).
+        if !ok {
+            if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
+                if let Some(url) = unpaywall_pdf_url(doi).await {
+                    if !candidates.iter().any(|c| c == &url) {
+                        ok = try_download_candidates(
+                            paper_dir,
+                            id,
+                            std::slice::from_ref(&url),
+                            &mut out,
+                        )
+                        .await;
+                        candidates.push(url);
+                    }
+                }
+            }
+        }
         if !ok && candidates.is_empty() {
             out.messages.push("pdf: no url".into());
         }
@@ -171,6 +189,29 @@ fn pdf_url_candidates(id: &str, arxiv_id: Option<&str>, pdf_url: Option<&str>) -
     }
 
     out
+}
+
+/// Query Unpaywall for a DOI's best open-access PDF location (no API key needed).
+/// Returns the `best_oa_location.url_for_pdf` when present.
+async fn unpaywall_pdf_url(doi: &str) -> Option<String> {
+    let url = format!(
+        "https://api.unpaywall.org/v2/{}?email=agentero@users.noreply.github.com",
+        doi.trim()
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .build()
+        .ok()?;
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(&resp.text().await.ok()?).ok()?;
+    v.pointer("/best_oa_location/url_for_pdf")
+        .and_then(|u| u.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// Try each PDF URL in order; write on first success. Returns true when a PDF was saved.

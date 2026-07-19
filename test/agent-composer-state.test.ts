@@ -107,7 +107,8 @@ describe("agent Composer persistence", () => {
 			text: "",
 			mentionedPaths: [],
 			selectedSkillIds: [],
-			includeSelectedFile: false,
+			// Current paper/file remains attached by default across turns.
+			includeSelectedFile: true,
 		});
 
 		expect(
@@ -116,6 +117,7 @@ describe("agent Composer persistence", () => {
 					...state,
 					text: "draft written while the request starts",
 					selectedSkillIds: ["review", "summarize"],
+					includeSelectedFile: false,
 				},
 				state,
 			),

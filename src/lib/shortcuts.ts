@@ -13,6 +13,10 @@ export type ShortcutId =
 	| "revealInFinder"
 	| "openInTerminal"
 	| "deleteTreeItem"
+	/** ⌘← — collapse selected file-tree folder (or its parent) */
+	| "collapseTreeCurrent"
+	/** ⇧⌘← — reset tree to only papers/ expanded (children listed, not open) */
+	| "collapseTreeDefault"
 	| "magicWand"
 	/** ⌘P / ⌘K — quick open papers & contents */
 	| "quickOpen"
@@ -46,10 +50,7 @@ export type ShortcutDef = {
 	 * (settings, dialogs, command palette — see overlay-stack).
 	 */
 	whenSettingsOpen?: boolean;
-	/**
-	 * When true, only matches if no app overlay is open.
-	 * Name kept for compatibility; means “when overlays closed”.
-	 */
+	/** When true, only matches if no app overlay is open. */
 	whenSettingsClosed?: boolean;
 };
 
@@ -128,6 +129,23 @@ export const SHORTCUTS: ShortcutDef[] = [
 		// ⌘⌫ — delete selected file tree item (with confirm)
 		key: "Backspace",
 		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "collapseTreeCurrent",
+		group: "Vault",
+		// ⌘← — collapse selected folder (VS Code list.collapse-ish; free of ⌥⌘← tabs)
+		key: "ArrowLeft",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "collapseTreeDefault",
+		group: "Vault",
+		// ⇧⌘← — collapse tree to default (only papers/ open; no subfolder expand)
+		key: "ArrowLeft",
+		meta: true,
+		shift: true,
 		whenSettingsClosed: true,
 	},
 	{
@@ -323,16 +341,11 @@ export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
 export function resolveShortcutId(
 	event: KeyboardEvent,
 	opts: {
-		/**
-		 * Any app overlay open (settings / dialogs / palette).
-		 * Historically named settingsOpen; kept for call-site compatibility.
-		 */
+		/** Any app overlay open (settings / dialogs / palette). */
 		settingsOpen: boolean;
-		/** @deprecated use settingsOpen — alias for any overlay */
-		overlayOpen?: boolean;
 	},
 ): ShortcutId | null {
-	const overlayOpen = opts.overlayOpen ?? opts.settingsOpen;
+	const overlayOpen = opts.settingsOpen;
 	const candidates = SHORTCUTS.flatMap((def) => {
 		const aliases = ALIASES[def.id] ?? [];
 		return [def, ...aliases];

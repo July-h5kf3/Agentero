@@ -13,7 +13,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 ## Layout
 
-- `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `highlights.md` / `PAPER.md`, and `source/`.
+- `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `PAPER.md` / `marks/`, and `source/`.
 - `notes/` — free-form concept notes and ideas (`[[wikilinks]]` welcome).
 - `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
@@ -24,7 +24,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 1. Start with this file and the paper list from the app catalog, or `agentero paper list --json` when the CLI is available.
 2. Open `{paper}/NOTES.md` for a locked paper.
-3. Then `highlights.md` → optional `PAPER.md` → `source/` only as needed.
+3. Then `marks/` (reader highlights / asks / translates) → optional `PAPER.md` → `source/` only as needed.
 
 ## Rules
 
@@ -61,8 +61,11 @@ pub const IDEA_EVALUATOR_SKILL: &str =
 pub const DEEP_RESEARCH_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/deep-research/SKILL.md");
 
-/// Vault-relative path → content for Create Vault skill seeding (no overwrite).
+/// Vault-relative path → content for bundled skill seeding (no overwrite).
 /// Paths are under the vault root (e.g. `.agents/skills/...`).
+///
+/// When the app ships new skills, [`ensure_vault`] / [`create_vault`] add any
+/// missing paths here; existing files are left untouched so user edits survive.
 fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
     &[
         (".agents/skills/README.md", SKILLS_DIR_README),
@@ -229,12 +232,16 @@ fn seed_file_if_missing(
     Ok(())
 }
 
-/// Create Agentero vault skeleton under `path` without overwriting existing user files.
+/// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
 /// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
-/// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills, and initializes
-/// `.agentero/catalog.sqlite`. Does **not** create `PAPERS.md` / `library.bib`.
-pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
+/// `AGENTS.md` (if missing), seeds `.agents/README.md` and **any missing** bundled
+/// skills from the app template, and initializes `.agentero/catalog.sqlite`.
+/// Does **not** create `PAPERS.md` / `library.bib`.
+///
+/// Safe to call on every vault open after an app update so newly shipped skills
+/// appear under `.agents/skills/` while customized files stay intact.
+pub fn ensure_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     if !path.exists() {
         fs::create_dir_all(path)?;
     }
@@ -269,6 +276,7 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
     }
 
     // Seed vault-local agent layout from `templates/vault/.agents/` (no overwrite).
+    // Includes newly bundled skills that did not exist when the vault was first created.
     seed_file_if_missing(path, ".agents/README.md", AGENTS_DIR_README, &mut created)?;
     for (rel, content) in bundled_skill_files() {
         seed_file_if_missing(path, rel, content, &mut created)?;
@@ -294,6 +302,11 @@ pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         created,
         open_path: "AGENTS.md".into(),
     })
+}
+
+/// Create Agentero vault skeleton (alias of [`ensure_vault`]).
+pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
+    ensure_vault(path)
 }
 
 #[cfg(test)]
@@ -349,6 +362,54 @@ mod tests {
         let agents_readme = fs::read_to_string(dir.join(".agents/README.md")).unwrap();
         assert!(agents_readme.starts_with("# keep"));
         assert!(!r2.created.iter().any(|c| c == ".agents/README.md"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// After app update: missing bundled skills are added; customized files stay.
+    #[test]
+    fn ensure_vault_seeds_missing_bundled_skills_only() {
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-ensure-skills-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        create_vault(&dir).expect("create");
+
+        // Simulate an older vault that lacked a later-bundled skill, plus a user edit.
+        let deep = dir.join(".agents/skills/deep-research");
+        let _ = fs::remove_dir_all(&deep);
+        let paper_skill = dir.join(".agents/skills/paper-reader/SKILL.md");
+        fs::write(&paper_skill, "# my custom paper-reader\n").unwrap();
+
+        let r = ensure_vault(&dir).expect("ensure after update");
+        assert!(
+            r.created
+                .iter()
+                .any(|c| c.starts_with(".agents/skills/deep-research/")),
+            "expected deep-research paths in created: {:?}",
+            r.created
+        );
+        assert!(dir.join(".agents/skills/deep-research/SKILL.md").is_file());
+        assert!(dir
+            .join(".agents/skills/deep-research/references/quality-gates.md")
+            .is_file());
+        // User-edited skill must not be overwritten
+        let paper = fs::read_to_string(&paper_skill).unwrap();
+        assert!(paper.starts_with("# my custom paper-reader"));
+        assert!(!r
+            .created
+            .iter()
+            .any(|c| c == ".agents/skills/paper-reader/SKILL.md"));
+
+        // Idempotent: second ensure adds nothing for already-present skills
+        let r2 = ensure_vault(&dir).expect("ensure again");
+        assert!(!r2
+            .created
+            .iter()
+            .any(|c| c.starts_with(".agents/skills/deep-research/")));
 
         let _ = fs::remove_dir_all(&dir);
     }

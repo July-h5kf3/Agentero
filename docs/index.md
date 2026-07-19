@@ -24,7 +24,7 @@ Agentero 桌面应用
     ├── Markdown 笔记与 paper notes / source
     ├── .agentero/catalog.sqlite（论文集合 + metadata 权威）
     ├── 可选导出 PAPERS.md / library.bib（非默认）
-    └── papers/<id>/ 下 NOTES、highlights、可选 PAPER.md、source/
+    └── papers/<id>/ 下 NOTES、marks/、可选 PAPER.md、source/
 ```
 
 ## 文档分层
@@ -52,7 +52,7 @@ Agentero 桌面应用
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
 - **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / **每次询问** / 自动批准）；`ask` 时弹权限对话框。
-- **Agent 面板**：空态建议 → summary / qa / related_work；笔记被 Agent 改写后可 Keep / Revert。
+- **Agent 面板**：空态建议 → summary / qa / related_work；笔记被 Agent 改写后 **统一 Diff** + Keep / Revert。
 - **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索。
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。

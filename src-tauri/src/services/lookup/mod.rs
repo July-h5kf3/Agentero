@@ -57,14 +57,51 @@ pub struct PaperDownloadAssetsArgs {
     pub path: String,
 }
 
+/// Per-file overrides when importing a local PDF (metadata confirm dialog).
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalPdfImportEntry {
+    pub file_path: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub authors: Option<Vec<String>>,
+    #[serde(default)]
+    pub year: Option<i32>,
+    /// Preferred folder id (slug); host still de-duplicates with `-2`/`-3`.
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
+/// Stage a dropped PDF (path-less WKWebView drop) into `~/.agentero/import-tmp/`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageImportFileArgs {
+    /// Original filename (used for stem + safe on-disk name).
+    pub file_name: String,
+    /// Standard base64 of PDF bytes (no `data:` prefix).
+    pub content_base64: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageImportFileResult {
+    /// Absolute path written on disk.
+    pub path: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportLocalPdfArgs {
     pub vault_path: String,
     /// Vault-relative parent, e.g. `papers` or `papers/nlp`.
     pub parent_dir: String,
-    /// Absolute paths to local PDF files chosen by the user.
+    /// Absolute paths to local PDF files (picker). Ignored when `entries` is non-empty.
+    #[serde(default)]
     pub file_paths: Vec<String>,
+    /// Preferred: path + optional title/authors/year/id from the confirm dialog.
+    #[serde(default)]
+    pub entries: Vec<LocalPdfImportEntry>,
 }
 
 #[derive(Debug, Serialize)]
@@ -240,8 +277,57 @@ pub async fn download_paper_assets(
     Ok(result)
 }
 
+/// Write drop payload bytes to `~/.agentero/import-tmp/<stamp>-<name>` and return the path.
+/// Used when the webview cannot expose `File.path` (typical on macOS WKWebView).
+pub fn stage_import_file(args: StageImportFileArgs) -> Result<StageImportFileResult, AppError> {
+    use base64::Engine;
+
+    let raw_name = args.file_name.trim();
+    let name = if raw_name.is_empty() {
+        "drop.pdf".to_string()
+    } else {
+        raw_name
+            .chars()
+            .map(|c| if c == '/' || c == '\\' { '_' } else { c })
+            .collect::<String>()
+    };
+    if !name.to_ascii_lowercase().ends_with(".pdf") {
+        return Err(AppError::message("not a PDF file"));
+    }
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(args.content_base64.trim())
+        .map_err(|e| AppError::message(format!("invalid base64: {e}")))?;
+    if bytes.is_empty() {
+        return Err(AppError::message("empty file"));
+    }
+    // Soft cap ~80MB — UI import is for papers, not bulk archives.
+    if bytes.len() > 80 * 1024 * 1024 {
+        return Err(AppError::message("file too large to stage (max 80MB)"));
+    }
+
+    let home =
+        dirs::home_dir().ok_or_else(|| AppError::message("cannot resolve home directory"))?;
+    let dir = home.join(".agentero").join("import-tmp");
+    fs::create_dir_all(&dir)?;
+    let stamp = format!(
+        "{}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    );
+    let dest = dir.join(format!("{stamp}-{name}"));
+    fs::write(&dest, bytes)?;
+    Ok(StageImportFileResult {
+        path: dest.to_string_lossy().to_string(),
+    })
+}
+
 /// Import one or more local PDF files as paper folders (copy + catalog + liteparse).
-/// Filename-derived title/id; no network lookup. Each PDF becomes `{parent}/{slug}/{slug}.pdf`.
+/// Filename-derived title/id by default; optional per-file metadata overrides.
+/// Each PDF becomes `{parent}/{slug}/{slug}.pdf`.
 pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPdfResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -249,16 +335,31 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
     }
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
 
+    let entries: Vec<LocalPdfImportEntry> = if !args.entries.is_empty() {
+        args.entries
+    } else {
+        args.file_paths
+            .into_iter()
+            .map(|file_path| LocalPdfImportEntry {
+                file_path,
+                title: None,
+                authors: None,
+                year: None,
+                id: None,
+            })
+            .collect()
+    };
+
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
-    for src in &args.file_paths {
-        match import_one_local_pdf(&vault, &parent_rel, src).await {
+    for entry in &entries {
+        match import_one_local_pdf(&vault, &parent_rel, entry).await {
             Ok(r) => papers_out.push(r),
             Err(e) => {
-                let name = Path::new(src.trim())
+                let name = Path::new(entry.file_path.trim())
                     .file_name()
                     .and_then(|s| s.to_str())
-                    .unwrap_or(src.as_str());
+                    .unwrap_or(entry.file_path.as_str());
                 errors.push(format!("{name}: {e}"));
             }
         }
@@ -276,9 +377,9 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
 async fn import_one_local_pdf(
     vault: &Path,
     parent_rel: &str,
-    src_path: &str,
+    entry: &LocalPdfImportEntry,
 ) -> Result<LookupImportResult, AppError> {
-    let src = PathBuf::from(src_path.trim());
+    let src = PathBuf::from(entry.file_path.trim());
     if !src.is_file() {
         return Err(AppError::message("file not found"));
     }
@@ -291,8 +392,21 @@ async fn import_one_local_pdf(
     }
 
     let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("paper");
-    let title = title_from_stem(stem);
-    let base_id = slug_from_stem(stem);
+    let title = entry
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| title_from_stem(stem));
+    let base_id = entry
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(slug_from_stem)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| slug_from_stem(stem));
     let (id, path_rel, paper_dir) = unique_paper_path(vault, parent_rel, &base_id);
     fs::create_dir_all(&paper_dir)?;
 
@@ -300,7 +414,18 @@ async fn import_one_local_pdf(
     fs::copy(&src, paper_dir.join(format!("{id}.pdf")))
         .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
 
-    let meta = local_pdf_meta(id.clone(), title.clone());
+    let mut meta = local_pdf_meta(id.clone(), title.clone());
+    if let Some(authors) = &entry.authors {
+        meta.authors = authors
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .map(|a| a.to_string())
+            .collect();
+    }
+    if let Some(year) = entry.year {
+        meta.year = Some(year);
+    }
     write_paper_shell(&paper_dir, &meta).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(vault, &record)?;
@@ -555,9 +680,11 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
     }
 }
 
-/// Write `{paper}/NOTES.md` shell + empty `highlights.md`.
+/// Write `{paper}/NOTES.md` shell (title + optional abstract blockquote).
 /// Abstract is shown in **Chinese** when free-MT succeeds (fallback: original text).
 /// Catalog still stores the original `abstract_text`.
+///
+/// Annotations live in `{paper}/marks/*.json` at runtime (not part of the shell).
 pub(crate) async fn write_paper_shell(paper_dir: &Path, meta: &PaperMeta) -> Result<(), AppError> {
     write_paper_shell_opts(paper_dir, meta, true).await
 }
@@ -588,7 +715,6 @@ pub(crate) async fn write_paper_shell_opts(
     };
     let notes = format!("# {}\n\n{abstract_block}", meta.title);
     fs::write(paper_dir.join("NOTES.md"), notes)?;
-    fs::write(paper_dir.join("highlights.md"), "")?;
     Ok(())
 }
 
@@ -634,7 +760,7 @@ async fn abstract_for_notes(text: &str) -> String {
 }
 
 /// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
-fn looks_mostly_cjk(s: &str) -> bool {
+pub(crate) fn looks_mostly_cjk(s: &str) -> bool {
     let mut cjk = 0usize;
     let mut letters = 0usize;
     for c in s.chars() {

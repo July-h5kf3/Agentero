@@ -8,6 +8,10 @@ import {
 	Folder,
 	ScrollText,
 } from "lucide-react";
+import {
+	formatPaperTreeLabel,
+	type PaperTreeLabelMode,
+} from "@/lib/paper-metadata";
 
 /**
  * Normalize a vault-relative (or absolute-looking) path for kind / icon lookup.
@@ -29,9 +33,6 @@ export function toPathSet(
 	}
 	return set;
 }
-
-/** @deprecated Use `toPathSet` — same implementation. */
-export const toDirectoryPathSet = toPathSet;
 
 export type ContextPathIconOptions = {
 	/** Vault-relative directories (org folders, notes dirs, paper folders, …). */
@@ -91,31 +92,98 @@ function hasFileLikeExtension(base: string): boolean {
 }
 
 /**
+ * Chip / mention **display** label: last path segment (paper folder name, file name).
+ * Full Vault-relative path stays in tooltips and is still sent to the Agent.
+ */
+export function contextPathDisplayName(path: string): string {
+	const norm = normalizeContextPath(path);
+	if (!norm) return path;
+	const base = norm.includes("/") ? (norm.split("/").pop() ?? norm) : norm;
+	return base || path;
+}
+
+export type ContextPathLabelOptions = {
+	/** Vault-relative paper folder paths. */
+	paperPaths?: ReadonlySet<string> | readonly string[] | null;
+	/**
+	 * Catalog rows keyed by vault-relative paper path.
+	 * Used with `paperTreeLabelMode` (same as file tree).
+	 */
+	paperMetaByRelPath?: ReadonlyMap<
+		string,
+		{ title?: string; authors?: string[]; year?: number | null }
+	> | null;
+	/** Settings → General paper tree label mode (default title-author). */
+	paperTreeLabelMode?: PaperTreeLabelMode | null;
+};
+
+/**
+ * Resolve the paper folder for a context path, if any.
+ * Exact paper path or a file under a paper → that paper root.
+ */
+export function paperContextRoot(
+	path: string,
+	paperPaths?: ReadonlySet<string> | readonly string[] | null,
+): string | null {
+	const norm = normalizeContextPath(path);
+	if (!norm || !paperPaths) return null;
+	const set =
+		paperPaths instanceof Set
+			? paperPaths
+			: new Set([...paperPaths].map(normalizeContextPath).filter(Boolean));
+	if (set.has(norm)) return norm;
+	// Longest matching paper prefix
+	let best: string | null = null;
+	for (const paper of set) {
+		if (!paper) continue;
+		if (norm.startsWith(`${paper}/`)) {
+			if (!best || paper.length > best.length) best = paper;
+		}
+	}
+	return best;
+}
+
+/**
+ * Display label for chips / @ menu, matching file-tree paper labels when possible.
+ * Non-paper paths keep basename; papers use `formatPaperTreeLabel` + catalog meta.
+ */
+export function contextPathLabel(
+	path: string,
+	options?: ContextPathLabelOptions | null,
+): string {
+	const norm = normalizeContextPath(path);
+	if (!norm) return path;
+
+	const paperRoot = paperContextRoot(norm, options?.paperPaths ?? null);
+	if (paperRoot) {
+		const folderName = paperRoot.includes("/")
+			? (paperRoot.split("/").pop() ?? paperRoot)
+			: paperRoot;
+		const raw = options?.paperMetaByRelPath?.get(paperRoot) ?? null;
+		const mode = options?.paperTreeLabelMode ?? "title-author";
+		const meta = raw
+			? {
+					title: raw.title ?? "",
+					authors: raw.authors ?? [],
+					year: raw.year ?? undefined,
+				}
+			: null;
+		return formatPaperTreeLabel(mode, meta, folderName);
+	}
+
+	return contextPathDisplayName(norm);
+}
+
+/**
  * Lucide icon for a Vault context chip / mention row.
  * Paper folders → ScrollText (same as file tree); other folders → Folder;
  * files → type-specific (PDF, image, code, …).
  */
-function isPathSet(
-	value: ContextPathIconOptions | ReadonlySet<string> | null | undefined,
-): value is ReadonlySet<string> {
-	return (
-		value != null &&
-		typeof value === "object" &&
-		typeof (value as ReadonlySet<string>).has === "function" &&
-		typeof (value as ReadonlySet<string>).size === "number" &&
-		!("directoryPaths" in value) &&
-		!("paperPaths" in value)
-	);
-}
-
 export function contextPathIcon(
 	path: string,
-	options?: ContextPathIconOptions | ReadonlySet<string> | null,
+	options?: ContextPathIconOptions | null,
 ): LucideIcon {
-	// Backward-compatible: second arg may be a directory Set only.
-	const opts: ContextPathIconOptions = isPathSet(options)
-		? { directoryPaths: options }
-		: (options ?? {});
+	const opts = options ?? {};
 
 	if (isPaperContextPath(path, opts.paperPaths)) {
 		return ScrollText;

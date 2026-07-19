@@ -302,7 +302,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 ## Layout
 
-- \`papers/\` — paper folders at **any depth**. A paper folder is the minimal unit (has \`NOTES.md\`, optional \`highlights.md\` / \`PAPER.md\`, and \`source/\`).
+- \`papers/\` — paper folders at **any depth**. A paper folder is the minimal unit (has \`NOTES.md\`, optional \`PAPER.md\` / \`marks/\`, and \`source/\`).
 - \`notes/\` — free-form concept notes (\`[[wikilinks]]\` welcome). May also hold loose PDFs under \`notes/attachments/\`.
 - \`plans/\` — research plans and drafts.
 - \`assets/\` — non-paper media (sample PDF / figures) for preview; not catalogued as papers.
@@ -312,7 +312,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 
 1. Start with this file; use the app catalog or scan \`papers/**/NOTES.md\`.
 2. Open \`{paper}/NOTES.md\` for a locked paper.
-3. Then \`highlights.md\` → optional \`PAPER.md\` → \`source/\` only as needed.
+3. Then \`marks/\` → optional \`PAPER.md\` → \`source/\` only as needed.
 
 ## Rules
 
@@ -650,11 +650,6 @@ async function scaffoldDemo(root) {
 
 	for (const paper of PAPERS) {
 		await writeText(root, `${paper.path}/NOTES.md`, paper.notes);
-		await writeText(
-			root,
-			`${paper.path}/highlights.md`,
-			`# Highlights — ${paper.title}\n\n(empty — add quotes + ideas here)\n`,
-		);
 		await writeText(root, `${paper.path}/metadata.json`, demoMeta(paper));
 		await ensureDir(root, `${paper.path}/source`);
 		await writeText(
@@ -849,9 +844,9 @@ async function collectPaperFolders(root) {
 		const names = new Set(entries.map((e) => e.name.toLowerCase()));
 		const isPaper =
 			names.has("notes.md") ||
-			names.has("highlights.md") ||
 			names.has("metadata.json") ||
-			names.has("source");
+			names.has("source") ||
+			names.has("marks");
 		if (isPaper && rel.startsWith("papers/")) {
 			out.push(rel);
 			return;

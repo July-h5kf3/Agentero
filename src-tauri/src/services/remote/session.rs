@@ -866,6 +866,7 @@ mod tests {
                 vault_path: info.vault_handle.clone(),
                 parent_dir: "papers".into(),
                 file_paths: vec![pdf_path.to_string_lossy().into()],
+                entries: vec![],
             },
         )
         .await

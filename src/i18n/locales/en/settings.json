@@ -35,8 +35,8 @@
 		},
 		"paperTreeSortMode": {
 			"label": "Sort papers in file tree",
-			"hint": "Display-only order under each folder. Does not rename or move folders. Missing metadata sorts by folder name (or last for year / date).",
-			"folder": "Folder name A–Z",
+			"hint": "Display-only order under each folder. The default mode sorts by the same labels shown in the tree (Settings → paper labels). Does not rename or move folders. Missing metadata sorts by folder name (or last for year / date).",
+			"folder": "Display name A–Z",
 			"title": "Title A–Z",
 			"author": "Author A–Z",
 			"year-desc": "Year (newest first)",
@@ -141,6 +141,11 @@
 			"auto": "Auto (follow content)",
 			"en": "English",
 			"zhCN": "简体中文"
+		},
+		"personalPrompt": {
+			"label": "Personal preference prompt",
+			"hint": "Optional free-form instructions injected into every Agent turn (chat, paper-reader, workflows). Leave empty to disable. Not shown in the chat transcript.",
+			"placeholder": "e.g. Prefer concise bullet points; always keep [[wikilinks]]; cite Vault paths."
 		},
 		"pdfAsk": {
 			"section": "PDF selection Ask",

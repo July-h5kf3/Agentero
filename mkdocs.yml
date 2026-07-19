@@ -36,6 +36,7 @@ nav:
       - 远程 Vault（SSH/SFTP）: development/remote-vault.md
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
+      - GitHub Project: development/github-project.md
   - Bug 修复记录:
       - DeepSeek 正文落入 Thinking: bug_fix/deepseek-thinking-body.md
 

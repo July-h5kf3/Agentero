@@ -77,18 +77,21 @@ export function AnnotationEditor({
 			) : null}
 			<textarea
 				ref={ref}
-				className="min-h-16 w-full min-w-0 flex-1 resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+				className="min-h-16 w-full min-w-0 flex-1 resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm text-foreground/80 outline-none placeholder:text-muted-foreground/80 focus:ring-1 focus:ring-ring"
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}
 				onKeyDown={(e) => {
-					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-						e.preventDefault();
-						onSave(text);
-					}
 					if (e.key === "Escape") {
 						e.preventDefault();
 						onClose();
+						return;
+					}
+					// Enter = save; Shift+Enter = newline (same as ask composer).
+					// Skip while IME is composing (e.g. Chinese input).
+					if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+						e.preventDefault();
+						onSave(text);
 					}
 				}}
 			/>

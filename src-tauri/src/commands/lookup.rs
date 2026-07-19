@@ -6,7 +6,8 @@ use crate::log_util::{trunc, OpTimer};
 use crate::services::lookup::{
     self, AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
     LookupImportResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
-    PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+    PaperImportArgs, PaperImportResult, StageImportFileArgs, StageImportFileResult,
+    DEFAULT_TRANSLATOR_BASE_URL,
 };
 use crate::services::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
 use crate::services::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
@@ -106,8 +107,17 @@ pub async fn paper_import_local_pdf(
     )
 }
 
+/// Stage a path-less OS drop (File bytes as base64) into `~/.agentero/import-tmp/`.
+#[tauri::command]
+pub fn paper_stage_import_file(args: StageImportFileArgs) -> ApiResult<StageImportFileResult> {
+    let name = trunc(&args.file_name, 80);
+    let op = OpTimer::start_with("paper_stage_import_file", format!("name={name}"));
+    op.finish_result(lookup::stage_import_file(args))
+}
+
 /// Generate PAPER.md from PDF via liteparse when the paper has no TeX.
 /// Remote vaults: pull PDF to work mirror → parse → SFTP put `PAPER.md`.
+
 #[tauri::command]
 pub async fn paper_parse_body(
     registry: State<'_, Arc<RemoteRegistry>>,

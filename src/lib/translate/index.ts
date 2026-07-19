@@ -16,10 +16,7 @@ export {
 	probeFreeMtProviders,
 	TRANSLATE_PROBE_TIMEOUT_MS,
 } from "@/lib/translate/probe";
-export {
-	buildPdfTranslatePrompt,
-	buildTranslatePrompt,
-} from "@/lib/translate/prompt";
+export { buildTranslatePrompt } from "@/lib/translate/prompt";
 export type { ResolvedTranslateAgent } from "@/lib/translate/resolve-agent";
 export {
 	listAvailableAgents,

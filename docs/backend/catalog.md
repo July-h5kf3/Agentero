@@ -13,7 +13,7 @@
 |---|---|
 | 集合索引进库 | 「库里有哪些论文」以 SQLite 表为准，不再依赖根级 `PAPERS.md`。 |
 | 元数据进库 | 单篇 title / authors / tags / URLs 等以 **catalog.sqlite 为权威**；`metadata.json` 仅为 SQLite 变更后的投影同步。 |
-| 人写内容仍文件 | `NOTES.md`、`highlights.md`、`source/`、可选 `PAPER.md` 保持 Markdown/二进制文件。 |
+| 人写内容仍文件 | `NOTES.md`、`marks/`、`source/`、可选 `PAPER.md` 保持 Markdown/JSON/二进制文件。 |
 | 可导出、非默认 | 保留导出为 `PAPERS.md` / `library.bib` 的能力，供 Agent、引用管理器、分享使用；Create Vault **不**生成这两份文件。 |
 | 与可扔缓存区分 | Catalog 是 Vault 资产（备份/同步应包含）；双链图等仍可另作可重建缓存（见 §6）。 |
 
@@ -23,7 +23,7 @@
 
 | 层级 | 内容 | 落盘 |
 |---|---|---|
-| **Tier 1a 人的知识 / 原始归档** | `AGENTS.md`、`NOTES.md`、`highlights.md`、`notes/`、`plans/`、`source/`、用户插入的笔记旁 `assets/*` | 文件 |
+| **Tier 1a 人的知识 / 原始归档** | `AGENTS.md`、`NOTES.md`、`marks/`、`notes/`、`plans/`、`source/`、用户插入的笔记旁 `assets/*` | 文件 |
 | **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
 | **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、解析派生的 `assets/` 图 | 按需生成；非 Vault 必备 |
 | **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表，或后续独立；可整删后从文件+catalog 重建 |
@@ -58,7 +58,7 @@ agentero-vault/
 ### Paper 文件夹（最小单元）
 
 - **定义**：`papers/` 下任意深度的一个目录，其**直接子项**含 paper 标记之一：
-  - 文件：`NOTES.md`、`highlights.md`、`PAPER.md`、`metadata.json`（过渡）
+  - 文件：`NOTES.md`、`marks/`、`PAPER.md`、`metadata.json`（过渡）
   - 目录：`source/`、`assets/`
 - **不是 paper**：仅作分类的中间目录（如 `papers/nlp/`），无上述标记，文件树中可展开。
 - **Catalog 主键**：Vault 相对路径 `path`（如 `papers/nlp/transformers/1706.03762`），不是「仅叶子目录名」。
@@ -169,7 +169,7 @@ interface Paper extends PaperMetadata {
   path: string;             // = catalog path，paper 文件夹（可嵌套）
   vault_path: string;       // 同 path，或带尾 /
   notes_path: string;       // {path}/NOTES.md
-  highlights_path: string;  // {path}/highlights.md
+  marks_dir: string;        // {path}/marks/
   source_dir: string;       // {path}/source/
   paper_md_path?: string;   // {path}/PAPER.md 若存在
 }
@@ -296,7 +296,7 @@ import paper（魔棒 lookup_import）
 |---|---|---|
 | L0 | `AGENTS.md` | 不变 |
 | L1 | 读根级 `PAPERS.md` | **应用内**：catalog 查询；**Agent 文件路径**：`papers/*/NOTES.md` 目录扫描，或工作流注入的导出 `PAPERS.md` / 结构化列表 |
-| L2+ | NOTES → highlights → PAPER.md → source | 不变 |
+| L2+ | NOTES → marks/ → PAPER.md → source | 标注层为 `marks/*.json` |
 
 `AGENTS.md` 模板应写明：
 

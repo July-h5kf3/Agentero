@@ -418,6 +418,7 @@ pub async fn agent_run_once(
                     request.skill_ids,
                     request.auto_approve,
                     request.response_language,
+                    request.personal_prompt,
                     cancellation,
                 )
                 .await;
@@ -440,6 +441,7 @@ pub async fn agent_run_once(
                 permission_policy,
                 permission_gate.clone(),
                 request.response_language,
+                request.personal_prompt,
                 cancellation,
                 remote_for_spawn,
             )

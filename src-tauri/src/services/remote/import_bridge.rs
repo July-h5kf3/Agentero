@@ -8,8 +8,9 @@ use crate::services::lookup::parse::extract_arxiv_id;
 use crate::services::lookup::{
     enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
     paper_record_from_meta, resolve_metadata, write_paper_shell, AssetDownloadResult,
-    ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs, LookupImportResult,
-    PaperDownloadAssetsArgs, PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
+    ImportLocalPdfArgs, ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs,
+    LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs, PaperImportResult,
+    DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -174,22 +175,37 @@ pub async fn download_paper_assets_remote(
 }
 
 /// Import local PDF files into a remote vault (copy from user machine → stage → SFTP).
+/// Filename-derived title/id by default; optional per-file metadata overrides via `entries`.
 pub async fn import_local_pdfs_remote(
     session: Arc<RemoteSession>,
     args: ImportLocalPdfArgs,
 ) -> Result<ImportLocalPdfResult, AppError> {
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
+    let entries: Vec<LocalPdfImportEntry> = if !args.entries.is_empty() {
+        args.entries
+    } else {
+        args.file_paths
+            .into_iter()
+            .map(|file_path| LocalPdfImportEntry {
+                file_path,
+                title: None,
+                authors: None,
+                year: None,
+                id: None,
+            })
+            .collect()
+    };
+
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
-
-    for src in &args.file_paths {
-        match import_one_local_pdf_remote(session.clone(), &parent_rel, src).await {
+    for entry in &entries {
+        match import_one_local_pdf_remote(session.clone(), &parent_rel, entry).await {
             Ok(r) => papers_out.push(r),
             Err(e) => {
-                let name = Path::new(src.trim())
+                let name = Path::new(entry.file_path.trim())
                     .file_name()
                     .and_then(|s| s.to_str())
-                    .unwrap_or(src.as_str());
+                    .unwrap_or(entry.file_path.as_str());
                 errors.push(format!("{name}: {e}"));
             }
         }
@@ -210,9 +226,9 @@ pub async fn import_local_pdfs_remote(
 async fn import_one_local_pdf_remote(
     session: Arc<RemoteSession>,
     parent_rel: &str,
-    src_path: &str,
+    entry: &LocalPdfImportEntry,
 ) -> Result<LookupImportResult, AppError> {
-    let src = PathBuf::from(src_path.trim());
+    let src = PathBuf::from(entry.file_path.trim());
     if !src.is_file() {
         return Err(AppError::message("file not found"));
     }
@@ -225,8 +241,21 @@ async fn import_one_local_pdf_remote(
     }
 
     let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("paper");
-    let title = title_from_stem(stem);
-    let base_id = slug_from_stem(stem);
+    let title = entry
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| title_from_stem(stem));
+    let base_id = entry
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(slug_from_stem)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| slug_from_stem(stem));
     let (id, path_rel) =
         unique_remote_paper_path(session.fs.as_ref(), parent_rel, &base_id).await?;
 
@@ -238,7 +267,18 @@ async fn import_one_local_pdf_remote(
     fs::copy(&src, staging.join(format!("{id}.pdf")))
         .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
 
-    let meta = crate::services::lookup::local_pdf_meta_for_import(id.clone(), title);
+    let mut meta = crate::services::lookup::local_pdf_meta_for_import(id.clone(), title);
+    if let Some(authors) = &entry.authors {
+        meta.authors = authors
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .map(|a| a.to_string())
+            .collect();
+    }
+    if let Some(year) = entry.year {
+        meta.year = Some(year);
+    }
     write_paper_shell(&staging, &meta).await?;
     let record = paper_record_from_meta(&path_rel, &meta);
     papers::upsert_paper(&session.work_root, &record)?;

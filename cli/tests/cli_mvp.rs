@@ -172,10 +172,40 @@ fn paper_crud_catalog_only() {
     let v: Value = serde_json::from_slice(&get).unwrap();
     assert_eq!(v["data"]["paper"]["title"], "Demo Paper");
     assert!(v["data"]["assets"]["notesMd"].as_bool().unwrap());
+    assert_eq!(v["data"]["assets"]["marksDir"], false);
     let reads = v["data"]["suggestedReads"].as_array().unwrap();
     assert!(reads
         .iter()
         .any(|r| r.as_str() == Some("papers/demo/NOTES.md")));
+
+    // Reader marks dir → assets.marksDir + suggestedReads / paths
+    fs::create_dir_all(paper.join("marks")).unwrap();
+    fs::write(
+        paper.join("marks").join("hl-1.json"),
+        r#"{"version":1,"kind":"highlight","id":"hl-1"}"#,
+    )
+    .unwrap();
+
+    let get_marks = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "get",
+            "demo",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let v: Value = serde_json::from_slice(&get_marks).unwrap();
+    assert!(v["data"]["assets"]["marksDir"].as_bool().unwrap());
+    let reads = v["data"]["suggestedReads"].as_array().unwrap();
+    assert!(reads
+        .iter()
+        .any(|r| r.as_str() == Some("papers/demo/marks")));
 
     let paths = agentero()
         .args([
@@ -192,11 +222,13 @@ fn paper_crud_catalog_only() {
         .stdout
         .clone();
     let v: Value = serde_json::from_slice(&paths).unwrap();
-    assert!(v["data"]
-        .as_array()
-        .unwrap()
+    let path_list = v["data"].as_array().unwrap();
+    assert!(path_list
         .iter()
         .any(|p| p.as_str() == Some("papers/demo/NOTES.md")));
+    assert!(path_list
+        .iter()
+        .any(|p| p.as_str() == Some("papers/demo/marks")));
 
     agentero()
         .args([

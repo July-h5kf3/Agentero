@@ -38,7 +38,7 @@ Agentero 已有多条「把论文放进 Vault」的路径。落盘相关 **砖�
 |---|------|------------|-------------|------------|----------|------------|
 | 1 | **魔棒** | 侧栏 / `⇧⌘I` | `lookup_import` → `import_by_identifier` | Translator（标识符/URL）+ arXiv 回退 | **同步** `ensure_paper_assets` + liteparse | 刷树 / Library / wiki → **`openPaper`** → 可选 **auto paper-reader** |
 | 2 | **Zotero Connector** | 官方浏览器扩展 | HTTP `saveItems` → `import_connector_item` | 插件 Translator JSON → `map_zotero_item` | **异步** 后台下载（躲 ~15s 超时）；`saveAttachment` 再写 PDF | `connector:item-saved` → 刷树/Library → **`openPaper`** + toast；**无** auto reader |
-| 3 | **本地 PDF** | 魔棒弹层 / Library 导入 | `paper_import_local_pdf` → `import_local_pdfs` | 文件名 stem 造 meta（无网络） | **复制** `{id}.pdf` + liteparse | 刷树/wiki/Library → **只 open 第一篇**；**无** auto reader |
+| 3 | **本地 PDF** | 魔棒弹层 / Library 导入 / **拖到 papers/ 组织夹** | `paper_import_local_pdf` → `import_local_pdfs`（`entries` 可带 title/authors/year/id） | 默认文件名 stem；拖入弹窗可确认/改 meta | **复制** `{id}.pdf` + liteparse | 刷树/wiki/Library → **只 open 第一篇**；**无** auto reader；非 PDF / 非 papers 落点：仅 `preventDefault` 不导航 |
 | 4 | **Bib/RIS 等文献库** | Library 导入 | `paper_import` → `import_catalog` | Translator `/import` 批量 | **同步** 每篇 `ensure_paper_assets` | 刷树/Library；错误 toast；**不 open**、**无** reader |
 | 5 | **Zotero 桌面迁移** | 欢迎页 / 侧栏对话框 | `migrate_zotero` | `zotero.sqlite` → `map_zotero_item` | 可选 **拷贝 storage PDF** | 对话框进度 + 刷新；**不逐篇 open** |
 | 6 | **CLI** | `agentero import id` / `import bib` | 直接调 1 / 4 | 同 1 / 4 | 同 1 / 4 | 无 UI |

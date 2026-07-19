@@ -56,7 +56,7 @@ export type AppSettings = {
 	paperTreeLabelMode: PaperTreeLabelMode;
 	/**
 	 * How siblings under each folder are ordered in the file tree (display-only).
-	 * Default: folder name A–Z.
+	 * Default: display name A–Z (matches paperTreeLabelMode labels).
 	 */
 	paperTreeSortMode: PaperTreeSortMode;
 	/**
@@ -82,6 +82,11 @@ export type AppSettings = {
 	autoPaperReader: boolean;
 	/** Language forced onto every agent response and generated notes. */
 	aiResponseLanguage: AiResponseLanguage;
+	/**
+	 * Free-form user preference instructions injected into every agent
+	 * prompt envelope (Composer, paper-reader, workflows, …). Empty = off.
+	 */
+	agentPersonalPrompt: string;
 	/**
 	 * Agent seat + model for PDF selection Ask dialogs (划词提问).
 	 * Independent of Chat's current agent and of translate.agentId.
@@ -126,6 +131,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	agentPermissionMode: "restricted",
 	autoPaperReader: false,
 	aiResponseLanguage: "auto",
+	agentPersonalPrompt: "",
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 	analyticsEnabled: false,
 	shareCrashReports: false,
@@ -334,6 +340,12 @@ function normalizePartial(
 	}
 	if (typeof parsed.autoPaperReader !== "boolean") {
 		merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;
+	}
+	if (typeof parsed.agentPersonalPrompt !== "string") {
+		merged.agentPersonalPrompt = DEFAULT_SETTINGS.agentPersonalPrompt;
+	} else {
+		// Cap extreme values from hand-edited storage; UI does not enforce a hard max.
+		merged.agentPersonalPrompt = parsed.agentPersonalPrompt.slice(0, 8000);
 	}
 	if (typeof parsed.connectorEnabled !== "boolean") {
 		merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;

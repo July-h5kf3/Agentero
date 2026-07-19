@@ -3,6 +3,8 @@ import {
 	Check,
 	CheckIcon,
 	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
 	CopyIcon,
 	History,
 	Pencil,
@@ -109,6 +111,7 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
+import { NotesReviewDiff } from "@/components/layout/notes-review-diff";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -181,6 +184,14 @@ import {
 	warmAgent,
 } from "@/lib/agent";
 import {
+	buildMentionCandidatePaths,
+	filterMentionOptions,
+	loadRecentMentionPaths,
+	mentionParentPath,
+	mentionPathHasChildren,
+	pushRecentMentionPath,
+} from "@/lib/agent-mention";
+import {
 	displayHistoryTitle,
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent-prompt-display";
@@ -189,8 +200,19 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent-stream-parse";
-import { contextPathIcon, toPathSet } from "@/lib/context-path-icon";
-import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import {
+	contextPathDisplayName,
+	contextPathIcon,
+	contextPathLabel,
+	normalizeContextPath,
+	toPathSet,
+} from "@/lib/context-path-icon";
+import {
+	type PaperMetadata,
+	type PaperTreeLabelMode,
+	paperDirFromPath,
+} from "@/lib/paper-metadata";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/papers-api";
 import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -199,6 +221,10 @@ import { toVaultRelative } from "@/lib/wiki";
 type AgentPanelProps = {
 	vaultPath: string | null;
 	selectedPath?: string | null;
+	/**
+	 * Catalog title for the focused paper (chip label prefers this over folder name).
+	 */
+	selectedPaperTitle?: string | null;
 	vaultMarkdownPaths?: string[];
 	/**
 	 * Vault-relative directory paths from the file tree.
@@ -210,6 +236,13 @@ type AgentPanelProps = {
 	 * Chips use the same ScrollText paper icon as the file tree.
 	 */
 	vaultPaperPaths?: string[];
+	/**
+	 * Catalog rows by vault-relative paper path — same source as the file tree.
+	 * Used so `@` / chips show paper titles per `paperTreeLabelMode`.
+	 */
+	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata> | null;
+	/** Settings → General: paper labels in file tree (display-only). */
+	paperTreeLabelMode?: PaperTreeLabelMode;
 	className?: string;
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
@@ -623,9 +656,12 @@ function dedupeModelsClient(models: AgentModelChoice[]): AgentModelChoice[] {
 export function AgentPanel({
 	vaultPath,
 	selectedPath = null,
+	selectedPaperTitle = null,
 	vaultMarkdownPaths = [],
 	vaultDirectoryPaths = [],
 	vaultPaperPaths = [],
+	paperMetaByRelPath = null,
+	paperTreeLabelMode = "title-author",
 	className,
 	headerActions,
 	autoFocus = false,
@@ -635,11 +671,26 @@ export function AgentPanel({
 }: AgentPanelProps) {
 	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
+	/**
+	 * Focused document as Vault-relative context path.
+	 * Files under a paper resolve to the **paper folder** (minimal unit).
+	 */
 	const selectedVaultPath = useMemo(() => {
 		if (!selectedPath) return null;
+		if (
+			isLibraryVirtualPath(selectedPath) ||
+			isTrashVirtualPath(selectedPath)
+		) {
+			return null;
+		}
 		const relative = toVaultRelative(vaultPath, selectedPath);
-		return relative || null;
-	}, [selectedPath, vaultPath]);
+		if (!relative) return null;
+		if (isLibraryVirtualPath(relative) || isTrashVirtualPath(relative)) {
+			return null;
+		}
+		const paperDir = paperDirFromPath(relative, vaultPaperPaths);
+		return paperDir ?? relative;
+	}, [selectedPath, vaultPath, vaultPaperPaths]);
 	/** O(1) lookups for context chip icons (paper → ScrollText, dir → Folder). */
 	const directoryPathSet = useMemo(
 		() => toPathSet(vaultDirectoryPaths),
@@ -649,6 +700,31 @@ export function AgentPanel({
 		() => toPathSet(vaultPaperPaths),
 		[vaultPaperPaths],
 	);
+
+	/** Label options shared by chips and @ menu (matches file-tree settings). */
+	const pathLabelOptions = useMemo(
+		() => ({
+			paperPaths: paperPathSet,
+			paperMetaByRelPath,
+			paperTreeLabelMode,
+		}),
+		[paperMetaByRelPath, paperPathSet, paperTreeLabelMode],
+	);
+
+	const labelForPath = useCallback(
+		(path: string) => contextPathLabel(path, pathLabelOptions),
+		[pathLabelOptions],
+	);
+
+	/** Searchable labels for @ filter (paper titles, not only folder names). */
+	const mentionLabelsByPath = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const p of vaultPaperPaths) {
+			const label = contextPathLabel(p, pathLabelOptions);
+			if (label && label !== p) map.set(normalizeContextPath(p), label);
+		}
+		return map;
+	}, [pathLabelOptions, vaultPaperPaths]);
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -703,7 +779,8 @@ export function AgentPanel({
 		vaultPath,
 		agentId: selectedAgentId,
 		sessionId: activeTabId,
-		defaultIncludeSelectedFile: false,
+		// Current paper/file is always in context by default (no click-to-add).
+		defaultIncludeSelectedFile: true,
 	});
 	const activeConversationRef = useRef<string | null>(null);
 	const activeTabRef = useRef("draft");
@@ -1467,24 +1544,125 @@ export function AgentPanel({
 		return [...new Set(paths)];
 	}, [includeSelectedFile, mentionedPaths, selectedVaultPath]);
 
+	/** Current paper/file path when included (always-on chip; no dashed + toggle). */
 	const currentFilePath =
-		selectedVaultPath && selectedVaultPath !== LIBRARY_VIRTUAL_PATH
-			? selectedVaultPath
-			: null;
+		includeSelectedFile && selectedVaultPath ? selectedVaultPath : null;
+
+	/** Same paper label mode as the file tree (settings); title fallback if meta missing. */
+	const currentFileLabel = useMemo(() => {
+		if (!currentFilePath) return "";
+		const labeled = labelForPath(currentFilePath);
+		if (labeled && labeled !== contextPathDisplayName(currentFilePath)) {
+			return labeled;
+		}
+		const title = selectedPaperTitle?.trim();
+		if (title && paperPathSet.has(normalizeContextPath(currentFilePath))) {
+			return title;
+		}
+		return labeled || contextPathDisplayName(currentFilePath);
+	}, [currentFilePath, labelForPath, paperPathSet, selectedPaperTitle]);
+
+	// Re-attach when the focused document/paper changes (user can still remove via X).
+	useEffect(() => {
+		if (!selectedVaultPath) return;
+		setIncludeSelectedFile(true);
+	}, [selectedVaultPath, setIncludeSelectedFile]);
+
 	const mentionChipPaths = useMemo(
 		() => contextPaths.filter((path) => path !== selectedVaultPath),
 		[contextPaths, selectedVaultPath],
 	);
 
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
-	const mentionQuery = mentionMatch?.[2]?.toLocaleLowerCase() ?? "";
+	/** Raw @query (preserve case for display; matching is case-insensitive). */
+	const mentionQueryRaw = mentionMatch?.[2] ?? "";
+	const mentionQuery = mentionQueryRaw.toLocaleLowerCase();
+
+	const mentionCandidates = useMemo(
+		() =>
+			buildMentionCandidatePaths({
+				markdownPaths: vaultMarkdownPaths,
+				directoryPaths: vaultDirectoryPaths,
+				paperPaths: vaultPaperPaths,
+			}),
+		[vaultDirectoryPaths, vaultMarkdownPaths, vaultPaperPaths],
+	);
+
+	const [recentMentionPaths, setRecentMentionPaths] = useState<string[]>(() => {
+		try {
+			return loadRecentMentionPaths(
+				typeof localStorage === "undefined" ? null : localStorage,
+				vaultPath,
+			);
+		} catch {
+			return [];
+		}
+	});
+
+	/**
+	 * In-folder browse for `@` menu (null = root: recents + shallow tree).
+	 * Chevron on the right drills into directories; papers stay leaves.
+	 */
+	const [mentionBrowseRoot, setMentionBrowseRoot] = useState<string | null>(
+		null,
+	);
+
+	// Reload recents when Vault changes; leave any open folder browser.
+	useEffect(() => {
+		try {
+			setRecentMentionPaths(
+				loadRecentMentionPaths(
+					typeof localStorage === "undefined" ? null : localStorage,
+					vaultPath,
+				),
+			);
+		} catch {
+			setRecentMentionPaths([]);
+		}
+		setMentionBrowseRoot(null);
+	}, [vaultPath]);
+
+	// Close folder browser when `@` is gone or the menu is dismissed.
+	useEffect(() => {
+		if (!mentionMatch || composerMenuDismissed) {
+			setMentionBrowseRoot(null);
+		}
+	}, [composerMenuDismissed, mentionMatch]);
+
 	const mentionOptions = useMemo(() => {
 		if (!mentionMatch) return [];
-		return vaultMarkdownPaths
-			.filter((path) => path.toLocaleLowerCase().includes(mentionQuery))
-			.filter((path) => !contextPaths.includes(path))
-			.slice(0, 6);
-	}, [contextPaths, mentionMatch, mentionQuery, vaultMarkdownPaths]);
+		return filterMentionOptions({
+			candidates: mentionCandidates,
+			query: mentionQuery,
+			exclude: contextPaths,
+			recent: recentMentionPaths,
+			labelsByPath: mentionLabelsByPath,
+			browseRoot: mentionBrowseRoot,
+			limit: 8,
+		});
+	}, [
+		contextPaths,
+		mentionBrowseRoot,
+		mentionCandidates,
+		mentionLabelsByPath,
+		mentionMatch,
+		mentionQuery,
+		recentMentionPaths,
+	]);
+
+	const enterMentionFolder = useCallback((path: string) => {
+		setMentionBrowseRoot(path);
+		setMentionActiveIndex(0);
+		setComposerMenuDismissed(false);
+	}, []);
+
+	const leaveMentionFolder = useCallback(() => {
+		setMentionBrowseRoot((current) => {
+			if (!current) return null;
+			return mentionParentPath(current);
+		});
+		setMentionActiveIndex(0);
+	}, []);
 
 	const skillMatch = composerText.match(/(^|\s)\$([^\s]*)$/);
 	const skillQuery = skillMatch?.[2]?.toLocaleLowerCase() ?? "";
@@ -1500,7 +1678,10 @@ export function AgentPanel({
 			.slice(0, 6);
 	}, [selectedSkillIds, skillMatch, skillQuery, skills]);
 
-	const showMentionMenu = !composerMenuDismissed && mentionOptions.length > 0;
+	const showMentionMenu =
+		!composerMenuDismissed &&
+		Boolean(mentionMatch) &&
+		(mentionOptions.length > 0 || mentionBrowseRoot != null);
 	const showSkillMenu = !composerMenuDismissed && skillOptions.length > 0;
 
 	useEffect(() => {
@@ -2013,6 +2194,18 @@ export function AgentPanel({
 				.filter((p) => p.length > 0);
 			if (!normalized.length) return;
 			setMentionedPaths((prev) => [...new Set([...prev, ...normalized])]);
+			// Remember for empty-`@` recent hints (per Vault).
+			try {
+				const storage =
+					typeof localStorage === "undefined" ? null : localStorage;
+				let recents: string[] = [];
+				for (const path of normalized) {
+					recents = pushRecentMentionPath(storage, vaultPath, path);
+				}
+				if (recents.length) setRecentMentionPaths(recents);
+			} catch {
+				// ignore quota / private mode
+			}
 			setComposerMenuDismissed(true);
 			// Clear an in-progress @ query so the menu closes after attach.
 			setComposerText((prev) =>
@@ -2025,6 +2218,7 @@ export function AgentPanel({
 	const attachMention = useCallback(
 		(path: string) => {
 			attachContextPaths([path]);
+			setMentionBrowseRoot(null);
 		},
 		[attachContextPaths],
 	);
@@ -2103,13 +2297,37 @@ export function AgentPanel({
 
 		if (event.key === "Escape" && (showMentionMenu || showSkillMenu)) {
 			event.preventDefault();
+			// While browsing a folder, Esc steps up; only dismiss at root.
+			if (showMentionMenu && mentionBrowseRoot) {
+				leaveMentionFolder();
+				return;
+			}
 			setComposerMenuDismissed(true);
+			setMentionBrowseRoot(null);
 			return;
 		}
 
 		if (showMentionMenu) {
+			if (event.key === "ArrowLeft" && mentionBrowseRoot) {
+				event.preventDefault();
+				leaveMentionFolder();
+				return;
+			}
+			if (event.key === "ArrowRight") {
+				const path =
+					mentionOptions[mentionActiveIndex] ?? mentionOptions[0] ?? null;
+				if (
+					path &&
+					mentionPathHasChildren(path, mentionCandidates, paperPathSet)
+				) {
+					event.preventDefault();
+					enterMentionFolder(path);
+					return;
+				}
+			}
 			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 				event.preventDefault();
+				if (mentionOptions.length === 0) return;
 				setMentionActiveIndex((index) =>
 					event.key === "ArrowDown"
 						? (index + 1) % mentionOptions.length
@@ -3027,22 +3245,10 @@ export function AgentPanel({
 											{currentFilePath ? (
 												<button
 													type="button"
-													className={cn(
-														"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-xs transition-colors",
-														includeSelectedFile
-															? "bg-muted/20 text-foreground hover:bg-muted"
-															: "border-dashed bg-transparent text-muted-foreground hover:bg-muted/40",
-													)}
-													aria-pressed={includeSelectedFile}
+													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
 													disabled={activeTabIsRunning}
-													onClick={() =>
-														setIncludeSelectedFile((current) => !current)
-													}
-													title={
-														includeSelectedFile
-															? t("composer.currentFileRemove")
-															: t("composer.currentFileAdd")
-													}
+													onClick={() => removeContextPath(currentFilePath)}
+													title={t("composer.currentFileRemove")}
 												>
 													<ContextPathIcon
 														path={currentFilePath}
@@ -3050,34 +3256,36 @@ export function AgentPanel({
 														paperPaths={paperPathSet}
 													/>
 													<span className="truncate" title={currentFilePath}>
-														{currentFilePath}
-													</span>
-													{includeSelectedFile ? (
-														<X className="size-3 shrink-0 text-muted-foreground" />
-													) : (
-														<Plus className="size-3 shrink-0 text-muted-foreground" />
-													)}
-												</button>
-											) : null}
-											{mentionChipPaths.map((path) => (
-												<button
-													key={path}
-													type="button"
-													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-													onClick={() => removeContextPath(path)}
-													title={t("composer.removeContext", { path })}
-												>
-													<ContextPathIcon
-														path={path}
-														directoryPaths={directoryPathSet}
-														paperPaths={paperPathSet}
-													/>
-													<span className="max-w-[16rem] truncate" title={path}>
-														{path}
+														{currentFileLabel}
 													</span>
 													<X className="size-3 shrink-0 text-muted-foreground" />
 												</button>
-											))}
+											) : null}
+											{mentionChipPaths.map((path) => {
+												const label = labelForPath(path);
+												return (
+													<button
+														key={path}
+														type="button"
+														className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+														onClick={() => removeContextPath(path)}
+														title={t("composer.removeContext", { path })}
+													>
+														<ContextPathIcon
+															path={path}
+															directoryPaths={directoryPathSet}
+															paperPaths={paperPathSet}
+														/>
+														<span
+															className="max-w-[16rem] truncate"
+															title={path}
+														>
+															{label}
+														</span>
+														<X className="size-3 shrink-0 text-muted-foreground" />
+													</button>
+												);
+											})}
 										</div>
 									) : null}
 									{selectedSkills.length > 0 ? (
@@ -3111,30 +3319,113 @@ export function AgentPanel({
 											role="listbox"
 											className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
 										>
-											{mentionOptions.map((path, index) => (
-												<button
-													key={path}
-													id={`agent-mention-option-${index}`}
-													type="button"
-													role="option"
-													aria-selected={mentionActiveIndex === index}
-													className={cn(
-														"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-														mentionActiveIndex === index
-															? "bg-muted"
-															: "hover:bg-muted/70",
-													)}
-													onMouseEnter={() => setMentionActiveIndex(index)}
-													onClick={() => attachMention(path)}
-												>
-													<ContextPathIcon
-														path={path}
-														directoryPaths={directoryPathSet}
-														paperPaths={paperPathSet}
-													/>
-													<span className="truncate">{path}</span>
-												</button>
-											))}
+											{mentionBrowseRoot ? (
+												<div className="mb-0.5 flex items-center gap-0.5 border-border/60 border-b px-0.5 pb-1">
+													<button
+														type="button"
+														className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+														aria-label={t("composer.mentionBack")}
+														title={t("composer.mentionBack")}
+														onClick={leaveMentionFolder}
+													>
+														<ChevronLeft className="size-3.5" aria-hidden />
+													</button>
+													<span
+														className="min-w-0 flex-1 truncate pr-1 text-muted-foreground text-xs"
+														title={mentionBrowseRoot}
+													>
+														{labelForPath(mentionBrowseRoot)}
+													</span>
+												</div>
+											) : null}
+											{mentionOptions.length === 0 ? (
+												<div className="px-2 py-2 text-muted-foreground text-xs">
+													{t("composer.mentionEmptyFolder")}
+												</div>
+											) : (
+												mentionOptions.map((path, index) => {
+													const label = labelForPath(path);
+													const showPathHint =
+														!mentionBrowseRoot &&
+														label !== path &&
+														path.includes("/");
+													const canEnter = mentionPathHasChildren(
+														path,
+														mentionCandidates,
+														paperPathSet,
+													);
+													return (
+														<div
+															key={path}
+															className={cn(
+																"flex w-full items-center gap-0.5 rounded-md text-sm",
+																mentionActiveIndex === index
+																	? "bg-muted"
+																	: "hover:bg-muted/70",
+															)}
+														>
+															<button
+																type="button"
+																id={`agent-mention-option-${index}`}
+																role="option"
+																aria-selected={mentionActiveIndex === index}
+																className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left focus-visible:outline-none"
+																onMouseEnter={() =>
+																	setMentionActiveIndex(index)
+																}
+																onClick={() => attachMention(path)}
+															>
+																<ContextPathIcon
+																	path={path}
+																	directoryPaths={directoryPathSet}
+																	paperPaths={paperPathSet}
+																/>
+																<span className="min-w-0 flex-1 truncate">
+																	<span className="block truncate" title={path}>
+																		{label}
+																	</span>
+																	{showPathHint ? (
+																		<span
+																			className="block truncate text-[11px] text-muted-foreground"
+																			title={path}
+																		>
+																			{path}
+																		</span>
+																	) : null}
+																</span>
+															</button>
+															{canEnter ? (
+																<button
+																	type="button"
+																	tabIndex={-1}
+																	className="mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+																	aria-label={t("composer.mentionEnterFolder", {
+																		name: label,
+																	})}
+																	title={t("composer.mentionEnterFolder", {
+																		name: label,
+																	})}
+																	onMouseEnter={() =>
+																		setMentionActiveIndex(index)
+																	}
+																	onClick={(e) => {
+																		e.preventDefault();
+																		e.stopPropagation();
+																		enterMentionFolder(path);
+																	}}
+																>
+																	<ChevronRight
+																		className="size-3.5"
+																		aria-hidden
+																	/>
+																</button>
+															) : (
+																<span className="mr-0.5 size-7 shrink-0" />
+															)}
+														</div>
+													);
+												})
+											)}
 										</div>
 									) : null}
 									{showSkillMenu ? (
@@ -3502,24 +3793,10 @@ export function AgentPanel({
 									})}
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid max-h-[50vh] grid-cols-2 gap-3 overflow-hidden">
-								<div className="flex min-h-0 flex-col">
-									<p className="mb-1 font-medium text-muted-foreground text-xs">
-										{t("review.before")}
-									</p>
-									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
-										{notesReview.before || t("review.empty")}
-									</pre>
-								</div>
-								<div className="flex min-h-0 flex-col">
-									<p className="mb-1 font-medium text-muted-foreground text-xs">
-										{t("review.after")}
-									</p>
-									<pre className="agentero-scroll min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
-										{notesReview.after || t("review.empty")}
-									</pre>
-								</div>
-							</div>
+							<NotesReviewDiff
+								before={notesReview.before}
+								after={notesReview.after}
+							/>
 							<DialogFooter>
 								<Button
 									variant="outline"

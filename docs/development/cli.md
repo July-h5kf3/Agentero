@@ -80,7 +80,7 @@
 1. agentero vault which --json          # 确认库根
 2. agentero paper list --json           # L1 索引
 3. agentero paper get <path|id> --json  # 单篇 meta + 建议读取路径
-4. 按需 read_file: NOTES.md → highlights.md → PAPER.md → source/
+4. 按需 read_file: NOTES.md → marks/ → PAPER.md → source/
 5. 入库: agentero import id <arxiv|doi|url> --json
 ```
 
@@ -285,23 +285,25 @@ agentero
       "tex": true,
       "paperMd": false,
       "notesMd": true,
-      "highlightsMd": true
+      "marksDir": true
     },
     "suggestedReads": [
       "papers/1706.03762/NOTES.md",
-      "papers/1706.03762/highlights.md",
+      "papers/1706.03762/marks",
       "papers/1706.03762/PAPER.md"
     ]
   }
 }
 ```
 
-- `suggestedReads` 按 L2 → L2.5 → L3 顺序，**仅包含存在的文件**
+- `assets.marksDir`：`{paper}/marks/` 是否存在（阅读器划词 JSON：`kind` ∈ highlight / ask / translate）
+- `suggestedReads` 按 L2 → L2.5（`marks/`）→ L3 顺序，**仅包含存在的路径**（目录或文件）
 - 正文内容不进 JSON；Agent 自己读文件
 
 **`paper paths <ref>`**
 
 - 极简：只输出相关路径列表（text 每行一个 / json `string[]`）
+- 含 paper 根、`NOTES.md`、`marks/`（若有）、`PAPER.md`、本地 PDF、`source/`（有 TeX 时）
 - 适合 Agent tool 描述极短、只要路径清单的场景
 
 #### C. 文献基础（无 Agent）

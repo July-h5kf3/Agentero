@@ -33,7 +33,4 @@ export function buildPdfAskPrompt(
 	return parts.join("\n\n");
 }
 
-export {
-	buildPdfTranslatePrompt,
-	buildTranslatePrompt,
-} from "@/lib/translate/prompt";
+export { buildTranslatePrompt } from "@/lib/translate/prompt";

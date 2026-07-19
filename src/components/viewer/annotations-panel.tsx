@@ -213,7 +213,7 @@ function AnnotationCard({
 					className={cn(
 						"mt-1.5 line-clamp-2 border-l-2 pl-2.5 text-xs leading-relaxed",
 						swatchBorderClass(a.color),
-						a.comment ? "text-muted-foreground" : "text-foreground/90",
+						a.comment ? "text-muted-foreground/90" : "text-muted-foreground",
 					)}
 				>
 					{a.quote}
@@ -222,7 +222,7 @@ function AnnotationCard({
 					<div className="mt-2">
 						<ExpandableText
 							text={a.comment}
-							className="whitespace-pre-wrap break-words text-[13px] text-foreground leading-relaxed"
+							className="whitespace-pre-wrap break-words text-[13px] text-foreground/80 leading-relaxed"
 						/>
 					</div>
 				) : null}

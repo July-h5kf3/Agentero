@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-	buildPdfTranslatePrompt,
 	buildTranslatePrompt,
 	canProbeFreeMtProvider,
 	FREE_MT_PROVIDER_IDS,
@@ -141,8 +140,13 @@ describe("translate prompts", () => {
 		expect(p).toContain("only the translation");
 	});
 
-	it("pdf re-export includes page context", () => {
-		const p = buildPdfTranslatePrompt("attention", 3, "Chinese");
+	it("pdf selection surface includes page context", () => {
+		const p = buildTranslatePrompt({
+			text: "attention",
+			targetLangName: "Chinese",
+			page: 3,
+			surface: "pdf-selection",
+		});
 		expect(p).toContain("page 3");
 		expect(p).toContain("attention");
 	});

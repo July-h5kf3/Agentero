@@ -19,7 +19,7 @@ Host (Tauri + Rust)
 ### 2.1 命名规范
 
 - Tauri command：`namespace:verb`（全小写，冒号分隔命名空间）。
-  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`window_new`、`graph_get_graph`）。
+  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`vault_ensure`、`window_new`、`graph_get_graph`）。
 
 ### 2.2 参数与返回
 
@@ -81,8 +81,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
-> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
+> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
+> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
 #### `vault_create`（已实现）
@@ -118,6 +118,26 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 种子 **bundled skills**（已存在则跳过）：`paper-reader`、`agentero-cli`、`idea-evaluator`、`deep-research`（后两者含 `references/`，来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，**CC BY-NC-SA 4.0**；另写 `skills/README.md` 与 `LICENSE-Supervisor-Skills.txt`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
+
+#### `vault_ensure`（已实现）
+
+幂等脚手架 / 同步缺失 bundled skills（Host `ensure_vault`，与 `vault_create` 同一实现）。**打开或恢复 Vault 时**前端调用，以便应用更新后把**新增** skill 写入 `.agents/skills/`。
+
+- **参数**
+
+```ts
+{
+  path: string; // 本地绝对路径
+}
+```
+
+- **返回**：同 `vault_create`（`ApiResult<CreateVaultResult>`；`created` 仅含本次新建的相对路径）。
+
+- **策略**
+  - **只补缺失**：目录 / `AGENTS.md` / 模板里有而盘上没有的 skill 文件。
+  - **从不覆盖**：用户改过的 `SKILL.md` 或 references 保持原样。
+  - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
+  - 前端：若 `created` 含 `.agents/skills/<id>/…`，右上角 success toast（`vault.skillsSeeded`）提示新增 skill 名称；无新增则不打扰。
 
 #### 远程 Vault（SSH/SFTP，MVP 已实现）
 
@@ -163,6 +183,7 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
 
 Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
+
 
 #### `path_open_in_terminal`（已实现）
 
@@ -555,7 +576,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 创建 paper 文件夹（默认 `papers/<id>/`，允许 `papers/<org>/…/<id>/`）与 `source/`；**元数据写入 catalog**（`path` = 该文件夹；不写默认 `metadata.json`）。
   - 下载 LaTeX source、PDF、HTML 到 `source/`。
   - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/PAPER.md`。
-  - 调用 Agent 生成 `papers/<id>/NOTES.md`，并创建空的 `papers/<id>/highlights.md`。
+  - 调用 Agent 生成 `papers/<id>/NOTES.md`。
   - **不**自动更新根级 `PAPERS.md` / `library.bib`（需要时由用户触发 `catalog:export_*`）。
 ```
 
@@ -625,7 +646,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 异步任务，通过 `pdf:progress` / `pdf:completed` / `pdf:failed` 事件推送结果。
   - 生成 citekey，落位 `papers/<citekey>/`，**metadata 写入 catalog**（`type=pdf`）。
   - 原始 PDF 存入 `source/`；用选定 `PdfParser` 全文解析生成 `PAPER.md`（PDF 来源必生成）与 `assets/`，`body_source` / `body_quality` 写入 catalog。
-  - 调用 Agent 生成 `NOTES.md`，创建空 `highlights.md`。
+  - 调用 Agent 生成 `NOTES.md`。
   - **不**自动写 `PAPERS.md` / `library.bib`。
   - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
 ```
@@ -765,7 +786,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     }
   }
   ```
-- **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` / `highlights.md`（`NOTES.md` 摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF** 到 `source/`；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
+- **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF** 到 `source/`；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
 
 #### `paper_download_assets`（已落地）
 
@@ -781,20 +802,34 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
 - **行为**：读 catalog 取 `pdf_url` / `arxiv_id` / `doi`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。下载客户端使用**浏览器 UA**（绕开部分出版商 403）；若直链/arXiv 候选都失败且有 `doi`，再查 **Crossref** 取直链 / OA PDF 兜底。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。
 
+#### `paper_stage_import_file`（已落地）
+
+将「无绝对路径」的 OS 拖放 PDF（macOS WKWebView 常无 `File.path`）以 base64 写入 `~/.agentero/import-tmp/`，返回绝对路径供 `paper_import_local_pdf` 使用。
+
+- **参数**（`args`）：`{ fileName: string; contentBase64: string }`
+- **返回**：`{ ok: true; data: { path: string } }`
+
 #### `paper_import_local_pdf`（已落地）
 
-把用户选择的本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**；元数据来自文件名。前端经魔棒弹层 `FileUp` 按钮的原生 PDF 选择器（多选）触发。
+把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹** → metadata 确认对话框后再导入。
 
 - **参数**（invoke 字段名 `args`）：
   ```ts
   {
     vaultPath: string;
     parentDir: string;   // Vault 相对，如 papers 或 papers/nlp
-    filePaths: string[]; // 用户选择的本地 PDF 绝对路径
+    filePaths?: string[]; // 仅路径（无 overrides）时用；`entries` 非空时忽略
+    entries?: Array<{    // 推荐：路径 + 可选 metadata（确认对话框）
+      filePath: string;
+      title?: string;
+      authors?: string[];
+      year?: number;
+      id?: string;       // 文件夹 slug 偏好；Host 仍会做 -2/-3 去重
+    }>;
   }
   ```
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
-- **行为**：每个 PDF → 由文件名 stem 派生 slug（`{parent}/{slug}/`，冲突加 `-2`/`-3`）与标题；复制到 `{slug}.pdf`（论文根目录）；写 `NOTES.md` / `highlights.md` 壳（摘要优先译中文，见 `lookup_import`）+ catalog（type `pdf`）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
+- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
 
 #### `paper_parse_body`（已落地）
 
@@ -1117,6 +1152,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
   permissionMode?: string; // "restricted" | "ask" | "auto"；"ask" 时每个 ACP 权限请求转交用户（agent:permission-request）
   responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
+  personalPrompt?: string; // 用户个人偏好提示词；省略或空时不注入
   hideFromChatHistory?: boolean; // 默认 false；true 时不写入 Vault Codex 会话索引（精读 / PDF 划词提问等）
 }
 ```
@@ -1136,9 +1172,10 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `restricted`（默认）：取消所有 ACP 权限请求；
   - `ask`（每次询问）：每个权限请求经 `agent:permission-request` 事件转交前端，用户点选后由 `agent_respond_permission` 回传（超时 5 分钟未应答则取消）；
   - `auto`（自动批准）：选择第一个 AllowOnce 选项（等价旧 `autoApprove: true`）。
-- **笔记写后审阅（信任闭环）**：运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`），运行结束后若被 Agent 重写则 emit `agent:notes-review`，前端弹「原文 / Agent 版本」对照，可保留或还原。
+- **笔记写后审阅（信任闭环）**：运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`），运行结束后若被 Agent 重写则 emit `agent:notes-review`，前端弹**统一 Diff**（行级增删），可保留或还原。
 
 - **回答语言**：设置 → Agent 提供全局「回答语言」（自动 / English / 简体中文，独立于界面语言）。前端 `runOnce` 统一读取该设置并透传 `responseLanguage`；Host 在 `build_prompt`（`prompts.rs`）为所有 workflow 追加一句语言指令，`auto` 时不注入。
+- **个人偏好提示词**：设置 → Agent 多行文本（`agentPersonalPrompt`，默认空）。非空时前端 `runOnce` 透传 `personalPrompt`；Host 在 `build_prompt` system envelope 追加 `User preference instructions` 块（所有 workflow）。留空不注入；Chat 展示剥离 envelope，不出现在对话记录。
 
 - **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
 
@@ -1607,7 +1644,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 | `toggle_sidebar` | Toggle Sidebar | `⌥⌘S` | 前端监听（左栏 collapsible；与右栏隔离） |
 | `toggle_chat` | Toggle Chat | `⌘L` | 前端监听（右栏 collapsible 常驻；勿条件卸载 Panel） |
 
-前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒、`⌥⌘←/→` 切换文档标签。`⌘W` 亦可由渲染层 `shortcuts.ts` 直接匹配（与菜单同源逻辑，防抖避免双触发）。
+前端快捷键（非菜单 emit，见 `src/lib/shortcuts.ts` / `docs/frontend/ui.md` §3.1）：`⌥⌘R` 在 Finder 中显示、`⌥⌘T` 在终端中打开、`⌘←` 折叠选中文件夹、`⇧⌘←` 折叠文件树至默认（仅 `papers/` 展开）、`⌘⌫` 删除选中树项、`⇧⌘I` 魔棒、`⌥⌘←/→` 切换文档标签。`⌘W` 亦可由渲染层 `shortcuts.ts` 直接匹配（与菜单同源逻辑，防抖避免双触发）。
 
 ## 3.x Headless CLI（对照）
 
@@ -1615,7 +1652,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 | CLI | Host service / command 锚点 |
 |---|---|
-| `vault create` | `services::vault::create_vault` / `vault_create` |
+| `vault create` | `services::vault::create_vault` / `vault_create`（与 GUI `vault_ensure` 同幂等实现） |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
 | `paper list\|get\|paths\|delete\|set-read\|set-tags\|tags` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
@@ -1659,5 +1696,5 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - `lookup:*` 与 PDF prepare 共用元数据管道。
 - `citation:fetch` / `citation:list_neighbors`（名称待定）：引用/被引邻域与缓存刷新（V0.7）。
 - ~~`search:full_text`~~ → 已用 walk 式 `vault_search`（命令面板）；FTS5 / PDF 正文层仍可替换增强。
-- `reader:annotations` 标注（`highlights.md`）读写。
+- `reader:annotations`（历史规划；划词标注现为前端 `marks/*.json`，不经 Host command）。
 - `sync:*` 多设备同步（远期）。

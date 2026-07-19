@@ -23,7 +23,7 @@
 
 **非目标（首版不做）**：
 
-- 完整 Zotero/Hypothesis 高亮批注系统（仍走后续 `highlights.md` 路线）。
+- 完整 Zotero/Hypothesis 原位高亮同步（导入侧暂迁文本到 `NOTES.md`；阅读器自用 `marks/`）。
 - 跨设备实时协作评论。
 - 扫描件 OCR 实时划词（无文本层时降级为「仅坐标提问」，见 §7）。
 - 在 PDF 二进制内写入注解（不改原始 PDF 文件）。
@@ -72,7 +72,7 @@
 |---|---|
 | 在 PDF 内嵌 XFDF/注解 | 污染用户原始 PDF；与 local-first「人可读旁路文件」冲突 |
 | 仅存 `.agentero/catalog.sqlite` | 问答是人的阅读产物，应可被外部工具打开；JSON 文件更透明 |
-| 全部写入 `highlights.md` | Markdown 不便表达多轮消息与流式元数据；首版 JSON 更干净；可后续互导 |
+| 全部写入 Markdown 文件 | 不便表达多轮消息与流式元数据；JSON `marks/` 更干净 |
 | 浏览器扩展式划词 | 应用内 Webview 已有 PDF，无需跨页面扩展 |
 | 自研 Canvas 文本命中 | TextLayer 已够用；仅在无文本层时再考虑坐标-only |
 
@@ -199,13 +199,13 @@ interface PdfTranslateRecord {
 
 实现：`src/lib/pdf-selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
 
-### 5.3 与 `highlights.md` 的边界
+### 5.3 存储边界
 
-| | `marks/*.json` | `highlights.md`（规划） |
+| | `marks/*.json` | `NOTES.md` |
 |---|---|---|
-| 目的 | 阅读器标注/问答/翻译（运行时事实来源） | 便携 Markdown 引文证据层 |
-| 默认 | **读写均用 marks** | **不自动写入** |
-| 后续 | 可选导出 quote+comment | Agent/双链 `^id` |
+| 目的 | 阅读器标注/问答/翻译（运行时事实来源） | 人写综合笔记 / 精读讲义 |
+| 默认 | **读写均用 marks** | **不**因划词自动写入 |
+| 导出 | 可选将来导出 quote+comment 为 Markdown | 独立 |
 
 ## 6. 前端模块
 
@@ -257,6 +257,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
 | **M6 选区菜单** | 划词弹菜单：高亮 / 批注 / 提问 / 翻译 → 统一 `marks/*.json`；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除 | ✅ |
 | **M7 批注（Zotero 式）** | 「批注」= 建高亮 + 内联编辑器写 `comment`；页边批注针；右侧「批注」面板（活动 PDF tab）列卡、跳转闪烁、编辑/删除；**不写 `NOTES.md`** | 新建/编辑/面板跳转/删除闭环；`comment` 落盘且 `version` 兼容 | ✅ |
+| **M7b 批注 UX** | 内联编辑器 **`Enter` 保存 / `Shift+Enter` 换行**；批注卡与默认评论文案颜色减弱（`muted`，避免过深） | Enter 落盘；默认色对比度可接受 | ✅ |
 
 ## 10. 风险与降级
 
@@ -273,7 +274,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 
 - 单元：归一化坐标往返、`schema` 校验（含可选 `comment`）、index 重建。
 - 组件：selection → open popover；write → gutter 出现；click → 消息恢复。
-- 批注：批注→内联编辑器写 `comment` 落盘并出现页边批注针；右侧「批注」面板列卡、点击跳转并闪烁、编辑 / 删除闭环。
+- 批注：批注→内联编辑器写 `comment` 落盘并出现页边批注针；**`Enter` 保存 / `Shift+Enter` 换行**；右侧「批注」面板列卡、点击跳转并闪烁、编辑 / 删除闭环；默认评论文案色为 muted。
 - 集成：mock `agent:stream` 完成一轮后文件存在且可再读。
 - 手工：长 PDF 滚动、窗口缩放、中英混排选区、双栏论文（rects 多段）。
 
@@ -291,4 +292,4 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 3. **存储**：**仅** `papers/<id>/marks/<id>.json` + `kind`；坐标 0–1 归一化。  
 4. **智能**：ACP BYOA；不在应用内嵌模型 Key。  
 5. **UI**：SelectionCard / Gutter + AI Elements 提问卡。  
-6. **`highlights.md`**：可选将来导出，非运行时事实来源。
+6. **标注层唯一**：`marks/*.json`（不写 NOTES / 不另建 Markdown 证据文件）。

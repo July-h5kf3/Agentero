@@ -50,3 +50,5 @@ openssh = { version = "0.11.6", features = ["native-mux"] }
 openssh-sftp-client = { version = "0.15.7", features = ["openssh"] }
 futures-util = "0.3.33"
 walkdir = "2.5.0"
+base64 = "0.22"
+

@@ -128,6 +128,117 @@ export async function deleteRemovedManagedAssets(
 	return removed;
 }
 
+/**
+ * Grace period before deleting a managed asset after its last document ref
+ * disappears. Cut → paste / undo must still find the file on disk.
+ */
+export const ASSET_GC_DEBOUNCE_MS = 15_000;
+
+function assetGcKey(mdFilePath: string, url: string): string {
+	return `${mdFilePath}\0${url}`;
+}
+
+/**
+ * Debounced GC for managed `./assets/` files.
+ *
+ * Immediate delete on cut made copy/cut/paste of images lose the bitmap:
+ * the node path returned on paste, but the file was already removed.
+ * Schedule deletions; cancel if the URL is referenced again before the timer.
+ */
+export function createManagedAssetGc(options?: {
+	debounceMs?: number;
+	/** Called after one or more files are actually removed. */
+	onDeleted?: (removed: number) => void;
+	/** Injectable for tests. */
+	deleteAsset?: (mdFilePath: string, url: string) => Promise<boolean>;
+	now?: () => number;
+	setTimer?: typeof setTimeout;
+	clearTimer?: typeof clearTimeout;
+}) {
+	const debounceMs = options?.debounceMs ?? ASSET_GC_DEBOUNCE_MS;
+	const deleteAsset = options?.deleteAsset ?? deleteManagedMarkdownAsset;
+	const setTimer = options?.setTimer ?? setTimeout;
+	const clearTimer = options?.clearTimer ?? clearTimeout;
+
+	const pending = new Map<
+		string,
+		{ mdFilePath: string; url: string; timer: ReturnType<typeof setTimeout> }
+	>();
+
+	const cancel = (mdFilePath: string, url: string) => {
+		const key = assetGcKey(mdFilePath, url);
+		const entry = pending.get(key);
+		if (!entry) return;
+		clearTimer(entry.timer);
+		pending.delete(key);
+	};
+
+	const schedule = (mdFilePath: string, url: string) => {
+		if (!isManagedMarkdownAssetUrl(url)) return;
+		const key = assetGcKey(mdFilePath, url);
+		const existing = pending.get(key);
+		if (existing) {
+			clearTimer(existing.timer);
+		}
+		const timer = setTimer(() => {
+			pending.delete(key);
+			void deleteAsset(mdFilePath, url).then((ok) => {
+				if (ok) options?.onDeleted?.(1);
+			});
+		}, debounceMs);
+		pending.set(key, { mdFilePath, url, timer });
+	};
+
+	return {
+		/** Apply ref-count delta: schedule GC for dropped URLs, cancel for revived. */
+		observe(
+			mdFilePath: string,
+			prev: Map<string, number>,
+			next: Map<string, number>,
+		) {
+			if (!mdFilePath) return;
+			for (const [url, nextCount] of next) {
+				if (nextCount > 0) cancel(mdFilePath, url);
+			}
+			for (const [url, prevCount] of prev) {
+				if (prevCount <= 0) continue;
+				const nextCount = next.get(url) ?? 0;
+				if (nextCount > 0) continue;
+				schedule(mdFilePath, url);
+			}
+		},
+
+		/** Pending scheduled URLs (tests / debug). */
+		pendingUrls(): string[] {
+			return [...pending.values()].map((e) => e.url);
+		},
+
+		/** Cancel all timers without deleting (e.g. tests). */
+		cancelAll() {
+			for (const entry of pending.values()) clearTimer(entry.timer);
+			pending.clear();
+		},
+
+		/**
+		 * Run all pending deletes now (editor unmount: cut without paste still
+		 * should free disk eventually when leaving the file).
+		 */
+		async flush(): Promise<number> {
+			const entries = [...pending.values()];
+			pending.clear();
+			for (const e of entries) clearTimer(e.timer);
+			let removed = 0;
+			for (const e of entries) {
+				if (await deleteAsset(e.mdFilePath, e.url)) removed += 1;
+			}
+			if (removed > 0) options?.onDeleted?.(removed);
+			return removed;
+		},
+	};
+}
+
+export type ManagedAssetGc = ReturnType<typeof createManagedAssetGc>;
+
 /** Parent directory of a file path (preserves path separator style). */
 export function parentDir(filePath: string): string {
 	const trimmed = filePath.replace(/[/\\]+$/, "");

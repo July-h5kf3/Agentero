@@ -40,6 +40,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import {
 	type AgentListResponse,
@@ -1867,6 +1868,39 @@ function AgentPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+			</SettingsGroup>
+
+			<SettingsGroup>
+				<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+					<Label
+						htmlFor="agent-personal-prompt"
+						className="font-normal text-[13px]"
+					>
+						{t("agent.personalPrompt.label")}
+					</Label>
+					<p className="text-muted-foreground text-xs leading-relaxed">
+						{t("agent.personalPrompt.hint")}
+					</p>
+					<Textarea
+						id="agent-personal-prompt"
+						value={settings.agentPersonalPrompt}
+						onChange={(e) =>
+							patch({
+								agentPersonalPrompt: e.target.value.slice(0, 8000),
+							})
+						}
+						onBlur={() => {
+							const trimmed = settings.agentPersonalPrompt.trim();
+							if (trimmed !== settings.agentPersonalPrompt) {
+								patch({ agentPersonalPrompt: trimmed });
+							}
+						}}
+						placeholder={t("agent.personalPrompt.placeholder")}
+						rows={4}
+						className="min-h-[88px] resize-y text-xs"
+						spellCheck={true}
+					/>
+				</div>
 			</SettingsGroup>
 
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">

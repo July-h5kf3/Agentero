@@ -15,9 +15,9 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` 保留/还原）；模型收藏；**AGENTS.md 自动注入仍待**。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**；非 Codex 历史持久化见 [#33](https://github.com/poco-ai/Agentero/issues/33)。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**`.md` 变更防抖重建索引**（`scheduleWikiRebuild`，~900ms）；`[[` 补全 / Plate 内联节点可后续增强。 |
-| V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、拖拽导入、DOI 识别、PdfParser（MinerU）仍在规划。 |
+| V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
@@ -81,7 +81,7 @@
 - [x] 侧栏魔棒：粘贴 arXiv / DOI 等链接或编号 → Host `lookup_import`。
 - [x] Translator HTTP（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）+ arXiv Atom fallback。
 - [x] map → `PaperMetadata` → **catalog.sqlite 权威**；`metadata.json` 仅为投影。
-- [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` / `highlights.md` 壳。
+- [x] 创建 `papers/<id>/`（或当前 Papers 子文件夹下）、`NOTES.md` 壳（标注走 `marks/`）。
 - [x] **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文根目录）；**arXiv e-print 解压 LaTeX** 到 `source/`（无下载开关）。
 - [x] 中间栏 **PDF 预览本地优先**：本地 `{paper}/*.pdf` → 缺省时自动 `paper_download_assets` → 失败回退远程 `pdf_url`；HTML 仍用远程 `html_url`。
 - [x] `paper_list` / `paper_get`；Library 表格 + 虚拟节点。
@@ -136,7 +136,7 @@
   - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [x] **面板内置工作流入口**（建议 chips → 后端 workflow）：Summarize → `summary`；Ask library / List claims → `qa`；Draft Related Work → `related_work`；目标为当前聚焦 paper（提及路径或选中路径）。引用类 workflow 见 V0.7。
-- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端 Before/After 对照，**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
+- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端**统一 Diff**（`NotesReviewDiff`），**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Agentero 不要求模型 BYOK 表单。
 
@@ -208,7 +208,7 @@
 
 - [ ] 抽象 importer 接口（Source adapter）。
 - [ ] 将 arXiv / 魔棒入库实现迁移为第一个 adapter + **`paper_commit`**。
-- [x] 本地 PDF 导入：魔棒弹层文件选择（多选，`paper_import_local_pdf`）、citekey slug 生成 + 重复检测（`-2`/`-3`）、复制 PDF + catalog + liteparse `PAPER.md`；拖拽 / DOI 识别待增强。
+- [x] 本地 PDF 导入：魔棒弹层文件选择（多选，`paper_import_local_pdf`）、citekey slug 生成 + 重复检测（`-2`/`-3`）、复制 PDF + catalog + liteparse `PAPER.md`；**外部 PDF 拖到 `papers/` 组织夹** → metadata 确认对话框（`entries`）再入库；窗口级拦截默认导航防卡死；DOI 识别待增强。
 - [ ] 可插拔 `PdfParser`：默认本地 liteparse，配置 MinerU API Key 后优先云端 MinerU，失败自动降级。
 - [ ] PDF 元数据混合获取：DOI/arXiv 标识符查询 Crossref/arXiv + Agent 正文抽取，入库前用户确认。
 - [ ] 预留本地 HTML importer。
@@ -413,9 +413,9 @@
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
 - **Zotero Connector 兼容服务**（方案一，**MVP 已落地**）：Host 在 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；组织子文件夹可选；**`saveAttachment` 浏览器上传登录墙 PDF 已做**；见 [`../backend/connector.md`](../backend/connector.md) **§4.5**。仍待 P0：`saveSnapshot` / `saveSingleFile` / cookies。
 - 浏览器插件（可选后续）：自研扩展或 fork，可共用入库核心、不必抢 23119。
-- ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：导出 `highlights.md`、无文本层降级。
+- ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：无文本层降级。
 - ~~**翻译服务**~~ ✅ 首版（见 [`translate.md`](translate.md)）：应用级可插拔 `TranslateService`；**免费 MT + BYOA Agent**（无付费 API）；设置 → **Translate**；PDF 划词为首个消费方。T4+ 更多引擎/消费方仍待。
-- ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板）。仍待：`highlights.md` 摘录同步 / 导出到 `NOTES.md`（暂不做）、与划词提问互导。
+- ~~阅读器内 PDF 高亮 + 批注~~ ✅（就地批注 = 高亮 + 内联评论 + 页边批注针 + 右侧「批注」面板；统一 `marks/`）。
 - 远程 PDF 链接、任意网页入库（DOI 魔棒路径可部分覆盖）。
 - 多 Agent 并行读论文和综合评估。
 - ~~论文引用关系自动抽取~~ → 升格为 **V0.7**（引用图 + hover Info + Agent 工作流）。
@@ -525,7 +525,7 @@ Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、
 - [ ] 浏览器插件与网页 importer。
 - [x] PDF 划词提问 MVP（见 [`pdf-ask.md`](pdf-ask.md)：划词操作菜单；统一 **`marks/*.json`**（kind: ask/highlight/translate）+ 页边针 + ACP；M5 增强仍待）。
 - [x] PDF 标注系统（Zotero 式）：阅读器内就地批注（高亮 + 内联评论 `comment`）+ 页边批注针 + 右侧「批注」面板（活动 PDF tab；跳转闪烁 / 编辑 / 删除）；标注落 **`marks/`**（`kind: highlight`），**不**写 `NOTES.md`。**导出到 `NOTES.md` 暂不做**。
-- [ ] PDF/HTML 统一标注系统与 `highlights.md` 互导（HTML iframe 标注仍待）。
+- [ ] HTML iframe 标注（PDF 侧 `marks/` 已落地）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。
 - [ ] 复杂分屏（>2 格）与命名工作区会话。

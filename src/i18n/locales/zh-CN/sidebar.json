@@ -57,6 +57,20 @@
 			"cancel": "取消"
 		}
 	},
+	"importLocalPdf": {
+		"title": "导入 {{count}} 个 PDF",
+		"parentDir": "目标文件夹",
+		"parentHint": "Vault 相对路径（来自拖放落点，位于 papers/ 下）。",
+		"fieldTitle": "标题",
+		"fieldAuthors": "作者",
+		"authorsPlaceholder": "逗号分隔",
+		"fieldYear": "年份",
+		"fieldId": "文件夹 id",
+		"confirm": "导入",
+		"cancel": "取消",
+		"dropNoPath": "无法读取拖入的 PDF。请改用魔棒 → 导入 PDF，或从 Finder 再拖一次。",
+		"dropStageFailed": "无法准备拖入的 PDF：{{detail}}"
+	},
 	"recycleBin": {
 		"open": "回收站",
 		"title": "回收站",
@@ -87,9 +101,6 @@
 		"colType": "类型",
 		"colId": "标识符",
 		"colPublication": "出版物",
-		"colHeatmap": "阅读热力图",
-		"colHeatmapHint": "根据 PDF 高亮、对话与翻译的位置与频率生成的阅读热力图",
-		"heatmapEmpty": "暂无阅读活动",
 		"heatmapTooltip": "{{total}} 次 · 高亮 {{highlights}} · 对话 {{asks}} · 翻译 {{translates}}",
 		"sortBy": "按{{column}}排序",
 		"copyHint": "单击复制{{label}}",

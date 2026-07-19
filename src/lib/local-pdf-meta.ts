@@ -1,0 +1,57 @@
+/**
+ * Client-side defaults for local PDF import (mirrors Host `title_from_stem` / `slug_from_stem`).
+ */
+
+/** Basename without directory; keeps extension if present. */
+export function basenameOfPath(path: string): string {
+	return (
+		path
+			.replace(/[\\/]+$/, "")
+			.split(/[\\/]/)
+			.pop() ?? path
+	);
+}
+
+/** Filename stem (no extension). */
+export function stemFromPath(path: string): string {
+	const base = basenameOfPath(path);
+	const i = base.lastIndexOf(".");
+	if (i <= 0) return base;
+	return base.slice(0, i);
+}
+
+/** Human title from a filename stem (underscores → spaces). */
+export function titleFromStem(stem: string): string {
+	const spaced = stem
+		.trim()
+		.replace(/_/g, " ")
+		.split(/\s+/)
+		.filter(Boolean)
+		.join(" ");
+	return spaced || "Untitled";
+}
+
+/** Folder-safe slug from a stem (alphanumerics + dots; other runs → `-`). */
+export function slugFromStem(stem: string): string {
+	let s = "";
+	let prevSep = true;
+	for (const c of stem.trim()) {
+		if (/[A-Za-z0-9.]/.test(c)) {
+			s += c;
+			prevSep = false;
+		} else if (!prevSep) {
+			s += "-";
+			prevSep = true;
+		}
+	}
+	s = s.slice(0, 60).replace(/^[-.]+|[-.]+$/g, "");
+	return s || "paper";
+}
+
+export function titleFromPdfPath(path: string): string {
+	return titleFromStem(stemFromPath(path));
+}
+
+export function slugFromPdfPath(path: string): string {
+	return slugFromStem(stemFromPath(path));
+}

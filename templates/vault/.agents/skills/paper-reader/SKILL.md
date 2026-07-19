@@ -24,7 +24,7 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
 - Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
-- Do not delete `highlights.md`, `source/`, assets, or binary files.
+- Do not delete `marks/`, `source/`, assets, or binary files.
 
 ## Activation notes (CLI differences)
 

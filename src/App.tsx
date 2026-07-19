@@ -18,10 +18,12 @@ import { BacklinksPanel } from "@/components/layout/backlinks-panel";
 import { CommandPalette } from "@/components/layout/command-palette";
 import {
 	FileTree,
+	type FileTreeHandle,
 	type TreeCreateDraft,
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
+import { ImportLocalPdfDialog } from "@/components/layout/import-local-pdf-dialog";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
 import { NotesEditorTab } from "@/components/layout/notes-editor-tab";
 import { PaneHeader } from "@/components/layout/pane-header";
@@ -55,6 +57,7 @@ import {
 import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
+import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
@@ -68,9 +71,14 @@ import {
 	connectorSetVault,
 } from "@/lib/connector";
 import {
+	cleanupImportTempPaths,
+	isImportTempPath,
+} from "@/lib/external-file-drop";
+import {
 	addPaperByIdentifier,
 	downloadPaperAssets,
 	importLocalPdfs,
+	type LocalPdfImportEntry,
 } from "@/lib/lookup";
 import {
 	notifyError,
@@ -152,6 +160,7 @@ import {
 	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
+	ensureVault,
 	type FileNode,
 	getRecentVaults,
 	getSavedVaultPath,
@@ -166,6 +175,7 @@ import {
 	removeRecentVault,
 	resolveCreateParent,
 	saveVaultPath,
+	seededSkillIdsFromCreated,
 	vaultDisplayName,
 	vaultRelativePath,
 	writeVaultFile,
@@ -256,6 +266,7 @@ export default function App() {
 	const sourcePanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const notesPaneRef = useRef<HTMLDivElement>(null);
+	const fileTreeRef = useRef<FileTreeHandle>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
 	const agentZenModeRef = useRef(false);
@@ -1107,6 +1118,33 @@ export default function App() {
 		[rebuildWikiAndNotify],
 	);
 
+	/**
+	 * After app updates, seed any **new** bundled skills into `.agents/skills/`
+	 * (missing files only — never overwrite user edits). Runs on open / restore.
+	 * Toast only when at least one skill package was added.
+	 */
+	useEffect(() => {
+		if (!isTauri() || !vaultPath) return;
+		const path = vaultPath;
+		void ensureVault(path)
+			.then((result) => {
+				const skills = seededSkillIdsFromCreated(result.created);
+				if (skills.length === 0) return;
+				// Path may have changed while ensure was in flight.
+				if (vaultPathRef.current !== path) return;
+				notifySuccess(
+					t("vault.skillsSeeded", {
+						count: skills.length,
+						names: skills.join(", "),
+					}),
+					{ id: "vault-skills-seeded" },
+				);
+			})
+			.catch(() => {
+				// Best-effort: opening the vault must not fail if seed is blocked.
+			});
+	}, [vaultPath, t]);
+
 	const handleOpenVault = useCallback(async () => {
 		try {
 			if (!isTauri()) {
@@ -1824,18 +1862,6 @@ export default function App() {
 		[vaultPath, refreshTree, refreshLibrary, refreshTabNotes, t],
 	);
 
-	/** Vault-relative paths that can fetch LaTeX (for tree Download icon). */
-	const arxivPaperRelPaths = useMemo(() => {
-		const set = new Set<string>();
-		for (const p of libraryPapers) {
-			if (!p.path) continue;
-			if (p.arxiv_id || p.type === "arxiv") {
-				set.add(p.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
-			}
-		}
-		return set;
-	}, [libraryPapers]);
-
 	/** Catalog rows by vault-relative path (for Zap / is_read). */
 	const paperMetaByRelPath = useMemo(() => {
 		const map = new Map<string, PaperMetadata>();
@@ -1962,59 +1988,121 @@ export default function App() {
 		t,
 	]);
 
-	/** Import local PDF file(s) via native picker → paper folders + catalog + PAPER.md. */
-	const handleImportLocalPdf = useCallback(async () => {
-		if (!vaultPath || libraryIoBusy) return;
-		setLibraryIoBusy("import-pdf");
-		try {
-			const result = await runBackgroundTask(
-				{
-					kind: "import",
-					title: t("tasks.importPdf"),
-				},
-				async ({ setDetail, setProgress }) => {
-					setProgress(10);
-					const r = await importLocalPdfs({
-						vaultRoot: vaultPath,
-						parentDir: lookupParentDir,
-					});
-					if (!r) return null;
-					setProgress(70);
-					setDetail(
-						t("sidebar:papersLibrary.importPdfDone", {
-							count: r.papers.length,
-						}),
-					);
-					await refreshTree(vaultPath);
-					await rebuildWikiAndNotify(vaultPath);
-					await refreshLibrary();
-					setProgress(100);
-					return r;
-				},
-			);
-			if (result) {
-				if (result.papers[0]) openPaper(result.papers[0].paperDir);
-				if (result.errors.length) {
-					notifyWarning(
-						`${t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,
-					);
+	/**
+	 * Import local PDF file(s) → paper folders + catalog + PAPER.md.
+	 * - No args: native PDF picker (magic wand).
+	 * - `entries` + optional `parentDir`: confirm-dialog drop import.
+	 */
+	const handleImportLocalPdf = useCallback(
+		async (opts?: { entries?: LocalPdfImportEntry[]; parentDir?: string }) => {
+			if (!vaultPath || libraryIoBusy) return;
+			// Paths under ~/.agentero/import-tmp from path-less WKWebView drops.
+			const stagingPaths = (opts?.entries ?? [])
+				.map((e) => e.filePath)
+				.filter(isImportTempPath);
+			setLibraryIoBusy("import-pdf");
+			try {
+				const result = await runBackgroundTask(
+					{
+						kind: "import",
+						title: t("tasks.importPdf"),
+					},
+					async ({ setDetail, setProgress }) => {
+						setProgress(10);
+						const r = await importLocalPdfs({
+							vaultRoot: vaultPath,
+							parentDir: opts?.parentDir ?? lookupParentDir,
+							entries: opts?.entries,
+						});
+						if (!r) return null;
+						setProgress(70);
+						setDetail(
+							t("sidebar:papersLibrary.importPdfDone", {
+								count: r.papers.length,
+							}),
+						);
+						await refreshTree(vaultPath);
+						await rebuildWikiAndNotify(vaultPath);
+						await refreshLibrary();
+						setProgress(100);
+						return r;
+					},
+				);
+				if (result) {
+					if (result.papers[0]) openPaper(result.papers[0].paperDir);
+					if (result.errors.length) {
+						notifyWarning(
+							`${t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,
+						);
+					}
 				}
+			} catch (e) {
+				notifyError(e instanceof Error ? e.message : String(e));
+			} finally {
+				setLibraryIoBusy(null);
+				void cleanupImportTempPaths(stagingPaths);
 			}
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setLibraryIoBusy(null);
-		}
-	}, [
-		vaultPath,
-		libraryIoBusy,
-		lookupParentDir,
-		refreshTree,
-		refreshLibrary,
-		rebuildWikiAndNotify,
-		openPaper,
-		t,
-	]);
+		},
+		[
+			vaultPath,
+			libraryIoBusy,
+			lookupParentDir,
+			refreshTree,
+			refreshLibrary,
+			rebuildWikiAndNotify,
+			openPaper,
+			t,
+		],
+	);
+
+	/** OS PDF drop onto a papers/ folder → metadata confirm dialog (not silent import). */
+	const [importPdfDraft, setImportPdfDraft] = useState<{
+		items: Array<{ path: string; sourceName: string }>;
+		parentDir: string;
+	} | null>(null);
+
+	const handleDropLocalPdfs = useCallback(
+		(items: Array<{ path: string; sourceName: string }>, parentDir: string) => {
+			if (!items.length) return;
+			const paths = items.map((i) => i.path);
+			if (!vaultPath) {
+				notifyWarning(t("errors.dropPdfNeedsVault"));
+				void cleanupImportTempPaths(paths);
+				return;
+			}
+			if (libraryIoBusy) {
+				void cleanupImportTempPaths(paths);
+				return;
+			}
+			setImportPdfDraft({
+				items,
+				parentDir: parentDir || "papers",
+			});
+		},
+		[vaultPath, libraryIoBusy, t],
+	);
+
+	const handleConfirmImportLocalPdf = useCallback(
+		(entries: LocalPdfImportEntry[], parentDir: string) => {
+			setImportPdfDraft(null);
+			void handleImportLocalPdf({ entries, parentDir });
+		},
+		[handleImportLocalPdf],
+	);
+
+	const handleImportLocalPdfDialogOpenChange = useCallback(
+		(open: boolean) => {
+			if (open) return;
+			const paths = importPdfDraft?.items.map((i) => i.path) ?? [];
+			setImportPdfDraft(null);
+			// User cancelled confirm — drop staging copies.
+			void cleanupImportTempPaths(paths);
+		},
+		[importPdfDraft],
+	);
+
+	// Cancel WebView navigation on any OS file drop (PDF import is tree-only).
+	useExternalFileDrop();
 
 	const handleDownloadAllMissingAssets = useCallback(async () => {
 		if (!vaultPath) return;
@@ -2081,7 +2169,7 @@ export default function App() {
 		async (tags: PaperTag[]) => {
 			if (!vaultPath || !paperMeta) return;
 			// Prefer catalog path on meta; fall back to the open paper folder so
-			// Zotero/legacy rows whose projection omitted `path` can still be edited.
+			// Projection may omit `path`; fall back to the open paper folder.
 			let path = (paperMeta.path ?? "")
 				.replace(/\\/g, "/")
 				.replace(/^\/+|\/+$/g, "");
@@ -2336,6 +2424,22 @@ export default function App() {
 				run: () => handleOpenInTerminal(),
 			},
 			{
+				id: "vault.collapseTreeCurrent",
+				titleKey: "commands.vaultCollapseTreeCurrent",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				keywords: ["collapse", "folder", "tree", "fold"],
+				run: () => fileTreeRef.current?.collapseSelected(),
+			},
+			{
+				id: "vault.collapseTreeDefault",
+				titleKey: "commands.vaultCollapseTreeDefault",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				keywords: ["collapse", "default", "papers", "tree", "fold"],
+				run: () => fileTreeRef.current?.collapseToDefault(),
+			},
+			{
 				id: "view.toggleSidebar",
 				titleKey: "commands.viewToggleSidebar",
 				categoryKey: "commands.catView",
@@ -2451,6 +2555,8 @@ export default function App() {
 		revealInFinder: handleRevealInFinder,
 		openInTerminal: handleOpenInTerminal,
 		deleteTreeItem: handleDeleteSelected,
+		collapseTreeCurrent: () => fileTreeRef.current?.collapseSelected(),
+		collapseTreeDefault: () => fileTreeRef.current?.collapseToDefault(),
 		magicWand: openMagicWand,
 		quickOpen: () => openPalette("go"),
 		commandPalette: () => openPalette("commands"),
@@ -2784,6 +2890,7 @@ export default function App() {
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">
 									<FileTree
+										ref={fileTreeRef}
 										nodes={tree}
 										selectedPath={treeSelectedPath}
 										vaultPath={vaultPath}
@@ -2794,12 +2901,12 @@ export default function App() {
 										onDeletePaths={(paths) => void handleDeletePaths(paths)}
 										onMovePaths={handleMovePaths}
 										onMoveTo={(paths, dest) => void movePathsTo(paths, dest)}
+										onDropLocalPdfs={handleDropLocalPdfs}
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onSelectTrash={handleSelectTrash}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
-										arxivPaperRelPaths={arxivPaperRelPaths}
 										paperMetaByRelPath={paperMetaByRelPath}
 										paperTreeLabelMode={settings.paperTreeLabelMode}
 										paperTreeSortMode={settings.paperTreeSortMode}
@@ -3195,9 +3302,12 @@ export default function App() {
 									<AgentPanel
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
+										selectedPaperTitle={paperMeta?.title ?? null}
 										vaultMarkdownPaths={vaultMdFiles}
 										vaultDirectoryPaths={vaultDirPaths}
 										vaultPaperPaths={vaultPaperPaths}
+										paperMetaByRelPath={paperMetaByRelPath}
+										paperTreeLabelMode={settings.paperTreeLabelMode}
 										className="min-h-0 h-full"
 										title={t("labels.agent")}
 										variant={agentZenMode ? "zen" : "sidebar"}
@@ -3279,6 +3389,15 @@ export default function App() {
 					count={movePaths?.length ?? 0}
 					sourcePaths={movePaths ?? []}
 					onConfirm={(dest) => void runMovePaths(dest)}
+				/>
+
+				<ImportLocalPdfDialog
+					open={importPdfDraft !== null}
+					onOpenChange={handleImportLocalPdfDialogOpenChange}
+					items={importPdfDraft?.items ?? []}
+					parentDir={importPdfDraft?.parentDir ?? "papers"}
+					onConfirm={handleConfirmImportLocalPdf}
+					busy={libraryIoBusy === "import-pdf"}
 				/>
 
 				<ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
