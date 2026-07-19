@@ -388,7 +388,7 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | `connector_set_vault` | 写 | `{ vaultPath: string \| null }` |
 | `connector_set_parent_dir` | 写 | `{ parentDir: string }` — 默认保存父目录 |
 
-设置权威：**前端 `agentero-settings`** 存 `connectorEnabled`；启动时 `App` 调 `set_enabled`；Vault / Library 作用域同步 vault 与 parent。类型细节见 [`api.md`](api.md) §3.5b。
+设置权威：**XDG `settings.json`** 存 `connectorEnabled`（前端缓存经 `settings_get` / `settings_set`）；启动时 `App` 调 `set_enabled`；Vault / Library 作用域同步 vault 与 parent。类型细节见 [`api.md`](api.md) §3.5b。
 
 ### 7.2 Events
 

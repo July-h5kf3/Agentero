@@ -138,6 +138,10 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `remote_cache_stats` | `{ sessionId? }` → `{ bytes, files, root, maxBytes }`（无 session 则汇总全部） |
 | `remote_cache_clear` | `{ sessionId? }` → `{ freedBytes }` 清除 blob 缓存 |
 | `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
+| `remote_agent_scan` | 目录模板 + 远端 PATH 扫描 → `CatalogEntry[]`（设置页远端 Agent） |
+| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（Codex+SSH 拒绝） |
+| `host_identity` | 本机 hostname + `os`（macos/windows/linux）/ 设置 Host 徽章 |
+| `remote_host_identity` | 远端 `uname -s` → `os` 家族（Host 徽章系统图标） |
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
 
@@ -1543,7 +1547,34 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   - `parser.mineru.enabled`：是否启用云端 MinerU，默认 `false`。
   - `recent_vaults`：最近 Vault 列表（Host 维护，前端一般只读）。
 
-### 3.10 界面与本地化（UI / i18n）
+### 3.10 应用设置（XDG）
+
+应用 UI 设置与 Agent 注册表落在 **XDG 配置目录**（非 Vault、非 `localStorage`）：
+
+| 文件 | 路径 |
+|---|---|
+| 应用设置 | `$XDG_CONFIG_HOME/agentero/settings.json`（未设 env 时 Unix：`~/.config/agentero/settings.json`） |
+| Agent 注册表 | `$XDG_CONFIG_HOME/agentero/agents.json` |
+
+Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macOS 路径 `~/Library/Application Support/agentero/` 在首次启动时 **best-effort 复制** 到 XDG 路径。
+
+#### `settings_get`（已实现）
+
+- **返回**（`ApiResult`）：`{ settings: AppSettings, path: string, existed: boolean }`
+- `existed === false` 时前端可将遗留 `localStorage` 的 `agentero-settings` 一次性写入并清除。
+
+#### `settings_set`（已实现）
+
+- **参数**：`{ settings: AppSettings }`（camelCase，与前端 `src/lib/settings.ts` 同构）
+- **返回**：规范化后的 `AppSettings`（写盘 + 更新 Host 内存）
+
+#### `settings_path`（已实现）
+
+- **返回**：设置文件绝对路径字符串（About / 诊断用）
+
+实现：`src-tauri/src/services/app_settings.rs`、`services/paths.rs`、`commands/settings.rs`。
+
+### 3.11 界面与本地化（UI / i18n）
 
 #### `set_locale`（已实现）
 
@@ -1558,7 +1589,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 ```
 
 - **返回**：`Result<(), String>`（成功为 `()`，失败返回错误信息字符串）。
-- **说明**：locale 偏好由渲染层持有（`localStorage` 的 `agentero-settings.locale`）。Host 启动时以英文兜底构建菜单；前端挂载及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
+- **说明**：locale 偏好存于 XDG `settings.json`（`settings_get` / `settings_set`）。Host 启动时以英文兜底构建菜单；前端在 `ensureSettingsLoaded` 后及每次语言切换时调用 `set_locale` 同步。实现见 `src-tauri/src/lib.rs`（`build_menu` + `set_locale`）与 `src-tauri/src/i18n.rs`（菜单词条）。
 
 #### 菜单事件
 
