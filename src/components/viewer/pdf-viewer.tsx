@@ -85,6 +85,8 @@ import {
 } from "@/lib/pdf-highlight";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf-reading-position";
+import { createTranslateRecord, writePdfTranslate } from "@/lib/pdf-translate";
+import { writeReadingMetaPageCount } from "@/lib/reading-heatmap";
 import { loadSettings } from "@/lib/settings";
 import {
 	buildTranslatePrompt,
@@ -1242,6 +1244,20 @@ export function PdfViewer({
 		const quote = sm.anchor.quote?.trim();
 		if (!quote) return;
 
+		// Persist a lightweight translate event for the library reading heatmap.
+		if (paperAbsPath && sm.anchor.rects.length) {
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const rec = createTranslateRecord({
+				paperPath,
+				page: sm.anchor.page,
+				rects: mergeRectsByLine(
+					sm.anchor.rects.filter((r) => r.w > 0 && r.h > 0),
+				),
+				quote,
+			});
+			void writePdfTranslate(paperAbsPath, rec).catch(() => undefined);
+		}
+
 		// Cancel any in-flight translation before starting a new one.
 		const prevSid = translateSessionRef.current;
 		if (prevSid) {
@@ -1398,7 +1414,7 @@ export function PdfViewer({
 				);
 			}
 		})();
-	}, [selectionMenu, t, vaultPath]);
+	}, [selectionMenu, t, vaultPath, paperAbsPath, paperRelPath]);
 
 	// Optional: auto-run translate when a PDF selection menu opens.
 	useEffect(() => {
@@ -1883,6 +1899,12 @@ export function PdfViewer({
 									setNumPages(doc.numPages);
 									setError(null);
 									pdfDocRef.current = doc;
+									if (paperAbsPath && doc.numPages > 0) {
+										void writeReadingMetaPageCount(
+											paperAbsPath,
+											doc.numPages,
+										).catch(() => undefined);
+									}
 									void doc.getOutline().then((o) => {
 										setOutline((o as PdfOutlineNode[] | null) ?? []);
 									});

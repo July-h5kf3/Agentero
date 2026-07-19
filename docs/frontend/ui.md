@@ -171,7 +171,8 @@
   - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
-  - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签）；**双击**行打开对应 paper 文件夹。
+  - **列**：标题、作者、年份、**标签**、类型、标识符、**阅读热力图**；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签）；**双击**行打开对应 paper 文件夹。
+  - **阅读热力图**：聚合该篇 `highlights/`（划词高亮/批注）、`asks/`（对话）、`translates/`（翻译）的**页码 + 页内 y**，画成横向文档脊条（左=文首、右=文末；强度用主题 `primary` 的 `color-mix`，随 light/dark 变化）。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度；无元数据时用活动最大页。全库与文件夹作用域均显示。实现：`src/lib/reading-heatmap/`、`ReadingHeatmapBar`。
   - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。

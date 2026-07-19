@@ -179,7 +179,8 @@ Vault 技能种子（Create Vault，已存在不覆盖；模板见 `templates/va
 - 归一化坐标可在缩放/重开后重定位；页面上点击已有高亮出现「删除」浮层；`comment` 非空的高亮在页边渲染**批注针**，点击打开内联编辑器读/改评论。
 - 右侧「批注」面板列出**当前活动 PDF tab** 的批注卡（页码 + 引文 + 评论），点击跳转闪烁、可编辑 / 删除；由 `PdfViewerHandle` + `onHighlightsChange` 驱动。
 - **不**污染原始 PDF、**不**进 catalog、**不**写入 `NOTES.md`（旧「追加引文到 `NOTES.md`」行为已移除）；坏文件读取时跳过。
-- 「翻译」复用 asks 弹层走 Agent 流式，不额外落盘。
+- 「翻译」走独立翻译卡（免费 MT 或 BYOA Agent）；为阅读热力图额外落盘轻量记录 `papers/<id>/translates/<id>.json`（`page` + 归一化 `rects` + 可选 `quote`），**不**存译文正文。
+- **阅读热力图**（论文库列）：聚合 `highlights/` + `asks/` + `translates/` 的位置与频次；可选 `{paper}/reading-meta.json`（`pageCount`，打开 PDF 时写入）标定全文跨度。见 [`../frontend/ui.md`](../frontend/ui.md) §3。
 
 格式示例:
 

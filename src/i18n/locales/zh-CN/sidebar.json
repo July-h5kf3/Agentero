@@ -86,7 +86,15 @@
 		"colTags": "标签",
 		"colType": "类型",
 		"colId": "标识符",
+		"colPublication": "出版物",
+		"colHeatmap": "阅读热力图",
+		"colHeatmapHint": "根据 PDF 高亮、对话与翻译的位置与频率生成的阅读热力图",
+		"heatmapEmpty": "暂无阅读活动",
+		"heatmapTooltip": "{{total}} 次 · 高亮 {{highlights}} · 对话 {{asks}} · 翻译 {{translates}}",
 		"sortBy": "按{{column}}排序",
+		"copyHint": "单击复制{{label}}",
+		"copied": "已复制{{label}}",
+		"copyFailed": "无法复制到剪贴板",
 		"count": "共 {{formatted}} 篇",
 		"search": "按标题或标签搜索",
 		"noMatch": "没有匹配的论文。",
@@ -103,11 +111,7 @@
 		"exportDone": "已导出 {{count}} 篇",
 		"importFailed": "导入失败",
 		"exportFailed": "导出失败",
-		"desktopOnly": "导入/导出需要桌面应用。",
-		"colPublication": "出版物",
-		"copyHint": "单击复制{{label}}",
-		"copied": "已复制{{label}}",
-		"copyFailed": "无法复制到剪贴板"
+		"desktopOnly": "导入/导出需要桌面应用。"
 	},
 	"connector": {
 		"saved": "已从浏览器保存「{{title}}」",

@@ -2,6 +2,7 @@
  * Vault library: table of all papers from catalog.sqlite (display only).
  * Click column headers to sort ascending / descending.
  * Single-click a cell to copy that field; double-click a row to open the paper.
+ * Reading heatmap column: highlight / ask / translate intensity along the PDF.
  * Optional tag filter chips above the table.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -9,20 +10,31 @@ import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
 import {
 	type MouseEvent as ReactMouseEvent,
 	useCallback,
+	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { ReadingHeatmapBar } from "@/components/layout/reading-heatmap";
 import { Button } from "@/components/ui/button";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { filterPapersByScope } from "@/lib/papers-api";
+import {
+	heatmapCacheKey,
+	loadReadingHeatmaps,
+	type ReadingHeatmap,
+} from "@/lib/reading-heatmap";
 import { cn } from "@/lib/utils";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
 	papers: PaperMetadata[];
+	/** Vault root; required to load per-paper reading heatmaps. */
+	vaultPath?: string | null;
+	/** When the Library tab is focused — reload heatmaps (after PDF activity). */
+	active?: boolean;
 	loading?: boolean;
 	query?: string;
 	/**
@@ -39,6 +51,9 @@ export type PapersLibraryProps = {
 	rescanning?: boolean;
 	className?: string;
 };
+
+/** Data columns + fixed reading-heatmap column (not sortable). */
+const TABLE_COL_COUNT = 7;
 
 type SortKey = "title" | "authors" | "year" | "type" | "id" | "tags";
 type SortDir = "asc" | "desc";
@@ -205,6 +220,8 @@ function TagChip({
 
 export function PapersLibrary({
 	papers,
+	vaultPath = null,
+	active = true,
 	loading,
 	query,
 	scopePath = null,
@@ -218,6 +235,10 @@ export function PapersLibrary({
 	const { t, i18n } = useTranslation("sidebar");
 	const [sortKey, setSortKey] = useState<SortKey>("title");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
+	const [heatmaps, setHeatmaps] = useState<Map<string, ReadingHeatmap>>(
+		() => new Map(),
+	);
+
 	const handleSort = useCallback(
 		(key: SortKey) => {
 			if (key === sortKey) {
@@ -269,6 +290,24 @@ export function PapersLibrary({
 		() => filterPapersByScope(papers, scopePath),
 		[papers, scopePath],
 	);
+
+	/** Load reading heatmaps for the current folder scope (full library or org folder). */
+	useEffect(() => {
+		if (!active) return;
+		if (!vaultPath || !scopedPapers.length) {
+			setHeatmaps(new Map());
+			return;
+		}
+		let cancelled = false;
+		void loadReadingHeatmaps(vaultPath, scopedPapers, { concurrency: 6 }).then(
+			(map) => {
+				if (!cancelled) setHeatmaps(map);
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [vaultPath, scopedPapers, active]);
 
 	const allTags = useMemo(() => {
 		const map = new Map<string, string>();
@@ -456,19 +495,28 @@ export function PapersLibrary({
 										</th>
 									);
 								})}
+								<th
+									className="min-w-[88px] px-3 py-2 font-medium"
+									title={t("papersLibrary.colHeatmapHint")}
+								>
+									<span className="truncate">
+										{t("papersLibrary.colHeatmap")}
+									</span>
+								</th>
 							</tr>
 						</thead>
 						<tbody>
 							{paddingTop > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={SORT_COLUMNS.length}
+										colSpan={TABLE_COL_COUNT}
 										style={{ height: paddingTop }}
 									/>
 								</tr>
 							) : null}
 							{virtualRows.map((vr) => {
 								const p = rows[vr.index];
+								const heat = heatmaps.get(heatmapCacheKey(p));
 								return (
 									<tr
 										key={p.path ?? p.id}
@@ -689,13 +737,16 @@ export function PapersLibrary({
 												</span>
 											</button>
 										</td>
+										<td className="whitespace-nowrap px-3 py-2.5 align-middle">
+											<ReadingHeatmapBar heatmap={heat} />
+										</td>
 									</tr>
 								);
 							})}
 							{paddingBottom > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={SORT_COLUMNS.length}
+										colSpan={TABLE_COL_COUNT}
 										style={{ height: paddingBottom }}
 									/>
 								</tr>

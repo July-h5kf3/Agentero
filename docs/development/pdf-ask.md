@@ -130,6 +130,9 @@ papers/<id>/
   asks/                    # 本功能
     index.json             # 可选：线程目录（id、page、updatedAt）
     <threadId>.json        # 单线程完整记录
+  highlights/              # 划词高亮 / 批注 JSON
+  translates/              # 翻译事件（阅读热力图；不存译文）
+  reading-meta.json        # 可选：PDF pageCount（热图跨度）
   1706.03762.pdf
   ...
 ```

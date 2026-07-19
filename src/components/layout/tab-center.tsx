@@ -77,6 +77,8 @@ export const TabCenter = memo(function TabCenter({
 		return (
 			<PapersLibrary
 				papers={libraryPapers}
+				vaultPath={vaultPath}
+				active={active}
 				loading={libraryLoading}
 				query={libraryQuery}
 				scopePath={libraryScopePath}
