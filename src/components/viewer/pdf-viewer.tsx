@@ -1421,6 +1421,7 @@ export function PdfViewer({
 		(id: string) => {
 			setHighlights((prev) => prev.filter((h) => h.id !== id));
 			setHighlightMenu(null);
+			setCommentEditor((cur) => (cur?.id === id ? null : cur));
 			if (paperAbsPath) {
 				void deletePdfHighlight(paperAbsPath, id).catch(() => undefined);
 			}
@@ -2016,7 +2017,7 @@ export function PdfViewer({
 									quote={hl.quote}
 									initialComment={hl.comment}
 									onSave={(text) => saveComment(hl.id, text)}
-									onDelete={() => removeHighlight(hl.id)}
+									onCancel={() => removeHighlight(hl.id)}
 									onClose={() => setCommentEditor(null)}
 								/>
 							</div>

@@ -13,9 +13,12 @@ type AnnotationEditorProps = {
 	initialComment?: string;
 	/** Save the (possibly empty) note; empty means "no comment / plain highlight" */
 	onSave: (text: string) => void;
-	/** Delete the whole highlight */
-	onDelete: () => void;
-	/** Dismiss without saving */
+	/**
+	 * Cancel: remove the highlight (undo the selection annotation).
+	 * Wired to the Cancel button; Escape only closes without deleting.
+	 */
+	onCancel: () => void;
+	/** Dismiss editor without deleting the highlight (e.g. Escape) */
 	onClose: () => void;
 };
 
@@ -27,7 +30,7 @@ export function AnnotationEditor({
 	quote,
 	initialComment,
 	onSave,
-	onDelete,
+	onCancel,
 	onClose,
 }: AnnotationEditorProps) {
 	const { t } = useTranslation("viewer");
@@ -75,24 +78,13 @@ export function AnnotationEditor({
 					}
 				}}
 			/>
-			<div className="flex items-center justify-between">
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					className="text-destructive hover:text-destructive"
-					onClick={onDelete}
-				>
-					{t("annotations.delete")}
+			<div className="flex items-center justify-end gap-1">
+				<Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+					{t("annotations.cancel")}
 				</Button>
-				<div className="flex items-center gap-1">
-					<Button type="button" variant="ghost" size="sm" onClick={onClose}>
-						{t("annotations.cancel")}
-					</Button>
-					<Button type="button" size="sm" onClick={() => onSave(text)}>
-						{t("annotations.save")}
-					</Button>
-				</div>
+				<Button type="button" size="sm" onClick={() => onSave(text)}>
+					{t("annotations.save")}
+				</Button>
 			</div>
 		</div>
 	);
