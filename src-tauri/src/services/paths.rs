@@ -20,7 +20,7 @@ pub fn xdg_config_home() -> PathBuf {
     }
     #[cfg(windows)]
     {
-        return dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
+        dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
     }
     #[cfg(not(windows))]
     {
@@ -35,7 +35,7 @@ pub fn xdg_cache_home() -> PathBuf {
     }
     #[cfg(windows)]
     {
-        return dirs::cache_dir().unwrap_or_else(|| PathBuf::from("."));
+        dirs::cache_dir().unwrap_or_else(|| PathBuf::from("."))
     }
     #[cfg(not(windows))]
     {
@@ -114,6 +114,10 @@ fn env_dir(key: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// Fallback home directory for XDG defaults. Only used on non-Windows platforms
+/// (Windows uses `dirs::config_dir`/`cache_dir` directly), hence the cfg gate to
+/// avoid a dead-code warning on Windows builds.
+#[cfg(not(windows))]
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
