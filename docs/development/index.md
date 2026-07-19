@@ -41,7 +41,7 @@
 - [`prd.md`](prd.md)：产品需求、范围、用户流程、验收标准。
 - [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
 - [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
-- [`github-project.md`](github-project.md)：GitHub Project「Agentero」结构、标签、Issue 草案目录（**结构已沉淀；Issue 批量创建另议**）。
+- [`github-project.md`](github-project.md)：GitHub Project「Agentero」结构、标签、Issue 映射（B1–B8 / F1–F18 → #7–#32；看板 [orgs/poco-ai/projects/1](https://github.com/orgs/poco-ai/projects/1)）。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
 - [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。

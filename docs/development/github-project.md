@@ -2,7 +2,8 @@
 
 > **Project**：[`poco-ai/Agentero` → Org Project #1](https://github.com/orgs/poco-ai/projects/1)（标题 **Agentero**）  
 > **语料**：`docs/development/todo.md`（未勾选）、`docs/development/bug.md`、远程 Vault WIP（PR #6 / `remote-vault.md`）  
-> **原则**：相似问题合成 **一条 Issue 草案**（下方为**规划清单**，**尚未批量创建 GitHub Issue**）；子任务写在 Issue body checklist。  
+> **原则**：相似问题合成 **一条 Issue**；子任务写在 Issue body checklist。  
+> **Issue 已创建**（2026-07-19）：规划 ID → GitHub number 见 §3.0；看板已灌入 Project #1。  
 > **已修复记录**（如 `docs/bug_fix/`）不进 backlog，仅作对照。
 
 ---
@@ -73,47 +74,55 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 
 ---
 
-## 3. Issue 草案目录（待创建；结构冻结用）
+## 3. Issue 目录（规划 ID ↔ GitHub）
 
-下列 ID 仅用于本文与 Project 规划编号，**不等于** GitHub issue number。
+规划 ID（B*/F*）为产品语料编号；**#n** 为仓库 `poco-ai/Agentero` 的 GitHub issue number。
+
+### 3.0 映射一览
+
+| 规划 ID | GitHub | Status |
+|---|---|---|
+| B1–B8 | [#7](https://github.com/poco-ai/Agentero/issues/7)–[#14](https://github.com/poco-ai/Agentero/issues/14) | Todo |
+| F1–F14 | [#15](https://github.com/poco-ai/Agentero/issues/15)–[#28](https://github.com/poco-ai/Agentero/issues/28) | Todo |
+| **F15** | [#29](https://github.com/poco-ai/Agentero/issues/29) | **In Progress** |
+| F16–F18 | [#30](https://github.com/poco-ai/Agentero/issues/30)–[#32](https://github.com/poco-ai/Agentero/issues/32) | Todo |
+| Remote PR | [PR #6](https://github.com/poco-ai/Agentero/pull/6) | **In Progress**（链 F15） |
 
 ### 3.1 Bug（语料：`bug.md`）
 
-| ID | 建议标题 | 合并语料 | Labels |
+| ID | # | 标题 | Labels |
 |---|---|---|---|
-| **B1** | bug: 入库 / 本地 PDF / NOTES 初始化异常 | 重构入库；PDF metadata+NOTES 未初始化；拖入 PDF 卡死；下载失败时 NOTES 初始化 | `type:bug` `area:import` `priority:p0` |
-| **B2** | bug: Agent 上下文与系统提示体验 | 当前论文默认进对话；用户系统提示词；根目录 chat 历史文件（讨论） | `type:bug` `area:agent` `priority:p1` |
-| **B3** | bug: Skill 随应用更新同步 | Update 时同步 vault `.agents/skills` 是否最新 | `type:bug` `area:agent` `priority:p1` |
-| **B4** | bug: Markdown 编辑器卡顿与选区/末行 | 编辑卡顿；选中蓝色；点不到最后一行/无法新行；编辑器体验债 | `type:bug` `area:editor` `priority:p0` |
-| **B5** | bug: 笔记审阅应用 Diff 展示 | 改动用 Diff，不用难读对比 | `type:bug` `area:editor` `area:agent` `priority:p1` |
-| **B6** | bug/ux: 文件树 @ 提及与显示名排序 | @ 最近目录；@ 论文名；按显示名排序；收缩快捷键/只展 papers 一级 | `type:bug` `area:tree` `priority:p1` |
-| **B7** | bug: 批注默认色与 Enter 快捷键 | 文字颜色过深；Enter 确认 | `type:bug` `area:pdf` `priority:p1` |
-| **B8** | bug/ux: 标题栏图标与热力图样式 | icon 偏小；面板 icon 撞车；热力在标题栏背景 | `type:bug` `area:ui` `priority:p2` |
-
-Body 模板约定：写「语料：`docs/development/bug.md` §x」+「请验证是否仍复现」。
+| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | bug: 入库 / 本地 PDF / NOTES 初始化异常 | `type:bug` `area:import` `priority:p0` |
+| **B2** | [#8](https://github.com/poco-ai/Agentero/issues/8) | bug: Agent 上下文与系统提示体验 | `type:bug` `area:agent` `priority:p1` |
+| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | bug: Skill 随应用更新同步 | `type:bug` `area:agent` `priority:p1` |
+| **B4** | [#10](https://github.com/poco-ai/Agentero/issues/10) | bug: Markdown 编辑器卡顿与选区/末行 | `type:bug` `area:editor` `priority:p0` |
+| **B5** | [#11](https://github.com/poco-ai/Agentero/issues/11) | bug: 笔记审阅应用 Diff 展示 | `type:bug` `area:editor` `area:agent` `priority:p1` |
+| **B6** | [#12](https://github.com/poco-ai/Agentero/issues/12) | bug/ux: 文件树 @ 提及与显示名排序 | `type:bug` `area:tree` `priority:p1` |
+| **B7** | [#13](https://github.com/poco-ai/Agentero/issues/13) | bug: 批注默认色与 Enter 快捷键 | `type:bug` `area:pdf` `priority:p1` |
+| **B8** | [#14](https://github.com/poco-ai/Agentero/issues/14) | bug/ux: 标题栏图标与热力图样式 | `type:bug` `area:ui` `priority:p2` |
 
 ### 3.2 Feature / Epic（语料：`todo.md` 未勾选 + 产品远期）
 
-| ID | 建议标题 | 合并语料 | Labels |
+| ID | # | 标题 | Labels |
 |---|---|---|---|
-| **F1** | epic: Vault 采纳 / 打开已有文件夹整理 | P0-4b 整项；inspect/adopt；漂移修复；skill 路径；dry-run | `type:epic` `area:tree` `priority:p0` |
-| **F2** | feature: 统一 paper 入库管线 (`paper_commit`) | 流水线 P0–P4；各入口收敛 | `type:feature` `area:import` `priority:p0` |
-| **F3** | feature: 魔棒增强（候选 / 拖拽 / 元数据确认） | 关键词 Agent 候选；拖拽；DOI 确认面板；MinerU BYOK | `type:feature` `area:import` `priority:p1` |
-| **F4** | feature: Translator sidecar 本机捆绑 | 本机 sidecar | `type:feature` `area:import` `priority:p1` |
-| **F5** | feature: Agent AGENTS.md 注入与写前草稿拦截 | workflow 注入；写前草稿 | `type:feature` `area:agent` `priority:p0` |
-| **F6** | feature: 文献引用图 + Connected Papers 式邻域 + 引用 workflow | V0.7 hover Info；cites/cited_by；邻域 UI；Explore/Map/Ingest | `type:epic` `area:graph` `area:agent` `priority:p1` |
-| **F7** | feature: 双链 / Graph 增强 | `[[` 补全；Plate 内联；全屏/邻居高亮；边级增量 | `type:feature` `area:editor` `priority:p1` |
-| **F8** | feature: 工作区分屏（V0.6） | 2 格 split；pin/网格 checklist | `type:feature` `area:ui` `priority:p1` |
-| **F9** | feature: PDF 批注系统深化 | highlights.md；M5；HTML 统一标注；Hypothesis 风格 | `type:feature` `area:pdf` `priority:p1` |
-| **F10** | feature: Zotero Connector 未完成协议 | C4c / C5a / C5b / C5c | `type:feature` `area:import` `priority:p1` |
-| **F11** | feature: 命令面板 / 搜索增强 | 注册表+MRU；FTS5；PDF 正文；历史过滤 | `type:feature` `area:ui` `priority:p1` |
-| **F12** | feature: CLI P1 | graph/doctor/completions；export papers-md | `type:feature` `area:cli` `priority:p1` |
-| **F13** | feature: 偏好迁 Tauri Store + 日志文件夹入口 | Store；打开/导出日志 | `type:feature` `area:ui` `priority:p1` |
-| **F14** | feature: 发布签名 / 公证 / changelog / artifact 命名 | Release 硬化 | `type:feature` `area:release` `priority:p2` |
-| **F15** | epic: 远程 Vault 后续（M4+） | 远端 trash；入库加固；Connector 远程；Codex-SSH；blob LRU；设置页远程；关联 **PR #6** | `type:epic` `area:remote` `status:wip` `priority:p1` |
-| **F16** | feature: 翻译 / 导入边界可选增强 | 更多 MT；远程 PDF 链接入库；浏览器收集 | `type:feature` `area:import` `priority:p2` |
-| **F17** | epic: 平台扩展（iPad / Git / 云同步） | iPadOS 触控布局；Git 版本管理集成；可选云同步与多设备阅读 | `type:epic` `area:platform` `priority:p2` |
-| **F18** | epic: 作者 / 机构 / 会议关系图谱（Connected Papers 式扩展） | 在 **F6 文献引用邻域**之上：作者–机构–会议节点与边；prior/derivative 布局、相似度聚类、跨库联合图 | `type:epic` `area:graph` `priority:p2` |
+| **F1** | [#15](https://github.com/poco-ai/Agentero/issues/15) | epic: Vault 采纳 / 打开已有文件夹整理 | `type:epic` `area:tree` `priority:p0` |
+| **F2** | [#16](https://github.com/poco-ai/Agentero/issues/16) | feature: 统一 paper 入库管线 (`paper_commit`) | `type:feature` `area:import` `priority:p0` |
+| **F3** | [#17](https://github.com/poco-ai/Agentero/issues/17) | feature: 魔棒增强（候选 / 拖拽 / 元数据确认） | `type:feature` `area:import` `priority:p1` |
+| **F4** | [#18](https://github.com/poco-ai/Agentero/issues/18) | feature: Translator sidecar 本机捆绑 | `type:feature` `area:import` `priority:p1` |
+| **F5** | [#19](https://github.com/poco-ai/Agentero/issues/19) | feature: Agent AGENTS.md 注入与写前草稿拦截 | `type:feature` `area:agent` `priority:p0` |
+| **F6** | [#20](https://github.com/poco-ai/Agentero/issues/20) | feature: 文献引用图 + Connected Papers 式邻域 + 引用 workflow | `type:epic` `area:graph` `area:agent` `priority:p1` |
+| **F7** | [#21](https://github.com/poco-ai/Agentero/issues/21) | feature: 双链 / Graph 增强 | `type:feature` `area:editor` `priority:p1` |
+| **F8** | [#22](https://github.com/poco-ai/Agentero/issues/22) | feature: 工作区分屏（V0.6） | `type:feature` `area:ui` `priority:p1` |
+| **F9** | [#23](https://github.com/poco-ai/Agentero/issues/23) | feature: PDF 批注系统深化 | `type:feature` `area:pdf` `priority:p1` |
+| **F10** | [#24](https://github.com/poco-ai/Agentero/issues/24) | feature: Zotero Connector 未完成协议 | `type:feature` `area:import` `priority:p1` |
+| **F11** | [#25](https://github.com/poco-ai/Agentero/issues/25) | feature: 命令面板 / 搜索增强 | `type:feature` `area:ui` `priority:p1` |
+| **F12** | [#26](https://github.com/poco-ai/Agentero/issues/26) | feature: CLI P1 | `type:feature` `area:cli` `priority:p1` |
+| **F13** | [#27](https://github.com/poco-ai/Agentero/issues/27) | feature: 偏好迁 Tauri Store + 日志文件夹入口 | `type:feature` `area:ui` `priority:p1` |
+| **F14** | [#28](https://github.com/poco-ai/Agentero/issues/28) | feature: 发布签名 / 公证 / changelog / artifact 命名 | `type:feature` `area:release` `priority:p2` |
+| **F15** | [#29](https://github.com/poco-ai/Agentero/issues/29) | epic: 远程 Vault 后续（M4+） | `type:epic` `area:remote` `status:wip` `priority:p1` |
+| **F16** | [#30](https://github.com/poco-ai/Agentero/issues/30) | feature: 翻译 / 导入边界可选增强 | `type:feature` `area:import` `priority:p2` |
+| **F17** | [#31](https://github.com/poco-ai/Agentero/issues/31) | epic: 平台扩展（iPad / Git / 云同步） | `type:epic` `area:platform` `priority:p2` |
+| **F18** | [#32](https://github.com/poco-ai/Agentero/issues/32) | epic: 作者 / 机构 / 会议关系图谱（Connected Papers 式扩展） | `type:epic` `area:graph` `priority:p2` |
 
 ### 3.3 关系示意
 
@@ -177,11 +186,11 @@ B4/B5 编辑器 ─────── F7 / notes-review UX
 | 步骤 | 状态 |
 |---|---|
 | 创建 Org Project「Agentero」 | ✅ https://github.com/orgs/poco-ai/projects/1 |
-| Link 仓库 Agentero | ✅（执行 `gh project link`） |
+| Link 仓库 Agentero | ✅ |
 | 本结构文档入库 | ✅ 本文 |
-| 创建仓库 Labels | ⏳ 创建 Issue 时一并建 |
-| 批量创建 GitHub Issue（B1–B8, F1–F18） | ⏳ **未做**（按产品要求先沉淀结构） |
-| PR #6 加入 Project | ⏳ 创建 Issue F15 后或可先 item-add PR |
+| 创建仓库 Labels | ✅ `type:*` / `area:*` / `priority:*` / `status:wip` |
+| 批量创建 GitHub Issue（B1–B8, F1–F18） | ✅ **#7–#32**（26 条） |
+| Issues + PR #6 加入 Project | ✅ **27 items**；F15 + PR #6 → **In Progress** |
 
 ---
 
