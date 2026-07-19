@@ -16,8 +16,16 @@ import { cn } from "@/lib/utils";
 
 type ListProps = PlateElementProps & { lineBreakBadge?: React.ReactNode };
 
+/**
+ * Ordered + todo lists need a real `<ol>` / `<ul>` wrapper (for `start` and the
+ * checkbox). Unordered lists use inject `display:list-item` instead — see
+ * `MarkdownEditorKit` ListPlugin config — so they must not be wrapped here
+ * (that would paint a second bullet).
+ */
 export const BlockList: RenderNodeWrapper = (props) => {
-	if (!props.element.listStyleType) return;
+	const styleType = props.element.listStyleType as string | undefined;
+	if (!styleType) return;
+	if (!isOrderedList(props.element) && styleType !== "todo") return;
 
 	return (childProps: ListProps) => <List {...childProps} />;
 };
@@ -29,14 +37,20 @@ function List(props: ListProps) {
 
 	return (
 		<Tag
-			className="relative m-0 p-0"
+			className={cn(
+				"relative m-0 py-0",
+				// Tailwind preflight sets list-style:none; restore markers and
+				// leave room for outside bullets/numbers (overflow-x-hidden on the
+				// editor would otherwise clip them).
+				isTodo ? "list-none p-0" : "list-outside ps-[1.5em]",
+			)}
 			style={{ listStyleType: isTodo ? "none" : listStyleType }}
 			start={listStart}
 		>
 			{isTodo ? (
 				<TodoLi {...props} />
 			) : (
-				<li>
+				<li className="ps-0">
 					{props.children}
 					{props.lineBreakBadge}
 				</li>

@@ -42,6 +42,7 @@ import {
 import { IndentPlugin } from "@platejs/indent/react";
 import {
 	BulletedListRules,
+	isOrderedList,
 	OrderedListRules,
 	TaskListRules,
 } from "@platejs/list";
@@ -196,9 +197,29 @@ export const MarkdownEditorKit = [
 			TaskListRules.markdown({ checked: false }),
 			TaskListRules.markdown({ checked: true }),
 		],
-		// Markers come from BlockList's <ul>/<ol>/<li> only.
-		// Do not also inject display:list-item on the block — that paints a second bullet.
+		// Unordered: inject display:list-item on the block (official ListKit).
+		// Ordered + todo: BlockList renders <ol>/<ul> wrappers (see block-list.tsx).
+		// Never both — that paints a double bullet on unordered lists.
 		inject: {
+			nodeProps: {
+				nodeKey: KEYS.listType,
+				query: ({ nodeProps }) => {
+					const element = nodeProps.element;
+					if (!element?.listStyleType) return false;
+					if (isOrderedList(element)) return false;
+					if (element.listStyleType === "todo") return false;
+					return true;
+				},
+				transformProps: ({ props }) => ({
+					...props,
+					role: "listitem",
+					style: {
+						...props.style,
+						display: "list-item",
+						listStylePosition: "outside",
+					},
+				}),
+			},
 			targetPlugins: listTargets,
 		},
 		render: { belowNodes: BlockList },
