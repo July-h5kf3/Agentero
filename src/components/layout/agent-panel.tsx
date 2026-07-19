@@ -189,8 +189,14 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent-stream-parse";
-import { contextPathIcon, toPathSet } from "@/lib/context-path-icon";
-import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import {
+	contextPathDisplayName,
+	contextPathIcon,
+	normalizeContextPath,
+	toPathSet,
+} from "@/lib/context-path-icon";
+import { paperDirFromPath } from "@/lib/paper-metadata";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/papers-api";
 import { loadSettings } from "@/lib/settings";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -199,6 +205,10 @@ import { toVaultRelative } from "@/lib/wiki";
 type AgentPanelProps = {
 	vaultPath: string | null;
 	selectedPath?: string | null;
+	/**
+	 * Catalog title for the focused paper (chip label prefers this over folder name).
+	 */
+	selectedPaperTitle?: string | null;
 	vaultMarkdownPaths?: string[];
 	/**
 	 * Vault-relative directory paths from the file tree.
@@ -623,6 +633,7 @@ function dedupeModelsClient(models: AgentModelChoice[]): AgentModelChoice[] {
 export function AgentPanel({
 	vaultPath,
 	selectedPath = null,
+	selectedPaperTitle = null,
 	vaultMarkdownPaths = [],
 	vaultDirectoryPaths = [],
 	vaultPaperPaths = [],
@@ -635,11 +646,26 @@ export function AgentPanel({
 }: AgentPanelProps) {
 	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
+	/**
+	 * Focused document as Vault-relative context path.
+	 * Files under a paper resolve to the **paper folder** (minimal unit).
+	 */
 	const selectedVaultPath = useMemo(() => {
 		if (!selectedPath) return null;
+		if (
+			isLibraryVirtualPath(selectedPath) ||
+			isTrashVirtualPath(selectedPath)
+		) {
+			return null;
+		}
 		const relative = toVaultRelative(vaultPath, selectedPath);
-		return relative || null;
-	}, [selectedPath, vaultPath]);
+		if (!relative) return null;
+		if (isLibraryVirtualPath(relative) || isTrashVirtualPath(relative)) {
+			return null;
+		}
+		const paperDir = paperDirFromPath(relative, vaultPaperPaths);
+		return paperDir ?? relative;
+	}, [selectedPath, vaultPath, vaultPaperPaths]);
 	/** O(1) lookups for context chip icons (paper → ScrollText, dir → Folder). */
 	const directoryPathSet = useMemo(
 		() => toPathSet(vaultDirectoryPaths),
@@ -703,7 +729,8 @@ export function AgentPanel({
 		vaultPath,
 		agentId: selectedAgentId,
 		sessionId: activeTabId,
-		defaultIncludeSelectedFile: false,
+		// Current paper/file is always in context by default (no click-to-add).
+		defaultIncludeSelectedFile: true,
 	});
 	const activeConversationRef = useRef<string | null>(null);
 	const activeTabRef = useRef("draft");
@@ -1467,10 +1494,26 @@ export function AgentPanel({
 		return [...new Set(paths)];
 	}, [includeSelectedFile, mentionedPaths, selectedVaultPath]);
 
+	/** Current paper/file path when included (always-on chip; no dashed + toggle). */
 	const currentFilePath =
-		selectedVaultPath && selectedVaultPath !== LIBRARY_VIRTUAL_PATH
-			? selectedVaultPath
-			: null;
+		includeSelectedFile && selectedVaultPath ? selectedVaultPath : null;
+
+	/** Prefer catalog paper title; fall back to paper folder / file basename. */
+	const currentFileLabel = useMemo(() => {
+		if (!currentFilePath) return "";
+		const title = selectedPaperTitle?.trim();
+		if (title && paperPathSet.has(normalizeContextPath(currentFilePath))) {
+			return title;
+		}
+		return contextPathDisplayName(currentFilePath);
+	}, [currentFilePath, paperPathSet, selectedPaperTitle]);
+
+	// Re-attach when the focused document/paper changes (user can still remove via X).
+	useEffect(() => {
+		if (!selectedVaultPath) return;
+		setIncludeSelectedFile(true);
+	}, [selectedVaultPath, setIncludeSelectedFile]);
+
 	const mentionChipPaths = useMemo(
 		() => contextPaths.filter((path) => path !== selectedVaultPath),
 		[contextPaths, selectedVaultPath],
@@ -3027,22 +3070,10 @@ export function AgentPanel({
 											{currentFilePath ? (
 												<button
 													type="button"
-													className={cn(
-														"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-xs transition-colors",
-														includeSelectedFile
-															? "bg-muted/20 text-foreground hover:bg-muted"
-															: "border-dashed bg-transparent text-muted-foreground hover:bg-muted/40",
-													)}
-													aria-pressed={includeSelectedFile}
+													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
 													disabled={activeTabIsRunning}
-													onClick={() =>
-														setIncludeSelectedFile((current) => !current)
-													}
-													title={
-														includeSelectedFile
-															? t("composer.currentFileRemove")
-															: t("composer.currentFileAdd")
-													}
+													onClick={() => removeContextPath(currentFilePath)}
+													title={t("composer.currentFileRemove")}
 												>
 													<ContextPathIcon
 														path={currentFilePath}
@@ -3050,34 +3081,36 @@ export function AgentPanel({
 														paperPaths={paperPathSet}
 													/>
 													<span className="truncate" title={currentFilePath}>
-														{currentFilePath}
-													</span>
-													{includeSelectedFile ? (
-														<X className="size-3 shrink-0 text-muted-foreground" />
-													) : (
-														<Plus className="size-3 shrink-0 text-muted-foreground" />
-													)}
-												</button>
-											) : null}
-											{mentionChipPaths.map((path) => (
-												<button
-													key={path}
-													type="button"
-													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-													onClick={() => removeContextPath(path)}
-													title={t("composer.removeContext", { path })}
-												>
-													<ContextPathIcon
-														path={path}
-														directoryPaths={directoryPathSet}
-														paperPaths={paperPathSet}
-													/>
-													<span className="max-w-[16rem] truncate" title={path}>
-														{path}
+														{currentFileLabel}
 													</span>
 													<X className="size-3 shrink-0 text-muted-foreground" />
 												</button>
-											))}
+											) : null}
+											{mentionChipPaths.map((path) => {
+												const label = contextPathDisplayName(path);
+												return (
+													<button
+														key={path}
+														type="button"
+														className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+														onClick={() => removeContextPath(path)}
+														title={t("composer.removeContext", { path })}
+													>
+														<ContextPathIcon
+															path={path}
+															directoryPaths={directoryPathSet}
+															paperPaths={paperPathSet}
+														/>
+														<span
+															className="max-w-[16rem] truncate"
+															title={path}
+														>
+															{label}
+														</span>
+														<X className="size-3 shrink-0 text-muted-foreground" />
+													</button>
+												);
+											})}
 										</div>
 									) : null}
 									{selectedSkills.length > 0 ? (
@@ -3132,7 +3165,12 @@ export function AgentPanel({
 														directoryPaths={directoryPathSet}
 														paperPaths={paperPathSet}
 													/>
-													<span className="truncate">{path}</span>
+													<span
+														className="min-w-0 flex-1 truncate"
+														title={path}
+													>
+														{contextPathDisplayName(path)}
+													</span>
 												</button>
 											))}
 										</div>

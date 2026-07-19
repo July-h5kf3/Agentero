@@ -3102,6 +3102,7 @@ export default function App() {
 									<AgentPanel
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
+										selectedPaperTitle={paperMeta?.title ?? null}
 										vaultMarkdownPaths={vaultMdFiles}
 										vaultDirectoryPaths={vaultDirPaths}
 										vaultPaperPaths={vaultPaperPaths}

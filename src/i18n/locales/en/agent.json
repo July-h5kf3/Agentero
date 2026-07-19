@@ -63,7 +63,6 @@
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
 		"removeSkill": "Remove ${{skill}} from context",
-		"currentFileAdd": "Add current file to context",
 		"currentFileRemove": "Remove current file from context",
 		"fast": "Fast",
 		"fastToggle": "Toggle Fast mode",

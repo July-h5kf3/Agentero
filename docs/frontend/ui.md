@@ -320,7 +320,7 @@
 | 结构 | 顶栏：ACP 后端选择 · 新建 · 历史 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
-| 输入 | 单层 Composer：当前文件以可切换 chip 呈现（打开文件时默认未选中的虚线态，点击加入/移出上下文），`@` 文件提及和 `$` 本机技能显示为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性上下文；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
+| 输入 | 单层 Composer：当前聚焦论文/文件**默认**加入上下文（实心 chip + 名称，可 X 移除；无虚线加号切换）；chip 展示 **paper-name / 文件名**（最后一段路径或 catalog 论文标题），tooltip 与 prompt 仍用 Vault 相对路径；`@` 文件提及和 `$` 本机技能为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性 `@`/`$` 上下文（当前论文保持默认附带）；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
@@ -345,7 +345,7 @@ PromptInput → Body / Footer / Submit
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
-**上下文提及**：Composer 默认附带当前打开的 Vault 文件；输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 **context chip**（图标 + Vault 相对路径，可移除）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
+**上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 可按 Vault 内 Markdown 路径筛选并加入 **context chip**（图标 + 显示名，可移除）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。
 
 > **不**接 AI Elements `Attachments` 做 Vault 上下文：那套组件面向 `FileUIPart` 二进制附件（`prompt-input` 已装未对 ACP 传文件）；本产品上下文是 **路径引用**，与 `@` chip / `composer.contextInstruction` 一致。
 
@@ -381,6 +381,8 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **笔记写后审阅（信任闭环）**：BYOA Agent 直接写盘，无法可靠事前拦截。`agent_run_once` 运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`）；若内容被改写则 emit `agent:notes-review`。面板弹 **原文 / Agent 版本** 对照对话框：**Keep** 保留 Agent 版本；**Revert** 写回快照（文件监听随后重载打开的编辑器）。
 
 **回答语言**：**设置 → Agent** 提供一个全局「回答语言」下拉（**自动 / English / 简体中文**，存于 app settings，默认 **自动**），**独立于界面语言**，对**所有 Agent** 交互生效（Composer 对话、精读、summary/QA、PDF 划词问答）。前端 `runOnce` 统一读取该设置并透传，Host 在 `build_prompt` 为所有 workflow 追加一句语言指令；选 **自动** 时不注入任何指令，交由 Agent 依据内容决定。
+
+**个人偏好提示词**：**设置 → Agent** 提供多行文本框（`agentPersonalPrompt`，默认空）。非空时，前端 `runOnce` 透传 `personalPrompt`，Host 在 `build_prompt` 的 system envelope 中追加 `User preference instructions` 块（所有 workflow）。留空不注入；Chat 展示经 `strip_prompt_envelope` 剥离 envelope，**不**在对话记录中显示该块。
 
 **Codex 控件**：只有选中 `codex-acp` 时，底栏才显示 App Server `model/list` 提供的模型与 reasoning effort，以及仅在闪电图标内填充黄色的 Fast toggle。选择在下一次 native turn 中传给 App Server；其他 Agent 不显示也不接收这些偏好。
 
@@ -418,6 +420,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
   - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
   - **回答语言**（自动 / English / 简体中文，独立于界面语言）。
+  - **个人偏好提示词**（`agentPersonalPrompt`，多行，默认空）：自由文本注入每次 Agent turn 的 prompt envelope；留空关闭。
   - **入库后自动精读**（`autoPaperReader`，**默认关**）：开启后魔棒 / 单篇 Download 资源就绪且未读时自动 paper-reader；Zap 始终可手动。
   - **PDF 划词提问**（`pdfAsk.agentId` / `pdfAsk.modelId`）：划词「提问」对话框专用 Agent 与模型；空则跟随默认 Agent / 该 Agent 的模型偏好；与 Chat 当前选择、翻译用 Agent **相互独立**。
   - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列 ready/failed/**探测中**（含旋转 Loader，取代静态「未探测」）；不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页 soft probe（**跳过已 ready**，只测 not-probed/failed）；Refresh / 改代理 **force** 全量再 Probe。badge 用 `ProbeResult` 就地更新（不全量 scan 每行）；结束再 reconcile scan 一次。代理开关不因 Probe busy 禁用。

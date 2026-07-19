@@ -91,6 +91,17 @@ function hasFileLikeExtension(base: string): boolean {
 }
 
 /**
+ * Chip / mention **display** label: last path segment (paper folder name, file name).
+ * Full Vault-relative path stays in tooltips and is still sent to the Agent.
+ */
+export function contextPathDisplayName(path: string): string {
+	const norm = normalizeContextPath(path);
+	if (!norm) return path;
+	const base = norm.includes("/") ? (norm.split("/").pop() ?? norm) : norm;
+	return base || path;
+}
+
+/**
  * Lucide icon for a Vault context chip / mention row.
  * Paper folders → ScrollText (same as file tree); other folders → Folder;
  * files → type-specific (PDF, image, code, …).

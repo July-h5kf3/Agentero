@@ -63,7 +63,6 @@
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
 		"removeContext": "从上下文移除 {{path}}",
 		"removeSkill": "从上下文移除 ${{skill}}",
-		"currentFileAdd": "将当前文件加入上下文",
 		"currentFileRemove": "从上下文移除当前文件",
 		"fast": "快速",
 		"fastToggle": "切换快速模式",

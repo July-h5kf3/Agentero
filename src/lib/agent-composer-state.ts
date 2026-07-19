@@ -51,10 +51,9 @@ export function clearSubmittedComposerState(
 			current.selectedSkillIds,
 			submitted.selectedSkillIds,
 		),
-		includeSelectedFile:
-			current.includeSelectedFile === submitted.includeSelectedFile
-				? false
-				: current.includeSelectedFile,
+		// Current paper/file stays in context by default across turns; only
+		// explicit user removal (or a newer draft edit) changes this flag.
+		includeSelectedFile: current.includeSelectedFile,
 	};
 }
 

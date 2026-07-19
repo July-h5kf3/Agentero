@@ -1,6 +1,7 @@
 import { FileText, FileType2, Folder, ScrollText } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import {
+	contextPathDisplayName,
 	contextPathIcon,
 	isDirectoryContextPath,
 	isPaperContextPath,
@@ -12,6 +13,15 @@ describe("context-path-icon", () => {
 	it("normalizes slashes and trailing separators", () => {
 		expect(normalizeContextPath("papers\\org\\")).toBe("papers/org");
 		expect(normalizeContextPath("./notes/a.md")).toBe("notes/a.md");
+	});
+
+	it("display name is the last path segment (paper-name / file name)", () => {
+		expect(contextPathDisplayName("papers/org/Smith2024_Title_2401")).toBe(
+			"Smith2024_Title_2401",
+		);
+		expect(contextPathDisplayName("notes/ideas/todo.md")).toBe("todo.md");
+		expect(contextPathDisplayName("papers\\org\\foo\\")).toBe("foo");
+		expect(contextPathDisplayName("README.md")).toBe("README.md");
 	});
 
 	it("uses tree directory set for org folders without extension", () => {
