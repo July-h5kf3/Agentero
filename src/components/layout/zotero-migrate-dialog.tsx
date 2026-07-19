@@ -139,8 +139,7 @@ export function ZoteroMigrateDialog({
 	};
 
 	const handleOpenChange = (next: boolean) => {
-		if (busy) return; // don't close mid-migration
-		if (!next) reset();
+		if (!next && !busy) reset();
 		onOpenChange(next);
 	};
 
@@ -550,7 +549,6 @@ export function ZoteroMigrateDialog({
 									type="button"
 									variant="ghost"
 									onClick={() => handleOpenChange(false)}
-									disabled={busy}
 								>
 									{t("sidebar:zoteroMigrate.cancel")}
 								</Button>
