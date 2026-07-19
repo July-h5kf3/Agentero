@@ -416,4 +416,329 @@ mod tests {
         reg.disconnect(&info.session_id).await.expect("disconnect");
         eprintln!("disconnect ok");
     }
+
+    /// Paper + catalog features over live SSH.
+    ///
+    /// ```bash
+    /// AGENTERO_REMOTE_SSH_HOST=<alias> \
+    /// AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault> \
+    /// cargo test -p agentero --lib live_paper_features -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
+    async fn live_paper_features() {
+        use crate::services::catalog::papers::{self, PaperRecord, PaperTag};
+        use crate::services::fs::WriteOpts;
+        use crate::services::remote::catalog_mirror::CatalogMirror;
+
+        let host = std::env::var("AGENTERO_REMOTE_SSH_HOST").expect("AGENTERO_REMOTE_SSH_HOST");
+        let path = std::env::var("AGENTERO_REMOTE_SSH_PATH").expect("AGENTERO_REMOTE_SSH_PATH");
+        let user = std::env::var("AGENTERO_REMOTE_SSH_USER").ok();
+
+        eprintln!("=== live_paper_features host={host} path={path} ===");
+        let reg = RemoteRegistry::new();
+        let info = reg
+            .connect(&host, user.as_deref(), &path)
+            .await
+            .expect("connect");
+        let session = reg.get(&info.session_id).await.expect("session");
+        let mut passed = 0usize;
+        let mut failed: Vec<String> = Vec::new();
+
+        macro_rules! check {
+            ($name:expr, $cond:expr) => {{
+                if $cond {
+                    eprintln!("  PASS  {}", $name);
+                    passed += 1;
+                } else {
+                    eprintln!("  FAIL  {}", $name);
+                    failed.push($name.to_string());
+                }
+            }};
+        }
+
+        // --- 1. list papers/ ---
+        let papers_dir = session.fs.list("papers").await.expect("list papers");
+        let names: Vec<_> = papers_dir.iter().map(|e| e.name.as_str()).collect();
+        eprintln!("  papers/: {names:?}");
+        check!(
+            "list papers has demo-paper",
+            papers_dir
+                .iter()
+                .any(|e| e.name == "demo-paper" && e.is_dir)
+        );
+        check!(
+            "list papers has attention-is-all-you-need",
+            papers_dir
+                .iter()
+                .any(|e| e.name == "attention-is-all-you-need" && e.is_dir)
+        );
+
+        // --- 2. read NOTES ---
+        let notes = session
+            .fs
+            .read("papers/attention-is-all-you-need/NOTES.md")
+            .await
+            .expect("read NOTES");
+        let notes_s = String::from_utf8_lossy(&notes);
+        check!(
+            "read NOTES contains Attention",
+            notes_s.contains("Attention")
+        );
+
+        // --- 3. write NOTES (write-through) ---
+        let stamp = chrono::Utc::now().to_rfc3339();
+        let new_notes = format!(
+            "# Attention Is All You Need\n\n## Method\nTransformers.\n\n<!-- smoke {stamp} -->\n"
+        );
+        session
+            .fs
+            .write(
+                "papers/attention-is-all-you-need/NOTES.md",
+                new_notes.as_bytes(),
+                WriteOpts {
+                    create_parents: true,
+                },
+            )
+            .await
+            .expect("write NOTES");
+        let back = session
+            .fs
+            .read("papers/attention-is-all-you-need/NOTES.md")
+            .await
+            .expect("re-read NOTES");
+        check!(
+            "NOTES write-through",
+            String::from_utf8_lossy(&back).contains(&stamp)
+        );
+
+        // --- 4. rescan-like upsert both papers + push catalog ---
+        let now = chrono::Utc::now().to_rfc3339();
+        for (rel, id, title) in [
+            ("papers/demo-paper", "demo-paper", "Demo Paper on DGX"),
+            (
+                "papers/attention-is-all-you-need",
+                "1706.03762",
+                "Attention Is All You Need",
+            ),
+        ] {
+            let rec = PaperRecord {
+                path: rel.into(),
+                id: id.into(),
+                paper_type: "article".into(),
+                title: title.into(),
+                authors: vec!["Test Author".into()],
+                creators: None,
+                year: Some(2017),
+                date: None,
+                abstract_text: Some("smoke abstract".into()),
+                tags: vec![],
+                arxiv_id: if id.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                    Some(id.into())
+                } else {
+                    None
+                },
+                doi: None,
+                isbn: None,
+                issn: None,
+                pmid: None,
+                publication: None,
+                volume: None,
+                issue: None,
+                pages: None,
+                publisher: None,
+                place: None,
+                series: None,
+                language: None,
+                pdf_url: None,
+                html_url: None,
+                source_url: None,
+                body_source: None,
+                body_quality: None,
+                bibtex_key: None,
+                citation_count: None,
+                zotero_item_type: None,
+                meta_source: Some("live_paper_features".into()),
+                extra: None,
+                summary: None,
+                status: "unread".into(),
+                is_read: false,
+                added_at: now.clone(),
+                updated_at: now.clone(),
+            };
+            papers::upsert_paper(&session.work_root, &rec).expect("upsert");
+        }
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone())
+                .await
+                .expect("push after upsert");
+        }
+        let listed = papers::list_all(&session.work_root).expect("list_all");
+        eprintln!(
+            "  catalog paths: {:?}",
+            listed.iter().map(|p| &p.path).collect::<Vec<_>>()
+        );
+        check!("catalog has 2+ papers", listed.len() >= 2);
+        check!(
+            "catalog has attention path",
+            listed
+                .iter()
+                .any(|p| p.path == "papers/attention-is-all-you-need")
+        );
+
+        // --- 5. paper get_by_path / get_by_id ---
+        let by_path = papers::get_by_path(&session.work_root, "papers/attention-is-all-you-need")
+            .expect("get_by_path");
+        check!(
+            "get_by_path title",
+            by_path
+                .as_ref()
+                .is_some_and(|p| p.title.contains("Attention"))
+        );
+        let by_id = papers::get_by_id(&session.work_root, "1706.03762").expect("get_by_id");
+        check!("get_by_id arxiv", by_id.is_some());
+
+        // --- 6. set_tags + push ---
+        let tags = vec![
+            PaperTag {
+                name: "transformer".into(),
+                color: Some("blue".into()),
+            },
+            PaperTag {
+                name: "nlp".into(),
+                color: Some("green".into()),
+            },
+        ];
+        let tagged = papers::set_tags(
+            &session.work_root,
+            "papers/attention-is-all-you-need",
+            &tags,
+        )
+        .expect("set_tags");
+        check!("set_tags count", tagged.tags.len() == 2);
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone()).await.expect("push tags");
+        }
+        // re-checkout remote catalog into a fresh work root to prove authority is remote
+        let pull_root =
+            std::env::temp_dir().join(format!("agentero-live-pull-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&pull_root).unwrap();
+        let _mirror = CatalogMirror::checkout(session.fs.clone(), &pull_root)
+            .await
+            .expect("re-checkout catalog from remote");
+        let pulled = papers::get_by_path(&pull_root, "papers/attention-is-all-you-need")
+            .expect("get after pull");
+        check!(
+            "tags survive remote catalog pull",
+            pulled.as_ref().is_some_and(|p| {
+                p.tags.iter().any(|t| t.name == "transformer")
+                    && p.tags.iter().any(|t| t.name == "nlp")
+            })
+        );
+        let _ = std::fs::remove_dir_all(&pull_root);
+
+        // --- 7. set_is_read + push ---
+        let read_row =
+            papers::set_is_read(&session.work_root, "papers/attention-is-all-you-need", true)
+                .expect("set_is_read");
+        check!("set_is_read true", read_row.is_read);
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone()).await.expect("push is_read");
+        }
+
+        // --- 8. PDF bytes / cache-like read ---
+        let pdf = session
+            .fs
+            .read("papers/attention-is-all-you-need/1706.03762.pdf")
+            .await
+            .expect("read pdf");
+        check!("pdf readable non-empty", pdf.len() > 10);
+        check!(
+            "pdf looks like PDF",
+            pdf.starts_with(b"%PDF") || pdf.windows(4).any(|w| w == b"%PDF")
+        );
+
+        // --- 9. mkdir + write file under notes/ ---
+        session.fs.mkdir("notes/smoke-dir").await.expect("mkdir");
+        session
+            .fs
+            .write(
+                "notes/smoke-dir/hello.md",
+                b"# hello remote\n",
+                WriteOpts {
+                    create_parents: true,
+                },
+            )
+            .await
+            .expect("write nested");
+        let hello = session
+            .fs
+            .read("notes/smoke-dir/hello.md")
+            .await
+            .expect("read nested");
+        check!(
+            "mkdir + nested write",
+            String::from_utf8_lossy(&hello).contains("hello remote")
+        );
+
+        // --- 10. paper_delete from catalog (not files) + push ---
+        let removed =
+            papers::delete_under_path(&session.work_root, "papers/demo-paper").expect("delete");
+        check!("catalog delete demo-paper", removed >= 1);
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone()).await.expect("push delete");
+        }
+        let after_del = papers::list_all(&session.work_root).expect("list after del");
+        check!(
+            "demo-paper gone from catalog",
+            !after_del.iter().any(|p| p.path == "papers/demo-paper")
+        );
+        // file still on remote (delete is catalog-only here)
+        check!(
+            "demo-paper files still on remote",
+            session
+                .fs
+                .exists("papers/demo-paper/NOTES.md")
+                .await
+                .unwrap_or(false)
+        );
+
+        // --- 11. SFTP remove nested smoke file ---
+        session
+            .fs
+            .remove("notes/smoke-dir", true)
+            .await
+            .expect("remove smoke-dir");
+        check!(
+            "SFTP recursive remove",
+            !session.fs.exists("notes/smoke-dir").await.unwrap_or(true)
+        );
+
+        // --- 12. remote_which agents ---
+        use crate::services::remote::agent_exec;
+        let claude = agent_exec::remote_which(&host, "claude")
+            .await
+            .ok()
+            .flatten();
+        eprintln!("  remote which claude: {claude:?}");
+        check!("remote agent discover claude", claude.is_some());
+
+        reg.disconnect(&info.session_id).await.expect("disconnect");
+
+        eprintln!(
+            "\n=== SUMMARY: {passed} passed, {} failed ===",
+            failed.len()
+        );
+        for f in &failed {
+            eprintln!("  - {f}");
+        }
+        assert!(
+            failed.is_empty(),
+            "live_paper_features failures: {failed:?}"
+        );
+    }
 }
