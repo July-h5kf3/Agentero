@@ -874,7 +874,7 @@ export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
  * How children under each folder are ordered in the file tree (Settings → General).
  * Display-only; does not rename or move disk folders.
  *
- * - `folder`: directory name A–Z (historical default)
+ * - `folder`: display label A–Z (uses `paperTreeLabelMode` for papers; org folders by name)
  * - `title` / `author`: catalog fields, missing → folder name
  * - `year-desc` / `year-asc`: publication year; missing year last
  * - `added-desc`: catalog `added_at` newest first; missing last
@@ -942,6 +942,11 @@ export function sortFileTreeNodes(
 	mode: PaperTreeSortMode,
 	metaByRelPath?: ReadonlyMap<string, PaperMetadata> | null,
 	toRelPath?: (absPath: string) => string,
+	/**
+	 * How paper rows are labeled in the tree. Used when sorting by display name
+	 * (`folder` mode and name tie-breaks) so order matches what the user sees.
+	 */
+	labelMode: PaperTreeLabelMode = "title-author",
 ): FileNode[] {
 	const relOf = (absPath: string) =>
 		toRelPath
@@ -953,14 +958,26 @@ export function sortFileTreeNodes(
 		return metaByRelPath.get(relOf(node.path)) ?? null;
 	};
 
+	/** Sort key for directories: papers use tree display label, orgs use folder name. */
+	const displayKey = (node: FileNode): string => {
+		if (node.kind === "file") return node.name;
+		if (isPaperDirectory(node.path, node.children)) {
+			return formatPaperTreeLabel(labelMode, metaOf(node), node.name);
+		}
+		return node.name;
+	};
+
 	const compare = (a: FileNode, b: FileNode): number => {
 		if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
 
 		// Files always by name
 		if (a.kind === "file") return cmpName(a.name, b.name);
 
-		// Historical default: all directories by folder name (org + paper mixed)
-		if (mode === "folder") return cmpName(a.name, b.name);
+		// Default: mixed org + paper by **display** name (matches tree labels)
+		if (mode === "folder") {
+			const c = cmpName(displayKey(a), displayKey(b));
+			return c !== 0 ? c : cmpName(a.name, b.name);
+		}
 
 		const aPaper = isPaperDirectory(a.path, a.children);
 		const bPaper = isPaperDirectory(b.path, b.children);
@@ -973,15 +990,15 @@ export function sortFileTreeNodes(
 		const bm = metaOf(b);
 
 		if (mode === "title") {
-			const at = (am?.title ?? "").trim() || a.name;
-			const bt = (bm?.title ?? "").trim() || b.name;
+			const at = (am?.title ?? "").trim() || displayKey(a);
+			const bt = (bm?.title ?? "").trim() || displayKey(b);
 			const c = cmpName(at, bt);
 			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
 
 		if (mode === "author") {
-			const aa = firstAuthorKey(am) || a.name.toLowerCase();
-			const ba = firstAuthorKey(bm) || b.name.toLowerCase();
+			const aa = firstAuthorKey(am) || displayKey(a).toLowerCase();
+			const ba = firstAuthorKey(bm) || displayKey(b).toLowerCase();
 			const c = cmpName(aa, ba);
 			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
@@ -995,7 +1012,8 @@ export function sortFileTreeNodes(
 			if (ay !== null && by !== null && ay !== by) {
 				return mode === "year-desc" ? by - ay : ay - by;
 			}
-			return cmpName(a.name, b.name);
+			const c = cmpName(displayKey(a), displayKey(b));
+			return c !== 0 ? c : cmpName(a.name, b.name);
 		}
 
 		// added-desc
@@ -1005,7 +1023,8 @@ export function sortFileTreeNodes(
 		const bMissing = bt === null;
 		if (aMissing !== bMissing) return aMissing ? 1 : -1;
 		if (at !== null && bt !== null && at !== bt) return bt - at;
-		return cmpName(a.name, b.name);
+		const c = cmpName(displayKey(a), displayKey(b));
+		return c !== 0 ? c : cmpName(a.name, b.name);
 	};
 
 	return [...nodes].sort(compare).map((n) => {
@@ -1014,7 +1033,13 @@ export function sortFileTreeNodes(
 		// still sort for consistency if inspected.
 		return {
 			...n,
-			children: sortFileTreeNodes(n.children, mode, metaByRelPath, toRelPath),
+			children: sortFileTreeNodes(
+				n.children,
+				mode,
+				metaByRelPath,
+				toRelPath,
+				labelMode,
+			),
 		};
 	});
 }

@@ -465,8 +465,15 @@ export function FileTree({
 				paperTreeSortMode,
 				paperMetaByRelPath,
 				relPathForNode,
+				paperTreeLabelMode,
 			),
-		[nodes, paperTreeSortMode, paperMetaByRelPath, relPathForNode],
+		[
+			nodes,
+			paperTreeSortMode,
+			paperMetaByRelPath,
+			relPathForNode,
+			paperTreeLabelMode,
+		],
 	);
 
 	/**
