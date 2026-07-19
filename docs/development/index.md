@@ -33,7 +33,7 @@
 | 全库搜索 / 命令面板 | ✅ Phase A | `⌘P`/`⌘K` 快速打开 + `⇧⌘P` 命令模式；`>` 前缀；见 [`command-palette.md`](command-palette.md) |
 | 应用弹层栈 | ✅ | `overlay-stack`：Esc/`⌘W` 统一关最顶层 sheet/Dialog；见 [`../frontend/ui.md`](../frontend/ui.md) §3.0 |
 | Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
-| 远程 Vault（SSH/SFTP） | 📝 设计中 | 文件权威远端 + 远端 BYOA；见 [`remote-vault.md`](remote-vault.md) |
+| 远程 Vault（SSH/SFTP） | ✅ MVP | 文件权威远端 + 远端 BYOA（ACP over SSH）；见 [`remote-vault.md`](remote-vault.md) |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
 

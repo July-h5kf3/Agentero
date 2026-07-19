@@ -130,6 +130,9 @@
 		"remoteConnecting": "连接中…",
 		"remoteConnectFailed": "打开远程知识库失败",
 		"remoteBadge": "远程",
+		"remoteNoFinder": "远程知识库无法在访达中显示。",
+		"remoteNoTerminal": "远程知识库无法在终端中打开。",
+		"remoteDeleteDirect": "远程删除将直接移除服务器上的文件（无回收站）。",
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开知识库。"
 	},

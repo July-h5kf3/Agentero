@@ -127,6 +127,25 @@ export async function deletePapersUnderPath(
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:fileTree.deleteDesktopOnly"));
 	}
+	const { isRemoteVaultHandle, remoteSessionIdFromHandle } = await import(
+		"@/lib/remote-vault"
+	);
+	if (isRemoteVaultHandle(vaultPath)) {
+		const sessionId = remoteSessionIdFromHandle(vaultPath);
+		if (!sessionId) {
+			throw new Error(i18n.t("sidebar:fileTree.deleteFailed"));
+		}
+		const res = await invoke<ApiResult<PaperDeleteResult>>(
+			"remote_paper_delete",
+			{ args: { sessionId, path } },
+		);
+		if (!res.ok || !res.data) {
+			throw new Error(
+				res.error?.message ?? i18n.t("sidebar:fileTree.deleteFailed"),
+			);
+		}
+		return res.data;
+	}
 	const res = await invoke<ApiResult<PaperDeleteResult>>("paper_delete", {
 		args: { vaultPath, path },
 	});

@@ -209,6 +209,142 @@ pub async fn remote_mkdir(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteRemoveArgs {
+    pub session_id: String,
+    pub path: String,
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+#[tauri::command]
+pub async fn remote_remove(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteRemoveArgs,
+) -> Result<ApiResult<()>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    match session.fs.remove(&args.path, args.recursive).await {
+        Ok(()) => Ok(ApiResult::ok(())),
+        Err(e) => Ok(map_err(e)),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteWriteBytesArgs {
+    pub session_id: String,
+    pub path: String,
+    pub data: Vec<u8>,
+}
+
+#[tauri::command]
+pub async fn remote_write_bytes(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteWriteBytesArgs,
+) -> Result<ApiResult<()>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    match session
+        .fs
+        .write(
+            &args.path,
+            &args.data,
+            WriteOpts {
+                create_parents: true,
+            },
+        )
+        .await
+    {
+        Ok(()) => Ok(ApiResult::ok(())),
+        Err(e) => Ok(map_err(e)),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePaperGetArgs {
+    pub session_id: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePaperDeleteArgs {
+    pub session_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemotePaperDeleteResult {
+    pub removed: usize,
+}
+
+#[tauri::command]
+pub async fn remote_paper_delete(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemotePaperDeleteArgs,
+) -> Result<ApiResult<RemotePaperDeleteResult>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let path = args.path.trim().trim_matches('/').replace('\\', "/");
+    if path.is_empty() {
+        return Ok(map_err(AppError::message("path is required")));
+    }
+    let removed = match papers::delete_under_path(&session.work_root, &path) {
+        Ok(n) => n,
+        Err(e) => return Ok(map_err(e)),
+    };
+    {
+        let mut cat = session.catalog.lock().await;
+        if let Err(e) = cat.push(session.fs.clone()).await {
+            return Ok(map_err(e));
+        }
+    }
+    Ok(ApiResult::ok(RemotePaperDeleteResult { removed }))
+}
+
+#[tauri::command]
+pub async fn remote_paper_get(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemotePaperGetArgs,
+) -> Result<ApiResult<PaperRecord>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    let work = session.work_root.clone();
+    let result = if let Some(path) = args
+        .path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let path = path.trim_matches('/').replace('\\', "/");
+        papers::get_by_path(&work, &path)
+    } else if let Some(id) = args.id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        papers::get_by_id(&work, id)
+    } else {
+        return Ok(map_err(AppError::message("path or id is required")));
+    };
+    match result {
+        Ok(Some(row)) => Ok(ApiResult::ok(row)),
+        Ok(None) => Ok(map_err(AppError::message("paper not found in catalog"))),
+        Err(e) => Ok(map_err(e)),
+    }
+}
+
 #[tauri::command]
 pub async fn remote_paper_list(
     registry: State<'_, Arc<RemoteRegistry>>,

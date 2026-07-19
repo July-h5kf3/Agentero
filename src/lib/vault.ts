@@ -6,9 +6,13 @@ import i18n from "@/i18n";
 import {
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
+	parseRemoteJoinedPath,
 	remoteList,
+	remoteMkdir,
 	remoteReadText,
+	remoteRemove,
 	remoteSessionIdFromHandle,
+	remoteWriteBytes,
 	remoteWriteText,
 } from "@/lib/remote-vault";
 import { isTauri } from "@/lib/tauri";
@@ -342,17 +346,10 @@ export async function readVaultFile(path: string): Promise<string> {
 		throw new Error(i18n.t("app:vault.readDesktopOnly"));
 	}
 
-	// Remote joined path: remote:<sessionId>/rel
-	if (path.startsWith("remote:")) {
-		const slash = path.indexOf("/", "remote:".length);
-		if (slash === -1) {
-			throw new Error("invalid remote path");
-		}
-		const handle = path.slice(0, slash);
-		const sessionId = remoteSessionIdFromHandle(handle);
-		if (!sessionId) throw new Error("invalid remote session");
-		const rel = path.slice(slash + 1);
-		return remoteReadText(sessionId, rel);
+	const remoteRead = parseRemoteJoinedPath(path);
+	if (remoteRead) {
+		if (!remoteRead.rel) throw new Error("invalid remote path");
+		return remoteReadText(remoteRead.sessionId, remoteRead.rel);
 	}
 
 	return readTextFile(path);
@@ -367,16 +364,10 @@ export async function writeVaultFile(
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
-	if (path.startsWith("remote:")) {
-		const slash = path.indexOf("/", "remote:".length);
-		if (slash === -1) {
-			throw new Error("invalid remote path");
-		}
-		const handle = path.slice(0, slash);
-		const sessionId = remoteSessionIdFromHandle(handle);
-		if (!sessionId) throw new Error("invalid remote session");
-		const rel = path.slice(slash + 1);
-		await remoteWriteText(sessionId, rel, content);
+	const remoteWrite = parseRemoteJoinedPath(path);
+	if (remoteWrite) {
+		if (!remoteWrite.rel) throw new Error("invalid remote path");
+		await remoteWriteText(remoteWrite.sessionId, remoteWrite.rel, content);
 		return;
 	}
 
@@ -401,6 +392,13 @@ export async function writeVaultBytes(
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
+	const remote = parseRemoteJoinedPath(path);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteWriteBytes(remote.sessionId, remote.rel, bytes);
+		return;
+	}
+
 	const { mkdir, writeFile } = await import("@tauri-apps/plugin-fs");
 	const parent = path.replace(/[\\/][^\\/]+$/, "");
 	if (parent && parent !== path) {
@@ -419,6 +417,13 @@ export async function createVaultDirectory(path: string): Promise<void> {
 		throw new Error(i18n.t("app:vault.writeDesktopOnly"));
 	}
 
+	const remote = parseRemoteJoinedPath(path);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteMkdir(remote.sessionId, remote.rel);
+		return;
+	}
+
 	const { mkdir } = await import("@tauri-apps/plugin-fs");
 	await mkdir(path, { recursive: true });
 }
@@ -426,6 +431,7 @@ export async function createVaultDirectory(path: string): Promise<void> {
 /**
  * Remove a file or directory under the vault.
  * Directories are removed recursively (including non-empty).
+ * Remote vaults use SFTP remove (no recycle bin in MVP).
  */
 export async function removeVaultPath(path: string): Promise<void> {
 	if (!isTauri()) {
@@ -434,6 +440,12 @@ export async function removeVaultPath(path: string): Promise<void> {
 	const trimmed = path.trim();
 	if (!trimmed || trimmed.startsWith("agentero:")) {
 		throw new Error(i18n.t("sidebar:fileTree.deleteInvalid"));
+	}
+	const remote = parseRemoteJoinedPath(trimmed);
+	if (remote) {
+		if (!remote.rel) throw new Error("invalid remote path");
+		await remoteRemove(remote.sessionId, remote.rel, true);
+		return;
 	}
 	const { remove } = await import("@tauri-apps/plugin-fs");
 	await remove(trimmed, { recursive: true });

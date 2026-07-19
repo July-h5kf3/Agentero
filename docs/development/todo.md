@@ -420,19 +420,16 @@
 
 ### 远程 Vault（SSH/SFTP）+ 远端 BYOA
 
-设计见 [`remote-vault.md`](remote-vault.md)（文档先行；未实现）。
+设计见 [`remote-vault.md`](remote-vault.md)。**MVP 已完成**。
 
 - [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
-- [x] **M1（Host + 部分 UI）** SSH/SFTP（`openssh`）+ `__local_sim__`；`remote_*` commands；欢迎页「打开远程」；树/读写 md 经 Host
-- [x] **M2** catalog work mirror GET/PUT + conflict；`remote_paper_list` / rescan / set_tags / set_is_read
-- [x] **M3** ACP over SSH（`to_acp_agent` + `run_once` / `warm`）；skill materialize；notes-review 读远端；Codex-SSH 明确拒绝
-- [x] PDF：`remote_cache_file` + `localBytesToViewerSource` / `findLocalPdfPath` 远程分支
-- [x] 最近远程列表 reopen（欢迎页）
-- [ ] **M4** 连接复用、远端 trash、入库写远端、blob LRU 淘汰策略
-- [x] i18n（en + zh-CN）远程对话框文案
-- [ ] 设置页远程项
-- [ ] `docs/backend/api.md` 落地 command 契约
-- [ ] Codex App Server 经 SSH 的原生 runtime
+- [x] **M1** SSH/SFTP + `__local_sim__`；`remote_*`；欢迎页；树 / md / mkdir / remove / bytes
+- [x] **M2** catalog work mirror；list/get/delete/rescan/tags/is_read + PUT
+- [x] **M3** ACP over SSH；skill materialize；notes-review；Codex-SSH 明确拒绝
+- [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
+- [x] 切换 Vault 时 disconnect 远程会话
+- [x] i18n；[`api.md`](../backend/api.md) 远程 command 表
+- [ ] **M4** 远端 recycle bin、魔棒入库写远端、blob LRU、Codex-SSH、设置页远程偏好
 
 ### 发布
 

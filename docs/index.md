@@ -59,7 +59,8 @@ Agentero 桌面应用
 - **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
 - **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；`.md` 变更防抖重建 wiki 索引；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
-- **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域；**远程 Vault（SSH/SFTP）+ 远端 BYOA**（设计见 [`development/remote-vault.md`](development/remote-vault.md)）。
+- **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
+- **远程 Vault（SSH/SFTP）+ 远端 BYOA**：**MVP 已落地**（见 [`development/remote-vault.md`](development/remote-vault.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
 ## 关键三方技术

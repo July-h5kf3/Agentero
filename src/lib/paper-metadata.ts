@@ -837,17 +837,28 @@ export async function loadPaperMetadata(
 ): Promise<PaperMetadata | null> {
 	const path = paperCatalogPath(paperDir, vaultRoot);
 
-	// Primary: SQLite catalog
+	// Primary: SQLite catalog (local vault path or remote work mirror)
 	if (isTauri() && vaultRoot && path) {
 		try {
-			const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
-				args: { vaultPath: vaultRoot, path },
-			});
-			if (res.ok && res.data?.id) {
+			const { isRemoteVaultHandle, remotePaperGet, remoteSessionIdFromHandle } =
+				await import("@/lib/remote-vault");
+			let data: PaperMetadata | null = null;
+			if (isRemoteVaultHandle(vaultRoot)) {
+				const sessionId = remoteSessionIdFromHandle(vaultRoot);
+				if (sessionId) {
+					data = (await remotePaperGet(sessionId, { path })) as PaperMetadata;
+				}
+			} else {
+				const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
+					args: { vaultPath: vaultRoot, path },
+				});
+				if (res.ok && res.data) data = res.data;
+			}
+			if (data?.id) {
 				return withNormalizedTags(
 					enrichArxivUrls({
-						...res.data,
-						path: res.data.path ?? path,
+						...data,
+						path: data.path ?? path,
 					}),
 				);
 			}

@@ -1,6 +1,6 @@
 # 远程 Vault（SSH / SFTP）与远端 BYOA
 
-> **状态**：实现中（M0–M3 主体已落地；M4 加固与 Codex-SSH 仍待）  
+> **状态**：**MVP 已落地**（M0–M3）；M4 为加固（远端 trash、入库写远端、Codex-SSH、blob LRU）  
 > **分支**：`docs/remote-vault-ssh`  
 > **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
 > **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO
@@ -440,41 +440,30 @@ type RemoteAgentLaunch = {
 
 ---
 
-## 14. 下一步（文档之后）
+## 14. Live SSH 冒烟（可选）
 
-1. 评审本文：SSH 选型（openssh vs russh）、catalog 冲突 UX 文案。  
-2. M0：列出需迁到 `VaultFs` 的 `services/*` 清单与回归范围。  
-3. Spike（可选、短）：本机 Tauri 内 `ssh` exec 跑 `echo` + SFTP list 一目录，验证 macOS 钥匙串/agent。  
-4. 实现阶段再改 `api.md` / PRD 验收条目并勾选 todo。
-
----
-
-## 15. Live SSH 冒烟（dgx 已验）
-
-在本机 `~/.ssh/config` 配置好 Host（例：`dgx` → `User phil`），远端准备测试 Vault 后：
+在本机 `~/.ssh/config` 配置好 Host 别名，远端准备符合 data-model 的 Vault 目录后：
 
 ```bash
-# 远端一次性脚手架（示例路径）
-ssh dgx 'mkdir -p ~/agentero-remote-test-vault/{papers/demo-paper,notes,plans,.agents/skills/hello}
+# 远端脚手架示例（替换 HOST 与路径）
+ssh HOST 'mkdir -p ~/agentero-remote-test-vault/{papers/demo-paper,notes,plans,.agents/skills/hello}
   && printf "# AGENTS.md\n" > ~/agentero-remote-test-vault/AGENTS.md
-  && printf "# Demo Paper on DGX\n\nnotes\n" > ~/agentero-remote-test-vault/papers/demo-paper/NOTES.md'
+  && printf "# Demo Paper\n\nnotes\n" > ~/agentero-remote-test-vault/papers/demo-paper/NOTES.md'
 
-# Host 集成测试（ignored，需环境变量）
+# Host 集成测试（ignored，需环境变量；勿把具体主机名写进仓库）
 cd src-tauri
-AGENTERO_REMOTE_SSH_HOST=dgx \
-AGENTERO_REMOTE_SSH_PATH=/home/phil/agentero-remote-test-vault \
+AGENTERO_REMOTE_SSH_HOST=<ssh-config-Host> \
+AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault-path> \
 cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 ```
 
-**2026-07-19 在 `dgx` 上结果（摘要）**：
+覆盖：connect / list / read / write-through / catalog checkout·push / paper upsert / `remote_which`（login shell PATH，`bash -lc`）。
 
-| 检查项 | 结果 |
-|---|---|
-| SSH + SFTP connect | ✅ `dgx:/home/phil/agentero-remote-test-vault` |
-| list / read NOTES | ✅ |
-| write-through `notes/remote-smoke.md` | ✅ 远端 cat 可见 |
-| catalog checkout + push | ✅ `.agentero/catalog.sqlite` |
-| upsert paper 行 | ✅ `papers/demo-paper` |
-| `remote_which` login PATH | ✅ `claude`、`grok` 在 `~/.local/bin`（非 login shell 会丢 PATH，故 agent 启动用 `bash -lc`） |
+完整 Chat 依赖远端已安装 **ACP-compatible** agent（`claude-agent-acp` / `opencode acp` 等）；仅有 Claude Code / 其它 CLI 时，文件层可用，Agent 面板需对应 ACP 入口。
 
-注意：远端 **Codex / OpenCode / claude-agent-acp** 当时不在 PATH；有 **Claude Code** 与 **grok** CLI。完整 Chat 仍依赖对应 **ACP** 入口（`claude-agent-acp` 等）。
+## 15. 后续（非 MVP）
+
+- 远端回收站、魔棒入库写远端、blob LRU  
+- Codex App Server 经 SSH  
+- 设置页远程偏好  
+- 更广的 `std::fs` → `VaultFs` 迁移  

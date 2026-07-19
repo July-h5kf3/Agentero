@@ -233,11 +233,11 @@ mod tests {
         assert_eq!(parse_remote_handle("/local/path"), None);
     }
 
-    /// Live SSH smoke test (e.g. Host `dgx` in `~/.ssh/config`).
+    /// Live SSH smoke test against any Host in `~/.ssh/config`.
     ///
     /// ```bash
-    /// AGENTERO_REMOTE_SSH_HOST=dgx \
-    /// AGENTERO_REMOTE_SSH_PATH=/home/phil/agentero-remote-test-vault \
+    /// AGENTERO_REMOTE_SSH_HOST=<alias> \
+    /// AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault> \
     /// cargo test -p agentero --lib live_ssh_remote_vault -- --ignored --nocapture
     /// ```
     #[tokio::test]

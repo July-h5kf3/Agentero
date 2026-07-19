@@ -130,6 +130,9 @@
 		"remoteConnecting": "Connecting…",
 		"remoteConnectFailed": "Failed to open remote vault",
 		"remoteBadge": "Remote",
+		"remoteNoFinder": "Reveal in Finder is not available for remote vaults.",
+		"remoteNoTerminal": "Open in Terminal is not available for remote vaults.",
+		"remoteDeleteDirect": "Remote delete removes files on the server (no recycle bin).",
 		"runTauriPrefix": "Run the app with",
 		"runTauriSuffix": "to open a vault."
 	},

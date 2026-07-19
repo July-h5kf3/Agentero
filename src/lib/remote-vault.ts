@@ -207,6 +207,59 @@ export async function remoteMkdir(
 	);
 }
 
+export async function remoteRemove(
+	sessionId: string,
+	path: string,
+	recursive = true,
+): Promise<void> {
+	await unwrap(
+		invoke<ApiResult<null>>("remote_remove", {
+			args: { sessionId, path, recursive },
+		}),
+		"Failed to remove remote path",
+	);
+}
+
+export async function remoteWriteBytes(
+	sessionId: string,
+	path: string,
+	data: Uint8Array,
+): Promise<void> {
+	await unwrap(
+		invoke<ApiResult<null>>("remote_write_bytes", {
+			args: { sessionId, path, data: Array.from(data) },
+		}),
+		"Failed to write remote bytes",
+	);
+}
+
+export async function remotePaperGet(
+	sessionId: string,
+	args: { path?: string; id?: string },
+): Promise<unknown> {
+	return unwrap(
+		invoke<ApiResult<unknown>>("remote_paper_get", {
+			args: { sessionId, path: args.path, id: args.id },
+		}),
+		"Failed to get paper",
+	);
+}
+
+/** Split `remote:<sessionId>/rel` → `{ sessionId, rel }` or null. */
+export function parseRemoteJoinedPath(
+	path: string,
+): { sessionId: string; rel: string } | null {
+	if (!path.startsWith(REMOTE_PREFIX)) return null;
+	const slash = path.indexOf("/", REMOTE_PREFIX.length);
+	if (slash === -1) {
+		const sessionId = path.slice(REMOTE_PREFIX.length).trim();
+		return sessionId ? { sessionId, rel: "" } : null;
+	}
+	const sessionId = path.slice(REMOTE_PREFIX.length, slash).trim();
+	if (!sessionId) return null;
+	return { sessionId, rel: path.slice(slash + 1) };
+}
+
 export async function remotePaperList(sessionId: string): Promise<unknown[]> {
 	return unwrap(
 		invoke<ApiResult<unknown[]>>("remote_paper_list", {

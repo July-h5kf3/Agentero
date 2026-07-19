@@ -119,6 +119,28 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
 
+#### 远程 Vault（SSH/SFTP，MVP 已实现）
+
+设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。前端伪路径 `remote:<sessionId>`；文件权威在远端。
+
+| Command | 说明 |
+|---|---|
+| `remote_connect` | `{ host, user?, remotePath }` → `RemoteSessionInfo`（含 `vaultHandle`、`caps`） |
+| `remote_disconnect` | flush catalog + 拆会话 |
+| `remote_status` | 会话信息 |
+| `remote_list` / `remote_stat` | 列目录 / 元数据 |
+| `remote_read_text` / `remote_write_text` / `remote_write_bytes` | 读写 |
+| `remote_read_bytes` | 读二进制 |
+| `remote_mkdir` / `remote_remove` | 建目录 / 删除（可 recursive） |
+| `remote_paper_list` / `remote_paper_get` / `remote_paper_delete` | catalog 工作副本 |
+| `remote_paper_rescan` / `remote_paper_set_tags` / `remote_paper_set_is_read` | mutation 后 PUT 远端 |
+| `remote_cache_file` | PDF 等缓存到本机 ephemeral 路径 |
+| `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
+
+Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
+
+Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
+
 #### `path_open_in_terminal`（已实现）
 
 在系统默认终端中打开本地路径（文件树右键 / `⌥⌘T`「在终端中打开」）。

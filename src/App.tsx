@@ -113,9 +113,12 @@ import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import {
+	clearRemoteSessionMeta,
 	isRemoteVaultHandle,
 	rememberRecentRemoteVault,
 	remoteConnect,
+	remoteDisconnect,
+	remoteSessionIdFromHandle,
 	saveRemoteSessionMeta,
 } from "@/lib/remote-vault";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
@@ -1074,6 +1077,19 @@ export default function App() {
 
 	const activateVault = useCallback(
 		async (path: string) => {
+			// Tear down previous remote session so work catalogs are flushed.
+			const prev = vaultPathRef.current;
+			if (prev && isRemoteVaultHandle(prev) && prev !== path) {
+				const prevId = remoteSessionIdFromHandle(prev);
+				if (prevId) {
+					try {
+						await remoteDisconnect(prevId);
+					} catch {
+						// best-effort
+					}
+				}
+				clearRemoteSessionMeta();
+			}
 			saveVaultPath(path);
 			setVaultPath(path);
 			setTabs([]);
@@ -1274,6 +1290,13 @@ export default function App() {
 	const handleRevealInFinder = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
+		if (
+			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
+			path.startsWith("remote:")
+		) {
+			notifyWarning(t("app:vault.remoteNoFinder"));
+			return;
+		}
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.revealDesktopOnly"));
 			return;
@@ -1285,12 +1308,19 @@ export default function App() {
 				notifyError(t("sidebar:fileTree.revealFailed"));
 			}
 		})();
-	}, [treeSelectedPath, t]);
+	}, [treeSelectedPath, vaultPath, t]);
 
 	/** ⌥⌘T — open system terminal at selected path (dir = self, file = parent). */
 	const handleOpenInTerminal = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
+		if (
+			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
+			path.startsWith("remote:")
+		) {
+			notifyWarning(t("app:vault.remoteNoTerminal"));
+			return;
+		}
 		if (!isTauri()) {
 			notifyError(t("sidebar:fileTree.openInTerminalDesktopOnly"));
 			return;
@@ -1302,11 +1332,10 @@ export default function App() {
 				notifyError(t("sidebar:fileTree.openInTerminalFailed"));
 			}
 		})();
-	}, [treeSelectedPath, t]);
+	}, [treeSelectedPath, vaultPath, t]);
 
 	/**
-	 * Delete vault paths into the recycle bin (`.agentero/.trash/`).
-	 * Recoverable from the Recycle Bin view; catalog rows are snapshotted too.
+	 * Delete vault paths into the recycle bin (local), or SFTP remove (remote MVP).
 	 */
 	const trashPathsAndNotify = useCallback(
 		async (absPaths: string[]) => {
@@ -1331,7 +1360,25 @@ export default function App() {
 				const rels = valid
 					.map((p) => vaultRelativePath(vaultPath, p))
 					.filter((r): r is string => Boolean(r));
-				await trashPaths(vaultPath, rels);
+				if (isRemoteVaultHandle(vaultPath)) {
+					// Remote MVP: direct SFTP remove (no recycle bin).
+					const { removeVaultPath } = await import("@/lib/vault");
+					const { deletePapersUnderPath } = await import("@/lib/papers-api");
+					for (const p of valid) {
+						await removeVaultPath(p);
+					}
+					for (const rel of rels) {
+						if (rel.startsWith("papers/") || rel === "papers") {
+							try {
+								await deletePapersUnderPath(vaultPath, rel);
+							} catch {
+								// catalog cleanup best-effort
+							}
+						}
+					}
+				} else {
+					await trashPaths(vaultPath, rels);
+				}
 				for (const p of valid) closeTabsUnderPath(p);
 				const treeNorm = treeSelectedPath
 					?.replace(/\\/g, "/")
@@ -1343,7 +1390,9 @@ export default function App() {
 					setTreeSelectedPath(null);
 				}
 				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
+				if (!isRemoteVaultHandle(vaultPath)) {
+					await rebuildWikiAndNotify(vaultPath);
+				}
 				await refreshLibrary();
 			} catch (e) {
 				notifyError(
@@ -2713,7 +2762,11 @@ export default function App() {
 							>
 								<div className="shrink-0">
 									<VaultSidebarHeader
-										title={vaultDisplayName(vaultPath)}
+										title={
+											vaultPath && isRemoteVaultHandle(vaultPath)
+												? `${vaultDisplayName(vaultPath)} · ${t("app:vault.remoteBadge")}`
+												: vaultDisplayName(vaultPath)
+										}
 										onNewFile={() => startCreate("file")}
 										onNewFolder={() => startCreate("folder")}
 										lookupParentDir={lookupParentDir}
