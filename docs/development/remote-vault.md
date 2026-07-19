@@ -408,8 +408,10 @@ type RemoteAgentLaunch = {
 | catalog PUT 中断 | 远端 tmp + rename；失败不更新 FileMeta；reopen 以远端为准 |
 | 多客户端写坏 sqlite | 产品假设单写者；mtime 冲突拒写 |
 | SSH 延迟导致 Chat 慢 | warm 状态；流式仍用现有事件；超时可配 |
-| 远端无 agent / PATH 怪 | discover 报错可操作；设置绝对路径；loginShell 选项 |
-| nvm/conda 未加载 | `loginShell` 或用户写 wrapper 脚本 |
+| 远端无 agent / PATH 怪 | `remote_which` + PATH bootstrap（linuxbrew / `~/.local`）；设置绝对路径；见 [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md) |
+| nvm / **Linuxbrew** 仅交互加载 | BatchMode `bash -lc` 常跳过 `.bashrc` 交互段 → brew 不在 PATH；Host 侧 prepend + `brew shellenv` 兜底；用户侧可把 `brew shellenv` 放到非交互也会执行的 profile |
+| 有 Claude 无 ACP 适配器 | UI **Install ACP**（SSH 远端 `npm i -g … --prefix ~/.local`）；探测区分 `claude` vs `claude-agent-acp` |
+| 远端 Agent 代理 | 与本地共用 proxy 配置，注入远端 `HTTP(S)_PROXY`；URL 须从**服务器**可达 |
 | PDF 反复下载 | blob LRU + mtime 校验 |
 | 安全：远端→本机 | ACP 桥只转发协议字节；不自动 ForwardAgent 除非用户显式 |
 | Host key | 校验 known_hosts；未知 host 提示确认 |
@@ -461,9 +463,11 @@ AGENTERO_REMOTE_SSH_PATH=<absolute-remote-vault-path> \
 cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 ```
 
-覆盖：connect / list / read / write-through / catalog checkout·push / paper upsert / `remote_which`（login shell PATH，`bash -lc`）。
+覆盖：connect / list / read / write-through / catalog checkout·push / paper upsert / `remote_which`（`bash -lc` + PATH bootstrap，含 linuxbrew）。
 
 完整 Chat 依赖远端已安装 **ACP-compatible** agent（`claude-agent-acp` / `opencode acp` 等）；仅有 Claude Code / 其它 CLI 时，文件层可用，Agent 面板需对应 ACP 入口。
+
+**排障**：交互 shell 能 `command -v`、应用内探测不到 → 多半是 BatchMode PATH（Linuxbrew）。见 [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)。
 
 ## 15. 后续（非 MVP）
 

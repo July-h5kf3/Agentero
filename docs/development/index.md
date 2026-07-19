@@ -50,7 +50,9 @@
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**设计中**）。
 - [`.md`](.md)：简短产品假设。
-- Bug 修复记录：[`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）。
+- Bug 修复记录：
+  - [`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）
+  - [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)（远端 ACP：BatchMode SSH PATH / Linuxbrew / Install 引号）
 - Paper 入库流水线统一：[`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
 
 ## 交叉引用

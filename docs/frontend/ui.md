@@ -467,7 +467,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **Host 上下文（本机 / 远端）**：
 
 - 设置侧栏**底部**显示 **Host**（系统图标 + 本机 hostname / 远端 `user@host`；本机用编译目标 OS，远端 `uname -s`）。
-- 当前 Vault 为 `remote:…` 时：Agent 分区切换为 **远端探测**（`remote_agent_scan` + `remote_agent_probe`，经 SSH `command -v` 与 ACP initialize）；外观等仍为本机 `settings.json`。
+- 当前 Vault 为 `remote:…` 时：Agent 分区切换为 **远端探测**（`remote_agent_scan` + `remote_agent_probe`；**代理**与本地共用并注入远端 env；**Install ACP** 经 SSH 装适配器）；外观等仍为本机 `settings.json`。PATH / Linuxbrew 注意见 [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)。
 - 本机 Vault / 无 Vault：Agent 分区为现有本机 catalog + probe。
 
 ## 4.1 国际化（i18n）
