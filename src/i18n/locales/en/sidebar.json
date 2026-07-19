@@ -103,7 +103,11 @@
 		"exportDone": "Exported {{count}} papers",
 		"importFailed": "Import failed",
 		"exportFailed": "Export failed",
-		"desktopOnly": "Import/export requires the desktop app."
+		"desktopOnly": "Import/export requires the desktop app.",
+		"colPublication": "Publication",
+		"copyHint": "Click to copy {{label}}",
+		"copied": "Copied {{label}}",
+		"copyFailed": "Could not copy to clipboard"
 	},
 	"connector": {
 		"saved": "Saved “{{title}}” from browser",

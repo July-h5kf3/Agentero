@@ -171,8 +171,8 @@
   - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
-  - **列**：标题、作者、年份、**标签**、类型、标识符；**双击**行打开对应 paper 文件夹。
-  - **标签筛选**：表上方汇总**当前作用域** tag chip；单元格 tag 也可筛选。标题搜索同时匹配 tag 子串。
+  - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签）；**双击**行打开对应 paper 文件夹。
+  - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
   - **中间栏 header**：搜索框；全库另有 Zotero 迁移；**导出**（Download 图标）。

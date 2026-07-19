@@ -103,7 +103,11 @@
 		"exportDone": "已导出 {{count}} 篇",
 		"importFailed": "导入失败",
 		"exportFailed": "导出失败",
-		"desktopOnly": "导入/导出需要桌面应用。"
+		"desktopOnly": "导入/导出需要桌面应用。",
+		"colPublication": "出版物",
+		"copyHint": "单击复制{{label}}",
+		"copied": "已复制{{label}}",
+		"copyFailed": "无法复制到剪贴板"
 	},
 	"connector": {
 		"saved": "已从浏览器保存「{{title}}」",
