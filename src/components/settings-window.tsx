@@ -49,6 +49,7 @@ import {
 	listAgents,
 	loadModelCatalog,
 	openInstallTerminal,
+	type ProbeResult,
 	probeAgent,
 	probeCatalogAgent,
 	removeAgent,
@@ -636,7 +637,7 @@ function StatusBadge({
 	return (
 		<span
 			className={cn(
-				"inline-flex shrink-0 items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
+				"inline-flex shrink-0 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
 				tone === "ok" &&
 					"bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
 				tone === "warn" && "bg-amber-500/15 text-amber-800 dark:text-amber-400",
@@ -649,6 +650,73 @@ function StatusBadge({
 			{children}
 		</span>
 	);
+}
+
+/** ACP badge while a probe is in flight (replaces static “not probed”). */
+function ProbingBadge({ label }: { label: string }) {
+	return (
+		<StatusBadge tone="warn">
+			<Loader2 className="size-2.5 shrink-0 animate-spin" aria-hidden />
+			{label}
+		</StatusBadge>
+	);
+}
+
+function catalogProbeKey(templateId: string): string {
+	return `catalog:${templateId}`;
+}
+
+function customProbeKey(id: string): string {
+	return `custom:${id}`;
+}
+
+/** Whether a catalog row still needs ACP initialize (skip already-ready on soft open). */
+function catalogNeedsProbe(entry: CatalogEntry, force: boolean): boolean {
+	if (!(entry.binaryAvailable || entry.acpCommandAvailable)) return false;
+	if (force) return true;
+	return entry.acpStatus === "not-probed" || entry.acpStatus === "failed";
+}
+
+function patchCatalogProbe(
+	scan: CatalogScanResponse,
+	templateId: string,
+	result: ProbeResult,
+): CatalogScanResponse {
+	return {
+		...scan,
+		entries: scan.entries.map((entry) => {
+			if (entry.templateId !== templateId) return entry;
+			return {
+				...entry,
+				registeredId: entry.registeredId ?? result.agentId,
+				acpStatus: result.available ? "ready" : "failed",
+				acpAgentName: result.agentName ?? null,
+				lastProbeError: result.error ?? null,
+				lastProbedAt: new Date().toISOString(),
+			};
+		}),
+	};
+}
+
+function patchCustomProbe(
+	scan: CatalogScanResponse,
+	agentId: string,
+	result: ProbeResult,
+): CatalogScanResponse {
+	return {
+		...scan,
+		customAgents: scan.customAgents.map((agent) => {
+			if (agent.id !== agentId) return agent;
+			return {
+				...agent,
+				available: result.available ? true : agent.available,
+				lastProbeOk: result.available,
+				lastProbeAgentName: result.agentName ?? null,
+				lastProbeError: result.error ?? null,
+				lastProbedAt: new Date().toISOString(),
+			};
+		}),
+	};
 }
 
 function catalogStatusTone(
@@ -1098,6 +1166,8 @@ function AgentPane({
 	const [formArgs, setFormArgs] = useState("");
 	const [proxyEnabled, setProxyEnabled] = useState(false);
 	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
+	/** Rows currently mid-ACP-probe — drives “探测中” badges. */
+	const [probingKeys, setProbingKeys] = useState<Set<string>>(() => new Set());
 	const autoProbedRef = useRef(false);
 
 	// PDF Ask agent/model (same listAgents registry as Translate → Agent)
@@ -1112,6 +1182,15 @@ function AgentPane({
 			patch({ pdfAsk: { ...settings.pdfAsk, ...partial } }),
 		[patch, settings.pdfAsk],
 	);
+
+	const clearProbingKey = useCallback((key: string) => {
+		setProbingKeys((prev) => {
+			if (!prev.has(key)) return prev;
+			const next = new Set(prev);
+			next.delete(key);
+			return next;
+		});
+	}, []);
 
 	/** Scan only — does not toggle busy; callers own the loading flag. */
 	const scanOnce =
@@ -1133,64 +1212,110 @@ function AgentPane({
 		}, [t]);
 
 	/**
-	 * Probe candidates in parallel; refresh catalog after each finishes so
-	 * badges update one-by-one instead of waiting for the whole batch.
+	 * Parallel ACP probe. Soft open skips already-ready rows; force re-probes all
+	 * installed. Badge updates from ProbeResult (no per-row full catalog rescan).
 	 */
 	const probeInstalled = useCallback(
-		async (scan: CatalogScanResponse) => {
+		async (scan: CatalogScanResponse, force: boolean) => {
 			if (!isTauri()) return;
-			const candidates = scan.entries.filter(
-				(e) => e.binaryAvailable || e.acpCommandAvailable,
+			const candidates = scan.entries.filter((e) =>
+				catalogNeedsProbe(e, force),
 			);
-			const custom = scan.customAgents.filter((a) => a.available);
-			if (candidates.length === 0 && custom.length === 0) return;
+			const custom = scan.customAgents.filter(
+				(a) => a.available && (force || a.lastProbeOk !== true),
+			);
+			if (candidates.length === 0 && custom.length === 0) {
+				setProbingKeys(new Set());
+				return;
+			}
+
+			setProbingKeys(
+				new Set([
+					...candidates.map((e) => catalogProbeKey(e.templateId)),
+					...custom.map((a) => customProbeKey(a.id)),
+				]),
+			);
 
 			await Promise.allSettled([
 				...candidates.map(async (entry) => {
+					const key = catalogProbeKey(entry.templateId);
 					try {
-						await probeCatalogAgent(entry.templateId);
+						const result = await probeCatalogAgent(entry.templateId);
+						setCatalog((prev) =>
+							prev ? patchCatalogProbe(prev, entry.templateId, result) : prev,
+						);
+					} catch (e) {
+						const err = e instanceof Error ? e.message : String(e);
+						setCatalog((prev) =>
+							prev
+								? patchCatalogProbe(prev, entry.templateId, {
+										agentId: entry.registeredId ?? entry.templateId,
+										available: false,
+										error: err,
+									})
+								: prev,
+						);
 					} finally {
-						// Host has persisted this probe; pull badges immediately.
-						await scanOnce();
+						clearProbingKey(key);
 					}
 				}),
 				...custom.map(async (agent) => {
+					const key = customProbeKey(agent.id);
 					try {
-						await probeAgent(agent.id);
+						const result = await probeAgent(agent.id);
+						setCatalog((prev) =>
+							prev ? patchCustomProbe(prev, agent.id, result) : prev,
+						);
+					} catch (e) {
+						const err = e instanceof Error ? e.message : String(e);
+						setCatalog((prev) =>
+							prev
+								? patchCustomProbe(prev, agent.id, {
+										agentId: agent.id,
+										available: false,
+										error: err,
+									})
+								: prev,
+						);
 					} finally {
-						await scanOnce();
+						clearProbingKey(key);
 					}
 				}),
 			]);
 		},
-		[scanOnce],
+		[clearProbingKey],
 	);
 
-	/** Full rescan → parallel probe (live badge updates) → final scan. */
-	const rescanAndProbe = useCallback(async () => {
-		if (!isTauri()) {
-			notifyError(t("agent.desktopOnly"));
-			return;
-		}
-		setLoading(true);
-		try {
-			const scan = await scanOnce();
-			if (scan) {
-				await probeInstalled(scan);
-				// One last pass in case a concurrent scan raced mid-batch.
-				await scanOnce();
+	/**
+	 * PATH scan → parallel probe → one reconcile scan.
+	 * `force`: Refresh / proxy change re-probe everything; open page skips ready.
+	 */
+	const rescanAndProbe = useCallback(
+		async (force = false) => {
+			if (!isTauri()) {
+				notifyError(t("agent.desktopOnly"));
+				return;
 			}
-		} finally {
-			setLoading(false);
-		}
-	}, [probeInstalled, scanOnce, t]);
+			setLoading(true);
+			try {
+				const scan = await scanOnce();
+				if (scan) {
+					await probeInstalled(scan, force);
+					await scanOnce();
+				}
+			} finally {
+				setLoading(false);
+				setProbingKeys(new Set());
+			}
+		},
+		[probeInstalled, scanOnce, t],
+	);
 
-	// Open page: scan + parallel ACP probe once (live badge updates).
-	// Proxy switch stays usable during busy; Refresh re-runs the same path.
+	// Open once: soft probe (skip ready). Refresh / proxy use force=true.
 	useEffect(() => {
 		if (autoProbedRef.current) return;
 		autoProbedRef.current = true;
-		void rescanAndProbe();
+		void rescanAndProbe(false);
 	}, [rescanAndProbe]);
 
 	const refreshPdfAskRegistry = useCallback(async () => {
@@ -1286,18 +1411,34 @@ function AgentPane({
 		}
 	};
 
-	/** Persist proxy only — no full re-probe (that used to lock the switch). */
+	/**
+	 * Persist proxy, then auto re-probe. Host clears last_probe_* on change so
+	 * we show “探测中” immediately (not “未探测”) and run ACP probes with the
+	 * new env. Proxy switch stays enabled during the batch.
+	 */
 	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
+		setLoading(true);
 		try {
+			// Optimistic: flip badges before host clears probe history.
+			if (catalog) {
+				setProbingBatch(collectProbeKeys(catalog));
+			}
 			const saved = await setAgentProxy(enabled, url);
 			setProxyEnabled(saved.proxyEnabled);
-			setProxyUrl(saved.proxyUrl);
-			await scanOnce();
+			setProxyUrl(saved.proxyUrl || "http://127.0.0.1:7890");
+			const scan = await scanOnce();
+			if (scan) {
+				await probeInstalled(scan);
+				await scanOnce();
+			}
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 			// Re-sync UI from host if save failed.
 			await scanOnce();
+		} finally {
+			setLoading(false);
+			clearAllProbing();
 		}
 	};
 
@@ -1373,6 +1514,7 @@ function AgentPane({
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLoading(false);
+			clearAllProbing();
 		}
 	};
 
@@ -1604,6 +1746,11 @@ function AgentPane({
 						entry.acpStatus === "ready";
 					const showInstall = Boolean(entry.offerInstall);
 					const notInstalled = !entry.binaryAvailable;
+					// Host "not-probed" (e.g. after proxy clears history) is shown as
+					// 探测中 + spinner, never static「未探测」.
+					const isProbing =
+						probingKeys.has(catalogProbeKey(entry.templateId)) ||
+						entry.acpStatus === "not-probed";
 					return (
 						<div
 							key={entry.templateId}
@@ -1631,7 +1778,9 @@ function AgentPane({
 											{t("agent.badges.notInstalled")}
 										</StatusBadge>
 									)}
-									{entry.acpStatus !== "missing" ? (
+									{isProbing ? (
+										<ProbingBadge label={t("agent.probing")} />
+									) : entry.acpStatus !== "missing" ? (
 										<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
 											{acpStatusLabel(entry.acpStatus)}
 										</StatusBadge>
@@ -1699,6 +1848,9 @@ function AgentPane({
 				})}
 				{customAgents.map((agent) => {
 					const isDefault = catalog?.defaultId === agent.id;
+					const isProbing =
+						probingKeys.has(customProbeKey(agent.id)) ||
+						(agent.available && agent.lastProbeOk == null);
 					return (
 						<div
 							key={agent.id}
@@ -1714,17 +1866,15 @@ function AgentPane({
 											{t("agent.badges.default")}
 										</StatusBadge>
 									) : null}
-									{agent.lastProbeOk === true ? (
+									{isProbing ? (
+										<ProbingBadge label={t("agent.probing")} />
+									) : agent.lastProbeOk === true ? (
 										<StatusBadge tone="ok">
 											{t("agent:acpStatus.ready")}
 										</StatusBadge>
 									) : agent.lastProbeOk === false ? (
 										<StatusBadge tone="err">
 											{t("agent:acpStatus.failed")}
-										</StatusBadge>
-									) : agent.available ? (
-										<StatusBadge tone="warn">
-											{t("agent:acpStatus.notProbed")}
 										</StatusBadge>
 									) : (
 										<StatusBadge tone="muted">
