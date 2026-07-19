@@ -738,18 +738,25 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `paper_import_local_pdf`（已落地）
 
-把用户选择的本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**；元数据来自文件名。前端经魔棒弹层 `FileUp` 按钮的原生 PDF 选择器（多选）触发。
+把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹** → metadata 确认对话框后再导入。
 
 - **参数**（invoke 字段名 `args`）：
   ```ts
   {
     vaultPath: string;
     parentDir: string;   // Vault 相对，如 papers 或 papers/nlp
-    filePaths: string[]; // 用户选择的本地 PDF 绝对路径
+    filePaths?: string[]; // 仅路径（无 overrides）时用；`entries` 非空时忽略
+    entries?: Array<{    // 推荐：路径 + 可选 metadata（确认对话框）
+      filePath: string;
+      title?: string;
+      authors?: string[];
+      year?: number;
+      id?: string;       // 文件夹 slug 偏好；Host 仍会做 -2/-3 去重
+    }>;
   }
   ```
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
-- **行为**：每个 PDF → 由文件名 stem 派生 slug（`{parent}/{slug}/`，冲突加 `-2`/`-3`）与标题；复制到 `{slug}.pdf`（论文根目录）；写 `NOTES.md` / `highlights.md` 壳（摘要优先译中文，见 `lookup_import`）+ catalog（type `pdf`）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
+- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` / `highlights.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
 
 #### `paper_parse_body`（已落地）
 

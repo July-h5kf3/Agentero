@@ -257,6 +257,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 | **M5 增强** | 导出 highlight；本地 PDF 文本层；无文本层降级 UI | 扫描件有明确空状态 | ⏳ |
 | **M6 选区菜单** | 划词弹菜单：高亮 / 批注 / 提问 / 翻译 → 统一 `marks/*.json`；去掉默认琥珀高亮 | 四项可用；高亮重开对齐并可删除 | ✅ |
 | **M7 批注（Zotero 式）** | 「批注」= 建高亮 + 内联编辑器写 `comment`；页边批注针；右侧「批注」面板（活动 PDF tab）列卡、跳转闪烁、编辑/删除；**不写 `NOTES.md`** | 新建/编辑/面板跳转/删除闭环；`comment` 落盘且 `version` 兼容 | ✅ |
+| **M7b 批注 UX** | 内联编辑器 **`Enter` 保存 / `Shift+Enter` 换行**；批注卡与默认评论文案颜色减弱（`muted`，避免过深） | Enter 落盘；默认色对比度可接受 | ✅ |
 
 ## 10. 风险与降级
 
@@ -273,7 +274,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 
 - 单元：归一化坐标往返、`schema` 校验（含可选 `comment`）、index 重建。
 - 组件：selection → open popover；write → gutter 出现；click → 消息恢复。
-- 批注：批注→内联编辑器写 `comment` 落盘并出现页边批注针；右侧「批注」面板列卡、点击跳转并闪烁、编辑 / 删除闭环。
+- 批注：批注→内联编辑器写 `comment` 落盘并出现页边批注针；**`Enter` 保存 / `Shift+Enter` 换行**；右侧「批注」面板列卡、点击跳转并闪烁、编辑 / 删除闭环；默认评论文案色为 muted。
 - 集成：mock `agent:stream` 完成一轮后文件存在且可再读。
 - 手工：长 PDF 滚动、窗口缩放、中英混排选区、双栏论文（rects 多段）。
 

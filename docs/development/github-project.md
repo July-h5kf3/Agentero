@@ -82,24 +82,27 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 
 | 规划 ID | GitHub | Status |
 |---|---|---|
-| B1–B8 | [#7](https://github.com/poco-ai/Agentero/issues/7)–[#14](https://github.com/poco-ai/Agentero/issues/14) | Todo |
+| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | **Partial**（拖入卡死已修；metadata/NOTES 初始化仍开） |
+| **B2, B4–B8** | [#8](https://github.com/poco-ai/Agentero/issues/8), [#10](https://github.com/poco-ai/Agentero/issues/10)–[#14](https://github.com/poco-ai/Agentero/issues/14) | **Done** |
+| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | Todo（Skill 随应用更新） |
 | F1–F14 | [#15](https://github.com/poco-ai/Agentero/issues/15)–[#28](https://github.com/poco-ai/Agentero/issues/28) | Todo |
 | **F15** | [#29](https://github.com/poco-ai/Agentero/issues/29) | **In Progress** |
 | F16–F18 | [#30](https://github.com/poco-ai/Agentero/issues/30)–[#32](https://github.com/poco-ai/Agentero/issues/32) | Todo |
+| 历史持久化（讨论） | [#33](https://github.com/poco-ai/Agentero/issues/33) | Todo（非 Codex 对话落盘） |
 | Remote PR | [PR #6](https://github.com/poco-ai/Agentero/pull/6) | **In Progress**（链 F15） |
 
 ### 3.1 Bug（语料：`bug.md`）
 
 | ID | # | 标题 | Labels |
 |---|---|---|---|
-| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | bug: 入库 / 本地 PDF / NOTES 初始化异常 | `type:bug` `area:import` `priority:p0` |
-| **B2** | [#8](https://github.com/poco-ai/Agentero/issues/8) | bug: Agent 上下文与系统提示体验 | `type:bug` `area:agent` `priority:p1` |
+| **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | bug: 入库 / 本地 PDF / NOTES 初始化异常 | `type:bug` `area:import` `priority:p0` · **Partial** |
+| **B2** | [#8](https://github.com/poco-ai/Agentero/issues/8) | bug: Agent 上下文与系统提示体验 | `type:bug` `area:agent` `priority:p1` · **Done** |
 | **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | bug: Skill 随应用更新同步 | `type:bug` `area:agent` `priority:p1` |
-| **B4** | [#10](https://github.com/poco-ai/Agentero/issues/10) | bug: Markdown 编辑器卡顿与选区/末行 | `type:bug` `area:editor` `priority:p0` |
-| **B5** | [#11](https://github.com/poco-ai/Agentero/issues/11) | bug: 笔记审阅应用 Diff 展示 | `type:bug` `area:editor` `area:agent` `priority:p1` |
-| **B6** | [#12](https://github.com/poco-ai/Agentero/issues/12) | bug/ux: 文件树 @ 提及与显示名排序 | `type:bug` `area:tree` `priority:p1` |
-| **B7** | [#13](https://github.com/poco-ai/Agentero/issues/13) | bug: 批注默认色与 Enter 快捷键 | `type:bug` `area:pdf` `priority:p1` |
-| **B8** | [#14](https://github.com/poco-ai/Agentero/issues/14) | bug/ux: 标题栏图标与热力图样式 | `type:bug` `area:ui` `priority:p2` |
+| **B4** | [#10](https://github.com/poco-ai/Agentero/issues/10) | bug: Markdown 编辑器卡顿与选区/末行 | `type:bug` `area:editor` `priority:p0` · **Done** |
+| **B5** | [#11](https://github.com/poco-ai/Agentero/issues/11) | bug: 笔记审阅应用 Diff 展示 | `type:bug` `area:editor` `area:agent` `priority:p1` · **Done** |
+| **B6** | [#12](https://github.com/poco-ai/Agentero/issues/12) | bug/ux: 文件树 @ 提及与显示名排序 | `type:bug` `area:tree` `priority:p1` · **Done** |
+| **B7** | [#13](https://github.com/poco-ai/Agentero/issues/13) | bug: 批注默认色与 Enter 快捷键 | `type:bug` `area:pdf` `priority:p1` · **Done** |
+| **B8** | [#14](https://github.com/poco-ai/Agentero/issues/14) | bug/ux: 标题栏图标与热力图样式 | `type:bug` `area:ui` `priority:p2` · **Done** |
 
 ### 3.2 Feature / Epic（语料：`todo.md` 未勾选 + 产品远期）
 
@@ -191,6 +194,7 @@ B4/B5 编辑器 ─────── F7 / notes-review UX
 | 创建仓库 Labels | ✅ `type:*` / `area:*` / `priority:*` / `status:wip` |
 | 批量创建 GitHub Issue（B1–B8, F1–F18） | ✅ **#7–#32**（26 条） |
 | Issues + PR #6 加入 Project | ✅ **27 items**；F15 + PR #6 → **In Progress** |
+| B2 / B4–B8 落地关闭 | ✅ 文档同步后 close #8、#10–#14；B1 #7 部分完成保持 open；#33 记录非 Codex 历史 |
 
 ---
 

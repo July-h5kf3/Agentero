@@ -110,7 +110,7 @@
 - [x] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”（建议按钮接通后端 `summary`/`qa`/`related_work` workflow）
 - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`
 - [x] 输出必须包含 Sources（workflow prompt 已要求 `## Sources`）
-- [x] 写后审阅：`agent:notes-review` 保留/还原（BYOA 写盘后对照；写前草稿拦截仍待）
+- [x] 写后审阅：`agent:notes-review` → **统一 Diff**（`NotesReviewDiff`）Keep / Revert（BYOA 写盘后对照；写前草稿拦截仍待）
 - [x] 权限「每次询问」档（`agentPermissionMode: ask` → `agent:permission-request` 对话框 + `agent_respond_permission`）
 
 ### 4. 文件与索引同步
@@ -175,7 +175,7 @@
 ### 2. 本地 PDF importer
 
 - [x] 文件选择 / 批量导入（魔棒弹层 `FileUp` → `paper_import_local_pdf`，多选）
-- [ ] 拖拽导入增强
+- [x] 窗口拖入文件：非 PDF 无反应（仅防导航）；PDF 拖到 `papers/` 组织夹 → metadata 确认对话框 → `paper_import_local_pdf`（可改 title/authors/year/id/目标路径）
 - [ ] DOI / arXiv ID 识别，元数据确认面板
 - [x] 生成 citekey slug（重复 `-2`/`-3`）、liteparse `PAPER.md`、`NOTES.md`；metadata 写入 catalog（type `pdf`）
 - [ ] 默认本地解析，MinerU BYOK 后可选云端解析

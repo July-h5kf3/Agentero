@@ -109,7 +109,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（Keep / Revert）。
+- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（统一 Diff + Keep / Revert）；**当前论文默认 context** + **个人偏好提示词**（`agentPersonalPrompt`）。
 - 面板空态建议 chips 接通上述 workflow；`AGENTS.md` 自动注入 workflow prompt 仍待。
 - 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `highlights.md` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
