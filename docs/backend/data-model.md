@@ -146,8 +146,8 @@ Vault 技能种子（Create Vault，已存在不覆盖；模板见 `templates/va
 | 落盘目录 | `{mdDir}/assets/`（对 paper 的 `NOTES.md` 即 `{paper}/assets/`） |
 | 链接写法 | `./assets/<file>`（相对当前 `.md`） |
 | 触发 | 剪贴板粘贴图片；工具栏「插入图片」选本地文件 |
-| 展示 | 未选中：相对路径 → 本地 `blob:` 位图预览；**选中图片节点时**：显示 Markdown 源码 `![alt](url)` |
-| 删除 / GC | 文档中移除图片节点后，若该 URL 在**全文引用计数为 0**，且路径属于本笔记 managed `assets/`，则同步删磁盘文件；`https://` / `data:` 等远程或内联 URL **不**删盘 |
+| 展示 | 相对路径 → 本地 `blob:` 位图预览；**选中时保留位图** + ring + 下方 monospace 源码 `![alt](url)`（不再用源码替换位图，避免剪切/粘贴冲突） |
+| 删除 / GC | 文档中移除图片节点后，若该 URL 在**全文引用计数为 0**，且路径属于本笔记 managed `assets/`，则 **延迟 ~15s** 删磁盘文件（剪切→粘贴 / 撤销期间可取消）；离开编辑器时 flush 待删项；`https://` / `data:` 等远程或内联 URL **不**删盘 |
 | 安全 | GC 仅限 `{mdDir}/assets/` 下文件；拒绝 `..` 穿越；不删 `assets` 目录本身 |
 | 命名 | 粘贴：`image-<时间戳>-<短 id>.ext`；点选文件尽量保留原名，冲突则 `-1` / `-2` 后缀 |
 | 实现 | `src/lib/markdown-image.ts`；编辑器 `MarkdownEditor` + `ImageElement`；插入/删除后 `onAssetsChanged` 刷新文件树 |

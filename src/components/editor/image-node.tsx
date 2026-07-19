@@ -28,8 +28,7 @@ export function ImageElement(props: PlateElementProps<TImageElement>) {
 	const { filePath } = useMarkdownDoc();
 	const selected = useSelected();
 	const focused = useFocused();
-	/** Cursor / selection on this image → show Markdown source, not the bitmap. */
-	const showSource = selected && focused;
+	const active = selected && focused;
 	const [src, setSrc] = useState<string>(() =>
 		url && isRemoteOrInlineImageUrl(url) ? url : "",
 	);
@@ -78,37 +77,43 @@ export function ImageElement(props: PlateElementProps<TImageElement>) {
 	return (
 		<PlateElement
 			{...props}
-			className={cn("py-2", showSource && "py-1")}
-			data-selected={showSource ? "true" : undefined}
+			className={cn("py-2", active && "rounded-sm")}
+			data-selected={active ? "true" : undefined}
 		>
-			{showSource ? (
-				<div
-					className={cn(
-						"m-0 rounded-sm border border-border bg-muted/40 px-2 py-1.5",
-						"font-mono text-sm text-foreground break-all",
-						"ring-1 ring-ring/40",
-					)}
-					contentEditable={false}
-				>
-					{sourceText}
-				</div>
-			) : (
-				<figure className="m-0" contentEditable={false}>
-					{src ? (
-						<img
-							src={src}
-							alt={alt}
-							className="max-w-full rounded-sm"
-							loading="lazy"
-							draggable={false}
-						/>
-					) : url ? (
-						<div className="rounded-sm border border-dashed border-border px-3 py-6 text-center text-muted-foreground text-sm">
-							{url}
-						</div>
-					) : null}
-				</figure>
-			)}
+			{/*
+			 * Keep the bitmap mounted when selected. Replacing it with source-only
+			 * UI made cut/copy feel like editing text, unmounted the <img>, and
+			 * conflicted with void-node selection. Show a selection ring + caption
+			 * instead so the image stays visible.
+			 */}
+			<figure className="m-0" contentEditable={false}>
+				{src ? (
+					<img
+						src={src}
+						alt={alt}
+						className={cn(
+							"max-w-full rounded-sm",
+							active && "ring-2 ring-ring ring-offset-2 ring-offset-background",
+						)}
+						loading="lazy"
+						draggable={false}
+					/>
+				) : url ? (
+					<div
+						className={cn(
+							"rounded-sm border border-dashed border-border px-3 py-6 text-center text-muted-foreground text-sm",
+							active && "ring-2 ring-ring ring-offset-2 ring-offset-background",
+						)}
+					>
+						{url}
+					</div>
+				) : null}
+				{active ? (
+					<figcaption className="mt-1 break-all font-mono text-[11px] text-muted-foreground leading-snug">
+						{sourceText}
+					</figcaption>
+				) : null}
+			</figure>
 			{props.children}
 		</PlateElement>
 	);

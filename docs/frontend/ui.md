@@ -46,9 +46,10 @@
 - 顶栏单行：左侧 Vault 名称（可截断）+ 右侧 **纯图标操作**。
 - 图标按钮点击反馈：统一走 `Button`（`variant="ghost"` + `size="icon-xs"` 等）的 **active** 态（背景加深 + 轻微缩放）；文件树行同样有 `active:bg-muted/80`。
 - 动作映射（Lucide），从左到右：
-  - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`）
+  - **按标识符添加（魔棒）** → `WandSparkles`（紧挨 **New file 左侧**；Popover 粘贴 arXiv 链接/编号 → Host `lookup_import`；弹层内 **FileUp** 可多选本地 PDF → `paper_import_local_pdf`）
   - 新建文件 → `FilePlus2`（在选中目录 / 文件父目录下 **树内联命名**，Enter 确认 / Esc 取消，对齐 VS Code）
   - 新建文件夹 → `FolderPlus`（同上）
+- **外部 PDF 拖入入库**（窗口级 `preventDefault`，避免 WebView 导航/卡死）：非 PDF 或未落到 `papers/` 组织夹 → 无入库动作；PDF 拖到 **`papers/` 组织夹**（含根与子文件夹）→ `ImportLocalPdfDialog` 确认/改 title、authors、year、id 与目标路径 → `paper_import_local_pdf`（`entries`）→ 刷树 / Library / wiki → `openPaper` 第一篇。实现：`use-external-file-drop` + `external-file-drop` + `local-pdf-meta`。
 - **内联新建进行中**时，顶栏其它图标（魔棒 / 新建文件 / 新建文件夹）**保持可点**（可切换新建类型或打开魔棒）；仅在全局 `busy` 或文献导入进行中时禁用。
 - **回收站入口**：文件树中 **Library 下方** 虚拟节点 `Trash2`（不在侧栏 Header）；点击后中间栏打开 `RecycleBinView`（见「删除」）。
 - **刷新文件树**不在侧边栏：使用菜单 **File → Refresh File Tree**（`⌘R`）。
@@ -74,6 +75,7 @@
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
   - 选中 ≥1 项时树顶出现**批量条**（移动 / 删除 / 清空，**吸顶固定**、滚动时保持可见）；右键选中项菜单提供「删除 N 项 / 移动 N 项」；`Delete`/`⌘⌫` 批量删除，`Esc` 清空（编辑 / 输入聚焦时不拦截）。
   - **拖拽移动**：把行（或整个选区）拖到某个 `papers/` 组织文件夹（含 papers 根）即移动；仅这类文件夹是合法落点（论文文件夹与 Library 除外），hover 时以 ring 高亮。经 `onMoveTo` 复用批量移动管线，无需对话框。
+  - **外部文件拖入**：与树内拖移区分；见上文「外部 PDF 拖入入库」（仅 `papers/` 组织夹 + PDF）。
   - **批量移动**（`MovePapersDialog` → `paper_move`）：把选中项移到某个 `papers/` 子文件夹（现有或新建）；移动文件夹并改写 catalog 路径前缀，随后统一刷新树 / Library / 双链。
 - **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault、刷新或设置入口。
 - **不要**使用「Open vault… / Refresh」等文字按钮。
@@ -156,7 +158,7 @@
 | `zotero-migrate` | `ZoteroMigrateDialog` |
 | `move-papers` | `MovePapersDialog` |
 | `agent-permission` | Agent 权限询问 Dialog |
-| `notes-review` | Agent 笔记 Keep/Revert Dialog |
+| `notes-review` | Agent 笔记写后审阅：统一 Diff + Keep/Revert Dialog |
 
 **新弹层约定**：在 Dialog / 全屏 sheet 内调用 `useOverlayRegistration("stable-id", open, () => onOpenChange(false))` 即可自动支持 `Esc` / `⌘W`。**不**把普通 Popover / Tooltip / 树内联重命名注册进栈。
 
@@ -184,10 +186,11 @@
   - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。**Tags** 可编辑：输入框在 chip 上方（多标签时无需先滚动）；输入框**右侧圆形色点**打开上方色盘（Apple 风格预置 8 色：`red`/`orange`/`yellow`/`green`/`teal`/`blue`/`indigo`/`purple` + 默认）；有色标签前导小圆点且 chip 背景/文字染色，未选色则默认 `muted`。回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`，同步 `metadata.json`）。`loadPaperMetadata` 会注入 vault-relative `path`（`metadata.json` 投影本身不含 path），Zotero 导入等路径也可持续编辑。
   - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表、**插入图片**等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
+  - **编辑体验**：有序 / 无序列表经 Plate list 插件可正常编辑；文本选区为中性色（非高饱和系统蓝）；文档末与图片后保持可点 trailing paragraph，便于点到最后一行并继续输入。
   - **Markdown 图片**（已落地）：
     - **插入**：粘贴剪贴板图 / 工具栏「插入图片」→ 二进制写入当前 `.md` 旁 `{mdDir}/assets/` → 正文 `![alt](./assets/…)`（不写 base64）。
-    - **预览**：未选中时相对路径解析为 `blob:` 位图；**选中节点**时显示 monospace Markdown 源码（`ImageElement` + `useSelected`）。
-    - **删除**：节点离开文档且 managed `./assets/` URL 引用计数归零 → 删磁盘文件 → 刷新文件树（`onAssetsChanged`）。
+    - **预览**：相对路径解析为 `blob:` 位图；**选中**时保留位图 + ring，下方显示 monospace Markdown 源码（不再用源码替换图片）。
+    - **删除**：节点离开文档且 managed `./assets/` 引用计数归零 → **延迟 GC**（~15s，剪切粘贴/撤销可取消；关编辑器 flush）→ 刷新文件树（`onAssetsChanged`）。
     - 实现：`src/lib/markdown-image.ts`、`markdown-editor.tsx`、`image-node.tsx`、`editor-toolbar.tsx`；i18n `editor:toolbar.image` / `editor:image.*`。
     - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
   - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`（有弹层时 `⌘W` 先关弹层，见 §3.0）。

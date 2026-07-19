@@ -20,7 +20,7 @@ import i18n from "@/i18n";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
 import {
 	collectImageUrlCounts,
-	deleteRemovedManagedAssets,
+	createManagedAssetGc,
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown-image";
 import { errorMessage, notifyError } from "@/lib/notify";
@@ -83,6 +83,17 @@ export function MarkdownEditor({
 	onAssetsChangedRef.current = onAssetsChanged;
 	/** Image URL ref-counts; used to GC `./assets/` when an image node is removed. */
 	const imageCountsRef = useRef<Map<string, number> | null>(null);
+	/**
+	 * Debounced asset GC so cut → paste / undo still finds the file.
+	 * Immediate delete used to leave a live `./assets/…` node with a missing file.
+	 */
+	const assetGcRef = useRef(
+		createManagedAssetGc({
+			onDeleted: () => {
+				onAssetsChangedRef.current?.();
+			},
+		}),
+	);
 
 	/**
 	 * ImagePlugin must declare `uploadImage` in its initial options store.
@@ -150,37 +161,32 @@ export function MarkdownEditor({
 
 	// Mark ready after the initial normalization pass so opening a file never saves.
 	// Seed image URL counts so we only GC assets removed after open.
-	// On unmount, flush any pending edit to THIS editor's file.
+	// On unmount, flush pending edit + deferred asset GC for this file.
 	useEffect(() => {
 		readyRef.current = true;
 		imageCountsRef.current = collectImageUrlCounts(editor.children);
+		const assetGc = assetGcRef.current;
 		return () => {
 			if (timerRef.current) {
 				clearTimeout(timerRef.current);
 				timerRef.current = null;
 				persistRef.current();
 			}
+			void assetGc.flush();
 		};
 	}, [editor]);
 
 	const handleChange = useCallback(() => {
 		if (readOnly || !readyRef.current) return;
 
-		// When an image node leaves the document, delete its managed `./assets/` file.
+		// Schedule (or cancel) managed asset GC from ref-count deltas.
 		const nextCounts = collectImageUrlCounts(editor.children);
 		const prevCounts = imageCountsRef.current;
 		imageCountsRef.current = nextCounts;
 		const mdPath = filePathRef.current;
-		// Skip the (async) diff entirely for image-free notes — the common case —
-		// so typing does not pay for asset-GC bookkeeping.
-		if (mdPath && (prevCounts?.size || nextCounts.size)) {
-			void deleteRemovedManagedAssets(
-				mdPath,
-				prevCounts ?? new Map(),
-				nextCounts,
-			).then((n) => {
-				if (n > 0) onAssetsChangedRef.current?.();
-			});
+		// Skip bookkeeping for image-free notes — the common case.
+		if (mdPath && prevCounts && (prevCounts.size || nextCounts.size)) {
+			assetGcRef.current.observe(mdPath, prevCounts, nextCounts);
 		}
 
 		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
