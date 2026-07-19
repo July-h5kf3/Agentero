@@ -232,4 +232,188 @@ mod tests {
         assert_eq!(parse_remote_handle("remote:abc"), Some("abc"));
         assert_eq!(parse_remote_handle("/local/path"), None);
     }
+
+    /// Live SSH smoke test (e.g. Host `dgx` in `~/.ssh/config`).
+    ///
+    /// ```bash
+    /// AGENTERO_REMOTE_SSH_HOST=dgx \
+    /// AGENTERO_REMOTE_SSH_PATH=/home/phil/agentero-remote-test-vault \
+    /// cargo test -p agentero --lib live_ssh_remote_vault -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
+    async fn live_ssh_remote_vault() {
+        use crate::services::fs::WriteOpts;
+        use crate::services::remote::agent_exec;
+
+        let host = std::env::var("AGENTERO_REMOTE_SSH_HOST")
+            .expect("AGENTERO_REMOTE_SSH_HOST (ssh config Host alias)");
+        let path = std::env::var("AGENTERO_REMOTE_SSH_PATH")
+            .expect("AGENTERO_REMOTE_SSH_PATH (absolute remote vault path)");
+        let user = std::env::var("AGENTERO_REMOTE_SSH_USER").ok();
+
+        eprintln!("connecting host={host} path={path} user={user:?}");
+        let reg = RemoteRegistry::new();
+        let info = reg
+            .connect(&host, user.as_deref(), &path)
+            .await
+            .expect("remote_connect");
+        eprintln!("connected: {:?}", info.display_name);
+        assert_eq!(info.kind, "ssh");
+        assert!(info.vault_handle.starts_with("remote:"));
+
+        let session = reg.get(&info.session_id).await.expect("session");
+
+        // list root
+        let root = session.fs.list("").await.expect("list root");
+        eprintln!(
+            "root entries: {:?}",
+            root.iter().map(|e| &e.name).collect::<Vec<_>>()
+        );
+        assert!(
+            root.iter().any(|e| e.name == "papers" && e.is_dir),
+            "expected papers/ on remote"
+        );
+        assert!(
+            root.iter().any(|e| e.name == "AGENTS.md" && e.is_file),
+            "expected AGENTS.md"
+        );
+
+        // read NOTES
+        let notes = session
+            .fs
+            .read("papers/demo-paper/NOTES.md")
+            .await
+            .expect("read NOTES");
+        let notes_s = String::from_utf8_lossy(&notes);
+        eprintln!("NOTES.md:\n{notes_s}");
+        assert!(notes_s.contains("Demo Paper") || notes_s.contains("NOTES"));
+
+        // write-through then re-read
+        let stamp = chrono::Utc::now().to_rfc3339();
+        let body = format!("# remote write test\n\nstamp={stamp}\n");
+        session
+            .fs
+            .write(
+                "notes/remote-smoke.md",
+                body.as_bytes(),
+                WriteOpts {
+                    create_parents: true,
+                },
+            )
+            .await
+            .expect("write notes/remote-smoke.md");
+        let back = session
+            .fs
+            .read("notes/remote-smoke.md")
+            .await
+            .expect("re-read smoke");
+        assert_eq!(String::from_utf8_lossy(&back), body);
+
+        // catalog work mirror present + paper rescan markers
+        assert!(
+            session.work_root.join(".agentero/catalog.sqlite").is_file(),
+            "work catalog missing"
+        );
+        // push already done at connect; re-stat remote catalog
+        let cat_meta = session
+            .fs
+            .stat(".agentero/catalog.sqlite")
+            .await
+            .expect("remote catalog after connect");
+        eprintln!(
+            "remote catalog size={} mtime={}",
+            cat_meta.size, cat_meta.mtime
+        );
+        assert!(cat_meta.size > 0);
+
+        // paper rescan should find demo-paper and push catalog
+        use crate::services::catalog::papers::{self, PaperRecord};
+        let papers_list = session.fs.list("papers").await.expect("list papers");
+        assert!(
+            papers_list
+                .iter()
+                .any(|e| e.name == "demo-paper" && e.is_dir),
+            "demo-paper folder"
+        );
+        // Minimal rescan: upsert demo-paper into work catalog then push
+        let now = chrono::Utc::now().to_rfc3339();
+        let rec = PaperRecord {
+            path: "papers/demo-paper".into(),
+            id: "demo-paper".into(),
+            paper_type: "article".into(),
+            title: "Demo Paper on DGX".into(),
+            authors: vec![],
+            creators: None,
+            year: None,
+            date: None,
+            abstract_text: None,
+            tags: vec![],
+            arxiv_id: None,
+            doi: None,
+            isbn: None,
+            issn: None,
+            pmid: None,
+            publication: None,
+            volume: None,
+            issue: None,
+            pages: None,
+            publisher: None,
+            place: None,
+            series: None,
+            language: None,
+            pdf_url: None,
+            html_url: None,
+            source_url: None,
+            body_source: None,
+            body_quality: None,
+            bibtex_key: None,
+            citation_count: None,
+            zotero_item_type: None,
+            meta_source: Some("live_ssh_test".into()),
+            extra: None,
+            summary: None,
+            status: "unread".into(),
+            is_read: false,
+            added_at: now.clone(),
+            updated_at: now,
+        };
+        papers::upsert_paper(&session.work_root, &rec).expect("upsert paper");
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone())
+                .await
+                .expect("push catalog after upsert");
+        }
+        let listed = papers::list_all(&session.work_root).expect("list catalog");
+        eprintln!(
+            "catalog papers: {:?}",
+            listed.iter().map(|p| &p.path).collect::<Vec<_>>()
+        );
+        assert!(
+            listed.iter().any(|p| p.path == "papers/demo-paper"),
+            "demo-paper in catalog"
+        );
+
+        // agent discover via ssh which (login shell PATH)
+        let dest_for_ssh = host.clone();
+        let mut found_any_agent = false;
+        for bin in ["claude", "codex", "opencode", "claude-agent-acp", "grok"] {
+            match agent_exec::remote_which(&dest_for_ssh, bin).await {
+                Ok(Some(p)) => {
+                    eprintln!("remote which {bin} -> {p}");
+                    found_any_agent = true;
+                }
+                Ok(None) => eprintln!("remote which {bin} -> (not found)"),
+                Err(e) => eprintln!("remote which {bin} err: {e}"),
+            }
+        }
+        assert!(
+            found_any_agent,
+            "expected at least one agent binary on remote PATH (login shell)"
+        );
+
+        reg.disconnect(&info.session_id).await.expect("disconnect");
+        eprintln!("disconnect ok");
+    }
 }

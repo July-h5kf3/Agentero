@@ -446,3 +446,35 @@ type RemoteAgentLaunch = {
 2. M0：列出需迁到 `VaultFs` 的 `services/*` 清单与回归范围。  
 3. Spike（可选、短）：本机 Tauri 内 `ssh` exec 跑 `echo` + SFTP list 一目录，验证 macOS 钥匙串/agent。  
 4. 实现阶段再改 `api.md` / PRD 验收条目并勾选 todo。
+
+---
+
+## 15. Live SSH 冒烟（dgx 已验）
+
+在本机 `~/.ssh/config` 配置好 Host（例：`dgx` → `User phil`），远端准备测试 Vault 后：
+
+```bash
+# 远端一次性脚手架（示例路径）
+ssh dgx 'mkdir -p ~/agentero-remote-test-vault/{papers/demo-paper,notes,plans,.agents/skills/hello}
+  && printf "# AGENTS.md\n" > ~/agentero-remote-test-vault/AGENTS.md
+  && printf "# Demo Paper on DGX\n\nnotes\n" > ~/agentero-remote-test-vault/papers/demo-paper/NOTES.md'
+
+# Host 集成测试（ignored，需环境变量）
+cd src-tauri
+AGENTERO_REMOTE_SSH_HOST=dgx \
+AGENTERO_REMOTE_SSH_PATH=/home/phil/agentero-remote-test-vault \
+cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
+```
+
+**2026-07-19 在 `dgx` 上结果（摘要）**：
+
+| 检查项 | 结果 |
+|---|---|
+| SSH + SFTP connect | ✅ `dgx:/home/phil/agentero-remote-test-vault` |
+| list / read NOTES | ✅ |
+| write-through `notes/remote-smoke.md` | ✅ 远端 cat 可见 |
+| catalog checkout + push | ✅ `.agentero/catalog.sqlite` |
+| upsert paper 行 | ✅ `papers/demo-paper` |
+| `remote_which` login PATH | ✅ `claude`、`grok` 在 `~/.local/bin`（非 login shell 会丢 PATH，故 agent 启动用 `bash -lc`） |
+
+注意：远端 **Codex / OpenCode / claude-agent-acp** 当时不在 PATH；有 **Claude Code** 与 **grok** CLI。完整 Chat 仍依赖对应 **ACP** 入口（`claude-agent-acp` 等）。
