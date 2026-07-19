@@ -50,6 +50,7 @@ import {
 import {
 	type AnnotationRow,
 	AnnotationsPanel,
+	type AskRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
@@ -108,6 +109,7 @@ import {
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
 } from "@/lib/papers-api";
+import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
@@ -485,6 +487,10 @@ export default function App() {
 	const [pdfHighlightsByTab, setPdfHighlightsByTab] = useState<
 		Record<string, PdfHighlight[]>
 	>({});
+	/** Latest PDF ask threads per tab (for the annotations panel conversations). */
+	const [pdfAsksByTab, setPdfAsksByTab] = useState<
+		Record<string, PdfAskThread[]>
+	>({});
 
 	const activeAnnotations = useMemo<AnnotationRow[]>(() => {
 		const list = activeTabId ? pdfHighlightsByTab[activeTabId] : undefined;
@@ -502,6 +508,30 @@ export default function App() {
 				color: normalizeHighlightColor(h.color),
 			}));
 	}, [activeTabId, pdfHighlightsByTab]);
+
+	const activeAsks = useMemo<AskRow[]>(() => {
+		const list = activeTabId ? pdfAsksByTab[activeTabId] : undefined;
+		if (!list) return [];
+		return [...list]
+			.sort(
+				(a, b) =>
+					a.anchor.page - b.anchor.page ||
+					(a.anchor.rects[0]?.y ?? 0) - (b.anchor.rects[0]?.y ?? 0),
+			)
+			.map((th) => {
+				const firstUser = th.messages.find((m) => m.role === "user");
+				const preview =
+					firstUser?.content.trim() || th.anchor.quote?.trim() || th.id;
+				return {
+					id: th.id,
+					page: th.anchor.page,
+					preview,
+					messageCount: th.messages.filter(
+						(m) => m.role === "user" || m.role === "assistant",
+					).length,
+				};
+			});
+	}, [activeTabId, pdfAsksByTab]);
 
 	/** Stable empty list so non-library tabs don't re-render on library changes. */
 	const noPapers = useMemo<PaperMetadata[]>(() => [], []);
@@ -525,6 +555,12 @@ export default function App() {
 	const handlePdfHighlightsChange = useCallback(
 		(tabId: string, list: PdfHighlight[]) => {
 			setPdfHighlightsByTab((prev) => ({ ...prev, [tabId]: list }));
+		},
+		[],
+	);
+	const handlePdfAsksChange = useCallback(
+		(tabId: string, list: PdfAskThread[]) => {
+			setPdfAsksByTab((prev) => ({ ...prev, [tabId]: list }));
 		},
 		[],
 	);
@@ -2930,6 +2966,7 @@ export default function App() {
 													onOpenAnnotations={openAnnotationsTab}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
+													onPdfAsksChange={handlePdfAsksChange}
 												/>
 											</div>
 										))}
@@ -3106,6 +3143,7 @@ export default function App() {
 							rightSidebarTab === "annotations" ? (
 								<AnnotationsPanel
 									items={activeAnnotations}
+									asks={activeAsks}
 									onJump={(id) =>
 										annotationAction((h) => h.scrollToHighlight(id))
 									}
@@ -3113,6 +3151,8 @@ export default function App() {
 									onDelete={(id) =>
 										annotationAction((h) => h.deleteHighlight(id))
 									}
+									onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
+									onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
 									onClose={() => setRightSidebarCollapsed(true)}
 								/>
 							) : null}

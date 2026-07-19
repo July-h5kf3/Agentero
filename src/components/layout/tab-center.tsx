@@ -9,6 +9,7 @@ import {
 	type PdfViewerHandle,
 } from "@/components/viewer/pdf-viewer";
 import type { PaperMetadata } from "@/lib/paper-metadata";
+import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
 import { type DocTab, tabIsPaperNotes } from "@/lib/tabs";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
@@ -43,6 +44,7 @@ type TabCenterProps = {
 	onOpenAnnotations: () => void;
 	registerPdfHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
 	onPdfHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
+	onPdfAsksChange: (tabId: string, list: PdfAskThread[]) => void;
 };
 
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
@@ -72,6 +74,7 @@ export const TabCenter = memo(function TabCenter({
 	onOpenAnnotations,
 	registerPdfHandle,
 	onPdfHighlightsChange,
+	onPdfAsksChange,
 }: TabCenterProps) {
 	if (tab.kind === "library") {
 		return (
@@ -149,6 +152,7 @@ export const TabCenter = memo(function TabCenter({
 					className="h-full w-full"
 					onHandle={(h) => registerPdfHandle(tab.id, h)}
 					onHighlightsChange={(list) => onPdfHighlightsChange(tab.id, list)}
+					onAsksChange={(list) => onPdfAsksChange(tab.id, list)}
 				/>
 			</div>
 		);
