@@ -109,14 +109,11 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- 已落地：**paper-reader 精读**（魔棒/单篇 Download 后自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / 自动批准）。
-- MVP 仍规划面板可点的内置**工作流 prompt**（由 Host 注入，仍由用户选定的 Agent 执行）：
-  - 总结当前论文。
-  - 基于本地库问答。
-  - 生成带本地路径引用的 Related Work 草稿。
+- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（Keep / Revert）。
+- 面板空态建议 chips 接通上述 workflow；`AGENTS.md` 自动注入 workflow prompt 仍待。
 - 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `highlights.md` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
-- Agent 输出必须展示读取过的文件路径；写回 Vault 前需用户确认（临时草稿 → 正式文件）。
+- Agent 输出必须展示读取过的文件路径；Agent 改写笔记后用户可在写后审阅中保留或还原（写前草稿拦截仍待加强）。
 - 未检测到可用 Agent 时，设置与 Agent 面板展示安装/配置指引，不阻塞 Vault 与阅读功能。
 
 #### 阅读器

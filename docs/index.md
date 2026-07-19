@@ -47,14 +47,16 @@ Agentero 桌面应用
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
 - Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
 - 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
-- **Zotero Connector 兼容**（MVP）：设置开启后本机 `23119` 接收官方浏览器扩展保存到 Vault（与 Zotero 桌面互斥）— 见 [`backend/connector.md`](backend/connector.md)。
+- **Zotero Connector 兼容**（MVP）：设置开启后本机 `23119` 接收官方浏览器扩展 `saveItems` + **`saveAttachment`** → Vault（与 Zotero 桌面互斥）— 见 [`backend/connector.md`](backend/connector.md)。
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
 - **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
-- **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / 自动批准）；逐项确认仍待。
+- **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / **每次询问** / 自动批准）；`ask` 时弹权限对话框。
+- **Agent 面板**：空态建议 → summary / qa / related_work；笔记被 Agent 改写后可 Keep / Revert。
+- **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索。
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。
 - **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
-- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树（见 [`frontend/ui.md`](frontend/ui.md)）。
+- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；`.md` 变更防抖重建 wiki 索引；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
 - **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。

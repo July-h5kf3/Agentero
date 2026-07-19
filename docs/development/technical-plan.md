@@ -498,8 +498,8 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 - ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
 
 **权限与写入**：
-- **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）时取消 ACP 权限请求 / Codex `workspace-write`；**自动批准**时选 Agent 给出的第一项 / Codex `danger-full-access`。运行经 `autoApprove` 传入。逐项「每次询问」仍待。
-- 涉及覆盖 Vault 内已有笔记的写入：先临时文件 / 草稿，用户确认后再落盘（与 `agent:accept_draft` 一致；草稿确认 UX 仍待补齐）。
+- **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）取消 ACP 权限请求 / Codex `workspace-write`；**每次询问**（`ask`）经 `agent:permission-request` + `agent_respond_permission` 对话框；**自动批准**（`auto`）选第一项 AllowOnce / Codex `danger-full-access`。运行经 `permissionMode` 传入（旧 `autoApprove` 仍兼容）。
+- **笔记写后审阅**：BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 对照 Keep/Revert。写前 dry-run / `agent:accept_draft` 路径仍可后续加强。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
@@ -695,8 +695,8 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听（`notify` → `vault:file-changed`，编辑器/文件树自动重载）已落地。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、`paper_set_tags`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（入库/单篇 Download **自动** + Zap 手动 + `is_read`）、**SkillMentionStyle**、**全局权限模式**（`agentPermissionMode`：受限 / 自动批准）、模型收藏已接入；面板内其它 workflow、逐项「每次询问」、写入草稿待补。 |
-| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**，非文献引用图）。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（可选自动 + Zap 手动 + `is_read`）、**SkillMentionStyle**、**权限三档**（`restricted` / `ask` / `auto` + `agent:permission-request`）、**面板 workflow**（summary / qa / related_work）、**笔记写后审阅**（`agent:notes-review` Keep/Revert）、模型收藏已接入；`AGENTS.md` 自动注入与写前草稿拦截仍待。 |
+| V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**）；`.md` 变更经 `scheduleWikiRebuild` 防抖重建索引。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
 | V0.6 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 关 tab / 无 tab 关窗、多窗口独立 tab 集）；**2 格分屏**仍待；与 Agent 会话标签分离。 |
 | V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
@@ -709,7 +709,7 @@ tempfile = "3"
 |---|---|
 | arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 catalog 中标记 `body_source`/`body_quality`。 |
 | 云端 MinerU 不可用或数据敏感 | 默认本地 `liteparse` 解析不外传；MinerU 失败自动降级本地；启用前提示 PDF 将上传第三方。 |
-| Agent 输出破坏用户笔记 | 所有写入先走临时文件，用户确认后再覆盖；NOTES.md 用户修改部分优先保留。 |
+| Agent 输出破坏用户笔记 | BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 对照 + Keep/Revert。写前 dry-run 拦截仍待。 |
 | 论文列表性能差 | Catalog SQLite 权威查询；双链边增量索引。 |
 | Catalog 损坏 | 启动校验 schema；提示从备份恢复；可选从历史 `metadata.json` 导入；导出 `PAPERS.md`/BibTeX 作可读快照。 |
 | iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |

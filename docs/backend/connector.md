@@ -330,7 +330,8 @@ target id 约定（非 Zotero collection 数字 ID）：
 ### 5.4 附件与 cookie
 
 - **当前**：`saveItems` 元数据返回后，后台 `ensure_paper_assets`（公开 PDF URL / arXiv）；**不**阻塞 201。
-- **未做**：`saveAttachment` 二进制；`detailedCookies` 注入（校园网 PDF 仍可能失败 → 用户可 Download 补下）。
+- **已做**：`saveAttachment` 二进制上传（浏览器用页面 cookie 拉取登录墙 PDF → Vault；`supportsAttachmentUpload: true`；body 上限 200 MiB）。
+- **未做**：`detailedCookies` 注入（无 `saveAttachment` 时校园网 PDF 仍可能失败 → 用户可 Download 补下）。
 - **纪律**：`saveItems` 同步路径禁止摘要 MT + 同步大附件，以免官方插件 **15s 超时**。
 
 ### 5.5 精读自动触发
@@ -550,6 +551,6 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 日期 | 说明 |
 |---|---|
 | 2026-07-18 | 初稿：方案一（兼容官方 Connector / 本机 23119）设计与分期；已挂 mkdocs / roadmap / todo / api §3.5b |
-| 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新；PR3 附件协议仍待 |
+| 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新 |
 | 2026-07-18 | 防 15s 超时（后台资产）；`targets` 子文件夹 + `updateSession` 移动；§4.5 上游 API 覆盖总表 |
-| 2026-07-18 | **C4b `saveAttachment`**：浏览器上传登录墙 PDF（`X-Metadata` `parentItemID`→paper；`%PDF` 校验；触发 PAPER.md；`supportsAttachmentUpload: true`；200 MiB body 上限） |
+| 2026-07-18 | **C4b `saveAttachment`**：浏览器上传登录墙 PDF（`X-Metadata` `parentItemID`→paper；`%PDF` 校验；触发 PAPER.md；`supportsAttachmentUpload: true`；200 MiB body 上限）。仍待：`saveSnapshot` / `saveSingleFile` / `detailedCookies` |

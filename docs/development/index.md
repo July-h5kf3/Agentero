@@ -20,8 +20,8 @@
 |---|---|---|
 | V0.1 工作台 | ✅ | 文件树（Finder / **回收站** / 多选拖拽）、Markdown IO + **内嵌图**、**文件监听**、Library + tags + **Rescan**、多窗口、catalog、后台任务条、全局 Toast |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
-| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader**（Zap 手动 + 可选自动，默认关）、**全局权限模式**、模型收藏；面板 workflow 与写入确认仍待 |
-| V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph` |
+| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader**（Zap + 可选自动默认关）、**权限三档**（含每次询问）、**面板 workflow**、**笔记写后审阅**；`AGENTS.md` 注入仍待 |
+| V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph`；**文件变更防抖重建索引** |
 | 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 MVP；`highlights.md` 导出仍待 |
 | 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
 | V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
@@ -29,7 +29,8 @@
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper set-tags`；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
-| Zotero Connector 兼容 | ✅ MVP | 本机 `23119` 兼容官方扩展保存 → Vault；设置开关默认关；见 [`../backend/connector.md`](../backend/connector.md) |
+| Zotero Connector 兼容 | ✅ MVP | 本机 `23119`：`saveItems` + 子文件夹 targets + **`saveAttachment`**；设置开关默认关；见 [`../backend/connector.md`](../backend/connector.md) |
+| 全库搜索 | ✅ | 命令面板 `⌘K`/`⌘P`：论文 quick-open + `vault_search` Markdown 全文 |
 | Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。

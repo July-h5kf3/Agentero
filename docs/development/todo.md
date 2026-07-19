@@ -278,12 +278,12 @@
 
 | 领域 | 已完成 | 未完成 / 进行中 |
 |---|---|---|
-| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、左右侧栏 collapsible、后台任务条、**全局错误 Toast** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；冲突提示（当前静默覆盖本地未存） |
-| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
+| Vault / 工作台壳 | 打开·创建 Vault、catalog 初始化、多窗口 ⌘N、欢迎页 MRU、文件树新建/Finder/**回收站删除（中间栏浏览恢复，无 Undo toast）**、多选拖拽、`notify` 文件监听、**保存冲突检测**（`diskConflict.saveBlocked`）、左右侧栏 collapsible、后台任务条、**全局错误 Toast**、**统一运行日志** | 最近 Vault 迁 Tauri Store；**打开已有夹自动发现/整理**（P0-4b / P1-2b）；设置「打开/导出日志文件夹」 |
+| 中间内容 | **文档标签页**（常驻挂载；`⌘W` / `⌥⌘←→`）；Library 表 + **tags** + **Rescan** + **文件夹作用域**；PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）；Notes 仅具体论文时显示 | **分屏**（V0.6 余量） |
 | 查找 | **命令面板 `⌘K`/`⌘P`**：论文 quick-open + `vault_search` 全文正文匹配（命中论文 → 打开论文） | FTS5 索引、PDF 正文层检索、搜索历史 / 过滤 |
-| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、**本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan` | 关键词/Agent 候选；本地 PDF 拖拽 / DOI 识别与元数据确认；MinerU 云端解析 |
-| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（Zap + 可选自动默认关；**不进对话历史**）、**全局权限模式**、模型收藏、Skill 提及分流、**禅模式左侧历史栏**（无 1/2/3 数字标签） | 面板内置 workflow 入口、写入草稿确认、逐项权限 UI；**引用类 workflow**（V0.7） |
-| 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；文件变更后增量重建索引 |
+| 入库 | 魔棒精确 ID/URL、Translator、默认 PDF+arXiv TeX、补下、无 TeX→PAPER.md、**本地 PDF 导入**、**非 arXiv 下载（浏览器 UA + Crossref 兜底）**、Library 导入导出 Bib、`paper_set_tags`、`paper_rescan`、**Zotero Connector MVP**（含 `saveAttachment`） | 关键词/Agent 候选；本地 PDF 拖拽 / DOI 识别与元数据确认；MinerU 云端解析；Connector 快照/cookies |
+| Agent | BYOA ACP Client、Codex 原生 thread、Sources、**paper-reader**（Zap + 可选自动默认关；**不进对话历史**）、**权限三档**（受限 / 每次询问 / 自动批准）、**面板 workflow**（summary / qa / related_work）、**笔记写后审阅** Keep/Revert、模型收藏、Skill 提及分流、**禅模式左侧历史栏** | `AGENTS.md` 自动注入；写前草稿拦截；**引用类 workflow**（V0.7） |
+| 双链 / Graph | `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph；**`.md` 变更防抖重建索引** | `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮；边级增量索引 |
 | 文献引用图 | — | **hover 引用→Info、Connected Papers 邻域、引用边缓存**（V0.7） |
 | PDF / 媒体 | 任意路径预览；导航 / 适应宽·整页 / 大纲 / ⌘F；真实 scale + 平滑划词；操作菜单（asks + highlights JSON） | `highlights.md` 标注系统、M5 |
 | **CLI** | **MVP**（[`cli.md`](cli.md)：`cli/`、workspace、`paper set-tags` / `tags`、无 BYOA） | graph / doctor / completions（P1-7）；Release 附带二进制 |

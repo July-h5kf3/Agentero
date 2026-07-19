@@ -15,8 +15,8 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（入库/单篇 Download **自动** + 文件树 Zap 手动；catalog `is_read`）；**全局权限模式**（设置 → Agent：受限 / **每次询问** / 自动批准）；**面板工作流入口**（Summarize / Ask library / Related Work）；**信任闭环**（权限逐项询问对话框 + 笔记写后审阅保留/还原）；模型收藏；AGENTS.md 自动注入仍待。 |
-| V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**文件变更防抖重建索引**（Backlinks/Graph 不陈旧）；`[[` 补全 / Plate 内联节点可后续增强。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` 保留/还原）；模型收藏；**AGENTS.md 自动注入仍待**。 |
+| V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**`.md` 变更防抖重建索引**（`scheduleWikiRebuild`，~900ms）；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、拖拽导入、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
@@ -53,7 +53,7 @@
 - [x] **文件夹作用域库**：单击非 paper 目录 → 同 Library 表，`path` 前缀过滤内存 `libraryPapers`。
 - [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。
 - [x] 后台任务条（含 paper-reader；hover 实色）；**全局错误 Toast**。
-- [x] **Vault 文件监听**（`notify` → `vault:file-changed`）：外部/Agent 改盘自动重载打开的 Markdown 与文件树。
+- [x] **Vault 文件监听**（`notify` → `vault:file-changed`）：外部/Agent 改盘自动重载打开的 Markdown 与文件树；有未存改动时提示重载；写盘前冲突检测（`diskConflict.saveBlocked`）。
 
 验收标准：
 
@@ -122,18 +122,20 @@
 - [x] 可执行文件探测与空状态安装指引（Agentero **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
 - [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast。
-- [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `autoApprove`）；对所有 Agent 生效；经 `autoApprove` 传入运行；逐项「每次询问」仍待。
+- [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `ask` / `auto`）；对所有 Agent 生效；经 `permissionMode` 传入 `agent_run_once`。
+- [x] **「每次询问」档**：`ask` 时每个 ACP 权限请求 emit `agent:permission-request`，前端对话框（Allow once / Always / Reject）→ `agent_respond_permission`（5 分钟超时取消）。
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
 - [x] 消息编辑与重发：会话空闲时 hover 用户消息可 **Edit**，就地编辑后重发（丢弃该消息及其之后内容并发起全新 turn）。
 - [x] 会话 `cwd` = 当前 Vault。
 - [ ] 工作流 prompt 模板注入 + `AGENTS.md` 约束。
 - [x] **Agent 禅模式 UI**：左侧历史栏（Quest 式）、返回图标退出、全宽 Conversation 滚动、无 1/2/3 数字标签；精读/划词等 `hideFromChatHistory`。
 - [x] **paper-reader 精读工作流**：
-  - 魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 时**自动**启动（`maybeAutoRunPaperReader`；批量导入/批量 Download **不**连跑）。
+  - 设置 `autoPaperReader`（**默认关**）开启时，魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 可自动启动（批量导入/批量 Download **不**连跑）。
   - 资源齐全且未读时文件树 **Zap** 可手动重跑。
   - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
-- [ ] 内置工作流：总结当前论文（面板入口）、基于本地库问答、生成 Related Work 草稿（引用类 workflow 见 V0.7）。
+- [x] **面板内置工作流入口**（建议 chips → 后端 workflow）：Summarize → `summary`；Ask library / List claims → `qa`；Draft Related Work → `related_work`；目标为当前聚焦 paper（提及路径或选中路径）。引用类 workflow 见 V0.7。
+- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端 Before/After 对照，**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Agentero 不要求模型 BYOK 表单。
 
@@ -143,18 +145,21 @@
 - [x] 未安装 Agent 时有清晰空状态与配置入口，应用其余功能可用。
 - [x] Agent 问答展示读取过的本地文件路径（Agent 返回 Sources 时）。
 - [x] 下载完成且未读的 paper 行显示 Zap；点击后精读并标记已读。
-- [x] 魔棒/单篇 Download 成功后可自动进入精读（有默认 Agent 时）。
-- [ ] Related Work 草稿必须包含本地路径引用。
-- [ ] Agent 失败或用户拒绝写入时，不会覆盖已有 Markdown。
+- [x] 魔棒/单篇 Download 成功后可自动进入精读（设置开启且有默认 Agent 时）。
+- [x] 面板建议可触发 summary / qa / related_work（非仅 free chat）。
+- [x] 「每次询问」下权限请求弹对话框；用户可拒绝。
+- [x] Agent 改写笔记后可审阅并还原到运行前快照。
+- [ ] Related Work 草稿必须包含本地路径引用（prompt 已要求 Sources；自动校验仍待）。
+- [ ] 写前草稿 / dry-run 拦截（当前为写后审阅，非事前拦截）。
 
 细化 TODO：
 
-- [x] paper-reader：自动触发 + 文件树 Zap + `is_read` + 后台任务进度。
-- [x] 全局权限模式替代 per-provider YOLO 开关。
-- [ ] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
+- [x] paper-reader：可选自动触发 + 文件树 Zap + `is_read` + 后台任务进度。
+- [x] 全局权限模式替代 per-provider YOLO 开关（含「每次询问」）。
+- [x] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
-- [ ] 接入 ACP 权限确认 UI（「每次询问」档），而不是仅取消或自动选第一项。
-- [ ] 写入草稿使用 diff/preview 确认后落盘。
+- [x] 接入 ACP 权限确认 UI（「每次询问」档）。
+- [x] 笔记写后 diff/preview 审阅（Keep / Revert）；写前草稿拦截仍待（若 BYOA 可支持）。
 - [x] Codex 会话恢复：按 Vault 过滤原生 Codex thread，恢复后继续使用同一 thread id。
 - [ ] 为通用 ACP provider 定义持久 runtime 与原生 history 契约；当前 ACP 会话仍是一次性连接。
 - [ ] Agent 输出期间的后续交互：普通 Agent 排队下一条消息，Codex 支持 guide / 引导消息。
@@ -185,10 +190,12 @@
 
 后续增强 TODO：
 
+- [x] 文件变更后防抖重建 wiki / Backlinks / Graph 索引（`scheduleWikiRebuild`，仅 `.md`，~900ms）。
 - [ ] 源码编辑中的 `[[` 路径/标题补全。
 - [ ] Plate 内联 wikilink 节点与更稳定的 Markdown 序列化。
 - [ ] 图谱 hover 时只高亮直接邻居。
 - [ ] 增加 Graph 全屏/聚焦模式，保留右侧栏小图作为默认入口。
+- [ ] 真正的增量边更新（当前为防抖全量 rebuild，非边级增量）。
 
 ## V0.5 Importer 架构与本地 PDF 入库
 
@@ -427,7 +434,7 @@
 
 ### Milestone C：Agent 可协作 🟡
 
-包含 V0.3。完成后，Agentero 可作为 ACP Client 连接本机 Agent，基于本地库问答和写作（workflow / 写入确认仍待）。
+包含 V0.3。**已可用**：ACP/Codex 连接、paper-reader、面板 workflow、权限三档、笔记写后审阅。**仍待**：`AGENTS.md` 自动注入、通用 ACP 持久 session、写前草稿拦截。
 
 ### Milestone D：知识可导航 ✅
 
@@ -466,15 +473,18 @@
 - [x] 文件树：Finder 显示、删除 + `paper_delete`、左右侧栏隔离。
 - [x] PDF 缩放（工具栏 / `⌘`+滚轮）。
 - [x] PDF 划词提问 MVP（M1–M4；见 [`pdf-ask.md`](pdf-ask.md)）。
-- [x] paper-reader 精读：自动（入库/单篇 Download）+ Zap 手动；`is_read`；任务条进度。
-- [x] Agent 全局权限模式（受限 / 自动批准）。
+- [x] paper-reader 精读：可选自动（入库/单篇 Download）+ Zap 手动；`is_read`；任务条进度。
+- [x] Agent 全局权限模式（受限 / **每次询问** / 自动批准）+ 权限对话框。
+- [x] Agent 面板 workflow：Summarize / Ask library / Draft Related Work。
+- [x] Agent 笔记写后审阅（Keep / Revert）。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
-- [ ] Agent workflow prompt：总结当前论文、本地库问答、Related Work。
-- [ ] Agent 写入草稿确认与拒绝路径。
+- [ ] workflow prompt 自动注入 Vault `AGENTS.md`。
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
-- [x] 文件监听（`notify`）：外部/Agent 改动经 `vault:file-changed` 自动重载打开的编辑器（覆盖本地未存改动）与文件树。
-- [ ] 索引增量刷新：文件变更后增量重建 wiki 双链 / Backlinks 索引（当前仅编辑器与文件树重载）。
+- [x] 文件监听（`notify`）：外部/Agent 改动经 `vault:file-changed` 重载打开的编辑器与文件树；有未存改动时提示（不静默覆盖）。
+- [x] 文件变更后防抖重建 wiki 索引（`scheduleWikiRebuild`）；保存冲突检测（`diskConflict.saveBlocked`）。
+- [x] **全库搜索 + 快速打开**：命令面板 `⌘K`/`⌘P`（论文 quick-open + `vault_search` 全文）。
 - [x] **CLI MVP**（[`cli.md`](cli.md)）：`cli/` + workspace；`vault` / `tree` / `paper` / `import` / `export` / `config`；`--json`；path 复用 services，**不迁 core、无 Agent**。
+- [x] **运行日志 P0**（[`logging.md`](logging.md)）：Host/前端/CLI 统一 log + 关键操作 op start/end。
 - [ ] **Vault 采纳（发现）**：打开文件夹时 inspect——合法 Vault / 半结构 / 散落 PDF / 未知；安全自动项（ensure catalog、缺目录脚手架、不覆盖种子）。
 
 ### 中期优先级 P1

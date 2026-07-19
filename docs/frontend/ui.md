@@ -224,7 +224,7 @@
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
 | `⌘/` | 键盘快捷键速查 | 打开快捷键清单对话框（`ShortcutsDialog`） |
-| `⌘K` / `⌘P` | 命令面板：搜索 / 快速打开 | 论文标题·作者即时 quick-open + `vault_search` 全文正文匹配（`CommandPalette`；`shortcuts.ts` → `commandPalette`） |
+| `⌘K` / `⌘P` | 命令面板：搜索 / 快速打开 | 无 Vault 时提示先打开 Vault；有 Vault 时：论文标题·作者·id **即时** quick-open + 去抖 `vault_search` Markdown 全文（片段/行号；`papers/` 命中打开 paper）（`CommandPalette`；`shortcuts.ts` → `commandPalette`） |
 | `Esc` | 关闭 Settings | 关闭 sheet / 对话框 |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |
 | `⌘O` | Open vault… | 打开文档/文件夹 |
@@ -269,6 +269,8 @@
 - **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
 - **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
+- **Wiki 索引刷新**：`.md` 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph，避免外部/Agent 写盘后图谱陈旧。
+- **保存冲突检测（防丢数据）**：autosave / `⌘S` / 卸载 flush 写盘前，`persistFile` 比对磁盘内容与上次落盘内容；若文件已被外部修改则**中止写入**并 `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖外部变更。
 
 规划中（尚未实现）：
 
@@ -327,7 +329,24 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 **斜杠命令**：Agentero 不实现自己的 `/` 命令菜单。用户手打的 `/…` 原样透传；Claude 路径上 Host 也可能主动加上 `/skill-id` 前缀以对齐其 skill 语法。Codex 使用 App Server native thread，skill 侧以 `$` 为准。
 
-**权限模式**：**设置 → Agent** 提供一个全局「权限模式」下拉，对**所有 Agent** 的运行生效（存于 app settings，默认 **受限**）。**受限（默认）**时，Agentero 取消 ACP 的权限请求（Codex 走原生策略、沙箱为 `workspace-write`）；**自动批准**时自动选择 Agent 给出的第一个权限选项（Codex 沙箱切换为 `danger-full-access`）。选 **自动批准** 时面板下方显示一行风险说明。逐项权限确认需要由保持 ACP 会话的后续实现提供；届时可在此下拉新增「每次询问」档。
+**权限模式**：**设置 → Agent** 提供一个全局「权限模式」下拉（`agentPermissionMode`），对**所有 Agent** 生效（默认 **受限**），经 `runOnce` → `permissionMode` 传入：
+
+| 档位 | 行为 |
+|---|---|
+| **受限**（默认） | 取消 ACP 权限请求；Codex 沙箱 `workspace-write` |
+| **每次询问** | 每个 ACP 权限请求 emit `agent:permission-request`；面板对话框展示标题、受影响路径与选项（Allow once / Always / Reject）；用户点选后 `agent_respond_permission`；**5 分钟**未应答则取消 |
+| **自动批准** | 选择 Agent 给出的第一个 AllowOnce 选项；Codex 沙箱 `danger-full-access`；面板下方显示风险说明 |
+
+**空态建议 chips（工作流入口）**：面板空态提供可点击建议，路由到后端 purpose-built workflow（非 free chat）：
+
+| 建议（i18n） | `workflow` | 目标 |
+|---|---|---|
+| Summarize | `summary` | 当前聚焦 paper（提及路径或选中路径） |
+| Ask library | `qa` | 跨库问答 |
+| List claims | `qa` | 当前 paper |
+| Draft Related Work | `related_work` | 当前 paper |
+
+**笔记写后审阅（信任闭环）**：BYOA Agent 直接写盘，无法可靠事前拦截。`agent_run_once` 运行前快照目标笔记（`.md` target 或论文夹 `NOTES.md`）；若内容被改写则 emit `agent:notes-review`。面板弹 **原文 / Agent 版本** 对照对话框：**Keep** 保留 Agent 版本；**Revert** 写回快照（文件监听随后重载打开的编辑器）。
 
 **回答语言**：**设置 → Agent** 提供一个全局「回答语言」下拉（**自动 / English / 简体中文**，存于 app settings，默认 **自动**），**独立于界面语言**，对**所有 Agent** 交互生效（Composer 对话、精读、summary/QA、PDF 划词问答）。前端 `runOnce` 统一读取该设置并透传，Host 在 `build_prompt` 为所有 workflow 追加一句语言指令；选 **自动** 时不注入任何指令，交由 Agent 依据内容决定。
 
@@ -365,6 +384,9 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Appearance**：主题、**语言（跟随系统 / English / 简体中文）**、编辑字号、行号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
+  - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
+  - **回答语言**（自动 / English / 简体中文，独立于界面语言）。
+  - **入库后自动精读**（`autoPaperReader`，**默认关**）：开启后魔棒 / 单篇 Download 资源就绪且未读时自动 paper-reader；Zap 始终可手动。
   - **Common agents** 目录表：名称与 badge 组留距；badge 组内紧凑（安装列固定槽：已安装 / 未安装；ACP 列仅 ready/failed/not-probed，不把 missing 显示成「未安装」；+ adapter missing）；未安装整行置灰；默认 Agent 右侧对勾。打开页自动 scan + 并行 Probe；Refresh 可再跑。表下小字：ACP 失败时可试代理。代理开关不因 Probe busy 禁用；改代理只持久化 + scan。
   - **Claude**：`detect` 用本机 `claude`（Claude Code）；ACP 入口为 `claude-agent-acp`。若已装 Claude Code 但缺适配器，显示 **ACP adapter missing** 徽章 + **Install ACP** 小按钮 → Host `agent_open_install_terminal` 打开系统终端，展示 `npm i -g @agentclientprotocol/claude-agent-acp`，**等待用户按 Enter 才执行**（不静默安装）。装完后用户点 Refresh 再 Probe。
   - 顶部 **Refresh**（Rescan + Probe）；**Use default** 纯文字（无 icon）。
