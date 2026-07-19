@@ -82,13 +82,16 @@ export function AnnotationEditor({
 				value={text}
 				onChange={(e) => setText(e.target.value)}
 				onKeyDown={(e) => {
-					if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-						e.preventDefault();
-						onSave(text);
-					}
 					if (e.key === "Escape") {
 						e.preventDefault();
 						onClose();
+						return;
+					}
+					// Enter = save; Shift+Enter = newline (same as ask composer).
+					// Skip while IME is composing (e.g. Chinese input).
+					if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+						e.preventDefault();
+						onSave(text);
 					}
 				}}
 			/>
