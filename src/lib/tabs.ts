@@ -12,6 +12,9 @@ import {
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
+	paperHasLocalPaperMd,
+	paperHasLocalPdf,
+	paperHasLocalTex,
 	paperRemoteAssetsFromMetadata,
 	revokePdfViewerSource,
 } from "@/lib/paper-metadata";
@@ -126,6 +129,42 @@ export type TabResources = {
 
 /** Session-scoped: vault-rel paper paths already auto-downloaded for preview. */
 const pdfAutoDownloadTried = new Set<string>();
+
+/** Session-scoped: vault-rel paper paths already triggered for deferred body resolve. */
+const paperParseTried = new Set<string>();
+
+function maybeTriggerDeferredParse(
+	paperDir: string,
+	vaultPath: string | null,
+	treeNode: FileNode | undefined,
+): void {
+	if (!isTauri() || !vaultPath || !treeNode) return;
+	if (
+		!paperHasLocalPdf(treeNode) ||
+		paperHasLocalTex(treeNode) ||
+		paperHasLocalPaperMd(treeNode)
+	) {
+		return;
+	}
+	const rel = toVaultRelative(vaultPath, paperDir)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!rel || paperParseTried.has(rel)) return;
+	paperParseTried.add(rel);
+
+	void runBackgroundTask(
+		{
+			kind: "download",
+			title: i18n.t("app:tasks.downloadPaper"),
+			detail: rel,
+		},
+		async ({ setProgress }) => {
+			setProgress(30);
+			await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
+			setProgress(100);
+		},
+	).catch(() => {});
+}
 
 /**
  * PDF for a paper tab: local file (blob:) → auto-download if missing → remote pdf_url.
@@ -289,6 +328,9 @@ export async function loadTabResources(
 			meta,
 			remotePdf,
 		);
+		if (!didDownload) {
+			maybeTriggerDeferredParse(paperDir, vaultPath, findNode(tree, paperDir));
+		}
 		const notesPath = notesPathForPaper(paperDir);
 		let notesSeed = NOTES_PLACEHOLDER;
 		try {

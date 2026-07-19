@@ -10,7 +10,6 @@ use super::map::{enrich_remote_urls, map_zotero_item};
 use super::{normalize_parent_dir, paper_record_from_meta, write_paper_shell};
 use crate::error::AppError;
 use crate::services::catalog::papers;
-use crate::services::pdf_parse::maybe_generate_paper_md_after_download;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -334,11 +333,6 @@ async fn migrate_one(
             if fs::copy(src, &dest).is_ok() {
                 copied = true;
             }
-        }
-        if copied {
-            // No TeX for Zotero PDFs → liteparse a readable PAPER.md, same as the
-            // magic-wand download path.
-            let _ = maybe_generate_paper_md_after_download(vault, &path_rel, &paper_dir).await;
         }
     }
 
