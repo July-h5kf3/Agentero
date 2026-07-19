@@ -58,7 +58,7 @@
 ### 2c-2. 论文库默认页 + 文件夹作用域库
 
 - [x] **论文库默认页 + 文件夹作用域库**（整项）
-- [x] **默认页**：有 Vault 时默认全库；关空 tab → `ensureFullLibraryTab()`；仅剩全库时 `⌘W`/X 关窗
+- [x] **默认页**：有 Vault 时默认全库；关空 tab → `ensureFullLibraryTab()`；仅剩全库且无弹层时 `⌘W`/X 关窗
 - [x] **文件夹作用域**：非 paper 目录 → 展开树 + **同一** Library tab 上 `libraryScopePath` 前缀过滤（**不**为文件夹开新 tab）
 - [x] 单测 + latency：`test/library-scope.test.ts`
 
@@ -201,7 +201,7 @@
 - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容
 - [x] **默认页全库 + 文件夹作用域库**（2c-2）
 - [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）
-- [x] 快捷键：关 tab `⌘W`（仅剩全库时关窗；File → Close 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏随 split 补
+- [x] 快捷键：关 tab `⌘W`（有弹层先关顶层；仅剩全库时关窗；File → Close 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏随 split 补
 - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦
 - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局
 - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）

@@ -135,7 +135,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 
 #### 工作区
 
-- **文档标签页已落地**：中间栏以浏览器式多 tab 管理 Library / PDF / HTML / Markdown / 图片等；常驻挂载，切换保留滚动与编辑状态；`⌘W` 优先关设置，否则先关标签，仅剩全库时关窗口。
+- **文档标签页已落地**：中间栏以浏览器式多 tab 管理 Library / PDF / HTML / Markdown / 图片等；常驻挂载，切换保留滚动与编辑状态；`⌘W` / `Esc` 优先关最顶层应用弹层（设置、快捷键清单、命令面板、迁移对话框等，见 `overlay-stack`），否则先关标签，仅剩全库时关窗口。
 - **规划（roadmap V0.6 余量）**：2 格分屏并排（PDF | NOTES 等）。
 - **操作错误**：全局右上角 Toast（`notifyError`），不占用侧栏 header。
 

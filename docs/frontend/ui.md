@@ -133,6 +133,34 @@
 
 ## 3. 布局
 
+### 3.0 应用弹层栈（overlay-stack）
+
+应用级 **sheet / Dialog** 不再各自绑定关闭键，而是注册到统一栈，由全局快捷键按 LIFO 关闭。
+
+| 项 | 说明 |
+|---|---|
+| 实现 | `src/lib/overlay-stack.ts`；React 接入 `src/hooks/use-overlay-registration.ts`（`useOverlayRegistration` / `useAnyOverlayOpen`） |
+| 注册 | 弹层 `open === true` 时 `pushOverlay({ id, close })`；关闭或卸载时 dispose（idempotent） |
+| 关闭 | `closeTopOverlay()` 弹出栈顶并调用其 `close`；`⌘W`（`closeTabOrWindow`）与 `Esc`（`closeSheet`）共用 |
+| 门控 | `useAppShortcuts(anyOverlayOpen, …)`：`whenSettingsClosed` 实际表示「无弹层」；有弹层时挡 Vault/导航类快捷键，避免误触 |
+| 开关类 | `⌘,` 设置、`⌘/` 快捷键清单、`⌘K`/`⌘P` 命令面板、`⇧⌘P` 命令模式：自身可再按关闭（不依赖 `whenSettingsClosed`） |
+
+**已注册 id（须保持稳定）**
+
+| id | 组件 |
+|---|---|
+| `settings` | `SettingsWindow` |
+| `shortcuts` | `ShortcutsDialog` |
+| `command-palette` | `CommandPalette`（Go / Commands 共用） |
+| `zotero-migrate` | `ZoteroMigrateDialog` |
+| `move-papers` | `MovePapersDialog` |
+| `agent-permission` | Agent 权限询问 Dialog |
+| `notes-review` | Agent 笔记 Keep/Revert Dialog |
+
+**新弹层约定**：在 Dialog / 全屏 sheet 内调用 `useOverlayRegistration("stable-id", open, () => onOpenChange(false))` 即可自动支持 `Esc` / `⌘W`。**不**把普通 Popover / Tooltip / 树内联重命名注册进栈。
+
+单测：`test/overlay-stack.test.ts`。
+
 - 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
 - **论文库表格**（`src/components/layout/papers-library.tsx`）：
   - **入口**：
@@ -160,7 +188,7 @@
     - **删除**：节点离开文档且 managed `./assets/` URL 引用计数归零 → 删磁盘文件 → 刷新文件树（`onAssetsChanged`）。
     - 实现：`src/lib/markdown-image.ts`、`markdown-editor.tsx`、`image-node.tsx`、`editor-toolbar.tsx`；i18n `editor:toolbar.image` / `editor:image.*`。
     - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
-  - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`。
+  - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`（有弹层时 `⌘W` 先关弹层，见 §3.0）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
 - **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
@@ -264,7 +292,7 @@
 - **默认页 = 全库 Library**：
   - 打开 Vault 无持久化 tab → `ensureFullLibraryTab()`。
   - 关 tab 后列表为空 → 自动打开全库（无「无标签」空态）。
-  - **`⌘W` / tab X**：设置打开时**先关设置**；否则仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
+  - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
 - **常驻挂载**：每个 tab 保持 mounted（非激活 `hidden`）；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
 - **状态派生**：`activeTab` 驱动路径 / 模式 / Notes；作用域 Library 的 `path` 为文件夹绝对路径，树高亮该组织夹。
 - **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
@@ -376,7 +404,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 | 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
-| 关闭 | 右上角 `X`、点遮罩、`Esc`、再次 `⌘,` |
+| 关闭 | 右上角 `X`、点遮罩、`Esc`、`⌘W`（经 `overlay-stack`）、再次 `⌘,` |
 | 文案 | 支持国际化（i18n）：English 与简体中文可切换，English 为源语言与兜底；简短说明可作 footer |
 
 **页面职责**

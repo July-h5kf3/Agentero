@@ -2,7 +2,7 @@
 
 > 状态：**Phase A 已落地**（⌘P/⌘K 快速打开 · ⇧⌘P 命令面板 · `>` 前缀；命令注册表 Phase B 仍待）  
 > 目标：对齐 VS Code 的 **⌘P 快速打开** 与 **⇧⌘P 命令面板** 交互心智，在 Agentero 中落地「全局搜索框」能力，并给出实现边界与分期。  
-> 相关：现有 `src/components/layout/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/api.md`](../backend/api.md)。
+> 相关：现有 `src/components/layout/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
 
 ---
 
@@ -19,7 +19,7 @@
 
 **产品目标（Agentero）**
 
-1. **全局入口**：任意焦点（编辑器 / PDF / 文件树）均可唤起，模态遮罩，Esc 关闭。
+1. **全局入口**：任意焦点（编辑器 / PDF / 文件树）均可唤起，模态遮罩；`Esc` / `⌘W` 经 `overlay-stack` 关闭；同键再按亦可关闭。
 2. **双模式心智**：快速打开（资源） vs 执行命令（动作）。
 3. **科研场景优先**：论文 / 笔记 / Library 路径优先于「任意工作区文件」。
 4. **可扩展**：新功能以注册命令方式进入面板，而不是硬编码一长串菜单。
@@ -223,26 +223,26 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 | Go · 内容 | `vault_search` 去抖 | 沿用 Host score |
 | Commands | 客户端 fuzzy（title + category + keywords） | 最近执行命令优先，其次字母 |
 
-### 4.6 无 Vault / 设置窗打开时
+### 4.6 无 Vault / 其它弹层打开时
 
-- **无 Vault**：Go 模式仅可显示「打开 Vault / 创建 Vault / 最近路径」类命令；内容搜索禁用。  
-- **设置打开**：现状 `whenSettingsClosed` 限制部分快捷键；面板应仍可开，且优先命令如「关闭设置」。
+- **无 Vault**：Go 模式可展示「打开 Vault / 创建 Vault」类命令；内容搜索禁用。  
+- **其它弹层**（设置 / 快捷键清单等）：与 Dialog 共用 [`overlay-stack`](../frontend/ui.md)（§3.0）。`⌘P`/`⌘K`/`⇧⌘P` 自身可再按关闭；`Esc` / `⌘W` 关最顶层。有弹层时 `whenSettingsClosed` 门控挡住 Vault 树类快捷键，但开关类（设置 / 面板 / 清单）仍可匹配。
 
 ---
 
 ## 5. 分期实现（建议）
 
-### Phase A — 快捷键与双模式壳（小改、高感知）
+### Phase A — 快捷键与双模式壳（小改、高感知） — ✅ 已落地
 
 1. 拆分快捷键：  
    - `quickOpen`：⌘P（+ 保留 ⌘K 别名）  
    - `commandPalette`：⇧⌘P  
-2. `CommandPalette` 接收 `initialMode: "go" | "commands"`。  
-3. Commands 模式：静态列表（从 App 注入的 handler 注册表），fuzzy 过滤，Enter 执行。  
-4. Go 模式：保持现有论文 + `vault_search`。  
-5. i18n / 快捷键速查表更新。
+2. `CommandPalette` 接收 `initialMode: "go" | "commands"`；`>` 前缀切命令模式。  
+3. Commands 模式：App 注入 `AppCommand[]`，客户端 fuzzy，Enter 执行。  
+4. Go 模式：论文 quick-open + `vault_search`。  
+5. i18n / 快捷键速查表更新；弹层注册 `command-palette`。
 
-**验收**：⇧⌘P 能执行「打开设置 / 切换侧栏」等 ≥8 条命令；⌘P 行为与今日一致或更好。
+**验收**：⇧⌘P 能执行「打开设置 / 切换侧栏」等命令；⌘P 行为与今日一致或更好。
 
 ### Phase B — 命令注册表与 MRU
 

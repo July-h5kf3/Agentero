@@ -25,7 +25,7 @@
   - PDF：任意路径本地预览；**导航 / 适应宽·整页 / 大纲 / ⌘F**；真实 scale + 平滑划词；**操作菜单**（高亮 / 笔记 / 提问 / 翻译）。
   - 图片文件：常见格式 `blob:` 预览（`ImageViewer`）。
   - Markdown / Notes：Plate WYSIWYG；内嵌图 → `./assets/`。
-  - 快捷键：关标签 `⌘W`（无标签时关窗口）、切标签 `⌥⌘←/→`。
+  - 快捷键：`⌘W` / `Esc` 先关最顶层弹层（`overlay-stack`），再关标签；仅剩全库时关窗；切标签 `⌥⌘←/→`。见 [`ui.md`](ui.md) §3.0。
   - **规划（V0.6 余）**：**2 格分屏**（文档标签页已落地）。
 - 右侧 Notes：**仅**论文 PDF/HTML 时显示该篇 `NOTES.md`；Library 隐藏。
 - 可选右侧栏：Agent 或 Backlinks（常驻 collapsible）。

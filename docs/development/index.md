@@ -30,7 +30,8 @@
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper set-tags`；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
 | Zotero Connector 兼容 | ✅ MVP | 本机 `23119`：`saveItems` + 子文件夹 targets + **`saveAttachment`**；设置开关默认关；见 [`../backend/connector.md`](../backend/connector.md) |
-| 全库搜索 | ✅ | 命令面板 `⌘K`/`⌘P`：论文 quick-open + `vault_search` Markdown 全文 |
+| 全库搜索 / 命令面板 | ✅ Phase A | `⌘P`/`⌘K` 快速打开 + `⇧⌘P` 命令模式；`>` 前缀；见 [`command-palette.md`](command-palette.md) |
+| 应用弹层栈 | ✅ | `overlay-stack`：Esc/`⌘W` 统一关最顶层 sheet/Dialog；见 [`../frontend/ui.md`](../frontend/ui.md) §3.0 |
 | Release CI | ✅ | `v*` tag → 三平台桌面安装包 + **CLI `agentero` 预编译包**（同草稿 Release） |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
