@@ -223,11 +223,16 @@ export function MarkdownEditor({
 						className="agentero-scroll min-h-0 flex-1"
 						onKeyDown={readOnly ? undefined : handleKeyDown}
 					>
+						{/*
+						 * min-h-full + generous bottom padding so the last line is easy
+						 * to click and Enter can always create a new block below it
+						 * (matches Plate default variant pb-72).
+						 */}
 						<Editor
 							variant="none"
 							placeholder={placeholder}
 							readOnly={readOnly}
-							className="min-h-full px-6 py-4"
+							className="min-h-full px-6 pt-4 pb-48"
 							style={fontSize ? { fontSize } : undefined}
 						/>
 					</EditorContainer>
