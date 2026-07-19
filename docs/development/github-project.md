@@ -84,7 +84,7 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 |---|---|---|
 | **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | **Partial**（拖入卡死已修；metadata/NOTES 初始化仍开） |
 | **B2, B4–B8** | [#8](https://github.com/poco-ai/Agentero/issues/8), [#10](https://github.com/poco-ai/Agentero/issues/10)–[#14](https://github.com/poco-ai/Agentero/issues/14) | **Done** |
-| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | Todo（Skill 随应用更新） |
+| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | **Done**（`vault_ensure` 打开时补种缺失 skills） |
 | F1–F14 | [#15](https://github.com/poco-ai/Agentero/issues/15)–[#28](https://github.com/poco-ai/Agentero/issues/28) | Todo |
 | **F15** | [#29](https://github.com/poco-ai/Agentero/issues/29) | **In Progress** |
 | F16–F18 | [#30](https://github.com/poco-ai/Agentero/issues/30)–[#32](https://github.com/poco-ai/Agentero/issues/32) | Todo |
@@ -97,7 +97,7 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 |---|---|---|---|
 | **B1** | [#7](https://github.com/poco-ai/Agentero/issues/7) | bug: 入库 / 本地 PDF / NOTES 初始化异常 | `type:bug` `area:import` `priority:p0` · **Partial** |
 | **B2** | [#8](https://github.com/poco-ai/Agentero/issues/8) | bug: Agent 上下文与系统提示体验 | `type:bug` `area:agent` `priority:p1` · **Done** |
-| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | bug: Skill 随应用更新同步 | `type:bug` `area:agent` `priority:p1` |
+| **B3** | [#9](https://github.com/poco-ai/Agentero/issues/9) | bug: Skill 随应用更新同步 | `type:bug` `area:agent` `priority:p1` · **Done** |
 | **B4** | [#10](https://github.com/poco-ai/Agentero/issues/10) | bug: Markdown 编辑器卡顿与选区/末行 | `type:bug` `area:editor` `priority:p0` · **Done** |
 | **B5** | [#11](https://github.com/poco-ai/Agentero/issues/11) | bug: 笔记审阅应用 Diff 展示 | `type:bug` `area:editor` `area:agent` `priority:p1` · **Done** |
 | **B6** | [#12](https://github.com/poco-ai/Agentero/issues/12) | bug/ux: 文件树 @ 提及与显示名排序 | `type:bug` `area:tree` `priority:p1` · **Done** |

@@ -99,7 +99,7 @@ UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`�
 
 其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`。触发：魔棒入库 / 单篇 Download 资源就绪后可**自动**精读；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示 **Zap** 图标供**手动**重跑。成功写入 `NOTES.md` 后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条（可与入库/下载任务衔接）。
 
-Vault 技能种子（Create Vault，已存在不覆盖；模板见 `templates/vault/.agents/skills/`）：
+Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_ensure`**；模板见 `templates/vault/.agents/skills/`）：
 
 | Skill | 用途 | 备注 |
 | --- | --- | --- |
@@ -107,6 +107,9 @@ Vault 技能种子（Create Vault，已存在不覆盖；模板见 `templates/va
 | `agentero-cli` | headless `agentero` CLI | 本项目维护 |
 | `idea-evaluator` | 研究 idea 评审 | 来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)（**CC BY-NC-SA 4.0**） |
 | `deep-research` | 综述级文献调研 | 同上 |
+
+- **已存在不覆盖**：用户改过的 skill 文件保持原样。
+- **应用更新**：发行版模板里**新增**的 skill 在下次 `vault_ensure`（打开 Vault）时写入缺失路径；不会静默覆盖旧版用户副本。
 
 亦可放在 `~/.agents/skills` / `~/.claude/skills`。第三方 skill 的来源与 LICENSE 见 vault 内 `.agents/skills/README.md`。
 

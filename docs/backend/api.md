@@ -19,7 +19,7 @@ Host (Tauri + Rust)
 ### 2.1 命名规范
 
 - Tauri command：`namespace:verb`（全小写，冒号分隔命名空间）。
-  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`window_new`、`graph_get_graph`）。
+  - 规划契约多用 `namespace:verb`（如 `vault:open`）；已落地的 invoke 名以 `src-tauri` 为准（如 `vault_create`、`vault_ensure`、`window_new`、`graph_get_graph`）。
 
 ### 2.2 参数与返回
 
@@ -81,8 +81,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
-> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成，Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
+> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
+> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
 #### `vault_create`（已实现）
@@ -118,6 +118,25 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 种子 **bundled skills**（已存在则跳过）：`paper-reader`、`agentero-cli`、`idea-evaluator`、`deep-research`（后两者含 `references/`，来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，**CC BY-NC-SA 4.0**；另写 `skills/README.md` 与 `LICENSE-Supervisor-Skills.txt`）。
   - **不**创建根级 `PAPERS.md` / `library.bib`；**不**覆盖已有 `AGENTS.md` / `.agents/**`。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
+
+#### `vault_ensure`（已实现）
+
+幂等脚手架 / 同步缺失 bundled skills（Host `ensure_vault`，与 `vault_create` 同一实现）。**打开或恢复 Vault 时**前端调用，以便应用更新后把**新增** skill 写入 `.agents/skills/`。
+
+- **参数**
+
+```ts
+{
+  path: string; // 本地绝对路径
+}
+```
+
+- **返回**：同 `vault_create`（`ApiResult<CreateVaultResult>`；`created` 仅含本次新建的相对路径）。
+
+- **策略**
+  - **只补缺失**：目录 / `AGENTS.md` / 模板里有而盘上没有的 skill 文件。
+  - **从不覆盖**：用户改过的 `SKILL.md` 或 references 保持原样。
+  - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
 
 #### `path_open_in_terminal`（已实现）
 
@@ -1559,7 +1578,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 | CLI | Host service / command 锚点 |
 |---|---|
-| `vault create` | `services::vault::create_vault` / `vault_create` |
+| `vault create` | `services::vault::create_vault` / `vault_create`（与 GUI `vault_ensure` 同幂等实现） |
 | `vault which\|info\|check\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
 | `paper list\|get\|paths\|delete\|set-read\|set-tags\|tags` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |

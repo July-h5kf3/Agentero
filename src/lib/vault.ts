@@ -235,7 +235,7 @@ export async function pickCreateVaultDirectory(): Promise<string | null> {
 /**
  * Scaffold a Agentero vault at `path` (Host: vault_create).
  * Creates papers/notes/plans/.agentero, AGENTS.md, catalog.sqlite.
- * Does not create PAPERS.md / library.bib.
+ * Does not create PAPERS.md / library.bib. Does not overwrite existing files.
  */
 export async function createVault(path: string): Promise<CreateVaultResult> {
 	if (!isTauri()) {
@@ -245,6 +245,30 @@ export async function createVault(path: string): Promise<CreateVaultResult> {
 	const { logOp } = await import("@/lib/logger");
 	return logOp("createVault", { path }, async () => {
 		const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
+			path,
+		});
+		if (!result.ok || !result.data) {
+			throw new Error(
+				result.error?.message ?? i18n.t("app:vault.createFailed"),
+			);
+		}
+		return result.data;
+	});
+}
+
+/**
+ * Idempotent ensure for an open vault (Host: vault_ensure).
+ * Seeds any **missing** bundled skills under `.agents/skills/` after app updates;
+ * never overwrites user-edited skill files. Safe to call on every open.
+ */
+export async function ensureVault(path: string): Promise<CreateVaultResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.createDesktopOnly"));
+	}
+
+	const { logOp } = await import("@/lib/logger");
+	return logOp("ensureVault", { path }, async () => {
+		const result = await invoke<ApiResult<CreateVaultResult>>("vault_ensure", {
 			path,
 		});
 		if (!result.ok || !result.data) {

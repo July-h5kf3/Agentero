@@ -207,6 +207,7 @@ pub fn run() {
             commands::graph::graph_get_graph,
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
+            commands::vault::vault_ensure,
             commands::terminal::path_open_in_terminal,
             commands::trash::path_trash,
             commands::trash::path_untrash,

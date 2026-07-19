@@ -151,6 +151,7 @@ import {
 	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
+	ensureVault,
 	type FileNode,
 	getRecentVaults,
 	getSavedVaultPath,
@@ -1090,6 +1091,17 @@ export default function App() {
 		},
 		[rebuildWikiAndNotify],
 	);
+
+	/**
+	 * After app updates, seed any **new** bundled skills into `.agents/skills/`
+	 * (missing files only — never overwrite user edits). Runs on open / restore.
+	 */
+	useEffect(() => {
+		if (!isTauri() || !vaultPath) return;
+		void ensureVault(vaultPath).catch(() => {
+			// Best-effort: opening the vault must not fail if seed is blocked.
+		});
+	}, [vaultPath]);
 
 	const handleOpenVault = useCallback(async () => {
 		try {
