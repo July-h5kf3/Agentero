@@ -1412,33 +1412,27 @@ function AgentPane({
 	};
 
 	/**
-	 * Persist proxy, then auto re-probe. Host clears last_probe_* on change so
-	 * we show “探测中” immediately (not “未探测”) and run ACP probes with the
-	 * new env. Proxy switch stays enabled during the batch.
+	 * Persist proxy then force re-probe (host clears last_probe_* on change).
+	 * Proxy switch stays enabled during the batch.
 	 */
 	const saveProxySettings = async (enabled: boolean, url: string) => {
 		if (!isTauri()) return;
 		setLoading(true);
 		try {
-			// Optimistic: flip badges before host clears probe history.
-			if (catalog) {
-				setProbingBatch(collectProbeKeys(catalog));
-			}
 			const saved = await setAgentProxy(enabled, url);
 			setProxyEnabled(saved.proxyEnabled);
 			setProxyUrl(saved.proxyUrl || "http://127.0.0.1:7890");
 			const scan = await scanOnce();
 			if (scan) {
-				await probeInstalled(scan);
+				await probeInstalled(scan, true);
 				await scanOnce();
 			}
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
-			// Re-sync UI from host if save failed.
 			await scanOnce();
 		} finally {
 			setLoading(false);
-			clearAllProbing();
+			setProbingKeys(new Set());
 		}
 	};
 
@@ -1452,7 +1446,7 @@ function AgentPane({
 	};
 
 	const onRescanAndProbe = async () => {
-		await rescanAndProbe();
+		await rescanAndProbe(true);
 	};
 
 	const onUseDefault = async (entry: CatalogEntry) => {
@@ -1507,14 +1501,14 @@ function AgentPane({
 			setFormArgs("");
 			const scan = await scanOnce();
 			if (scan) {
-				await probeInstalled(scan);
+				await probeInstalled(scan, true);
 				await scanOnce();
 			}
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLoading(false);
-			clearAllProbing();
+			setProbingKeys(new Set());
 		}
 	};
 
@@ -1746,11 +1740,11 @@ function AgentPane({
 						entry.acpStatus === "ready";
 					const showInstall = Boolean(entry.offerInstall);
 					const notInstalled = !entry.binaryAvailable;
-					// Host "not-probed" (e.g. after proxy clears history) is shown as
-					// 探测中 + spinner, never static「未探测」.
+					// Mid-probe or host-cleared not-probed while a batch is running.
 					const isProbing =
 						probingKeys.has(catalogProbeKey(entry.templateId)) ||
-						entry.acpStatus === "not-probed";
+						(entry.acpStatus === "not-probed" &&
+							(loading || probingKeys.size > 0));
 					return (
 						<div
 							key={entry.templateId}
@@ -1848,9 +1842,10 @@ function AgentPane({
 				})}
 				{customAgents.map((agent) => {
 					const isDefault = catalog?.defaultId === agent.id;
+					const notProbedYet = agent.available && agent.lastProbeOk == null;
 					const isProbing =
 						probingKeys.has(customProbeKey(agent.id)) ||
-						(agent.available && agent.lastProbeOk == null);
+						(notProbedYet && (loading || probingKeys.size > 0));
 					return (
 						<div
 							key={agent.id}
@@ -1876,6 +1871,8 @@ function AgentPane({
 										<StatusBadge tone="err">
 											{t("agent:acpStatus.failed")}
 										</StatusBadge>
+									) : notProbedYet ? (
+										<ProbingBadge label={t("agent.probing")} />
 									) : (
 										<StatusBadge tone="muted">
 											{t("agent:acpStatus.notInstalled")}
