@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
 	type KeyboardEvent,
+	type DragEvent as ReactDragEvent,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -1967,13 +1968,29 @@ export function AgentPanel({
 		await send(text, baseLines);
 	};
 
-	const attachMention = (path: string) => {
-		setMentionedPaths((prev) => [...new Set([...prev, path])]);
-		setComposerMenuDismissed(true);
-		setComposerText((prev) =>
-			prev.replace(/(^|\s)@[^\s]*$/, (_match, prefix: string) => `${prefix}`),
-		);
-	};
+	/** Add Vault-relative path(s) as removable context chips (same as @mention). */
+	const attachContextPaths = useCallback(
+		(rawPaths: string[]) => {
+			const normalized = rawPaths
+				.map((p) => toVaultRelative(vaultPath, p.trim()))
+				.filter((p) => p.length > 0);
+			if (!normalized.length) return;
+			setMentionedPaths((prev) => [...new Set([...prev, ...normalized])]);
+			setComposerMenuDismissed(true);
+			// Clear an in-progress @ query so the menu closes after attach.
+			setComposerText((prev) =>
+				prev.replace(/(^|\s)@[^\s]*$/, (_match, prefix: string) => `${prefix}`),
+			);
+		},
+		[setComposerText, setMentionedPaths, vaultPath],
+	);
+
+	const attachMention = useCallback(
+		(path: string) => {
+			attachContextPaths([path]);
+		},
+		[attachContextPaths],
+	);
 
 	const removeContextPath = (path: string) => {
 		if (path === selectedVaultPath) {
@@ -1982,6 +1999,53 @@ export function AgentPanel({
 		}
 		setMentionedPaths((prev) => prev.filter((item) => item !== path));
 	};
+
+	/**
+	 * Drag from file tree sets `text/plain` vault paths (newline-separated).
+	 * Capture as context chips instead of inserting raw path text into the textarea.
+	 * Reuses the same chip UI as `@` mentions — not AI Elements Attachments
+	 * (those are FileUIPart blobs; ACP context is path-based).
+	 */
+	const handleComposerDragOver = useCallback((e: ReactDragEvent) => {
+		const types = e.dataTransfer?.types;
+		if (!types) return;
+		const hasText =
+			[...types].includes("text/plain") || [...types].includes("Text");
+		const hasFiles = [...types].includes("Files");
+		// Prefer vault path drops; leave pure OS file drops to PromptInput if any.
+		if (hasText && !hasFiles) {
+			e.preventDefault();
+			e.dataTransfer.dropEffect = "copy";
+		} else if (hasText && hasFiles) {
+			// Some platforms advertise both; still accept path payload.
+			e.preventDefault();
+			e.dataTransfer.dropEffect = "copy";
+		}
+	}, []);
+
+	const handleComposerDrop = useCallback(
+		(e: ReactDragEvent) => {
+			const text = e.dataTransfer?.getData("text/plain")?.trim();
+			if (!text) return;
+			// Ignore non-path payloads (e.g. plain prose selection).
+			const lines = text
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.filter(Boolean);
+			const pathLike = lines.filter(
+				(line) =>
+					!line.includes("://") &&
+					(line.includes("/") ||
+						line.includes("\\") ||
+						/\.(md|pdf|tex|bib|json|txt|html?)$/i.test(line)),
+			);
+			if (!pathLike.length) return;
+			e.preventDefault();
+			e.stopPropagation();
+			attachContextPaths(pathLike);
+		},
+		[attachContextPaths],
+	);
 
 	const attachSkill = (skill: AgentSkill) => {
 		setSelectedSkillIds((prev) => [...new Set([...prev, skill.id])]);
@@ -2918,6 +2982,8 @@ export function AgentPanel({
 										"relative flex w-full flex-col px-3 pt-3",
 										isZen ? "min-h-[120px]" : "min-h-[96px]",
 									)}
+									onDragOverCapture={handleComposerDragOver}
+									onDropCapture={handleComposerDrop}
 								>
 									{currentFilePath || mentionChipPaths.length > 0 ? (
 										<div className="mb-2 flex flex-wrap gap-1.5">
@@ -2942,8 +3008,8 @@ export function AgentPanel({
 													}
 												>
 													<FileText className="size-3.5 shrink-0 text-muted-foreground" />
-													<span className="truncate">
-														{currentFilePath.split("/").at(-1)}
+													<span className="truncate" title={currentFilePath}>
+														{currentFilePath}
 													</span>
 													{includeSelectedFile ? (
 														<X className="size-3 shrink-0 text-muted-foreground" />
@@ -2961,8 +3027,8 @@ export function AgentPanel({
 													title={t("composer.removeContext", { path })}
 												>
 													<FileText className="size-3.5 shrink-0 text-muted-foreground" />
-													<span className="truncate">
-														{path.split("/").at(-1)}
+													<span className="max-w-[16rem] truncate" title={path}>
+														{path}
 													</span>
 													<X className="size-3 shrink-0 text-muted-foreground" />
 												</button>
