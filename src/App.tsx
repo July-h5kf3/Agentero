@@ -2638,7 +2638,6 @@ export default function App() {
 					onToggleNotes={setShowNotes}
 					onToggleRightSidebar={toggleRightSidebar}
 					onToggleAgentZen={toggleAgentZen}
-					onEnterAgentZen={enterAgentZen}
 					onOpenRightTab={openRightTab}
 				/>
 

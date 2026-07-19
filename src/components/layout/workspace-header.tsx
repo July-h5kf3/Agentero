@@ -1,7 +1,6 @@
 import {
 	ArrowLeft,
 	Bot,
-	Focus,
 	Link2,
 	MessageSquareText,
 	PanelLeft,
@@ -47,7 +46,6 @@ type WorkspaceHeaderProps = {
 	onToggleNotes: (open: boolean) => void;
 	onToggleRightSidebar: () => void;
 	onToggleAgentZen: () => void;
-	onEnterAgentZen: () => void;
 	onOpenRightTab: (tab: "agent" | "backlinks" | "annotations") => void;
 };
 
@@ -72,7 +70,6 @@ export function WorkspaceHeader({
 	onToggleNotes,
 	onToggleRightSidebar,
 	onToggleAgentZen,
-	onEnterAgentZen,
 	onOpenRightTab,
 }: WorkspaceHeaderProps) {
 	const { t } = useTranslation(["app"]);
@@ -149,7 +146,7 @@ export function WorkspaceHeader({
 								</TooltipContent>
 							</Tooltip>
 						</div>
-						{/* Document tabs share the title bar row with zen / layout icons */}
+						{/* Document tabs share the title bar row with layout icons */}
 						{hasVault && tabs.length ? (
 							<DocumentTabBar
 								tabs={tabs}
@@ -176,23 +173,6 @@ export function WorkspaceHeader({
 								zenMode={agentZenMode}
 								onToggleZen={onToggleAgentZen}
 							/>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={t("titlebar.enterAgentZen")}
-										aria-pressed={agentZenMode}
-										onClick={onEnterAgentZen}
-									>
-										<Focus className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{t("titlebar.enterAgentZenHint", { shortcut: ZEN_SHORTCUT })}
-								</TooltipContent>
-							</Tooltip>
 							{rightSidebarOpen ? (
 								<>
 									<Tooltip>

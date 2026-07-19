@@ -33,7 +33,7 @@ type DocumentTabBarProps = {
 
 /**
  * Browser-style document tab strip.
- * Sits in the title bar row (same line as zen / layout icons).
+ * Sits in the title bar row (same line as layout icons).
  */
 export function DocumentTabBar({
 	tabs,

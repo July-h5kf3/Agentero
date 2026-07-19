@@ -15,8 +15,8 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
   - 右侧 Notes：**仅**打开具体论文且 PDF/HTML 时显示该篇 `NOTES.md`（WYSIWYG，无独立预览栏）；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
   - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）弹出；表单就地校验除外。
-  - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Focus）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话；左侧栏 Quest 式弱对比（新建 + 单行历史）；主区顶栏仅 Agent 切换（无 1/2/3 标签）；对话区全宽滚动 + AI Elements；标题栏返回图标退出。精读 / PDF 划词等后台运行不进对话历史。
-  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与禅模式 Focus 图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library（全库或文件夹作用域），切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：`⌘W`（仅剩全库时关窗，否则关 tab；关空后自动全库）、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
+  - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Layout「面板」菜单）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话；左侧栏 Quest 式弱对比（新建 + 单行历史）；主区顶栏仅 Agent 切换（无 1/2/3 标签）；对话区全宽滚动 + AI Elements；标题栏返回图标退出。精读 / PDF 划词等后台运行不进对话历史。
+  - **文档标签页**（浏览器式多 tab）位于**标题栏**（与 Layout / 侧栏图标同行）：可同时打开多个 paper / PDF / HTML / Markdown / Library（全库或文件夹作用域），切换、关闭、拖拽重排；每个 tab **常驻挂载**，切换保留 PDF 滚动/缩放与编辑器状态。快捷键：`⌘W`（仅剩全库时关窗，否则关 tab；关空后自动全库）、切换 `⌥⌘←/→`。**分屏（split）** 仍规划见 roadmap V0.6。
 - 论文库：`paper_list` 读 catalog 一次进内存；表头排序；横向/纵向滚动；**tags** 列 + chip 筛选；**文件夹作用域**按 `paper.path` 前缀过滤（不扫盘、无 per-folder RPC）。虚拟路径 `agentero:library` 不写盘。
 - 标签：Paper Info 增删与 **Apple 风格 8 色** → Host `paper_set_tags`（catalog `tags_json` 权威；元素为字符串或 `{name,color}`）；Library 染色 chip 与筛选；CLI `paper set-tags` / `list --tag` / `tags`（CLI 仅名称）。
 - 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。入库成功后刷新树并 `openPaper`，左侧文件树**展开并滚到新论文**。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
