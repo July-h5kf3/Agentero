@@ -4,7 +4,7 @@
 
 mod assets;
 mod map;
-mod parse;
+pub(crate) mod parse;
 mod zotero_db;
 mod zotero_io;
 
@@ -373,7 +373,7 @@ fn unique_paper_path(vault: &Path, parent_rel: &str, base_id: &str) -> (String, 
     }
 }
 
-async fn resolve_metadata(
+pub(crate) async fn resolve_metadata(
     text: &str,
     translator_base: &str,
 ) -> Result<(PaperMeta, bool), AppError> {

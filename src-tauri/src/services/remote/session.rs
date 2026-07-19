@@ -741,4 +741,118 @@ mod tests {
             "live_paper_features failures: {failed:?}"
         );
     }
+
+    /// Local-sim magic-wand import (arXiv fallback; needs network unless AGENTERO_SKIP_NETWORK).
+    #[tokio::test]
+    async fn local_sim_remote_import_arxiv() {
+        use crate::services::lookup::{LookupImportArgs, PaperDownloadAssetsArgs};
+        use crate::services::remote::import_bridge;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agentero-remote-import-{n}"));
+        std::fs::create_dir_all(root.join("papers")).unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("AGENTS.md"), "# t\n").unwrap();
+
+        let reg = RemoteRegistry::new();
+        let info = reg
+            .connect(LOCAL_SIM_HOST, None, &root.to_string_lossy())
+            .await
+            .expect("connect");
+        let session = reg.get(&info.session_id).await.unwrap();
+
+        if std::env::var("AGENTERO_SKIP_NETWORK").is_ok() {
+            reg.disconnect(&info.session_id).await.ok();
+            let _ = std::fs::remove_dir_all(&root);
+            return;
+        }
+
+        let result = import_bridge::import_by_identifier_remote(
+            session.clone(),
+            LookupImportArgs {
+                vault_path: info.vault_handle.clone(),
+                parent_dir: "papers".into(),
+                text: "1706.03762".into(),
+                translator_base_url: None,
+            },
+        )
+        .await;
+
+        match result {
+            Ok(r) => {
+                eprintln!("import ok path={} paperDir={}", r.path, r.paper_dir);
+                assert!(r.path.starts_with("papers/"));
+                assert!(r.paper_dir.starts_with("remote:"));
+                assert!(
+                    root.join(&r.path).join("NOTES.md").is_file(),
+                    "NOTES should be on remote root"
+                );
+                use crate::services::catalog::papers;
+                let row = papers::get_by_path(&session.work_root, &r.path)
+                    .unwrap()
+                    .expect("catalog row");
+                assert!(!row.title.is_empty());
+                let _ = import_bridge::download_paper_assets_remote(
+                    session.clone(),
+                    PaperDownloadAssetsArgs {
+                        vault_path: info.vault_handle.clone(),
+                        path: r.path.clone(),
+                    },
+                )
+                .await;
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                eprintln!("import network error (ok offline): {msg}");
+                assert!(
+                    msg.contains("translator")
+                        || msg.contains("unreachable")
+                        || msg.contains("error sending")
+                        || msg.contains("timed out")
+                        || msg.contains("dns")
+                        || msg.contains("connection")
+                        || msg.contains("arxiv")
+                        || msg.contains("http"),
+                    "unexpected import error: {msg}"
+                );
+            }
+        }
+
+        reg.disconnect(&info.session_id).await.ok();
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Live SSH magic-wand import smoke (env-driven; needs network).
+    #[tokio::test]
+    #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
+    async fn live_ssh_import_arxiv() {
+        use crate::services::lookup::LookupImportArgs;
+        use crate::services::remote::import_bridge;
+        let host = std::env::var("AGENTERO_REMOTE_SSH_HOST").unwrap();
+        let path = std::env::var("AGENTERO_REMOTE_SSH_PATH").unwrap();
+        let reg = RemoteRegistry::new();
+        let info = reg.connect(&host, None, &path).await.expect("connect");
+        let session = reg.get(&info.session_id).await.unwrap();
+        let r = import_bridge::import_by_identifier_remote(
+            session,
+            LookupImportArgs {
+                vault_path: info.vault_handle.clone(),
+                parent_dir: "papers".into(),
+                text: "1512.03385".into(),
+                translator_base_url: None,
+            },
+        )
+        .await
+        .expect("import");
+        eprintln!(
+            "LIVE IMPORT path={} paperDir={} title={} pdf={}",
+            r.path, r.paper_dir, r.title, r.pdf
+        );
+        assert!(r.path.contains("1512") || r.path.starts_with("papers/"));
+        reg.disconnect(&info.session_id).await.ok();
+    }
 }

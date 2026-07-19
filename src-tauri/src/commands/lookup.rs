@@ -9,7 +9,10 @@ use crate::services::lookup::{
     PaperImportArgs, PaperImportResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use crate::services::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
+use crate::services::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
 use serde::Serialize;
+use std::sync::Arc;
+use tauri::State;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,22 +31,51 @@ pub fn lookup_translator_config() -> ApiResult<TranslatorConfig> {
 
 /// Resolve identifier via Translator (placeholder URL) and write paper into vault.
 /// Always downloads PDF; arXiv also downloads and unpacks LaTeX into `source/`.
+/// Remote vaults (`remote:<sessionId>`) stage locally then SFTP-upload + catalog push.
 #[tauri::command]
-pub async fn lookup_import(args: LookupImportArgs) -> ApiResult<LookupImportResult> {
+pub async fn lookup_import(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: LookupImportArgs,
+) -> Result<ApiResult<LookupImportResult>, String> {
     let id = trunc(&args.text, 80);
     let op = OpTimer::start_with("lookup_import", format!("query={id}"));
-    op.finish_result(lookup::import_by_identifier(args).await)
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(
+            op.finish_result(import_bridge::import_by_identifier_remote(session, args).await)
+        );
+    }
+    Ok(op.finish_result(lookup::import_by_identifier(args).await))
 }
 
 /// Download PDF (+ arXiv LaTeX) for an existing paper folder that is missing local assets.
 /// When no TeX remains after download, also tries liteparse → PAPER.md.
 #[tauri::command]
 pub async fn paper_download_assets(
+    registry: State<'_, Arc<RemoteRegistry>>,
     args: PaperDownloadAssetsArgs,
-) -> ApiResult<AssetDownloadResult> {
+) -> Result<ApiResult<AssetDownloadResult>, String> {
     let path = trunc(&args.path, 120);
     let op = OpTimer::start_with("paper_download_assets", format!("path={path}"));
-    op.finish_result(lookup::download_paper_assets(args).await)
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(
+            op.finish_result(import_bridge::download_paper_assets_remote(session, args).await)
+        );
+    }
+    Ok(op.finish_result(lookup::download_paper_assets(args).await))
 }
 
 /// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).

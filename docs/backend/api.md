@@ -139,6 +139,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
 
+**魔棒 / 资源下载**：`lookup_import` / `paper_download_assets` 在 `vaultPath` 为 `remote:<sessionId>` 时走远程桥（本机 staging → SFTP 上传 → catalog PUT），返回的 `paperDir` 为 `remote:<sessionId>/papers/…`。
+
 Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
 
 #### `path_open_in_terminal`（已实现）

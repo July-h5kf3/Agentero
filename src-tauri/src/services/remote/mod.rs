@@ -3,6 +3,7 @@
 
 pub mod agent_exec;
 pub mod catalog_mirror;
+pub mod import_bridge;
 pub mod launch;
 pub mod session;
 pub mod sftp_fs;
