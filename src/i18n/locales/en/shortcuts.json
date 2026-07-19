@@ -15,6 +15,8 @@
 		"revealInFinder": "Show in Finder",
 		"openInTerminal": "Open in Terminal",
 		"deleteTreeItem": "Delete selected item",
+		"collapseTreeCurrent": "Collapse selected folder",
+		"collapseTreeDefault": "Collapse tree to papers only",
 		"magicWand": "Add paper by identifier",
 		"quickOpen": "Quick open (papers / contents)",
 		"commandPalette": "Command palette",

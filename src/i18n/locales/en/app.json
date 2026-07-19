@@ -34,6 +34,8 @@
 		"vaultRefresh": "Refresh File Tree",
 		"vaultReveal": "Reveal in Finder",
 		"vaultTerminal": "Open in Terminal",
+		"vaultCollapseTreeCurrent": "Collapse Selected Folder",
+		"vaultCollapseTreeDefault": "Collapse Tree to papers/ Only",
 		"viewToggleSidebar": "Toggle Sidebar",
 		"viewToggleChat": "Toggle Chat",
 		"viewAgentZen": "Toggle Agent Zen Mode",

@@ -34,6 +34,8 @@
 		"vaultRefresh": "刷新文件树",
 		"vaultReveal": "在 Finder 中显示",
 		"vaultTerminal": "在终端中打开",
+		"vaultCollapseTreeCurrent": "折叠选中文件夹",
+		"vaultCollapseTreeDefault": "折叠文件树至仅 papers/",
 		"viewToggleSidebar": "显示/隐藏侧栏",
 		"viewToggleChat": "显示/隐藏 Chat",
 		"viewAgentZen": "切换 Agent 禅模式",

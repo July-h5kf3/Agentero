@@ -28,8 +28,13 @@ export function useAppShortcuts(
 			});
 			if (!id) return;
 
-			// ⌘⌫ is "delete to line start" in editors — only claim it outside text fields.
-			if (id === "deleteTreeItem") {
+			// Editor-native combos — only claim them outside text fields:
+			// ⌘⌫ delete-to-line-start; ⌘← / ⇧⌘← jump/select to line start (macOS).
+			if (
+				id === "deleteTreeItem" ||
+				id === "collapseTreeCurrent" ||
+				id === "collapseTreeDefault"
+			) {
 				const el = event.target;
 				if (
 					el instanceof HTMLElement &&

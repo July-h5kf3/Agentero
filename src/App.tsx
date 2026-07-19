@@ -18,6 +18,7 @@ import { BacklinksPanel } from "@/components/layout/backlinks-panel";
 import { CommandPalette } from "@/components/layout/command-palette";
 import {
 	FileTree,
+	type FileTreeHandle,
 	type TreeCreateDraft,
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
@@ -247,6 +248,7 @@ export default function App() {
 	const sourcePanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const notesPaneRef = useRef<HTMLDivElement>(null);
+	const fileTreeRef = useRef<FileTreeHandle>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
 	const agentZenModeRef = useRef(false);
@@ -2253,6 +2255,22 @@ export default function App() {
 				run: () => handleOpenInTerminal(),
 			},
 			{
+				id: "vault.collapseTreeCurrent",
+				titleKey: "commands.vaultCollapseTreeCurrent",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				keywords: ["collapse", "folder", "tree", "fold"],
+				run: () => fileTreeRef.current?.collapseSelected(),
+			},
+			{
+				id: "vault.collapseTreeDefault",
+				titleKey: "commands.vaultCollapseTreeDefault",
+				categoryKey: "commands.catVault",
+				when: hasVault,
+				keywords: ["collapse", "default", "papers", "tree", "fold"],
+				run: () => fileTreeRef.current?.collapseToDefault(),
+			},
+			{
 				id: "view.toggleSidebar",
 				titleKey: "commands.viewToggleSidebar",
 				categoryKey: "commands.catView",
@@ -2368,6 +2386,8 @@ export default function App() {
 		revealInFinder: handleRevealInFinder,
 		openInTerminal: handleOpenInTerminal,
 		deleteTreeItem: handleDeleteSelected,
+		collapseTreeCurrent: () => fileTreeRef.current?.collapseSelected(),
+		collapseTreeDefault: () => fileTreeRef.current?.collapseToDefault(),
 		magicWand: openMagicWand,
 		quickOpen: () => openPalette("go"),
 		commandPalette: () => openPalette("commands"),
@@ -2694,6 +2714,7 @@ export default function App() {
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">
 									<FileTree
+										ref={fileTreeRef}
 										nodes={tree}
 										selectedPath={treeSelectedPath}
 										vaultPath={vaultPath}
