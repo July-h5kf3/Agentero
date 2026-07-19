@@ -23,10 +23,12 @@ import {
 	useCallback,
 	useEffect,
 	useId,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { HostOsIcon, normalizeHostOs } from "@/components/host-os-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +73,15 @@ import {
 	type PaperTreeLabelMode,
 	type PaperTreeSortMode,
 } from "@/lib/paper-metadata";
+import {
+	fetchHostIdentity,
+	fetchRemoteHostIdentity,
+	getRemoteSessionMeta,
+	isRemoteVaultHandle,
+	remoteAgentProbe,
+	remoteAgentScan,
+	remoteSessionIdFromHandle,
+} from "@/lib/remote-vault";
 import { revealInOsLabelKey } from "@/lib/reveal";
 import {
 	type AgentPermissionMode,
@@ -89,7 +100,7 @@ import {
 	type ShortcutGroup,
 	shortcutsByGroup,
 } from "@/lib/shortcuts";
-import { isTauri } from "@/lib/tauri";
+import { getPlatformOS, isTauri } from "@/lib/tauri";
 import {
 	FREE_MT_PROVIDER_IDS,
 	type FreeMtProbeMap,
@@ -109,6 +120,17 @@ export type SettingsSection =
 	| "keyboard"
 	| "privacy"
 	| "about";
+
+/** Which machine the Agent catalog / probe targets. */
+export type SettingsHostContext =
+	| { kind: "local"; label: string }
+	| {
+			kind: "remote";
+			label: string;
+			sessionId: string;
+			host: string;
+			remotePath: string;
+	  };
 
 const NAV: {
 	id: SettingsSection;
@@ -136,6 +158,8 @@ type SettingsWindowProps = {
 	onClose: () => void;
 	settings: AppSettings;
 	onChange: (next: AppSettings) => void;
+	/** Active vault path — remote handles switch Agent settings to the SSH host. */
+	vaultPath?: string | null;
 };
 
 export function SettingsWindow({
@@ -145,9 +169,17 @@ export function SettingsWindow({
 	onClose,
 	settings,
 	onChange,
+	vaultPath = null,
 }: SettingsWindowProps) {
 	const { t } = useTranslation(["settings", "common"]);
 	const titleId = useId();
+	const [localHostLabel, setLocalHostLabel] = useState(() =>
+		t("host.thisComputer"),
+	);
+	const [localOs, setLocalOs] = useState(() =>
+		normalizeHostOs(getPlatformOS()),
+	);
+	const [remoteOs, setRemoteOs] = useState(() => normalizeHostOs("other"));
 
 	useOverlayRegistration("settings", open, onClose);
 
@@ -159,6 +191,75 @@ export function SettingsWindow({
 			document.body.style.overflow = prev;
 		};
 	}, [open]);
+
+	// Local hostname + OS for the host chip (when vault is local / none).
+	useEffect(() => {
+		if (!open || !isTauri()) return;
+		let cancelled = false;
+		void fetchHostIdentity()
+			.then((h) => {
+				if (cancelled) return;
+				if (h.label.trim()) setLocalHostLabel(h.label.trim());
+				setLocalOs(normalizeHostOs(h.os));
+			})
+			.catch(() => {
+				/* keep fallback */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open]);
+
+	const hostContext = useMemo((): SettingsHostContext => {
+		if (vaultPath && isRemoteVaultHandle(vaultPath)) {
+			const sessionId = remoteSessionIdFromHandle(vaultPath);
+			const meta = getRemoteSessionMeta();
+			if (sessionId && meta && meta.sessionId === sessionId) {
+				const label =
+					meta.host.trim() ||
+					meta.displayName.split(":")[0]?.trim() ||
+					t("host.remote");
+				return {
+					kind: "remote",
+					label,
+					sessionId,
+					host: meta.host,
+					remotePath: meta.remotePath,
+				};
+			}
+			if (sessionId) {
+				return {
+					kind: "remote",
+					label: t("host.remote"),
+					sessionId,
+					host: "",
+					remotePath: "",
+				};
+			}
+		}
+		return { kind: "local", label: localHostLabel };
+	}, [vaultPath, localHostLabel, t]);
+
+	// Remote OS via uname -s (for brand icon on remote host chip).
+	useEffect(() => {
+		if (!open || !isTauri() || hostContext.kind !== "remote") {
+			return;
+		}
+		let cancelled = false;
+		setRemoteOs(normalizeHostOs("other"));
+		void fetchRemoteHostIdentity(hostContext.sessionId)
+			.then((info) => {
+				if (!cancelled) setRemoteOs(normalizeHostOs(info.os));
+			})
+			.catch(() => {
+				if (!cancelled) setRemoteOs(normalizeHostOs("other"));
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, hostContext]);
+
+	const hostOs = hostContext.kind === "remote" ? remoteOs : localOs;
 
 	if (!open) return null;
 
@@ -181,10 +282,10 @@ export function SettingsWindow({
 			>
 				{/* Sidebar — macOS Settings style */}
 				<nav className="flex w-[180px] shrink-0 flex-col border-r bg-muted/40">
-					<div className="flex items-center justify-between px-3 pt-3 pb-2">
+					<div className="flex items-center justify-between gap-1 px-3 pt-3 pb-2">
 						<span
 							id={titleId}
-							className="font-semibold text-[13px] tracking-tight"
+							className="font-semibold text-[13px] leading-none tracking-tight"
 						>
 							{t("title")}
 						</span>
@@ -192,13 +293,14 @@ export function SettingsWindow({
 							type="button"
 							variant="ghost"
 							size="icon-xs"
+							className="shrink-0"
 							aria-label={t("common:close")}
 							onClick={onClose}
 						>
 							<X className="size-3.5" />
 						</Button>
 					</div>
-					<ul className="flex flex-1 flex-col gap-0.5 px-2 pb-3">
+					<ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
 						{NAV.map((item) => {
 							const Icon = item.icon;
 							const active = section === item.id;
@@ -222,20 +324,62 @@ export function SettingsWindow({
 							);
 						})}
 					</ul>
+					{/* Host context — pinned to sidebar footer */}
+					<div
+						className="mt-auto flex items-center gap-1.5 border-t px-3 py-2.5 text-muted-foreground"
+						title={
+							hostContext.kind === "remote"
+								? t("host.remoteTooltip", {
+										host: hostContext.label,
+										path: hostContext.remotePath || "—",
+									})
+								: t("host.localTooltip", { name: hostContext.label })
+						}
+					>
+						<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+							<HostOsIcon
+								os={hostOs}
+								className="block size-3.5"
+								title={
+									hostOs === "macos"
+										? "macOS"
+										: hostOs === "windows"
+											? "Windows"
+											: hostOs === "linux"
+												? "Linux"
+												: undefined
+								}
+							/>
+						</span>
+						<span className="min-w-0 truncate text-[12px] leading-none">
+							{hostContext.label}
+						</span>
+					</div>
 				</nav>
 
 				{/* Content */}
 				<div className="min-w-0 flex-1 overflow-y-auto">
 					<div className="px-6 py-5">
 						{section === "general" && (
-							<GeneralPane settings={settings} patch={patch} />
+							<GeneralPane
+								settings={settings}
+								patch={patch}
+								hostContext={hostContext}
+							/>
 						)}
 						{section === "appearance" && (
 							<AppearancePane settings={settings} patch={patch} />
 						)}
-						{section === "agent" && (
-							<AgentPane settings={settings} patch={patch} />
-						)}
+						{section === "agent" &&
+							(hostContext.kind === "remote" ? (
+								<RemoteAgentPane
+									settings={settings}
+									patch={patch}
+									hostContext={hostContext}
+								/>
+							) : (
+								<AgentPane settings={settings} patch={patch} />
+							))}
 						{section === "translate" && (
 							<TranslatePane
 								settings={settings}
@@ -301,14 +445,24 @@ function SettingsRow({
 function GeneralPane({
 	settings,
 	patch,
+	hostContext,
 }: {
 	settings: AppSettings;
 	patch: (p: Partial<AppSettings>) => void;
+	hostContext: SettingsHostContext;
 }) {
 	const { t } = useTranslation("settings");
 	return (
 		<>
 			<PageTitle title={t("general.title")} />
+			{hostContext.kind === "remote" ? (
+				<p className="mb-3 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2 text-muted-foreground text-xs leading-relaxed">
+					{t("host.remoteContextHint", {
+						host: hostContext.label,
+						path: hostContext.remotePath || "—",
+					})}
+				</p>
+			) : null}
 			<SettingsGroup>
 				<SettingsRow
 					label={t("general.restoreVault.label")}
@@ -719,13 +873,16 @@ function StatusBadge({
 	tone,
 	children,
 	className,
+	title,
 }: {
 	tone: "ok" | "warn" | "err" | "muted" | "primary";
 	children: ReactNode;
 	className?: string;
+	title?: string;
 }) {
 	return (
 		<span
+			title={title}
 			className={cn(
 				"inline-flex shrink-0 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
 				tone === "ok" &&
@@ -2070,6 +2227,318 @@ function AgentPane({
 			</SettingsGroup>
 			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("agent.commonAgentsHint")}
+			</p>
+		</>
+	);
+}
+
+/**
+ * Agent settings when the active vault is remote: discover + ACP probe run on the
+ * SSH host (not this machine). App-level prefs (permission, language) still apply.
+ */
+function RemoteAgentPane({
+	settings,
+	patch,
+	hostContext,
+}: {
+	settings: AppSettings;
+	patch: (p: Partial<AppSettings>) => void;
+	hostContext: Extract<SettingsHostContext, { kind: "remote" }>;
+}) {
+	const { t } = useTranslation(["settings", "agent", "common"]);
+	const [entries, setEntries] = useState<CatalogEntry[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [probingKeys, setProbingKeys] = useState<Set<string>>(() => new Set());
+	const sessionId = hostContext.sessionId;
+
+	const clearProbingKey = useCallback((key: string) => {
+		setProbingKeys((prev) => {
+			if (!prev.has(key)) return prev;
+			const next = new Set(prev);
+			next.delete(key);
+			return next;
+		});
+	}, []);
+
+	const scanOnce = useCallback(async (): Promise<CatalogEntry[] | null> => {
+		if (!isTauri()) {
+			notifyError(t("agent.desktopOnly"));
+			return null;
+		}
+		try {
+			const scan = await remoteAgentScan(sessionId);
+			setEntries(scan.entries);
+			return scan.entries;
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+			return null;
+		}
+	}, [sessionId, t]);
+
+	const patchEntryProbe = useCallback(
+		(templateId: string, result: ProbeResult) => {
+			setEntries((prev) =>
+				prev.map((entry) => {
+					if (entry.templateId !== templateId) return entry;
+					return {
+						...entry,
+						acpStatus: result.available ? "ready" : "failed",
+						acpAgentName: result.agentName ?? null,
+						lastProbeError: result.error ?? null,
+						lastProbedAt: new Date().toISOString(),
+					};
+				}),
+			);
+		},
+		[],
+	);
+
+	const probeInstalled = useCallback(
+		async (list: CatalogEntry[], force: boolean) => {
+			if (!isTauri()) return;
+			const candidates = list.filter((e) => catalogNeedsProbe(e, force));
+			if (candidates.length === 0) {
+				setProbingKeys(new Set());
+				return;
+			}
+			setProbingKeys(
+				new Set(candidates.map((e) => catalogProbeKey(e.templateId))),
+			);
+			await Promise.allSettled(
+				candidates.map(async (entry) => {
+					const key = catalogProbeKey(entry.templateId);
+					try {
+						const result = await remoteAgentProbe(sessionId, entry.templateId);
+						patchEntryProbe(entry.templateId, result);
+					} catch (e) {
+						const err = e instanceof Error ? e.message : String(e);
+						patchEntryProbe(entry.templateId, {
+							agentId: entry.templateId,
+							available: false,
+							error: err,
+						});
+					} finally {
+						clearProbingKey(key);
+					}
+				}),
+			);
+		},
+		[sessionId, patchEntryProbe, clearProbingKey],
+	);
+
+	const rescanAndProbe = useCallback(
+		async (force = false) => {
+			if (!isTauri()) {
+				notifyError(t("agent.desktopOnly"));
+				return;
+			}
+			setLoading(true);
+			try {
+				const list = await scanOnce();
+				if (list) await probeInstalled(list, force);
+			} finally {
+				setLoading(false);
+				setProbingKeys(new Set());
+			}
+		},
+		[probeInstalled, scanOnce, t],
+	);
+
+	// Soft probe when remote session (or rescan callback) changes.
+	useEffect(() => {
+		void rescanAndProbe(false);
+	}, [rescanAndProbe]);
+
+	const busy = loading;
+
+	return (
+		<>
+			<PageTitle title={t("agent.title")} />
+			<p className="mb-3 rounded-lg border border-sky-500/25 bg-sky-500/5 px-3 py-2 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.remote.banner", {
+					host: hostContext.label,
+					path: hostContext.remotePath || "—",
+				})}
+			</p>
+
+			<SettingsGroup>
+				<SettingsRow label={t("agent.permission.label")} htmlFor="agent-perm-r">
+					<Select
+						value={settings.agentPermissionMode}
+						onValueChange={(v) =>
+							patch({ agentPermissionMode: v as AgentPermissionMode })
+						}
+					>
+						<SelectTrigger
+							id="agent-perm-r"
+							size="sm"
+							className="min-w-[140px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="restricted">
+								{t("agent.permission.restricted.label")}
+							</SelectItem>
+							<SelectItem value="ask">
+								{t("agent.permission.ask.label")}
+							</SelectItem>
+							<SelectItem value="auto">
+								{t("agent.permission.auto.label")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.autoPaperReader.label")}
+					htmlFor="agent-auto-paper-reader-r"
+					description={t("agent.autoPaperReader.hint")}
+				>
+					<Switch
+						id="agent-auto-paper-reader-r"
+						checked={settings.autoPaperReader}
+						onCheckedChange={(v) => patch({ autoPaperReader: v })}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("agent.responseLanguage.label")}
+					htmlFor="agent-response-language-r"
+				>
+					<Select
+						value={settings.aiResponseLanguage}
+						onValueChange={(v) =>
+							patch({ aiResponseLanguage: v as AiResponseLanguage })
+						}
+					>
+						<SelectTrigger
+							id="agent-response-language-r"
+							size="sm"
+							className="min-w-[140px]"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="auto">
+								{t("agent.responseLanguage.auto")}
+							</SelectItem>
+							<SelectItem value="en">
+								{t("agent.responseLanguage.en")}
+							</SelectItem>
+							<SelectItem value="zh-CN">
+								{t("agent.responseLanguage.zhCN")}
+							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+			</SettingsGroup>
+
+			{!isTauri() ? (
+				<p className="mb-3 text-muted-foreground text-xs">
+					{t("agent.desktopHint")}
+				</p>
+			) : null}
+
+			<div className="mb-2 flex items-center justify-between gap-2">
+				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					{t("agent.remote.commonAgents")}
+				</p>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-xs"
+					aria-label={t("agent.probe")}
+					title={t("agent.remote.probeTitle")}
+					disabled={busy || !isTauri()}
+					onClick={() => void rescanAndProbe(true)}
+				>
+					{busy ? (
+						<Loader2 className="size-3.5 animate-spin" aria-hidden />
+					) : (
+						<RefreshCw className="size-3.5" aria-hidden />
+					)}
+				</Button>
+			</div>
+
+			<SettingsGroup>
+				{entries.length === 0 && busy ? (
+					<div className="flex items-center gap-2 px-3.5 py-4 text-muted-foreground text-xs">
+						<Loader2 className="size-3.5 animate-spin" aria-hidden />
+						{t("agent.scanning")}
+					</div>
+				) : null}
+				{entries.length === 0 && !busy ? (
+					<p className="px-3.5 py-3 text-muted-foreground text-xs">
+						{t("agent.remote.empty")}
+					</p>
+				) : null}
+				{entries.map((entry) => {
+					const notInstalled =
+						!entry.binaryAvailable && !entry.acpCommandAvailable;
+					const isProbing =
+						probingKeys.has(catalogProbeKey(entry.templateId)) ||
+						(entry.acpStatus === "not-probed" &&
+							(loading || probingKeys.size > 0) &&
+							(entry.binaryAvailable || entry.acpCommandAvailable));
+					return (
+						<div
+							key={entry.templateId}
+							className={cn(
+								"flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0",
+								notInstalled && "opacity-50",
+							)}
+						>
+							<div className="flex min-w-0 flex-1 items-center gap-4">
+								<span
+									className={cn(
+										"w-24 shrink-0 truncate font-medium text-[13px]",
+										notInstalled && "text-muted-foreground",
+									)}
+									title={entry.description || entry.name}
+								>
+									{entry.name}
+								</span>
+								<div className="flex min-w-0 flex-wrap items-center gap-1">
+									{entry.binaryAvailable || entry.acpCommandAvailable ? (
+										<StatusBadge tone="ok">
+											{t("agent.badges.installed")}
+										</StatusBadge>
+									) : (
+										<StatusBadge tone="muted">
+											{t("agent.badges.notInstalled")}
+										</StatusBadge>
+									)}
+									{isProbing ? (
+										<ProbingBadge label={t("agent.probing")} />
+									) : entry.acpStatus === "ready" ? (
+										<StatusBadge
+											tone="ok"
+											title={entry.acpAgentName ?? undefined}
+										>
+											{entry.acpAgentName
+												? `${acpStatusLabel("ready")} · ${entry.acpAgentName}`
+												: acpStatusLabel("ready")}
+										</StatusBadge>
+									) : entry.acpStatus === "failed" ? (
+										<StatusBadge
+											tone="err"
+											title={entry.lastProbeError ?? undefined}
+										>
+											{acpStatusLabel("failed")}
+										</StatusBadge>
+									) : entry.acpStatus === "not-probed" &&
+										(entry.binaryAvailable || entry.acpCommandAvailable) ? (
+										<StatusBadge tone="warn">
+											{acpStatusLabel("not-probed")}
+										</StatusBadge>
+									) : null}
+								</div>
+							</div>
+						</div>
+					);
+				})}
+			</SettingsGroup>
+			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("agent.remote.hint")}
 			</p>
 		</>
 	);

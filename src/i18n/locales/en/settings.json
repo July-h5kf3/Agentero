@@ -1,6 +1,13 @@
 {
 	"title": "Settings",
 	"dismiss": "Dismiss settings",
+	"host": {
+		"thisComputer": "This computer",
+		"remote": "Remote",
+		"localTooltip": "Local host: {{name}}",
+		"remoteTooltip": "Remote host {{host}} · {{path}}",
+		"remoteContextHint": "Vault is open on {{host}} ({{path}}). App appearance stays local; Agent catalog below probes that host when you open the Agent section."
+	},
 	"nav": {
 		"general": "General",
 		"appearance": "Appearance",
@@ -154,6 +161,13 @@
 			"name": "Name",
 			"command": "Command",
 			"args": "Args"
+		},
+		"remote": {
+			"banner": "Probing ACP agents on {{host}}. Binaries must be installed and logged in on the server (PATH / login shell). Codex over pure SSH is not supported yet.",
+			"commonAgents": "Agents on remote host",
+			"probeTitle": "Rescan & probe remote agents",
+			"empty": "No catalog results. Check the SSH session and remote PATH.",
+			"hint": "Refresh runs command -v then ACP initialize over SSH. Install agents on the server; API keys stay on the remote machine (BYOA)."
 		}
 	},
 	"translate": {

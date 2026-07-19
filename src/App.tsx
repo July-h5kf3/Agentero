@@ -3259,6 +3259,7 @@ export default function App() {
 					onClose={closeSettings}
 					settings={settings}
 					onChange={updateSettings}
+					vaultPath={vaultPath}
 				/>
 
 				<ZoteroMigrateDialog
