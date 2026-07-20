@@ -104,6 +104,7 @@ Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_en
 | --- | --- | --- |
 | `paper-reader` | 精读 → `{paper}/NOTES.md` | 本项目维护 |
 | `agentero-cli` | headless `agentero` CLI | 本项目维护 |
+| `vault-normalizer` | 将现有研究目录整理为 Agentero Vault 规范 | 本项目维护 |
 | `idea-evaluator` | 研究 idea 评审 | 来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)（**CC BY-NC-SA 4.0**） |
 | `deep-research` | 综述级文献调研 | 同上 |
 

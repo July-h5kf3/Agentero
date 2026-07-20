@@ -53,6 +53,10 @@ pub const PAPER_READER_SKILL: &str =
 pub const AGENTERO_CLI_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
 
+/// Bundled vault-normalizer skill (directory migration into Agentero layout).
+pub const VAULT_NORMALIZER_SKILL: &str =
+    include_str!("../../../templates/vault/.agents/skills/vault-normalizer/SKILL.md");
+
 /// Bundled idea-evaluator skill (from Supervisor-Skills).
 pub const IDEA_EVALUATOR_SKILL: &str =
     include_str!("../../../templates/vault/.agents/skills/idea-evaluator/SKILL.md");
@@ -75,6 +79,10 @@ fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
         ),
         (".agents/skills/paper-reader/SKILL.md", PAPER_READER_SKILL),
         (".agents/skills/agentero-cli/SKILL.md", AGENTERO_CLI_SKILL),
+        (
+            ".agents/skills/vault-normalizer/SKILL.md",
+            VAULT_NORMALIZER_SKILL,
+        ),
         // idea-evaluator (Supervisor-Skills)
         (
             ".agents/skills/idea-evaluator/SKILL.md",
