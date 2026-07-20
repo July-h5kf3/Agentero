@@ -32,7 +32,6 @@
 - **BibTeX 导出**：随时导出 BibTeX / BibLaTeX，衔接 LaTeX 写作流程。
 - 快捷键与常用软件保持对齐，不改变使用习惯
 
-![demo-1](docs/assets/ui-1.png)
 ![demo-2](docs/assets/ui-2.png)
 ![demo-3](docs/assets/ui-3.png)
 ![demo-4](docs/assets/ui-4.png)
