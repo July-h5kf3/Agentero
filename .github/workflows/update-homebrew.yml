@@ -1,0 +1,121 @@
+name: Update Homebrew Tap
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: poco-ai/homebrew-agentero
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Fetch release assets
+        id: fetch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          mkdir -p tmp
+          cd tmp
+
+          gh release view "$TAG" \
+            --repo "${{ github.repository }}" \
+            --json assets \
+            --jq '.assets[].name' > assets.txt
+
+          echo "Release assets:"
+          cat assets.txt
+
+      - name: Update CLI formula
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.fetch.outputs.version }}"
+          cd tmp
+
+          download_and_hash() {
+            local asset="$1"
+            curl -sL "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${asset}" -o "$asset"
+            sha256sum "$asset" | cut -d' ' -f1
+          }
+
+          update_placeholder() {
+            local placeholder="$1"
+            local sha="$2"
+            sed -i "s/${placeholder}/${sha}/" ../Formula/agentero.rb
+          }
+
+          while IFS= read -r asset; do
+            case "$asset" in
+              agentero-${VERSION}-aarch64-apple-darwin.tar.gz)
+                sha=$(download_and_hash "$asset")
+                update_placeholder "PLACEHOLDER_SHA256_AARCH64_APPLE_DARWIN" "$sha"
+                ;;
+              agentero-${VERSION}-x86_64-apple-darwin.tar.gz)
+                sha=$(download_and_hash "$asset")
+                update_placeholder "PLACEHOLDER_SHA256_X86_64_APPLE_DARWIN" "$sha"
+                ;;
+              agentero-${VERSION}-x86_64-unknown-linux-gnu.tar.gz)
+                sha=$(download_and_hash "$asset")
+                update_placeholder "PLACEHOLDER_SHA256_X86_64_UNKNOWN_LINUX_GNU" "$sha"
+                ;;
+            esac
+          done < assets.txt
+
+          sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" ../Formula/agentero.rb
+
+      - name: Update Cask
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.fetch.outputs.version }}"
+          cd tmp
+
+          has_aarch64=0
+          has_x64=0
+
+          while IFS= read -r asset; do
+            case "$asset" in
+              Agentero_${VERSION}_aarch64.dmg)
+                curl -sL "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${asset}" -o "$asset"
+                sha=$(sha256sum "$asset" | cut -d' ' -f1)
+                sed -i "s/PLACEHOLDER_SHA256_AARCH64_DMG/${sha}/" ../Casks/agentero.rb
+                has_aarch64=1
+                ;;
+              Agentero_${VERSION}_x64.dmg)
+                curl -sL "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${asset}" -o "$asset"
+                sha=$(sha256sum "$asset" | cut -d' ' -f1)
+                sed -i "s/PLACEHOLDER_SHA256_X64_DMG/${sha}/" ../Casks/agentero.rb
+                has_x64=1
+                ;;
+            esac
+          done < assets.txt
+
+          sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" ../Casks/agentero.rb
+
+          if [ "$has_aarch64" -eq 0 ] && [ "$has_x64" -eq 0 ]; then
+            echo "No macOS dmg assets found; skipping cask update."
+          fi
+
+      - name: Commit and push tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/agentero.rb Casks/agentero.rb
+          if git diff --cached --quiet; then
+            echo "No changes to tap."
+            exit 0
+          fi
+          git commit -m "chore: bump agentero to v${{ steps.fetch.outputs.version }}"
+          git push

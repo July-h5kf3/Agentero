@@ -149,12 +149,20 @@ jobs:
           fi
           ls -la "$OUT_DIR"
 
+      - name: Write SHA256 checksum
+        shell: bash
+        run: |
+          cd dist-cli
+          sha256sum "$(basename "$CLI_ASSET")" > "$(basename "$CLI_ASSET").sha256"
+
       - name: Upload CLI to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           draft: true
-          files: ${{ env.CLI_ASSET }}
+          files: |
+            ${{ env.CLI_ASSET }}
+            dist-cli/*.sha256
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
