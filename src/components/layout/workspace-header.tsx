@@ -5,6 +5,7 @@ import {
 	MessageSquareText,
 	PanelLeft,
 	PanelRight,
+	Settings,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DocumentTabBar } from "@/components/layout/document-tab-bar";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
+const SETTINGS_SHORTCUT = formatShortcutById("settings");
 
 type WorkspaceHeaderProps = {
 	isMacDesktop: boolean;
@@ -47,6 +49,7 @@ type WorkspaceHeaderProps = {
 	onToggleRightSidebar: () => void;
 	onToggleAgentZen: () => void;
 	onOpenRightTab: (tab: "agent" | "backlinks" | "annotations") => void;
+	onOpenSettings: () => void;
 };
 
 /** Title-bar row: window chrome, sidebar toggles, document tabs, layout + agent controls. */
@@ -71,6 +74,7 @@ export function WorkspaceHeader({
 	onToggleRightSidebar,
 	onToggleAgentZen,
 	onOpenRightTab,
+	onOpenSettings,
 }: WorkspaceHeaderProps) {
 	const { t } = useTranslation(["app"]);
 
@@ -270,6 +274,33 @@ export function WorkspaceHeader({
 						</div>
 					</>
 				)}
+				{/*
+				  Windows / Linux have no native menu bar, so Settings needs a
+				  visible entry point. Gear sits just left of the caption buttons.
+				*/}
+				{showWindowControls ? (
+					<div className="flex shrink-0 items-center gap-0.5 pl-1">
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="group"
+									aria-label={t("titlebar.settings")}
+									onClick={onOpenSettings}
+								>
+									<Settings className="size-3.5 transition-transform duration-300 ease-out group-hover:rotate-90" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("titlebar.settingsHint", {
+									shortcut: SETTINGS_SHORTCUT,
+								})}
+							</TooltipContent>
+						</Tooltip>
+					</div>
+				) : null}
 				{showWindowControls ? <WindowControls /> : null}
 			</TooltipProvider>
 		</header>

@@ -426,7 +426,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | 顶部菜单栏 **agentero → Settings…**，或 `⌘,`（不在侧边栏放设置图标） |
+| 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`workspace-header.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
 | 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |

@@ -2828,6 +2828,7 @@ export default function App() {
 					onToggleRightSidebar={toggleRightSidebar}
 					onToggleAgentZen={toggleAgentZen}
 					onOpenRightTab={openRightTab}
+					onOpenSettings={openSettings}
 				/>
 
 				<ErrorBoundary label="workspace">
