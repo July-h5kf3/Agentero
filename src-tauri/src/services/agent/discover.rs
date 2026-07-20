@@ -87,18 +87,22 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
     }
 
     for dir in path_entries() {
-        let candidate = dir.join(command);
-        if is_executable(&candidate) {
-            return Some(candidate);
-        }
-        // Windows shims are rarely bare files: try common executable extensions
-        // (npm/pnpm CLIs are usually .cmd, native tools .exe).
+        // On Windows, `npm i -g` drops BOTH a bare shell script (for Git Bash)
+        // and a `.cmd`/`.exe` shim of the same name. The bare file is not a valid
+        // Win32 executable, yet `is_executable` treats any file as runnable, so we
+        // must probe the real Windows entrypoints (PATHEXT-style) FIRST — otherwise
+        // we'd hand the sh script to CreateProcess and the ACP spawn/probe fails
+        // (e.g. `codex-acp`, `claude-agent-acp`).
         #[cfg(windows)]
         for ext in ["exe", "cmd", "bat", "ps1"] {
             let with_ext = dir.join(format!("{command}.{ext}"));
             if is_executable(&with_ext) {
                 return Some(with_ext);
             }
+        }
+        let candidate = dir.join(command);
+        if is_executable(&candidate) {
+            return Some(candidate);
         }
     }
     None
