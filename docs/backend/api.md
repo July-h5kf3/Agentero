@@ -12,7 +12,7 @@ Host (Tauri + Rust)
 ```
 
 - **Frontend ↔ Host**：`invoke('namespace:command')` 请求响应，配合 Tauri event 做进度/流式推送。
-- Host 对通用 provider 作为 **ACP Client**；Codex 使用本机 `codex app-server` 的原生 thread runtime。Frontend 只面对下方 `agent:*` 命令与事件，**不** 直接暴露底层 RPC 细节。
+- Host 对所有 provider（含 Codex）统一作为 **ACP Client**；Codex 经 `@agentclientprotocol/codex-acp` 适配器接入标准 ACP 协议。Frontend 只面对下方 `agent:*` 命令与事件，**不** 直接暴露底层 RPC 细节。
 
 ## 2. 通用约定
 
@@ -62,7 +62,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 #### `agent_warm`
 
-打开 Chat 时后台预热 provider（不发用户 prompt）。ACP provider 通过 `initialize` + `session/new` 获取配置；Codex 通过 `model/list` 获取模型、effort 和 service tier。
+打开 Chat 时后台预热 provider（不发用户 prompt）。所有 provider（含 Codex）通过 ACP `initialize` + `session/new` 获取配置（模型、effort 等经 `SessionConfigOption` 协商）。
 
 - **参数**
 
@@ -159,7 +159,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `remote_cache_clear` | `{ sessionId? }` → `{ freedBytes }` 清除 blob 缓存 |
 | `remote_agent_discover` | 远端 `bash -lc 'command -v …'` |
 | `remote_agent_scan` | 目录模板 + 远端 PATH 扫描 → `CatalogEntry[]`（设置页远端 Agent） |
-| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env；Codex+SSH 拒绝） |
+| `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env） |
 | `remote_agent_open_install_terminal` | 本机终端确认后 `ssh -t` 在远端执行模板 `install_command`（如 Claude ACP 适配器） |
 | `host_identity` | 本机 hostname + `os`（macos/windows/linux）/ 设置 Host 徽章 |
 | `remote_host_identity` | 远端 `uname -s` → `os` 家族（Host 徽章系统图标） |
@@ -182,7 +182,7 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 
 返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
 
-Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP；Codex+纯 SSH 暂不支持。
+Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP（含 Codex，经 `codex-acp` 适配器）。
 
 
 #### `path_open_in_terminal`（已实现）
@@ -1133,14 +1133,14 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_run_once`
 
-通用 ACP provider 创建一次性会话并发送 prompt。Codex 会先创建或恢复原生 thread，再通过 `turn/start` 发送 prompt；每个 turn 的连接结束后，native thread 仍保存在 Codex CLI history 中。
+通用 ACP provider 创建或恢复会话并发送 prompt。所有 provider（含 Codex）统一使用 ACP `session/new` 或 `session/resume` 管理会话；历史经 `session/list` + `session/load` 获取。
 
 - **参数**
 
 ```ts
 {
   agentId?: string;
-  sessionId?: string; // Codex native thread id; other providers currently ignore it
+  sessionId?: string; // ACP session id for resuming a prior session; omit to create new
   prompt: string;
   vaultPath?: string;
   workflow?: string;
@@ -1159,13 +1159,12 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 - **返回**：`{ ok: true, data: { sessionId, messageId, agentId } }`
 
-- **`hideFromChatHistory`**：为 `true` 时，Codex 路径不把该 native thread 记入 `.agentero/agent-sessions/codex.json`，因此默认 `agent_codex_list_threads` 不会列出；前端 Agent 面板也不会把这类流式事件并入对话记录。用于 **paper-reader 精读**、**PDF 划词提问** 等非 Composer 发起的运行。Composer 对话保持默认 `false`。
+- **`hideFromChatHistory`**：为 `true` 时，该次运行不记入会话历史（`agent_list_sessions` 不列出）；前端 Agent 面板也不会把这类流式事件并入对话记录。用于 **paper-reader 精读**、**PDF 划词提问** 等非 Composer 发起的运行。Composer 对话保持默认 `false`。
 
 - **技能上下文**：`agent_list_skills` 列出 `~/.agents/skills`、`${CODEX_HOME:-~/.codex}/skills`、`~/.claude/skills` 和当前 Vault `.agents/skills`。运行时重新解析 id，只读取 `SKILL.md`，单个文件上限 64 KiB，最多加载 5 个。
 - **技能提及按 provider 分流**（`SkillMentionStyle`，见 Host `skills.rs`）：
-  - **Codex** → `$skill-id` 前缀 + 注入正文；
   - **Claude ACP** → `/skill-id` 前缀 + 注入正文；
-  - **其它** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
+  - **其它（含 Codex）** → 仅注入正文（`skill:id` 标签），prompt 明确写明不要依赖 `$`/`/` 运行时命令。
   - Composer 的 `$` 仅是 Agentero UI 选 skill 的方式，不等于每个 Agent 的运行时语法。
 
 - **权限策略**：设置 → Agent 提供全局「权限模式」，对所有 Agent 生效，并在每次运行中通过 `permissionMode` 传入：
@@ -1177,7 +1176,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 - **回答语言**：设置 → Agent 提供全局「回答语言」（自动 / English / 简体中文，独立于界面语言）。前端 `runOnce` 统一读取该设置并透传 `responseLanguage`；Host 在 `build_prompt`（`prompts.rs`）为所有 workflow 追加一句语言指令，`auto` 时不注入。
 - **个人偏好提示词**：设置 → Agent 多行文本（`agentPersonalPrompt`，默认空）。非空时前端 `runOnce` 透传 `personalPrompt`；Host 在 `build_prompt` system envelope 追加 `User preference instructions` 块（所有 workflow）。留空不注入；Chat 展示剥离 envelope，不出现在对话记录。
 
-- **能力边界**：Codex 使用 App Server 的模型目录、reasoning effort 与 service tier；ACP provider 根据 `SessionConfigOption` 协商。Composer 只为当前 provider 已声明的能力显示对应控件。
+- **能力边界**：所有 provider（含 Codex）根据 ACP `SessionConfigOption` 协商模型目录、reasoning effort 与 Fast 等能力。`ProbeResult` 含 `sessionCapabilities` 字段。Composer 只为当前 provider 已声明的能力显示对应控件。
 
 #### `agent_respond_permission`
 
@@ -1186,22 +1185,22 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 - **参数**：`{ request: { requestId: string; optionId: string | null } }`（`optionId = null` 表示取消）
 - **返回**：`{ ok: true, data: { resolved: boolean } }`（`resolved=false` 表示请求已超时/不存在）
 
-#### `agent_codex_list_threads`
+#### `agent_list_sessions`
 
-列出当前 Vault 的原生 Codex thread，按最近活跃时间排序。该命令读取 App Server 的 `thread/list`，不会复制或改写 `~/.codex/sessions`。Agentero 在 `.agentero/agent-sessions/codex.json` 记录自己创建或继续使用的 native thread（**不含** `hideFromChatHistory` 的后台运行）；默认只返回这份索引中的 thread。`includeExternal: true` 时返回当前 Vault 下的全部 Codex thread。
+列出当前 Vault 的 Agent 会话历史（所有 provider 统一）。Host 通过 ACP `session/list` 获取会话列表，按最近活跃时间排序。`hideFromChatHistory` 的后台运行不出现在列表中。
 
 ```ts
-{ agentId?: string; vaultPath?: string; includeExternal?: boolean }
-// -> CodexThreadInfo[]
+{ agentId?: string; vaultPath?: string }
+// -> { ok: true, data: { sessions: AgentSessionInfo[] } }
 ```
 
-#### `agent_codex_read_thread`
+#### `agent_load_session`
 
-按 native thread id 恢复对话显示。Host 用 `thread/read` 校验 thread 与当前 Vault 的 canonical 工作目录，并从对应 Codex JSONL transcript 回放 user、assistant 与 reasoning 文本。**用户轮**经 `strip_prompt_envelope_for_display` 去掉 Host 系统信封，只返回 `User request:` 后的人类原文。默认只允许读取 Vault 索引中的 thread；`includeExternal: true` 可读取同一 Vault 下由其他 Codex 客户端创建的 thread。
+按 ACP session id 恢复对话显示。Host 通过 ACP `session/load` 回放历史消息（user、assistant、reasoning）。**用户轮**经 `strip_prompt_envelope_for_display` 去掉 Host 系统信封，只返回人类原文。所有 provider 统一走此命令。
 
 ```ts
-{ agentId?: string; threadId: string; vaultPath?: string; includeExternal?: boolean }
-// -> { thread: CodexThreadInfo; lines: CodexHistoryLine[] }
+{ agentId?: string; sessionId: string; vaultPath?: string }
+// -> { ok: true, data: { session: AgentSessionInfo; lines: SessionHistoryLine[] } }
 ```
 
 #### `agent_list_skills`

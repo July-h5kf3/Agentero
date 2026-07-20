@@ -41,7 +41,7 @@
 		"description": "此对话中最近的 ACP 会话。",
 		"empty": "暂无会话。",
 		"includeExternal": "外部会话",
-		"includeExternalToggle": "显示外部 Codex 会话",
+		"includeExternalToggle": "显示所有会话",
 		"status": {
 			"running": "运行中",
 			"completed": "已完成",
@@ -70,7 +70,7 @@
 		"mentionEmptyFolder": "此文件夹中没有可选项",
 		"fast": "快速",
 		"fastToggle": "切换快速模式",
-		"effortTooltip": "选择 Codex 推理强度",
+		"effortTooltip": "选择推理强度",
 		"effort": {
 			"label": "推理强度",
 			"max": "最高",

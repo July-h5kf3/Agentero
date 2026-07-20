@@ -4,9 +4,7 @@ use super::agent_exec;
 use super::launch::{resolve_remote_target, RemoteAgentTarget};
 use super::session::{RemoteRegistry, RemoteSession, LOCAL_SIM_HOST};
 use crate::error::AppError;
-use crate::models::agent::{
-    AgentDescriptor, AgentTemplate, CatalogAcpStatus, CatalogEntry, ProbeResult,
-};
+use crate::models::agent::{AgentDescriptor, CatalogAcpStatus, CatalogEntry, ProbeResult};
 use crate::services::agent::probe_agent;
 use crate::services::agent::templates::{catalog_templates, template_from_id, template_info};
 use serde::Serialize;
@@ -104,19 +102,6 @@ pub async fn probe_remote_template(
     let mut desc = descriptor_from_template(&info.id, &info.name, &info.command, &info.args);
     apply_proxy_env(&mut desc, proxy_enabled, proxy_url);
 
-    if desc.template == AgentTemplate::CodexAcp && remote.is_ssh() {
-        return Ok(ProbeResult {
-            agent_id: desc.id,
-            available: false,
-            agent_name: None,
-            protocol_version: None,
-            error: Some(
-                "Codex on remote SSH vault is not supported yet; use an ACP agent installed on the server"
-                    .into(),
-            ),
-        });
-    }
-
     // Ensure binaries exist before full ACP handshake (faster fail + clearer errors).
     let detect_bin = info
         .detect_command
@@ -147,6 +132,7 @@ pub async fn probe_remote_template(
                 agent_name: None,
                 protocol_version: None,
                 error: Some(format!("`{detect_bin}` not found on remote PATH")),
+                session_capabilities: None,
             });
         }
         if detect_ok && !acp_ok {
@@ -166,6 +152,7 @@ pub async fn probe_remote_template(
                 error: Some(format!(
                     "ACP entrypoint `{acp_bin}` not found on remote PATH (host CLI `{detect_bin}` is present).{hint}"
                 )),
+                session_capabilities: None,
             });
         }
     } else if which::which(detect_bin).is_err() && which::which(acp_bin).is_err() {
@@ -175,6 +162,7 @@ pub async fn probe_remote_template(
             agent_name: None,
             protocol_version: None,
             error: Some(format!("`{detect_bin}` not found on PATH")),
+            session_capabilities: None,
         });
     }
 

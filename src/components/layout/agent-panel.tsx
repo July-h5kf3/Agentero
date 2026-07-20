@@ -137,7 +137,6 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
@@ -155,7 +154,6 @@ import {
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
-	listCodexThreads,
 	listenAgentCompleted,
 	listenAgentEffort,
 	listenAgentFailed,
@@ -165,17 +163,16 @@ import {
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
-	loadExternalCodexHistoryPref,
+	listSessions,
 	loadModelCatalog,
 	loadModelFavorites,
 	loadModelPref,
+	loadSession,
 	type NotesReview,
 	type PermissionRequest,
-	readCodexThread,
 	respondPermission,
 	revertNote,
 	runOnce,
-	saveExternalCodexHistoryPref,
 	saveModelCatalog,
 	saveModelFavorites,
 	saveModelPref,
@@ -752,8 +749,6 @@ export function AgentPanel({
 	const [reasoningEffort, setReasoningEffort] = useState<string | null>(null);
 	const [fastAvailable, setFastAvailable] = useState(false);
 	const [fastEnabled, setFastEnabled] = useState(false);
-	const [includeExternalCodexHistory, setIncludeExternalCodexHistory] =
-		useState(false);
 	const [composerMenuDismissed, setComposerMenuDismissed] = useState(false);
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
@@ -803,7 +798,6 @@ export function AgentPanel({
 	const thinkParsersRef = useRef(new Map<string, ThinkTagParser>());
 	const sessionHistoryRef = useRef<ChatSessionHistoryItem[]>([]);
 	const vaultPathRef = useRef(vaultPath);
-	const includeExternalCodexHistoryRef = useRef(includeExternalCodexHistory);
 	const sessionContextGenRef = useRef(0);
 	const previousVaultPathRef = useRef(vaultPath);
 
@@ -914,11 +908,6 @@ export function AgentPanel({
 	}, [vaultPath]);
 
 	useEffect(() => {
-		includeExternalCodexHistoryRef.current = includeExternalCodexHistory;
-		historyHydrationGenRef.current += 1;
-	}, [includeExternalCodexHistory]);
-
-	useEffect(() => {
 		if (previousVaultPathRef.current === vaultPath) return;
 		previousVaultPathRef.current = vaultPath;
 		for (const session of sessionHistoryRef.current) {
@@ -964,7 +953,6 @@ export function AgentPanel({
 			setFastEnabled(false);
 			setUsage(null);
 			setUsageBySession({});
-			setIncludeExternalCodexHistory(false);
 			return;
 		}
 		setEffortOptions([]);
@@ -973,9 +961,6 @@ export function AgentPanel({
 		setFastEnabled(false);
 		setUsage(null);
 		setUsageBySession({});
-		setIncludeExternalCodexHistory(
-			loadExternalCodexHistoryPref(selectedAgentId),
-		);
 		setFavoriteIds(loadModelFavorites(selectedAgentId));
 		const catalog = loadModelCatalog(selectedAgentId);
 		const pref = loadModelPref(selectedAgentId);
@@ -1389,37 +1374,21 @@ export function AgentPanel({
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
-	const selectedTemplate =
-		selected?.templateId ??
-		registry?.agents.find((agent) => agent.id === selectedAgentId)?.template ??
-		null;
-	const isCodexAgent = selectedTemplate === "codex-acp";
+	const [supportsResume, setSupportsResume] = useState(false);
 
-	const loadCodexHistory = useCallback(async () => {
-		if (!isTauri() || !isCodexAgent || !selectedAgentId) return;
+	const loadAgentHistory = useCallback(async () => {
+		if (!isTauri() || !selectedAgentId) return;
 		const generation = ++historyGenRef.current;
 		try {
-			const [threads, indexedThreads] = await Promise.all([
-				listCodexThreads({
-					agentId: selectedAgentId,
-					vaultPath: vaultPath ?? undefined,
-					includeExternal: includeExternalCodexHistory,
-				}),
-				includeExternalCodexHistory
-					? listCodexThreads({
-							agentId: selectedAgentId,
-							vaultPath: vaultPath ?? undefined,
-							includeExternal: false,
-						})
-					: Promise.resolve(null),
-			]);
+			const result = await listSessions({
+				agentId: selectedAgentId,
+				vaultPath: vaultPath ?? undefined,
+			});
 			if (generation !== historyGenRef.current) return;
-			const indexedIds = new Set(
-				(indexedThreads ?? threads).map((thread) => thread.id),
-			);
-			// Drop paper-reader / other non-composer workflows (legacy index + title heuristic).
-			const chatThreads = threads.filter(
-				(thread) => !isBackgroundWorkflowHistoryTitle(thread.title),
+			setSupportsResume(result.supported);
+			if (!result.supported) return;
+			const chatSessions = result.sessions.filter(
+				(s) => !isBackgroundWorkflowHistoryTitle(s.title ?? ""),
 			);
 			setSessionHistory((prev) => {
 				const existing = new Map(
@@ -1427,45 +1396,47 @@ export function AgentPanel({
 						.filter((item) => item.agentId === selectedAgentId)
 						.map((item) => [item.id, item]),
 				);
-				const imported = chatThreads.map((thread) => {
-					const current = existing.get(thread.id);
-					const source: ChatSessionHistoryItem["source"] =
-						current?.source === "local"
-							? "local"
-							: indexedIds.has(thread.id)
-								? "indexed"
-								: "external";
-					const startedAt = (() => {
-						const timestamp = Number(thread.updatedAt ?? thread.createdAt);
-						return Number.isFinite(timestamp)
-							? new Date(timestamp * 1000).toLocaleString(i18n.language)
-							: "";
-					})();
+				const imported = chatSessions.map((session) => {
+					const current = existing.get(session.sessionId);
+					const startedAt = session.updatedAt
+						? new Date(session.updatedAt).toLocaleString(i18n.language)
+						: "";
 					if (current) {
 						const title =
 							current.lines.length > 0
 								? current.title
-								: displayHistoryTitle(thread.title, thread.id.slice(0, 8));
+								: displayHistoryTitle(
+										session.title ?? "",
+										session.sessionId.slice(0, 8),
+									);
 						return {
 							...current,
-							source,
-							agentName: selected?.name ?? "Codex",
+							source:
+								current.source === "local"
+									? ("local" as const)
+									: ("external" as const),
+							agentName: selected?.name ?? "Agent",
 							title,
 							startedAt: current.startedAt || startedAt,
 						};
 					}
 					return {
-						id: thread.id,
+						id: session.sessionId,
 						agentId: selectedAgentId,
-						source,
-						title: displayHistoryTitle(thread.title, thread.id.slice(0, 8)),
-						agentName: selected?.name ?? "Codex",
+						source: "external" as const,
+						title: displayHistoryTitle(
+							session.title ?? "",
+							session.sessionId.slice(0, 8),
+						),
+						agentName: selected?.name ?? "Agent",
 						startedAt,
 						lines: [],
 						status: "completed" as const,
 					};
 				});
-				const importedIds = new Set(chatThreads.map((thread) => thread.id));
+				const importedIds = new Set(
+					chatSessions.map((session) => session.sessionId),
+				);
 				const localOnly = prev.filter(
 					(item) =>
 						item.agentId === selectedAgentId &&
@@ -1479,21 +1450,14 @@ export function AgentPanel({
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
 		}
-	}, [
-		includeExternalCodexHistory,
-		i18n.language,
-		isCodexAgent,
-		selected?.name,
-		selectedAgentId,
-		vaultPath,
-	]);
+	}, [i18n.language, selected?.name, selectedAgentId, vaultPath]);
 
 	useEffect(() => {
-		void loadCodexHistory();
+		void loadAgentHistory();
 		return () => {
 			historyGenRef.current += 1;
 		};
-	}, [loadCodexHistory]);
+	}, [loadAgentHistory]);
 
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
@@ -1752,7 +1716,7 @@ export function AgentPanel({
 		setModelId(id);
 		if (!selectedAgentId) return;
 		saveModelPref(selectedAgentId, id);
-		if (!isTauri() || !isCodexAgent || !agentListenersReady) return;
+		if (!isTauri() || !agentListenersReady) return;
 
 		const agentId = selectedAgentId;
 		const requestVaultPath = vaultPath;
@@ -2027,12 +1991,12 @@ export function AgentPanel({
 			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
 			const sessionStartLines = [...(baseLinesOverride ?? lines), userLine];
 			setLines(sessionStartLines);
-			pendingSubmissionSessionIdRef.current = isCodexAgent
+			pendingSubmissionSessionIdRef.current = supportsResume
 				? activeConversationRef.current
 				: null;
 			const accepted = await runOnce({
 				agentId,
-				sessionId: isCodexAgent
+				sessionId: supportsResume
 					? (activeConversationRef.current ?? undefined)
 					: undefined,
 				prompt,
@@ -2040,9 +2004,8 @@ export function AgentPanel({
 				workflow: workflow ?? "free",
 				target: workflowTarget,
 				modelId: modelId ?? undefined,
-				reasoningEffort:
-					isCodexAgent && reasoningEffort ? reasoningEffort : undefined,
-				fastMode: isCodexAgent && fastAvailable ? fastEnabled : undefined,
+				reasoningEffort: reasoningEffort ?? undefined,
+				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: submittedComposerState.selectedSkillIds,
 				autoApprove: loadSettings().agentPermissionMode === "auto",
 				permissionMode: loadSettings().agentPermissionMode,
@@ -2079,7 +2042,7 @@ export function AgentPanel({
 				}
 				return { ...line };
 			});
-			if (isCodexAgent) activeConversationRef.current = accepted.sessionId;
+			if (supportsResume) activeConversationRef.current = accepted.sessionId;
 			completeComposerSubmission(accepted.sessionId, submittedComposerState);
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
@@ -2371,22 +2334,6 @@ export function AgentPanel({
 		activeConversationRef.current = null;
 	};
 
-	const setIncludeExternalHistory = (enabled: boolean) => {
-		if (submittingRef.current) return;
-		historyHydrationGenRef.current += 1;
-		includeExternalCodexHistoryRef.current = enabled;
-		if (!enabled) {
-			const active = sessionHistory.find((item) => item.id === activeTabId);
-			if (active?.source === "external" && active.status !== "running") {
-				newConversation();
-			}
-		}
-		setIncludeExternalCodexHistory(enabled);
-		if (selectedAgentId) {
-			saveExternalCodexHistoryPref(selectedAgentId, enabled);
-		}
-	};
-
 	/** Strip Host/Codex machine envelopes so Chat never shows system preamble. */
 	const sanitizeChatLines = (raw: ChatLine[]): ChatLine[] =>
 		raw
@@ -2401,34 +2348,30 @@ export function AgentPanel({
 		if (submittingRef.current) return;
 		const hydrationGeneration = ++historyHydrationGenRef.current;
 		setHistoryOpen(false);
-		if (!isCodexAgent || item.lines.length > 0) {
+		if (!supportsResume || item.lines.length > 0) {
 			activateComposerSession(item.id);
-			// Re-sanitize cached lines (older sessions may still hold envelopes).
 			setLines(sanitizeChatLines(item.lines));
 			activeTabRef.current = item.id;
 			setActiveTabId(item.id);
-			if (isCodexAgent) {
+			if (supportsResume) {
 				activeConversationRef.current = item.id;
 			}
 			return;
 		}
 		const requestAgentId = selectedAgentId;
 		const requestVaultPath = vaultPath;
-		const requestIncludeExternal = includeExternalCodexHistory;
 		if (!requestAgentId) return;
 		void (async () => {
 			try {
-				const history = await readCodexThread({
+				const history = await loadSession({
 					agentId: requestAgentId,
-					threadId: item.id,
+					sessionId: item.id,
 					vaultPath: requestVaultPath ?? undefined,
-					includeExternal: requestIncludeExternal,
 				});
 				if (
 					hydrationGeneration !== historyHydrationGenRef.current ||
 					selectedAgentIdRef.current !== requestAgentId ||
-					vaultPathRef.current !== requestVaultPath ||
-					includeExternalCodexHistoryRef.current !== requestIncludeExternal
+					vaultPathRef.current !== requestVaultPath
 				) {
 					return;
 				}
@@ -2464,8 +2407,8 @@ export function AgentPanel({
 				const firstUser = nextLines.find((l) => l.kind === "user");
 				const titleFromBody =
 					firstUser?.kind === "user"
-						? displayHistoryTitle(firstUser.text, history.thread.title)
-						: displayHistoryTitle(history.thread.title);
+						? displayHistoryTitle(firstUser.text, history.title ?? "")
+						: displayHistoryTitle(history.title ?? "");
 				setSessionHistory((prev) =>
 					prev.map((entry) =>
 						entry.id === item.id && entry.agentId === requestAgentId
@@ -2486,8 +2429,7 @@ export function AgentPanel({
 				if (
 					hydrationGeneration !== historyHydrationGenRef.current ||
 					selectedAgentIdRef.current !== requestAgentId ||
-					vaultPathRef.current !== requestVaultPath ||
-					includeExternalCodexHistoryRef.current !== requestIncludeExternal
+					vaultPathRef.current !== requestVaultPath
 				) {
 					return;
 				}
@@ -2532,18 +2474,7 @@ export function AgentPanel({
 		);
 	});
 
-	const externalHistoryToggle = isCodexAgent ? (
-		<div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-			<span>{t("history.includeExternal")}</span>
-			<Switch
-				size="sm"
-				checked={includeExternalCodexHistory}
-				disabled={submitting}
-				onCheckedChange={setIncludeExternalHistory}
-				aria-label={t("history.includeExternalToggle")}
-			/>
-		</div>
-	) : null;
+	const externalHistoryToggle = null;
 
 	const agentSwitcher = (
 		<DropdownMenu>
@@ -3610,7 +3541,7 @@ export function AgentPanel({
 											</ModelSelectorList>
 										</ModelSelectorContent>
 									</ModelSelector>
-									{isCodexAgent && effortOptionsInDisplayOrder.length > 0 ? (
+									{effortOptionsInDisplayOrder.length > 0 ? (
 										<DropdownMenu>
 											<DropdownMenuTrigger asChild>
 												<PromptInputButton
@@ -3664,7 +3595,7 @@ export function AgentPanel({
 											</ContextContent>
 										</Context>
 									) : null}
-									{isCodexAgent && fastAvailable ? (
+									{fastAvailable ? (
 										<PromptInputButton
 											type="button"
 											className={cn(

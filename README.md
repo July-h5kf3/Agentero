@@ -1,4 +1,8 @@
-# Agentero
+<p align="center">
+  <img src="src/assets/agentero-logo.svg" alt="Agentero" width="120" />
+</p>
+
+<h1 align="center">Agentero</h1>
 
 <p align="center">
   <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://img.shields.io/github/stars/poco-ai/agentero?style=flat&logo=github" alt="GitHub stars" /></a>

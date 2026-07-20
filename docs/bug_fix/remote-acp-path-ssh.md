@@ -162,7 +162,7 @@ npm i -g @agentclientprotocol/claude-agent-acp --prefix "$HOME/.local"
 
 4. 安装后应用内 **Refresh**；改代理后会 force 再 probe。
 
-5. Codex + 纯 SSH 仍不支持；用 OpenCode / Claude ACP 等。
+5. Codex 现已通过 ACP 适配器（`codex-acp`）支持纯 SSH。
 
 ---
 

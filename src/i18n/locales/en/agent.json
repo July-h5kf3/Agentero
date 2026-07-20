@@ -41,7 +41,7 @@
 		"description": "Recent ACP sessions in this chat.",
 		"empty": "No sessions yet.",
 		"includeExternal": "External",
-		"includeExternalToggle": "Include external Codex sessions",
+		"includeExternalToggle": "Include all sessions",
 		"status": {
 			"running": "Running",
 			"completed": "Completed",
@@ -70,7 +70,7 @@
 		"mentionEmptyFolder": "No items in this folder",
 		"fast": "Fast",
 		"fastToggle": "Toggle Fast mode",
-		"effortTooltip": "Select Codex reasoning effort",
+		"effortTooltip": "Select reasoning effort",
 		"effort": {
 			"label": "Effort",
 			"max": "Max",
