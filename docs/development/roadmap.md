@@ -15,7 +15,7 @@
 |---|---|---|
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
-| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Qoder、Grok、自定义）+ Codex 原生 App Server thread/history；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**；非 Codex 历史持久化见 [#33](https://github.com/poco-ai/Agentero/issues/33)。 |
+| V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Codex、Qoder、Grok、自定义）统一 ACP 协议（Codex 经 `@agentclientprotocol/codex-acp` 适配器）；**统一会话历史**（`agent_list_sessions` / `agent_load_session`，ACP `session/list` + `session/load`）；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**`.md` 变更防抖重建索引**（`scheduleWikiRebuild`，~900ms）；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
@@ -118,11 +118,11 @@
 关键交付：
 
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
-- [x] Codex 原生 runtime：`codex app-server` 的 thread start/resume、流式 turn、原生 history 列表与 JSONL transcript 回放；不再经 ACP adapter 启动 Codex。
+- [x] Codex ACP 迁移：经 `@agentclientprotocol/codex-acp`（npm）适配器接入标准 ACP 协议；原生 `codex app-server` 模块（`src-tauri/src/services/agent/codex/`）已删除；`agent_codex_list_threads` / `agent_codex_read_thread` 由统一的 `agent_list_sessions` / `agent_load_session` 替代。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Agentero **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
-- [x] Codex 会话配置：仅在 Codex provider 上按 App Server 模型目录显示并应用 reasoning effort 与 Fast。
+- [x] 会话配置能力：所有 provider（含 Codex）经 ACP `SessionConfigOption` 协商模型、reasoning effort 与 Fast；Composer 按已声明能力显示控件。
 - [x] **全局权限模式**：设置 → Agent（`agentPermissionMode`：`restricted` 默认 / `ask` / `auto`）；对所有 Agent 生效；经 `permissionMode` 传入 `agent_run_once`。
 - [x] **「每次询问」档**：`ask` 时每个 ACP 权限请求 emit `agent:permission-request`，前端对话框（Allow once / Always / Reject）→ `agent_respond_permission`（5 分钟超时取消）。
 - [x] Agent 输出期间 Composer 仍可编辑；按 `Esc` 会取消当前 ACP session 并保留已输出内容。
@@ -133,7 +133,7 @@
 - [x] **paper-reader 精读工作流**：
   - 设置 `autoPaperReader`（**默认关**）开启时，魔棒入库 / 单篇 Download 资源就绪且 `is_read=false` 可自动启动（批量导入/批量 Download **不**连跑）。
   - 资源齐全且未读时文件树 **Zap** 可手动重跑。
-  - skill（**provider 分流：Codex `$` / Claude `/` / 其它注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
+  - skill（**provider 分流：Claude `/` / 其它（含 Codex）注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [x] **面板内置工作流入口**（建议 chips → 后端 workflow）：Summarize → `summary`；Ask library / List claims → `qa`；Draft Related Work → `related_work`；目标为当前聚焦 paper（提及路径或选中路径）。引用类 workflow 见 V0.7。
 - [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端**统一 Diff**（`NotesReviewDiff`），**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
@@ -161,8 +161,8 @@
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
 - [x] 接入 ACP 权限确认 UI（「每次询问」档）。
 - [x] 笔记写后 diff/preview 审阅（Keep / Revert）；写前草稿拦截仍待（若 BYOA 可支持）。
-- [x] Codex 会话恢复：按 Vault 过滤原生 Codex thread，恢复后继续使用同一 thread id。
-- [ ] 为通用 ACP provider 定义持久 runtime 与原生 history 契约；当前 ACP 会话仍是一次性连接。
+- [x] Codex 会话恢复：经 ACP `session/resume` 统一恢复，与所有 provider 一致。
+- [x] 为通用 ACP provider 定义持久 session 与历史契约：`agent_list_sessions` / `agent_load_session`（ACP `session/list` + `session/load`）。
 - [ ] Agent 输出期间的后续交互：普通 Agent 排队下一条消息，Codex 支持 guide / 引导消息。
 
 ## V0.4 双链、反链与图谱
@@ -438,7 +438,7 @@
 
 ### Milestone C：Agent 可协作 🟡
 
-包含 V0.3。**已可用**：ACP/Codex 连接、paper-reader、面板 workflow、权限三档、笔记写后审阅。**仍待**：`AGENTS.md` 自动注入、通用 ACP 持久 session、写前草稿拦截。
+包含 V0.3。**已可用**：ACP 连接（含 Codex 经 `codex-acp` 适配器）、统一会话历史、paper-reader、面板 workflow、权限三档、笔记写后审阅。**仍待**：`AGENTS.md` 自动注入、写前草稿拦截。
 
 ### Milestone D：知识可导航 ✅
 
@@ -511,13 +511,13 @@
 
 ### Agent provider 后续改造
 
-Codex 的原生 thread runtime 是 provider 专属实现，不应把其命令、history 文件或配置能力抽象成所有 agent 的默认行为。后续按 provider 的真实能力逐项接入：
+Codex 已迁移至标准 ACP（经 `@agentclientprotocol/codex-acp`），不再有特殊原生 runtime。后续按 provider 的真实能力逐项接入：
 
 - [ ] Claude Code：评估官方 SDK / 原生 session resume，保存 native session id，接入其历史和权限请求；不能时继续走 ACP 单轮模式。
 - [ ] OpenCode：使用其原生 session API / ACP 能力确认持久会话、模型目录、权限与 history 的可用接口。
 - [ ] Gemini CLI：确认 experimental ACP 的 session lifecycle 和恢复语义；在稳定前仅提供一次性 ACP run。
 - [ ] Qoder CLI、Grok Build 与 Custom ACP：只暴露 ACP 已声明的能力；增加 capability discovery，避免展示不受支持的模型、effort、Fast 或 history 控件。
-- [ ] 建立 provider capability contract：`persistentRuntime`、`nativeHistory`、`modelCatalog`、`reasoningEffort`、`serviceTier`、`permissionRequests`、`skillPicker`。Composer 仅按当前 provider 的能力显示对应组件；**全局权限模式**已对所有 Agent 生效，不在 per-provider 能力表重复。
+- [x] 建立 provider capability contract：`ProbeResult.sessionCapabilities` 驱动 Composer 控件显示；**全局权限模式**已对所有 Agent 生效，不在 per-provider 能力表重复。
 
 ### 长期优先级 P2
 
