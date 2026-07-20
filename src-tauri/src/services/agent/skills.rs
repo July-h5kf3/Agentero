@@ -25,10 +25,11 @@ pub enum SkillMentionStyle {
 /// Map Agentero agent template → native skill mention style.
 pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
     match template {
-        AgentTemplate::CodexAcp => SkillMentionStyle::Dollar,
         AgentTemplate::ClaudeAcp => SkillMentionStyle::Slash,
-        // OpenCode / Gemini / Qoder / Grok / custom: Agentero injection is the reliable path.
+        // All other agents (OpenCode / Codex ACP / Gemini / Qoder / Grok / custom):
+        // Agentero injection is the reliable path.
         AgentTemplate::Opencode
+        | AgentTemplate::CodexAcp
         | AgentTemplate::Gemini
         | AgentTemplate::QoderCli
         | AgentTemplate::GrokBuild
@@ -240,17 +241,11 @@ mod tests {
     }
 
     #[test]
-    fn codex_uses_dollar_mentions() {
+    fn codex_uses_injected_mentions() {
         assert_eq!(
             skill_mention_style(&AgentTemplate::CodexAcp),
-            SkillMentionStyle::Dollar
+            SkillMentionStyle::InjectedOnly
         );
-        assert_eq!(
-            format_skill_mention("paper-reader", SkillMentionStyle::Dollar),
-            "$paper-reader"
-        );
-        let prefix = skill_activation_prefix(&["paper-reader".into()], SkillMentionStyle::Dollar);
-        assert!(prefix.starts_with("$paper-reader"));
     }
 
     #[test]

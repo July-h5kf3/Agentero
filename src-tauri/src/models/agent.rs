@@ -203,6 +203,8 @@ pub struct ProbeResult {
     pub protocol_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_capabilities: Option<AcpSessionCapabilities>,
 }
 
 /// Base64 image payload for multimodal ACP prompts (PDF region crops, etc.).
@@ -219,8 +221,8 @@ pub struct PromptImage {
 pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
-    /// Native provider conversation id. Codex maps this to its durable thread id;
-    /// ACP providers intentionally ignore it until they gain persistent runtimes.
+    /// ACP session id for multi-turn: when provided, `session/resume` is used
+    /// instead of `session/new` so the agent retains conversation context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub prompt: String,
@@ -261,7 +263,7 @@ pub struct RunOnceRequest {
     /// Injected into the Host prompt envelope; empty / omitted = off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personal_prompt: Option<String>,
-    /// When true, do not list this Codex thread in Agent chat history
+    /// When true, do not list this session in Agent chat history
     /// (paper-reader and other non-composer workflows).
     #[serde(default)]
     pub hide_from_chat_history: bool,
@@ -444,4 +446,59 @@ pub struct WarmResult {
 pub struct AgentFailedEvent {
     pub session_id: String,
     pub error: String,
+}
+
+/// A single session entry from ACP `session/list`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpSessionInfo {
+    pub session_id: String,
+    pub cwd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
+/// Response for `agent_list_sessions`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpListSessionsResult {
+    pub sessions: Vec<AcpSessionInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    /// Whether the agent advertised session.list capability.
+    pub supported: bool,
+}
+
+/// A single history line reconstructed from ACP `session/load` replay.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpHistoryLine {
+    pub id: String,
+    /// "user" | "agent"
+    pub kind: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+}
+
+/// Response for `agent_load_session`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpLoadSessionResult {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub lines: Vec<AcpHistoryLine>,
+}
+
+/// Session capabilities advertised by an ACP agent during initialize.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpSessionCapabilities {
+    pub list: bool,
+    pub resume: bool,
+    pub load: bool,
+    pub delete: bool,
 }

@@ -78,38 +78,52 @@ export type CatalogScanResponse = {
 	proxyUrl: string;
 };
 
+export type AcpSessionCapabilities = {
+	list: boolean;
+	resume: boolean;
+	load: boolean;
+	delete: boolean;
+};
+
 export type ProbeResult = {
 	agentId: string;
 	available: boolean;
 	agentName?: string | null;
 	protocolVersion?: string | null;
 	error?: string | null;
+	sessionCapabilities?: AcpSessionCapabilities | null;
 };
 
-export type RunOnceAccepted = {
+export type AcpSessionInfo = {
 	sessionId: string;
-	messageId: string;
-	agentId: string;
-};
-
-export type CodexThreadInfo = {
-	id: string;
-	title: string;
-	createdAt?: string | null;
+	cwd: string;
+	title?: string | null;
 	updatedAt?: string | null;
-	cwd?: string | null;
 };
 
-export type CodexHistoryLine = {
+export type AcpListSessionsResult = {
+	sessions: AcpSessionInfo[];
+	nextCursor?: string | null;
+	supported: boolean;
+};
+
+export type AcpHistoryLine = {
 	id: string;
 	kind: "user" | "agent";
 	text: string;
 	reasoning?: string | null;
 };
 
-export type CodexThreadHistory = {
-	thread: CodexThreadInfo;
-	lines: CodexHistoryLine[];
+export type AcpLoadSessionResult = {
+	sessionId: string;
+	title?: string | null;
+	lines: AcpHistoryLine[];
+};
+
+export type RunOnceAccepted = {
+	sessionId: string;
+	messageId: string;
+	agentId: string;
 };
 
 export type AgentSkill = {
@@ -418,29 +432,29 @@ export async function runOnce(request: {
 	});
 }
 
-export async function listCodexThreads(request: {
+/** List ACP sessions for an agent via `session/list`. */
+export async function listSessions(request: {
 	agentId?: string;
 	vaultPath?: string;
-	includeExternal?: boolean;
-}): Promise<CodexThreadInfo[]> {
-	return invokeApi("agent_codex_list_threads", {
+	cursor?: string;
+}): Promise<AcpListSessionsResult> {
+	return invokeApi("agent_list_sessions", {
 		agentId: request.agentId ?? null,
 		vaultPath: request.vaultPath ?? null,
-		includeExternal: request.includeExternal ?? false,
+		cursor: request.cursor ?? null,
 	});
 }
 
-export async function readCodexThread(request: {
+/** Load an ACP session's history via `session/load`. */
+export async function loadSession(request: {
 	agentId?: string;
-	threadId: string;
+	sessionId: string;
 	vaultPath?: string;
-	includeExternal?: boolean;
-}): Promise<CodexThreadHistory> {
-	return invokeApi("agent_codex_read_thread", {
+}): Promise<AcpLoadSessionResult> {
+	return invokeApi("agent_load_session", {
 		agentId: request.agentId ?? null,
-		threadId: request.threadId,
+		sessionId: request.sessionId,
 		vaultPath: request.vaultPath ?? null,
-		includeExternal: request.includeExternal ?? false,
 	});
 }
 
@@ -606,8 +620,6 @@ export function saveModelFavorites(agentId: string, ids: string[]): void {
 }
 
 const MODEL_CATALOG_KEY = "agentero-agent-model-catalog";
-const EXTERNAL_CODEX_HISTORY_PREF_KEY =
-	"agentero-agent-external-codex-history-pref";
 
 export type CachedModelCatalog = {
 	configId: string;
@@ -641,33 +653,6 @@ export function saveModelCatalog(
 		>;
 		map[agentId] = catalog;
 		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
-}
-
-/** Persist whether a Codex registration includes non-Agentero Vault threads. */
-export function loadExternalCodexHistoryPref(agentId: string | null): boolean {
-	if (!agentId) return false;
-	try {
-		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
-		if (!raw) return false;
-		const map = JSON.parse(raw) as Record<string, boolean>;
-		return map[agentId] === true;
-	} catch {
-		return false;
-	}
-}
-
-export function saveExternalCodexHistoryPref(
-	agentId: string,
-	enabled: boolean,
-): void {
-	try {
-		const raw = localStorage.getItem(EXTERNAL_CODEX_HISTORY_PREF_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<string, boolean>;
-		map[agentId] = enabled;
-		localStorage.setItem(EXTERNAL_CODEX_HISTORY_PREF_KEY, JSON.stringify(map));
 	} catch {
 		// ignore
 	}

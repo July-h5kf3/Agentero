@@ -1,7 +1,6 @@
 pub mod acp;
 #[cfg(test)]
 mod acp_tests;
-pub mod codex;
 pub mod discover;
 mod events;
 pub mod permission;
@@ -11,10 +10,9 @@ pub mod runtime;
 pub mod skills;
 pub mod templates;
 
-pub use acp::{new_ids, probe_agent, run_once, warm_agent, PermissionPolicy};
-pub use codex::{
-    codex_list_threads, codex_read_thread, prepare_codex_thread, probe_codex, run_codex_turn,
-    warm_codex,
+pub use acp::{
+    list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, warm_agent,
+    PermissionPolicy,
 };
 pub use events::AgentEventEmitter;
 pub use permission::PermissionGate;

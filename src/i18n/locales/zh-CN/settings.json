@@ -168,7 +168,7 @@
 			"args": "参数"
 		},
 		"remote": {
-			"banner": "正在探测 {{host}} 上的 ACP Agent。二进制需在服务器安装并完成登录（login shell PATH）。纯 SSH 下暂不支持 Codex。",
+			"banner": "正在探测 {{host}} 上的 ACP Agent。二进制需在服务器安装并完成登录（login shell PATH）。",
 			"commonAgents": "远端主机上的 Agent",
 			"probeTitle": "重新扫描并探测远端 Agent",
 			"empty": "没有目录结果。请检查 SSH 会话与远端 PATH。",

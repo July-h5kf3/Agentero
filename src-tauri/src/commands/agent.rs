@@ -1,16 +1,12 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::agent::{
-    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplate, AgentTemplateInfo,
-    CatalogScanResponse, ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest,
-    WarmRequest, WarmResult,
+    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplateInfo, CatalogScanResponse,
+    ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
-use crate::services::agent::codex::{CodexThreadHistory, CodexThreadInfo};
 use crate::services::agent::templates::template_info;
 use crate::services::agent::{
-    builtin_templates, codex_list_threads, codex_read_thread, list_agent_skills, new_ids,
-    prepare_codex_thread, probe_agent, probe_codex, run_codex_turn, run_once, warm_agent,
-    warm_codex, AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate,
-    PermissionPolicy,
+    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent,
+    AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
 };
 use crate::services::remote::{
     notes_rel_from_target, read_remote_note, resolve_remote_target, RemoteRegistry,
@@ -185,15 +181,12 @@ pub async fn agent_probe(
             error: desc
                 .last_error
                 .or_else(|| Some(format!("command `{}` not found on PATH", desc.command))),
+            session_capabilities: None,
         };
         let _ = registry.apply_probe_result(&id, &result);
         return Ok(ApiResult::ok(result));
     }
-    let result = if desc.template == AgentTemplate::CodexAcp {
-        probe_codex(&desc).await
-    } else {
-        probe_agent(&desc, None).await
-    };
+    let result = probe_agent(&desc, None).await;
     let _ = registry.apply_probe_result(&id, &result);
     Ok(ApiResult::ok(result))
 }
@@ -244,15 +237,12 @@ pub async fn agent_probe_catalog(
             error: desc
                 .last_error
                 .or_else(|| Some(format!("command `{}` not found on PATH", desc.command))),
+            session_capabilities: None,
         };
         let _ = registry.apply_probe_result(&desc.id, &result);
         return Ok(ApiResult::ok(result));
     }
-    let result = if desc.template == AgentTemplate::CodexAcp {
-        probe_codex(&desc).await
-    } else {
-        probe_agent(&desc, None).await
-    };
+    let result = probe_agent(&desc, None).await;
     let _ = registry.apply_probe_result(&desc.id, &result);
     Ok(ApiResult::ok(result))
 }
@@ -299,47 +289,7 @@ pub async fn agent_run_once(
                 return Ok(map_err(e));
             }
         };
-    if desc.template == AgentTemplate::CodexAcp
-        && remote_target_early.as_ref().is_some_and(|r| r.is_ssh())
-    {
-        let err = AppError::message(
-            "Codex on remote SSH vault is not supported yet; use an ACP agent installed on the server",
-        );
-        op.finish_err(&err);
-        return Ok(map_err(err));
-    }
-    // local-sim: Codex sees the real local directory path
-    let codex_vault_path = remote_target_early
-        .as_ref()
-        .filter(|r| !r.is_ssh())
-        .map(|r| r.remote_cwd.clone())
-        .or_else(|| request.vault_path.clone());
-
-    let (generated_session_id, message_id) = new_ids();
-    let prepared_codex_thread = if desc.template == AgentTemplate::CodexAcp {
-        match prepare_codex_thread(
-            &desc,
-            request.session_id.clone(),
-            codex_vault_path,
-            request.model_id.clone(),
-            request.auto_approve,
-            !request.hide_from_chat_history,
-        )
-        .await
-        {
-            Ok(thread) => Some(thread),
-            Err(error) => {
-                op.finish_err(&error);
-                return Ok(map_err(error));
-            }
-        }
-    } else {
-        None
-    };
-    let session_id = prepared_codex_thread
-        .as_ref()
-        .map(|thread| thread.thread_id().to_string())
-        .unwrap_or(generated_session_id);
+    let (session_id, message_id) = new_ids();
     let accepted = RunOnceAccepted {
         session_id: session_id.clone(),
         message_id: message_id.clone(),
@@ -349,9 +299,6 @@ pub async fn agent_run_once(
     let cancellation = match runs.register(&session_id) {
         Ok(cancellation) => cancellation,
         Err(error) => {
-            if let Some(thread) = prepared_codex_thread {
-                thread.shutdown().await;
-            }
             op.finish_err(&error);
             return Ok(map_err(error));
         }
@@ -395,58 +342,30 @@ pub async fn agent_run_once(
         } else {
             None
         };
-    // Codex native path still expects a real local cwd; remote SSH uses ACP-style
-    // ssh wrap only for generic ACP agents. For Codex + remote, rewrite vault_path
-    // to work_root for thread index and remote_cwd for process (via remote target).
     tauri::async_runtime::spawn(async move {
-        if desc.template == AgentTemplate::CodexAcp {
-            if let Some(prepared_codex_thread) = prepared_codex_thread {
-                // Codex turn path is text-first; image bytes are not forwarded yet.
-                // Remote vaults: codex still runs only for local-sim (local path);
-                // pure SSH remote is rejected earlier if prepare failed.
-                run_codex_turn(
-                    events.clone(),
-                    prepared_codex_thread,
-                    message_id,
-                    request.prompt,
-                    request.workflow,
-                    request.target,
-                    request.vault_path,
-                    request.model_id,
-                    request.reasoning_effort,
-                    request.fast_mode,
-                    request.skill_ids,
-                    request.auto_approve,
-                    request.response_language,
-                    request.personal_prompt,
-                    cancellation,
-                )
-                .await;
-            }
-        } else {
-            let _ = run_once(
-                events.clone(),
-                desc,
-                session_id.clone(),
-                message_id,
-                request.prompt,
-                request.images,
-                request.workflow,
-                request.target.clone(),
-                request.vault_path,
-                request.model_id,
-                request.reasoning_effort,
-                request.fast_mode,
-                request.skill_ids,
-                permission_policy,
-                permission_gate.clone(),
-                request.response_language,
-                request.personal_prompt,
-                cancellation,
-                remote_for_spawn,
-            )
-            .await;
-        }
+        let _ = run_once(
+            events.clone(),
+            desc,
+            session_id.clone(),
+            message_id,
+            request.prompt,
+            request.images,
+            request.workflow,
+            request.target.clone(),
+            request.vault_path,
+            request.model_id,
+            request.reasoning_effort,
+            request.fast_mode,
+            request.skill_ids,
+            permission_policy,
+            permission_gate.clone(),
+            request.response_language,
+            request.personal_prompt,
+            cancellation,
+            remote_for_spawn,
+            request.session_id.clone(),
+        )
+        .await;
         let _ = app_handle.state::<AgentRunController>().finish(&session_id);
         // Trust loop: if the run rewrote the target note, offer keep / revert.
         if let (Some(path), Some(before)) = (&snapshot_path, &notes_before) {
@@ -496,51 +415,70 @@ pub async fn agent_run_once(
     Ok(ApiResult::ok(accepted))
 }
 
-/// Read native Codex threads. The App Server owns the actual history; Agentero only
-/// filters it to the current Vault and renders it locally.
+/// List ACP sessions for an agent via `session/list`.
 #[tauri::command]
-pub async fn agent_codex_list_threads(
+pub async fn agent_list_sessions(
     registry: State<'_, AgentRegistry>,
+    remote_registry: State<'_, Arc<RemoteRegistry>>,
     agent_id: Option<String>,
     vault_path: Option<String>,
-    include_external: bool,
-) -> Result<ApiResult<Vec<CodexThreadInfo>>, String> {
+    cursor: Option<String>,
+) -> Result<ApiResult<crate::models::agent::AcpListSessionsResult>, String> {
     let desc = match registry.resolve_default(agent_id.as_deref()) {
-        Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
-        Ok(_) => {
-            return Ok(map_err(AppError::message(
-                "Codex history is only available for the Codex provider",
-            )))
-        }
+        Ok(desc) => desc,
         Err(error) => return Ok(map_err(error)),
     };
-    match codex_list_threads(&desc, vault_path, include_external).await {
-        Ok(threads) => Ok(ApiResult::ok(threads)),
+    let remote_target =
+        match resolve_remote_target(remote_registry.inner(), vault_path.as_deref()).await {
+            Ok(t) => t,
+            Err(e) => return Ok(map_err(e)),
+        };
+    let cwd = if let Some(ref rt) = remote_target {
+        rt.agent_cwd()
+    } else {
+        vault_path
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    };
+    match crate::services::agent::list_acp_sessions(&desc, cwd, cursor, remote_target.as_ref())
+        .await
+    {
+        Ok(result) => Ok(ApiResult::ok(result)),
         Err(error) => Ok(map_err(error)),
     }
 }
 
-/// Hydrate an existing Codex thread from its native JSONL transcript without
-/// copying that transcript into the Vault.
+/// Load an ACP session's history via `session/load`.
 #[tauri::command]
-pub async fn agent_codex_read_thread(
+pub async fn agent_load_session(
     registry: State<'_, AgentRegistry>,
+    remote_registry: State<'_, Arc<RemoteRegistry>>,
     agent_id: Option<String>,
-    thread_id: String,
+    session_id: String,
     vault_path: Option<String>,
-    include_external: bool,
-) -> Result<ApiResult<CodexThreadHistory>, String> {
+) -> Result<ApiResult<crate::models::agent::AcpLoadSessionResult>, String> {
     let desc = match registry.resolve_default(agent_id.as_deref()) {
-        Ok(desc) if desc.template == AgentTemplate::CodexAcp => desc,
-        Ok(_) => {
-            return Ok(map_err(AppError::message(
-                "Codex history is only available for the Codex provider",
-            )))
-        }
+        Ok(desc) => desc,
         Err(error) => return Ok(map_err(error)),
     };
-    match codex_read_thread(&desc, thread_id, vault_path, include_external).await {
-        Ok(thread) => Ok(ApiResult::ok(thread)),
+    let remote_target =
+        match resolve_remote_target(remote_registry.inner(), vault_path.as_deref()).await {
+            Ok(t) => t,
+            Err(e) => return Ok(map_err(e)),
+        };
+    let cwd = if let Some(ref rt) = remote_target {
+        rt.agent_cwd()
+    } else {
+        vault_path
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    };
+    match crate::services::agent::load_acp_session(&desc, session_id, cwd, remote_target.as_ref())
+        .await
+    {
+        Ok(result) => Ok(ApiResult::ok(result)),
         Err(error) => Ok(map_err(error)),
     }
 }
@@ -650,29 +588,6 @@ pub async fn agent_warm(
         };
 
     let events = AgentEventEmitter::new(window.app_handle().clone(), window.label());
-    let result = if desc.template == AgentTemplate::CodexAcp {
-        if remote.as_ref().is_some_and(|r| r.is_ssh()) {
-            WarmResult {
-                agent_id: desc.id,
-                ok: false,
-                models: None,
-                usage_used: None,
-                usage_size: None,
-                error: Some(
-                    "Codex on remote SSH vault is not supported yet; use an ACP agent (OpenCode / Claude) installed on the server"
-                        .into(),
-                ),
-            }
-        } else {
-            // local-sim: use real local path as vault
-            let vault = remote
-                .as_ref()
-                .map(|r| r.remote_cwd.clone())
-                .or(request.vault_path);
-            warm_codex(events, desc, vault, request.model_id).await
-        }
-    } else {
-        warm_agent(events, desc, request.vault_path, request.model_id, remote).await
-    };
+    let result = warm_agent(events, desc, request.vault_path, request.model_id, remote).await;
     Ok(ApiResult::ok(result))
 }

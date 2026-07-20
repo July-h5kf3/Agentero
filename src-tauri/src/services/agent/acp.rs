@@ -1,9 +1,10 @@
 use crate::error::AppError;
 use crate::models::agent::{
-    AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
-    AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
-    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
-    WarmResult,
+    AcpHistoryLine, AcpListSessionsResult, AcpLoadSessionResult, AcpSessionCapabilities,
+    AcpSessionInfo, AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent,
+    AgentFastModeEvent, AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent,
+    AgentResultPayload, AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent,
+    ProbeResult, PromptImage, WarmResult,
 };
 use crate::services::agent::discover::{path_entries, resolve_command};
 use crate::services::agent::events::AgentEventEmitter;
@@ -13,13 +14,14 @@ use crate::services::agent::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
 use agent_client_protocol::schema::v1::{
-    CancelNotification, ContentBlock, EnvVariable, ImageContent, InitializeRequest, McpServer,
-    McpServerStdio, NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus,
-    PromptRequest, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-    SelectedPermissionOutcome, SessionConfigId, SessionConfigKind, SessionConfigOption,
-    SessionConfigOptionCategory, SessionConfigOptionValue, SessionConfigSelectOptions,
-    SessionNotification, SessionUpdate, SetSessionConfigOptionRequest, TextContent, ToolCallStatus,
-    ToolKind,
+    CancelNotification, ContentBlock, EnvVariable, ImageContent, InitializeRequest,
+    ListSessionsRequest, LoadSessionRequest, McpServer, McpServerStdio, NewSessionRequest,
+    PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
+    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    ResumeSessionRequest, SelectedPermissionOutcome, SessionConfigId, SessionConfigKind,
+    SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
+    SessionConfigSelectOptions, SessionId, SessionNotification, SessionUpdate,
+    SetSessionConfigOptionRequest, TextContent, ToolCallStatus, ToolKind,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
@@ -618,20 +620,6 @@ pub async fn probe_agent(
     remote: Option<&crate::services::remote::RemoteAgentTarget>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    if remote.is_some_and(|r| r.is_ssh())
-        && desc.template == crate::models::agent::AgentTemplate::CodexAcp
-    {
-        return ProbeResult {
-            agent_id,
-            available: false,
-            agent_name: None,
-            protocol_version: None,
-            error: Some(
-                "Codex on remote SSH vault is not supported yet; use an ACP agent (OpenCode / Claude) installed on the server"
-                    .into(),
-            ),
-        };
-    }
     let acp = match to_acp_agent(desc, remote) {
         Ok(a) => a,
         Err(e) => {
@@ -641,11 +629,13 @@ pub async fn probe_agent(
                 agent_name: None,
                 protocol_version: None,
                 error: Some(e.to_string()),
+                session_capabilities: None,
             };
         }
     };
 
-    let captured: Arc<Mutex<Option<(String, String)>>> = Arc::new(Mutex::new(None));
+    let captured: Arc<Mutex<Option<(String, String, AcpSessionCapabilities)>>> =
+        Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
 
     let connect = agent_client_protocol::Client
@@ -673,8 +663,17 @@ pub async fn probe_agent(
                     .map(|i| i.name.clone())
                     .unwrap_or_else(|| "unknown".into());
                 let version = format!("{:?}", init.protocol_version);
+                let session_caps = {
+                    let sc = &init.agent_capabilities.session_capabilities;
+                    AcpSessionCapabilities {
+                        list: sc.list.is_some(),
+                        resume: sc.resume.is_some(),
+                        load: init.agent_capabilities.load_session,
+                        delete: sc.delete.is_some(),
+                    }
+                };
                 if let Ok(mut g) = captured.lock() {
-                    *g = Some((name, version));
+                    *g = Some((name, version, session_caps));
                 }
                 Ok(())
             }
@@ -692,6 +691,7 @@ pub async fn probe_agent(
                     "probe timed out after {}s (check Agent proxy / network)",
                     ACP_TIMEOUT.as_secs()
                 )),
+                session_capabilities: None,
             };
         }
     };
@@ -700,12 +700,13 @@ pub async fn probe_agent(
         Ok(()) => {
             let info = captured.lock().ok().and_then(|g| g.clone());
             match info {
-                Some((name, version)) => ProbeResult {
+                Some((name, version, session_caps)) => ProbeResult {
                     agent_id,
                     available: true,
                     agent_name: Some(name),
                     protocol_version: Some(version),
                     error: None,
+                    session_capabilities: Some(session_caps),
                 },
                 None => ProbeResult {
                     agent_id,
@@ -713,6 +714,7 @@ pub async fn probe_agent(
                     agent_name: None,
                     protocol_version: None,
                     error: Some("no initialize response".into()),
+                    session_capabilities: None,
                 },
             }
         }
@@ -722,6 +724,7 @@ pub async fn probe_agent(
             agent_name: None,
             protocol_version: None,
             error: Some(e.to_string()),
+            session_capabilities: None,
         },
     }
 }
@@ -748,6 +751,7 @@ pub async fn run_once(
     personal_prompt: Option<String>,
     mut cancellation: watch::Receiver<bool>,
     remote: Option<crate::services::remote::RemoteAgentTarget>,
+    resume_session_id: Option<String>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
     // Skills: local vault path, or remote work_root after materializing SKILL.md from SFTP.
@@ -901,6 +905,7 @@ pub async fn run_once(
             let app_for_models = app_for_conn.clone();
             let session_for_models = session_for_conn.clone();
             let agent_id_for_models = desc.id.clone();
+            let resume_id = resume_session_id.clone();
             move |connection: ConnectionTo<Agent>| async move {
                 tokio::select! {
                     result = timed_acp_request(
@@ -921,25 +926,54 @@ pub async fn run_once(
                     }
                 }
 
-                let new_session = tokio::select! {
-                    result = timed_acp_request(
-                        "new_session",
-                        connection.send_request(NewSessionRequest::new(cwd)).block_task(),
-                    ) => result?,
-                    () = wait_for_cancellation(&mut cancellation) => {
-                        let payload = cancelled_payload(
-                            session_for_conn.clone(),
-                            message_for_conn.clone(),
-                            &content_for_conn,
-                            &thought_for_conn,
-                        );
-                        let _ = app_for_conn.emit("agent:completed", payload.clone());
-                        return Ok(payload);
-                    }
+                let (acp_session_id, mut config_options) = if let Some(ref rid) = resume_id {
+                    let resp = tokio::select! {
+                        result = timed_acp_request(
+                            "resume_session",
+                            connection
+                                .send_request(ResumeSessionRequest::new(
+                                    SessionId::new(rid.as_str()),
+                                    cwd.clone(),
+                                ))
+                                .block_task(),
+                        ) => result?,
+                        () = wait_for_cancellation(&mut cancellation) => {
+                            let payload = cancelled_payload(
+                                session_for_conn.clone(),
+                                message_for_conn.clone(),
+                                &content_for_conn,
+                                &thought_for_conn,
+                            );
+                            let _ = app_for_conn.emit("agent:completed", payload.clone());
+                            return Ok(payload);
+                        }
+                    };
+                    (
+                        SessionId::new(rid.as_str()),
+                        resp.config_options.unwrap_or_default(),
+                    )
+                } else {
+                    let new_session = tokio::select! {
+                        result = timed_acp_request(
+                            "new_session",
+                            connection.send_request(NewSessionRequest::new(cwd)).block_task(),
+                        ) => result?,
+                        () = wait_for_cancellation(&mut cancellation) => {
+                            let payload = cancelled_payload(
+                                session_for_conn.clone(),
+                                message_for_conn.clone(),
+                                &content_for_conn,
+                                &thought_for_conn,
+                            );
+                            let _ = app_for_conn.emit("agent:completed", payload.clone());
+                            return Ok(payload);
+                        }
+                    };
+                    (
+                        new_session.session_id,
+                        new_session.config_options.unwrap_or_default(),
+                    )
                 };
-
-                let acp_session_id = new_session.session_id;
-                let mut config_options = new_session.config_options.unwrap_or_default();
                 macro_rules! return_cancelled {
                     () => {{
                         let payload = cancelled_payload(
@@ -1317,6 +1351,200 @@ pub async fn warm_agent(
             usage_size: None,
             error: Some(e.to_string()),
         },
+    }
+}
+
+/// List sessions from an ACP agent via `session/list`.
+/// Returns `supported: false` if the agent does not advertise session.list capability.
+pub async fn list_acp_sessions(
+    desc: &AgentDescriptor,
+    cwd: PathBuf,
+    cursor: Option<String>,
+    remote: Option<&crate::services::remote::RemoteAgentTarget>,
+) -> Result<AcpListSessionsResult, AppError> {
+    let acp = to_acp_agent(desc, remote)?;
+
+    let result = agent_client_protocol::Client
+        .builder()
+        .name("agentero")
+        .on_receive_request(
+            async move |request: RequestPermissionRequest, responder, _cx| {
+                let _ = responder.respond(permission_response(&request, false));
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(acp, {
+            move |connection: ConnectionTo<Agent>| async move {
+                let init = timed_acp_request(
+                    "initialize",
+                    connection
+                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .block_task(),
+                )
+                .await?;
+
+                let supports_list = init.agent_capabilities.session_capabilities.list.is_some();
+
+                if !supports_list {
+                    return Ok(AcpListSessionsResult {
+                        sessions: vec![],
+                        next_cursor: None,
+                        supported: false,
+                    });
+                }
+
+                let mut req = ListSessionsRequest::new().cwd(cwd);
+                if let Some(c) = cursor {
+                    req = req.cursor(c);
+                }
+
+                let resp =
+                    timed_acp_request("session/list", connection.send_request(req).block_task())
+                        .await?;
+
+                let sessions = resp
+                    .sessions
+                    .into_iter()
+                    .map(|s| AcpSessionInfo {
+                        session_id: s.session_id.to_string(),
+                        cwd: s.cwd.to_string_lossy().to_string(),
+                        title: s.title,
+                        updated_at: s.updated_at,
+                    })
+                    .collect();
+
+                Ok(AcpListSessionsResult {
+                    sessions,
+                    next_cursor: resp.next_cursor,
+                    supported: true,
+                })
+            }
+        })
+        .await;
+
+    match result {
+        Ok(r) => Ok(r),
+        Err(e) => Err(AppError::Acp(format!("list sessions: {e}"))),
+    }
+}
+
+/// Load a session's history from an ACP agent via `session/load`.
+/// The agent replays history as SessionNotification events which we accumulate.
+pub async fn load_acp_session(
+    desc: &AgentDescriptor,
+    session_id: String,
+    cwd: PathBuf,
+    remote: Option<&crate::services::remote::RemoteAgentTarget>,
+) -> Result<AcpLoadSessionResult, AppError> {
+    let acp = to_acp_agent(desc, remote)?;
+
+    let lines: Arc<Mutex<Vec<AcpHistoryLine>>> = Arc::new(Mutex::new(Vec::new()));
+    let content_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let thought_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let line_counter: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+
+    let lines_for_notif = lines.clone();
+    let content_for_notif = content_buf.clone();
+    let thought_for_notif = thought_buf.clone();
+
+    let result = agent_client_protocol::Client
+        .builder()
+        .name("agentero")
+        .on_receive_notification(
+            async move |notification: SessionNotification, _cx| {
+                match &notification.update {
+                    SessionUpdate::AgentMessageChunk(chunk) => {
+                        if let Some(text) = text_from_content_block(&chunk.content) {
+                            if let Ok(mut buf) = content_for_notif.lock() {
+                                buf.push_str(&text);
+                            }
+                        }
+                    }
+                    SessionUpdate::AgentThoughtChunk(chunk) => {
+                        if let Some(text) = text_from_content_block(&chunk.content) {
+                            if let Ok(mut buf) = thought_for_notif.lock() {
+                                buf.push_str(&text);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                Ok(())
+            },
+            agent_client_protocol::on_receive_notification!(),
+        )
+        .on_receive_request(
+            async move |request: RequestPermissionRequest, responder, _cx| {
+                let _ = responder.respond(permission_response(&request, false));
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(acp, {
+            let sid = session_id.clone();
+            move |connection: ConnectionTo<Agent>| async move {
+                timed_acp_request(
+                    "initialize",
+                    connection
+                        .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                        .block_task(),
+                )
+                .await?;
+
+                timed_acp_request(
+                    "session/load",
+                    connection
+                        .send_request(LoadSessionRequest::new(SessionId::new(sid.as_str()), cwd))
+                        .block_task(),
+                )
+                .await?;
+
+                // Brief settle so the agent can push replayed notifications.
+                tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                Ok(())
+            }
+        })
+        .await;
+
+    match result {
+        Ok(()) => {
+            let content = content_buf.lock().map(|g| g.clone()).unwrap_or_default();
+            let reasoning = thought_buf.lock().map(|g| g.clone()).unwrap_or_default();
+
+            let mut result_lines = Vec::new();
+            if !content.is_empty() {
+                let id = {
+                    let mut c = line_counter.lock().unwrap_or_else(|e| e.into_inner());
+                    *c += 1;
+                    format!("line-{c}")
+                };
+                result_lines.push(AcpHistoryLine {
+                    id,
+                    kind: "agent".to_string(),
+                    text: content,
+                    reasoning: if reasoning.is_empty() {
+                        None
+                    } else {
+                        Some(reasoning)
+                    },
+                });
+            }
+
+            // Also include any lines accumulated via notification handler
+            if let Ok(mut accumulated) = lines_for_notif.lock() {
+                if !accumulated.is_empty() {
+                    result_lines = std::mem::take(&mut accumulated);
+                }
+            }
+
+            Ok(AcpLoadSessionResult {
+                session_id,
+                title: None,
+                lines: result_lines,
+            })
+        }
+        Err(e) => Err(AppError::Acp(format!("load session: {e}"))),
     }
 }
 

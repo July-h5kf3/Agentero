@@ -168,7 +168,7 @@
 			"args": "Args"
 		},
 		"remote": {
-			"banner": "Probing ACP agents on {{host}}. Binaries must be installed and logged in on the server (PATH / login shell). Codex over pure SSH is not supported yet.",
+			"banner": "Probing ACP agents on {{host}}. Binaries must be installed and logged in on the server (PATH / login shell).",
 			"commonAgents": "Agents on remote host",
 			"probeTitle": "Rescan & probe remote agents",
 			"empty": "No catalog results. Check the SSH session and remote PATH.",

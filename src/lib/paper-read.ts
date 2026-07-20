@@ -47,8 +47,6 @@ export function skillMentionStyleForTemplate(
 	template: AgentTemplate | string | null | undefined,
 ): SkillMentionStyle {
 	switch (template) {
-		case "codex-acp":
-			return "dollar";
 		case "claude-acp":
 			return "slash";
 		default:
