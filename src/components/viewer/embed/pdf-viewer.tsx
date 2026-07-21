@@ -1717,6 +1717,21 @@ function PdfViewerInner({
 									>
 										<SelectionLayer documentId={docId} pageIndex={pageIndex} />
 										<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
+										{activeTranslateOnPage
+											? activeTranslateOnPage.rects.map((rect) => (
+													<div
+														key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+														className="pointer-events-none absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
+														style={{
+															left: `${rect.x * 100}%`,
+															top: `${rect.y * 100}%`,
+															width: `${rect.w * 100}%`,
+															height: `${rect.h * 100}%`,
+														}}
+														aria-hidden="true"
+													/>
+												))
+											: null}
 										<SelectionGutter
 											items={pins}
 											activeId={activeCard?.id ?? null}
