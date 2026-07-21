@@ -167,12 +167,14 @@ import {
 	isMarkdownPath,
 	isValidVaultEntryName,
 	joinVaultPath,
+	listVaultDirChildren,
 	loadVaultTree,
 	openNewWindow,
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	readVaultFile,
 	removeRecentVault,
+	replaceTreeNodeChildren,
 	resolveCreateParent,
 	saveVaultPath,
 	seededSkillIdsFromCreated,
@@ -958,6 +960,21 @@ export default function App() {
 			setTree([]);
 		} finally {
 			setBusy(false);
+		}
+	}, []);
+
+	/**
+	 * Lazy tree expand: list one level under a non-eager folder (`src/`, …).
+	 * Eager roots (`papers/` …) are fully loaded in `loadVaultTree`.
+	 */
+	const handleLoadDirChildren = useCallback(async (dirPath: string) => {
+		const vault = vaultPathRef.current;
+		if (!vault) return;
+		try {
+			const children = await listVaultDirChildren(vault, dirPath);
+			setTree((prev) => replaceTreeNodeChildren(prev, dirPath, children));
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
 		}
 	}, []);
 
@@ -2912,6 +2929,7 @@ export default function App() {
 										paperTreeLabelMode={settings.paperTreeLabelMode}
 										paperTreeSortMode={settings.paperTreeSortMode}
 										onReadPaper={handleReadPaper}
+										onLoadDirChildren={handleLoadDirChildren}
 									/>
 								</div>
 								{/* Paper info only when a specific paper is selected */}

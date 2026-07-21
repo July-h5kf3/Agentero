@@ -29,6 +29,11 @@
 
 - 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **性能（虚拟化）**：树把可见节点**拍平为一维列表 + 窗口化**（`@tanstack/react-virtual`），只渲染视口内的行；FileTree 自持滚动容器（`treeScrollRef`），折叠文件夹用扫平行组件 `FileTreeFolderRow`（`ai-elements/file-tree.tsx`）。避免大 Vault（成百上千篇）时常驻海量 DOM，以及选中/展开/拖拽时的全树重渲染。
+- **建树策略（懒加载）**（`src/lib/vault.ts` `loadVaultTree` / `listVaultDirChildren`）：
+  - **全量递归（eager）**：`papers/`、`notes/`、`plans/`、`.agents/`（产品面：paper marker、笔记、skill）。
+  - **浅层 + 按需**：Vault 根下其它目录（如 `src/`、`thesis/`、`scripts/`）打开时只 list **一层内容**（文件 + 子目录壳），子目录标 `childrenPending`；**展开子目录**时再 list 一层（可继续下钻）。不展开则不再往下扫。
+  - **永不解析**：`TREE_IGNORE_NAMES`（`.git`、`.agentero`、`.venv`、`node_modules`、`__pycache__`、`site-packages`、`.codex` 等）以及其它以 `.` 开头的项（例外：`.agents`、`.env.example`）和 `*.egg-info` **直接跳过**，不进入树、不发 SFTP list。
+  - 本地与远程同一套规则；远程大杂项目录（如含完整代码仓的 Vault）因此可在「产品目录全量 + 其它根目录各 1 次 list」内打开。
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
 - **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件、**魔棒 / 本地 PDF 入库完成后 `openPaper`**），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex`（`align: "center"`）滚入视口。树刷新后若目标行尚未出现在拍平行中，会重新展开祖先再滚一次（覆盖入库刚写入磁盘的竞态）。
 - **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（XDG `settings.json`）。

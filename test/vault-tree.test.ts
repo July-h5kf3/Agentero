@@ -2,15 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
 	collectMarkdownRelPaths,
 	type FileNode,
+	isEagerTreeRel,
 	normalizePathKey,
 	paperRelFromNotes,
+	pendingDirsAmongExpanded,
+	replaceTreeNodeChildren,
 	resolveCreateParent,
+	shouldIgnoreTreeName,
 	treeFindNode,
+	treeHasPendingChildren,
 } from "@/lib/vault";
 
-function dir(path: string, children: FileNode[]): FileNode {
+function dir(
+	path: string,
+	children: FileNode[],
+	extra?: Partial<FileNode>,
+): FileNode {
 	const name = path.split("/").pop() ?? path;
-	return { id: path, name, path, kind: "directory", children };
+	return { id: path, name, path, kind: "directory", children, ...extra };
 }
 
 function file(path: string): FileNode {
@@ -84,5 +93,85 @@ describe("paperRelFromNotes", () => {
 	it("returns null when either path is missing", () => {
 		expect(paperRelFromNotes(null, "/v")).toBeNull();
 		expect(paperRelFromNotes("/v/papers/x/NOTES.md", null)).toBeNull();
+	});
+});
+
+describe("shouldIgnoreTreeName", () => {
+	it("skips VCS, cache, venv, and Host-only dirs", () => {
+		for (const n of [
+			".git",
+			".agentero",
+			".venv",
+			"venv",
+			"node_modules",
+			"__pycache__",
+			"site-packages",
+			".codex",
+			"foo.egg-info",
+		]) {
+			expect(shouldIgnoreTreeName(n)).toBe(true);
+		}
+	});
+
+	it("keeps product surface and normal names", () => {
+		expect(shouldIgnoreTreeName(".agents")).toBe(false);
+		expect(shouldIgnoreTreeName(".env.example")).toBe(false);
+		expect(shouldIgnoreTreeName("papers")).toBe(false);
+		expect(shouldIgnoreTreeName("src")).toBe(false);
+		expect(shouldIgnoreTreeName("AGENTS.md")).toBe(false);
+	});
+});
+
+describe("isEagerTreeRel", () => {
+	it("treats papers/notes/plans/.agents as eager", () => {
+		expect(isEagerTreeRel("papers")).toBe(true);
+		expect(isEagerTreeRel("papers/topic/x")).toBe(true);
+		expect(isEagerTreeRel("notes/todo.md")).toBe(true);
+		expect(isEagerTreeRel("plans")).toBe(true);
+		expect(isEagerTreeRel(".agents/skills")).toBe(true);
+	});
+
+	it("treats other vault-root trees as lazy", () => {
+		expect(isEagerTreeRel("src")).toBe(false);
+		expect(isEagerTreeRel("src/agents")).toBe(false);
+		expect(isEagerTreeRel("thesis")).toBe(false);
+		expect(isEagerTreeRel("scripts")).toBe(false);
+	});
+});
+
+describe("replaceTreeNodeChildren / lazy pending", () => {
+	/** After open: non-eager `src/` has one listed level; nested dirs stay pending. */
+	const lazyTree: FileNode[] = [
+		dir("/v/papers", [dir("/v/papers/x", [file("/v/papers/x/NOTES.md")])]),
+		dir("/v/src", [
+			file("/v/src/README.md"),
+			dir("/v/src/agents", [], { childrenPending: true }),
+		]),
+	];
+
+	it("replaces children of an expanded pending folder", () => {
+		const next = replaceTreeNodeChildren(lazyTree, "/v/src/agents", [
+			file("/v/src/agents/README.md"),
+			dir("/v/src/agents/benchmark", [], { childrenPending: true }),
+		]);
+		const agents = treeFindNode(next, "/v/src/agents");
+		expect(agents?.childrenPending).toBe(false);
+		expect(agents?.children?.map((c) => c.name).sort()).toEqual([
+			"README.md",
+			"benchmark",
+		]);
+		expect(treeFindNode(next, "/v/src/agents/benchmark")?.childrenPending).toBe(
+			true,
+		);
+		// Sibling listing under src unchanged
+		expect(treeFindNode(next, "/v/src/README.md")?.kind).toBe("file");
+	});
+
+	it("lists expanded pending dirs only", () => {
+		expect(treeHasPendingChildren(lazyTree)).toBe(true);
+		expect(
+			pendingDirsAmongExpanded(lazyTree, new Set(["/v/src/agents"])),
+		).toEqual(["/v/src/agents"]);
+		expect(pendingDirsAmongExpanded(lazyTree, new Set(["/v/src"]))).toEqual([]);
 	});
 });

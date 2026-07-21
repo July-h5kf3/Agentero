@@ -377,6 +377,11 @@ type FileTreeProps = {
 		items: Array<{ path: string; sourceName: string }>,
 		parentDir: string,
 	) => void;
+	/**
+	 * Lazy tree: load children when a folder with `childrenPending` is expanded.
+	 * Parent should call `listVaultDirChildren` and merge via `replaceTreeNodeChildren`.
+	 */
+	onLoadDirChildren?: (dirPath: string) => void | Promise<void>;
 	className?: string;
 };
 
@@ -417,6 +422,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onMovePaths,
 			onMoveTo,
 			onDropLocalPdfs,
+			onLoadDirChildren,
 			className,
 		},
 		ref,
@@ -430,6 +436,11 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		);
 		const [revealError, setRevealError] = useState<string | null>(null);
 		const contextMenuRef = useRef<HTMLDivElement>(null);
+		/** Paths currently being listed (lazy expand). */
+		const [loadingDirs, setLoadingDirs] = useState<Set<string>>(
+			() => new Set(),
+		);
+		const loadingDirsRef = useRef<Set<string>>(new Set());
 		const [expanded, setExpanded] = useState<Set<string>>(() => {
 			const open = new Set<string>();
 			collectDefaultExpanded(nodes, open);
@@ -455,6 +466,48 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			setExpanded(open);
 			defaultAppliedForVaultRef.current = vaultPath;
 		}, [vaultPath, nodes]);
+
+		/**
+		 * When expanded folders still have `childrenPending`, ask parent to list them.
+		 * Covers click-expand, default expand, and reveal-ancestors.
+		 */
+		useEffect(() => {
+			if (!onLoadDirChildren) return;
+			const pending: string[] = [];
+			const walk = (list: FileNode[]) => {
+				for (const n of list) {
+					if (n.kind !== "directory") continue;
+					if (
+						n.childrenPending &&
+						expanded.has(n.path) &&
+						!loadingDirsRef.current.has(n.path)
+					) {
+						pending.push(n.path);
+					}
+					if (n.children?.length) walk(n.children);
+				}
+			};
+			walk(nodes);
+			if (pending.length === 0) return;
+
+			for (const path of pending) {
+				loadingDirsRef.current.add(path);
+			}
+			setLoadingDirs(new Set(loadingDirsRef.current));
+
+			void (async () => {
+				for (const path of pending) {
+					try {
+						await onLoadDirChildren(path);
+					} catch {
+						// Parent surfaces errors via toast; clear loading so user can retry.
+					} finally {
+						loadingDirsRef.current.delete(path);
+						setLoadingDirs(new Set(loadingDirsRef.current));
+					}
+				}
+			})();
+		}, [nodes, expanded, onLoadDirChildren]);
 
 		// Expand parent folder when starting inline create (IDE-like).
 		useEffect(() => {
@@ -1490,7 +1543,21 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		const renderNodeRow = (node: FileNode, paperLeaf: boolean): ReactNode => {
 			if (paperLeaf) return renderPaperRow(node);
 			if (node.kind === "directory") {
-				return <FileTreeFolderRow path={node.path} name={node.name} />;
+				const pendingLoad =
+					Boolean(node.childrenPending) || loadingDirs.has(node.path);
+				return (
+					<div className="relative flex w-full items-center">
+						<div className="min-w-0 flex-1">
+							<FileTreeFolderRow path={node.path} name={node.name} />
+						</div>
+						{pendingLoad && expanded.has(node.path) ? (
+							<Loader2
+								className="pointer-events-none absolute right-2 size-3.5 shrink-0 animate-spin text-muted-foreground"
+								aria-hidden
+							/>
+						) : null}
+					</div>
+				);
 			}
 			const Icon = fileIcon(node.name);
 			return (
