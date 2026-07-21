@@ -3147,6 +3147,13 @@ export default function App() {
 													libraryTagFilter={
 														tab.kind === "library" ? libraryTagFilter : null
 													}
+													libraryColumns={settings.libraryColumns}
+													onLibraryColumnsChange={(cols) =>
+														updateSettings({
+															...settings,
+															libraryColumns: cols,
+														})
+													}
 													rescanning={
 														tab.kind === "library" ? rescanning : false
 													}

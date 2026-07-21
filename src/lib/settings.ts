@@ -26,6 +26,35 @@ export type ThemePreference = "system" | "light" | "dark";
 
 export type LocalePreference = "system" | "en" | "zh-CN";
 
+/** Sortable / customizable columns in the papers Library table. */
+export type LibraryColumnKey =
+	| "title"
+	| "authors"
+	| "year"
+	| "tags"
+	| "type"
+	| "id";
+
+/** Per-column display preference: order comes from array position. */
+export type LibraryColumnPref = {
+	key: LibraryColumnKey;
+	visible: boolean;
+};
+
+/** Canonical column order (also the source of truth for reconciliation). */
+export const LIBRARY_COLUMN_KEYS: LibraryColumnKey[] = [
+	"title",
+	"authors",
+	"year",
+	"tags",
+	"type",
+	"id",
+];
+
+/** Default: every column visible, in canonical order. */
+export const DEFAULT_LIBRARY_COLUMNS: LibraryColumnPref[] =
+	LIBRARY_COLUMN_KEYS.map((key) => ({ key, visible: true }));
+
 /**
  * How Agentero responds to agent permission escalations.
  * - `restricted`: decline requests (Codex uses workspace-write).
@@ -59,6 +88,11 @@ export type AppSettings = {
 	 * Default: display name A–Z (matches paperTreeLabelMode labels).
 	 */
 	paperTreeSortMode: PaperTreeSortMode;
+	/**
+	 * Papers Library table columns: order (array position) + visibility.
+	 * Reconciled against {@link LIBRARY_COLUMN_KEYS}; `title` is always visible.
+	 */
+	libraryColumns: LibraryColumnPref[];
 	/**
 	 * Host local HTTP server compatible with the official Zotero Connector
 	 * (loopback :23119). Default **off**; mutually exclusive with Zotero desktop.
@@ -122,6 +156,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
+	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	theme: "system",
 	locale: "system",
@@ -156,6 +191,7 @@ type SettingsGetResult = {
 /** In-memory snapshot (source of truth between Host round-trips). */
 let cache: AppSettings = {
 	...DEFAULT_SETTINGS,
+	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
 };
@@ -167,6 +203,7 @@ let settingsFilePath = "";
 function cloneSettings(s: AppSettings): AppSettings {
 	return {
 		...s,
+		libraryColumns: s.libraryColumns.map((c) => ({ ...c })),
 		pdfAsk: { ...s.pdfAsk },
 		translate: { ...s.translate },
 	};
@@ -338,6 +375,7 @@ function normalizePartial(
 	if (!isPaperTreeSortMode(merged.paperTreeSortMode)) {
 		merged.paperTreeSortMode = DEFAULT_SETTINGS.paperTreeSortMode;
 	}
+	merged.libraryColumns = normalizeLibraryColumns(merged.libraryColumns);
 	if (typeof parsed.autoPaperReader !== "boolean") {
 		merged.autoPaperReader = DEFAULT_SETTINGS.autoPaperReader;
 	}
@@ -387,6 +425,39 @@ function normalizePartial(
 
 function isTranslateTargetLang(v: unknown): v is TranslateTargetLang {
 	return v === "ui" || v === "en" || v === "zh-CN";
+}
+
+/**
+ * Reconcile stored column prefs against the canonical set:
+ * drop unknown/duplicate keys, append missing columns (visible), and keep
+ * `title` visible so rows stay identifiable.
+ */
+function normalizeLibraryColumns(raw: unknown): LibraryColumnPref[] {
+	const known = new Set<string>(LIBRARY_COLUMN_KEYS);
+	const seen = new Set<LibraryColumnKey>();
+	const out: LibraryColumnPref[] = [];
+	if (Array.isArray(raw)) {
+		for (const item of raw) {
+			if (!item || typeof item !== "object") continue;
+			const key = (item as { key?: unknown }).key;
+			if (typeof key !== "string" || !known.has(key)) continue;
+			const k = key as LibraryColumnKey;
+			if (seen.has(k)) continue;
+			seen.add(k);
+			const visible = (item as { visible?: unknown }).visible;
+			out.push({
+				key: k,
+				visible: typeof visible === "boolean" ? visible : true,
+			});
+		}
+	}
+	for (const key of LIBRARY_COLUMN_KEYS) {
+		if (!seen.has(key)) out.push({ key, visible: true });
+	}
+	for (const c of out) {
+		if (c.key === "title") c.visible = true;
+	}
+	return out;
 }
 
 function normalizePdfAskSettings(

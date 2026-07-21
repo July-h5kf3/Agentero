@@ -111,6 +111,8 @@
 		"noMatch": "没有匹配的论文。",
 		"filterTag": "标签",
 		"clearTagFilter": "清除",
+		"columnsMenuLabel": "列",
+		"resetColumns": "重置列",
 		"import": "导入文献",
 		"importPdf": "导入 PDF",
 		"export": "导出论文库",

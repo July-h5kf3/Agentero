@@ -25,6 +25,8 @@ pub struct AppSettings {
     pub paper_tree_label_mode: String,
     #[serde(default = "default_paper_tree_sort_mode")]
     pub paper_tree_sort_mode: String,
+    #[serde(default = "default_library_columns")]
+    pub library_columns: Vec<LibraryColumnPref>,
     #[serde(default)]
     pub connector_enabled: bool,
     #[serde(default = "default_theme")]
@@ -60,6 +62,14 @@ pub struct PdfAskSettings {
     pub agent_id: String,
     #[serde(default)]
     pub model_id: String,
+}
+
+/// One column in the papers Library table: array order = display order.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryColumnPref {
+    pub key: String,
+    pub visible: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -103,6 +113,7 @@ impl Default for AppSettings {
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
+            library_columns: default_library_columns(),
             connector_enabled: false,
             theme: default_theme(),
             locale: default_locale(),
@@ -131,6 +142,17 @@ fn default_paper_tree_label_mode() -> String {
 }
 fn default_paper_tree_sort_mode() -> String {
     "folder".into()
+}
+/// Canonical papers-Library column keys, in default order.
+const LIBRARY_COLUMN_KEYS: &[&str] = &["title", "authors", "year", "tags", "type", "id"];
+fn default_library_columns() -> Vec<LibraryColumnPref> {
+    LIBRARY_COLUMN_KEYS
+        .iter()
+        .map(|&key| LibraryColumnPref {
+            key: key.to_string(),
+            visible: true,
+        })
+        .collect()
 }
 fn default_theme() -> String {
     "system".into()
@@ -282,6 +304,35 @@ fn normalize(s: &mut AppSettings) {
         s.paper_tree_sort_mode = default_paper_tree_sort_mode();
     }
 
+    // Library columns: drop unknown/duplicate keys, append missing ones
+    // (visible), and keep `title` visible so rows stay identifiable.
+    let mut seen: Vec<String> = Vec::new();
+    let mut cols: Vec<LibraryColumnPref> = Vec::new();
+    for col in s.library_columns.drain(..) {
+        if !LIBRARY_COLUMN_KEYS.contains(&col.key.as_str()) {
+            continue;
+        }
+        if seen.iter().any(|k| k == &col.key) {
+            continue;
+        }
+        seen.push(col.key.clone());
+        cols.push(col);
+    }
+    for &key in LIBRARY_COLUMN_KEYS {
+        if !seen.iter().any(|k| k == key) {
+            cols.push(LibraryColumnPref {
+                key: key.to_string(),
+                visible: true,
+            });
+        }
+    }
+    for col in cols.iter_mut() {
+        if col.key == "title" {
+            col.visible = true;
+        }
+    }
+    s.library_columns = cols;
+
     const THEMES: &[&str] = &["system", "light", "dark"];
     if !THEMES.contains(&s.theme.as_str()) {
         s.theme = default_theme();
@@ -353,5 +404,43 @@ mod tests {
         };
         normalize(&mut s);
         assert_eq!(s.translator_base_url, DEFAULT_TRANSLATOR_BASE_URL);
+    }
+
+    #[test]
+    fn normalize_reconciles_library_columns() {
+        let mut s = AppSettings {
+            library_columns: vec![
+                LibraryColumnPref {
+                    key: "bogus".into(),
+                    visible: true,
+                },
+                LibraryColumnPref {
+                    key: "title".into(),
+                    visible: false,
+                },
+                LibraryColumnPref {
+                    key: "year".into(),
+                    visible: false,
+                },
+            ],
+            ..AppSettings::default()
+        };
+        normalize(&mut s);
+        let keys: Vec<&str> = s.library_columns.iter().map(|c| c.key.as_str()).collect();
+        // Unknown dropped; kept order first, then missing canonical columns appended.
+        assert_eq!(keys, vec!["title", "year", "authors", "tags", "type", "id"]);
+        // Title forced visible even though stored hidden.
+        let title = s.library_columns.iter().find(|c| c.key == "title").unwrap();
+        assert!(title.visible);
+        // Non-title hidden preference preserved.
+        let year = s.library_columns.iter().find(|c| c.key == "year").unwrap();
+        assert!(!year.visible);
+        // Appended column defaults to visible.
+        let authors = s
+            .library_columns
+            .iter()
+            .find(|c| c.key == "authors")
+            .unwrap();
+        assert!(authors.visible);
     }
 }

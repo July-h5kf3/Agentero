@@ -11,6 +11,7 @@ import {
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+import type { LibraryColumnPref } from "@/lib/settings";
 import { type DocTab, tabIsPaperNotes } from "@/lib/tabs";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 
@@ -25,6 +26,9 @@ type TabCenterProps = {
 	/** Vault-relative folder scope; null = full library. */
 	libraryScopePath: string | null;
 	libraryTagFilter: string | null;
+	/** Library table column order + visibility. */
+	libraryColumns: LibraryColumnPref[];
+	onLibraryColumnsChange: (columns: LibraryColumnPref[]) => void;
 	rescanning: boolean;
 	onLibraryTagFilterChange: (tag: string | null) => void;
 	onOpenLibraryPaper: (paper: PaperMetadata) => void;
@@ -57,6 +61,8 @@ export const TabCenter = memo(function TabCenter({
 	libraryQuery,
 	libraryScopePath,
 	libraryTagFilter,
+	libraryColumns,
+	onLibraryColumnsChange,
 	rescanning,
 	onLibraryTagFilterChange,
 	onOpenLibraryPaper,
@@ -87,6 +93,8 @@ export const TabCenter = memo(function TabCenter({
 				scopePath={libraryScopePath}
 				tagFilter={libraryTagFilter}
 				onTagFilterChange={onLibraryTagFilterChange}
+				columns={libraryColumns}
+				onColumnsChange={onLibraryColumnsChange}
 				onOpenPaper={onOpenLibraryPaper}
 				onRescan={onRescanPapers}
 				rescanning={rescanning}

@@ -9,7 +9,9 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
 import {
+	Fragment,
 	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -19,6 +21,15 @@ import {
 import { useTranslation } from "react-i18next";
 import { ReadingTitleHeat } from "@/components/layout/reading-heatmap";
 import { Button } from "@/components/ui/button";
+import {
+	ContextMenu,
+	ContextMenuCheckboxItem,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuLabel,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { filterPapersByScope } from "@/lib/papers-api";
@@ -27,6 +38,11 @@ import {
 	loadReadingHeatmaps,
 	type ReadingHeatmap,
 } from "@/lib/reading-heatmap";
+import {
+	DEFAULT_LIBRARY_COLUMNS,
+	type LibraryColumnKey,
+	type LibraryColumnPref,
+} from "@/lib/settings";
 import {
 	coercePaperTags,
 	type PaperTag,
@@ -53,14 +69,18 @@ export type PapersLibraryProps = {
 	tagFilter?: string | null;
 	onTagFilterChange?: (tag: string | null) => void;
 	onOpenPaper: (paper: PaperMetadata) => void;
+	/**
+	 * Column order + visibility (persisted in settings). When omitted, all
+	 * columns show in canonical order.
+	 */
+	columns?: LibraryColumnPref[];
+	/** Persist a new column layout (reorder / show-hide / reset). */
+	onColumnsChange?: (columns: LibraryColumnPref[]) => void;
 	/** Rebuild the catalog from papers/ on disk (empty-state recovery). */
 	onRescan?: () => void;
 	rescanning?: boolean;
 	className?: string;
 };
-
-/** Sortable data columns (title / authors / year / tags / type / id). */
-const TABLE_COL_COUNT = 6;
 
 /**
  * Delay before committing a cell-copy click.
@@ -69,41 +89,52 @@ const TABLE_COL_COUNT = 6;
  */
 const CELL_COPY_CLICK_DELAY_MS = 320;
 
-type SortKey = "title" | "authors" | "year" | "type" | "id" | "tags";
+type SortKey = LibraryColumnKey;
 type SortDir = "asc" | "desc";
 
-const SORT_COLUMNS = [
-	{
-		key: "title" as const,
-		labelKey: "papersLibrary.colTitle" as const,
-		className: "min-w-[240px]",
+/** Per-column display metadata (i18n label + header min-width). */
+const COLUMN_META = {
+	title: {
+		labelKey: "papersLibrary.colTitle",
+		headerClassName: "min-w-[240px]",
 	},
-	{
-		key: "authors" as const,
-		labelKey: "papersLibrary.colAuthors" as const,
-		className: "min-w-[140px]",
+	authors: {
+		labelKey: "papersLibrary.colAuthors",
+		headerClassName: "min-w-[140px]",
 	},
-	{
-		key: "year" as const,
-		labelKey: "papersLibrary.colYear" as const,
-		className: "min-w-16",
-	},
-	{
-		key: "tags" as const,
-		labelKey: "papersLibrary.colTags" as const,
-		className: "min-w-[120px]",
-	},
-	{
-		key: "type" as const,
-		labelKey: "papersLibrary.colType" as const,
-		className: "min-w-24",
-	},
-	{
-		key: "id" as const,
-		labelKey: "papersLibrary.colId" as const,
-		className: "min-w-[160px]",
-	},
-];
+	year: { labelKey: "papersLibrary.colYear", headerClassName: "min-w-16" },
+	tags: { labelKey: "papersLibrary.colTags", headerClassName: "min-w-[120px]" },
+	type: { labelKey: "papersLibrary.colType", headerClassName: "min-w-24" },
+	id: { labelKey: "papersLibrary.colId", headerClassName: "min-w-[160px]" },
+} as const satisfies Record<
+	SortKey,
+	{ labelKey: string; headerClassName: string }
+>;
+
+/** Move `fromKey` to sit just before `toKey` in the full column list. */
+function reorderColumns(
+	cols: LibraryColumnPref[],
+	fromKey: SortKey,
+	toKey: SortKey,
+): LibraryColumnPref[] {
+	if (fromKey === toKey) return cols;
+	const arr = [...cols];
+	const fromIdx = arr.findIndex((c) => c.key === fromKey);
+	if (fromIdx < 0) return cols;
+	const [moved] = arr.splice(fromIdx, 1);
+	const toIdx = arr.findIndex((c) => c.key === toKey);
+	if (toIdx < 0) return cols;
+	arr.splice(toIdx, 0, moved);
+	return arr;
+}
+
+/** Toggle a column's visibility (title is kept visible by the caller). */
+function toggleColumnVisibility(
+	cols: LibraryColumnPref[],
+	key: SortKey,
+): LibraryColumnPref[] {
+	return cols.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c));
+}
 
 function formatAuthors(authors: string[] | undefined): string {
 	if (!authors?.length) return "—";
@@ -269,6 +300,8 @@ export function PapersLibrary({
 	tagFilter = null,
 	onTagFilterChange,
 	onOpenPaper,
+	columns = DEFAULT_LIBRARY_COLUMNS,
+	onColumnsChange,
 	onRescan,
 	rescanning,
 	className,
@@ -357,6 +390,288 @@ export function PapersLibrary({
 			onOpenPaper(paper);
 		},
 		[cancelPendingCopy, onOpenPaper],
+	);
+
+	// --- Column customization (order + visibility) ---
+	const [dragKey, setDragKey] = useState<SortKey | null>(null);
+	const [dragOverKey, setDragOverKey] = useState<SortKey | null>(null);
+
+	/** Ordered, visible columns (title stays as a safety fallback). */
+	const visibleColumns = useMemo(() => {
+		const vis = columns.filter((c) => c.visible);
+		return vis.length ? vis : columns.filter((c) => c.key === "title");
+	}, [columns]);
+
+	const toggleColumn = useCallback(
+		(key: SortKey) => {
+			if (!onColumnsChange || key === "title") return;
+			onColumnsChange(toggleColumnVisibility(columns, key));
+		},
+		[columns, onColumnsChange],
+	);
+
+	const resetColumns = useCallback(() => {
+		onColumnsChange?.(DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })));
+	}, [onColumnsChange]);
+
+	const handleColumnDrop = useCallback(
+		(toKey: SortKey) => {
+			const from = dragKey;
+			setDragKey(null);
+			setDragOverKey(null);
+			if (!onColumnsChange || !from) return;
+			onColumnsChange(reorderColumns(columns, from, toKey));
+		},
+		[columns, dragKey, onColumnsChange],
+	);
+
+	/** Render one table cell for a column key (order-independent). */
+	const renderCell = useCallback(
+		(
+			key: SortKey,
+			p: PaperMetadata,
+			heat: ReadingHeatmap | undefined,
+		): ReactNode => {
+			switch (key) {
+				case "title":
+					return (
+						<td className="max-w-[420px] px-3 py-2.5">
+							<button
+								type="button"
+								className={cn(
+									"block w-full cursor-pointer rounded-sm text-left font-medium",
+									"hover:bg-muted/60",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								title={
+									p.title
+										? t("papersLibrary.copyHint", {
+												label: t("papersLibrary.colTitle"),
+											})
+										: undefined
+								}
+								aria-label={t("papersLibrary.copyHint", {
+									label: t("papersLibrary.colTitle"),
+								})}
+								onClick={(e) =>
+									onCellCopy(e, p.title, t("papersLibrary.colTitle"))
+								}
+							>
+								<ReadingTitleHeat heatmap={heat}>
+									<span title={p.title}>{p.title}</span>
+								</ReadingTitleHeat>
+							</button>
+							{p.publication ? (
+								<button
+									type="button"
+									className={cn(
+										"mt-0.5 block w-full cursor-pointer rounded-sm text-left text-muted-foreground text-xs",
+										"hover:bg-muted/60 hover:text-foreground",
+										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+									)}
+									title={t("papersLibrary.copyHint", {
+										label: t("papersLibrary.colPublication"),
+									})}
+									aria-label={t("papersLibrary.copyHint", {
+										label: t("papersLibrary.colPublication"),
+									})}
+									onClick={(e) =>
+										onCellCopy(
+											e,
+											p.publication,
+											t("papersLibrary.colPublication"),
+										)
+									}
+								>
+									<span className="line-clamp-1" title={p.publication}>
+										{p.publication}
+									</span>
+								</button>
+							) : null}
+						</td>
+					);
+				case "authors":
+					return (
+						<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
+							<button
+								type="button"
+								className={cn(
+									"block w-full cursor-pointer rounded-sm text-left",
+									"hover:bg-muted/60 hover:text-foreground",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								title={
+									authorsCopyText(p.authors)
+										? t("papersLibrary.copyHint", {
+												label: t("papersLibrary.colAuthors"),
+											})
+										: undefined
+								}
+								aria-label={t("papersLibrary.copyHint", {
+									label: t("papersLibrary.colAuthors"),
+								})}
+								onClick={(e) =>
+									onCellCopy(
+										e,
+										authorsCopyText(p.authors),
+										t("papersLibrary.colAuthors"),
+									)
+								}
+							>
+								<span title={p.authors?.join(", ")}>
+									{formatAuthors(p.authors)}
+								</span>
+							</button>
+						</td>
+					);
+				case "year":
+					return (
+						<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
+							<button
+								type="button"
+								className={cn(
+									"cursor-pointer rounded-sm px-0.5",
+									"hover:bg-muted/60 hover:text-foreground",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								title={
+									p.year != null
+										? t("papersLibrary.copyHint", {
+												label: t("papersLibrary.colYear"),
+											})
+										: undefined
+								}
+								aria-label={t("papersLibrary.copyHint", {
+									label: t("papersLibrary.colYear"),
+								})}
+								onClick={(e) =>
+									onCellCopy(
+										e,
+										p.year != null ? String(p.year) : null,
+										t("papersLibrary.colYear"),
+									)
+								}
+							>
+								{p.year ?? "—"}
+							</button>
+						</td>
+					);
+				case "tags":
+					return (
+						<td className="max-w-[200px] px-3 py-2.5">
+							{coercePaperTags(p.tags).length ? (
+								<div className="flex flex-wrap gap-1">
+									{coercePaperTags(p.tags).map((tag) => {
+										const active =
+											tagFilter != null &&
+											tag.name.toLocaleLowerCase() ===
+												tagFilter.toLocaleLowerCase();
+										const colored = !active
+											? tagChipStyle(tag.color)
+											: undefined;
+										return (
+											<button
+												key={tag.name}
+												type="button"
+												className={cn(
+													"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+													"cursor-pointer transition-colors",
+													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+													active
+														? "bg-foreground text-background hover:bg-foreground/90"
+														: colored
+															? "font-medium hover:opacity-90"
+															: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+												)}
+												style={colored}
+												title={t("papersLibrary.copyHint", {
+													label: t("papersLibrary.colTags"),
+												})}
+												aria-label={t("papersLibrary.copyHint", {
+													label: tag.name,
+												})}
+												onClick={(e) =>
+													onCellCopy(e, tag.name, t("papersLibrary.colTags"))
+												}
+											>
+												{tag.color && !active ? (
+													<span
+														className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
+														style={tagSwatchStyle(tag.color)}
+														aria-hidden
+													/>
+												) : null}
+												{tag.name}
+											</button>
+										);
+									})}
+								</div>
+							) : (
+								<span className="text-muted-foreground text-xs">—</span>
+							)}
+						</td>
+					);
+				case "type":
+					return (
+						<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
+							<button
+								type="button"
+								className={cn(
+									"cursor-pointer rounded-sm px-0.5",
+									"hover:bg-muted/60 hover:text-foreground",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								title={
+									p.type
+										? t("papersLibrary.copyHint", {
+												label: t("papersLibrary.colType"),
+											})
+										: undefined
+								}
+								aria-label={t("papersLibrary.copyHint", {
+									label: t("papersLibrary.colType"),
+								})}
+								onClick={(e) =>
+									onCellCopy(e, p.type, t("papersLibrary.colType"))
+								}
+							>
+								{p.type || "—"}
+							</button>
+						</td>
+					);
+				case "id":
+					return (
+						<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
+							<button
+								type="button"
+								className={cn(
+									"block w-full cursor-pointer rounded-sm text-left",
+									"hover:bg-muted/60 hover:text-foreground",
+									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								title={
+									identifierCopyText(p)
+										? t("papersLibrary.copyHint", {
+												label: t("papersLibrary.colId"),
+											})
+										: undefined
+								}
+								aria-label={t("papersLibrary.copyHint", {
+									label: t("papersLibrary.colId"),
+								})}
+								onClick={(e) =>
+									onCellCopy(e, identifierCopyText(p), t("papersLibrary.colId"))
+								}
+							>
+								<span className="line-clamp-1" title={identifierLabel(p)}>
+									{identifierLabel(p)}
+								</span>
+							</button>
+						</td>
+					);
+			}
+		},
+		[t, onCellCopy, tagFilter],
 	);
 
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
@@ -537,48 +852,104 @@ export function PapersLibrary({
 				>
 					{/* w-max + column min-widths: grow past pane for horizontal scroll */}
 					<table className="w-max min-w-full border-collapse text-left text-sm">
-						<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
-							<tr className="text-muted-foreground text-xs">
-								{SORT_COLUMNS.map((col) => {
-									const active = sortKey === col.key;
-									return (
-										<th
-											key={col.key}
-											className={cn(col.className, "p-0 font-medium")}
-											aria-sort={
-												active
-													? sortDir === "asc"
-														? "ascending"
-														: "descending"
-													: "none"
-											}
-										>
-											<button
-												type="button"
-												className={cn(
-													"flex w-full items-center gap-1 px-3 py-2 text-left",
-													"hover:bg-muted/60 hover:text-foreground",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-													active && "text-foreground",
-												)}
-												onClick={() => handleSort(col.key)}
-												aria-label={t("papersLibrary.sortBy", {
-													column: t(col.labelKey),
-												})}
-											>
-												<span className="truncate">{t(col.labelKey)}</span>
-												<SortIcon active={active} dir={sortDir} />
-											</button>
-										</th>
-									);
-								})}
-							</tr>
-						</thead>
+						<ContextMenu>
+							<ContextMenuTrigger asChild>
+								<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
+									<tr className="text-muted-foreground text-xs">
+										{visibleColumns.map((col) => {
+											const meta = COLUMN_META[col.key];
+											const active = sortKey === col.key;
+											const isDragOver =
+												dragOverKey === col.key && dragKey !== col.key;
+											return (
+												<th
+													key={col.key}
+													className={cn(
+														meta.headerClassName,
+														"p-0 font-medium",
+														dragKey === col.key && "opacity-50",
+														isDragOver && "bg-muted",
+													)}
+													aria-sort={
+														active
+															? sortDir === "asc"
+																? "ascending"
+																: "descending"
+															: "none"
+													}
+													draggable={Boolean(onColumnsChange)}
+													onDragStart={(e) => {
+														setDragKey(col.key);
+														e.dataTransfer.effectAllowed = "move";
+														e.dataTransfer.setData("text/plain", col.key);
+													}}
+													onDragOver={(e) => {
+														if (!dragKey) return;
+														e.preventDefault();
+														e.dataTransfer.dropEffect = "move";
+														if (dragOverKey !== col.key)
+															setDragOverKey(col.key);
+													}}
+													onDrop={(e) => {
+														e.preventDefault();
+														handleColumnDrop(col.key);
+													}}
+													onDragEnd={() => {
+														setDragKey(null);
+														setDragOverKey(null);
+													}}
+												>
+													<button
+														type="button"
+														className={cn(
+															"flex w-full cursor-grab items-center gap-1 px-3 py-2 text-left active:cursor-grabbing",
+															"hover:bg-muted/60 hover:text-foreground",
+															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+															active && "text-foreground",
+														)}
+														onClick={() => handleSort(col.key)}
+														aria-label={t("papersLibrary.sortBy", {
+															column: t(meta.labelKey),
+														})}
+													>
+														<span className="truncate">{t(meta.labelKey)}</span>
+														<SortIcon active={active} dir={sortDir} />
+													</button>
+												</th>
+											);
+										})}
+									</tr>
+								</thead>
+							</ContextMenuTrigger>
+							<ContextMenuContent className="w-44">
+								<ContextMenuLabel>
+									{t("papersLibrary.columnsMenuLabel")}
+								</ContextMenuLabel>
+								{columns.map((col) => (
+									<ContextMenuCheckboxItem
+										key={col.key}
+										checked={col.visible}
+										disabled={col.key === "title" || !onColumnsChange}
+										onSelect={(e) => e.preventDefault()}
+										onCheckedChange={() => toggleColumn(col.key)}
+									>
+										{t(COLUMN_META[col.key].labelKey)}
+									</ContextMenuCheckboxItem>
+								))}
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									disabled={!onColumnsChange}
+									onSelect={() => resetColumns()}
+								>
+									{t("papersLibrary.resetColumns")}
+								</ContextMenuItem>
+							</ContextMenuContent>
+						</ContextMenu>
 						<tbody>
 							{paddingTop > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={TABLE_COL_COUNT}
+										colSpan={visibleColumns.length}
 										style={{ height: paddingTop }}
 									/>
 								</tr>
@@ -594,242 +965,18 @@ export function PapersLibrary({
 										className="border-b border-border/60 transition-colors hover:bg-muted/50"
 										onDoubleClick={() => openPaperFromRow(p)}
 									>
-										<td className="max-w-[420px] px-3 py-2.5">
-											<button
-												type="button"
-												className={cn(
-													"block w-full cursor-pointer rounded-sm text-left font-medium",
-													"hover:bg-muted/60",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												)}
-												title={
-													p.title
-														? t("papersLibrary.copyHint", {
-																label: t("papersLibrary.colTitle"),
-															})
-														: undefined
-												}
-												aria-label={t("papersLibrary.copyHint", {
-													label: t("papersLibrary.colTitle"),
-												})}
-												onClick={(e) =>
-													onCellCopy(e, p.title, t("papersLibrary.colTitle"))
-												}
-											>
-												<ReadingTitleHeat heatmap={heat}>
-													<span title={p.title}>{p.title}</span>
-												</ReadingTitleHeat>
-											</button>
-											{p.publication ? (
-												<button
-													type="button"
-													className={cn(
-														"mt-0.5 block w-full cursor-pointer rounded-sm text-left text-muted-foreground text-xs",
-														"hover:bg-muted/60 hover:text-foreground",
-														"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-													)}
-													title={t("papersLibrary.copyHint", {
-														label: t("papersLibrary.colPublication"),
-													})}
-													aria-label={t("papersLibrary.copyHint", {
-														label: t("papersLibrary.colPublication"),
-													})}
-													onClick={(e) =>
-														onCellCopy(
-															e,
-															p.publication,
-															t("papersLibrary.colPublication"),
-														)
-													}
-												>
-													<span className="line-clamp-1" title={p.publication}>
-														{p.publication}
-													</span>
-												</button>
-											) : null}
-										</td>
-										<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
-											<button
-												type="button"
-												className={cn(
-													"block w-full cursor-pointer rounded-sm text-left",
-													"hover:bg-muted/60 hover:text-foreground",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												)}
-												title={
-													authorsCopyText(p.authors)
-														? t("papersLibrary.copyHint", {
-																label: t("papersLibrary.colAuthors"),
-															})
-														: undefined
-												}
-												aria-label={t("papersLibrary.copyHint", {
-													label: t("papersLibrary.colAuthors"),
-												})}
-												onClick={(e) =>
-													onCellCopy(
-														e,
-														authorsCopyText(p.authors),
-														t("papersLibrary.colAuthors"),
-													)
-												}
-											>
-												<span title={p.authors?.join(", ")}>
-													{formatAuthors(p.authors)}
-												</span>
-											</button>
-										</td>
-										<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
-											<button
-												type="button"
-												className={cn(
-													"cursor-pointer rounded-sm px-0.5",
-													"hover:bg-muted/60 hover:text-foreground",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												)}
-												title={
-													p.year != null
-														? t("papersLibrary.copyHint", {
-																label: t("papersLibrary.colYear"),
-															})
-														: undefined
-												}
-												aria-label={t("papersLibrary.copyHint", {
-													label: t("papersLibrary.colYear"),
-												})}
-												onClick={(e) =>
-													onCellCopy(
-														e,
-														p.year != null ? String(p.year) : null,
-														t("papersLibrary.colYear"),
-													)
-												}
-											>
-												{p.year ?? "—"}
-											</button>
-										</td>
-										<td className="max-w-[200px] px-3 py-2.5">
-											{coercePaperTags(p.tags).length ? (
-												<div className="flex flex-wrap gap-1">
-													{coercePaperTags(p.tags).map((tag) => {
-														const active =
-															tagFilter != null &&
-															tag.name.toLocaleLowerCase() ===
-																tagFilter.toLocaleLowerCase();
-														const colored = !active
-															? tagChipStyle(tag.color)
-															: undefined;
-														return (
-															<button
-																key={tag.name}
-																type="button"
-																className={cn(
-																	"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
-																	"cursor-pointer transition-colors",
-																	"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-																	active
-																		? "bg-foreground text-background hover:bg-foreground/90"
-																		: colored
-																			? "font-medium hover:opacity-90"
-																			: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
-																)}
-																style={colored}
-																title={t("papersLibrary.copyHint", {
-																	label: t("papersLibrary.colTags"),
-																})}
-																aria-label={t("papersLibrary.copyHint", {
-																	label: tag.name,
-																})}
-																onClick={(e) =>
-																	onCellCopy(
-																		e,
-																		tag.name,
-																		t("papersLibrary.colTags"),
-																	)
-																}
-															>
-																{tag.color && !active ? (
-																	<span
-																		className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
-																		style={tagSwatchStyle(tag.color)}
-																		aria-hidden
-																	/>
-																) : null}
-																{tag.name}
-															</button>
-														);
-													})}
-												</div>
-											) : (
-												<span className="text-muted-foreground text-xs">—</span>
-											)}
-										</td>
-										<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
-											<button
-												type="button"
-												className={cn(
-													"cursor-pointer rounded-sm px-0.5",
-													"hover:bg-muted/60 hover:text-foreground",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												)}
-												title={
-													p.type
-														? t("papersLibrary.copyHint", {
-																label: t("papersLibrary.colType"),
-															})
-														: undefined
-												}
-												aria-label={t("papersLibrary.copyHint", {
-													label: t("papersLibrary.colType"),
-												})}
-												onClick={(e) =>
-													onCellCopy(e, p.type, t("papersLibrary.colType"))
-												}
-											>
-												{p.type || "—"}
-											</button>
-										</td>
-										<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
-											<button
-												type="button"
-												className={cn(
-													"block w-full cursor-pointer rounded-sm text-left",
-													"hover:bg-muted/60 hover:text-foreground",
-													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-												)}
-												title={
-													identifierCopyText(p)
-														? t("papersLibrary.copyHint", {
-																label: t("papersLibrary.colId"),
-															})
-														: undefined
-												}
-												aria-label={t("papersLibrary.copyHint", {
-													label: t("papersLibrary.colId"),
-												})}
-												onClick={(e) =>
-													onCellCopy(
-														e,
-														identifierCopyText(p),
-														t("papersLibrary.colId"),
-													)
-												}
-											>
-												<span
-													className="line-clamp-1"
-													title={identifierLabel(p)}
-												>
-													{identifierLabel(p)}
-												</span>
-											</button>
-										</td>
+										{visibleColumns.map((col) => (
+											<Fragment key={col.key}>
+												{renderCell(col.key, p, heat)}
+											</Fragment>
+										))}
 									</tr>
 								);
 							})}
 							{paddingBottom > 0 ? (
 								<tr aria-hidden>
 									<td
-										colSpan={TABLE_COL_COUNT}
+										colSpan={visibleColumns.length}
 										style={{ height: paddingBottom }}
 									/>
 								</tr>

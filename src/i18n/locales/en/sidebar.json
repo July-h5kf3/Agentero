@@ -111,6 +111,8 @@
 		"noMatch": "No papers match your search.",
 		"filterTag": "Tag",
 		"clearTagFilter": "Clear",
+		"columnsMenuLabel": "Columns",
+		"resetColumns": "Reset columns",
 		"import": "Import bibliography",
 		"importPdf": "Import PDF",
 		"export": "Export library",
