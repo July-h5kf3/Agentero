@@ -111,6 +111,7 @@ function TagsEditor({
 	const [draftColor, setDraftColor] = useState<TagColorId | null>(null);
 	const [colorOpen, setColorOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
+	const inputRef = useRef<HTMLInputElement>(null);
 	const list = coercePaperTags(tags);
 
 	const commit = async (next: PaperTag[]) => {
@@ -161,15 +162,10 @@ function TagsEditor({
 			{disabled ? null : (
 				<div className="relative">
 					<Input
+						ref={inputRef}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 						onKeyDown={onKeyDown}
-						onBlur={(e) => {
-							// Don't commit while interacting with the color popover.
-							const next = e.relatedTarget as HTMLElement | null;
-							if (next?.closest?.("[data-tag-color-picker]")) return;
-							if (draft.trim()) addTag();
-						}}
 						placeholder={t("paperInfo.addTag")}
 						aria-label={t("paperInfo.addTag")}
 						disabled={busy}
@@ -183,16 +179,21 @@ function TagsEditor({
 								disabled={busy}
 								className={cn(
 									"absolute top-1/2 right-1 flex size-4 -translate-y-1/2 items-center justify-center",
-									"rounded-full ring-1 ring-border/70 transition-colors",
+									"overflow-hidden rounded-full bg-background ring-1 ring-border/70 transition-colors",
 									"hover:ring-foreground/30",
 									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 									"disabled:pointer-events-none disabled:opacity-50",
-									!draftColor && "bg-muted",
 								)}
 								style={draftSwatch}
 								aria-label={t("paperInfo.tagColor")}
 								title={t("paperInfo.tagColor")}
 							>
+								{draftColor == null ? (
+									<span
+										className="pointer-events-none absolute top-1/2 left-[-20%] h-px w-[140%] -translate-y-1/2 rotate-45 bg-red-500"
+										aria-hidden
+									/>
+								) : null}
 								<span className="sr-only">{t("paperInfo.tagColor")}</span>
 							</button>
 						</PopoverTrigger>
@@ -209,7 +210,7 @@ function TagsEditor({
 									type="button"
 									data-tag-color-picker
 									className={cn(
-										"size-5 rounded-full bg-muted ring-1 ring-border transition-shadow",
+										"relative size-5 overflow-hidden rounded-full bg-background ring-1 ring-border transition-shadow",
 										"hover:ring-foreground/40",
 										"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 										draftColor == null && "ring-2 ring-foreground/50",
@@ -219,8 +220,14 @@ function TagsEditor({
 									onClick={() => {
 										setDraftColor(null);
 										setColorOpen(false);
+										inputRef.current?.focus();
 									}}
-								/>
+								>
+									<span
+										className="pointer-events-none absolute top-1/2 left-[-20%] h-px w-[140%] -translate-y-1/2 rotate-45 bg-red-500"
+										aria-hidden
+									/>
+								</button>
 								{TAG_COLOR_IDS.map((id) => {
 									const style = tagSwatchStyle(id);
 									const selected = draftColor === id;
@@ -241,6 +248,7 @@ function TagsEditor({
 											onClick={() => {
 												setDraftColor(id);
 												setColorOpen(false);
+												inputRef.current?.focus();
 											}}
 										/>
 									);
