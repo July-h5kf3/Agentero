@@ -96,7 +96,7 @@
 - **展开态**：任务列表（队列序号、标题、详情、进度）；可清除已完成项。
 - **外观**：`bg-popover` 实底 + 边框阴影；**hover 使用实色 `hover:bg-accent`**（禁止 `accent/40` 等半透明，避免底下内容透出）。
 - **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**、**Zotero Connector 附件下载**等长操作经 `runBackgroundTask` / `startBackgroundTask` 登记（`kind` 含 `download` | `downloadAll` | `lookup` | `import` | `export` | `paperRead` | `connector` | …）。
-- **paper-reader 进度**：任务 kind=`paperRead`；title/detail 走 i18n `app:tasks.paperRead*`；plan/tool 事件会更新进度百分比；失败时 error 写入任务条。
+- **进度语义**：下载任务在 Host 读取响应流时按实际 `downloaded_bytes / total_bytes` 更新；服务端未返回 `Content-Length` 时显示不确定进度，不显示估算百分比。批量下载 / Zotero 迁移使用实际完成项目数。查询、解析、刷新、Connector 和 paper-reader 仅在有真实百分比来源时显示百分比，否则显示状态文本与不确定进度；失败时 error 写入任务条。
 - **Connector 进度**：Host 发 `connector:progress`；前端显示附件下载、正文生成、完成/失败阶段；不进入 Agent 对话历史。
 - 交互对齐常见 IDE（VS Code 类）：不抢焦点、可折叠、只展示后台进度；操作级错误另走右上角 toast（见 §2.1.2）。
 
