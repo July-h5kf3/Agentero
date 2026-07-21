@@ -74,10 +74,14 @@ jobs:
                 sha=$(download_and_hash "$asset")
                 update_placeholder "PLACEHOLDER_SHA256_X86_64_UNKNOWN_LINUX_GNU" "$sha"
                 ;;
+              agentero-${VERSION}-aarch64-unknown-linux-gnu.tar.gz)
+                sha=$(download_and_hash "$asset")
+                update_placeholder "PLACEHOLDER_SHA256_AARCH64_UNKNOWN_LINUX_GNU" "$sha"
+                ;;
             esac
           done < assets.txt
 
-          sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" ../Formula/agentero.rb
+          sed -i -E "s/version \"[^\"]*\"/version \"${VERSION}\"/" ../Formula/agentero.rb
 
       - name: Update Cask
         env:
@@ -107,7 +111,7 @@ jobs:
             esac
           done < assets.txt
 
-          sed -i "s/version \"[0-9.]*\"/version \"${VERSION}\"/" ../Casks/agentero.rb
+          sed -i -E "s/version \"[^\"]*\"/version \"${VERSION}\"/" ../Casks/agentero.rb
 
           if [ "$has_aarch64" -eq 0 ] && [ "$has_x64" -eq 0 ]; then
             echo "No macOS dmg assets found; skipping cask update."

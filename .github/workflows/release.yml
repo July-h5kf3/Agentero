@@ -20,7 +20,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Agentero ${{ github.ref_name }}
           draft: true
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             Installers and CLI for Agentero ${{ github.ref_name }}.
 
@@ -93,7 +93,7 @@ jobs:
           releaseName: Agentero ${{ github.ref_name }}
           # Body is set by the prepare job; keep draft + same tag.
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   cli:
     name: CLI (${{ matrix.platform }})
@@ -102,7 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, ubuntu-22.04, windows-latest]
+        platform: [macos-latest, ubuntu-22.04, ubuntu-24.04-arm, windows-latest]
 
     steps:
       - name: Checkout repository
@@ -113,7 +113,7 @@ jobs:
 
       # agentero-cli path-depends agentero_lib (Tauri), so Linux still needs WebKit link libs.
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
