@@ -345,6 +345,8 @@ export default function App() {
 	treeRef.current = tree;
 	const vaultPathRef = useRef(vaultPath);
 	vaultPathRef.current = vaultPath;
+	/** Invalidates in-flight tree loads when the active Vault changes. */
+	const treeLoadGenerationRef = useRef(0);
 	const restoredVaultPathRef = useRef(vaultPath);
 	/** Normalized paths currently being reloaded from disk; suppresses the editor
 	 * unmount-flush so an external/Agent write is never clobbered by stale in-memory text. */
@@ -445,9 +447,15 @@ export default function App() {
 				// Auto-download for preview may have written local PDF — refresh tree icons
 				const vault = vaultPathRef.current;
 				if (res.didDownloadAssets && vault) {
+					const generation = treeLoadGenerationRef.current;
 					try {
 						const nodes = await loadVaultTree(vault);
-						setTree(nodes);
+						if (
+							vaultPathRef.current === vault &&
+							treeLoadGenerationRef.current === generation
+						) {
+							setTree(nodes);
+						}
 					} catch {
 						// ignore; viewer already has source
 					}
@@ -999,18 +1007,35 @@ export default function App() {
 	}, [pdfZenMode, activeTab, exitPdfZen]);
 
 	const refreshTree = useCallback(async (path: string) => {
+		if (vaultPathRef.current !== path) return;
+		const generation = treeLoadGenerationRef.current;
 		setTreeLoading(true);
 		setBusy(true);
 		try {
 			const nodes = await loadVaultTree(path);
-			setTree(nodes);
+			if (
+				vaultPathRef.current === path &&
+				treeLoadGenerationRef.current === generation
+			) {
+				setTree(nodes);
+			}
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
-			notifyError(message);
-			setTree([]);
+			if (
+				vaultPathRef.current === path &&
+				treeLoadGenerationRef.current === generation
+			) {
+				notifyError(message);
+				setTree([]);
+			}
 		} finally {
-			setTreeLoading(false);
-			setBusy(false);
+			if (
+				vaultPathRef.current === path &&
+				treeLoadGenerationRef.current === generation
+			) {
+				setTreeLoading(false);
+				setBusy(false);
+			}
 		}
 	}, []);
 
@@ -1021,11 +1046,22 @@ export default function App() {
 	const handleLoadDirChildren = useCallback(async (dirPath: string) => {
 		const vault = vaultPathRef.current;
 		if (!vault) return;
+		const generation = treeLoadGenerationRef.current;
 		try {
 			const children = await listVaultDirChildren(vault, dirPath);
-			setTree((prev) => replaceTreeNodeChildren(prev, dirPath, children));
+			if (
+				vaultPathRef.current === vault &&
+				treeLoadGenerationRef.current === generation
+			) {
+				setTree((prev) => replaceTreeNodeChildren(prev, dirPath, children));
+			}
 		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
+			if (
+				vaultPathRef.current === vault &&
+				treeLoadGenerationRef.current === generation
+			) {
+				notifyError(e instanceof Error ? e.message : String(e));
+			}
 		}
 	}, []);
 
@@ -1110,8 +1146,16 @@ export default function App() {
 			treeRefreshTimerRef.current = null;
 			const vault = vaultPathRef.current;
 			if (!vault) return;
+			const generation = treeLoadGenerationRef.current;
 			void loadVaultTree(vault)
-				.then((nodes) => setTree(nodes))
+				.then((nodes) => {
+					if (
+						vaultPathRef.current === vault &&
+						treeLoadGenerationRef.current === generation
+					) {
+						setTree(nodes);
+					}
+				})
 				.catch(() => {
 					// best-effort background refresh
 				});
@@ -1156,6 +1200,13 @@ export default function App() {
 
 	const activateVault = useCallback(
 		async (path: string) => {
+			treeLoadGenerationRef.current += 1;
+			if (treeRefreshTimerRef.current) {
+				clearTimeout(treeRefreshTimerRef.current);
+				treeRefreshTimerRef.current = null;
+			}
+			setTree([]);
+			setTreeLoading(true);
 			// Tear down previous remote session so work catalogs are flushed.
 			const prev = vaultPathRef.current;
 			if (prev && isRemoteVaultHandle(prev) && prev !== path) {
@@ -1171,7 +1222,6 @@ export default function App() {
 			}
 			saveVaultPath(path);
 			setVaultPath(path);
-			setTreeLoading(true);
 			setTabs([]);
 			setActiveTabId(null);
 			setTreeSelectedPath(null);
