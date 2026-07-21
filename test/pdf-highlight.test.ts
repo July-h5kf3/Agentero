@@ -5,6 +5,7 @@ import { parsePdfHighlight } from "@/lib/pdf-highlight/schema";
 
 const base = {
 	version: 1,
+	kind: "highlight",
 	id: "h1",
 	paperPath: "papers/1706.03762",
 	createdAt: "2026-01-01T00:00:00.000Z",
