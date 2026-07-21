@@ -107,4 +107,4 @@ agentero/
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=poco-ai/agentero&type=Date)](https://www.star-history.com/#poco-ai/agentero&Date)
+[![Star History Chart](https://api.star-history.com/chart?repos=poco-ai/agentero&type=date&legend=top-left&sealed_token=dKsoXrNYkG3u-nEL3OLp0_aTrlN-GjDpvVEVJvC3xjH13q3viEwwkkB5m6LYT3iKu6LZXtZpQAXalvBwaFQdYgVTjTA1Dzp6NGe_BUQXA1cMt57wNdrYvA)](https://www.star-history.com/?type=date&repos=poco-ai%2Fagentero)
