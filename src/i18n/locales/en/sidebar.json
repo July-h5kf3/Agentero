@@ -200,6 +200,7 @@
 	},
 	"paperInfo": {
 		"info": "Info",
+		"resize": "Resize info panel",
 		"selectPrompt": "Select a paper to see metadata.",
 		"title": "Title",
 		"authors": "Authors",

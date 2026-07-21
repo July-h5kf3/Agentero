@@ -200,6 +200,7 @@
 	},
 	"paperInfo": {
 		"info": "信息",
+		"resize": "调整信息面板高度",
 		"selectPrompt": "选择一篇论文以查看元数据。",
 		"title": "标题",
 		"authors": "作者",

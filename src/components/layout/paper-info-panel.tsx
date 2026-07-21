@@ -13,7 +13,9 @@ import {
 	type ComponentType,
 	type KeyboardEvent,
 	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
 	useEffect,
+	useRef,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -295,6 +297,26 @@ function TagsEditor({
 	);
 }
 
+const HEIGHT_STORAGE_KEY = "agentero.paperInfoHeight";
+const MIN_CONTENT_HEIGHT = 120;
+const MAX_CONTENT_HEIGHT = 560;
+const DEFAULT_CONTENT_HEIGHT = 224;
+
+function clampHeight(value: number) {
+	return Math.min(MAX_CONTENT_HEIGHT, Math.max(MIN_CONTENT_HEIGHT, value));
+}
+
+function loadStoredHeight(): number {
+	try {
+		const raw = localStorage.getItem(HEIGHT_STORAGE_KEY);
+		const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+		if (Number.isFinite(parsed)) return clampHeight(parsed);
+	} catch {
+		// localStorage unavailable; fall through to default.
+	}
+	return DEFAULT_CONTENT_HEIGHT;
+}
+
 export function PaperInfoPanel({
 	meta,
 	className,
@@ -303,6 +325,50 @@ export function PaperInfoPanel({
 }: PaperInfoPanelProps) {
 	const { t } = useTranslation("sidebar");
 	const [open, setOpen] = useState(Boolean(meta) && autoOpen);
+	const [contentHeight, setContentHeight] = useState(loadStoredHeight);
+	const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+	const persistHeight = (value: number) => {
+		try {
+			localStorage.setItem(HEIGHT_STORAGE_KEY, String(Math.round(value)));
+		} catch {
+			// Ignore persistence failures.
+		}
+	};
+
+	const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+		if (e.button !== 0) return;
+		dragRef.current = { startY: e.clientY, startHeight: contentHeight };
+		e.currentTarget.setPointerCapture(e.pointerId);
+	};
+
+	const onHandlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+		const drag = dragRef.current;
+		if (!drag) return;
+		// Dragging up grows the panel.
+		setContentHeight(clampHeight(drag.startHeight + (drag.startY - e.clientY)));
+	};
+
+	const onHandlePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+		if (!dragRef.current) return;
+		dragRef.current = null;
+		e.currentTarget.releasePointerCapture(e.pointerId);
+		setContentHeight((h) => {
+			persistHeight(h);
+			return h;
+		});
+	};
+
+	const onHandleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+		const step = e.shiftKey ? 48 : 16;
+		let next: number | null = null;
+		if (e.key === "ArrowUp") next = clampHeight(contentHeight + step);
+		else if (e.key === "ArrowDown") next = clampHeight(contentHeight - step);
+		if (next == null) return;
+		e.preventDefault();
+		setContentHeight(next);
+		persistHeight(next);
+	};
 
 	// Open when a paper is selected; collapse when none.
 	useEffect(() => {
@@ -313,8 +379,34 @@ export function PaperInfoPanel({
 		if (autoOpen) setOpen(true);
 	}, [meta, autoOpen]);
 
+	const resizable = open && Boolean(meta);
+
 	return (
-		<div className={cn("shrink-0 border-t bg-muted/10", className)}>
+		<div className={cn("relative shrink-0 border-t bg-muted/10", className)}>
+			{resizable ? (
+				// biome-ignore lint/a11y/useSemanticElements: a focusable drag separator cannot be a native <hr>
+				<div
+					role="separator"
+					aria-orientation="horizontal"
+					aria-label={t("paperInfo.resize")}
+					aria-valuenow={Math.round(contentHeight)}
+					aria-valuemin={MIN_CONTENT_HEIGHT}
+					aria-valuemax={MAX_CONTENT_HEIGHT}
+					title={t("paperInfo.resize")}
+					tabIndex={0}
+					onPointerDown={onHandlePointerDown}
+					onPointerMove={onHandlePointerMove}
+					onPointerUp={onHandlePointerUp}
+					onPointerCancel={onHandlePointerUp}
+					onKeyDown={onHandleKeyDown}
+					className={cn(
+						// Sits on the panel's top border; wider invisible hit area.
+						"absolute inset-x-0 -top-[3px] z-10 h-[7px] cursor-row-resize outline-none",
+						"after:absolute after:inset-x-0 after:top-[3px] after:h-px after:content-['']",
+						"hover:after:bg-foreground/25 focus-visible:after:bg-foreground/35",
+					)}
+				/>
+			) : null}
 			<Collapsible open={open} onOpenChange={setOpen}>
 				<CollapsibleTrigger
 					className={cn(
@@ -345,15 +437,16 @@ export function PaperInfoPanel({
 							{t("paperInfo.selectPrompt")}
 						</p>
 					) : (
-						<div className="agentero-scroll max-h-56 overflow-y-auto border-t pb-2">
+						<div
+							className="agentero-scroll overflow-y-auto border-t pb-2"
+							style={{ maxHeight: contentHeight }}
+						>
 							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
 								<span className="font-medium">{meta.title}</span>
 							</MetaRow>
 							{meta.authors?.length ? (
 								<MetaRow icon={Users} label={t("paperInfo.authors")}>
-									<span className="line-clamp-3">
-										{meta.authors.join(", ")}
-									</span>
+									<span>{meta.authors.join(", ")}</span>
 								</MetaRow>
 							) : null}
 							{meta.year ? (
@@ -374,9 +467,7 @@ export function PaperInfoPanel({
 							</MetaRow>
 							{meta.abstract ? (
 								<MetaRow icon={FileText} label={t("paperInfo.abstract")}>
-									<p className="line-clamp-4 text-muted-foreground">
-										{meta.abstract}
-									</p>
+									<p className="text-muted-foreground">{meta.abstract}</p>
 								</MetaRow>
 							) : null}
 							{(meta.pdf_url ||
