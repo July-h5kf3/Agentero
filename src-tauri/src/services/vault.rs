@@ -70,7 +70,7 @@ pub const DEEP_RESEARCH_SKILL: &str =
 ///
 /// When the app ships new skills, [`ensure_vault`] / [`create_vault`] add any
 /// missing paths here; existing files are left untouched so user edits survive.
-fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
+pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
     &[
         (".agents/skills/README.md", SKILLS_DIR_README),
         (

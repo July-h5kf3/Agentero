@@ -3,6 +3,7 @@
 use super::session::{parse_remote_handle, RemoteRegistry, RemoteSession, LOCAL_SIM_HOST};
 use crate::error::AppError;
 use crate::services::fs::WriteOpts;
+use crate::services::vault::{self, CreateVaultResult};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -58,8 +59,42 @@ pub async fn resolve_remote_target(
     }))
 }
 
+/// Seed missing bundled skills directly into the remote vault.
+///
+/// Remote vault handles are opaque session ids, so the local `vault_ensure`
+/// command cannot be used for them. Existing remote files are never replaced.
+pub async fn ensure_remote_vault_skills(
+    session: &RemoteSession,
+) -> Result<CreateVaultResult, AppError> {
+    let mut created = Vec::new();
+    for (rel, content) in vault::bundled_skill_files() {
+        if session.fs.exists(rel).await? {
+            continue;
+        }
+        session
+            .fs
+            .write(
+                rel,
+                content.as_bytes(),
+                WriteOpts {
+                    create_parents: true,
+                },
+            )
+            .await?;
+        created.push((*rel).to_string());
+    }
+
+    Ok(CreateVaultResult {
+        path: session.remote_path.clone(),
+        created,
+        open_path: "AGENTS.md".into(),
+    })
+}
+
 /// Pull `.agents/skills/*/SKILL.md` into the session work root so Host can inject skills.
 pub async fn materialize_skills_to_work(session: &RemoteSession) -> Result<(), AppError> {
+    let mirror_root = session.work_root.join(".agents/skills");
+    let _ = std::fs::remove_dir_all(&mirror_root);
     let skills_rel = ".agents/skills";
     let entries = match session.fs.list(skills_rel).await {
         Ok(e) => e,
@@ -129,5 +164,57 @@ pub fn notes_rel_from_target(target: &str) -> String {
         t
     } else {
         format!("{t}/NOTES.md")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp_vault() -> PathBuf {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("agentero-remote-skills-{n}"));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn ensure_remote_vault_skills_seeds_missing_files_without_overwrite() {
+        let root = tmp_vault();
+        let agents = root.join("AGENTS.md");
+        let existing_skill = root.join(".agents/skills/paper-reader/SKILL.md");
+        std::fs::write(&agents, "# user agents\n").unwrap();
+        std::fs::create_dir_all(existing_skill.parent().unwrap()).unwrap();
+        std::fs::write(&existing_skill, "# user skill\n").unwrap();
+
+        let registry = RemoteRegistry::new();
+        let info = registry
+            .connect(LOCAL_SIM_HOST, None, &root.to_string_lossy())
+            .await
+            .unwrap();
+        let session = registry.get(&info.session_id).await.unwrap();
+
+        let first = ensure_remote_vault_skills(&session).await.unwrap();
+        assert!(first
+            .created
+            .contains(&".agents/skills/deep-research/SKILL.md".to_string()));
+        assert!(!first
+            .created
+            .contains(&".agents/skills/paper-reader/SKILL.md".to_string()));
+        assert_eq!(std::fs::read_to_string(&agents).unwrap(), "# user agents\n");
+        assert_eq!(
+            std::fs::read_to_string(&existing_skill).unwrap(),
+            "# user skill\n"
+        );
+
+        let second = ensure_remote_vault_skills(&session).await.unwrap();
+        assert!(second.created.is_empty());
+
+        registry.disconnect(&info.session_id).await.unwrap();
+        let _ = std::fs::remove_dir_all(root);
     }
 }

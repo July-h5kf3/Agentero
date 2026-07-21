@@ -219,6 +219,7 @@ pub fn run() {
             commands::remote::remote_connect,
             commands::remote::remote_disconnect,
             commands::remote::remote_status,
+            commands::remote::remote_vault_ensure,
             commands::remote::remote_list,
             commands::remote::remote_stat,
             commands::remote::remote_read_text,

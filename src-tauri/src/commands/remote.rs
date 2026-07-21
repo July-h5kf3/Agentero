@@ -8,7 +8,10 @@ use crate::log_util::{trunc, OpTimer};
 use crate::services::catalog::papers::{self, PaperRecord};
 use crate::services::fs::{FsDirEntry, FsFileMeta, WriteOpts};
 use crate::services::remote::agent_exec;
-use crate::services::remote::{parse_remote_handle, RemoteRegistry, RemoteSessionInfo};
+use crate::services::remote::{
+    ensure_remote_vault_skills, parse_remote_handle, RemoteRegistry, RemoteSessionInfo,
+};
+use crate::services::vault::CreateVaultResult;
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
@@ -104,6 +107,22 @@ pub async fn remote_status(
 ) -> Result<ApiResult<RemoteSessionInfo>, String> {
     match registry.get(&args.session_id).await {
         Ok(s) => Ok(ApiResult::ok(s.info())),
+        Err(e) => Ok(map_err(e)),
+    }
+}
+
+/// Ensure missing bundled skills in a remote vault without overwriting user files.
+#[tauri::command]
+pub async fn remote_vault_ensure(
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: RemoteSessionArgs,
+) -> Result<ApiResult<CreateVaultResult>, String> {
+    let session = match registry.get(&args.session_id).await {
+        Ok(s) => s,
+        Err(e) => return Ok(map_err(e)),
+    };
+    match ensure_remote_vault_skills(&session).await {
+        Ok(result) => Ok(ApiResult::ok(result)),
         Err(e) => Ok(map_err(e)),
     }
 }

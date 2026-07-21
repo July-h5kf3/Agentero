@@ -193,6 +193,10 @@ mutation（tags / rescan / is_read…）:
 - Agent 会话结束 / 用户保存后：对**已打开**文件 SFTP `stat` + 按需 re-read
 - 文件树：手动刷新或展开时 readdir
 
+### 4.6 远端 Vault skill 更新
+
+打开远端 Vault 时不能调用本地 `vault_ensure`：`remote:<sessionId>` 是本机 Host 的会话句柄，不是远端文件系统路径。Host 通过 `remote_vault_ensure` 使用当前 `RemoteSession.fs` 的 SFTP 写入能力，仅补种缺失的 bundled skill 文件，不覆盖远端已有文件。Agent 面板列出远端 skills 时也会先执行同一补种并刷新本地 ephemeral skill mirror，确保“已更新”状态与 Composer 列表一致。
+
 ---
 
 ## 5. 远端 BYOA（ACP over SSH）

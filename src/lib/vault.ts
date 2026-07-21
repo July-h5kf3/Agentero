@@ -7,6 +7,7 @@ import {
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
 	parseRemoteJoinedPath,
+	remoteEnsureVault,
 	remoteList,
 	remoteMkdir,
 	remoteReadText,
@@ -596,6 +597,10 @@ export async function ensureVault(path: string): Promise<CreateVaultResult> {
 
 	const { logOp } = await import("@/lib/logger");
 	return logOp("ensureVault", { path }, async () => {
+		const remoteSessionId = remoteSessionIdFromHandle(path);
+		if (remoteSessionId) {
+			return remoteEnsureVault(remoteSessionId);
+		}
 		const result = await invoke<ApiResult<CreateVaultResult>>("vault_ensure", {
 			path,
 		});

@@ -135,6 +135,24 @@ export async function remoteConnect(args: {
 	);
 }
 
+export type RemoteVaultEnsureResult = {
+	path: string;
+	created: string[];
+	openPath: string;
+};
+
+/** Seed missing bundled skills in the connected remote vault. */
+export async function remoteEnsureVault(
+	sessionId: string,
+): Promise<RemoteVaultEnsureResult> {
+	return unwrap(
+		invoke<ApiResult<RemoteVaultEnsureResult>>("remote_vault_ensure", {
+			args: { sessionId },
+		}),
+		"Failed to update remote vault skills",
+	);
+}
+
 export async function remoteDisconnect(sessionId: string): Promise<void> {
 	if (!isTauri()) return;
 	await unwrap(

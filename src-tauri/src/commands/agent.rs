@@ -9,7 +9,8 @@ use crate::services::agent::{
     AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
 };
 use crate::services::remote::{
-    notes_rel_from_target, read_remote_note, resolve_remote_target, RemoteRegistry,
+    materialize_skills_to_work, notes_rel_from_target, read_remote_note, resolve_remote_target,
+    RemoteRegistry,
 };
 use crate::services::terminal;
 use serde::Serialize;
@@ -66,8 +67,26 @@ pub fn agent_list_templates() -> ApiResult<TemplatesResponse> {
 }
 
 #[tauri::command]
-pub fn agent_list_skills(vault_path: Option<String>) -> ApiResult<Vec<AgentSkill>> {
-    ApiResult::ok(list_agent_skills(vault_path.as_deref()))
+pub async fn agent_list_skills(
+    remote_registry: State<'_, Arc<RemoteRegistry>>,
+    vault_path: Option<String>,
+) -> Result<ApiResult<Vec<AgentSkill>>, String> {
+    let remote_target =
+        match resolve_remote_target(remote_registry.inner(), vault_path.as_deref()).await {
+            Ok(target) => target,
+            Err(e) => return Ok(map_err(e)),
+        };
+    if let Some(remote) = remote_target {
+        if let Err(e) = crate::services::remote::ensure_remote_vault_skills(&remote.session).await {
+            return Ok(map_err(e));
+        }
+        if let Err(e) = materialize_skills_to_work(&remote.session).await {
+            return Ok(map_err(e));
+        }
+        let work_root = remote.work_root.to_string_lossy().to_string();
+        return Ok(ApiResult::ok(list_agent_skills(Some(&work_root))));
+    }
+    Ok(ApiResult::ok(list_agent_skills(vault_path.as_deref())))
 }
 
 #[tauri::command]
