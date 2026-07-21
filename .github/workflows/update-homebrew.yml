@@ -108,6 +108,18 @@ jobs:
                 sed -i "s/PLACEHOLDER_SHA256_X64_DMG/${sha}/" ../Casks/agentero.rb
                 has_x64=1
                 ;;
+              Agentero_${VERSION}_aarch64.AppImage)
+                curl -sL "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${asset}" -o "$asset"
+                sha=$(sha256sum "$asset" | cut -d' ' -f1)
+                sed -i "s/PLACEHOLDER_SHA256_AARCH64_LINUX_APPIMAGE/${sha}/" ../Casks/agentero.rb
+                has_aarch64=1
+                ;;
+              Agentero_${VERSION}_amd64.AppImage)
+                curl -sL "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${asset}" -o "$asset"
+                sha=$(sha256sum "$asset" | cut -d' ' -f1)
+                sed -i "s/PLACEHOLDER_SHA256_AMD64_LINUX_APPIMAGE/${sha}/" ../Casks/agentero.rb
+                has_x64=1
+                ;;
             esac
           done < assets.txt
 

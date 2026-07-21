@@ -600,7 +600,7 @@ pnpm tauri build
 - `.github/workflows/release.yml` 在 push `v*` tag 时触发（workflow 名 **Release**）。
 - Job 拆分（可并行、互不 `needs` 对方）：
   1. **prepare**：创建草稿 GitHub Release + release notes
-  2. **installers**（矩阵 `macos-latest` / `ubuntu-22.04` / `windows-latest`）：pnpm、Node 24、Rust stable；Linux 装 WebKit 等；`tauri-apps/tauri-action@v0` 构建桌面安装包并上传
+  2. **installers**（矩阵 `macos-latest` / `ubuntu-22.04` / `ubuntu-24.04-arm` / `windows-latest`）：pnpm、Node 24、Rust stable；Linux 装 WebKit 等；`tauri-apps/tauri-action@v0` 构建桌面安装包并上传
   3. **cli**（同矩阵）：仅 Rust（+ Linux 系统库，因 path 依赖 `agentero_lib`）；`cargo build -p agentero-cli --release`，打包后上传同一草稿。Linux CLI 覆盖 x86_64 与 ARM64（`aarch64-unknown-linux-gnu`）。
 - `fail-fast: false`：安装包失败不取消 CLI（反之亦然）。
 - 后续若加入签名、公证或自动发布，需要在文档中同步列出所需 secrets，并保证本地开发构建不依赖发布凭据。
