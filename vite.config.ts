@@ -18,6 +18,17 @@ export default defineConfig(async () => ({
 		},
 	},
 
+	// EmbedPDF ships a PDFium WASM binary + web worker. Emit the wasm as an
+	// asset, bundle the worker as an ES module, and keep Vite from pre-bundling
+	// these packages (dep-optimize rewrites break their wasm/worker loading).
+	assetsInclude: ["**/*.wasm"],
+	worker: {
+		format: "es",
+	},
+	optimizeDeps: {
+		exclude: ["@embedpdf/pdfium", "@embedpdf/engines"],
+	},
+
 	test: {
 		environment: "node",
 		include: ["test/**/*.test.ts"],
