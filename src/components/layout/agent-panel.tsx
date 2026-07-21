@@ -1136,6 +1136,9 @@ export function AgentPanel({
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
+			if (ev.providerSessionId && activeTabRef.current === ev.sessionId) {
+				activeConversationRef.current = ev.providerSessionId;
+			}
 			if (ev.stopReason === "cancelled") {
 				const cancelledLine: ChatLine = {
 					id: nextLineId("sys"),
@@ -2042,7 +2045,6 @@ export function AgentPanel({
 				}
 				return { ...line };
 			});
-			if (supportsResume) activeConversationRef.current = accepted.sessionId;
 			completeComposerSubmission(accepted.sessionId, submittedComposerState);
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);

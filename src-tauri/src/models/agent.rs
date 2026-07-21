@@ -298,6 +298,10 @@ pub struct AgentResultPayload {
     pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
+    /// Durable ACP provider session id used by `session/resume`.
+    /// This is distinct from Agentero's per-run event correlation id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_session_id: Option<String>,
 }
 
 /// Stream chunk kind: assistant message body vs internal thought/reasoning.

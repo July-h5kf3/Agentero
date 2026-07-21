@@ -140,6 +140,8 @@ export type AgentResultPayload = {
 	reasoning?: string | null;
 	sources: string[];
 	stopReason?: string | null;
+	/** Durable ACP provider session id for the next `session/resume`. */
+	providerSessionId?: string | null;
 };
 
 export type AgentStreamKind = "message" | "thought";

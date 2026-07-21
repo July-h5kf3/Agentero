@@ -47,6 +47,7 @@ nav:
       - GitHub Project: development/github-project.md
   - Bug 修复记录:
       - DeepSeek 正文落入 Thinking: bug_fix/deepseek-thinking-body.md
+      - ACP 会话恢复 ID 错误: bug_fix/acp-session-resume-id.md
 
 markdown_extensions:
   - admonition

@@ -142,6 +142,7 @@ fn cancelled_payload(
         content,
         reasoning: (!reasoning.is_empty()).then_some(reasoning),
         stop_reason: Some("cancelled".to_string()),
+        provider_session_id: None,
     }
 }
 
@@ -1154,6 +1155,7 @@ pub async fn run_once(
                     },
                     sources,
                     stop_reason: stop_for_conn.lock().ok().and_then(|g| g.clone()),
+                    provider_session_id: Some(acp_session_id.to_string()),
                 };
                 let _ = app_for_conn.emit("agent:completed", payload.clone());
                 Ok(payload)

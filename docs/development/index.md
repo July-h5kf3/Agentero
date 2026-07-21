@@ -55,6 +55,7 @@
 - [`.md`](.md)：简短产品假设。
 - Bug 修复记录：
   - [`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）
+  - [`../bug_fix/acp-session-resume-id.md`](../bug_fix/acp-session-resume-id.md)（ACP 会话恢复使用错误的 provider session ID）
   - [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)（远端 ACP：BatchMode SSH PATH / Linuxbrew / Install 引号）
 - Paper 入库流水线统一：[`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
 
