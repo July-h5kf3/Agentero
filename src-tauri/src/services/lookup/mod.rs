@@ -8,7 +8,10 @@ pub(crate) mod parse;
 mod zotero_db;
 pub(crate) mod zotero_io;
 
-pub use assets::{ensure_paper_assets, has_local_pdf, has_local_tex, AssetDownloadResult};
+pub use assets::{
+    ensure_paper_assets, ensure_paper_assets_with_cookies, has_local_pdf, has_local_tex,
+    AssetDownloadResult,
+};
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 pub use zotero_db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,

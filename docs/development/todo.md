@@ -263,10 +263,10 @@
 - [x] C4a：catalog id 去重；URL 附件后台 `ensure_paper_assets`；防插件 15s 超时（NOTES 无实时 MT）
 - [x] C4a2：`getSelectedCollection.targets` 列出 `papers/` 组织子文件夹；`updateSession` 移动 paper；`connector_set_parent_dir` + Library 作用域同步
 - [x] C4b：`saveAttachment` 二进制上传协议（浏览器登录墙 PDF；`parentItemID`→paper；`%PDF` 校验；触发 PAPER.md）
-- [ ] C4c（P0）：`saveSnapshot` / `saveSingleFile`（可降级为元数据 + `html_url`）
-- [ ] C5a（P0）：`detailedCookies` 注入下载
-- [ ] C5b（P1）：`detect` / `savePage` / `selectItems`；`attachmentProgress`
-- [ ] C5c（可选）：`getTranslators` / proxies；可配置端口；`updateSession.tags` 写入 catalog
+- [x] C4c（P0）：`saveSnapshot` / `saveSingleFile`，写入 paper `snapshot.html`
+- [x] C5a（P0）：`detailedCookies` 注入后台 PDF 下载（不持久化 Cookie）
+- [x] C5b（P1）：`detect` / `savePage` / `selectItems`；`attachmentProgress`（安全降级）
+- [x] C5c（可选）：`getTranslators` / proxies 降级；可配置端口；`updateSession.tags` 写入 catalog
 
 ### 2. 用户友好的 Skills / Workflows
 

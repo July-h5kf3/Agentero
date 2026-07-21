@@ -8,4 +8,7 @@ mod server;
 mod state;
 mod targets;
 
-pub use state::{ConnectorController, ConnectorItemSaved, ConnectorStatus, DEFAULT_CONNECTOR_PORT};
+pub use state::{
+    ConnectorController, ConnectorItemSaved, ConnectorProgress, ConnectorStatus,
+    DEFAULT_CONNECTOR_PORT,
+};

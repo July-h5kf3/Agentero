@@ -23,6 +23,17 @@ export type ConnectorItemSaved = {
 	sessionId: string;
 };
 
+export type ConnectorProgress = {
+	key: string;
+	sessionId: string;
+	path: string;
+	title: string;
+	status: "running" | "completed" | "failed";
+	progress: number | null;
+	detail: string | null;
+	error: string | null;
+};
+
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;
@@ -65,6 +76,15 @@ export async function connectorSetEnabled(
 	return unwrap(
 		invoke<ApiResult<ConnectorStatus>>("connector_set_enabled", {
 			args: { enabled },
+		}),
+	);
+}
+
+export async function connectorSetPort(port: number): Promise<ConnectorStatus> {
+	if (!isTauri()) return connectorGetStatus();
+	return unwrap(
+		invoke<ApiResult<ConnectorStatus>>("connector_set_port", {
+			args: { port },
 		}),
 	);
 }

@@ -62,10 +62,17 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
-import { runBackgroundTask } from "@/lib/background-tasks";
+import {
+	completeBackgroundTask,
+	failBackgroundTask,
+	runBackgroundTask,
+	startBackgroundTask,
+	updateBackgroundTask,
+} from "@/lib/background-tasks";
 import type { AppCommand, PaletteMode } from "@/lib/commands/types";
 import {
 	type ConnectorItemSaved,
+	type ConnectorProgress,
 	connectorSetEnabled,
 	connectorSetParentDir,
 	connectorSetVault,
@@ -344,6 +351,7 @@ export default function App() {
 	const treeRef = useRef(tree);
 	treeRef.current = tree;
 	const vaultPathRef = useRef(vaultPath);
+	const connectorProgressTasksRef = useRef(new Map<string, string>());
 	vaultPathRef.current = vaultPath;
 	/** Invalidates in-flight tree loads when the active Vault changes. */
 	const treeLoadGenerationRef = useRef(0);
@@ -1809,6 +1817,40 @@ export default function App() {
 								? t("sidebar:connector.deduped", { title: p.title })
 								: t("sidebar:connector.saved", { title: p.title }),
 						);
+					}
+				}),
+			);
+			unsubs.push(
+				await listen<ConnectorProgress>("connector:progress", (ev) => {
+					const p = ev.payload;
+					if (!p?.key) return;
+					let taskId = connectorProgressTasksRef.current.get(p.key);
+					if (!taskId) {
+						taskId = startBackgroundTask({
+							kind: "connector",
+							title: p.title || t("tasks.connector"),
+							detail: p.detail ?? undefined,
+							progress: p.progress ?? null,
+						});
+						connectorProgressTasksRef.current.set(p.key, taskId);
+					} else {
+						updateBackgroundTask(taskId, {
+							detail: p.detail ?? undefined,
+							progress: p.progress ?? null,
+						});
+					}
+					if (p.status === "completed") {
+						completeBackgroundTask(
+							taskId,
+							p.detail ?? t("tasks.connectorComplete"),
+						);
+						connectorProgressTasksRef.current.delete(p.key);
+					} else if (p.status === "failed") {
+						failBackgroundTask(
+							taskId,
+							p.error ?? p.detail ?? t("tasks.connectorFailed"),
+						);
+						connectorProgressTasksRef.current.delete(p.key);
 					}
 				}),
 			);

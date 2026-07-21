@@ -168,6 +168,9 @@
 		"paperReadRunning": "Agent is reading the paper…",
 		"paperReadMarking": "Marking as read…",
 		"paperReadDone": "Read complete",
-		"paperReadFailed": "Paper reading failed"
+		"paperReadFailed": "Paper reading failed",
+		"connector": "Saving Connector attachment",
+		"connectorComplete": "Connector attachment ready",
+		"connectorFailed": "Connector attachment failed"
 	}
 }

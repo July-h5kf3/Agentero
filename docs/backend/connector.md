@@ -1,6 +1,6 @@
 # Zotero Connector 兼容服务（方案一）
 
-> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`** + **远程 Vault（SSH）**；**快照 / cookies 仍待**）  
+> 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`** + **快照 / cookies / 后台进度** + **远程 Vault（SSH）**）
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
 > 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
@@ -203,36 +203,37 @@ Tauri event: connector:item-saved / connector:error
 | Endpoint | 行为 |
 |---|---|
 | `POST /connector/getSelectedCollection` | 当前选中父目录 + **`targets`**：`L1`=`papers`，`Dpapers/…`=组织子文件夹（跳过 paper 单元：`NOTES.md` / `metadata.json` / `{id}.pdf`）；供插件保存位置下拉 |
-| `POST /connector/updateSession` | `sessionID` + `target`：解析目标并 **移动** 本 session 已写入的 paper 文件夹 + 更新 catalog path；同时记住默认 `parent_dir`；`tags` 暂未写入 catalog |
+| `POST /connector/updateSession` | `sessionID` + `target`：解析目标并 **移动** 本 session 已写入的 paper 文件夹 + 更新 catalog path；同时记住默认 `parent_dir`；`tags` 支持逗号字符串或字符串数组并写入 catalog |
 | `POST /connector/delaySync` | `204` 空（无真实 sync） |
 
-### 4.3 下一阶段 endpoints（快照 / cookies 未实现）
+### 4.3 快照、cookies 与兼容 endpoints
 
 **已实现（PR3 C4b）：**
 
 | Endpoint | 行为 |
 |---|---|
 | `POST /connector/saveAttachment` | 浏览器上传的附件（登录墙 PDF，插件用页面 cookie 拉取）。Body = 原始字节；`X-Metadata` 头携 `{ sessionID, parentItemID, title, url }`。按 `parentItemID` → session item 映射解析目标 paper（无映射时回退本 session 最近一篇），校验 `%PDF` magic 后写 `{paper}/{id}.pdf`，触发 `PAPER.md`（幂等）+ `connector:item-saved`。`ping` 回 `supportsAttachmentUpload: true`；body 上限 200 MiB。 |
+| `POST /connector/saveSnapshot` | 创建 `webpage` paper 条目；若请求带 `html`，同步写入 `{paper}/snapshot.html`。 |
+| `POST /connector/saveSingleFile` | 接收官方 Connector 的 `snapshotContent`，写入当前 session 对应 paper 的 `snapshot.html`。 |
+| `detailedCookies` | 在 `saveItems` / `saveSnapshot` 内消费；仅用于后台 PDF 下载，不持久化 Cookie。 |
+| `connector:progress` | Rust 后台资源任务发出阶段进度；前端映射到左下角 `BackgroundTasksPanel`。 |
 
-**未实现：**
+**兼容实现 / 安全降级：**
 
 | Endpoint | 说明 | 优先级 |
 |---|---|---|
-| `POST /connector/saveSnapshot` | 网页条目 + 可选快照 | **P0** |
-| `POST /connector/saveSingleFile` | SingleFile 整页 HTML | **P0**（可降级为仅元数据 + `html_url`） |
-| `detailedCookies`（在 `saveItems` 内消费） | 用浏览器 cookie 下 PDF | **P0** |
-| `POST /connector/detect` | 服务端 HTML 检测 translator | P1 |
-| `POST /connector/savePage` | 服务端翻译整页；多选时 300 | P1 |
-| `POST /connector/selectItems` | 多条目勾选后续 | P1 |
-| `POST /connector/attachmentProgress` | 旧版按 id 查附件进度 | P1（新版多用 `sessionProgress`） |
+| `POST /connector/detect` | 返回空 translator 列表；不在 Host 执行任意 Translator JavaScript | P1 |
+| `POST /connector/savePage` | 复用网页条目/快照保存路径 | P1 |
+| `POST /connector/selectItems` | 回传请求中的 `items` | P1 |
+| `POST /connector/attachmentProgress` | 复用 `sessionProgress` 返回附件状态 | P1 |
 
 ### 4.4 低优先级 / 明确不做
 
 | Endpoint / 能力 | 说明 |
 |---|---|
-| `POST /connector/getTranslators` | 桌面拉 translator 列表；现代插件多自带缓存 |
+| `POST /connector/getTranslators` | 返回空列表；Translator 代码执行仍由官方 Connector 完成 |
 | `POST /connector/getTranslatorCode` | 拉单个 translator 源码 |
-| `POST /connector/proxies` | 代理规则列表 |
+| `POST /connector/proxies` | 返回空列表；不暴露本地代理配置 |
 | `POST /connector/getClientHostnames` | 本机反解 hostname |
 | `POST /connector/import` | 任意格式导入（与 Library BibTeX 分离） |
 | `POST /connector/installStyle` | 安装 CSL |
@@ -247,21 +248,21 @@ Tauri event: connector:item-saved / connector:error
 | Endpoint | Agentero | 备注 |
 |---|---|---|
 | `GET/POST /connector/ping` | ✅ | HTML 探活 + prefs JSON |
-| `POST /connector/saveItems` | ✅ 基本 | 元数据同步落盘；PDF URL **后台**下；无 cookie；NOTES 不做实时 MT（防 15s 超时） |
-| `POST /connector/sessionProgress` | ✅ 简版 | `done` 在元数据完成后即为 true；附件进度多为占位 |
+| `POST /connector/saveItems` | ✅ 基本 | 元数据同步落盘；PDF URL **后台**下；支持 `detailedCookies`；NOTES 不做实时 MT（防 15s 超时） |
+| `POST /connector/sessionProgress` | ✅ 简版 | 元数据完成后返回 `done`；附件阶段由 `connector:progress` 驱动 Agentero 后台任务条 |
 | `POST /connector/getSelectedCollection` | ✅ | `targets` 含组织子文件夹 |
-| `POST /connector/updateSession` | ✅ | 切换 target 移动 paper；tags 未写 |
+| `POST /connector/updateSession` | ✅ | 切换 target 移动 paper；tags 写入 catalog |
 | `POST /connector/delaySync` | ✅ stub | `204` |
 | `POST /connector/saveAttachment` | ✅ | 登录墙 PDF：浏览器字节上传；`parentItemID`→paper；`%PDF` 校验；触发 PAPER.md |
-| `POST /connector/saveSnapshot` | ❌ | 普通网页保存 |
-| `POST /connector/saveSingleFile` | ❌ | 插件 snapshot 链路 |
-| `POST /connector/detect` | ❌ | 旧/bookmarklet 路径 |
-| `POST /connector/savePage` | ❌ | 服务端翻译 + 多选 |
-| `POST /connector/selectItems` | ❌ | 配合 savePage 300 |
-| `POST /connector/attachmentProgress` | ❌ | 旧附件进度 |
-| `POST /connector/getTranslators` | ❌ | 现代插件通常不依赖 |
+| `POST /connector/saveSnapshot` | ✅ | 创建网页 paper + 可选 `snapshot.html` |
+| `POST /connector/saveSingleFile` | ✅ | 写入 SingleFile `snapshot.html` |
+| `POST /connector/detect` | ✅ 降级 | 不执行 Host 侧 Translator JS |
+| `POST /connector/savePage` | ✅ 降级 | 复用网页保存路径 |
+| `POST /connector/selectItems` | ✅ 降级 | 原样回传 items |
+| `POST /connector/attachmentProgress` | ✅ | 复用 session progress |
+| `POST /connector/getTranslators` | ✅ 降级 | 空列表 |
 | `POST /connector/getTranslatorCode` | ❌ | 同上 |
-| `POST /connector/proxies` | ❌ | 可选 |
+| `POST /connector/proxies` | ✅ 降级 | 空列表 |
 | `POST /connector/getClientHostnames` | ❌ | 可选 |
 | `POST /connector/import` | ❌ | 另有 Library 导入 |
 | `POST /connector/installStyle` | ❌ | 不做 |
@@ -273,14 +274,14 @@ Tauri event: connector:item-saved / connector:error
 
 | 能力 | 现状 |
 |---|---|
-| 订阅站 / 登录墙 PDF | ✅ `saveAttachment` 浏览器上传；`detailedCookies` 仍未做 |
-| `singleFile: true` | 固定回 `false`，不接 `saveSingleFile` |
+| 订阅站 / 登录墙 PDF | ✅ `saveAttachment` 浏览器上传；URL 下载支持 `detailedCookies` |
+| `singleFile: true` | 支持 `saveSingleFile`，快照写入 `snapshot.html` |
 | 摘要中文 MT | Connector 路径关闭（超时纪律） |
-| `updateSession.tags` | 忽略 |
-| 附件真实 progress % | 占位；URL 下载在后台 |
-| 可配置端口 | 写死 `23119` |
+| `updateSession.tags` | 支持字符串/数组，追加到 catalog |
+| 附件后台进度 | `connector:progress` 映射到左下角后台任务条 |
+| 可配置端口 | 设置 → General → Connector port；修改时自动重启 loopback server |
 
-**建议补齐顺序：** ~~`saveAttachment`~~ ✅ → `saveSnapshot` / `saveSingleFile`（可降级）→ `detailedCookies` →（按需）`detect`/`savePage`/`selectItems`。
+**当前边界：** 页面 Translator 检测、translator 列表与代理规则不在 Host 执行；官方 Connector 继续负责页面识别，Agentero 负责兼容接收与 Vault 落盘。
 
 ---
 
@@ -433,9 +434,9 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 - 非模态：右上角成功 toast（简短标题）或仅依赖树刷新。
 - 失败：`notifyError`，不在侧栏挂常驻错误条。
 
-### 8.4 后台任务条（P1）
+### 8.4 后台任务条
 
-若 PDF 下载较慢，可 `kind=connector` 任务；MVP 可省略。
+Connector 的后台 PDF/TeX/PAPER.md 处理创建 `kind=connector` 任务。任务条显示阶段进度，完成/失败后沿用统一的短暂历史保留与自动收起行为。
 
 ---
 
@@ -462,18 +463,17 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 - [x] Library 作用域 → `connector_set_parent_dir`
 - [x] `docs/backend/api.md` 命令表同步
 
-### PR3 — 附件与快照（C4b 已做）
+### PR3 — 附件与快照（C4b/C4c/C5a 已做）
 
 - [x] **C4b** `saveAttachment` 二进制上传
-- [ ] **C4c** `saveSnapshot` / `saveSingleFile`（可降级）
-- [ ] **C5a** `detailedCookies`
-- [ ] （可选）`sessionProgress` 真实附件百分比；后台任务条
+- [x] **C4c** `saveSnapshot` / `saveSingleFile`（写入 `snapshot.html`）
+- [x] **C5a** `detailedCookies`（仅用于后台附件下载，不持久化）
+- [x] Connector 后台任务条（阶段进度、完成/失败）
 
-### PR4 — 可选 / 低优先级
+### PR4 — 兼容降级与端口
 
-- [ ] `detect` / `savePage` / `selectItems`
-- [ ] `getTranslators` / `getTranslatorCode` / proxies
-- [ ] 可配置端口（须用户改插件 `connector.url`）
+- [x] **C5b** `detect` / `savePage` / `selectItems` / `attachmentProgress`（安全降级）
+- [x] **C5c** `getTranslators` / proxies（空列表降级）、可配置端口、`updateSession.tags`
 
 ### 非目标
 
@@ -556,3 +556,4 @@ listening ──(Vault 关闭)──► 可选：保持 listening 但 saveItems 
 | 2026-07-18 | MVP 实现：Host axum server、commands、设置开关、事件刷新 |
 | 2026-07-18 | 防 15s 超时（后台资产）；`targets` 子文件夹 + `updateSession` 移动；§4.5 上游 API 覆盖总表 |
 | 2026-07-18 | **C4b `saveAttachment`**：浏览器上传登录墙 PDF（`X-Metadata` `parentItemID`→paper；`%PDF` 校验；触发 PAPER.md；`supportsAttachmentUpload: true`；200 MiB body 上限）。仍待：`saveSnapshot` / `saveSingleFile` / `detailedCookies` |
+| 2026-07-21 | 完成 C4c/C5a/C5b/C5c：网页快照、Cookie 下载、兼容降级路由、tags、端口设置与 Connector 后台任务条。 |

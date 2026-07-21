@@ -99,6 +99,7 @@ export type AppSettings = {
 	 * (loopback :23119). Default **off**; mutually exclusive with Zotero desktop.
 	 */
 	connectorEnabled: boolean;
+	connectorPort: number;
 	// Appearance
 	theme: ThemePreference;
 	/**
@@ -164,6 +165,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	paperTreeSortMode: "folder",
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
+	connectorPort: 23119,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",

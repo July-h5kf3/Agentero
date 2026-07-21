@@ -55,7 +55,9 @@
 			"statusStarting": "启动中…",
 			"statusError": "错误：{{message}}",
 			"statusNoVault": "请先打开知识库才能接收保存",
-			"desktopOnly": "需要桌面应用。"
+			"desktopOnly": "需要桌面应用。",
+			"portLabel": "Connector 端口",
+			"invalidPort": "端口必须在 1 到 65535 之间。"
 		},
 		"remoteCache": {
 			"section": "远程 Vault 缓存",

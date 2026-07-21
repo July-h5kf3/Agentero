@@ -77,3 +77,17 @@ pub fn connector_set_parent_dir(
     ctrl.set_parent_dir(args.parent_dir);
     ApiResult::ok(())
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorSetPortArgs {
+    pub port: u16,
+}
+
+#[tauri::command]
+pub fn connector_set_port(
+    ctrl: State<'_, Arc<ConnectorController>>,
+    args: ConnectorSetPortArgs,
+) -> ApiResult<ConnectorStatus> {
+    ApiResult::ok(ctrl.set_port(args.port))
+}

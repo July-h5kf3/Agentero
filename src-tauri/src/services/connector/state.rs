@@ -38,6 +38,19 @@ pub struct ConnectorItemSaved {
     pub session_id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorProgress {
+    pub key: String,
+    pub session_id: String,
+    pub path: String,
+    pub title: String,
+    pub status: String,
+    pub progress: Option<i32>,
+    pub detail: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProgressAttachment {
     pub id: String,
@@ -186,6 +199,35 @@ impl ConnectorController {
                 g.parent_dir = trimmed;
             }
         }
+    }
+
+    /// Change the loopback port. If the server is enabled, restart it so the
+    /// status cannot claim a port that is not actually bound.
+    pub fn set_port(self: &Arc<Self>, port: u16) -> ConnectorStatus {
+        if port == 0 {
+            if let Ok(mut g) = self.inner.lock() {
+                g.last_error = Some("Connector port must be between 1 and 65535".into());
+            }
+            return self.status();
+        }
+        let enabled = self.inner.lock().map(|g| g.enabled).unwrap_or(false);
+        if enabled {
+            self.stop_server_internal();
+        }
+        if let Ok(mut g) = self.inner.lock() {
+            g.port = port;
+            g.last_error = None;
+        }
+        if enabled {
+            if let Err(e) = self.start_server() {
+                if let Ok(mut g) = self.inner.lock() {
+                    g.last_error = Some(e.to_string());
+                    g.listening = false;
+                }
+            }
+        }
+        self.emit_status();
+        self.status()
     }
 
     /// Vault handle string (local path or `remote:…`) + parent dir.
@@ -414,6 +456,16 @@ impl ConnectorController {
         }
     }
 
+    /// Resolve a saved paper by Connector item id, falling back to the only
+    /// paper in the session for older saveSingleFile callers.
+    pub fn session_item_paper(&self, session_id: &str, item_id: Option<&str>) -> Option<String> {
+        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let session = g.sessions.get(session_id)?;
+        item_id
+            .and_then(|id| session.item_map.get(id).cloned())
+            .or_else(|| session.paper_paths.last().cloned())
+    }
+
     /// Resolve paper rel for a `saveAttachment` upload (session map / last paper).
     fn resolve_attachment_rel(
         &self,
@@ -579,6 +631,66 @@ impl ConnectorController {
         Ok(parent)
     }
 
+    /// Apply Connector's post-save tags to every paper in a session.
+    pub async fn update_session_tags(
+        &self,
+        session_id: &str,
+        tags: &[String],
+    ) -> Result<(), AppError> {
+        let (handle, paths) = {
+            let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            let session = g
+                .sessions
+                .get(session_id)
+                .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
+            (
+                g.vault_handle
+                    .clone()
+                    .ok_or_else(|| AppError::message("No vault open"))?,
+                session.paper_paths.clone(),
+            )
+        };
+        let paper_tags: Vec<crate::services::catalog::papers::PaperTag> =
+            tags.iter().cloned().map(Into::into).collect();
+        if let Some(sid) = crate::services::remote::parse_remote_handle(&handle) {
+            let reg = self
+                .remote_registry()
+                .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+            let session = reg.get(sid).await?;
+            for path in paths {
+                let row = crate::services::catalog::papers::add_tags(
+                    &session.work_root,
+                    &path,
+                    &paper_tags,
+                )?;
+                let metadata = serde_json::to_vec_pretty(&row)
+                    .map_err(|e| AppError::message(e.to_string()))?;
+                session
+                    .fs
+                    .write(
+                        &format!("{path}/metadata.json"),
+                        &metadata,
+                        crate::services::fs::WriteOpts {
+                            create_parents: true,
+                        },
+                    )
+                    .await?;
+            }
+            session
+                .catalog
+                .lock()
+                .await
+                .push(session.fs.clone())
+                .await?;
+        } else {
+            let vault = PathBuf::from(handle);
+            for path in paths {
+                let _ = crate::services::catalog::papers::add_tags(&vault, &path, &paper_tags)?;
+            }
+        }
+        Ok(())
+    }
+
     /// JSON body for `/connector/getSelectedCollection` (async for remote targets).
     pub async fn selected_collection_json(&self) -> serde_json::Value {
         let (parent, handle) = {
@@ -702,6 +814,14 @@ impl ConnectorController {
         if let Ok(g) = self.inner.lock() {
             if let Some(app) = &g.app {
                 let _ = app.emit("connector:item-saved", &payload);
+            }
+        }
+    }
+
+    pub fn emit_progress(&self, payload: ConnectorProgress) {
+        if let Ok(g) = self.inner.lock() {
+            if let Some(app) = &g.app {
+                let _ = app.emit("connector:progress", &payload);
             }
         }
     }

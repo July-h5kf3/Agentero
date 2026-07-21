@@ -411,7 +411,7 @@
 这些能力不进入 MVP 主线，但可在上述版本之后继续规划：
 
 - ~~Zotero/BibTeX 批量导入~~ ✅ 一键从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`，可选拷 PDF；见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) §16）；BibTeX/RIS 文件仍走 Library 导入。
-- **Zotero Connector 兼容服务**（方案一，**MVP 已落地**）：Host 在 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；组织子文件夹可选；**`saveAttachment` 浏览器上传登录墙 PDF 已做**；见 [`../backend/connector.md`](../backend/connector.md) **§4.5**。仍待 P0：`saveSnapshot` / `saveSingleFile` / cookies。
+- **Zotero Connector 兼容服务**（方案一，**MVP 已落地**）：Host 在 loopback 端口兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；组织子文件夹可选；**`saveAttachment`、网页快照、Cookie 下载、Connector 后台任务条已做**；detect/translators/proxies 保持安全降级；见 [`../backend/connector.md`](../backend/connector.md) **§4.5**。
 - 浏览器插件（可选后续）：自研扩展或 fork，可共用入库核心、不必抢 23119。
 - ~~**PDF 划词提问** MVP~~ ✅（划词操作菜单：高亮 / 批注 / 提问 / 翻译 → **`marks/*.json`**（`kind`）；平滑蓝色选区；见 [`pdf-ask.md`](pdf-ask.md)）。仍待：无文本层降级。
 - ~~**翻译服务**~~ ✅ 首版（见 [`translate.md`](translate.md)）：应用级可插拔 `TranslateService`；**免费 MT + BYOA Agent**（无付费 API）；设置 → **Translate**；PDF 划词为首个消费方。T4+ 更多引擎/消费方仍待。

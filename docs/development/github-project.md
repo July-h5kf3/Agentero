@@ -119,7 +119,7 @@ GitHub Projects v2 自带 **Status** 等内置字段。自定义字段（Type / 
 | **F7** | [#21](https://github.com/poco-ai/Agentero/issues/21) | feature: 双链 / Graph 增强 | `type:feature` `area:editor` `priority:p1` |
 | **F8** | [#22](https://github.com/poco-ai/Agentero/issues/22) | feature: 工作区分屏（V0.6） | `type:feature` `area:ui` `priority:p1` |
 | **F9** | [#23](https://github.com/poco-ai/Agentero/issues/23) | feature: PDF 批注系统深化 | `type:feature` `area:pdf` `priority:p1` |
-| **F10** | [#24](https://github.com/poco-ai/Agentero/issues/24) | feature: Zotero Connector 未完成协议 | `type:feature` `area:import` `priority:p1` |
+| **F10** | [#24](https://github.com/poco-ai/Agentero/issues/24) | feature: Zotero Connector 协议（C4c/C5a/C5b/C5c 已落地） | **Done** · `type:feature` `area:import` `priority:p1` |
 | **F11** | [#25](https://github.com/poco-ai/Agentero/issues/25) | feature: 命令面板 / 搜索增强 | `type:feature` `area:ui` `priority:p1` |
 | **F12** | [#26](https://github.com/poco-ai/Agentero/issues/26) | feature: CLI P1 | `type:feature` `area:cli` `priority:p1` |
 | **F13** | [#27](https://github.com/poco-ai/Agentero/issues/27) | feature: 偏好迁 Tauri Store + 日志文件夹入口 | `type:feature` `area:ui` `priority:p1` |

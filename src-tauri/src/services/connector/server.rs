@@ -1,11 +1,14 @@
 //! Minimal axum HTTP server compatible with Zotero Connector endpoints.
 
-use super::import::{import_connector_item, import_connector_item_remote};
+use super::import::{
+    import_connector_item_remote_with_cookies, import_connector_item_with_cookies,
+    write_snapshot_html, write_snapshot_html_remote,
+};
 use super::state::{ConnectorController, ConnectorItemSaved, ProgressAttachment, ProgressItem};
 use crate::error::AppError;
 use crate::services::remote::parse_remote_handle;
 use axum::body::{Body, Bytes};
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -33,11 +36,19 @@ pub async fn serve(
     let app = Router::new()
         .route("/connector/ping", get(ping_get).post(ping_post))
         .route("/connector/saveItems", post(save_items))
+        .route("/connector/saveSnapshot", post(save_snapshot))
+        .route("/connector/saveSingleFile", post(save_single_file))
         .route(
             "/connector/saveAttachment",
             post(save_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BYTES)),
         )
         .route("/connector/sessionProgress", post(session_progress))
+        .route("/connector/attachmentProgress", post(attachment_progress))
+        .route("/connector/detect", post(detect))
+        .route("/connector/savePage", post(save_page))
+        .route("/connector/selectItems", post(select_items))
+        .route("/connector/getTranslators", post(get_translators))
+        .route("/connector/proxies", post(proxies))
         .route(
             "/connector/getSelectedCollection",
             post(get_selected_collection),
@@ -199,6 +210,8 @@ struct SaveItemsBody {
     uri: Option<String>,
     #[serde(default)]
     url: Option<String>,
+    #[serde(default, alias = "detailedCookies")]
+    detailed_cookies: Option<String>,
 }
 
 async fn save_items(
@@ -315,7 +328,16 @@ async fn save_items(
             };
             match reg.get(sid).await {
                 Ok(session) => {
-                    import_connector_item_remote(session, &parent_dir, item, page_uri).await
+                    import_connector_item_remote_with_cookies(
+                        state.ctrl.clone(),
+                        &session_id,
+                        session,
+                        &parent_dir,
+                        item,
+                        page_uri,
+                        body.detailed_cookies.as_deref(),
+                    )
+                    .await
                 }
                 Err(e) => {
                     // Session handle stale (e.g. reconnected remote without rebinding Connector).
@@ -325,11 +347,14 @@ async fn save_items(
                 }
             }
         } else {
-            import_connector_item(
+            import_connector_item_with_cookies(
+                state.ctrl.clone(),
+                &session_id,
                 std::path::Path::new(&vault_handle),
                 &parent_dir,
                 item,
                 page_uri,
+                body.detailed_cookies.as_deref(),
             )
             .await
         };
@@ -398,6 +423,237 @@ struct SessionIdBody {
     session_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct SnapshotBody {
+    #[serde(default, alias = "sessionId", rename = "sessionID")]
+    session_id: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    uri: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    title: Option<String>,
+    #[serde(default)]
+    html: Option<String>,
+    #[serde(default, alias = "detailedCookies")]
+    detailed_cookies: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SingleFileBody {
+    #[serde(default, alias = "sessionId", rename = "sessionID")]
+    session_id: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    /// Sent by the official Connector; unused today (paper already created in session).
+    #[serde(default)]
+    #[allow(dead_code)]
+    title: Option<String>,
+    #[serde(default, rename = "snapshotContent")]
+    snapshot_content: Option<String>,
+}
+
+fn request_session_id(value: &Option<String>) -> Result<String, Box<Response>> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            json_response(
+                StatusCode::BAD_REQUEST,
+                json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+            )
+            .into()
+        })
+}
+
+async fn save_snapshot(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<SnapshotBody>,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    let session_id = match request_session_id(&body.session_id) {
+        Ok(id) => id,
+        Err(r) => return *r,
+    };
+    let url = body
+        .url
+        .as_deref()
+        .or(body.uri.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("about:blank");
+    let item = json!({
+        "id": format!("snapshot-{}", uuid::Uuid::new_v4()),
+        "itemType": "webpage",
+        "title": body.title.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(url),
+        "url": url,
+        "accessDate": chrono::Utc::now().to_rfc3339(),
+        "attachments": []
+    });
+    let (handle, _) = match state.ctrl.vault_handle_and_parent() {
+        Ok(v) => v,
+        Err(e) => {
+            return json_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                json!({ "error": e.to_string() }),
+            )
+        }
+    };
+    if let Err(e) = state.ctrl.create_session(
+        &session_id,
+        vec![ProgressItem {
+            id: item["id"].clone(),
+            title: item["title"].as_str().unwrap_or("Web page").to_string(),
+            item_type: "webpage".into(),
+            attachments: Vec::new(),
+        }],
+    ) {
+        return json_response(StatusCode::CONFLICT, json!({ "error": e.to_string() }));
+    }
+    let parent = state.ctrl.session_parent_dir(&session_id);
+    let result = if let Some(sid) = parse_remote_handle(&handle) {
+        let Some(reg) = state.ctrl.remote_registry() else {
+            return json_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                json!({ "error": "remote registry unavailable" }),
+            );
+        };
+        match reg.get(sid).await {
+            Ok(session) => {
+                import_connector_item_remote_with_cookies(
+                    state.ctrl.clone(),
+                    &session_id,
+                    session,
+                    &parent,
+                    &item,
+                    Some(url),
+                    body.detailed_cookies.as_deref(),
+                )
+                .await
+            }
+            Err(e) => Err(AppError::message(e.to_string())),
+        }
+    } else {
+        import_connector_item_with_cookies(
+            state.ctrl.clone(),
+            &session_id,
+            std::path::Path::new(&handle),
+            &parent,
+            &item,
+            Some(url),
+            body.detailed_cookies.as_deref(),
+        )
+        .await
+    };
+    let result = match result {
+        Ok(result) => result,
+        Err(e) => {
+            state.ctrl.mark_session_done(&session_id);
+            return json_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "error": e.to_string() }),
+            );
+        }
+    };
+    state.ctrl.record_session_paper(&session_id, &result.path);
+    state
+        .ctrl
+        .record_session_item_paper(&session_id, &item["id"].to_string(), &result.path);
+    if let Some(html) = body.html.as_deref().filter(|s| !s.is_empty()) {
+        let write_result = if let Some(sid) = parse_remote_handle(&handle) {
+            match state.ctrl.remote_registry() {
+                Some(reg) => match reg.get(sid).await {
+                    Ok(session) => write_snapshot_html_remote(session, &result.path, html).await,
+                    Err(e) => Err(AppError::message(e.to_string())),
+                },
+                None => Err(AppError::message("remote registry unavailable")),
+            }
+        } else {
+            write_snapshot_html(std::path::Path::new(&handle), &result.path, html).await
+        };
+        if let Err(e) = write_result {
+            state.ctrl.emit_error(&e.to_string(), Some(&session_id));
+        }
+    }
+    state.ctrl.mark_session_done(&session_id);
+    state.ctrl.emit_item_saved(ConnectorItemSaved {
+        path: result.path.clone(),
+        id: result.id.clone(),
+        title: result.title.clone(),
+        deduped: result.deduped,
+        session_id: session_id.clone(),
+    });
+    json_response(StatusCode::CREATED, json!({ "singleFile": false }))
+}
+
+async fn save_single_file(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<SingleFileBody>,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    let session_id = match request_session_id(&body.session_id) {
+        Ok(id) => id,
+        Err(r) => return *r,
+    };
+    let Some(html) = body.snapshot_content.as_deref() else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SNAPSHOT_NOT_PROVIDED" }),
+        );
+    };
+    let (handle, _) = match state.ctrl.vault_handle_and_parent() {
+        Ok(v) => v,
+        Err(e) => {
+            return json_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                json!({ "error": e.to_string() }),
+            )
+        }
+    };
+    let Some(path) = state
+        .ctrl
+        .session_item_paper(&session_id, body.url.as_deref())
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_NOT_FOUND" }),
+        );
+    };
+    let result = if let Some(sid) = parse_remote_handle(&handle) {
+        let Some(reg) = state.ctrl.remote_registry() else {
+            return json_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                json!({ "error": "remote registry unavailable" }),
+            );
+        };
+        match reg.get(sid).await {
+            Ok(session) => write_snapshot_html_remote(session, &path, html).await,
+            Err(e) => Err(AppError::message(e.to_string())),
+        }
+    } else {
+        write_snapshot_html(std::path::Path::new(&handle), &path, html).await
+    };
+    match result {
+        Ok(snapshot_path) => {
+            state.ctrl.mark_session_done(&session_id);
+            json_response(StatusCode::CREATED, json!({ "path": snapshot_path }))
+        }
+        Err(e) => json_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({ "error": e.to_string() }),
+        ),
+    }
+}
+
 async fn session_progress(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -440,7 +696,7 @@ struct UpdateSessionBody {
     #[serde(default)]
     target: Option<String>,
     #[serde(default)]
-    tags: Option<String>,
+    tags: Option<Value>,
 }
 
 async fn update_session(
@@ -451,7 +707,6 @@ async fn update_session(
     if let Some(r) = guard(&headers, &Method::POST) {
         return r;
     }
-    let _ = body.tags; // tags optional; catalog merge can wait
     let Some(sid) = body
         .session_id
         .as_deref()
@@ -463,6 +718,27 @@ async fn update_session(
             json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
         );
     };
+    if let Some(tags) = body.tags.as_ref() {
+        let parsed: Vec<String> = match tags {
+            Value::String(s) => s
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
+            Value::Array(values) => values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
+            _ => Vec::new(),
+        };
+        if let Err(e) = state.ctrl.update_session_tags(sid, &parsed).await {
+            return json_response(StatusCode::BAD_REQUEST, json!({ "error": e.to_string() }));
+        }
+    }
     let Some(target) = body
         .target
         .as_deref()
@@ -494,6 +770,7 @@ async fn update_session(
 async fn save_attachment(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
     body: Bytes,
 ) -> Response {
     if let Some(r) = guard(&headers, &Method::POST) {
@@ -512,6 +789,7 @@ async fn save_attachment(
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
+        .or_else(|| query.get("sessionID").map(String::as_str))
         .unwrap_or("")
         .to_string();
     if session_id.is_empty() {
@@ -548,6 +826,66 @@ async fn save_attachment(
             json_response(status, json!({ "error": msg }))
         }
     }
+}
+
+async fn attachment_progress(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<SessionIdBody>,
+) -> Response {
+    session_progress(State(state), headers, Json(body)).await
+}
+
+async fn detect(
+    State(_state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    // Translator execution remains in the configured Translator Runtime. The
+    // local compatibility server cannot safely execute arbitrary translator JS.
+    let has_page = body.get("uri").and_then(Value::as_str).is_some()
+        || body.get("url").and_then(Value::as_str).is_some();
+    json_response(
+        StatusCode::OK,
+        if has_page {
+            json!([])
+        } else {
+            json!({ "error": "URI_NOT_PROVIDED" })
+        },
+    )
+}
+
+async fn save_page(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<SnapshotBody>,
+) -> Response {
+    save_snapshot(State(state), headers, Json(body)).await
+}
+
+async fn select_items(headers: HeaderMap, Json(body): Json<Value>) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    let items = body.get("items").cloned().unwrap_or_else(|| json!([]));
+    json_response(StatusCode::OK, items)
+}
+
+async fn get_translators(headers: HeaderMap) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    json_response(StatusCode::OK, json!([]))
+}
+
+async fn proxies(headers: HeaderMap) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    json_response(StatusCode::OK, json!([]))
 }
 
 async fn delay_sync(headers: HeaderMap) -> Response {

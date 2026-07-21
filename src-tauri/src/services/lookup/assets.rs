@@ -73,6 +73,19 @@ pub async fn ensure_paper_assets(
     pdf_url: Option<&str>,
     doi: Option<&str>,
 ) -> Result<AssetDownloadResult, AppError> {
+    ensure_paper_assets_with_cookies(paper_dir, id, arxiv_id, pdf_url, doi, None).await
+}
+
+/// Variant used by browser integrations that provide the page's cookie jar.
+/// The cookie string is only sent to the explicitly supplied attachment URL.
+pub async fn ensure_paper_assets_with_cookies(
+    paper_dir: &Path,
+    id: &str,
+    arxiv_id: Option<&str>,
+    pdf_url: Option<&str>,
+    doi: Option<&str>,
+    cookies: Option<&str>,
+) -> Result<AssetDownloadResult, AppError> {
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
 
@@ -81,7 +94,9 @@ pub async fn ensure_paper_assets(
 
     if need_pdf {
         let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
-        let mut ok = try_download_candidates(paper_dir, id, &candidates, &mut out).await;
+        let mut ok =
+            try_download_candidates_with_cookies(paper_dir, id, &candidates, &mut out, cookies)
+                .await;
         // DOI fallback: Crossref often lists a direct / open-access PDF link even
         // when the Translator gave no pdf_url (or the publisher landing page failed).
         if !ok {
@@ -95,7 +110,10 @@ pub async fn ensure_paper_assets(
                     out.messages
                         .push("pdf: no Crossref PDF link for DOI".into());
                 } else {
-                    ok = try_download_candidates(paper_dir, id, &extra, &mut out).await;
+                    ok = try_download_candidates_with_cookies(
+                        paper_dir, id, &extra, &mut out, cookies,
+                    )
+                    .await;
                     candidates.extend(extra);
                 }
             }
@@ -106,11 +124,12 @@ pub async fn ensure_paper_assets(
             if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
                 if let Some(url) = unpaywall_pdf_url(doi).await {
                     if !candidates.iter().any(|c| c == &url) {
-                        ok = try_download_candidates(
+                        ok = try_download_candidates_with_cookies(
                             paper_dir,
                             id,
                             std::slice::from_ref(&url),
                             &mut out,
+                            cookies,
                         )
                         .await;
                         candidates.push(url);
@@ -215,15 +234,16 @@ async fn unpaywall_pdf_url(doi: &str) -> Option<String> {
 }
 
 /// Try each PDF URL in order; write on first success. Returns true when a PDF was saved.
-async fn try_download_candidates(
+async fn try_download_candidates_with_cookies(
     paper_dir: &Path,
     id: &str,
     urls: &[String],
     out: &mut AssetDownloadResult,
+    cookies: Option<&str>,
 ) -> bool {
     for url in urls {
         // PDF lives next to NOTES.md, not under source/
-        match download_pdf(paper_dir, id, url).await {
+        match download_pdf_with_cookies(paper_dir, id, url, cookies).await {
             Ok(()) => {
                 out.pdf = true;
                 out.messages.push(format!("pdf ok ({url})"));
@@ -312,8 +332,13 @@ fn looks_like_arxiv_id(s: &str) -> bool {
         && (parts[1].len() >= 4 && parts[1].len() <= 5)
 }
 
-async fn download_pdf(source_dir: &Path, id: &str, url: &str) -> Result<(), AppError> {
-    let bytes = http_get_bytes(url, Duration::from_secs(180)).await?;
+async fn download_pdf_with_cookies(
+    source_dir: &Path,
+    id: &str,
+    url: &str,
+    cookies: Option<&str>,
+) -> Result<(), AppError> {
+    let bytes = http_get_bytes_with_cookies(url, Duration::from_secs(180), cookies).await?;
     // Reject HTML error pages disguised as PDF
     if bytes.len() >= 4 && &bytes[..4] == b"%PDF" {
         let name = safe_filename(id, "pdf");
@@ -480,15 +505,27 @@ fn sanitize_tar_path(path: &Path) -> Result<PathBuf, AppError> {
 }
 
 async fn http_get_bytes(url: &str, timeout: Duration) -> Result<Vec<u8>, AppError> {
+    http_get_bytes_with_cookies(url, timeout, None).await
+}
+
+async fn http_get_bytes_with_cookies(
+    url: &str,
+    timeout: Duration,
+    cookies: Option<&str>,
+) -> Result<Vec<u8>, AppError> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
         .user_agent(USER_AGENT)
         .redirect(reqwest::redirect::Policy::limited(10))
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let res = client
+    let mut request = client
         .get(url)
-        .header("Accept", "application/pdf,application/octet-stream,*/*")
+        .header("Accept", "application/pdf,application/octet-stream,*/*");
+    if let Some(cookie) = cookies.map(str::trim).filter(|s| !s.is_empty()) {
+        request = request.header(reqwest::header::COOKIE, cookie);
+    }
+    let res = request
         .send()
         .await
         .map_err(|e| AppError::message(format!("download: {e}")))?;

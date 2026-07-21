@@ -29,6 +29,8 @@ pub struct AppSettings {
     pub library_columns: Vec<LibraryColumnPref>,
     #[serde(default)]
     pub connector_enabled: bool,
+    #[serde(default = "default_connector_port")]
+    pub connector_port: u16,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_ui_theme")]
@@ -119,6 +121,7 @@ impl Default for AppSettings {
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
             library_columns: default_library_columns(),
             connector_enabled: false,
+            connector_port: default_connector_port(),
             theme: default_theme(),
             ui_theme: default_ui_theme(),
             locale: default_locale(),
@@ -182,6 +185,9 @@ fn default_ai_response_language() -> String {
 }
 fn default_translate_provider() -> String {
     "bing".into()
+}
+fn default_connector_port() -> u16 {
+    crate::services::connector::DEFAULT_CONNECTOR_PORT
 }
 fn default_translate_target() -> String {
     "ui".into()
@@ -292,6 +298,9 @@ fn persist(path: &PathBuf, settings: &AppSettings) -> Result<(), AppError> {
 }
 
 fn normalize(s: &mut AppSettings) {
+    if s.connector_port == 0 {
+        s.connector_port = default_connector_port();
+    }
     let url = s.translator_base_url.trim().trim_end_matches('/');
     s.translator_base_url = if url.is_empty() {
         DEFAULT_TRANSLATOR_BASE_URL.to_string()

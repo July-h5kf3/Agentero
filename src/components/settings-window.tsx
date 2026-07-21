@@ -66,6 +66,7 @@ import {
 	type ConnectorStatus,
 	connectorGetStatus,
 	connectorSetEnabled,
+	connectorSetPort,
 } from "@/lib/connector";
 import { notifyError } from "@/lib/notify";
 import {
@@ -769,6 +770,21 @@ function ConnectorSettingsBlock({
 		}
 	};
 
+	const onPortBlur = async (value: string) => {
+		const port = Number.parseInt(value, 10);
+		if (!Number.isInteger(port) || port < 1 || port > 65535) {
+			notifyError(t("general.connector.invalidPort"));
+			return;
+		}
+		patch({ connectorPort: port });
+		if (!isTauri()) return;
+		try {
+			setStatus(await connectorSetPort(port));
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
 	const statusLine = (() => {
 		if (!isTauri()) return t("general.connector.desktopOnly");
 		if (!status) {
@@ -808,6 +824,21 @@ function ConnectorSettingsBlock({
 						checked={settings.connectorEnabled}
 						disabled={busy}
 						onCheckedChange={(v) => void onToggle(v)}
+					/>
+				</SettingsRow>
+				<SettingsRow
+					label={t("general.connector.portLabel")}
+					htmlFor="connector-port"
+				>
+					<Input
+						id="connector-port"
+						type="number"
+						min={1}
+						max={65535}
+						className="h-8 w-28"
+						defaultValue={settings.connectorPort}
+						onBlur={(e) => void onPortBlur(e.currentTarget.value)}
+						disabled={busy}
 					/>
 				</SettingsRow>
 			</SettingsGroup>

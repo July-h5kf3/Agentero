@@ -276,6 +276,7 @@ pub fn run() {
             commands::connector::connector_set_enabled,
             commands::connector::connector_set_vault,
             commands::connector::connector_set_parent_dir,
+            commands::connector::connector_set_port,
             set_locale,
         ])
         .setup(|app| {
