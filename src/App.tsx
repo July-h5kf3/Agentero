@@ -339,6 +339,7 @@ export default function App() {
 	treeRef.current = tree;
 	const vaultPathRef = useRef(vaultPath);
 	vaultPathRef.current = vaultPath;
+	const restoredVaultPathRef = useRef(vaultPath);
 	/** Normalized paths currently being reloaded from disk; suppresses the editor
 	 * unmount-flush so an external/Agent write is never clobbered by stale in-memory text. */
 	const reseedGuardRef = useRef<Set<string>>(new Set());
@@ -353,6 +354,37 @@ export default function App() {
 	const rebuildWikiRef = useRef<(path: string) => Promise<void>>(
 		async () => {},
 	);
+
+	// Validate the restored local Vault before restoring its tree and tabs.
+	// The path can remain in localStorage after the directory is deleted.
+	useEffect(() => {
+		const restoredPath = restoredVaultPathRef.current;
+		if (!isTauri() || !restoredPath || isRemoteVaultHandle(restoredPath)) {
+			return;
+		}
+
+		let cancelled = false;
+		void import("@tauri-apps/plugin-fs")
+			.then(({ exists }) => exists(restoredPath))
+			.then((pathExists) => {
+				if (cancelled || pathExists || vaultPathRef.current !== restoredPath) {
+					return;
+				}
+				saveVaultPath(null);
+				setVaultPath(null);
+				setTree([]);
+				setTabs([]);
+				setActiveTabId(null);
+				setTreeSelectedPath(null);
+			})
+			.catch(() => {
+				// Leave the restored state intact when the existence check fails.
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	/** Merge a patch into the tab with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
