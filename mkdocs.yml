@@ -10,6 +10,14 @@ theme:
 
 nav:
   - 首页: index.md
+  - 用户指南:
+      - 使用指南: usage/index.md
+      - 安装与首次使用: usage/getting-started.md
+      - 导入和管理论文: usage/import-papers.md
+      - 阅读、标注与整理: usage/read-and-organize.md
+      - 接入 Agent: usage/agents.md
+      - 使用 Zotero Connector: usage/zotero.md
+      - 打开远程 Vault: usage/remote-vault.md
   - 前端:
       - 概览: frontend/index.md
       - UI 规范: frontend/ui.md

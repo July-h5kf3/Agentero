@@ -31,6 +31,7 @@ Agentero 桌面应用
 
 | 分层 | 目录 | 说明 |
 |---|---|---|
+| 用户指南 | [`usage/`](usage/index.md) | 从安装、建库到导入、阅读、Agent 和远程 Vault 的实际操作教程。 |
 | 前端 | [`frontend/`](frontend/index.md) | 工作台 UI、组件约定、AI Elements 接入、右侧栏行为。 |
 | 后端 | [`backend/`](backend/index.md) | Tauri command 契约、Vault 数据模型、Catalog SQLite、双链/反链/图谱索引、[入库流水线](backend/paper-import-pipeline.md)。 |
 | 测试 | [`test/`](test/index.md) | 前端 Vitest、Rust 单测、临时 Vault fixture 与验证策略。 |
