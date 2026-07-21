@@ -13,7 +13,9 @@ import {
 	ensureSettingsLoaded,
 	initSettingsSync,
 	loadSettings,
+	subscribeSettings,
 } from "@/lib/settings";
+import { applyUiTheme } from "@/lib/ui-theme";
 import App from "./App";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
@@ -25,6 +27,8 @@ async function boot() {
 	// Host XDG settings.json (migrates legacy localStorage once).
 	await ensureSettingsLoaded();
 	initSettingsSync();
+	applyUiTheme(loadSettings().uiTheme);
+	subscribeSettings((s) => applyUiTheme(s.uiTheme));
 	const locale = resolveLocale(loadSettings().locale);
 	await i18n.changeLanguage(locale);
 	if (typeof document !== "undefined") {

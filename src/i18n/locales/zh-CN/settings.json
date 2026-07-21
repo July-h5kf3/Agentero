@@ -76,6 +76,10 @@
 			"light": "浅色",
 			"dark": "深色"
 		},
+		"uiThemeLabel": "配色主题",
+		"uiTheme": {
+			"default": "默认"
+		},
 		"languageLabel": "语言",
 		"language": {
 			"system": "跟随系统",

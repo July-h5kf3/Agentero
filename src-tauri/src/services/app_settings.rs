@@ -31,6 +31,8 @@ pub struct AppSettings {
     pub connector_enabled: bool,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_ui_theme")]
+    pub ui_theme: String,
     #[serde(default = "default_locale")]
     pub locale: String,
     #[serde(default = "default_editor_font_size")]
@@ -118,6 +120,7 @@ impl Default for AppSettings {
             library_columns: default_library_columns(),
             connector_enabled: false,
             theme: default_theme(),
+            ui_theme: default_ui_theme(),
             locale: default_locale(),
             editor_font_size: default_editor_font_size(),
             show_editor_toolbar: true,
@@ -159,6 +162,11 @@ fn default_library_columns() -> Vec<LibraryColumnPref> {
 }
 fn default_theme() -> String {
     "system".into()
+}
+/// tweakcn preset name; the theme list lives in the frontend bundle, so the
+/// Host only guarantees a non-empty value.
+fn default_ui_theme() -> String {
+    "default".into()
 }
 fn default_locale() -> String {
     "system".into()
@@ -339,6 +347,10 @@ fn normalize(s: &mut AppSettings) {
     const THEMES: &[&str] = &["system", "light", "dark"];
     if !THEMES.contains(&s.theme.as_str()) {
         s.theme = default_theme();
+    }
+    s.ui_theme = s.ui_theme.trim().to_string();
+    if s.ui_theme.is_empty() {
+        s.ui_theme = default_ui_theme();
     }
     const LOCALES: &[&str] = &["system", "en", "zh-CN"];
     if !LOCALES.contains(&s.locale.as_str()) {

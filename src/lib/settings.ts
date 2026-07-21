@@ -13,6 +13,7 @@ import type {
 	TranslateSettings,
 	TranslateTargetLang,
 } from "@/lib/translate/types";
+import { DEFAULT_UI_THEME, isKnownUiTheme } from "@/lib/ui-theme";
 
 export type {
 	PaperTreeLabelMode,
@@ -100,6 +101,11 @@ export type AppSettings = {
 	connectorEnabled: boolean;
 	// Appearance
 	theme: ThemePreference;
+	/**
+	 * Bundled tweakcn color theme name; `"default"` keeps the built-in look.
+	 * See src/lib/ui-theme.ts.
+	 */
+	uiTheme: string;
 	locale: LocalePreference;
 	editorFontSize: number;
 	/** Show the WYSIWYG formatting toolbar above Markdown/notes editors. */
@@ -159,6 +165,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	theme: "system",
+	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",
 	editorFontSize: 14,
 	showEditorToolbar: true,
@@ -441,6 +448,9 @@ function normalizePartial(
 		merged.theme !== "dark"
 	) {
 		merged.theme = DEFAULT_SETTINGS.theme;
+	}
+	if (!isKnownUiTheme(merged.uiTheme)) {
+		merged.uiTheme = DEFAULT_SETTINGS.uiTheme;
 	}
 	if (
 		merged.locale !== "system" &&

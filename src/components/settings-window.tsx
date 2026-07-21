@@ -112,6 +112,7 @@ import {
 	listSelectableProviders,
 	probeFreeMtProviders,
 } from "@/lib/translate";
+import { applyUiTheme, DEFAULT_UI_THEME, UI_THEMES } from "@/lib/ui-theme";
 import { cn } from "@/lib/utils";
 
 export type SettingsSection =
@@ -858,6 +859,29 @@ function AppearancePane({
 								{t("appearance.theme.light")}
 							</SelectItem>
 							<SelectItem value="dark">{t("appearance.theme.dark")}</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow label={t("appearance.uiThemeLabel")}>
+					<Select
+						value={settings.uiTheme}
+						onValueChange={(v) => {
+							patch({ uiTheme: v });
+							applyUiTheme(v);
+						}}
+					>
+						<SelectTrigger size="sm" className="min-w-[160px] max-w-[220px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value={DEFAULT_UI_THEME}>
+								{t("appearance.uiTheme.default")}
+							</SelectItem>
+							{UI_THEMES.map((theme) => (
+								<SelectItem key={theme.name} value={theme.name}>
+									{theme.title}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</SettingsRow>

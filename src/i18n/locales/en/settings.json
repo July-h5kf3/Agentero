@@ -76,6 +76,10 @@
 			"light": "Light",
 			"dark": "Dark"
 		},
+		"uiThemeLabel": "Color theme",
+		"uiTheme": {
+			"default": "Default"
+		},
 		"languageLabel": "Language",
 		"language": {
 			"system": "System",
