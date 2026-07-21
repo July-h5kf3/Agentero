@@ -119,7 +119,7 @@ P0 **不**同时上 tracing，避免双栈。
 
 当前 bundle id 见 `src-tauri/tauri.conf.json` → `identifier`（如 `com.poco-ai.agentero`）。
 
-**CLI**：不写 LogDir 强制文件（避免 headless 噪音）；默认 stderr + `RUST_LOG`。可选后续 `--log-file`。
+**CLI**：不写 LogDir 强制文件（避免 headless 噪音）；默认 **stderr + 级别 `warn`**（无 `op start/end` 刷屏）。需要诊断时设 `RUST_LOG=info` 或 `RUST_LOG=agentero::op=info`。可选后续 `--log-file`。
 
 ## 5. 关键操作：开始 / 结束日志规范
 
@@ -222,7 +222,7 @@ pub struct OpGuard { name: &'static str, start: Instant, /* fields */ }
 
 | 操作 | 行为 |
 |---|---|
-| 每个写命令 / 重 IO 子命令 | `op start` / `op end` 到 stderr（text）或仅当 `RUST_LOG` 开启时 |
+| 每个子命令（`main` 包一层） | 打 `agentero::op` 的 `op start` / `op end`，但 **默认 filter=`warn` 不可见**；`RUST_LOG=info`（或更细 target）时才出现在 stderr |
 | `--json` 成功/失败 envelope | **不变**；日志不得污染 stdout |
 
 ### 5.3 不必 start/end 的（默认）
@@ -413,8 +413,9 @@ match do_thing() {
 | 项 | 结果 |
 |---|---|
 | `cargo test -p agentero log_util` | `trunc` + `OpTimer` ok/err 通过 |
+| `agentero vault create <tmp> --json`（无 `RUST_LOG`） | stderr **无** `op start/end`；stdout 纯 JSON `ok:true` |
 | `RUST_LOG=info agentero vault create <tmp> --json` | stderr：`op start/end cli.vault.create`；stdout 纯 JSON `ok:true` |
-| `agentero vault which --vault /nonexistent --json` | stderr：`op end … ok=false error_code=vault_not_found`；stdout `ok:false`；exit 3 |
+| `agentero vault which --vault /nonexistent --json` | stderr：业务 `error:` 行；stdout `ok:false`；exit 3（无默认 op 日志） |
 | `cargo check -p agentero` / `agentero-cli` | 通过 |
 | `pnpm exec tsc --noEmit` | 通过 |
 
