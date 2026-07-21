@@ -99,6 +99,7 @@ export async function addPaperByIdentifier(opts: {
 	settings: AppSettings;
 	/** Override settings URL for this call */
 	translatorBaseUrl?: string;
+	progressTaskId?: string;
 }): Promise<LookupAddResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
@@ -120,6 +121,7 @@ export async function addPaperByIdentifier(opts: {
 			parentDir: opts.parentDir.replace(/\\/g, "/"),
 			text,
 			translatorBaseUrl,
+			taskId: opts.progressTaskId,
 		},
 	});
 
@@ -139,6 +141,7 @@ export async function addPaperByIdentifier(opts: {
 export async function downloadPaperAssets(opts: {
 	vaultRoot: string;
 	paperPath: string;
+	progressTaskId?: string;
 }): Promise<PaperAssetsDownloadResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
@@ -149,6 +152,7 @@ export async function downloadPaperAssets(opts: {
 			args: {
 				vaultPath: opts.vaultRoot,
 				path: opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+				taskId: opts.progressTaskId,
 			},
 		},
 	);

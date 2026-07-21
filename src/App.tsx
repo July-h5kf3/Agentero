@@ -1878,18 +1878,17 @@ export default function App() {
 					title: t("tasks.lookupImport"),
 					detail: text.trim().slice(0, 80),
 				},
-				async ({ setDetail, setProgress }) => {
+				async ({ id, setDetail }) => {
 					setDetail(
 						t("tasks.lookupFetching", { id: text.trim().slice(0, 80) }),
 					);
-					setProgress(15);
 					const r = await addPaperByIdentifier({
 						vaultRoot: vaultPath,
 						parentDir: lookupParentDir,
 						text,
 						settings,
+						progressTaskId: id,
 					});
-					setProgress(70);
 					setDetail(
 						t("tasks.lookupRefreshing", {
 							title: r.title?.slice(0, 60) || r.path,
@@ -1900,7 +1899,6 @@ export default function App() {
 						await rebuildWikiAndNotify(vaultPath);
 					}
 					await refreshLibrary();
-					setProgress(100);
 					return r;
 				},
 			);
@@ -1991,18 +1989,16 @@ export default function App() {
 						title: t("tasks.downloadPaper"),
 						detail: rel,
 					},
-					async ({ setDetail, setProgress }) => {
+					async ({ id, setDetail }) => {
 						setDetail(rel);
-						setProgress(20);
 						const r = await downloadPaperAssets({
 							vaultRoot: vaultPath,
 							paperPath: rel,
+							progressTaskId: id,
 						});
-						setProgress(85);
 						setDetail(t("tasks.downloadRefreshing", { path: rel }));
 						await refreshTree(vaultPath);
 						await refreshLibrary();
-						setProgress(100);
 						return r;
 					},
 				);
@@ -2188,15 +2184,13 @@ export default function App() {
 						kind: "import",
 						title: t("tasks.importPdf"),
 					},
-					async ({ setDetail, setProgress }) => {
-						setProgress(10);
+					async ({ setDetail }) => {
 						const r = await importLocalPdfs({
 							vaultRoot: vaultPath,
 							parentDir: opts?.parentDir ?? lookupParentDir,
 							entries: opts?.entries,
 						});
 						if (!r) return null;
-						setProgress(70);
 						setDetail(
 							t("sidebar:papersLibrary.importPdfDone", {
 								count: r.papers.length,
@@ -2205,7 +2199,6 @@ export default function App() {
 						await refreshTree(vaultPath);
 						await rebuildWikiAndNotify(vaultPath);
 						await refreshLibrary();
-						setProgress(100);
 						return r;
 					},
 				);
@@ -2301,7 +2294,7 @@ export default function App() {
 						total: queue.length,
 					}),
 				},
-				async ({ setProgress, setDetail }) => {
+				async ({ id, setProgress, setDetail }) => {
 					let i = 0;
 					for (const paperPath of queue) {
 						const rel = toVaultRelative(vaultPath, paperPath)
@@ -2316,6 +2309,7 @@ export default function App() {
 							await downloadPaperAssets({
 								vaultRoot: vaultPath,
 								paperPath: rel,
+								progressTaskId: id,
 							});
 						} catch (e) {
 							errors.push(

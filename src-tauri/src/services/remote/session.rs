@@ -792,6 +792,7 @@ mod tests {
                 parent_dir: "papers".into(),
                 text: "1706.03762".into(),
                 translator_base_url: None,
+                task_id: None,
             },
         )
         .await;
@@ -815,6 +816,7 @@ mod tests {
                     PaperDownloadAssetsArgs {
                         vault_path: info.vault_handle.clone(),
                         path: r.path.clone(),
+                        task_id: None,
                     },
                 )
                 .await;
@@ -908,6 +910,7 @@ mod tests {
                     parent_dir: "papers".into(),
                     text: "1602.07360".into(), // MobileNets - smaller
                     translator_base_url: None,
+                    task_id: None,
                 },
             )
             .await
@@ -958,6 +961,7 @@ mod tests {
                         PaperDownloadAssetsArgs {
                             vault_path: info.vault_handle.clone(),
                             path: p.path.clone(),
+                            task_id: None,
                         },
                     )
                     .await
@@ -1034,6 +1038,7 @@ mod tests {
                 parent_dir: "papers".into(),
                 text: "1512.03385".into(),
                 translator_base_url: None,
+                task_id: None,
             },
         )
         .await

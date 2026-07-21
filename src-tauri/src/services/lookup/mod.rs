@@ -9,8 +9,8 @@ mod zotero_db;
 pub(crate) mod zotero_io;
 
 pub use assets::{
-    ensure_paper_assets, ensure_paper_assets_with_cookies, has_local_pdf, has_local_tex,
-    AssetDownloadResult,
+    ensure_paper_assets, ensure_paper_assets_with_cookies, ensure_paper_assets_with_progress,
+    has_local_pdf, has_local_tex, AssetDownloadResult, AssetProgressContext,
 };
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
 pub use zotero_db::{
@@ -50,6 +50,9 @@ pub struct LookupImportArgs {
     /// Optional override; empty → [`DEFAULT_TRANSLATOR_BASE_URL`].
     #[serde(default)]
     pub translator_base_url: Option<String>,
+    /// Frontend background-task id for byte-level download progress events.
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,6 +61,9 @@ pub struct PaperDownloadAssetsArgs {
     pub vault_path: String,
     /// Vault-relative paper folder, e.g. `papers/1706.03762`.
     pub path: String,
+    /// Frontend background-task id for byte-level download progress events.
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// Per-file overrides when importing a local PDF (metadata confirm dialog).
@@ -141,6 +147,13 @@ pub struct LookupImportResult {
 }
 
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
+    import_by_identifier_with_progress(args, None).await
+}
+
+pub async fn import_by_identifier_with_progress(
+    args: LookupImportArgs,
+    app: Option<&tauri::AppHandle>,
+) -> Result<LookupImportResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -181,12 +194,17 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
 
     // 2) Always download PDF into source/; arXiv also unpacks LaTeX
     // 3) No TeX → liteparse PAPER.md after download
-    let mut assets = ensure_paper_assets(
+    let mut assets = ensure_paper_assets_with_progress(
         &paper_dir,
         &id,
         meta.arxiv_id.as_deref(),
         meta.pdf_url.as_deref(),
         meta.doi.as_deref(),
+        None,
+        AssetProgressContext {
+            app,
+            task_id: args.task_id.as_deref(),
+        },
     )
     .await
     .unwrap_or_else(|e| {
@@ -224,6 +242,13 @@ pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImport
 pub async fn download_paper_assets(
     args: PaperDownloadAssetsArgs,
 ) -> Result<AssetDownloadResult, AppError> {
+    download_paper_assets_with_progress(args, None).await
+}
+
+pub async fn download_paper_assets_with_progress(
+    args: PaperDownloadAssetsArgs,
+    app: Option<&tauri::AppHandle>,
+) -> Result<AssetDownloadResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -259,12 +284,17 @@ pub async fn download_paper_assets(
         (name, arxiv, pdf, None)
     };
 
-    let mut result = ensure_paper_assets(
+    let mut result = ensure_paper_assets_with_progress(
         &paper_dir,
         &id,
         arxiv_id.as_deref(),
         pdf_url.as_deref(),
         doi.as_deref(),
+        None,
+        AssetProgressContext {
+            app,
+            task_id: args.task_id.as_deref(),
+        },
     )
     .await?;
 

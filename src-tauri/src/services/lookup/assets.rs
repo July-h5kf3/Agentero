@@ -10,6 +10,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
+use tauri::{AppHandle, Emitter};
 
 // Browser-like UA: several non-arXiv publishers (PLOS, IEEE, Springer, …)
 // reject non-browser agents with HTTP 403, which blocked DOI PDF downloads.
@@ -24,6 +25,22 @@ pub struct AssetDownloadResult {
     #[serde(default)]
     pub paper_md: bool,
     pub messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetDownloadProgress {
+    pub task_id: String,
+    pub phase: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: Option<u64>,
+    pub progress: Option<u8>,
+}
+
+#[derive(Clone, Copy)]
+pub struct AssetProgressContext<'a> {
+    pub app: Option<&'a AppHandle>,
+    pub task_id: Option<&'a str>,
 }
 
 /// True if `source/` (or paper dir) already has a PDF.
@@ -76,6 +93,18 @@ pub async fn ensure_paper_assets(
     ensure_paper_assets_with_cookies(paper_dir, id, arxiv_id, pdf_url, doi, None).await
 }
 
+pub async fn ensure_paper_assets_with_progress(
+    paper_dir: &Path,
+    id: &str,
+    arxiv_id: Option<&str>,
+    pdf_url: Option<&str>,
+    doi: Option<&str>,
+    cookies: Option<&str>,
+    progress: AssetProgressContext<'_>,
+) -> Result<AssetDownloadResult, AppError> {
+    ensure_paper_assets_impl(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress).await
+}
+
 /// Variant used by browser integrations that provide the page's cookie jar.
 /// The cookie string is only sent to the explicitly supplied attachment URL.
 pub async fn ensure_paper_assets_with_cookies(
@@ -86,6 +115,30 @@ pub async fn ensure_paper_assets_with_cookies(
     doi: Option<&str>,
     cookies: Option<&str>,
 ) -> Result<AssetDownloadResult, AppError> {
+    ensure_paper_assets_impl(
+        paper_dir,
+        id,
+        arxiv_id,
+        pdf_url,
+        doi,
+        cookies,
+        AssetProgressContext {
+            app: None,
+            task_id: None,
+        },
+    )
+    .await
+}
+
+async fn ensure_paper_assets_impl(
+    paper_dir: &Path,
+    id: &str,
+    arxiv_id: Option<&str>,
+    pdf_url: Option<&str>,
+    doi: Option<&str>,
+    cookies: Option<&str>,
+    progress: AssetProgressContext<'_>,
+) -> Result<AssetDownloadResult, AppError> {
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
 
@@ -94,9 +147,16 @@ pub async fn ensure_paper_assets_with_cookies(
 
     if need_pdf {
         let mut candidates = pdf_url_candidates(id, arxiv_id, pdf_url);
-        let mut ok =
-            try_download_candidates_with_cookies(paper_dir, id, &candidates, &mut out, cookies)
-                .await;
+        let mut ok = try_download_candidates_with_cookies(
+            paper_dir,
+            id,
+            &candidates,
+            &mut out,
+            cookies,
+            progress.app,
+            progress.task_id,
+        )
+        .await;
         // DOI fallback: Crossref often lists a direct / open-access PDF link even
         // when the Translator gave no pdf_url (or the publisher landing page failed).
         if !ok {
@@ -111,7 +171,13 @@ pub async fn ensure_paper_assets_with_cookies(
                         .push("pdf: no Crossref PDF link for DOI".into());
                 } else {
                     ok = try_download_candidates_with_cookies(
-                        paper_dir, id, &extra, &mut out, cookies,
+                        paper_dir,
+                        id,
+                        &extra,
+                        &mut out,
+                        cookies,
+                        progress.app,
+                        progress.task_id,
                     )
                     .await;
                     candidates.extend(extra);
@@ -130,6 +196,8 @@ pub async fn ensure_paper_assets_with_cookies(
                             std::slice::from_ref(&url),
                             &mut out,
                             cookies,
+                            progress.app,
+                            progress.task_id,
                         )
                         .await;
                         candidates.push(url);
@@ -150,7 +218,9 @@ pub async fn ensure_paper_assets_with_cookies(
         if need_tex {
             let source = paper_dir.join("source");
             fs::create_dir_all(&source)?;
-            match download_arxiv_source(&source, paper_dir, aid).await {
+            match download_arxiv_source(&source, paper_dir, aid, progress.app, progress.task_id)
+                .await
+            {
                 Ok(()) => {
                     out.tex = true;
                     out.messages.push("tex ok".into());
@@ -240,10 +310,12 @@ async fn try_download_candidates_with_cookies(
     urls: &[String],
     out: &mut AssetDownloadResult,
     cookies: Option<&str>,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
 ) -> bool {
     for url in urls {
         // PDF lives next to NOTES.md, not under source/
-        match download_pdf_with_cookies(paper_dir, id, url, cookies).await {
+        match download_pdf_with_cookies(paper_dir, id, url, cookies, app, task_id).await {
             Ok(()) => {
                 out.pdf = true;
                 out.messages.push(format!("pdf ok ({url})"));
@@ -337,8 +409,12 @@ async fn download_pdf_with_cookies(
     id: &str,
     url: &str,
     cookies: Option<&str>,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
 ) -> Result<(), AppError> {
-    let bytes = http_get_bytes_with_cookies(url, Duration::from_secs(180), cookies).await?;
+    let bytes =
+        http_get_bytes_with_progress(url, Duration::from_secs(180), app, task_id, cookies, "pdf")
+            .await?;
     // Reject HTML error pages disguised as PDF
     if bytes.len() >= 4 && &bytes[..4] == b"%PDF" {
         let name = safe_filename(id, "pdf");
@@ -365,11 +441,15 @@ async fn download_arxiv_source(
     source_dir: &Path,
     paper_dir: &Path,
     arxiv_id: &str,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
 ) -> Result<(), AppError> {
     let bare = strip_version(arxiv_id);
     // Prefer e-print; /src/ is an alias
     let url = format!("https://arxiv.org/e-print/{bare}");
-    let bytes = http_get_bytes(&url, Duration::from_secs(180)).await?;
+    let bytes =
+        http_get_bytes_with_progress(&url, Duration::from_secs(180), app, task_id, None, "tex")
+            .await?;
     unpack_arxiv_eprint(source_dir, paper_dir, &bare, &bytes)
 }
 
@@ -504,14 +584,13 @@ fn sanitize_tar_path(path: &Path) -> Result<PathBuf, AppError> {
     Ok(out)
 }
 
-async fn http_get_bytes(url: &str, timeout: Duration) -> Result<Vec<u8>, AppError> {
-    http_get_bytes_with_cookies(url, timeout, None).await
-}
-
-async fn http_get_bytes_with_cookies(
+async fn http_get_bytes_with_progress(
     url: &str,
     timeout: Duration,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
     cookies: Option<&str>,
+    phase: &str,
 ) -> Result<Vec<u8>, AppError> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
@@ -525,18 +604,40 @@ async fn http_get_bytes_with_cookies(
     if let Some(cookie) = cookies.map(str::trim).filter(|s| !s.is_empty()) {
         request = request.header(reqwest::header::COOKIE, cookie);
     }
-    let res = request
+    let mut res = request
         .send()
         .await
         .map_err(|e| AppError::message(format!("download: {e}")))?;
     if !res.status().is_success() {
         return Err(AppError::message(format!("download HTTP {}", res.status())));
     }
-    let bytes = res
-        .bytes()
+    let total_bytes = res.content_length();
+    let mut downloaded_bytes = 0_u64;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = res
+        .chunk()
         .await
-        .map_err(|e| AppError::message(format!("download body: {e}")))?;
-    Ok(bytes.to_vec())
+        .map_err(|e| AppError::message(format!("download body: {e}")))?
+    {
+        downloaded_bytes += chunk.len() as u64;
+        bytes.extend_from_slice(&chunk);
+        if let (Some(app), Some(task_id)) = (app, task_id) {
+            let progress = total_bytes.map(|total| {
+                ((downloaded_bytes.saturating_mul(100) / total.max(1)).min(100)) as u8
+            });
+            let _ = app.emit(
+                "background-task:progress",
+                AssetDownloadProgress {
+                    task_id: task_id.to_string(),
+                    phase: phase.to_string(),
+                    downloaded_bytes,
+                    total_bytes,
+                    progress,
+                },
+            );
+        }
+    }
+    Ok(bytes)
 }
 
 fn strip_version(id: &str) -> String {

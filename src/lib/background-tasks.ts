@@ -3,7 +3,10 @@
  * No external state lib — useSyncExternalStore for React subscriptions.
  */
 
+import { listen } from "@tauri-apps/api/event";
+import i18n from "@/i18n";
 import { logger } from "@/lib/logger";
+import { isTauri } from "@/lib/tauri";
 
 export type BackgroundTaskKind =
 	| "download"
@@ -45,6 +48,32 @@ type Store = {
 	tasks: BackgroundTask[];
 	expanded: boolean;
 };
+
+type BackgroundTaskProgressEvent = {
+	taskId: string;
+	phase: string;
+	downloadedBytes: number;
+	totalBytes?: number;
+	progress: number | null;
+};
+
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	const units = ["KB", "MB", "GB"];
+	let value = bytes;
+	let unit = -1;
+	while (value >= 1024 && unit < units.length - 1) {
+		value /= 1024;
+		unit += 1;
+	}
+	return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
+
+function phaseLabel(phase: string): string {
+	if (phase === "pdf") return i18n.t("app:tasks.downloadPhasePdf");
+	if (phase === "tex") return i18n.t("app:tasks.downloadPhaseTex");
+	return i18n.t("app:tasks.downloadPhaseAsset");
+}
 
 let store: Store = {
 	tasks: [],
@@ -212,6 +241,29 @@ export async function runBackgroundTask<T>(
 		progress: null,
 	});
 	const start = performance.now();
+	const unlisten = isTauri()
+		? await listen<BackgroundTaskProgressEvent>(
+				"background-task:progress",
+				(event) => {
+					if (event.payload.taskId !== id) return;
+					const { downloadedBytes, totalBytes } = event.payload;
+					updateBackgroundTask(id, {
+						progress: event.payload.progress,
+						detail:
+							totalBytes == null
+								? i18n.t("app:tasks.downloadBytesUnknown", {
+										phase: phaseLabel(event.payload.phase),
+										downloaded: formatBytes(downloadedBytes),
+									})
+								: i18n.t("app:tasks.downloadBytes", {
+										phase: phaseLabel(event.payload.phase),
+										downloaded: formatBytes(downloadedBytes),
+										total: formatBytes(totalBytes),
+									}),
+					});
+				},
+			)
+		: null;
 	logger.info(
 		`op start background_task kind=${input.kind} task_id=${id} title=${input.title}`,
 	);
@@ -235,5 +287,7 @@ export async function runBackgroundTask<T>(
 			`op end background_task ok=false duration_ms=${ms} kind=${input.kind} task_id=${id} error=${msg}`,
 		);
 		throw e;
+	} finally {
+		unlisten?.();
 	}
 }

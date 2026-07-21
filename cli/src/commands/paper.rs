@@ -503,6 +503,7 @@ async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     let result = lookup::download_paper_assets(PaperDownloadAssetsArgs {
         vault_path: vault.to_string_lossy().to_string(),
         path: paper.path.clone(),
+        task_id: None,
     })
     .await?;
     let style = globals.style;

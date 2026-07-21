@@ -35,6 +35,7 @@ pub fn lookup_translator_config() -> ApiResult<TranslatorConfig> {
 /// Remote vaults (`remote:<sessionId>`) stage locally then SFTP-upload + catalog push.
 #[tauri::command]
 pub async fn lookup_import(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
     args: LookupImportArgs,
 ) -> Result<ApiResult<LookupImportResult>, String> {
@@ -52,13 +53,14 @@ pub async fn lookup_import(
             op.finish_result(import_bridge::import_by_identifier_remote(session, args).await)
         );
     }
-    Ok(op.finish_result(lookup::import_by_identifier(args).await))
+    Ok(op.finish_result(lookup::import_by_identifier_with_progress(args, Some(&app)).await))
 }
 
 /// Download PDF (+ arXiv LaTeX) for an existing paper folder that is missing local assets.
 /// When no TeX remains after download, also tries liteparse → PAPER.md.
 #[tauri::command]
 pub async fn paper_download_assets(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
     args: PaperDownloadAssetsArgs,
 ) -> Result<ApiResult<AssetDownloadResult>, String> {
@@ -76,7 +78,7 @@ pub async fn paper_download_assets(
             op.finish_result(import_bridge::download_paper_assets_remote(session, args).await)
         );
     }
-    Ok(op.finish_result(lookup::download_paper_assets(args).await))
+    Ok(op.finish_result(lookup::download_paper_assets_with_progress(args, Some(&app)).await))
 }
 
 /// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).

@@ -158,10 +158,12 @@ function maybeTriggerDeferredParse(
 			title: i18n.t("app:tasks.downloadPaper"),
 			detail: rel,
 		},
-		async ({ setProgress }) => {
-			setProgress(30);
-			await downloadPaperAssets({ vaultRoot: vaultPath, paperPath: rel });
-			setProgress(100);
+		async ({ id }) => {
+			await downloadPaperAssets({
+				vaultRoot: vaultPath,
+				paperPath: rel,
+				progressTaskId: id,
+			});
 		},
 	).catch(() => {});
 }
@@ -202,14 +204,13 @@ async function resolvePaperPdfSource(
 				title: i18n.t("app:tasks.downloadPaper"),
 				detail: rel,
 			},
-			async ({ setDetail, setProgress }) => {
+			async ({ id, setDetail }) => {
 				setDetail(rel);
-				setProgress(25);
 				const r = await downloadPaperAssets({
 					vaultRoot: vaultPath,
 					paperPath: rel,
+					progressTaskId: id,
 				});
-				setProgress(100);
 				return r;
 			},
 		);

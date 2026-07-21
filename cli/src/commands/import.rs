@@ -43,6 +43,7 @@ async fn import_id(globals: &GlobalOpts, text: &str, parent: &str) -> Result<Val
         parent_dir: parent.to_string(),
         text: text.to_string(),
         translator_base_url: globals.translator_base_url(),
+        task_id: None,
     })
     .await
     .map_err(|e| CliError::import_failed(e.to_string()))?;
