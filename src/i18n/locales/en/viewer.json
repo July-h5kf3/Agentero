@@ -84,7 +84,8 @@
 		"translateHide": "Hide",
 		"translateDelete": "Delete",
 		"translatePinAria": "Open translation: {{preview}}",
-		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent."
+		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent.",
+		"translateOpenSettings": "Open translation settings"
 	},
 	"html": {
 		"empty": "No paper available.",

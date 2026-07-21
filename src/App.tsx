@@ -3312,6 +3312,7 @@ export default function App() {
 													pdfZen={pdfZenMode}
 													onTogglePdfZen={togglePdfZen}
 													onOpenAnnotations={openAnnotationsTab}
+													onOpenSettings={() => openSettings("translate")}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
 													onPdfAsksChange={handlePdfAsksChange}

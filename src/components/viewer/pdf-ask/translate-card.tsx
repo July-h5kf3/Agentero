@@ -1,17 +1,18 @@
-import { Languages, MinusIcon, Trash2Icon } from "lucide-react";
+import { Languages, MinusIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 
 export type TranslateCardProps = {
 	screen: { x: number; y: number };
-	/** Source quote (optional header context) */
-	quote?: string;
 	/** Translation text (may stream in) */
 	result: string;
 	streaming: boolean;
 	error: string | null;
+	/** Open Translate settings from an API failure state. */
+	onOpenSettings: () => void;
 	/** Hide card; pin remains for reopen */
 	onHide: () => void;
 	/** Delete persisted translate record + pin */
@@ -26,10 +27,10 @@ export type TranslateCardProps = {
  */
 export function TranslateCard({
 	screen,
-	quote,
 	result,
 	streaming,
 	error,
+	onOpenSettings,
 	onHide,
 	onDelete,
 	onPointerEnter,
@@ -43,8 +44,6 @@ export function TranslateCard({
 		<SelectionCard
 			screen={screen}
 			width={320}
-			height={360}
-			lockHeight
 			title={t("selection.translateTitle")}
 			icon={Languages}
 			ariaLive="polite"
@@ -65,12 +64,6 @@ export function TranslateCard({
 			]}
 			bodyClassName="gap-2 px-3 py-2.5"
 		>
-			{quote?.trim() ? (
-				<blockquote className="agentero-scroll max-h-16 shrink-0 overflow-y-auto border-border/70 border-l-2 pl-2 text-muted-foreground text-xs leading-relaxed">
-					{quote.trim()}
-				</blockquote>
-			) : null}
-
 			{showLoading ? (
 				<Shimmer className="text-sm" as="p">
 					{t("selection.translating")}
@@ -90,9 +83,21 @@ export function TranslateCard({
 			) : null}
 
 			{error ? (
-				<p className="text-destructive text-xs" role="alert">
-					{error}
-				</p>
+				<div className="flex flex-col items-start gap-2">
+					<p className="text-destructive text-xs" role="alert">
+						{error}
+					</p>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						className="h-7 gap-1.5 px-2 text-xs"
+						onClick={onOpenSettings}
+					>
+						<Settings2Icon className="size-3.5" />
+						{t("selection.translateOpenSettings")}
+					</Button>
+				</div>
 			) : null}
 		</SelectionCard>
 	);

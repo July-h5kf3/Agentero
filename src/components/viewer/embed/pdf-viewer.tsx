@@ -191,6 +191,8 @@ export type PdfViewerProps = {
 	onToggleZen?: () => void;
 	/** Open the annotations overview (App-level right sidebar tab). */
 	onOpenAnnotations?: () => void;
+	/** Open Translate settings from a translation error card. */
+	onOpenSettings?: () => void;
 	className?: string;
 	/** Register/unregister an imperative handle for the annotations panel */
 	onHandle?: (handle: PdfViewerHandle | null) => void;
@@ -362,6 +364,7 @@ function PdfViewerInner({
 	zen = false,
 	onToggleZen,
 	onOpenAnnotations,
+	onOpenSettings,
 	onHandle,
 	onHighlightsChange,
 	onAsksChange,
@@ -572,6 +575,22 @@ function PdfViewerInner({
 			}
 		},
 		[paperAbsPath],
+	);
+
+	const markTranslateFailure = useCallback(
+		(id: string, message: string) => {
+			const latest = translatesRef.current.find((r) => r.id === id);
+			if (latest) {
+				upsertTranslate({
+					...latest,
+					error: message,
+					updatedAt: new Date().toISOString(),
+				});
+			}
+			setTranslateStreaming(false);
+			setTranslateError(message);
+		},
+		[upsertTranslate],
 	);
 
 	// Load persisted ask threads + translate records once.
@@ -1031,7 +1050,6 @@ function PdfViewerInner({
 			quote,
 		});
 		upsertTranslate(rec);
-		if (paperAbsPath) void persistTranslate(rec);
 		openCard({ kind: "translate", id: rec.id });
 		setTranslateStreaming(true);
 		setTranslateError(null);
@@ -1058,8 +1076,7 @@ function PdfViewerInner({
 					if (!resolved.agentId) {
 						const msg = t("selection.translateNoAgent");
 						notifyError(msg);
-						setTranslateStreaming(false);
-						setTranslateError(msg);
+						markTranslateFailure(rec.id, msg);
 						return;
 					}
 					const accepted = await runOnce({
@@ -1118,25 +1135,15 @@ function PdfViewerInner({
 						await listenAgentFailed((ev) => {
 							if (ev.sessionId !== sessionId) return;
 							const msg = ev.error || t("pdfAsk.agentFailed");
-							setTranslateError(msg);
 							notifyError(msg);
-							const latest =
-								translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-							const next = {
-								...latest,
-								error: msg,
-								updatedAt: new Date().toISOString(),
-							};
-							upsertTranslate(next);
-							void persistTranslate(next);
+							markTranslateFailure(rec.id, msg);
 							cleanup();
 						}),
 					);
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
 					notifyError(message);
-					setTranslateStreaming(false);
-					setTranslateError(message);
+					markTranslateFailure(rec.id, message);
 				}
 			})();
 			return;
@@ -1166,8 +1173,7 @@ function PdfViewerInner({
 			} catch (e) {
 				const message = e instanceof Error ? e.message : String(e);
 				notifyError(message);
-				setTranslateStreaming(false);
-				setTranslateError(message);
+				markTranslateFailure(rec.id, message);
 			}
 		})();
 	}, [
@@ -1181,6 +1187,7 @@ function PdfViewerInner({
 		stopTranslateSession,
 		upsertTranslate,
 		persistTranslate,
+		markTranslateFailure,
 		openCard,
 	]);
 
@@ -1654,6 +1661,8 @@ function PdfViewerInner({
 						documentId={docId}
 						renderPage={({ pageIndex, width, height }) => {
 							const pageNumber = pageIndex + 1;
+							const activeTranslateOnPage =
+								activeTranslate?.page === pageNumber ? activeTranslate : null;
 							const pins: SelectionPin[] = [
 								...askSummaries
 									.filter((s) => s.page === pageNumber)
@@ -1668,7 +1677,7 @@ function PdfViewerInner({
 										}),
 									),
 								...translates
-									.filter((tr) => tr.page === pageNumber)
+									.filter((tr) => tr.page === pageNumber && !tr.error)
 									.map((tr): SelectionPin => {
 										const pin = pinFromRects(tr.rects);
 										return {
@@ -1759,10 +1768,10 @@ function PdfViewerInner({
 			{activeTranslate && cardScreen ? (
 				<TranslateCard
 					screen={cardScreen}
-					quote={activeTranslate.quote ?? ""}
 					result={activeTranslate.result ?? ""}
 					streaming={translateStreaming}
 					error={translateError ?? activeTranslate.error ?? null}
+					onOpenSettings={() => onOpenSettings?.()}
 					onHide={hideActiveCard}
 					onDelete={deleteTranslateCard}
 					onPointerEnter={cancelHoverHide}

@@ -84,7 +84,8 @@
 		"translateHide": "收起",
 		"translateDelete": "删除",
 		"translatePinAria": "打开翻译：{{preview}}",
-		"translateNoAgent": "没有可用的 Agent 进行翻译，请先在设置 → Agent 中配置。"
+		"translateNoAgent": "没有可用的 Agent 进行翻译，请先在设置 → Agent 中配置。",
+		"translateOpenSettings": "打开翻译设置"
 	},
 	"html": {
 		"empty": "暂无论文。",

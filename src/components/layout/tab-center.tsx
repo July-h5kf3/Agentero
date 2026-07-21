@@ -47,6 +47,7 @@ type TabCenterProps = {
 	pdfZen: boolean;
 	onTogglePdfZen: () => void;
 	onOpenAnnotations: () => void;
+	onOpenSettings: () => void;
 	registerPdfHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
 	onPdfHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
 	onPdfAsksChange: (tabId: string, list: PdfAskThread[]) => void;
@@ -102,6 +103,7 @@ export const TabCenter = memo(function TabCenter({
 	pdfZen,
 	onTogglePdfZen,
 	onOpenAnnotations,
+	onOpenSettings,
 	registerPdfHandle,
 	onPdfHighlightsChange,
 	onPdfAsksChange,
@@ -185,6 +187,7 @@ export const TabCenter = memo(function TabCenter({
 					zen={pdfZen}
 					onToggleZen={onTogglePdfZen}
 					onOpenAnnotations={onOpenAnnotations}
+					onOpenSettings={onOpenSettings}
 					className="h-full w-full"
 					onHandle={(h) => registerPdfHandle(tab.id, h)}
 					onHighlightsChange={(list) => onPdfHighlightsChange(tab.id, list)}
