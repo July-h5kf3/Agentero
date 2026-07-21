@@ -46,6 +46,8 @@ pub struct AppSettings {
     #[serde(default = "default_ai_response_language")]
     pub ai_response_language: String,
     #[serde(default)]
+    pub agent_personal_prompt: String,
+    #[serde(default)]
     pub pdf_ask: PdfAskSettings,
     #[serde(default)]
     pub analytics_enabled: bool,
@@ -123,6 +125,7 @@ impl Default for AppSettings {
             agent_permission_mode: default_permission_mode(),
             auto_paper_reader: false,
             ai_response_language: default_ai_response_language(),
+            agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),
             analytics_enabled: false,
             share_crash_reports: false,
