@@ -216,7 +216,7 @@ src-tauri/src/
 | 命令 | 状态 | 说明 |
 |---|---|---|
 | `paper_list` | **已落地** | 全量列表 → UI 论文库表格；参数仅 `vaultPath` |
-| `paper_set_tags` | **已落地** | 整表替换 `tags`（元素可为字符串或 `{ name, color? }` Apple 风格色 id：`red`/`orange`/`yellow`/`green`/`teal`/`blue`/`indigo`/`purple`）；Paper Info 增删与选色；Library 展示 + 筛选；CLI `paper set-tags` / `list --tag` / `tags`（CLI 仍传裸字符串） |
+| `paper_set_tags` | **已落地** | 整表替换 `tags`（元素可为字符串或 `{ name, color? }` Apple 风格色 id：`red`/`orange`/`yellow`/`green`/`teal`/`blue`/`indigo`/`purple`）；Paper Info 增删与选色；Library 展示 + 筛选；CLI `paper tag list|set|add|rm` / `list --tag`（CLI 仍传裸字符串） |
 | `paper_get` | **已落地** | 单篇 meta（`path` 或 `id`）→ Paper Info / 远程 URL（下载候选与预览回退） |
 | `paper:list`（过滤/分页） | 规划 | year、tag、type、query（LIKE 或 FTS）、limit/offset |
 
