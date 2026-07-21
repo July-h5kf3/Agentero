@@ -358,21 +358,39 @@ pub fn remove_tags(
     upsert_paper(vault_root, &row)
 }
 
+/// Catalog-wide tag inventory entry (name + optional color + count).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagCount {
+    pub name: String,
+    pub color: Option<String>,
+    pub count: usize,
+}
+
 /// Unique tags across the catalog with occurrence counts (sorted by tag name).
-/// First-seen casing is preserved for the tag string.
-pub fn list_all_tags(vault_root: &Path) -> Result<Vec<(String, usize)>, AppError> {
+/// First-seen casing is preserved; first non-empty color wins.
+pub fn list_all_tags(vault_root: &Path) -> Result<Vec<TagCount>, AppError> {
     let rows = list_all(vault_root)?;
-    let mut map: std::collections::BTreeMap<String, (String, usize)> =
+    // key = lowercase name → (display name, color, count)
+    let mut map: std::collections::BTreeMap<String, (String, Option<String>, usize)> =
         std::collections::BTreeMap::new();
     for r in rows {
         for tag in r.tags {
             let key = tag.name.to_ascii_lowercase();
             map.entry(key)
-                .and_modify(|(_, n)| *n += 1)
-                .or_insert((tag.name, 1));
+                .and_modify(|(name, color, n)| {
+                    *n += 1;
+                    if color.is_none() {
+                        *color = normalize_color(tag.color.as_deref());
+                    }
+                    let _ = name; // casing from first insert
+                })
+                .or_insert((tag.name, normalize_color(tag.color.as_deref()), 1));
         }
     }
-    Ok(map.into_values().collect())
+    Ok(map
+        .into_values()
+        .map(|(name, color, count)| TagCount { name, color, count })
+        .collect())
 }
 
 /// True if the paper has every tag in `required` (exact match, case-insensitive).
