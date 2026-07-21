@@ -30,12 +30,13 @@ function unionRect(rects: Rect[]): Rect | null {
 
 /**
  * One-time migration of legacy normalized-rect highlight marks
- * (`papers/<id>/marks/*.json`, kind "highlight") into EmbedPDF annotation
- * transfer items. Normalized rects (top-left origin, y-down) are scaled by the
- * page size in points. Ask/Translate marks are left untouched.
+ * (`papers/<id>/marks/<id>.json`, kind "highlight") into EmbedPDF annotation
+ * transfer items (later saved as `marks/annotations.json`). Normalized rects
+ * (top-left origin, y-down) are scaled by the page size in points.
+ * Ask/Translate marks are left untouched.
  *
- * Migrated highlight mark files are deleted so the annotation store becomes the
- * single source of truth.
+ * Migrated highlight mark files are deleted so `marks/annotations.json` becomes
+ * the single source of truth for highlights/批注.
  */
 export async function migrateHighlightMarks(
 	paperAbsPath: string,

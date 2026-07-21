@@ -248,9 +248,10 @@ function OutlineTree({
  * `<EmbedPDF>` provider keyed by `docId` so scroll/zoom/selection/annotation
  * state stays isolated across the persistent tab set.
  *
- * Highlights/批注 are EmbedPDF annotations (persisted to `annotations.json`).
- * Ask (AI Q&A) and Translate stay app-specific overlays, re-sourced from the
- * selection plugin and persisted as `marks/*.json`.
+ * Highlights/批注 are EmbedPDF annotations (persisted to
+ * `marks/annotations.json`). Ask (AI Q&A) and Translate stay app-specific
+ * overlays, re-sourced from the selection plugin and persisted as
+ * `marks/<id>.json`.
  */
 export function PdfViewer(props: PdfViewerProps) {
 	const { t } = useTranslation("viewer");

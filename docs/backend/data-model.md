@@ -48,7 +48,7 @@ agentero-vault/
 ├── papers/                # 文献区；可含组织子目录
 │   ├── 1706.03762/        # paper 单元（一级）
 │   │   ├── NOTES.md
-│   │   ├── marks/         # 划词标记 JSON（ask/highlight/translate）
+│   │   ├── marks/         # 划词：ask/translate 单文件 + annotations.json 高亮/批注
 │   │   ├── PAPER.md       # 可选
 │   │   ├── assets/
 │   │   └── source/
@@ -163,21 +163,21 @@ Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_en
 划词后的 **提问 / 高亮·批注 / 翻译** 全部为 **JSON**，落在同一目录（pretty，便于 Git diff）：
 
 ```text
-papers/<id>/marks/<id>.json
+papers/<id>/marks/<id>.json           # kind: ask | translate（及遗留 kind: highlight）
+papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import 传输格式）
 ```
 
-每条带 **`kind`** 判别器：
-
-| `kind` | 含义 | 主要字段 |
-|--------|------|----------|
-| `ask` | 多轮就地提问 | `anchor`（page/rects/quote）、`messages[]`、`status` |
-| `highlight` | 高亮；`comment` 非空 = 批注 | `page`、`rects`、`quote`、`color?`、`comment?` |
-| `translate` | 成功划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
+| 文件 | 含义 | 主要字段 |
+|------|------|----------|
+| `marks/<id>.json` · `kind: ask` | 多轮就地提问 | `anchor`（page/rects/quote）、`messages[]`、`status` |
+| `marks/<id>.json` · `kind: translate` | 成功划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
+| `marks/annotations.json` | **高亮 / 批注**（EmbedPDF 注解数组；`contents` 非空 = 批注） | 插件 transfer item；调色板键 / quote 在注解 `custom` |
+| （遗留）`marks/<id>.json` · `kind: highlight` | 旧归一化高亮；打开时一次性迁入 `annotations.json` 后删除 | `page`、`rects`、`quote`、`color?`、`comment?` |
 
 - **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
-- 坐标均为页内归一化 0–1，缩放/重开可重建。
-- 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight` / `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
-- **阅读热力**：聚合上述三类 mark 的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
+- 提问 / 翻译坐标为页内归一化 0–1；高亮几何由 EmbedPDF 注解（页点坐标）保存。
+- 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight`（含 `annotation-store.ts`）/ `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
+- **阅读热力**：聚合 ask / translate mark 与高亮视图的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
 
 

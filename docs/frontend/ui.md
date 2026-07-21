@@ -271,7 +271,7 @@
   - **PDF 沉浸式阅读**（工具栏 `Maximize2` 进入 / `Minimize2` 或 `Esc` 退出）：折叠左右侧栏 + 隐藏中间栏头，PDF 铺满窗口；正文**限宽 ≤ 1100px 居中**（舒适阅读 + 两侧留白），缩放 / 页码 / 大纲 / 查找浮层照常；切到非 PDF tab 自动退出。i18n `viewer:pdf.zenEnter/zenExit`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
-    - 划词标记统一落盘 **`papers/<id>/marks/<id>.json`**（`kind`: `highlight` / `ask` / `translate`）。高亮含 `color` 调色板；批注 = `comment` 非空；提问为多轮 `messages`；成功翻译含 `result` 可回访。翻译 API 失败时仅保留当前错误卡片，不落盘且不显示页边入口，卡片提供跳转翻译设置。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
+    - 划词标记统一落在 **`papers/<id>/marks/`**：高亮 / 批注 → **`marks/annotations.json`**（EmbedPDF 注解；`contents` 非空 = 批注）；提问 / 翻译 → **`marks/<id>.json`**（`kind`: `ask` / `translate`）。提问为多轮 `messages`；成功翻译含 `result` 可回访。翻译 API 失败时仅保留当前错误卡片，不落盘且不显示页边入口，卡片提供跳转翻译设置。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。

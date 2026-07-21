@@ -2,8 +2,8 @@
 
 > ⚠️ **EmbedPDF 迁移（2026-07）**：PDF 渲染 / 选中 / 批注引擎已从 `react-pdf` + `pdfjs-dist` 全量切换到 **[@embedpdf](https://www.embedpdf.com)（PDFium / WASM，headless 插件式）**。
 > - **新组件**：`src/components/viewer/embed/pdf-viewer.tsx`（`Viewport`/`Scroller`/`RenderLayer`/`TilingLayer` + selection / annotation / search / bookmark 插件）；共享 PDFium 引擎在 `src/components/viewer/embed/engine-provider.tsx`（`main.tsx` 挂载，`worker:false` 主线程加载本地 wasm）。
-> - **高亮 / 批注 = EmbedPDF 注解**（唯一事实来源），落盘 `papers/<id>/annotations.json`（`exportAnnotations()` / `importAnnotations()` 传输格式；批注 = 注解 `contents` 非空；调色板键 / quote 存于注解 `custom`）。首次打开若存在旧版 `marks/*.json`（`kind: highlight`）会**一次性迁移**到 `annotations.json` 并删除旧高亮标记（`lib/pdf-highlight/annotation-store.ts` + `migrate-marks.ts`）。
-> - **提问 / 翻译仍为应用层浮层**，几何来自 selection 插件；成功翻译落盘 `papers/<id>/marks/*.json`（`kind` ∈ `ask` \| `translate`），翻译失败仅显示当前错误卡片，不生成持久化入口。
+> - **高亮 / 批注 = EmbedPDF 注解**（唯一事实来源），落盘 `papers/<id>/marks/annotations.json`（`exportAnnotations()` / `importAnnotations()` 传输格式；批注 = 注解 `contents` 非空；调色板键 / quote 存于注解 `custom`）。首次打开若存在旧版 `marks/<id>.json`（`kind: highlight`）会**一次性迁移**到 `marks/annotations.json` 并删除旧高亮标记；若仍有论文根目录遗留的 `annotations.json` 也会迁入 `marks/`（`lib/pdf-highlight/annotation-store.ts` + `migrate-marks.ts`）。
+> - **提问 / 翻译仍为应用层浮层**，几何来自 selection 插件；成功翻译落盘 `papers/<id>/marks/<id>.json`（`kind` ∈ `ask` \| `translate`），翻译失败仅显示当前错误卡片，不生成持久化入口。
 > - **查找（⌘F）/ 大纲** 改用 `@embedpdf/plugin-search` / `plugin-bookmark`。
 > - 下方各节仍描述历史 `react-pdf` 设计，待完整重写。
 

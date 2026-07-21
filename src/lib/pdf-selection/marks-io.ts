@@ -1,9 +1,11 @@
 /**
  * Unified on-disk layout for PDF selection marks:
  *
- *   papers/<id>/marks/<id>.json
+ *   papers/<id>/marks/<id>.json          # kind: ask | highlight | translate
+ *   papers/<id>/marks/annotations.json   # EmbedPDF highlight/批注 transfer blob
  *
- * Pretty JSON with required `kind`: "ask" | "highlight" | "translate".
+ * Per-mark files are pretty JSON with required `kind`.
+ * `annotations.json` is the aggregate EmbedPDF annotation store (not a mark).
  */
 import { readDir } from "@tauri-apps/plugin-fs";
 
@@ -11,6 +13,9 @@ import { isTauri } from "@/lib/tauri";
 import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
 export const MARKS_FOLDER = "marks";
+
+/** Aggregate EmbedPDF annotations file name under `marks/` (not a per-id mark). */
+export const ANNOTATIONS_JSON = "annotations.json";
 
 export type PdfMarkKind = "ask" | "highlight" | "translate";
 
@@ -22,7 +27,7 @@ export function markPath(paperAbsPath: string, id: string): string {
 	return joinVaultPath(marksDir(paperAbsPath), `${id}.json`);
 }
 
-/** Read + JSON.parse every `*.json` under `marks/` (skip corrupt). */
+/** Read + JSON.parse every per-id `*.json` under `marks/` (skip aggregate + corrupt). */
 export async function listMarkRaw(paperAbsPath: string): Promise<unknown[]> {
 	if (!paperAbsPath || !isTauri()) return [];
 	const dir = marksDir(paperAbsPath);
@@ -31,7 +36,10 @@ export async function listMarkRaw(paperAbsPath: string): Promise<unknown[]> {
 		const entries = await readDir(dir);
 		names = entries
 			.map((e) => e.name)
-			.filter((n): n is string => Boolean(n?.endsWith(".json")));
+			.filter(
+				(n): n is string =>
+					Boolean(n?.endsWith(".json")) && n !== ANNOTATIONS_JSON,
+			);
 	} catch {
 		return [];
 	}
