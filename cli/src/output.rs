@@ -2,6 +2,7 @@
 
 use crate::error::CliError;
 use crate::resolve::GlobalOpts;
+use crate::style::Style;
 use clap::ValueEnum;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -33,7 +34,7 @@ pub fn emit_ok(globals: &GlobalOpts, data: &Value) -> Result<(), CliError> {
             if globals.quiet {
                 return Ok(());
             }
-            emit_text(data);
+            emit_text(data, globals.style);
         }
     }
     Ok(())
@@ -48,10 +49,17 @@ fn normalize_json_data(data: &Value) -> Value {
                 .cloned()
                 .unwrap_or_else(|| Value::Array(vec![]));
         }
+        if obj.get("__path_list").and_then(|v| v.as_bool()) == Some(true) {
+            return obj
+                .get("items")
+                .cloned()
+                .unwrap_or_else(|| Value::Array(vec![]));
+        }
         // Drop text-only helpers from success payloads.
         let mut clean = obj.clone();
         clean.remove("lines");
         clean.remove("__paper_list");
+        clean.remove("__path_list");
         return Value::Object(clean);
     }
     data.clone()
@@ -65,28 +73,44 @@ pub fn emit_err(globals: &GlobalOpts, err: &CliError) -> Result<(), CliError> {
             println!("{}", serde_json::to_string_pretty(&fail)?);
         }
         OutputFormat::Text => {
-            eprintln!("error: {} ({})", err.message, err.code);
+            let style = globals.style;
+            eprintln!(
+                "{} {} {}",
+                style.error_label("error:"),
+                err.message,
+                style.dim(&format!("({})", err.code))
+            );
             if !err.details.is_null() && err.details != json!({}) {
-                eprintln!("{}", serde_json::to_string_pretty(&err.details)?);
+                // Prefer human lines inside details when present.
+                if let Some(lines) = err.details.get("lines").and_then(|v| v.as_array()) {
+                    for line in lines {
+                        if let Some(s) = line.as_str() {
+                            eprintln!("  {s}");
+                        }
+                    }
+                } else {
+                    eprintln!("{}", serde_json::to_string_pretty(&err.details)?);
+                }
             }
         }
     }
     Ok(())
 }
 
-fn emit_text(data: &Value) {
+fn emit_text(data: &Value, style: Style) {
     match data {
         Value::String(s) => println!("{s}"),
         Value::Array(items) if items.iter().all(|v| v.is_string()) => {
             for item in items {
                 if let Some(s) = item.as_str() {
+                    // Bare path lists (no color wrapper).
                     println!("{s}");
                 }
             }
         }
         Value::Object(map) if map.contains_key("path") && map.len() == 1 => {
             if let Some(p) = map.get("path").and_then(|v| v.as_str()) {
-                println!("{p}");
+                println!("{}", style.path(p));
             }
         }
         Value::Object(map) if map.contains_key("lines") => {

@@ -3,7 +3,8 @@
 use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
-use agentero_lib::services::catalog::papers::{self, PaperRecord};
+use crate::style::{format_table, truncate_chars};
+use agentero_lib::services::catalog::papers::{self, PaperRecord, PaperTag};
 use agentero_lib::services::lookup::{self, PaperDownloadAssetsArgs};
 use agentero_lib::services::pdf_parse::{self, PaperParseBodyArgs};
 use clap::Subcommand;
@@ -28,8 +29,11 @@ pub enum PaperCmd {
         #[arg(long = "status")]
         status: Option<String>,
     },
-    /// List unique tags in the catalog with counts.
-    Tags,
+    /// Tag inventory and per-paper tag edits.
+    Tag {
+        #[command(subcommand)]
+        cmd: TagCmd,
+    },
     /// Meta + asset flags + suggestedReads (no body dump).
     Get {
         /// Vault-relative path or paper id.
@@ -52,21 +56,6 @@ pub enum PaperCmd {
         #[arg(long = "false")]
         set_false: bool,
     },
-    /// Set catalog tags (does not run paper-reader).
-    ///
-    /// Default: replace the full tag list with `tags` (empty list clears).
-    /// Use `--add` or `--remove` for incremental edits (mutually exclusive).
-    SetTags {
-        r#ref: String,
-        /// Tag names (replace mode when neither --add nor --remove).
-        tags: Vec<String>,
-        /// Append tags (case-insensitive dedupe).
-        #[arg(long = "add", conflicts_with = "remove")]
-        add: bool,
-        /// Remove tags (case-insensitive).
-        #[arg(long = "remove", conflicts_with = "add")]
-        remove: bool,
-    },
     /// Download PDF / arXiv TeX for an existing paper.
     Download { r#ref: String },
     /// liteparse PDF → PAPER.md when no TeX.
@@ -74,6 +63,38 @@ pub enum PaperCmd {
         r#ref: String,
         #[arg(long = "force")]
         force: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TagCmd {
+    /// List unique tags in the catalog with counts (and colors when set).
+    List,
+    /// Replace the full tag list for a paper.
+    ///
+    /// Pass tag names as arguments, or use `--clear` to remove all tags.
+    Set {
+        /// Vault-relative path or paper id.
+        r#ref: String,
+        /// Tag names (replace entire list).
+        tags: Vec<String>,
+        /// Clear all tags (do not pass tag names with this flag).
+        #[arg(long = "clear")]
+        clear: bool,
+    },
+    /// Append tags to a paper (case-insensitive dedupe).
+    Add {
+        r#ref: String,
+        /// Tag names to append (at least one).
+        #[arg(required = true)]
+        tags: Vec<String>,
+    },
+    /// Remove tags from a paper (case-insensitive).
+    Rm {
+        r#ref: String,
+        /// Tag names to remove (at least one).
+        #[arg(required = true)]
+        tags: Vec<String>,
     },
 }
 
@@ -97,8 +118,10 @@ struct PaperGetData {
 }
 
 #[derive(Debug, Serialize)]
-struct TagCount {
+struct TagCountOut {
     tag: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    color: Option<String>,
     count: usize,
 }
 
@@ -110,20 +133,43 @@ pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError>
             unread,
             status,
         } => list(globals, query.as_deref(), &tags, unread, status.as_deref()),
-        PaperCmd::Tags => list_tags(globals),
+        PaperCmd::Tag { cmd } => run_tag(cmd, globals),
         PaperCmd::Get { r#ref } => get(globals, &r#ref),
         PaperCmd::Paths { r#ref } => paths(globals, &r#ref),
         PaperCmd::Delete { path, files } => delete(globals, &path, files),
         PaperCmd::SetRead { r#ref, set_false } => set_read(globals, &r#ref, !set_false),
-        PaperCmd::SetTags {
-            r#ref,
-            tags,
-            add,
-            remove,
-        } => set_tags(globals, &r#ref, &tags, add, remove),
         PaperCmd::Download { r#ref } => download(globals, &r#ref).await,
         PaperCmd::Parse { r#ref, force } => parse(globals, &r#ref, force).await,
     }
+}
+
+fn run_tag(cmd: TagCmd, globals: &GlobalOpts) -> Result<Value, CliError> {
+    match cmd {
+        TagCmd::List => list_tags(globals),
+        TagCmd::Set { r#ref, tags, clear } => {
+            if clear && !tags.is_empty() {
+                return Err(CliError::usage("--clear cannot be combined with tag names"));
+            }
+            if clear {
+                set_tags(globals, &r#ref, &[], TagMode::Replace)
+            } else if tags.is_empty() {
+                Err(CliError::usage(
+                    "pass tag names to replace, or use --clear to remove all tags",
+                ))
+            } else {
+                set_tags(globals, &r#ref, &tags, TagMode::Replace)
+            }
+        }
+        TagCmd::Add { r#ref, tags } => set_tags(globals, &r#ref, &tags, TagMode::Add),
+        TagCmd::Rm { r#ref, tags } => set_tags(globals, &r#ref, &tags, TagMode::Remove),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TagMode {
+    Replace,
+    Add,
+    Remove,
 }
 
 fn list(
@@ -164,34 +210,32 @@ fn list(
         });
     }
 
-    // cli.md: JSON is PaperRecord[]. For text mode, attach human lines via wrapper
-    // only when not pure array — emit_ok handles arrays poorly for columns, so we use
-    // a small object with `items` + `lines`, and output layer prefers `items` for json.
-    let lines: Vec<String> = rows
+    let style = globals.style;
+    let table_rows: Vec<Vec<String>> = rows
         .iter()
         .map(|r| {
             let year = r.year.map(|y| y.to_string()).unwrap_or_else(|| "-".into());
-            let read = if r.is_read { "read" } else { "unread" };
-            let tags = if r.tags.is_empty() {
-                "-".into()
-            } else {
-                r.tags
-                    .iter()
-                    .map(|t| t.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            };
-            format!(
-                "{}\t{}\t{}\t{}\t{}\t{}",
-                r.path,
-                r.id,
-                truncate(&r.title, 60),
-                year,
+            let tags =
+                style.tags_join(r.tags.iter().map(|t| (t.name.as_str(), t.color.as_deref())));
+            vec![
+                style.path(&truncate_chars(&r.path, 40)),
+                style.id(&truncate_chars(&r.id, 16)),
+                style.title(&truncate_chars(&r.title, 48)),
+                style.dim(&year),
                 tags,
-                read
-            )
+                style.read_status(r.is_read),
+            ]
         })
         .collect();
+    let lines = if rows.is_empty() {
+        vec![style.dim("(no papers)")]
+    } else {
+        format_table(
+            style,
+            &["PATH", "ID", "TITLE", "YEAR", "TAGS", "STATUS"],
+            &table_rows,
+        )
+    };
 
     Ok(json!({
         "items": rows,
@@ -203,14 +247,29 @@ fn list(
 fn list_tags(globals: &GlobalOpts) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let pairs = papers::list_all_tags(&vault)?;
-    let items: Vec<TagCount> = pairs
+    let items: Vec<TagCountOut> = pairs
         .into_iter()
-        .map(|(tag, count)| TagCount { tag, count })
+        .map(|t| TagCountOut {
+            tag: t.name,
+            color: t.color,
+            count: t.count,
+        })
         .collect();
-    let lines: Vec<String> = items
+    let style = globals.style;
+    let table_rows: Vec<Vec<String>> = items
         .iter()
-        .map(|t| format!("{}\t{}", t.tag, t.count))
+        .map(|t| {
+            vec![
+                style.tag(&t.tag, t.color.as_deref()),
+                style.dim(&t.count.to_string()),
+            ]
+        })
         .collect();
+    let lines = if items.is_empty() {
+        vec![style.dim("(no tags)")]
+    } else {
+        format_table(style, &["TAG", "COUNT"], &table_rows)
+    };
     Ok(json!({
         "items": items,
         "lines": lines,
@@ -229,23 +288,67 @@ fn get(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
         assets,
         suggested_reads: suggested_reads.clone(),
     };
+    let style = globals.style;
+    let tags = style.tags_join(
+        paper
+            .tags
+            .iter()
+            .map(|t| (t.name.as_str(), t.color.as_deref())),
+    );
+    let year = paper
+        .year
+        .map(|y| y.to_string())
+        .unwrap_or_else(|| "-".into());
+    let asset_bits = [
+        ("pdf", data.assets.pdf),
+        ("tex", data.assets.tex),
+        ("paperMd", data.assets.paper_md),
+        ("notesMd", data.assets.notes_md),
+        ("marksDir", data.assets.marks_dir),
+    ]
+    .into_iter()
+    .map(|(k, on)| {
+        if on {
+            style.bright_green(k)
+        } else {
+            style.dim(k)
+        }
+    })
+    .collect::<Vec<_>>()
+    .join(" ");
+
+    let mut lines = vec![
+        format!("{}  {}", style.path(&paper.path), style.title(&paper.title)),
+        format!(
+            "{} {}  {} {}  {} {}  {} {}",
+            style.key("id"),
+            style.id(&paper.id),
+            style.key("year"),
+            style.dim(&year),
+            style.key("status"),
+            style.read_status(paper.is_read),
+            style.key("tags"),
+            tags
+        ),
+        format!("{} {}", style.key("assets"), asset_bits),
+    ];
+    if suggested_reads.is_empty() {
+        lines.push(format!("{} {}", style.key("reads"), style.dim("(none)")));
+    } else {
+        lines.push(format!(
+            "{} {}",
+            style.key("reads"),
+            suggested_reads
+                .iter()
+                .map(|p| style.path(p))
+                .collect::<Vec<_>>()
+                .join(&style.dim(", "))
+        ));
+    }
+
     let mut v = to_value(&data)?;
     if let Some(obj) = v.as_object_mut() {
-        obj.insert(
-            "lines".into(),
-            json!([
-                format!("{} — {}", paper.path, paper.title),
-                format!(
-                    "assets: pdf={} tex={} paperMd={} notesMd={} marksDir={}",
-                    data.assets.pdf,
-                    data.assets.tex,
-                    data.assets.paper_md,
-                    data.assets.notes_md,
-                    data.assets.marks_dir
-                ),
-                format!("suggestedReads: {}", suggested_reads.join(", ")),
-            ]),
-        );
+        obj.insert("lines".into(), json!(lines));
     }
     Ok(v)
 }
@@ -279,6 +382,13 @@ fn paths(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
         }
     }
 
+    // Text mode: colorize paths when painting lines wrapper would be skipped for
+    // pure string arrays — emit via lines when color is on so path tint applies.
+    let style = globals.style;
+    if style.enabled() {
+        let lines: Vec<String> = paths.iter().map(|p| style.path(p)).collect();
+        return Ok(json!({ "items": paths, "lines": lines, "__path_list": true }));
+    }
     Ok(json!(paths))
 }
 
@@ -306,11 +416,17 @@ fn delete(globals: &GlobalOpts, path: &str, files: bool) -> Result<Value, CliErr
         }
     }
 
+    let style = globals.style;
     Ok(json!({
         "removed": removed,
         "path": path,
         "deletedFiles": deleted_files,
-        "lines": [format!("removed {removed} catalog row(s) for {path}")]
+        "lines": [format!(
+            "{} removed {} catalog row(s) for {}",
+            style.ok("✓"),
+            removed,
+            style.path(&path)
+        )]
     }))
 }
 
@@ -318,11 +434,18 @@ fn set_read(globals: &GlobalOpts, ref_: &str, is_read: bool) -> Result<Value, Cl
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let row = papers::set_is_read(&vault, &paper.path, is_read)?;
+    let style = globals.style;
     let mut v = to_value(&row)?;
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "lines".into(),
-            json!([format!("is_read={} path={}", row.is_read, row.path)]),
+            json!([format!(
+                "{} {}  {} {}",
+                style.key("is_read"),
+                style.read_status(row.is_read),
+                style.key("path"),
+                style.path(&row.path)
+            )]),
         );
     }
     Ok(v)
@@ -332,47 +455,43 @@ fn set_tags(
     globals: &GlobalOpts,
     ref_: &str,
     tags: &[String],
-    add: bool,
-    remove: bool,
+    mode: TagMode,
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
-    if add && remove {
-        return Err(CliError::message(
-            "--add and --remove are mutually exclusive",
-        ));
-    }
-    let tag_objs: Vec<papers::PaperTag> = tags.iter().map(papers::PaperTag::new).collect();
-    let row = if add {
-        if tags.is_empty() {
-            return Err(CliError::message("--add requires at least one tag"));
+    let tag_objs: Vec<PaperTag> = tags.iter().map(PaperTag::new).collect();
+    let row = match mode {
+        TagMode::Add => {
+            if tags.is_empty() {
+                return Err(CliError::usage("tag add requires at least one tag"));
+            }
+            papers::add_tags(&vault, &paper.path, &tag_objs)?
         }
-        papers::add_tags(&vault, &paper.path, &tag_objs)?
-    } else if remove {
-        if tags.is_empty() {
-            return Err(CliError::message("--remove requires at least one tag"));
+        TagMode::Remove => {
+            if tags.is_empty() {
+                return Err(CliError::usage("tag rm requires at least one tag"));
+            }
+            papers::remove_tags(&vault, &paper.path, tags)?
         }
-        papers::remove_tags(&vault, &paper.path, tags)?
-    } else {
-        papers::set_tags(&vault, &paper.path, &tag_objs)?
+        TagMode::Replace => papers::set_tags(&vault, &paper.path, &tag_objs)?,
     };
-    let tags_disp = if row.tags.is_empty() {
-        "[]".into()
-    } else {
-        format!(
-            "[{}]",
-            row.tags
-                .iter()
-                .map(|t| t.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    };
+    let style = globals.style;
+    let tags_disp = style.tags_join(
+        row.tags
+            .iter()
+            .map(|t| (t.name.as_str(), t.color.as_deref())),
+    );
     let mut v = to_value(&row)?;
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "lines".into(),
-            json!([format!("tags={} path={}", tags_disp, row.path)]),
+            json!([format!(
+                "{} {}  {} {}",
+                style.key("tags"),
+                tags_disp,
+                style.key("path"),
+                style.path(&row.path)
+            )]),
         );
     }
     Ok(v)
@@ -386,13 +505,18 @@ async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
         path: paper.path.clone(),
     })
     .await?;
+    let style = globals.style;
     let mut v = to_value(&result)?;
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "lines".into(),
             json!([format!(
-                "download path={} pdf={} tex={} paperMd={}",
-                paper.path, result.pdf, result.tex, result.paper_md
+                "{} {}  pdf={} tex={} paperMd={}",
+                style.ok("download"),
+                style.path(&paper.path),
+                result.pdf,
+                result.tex,
+                result.paper_md
             )]),
         );
         obj.insert("path".into(), json!(paper.path));
@@ -420,13 +544,16 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
         force,
     })
     .await?;
+    let style = globals.style;
     let mut v = to_value(&result)?;
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "lines".into(),
             json!([format!(
-                "parse path={} paperMd={}",
-                paper.path, result.paper_md
+                "{} {}  paperMd={}",
+                style.ok("parse"),
+                style.path(&paper.path),
+                result.paper_md
             )]),
         );
         obj.insert("path".into(), json!(paper.path));
@@ -449,7 +576,6 @@ fn suggested_reads(path: &str, assets: &Assets) -> Vec<String> {
     if assets.notes_md {
         out.push(format!("{path}/NOTES.md"));
     }
-    // L2.5: reader marks (highlight / ask / translate JSON)
     if assets.marks_dir {
         out.push(format!("{path}/marks"));
     }
@@ -457,12 +583,4 @@ fn suggested_reads(path: &str, assets: &Assets) -> Vec<String> {
         out.push(format!("{path}/PAPER.md"));
     }
     out
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let t: String = s.chars().take(max.saturating_sub(1)).collect();
-    format!("{t}…")
 }

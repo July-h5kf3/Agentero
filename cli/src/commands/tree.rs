@@ -3,6 +3,7 @@
 use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{resolve_vault, GlobalOpts};
+use crate::style::Style;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -49,7 +50,7 @@ pub fn run(sub: Option<&str>, depth: i32, globals: &GlobalOpts) -> Result<Value,
         }]
     };
 
-    let lines = flatten_lines(&nodes, 0);
+    let lines = flatten_lines(&nodes, 0, globals.style);
     Ok(json!({
         "nodes": to_value(&nodes)?,
         "lines": lines,
@@ -114,17 +115,19 @@ fn vault_relative(vault: &Path, path: &Path) -> String {
         .unwrap_or_else(|_| path.to_string_lossy().replace('\\', "/"))
 }
 
-fn flatten_lines(nodes: &[TreeNode], indent: usize) -> Vec<String> {
+fn flatten_lines(nodes: &[TreeNode], indent: usize, style: Style) -> Vec<String> {
     let mut lines = Vec::new();
     let pad = "  ".repeat(indent);
     for n in nodes {
-        let mark = if n.kind == "dir" { "/" } else { "" };
-        lines.push(format!(
-            "{pad}{}{mark}",
-            n.path.rsplit('/').next().unwrap_or(&n.path)
-        ));
+        let name = n.path.rsplit('/').next().unwrap_or(&n.path);
+        let label = if n.kind == "dir" {
+            style.dir(&format!("{name}/"))
+        } else {
+            style.file(name)
+        };
+        lines.push(format!("{pad}{label}"));
         if let Some(ch) = &n.children {
-            lines.extend(flatten_lines(ch, indent + 1));
+            lines.extend(flatten_lines(ch, indent + 1, style));
         }
     }
     lines

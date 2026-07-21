@@ -3,6 +3,7 @@
 use crate::config;
 use crate::error::CliError;
 use crate::output::OutputFormat;
+use crate::style::Style;
 use agentero_lib::services::catalog::papers::{self, PaperRecord};
 use std::path::{Path, PathBuf};
 
@@ -13,6 +14,8 @@ pub struct GlobalOpts {
     pub quiet: bool,
     pub translator_url: Option<String>,
     pub format: OutputFormat,
+    /// Text-mode paint switch (always false for JSON).
+    pub style: Style,
 }
 
 impl GlobalOpts {

@@ -76,15 +76,15 @@ struct CheckData {
 
 pub async fn run(cmd: VaultCmd, globals: &GlobalOpts) -> Result<Value, CliError> {
     match cmd {
-        VaultCmd::Create { path, open } => create(&path, open),
+        VaultCmd::Create { path, open } => create(&path, open, globals),
         VaultCmd::Which => which(globals),
         VaultCmd::Info => info(globals),
         VaultCmd::Check => check(globals),
-        VaultCmd::Use { path } => use_vault(&path),
+        VaultCmd::Use { path } => use_vault(&path, globals),
     }
 }
 
-fn create(path: &Path, open: bool) -> Result<Value, CliError> {
+fn create(path: &Path, open: bool, globals: &GlobalOpts) -> Result<Value, CliError> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -97,13 +97,21 @@ fn create(path: &Path, open: bool) -> Result<Value, CliError> {
             obj.insert("openPath".into(), json!(result.open_path));
         }
     }
-    // Text-friendly lines
+    let style = globals.style;
     if let Some(obj) = v.as_object_mut() {
-        let mut lines = vec![format!("Created vault at {}", result.path)];
+        let mut lines = vec![format!(
+            "{} {}",
+            style.ok("created"),
+            style.path(&result.path)
+        )];
         if !result.created.is_empty() {
-            lines.push(format!("Created: {}", result.created.join(", ")));
+            lines.push(format!(
+                "{} {}",
+                style.key("new"),
+                result.created.join(", ")
+            ));
         } else {
-            lines.push("Already scaffolded (nothing new)".into());
+            lines.push(style.dim("Already scaffolded (nothing new)"));
         }
         obj.insert("lines".into(), json!(lines));
     }
@@ -150,21 +158,38 @@ fn info(globals: &GlobalOpts) -> Result<Value, CliError> {
             l1: "catalog.sqlite (use: paper list)".into(),
         },
     };
+    let style = globals.style;
+    let valid_s = if data.valid {
+        style.ok("yes")
+    } else {
+        style.bright_red("no")
+    };
+    let schema = data
+        .schema_version
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "?".into());
     let mut v = to_value(&data)?;
     if let Some(obj) = v.as_object_mut() {
         obj.insert(
             "lines".into(),
             json!([
-                format!("vault: {}", data.path),
+                format!("{} {}", style.key("vault"), style.path(&data.path)),
                 format!(
-                    "valid={} schema={} papers={} unread={} notes_md={}",
-                    data.valid,
-                    data.schema_version
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "?".into()),
-                    data.counts.papers,
-                    data.counts.unread,
-                    data.counts.notes_files
+                    "{} {}  {} {}  {} {}  {} {}  {} {}",
+                    style.key("valid"),
+                    valid_s,
+                    style.key("schema"),
+                    style.dim(&schema),
+                    style.key("papers"),
+                    style.bold(&data.counts.papers.to_string()),
+                    style.key("unread"),
+                    if data.counts.unread > 0 {
+                        style.bright_yellow(&data.counts.unread.to_string())
+                    } else {
+                        style.dim("0")
+                    },
+                    style.key("notes"),
+                    style.dim(&data.counts.notes_files.to_string()),
                 ),
             ]),
         );
@@ -223,18 +248,24 @@ fn check(globals: &GlobalOpts) -> Result<Value, CliError> {
         issues,
     };
 
+    let style = globals.style;
     if !data.ok {
         let mut v = to_value(&data)?;
         if let Some(obj) = v.as_object_mut() {
             let lines: Vec<String> = data
                 .issues
                 .iter()
-                .map(|i| format!("{}: {}", i.code, i.message))
+                .map(|i| {
+                    format!(
+                        "{} {}",
+                        style.bright_red(&format!("{}:", i.code)),
+                        i.message
+                    )
+                })
                 .collect();
             obj.insert("lines".into(), json!(lines));
         }
-        // Return Ok with data but signal via error so exit non-zero?
-        // cli.md: non-zero when issues. Use dedicated error.
+        // cli.md: non-zero when issues.
         return Err(CliError::with_details(
             "vault_invalid",
             "vault check found issues",
@@ -245,12 +276,12 @@ fn check(globals: &GlobalOpts) -> Result<Value, CliError> {
 
     let mut v = to_value(&data)?;
     if let Some(obj) = v.as_object_mut() {
-        obj.insert("lines".into(), json!(["ok"]));
+        obj.insert("lines".into(), json!([style.ok("ok")]));
     }
     Ok(v)
 }
 
-fn use_vault(path: &Path) -> Result<Value, CliError> {
+fn use_vault(path: &Path, globals: &GlobalOpts) -> Result<Value, CliError> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -265,9 +296,14 @@ fn use_vault(path: &Path) -> Result<Value, CliError> {
     let abs = abs.canonicalize().unwrap_or(abs);
     let abs_str = abs.to_string_lossy().to_string();
     config::set_key("default_vault", &abs_str)?;
+    let style = globals.style;
     Ok(json!({
         "defaultVault": abs_str,
-        "lines": [format!("default_vault = {abs_str}")]
+        "lines": [format!(
+            "{} {}",
+            style.key("default_vault"),
+            style.path(&abs_str)
+        )]
     }))
 }
 

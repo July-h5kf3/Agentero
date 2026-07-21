@@ -259,13 +259,14 @@ fn paper_crud_catalog_only() {
     let v: Value = serde_json::from_slice(&get2).unwrap();
     assert_eq!(v["data"]["paper"]["is_read"], true);
 
-    // Tags: replace → list filter → add → remove → tags index
+    // Tags: replace → list filter → add → rm → tag list inventory
     agentero()
         .args([
             "--vault",
             vault.to_str().unwrap(),
             "paper",
-            "set-tags",
+            "tag",
+            "set",
             "demo",
             "nlp",
             "survey",
@@ -317,9 +318,9 @@ fn paper_crud_catalog_only() {
             "--vault",
             vault.to_str().unwrap(),
             "paper",
-            "set-tags",
+            "tag",
+            "add",
             "demo",
-            "--add",
             "draft",
             "--json",
         ])
@@ -330,9 +331,9 @@ fn paper_crud_catalog_only() {
             "--vault",
             vault.to_str().unwrap(),
             "paper",
-            "set-tags",
+            "tag",
+            "rm",
             "demo",
-            "--remove",
             "survey",
             "--json",
         ])
@@ -364,7 +365,8 @@ fn paper_crud_catalog_only() {
             "--vault",
             vault.to_str().unwrap(),
             "paper",
-            "tags",
+            "tag",
+            "list",
             "--json",
         ])
         .assert()
@@ -380,6 +382,33 @@ fn paper_crud_catalog_only() {
     assert!(items
         .iter()
         .any(|it| { it["tag"].as_str() == Some("draft") && it["count"].as_u64() == Some(1) }));
+
+    // clear requires --clear (empty args alone is a usage error)
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "tag",
+            "set",
+            "demo",
+            "--json",
+        ])
+        .assert()
+        .failure();
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "tag",
+            "set",
+            "demo",
+            "--clear",
+            "--json",
+        ])
+        .assert()
+        .success();
 
     agentero()
         .args([

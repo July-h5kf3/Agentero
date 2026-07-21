@@ -9,6 +9,7 @@ mod error;
 mod output;
 mod prompt;
 mod resolve;
+mod style;
 
 use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{ColorChoice, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
@@ -17,12 +18,23 @@ use output::{emit_err, emit_ok, OutputFormat};
 use resolve::GlobalOpts;
 use std::path::PathBuf;
 use std::process::ExitCode as StdExitCode;
+use style::Style;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ColorWhen {
     Auto,
     Always,
     Never,
+}
+
+impl From<ColorWhen> for style::ColorWhen {
+    fn from(w: ColorWhen) -> Self {
+        match w {
+            ColorWhen::Auto => style::ColorWhen::Auto,
+            ColorWhen::Always => style::ColorWhen::Always,
+            ColorWhen::Never => style::ColorWhen::Never,
+        }
+    }
 }
 
 /// High-contrast help styles so sections / flags / placeholders are easy to scan.
@@ -132,7 +144,7 @@ struct Cli {
     #[arg(long = "translator-url", global = true, value_name = "URL")]
     translator_url: Option<String>,
 
-    /// Colorize help / errors (`auto` = TTY; `always` overrides NO_COLOR).
+    /// Colorize help and text output (`auto` = TTY; `always` / `never` force).
     #[arg(long = "color", global = true, value_enum, default_value = "auto")]
     color: ColorWhen,
 
@@ -179,14 +191,11 @@ enum Commands {
 
 fn init_logging() {
     // Logs go to stderr so `--json` stdout stays a pure business envelope.
-    // Example: RUST_LOG=info agentero vault create /tmp/v
-    // Custom op logs use target `agentero::op`; crate modules use package names.
-    let _ = env_logger::Builder::from_env(
-        env_logger::Env::default()
-            .default_filter_or("warn,agentero_cli=info,agentero_lib=info,agentero::op=info"),
-    )
-    .format_timestamp_secs()
-    .try_init();
+    // Default is quiet (warn+ only): everyday CLI use should not print op start/end.
+    // Opt in: `RUST_LOG=info agentero …` or `RUST_LOG=agentero::op=info,agentero_lib=debug`.
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"))
+        .format_timestamp_secs()
+        .try_init();
 }
 
 fn main() -> StdExitCode {
@@ -210,12 +219,18 @@ fn main() -> StdExitCode {
 
     // Honor AGENTERO_OUTPUT when -o / --json not set explicitly via env default later.
     let format = resolve_format(&cli);
+    // JSON must never carry ANSI; text paints when --color allows + TTY (auto).
+    let style = match format {
+        OutputFormat::Json => Style::new(false),
+        OutputFormat::Text => Style::from_when(cli.color.into()),
+    };
     let globals = GlobalOpts {
         vault_flag: cli.vault.clone(),
         yes: cli.yes,
         quiet: cli.quiet,
         translator_url: cli.translator_url.clone(),
         format,
+        style,
     };
 
     let rt = match tokio::runtime::Builder::new_multi_thread()
