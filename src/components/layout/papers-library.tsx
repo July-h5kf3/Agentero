@@ -30,6 +30,11 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import { filterPapersByScope } from "@/lib/papers-api";
@@ -493,35 +498,42 @@ export function PapersLibrary({
 				case "authors":
 					return (
 						<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
-							<button
-								type="button"
-								className={cn(
-									"block w-full cursor-pointer rounded-sm text-left",
-									"hover:bg-muted/60 hover:text-foreground",
-									"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-								)}
-								title={
-									authorsCopyText(p.authors)
-										? t("papersLibrary.copyHint", {
-												label: t("papersLibrary.colAuthors"),
-											})
-										: undefined
-								}
-								aria-label={t("papersLibrary.copyHint", {
-									label: t("papersLibrary.colAuthors"),
-								})}
-								onClick={(e) =>
-									onCellCopy(
-										e,
-										authorsCopyText(p.authors),
-										t("papersLibrary.colAuthors"),
-									)
-								}
-							>
-								<span title={p.authors?.join(", ")}>
-									{formatAuthors(p.authors)}
-								</span>
-							</button>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<button
+										type="button"
+										className={cn(
+											"block w-full cursor-pointer rounded-sm text-left",
+											"hover:bg-muted/60 hover:text-foreground",
+											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+										)}
+										title={
+											authorsCopyText(p.authors)
+												? t("papersLibrary.copyHint", {
+														label: t("papersLibrary.colAuthors"),
+													})
+												: undefined
+										}
+										aria-label={t("papersLibrary.copyHint", {
+											label: t("papersLibrary.colAuthors"),
+										})}
+										onClick={(e) =>
+											onCellCopy(
+												e,
+												authorsCopyText(p.authors),
+												t("papersLibrary.colAuthors"),
+											)
+										}
+									>
+										<span>{formatAuthors(p.authors)}</span>
+									</button>
+								</TooltipTrigger>
+								{p.authors && p.authors.length > 2 ? (
+									<TooltipContent side="top" align="start" className="max-w-xs">
+										{p.authors.join(", ")}
+									</TooltipContent>
+								) : null}
+							</Tooltip>
 						</td>
 					);
 				case "year":
