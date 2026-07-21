@@ -46,23 +46,25 @@
 
 前往 [Agentero](https://agentero.poco-ai.com) 进行下载。
 
+HomeBrew
+
 ```bash
-git clone https://github.com/poco-ai/agentero.git
-cd agentero
-pnpm install
-
-# 桌面应用（推荐）
-pnpm tauri dev
-
-# 仅前端预览（无原生 Vault / Agent 后端）
-pnpm dev
+brew tap poco-ai/agentero
+brew install --cask agentero
 ```
 
 ### CLI
 
-Headless **Vault / Catalog 机器接口**：创建与发现库、列表与入库文献基础能力。**不含** BYOA / Agent 运行时。
+HomeBrew
 
-## 项目结构
+```bash
+brew tap poco-ai/agentero
+brew install agentero
+```
+
+## 开发
+
+### 项目结构
 
 ```text
 agentero/
@@ -76,7 +78,7 @@ agentero/
 └── package.json
 ```
 
-## 技术栈
+### 技术栈
 
 <p align="center">
   <img src="https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=white" alt="Tauri 2" />
@@ -90,6 +92,20 @@ agentero/
 - **前端**：[React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[AI Elements](https://elements.ai-sdk.dev/)
 - **编辑器**：[Plate](https://platejs.org/) / Markdown
 - **Agent**：[Agent Client Protocol](https://agentclientprotocol.com/)、BYOA
+
+### 测试
+
+```bash
+git clone https://github.com/poco-ai/agentero.git
+cd agentero
+pnpm install
+
+# 桌面应用（推荐）
+pnpm tauri dev
+
+# 仅前端预览（无原生 Vault / Agent 后端）
+pnpm dev
+```
 
 ## 贡献
 
