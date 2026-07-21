@@ -163,7 +163,7 @@ fn schedule_asset_download_with_cookies(
                 path: path_key.clone(),
                 title: title.clone(),
                 status: "running".into(),
-                progress: Some(5),
+                progress: None,
                 detail: Some("Downloading paper assets".into()),
                 error: None,
             });
@@ -184,7 +184,7 @@ fn schedule_asset_download_with_cookies(
                 path: path_key.clone(),
                 title: title.clone(),
                 status: "running".into(),
-                progress: Some(75),
+                progress: None,
                 detail: Some("Generating readable paper text".into()),
                 error: None,
             });
@@ -210,7 +210,7 @@ fn schedule_asset_download_with_cookies(
                     "completed"
                 }
                 .into(),
-                progress: Some(if error.is_some() { 75 } else { 100 }),
+                progress: None,
                 detail: Some(if error.is_some() {
                     "Asset download failed".into()
                 } else {
@@ -346,7 +346,7 @@ fn schedule_remote_asset_download_with_cookies(
                 path: path_key.clone(),
                 title: title.clone(),
                 status: "running".into(),
-                progress: Some(5),
+                progress: None,
                 detail: Some("Downloading paper assets".into()),
                 error: None,
             });
@@ -367,7 +367,7 @@ fn schedule_remote_asset_download_with_cookies(
                 path: path_key.clone(),
                 title: title.clone(),
                 status: "running".into(),
-                progress: Some(75),
+                progress: None,
                 detail: Some("Generating readable paper text".into()),
                 error: None,
             });
@@ -397,7 +397,7 @@ fn schedule_remote_asset_download_with_cookies(
                     "completed"
                 }
                 .into(),
-                progress: Some(if error.is_some() { 75 } else { 100 }),
+                progress: None,
                 detail: Some(if error.is_some() {
                     "Asset download failed".into()
                 } else {

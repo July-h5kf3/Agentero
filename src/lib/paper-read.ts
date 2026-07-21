@@ -104,28 +104,18 @@ async function resolveDefaultAgentTemplate(): Promise<AgentTemplate | null> {
 	}
 }
 
-function planProgress(entries: AgentPlanEntry[]): {
-	pct: number;
-	detail: string;
-} {
+function planDetail(entries: AgentPlanEntry[]): string {
 	if (!entries.length) {
-		return { pct: 10, detail: i18n.t("app:tasks.paperReadRunning") };
+		return i18n.t("app:tasks.paperReadRunning");
 	}
-	const done = entries.filter(
-		(e) => e.status === "completed" || e.status === "done",
-	).length;
 	const active = entries.find(
 		(e) => e.status === "in_progress" || e.status === "pending",
 	);
-	const pct = Math.min(
-		90,
-		Math.round(10 + (done / Math.max(entries.length, 1)) * 75),
-	);
-	const detail =
+	return (
 		active?.content?.trim() ||
 		entries[entries.length - 1]?.content?.trim() ||
-		i18n.t("app:tasks.paperReadRunning");
-	return { pct, detail };
+		i18n.t("app:tasks.paperReadRunning")
+	);
 }
 
 /**
@@ -181,19 +171,18 @@ async function waitForAgentSession(
 				unsubs.push(
 					await listenAgentPlan((ev: AgentPlanEvent) => {
 						if (ev.sessionId !== sessionId) return;
-						const { pct, detail } = planProgress(ev.entries ?? []);
-						updateBackgroundTask(taskId, { progress: pct, detail });
+						updateBackgroundTask(taskId, {
+							detail: planDetail(ev.entries ?? []),
+						});
 					}),
 				);
 				unsubs.push(
 					await listenAgentTool((ev: AgentToolEvent) => {
 						if (ev.sessionId !== sessionId) return;
 						const title = ev.title?.trim();
-						const status = ev.status ?? "";
 						if (title) {
 							updateBackgroundTask(taskId, {
 								detail: title,
-								progress: status === "in_progress" ? 45 : 30,
 							});
 						}
 					}),
@@ -231,13 +220,12 @@ export async function runPaperReaderWorkflow(opts: {
 		title: i18n.t("app:tasks.paperRead"),
 		detail: paperRel,
 		running: true,
-		progress: 5,
+		progress: null,
 	});
 
 	try {
 		updateBackgroundTask(taskId, {
 			detail: i18n.t("app:tasks.paperReadStarting"),
-			progress: 8,
 		});
 
 		const template = await resolveDefaultAgentTemplate();
@@ -257,14 +245,12 @@ export async function runPaperReaderWorkflow(opts: {
 
 		updateBackgroundTask(taskId, {
 			detail: i18n.t("app:tasks.paperReadRunning"),
-			progress: 15,
 		});
 
 		await waitForAgentSession(accepted.sessionId, taskId);
 
 		updateBackgroundTask(taskId, {
 			detail: i18n.t("app:tasks.paperReadMarking"),
-			progress: 95,
 		});
 
 		await setPaperIsRead(opts.vaultRoot, paperRel, true);
