@@ -215,6 +215,7 @@ export default function App() {
 		});
 	});
 	const [tree, setTree] = useState<FileNode[]>([]);
+	const [treeLoading, setTreeLoading] = useState(() => Boolean(vaultPath));
 	/** Open documents in the center tab strip (browser-style multi-tab). */
 	const [tabs, setTabs] = useState<DocTab[]>([]);
 	const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -998,6 +999,7 @@ export default function App() {
 	}, [pdfZenMode, activeTab, exitPdfZen]);
 
 	const refreshTree = useCallback(async (path: string) => {
+		setTreeLoading(true);
 		setBusy(true);
 		try {
 			const nodes = await loadVaultTree(path);
@@ -1007,6 +1009,7 @@ export default function App() {
 			notifyError(message);
 			setTree([]);
 		} finally {
+			setTreeLoading(false);
 			setBusy(false);
 		}
 	}, []);
@@ -1168,6 +1171,7 @@ export default function App() {
 			}
 			saveVaultPath(path);
 			setVaultPath(path);
+			setTreeLoading(true);
 			setTabs([]);
 			setActiveTabId(null);
 			setTreeSelectedPath(null);
@@ -1665,6 +1669,7 @@ export default function App() {
 	useEffect(() => {
 		if (!vaultPath) {
 			setTree([]);
+			setTreeLoading(false);
 			return;
 		}
 		void refreshTree(vaultPath);
@@ -2977,6 +2982,7 @@ export default function App() {
 									<FileTree
 										ref={fileTreeRef}
 										nodes={tree}
+										loading={treeLoading}
 										selectedPath={treeSelectedPath}
 										vaultPath={vaultPath}
 										createDraft={createDraft}

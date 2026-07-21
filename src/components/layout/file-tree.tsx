@@ -65,6 +65,7 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Tooltip,
 	TooltipContent,
@@ -327,6 +328,8 @@ function TreeCreateInput({
 
 type FileTreeProps = {
 	nodes: FileNode[];
+	/** True while the root Vault tree is being loaded. */
+	loading?: boolean;
 	selectedPath: string | null;
 	/** Vault root absolute path — used as create parent for root-level entries. */
 	vaultPath: string | null;
@@ -403,6 +406,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 	function FileTree(
 		{
 			nodes,
+			loading = false,
 			selectedPath,
 			vaultPath,
 			createDraft,
@@ -1434,6 +1438,21 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 				</FileTreeName>
 			</FileTreeFile>
 		);
+		const loadingRows = (
+			<div className="space-y-1 px-2 py-1.5" aria-hidden>
+				{["one", "two", "three", "four", "five"].map((key, index) => (
+					<div key={key} className="flex h-7 items-center gap-2 rounded px-2">
+						<Skeleton className="size-4 shrink-0 library-shimmer" />
+						<Skeleton
+							className={cn(
+								"library-shimmer h-3",
+								index === 0 ? "w-32" : index === 1 ? "w-24" : "w-28",
+							)}
+						/>
+					</div>
+				))}
+			</div>
+		);
 
 		const renderPaperRow = (node: FileNode): ReactNode => {
 			const downloadReasons = paperAssetDownloadReasons(node);
@@ -1661,8 +1680,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 									{libraryRow}
 									{trashRow}
 								</AiFileTree>
-								{/* Only when a vault is open but has no files — not before open/create. */}
-								{vaultPath ? (
+								{vaultPath && loading ? (
+									loadingRows
+								) : vaultPath ? (
 									<p className="px-3 py-2 text-muted-foreground text-xs">
 										{t("fileTree.empty")}
 									</p>

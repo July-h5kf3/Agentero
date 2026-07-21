@@ -36,6 +36,7 @@
   - **永不解析**：`TREE_IGNORE_NAMES`（`.git`、`.agentero`、`.venv`、`node_modules`、`__pycache__`、`site-packages`、`.codex` 等）以及其它以 `.` 开头的项（例外：`.agents`、`.env.example`）和 `*.egg-info` **直接跳过**，不进入树、不发 SFTP list。
   - 本地与远程同一套规则；远程大杂项目录（如含完整代码仓的 Vault）因此可在「产品目录全量 + 其它根目录各 1 次 list」内打开。
 - **默认展开**：打开 Vault 时**只**展开 `papers/` 及其**一级**子目录（组织文件夹），其余（`notes/`、更深层 org 等）默认折叠；paper 文件夹始终作叶子、不展开。树刷新**不**重置用户展开状态。
+- **根目录加载态**：打开 Vault 后根目录尚未加载完成时保留虚拟 Library / Recycle Bin，并显示文件夹行 shimmer 骨架；仅在加载完成且 Vault 确实为空时显示「暂无文件夹」。
 - **选中同步 / 定位**：激活文档变化时（切换标签、从 Library 打开 paper、打开图片或其他文件、**魔棒 / 本地 PDF 入库完成后 `openPaper`**），树将高亮对应行（paper 内任意文件 → 该 paper 叶子；其它路径 → 自身或最近祖先），**自动展开祖先文件夹**并 `scrollToIndex`（`align: "center"`）滚入视口。树刷新后若目标行尚未出现在拍平行中，会重新展开祖先再滚一次（覆盖入库刚写入磁盘的竞态）。
 - **Paper 行标签**（展示用，不改磁盘名）：默认 **标题 · 作者**（catalog `title` / `authors`）；设置 → **通用 → 文件树论文显示** 可选：`标题 · 作者` / `标题` / `作者 (年份) · 标题` / `文件夹名`。无元数据时回退文件夹名。实现：`formatPaperTreeLabel`（`src/lib/paper-metadata.ts`），偏好 `paperTreeLabelMode`（XDG `settings.json`）。
 - **文件树排序**（展示用，不改名不移动）：默认 **显示名称 A–Z**（与「论文显示」`paperTreeLabelMode` 一致，按树中所见标签排序，而非磁盘文件夹名）；设置 → **通用 → 文件树论文排序** 可选：`显示名称 A–Z` / `标题 A–Z` / `作者 A–Z` / `年份（新→旧）` / `年份（旧→新）` / `添加时间（新→旧）`。同目录下目录优先于文件；元数据排序时组织文件夹在前（按名）、paper 按所选键（缺元数据回退显示名，年份/添加时间缺失排最后）。实现：`sortFileTreeNodes`，偏好 `paperTreeSortMode` + `paperTreeLabelMode`。
@@ -198,6 +199,7 @@
   - **作用域**：App 状态 `libraryScopePath`（vault-relative，如 `papers/nlp/pretrain`）；null = 全库。过滤：`filterPapersByScope` 内存前缀匹配。无 per-folder RPC、不扫盘。
   - **性能**：全库一次 `paper_list`；切文件夹仅改 scope + filter；见 `test/library-scope.test.ts` latency。
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
+  - **打开文档加载态**：论文、PDF、HTML 或 Markdown tab 资源尚未加载完成时显示内容 shimmer 骨架；不显示论文库空态。
   - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签；复制**短延迟提交**，双击打开论文时取消，避免与双击冲突）；**双击**行打开对应 paper 文件夹。
   - **列自定义**（顺序 + 显隐）：**右键表头**弹出上下文菜单勾选显示/隐藏列；**拖拽表头** `<th>` 改变列顺序（拖拽时列半透明、落点高亮）；菜单底部「重置列」恢复默认。**标题列不可隐藏**（承载阅读热力与出版物副标题，勾选框禁用且 normalize 强制可见）。布局持久化到 `settings.json` 的 `libraryColumns`（`LibraryColumnPref[] = {key, visible}[]`，数组顺序即显示顺序），前后端均 reconcile（去重、丢未知 key、补新列为可见、强制 title 可见）。实现：`COLUMN_META` + `renderCell` 按 key 渲染；右键菜单基于 `src/components/ui/context-menu.tsx`（radix `ContextMenu`）。
   - **阅读热力（标题背景）**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成**标题文字横向背景脊条**（左=文首、右=文末；局部深浅=该位置交互强度）。颜色为 **Apple system green** 浅色洗（`oklch(0.65 0.17 145)` ≈ `#34C759`，与标签 green 同系，低比例 `color-mix` 保持浅色不抢眼）。悬停标题可看高亮 / 对话 / 翻译分项。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度。实现：`src/lib/reading-heatmap/`、`ReadingTitleHeat`。

@@ -2,6 +2,7 @@ import { memo } from "react";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { PapersLibrary } from "@/components/layout/papers-library";
 import { RecycleBinView } from "@/components/layout/recycle-bin-view";
+import { Skeleton } from "@/components/ui/skeleton";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import {
@@ -51,6 +52,29 @@ type TabCenterProps = {
 	onPdfAsksChange: (tabId: string, list: PdfAskThread[]) => void;
 };
 
+function TabLoadingSkeleton() {
+	return (
+		<div
+			className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-muted/20 p-4"
+			aria-busy="true"
+			role="status"
+		>
+			<Skeleton className="library-shimmer h-8 w-2/5" />
+			<div className="flex min-h-0 flex-1 flex-col gap-3 rounded-md border bg-background/40 p-4">
+				<Skeleton className="library-shimmer h-4 w-3/4" />
+				<Skeleton className="library-shimmer h-3 w-full" />
+				<Skeleton className="library-shimmer h-3 w-11/12" />
+				<Skeleton className="library-shimmer h-3 w-4/5" />
+				<div className="mt-4 space-y-3">
+					<Skeleton className="library-shimmer h-3 w-full" />
+					<Skeleton className="library-shimmer h-3 w-5/6" />
+					<Skeleton className="library-shimmer h-3 w-2/3" />
+				</div>
+			</div>
+		</div>
+	);
+}
+
 /** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
 export const TabCenter = memo(function TabCenter({
 	tab,
@@ -82,6 +106,9 @@ export const TabCenter = memo(function TabCenter({
 	onPdfHighlightsChange,
 	onPdfAsksChange,
 }: TabCenterProps) {
+	if (!tab.loaded) {
+		return <TabLoadingSkeleton />;
+	}
 	if (tab.kind === "library") {
 		return (
 			<PapersLibrary
