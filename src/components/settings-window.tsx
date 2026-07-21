@@ -164,6 +164,7 @@ type SettingsWindowProps = {
 	vaultPath?: string | null;
 };
 
+/** In-app modal fallback (non-Tauri / browser dev); Tauri opens a native window. */
 export function SettingsWindow({
 	open,
 	section,
@@ -175,13 +176,6 @@ export function SettingsWindow({
 }: SettingsWindowProps) {
 	const { t } = useTranslation(["settings", "common"]);
 	const titleId = useId();
-	const [localHostLabel, setLocalHostLabel] = useState(() =>
-		t("host.thisComputer"),
-	);
-	const [localOs, setLocalOs] = useState(() =>
-		normalizeHostOs(getPlatformOS()),
-	);
-	const [remoteOs, setRemoteOs] = useState(() => normalizeHostOs("other"));
 
 	useOverlayRegistration("settings", open, onClose);
 
@@ -194,9 +188,73 @@ export function SettingsWindow({
 		};
 	}, [open]);
 
+	if (!open) return null;
+
+	return (
+		<div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+			<button
+				type="button"
+				className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
+				aria-label={t("dismiss")}
+				onClick={onClose}
+			/>
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby={titleId}
+				className="relative flex h-[min(560px,calc(100vh-3rem))] w-[min(720px,calc(100vw-2rem))] overflow-hidden rounded-xl border bg-background shadow-2xl ring-1 ring-black/5"
+			>
+				<SettingsContent
+					titleId={titleId}
+					section={section}
+					onSectionChange={onSectionChange}
+					onClose={onClose}
+					settings={settings}
+					onChange={onChange}
+					vaultPath={vaultPath}
+				/>
+			</div>
+		</div>
+	);
+}
+
+type SettingsContentProps = {
+	section: SettingsSection;
+	onSectionChange: (section: SettingsSection) => void;
+	settings: AppSettings;
+	onChange: (next: AppSettings) => void;
+	/** Renders a close (X) button when provided (modal mode). */
+	onClose?: () => void;
+	/** aria-labelledby id supplied by a dialog wrapper. */
+	titleId?: string;
+	/** Active vault path — remote handles switch Agent settings to the SSH host. */
+	vaultPath?: string | null;
+};
+
+/** Settings navigation + panes; used by the native settings window and the modal fallback. */
+export function SettingsContent({
+	section,
+	onSectionChange,
+	settings,
+	onChange,
+	onClose,
+	titleId,
+	vaultPath = null,
+}: SettingsContentProps) {
+	const { t } = useTranslation(["settings", "common"]);
+	const fallbackTitleId = useId();
+	const headingId = titleId ?? fallbackTitleId;
+	const [localHostLabel, setLocalHostLabel] = useState(() =>
+		t("host.thisComputer"),
+	);
+	const [localOs, setLocalOs] = useState(() =>
+		normalizeHostOs(getPlatformOS()),
+	);
+	const [remoteOs, setRemoteOs] = useState(() => normalizeHostOs("other"));
+
 	// Local hostname + OS for the host chip (when vault is local / none).
 	useEffect(() => {
-		if (!open || !isTauri()) return;
+		if (!isTauri()) return;
 		let cancelled = false;
 		void fetchHostIdentity()
 			.then((h) => {
@@ -210,7 +268,7 @@ export function SettingsWindow({
 		return () => {
 			cancelled = true;
 		};
-	}, [open]);
+	}, []);
 
 	const hostContext = useMemo((): SettingsHostContext => {
 		if (vaultPath && isRemoteVaultHandle(vaultPath)) {
@@ -244,7 +302,7 @@ export function SettingsWindow({
 
 	// Remote OS via uname -s (for brand icon on remote host chip).
 	useEffect(() => {
-		if (!open || !isTauri() || hostContext.kind !== "remote") {
+		if (!isTauri() || hostContext.kind !== "remote") {
 			return;
 		}
 		let cancelled = false;
@@ -259,34 +317,22 @@ export function SettingsWindow({
 		return () => {
 			cancelled = true;
 		};
-	}, [open, hostContext]);
+	}, [hostContext]);
 
 	const hostOs = hostContext.kind === "remote" ? remoteOs : localOs;
-
-	if (!open) return null;
 
 	const patch = (partial: Partial<AppSettings>) =>
 		onChange({ ...settings, ...partial });
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-			<button
-				type="button"
-				className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
-				aria-label={t("dismiss")}
-				onClick={onClose}
-			/>
-			<div
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby={titleId}
-				className="relative flex h-[min(560px,calc(100vh-3rem))] w-[min(720px,calc(100vw-2rem))] overflow-hidden rounded-xl border bg-background shadow-2xl ring-1 ring-black/5"
-			>
-				{/* Sidebar — macOS Settings style */}
-				<nav className="flex w-[180px] shrink-0 flex-col border-r bg-muted/40">
+		<>
+			{/* Sidebar — macOS Settings style */}
+			<nav className="flex w-[180px] shrink-0 flex-col border-r bg-muted/40">
+				{/* Modal fallback only: native window already shows the title in its title bar. */}
+				{onClose ? (
 					<div className="flex items-center justify-between gap-1 px-3 pt-3 pb-2">
 						<span
-							id={titleId}
+							id={headingId}
 							className="font-semibold text-[13px] leading-none tracking-tight"
 						>
 							{t("title")}
@@ -302,102 +348,107 @@ export function SettingsWindow({
 							<X className="size-3.5" />
 						</Button>
 					</div>
-					<ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
-						{NAV.map((item) => {
-							const Icon = item.icon;
-							const active = section === item.id;
-							return (
-								<li key={item.id}>
-									<button
-										type="button"
-										className={cn(
-											"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] outline-none transition-colors",
-											"hover:bg-black/5 dark:hover:bg-white/10",
-											active &&
-												"bg-primary text-primary-foreground hover:bg-primary dark:hover:bg-primary",
-										)}
-										aria-current={active ? "page" : undefined}
-										onClick={() => onSectionChange(item.id)}
-									>
-										<Icon className="size-3.5 shrink-0 opacity-90" />
-										<span className="truncate">{t(`nav.${item.id}`)}</span>
-									</button>
-								</li>
-							);
-						})}
-					</ul>
-					{/* Host context — pinned to sidebar footer */}
-					<div
-						className="mt-auto flex items-center gap-1.5 border-t px-3 py-2.5 text-muted-foreground"
-						title={
-							hostContext.kind === "remote"
-								? t("host.remoteTooltip", {
-										host: hostContext.label,
-										path: hostContext.remotePath || "—",
-									})
-								: t("host.localTooltip", { name: hostContext.label })
-						}
-					>
-						<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
-							<HostOsIcon
-								os={hostOs}
-								className="block size-3.5"
-								title={
-									hostOs === "macos"
-										? "macOS"
-										: hostOs === "windows"
-											? "Windows"
-											: hostOs === "linux"
-												? "Linux"
-												: undefined
-								}
-							/>
-						</span>
-						<span className="min-w-0 truncate text-[12px] leading-none">
-							{hostContext.label}
-						</span>
-					</div>
-				</nav>
+				) : null}
+				<ul
+					className={cn(
+						"flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2",
+						!onClose && "pt-3",
+					)}
+				>
+					{NAV.map((item) => {
+						const Icon = item.icon;
+						const active = section === item.id;
+						return (
+							<li key={item.id}>
+								<button
+									type="button"
+									className={cn(
+										"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] outline-none transition-colors",
+										"hover:bg-black/5 dark:hover:bg-white/10",
+										active &&
+											"bg-primary text-primary-foreground hover:bg-primary dark:hover:bg-primary",
+									)}
+									aria-current={active ? "page" : undefined}
+									onClick={() => onSectionChange(item.id)}
+								>
+									<Icon className="size-3.5 shrink-0 opacity-90" />
+									<span className="truncate">{t(`nav.${item.id}`)}</span>
+								</button>
+							</li>
+						);
+					})}
+				</ul>
+				{/* Host context — pinned to sidebar footer */}
+				<div
+					className="mt-auto flex items-center gap-1.5 border-t px-3 py-2.5 text-muted-foreground"
+					title={
+						hostContext.kind === "remote"
+							? t("host.remoteTooltip", {
+									host: hostContext.label,
+									path: hostContext.remotePath || "—",
+								})
+							: t("host.localTooltip", { name: hostContext.label })
+					}
+				>
+					<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+						<HostOsIcon
+							os={hostOs}
+							className="block size-3.5"
+							title={
+								hostOs === "macos"
+									? "macOS"
+									: hostOs === "windows"
+										? "Windows"
+										: hostOs === "linux"
+											? "Linux"
+											: undefined
+							}
+						/>
+					</span>
+					<span className="min-w-0 truncate text-[12px] leading-none">
+						{hostContext.label}
+					</span>
+				</div>
+			</nav>
 
-				{/* Content */}
-				<div className="min-w-0 flex-1 overflow-y-auto">
-					<div className="px-6 py-5">
-						{section === "general" && (
-							<GeneralPane
+			{/* Content */}
+			<div className="min-w-0 flex-1 overflow-y-auto">
+				<div className="px-6 py-5">
+					{section === "general" && (
+						<GeneralPane
+							settings={settings}
+							patch={patch}
+							hostContext={hostContext}
+						/>
+					)}
+					{section === "appearance" && (
+						<AppearancePane settings={settings} patch={patch} />
+					)}
+					{section === "agent" &&
+						(hostContext.kind === "remote" ? (
+							<RemoteAgentPane
 								settings={settings}
 								patch={patch}
 								hostContext={hostContext}
 							/>
-						)}
-						{section === "appearance" && (
-							<AppearancePane settings={settings} patch={patch} />
-						)}
-						{section === "agent" &&
-							(hostContext.kind === "remote" ? (
-								<RemoteAgentPane
-									settings={settings}
-									patch={patch}
-									hostContext={hostContext}
-								/>
-							) : (
-								<AgentPane settings={settings} patch={patch} />
-							))}
-						{section === "translate" && (
-							<TranslatePane
-								settings={settings}
-								patch={patch}
-								onOpenAgentSettings={() => onSectionChange("agent")}
-							/>
-						)}
-						{section === "keyboard" && <KeyboardPane />}
-						{section === "privacy" && (
-							<PrivacyPane settings={settings} patch={patch} />
-						)}
-						{section === "about" && <AboutPane />}
-					</div>
+						) : (
+							<AgentPane settings={settings} patch={patch} />
+						))}
+					{section === "translate" && (
+						<TranslatePane
+							settings={settings}
+							patch={patch}
+							onOpenAgentSettings={() => onSectionChange("agent")}
+						/>
+					)}
+					{section === "keyboard" && <KeyboardPane />}
+					{section === "privacy" && (
+						<PrivacyPane settings={settings} patch={patch} />
+					)}
+					{section === "about" && <AboutPane />}
 				</div>
 			</div>
-		</div>
+		</>
 	);
 }
 

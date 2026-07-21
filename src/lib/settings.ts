@@ -284,6 +284,53 @@ export function saveSettings(settings: AppSettings): void {
 	});
 }
 
+type SettingsListener = (settings: AppSettings) => void;
+
+const settingsListeners = new Set<SettingsListener>();
+
+/** Subscribe to settings changes coming from other windows. Returns unsubscribe. */
+export function subscribeSettings(listener: SettingsListener): () => void {
+	settingsListeners.add(listener);
+	return () => {
+		settingsListeners.delete(listener);
+	};
+}
+
+/** Apply a settings snapshot broadcast by the Host (`settings:changed`). */
+export function applyExternalSettings(raw: AppSettings): void {
+	const next = normalizeSettings(raw);
+	setCache(next);
+	for (const listener of settingsListeners) {
+		try {
+			listener(loadSettings());
+		} catch (e) {
+			console.warn("[settings] listener failed", e);
+		}
+	}
+}
+
+let syncStarted = false;
+
+/**
+ * Start listening for cross-window `settings:changed` broadcasts (Tauri only).
+ * Called once at boot; keeps this window's cache + subscribers fresh when the
+ * settings window (or another main window) persists changes.
+ */
+export function initSettingsSync(): void {
+	if (syncStarted || !isTauri()) return;
+	syncStarted = true;
+	void (async () => {
+		try {
+			const { listen } = await import("@tauri-apps/api/event");
+			await listen<AppSettings>("settings:changed", (event) => {
+				applyExternalSettings(event.payload);
+			});
+		} catch (e) {
+			console.warn("[settings] sync listener failed", e);
+		}
+	})();
+}
+
 /** Awaitable save (settings UI / tests). */
 export async function saveSettingsAsync(
 	settings: AppSettings,

@@ -130,7 +130,12 @@ import {
 	saveRemoteSessionMeta,
 } from "@/lib/remote-vault";
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
-import { type AppSettings, loadSettings, saveSettings } from "@/lib/settings";
+import {
+	type AppSettings,
+	loadSettings,
+	saveSettings,
+	subscribeSettings,
+} from "@/lib/settings";
 import {
 	basenameOf,
 	cycleActiveTabId,
@@ -746,6 +751,16 @@ export default function App() {
 	const updateSettings = useCallback((next: AppSettings) => {
 		setSettings(next);
 		saveSettings(next);
+	}, []);
+
+	// Cross-window settings sync: apply snapshots persisted by the native
+	// settings window (or other main windows); skip no-op echoes of own saves.
+	useEffect(() => {
+		return subscribeSettings((next) => {
+			setSettings((prev) =>
+				JSON.stringify(prev) === JSON.stringify(next) ? prev : next,
+			);
+		});
 	}, []);
 
 	const SIDEBAR_DEFAULT_PX = 200;
@@ -1620,10 +1635,29 @@ export default function App() {
 		[vaultPath, treeSelectedPath, tree],
 	);
 
-	const openSettings = useCallback((section: SettingsSection = "general") => {
-		setSettingsSection(section);
-		setSettingsOpen(true);
-	}, []);
+	const openSettings = useCallback(
+		(section: SettingsSection = "general") => {
+			if (isTauri()) {
+				// Native singleton settings window (focuses + navigates if open).
+				void (async () => {
+					try {
+						const { invoke } = await import("@tauri-apps/api/core");
+						await invoke("settings_window_open", {
+							section,
+							vault: vaultPath,
+						});
+					} catch (e) {
+						notifyError(String(e));
+					}
+				})();
+				return;
+			}
+			// Browser dev fallback: in-app modal.
+			setSettingsSection(section);
+			setSettingsOpen(true);
+		},
+		[vaultPath],
+	);
 
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
@@ -2588,7 +2622,7 @@ export default function App() {
 
 	useAppShortcuts(anyOverlayOpen, {
 		settings: () => {
-			if (settingsOpenRef.current) closeSettings();
+			if (!isTauri() && settingsOpenRef.current) closeSettings();
 			else openSettings();
 		},
 		// Esc → dismiss top overlay (settings, shortcuts, palette, dialogs…)
@@ -3420,15 +3454,17 @@ export default function App() {
 					</ResizableGroup>
 				</ErrorBoundary>
 
-				<SettingsWindow
-					open={settingsOpen}
-					section={settingsSection}
-					onSectionChange={setSettingsSection}
-					onClose={closeSettings}
-					settings={settings}
-					onChange={updateSettings}
-					vaultPath={vaultPath}
-				/>
+				{!isTauri() ? (
+					<SettingsWindow
+						open={settingsOpen}
+						section={settingsSection}
+						onSectionChange={setSettingsSection}
+						onClose={closeSettings}
+						settings={settings}
+						onChange={updateSettings}
+						vaultPath={vaultPath}
+					/>
+				) : null}
 
 				<ZoteroMigrateDialog
 					open={zoteroOpen}

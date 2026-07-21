@@ -3,7 +3,7 @@
 use crate::error::{map_err, ApiResult};
 use crate::services::app_settings::{AppSettings, AppSettingsStore, SettingsGetResult};
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGetResult> {
@@ -15,11 +15,16 @@ pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGet
 
 #[tauri::command]
 pub fn settings_set(
+    app: AppHandle,
     store: State<'_, AppSettingsStore>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
     match store.set(settings) {
-        Ok(s) => ApiResult::ok(s),
+        Ok(s) => {
+            // Keep every window's settings cache fresh (settings window, main windows).
+            let _ = app.emit("settings:changed", &s);
+            ApiResult::ok(s)
+        }
         Err(e) => map_err(e),
     }
 }

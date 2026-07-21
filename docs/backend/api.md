@@ -260,6 +260,18 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
 
+#### `settings_window_open`（已实现）
+
+打开（或聚焦）**单例原生设置窗口**（macOS 惯例：`⌘,` → 独立小窗口，原生标题栏）。
+
+- **参数**：`{ section?: string, vault?: string }`（section 深链设置分类；vault 传调用方窗口的 Vault 路径，供远程 Vault 的 Agent 页上下文）
+- **返回**：`Result<(), String>`
+- **行为**
+  - 固定 label `agentero-settings`（匹配 capability `agentero-*`）；已存在则 `set_focus` 并向该窗口 `emit("settings:navigate", { section })`。
+  - 否则创建 760×600（min 640×480）窗口，URL `index.html?window=settings&section=…&vault=…`（percent-encoded）；原生标题栏（macOS 不用 Overlay）、禁用最大化；macOS 复制 app menu。
+  - 前端 `main.tsx` 检测 `?window=settings` 渲染 `SettingsWindowRoot`（`src/components/settings-window-root.tsx`）而非完整工作台；窗口标题随 UI 语言 `setTitle`。
+  - 设置保存后经 `settings:changed` 事件广播同步所有窗口（见 `settings_set`）。
+
 #### `fs_watch_start` / `fs_watch_stop`（已实现）
 
 按窗口启停 Vault 文件系统监听（Rust `notify` 递归监听），用于外部编辑器 / Agent 写盘后自动重载编辑器与文件树。
@@ -1604,6 +1616,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 - **参数**：`{ settings: AppSettings }`（camelCase，与前端 `src/lib/settings.ts` 同构）
 - **返回**：规范化后的 `AppSettings`（写盘 + 更新 Host 内存）
+- **事件**：保存成功后向**所有窗口** `emit("settings:changed", AppSettings)`（规范化后的快照）。前端 `initSettingsSync()`（`src/lib/settings.ts`）监听该事件更新各窗口内存缓存并通知订阅者（`subscribeSettings`），保证独立设置窗口与各主窗口的设置实时一致。
 
 #### `settings_path`（已实现）
 

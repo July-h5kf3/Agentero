@@ -1,6 +1,8 @@
 //! Multi-window helpers.
 
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+pub const SETTINGS_WINDOW_LABEL: &str = "agentero-settings";
 
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 #[tauri::command]
@@ -55,5 +57,68 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
     }
 
     op.finish_ok_extra(format!("label={label}"));
+    Ok(())
+}
+
+/// Open (or focus) the singleton native Settings window.
+///
+/// `section` deep-links a settings section; `vault` carries the opener
+/// window's vault path so remote-vault context renders correctly.
+#[tauri::command]
+pub fn settings_window_open(
+    app: AppHandle,
+    section: Option<String>,
+    vault: Option<String>,
+) -> Result<(), String> {
+    use crate::log_util::OpTimer;
+
+    let op = OpTimer::start("settings_window_open");
+
+    if let Some(existing) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        let _ = existing.set_focus();
+        let _ = existing.emit(
+            "settings:navigate",
+            serde_json::json!({ "section": section }),
+        );
+        op.finish_ok_extra("focused=existing");
+        return Ok(());
+    }
+
+    let mut url = String::from("index.html?window=settings");
+    if let Some(section) = section.as_deref().filter(|s| !s.is_empty()) {
+        url.push_str("&section=");
+        url.push_str(&urlencoding::encode(section));
+    }
+    if let Some(vault) = vault.as_deref().filter(|v| !v.is_empty()) {
+        url.push_str("&vault=");
+        url.push_str(&urlencoding::encode(vault));
+    }
+
+    // Native title bar on every platform: settings is a utility window, so it
+    // follows OS conventions instead of the frameless main-window chrome.
+    let builder =
+        WebviewWindowBuilder::new(&app, SETTINGS_WINDOW_LABEL, WebviewUrl::App(url.into()))
+            .title("Settings")
+            .inner_size(760.0, 600.0)
+            .min_inner_size(640.0, 480.0)
+            .resizable(true)
+            .maximizable(false)
+            .focused(true);
+
+    let window = match builder.build() {
+        Ok(w) => w,
+        Err(e) => {
+            op.finish_err_msg("window", &e);
+            return Err(e.to_string());
+        }
+    };
+    let _ = window.set_focus();
+
+    #[cfg(target_os = "macos")]
+    if let Some(menu) = app.menu() {
+        let _ = window.set_menu(menu);
+    }
+
+    op.finish_ok();
     Ok(())
 }

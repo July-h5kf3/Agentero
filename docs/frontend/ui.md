@@ -143,7 +143,7 @@
 | File | Create Vault… | `⇧⌘N` | 选择目录 → Host `vault_create` 脚手架 |
 | File | Refresh File Tree | `⌘R` | 刷新当前 Vault 文件树 |
 | File | Close | `⌘W` | 自定义菜单项 `close_tab_or_window`：有弹层时先关最顶层（`overlay-stack`）；否则关当前文档 tab；仅剩全库时关窗（非系统 CloseWindow） |
-| agentero | Settings… | `⌘,` | 设置 sheet |
+| agentero | Settings… | `⌘,` | 打开 / 聚焦独立原生设置窗口（Host `settings_window_open`，见 §4） |
 
 **窗口与路径状态**（`src/lib/vault.ts`、`src/lib/remote-vault.ts`）：
 
@@ -170,13 +170,13 @@
 | 注册 | 弹层 `open === true` 时 `pushOverlay({ id, close })`；关闭或卸载时 dispose（idempotent） |
 | 关闭 | `closeTopOverlay()` 弹出栈顶并调用其 `close`；`⌘W`（`closeTabOrWindow`）与 `Esc`（`closeSheet`）共用 |
 | 门控 | `useAppShortcuts(anyOverlayOpen, …)`：`whenSettingsClosed` 实际表示「无弹层」；有弹层时挡 Vault/导航类快捷键，避免误触 |
-| 开关类 | `⌘,` 设置、`⌘/` 快捷键清单、`⌘K`/`⌘P` 命令面板、`⇧⌘P` 命令模式：自身可再按关闭（不依赖 `whenSettingsClosed`） |
+| 开关类 | `⌘/` 快捷键清单、`⌘K`/`⌘P` 命令面板、`⇧⌘P` 命令模式：自身可再按关闭（不依赖 `whenSettingsClosed`）；`⌘,` 打开 / 聚焦独立设置窗口（非弹层） |
 
 **已注册 id（须保持稳定）**
 
 | id | 组件 |
 |---|---|
-| `settings` | `SettingsWindow` |
+| `settings` | `SettingsWindow`（仅浏览器 dev 回退 modal；Tauri 下设置为独立窗口，不入栈） |
 | `shortcuts` | `ShortcutsDialog` |
 | `command-palette` | `CommandPalette`（Go / Commands 共用） |
 | `zotero-migrate` | `ZoteroMigrateDialog` |
@@ -279,7 +279,7 @@
 
 | 快捷键 | 作用 | 说明 |
 |---|---|---|
-| `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定 |
+| `⌘,` | 打开 / 聚焦 Settings 窗口 | 系统级 Preferences 约定；独立原生单例窗口，`⌘W` 关闭 |
 | `⌘/` | 键盘快捷键速查（开关） | 再按关闭；`ShortcutsDialog` |
 | `⌘P` / `⌘K` | 快速打开（开关） | 论文标题·作者·id 即时 quick-open + 去抖 `vault_search` 全文；输入 `>` 可切命令模式（`CommandPalette` · `quickOpen`） |
 | `⇧⌘P` | 命令面板（开关） | 执行应用命令（设置 / 侧栏 / Vault / 标签…）；与快速打开共用浮层（`commandPalette`） |
@@ -429,17 +429,18 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 ## 4. 设置窗口（Settings）
 
-参考 **macOS System Settings / 传统 Preferences** 形态，而非多标签网页：
+参考 **macOS System Settings / 传统 Preferences** 形态：Tauri 下为**独立原生单例窗口**（Host `settings_window_open`，label `agentero-settings`，原生标题栏、禁用最大化，760×600 / min 640×480）；纯浏览器 dev 回退为居中浮层 dialog。
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`workspace-header.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
-| 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog |
+| 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`workspace-header.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标。窗口已打开时再次触发 → 聚焦并按需切换分类（`settings:navigate`） |
+| 结构 | 左侧分类导航 + 右侧内容；独立窗口内容占满窗口，无遮罩 |
 | 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
-| 关闭 | 右上角 `X`、点遮罩、`Esc`、`⌘W`（经 `overlay-stack`）、再次 `⌘,` |
-| 文案 | 支持国际化（i18n）：English 与简体中文可切换，English 为源语言与兜底；简短说明可作 footer |
+| 关闭 | 原生窗口关闭按钮 / `⌘W`；浏览器回退模式另有右上角 `X`、点遮罩、`Esc`（经 `overlay-stack`） |
+| 同步 | 保存经 `settings_set` → Host 广播 `settings:changed` → 各窗口即时应用（主题 / 语言 / 列配置等），见 `../backend/api.md` |
+| 文案 | 支持国际化（i18n）：English 与简体中文可切换，English 为源语言与兜底；简短说明可作 footer；窗口标题随 UI 语言 |
 
 **页面职责**
 
@@ -469,7 +470,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings-window.tsx`；**应用设置**持久化为 Host 文件（XDG）：
+实现：`src/components/settings-window.tsx`（`SettingsContent` + 浏览器回退 modal）、`src/components/settings-window-root.tsx`（独立窗口根组件）；**应用设置**持久化为 Host 文件（XDG）：
 
 | 路径 | 说明 |
 |---|---|
