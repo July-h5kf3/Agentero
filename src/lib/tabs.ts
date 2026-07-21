@@ -369,6 +369,7 @@ export async function loadTabResources(
 		const mode = preferredModeForPath(path);
 		let pdfUrl = paperPdf;
 		let imageUrl: string | null = null;
+		let markdownSeed = "";
 
 		if (isPdfPath(path)) {
 			// Prefer the exact file the user clicked (may differ from canonical {id}.pdf).
@@ -401,6 +402,13 @@ export async function loadTabResources(
 				};
 			}
 		}
+		if (isTextOpenable(path)) {
+			try {
+				markdownSeed = await readVaultFile(path);
+			} catch {
+				// Leave the editor empty when the file cannot be read.
+			}
+		}
 
 		return {
 			kind: "file",
@@ -412,7 +420,7 @@ export async function loadTabResources(
 			imageUrl,
 			notesPath,
 			notesSeed,
-			markdownSeed: "",
+			markdownSeed,
 			loaded: true,
 			didDownloadAssets: didDownload,
 		};
@@ -485,7 +493,13 @@ export function tabNotesEligible(tab: DocTab | null): boolean {
 
 /** Center Markdown mode while a paper is open edits its NOTES.md live. */
 export function tabIsPaperNotes(tab: DocTab | null): boolean {
-	return Boolean(tab?.paperMeta) && tab?.mode === "markdown";
+	if (!tab?.paperMeta || tab.mode !== "markdown" || !tab.notesPath) {
+		return false;
+	}
+	const tabPath = normalizeTabPath(tab.path);
+	const notesPath = normalizeTabPath(tab.notesPath);
+	const paperDir = notesPath.replace(/\/notes\.md$/, "");
+	return tabPath === notesPath || tabPath === paperDir;
 }
 
 // --- Pure tab-list operations (unit-tested in test/tabs.test.ts) ---

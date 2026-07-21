@@ -8,3 +8,4 @@
 
 # Qoder CLI local settings / workspace
 .qoder/
+remote:*/

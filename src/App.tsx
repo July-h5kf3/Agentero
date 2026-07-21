@@ -438,6 +438,7 @@ export default function App() {
 					notesPath: res.notesPath,
 					notesSeed: res.notesSeed,
 					markdownSeed: res.markdownSeed,
+					seedKey: 1,
 					loaded: true,
 				});
 				// Auto-download for preview may have written local PDF — refresh tree icons

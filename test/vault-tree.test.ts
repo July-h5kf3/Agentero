@@ -3,6 +3,7 @@ import {
 	collectMarkdownRelPaths,
 	type FileNode,
 	isEagerTreeRel,
+	isMarkdownPath,
 	normalizePathKey,
 	paperRelFromNotes,
 	pendingDirsAmongExpanded,
@@ -78,6 +79,20 @@ describe("collectMarkdownRelPaths", () => {
 			"notes/todo.md",
 			"papers/x/NOTES.md",
 		]);
+	});
+});
+
+describe("isMarkdownPath", () => {
+	it("recognizes Markdown files at any vault path", () => {
+		for (const path of [
+			"/v/README.md",
+			"/v/notes/todo.md",
+			"/v/plans/2026/review.mdx",
+			"/v/papers/topic/paper/PAPER.md",
+			"remote:session/notes/review.markdown",
+		]) {
+			expect(isMarkdownPath(path)).toBe(true);
+		}
 	});
 });
 
