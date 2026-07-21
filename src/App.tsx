@@ -54,7 +54,7 @@ import {
 	AnnotationsPanel,
 	type AskRow,
 } from "@/components/viewer/annotations-panel";
-import type { PdfViewerHandle } from "@/components/viewer/pdf-viewer";
+import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
 import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";

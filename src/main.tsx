@@ -8,6 +8,7 @@ import {
 } from "@/components/settings-window-root";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
 import { initLogger, logger } from "@/lib/logger";
 import {
 	ensureSettingsLoaded,
@@ -45,7 +46,9 @@ async function boot() {
 				vaultPath={params.get("vault")}
 			/>
 		) : (
-			<App />
+			<PdfEngineHost>
+				<App />
+			</PdfEngineHost>
 		);
 
 	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

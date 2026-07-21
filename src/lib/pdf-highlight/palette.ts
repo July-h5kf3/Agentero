@@ -12,6 +12,37 @@ export const HIGHLIGHT_COLORS: HighlightColor[] = [
 
 export const DEFAULT_HIGHLIGHT_COLOR: HighlightColor = "yellow";
 
+/**
+ * Hex colors for EmbedPDF highlight annotations (which persist `strokeColor` as
+ * a hex string + separate `opacity`). Kept in sync with the translucent Tailwind
+ * fills below so the on-page highlight matches the swatch/palette UI.
+ */
+export const HIGHLIGHT_HEX: Record<HighlightColor, string> = {
+	yellow: "#fcd34d",
+	green: "#86efac",
+	blue: "#7dd3fc",
+	pink: "#f9a8d4",
+	purple: "#d8b4fe",
+};
+
+/** Default fill opacity for highlight annotations. */
+export const HIGHLIGHT_OPACITY = 0.4;
+
+/** Ordered hex list for the annotation plugin's color presets. */
+export const HIGHLIGHT_HEX_LIST: string[] = HIGHLIGHT_COLORS.map(
+	(c) => HIGHLIGHT_HEX[c],
+);
+
+/** Map a stored hex color back to the nearest known palette key. */
+export function highlightColorFromHex(hex: string | undefined): HighlightColor {
+	if (!hex) return DEFAULT_HIGHLIGHT_COLOR;
+	const target = hex.toLowerCase();
+	const found = HIGHLIGHT_COLORS.find(
+		(c) => HIGHLIGHT_HEX[c].toLowerCase() === target,
+	);
+	return found ?? DEFAULT_HIGHLIGHT_COLOR;
+}
+
 /** Coerce an arbitrary stored color string to a known palette key. */
 export function normalizeHighlightColor(
 	color: string | undefined,

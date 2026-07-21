@@ -3,12 +3,12 @@ import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { PapersLibrary } from "@/components/layout/papers-library";
 import { RecycleBinView } from "@/components/layout/recycle-bin-view";
 import { Skeleton } from "@/components/ui/skeleton";
-import { HtmlViewer } from "@/components/viewer/html-viewer";
-import { ImageViewer } from "@/components/viewer/image-viewer";
 import {
 	PdfViewer,
 	type PdfViewerHandle,
-} from "@/components/viewer/pdf-viewer";
+} from "@/components/viewer/embed/pdf-viewer";
+import { HtmlViewer } from "@/components/viewer/html-viewer";
+import { ImageViewer } from "@/components/viewer/image-viewer";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";
@@ -174,6 +174,7 @@ export const TabCenter = memo(function TabCenter({
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 				<PdfViewer
 					source={tab.pdfUrl}
+					docId={tab.id}
 					paperAbsPath={
 						tab.notesPath ? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "") : null
 					}
