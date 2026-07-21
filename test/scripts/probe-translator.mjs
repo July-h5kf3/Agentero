@@ -283,7 +283,7 @@ function parseJsonArray(text) {
 	let v;
 	try {
 		v = JSON.parse(text);
-	} catch (e) {
+	} catch (_e) {
 		throw new Error(`invalid JSON: ${snippet(text, 100)}`);
 	}
 	if (!Array.isArray(v)) {

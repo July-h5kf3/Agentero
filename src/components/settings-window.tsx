@@ -678,35 +678,33 @@ function RemoteCacheSettingsBlock() {
 		: t("general.remoteCache.sizeUnknown");
 
 	return (
-		<>
-			<div className="mt-4">
-				<p className="mb-2 px-0.5 font-medium text-[13px]">
-					{t("general.remoteCache.section")}
-				</p>
-				<SettingsGroup>
-					<SettingsRow label={t("general.remoteCache.label")}>
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="h-8"
-							disabled={busy || !isTauri()}
-							onClick={() => void onClear()}
-						>
-							{busy
-								? t("general.remoteCache.clearing")
-								: t("general.remoteCache.clear")}
-						</Button>
-					</SettingsRow>
-				</SettingsGroup>
-				<p className="mt-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
-					{t("general.remoteCache.hint")}
-				</p>
-				<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
-					{sizeLine}
-				</p>
-			</div>
-		</>
+		<div className="mt-4">
+			<p className="mb-2 px-0.5 font-medium text-[13px]">
+				{t("general.remoteCache.section")}
+			</p>
+			<SettingsGroup>
+				<SettingsRow label={t("general.remoteCache.label")}>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="h-8"
+						disabled={busy || !isTauri()}
+						onClick={() => void onClear()}
+					>
+						{busy
+							? t("general.remoteCache.clearing")
+							: t("general.remoteCache.clear")}
+					</Button>
+				</SettingsRow>
+			</SettingsGroup>
+			<p className="mt-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.remoteCache.hint")}
+			</p>
+			<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
+				{sizeLine}
+			</p>
+		</div>
 	);
 }
 
