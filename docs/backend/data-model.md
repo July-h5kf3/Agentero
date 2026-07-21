@@ -172,7 +172,7 @@ papers/<id>/marks/<id>.json
 |--------|------|----------|
 | `ask` | 多轮就地提问 | `anchor`（page/rects/quote）、`messages[]`、`status` |
 | `highlight` | 高亮；`comment` 非空 = 批注 | `page`、`rects`、`quote`、`color?`、`comment?` |
-| `translate` | 划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
+| `translate` | 成功划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
 
 - **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
 - 坐标均为页内归一化 0–1，缩放/重开可重建。
