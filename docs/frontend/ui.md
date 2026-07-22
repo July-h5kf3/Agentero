@@ -359,7 +359,7 @@
 | 结构 | 顶栏：ACP 后端选择 · 新建 · 历史 + 消息列表 + Composer |
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
-| 输入 | 单层 Composer：当前聚焦论文/文件**默认**加入上下文（实心 chip + 名称，可 X 移除；无虚线加号切换）；chip 展示 **paper-name / 文件名**（最后一段路径或 catalog 论文标题），tooltip 与 prompt 仍用 Vault 相对路径；`@` 文件提及和 `$` 本机技能为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性 `@`/`$` 上下文（当前论文保持默认附带）；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
+| 输入 | 单层 Composer：当前聚焦论文/文件**默认**加入上下文（实心 chip + 名称，可 X 移除；无虚线加号切换）；chip 展示 **paper-name / 文件名**（最后一段路径或 catalog 论文标题），tooltip 与 prompt 仍用 Vault 相对路径；`@` 文件提及和 `$` 本机技能为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性 `@`/`$` 上下文（当前论文保持默认附带）；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；**IME 组字中 `↵` 只确认候选、不发送**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)）；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
 | 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
@@ -380,7 +380,7 @@ PromptInput → Body / Footer / Submit
 
 **Agent 切换**：顶栏左侧当前 ACP 后端名打开下拉（列表来自 catalog + 注册表）；选择后设为默认并用于后续 `runOnce`。下拉 **「ACP backend」标题行最右侧** 齿轮（`Settings`）→ **设置 → Agent**（`onOpenAgentSettings`）。
 
-**消息编辑与重发**：会话空闲时（发送成功、停止或失败后）hover 已发送的用户消息会显示 **Edit（铅笔）** 与 **Copy** 两个图标按钮；运行中不显示 Edit，须先按 `Esc` / 点击停止。点击 Edit 就地把气泡替换为文本框（`↵` 重新发送、`⇧↵` 换行、`Esc` 取消），重发时会丢弃**该消息及其之后的所有内容**（旧回答 / 被中断的运行）并以新文本发起一次全新的 turn，用于修正发错的输入。切换会话 / 标签 / 新建对话会自动取消未完成的编辑。（重发沿用普通发送的 session 续接规则：有 `sessionId` 时经 ACP `session/resume` 续接，可见转录被截断但 Agent 侧会话记忆不随之回退。）
+**消息编辑与重发**：会话空闲时（发送成功、停止或失败后）hover 已发送的用户消息会显示 **Edit（铅笔）** 与 **Copy** 两个图标按钮；运行中不显示 Edit，须先按 `Esc` / 点击停止。点击 Edit 就地把气泡替换为文本框（`↵` 重新发送、`⇧↵` 换行、`Esc` 取消；**IME 组字中 `↵` 不重发**，见 [IME composition race](../bug_fix/ime-composition-enter-submit.md)），重发时会丢弃**该消息及其之后的所有内容**（旧回答 / 被中断的运行）并以新文本发起一次全新的 turn，用于修正发错的输入。切换会话 / 标签 / 新建对话会自动取消未完成的编辑。（重发沿用普通发送的 session 续接规则：有 `sessionId` 时经 ACP `session/resume` 续接，可见转录被截断但 Agent 侧会话记忆不随之回退。）
 
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 

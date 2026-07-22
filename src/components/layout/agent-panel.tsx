@@ -137,6 +137,7 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
@@ -204,6 +205,7 @@ import {
 	normalizeContextPath,
 	toPathSet,
 } from "@/lib/context-path-icon";
+import { isImeKeyboardEvent } from "@/lib/ime";
 import {
 	type PaperMetadata,
 	type PaperTreeLabelMode,
@@ -757,6 +759,10 @@ export function AgentPanel({
 	const [editingLineId, setEditingLineId] = useState<string | null>(null);
 	const [editingText, setEditingText] = useState("");
 	const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+	const {
+		isBlockedByIme: isEditBlockedByIme,
+		compositionProps: editCompositionProps,
+	} = useImeGuard();
 	const {
 		text: composerText,
 		mentionedPaths,
@@ -2254,6 +2260,13 @@ export function AgentPanel({
 	const handleComposerMenuKeyDown = (
 		event: KeyboardEvent<HTMLTextAreaElement>,
 	) => {
+		// IME: do not treat Enter as mention/skill select while composing.
+		// PromptInputTextarea owns compositionend grace + blocks submit; here
+		// we only need keyCode 229 / isComposing so menus do not steal the key.
+		if (event.key === "Enter" && isImeKeyboardEvent(event)) {
+			return;
+		}
+
 		if (event.key === "Escape" && activeTabIsRunning) {
 			event.preventDefault();
 			void cancelCurrentRun();
@@ -2773,13 +2786,15 @@ export function AgentPanel({
 																onChange={(event) =>
 																	setEditingText(event.currentTarget.value)
 																}
+																{...editCompositionProps}
 																onKeyDown={(event) => {
 																	if (event.key === "Escape") {
 																		event.preventDefault();
 																		cancelEditingMessage();
 																	} else if (
 																		event.key === "Enter" &&
-																		!event.shiftKey
+																		!event.shiftKey &&
+																		!isEditBlockedByIme(event)
 																	) {
 																		event.preventDefault();
 																		void resendEditedMessage(line.id);

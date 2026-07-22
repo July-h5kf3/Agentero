@@ -73,6 +73,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
@@ -981,10 +982,17 @@ export const PromptInputTextarea = ({
 	const { t } = useTranslation("aiElements");
 	const controller = useOptionalPromptInputController();
 	const attachments = usePromptInputAttachments();
-	const [isComposing, setIsComposing] = useState(false);
+	// IME: compositionend can fire before the confirming Enter (see useImeGuard).
+	const { isBlockedByIme, compositionProps } = useImeGuard();
 
 	const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = useCallback(
 		(e) => {
+			// Block Enter submit before external handlers (e.g. mention menus)
+			// so they do not select/submit while IME is confirming a candidate.
+			if (e.key === "Enter" && isBlockedByIme(e)) {
+				return;
+			}
+
 			// Call the external onKeyDown handler first
 			onKeyDown?.(e);
 
@@ -994,9 +1002,6 @@ export const PromptInputTextarea = ({
 			}
 
 			if (e.key === "Enter") {
-				if (isComposing || e.nativeEvent.isComposing) {
-					return;
-				}
 				if (e.shiftKey) {
 					return;
 				}
@@ -1027,7 +1032,7 @@ export const PromptInputTextarea = ({
 				}
 			}
 		},
-		[onKeyDown, isComposing, attachments],
+		[onKeyDown, isBlockedByIme, attachments],
 	);
 
 	const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = useCallback(
@@ -1057,9 +1062,6 @@ export const PromptInputTextarea = ({
 		[attachments],
 	);
 
-	const handleCompositionEnd = useCallback(() => setIsComposing(false), []);
-	const handleCompositionStart = useCallback(() => setIsComposing(true), []);
-
 	const controlledProps = controller
 		? {
 				onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -1076,8 +1078,7 @@ export const PromptInputTextarea = ({
 		<InputGroupTextarea
 			className={cn("field-sizing-content max-h-48 min-h-16", className)}
 			name="message"
-			onCompositionEnd={handleCompositionEnd}
-			onCompositionStart={handleCompositionStart}
+			{...compositionProps}
 			onKeyDown={handleKeyDown}
 			onPaste={handlePaste}
 			placeholder={placeholder ?? t("promptInput.placeholder")}

@@ -6,4 +6,5 @@
 
 ## 二、Agent / 对话
 - [x] Update / 打开 Vault 时补种缺失的 bundled skills（`vault_ensure`，仅新增、不覆盖；[#9](https://github.com/poco-ai/Agentero/issues/9)）
+- [x] 输入法组字时 Enter 误发送（IME composition race）→ [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)
 - 在根目录下放一个 chat 文件做全局对话/对话历史记录 → 讨论见 [#33](https://github.com/poco-ai/Agentero/issues/33)（非 Codex 持久化）

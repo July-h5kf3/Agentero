@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { useImeGuard } from "@/hooks/use-ime-guard";
 
 type AnnotationEditorProps = {
 	/** Screen point near the highlight (from popoverScreenPoint) */
@@ -37,6 +38,7 @@ export function AnnotationEditor({
 	const { t } = useTranslation("viewer");
 	const [text, setText] = useState(initialComment ?? "");
 	const ref = useRef<HTMLTextAreaElement>(null);
+	const { isBlockedByIme, compositionProps } = useImeGuard();
 
 	useEffect(() => {
 		ref.current?.focus();
@@ -81,6 +83,7 @@ export function AnnotationEditor({
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}
+				{...compositionProps}
 				onKeyDown={(e) => {
 					if (e.key === "Escape") {
 						e.preventDefault();
@@ -88,8 +91,8 @@ export function AnnotationEditor({
 						return;
 					}
 					// Enter = save; Shift+Enter = newline (same as ask composer).
-					// Skip while IME is composing (e.g. Chinese input).
-					if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+					// Skip while IME is composing / confirming a candidate.
+					if (e.key === "Enter" && !e.shiftKey && !isBlockedByIme(e)) {
 						e.preventDefault();
 						onSave(text);
 					}

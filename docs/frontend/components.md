@@ -123,7 +123,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 |---|---|---|
 | `conversation.tsx` | 列表 / 空态 / 贴底 | `layout/agent-panel` |
 | `message.tsx` | Message + Actions / Response | `layout/agent-panel` |
-| `prompt-input.tsx` | Composer | `layout/agent-panel` |
+| `prompt-input.tsx` | Composer；**IME 组字中 Enter 不提交**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)） | `layout/agent-panel` |
 | `sources.tsx` | Vault 引用 | `layout/agent-panel` |
 | `reasoning.tsx` | Thought 折叠 | `layout/agent-panel` |
 | `tool.tsx` | ACP tool 调用 | `layout/agent-panel` |
