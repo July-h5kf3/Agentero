@@ -82,7 +82,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
-> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
+> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`vault_allow_fs_scope`、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
@@ -139,6 +139,14 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - **从不覆盖**：用户改过的 `SKILL.md` 或 references 保持原样。
   - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
   - 前端：若 `created` 含 `.agents/skills/<id>/…`，右上角 success toast（`vault.skillsSeeded`）提示新增 skill 名称；无新增则不打扰。
+
+#### `vault_allow_fs_scope`（已实现）
+
+把本地 Vault 目录加入 `tauri-plugin-fs` 的**运行时 scope**（`fs_scope().allow_directory(path, recursive=true)`）。
+
+- **参数**：`{ path: string }`（本地绝对路径）。**返回**：`ApiResult<null>`。
+- **动机**：静态 scope 仅允许 `$HOME/**` / `$DOCUMENT/**` / `$DESKTOP/**` / `$DOWNLOAD/**`（`capabilities/default.json`）。dialog 选目录时 Tauri 会为该目录授予运行时 scope，但**不持久化**；重启后恢复位于上述根之外的 Vault（如 `D:\…`）会让每次 `plugin-fs` 调用（`readDir` / `readTextFile` / `exists`）报 **`forbidden path`**，直到再次用 dialog 打开。
+- **调用点**：前端 `ensureLocalFsScope(root)`（`src/lib/vault.ts`，按根去重、并发共享同一 grant、幂等）在**任何 `plugin-fs` 读之前**调用 —— `loadVaultTree`、`loadTabResources`（恢复的标签页与树并发加载）、启动时校验恢复路径是否存在的 effect。远端 handle / 非 Tauri 环境为 no-op。
 
 #### 远程 Vault（SSH/SFTP，MVP 已实现）
 
@@ -264,17 +272,15 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
 
-#### `settings_window_open`（已实现）
+#### `settings_window_open`（已实现，**前端暂未调用**）
 
-打开（或聚焦）**单例原生设置窗口**（macOS 惯例：`⌘,` → 独立小窗口，原生标题栏）。
+打开（或聚焦）**单例原生设置窗口**。命令仍注册，但因该第二 webview 在 **Windows 下白屏卡死**，前端已改用 App 内浮层（`SettingsWindow`，见 `../frontend/ui.md` §4），暂不调用本命令；代码保留待根因修复后再启用。
 
 - **参数**：`{ section?: string, vault?: string }`（section 深链设置分类；vault 传调用方窗口的 Vault 路径，供远程 Vault 的 Agent 页上下文）
 - **返回**：`Result<(), String>`
 - **行为**
   - 固定 label `agentero-settings`（匹配 capability `agentero-*`）；已存在则 `set_focus` 并向该窗口 `emit("settings:navigate", { section })`。
-  - 否则创建 760×600（min 640×480）窗口，URL `index.html?window=settings&section=…&vault=…`（percent-encoded）；原生标题栏（macOS 不用 Overlay）、禁用最大化；macOS 复制 app menu。
-  - 前端 `main.tsx` 检测 `?window=settings` 渲染 `SettingsWindowRoot`（`src/components/settings-window-root.tsx`）而非完整工作台；窗口标题随 UI 语言 `setTitle`。
-  - 设置保存后经 `settings:changed` 事件广播同步所有窗口（见 `settings_set`）。
+  - 否则创建 760×600（min 640×480）窗口，URL `index.html?window=settings&section=…&vault=…`（percent-encoded）；前端 `main.tsx` 检测 `?window=settings` 渲染 `SettingsWindowRoot`。
 
 #### `fs_watch_start` / `fs_watch_stop`（已实现）
 
@@ -1680,7 +1686,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 | 事件名 | 菜单项 | 快捷键 | 说明 |
 |---|---|---|---|
-| `settings` | Settings… | `⌘,` | 前端监听，打开设置 |
+| `settings` | Settings… | `⌘,` | 前端监听，打开 App 内设置浮层 |
 | `new_window` | New Window | `⌘N` | **Host 直接** `window_new`，不 emit 给前端 |
 | `open_vault` | Open Vault… | `⌘O` | 前端监听 |
 | `create_vault` | Create Vault… | `⇧⌘N` | 前端监听 |
