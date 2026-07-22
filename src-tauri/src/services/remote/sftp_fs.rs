@@ -6,13 +6,18 @@ use crate::services::fs::{
 };
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use openssh::{KnownHosts, Session};
+use openssh::{KnownHosts, SessionBuilder};
 use openssh_sftp_client::metadata::MetaData;
 use openssh_sftp_client::Sftp;
 use std::path::Path;
 use std::pin::pin;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::time::{timeout, Duration};
+
+pub const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub const SSH_SERVER_ALIVE_INTERVAL: Duration = Duration::from_secs(30);
+pub const SFTP_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct SftpFs {
     remote_root: String,
@@ -34,15 +39,37 @@ impl SftpFs {
             return Err(AppError::message("remote vault path is required"));
         }
 
-        let session = Session::connect_mux(destination, KnownHosts::Accept)
-            .await
-            .map_err(|e| AppError::message(format!("ssh connect {destination}: {e}")))?;
+        let session = timeout(
+            SSH_CONNECT_TIMEOUT,
+            SessionBuilder::default()
+                .known_hosts_check(KnownHosts::Accept)
+                .connect_timeout(SSH_CONNECT_TIMEOUT)
+                .server_alive_interval(SSH_SERVER_ALIVE_INTERVAL)
+                .connect_mux(destination),
+        )
+        .await
+        .map_err(|_| {
+            AppError::message(format!(
+                "ssh connect timeout after {}s: {destination}",
+                SSH_CONNECT_TIMEOUT.as_secs()
+            ))
+        })?
+        .map_err(|e| AppError::message(format!("ssh connect {destination}: {e}")))?;
 
-        let sftp = Sftp::from_session(session, Default::default())
-            .await
-            .map_err(|e| AppError::message(format!("sftp start: {e}")))?;
+        let sftp = timeout(
+            SSH_CONNECT_TIMEOUT,
+            Sftp::from_session(session, Default::default()),
+        )
+        .await
+        .map_err(|_| {
+            AppError::message(format!(
+                "sftp start timeout after {}s",
+                SSH_CONNECT_TIMEOUT.as_secs()
+            ))
+        })?
+        .map_err(|e| AppError::message(format!("sftp start: {e}")))?;
 
-        {
+        timeout(SSH_CONNECT_TIMEOUT, async {
             let mut fs = sftp.fs();
             let meta = fs
                 .metadata(Path::new(&remote_root))
@@ -53,7 +80,15 @@ impl SftpFs {
                     "remote path is not a directory: {remote_root}"
                 )));
             }
-        }
+            Ok::<(), AppError>(())
+        })
+        .await
+        .map_err(|_| {
+            AppError::message(format!(
+                "remote path check timeout after {}s: {remote_root}",
+                SSH_CONNECT_TIMEOUT.as_secs()
+            ))
+        })??;
 
         Ok(Self {
             remote_root,
@@ -88,133 +123,168 @@ impl VaultFs for SftpFs {
     }
 
     async fn list(&self, rel: &str) -> Result<Vec<FsDirEntry>, AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        let dir = fs
-            .open_dir(Path::new(&abs))
-            .await
-            .map_err(|e| AppError::message(format!("sftp list {abs}: {e}")))?;
-        let mut rd = pin!(dir.read_dir());
-        let base = normalize_rel(rel);
-        let mut out = Vec::new();
-        while let Some(item) = rd.as_mut().next().await {
-            let entry = item.map_err(|e| AppError::message(format!("sftp readdir: {e}")))?;
-            let name = entry
-                .filename()
-                .file_name()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_else(|| entry.filename().to_string_lossy().into_owned());
-            if name == "." || name == ".." {
-                continue;
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            let dir = fs
+                .open_dir(Path::new(&abs))
+                .await
+                .map_err(|e| AppError::message(format!("sftp list {abs}: {e}")))?;
+            let mut rd = pin!(dir.read_dir());
+            let base = normalize_rel(rel);
+            let mut out = Vec::new();
+            while let Some(item) = rd.as_mut().next().await {
+                let entry = item.map_err(|e| AppError::message(format!("sftp readdir: {e}")))?;
+                let name = entry
+                    .filename()
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| entry.filename().to_string_lossy().into_owned());
+                if name == "." || name == ".." {
+                    continue;
+                }
+                let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                let is_file = entry.file_type().map(|t| t.is_file()).unwrap_or(!is_dir);
+                let child_rel = if base.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{base}/{name}")
+                };
+                out.push(FsDirEntry {
+                    name,
+                    is_dir,
+                    is_file,
+                    path: child_rel,
+                });
             }
-            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            let is_file = entry.file_type().map(|t| t.is_file()).unwrap_or(!is_dir);
-            let child_rel = if base.is_empty() {
-                name.clone()
-            } else {
-                format!("{base}/{name}")
-            };
-            out.push(FsDirEntry {
-                name,
-                is_dir,
-                is_file,
-                path: child_rel,
+            out.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
             });
-        }
-        out.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        });
-        Ok(out)
+            Ok(out)
+        })
+        .await
+        .map_err(|_| sftp_timeout("list"))?
     }
 
     async fn stat(&self, rel: &str) -> Result<FsFileMeta, AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        let meta = fs
-            .metadata(Path::new(&abs))
-            .await
-            .map_err(|e| AppError::message(format!("sftp stat {abs}: {e}")))?;
-        Ok(meta_to_fs(&meta))
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            let meta = fs
+                .metadata(Path::new(&abs))
+                .await
+                .map_err(|e| AppError::message(format!("sftp stat {abs}: {e}")))?;
+            Ok(meta_to_fs(&meta))
+        })
+        .await
+        .map_err(|_| sftp_timeout("stat"))?
     }
 
     async fn read(&self, rel: &str) -> Result<Vec<u8>, AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        let bytes = fs
-            .read(Path::new(&abs))
-            .await
-            .map_err(|e| AppError::message(format!("sftp read {abs}: {e}")))?;
-        Ok(bytes.to_vec())
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            let bytes = fs
+                .read(Path::new(&abs))
+                .await
+                .map_err(|e| AppError::message(format!("sftp read {abs}: {e}")))?;
+            Ok(bytes.to_vec())
+        })
+        .await
+        .map_err(|_| sftp_timeout("read"))?
     }
 
     async fn write(&self, rel: &str, data: &[u8], opts: WriteOpts) -> Result<(), AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        if opts.create_parents {
-            if let Some(parent) = Path::new(&abs).parent() {
-                let p = parent.to_string_lossy();
-                if !p.is_empty() && p != self.remote_root {
-                    let _ = sftp_mkdir_p(&mut fs, &p).await;
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            if opts.create_parents {
+                if let Some(parent) = Path::new(&abs).parent() {
+                    let p = parent.to_string_lossy();
+                    if !p.is_empty() && p != self.remote_root {
+                        let _ = sftp_mkdir_p(&mut fs, &p).await;
+                    }
                 }
             }
-        }
-        fs.write(Path::new(&abs), data)
-            .await
-            .map_err(|e| AppError::message(format!("sftp write {abs}: {e}")))
+            fs.write(Path::new(&abs), data)
+                .await
+                .map_err(|e| AppError::message(format!("sftp write {abs}: {e}")))
+        })
+        .await
+        .map_err(|_| sftp_timeout("write"))?
     }
 
     async fn mkdir(&self, rel: &str) -> Result<(), AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        sftp_mkdir_p(&mut fs, &abs).await
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            sftp_mkdir_p(&mut fs, &abs).await
+        })
+        .await
+        .map_err(|_| sftp_timeout("mkdir"))?
     }
 
     async fn rename(&self, from: &str, to: &str) -> Result<(), AppError> {
-        let src = self.abs(from)?;
-        let dst = self.abs(to)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        if let Some(parent) = Path::new(&dst).parent() {
-            let p = parent.to_string_lossy();
-            if !p.is_empty() {
-                let _ = sftp_mkdir_p(&mut fs, &p).await;
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let src = self.abs(from)?;
+            let dst = self.abs(to)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            if let Some(parent) = Path::new(&dst).parent() {
+                let p = parent.to_string_lossy();
+                if !p.is_empty() {
+                    let _ = sftp_mkdir_p(&mut fs, &p).await;
+                }
             }
-        }
-        fs.rename(Path::new(&src), Path::new(&dst))
-            .await
-            .map_err(|e| AppError::message(format!("sftp rename: {e}")))
+            fs.rename(Path::new(&src), Path::new(&dst))
+                .await
+                .map_err(|e| AppError::message(format!("sftp rename: {e}")))
+        })
+        .await
+        .map_err(|_| sftp_timeout("rename"))?
     }
 
     async fn remove(&self, rel: &str, recursive: bool) -> Result<(), AppError> {
-        let abs = self.abs(rel)?;
-        let sftp = self.sftp.lock().await;
-        let mut fs = sftp.fs();
-        let meta = fs
-            .metadata(Path::new(&abs))
-            .await
-            .map_err(|e| AppError::message(format!("sftp remove stat {abs}: {e}")))?;
-        if meta.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            if recursive {
-                remove_dir_all(&mut fs, &abs).await?;
-            } else {
-                fs.remove_dir(Path::new(&abs))
-                    .await
-                    .map_err(|e| AppError::message(format!("sftp rmdir: {e}")))?;
-            }
-        } else {
-            fs.remove_file(Path::new(&abs))
+        timeout(SFTP_OPERATION_TIMEOUT, async {
+            let abs = self.abs(rel)?;
+            let sftp = self.sftp.lock().await;
+            let mut fs = sftp.fs();
+            let meta = fs
+                .metadata(Path::new(&abs))
                 .await
-                .map_err(|e| AppError::message(format!("sftp rm: {e}")))?;
-        }
-        Ok(())
+                .map_err(|e| AppError::message(format!("sftp remove stat {abs}: {e}")))?;
+            if meta.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                if recursive {
+                    remove_dir_all(&mut fs, &abs).await?;
+                } else {
+                    fs.remove_dir(Path::new(&abs))
+                        .await
+                        .map_err(|e| AppError::message(format!("sftp rmdir: {e}")))?;
+                }
+            } else {
+                fs.remove_file(Path::new(&abs))
+                    .await
+                    .map_err(|e| AppError::message(format!("sftp rm: {e}")))?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| sftp_timeout("remove"))?
     }
+}
+
+fn sftp_timeout(operation: &str) -> AppError {
+    AppError::message(format!(
+        "sftp {operation} timeout after {}s",
+        SFTP_OPERATION_TIMEOUT.as_secs()
+    ))
 }
 
 async fn sftp_mkdir_p(fs: &mut openssh_sftp_client::fs::Fs, path: &str) -> Result<(), AppError> {

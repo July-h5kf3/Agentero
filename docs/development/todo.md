@@ -440,6 +440,7 @@
 - [x] **M4** 魔棒入库写远端（staging → SFTP → catalog PUT；见 `import_bridge`）
 - [x] **M4** blob LRU（2 GiB/库）+ 设置页「清除远程缓存」
 - [x] **M4** Zotero Connector 绑定远程会话（saveItems / saveAttachment / targets）
+- [x] **M4** SSH/SFTP 超时与保活：15s 建连、30s 单次 SFTP 操作、30s keepalive + 3 次失败、远端探测 30s command timeout
 - [ ] **M4** Codex-SSH、更完整远程偏好
 
 ### 发布

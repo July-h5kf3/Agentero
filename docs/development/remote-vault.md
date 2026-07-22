@@ -66,6 +66,25 @@ TCP
 - **不是二选一**：MVP **同时**需要 SFTP（UI 文件）与 SSH exec（远端 BYOA）。
 - 优先**复用同一 TCP / ControlMaster**，避免文件一条连接、Agent 再登一次。
 
+### 2.1 超时、保活与断线行为
+
+远程连接采用固定的安全默认值，当前不在 UI 中暴露配置项：
+
+| 层级 | 默认值 | 行为 |
+|---|---:|---|
+| SSH/SFTP 建连 | 15 秒 | 建立 SSH、启动 SFTP subsystem、校验远端 Vault 根目录均受此限制 |
+| SFTP 单次操作 | 30 秒 | `list/stat/read/write/mkdir/rename/remove` 超时返回错误；不会无限等待 |
+| SSH 保活 | 30 秒 | `ServerAliveInterval=30`；连续 3 次无响应后由 OpenSSH 判定连接失效，约 90 秒 |
+| 远端 `uname` / `which` | 30 秒 | 探测命令有完整执行超时，另受 15 秒 SSH 建连限制 |
+| 远端 ACP Agent | 15 秒建连 | Agent 是长生命周期进程，不设置 30 秒运行超时；连接断开或进程退出时由 ACP 流结束报告失败 |
+
+说明：
+
+- 用户 `~/.ssh/config` 仍可提供端口、ProxyJump、密钥等连接参数；Agentero 的显式超时用于避免配置缺失时无限等待。
+- 超时不会自动重连，也不会重放写操作。用户需要重新打开远程 Vault；后续可增加带会话状态机的自动重连。
+- SFTP 超时只取消当前 Tokio future；对于已发出的远端写入，不宣称具备事务回滚语义，因此写入仍遵循现有临时文件/冲突检测策略。
+- 详细 command 对照见 [`../backend/api.md`](../backend/api.md)。
+
 ---
 
 ## 3. 架构总览
