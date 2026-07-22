@@ -202,7 +202,7 @@
   - **数据**：Host `paper_list` → catalog.sqlite。**catalog 权威**；空态「重新扫描 papers/」（`paper_rescan`）。
   - **打开文档加载态**：论文、PDF、HTML 或 Markdown tab 资源尚未加载完成时显示内容 shimmer 骨架；不显示论文库空态。
   - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签；复制**短延迟提交**，双击打开论文时取消，避免与双击冲突）；**双击**行打开对应 paper 文件夹。
-  - **列自定义**（顺序 + 显隐）：**右键表头**弹出上下文菜单勾选显示/隐藏列；**拖拽表头** `<th>` 改变列顺序（拖拽时列半透明、落点高亮）；菜单底部「重置列」恢复默认。**标题列不可隐藏**（承载阅读热力与出版物副标题，勾选框禁用且 normalize 强制可见）。布局持久化到 `settings.json` 的 `libraryColumns`（`LibraryColumnPref[] = {key, visible}[]`，数组顺序即显示顺序），前后端均 reconcile（去重、丢未知 key、补新列为可见、强制 title 可见）。实现：`COLUMN_META` + `renderCell` 按 key 渲染；右键菜单基于 `src/components/ui/context-menu.tsx`（radix `ContextMenu`）。
+  - **列自定义**（顺序 + 显隐）：**右键表头**弹出上下文菜单勾选显示/隐藏列；**拖拽表头** `<th>` 改变列顺序（拖拽时列半透明、落点高亮）；菜单底部「重置列」恢复默认。**标题列不可隐藏**（承载阅读热力与出版物副标题，勾选框禁用且 normalize 强制可见）；表格使用固定布局和各列固定权重，标题列约占 32%，标题正文单行显示，超出以省略号截断，悬浮仍可查看完整标题。布局持久化到 `settings.json` 的 `libraryColumns`（`LibraryColumnPref[] = {key, visible}[]`，数组顺序即显示顺序），前后端均 reconcile（去重、丢未知 key、补新列为可见、强制 title 可见）。实现：`COLUMN_META` + `colgroup` + `renderCell` 按 key 渲染；右键菜单基于 `src/components/ui/context-menu.tsx`（radix `ContextMenu`）。
   - **阅读热力（标题背景）**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成**标题文字横向背景脊条**（左=文首、右=文末；局部深浅=该位置交互强度）。颜色为 **Apple system green** 浅色洗（`oklch(0.65 0.17 145)` ≈ `#34C759`，与标签 green 同系，低比例 `color-mix` 保持浅色不抢眼）。悬停标题可看高亮 / 对话 / 翻译分项。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度。实现：`src/lib/reading-heatmap/`、`ReadingTitleHeat`。
   - **标签筛选**：表上方汇总**当前作用域** tag chip 做筛选；行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。

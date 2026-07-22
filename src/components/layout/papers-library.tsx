@@ -97,23 +97,41 @@ const CELL_COPY_CLICK_DELAY_MS = 320;
 type SortKey = LibraryColumnKey;
 type SortDir = "asc" | "desc";
 
-/** Per-column display metadata (i18n label + header min-width). */
+/** Per-column display metadata (i18n label + fixed layout weight). */
 const COLUMN_META = {
 	title: {
 		labelKey: "papersLibrary.colTitle",
+		widthWeight: 32,
 		headerClassName: "min-w-[240px]",
 	},
 	authors: {
 		labelKey: "papersLibrary.colAuthors",
+		widthWeight: 18,
 		headerClassName: "min-w-[140px]",
 	},
-	year: { labelKey: "papersLibrary.colYear", headerClassName: "min-w-16" },
-	tags: { labelKey: "papersLibrary.colTags", headerClassName: "min-w-[120px]" },
-	type: { labelKey: "papersLibrary.colType", headerClassName: "min-w-24" },
-	id: { labelKey: "papersLibrary.colId", headerClassName: "min-w-[160px]" },
+	year: {
+		labelKey: "papersLibrary.colYear",
+		widthWeight: 8,
+		headerClassName: "min-w-16",
+	},
+	tags: {
+		labelKey: "papersLibrary.colTags",
+		widthWeight: 18,
+		headerClassName: "min-w-[120px]",
+	},
+	type: {
+		labelKey: "papersLibrary.colType",
+		widthWeight: 10,
+		headerClassName: "min-w-24",
+	},
+	id: {
+		labelKey: "papersLibrary.colId",
+		widthWeight: 14,
+		headerClassName: "min-w-[160px]",
+	},
 } as const satisfies Record<
 	SortKey,
-	{ labelKey: string; headerClassName: string }
+	{ labelKey: string; widthWeight: number; headerClassName: string }
 >;
 
 /** Move `fromKey` to sit just before `toKey` in the full column list. */
@@ -406,6 +424,14 @@ export function PapersLibrary({
 		const vis = columns.filter((c) => c.visible);
 		return vis.length ? vis : columns.filter((c) => c.key === "title");
 	}, [columns]);
+	const visibleColumnWeight = useMemo(
+		() =>
+			visibleColumns.reduce(
+				(total, col) => total + COLUMN_META[col.key].widthWeight,
+				0,
+			),
+		[visibleColumns],
+	);
 
 	const toggleColumn = useCallback(
 		(key: SortKey) => {
@@ -440,7 +466,7 @@ export function PapersLibrary({
 			switch (key) {
 				case "title":
 					return (
-						<td className="max-w-[420px] px-3 py-2.5">
+						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
 							<button
 								type="button"
 								className={cn(
@@ -462,8 +488,10 @@ export function PapersLibrary({
 									onCellCopy(e, p.title, t("papersLibrary.colTitle"))
 								}
 							>
-								<ReadingTitleHeat heatmap={heat}>
-									<span title={p.title}>{p.title}</span>
+								<ReadingTitleHeat heatmap={heat} className="line-clamp-1">
+									<span className="block truncate" title={p.title}>
+										{p.title}
+									</span>
 								</ReadingTitleHeat>
 							</button>
 							{p.publication ? (
@@ -497,7 +525,7 @@ export function PapersLibrary({
 					);
 				case "authors":
 					return (
-						<td className="max-w-[220px] px-3 py-2.5 text-muted-foreground text-xs">
+						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 text-muted-foreground text-xs">
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<button
@@ -570,7 +598,7 @@ export function PapersLibrary({
 					);
 				case "tags":
 					return (
-						<td className="max-w-[200px] px-3 py-2.5">
+						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
 							{coercePaperTags(p.tags).length ? (
 								<div className="flex flex-wrap gap-1">
 									{coercePaperTags(p.tags).map((tag) => {
@@ -653,7 +681,7 @@ export function PapersLibrary({
 					);
 				case "id":
 					return (
-						<td className="max-w-[280px] px-3 py-2.5 font-mono text-muted-foreground text-xs">
+						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 font-mono text-muted-foreground text-xs">
 							<button
 								type="button"
 								className={cn(
@@ -862,8 +890,18 @@ export function PapersLibrary({
 					ref={scrollRef}
 					className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 				>
-					{/* w-max + column min-widths: grow past pane for horizontal scroll */}
-					<table className="w-max min-w-full border-collapse text-left text-sm">
+					{/* Fixed weights keep the table stable while content and rows change. */}
+					<table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
+						<colgroup>
+							{visibleColumns.map((col) => (
+								<col
+									key={col.key}
+									style={{
+										width: `${(COLUMN_META[col.key].widthWeight / visibleColumnWeight) * 100}%`,
+									}}
+								/>
+							))}
+						</colgroup>
 						<ContextMenu>
 							<ContextMenuTrigger asChild>
 								<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
