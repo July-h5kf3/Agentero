@@ -12,7 +12,6 @@ import {
 	resolveTargetLangCode,
 	resolveTargetLangName,
 	resolveTranslateAgent,
-	TRANSLATE_SERVICES,
 } from "@/lib/translate";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
 
