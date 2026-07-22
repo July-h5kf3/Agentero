@@ -867,6 +867,34 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 已有 `PAPER.md` 且 `force` 非 true → 跳过。
   - 否则 liteparse（Markdown 输出）写 `PAPER.md`；catalog 写入 `body_source`（`pdf` | `ocr`）与 `body_quality`（`medium` | `low`）。
 
+#### `paper_analyze_pdf`（规划中）
+
+为本地 paper PDF 生成可重建的引用与插图 sidecar。首版不支持远程 Vault，不自动联网补全库外引用。
+
+- **参数**：
+  ```ts
+  {
+    vaultPath: string;
+    path: string;
+    force?: boolean;
+    taskId?: string;
+  }
+  ```
+- **返回**：
+  ```ts
+  {
+    mode: "tex" | "pdf";
+    citePath: string;
+    figuresPath: string;
+    figuresDir: string;
+    citationCount: number;
+    figureCount: number;
+    messages: string[];
+  }
+  ```
+- **落盘**：`{paper}/source/agentero-cite.json`、`{paper}/source/agentero-figures.json`、`{paper}/source/agentero-figures/*.png`。
+- **行为**：有 TeX 时解析 TeX/Bib 并用 PDF bbox 做定位；无 TeX 时使用 liteparse。不得覆盖原始 PDF、TeX/Bib、`NOTES.md` 或 `PAPER.md`。完整 schema 见 [`pdf-analysis.md`](pdf-analysis.md)。
+
 #### `paper_export`（已落地）
 
 导出 catalog 全文：Host 将每行转为 **Zotero API JSON item**，组成 **JSON 数组**，再 `POST {translatorBaseUrl}/export?format=…`（`Content-Type: application/json`）。

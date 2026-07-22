@@ -74,6 +74,10 @@ agentero-vault/
 > **默认不生成**：根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。  
 > 需要可读索引或 BibTeX 时，使用 `catalog:export_papers_md` / `catalog:export_bibtex`（见 [`catalog.md`](catalog.md) §5.4）。
 
+### 1.1 PDF 分析派生 sidecar
+
+论文 PDF 的引用与插图解析结果固定写入 `source/agentero-cite.json`、`source/agentero-figures.json` 和 `source/agentero-figures/*.png`。它们是可删除、可重建的派生数据，不属于用户笔记或原始归档；字段契约和重建规则见 [`pdf-analysis.md`](pdf-analysis.md)。
+
 > **Paper 文件夹**是最小单元：以标记文件/目录识别（`NOTES.md` / `marks/` / `source/` / `assets/` 等），可位于 `papers/` 下任意深度。  
 > **Catalog `path`**（Vault 相对路径）标识位置；**`id`** 为逻辑 id（arXiv ID 或 citekey）。  
 > 默认入库可仍写 `papers/<id>/`；用户也可整理到 `papers/<topic>/…/<id>/`。citekey 冲突时追加字母后缀。

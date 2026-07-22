@@ -213,6 +213,9 @@
 
 ### 5. 引用关系 / Connected Papers（roadmap V0.7）
 
+- [ ] **P0：本地 PDF citation/figure analysis**：按 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md) 实现 Host `paper_analyze_pdf`、sidecar、TeX/PDF 双解析和 PNG 派生。
+- [ ] **P0：Paper Content 侧栏**：展示 citations/figures，支持 PDF hover 高亮、reference/figure 跳转。
+- [ ] **P0：Agent context**：Composer `@` 与拖拽支持 citation/figure structured refs；继续使用 path context chip，不使用二进制 Attachments。
 - [ ] **文内引用 hover → 右侧 Paper Info**：PDF/HTML/`PAPER.md` 中识别 `[n]` / Author-year / DOI·arXiv 链接；hover 时侧栏展示目标论文 Info（库内 path / 远程缓存 metadata、入库或打开）
 - [ ] **引用图数据**：cites / cited_by 可重建缓存（catalog 扩展表或 `.agentero/`）；外部 API 可插拔（Semantic Scholar / OpenAlex 等），失败可降级 TeX/参考文献解析
 - [ ] **Connected Papers 式邻域 UI**：以当前 paper 为中心展示引用/被引列表 + 简易图；节点可打开 / 入库 / 进阅读队列

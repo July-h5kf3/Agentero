@@ -273,6 +273,7 @@
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
     - 划词标记统一落在 **`papers/<id>/marks/`**：高亮 / 批注 → **`marks/annotations.json`**（EmbedPDF 注解；`contents` 非空 = 批注）；提问 / 翻译 → **`marks/<id>.json`**（`kind`: `ask` / `translate`）。提问为多轮 `messages`；成功翻译含 `result` 可回访。翻译 API 失败时仅保留当前错误卡片，不落盘且不显示页边入口，卡片提供跳转翻译设置。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
+  - **PDF 引用与插图（规划中）**：本地 paper PDF 由 Host 生成 `source/agentero-cite.json`、`source/agentero-figures.json` 和 `source/agentero-figures/*.png`；右侧 `Paper Content` 展示 citations/figures。引用 hover 只高亮并预览，点击或侧栏操作跳至参考文献；figure card 跳至 PDF bbox。`@` 菜单和拖拽支持结构化 citation/figure context。完整契约见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。
   - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
@@ -342,7 +343,11 @@
 - tab 固定（pin）、按 paper 分组、「当前 tab vs 新 tab 打开」策略可配。
 - 与 Agent 面板 **会话标签** 分离（不同概念）。
 
-### 3.1.2 规划：文内引用 hover → Paper Info（roadmap V0.7）
+### 3.1.2 规划：PDF 引用与插图
+
+首个交付只处理本地 paper PDF：有 TeX 时解析 TeX/Bib/figure declaration，无 TeX 时使用 liteparse；结果写入 `source/agentero-*` 可重建 sidecar。右侧 `Paper Content` 展示 citations/figures，PDF 内 hover 高亮并预览，点击跳 reference/figure。库外引用只显示 unresolved 原始信息，不自动导入。详见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。
+
+### 3.1.3 规划：文内引用 hover → Paper Info（roadmap V0.7）
 
 阅读 PDF/HTML/`PAPER.md` 时，对文内引用锚点 hover，右侧 Paper Info 展示**被引论文**元信息（库内打开 / 库外缓存 + 入库）。引用邻域图与 Agent 引用工作流见 roadmap V0.7；**不**与 Backlinks 双链 Graph 混为一谈。
 

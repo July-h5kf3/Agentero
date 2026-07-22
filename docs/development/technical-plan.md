@@ -58,7 +58,7 @@
 | Markdown 编辑 | Plate.js WYSIWYG 编辑器 | 持久化到磁盘 |
 | 双链解析与高亮 | 正则 + AST 渲染 | 构建全局索引、反链查询 |
 | 图谱 | `react-force-graph-2d`，嵌在 Backlinks 右侧栏下方 | `graph_get_graph` 输出 nodes/edges |
-| PDF/HTML 阅读 | react-pdf 渲染；内联 HTML 经 DOMPurify 消毒 | 可插拔解析器提取文本、提供本地文件路径/URL |
+| PDF/HTML 阅读 | PDF viewer 渲染；内联 HTML 经 DOMPurify 消毒；引用/插图 overlay 与 Paper Content 侧栏 | 可插拔解析器提取文本、bbox、图片和本地文件路径/URL |
 | 本地 PDF 导入 | 文件选择/拖拽/进度展示 | 归档原始 PDF、解析生成 PAPER.md、混合获取元数据 |
 | arXiv 抓取 | 输入/进度展示 | HTTP 下载、LaTeX/HTML/PDF 获取 |
 | Agent 调用 | 会话 UI、权限确认、读取路径回显 | ACP Client：spawn 用户配置的 agent、stdio JSON-RPC、会话与权限桥接、工作流 prompt |
@@ -195,6 +195,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
+- PDF 引用/插图解析的落盘契约、TeX/PDF 双路径和交互边界见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。首版只分析本地 paper PDF；sidecar 写入 paper `source/`，不覆盖原始资产。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
 **可插拔 PDF 解析器（`PdfParser`）**：

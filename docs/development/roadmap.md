@@ -7,7 +7,7 @@
 - 所有核心数据必须能从本地 Markdown 重建。
 - 阅读器服务于审阅和修正，不在早期追求完整 Zotero/PDF 批注体验。
 - Agent 采用 **BYOA**：Agentero 只做 ACP Client，不捆绑 Agent；能力必须可解释、可追溯、可被用户修正。
-- UI 以“少入口、强上下文”为原则：右侧栏只保留 Agent 与 Backlinks 两个入口，Backlinks 下方承载 Graph。
+- UI 以“少入口、强上下文”为原则：右侧栏保留 Agent、Backlinks、批注和按需出现的 Paper Content；Backlinks 下方承载 Graph。
 
 ## 2. 当前状态快照
 
@@ -19,7 +19,7 @@
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**`.md` 变更防抖重建索引**（`scheduleWikiRebuild`，~900ms）；`[[` 补全 / Plate 内联节点可后续增强。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
-| V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 文内引用 hover → 右侧 Paper Info；引用图 / Connected-Papers 式探索；配套 Agent 工作流。 |
+| V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 先落地本地 PDF citation/figure sidecar 与 Paper Content 侧栏，再做引用图、Connected Papers 和外部关系补全。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | **远程 Vault（SSH/SFTP）+ 远端 BYOA** | ✅ MVP | 文件权威远端；SFTP IO；catalog work mirror；ACP over SSH；PDF cache。设计见 [`remote-vault.md`](remote-vault.md)。 |
@@ -261,7 +261,7 @@
 
 ## V0.7 引用关系与 Connected Papers
 
-目标：让用户在阅读时能 **发现与跳转引用/被引论文**，并在侧栏快速预览元信息；用 Agent 工作流辅助「沿引用链探索」与入库。
+目标：先让用户在本地 PDF 中发现、预览和跳转引用/插图，再扩展为引用关系图和 Agent 工作流。
 
 设计原则：
 
@@ -276,6 +276,15 @@
 - [ ] 已在 Vault 内的引用：Info 展示本地 path、是否有 PDF/NOTES、`is_read`。
 - [ ] 库外引用：显示远程 metadata（缓存），提供魔棒式「加入 Papers」。
 - [ ] 离开 hover / 明确关闭后恢复当前 paper 的 Info；不打断中间栏阅读位置。
+
+### A0. 本地 PDF 解析与 Paper Content（首个交付）
+
+- [ ] 新增 `paper_analyze_pdf`，只处理本地 paper PDF。
+- [ ] 有 TeX 时解析 TeX/Bib/figure declaration；无 TeX 时使用 liteparse。
+- [ ] 生成 `source/agentero-cite.json`、`source/agentero-figures.json`、`source/agentero-figures/*.png`。
+- [ ] 右侧 Paper Content 展示 citations/figures；PDF 内 hover 高亮、点击跳 reference/figure。
+- [ ] Composer `@` 和拖拽支持 citation/figure structured refs；不使用 AI Elements Attachments。
+- [ ] 原始 PDF、TeX/Bib、`NOTES.md`、`PAPER.md` 不被覆盖；sidecar 删除后可重建。
 
 ### B. Connected Papers 式引用关系
 
