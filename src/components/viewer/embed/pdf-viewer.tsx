@@ -16,6 +16,7 @@ import {
 	useBookmarkCapability,
 } from "@embedpdf/plugin-bookmark/react";
 import {
+	DocumentContent,
 	DocumentManagerPluginPackage,
 	useDocumentManagerCapability,
 } from "@embedpdf/plugin-document-manager/react";
@@ -351,7 +352,18 @@ export function PdfViewer(props: PdfViewerProps) {
 				engine={engine}
 				plugins={plugins}
 			>
-				<PdfViewerInner {...props} docId={docId} />
+				<DocumentContent documentId={docId}>
+					{({ isLoaded, isLoading }) => {
+						if (!isLoaded) {
+							return (
+								<p className="p-6 text-center text-muted-foreground text-sm">
+									{isLoading ? t("pdf.loading") : t("pdf.empty")}
+								</p>
+							);
+						}
+						return <PdfViewerInner {...props} docId={docId} />;
+					}}
+				</DocumentContent>
 			</EmbedPDF>
 		</div>
 	);
