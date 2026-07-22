@@ -25,7 +25,12 @@ import {
 	TRASH_VIRTUAL_PATH,
 } from "@/lib/papers-api";
 import { isTauri } from "@/lib/tauri";
-import { type FileNode, isTextOpenable, readVaultFile } from "@/lib/vault";
+import {
+	ensureLocalFsScope,
+	type FileNode,
+	isTextOpenable,
+	readVaultFile,
+} from "@/lib/vault";
 import {
 	type CenterViewMode,
 	imageMimeFromPath,
@@ -276,6 +281,10 @@ export async function loadTabResources(
 			loaded: true,
 		};
 	}
+
+	// Restored tabs load concurrently with the tree on startup; ensure the
+	// vault dir is in the fs-plugin scope before any read (see ensureLocalFsScope).
+	await ensureLocalFsScope(vaultPath);
 
 	let paperDir = paperDirFromPath(path, paperFolders);
 	if (!paperDir && (await detectPaperDirectory(path))) {
