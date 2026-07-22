@@ -172,6 +172,7 @@ import {
 	collectMarkdownRelPaths,
 	createVault,
 	createVaultDirectory,
+	ensureLocalFsScope,
 	ensureVault,
 	type FileNode,
 	getRecentVaults,
@@ -380,7 +381,8 @@ export default function App() {
 		}
 
 		let cancelled = false;
-		void import("@tauri-apps/plugin-fs")
+		void ensureLocalFsScope(restoredPath)
+			.then(() => import("@tauri-apps/plugin-fs"))
 			.then(({ exists }) => exists(restoredPath))
 			.then((pathExists) => {
 				if (cancelled || pathExists || vaultPathRef.current !== restoredPath) {
@@ -1329,6 +1331,7 @@ export default function App() {
 					return;
 				}
 				setBusy(true);
+				await ensureLocalFsScope(path);
 				const { exists } = await import("@tauri-apps/plugin-fs");
 				if (!(await exists(path))) {
 					removeRecentVault(path);
@@ -1698,29 +1701,13 @@ export default function App() {
 		[vaultPath, treeSelectedPath, tree],
 	);
 
-	const openSettings = useCallback(
-		(section: SettingsSection = "general") => {
-			if (isTauri()) {
-				// Native singleton settings window (focuses + navigates if open).
-				void (async () => {
-					try {
-						const { invoke } = await import("@tauri-apps/api/core");
-						await invoke("settings_window_open", {
-							section,
-							vault: vaultPath,
-						});
-					} catch (e) {
-						notifyError(String(e));
-					}
-				})();
-				return;
-			}
-			// Browser dev fallback: in-app modal.
-			setSettingsSection(section);
-			setSettingsOpen(true);
-		},
-		[vaultPath],
-	);
+	const openSettings = useCallback((section: SettingsSection = "general") => {
+		// In-app modal on every platform. The native settings window
+		// (`settings_window_open`) renders blank on Windows (second-webview boot),
+		// so we use the proven overlay that shares the same `SettingsContent`.
+		setSettingsSection(section);
+		setSettingsOpen(true);
+	}, []);
 
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
@@ -2714,7 +2701,7 @@ export default function App() {
 
 	useAppShortcuts(anyOverlayOpen, {
 		settings: () => {
-			if (!isTauri() && settingsOpenRef.current) closeSettings();
+			if (settingsOpenRef.current) closeSettings();
 			else openSettings();
 		},
 		// Esc → dismiss top overlay (settings, shortcuts, palette, dialogs…)
@@ -3548,17 +3535,15 @@ export default function App() {
 					</ResizableGroup>
 				</ErrorBoundary>
 
-				{!isTauri() ? (
-					<SettingsWindow
-						open={settingsOpen}
-						section={settingsSection}
-						onSectionChange={setSettingsSection}
-						onClose={closeSettings}
-						settings={settings}
-						onChange={updateSettings}
-						vaultPath={vaultPath}
-					/>
-				) : null}
+				<SettingsWindow
+					open={settingsOpen}
+					section={settingsSection}
+					onSectionChange={setSettingsSection}
+					onClose={closeSettings}
+					settings={settings}
+					onChange={updateSettings}
+					vaultPath={vaultPath}
+				/>
 
 				<ZoteroMigrateDialog
 					open={zoteroOpen}

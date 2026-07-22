@@ -216,6 +216,7 @@ pub fn run() {
             commands::graph::graph_rebuild,
             commands::vault::vault_create,
             commands::vault::vault_ensure,
+            commands::vault::vault_allow_fs_scope,
             commands::remote::remote_connect,
             commands::remote::remote_disconnect,
             commands::remote::remote_status,
