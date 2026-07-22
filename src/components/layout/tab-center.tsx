@@ -172,6 +172,12 @@ export const TabCenter = memo(function TabCenter({
 		);
 	}
 	if (tab.mode === "pdf") {
+		// PERF: only mount the heavyweight EmbedPDF viewer for the active tab.
+		// Inactive PDF tabs release their engine document + plugin registry so a
+		// large open-tab set keeps at most one PDFium document alive (PDFium runs
+		// on the main thread). Reading position / annotations / ask threads are
+		// persisted, so remounting on re-activation restores them automatically.
+		if (!active) return null;
 		return (
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 				<PdfViewer

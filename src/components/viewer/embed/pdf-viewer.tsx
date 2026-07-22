@@ -1452,6 +1452,116 @@ function PdfViewerInner({
 		else setPageField(String(currentPage));
 	};
 
+	/**
+	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
+	 * (which only change `currentPage`/`zoomLevel`) keep a stable callback
+	 * identity and avoid re-running the per-page pin/filter work.
+	 */
+	const renderPage = useCallback(
+		({
+			pageIndex,
+			width,
+			height,
+		}: {
+			pageIndex: number;
+			width: number;
+			height: number;
+		}) => {
+			const pageNumber = pageIndex + 1;
+			const activeTranslateOnPage =
+				activeTranslate?.page === pageNumber ? activeTranslate : null;
+			const pins: SelectionPin[] = [
+				...askSummaries
+					.filter((s) => s.page === pageNumber)
+					.map(
+						(s): SelectionPin => ({
+							id: s.id,
+							kind: "ask",
+							x: s.x,
+							y: s.y,
+							preview: s.preview,
+							ended: s.status === "ended",
+						}),
+					),
+				...translates
+					.filter((tr) => tr.page === pageNumber && !tr.error)
+					.map((tr): SelectionPin => {
+						const pin = pinFromRects(tr.rects);
+						return {
+							id: tr.id,
+							kind: "translate",
+							x: pin.x,
+							y: pin.y,
+							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
+						};
+					}),
+			];
+			return (
+				<div
+					className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+					style={{ width, height }}
+					{...{ [EMBED_PAGE_ATTR]: pageIndex }}
+				>
+					<RenderLayer
+						documentId={docId}
+						pageIndex={pageIndex}
+						style={{ position: "absolute", inset: 0 }}
+					/>
+					<TilingLayer
+						documentId={docId}
+						pageIndex={pageIndex}
+						style={{ position: "absolute", inset: 0 }}
+					/>
+					<SearchLayer
+						documentId={docId}
+						pageIndex={pageIndex}
+						style={{ position: "absolute", inset: 0 }}
+					/>
+					<PagePointerProvider
+						documentId={docId}
+						pageIndex={pageIndex}
+						style={{ position: "absolute", inset: 0 }}
+					>
+						<SelectionLayer documentId={docId} pageIndex={pageIndex} />
+						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
+						{activeTranslateOnPage
+							? activeTranslateOnPage.rects.map((rect) => (
+									<div
+										key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-none absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
+										style={{
+											left: `${rect.x * 100}%`,
+											top: `${rect.y * 100}%`,
+											width: `${rect.w * 100}%`,
+											height: `${rect.h * 100}%`,
+										}}
+										aria-hidden="true"
+									/>
+								))
+							: null}
+						<SelectionGutter
+							items={pins}
+							activeId={activeCard?.id ?? null}
+							onOpen={handleOpenPin}
+							onEnter={cancelHoverHide}
+							onLeave={scheduleHoverHide}
+						/>
+					</PagePointerProvider>
+				</div>
+			);
+		},
+		[
+			docId,
+			askSummaries,
+			translates,
+			activeTranslate,
+			activeCard?.id,
+			handleOpenPin,
+			cancelHoverHide,
+			scheduleHoverHide,
+		],
+	);
+
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
 			{outline.length > 0 ? (
@@ -1688,99 +1798,7 @@ function PdfViewerInner({
 				{/* Ctrl/Cmd+wheel + pinch zoom (EmbedPDF headless requires this wrapper). */}
 				<ZoomGestureWrapper documentId={docId}>
 					<GlobalPointerProvider documentId={docId}>
-						<Scroller
-							documentId={docId}
-							renderPage={({ pageIndex, width, height }) => {
-								const pageNumber = pageIndex + 1;
-								const activeTranslateOnPage =
-									activeTranslate?.page === pageNumber ? activeTranslate : null;
-								const pins: SelectionPin[] = [
-									...askSummaries
-										.filter((s) => s.page === pageNumber)
-										.map(
-											(s): SelectionPin => ({
-												id: s.id,
-												kind: "ask",
-												x: s.x,
-												y: s.y,
-												preview: s.preview,
-												ended: s.status === "ended",
-											}),
-										),
-									...translates
-										.filter((tr) => tr.page === pageNumber && !tr.error)
-										.map((tr): SelectionPin => {
-											const pin = pinFromRects(tr.rects);
-											return {
-												id: tr.id,
-												kind: "translate",
-												x: pin.x,
-												y: pin.y,
-												preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
-											};
-										}),
-								];
-								return (
-									<div
-										className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-										style={{ width, height }}
-										{...{ [EMBED_PAGE_ATTR]: pageIndex }}
-									>
-										<RenderLayer
-											documentId={docId}
-											pageIndex={pageIndex}
-											style={{ position: "absolute", inset: 0 }}
-										/>
-										<TilingLayer
-											documentId={docId}
-											pageIndex={pageIndex}
-											style={{ position: "absolute", inset: 0 }}
-										/>
-										<SearchLayer
-											documentId={docId}
-											pageIndex={pageIndex}
-											style={{ position: "absolute", inset: 0 }}
-										/>
-										<PagePointerProvider
-											documentId={docId}
-											pageIndex={pageIndex}
-											style={{ position: "absolute", inset: 0 }}
-										>
-											<SelectionLayer
-												documentId={docId}
-												pageIndex={pageIndex}
-											/>
-											<AnnotationLayer
-												documentId={docId}
-												pageIndex={pageIndex}
-											/>
-											{activeTranslateOnPage
-												? activeTranslateOnPage.rects.map((rect) => (
-														<div
-															key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-															className="pointer-events-none absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
-															style={{
-																left: `${rect.x * 100}%`,
-																top: `${rect.y * 100}%`,
-																width: `${rect.w * 100}%`,
-																height: `${rect.h * 100}%`,
-															}}
-															aria-hidden="true"
-														/>
-													))
-												: null}
-											<SelectionGutter
-												items={pins}
-												activeId={activeCard?.id ?? null}
-												onOpen={handleOpenPin}
-												onEnter={cancelHoverHide}
-												onLeave={scheduleHoverHide}
-											/>
-										</PagePointerProvider>
-									</div>
-								);
-							}}
-						/>
+						<Scroller documentId={docId} renderPage={renderPage} />
 					</GlobalPointerProvider>
 				</ZoomGestureWrapper>
 			</Viewport>
