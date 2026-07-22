@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@embedpdf/engines@2.14.4': 2591ba6d0f508630f3dda18951f9202343ffcad1f315594a5b4217b2c8a14600
+
 importers:
 
   .:
@@ -13,7 +16,7 @@ importers:
         version: 2.14.4(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))
       '@embedpdf/engines':
         specifier: 2.14.4
-        version: 2.14.4(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))
+        version: 2.14.4(patch_hash=2591ba6d0f508630f3dda18951f9202343ffcad1f315594a5b4217b2c8a14600)(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))
       '@embedpdf/models':
         specifier: 2.14.4
         version: 2.14.4
@@ -5501,7 +5504,7 @@ snapshots:
 
   '@embedpdf/core@2.14.4(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))':
     dependencies:
-      '@embedpdf/engines': 2.14.4(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))
+      '@embedpdf/engines': 2.14.4(patch_hash=2591ba6d0f508630f3dda18951f9202343ffcad1f315594a5b4217b2c8a14600)(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))
       '@embedpdf/models': 2.14.4
       preact: 10.29.7
       react: 19.2.7
@@ -5509,7 +5512,7 @@ snapshots:
       svelte: 5.56.6
       vue: 3.5.40(typescript@5.8.3)
 
-  '@embedpdf/engines@2.14.4(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))':
+  '@embedpdf/engines@2.14.4(patch_hash=2591ba6d0f508630f3dda18951f9202343ffcad1f315594a5b4217b2c8a14600)(preact@10.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.6)(vue@3.5.40(typescript@5.8.3))':
     dependencies:
       '@embedpdf/fonts-arabic': 1.0.0
       '@embedpdf/fonts-hebrew': 1.0.0

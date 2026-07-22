@@ -1,0 +1,45 @@
+diff --git a/dist/direct-engine-C8xTbxym.js b/dist/direct-engine-C8xTbxym.js
+index f28a4a85e0b86b398da43e4c2ab163593de4cfc9..3f11b5a76bccb524065f2361eb199819ad76ebf0 100644
+--- a/dist/direct-engine-C8xTbxym.js
++++ b/dist/direct-engine-C8xTbxym.js
+@@ -106,6 +106,7 @@ class PdfCache {
+     this.pdfium = pdfium;
+     this.memoryManager = memoryManager;
+     this.docs = /* @__PURE__ */ new Map();
++    this.refCounts = /* @__PURE__ */ new Map();
+     this.config = { ...DEFAULT_CONFIG, ...config };
+   }
+   /** Open (or re-use) a document */
+@@ -115,6 +116,11 @@ class PdfCache {
+       const docConfig = { ...this.config, normalizeRotation };
+       ctx = new DocumentContext(filePtr, docPtr, this.pdfium, this.memoryManager, docConfig);
+       this.docs.set(id, ctx);
++      this.refCounts.set(id, 1);
++    } else {
++      this.refCounts.set(id, (this.refCounts.get(id) ?? 0) + 1);
++      this.pdfium.FPDF_CloseDocument(docPtr);
++      this.memoryManager.free(WasmPointer(filePtr));
+     }
+   }
+   /** Retrieve the DocumentContext for a given PdfDocumentObject */
+@@ -125,6 +131,12 @@ class PdfCache {
+   closeDocument(docId) {
+     const ctx = this.docs.get(docId);
+     if (!ctx) return false;
++    const remaining = (this.refCounts.get(docId) ?? 1) - 1;
++    if (remaining > 0) {
++      this.refCounts.set(docId, remaining);
++      return true;
++    }
++    this.refCounts.delete(docId);
+     this.docs.delete(docId);
+     ctx.dispose();
+     return true;
+@@ -135,6 +147,7 @@ class PdfCache {
+       ctx.dispose();
+     }
+     this.docs.clear();
++    this.refCounts.clear();
+   }
+   /** Update cache configuration for all existing documents */
+   updateConfig(newConfig) {
