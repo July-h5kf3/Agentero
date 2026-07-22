@@ -288,7 +288,7 @@ export function WorkspaceHeader({
 									size="icon-xs"
 									className="group"
 									aria-label={t("titlebar.settings")}
-									onClick={onOpenSettings}
+									onClick={() => onOpenSettings()}
 								>
 									<Settings className="size-3.5 transition-transform duration-300 ease-out group-hover:rotate-90" />
 								</Button>
