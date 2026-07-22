@@ -446,6 +446,7 @@ export default function App() {
 					mode: res.mode,
 					paperMeta: res.paperMeta,
 					pdfUrl: res.pdfUrl,
+					pdfBytes: res.pdfBytes ?? null,
 					htmlUrl: res.htmlUrl,
 					imageUrl: res.imageUrl,
 					notesPath: res.notesPath,

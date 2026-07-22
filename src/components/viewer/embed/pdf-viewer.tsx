@@ -178,6 +178,12 @@ export type PdfViewerProps = {
 	 * vault PDF; remote URL is fallback when download fails.
 	 */
 	source: string | null;
+	/**
+	 * Local PDF bytes. Preferred over `source`: the engine opens the document
+	 * straight from the buffer, avoiding a `fetch(blob:)` that stalls/fails in
+	 * some webviews (Windows WebView2). `source` is the fallback (remote https).
+	 */
+	sourceBytes?: ArrayBuffer | null;
 	/** Stable per-tab document id (EmbedPDF documentId + scope key). */
 	docId?: string | null;
 	/** Absolute path to paper folder for annotations/marks persistence */
@@ -263,6 +269,7 @@ export function PdfViewer(props: PdfViewerProps) {
 	} = usePdfEngineContext();
 
 	const source = isPdfViewerSource(props.source) ? props.source.trim() : null;
+	const sourceBytes = props.sourceBytes ?? null;
 	const docId =
 		props.docId?.trim() ||
 		props.paperRelPath ||
@@ -271,10 +278,14 @@ export function PdfViewer(props: PdfViewerProps) {
 		"pdf";
 
 	const plugins = useMemo(() => {
-		if (!source) return null;
+		if (!source && !sourceBytes) return null;
+		// Prefer bytes (no fetch step); fall back to a URL (remote https).
+		const initialDocument = sourceBytes
+			? { buffer: sourceBytes, documentId: docId, name: docId }
+			: { url: source as string, documentId: docId, name: docId };
 		return [
 			createPluginRegistration(DocumentManagerPluginPackage, {
-				initialDocuments: [{ url: source, documentId: docId, name: docId }],
+				initialDocuments: [initialDocument],
 			}),
 			createPluginRegistration(ViewportPluginPackage),
 			createPluginRegistration(ScrollPluginPackage),
@@ -296,14 +307,14 @@ export function PdfViewer(props: PdfViewerProps) {
 			createPluginRegistration(SearchPluginPackage),
 			createPluginRegistration(BookmarkPluginPackage),
 		];
-	}, [source, docId]);
+	}, [source, sourceBytes, docId]);
 
 	const hostClass = cn(
 		"relative flex h-full min-h-0 flex-col bg-muted/20",
 		props.className,
 	);
 
-	if (!source) {
+	if (!source && !sourceBytes) {
 		return (
 			<div id="agentero-pdf-host" className={hostClass}>
 				<p className="p-6 text-center text-muted-foreground text-sm">
@@ -335,7 +346,11 @@ export function PdfViewer(props: PdfViewerProps) {
 
 	return (
 		<div id="agentero-pdf-host" className={hostClass}>
-			<EmbedPDF key={`${docId}::${source}`} engine={engine} plugins={plugins}>
+			<EmbedPDF
+				key={`${docId}::${source ?? "buffer"}`}
+				engine={engine}
+				plugins={plugins}
+			>
 				<PdfViewerInner {...props} docId={docId} />
 			</EmbedPDF>
 		</div>

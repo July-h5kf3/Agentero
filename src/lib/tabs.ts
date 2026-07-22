@@ -7,8 +7,8 @@ import {
 	findLocalPdfPath,
 	isPaperDirectory,
 	loadPaperMetadata,
+	localFileToArrayBuffer,
 	localImageToViewerSource,
-	localPdfToViewerSource,
 	notesPathForPaper,
 	type PaperMetadata,
 	paperDirFromPath,
@@ -55,6 +55,8 @@ export type DocTab = {
 	mode: CenterViewMode;
 	paperMeta: PaperMetadata | null;
 	pdfUrl: string | null;
+	/** Local PDF bytes fed straight to the engine (avoids fragile `blob:` fetch). */
+	pdfBytes: ArrayBuffer | null;
 	htmlUrl: string | null;
 	/** Local image preview (`blob:`) when mode is image. */
 	imageUrl: string | null;
@@ -120,6 +122,7 @@ export type TabResources = {
 	mode: CenterViewMode;
 	paperMeta: PaperMetadata | null;
 	pdfUrl: string | null;
+	pdfBytes?: ArrayBuffer | null;
 	htmlUrl: string | null;
 	imageUrl: string | null;
 	notesPath: string | null;
@@ -182,22 +185,27 @@ async function resolvePaperPdfSource(
 	vaultPath: string | null,
 	meta: PaperMetadata | null,
 	remotePdf: string | null,
-): Promise<{ pdfUrl: string | null; didDownload: boolean }> {
+): Promise<{
+	pdfUrl: string | null;
+	pdfBytes: ArrayBuffer | null;
+	didDownload: boolean;
+}> {
 	const localPath = await findLocalPdfPath(paperDir);
 	if (localPath) {
-		const blob = await localPdfToViewerSource(localPath);
-		return { pdfUrl: blob ?? remotePdf, didDownload: false };
+		const bytes = await localFileToArrayBuffer(localPath);
+		if (bytes) return { pdfUrl: null, pdfBytes: bytes, didDownload: false };
+		return { pdfUrl: remotePdf, pdfBytes: null, didDownload: false };
 	}
 
 	if (!isTauri() || !vaultPath || !canAttemptPdfDownload(meta, remotePdf)) {
-		return { pdfUrl: remotePdf, didDownload: false };
+		return { pdfUrl: remotePdf, pdfBytes: null, didDownload: false };
 	}
 
 	const rel = toVaultRelative(vaultPath, paperDir)
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");
 	if (!rel || pdfAutoDownloadTried.has(rel)) {
-		return { pdfUrl: remotePdf, didDownload: false };
+		return { pdfUrl: remotePdf, pdfBytes: null, didDownload: false };
 	}
 	pdfAutoDownloadTried.add(rel);
 
@@ -226,10 +234,10 @@ async function resolvePaperPdfSource(
 
 	const after = await findLocalPdfPath(paperDir);
 	if (after) {
-		const blob = await localPdfToViewerSource(after);
-		return { pdfUrl: blob ?? remotePdf, didDownload };
+		const bytes = await localFileToArrayBuffer(after);
+		if (bytes) return { pdfUrl: null, pdfBytes: bytes, didDownload };
 	}
-	return { pdfUrl: remotePdf, didDownload };
+	return { pdfUrl: remotePdf, pdfBytes: null, didDownload };
 }
 
 /** Revoke blob: media sources held by closed tabs (PDF + image). */
@@ -332,12 +340,11 @@ export async function loadTabResources(
 	if (paperDir) {
 		const meta = await loadPaperMetadata(paperDir, vaultPath);
 		const { pdfUrl: remotePdf, htmlUrl } = paperRemoteAssetsFromMetadata(meta);
-		const { pdfUrl: paperPdf, didDownload } = await resolvePaperPdfSource(
-			paperDir,
-			vaultPath,
-			meta,
-			remotePdf,
-		);
+		const {
+			pdfUrl: paperPdf,
+			pdfBytes: paperBytes,
+			didDownload,
+		} = await resolvePaperPdfSource(paperDir, vaultPath, meta, remotePdf);
 		if (!didDownload) {
 			maybeTriggerDeferredParse(paperDir, vaultPath, findNode(tree, paperDir));
 		}
@@ -354,7 +361,8 @@ export async function loadTabResources(
 			isPaperDirectory(path, findChildren(tree, path));
 
 		if (openingPaperRoot) {
-			const mode: CenterViewMode = paperPdf
+			const hasPdf = Boolean(paperPdf || paperBytes);
+			const mode: CenterViewMode = hasPdf
 				? "pdf"
 				: htmlUrl
 					? "html"
@@ -365,6 +373,7 @@ export async function loadTabResources(
 				mode,
 				paperMeta: meta,
 				pdfUrl: paperPdf,
+				pdfBytes: paperBytes,
 				htmlUrl,
 				imageUrl: null,
 				notesPath,
@@ -378,19 +387,16 @@ export async function loadTabResources(
 		// A file inside a paper folder (e.g. NOTES.md, a nested PDF, or figure).
 		const mode = preferredModeForPath(path);
 		let pdfUrl = paperPdf;
+		let pdfBytes = paperBytes;
 		let imageUrl: string | null = null;
 		let markdownSeed = "";
 
 		if (isPdfPath(path)) {
 			// Prefer the exact file the user clicked (may differ from canonical {id}.pdf).
-			const exact = await localPdfToViewerSource(path);
+			const exact = await localFileToArrayBuffer(path);
 			if (exact) {
-				if (paperPdf && paperPdf !== exact) {
-					revokePdfViewerSource(paperPdf);
-				}
-				pdfUrl = exact;
-			} else {
-				pdfUrl = paperPdf;
+				pdfBytes = exact;
+				pdfUrl = null;
 			}
 		} else if (isImagePath(path)) {
 			imageUrl = await localImageToViewerSource(path, imageMimeFromPath(path));
@@ -401,6 +407,7 @@ export async function loadTabResources(
 					mode: "image",
 					paperMeta: meta,
 					pdfUrl: paperPdf,
+					pdfBytes: paperBytes,
 					htmlUrl,
 					imageUrl: null,
 					notesPath,
@@ -426,6 +433,7 @@ export async function loadTabResources(
 			mode,
 			paperMeta: meta,
 			pdfUrl,
+			pdfBytes,
 			htmlUrl,
 			imageUrl,
 			notesPath,
@@ -444,6 +452,7 @@ export async function loadTabResources(
 		mode,
 		paperMeta: null,
 		pdfUrl: null as string | null,
+		pdfBytes: null as ArrayBuffer | null,
 		htmlUrl: null as string | null,
 		imageUrl: null as string | null,
 		notesPath: null,
@@ -453,11 +462,11 @@ export async function loadTabResources(
 	};
 
 	if (isPdfPath(path)) {
-		const pdfUrl = await localPdfToViewerSource(path);
-		if (!pdfUrl) {
+		const pdfBytes = await localFileToArrayBuffer(path);
+		if (!pdfBytes) {
 			return { ...base, mode: "pdf", error: "cannotPreview" };
 		}
-		return { ...base, mode: "pdf", pdfUrl };
+		return { ...base, mode: "pdf", pdfBytes };
 	}
 
 	if (isImagePath(path)) {
@@ -533,6 +542,7 @@ export function createPlaceholderTab(
 		mode: preferMode,
 		paperMeta: null,
 		pdfUrl: null,
+		pdfBytes: null,
 		htmlUrl: null,
 		imageUrl: null,
 		notesPath: null,

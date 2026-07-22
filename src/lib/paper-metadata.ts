@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import { arxivUrls } from "@/lib/arxiv";
+import { logger } from "@/lib/logger";
 import {
 	coercePaperTags,
 	type PaperTag,
@@ -590,7 +591,13 @@ export async function localBytesToViewerSource(
 		copy.set(bytes);
 		const blob = new Blob([copy], { type: mimeType });
 		return URL.createObjectURL(blob);
-	} catch {
+	} catch (e) {
+		// Read failed (fs scope / OneDrive placeholder / missing file). Log so the
+		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
+		logger.warn("pdf: read local bytes failed", {
+			path: absPath,
+			error: e instanceof Error ? e.message : String(e),
+		});
 		return null;
 	}
 }
@@ -603,6 +610,49 @@ export async function localPdfToViewerSource(
 	absPath: string,
 ): Promise<string | null> {
 	return localBytesToViewerSource(absPath, "application/pdf");
+}
+
+/**
+ * Read a local (or remote-cached) file into a standalone `ArrayBuffer`.
+ *
+ * Preferred over {@link localBytesToViewerSource} for the PDF engine: EmbedPDF
+ * can open a document straight from a buffer, avoiding a `fetch(blob:)` step
+ * that stalls/fails under some webviews (Windows WebView2; see the engine host
+ * note about the wasm worker re-fetching from `blob:`). Returns null on read
+ * failure (logged) so callers can fall back to a remote URL.
+ */
+export async function localFileToArrayBuffer(
+	absPath: string,
+): Promise<ArrayBuffer | null> {
+	if (!isTauri() || !absPath?.trim()) return null;
+	try {
+		let bytes: Uint8Array;
+		if (absPath.startsWith("remote:")) {
+			const slash = absPath.indexOf("/", "remote:".length);
+			if (slash === -1) return null;
+			const handle = absPath.slice(0, slash);
+			const rel = absPath.slice(slash + 1);
+			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
+				"@/lib/remote-vault"
+			);
+			const sessionId = remoteSessionIdFromHandle(handle);
+			if (!sessionId) return null;
+			const localPath = await remoteCacheFile(sessionId, rel);
+			bytes = await readFile(localPath);
+		} else {
+			bytes = await readFile(absPath);
+		}
+		// Copy into a fresh ArrayBuffer the engine can own (plugin may return a view).
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		return copy.buffer;
+	} catch (e) {
+		logger.warn("pdf: read local bytes failed", {
+			path: absPath,
+			error: e instanceof Error ? e.message : String(e),
+		});
+		return null;
+	}
 }
 
 /**
@@ -690,7 +740,11 @@ export async function findLocalPdfPath(
 			return rootPdfs[0] ?? null;
 		}
 		return await findPdfUnder(root, 1, 4);
-	} catch {
+	} catch (e) {
+		logger.warn("pdf: list paper dir failed", {
+			dir: root,
+			error: e instanceof Error ? e.message : String(e),
+		});
 		return null;
 	}
 }
