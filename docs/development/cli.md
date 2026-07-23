@@ -84,6 +84,21 @@
 5. 入库: agentero import id <arxiv|doi|url> --json
 ```
 
+### 2.3 Desktop Agent prompt policy
+
+Agentero's built-in Agent panel injects this policy into every workflow, even
+when the user has not explicitly selected the `agentero-cli` skill:
+
+- Add/import a paper: `agentero import id <arxiv|doi|url> --json`.
+- Download paper assets: `agentero paper download <path|id> --json`.
+- Generate fallback text: `agentero paper parse <path|id> --json`.
+- Discover or update catalog metadata: `paper list|get|paths`, `paper tag`, and
+  `paper set-read`, all with `--json`.
+
+The Agent must use returned paths for Markdown/source reading and note editing;
+it must not manually create paper directories or modify catalog data. If the
+binary is unavailable, it reports that fact and falls back to Vault files.
+
 ---
 
 ## 3. 能力边界

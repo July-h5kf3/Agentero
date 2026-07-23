@@ -60,12 +60,28 @@ pub fn build_prompt(
     };
 
     let system = format!(
-        "{system}{}{}",
+        "{system}{}{}{}",
+        agentero_cli_directive(),
         language_directive(response_language),
         personal_preference_directive(personal_prompt)
     );
 
     format!("{system}\n\n{target_line}User request:\n{user_prompt}")
+}
+
+/// Keep structured Vault mutations on the public CLI, even when the optional
+/// `agentero-cli` skill was not explicitly selected in the Composer.
+fn agentero_cli_directive() -> &'static str {
+    "\n\nAgentero CLI policy: for Vault/catalog operations, prefer the `agentero` CLI \
+     with `--json` instead of manually creating paper folders or editing catalog data. \
+     When asked to add/import a paper, run `agentero import id <arxiv|doi|url> --json`; \
+     when asked to download a paper's assets, run `agentero paper download <path|id> --json`; \
+     when asked to produce PAPER.md, run `agentero paper parse <path|id> --json`; \
+     use `agentero paper list|get|paths --json` to discover catalog records and \
+     `agentero paper tag ...` or `agentero paper set-read ...` for those catalog updates. \
+     Read and edit the Markdown/source paths returned by the CLI directly when doing \
+     research or notes. If `agentero` is unavailable, say so and fall back to the \
+     Vault files; never invent catalog records."
 }
 
 /// Marker Host always inserts before the real user text in `build_prompt`.
@@ -298,6 +314,22 @@ mod tests {
         );
         assert!(p.contains("What is attention?"));
         assert!(p.contains("papers/x/NOTES.md"));
+    }
+
+    #[test]
+    fn build_prompt_prefers_cli_for_paper_mutations_without_selected_skill() {
+        let p = build_prompt(
+            Some("free"),
+            "Add this paper and download its PDF",
+            None,
+            SkillMentionStyle::InjectedOnly,
+            &[],
+            None,
+            None,
+        );
+        assert!(p.contains("agentero import id <arxiv|doi|url> --json"));
+        assert!(p.contains("agentero paper download <path|id> --json"));
+        assert!(p.contains("agentero paper parse <path|id> --json"));
     }
 
     #[test]
