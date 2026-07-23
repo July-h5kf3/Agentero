@@ -109,9 +109,16 @@ cargo test -p agentero-cli
 
 - 提交信息必须符合 [Conventional Commits](https://www.conventionalcommits.org/) 规范。
 - 一次提交只做一件事，避免混合多个 unrelated changes。
+- 项目级 Agent Skill：`.agents/skills/bump/SKILL.md` 定义版本升级流程；`.agents/skills/commit/SKILL.md` 定义按逻辑拆分当前改动并提交的流程。
+- `bump` Skill 只更新并校验版本来源，默认不创建 commit、tag 或 push；版本 bump 完成后再使用 `commit` Skill 创建独立的 release commit。
+- `commit` Skill 必须保留用户已有改动，按目的精确暂存，检查相关文档，并只创建本地 Conventional Commit。
 
 ## 应用发布流程
 
 推送 `v*` tag 会触发 `.github/workflows/release.yml`（Release）：先 **prepare** 草稿 Release，再并行 **installers**（Tauri）与 **cli**（`agentero` 预编译包），上传到同一草稿。
+
+使用文件夹当中自带的 bump skill
+
+版本 bump 提交完成后，才能创建对应的 `vX.Y.Z` tag；tag 去掉 `v` 后必须与上述版本完全一致。发布工作流中，Tauri 安装包版本来自 Tauri/Cargo 配置，CLI 压缩包文件名来自 tag，不能只改 tag 而跳过 manifest 版本更新。发布前应检查 `git diff <previous-tag>..<new-tag> -- package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml cli/Cargo.toml Cargo.lock`，并确认构建产物、应用内版本和 `agentero --version` 没有混用两个版本。
 
 不要在未补充文档和 secrets 说明的情况下加入签名、公证或自动发布步骤；本地开发构建不能依赖发布凭据。

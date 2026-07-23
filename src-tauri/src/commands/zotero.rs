@@ -21,7 +21,7 @@ pub fn zotero_scan(args: ZoteroScanArgs) -> ApiResult<ZoteroScan> {
 }
 
 /// Migrate a Zotero library into `papers/…` + catalog; optionally copy PDFs.
-/// Streams `{current,total}` progress to the UI via `on_progress`.
+/// Streams `{current,total,phase}` progress to the UI via `on_progress`.
 #[tauri::command]
 pub async fn zotero_migrate(
     args: ZoteroMigrateArgs,
@@ -33,8 +33,12 @@ pub async fn zotero_migrate(
         "zotero_migrate",
         format!("path={}", trunc(&args.zotero_dir, 160)),
     );
-    let report = move |current, total| {
-        let _ = on_progress.send(MigrateProgress { current, total });
+    let report = move |current, total, phase: &str| {
+        let _ = on_progress.send(MigrateProgress {
+            current,
+            total,
+            phase: phase.to_string(),
+        });
     };
     op.finish_result_ok_extra(migrate_zotero(args, report).await, |r| {
         format!("imported={} skipped={}", r.imported, r.skipped)

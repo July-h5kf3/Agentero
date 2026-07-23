@@ -69,6 +69,7 @@ pub struct ZoteroScan {
 pub struct MigrateProgress {
     pub current: usize,
     pub total: usize,
+    pub phase: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,7 +181,7 @@ fn parse_year(date: Option<&str>) -> Option<i64> {
 /// Migrate every regular item into `papers/…` + catalog. Optionally copy PDFs.
 pub async fn migrate_zotero(
     args: ZoteroMigrateArgs,
-    progress: impl Fn(usize, usize),
+    progress: impl Fn(usize, usize, &str),
 ) -> Result<ZoteroMigrateResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
@@ -209,6 +210,7 @@ pub async fn migrate_zotero(
         pruned,
         ..Default::default()
     };
+    let mut pdf_paths_to_parse = Vec::new();
 
     // Per-paper selection takes precedence; otherwise an optional collection
     // filter (0 = unfiled). Neither set → import everything.
@@ -230,7 +232,7 @@ pub async fn migrate_zotero(
 
     let total = items.len();
     for (idx, item) in items.into_iter().enumerate() {
-        progress(idx, total);
+        progress(idx, total, "migrate");
         if let Some(set) = &include_items {
             if !set.contains(&item.item_id) {
                 continue;
@@ -248,6 +250,9 @@ pub async fn migrate_zotero(
         match migrate_one(&vault, &parent_rel, &item, flags, &mut dedup).await {
             Ok(MigrateOutcome::Imported { path, copied_pdf }) => {
                 out.imported += 1;
+                if copied_pdf {
+                    pdf_paths_to_parse.push(path.clone());
+                }
                 out.paths.push(path);
                 if copied_pdf {
                     out.copied_pdfs += 1;
@@ -261,7 +266,28 @@ pub async fn migrate_zotero(
             Err(e) => out.errors.push(e.to_string()),
         }
     }
-    progress(total, total);
+
+    // Zotero storage only gives us the PDF. Generate the readable body for
+    // PDF-only papers after the migration pass; the parser itself skips local
+    // TeX and existing PAPER.md files.
+    let parse_total = pdf_paths_to_parse.len();
+    for (idx, path) in pdf_paths_to_parse.into_iter().enumerate() {
+        progress(idx, parse_total, "parse");
+        let paper_dir = vault.join(&path);
+        let parsed = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
+            &vault, &path, &paper_dir,
+        )
+        .await;
+        if !parsed.paper_md && !parsed.messages.is_empty() {
+            out.errors
+                .push(format!("{path}: {}", parsed.messages.join("; ")));
+        }
+    }
+    if parse_total > 0 {
+        progress(parse_total, parse_total, "parse");
+    } else {
+        progress(total, total, "migrate");
+    }
     Ok(out)
 }
 

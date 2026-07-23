@@ -20,7 +20,8 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
 - **Read order (prefer earlier):**
   1. `source/**/*.{tex,ltx}` (arXiv e-print / LaTeX)
   2. `{paper}/PAPER.md` (liteparse / structured body)
-  3. Local PDF under the paper folder (e.g. `{id}.pdf`)
+  3. If no TeX or `PAPER.md` exists, run `agentero paper parse {paper}` and then read the generated `PAPER.md`
+  4. Local PDF under the paper folder (e.g. `{id}.pdf`)
 - Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
@@ -79,7 +80,7 @@ If you cannot spawn subagents, simulate the teacher–student dialogue inline un
 ## Workflow
 
 1. Resolve the paper folder path (from user / Agentero target).
-2. Locate content: TeX → `PAPER.md` → PDF.
+2. Locate content: TeX → existing `PAPER.md` → `agentero paper parse {paper}` when needed → PDF.
 3. Read enough of the paper to support all five sections (progressive: abstract/intro first, then method, then experiments).
 4. Generate the structured notes.
 5. Write / update `{paper}/NOTES.md`.
