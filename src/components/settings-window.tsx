@@ -254,6 +254,24 @@ export function SettingsContent({
 	);
 	const [remoteOs, setRemoteOs] = useState(() => normalizeHostOs("other"));
 
+	// Keep visited panes mounted (hidden when inactive) so switching sections
+	// doesn't unmount/remount them — avoids re-running their load effects
+	// (agent list, connector status, cache stats, dynamic imports) and makes
+	// section switches instant instead of re-fetching on every visit.
+	const [visitedSections, setVisitedSections] = useState<SettingsSection[]>([
+		section,
+	]);
+	useEffect(() => {
+		setVisitedSections((prev) =>
+			prev.includes(section) ? prev : [...prev, section],
+		);
+	}, [section]);
+	const contentScrollRef = useRef<HTMLDivElement>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: section intentionally triggers a scroll-to-top on switch
+	useEffect(() => {
+		contentScrollRef.current?.scrollTo({ top: 0 });
+	}, [section]);
+
 	// Local hostname + OS for the host chip (when vault is local / none).
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -414,40 +432,59 @@ export function SettingsContent({
 			</nav>
 
 			{/* Content */}
-			<div className="min-w-0 flex-1 overflow-y-auto">
+			<div ref={contentScrollRef} className="min-w-0 flex-1 overflow-y-auto">
 				<div className="px-6 py-5">
-					{section === "general" && (
-						<GeneralPane
-							settings={settings}
-							patch={patch}
-							hostContext={hostContext}
-						/>
-					)}
-					{section === "appearance" && (
-						<AppearancePane settings={settings} patch={patch} />
-					)}
-					{section === "agent" &&
-						(hostContext.kind === "remote" ? (
-							<RemoteAgentPane
+					{visitedSections.includes("general") && (
+						<div hidden={section !== "general"}>
+							<GeneralPane
 								settings={settings}
 								patch={patch}
 								hostContext={hostContext}
 							/>
-						) : (
-							<AgentPane settings={settings} patch={patch} />
-						))}
-					{section === "translate" && (
-						<TranslatePane
-							settings={settings}
-							patch={patch}
-							onOpenAgentSettings={() => onSectionChange("agent")}
-						/>
+						</div>
 					)}
-					{section === "keyboard" && <KeyboardPane />}
-					{section === "privacy" && (
-						<PrivacyPane settings={settings} patch={patch} />
+					{visitedSections.includes("appearance") && (
+						<div hidden={section !== "appearance"}>
+							<AppearancePane settings={settings} patch={patch} />
+						</div>
 					)}
-					{section === "about" && <AboutPane />}
+					{visitedSections.includes("agent") && (
+						<div hidden={section !== "agent"}>
+							{hostContext.kind === "remote" ? (
+								<RemoteAgentPane
+									settings={settings}
+									patch={patch}
+									hostContext={hostContext}
+								/>
+							) : (
+								<AgentPane settings={settings} patch={patch} />
+							)}
+						</div>
+					)}
+					{visitedSections.includes("translate") && (
+						<div hidden={section !== "translate"}>
+							<TranslatePane
+								settings={settings}
+								patch={patch}
+								onOpenAgentSettings={() => onSectionChange("agent")}
+							/>
+						</div>
+					)}
+					{visitedSections.includes("keyboard") && (
+						<div hidden={section !== "keyboard"}>
+							<KeyboardPane />
+						</div>
+					)}
+					{visitedSections.includes("privacy") && (
+						<div hidden={section !== "privacy"}>
+							<PrivacyPane settings={settings} patch={patch} />
+						</div>
+					)}
+					{visitedSections.includes("about") && (
+						<div hidden={section !== "about"}>
+							<AboutPane />
+						</div>
+					)}
 				</div>
 			</div>
 		</>
