@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod background_tasks;
 pub mod connector;
 pub mod graph;
 pub mod lookup;

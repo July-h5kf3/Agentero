@@ -25,6 +25,7 @@ import {
 import { useBackgroundTasks } from "@/hooks/use-background-tasks";
 import {
 	type BackgroundTask,
+	cancelBackgroundTask,
 	clearFinishedBackgroundTasks,
 	getActiveBackgroundTasks,
 	setBackgroundTasksExpanded,
@@ -47,10 +48,13 @@ function statusIcon(task: BackgroundTask) {
 			);
 		case "failed":
 			return <CircleX className="size-3.5 shrink-0 text-destructive" />;
+		case "cancelled":
+			return <CircleX className="size-3.5 shrink-0 text-muted-foreground" />;
 	}
 }
 
 function TaskRow({ task }: { task: BackgroundTask }) {
+	const { t } = useTranslation("app");
 	const showBar =
 		task.status === "running" ||
 		task.status === "queued" ||
@@ -89,8 +93,28 @@ function TaskRow({ task }: { task: BackgroundTask }) {
 						</p>
 					) : null}
 				</div>
+				{task.status === "queued" || task.status === "running" ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 shrink-0"
+								aria-label={t("tasks.cancel")}
+								onClick={() => cancelBackgroundTask(task.id)}
+							>
+								<X className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="left">{t("tasks.cancel")}</TooltipContent>
+					</Tooltip>
+				) : null}
 			</div>
-			{showBar && task.status !== "completed" && task.status !== "failed" ? (
+			{showBar &&
+			task.status !== "completed" &&
+			task.status !== "failed" &&
+			task.status !== "cancelled" ? (
 				<Progress
 					value={task.progress ?? undefined}
 					className={cn(
@@ -114,15 +138,15 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 			.filter((x) => x.status === "queued" || x.status === "running")
 			.sort((a, b) => a.queueIndex - b.queueIndex);
 		const done = tasks
-			.filter((x) => x.status === "completed" || x.status === "failed")
+			.filter((x) => ["completed", "failed", "cancelled"].includes(x.status))
 			.sort((a, b) => b.updatedAt - a.updatedAt)
 			.slice(0, 6);
 		return [...act, ...done];
 	}, [tasks]);
 
 	const running = active.find((t) => t.status === "running") ?? active[0];
-	const hasFinished = tasks.some(
-		(t) => t.status === "completed" || t.status === "failed",
+	const hasFinished = tasks.some((t) =>
+		["completed", "failed", "cancelled"].includes(t.status),
 	);
 
 	if (tasks.length === 0) return null;

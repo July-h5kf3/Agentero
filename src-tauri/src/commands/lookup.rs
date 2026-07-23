@@ -53,7 +53,12 @@ pub async fn lookup_import(
             op.finish_result(import_bridge::import_by_identifier_remote(session, args).await)
         );
     }
-    Ok(op.finish_result(lookup::import_by_identifier_with_progress(args, Some(&app)).await))
+    let task_id = args.task_id.clone();
+    let result = lookup::import_by_identifier_with_progress(args, Some(&app)).await;
+    if let Some(task_id) = task_id.as_deref() {
+        crate::services::background_tasks::finish(task_id);
+    }
+    Ok(op.finish_result(result))
 }
 
 /// Download PDF (+ arXiv LaTeX) for an existing paper folder that is missing local assets.
@@ -78,7 +83,12 @@ pub async fn paper_download_assets(
             op.finish_result(import_bridge::download_paper_assets_remote(session, args).await)
         );
     }
-    Ok(op.finish_result(lookup::download_paper_assets_with_progress(args, Some(&app)).await))
+    let task_id = args.task_id.clone();
+    let result = lookup::download_paper_assets_with_progress(args, Some(&app)).await;
+    if let Some(task_id) = task_id.as_deref() {
+        crate::services::background_tasks::finish(task_id);
+    }
+    Ok(op.finish_result(result))
 }
 
 /// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).

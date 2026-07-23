@@ -209,6 +209,7 @@ pub fn run() {
             commands::agent::agent_list_sessions,
             commands::agent::agent_load_session,
             commands::agent::agent_cancel_run,
+            commands::background_tasks::background_task_cancel,
             commands::agent::agent_respond_permission,
             commands::agent::agent_warm,
             commands::graph::graph_get_backlinks,

@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod app_settings;
+pub mod background_tasks;
 pub mod catalog;
 pub mod connector;
 pub mod fs;

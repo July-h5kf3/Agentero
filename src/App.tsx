@@ -2321,9 +2321,10 @@ export default function App() {
 						total: queue.length,
 					}),
 				},
-				async ({ id, setProgress, setDetail }) => {
+				async ({ id, signal, setProgress, setDetail }) => {
 					let i = 0;
 					for (const paperPath of queue) {
+						if (signal.aborted) throw new Error("background task cancelled");
 						const rel = toVaultRelative(vaultPath, paperPath)
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");
@@ -2339,6 +2340,7 @@ export default function App() {
 								progressTaskId: id,
 							});
 						} catch (e) {
+							if (signal.aborted) throw e;
 							errors.push(
 								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
 							);

@@ -792,6 +792,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     parentDir: string;              // "papers" | "papers/nlp"
     text: string;
     translatorBaseUrl?: string;     // 来自设置，默认 https://translator.philfan.cn
+    taskId?: string;                 // 前端后台任务 id；支持取消与进度事件
   }
   ```
 - **返回**：
@@ -824,6 +825,10 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
 - **行为**：读 catalog 取 `pdf_url` / `arxiv_id` / `doi`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。下载客户端使用**浏览器 UA**（绕开部分出版商 403）；若直链/arXiv 候选都失败且有 `doi`，再查 **Crossref** 取直链 / OA PDF 兜底。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。当传入 `taskId` 且响应提供 `Content-Length` 时，通过 `background-task:progress` 按实际已接收字节数推送百分比；无法得知总大小时只推送不确定进度。
+
+#### `background_task_cancel`
+
+请求取消一个前端后台任务。参数为 `{ taskId: string }`；下载任务会中止当前读取流，批量任务和 Agent 工作流在协作取消点停止。取消是尽力而为，不回滚已经写入的文件。
 
 #### `paper_stage_import_file`（已落地）
 

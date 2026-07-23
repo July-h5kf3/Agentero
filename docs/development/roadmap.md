@@ -53,7 +53,7 @@
 - [x] **论文库默认页**：关光文档 tab 后回到全库；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：单击非 paper 目录 → 同 Library 表，`path` 前缀过滤内存 `libraryPapers`。
 - [x] Paper Info / Notes 仅具体论文；Paper Info **Tags** 可编辑。
-- [x] 后台任务条（含 paper-reader；hover 实色）；**全局错误 Toast**。
+- [x] 后台任务条（含 paper-reader；hover 实色；支持取消）；**全局错误 Toast**。
 - [x] **Vault 文件监听**（`notify` → `vault:file-changed`）：外部/Agent 改盘自动重载打开的 Markdown 与文件树；有未存改动时提示重载；写盘前冲突检测（`diskConflict.saveBlocked`）。
 
 验收标准：

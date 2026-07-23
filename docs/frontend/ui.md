@@ -94,6 +94,7 @@
 - **显示时机**：**有任务时**才出现；全部结束后约 4s 自动消失。
 - **收起态**：一条状态条——转圈 / 完成勾 + 当前任务标题或「N 个进行中」+ 进度条；点击展开/收起。
 - **展开态**：任务列表（队列序号、标题、详情、进度）；可清除已完成项。
+- **取消**：进行中的任务行显示取消图标；点击后任务进入「已取消」状态。下载会中止当前读取流，批量任务和 Agent 工作流在安全检查点停止；取消不显示失败 Toast。
 - **外观**：`bg-popover` 实底 + 边框阴影；**hover 使用实色 `hover:bg-accent`**（禁止 `accent/40` 等半透明，避免底下内容透出）。
 - **接入任务**：单篇下载、批量下载、魔棒入库、文献库导入/导出、**paper-reader 精读**、**Zotero Connector 附件下载**等长操作经 `runBackgroundTask` / `startBackgroundTask` 登记（`kind` 含 `download` | `downloadAll` | `lookup` | `import` | `export` | `paperRead` | `connector` | …）。
 - **进度语义**：下载任务在 Host 读取响应流时按实际 `downloaded_bytes / total_bytes` 更新；服务端未返回 `Content-Length` 时显示不确定进度，不显示估算百分比。批量下载 / Zotero 迁移使用实际完成项目数。查询、解析、刷新、Connector 和 paper-reader 仅在有真实百分比来源时显示百分比，否则显示状态文本与不确定进度；失败时 error 写入任务条。

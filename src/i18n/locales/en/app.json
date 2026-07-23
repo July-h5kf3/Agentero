@@ -150,6 +150,8 @@
 		"toggle": "Show or hide background tasks",
 		"collapse": "Collapse",
 		"clearFinished": "Clear finished",
+		"cancel": "Cancel",
+		"cancelled": "Cancelled",
 		"empty": "No tasks",
 		"idle": "Done",
 		"activeCount": "{{count}} running",

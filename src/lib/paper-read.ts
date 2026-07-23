@@ -7,6 +7,7 @@
  * - Claude ACP: `/paper-reader`
  * - others: Agentero injects SKILL.md body (no native $ / / trigger)
  */
+import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
 import {
 	type AgentFailedEvent,
@@ -26,6 +27,9 @@ import {
 import {
 	completeBackgroundTask,
 	failBackgroundTask,
+	isBackgroundTaskCancelledError,
+	registerBackgroundTaskCancellation,
+	releaseBackgroundTaskCancellation,
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/background-tasks";
@@ -222,6 +226,7 @@ export async function runPaperReaderWorkflow(opts: {
 		running: true,
 		progress: null,
 	});
+	const cancellation = registerBackgroundTaskCancellation(taskId);
 
 	try {
 		updateBackgroundTask(taskId, {
@@ -242,6 +247,14 @@ export async function runPaperReaderWorkflow(opts: {
 			// Background workflow — never surface in Agent chat history.
 			hideFromChatHistory: true,
 		});
+		const cancelAgent = () => {
+			void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
+		};
+		if (cancellation.aborted) {
+			cancelAgent();
+			throw new Error("background task cancelled");
+		}
+		cancellation.addEventListener("abort", cancelAgent, { once: true });
 
 		updateBackgroundTask(taskId, {
 			detail: i18n.t("app:tasks.paperReadRunning"),
@@ -257,10 +270,22 @@ export async function runPaperReaderWorkflow(opts: {
 
 		completeBackgroundTask(taskId, i18n.t("app:tasks.paperReadDone"));
 	} catch (e) {
+		if (cancellation.aborted || isBackgroundTaskCancelledError(e)) {
+			if (!cancellation.aborted) {
+				// Keep the task in the same visible cancelled state when the Agent
+				// reports cancellation before the UI signal reaches this workflow.
+				updateBackgroundTask(taskId, {
+					status: "cancelled",
+					detail: i18n.t("app:tasks.cancelled"),
+				});
+			}
+			throw e;
+		}
 		const msg = e instanceof Error ? e.message : String(e);
 		failBackgroundTask(taskId, msg);
 		throw e;
 	} finally {
+		releaseBackgroundTaskCancellation(taskId);
 		inflightReads.delete(paperRel);
 	}
 }

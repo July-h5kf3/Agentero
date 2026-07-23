@@ -619,6 +619,11 @@ async fn http_get_bytes_with_progress(
         .await
         .map_err(|e| AppError::message(format!("download body: {e}")))?
     {
+        if let Some(task_id) = task_id {
+            if crate::services::background_tasks::is_cancelled(task_id) {
+                return Err(AppError::message("background task cancelled"));
+            }
+        }
         downloaded_bytes += chunk.len() as u64;
         bytes.extend_from_slice(&chunk);
         if let (Some(app), Some(task_id)) = (app, task_id) {

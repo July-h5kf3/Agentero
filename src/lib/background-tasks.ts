@@ -3,6 +3,7 @@
  * No external state lib — useSyncExternalStore for React subscriptions.
  */
 
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
 import { logger } from "@/lib/logger";
@@ -23,7 +24,8 @@ export type BackgroundTaskStatus =
 	| "queued"
 	| "running"
 	| "completed"
-	| "failed";
+	| "failed"
+	| "cancelled";
 
 export type BackgroundTask = {
 	id: string;
@@ -81,6 +83,23 @@ let store: Store = {
 };
 
 const listeners = new Set<Listener>();
+const controllers = new Map<string, AbortController>();
+
+export class BackgroundTaskCancelledError extends Error {
+	readonly code = "BACKGROUND_TASK_CANCELLED";
+
+	constructor() {
+		super("background task cancelled");
+		this.name = "BackgroundTaskCancelledError";
+	}
+}
+
+export function isBackgroundTaskCancelledError(error: unknown): boolean {
+	return (
+		error instanceof BackgroundTaskCancelledError ||
+		(error instanceof Error && error.name === "AbortError")
+	);
+}
 
 function emit() {
 	for (const l of listeners) l();
@@ -129,7 +148,9 @@ function schedulePrune(id: string) {
 		}
 		// Collapse when nothing left
 		if (
-			tasks.every((t) => t.status === "completed" || t.status === "failed") ||
+			tasks.every((t) =>
+				["completed", "failed", "cancelled"].includes(t.status),
+			) ||
 			tasks.length === 0
 		) {
 			const stillActive = tasks.some(
@@ -197,6 +218,34 @@ export function failBackgroundTask(id: string, error: string): void {
 	schedulePrune(id);
 }
 
+export function cancelBackgroundTask(id: string): void {
+	const task = store.tasks.find((item) => item.id === id);
+	if (!task || (task.status !== "queued" && task.status !== "running")) return;
+	controllers.get(id)?.abort();
+	updateBackgroundTask(id, {
+		status: "cancelled",
+		detail: i18n.t("app:tasks.cancelled"),
+	});
+	if (isTauri()) {
+		void invoke("background_task_cancel", { taskId: id }).catch((error) =>
+			logger.warn(
+				`background task cancellation signal failed: ${String(error)}`,
+			),
+		);
+	}
+	schedulePrune(id);
+}
+
+export function registerBackgroundTaskCancellation(id: string): AbortSignal {
+	const controller = new AbortController();
+	controllers.set(id, controller);
+	return controller.signal;
+}
+
+export function releaseBackgroundTaskCancellation(id: string): void {
+	controllers.delete(id);
+}
+
 export function setBackgroundTasksExpanded(expanded: boolean): void {
 	setStore({ ...store, expanded });
 }
@@ -229,6 +278,7 @@ export async function runBackgroundTask<T>(
 	},
 	fn: (ctx: {
 		id: string;
+		signal: AbortSignal;
 		setProgress: (n: number | null) => void;
 		setDetail: (d: string) => void;
 	}) => Promise<T>,
@@ -240,6 +290,8 @@ export async function runBackgroundTask<T>(
 		running: true,
 		progress: null,
 	});
+	const controller = new AbortController();
+	controllers.set(id, controller);
 	const start = performance.now();
 	const unlisten = isTauri()
 		? await listen<BackgroundTaskProgressEvent>(
@@ -270,9 +322,16 @@ export async function runBackgroundTask<T>(
 	try {
 		const result = await fn({
 			id,
+			signal: controller.signal,
 			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
 			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
 		});
+		if (
+			controller.signal.aborted ||
+			store.tasks.find((t) => t.id === id)?.status === "cancelled"
+		) {
+			throw new BackgroundTaskCancelledError();
+		}
 		completeBackgroundTask(id);
 		const ms = Math.round(performance.now() - start);
 		logger.info(
@@ -280,6 +339,12 @@ export async function runBackgroundTask<T>(
 		);
 		return result;
 	} catch (e) {
+		if (controller.signal.aborted || isBackgroundTaskCancelledError(e)) {
+			if (store.tasks.find((t) => t.id === id)?.status !== "cancelled") {
+				cancelBackgroundTask(id);
+			}
+			throw new BackgroundTaskCancelledError();
+		}
 		const msg = e instanceof Error ? e.message : String(e);
 		failBackgroundTask(id, msg);
 		const ms = Math.round(performance.now() - start);
@@ -288,6 +353,7 @@ export async function runBackgroundTask<T>(
 		);
 		throw e;
 	} finally {
+		controllers.delete(id);
 		unlisten?.();
 	}
 }

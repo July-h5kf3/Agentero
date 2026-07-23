@@ -23,6 +23,7 @@ export function notifyError(
 ): string | number {
 	const text = message?.trim();
 	if (!text) return "";
+	if (text === "background task cancelled") return "";
 	return toast.error(text, {
 		description: opts.description,
 		id: opts.id,

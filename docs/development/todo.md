@@ -74,7 +74,7 @@
 - [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除 / 清空
 - [x] 多选（⌘/Shift 行高亮）+ 拖拽移动到 `papers/` 组织夹 + 批量移动对话框
 - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）
-- [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明）
+- [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明；任务可取消）
 - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行
 - [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者(年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
 - [x] **文件树论文排序预设**：默认文件夹名 A–Z；设置 → 通用 `paperTreeSortMode`（标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；展示用、不移动磁盘（`sortFileTreeNodes`）
