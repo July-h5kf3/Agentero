@@ -48,6 +48,8 @@ export type ZoteroMigrateResult = {
 	errors: string[];
 };
 
+export type ZoteroMigratePhase = "migrate" | "parse";
+
 /** Folder picker for the Zotero data directory. Returns null when cancelled. */
 export async function pickZoteroDir(): Promise<string | null> {
 	const selected = await open({ directory: true, multiple: false });
@@ -80,15 +82,23 @@ export async function migrateZotero(opts: {
 	migrateAnnotations: boolean;
 	includeCollections?: number[];
 	includeItems?: number[];
-	onProgress?: (current: number, total: number) => void;
+	onProgress?: (
+		current: number,
+		total: number,
+		phase: ZoteroMigratePhase,
+	) => void;
 }): Promise<ZoteroMigrateResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:zoteroMigrate.desktopOnly"));
 	}
-	const onProgress = new Channel<{ current: number; total: number }>();
+	const onProgress = new Channel<{
+		current: number;
+		total: number;
+		phase: ZoteroMigratePhase;
+	}>();
 	if (opts.onProgress) {
 		const cb = opts.onProgress;
-		onProgress.onmessage = (m) => cb(m.current, m.total);
+		onProgress.onmessage = (m) => cb(m.current, m.total, m.phase);
 	}
 	const res = await invoke<ApiResult<ZoteroMigrateResult>>("zotero_migrate", {
 		args: {

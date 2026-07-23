@@ -255,11 +255,19 @@ export function ZoteroMigrateDialog({
 							selectedItems.size === scan.items.length
 								? undefined
 								: Array.from(selectedItems),
-						onProgress: (current, total) => {
+						onProgress: (current, total, phase) => {
 							setProgress({ current, total });
 							setBg(total ? Math.round((current / total) * 100) : null);
 							setDetail(
-								t("sidebar:zoteroMigrate.progressLabel", { current, total }),
+								phase === "parse"
+									? t("sidebar:zoteroMigrate.parseProgressLabel", {
+											current,
+											total,
+										})
+									: t("sidebar:zoteroMigrate.progressLabel", {
+											current,
+											total,
+										}),
 							);
 						},
 					});

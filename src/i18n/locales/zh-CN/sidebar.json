@@ -146,6 +146,7 @@
 		"allFolders": "全部文件夹",
 		"selectedCount": "已选 {{sel}} / {{total}}",
 		"progressLabel": "迁移中 {{current}} / {{total}}",
+		"parseProgressLabel": "正在解析 PDF {{current}} / {{total}}",
 		"copyPdfs": "把 PDF 复制进知识库",
 		"copyPdfsHint": "关闭则只导入书目信息，之后可按需下载 PDF。",
 		"migrateNotes": "迁移 Zotero 笔记",

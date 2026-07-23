@@ -146,6 +146,7 @@
 		"allFolders": "All folders",
 		"selectedCount": "{{sel}} / {{total}} selected",
 		"progressLabel": "Migrating {{current}} / {{total}}",
+		"parseProgressLabel": "Parsing PDFs {{current}} / {{total}}",
 		"copyPdfs": "Copy PDFs into the vault",
 		"copyPdfsHint": "Off: import bibliographic info only and download PDFs on demand later.",
 		"migrateNotes": "Migrate Zotero notes",
