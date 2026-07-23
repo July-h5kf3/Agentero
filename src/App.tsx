@@ -139,6 +139,7 @@ import {
 import { openInTerminal, revealInFileManager } from "@/lib/reveal";
 import {
 	type AppSettings,
+	type LibraryColumnPref,
 	loadSettings,
 	saveSettings,
 	subscribeSettings,
@@ -206,10 +207,20 @@ import {
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
+/**
+ * Number of PDF tabs kept mounted (most recent first). The active PDF tab is
+ * always mounted; recently viewed PDF tabs stay mounted so switching between
+ * them is instant (re-opening a PDFium document blocks the main thread). Older
+ * PDF tabs beyond this cap unmount and release their engine document.
+ */
+const PDF_TAB_MOUNT_LRU = 4;
+
 export default function App() {
 	const { t } = useTranslation(["app", "sidebar", "editor"]);
 	const { setTheme } = useTheme();
 	const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+	const settingsRef = useRef(settings);
+	settingsRef.current = settings;
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [settingsSection, setSettingsSection] =
 		useState<SettingsSection>("general");
@@ -227,6 +238,8 @@ export default function App() {
 	/** Open documents in the center tab strip (browser-style multi-tab). */
 	const [tabs, setTabs] = useState<DocTab[]>([]);
 	const [activeTabId, setActiveTabId] = useState<string | null>(null);
+	/** Most-recently-viewed PDF tab ids kept mounted (see PDF_TAB_MOUNT_LRU). */
+	const [pdfLru, setPdfLru] = useState<string[]>([]);
 	/**
 	 * File-tree selection / create-parent context. Follows the active document,
 	 * but a folder create can point it at a folder without opening a tab.
@@ -324,6 +337,18 @@ export default function App() {
 		() => tabs.find((t) => t.id === activeTabId) ?? null,
 		[tabs, activeTabId],
 	);
+	// Keep the active PDF tab plus a few recently viewed ones mounted so tab
+	// switches don't re-open the PDFium document (main-thread block).
+	useEffect(() => {
+		if (!activeTabId || activeTab?.mode !== "pdf") return;
+		setPdfLru((prev) => {
+			if (prev[0] === activeTabId) return prev;
+			return [activeTabId, ...prev.filter((id) => id !== activeTabId)].slice(
+				0,
+				PDF_TAB_MOUNT_LRU,
+			);
+		});
+	}, [activeTabId, activeTab?.mode]);
 	/** Active document identity — downstream panels read this as before. */
 	const selectedPath = activeTab?.path ?? null;
 	const centerMode = activeTab?.mode ?? "markdown";
@@ -1711,6 +1736,20 @@ export default function App() {
 	}, []);
 
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
+
+	// Stable handlers passed to TabCenter so its React.memo can bail out on
+	// unrelated App re-renders (otherwise every mounted tab's viewer/editor
+	// re-renders on any App state change).
+	const handleLibraryColumnsChange = useCallback(
+		(cols: LibraryColumnPref[]) => {
+			updateSettings({ ...settingsRef.current, libraryColumns: cols });
+		},
+		[updateSettings],
+	);
+	const handleOpenSettingsTranslate = useCallback(
+		() => openSettings("translate"),
+		[openSettings],
+	);
 
 	useEffect(() => {
 		if (!vaultPath) {
@@ -3296,6 +3335,7 @@ export default function App() {
 												<TabCenter
 													tab={tab}
 													active={tab.id === activeTabId}
+													pdfKeepMounted={pdfLru.includes(tab.id)}
 													vaultPath={vaultPath}
 													libraryPapers={
 														tab.kind === "library" ? libraryPapers : noPapers
@@ -3313,12 +3353,7 @@ export default function App() {
 														tab.kind === "library" ? libraryTagFilter : null
 													}
 													libraryColumns={settings.libraryColumns}
-													onLibraryColumnsChange={(cols) =>
-														updateSettings({
-															...settings,
-															libraryColumns: cols,
-														})
-													}
+													onLibraryColumnsChange={handleLibraryColumnsChange}
 													rescanning={
 														tab.kind === "library" ? rescanning : false
 													}
@@ -3336,7 +3371,7 @@ export default function App() {
 													pdfZen={pdfZenMode}
 													onTogglePdfZen={togglePdfZen}
 													onOpenAnnotations={openAnnotationsTab}
-													onOpenSettings={() => openSettings("translate")}
+													onOpenSettings={handleOpenSettingsTranslate}
 													registerPdfHandle={registerPdfHandle}
 													onPdfHighlightsChange={handlePdfHighlightsChange}
 													onPdfAsksChange={handlePdfAsksChange}

@@ -19,6 +19,12 @@ import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 type TabCenterProps = {
 	tab: DocTab;
 	active: boolean;
+	/**
+	 * Whether this PDF tab should stay mounted even when inactive (LRU of
+	 * recently viewed PDFs). Non-PDF tabs ignore this. When false and inactive,
+	 * the heavyweight PDF viewer unmounts to release its engine document.
+	 */
+	pdfKeepMounted: boolean;
 	vaultPath: string | null;
 	/** Papers library (only used by the Library tab). */
 	libraryPapers: PaperMetadata[];
@@ -80,6 +86,7 @@ function TabLoadingSkeleton() {
 export const TabCenter = memo(function TabCenter({
 	tab,
 	active,
+	pdfKeepMounted,
 	vaultPath,
 	libraryPapers,
 	libraryLoading,
@@ -177,7 +184,7 @@ export const TabCenter = memo(function TabCenter({
 		// large open-tab set keeps at most one PDFium document alive (PDFium runs
 		// on the main thread). Reading position / annotations / ask threads are
 		// persisted, so remounting on re-activation restores them automatically.
-		if (!active) return null;
+		if (!active && !pdfKeepMounted) return null;
 		return (
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 				<PdfViewer
