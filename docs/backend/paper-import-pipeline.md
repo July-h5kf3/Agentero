@@ -40,7 +40,7 @@ Agentero 已有多条「把论文放进 Vault」的路径。落盘相关 **砖�
 | 2 | **Zotero Connector** | 官方浏览器扩展 | HTTP `saveItems` → `import_connector_item` | 插件 Translator JSON → `map_zotero_item` | **异步** 后台下载（躲 ~15s 超时）；`saveAttachment` 再写 PDF | `connector:item-saved` → 刷树/Library → **`openPaper`** + toast；**无** auto reader |
 | 3 | **本地 PDF** | 魔棒弹层 / Library 导入 / **拖到 papers/ 组织夹** | `paper_import_local_pdf` → `import_local_pdfs`（`entries` 可带 title/authors/year/id） | 默认文件名 stem；拖入弹窗可确认/改 meta | **复制** `{id}.pdf` + liteparse | 刷树/wiki/Library → **只 open 第一篇**；**无** auto reader；非 PDF / 非 papers 落点：仅 `preventDefault` 不导航 |
 | 4 | **Bib/RIS 等文献库** | Library 导入 | `paper_import` → `import_catalog` | Translator `/import` 批量 | **同步** 每篇 `ensure_paper_assets` | 刷树/Library；错误 toast；**不 open**、**无** reader |
-| 5 | **Zotero 桌面迁移** | 欢迎页 / 侧栏对话框 | `migrate_zotero` | `zotero.sqlite` → `map_zotero_item` | 可选 **拷贝 storage PDF** | 对话框进度 + 刷新；**不逐篇 open** |
+| 5 | **Zotero 桌面迁移** | 欢迎页 / 侧栏对话框 | `migrate_zotero` | `zotero.sqlite` → `map_zotero_item` | 可选 **拷贝 storage PDF**；迁移后批量对 PDF-only 论文运行 liteparse | 对话框进度 + 左下角后台任务显示解析进度；**不逐篇 open** |
 | 6 | **CLI** | `agentero import id` / `import bib` | 直接调 1 / 4 | 同 1 / 4 | 同 1 / 4 | 无 UI |
 
 ### 2.2 非新建、但同属「paper 资源生命周期」
@@ -234,7 +234,7 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 | Connector | JSON → map；关 abstract MT；session 映射 | `AsyncDownload` + `ByCatalogId` |
 | Bib | Translator `/import` → items[] | 循环 `SyncDownload` + `ByPathOrNotes`（或统一到 ByCatalogId） |
 | 本地 PDF | stem → meta + 源文件 path | `CopyPdf` + `UniqueSuffix` |
-| Zotero 迁移 | sqlite 读 + collection path + storage PDF | `CopyPdf` / `None` + notes blocks |
+| Zotero 迁移 | sqlite 读 + collection path + storage PDF | `CopyPdf` / `None` + notes blocks；迁移后对无 TeX 的 PDF 批量 liteparse |
 | CLI | 参数组装 | 与桌面同策略 |
 
 **不进 commit 的逻辑**仍留在 adapter：HTTP 响应码、session progress、插件 targets 列表、迁移进度事件等。

@@ -1,8 +1,22 @@
-# iPadOS App 上架要求
+# 发布流程与 iPadOS App 上架要求
 
 > 调研日期：2026-07-21  
 > 适用场景：将基于 iPadOS 的 App 提交到 Apple App Store，并为“启航”赛道准备可验证的上架或 TestFlight 版本。  
 > 说明：Apple 的审核规则和上传要求会持续更新，正式提交前应再次检查官方页面。
+
+## Agentero Desktop/CLI 版本发布
+
+桌面安装包由 Tauri 配置和 Rust package 版本决定，CLI 归档文件名由发布 tag 决定。因此发布时不能只创建 `v*` tag，必须先同步版本并提交。
+
+推荐流程：
+
+1. 执行 `/bump <version>`，同步检查 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`cli/Cargo.toml` 和 `Cargo.lock`。
+2. 执行 `/commit`，将版本 bump 作为独立的 `chore(release): bump version to <version>` commit。
+3. 确认 tag `v<version>` 指向该版本 bump commit，且 tag 去掉 `v` 后与所有版本字段一致。
+4. 推送 tag，等待 `.github/workflows/release.yml` 构建 Tauri installers 和 CLI artifacts。
+5. 发布前确认桌面安装包、应用内版本、CLI `--version` 和 CLI 文件名没有混用不同版本。
+
+`/bump` 和 `/commit` 默认只修改工作区或创建本地 commit，不会自动创建 tag、push 或发布 Release。
 
 ## 1. 结论先看
 
@@ -290,4 +304,3 @@ Apple 支持通过 Xcode、Transporter、altool 或 App Store Connect API 上传
 - [Upload app previews and screenshots](https://developer.apple.com/help/app-store-connect/manage-app-information/upload-app-previews-and-screenshots)
 - [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 - [Maximum build file sizes](https://developer.apple.com/help/app-store-connect/reference/app-uploads/maximum-build-file-sizes/)
-
