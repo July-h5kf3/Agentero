@@ -34,6 +34,30 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Provision PDFium
+        shell: bash
+        run: |
+          set -euo pipefail
+          # liteparse-pdfium-sys fetches PDFium in its build script into an OS
+          # cache dir that Swatinem/rust-cache does not persist. On a cache hit
+          # the build script is skipped, so libpdfium.dylib is absent when tests
+          # dlopen it. Provision it explicitly and point both the build script
+          # and the runtime loader at a stable directory. Keep the tag in sync
+          # with liteparse-pdfium-sys (currently chromium/7897).
+          tag="chromium/7897"
+          case "$(uname -m)" in
+            arm64 | aarch64) asset="pdfium-mac-arm64" ;;
+            *) asset="pdfium-mac-x64" ;;
+          esac
+          dest="$RUNNER_TEMP/pdfium"
+          mkdir -p "$dest"
+          url="https://github.com/run-llama/pdfium-binaries/releases/download/${tag/\//%2F}/${asset}.tgz"
+          echo "Downloading $url"
+          curl -fsSL "$url" | tar -xz -C "$dest"
+          test -f "$dest/lib/libpdfium.dylib"
+          test -d "$dest/include"
+          echo "PDFIUM_LIB_PATH=$dest/lib" >> "$GITHUB_ENV"
+          echo "PDFIUM_INCLUDE_PATH=$dest/include" >> "$GITHUB_ENV"
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
