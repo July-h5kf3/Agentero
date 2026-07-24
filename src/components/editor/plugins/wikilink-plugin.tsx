@@ -19,7 +19,7 @@ type MdWikiLink = {
 	};
 };
 
-type WikiSlateNode = {
+export type WikiSlateNode = {
 	type: "wikiLink";
 	value: string;
 	heading?: string;
@@ -28,16 +28,88 @@ type WikiSlateNode = {
 	children: { text: string }[];
 };
 
-function splitTarget(raw: string): { target: string; heading: string } {
+export type WikiLinkDraftText = {
+	text: string;
+	wikiLinkDraft: true;
+};
+
+export function splitWikiLinkTarget(raw: string): {
+	target: string;
+	heading: string;
+} {
 	const h = raw.indexOf("#");
 	return h >= 0
 		? { target: raw.slice(0, h), heading: raw.slice(h + 1) }
 		: { target: raw, heading: "" };
 }
 
+function findWikiLinkAliasSeparator(raw: string): number {
+	for (let index = 0; index < raw.length; index += 1) {
+		if (raw[index] !== "|" || raw[index - 1] === "\\") continue;
+		return index;
+	}
+	return -1;
+}
+
+/** Convert the structured display node into the portable text a user edits. */
+export function wikiLinkToMarkdown(node: {
+	value: string;
+	heading?: string;
+	alias?: string | null;
+	embed?: boolean;
+}): string {
+	const target = node.heading ? `${node.value}#${node.heading}` : node.value;
+	const alias = node.alias ? `|${node.alias.replaceAll("|", "\\|")}` : "";
+	return `${node.embed ? "!" : ""}[[${target}${alias}]]`;
+}
+
+/**
+ * Parse only a complete inline Wikilink. Partial or malformed edit text must
+ * remain ordinary Markdown text, so users never lose an in-progress edit.
+ */
+export function parseWikiLinkMarkdown(raw: string): WikiSlateNode | null {
+	const match = raw.match(/^(!?)\[\[([^\]\n]+)\]\]$/);
+	if (!match) return null;
+	const [, embedMarker, body] = match;
+	const pipe = findWikiLinkAliasSeparator(body);
+	const targetWithHeading = pipe < 0 ? body : body.slice(0, pipe);
+	const aliasText =
+		pipe < 0 ? null : body.slice(pipe + 1).replaceAll("\\|", "|");
+	if (targetWithHeading.endsWith("#") || aliasText === "") return null;
+	const { target, heading } = splitWikiLinkTarget(targetWithHeading);
+	if (!target && !heading) return null;
+	return {
+		type: "wikiLink",
+		value: target,
+		heading: heading || undefined,
+		alias: aliasText,
+		embed: embedMarker === "!",
+		children: [{ text: "" }],
+	};
+}
+
+export function isWikiLinkDraftText(node: unknown): node is WikiLinkDraftText {
+	return (
+		typeof node === "object" &&
+		node !== null &&
+		"text" in node &&
+		"wikiLinkDraft" in node &&
+		(node as { wikiLinkDraft?: unknown }).wikiLinkDraft === true
+	);
+}
+
+export function isWikiLinkNode(node: unknown): node is WikiSlateNode {
+	return (
+		typeof node === "object" &&
+		node !== null &&
+		(node as { type?: unknown }).type === "wikiLink" &&
+		typeof (node as { value?: unknown }).value === "string"
+	);
+}
+
 function toSlate(node: MdWikiLink, embed: boolean): WikiSlateNode {
 	const raw = node.value ?? "";
-	const { target, heading } = splitTarget(raw);
+	const { target, heading } = splitWikiLinkTarget(raw);
 	let alias = node.data?.alias ?? null;
 	if (embed) {
 		// Image/media embeds encode dimensions as data-fs-width/height, not alias.

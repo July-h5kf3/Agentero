@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { wikiLinkToMarkdown } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	resolveWikiReference,
 	searchWikiLinks,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/wiki";
 import {
 	addRecentWikiCandidate,
+	isWikiCompletionSubmitKey,
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionCandidateKey,
@@ -151,7 +153,7 @@ export function WikiLinkSuggestion({
 	}, [filePath, recentCandidates, request, wikiNav?.vaultPath]);
 
 	const selectCandidate = useCallback(
-		(candidate: WikiSearchCandidate) => {
+		(candidate: WikiSearchCandidate, submitKey: "Enter" | "Tab" = "Enter") => {
 			if (!draft) return;
 			const selection = editor.selection;
 			if (
@@ -169,14 +171,26 @@ export function WikiLinkSuggestion({
 			};
 			const insert = wikiCompletionInsert(candidate);
 			editor.tf.delete({ at: { anchor: start, focus: selection.anchor } });
-			editor.tf.insertNodes({
-				type: "wikiLink",
-				value: insert.target,
-				heading: insert.heading,
-				alias: insert.alias ?? null,
-				children: [{ text: "" }],
-			});
-			editor.tf.insertText(" ");
+			if (submitKey === "Tab") {
+				const raw = wikiLinkToMarkdown({
+					value: insert.target,
+					heading: insert.heading,
+					alias: insert.alias,
+				});
+				editor.tf.insertNodes({ text: raw, wikiLinkDraft: true });
+				editor.tf.move({ distance: 2, reverse: true });
+			} else {
+				editor.tf.insertNodes([
+					{
+						type: "wikiLink",
+						value: insert.target,
+						heading: insert.heading,
+						alias: insert.alias ?? null,
+						children: [{ text: "" }],
+					},
+					{ text: "" },
+				]);
+			}
 			setRecentCandidates((recent) =>
 				addRecentWikiCandidate(recent, candidate),
 			);
@@ -205,9 +219,9 @@ export function WikiLinkSuggestion({
 				);
 				return true;
 			}
-			if (event.key === "Enter" && candidates[selectedIndex]) {
+			if (isWikiCompletionSubmitKey(event.key) && candidates[selectedIndex]) {
 				event.preventDefault();
-				selectCandidate(candidates[selectedIndex]);
+				selectCandidate(candidates[selectedIndex], event.key);
 				return true;
 			}
 			return false;

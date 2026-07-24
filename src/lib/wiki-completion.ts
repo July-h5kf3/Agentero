@@ -30,6 +30,11 @@ export type WikiCompletionInsert = {
 	alias?: string;
 };
 
+/** Completion accepts the same primary action from keyboard-only workflows. */
+export function isWikiCompletionSubmitKey(key: string): key is "Enter" | "Tab" {
+	return key === "Enter" || key === "Tab";
+}
+
 /** Convert a canonical Host candidate into the persisted `wikiLink` node data. */
 export function wikiCompletionInsert(
 	candidate: WikiSearchCandidate,
