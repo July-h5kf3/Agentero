@@ -15,14 +15,20 @@ pub mod services;
 use i18n::menu_labels;
 use services::agent::{AgentRegistry, AgentRunController};
 use services::app_settings::AppSettingsStore;
+#[cfg(not(target_os = "ios"))]
 use services::connector::ConnectorController;
+#[cfg(not(target_os = "ios"))]
 use services::remote::RemoteRegistry;
+#[cfg(not(target_os = "ios"))]
 use services::watcher::FsWatchController;
 use services::wiki::WikiIndexState;
+#[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+#[cfg(not(target_os = "ios"))]
+use tauri::Emitter;
+use tauri::Manager;
 
 #[cfg(target_os = "macos")]
 fn build_menu(app: &tauri::AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -171,22 +177,36 @@ fn build_log_plugin() -> tauri_plugin_log::Builder {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(build_log_plugin().build())
+        .plugin(build_log_plugin().build());
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder.plugin(tauri_plugin_shell::init());
+    }
+
+    builder = builder
         .manage(AppSettingsStore::load())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(services::agent::PermissionGate::new())
-        .manage(WikiIndexState::new())
-        .manage(FsWatchController::new())
-        .manage(Arc::new(ConnectorController::new()))
-        .manage(Arc::new(RemoteRegistry::new()))
-        .invoke_handler(tauri::generate_handler![
+        .manage(WikiIndexState::new());
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder
+            .manage(FsWatchController::new())
+            .manage(Arc::new(ConnectorController::new()))
+            .manage(Arc::new(RemoteRegistry::new()));
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder.invoke_handler(tauri::generate_handler![
             commands::settings::settings_get,
             commands::settings::settings_set,
             commands::settings::settings_path,
@@ -280,10 +300,68 @@ pub fn run() {
             commands::connector::connector_set_parent_dir,
             commands::connector::connector_set_port,
             set_locale,
-        ])
-        .setup(|app| {
-            // Non-macOS windows are frameless (custom caption buttons in React);
-            // strip native decorations before the window is shown to avoid a flash.
+        ]);
+    }
+    #[cfg(target_os = "ios")]
+    {
+        builder = builder.invoke_handler(tauri::generate_handler![
+            commands::settings::settings_get,
+            commands::settings::settings_set,
+            commands::settings::settings_path,
+            commands::settings::host_identity,
+            commands::agent::agent_list_agents,
+            commands::agent::agent_list_templates,
+            commands::agent::agent_list_skills,
+            commands::agent::agent_scan_catalog,
+            commands::agent::agent_upsert_agent,
+            commands::agent::agent_ensure_catalog,
+            commands::agent::agent_remove_agent,
+            commands::agent::agent_set_default,
+            commands::agent::agent_set_enabled,
+            commands::agent::agent_set_proxy,
+            commands::agent::agent_discover,
+            commands::agent::agent_probe,
+            commands::agent::agent_probe_catalog,
+            commands::agent::agent_cancel_run,
+            commands::background_tasks::background_task_cancel,
+            commands::agent::agent_respond_permission,
+            commands::graph::graph_get_backlinks,
+            commands::graph::graph_get_graph,
+            commands::graph::graph_rebuild,
+            commands::vault::vault_create,
+            commands::vault::vault_ensure,
+            commands::vault::vault_allow_fs_scope,
+            commands::trash::path_trash,
+            commands::trash::path_untrash,
+            commands::trash::path_list_trash,
+            commands::trash::path_restore_item,
+            commands::trash::path_purge_item,
+            commands::trash::path_purge_trash,
+            commands::translate::translate_text,
+            commands::lookup::lookup_import,
+            commands::lookup::lookup_translator_config,
+            commands::lookup::paper_download_assets,
+            commands::lookup::paper_import_local_pdf,
+            commands::lookup::paper_stage_import_file,
+            commands::lookup::paper_export,
+            commands::lookup::paper_import,
+            commands::paper::paper_get,
+            commands::paper::paper_list,
+            commands::paper::paper_delete,
+            commands::paper::paper_move,
+            commands::paper::paper_set_is_read,
+            commands::paper::paper_set_tags,
+            commands::paper::paper_rescan,
+            commands::search::vault_search,
+            set_locale,
+        ]);
+    }
+
+    builder = builder.setup(|app| {
+        // Window chrome / show is desktop-only; mobile windows are managed by the
+        // embedder and do not expose these APIs.
+        #[cfg(not(target_os = "ios"))]
+        {
             #[cfg(not(target_os = "macos"))]
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.set_decorations(false);
@@ -291,27 +369,34 @@ pub fn run() {
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
             }
-            // Native menu is macOS-only; the renderer re-syncs the locale on mount.
-            #[cfg(target_os = "macos")]
-            {
-                let menu = build_menu(app.handle(), "en")?;
-                app.set_menu(menu)?;
-            }
-            // Ensure registry is loaded early.
-            let _ = app.state::<AgentRegistry>();
-            let _ = app.state::<WikiIndexState>();
+        }
+        // Native menu is macOS-only; the renderer re-syncs the locale on mount.
+        #[cfg(target_os = "macos")]
+        {
+            let menu = build_menu(app.handle(), "en")?;
+            app.set_menu(menu)?;
+        }
+        // Ensure registry is loaded early.
+        let _ = app.state::<AgentRegistry>();
+        let _ = app.state::<WikiIndexState>();
+        #[cfg(not(target_os = "ios"))]
+        {
             let connector = app.state::<Arc<ConnectorController>>();
             connector.set_app_handle(app.handle().clone());
             let remote = app.state::<Arc<RemoteRegistry>>();
             connector.set_remote_registry(Arc::clone(&remote));
-            log::info!(
-                target: "agentero::op",
-                "op start app_ready debug={}",
-                cfg!(debug_assertions)
-            );
-            Ok(())
-        })
-        .on_menu_event(|app, event| {
+        }
+        log::info!(
+            target: "agentero::op",
+            "op start app_ready debug={}",
+            cfg!(debug_assertions)
+        );
+        Ok(())
+    });
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder.on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if id == "new_window" {
                 if let Err(e) = commands::window::window_new(app.clone()) {
@@ -320,12 +405,19 @@ pub fn run() {
                 return;
             }
             let _ = app.emit(id, ());
-        })
-        .on_window_event(|window, event| {
+        });
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder.on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 window.state::<FsWatchController>().stop(window.label());
             }
-        })
+        });
+    }
+
+    builder
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -333,6 +425,7 @@ pub fn run() {
                 event,
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
+                #[cfg(not(target_os = "ios"))]
                 app.state::<Arc<ConnectorController>>().stop();
             }
         });
