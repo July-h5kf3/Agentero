@@ -13,8 +13,6 @@ type BacklinksPanelProps = {
 	selectedPath: string | null;
 	onOpenPath: (vaultRelativePath: string) => void;
 	className?: string;
-	/** Full-height sidebar mode (default). Compact strip is legacy. */
-	variant?: "sidebar" | "compact";
 	/**
 	 * Bumped after `graph_rebuild` (e.g. magic-wand import) so the panel
 	 * re-fetches without requiring a path change.
@@ -27,7 +25,6 @@ export function BacklinksPanel({
 	selectedPath,
 	onOpenPath,
 	className,
-	variant = "sidebar",
 	wikiIndexRevision = 0,
 }: BacklinksPanelProps) {
 	const { t } = useTranslation("sidebar");
@@ -66,83 +63,6 @@ export function BacklinksPanel({
 
 	const countLabel = loading ? "" : ` (${backlinks.length})`;
 
-	const body = (
-		<div
-			className={cn(
-				"agentero-scroll min-h-0 flex-1 overflow-y-auto",
-				variant === "sidebar" ? "px-2 py-2" : "px-2 pb-2",
-			)}
-		>
-			{!selectedPath ? (
-				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
-					{t("backlinks.openNote")}
-					Open a note to see backlinks
-				</p>
-			) : null}
-			{selectedPath && error ? (
-				<p className="flex h-full items-center justify-center text-destructive text-xs">
-					{error}
-				</p>
-			) : null}
-			{selectedPath && !error && !loading && backlinks.length === 0 ? (
-				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
-					{t("backlinks.none")}
-					No backlinks
-				</p>
-			) : null}
-			{selectedPath ? (
-				<ul className="flex flex-col gap-0.5">
-					{backlinks.map((b) => (
-						<li key={`${b.source}:${b.line ?? 0}:${b.targetRaw}`}>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="h-auto w-full justify-start gap-1 px-2 py-1.5 font-normal text-left"
-								onClick={() => onOpenPath(b.source)}
-								title={b.source}
-							>
-								<span className="min-w-0 flex-1 truncate text-xs">
-									<span className="font-medium text-foreground">
-										{b.source.split("/").pop()}
-									</span>
-									{b.context ? (
-										<span className="ml-1.5 text-muted-foreground">
-											{b.context.length > 72
-												? `${b.context.slice(0, 72)}…`
-												: b.context}
-										</span>
-									) : null}
-								</span>
-							</Button>
-						</li>
-					))}
-				</ul>
-			) : null}
-		</div>
-	);
-
-	if (variant === "compact") {
-		if (!selectedPath) return null;
-		return (
-			<div
-				className={cn(
-					"flex max-h-40 shrink-0 flex-col border-t bg-muted/15",
-					className,
-				)}
-			>
-				<div className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-muted-foreground">
-					<Link2 className="size-3.5 shrink-0" aria-hidden />
-					<span className="text-xs font-medium">
-						{t("backlinks.title")}
-						{countLabel}
-					</span>
-				</div>
-				{body}
-			</div>
-		);
-	}
-
 	return (
 		<div
 			className={cn(
@@ -162,7 +82,52 @@ export function BacklinksPanel({
 					</span>
 				</span>
 			</PaneHeader>
-			{body}
+			<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto px-2 py-2">
+				{!selectedPath ? (
+					<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
+						{t("backlinks.openNote")}
+					</p>
+				) : null}
+				{selectedPath && error ? (
+					<p className="flex h-full items-center justify-center text-destructive text-xs">
+						{error}
+					</p>
+				) : null}
+				{selectedPath && !error && !loading && backlinks.length === 0 ? (
+					<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
+						{t("backlinks.none")}
+					</p>
+				) : null}
+				{selectedPath ? (
+					<ul className="flex flex-col gap-0.5">
+						{backlinks.map((b) => (
+							<li key={`${b.source}:${b.line ?? 0}:${b.targetRaw}`}>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-auto w-full justify-start gap-1 px-2 py-1.5 font-normal text-left"
+									onClick={() => onOpenPath(b.source)}
+									title={b.source}
+								>
+									<span className="min-w-0 flex-1 truncate text-xs">
+										<span className="font-medium text-foreground">
+											{b.source.split("/").pop()}
+										</span>
+										{b.context ? (
+											<span className="ml-1.5 text-muted-foreground">
+												{b.context.length > 72
+													? `${b.context.slice(0, 72)}…`
+													: b.context}
+											</span>
+										) : null}
+									</span>
+								</Button>
+							</li>
+						))}
+					</ul>
+				) : null}
+			</div>
 		</div>
 	);
 }
