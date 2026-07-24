@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
 import {
+	createNotesSplitPane,
 	createPlaceholderTab,
-	cycleActiveTabId,
 	type DocTab,
+	extractTabsFromLayout,
 	insertPlaceholderTab,
 	loadPersistedTabs,
-	moveTab,
 	patchTab,
 	removeTab,
 	removeTabsUnderPath,
@@ -14,6 +14,7 @@ import {
 	reseedNotesTab,
 	savePersistedTabs,
 	syncTabSeedsForPath,
+	tabHasNotesSplit,
 } from "@/lib/tabs";
 
 function makeTab(path: string, overrides: Partial<DocTab> = {}): DocTab {
@@ -72,41 +73,25 @@ describe("removeTab", () => {
 		makeTab("/vault/c.md"),
 	];
 
-	it("moves the active id to the following neighbor", () => {
-		const { tabs, activeId } = removeTab(start, "/vault/b.md", "/vault/b.md");
+	it("removes by id without computing a neighbor active id", () => {
+		const { tabs, removed } = removeTab(start, "/vault/b.md");
+		expect(removed?.id).toBe("/vault/b.md");
 		expect(tabs.map((t) => t.id)).toEqual(["/vault/a.md", "/vault/c.md"]);
-		expect(activeId).toBe("/vault/c.md");
 	});
 
-	it("clamps to the last tab when removing the final active tab", () => {
-		const { activeId } = removeTab(start, "/vault/c.md", "/vault/c.md");
-		expect(activeId).toBe("/vault/b.md");
-	});
-
-	it("keeps a different active id untouched", () => {
-		const { activeId } = removeTab(start, "/vault/a.md", "/vault/b.md");
-		expect(activeId).toBe("/vault/b.md");
-	});
-
-	it("returns null active when the last tab is removed", () => {
-		const { tabs, activeId } = removeTab(
+	it("returns empty tabs when the last panel is removed", () => {
+		const { tabs, removed } = removeTab(
 			[makeTab("/vault/a.md")],
 			"/vault/a.md",
-			"/vault/a.md",
 		);
+		expect(removed?.id).toBe("/vault/a.md");
 		expect(tabs).toHaveLength(0);
-		expect(activeId).toBeNull();
 	});
 
 	it("is a no-op for an unknown id", () => {
-		const { tabs, removed, activeId } = removeTab(
-			start,
-			"/nope",
-			"/vault/a.md",
-		);
+		const { tabs, removed } = removeTab(start, "/nope");
 		expect(tabs).toBe(start);
 		expect(removed).toBeNull();
-		expect(activeId).toBe("/vault/a.md");
 	});
 });
 
@@ -118,68 +103,19 @@ describe("removeTabsUnderPath", () => {
 			makeTab("/vault/papers/x/NOTES.md"),
 			makeTab("/vault/other.md"),
 		];
-		const { tabs, removed, activeId } = removeTabsUnderPath(
-			start,
-			"/vault/papers/x",
-			"/vault/papers/x",
-		);
+		const { tabs, removed } = removeTabsUnderPath(start, "/vault/papers/x");
 		expect(tabs.map((t) => t.id)).toEqual([
 			LIBRARY_VIRTUAL_PATH,
 			"/vault/other.md",
 		]);
 		expect(removed).toHaveLength(2);
-		expect(activeId).toBe("/vault/other.md");
 	});
 
 	it("is a no-op when nothing matches", () => {
 		const start = [makeTab("/vault/a.md")];
-		const { tabs, removed } = removeTabsUnderPath(
-			start,
-			"/vault/z",
-			"/vault/a.md",
-		);
+		const { tabs, removed } = removeTabsUnderPath(start, "/vault/z");
 		expect(tabs).toBe(start);
 		expect(removed).toHaveLength(0);
-	});
-});
-
-describe("moveTab", () => {
-	const start = [
-		makeTab("/vault/a.md"),
-		makeTab("/vault/b.md"),
-		makeTab("/vault/c.md"),
-	];
-
-	it("reorders from -> to", () => {
-		const next = moveTab(start, "/vault/a.md", "/vault/c.md");
-		expect(next.map((t) => t.id)).toEqual([
-			"/vault/b.md",
-			"/vault/c.md",
-			"/vault/a.md",
-		]);
-	});
-
-	it("is a no-op when ids match or are missing", () => {
-		expect(moveTab(start, "/vault/a.md", "/vault/a.md")).toBe(start);
-		expect(moveTab(start, "/nope", "/vault/a.md")).toBe(start);
-	});
-});
-
-describe("cycleActiveTabId", () => {
-	const list = [
-		makeTab("/vault/a.md"),
-		makeTab("/vault/b.md"),
-		makeTab("/vault/c.md"),
-	];
-
-	it("wraps forward and backward", () => {
-		expect(cycleActiveTabId(list, "/vault/a.md", 1)).toBe("/vault/b.md");
-		expect(cycleActiveTabId(list, "/vault/a.md", -1)).toBe("/vault/c.md");
-		expect(cycleActiveTabId(list, "/vault/c.md", 1)).toBe("/vault/a.md");
-	});
-
-	it("does nothing with fewer than two tabs", () => {
-		expect(cycleActiveTabId([list[0]], "/vault/a.md", 1)).toBe("/vault/a.md");
 	});
 });
 
@@ -219,6 +155,57 @@ describe("syncTabSeedsForPath", () => {
 	});
 });
 
+describe("extractTabsFromLayout", () => {
+	it("reads path/mode from panel params and active from grid", () => {
+		const layout = {
+			grid: {
+				root: {
+					type: "leaf",
+					data: {
+						id: "g1",
+						views: ["/vault/a.md", "/vault/b.md"],
+						activeView: "/vault/b.md",
+					},
+				},
+				height: 100,
+				width: 100,
+				orientation: "HORIZONTAL",
+			},
+			panels: {
+				"/vault/a.md": {
+					id: "/vault/a.md",
+					params: {
+						panelId: "/vault/a.md",
+						path: "/vault/a.md",
+						mode: "markdown",
+					},
+				},
+				"/vault/b.md": {
+					id: "/vault/b.md",
+					params: { panelId: "/vault/b.md", path: "/vault/b.md", mode: "pdf" },
+				},
+			},
+			activeGroup: "g1",
+		};
+		const extracted = extractTabsFromLayout(layout);
+		expect(extracted.tabs).toEqual([
+			{ path: "/vault/a.md", mode: "markdown" },
+			{ path: "/vault/b.md", mode: "pdf" },
+		]);
+		expect(extracted.activeId).toBe("/vault/b.md");
+	});
+
+	it("falls back to panel id as path when params are missing", () => {
+		const layout = {
+			panels: {
+				"/vault/x.md": { id: "/vault/x.md" },
+			},
+		};
+		const extracted = extractTabsFromLayout(layout);
+		expect(extracted.tabs).toEqual([{ path: "/vault/x.md", mode: "markdown" }]);
+	});
+});
+
 describe("tab session persistence", () => {
 	beforeEach(() => {
 		const store = new Map<string, string>();
@@ -232,23 +219,113 @@ describe("tab session persistence", () => {
 		});
 	});
 
-	it("round-trips tabs and the active index", () => {
-		const tabs = [
-			makeTab("/vault/a.md"),
-			makeTab("/vault/b.md", { mode: "pdf" }),
-		];
-		savePersistedTabs(tabs, "/vault/b.md");
+	it("round-trips layout-only storage", () => {
+		const layout = {
+			grid: {
+				root: {
+					type: "leaf",
+					data: {
+						id: "g1",
+						views: ["/vault/a.md", "/vault/b.md"],
+						activeView: "/vault/b.md",
+					},
+				},
+				height: 1,
+				width: 1,
+				orientation: "HORIZONTAL",
+			},
+			panels: {
+				"/vault/a.md": {
+					id: "/vault/a.md",
+					params: {
+						panelId: "/vault/a.md",
+						path: "/vault/a.md",
+						mode: "markdown",
+					},
+				},
+				"/vault/b.md": {
+					id: "/vault/b.md",
+					params: { panelId: "/vault/b.md", path: "/vault/b.md", mode: "pdf" },
+				},
+			},
+			activeGroup: "g1",
+		};
+		savePersistedTabs(layout);
+		const loaded = loadPersistedTabs();
+		expect(loaded?.layout).toEqual(layout);
+		expect(loaded?.tabs).toEqual([
+			{ path: "/vault/a.md", mode: "markdown" },
+			{ path: "/vault/b.md", mode: "pdf" },
+		]);
+		expect(loaded?.activeId).toBe("/vault/b.md");
+	});
+
+	it("still loads legacy tabs[] + activeIndex without layout", () => {
+		localStorage.setItem(
+			"agentero-open-tabs",
+			JSON.stringify({
+				tabs: [
+					{ path: "/vault/a.md", mode: "markdown" },
+					{ path: "/vault/b.md", mode: "pdf" },
+				],
+				activeIndex: 1,
+			}),
+		);
 		const loaded = loadPersistedTabs();
 		expect(loaded?.tabs).toEqual([
 			{ path: "/vault/a.md", mode: "markdown" },
 			{ path: "/vault/b.md", mode: "pdf" },
 		]);
-		expect(loaded?.activeIndex).toBe(1);
+		expect(loaded?.activeId).toBe("/vault/b.md");
+		expect(loaded?.layout).toBeNull();
 	});
 
-	it("clears storage when there are no tabs", () => {
-		savePersistedTabs([makeTab("/vault/a.md")], "/vault/a.md");
-		savePersistedTabs([], null);
+	it("clears storage when layout is empty", () => {
+		savePersistedTabs({
+			panels: {
+				"/vault/a.md": {
+					id: "/vault/a.md",
+					params: {
+						panelId: "/vault/a.md",
+						path: "/vault/a.md",
+						mode: "markdown",
+					},
+				},
+			},
+		});
+		savePersistedTabs(null);
 		expect(loadPersistedTabs()).toBeNull();
+		savePersistedTabs({ panels: {} });
+		expect(loadPersistedTabs()).toBeNull();
+	});
+});
+
+describe("flat workspace helpers", () => {
+	it("createNotesSplitPane reuses notesSeed", () => {
+		const tab = makeTab("/vault/p", {
+			kind: "paper",
+			mode: "pdf",
+			notesPath: "/vault/p/NOTES.md",
+			notesSeed: "# hi",
+			paperMeta: { path: "p", title: "P" } as DocTab["paperMeta"],
+		});
+		const pane = createNotesSplitPane(tab);
+		expect(pane?.notesSeed).toBe("# hi");
+		expect(pane?.path).toBe("/vault/p/NOTES.md");
+		expect(pane?.title).toBe("Notes");
+	});
+
+	it("tabHasNotesSplit finds NOTES among open panels", () => {
+		const paper = makeTab("/vault/p", {
+			kind: "paper",
+			mode: "pdf",
+			notesPath: "/vault/p/NOTES.md",
+			paperMeta: { path: "p", title: "P" } as DocTab["paperMeta"],
+		});
+		const notes = createNotesSplitPane(paper);
+		expect(notes).not.toBeNull();
+		if (!notes) return;
+		expect(tabHasNotesSplit([paper], paper)).toBe(false);
+		expect(tabHasNotesSplit([paper, notes], paper)).toBe(true);
 	});
 });

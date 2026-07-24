@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "dockview-react/dist/styles/dockview.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -217,4 +218,77 @@
 .agentero-scroll::-webkit-scrollbar-corner,
 .agentero-scroll-both::-webkit-scrollbar-corner {
 	background: transparent;
+}
+
+/* dockview: map native theme class to app design tokens */
+.agentero-dockview,
+.agentero-dockview-theme {
+	--dv-group-view-background-color: var(--background);
+	--dv-tabs-and-actions-container-background-color: var(--muted);
+	--dv-tabs-and-actions-container-height: 2rem;
+	--dv-tabs-and-actions-container-font-size: 0.75rem;
+	--dv-activegroup-visiblepanel-tab-background-color: var(--background);
+	--dv-activegroup-hiddenpanel-tab-background-color: color-mix(
+		in oklab,
+		var(--muted) 80%,
+		transparent
+	);
+	--dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+	--dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+	--dv-activegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-tab-divider-color: var(--border);
+	--dv-separator-border: var(--border);
+	--dv-sash-color: var(--border);
+	--dv-active-sash-color: color-mix(
+		in oklab,
+		var(--primary) 50%,
+		var(--border)
+	);
+	--dv-drag-over-background-color: color-mix(
+		in oklab,
+		var(--primary) 16%,
+		transparent
+	);
+	--dv-drag-over-border-color: var(--primary);
+	--dv-drag-over-border: 2px solid var(--primary);
+	--dv-icon-hover-background-color: var(--accent);
+	background-color: var(--background);
+	color: var(--foreground);
+	height: 100%;
+	width: 100%;
+}
+
+/*
+ * Fill grid/split ancestry. Do NOT set height:100% on .dv-content-container —
+ * groupview is a flex column (tabs chrome + content). Forcing content to 100% of
+ * the group makes it overflow by the tab bar height, so editor toolbars stack
+ * over NOTES.md / tab titles.
+ */
+.agentero-dockview .dv-dockview,
+.agentero-dockview .dv-groupview,
+.agentero-dockview .dv-view,
+.agentero-dockview .dv-split-view-container {
+	height: 100%;
+	min-height: 0;
+}
+
+.agentero-dockview .dv-groupview > .dv-content-container {
+	/* dockview defaults: flex-grow:1; min-height:0 */
+	min-height: 0;
+	overflow: hidden;
+	background-color: var(--background);
+}
+
+.agentero-dockview .dv-tabs-and-actions-container {
+	flex-shrink: 0;
+	position: relative;
+	z-index: 2;
+}
+
+/* Global workspace: always show dockview tab chrome (it owns document tabs). */
+.agentero-dockview.agentero-dock-global .dv-tabs-and-actions-container {
+	display: flex !important;
 }

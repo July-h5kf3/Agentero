@@ -5,7 +5,6 @@
 
 export type ShortcutId =
 	| "settings"
-	| "showShortcuts"
 	| "newWindow"
 	| "openVault"
 	| "createVault"
@@ -63,14 +62,6 @@ export const SHORTCUTS: ShortcutDef[] = [
 		group: "App",
 		key: ",",
 		meta: true,
-	},
-	{
-		id: "showShortcuts",
-		group: "App",
-		// ⌘/ — toggle keyboard shortcuts cheat sheet (open and close)
-		key: "/",
-		meta: true,
-		// No whenSettingsClosed: must fire while open so the same key can dismiss.
 	},
 	{
 		id: "closeSheet",

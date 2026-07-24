@@ -4,10 +4,17 @@
  * Single-click a cell to copy that field (deferred so double-click can cancel);
  * double-click a row to open the paper without copying.
  * Reading heat: title text background as a left→right spine (doc start→end).
- * Optional tag filter chips above the table.
  */
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, X } from "lucide-react";
+import {
+	ArrowDown,
+	ArrowUp,
+	ArrowUpDown,
+	Download,
+	Loader2,
+	RefreshCw,
+	Search,
+} from "lucide-react";
 import {
 	Fragment,
 	type MouseEvent as ReactMouseEvent,
@@ -19,6 +26,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { ReadingTitleHeat } from "@/components/layout/reading-heatmap";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +38,7 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { Input } from "@/components/ui/input";
 import {
 	Tooltip,
 	TooltipContent,
@@ -51,7 +60,6 @@ import {
 } from "@/lib/settings";
 import {
 	coercePaperTags,
-	type PaperTag,
 	tagChipStyle,
 	tagSwatchStyle,
 } from "@/lib/tag-colors";
@@ -66,14 +74,13 @@ export type PapersLibraryProps = {
 	active?: boolean;
 	loading?: boolean;
 	query?: string;
+	/** Controlled search string (lives in App so palette/other callers can clear it). */
+	onQueryChange?: (query: string) => void;
 	/**
 	 * Vault-relative folder scope (e.g. `papers/nlp`).
 	 * Null/empty = full library. Filters by catalog `path` prefix (recursive).
 	 */
 	scopePath?: string | null;
-	/** Active tag filter (exact match, case-insensitive). */
-	tagFilter?: string | null;
-	onTagFilterChange?: (tag: string | null) => void;
 	onOpenPaper: (paper: PaperMetadata) => void;
 	/**
 	 * Column order + visibility (persisted in settings). When omitted, all
@@ -85,6 +92,11 @@ export type PapersLibraryProps = {
 	/** Rebuild the catalog from papers/ on disk (empty-state recovery). */
 	onRescan?: () => void;
 	rescanning?: boolean;
+	/** Export bibliography (shown in in-panel toolbar). */
+	onExport?: () => void;
+	exportBusy?: boolean;
+	/** Zotero migrate (full library only). */
+	onMigrateZotero?: () => void;
 	className?: string;
 };
 
@@ -184,13 +196,6 @@ function identifierCopyText(p: PaperMetadata): string | null {
 	return label && label !== "—" ? label : null;
 }
 
-function paperHasTag(p: PaperMetadata, tag: string): boolean {
-	const needle = tag.toLocaleLowerCase();
-	return coercePaperTags(p.tags).some(
-		(t) => t.name.toLocaleLowerCase() === needle,
-	);
-}
-
 function paperTagNames(p: PaperMetadata): string[] {
 	return coercePaperTags(p.tags).map((t) => t.name);
 }
@@ -250,84 +255,22 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 	);
 }
 
-function TagChip({
-	tag,
-	color,
-	active,
-	onClick,
-}: {
-	tag: string;
-	color?: PaperTag["color"];
-	active?: boolean;
-	onClick?: () => void;
-}) {
-	const colored = !active ? tagChipStyle(color) : undefined;
-	const body = (
-		<>
-			{color && !active ? (
-				<span
-					className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
-					style={tagSwatchStyle(color)}
-					aria-hidden
-				/>
-			) : null}
-			{tag}
-		</>
-	);
-	if (!onClick) {
-		return (
-			<span
-				className={cn(
-					"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
-					active
-						? "bg-foreground text-background"
-						: colored
-							? "font-medium"
-							: "bg-muted text-muted-foreground",
-				)}
-				style={colored}
-			>
-				{body}
-			</span>
-		);
-	}
-	return (
-		<button
-			type="button"
-			onClick={(e) => {
-				e.stopPropagation();
-				onClick();
-			}}
-			className={cn(
-				"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
-				"cursor-pointer transition-colors",
-				active
-					? "bg-foreground text-background hover:bg-foreground/90"
-					: colored
-						? "font-medium hover:opacity-90"
-						: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
-			)}
-			style={colored}
-		>
-			{body}
-		</button>
-	);
-}
-
 export function PapersLibrary({
 	papers,
 	vaultPath = null,
 	active = true,
 	loading,
-	query,
+	query = "",
+	onQueryChange,
 	scopePath = null,
-	tagFilter = null,
-	onTagFilterChange,
 	onOpenPaper,
 	columns = DEFAULT_LIBRARY_COLUMNS,
 	onColumnsChange,
 	onRescan,
 	rescanning,
+	onExport,
+	exportBusy = false,
+	onMigrateZotero,
 	className,
 }: PapersLibraryProps) {
 	const { t, i18n } = useTranslation("sidebar");
@@ -603,13 +546,7 @@ export function PapersLibrary({
 							{coercePaperTags(p.tags).length ? (
 								<div className="flex flex-wrap gap-1">
 									{coercePaperTags(p.tags).map((tag) => {
-										const active =
-											tagFilter != null &&
-											tag.name.toLocaleLowerCase() ===
-												tagFilter.toLocaleLowerCase();
-										const colored = !active
-											? tagChipStyle(tag.color)
-											: undefined;
+										const colored = tagChipStyle(tag.color);
 										return (
 											<button
 												key={tag.name}
@@ -618,11 +555,9 @@ export function PapersLibrary({
 													"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
 													"cursor-pointer transition-colors",
 													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-													active
-														? "bg-foreground text-background hover:bg-foreground/90"
-														: colored
-															? "font-medium hover:opacity-90"
-															: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
+													colored
+														? "font-medium hover:opacity-90"
+														: "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground",
 												)}
 												style={colored}
 												title={t("papersLibrary.copyHint", {
@@ -635,7 +570,7 @@ export function PapersLibrary({
 													onCellCopy(e, tag.name, t("papersLibrary.colTags"))
 												}
 											>
-												{tag.color && !active ? (
+												{tag.color ? (
 													<span
 														className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
 														style={tagSwatchStyle(tag.color)}
@@ -712,7 +647,7 @@ export function PapersLibrary({
 					);
 			}
 		},
-		[t, onCellCopy, tagFilter],
+		[t, onCellCopy],
 	);
 
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
@@ -739,21 +674,6 @@ export function PapersLibrary({
 		};
 	}, [vaultPath, scopedPapers, active]);
 
-	const allTags = useMemo(() => {
-		/** name → first-seen PaperTag (keeps color for filter chips). */
-		const map = new Map<string, PaperTag>();
-		for (const p of scopedPapers) {
-			for (const tag of coercePaperTags(p.tags)) {
-				const key = tag.name.toLocaleLowerCase();
-				if (!map.has(key)) map.set(key, tag);
-				else if (!map.get(key)?.color && tag.color) map.set(key, tag);
-			}
-		}
-		return [...map.values()].sort((a, b) =>
-			a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-		);
-	}, [scopedPapers]);
-
 	const normalizedQuery = (query ?? "").trim().toLocaleLowerCase();
 
 	const rows = useMemo(() => {
@@ -767,13 +687,10 @@ export function PapersLibrary({
 				);
 			});
 		}
-		if (tagFilter) {
-			filtered = filtered.filter((p) => paperHasTag(p, tagFilter));
-		}
 		const copy = [...filtered];
 		copy.sort((a, b) => comparePapers(a, b, sortKey, sortDir));
 		return copy;
-	}, [scopedPapers, sortKey, sortDir, normalizedQuery, tagFilter]);
+	}, [scopedPapers, sortKey, sortDir, normalizedQuery]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const uiScale = useUiScale();
@@ -792,260 +709,275 @@ export function PapersLibrary({
 			? totalSize - virtualRows[virtualRows.length - 1].end
 			: 0;
 
+	const searching = normalizedQuery.length > 0;
+	const showFullLibrary = !scopePath;
+	const toolbar = onQueryChange ? (
+		<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+			<div className="relative min-w-0 max-w-[280px] flex-1">
+				<Search
+					className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
+					aria-hidden
+				/>
+				<Input
+					type="search"
+					value={query}
+					onChange={(e) => onQueryChange(e.target.value)}
+					placeholder={t("papersLibrary.search")}
+					aria-label={t("papersLibrary.search")}
+					className="h-7 pl-7 text-xs"
+				/>
+			</div>
+			<div className="flex h-7 shrink-0 items-center gap-1.5">
+				{showFullLibrary && onMigrateZotero ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-7 shrink-0"
+								aria-label={t("zoteroMigrate.button")}
+								disabled={!vaultPath}
+								onClick={onMigrateZotero}
+							>
+								<ZoteroIcon className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t("zoteroMigrate.button")}
+						</TooltipContent>
+					</Tooltip>
+				) : null}
+				{onExport ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-7 shrink-0"
+								aria-label={t("papersLibrary.export")}
+								disabled={!vaultPath || exportBusy || papers.length === 0}
+								onClick={onExport}
+							>
+								{exportBusy ? (
+									<Loader2 className="size-3.5 animate-spin" />
+								) : (
+									<Download className="size-3.5" />
+								)}
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t("papersLibrary.export")}
+						</TooltipContent>
+					</Tooltip>
+				) : null}
+			</div>
+		</div>
+	) : null;
+
 	if (loading) {
 		return (
-			<div
-				className={cn(
-					"flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm",
-					className,
-				)}
-			>
-				{t("papersLibrary.loading")}
+			<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+				{toolbar}
+				<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
+					{t("papersLibrary.loading")}
+				</div>
 			</div>
 		);
 	}
 
-	const searching = normalizedQuery.length > 0 || Boolean(tagFilter);
-
-	if (!rows.length && !allTags.length) {
+	if (!rows.length) {
 		return (
-			<div
-				className={cn(
-					"flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center",
-					className,
-				)}
-			>
-				<p className="font-medium text-sm">
-					{searching
-						? t("papersLibrary.noMatch")
-						: t("papersLibrary.emptyTitle")}
-				</p>
-				{searching ? null : (
-					<p className="max-w-sm text-muted-foreground text-xs">
-						{t("papersLibrary.emptyHint")}
+			<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+				{toolbar}
+				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+					<p className="font-medium text-sm">
+						{searching
+							? t("papersLibrary.noMatch")
+							: t("papersLibrary.emptyTitle")}
 					</p>
-				)}
-				{!searching && onRescan ? (
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="mt-1"
-						disabled={rescanning}
-						onClick={onRescan}
-					>
-						<RefreshCw
-							className={cn("size-3.5", rescanning && "animate-spin")}
-						/>
-						{t("papersLibrary.rescan")}
-					</Button>
-				) : null}
+					{searching ? null : (
+						<p className="max-w-sm text-muted-foreground text-xs">
+							{t("papersLibrary.emptyHint")}
+						</p>
+					)}
+					{!searching && onRescan ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="mt-1"
+							disabled={rescanning}
+							onClick={onRescan}
+						>
+							<RefreshCw
+								className={cn("size-3.5", rescanning && "animate-spin")}
+							/>
+							{t("papersLibrary.rescan")}
+						</Button>
+					) : null}
+				</div>
 			</div>
 		);
 	}
 
 	return (
 		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-			{allTags.length > 0 && onTagFilterChange ? (
-				<div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
-					<span className="mr-1 text-[0.625rem] text-muted-foreground uppercase tracking-wide">
-						{t("papersLibrary.filterTag")}
-					</span>
-					{allTags.map((tag) => {
-						const active =
-							tagFilter != null &&
-							tag.name.toLocaleLowerCase() === tagFilter.toLocaleLowerCase();
-						return (
-							<TagChip
-								key={tag.name}
-								tag={tag.name}
-								color={tag.color}
-								active={active}
-								onClick={() => onTagFilterChange(active ? null : tag.name)}
+			{toolbar}
+			<div
+				ref={scrollRef}
+				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
+			>
+				{/* Fixed weights keep the table stable while content and rows change. */}
+				<table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
+					<colgroup>
+						{visibleColumns.map((col) => (
+							<col
+								key={col.key}
+								style={{
+									width: `${(COLUMN_META[col.key].widthWeight / visibleColumnWeight) * 100}%`,
+								}}
 							/>
-						);
-					})}
-					{tagFilter ? (
-						<button
-							type="button"
-							className={cn(
-								"inline-flex items-center gap-0.5 rounded px-1.5 py-0.5",
-								"text-[0.625rem] text-muted-foreground transition-colors",
-								"hover:bg-muted hover:text-foreground",
-								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-							)}
-							onClick={() => onTagFilterChange(null)}
-							aria-label={t("papersLibrary.clearTagFilter")}
-						>
-							<X className="size-2.5" aria-hidden />
-							{t("papersLibrary.clearTagFilter")}
-						</button>
-					) : null}
-				</div>
-			) : null}
-
-			{!rows.length ? (
-				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-					<p className="font-medium text-sm">{t("papersLibrary.noMatch")}</p>
-				</div>
-			) : (
-				<div
-					ref={scrollRef}
-					className="agentero-scroll-both min-h-0 min-w-0 flex-1"
-				>
-					{/* Fixed weights keep the table stable while content and rows change. */}
-					<table className="w-full min-w-[900px] table-fixed border-collapse text-left text-sm">
-						<colgroup>
-							{visibleColumns.map((col) => (
-								<col
-									key={col.key}
-									style={{
-										width: `${(COLUMN_META[col.key].widthWeight / visibleColumnWeight) * 100}%`,
-									}}
-								/>
-							))}
-						</colgroup>
-						<ContextMenu>
-							<ContextMenuTrigger asChild>
-								<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
-									<tr className="text-muted-foreground text-xs">
-										{visibleColumns.map((col) => {
-											const meta = COLUMN_META[col.key];
-											const active = sortKey === col.key;
-											const isDragOver =
-												dragOverKey === col.key && dragKey !== col.key;
-											return (
-												<th
-													key={col.key}
+						))}
+					</colgroup>
+					<ContextMenu>
+						<ContextMenuTrigger asChild>
+							<thead className="sticky top-0 z-[1] border-b bg-background/95 backdrop-blur-sm">
+								<tr className="text-muted-foreground text-xs">
+									{visibleColumns.map((col) => {
+										const meta = COLUMN_META[col.key];
+										const active = sortKey === col.key;
+										const isDragOver =
+											dragOverKey === col.key && dragKey !== col.key;
+										return (
+											<th
+												key={col.key}
+												className={cn(
+													meta.headerClassName,
+													"p-0 font-medium",
+													dragKey === col.key && "opacity-50",
+													isDragOver && "bg-muted",
+												)}
+												aria-sort={
+													active
+														? sortDir === "asc"
+															? "ascending"
+															: "descending"
+														: "none"
+												}
+												draggable={Boolean(onColumnsChange)}
+												onDragStart={(e) => {
+													setDragKey(col.key);
+													e.dataTransfer.effectAllowed = "move";
+													e.dataTransfer.setData("text/plain", col.key);
+												}}
+												onDragOver={(e) => {
+													if (!dragKey) return;
+													e.preventDefault();
+													e.dataTransfer.dropEffect = "move";
+													if (dragOverKey !== col.key) setDragOverKey(col.key);
+												}}
+												onDrop={(e) => {
+													e.preventDefault();
+													handleColumnDrop(col.key);
+												}}
+												onDragEnd={() => {
+													setDragKey(null);
+													setDragOverKey(null);
+												}}
+											>
+												<button
+													type="button"
 													className={cn(
-														meta.headerClassName,
-														"p-0 font-medium",
-														dragKey === col.key && "opacity-50",
-														isDragOver && "bg-muted",
+														"flex w-full cursor-grab items-center gap-1 px-3 py-2 text-left active:cursor-grabbing",
+														"hover:bg-muted/60 hover:text-foreground",
+														"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+														active && "text-foreground",
 													)}
-													aria-sort={
-														active
-															? sortDir === "asc"
-																? "ascending"
-																: "descending"
-															: "none"
-													}
-													draggable={Boolean(onColumnsChange)}
-													onDragStart={(e) => {
-														setDragKey(col.key);
-														e.dataTransfer.effectAllowed = "move";
-														e.dataTransfer.setData("text/plain", col.key);
-													}}
-													onDragOver={(e) => {
-														if (!dragKey) return;
-														e.preventDefault();
-														e.dataTransfer.dropEffect = "move";
-														if (dragOverKey !== col.key)
-															setDragOverKey(col.key);
-													}}
-													onDrop={(e) => {
-														e.preventDefault();
-														handleColumnDrop(col.key);
-													}}
-													onDragEnd={() => {
-														setDragKey(null);
-														setDragOverKey(null);
-													}}
+													onClick={() => handleSort(col.key)}
+													aria-label={t("papersLibrary.sortBy", {
+														column: t(meta.labelKey),
+													})}
 												>
-													<button
-														type="button"
-														className={cn(
-															"flex w-full cursor-grab items-center gap-1 px-3 py-2 text-left active:cursor-grabbing",
-															"hover:bg-muted/60 hover:text-foreground",
-															"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-															active && "text-foreground",
-														)}
-														onClick={() => handleSort(col.key)}
-														aria-label={t("papersLibrary.sortBy", {
-															column: t(meta.labelKey),
-														})}
-													>
-														<span className="truncate">{t(meta.labelKey)}</span>
-														<SortIcon active={active} dir={sortDir} />
-													</button>
-												</th>
-											);
-										})}
-									</tr>
-								</thead>
-							</ContextMenuTrigger>
-							<ContextMenuContent className="w-44">
-								<ContextMenuLabel>
-									{t("papersLibrary.columnsMenuLabel")}
-								</ContextMenuLabel>
-								{columns.map((col) => (
-									<ContextMenuCheckboxItem
-										key={col.key}
-										checked={col.visible}
-										disabled={col.key === "title" || !onColumnsChange}
-										onSelect={(e) => e.preventDefault()}
-										onCheckedChange={() => toggleColumn(col.key)}
-									>
-										{t(COLUMN_META[col.key].labelKey)}
-									</ContextMenuCheckboxItem>
-								))}
-								<ContextMenuSeparator />
-								<ContextMenuItem
-									disabled={!onColumnsChange}
-									onSelect={() => resetColumns()}
+													<span className="truncate">{t(meta.labelKey)}</span>
+													<SortIcon active={active} dir={sortDir} />
+												</button>
+											</th>
+										);
+									})}
+								</tr>
+							</thead>
+						</ContextMenuTrigger>
+						<ContextMenuContent className="w-44">
+							<ContextMenuLabel>
+								{t("papersLibrary.columnsMenuLabel")}
+							</ContextMenuLabel>
+							{columns.map((col) => (
+								<ContextMenuCheckboxItem
+									key={col.key}
+									checked={col.visible}
+									disabled={col.key === "title" || !onColumnsChange}
+									onSelect={(e) => e.preventDefault()}
+									onCheckedChange={() => toggleColumn(col.key)}
 								>
-									{t("papersLibrary.resetColumns")}
-								</ContextMenuItem>
-							</ContextMenuContent>
-						</ContextMenu>
-						<tbody>
-							{paddingTop > 0 ? (
-								<tr aria-hidden>
-									<td
-										colSpan={visibleColumns.length}
-										style={{ height: paddingTop }}
-									/>
+									{t(COLUMN_META[col.key].labelKey)}
+								</ContextMenuCheckboxItem>
+							))}
+							<ContextMenuSeparator />
+							<ContextMenuItem
+								disabled={!onColumnsChange}
+								onSelect={() => resetColumns()}
+							>
+								{t("papersLibrary.resetColumns")}
+							</ContextMenuItem>
+						</ContextMenuContent>
+					</ContextMenu>
+					<tbody>
+						{paddingTop > 0 ? (
+							<tr aria-hidden>
+								<td
+									colSpan={visibleColumns.length}
+									style={{ height: paddingTop }}
+								/>
+							</tr>
+						) : null}
+						{virtualRows.map((vr) => {
+							const p = rows[vr.index];
+							const heat = heatmaps.get(heatmapCacheKey(p));
+							return (
+								<tr
+									key={p.path ?? p.id}
+									data-index={vr.index}
+									ref={rowVirtualizer.measureElement}
+									className="border-b border-border/60 transition-colors hover:bg-muted/50"
+									onDoubleClick={() => openPaperFromRow(p)}
+								>
+									{visibleColumns.map((col) => (
+										<Fragment key={col.key}>
+											{renderCell(col.key, p, heat)}
+										</Fragment>
+									))}
 								</tr>
-							) : null}
-							{virtualRows.map((vr) => {
-								const p = rows[vr.index];
-								const heat = heatmaps.get(heatmapCacheKey(p));
-								return (
-									<tr
-										key={p.path ?? p.id}
-										data-index={vr.index}
-										ref={rowVirtualizer.measureElement}
-										className="border-b border-border/60 transition-colors hover:bg-muted/50"
-										onDoubleClick={() => openPaperFromRow(p)}
-									>
-										{visibleColumns.map((col) => (
-											<Fragment key={col.key}>
-												{renderCell(col.key, p, heat)}
-											</Fragment>
-										))}
-									</tr>
-								);
-							})}
-							{paddingBottom > 0 ? (
-								<tr aria-hidden>
-									<td
-										colSpan={visibleColumns.length}
-										style={{ height: paddingBottom }}
-									/>
-								</tr>
-							) : null}
-						</tbody>
-					</table>
-					<p className="sticky left-0 px-3 py-2 text-muted-foreground text-xs">
-						{t("papersLibrary.count", {
-							count: rows.length,
-							formatted: new Intl.NumberFormat(i18n.language).format(
-								rows.length,
-							),
+							);
 						})}
-					</p>
-				</div>
-			)}
+						{paddingBottom > 0 ? (
+							<tr aria-hidden>
+								<td
+									colSpan={visibleColumns.length}
+									style={{ height: paddingBottom }}
+								/>
+							</tr>
+						) : null}
+					</tbody>
+				</table>
+				<p className="sticky left-0 px-3 py-2 text-muted-foreground text-xs">
+					{t("papersLibrary.count", {
+						count: rows.length,
+						formatted: new Intl.NumberFormat(i18n.language).format(rows.length),
+					})}
+				</p>
+			</div>
 		</div>
 	);
 }

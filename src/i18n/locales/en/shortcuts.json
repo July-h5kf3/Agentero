@@ -6,7 +6,6 @@
 	},
 	"labels": {
 		"settings": "Settings…",
-		"showShortcuts": "Keyboard shortcuts (toggle)",
 		"closeSheet": "Close dialog / sheet",
 		"zoomIn": "Zoom in",
 		"zoomOut": "Zoom out",

@@ -223,10 +223,15 @@ export function MarkdownEditor({
 	return (
 		<MarkdownDocProvider value={docCtx}>
 			<Plate editor={editor} onValueChange={handleChange}>
-				<div className={cn("flex h-full min-h-0 flex-col", className)}>
+				<div
+					className={cn(
+						"flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
+						className,
+					)}
+				>
 					{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
 					<EditorContainer
-						className="agentero-scroll min-h-0 flex-1"
+						className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
 						onKeyDown={readOnly ? undefined : handleKeyDown}
 					>
 						{/*

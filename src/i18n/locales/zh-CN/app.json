@@ -28,7 +28,6 @@
 		"catTab": "标签",
 		"settingsOpen": "打开设置",
 		"settingsClose": "关闭设置",
-		"shortcutsShow": "键盘快捷键",
 		"vaultOpen": "打开 Vault…",
 		"vaultCreate": "创建 Vault…",
 		"vaultRefresh": "刷新文件树",
@@ -93,6 +92,9 @@
 	"tabs": {
 		"strip": "已打开的文档",
 		"close": "关闭 {{title}}",
+		"closeSplit": "关闭分屏 · {{title}}",
+		"splitDropHint": "松开放到分屏",
+		"splitNotAllowed": "此项无法在分屏中打开。",
 		"emptyTitle": "未打开任何文档",
 		"emptyHint": "从侧边栏选择文件或论文即可在标签中打开。"
 	},

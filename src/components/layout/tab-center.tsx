@@ -16,7 +16,8 @@ import type { LibraryColumnPref } from "@/lib/settings";
 import { type DocTab, tabIsPaperNotes } from "@/lib/tabs";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 
-type TabCenterProps = {
+export type TabCenterProps = {
+	/** Primary tab or split pane (shared fields). */
 	tab: DocTab;
 	active: boolean;
 	/**
@@ -30,17 +31,21 @@ type TabCenterProps = {
 	libraryPapers: PaperMetadata[];
 	libraryLoading: boolean;
 	libraryQuery: string;
+	onLibraryQueryChange: (query: string) => void;
 	/** Vault-relative folder scope; null = full library. */
 	libraryScopePath: string | null;
-	libraryTagFilter: string | null;
 	/** Library table column order + visibility. */
 	libraryColumns: LibraryColumnPref[];
 	onLibraryColumnsChange: (columns: LibraryColumnPref[]) => void;
 	rescanning: boolean;
-	onLibraryTagFilterChange: (tag: string | null) => void;
 	onOpenLibraryPaper: (paper: PaperMetadata) => void;
 	onRescanPapers: () => void;
+	onLibraryExport: () => void;
+	libraryExportBusy: boolean;
+	onMigrateZotero: () => void;
 	onTrashChanged: () => void;
+	/** Bump to reload recycle bin after Empty Recycle Bin from the sidebar. */
+	trashReloadSignal?: number;
 	/** Markdown editor config. */
 	editorFontSize: number;
 	showEditorToolbar: boolean;
@@ -91,15 +96,18 @@ export const TabCenter = memo(function TabCenter({
 	libraryPapers,
 	libraryLoading,
 	libraryQuery,
+	onLibraryQueryChange,
 	libraryScopePath,
-	libraryTagFilter,
 	libraryColumns,
 	onLibraryColumnsChange,
 	rescanning,
-	onLibraryTagFilterChange,
 	onOpenLibraryPaper,
 	onRescanPapers,
+	onLibraryExport,
+	libraryExportBusy,
+	onMigrateZotero,
 	onTrashChanged,
+	trashReloadSignal = 0,
 	editorFontSize,
 	showEditorToolbar,
 	notesPlaceholder,
@@ -126,14 +134,16 @@ export const TabCenter = memo(function TabCenter({
 				active={active}
 				loading={libraryLoading}
 				query={libraryQuery}
+				onQueryChange={onLibraryQueryChange}
 				scopePath={libraryScopePath}
-				tagFilter={libraryTagFilter}
-				onTagFilterChange={onLibraryTagFilterChange}
 				columns={libraryColumns}
 				onColumnsChange={onLibraryColumnsChange}
 				onOpenPaper={onOpenLibraryPaper}
 				onRescan={onRescanPapers}
 				rescanning={rescanning}
+				onExport={onLibraryExport}
+				exportBusy={libraryExportBusy}
+				onMigrateZotero={onMigrateZotero}
 				className="bg-muted/20"
 			/>
 		);
@@ -144,6 +154,7 @@ export const TabCenter = memo(function TabCenter({
 				vaultPath={vaultPath}
 				active={active}
 				onChanged={onTrashChanged}
+				reloadSignal={trashReloadSignal}
 				className="bg-muted/20"
 			/>
 		);
@@ -151,14 +162,14 @@ export const TabCenter = memo(function TabCenter({
 	const isNotes = tabIsPaperNotes(tab);
 	if (tab.mode === "markdown") {
 		return (
-			<div className="min-h-0 flex-1 overflow-hidden bg-muted/30">
+			<div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
 				<MarkdownEditor
 					key={
 						isNotes
 							? `notes-center-${tab.id}-${tab.notesKey}`
 							: `file-${tab.id}-${tab.seedKey}`
 					}
-					className="agentero-scroll h-full min-h-0"
+					className="h-full min-h-0"
 					initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
 					filePath={
 						isNotes ? tab.notesPath : isMarkdownPath(tab.path) ? tab.path : null

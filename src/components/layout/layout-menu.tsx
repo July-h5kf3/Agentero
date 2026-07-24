@@ -30,7 +30,7 @@ type LayoutMenuProps = {
 	/** Notes column only applies while a paper PDF/HTML is open. */
 	notesAvailable: boolean;
 	notesOpen: boolean;
-	onToggleNotes: (open: boolean) => void;
+	onToggleNotes: (open?: boolean) => void;
 	rightSidebarOpen: boolean;
 	onToggleRightSidebar: () => void;
 	zenMode: boolean;
@@ -88,7 +88,7 @@ export function LayoutMenu({
 				<DropdownMenuCheckboxItem
 					checked={notesOpen}
 					disabled={!notesAvailable}
-					onCheckedChange={(checked) => onToggleNotes(checked)}
+					onCheckedChange={() => onToggleNotes()}
 					onSelect={(e) => e.preventDefault()}
 				>
 					{t("labels.notes")}

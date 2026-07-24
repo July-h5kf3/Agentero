@@ -1,7 +1,6 @@
 import { FileIcon, FolderIcon, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -12,7 +11,6 @@ import {
 import { notifyError } from "@/lib/notify";
 import {
 	listTrash,
-	purgeAllTrash,
 	purgeTrashItem,
 	restoreTrashItem,
 	type TrashEntry,
@@ -22,12 +20,15 @@ import { cn } from "@/lib/utils";
 /**
  * Recycle Bin center view (Zotero-style): lists items previously deleted into
  * `.agentero/.trash/` in the same full-pane area as the Library table, with
- * per-item Restore / Delete-permanently and Empty Recycle Bin.
+ * per-item Restore / Delete-permanently. Empty Recycle Bin lives on the
+ * sidebar trash node context menu.
  */
 export function RecycleBinView({
 	vaultPath,
 	active,
 	onChanged,
+	/** Incremented by parent after Empty Recycle Bin (sidebar menu). */
+	reloadSignal = 0,
 	className,
 }: {
 	vaultPath: string | null;
@@ -35,6 +36,7 @@ export function RecycleBinView({
 	active: boolean;
 	/** Called after a restore so the parent can refresh tree / library / wiki. */
 	onChanged: () => void | Promise<void>;
+	reloadSignal?: number;
 	className?: string;
 }) {
 	const { t, i18n } = useTranslation("sidebar");
@@ -57,10 +59,11 @@ export function RecycleBinView({
 		}
 	}, [vaultPath, t]);
 
-	// Reload whenever the view becomes active (tabs stay mounted in the strip).
+	// Reload when shown, or after Empty Recycle Bin from the sidebar menu.
 	useEffect(() => {
+		void reloadSignal;
 		if (active) void reload();
-	}, [active, reload]);
+	}, [active, reload, reloadSignal]);
 
 	const formatWhen = useCallback(
 		(iso: string) => {
@@ -116,47 +119,8 @@ export function RecycleBinView({
 		[vaultPath, busyId, t],
 	);
 
-	const handleEmpty = useCallback(async () => {
-		if (!vaultPath || items.length === 0) return;
-		if (
-			!window.confirm(t("recycleBin.emptyConfirm", { count: items.length }))
-		) {
-			return;
-		}
-		setBusyId("__all__");
-		try {
-			await purgeAllTrash(vaultPath);
-			setItems([]);
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : t("recycleBin.purgeFailed"));
-		} finally {
-			setBusyId(null);
-		}
-	}, [vaultPath, items.length, t]);
-
 	return (
 		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-			{/* Same h-10 bar as VaultSidebarHeader / other pane headers. */}
-			<PaneHeader
-				trailing={
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="h-7 gap-1 px-2 text-destructive text-xs leading-none"
-						disabled={items.length === 0 || Boolean(busyId)}
-						onClick={() => void handleEmpty()}
-					>
-						<Trash2 className="size-3.5 shrink-0" aria-hidden />
-						<span className="leading-none">{t("recycleBin.emptyTrash")}</span>
-					</Button>
-				}
-			>
-				<span className="truncate font-medium text-sm">
-					{t("recycleBin.title")}
-				</span>
-			</PaneHeader>
-
 			{loading ? (
 				<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
 					{t("recycleBin.loading")}

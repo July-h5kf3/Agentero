@@ -1,17 +1,9 @@
-import {
-	Download,
-	FolderOpen,
-	Loader2,
-	NotebookPen,
-	PanelTop,
-	Search,
-} from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { AgentPanel } from "@/components/layout/agent-panel";
 import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
 import { BacklinksPanel } from "@/components/layout/backlinks-panel";
@@ -26,16 +18,17 @@ import {
 import { GraphPanel } from "@/components/layout/graph-panel";
 import { ImportLocalPdfDialog } from "@/components/layout/import-local-pdf-dialog";
 import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
-import { NotesEditorTab } from "@/components/layout/notes-editor-tab";
-import { PaneHeader } from "@/components/layout/pane-header";
 import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
 import {
 	ResizableGroup,
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/layout/resizable";
-import { ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
-import { TabCenter } from "@/components/layout/tab-center";
+import {
+	TabWorkspace,
+	type TabWorkspaceHandle,
+	type WorkspaceExternalDrop,
+} from "@/components/layout/tab-workspace";
 import { VaultWelcome } from "@/components/layout/vault-welcome";
 import { WorkspaceHeader } from "@/components/layout/workspace-header";
 import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
@@ -43,20 +36,12 @@ import {
 	type SettingsSection,
 	SettingsWindow,
 } from "@/components/settings-window";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
-import { ViewModeToggle } from "@/components/viewer/view-mode-toggle";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -121,7 +106,9 @@ import {
 	isTrashVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
 	listPapers,
+	listTrash,
 	movePaperFolder,
+	purgeAllTrash,
 	rescanPapers,
 	setPaperTags,
 	TRASH_VIRTUAL_PATH,
@@ -150,22 +137,24 @@ import {
 } from "@/lib/settings";
 import {
 	basenameOf,
-	cycleActiveTabId,
+	createNotesSplitPane,
+	createPlaceholderTab,
 	type DocTab,
 	ensureFullLibraryTab,
 	insertPlaceholderTab,
 	loadPersistedTabs,
 	loadTabResources,
-	moveTab,
 	normalizeTabPath,
+	type OpenPlacement,
 	patchTab,
 	removeTab,
 	removeTabsUnderPath,
 	reseedMarkdownTab,
 	reseedNotesTab,
-	revokeTabPdfSource,
+	revokeTabMediaSources,
 	savePersistedTabs,
 	syncTabSeedsForPath,
+	tabHasNotesSplit,
 	tabIdForPath,
 	tabIsPaperNotes,
 	tabNotesEligible,
@@ -193,7 +182,6 @@ import {
 	readVaultFile,
 	removeRecentVault,
 	replaceTreeNodeChildren,
-	resolveCreateParent,
 	saveVaultPath,
 	seededSkillIdsFromCreated,
 	vaultDisplayName,
@@ -239,9 +227,30 @@ export default function App() {
 	});
 	const [tree, setTree] = useState<FileNode[]>([]);
 	const [treeLoading, setTreeLoading] = useState(() => Boolean(vaultPath));
-	/** Open documents in the center tab strip (browser-style multi-tab). */
-	const [tabs, setTabs] = useState<DocTab[]>([]);
-	const [activeTabId, setActiveTabId] = useState<string | null>(null);
+	/**
+	 * Seed open panels + layout from localStorage on first paint so TabWorkspace
+	 * onReady can fromJSON before any membership sync (avoids empty→rebuild race).
+	 */
+	const persistedSession = useMemo(() => {
+		if (!isTauri()) return null;
+		return loadPersistedTabs();
+	}, []);
+	/** Open document panels (flat list; layout owned by global dockview). */
+	const [tabs, setTabs] = useState<DocTab[]>(() => {
+		if (!persistedSession?.tabs.length) return [];
+		return persistedSession.tabs.map((pt) =>
+			createPlaceholderTab(pt.path, pt.mode),
+		);
+	});
+	const [activeTabId, setActiveTabId] = useState<string | null>(
+		() => persistedSession?.activeId ?? null,
+	);
+	/** Global dockview grid snapshot (panel ids = tab ids). */
+	const [dockLayout, setDockLayout] = useState<unknown | null>(
+		() => persistedSession?.layout ?? null,
+	);
+	/** Imperative open/cycle against live dockview (placement, visual order). */
+	const workspaceRef = useRef<TabWorkspaceHandle>(null);
 	/** Most-recently-viewed PDF tab ids kept mounted (see PDF_TAB_MOUNT_LRU). */
 	const [pdfLru, setPdfLru] = useState<string[]>([]);
 	/**
@@ -260,17 +269,12 @@ export default function App() {
 	const [libraryLoading, setLibraryLoading] = useState(false);
 	/** Title search query for the papers library view. */
 	const [libraryQuery, setLibraryQuery] = useState("");
-	/** Tag filter for the papers library view (exact match). */
-	const [libraryTagFilter, setLibraryTagFilter] = useState<string | null>(null);
 	/**
 	 * Vault-relative folder filter for the single Library tab (e.g. `papers/nlp/pretrain`).
 	 * Null = full library. Set by clicking org folders in the tree — does not open new tabs.
 	 */
 	const [libraryScopePath, setLibraryScopePath] = useState<string | null>(null);
-	/** Whether the side Notes column is shown while viewing a paper PDF/HTML. */
-	const [showNotes, setShowNotes] = useState(true);
-	const showNotesRef = useRef(showNotes);
-	showNotesRef.current = showNotes;
+
 	/**
 	 * Right sidebar (⌘L): Agent (default) or Backlinks with Graph below.
 	 * Collapsed by default; top-bar icons open a tab.
@@ -298,7 +302,6 @@ export default function App() {
 	const rightSidebarPanelRef = usePanelRef();
 	const sourcePanelRef = usePanelRef();
 	const editorPaneRef = useRef<HTMLDivElement>(null);
-	const notesPaneRef = useRef<HTMLDivElement>(null);
 	const fileTreeRef = useRef<FileTreeHandle>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
@@ -341,21 +344,23 @@ export default function App() {
 		() => tabs.find((t) => t.id === activeTabId) ?? null,
 		[tabs, activeTabId],
 	);
-	// Keep the active PDF tab plus a few recently viewed ones mounted so tab
-	// switches don't re-open the PDFium document (main-thread block).
+	// Keep active PDF panels plus a few recently viewed ones mounted.
 	useEffect(() => {
-		if (!activeTabId || activeTab?.mode !== "pdf") return;
+		const ids = tabs.filter((t) => t.mode === "pdf").map((t) => t.id);
+		const activePdf = activeTab?.mode === "pdf" ? activeTab.id : null;
+		if (!activePdf && !ids.length) return;
 		setPdfLru((prev) => {
-			if (prev[0] === activeTabId) return prev;
-			return [activeTabId, ...prev.filter((id) => id !== activeTabId)].slice(
-				0,
-				PDF_TAB_MOUNT_LRU,
-			);
+			let next = prev;
+			const promote = activePdf ? [activePdf, ...ids] : ids;
+			for (const id of promote) {
+				if (next[0] === id) continue;
+				next = [id, ...next.filter((x) => x !== id)];
+			}
+			return next.slice(0, PDF_TAB_MOUNT_LRU);
 		});
-	}, [activeTabId, activeTab?.mode]);
+	}, [activeTab?.mode, activeTab?.id, tabs]);
 	/** Active document identity — downstream panels read this as before. */
 	const selectedPath = activeTab?.path ?? null;
-	const centerMode = activeTab?.mode ?? "markdown";
 	const paperMeta = activeTab?.paperMeta ?? null;
 
 	// Tree selection / create-parent follows the active document.
@@ -368,13 +373,6 @@ export default function App() {
 		}
 		setTreeSelectedPath(selectedPath);
 	}, [selectedPath, libraryScopePath, vaultPath]);
-
-	const modeAvailable: Record<CenterViewMode, boolean> = {
-		markdown: true,
-		pdf: Boolean(activeTab?.pdfUrl || activeTab?.pdfBytes),
-		html: Boolean(activeTab?.htmlUrl),
-		image: Boolean(activeTab?.imageUrl),
-	};
 
 	const paperFoldersRef = useRef(paperFolders);
 	paperFoldersRef.current = paperFolders;
@@ -433,28 +431,56 @@ export default function App() {
 		};
 	}, []);
 
-	/** Merge a patch into the tab with the given id. */
+	/** Merge a patch into the panel with the given id. */
 	const updateTab = useCallback((id: string, patch: Partial<DocTab>) => {
 		setTabs((prev) => patchTab(prev, id, patch));
 	}, []);
 
 	/**
-	 * Open a document in a tab. If a tab for this path already exists we just
-	 * activate it (keeps its mounted viewer/editor state — like a browser tab).
-	 * Otherwise a placeholder is inserted, then its resources load asynchronously.
+	 * When the strip would be empty with a Vault open, insert full Library.
+	 * Active focus is left to dockview (`onDidActivePanelChange` / sync end).
+	 */
+	const withLibraryIfEmpty = useCallback((next: DocTab[]): DocTab[] => {
+		if (next.length > 0 || !vaultPathRef.current) return next;
+		return ensureFullLibraryTab([]).tabs;
+	}, []);
+
+	/**
+	 * Open a document panel. If already open → activate it.
+	 * Otherwise insert a placeholder, imperatively place in dockview, load
+	 * resources, and optionally open NOTES as a same-group sibling.
 	 */
 	const openTab = useCallback(
-		(path: string, opts?: { preferMode?: CenterViewMode }) => {
+		(
+			path: string,
+			opts?: {
+				preferMode?: CenterViewMode;
+				/** Place relative to an existing panel (file-tree drop / NOTES). */
+				placement?: OpenPlacement;
+				/** Skip default paper→NOTES companion open. */
+				skipDefaultNotes?: boolean;
+			},
+		) => {
 			const id = tabIdForPath(path);
-			let exists = false;
-			setTabs((prev) => {
-				const result = insertPlaceholderTab(prev, path, opts?.preferMode);
-				exists = result.exists;
-				return result.tabs;
-			});
-			setActiveTabId(id);
+			const existing = tabsRef.current.find((t) => t.id === id);
+			if (existing) {
+				setActiveTabId(id);
+				workspaceRef.current?.activatePanel(id);
+				return;
+			}
+			const { tabs: nextTabs, id: insertedId } = insertPlaceholderTab(
+				tabsRef.current,
+				path,
+				opts?.preferMode,
+			);
+			const placeholder =
+				nextTabs.find((t) => t.id === insertedId) ??
+				createPlaceholderTab(path, opts?.preferMode);
+			tabsRef.current = nextTabs;
+			setTabs(nextTabs);
+			setActiveTabId(insertedId);
+			workspaceRef.current?.openPanel(placeholder, opts?.placement ?? null);
 
-			if (exists) return;
 			void (async () => {
 				const res = await loadTabResources(
 					path,
@@ -469,7 +495,7 @@ export default function App() {
 							: res.error,
 					);
 				}
-				updateTab(id, {
+				const patch: Partial<DocTab> = {
 					kind: res.kind,
 					title: res.title,
 					mode: res.mode,
@@ -483,8 +509,39 @@ export default function App() {
 					markdownSeed: res.markdownSeed,
 					seedKey: 1,
 					loaded: true,
-				});
-				// Auto-download for preview may have written local PDF — refresh tree icons
+				};
+				updateTab(id, patch);
+
+				// Paper default: open NOTES as a sibling tab in the same group (within).
+				const wantDefaultNotes =
+					!opts?.skipDefaultNotes &&
+					!opts?.placement &&
+					res.kind === "paper" &&
+					Boolean(res.notesPath) &&
+					(res.mode === "pdf" || res.mode === "html");
+				if (wantDefaultNotes && res.notesPath) {
+					const notesId = tabIdForPath(res.notesPath);
+					if (!tabsRef.current.some((t) => t.id === notesId)) {
+						const paperLike = {
+							...createPlaceholderTab(path, res.mode),
+							...patch,
+						} as DocTab;
+						const notesPane = createNotesSplitPane(paperLike);
+						if (notesPane) {
+							setTabs((prev) => {
+								if (prev.some((t) => t.id === notesPane.id)) return prev;
+								const next = [...prev, notesPane];
+								tabsRef.current = next;
+								return next;
+							});
+							workspaceRef.current?.openPanel(notesPane, {
+								direction: "within",
+								referencePanelId: id,
+							});
+						}
+					}
+				}
+
 				const vault = vaultPathRef.current;
 				if (res.didDownloadAssets && vault) {
 					const generation = treeLoadGenerationRef.current;
@@ -505,84 +562,50 @@ export default function App() {
 		[t, updateTab],
 	);
 
-	/** Close a tab; move focus to a neighbor, or full Library when emptied. */
-	const closeTab = useCallback((id: string) => {
-		setTabs((prev) => {
-			const { tabs, removed, activeId } = removeTab(
-				prev,
-				id,
-				activeTabIdRef.current,
-			);
-			if (!removed) return prev;
-			revokeTabPdfSource(removed);
-			if (tabs.length === 0 && vaultPathRef.current) {
-				const ensured = ensureFullLibraryTab([]);
-				setActiveTabId(ensured.activeId);
-				return ensured.tabs;
-			}
-			setActiveTabId(activeId);
-			return tabs;
-		});
-		setPdfHighlightsByTab((prev) => {
-			if (!(id in prev)) return prev;
-			const next = { ...prev };
-			delete next[id];
-			return next;
-		});
-	}, []);
+	/** Close a tab; focus stays with dockview; full Library when emptied. */
+	const closeTab = useCallback(
+		(id: string) => {
+			setTabs((prev) => {
+				const { tabs, removed } = removeTab(prev, id);
+				if (!removed) return prev;
+				revokeTabMediaSources(removed);
+				return withLibraryIfEmpty(tabs);
+			});
+			setPdfHighlightsByTab((prev) => {
+				if (!(id in prev)) return prev;
+				const next = { ...prev };
+				delete next[id];
+				return next;
+			});
+		},
+		[withLibraryIfEmpty],
+	);
 
-	/** Close every tab whose path is at or under the given path. */
-	const closeTabsUnderPath = useCallback((path: string) => {
-		setTabs((prev) => {
-			const { tabs, removed, activeId } = removeTabsUnderPath(
-				prev,
-				path,
-				activeTabIdRef.current,
-			);
-			if (!removed.length) return prev;
-			for (const t of removed) revokeTabPdfSource(t);
-			if (tabs.length === 0 && vaultPathRef.current) {
-				const ensured = ensureFullLibraryTab([]);
-				setActiveTabId(ensured.activeId);
-				setPdfHighlightsByTab((prevHl) => {
-					let changed = false;
-					const next = { ...prevHl };
-					for (const t of removed) {
-						if (t.id in next) {
-							delete next[t.id];
-							changed = true;
-						}
-					}
-					return changed ? next : prevHl;
-				});
-				return ensured.tabs;
-			}
-			setActiveTabId(activeId);
+	/** Close every panel whose path is at or under the given path. */
+	const closeTabsUnderPath = useCallback(
+		(path: string) => {
+			let removedIds: string[] = [];
+			setTabs((prev) => {
+				const { tabs, removed } = removeTabsUnderPath(prev, path);
+				if (!removed.length) return prev;
+				for (const t of removed) revokeTabMediaSources(t);
+				removedIds = removed.map((t) => t.id);
+				return withLibraryIfEmpty(tabs);
+			});
+			if (!removedIds.length) return;
 			setPdfHighlightsByTab((prevHl) => {
 				let changed = false;
 				const next = { ...prevHl };
-				for (const t of removed) {
-					if (t.id in next) {
-						delete next[t.id];
+				for (const rid of removedIds) {
+					if (rid in next) {
+						delete next[rid];
 						changed = true;
 					}
 				}
 				return changed ? next : prevHl;
 			});
-			return tabs;
-		});
-	}, []);
-
-	const reorderTabs = useCallback((fromId: string, toId: string) => {
-		setTabs((prev) => moveTab(prev, fromId, toId));
-	}, []);
-
-	const setActiveTabMode = useCallback(
-		(mode: CenterViewMode) => {
-			if (!activeTabId) return;
-			updateTab(activeTabId, { mode });
 		},
-		[activeTabId, updateTab],
+		[withLibraryIfEmpty],
 	);
 
 	const tabsRef = useRef(tabs);
@@ -642,9 +665,6 @@ export default function App() {
 			});
 	}, [activeTabId, pdfAsksByTab]);
 
-	/** Stable empty list so non-library tabs don't re-render on library changes. */
-	const noPapers = useMemo<PaperMetadata[]>(() => [], []);
-
 	const annotationAction = useCallback(
 		(fn: (h: PdfViewerHandle) => void) => {
 			if (!activeTabId) return;
@@ -674,18 +694,16 @@ export default function App() {
 		[],
 	);
 
-	/** Cycle the active tab by delta (wraps). */
+	/** Cycle the active panel by dockview visual order (api.panels). */
 	const cycleActiveTab = useCallback((delta: number) => {
-		setActiveTabId((cur) => cycleActiveTabId(tabsRef.current, cur, delta));
+		workspaceRef.current?.cycleActive(delta);
 	}, []);
 
 	/**
 	 * ⌘W / File → Close:
-	 * 1. Top app overlay (settings / dialogs / palette) → dismiss it.
-	 * 2. Else close the active document tab one at a time.
-	 * Sole full-library tab → close window (Library is the default page).
-	 * Closing the last non-library tab reopens full Library via `closeTab`.
-	 * Debounced so macOS menu accelerator + keydown do not close two tabs at once.
+	 * 1. Top app overlay → dismiss.
+	 * 2. Else close the active dockview panel (native close path via React state).
+	 * Sole full-library panel → close window.
 	 */
 	const lastCloseTabOrWindowAt = useRef(0);
 	const closeWindow = useCallback(() => {
@@ -705,39 +723,81 @@ export default function App() {
 		if (now - lastCloseTabOrWindowAt.current < 80) return;
 		lastCloseTabOrWindowAt.current = now;
 
-		// Any registered overlay (settings, shortcuts, palette, dialogs…) first.
 		if (closeTopOverlay()) return;
 
 		const list = tabsRef.current;
+		const activeId = activeTabIdRef.current ?? list[list.length - 1]?.id;
 		const sole = list.length === 1 ? list[0] : null;
 		if (sole && isLibraryVirtualPath(sole.path)) {
 			closeWindow();
 			return;
 		}
 		if (list.length > 0) {
-			const id = activeTabIdRef.current ?? list[list.length - 1]?.id;
-			if (id) closeTab(id);
+			if (activeId) closeTab(activeId);
 			return;
 		}
 		closeWindow();
 	}, [closeTab, closeWindow]);
 
-	/** Tab strip X: same as ⌘W when sole full Library; otherwise close that tab. */
-	const handleCloseTab = useCallback(
-		(id: string) => {
-			const list = tabsRef.current;
-			if (
-				list.length === 1 &&
-				list[0]?.id === id &&
-				isLibraryVirtualPath(list[0].path)
-			) {
-				closeTabOrWindow();
-				return;
-			}
-			closeTab(id);
+	/** Toggle NOTES.md panel for the active paper (⌘\\ / Layout menu). */
+	const toggleNotesSplit = useCallback(() => {
+		const id = activeTabIdRef.current;
+		if (!id) return;
+		const tab = tabsRef.current.find((t) => t.id === id);
+		// NOTES may be toggled from paper PDF/HTML, or when NOTES panel itself is active.
+		const paper =
+			tab && tabNotesEligible(tab)
+				? tab
+				: tabsRef.current.find(
+						(t) =>
+							tabNotesEligible(t) &&
+							t.notesPath &&
+							tab?.path &&
+							normalizeTabPath(t.notesPath) === normalizeTabPath(tab.path),
+					);
+		const target = paper ?? tab;
+		if (!target?.notesPath) return;
+		const notesId = tabIdForPath(target.notesPath);
+		if (tabHasNotesSplit(tabsRef.current, target)) {
+			closeTab(notesId);
+			return;
+		}
+		if (!tabNotesEligible(target) && target.kind !== "paper") return;
+		const notesPane = createNotesSplitPane(target);
+		if (!notesPane) return;
+		// Same group as the paper panel (tab strip), not a new split.
+		setTabs((prev) => {
+			if (prev.some((t) => t.id === notesPane.id)) return prev;
+			const next = [...prev, notesPane];
+			tabsRef.current = next;
+			return next;
+		});
+		workspaceRef.current?.openPanel(notesPane, {
+			direction: "within",
+			referencePanelId: target.id,
+		});
+		setActiveTabId(notesPane.id);
+	}, [closeTab]);
+
+	/** File-tree path dropped onto a dockview edge → open with placement. */
+	const handleWorkspaceDrop = useCallback(
+		(drop: WorkspaceExternalDrop) => {
+			const path = drop.paths[0];
+			if (!path) return;
+			openTab(path, {
+				placement: {
+					direction: drop.direction,
+					referencePanelId: drop.referencePanelId,
+				},
+				skipDefaultNotes: true,
+			});
 		},
-		[closeTab, closeTabOrWindow],
+		[openTab],
 	);
+
+	const handleLayoutChange = useCallback((layout: unknown) => {
+		setDockLayout(layout);
+	}, []);
 
 	/** Reseed an open paper tab's NOTES after the reader / download writes it. */
 	const refreshTabNotes = useCallback((paperDir: string, content: string) => {
@@ -749,23 +809,43 @@ export default function App() {
 		setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
 	}, []);
 
-	// Restore the previous window's open tabs once on mount (per-window session).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only restore
+	// After seeding placeholders from layout, load resources once (mount-only).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: mount-only hydrate
 	useEffect(() => {
 		if (!isTauri() || !vaultPathRef.current) return;
-		const persisted = loadPersistedTabs();
-		if (!persisted?.tabs.length) {
-			// No saved layout → default page is full Library.
+		if (!tabsRef.current.length) {
 			const ensured = ensureFullLibraryTab([]);
 			setTabs(ensured.tabs);
 			setActiveTabId(ensured.activeId);
 			return;
 		}
-		for (const pt of persisted.tabs) {
-			openTab(pt.path, { preferMode: pt.mode });
+		for (const tab of tabsRef.current) {
+			if (tab.loaded) continue;
+			void (async () => {
+				const res = await loadTabResources(
+					tab.path,
+					vaultPathRef.current,
+					treeRef.current,
+					paperFoldersRef.current,
+				);
+				if (!tabsRef.current.some((t) => t.id === tab.id)) return;
+				updateTab(tab.id, {
+					kind: res.kind,
+					title: res.title,
+					mode: res.mode,
+					paperMeta: res.paperMeta,
+					pdfUrl: res.pdfUrl,
+					pdfBytes: res.pdfBytes ?? null,
+					htmlUrl: res.htmlUrl,
+					imageUrl: res.imageUrl,
+					notesPath: res.notesPath,
+					notesSeed: res.notesSeed,
+					markdownSeed: res.markdownSeed,
+					seedKey: 1,
+					loaded: true,
+				});
+			})();
 		}
-		const active = persisted.tabs[persisted.activeIndex];
-		if (active) setActiveTabId(tabIdForPath(active.path));
 	}, []);
 
 	// Default page: whenever the strip is empty with a Vault open, show full Library.
@@ -825,7 +905,6 @@ export default function App() {
 
 	const SIDEBAR_DEFAULT_PX = 200;
 	const RIGHT_SIDEBAR_DEFAULT_PX = 320;
-	const NOTES_DEFAULT_PCT = "30";
 
 	/** Collapse / expand left file-tree panel without remounting (stable Group layout). */
 	const setLeftSidebarCollapsed = useCallback(
@@ -1124,11 +1203,6 @@ export default function App() {
 		[openRightTab],
 	);
 
-	const handleNotesDirty = useCallback(
-		(id: string, dirty: boolean) => updateTab(id, { notesDirty: dirty }),
-		[updateTab],
-	);
-
 	/**
 	 * Reload an open editor when its file changed on disk (external editor / Agent).
 	 * Reseeds only when disk content differs from the current seed — equal content
@@ -1139,18 +1213,17 @@ export default function App() {
 		async (absPath: string) => {
 			const norm = normalizeTabPath(absPath);
 			const openTabs = tabsRef.current;
-			const notesTab = openTabs.find(
+			const notesOwners = openTabs.filter(
 				(t) => t.notesPath && normalizeTabPath(t.notesPath) === norm,
 			);
-			const mdTab = openTabs.find(
+			const mdOwners = openTabs.filter(
 				(t) => normalizeTabPath(t.path) === norm && isMarkdownPath(t.path),
 			);
-			if (!notesTab && !mdTab) return;
+			if (!notesOwners.length && !mdOwners.length) return;
 			let content: string;
 			try {
 				content = await readVaultFile(absPath);
 			} catch {
-				// File removed / unreadable → leave editor; tree refresh reflects removal.
 				return;
 			}
 			const guard = () => {
@@ -1165,11 +1238,9 @@ export default function App() {
 					duration: 12000,
 				});
 			};
-			if (notesTab && content !== notesTab.notesSeed) {
-				const paperDir = (notesTab.notesPath ?? "").replace(
-					/[\\/]NOTES\.md$/i,
-					"",
-				);
+			for (const notesTab of notesOwners) {
+				if (content === notesTab.notesSeed) continue;
+				const paperDir = absPath.replace(/[\\/]NOTES\.md$/i, "");
 				const reload = () => {
 					guard();
 					refreshTabNotes(paperDir, content);
@@ -1177,7 +1248,8 @@ export default function App() {
 				if (notesTab.notesDirty) promptReload(reload);
 				else reload();
 			}
-			if (mdTab && content !== mdTab.markdownSeed) {
+			for (const mdTab of mdOwners) {
+				if (content === mdTab.markdownSeed) continue;
 				const reload = () => {
 					guard();
 					refreshTabMarkdown(absPath, content);
@@ -1276,7 +1348,6 @@ export default function App() {
 			setActiveTabId(null);
 			setTreeSelectedPath(null);
 			setLibraryQuery("");
-			setLibraryTagFilter(null);
 			setLibraryScopePath(null);
 			setRecentVaults(getRecentVaults());
 			// Wiki rebuild needs local fs watcher semantics; remote is best-effort / deferred.
@@ -1637,11 +1708,13 @@ export default function App() {
 
 	/** Paths queued for the "move to folder" dialog (null = closed). */
 	const [movePaths, setMovePaths] = useState<string[] | null>(null);
-	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	const [commandOpen, setCommandOpen] = useState(false);
 	const [commandMode, setCommandMode] = useState<PaletteMode>("go");
 	const commandModeRef = useRef(commandMode);
 	commandModeRef.current = commandMode;
+
+	/** Bump to force RecycleBinView reload after Empty Recycle Bin. */
+	const [trashReloadSignal, setTrashReloadSignal] = useState(0);
 
 	/** Refresh tree / library / wiki after a recycle-bin restore. */
 	const handleTrashChanged = useCallback(async () => {
@@ -1651,6 +1724,28 @@ export default function App() {
 		await rebuildWikiAndNotify(vaultPath);
 		await refreshLibrary();
 	}, [vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary]);
+
+	/** Empty recycle bin from the trash node context menu (confirm + purge). */
+	const handleEmptyTrash = useCallback(async () => {
+		if (!vaultPath || !isTauri()) return;
+		try {
+			const items = await listTrash(vaultPath);
+			if (items.length === 0) return;
+			if (
+				!window.confirm(
+					t("sidebar:recycleBin.emptyConfirm", { count: items.length }),
+				)
+			) {
+				return;
+			}
+			await purgeAllTrash(vaultPath);
+			setTrashReloadSignal((n) => n + 1);
+		} catch (e) {
+			notifyError(
+				e instanceof Error ? e.message : t("sidebar:recycleBin.purgeFailed"),
+			);
+		}
+	}, [vaultPath, t]);
 
 	const handleMovePaths = useCallback((paths: string[]) => {
 		const valid = paths.filter(
@@ -1774,9 +1869,10 @@ export default function App() {
 		void refreshTree(vaultPath);
 	}, [vaultPath, refreshTree]);
 
+	// Layout alone is persisted (panels + order + active + path/mode in params).
 	useEffect(() => {
-		savePersistedTabs(tabs, activeTabId);
-	}, [tabs, activeTabId]);
+		savePersistedTabs(dockLayout);
+	}, [dockLayout]);
 
 	// Persist a specific file's Markdown to disk. The MarkdownEditor calls this with
 	// its own fixed path (debounced autosave, ⌘S, and unmount flush), so writes always
@@ -2481,15 +2577,6 @@ export default function App() {
 		[vaultPath, t],
 	);
 
-	const startCreate = useCallback(
-		(kind: TreeCreateKind) => {
-			if (!vaultPath) return;
-			const parent = resolveCreateParent(vaultPath, treeSelectedPath, tree);
-			handleStartCreate(kind, parent);
-		},
-		[vaultPath, treeSelectedPath, tree, handleStartCreate],
-	);
-
 	const handleCancelCreate = useCallback(() => {
 		setCreateDraft(null);
 	}, []);
@@ -2582,17 +2669,27 @@ export default function App() {
 	const anyOverlayOpen = useAnyOverlayOpen();
 
 	const focusNotesEditor = useCallback(() => {
-		const focus = () =>
-			notesPaneRef.current
-				?.querySelector<HTMLElement>("[contenteditable='true']")
-				?.focus();
-		if (!showNotesRef.current) {
-			setShowNotes(true);
-			requestAnimationFrame(() => requestAnimationFrame(focus));
-		} else {
-			focus();
+		const tab = tabsRef.current.find((t) => t.id === activeTabIdRef.current);
+		if (
+			tab &&
+			tabNotesEligible(tab) &&
+			!tabHasNotesSplit(tabsRef.current, tab)
+		) {
+			toggleNotesSplit();
 		}
-	}, []);
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				// Prefer a NOTES secondary-pane editor when present.
+				const root = editorPaneRef.current;
+				if (!root) return;
+				const editables = root.querySelectorAll<HTMLElement>(
+					"[contenteditable='true']",
+				);
+				const target = editables[editables.length - 1] ?? editables[0];
+				target?.focus();
+			});
+		});
+	}, [toggleNotesSplit]);
 
 	const focusEditorPane = useCallback(() => {
 		editorPaneRef.current
@@ -2628,13 +2725,6 @@ export default function App() {
 				categoryKey: "commands.catApp",
 				when: () => settingsOpenRef.current,
 				run: () => closeSettings(),
-			},
-			{
-				id: "shortcuts.show",
-				titleKey: "commands.shortcutsShow",
-				categoryKey: "commands.catApp",
-				keywords: ["hotkeys", "keyboard"],
-				run: () => setShortcutsOpen(true),
 			},
 			{
 				id: "vault.open",
@@ -2788,12 +2878,10 @@ export default function App() {
 			if (settingsOpenRef.current) closeSettings();
 			else openSettings();
 		},
-		// Esc → dismiss top overlay (settings, shortcuts, palette, dialogs…)
+		// Esc → dismiss top overlay (settings, palette, dialogs…)
 		closeSheet: () => {
 			closeTopOverlay();
 		},
-		// ⌘/ toggles the cheat sheet open and closed
-		showShortcuts: () => setShortcutsOpen((v) => !v),
 		newWindow: () => void handleNewWindow(),
 		openVault: () => void handleOpenVault(),
 		createVault: () => void handleCreateVault(),
@@ -3002,68 +3090,27 @@ export default function App() {
 		[handleWikiNavigate, vaultMdFiles],
 	);
 
-	const handleCenterModeChange = (mode: CenterViewMode) => {
-		if (!modeAvailable[mode]) return;
-		setActiveTabMode(mode);
-	};
-
-	const showLibrary = Boolean(vaultPath) && activeTab?.kind === "library";
-	/** Full catalog (no folder scope); Zotero migrate only here. */
-	const showFullLibrary = showLibrary && !libraryScopePath;
-	const showTrash = Boolean(vaultPath) && activeTab?.kind === "trash";
-	/** Notes column is relevant: paper open + PDF/HTML center (not when Notes is already center). */
-	const notesEligible = tabNotesEligible(activeTab);
-	/** Side Notes column actually renders when relevant and the user hasn't hidden it. */
-	const showNotesOnRight = notesEligible && showNotes;
-
-	/**
-	 * Center markdown mode while a paper is selected edits NOTES.md live (WYSIWYG),
-	 * not a separate read-only preview of another document.
-	 */
-	const centerIsPaperNotes = tabIsPaperNotes(activeTab);
-
-	/**
-	 * Notes still mounts/unmounts with paper selection (needs a real defaultSize
-	 * to appear — collapsible expand-from-0 was unreliable). After remount,
-	 * re-assert left/right rail pixel widths so Library ↔ paper does not jump.
-	 */
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on Notes mount; restore rail widths
-	useEffect(() => {
-		if (agentZenMode) return;
-		const id = requestAnimationFrame(() => {
-			const left = sidebarPanelRef.current;
-			const right = rightSidebarPanelRef.current;
-			if (sidebarCollapsed) {
-				try {
-					left?.collapse();
-				} catch {
-					// ignore
-				}
-			} else {
-				try {
-					left?.resize(leftWidthPxRef.current || SIDEBAR_DEFAULT_PX);
-				} catch {
-					// ignore
-				}
-			}
-			if (!rightSidebarOpen) {
-				try {
-					right?.collapse();
-				} catch {
-					// ignore
-				}
-			} else {
-				try {
-					right?.resize(rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX);
-				} catch {
-					// ignore
-				}
-			}
-		});
-		return () => cancelAnimationFrame(id);
-	}, [showNotesOnRight, sidebarCollapsed, rightSidebarOpen, agentZenMode]);
-
-	const activeFileLabel = activeTab?.title ?? t("labels.untitled");
+	/** NOTES toggle: eligible when active panel is a paper PDF/HTML, or its NOTES. */
+	const notesEligiblePaper = useMemo(() => {
+		if (!activeTab) return null;
+		if (tabNotesEligible(activeTab)) return activeTab;
+		// Active is NOTES.md of some open paper.
+		if (activeTab.notesPath && tabIsPaperNotes(activeTab)) {
+			const paperDir = activeTab.notesPath.replace(/[\\/]NOTES\.md$/i, "");
+			return (
+				tabs.find(
+					(t) =>
+						t.kind === "paper" &&
+						normalizeTabPath(t.path) === normalizeTabPath(paperDir),
+				) ?? null
+			);
+		}
+		return null;
+	}, [activeTab, tabs]);
+	const notesEligible = Boolean(notesEligiblePaper);
+	const notesSplitOpen = notesEligiblePaper
+		? tabHasNotesSplit(tabs, notesEligiblePaper)
+		: false;
 
 	const editorFontSize = settings.editorFontSize;
 
@@ -3084,19 +3131,13 @@ export default function App() {
 					showWindowControls={showWindowControls}
 					agentZenMode={agentZenMode}
 					sidebarCollapsed={sidebarCollapsed}
-					hasVault={Boolean(vaultPath)}
-					tabs={tabs}
-					activeTabId={activeTabId}
 					notesEligible={notesEligible}
-					showNotes={showNotes}
+					showNotes={notesSplitOpen}
 					rightSidebarOpen={rightSidebarOpen}
 					rightSidebarTab={rightSidebarTab}
 					onExitAgentZen={exitAgentZen}
 					onToggleSidebar={toggleSidebar}
-					onSelectTab={setActiveTabId}
-					onCloseTab={handleCloseTab}
-					onReorderTabs={reorderTabs}
-					onToggleNotes={setShowNotes}
+					onToggleNotes={() => toggleNotesSplit()}
 					onToggleRightSidebar={toggleRightSidebar}
 					onToggleAgentZen={toggleAgentZen}
 					onOpenRightTab={openRightTab}
@@ -3139,8 +3180,6 @@ export default function App() {
 												? `${vaultDisplayName(vaultPath)} · ${t("app:vault.remoteBadge")}`
 												: vaultDisplayName(vaultPath)
 										}
-										onNewFile={() => startCreate("file")}
-										onNewFolder={() => startCreate("folder")}
 										lookupParentDir={lookupParentDir}
 										onLookupSubmit={handleLookupSubmit}
 										onImportBibliography={() => void handleLibraryImport()}
@@ -3179,6 +3218,7 @@ export default function App() {
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onSelectTrash={handleSelectTrash}
+										onEmptyTrash={() => void handleEmptyTrash()}
 										onStartCreate={handleStartCreate}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
@@ -3212,150 +3252,11 @@ export default function App() {
 							collapsedSize={0}
 							className="min-h-0 min-w-0 overflow-hidden"
 						>
-							<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-								{/* Document tabs live in the window title bar (same row as zen icon). */}
-								{/* Center header: library search / view mode left; actions right.
-								    Trash has its own toolbar inside RecycleBinView — skip the
-								    redundant title + close row here. */}
-								{vaultPath && activeTab && !pdfZenMode && !showTrash ? (
-									<div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
-										<div
-											className={cn(
-												"flex h-7 items-center",
-												showLibrary ? "min-w-0 flex-1" : "shrink-0",
-											)}
-										>
-											{showLibrary ? (
-												<div className="relative w-full max-w-[280px]">
-													<Search
-														className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
-														aria-hidden
-													/>
-													<Input
-														type="search"
-														value={libraryQuery}
-														onChange={(e) => setLibraryQuery(e.target.value)}
-														placeholder={t("sidebar:papersLibrary.search")}
-														aria-label={t("sidebar:papersLibrary.search")}
-														className="h-7 pl-7 text-xs"
-													/>
-												</div>
-											) : (
-												<ViewModeToggle
-													value={centerMode}
-													onChange={handleCenterModeChange}
-													available={modeAvailable}
-												/>
-											)}
-										</div>
-										<div className="flex h-7 min-w-0 flex-1 items-center justify-end gap-1.5">
-											{!showLibrary &&
-											centerMode === "markdown" &&
-											(centerIsPaperNotes
-												? activeTab.notesDirty
-												: activeTab.markdownDirty) ? (
-												<span
-													className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
-													role="img"
-													aria-label={t("editor.unsaved")}
-													title={t("editor.unsaved")}
-												/>
-											) : null}
-											{showLibrary ? (
-												<>
-													{showFullLibrary ? (
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<Button
-																	type="button"
-																	variant="ghost"
-																	size="icon-xs"
-																	className="size-7 shrink-0"
-																	aria-label={t("sidebar:zoteroMigrate.button")}
-																	disabled={!vaultPath}
-																	onClick={() => setZoteroOpen(true)}
-																>
-																	<ZoteroIcon className="size-3.5" />
-																</Button>
-															</TooltipTrigger>
-															<TooltipContent side="bottom">
-																{t("sidebar:zoteroMigrate.button")}
-															</TooltipContent>
-														</Tooltip>
-													) : null}
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																className="size-7 shrink-0"
-																aria-label={t("sidebar:papersLibrary.export")}
-																disabled={
-																	!vaultPath ||
-																	libraryIoBusy !== null ||
-																	libraryPapers.length === 0
-																}
-																onClick={() => void handleLibraryExport()}
-															>
-																{libraryIoBusy === "export" ? (
-																	<Loader2 className="size-3.5 animate-spin" />
-																) : (
-																	<Download className="size-3.5" />
-																)}
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{t("sidebar:papersLibrary.export")}
-														</TooltipContent>
-													</Tooltip>
-												</>
-											) : (
-												<>
-													<span
-														className="block min-w-0 truncate text-right text-muted-foreground text-xs leading-7"
-														title={
-															paperMeta
-																? `${paperMeta.title} · ${activeFileLabel}`
-																: (activeFileLabel ?? undefined)
-														}
-													>
-														{paperMeta?.title ?? activeFileLabel}
-													</span>
-													{notesEligible ? (
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<Button
-																	type="button"
-																	variant="ghost"
-																	size="icon-xs"
-																	className={cn(
-																		"size-7 shrink-0",
-																		showNotes && "bg-muted text-foreground",
-																	)}
-																	aria-label={
-																		showNotes
-																			? t("titlebar.hideNotes")
-																			: t("titlebar.showNotes")
-																	}
-																	aria-pressed={showNotes}
-																	onClick={() => setShowNotes((v) => !v)}
-																>
-																	<NotebookPen className="size-3.5" />
-																</Button>
-															</TooltipTrigger>
-															<TooltipContent side="bottom">
-																{showNotes
-																	? t("titlebar.hideNotesHint")
-																	: t("titlebar.showNotesHint")}
-															</TooltipContent>
-														</Tooltip>
-													) : null}
-												</>
-											)}
-										</div>
-									</div>
-								) : null}
+							<div
+								ref={editorPaneRef}
+								className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
+							>
+								{/* Document panels + library toolbar live inside dockview. */}
 								{!vaultPath ? (
 									isTauri() ? (
 										<VaultWelcome
@@ -3389,156 +3290,60 @@ export default function App() {
 											</div>
 										</div>
 									)
-								) : !tabs.length ? (
-									<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 bg-muted/20 p-6 text-center text-muted-foreground">
-										<p className="text-sm">{t("tabs.emptyTitle")}</p>
-										<p className="text-xs">{t("tabs.emptyHint")}</p>
-									</div>
 								) : (
 									<div className="relative min-h-0 flex-1 overflow-hidden">
-										{tabs.map((tab) => (
-											<div
-												key={tab.id}
-												hidden={tab.id !== activeTabId}
-												ref={tab.id === activeTabId ? editorPaneRef : undefined}
-												className="absolute inset-0 flex min-h-0 min-w-0 flex-col overflow-hidden"
-											>
-												<TabCenter
-													tab={tab}
-													active={tab.id === activeTabId}
-													pdfKeepMounted={pdfLru.includes(tab.id)}
-													vaultPath={vaultPath}
-													libraryPapers={
-														tab.kind === "library" ? libraryPapers : noPapers
-													}
-													libraryLoading={
-														tab.kind === "library" ? libraryLoading : false
-													}
-													libraryQuery={
-														tab.kind === "library" ? libraryQuery : ""
-													}
-													libraryScopePath={
-														tab.kind === "library" ? libraryScopePath : null
-													}
-													libraryTagFilter={
-														tab.kind === "library" ? libraryTagFilter : null
-													}
-													libraryColumns={settings.libraryColumns}
-													onLibraryColumnsChange={handleLibraryColumnsChange}
-													rescanning={
-														tab.kind === "library" ? rescanning : false
-													}
-													onLibraryTagFilterChange={setLibraryTagFilter}
-													onOpenLibraryPaper={handleOpenLibraryPaper}
-													onRescanPapers={handleRescanPapers}
-													onTrashChanged={handleTrashChanged}
-													editorFontSize={editorFontSize}
-													showEditorToolbar={settings.showEditorToolbar}
-													notesPlaceholder={t("editor.notesPlaceholder")}
-													markdownPlaceholder={t("editor.markdownPlaceholder")}
-													onPersistFile={persistFile}
-													onEditorAssetsChanged={handleEditorAssetsChanged}
-													onTabPatch={updateTab}
-													pdfZen={pdfZenMode}
-													onTogglePdfZen={togglePdfZen}
-													onOpenAnnotations={openAnnotationsTab}
-													onOpenSettings={handleOpenSettingsTranslate}
-													registerPdfHandle={registerPdfHandle}
-													onPdfHighlightsChange={handlePdfHighlightsChange}
-													onPdfAsksChange={handlePdfAsksChange}
-												/>
-											</div>
-										))}
+										<TabWorkspace
+											ref={workspaceRef}
+											tabs={tabs}
+											activePanelId={activeTabId}
+											layout={dockLayout}
+											pdfKeepMountedIds={[
+												...pdfLru,
+												...(activeTab?.mode === "pdf" && activeTab
+													? [activeTab.id]
+													: []),
+											]}
+											centerProps={{
+												vaultPath,
+												libraryPapers: libraryPapers,
+												libraryLoading,
+												libraryQuery,
+												onLibraryQueryChange: setLibraryQuery,
+												libraryScopePath,
+												libraryColumns: settings.libraryColumns,
+												onLibraryColumnsChange: handleLibraryColumnsChange,
+												rescanning,
+												onOpenLibraryPaper: handleOpenLibraryPaper,
+												onRescanPapers: handleRescanPapers,
+												onLibraryExport: () => void handleLibraryExport(),
+												libraryExportBusy: libraryIoBusy === "export",
+												onMigrateZotero: () => setZoteroOpen(true),
+												onTrashChanged: handleTrashChanged,
+												trashReloadSignal,
+												editorFontSize,
+												showEditorToolbar: settings.showEditorToolbar,
+												notesPlaceholder: t("editor.notesPlaceholder"),
+												markdownPlaceholder: t("editor.markdownPlaceholder"),
+												onPersistFile: persistFile,
+												onEditorAssetsChanged: handleEditorAssetsChanged,
+												onTabPatch: updateTab,
+												pdfZen: pdfZenMode,
+												onTogglePdfZen: togglePdfZen,
+												onOpenAnnotations: openAnnotationsTab,
+												onOpenSettings: handleOpenSettingsTranslate,
+												registerPdfHandle,
+												onPdfHighlightsChange: handlePdfHighlightsChange,
+												onPdfAsksChange: handlePdfAsksChange,
+											}}
+											onActivePanelChange={setActiveTabId}
+											onClosePanel={closeTab}
+											onLayoutChange={handleLayoutChange}
+											onExternalDrop={handleWorkspaceDrop}
+										/>
 									</div>
 								)}
 							</div>
 						</ResizablePanel>
-
-						{showNotesOnRight && !agentZenMode && !pdfZenMode ? (
-							<ResizableHandle />
-						) : null}
-
-						{showNotesOnRight && !agentZenMode && !pdfZenMode ? (
-							<ResizablePanel
-								id="notes"
-								defaultSize={rightSidebarOpen ? NOTES_DEFAULT_PCT : "40"}
-								minSize={200}
-								className="min-h-0 overflow-hidden"
-							>
-								<div
-									ref={notesPaneRef}
-									className="flex h-full min-h-0 flex-col overflow-hidden"
-									style={{ fontSize: editorFontSize }}
-								>
-									<PaneHeader
-										trailing={
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														type="button"
-														variant="ghost"
-														size="icon-xs"
-														aria-label={
-															settings.showEditorToolbar
-																? t("editor:toolbar.hide")
-																: t("editor:toolbar.show")
-														}
-														aria-pressed={settings.showEditorToolbar}
-														onClick={() =>
-															updateSettings({
-																...settings,
-																showEditorToolbar: !settings.showEditorToolbar,
-															})
-														}
-													>
-														<PanelTop className="size-3.5" />
-													</Button>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">
-													{settings.showEditorToolbar
-														? t("editor:toolbar.hide")
-														: t("editor:toolbar.show")}
-												</TooltipContent>
-											</Tooltip>
-										}
-									>
-										<span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-sm">
-											<NotebookPen
-												className="size-4 shrink-0 text-muted-foreground"
-												aria-hidden
-											/>
-											{t("labels.notes")}
-											{activeTab?.notesDirty ? (
-												<span
-													className="size-1.5 shrink-0 rounded-full bg-muted-foreground/70"
-													role="img"
-													aria-label={t("editor.unsaved")}
-													title={t("editor.unsaved")}
-												/>
-											) : null}
-										</span>
-									</PaneHeader>
-									<div className="relative min-h-0 flex-1 overflow-hidden">
-										{/* Live WYSIWYG NOTES.md — one editor per paper tab, kept mounted. */}
-										{tabs
-											.filter((tab) => tab.notesPath)
-											.map((tab) => (
-												<NotesEditorTab
-													key={tab.id}
-													tab={tab}
-													active={tab.id === activeTabId}
-													fontSize={editorFontSize}
-													showToolbar={settings.showEditorToolbar}
-													placeholder={t("editor.notesPlaceholder")}
-													onPersist={persistFile}
-													onAssetsChanged={handleEditorAssetsChanged}
-													onDirty={handleNotesDirty}
-												/>
-											))}
-									</div>
-								</div>
-							</ResizablePanel>
-						) : null}
 
 						{/*
 						  Right sidebar: always mounted + collapsible (same as left).
@@ -3679,8 +3484,6 @@ export default function App() {
 					onConfirm={handleConfirmImportLocalPdf}
 					busy={libraryIoBusy === "import-pdf"}
 				/>
-
-				<ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
 
 				<CommandPalette
 					open={commandOpen}

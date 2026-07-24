@@ -43,15 +43,18 @@ import { toVaultRelative } from "@/lib/wiki";
 
 export type DocTabKind = "library" | "trash" | "paper" | "file";
 
-/** One open document in the center tab strip (browser-style multi-tab). */
+/**
+ * One open document panel in the center Dockview workspace.
+ * All open documents are peers — layout/split is owned by dockview, not by nesting.
+ */
 export type DocTab = {
-	/** Stable id derived from the normalized path (dedupe / reorder). */
+	/** Stable id derived from the normalized path (dedupe). */
 	id: string;
 	/** Absolute path, or the Library virtual path. */
 	path: string;
 	kind: DocTabKind;
 	title: string;
-	/** Current view for this tab. */
+	/** View mode for this panel (set at open; no in-pane PDF/HTML toggle). */
 	mode: CenterViewMode;
 	paperMeta: PaperMetadata | null;
 	pdfUrl: string | null;
@@ -73,6 +76,23 @@ export type DocTab = {
 	notesKey: number;
 	loaded: boolean;
 };
+
+/**
+ * Dockview placement direction.
+ * - left/right/above/below → new group (split)
+ * - within → same group as a sibling tab
+ */
+export type SplitDirection = "left" | "right" | "above" | "below" | "within";
+
+/**
+ * How a newly opened panel should be placed in dockview.
+ * `null` = let dockview activate existing / add to active group (default open).
+ */
+export type OpenPlacement = {
+	direction: SplitDirection;
+	/** Existing panel id to place relative to; null = active panel. */
+	referencePanelId: string | null;
+} | null;
 
 const NOTES_PLACEHOLDER = "# Notes\n\nNo NOTES.md found for this paper.\n";
 
@@ -240,8 +260,8 @@ async function resolvePaperPdfSource(
 	return { pdfUrl: remotePdf, pdfBytes: null, didDownload };
 }
 
-/** Revoke blob: media sources held by closed tabs (PDF + image). */
-export function revokeTabPdfSource(
+/** Revoke blob: media sources held by a document panel (PDF + image). */
+export function revokeTabMediaSources(
 	tab: Pick<DocTab, "pdfUrl" | "imageUrl"> | null,
 ): void {
 	if (!tab) return;
@@ -523,7 +543,7 @@ export function tabIsPaperNotes(tab: DocTab | null): boolean {
 
 // --- Pure tab-list operations (unit-tested in test/tabs.test.ts) ---
 
-/** Placeholder tab shown immediately while its resources load asynchronously. */
+/** Placeholder panel shown immediately while its resources load asynchronously. */
 export function createPlaceholderTab(
 	path: string,
 	preferMode: CenterViewMode = "markdown",
@@ -593,7 +613,7 @@ export function insertPlaceholderTab(
 	};
 }
 
-/** Merge a patch into the tab with the given id. */
+/** Merge a patch into the tab with the given id (primary pane fields only). */
 export function patchTab(
 	prev: DocTab[],
 	id: string,
@@ -602,32 +622,34 @@ export function patchTab(
 	return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
 }
 
-/** Remove a tab and pick the next active id (a neighbor, or null when emptied). */
+/**
+ * Remove a tab from the React list only.
+ * Active focus is owned by dockview (`onDidActivePanelChange`); do not pick a neighbor here.
+ */
 export function removeTab(
 	prev: DocTab[],
 	id: string,
-	activeId: string | null,
-): { tabs: DocTab[]; removed: DocTab | null; activeId: string | null } {
+): { tabs: DocTab[]; removed: DocTab | null } {
 	const idx = prev.findIndex((t) => t.id === id);
-	if (idx < 0) return { tabs: prev, removed: null, activeId };
+	if (idx < 0) return { tabs: prev, removed: null };
 	const removed = prev[idx] ?? null;
 	const tabs = prev.filter((t) => t.id !== id);
-	let nextActiveId = activeId;
-	if (activeId === id) {
-		nextActiveId = tabs.length
-			? (tabs[Math.min(idx, tabs.length - 1)]?.id ?? null)
-			: null;
-	}
-	return { tabs, removed, activeId: nextActiveId };
+	return { tabs, removed };
 }
 
 /** Remove every tab at or under `path`; Library/Trash virtual tabs are kept. */
 export function removeTabsUnderPath(
 	prev: DocTab[],
 	path: string,
-	activeId: string | null,
-): { tabs: DocTab[]; removed: DocTab[]; activeId: string | null } {
+): {
+	tabs: DocTab[];
+	removed: DocTab[];
+} {
 	const key = normalizeTabPath(path);
+	const hit = (p: string) => {
+		const k = normalizeTabPath(p);
+		return k === key || k.startsWith(`${key}/`);
+	};
 	const survivors: DocTab[] = [];
 	const removed: DocTab[] = [];
 	for (const t of prev) {
@@ -635,45 +657,46 @@ export function removeTabsUnderPath(
 			survivors.push(t);
 			continue;
 		}
-		const tk = normalizeTabPath(t.path);
-		if (tk === key || tk.startsWith(`${key}/`)) {
+		if (hit(t.path)) {
 			removed.push(t);
 			continue;
 		}
 		survivors.push(t);
 	}
-	if (!removed.length) return { tabs: prev, removed, activeId };
-	const nextActiveId = survivors.some((t) => t.id === activeId)
-		? activeId
-		: (survivors[survivors.length - 1]?.id ?? null);
-	return { tabs: survivors, removed, activeId: nextActiveId };
+	if (!removed.length) {
+		return { tabs: prev, removed };
+	}
+	return { tabs: survivors, removed };
 }
 
-/** Move the tab `fromId` to the current position of `toId`. */
-export function moveTab(
-	prev: DocTab[],
-	fromId: string,
-	toId: string,
-): DocTab[] {
-	const from = prev.findIndex((t) => t.id === fromId);
-	const to = prev.findIndex((t) => t.id === toId);
-	if (from < 0 || to < 0 || from === to) return prev;
-	const next = [...prev];
-	const [moved] = next.splice(from, 1);
-	next.splice(to, 0, moved);
-	return next;
+// --- Workspace helpers (flat panels; layout owned by dockview) ---
+
+/**
+ * NOTES.md panel for a loaded paper (default companion tab when opening a paper).
+ * Reuses the paper's notesSeed — no extra IO.
+ * Title uses i18n "Notes" so the dockview tab is readable (not NOTES.md).
+ */
+export function createNotesSplitPane(tab: DocTab): DocTab | null {
+	if (!tab.notesPath || !tab.paperMeta) return null;
+	return {
+		...createPlaceholderTab(tab.notesPath, "markdown"),
+		kind: "file",
+		title: i18n.t("app:labels.notes"),
+		paperMeta: tab.paperMeta,
+		notesPath: tab.notesPath,
+		notesSeed: tab.notesSeed,
+		loaded: true,
+	};
 }
 
-/** Active tab id after cycling by `delta` (wraps); unchanged with fewer than 2 tabs. */
-export function cycleActiveTabId(
-	list: DocTab[],
-	activeId: string | null,
-	delta: number,
-): string | null {
-	if (list.length < 2) return activeId;
-	const idx = list.findIndex((t) => t.id === activeId);
-	const nextIdx = (idx + delta + list.length) % list.length;
-	return list[nextIdx]?.id ?? activeId;
+/** Whether NOTES.md for this paper is already open as a panel. */
+export function tabHasNotesSplit(
+	tabs: DocTab[],
+	paperTab: DocTab | null,
+): boolean {
+	if (!paperTab?.notesPath) return false;
+	const notesId = tabIdForPath(paperTab.notesPath);
+	return tabs.some((t) => t.id === notesId);
 }
 
 /** Reseed an open paper tab's NOTES editor (bumps notesKey to remount). */
@@ -683,16 +706,18 @@ export function reseedNotesTab(
 	content: string,
 ): DocTab[] {
 	const id = tabIdForPath(paperDir);
-	return prev.map((t) =>
-		t.id === id
-			? {
-					...t,
-					notesSeed: content,
-					notesDirty: false,
-					notesKey: t.notesKey + 1,
-				}
-			: t,
-	);
+	const notesId = tabIdForPath(notesPathForPaper(paperDir));
+	return prev.map((t) => {
+		if (t.id === id || t.id === notesId) {
+			return {
+				...t,
+				notesSeed: content,
+				notesDirty: false,
+				notesKey: t.notesKey + 1,
+			};
+		}
+		return t;
+	});
 }
 
 /** Reseed an open plain-Markdown tab (bumps seedKey to remount). */
@@ -702,16 +727,17 @@ export function reseedMarkdownTab(
 	content: string,
 ): DocTab[] {
 	const id = tabIdForPath(absPath);
-	return prev.map((t) =>
-		t.id === id
-			? {
-					...t,
-					markdownSeed: content,
-					markdownDirty: false,
-					seedKey: t.seedKey + 1,
-				}
-			: t,
-	);
+	return prev.map((t) => {
+		if (t.id === id) {
+			return {
+				...t,
+				markdownSeed: content,
+				markdownDirty: false,
+				seedKey: t.seedKey + 1,
+			};
+		}
+		return t;
+	});
 }
 
 /** Keep the seed of the tab(s) owning `path` in sync after a disk write. */
@@ -721,54 +747,226 @@ export function syncTabSeedsForPath(
 	content: string,
 ): DocTab[] {
 	const key = path.replace(/\\/g, "/").toLowerCase();
+	const pathId = tabIdForPath(path);
 	return prev.map((tab) => {
 		const notesKey = tab.notesPath?.replace(/\\/g, "/").toLowerCase();
-		if (notesKey === key) return { ...tab, notesSeed: content };
-		if (normalizeTabPath(tab.path) === normalizeTabPath(path)) {
-			return { ...tab, markdownSeed: content };
+		if (notesKey === key) {
+			return { ...tab, notesSeed: content };
+		}
+		if (
+			tab.id === pathId ||
+			normalizeTabPath(tab.path) === normalizeTabPath(path)
+		) {
+			const isNotes = Boolean(
+				tab.notesPath &&
+					normalizeTabPath(tab.path) === normalizeTabPath(tab.notesPath),
+			);
+			return {
+				...tab,
+				...(isNotes || notesKey === key
+					? { notesSeed: content }
+					: { markdownSeed: content }),
+			};
 		}
 		return tab;
 	});
 }
 
-// --- Tab session persistence (per-window, best-effort localStorage) ---
+// --- Session persistence (dockview layout is the sole source of truth) ---
 
 const TABS_STORAGE_KEY = "agentero-open-tabs";
 
-export type PersistedTab = { path: string; mode: CenterViewMode };
-export type PersistedTabs = { tabs: PersistedTab[]; activeIndex: number };
+export type PersistedTab = {
+	path: string;
+	mode: CenterViewMode;
+};
 
-/** Read and validate the previously persisted open tabs for this window. */
+/**
+ * Restored session: panel list + active id derived from dockview layout
+ * (params carry path/mode; grid carries active group/view).
+ */
+export type PersistedTabs = {
+	tabs: PersistedTab[];
+	activeId: string | null;
+	/** Global dockview grid snapshot (panel ids = path-derived tab ids). */
+	layout: unknown | null;
+};
+
+const VALID_MODES = new Set<CenterViewMode>([
+	"markdown",
+	"pdf",
+	"html",
+	"image",
+]);
+
+function isCenterViewMode(v: unknown): v is CenterViewMode {
+	return typeof v === "string" && VALID_MODES.has(v as CenterViewMode);
+}
+
+/** Params written into each dockview panel for layout round-trip. */
+export type PanelPersistParams = {
+	panelId: string;
+	path: string;
+	mode: CenterViewMode;
+};
+
+export function panelPersistParams(tab: DocTab): PanelPersistParams {
+	return { panelId: tab.id, path: tab.path, mode: tab.mode };
+}
+
+type LayoutPanelState = {
+	id?: string;
+	params?: { panelId?: string; path?: string; mode?: string };
+};
+
+type LayoutLeafData = {
+	id?: string;
+	views?: string[];
+	activeView?: string;
+};
+
+/**
+ * Walk a SerializedDockview grid for the active panel id
+ * (activeGroup → leaf activeView).
+ */
+function findActivePanelIdInLayout(layout: {
+	activeGroup?: string;
+	grid?: { root?: unknown };
+}): string | null {
+	const activeGroup = layout.activeGroup;
+	const walk = (node: unknown): string | null => {
+		if (!node || typeof node !== "object") return null;
+		const n = node as { type?: string; data?: unknown };
+		if (n.type === "leaf" && n.data && typeof n.data === "object") {
+			const data = n.data as LayoutLeafData;
+			if (activeGroup && data.id !== activeGroup) return null;
+			return data.activeView ?? data.views?.[0] ?? null;
+		}
+		if (n.type === "branch" && Array.isArray(n.data)) {
+			for (const child of n.data) {
+				const hit = walk(child);
+				if (hit) return hit;
+			}
+		}
+		return null;
+	};
+	return walk(layout.grid?.root) ?? null;
+}
+
+/**
+ * Derive flat panel list + active id from a dockview `toJSON()` snapshot.
+ * Prefers `params.path` / `params.mode`; falls back to panel id as path.
+ */
+export function extractTabsFromLayout(layout: unknown): {
+	tabs: PersistedTab[];
+	activeId: string | null;
+} {
+	if (!layout || typeof layout !== "object") {
+		return { tabs: [], activeId: null };
+	}
+	const l = layout as {
+		panels?: Record<string, LayoutPanelState>;
+		activeGroup?: string;
+		grid?: { root?: unknown };
+	};
+	if (!l.panels || typeof l.panels !== "object") {
+		return { tabs: [], activeId: null };
+	}
+	const tabs: PersistedTab[] = [];
+	const seen = new Set<string>();
+	for (const [id, panel] of Object.entries(l.panels)) {
+		const path =
+			typeof panel.params?.path === "string" && panel.params.path
+				? panel.params.path
+				: id;
+		const mode = isCenterViewMode(panel.params?.mode)
+			? panel.params.mode
+			: "markdown";
+		const tabId = tabIdForPath(path);
+		if (seen.has(tabId)) continue;
+		seen.add(tabId);
+		tabs.push({ path, mode });
+	}
+	const activeId = findActivePanelIdInLayout(l);
+	return {
+		tabs,
+		activeId:
+			activeId && seen.has(activeId)
+				? activeId
+				: tabs[0]
+					? tabIdForPath(tabs[0].path)
+					: null,
+	};
+}
+
+/** Read the previously persisted workspace for this window. */
 export function loadPersistedTabs(): PersistedTabs | null {
 	try {
 		const raw = localStorage.getItem(TABS_STORAGE_KEY);
 		if (!raw) return null;
-		const parsed = JSON.parse(raw) as PersistedTabs;
-		if (!parsed || !Array.isArray(parsed.tabs)) return null;
-		return parsed;
+		const parsed = JSON.parse(raw) as {
+			layout?: unknown | null;
+			/** @deprecated layout-only storage; still accepted for one-shot restore */
+			tabs?: Array<{ path?: string; mode?: string }>;
+			/** @deprecated */
+			activeIndex?: number;
+		};
+		if (!parsed || typeof parsed !== "object") return null;
+
+		// Preferred: layout alone (params carry path/mode).
+		if (parsed.layout != null && typeof parsed.layout === "object") {
+			const extracted = extractTabsFromLayout(parsed.layout);
+			if (!extracted.tabs.length) return null;
+			return {
+				tabs: extracted.tabs,
+				activeId: extracted.activeId,
+				layout: parsed.layout,
+			};
+		}
+
+		// Legacy: explicit tabs[] without layout (pre layout-only storage).
+		if (!Array.isArray(parsed.tabs) || !parsed.tabs.length) return null;
+		const flat: PersistedTab[] = [];
+		const seen = new Set<string>();
+		for (const pt of parsed.tabs) {
+			if (!pt || typeof pt.path !== "string" || !pt.path) continue;
+			const id = tabIdForPath(pt.path);
+			if (seen.has(id)) continue;
+			seen.add(id);
+			flat.push({
+				path: pt.path,
+				mode: isCenterViewMode(pt.mode) ? pt.mode : "markdown",
+			});
+		}
+		if (!flat.length) return null;
+		const idx = Math.min(Math.max(0, parsed.activeIndex ?? 0), flat.length - 1);
+		const activePath = flat[idx]?.path;
+		return {
+			tabs: flat,
+			activeId: activePath ? tabIdForPath(activePath) : null,
+			layout: null,
+		};
 	} catch {
 		return null;
 	}
 }
 
-/** Persist the current open tabs and active index (best-effort). */
-export function savePersistedTabs(
-	tabs: DocTab[],
-	activeTabId: string | null,
-): void {
+/**
+ * Persist dockview layout only (panel list, order, active, path/mode in params).
+ * Empty / missing layout clears storage.
+ */
+export function savePersistedTabs(layout: unknown | null): void {
 	try {
-		const payload: PersistedTabs = {
-			tabs: tabs.map((t) => ({ path: t.path, mode: t.mode })),
-			activeIndex: Math.max(
-				0,
-				tabs.findIndex((t) => t.id === activeTabId),
-			),
-		};
-		if (payload.tabs.length) {
-			localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(payload));
-		} else {
+		if (layout == null || typeof layout !== "object") {
 			localStorage.removeItem(TABS_STORAGE_KEY);
+			return;
 		}
+		const panels = (layout as { panels?: Record<string, unknown> }).panels;
+		if (!panels || !Object.keys(panels).length) {
+			localStorage.removeItem(TABS_STORAGE_KEY);
+			return;
+		}
+		localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify({ layout }));
 	} catch {
 		// localStorage may be unavailable; tab restore is best-effort.
 	}

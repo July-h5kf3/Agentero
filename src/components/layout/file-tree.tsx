@@ -6,7 +6,6 @@ import {
 	FileCode2,
 	FileImage,
 	FileJson,
-	FilePlus2,
 	FileText,
 	FileType2,
 	FileUp,
@@ -347,6 +346,8 @@ type FileTreeProps = {
 	onSelectLibrary?: () => void;
 	/** Virtual trash node → recycle bin view in center pane. */
 	onSelectTrash?: () => void;
+	/** Empty recycle bin (confirm + purge). From trash node context menu. */
+	onEmptyTrash?: () => void | Promise<void>;
 	/**
 	 * Start an inline create rename for a new file/folder under the given parent.
 	 * Parent is derived from the right-clicked path (folder itself, or file's parent).
@@ -425,6 +426,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onEmptyTrash,
 			onStartCreate,
 			onDownloadPaperAssets,
 			onDownloadAllMissingAssets,
@@ -1248,7 +1250,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		const handleContextMenuPath = useCallback(
 			(path: string, event: ReactMouseEvent) => {
 				if (createDraft) return;
-				if (!canRevealPath(path)) return;
+				// Real vault paths + recycle bin (empty action); not Library.
+				if (!canRevealPath(path) && path !== TRASH_VIRTUAL_PATH) return;
 				event.preventDefault();
 				event.stopPropagation();
 				setRevealError(null);
@@ -1256,6 +1259,11 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			},
 			[canRevealPath, createDraft],
 		);
+
+		const handleEmptyTrashFromMenu = useCallback(() => {
+			setContextMenu(null);
+			void onEmptyTrash?.();
+		}, [onEmptyTrash]);
 
 		useEffect(() => {
 			if (!contextMenu) return;
@@ -1339,6 +1347,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		}, [contextMenu, t]);
 
 		const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
+		const isTrashMenu = contextMenu?.path === TRASH_VIRTUAL_PATH;
 		const contextMenuPortal =
 			contextMenu && typeof document !== "undefined"
 				? createPortal(
@@ -1351,101 +1360,117 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 								top: Math.min(contextMenu.y, window.innerHeight - 120),
 							}}
 						>
-							{menuCount === 1 && onStartCreate ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={handleNewFileFromMenu}
-								>
-									<span>{t("fileTree.newFile")}</span>
-								</button>
-							) : null}
-							{menuCount === 1 && onStartCreate ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={handleNewFolderFromMenu}
-								>
-									<span>{t("fileTree.newFolder")}</span>
-								</button>
-							) : null}
-							{menuCount === 1 ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={() => {
-										void handleCopyPathFromMenu();
-									}}
-								>
-									<span>{t("fileTree.copyPath")}</span>
-								</button>
-							) : null}
-							{menuCount === 1 ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={() => {
-										void handleReveal(contextMenu.path);
-									}}
-								>
-									<span>{revealLabel}</span>
-									<span className="text-muted-foreground text-xs tracking-wide">
-										{revealShortcut}
-									</span>
-								</button>
-							) : null}
-							{menuCount === 1 ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={() => {
-										void handleOpenInTerminal(contextMenu.path);
-									}}
-								>
-									<span>{t("fileTree.openInTerminal")}</span>
-									<span className="text-muted-foreground text-xs tracking-wide">
-										{openInTerminalShortcut}
-									</span>
-								</button>
-							) : null}
-							{onMovePaths ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-									onClick={handleMoveFromMenu}
-								>
-									<span>
-										{menuCount > 1
-											? t("fileTree.moveSelected", { count: menuCount })
-											: t("fileTree.move")}
-									</span>
-								</button>
-							) : null}
-							{onDeletePath || onDeletePaths ? (
-								<button
-									type="button"
-									role="menuitem"
-									className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
-									onClick={handleDeleteFromMenu}
-								>
-									<span>
-										{menuCount > 1
-											? t("fileTree.deleteSelected", { count: menuCount })
-											: t("fileTree.delete")}
-									</span>
-									{menuCount === 1 ? (
-										<span className="text-xs tracking-wide opacity-80">
-											{deleteShortcut}
-										</span>
+							{isTrashMenu ? (
+								onEmptyTrash ? (
+									<button
+										type="button"
+										role="menuitem"
+										className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
+										onClick={handleEmptyTrashFromMenu}
+									>
+										<Trash2 className="size-3.5 shrink-0" aria-hidden />
+										<span>{t("recycleBin.emptyTrash")}</span>
+									</button>
+								) : null
+							) : (
+								<>
+									{menuCount === 1 && onStartCreate ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={handleNewFileFromMenu}
+										>
+											<span>{t("fileTree.newFile")}</span>
+										</button>
 									) : null}
-								</button>
-							) : null}
+									{menuCount === 1 && onStartCreate ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={handleNewFolderFromMenu}
+										>
+											<span>{t("fileTree.newFolder")}</span>
+										</button>
+									) : null}
+									{menuCount === 1 ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={() => {
+												void handleCopyPathFromMenu();
+											}}
+										>
+											<span>{t("fileTree.copyPath")}</span>
+										</button>
+									) : null}
+									{menuCount === 1 ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={() => {
+												void handleReveal(contextMenu.path);
+											}}
+										>
+											<span>{revealLabel}</span>
+											<span className="text-muted-foreground text-xs tracking-wide">
+												{revealShortcut}
+											</span>
+										</button>
+									) : null}
+									{menuCount === 1 ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={() => {
+												void handleOpenInTerminal(contextMenu.path);
+											}}
+										>
+											<span>{t("fileTree.openInTerminal")}</span>
+											<span className="text-muted-foreground text-xs tracking-wide">
+												{openInTerminalShortcut}
+											</span>
+										</button>
+									) : null}
+									{onMovePaths ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={handleMoveFromMenu}
+										>
+											<span>
+												{menuCount > 1
+													? t("fileTree.moveSelected", { count: menuCount })
+													: t("fileTree.move")}
+											</span>
+										</button>
+									) : null}
+									{onDeletePath || onDeletePaths ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
+											onClick={handleDeleteFromMenu}
+										>
+											<span>
+												{menuCount > 1
+													? t("fileTree.deleteSelected", { count: menuCount })
+													: t("fileTree.delete")}
+											</span>
+											{menuCount === 1 ? (
+												<span className="text-xs tracking-wide opacity-80">
+													{deleteShortcut}
+												</span>
+											) : null}
+										</button>
+									) : null}
+								</>
+							)}
 						</div>,
 						document.body,
 					)
@@ -1819,40 +1844,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 	},
 );
 
-function IconAction({
-	label,
-	onClick,
-	disabled,
-	children,
-}: {
-	label: string;
-	onClick: () => void;
-	disabled?: boolean;
-	children: ReactNode;
-}) {
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon-xs"
-					aria-label={label}
-					disabled={disabled}
-					onClick={onClick}
-				>
-					{children}
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent side="bottom">{label}</TooltipContent>
-		</Tooltip>
-	);
-}
-
 export function VaultSidebarHeader({
 	title,
-	onNewFile,
-	onNewFolder,
 	/** Vault-relative papers parent, e.g. `papers` or `papers/nlp` */
 	lookupParentDir,
 	onLookupSubmit,
@@ -1878,8 +1871,6 @@ export function VaultSidebarHeader({
 	onOpenRemoteVault,
 }: {
 	title: string;
-	onNewFile: () => void;
-	onNewFolder: () => void;
 	lookupParentDir: string;
 	onLookupSubmit: (texts: string[]) => Promise<void>;
 	onImportBibliography?: () => void | Promise<void>;
@@ -1973,164 +1964,148 @@ export function VaultSidebarHeader({
 				<PaneHeader
 					className="bg-muted/20"
 					trailing={
-						<>
-							<Popover
-								open={wandOpen}
-								onOpenChange={(open) => {
-									setWandOpen(open);
-									if (!open) setLookupError(null);
-								}}
+						<Popover
+							open={wandOpen}
+							onOpenChange={(open) => {
+								setWandOpen(open);
+								if (!open) setLookupError(null);
+							}}
+						>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<PopoverTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											aria-label={t("lookup.magicWand")}
+											disabled={actionsDisabled}
+										>
+											<WandSparkles className="size-3.5" />
+										</Button>
+									</PopoverTrigger>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{t("lookup.magicWand")}
+									<span className="ml-2 text-muted-foreground">
+										{magicWandShortcut}
+									</span>
+								</TooltipContent>
+							</Tooltip>
+							<PopoverContent
+								align="end"
+								side="bottom"
+								className="w-72 gap-2 p-2.5"
 							>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<PopoverTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("lookup.magicWand")}
-												disabled={actionsDisabled}
-											>
-												<WandSparkles className="size-3.5" />
-											</Button>
-										</PopoverTrigger>
-									</TooltipTrigger>
-									<TooltipContent side="bottom">
-										{t("lookup.magicWand")}
-										<span className="ml-2 text-muted-foreground">
-											{magicWandShortcut}
-										</span>
-									</TooltipContent>
-								</Tooltip>
-								<PopoverContent
-									align="end"
-									side="bottom"
-									className="w-72 gap-2 p-2.5"
+								<form
+									className="flex flex-col gap-2"
+									onSubmit={(e) => {
+										e.preventDefault();
+										void runLookup();
+									}}
 								>
-									<form
-										className="flex flex-col gap-2"
-										onSubmit={(e) => {
-											e.preventDefault();
-											void runLookup();
+									<p className="text-muted-foreground text-xs">
+										{t("lookup.addTo", { path: lookupParentDir })}
+									</p>
+									<Textarea
+										ref={lookupTextareaRef}
+										value={lookupText}
+										onChange={(e) => {
+											setLookupText(e.target.value);
+											// Auto-grow up to max-h-32; shrink when lines are removed.
+											const el = lookupTextareaRef.current;
+											if (el) {
+												el.style.height = "auto";
+												el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+											}
 										}}
-									>
-										<p className="text-muted-foreground text-xs">
-											{t("lookup.addTo", { path: lookupParentDir })}
+										onKeyDown={(e) => {
+											if (e.key === "Enter" && !e.shiftKey) {
+												e.preventDefault();
+												void runLookup();
+											}
+										}}
+										placeholder={t("lookup.placeholder")}
+										disabled={lookupBusy || importBusy}
+										className="min-h-[2.5rem] max-h-32 resize-none overflow-y-auto text-xs"
+										rows={1}
+									/>
+									{lookupError ? (
+										<p className="text-destructive text-xs leading-snug">
+											{lookupError}
 										</p>
-										<Textarea
-											ref={lookupTextareaRef}
-											value={lookupText}
-											onChange={(e) => {
-												setLookupText(e.target.value);
-												// Auto-grow up to max-h-32; shrink when lines are removed.
-												const el = lookupTextareaRef.current;
-												if (el) {
-													el.style.height = "auto";
-													el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
-												}
-											}}
-											onKeyDown={(e) => {
-												if (e.key === "Enter" && !e.shiftKey) {
-													e.preventDefault();
-													void runLookup();
-												}
-											}}
-											placeholder={t("lookup.placeholder")}
-											disabled={lookupBusy || importBusy}
-											className="min-h-[2.5rem] max-h-32 resize-none overflow-y-auto text-xs"
-											rows={1}
-										/>
-										{lookupError ? (
-											<p className="text-destructive text-xs leading-snug">
-												{lookupError}
-											</p>
-										) : null}
-										{/* Imports bottom-left (PDF · bibliography) · Add bottom-right */}
-										<div className="flex items-center justify-between gap-2">
-											<div className="flex items-center gap-1">
-												{onImportLocalPdf ? (
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																disabled={actionsDisabled}
-																aria-label={t("papersLibrary.importPdf")}
-																onClick={() => {
-																	void onImportLocalPdf();
-																}}
-															>
-																{importPdfBusy ? (
-																	<Loader2 className="size-3.5 animate-spin" />
-																) : (
-																	<FileUp className="size-3.5" />
-																)}
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{t("papersLibrary.importPdf")}
-														</TooltipContent>
-													</Tooltip>
-												) : null}
-												{onImportBibliography ? (
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																type="button"
-																variant="ghost"
-																size="icon-xs"
-																disabled={actionsDisabled}
-																aria-label={t("papersLibrary.import")}
-																onClick={() => {
-																	void onImportBibliography();
-																}}
-															>
-																{importBusy ? (
-																	<Loader2 className="size-3.5 animate-spin" />
-																) : (
-																	<Upload className="size-3.5" />
-																)}
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent side="bottom">
-															{t("papersLibrary.import")}
-														</TooltipContent>
-													</Tooltip>
-												) : null}
-											</div>
-											<Button
-												type="submit"
-												size="sm"
-												className="h-7 px-2.5 text-xs"
-												disabled={
-													lookupBusy ||
-													importBusy ||
-													importPdfBusy ||
-													!lookupText.trim()
-												}
-											>
-												{lookupBusy ? t("lookup.adding") : t("lookup.add")}
-											</Button>
+									) : null}
+									{/* Imports bottom-left (PDF · bibliography) · Add bottom-right */}
+									<div className="flex items-center justify-between gap-2">
+										<div className="flex items-center gap-1">
+											{onImportLocalPdf ? (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-xs"
+															disabled={actionsDisabled}
+															aria-label={t("papersLibrary.importPdf")}
+															onClick={() => {
+																void onImportLocalPdf();
+															}}
+														>
+															{importPdfBusy ? (
+																<Loader2 className="size-3.5 animate-spin" />
+															) : (
+																<FileUp className="size-3.5" />
+															)}
+														</Button>
+													</TooltipTrigger>
+													<TooltipContent side="bottom">
+														{t("papersLibrary.importPdf")}
+													</TooltipContent>
+												</Tooltip>
+											) : null}
+											{onImportBibliography ? (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-xs"
+															disabled={actionsDisabled}
+															aria-label={t("papersLibrary.import")}
+															onClick={() => {
+																void onImportBibliography();
+															}}
+														>
+															{importBusy ? (
+																<Loader2 className="size-3.5 animate-spin" />
+															) : (
+																<Upload className="size-3.5" />
+															)}
+														</Button>
+													</TooltipTrigger>
+													<TooltipContent side="bottom">
+														{t("papersLibrary.import")}
+													</TooltipContent>
+												</Tooltip>
+											) : null}
 										</div>
-									</form>
-								</PopoverContent>
-							</Popover>
-							<IconAction
-								label={t("fileTree.newFile")}
-								onClick={onNewFile}
-								disabled={actionsDisabled}
-							>
-								<FilePlus2 className="size-3.5" />
-							</IconAction>
-							<IconAction
-								label={t("fileTree.newFolder")}
-								onClick={onNewFolder}
-								disabled={actionsDisabled}
-							>
-								<FolderPlus className="size-3.5" />
-							</IconAction>
-						</>
+										<Button
+											type="submit"
+											size="sm"
+											className="h-7 px-2.5 text-xs"
+											disabled={
+												lookupBusy ||
+												importBusy ||
+												importPdfBusy ||
+												!lookupText.trim()
+											}
+										>
+											{lookupBusy ? t("lookup.adding") : t("lookup.add")}
+										</Button>
+									</div>
+								</form>
+							</PopoverContent>
+						</Popover>
 					}
 				>
 					<DropdownMenu

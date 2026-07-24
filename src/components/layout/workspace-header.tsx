@@ -8,7 +8,6 @@ import {
 	Settings,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { DocumentTabBar } from "@/components/layout/document-tab-bar";
 import { LayoutMenu } from "@/components/layout/layout-menu";
 import { WindowControls } from "@/components/layout/window-controls";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,6 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatShortcutById } from "@/lib/shortcuts";
-import type { DocTab } from "@/lib/tabs";
 import { cn } from "@/lib/utils";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
@@ -33,43 +31,35 @@ type WorkspaceHeaderProps = {
 	showWindowControls: boolean;
 	agentZenMode: boolean;
 	sidebarCollapsed: boolean;
-	hasVault: boolean;
-	tabs: DocTab[];
-	activeTabId: string | null;
 	notesEligible: boolean;
 	showNotes: boolean;
 	rightSidebarOpen: boolean;
 	rightSidebarTab: "agent" | "backlinks" | "annotations";
 	onExitAgentZen: () => void;
 	onToggleSidebar: () => void;
-	onSelectTab: (id: string) => void;
-	onCloseTab: (id: string) => void;
-	onReorderTabs: (fromId: string, toId: string) => void;
-	onToggleNotes: (open: boolean) => void;
+	/** Toggle NOTES panel for the active paper (state lives in dockview). */
+	onToggleNotes: (open?: boolean) => void;
 	onToggleRightSidebar: () => void;
 	onToggleAgentZen: () => void;
 	onOpenRightTab: (tab: "agent" | "backlinks" | "annotations") => void;
 	onOpenSettings: () => void;
 };
 
-/** Title-bar row: window chrome, sidebar toggles, document tabs, layout + agent controls. */
+/**
+ * Title-bar row: window chrome + sidebar / layout controls.
+ * Document tabs live inside the center Dockview workspace (not here).
+ */
 export function WorkspaceHeader({
 	isMacDesktop,
 	showWindowControls,
 	agentZenMode,
 	sidebarCollapsed,
-	hasVault,
-	tabs,
-	activeTabId,
 	notesEligible,
 	showNotes,
 	rightSidebarOpen,
 	rightSidebarTab,
 	onExitAgentZen,
 	onToggleSidebar,
-	onSelectTab,
-	onCloseTab,
-	onReorderTabs,
 	onToggleNotes,
 	onToggleRightSidebar,
 	onToggleAgentZen,
@@ -150,21 +140,11 @@ export function WorkspaceHeader({
 								</TooltipContent>
 							</Tooltip>
 						</div>
-						{/* Document tabs share the title bar row with layout icons */}
-						{hasVault && tabs.length ? (
-							<DocumentTabBar
-								tabs={tabs}
-								activeId={activeTabId}
-								onSelect={onSelectTab}
-								onClose={onCloseTab}
-								onReorder={onReorderTabs}
-							/>
-						) : (
-							<div
-								className="min-w-0 flex-1 self-stretch"
-								data-tauri-drag-region
-							/>
-						)}
+						{/* Drag region fills the middle — document tabs are in dockview. */}
+						<div
+							className="min-w-0 flex-1 self-stretch"
+							data-tauri-drag-region
+						/>
 						<div className="flex shrink-0 items-center gap-0.5 pr-2">
 							<LayoutMenu
 								leftSidebarOpen={!sidebarCollapsed}

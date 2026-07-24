@@ -112,8 +112,6 @@
 		"count": "{{formatted}} papers",
 		"search": "Search by title or tag",
 		"noMatch": "No papers match your search.",
-		"filterTag": "Tag",
-		"clearTagFilter": "Clear",
 		"columnsMenuLabel": "Columns",
 		"resetColumns": "Reset columns",
 		"import": "Import bibliography",

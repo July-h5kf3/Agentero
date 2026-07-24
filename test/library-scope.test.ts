@@ -137,7 +137,7 @@ describe("ensureFullLibraryTab", () => {
 describe("removeTab + ensureFullLibraryTab", () => {
 	it("can rebuild library after the last document closes", () => {
 		const doc = createPlaceholderTab("/vault/notes/a.md");
-		const { tabs } = removeTab([doc], doc.id, doc.id);
+		const { tabs } = removeTab([doc], doc.id);
 		expect(tabs).toHaveLength(0);
 		const ensured = ensureFullLibraryTab(tabs);
 		expect(ensured.tabs[0]?.path).toBe(LIBRARY_VIRTUAL_PATH);

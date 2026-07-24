@@ -28,7 +28,6 @@
 		"catTab": "Tab",
 		"settingsOpen": "Open Settings",
 		"settingsClose": "Close Settings",
-		"shortcutsShow": "Keyboard Shortcuts",
 		"vaultOpen": "Open Vault…",
 		"vaultCreate": "Create Vault…",
 		"vaultRefresh": "Refresh File Tree",
@@ -93,6 +92,9 @@
 	"tabs": {
 		"strip": "Open documents",
 		"close": "Close {{title}}",
+		"closeSplit": "Close split · {{title}}",
+		"splitDropHint": "Drop to open as split",
+		"splitNotAllowed": "This item cannot open in a split pane.",
 		"emptyTitle": "No document open",
 		"emptyHint": "Pick a file or paper from the sidebar to open it in a tab."
 	},
