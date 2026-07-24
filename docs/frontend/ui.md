@@ -16,6 +16,7 @@
 - 视觉原则：**尽量简约，减少不必要的元素**。
 - 外观跟随 **System / Light / Dark**（`next-themes`，设置 → Appearance）。
 - **配色主题（tweakcn 预设）**：设置 → Appearance `uiTheme`（默认 `default` = index.css 内置外观）。全部 tweakcn 主题（36 个）打包在 `src/themes/tweakcn.json`（仅颜色 + radius，不覆盖字体/阴影），运行时经 `src/lib/ui-theme.ts` `applyUiTheme` 在 `<head>` 末尾注入 `:root` / `.dark` 变量覆盖；跨窗口经 `settings:changed` 同步。刷新主题数据：`node scripts/fetch-tweakcn-themes.mjs`。
+- **界面缩放（UI Scale）**：设置 → Appearance `uiScale`，提供 5 档预设：80% / 90% / 100% / 125% / 150%（默认 100%）。通过设置 `<html>` 的 `font-size` 缩放整个界面（标题栏、侧边栏、内容区、编辑器同步放大/缩小）。工具栏按钮与标题栏随全局缩放一起调整，不再使用单独的 `toolbarIconSize`。macOS 下新建窗口会根据当前 `uiScale` 重新计算 traffic light 位置；主窗口仍使用 `tauri.conf.json` 的固定位置。
 
 ## 2. 文案 vs 图标
 
@@ -286,6 +287,9 @@
 | 快捷键 | 作用 | 说明 |
 |---|---|---|
 | `⌘,` | 打开 / 关闭 Settings | 系统级 Preferences 约定；App 内居中浮层，`Esc` / `⌘W` 关闭 |
+| `⌘+` / `⌘=` | 放大界面 | 全局 UI Scale +5%（`zoomIn`）；对齐浏览器 / VS Code |
+| `⌘-` | 缩小界面 | 全局 UI Scale -5%（`zoomOut`） |
+| `⌘0` | 重置界面缩放 | 恢复 100%（`zoomReset`） |
 | `⌘/` | 键盘快捷键速查（开关） | 再按关闭；`ShortcutsDialog` |
 | `⌘P` / `⌘K` | 快速打开（开关） | 论文标题·作者·id 即时 quick-open + 去抖 `vault_search` 全文；输入 `>` 可切命令模式（`CommandPalette` · `quickOpen`） |
 | `⇧⌘P` | 命令面板（开关） | 执行应用命令（设置 / 侧栏 / Vault / 标签…）；与快速打开共用浮层（`commandPalette`） |
@@ -457,7 +461,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
-- **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
+- **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**语言（跟随系统 / English / 简体中文）**、**工具栏按钮大小**（`toolbarIconSize`，滑块 12–22px，默认 14；驱动标题栏图标按钮的图标与按钮盒尺寸，经 `<header>` 上的 `--tb-icon` / `--tb-btn` CSS 变量级联到 `WorkspaceHeader` 与 `LayoutMenu`，为视力不佳用户提供无障碍放大）；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
