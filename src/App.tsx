@@ -369,7 +369,7 @@ export default function App() {
 
 	const modeAvailable: Record<CenterViewMode, boolean> = {
 		markdown: true,
-		pdf: Boolean(activeTab?.pdfUrl),
+		pdf: Boolean(activeTab?.pdfUrl || activeTab?.pdfBytes),
 		html: Boolean(activeTab?.htmlUrl),
 		image: Boolean(activeTab?.imageUrl),
 	};
