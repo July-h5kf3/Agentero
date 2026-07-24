@@ -77,7 +77,7 @@ import {
 	resolveDroppedPdfPaths,
 	snapshotDataTransfer,
 } from "@/lib/external-file-drop";
-import { notifyError } from "@/lib/notify";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import {
 	formatPaperTreeLabel,
 	isPaperDirectory,
@@ -107,7 +107,11 @@ import { useUiScale } from "@/lib/settings";
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import { type FileNode, vaultDisplayName } from "@/lib/vault";
+import {
+	type FileNode,
+	resolveCreateParent,
+	vaultDisplayName,
+} from "@/lib/vault";
 
 /** Paper folders that need Download (no PDF / no source / no PAPER.md). */
 function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
@@ -343,6 +347,11 @@ type FileTreeProps = {
 	onSelectLibrary?: () => void;
 	/** Virtual trash node → recycle bin view in center pane. */
 	onSelectTrash?: () => void;
+	/**
+	 * Start an inline create rename for a new file/folder under the given parent.
+	 * Parent is derived from the right-clicked path (folder itself, or file's parent).
+	 */
+	onStartCreate?: (kind: TreeCreateKind, parentPath: string) => void;
 	/** Download PDF (+ TeX if arXiv); no TeX → liteparse PAPER.md. */
 	onDownloadPaperAssets?: (paperNode: FileNode) => Promise<void>;
 	/** Download missing assets for every incomplete paper (Library row). */
@@ -416,6 +425,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onSelectFile,
 			onSelectLibrary,
 			onSelectTrash,
+			onStartCreate,
 			onDownloadPaperAssets,
 			onDownloadAllMissingAssets,
 			paperMetaByRelPath,
@@ -1303,6 +1313,31 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onMovePaths(targets);
 		}, [contextMenu, menuTargets, onMovePaths]);
 
+		const handleNewFileFromMenu = useCallback(() => {
+			if (!contextMenu || !vaultPath || !onStartCreate) return;
+			const parent = resolveCreateParent(vaultPath, contextMenu.path, nodes);
+			setContextMenu(null);
+			onStartCreate("file", parent);
+		}, [contextMenu, vaultPath, nodes, onStartCreate]);
+
+		const handleNewFolderFromMenu = useCallback(() => {
+			if (!contextMenu || !vaultPath || !onStartCreate) return;
+			const parent = resolveCreateParent(vaultPath, contextMenu.path, nodes);
+			setContextMenu(null);
+			onStartCreate("folder", parent);
+		}, [contextMenu, vaultPath, nodes, onStartCreate]);
+
+		const handleCopyPathFromMenu = useCallback(async () => {
+			if (!contextMenu) return;
+			setContextMenu(null);
+			try {
+				await navigator.clipboard.writeText(contextMenu.path);
+				notifySuccess(t("fileTree.copiedPath"), { duration: 2000 });
+			} catch {
+				notifyError(t("fileTree.copyPathFailed"));
+			}
+		}, [contextMenu, t]);
+
 		const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
 		const contextMenuPortal =
 			contextMenu && typeof document !== "undefined"
@@ -1316,6 +1351,38 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 								top: Math.min(contextMenu.y, window.innerHeight - 120),
 							}}
 						>
+							{menuCount === 1 && onStartCreate ? (
+								<button
+									type="button"
+									role="menuitem"
+									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+									onClick={handleNewFileFromMenu}
+								>
+									<span>{t("fileTree.newFile")}</span>
+								</button>
+							) : null}
+							{menuCount === 1 && onStartCreate ? (
+								<button
+									type="button"
+									role="menuitem"
+									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+									onClick={handleNewFolderFromMenu}
+								>
+									<span>{t("fileTree.newFolder")}</span>
+								</button>
+							) : null}
+							{menuCount === 1 ? (
+								<button
+									type="button"
+									role="menuitem"
+									className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+									onClick={() => {
+										void handleCopyPathFromMenu();
+									}}
+								>
+									<span>{t("fileTree.copyPath")}</span>
+								</button>
+							) : null}
 							{menuCount === 1 ? (
 								<button
 									type="button"

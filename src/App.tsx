@@ -20,6 +20,7 @@ import {
 	FileTree,
 	type FileTreeHandle,
 	type TreeCreateDraft,
+	type TreeCreateKind,
 	VaultSidebarHeader,
 } from "@/components/layout/file-tree";
 import { GraphPanel } from "@/components/layout/graph-panel";
@@ -2447,16 +2448,24 @@ export default function App() {
 		[openTab],
 	);
 
-	const startCreate = useCallback(
-		(kind: TreeCreateDraft["kind"]) => {
+	const handleStartCreate = useCallback(
+		(kind: TreeCreateKind, parentPath: string) => {
 			if (!vaultPath || !isTauri()) {
 				notifyError(t("sidebar:fileTree.needsVault"));
 				return;
 			}
-			const parent = resolveCreateParent(vaultPath, treeSelectedPath, tree);
-			setCreateDraft({ kind, parentPath: parent });
+			setCreateDraft({ kind, parentPath });
 		},
-		[vaultPath, treeSelectedPath, tree, t],
+		[vaultPath, t],
+	);
+
+	const startCreate = useCallback(
+		(kind: TreeCreateKind) => {
+			if (!vaultPath) return;
+			const parent = resolveCreateParent(vaultPath, treeSelectedPath, tree);
+			handleStartCreate(kind, parent);
+		},
+		[vaultPath, treeSelectedPath, tree, handleStartCreate],
 	);
 
 	const handleCancelCreate = useCallback(() => {
@@ -3148,6 +3157,7 @@ export default function App() {
 										onSelectFile={(n) => handleSelectFile(n)}
 										onSelectLibrary={handleSelectLibrary}
 										onSelectTrash={handleSelectTrash}
+										onStartCreate={handleStartCreate}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}
 										paperMetaByRelPath={paperMetaByRelPath}
