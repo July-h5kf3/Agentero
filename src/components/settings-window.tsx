@@ -28,7 +28,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { HostOsIcon, normalizeHostOs } from "@/components/host-os-icon";
+import { HostOsIcon, normalizeHostOs } from "@/components/icons/host-os-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
