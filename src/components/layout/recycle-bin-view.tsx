@@ -3,6 +3,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
@@ -39,10 +47,12 @@ export function RecycleBinView({
 	reloadSignal?: number;
 	className?: string;
 }) {
-	const { t, i18n } = useTranslation("sidebar");
+	const { t, i18n } = useTranslation(["sidebar", "common"]);
 	const [items, setItems] = useState<TrashEntry[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [busyId, setBusyId] = useState<string | null>(null);
+	/** Pending permanent-delete confirmation (Dialog instead of window.confirm). */
+	const [purgeTarget, setPurgeTarget] = useState<TrashEntry | null>(null);
 
 	const reload = useCallback(async () => {
 		if (!vaultPath) {
@@ -94,30 +104,28 @@ export function RecycleBinView({
 		[vaultPath, busyId, onChanged, t],
 	);
 
-	const handlePurge = useCallback(
-		async (item: TrashEntry) => {
+	const handlePurgeClick = useCallback(
+		(item: TrashEntry) => {
 			if (!vaultPath || busyId) return;
-			if (
-				!window.confirm(
-					t("recycleBin.deleteForeverConfirm", { name: item.name }),
-				)
-			) {
-				return;
-			}
-			setBusyId(item.id);
-			try {
-				await purgeTrashItem(vaultPath, item.batchId, item.stored);
-				setItems((prev) => prev.filter((x) => x.id !== item.id));
-			} catch (e) {
-				notifyError(
-					e instanceof Error ? e.message : t("recycleBin.purgeFailed"),
-				);
-			} finally {
-				setBusyId(null);
-			}
+			setPurgeTarget(item);
 		},
-		[vaultPath, busyId, t],
+		[vaultPath, busyId],
 	);
+
+	const handlePurgeConfirm = useCallback(async () => {
+		const item = purgeTarget;
+		if (!vaultPath || !item || busyId) return;
+		setPurgeTarget(null);
+		setBusyId(item.id);
+		try {
+			await purgeTrashItem(vaultPath, item.batchId, item.stored);
+			setItems((prev) => prev.filter((x) => x.id !== item.id));
+		} catch (e) {
+			notifyError(e instanceof Error ? e.message : t("recycleBin.purgeFailed"));
+		} finally {
+			setBusyId(null);
+		}
+	}, [vaultPath, purgeTarget, busyId, t]);
 
 	return (
 		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
@@ -181,7 +189,7 @@ export function RecycleBinView({
 													className="size-7 text-destructive"
 													aria-label={t("recycleBin.deleteForever")}
 													disabled={Boolean(busyId)}
-													onClick={() => void handlePurge(item)}
+													onClick={() => handlePurgeClick(item)}
 												>
 													<Trash2 className="size-3.5" />
 												</Button>
@@ -197,6 +205,44 @@ export function RecycleBinView({
 					</TooltipProvider>
 				</div>
 			)}
+
+			<Dialog
+				open={purgeTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setPurgeTarget(null);
+				}}
+			>
+				<DialogContent showCloseButton={false} className="sm:max-w-sm">
+					<DialogHeader>
+						<DialogTitle>{t("recycleBin.deleteForever")}</DialogTitle>
+						<DialogDescription>
+							{purgeTarget
+								? t("recycleBin.deleteForeverConfirm", {
+										name: purgeTarget.name,
+									})
+								: null}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter className="gap-2 sm:gap-0">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => setPurgeTarget(null)}
+							disabled={Boolean(busyId)}
+						>
+							{t("common:cancel")}
+						</Button>
+						<Button
+							type="button"
+							variant="destructive"
+							onClick={() => void handlePurgeConfirm()}
+							disabled={Boolean(busyId)}
+						>
+							{t("recycleBin.deleteForever")}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
