@@ -54,7 +54,7 @@
 - [x] 表头排序；横向/纵向滚动
 - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）
 - [x] Library 行批量补资源（与 2b 联动）
-- [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选
+- [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示（搜索匹配标签；无表上方 chip 筛选条）
 - [x] **Tags CLI**：`paper tag list|set|add|rm` / `list --tag`（与 Host 共用 `papers::set_tags`）
 - [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/tag-colors.ts`）
 
@@ -68,11 +68,11 @@
 ### 2d. 文件树与侧栏 UX
 
 - [x] **文件树与侧栏 UX**（整项）
-- [x] **回收站虚拟节点**：Library 下方 `agentero:trash`（不在侧栏 Header）；`RecycleBinView` 自持 `PaneHeader`（与侧栏同高）；中间栏不重复 title/关闭行
+- [x] **回收站虚拟节点**：Library 下方 `agentero:trash`（不在侧栏 Header）；中间栏 `RecycleBinView` 无独立 header；中间栏不重复 title/关闭行
 - [x] **选中同步 / 定位**：激活文档与入库完成后树展开祖先并 `scrollToIndex`
 - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）
 - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）
-- [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除 / 清空
+- [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除；**清空**在侧栏回收站右键
 - [x] 多选（⌘/Shift 行高亮）+ 拖拽移动到 `papers/` 组织夹 + 批量移动对话框
 - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）
 - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明；任务可取消）
@@ -112,7 +112,6 @@
 - [x] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”（建议按钮接通后端 `summary`/`qa`/`related_work` workflow）
 - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`
 - [x] 输出必须包含 Sources（workflow prompt 已要求 `## Sources`）
-- [x] 写后审阅：`agent:notes-review` → **统一 Diff**（`NotesReviewDiff`）Keep / Revert（BYOA 写盘后对照；写前草稿拦截仍待）
 - [x] 权限「每次询问」档（`agentPermissionMode: ask` → `agent:permission-request` 对话框 + `agent_respond_permission`）
 
 ### 4. 文件与索引同步
@@ -205,8 +204,9 @@
 - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / 图片 / Library 以 tab 打开，可关闭、切换、拖拽重排
 - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容
 - [x] **默认页全库 + 文件夹作用域库**（2c-2）
-- [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）
-- [x] 快捷键：关 tab `⌘W`（有弹层先关顶层；仅剩全库时关窗；File → Close 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏随 split 补
+- [x] **全局 Dockview**：中间栏单一工作区管理全部文档 panel；上下左右 + 多格；拖文件树并入任意边
+- [x] 快捷键：关 panel `⌘W`（弹层 → active panel → 关窗；File → Close 同源）/ 切 panel `⌥⌘→·⌥⌘←`
+- [x] 去掉标题栏文档 tab 条与中间栏 PDF/HTML 模式切换
 - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦
 - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局
 - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）
@@ -326,7 +326,8 @@
 
 ### 7. 工作区增强
 
-- [ ] 超过 2 格的网格分屏；tab 固定（pin）、按 paper 分组
+- [x] 超过 2 格的网格分屏（dockview multi-pane + layout 快照）
+- [ ] tab 固定（pin）、按 paper 分组
 - [ ] 命名工作区会话（保存/恢复一整套 tab + 分屏布局）
 
 ### 8. 多端与协作
@@ -365,7 +366,7 @@
 - [x] Library 表 + **tags** + **Rescan** + **文件夹作用域**
 - [x] PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）
 - [x] Notes 仅具体论文时显示
-- [ ] **分屏**（V0.6 余量）
+- [x] **分屏**（V0.6：dockview tab 内上下左右 + 多格；见 `tab-split.md`）
 
 ### 查找
 
@@ -394,7 +395,6 @@
 - [x] **paper-reader**（Zap + 可选自动默认关；**不进对话历史**）
 - [x] **权限三档**（受限 / 每次询问 / 自动批准）
 - [x] **面板 workflow**（summary / qa / related_work）
-- [x] **笔记写后审阅** Keep/Revert
 - [x] 模型收藏、Skill 提及分流、**禅模式左侧历史栏**
 - [ ] `AGENTS.md` 自动注入
 - [ ] 写前草稿拦截
@@ -431,7 +431,7 @@
 - [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
 - [x] **M1** SSH/SFTP + `__local_sim__`；`remote_*`；欢迎页；树 / md / mkdir / remove / bytes
 - [x] **M2** catalog work mirror；list/get/delete/rescan/tags/is_read + PUT
-- [x] **M3** ACP over SSH；skill materialize；notes-review；Codex-SSH 明确拒绝
+- [x] **M3** ACP over SSH；skill materialize；Codex-SSH 明确拒绝
 - [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
 - [x] 切换 Vault 时 disconnect 远程会话
 - [x] 侧栏「切换知识库」菜单：**打开远程…** + 最近远程 MRU（共用 `RemoteVaultDialog`）

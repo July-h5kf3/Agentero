@@ -226,7 +226,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 ### 4.6 无 Vault / 其它弹层打开时
 
 - **无 Vault**：Go 模式可展示「打开 Vault / 创建 Vault」类命令；内容搜索禁用。  
-- **其它弹层**（设置 / 快捷键清单等）：与 Dialog 共用 [`overlay-stack`](../frontend/ui.md)（§3.0）。`⌘P`/`⌘K`/`⇧⌘P` 自身可再按关闭；`Esc` / `⌘W` 关最顶层。有弹层时 `whenSettingsClosed` 门控挡住 Vault 树类快捷键，但开关类（设置 / 面板 / 清单）仍可匹配。
+- **其它弹层**（设置等）：与 Dialog 共用 [`overlay-stack`](../frontend/ui.md)（§3.0）。`⌘P`/`⌘K`/`⇧⌘P` 自身可再按关闭；`Esc` / `⌘W` 关最顶层。有弹层时 `whenSettingsClosed` 门控挡住 Vault 树类快捷键，但开关类（设置 / 面板）仍可匹配。
 
 ---
 

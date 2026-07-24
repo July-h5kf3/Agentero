@@ -41,9 +41,9 @@ Agentero 桌面应用
 ## 当前 UI 形态
 
 - 默认工作台：文件树 + **文档标签页**中间内容 +（按需）Notes + 可选右侧栏。
-- **文档标签**：标题栏浏览器式多 tab（paper / PDF / HTML / Markdown / Library / 图片）；常驻挂载，切换保留 PDF 滚动/缩放与编辑器状态。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`：设置 / 快捷键清单 / 命令面板 / 迁移对话框等），否则逐个关标签，仅剩全库时关窗；`⌥⌘←/→` 切换。**分屏（split）** 仍规划见 V0.6。
+- **文档标签**：标题栏浏览器式多 tab（paper / PDF / HTML / Markdown / Library / 图片）；常驻挂载，切换保留 PDF 滚动/缩放与编辑器状态。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`：设置 / 命令面板 / 迁移对话框等），否则逐个关标签，仅剩全库时关窗；`⌥⌘←/→` 切换。**分屏（split）** 仍规划见 V0.6。
 - 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 染色 chip + 筛选、双向滚动），数据来自 `paper_list`。
-- 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下虚拟节点 `agentero:trash` → 中间栏回收站视图恢复 / 清空，无 Undo toast）。Paper 行默认 **标题 · 作者**（设置 → 通用可切换标签/排序预设，不改磁盘文件夹名）。
+- 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下虚拟节点 `agentero:trash` → 中间栏恢复 / 永久删除，侧栏右键清空，无 Undo toast）。Paper 行默认 **标题 · 作者**（设置 → 通用可切换标签/排序预设，不改磁盘文件夹名）。
 - **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑并可设 **Apple 8 色**（`paper_set_tags`，`tags_json` 字符串或 `{name,color}`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
 - 无 Vault 时中间栏为欢迎页（最近本地/远程 + 打开 / **打开远程** / 创建 / 从 Zotero 迁移）；有 Vault 时侧栏标题可切换知识库（含 **打开远程…**）；`⌘N` 可开多窗口。
 - 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
@@ -53,7 +53,7 @@ Agentero 桌面应用
 - 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
 - **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
 - **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / **每次询问** / 自动批准）；`ask` 时弹权限对话框。
-- **Agent 面板**：空态建议 → summary / qa / related_work；笔记被 Agent 改写后 **统一 Diff** + Keep / Revert。
+- **Agent 面板**：空态建议 → summary / qa / related_work。
 - **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索。
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。

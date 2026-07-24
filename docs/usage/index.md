@@ -28,7 +28,7 @@ Vault 是一个普通文件夹。论文目录、`NOTES.md`、PDF、Markdown 和 
 
 ### Library
 
-Library 是 Agentero 根据 Vault 中论文数据生成的论文列表。排序、标签筛选和论文元数据来自 `.agentero/catalog.sqlite`，而笔记正文仍以 Vault 中的普通文件为准。
+Library 是 Agentero 根据 Vault 中论文数据生成的论文列表。排序、标签与论文元数据来自 `.agentero/catalog.sqlite`，而笔记正文仍以 Vault 中的普通文件为准。
 
 ### Agent
 

@@ -1,83 +1,85 @@
-# Tab 内分屏（split）
+# 全局 Dockview 工作区
 
-> V0.6 分屏 MVP 的设计与实现记录。标题栏全局 tab 条保持不动，分屏发生在**单个 tab 内部**：一个 tab = 一个工作区，最多左右两格（`primary | split`）。基于既有 `react-resizable-panels`，不引入 docking 库。
+> V0.6 工作区。中间栏由 **单一全局 Dockview** 管理全部打开文档；标题栏不再放文档 tab 条，PDF/HTML 也不再在中间栏切换。布局、分屏、关闭、重排尽量使用 dockview 原生能力。
 
 ## 1. 模型选型
 
-对比过三种模型：
-
-| 模型 | tab 条位置 | 结论 |
-|---|---|---|
-| Docking 库（Dockview / flexlayout-react） | 每个分屏格自带 tab 栈，tab 条必须离开标题栏 | 与「标题栏全局单 tab 条」结构冲突，放弃 |
-| Emacs/tmux（全局 tab 池 + 格子为视口） | 标题栏不动 | 需要「聚焦格」概念，交互解释成本高，放弃 |
-| **分屏放进 tab 内部（本方案）** | 标题栏不动 | 格子属于 tab；切 tab 时整个分屏布局跟随；改动最小 |
+| 模型 | 结论 |
+|---|---|
+| 标题栏全局 tab + 每 tab 内 Dockview | 已废弃：双轨状态、手写 split 过多 |
+| **中间栏全局 Dockview（本方案）** | 每个打开文档 = 一个 dockview panel；分屏/网格/tab 栈由 dockview 原生管理 |
 
 ## 2. 行为定义
 
-- **论文默认分屏**：新建论文 tab（kind=paper 且 mode 为 pdf/html、有 `NOTES.md`）时，默认左 PDF、右 NOTES.md（WYSIWYG）。会话恢复按持久化内容还原，用户关掉的分屏不会复活。
-- **拖拽触发**：
-  - 拖标题栏 tab 到内容区右半落点 → 该 tab 成为当前 tab 的右格（原 tab 从 tab 条移除）；
-  - 拖文件树节点到内容区右半落点 → 该路径以分屏打开。
-- **⌘W 两段式**：有分屏先关分屏，再按才关 tab（无需聚焦格概念）。
-- **⌘\\**：论文 tab 一键切换 NOTES 分屏（与标题栏 NotebookPen 按钮同一 handler）。
-- **收编 Notes 列**：原右侧硬编码 NOTES 列（`showNotesOnRight` + `NotesEditorTab`）删除，由通用 split 取代；每 tab 独立分屏比例，右格可为任意文档（两篇 paper 并排）。
+- **打开文档**：文件树 / 库表 / 命令面板 → `openTab(path)` → React `tabs[]` 插入 + **`workspaceRef.openPanel(tab, placement)`**（命令式 `addPanel`，不再经 `pendingPlacement` state 往返）。
+- **论文默认**：paper（pdf/html）打开时，再开 `NOTES.md` 为**同一 group 内的 sibling tab**（`openPanel(..., { direction: "within", referencePanelId })`），与 PDF 共用 tab 条。
+- **文件树拖入**：`onUnhandledDragOver.accept` + `onDidDrop` → `openTab(path, { placement })`；方向为 left/right/above/below/within（中心落点 = 同组 tab）。
+- **关 panel**：dockview 原生 tab X → `onDidRemovePanel` → React 只删 `tabs[]` 数据；**焦点完全听 `onDidActivePanelChange`**（不按扁平列表另算 neighbor）。
+- **循环 panel**（`⌥⌘←/→`）：`workspaceRef.cycleActive` 按 **`api.panels` 视觉顺序** 循环，不是 React 插入序。
+- **NOTES 切换**：Layout 菜单 / 快捷键 → 开/关 NOTES 为同组 tab。
+- **无 PDF/HTML 切换条**：`mode` 在 `loadTabResources` 时按路径与可用资源确定。
 
 ## 3. 数据结构（`src/lib/tabs.ts`）
 
 ```ts
-export type DocTabBase = { /* 原 DocTab 全部字段：id/path/kind/title/mode/资源/编辑器状态 */ };
-export type DocTab = DocTabBase & {
-  split: DocTabBase | null;   // 右格；仅一层，不递归
-  splitPct: number | null;    // 右格宽度百分比（null = 默认）
+export type DocTab = {
+  id: string;           // path-derived
+  path: string;
+  kind: "library" | "trash" | "paper" | "file";
+  title: string;
+  mode: CenterViewMode; // 打开时确定，无 in-pane 切换
+  // … resources / editor seeds …
 };
+
+// 布局不在 DocTab 上嵌套：
+// App 持有 dockLayout: unknown | null  // api.toJSON()
+// 每个 panel 的 params: { panelId, path, mode } 供 layout 单源持久化
 ```
 
-- 右格 pane 的 `id` 仍由 path 派生（与单开成 tab 时一致）→ PDF 阅读位置 / 高亮 / ask 线程持久化天然共享。
-- **单实例规则**：同一 path 不允许同时存在于 tab 条与某个 split 中；打开一个已在 split 里的 path → 激活其宿主 tab。
+- 所有打开文档是**扁平 peer**，不再有 `DocTab.panes` / `split`。
+- 单实例：同一 path 只存在一个 panel；再打开则 `activatePanel`。
 
-### 纯函数（单测于 `test/tabs.test.ts`）
+### 关键纯函数
 
 | 函数 | 说明 |
 |---|---|
-| `setTabSplit(prev, tabId, pane)` | 设置右格（已有则替换，返回被替换 pane 供 blob 回收） |
-| `closeTabSplit(prev, tabId)` | 关闭右格，返回 removed pane |
-| `moveTabIntoSplit(prev, sourceTabId, targetTabId, activeId)` | 拖 tab 并入 target 右格：source 从 tab 条移除并处理 activeId |
-| `findTabHostingSplitPath(prev, path)` | 单实例规则查询 |
-| `patchTabSplit(prev, tabId, patch)` | 给右格打 patch（dirty/seed 等） |
-| `createNotesSplitPane(tab)` | 由 paper tab 合成 NOTES pane（复用 notesSeed，无二次 IO） |
-| `removeTab` / `removeTabsUnderPath` | 连带回收 split blob；path 命中 split 时摘除 split |
-| `syncTabSeedsForPath` / `reseedNotesTab` / `reseedMarkdownTab` | 同时遍历 split pane |
-| 持久化 `PersistedTab` | 增 `split?: { path, mode }` 与 `splitPct?`；恢复时 split 走 `loadTabResources` |
+| `insertPlaceholderTab` / `removeTab` / `patchTab` | 扁平列表增删改（`removeTab` **不**计算 neighbor active） |
+| `createNotesSplitPane` | 从 paper 派生 NOTES panel |
+| `tabHasNotesSplit(tabs, paper)` | NOTES 是否已在列表中 |
+| `extractTabsFromLayout` / `panelPersistParams` | 从 layout 反推 tab 列表；写入 panel params |
+| 持久化 | **只存 `{ layout }`**；restore 时从 layout.panels 的 params 反推 `tabs[]` + active |
 
-## 4. 渲染（`App.tsx`）
+## 4. 渲染（`TabWorkspace` = 全局 Dockview）
 
 ```
-tab.split == null →  <TabCenter tab={tab}/>（现状不变）
-tab.split != null →
-  <ResizableGroup direction="horizontal">
-    <ResizablePanel minSize={220}> <TabCenter tab={tab}/> </ResizablePanel>
-    <ResizableHandle />
-    <ResizablePanel minSize={220} defaultSize={splitPct ?? 40}>
-      <SplitPaneHeader/>   ← 细头条：图标 + 标题 + dirty 圆点 + 关闭 X
-      <TabCenter tab={tab.split}/>
-    </ResizablePanel>
-  </ResizableGroup>
+中间栏一个 <TabWorkspace ref={workspaceRef}>
+  └─ DockviewReact
+       components.pane → TabCenter（params.panelId）
+       tabComponents.default → DockviewDefaultTab（原生标题/关闭）
+       tabs[] ↔ syncPanels（仅 membership：add 缺失 / remove 多余）
+       title/mode → panel.api.setTitle / updateParameters（独立通道）
+       openPanel(tab, placement) → api.addPanel({ position }) 命令式
+       cycleActive(delta) → api.panels 顺序
+       layout ↔ toJSON（单路 120ms 防抖 onDidLayoutChange）/ fromJSON
+       external DnD: onUnhandledDragOver + onDidDrop（仅文件树路径）
 ```
 
-- keep-alive 不变：tab 容器仍 `hidden` 切换，split pane 随宿主常驻。
-- **pdfLru** 从 tab id 扩展为 pane id；`registerPdfHandle` / highlights / asks 回调按 pane id。
-- pdfZen 只渲染聚焦 PDF pane，split 隐藏。
-- 中间切到 markdown 模式且右格即该论文 NOTES 时隐藏 split，避免同文件双编辑器。
+| 能力 | 谁负责 |
+|---|---|
+| Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
+| 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
+| 布局持久化 | **仅** `api.toJSON()`（params 含 path/mode） |
+| 打开放置 / 循环焦点 | `TabWorkspaceHandle`（imperative） |
+| 文档内容 / 资源加载 | React `DocTab` + `TabCenter` |
+| 侧栏 Paper Info / active id | `onDidActivePanelChange` → React |
 
-## 5. 拖拽落点（`src/components/layout/split-drop-overlay.tsx`）
+## 5. 标题栏
 
-- `document-tab-bar.tsx` 的 `onDragStart` 增 `dataTransfer.setData("application/x-agentero-tab", tab.id)`。
-- 内容区 dragover 检测 tab 类型或文件树 `text/plain` 多行路径 payload → 显示右半高亮落点。
-- drop：tab → `moveTabIntoSplit`；文件树路径 → `loadTabResources` 建 pane → `setTabSplit`。library/trash/目录拒绝并 toast。
-- 与外部文件导入（`use-external-file-drop`）互不干扰：内部拖拽无 `Files` 类型。
+- 仅保留侧栏折叠、Layout 菜单、Agent/Backlinks/Annotations、窗口控件。
+- **无** `DocumentTabBar`；中间拖拽区为 `data-tauri-drag-region`。
 
-## 6. MVP 限制
+## 6. 限制
 
-- 仅 2 格水平分屏；无竖直 / 网格 / 拖拽合并（roadmap 非目标）。
-- library / trash tab 不参与分屏（筛选状态为全局单例）。
-- 右格不可再作为拖拽源拖出（后续增强）。
+- 浮动窗 / popout 关闭（`disableFloatingGroups`）。
+- 文件树拖入开新 panel；dockview 内部 panel 拖拽重组不经 React。
+- Library / Trash 也是普通 panel（可与其它文档并排）。

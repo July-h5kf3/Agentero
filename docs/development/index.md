@@ -20,7 +20,7 @@
 |---|---|---|
 | V0.1 工作台 | ✅ | 文件树（Finder / **回收站** / 多选拖拽）、Markdown IO + **内嵌图**、**文件监听**、Library + tags + **Rescan**、多窗口、catalog、后台任务条、全局 Toast |
 | V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
-| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader**（Zap + 可选自动默认关）、**权限三档**（含每次询问）、**面板 workflow**、**笔记写后审阅**；`AGENTS.md` 注入仍待 |
+| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader**（Zap + 可选自动默认关）、**权限三档**（含每次询问）、**面板 workflow**；`AGENTS.md` 注入仍待 |
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph`；**文件变更防抖重建索引** |
 | 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 → `marks/*.json`；无文本层降级仍待 |
 | 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
@@ -50,7 +50,7 @@
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
-- [`tab-split.md`](tab-split.md)：Tab 内分屏（V0.6 split MVP）——标题栏 tab 条不动，单 tab 内 `primary | split` 两格；论文默认 PDF | NOTES；收编原右侧 Notes 列。
+- [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 并排。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
 
 - [`.md`](.md)：简短产品假设。

@@ -19,7 +19,7 @@
 | G2 | **SFTP 服务 UI 文件 IO** | 文件树、读写 Markdown、PDF 预览、目录操作经 SFTP（经 SSH 会话） |
 | G3 | **BYOA 跑在远端** | Codex / Claude-ACP / OpenCode 等进程在服务器上启动；`cwd` = 远端 Vault 根 |
 | G4 | **本机不持有第二套库** | 允许 ephemeral 工作副本与 PDF blob 缓存；断开后不得变成可独立打开的「本地 Vault」 |
-| G5 | **复用现有产品契约** | Vault 相对路径、catalog 语义、ACP 事件、权限三档、notes-review 尽量同构 |
+| G5 | **复用现有产品契约** | Vault 相对路径、catalog 语义、ACP 事件、权限三档尽量同构 |
 
 ### 1.2 非目标（MVP 不做）
 
@@ -248,7 +248,7 @@ cd /data/my-vault && exec opencode acp
 4. ACP 写入 → channel stdin  
 5. 退出码 / 断开 → `agent:completed` / `agent:failed`  
 
-**协议与 UI 复用**：`agent:stream`、`agent:permission-request`、`agent:notes-review`、权限三档、paper-reader skill 触发语法不变；路径展示尽量 strip 为 vault-relative。
+**协议与 UI 复用**：`agent:stream`、`agent:permission-request`、权限三档、paper-reader skill 触发语法不变；路径展示尽量 strip 为 vault-relative。
 
 ### 5.3 Provider 配置扩展（草案）
 
@@ -330,7 +330,7 @@ type RemoteAgentLaunch = {
 | **M0** | `VaultFs` + `LocalFs` 迁移关键读写路径；本地零回归 | 本地 |
 | **M1** | SSH 连接、SFTP 树、md 读写、PDF blob 预览、远程徽章 | 文件远端 |
 | **M2** | catalog GET/PUT、`paper_list` / tags / rescan、冲突 stat | **含 sqlite 远端** |
-| **M3** | `SshStdio` ACP、远端 discover/warm、精读 Zap、permission/notes-review | 远端 BYOA |
+| **M3** | `SshStdio` ACP、远端 discover/warm、精读 Zap、permission | 远端 BYOA |
 | **M4** | 连接复用、atomic catalog PUT、**trash ✅**、**入库写远端 ✅**、**缓存 LRU ✅** | 加固 |
 
 **MVP 闭环** = M0–M3。M1 无 catalog 不算完整远程 Vault；M2 无 Agent 不满足「要 BYOA」。
