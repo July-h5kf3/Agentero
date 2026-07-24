@@ -16,7 +16,7 @@
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Codex、Qoder、Grok、自定义）统一 ACP 协议（Codex 经 `@agentclientprotocol/codex-acp` 适配器）；**统一会话历史**（`agent_list_sessions` / `agent_load_session`，ACP `session/list` + `session/load`）；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**。 |
-| V0.4 双链、反链与图谱 | ✅ 基本完成 | 反链、预览双链跳转、缺失目标创建、Graph 与 `graph_get_graph` 已落地；**`.md` 变更防抖重建索引**（`scheduleWikiRebuild`，~900ms）；`[[` 补全 / Plate 内联节点可后续增强。 |
+| V0.4 双链、反链与图谱 | ✅ 基本完成 | 语义解析、标题/block 精确跳转、入/出链、Graph、`[[` 文件/alias/标题/block 候选与 Plate 规范序列化已落地；**链接感知的文件/目录/paper 移动**和可信本地外部 rename 的 `ask` / `always` repair 也已落地；`.md` 变更防抖重建索引（`scheduleWikiRebuild`，~900ms）。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 先落地本地 PDF citation/figure sidecar 与 Paper Content 侧栏，再做引用图、Connected Papers 和外部关系补全。 |
@@ -184,6 +184,8 @@
 - [x] 统一解析 Wikilink 与 Vault-local Markdown links：YAML aliases、标题层级、block ID、解析状态和 occurrence 范围均由可重建索引提供。
 - [x] 标题/block 精确跳转；Backlinks 入口同时展示入链和出链，Graph 仍在下方。
 - [x] Plate 中 `[[` 候选支持文件、alias、标题和 block，并写入可移植的规范链接。
+- [x] Agentero 发起的文件、目录与 paper 移动通过 pre-rename snapshot 更新已解析内链，并同步 tab、tree、catalog 与索引。
+- [x] 可信本地外部 rename 支持默认 `ask` 确认与严格门禁下的 `always` repair；remote Vault 不自动修复。
 
 验收标准：
 
@@ -509,7 +511,6 @@
 - [x] Catalog 权威存储 + `paper_list` / `paper_get` / `paper_delete` / 入库写路径（FTS / 双链缓存表仍待）。
 - [x] Library BibTeX 导入/导出（Translator `/import` `/export`）。
 - [ ] `catalog:export_papers_md`（Markdown 表）。
-- [ ] `[[` 补全与 Plate wikilink 内联节点。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
 - [x] **工作区标签页**：多文档 tab、关闭/重排、滚动与视图状态保留；`⌘W` 关 tab / 无 tab 关窗（V0.6 标签页部分）。
 - [ ] **分屏**：中间栏 2 格并排（PDF | NOTES 或 paper | paper）（V0.6 余量）。

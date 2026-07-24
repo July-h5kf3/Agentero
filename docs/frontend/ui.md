@@ -84,6 +84,7 @@
   - 对齐 VS Code / Finder：**无勾选框**，以**行高亮**表达选区。**Ctrl/⌘ 点击**切换单项、**Shift 点击**按可见顺序选区间；普通点击仍为单选并打开。
   - 选中 ≥1 项时树顶出现**批量条**（移动 / 删除 / 清空，**吸顶固定**、滚动时保持可见）；右键选中项菜单提供「删除 N 项 / 移动 N 项」；`Delete`/`⌘⌫` 批量删除，`Esc` 清空（编辑 / 输入聚焦时不拦截）。
   - **拖拽移动**：把行（或整个选区）拖到某个 `papers/` 组织文件夹（含 papers 根）即移动；仅这类文件夹是合法落点（论文文件夹与 Library 除外），hover 时以 ring 高亮。经 `onMoveTo` 复用批量移动管线，无需对话框。
+  - **改名与移动**：FileTree 的改名和 `papers/` 内移动均走链接感知事务。它更新已解析的 Markdown 内链并保留 alias、heading/block fragment 与 tab 状态；未保存编辑、目标冲突或来源文件变更会阻止事务并显示错误，不能以裸字符串替换兜底。
   - **外部文件拖入**：与树内拖移区分；见上文「外部 PDF 拖入入库」（仅 `papers/` 组织夹 + PDF）。
   - **批量移动**（`MovePapersDialog` → `paper_move`）：把选中项移到某个 `papers/` 子文件夹（现有或新建）；移动文件夹并改写 catalog 路径前缀，随后统一刷新树 / Library / 双链。
 - **不要**在侧边栏放打开 / 创建 Vault、关闭 Vault、刷新或设置入口。
@@ -186,6 +187,7 @@
 | `command-palette` | `CommandPalette`（Go / Commands 共用） |
 | `zotero-migrate` | `ZoteroMigrateDialog` |
 | `move-papers` | `MovePapersDialog` |
+| `external-rename-repair` | 外部本地改名的内链修复确认 Dialog |
 | `agent-permission` | Agent 权限询问 Dialog |
 | `notes-review` | Agent 笔记写后审阅：统一 Diff + Keep/Revert Dialog |
 
@@ -339,6 +341,7 @@
 - **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
 - **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
+- **外部本地改名 repair**：只有 Host 明确给出单个可信 `rename { from, to }` 时才进入内链 repair。General 的默认 `autoUpdateInternalLinks: "ask"` 先用 Dialog 显示旧/新路径、影响来源与跳过项；用户确认后才写 Markdown。`"always"` 仍要求 Host 的 dirty path、hash、旧/新磁盘状态门禁全部通过。成功后，已打开 tab、活动路径、树选中、Library scope 与 PDF highlights 统一按 `from → to` 重映射，避免重复 tab；不可信事件仅刷新，remote Vault 不自动修复。
 - **Wiki 索引刷新**：`.md` 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph，避免外部/Agent 写盘后图谱陈旧。
 - **保存冲突检测（防丢数据）**：autosave / `⌘S` / 卸载 flush 写盘前，`persistFile` 比对磁盘内容与上次落盘内容；若文件已被外部修改则**中止写入**并 `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖外部变更。
 
@@ -460,7 +463,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
+- **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者(年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**外部改名同步内链**（`autoUpdateInternalLinks`：`ask` 默认，确认可信本地 rename 后再改写；`always` 仅在安全门禁通过时自动修复）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
 - **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**语言（跟随系统 / English / 简体中文）**、**工具栏按钮大小**（`toolbarIconSize`，滑块 12–22px，默认 14；驱动标题栏图标按钮的图标与按钮盒尺寸，经 `<header>` 上的 `--tb-icon` / `--tb-btn` CSS 变量级联到 `WorkspaceHeader` 与 `LayoutMenu`，为视力不佳用户提供无障碍放大）；其下分组 **Markdown编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。

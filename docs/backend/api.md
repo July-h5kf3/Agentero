@@ -41,7 +41,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 | 事件名 | 触发时机 | payload 关键字段 |
 |---|---|---|
-| `vault:file-changed`（已实现） | Vault 内文件被外部/Agent 改动（Host `notify` 监听，按窗口 `emit_to` 定向） | `{ paths: string[], kind: 'create' \| 'modify' \| 'remove' \| 'rename' \| 'other' }`（绝对路径；`.agentero/`、`.git/`、`node_modules/` 已过滤） |
+| `vault:file-changed`（已实现） | Vault 内文件被外部/Agent 改动（Host `notify` 监听，按窗口 `emit_to` 定向） | `{ paths: string[], kind: 'create' \| 'modify' \| 'remove' \| 'rename' \| 'other', rename?: { from: string; to: string } }`（绝对路径；`.agentero/`、`.git/`、`node_modules/` 已过滤；`rename` 仅表示单个可信 old/new 配对） |
 | `arxiv:progress` | arXiv 入库进度更新 | `{ job_id: string, stage: string, progress?: number, message?: string }` |
 | `arxiv:completed` | 入库完成 | `{ job_id: string, paper: Paper, created_paths: string[] }` |
 | `arxiv:failed` | 入库失败 | `{ job_id: string, error: AppError }` |
@@ -289,7 +289,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **`fs_watch_start`**
   - **参数**：`{ vaultPath: string }`
   - **返回**：`Result<(), String>`
-  - **行为**：为当前窗口（label）启动递归监听；若该窗口已有监听则先停止再重建。命中变更时按窗口 `emit_to` 发送 `vault:file-changed`（去抖 ~300ms，过滤 `.agentero/`、`.git/`、`node_modules/`）。
+  - **行为**：为当前窗口（label）启动递归监听；若该窗口已有监听则先停止再重建。命中变更时按窗口 `emit_to` 发送 `vault:file-changed`（去抖 ~300ms，过滤 `.agentero/`、`.git/`、`node_modules/`）。只有 `notify` 的单事件 `RenameMode::Both`、恰有两条不同路径且均未被过滤时，payload 才带按顺序排列的 `rename.from` / `rename.to`；其它 rename 事件只用于刷新，绝不能授权改写 Vault 内容。
 - **`fs_watch_stop`**
   - **参数**：无
   - **返回**：`Result<(), String>`
@@ -1033,7 +1033,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_move`（已落地）
 
-把 paper 文件夹 / `papers/` 下组织目录（或文件）移动到另一 `papers/` 目录：磁盘 `fs::rename`（**不覆盖**已存在目标），并改写 catalog 中受影响行的 `path` 前缀。
+把 paper 文件夹 / `papers/` 下组织目录（或文件）移动到另一 `papers/` 目录：通过共享的链接感知事务执行磁盘 `fs::rename`（**不覆盖**已存在目标）、已解析内链改写与 catalog path 前缀更新。
 
 - **参数**（invoke 字段名 `args`）：
 
@@ -1047,8 +1047,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 }
 ```
 
-- **返回**：`{ ok: true; data: { newRel: string } }`（移动后的新相对路径）。
-- **校验**：目标须在 `papers/` 下；拒绝移入自身 / 子孙；目标已存在则报错。
+- **返回**：`{ ok: true; data: { newRel: string, linkUpdate: WikiRenameResult } }`（移动后的新相对路径与链接事务结果）。
+- **校验**：目标须在 `papers/` 下；拒绝移入自身 / 子孙；目标已存在、相关编辑器仍有未保存内容、或任一计划来源 hash 已变化时中止。
 - **SQL**：`UPDATE papers SET path = ?to || substr(path, len(?from)+1) WHERE path = ?from OR path LIKE '{from}/%'`（字符级 substr，兼容非 ASCII 目录名）。
 - **单测**：`papers.rs::move_under_path`（叶子 + 组织目录下多行前缀改写）。
 - **前端**：`src/lib/papers-api.ts` → `movePaperFolder`；文件树多选批量移动（`MovePapersDialog`）。
@@ -1548,6 +1548,44 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 // => { ok: true; data: WikiSearchCandidate[] }
 ```
 
+#### `wiki_move`
+
+对本地 Vault 的普通文件或目录执行链接感知 rename/move。Host 先重建改名前的索引快照，只重写明确解析到 `fromRel` 或其子路径的 occurrence，再移动主路径；Markdown link 会按最终来源位置重新相对化。
+
+```ts
+{
+  vaultPath: string;
+  fromRel: string;
+  toRel: string;
+  dirtyPaths?: string[];
+}
+// => { ok: true; data: WikiRenameResult }
+```
+
+`WikiRenameResult` 为 `{ movedPath, updatedSources, skipped: { path, reason }[], rollback }`，其中 `rollback` 为 `notNeeded`、`completed` 或 `manualRecoveryRequired`。冲突、未保存编辑、来源内容已变、目标已存在或失败回滚均返回错误；remote Vault 不通过该本地命令执行。
+
+#### `wiki_external_rename_preview`
+
+为已由 Finder、Obsidian 或 Agent 完成的**可信本地外部 rename**创建只读 repair candidate。调用方传入 watcher 的 old/new Vault 相对路径与当前 dirty path；Host 必须仍持有改名前索引，且验证旧路径已不存在、新路径存在后才返回 candidate。
+
+```ts
+{ vaultPath: string; fromRel: string; toRel: string; dirtyPaths?: string[] }
+// => { ok: true; data: { candidateId, from, to, affectedSources, skipped } }
+```
+
+该命令不写 Markdown、不移动主文件；候选用于 `ask` 的确认界面，也可由 `always` 在前端策略允许时直接交给 apply。
+
+#### `wiki_apply_external_rename_repair`
+
+执行一个先前 preview 的 candidate。执行前再次验证 dirty path、所有来源内容 hash，以及外部 rename 仍保持旧路径不存在 / 新路径存在；只写入计划中的 Markdown occurrence，绝不反向移动主文件或目录。
+
+```ts
+{ vaultPath: string; candidateId: string; dirtyPaths?: string[] }
+// => { ok: true; data: WikiRenameResult }
+```
+
+失败会移除无效 candidate；仅未保存编辑错误保留 candidate，允许用户先处理编辑后重试。
+
 #### `graph_get_graph`（草案名 `graph:get_graph`）
 
 获取全量或局部 wikilink 图谱。数据来自内存索引（必要时 `ensure_vault` 先 rebuild）。  
@@ -1690,6 +1728,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - **参数**：`{ settings: AppSettings }`（camelCase，与前端 `src/lib/settings.ts` 同构）
 - **返回**：规范化后的 `AppSettings`（写盘 + 更新 Host 内存）
 - **事件**：保存成功后向**所有窗口** `emit("settings:changed", AppSettings)`（规范化后的快照）。前端 `initSettingsSync()`（`src/lib/settings.ts`）监听该事件更新各窗口内存缓存并通知订阅者（`subscribeSettings`），保证独立设置窗口与各主窗口的设置实时一致。
+- **链接改名策略**：`autoUpdateInternalLinks` 为 `"ask"`（默认）或 `"always"`；未知值规范化为 `"ask"`。它只控制可信**本地外部** rename 的 repair，Agentero 发起的显式 rename/move 始终走单次事务预检，remote Vault 不自动修复。
 
 #### `settings_path`（已实现）
 

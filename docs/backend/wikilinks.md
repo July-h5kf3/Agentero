@@ -1,7 +1,7 @@
 # Agentero 双链设计（Obsidian 兼容）
 
-> 状态：语义索引与精确导航已实现；入/出链关系面、输入补全、改名事务和嵌入渲染仍由后续工作覆盖。
-> 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.7 · `docs/backend/data-model.md`
+> 状态：语义索引、精确导航、入/出链关系面、输入补全，以及链接感知的改名/移动与外部改名修复均已实现；嵌入内容渲染仍由后续工作覆盖。
+> 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.8 · `docs/backend/data-model.md`
 
 本文定义 Agentero 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
 
@@ -141,7 +141,14 @@ backlinks(path) = { e.source | e.target_path == path }
 - 点击不存在的 `[[Concept]]` → 确认创建 `notes/<slug>.md`（默认 frontmatter 可极简）。
 - 创建后刷新索引并跳转。
 
-### 4.4 图谱（Backlinks 右侧栏下方）
+### 4.4 改名与移动稳定性
+
+- Agentero 发起的文件、目录与 `papers/` 内移动先从改名前的 `WikiIndex` 生成精确编辑计划，再执行主路径移动、Markdown 原子写入、catalog path 更新（如适用）与索引重建。只改写此前已明确解析到被移动路径的 occurrence；alias、heading/block fragment、embed 标记及 Markdown link label 保持不变。
+- 每个来源文件均经过未保存编辑和内容 hash 预检；写入或后续 catalog 更新失败时，事务尽力恢复已写 Markdown 与主路径。结果显式报告 `not-needed`、`completed` 或 `manual-recovery-required` 的 rollback 状态。
+- 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；不可信事件只刷新树和索引，不授权 Markdown 改写。
+- 外部修复只改写引用文件，不会移动已由 Finder、Obsidian 或 Agent 改名的主文件。remote Vault 没有本地 watcher 自动修复；显式 Agentero 改名/移动仍由 Host capability 与事务预检决定是否可执行。
+
+### 4.5 图谱（Backlinks 右侧栏下方）
 
 产品形态：
 
@@ -153,7 +160,7 @@ backlinks(path) = { e.source | e.target_path == path }
 数据：
 
 - 唯一事实来源：Markdown 中的 `[[wikilink]]`（内存索引，可 `graph_rebuild` 重建）。
-- Host：`graph_get_graph`（见 `docs/backend/api.md` §3.7）。
+- Host：`graph_get_graph`（见 `docs/backend/api.md` §3.8）。
 - Demo（无 Tauri）：前端用 demo vault 文件内容现算 nodes/edges。
 
 验收：20+ 节点可交互；选中 paper 时邻域图以当前 paper 为中心；不依赖手写图数据库。
@@ -162,7 +169,7 @@ backlinks(path) = { e.source | e.target_path == path }
 
 ## 5. Host API
 
-见 `docs/backend/api.md` §3.7：
+见 `docs/backend/api.md` §3.8：
 
 | 命令 | 状态 | 用途 |
 |---|---|---|
@@ -170,6 +177,9 @@ backlinks(path) = { e.source | e.target_path == path }
 | `wiki_get_outgoing` | ✅ | `{ vaultPath, path }` → 当前文件的显式出链 occurrence |
 | `wiki_resolve` | ✅ | `{ vaultPath, sourcePath, linkText }` → 统一解析结果 |
 | `wiki_search` | ✅ | `{ vaultPath, query }` → 文件、标题、block 候选 |
+| `wiki_move` | ✅ | `{ vaultPath, fromRel, toRel, dirtyPaths? }` → 链接感知的本地文件/目录 rename 或 move |
+| `wiki_external_rename_preview` | ✅ | 可信外部 rename 的只读 repair candidate |
+| `wiki_apply_external_rename_repair` | ✅ | 确认后执行 candidate 的 Markdown repair，并重新校验 hash / dirty path |
 | `graph_rebuild` | ✅ | 全量重建内存索引 |
 | `graph_get_graph` | ✅ / Phase D | 全图或局部邻域 `{ nodes, edges }` |
 
@@ -277,16 +287,22 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 - `src/components/layout/graph-panel.tsx`
 - `src/App.tsx`（Backlinks 右侧栏内接线）
 
+### Phase E — 链接感知改名与移动 ✅
+
+1. `WikiRenameTransaction` 基于改名前的已解析 occurrence 生成写计划；本地 Agentero rename/move 与 `paper_move` 共享该事务。
+2. 外部本地 rename 只在 watcher 提供单个可靠 old/new 配对时建立 repair candidate；`ask` 显示确认弹层，`always` 在全部安全门禁通过时执行。
+3. 所有写入均重新校验 dirty path 与内容 hash；失败时报告并尽力回滚。Finder、Obsidian、Agent 已完成的主路径改名不会被 repair 反向移动。
+
 ---
 
 ## 8. 与现有代码的关系
 
 | 现状 | 说明 |
 |---|---|
-| Demo vault 已有 `[[papers/.../NOTES]]` 字面量 | 仅文本，未解析 |
-| Plate + `@platejs/markdown` | 编辑/预览主干；双链插件待加 |
+| Demo vault 已有 `[[papers/.../NOTES]]` 字面量 | 参与前端 Demo 解析；生产路径优先 Host 查询 |
+| Plate + `@platejs/markdown` | 编辑/预览主干；支持 wikilink 内联节点与规范序列化 |
 | ACP Agent | 生成笔记须保留 `[[...]]`；不负责索引 |
-| Settings / Chat | 与双链无关 |
+| Settings | `autoUpdateInternalLinks` 控制可信本地外部改名的 `ask` / `always` repair 策略 |
 
 ---
 
@@ -294,7 +310,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 | 风险 | 缓解 |
 |---|---|
-| 大 Vault 全量扫描慢 | 增量索引 + SQLite；后台队列 |
+| 大 Vault 全量扫描慢 | 当前防抖全量重建优先正确性；边级增量与 SQLite 可重建缓存另立工作 |
 | 标题歧义（重名笔记） | resolve 规则文档化；偏好显式路径 |
 | 与 Obsidian 细节不一致 | 优先兼容常见 `[[path]]` / `[[name]]` / alias |
 | 编辑器插件复杂 | Phase B 先预览可点，编辑器第二期 |
