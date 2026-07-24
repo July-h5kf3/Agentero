@@ -218,7 +218,13 @@ pub fn wiki_apply_external_rename_repair(
             if error.code != WikiRenameErrorCode::UnsavedEdits {
                 repairs.remove(&args.candidate_id);
             }
-            map_err(AppError::message(error.to_string()))
+            ApiResult::err_with_details(
+                AppError::message(error.to_string()),
+                serde_json::json!({
+                    "code": error.code,
+                    "rollback": error.rollback,
+                }),
+            )
         }
     }
 }

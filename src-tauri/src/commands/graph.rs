@@ -1,7 +1,7 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::wiki::{
-    BacklinksResponse, GraphResponse, OutgoingLinksResponse, RebuildResult, WikiResolveResponse,
-    WikiSearchCandidate,
+    BacklinksResponse, GraphResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult,
+    WikiResolveResponse, WikiSearchCandidate,
 };
 use crate::services::wiki::WikiIndexState;
 use tauri::State;
@@ -47,6 +47,7 @@ pub fn wiki_resolve(
     vault_path: String,
     source_path: String,
     link_text: String,
+    syntax: Option<InternalLinkSyntax>,
 ) -> ApiResult<WikiResolveResponse> {
     let mut guard = match index.inner.lock() {
         Ok(g) => g,
@@ -55,7 +56,12 @@ pub fn wiki_resolve(
     if let Err(e) = guard.ensure_vault(&vault_path) {
         return map_err(AppError::message(e));
     }
-    ApiResult::ok(guard.resolve_text(&vault_path, &source_path, &link_text))
+    ApiResult::ok(guard.resolve_text(
+        &vault_path,
+        &source_path,
+        &link_text,
+        syntax.unwrap_or(InternalLinkSyntax::Wikilink),
+    ))
 }
 
 #[tauri::command]

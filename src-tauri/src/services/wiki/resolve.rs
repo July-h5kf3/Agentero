@@ -14,7 +14,9 @@ pub fn normalize_rel(path: &str) -> String {
         match component {
             "" | "." => {}
             ".." => {
-                parts.pop();
+                if parts.pop().is_none() {
+                    parts.push("..");
+                }
             }
             value => parts.push(value),
         }
@@ -89,12 +91,17 @@ fn resolve_document(
     // document, including bare `Target.md`. Try that location before the
     // vault-root spelling so a nearby same-named document keeps its Markdown
     // meaning instead of being shadowed by a root-level file.
-    let mut exact_candidates =
-        if matches!(occurrence.syntax, InternalLinkSyntax::Markdown) && !raw.starts_with('/') {
-            add_extensions(&source_relative(&occurrence.source, raw))
-        } else {
-            Vec::new()
-        };
+    let mut exact_candidates = Vec::new();
+    if matches!(occurrence.syntax, InternalLinkSyntax::Markdown) && !raw.starts_with('/') {
+        let relative = source_relative(&occurrence.source, raw);
+        // A Markdown destination is source-relative. If resolving it would
+        // escape the Vault, do not fall through to a root/suffix/stem match:
+        // `../../Target.md` must never silently become `Target.md` in Vault.
+        if relative == ".." || relative.starts_with("../") {
+            return Err(Vec::new());
+        }
+        exact_candidates.extend(add_extensions(&relative));
+    }
     exact_candidates.extend(add_extensions(raw));
     for candidate in &exact_candidates {
         let hits = documents
@@ -415,6 +422,24 @@ mod tests {
         assert_eq!(cross_file.target_path.as_deref(), Some("notes/Target.md"));
     }
 
+    #[test]
+    fn never_resolves_markdown_paths_outside_the_vault() {
+        let mut docs = documents();
+        docs.push(WikiDocument {
+            path: "Target.md".into(),
+            aliases: Vec::new(),
+            headings: Vec::new(),
+            blocks: Vec::new(),
+        });
+        let mut link = occurrence("notes/source.md", "../../Target.md", None);
+        link.syntax = InternalLinkSyntax::Markdown;
+
+        let link = resolve_occurrence(link, &docs);
+
+        assert_eq!(link.status, LinkResolutionStatus::Missing);
+        assert_eq!(link.target_path, None);
+    }
+
     #[derive(Deserialize)]
     struct SemanticFixture {
         documents: Vec<FixtureDocument>,
@@ -431,6 +456,8 @@ mod tests {
     struct FixtureCase {
         source: String,
         link: String,
+        #[serde(default)]
+        syntax: Option<InternalLinkSyntax>,
         status: String,
         path: Option<String>,
     }
@@ -448,8 +475,12 @@ mod tests {
             .collect::<Vec<_>>();
 
         for case in fixture.cases {
-            let (_, mut occurrences) =
-                extract_document(&case.source, &format!("[[{}]]", case.link));
+            let syntax = case.syntax.unwrap_or(InternalLinkSyntax::Wikilink);
+            let input = match syntax {
+                InternalLinkSyntax::Wikilink => format!("[[{}]]", case.link),
+                InternalLinkSyntax::Markdown => format!("[link]({})", case.link),
+            };
+            let (_, mut occurrences) = extract_document(&case.source, &input);
             let resolved = resolve_occurrence(
                 occurrences.pop().expect("fixture link must parse"),
                 &documents,

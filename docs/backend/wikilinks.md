@@ -107,8 +107,8 @@ backlinks(path) = { e.source | e.target_path == path }
 
 - 双链边：当前为**内存索引**；后续可落入 `.agentero/catalog.sqlite` 的可重建表（与 `papers` 权威表区分，见 [`catalog.md`](catalog.md) §6）。
 - **Paper 标题**：读 catalog `papers.title`，不读 `metadata.json`。
-- 可整删重建（仅边表）：重扫全部 Markdown 中的 `[[...]]` + join catalog 取 label。
-- 增量：文件 mtime / fs 事件变化时，仅重算该 `source` 的出边。
+- 可整删重建：重扫全部 Markdown 中的 Wikilink 与 Vault-local Markdown link，再 join catalog 取 paper label。
+- 当前更新策略：文件系统事件经约 900ms 防抖后全量重建内存索引；边级增量重建与 SQLite 边缓存仍是后续工作。
 
 ### 3.3 图谱节点 / 边类型（与 TECH §5.6 对齐）
 
@@ -122,13 +122,13 @@ backlinks(path) = { e.source | e.target_path == path }
 
 ## 4. 产品表面
 
-### 4.1 预览 / 编辑（分期）
+### 4.1 预览 / 编辑
 
-| 阶段 | 能力 |
+| 能力 | 当前行为 |
 |---|---|
-| **P0** | 中间栏预览：`[[...]]` 高亮、可点跳转；缺失目标样式区分 |
-| **P1** | 源码编辑：`[[` 补全 Vault 路径、alias、标题与 block |
-| **P2** | Plate WYSIWYG：wikilink 内联节点 + 同上序列化 |
+| 链接点击 | Wikilink 和 Vault-local Markdown link 都先交给 Host resolver；后者按来源目录解析，外部 URL 保持普通外链行为。 |
+| `[[` 补全 | 搜索 Vault 路径、alias、标题与 block；重名时显示路径，写入规范化可移植文本。 |
+| Plate WYSIWYG | Wikilink 使用内联节点，但序列化仍为 `[[...]]`。 |
 
 ### 4.2 入链与出链面板
 
@@ -145,7 +145,7 @@ backlinks(path) = { e.source | e.target_path == path }
 
 - Agentero 发起的文件、目录与 `papers/` 内移动先从改名前的 `WikiIndex` 生成精确编辑计划，再执行主路径移动、Markdown 原子写入、catalog path 更新（如适用）与索引重建。只改写此前已明确解析到被移动路径的 occurrence；alias、heading/block fragment、embed 标记及 Markdown link label 保持不变。
 - 每个来源文件均经过未保存编辑和内容 hash 预检；写入或后续 catalog 更新失败时，事务尽力恢复已写 Markdown 与主路径。结果显式报告 `not-needed`、`completed` 或 `manual-recovery-required` 的 rollback 状态。
-- 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；任一预检或 apply 校验失败时不写 Markdown，并打开同一审阅 Dialog 显示路径、影响范围和可处理的错误。不可信事件只刷新树和索引，不授权 Markdown 改写。
+- 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；预检失败不会写 Markdown。apply 在写入后失败时 Host 返回 rollback 状态，审阅 Dialog 据此区分零写入、已回滚和需要人工恢复，避免把部分写入报成未写入。不可信事件只刷新树和索引，不授权 Markdown 改写。
 - 外部修复只改写引用文件，不会移动已由 Finder、Obsidian 或 Agent 改名的主文件。remote Vault 没有本地 watcher 自动修复；显式 Agentero 改名/移动仍由 Host capability 与事务预检决定是否可执行。
 
 ### 4.5 图谱（Backlinks 右侧栏下方）
@@ -175,13 +175,13 @@ backlinks(path) = { e.source | e.target_path == path }
 |---|---|---|
 | `graph_get_backlinks` | ✅ | `{ vaultPath, path }` → 反链列表 |
 | `wiki_get_outgoing` | ✅ | `{ vaultPath, path }` → 当前文件的显式出链 occurrence |
-| `wiki_resolve` | ✅ | `{ vaultPath, sourcePath, linkText }` → 统一解析结果 |
+| `wiki_resolve` | ✅ | `{ vaultPath, sourcePath, linkText, syntax? }` → 统一解析结果 |
 | `wiki_search` | ✅ | `{ vaultPath, query }` → 文件、标题、block 候选 |
 | `wiki_move` | ✅ | `{ vaultPath, fromRel, toRel, dirtyPaths? }` → 链接感知的本地文件/目录 rename 或 move |
 | `wiki_external_rename_preview` | ✅ | 可信外部 rename 的只读 repair candidate |
 | `wiki_apply_external_rename_repair` | ✅ | 确认后执行 candidate 的 Markdown repair，并重新校验 hash / dirty path |
 | `graph_rebuild` | ✅ | 全量重建内存索引 |
-| `graph_get_graph` | ✅ / Phase D | 全图或局部邻域 `{ nodes, edges }` |
+| `graph_get_graph` | ✅ | 全图或局部邻域 `{ nodes, edges }` |
 
 索引更新：Markdown 保存、Vault 扫描、打开 Vault 后 `rebuild`；查询侧 `ensure_vault` 惰性重建。
 
@@ -250,7 +250,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 ## 7. 实现分期（与 ROADMAP V0.4 对齐）
 
-### Phase A — 索引与反链（后端优先） ✅
+### Phase A — 索引与反链 ✅
 
 1. Rust：`extract_wikilinks(md)` + `resolve` + **内存索引**（全量 `graph_rebuild`；尚无 SQLite 落盘）。  
 2. Tauri：`graph_get_backlinks` / `graph_rebuild`（参数 `vaultPath` + `path`）。  
@@ -313,7 +313,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 | 大 Vault 全量扫描慢 | 当前防抖全量重建优先正确性；边级增量与 SQLite 可重建缓存另立工作 |
 | 标题歧义（重名笔记） | resolve 规则文档化；偏好显式路径 |
 | 与 Obsidian 细节不一致 | 优先兼容常见 `[[path]]` / `[[name]]` / alias |
-| 编辑器插件复杂 | Phase B 先预览可点，编辑器第二期 |
+| 编辑器插件复杂 | 保持 Plate 内联节点与 Markdown 序列化的可逆边界，新增交互须补 round-trip 测试 |
 
 ---
 

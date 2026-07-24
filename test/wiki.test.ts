@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+	externalRenameRepairHadZeroWrites,
 	extractWikilinks,
+	isVaultLocalMarkdownLink,
 	parseWikiHref,
 	resolveDemoWikiReference,
 	resolveWikiTarget,
@@ -19,10 +21,10 @@ describe("wikilink extraction", () => {
 		expect(source).toBeTruthy();
 		const links = extractWikilinks(source ?? "");
 		expect(links.map((link) => link.targetRaw)).toEqual([
-			"Target",
+			"notes/Target",
 			"",
 			"",
-			"Target",
+			"notes/Target",
 		]);
 		expect(links[3]?.embed).toBe(true);
 	});
@@ -75,6 +77,7 @@ describe("wikilink resolution", () => {
 				fixtureCase.source,
 				fixtureCase.link,
 				semanticFixture.documents,
+				fixtureCase.syntax ?? "wikilink",
 			);
 			expect(result.status, fixtureCase.link).toBe(fixtureCase.status);
 			expect(result.targetPath, fixtureCase.link).toBe(fixtureCase.path);
@@ -140,6 +143,49 @@ describe("wikilink resolution", () => {
 			status: "invalidFragment",
 			targetPath: "notes/Target.md",
 		});
+	});
+
+	it("keeps source-relative Markdown links inside the Vault", () => {
+		const documents = [
+			{ path: "Target.md", content: "# Root target\n" },
+			{ path: "notes/Target.md", content: "# Nearby target\n" },
+		];
+
+		expect(
+			resolveDemoWikiReference(
+				"notes/Source.md",
+				"../../Target.md",
+				documents,
+				"markdown",
+			),
+		).toMatchObject({ status: "missing" });
+	});
+
+	it("classifies LinkElement destinations before choosing local Host navigation", () => {
+		expect(isVaultLocalMarkdownLink("Target.md#Overview")).toBe(true);
+		expect(isVaultLocalMarkdownLink("./Target.md#^block-id")).toBe(true);
+		expect(isVaultLocalMarkdownLink("#Current heading")).toBe(true);
+		expect(isVaultLocalMarkdownLink("https://example.com/Target.md")).toBe(
+			false,
+		);
+		expect(isVaultLocalMarkdownLink("mailto:author@example.com")).toBe(false);
+	});
+
+	it("only reports zero writes when external repair details confirm it", () => {
+		const preflight = Object.assign(new Error("source changed"), {
+			details: { code: "sourceChanged", rollback: "not-needed" },
+		});
+		const rolledBack = Object.assign(new Error("write failed"), {
+			details: { code: "writeFailed", rollback: "completed" },
+		});
+		const manualRecovery = Object.assign(new Error("write failed"), {
+			details: { code: "writeFailed", rollback: "manual-recovery-required" },
+		});
+
+		expect(externalRenameRepairHadZeroWrites(preflight)).toBe(true);
+		expect(externalRenameRepairHadZeroWrites(rolledBack)).toBe(false);
+		expect(externalRenameRepairHadZeroWrites(manualRecovery)).toBe(false);
+		expect(externalRenameRepairHadZeroWrites(new Error("unknown"))).toBe(false);
 	});
 });
 

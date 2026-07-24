@@ -1,8 +1,8 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
 use crate::models::wiki::{
-    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, LinkFragment,
-    OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument, WikiLinkEdge,
+    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkSyntax,
+    LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument, WikiLinkEdge,
     WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::services::wiki::extract::extract_document;
@@ -221,12 +221,13 @@ impl WikiIndex {
         vault_root: &str,
         source_path: &str,
         text: &str,
+        syntax: InternalLinkSyntax,
     ) -> WikiResolveResponse {
         let source = to_vault_rel(Path::new(vault_root), source_path);
-        let input = if text.trim_start().starts_with("[[") {
-            text.to_string()
-        } else {
-            format!("[[{}]]", text.trim())
+        let input = match syntax {
+            InternalLinkSyntax::Wikilink if text.trim_start().starts_with("[[") => text.to_string(),
+            InternalLinkSyntax::Wikilink => format!("[[{}]]", text.trim()),
+            InternalLinkSyntax::Markdown => format!("[link]({})", text.trim()),
         };
         let (_, mut occurrences) = extract_document(&source, &input);
         let occurrence =
@@ -235,7 +236,7 @@ impl WikiIndex {
                 .unwrap_or_else(|| crate::models::wiki::InternalLinkOccurrence {
                     source,
                     target_raw: text.trim().to_string(),
-                    syntax: crate::models::wiki::InternalLinkSyntax::Wikilink,
+                    syntax,
                     embed: false,
                     display_text: None,
                     fragment: None,

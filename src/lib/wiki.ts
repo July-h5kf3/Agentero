@@ -116,8 +116,33 @@ export type GraphResponse = {
 type ApiResult<T> = {
 	ok: boolean;
 	data?: T;
-	error?: { code: string; message: string };
+	error?: { code: string; message: string; details?: unknown };
 };
+
+export type WikiRenameFailure = {
+	code: string;
+	rollback: WikiRenameRollback;
+};
+
+export type WikiApiError = Error & { details?: unknown };
+
+export function wikiRenameFailure(error: unknown): WikiRenameFailure | null {
+	const details = (error as WikiApiError | undefined)?.details;
+	if (
+		!details ||
+		typeof details !== "object" ||
+		typeof (details as { code?: unknown }).code !== "string" ||
+		typeof (details as { rollback?: unknown }).rollback !== "string"
+	) {
+		return null;
+	}
+	return details as WikiRenameFailure;
+}
+
+/** A failed external repair is zero-write only when the Host confirmed it. */
+export function externalRenameRepairHadZeroWrites(error: unknown): boolean {
+	return wikiRenameFailure(error)?.rollback === "not-needed";
+}
 
 async function invokeApi<T>(
 	cmd: string,
@@ -128,7 +153,11 @@ async function invokeApi<T>(
 	}
 	const res = await invoke<ApiResult<T>>(cmd, args);
 	if (!res.ok || res.data === undefined) {
-		throw new Error(res.error?.message ?? `Command ${cmd} failed`);
+		const error = new Error(
+			res.error?.message ?? `Command ${cmd} failed`,
+		) as WikiApiError;
+		error.details = res.error?.details;
+		throw error;
 	}
 	return res.data;
 }
@@ -171,6 +200,20 @@ export async function applyExternalRenameRepair(
 /** Normalize vault-relative path (forward slashes, no leading ./). */
 export function normalizeVaultRel(path: string): string {
 	return path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+}
+
+/** Whether a Markdown destination can be resolved inside the active Vault. */
+export function isVaultLocalMarkdownLink(target: string): boolean {
+	const value = target.trim().replace(/^<|>$/g, "");
+	const lower = value.toLowerCase();
+	return (
+		value.length > 0 &&
+		!value.startsWith("/") &&
+		!lower.startsWith("//") &&
+		!lower.startsWith("mailto:") &&
+		!lower.startsWith("data:") &&
+		!/^[a-z][a-z0-9+.-]*:/i.test(value)
+	);
 }
 
 /** Strip vault root prefix when path is absolute. */
@@ -351,6 +394,7 @@ export function resolveDemoWikiReference(
 	sourcePath: string,
 	linkText: string,
 	documents: Array<{ path: string; content: string }>,
+	syntax: InternalLinkSyntax = "wikilink",
 ): Pick<ResolvedLink, "status" | "targetPath" | "candidates"> & {
 	fragment?: LinkFragment;
 } {
@@ -381,6 +425,19 @@ export function resolveDemoWikiReference(
 					`${normalized}.mdx`,
 					`${normalized}.markdown`,
 				];
+	};
+	const sourceRelative = (value: string) => {
+		const parts = sourcePath.split("/").slice(0, -1);
+		for (const part of value.replace(/\\/g, "/").split("/")) {
+			if (!part || part === ".") continue;
+			if (part === "..") {
+				if (parts.length === 0) return null;
+				parts.pop();
+			} else {
+				parts.push(part);
+			}
+		}
+		return parts.join("/");
 	};
 	const aliasesFor = (content: string) => {
 		const lines = content.split(/\r?\n/);
@@ -433,21 +490,32 @@ export function resolveDemoWikiReference(
 		);
 	} else {
 		const candidates = addExtensions(targetRaw);
-		const exact = choose(
-			documents
-				.filter((document) => candidates.includes(document.path))
-				.map((document) => document.path),
-		);
-		const insensitive = choose(
-			documents
-				.filter((document) =>
-					candidates.some(
-						(candidate) =>
-							candidate.toLowerCase() === document.path.toLowerCase(),
-					),
-				)
-				.map((document) => document.path),
-		);
+		const relativeTarget =
+			syntax === "markdown" && !targetRaw.startsWith("/")
+				? sourceRelative(targetRaw)
+				: undefined;
+		if (relativeTarget === null) {
+			return { status: "missing", candidates: [] };
+		}
+		const relativeCandidates =
+			typeof relativeTarget === "string" ? addExtensions(relativeTarget) : [];
+		const matchCandidates = (values: string[], insensitive = false) =>
+			choose(
+				documents
+					.filter((document) =>
+						values.some((candidate) =>
+							insensitive
+								? candidate.toLowerCase() === document.path.toLowerCase()
+								: candidate === document.path,
+						),
+					)
+					.map((document) => document.path),
+			);
+		const exact =
+			matchCandidates(relativeCandidates) ?? matchCandidates(candidates);
+		const insensitive =
+			matchCandidates(relativeCandidates, true) ??
+			matchCandidates(candidates, true);
 		const suffix = choose(
 			documents
 				.filter((document) =>
@@ -505,14 +573,32 @@ export function resolveDemoWikiReference(
 		fragment.kind === "block"
 			? [...content.matchAll(new RegExp(`\\^${fragment.id}(?=\\s*$)`, "gm"))]
 					.length
-			: content
-					.split(/\r?\n/)
-					.filter((line) => /^#{1,6}\s+/.test(line))
-					.filter(
-						(line) =>
-							key(line.replace(/^#{1,6}\s+/, "").replace(/\s+#+\s*$/, "")) ===
-							key(fragment.path.at(-1) ?? ""),
-					).length;
+			: (() => {
+					const stack: Array<{ level: number; text: string }> = [];
+					return content
+						.split(/\r?\n/)
+						.flatMap((line) => {
+							const match = line.match(/^(#{1,6})\s+(.+?)(?:\s+#+\s*)?$/);
+							if (!match) return [];
+							const level = match[1].length;
+							while (
+								stack.length > 0 &&
+								stack[stack.length - 1].level >= level
+							) {
+								stack.pop();
+							}
+							stack.push({ level, text: match[2].trim() });
+							return [stack.map((heading) => heading.text)];
+						})
+						.filter((path) => {
+							const expected = fragment.path.map(key);
+							const actual = path.map(key);
+							return expected.length === 1
+								? actual.at(-1) === expected.at(-1)
+								: actual.length === expected.length &&
+										actual.every((part, index) => part === expected[index]);
+						}).length;
+				})();
 	return matches === 1
 		? { status: "resolved", targetPath: selected.path, fragment }
 		: matches > 1
@@ -708,12 +794,14 @@ export async function resolveWikiReference(
 	vaultPath: string | null,
 	sourcePath: string,
 	linkText: string,
+	syntax: InternalLinkSyntax = "wikilink",
 ): Promise<ResolvedLink | null> {
 	if (!vaultPath || !isTauri()) return null;
 	const response = await invokeApi<{ link: ResolvedLink }>("wiki_resolve", {
 		vaultPath,
 		sourcePath,
 		linkText,
+		syntax,
 	});
 	return response.link;
 }

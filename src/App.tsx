@@ -215,6 +215,7 @@ import {
 import { type CenterViewMode, preferredModeForPath } from "@/lib/viewer";
 import {
 	applyExternalRenameRepair,
+	externalRenameRepairHadZeroWrites,
 	missingNotePath,
 	moveVaultPath,
 	newNoteMarkdown,
@@ -225,6 +226,7 @@ import {
 	type WikiExternalRenamePreview,
 	type WikiNavTarget,
 	type WikiRenameResult,
+	wikiRenameFailure,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
@@ -324,6 +326,8 @@ export default function App() {
 		to: string;
 		error: string;
 		affectedSources: number | null;
+		zeroWrite: boolean;
+		rollback?: string;
 	} | null>(null);
 	useOverlayRegistration(
 		"external-rename-repair",
@@ -1858,10 +1862,13 @@ export default function App() {
 						);
 						setExternalRenameVaultPath(root);
 						setExternalRenamePreview(null);
+						const failure = wikiRenameFailure(error);
 						setExternalRenameFailure({
 							from: preview.from,
 							to: preview.to,
 							affectedSources: preview.affectedSources.length,
+							zeroWrite: externalRenameRepairHadZeroWrites(error),
+							rollback: failure?.rollback,
 							error:
 								error instanceof Error
 									? error.message
@@ -1881,6 +1888,7 @@ export default function App() {
 					from: fromRel,
 					to: toRel,
 					affectedSources: null,
+					zeroWrite: true,
 					error:
 						error instanceof Error
 							? error.message
@@ -4015,7 +4023,9 @@ export default function App() {
 							</DialogTitle>
 							<DialogDescription>
 								{externalRenameFailure
-									? t("vault.externalRename.reviewDescription")
+									? externalRenameFailure.zeroWrite
+										? t("vault.externalRename.reviewDescription")
+										: t("vault.externalRename.recoveryDescription")
 									: t("vault.externalRename.description", {
 											count: externalRenamePreview?.affectedSources.length ?? 0,
 										})}
@@ -4061,7 +4071,14 @@ export default function App() {
 										className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-destructive"
 										role="alert"
 									>
-										<p>{t("vault.externalRename.repairBlocked")}</p>
+										<p>
+											{externalRenameFailure.zeroWrite
+												? t("vault.externalRename.repairBlocked")
+												: t("vault.externalRename.recoveryBlocked", {
+														rollback:
+															externalRenameFailure.rollback ?? "unknown",
+													})}
+										</p>
 										<p className="break-words text-xs">
 											{externalRenameFailure.error}
 										</p>
@@ -4097,12 +4114,15 @@ export default function App() {
 											externalRenamePreview,
 											externalRenameVaultPath,
 										).catch((error) => {
+											const failure = wikiRenameFailure(error);
 											setExternalRenamePreview(null);
 											setExternalRenameFailure({
 												from: externalRenamePreview.from,
 												to: externalRenamePreview.to,
 												affectedSources:
 													externalRenamePreview.affectedSources.length,
+												zeroWrite: externalRenameRepairHadZeroWrites(error),
+												rollback: failure?.rollback,
 												error:
 													error instanceof Error
 														? error.message

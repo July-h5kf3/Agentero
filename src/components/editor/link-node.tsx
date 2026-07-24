@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import { cn } from "@/lib/utils";
 import {
+	isVaultLocalMarkdownLink,
 	parseWikiHref,
 	resolveWikiReference,
 	WIKI_HREF_PREFIX,
@@ -26,6 +27,7 @@ export function LinkElement(props: PlateElementProps) {
 	const wiki = url.startsWith(WIKI_HREF_PREFIX) ? parseWikiHref(url) : null;
 	const wikiNav = useWikiNav();
 	const markdownDoc = useMarkdownDoc();
+	const localMarkdown = !wiki && isVaultLocalMarkdownLink(url);
 
 	if (wiki) {
 		return (
@@ -75,6 +77,44 @@ export function LinkElement(props: PlateElementProps) {
 							}
 						}
 						wikiNav?.onWikiNavigate(wiki);
+					},
+				}}
+			>
+				{children}
+			</PlateElement>
+		);
+	}
+
+	if (localMarkdown) {
+		return (
+			<PlateElement
+				{...props}
+				as="a"
+				className="cursor-pointer font-medium text-primary underline decoration-primary/40 underline-offset-2"
+				attributes={{
+					...props.attributes,
+					href: url,
+					onClick: async (event: MouseEvent) => {
+						event.preventDefault();
+						event.stopPropagation();
+						if (!wikiNav?.vaultPath || !markdownDoc.filePath) return;
+						try {
+							const resolved = await resolveWikiReference(
+								wikiNav.vaultPath,
+								markdownDoc.filePath,
+								url,
+								"markdown",
+							);
+							if (!resolved) return;
+							wikiNav.onWikiNavigate({
+								targetRaw: resolved.occurrence.targetRaw,
+								path: resolved.targetPath ?? null,
+								status: resolved.status,
+								fragment: resolved.occurrence.fragment,
+							});
+						} catch {
+							// Keep the link inert when the Host cannot establish a local target.
+						}
 					},
 				}}
 			>

@@ -26,7 +26,7 @@ Host (Tauri + Rust)
 - 所有请求统一通过对象传参。
 - 返回结构：
   - 成功：`{ "ok": true, "data": T }`
-  - 失败：`{ "ok": false, "error": { "code": "...", "message": "...", "details": {} } }`
+  - 失败：`{ "ok": false, "error": { "code": "...", "message": "...", "details"?: {} } }`
 - 流式结果通过 Tauri event 推送，不占用返回通道。
 
 ### 2.3 路径表示
@@ -1492,7 +1492,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 ### 3.8 双链与图谱
 
-> 产品与索引设计见 **`docs/backend/wikilinks.md`**。下列为 Host 接口草案。
+> 产品与索引设计见 **`docs/backend/wikilinks.md`**。下列为已实现的 Host 接口。
 
 #### `graph_get_backlinks`
 
@@ -1532,12 +1532,19 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `wiki_resolve`
 
-以来源路径上下文解析一个 Wikilink 文本。生产 UI 使用该接口，而不是复制 Rust resolver。
+以来源路径上下文解析一个内链文本。生产 UI 使用该接口，而不是复制 Rust resolver。
 
 ```ts
-{ vaultPath: string; sourcePath: string; linkText: string }
+{
+  vaultPath: string;
+  sourcePath: string;
+  linkText: string;
+  syntax?: "wikilink" | "markdown"; // 默认 wikilink
+}
 // => { ok: true; data: { link: ResolvedLink } }
 ```
+
+`syntax: "markdown"` 将 destination 按来源目录优先解析；若 `..` 会离开 Vault，返回 `missing`，不会降级匹配 Vault 根或同名文件。
 
 #### `wiki_search`
 
@@ -1573,7 +1580,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 // => { ok: true; data: { candidateId, from, to, affectedSources, skipped } }
 ```
 
-该命令不写 Markdown、不移动主文件；候选用于 `ask` 的确认界面，也可由 `always` 在前端策略允许时直接交给 apply。若 preview 或后续 apply 因 dirty path、source hash 或旧/新路径状态失败，前端保留零写入语义，并以审阅 Dialog 显示 old/new path、已知影响和可处理错误。
+该命令不写 Markdown、不移动主文件；候选用于 `ask` 的确认界面，也可由 `always` 在前端策略允许时直接交给 apply。preview 失败保持零写入；后续 apply 失败以 `error.details.rollback` 说明是否写入并完成回滚或需要人工恢复。审阅 Dialog 显示 old/new path、已知影响和可处理错误。
 
 #### `wiki_apply_external_rename_repair`
 
@@ -1584,9 +1591,9 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 // => { ok: true; data: WikiRenameResult }
 ```
 
-失败会移除无效 candidate；仅未保存编辑错误保留 candidate，允许用户先处理编辑后重试。
+失败会移除无效 candidate；仅未保存编辑错误保留 candidate，允许用户先处理编辑后重试。执行失败响应的 `error.details` 为 `{ code: WikiRenameErrorCode, rollback: "not-needed" | "completed" | "manual-recovery-required" }`；调用方仅在 `rollback === "not-needed"` 时可表述为零写入。
 
-#### `graph_get_graph`（草案名 `graph:get_graph`）
+#### `graph_get_graph`
 
 获取全量或局部 wikilink 图谱。数据来自内存索引（必要时 `ensure_vault` 先 rebuild）。  
 设计见 **`docs/backend/wikilinks.md` §4.4 / §6.3**。
