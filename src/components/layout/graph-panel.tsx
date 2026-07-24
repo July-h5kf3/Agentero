@@ -27,18 +27,16 @@ type GraphPanelProps = {
 	wikiIndexRevision?: number;
 };
 
+/** Force-graph mutates x/y at runtime; only declare what we paint/read. */
 type FgNode = GraphNode & {
 	x?: number;
 	y?: number;
-	vx?: number;
-	vy?: number;
 };
 
 type FgLink = {
 	source: string | FgNode;
 	target: string | FgNode;
 	id: string;
-	targetRaw?: string;
 };
 
 /** Theme-derived colors for canvas (resolved from CSS variables). */
@@ -174,7 +172,6 @@ export function GraphPanel({
 				id: e.id,
 				source: e.source,
 				target: e.target,
-				targetRaw: e.targetRaw,
 			})),
 		};
 	}, [data]);
