@@ -1,6 +1,6 @@
 # Agentero 双链设计（Obsidian 兼容）
 
-> 状态：**Phase A–B 已实现**（索引 + 反链 + 预览可点）/ **Phase D 基本完成**（GraphPanel + `graph_get_graph`）/ Phase C 待增强  
+> 状态：语义索引与精确导航已实现；入/出链关系面、输入补全、改名事务和嵌入渲染仍由后续工作覆盖。
 > 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.7 · `docs/backend/data-model.md`
 
 本文定义 Agentero 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
@@ -12,8 +12,8 @@
 ### 1.1 目标
 
 - 用户在 Markdown 中书写 `[[...]]`，与 **Obsidian 兼容**，可在 Agentero / Obsidian 间互开 Vault。
-- 点击双链可跳转到 Vault 内目标文件；目标不存在时可创建。
-- 查看某文件的 **反链（backlinks）**：谁引用了我。
+- 点击双链可跳转到 Vault 内文件、标题或 block ID；目标文件缺失时可创建，缺失或歧义的 fragment 只报告错误。
+- 查看某文件的显式 **入链（backlinks）** 与 **出链（outgoing links）**。
 - 图谱视图展示节点与 `links_to` 等边；**可从 Markdown 全量重建**。
 - Agent 生成/改写笔记时 **保留** `[[...]]` 字面量，不破坏链接。
 
@@ -21,7 +21,7 @@
 
 - **不**在目标文件正文里自动插入回链（不做“双向写盘”）。
 - **不**把 SQLite 当作第二事实来源。
-- **不**第一期做完整 Obsidian 方言（callouts、embed `![[...]]`、块引用 `^id` 可第二期）。
+- **不**在本阶段渲染 embed `![[...]]` 的内容；它仍作为显式关系参与解析。
 - **不**替换 Plate 编辑器为 Logseq/Foam 等整应用。
 
 ### 1.3 核心模型（与 Obsidian 一致）
@@ -54,18 +54,19 @@
 | `[[Note]]` | 按标题 / 路径片段解析到笔记 |
 | `[[papers/1706.03762/NOTES]]` | 相对 Vault 根的路径（可省略 `.md`） |
 | `[[Note\|显示名]]` | 出链目标 `Note`，展示文案 `显示名` |
-| `[[Note#Heading]]` | 跳到目标文件内标题（第二期可做滚动定位） |
+| `[[Note#Heading]]` / `[[#Heading]]` | 跳到跨文件或当前文件标题；重复标题不会任意选择 |
+| `[[Note#^block-id]]` / `[[#^block-id]]` | 跳到可验证的 Obsidian block ID |
+| `[显示名](./Note.md#Heading)` | Vault 内标准 Markdown 相对链接，与 Wikilink 共享 resolver |
+| `![[Note]]` | 作为显式关系建索引；视觉嵌入尚未实现 |
 
-块引用 `[[file#^blockid]]`、嵌入 `![[file]]`：**V0.4 后**。
+leading YAML frontmatter 的 `aliases` 列表会参与目标解析；`title` 不会被当作 alias。
 
 ### 2.2 解析规则（概要）
 
-1. 从 Markdown 源文本提取 wikilink（代码块 / 行内 code 内 **不**解析）。
-2. 拆分 `target`、可选 `alias`（`|`）、可选 `heading`（`#`）。
-3. **resolve(target)** 顺序建议：
-   - 若以 `papers/`、`notes/`、`plans/` 等开头 → 当相对路径；补 `.md` 若缺扩展名且文件存在。
-   - 否则在 Vault 内按 **路径后缀 / 文件名 stem / 标题** 模糊匹配（与 Obsidian「最短唯一路径」可逐步对齐）。
-4. resolve 结果：`{ path, exists: boolean }`。
+1. 从 Markdown 源文本提取 Wikilink、embed token 和 Vault-local Markdown links；fenced code、inline code、外部 URL 不产生关系。
+2. occurrence 保留语法、embed 标记、目标字节范围、alias/label、typed fragment、行号和上下文。
+3. resolver 先匹配路径（Markdown link 先按来源目录），再匹配唯一后缀、唯一文件名和唯一 YAML alias；任意多命中返回 `ambiguous`。
+4. 目标文件命中后按 heading 层级或 block ID 验证 fragment，返回 `resolved`、`missing`、`ambiguous` 或 `invalidFragment`。
 
 ### 2.3 落盘纪律
 
@@ -80,12 +81,19 @@
 ### 3.1 边模型
 
 ```ts
-type WikiLinkEdge = {
-  source: string;      // vault 相对路径，如 papers/1706.03762/NOTES.md
-  target_raw: string;  // [[ ]] 内原始 target
-  target_path: string | null; // resolve 后路径；null = 未解析到
-  alias?: string;
-  heading?: string;
+type ResolvedLink = {
+  occurrence: {
+    source: string;
+    targetRaw: string;
+    syntax: "wikilink" | "markdown";
+    embed: boolean;
+    displayText?: string;
+    fragment?: { kind: "heading"; path: string[] } | { kind: "block"; id: string };
+    sourceRange: { start: number; end: number };
+  };
+  status: "resolved" | "missing" | "ambiguous" | "invalidFragment";
+  targetPath?: string;
+  candidates?: string[];
 };
 ```
 
@@ -122,10 +130,11 @@ backlinks(path) = { e.source | e.target_path == path }
 | **P1** | 源码编辑：`[[` 补全 Vault 路径/标题 |
 | **P2** | Plate WYSIWYG：wikilink 内联节点 + 同上序列化 |
 
-### 4.2 反链面板
+### 4.2 入链与出链面板
 
-- 展示当前打开文件的 `backlinks`：源路径 + 可选上下文摘录（一行）。
-- 点击源路径打开对应文件。
+- Backlinks 入口的上半区域显示入链、出链两个区段；Graph 仍在下方。
+- 每个 occurrence 显示路径、可选 fragment、上下文和解析状态。缺失、歧义、无效 fragment 可诊断，不能伪装成可跳转按钮。
+- 点击入链打开其来源；点击出链使用同一 fragment-navigation 链路。
 
 ### 4.3 缺失目标
 
@@ -158,15 +167,11 @@ backlinks(path) = { e.source | e.target_path == path }
 | 命令 | 状态 | 用途 |
 |---|---|---|
 | `graph_get_backlinks` | ✅ | `{ vaultPath, path }` → 反链列表 |
+| `wiki_get_outgoing` | ✅ | `{ vaultPath, path }` → 当前文件的显式出链 occurrence |
+| `wiki_resolve` | ✅ | `{ vaultPath, sourcePath, linkText }` → 统一解析结果 |
+| `wiki_search` | ✅ | `{ vaultPath, query }` → 文件、标题、block 候选 |
 | `graph_rebuild` | ✅ | 全量重建内存索引 |
 | `graph_get_graph` | ✅ / Phase D | 全图或局部邻域 `{ nodes, edges }` |
-
-建议后续补充：
-
-| 命令 | 用途 |
-|---|---|
-| `wiki:resolve` | 单条 target → path / missing |
-| `wiki:search` | 补全用标题/路径搜索 |
 
 索引更新：Markdown 保存、Vault 扫描、打开 Vault 后 `rebuild`；查询侧 `ensure_vault` 惰性重建。
 
@@ -244,10 +249,10 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 **代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/layout/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
 
-### Phase B — 预览可点 ✅
+### Phase B — 精确导航 ✅
 
-1. 预览：`rewriteWikilinksForPreview` → Plate `LinkPlugin`。  
-2. 存在 / 缺失链跳转与创建。  
+1. Host 解析结果贯穿 Plate link node、Document tabs 和 Markdown editor；已打开 tab 通过 one-shot navigation intent 保持编辑状态。
+2. 标题与 block fragment 滚动定位并短暂高亮；`missing` 文件仍可创建，错误 fragment 不创建伪目标。
 
 **代码**：`src/lib/wiki.ts` · `link-node.tsx` · `WikiNavContext`
 

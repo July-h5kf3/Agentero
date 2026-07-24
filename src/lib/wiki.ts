@@ -1,17 +1,57 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauri } from "@/lib/tauri";
 
-export type Backlink = {
+export type LinkFragment =
+	| { kind: "heading"; path: string[] }
+	| { kind: "block"; id: string };
+
+export type LinkResolutionStatus =
+	| "resolved"
+	| "missing"
+	| "ambiguous"
+	| "invalidFragment";
+
+export type InternalLinkSyntax = "wikilink" | "markdown";
+
+export type InternalLinkOccurrence = {
 	source: string;
 	targetRaw: string;
-	alias?: string;
+	syntax: InternalLinkSyntax;
+	embed: boolean;
+	displayText?: string;
+	fragment?: LinkFragment;
+	sourceRange: { start: number; end: number };
+	line: number;
 	context?: string;
-	line?: number;
 };
+
+export type ResolvedLink = {
+	occurrence: InternalLinkOccurrence;
+	status: LinkResolutionStatus;
+	targetPath?: string;
+	candidates?: string[];
+};
+
+export type Backlink = ResolvedLink;
 
 export type BacklinksResponse = {
 	path: string;
 	backlinks: Backlink[];
+};
+
+export type OutgoingLinksResponse = {
+	path: string;
+	outgoing: ResolvedLink[];
+};
+
+export type WikiSearchCandidate = {
+	kind: "file" | "heading" | "block";
+	path: string;
+	insertText: string;
+	label: string;
+	/** Display alias chosen by the user; `insertText` stays canonical. */
+	alias?: string;
+	fragment?: LinkFragment;
 };
 
 export type RebuildResult = {
@@ -86,14 +126,14 @@ export function toVaultRelative(
 type Extracted = {
 	targetRaw: string;
 	alias?: string;
-	heading?: string;
+	fragment?: LinkFragment;
 	line?: number;
 	context?: string;
 };
 
 function parseLinkBody(
 	body: string,
-): { targetRaw: string; alias?: string; heading?: string } | null {
+): { targetRaw: string; alias?: string; fragment?: LinkFragment } | null {
 	const trimmed = body.trim();
 	if (!trimmed) return null;
 	const pipe = trimmed.indexOf("|");
@@ -102,12 +142,23 @@ function parseLinkBody(
 	if (!main) return null;
 	const hash = main.indexOf("#");
 	const targetRaw = (hash >= 0 ? main.slice(0, hash) : main).trim();
-	const heading = hash >= 0 ? main.slice(hash + 1).trim() : "";
-	if (!targetRaw) return null;
+	const fragmentRaw = hash >= 0 ? main.slice(hash + 1).trim() : "";
+	const fragment = fragmentRaw
+		? fragmentRaw.startsWith("^")
+			? { kind: "block" as const, id: fragmentRaw.slice(1) }
+			: {
+					kind: "heading" as const,
+					path: fragmentRaw
+						.split("#")
+						.map((part) => part.trim())
+						.filter(Boolean),
+				}
+		: undefined;
+	if (!targetRaw && !fragment) return null;
 	return {
 		targetRaw,
 		alias: aliasRaw || undefined,
-		heading: heading || undefined,
+		fragment,
 	};
 }
 
@@ -222,6 +273,177 @@ export function resolveWikiTarget(
 	return null;
 }
 
+/**
+ * Minimal semantic resolver for the browser-only demo. Desktop production paths
+ * call `wiki_resolve` in Rust; this duplicate is intentionally fixture-tested so
+ * the demo never presents a more precise result than the Host can justify.
+ */
+export function resolveDemoWikiReference(
+	sourcePath: string,
+	linkText: string,
+	documents: Array<{ path: string; content: string }>,
+): Pick<ResolvedLink, "status" | "targetPath" | "candidates"> & {
+	fragment?: LinkFragment;
+} {
+	const hash = linkText.indexOf("#");
+	const targetRaw = (hash >= 0 ? linkText.slice(0, hash) : linkText).trim();
+	const fragmentRaw = hash >= 0 ? linkText.slice(hash + 1).trim() : "";
+	const fragment = fragmentRaw
+		? fragmentRaw.startsWith("^")
+			? { kind: "block" as const, id: fragmentRaw.slice(1) }
+			: {
+					kind: "heading" as const,
+					path: fragmentRaw
+						.split("#")
+						.map((part) => part.trim())
+						.filter(Boolean),
+				}
+		: undefined;
+	const key = (value: string) =>
+		value.trim().replace(/\s+/g, " ").toLowerCase();
+	const addExtensions = (value: string) => {
+		const normalized = normalizeVaultRel(value);
+		if (!normalized) return [];
+		return /\.(md|mdx|markdown)$/i.test(normalized)
+			? [normalized]
+			: [
+					normalized,
+					`${normalized}.md`,
+					`${normalized}.mdx`,
+					`${normalized}.markdown`,
+				];
+	};
+	const aliasesFor = (content: string) => {
+		const lines = content.split(/\r?\n/);
+		if (lines[0]?.trim() !== "---") return [];
+		const aliases: string[] = [];
+		let reading = false;
+		for (const line of lines.slice(1)) {
+			const trimmed = line.trim();
+			if (trimmed === "---" || trimmed === "...") break;
+			if (trimmed.startsWith("aliases:")) {
+				reading = true;
+				const inline = trimmed.slice("aliases:".length).trim();
+				if (inline.startsWith("[") && inline.endsWith("]")) {
+					aliases.push(
+						...inline
+							.slice(1, -1)
+							.split(",")
+							.map((item) => item.trim().replace(/^['"]|['"]$/g, ""))
+							.filter(Boolean),
+					);
+					reading = false;
+				}
+			} else if (reading && trimmed.startsWith("-")) {
+				aliases.push(
+					trimmed
+						.slice(1)
+						.trim()
+						.replace(/^['"]|['"]$/g, ""),
+				);
+			} else if (trimmed && !/^\s/.test(line)) {
+				reading = false;
+			}
+		}
+		return aliases;
+	};
+	const choose = (matches: string[]) => {
+		const unique = [...new Set(matches)].sort();
+		return unique.length === 1
+			? { path: unique[0] }
+			: unique.length
+				? { candidates: unique }
+				: null;
+	};
+	let selected: { path?: string; candidates?: string[] } | null;
+	if (!targetRaw) {
+		selected = choose(
+			documents
+				.filter((document) => document.path === sourcePath)
+				.map((document) => document.path),
+		);
+	} else {
+		const candidates = addExtensions(targetRaw);
+		const exact = choose(
+			documents
+				.filter((document) => candidates.includes(document.path))
+				.map((document) => document.path),
+		);
+		const insensitive = choose(
+			documents
+				.filter((document) =>
+					candidates.some(
+						(candidate) =>
+							candidate.toLowerCase() === document.path.toLowerCase(),
+					),
+				)
+				.map((document) => document.path),
+		);
+		const suffix = choose(
+			documents
+				.filter((document) =>
+					candidates.some(
+						(candidate) =>
+							document.path.endsWith(`/${candidate}`) ||
+							document.path === candidate,
+					),
+				)
+				.map((document) => document.path),
+		);
+		const stem =
+			targetRaw
+				.split("/")
+				.pop()
+				?.replace(/\.(md|mdx|markdown)$/i, "") ?? targetRaw;
+		const stemMatch = choose(
+			documents
+				.filter(
+					(document) =>
+						document.path
+							.split("/")
+							.pop()
+							?.replace(/\.(md|mdx|markdown)$/i, "")
+							.toLowerCase() === stem.toLowerCase(),
+				)
+				.map((document) => document.path),
+		);
+		const alias = choose(
+			documents
+				.filter((document) =>
+					aliasesFor(document.content).some(
+						(value) => key(value) === key(targetRaw),
+					),
+				)
+				.map((document) => document.path),
+		);
+		selected = exact ?? insensitive ?? suffix ?? stemMatch ?? alias;
+	}
+	if (!selected) return { status: "missing", fragment };
+	if (!selected.path)
+		return { status: "ambiguous", candidates: selected.candidates, fragment };
+	if (!fragment) return { status: "resolved", targetPath: selected.path };
+	const content =
+		documents.find((document) => document.path === selected.path)?.content ??
+		"";
+	const matches =
+		fragment.kind === "block"
+			? [...content.matchAll(new RegExp(`\\^${fragment.id}(?=\\s*$)`, "gm"))]
+					.length
+			: content
+					.split(/\r?\n/)
+					.filter((line) => /^#{1,6}\s+/.test(line))
+					.filter(
+						(line) =>
+							key(line.replace(/^#{1,6}\s+/, "").replace(/\s+#+\s*$/, "")) ===
+							key(fragment.path.at(-1) ?? ""),
+					).length;
+	return matches === 1
+		? { status: "resolved", targetPath: selected.path, fragment }
+		: matches > 1
+			? { status: "ambiguous", targetPath: selected.path, fragment }
+			: { status: "invalidFragment", targetPath: selected.path, fragment };
+}
+
 /** Protocol for preview-only markdown links generated from `[[wikilinks]]`. */
 export const WIKI_HREF_PREFIX = "agentero-wiki:";
 
@@ -229,17 +451,17 @@ export type WikiNavTarget = {
 	targetRaw: string;
 	/** Resolved vault-relative path when exists */
 	path: string | null;
-	exists: boolean;
-	heading?: string;
+	status: LinkResolutionStatus;
+	fragment?: LinkFragment;
 };
 
 /** Encode navigation payload into a markdown-safe href. */
 export function encodeWikiHref(nav: WikiNavTarget): string {
 	const payload = [
-		nav.exists ? "1" : "0",
+		nav.status,
 		encodeURIComponent(nav.targetRaw),
 		encodeURIComponent(nav.path ?? ""),
-		encodeURIComponent(nav.heading ?? ""),
+		encodeURIComponent(nav.fragment ? JSON.stringify(nav.fragment) : ""),
 	].join("/");
 	return `${WIKI_HREF_PREFIX}${payload}`;
 }
@@ -249,17 +471,30 @@ export function parseWikiHref(href: string): WikiNavTarget | null {
 	const rest = href.slice(WIKI_HREF_PREFIX.length);
 	const parts = rest.split("/");
 	if (parts.length < 3) return null;
-	const [existsFlag, rawTarget, rawPath, rawHeading] = parts;
+	const [statusRaw, rawTarget, rawPath, rawFragment] = parts;
 	const targetRaw = decodeURIComponent(rawTarget ?? "");
 	const path = decodeURIComponent(rawPath ?? "");
-	const heading = decodeURIComponent(rawHeading ?? "");
-	if (!targetRaw) return null;
+	const fragmentRaw = decodeURIComponent(rawFragment ?? "");
+	if (!targetRaw && !fragmentRaw) return null;
 	return {
 		targetRaw,
 		path: path || null,
-		exists: existsFlag === "1",
-		heading: heading || undefined,
+		status: isLinkResolutionStatus(statusRaw) ? statusRaw : "missing",
+		fragment: fragmentRaw
+			? (JSON.parse(fragmentRaw) as LinkFragment)
+			: undefined,
 	};
+}
+
+function isLinkResolutionStatus(
+	value: string | undefined,
+): value is LinkResolutionStatus {
+	return (
+		value === "resolved" ||
+		value === "missing" ||
+		value === "ambiguous" ||
+		value === "invalidFragment"
+	);
 }
 
 function escapeMdLabel(label: string): string {
@@ -309,8 +544,8 @@ export function rewriteWikilinksForPreview(
 							const href = encodeWikiHref({
 								targetRaw: parsed.targetRaw,
 								path: resolved,
-								exists: Boolean(resolved),
-								heading: parsed.heading,
+								status: resolved ? "resolved" : "missing",
+								fragment: parsed.fragment,
 							});
 							rebuilt += `[${label}](${href})`;
 						} else {
@@ -377,6 +612,42 @@ export async function getBacklinks(
 		vaultPath,
 		path,
 	});
+}
+
+export async function getOutgoingLinks(
+	vaultPath: string | null,
+	path: string,
+): Promise<OutgoingLinksResponse> {
+	if (!path) return { path: "", outgoing: [] };
+	if (!vaultPath || !isTauri()) {
+		return { path: toVaultRelative(vaultPath, path), outgoing: [] };
+	}
+	return invokeApi<OutgoingLinksResponse>("wiki_get_outgoing", {
+		vaultPath,
+		path,
+	});
+}
+
+export async function resolveWikiReference(
+	vaultPath: string | null,
+	sourcePath: string,
+	linkText: string,
+): Promise<ResolvedLink | null> {
+	if (!vaultPath || !isTauri()) return null;
+	const response = await invokeApi<{ link: ResolvedLink }>("wiki_resolve", {
+		vaultPath,
+		sourcePath,
+		linkText,
+	});
+	return response.link;
+}
+
+export async function searchWikiLinks(
+	vaultPath: string | null,
+	query: string,
+): Promise<WikiSearchCandidate[]> {
+	if (!vaultPath || !isTauri()) return [];
+	return invokeApi<WikiSearchCandidate[]>("wiki_search", { vaultPath, query });
 }
 
 export async function rebuildWikiIndex(

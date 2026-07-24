@@ -39,7 +39,7 @@ import {
 	isPdfPath,
 	preferredModeForPath,
 } from "@/lib/viewer";
-import { toVaultRelative } from "@/lib/wiki";
+import { type LinkFragment, toVaultRelative } from "@/lib/wiki";
 
 export type DocTabKind = "library" | "trash" | "paper" | "file";
 
@@ -71,6 +71,8 @@ export type DocTab = {
 	seedKey: number;
 	/** Bump to remount + reseed the NOTES editor. */
 	notesKey: number;
+	/** One-shot, monotonic intent consumed by the mounted Markdown editor. */
+	navigationIntent?: { id: number; fragment: LinkFragment };
 	loaded: boolean;
 };
 

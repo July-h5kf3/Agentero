@@ -39,6 +39,7 @@ export const NotesEditorTab = memo(function NotesEditorTab({
 				filePath={tab.notesPath}
 				fontSize={fontSize}
 				showToolbar={showToolbar}
+				navigationIntent={tab.navigationIntent}
 				placeholder={placeholder}
 				onPersist={onPersist}
 				onAssetsChanged={onAssetsChanged}

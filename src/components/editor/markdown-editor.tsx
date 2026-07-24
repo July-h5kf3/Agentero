@@ -25,6 +25,11 @@ import {
 } from "@/lib/markdown-image";
 import { errorMessage, notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import type { LinkFragment } from "@/lib/wiki";
+import {
+	findWikiHeadingIndex,
+	hasWikiBlockAnchor,
+} from "@/lib/wiki-navigation";
 
 export type MarkdownEditorProps = {
 	/** Initial Markdown content for the open file. The component reseeds on remount (key). */
@@ -51,6 +56,8 @@ export type MarkdownEditorProps = {
 	onDirtyChange?: (dirty: boolean) => void;
 	/** After writing an image under `./assets/` (refresh file tree). */
 	onAssetsChanged?: () => void;
+	/** A one-shot request to scroll to a resolved internal-link anchor. */
+	navigationIntent?: { id: number; fragment: LinkFragment };
 };
 
 const CHANGE_DEBOUNCE_MS = 500;
@@ -66,6 +73,7 @@ export function MarkdownEditor({
 	onPersist,
 	onDirtyChange,
 	onAssetsChanged,
+	navigationIntent,
 }: MarkdownEditorProps) {
 	const frontmatterRef = useRef("");
 	const savedRef = useRef(initialMarkdown);
@@ -94,6 +102,39 @@ export function MarkdownEditor({
 			},
 		}),
 	);
+	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!navigationIntent) return;
+		const root = editorContainerRef.current;
+		if (!root) return;
+		const fragment = navigationIntent.fragment;
+		const headings = [
+			...root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6"),
+		];
+		const target =
+			fragment.kind === "heading"
+				? headings[
+						findWikiHeadingIndex(
+							headings.map((element) => ({
+								level: Number(element.tagName.slice(1)),
+								text: element.textContent ?? "",
+							})),
+							fragment.path,
+						)
+					]
+				: [...root.querySelectorAll<HTMLElement>("p,li,blockquote,td")].find(
+						(element) =>
+							hasWikiBlockAnchor(element.textContent ?? "", fragment.id),
+					);
+		if (!target) return;
+		target.dataset.navTarget = "true";
+		target.scrollIntoView({ behavior: "smooth", block: "center" });
+		const timeout = window.setTimeout(() => {
+			delete target.dataset.navTarget;
+		}, 1600);
+		return () => window.clearTimeout(timeout);
+	}, [navigationIntent]);
 
 	/**
 	 * ImagePlugin must declare `uploadImage` in its initial options store.
@@ -226,6 +267,7 @@ export function MarkdownEditor({
 				<div className={cn("flex h-full min-h-0 flex-col", className)}>
 					{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
 					<EditorContainer
+						ref={editorContainerRef}
 						className="agentero-scroll min-h-0 flex-1"
 						onKeyDown={readOnly ? undefined : handleKeyDown}
 					>

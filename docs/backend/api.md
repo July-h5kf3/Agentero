@@ -1494,7 +1494,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 > 产品与索引设计见 **`docs/backend/wikilinks.md`**。下列为 Host 接口草案。
 
-#### `graph_get_backlinks`（实现中；草案名 `graph:get_backlinks`）
+#### `graph_get_backlinks`
 
 获取某个文件的反链列表。若当前 Vault 尚未索引会先全量重建。
 
@@ -1514,9 +1514,38 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   ok: true;
   data: {
     path: string; // 规范化后的 Vault 相对路径
-    backlinks: Backlink[]; // { source, targetRaw, alias?, context?, line? }
+    backlinks: ResolvedLink[];
   };
 }
+```
+
+`ResolvedLink` 保留 occurrence 的 `source`、`targetRaw`、`syntax`、`embed`、`displayText?`、typed `fragment?`、`sourceRange`、`line`、`context?`，并返回 `status`（`resolved` / `missing` / `ambiguous` / `invalidFragment`）、`targetPath?` 与 `candidates?`。反链和出链以 occurrence 为单位，不能由 Graph 去重结果反推。
+
+#### `wiki_get_outgoing`
+
+获取一个 Markdown 文件显式写出的全部出链 occurrence，包括可诊断但不可跳转的缺失、歧义和无效 fragment。
+
+```ts
+{ vaultPath: string; path: string }
+// => { ok: true; data: { path: string; outgoing: ResolvedLink[] } }
+```
+
+#### `wiki_resolve`
+
+以来源路径上下文解析一个 Wikilink 文本。生产 UI 使用该接口，而不是复制 Rust resolver。
+
+```ts
+{ vaultPath: string; sourcePath: string; linkText: string }
+// => { ok: true; data: { link: ResolvedLink } }
+```
+
+#### `wiki_search`
+
+返回可写入的文件、heading 和 block 候选；候选带规范路径与 `insertText`，重名场景由 UI 显示路径供用户选择。
+
+```ts
+{ vaultPath: string; query: string }
+// => { ok: true; data: WikiSearchCandidate[] }
 ```
 
 #### `graph_get_graph`（草案名 `graph:get_graph`）
@@ -1565,7 +1594,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 - **边**：有向，`source` / `target` 为折叠后节点 id；折叠后的自环丢弃。
 - **邻域**：无向 BFS（出边+入边）从 `center` 扩展至多 `depth` 跳，再裁剪 edges。
 
-#### `graph_rebuild`（实现中；草案名 `graph:rebuild_index`）
+#### `graph_rebuild`
 
 全量扫描 Vault 内 Markdown，重建内存 wikilink 索引。
 

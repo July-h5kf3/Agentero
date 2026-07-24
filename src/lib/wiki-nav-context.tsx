@@ -4,6 +4,8 @@ import type { WikiNavTarget } from "@/lib/wiki";
 
 export type WikiNavContextValue = {
 	onWikiNavigate: (nav: WikiNavTarget) => void;
+	/** Active Vault root for Host-backed semantic resolution. */
+	vaultPath?: string | null;
 	/** Vault-relative Markdown paths, used to resolve `[[wikilink]]` targets. */
 	mdFiles?: string[];
 };

@@ -2,15 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
 	extractWikilinks,
 	parseWikiHref,
+	resolveDemoWikiReference,
 	resolveWikiTarget,
 	rewriteWikilinksForPreview,
 	toVaultRelative,
 	WIKI_HREF_PREFIX,
 } from "@/lib/wiki";
+import semanticFixture from "./fixtures/wikilinks/semantic-cases.json";
 import { createTestVault } from "./helpers/create-test-vault";
 
 describe("wikilink extraction", () => {
-	it("extracts aliases and headings while skipping inline and fenced code", () => {
+	it("uses the shared semantic fixture without parsing code examples", () => {
+		const source = semanticFixture.documents.find(
+			(document) => document.path === "notes/Source.md",
+		)?.content;
+		expect(source).toBeTruthy();
+		const links = extractWikilinks(source ?? "");
+		expect(links.map((link) => link.targetRaw)).toEqual(["Target", "", ""]);
+	});
+
+	it("extracts typed fragments while skipping inline and fenced code", () => {
 		const links = extractWikilinks(
 			[
 				"See [[notes/Target#Intro|Target Note]] and `[[ignored-inline]]`.",
@@ -24,7 +35,7 @@ describe("wikilink extraction", () => {
 		expect(links).toHaveLength(2);
 		expect(links[0]).toMatchObject({
 			targetRaw: "notes/Target",
-			heading: "Intro",
+			fragment: { kind: "heading", path: ["Intro"] },
 			alias: "Target Note",
 			line: 1,
 		});
@@ -33,9 +44,29 @@ describe("wikilink extraction", () => {
 			line: 5,
 		});
 	});
+
+	it("accepts same-file heading and block fragments", () => {
+		const links = extractWikilinks("[[#Root#Child]] and [[#^summary]]");
+		expect(links).toMatchObject([
+			{ targetRaw: "", fragment: { kind: "heading", path: ["Root", "Child"] } },
+			{ targetRaw: "", fragment: { kind: "block", id: "summary" } },
+		]);
+	});
 });
 
 describe("wikilink resolution", () => {
+	it("keeps the browser demo aligned with the shared semantic fixture", () => {
+		for (const fixtureCase of semanticFixture.cases) {
+			const result = resolveDemoWikiReference(
+				fixtureCase.source,
+				fixtureCase.link,
+				semanticFixture.documents,
+			);
+			expect(result.status, fixtureCase.link).toBe(fixtureCase.status);
+			expect(result.targetPath, fixtureCase.link).toBe(fixtureCase.path);
+		}
+	});
+
 	it("resolves targets against markdown files in a real vault directory", async () => {
 		const vault = await createTestVault({
 			"notes/Index.md": "[[Target]] [[Case]]",
@@ -99,8 +130,8 @@ describe("wikilink preview rewrite", () => {
 			expect(parseWikiHref(href ?? "")).toEqual({
 				targetRaw: "notes/Target",
 				path: "notes/Target.md",
-				exists: true,
-				heading: "Intro",
+				status: "resolved",
+				fragment: { kind: "heading", path: ["Intro"] },
 			});
 		} finally {
 			await vault.cleanup();

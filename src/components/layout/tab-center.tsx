@@ -165,6 +165,7 @@ export const TabCenter = memo(function TabCenter({
 					}
 					fontSize={editorFontSize}
 					showToolbar={showEditorToolbar}
+					navigationIntent={tab.navigationIntent}
 					placeholder={isNotes ? notesPlaceholder : markdownPlaceholder}
 					onPersist={onPersistFile}
 					onAssetsChanged={onEditorAssetsChanged}

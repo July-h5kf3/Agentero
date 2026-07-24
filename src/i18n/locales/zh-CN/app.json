@@ -102,6 +102,8 @@
 		"openVaultForLinks": "请先打开知识库，再导航知识库相对链接。",
 		"openVaultForGraph": "请先打开知识库，再导航图谱链接。",
 		"openVaultForCreate": "请先打开知识库，再创建双链目标。",
+		"wikiLinkAmbiguous": "双链目标不明确：{{target}}。请选择更具体的路径。",
+		"wikiLinkInvalidFragment": "目标文件存在，但标题或块引用不可用：{{target}}。",
 		"dropPdfNeedsVault": "请先打开知识库，再拖入 PDF 导入。"
 	},
 	"vault": {

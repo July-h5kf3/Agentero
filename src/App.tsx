@@ -300,6 +300,7 @@ export default function App() {
 	const fileTreeRef = useRef<FileTreeHandle>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
+	const wikiNavigationIntentIdRef = useRef(0);
 	const agentZenModeRef = useRef(false);
 	const pdfZenModeRef = useRef(false);
 	pdfZenModeRef.current = pdfZenMode;
@@ -2933,8 +2934,34 @@ export default function App() {
 
 	const handleWikiNavigate = useCallback(
 		async (nav: WikiNavTarget) => {
-			if (nav.exists && nav.path) {
-				handleOpenVaultRel(nav.path);
+			if (nav.status === "resolved" && nav.path) {
+				if (!vaultPath) {
+					notifyError(t("errors.openVaultForLinks"));
+					return;
+				}
+				const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(nav.path)}`;
+				openTab(full, { preferMode: "markdown" });
+				if (nav.fragment) {
+					const intent = {
+						id: ++wikiNavigationIntentIdRef.current,
+						fragment: nav.fragment,
+					};
+					setTabs((previous) =>
+						patchTab(previous, tabIdForPath(full), {
+							navigationIntent: intent,
+						}),
+					);
+				}
+				return;
+			}
+			if (nav.status === "ambiguous") {
+				notifyError(t("errors.wikiLinkAmbiguous", { target: nav.targetRaw }));
+				return;
+			}
+			if (nav.status === "invalidFragment") {
+				notifyError(
+					t("errors.wikiLinkInvalidFragment", { target: nav.targetRaw }),
+				);
 				return;
 			}
 			if (!vaultPath) {
@@ -2962,22 +2989,16 @@ export default function App() {
 				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[
-			vaultPath,
-			handleOpenVaultRel,
-			openPath,
-			refreshTree,
-			rebuildWikiAndNotify,
-			t,
-		],
+		[vaultPath, openPath, openTab, refreshTree, rebuildWikiAndNotify, t],
 	);
 
 	const wikiNavValue = useMemo(
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
 			mdFiles: vaultMdFiles,
+			vaultPath,
 		}),
-		[handleWikiNavigate, vaultMdFiles],
+		[handleWikiNavigate, vaultMdFiles, vaultPath],
 	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
@@ -3584,7 +3605,14 @@ export default function App() {
 									<BacklinksPanel
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
-										onOpenPath={handleOpenVaultRel}
+										onNavigate={(link) =>
+											void handleWikiNavigate({
+												targetRaw: link.occurrence.targetRaw,
+												path: link.targetPath ?? null,
+												status: link.status,
+												fragment: link.occurrence.fragment,
+											})
+										}
 										variant="sidebar"
 										className="min-h-0 basis-[42%] border-b"
 										wikiIndexRevision={wikiIndexRevision}

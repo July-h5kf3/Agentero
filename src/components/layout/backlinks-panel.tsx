@@ -1,70 +1,125 @@
-import { Link2 } from "lucide-react";
+import { ArrowUpLeft, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { type Backlink, getBacklinks } from "@/lib/wiki";
+import { getBacklinks, type ResolvedLink } from "@/lib/wiki";
 
 type BacklinksPanelProps = {
 	vaultPath: string | null;
 	/** Absolute or demo path of the open file */
 	selectedPath: string | null;
-	onOpenPath: (vaultRelativePath: string) => void;
+	onNavigate: (link: ResolvedLink) => void;
 	className?: string;
 	/** Full-height sidebar mode (default). Compact strip is legacy. */
 	variant?: "sidebar" | "compact";
-	/**
-	 * Bumped after `graph_rebuild` (e.g. magic-wand import) so the panel
-	 * re-fetches without requiring a path change.
-	 */
+	/** Bumped after `graph_rebuild` so the relationship queries remain fresh. */
 	wikiIndexRevision?: number;
 };
+
+function fragmentLabel(link: ResolvedLink): string | null {
+	const fragment = link.occurrence.fragment;
+	if (!fragment) return null;
+	return fragment.kind === "block"
+		? `^${fragment.id}`
+		: fragment.path.join(" › ");
+}
+
+function RelationList({
+	items,
+	onNavigate,
+}: {
+	items: ResolvedLink[];
+	onNavigate: (link: ResolvedLink) => void;
+}) {
+	return (
+		<ul className="flex flex-col gap-0.5">
+			{items.map((link) => {
+				const source = link.occurrence.source;
+				return (
+					<li key={`${source}:${link.occurrence.sourceRange.start}`}>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-auto w-full justify-start gap-1 px-2 py-1.5 font-normal text-left disabled:opacity-100"
+							onClick={() =>
+								onNavigate({
+									...link,
+									status: "resolved",
+									targetPath: source,
+									occurrence: { ...link.occurrence, fragment: undefined },
+								})
+							}
+							title={source}
+						>
+							<span className="min-w-0 flex-1 truncate text-xs">
+								<span className="font-medium text-foreground">
+									{source.split("/").pop()}
+								</span>
+								{fragmentLabel(link) ? (
+									<span className="ml-1 text-muted-foreground">
+										{fragmentLabel(link)}
+									</span>
+								) : null}
+								{link.occurrence.context ? (
+									<span className="ml-1.5 text-muted-foreground">
+										{link.occurrence.context.length > 72
+											? `${link.occurrence.context.slice(0, 72)}…`
+											: link.occurrence.context}
+									</span>
+								) : null}
+							</span>
+						</Button>
+					</li>
+				);
+			})}
+		</ul>
+	);
+}
 
 export function BacklinksPanel({
 	vaultPath,
 	selectedPath,
-	onOpenPath,
+	onNavigate,
 	className,
 	variant = "sidebar",
 	wikiIndexRevision = 0,
 }: BacklinksPanelProps) {
 	const { t } = useTranslation("sidebar");
-	const [backlinks, setBacklinks] = useState<Backlink[]>([]);
+	const [incoming, setIncoming] = useState<ResolvedLink[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		// `wikiIndexRevision` is intentional: re-fetch after graph_rebuild.
 		void wikiIndexRevision;
 		if (!selectedPath) {
-			setBacklinks([]);
+			setIncoming([]);
 			setError(null);
 			return;
 		}
 		let cancelled = false;
 		setLoading(true);
 		setError(null);
-		void (async () => {
-			try {
-				const res = await getBacklinks(vaultPath, selectedPath);
+		void getBacklinks(vaultPath, selectedPath)
+			.then((backlinks) => {
 				if (cancelled) return;
-				setBacklinks(res.backlinks);
-			} catch (e) {
+				setIncoming(backlinks.backlinks);
+			})
+			.catch((cause: unknown) => {
 				if (cancelled) return;
-				setBacklinks([]);
-				setError(e instanceof Error ? e.message : String(e));
-			} finally {
+				setIncoming([]);
+				setError(cause instanceof Error ? cause.message : String(cause));
+			})
+			.finally(() => {
 				if (!cancelled) setLoading(false);
-			}
-		})();
+			});
 		return () => {
 			cancelled = true;
 		};
 	}, [vaultPath, selectedPath, wikiIndexRevision]);
-
-	const countLabel = loading ? "" : ` (${backlinks.length})`;
 
 	const body = (
 		<div
@@ -76,7 +131,6 @@ export function BacklinksPanel({
 			{!selectedPath ? (
 				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
 					{t("backlinks.openNote")}
-					Open a note to see backlinks
 				</p>
 			) : null}
 			{selectedPath && error ? (
@@ -84,40 +138,22 @@ export function BacklinksPanel({
 					{error}
 				</p>
 			) : null}
-			{selectedPath && !error && !loading && backlinks.length === 0 ? (
-				<p className="flex h-full items-center justify-center text-muted-foreground text-xs">
-					{t("backlinks.none")}
-					No backlinks
-				</p>
-			) : null}
-			{selectedPath ? (
-				<ul className="flex flex-col gap-0.5">
-					{backlinks.map((b) => (
-						<li key={`${b.source}:${b.line ?? 0}:${b.targetRaw}`}>
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="h-auto w-full justify-start gap-1 px-2 py-1.5 font-normal text-left"
-								onClick={() => onOpenPath(b.source)}
-								title={b.source}
-							>
-								<span className="min-w-0 flex-1 truncate text-xs">
-									<span className="font-medium text-foreground">
-										{b.source.split("/").pop()}
-									</span>
-									{b.context ? (
-										<span className="ml-1.5 text-muted-foreground">
-											{b.context.length > 72
-												? `${b.context.slice(0, 72)}…`
-												: b.context}
-										</span>
-									) : null}
-								</span>
-							</Button>
-						</li>
-					))}
-				</ul>
+			{selectedPath && !error && !loading ? (
+				<div className="space-y-3">
+					<section>
+						<p className="mb-1 flex items-center gap-1 px-2 text-muted-foreground text-xs">
+							<ArrowUpLeft className="size-3" aria-hidden />
+							{t("backlinks.title")}
+						</p>
+						{incoming.length ? (
+							<RelationList items={incoming} onNavigate={onNavigate} />
+						) : (
+							<p className="px-2 text-muted-foreground text-xs">
+								{t("backlinks.none")}
+							</p>
+						)}
+					</section>
+				</div>
 			) : null}
 		</div>
 	);
@@ -131,13 +167,6 @@ export function BacklinksPanel({
 					className,
 				)}
 			>
-				<div className="flex h-8 shrink-0 items-center gap-1.5 px-3 text-muted-foreground">
-					<Link2 className="size-3.5 shrink-0" aria-hidden />
-					<span className="text-xs font-medium">
-						{t("backlinks.title")}
-						{countLabel}
-					</span>
-				</div>
 				{body}
 			</div>
 		);
@@ -157,9 +186,6 @@ export function BacklinksPanel({
 				/>
 				<span className="min-w-0 flex-1 truncate font-medium text-sm">
 					{t("backlinks.title")}
-					<span className="font-normal text-muted-foreground">
-						{countLabel}
-					</span>
 				</span>
 			</PaneHeader>
 			{body}
