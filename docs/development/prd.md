@@ -89,9 +89,8 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 #### Markdown 工作台
 
 - 左侧：Vault 文件树与 paper 元信息。
-- 中间：Markdown / PDF / HTML 视图切换。
-- 中间栏：论文库表格（Library / vault home）或 Markdown / PDF / HTML。
-- 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时展示该篇 `NOTES.md`；论文库视图隐藏。
+- 中间：**Dockview 工作区**——Library / Markdown / PDF / HTML / 图片 / 回收站 / 论文 NOTES 等 panel；可分屏。
+- 论文 NOTES：打开 paper 时默认与 PDF 为同组 sibling tab（非独立右列预览栏）。
 - 可选右侧栏：Agent，或 Backlinks+Graph（上方反链，下方图谱）。
 - 支持打开、编辑、保存 Markdown。
 - 支持基本标题、列表、代码块、链接、表格预览。
@@ -134,14 +133,13 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 
 #### 工作区
 
-- **文档标签页已落地**：中间栏以浏览器式多 tab 管理 Library / PDF / HTML / Markdown / 图片等；常驻挂载，切换保留滚动与编辑状态；`⌘W` / `Esc` 优先关最顶层应用弹层（设置、命令面板、迁移对话框等，见 `overlay-stack`），否则先关标签，仅剩全库时关窗口。
-- **规划（roadmap V0.6 余量）**：2 格分屏并排（PDF | NOTES 等）。
+- **全局 Dockview 已落地（V0.6）**：中间栏管理 Library / PDF / HTML / Markdown / 图片 / 回收站 / NOTES 等文档 panel；dockview 原生 tab、关闭、上下左右/多格分屏；论文默认 PDF 与 `NOTES.md` 同组 sibling。标题栏**无**文档 tab 条。`⌘W` / `Esc` 优先关最顶层应用弹层（`overlay-stack`），否则关 active panel，仅剩全库时关窗。详见 [`tab-split.md`](tab-split.md)。
 - **操作错误**：全局右上角 Toast（`notifyError`），不占用侧栏 header。
 
 ### 4.2 P1 暂缓 / 后续版本
 
-- 分屏（V0.6 余量；标签页已完成）。
-- 文献引用关系探索与 hover Paper Info（升格为 roadmap V0.7）。
+- tab 固定（pin）、按 paper 分组等工作区增强（V0.6 后续）。
+- 文献引用关系探索与 hover Paper Info（roadmap V0.7）。
 - Zotero 全量替代能力。
 - 云同步、多人协作、权限管理。
 - 浏览器插件。

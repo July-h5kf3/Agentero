@@ -24,8 +24,8 @@
 | V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph`；**文件变更防抖重建索引** |
 | 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 → `marks/*.json`；无文本层降级仍待 |
 | 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
-| V0.5 Importer | ⏳ | 本地 PDF / PdfParser 规划中 |
-| V0.6 标签页与分屏 | 🟡 标签页 ✅ | **文档标签页已落地**（`⌘W` 关 tab / 无 tab 关窗）；**分屏（split）** 仍待 |
+| V0.5 Importer | 🟡 本地 PDF ✅ | **本地 PDF 入库**（魔棒多选 / 拖到 `papers/`）已落地；Importer trait / DOI / MinerU 仍待 |
+| V0.6 标签页与分屏 | ✅ | **全局 Dockview**：中间栏文档 panel + 上下左右/多格分屏；论文默认 PDF\|NOTES sibling；标题栏无文档 tab（见 [`tab-split.md`](tab-split.md)） |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper tag *`；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |

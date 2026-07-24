@@ -182,7 +182,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：本地优先 `blob:` → 自动下载 → 远程回退；**真实 scale 重渲染**（缩放停后 `width = 基准×缩放`）；放大后双向滚动 |
+| PDF 渲染（前端） | **已接入** EmbedPDF + PDFium：本地优先 `blob:` → 自动下载 → 远程回退；**真实 scale 重渲染**（缩放停后 `width = 基准×缩放`）；放大后双向滚动 |
 | PDF 工具栏 | 适应宽 / **适应整页**；页码 pill + 跳转；`PageDown/Up`；大纲浮层；**⌘F 查找**（`pdf-find.ts` + 文本层 rects 高亮） |
 | PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf` |
 | arXiv LaTeX 归档 | e-print 解压到 `source/`（`lookup/assets.rs`） |
@@ -194,7 +194,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 **分工说明**：
 
-- **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
+- **渲染层**（EmbedPDF / PDFium）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
@@ -570,7 +570,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 | 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
 | 鼠标悬停提示 | 长按菜单替代 |
 | 小点击区域 | 增大按钮/节点热区至 44pt |
-| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口与**文档标签页**；**分屏** 规划见 roadmap V0.6 余量 |
+| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口与中间栏 **Dockview** 多分屏（V0.6 已落地） |
 | PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
 | 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
 
@@ -590,7 +590,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 
 - **共享层**：Rust 业务逻辑（Vault、Markdown 索引、ACP Client）完全跨平台。
 - **前端适配层**：通过 `useMediaQuery` / 平台检测（Tauri `os` API）切换布局组件。
-- **平台特定代码**：封装在 `src/platform/` 下，如 `desktop.ts`、`mobile.ts`。
+- **平台特定代码**：按需拆分平台入口（当前无独立 platform 目录）。
 
 ## 7. 开发/构建/部署
 
@@ -649,14 +649,15 @@ pnpm tauri build
   "remark-emoji": "^5",
   "zustand": "^5",
   "react-force-graph-2d": "^1",
-  "react-pdf": "^9",
+  "@embedpdf/*": "版本见 package.json",
+  "dockview": "版本见 package.json",
   "class-variance-authority": "^0.7",
   "clsx": "^2",
   "tailwind-merge": "^3"
 }
 ```
 
-> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、`react-pdf`、双链反链、`react-force-graph-2d` + `graph_get_graph`。  
+> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、EmbedPDF、双链反链、`react-force-graph-2d` + `graph_get_graph`。  
 > **图谱 UI**：Graph 位于 Backlinks 右侧栏下方，支持 Near / All 模式和节点点击打开。  
 > **仍为计划**：`zustand`（可选）。
 
@@ -712,10 +713,10 @@ tempfile = "3"
 | V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（可选自动 + Zap 手动 + `is_read`）、**SkillMentionStyle**、**权限三档**（`restricted` / `ask` / `auto` + `agent:permission-request`）、**面板 workflow**（summary / qa / related_work）、模型收藏已接入；`AGENTS.md` 自动注入仍待。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**）；`.md` 变更经 `scheduleWikiRebuild` 防抖重建索引。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
-| V0.6 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 关 tab / 无 tab 关窗、多窗口独立 tab 集）；**2 格分屏**仍待；与 Agent 会话标签分离。 |
+| V0.6 | **全局 Dockview 已落地**：中间栏文档 panel（非标题栏 tab）；上下左右/多格分屏；论文默认 PDF\|NOTES sibling；布局 `toJSON()`；与 Agent 会话标签分离。见 [`tab-split.md`](tab-split.md)。 |
 | V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
-| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局、>2 格分屏。 |
+| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局。 |
 
 ## 10. 风险与技术对策
 

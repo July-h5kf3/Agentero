@@ -119,7 +119,7 @@
 关键交付：
 
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
-- [x] Codex ACP 迁移：经 `@agentclientprotocol/codex-acp`（npm）适配器接入标准 ACP 协议；原生 `codex app-server` 模块（`src-tauri/src/services/agent/codex/`）已删除；`agent_codex_list_threads` / `agent_codex_read_thread` 由统一的 `agent_list_sessions` / `agent_load_session` 替代。
+- [x] Codex ACP 迁移：经 `@agentclientprotocol/codex-acp`（npm）适配器接入标准 ACP 协议；原生 `codex app-server` 模块已删除；`agent_codex_list_threads` / `agent_codex_read_thread` 由统一的 `agent_list_sessions` / `agent_load_session` 替代。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Agentero **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
@@ -237,14 +237,14 @@
 
 关键交付：
 
-- [x] **文档标签栏**：打开 paper / Markdown / PDF / HTML / Library 时在标题栏（与禅模式图标同行）以 tab 呈现，可关闭、切换、拖拽重排。（`src/components/workspace/tab-workspace.tsx`、`src/lib/tabs.ts`）
-- [x] **标签状态**：每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush），关闭不丢内容。
+- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/tab-workspace.tsx`、`src/lib/tabs.ts`；见 [`tab-split.md`](tab-split.md)）
+- [x] **panel 状态**：内容常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush）。
 - [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。
-- [x] **全局 Dockview**：中间栏管理全部文档 panel；上下左右 + 多格；论文默认 PDF\|NOTES；拖文件树 → 任意边。
+- [x] **分屏**：上下左右 + 多格；论文默认 PDF\|NOTES sibling；拖文件树 → 任意边；布局仅 `toJSON()`。
 - [x] **快捷键**：关闭 panel `⌘W`（弹层 → active panel → 关窗）、下一/上一 panel `⌥⌘→ / ⌥⌘←`；NOTES 切换见 Layout 菜单。
-- [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 tab。
-- [x] **多窗口兼容**：`⌘N` 窗口各自有独立 tab 集（`agentero-open-tabs` 按窗口 localStorage 恢复）。
+- [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 panel。
+- [x] **多窗口兼容**：`⌘N` 窗口各自独立 dock 布局（按窗口持久化恢复）。
 
 验收标准：
 

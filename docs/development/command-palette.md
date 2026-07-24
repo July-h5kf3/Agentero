@@ -114,23 +114,24 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 | 能力 | 位置 | 说明 |
 |---|---|---|
 | 全局浮层 UI | `src/components/dialogs/command-palette.tsx` | shadcn `CommandDialog` + `CommandInput` + `CommandList` |
-| 快捷键 | `shortcuts.ts` → `commandPalette` | **⌘K** 与 **⌘P**（`App.tsx` 另绑 p）打开**同一面板** |
+| 快捷键 | `shortcuts.ts` | **⌘P / ⌘K** → 快速打开（`quickOpen`）；**⇧⌘P** → 命令模式（`commandPalette`） |
 | 论文 quick-open | 前端内存 `libraryPapers` | 标题 / 作者 / id 即时过滤，无 RPC |
 | 全文搜索 | Host `vault_search` | walk `*.md`，AND 分词，片段 + 行号 |
+| 命令模式 | 内置命令列表 + `>` 前缀 | 设置 / 侧栏 / Vault / 布局等可执行动作（Phase A） |
 | 打开目标 | `onOpenPaper` / `onOpenVaultRel` | 命中 `papers/` 打开论文，否则打开笔记路径 |
 
-**语义上：当前面板 ≈ VS Code 的 ⌘P（资源导航）+ 内容搜索**，**还不是** ⇧⌘P 的「执行任意命令」。
+**Phase A**：⌘P 资源导航 + 内容搜索 + ⇧⌘P / `>` 命令执行。**Phase B** 仍待：统一 `src/lib/commands` 注册表（现仅有 `types.ts` / `match.ts`）、扩展贡献、更丰富 when / MRU。
 
 ### 3.2 与 VS Code 的差距
 
 | 维度 | VS Code | Agentero 现状 |
 |---|---|---|
-| 快捷键分工 | ⌘P 文件 / ⇧⌘P 命令 | ⌘K ≈ ⌘P，**无 ⇧⌘P** |
-| 前缀模式 | `>` `@` `#` `:` `?` | 无 |
-| 命令注册表 | 全局 CommandService + 扩展贡献 | 无统一命令模型；动作散落 App / 菜单 / 快捷键 |
-| 执行命令 | 面板即执行器 | 面板只 **打开资源** |
-| 最近项 | 最近文件 / 最近命令 | 空查询 ≈ 论文列表前 N 条（非真实 MRU） |
-| 上下文 when | 丰富 | 仅「有无 Vault」空态 |
+| 快捷键分工 | ⌘P 文件 / ⇧⌘P 命令 | ✅ 已分工（⌘P/⌘K go · ⇧⌘P commands） |
+| 前缀模式 | `>` `@` `#` `:` `?` | `>` 命令模式；`@`/`#`/`:` 无 |
+| 命令注册表 | 全局 CommandService + 扩展贡献 | 内置列表；完整 registry 仍 Phase B |
+| 执行命令 | 面板即执行器 | ✅ 命令模式可执行内置动作 |
+| 最近项 | 最近文件 / 最近命令 | 空查询 ≈ 论文列表前 N 条（非完整 MRU） |
+| 上下文 when | 丰富 | 有限（有无 Vault 等） |
 | 符号 / 行号 | 一等能力 | 无 |
 
 ### 3.3 现有可复用资产
@@ -246,7 +247,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 
 ### Phase B — 命令注册表与 MRU
 
-1. `src/lib/commands/registry.ts` + 内置命令迁移（从 App 抽出绑定）。  
+1. `src/lib/commands/（`types.ts` / `match.ts`；完整 registry 仍为 Phase B）` + 内置命令迁移（从 App 抽出绑定）。  
 2. localStorage：`command-mru`、`paper-mru`。  
 3. 空查询：最近论文 + 最近命令。  
 4. 可选前缀：`>` 强制命令模式。

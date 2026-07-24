@@ -377,7 +377,7 @@ type RemoteAgentLaunch = {
 ### 9.3 前端
 
 - 无新重视图库；状态：远程 session + caps  
-- PDF 仍 `blob:` / react-pdf  
+- PDF 仍 `blob:` / EmbedPDF  
 - 设置页：远程条目；i18n `en` + `zh-CN`
 
 ### 9.4 明确不采用（MVP）

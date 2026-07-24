@@ -1803,7 +1803,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 | V0.3 | ACP Client + BYOA：会话与流式事件；`permissionMode`（`restricted`/`ask`/`auto`）+ `agent_respond_permission` / `agent:permission-request`；面板 workflow（`summary`/`qa`/`related_work`）；`paper_set_is_read` + paper-reader（可选自动/手动）。 |
 | V0.4 | `graph:*`（双链 / 反链 / 图谱）；前端文件变更防抖 `graph_rebuild`。 |
 | V0.5 | 抽象 importer，落地 arxiv 与本地 PDF；新增 `pdf:*` 命令与可插拔 `PdfParser`（liteparse 默认 + 云端 MinerU）。 |
-| V0.6 | 文档 **tab 已落地**（前端 `agentero-open-tabs` + 菜单 `close_tab_or_window`）；**分屏**布局持久化仍待。Host 侧可选 `config`/Store 扩展，一般无需新 paper API。 |
+| V0.6 | **全局 Dockview** 已落地（前端 panel + `toJSON()` 布局持久化 + 菜单 `close_tab_or_window`）；Host 侧一般无需新 paper API。见 [`../development/tab-split.md`](../development/tab-split.md)。 |
 | V0.7 | 引用关系：`citation:*` 或 catalog 扩展表（cites / cited_by 缓存）、远程元数据补全、文内引用解析；与 `graph:*` 双链 API 并存。 |
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 

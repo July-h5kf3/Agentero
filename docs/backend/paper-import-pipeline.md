@@ -131,7 +131,7 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 
 ## 4. Host:`paper_commit`
 
-建议模块：`src-tauri/src/services/lookup/commit.rs`（或新建 `services/paper_import/`，初期放 lookup 旁即可，避免过早拆 crate）。
+建议模块（**尚未抽出**）：`src-tauri/src/services/lookup/` 旁或新建 `services/paper_import/` 统一 `paper_commit`；当前各入口仍分散在 lookup / connector / papers 路径。
 
 ### 4.1 输入：`PaperDraft` + `PaperCommitOptions`
 

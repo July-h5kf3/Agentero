@@ -193,7 +193,7 @@
 
 单测：`test/overlay-stack.test.ts`。
 
-- 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
+- 工作台默认 **三栏**：文件树 + 中间 **Dockview 工作区** + 可选右侧栏（Agent / Backlinks）。文档 panel 由 dockview 管理（见 §3.1.1 / [`../development/tab-split.md`](../development/tab-split.md)）；论文 NOTES 为同组 sibling panel，非独立右列。
 - **论文库表格**（`src/components/library/papers-library.tsx`）：
   - **入口**：
     1. 虚拟节点 `agentero:library` → **全库**（清除 `libraryScopePath`）；
@@ -214,49 +214,31 @@
   - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
   - **从 Zotero 迁移**：仅**全库**视图工具栏。
 - **Paper Info / Notes——仅具体论文**：
-  - **左侧 Paper Info**（`paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。展开时顶部边框为**纵向拖拽把手**（可键盘 ↑/↓，Shift 加速），调节内容区高度（120–560px，localStorage `agentero.paperInfoHeight` 持久化）；作者与摘要不再行数截断，超出滚动。**Tags** 可编辑：输入框在 chip 上方（多标签时无需先滚动）；输入框**右侧圆形色点**打开上方色盘（Apple 风格预置 8 色：`red`/`orange`/`yellow`/`green`/`teal`/`blue`/`indigo`/`purple` + 默认）；有色标签前导小圆点且 chip 背景/文字染色，未选色则默认 `muted`。回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`，同步 `metadata.json`）。`loadPaperMetadata` 会注入 vault-relative `path`（`metadata.json` 投影本身不含 path），Zotero 导入等路径也可持续编辑。
-  - **Notes（WYSIWYG，无独立预览栏）**：中心切换为 Notes 时全宽编辑 `NOTES.md`；中心为 PDF/HTML 时右侧栏显示同一篇 `NOTES.md` 实时编辑。论文库视图或未选论文时隐藏。
-  - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选的固定工具栏（`editor-toolbar.tsx`），提供标题（H1–H3）、引用、加粗 / 斜体 / 下划线 / 删除线 / 行内代码 / 高亮、无序 / 有序 / 待办列表、**插入图片**等常用格式按钮，无需手写 Markdown 即可排版。由全局设置 `showEditorToolbar`（默认开）控制，Notes 面板 header 右侧另有 `PanelTop` 一键显示 / 隐藏；只读时不渲染。所有按钮均有 `aria-label` + Tooltip，i18n `editor:toolbar.*`。
-  - **编辑体验**：有序 / 无序列表经 Plate list 插件可正常编辑；文本选区为中性色（非高饱和系统蓝）；文档末与图片后保持可点 trailing paragraph，便于点到最后一行并继续输入。
-  - **Markdown 图片**（已落地）：
-    - **插入**：粘贴剪贴板图 / 工具栏「插入图片」→ 二进制写入当前 `.md` 旁 `{mdDir}/assets/` → 正文 `![alt](./assets/…)`（不写 base64）。
-    - **预览**：相对路径解析为 `blob:` 位图；**选中**时保留位图 + ring，下方显示 monospace Markdown 源码（不再用源码替换图片）。
-    - **删除**：节点离开文档且 managed `./assets/` 引用计数归零 → **延迟 GC**（~15s，剪切粘贴/撤销可取消；关编辑器 flush）→ 刷新文件树（`onAssetsChanged`）。
-    - 实现：`src/lib/markdown-image.ts`、`markdown-editor.tsx`、`image-node.tsx`、`editor-toolbar.tsx`；i18n `editor:toolbar.image` / `editor:image.*`。
-    - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
-  - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`（有弹层时 `⌘W` 先关弹层，见 §3.0）。
+  - **左侧 Paper Info**（`sidebar/paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。展开时顶部边框为**纵向拖拽把手**（可键盘 ↑/↓，Shift 加速），调节内容区高度（120–560px，localStorage `agentero.paperInfoHeight` 持久化）；作者与摘要不再行数截断，超出滚动。**Tags** 可编辑：输入框在 chip 上方；输入框**右侧圆形色点**打开色盘（Apple 风格 8 色 + 默认）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`）。
+  - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF 同组 sibling tab）；非独立右侧 Notes 列。论文库视图或未选论文时不自动开 NOTES。
+  - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选固定工具栏（`editor-toolbar.tsx`）：标题、引用、加粗/斜体等、列表、**插入图片**。全局设置 `showEditorToolbar`（默认开）；只读时不渲染。i18n `editor:toolbar.*`。
+  - **编辑体验**：Plate list 可编辑；文本选区中性色；文档末与图片后保持 trailing paragraph。
+  - **Markdown 图片**（已落地）：粘贴/工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时延迟 GC。实现：`src/lib/markdown-image.ts`；约定见 [`../backend/data-model.md`](../backend/data-model.md)。
+  - **Notes 开关**：Layout 菜单 / 快捷键切换当前论文的 NOTES panel（`toggleNotesSplit`）；`⌘3` 聚焦 Notes（未开则先打开）。关闭文档 panel 走 dockview tab `X` 或 `⌘W`（有弹层时先关弹层，见 §3.0）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
-- **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/shell/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
-- Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
-- **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 **Layout / 面板** 菜单中的禅模式项）：
-  - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + **返回**（`ArrowLeft`，不再用关闭 `X`）；隐藏后台任务条与 Notes；Agent 面板头**无**重复退出按钮。
-  - **同一** `AgentPanel` 实例保持挂载（CSS 切换 / 不 remount），会话与流式状态不丢。
-  - **布局**（`variant="zen"`）：
-    - **左侧栏**（Quest 式弱对比）：浅灰底；顶部 pill「新建会话」；下方静音分区标题 + **单行**历史标题列表（当前会话高亮；运行中小绿点）。无「外部会话」开关；无 agent/状态/时间元信息堆叠。
-    - **主区顶栏**：仅 **Agent 切换**（**无** 1/2/3 会话数字标签页；历史切换走左侧列表或侧栏 History 弹出层）。
-    - **对话区**（AI Elements）：`Conversation` 视口**全宽**（滚动条贴主区最右，`agentero-scroll`）；消息 / Composer 内容 `max-w-2xl` 居中；空态垂直居中；组件：`Message` / `Reasoning` / `Plan` / `Tool` / `PromptInput` / `Suggestion` / `Sources` / `Checkpoint` 等。
-  - **侧栏模式**（非禅）：顶栏仍为 Agent 切换 + 新建 + History 弹出层；无 1/2/3 数字标签。
-  - **历史过滤**：精读 `paper_reader`、PDF 划词提问等非 Composer 工作流传 `hideFromChatHistory`，不写入会话历史、不出现在对话记录；进度只走左下角后台任务条。
-  - 退出：标题栏 **返回图标**，或再次 `⌥⌘Z`；恢复进入前左栏折叠意图与右栏默认宽度。
+- **Layout 菜单**（标题栏 `PanelsTopLeft`，`src/components/shell/layout-menu.tsx`）：切换 **左侧边栏 / Notes panel / 右侧边栏 / 禅模式**；Notes 项仅在打开论文 PDF/HTML（或 NOTES 本身）时可用。i18n `app:titlebar.layout*`。
+- Backlinks 入口内上下分区：上方反链，下方 Graph（非独立顶层 tab）。
+- **Agent 禅模式**（`⌥⌘Z` 或 Layout 菜单）：折叠左栏与中间主栏，Agent 全屏；标题栏仅拖拽 + 返回；隐藏后台任务条；**同一** `AgentPanel` 不 remount。禅模式布局见 §3.2 / components.md。
 - **左右侧栏隔离**（`react-resizable-panels`）：
-  - 左栏（文件树）与右栏（Agent/Backlinks）均为 **常驻 collapsible 面板**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**对右栏做条件卸载整块 `ResizablePanel`（否则 Group 重排会冲掉左栏折叠态）。
-  - 两侧使用 `groupResizeBehavior="preserve-pixel-size"`，并把上次展开像素宽记入 ref；中间主栏保持默认相对尺寸。
-  - Notes 列仍随论文选中条件挂载（需真实 `defaultSize` 才能出现）；`showNotesOnRight` 变化后 rAF 再 assert 左右栏宽度/折叠意图，避免 Library ↔ paper 时左栏跳宽。
-- **文档标签栏位置**：标题栏**无**文档 tab 条；文档 tab 由中间栏 dockview 原生管理。中间栏仅保留 view mode / 文档标题工具行。
-- 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；全局操作错误走右上角 toast（§2.1.2），不撑高标题栏。
-- 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
-- **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/shell/resizable.tsx`。
-- **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
-  - 默认竖向：`.agentero-scroll`（`overflow-x: hidden; overflow-y: auto`）。
-  - 需双向滚动（论文库表）：`.agentero-scroll-both`。
-- **中间栏视图切换**（纯图标 + Tooltip）：**仅 PDF · HTML**（`ViewModeToggle`）；无 PDF/HTML 时不显示切换。论文库视图下不显示。
-  - Notes / 普通 Markdown 文件：**所见即所得富文本编辑**（Plate），在 Notes 侧栏或打开 `.md` 时编辑；不占中间栏切换卡片。
-  - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
-  - **双链**：`[[目标#标题|别名]]` 与 `![[嵌入]]` 由 `@flowershow/remark-wiki-link` 解析并 **无损回写**；渲染仍复用既有 exists/missing 样式与点击导航。
-  - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
-  - PDF / HTML / **图片** **预览**：
-    - **PDF（任意路径）**：Vault 内任意位置的 `.pdf`（根目录、`notes/`、paper 内嵌套文件等）均可直接打开；`readFile` → `blob:` → PDF.js（**不用** `convertFileSrc`/`asset://`）。
-    - **PDF（论文单元）**额外链路：① 论文文件夹内本地 PDF（根目录 `{id}.pdf` 优先，兼容 `source/` 等嵌套）；② **无本地 PDF** 时自动 `paper_download_assets`；③ 失败回退 catalog 远程 `pdf_url`（或 `arxiv_id` 推导 URL）。点开 paper 内某一具体 `.pdf` 时优先该文件字节。
+  - 左栏与右栏均为 **常驻 collapsible**（`collapsedSize=0`），用 `expand`/`collapse`/`resize` 切换，**不要**条件卸载整块右栏 `ResizablePanel`。
+  - `groupResizeBehavior="preserve-pixel-size"`；上次展开像素宽记入 ref。
+- **文档 tab 位置**：标题栏**无**文档 tab；由中间栏 dockview 原生管理（见 §3.1.1）。
+- 各栏 header 等高：`h-10`（`PaneHeader`）；操作错误走右上角 toast（§2.1.2）。
+- **面板分隔（sash）**：默认 **1px** 细线；实现见 `src/components/shell/resizable.tsx`。
+- **独立滚动**：侧边栏 / 中间 dockview 内容 **各自**滚动，顶栏固定。
+  - 默认竖向：`.agentero-scroll`；双向（论文库表）：`.agentero-scroll-both`。
+- **中间栏视图**：
+  - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。
+  - **双链**：`[[…]]` / `![[…]]` 经 remark-wiki-link 解析并无损回写。
+  - **YAML frontmatter** 按字节保留；Plate 会归一化部分 Markdown 风格。
+  - PDF / HTML / **图片** 预览：
+    - **PDF（任意路径）**：Vault 内任意 `.pdf` → `readFile` → `blob:` → **EmbedPDF / PDFium**（**不用** `convertFileSrc`/`asset://`）。
+    - **PDF（论文单元）**：① 本地根目录 `{id}.pdf` 优先；② 无本地时 `paper_download_assets`；③ 失败回退远程 `pdf_url`。
     - **HTML**：仍读远程 `html_url`（iframe）；本地 `.html` 文件尚无 file 沙盒预览。
     - **图片**：常见格式 `.png` / `.jpg` / `.jpeg` / `.gif` / `.webp` / `.bmp` / `.svg` / `.avif` / `.ico` → `readFile` → `blob:` → 中间栏 `ImageViewer`（居中 contain、可滚动）；任意 Vault 路径。
   - **本地归档**：魔棒 / `paper_download_assets` 将 PDF 写入 `{paper}/{id}.pdf`（根目录），arXiv LaTeX 到 `source/`；预览优先读同一本地 PDF。
@@ -265,18 +247,18 @@
     - `html_url`: `https://arxiv.org/html/{id}`
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
-  - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 PDF.js 渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
+  - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 EmbedPDF（PDFium）渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
   - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）；**放大后**缩放停下 ~160ms 后按**真实比例**重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero），手势中以 transform 比值即时反馈；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
-  - **PDF 性能（页面窗口化）**：只给「当前页 ±4」（`PAGE_WINDOW`）渲染真实 `<Page>`（canvas + 文本层 + 批注层），其余为等高占位 div；`currentPage` 由 `IntersectionObserver` 跟踪、随滚动移动窗口。避免大 PDF（几十上百页）一次性挂载全部 canvas，并把缩放重渲染限制在窗口内。
+  - **PDF 性能**：EmbedPDF Tiling / 视口渲染，按可见区域绘制；缩放与滚动由引擎插件处理。
   - **PDF 页码导航**：底部居中页码 pill（`‹ [当前页] / 总页数 ›`，输入数字回车跳页）；当前页用 `IntersectionObserver` 跟踪；键盘 `PageDown/PageUp` 翻页、`Home/End` 首/末页（PDF 区悬停或聚焦时生效，输入框内不拦截）；**续读**：按论文（路径）记住上次页码，重开自动续上（`pdf-reading-position.ts`，localStorage）。i18n `viewer:pdf.prevPage/nextPage/goToPage`。
-  - **PDF 大纲（书签）**：有大纲时左上 `List` 按钮切换**左侧浮层目录**（`getOutline()` 读书签树；点条目经 `getDestination`/`getPageIndex` 解析跳页）；无大纲不显示。i18n `viewer:pdf.outline`。
-  - **PDF 文档内查找**（`⌘/Ctrl+F`）：右上查找条（查询 + 命中计数 + 上/下一个 + `Esc` 关闭；`Enter`/`Shift+Enter` 循环）。`pdf-find.ts` 用 pdfjs `getTextContent` 逐页搜索（按页缓存）；命中滚动到该页并把该次出现映射回**文本层 rects** 高亮（复用 pdf-ask 归一化覆盖层），文本层未就绪时仅滚动。i18n `viewer:pdf.find*`。
+  - **PDF 大纲（书签）**：有大纲时左上 `List` 切换左侧浮层目录（`@embedpdf/plugin-bookmark`）；点条目跳页；无大纲不显示。i18n `viewer:pdf.outline`。
+  - **PDF 文档内查找**（`⌘/Ctrl+F`）：右上查找条（查询 + 命中计数 + 上/下一个 + `Esc` 关闭；`Enter`/`Shift+Enter` 循环）。EmbedPDF `/plugin-search`：查询条 + 命中计数 + 上/下一个；命中滚动并高亮。i18n `viewer:pdf.find*`。
   - **PDF 沉浸式阅读**（工具栏 `Maximize2` 进入 / `Minimize2` 或 `Esc` 退出）：折叠左右侧栏 + 隐藏中间栏头，PDF 铺满窗口；正文**限宽 ≤ 1100px 居中**（舒适阅读 + 两侧留白），缩放 / 页码 / 大纲 / 查找浮层照常；切到非 PDF tab 自动退出。i18n `viewer:pdf.zenEnter/zenExit`。
   - **PDF 划词操作菜单**（已落地，见 [`../development/pdf-ask.md`](../development/pdf-ask.md)）：
     - 划词后在选区旁弹出操作菜单（图标 + Tooltip）：**5 色色板 + 复制 / 笔记 / 提问 / 翻译**（点色板 = 该色**高亮**；复制 / 笔记有内联确认）；选区以**平滑蓝色覆盖层**呈现（`selectionRectsByPage` 按行合并 rects + `SELECTION_CSS` 隐藏原生 `::selection`，对齐 Zotero、点掉即消）。双击 / 悬停停留仍直接开问答卡（页码上下文）。
     - 划词标记统一落在 **`papers/<id>/marks/`**：高亮 / 批注 → **`marks/annotations.json`**（EmbedPDF 注解；`contents` 非空 = 批注）；提问 / 翻译 → **`marks/<id>.json`**（`kind`: `ask` / `translate`）。提问为多轮 `messages`；成功翻译含 `result` 可回访。翻译 API 失败时仅保留当前错误卡片，不落盘且不显示页边入口，卡片提供跳转翻译设置。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
   - **PDF 引用与插图（规划中）**：本地 paper PDF 由 Host 生成 `source/agentero-cite.json`、`source/agentero-figures.json` 和 `source/agentero-figures/*.png`；右侧 `Paper Content` 展示 citations/figures。引用 hover 只高亮并预览，点击或侧栏操作跳至参考文献；figure card 跳至 PDF bbox。`@` 菜单和拖拽支持结构化 citation/figure context。完整契约见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。
-  - **PDF/HTML 时右侧自动加载该篇 `NOTES.md`**（可编辑，自动保存 / `⌘S`）
+  - **PDF/HTML 时默认同组打开 `NOTES.md` panel**（可编辑，自动保存 / `⌘S`；Layout 菜单可关）
   - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
@@ -308,10 +290,10 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
-| `⌥⌘→` / `⌥⌘←` | 下一 / 上一标签（`nextTab` / `prevTab`） | 在打开的文档标签间循环 |
+| `⌥⌘→` / `⌥⌘←` | 下一 / 上一 panel | 按 dockview `api.panels` 视觉序循环（`cycleActive`） |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
-| `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话（quest / Agents Window 心智）；再按退出；`toggleAgentZen` |
-| `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand`；设置 Keyboard 可见 |
+| `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话；再按退出；`toggleAgentZen` |
+| `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand` |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
@@ -325,28 +307,28 @@
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
 - **论文行 Zap（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Claude 用 `/paper-reader`，其它（含 Codex）靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。若设置开启 `autoPaperReader`，魔棒 / 单篇 Download 成功后也会自动跑（批量不连跑）。进度在左下角后台任务条。
 
-### 3.1.1 文档标签页（已落地）与分屏（规划，roadmap V0.6）
+### 3.1.1 全局 Dockview 工作区（V0.6 已落地）
 
-**浏览器式文档标签页**（`src/components/workspace/tab-workspace.tsx`、模型 `src/lib/tabs.ts`）位于**窗口标题栏**（与 Layout / 侧栏图标同行）：
+中间栏由 **单一全局 Dockview** 管理全部打开文档（`src/components/workspace/tab-workspace.tsx`、模型 `src/lib/tabs.ts`）。**标题栏无文档 tab 条**。完整契约见 [`../development/tab-split.md`](../development/tab-split.md)。
 
-- **多 tab**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** 各占一个 tab，可切换、关闭（`X` / 中键 / `⌘W`）、拖拽重排；同一路径已开则聚焦其 tab。
+- **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
+- **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **同组 sibling tab**。
 - **默认页 = 全库 Library**：
-  - 打开 Vault 无持久化 tab → `ensureFullLibraryTab()`。
-  - 关 tab 后列表为空 → 自动打开全库（无「无标签」空态）。
-  - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关当前 tab，关空后回全库。
-- **常驻挂载**：每个 tab 保持 mounted（非激活 `hidden`）；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
-- **状态派生**：`activeTab` 驱动路径 / 模式 / Notes；作用域 Library 的 `path` 为文件夹绝对路径，树高亮该组织夹。
-- **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
-- **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
-- **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
-- **Wiki 索引刷新**：`.md` 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph，避免外部/Agent 写盘后图谱陈旧。
-- **保存冲突检测（防丢数据）**：autosave / `⌘S` / 卸载 flush 写盘前，`persistFile` 比对磁盘内容与上次落盘内容；若文件已被外部修改则**中止写入**并 `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖外部变更。
+  - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。
+  - 关 panel 后列表为空 → 自动打开全库。
+  - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关 active panel，关空后回全库。
+- **常驻挂载**：panel 内容保持 mounted；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
+- **焦点**：完全听 dockview `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` **视觉序**循环。
+- **持久化**：**只存** dockview `toJSON()`（panel params 含 path/mode）；按窗口恢复。
+- **NOTES**：`createNotesSplitPane` 派生独立 panel；paper-reader / download 写回后按路径 reseed。
+- **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`src/lib/fs-watch.ts`）。打开中的 `.md`/`NOTES.md`：无未存改动则重载；有未存改动 toast 提示不静默覆盖；内容相等抑制自写回声。结构性变更去抖刷新文件树。
+- **Wiki 索引**：`.md` 变更 → `scheduleWikiRebuild`（~900ms 防抖）。
+- **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。
 
-规划中（尚未实现）：
+后续增强（未做）：
 
-- **2 格分屏**（水平或垂直）：例如 PDF | NOTES、两篇 paper 并排；分屏快捷键随实现补入本表与 `shortcuts.ts`。
-- tab 固定（pin）、按 paper 分组、「当前 tab vs 新 tab 打开」策略可配。
-- 与 Agent 面板 **会话标签** 分离（不同概念）。
+- tab 固定（pin）、按 paper 分组、「当前 panel vs 新 panel 打开」策略可配。
+- 与 Agent 面板 **会话标签** 分离（不同概念，已成立）。
 
 ### 3.1.2 规划：PDF 引用与插图
 
@@ -459,7 +441,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 **页面职责**
 
 - **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者 (年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
-- **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**语言（跟随系统 / English / 简体中文）**、**工具栏按钮大小**（`toolbarIconSize`，滑块 12–22px，默认 14；驱动标题栏图标按钮的图标与按钮盒尺寸，经 `<header>` 上的 `--tb-icon` / `--tb-btn` CSS 变量级联到 `WorkspaceHeader` 与 `LayoutMenu`，为视力不佳用户提供无障碍放大）；其下分组 **Markdown 编辑器**（`appearance.markdownEditor.section`）：编辑字号、**格式工具栏**（`showEditorToolbar`，控制 Markdown/Notes 编辑器顶部的 WYSIWYG 工具栏，默认开）。
+- **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**界面缩放**（`uiScale`：80% / 90% / 100% / 125% / 150%，默认 100%；通过 `<html>` `font-size` 全局缩放，旧 `toolbarIconSize` 仅一次性迁移）、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown 编辑器**：编辑字号、**格式工具栏**（`showEditorToolbar`，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
   - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
@@ -533,4 +515,4 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 - 图标：**Lucide React**。
 - 优先复用 `Button`（`variant="ghost"` + `size="icon-xs"`）、`Tooltip`、`Switch`、`Select`、`Input`、`DropdownMenu`。
-- 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/frontend/components.md`
+- - 参考：[shadcn/ui](https://ui.shadcn.com/) · [AI Elements](https://elements.ai-sdk.dev/) · `docs/frontend/components.md`
