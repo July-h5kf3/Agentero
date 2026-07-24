@@ -81,7 +81,6 @@ pub struct BlockAnchor {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedLink {
-    #[serde(flatten)]
     pub occurrence: InternalLinkOccurrence,
     pub status: LinkResolutionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -253,4 +252,38 @@ pub struct GraphResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub center: Option<String>,
     pub depth: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backlinks_serialize_occurrences_as_nested_api_objects() {
+        let response = BacklinksResponse {
+            path: "notes/Target.md".to_string(),
+            backlinks: vec![ResolvedLink {
+                occurrence: InternalLinkOccurrence {
+                    source: "notes/Source.md".to_string(),
+                    target_raw: "notes/Target".to_string(),
+                    syntax: InternalLinkSyntax::Wikilink,
+                    embed: false,
+                    display_text: None,
+                    fragment: None,
+                    source_range: SourceRange { start: 4, end: 16 },
+                    line: 1,
+                    context: Some("[[notes/Target]]".to_string()),
+                },
+                status: LinkResolutionStatus::Resolved,
+                target_path: Some("notes/Target.md".to_string()),
+                candidates: Vec::new(),
+            }],
+        };
+
+        let value = serde_json::to_value(response).expect("backlinks serialize");
+        let link = &value["backlinks"][0];
+        assert_eq!(link["occurrence"]["source"], "notes/Source.md");
+        assert_eq!(link["occurrence"]["targetRaw"], "notes/Target");
+        assert!(link.get("source").is_none());
+    }
 }
