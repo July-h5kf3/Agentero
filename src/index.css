@@ -288,6 +288,28 @@
 	z-index: 2;
 }
 
+/*
+ * Cap each document tab so long paper titles do not dominate the tab strip.
+ * Ellipsis needs min-width:0 on the flex chain + overflow on the title span.
+ */
+.agentero-dockview .dv-tab {
+	max-width: 12rem;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.agentero-dockview .dv-tab .dv-default-tab {
+	min-width: 0;
+	overflow: hidden;
+}
+
+.agentero-dockview .dv-tab .dv-default-tab-content {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* Global workspace: always show dockview tab chrome (it owns document tabs). */
 .agentero-dockview.agentero-dock-global .dv-tabs-and-actions-container {
 	display: flex !important;
