@@ -1,8 +1,11 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::log_util::{trunc, OpTimer};
+use crate::models::wiki::WikiRenameResult;
 use crate::services::vault::{self, CreateVaultResult};
+use crate::services::wiki::rename::run_local_rename_transaction;
+use crate::services::wiki::WikiIndexState;
 use std::path::PathBuf;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_fs::FsExt;
 
 fn vault_path_arg(path: &str) -> Result<std::path::PathBuf, AppError> {
@@ -69,5 +72,37 @@ pub fn vault_allow_fs_scope<R: Runtime>(app: AppHandle<R>, path: String) -> ApiR
             op.finish_err(&err);
             map_err(err)
         }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiMoveArgs {
+    pub vault_path: String,
+    /// Vault-relative file or directory path to rename/move.
+    pub from_rel: String,
+    /// Vault-relative final path, including the new basename.
+    pub to_rel: String,
+}
+
+/// Move or rename one local Vault path while updating resolved internal links.
+#[tauri::command]
+pub fn wiki_move(
+    args: WikiMoveArgs,
+    index: State<'_, WikiIndexState>,
+) -> ApiResult<WikiRenameResult> {
+    let vault = match vault_path_arg(&args.vault_path) {
+        Ok(vault) if vault.is_dir() => vault,
+        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+        Err(error) => return map_err(error),
+    };
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    match run_local_rename_transaction(&vault, &mut guard, &args.from_rel, &args.to_rel, || Ok(()))
+    {
+        Ok(result) => ApiResult::ok(result),
+        Err(error) => map_err(AppError::message(error.to_string())),
     }
 }

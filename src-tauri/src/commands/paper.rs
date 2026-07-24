@@ -1,9 +1,13 @@
 //! Paper metadata commands — catalog.sqlite is authoritative.
 
 use crate::error::{map_err, ApiResult, AppError};
+use crate::models::wiki::WikiRenameResult;
 use crate::services::catalog::papers::{self, PaperRecord};
+use crate::services::wiki::rename::run_local_rename_transaction;
+use crate::services::wiki::WikiIndexState;
 use serde::Deserialize;
 use std::path::PathBuf;
+use tauri::State;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -139,19 +143,31 @@ pub struct PaperMoveArgs {
 pub struct PaperMoveResult {
     /// New vault-relative path of the moved item.
     pub new_rel: String,
+    /// Link-aware transaction details for UI refresh and diagnostics.
+    pub link_update: WikiRenameResult,
 }
 
 /// Move an item into another `papers/` folder on disk and rewrite matching
 /// catalog path prefixes. Never overwrites an existing target.
 #[tauri::command]
-pub fn paper_move(args: PaperMoveArgs) -> ApiResult<PaperMoveResult> {
-    match move_inner(args) {
+pub fn paper_move(
+    args: PaperMoveArgs,
+    index: State<'_, WikiIndexState>,
+) -> ApiResult<PaperMoveResult> {
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    match move_inner(args, &mut guard) {
         Ok(r) => ApiResult::ok(r),
         Err(e) => map_err(e),
     }
 }
 
-fn move_inner(args: PaperMoveArgs) -> Result<PaperMoveResult, AppError> {
+fn move_inner(
+    args: PaperMoveArgs,
+    index: &mut crate::services::wiki::index::WikiIndex,
+) -> Result<PaperMoveResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
@@ -185,20 +201,16 @@ fn move_inner(args: PaperMoveArgs) -> Result<PaperMoveResult, AppError> {
     if new_rel == from {
         return Err(AppError::message("already in this folder"));
     }
-    let from_abs = vault.join(&from);
-    if !from_abs.exists() {
-        return Err(AppError::message("source path does not exist"));
-    }
-    let new_abs = vault.join(&new_rel);
-    if new_abs.exists() {
-        return Err(AppError::message("target already exists"));
-    }
-    if let Some(parent) = new_abs.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::rename(&from_abs, &new_abs)?;
-    papers::move_under_path(&vault, &from, &new_rel)?;
-    Ok(PaperMoveResult { new_rel })
+    let link_update = run_local_rename_transaction(&vault, index, &from, &new_rel, || {
+        papers::move_under_path(&vault, &from, &new_rel)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    })
+    .map_err(|error| AppError::message(error.to_string()))?;
+    Ok(PaperMoveResult {
+        new_rel,
+        link_update,
+    })
 }
 
 #[derive(Debug, Deserialize)]

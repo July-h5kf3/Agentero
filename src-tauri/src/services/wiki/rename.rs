@@ -375,6 +375,42 @@ impl WikiRenameTransaction {
     }
 }
 
+/// Rebuild the old snapshot, execute one local rename transaction, then rebuild
+/// the index only after success. Callers can attach one dependent commit while
+/// the filesystem transaction is still recoverable (for example catalog paths).
+pub fn run_local_rename_transaction<F>(
+    vault_root: &Path,
+    index: &mut WikiIndex,
+    from: &str,
+    to: &str,
+    commit: F,
+) -> Result<WikiRenameResult, WikiRenameError>
+where
+    F: FnOnce() -> Result<(), String>,
+{
+    let vault_path = vault_root.to_str().ok_or_else(|| {
+        WikiRenameError::new(
+            WikiRenameErrorCode::InvalidPath,
+            "vault path is not valid UTF-8",
+        )
+    })?;
+    index.rebuild(vault_path).map_err(|error| {
+        WikiRenameError::new(
+            WikiRenameErrorCode::IndexStale,
+            format!("could not build pre-move wiki snapshot: {error}"),
+        )
+    })?;
+    let transaction = WikiRenameTransaction::plan(vault_root, index, from, to)?;
+    let result = transaction.execute(commit)?;
+    index.rebuild(vault_path).map_err(|error| {
+        WikiRenameError::new(
+            WikiRenameErrorCode::CommitFailed,
+            format!("move succeeded but wiki index rebuild failed: {error}"),
+        )
+    })?;
+    Ok(result)
+}
+
 fn normalize_vault_path(path: &str) -> Result<String, WikiRenameError> {
     let path = path.trim().replace('\\', "/");
     let path = path.trim_matches('/');
@@ -667,6 +703,30 @@ mod tests {
             fs::read_to_string(root.join("notes/Source.md")).unwrap(),
             "[[Target]]\n"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn failed_dependent_commit_restores_markdown_and_primary_move() {
+        let root = temp_vault();
+        write(&root, "notes/Source.md", "[[notes/Target]]\n");
+        write(&root, "notes/Target.md", "# Target\n");
+        let index = snapshot(&root);
+        let transaction =
+            WikiRenameTransaction::plan(&root, &index, "notes/Target.md", "archive/Target.md")
+                .expect("plan");
+
+        let error = transaction
+            .execute(|| Err("catalog update failed".to_string()))
+            .expect_err("catalog failure must roll back");
+        assert_eq!(error.code, WikiRenameErrorCode::CommitFailed);
+        assert_eq!(error.rollback, WikiRenameRollback::Completed);
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).unwrap(),
+            "[[notes/Target]]\n"
+        );
+        assert!(root.join("notes/Target.md").exists());
+        assert!(!root.join("archive/Target.md").exists());
         let _ = fs::remove_dir_all(root);
     }
 
