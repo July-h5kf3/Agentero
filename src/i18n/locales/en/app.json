@@ -163,6 +163,7 @@
 		"downloadPhaseAsset": "Asset",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
+		"batchProgress": "{{phase}} · {{current}} / {{total}}",
 		"downloadRefreshing": "Refreshing library… · {{path}}",
 		"lookupImport": "Add paper",
 		"lookupFetching": "Fetching metadata & assets… · {{id}}",

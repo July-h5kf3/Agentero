@@ -177,7 +177,7 @@
 	},
 	"lookup": {
 		"magicWand": "Add by identifier",
-		"placeholder": "arXiv URL or ID…",
+		"placeholder": "arXiv URL / ID, DOI… one or more",
 		"add": "Add",
 		"adding": "Adding…",
 		"addTo": "Add to {{path}}",
@@ -187,7 +187,12 @@
 		"fetchFailed": "Failed to fetch metadata.",
 		"needsVault": "Open a vault first.",
 		"pdfDownloadFailed": "Paper added, but PDF download failed. Use the Download button on the paper row to retry.",
-		"pdfDownloadFailedDetail": "Paper added, but PDF download failed: {{detail}}"
+		"pdfDownloadFailedDetail": "Paper added, but PDF download failed: {{detail}}",
+		"batchEmpty": "No valid identifiers found.",
+		"batchSummary": "Imported {{imported}}, skipped {{skipped}}, failed {{failed}}",
+		"batchDownloadQueue": "Downloading assets for {{count}} papers…",
+		"batchDuplicateInBatch": "Duplicate in input",
+		"batchAlreadyInLibrary": "Already in library"
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",

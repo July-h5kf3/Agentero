@@ -177,7 +177,7 @@
 	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",
-		"placeholder": "arXiv 链接或编号…",
+		"placeholder": "arXiv 链接/编号、DOI… 可输入多个",
 		"add": "添加",
 		"adding": "添加中…",
 		"addTo": "加入 {{path}}",
@@ -187,7 +187,12 @@
 		"fetchFailed": "获取元数据失败。",
 		"needsVault": "请先打开知识库。",
 		"pdfDownloadFailed": "论文已入库，但 PDF 下载失败。请在论文行点击下载按钮重试。",
-		"pdfDownloadFailedDetail": "论文已入库，但 PDF 下载失败：{{detail}}"
+		"pdfDownloadFailedDetail": "论文已入库，但 PDF 下载失败：{{detail}}",
+		"batchEmpty": "未识别到有效标识符。",
+		"batchSummary": "已导入 {{imported}} 篇，跳过 {{skipped}} 篇，失败 {{failed}} 篇",
+		"batchDownloadQueue": "正在下载 {{count}} 篇论文资源…",
+		"batchDuplicateInBatch": "输入中重复",
+		"batchAlreadyInLibrary": "已在论文库中"
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",

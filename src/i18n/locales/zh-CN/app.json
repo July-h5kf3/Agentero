@@ -163,6 +163,7 @@
 		"downloadPhaseAsset": "资源",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
+		"batchProgress": "{{phase}} · {{current}} / {{total}}",
 		"downloadRefreshing": "正在刷新论文库… · {{path}}",
 		"lookupImport": "添加论文",
 		"lookupFetching": "正在拉取元数据与资源… · {{id}}",
