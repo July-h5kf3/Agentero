@@ -31,6 +31,8 @@ pub struct AppSettings {
     pub connector_enabled: bool,
     #[serde(default = "default_connector_port")]
     pub connector_port: u16,
+    #[serde(default = "default_batch_import_concurrency")]
+    pub batch_import_concurrency: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_ui_theme")]
@@ -124,6 +126,7 @@ impl Default for AppSettings {
             library_columns: default_library_columns(),
             connector_enabled: false,
             connector_port: default_connector_port(),
+            batch_import_concurrency: default_batch_import_concurrency(),
             theme: default_theme(),
             ui_theme: default_ui_theme(),
             locale: default_locale(),
@@ -200,6 +203,9 @@ fn default_connector_port() -> u16 {
 #[cfg(target_os = "ios")]
 fn default_connector_port() -> u16 {
     23119
+}
+fn default_batch_import_concurrency() -> u32 {
+    3
 }
 fn default_translate_target() -> String {
     "ui".into()
@@ -312,6 +318,9 @@ fn persist(path: &PathBuf, settings: &AppSettings) -> Result<(), AppError> {
 fn normalize(s: &mut AppSettings) {
     if s.connector_port == 0 {
         s.connector_port = default_connector_port();
+    }
+    if s.batch_import_concurrency < 1 || s.batch_import_concurrency > 10 {
+        s.batch_import_concurrency = default_batch_import_concurrency();
     }
     let url = s.translator_base_url.trim().trim_end_matches('/');
     s.translator_base_url = if url.is_empty() {

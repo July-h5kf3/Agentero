@@ -654,6 +654,30 @@ function GeneralPane({
 			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.translatorBaseUrl.hint")}
 			</p>
+			<SettingsGroup>
+				<SettingsRow
+					label={t("general.batchImportConcurrency.label")}
+					htmlFor="batch-import-concurrency"
+					description={t("general.batchImportConcurrency.hint")}
+				>
+					<Input
+						id="batch-import-concurrency"
+						type="number"
+						min={1}
+						max={10}
+						step={1}
+						value={settings.batchImportConcurrency}
+						onChange={(e) => {
+							const v = Number.parseInt(e.target.value, 10);
+							if (Number.isNaN(v)) return;
+							patch({
+								batchImportConcurrency: Math.max(1, Math.min(10, v)),
+							});
+						}}
+						className="h-8 w-20 tabular-nums"
+					/>
+				</SettingsRow>
+			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />
 		</>

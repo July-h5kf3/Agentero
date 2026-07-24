@@ -47,6 +47,10 @@
 			"label": "Translator 服务地址",
 			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"
 		},
+		"batchImportConcurrency": {
+			"label": "批量导入并发数",
+			"hint": "一次粘贴多个标识符时，同时入库的最大并行数量。值越小对远端服务越友好；网络良好时适当提高可加快批量入库。"
+		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。支持本地与远程 Vault；默认关闭。",

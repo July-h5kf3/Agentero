@@ -101,6 +101,12 @@ export type AppSettings = {
 	 */
 	connectorEnabled: boolean;
 	connectorPort: number;
+	/**
+	 * Max concurrent identifier imports in a single magic-wand batch.
+	 * Clamped to 1–10; higher values download more papers in parallel but
+	 * increase rate-limit risk.
+	 */
+	batchImportConcurrency: number;
 	// Appearance
 	theme: ThemePreference;
 	/**
@@ -194,6 +200,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,
+	batchImportConcurrency: 3,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",
@@ -484,6 +491,16 @@ function normalizePartial(
 	}
 	if (typeof parsed.connectorEnabled !== "boolean") {
 		merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
+	}
+	if (
+		typeof merged.batchImportConcurrency !== "number" ||
+		!Number.isFinite(merged.batchImportConcurrency) ||
+		merged.batchImportConcurrency < 1 ||
+		merged.batchImportConcurrency > 10
+	) {
+		merged.batchImportConcurrency = DEFAULT_SETTINGS.batchImportConcurrency;
+	} else {
+		merged.batchImportConcurrency = Math.round(merged.batchImportConcurrency);
 	}
 	if (
 		merged.theme !== "system" &&
