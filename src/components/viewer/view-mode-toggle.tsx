@@ -20,9 +20,9 @@ const MODES: {
 	{ id: "html", labelKey: "mode.html", icon: FileCode2 },
 ];
 
-/** size-6 = 24px, gap-0.5 = 2px — keep in sync with class names below */
-const CELL = 24;
-const GAP = 2;
+/** Tailwind rem sizes: size-6 = 1.5rem, gap-0.5 = 0.125rem */
+const CELL = 1.5;
+const GAP = 0.125;
 
 type ViewModeToggleProps = {
 	value: CenterViewMode;
@@ -62,7 +62,7 @@ export function ViewModeToggle({
 							"transition-transform duration-200 ease-out will-change-transform",
 						)}
 						style={{
-							transform: `translate3d(${thumbX}px, 0, 0)`,
+							transform: `translate3d(${thumbX}rem, 0, 0)`,
 						}}
 					/>
 				) : null}
