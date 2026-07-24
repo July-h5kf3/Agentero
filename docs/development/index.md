@@ -50,6 +50,7 @@
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
+- [`tab-split.md`](tab-split.md)：Tab 内分屏（V0.6 split MVP）——标题栏 tab 条不动，单 tab 内 `primary | split` 两格；论文默认 PDF | NOTES；收编原右侧 Notes 列。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
 
 - [`.md`](.md)：简短产品假设。

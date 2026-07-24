@@ -110,7 +110,7 @@ Rescan / Download / saveAttachment **不必**全部塞进「新建 commit」，�
 
 ```text
 ┌──────────── UI / CLI / HTTP Connector ────────────┐
-│  魔棒  Connector  本地PDF  Bib  迁移  CLI  Rescan* │
+│  魔棒  Connector  本地 PDF  Bib  迁移  CLI  Rescan* │
 └───────────────┬───────────────────────────────────┘
                 │  Source adapter → PaperDraft
                 ▼
@@ -129,7 +129,7 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 
 ---
 
-## 4. Host：`paper_commit`
+## 4. Host:`paper_commit`
 
 建议模块：`src-tauri/src/services/lookup/commit.rs`（或新建 `services/paper_import/`，初期放 lookup 旁即可，避免过早拆 crate）。
 

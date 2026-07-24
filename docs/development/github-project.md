@@ -18,7 +18,7 @@
 | Title | Agentero |
 | Visibility | 私有（org 默认；可在网页改为 Public） |
 | 关联仓库 | [`poco-ai/Agentero`](https://github.com/poco-ai/Agentero)（`gh project link`） |
-| 看板 URL | https://github.com/orgs/poco-ai/projects/1 |
+| 看板 URL | <https://github.com/orgs/poco-ai/projects/1> |
 
 ### 1.1 推荐视图
 
@@ -190,7 +190,7 @@ B4/B5 编辑器 ─────── F7 / notes-review UX
 
 | 步骤 | 状态 |
 |---|---|
-| 创建 Org Project「Agentero」 | ✅ https://github.com/orgs/poco-ai/projects/1 |
+| 创建 Org Project「Agentero」 | ✅ <https://github.com/orgs/poco-ai/projects/1> |
 | Link 仓库 Agentero | ✅ |
 | 本结构文档入库 | ✅ 本文 |
 | 创建仓库 Labels | ✅ `type:*` / `area:*` / `priority:*` / `status:wip` |

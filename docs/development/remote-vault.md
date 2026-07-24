@@ -189,7 +189,7 @@ mutation（tags / rescan / is_read…）:
   立刻 SFTP PUT（建议 catalog.sqlite.tmp + rename）
   更新 FileMeta；失败则整次操作失败 + toast
 
-写前乐观锁:
+写前乐观锁：
   stat 远端；与打开/上次 push 的 meta 不一致 → Conflict，提示重新打开
 ```
 
@@ -294,7 +294,7 @@ type RemoteAgentLaunch = {
 | 最近本地 | **不得**收录 `remote:<sessionId>`（每次连接新 UUID；见 `rememberRecentVault` 过滤） |
 | 标题栏 / 树标题 | 远程展示 `displayName` + 「远程」徽章；会话内用伪路径 `remote:<sessionId>` |
 | 文件树 | **懒加载**：`papers/`/`notes/`/`plans/`/`.agents/` 打开时全量递归；其它根目录仅一层，`childrenPending` 展开再 list；忽略名永不 list。隐藏 Finder / 系统终端（`FsCaps`） |
-| Agent 面板 | 远端 transport；Codex+纯 SSH 暂拒 |
+| Agent 面板 | 远端 transport；Codex+ 纯 SSH 暂拒 |
 | 设置 → 通用 | 「清除远程缓存」（blob LRU 2 GiB/库） |
 | i18n | 全部 `t()`；先 `en` 再 `zh-CN` |
 
@@ -506,4 +506,4 @@ cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 
 - Codex App Server 经 SSH  
 - 更完整设置页远程偏好（默认 identity 等）  
-- 更广的 `std::fs` → `VaultFs` 迁移 
+- 更广的 `std::fs` → `VaultFs` 迁移

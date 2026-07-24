@@ -5,17 +5,17 @@
 
 ## 0. 设计原则
 
-Agentero 的存储遵循两条原则:
+Agentero 的存储遵循两条原则：
 
 1. **人的知识与原始归档以文件为准；结构化论文目录以 Catalog SQLite 为准**:笔记、标注、源文件必须是普通文件，可被外部编辑器打开；论文集合与 metadata 进入 `.agentero/catalog.sqlite`，支持查询与入库事务。这与 Zotero（几乎一切锁在单一 sqlite、笔记不可便携）不同：**笔记层仍是 Markdown**。
-2. **渐进式披露(Progressive Disclosure)**:目录与 catalog 共同构成 Agent 接口。信息按"体量递增、成本递增"分层,Agent 按需逐层下钻,而不是一次性加载整篇论文。
+2. **渐进式披露 (Progressive Disclosure)**:目录与 catalog 共同构成 Agent 接口。信息按"体量递增、成本递增"分层，Agent 按需逐层下钻，而不是一次性加载整篇论文。
 
 ### 0.1 渐进式披露分层
 
 | 层 | 载体 | Agent / UI 何时用 | 体量 |
 |---|---|---|---|
-| L0 指令 | `AGENTS.md` | 会话开始,总是 | 极小 |
-| L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小(每篇一行) |
+| L0 指令 | `AGENTS.md` | 会话开始，总是 | 极小 |
+| L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小 (每篇一行) |
 | L2 条目 | `{paper}/NOTES.md` | 锁定某篇之后 | 小 |
 | L2.5 证据 | `{paper}/marks/*.json`（划词高亮 / 批注 / 提问 / 翻译） | 需要用户标注 / 精确引文 | 中 |
 | L3 正文 | `{paper}/PAPER.md` | 需要公式 / 实验细节 / 原文 | 大 |
@@ -23,7 +23,7 @@ Agentero 的存储遵循两条原则:
 
 其中 `{paper}` = paper 文件夹（`papers/` 下任意深度，见下）。
 
-`AGENTS.md` 是渐进式披露的"总开关":它本身很短,只写清楚库怎么组织、L1 以 catalog 为准（根目录通常无 `PAPERS.md`）、按什么顺序读笔记与正文、引用要带本地路径、写入先走临时文件。
+`AGENTS.md` 是渐进式披露的"总开关":它本身很短，只写清楚库怎么组织、L1 以 catalog 为准（根目录通常无 `PAPERS.md`）、按什么顺序读笔记与正文、引用要带本地路径、写入先走临时文件。
 
 ### 0.2 事实来源分层
 
@@ -37,7 +37,7 @@ Agentero 的存储遵循两条原则:
 - 删除 Tier 3:重扫 Markdown + 读 catalog 标题即可恢复图谱等。
 - 删除 Tier 2:可从 catalog / source 再导出或再解析（**不含**用户粘贴进笔记的图片）。
 - **删除 `catalog.sqlite`**:结构化 meta 丢失（除非事先 export 备份）；`papers/<id>/` 目录仍在。
-- Tier 1a 是不可再生的用户手写与归档,任何写入都要谨慎(先临时文件、确认后落盘)。
+- Tier 1a 是不可再生的用户手写与归档，任何写入都要谨慎 (先临时文件、确认后落盘)。
 - **`assets/` 双义**：同一目录可同时存放（1）用户经编辑器插入的图（Tier 1a，删节点可 GC）；（2）PDF 解析等派生资源（Tier 2，可再生成）。二者文件名唯一，互不覆盖。
 
 ## 1. Vault 结构
@@ -84,15 +84,15 @@ agentero-vault/
 
 ## 2. 核心文件约定
 
-### `AGENTS.md`(L0,事实来源)
+### `AGENTS.md`(L0，事实来源)
 
-Vault 内的 Agent 行为规范,至少包含:
+Vault 内的 Agent 行为规范，至少包含：
 
 - **读取协议**:L1 以应用 catalog 为准（无默认 `PAPERS.md`）；锁定篇目后按 `NOTES.md → marks/ → PAPER.md → source/` 下钻。
-- 笔记结构规范(三段论)。
-- 引用路径要求:回答必须列出读取过的本地文件路径。
-- 生成内容的双链要求:保留 `[[...]]` 格式。
-- 写入规范:先写临时文件,用户确认后落盘;不得覆盖用户手写笔记。
+- 笔记结构规范 (三段论)。
+- 引用路径要求：回答必须列出读取过的本地文件路径。
+- 生成内容的双链要求：保留 `[[...]]` 格式。
+- 写入规范：先写临时文件，用户确认后落盘;不得覆盖用户手写笔记。
 
 ### 论文集合与 metadata（Catalog，非 Markdown 文件）
 
@@ -126,11 +126,11 @@ Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_en
 
 二者**不是**手工 master，也**不是**入库写路径；改 meta 只写 SQLite。导出后若用户再入库，导出文件**不会**自动更新（避免假装它是权威源）。
 
-### `NOTES.md`(L2,事实来源)
+### `NOTES.md`(L2，事实来源)
 
-单篇论文的结构化压缩笔记,纯粹是人的知识/综合产物,不掺元数据 frontmatter。
+单篇论文的结构化压缩笔记，纯粹是人的知识/综合产物，不掺元数据 frontmatter。
 
-默认结构:
+默认结构：
 
 ```md
 # 解决了什么问题
@@ -183,9 +183,7 @@ papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import �
 - 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight`（含 `annotation-store.ts`）/ `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
 - **阅读热力**：聚合 ask / translate mark 与高亮视图的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
-
-
-### `PAPER.md`(L3,派生)
+### `PAPER.md`(L3，派生)
 
 位于 paper 文件夹根部的 `PAPER.md`(不在 `source/` 内)。面向 Agent 阅读的统一可读正文。**仍是文件，不进 catalog 正文列。**
 
@@ -202,7 +200,7 @@ papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import �
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
 - 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Zap 手动精读
 
-正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建,`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
+正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建，`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
 
 ## 3. 数据类型
 
@@ -229,7 +227,7 @@ interface FileNode {
 
 ### 3.3 论文元数据 (Catalog `papers` 行)
 
-与 `.agentero/catalog.sqlite` 中一行对应,是单篇论文结构化元数据的事实来源（不再默认落盘 `metadata.json`）。
+与 `.agentero/catalog.sqlite` 中一行对应，是单篇论文结构化元数据的事实来源（不再默认落盘 `metadata.json`）。
 
 ```ts
 interface PaperMetadata {
@@ -349,7 +347,7 @@ interface PdfHighlight {
 
 ## 4. Catalog 与缓存纪律
 
-详见 [`catalog.md`](catalog.md)。摘要:
+详见 [`catalog.md`](catalog.md)。摘要：
 
 1. **Catalog（`papers` 表）是结构化目录的权威来源**，备份应包含 `.agentero/catalog.sqlite`。
 2. **入库与改 meta**：写 SQLite；文件系统负责对应 paper 文件夹下笔记与 source。
@@ -395,7 +393,7 @@ interface AgentResult {
 ## 6. 相关文档
 
 - [`catalog.md`](catalog.md)：Catalog schema、导出、Host 实现。
-- `docs/development/prd.md`:产品需求与验收标准(§5 文件结构)。
+- `docs/development/prd.md`:产品需求与验收标准 (§5 文件结构)。
 - `docs/development/technical-plan.md`:存储分层与入库/Agent 数据流；ACP Client + BYOA。
 - `docs/backend/api.md`:Host 命令与数据模型引用。
 - `docs/backend/wikilinks.md`:双链与图谱（paper 标题读 catalog）。

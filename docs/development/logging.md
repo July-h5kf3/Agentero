@@ -168,7 +168,7 @@ logger.error(`op end openVault ok=false duration_ms=${ms} error=${msg}`);
 
 按「用户可感知、有副作用或长耗时」优先。
 
-#### Host（Rust command / service）
+#### Host (Rust command / service)
 
 | 操作名（log name） | 入口 | 必记字段（脱敏） | 备注 |
 |---|---|---|---|
@@ -207,7 +207,7 @@ pub struct OpGuard { name: &'static str, start: Instant, /* fields */ }
 | 操作名 | 入口建议 | 备注 |
 |---|---|---|
 | `openVault` / `createVault` | `App` / `vault.ts` | 与 Host create 可双端都有；字段对齐 |
-| `runBackgroundTask` | `background-tasks.ts` | **统一包一层**：任意 kind 自动 start/end | 
+| `runBackgroundTask` | `background-tasks.ts` | **统一包一层**：任意 kind 自动 start/end |
 | `lookupImport` / 批量下载 | lookup 调用点 / App | 若已走 background task，可只靠 task 层 |
 | `paperRead` | `paper-read.ts` | 与 agent session 关联 sessionId |
 | `agentRunOnce`（Chat） | agent-panel | start 发消息；end 在 completed/failed |

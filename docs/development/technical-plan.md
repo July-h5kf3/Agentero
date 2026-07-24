@@ -152,6 +152,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 自定义 `[[双链]]` 插件 | 基于 Plate 插件机制实现双链输入、解析、高亮与点击跳转 |
 
 **选型理由**：
+
 - **所见即所得**：用户无需在源码和预览之间切换，编辑体验接近 Notion/Obsidian Live Preview。
 - **与 shadcn/ui 原生集成**：Plate 的 UI 组件直接基于 shadcn/ui 构建，与项目现有组件体系无缝配合。
 - **内置 AI 能力**：`@platejs/ai` 提供编辑器内 AI 交互（补全、改写、内联建议），可通过 ACP 对接 Agent 工作流。
@@ -159,6 +160,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - **Markdown 兼容**：通过 `@platejs/markdown` 实现 Markdown 文件的导入（反序列化为 Slate 文档）和保存（序列化为 Markdown 文本），保持与 Vault 文件的兼容。
 
 **注意事项**：
+
 - Plate 内部使用 Slate 数据模型，保存时需序列化为 Markdown 再写入磁盘，确保 Vault 文件仍为标准 Markdown。
 - Agent 写入的 Markdown 同样需反序列化为 Slate 文档后展示在编辑器中。
 - 对于习惯源码编辑的用户，后续可考虑提供 CodeMirror 源码模式作为可选切换。
@@ -191,6 +193,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 翻译服务 | 应用级可插拔 `TranslateService`（free + agent）；见 [`translate.md`](translate.md) |
 
 **分工说明**：
+
 - **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
 - **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
@@ -199,6 +202,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
 
 **可插拔 PDF 解析器（`PdfParser`）**：
+
 - 抽象 `PdfParser` trait，提供两个后端：本地 `LiteparseBackend`（默认，离线开箱即用）与云端 `MineruCloudBackend`（BYOK，配置 MinerU API Key 后启用）。
 - 选择策略：配置并启用 MinerU 时优先云端（解析质量更高），失败自动降级本地 `liteparse`；未配置时始终本地。
 - 质量映射：MinerU → `body_quality=high`；liteparse 文本层 → `medium`；扫描件 OCR → `low`，写入 catalog。
@@ -343,6 +347,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 | 损坏处理 | 丢失后用户重新配置 | meta 需备份/export；笔记目录仍在。双链缓存表可删重建 |
 
 **使用原则**：
+
 - Tauri Store 只存配置和机密，不存论文元数据。
 - 论文集合与 metadata 的权威来源是 **catalog**；根级 `PAPERS.md` / `library.bib` **默认不生成**，仅 `catalog:export_*` 按需写出。
 - 人写笔记（`NOTES.md`）与 `marks/`、`source/` 仍是文件；`PAPER.md` 仍是可选派生文件。
@@ -386,12 +391,14 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```
 
 **输入分类与 Agent 解析**：
+
 - 规则层先用正则识别 arXiv ID（如 `1706.03762`、`arXiv:1706.03762`）和 URL。
 - 非精确输入统一交给 Agent，Agent 可调用 arXiv API 进行关键词/摘要搜索，并返回 Top-K 候选。
 - 候选需包含：标题、作者、年份、arXiv ID、摘要片段、与输入意图的匹配理由。
 - 用户可在列表中多选批量入库，或拒绝全部候选后重新输入。
 
 **PAPER.md 生成策略**（魔棒路径已部分落地）：
+
 - `papers/<id>/source/` 存 PDF / 可选 LaTeX；Agent 优先读 `.tex`。
 - **无本地 TeX**：在 PDF（及 e-print 尝试）**下载之后**，Host 用 **liteparse** 写 `PAPER.md`，并更新 catalog `body_source` / `body_quality`；亦可 `paper_parse_body`（Download 路径内触发）。
 - **有 TeX**：不自动生成 `PAPER.md`。
@@ -417,6 +424,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```
 
 **与 arXiv 入库的差异**：
+
 - 目录名用 citekey 而非 arXiv ID；无 arXiv API 提供权威元数据，改由“标识符查询 + Agent 抽取 + 用户确认”混合获取。
 - 无 LaTeX source，`PAPER.md` 必定生成，是该篇唯一结构化可读正文。
 - 解析器可插拔：默认本地 `liteparse`，配置 MinerU API Key 后优先云端 MinerU，失败自动降级；arXiv 入库在缺 LaTeX/HTML 时复用同一 `PdfParser`。
@@ -461,6 +469,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Agentero **不打包** 任何 agent 二进制。
 
 **BYOA 原则**：
+
 - 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
 - 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `papers/` 等本地资产（无默认 PAPERS.md）。
 - 模型与 API Key 完全由 Agent CLI 管理；Agentero 只负责 Client 侧会话、权限 UX 与工作流 prompt。
@@ -495,14 +504,17 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 | `custom` | 任意 command + args + env | 用户完全自定义 |
 
 **Agent 切换**：
+
 - 切换只改注册表中的默认 agent id 与启动参数，不改变 Rust 业务逻辑。
 - ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
 
 **权限与写入**：
+
 - **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）取消 ACP 权限请求 / Codex `workspace-write`；**每次询问**（`ask`）经 `agent:permission-request` + `agent_respond_permission` 对话框；**自动批准**（`auto`）选第一项 AllowOnce / Codex `danger-full-access`。运行经 `permissionMode` 传入（旧 `autoApprove` 仍兼容）。
 - **笔记写后审阅**：BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 统一 Diff + Keep/Revert。写前 dry-run / `agent:accept_draft` 路径仍可后续加强。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
+
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
 - 涉及双链的内容必须保留 `[[...]]` 格式。
 - Agent 可先查 SQLite 索引加速路由，但最终引用与展示必须落回本地文件路径。

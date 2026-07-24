@@ -77,7 +77,7 @@
 - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）
 - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明；任务可取消）
 - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行
-- [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者(年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
+- [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者 (年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
 - [x] **文件树论文排序预设**：默认文件夹名 A–Z；设置 → 通用 `paperTreeSortMode`（标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；展示用、不移动磁盘（`sortFileTreeNodes`）
 
 ### 2e. PDF 阅读增强
@@ -253,7 +253,7 @@
 - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）
 - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）
 - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）
-- [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项
+- [x] 迁移 PDF 批注文本（高亮 + 评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项
 - [x] 批注原位高亮渲染（`marks/` + 页边针 + 右侧批注面板）
 
 ### 1b. Zotero Connector 兼容服务（方案一）

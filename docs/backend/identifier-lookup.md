@@ -75,11 +75,13 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 | **`PAPER.md`（无 TeX 时）** | 下载结束后：若**无**本地 `.tex`/`.ltx`、**有** PDF、且尚无 `PAPER.md` → **liteparse** 解析 PDF 写 `{paper}/PAPER.md`，并写 catalog `body_source` / `body_quality`。有 TeX 则不自动生成 |
 
 按需补下（**Download** 图标）：
+
 - **显示条件**：缺 PDF **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。**不再**因缺少空 `source/` 单独显示 Download。hover 说明原因。
 - **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
 - **Library 行**：库内任一篇不完整时批量同一逻辑。
 
 **精读（Zap 图标 + 自动触发）**：
+
 - **显示条件（Zap）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
 - **自动触发**：`lookup_import`（魔棒）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
 - **手动**：点击 Zap → 同上。
@@ -380,7 +382,7 @@ catalog **schema v2** 起补齐期刊/卷期页等字段（见 [`catalog.md`](ca
 | `extra` | `extra` | 未结构化残余 |
 | `type` | 由 `zotero_item_type` + 标识符推断 | 有 `arxiv_id`→`arxiv`；有 `doi`→`doi`；book→`other` 等 |
 | `id` | arXiv ID 或 citekey | |
-| `bibtex_key` | 生成或沿用 | 作者+年+题词 |
+| `bibtex_key` | 生成或沿用 | 作者 + 年+题词 |
 | `path` | Host 用 `parent_dir`+`id` 写入 | 入库时填 |
 | `status` | Host | 入库完成 → `completed` |
 | `added_at` / `updated_at` | Host | ISO 8601 |
@@ -493,6 +495,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 一次性解析、去重并入库多个标识符。前端魔棒输入框改为可变高度 textarea，粘贴 `1706.03762 1810.04805` 或每行一个 URL 后提交即走本命令。
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -503,7 +506,9 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
     concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
   }
   ```
+
 - **返回**：
+
   ```ts
   {
     ok: true;
@@ -514,6 +519,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
     }
   }
   ```
+
 - **行为**：
   1. 对 `texts` 逐条调 `extract_primary_identifier`；未识别则计入 `errors`。
   2. 按规范化 value（arXiv 去 version、DOI 小写等）去重：同一 batch 内重复 → `skipped`（`duplicate_in_batch`）。
@@ -581,7 +587,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 
 ```text
 点击魔棒
-  → 弹出输入框（单行或小多行）：placeholder 如 “arXiv URL / ID, DOI, …”
+  → 弹出输入框（单行或小多行）：placeholder 如“arXiv URL / ID, DOI, …”
   → 展示目标路径提示：将加入「papers/」或「papers/nlp/」（来自 §1.2）
   → 用户 Enter 或点「添加」
   → lookup:search（Translator）→ 可选极简预览
@@ -650,7 +656,7 @@ papers/
         └── source/
             ├── {id}.pdf       # 默认下载
             └── …              # arXiv：e-print 解压后的 .tex 工程
-# catalog.papers：path, title, pdf_url, html_url, …
+# catalog.papers: path, title, pdf_url, html_url, …
 # 划词标注运行时写入 marks/*.json（非入库壳）
 ```
 
@@ -781,7 +787,7 @@ arXiv URL 推导：
 - 读库：把 `zotero.sqlite`（含 `-wal`/`-shm`）**拷到临时目录**再只读打开（容忍 Zotero 正在运行）；查 `items`/`itemData`/`creators`/`itemTags`/`itemAttachments`，跳过 `deletedItems` 与 attachment/note/annotation 类型。
 - 映射：每条**拼装成 Zotero-API-JSON item** → 复用 `map_zotero_item` + `enrich_remote_urls` + `write_paper_shell` + `paper_record_from_meta` + catalog upsert，落到 `{parent_dir}/{id}/`（id/citekey 与魔棒 / 文件导入一致）。
 - 附件 PDF URL：`map_zotero_item` 未给出 `pdf_url` 时，采用 Connector `attachments[]` 里的 PDF 链接（浏览器侧捕获，ACM/IEEE 等常仅经此暴露）。
-- 中文摘要：为不超 Connector 15s 超时，壳先以原文写入；**后台**多引擎翻译摘要并安全替换 `NOTES.md` 的 `> ` 摘要块（mtime 守卫，用户已编辑则跳过）。
+- 中文摘要：为不超 Connector 15s 超时，壳先以原文写入；**后台**多引擎翻译摘要并安全替换 `NOTES.md` 的 `>` 摘要块（mtime 守卫，用户已编辑则跳过）。
 - 标签：**仅保留手动标签**——Zotero 自动标签（网络翻译器加的来源/状态标签，`itemTags.type ≠ 0`）在导入时过滤；`type = 0` 的用户标签保留（旧库无 `type` 列时回退为全部）。collection 名仍作为组织标签补充。
 - PDF：对话框 **“把 PDF 复制进知识库”** 勾选项（默认开）。勾选时从 `storage/<attachmentKey>/` 拷到 `{paper}/{id}.pdf` 并 liteparse `PAPER.md`；不勾则只留书目，`pdf_url` 供按需下载。
 - 去重：按 arXiv id / DOI / 归一化标题跳过重复（re-run 与既有）；不同文献 citekey 相撞时目录追加后缀。**不覆盖** `NOTES.md`。

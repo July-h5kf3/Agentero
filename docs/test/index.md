@@ -64,15 +64,15 @@ Vitest 适合覆盖纯 TypeScript 逻辑，例如：
 
 ```ts
 const vault = await createTestVault({
-	"notes/Source.md": "See [[notes/Target]].",
-	"notes/Target.md": "# Target",
+ "notes/Source.md": "See [[notes/Target]].",
+ "notes/Target.md": "# Target",
 });
 
 try {
-	const files = await vault.listMarkdownFiles();
-	// assertions
+ const files = await vault.listMarkdownFiles();
+ // assertions
 } finally {
-	await vault.cleanup();
+ await vault.cleanup();
 }
 ```
 

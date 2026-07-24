@@ -81,7 +81,7 @@
 2. agentero paper list --json           # L1 索引
 3. agentero paper get <path|id> --json  # 单篇 meta + 建议读取路径
 4. 按需 read_file: NOTES.md → marks/ → PAPER.md → source/
-5. 入库: agentero import id <arxiv|doi|url> --json
+5. 入库：agentero import id <arxiv|doi|url> --json
 ```
 
 ### 2.3 Desktop Agent prompt policy
@@ -111,7 +111,7 @@ binary is unavailable, it reports that fact and falls back to Vault files.
 | **发现** | 当前 vault 是谁、树形结构、catalog 有哪些 paper | 上溯解析 + catalog + 目录扫描 |
 | **暴露** | 把库内容以稳定结构交给 Agent/脚本（路径、meta、资源状态） | `paper_list` / `paper_get` + 落盘状态探测 |
 | **文献基础** | 标识符入库、补 PDF/TeX、`PAPER.md`、bib 导入导出 | `lookup_*` / `paper_*` import-export / parse |
-| **双链索引（只读+重建）** | 反链查询、图导出、重建 | `graph_*`（不依赖 Agent） |
+| **双链索引（只读 + 重建）** | 反链查询、图导出、重建 | `graph_*`（不依赖 Agent） |
 | **Catalog 标记** | `is_read` / `tags` 等字段读写（**仅字段**，不触发精读） | `paper_set_is_read`、`paper_set_tags` |
 
 ### 3.2 明确不进 CLI
@@ -721,7 +721,7 @@ agentero paper paths 1706.03762 | xargs -I{} echo "read {}"
 | Q2 | 是否包含 Agent / BYOA | **否** |
 | Q3 | 是否自动精读 | **否** |
 | Q4 | `is_read` | 仅字段读写，不触发精读 |
-| Q4b | `tags` | 仅字段读写；`paper tag list|set|add|rm`；`set --clear` 清空；`list --tag` AND 精确匹配 |
+| Q4b | `tags` | 仅字段读写；`paper tag list|set|add|rm`；`set --clear`清空；`list --tag` AND 精确匹配 |
 | Q5 | `paper delete` | 默认只 catalog；`--files` 需确认 |
 | Q6 | 与 GUI 共享 | **仅 Vault 目录** |
 | Q7 | **代码目录** | **`cli/`**（与 `src-tauri` 并列） |

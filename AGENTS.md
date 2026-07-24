@@ -96,6 +96,7 @@ cargo test -p agentero-cli
 - `docs/development/cli.md`：headless CLI 语义与实现（`cli/`）。
 - `docs/development/pdf-ask.md`：PDF 划词提问与批注。
 - `docs/development/translate.md`：翻译服务（应用级可插拔 free + Agent；设置 → 翻译）。
+- `docs/development/tab-split.md`：Tab 内分屏（单 tab 内 `primary | split` 两格；论文默认 PDF | NOTES）。
 
 当修改 UI、数据契约、发布流程或 Vault 语义时，必须同步更新相关文档。
 
@@ -112,6 +113,7 @@ cargo test -p agentero-cli
 - 项目级 Agent Skill：`.agents/skills/bump/SKILL.md` 定义版本升级流程；`.agents/skills/commit/SKILL.md` 定义按逻辑拆分当前改动并提交的流程。
 - `bump` Skill 只更新并校验版本来源，默认不创建 commit、tag 或 push；版本 bump 完成后再使用 `commit` Skill 创建独立的 release commit。
 - `commit` Skill 必须保留用户已有改动，按目的精确暂存，检查相关文档，并只创建本地 Conventional Commit。
+- 如果库当中有对应的 issue，则在提交信息中引用，例如 `Fix #123`，如果解决了该 issue，则关闭该 issue；如果解决了部分，则在 issue 区评论一下。
 
 ## 应用发布流程
 

@@ -150,8 +150,8 @@ agentero-vault/
 - `idx_papers_arxiv` ON `papers(arxiv_id)` WHERE `arxiv_id` IS NOT NULL
 - `idx_papers_doi` ON `papers(doi)` WHERE `doi` IS NOT NULL
 - `idx_papers_bibtex` ON `papers(bibtex_key)` WHERE `bibtex_key` IS NOT NULL
-- `idx_papers_pmid` ON `papers(pmid)` WHERE `pmid` IS NOT NULL（v2）
-- `idx_papers_isbn` ON `papers(isbn)` WHERE `isbn` IS NOT NULL（v2）
+- `idx_papers_pmid` ON `papers(pmid)` WHERE `pmid` IS NOT NULL (v2)
+- `idx_papers_isbn` ON `papers(isbn)` WHERE `isbn` IS NOT NULL (v2)
 - `idx_papers_is_read` ON `papers(is_read)`（v3）
 
 可选后续：

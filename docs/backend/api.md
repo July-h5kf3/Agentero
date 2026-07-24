@@ -82,6 +82,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 ### 3.1 Vault 与窗口
 
 > **实现状态（V0.1）**  
+>
 > - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`vault_allow_fs_scope`、`path_open_in_terminal`、`path_trash` / `path_untrash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
 > - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
@@ -195,7 +196,6 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 返回的 `paperDir`（远程）为 `remote:<sessionId>/papers/…`。
 
 Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `bash -lc` 启动远端 ACP（含 Codex，经 `codex-acp` 适配器）。
-
 
 #### `path_open_in_terminal`（已实现）
 
@@ -600,6 +600,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 无 tex 源或需要可读结构化正文时，生成 `papers/<id>/PAPER.md`。
   - 调用 Agent 生成 `papers/<id>/NOTES.md`。
   - **不**自动更新根级 `PAPERS.md` / `library.bib`（需要时由用户触发 `catalog:export_*`）。
+
 ```
 
 ### 3.4 本地 PDF 入库
@@ -671,6 +672,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 调用 Agent 生成 `NOTES.md`。
   - **不**自动写 `PAPERS.md` / `library.bib`。
   - 使用云端 MinerU 前需前端已获用户同意（PDF 将上传第三方）。
+
 ```
 
 ### 3.5 翻译服务（已落地）
@@ -690,6 +692,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     timeoutMs?: number | null;   // optional; clamped 1s–30s server-side (default 30s); settings probe uses 5000
   }
   ```
+
 - **返回**：`{ ok: true; data: { text: string; provider: string } }`
 - **约束**：单次约 ≤ 5000 字符（CNKI ≤800）；默认超时约 30s。无付费 API Key；免费引擎为非官方网页接口。设置页打开默认服务下拉时，对全部免费引擎并行 probe（`timeoutMs=5000`，不含 Agent）。
 
@@ -706,6 +709,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 #### `connector_get_status`
 
 - **返回**：`{ ok: true; data: ConnectorStatus }`
+
   ```ts
   type ConnectorStatus = {
     enabled: boolean;
@@ -751,6 +755,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 #### `vault_search`（已落地）
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -758,7 +763,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     limit?: number;     // 默认 60，clamp 1–200
   }
   ```
+
 - **返回**：`{ ok: true; data: { hits: SearchHit[]; truncated: boolean } }`
+
   ```ts
   type SearchHit = {
     path: string;         // Vault 相对 md，如 papers/x/NOTES.md
@@ -769,7 +776,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     score: number;
   };
   ```
-- **行为**：读文件（>2MB 跳过）；标题优先取 `# ` H1；片段居中于首个命中词；评分 = 标题命中（+50/词）+ 正文出现次数（每词封顶 20）+ NOTES/PAPER.md 加成；按 score 降序、path 升序；截断到 `limit`。命中 `papers/<x>/…` 时 `paperPath=papers/<x>`，供 UI 打开论文而非裸文件。
+
+- **行为**：读文件（>2MB 跳过）；标题优先取 `#` H1；片段居中于首个命中词；评分 = 标题命中（+50/词）+ 正文出现次数（每词封顶 20）+ NOTES/PAPER.md 加成；按 score 降序、path 升序；截断到 `limit`。命中 `papers/<x>/…` 时 `paperPath=papers/<x>`，供 UI 打开论文而非裸文件。
 
 ### 3.6 魔棒 / 标识符入库（已落地 v0）
 
@@ -786,6 +794,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 #### `lookup_import`
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -795,7 +804,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     taskId?: string;                 // 前端后台任务 id；支持取消与进度事件
   }
   ```
+
 - **返回**：
+
   ```ts
   {
     ok: true;
@@ -809,11 +820,13 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     }
   }
   ```
+
 - **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF** 到 `source/`；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
 
 #### `lookup_import_batch`（魔棒批量入库）
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -824,7 +837,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
   }
   ```
+
 - **返回**：
+
   ```ts
   {
     ok: true;
@@ -835,6 +850,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     }
   }
   ```
+
   其中 `LookupImportResult` 同 `lookup_import` 的 `data` 字段（含 `paperDir`、`path`、`id`、`title`、`usedTranslator`、`translatorBaseUrl`、`pdf?`、`tex?`、`paperMd?`、`assetMessages?`）。
 - **行为**：
   1. 逐条解析 `texts`；未识别则加入 `errors`。
@@ -848,6 +864,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 Library 行「下载全部缺失」。下载后若无 TeX，同样尝试生成 `PAPER.md`。
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -855,6 +872,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     taskId?: string; // 前端后台任务 id，用于接收 background-task:progress
   }
   ```
+
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
 - **行为**：读 catalog 取 `pdf_url` / `arxiv_id` / `doi`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。下载客户端使用**浏览器 UA**（绕开部分出版商 403）；若直链/arXiv 候选都失败且有 `doi`，再查 **Crossref** 取直链 / OA PDF 兜底。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。当传入 `taskId` 且响应提供 `Content-Length` 时，通过 `background-task:progress` 按实际已接收字节数推送百分比；无法得知总大小时只推送不确定进度。
 
@@ -874,6 +892,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse），**无网络查询**。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹** → metadata 确认对话框后再导入。
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -888,6 +907,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     }>;
   }
   ```
+
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
 - **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
 
@@ -898,6 +918,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 > **Zap 图标**现用于 **paper-reader 精读**（资源齐全且未读时显示），不再表示「生成 PAPER.md」。
 
 - **参数**（invoke 字段名 `args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -905,6 +926,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     force?: boolean; // 默认 false：已有 PAPER.md 则跳过；true 时覆盖
   }
   ```
+
 - **返回**：`{ ok: true; data: { paperMd: boolean; bodySource?: string; bodyQuality?: string; messages: string[] } }`
 - **行为**：
   - 本地已有 `.tex`/`.ltx` → 跳过（不生成）。
@@ -917,6 +939,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 为本地 paper PDF 生成可重建的引用与插图 sidecar。首版不支持远程 Vault，不自动联网补全库外引用。
 
 - **参数**：
+
   ```ts
   {
     vaultPath: string;
@@ -925,7 +948,9 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     taskId?: string;
   }
   ```
+
 - **返回**：
+
   ```ts
   {
     mode: "tex" | "pdf";
@@ -937,6 +962,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     messages: string[];
   }
   ```
+
 - **落盘**：`{paper}/source/agentero-cite.json`、`{paper}/source/agentero-figures.json`、`{paper}/source/agentero-figures/*.png`。
 - **行为**：有 TeX 时解析 TeX/Bib 并用 PDF bbox 做定位；无 TeX 时使用 liteparse。不得覆盖原始 PDF、TeX/Bib、`NOTES.md` 或 `PAPER.md`。完整 schema 见 [`pdf-analysis.md`](pdf-analysis.md)。
 
@@ -945,6 +971,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 导出 catalog 全文：Host 将每行转为 **Zotero API JSON item**，组成 **JSON 数组**，再 `POST {translatorBaseUrl}/export?format=…`（`Content-Type: application/json`）。
 
 - **参数**（`args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -952,6 +979,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     translatorBaseUrl?: string;
   }
   ```
+
 - **返回**：`{ ok: true; data: { format, content, count, filename } }`
 - **注意**：`/export` **要求 body 为 Zotero items 数组**，不是 Agentero `PaperMetadata` 蛇形字段；转换在 Host `zotero_io::paper_record_to_zotero_item`。
 
@@ -960,6 +988,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 导入 BibTeX / RIS 等：`POST {translatorBaseUrl}/import`（`Content-Type: text/plain`）→ Zotero items 数组 → map + catalog upsert + paper 壳 + 默认下载资源。
 
 - **参数**（`args`）：
+
   ```ts
   {
     vaultPath: string;
@@ -968,6 +997,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     translatorBaseUrl?: string;
   }
   ```
+
 - **返回**：`{ ok: true; data: { imported, skipped, paths, titles, errors } }`
 - **行为**：已存在同 path 的 paper（有 NOTES 或 catalog 行）→ **skip**，不覆盖 `NOTES.md`。
 
@@ -1595,7 +1625,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 | `stub` | 未解析目标（id 形如 `stub:<raw>`） |
 
 - **边**：有向，`source` / `target` 为折叠后节点 id；折叠后的自环丢弃。
-- **邻域**：无向 BFS（出边+入边）从 `center` 扩展至多 `depth` 跳，再裁剪 edges。
+- **邻域**：无向 BFS（出边 + 入边）从 `center` 扩展至多 `depth` 跳，再裁剪 edges。
 
 #### `graph_rebuild`（实现中；草案名 `graph:rebuild_index`）
 
@@ -1780,6 +1810,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 | V0.x | 魔棒 `lookup:*` + 本机 Translator Runtime（见 [`identifier-lookup.md`](identifier-lookup.md)）。 |
 
 后续扩展：
+
 - `importer:import` 统一来源入口。
 - `lookup:*` 与 PDF prepare 共用元数据管道。
 - `citation:fetch` / `citation:list_neighbors`（名称待定）：引用/被引邻域与缓存刷新（V0.7）。

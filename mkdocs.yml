@@ -40,6 +40,7 @@ nav:
       - CLI 设计: development/cli.md
       - PDF 划词提问: development/pdf-ask.md
       - 翻译服务: development/translate.md
+      - Tab 内分屏: development/tab-split.md
       - 运行日志: development/logging.md
       - 远程 Vault（SSH/SFTP）: development/remote-vault.md
       - 路线图: development/roadmap.md
