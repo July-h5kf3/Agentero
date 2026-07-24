@@ -2498,6 +2498,80 @@ export default function App() {
 		[vaultPath, openPaper],
 	);
 
+	const handleLibraryExportClick = useCallback(() => {
+		void handleLibraryExport();
+	}, [handleLibraryExport]);
+	const handleMigrateZoteroOpen = useCallback(() => setZoteroOpen(true), []);
+
+	/**
+	 * Memoized TabCenter props — must not be an inline object in JSX, or
+	 * TabCenter's React.memo never bails out (see comment on stable handlers).
+	 */
+	const centerProps = useMemo(
+		() => ({
+			vaultPath,
+			libraryPapers,
+			libraryLoading,
+			libraryQuery,
+			onLibraryQueryChange: setLibraryQuery,
+			libraryScopePath,
+			libraryColumns: settings.libraryColumns,
+			onLibraryColumnsChange: handleLibraryColumnsChange,
+			rescanning,
+			onOpenLibraryPaper: handleOpenLibraryPaper,
+			onRescanPapers: handleRescanPapers,
+			onLibraryExport: handleLibraryExportClick,
+			libraryExportBusy: libraryIoBusy === "export",
+			onMigrateZotero: handleMigrateZoteroOpen,
+			onTrashChanged: handleTrashChanged,
+			trashReloadSignal,
+			editorFontSize: settings.editorFontSize,
+			showEditorToolbar: settings.showEditorToolbar,
+			notesPlaceholder: t("editor.notesPlaceholder"),
+			markdownPlaceholder: t("editor.markdownPlaceholder"),
+			onPersistFile: persistFile,
+			onEditorAssetsChanged: handleEditorAssetsChanged,
+			onTabPatch: updateTab,
+			pdfZen: pdfZenMode,
+			onTogglePdfZen: togglePdfZen,
+			onOpenAnnotations: openAnnotationsTab,
+			onOpenSettings: handleOpenSettingsTranslate,
+			registerPdfHandle,
+			onPdfHighlightsChange: handlePdfHighlightsChange,
+			onPdfAsksChange: handlePdfAsksChange,
+		}),
+		[
+			vaultPath,
+			libraryPapers,
+			libraryLoading,
+			libraryQuery,
+			libraryScopePath,
+			settings.libraryColumns,
+			settings.editorFontSize,
+			settings.showEditorToolbar,
+			handleLibraryColumnsChange,
+			rescanning,
+			handleOpenLibraryPaper,
+			handleRescanPapers,
+			handleLibraryExportClick,
+			libraryIoBusy,
+			handleMigrateZoteroOpen,
+			handleTrashChanged,
+			trashReloadSignal,
+			t,
+			persistFile,
+			handleEditorAssetsChanged,
+			updateTab,
+			pdfZenMode,
+			togglePdfZen,
+			openAnnotationsTab,
+			handleOpenSettingsTranslate,
+			registerPdfHandle,
+			handlePdfHighlightsChange,
+			handlePdfAsksChange,
+		],
+	);
+
 	/** Persist tags from Paper Info and keep library + open tabs in sync. */
 	const handlePaperTagsChange = useCallback(
 		async (tags: PaperTag[]) => {
@@ -3112,8 +3186,6 @@ export default function App() {
 		? tabHasNotesSplit(tabs, notesEligiblePaper)
 		: false;
 
-	const editorFontSize = settings.editorFontSize;
-
 	return (
 		<WikiNavContext.Provider value={wikiNavValue}>
 			<div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -3303,38 +3375,7 @@ export default function App() {
 													? [activeTab.id]
 													: []),
 											]}
-											centerProps={{
-												vaultPath,
-												libraryPapers: libraryPapers,
-												libraryLoading,
-												libraryQuery,
-												onLibraryQueryChange: setLibraryQuery,
-												libraryScopePath,
-												libraryColumns: settings.libraryColumns,
-												onLibraryColumnsChange: handleLibraryColumnsChange,
-												rescanning,
-												onOpenLibraryPaper: handleOpenLibraryPaper,
-												onRescanPapers: handleRescanPapers,
-												onLibraryExport: () => void handleLibraryExport(),
-												libraryExportBusy: libraryIoBusy === "export",
-												onMigrateZotero: () => setZoteroOpen(true),
-												onTrashChanged: handleTrashChanged,
-												trashReloadSignal,
-												editorFontSize,
-												showEditorToolbar: settings.showEditorToolbar,
-												notesPlaceholder: t("editor.notesPlaceholder"),
-												markdownPlaceholder: t("editor.markdownPlaceholder"),
-												onPersistFile: persistFile,
-												onEditorAssetsChanged: handleEditorAssetsChanged,
-												onTabPatch: updateTab,
-												pdfZen: pdfZenMode,
-												onTogglePdfZen: togglePdfZen,
-												onOpenAnnotations: openAnnotationsTab,
-												onOpenSettings: handleOpenSettingsTranslate,
-												registerPdfHandle,
-												onPdfHighlightsChange: handlePdfHighlightsChange,
-												onPdfAsksChange: handlePdfAsksChange,
-											}}
+											centerProps={centerProps}
 											onActivePanelChange={setActiveTabId}
 											onClosePanel={closeTab}
 											onLayoutChange={handleLayoutChange}
@@ -3412,7 +3453,6 @@ export default function App() {
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
 										onOpenPath={handleOpenVaultRel}
-										variant="sidebar"
 										className="min-h-0 basis-[42%] border-b"
 										wikiIndexRevision={wikiIndexRevision}
 									/>
