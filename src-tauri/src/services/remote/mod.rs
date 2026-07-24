@@ -13,8 +13,8 @@ pub mod sftp_fs;
 pub mod trash_bridge;
 
 pub use launch::{
-    ensure_remote_vault_skills, materialize_skills_to_work, notes_rel_from_target,
-    read_remote_note, resolve_remote_target, RemoteAgentTarget,
+    ensure_remote_vault_skills, materialize_skills_to_work, resolve_remote_target,
+    RemoteAgentTarget,
 };
 pub use session::{
     parse_remote_handle, RemoteRegistry, RemoteSession, RemoteSessionInfo, LOCAL_SIM_HOST,

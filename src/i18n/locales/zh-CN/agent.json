@@ -16,16 +16,6 @@
 			"rejectAlways": "始终拒绝"
 		}
 	},
-	"review": {
-		"title": "审阅笔记改动",
-		"description": "Agent 重写了“{{name}}”。保留新版本，或还原为原文。",
-		"before": "原文",
-		"after": "Agent 版本",
-		"diffAria": "笔记改动的统一 Diff",
-		"keep": "保留",
-		"revert": "还原",
-		"empty": "（空）"
-	},
 	"missing": "（缺失）",
 	"switchAgent": "切换 ACP Agent",
 	"suggestions": {

@@ -8,10 +8,7 @@ use crate::services::agent::{
     builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent,
     AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
 };
-use crate::services::remote::{
-    materialize_skills_to_work, notes_rel_from_target, read_remote_note, resolve_remote_target,
-    RemoteRegistry,
-};
+use crate::services::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
 use crate::services::terminal;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -336,31 +333,7 @@ pub async fn agent_run_once(
     let log_session_id = session_id.clone();
     let log_agent_id = desc.id.clone();
     let session_agent_id = log_agent_id.clone();
-    // Trust loop: snapshot the target note before the run so we can offer a
-    // keep / revert review if the agent rewrites it.
-    let remote_target = remote_target_early;
-    let remote_for_spawn = remote_target.clone();
-    let snapshot_path = if remote_target.is_some() {
-        None
-    } else {
-        request
-            .vault_path
-            .as_deref()
-            .zip(request.target.as_deref())
-            .and_then(|(v, t)| snapshot_notes_path(v, t))
-    };
-    let notes_before = snapshot_path.as_ref().and_then(|p| read_note_snapshot(p));
-    let remote_notes_rel = request
-        .target
-        .as_deref()
-        .filter(|_| remote_target.is_some())
-        .map(notes_rel_from_target);
-    let notes_before_remote =
-        if let (Some(rt), Some(rel)) = (remote_target.as_ref(), remote_notes_rel.as_ref()) {
-            read_remote_note(&rt.session, rel).await.ok().flatten()
-        } else {
-            None
-        };
+    let remote_for_spawn = remote_target_early;
     tauri::async_runtime::spawn(async move {
         let _ = run_once(
             events.clone(),
@@ -386,38 +359,6 @@ pub async fn agent_run_once(
         )
         .await;
         let _ = app_handle.state::<AgentRunController>().finish(&session_id);
-        // Trust loop: if the run rewrote the target note, offer keep / revert.
-        if let (Some(path), Some(before)) = (&snapshot_path, &notes_before) {
-            if let Some(after) = read_note_snapshot(path) {
-                if &after != before {
-                    let _ = events.emit(
-                        "agent:notes-review",
-                        NotesReviewEvent {
-                            path: path.to_string_lossy().to_string(),
-                            before: before.clone(),
-                            after,
-                        },
-                    );
-                }
-            }
-        } else if let (Some(rt), Some(rel), Some(before)) = (
-            remote_target.as_ref(),
-            remote_notes_rel.as_ref(),
-            notes_before_remote.as_ref(),
-        ) {
-            if let Ok(Some(after)) = read_remote_note(&rt.session, rel).await {
-                if &after != before {
-                    let _ = events.emit(
-                        "agent:notes-review",
-                        NotesReviewEvent {
-                            path: rel.clone(),
-                            before: before.clone(),
-                            after,
-                        },
-                    );
-                }
-            }
-        }
         log::info!(
             target: "agentero::op",
             "op end agent_run_session session_id={} agent_id={}",
@@ -537,36 +478,6 @@ pub fn agent_respond_permission(
 ) -> ApiResult<PermissionResponded> {
     let resolved = gate.resolve(&request.request_id, request.option_id);
     ApiResult::ok(PermissionResponded { resolved })
-}
-
-/// Payload for the `agent:notes-review` event: a note the agent modified this
-/// run, offered to the user for keep / revert (trust loop).
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NotesReviewEvent {
-    path: String,
-    before: String,
-    after: String,
-}
-
-/// Resolve the note file a run may edit: the target itself when it is a `.md`
-/// file, or the paper folder's `NOTES.md` when the target is a folder.
-fn snapshot_notes_path(vault: &str, target: &str) -> Option<PathBuf> {
-    let t = target.trim().trim_matches('/');
-    if t.is_empty() || t.contains("..") {
-        return None;
-    }
-    let abs = PathBuf::from(vault).join(t);
-    if abs.extension().and_then(|e| e.to_str()) == Some("md") {
-        Some(abs)
-    } else {
-        Some(abs.join("NOTES.md"))
-    }
-}
-
-/// Read a note's current content (None when missing / unreadable).
-fn read_note_snapshot(path: &std::path::Path) -> Option<String> {
-    std::fs::read_to_string(path).ok()
 }
 
 /// Background ACP start when Chat opens — loads models/context without a user prompt.

@@ -144,29 +144,6 @@ pub async fn materialize_skills_to_work(session: &RemoteSession) -> Result<(), A
     Ok(())
 }
 
-/// Read a vault-relative note after a remote agent run (for notes-review).
-pub async fn read_remote_note(
-    session: &RemoteSession,
-    rel: &str,
-) -> Result<Option<String>, AppError> {
-    match session.fs.read(rel).await {
-        Ok(bytes) => Ok(Some(
-            String::from_utf8(bytes).map_err(|e| AppError::message(format!("utf-8: {e}")))?,
-        )),
-        Err(_) => Ok(None),
-    }
-}
-
-/// Build vault-relative NOTES path from paper target (same rules as local snapshot).
-pub fn notes_rel_from_target(target: &str) -> String {
-    let t = target.trim().trim_matches('/').replace('\\', "/");
-    if t.ends_with(".md") {
-        t
-    } else {
-        format!("{t}/NOTES.md")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

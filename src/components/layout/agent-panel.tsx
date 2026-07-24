@@ -111,7 +111,6 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
-import { NotesReviewDiff } from "@/components/layout/notes-review-diff";
 import { PaneHeader } from "@/components/layout/pane-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -169,10 +168,8 @@ import {
 	loadModelFavorites,
 	loadModelPref,
 	loadSession,
-	type NotesReview,
 	type PermissionRequest,
 	respondPermission,
-	revertNote,
 	runOnce,
 	saveModelCatalog,
 	saveModelFavorites,
@@ -1851,8 +1848,6 @@ export function AgentPanel({
 	// Forward ACP permission requests (ask mode) to the user for an explicit decision.
 	const [permissionRequest, setPermissionRequest] =
 		useState<PermissionRequest | null>(null);
-	// Trust loop: review a note the agent rewrote (keep / revert).
-	const [notesReview, setNotesReview] = useState<NotesReview | null>(null);
 
 	const permissionRequestRef = useRef(permissionRequest);
 	permissionRequestRef.current = permissionRequest;
@@ -1861,9 +1856,6 @@ export function AgentPanel({
 		if (!req) return;
 		void respondPermission(req.requestId, null);
 		setPermissionRequest(null);
-	});
-	useOverlayRegistration("notes-review", notesReview !== null, () => {
-		setNotesReview(null);
 	});
 
 	useEffect(() => {
@@ -1876,24 +1868,6 @@ export function AgentPanel({
 			unsub = await listen<PermissionRequest>(
 				"agent:permission-request",
 				({ payload }) => setPermissionRequest(payload),
-			);
-		})();
-		return () => {
-			cancelled = true;
-			unsub?.();
-		};
-	}, []);
-
-	// Trust loop: surface agent note rewrites for keep / revert review.
-	useEffect(() => {
-		if (!isTauri()) return;
-		let unsub: (() => void) | undefined;
-		let cancelled = false;
-		void (async () => {
-			const { listen } = await import("@tauri-apps/api/event");
-			if (cancelled) return;
-			unsub = await listen<NotesReview>("agent:notes-review", ({ payload }) =>
-				setNotesReview(payload),
 			);
 		})();
 		return () => {
@@ -3717,46 +3691,6 @@ export function AgentPanel({
 									}}
 								>
 									{t("permission.deny")}
-								</Button>
-							</DialogFooter>
-						</>
-					) : null}
-				</DialogContent>
-			</Dialog>
-			<Dialog
-				open={notesReview !== null}
-				onOpenChange={(open) => {
-					if (!open) setNotesReview(null);
-				}}
-			>
-				<DialogContent className="max-w-3xl">
-					{notesReview ? (
-						<>
-							<DialogHeader>
-								<DialogTitle>{t("review.title")}</DialogTitle>
-								<DialogDescription>
-									{t("review.description", {
-										name:
-											notesReview.path.split(/[\\/]/).pop() ?? notesReview.path,
-									})}
-								</DialogDescription>
-							</DialogHeader>
-							<NotesReviewDiff
-								before={notesReview.before}
-								after={notesReview.after}
-							/>
-							<DialogFooter>
-								<Button
-									variant="outline"
-									onClick={() => {
-										void revertNote(notesReview.path, notesReview.before);
-										setNotesReview(null);
-									}}
-								>
-									{t("review.revert")}
-								</Button>
-								<Button onClick={() => setNotesReview(null)}>
-									{t("review.keep")}
 								</Button>
 							</DialogFooter>
 						</>
