@@ -252,7 +252,7 @@
 - **中间栏视图切换**（纯图标 + Tooltip）：**仅 PDF · HTML**（`ViewModeToggle`）；无 PDF/HTML 时不显示切换。论文库视图下不显示。
   - Notes / 普通 Markdown 文件：**所见即所得富文本编辑**（Plate），在 Notes 侧栏或打开 `.md` 时编辑；不占中间栏切换卡片。
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
-  - **双链**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析；链接节点无损回写 Markdown。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast 而不跳到文件开头。embed 内容渲染尚未实现。
+  - **双链**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析；链接节点无损回写 Markdown。输入 `[[` 提供文件、alias、标题和 block 候选，选择 alias 会写出规范路径。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast 而不跳到文件开头。embed 内容渲染尚未实现。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
   - PDF / HTML / **图片** **预览**：
     - **PDF（任意路径）**：Vault 内任意位置的 `.pdf`（根目录、`notes/`、paper 内嵌套文件等）均可直接打开；`readFile` → `blob:` → PDF.js（**不用** `convertFileSrc`/`asset://`）。

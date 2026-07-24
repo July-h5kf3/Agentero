@@ -271,8 +271,21 @@ impl WikiIndex {
                     path: document.path.clone(),
                     insert_text: document.path.trim_end_matches(".md").to_string(),
                     label: file_name.to_string(),
+                    alias: None,
                     fragment: None,
                 });
+            }
+            for alias in &document.aliases {
+                if query_key.is_empty() || alias.to_lowercase().contains(&query_key) {
+                    candidates.push(WikiSearchCandidate {
+                        kind: WikiSearchCandidateKind::File,
+                        path: document.path.clone(),
+                        insert_text: document.path.trim_end_matches(".md").to_string(),
+                        label: alias.clone(),
+                        alias: Some(alias.clone()),
+                        fragment: None,
+                    });
+                }
             }
             for heading in &document.headings {
                 let label = heading.path.join(" › ");
@@ -286,6 +299,7 @@ impl WikiIndex {
                             heading.path.join("#")
                         ),
                         label,
+                        alias: None,
                         fragment: Some(LinkFragment::Heading {
                             path: heading.path.clone(),
                         }),
@@ -303,6 +317,7 @@ impl WikiIndex {
                             block.id
                         ),
                         label: format!("^{}", block.id),
+                        alias: None,
                         fragment: Some(LinkFragment::Block {
                             id: block.id.clone(),
                         }),
@@ -682,5 +697,52 @@ impl WikiIndexState {
 impl Default for WikiIndexState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::wiki::{BlockAnchor, HeadingAnchor};
+
+    #[test]
+    fn search_keeps_alias_display_separate_from_canonical_target() {
+        let index = WikiIndex {
+            documents: vec![WikiDocument {
+                path: "notes/Canonical.md".into(),
+                aliases: vec!["Short name".into()],
+                headings: vec![HeadingAnchor {
+                    text: "Overview".into(),
+                    path: vec!["Overview".into()],
+                    line: 4,
+                }],
+                blocks: vec![BlockAnchor {
+                    id: "summary".into(),
+                    line: 8,
+                }],
+            }],
+            ..Default::default()
+        };
+
+        let alias = index
+            .search("Short")
+            .into_iter()
+            .find(|candidate| candidate.alias.as_deref() == Some("Short name"))
+            .expect("alias candidate");
+        assert_eq!(alias.insert_text, "notes/Canonical");
+
+        let heading = index
+            .search("Overview")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
+            .expect("heading candidate");
+        assert_eq!(heading.insert_text, "notes/Canonical#Overview");
+
+        let block = index
+            .search("summary")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Block)
+            .expect("block candidate");
+        assert_eq!(block.insert_text, "notes/Canonical#^summary");
     }
 }

@@ -10,12 +10,18 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
+import {
+	type WikiCompletionController,
+	type WikiCompletionDraft,
+	WikiLinkSuggestion,
+} from "@/components/editor/wiki-link-suggestion";
 import i18n from "@/i18n";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
 import {
@@ -103,6 +109,9 @@ export function MarkdownEditor({
 		}),
 	);
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+	const completionControllerRef = useRef<WikiCompletionController | null>(null);
+	const [wikiCompletionDraft, setWikiCompletionDraft] =
+		useState<WikiCompletionDraft | null>(null);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -177,6 +186,52 @@ export function MarkdownEditor({
 		},
 	});
 
+	/**
+	 * The suggestion component owns Host queries; this editor-side probe only
+	 * identifies a live `[[` inside an editable text leaf and anchors the menu.
+	 * Checking the DOM code ancestor avoids turning code examples into links.
+	 */
+	const updateWikiCompletionDraft = useCallback(() => {
+		const container = editorContainerRef.current;
+		const nativeSelection = window.getSelection();
+		const anchor = nativeSelection?.anchorNode;
+		if (!container || !nativeSelection?.isCollapsed || !anchor) {
+			setWikiCompletionDraft(null);
+			return;
+		}
+		const anchorElement =
+			anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : null;
+		if (
+			!anchorElement ||
+			!container.contains(anchorElement) ||
+			anchorElement.closest("code, pre")
+		) {
+			setWikiCompletionDraft(null);
+			return;
+		}
+		const textBeforeCursor = (anchor.textContent ?? "").slice(
+			0,
+			nativeSelection.anchorOffset,
+		);
+		const triggerIndex = textBeforeCursor.lastIndexOf("[[");
+		const raw = textBeforeCursor.slice(triggerIndex + 2);
+		if (triggerIndex < 0 || /[\]\n|]/.test(raw)) {
+			setWikiCompletionDraft(null);
+			return;
+		}
+		if (!nativeSelection.rangeCount) {
+			setWikiCompletionDraft(null);
+			return;
+		}
+		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
+		const bounds = container.getBoundingClientRect();
+		setWikiCompletionDraft({
+			raw,
+			left: Math.max(8, cursor.left - bounds.left),
+			top: cursor.bottom - bounds.top + container.scrollTop + 4,
+		});
+	}, []);
+
 	const serialize = useCallback(() => {
 		const body = editor.getApi(MarkdownPlugin).markdown.serialize();
 		return joinFrontmatter(frontmatterRef.current, body);
@@ -218,6 +273,7 @@ export function MarkdownEditor({
 	}, [editor]);
 
 	const handleChange = useCallback(() => {
+		window.requestAnimationFrame(updateWikiCompletionDraft);
 		if (readOnly || !readyRef.current) return;
 
 		// Schedule (or cancel) managed asset GC from ref-count deltas.
@@ -240,9 +296,13 @@ export function MarkdownEditor({
 			timerRef.current = null;
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
-	}, [editor, readOnly, onDirtyChange]);
+	}, [editor, readOnly, onDirtyChange, updateWikiCompletionDraft]);
 
 	const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+		if (!event.nativeEvent.isComposing) {
+			if (completionControllerRef.current?.handleKeyDown(event)) return;
+			if (event.key === "Escape") setWikiCompletionDraft(null);
+		}
 		if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
 			event.preventDefault();
 			if (timerRef.current) {
@@ -283,6 +343,13 @@ export function MarkdownEditor({
 							className="min-h-full px-6 pt-4 pb-48"
 							style={fontSize ? { fontSize } : undefined}
 						/>
+						{!readOnly ? (
+							<WikiLinkSuggestion
+								draft={wikiCompletionDraft}
+								onClose={() => setWikiCompletionDraft(null)}
+								controllerRef={completionControllerRef}
+							/>
+						) : null}
 					</EditorContainer>
 				</div>
 			</Plate>

@@ -403,7 +403,8 @@
 
 - [x] Wikilink / Vault-local Markdown link 语义索引、标题与 block 精确跳转、入链/出链、缺失文件创建、Backlinks 下 Graph
 - [x] **`.md` 变更防抖重建索引**
-- [ ] `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮
+- [x] `[[` 文件、alias、标题和 block 补全；Plate 内联节点的规范链接序列化
+- [ ] Graph 全屏/邻居高亮
 - [ ] 边级增量索引
 
 ### 文献引用图

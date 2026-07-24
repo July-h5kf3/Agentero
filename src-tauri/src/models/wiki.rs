@@ -133,6 +133,10 @@ pub struct WikiSearchCandidate {
     pub path: String,
     pub insert_text: String,
     pub label: String,
+    /// A human-facing alias selected by the user. The editor writes this as a
+    /// display alias while preserving `insert_text` as the canonical target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fragment: Option<LinkFragment>,
 }

@@ -183,6 +183,7 @@
 - [x] 当前 UI：Backlinks 入口内上方为入链与出链，下方为 Graph。
 - [x] 统一解析 Wikilink 与 Vault-local Markdown links：YAML aliases、标题层级、block ID、解析状态和 occurrence 范围均由可重建索引提供。
 - [x] 标题/block 精确跳转；Backlinks 入口同时展示入链和出链，Graph 仍在下方。
+- [x] Plate 中 `[[` 候选支持文件、alias、标题和 block，并写入可移植的规范链接。
 
 验收标准：
 
@@ -194,8 +195,8 @@
 后续增强 TODO：
 
 - [x] 文件变更后防抖重建 wiki / Backlinks / Graph 索引（`scheduleWikiRebuild`，仅 `.md`，~900ms）。
-- [ ] 源码编辑中的 `[[` 路径/标题补全。
-- [ ] Plate 内联 wikilink 节点与更稳定的 Markdown 序列化。
+- [x] 源码编辑中的 `[[` 路径、alias、标题和 block 补全。
+- [x] Plate 内联 wikilink 节点与规范链接序列化。
 - [ ] 图谱 hover 时只高亮直接邻居。
 - [ ] 增加 Graph 全屏/聚焦模式，保留右侧栏小图作为默认入口。
 - [ ] 真正的增量边更新（当前为防抖全量 rebuild，非边级增量）。

@@ -23,5 +23,10 @@
 		"invalidPayload": "无法读取粘贴的图片数据。",
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
+	},
+	"wikiCompletion": {
+		"label": "双链候选",
+		"loading": "正在搜索双链…",
+		"empty": "没有匹配的双链"
 	}
 }

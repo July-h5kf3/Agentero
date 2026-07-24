@@ -127,7 +127,7 @@ backlinks(path) = { e.source | e.target_path == path }
 | 阶段 | 能力 |
 |---|---|
 | **P0** | 中间栏预览：`[[...]]` 高亮、可点跳转；缺失目标样式区分 |
-| **P1** | 源码编辑：`[[` 补全 Vault 路径/标题 |
+| **P1** | 源码编辑：`[[` 补全 Vault 路径、alias、标题与 block |
 | **P2** | Plate WYSIWYG：wikilink 内联节点 + 同上序列化 |
 
 ### 4.2 入链与出链面板
@@ -256,10 +256,10 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 **代码**：`src/lib/wiki.ts` · `link-node.tsx` · `WikiNavContext`
 
-### Phase C — 输入补全 + Plate（可选同一版本）
+### Phase C — 输入补全 + Plate ✅
 
-1. 源码模式 `[[` 补全。  
-2. Plate 内联 wikilink 节点，序列化回 `[[...]]`。  
+1. 输入 `[[` 时从 Host 搜索文件和 alias；`#` 和 `^` 仅显示已解析目标内的标题或 block 候选。Esc、方向键和 Enter 均不干扰输入法 composition。
+2. 选择 alias 时写入 `[[规范路径|alias]]`；标题/block 选择写入可跳转的 `#heading` / `#^block-id`。Plate 内联节点序列化回 `[[...]]`。
 
 ### Phase D — 图谱 ✅
 

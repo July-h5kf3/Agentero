@@ -23,5 +23,10 @@
 		"invalidPayload": "Could not read the pasted image data.",
 		"pickTitle": "Insert image into note",
 		"pickFilter": "Images"
+	},
+	"wikiCompletion": {
+		"label": "Internal link suggestions",
+		"loading": "Searching links…",
+		"empty": "No matching internal links"
 	}
 }
