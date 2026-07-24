@@ -1,5 +1,6 @@
 import {
 	type DockviewApi,
+	DockviewDefaultTab,
 	type DockviewDidDropEvent,
 	type DockviewDndOverlayEvent,
 	DockviewReact,
@@ -81,6 +82,8 @@ function WorkspacePane(props: IDockviewPanelProps<{ panelId: string }>) {
 }
 
 const components = { pane: WorkspacePane };
+/** Alias so layout snapshots that stored tabComponent:"default" still resolve. */
+const tabComponents = { default: DockviewDefaultTab };
 
 /**
  * Map dockview drop Position → addPanel Direction.
@@ -123,7 +126,9 @@ function addPanelWithPlacement(
 	api.addPanel({
 		id: tab.id,
 		component: "pane",
-		tabComponent: "default",
+		// Omit tabComponent so dockview uses its built-in default tab.
+		// A string like "default" looks up tabComponents["default"] and throws
+		// if not registered (undefined is not a React component).
 		title: tab.title,
 		params: panelPersistParams(tab),
 		...(referencePanel
@@ -442,9 +447,9 @@ export const TabWorkspace = memo(
 						className="h-full w-full"
 						theme={agenteroDockTheme}
 						components={components}
+						tabComponents={tabComponents}
+						defaultTabComponent={DockviewDefaultTab}
 						disableFloatingGroups
-						/* Default single-tab: compact tab (not fullwidth stretch). fullwidth
-						 * puts the close button at the far right and looks unlike multi-tab. */
 						dndEdges={{ size: { value: 24, type: "pixels" } }}
 						onReady={onReady}
 						onDidDrop={handleExternalDrop}
