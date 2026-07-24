@@ -44,6 +44,7 @@
 - [x] 精读：设置 `autoPaperReader`（默认关）+ 魔棒/单篇 Download 自动；资源齐全且未读时 Zap 可手动 → `is_read`
 - [x] Library 行：库内任一篇仍缺资源 → 批量 Download
 - [x] 快捷键 `⇧⌘I`（打开魔棒）
+- [x] 魔棒批量入库：多标识符粘贴（空格 / 逗号 / 分号 / 换行 / 中文标点）、去重、顺序入库、批量下载、进度聚合；不自动连跑 paper-reader
 - [ ] 本机 Translator sidecar 捆绑
 
 ### 2c. 论文库表格 UI

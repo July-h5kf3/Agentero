@@ -227,7 +227,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | **arXiv** | `1706.03762`、`arXiv:1706.03762v1`、abs URL | arXiv Search Translator 或 Agentero arXiv API |
 | **ADS Bibcode** | `2015ApJ...810...89S` | ADS 相关 Search Translator |
 
-批量：空格、逗号、换行分隔；PMID 可在 Runtime 侧按批合并（Zotero 习惯每批 ≤200）。
+批量：魔棒输入框现已支持一次粘贴多个标识符，可用以下分隔符拆分（正则 `/[\s,;，；\n\r]+/`）：空格、逗号 `,`、分号 `;`、中文逗号 `，`、中文分号 `；`、换行 / 回车。Parser 会逐 token 调用 `extract_primary_identifier`，并按去 version 的 arXiv ID / DOI / ISBN / PMID 等做去重。PMID 仍可在 Runtime 侧按批合并（Zotero 习惯每批 ≤200）。
 
 ### 3.2 解析优先级（对齐 Zotero `extractIdentifiers`）
 
@@ -488,7 +488,41 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 5. **始终** `ensure_paper_assets`：PDF → `{paper}/{id}.pdf`；有 `arxiv_id` 时 e-print TeX 解压到 `source/`。
 6. 返回 `path`；前端刷新并打开 paper。
 
-### 6.4 事件
+### 6.4 `lookup_import_batch`（魔棒批量入库）
+
+一次性解析、去重并入库多个标识符。前端魔棒输入框改为可变高度 textarea，粘贴 `1706.03762 1810.04805` 或每行一个 URL 后提交即走本命令。
+
+- **参数**（invoke 字段名 `args`）：
+  ```ts
+  {
+    vaultPath: string;
+    parentDir: string;              // "papers" | "papers/nlp"
+    texts: string[];                // 用户输入拆分后的原始 token 数组
+    translatorBaseUrl?: string;     // 同 lookup_import
+    taskId?: string;                // 前端后台任务 id
+    concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
+  }
+  ```
+- **返回**：
+  ```ts
+  {
+    ok: true;
+    data: {
+      imported: LookupImportResult[];
+      skipped: { raw: string; kind: string; value: string; reason: 'duplicate_in_batch' | 'already_in_library' }[];
+      errors: string[];
+    }
+  }
+  ```
+- **行为**：
+  1. 对 `texts` 逐条调 `extract_primary_identifier`；未识别则计入 `errors`。
+  2. 按规范化 value（arXiv 去 version、DOI 小写等）去重：同一 batch 内重复 → `skipped`（`duplicate_in_batch`）。
+  3. 对每条唯一标识符查 catalog：已存在同 `arxiv_id` / `doi` / `isbn` / `pmid` / `id` 的 paper → `skipped`（`already_in_library`）。
+  4. 剩余条目以 `concurrency`（默认 3，范围 1–10）为上限**并发**调 `import_by_identifier_with_progress`（共用同一个 `taskId`，进度事件聚合在单一后台任务）。单条失败继续下一条，错误文本加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
+  5. 返回全部 `imported` 条目；前端刷新树 / Library / wiki 后，对 `imported` 中仍缺资源的 paper 逐个加入下载队列，每篇对应一个独立的 `download` 后台任务，并按并发上限排队执行。
+- **不自动精读**：批量入库不连跑 `paper-reader`，避免 Agent 与写笔记开销爆炸；用户可后续单篇手动 Zap 或等设置 `autoPaperReader` 对单篇触发。
+
+### 6.5 事件
 
 | 事件 | 载荷 |
 |---|---|
@@ -662,7 +696,8 @@ arXiv URL 推导：
 - [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
 - [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`）
 - [x] `⇧⌘I` 魔棒快捷键
-- [ ] 重复提示增强、入库任务可取消
+- [x] 魔棒批量入库：多标识符粘贴、去重、批量下载、进度聚合
+- [ ] 重复提示增强（单条弹层内）、入库任务可取消
 
 ### Phase D — 可选
 
@@ -675,12 +710,26 @@ arXiv URL 推导：
 
 ## 12. 测试要点
 
+### 12.1 单元测试
+
 | 层级 | 内容 |
 |---|---|
 | 单测 `parse` | arXiv URL/ID、DOI、version 剥离 |
 | 单测 `parent_dir` | 根 / 子文件夹 / paper 内文件 → 父目录 |
 | 单测 import | catalog 有 `pdf_url`；`source/` 不出现 pdf（设置关时） |
-| UI | 魔棒无 Vault 禁用；Library 表可见新行；本地 PDF 预览（无本地则下载 / 远程回退） |
+| 单测 settings | `batchImportConcurrency` 越界时自动恢复为默认值 3 |
+
+### 12.2 批量魔棒导入手动测试
+
+| 编号 | 场景 | 输入示例 | 预期现象 |
+|---|---|---|---|
+| B-1 | 多分隔符混合解析 | `1706.03762, 1810.04805; 2501.12345，2502.67890\n2503.11111 2504.22222` | 解析出 6 个 token；魔棒任务显示总数 6 并按 `current/total` 更新；summary toast `Imported 6, skipped 0, failed 0` |
+| B-2 | Batch 内去重 + 已存在去重 | 库中已有 `1706.03762`；输入 `1706.03762\n1706.03762\n1810.04805` | 第 1 个 `1706.03762` → `skipped`（`already_in_library`）；第 2 个 → `skipped`（`duplicate_in_batch`）；`1810.04805` 导入成功；summary `Imported 1, skipped 2, failed 0` |
+| B-3 | 并发上限生效 | 设置 `Batch import concurrency = 2`，粘贴 5 个不同 ID | 魔棒任务总数显示 5；同时运行的导入任务不超过 2 个；进度显示 `2/5`、`3/5`… |
+| B-4 | 非法/无法识别输入 | `1706.03762\nnot-a-valid-id` | `1706.03762` 导入成功；`not-a-valid-id` 进入 `errors`；summary `Imported 1, skipped 0, failed 1` 并走 error toast |
+| B-5 | 导入后逐篇补下缺失资源 | 6 个 ID 均缺 PDF/TeX | 导入完成后左下角任务列表出现 **6 个独立的 `Download paper assets`** 任务；默认并发 3 时前 3 个 `running`、后 3 个 `queued`；每完成一篇队列中下一篇自动开始 |
+| B-6 | 只打开第一篇成功论文 | 4 个 ID，其中第 2 个失败 | 成功后只打开第 1 篇成功导入的 paper tab；失败条目不打开；文件树展开到新论文路径 |
+| B-7 | 设置值越界自动恢复 | 手动把 `settings.json` 的 `batchImportConcurrency` 改为 `20` 或 `-1` | 启动后自动 clamp 为默认值 3；UI 中显示 3 |
 
 ---
 

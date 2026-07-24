@@ -811,6 +811,38 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 - **行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF** 到 `source/`；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
 
+#### `lookup_import_batch`（魔棒批量入库）
+
+- **参数**（invoke 字段名 `args`）：
+  ```ts
+  {
+    vaultPath: string;
+    parentDir: string;              // "papers" | "papers/nlp"
+    texts: string[];                // 拆分后的原始 token 数组
+    translatorBaseUrl?: string;     // 同 lookup_import
+    taskId?: string;                // 前端后台任务 id；单条进度聚合在该任务下
+    concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
+  }
+  ```
+- **返回**：
+  ```ts
+  {
+    ok: true;
+    data: {
+      imported: LookupImportResult[];
+      skipped: { raw: string; kind: string; value: string; reason: 'duplicate_in_batch' | 'already_in_library' }[];
+      errors: string[];
+    }
+  }
+  ```
+  其中 `LookupImportResult` 同 `lookup_import` 的 `data` 字段（含 `paperDir`、`path`、`id`、`title`、`usedTranslator`、`translatorBaseUrl`、`pdf?`、`tex?`、`paperMd?`、`assetMessages?`）。
+- **行为**：
+  1. 逐条解析 `texts`；未识别则加入 `errors`。
+  2. 按规范化 value 去重（arXiv 去 version、DOI 小写等）；batch 内重复 → `skipped.reason = 'duplicate_in_batch'`。
+  3. 查 catalog：`arxiv_id` / `doi` / `isbn` / `pmid` / `id` 已存在 → `skipped.reason = 'already_in_library'`。
+  4. 其余以 `concurrency`（默认 3，范围 1–10）为上限并发调 `import_by_identifier_with_progress`，共用 `taskId`；单条失败继续，错误加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
+  5. 前端收到 `imported` 后刷新树 / Library / wiki，并对其中仍缺资源的 paper 逐个入下载队列，每篇一个独立的 `download` 后台任务，按并发上限排队执行。**不**自动连跑 paper-reader。
+
 #### `paper_download_assets`（已落地）
 
 为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 Library 行「下载全部缺失」。下载后若无 TeX，同样尝试生成 `PAPER.md`。

@@ -316,12 +316,13 @@
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
 - 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shortcuts.ts`。
-- **魔棒**（已落地 v0）：侧栏 `WandSparkles` Popover；粘贴链接或编号 → Host `lookup_import` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ catalog + paper 壳。  
+- **魔棒**（已落地 v0/v1）：侧栏 `WandSparkles` Popover；输入框为**可变高度 textarea**（最低约 2 行、最大高度限制，可滚动），支持一次粘贴多个标识符，以空格 / 逗号 `,` / 分号 `;` / 中文逗号 `，` / 中文分号 `；` / 换行分隔。提交后走 Host `lookup_import_batch` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ 逐条解析、去重、入库。  
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
   - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
   - **arXiv**：另从 `https://arxiv.org/e-print/{id}` 下载并解压 LaTeX 到 `source/`。  
-  - **完成后**：刷新文件树 / Library / wiki → `openPaper(paperDir)`（打开 PDF tab，并 `setTreeSelectedPath`）→ 左侧树**展开祖先并滚到新论文行**（见 §2.1 选中同步）。本地 PDF 导入同样走 `openPaper`。  
-  - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
+  - **批量行为**：batch 内自动按 arXiv ID / DOI 等去重；已存在于 catalog 的条目跳过；并发入库（上限可在 **Settings → General → Batch import concurrency** 调整，默认 3、范围 1–10）并在单一后台任务聚合进度；入库结束后把仍缺资源的 paper 逐个加入下载队列，左下角任务列表会显示每一篇独立的下载任务，按并发上限排队执行。**批量入库不自动连跑 paper-reader**。  
+  - **完成后**：刷新文件树 / Library / wiki → 打开**第一篇**成功导入的 paper（`openPaper`）并左侧树**展开祖先滚到新论文行**（避免 tab 爆炸）；全部失败则不打开。本地 PDF 导入同样走 `openPaper`。  
+  - 详见 [`../backend/identifier-lookup.md`](../backend/identifier-lookup.md) / [`../backend/api.md`](../backend/api.md) §3.6；i18n `sidebar:lookup.*` / `papersLibrary.*`；无 Vault 时禁用。
 - **论文行 Download**：缺本地 PDF，或既无 TeX 也无 `PAPER.md` 时显示；hover 列出原因 → `paper_download_assets`（已有资源跳过）。下载后若仍无 TeX 且有 PDF，Host 自动 liteparse 写 `PAPER.md`。Library 行可对库内全部不完整 paper **批量** Download。
 - **论文行 Zap（精读）**：资源齐全且 catalog `is_read === false` 时显示；点击**手动**启动 paper-reader（`agent_run_once` + skill；**Claude 用 `/paper-reader`，其它（含 Codex）靠注入正文**）→ 写/更新 `{paper}/NOTES.md` → `paper_set_is_read(true)`。若设置开启 `autoPaperReader`，魔棒 / 单篇 Download 成功后也会自动跑（批量不连跑）。进度在左下角后台任务条。
 
