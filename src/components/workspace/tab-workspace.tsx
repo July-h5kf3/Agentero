@@ -22,15 +22,18 @@ import {
 	TabCenter,
 	type TabCenterProps,
 } from "@/components/workspace/tab-center";
-import { agenteroDockTheme } from "@/lib/dockview-theme";
-import { isSplitDragPayload, readDraggedVaultPaths } from "@/lib/tab-dnd";
+import { cn } from "@/lib/core/utils";
+import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
+import {
+	isSplitDragPayload,
+	readDraggedVaultPaths,
+} from "@/lib/workspace/tab-dnd";
 import {
 	type DocTab,
 	type OpenPlacement,
 	panelPersistParams,
 	type SplitDirection,
-} from "@/lib/tabs";
-import { cn } from "@/lib/utils";
+} from "@/lib/workspace/tabs";
 
 export type WorkspaceExternalDrop = {
 	paths: string[];

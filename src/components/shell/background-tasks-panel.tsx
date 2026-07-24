@@ -29,8 +29,8 @@ import {
 	clearFinishedBackgroundTasks,
 	getActiveBackgroundTasks,
 	setBackgroundTasksExpanded,
-} from "@/lib/background-tasks";
-import { cn } from "@/lib/utils";
+} from "@/lib/core/background-tasks";
+import { cn } from "@/lib/core/utils";
 
 function statusIcon(task: BackgroundTask) {
 	switch (task.status) {

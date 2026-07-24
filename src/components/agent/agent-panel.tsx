@@ -9,7 +9,7 @@ import { ChatTranscript } from "@/components/agent/chat-transcript";
 import type { AgentPanelProps } from "@/components/agent/types";
 import { useAgentPanel } from "@/components/agent/use-agent-panel";
 import { PaneHeader } from "@/components/shell/pane-header";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type { AgentPanelProps } from "@/components/agent/types";
 

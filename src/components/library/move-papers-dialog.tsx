@@ -13,8 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
-import { isPaperDirectory } from "@/lib/paper-metadata";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { isPaperDirectory } from "@/lib/paper";
 import { type FileNode, vaultRelativePath } from "@/lib/vault";
 
 /**

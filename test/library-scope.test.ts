@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { PaperMetadata } from "@/lib/paper-metadata";
+import type { PaperMetadata } from "@/lib/paper";
 import {
 	filterPapersByScope,
 	LIBRARY_VIRTUAL_PATH,
 	normalizeLibraryScope,
 	paperInLibraryScope,
-} from "@/lib/papers-api";
+} from "@/lib/paper/api";
 import {
 	createPlaceholderTab,
 	ensureFullLibraryTab,
 	removeTab,
-} from "@/lib/tabs";
+} from "@/lib/workspace/tabs";
 
 function paper(
 	path: string,

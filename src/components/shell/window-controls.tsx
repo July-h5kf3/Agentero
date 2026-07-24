@@ -8,7 +8,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { isTauri } from "@/lib/tauri";
+import { isTauri } from "@/lib/core/tauri";
 
 /**
  * Custom caption buttons (minimize / maximize / close) for the frameless

@@ -27,8 +27,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { cn } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { cn } from "@/lib/core/utils";
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // oxlint-disable-next-line eslint(no-bitwise)

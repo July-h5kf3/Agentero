@@ -12,7 +12,7 @@ import {
 	useReadOnly,
 } from "platejs/react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 type ListProps = PlateElementProps & { lineBreakBadge?: React.ReactNode };
 

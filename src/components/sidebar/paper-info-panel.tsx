@@ -34,7 +34,8 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-import type { PaperMetadata } from "@/lib/paper-metadata";
+import { cn } from "@/lib/core/utils";
+import type { PaperMetadata } from "@/lib/paper";
 import {
 	coercePaperTags,
 	normalizePaperTags,
@@ -42,8 +43,7 @@ import {
 	TAG_COLOR_IDS,
 	type TagColorId,
 	tagSwatchStyle,
-} from "@/lib/tag-colors";
-import { cn } from "@/lib/utils";
+} from "@/lib/ui/tag-colors";
 
 type PaperInfoPanelProps = {
 	meta: PaperMetadata | null;

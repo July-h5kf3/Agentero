@@ -47,9 +47,9 @@ import type {
 	AgentModelChoice,
 	AgentSkill,
 } from "@/lib/agent";
-import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent-chat-state";
-import { mentionPathHasChildren } from "@/lib/agent-mention";
-import { cn } from "@/lib/utils";
+import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
+import { mentionPathHasChildren } from "@/lib/agent/mention";
+import { cn } from "@/lib/core/utils";
 
 export type GroupedModel = {
 	id: string;

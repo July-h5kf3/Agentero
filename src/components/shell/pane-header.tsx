@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 /** Shared pane title bar height — keep all three columns aligned. */
 export const PANE_HEADER_CLASS =

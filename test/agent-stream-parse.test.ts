@@ -3,7 +3,7 @@ import {
 	classifyStreamChunk,
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
-} from "@/lib/agent-stream-parse";
+} from "@/lib/agent/stream-parse";
 
 describe("ThinkTagParser", () => {
 	it("splits think block from following answer in one chunk", () => {

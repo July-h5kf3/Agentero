@@ -17,8 +17,8 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatShortcutById } from "@/lib/shortcuts";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { formatShortcutById } from "@/lib/shell/shortcuts";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");

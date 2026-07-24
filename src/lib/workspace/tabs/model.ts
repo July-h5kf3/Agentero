@@ -1,0 +1,152 @@
+import {
+	isLibraryVirtualPath,
+	isTrashVirtualPath,
+	LIBRARY_VIRTUAL_PATH,
+	TRASH_VIRTUAL_PATH,
+} from "@/lib/paper/api";
+import type { DocTab } from "@/lib/workspace/tabs/types";
+import type { CenterViewMode } from "@/lib/workspace/viewer";
+
+export function normalizeTabPath(path: string): string {
+	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+export function tabIdForPath(path: string): string {
+	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;
+	if (isTrashVirtualPath(path)) return TRASH_VIRTUAL_PATH;
+	return normalizeTabPath(path);
+}
+
+export function basenameOf(path: string): string {
+	return (
+		path
+			.replace(/[\\/]+$/, "")
+			.split(/[\\/]/)
+			.pop() ?? path
+	);
+}
+
+export function createPlaceholderTab(
+	path: string,
+	preferMode: CenterViewMode = "markdown",
+): DocTab {
+	const isLibrary = isLibraryVirtualPath(path);
+	const isTrash = isTrashVirtualPath(path);
+	return {
+		id: tabIdForPath(path),
+		path: isLibrary
+			? LIBRARY_VIRTUAL_PATH
+			: isTrash
+				? TRASH_VIRTUAL_PATH
+				: path,
+		kind: isLibrary ? "library" : isTrash ? "trash" : "file",
+		title: isLibrary ? "Library" : isTrash ? "Recycle Bin" : basenameOf(path),
+		mode: preferMode,
+		paperMeta: null,
+		pdfUrl: null,
+		pdfBytes: null,
+		htmlUrl: null,
+		imageUrl: null,
+		notesPath: null,
+		notesSeed: "",
+		markdownSeed: "",
+		markdownDirty: false,
+		notesDirty: false,
+		seedKey: 0,
+		notesKey: 0,
+		loaded: false,
+	};
+}
+
+/**
+ * Ensure the full-library tab exists; returns the next tabs + active id.
+ * Used when the tab strip would otherwise be empty (default page).
+ */
+export function ensureFullLibraryTab(prev: DocTab[]): {
+	tabs: DocTab[];
+	activeId: string;
+	inserted: boolean;
+} {
+	const existing = prev.find((t) => isLibraryVirtualPath(t.path));
+	if (existing) {
+		return { tabs: prev, activeId: existing.id, inserted: false };
+	}
+	const tab: DocTab = {
+		...createPlaceholderTab(LIBRARY_VIRTUAL_PATH),
+		kind: "library",
+		title: "Library",
+		loaded: true,
+	};
+	return { tabs: [...prev, tab], activeId: tab.id, inserted: true };
+}
+
+/** Insert a placeholder tab for `path` unless a tab for it already exists. */
+export function insertPlaceholderTab(
+	prev: DocTab[],
+	path: string,
+	preferMode: CenterViewMode = "markdown",
+): { tabs: DocTab[]; id: string; exists: boolean } {
+	const id = tabIdForPath(path);
+	if (prev.some((t) => t.id === id)) return { tabs: prev, id, exists: true };
+	return {
+		tabs: [...prev, createPlaceholderTab(path, preferMode)],
+		id,
+		exists: false,
+	};
+}
+
+/** Merge a patch into the tab with the given id (primary pane fields only). */
+export function patchTab(
+	prev: DocTab[],
+	id: string,
+	patch: Partial<DocTab>,
+): DocTab[] {
+	return prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
+}
+
+/**
+ * Remove a tab from the React list only.
+ * Active focus is owned by dockview (`onDidActivePanelChange`); do not pick a neighbor here.
+ */
+export function removeTab(
+	prev: DocTab[],
+	id: string,
+): { tabs: DocTab[]; removed: DocTab | null } {
+	const idx = prev.findIndex((t) => t.id === id);
+	if (idx < 0) return { tabs: prev, removed: null };
+	const removed = prev[idx] ?? null;
+	const tabs = prev.filter((t) => t.id !== id);
+	return { tabs, removed };
+}
+
+/** Remove every tab at or under `path`; Library/Trash virtual tabs are kept. */
+export function removeTabsUnderPath(
+	prev: DocTab[],
+	path: string,
+): {
+	tabs: DocTab[];
+	removed: DocTab[];
+} {
+	const key = normalizeTabPath(path);
+	const hit = (p: string) => {
+		const k = normalizeTabPath(p);
+		return k === key || k.startsWith(`${key}/`);
+	};
+	const survivors: DocTab[] = [];
+	const removed: DocTab[] = [];
+	for (const t of prev) {
+		if (isLibraryVirtualPath(t.path)) {
+			survivors.push(t);
+			continue;
+		}
+		if (hit(t.path)) {
+			removed.push(t);
+			continue;
+		}
+		survivors.push(t);
+	}
+	if (!removed.length) {
+		return { tabs: prev, removed };
+	}
+	return { tabs: survivors, removed };
+}

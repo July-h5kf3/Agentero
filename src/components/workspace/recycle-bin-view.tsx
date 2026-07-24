@@ -16,14 +16,14 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { notifyError } from "@/lib/notify";
+import { notifyError } from "@/lib/core/notify";
+import { cn } from "@/lib/core/utils";
 import {
 	listTrash,
 	purgeTrashItem,
 	restoreTrashItem,
 	type TrashEntry,
-} from "@/lib/papers-api";
-import { cn } from "@/lib/utils";
+} from "@/lib/paper/api";
 
 /**
  * Recycle Bin center view (Zotero-style): lists items previously deleted into

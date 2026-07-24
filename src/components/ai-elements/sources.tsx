@@ -8,7 +8,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type SourcesProps = ComponentProps<"div">;
 

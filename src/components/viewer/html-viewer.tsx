@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
-
-import { isArxivHostedUrl } from "@/lib/arxiv";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { isArxivHostedUrl } from "@/lib/paper/arxiv";
 
 type HtmlViewerProps = {
 	/** Remote URL only — streamed in a sandboxed iframe (no local download) */

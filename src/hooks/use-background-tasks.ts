@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
 	getBackgroundTasksSnapshot,
 	subscribeBackgroundTasks,
-} from "@/lib/background-tasks";
+} from "@/lib/core/background-tasks";
 
 export function useBackgroundTasks() {
 	return useSyncExternalStore(

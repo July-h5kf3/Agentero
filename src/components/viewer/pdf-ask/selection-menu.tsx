@@ -15,12 +15,12 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/core/utils";
 import {
 	HIGHLIGHT_COLORS,
 	type HighlightColor,
 	swatchColorClass,
-} from "@/lib/pdf-highlight/palette";
-import { cn } from "@/lib/utils";
+} from "@/lib/pdf/highlight/palette";
 
 type SelectionMenuProps = {
 	/** Screen point near the top-center of the selection (toolbar anchor) */

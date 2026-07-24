@@ -1,8 +1,7 @@
 import { Languages, MessageSquare, MessageSquareText } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-import type { SelectionPin } from "@/lib/pdf-selection";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import type { SelectionPin } from "@/lib/pdf/selection";
 
 type SelectionGutterProps = {
 	/** Pins for this page only (ask + annotate + translate) */

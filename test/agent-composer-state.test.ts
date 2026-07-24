@@ -6,7 +6,7 @@ import {
 	loadAgentComposerState,
 	removeAgentComposerState,
 	saveAgentComposerState,
-} from "@/lib/agent-composer-state";
+} from "@/lib/agent/composer-state";
 
 class MemoryStorage {
 	private values = new Map<string, string>();

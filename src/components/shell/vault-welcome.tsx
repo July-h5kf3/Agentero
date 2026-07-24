@@ -7,13 +7,13 @@ import {
 } from "@/components/dialogs/remote-vault-dialog";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/core/utils";
+import { vaultDisplayName } from "@/lib/vault";
 import {
 	getRecentRemoteVaults,
 	type RecentRemoteVault,
 	removeRecentRemoteVault,
-} from "@/lib/remote-vault";
-import { cn } from "@/lib/utils";
-import { vaultDisplayName } from "@/lib/vault";
+} from "@/lib/vault/remote/remote-vault";
 
 export function VaultWelcome({
 	recentVaults,

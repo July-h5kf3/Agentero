@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { LIBRARY_VIRTUAL_PATH } from "@/lib/papers-api";
+import { LIBRARY_VIRTUAL_PATH } from "@/lib/paper/api";
 import {
 	createNotesSplitPane,
 	createPlaceholderTab,
@@ -15,7 +15,7 @@ import {
 	savePersistedTabs,
 	syncTabSeedsForPath,
 	tabHasNotesSplit,
-} from "@/lib/tabs";
+} from "@/lib/workspace/tabs";
 
 function makeTab(path: string, overrides: Partial<DocTab> = {}): DocTab {
 	return { ...createPlaceholderTab(path), ...overrides };

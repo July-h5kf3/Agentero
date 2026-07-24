@@ -10,9 +10,9 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-import type { ChatSessionHistoryItem } from "@/lib/agent-chat-state";
-import { displayHistoryTitle } from "@/lib/agent-prompt-display";
-import { cn } from "@/lib/utils";
+import type { ChatSessionHistoryItem } from "@/lib/agent/chat-state";
+import { displayHistoryTitle } from "@/lib/agent/prompt-display";
+import { cn } from "@/lib/core/utils";
 
 export function HistorySessionList({
 	sessionHistory,

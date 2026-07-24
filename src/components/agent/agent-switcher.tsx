@@ -8,7 +8,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { AgentOption } from "@/lib/agent-chat-state";
+import type { AgentOption } from "@/lib/agent/chat-state";
 
 export function AgentSwitcher({
 	options,

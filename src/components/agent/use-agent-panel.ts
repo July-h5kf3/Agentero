@@ -75,7 +75,13 @@ import {
 	type PendingTerminalEvent,
 	resolveSelected,
 	upsertPlanPart,
-} from "@/lib/agent-chat-state";
+} from "@/lib/agent/chat-state";
+import {
+	contextPathDisplayName,
+	contextPathLabel,
+	normalizeContextPath,
+	toPathSet,
+} from "@/lib/agent/context-path-icon";
 import {
 	buildMentionCandidatePaths,
 	filterMentionOptions,
@@ -83,27 +89,21 @@ import {
 	mentionParentPath,
 	mentionPathHasChildren,
 	pushRecentMentionPath,
-} from "@/lib/agent-mention";
+} from "@/lib/agent/mention";
 import {
 	displayHistoryTitle,
 	stripPromptEnvelopeForDisplay,
-} from "@/lib/agent-prompt-display";
+} from "@/lib/agent/prompt-display";
 import {
 	classifyStreamChunk,
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
-} from "@/lib/agent-stream-parse";
-import {
-	contextPathDisplayName,
-	contextPathLabel,
-	normalizeContextPath,
-	toPathSet,
-} from "@/lib/context-path-icon";
-import { isImeKeyboardEvent } from "@/lib/ime";
-import { paperDirFromPath } from "@/lib/paper-metadata";
-import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/papers-api";
+} from "@/lib/agent/stream-parse";
+import { isImeKeyboardEvent } from "@/lib/core/ime";
+import { isTauri } from "@/lib/core/tauri";
+import { paperDirFromPath } from "@/lib/paper";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { loadSettings } from "@/lib/settings";
-import { isTauri } from "@/lib/tauri";
 import { toVaultRelative } from "@/lib/wiki";
 
 export type UseAgentPanelArgs = Pick<

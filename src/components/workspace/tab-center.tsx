@@ -9,12 +9,12 @@ import {
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
-import type { PaperMetadata } from "@/lib/paper-metadata";
-import type { PdfAskThread } from "@/lib/pdf-ask/types";
-import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+import type { PaperMetadata } from "@/lib/paper";
+import type { PdfAskThread } from "@/lib/pdf/ask/types";
+import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { LibraryColumnPref } from "@/lib/settings";
-import { type DocTab, tabIsPaperNotes } from "@/lib/tabs";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
+import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
 
 export type TabCenterProps = {
 	/** Primary tab or split pane (shared fields). */

@@ -20,7 +20,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type SelectMods = { meta: boolean; ctrl: boolean; shift: boolean };
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { resolveShortcutId, type ShortcutId } from "@/lib/shortcuts";
+import { resolveShortcutId, type ShortcutId } from "@/lib/shell/shortcuts";
 
 /** One handler per global keyboard shortcut. */
 export type ShortcutHandlers = Record<ShortcutId, () => void>;

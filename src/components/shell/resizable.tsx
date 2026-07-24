@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export { Group as ResizableGroup, Panel as ResizablePanel };
 

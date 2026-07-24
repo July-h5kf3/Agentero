@@ -31,15 +31,15 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
-import { runBackgroundTask } from "@/lib/background-tasks";
-import { isTauri } from "@/lib/tauri";
+import { runBackgroundTask } from "@/lib/core/background-tasks";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	migrateZotero,
 	pickZoteroDir,
 	scanZotero,
 	type ZoteroMigrateResult,
 	type ZoteroScan,
-} from "@/lib/zotero-migrate";
+} from "@/lib/paper/import/zotero-migrate";
 
 /** Remembered import options (localStorage). */
 const OPTS_KEY = "motif.zotero.opts";

@@ -41,14 +41,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { contextPathIcon } from "@/lib/context-path-icon";
-import {
-	dataTransferHasFiles,
-	resolveDroppedPdfPaths,
-	snapshotDataTransfer,
-} from "@/lib/external-file-drop";
-import { notifyError } from "@/lib/notify";
+import { contextPathIcon } from "@/lib/agent/context-path-icon";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { notifyError } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
+import { cn } from "@/lib/core/utils";
 import {
 	formatPaperTreeLabel,
 	isPaperDirectory,
@@ -60,22 +57,25 @@ import {
 	paperNeedsAssetDownload,
 	paperNeedsRead,
 	sortFileTreeNodes,
-} from "@/lib/paper-metadata";
-import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/papers-api";
-import {
-	openInTerminal,
-	revealInFileManager,
-	revealInOsLabelKey,
-} from "@/lib/reveal";
+} from "@/lib/paper";
+import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
 import { useUiScale } from "@/lib/settings";
-import { formatShortcutById } from "@/lib/shortcuts";
-import { isTauri } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+import {
+	dataTransferHasFiles,
+	resolveDroppedPdfPaths,
+	snapshotDataTransfer,
+} from "@/lib/shell/external-file-drop";
+import { formatShortcutById } from "@/lib/shell/shortcuts";
 import {
 	type FileNode,
 	isValidVaultEntryName,
 	resolveCreateParent,
 } from "@/lib/vault";
+import {
+	openInTerminal,
+	revealInFileManager,
+	revealInOsLabelKey,
+} from "@/lib/vault/reveal";
 import { toVaultRelative } from "@/lib/wiki";
 
 /** Paper folders that need Download (no PDF / no source / no PAPER.md). */

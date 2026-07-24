@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
-import { paperDirFromPath } from "@/lib/paper-metadata";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { paperDirFromPath } from "@/lib/paper";
 import {
 	type GraphNode,
 	type GraphNodeType,

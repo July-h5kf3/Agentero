@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper-metadata";
+import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper";
 
 export type AgentPanelProps = {
 	vaultPath: string | null;

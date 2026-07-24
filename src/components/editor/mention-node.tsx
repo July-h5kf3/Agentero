@@ -6,7 +6,7 @@ import {
 	type PlateElementProps,
 	useSelected,
 } from "platejs/react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export function MentionElement(props: PlateElementProps<TMentionElement>) {
 	const selected = useSelected();

@@ -6,13 +6,13 @@ import {
 	type SettingsSection,
 } from "@/components/settings/settings-window";
 import i18n, { resolveLocale } from "@/i18n";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	type AppSettings,
 	loadSettings,
 	saveSettings,
 	subscribeSettings,
 } from "@/lib/settings";
-import { isTauri } from "@/lib/tauri";
 
 const SECTIONS: SettingsSection[] = [
 	"general",

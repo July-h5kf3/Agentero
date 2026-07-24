@@ -1,0 +1,285 @@
+import { readDir, readFile } from "@tauri-apps/plugin-fs";
+import { logger } from "@/lib/core/logger";
+import { isTauri } from "@/lib/core/tauri";
+import { arxivUrls } from "@/lib/paper/arxiv";
+import type { PaperMetadata } from "@/lib/paper/types";
+
+const PDF_NAME_RE = /\.pdf$/i;
+
+export function resolveRemoteUrl(
+	ref: string | undefined | null,
+): string | null {
+	if (!ref?.trim()) return null;
+	const value = ref.trim();
+	if (/^https?:\/\//i.test(value)) return value;
+	return null;
+}
+
+/** True when a string can be passed to PDF.js `Document` `file`. */
+export function isPdfViewerSource(
+	source: string | null | undefined,
+): source is string {
+	if (!source?.trim()) return false;
+	const s = source.trim();
+	// blob: (local bytes) or remote https — not asset:// (PDF.js XHR fails on asset protocol)
+	if (/^(https?|blob):/i.test(s)) return true;
+	return false;
+}
+
+/**
+ * Read a local file into a `blob:` URL for in-app viewers (PDF.js, img tags).
+ *
+ * Prefer this over `convertFileSrc` / `asset://`: PDF.js issues range/XHR
+ * requests that often fail on Tauri's asset protocol ("Unexpected server response (0)").
+ * Caller should `URL.revokeObjectURL` when replacing the source.
+ */
+export async function localBytesToViewerSource(
+	absPath: string,
+	mimeType: string,
+): Promise<string | null> {
+	if (!isTauri() || !absPath?.trim()) return null;
+	try {
+		let bytes: Uint8Array;
+		if (absPath.startsWith("remote:")) {
+			const slash = absPath.indexOf("/", "remote:".length);
+			if (slash === -1) return null;
+			const handle = absPath.slice(0, slash);
+			const rel = absPath.slice(slash + 1);
+			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
+				"@/lib/vault/remote/remote-vault"
+			);
+			const sessionId = remoteSessionIdFromHandle(handle);
+			if (!sessionId) return null;
+			const localPath = await remoteCacheFile(sessionId, rel);
+			bytes = await readFile(localPath);
+		} else {
+			bytes = await readFile(absPath);
+		}
+		// Copy so Blob owns a stable ArrayBuffer (plugin may return a view)
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		const blob = new Blob([copy], { type: mimeType });
+		return URL.createObjectURL(blob);
+	} catch (e) {
+		// Read failed (fs scope / OneDrive placeholder / missing file). Log so the
+		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
+		logger.warn("pdf: read local bytes failed", {
+			path: absPath,
+			error: e instanceof Error ? e.message : String(e),
+		});
+		return null;
+	}
+}
+
+/**
+ * Read a local PDF into a `blob:` URL for PDF.js.
+ * @see localBytesToViewerSource
+ */
+export async function localPdfToViewerSource(
+	absPath: string,
+): Promise<string | null> {
+	return localBytesToViewerSource(absPath, "application/pdf");
+}
+
+/**
+ * Read a local (or remote-cached) file into a standalone `ArrayBuffer`.
+ *
+ * Preferred over {@link localBytesToViewerSource} for the PDF engine: EmbedPDF
+ * can open a document straight from a buffer, avoiding a `fetch(blob:)` step
+ * that stalls/fails under some webviews (Windows WebView2; see the engine host
+ * note about the wasm worker re-fetching from `blob:`). Returns null on read
+ * failure (logged) so callers can fall back to a remote URL.
+ */
+export async function localFileToArrayBuffer(
+	absPath: string,
+): Promise<ArrayBuffer | null> {
+	if (!isTauri() || !absPath?.trim()) return null;
+	try {
+		let bytes: Uint8Array;
+		if (absPath.startsWith("remote:")) {
+			const slash = absPath.indexOf("/", "remote:".length);
+			if (slash === -1) return null;
+			const handle = absPath.slice(0, slash);
+			const rel = absPath.slice(slash + 1);
+			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
+				"@/lib/vault/remote/remote-vault"
+			);
+			const sessionId = remoteSessionIdFromHandle(handle);
+			if (!sessionId) return null;
+			const localPath = await remoteCacheFile(sessionId, rel);
+			bytes = await readFile(localPath);
+		} else {
+			bytes = await readFile(absPath);
+		}
+		// Copy into a fresh ArrayBuffer the engine can own (plugin may return a view).
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		return copy.buffer;
+	} catch (e) {
+		logger.warn("pdf: read local bytes failed", {
+			path: absPath,
+			error: e instanceof Error ? e.message : String(e),
+		});
+		return null;
+	}
+}
+
+/**
+ * Read a local image into a `blob:` URL for the image viewer.
+ * MIME is inferred from the file extension.
+ */
+export async function localImageToViewerSource(
+	absPath: string,
+	mimeType: string,
+): Promise<string | null> {
+	return localBytesToViewerSource(absPath, mimeType);
+}
+
+/** Revoke a blob: URL created by local*ToViewerSource (no-op for others). */
+export function revokePdfViewerSource(source: string | null | undefined): void {
+	if (source?.startsWith("blob:")) {
+		try {
+			URL.revokeObjectURL(source);
+		} catch {
+			// ignore
+		}
+	}
+}
+
+function joinDir(parent: string, name: string): string {
+	const sep = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
+	const base = parent.replace(/[/\\]+$/, "");
+	return `${base}${sep}${name}`;
+}
+
+/**
+ * Find first local PDF under a paper folder.
+ * Prefer root-level `*.pdf` (canonical `{id}.pdf`), then shallow recursive
+ * under nested dirs (e.g. `source/`). Max depth 4.
+ */
+export async function findLocalPdfPath(
+	paperDir: string,
+): Promise<string | null> {
+	if (!isTauri() || !paperDir?.trim()) return null;
+	const root = paperDir.replace(/[/\\]+$/, "");
+	// Remote joined path: list via Host SFTP
+	if (root.startsWith("remote:")) {
+		const slash = root.indexOf("/", "remote:".length);
+		const handle = slash === -1 ? root : root.slice(0, slash);
+		const rel = slash === -1 ? "" : root.slice(slash + 1);
+		const { remoteList, remoteSessionIdFromHandle } = await import(
+			"@/lib/vault/remote/remote-vault"
+		);
+		const sessionId = remoteSessionIdFromHandle(handle);
+		if (!sessionId) return null;
+		try {
+			const entries = await remoteList(sessionId, rel);
+			const pdfs = entries
+				.filter((e) => e.isFile && PDF_NAME_RE.test(e.name))
+				.map((e) => `${handle}/${e.path}`)
+				.sort((a, b) => a.localeCompare(b));
+			if (pdfs[0]) return pdfs[0];
+			// shallow search source/
+			const source = entries.find((e) => e.isDir && e.name === "source");
+			if (source) {
+				const nested = await remoteList(sessionId, source.path);
+				const nestedPdf = nested
+					.filter((e) => e.isFile && PDF_NAME_RE.test(e.name))
+					.map((e) => `${handle}/${e.path}`)
+					.sort((a, b) => a.localeCompare(b));
+				return nestedPdf[0] ?? null;
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}
+	try {
+		const entries = await readDir(root);
+		const rootPdfs: string[] = [];
+		for (const e of entries) {
+			if (!e.name || !e.isFile) continue;
+			if (PDF_NAME_RE.test(e.name)) {
+				rootPdfs.push(joinDir(root, e.name));
+			}
+		}
+		if (rootPdfs.length > 0) {
+			// Prefer shorter names / id-like: stable sort
+			rootPdfs.sort((a, b) => a.localeCompare(b));
+			return rootPdfs[0] ?? null;
+		}
+		return await findPdfUnder(root, 1, 4);
+	} catch (e) {
+		logger.warn("pdf: list paper dir failed", {
+			dir: root,
+			error: e instanceof Error ? e.message : String(e),
+		});
+		return null;
+	}
+}
+
+async function findPdfUnder(
+	dir: string,
+	depth: number,
+	maxDepth: number,
+): Promise<string | null> {
+	if (depth > maxDepth) return null;
+	let entries: Awaited<ReturnType<typeof readDir>>;
+	try {
+		entries = await readDir(dir);
+	} catch {
+		return null;
+	}
+	const subdirs: string[] = [];
+	for (const e of entries) {
+		if (!e.name) continue;
+		if (e.name.startsWith(".")) continue;
+		const full = joinDir(dir, e.name);
+		if (e.isFile && PDF_NAME_RE.test(e.name)) return full;
+		if (e.isDirectory) subdirs.push(full);
+	}
+	// Prefer source/ before other nested dirs
+	subdirs.sort((a, b) => {
+		const an = a.replace(/\\/g, "/").toLowerCase();
+		const bn = b.replace(/\\/g, "/").toLowerCase();
+		const aSrc = an.endsWith("/source") || an.includes("/source/") ? 0 : 1;
+		const bSrc = bn.endsWith("/source") || bn.includes("/source/") ? 0 : 1;
+		if (aSrc !== bSrc) return aSrc - bSrc;
+		return an.localeCompare(bn);
+	});
+	for (const sub of subdirs) {
+		const found = await findPdfUnder(sub, depth + 1, maxDepth);
+		if (found) return found;
+	}
+	return null;
+}
+
+/**
+ * Whether we should attempt `paper_download_assets` when local PDF is missing.
+ * Needs a remote candidate (pdf_url or arxiv_id / arxiv-like folder id).
+ */
+export function canAttemptPdfDownload(
+	meta: PaperMetadata | null,
+	remotePdfUrl: string | null,
+): boolean {
+	if (remotePdfUrl) return true;
+	if (meta?.arxiv_id?.trim()) return true;
+	if (meta?.type === "arxiv") return true;
+	return false;
+}
+
+export function paperRemoteAssetsFromMetadata(meta: PaperMetadata | null): {
+	pdfUrl: string | null;
+	htmlUrl: string | null;
+} {
+	if (!meta) return { pdfUrl: null, htmlUrl: null };
+
+	let pdfUrl = resolveRemoteUrl(meta.pdf_url);
+	let htmlUrl = resolveRemoteUrl(meta.html_url);
+
+	const arxiv = meta.arxiv_id ? arxivUrls(meta.arxiv_id) : null;
+	if (!pdfUrl && arxiv) pdfUrl = arxiv.pdf;
+	if (!htmlUrl && arxiv) htmlUrl = arxiv.html;
+
+	return { pdfUrl, htmlUrl };
+}

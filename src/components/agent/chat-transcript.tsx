@@ -70,9 +70,9 @@ import {
 	SUGGESTION_KEYS,
 	SUGGESTION_WORKFLOW,
 	toolPartState,
-} from "@/lib/agent-chat-state";
-import { stripPromptEnvelopeForDisplay } from "@/lib/agent-prompt-display";
-import { cn } from "@/lib/utils";
+} from "@/lib/agent/chat-state";
+import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import { cn } from "@/lib/core/utils";
 
 export function ChatTranscript({
 	isZen,

@@ -5,7 +5,7 @@ import {
 	isAnyOverlayOpen,
 	pushOverlay,
 	subscribeOverlayStack,
-} from "@/lib/overlay-stack";
+} from "@/lib/core/overlay-stack";
 
 /**
  * While `open` is true, register this overlay on the app stack so

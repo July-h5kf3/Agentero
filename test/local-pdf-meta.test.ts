@@ -6,7 +6,7 @@ import {
 	stemFromPath,
 	titleFromPdfPath,
 	titleFromStem,
-} from "@/lib/local-pdf-meta";
+} from "@/lib/paper/local-pdf-meta";
 
 describe("local-pdf-meta", () => {
 	it("basename and stem", () => {

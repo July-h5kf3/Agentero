@@ -9,14 +9,14 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
-import { initLogger, logger } from "@/lib/logger";
+import { initLogger, logger } from "@/lib/core/logger";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
 	loadSettings,
 	subscribeSettings,
 } from "@/lib/settings";
-import { applyUiTheme } from "@/lib/ui-theme";
+import { applyUiTheme } from "@/lib/ui/theme";
 import App from "./App";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";

@@ -31,8 +31,8 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown-image";
-import { errorMessage, notifyError } from "@/lib/notify";
+import { errorMessage, notifyError } from "@/lib/core/notify";
+import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
 
 import { FixedToolbar } from "./fixed-toolbar";
 import { MarkToolbarButton } from "./mark-toolbar-button";

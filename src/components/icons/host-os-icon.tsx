@@ -3,7 +3,7 @@
  * Brands: Font Awesome via `react-icons/fa6`; fallback desktop: `FaDisplay`.
  */
 import { FaApple, FaDisplay, FaLinux, FaWindows } from "react-icons/fa6";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type HostOsKind = "macos" | "windows" | "linux" | "other";
 

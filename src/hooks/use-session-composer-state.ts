@@ -13,7 +13,7 @@ import {
 	loadAgentComposerState,
 	removeAgentComposerState,
 	saveAgentComposerState,
-} from "@/lib/agent-composer-state";
+} from "@/lib/agent/composer-state";
 
 type SessionComposerStateOptions = {
 	vaultPath: string | null;

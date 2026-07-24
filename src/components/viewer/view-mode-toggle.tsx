@@ -8,8 +8,8 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import type { CenterViewMode } from "@/lib/viewer";
+import { cn } from "@/lib/core/utils";
+import type { CenterViewMode } from "@/lib/workspace/viewer";
 
 /** Center paper view: PDF / HTML only (Notes is the side editor, not a center mode card). */
 const MODES: {

@@ -3,9 +3,9 @@
 import { PlateElement, type PlateElementProps } from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import { resolveWikiTarget } from "@/lib/wiki";
-import { useWikiNav } from "@/lib/wiki-nav-context";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 
 export type WikiLinkEl = {
 	value: string;

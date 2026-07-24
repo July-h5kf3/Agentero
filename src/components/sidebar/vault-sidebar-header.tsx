@@ -42,15 +42,15 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatShortcutById } from "@/lib/shell/shortcuts";
+import { vaultDisplayName } from "@/lib/vault";
 import {
 	getRecentRemoteVaults,
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
 	type RecentRemoteVault,
 	removeRecentRemoteVault,
-} from "@/lib/remote-vault";
-import { formatShortcutById } from "@/lib/shortcuts";
-import { vaultDisplayName } from "@/lib/vault";
+} from "@/lib/vault/remote/remote-vault";
 
 export type VaultSidebarHeaderProps = {
 	title: string;

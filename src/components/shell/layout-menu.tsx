@@ -16,7 +16,11 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatShortcut, SHORTCUTS, type ShortcutId } from "@/lib/shortcuts";
+import {
+	formatShortcut,
+	SHORTCUTS,
+	type ShortcutId,
+} from "@/lib/shell/shortcuts";
 
 /** Display string (⌥⌘S / Ctrl+Alt+S …) for a shortcut id, empty if none. */
 function shortcutFor(id: ShortcutId): string {

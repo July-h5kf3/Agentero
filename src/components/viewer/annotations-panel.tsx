@@ -12,12 +12,12 @@ import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/core/utils";
 import {
 	type HighlightColor,
 	swatchBorderClass,
 	swatchColorClass,
-} from "@/lib/pdf-highlight/palette";
-import { cn } from "@/lib/utils";
+} from "@/lib/pdf/highlight/palette";
 
 export type AnnotationRow = {
 	id: string;

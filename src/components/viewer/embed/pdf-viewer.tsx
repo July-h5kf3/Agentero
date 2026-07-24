@@ -107,8 +107,10 @@ import {
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
-import { notifyError } from "@/lib/notify";
-import { isPdfViewerSource } from "@/lib/paper-metadata";
+import { notifyError } from "@/lib/core/notify";
+import { cn } from "@/lib/core/utils";
+import { isPdfViewerSource } from "@/lib/paper";
+import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
 import {
 	createEmptyThread,
 	deletePdfAskThread,
@@ -117,40 +119,39 @@ import {
 	popoverScreenPoint,
 	toSummaries,
 	writePdfAskThread,
-} from "@/lib/pdf-ask";
-import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
-import { threadHasUserQuestion, threadPin } from "@/lib/pdf-ask/schema";
-import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf-ask/types";
+} from "@/lib/pdf/ask";
+import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
+import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
+import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf/ask/types";
 import {
 	hasAnnotationsFile,
 	highlightViewFromObject,
 	isHighlightObject,
 	loadAnnotationItems,
 	saveAnnotationItems,
-} from "@/lib/pdf-highlight/annotation-store";
-import { migrateHighlightMarks } from "@/lib/pdf-highlight/migrate-marks";
+} from "@/lib/pdf/highlight/annotation-store";
+import { migrateHighlightMarks } from "@/lib/pdf/highlight/migrate-marks";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	HIGHLIGHT_HEX,
 	HIGHLIGHT_HEX_LIST,
 	HIGHLIGHT_OPACITY,
 	type HighlightColor,
-} from "@/lib/pdf-highlight/palette";
-import type { PdfHighlight } from "@/lib/pdf-highlight/types";
-import { readReadingPage, writeReadingPage } from "@/lib/pdf-reading-position";
+} from "@/lib/pdf/highlight/palette";
+import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
 	type SelectionPin,
-} from "@/lib/pdf-selection";
+} from "@/lib/pdf/selection";
 import {
 	createTranslateRecord,
 	deletePdfTranslate,
 	listPdfTranslates,
 	writePdfTranslate,
-} from "@/lib/pdf-translate";
-import type { PdfTranslateRecord } from "@/lib/pdf-translate/types";
-import { writeReadingMetaPageCount } from "@/lib/reading-heatmap";
+} from "@/lib/pdf/translate";
+import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { loadSettings } from "@/lib/settings";
 import {
 	buildTranslatePrompt,
@@ -158,7 +159,6 @@ import {
 	resolveTranslateAgent,
 	runTranslate,
 } from "@/lib/translate";
-import { cn } from "@/lib/utils";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;

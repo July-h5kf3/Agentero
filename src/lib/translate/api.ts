@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "@/lib/tauri";
+import { isTauri } from "@/lib/core/tauri";
 
 type ApiResult<T> = {
 	ok: boolean;

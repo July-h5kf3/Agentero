@@ -11,7 +11,7 @@ import {
 	type PaperMetadata,
 	paperDirFromPath,
 	sortFileTreeNodes,
-} from "@/lib/paper-metadata";
+} from "@/lib/paper";
 import type { FileNode } from "@/lib/vault";
 
 describe("paper folder minimal unit", () => {

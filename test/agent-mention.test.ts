@@ -9,7 +9,7 @@ import {
 	mentionPathDepth,
 	mentionPathHasChildren,
 	pushRecentMentionPath,
-} from "@/lib/agent-mention";
+} from "@/lib/agent/mention";
 
 class MemoryStorage {
 	private values = new Map<string, string>();

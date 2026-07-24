@@ -74,7 +74,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useImeGuard } from "@/hooks/use-ime-guard";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 // ============================================================================
 // Helpers

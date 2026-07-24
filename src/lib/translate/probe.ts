@@ -3,7 +3,7 @@
  * Used by Settings → Translate when the default-service Select opens.
  */
 
-import { isTauri } from "@/lib/tauri";
+import { isTauri } from "@/lib/core/tauri";
 import { invokeTranslateText } from "@/lib/translate/api";
 import type { FreeTranslateProviderId } from "@/lib/translate/types";
 import { FREE_MT_PROVIDER_IDS } from "@/lib/translate/types";

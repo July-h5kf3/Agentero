@@ -17,14 +17,14 @@ import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import i18n from "@/i18n";
-import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
+import { errorMessage, notifyError } from "@/lib/core/notify";
+import { cn } from "@/lib/core/utils";
+import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
 	saveImageToMarkdownAssets,
-} from "@/lib/markdown-image";
-import { errorMessage, notifyError } from "@/lib/notify";
-import { cn } from "@/lib/utils";
+} from "@/lib/markdown/image";
 
 export type MarkdownEditorProps = {
 	/** Initial Markdown content for the open file. The component reseeds on remount (key). */

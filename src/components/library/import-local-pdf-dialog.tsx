@@ -16,8 +16,8 @@ import {
 	basenameOfPath,
 	slugFromPdfPath,
 	titleFromPdfPath,
-} from "@/lib/local-pdf-meta";
-import type { LocalPdfImportEntry } from "@/lib/lookup";
+} from "@/lib/paper/local-pdf-meta";
+import type { LocalPdfImportEntry } from "@/lib/paper/lookup";
 
 type DraftRow = {
 	filePath: string;

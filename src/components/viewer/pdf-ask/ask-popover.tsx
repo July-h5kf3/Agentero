@@ -19,9 +19,9 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
-import { threadTitle } from "@/lib/pdf-ask/schema";
-import type { PdfAskThread } from "@/lib/pdf-ask/types";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { threadTitle } from "@/lib/pdf/ask/schema";
+import type { PdfAskThread } from "@/lib/pdf/ask/types";
 
 type AskPopoverProps = {
 	thread: PdfAskThread;

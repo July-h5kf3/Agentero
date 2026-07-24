@@ -9,7 +9,7 @@ import {
 	normalizeContextPath,
 	paperContextRoot,
 	toPathSet,
-} from "@/lib/context-path-icon";
+} from "@/lib/agent/context-path-icon";
 
 describe("context-path-icon", () => {
 	it("normalizes slashes and trailing separators", () => {

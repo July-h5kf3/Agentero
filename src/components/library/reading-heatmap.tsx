@@ -10,13 +10,16 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { isEmptyHeatmap, type ReadingHeatmap } from "@/lib/reading-heatmap";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import {
+	isEmptyHeatmap,
+	type ReadingHeatmap,
+} from "@/lib/paper/reading-heatmap";
 
 /**
  * Apple system green (HIG / SF Symbols green family).
  * Matches tag palette `green` swatch: ~#34C759 light, close to systemGreen.
- * @see src/lib/tag-colors.ts green token
+ * @see src/lib/ui/tag-colors.ts green token
  */
 const APPLE_SYSTEM_GREEN = "oklch(0.65 0.17 145)";
 

@@ -6,7 +6,7 @@ import {
 	getOverlayStackSnapshot,
 	isAnyOverlayOpen,
 	pushOverlay,
-} from "@/lib/overlay-stack";
+} from "@/lib/core/overlay-stack";
 
 afterEach(() => {
 	while (isAnyOverlayOpen()) {

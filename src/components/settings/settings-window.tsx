@@ -62,30 +62,21 @@ import {
 	upsertAgent,
 	warmAgent,
 } from "@/lib/agent";
-import {
-	type ConnectorStatus,
-	connectorGetStatus,
-	connectorSetEnabled,
-	connectorSetPort,
-} from "@/lib/connector";
-import { notifyError } from "@/lib/notify";
+import { notifyError } from "@/lib/core/notify";
+import { getPlatformOS, isTauri } from "@/lib/core/tauri";
+import { cn } from "@/lib/core/utils";
 import {
 	PAPER_TREE_LABEL_MODES,
 	PAPER_TREE_SORT_MODES,
 	type PaperTreeLabelMode,
 	type PaperTreeSortMode,
-} from "@/lib/paper-metadata";
+} from "@/lib/paper";
 import {
-	fetchHostIdentity,
-	fetchRemoteHostIdentity,
-	getRemoteSessionMeta,
-	isRemoteVaultHandle,
-	remoteAgentOpenInstallTerminal,
-	remoteAgentProbe,
-	remoteAgentScan,
-	remoteSessionIdFromHandle,
-} from "@/lib/remote-vault";
-import { revealInOsLabelKey } from "@/lib/reveal";
+	type ConnectorStatus,
+	connectorGetStatus,
+	connectorSetEnabled,
+	connectorSetPort,
+} from "@/lib/paper/import/connector";
 import {
 	type AgentPermissionMode,
 	type AiResponseLanguage,
@@ -103,8 +94,7 @@ import {
 	type ShortcutDef,
 	type ShortcutGroup,
 	shortcutsByGroup,
-} from "@/lib/shortcuts";
-import { getPlatformOS, isTauri } from "@/lib/tauri";
+} from "@/lib/shell/shortcuts";
 import {
 	FREE_MT_PROVIDER_IDS,
 	type FreeMtProbeMap,
@@ -114,8 +104,18 @@ import {
 	listSelectableProviders,
 	probeFreeMtProviders,
 } from "@/lib/translate";
-import { applyUiTheme, DEFAULT_UI_THEME, UI_THEMES } from "@/lib/ui-theme";
-import { cn } from "@/lib/utils";
+import { applyUiTheme, DEFAULT_UI_THEME, UI_THEMES } from "@/lib/ui/theme";
+import {
+	fetchHostIdentity,
+	fetchRemoteHostIdentity,
+	getRemoteSessionMeta,
+	isRemoteVaultHandle,
+	remoteAgentOpenInstallTerminal,
+	remoteAgentProbe,
+	remoteAgentScan,
+	remoteSessionIdFromHandle,
+} from "@/lib/vault/remote/remote-vault";
+import { revealInOsLabelKey } from "@/lib/vault/reveal";
 
 export type SettingsSection =
 	| "general"
@@ -704,7 +704,9 @@ function RemoteCacheSettingsBlock() {
 	const refresh = useCallback(async () => {
 		if (!isTauri()) return;
 		try {
-			const { remoteCacheStats } = await import("@/lib/remote-vault");
+			const { remoteCacheStats } = await import(
+				"@/lib/vault/remote/remote-vault"
+			);
 			const s = await remoteCacheStats();
 			setStats({ bytes: s.bytes, files: s.files, maxBytes: s.maxBytes });
 		} catch {
@@ -720,7 +722,9 @@ function RemoteCacheSettingsBlock() {
 		if (!isTauri() || busy) return;
 		setBusy(true);
 		try {
-			const { remoteCacheClear } = await import("@/lib/remote-vault");
+			const { remoteCacheClear } = await import(
+				"@/lib/vault/remote/remote-vault"
+			);
 			await remoteCacheClear();
 			await refresh();
 		} catch (e) {

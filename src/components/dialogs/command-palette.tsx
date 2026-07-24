@@ -16,10 +16,10 @@ import {
 	CommandItem,
 	CommandList,
 } from "@/components/ui/command";
-import { filterByFuzzy } from "@/lib/commands/match";
-import type { AppCommand, PaletteMode } from "@/lib/commands/types";
-import type { PaperMetadata } from "@/lib/paper-metadata";
-import { type SearchHit, searchVault } from "@/lib/vault-search";
+import type { PaperMetadata } from "@/lib/paper";
+import { filterByFuzzy } from "@/lib/shell/commands/match";
+import type { AppCommand, PaletteMode } from "@/lib/shell/commands/types";
+import { type SearchHit, searchVault } from "@/lib/vault/search";
 
 type CommandPaletteProps = {
 	open: boolean;

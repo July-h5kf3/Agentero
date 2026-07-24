@@ -5,7 +5,7 @@ import {
 	isPdfFileName,
 	pathsFromDataTransfer,
 	pdfPathsFromDataTransfer,
-} from "@/lib/external-file-drop";
+} from "@/lib/shell/external-file-drop";
 
 function mockDt(opts: {
 	types?: string[];

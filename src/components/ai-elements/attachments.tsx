@@ -20,7 +20,7 @@ import {
 	HoverCardContent,
 	HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 // ============================================================================
 // Types

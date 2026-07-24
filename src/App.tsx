@@ -56,32 +56,16 @@ import {
 	runQueuedBackgroundTask,
 	startBackgroundTask,
 	updateBackgroundTask,
-} from "@/lib/background-tasks";
-import type { AppCommand, PaletteMode } from "@/lib/commands/types";
-import {
-	type ConnectorItemSaved,
-	type ConnectorProgress,
-	connectorSetEnabled,
-	connectorSetParentDir,
-	connectorSetVault,
-} from "@/lib/connector";
-import {
-	cleanupImportTempPaths,
-	isImportTempPath,
-} from "@/lib/external-file-drop";
-import {
-	addPapersByIdentifiers,
-	downloadPaperAssets,
-	importLocalPdfs,
-	type LocalPdfImportEntry,
-} from "@/lib/lookup";
+} from "@/lib/core/background-tasks";
 import {
 	notifyError,
 	notifySuccess,
 	notifyUndo,
 	notifyWarning,
-} from "@/lib/notify";
-import { closeTopOverlay } from "@/lib/overlay-stack";
+} from "@/lib/core/notify";
+import { closeTopOverlay } from "@/lib/core/overlay-stack";
+import { isMacOS, isTauri } from "@/lib/core/tauri";
+import { cn } from "@/lib/core/utils";
 import {
 	collectPaperFoldersFromTree,
 	collectPapersNeedingAssetDownload,
@@ -93,12 +77,7 @@ import {
 	paperCatalogPath,
 	paperDirFromPath,
 	resolvePapersParentDir,
-} from "@/lib/paper-metadata";
-import {
-	maybeAutoRunPaperReader,
-	paperAssetsReadyForReader,
-	runPaperReaderWorkflow,
-} from "@/lib/paper-read";
+} from "@/lib/paper";
 import {
 	exportLibraryToFile,
 	importLibraryFromFile,
@@ -113,20 +92,28 @@ import {
 	setPaperTags,
 	TRASH_VIRTUAL_PATH,
 	trashPaths,
-} from "@/lib/papers-api";
-import type { PdfAskThread } from "@/lib/pdf-ask/types";
-import { normalizeHighlightColor } from "@/lib/pdf-highlight/palette";
-import type { PdfHighlight } from "@/lib/pdf-highlight/types";
+} from "@/lib/paper/api";
 import {
-	clearRemoteSessionMeta,
-	isRemoteVaultHandle,
-	rememberRecentRemoteVault,
-	remoteConnect,
-	remoteDisconnect,
-	remoteSessionIdFromHandle,
-	saveRemoteSessionMeta,
-} from "@/lib/remote-vault";
-import { openInTerminal, revealInFileManager } from "@/lib/reveal";
+	type ConnectorItemSaved,
+	type ConnectorProgress,
+	connectorSetEnabled,
+	connectorSetParentDir,
+	connectorSetVault,
+} from "@/lib/paper/import/connector";
+import {
+	addPapersByIdentifiers,
+	downloadPaperAssets,
+	importLocalPdfs,
+	type LocalPdfImportEntry,
+} from "@/lib/paper/lookup";
+import {
+	maybeAutoRunPaperReader,
+	paperAssetsReadyForReader,
+	runPaperReaderWorkflow,
+} from "@/lib/paper/reader";
+import type { PdfAskThread } from "@/lib/pdf/ask/types";
+import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
+import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
 	type AppSettings,
 	type LibraryColumnPref,
@@ -135,32 +122,11 @@ import {
 	subscribeSettings,
 	UI_SCALE_PRESETS,
 } from "@/lib/settings";
+import type { AppCommand, PaletteMode } from "@/lib/shell/commands/types";
 import {
-	basenameOf,
-	createNotesSplitPane,
-	createPlaceholderTab,
-	type DocTab,
-	ensureFullLibraryTab,
-	insertPlaceholderTab,
-	loadPersistedTabs,
-	loadTabResources,
-	normalizeTabPath,
-	type OpenPlacement,
-	patchTab,
-	removeTab,
-	removeTabsUnderPath,
-	reseedMarkdownTab,
-	reseedNotesTab,
-	revokeTabMediaSources,
-	savePersistedTabs,
-	syncTabSeedsForPath,
-	tabHasNotesSplit,
-	tabIdForPath,
-	tabIsPaperNotes,
-	tabNotesEligible,
-} from "@/lib/tabs";
-import { isMacOS, isTauri } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
+	cleanupImportTempPaths,
+	isImportTempPath,
+} from "@/lib/shell/external-file-drop";
 import {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
@@ -188,7 +154,16 @@ import {
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
-import { type CenterViewMode, preferredModeForPath } from "@/lib/viewer";
+import {
+	clearRemoteSessionMeta,
+	isRemoteVaultHandle,
+	rememberRecentRemoteVault,
+	remoteConnect,
+	remoteDisconnect,
+	remoteSessionIdFromHandle,
+	saveRemoteSessionMeta,
+} from "@/lib/vault/remote/remote-vault";
+import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import {
 	missingNotePath,
 	newNoteMarkdown,
@@ -197,7 +172,35 @@ import {
 	toVaultRelative,
 	type WikiNavTarget,
 } from "@/lib/wiki";
-import { WikiNavContext } from "@/lib/wiki-nav-context";
+import { WikiNavContext } from "@/lib/wiki/nav-context";
+import {
+	basenameOf,
+	createNotesSplitPane,
+	createPlaceholderTab,
+	type DocTab,
+	ensureFullLibraryTab,
+	insertPlaceholderTab,
+	loadPersistedTabs,
+	loadTabResources,
+	normalizeTabPath,
+	type OpenPlacement,
+	patchTab,
+	removeTab,
+	removeTabsUnderPath,
+	reseedMarkdownTab,
+	reseedNotesTab,
+	revokeTabMediaSources,
+	savePersistedTabs,
+	syncTabSeedsForPath,
+	tabHasNotesSplit,
+	tabIdForPath,
+	tabIsPaperNotes,
+	tabNotesEligible,
+} from "@/lib/workspace/tabs";
+import {
+	type CenterViewMode,
+	preferredModeForPath,
+} from "@/lib/workspace/viewer";
 
 /**
  * Number of PDF tabs kept mounted (most recent first). The active PDF tab is

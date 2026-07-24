@@ -9,7 +9,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type HighlightMenuProps = {
 	screen: { x: number; y: number };

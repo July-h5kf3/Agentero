@@ -13,7 +13,7 @@ import {
 	resetAgentChatIds,
 	resolveSelected,
 	upsertPlanPart,
-} from "@/lib/agent-chat-state";
+} from "@/lib/agent/chat-state";
 
 beforeEach(() => {
 	resetAgentChatIds();

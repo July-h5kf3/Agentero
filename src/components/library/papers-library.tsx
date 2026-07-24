@@ -43,22 +43,22 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { copyTextToClipboard } from "@/lib/clipboard";
-import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper-metadata";
-import { filterPapersByScope } from "@/lib/papers-api";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { cn } from "@/lib/core/utils";
+import { formatAuthorsShort, type PaperMetadata } from "@/lib/paper";
+import { filterPapersByScope } from "@/lib/paper/api";
 import {
 	heatmapCacheKey,
 	loadReadingHeatmaps,
 	type ReadingHeatmap,
-} from "@/lib/reading-heatmap";
+} from "@/lib/paper/reading-heatmap";
 import {
 	DEFAULT_LIBRARY_COLUMNS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
 	useUiScale,
 } from "@/lib/settings";
-import { coercePaperTags } from "@/lib/tag-colors";
-import { cn } from "@/lib/utils";
+import { coercePaperTags } from "@/lib/ui/tag-colors";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */

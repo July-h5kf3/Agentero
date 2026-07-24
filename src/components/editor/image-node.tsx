@@ -10,17 +10,14 @@ import {
 import { useEffect, useState } from "react";
 
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { cn } from "@/lib/core/utils";
 import {
 	formatMarkdownImageSyntax,
 	isRemoteOrInlineImageUrl,
 	resolveMarkdownImageAbs,
-} from "@/lib/markdown-image";
-import {
-	localImageToViewerSource,
-	revokePdfViewerSource,
-} from "@/lib/paper-metadata";
-import { cn } from "@/lib/utils";
-import { imageMimeFromPath } from "@/lib/viewer";
+} from "@/lib/markdown/image";
+import { localImageToViewerSource, revokePdfViewerSource } from "@/lib/paper";
+import { imageMimeFromPath } from "@/lib/workspace/viewer";
 
 export function ImageElement(props: PlateElementProps<TImageElement>) {
 	const url = props.element.url ?? "";

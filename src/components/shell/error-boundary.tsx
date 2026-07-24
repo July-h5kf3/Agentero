@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import i18n from "@/i18n";
-import { logger } from "@/lib/logger";
+import { logger } from "@/lib/core/logger";
 
 type Props = {
 	children: ReactNode;

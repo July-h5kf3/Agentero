@@ -18,7 +18,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 import { CodeBlock } from "./code-block";
 

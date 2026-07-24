@@ -1,7 +1,7 @@
 /**
  * Shared chip / mention-row icon (paper / folder / typed file).
  */
-import { contextPathIcon } from "@/lib/context-path-icon";
+import { contextPathIcon } from "@/lib/agent/context-path-icon";
 
 export function ContextPathIcon({
 	path,

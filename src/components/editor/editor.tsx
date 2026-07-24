@@ -6,7 +6,7 @@ import type { PlateContentProps, PlateViewProps } from "platejs/react";
 import { PlateContainer, PlateContent, PlateView } from "platejs/react";
 import type * as React from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 const editorContainerVariants = cva(
 	// Neutral selection (not brand blue) so selected text stays readable in light/dark.
