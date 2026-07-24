@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { wikiLinkRules } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	addRecentWikiCandidate,
 	parseWikiCompletionQuery,
@@ -68,5 +69,26 @@ describe("wikilink completion grammar", () => {
 		const recent = addRecentWikiCandidate([first], second, 2);
 		expect(recent).toEqual([second, first]);
 		expect(addRecentWikiCandidate(recent, first, 2)).toEqual([first, second]);
+	});
+
+	it("serializes a completion node back to a portable Wikilink", () => {
+		const completion = wikiCompletionInsert({
+			kind: "heading",
+			path: "notes/Canonical.md",
+			insertText: "notes/Canonical#Overview",
+			label: "Overview",
+		});
+		const serialized = wikiLinkRules.wikiLink.serialize({
+			type: "wikiLink",
+			value: completion.target,
+			heading: completion.heading,
+			alias: "Short name",
+			children: [{ text: "" }],
+		});
+		expect(serialized).toEqual({
+			type: "wikiLink",
+			value: "notes/Canonical#Overview",
+			data: { alias: "Short name" },
+		});
 	});
 });
