@@ -45,6 +45,7 @@
 - [`github-project.md`](github-project.md)：GitHub Project「Agentero」结构、标签、Issue 映射（B1–B8 / F1–F18 → #7–#32；B2/B4–B8 已关闭；#33 非 Codex 历史；看板 [orgs/poco-ai/projects/1](https://github.com/orgs/poco-ai/projects/1)）。
 - [`bug.md`](bug.md)：已知 bug / UX 语料与勾选状态（与 GitHub B1–B8 对齐）。
 - [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
+- [`lib-layout.md`](lib-layout.md)：前端 `src/lib` 领域分包布局与导入约定。
 - [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
 - [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。

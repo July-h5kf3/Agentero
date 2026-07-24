@@ -200,7 +200,7 @@ interface PdfTranslateRecord {
 }
 ```
 
-实现：`src/lib/pdf-selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
+实现：`src/lib/pdf/selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
 
 ### 5.3 存储边界
 
@@ -222,8 +222,8 @@ src/components/viewer/
     selection-gutter.tsx         # 共用页边针
     ask-popover.tsx | annotation-editor.tsx | translate-card.tsx
     highlight-layer.tsx | highlight-menu.tsx
-src/lib/pdf-selection/           # marks-io + pin + ActiveSelectionCard
-src/lib/pdf-ask|pdf-highlight|pdf-translate/
+src/lib/pdf/selection/           # marks-io + pin + ActiveSelectionCard
+src/lib/pdf/ask|pdf-highlight|pdf-translate/
 ```
 
 **UI**：i18n `viewer`；图标 + Tooltip；卡片 Esc/收起/删除；滚动重定位。
@@ -236,7 +236,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 
 - `agent_run_once`（`hideFromChatHistory: true`）
 - `agent:stream` / `agent:completed` / `agent:failed`
-- 提问 prompt：`src/lib/pdf-ask/prompt.ts`；Agent/模型：`settings.pdfAsk`
+- 提问 prompt：`src/lib/pdf/ask/prompt.ts`；Agent/模型：`settings.pdfAsk`
 - 翻译：应用级 `translate` 服务（免费 MT 或 BYOA Agent，见 [`translate.md`](translate.md)）
 
 ## 8. 页边圆片布局算法

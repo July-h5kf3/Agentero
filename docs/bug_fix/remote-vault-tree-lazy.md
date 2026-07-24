@@ -4,7 +4,7 @@
 **影响面**：打开 Vault 时的左侧文件树（本地与远程同一套建树逻辑；远程 SFTP 下体感最重）  
 **相关代码**：
 
-- `src/lib/vault.ts` — `loadVaultTree` / `listVaultDirChildren` / `shouldIgnoreTreeName` / `isEagerTreeRel` / `replaceTreeNodeChildren`
+- `src/lib/vault` — `loadVaultTree` / `listVaultDirChildren` / `shouldIgnoreTreeName` / `isEagerTreeRel` / `replaceTreeNodeChildren`
 - `src/components/sidebar/file-tree.tsx` — 展开时触发懒加载、pending spinner
 - `src/App.tsx` — `onLoadDirChildren` 合并子树
 - `test/vault-tree.test.ts` — 忽略规则、eager 判定、pending 合并

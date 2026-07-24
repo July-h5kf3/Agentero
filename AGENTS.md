@@ -14,7 +14,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
   - 中间：无 Vault 时欢迎页；有 Vault 时 **全局 Dockview 工作区**（每个打开文档一个 panel：Library / PDF / HTML / 图片 / Markdown / Trash）；单击非 paper 文件夹在 Library panel 就地按路径筛选；关光文档后回到全库；
   - 论文 NOTES：作为独立 dockview panel 与 PDF 同组 sibling tab（`openPanel` within）；Layout 菜单 / 快捷键切换；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
-  - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/notify.ts`）弹出；表单就地校验除外。
+  - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/core/notify.ts`）弹出；表单就地校验除外。
   - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Layout「面板」菜单）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话；左侧栏 Quest 式弱对比（新建 + 单行历史）；主区顶栏仅 Agent 切换（无 1/2/3 标签）；对话区全宽滚动 + AI Elements；标题栏返回图标退出。精读 / PDF 划词等后台运行不进对话历史。
   - **文档面板**由中间栏 **dockview** 原生管理（tab 条、关闭、上下左右分屏、多格网格；**布局只存 `toJSON()`**，path/mode 在 panel params）；标题栏**无**文档 tab 条。打开带放置走 `workspaceRef.openPanel`；关闭焦点听 `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` 视觉序循环。见 `docs/development/tab-split.md`。
 - 论文库：`paper_list` 读 catalog 一次进内存；表头排序；**表头右键选列 / 拖拽排序**（顺序 + 显隐持久化到 `settings.json` 的 `libraryColumns`，标题列不可隐藏）；横向/纵向滚动；**tags** 列展示（搜索框可匹配标签子串）；**文件夹作用域**按 `paper.path` 前缀过滤（不扫盘、无 per-folder RPC）。虚拟路径 `agentero:library` 不写盘。
@@ -28,13 +28,13 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **Agent 面板工作流**：空态建议 chips → `summary` / `qa` / `related_work`（Summarize、Ask library、Draft Related Work 等）；目标为当前聚焦 paper。Composer：**当前论文默认加入**上下文（实心 chip + paper-name/标题，无加号切换；可 X 移除）；`@` 提及（论文文件夹 + 目录 + paper 外 Markdown；空 `@` 优先最近路径与浅层目录树；行右 **›** 进入子目录、‹/`←`/`Esc` 返回；论文标签与文件树 `paperTreeLabelMode` 一致）与从文件树**拖入**路径均为可移除 context chip（路径引用，非 AI Elements Attachments 二进制）；chip 展示虚拟名（paper-name），prompt 仍用 Vault 相对路径；图标见 `context-path-icon`（**paper** → `ScrollText`，其它文件夹 → `Folder`，文件按扩展名）。
 - **命令面板**：`⌘P`/`⌘K` 快速打开（论文 + `vault_search` 全文）；`⇧⌘P` / `>` 执行内置命令。
 - **设置窗口**：App 内居中浮层 dialog（`SettingsWindow` + `overlay-stack`；`⌘,` / 菜单 / 齿轮）。曾实现独立原生单例窗口（`settings_window_open` + `?window=settings`），Windows 第二 webview 白屏故改回浮层；相关 Host/路由代码保留未启用。保存经 `settings_set` → 广播 `settings:changed` 同步。
-- **配色主题**：设置 → Appearance **`uiTheme`**（默认 `default` = 内置外观）；36 个 tweakcn 预设打包于 `src/themes/tweakcn.json`（仅颜色 + radius），`src/lib/ui-theme.ts` 运行时注入 `:root`/`.dark` 变量覆盖；刷新数据 `node scripts/fetch-tweakcn-themes.mjs`。
+- **配色主题**：设置 → Appearance **`uiTheme`**（默认 `default` = 内置外观）；36 个 tweakcn 预设打包于 `src/themes/tweakcn.json`（仅颜色 + radius），`src/lib/ui/theme.ts` 运行时注入 `:root`/`.dark` 变量覆盖；刷新数据 `node scripts/fetch-tweakcn-themes.mjs`。
 - 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；**`⌘←` 折叠选中文件夹**、**`⇧⌘←` 折叠至默认**（只展开 `papers/`，不展开其子目录）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；Library 虚拟节点右键 **导出论文库**（BibTeX）；其下虚拟节点 **Recycle Bin**（`agentero:trash`）打开中间栏回收站视图（恢复 / 永久删除；**清空**在该节点右键菜单）。打开 Vault 时默认只展开 `papers/` 及其一级子目录；激活文档变化时树展开祖先并滚到对应行。**建树**：`papers/`/`notes/`/`plans/`/`.agents/` 全量递归；其它根目录（`src/` 等）只 list 一层，子目录 `childrenPending`、展开再 list；忽略名（`.git`/`.venv`/`node_modules`/…）永不 list。Paper 行标签默认 **标题 · 作者**（设置 → 通用 `paperTreeLabelMode`，展示用、不改磁盘名）；同目录排序默认 **显示名称 A–Z**（与 `paperTreeLabelMode` 标签一致；`paperTreeSortMode`：标题 / 作者 / 年份 / 添加时间等预设，展示用）。
 - 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
 - PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 批注 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。**批注** = 高亮 + 内联评论（`comment`），带 comment 的高亮显示页边批注针，右侧 **批注** 面板列出当前 PDF 的批注卡（跳转 / 编辑 / 删除），不写入 `NOTES.md`。
 - **翻译服务**：应用级可插拔 `TranslateService`（免费 MT + BYOA Agent，无付费 API），设置 → 翻译；PDF 划词等为消费方；见 `docs/development/translate.md`。
 - 图片：常见格式任意路径 `blob:` 中间栏预览。
-- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown-image.ts`）。
+- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown/image.ts`）。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘变化：**无未存改动则重载**；**有未存改动则 toast 提示**（不静默覆盖）；内容相等抑制自写回声；create/remove/rename 去抖刷新文件树。
 - **Wiki 索引**：`.md` 变更防抖重建（`scheduleWikiRebuild`，~900ms），Backlinks/Graph 保持新鲜。
 - **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止写入并警告（`diskConflict.saveBlocked`）。

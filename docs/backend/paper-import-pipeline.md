@@ -246,7 +246,7 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 ### 5.1 策略表
 
 ```ts
-// 概念：src/lib/paper-import.ts（或同类）
+// 概念：src/lib/paper/import（或同类）
 type AfterImportPolicy = {
   refreshTree: boolean;
   refreshLibrary: boolean;
@@ -363,7 +363,7 @@ MVP 统一管线时选 **A**，避免与后台任务条并发策略纠缠。
 代码锚点（迁移前参考）：
 
 - Host：`src-tauri/src/services/lookup/mod.rs`、`connector/import.rs`、`lookup/zotero_io.rs`、`lookup/zotero_db.rs`
-- 前端：`src/App.tsx`（lookup / connector / local pdf / library import）、`src/lib/lookup.ts`、`src/lib/papers-api.ts`、`src/lib/connector.ts`
+- 前端：`src/App.tsx`（lookup / connector / local pdf / library import）、`src/lib/paper/lookup.ts`、`src/lib/paper/api.ts`、`src/lib/paper/import/connector.ts`
 
 ---
 

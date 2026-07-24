@@ -56,7 +56,7 @@
 - [x] Library 行批量补资源（与 2b 联动）
 - [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示（搜索匹配标签；无表上方 chip 筛选条）
 - [x] **Tags CLI**：`paper tag list|set|add|rm` / `list --tag`（与 Host 共用 `papers::set_tags`）
-- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/tag-colors.ts`）
+- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/ui/tag-colors.ts`）
 
 ### 2c-2. 论文库默认页 + 文件夹作用域库
 
@@ -93,7 +93,7 @@
 ### 2f. Markdown 内嵌图片
 
 - [x] **Markdown 内嵌图片**（整项）
-- [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown-image.ts`）
+- [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown/image.ts`）
 - [x] 选中图片节点显示 Markdown 源码；未选中 `blob:` 预览
 - [x] 删除节点且引用计数归零时 GC managed assets 文件并刷新文件树
 - [x] 单测 + 文档（data-model / ui / technical-plan / test 冒烟表）
@@ -158,7 +158,7 @@
 - [x] 分层：log（诊断）≠ `ApiResult` / CLI envelope ≠ `notifyError` / 任务条 / Agent error 行
 - [x] 栈：`tauri-plugin-log` + `log` + `@tauri-apps/plugin-log`；CLI `env_logger` / `RUST_LOG`；默认无远程遥测
 - [x] Host：插件注册、capabilities `log:default`、dev/release level 与 LogDir
-- [x] 前端：`src/lib/logger.ts` + `logOp`；ErrorBoundary 打 error
+- [x] 前端：`src/lib/core/logger.ts` + `logOp`；ErrorBoundary 打 error
 - [x] **关键操作成对** `op start` / `op end`（`ok`、`duration_ms`）；`runBackgroundTask` 横切自动埋点
 - [x] Host 写/长耗时 command（vault、lookup、agent_run、trash、zotero、parse…）与 CLI 每命令 op 对
 - [x] 隐私：不写 Vault；不记 NOTES/PDF/prompt 全文（仅 path/id/len）

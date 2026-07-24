@@ -19,7 +19,7 @@
 - **NOTES 切换**：Layout 菜单 / 快捷键 → 开/关 NOTES 为同组 tab。
 - **无 PDF/HTML 切换条**：`mode` 在 `loadTabResources` 时按路径与可用资源确定。
 
-## 3. 数据结构（`src/lib/tabs.ts`）
+## 3. 数据结构（`src/lib/workspace/tabs`）
 
 ```ts
 export type DocTab = {

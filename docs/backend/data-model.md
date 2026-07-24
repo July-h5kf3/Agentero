@@ -157,7 +157,7 @@ Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_en
 | 删除 / GC | 文档中移除图片节点后，若该 URL 在**全文引用计数为 0**，且路径属于本笔记 managed `assets/`，则 **延迟 ~15s** 删磁盘文件（剪切→粘贴 / 撤销期间可取消）；离开编辑器时 flush 待删项；`https://` / `data:` 等远程或内联 URL **不**删盘 |
 | 安全 | GC 仅限 `{mdDir}/assets/` 下文件；拒绝 `..` 穿越；不删 `assets` 目录本身 |
 | 命名 | 粘贴：`image-<时间戳>-<短 id>.ext`；点选文件尽量保留原名，冲突则 `-1` / `-2` 后缀 |
-| 实现 | `src/lib/markdown-image.ts`；编辑器 `MarkdownEditor` + `ImageElement`；插入/删除后 `onAssetsChanged` 刷新文件树 |
+| 实现 | `src/lib/markdown/image.ts`；编辑器 `MarkdownEditor` + `ImageElement`；插入/删除后 `onAssetsChanged` 刷新文件树 |
 | 权限 | Host capability 含 `fs:allow-write-file`（二进制写入 assets） |
 
 与 PDF 解析派生资源共用同一 `assets/` 文件夹时互不冲突（文件名唯一）。用户插入图属 **Tier 1a**；勿把仅由解析生成的图误当成可随意 GC 的临时缓存（当前 GC **只**针对编辑器移除的 managed `./assets/` 链接）。
@@ -180,7 +180,7 @@ papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import �
 
 - **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
 - 提问 / 翻译坐标为页内归一化 0–1；高亮几何由 EmbedPDF 注解（页点坐标）保存。
-- 实现：`src/lib/pdf-selection/marks-io.ts` + `pdf-ask` / `pdf-highlight`（含 `annotation-store.ts`）/ `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
+- 实现：`src/lib/pdf/selection/marks-io.ts` + `pdf-ask` / `pdf-highlight`（含 `annotation-store.ts`）/ `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
 - **阅读热力**：聚合 ask / translate mark 与高亮视图的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
 
 ### `PAPER.md`(L3，派生)
@@ -245,7 +245,7 @@ interface PaperMetadata {
   /**
    * Catalog 标签。序列化兼容：无色为字符串，有色为 `{ name, color }`。
    * `color` 预置 id：red/orange/yellow/green/teal/blue/indigo/purple。
-   * 前端读写经 `coercePaperTags` / `normalizePaperTags`（`src/lib/tag-colors.ts`）。
+   * 前端读写经 `coercePaperTags` / `normalizePaperTags`（`src/lib/ui/tag-colors.ts`）。
    */
   tags: Array<string | { name: string; color?: string }>;
 

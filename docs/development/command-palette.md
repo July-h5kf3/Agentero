@@ -2,7 +2,7 @@
 
 > 状态：**Phase A 已落地**（⌘P/⌘K 快速打开 · ⇧⌘P 命令面板 · `>` 前缀；命令注册表 Phase B 仍待）  
 > 目标：对齐 VS Code 的 **⌘P 快速打开** 与 **⇧⌘P 命令面板** 交互心智，在 Agentero 中落地「全局搜索框」能力，并给出实现边界与分期。  
-> 相关：现有 `src/components/dialogs/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
+> 相关：现有 `src/components/dialogs/command-palette.tsx`、`src/lib/vault/search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
 
 ---
 
@@ -120,7 +120,7 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 | 命令模式 | 内置命令列表 + `>` 前缀 | 设置 / 侧栏 / Vault / 布局等可执行动作（Phase A） |
 | 打开目标 | `onOpenPaper` / `onOpenVaultRel` | 命中 `papers/` 打开论文，否则打开笔记路径 |
 
-**Phase A**：⌘P 资源导航 + 内容搜索 + ⇧⌘P / `>` 命令执行。**Phase B** 仍待：统一 `src/lib/commands` 注册表（现仅有 `types.ts` / `match.ts`）、扩展贡献、更丰富 when / MRU。
+**Phase A**：⌘P 资源导航 + 内容搜索 + ⇧⌘P / `>` 命令执行。**Phase B** 仍待：统一 `src/lib/shell/commands` 注册表（现仅有 `types.ts` / `match.ts`）、扩展贡献、更丰富 when / MRU。
 
 ### 3.2 与 VS Code 的差距
 
@@ -183,7 +183,7 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 
 ### 4.3 命令注册表（核心，对应 VS Code CommandService）
 
-新建轻量模块（建议 `src/lib/commands/`）：
+新建轻量模块（建议 `src/lib/shell/commands/`）：
 
 ```ts
 type AppCommand = {
@@ -247,7 +247,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 
 ### Phase B — 命令注册表与 MRU
 
-1. `src/lib/commands/（`types.ts` / `match.ts`；完整 registry 仍为 Phase B）` + 内置命令迁移（从 App 抽出绑定）。  
+1. `src/lib/shell/commands/（`types.ts` / `match.ts`；完整 registry 仍为 Phase B）` + 内置命令迁移（从 App 抽出绑定）。  
 2. localStorage：`command-mru`、`paper-mru`。  
 3. 空查询：最近论文 + 最近命令。  
 4. 可选前缀：`>` 强制命令模式。
@@ -328,7 +328,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 ## 9. 建议的文件布局
 
 ```text
-src/lib/commands/
+src/lib/shell/commands/
   types.ts          # AppCommand, PaletteItem
   registry.ts       # register / list / execute
   builtins.ts       # 内置命令 id 与工厂（注入 deps）

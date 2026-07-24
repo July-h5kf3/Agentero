@@ -39,7 +39,7 @@
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.agentero/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
-- [x] Markdown **图片**：粘贴 / 工具栏 → `./assets/` + `![](./assets/…)`；相对路径预览；**选中显示源码**；删除节点且无引用时同步删 assets 文件（见 `src/lib/markdown-image.ts`、data-model）。
+- [x] Markdown **图片**：粘贴 / 工具栏 → `./assets/` + `![](./assets/…)`；相对路径预览；**选中显示源码**；删除节点且无引用时同步删 assets 文件（见 `src/lib/markdown/image.ts`、data-model）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
@@ -237,7 +237,7 @@
 
 关键交付：
 
-- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/tab-workspace.tsx`、`src/lib/tabs.ts`；见 [`tab-split.md`](tab-split.md)）
+- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/tab-workspace.tsx`、`src/lib/workspace/tabs`；见 [`tab-split.md`](tab-split.md)）
 - [x] **panel 状态**：内容常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush）。
 - [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。

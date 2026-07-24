@@ -309,7 +309,7 @@ resolveTranslateModel(id):
 
 设置窗左侧导航 **Translate（翻译）**，与 General · Appearance · Agent · Keyboard · Privacy · About 并列。
 
-实现：`settings-window.tsx`；持久化 `src/lib/settings.ts`。
+实现：`settings-window.tsx`；持久化 `src/lib/settings`。
 
 ### 7.2 设计原则：最小选择
 
@@ -516,7 +516,7 @@ src-tauri/src/
   services/translate/   # HTTP 客户端、错误映射
 
 src/components/settings/settings-window.tsx  # Translate 导航页
-src/lib/settings.ts                 # translate 字段
+src/lib/settings                 # translate 字段
 src/i18n/locales/{en,zh-CN}/settings.json
 
 # 消费方（示例，不独占服务层）
@@ -569,4 +569,4 @@ src/components/viewer/pdf-viewer.tsx / pdf-ask/  → 调用 runTranslate
 
 - [zotero-pdf-translate](https://github.com/windingwind/zotero-pdf-translate) — 服务表、设置 Service 页、可插拔引擎
 - [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) — 自托管 MT 参考
-- 本仓库：[`pdf-ask.md`](pdf-ask.md)（首个消费方）、`src/lib/pdf-ask/prompt.ts`（现有 Agent 译 prompt，待迁入 `lib/translate`）
+- 本仓库：[`pdf-ask.md`](pdf-ask.md)（首个消费方）、`src/lib/pdf/ask/prompt.ts`（现有 Agent 译 prompt，待迁入 `lib/translate`）

@@ -14,7 +14,7 @@
 | Agent UI | [AI Elements](https://elements.ai-sdk.dev/) | Conversation、PromptInput、Sources、Reasoning、FileTree 等现成模式。 |
 | Markdown 编辑 | [Plate](https://platejs.org/) + `@platejs/markdown` + `@platejs/media` | WYSIWYG 编辑；内嵌图写入 `./assets/`（见 [`ui.md`](ui.md)、[`../backend/data-model.md`](../backend/data-model.md)）。 |
 | PDF 阅读 | [EmbedPDF](https://www.embedpdf.com/) + PDFium | 本地 `blob:` 优先，远程 URL 回退；缩放、大纲、查找、划词与批注。 |
-| 全局 Toast | [Sonner](https://sonner.emilkowal.ski/)（shadcn `ui/sonner`） | 右上角操作失败 / 警告；API 见 `src/lib/notify.ts`。 |
+| 全局 Toast | [Sonner](https://sonner.emilkowal.ski/)（shadcn `ui/sonner`） | 右上角操作失败 / 警告；API 见 `src/lib/core/notify.ts`。 |
 | 图谱 | [react-force-graph-2d](https://github.com/vasturiano/react-force-graph) | Canvas 力导向图，适合 Obsidian 式研究网络。 |
 | 左右分栏 | [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels) | 左/右 collapsible 侧栏 + 中间主栏。 |
 | 中间文档工作区 | [dockview](https://dockview.dev/) | 文档 panel 的 tab / 分屏 / 布局持久化（见 [`../development/tab-split.md`](../development/tab-split.md)）。 |

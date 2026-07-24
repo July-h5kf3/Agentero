@@ -117,7 +117,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 |---|---|---|
 | 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/shell/resizable.tsx`；左右侧栏 **collapsible 常驻** + `preserve-pixel-size` |
 | 侧边栏文件树 | `src/components/sidebar/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 快捷键 |
-| Vault IO | `src/lib/vault.ts` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/reveal.ts` 系统文件管理器定位 / 终端打开 |
+| Vault IO | `src/lib/vault` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/vault/reveal.ts` 系统文件管理器定位 / 终端打开 |
 | Catalog 删除 | Host `paper_delete` | 删除 paper 或组织目录下 catalog 行（`path` / `path/%`） |
 
 **交互（当前实现）**
@@ -173,7 +173,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 插入 | Plate `ImagePlugin.uploadImage`（粘贴）+ 工具栏 `pickImageFiles` → `writeVaultBytes` |
 | 预览 | 相对路径 → fs `readFile` → `blob:`；**选中**节点时渲染 Markdown 源码而非位图 |
 | GC | `collectImageUrlCounts` 引用计数；归零且 managed `./assets/` 时 `remove` 文件 |
-| 代码 | `src/lib/markdown-image.ts`；`MarkdownEditor` 配置 `ImagePlugin`；`ImageElement` |
+| 代码 | `src/lib/markdown/image.ts`；`MarkdownEditor` 配置 `ImagePlugin`；`ImageElement` |
 | 权限 | `fs:allow-write-file`（capabilities） |
 
 详见 [`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」、[`../frontend/ui.md`](../frontend/ui.md)。
@@ -196,7 +196,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 - **渲染层**（EmbedPDF / PDFium）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper/reader.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - PDF 引用/插图解析的落盘契约、TeX/PDF 双路径和交互边界见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。首版只分析本地 paper PDF；sidecar 写入 paper `source/`，不覆盖原始资产。
 - **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
@@ -691,7 +691,7 @@ tempfile = "3"
 
 | 库 | 用途 | 说明 |
 |---|---|---|
-| `dompurify` | HTML XSS 消毒 | 已接入；封装见 `src/lib/sanitize.ts` 的 `sanitizeHtml`。内联 HTML 渲染前必须调用。 |
+| `dompurify` | HTML XSS 消毒 | 已接入；封装见 `src/lib/core/sanitize.ts` 的 `sanitizeHtml`。内联 HTML 渲染前必须调用。 |
 
 ### 8.4 可选依赖
 

@@ -16,7 +16,7 @@
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
 | 业务壳 | `agent/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation`；无会话数字标签；`hideFromChatHistory` 过滤后台运行；**权限三档** + `agent:permission-request` 对话框；**空态 suggestion → workflow**；Composer **当前论文默认 context** + **`@`（最近路径 / 浅层树 / 下钻子目录；论文标签同 `paperTreeLabelMode`）/ 文件树拖入 → context chip**（展示 paper-name/标题；图标：`context-path-icon` — paper `ScrollText` / 文件夹 `Folder` / 文件按扩展名））、`dialogs/command-palette`（`⌘K`/`⌘P` 论文 quick-open + `vault_search`）、`sidebar/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 折叠快捷键 + 回收站入口；**外部 PDF 拖到 `papers/` 组织夹 → metadata 确认入库**）、`library/import-local-pdf-dialog`（本地 PDF 元数据确认）、`workspace/recycle-bin-view`（中间栏回收站）、`library/papers-library`（catalog 表 + **染色 tags** + **阅读热力 spine** + **Rescan** + 文件夹作用域）、`sidebar/paper-info-panel`（Tags 色盘）、`workspace/tab-workspace`、`wiki/backlinks-panel`、`wiki/graph-panel`、`shell/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；批注 **Enter 保存**；划词提问 `hideFromChatHistory`） |
-| 全局通知 | shadcn `ui/sonner` + `src/lib/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
+| 全局通知 | shadcn `ui/sonner` + `src/lib/core/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
 安装命令中的 `<name>` 与下表 **Registry 名**（URL 路径）一致。
@@ -283,7 +283,7 @@ src/components/
   - `markdown-editor.tsx`：防抖保存、`ImagePlugin.uploadImage` → `./assets/`、引用计数 GC。  
   - `image-node.tsx`：相对路径 `blob:` 预览；选中显示 `![alt](url)` 源码。  
   - `editor-toolbar.tsx`：格式按钮 +「插入图片」。  
-  - `src/lib/markdown-image.ts`：路径 / 落盘 / GC 工具（单测 `test/markdown-image.test.ts`）。  
+  - `src/lib/markdown/image.ts`：路径 / 落盘 / GC 工具（单测 `test/markdown-image.test.ts`）。  
 - **禁止**把 Chat 塞进 `ui/` 或与 shadcn Message/Bubble 混用。
 
 ---
