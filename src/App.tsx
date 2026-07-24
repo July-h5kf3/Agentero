@@ -143,6 +143,7 @@ import {
 	loadSettings,
 	saveSettings,
 	subscribeSettings,
+	UI_SCALE_PRESETS,
 } from "@/lib/settings";
 import {
 	basenameOf,
@@ -793,6 +794,16 @@ export default function App() {
 			}
 		})();
 	}, [settings.locale]);
+
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		document.documentElement.style.fontSize = `${16 * settings.uiScale}px`;
+		// Note: macOS traffic lights are positioned at build-time via
+		// WebviewWindowBuilder::traffic_light_position. The initial main window
+		// uses tauri.conf.json's fixed y=18; newly created windows read the
+		// current uiScale and position themselves accordingly. Tauri v2 does not
+		// expose a runtime setter for the main window's traffic lights.
+	}, [settings.uiScale]);
 
 	const updateSettings = useCallback((next: AppSettings) => {
 		setSettings(next);
@@ -2773,6 +2784,32 @@ export default function App() {
 		closeTab: closeTabOrWindow,
 		nextTab: () => cycleActiveTab(1),
 		prevTab: () => cycleActiveTab(-1),
+		zoomIn: () => {
+			const current = settingsRef.current.uiScale;
+			const idx = UI_SCALE_PRESETS.findIndex((s) => s > current);
+			const next = idx === -1 ? current : UI_SCALE_PRESETS[idx];
+			if (next !== current) {
+				updateSettings({ ...settingsRef.current, uiScale: next });
+			}
+		},
+		zoomOut: () => {
+			const current = settingsRef.current.uiScale;
+			let next = current;
+			for (let i = UI_SCALE_PRESETS.length - 1; i >= 0; i--) {
+				if (UI_SCALE_PRESETS[i] < current) {
+					next = UI_SCALE_PRESETS[i];
+					break;
+				}
+			}
+			if (next !== current) {
+				updateSettings({ ...settingsRef.current, uiScale: next });
+			}
+		},
+		zoomReset: () => {
+			if (settingsRef.current.uiScale !== 1) {
+				updateSettings({ ...settingsRef.current, uiScale: 1 });
+			}
+		},
 	});
 
 	useNativeMenuEvents({

@@ -31,7 +31,10 @@ export type ShortcutId =
 	| "focusNotes"
 	| "closeTab"
 	| "nextTab"
-	| "prevTab";
+	| "prevTab"
+	| "zoomIn"
+	| "zoomOut"
+	| "zoomReset";
 
 export type ShortcutGroup = "App" | "Navigation" | "Vault";
 
@@ -75,6 +78,31 @@ export const SHORTCUTS: ShortcutDef[] = [
 		// Esc — dismiss the topmost registered overlay (settings, dialogs, palette…)
 		key: "Escape",
 		whenSettingsOpen: true,
+	},
+	{
+		id: "zoomIn",
+		group: "App",
+		// ⌘+ — zoom whole UI in (matches browsers / VS Code)
+		key: "+",
+		meta: true,
+		shift: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "zoomOut",
+		group: "App",
+		// ⌘- — zoom whole UI out
+		key: "-",
+		meta: true,
+		whenSettingsClosed: true,
+	},
+	{
+		id: "zoomReset",
+		group: "App",
+		// ⌘0 — reset UI zoom to 100%
+		key: "0",
+		meta: true,
+		whenSettingsClosed: true,
 	},
 	{
 		id: "newWindow",
@@ -265,6 +293,16 @@ const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
 			id: "toggleSidebar",
 			group: "Navigation",
 			key: "b",
+			meta: true,
+			whenSettingsClosed: true,
+		},
+	],
+	zoomIn: [
+		{
+			id: "zoomIn",
+			group: "App",
+			// ⌘= — alias for zoom in on keyboards where + shares the = key
+			key: "=",
 			meta: true,
 			whenSettingsClosed: true,
 		},

@@ -109,6 +109,12 @@ export type AppSettings = {
 	uiTheme: string;
 	locale: LocalePreference;
 	editorFontSize: number;
+	/**
+	 * Global UI scale multiplier. Affects font-size, spacing, and the title bar,
+	 * so toolbar buttons grow together with the rest of the interface.
+	 * Must be one of {@link UI_SCALE_PRESETS}; default 1.0 (100%).
+	 */
+	uiScale: number;
 	/** Show the WYSIWYG formatting toolbar above Markdown/notes editors. */
 	showEditorToolbar: boolean;
 	// Agent (local UI prefs; registry lives in Host agents.json)
@@ -157,6 +163,27 @@ export const DEFAULT_PDF_ASK_SETTINGS: PdfAskSettings = {
 /** Default Translator Runtime endpoint (overridable in Settings). */
 export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
 
+/**
+ * Discrete UI scale presets exposed in Settings. Keyboard shortcuts and the
+ * settings UI move between these values instead of using a continuous slider.
+ */
+export const UI_SCALE_PRESETS = [0.8, 0.9, 1, 1.25, 1.5] as const;
+
+/** Snap an arbitrary scale value to the closest supported preset. */
+export function snapUiScale(value: number): number {
+	if (!Number.isFinite(value)) return DEFAULT_SETTINGS.uiScale;
+	let closest: number = UI_SCALE_PRESETS[0];
+	let best = Infinity;
+	for (const preset of UI_SCALE_PRESETS) {
+		const d = Math.abs(preset - value);
+		if (d < best) {
+			best = d;
+			closest = preset;
+		}
+	}
+	return closest;
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
 	confirmBeforeClose: false,
@@ -170,6 +197,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",
 	editorFontSize: 14,
+	uiScale: 1,
 	showEditorToolbar: true,
 	agentEnabled: true,
 	agentPermissionMode: "restricted",
@@ -453,6 +481,19 @@ function normalizePartial(
 	}
 	if (!isKnownUiTheme(merged.uiTheme)) {
 		merged.uiTheme = DEFAULT_SETTINGS.uiTheme;
+	}
+	if (!Number.isFinite(merged.uiScale)) {
+		// Migrate the old per-icon-size setting (12–22 px, default 14) to a global
+		// scale ratio. 14 px was 100%; snap to the closest preset.
+		const oldIconSize = (parsed as { toolbarIconSize?: unknown })
+			.toolbarIconSize;
+		if (Number.isFinite(oldIconSize)) {
+			merged.uiScale = snapUiScale(Number(oldIconSize) / 14);
+		} else {
+			merged.uiScale = DEFAULT_SETTINGS.uiScale;
+		}
+	} else {
+		merged.uiScale = snapUiScale(merged.uiScale);
 	}
 	if (
 		merged.locale !== "system" &&

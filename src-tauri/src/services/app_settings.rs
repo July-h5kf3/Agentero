@@ -39,6 +39,8 @@ pub struct AppSettings {
     pub locale: String,
     #[serde(default = "default_editor_font_size")]
     pub editor_font_size: u32,
+    #[serde(default = "default_ui_scale")]
+    pub ui_scale: f64,
     #[serde(default = "default_true")]
     pub show_editor_toolbar: bool,
     #[serde(default = "default_true")]
@@ -126,6 +128,7 @@ impl Default for AppSettings {
             ui_theme: default_ui_theme(),
             locale: default_locale(),
             editor_font_size: default_editor_font_size(),
+            ui_scale: default_ui_scale(),
             show_editor_toolbar: true,
             agent_enabled: true,
             agent_permission_mode: default_permission_mode(),
@@ -177,6 +180,9 @@ fn default_locale() -> String {
 fn default_editor_font_size() -> u32 {
     14
 }
+fn default_ui_scale() -> f64 {
+    1.0
+}
 fn default_permission_mode() -> String {
     "restricted".into()
 }
@@ -186,8 +192,14 @@ fn default_ai_response_language() -> String {
 fn default_translate_provider() -> String {
     "bing".into()
 }
+#[cfg(not(target_os = "ios"))]
 fn default_connector_port() -> u16 {
     crate::services::connector::DEFAULT_CONNECTOR_PORT
+}
+
+#[cfg(target_os = "ios")]
+fn default_connector_port() -> u16 {
+    23119
 }
 fn default_translate_target() -> String {
     "ui".into()
@@ -367,6 +379,21 @@ fn normalize(s: &mut AppSettings) {
     }
     if s.editor_font_size < 10 || s.editor_font_size > 32 {
         s.editor_font_size = default_editor_font_size();
+    }
+    const UI_SCALE_PRESETS: &[f64] = &[0.8, 0.9, 1.0, 1.25, 1.5];
+    if !s.ui_scale.is_finite() {
+        s.ui_scale = default_ui_scale();
+    } else {
+        let mut closest = UI_SCALE_PRESETS[0];
+        let mut best = f64::INFINITY;
+        for &preset in UI_SCALE_PRESETS {
+            let d = (preset - s.ui_scale).abs();
+            if d < best {
+                best = d;
+                closest = preset;
+            }
+        }
+        s.ui_scale = closest;
     }
     const PERMS: &[&str] = &["restricted", "ask", "auto"];
     if !PERMS.contains(&s.agent_permission_mode.as_str()) {

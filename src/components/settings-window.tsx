@@ -96,6 +96,7 @@ import {
 	type ThemePreference,
 	type TranslateProviderId,
 	type TranslateTargetLang,
+	UI_SCALE_PRESETS,
 } from "@/lib/settings";
 import {
 	formatShortcut,
@@ -899,6 +900,7 @@ function AppearancePane({
 	const { t } = useTranslation("settings");
 	const { setTheme } = useTheme();
 	const fontId = useId();
+	const uiScaleId = useId();
 
 	const setThemePref = (theme: ThemePreference) => {
 		patch({ theme });
@@ -967,6 +969,25 @@ function AppearancePane({
 							<SelectItem value="zh-CN">
 								{t("appearance.language.zhCN")}
 							</SelectItem>
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow label={t("appearance.uiScale.label")} htmlFor={uiScaleId}>
+					<Select
+						value={String(settings.uiScale)}
+						onValueChange={(v) => patch({ uiScale: Number(v) })}
+					>
+						<SelectTrigger id={uiScaleId} size="sm" className="min-w-[120px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{UI_SCALE_PRESETS.map((scale) => (
+								<SelectItem key={scale} value={String(scale)}>
+									{t("appearance.uiScale.value", {
+										percent: Math.round(scale * 100),
+									})}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</SettingsRow>

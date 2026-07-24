@@ -2,6 +2,12 @@
 
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
+use crate::services::app_settings::AppSettingsStore;
+
+/// Default traffic-light y position at 100% UI scale. Matches tauri.conf.json.
+const TRAFFIC_LIGHT_Y_DEFAULT: f64 = 18.0;
+const TRAFFIC_LIGHT_X: f64 = 14.0;
+
 pub const SETTINGS_WINDOW_LABEL: &str = "agentero-settings";
 
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
@@ -27,10 +33,20 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
+        let scale = app
+            .state::<AppSettingsStore>()
+            .get()
+            .map(|r| r.settings.ui_scale)
+            .unwrap_or(1.0);
+        let y = if scale.is_finite() && (0.8..=1.5).contains(&scale) {
+            TRAFFIC_LIGHT_Y_DEFAULT * scale
+        } else {
+            TRAFFIC_LIGHT_Y_DEFAULT
+        };
         builder = builder
             .hidden_title(true)
             .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .traffic_light_position(tauri::LogicalPosition::new(14.0, 18.0));
+            .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_LIGHT_X, y));
     }
 
     // Non-macOS: frameless window; caption buttons are drawn in the React title

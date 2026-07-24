@@ -290,7 +290,12 @@ export function WorkspaceHeader({
 									aria-label={t("titlebar.settings")}
 									onClick={() => onOpenSettings()}
 								>
-									<Settings className="size-3.5 transition-transform duration-300 ease-out group-hover:rotate-90" />
+									<Settings
+										className={cn(
+											"size-3.5",
+											"transition-transform duration-300 ease-out group-hover:rotate-90",
+										)}
+									/>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
