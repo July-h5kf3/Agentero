@@ -57,6 +57,9 @@ type BackgroundTaskProgressEvent = {
 	downloadedBytes: number;
 	totalBytes?: number;
 	progress: number | null;
+	/** Optional item counters for batch operations (e.g. import 2/5). */
+	currentCount?: number;
+	totalCount?: number;
 };
 
 function formatBytes(bytes: number): string {
@@ -246,6 +249,160 @@ export function releaseBackgroundTaskCancellation(id: string): void {
 	controllers.delete(id);
 }
 
+type BackgroundTaskFn<T> = (ctx: {
+	id: string;
+	signal: AbortSignal;
+	setProgress: (n: number | null) => void;
+	setDetail: (d: string) => void;
+}) => Promise<T>;
+
+class Semaphore {
+	private running = 0;
+	private queue: Array<() => void> = [];
+
+	constructor(private max: number) {}
+
+	async acquire(): Promise<void> {
+		if (this.running < this.max) {
+			this.running++;
+			return;
+		}
+		await new Promise<void>((resolve) => this.queue.push(resolve));
+	}
+
+	release(): void {
+		const next = this.queue.shift();
+		if (next) {
+			next();
+		} else {
+			this.running = Math.max(0, this.running - 1);
+		}
+	}
+}
+
+const semaphores = new Map<BackgroundTaskKind, Semaphore>();
+
+function getSemaphore(
+	kind: BackgroundTaskKind,
+	concurrency: number,
+): Semaphore {
+	let sem = semaphores.get(kind);
+	if (!sem) {
+		sem = new Semaphore(concurrency);
+		semaphores.set(kind, sem);
+	}
+	return sem;
+}
+
+/**
+ * Run an async job as a queued background task with a per-kind concurrency limit.
+ * The task is created immediately in `queued` status and starts when a slot is free.
+ */
+export async function runQueuedBackgroundTask<T>(
+	input: {
+		kind: BackgroundTaskKind;
+		title: string;
+		detail?: string;
+	},
+	concurrency: number,
+	fn: BackgroundTaskFn<T>,
+): Promise<T> {
+	const id = startBackgroundTask({
+		kind: input.kind,
+		title: input.title,
+		detail: input.detail,
+		running: false,
+	});
+	const controller = new AbortController();
+	controllers.set(id, controller);
+	const unlisten = isTauri()
+		? await listen<BackgroundTaskProgressEvent>(
+				"background-task:progress",
+				(event) => {
+					if (event.payload.taskId !== id) return;
+					const { downloadedBytes, totalBytes, currentCount, totalCount } =
+						event.payload;
+					if (currentCount != null && totalCount != null) {
+						updateBackgroundTask(id, {
+							progress: event.payload.progress,
+							detail: i18n.t("app:tasks.batchProgress", {
+								phase: phaseLabel(event.payload.phase),
+								current: currentCount,
+								total: totalCount,
+							}),
+						});
+						return;
+					}
+					updateBackgroundTask(id, {
+						progress: event.payload.progress,
+						detail:
+							totalBytes == null
+								? i18n.t("app:tasks.downloadBytesUnknown", {
+										phase: phaseLabel(event.payload.phase),
+										downloaded: formatBytes(downloadedBytes),
+									})
+								: i18n.t("app:tasks.downloadBytes", {
+										phase: phaseLabel(event.payload.phase),
+										downloaded: formatBytes(downloadedBytes),
+										total: formatBytes(totalBytes),
+									}),
+					});
+				},
+			)
+		: null;
+	logger.info(
+		`op enqueue background_task kind=${input.kind} task_id=${id} title=${input.title}`,
+	);
+	let acquired = false;
+	try {
+		if (
+			controller.signal.aborted ||
+			store.tasks.find((t) => t.id === id)?.status === "cancelled"
+		) {
+			throw new BackgroundTaskCancelledError();
+		}
+		await getSemaphore(input.kind, concurrency).acquire();
+		acquired = true;
+		if (
+			controller.signal.aborted ||
+			store.tasks.find((t) => t.id === id)?.status === "cancelled"
+		) {
+			throw new BackgroundTaskCancelledError();
+		}
+		updateBackgroundTask(id, { status: "running" });
+		const result = await fn({
+			id,
+			signal: controller.signal,
+			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
+			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
+		});
+		if (
+			controller.signal.aborted ||
+			store.tasks.find((t) => t.id === id)?.status === "cancelled"
+		) {
+			throw new BackgroundTaskCancelledError();
+		}
+		completeBackgroundTask(id);
+		return result;
+	} catch (e) {
+		if (controller.signal.aborted || isBackgroundTaskCancelledError(e)) {
+			if (store.tasks.find((t) => t.id === id)?.status !== "cancelled") {
+				cancelBackgroundTask(id);
+			}
+			throw new BackgroundTaskCancelledError();
+		}
+		const msg = e instanceof Error ? e.message : String(e);
+		failBackgroundTask(id, msg);
+		throw e;
+	} finally {
+		if (acquired) {
+			getSemaphore(input.kind, concurrency).release();
+		}
+		controllers.delete(id);
+		unlisten?.();
+	}
+}
+
 export function setBackgroundTasksExpanded(expanded: boolean): void {
 	setStore({ ...store, expanded });
 }
@@ -298,7 +455,19 @@ export async function runBackgroundTask<T>(
 				"background-task:progress",
 				(event) => {
 					if (event.payload.taskId !== id) return;
-					const { downloadedBytes, totalBytes } = event.payload;
+					const { downloadedBytes, totalBytes, currentCount, totalCount } =
+						event.payload;
+					if (currentCount != null && totalCount != null) {
+						updateBackgroundTask(id, {
+							progress: event.payload.progress,
+							detail: i18n.t("app:tasks.batchProgress", {
+								phase: phaseLabel(event.payload.phase),
+								current: currentCount,
+								total: totalCount,
+							}),
+						});
+						return;
+					}
 					updateBackgroundTask(id, {
 						progress: event.payload.progress,
 						detail:

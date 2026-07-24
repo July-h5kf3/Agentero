@@ -59,13 +59,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Tooltip,
 	TooltipContent,
@@ -1881,7 +1881,7 @@ export function VaultSidebarHeader({
 	onNewFile: () => void;
 	onNewFolder: () => void;
 	lookupParentDir: string;
-	onLookupSubmit: (text: string) => Promise<void>;
+	onLookupSubmit: (texts: string[]) => Promise<void>;
 	onImportBibliography?: () => void | Promise<void>;
 	onImportLocalPdf?: () => void | Promise<void>;
 	importBusy?: boolean;
@@ -1903,6 +1903,7 @@ export function VaultSidebarHeader({
 	const [lookupText, setLookupText] = useState("");
 	const [lookupBusy, setLookupBusy] = useState(false);
 	const [lookupError, setLookupError] = useState<string | null>(null);
+	const lookupTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const [remoteDialogOpen, setRemoteDialogOpen] = useState(false);
 	const [recentRemotes, setRecentRemotes] = useState<RecentRemoteVault[]>(() =>
 		getRecentRemoteVaults(),
@@ -1944,13 +1945,19 @@ export function VaultSidebarHeader({
 		setLookupError(null);
 	}, [lookupOpenSignal, isDemo, busy]);
 
+	const parseLookupTexts = (text: string): string[] =>
+		text
+			.split(/[\s,;，；\n\r]+/)
+			.map((t) => t.trim())
+			.filter(Boolean);
+
 	const runLookup = async () => {
-		const text = lookupText.trim();
-		if (!text || lookupBusy) return;
+		const texts = parseLookupTexts(lookupText);
+		if (texts.length === 0 || lookupBusy) return;
 		setLookupBusy(true);
 		setLookupError(null);
 		try {
-			await onLookupSubmit(text);
+			await onLookupSubmit(texts);
 			setLookupText("");
 			setWandOpen(false);
 		} catch (e) {
@@ -2010,12 +2017,28 @@ export function VaultSidebarHeader({
 										<p className="text-muted-foreground text-xs">
 											{t("lookup.addTo", { path: lookupParentDir })}
 										</p>
-										<Input
+										<Textarea
+											ref={lookupTextareaRef}
 											value={lookupText}
-											onChange={(e) => setLookupText(e.target.value)}
+											onChange={(e) => {
+												setLookupText(e.target.value);
+												// Auto-grow up to max-h-32; shrink when lines are removed.
+												const el = lookupTextareaRef.current;
+												if (el) {
+													el.style.height = "auto";
+													el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+												}
+											}}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" && !e.shiftKey) {
+													e.preventDefault();
+													void runLookup();
+												}
+											}}
 											placeholder={t("lookup.placeholder")}
 											disabled={lookupBusy || importBusy}
-											className="h-8 text-xs"
+											className="min-h-[2.5rem] max-h-32 resize-none overflow-y-auto text-xs"
+											rows={1}
 										/>
 										{lookupError ? (
 											<p className="text-destructive text-xs leading-snug">

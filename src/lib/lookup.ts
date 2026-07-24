@@ -134,6 +134,67 @@ export async function addPaperByIdentifier(opts: {
 	return toLookupAddResult(result.data);
 }
 
+export type LookupBatchAddResult = {
+	imported: LookupAddResult[];
+	skipped: { raw: string; kind: string; value: string; reason: string }[];
+	errors: string[];
+};
+
+/**
+ * Batch add papers by identifiers/URLs into `vaultRoot/parentDir/`.
+ * Host parses, deduplicates, and imports each item sequentially.
+ */
+export async function addPapersByIdentifiers(opts: {
+	vaultRoot: string;
+	/** Vault-relative, e.g. `papers` or `papers/nlp` */
+	parentDir: string;
+	texts: string[];
+	settings: AppSettings;
+	/** Override settings URL for this call */
+	translatorBaseUrl?: string;
+	progressTaskId?: string;
+}): Promise<LookupBatchAddResult> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
+	}
+
+	const texts = opts.texts.map((t) => t.trim()).filter(Boolean);
+	if (texts.length === 0) {
+		throw new Error(i18n.t("sidebar:lookup.batchEmpty"));
+	}
+
+	const translatorBaseUrl = resolveTranslatorBaseUrl(
+		opts.settings,
+		opts.translatorBaseUrl,
+	);
+
+	const result = await invoke<ApiResult<LookupBatchAddResult>>(
+		"lookup_import_batch",
+		{
+			args: {
+				vaultPath: opts.vaultRoot,
+				parentDir: opts.parentDir.replace(/\\/g, "/"),
+				texts,
+				translatorBaseUrl,
+				taskId: opts.progressTaskId,
+				concurrency: opts.settings.batchImportConcurrency,
+			},
+		},
+	);
+
+	if (!result.ok || !result.data) {
+		throw new Error(
+			result.error?.message ?? i18n.t("sidebar:lookup.fetchFailed"),
+		);
+	}
+
+	return {
+		imported: result.data.imported.map(toLookupAddResult),
+		skipped: result.data.skipped,
+		errors: result.data.errors,
+	};
+}
+
 /**
  * Download PDF (+ arXiv LaTeX) for a paper folder missing local assets.
  * `paperPath` is vault-relative (e.g. `papers/1706.03762`).

@@ -66,7 +66,9 @@ import i18n, { resolveLocale } from "@/i18n";
 import {
 	completeBackgroundTask,
 	failBackgroundTask,
+	isBackgroundTaskCancelledError,
 	runBackgroundTask,
+	runQueuedBackgroundTask,
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/background-tasks";
@@ -83,7 +85,7 @@ import {
 	isImportTempPath,
 } from "@/lib/external-file-drop";
 import {
-	addPaperByIdentifier,
+	addPapersByIdentifiers,
 	downloadPaperAssets,
 	importLocalPdfs,
 	type LocalPdfImportEntry,
@@ -1907,30 +1909,41 @@ export default function App() {
 	}, [refreshTree, refreshLibrary, openPaper, t]);
 
 	const handleLookupSubmit = useCallback(
-		async (text: string) => {
+		async (texts: string[]) => {
 			if (!vaultPath) {
 				throw new Error(t("sidebar:lookup.needsVault"));
 			}
+			if (texts.length === 0) return;
+
 			const result = await runBackgroundTask(
 				{
 					kind: "lookup",
 					title: t("tasks.lookupImport"),
-					detail: text.trim().slice(0, 80),
+					detail: texts
+						.slice(0, 3)
+						.map((t) => t.trim().slice(0, 40))
+						.join(", "),
 				},
 				async ({ id, setDetail }) => {
 					setDetail(
-						t("tasks.lookupFetching", { id: text.trim().slice(0, 80) }),
+						t("tasks.lookupFetching", {
+							id: texts.length.toString(),
+						}),
 					);
-					const r = await addPaperByIdentifier({
+					const r = await addPapersByIdentifiers({
 						vaultRoot: vaultPath,
 						parentDir: lookupParentDir,
-						text,
+						texts,
 						settings,
 						progressTaskId: id,
 					});
 					setDetail(
 						t("tasks.lookupRefreshing", {
-							title: r.title?.slice(0, 60) || r.path,
+							title: t("sidebar:lookup.batchSummary", {
+								imported: r.imported.length,
+								skipped: r.skipped.length,
+								failed: r.errors.length,
+							}),
 						}),
 					);
 					await refreshTree(vaultPath);
@@ -1941,62 +1954,71 @@ export default function App() {
 					return r;
 				},
 			);
-			// Prefer absolute paperDir; fall back to vault + relative path.
-			const paperAbs =
-				result.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
-				`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
-					result.path || ""
-				)
-					.replace(/\\/g, "/")
-					.replace(/^\/+|\/+$/g, "")}`;
-			openPaper(paperAbs);
-			// Surface download failure without failing the whole import
-			if (result.pdf === false) {
-				const detail =
-					result.assetMessages
-						?.filter((m) => /pdf/i.test(m))
-						.slice(-2)
-						.join("; ") ?? "";
-				notifyError(
-					detail
-						? t("sidebar:lookup.pdfDownloadFailedDetail", { detail })
-						: t("sidebar:lookup.pdfDownloadFailed"),
-				);
+
+			const first = result.imported[0];
+			if (first) {
+				const paperAbs =
+					first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
+					`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
+						first.path || ""
+					)
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "")}`;
+				openPaper(paperAbs);
 			}
-			// Assets ready → auto paper-reader (progress in bottom-left)
-			const rel = (result.path || "")
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			if (
-				rel &&
-				paperAssetsReadyForReader({
-					pdf: result.pdf,
-					tex: result.tex,
-					paperMd: result.paperMd,
-				})
-			) {
-				// Fire-and-forget: reader progress shows in the bottom-left task bar.
-				// Do NOT await — awaiting keeps the sidebar busy and blocks new imports.
-				void maybeAutoRunPaperReader({
-					vaultRoot: vaultPath,
-					paperPath: rel,
-					assetsReady: true,
-				})
-					.then(async (started) => {
-						if (!started) return;
-						await refreshLibrary();
-						// We just opened this paper — reload NOTES after reader writes
-						const notesAbs = notesPathForPaper(result.paperDir);
-						try {
-							const content = await readVaultFile(notesAbs);
-							refreshTabNotes(result.paperDir, content);
-						} catch {
-							// ignore
-						}
-					})
-					.catch((e) => {
-						notifyError(e instanceof Error ? e.message : String(e));
-					});
+
+			// Summary toast.
+			const summary = t("sidebar:lookup.batchSummary", {
+				imported: result.imported.length,
+				skipped: result.skipped.length,
+				failed: result.errors.length,
+			});
+			if (result.errors.length > 0 || result.imported.length === 0) {
+				notifyError(summary);
+			} else {
+				notifySuccess(summary);
+			}
+
+			// Enqueue any newly imported papers that still lack assets.
+			const newPaths = result.imported.map((r) => r.path);
+			if (newPaths.length > 0) {
+				const needing = collectPapersNeedingAssetDownload(tree).filter((p) =>
+					newPaths.some((rel) => {
+						const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+						const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+						return n === r || n.startsWith(`${r}/`);
+					}),
+				);
+				if (needing.length > 0) {
+					for (const paperPath of needing) {
+						const rel = toVaultRelative(vaultPath, paperPath)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						void runQueuedBackgroundTask(
+							{
+								kind: "download",
+								title: t("tasks.downloadPaper"),
+								detail: rel,
+							},
+							settings.batchImportConcurrency,
+							async ({ id, signal }) => {
+								if (signal.aborted) throw new Error("cancelled");
+								await downloadPaperAssets({
+									vaultRoot: vaultPath,
+									paperPath: rel,
+									progressTaskId: id,
+								});
+								await refreshTree(vaultPath);
+								await refreshLibrary();
+							},
+						).catch((e) => {
+							if (isBackgroundTaskCancelledError(e)) return;
+							notifyError(
+								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
+							);
+						});
+					}
+				}
 			}
 		},
 		[
@@ -2006,9 +2028,9 @@ export default function App() {
 			refreshTree,
 			refreshLibrary,
 			openPaper,
-			refreshTabNotes,
 			rebuildWikiAndNotify,
 			t,
+			tree,
 		],
 	);
 
