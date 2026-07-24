@@ -1,4 +1,5 @@
 import { FileCode2, FileType2 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -20,10 +21,6 @@ const MODES: {
 	{ id: "html", labelKey: "mode.html", icon: FileCode2 },
 ];
 
-/** Tailwind rem sizes: size-6 = 1.5rem, gap-0.5 = 0.125rem */
-const CELL = 1.5;
-const GAP = 0.125;
-
 type ViewModeToggleProps = {
 	value: CenterViewMode;
 	onChange: (mode: CenterViewMode) => void;
@@ -36,9 +33,40 @@ export function ViewModeToggle({
 	available,
 }: ViewModeToggleProps) {
 	const { t } = useTranslation("viewer");
-	const activeIndex = MODES.findIndex((m) => m.id === value);
-	const showThumb = activeIndex >= 0;
-	const thumbX = Math.max(0, activeIndex) * (CELL + GAP);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+	const [thumb, setThumb] = useState<{
+		left: number;
+		top: number;
+		width: number;
+		height: number;
+	} | null>(null);
+
+	const activeMode = MODES.find((m) => m.id === value);
+
+	useLayoutEffect(() => {
+		const container = containerRef.current;
+		if (!container) return;
+		const measure = () => {
+			const activeButton = activeMode?.id
+				? buttonRefs.current.get(activeMode.id)
+				: null;
+			if (!activeButton) {
+				setThumb(null);
+				return;
+			}
+			setThumb({
+				left: activeButton.offsetLeft,
+				top: activeButton.offsetTop,
+				width: activeButton.offsetWidth,
+				height: activeButton.offsetHeight,
+			});
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(container);
+		return () => ro.disconnect();
+	}, [activeMode?.id]);
 
 	// Nothing to switch if neither paper view exists
 	if (!available.pdf && !available.html) {
@@ -48,21 +76,25 @@ export function ViewModeToggle({
 	return (
 		<TooltipProvider delayDuration={250}>
 			<div
+				ref={containerRef}
 				className="relative inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-border/80 bg-muted/50 p-0.5 dark:bg-muted/30"
 				role="tablist"
 				aria-label={t("centerPaneView")}
 			>
-				{showThumb ? (
+				{thumb ? (
 					<span
 						aria-hidden
 						className={cn(
-							"pointer-events-none absolute top-0.5 left-0.5 z-0 h-6 w-6 rounded-md",
+							"pointer-events-none absolute z-0 rounded-md",
 							"bg-background shadow-sm",
 							"dark:bg-foreground/10 dark:shadow-none dark:ring-1 dark:ring-white/10",
-							"transition-transform duration-200 ease-out will-change-transform",
+							"transition-all duration-200 ease-out will-change-[left,width]",
 						)}
 						style={{
-							transform: `translate3d(${thumbX}rem, 0, 0)`,
+							left: thumb.left,
+							top: thumb.top,
+							width: thumb.width,
+							height: thumb.height,
 						}}
 					/>
 				) : null}
@@ -80,6 +112,10 @@ export function ViewModeToggle({
 									aria-selected={active}
 									aria-label={label}
 									disabled={!enabled}
+									ref={(el) => {
+										if (el) buttonRefs.current.set(id, el);
+										else buttonRefs.current.delete(id);
+									}}
 									className={cn(
 										"relative z-10 inline-flex size-6 shrink-0 items-center justify-center rounded-md",
 										"text-muted-foreground outline-none transition-colors duration-150",
