@@ -58,6 +58,14 @@ describe("wikilink extraction", () => {
 			{ targetRaw: "", fragment: { kind: "block", id: "summary" } },
 		]);
 	});
+
+	it("retains malformed block fragments so navigation can report invalidFragment", () => {
+		const links = extractWikilinks("[[#^bad id]] and [[Target#^also-bad!]]");
+		expect(links).toMatchObject([
+			{ targetRaw: "", fragment: { kind: "block", id: "bad id" } },
+			{ targetRaw: "Target", fragment: { kind: "block", id: "also-bad!" } },
+		]);
+	});
 });
 
 describe("wikilink resolution", () => {
@@ -105,6 +113,33 @@ describe("wikilink resolution", () => {
 		} finally {
 			await vault.cleanup();
 		}
+	});
+
+	it("reports malformed same-file and cross-file block references as invalid fragments", () => {
+		const documents = [
+			{ path: "notes/Source.md", content: "# Source\nText ^bad id\n" },
+			{
+				path: "notes/Target.md",
+				content: "# Target\nText ^also-bad!\nBlock ^valid\n",
+			},
+		];
+
+		expect(
+			resolveDemoWikiReference("notes/Source.md", "#^bad id", documents),
+		).toMatchObject({
+			status: "invalidFragment",
+			targetPath: "notes/Source.md",
+		});
+		expect(
+			resolveDemoWikiReference(
+				"notes/Source.md",
+				"Target#^also-bad!",
+				documents,
+			),
+		).toMatchObject({
+			status: "invalidFragment",
+			targetPath: "notes/Target.md",
+		});
 	});
 });
 

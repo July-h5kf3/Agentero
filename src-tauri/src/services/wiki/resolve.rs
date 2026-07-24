@@ -85,15 +85,17 @@ fn resolve_document(
     }
 
     let raw = occurrence.target_raw.trim();
-    let mut exact_candidates = add_extensions(raw);
-    if matches!(occurrence.syntax, InternalLinkSyntax::Markdown)
-        && (raw.starts_with("./") || raw.starts_with("../"))
-    {
-        exact_candidates.splice(
-            0..0,
-            add_extensions(&source_relative(&occurrence.source, raw)),
-        );
-    }
+    // Markdown destinations without a leading slash are relative to the source
+    // document, including bare `Target.md`. Try that location before the
+    // vault-root spelling so a nearby same-named document keeps its Markdown
+    // meaning instead of being shadowed by a root-level file.
+    let mut exact_candidates =
+        if matches!(occurrence.syntax, InternalLinkSyntax::Markdown) && !raw.starts_with('/') {
+            add_extensions(&source_relative(&occurrence.source, raw))
+        } else {
+            Vec::new()
+        };
+    exact_candidates.extend(add_extensions(raw));
     for candidate in &exact_candidates {
         let hits = documents
             .iter()
@@ -182,12 +184,15 @@ fn fragment_candidates(document: &WikiDocument, fragment: &LinkFragment) -> Vec<
                 .map(|heading| heading.path.join("#"))
                 .collect()
         }
-        LinkFragment::Block { id } => document
-            .blocks
-            .iter()
-            .filter(|block| block.id == *id)
-            .map(|block| block.id.clone())
-            .collect(),
+        LinkFragment::Block { id } if crate::services::wiki::extract::is_valid_block_id(id) => {
+            document
+                .blocks
+                .iter()
+                .filter(|block| block.id == *id)
+                .map(|block| block.id.clone())
+                .collect()
+        }
+        LinkFragment::Block { .. } => Vec::new(),
     }
 }
 
@@ -367,6 +372,47 @@ mod tests {
         link.syntax = InternalLinkSyntax::Markdown;
         let link = resolve_occurrence(link, &docs);
         assert_eq!(link.target_path.as_deref(), Some("notes/a.md"));
+    }
+
+    #[test]
+    fn resolves_bare_markdown_destination_relative_to_source_before_vault_root() {
+        let mut docs = documents();
+        docs.extend([
+            WikiDocument {
+                path: "Target.md".into(),
+                aliases: Vec::new(),
+                headings: Vec::new(),
+                blocks: Vec::new(),
+            },
+            WikiDocument {
+                path: "folder/Target.md".into(),
+                aliases: Vec::new(),
+                headings: Vec::new(),
+                blocks: Vec::new(),
+            },
+        ]);
+        let mut link = occurrence("folder/source.md", "Target.md", None);
+        link.syntax = InternalLinkSyntax::Markdown;
+
+        let link = resolve_occurrence(link, &docs);
+
+        assert_eq!(link.target_path.as_deref(), Some("folder/Target.md"));
+    }
+
+    #[test]
+    fn reports_invalid_block_fragments_for_same_and_cross_file_links() {
+        let (source, mut links) =
+            extract_document("notes/source.md", "[[#^bad id]] and [[Target#^also-bad!]]");
+        let (target, _) = extract_document("notes/Target.md", "# Target\nBlock ^valid\n");
+        let documents = vec![source, target];
+
+        let cross_file = resolve_occurrence(links.pop().expect("cross-file link"), &documents);
+        let same_file = resolve_occurrence(links.pop().expect("same-file link"), &documents);
+
+        assert_eq!(same_file.status, LinkResolutionStatus::InvalidFragment);
+        assert_eq!(same_file.target_path.as_deref(), Some("notes/source.md"));
+        assert_eq!(cross_file.status, LinkResolutionStatus::InvalidFragment);
+        assert_eq!(cross_file.target_path.as_deref(), Some("notes/Target.md"));
     }
 
     #[derive(Deserialize)]

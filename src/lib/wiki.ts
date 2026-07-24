@@ -13,6 +13,10 @@ export type LinkResolutionStatus =
 
 export type InternalLinkSyntax = "wikilink" | "markdown";
 
+function isValidBlockId(id: string): boolean {
+	return id.length > 0 && /^[A-Za-z0-9-]+$/.test(id);
+}
+
 export type InternalLinkOccurrence = {
 	source: string;
 	targetRaw: string;
@@ -487,6 +491,13 @@ export function resolveDemoWikiReference(
 	if (!selected.path)
 		return { status: "ambiguous", candidates: selected.candidates, fragment };
 	if (!fragment) return { status: "resolved", targetPath: selected.path };
+	if (fragment.kind === "block" && !isValidBlockId(fragment.id)) {
+		return {
+			status: "invalidFragment",
+			targetPath: selected.path,
+			fragment,
+		};
+	}
 	const content =
 		documents.find((document) => document.path === selected.path)?.content ??
 		"";

@@ -20,10 +20,10 @@ pub fn parse_fragment(value: &str) -> Option<LinkFragment> {
         return None;
     }
     if let Some(id) = value.strip_prefix('^') {
-        if is_valid_block_id(id) {
-            return Some(LinkFragment::Block { id: id.to_string() });
-        }
-        return None;
+        // Retain malformed block fragments for the resolver. It can then return
+        // `invalidFragment` instead of silently degrading `[[Target#^bad id]]`
+        // into a file-only link.
+        return Some(LinkFragment::Block { id: id.to_string() });
     }
     let path: Vec<String> = value
         .split('#')
@@ -468,6 +468,24 @@ mod tests {
         assert!(matches!(
             links[0].fragment,
             Some(LinkFragment::Block { .. })
+        ));
+    }
+
+    #[test]
+    fn preserves_invalid_block_fragments_for_resolution() {
+        let (_, links) =
+            extract_document("notes/source.md", "[[#^bad id]] and [[Target#^also-bad!]]");
+
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].target_raw, "");
+        assert_eq!(links[1].target_raw, "Target");
+        assert!(matches!(
+            links[0].fragment,
+            Some(LinkFragment::Block { ref id }) if id == "bad id"
+        ));
+        assert!(matches!(
+            links[1].fragment,
+            Some(LinkFragment::Block { ref id }) if id == "also-bad!"
         ));
     }
 }
