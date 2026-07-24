@@ -285,4 +285,38 @@ describe("wikilink completion grammar", () => {
 			focus: { path: [1, 0], offset: 2 },
 		});
 	});
+
+	it("tracks later drafts when an earlier draft is reified", () => {
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [
+						{ text: "[[First]]", wikiLinkDraft: true },
+						{ text: " " },
+						{ text: "[[Second]]", wikiLinkDraft: true },
+					],
+				},
+			],
+		});
+		const firstRef = editor.api.pathRef([0, 0], { affinity: "forward" });
+		const secondRef = editor.api.pathRef([0, 2], { affinity: "forward" });
+		const firstPath = firstRef.unref();
+		expect(firstPath).toEqual([0, 0]);
+		const first = parseWikiLinkMarkdown("[[First]]");
+		expect(first).not.toBeNull();
+		if (!first || !firstPath) throw new Error("expected the first link draft");
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: firstPath });
+			editor.tf.insertNodes(first, { at: firstPath });
+		});
+		const secondPath = secondRef.unref();
+		expect(secondPath).not.toBeNull();
+		if (!secondPath) throw new Error("expected the tracked second draft");
+		expect(editor.api.node(secondPath)?.[0]).toMatchObject({
+			text: "[[Second]]",
+			wikiLinkDraft: true,
+		});
+	});
 });

@@ -119,6 +119,7 @@ export function MarkdownEditor({
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
 	const syncingWikiLinkPresentationRef = useRef(false);
+	const composingWikiLinkDraftRef = useRef(false);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
 
@@ -397,8 +398,13 @@ export function MarkdownEditor({
 	 */
 	const syncWikiLinkPresentation = useCallback(
 		(selection: typeof editor.selection) => {
-			if (syncingWikiLinkPresentationRef.current) return;
-			const paths = [...editor.api.nodes({ at: [] })]
+			if (
+				syncingWikiLinkPresentationRef.current ||
+				composingWikiLinkDraftRef.current
+			) {
+				return;
+			}
+			const draftRefs = [...editor.api.nodes({ at: [] })]
 				.filter(([node]) => isWikiLinkDraftText(node))
 				.filter(([node, path]) => {
 					if (!isWikiLinkDraftText(node)) return false;
@@ -407,12 +413,16 @@ export function MarkdownEditor({
 						!isSelectionEditingWikiLinkDraft(path, node.text, selection)
 					);
 				})
-				.map(([, path]) => path);
-			if (!paths.length) return;
+				.map(([, path]) => editor.api.pathRef(path, { affinity: "forward" }));
+			if (!draftRefs.length) return;
 			syncingWikiLinkPresentationRef.current = true;
 			try {
-				for (const path of paths) reifyWikiLinkDraftAt(path);
+				for (const ref of draftRefs) {
+					const path = ref.unref();
+					if (path) reifyWikiLinkDraftAt(path);
+				}
 			} finally {
+				for (const ref of draftRefs) ref.unref();
 				syncingWikiLinkPresentationRef.current = false;
 			}
 		},
@@ -540,14 +550,18 @@ export function MarkdownEditor({
 	 * editor semantics.
 	 */
 	const finalizeWikiLinkDrafts = useCallback(() => {
-		const drafts = [...editor.api.nodes({ at: [] })].filter(([node]) =>
-			isWikiLinkDraftText(node),
-		);
-		if (!drafts.length) return;
+		const draftRefs = [...editor.api.nodes({ at: [] })]
+			.filter(([node]) => isWikiLinkDraftText(node))
+			.map(([, path]) => editor.api.pathRef(path, { affinity: "forward" }));
+		if (!draftRefs.length) return;
 		syncingWikiLinkPresentationRef.current = true;
 		try {
 			editor.tf.withoutNormalizing(() => {
-				for (const [node, path] of drafts) {
+				for (const ref of draftRefs) {
+					const path = ref.unref();
+					if (!path) continue;
+					const entry = editor.api.node(path);
+					const node = entry?.[0];
 					if (!isWikiLinkDraftText(node)) continue;
 					if (!parseWikiLinkMarkdown(node.text)) {
 						editor.tf.unsetNodes("wikiLinkDraft", { at: path });
@@ -557,6 +571,7 @@ export function MarkdownEditor({
 				}
 			});
 		} finally {
+			for (const ref of draftRefs) ref.unref();
 			syncingWikiLinkPresentationRef.current = false;
 		}
 	}, [editor, reifyWikiLinkDraftAt]);
@@ -568,6 +583,17 @@ export function MarkdownEditor({
 		},
 		[finalizeWikiLinkDrafts],
 	);
+
+	const handleWikiLinkCompositionStart = useCallback(() => {
+		composingWikiLinkDraftRef.current = true;
+	}, []);
+
+	const handleWikiLinkCompositionEnd = useCallback(() => {
+		composingWikiLinkDraftRef.current = false;
+		window.requestAnimationFrame(() => {
+			syncWikiLinkPresentation(editor.selection);
+		});
+	}, [editor.selection, syncWikiLinkPresentation]);
 
 	const docCtx = useMemo(
 		() => ({
@@ -593,6 +619,12 @@ export function MarkdownEditor({
 						className="agentero-scroll min-h-0 flex-1"
 						onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 						onBlur={readOnly ? undefined : handleEditorBlur}
+						onCompositionStartCapture={
+							readOnly ? undefined : handleWikiLinkCompositionStart
+						}
+						onCompositionEndCapture={
+							readOnly ? undefined : handleWikiLinkCompositionEnd
+						}
 					>
 						{/*
 						 * min-h-full + generous bottom padding so the last line is easy
