@@ -111,7 +111,6 @@
 		"cancelled": "已停止当前运行。",
 		"switchedTo": "已切换到 {{name}}",
 		"desktopOnly": "请打开桌面应用以运行 Agent。",
-		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
-		"notAvailable": "{{name}} 不可用。请更换或在 设置 → Agent 中打开。"
+		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。"
 	}
 }

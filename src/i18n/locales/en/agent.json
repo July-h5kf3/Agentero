@@ -111,7 +111,6 @@
 		"cancelled": "Stopped the current run.",
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
-		"noAgent": "No available agent. Open Settings → Agent to configure one.",
-		"notAvailable": "{{name}} is not available. Pick another or open Settings → Agent."
+		"noAgent": "No available agent. Open Settings → Agent to configure one."
 	}
 }
