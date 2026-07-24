@@ -298,11 +298,10 @@ export function CommandPalette({
 }
 
 function CommandIcon({ id }: { id: string }) {
-	const Icon: LucideIcon =
-		id.startsWith("settings.") || id.startsWith("shortcuts.")
-			? Settings2
-			: id.startsWith("vault.") || id.startsWith("library.")
-				? FileText
-				: SquareTerminal;
+	const Icon: LucideIcon = id.startsWith("settings.")
+		? Settings2
+		: id.startsWith("vault.") || id.startsWith("library.")
+			? FileText
+			: SquareTerminal;
 	return <Icon className="text-muted-foreground" />;
 }
