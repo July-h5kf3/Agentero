@@ -35,6 +35,11 @@ pub struct AssetDownloadProgress {
     pub downloaded_bytes: u64,
     pub total_bytes: Option<u64>,
     pub progress: Option<u8>,
+    /// Optional item counters for batch operations (e.g. import 2/5).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_count: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -638,6 +643,8 @@ async fn http_get_bytes_with_progress(
                     downloaded_bytes,
                     total_bytes,
                     progress,
+                    current_count: None,
+                    total_count: None,
                 },
             );
         }

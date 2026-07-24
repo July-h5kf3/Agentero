@@ -5,9 +5,9 @@ use crate::error::ApiResult;
 use crate::log_util::{trunc, OpTimer};
 use crate::services::lookup::{
     self, AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
-    LookupImportResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
-    PaperImportArgs, PaperImportResult, StageImportFileArgs, StageImportFileResult,
-    DEFAULT_TRANSLATOR_BASE_URL,
+    LookupImportBatchArgs, LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs,
+    PaperExportArgs, PaperExportResult, PaperImportArgs, PaperImportResult, StageImportFileArgs,
+    StageImportFileResult, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use crate::services::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
 use crate::services::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
@@ -55,6 +55,36 @@ pub async fn lookup_import(
     }
     let task_id = args.task_id.clone();
     let result = lookup::import_by_identifier_with_progress(args, Some(&app)).await;
+    if let Some(task_id) = task_id.as_deref() {
+        crate::services::background_tasks::finish(task_id);
+    }
+    Ok(op.finish_result(result))
+}
+
+/// Batch resolve identifiers and write papers into vault.
+/// Deduplicates within the batch and against existing catalog entries.
+#[tauri::command]
+pub async fn lookup_import_batch(
+    app: tauri::AppHandle,
+    registry: State<'_, Arc<RemoteRegistry>>,
+    args: LookupImportBatchArgs,
+) -> Result<ApiResult<LookupImportBatchResult>, String> {
+    let n = args.texts.len();
+    let op = OpTimer::start_with("lookup_import_batch", format!("count={n}"));
+    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+        let session = match registry.get(session_id).await {
+            Ok(s) => s,
+            Err(e) => {
+                op.finish_err(&e);
+                return Ok(crate::error::map_err(e));
+            }
+        };
+        return Ok(
+            op.finish_result(import_bridge::import_by_identifier_batch_remote(session, args).await)
+        );
+    }
+    let task_id = args.task_id.clone();
+    let result = lookup::import_by_identifier_batch(args, Some(&app)).await;
     if let Some(task_id) = task_id.as_deref() {
         crate::services::background_tasks::finish(task_id);
     }

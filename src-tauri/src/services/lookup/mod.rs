@@ -24,17 +24,23 @@ pub use zotero_io::{
 
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
+use crate::services::lookup::assets::AssetDownloadProgress;
+use futures_util::StreamExt;
 use map::local_pdf_meta;
+use parse::{extract_primary_identifier, IdentifierKind};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tauri::Emitter;
+use tokio::sync::Mutex;
 
 /// Public helper for remote PDF import staging.
 pub(crate) fn local_pdf_meta_for_import(id: String, title: String) -> PaperMeta {
     local_pdf_meta(id, title)
 }
-use parse::{extract_primary_identifier, IdentifierKind};
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 /// Default Translator Runtime base URL (hosted service).
 /// Override via Settings → `translatorBaseUrl` / `LookupImportArgs.translator_base_url`.
@@ -146,6 +152,40 @@ pub struct LookupImportResult {
     pub asset_messages: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LookupImportBatchArgs {
+    pub vault_path: String,
+    pub parent_dir: String,
+    pub texts: Vec<String>,
+    #[serde(default)]
+    pub translator_base_url: Option<String>,
+    #[serde(default)]
+    pub task_id: Option<String>,
+    /// Max concurrent imports; 0 or 1 means sequential.
+    #[serde(default)]
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedImport {
+    pub raw: String,
+    pub kind: String,
+    pub value: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LookupImportBatchResult {
+    pub imported: Vec<LookupImportResult>,
+    #[serde(default)]
+    pub skipped: Vec<SkippedImport>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
 pub async fn import_by_identifier(args: LookupImportArgs) -> Result<LookupImportResult, AppError> {
     import_by_identifier_with_progress(args, None).await
 }
@@ -236,6 +276,177 @@ pub async fn import_by_identifier_with_progress(
         paper_md: assets.paper_md,
         asset_messages: assets.messages,
     })
+}
+
+/// Batch import multiple identifiers with deduplication.
+/// Progress events are emitted under the same `task_id` so the frontend sees
+/// a single background task for the whole batch.
+pub async fn import_by_identifier_batch(
+    args: LookupImportBatchArgs,
+    app: Option<&tauri::AppHandle>,
+) -> Result<LookupImportBatchResult, AppError> {
+    let vault = PathBuf::from(args.vault_path.trim());
+    if !vault.is_dir() {
+        return Err(AppError::message("vault path is not a directory"));
+    }
+
+    let mut skipped: Vec<SkippedImport> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    // Phase 1: parse, deduplicate, and filter against existing catalog.
+    let mut to_import: Vec<(String, LookupImportArgs)> = Vec::new();
+    for raw in &args.texts {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let Some((kind, value)) = extract_primary_identifier(raw) else {
+            errors.push(format!("{raw}: unrecognized identifier"));
+            continue;
+        };
+
+        let kind_str = identifier_kind_str(kind);
+        let dedup_key = format!("{kind_str}:{value}");
+        if seen.contains_key(&dedup_key) {
+            skipped.push(SkippedImport {
+                raw: raw.to_string(),
+                kind: kind_str,
+                value: value.clone(),
+                reason: "duplicate_in_batch".to_string(),
+            });
+            continue;
+        }
+        seen.insert(dedup_key.clone(), raw.to_string());
+
+        // Check catalog for existing paper by canonical identifier.
+        if let Some(column) = identifier_kind_column(kind) {
+            match papers::find_by_identifier(&vault, column, &value) {
+                Ok(Some(_record)) => {
+                    skipped.push(SkippedImport {
+                        raw: raw.to_string(),
+                        kind: kind_str,
+                        value: value.clone(),
+                        reason: "already_in_library".to_string(),
+                    });
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    // Log but do not block import on catalog read failure.
+                    log::warn!("catalog lookup failed for {value}: {e}");
+                }
+            }
+        }
+
+        to_import.push((
+            raw.to_string(),
+            LookupImportArgs {
+                vault_path: args.vault_path.clone(),
+                parent_dir: args.parent_dir.clone(),
+                text: raw.to_string(),
+                translator_base_url: args.translator_base_url.clone(),
+                task_id: args.task_id.clone(),
+            },
+        ));
+    }
+
+    let total = to_import.len();
+    if total == 0 {
+        return Ok(LookupImportBatchResult {
+            imported: Vec::new(),
+            skipped,
+            errors,
+        });
+    }
+
+    // Phase 2: run imports with a concurrency limit and emit count progress.
+    let concurrency = args.concurrency.unwrap_or(3).max(1);
+    let imported = Arc::new(Mutex::new(Vec::new()));
+    let counter = Arc::new(AtomicUsize::new(0));
+
+    let stream = futures_util::stream::iter(to_import.into_iter().map(|(raw, single)| {
+        let imported = imported.clone();
+        let counter = counter.clone();
+        let task_id = args.task_id.clone();
+        async move {
+            let result = import_by_identifier_with_progress(single, app).await;
+            let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
+            emit_batch_progress(app, task_id.as_deref(), done, total);
+            match result {
+                Ok(r) => {
+                    imported.lock().await.push(r);
+                    Ok(())
+                }
+                Err(e) => Err(format!("{raw}: {e}")),
+            }
+        }
+    }));
+
+    let import_errors: Vec<String> = stream
+        .buffer_unordered(concurrency)
+        .filter_map(|r| async { r.err() })
+        .collect()
+        .await;
+
+    errors.extend(import_errors);
+
+    let imported = Arc::try_unwrap(imported)
+        .expect("all import futures finished")
+        .into_inner();
+
+    Ok(LookupImportBatchResult {
+        imported,
+        skipped,
+        errors,
+    })
+}
+
+fn emit_batch_progress(
+    app: Option<&tauri::AppHandle>,
+    task_id: Option<&str>,
+    current: usize,
+    total: usize,
+) {
+    let (Some(app), Some(task_id)) = (app, task_id) else {
+        return;
+    };
+    let progress = ((current as f64 / total.max(1) as f64) * 100.0).round() as u8;
+    let _ = app.emit(
+        "background-task:progress",
+        AssetDownloadProgress {
+            task_id: task_id.to_string(),
+            phase: "import".to_string(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            progress: Some(progress),
+            current_count: Some(current),
+            total_count: Some(total),
+        },
+    );
+}
+
+fn identifier_kind_str(kind: IdentifierKind) -> String {
+    match kind {
+        IdentifierKind::Doi => "doi",
+        IdentifierKind::Isbn => "isbn",
+        IdentifierKind::Arxiv => "arxiv",
+        IdentifierKind::Pmid => "pmid",
+        IdentifierKind::AdsBibcode => "ads",
+        IdentifierKind::Url => "url",
+    }
+    .to_string()
+}
+
+fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static str> {
+    match kind {
+        IdentifierKind::Arxiv => Some("arxiv_id"),
+        IdentifierKind::Doi => Some("doi"),
+        IdentifierKind::Isbn => Some("isbn"),
+        IdentifierKind::Pmid => Some("pmid"),
+        IdentifierKind::AdsBibcode => Some("id"),
+        IdentifierKind::Url => None,
+    }
 }
 
 /// On-demand download of PDF (+ arXiv LaTeX) for an existing paper folder.

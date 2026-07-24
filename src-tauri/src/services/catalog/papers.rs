@@ -219,6 +219,44 @@ pub fn list_by_id(vault_root: &Path, id: &str) -> Result<Vec<PaperRecord>, AppEr
     Ok(rows)
 }
 
+/// Find a paper by one of its canonical identifier columns.
+/// `column` must be one of: `arxiv_id`, `doi`, `isbn`, `pmid`, `id`.
+pub fn find_by_identifier(
+    vault_root: &Path,
+    column: &str,
+    value: &str,
+) -> Result<Option<PaperRecord>, AppError> {
+    let allowed = ["arxiv_id", "doi", "isbn", "pmid", "id"];
+    if !allowed.contains(&column) {
+        return Err(AppError::message(format!(
+            "invalid identifier column: {column}"
+        )));
+    }
+    let conn = ensure_catalog(vault_root)?;
+    let sql = format!(
+        r#"
+        SELECT
+            path, id, type, title, authors_json, year, abstract, tags_json,
+            arxiv_id, doi, pdf_url, html_url, source_url,
+            body_source, body_quality, bibtex_key, citation_count, status, summary,
+            added_at, updated_at,
+            creators_json, date, isbn, issn, pmid, publication, volume, issue, pages,
+            publisher, place, series, language, zotero_item_type, meta_source, extra,
+            is_read
+        FROM papers
+        WHERE {column} = ?1
+        ORDER BY path ASC
+        LIMIT 1
+        "#
+    );
+    let mut stmt = conn.prepare(&sql).map_err(AppError::from)?;
+    let row = stmt
+        .query_row(params![value], map_row)
+        .optional()
+        .map_err(AppError::from)?;
+    Ok(row)
+}
+
 /// List all papers for library table (newest first).
 pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     let conn = ensure_catalog(vault_root)?;
