@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
 	parseWikiLinkMarkdown,
 	WikiLinkPlugin,
+	wikiLinkDraftEditableBounds,
 	wikiLinkRules,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
@@ -188,6 +189,100 @@ describe("wikilink completion grammar", () => {
 		expect(editor.selection).toEqual({
 			anchor: { path: [0, 2], offset: 0 },
 			focus: { path: [0, 2], offset: 0 },
+		});
+	});
+
+	it("keeps Tab completion's caret within the editable target", () => {
+		const raw = "[[2026-W30]]";
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [{ type: "p", children: [{ text: raw, wikiLinkDraft: true }] }],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: raw.length - 2 },
+			focus: { path: [0, 0], offset: raw.length - 2 },
+		});
+		expect(wikiLinkDraftEditableBounds(raw)).toEqual({
+			start: 2,
+			end: raw.length - 2,
+		});
+		const parsed = parseWikiLinkMarkdown(raw);
+		expect(parsed).not.toBeNull();
+		if (!parsed) throw new Error("expected the completed Wikilink to parse");
+		let linkPath: number[] | null = null;
+		const linkRefs: { unref: () => number[] | null }[] = [];
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 0] });
+			editor.tf.insertNodes(parsed, { at: [0, 0] });
+			linkRefs.push(editor.api.pathRef([0, 0], { affinity: "forward" }));
+		});
+		linkPath = linkRefs[0]?.unref() ?? null;
+		expect(linkPath).toEqual([0, 1]);
+		if (!linkPath) throw new Error("expected the inserted link path");
+		const after = editor.api.after(linkPath);
+		expect(after).toBeDefined();
+		if (after) editor.tf.select(after);
+		editor.tf.insertBreak();
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "" },
+					{
+						type: "wikiLink",
+						value: "2026-W30",
+						heading: undefined,
+						embed: false,
+						alias: null,
+						children: [{ text: "" }],
+					},
+					{ text: "" },
+				],
+			},
+			{ type: "p", children: [{ text: "" }] },
+		]);
+	});
+
+	it("excludes both delimiters from an editable draft", () => {
+		expect(wikiLinkDraftEditableBounds("[[AGENTS]]")).toEqual({
+			start: 2,
+			end: 8,
+		});
+		expect(wikiLinkDraftEditableBounds("![[figure.png]]")).toEqual({
+			start: 3,
+			end: 13,
+		});
+	});
+
+	it("preserves an external selection while a complete draft is reified", () => {
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "[[AGENTS]]", wikiLinkDraft: true }],
+				},
+				{ type: "p", children: [{ text: "next" }] },
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [1, 0], offset: 2 },
+			focus: { path: [1, 0], offset: 2 },
+		});
+		if (!editor.selection) throw new Error("expected an external selection");
+		const selectionRef = editor.api.rangeRef(editor.selection, {
+			affinity: "forward",
+		});
+		const parsed = parseWikiLinkMarkdown("[[AGENTS]]");
+		expect(parsed).not.toBeNull();
+		if (!parsed) throw new Error("expected the completed Wikilink to parse");
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 0] });
+			editor.tf.insertNodes(parsed, { at: [0, 0] });
+		});
+		expect(selectionRef.unref()).toEqual({
+			anchor: { path: [1, 0], offset: 2 },
+			focus: { path: [1, 0], offset: 2 },
 		});
 	});
 });

@@ -98,6 +98,17 @@ export function isWikiLinkDraftText(node: unknown): node is WikiLinkDraftText {
 	);
 }
 
+/** The editable target range, excluding the `[[` / `]]` delimiters. */
+export function wikiLinkDraftEditableBounds(raw: string): {
+	start: number;
+	end: number;
+} {
+	return {
+		start: raw.startsWith("![[") ? 3 : 2,
+		end: Math.max(raw.length - 2, 0),
+	};
+}
+
 export function isWikiLinkNode(node: unknown): node is WikiSlateNode {
 	return (
 		typeof node === "object" &&

@@ -3,6 +3,7 @@
 import "katex/dist/katex.min.css";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
+import { RangeApi } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type KeyboardEvent,
@@ -21,6 +22,7 @@ import {
 	isWikiLinkDraftText,
 	isWikiLinkNode,
 	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
 import {
@@ -116,6 +118,7 @@ export function MarkdownEditor({
 	);
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
+	const syncingWikiLinkPresentationRef = useRef(false);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
 
@@ -322,32 +325,98 @@ export function MarkdownEditor({
 		[editor],
 	);
 
-	const collapseWikiLinkDraftAt = useCallback(
-		(path: number[], direction: "left" | "right") => {
+	const isSelectionEditingWikiLinkDraft = useCallback(
+		(path: number[], raw: string, selection = editor.selection) => {
+			if (!selection) return false;
+			if (RangeApi.isCollapsed(selection)) {
+				const { start, end } = wikiLinkDraftEditableBounds(raw);
+				return (
+					selection.anchor.path.join(",") === path.join(",") &&
+					selection.anchor.offset >= start &&
+					selection.anchor.offset <= end
+				);
+			}
+			const draftRange = editor.api.range(path);
+			return draftRange
+				? RangeApi.intersection(selection, draftRange) !== null
+				: false;
+		},
+		[editor],
+	);
+
+	/**
+	 * Reify a complete editable source leaf into its display node. Presentation
+	 * transitions keep the user's current selection; explicit keyboard exits
+	 * request the text point immediately before or after the display node.
+	 */
+	const reifyWikiLinkDraftAt = useCallback(
+		(
+			path: number[],
+			placement: "preserve" | "before" | "after" | "none" = "preserve",
+		) => {
 			const entry = editor.api.node(path);
 			if (!entry || !isWikiLinkDraftText(entry[0])) return false;
 			const parsed = parseWikiLinkMarkdown(entry[0].text);
 			if (!parsed) return false;
-			const cursorPath =
-				direction === "left"
-					? path
-					: [...path.slice(0, -1), path[path.length - 1] + 1];
+			const selectionRefs: { unref: () => typeof editor.selection }[] = [];
+			const linkRefs: { unref: () => number[] | null }[] = [];
 			editor.tf.withoutNormalizing(() => {
+				if (placement === "preserve" && editor.selection) {
+					selectionRefs.push(
+						editor.api.rangeRef(editor.selection, { affinity: "forward" }),
+					);
+				}
 				editor.tf.removeNodes({ at: path });
-				editor.tf.insertNodes(
-					direction === "left"
-						? [{ text: "" }, parsed]
-						: [parsed, { text: "" }],
-					{ at: path },
-				);
-				editor.tf.select({
-					anchor: { path: cursorPath, offset: 0 },
-					focus: { path: cursorPath, offset: 0 },
-				});
+				editor.tf.insertNodes(parsed, { at: path });
+				if (placement === "before" || placement === "after") {
+					linkRefs.push(editor.api.pathRef(path, { affinity: "forward" }));
+				}
 			});
+
+			if (placement === "preserve") {
+				const selection = selectionRefs[0]?.unref();
+				if (selection) editor.tf.select(selection);
+				return true;
+			}
+			if (placement === "none") return true;
+			const linkPath = linkRefs[0]?.unref();
+			if (!linkPath) return true;
+			const cursor =
+				placement === "before"
+					? editor.api.before(linkPath)
+					: editor.api.after(linkPath);
+			if (cursor) editor.tf.select(cursor);
 			return true;
 		},
 		[editor],
+	);
+
+	/**
+	 * The source/display distinction is a projection of the Slate selection.
+	 * A complete draft cannot remain visible when that selection leaves it.
+	 */
+	const syncWikiLinkPresentation = useCallback(
+		(selection: typeof editor.selection) => {
+			if (syncingWikiLinkPresentationRef.current) return;
+			const paths = [...editor.api.nodes({ at: [] })]
+				.filter(([node]) => isWikiLinkDraftText(node))
+				.filter(([node, path]) => {
+					if (!isWikiLinkDraftText(node)) return false;
+					return (
+						parseWikiLinkMarkdown(node.text) !== null &&
+						!isSelectionEditingWikiLinkDraft(path, node.text, selection)
+					);
+				})
+				.map(([, path]) => path);
+			if (!paths.length) return;
+			syncingWikiLinkPresentationRef.current = true;
+			try {
+				for (const path of paths) reifyWikiLinkDraftAt(path);
+			} finally {
+				syncingWikiLinkPresentationRef.current = false;
+			}
+		},
+		[editor, isSelectionEditingWikiLinkDraft, reifyWikiLinkDraftAt],
 	);
 
 	const handleWikiLinkArrow = useCallback(
@@ -367,14 +436,14 @@ export function MarkdownEditor({
 			}
 			const [leaf, leafPath] = entry as [{ text: string }, number[]];
 			if (isWikiLinkDraftText(leaf)) {
+				const { start, end } = wikiLinkDraftEditableBounds(leaf.text);
 				const leavesDraft =
-					(event.key === "ArrowLeft" && selection.anchor.offset === 0) ||
-					(event.key === "ArrowRight" &&
-						selection.anchor.offset === leaf.text.length);
+					(event.key === "ArrowLeft" && selection.anchor.offset === start) ||
+					(event.key === "ArrowRight" && selection.anchor.offset === end);
 				if (!leavesDraft) return false;
-				const collapsed = collapseWikiLinkDraftAt(
+				const collapsed = reifyWikiLinkDraftAt(
 					leafPath,
-					event.key === "ArrowLeft" ? "left" : "right",
+					event.key === "ArrowLeft" ? "before" : "after",
 				);
 				if (collapsed) event.preventDefault();
 				return collapsed;
@@ -398,64 +467,20 @@ export function MarkdownEditor({
 			const adjacent = parent.children?.[adjacentIndex];
 			if (adjacentIndex < 0 || !isWikiLinkNode(adjacent)) return false;
 			const raw = wikiLinkToMarkdown(adjacent);
+			const { start, end } = wikiLinkDraftEditableBounds(raw);
 			const expanded = expandWikiLinkAt(
 				[...parentPath, adjacentIndex],
-				event.key === "ArrowLeft" ? raw.length : 0,
+				event.key === "ArrowLeft" ? end : start,
 			);
 			if (expanded) event.preventDefault();
 			return expanded;
 		},
-		[collapseWikiLinkDraftAt, editor, expandWikiLinkAt],
+		[editor, expandWikiLinkAt, reifyWikiLinkDraftAt],
 	);
 
-	const expandWikiLinkAtSelectionBoundary = useCallback(() => {
-		const selection = editor.selection;
-		if (
-			!selection ||
-			selection.anchor.offset !== selection.focus.offset ||
-			selection.anchor.path.join(",") !== selection.focus.path.join(",")
-		) {
-			return false;
-		}
-		const entry = editor.api.node(selection.anchor.path);
-		if (!entry || typeof (entry[0] as { text?: unknown }).text !== "string") {
-			return false;
-		}
-		const [leaf, leafPath] = entry as [{ text: string }, number[]];
-		if (isWikiLinkDraftText(leaf)) return false;
-		const parentEntry = editor.api.parent(leafPath);
-		if (!parentEntry || leafPath.length !== parentEntry[1].length + 1) {
-			return false;
-		}
-		const [parent, parentPath] = parentEntry as [
-			{ children?: unknown[] },
-			number[],
-		];
-		const index = leafPath[leafPath.length - 1];
-		const previous = parent.children?.[index - 1];
-		if (selection.anchor.offset === 0 && isWikiLinkNode(previous)) {
-			return expandWikiLinkAt(
-				[...parentPath, index - 1],
-				wikiLinkToMarkdown(previous).length,
-			);
-		}
-		const next = parent.children?.[index + 1];
-		if (selection.anchor.offset === leaf.text.length && isWikiLinkNode(next)) {
-			return expandWikiLinkAt([...parentPath, index + 1], 0);
-		}
-		return false;
-	}, [editor, expandWikiLinkAt]);
-
-	const handleWikiLinkBoundaryTextInput = useCallback(
+	const handleWikiLinkDraftEnter = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
-			if (
-				event.key.length !== 1 ||
-				event.metaKey ||
-				event.ctrlKey ||
-				event.altKey
-			) {
-				return false;
-			}
+			if (event.key !== "Enter") return false;
 			const selection = editor.selection;
 			if (
 				!selection ||
@@ -466,11 +491,17 @@ export function MarkdownEditor({
 			}
 			const entry = editor.api.node(selection.anchor.path);
 			if (!entry || !isWikiLinkDraftText(entry[0])) return false;
-			const offset = selection.anchor.offset;
-			if (offset !== 0 && offset !== entry[0].text.length) return false;
-			return collapseWikiLinkDraftAt(entry[1], offset === 0 ? "left" : "right");
+			const { end } = wikiLinkDraftEditableBounds(entry[0].text);
+			if (selection.anchor.offset !== end) {
+				return false;
+			}
+			const collapsed = reifyWikiLinkDraftAt(entry[1], "after");
+			if (!collapsed) return false;
+			event.preventDefault();
+			editor.tf.insertBreak();
+			return true;
 		},
-		[collapseWikiLinkDraftAt, editor],
+		[editor, reifyWikiLinkDraftAt],
 	);
 
 	const handleKeyDown = useCallback(
@@ -484,7 +515,7 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
-				if (handleWikiLinkBoundaryTextInput(event)) {
+				if (handleWikiLinkDraftEnter(event)) {
 					event.stopPropagation();
 					return;
 				}
@@ -499,14 +530,8 @@ export function MarkdownEditor({
 				persistRef.current();
 			}
 		},
-		[handleWikiLinkArrow, handleWikiLinkBoundaryTextInput],
+		[handleWikiLinkArrow, handleWikiLinkDraftEnter],
 	);
-
-	const handleEditorSelect = useCallback(() => {
-		window.requestAnimationFrame(() => {
-			expandWikiLinkAtSelectionBoundary();
-		});
-	}, [expandWikiLinkAtSelectionBoundary]);
 
 	/**
 	 * A cursor crossing a display-node boundary creates a marked, ordinary text
@@ -514,31 +539,34 @@ export function MarkdownEditor({
 	 * as text so IME composition, deletion, and pasted drafts retain normal
 	 * editor semantics.
 	 */
-	const collapseWikiLinkDrafts = useCallback(() => {
+	const finalizeWikiLinkDrafts = useCallback(() => {
 		const drafts = [...editor.api.nodes({ at: [] })].filter(([node]) =>
 			isWikiLinkDraftText(node),
 		);
 		if (!drafts.length) return;
-		editor.tf.withoutNormalizing(() => {
-			for (const [node, path] of drafts) {
-				if (!isWikiLinkDraftText(node)) continue;
-				const parsed = parseWikiLinkMarkdown(node.text);
-				if (!parsed) {
-					editor.tf.unsetNodes("wikiLinkDraft", { at: path });
-					continue;
+		syncingWikiLinkPresentationRef.current = true;
+		try {
+			editor.tf.withoutNormalizing(() => {
+				for (const [node, path] of drafts) {
+					if (!isWikiLinkDraftText(node)) continue;
+					if (!parseWikiLinkMarkdown(node.text)) {
+						editor.tf.unsetNodes("wikiLinkDraft", { at: path });
+						continue;
+					}
+					reifyWikiLinkDraftAt(path, "none");
 				}
-				editor.tf.removeNodes({ at: path });
-				editor.tf.insertNodes(parsed, { at: path });
-			}
-		});
-	}, [editor]);
+			});
+		} finally {
+			syncingWikiLinkPresentationRef.current = false;
+		}
+	}, [editor, reifyWikiLinkDraftAt]);
 
 	const handleEditorBlur = useCallback(
 		(event: React.FocusEvent<HTMLDivElement>) => {
 			if (event.currentTarget.contains(event.relatedTarget)) return;
-			collapseWikiLinkDrafts();
+			finalizeWikiLinkDrafts();
 		},
-		[collapseWikiLinkDrafts],
+		[finalizeWikiLinkDrafts],
 	);
 
 	const docCtx = useMemo(
@@ -551,7 +579,13 @@ export function MarkdownEditor({
 
 	return (
 		<MarkdownDocProvider value={docCtx}>
-			<Plate editor={editor} onValueChange={handleChange}>
+			<Plate
+				editor={editor}
+				onSelectionChange={({ selection }) => {
+					syncWikiLinkPresentation(selection);
+				}}
+				onValueChange={handleChange}
+			>
 				<div className={cn("flex h-full min-h-0 flex-col", className)}>
 					{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
 					<EditorContainer
@@ -559,7 +593,6 @@ export function MarkdownEditor({
 						className="agentero-scroll min-h-0 flex-1"
 						onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 						onBlur={readOnly ? undefined : handleEditorBlur}
-						onSelectCapture={readOnly ? undefined : handleEditorSelect}
 					>
 						{/*
 						 * min-h-full + generous bottom padding so the last line is easy
