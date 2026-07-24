@@ -191,7 +191,17 @@
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",
+		"loadFailed": "Could not load internal links",
 		"none": "No backlinks",
+		"incoming": "Incoming ({{count}})",
+		"outgoing": "Outgoing ({{count}})",
+		"noneIncoming": "No incoming links",
+		"noneOutgoing": "No outgoing links",
+		"status": {
+			"missing": "Missing",
+			"ambiguous": "Ambiguous",
+			"invalidFragment": "Invalid fragment"
+		},
 		"title": "Backlinks"
 	},
 	"graph": {

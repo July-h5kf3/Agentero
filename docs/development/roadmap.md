@@ -180,7 +180,9 @@
 - [x] 图谱视图。
 - [x] Paper、Note、Index、Stub 节点类型。
 - [x] 图谱节点点击打开文件。
-- [x] 当前 UI：Backlinks 入口内上方为反链，下方为 Graph。
+- [x] 当前 UI：Backlinks 入口内上方为入链与出链，下方为 Graph。
+- [x] 统一解析 Wikilink 与 Vault-local Markdown links：YAML aliases、标题层级、block ID、解析状态和 occurrence 范围均由可重建索引提供。
+- [x] 标题/block 精确跳转；Backlinks 入口同时展示入链和出链，Graph 仍在下方。
 
 验收标准：
 

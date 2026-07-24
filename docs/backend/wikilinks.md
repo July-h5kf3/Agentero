@@ -146,7 +146,7 @@ backlinks(path) = { e.source | e.target_path == path }
 产品形态：
 
 - 右侧边栏只有 Agent 与 Backlinks 两个顶层入口；Graph 嵌在 Backlinks 入口下方。
-- 上方 `BacklinksPanel` 展示当前文件反链；下方 `GraphPanel` 展示力导向关系图。
+- 上方 `BacklinksPanel` 展示当前 Markdown 文件的入链和出链 occurrence；下方 `GraphPanel` 展示力导向关系图。
 - 点击节点打开对应文件 / paper（paper 级路径走现有 openPaper 逻辑）。
 - 模式：**全图** | **当前邻域**（`center` + `depth`，默认 depth=2）。
 

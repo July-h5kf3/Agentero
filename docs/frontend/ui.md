@@ -436,7 +436,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 | 区域 | 说明 |
 |---|---|
 | 入口 | 标题栏右侧 Backlinks 图标；若右侧栏关闭，点击后打开并切到 Backlinks |
-| 上方 | `BacklinksPanel`：当前文件的反链来源与上下文摘录 |
+| 上方 | `BacklinksPanel`：当前 Markdown 文件的入链与出链 occurrence、上下文摘录和解析诊断；入链打开来源，已解析的出链可精确跳转到目标 fragment |
 | 下方 | `GraphPanel`：当前邻域 / 全图切换，节点点击打开对应文件或 paper |
 | 布局 | 同一右侧栏内垂直堆叠，Backlinks 约占上方区域，Graph 填充剩余高度 |
 | 非目标 | 不再提供独立顶层 Graph tab；避免右侧栏入口过多 |
