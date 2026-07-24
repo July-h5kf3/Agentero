@@ -98,6 +98,57 @@ export function basenameOf(path: string): string {
 	);
 }
 
+/** Rewrite one absolute path when it is the moved path or one of its children. */
+export function remapPathUnder(path: string, from: string, to: string): string {
+	if (isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return path;
+	const current = path.replace(/\\/g, "/").replace(/\/+$/, "");
+	const oldRoot = from.replace(/\\/g, "/").replace(/\/+$/, "");
+	const newRoot = to.replace(/\\/g, "/").replace(/\/+$/, "");
+	const currentKey = current.toLowerCase();
+	const oldKey = oldRoot.toLowerCase();
+	if (currentKey === oldKey) return newRoot;
+	if (currentKey.startsWith(`${oldKey}/`)) {
+		return `${newRoot}${current.slice(oldRoot.length)}`;
+	}
+	return path;
+}
+
+/** Keep tabs mounted while a file or directory changes its Vault path. */
+export function remapTabsUnderPath(
+	prev: DocTab[],
+	from: string,
+	to: string,
+	fromRel: string,
+	toRel: string,
+): DocTab[] {
+	return prev.map((tab) => {
+		const path = remapPathUnder(tab.path, from, to);
+		const notesPath = tab.notesPath
+			? remapPathUnder(tab.notesPath, from, to)
+			: null;
+		const paperPath = tab.paperMeta?.path
+			? remapPathUnder(tab.paperMeta.path, fromRel, toRel)
+			: tab.paperMeta?.path;
+		if (
+			path === tab.path &&
+			notesPath === tab.notesPath &&
+			paperPath === tab.paperMeta?.path
+		) {
+			return tab;
+		}
+		return {
+			...tab,
+			id: tabIdForPath(path),
+			path,
+			notesPath,
+			paperMeta:
+				tab.paperMeta && paperPath !== tab.paperMeta.path
+					? { ...tab.paperMeta, path: paperPath }
+					: tab.paperMeta,
+		};
+	});
+}
+
 function findNode(nodes: FileNode[], path: string): FileNode | undefined {
 	const key = normalizeTabPath(path);
 	const walk = (list: FileNode[]): FileNode | undefined => {

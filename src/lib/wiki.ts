@@ -60,6 +60,23 @@ export type RebuildResult = {
 	nodes: number;
 };
 
+export type WikiRenameRollback =
+	| "not-needed"
+	| "completed"
+	| "manual-recovery-required";
+
+export type WikiRenameSkipped = {
+	path: string;
+	reason: string;
+};
+
+export type WikiRenameResult = {
+	movedPath: string;
+	updatedSources: string[];
+	skipped: WikiRenameSkipped[];
+	rollback: WikiRenameRollback;
+};
+
 export type GraphNodeType = "paper" | "note" | "index" | "stub";
 
 export type GraphNode = {
@@ -101,6 +118,18 @@ async function invokeApi<T>(
 		throw new Error(res.error?.message ?? `Command ${cmd} failed`);
 	}
 	return res.data;
+}
+
+/** Rename or move a local Vault path and repair resolved internal links. */
+export async function moveVaultPath(
+	vaultPath: string,
+	fromRel: string,
+	toRel: string,
+	dirtyPaths: string[],
+): Promise<WikiRenameResult> {
+	return invokeApi<WikiRenameResult>("wiki_move", {
+		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
 }
 
 /** Normalize vault-relative path (forward slashes, no leading ./). */

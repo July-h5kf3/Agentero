@@ -108,6 +108,7 @@
 	},
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
+		"remoteNoAutoLinkRepair": "远程 Vault 暂不支持自动修复双链。",
 		"createDesktopOnly": "创建知识库仅在 Tauri 应用中可用。",
 		"dialogTitle": "选择 Agentero 知识库文件夹",
 		"createDialogTitle": "选择新建 Agentero 知识库的文件夹",

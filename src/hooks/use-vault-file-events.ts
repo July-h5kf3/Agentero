@@ -18,6 +18,8 @@ type VaultFileEventsParams = {
 	 * wiki / backlinks / graph index so it never goes stale after external writes.
 	 */
 	onWikiChange?: (absPath: string) => void;
+	/** Ignore a known self-authored transaction event so it does not re-run refresh work. */
+	shouldIgnoreEvent?: (payload: VaultFileChangedPayload) => boolean;
 };
 
 /**
@@ -29,6 +31,7 @@ export function useVaultFileEvents({
 	onDiskChange,
 	onStructuralChange,
 	onWikiChange,
+	shouldIgnoreEvent,
 }: VaultFileEventsParams): void {
 	// start() replaces any existing watcher for this window, so a Vault switch needs
 	// only a fresh start (no cleanup-stop, which could race the new start). Window
@@ -53,6 +56,7 @@ export function useVaultFileEvents({
 			unsub = await listen<VaultFileChangedPayload>(
 				VAULT_FILE_CHANGED_EVENT,
 				({ payload }) => {
+					if (shouldIgnoreEvent?.(payload)) return;
 					for (const p of payload.paths) {
 						onDiskChange(p);
 						onWikiChange?.(p);
@@ -66,5 +70,5 @@ export function useVaultFileEvents({
 			cancelled = true;
 			unsub?.();
 		};
-	}, [onDiskChange, onStructuralChange, onWikiChange]);
+	}, [onDiskChange, onStructuralChange, onWikiChange, shouldIgnoreEvent]);
 }

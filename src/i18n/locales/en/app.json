@@ -108,6 +108,7 @@
 	},
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",
+		"remoteNoAutoLinkRepair": "Automatic link repair is unavailable for remote vaults.",
 		"createDesktopOnly": "Create vault is only available in the Tauri app.",
 		"dialogTitle": "Select Agentero vault folder",
 		"createDialogTitle": "Choose folder for new Agentero vault",
