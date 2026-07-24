@@ -30,15 +30,67 @@ export type WikiCompletionInsert = {
 	alias?: string;
 };
 
+export type WikiCompletionMatch = {
+	start: number;
+	end: number;
+	raw: string;
+};
+
 /** Completion accepts the same primary action from keyboard-only workflows. */
 export function isWikiCompletionSubmitKey(key: string): key is "Enter" | "Tab" {
 	return key === "Enter" || key === "Tab";
 }
 
+/**
+ * Locate the live completion token around a Slate caret. A Tab completion
+ * leaves `]]` after the caret, so replacement must consume those delimiters as
+ * well as the typed prefix or a later Enter leaves duplicate brackets behind.
+ */
+export function findWikiCompletionMatch(
+	text: string,
+	cursorOffset: number,
+	expectedRaw: string,
+): WikiCompletionMatch | null {
+	if (cursorOffset < 0 || cursorOffset > text.length) return null;
+	const before = text.slice(0, cursorOffset);
+	const start = before.lastIndexOf("[[");
+	if (start < 0) return null;
+	const raw = before.slice(start + 2);
+	if (raw !== expectedRaw || /[\]\n|]/.test(raw)) return null;
+	const end = text.startsWith("]]", cursorOffset)
+		? cursorOffset + 2
+		: cursorOffset;
+	return { start, end, raw };
+}
+
 /** Convert a canonical Host candidate into the persisted `wikiLink` node data. */
 export function wikiCompletionInsert(
 	candidate: WikiSearchCandidate,
+	request?: WikiCompletionRequest | null,
 ): WikiCompletionInsert {
+	if (
+		request?.kind === "heading" &&
+		candidate.kind === "heading" &&
+		candidate.fragment?.kind === "heading" &&
+		candidate.fragment.path.length
+	) {
+		return {
+			target: request.target,
+			heading: candidate.fragment.path.at(-1),
+			alias: candidate.alias,
+		};
+	}
+	if (
+		request?.kind === "block" &&
+		candidate.kind === "block" &&
+		candidate.fragment?.kind === "block"
+	) {
+		return {
+			target: request.target,
+			heading: `^${candidate.fragment.id}`,
+			alias: candidate.alias,
+		};
+	}
 	const hash = candidate.insertText.indexOf("#");
 	return {
 		target:
@@ -47,6 +99,35 @@ export function wikiCompletionInsert(
 			hash < 0 ? undefined : candidate.insertText.slice(hash + 1) || undefined,
 		alias: candidate.alias,
 	};
+}
+
+function normalizedCompletionText(value: string): string {
+	return value.replace(/\\/g, "/").trim().toLowerCase();
+}
+
+/**
+ * Once Tab has filled a target, keep only exact target/label matches in the
+ * file list. Duplicate basenames intentionally remain visible so the user must
+ * choose the Vault-relative path that disambiguates them.
+ */
+export function narrowExactWikiFileCandidates(
+	candidates: WikiSearchCandidate[],
+	query: string,
+): WikiSearchCandidate[] {
+	const key = normalizedCompletionText(query);
+	if (!key) return candidates;
+	const exactTargets = candidates.filter(
+		(candidate) =>
+			candidate.kind === "file" &&
+			normalizedCompletionText(candidate.insertText) === key,
+	);
+	if (exactTargets.length) return exactTargets;
+	const exactLabels = candidates.filter(
+		(candidate) =>
+			candidate.kind === "file" &&
+			normalizedCompletionText(candidate.label) === key,
+	);
+	return exactLabels.length ? exactLabels : candidates;
 }
 
 export function sameWikiPath(left: string, right: string): boolean {

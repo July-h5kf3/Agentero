@@ -31,6 +31,24 @@ fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn without_markdown_extension(path: &str) -> String {
+    let lower = path.to_ascii_lowercase();
+    for extension in [".markdown", ".mdx", ".md"] {
+        if lower.ends_with(extension) {
+            return path[..path.len() - extension.len()].to_string();
+        }
+    }
+    path.to_string()
+}
+
+fn document_stem(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn should_skip_name(name: &str) -> bool {
     if IGNORE_NAMES.contains(&name) {
         return true;
@@ -254,12 +272,28 @@ impl WikiIndex {
 
     pub fn search(&self, query: &str) -> Vec<WikiSearchCandidate> {
         let query_key = query.trim().to_lowercase();
+        let stem_counts =
+            self.documents
+                .iter()
+                .fold(HashMap::<String, usize>::new(), |mut counts, document| {
+                    *counts
+                        .entry(document_stem(&document.path).to_lowercase())
+                        .or_default() += 1;
+                    counts
+                });
         let mut candidates = Vec::new();
         for document in &self.documents {
-            let file_name = Path::new(&document.path)
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&document.path);
+            let file_name = document_stem(&document.path);
+            let target = if stem_counts
+                .get(&file_name.to_lowercase())
+                .copied()
+                .unwrap_or_default()
+                > 1
+            {
+                without_markdown_extension(&document.path)
+            } else {
+                file_name.clone()
+            };
             let file_match = query_key.is_empty()
                 || document.path.to_lowercase().contains(&query_key)
                 || document
@@ -270,8 +304,8 @@ impl WikiIndex {
                 candidates.push(WikiSearchCandidate {
                     kind: WikiSearchCandidateKind::File,
                     path: document.path.clone(),
-                    insert_text: document.path.trim_end_matches(".md").to_string(),
-                    label: file_name.to_string(),
+                    insert_text: target.clone(),
+                    label: file_name.clone(),
                     alias: None,
                     fragment: None,
                 });
@@ -281,7 +315,7 @@ impl WikiIndex {
                     candidates.push(WikiSearchCandidate {
                         kind: WikiSearchCandidateKind::File,
                         path: document.path.clone(),
-                        insert_text: document.path.trim_end_matches(".md").to_string(),
+                        insert_text: target.clone(),
                         label: alias.clone(),
                         alias: Some(alias.clone()),
                         fragment: None,
@@ -294,11 +328,7 @@ impl WikiIndex {
                     candidates.push(WikiSearchCandidate {
                         kind: WikiSearchCandidateKind::Heading,
                         path: document.path.clone(),
-                        insert_text: format!(
-                            "{}#{}",
-                            document.path.trim_end_matches(".md"),
-                            heading.path.join("#")
-                        ),
+                        insert_text: format!("{}#{}", target, heading.text),
                         label,
                         alias: None,
                         fragment: Some(LinkFragment::Heading {
@@ -312,11 +342,7 @@ impl WikiIndex {
                     candidates.push(WikiSearchCandidate {
                         kind: WikiSearchCandidateKind::Block,
                         path: document.path.clone(),
-                        insert_text: format!(
-                            "{}#^{}",
-                            document.path.trim_end_matches(".md"),
-                            block.id
-                        ),
+                        insert_text: format!("{}#^{}", target, block.id),
                         label: format!("^{}", block.id),
                         alias: None,
                         fragment: Some(LinkFragment::Block {
@@ -714,7 +740,7 @@ mod tests {
                 aliases: vec!["Short name".into()],
                 headings: vec![HeadingAnchor {
                     text: "Overview".into(),
-                    path: vec!["Overview".into()],
+                    path: vec!["Canonical".into(), "Overview".into()],
                     line: 4,
                 }],
                 blocks: vec![BlockAnchor {
@@ -730,20 +756,62 @@ mod tests {
             .into_iter()
             .find(|candidate| candidate.alias.as_deref() == Some("Short name"))
             .expect("alias candidate");
-        assert_eq!(alias.insert_text, "notes/Canonical");
+        assert_eq!(alias.insert_text, "Canonical");
 
         let heading = index
             .search("Overview")
             .into_iter()
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
             .expect("heading candidate");
-        assert_eq!(heading.insert_text, "notes/Canonical#Overview");
+        assert_eq!(heading.insert_text, "Canonical#Overview");
 
         let block = index
             .search("summary")
             .into_iter()
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Block)
             .expect("block candidate");
-        assert_eq!(block.insert_text, "notes/Canonical#^summary");
+        assert_eq!(block.insert_text, "Canonical#^summary");
+    }
+
+    #[test]
+    fn search_uses_vault_relative_paths_for_duplicate_file_names() {
+        let index = WikiIndex {
+            documents: vec![
+                WikiDocument {
+                    path: "notes/Target.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+                WikiDocument {
+                    path: "references/target.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+                WikiDocument {
+                    path: "papers/Fara-1.5.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let duplicate_targets = index
+            .search("Target")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert_eq!(duplicate_targets, vec!["notes/Target", "references/target"]);
+
+        let unique = index
+            .search("Fara-1.5")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .expect("unique file candidate");
+        assert_eq!(unique.insert_text, "Fara-1.5");
     }
 }

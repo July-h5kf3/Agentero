@@ -202,6 +202,17 @@ export function MarkdownEditor({
 	 * Checking the DOM code ancestor avoids turning code examples into links.
 	 */
 	const updateWikiCompletionDraft = useCallback(() => {
+		const slateSelection = editor.selection;
+		if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) {
+			setWikiCompletionDraft(null);
+			return;
+		}
+		const entry = editor.api.node(slateSelection.anchor.path);
+		const leaf = entry?.[0];
+		if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
+			setWikiCompletionDraft(null);
+			return;
+		}
 		const container = editorContainerRef.current;
 		const nativeSelection = window.getSelection();
 		const anchor = nativeSelection?.anchorNode;
@@ -219,9 +230,9 @@ export function MarkdownEditor({
 			setWikiCompletionDraft(null);
 			return;
 		}
-		const textBeforeCursor = (anchor.textContent ?? "").slice(
+		const textBeforeCursor = (leaf as { text: string }).text.slice(
 			0,
-			nativeSelection.anchorOffset,
+			slateSelection.anchor.offset,
 		);
 		const triggerIndex = textBeforeCursor.lastIndexOf("[[");
 		const raw = textBeforeCursor.slice(triggerIndex + 2);
@@ -240,7 +251,7 @@ export function MarkdownEditor({
 			left: Math.max(8, cursor.left - bounds.left),
 			top: cursor.bottom - bounds.top + container.scrollTop + 4,
 		});
-	}, []);
+	}, [editor]);
 
 	const serialize = useCallback(() => {
 		const body = editor.getApi(MarkdownPlugin).markdown.serialize();
@@ -642,6 +653,11 @@ export function MarkdownEditor({
 							<WikiLinkSuggestion
 								draft={wikiCompletionDraft}
 								onClose={() => setWikiCompletionDraft(null)}
+								onContinue={(raw) =>
+									setWikiCompletionDraft((current) =>
+										current ? { ...current, raw } : current,
+									)
+								}
 								controllerRef={completionControllerRef}
 							/>
 						) : null}

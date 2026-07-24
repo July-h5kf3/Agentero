@@ -6,10 +6,19 @@ import type {
 	MutableRefObject,
 	KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import { wikiLinkToMarkdown } from "@/components/editor/plugins/wikilink-plugin";
+import {
+	isWikiLinkDraftText,
+	wikiLinkToMarkdown,
+} from "@/components/editor/plugins/wikilink-plugin";
 import {
 	resolveWikiReference,
 	searchWikiLinks,
@@ -17,7 +26,9 @@ import {
 } from "@/lib/wiki";
 import {
 	addRecentWikiCandidate,
+	findWikiCompletionMatch,
 	isWikiCompletionSubmitKey,
+	narrowExactWikiFileCandidates,
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionCandidateKey,
@@ -38,8 +49,23 @@ export type WikiCompletionController = {
 type WikiLinkSuggestionProps = {
 	draft: WikiCompletionDraft | null;
 	onClose: () => void;
+	onContinue: (raw: string) => void;
 	controllerRef: MutableRefObject<WikiCompletionController | null>;
 };
+
+type CandidateState = {
+	requestKey: string | null;
+	items: WikiSearchCandidate[];
+};
+
+function completionRequestKey(
+	request: ReturnType<typeof parseWikiCompletionQuery>,
+): string | null {
+	if (!request) return null;
+	return request.kind === "file"
+		? `file\u0000${request.query}`
+		: `${request.kind}\u0000${request.target}\u0000${request.query}`;
+}
 
 function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 	const Icon =
@@ -60,6 +86,7 @@ function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 export function WikiLinkSuggestion({
 	draft,
 	onClose,
+	onContinue,
 	controllerRef,
 }: WikiLinkSuggestionProps) {
 	const { t } = useTranslation("editor");
@@ -70,7 +97,13 @@ export function WikiLinkSuggestion({
 		() => (draft ? parseWikiCompletionQuery(draft.raw) : null),
 		[draft],
 	);
-	const [candidates, setCandidates] = useState<WikiSearchCandidate[]>([]);
+	const requestKey = completionRequestKey(request);
+	const [candidateState, setCandidateState] = useState<CandidateState>({
+		requestKey: null,
+		items: [],
+	});
+	const candidates =
+		candidateState.requestKey === requestKey ? candidateState.items : [];
 	const [recentCandidates, setRecentCandidates] = useState<
 		WikiSearchCandidate[]
 	>([]);
@@ -81,7 +114,7 @@ export function WikiLinkSuggestion({
 		setSelectedIndex(0);
 		const vaultPath = wikiNav?.vaultPath;
 		if (!request || !vaultPath || !filePath) {
-			setCandidates([]);
+			setCandidateState({ requestKey: null, items: [] });
 			setLoading(false);
 			return;
 		}
@@ -92,8 +125,9 @@ export function WikiLinkSuggestion({
 				if (request.kind === "file") {
 					const results = await searchWikiLinks(vaultPath, request.query);
 					if (!cancelled) {
-						const matching = results.filter(
-							(candidate) => candidate.kind === "file",
+						const matching = narrowExactWikiFileCandidates(
+							results.filter((candidate) => candidate.kind === "file"),
+							request.query,
 						);
 						if (!request.query) {
 							const byKey = new Map(
@@ -108,10 +142,13 @@ export function WikiLinkSuggestion({
 								);
 								return current ? [current] : [];
 							});
-							setCandidates(recent.length ? recent : matching);
+							setCandidateState({
+								requestKey,
+								items: recent.length ? recent : matching,
+							});
 							return;
 						}
-						setCandidates(matching);
+						setCandidateState({ requestKey, items: matching });
 					}
 					return;
 				}
@@ -128,21 +165,24 @@ export function WikiLinkSuggestion({
 					!resolved?.targetPath ||
 					resolved.status === "ambiguous"
 				) {
-					if (!cancelled) setCandidates([]);
+					if (!cancelled) {
+						setCandidateState({ requestKey, items: [] });
+					}
 					return;
 				}
 				const results = await searchWikiLinks(vaultPath, request.query);
 				if (!cancelled) {
-					setCandidates(
-						results.filter(
+					setCandidateState({
+						requestKey,
+						items: results.filter(
 							(candidate) =>
 								candidate.kind === request.kind &&
 								sameWikiPath(candidate.path, resolved.targetPath ?? ""),
 						),
-					);
+					});
 				}
 			} catch {
-				if (!cancelled) setCandidates([]);
+				if (!cancelled) setCandidateState({ requestKey, items: [] });
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -150,27 +190,45 @@ export function WikiLinkSuggestion({
 		return () => {
 			cancelled = true;
 		};
-	}, [filePath, recentCandidates, request, wikiNav?.vaultPath]);
+	}, [filePath, recentCandidates, request, requestKey, wikiNav?.vaultPath]);
 
 	const selectCandidate = useCallback(
 		(candidate: WikiSearchCandidate, submitKey: "Enter" | "Tab" = "Enter") => {
-			if (!draft) return;
+			if (!draft || !request || candidate.kind !== request.kind) return false;
 			const selection = editor.selection;
 			if (
 				!selection ||
 				selection.anchor.path.join(",") !== selection.focus.path.join(",") ||
 				selection.anchor.offset !== selection.focus.offset
 			) {
-				return;
+				return false;
 			}
-			const openingLength = draft.raw.length + 2;
-			if (selection.anchor.offset < openingLength) return;
+			const entry = editor.api.node(selection.anchor.path);
+			const leaf = entry?.[0];
+			if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
+				return false;
+			}
+			const match = findWikiCompletionMatch(
+				(leaf as { text: string }).text,
+				selection.anchor.offset,
+				draft.raw,
+			);
+			if (!match) return false;
 			const start = {
 				path: selection.anchor.path,
-				offset: selection.anchor.offset - openingLength,
+				offset: match.start,
 			};
-			const insert = wikiCompletionInsert(candidate);
-			editor.tf.delete({ at: { anchor: start, focus: selection.anchor } });
+			const end = {
+				path: selection.anchor.path,
+				offset: match.end,
+			};
+			const insert = wikiCompletionInsert(candidate, request);
+			controllerRef.current = null;
+			editor.tf.delete({ at: { anchor: start, focus: end } });
+			const remainder = editor.api.node(start.path);
+			if (remainder && isWikiLinkDraftText(remainder[0])) {
+				editor.tf.unsetNodes("wikiLinkDraft", { at: remainder[1] });
+			}
 			if (submitKey === "Tab") {
 				const raw = wikiLinkToMarkdown({
 					value: insert.target,
@@ -179,6 +237,18 @@ export function WikiLinkSuggestion({
 				});
 				editor.tf.insertNodes({ text: raw, wikiLinkDraft: true });
 				editor.tf.move({ distance: 2, reverse: true });
+				const nextRaw = raw.slice(2, -2);
+				const nextRequest = parseWikiCompletionQuery(nextRaw);
+				if (nextRequest && candidate.kind === nextRequest.kind) {
+					setCandidateState({
+						requestKey: completionRequestKey(nextRequest),
+						items: [candidate],
+					});
+					setSelectedIndex(0);
+					onContinue(nextRaw);
+				} else {
+					onClose();
+				}
 			} else {
 				editor.tf.insertNodes([
 					{
@@ -190,13 +260,14 @@ export function WikiLinkSuggestion({
 					},
 					{ text: "" },
 				]);
+				onClose();
 			}
 			setRecentCandidates((recent) =>
 				addRecentWikiCandidate(recent, candidate),
 			);
-			onClose();
+			return true;
 		},
-		[draft, editor, onClose],
+		[controllerRef, draft, editor, onClose, onContinue, request],
 	);
 
 	const handleKeyDown = useCallback(
@@ -220,16 +291,17 @@ export function WikiLinkSuggestion({
 				return true;
 			}
 			if (isWikiCompletionSubmitKey(event.key) && candidates[selectedIndex]) {
-				event.preventDefault();
-				selectCandidate(candidates[selectedIndex], event.key);
-				return true;
+				if (selectCandidate(candidates[selectedIndex], event.key)) {
+					event.preventDefault();
+					return true;
+				}
 			}
 			return false;
 		},
 		[candidates, draft, onClose, selectCandidate, selectedIndex],
 	);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		controllerRef.current = { handleKeyDown };
 		return () => {
 			controllerRef.current = null;

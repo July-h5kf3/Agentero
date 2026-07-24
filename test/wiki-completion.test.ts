@@ -10,7 +10,9 @@ import {
 } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	addRecentWikiCandidate,
+	findWikiCompletionMatch,
 	isWikiCompletionSubmitKey,
+	narrowExactWikiFileCandidates,
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionInsert,
@@ -59,6 +61,42 @@ describe("wikilink completion grammar", () => {
 		expect(sameWikiPath("notes\\Canonical.md", "notes/canonical.md")).toBe(
 			true,
 		);
+	});
+
+	it("keeps an explicitly typed target when completing a heading or block", () => {
+		const heading = wikiCompletionInsert(
+			{
+				kind: "heading",
+				path: "AGENTS.md",
+				insertText: "AGENTS.md#Paper reading order",
+				label: "Paper reading order",
+				fragment: {
+					kind: "heading",
+					path: ["AGENTS.md", "Paper reading order"],
+				},
+			},
+			{ kind: "heading", target: "AGENTS", query: "" },
+		);
+		expect(heading).toEqual({
+			target: "AGENTS",
+			heading: "Paper reading order",
+		});
+		expect(
+			wikiLinkToMarkdown({ value: heading.target, heading: heading.heading }),
+		).toBe("[[AGENTS#Paper reading order]]");
+
+		expect(
+			wikiCompletionInsert(
+				{
+					kind: "block",
+					path: "AGENTS.md",
+					insertText: "AGENTS.md#^reading-order",
+					label: "^reading-order",
+					fragment: { kind: "block", id: "reading-order" },
+				},
+				{ kind: "block", target: "AGENTS", query: "" },
+			),
+		).toEqual({ target: "AGENTS", heading: "^reading-order" });
 	});
 
 	it("keeps the most recently selected candidates unique and bounded", () => {
@@ -138,6 +176,107 @@ describe("wikilink completion grammar", () => {
 		expect(isWikiCompletionSubmitKey("Enter")).toBe(true);
 		expect(isWikiCompletionSubmitKey("Tab")).toBe(true);
 		expect(isWikiCompletionSubmitKey(" ")).toBe(false);
+	});
+
+	it("replaces a completed Tab draft including its existing closing brackets", () => {
+		expect(findWikiCompletionMatch("[[AGENTS#]]", 9, "AGENTS#")).toEqual({
+			start: 0,
+			end: 11,
+			raw: "AGENTS#",
+		});
+		expect(findWikiCompletionMatch("prefix [[AGENTS#", 16, "AGENTS#")).toEqual({
+			start: 7,
+			end: 16,
+			raw: "AGENTS#",
+		});
+	});
+
+	it("does not leave closing brackets after confirming a heading draft", () => {
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "[[AGENTS#]]", wikiLinkDraft: true }],
+				},
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: 9 },
+			focus: { path: [0, 0], offset: 9 },
+		});
+		const match = findWikiCompletionMatch("[[AGENTS#]]", 9, "AGENTS#");
+		expect(match).not.toBeNull();
+		if (!match) throw new Error("expected a completion match");
+		editor.tf.delete({
+			at: {
+				anchor: { path: [0, 0], offset: match.start },
+				focus: { path: [0, 0], offset: match.end },
+			},
+		});
+		editor.tf.unsetNodes("wikiLinkDraft", { at: [0, 0] });
+		editor.tf.insertNodes([
+			{
+				type: "wikiLink",
+				value: "AGENTS",
+				heading: "Paper reading order",
+				children: [{ text: "" }],
+			},
+			{ text: "" },
+		]);
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "" },
+					{
+						type: "wikiLink",
+						value: "AGENTS",
+						heading: "Paper reading order",
+						children: [{ text: "" }],
+					},
+					{ text: "" },
+				],
+			},
+		]);
+	});
+
+	it("narrows a Tab-completed file target while preserving duplicate names", () => {
+		const candidates = [
+			{
+				kind: "file" as const,
+				path: "notes/Fara-1.5.md",
+				insertText: "Fara-1.5",
+				label: "Fara-1.5",
+			},
+			{
+				kind: "file" as const,
+				path: "notes/Fara-1.5-notes.md",
+				insertText: "Fara-1.5-notes",
+				label: "Fara-1.5-notes",
+			},
+		];
+		expect(narrowExactWikiFileCandidates(candidates, "Fara-1.5")).toEqual([
+			candidates[0],
+		]);
+
+		const duplicates = [
+			{
+				kind: "file" as const,
+				path: "notes/Target.md",
+				insertText: "notes/Target",
+				label: "Target",
+			},
+			{
+				kind: "file" as const,
+				path: "references/Target.md",
+				insertText: "references/Target",
+				label: "Target",
+			},
+		];
+		expect(narrowExactWikiFileCandidates(duplicates, "Target")).toEqual(
+			duplicates,
+		);
 	});
 
 	it("places a Tab completion immediately before the closing brackets", () => {
