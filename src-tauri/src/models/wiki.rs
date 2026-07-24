@@ -1,63 +1,140 @@
 use serde::{Deserialize, Serialize};
 
-/// A single `[[wikilink]]` occurrence extracted from Markdown source.
+/// Byte range of the target portion of an internal-link token in its source file.
+/// It deliberately excludes aliases, fragments and Markdown labels so a rename can
+/// replace only the target while preserving the user's surrounding text.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct ExtractedWikilink {
-    /// Raw target before resolve (path fragment or note name).
+pub struct SourceRange {
+    pub start: usize,
+    pub end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum InternalLinkSyntax {
+    Wikilink,
+    Markdown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LinkFragment {
+    Heading { path: Vec<String> },
+    Block { id: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkResolutionStatus {
+    Resolved,
+    Missing,
+    Ambiguous,
+    InvalidFragment,
+}
+
+/// A parsed explicit Vault-local link. Markdown remains the source of truth; this
+/// is only an in-memory, rebuildable occurrence projection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalLinkOccurrence {
+    pub source: String,
     pub target_raw: String,
+    pub syntax: InternalLinkSyntax,
+    pub embed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
+    pub display_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub heading: Option<String>,
-    /// 1-based line number in the source file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub line: Option<u32>,
-    /// Surrounding line text (for backlink context).
+    pub fragment: Option<LinkFragment>,
+    pub source_range: SourceRange,
+    pub line: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
 }
 
-/// Directed edge A → B derived from a wikilink in A.
+/// Document-local anchors and aliases used by the resolver.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct WikiLinkEdge {
-    /// Vault-relative source path (forward slashes).
-    pub source: String,
-    pub target_raw: String,
-    /// Resolved vault-relative path, or null if missing / ambiguous.
+pub struct WikiDocument {
+    pub path: String,
+    pub aliases: Vec<String>,
+    pub headings: Vec<HeadingAnchor>,
+    pub blocks: Vec<BlockAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadingAnchor {
+    pub text: String,
+    pub path: Vec<String>,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockAnchor {
+    pub id: String,
+    pub line: u32,
+}
+
+/// A parsed occurrence enriched with one deterministic resolution result.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedLink {
+    #[serde(flatten)]
+    pub occurrence: InternalLinkOccurrence,
+    pub status: LinkResolutionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_path: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub heading: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub line: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<String>,
 }
 
-/// One backlink entry: who links to the current file.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Backlink {
-    /// Vault-relative path of the linking file.
-    pub source: String,
-    pub target_raw: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub line: Option<u32>,
-}
+/// Compatibility/public graph edge. It preserves occurrence semantics so callers
+/// that need navigation or a later rewrite never have to reconstruct it from the
+/// file-level graph projection.
+pub type WikiLinkEdge = ResolvedLink;
+
+/// One incoming occurrence for a selected target file.
+pub type Backlink = ResolvedLink;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BacklinksResponse {
     pub path: String,
     pub backlinks: Vec<Backlink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutgoingLinksResponse {
+    pub path: String,
+    pub outgoing: Vec<ResolvedLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiResolveResponse {
+    pub link: ResolvedLink,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WikiSearchCandidateKind {
+    File,
+    Heading,
+    Block,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiSearchCandidate {
+    pub kind: WikiSearchCandidateKind,
+    pub path: String,
+    pub insert_text: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragment: Option<LinkFragment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

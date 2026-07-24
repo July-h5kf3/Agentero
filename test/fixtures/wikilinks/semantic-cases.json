@@ -1,0 +1,44 @@
+{
+	"documents": [
+		{
+			"path": "notes/Source.md",
+			"content": "---\naliases:\n  - Source alias\n---\n# Root\n## Child\nBlock text ^summary\n[[Target#Overview]] [[#Root#Child]] [[#^summary]] [relative](./Target.md#Overview)\n`[[ignored-inline]]`\n```md\n[[ignored-fence]]\n```\n"
+		},
+		{
+			"path": "notes/Target.md",
+			"content": "---\naliases: [Target alias]\n---\n# Overview\nTarget block ^target-block\n"
+		},
+		{
+			"path": "duplicates/Target.md",
+			"content": "# Different\n"
+		}
+	],
+	"cases": [
+		{
+			"source": "notes/Source.md",
+			"link": "Target alias#Overview",
+			"status": "resolved",
+			"path": "notes/Target.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "#Root#Child",
+			"status": "resolved",
+			"path": "notes/Source.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "#^summary",
+			"status": "resolved",
+			"path": "notes/Source.md"
+		},
+		{ "source": "notes/Source.md", "link": "Missing", "status": "missing" },
+		{ "source": "notes/Source.md", "link": "Target", "status": "ambiguous" },
+		{
+			"source": "notes/Source.md",
+			"link": "notes/Target#Absent",
+			"status": "invalidFragment",
+			"path": "notes/Target.md"
+		}
+	]
+}

@@ -1,11 +1,12 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
 use crate::models::wiki::{
-    Backlink, BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, RebuildResult,
-    WikiLinkEdge,
+    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, LinkFragment,
+    OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument, WikiLinkEdge,
+    WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
-use crate::services::wiki::extract::extract_wikilinks;
-use crate::services::wiki::resolve::{normalize_rel, resolve_target};
+use crate::services::wiki::extract::extract_document;
+use crate::services::wiki::resolve::{normalize_rel, resolve_occurrence};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -89,10 +90,12 @@ pub struct WikiIndex {
     pub vault_path: Option<String>,
     /// All outgoing edges.
     pub edges: Vec<WikiLinkEdge>,
-    /// target_path → backlinks
-    reverse: HashMap<String, Vec<Backlink>>,
+    /// target_path → incoming occurrences
+    reverse: HashMap<String, Vec<ResolvedLink>>,
     /// Indexed markdown relative paths.
     files: Vec<String>,
+    /// File metadata and anchors, rebuilt entirely from Markdown source.
+    documents: Vec<WikiDocument>,
 }
 
 impl WikiIndex {
@@ -103,54 +106,43 @@ impl WikiIndex {
         }
 
         let files = collect_markdown_files(&root).map_err(|e| e.to_string())?;
+        let mut parsed = Vec::new();
+        let mut documents = Vec::new();
+        for rel in &files {
+            let abs = root.join(rel);
+            let content = match fs::read_to_string(&abs) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+            let (document, occurrences) = extract_document(rel, &content);
+            documents.push(document);
+            parsed.extend(occurrences);
+        }
+
         let mut edges = Vec::new();
-        let mut reverse: HashMap<String, Vec<Backlink>> = HashMap::new();
+        let mut reverse: HashMap<String, Vec<ResolvedLink>> = HashMap::new();
         let mut nodes: HashSet<String> = HashSet::new();
 
         for rel in &files {
             nodes.insert(rel.clone());
-            let abs = root.join(rel);
-            let content = match fs::read_to_string(&abs) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let links = extract_wikilinks(&content);
-            for link in links {
-                let target_path = resolve_target(&link.target_raw, &files);
-                if let Some(ref tp) = target_path {
-                    nodes.insert(tp.clone());
-                } else {
-                    // dangling concept still a node id by raw target
-                    nodes.insert(format!("stub:{}", link.target_raw));
-                }
-
-                let edge = WikiLinkEdge {
-                    source: rel.clone(),
-                    target_raw: link.target_raw.clone(),
-                    target_path: target_path.clone(),
-                    alias: link.alias.clone(),
-                    heading: link.heading.clone(),
-                    line: link.line,
-                    context: link.context.clone(),
-                };
-
-                if let Some(tp) = &target_path {
-                    reverse.entry(tp.clone()).or_default().push(Backlink {
-                        source: rel.clone(),
-                        target_raw: link.target_raw.clone(),
-                        alias: link.alias.clone(),
-                        context: link.context.clone(),
-                        line: link.line,
-                    });
-                }
-
-                edges.push(edge);
+        }
+        for occurrence in parsed {
+            let edge = resolve_occurrence(occurrence, &documents);
+            if let Some(target_path) = &edge.target_path {
+                nodes.insert(target_path.clone());
+                reverse
+                    .entry(target_path.clone())
+                    .or_default()
+                    .push(edge.clone());
+            } else {
+                nodes.insert(format!("stub:{}", edge.occurrence.target_raw));
             }
+            edges.push(edge);
         }
 
         // Stable order for UI
         for list in reverse.values_mut() {
-            list.sort_by(|a, b| a.source.cmp(&b.source));
+            list.sort_by(|a, b| a.occurrence.source.cmp(&b.occurrence.source));
         }
 
         let result = RebuildResult {
@@ -163,6 +155,7 @@ impl WikiIndex {
         self.edges = edges;
         self.reverse = reverse;
         self.files = files;
+        self.documents = documents;
 
         Ok(result)
     }
@@ -189,21 +182,141 @@ impl WikiIndex {
                 backlinks.extend(list.iter().cloned());
             }
         }
-        // Dedupe by source+line+target_raw
+        // Preserve every occurrence: different fragments on one line are distinct.
         backlinks.sort_by(|a, b| {
-            a.source
-                .cmp(&b.source)
-                .then(a.line.cmp(&b.line))
-                .then(a.target_raw.cmp(&b.target_raw))
-        });
-        backlinks.dedup_by(|a, b| {
-            a.source == b.source && a.line == b.line && a.target_raw == b.target_raw
+            a.occurrence
+                .source
+                .cmp(&b.occurrence.source)
+                .then(a.occurrence.line.cmp(&b.occurrence.line))
+                .then(
+                    a.occurrence
+                        .source_range
+                        .start
+                        .cmp(&b.occurrence.source_range.start),
+                )
         });
 
         BacklinksResponse {
             path: rel,
             backlinks,
         }
+    }
+
+    pub fn get_outgoing(&self, vault_root: &str, path: &str) -> OutgoingLinksResponse {
+        let rel = to_vault_rel(Path::new(vault_root), path);
+        let outgoing = self
+            .edges
+            .iter()
+            .filter(|edge| edge.occurrence.source == rel)
+            .cloned()
+            .collect();
+        OutgoingLinksResponse {
+            path: rel,
+            outgoing,
+        }
+    }
+
+    pub fn resolve_text(
+        &self,
+        vault_root: &str,
+        source_path: &str,
+        text: &str,
+    ) -> WikiResolveResponse {
+        let source = to_vault_rel(Path::new(vault_root), source_path);
+        let input = if text.trim_start().starts_with("[[") {
+            text.to_string()
+        } else {
+            format!("[[{}]]", text.trim())
+        };
+        let (_, mut occurrences) = extract_document(&source, &input);
+        let occurrence =
+            occurrences
+                .pop()
+                .unwrap_or_else(|| crate::models::wiki::InternalLinkOccurrence {
+                    source,
+                    target_raw: text.trim().to_string(),
+                    syntax: crate::models::wiki::InternalLinkSyntax::Wikilink,
+                    embed: false,
+                    display_text: None,
+                    fragment: None,
+                    source_range: crate::models::wiki::SourceRange {
+                        start: 0,
+                        end: text.len(),
+                    },
+                    line: 1,
+                    context: None,
+                });
+        WikiResolveResponse {
+            link: resolve_occurrence(occurrence, &self.documents),
+        }
+    }
+
+    pub fn search(&self, query: &str) -> Vec<WikiSearchCandidate> {
+        let query_key = query.trim().to_lowercase();
+        let mut candidates = Vec::new();
+        for document in &self.documents {
+            let file_name = Path::new(&document.path)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&document.path);
+            let file_match = query_key.is_empty()
+                || document.path.to_lowercase().contains(&query_key)
+                || document
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.to_lowercase().contains(&query_key));
+            if file_match {
+                candidates.push(WikiSearchCandidate {
+                    kind: WikiSearchCandidateKind::File,
+                    path: document.path.clone(),
+                    insert_text: document.path.trim_end_matches(".md").to_string(),
+                    label: file_name.to_string(),
+                    fragment: None,
+                });
+            }
+            for heading in &document.headings {
+                let label = heading.path.join(" › ");
+                if query_key.is_empty() || label.to_lowercase().contains(&query_key) {
+                    candidates.push(WikiSearchCandidate {
+                        kind: WikiSearchCandidateKind::Heading,
+                        path: document.path.clone(),
+                        insert_text: format!(
+                            "{}#{}",
+                            document.path.trim_end_matches(".md"),
+                            heading.path.join("#")
+                        ),
+                        label,
+                        fragment: Some(LinkFragment::Heading {
+                            path: heading.path.clone(),
+                        }),
+                    });
+                }
+            }
+            for block in &document.blocks {
+                if query_key.is_empty() || block.id.to_lowercase().contains(&query_key) {
+                    candidates.push(WikiSearchCandidate {
+                        kind: WikiSearchCandidateKind::Block,
+                        path: document.path.clone(),
+                        insert_text: format!(
+                            "{}#^{}",
+                            document.path.trim_end_matches(".md"),
+                            block.id
+                        ),
+                        label: format!("^{}", block.id),
+                        fragment: Some(LinkFragment::Block {
+                            id: block.id.clone(),
+                        }),
+                    });
+                }
+            }
+        }
+        candidates.sort_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then(left.label.cmp(&right.label))
+        });
+        candidates.truncate(100);
+        candidates
     }
 
     /// Full graph or undirected BFS neighborhood around `center`.
@@ -230,17 +343,17 @@ impl WikiIndex {
         }
 
         for e in &self.edges {
-            let source = collapse_graph_id(&e.source, &paper_folders);
+            let source = collapse_graph_id(&e.occurrence.source, &paper_folders);
             let target = match &e.target_path {
                 Some(tp) => collapse_graph_id(tp, &paper_folders),
-                None => format!("stub:{}", e.target_raw),
+                None => format!("stub:{}", e.occurrence.target_raw),
             };
             if source == target {
                 continue; // self-loop after collapse (e.g. NOTES ↔ paper internals)
             }
             node_ids.insert(source.clone());
             node_ids.insert(target.clone());
-            full_edges.push((source, target, e.target_raw.clone()));
+            full_edges.push((source, target, e.occurrence.target_raw.clone()));
         }
 
         // Dedupe edges by (source, target)
