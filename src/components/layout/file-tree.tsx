@@ -103,6 +103,7 @@ import {
 	revealInFileManager,
 	revealInOsLabelKey,
 } from "@/lib/reveal";
+import { useUiScale } from "@/lib/settings";
 import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 import { isTauri } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -318,7 +319,7 @@ function TreeCreateInput({
 				/>
 			</div>
 			{error ? (
-				<p className="px-8 text-destructive text-[11px] leading-tight">
+				<p className="px-8 text-destructive text-[0.6875rem] leading-tight">
 					{error}
 				</p>
 			) : null}
@@ -719,10 +720,11 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		}, [displayNodes, expanded, createDraft, vaultPath]);
 
 		const treeScrollRef = useRef<HTMLDivElement>(null);
+		const uiScale = useUiScale();
 		const rowVirtualizer = useVirtualizer({
 			count: flatRows.length,
 			getScrollElement: () => treeScrollRef.current,
-			estimateSize: () => 28,
+			estimateSize: () => Math.round(28 * uiScale),
 			overscan: 15,
 		});
 
@@ -2105,7 +2107,7 @@ export function VaultSidebarHeader({
 										<span className="min-w-0 flex-1">
 											<span className="flex items-center gap-1.5 truncate text-sm">
 												<span className="truncate">{name}</span>
-												<span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+												<span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[0.625rem] text-muted-foreground">
 													{t("app:vault.remoteBadge")}
 												</span>
 											</span>

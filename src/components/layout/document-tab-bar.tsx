@@ -105,7 +105,7 @@ export function DocumentTabBar({
 								}
 							}}
 							className={cn(
-								"group my-0.5 flex min-w-0 max-w-[180px] shrink-0 cursor-default items-center gap-1 rounded-md px-1.5 text-[11px] outline-none",
+								"group my-0.5 flex min-w-0 max-w-[180px] shrink-0 cursor-default items-center gap-1 rounded-md px-1.5 text-[0.6875rem] outline-none",
 								"focus-visible:ring-2 focus-visible:ring-ring/40",
 								active
 									? "bg-background text-foreground shadow-sm dark:bg-foreground/10"

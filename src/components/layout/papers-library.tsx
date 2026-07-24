@@ -47,6 +47,7 @@ import {
 	DEFAULT_LIBRARY_COLUMNS,
 	type LibraryColumnKey,
 	type LibraryColumnPref,
+	useUiScale,
 } from "@/lib/settings";
 import {
 	coercePaperTags,
@@ -277,7 +278,7 @@ function TagChip({
 		return (
 			<span
 				className={cn(
-					"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+					"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
 					active
 						? "bg-foreground text-background"
 						: colored
@@ -298,7 +299,7 @@ function TagChip({
 				onClick();
 			}}
 			className={cn(
-				"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+				"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
 				"cursor-pointer transition-colors",
 				active
 					? "bg-foreground text-background hover:bg-foreground/90"
@@ -614,7 +615,7 @@ export function PapersLibrary({
 												key={tag.name}
 												type="button"
 												className={cn(
-													"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+													"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.625rem] leading-none",
 													"cursor-pointer transition-colors",
 													"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 													active
@@ -775,12 +776,14 @@ export function PapersLibrary({
 	}, [scopedPapers, sortKey, sortDir, normalizedQuery, tagFilter]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const uiScale = useUiScale();
 	const rowVirtualizer = useVirtualizer({
 		count: rows.length,
 		getScrollElement: () => scrollRef.current,
-		estimateSize: () => 52,
+		estimateSize: () => Math.round(52 * uiScale),
 		overscan: 12,
 	});
+
 	const virtualRows = rowVirtualizer.getVirtualItems();
 	const totalSize = rowVirtualizer.getTotalSize();
 	const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
@@ -845,7 +848,7 @@ export function PapersLibrary({
 		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
 			{allTags.length > 0 && onTagFilterChange ? (
 				<div className="flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
-					<span className="mr-1 text-[10px] text-muted-foreground uppercase tracking-wide">
+					<span className="mr-1 text-[0.625rem] text-muted-foreground uppercase tracking-wide">
 						{t("papersLibrary.filterTag")}
 					</span>
 					{allTags.map((tag) => {
@@ -867,7 +870,7 @@ export function PapersLibrary({
 							type="button"
 							className={cn(
 								"inline-flex items-center gap-0.5 rounded px-1.5 py-0.5",
-								"text-[10px] text-muted-foreground transition-colors",
+								"text-[0.625rem] text-muted-foreground transition-colors",
 								"hover:bg-muted hover:text-foreground",
 								"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
 							)}

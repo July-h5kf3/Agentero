@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import {
 	isPaperTreeLabelMode,
 	isPaperTreeSortMode,
@@ -331,6 +332,18 @@ export function subscribeSettings(listener: SettingsListener): () => void {
 	return () => {
 		settingsListeners.delete(listener);
 	};
+}
+
+/** React hook that tracks the current `uiScale` without re-rendering on other
+ *  settings changes. Useful for scale-aware virtualized lists. */
+export function useUiScale(): number {
+	const [scale, setScale] = useState(() => loadSettings().uiScale);
+	useEffect(() => {
+		return subscribeSettings((next) => {
+			setScale((prev) => (prev === next.uiScale ? prev : next.uiScale));
+		});
+	}, []);
+	return scale;
 }
 
 /** Apply a settings snapshot broadcast by the Host (`settings:changed`). */
