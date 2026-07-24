@@ -7,7 +7,6 @@ import {
 	Info,
 	Tag,
 	Users,
-	X,
 } from "lucide-react";
 import {
 	type ComponentType,
@@ -20,6 +19,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+	PaperTagChip,
+	PaperTagRemoveButton,
+} from "@/components/layout/paper-tag-chip";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -38,7 +41,6 @@ import {
 	type PaperTag,
 	TAG_COLOR_IDS,
 	type TagColorId,
-	tagChipStyle,
 	tagSwatchStyle,
 } from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
@@ -46,8 +48,6 @@ import { cn } from "@/lib/utils";
 type PaperInfoPanelProps = {
 	meta: PaperMetadata | null;
 	className?: string;
-	/** Expand when a paper is selected (default true). */
-	autoOpen?: boolean;
 	/** Persist tags to catalog. Required for editing. */
 	onTagsChange?: (tags: PaperTag[]) => Promise<void> | void;
 };
@@ -260,45 +260,23 @@ function TagsEditor({
 			)}
 			{list.length > 0 ? (
 				<div className="flex flex-wrap gap-1">
-					{list.map((tag) => {
-						const colored = tagChipStyle(tag.color);
-						return (
-							<span
-								key={tag.name}
-								className={cn(
-									"inline-flex items-center gap-1 rounded px-1.5 py-0.5",
-									"text-[10px]",
-									colored ? "font-medium" : "bg-muted text-muted-foreground",
-								)}
-								style={colored}
-							>
-								{tag.color ? (
-									<span
-										className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10"
-										style={tagSwatchStyle(tag.color)}
-										aria-hidden
-									/>
-								) : null}
-								{tag.name}
-								{disabled ? null : (
-									<button
-										type="button"
-										className={cn(
-											"rounded p-0.5 opacity-70 transition-colors",
-											"hover:bg-background/60 hover:opacity-100",
-											"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-											"disabled:pointer-events-none disabled:opacity-50",
-										)}
-										aria-label={t("paperInfo.removeTag", { tag: tag.name })}
+					{list.map((tag) => (
+						<PaperTagChip
+							key={tag.name}
+							tag={tag}
+							size="sm"
+							trailing={
+								disabled ? null : (
+									<PaperTagRemoveButton
+										tagName={tag.name}
+										label={t("paperInfo.removeTag", { tag: tag.name })}
 										disabled={busy}
-										onClick={() => removeTag(tag.name)}
-									>
-										<X className="size-2.5" aria-hidden />
-									</button>
-								)}
-							</span>
-						);
-					})}
+										onRemove={removeTag}
+									/>
+								)
+							}
+						/>
+					))}
 				</div>
 			) : null}
 		</div>
@@ -328,11 +306,10 @@ function loadStoredHeight(): number {
 export function PaperInfoPanel({
 	meta,
 	className,
-	autoOpen = true,
 	onTagsChange,
 }: PaperInfoPanelProps) {
 	const { t } = useTranslation("sidebar");
-	const [open, setOpen] = useState(Boolean(meta) && autoOpen);
+	const [open, setOpen] = useState(Boolean(meta));
 	const [contentHeight, setContentHeight] = useState(loadStoredHeight);
 	const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
@@ -384,8 +361,8 @@ export function PaperInfoPanel({
 			setOpen(false);
 			return;
 		}
-		if (autoOpen) setOpen(true);
-	}, [meta, autoOpen]);
+		setOpen(true);
+	}, [meta]);
 
 	const resizable = open && Boolean(meta);
 
