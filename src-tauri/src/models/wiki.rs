@@ -149,6 +149,55 @@ pub struct RebuildResult {
     pub nodes: u32,
 }
 
+/// Why an internal-link rename transaction could not safely proceed.
+///
+/// These codes are deliberately independent from filesystem error text so UI
+/// callers can present a recoverable action without trying to parse messages.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WikiRenameErrorCode {
+    InvalidPath,
+    SourceMissing,
+    TargetExists,
+    TargetInsideSource,
+    IndexStale,
+    SourceChanged,
+    UnsavedEdits,
+    PermissionDenied,
+    AtomicRenameUnsupported,
+    OverlappingEdits,
+    MoveFailed,
+    WriteFailed,
+    CommitFailed,
+}
+
+/// How far a failed transaction was restored.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum WikiRenameRollback {
+    NotNeeded,
+    Completed,
+    ManualRecoveryRequired,
+}
+
+/// A source skipped by the rename planner because it was not safe to rewrite.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiRenameSkipped {
+    pub path: String,
+    pub reason: String,
+}
+
+/// Observable outcome of a successful link-aware file or directory move.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiRenameResult {
+    pub moved_path: String,
+    pub updated_sources: Vec<String>,
+    pub skipped: Vec<WikiRenameSkipped>,
+    pub rollback: WikiRenameRollback,
+}
+
 /// Graph node type inferred from vault-relative path.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
