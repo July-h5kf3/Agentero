@@ -318,13 +318,21 @@ export default function App() {
 		string | null
 	>(null);
 	const [externalRenameRepairing, setExternalRenameRepairing] = useState(false);
+	/** A no-write preflight failure that still needs an actionable review surface. */
+	const [externalRenameFailure, setExternalRenameFailure] = useState<{
+		from: string;
+		to: string;
+		error: string;
+		affectedSources: number | null;
+	} | null>(null);
 	useOverlayRegistration(
 		"external-rename-repair",
-		externalRenamePreview !== null,
+		externalRenamePreview !== null || externalRenameFailure !== null,
 		() => {
 			if (externalRenameRepairing) return;
 			setExternalRenamePreview(null);
 			setExternalRenameVaultPath(null);
+			setExternalRenameFailure(null);
 		},
 	);
 	const sidebarPanelRef = usePanelRef();
@@ -1810,6 +1818,7 @@ export default function App() {
 				await refreshLibrary();
 				setExternalRenamePreview(null);
 				setExternalRenameVaultPath(null);
+				setExternalRenameFailure(null);
 				notifySuccess(
 					t("vault.externalRename.repaired", {
 						count: result.updatedSources.length,
@@ -1840,14 +1849,43 @@ export default function App() {
 					dirtyVaultPaths(root),
 				);
 				if (settingsRef.current.autoUpdateInternalLinks === "always") {
-					await applyPendingExternalRenameRepair(preview, root);
+					try {
+						await applyPendingExternalRenameRepair(preview, root);
+					} catch (error) {
+						console.warn(
+							"[wiki] automatic external rename repair blocked",
+							error,
+						);
+						setExternalRenameVaultPath(root);
+						setExternalRenamePreview(null);
+						setExternalRenameFailure({
+							from: preview.from,
+							to: preview.to,
+							affectedSources: preview.affectedSources.length,
+							error:
+								error instanceof Error
+									? error.message
+									: t("vault.externalRename.failed"),
+						});
+					}
 					return;
 				}
 				setExternalRenameVaultPath(root);
+				setExternalRenameFailure(null);
 				setExternalRenamePreview(preview);
 			} catch (error) {
 				console.warn("[wiki] external rename repair unavailable", error);
-				notifyWarning(t("vault.externalRename.notRepaired"));
+				setExternalRenameVaultPath(root);
+				setExternalRenamePreview(null);
+				setExternalRenameFailure({
+					from: fromRel,
+					to: toRel,
+					affectedSources: null,
+					error:
+						error instanceof Error
+							? error.message
+							: t("vault.externalRename.failed"),
+				});
 			}
 		},
 		[applyPendingExternalRenameRepair, dirtyVaultPaths, t],
@@ -3954,11 +3992,14 @@ export default function App() {
 				/>
 
 				<Dialog
-					open={externalRenamePreview !== null}
+					open={
+						externalRenamePreview !== null || externalRenameFailure !== null
+					}
 					onOpenChange={(open) => {
 						if (!open && !externalRenameRepairing) {
 							setExternalRenamePreview(null);
 							setExternalRenameVaultPath(null);
+							setExternalRenameFailure(null);
 						}
 					}}
 				>
@@ -3967,31 +4008,64 @@ export default function App() {
 						className="sm:max-w-md"
 					>
 						<DialogHeader>
-							<DialogTitle>{t("vault.externalRename.title")}</DialogTitle>
+							<DialogTitle>
+								{externalRenameFailure
+									? t("vault.externalRename.reviewTitle")
+									: t("vault.externalRename.title")}
+							</DialogTitle>
 							<DialogDescription>
-								{t("vault.externalRename.description", {
-									count: externalRenamePreview?.affectedSources.length ?? 0,
-								})}
+								{externalRenameFailure
+									? t("vault.externalRename.reviewDescription")
+									: t("vault.externalRename.description", {
+											count: externalRenamePreview?.affectedSources.length ?? 0,
+										})}
 							</DialogDescription>
 						</DialogHeader>
-						{externalRenamePreview ? (
+						{externalRenamePreview || externalRenameFailure ? (
 							<div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
 								<div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
 									<span className="text-muted-foreground">
 										{t("vault.externalRename.from")}
 									</span>
-									<code className="truncate">{externalRenamePreview.from}</code>
+									<code className="truncate">
+										{externalRenamePreview?.from ?? externalRenameFailure?.from}
+									</code>
 									<span className="text-muted-foreground">
 										{t("vault.externalRename.to")}
 									</span>
-									<code className="truncate">{externalRenamePreview.to}</code>
+									<code className="truncate">
+										{externalRenamePreview?.to ?? externalRenameFailure?.to}
+									</code>
 								</div>
-								{externalRenamePreview.skipped.length > 0 ? (
+								<p className="text-muted-foreground">
+									{externalRenamePreview ||
+									externalRenameFailure?.affectedSources != null
+										? t("vault.externalRename.impact", {
+												count:
+													externalRenamePreview?.affectedSources.length ??
+													externalRenameFailure?.affectedSources ??
+													0,
+											})
+										: t("vault.externalRename.impactUnknown")}
+								</p>
+								{externalRenamePreview &&
+								externalRenamePreview.skipped.length > 0 ? (
 									<p className="text-muted-foreground">
 										{t("vault.externalRename.skipped", {
 											count: externalRenamePreview.skipped.length,
 										})}
 									</p>
+								) : null}
+								{externalRenameFailure ? (
+									<div
+										className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-destructive"
+										role="alert"
+									>
+										<p>{t("vault.externalRename.repairBlocked")}</p>
+										<p className="break-words text-xs">
+											{externalRenameFailure.error}
+										</p>
+									</div>
 								) : null}
 							</div>
 						) : null}
@@ -4003,37 +4077,46 @@ export default function App() {
 								onClick={() => {
 									setExternalRenamePreview(null);
 									setExternalRenameVaultPath(null);
+									setExternalRenameFailure(null);
 								}}
 							>
 								{t("vault.externalRename.cancel")}
 							</Button>
-							<Button
-								type="button"
-								disabled={
-									externalRenameRepairing ||
-									!externalRenamePreview ||
-									!externalRenameVaultPath
-								}
-								onClick={() => {
-									if (!externalRenamePreview || !externalRenameVaultPath)
-										return;
-									void applyPendingExternalRenameRepair(
-										externalRenamePreview,
-										externalRenameVaultPath,
-									).catch((error) => {
-										notifyError(
-											error instanceof Error
-												? error.message
-												: t("vault.externalRename.failed"),
-										);
-									});
-								}}
-							>
-								{externalRenameRepairing ? (
-									<Loader2 className="animate-spin" />
-								) : null}
-								{t("vault.externalRename.repair")}
-							</Button>
+							{externalRenamePreview ? (
+								<Button
+									type="button"
+									disabled={
+										externalRenameRepairing ||
+										!externalRenamePreview ||
+										!externalRenameVaultPath
+									}
+									onClick={() => {
+										if (!externalRenamePreview || !externalRenameVaultPath)
+											return;
+										void applyPendingExternalRenameRepair(
+											externalRenamePreview,
+											externalRenameVaultPath,
+										).catch((error) => {
+											setExternalRenamePreview(null);
+											setExternalRenameFailure({
+												from: externalRenamePreview.from,
+												to: externalRenamePreview.to,
+												affectedSources:
+													externalRenamePreview.affectedSources.length,
+												error:
+													error instanceof Error
+														? error.message
+														: t("vault.externalRename.failed"),
+											});
+										});
+									}}
+								>
+									{externalRenameRepairing ? (
+										<Loader2 className="animate-spin" />
+									) : null}
+									{t("vault.externalRename.repair")}
+								</Button>
+							) : null}
 						</DialogFooter>
 					</DialogContent>
 				</Dialog>

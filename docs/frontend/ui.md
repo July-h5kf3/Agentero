@@ -341,7 +341,7 @@
 - **持久化**：`agentero-open-tabs` 按窗口保存；全库与作用域 path 均可恢复。
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
 - **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
-- **外部本地改名 repair**：只有 Host 明确给出单个可信 `rename { from, to }` 时才进入内链 repair。General 的默认 `autoUpdateInternalLinks: "ask"` 先用 Dialog 显示旧/新路径、影响来源与跳过项；用户确认后才写 Markdown。`"always"` 仍要求 Host 的 dirty path、hash、旧/新磁盘状态门禁全部通过。成功后，已打开 tab、活动路径、树选中、Library scope 与 PDF highlights 统一按 `from → to` 重映射，避免重复 tab；不可信事件仅刷新，remote Vault 不自动修复。
+- **外部本地改名 repair**：只有 Host 明确给出单个可信 `rename { from, to }` 时才进入内链 repair。General 的默认 `autoUpdateInternalLinks: "ask"` 先用 Dialog 显示旧/新路径、影响来源与跳过项；用户确认后才写 Markdown。`"always"` 仍要求 Host 的 dirty path、hash、旧/新磁盘状态门禁全部通过；若预检或最终校验失败，保持零写入并打开审阅 Dialog，展示旧/新路径、已知影响范围与错误，明确用户可手动修复链接或在 Agentero 中重新执行改名。成功后，已打开 tab、活动路径、树选中、Library scope 与 PDF highlights 统一按 `from → to` 重映射，避免重复 tab；不可信事件仅刷新，remote Vault 不自动修复。
 - **Wiki 索引刷新**：`.md` 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph，避免外部/Agent 写盘后图谱陈旧。
 - **保存冲突检测（防丢数据）**：autosave / `⌘S` / 卸载 flush 写盘前，`persistFile` 比对磁盘内容与上次落盘内容；若文件已被外部修改则**中止写入**并 `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖外部变更。
 

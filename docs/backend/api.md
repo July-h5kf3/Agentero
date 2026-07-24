@@ -1573,7 +1573,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 // => { ok: true; data: { candidateId, from, to, affectedSources, skipped } }
 ```
 
-该命令不写 Markdown、不移动主文件；候选用于 `ask` 的确认界面，也可由 `always` 在前端策略允许时直接交给 apply。
+该命令不写 Markdown、不移动主文件；候选用于 `ask` 的确认界面，也可由 `always` 在前端策略允许时直接交给 apply。若 preview 或后续 apply 因 dirty path、source hash 或旧/新路径状态失败，前端保留零写入语义，并以审阅 Dialog 显示 old/new path、已知影响和可处理错误。
 
 #### `wiki_apply_external_rename_repair`
 
