@@ -11,6 +11,10 @@
 		{
 			"path": "duplicates/Target.md",
 			"content": "# Different\n"
+		},
+		{
+			"path": "notes/Repeated.md",
+			"content": "First occurrence ^duplicate\nSecond occurrence ^duplicate\n"
 		}
 	],
 	"cases": [
@@ -39,6 +43,28 @@
 			"link": "notes/Target#Absent",
 			"status": "invalidFragment",
 			"path": "notes/Target.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/Repeated#^duplicate",
+			"status": "ambiguous",
+			"path": "notes/Repeated.md"
+		}
+	],
+	"moveCases": [
+		{
+			"source": "notes/Source.md",
+			"link": "./Target.md#Overview",
+			"from": "notes/Target.md",
+			"to": "archive/Target.md",
+			"expected": "../archive/Target.md#Overview"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "Target#Overview",
+			"from": "notes/Target.md",
+			"to": "archive/Target.md",
+			"expected": "archive/Target#Overview"
 		}
 	]
 }
