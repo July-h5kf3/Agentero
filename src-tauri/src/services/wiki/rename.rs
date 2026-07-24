@@ -10,11 +10,12 @@ use crate::models::wiki::{
 };
 use crate::services::wiki::index::WikiIndex;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -58,16 +59,76 @@ impl Error for WikiRenameError {}
 struct PlannedEdit {
     start: usize,
     end: usize,
+    expected: String,
     replacement: String,
 }
 
 #[derive(Debug, Clone)]
 struct PlannedSource {
-    original_path: String,
+    current_path: String,
     final_path: String,
     original_content: String,
     original_hash: String,
     edits: Vec<PlannedEdit>,
+}
+
+/// Host-owned short-lived external rename repair snapshots. Keeping the plan
+/// here lets an `ask` confirmation survive a regular watcher-triggered index
+/// rebuild without rediscovering old links from the already-renamed Vault.
+pub struct ExternalRenameRepairStore {
+    inner: Mutex<HashMap<String, WikiRenameTransaction>>,
+}
+
+impl ExternalRenameRepairStore {
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn insert(&self, transaction: WikiRenameTransaction) -> Result<String, WikiRenameError> {
+        let candidate_id = Uuid::new_v4().to_string();
+        let mut guard = self.inner.lock().map_err(|_| {
+            WikiRenameError::new(
+                WikiRenameErrorCode::CommitFailed,
+                "external rename repair store lock poisoned",
+            )
+        })?;
+        // A bounded in-memory cache is sufficient: candidates are advisory and
+        // each execution still rechecks every source hash.
+        if guard.len() >= 32 {
+            guard.clear();
+        }
+        guard.insert(candidate_id.clone(), transaction);
+        Ok(candidate_id)
+    }
+
+    pub fn get(&self, candidate_id: &str) -> Result<WikiRenameTransaction, WikiRenameError> {
+        let guard = self.inner.lock().map_err(|_| {
+            WikiRenameError::new(
+                WikiRenameErrorCode::CommitFailed,
+                "external rename repair store lock poisoned",
+            )
+        })?;
+        guard.get(candidate_id).cloned().ok_or_else(|| {
+            WikiRenameError::new(
+                WikiRenameErrorCode::IndexStale,
+                "external rename repair candidate is no longer available",
+            )
+        })
+    }
+
+    pub fn remove(&self, candidate_id: &str) {
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.remove(candidate_id);
+        }
+    }
+}
+
+impl Default for ExternalRenameRepairStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// A preflighted local rename/move. Construction never mutates the Vault.
@@ -76,6 +137,7 @@ pub struct WikiRenameTransaction {
     vault_root: PathBuf,
     from: String,
     to: String,
+    primary_move_pending: bool,
     sources: Vec<PlannedSource>,
     skipped: Vec<WikiRenameSkipped>,
 }
@@ -88,6 +150,29 @@ impl WikiRenameTransaction {
         index: &WikiIndex,
         from: &str,
         to: &str,
+    ) -> Result<Self, WikiRenameError> {
+        Self::plan_with_move_state(vault_root, index, from, to, true)
+    }
+
+    /// Plan a repair after a local filesystem watcher has reliably observed
+    /// that the primary rename already happened. The supplied index must still
+    /// describe the old paths; sources are read from their final locations and
+    /// their original link text is checked before any write is allowed.
+    pub fn plan_external_repair(
+        vault_root: impl Into<PathBuf>,
+        index: &WikiIndex,
+        from: &str,
+        to: &str,
+    ) -> Result<Self, WikiRenameError> {
+        Self::plan_with_move_state(vault_root, index, from, to, false)
+    }
+
+    fn plan_with_move_state(
+        vault_root: impl Into<PathBuf>,
+        index: &WikiIndex,
+        from: &str,
+        to: &str,
+        primary_move_pending: bool,
     ) -> Result<Self, WikiRenameError> {
         let vault_root = vault_root.into();
         if !vault_root.is_dir() {
@@ -118,17 +203,25 @@ impl WikiRenameTransaction {
             ));
         }
 
-        let from_abs = vault_root.join(&from);
-        if !from_abs.exists() {
+        let from_exists = vault_root.join(&from).exists();
+        let to_exists = vault_root.join(&to).exists();
+        if primary_move_pending {
+            if !from_exists {
+                return Err(WikiRenameError::new(
+                    WikiRenameErrorCode::SourceMissing,
+                    "source path does not exist",
+                ));
+            }
+            if to_exists {
+                return Err(WikiRenameError::new(
+                    WikiRenameErrorCode::TargetExists,
+                    "target path already exists",
+                ));
+            }
+        } else if from_exists || !to_exists {
             return Err(WikiRenameError::new(
-                WikiRenameErrorCode::SourceMissing,
-                "source path does not exist",
-            ));
-        }
-        if vault_root.join(&to).exists() {
-            return Err(WikiRenameError::new(
-                WikiRenameErrorCode::TargetExists,
-                "target path already exists",
+                WikiRenameErrorCode::SourceChanged,
+                "external rename pair is no longer valid",
             ));
         }
 
@@ -178,24 +271,32 @@ impl WikiRenameTransaction {
                 .push(PlannedEdit {
                     start: edge.occurrence.source_range.start,
                     end: edge.occurrence.source_range.end,
+                    expected: edge.occurrence.target_raw.clone(),
                     replacement,
                 });
         }
 
         let mut sources = Vec::new();
         for (path, mut edits) in candidates {
-            let original_content = fs::read_to_string(vault_root.join(&path)).map_err(|error| {
-                WikiRenameError::new(
-                    WikiRenameErrorCode::SourceChanged,
-                    format!("could not read planned source {path}: {error}"),
-                )
-            })?;
+            let current_path = if primary_move_pending {
+                path.clone()
+            } else {
+                remap_path(&path, &from, &to)
+            };
+            let original_content =
+                fs::read_to_string(vault_root.join(&current_path)).map_err(|error| {
+                    WikiRenameError::new(
+                        WikiRenameErrorCode::SourceChanged,
+                        format!("could not read planned source {current_path}: {error}"),
+                    )
+                })?;
             edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
             if edits.iter().any(|edit| {
                 edit.start > edit.end
                     || edit.end > original_content.len()
                     || !original_content.is_char_boundary(edit.start)
                     || !original_content.is_char_boundary(edit.end)
+                    || original_content.get(edit.start..edit.end) != Some(edit.expected.as_str())
             }) || edits.windows(2).any(|pair| pair[0].start < pair[1].end)
             {
                 return Err(WikiRenameError::new(
@@ -207,7 +308,7 @@ impl WikiRenameTransaction {
                 final_path: remap_path(&path, &from, &to),
                 original_hash: content_hash(&original_content),
                 original_content,
-                original_path: path,
+                current_path,
                 edits,
             });
         }
@@ -223,6 +324,7 @@ impl WikiRenameTransaction {
             vault_root,
             from,
             to,
+            primary_move_pending,
             sources,
             skipped,
         })
@@ -232,6 +334,14 @@ impl WikiRenameTransaction {
         &self.to
     }
 
+    pub fn from(&self) -> &str {
+        &self.from
+    }
+
+    pub fn skipped(&self) -> &[WikiRenameSkipped] {
+        &self.skipped
+    }
+
     pub fn updated_sources(&self) -> Vec<String> {
         self.sources
             .iter()
@@ -239,14 +349,14 @@ impl WikiRenameTransaction {
             .collect()
     }
 
-    fn reject_dirty_paths(&self, dirty_paths: &[String]) -> Result<(), WikiRenameError> {
+    pub fn reject_dirty_paths(&self, dirty_paths: &[String]) -> Result<(), WikiRenameError> {
         for raw_path in dirty_paths {
             let path = normalize_vault_path(raw_path)?;
             let touches_primary_move = is_at_or_under(&path, &self.from);
             let touches_rewrite = self
                 .sources
                 .iter()
-                .any(|source| source.original_path == path);
+                .any(|source| source.current_path == path);
             if touches_primary_move || touches_rewrite {
                 return Err(WikiRenameError::new(
                     WikiRenameErrorCode::UnsavedEdits,
@@ -264,7 +374,24 @@ impl WikiRenameTransaction {
     where
         F: FnOnce() -> Result<(), String>,
     {
+        if !self.primary_move_pending {
+            return Err(WikiRenameError::new(
+                WikiRenameErrorCode::InvalidPath,
+                "external repair plan cannot perform a primary move",
+            ));
+        }
         self.execute_inner(commit, None)
+    }
+
+    /// Apply only Markdown rewrites after an already-observed external rename.
+    pub fn execute_external_repair(&self) -> Result<WikiRenameResult, WikiRenameError> {
+        if self.primary_move_pending {
+            return Err(WikiRenameError::new(
+                WikiRenameErrorCode::InvalidPath,
+                "local move plan cannot be applied as an external repair",
+            ));
+        }
+        self.execute_inner(|| Ok(()), None)
     }
 
     fn execute_inner<F>(
@@ -277,33 +404,44 @@ impl WikiRenameTransaction {
     {
         self.verify_sources_unchanged()?;
 
-        let from_abs = self.vault_root.join(&self.from);
-        let to_abs = self.vault_root.join(&self.to);
-        if to_abs.exists() {
-            return Err(WikiRenameError::new(
-                WikiRenameErrorCode::TargetExists,
-                "target path already exists",
-            ));
-        }
-        if let Some(parent) = to_abs.parent() {
-            fs::create_dir_all(parent).map_err(|error| {
+        let mut primary_move_completed = false;
+        if self.primary_move_pending {
+            let from_abs = self.vault_root.join(&self.from);
+            let to_abs = self.vault_root.join(&self.to);
+            if to_abs.exists() {
+                return Err(WikiRenameError::new(
+                    WikiRenameErrorCode::TargetExists,
+                    "target path already exists",
+                ));
+            }
+            if let Some(parent) = to_abs.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    WikiRenameError::new(
+                        WikiRenameErrorCode::MoveFailed,
+                        format!("could not create target parent: {error}"),
+                    )
+                })?;
+            }
+            fs::rename(&from_abs, &to_abs).map_err(|error| {
                 WikiRenameError::new(
                     WikiRenameErrorCode::MoveFailed,
-                    format!("could not create target parent: {error}"),
+                    format!("could not move {} to {}: {error}", self.from, self.to),
                 )
             })?;
+            primary_move_completed = true;
+        } else if self.vault_root.join(&self.from).exists()
+            || !self.vault_root.join(&self.to).exists()
+        {
+            return Err(WikiRenameError::new(
+                WikiRenameErrorCode::SourceChanged,
+                "external rename pair changed before repair",
+            ));
         }
-        fs::rename(&from_abs, &to_abs).map_err(|error| {
-            WikiRenameError::new(
-                WikiRenameErrorCode::MoveFailed,
-                format!("could not move {} to {}: {error}", self.from, self.to),
-            )
-        })?;
 
         let mut written = Vec::new();
         for (write_index, source) in self.sources.iter().enumerate() {
             if fail_write_at == Some(write_index) {
-                let rollback = self.rollback(&written);
+                let rollback = self.rollback(&written, primary_move_completed);
                 return Err(WikiRenameError::after_mutation(
                     WikiRenameErrorCode::WriteFailed,
                     format!("simulated write failure for {}", source.final_path),
@@ -315,7 +453,7 @@ impl WikiRenameTransaction {
                 &self.vault_root.join(&source.final_path),
                 rewritten.as_bytes(),
             ) {
-                let rollback = self.rollback(&written);
+                let rollback = self.rollback(&written, primary_move_completed);
                 return Err(WikiRenameError::after_mutation(
                     WikiRenameErrorCode::WriteFailed,
                     format!("could not rewrite {}: {error}", source.final_path),
@@ -326,7 +464,7 @@ impl WikiRenameTransaction {
         }
 
         if let Err(message) = commit() {
-            let rollback = self.rollback(&written);
+            let rollback = self.rollback(&written, primary_move_completed);
             return Err(WikiRenameError::after_mutation(
                 WikiRenameErrorCode::CommitFailed,
                 message,
@@ -344,13 +482,13 @@ impl WikiRenameTransaction {
 
     fn verify_sources_unchanged(&self) -> Result<(), WikiRenameError> {
         for source in &self.sources {
-            let current = fs::read_to_string(self.vault_root.join(&source.original_path)).map_err(
+            let current = fs::read_to_string(self.vault_root.join(&source.current_path)).map_err(
                 |error| {
                     WikiRenameError::new(
                         WikiRenameErrorCode::SourceChanged,
                         format!(
                             "could not re-read planned source {}: {error}",
-                            source.original_path
+                            source.current_path
                         ),
                     )
                 },
@@ -358,14 +496,18 @@ impl WikiRenameTransaction {
             if content_hash(&current) != source.original_hash {
                 return Err(WikiRenameError::new(
                     WikiRenameErrorCode::SourceChanged,
-                    format!("planned source changed: {}", source.original_path),
+                    format!("planned source changed: {}", source.current_path),
                 ));
             }
         }
         Ok(())
     }
 
-    fn rollback(&self, written: &[&PlannedSource]) -> WikiRenameRollback {
+    fn rollback(
+        &self,
+        written: &[&PlannedSource],
+        primary_move_completed: bool,
+    ) -> WikiRenameRollback {
         let mut complete = true;
         for source in written.iter().rev() {
             if atomic_write(
@@ -377,11 +519,12 @@ impl WikiRenameTransaction {
                 complete = false;
             }
         }
-        if fs::rename(
-            self.vault_root.join(&self.to),
-            self.vault_root.join(&self.from),
-        )
-        .is_err()
+        if primary_move_completed
+            && fs::rename(
+                self.vault_root.join(&self.to),
+                self.vault_root.join(&self.from),
+            )
+            .is_err()
         {
             complete = false;
         }
@@ -426,6 +569,38 @@ where
         WikiRenameError::new(
             WikiRenameErrorCode::CommitFailed,
             format!("move succeeded but wiki index rebuild failed: {error}"),
+        )
+    })?;
+    Ok(result)
+}
+
+/// Execute a prepared external repair against the preserved pre-rename index
+/// snapshot. The operation writes only Markdown sources; it never moves the
+/// externally renamed file or directory back.
+pub fn run_prepared_external_rename_repair(
+    vault_root: &Path,
+    index: &mut WikiIndex,
+    transaction: &WikiRenameTransaction,
+    dirty_paths: &[String],
+) -> Result<WikiRenameResult, WikiRenameError> {
+    let vault_path = vault_root.to_str().ok_or_else(|| {
+        WikiRenameError::new(
+            WikiRenameErrorCode::InvalidPath,
+            "vault path is not valid UTF-8",
+        )
+    })?;
+    if transaction.vault_root != vault_root || transaction.primary_move_pending {
+        return Err(WikiRenameError::new(
+            WikiRenameErrorCode::InvalidPath,
+            "invalid external rename repair transaction",
+        ));
+    }
+    transaction.reject_dirty_paths(dirty_paths)?;
+    let result = transaction.execute_external_repair()?;
+    index.rebuild(vault_path).map_err(|error| {
+        WikiRenameError::new(
+            WikiRenameErrorCode::CommitFailed,
+            format!("external repair succeeded but wiki index rebuild failed: {error}"),
         )
     })?;
     Ok(result)
@@ -766,6 +941,94 @@ mod tests {
         assert_eq!(error.code, WikiRenameErrorCode::UnsavedEdits);
         assert!(root.join("notes/Target.md").exists());
         assert!(!root.join("archive/Target.md").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn external_rename_repair_uses_the_old_snapshot_and_supports_consecutive_moves() {
+        let root = temp_vault();
+        write(
+            &root,
+            "notes/Source.md",
+            "[[notes/Target#Overview|Alias]] [target](./Target.md#Overview)\n",
+        );
+        write(&root, "notes/Target.md", "# Overview\n");
+        let mut index = snapshot(&root);
+
+        fs::create_dir_all(root.join("archive")).expect("create archive");
+        fs::rename(
+            root.join("notes/Target.md"),
+            root.join("archive/Renamed.md"),
+        )
+        .expect("external rename");
+        let first = WikiRenameTransaction::plan_external_repair(
+            &root,
+            &index,
+            "notes/Target.md",
+            "archive/Renamed.md",
+        )
+        .expect("external plan");
+        let result = run_prepared_external_rename_repair(&root, &mut index, &first, &[])
+            .expect("external repair");
+        assert_eq!(result.updated_sources, vec!["notes/Source.md"]);
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).unwrap(),
+            "[[archive/Renamed#Overview|Alias]] [target](../archive/Renamed.md#Overview)\n"
+        );
+        assert!(!root.join("notes/Target.md").exists());
+
+        fs::rename(
+            root.join("archive/Renamed.md"),
+            root.join("archive/Final.md"),
+        )
+        .expect("second external rename");
+        let second = WikiRenameTransaction::plan_external_repair(
+            &root,
+            &index,
+            "archive/Renamed.md",
+            "archive/Final.md",
+        )
+        .expect("second external plan");
+        run_prepared_external_rename_repair(&root, &mut index, &second, &[])
+            .expect("second external repair");
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).unwrap(),
+            "[[archive/Final#Overview|Alias]] [target](../archive/Final.md#Overview)\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn external_rename_repair_rejects_dirty_or_stale_sources_without_writing() {
+        let root = temp_vault();
+        write(&root, "notes/Source.md", "[[notes/Target]]\n");
+        write(&root, "notes/Target.md", "# Target\n");
+        let index = snapshot(&root);
+        fs::create_dir_all(root.join("archive")).expect("create archive");
+        fs::rename(root.join("notes/Target.md"), root.join("archive/Target.md"))
+            .expect("external rename");
+        let transaction = WikiRenameTransaction::plan_external_repair(
+            &root,
+            &index,
+            "notes/Target.md",
+            "archive/Target.md",
+        )
+        .expect("external plan");
+
+        let dirty = transaction
+            .reject_dirty_paths(&["notes/Source.md".to_string()])
+            .expect_err("dirty source blocks repair");
+        assert_eq!(dirty.code, WikiRenameErrorCode::UnsavedEdits);
+        write(&root, "notes/Source.md", "[[manually changed]]\n");
+        let stale = transaction
+            .execute_external_repair()
+            .expect_err("hash mismatch blocks repair");
+        assert_eq!(stale.code, WikiRenameErrorCode::SourceChanged);
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).unwrap(),
+            "[[manually changed]]\n"
+        );
+        assert!(root.join("archive/Target.md").exists());
         let _ = fs::remove_dir_all(root);
     }
 

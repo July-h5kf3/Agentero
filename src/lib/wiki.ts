@@ -77,6 +77,15 @@ export type WikiRenameResult = {
 	rollback: WikiRenameRollback;
 };
 
+/** Host-held pre-rename snapshot for an externally observed local move. */
+export type WikiExternalRenamePreview = {
+	candidateId: string;
+	from: string;
+	to: string;
+	affectedSources: string[];
+	skipped: WikiRenameSkipped[];
+};
+
 export type GraphNodeType = "paper" | "note" | "index" | "stub";
 
 export type GraphNode = {
@@ -129,6 +138,29 @@ export async function moveVaultPath(
 ): Promise<WikiRenameResult> {
 	return invokeApi<WikiRenameResult>("wiki_move", {
 		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
+}
+
+/** Create a no-write repair candidate from a trustworthy external rename pair. */
+export async function previewExternalRenameRepair(
+	vaultPath: string,
+	fromRel: string,
+	toRel: string,
+	dirtyPaths: string[],
+): Promise<WikiExternalRenamePreview> {
+	return invokeApi<WikiExternalRenamePreview>("wiki_external_rename_preview", {
+		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
+}
+
+/** Apply a previously previewed external rename repair after a fresh dirty check. */
+export async function applyExternalRenameRepair(
+	vaultPath: string,
+	candidateId: string,
+	dirtyPaths: string[],
+): Promise<WikiRenameResult> {
+	return invokeApi<WikiRenameResult>("wiki_apply_external_rename_repair", {
+		args: { vaultPath, candidateId, dirtyPaths },
 	});
 }
 

@@ -21,7 +21,7 @@ use services::connector::ConnectorController;
 use services::remote::RemoteRegistry;
 #[cfg(not(target_os = "ios"))]
 use services::watcher::FsWatchController;
-use services::wiki::WikiIndexState;
+use services::wiki::{ExternalRenameRepairStore, WikiIndexState};
 #[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
@@ -194,7 +194,8 @@ pub fn run() {
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(services::agent::PermissionGate::new())
-        .manage(WikiIndexState::new());
+        .manage(WikiIndexState::new())
+        .manage(ExternalRenameRepairStore::new());
 
     #[cfg(not(target_os = "ios"))]
     {
@@ -242,6 +243,8 @@ pub fn run() {
             commands::vault::vault_ensure,
             commands::vault::vault_allow_fs_scope,
             commands::vault::wiki_move,
+            commands::vault::wiki_external_rename_preview,
+            commands::vault::wiki_apply_external_rename_repair,
             commands::remote::remote_connect,
             commands::remote::remote_disconnect,
             commands::remote::remote_status,
@@ -339,6 +342,8 @@ pub fn run() {
             commands::vault::vault_ensure,
             commands::vault::vault_allow_fs_scope,
             commands::vault::wiki_move,
+            commands::vault::wiki_external_rename_preview,
+            commands::vault::wiki_apply_external_rename_repair,
             commands::trash::path_trash,
             commands::trash::path_untrash,
             commands::trash::path_list_trash,

@@ -1,8 +1,11 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::log_util::{trunc, OpTimer};
-use crate::models::wiki::WikiRenameResult;
+use crate::models::wiki::{WikiExternalRenamePreview, WikiRenameErrorCode, WikiRenameResult};
 use crate::services::vault::{self, CreateVaultResult};
-use crate::services::wiki::rename::run_local_rename_transaction;
+use crate::services::wiki::rename::{
+    run_local_rename_transaction, run_prepared_external_rename_repair, ExternalRenameRepairStore,
+    WikiRenameTransaction,
+};
 use crate::services::wiki::WikiIndexState;
 use std::path::PathBuf;
 use tauri::{AppHandle, Runtime, State};
@@ -88,6 +91,28 @@ pub struct WikiMoveArgs {
     pub dirty_paths: Vec<String>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiExternalRenamePreviewArgs {
+    pub vault_path: String,
+    /// Verified watcher pair: the former Vault-relative path and its final path.
+    pub from_rel: String,
+    pub to_rel: String,
+    /// Dirty open Markdown/NOTES paths supplied by the renderer.
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiApplyExternalRenameArgs {
+    pub vault_path: String,
+    pub candidate_id: String,
+    /// Rechecked immediately before any Vault write.
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
+}
+
 /// Move or rename one local Vault path while updating resolved internal links.
 #[tauri::command]
 pub fn wiki_move(
@@ -113,5 +138,87 @@ pub fn wiki_move(
     ) {
         Ok(result) => ApiResult::ok(result),
         Err(error) => map_err(AppError::message(error.to_string())),
+    }
+}
+
+/// Preserve a pre-rename semantic plan for an externally observed local rename.
+/// This is intentionally a read-only preflight: the caller must explicitly apply
+/// it, or opt into the `always` policy in the renderer.
+#[tauri::command]
+pub fn wiki_external_rename_preview(
+    args: WikiExternalRenamePreviewArgs,
+    index: State<'_, WikiIndexState>,
+    repairs: State<'_, ExternalRenameRepairStore>,
+) -> ApiResult<WikiExternalRenamePreview> {
+    let vault = match vault_path_arg(&args.vault_path) {
+        Ok(vault) if vault.is_dir() => vault,
+        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+        Err(error) => return map_err(error),
+    };
+    let guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    let transaction = match WikiRenameTransaction::plan_external_repair(
+        &vault,
+        &guard,
+        &args.from_rel,
+        &args.to_rel,
+    ) {
+        Ok(transaction) => transaction,
+        Err(error) => return map_err(AppError::message(error.to_string())),
+    };
+    if let Err(error) = transaction.reject_dirty_paths(&args.dirty_paths) {
+        return map_err(AppError::message(error.to_string()));
+    }
+    let affected_sources = transaction.updated_sources();
+    let skipped = transaction.skipped().to_vec();
+    let from = transaction.from().to_string();
+    let to = transaction.moved_path().to_string();
+    drop(guard);
+    match repairs.insert(transaction) {
+        Ok(candidate_id) => ApiResult::ok(WikiExternalRenamePreview {
+            candidate_id,
+            from,
+            to,
+            affected_sources,
+            skipped,
+        }),
+        Err(error) => map_err(AppError::message(error.to_string())),
+    }
+}
+
+/// Apply one previously previewed external rename repair. The Host rechecks the
+/// candidate's source hashes and current dirty paths before touching Markdown.
+#[tauri::command]
+pub fn wiki_apply_external_rename_repair(
+    args: WikiApplyExternalRenameArgs,
+    index: State<'_, WikiIndexState>,
+    repairs: State<'_, ExternalRenameRepairStore>,
+) -> ApiResult<WikiRenameResult> {
+    let vault = match vault_path_arg(&args.vault_path) {
+        Ok(vault) if vault.is_dir() => vault,
+        Ok(_) => return map_err(AppError::message("vault path is not a directory")),
+        Err(error) => return map_err(error),
+    };
+    let transaction = match repairs.get(&args.candidate_id) {
+        Ok(transaction) => transaction,
+        Err(error) => return map_err(AppError::message(error.to_string())),
+    };
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    match run_prepared_external_rename_repair(&vault, &mut guard, &transaction, &args.dirty_paths) {
+        Ok(result) => {
+            repairs.remove(&args.candidate_id);
+            ApiResult::ok(result)
+        }
+        Err(error) => {
+            if error.code != WikiRenameErrorCode::UnsavedEdits {
+                repairs.remove(&args.candidate_id);
+            }
+            map_err(AppError::message(error.to_string()))
+        }
     }
 }

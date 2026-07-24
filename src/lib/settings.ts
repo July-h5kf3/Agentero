@@ -71,6 +71,14 @@ export type AgentPermissionMode = "restricted" | "ask" | "auto";
  */
 export type AiResponseLanguage = "auto" | "en" | "zh-CN";
 
+/** How a verified external local rename may repair resolved internal links. */
+export type AutoUpdateInternalLinks = "ask" | "always";
+
+export const AUTO_UPDATE_INTERNAL_LINKS: AutoUpdateInternalLinks[] = [
+	"ask",
+	"always",
+];
+
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
@@ -90,6 +98,8 @@ export type AppSettings = {
 	 * Default: display name A–Z (matches paperTreeLabelMode labels).
 	 */
 	paperTreeSortMode: PaperTreeSortMode;
+	/** Default `ask`: external local renames are previewed before Markdown writes. */
+	autoUpdateInternalLinks: AutoUpdateInternalLinks;
 	/**
 	 * Papers Library table columns: order (array position) + visibility.
 	 * Reconciled against {@link LIBRARY_COLUMN_KEYS}; `title` is always visible.
@@ -191,6 +201,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
+	autoUpdateInternalLinks: "ask",
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,
@@ -471,6 +482,12 @@ function normalizePartial(
 	}
 	if (!isPaperTreeSortMode(merged.paperTreeSortMode)) {
 		merged.paperTreeSortMode = DEFAULT_SETTINGS.paperTreeSortMode;
+	}
+	if (
+		merged.autoUpdateInternalLinks !== "ask" &&
+		merged.autoUpdateInternalLinks !== "always"
+	) {
+		merged.autoUpdateInternalLinks = DEFAULT_SETTINGS.autoUpdateInternalLinks;
 	}
 	merged.libraryColumns = normalizeLibraryColumns(merged.libraryColumns);
 	if (typeof parsed.autoPaperReader !== "boolean") {

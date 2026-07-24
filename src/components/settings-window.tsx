@@ -90,6 +90,8 @@ import {
 	type AgentPermissionMode,
 	type AiResponseLanguage,
 	type AppSettings,
+	AUTO_UPDATE_INTERNAL_LINKS,
+	type AutoUpdateInternalLinks,
 	DEFAULT_TRANSLATOR_BASE_URL,
 	type LocalePreference,
 	type PdfAskSettings,
@@ -615,12 +617,36 @@ function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow label={t("general.autoUpdateInternalLinks.label")}>
+					<Select
+						value={settings.autoUpdateInternalLinks}
+						onValueChange={(v) =>
+							patch({
+								autoUpdateInternalLinks: v as AutoUpdateInternalLinks,
+							})
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{AUTO_UPDATE_INTERNAL_LINKS.map((mode) => (
+								<SelectItem key={mode} value={mode}>
+									{t(`general.autoUpdateInternalLinks.${mode}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
 			</SettingsGroup>
 			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.paperTreeLabelMode.hint")}
 			</p>
 			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("general.paperTreeSortMode.hint")}
+			</p>
+			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
+				{t("general.autoUpdateInternalLinks.hint")}
 			</p>
 			<SettingsGroup>
 				<div className="flex flex-col gap-1.5 border-b px-3.5 py-2.5 last:border-b-0">

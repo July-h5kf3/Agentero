@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use notify_debouncer_full::new_debouncer;
-use notify_debouncer_full::notify::event::ModifyKind;
+use notify_debouncer_full::notify::event::{ModifyKind, RenameMode};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, EventTarget};
@@ -22,6 +22,18 @@ pub struct FileChangedPayload {
     pub paths: Vec<String>,
     /// Coarse change kind: "create" | "modify" | "remove" | "other".
     pub kind: String,
+    /// Present only when the OS delivered one trustworthy old/new rename pair.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rename: Option<FileRename>,
+}
+
+/// A rename pair emitted by the native watcher. `None` means the watcher did
+/// not preserve enough information for automatic internal-link repair.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRename {
+    pub from: String,
+    pub to: String,
 }
 
 struct WatchHandle {
@@ -138,6 +150,23 @@ fn kind_label(kind: &EventKind) -> &'static str {
     }
 }
 
+/// `notify` marks `Both` only when one event contains the old and new path in
+/// order. Other rename modes (or any filtered/incomplete pair) are deliberately
+/// treated as an ordinary structural event: they may refresh the tree/index but
+/// can never authorize a Vault rewrite.
+fn verified_rename_pair(kind: &EventKind, paths: &[String]) -> Option<FileRename> {
+    if !matches!(kind, EventKind::Modify(ModifyKind::Name(RenameMode::Both)))
+        || paths.len() != 2
+        || paths[0] == paths[1]
+    {
+        return None;
+    }
+    Some(FileRename {
+        from: paths[0].clone(),
+        to: paths[1].clone(),
+    })
+}
+
 /// Convert a debounced batch into one payload per event kind, dropping ignored paths.
 fn payloads_from_events(
     events: Vec<notify_debouncer_full::DebouncedEvent>,
@@ -154,10 +183,33 @@ fn payloads_from_events(
         if paths.is_empty() {
             continue;
         }
+        let rename = verified_rename_pair(&event.kind, &paths);
         out.push(FileChangedPayload {
             paths,
             kind: kind.to_string(),
+            rename,
         });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_complete_notify_rename_pairs_are_trusted() {
+        let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
+        let paths = vec!["/vault/old.md".to_string(), "/vault/new.md".to_string()];
+        let pair = verified_rename_pair(&kind, &paths).expect("trusted pair");
+        assert_eq!(pair.from, "/vault/old.md");
+        assert_eq!(pair.to, "/vault/new.md");
+
+        assert!(verified_rename_pair(
+            &EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
+            &paths,
+        )
+        .is_none());
+        assert!(verified_rename_pair(&kind, &paths[..1]).is_none());
+    }
 }

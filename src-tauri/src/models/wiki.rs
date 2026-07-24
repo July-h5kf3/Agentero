@@ -198,6 +198,19 @@ pub struct WikiRenameResult {
     pub rollback: WikiRenameRollback,
 }
 
+/// A verified external filesystem rename that is safe to present for explicit
+/// approval. The opaque ID keeps the pre-rename semantic snapshot in the Host
+/// until the renderer either applies or discards the repair.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiExternalRenamePreview {
+    pub candidate_id: String,
+    pub from: String,
+    pub to: String,
+    pub affected_sources: Vec<String>,
+    pub skipped: Vec<WikiRenameSkipped>,
+}
+
 /// Graph node type inferred from vault-relative path.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

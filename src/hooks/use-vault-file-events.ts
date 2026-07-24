@@ -20,6 +20,13 @@ type VaultFileEventsParams = {
 	onWikiChange?: (absPath: string) => void;
 	/** Ignore a known self-authored transaction event so it does not re-run refresh work. */
 	shouldIgnoreEvent?: (payload: VaultFileChangedPayload) => boolean;
+	/** Inspect a trustworthy external rename pair before the regular index rebuild. */
+	onExternalRename?: (
+		rename: NonNullable<VaultFileChangedPayload["rename"]>,
+		payload: VaultFileChangedPayload,
+	) => Promise<void> | void;
+	/** Report a rename event that did not include a safe old/new path pair. */
+	onUnverifiedRename?: (payload: VaultFileChangedPayload) => void;
 };
 
 /**
@@ -32,6 +39,8 @@ export function useVaultFileEvents({
 	onStructuralChange,
 	onWikiChange,
 	shouldIgnoreEvent,
+	onExternalRename,
+	onUnverifiedRename,
 }: VaultFileEventsParams): void {
 	// start() replaces any existing watcher for this window, so a Vault switch needs
 	// only a fresh start (no cleanup-stop, which could race the new start). Window
@@ -55,8 +64,13 @@ export function useVaultFileEvents({
 			if (cancelled) return;
 			unsub = await listen<VaultFileChangedPayload>(
 				VAULT_FILE_CHANGED_EVENT,
-				({ payload }) => {
+				async ({ payload }) => {
 					if (shouldIgnoreEvent?.(payload)) return;
+					if (payload.rename) {
+						await onExternalRename?.(payload.rename, payload);
+					} else if (payload.kind === "rename") {
+						onUnverifiedRename?.(payload);
+					}
 					for (const p of payload.paths) {
 						onDiskChange(p);
 						onWikiChange?.(p);
@@ -70,5 +84,12 @@ export function useVaultFileEvents({
 			cancelled = true;
 			unsub?.();
 		};
-	}, [onDiskChange, onStructuralChange, onWikiChange, shouldIgnoreEvent]);
+	}, [
+		onDiskChange,
+		onExternalRename,
+		onUnverifiedRename,
+		onStructuralChange,
+		onWikiChange,
+		shouldIgnoreEvent,
+	]);
 }

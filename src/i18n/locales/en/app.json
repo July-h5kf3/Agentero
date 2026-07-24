@@ -109,6 +109,20 @@
 	"vault": {
 		"openDesktopOnly": "Open vault is only available in the Tauri app.",
 		"remoteNoAutoLinkRepair": "Automatic link repair is unavailable for remote vaults.",
+		"externalRename": {
+			"title": "Repair links after external rename?",
+			"description": "The file system moved this path. Repair {{count}} linked Markdown file(s) using the verified rename snapshot?",
+			"from": "From",
+			"to": "To",
+			"skipped": "{{count}} unresolved or ambiguous link source(s) will remain unchanged.",
+			"repair": "Repair links",
+			"cancel": "Keep links unchanged",
+			"repaired": "Updated links in {{count}} Markdown file(s).",
+			"notRepaired": "The external rename was detected, but links were left unchanged because a safe repair could not be prepared.",
+			"unverified": "The file watcher did not provide a complete rename pair; links were left unchanged.",
+			"vaultChanged": "The active vault changed before the external rename repair could run.",
+			"failed": "Could not repair links after the external rename."
+		},
 		"createDesktopOnly": "Create vault is only available in the Tauri app.",
 		"dialogTitle": "Select Agentero vault folder",
 		"createDialogTitle": "Choose folder for new Agentero vault",

@@ -109,6 +109,20 @@
 	"vault": {
 		"openDesktopOnly": "打开知识库仅在 Tauri 应用中可用。",
 		"remoteNoAutoLinkRepair": "远程 Vault 暂不支持自动修复双链。",
+		"externalRename": {
+			"title": "修复外部改名后的双链？",
+			"description": "文件系统已移动此路径。要根据可信的改名快照修复 {{count}} 个被引用的 Markdown 文件吗？",
+			"from": "原路径",
+			"to": "新路径",
+			"skipped": "{{count}} 个未解析或歧义链接来源将保持不变。",
+			"repair": "修复双链",
+			"cancel": "保持链接不变",
+			"repaired": "已更新 {{count}} 个 Markdown 文件中的链接。",
+			"notRepaired": "已检测到外部改名，但无法安全建立修复计划，因此链接保持不变。",
+			"unverified": "文件监听器未提供完整的改名前后路径对，因此链接保持不变。",
+			"vaultChanged": "外部改名修复执行前，当前知识库已切换。",
+			"failed": "无法修复外部改名后的双链。"
+		},
 		"createDesktopOnly": "创建知识库仅在 Tauri 应用中可用。",
 		"dialogTitle": "选择 Agentero 知识库文件夹",
 		"createDialogTitle": "选择新建 Agentero 知识库的文件夹",
