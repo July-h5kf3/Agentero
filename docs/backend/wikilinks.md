@@ -242,7 +242,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 3. 前端：`src/lib/wiki.ts` + `BacklinksPanel`；Demo 模式纯前端索引。  
 4. **文件变更防抖重建**（已落地）：Vault watcher 报告 `.md` 变更后，前端 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 **900ms** 防抖）触发全量 rebuild，使 Backlinks / Graph 在外部或 Agent 写盘后保持新鲜。非边级增量；SQLite 边缓存仍待。
 
-**代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/layout/sidebar/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
+**代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/wiki/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
 
 ### Phase B — 预览可点 ✅
 
@@ -269,7 +269,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 - `src-tauri/src/services/wiki/index.rs`（`get_graph`）
 - `src-tauri/src/commands/graph.rs`（`graph_get_graph`）
 - `src/lib/wiki.ts`（`getGraph` / demo）
-- `src/components/layout/sidebar/graph-panel.tsx`
+- `src/components/wiki/graph-panel.tsx`
 - `src/App.tsx`（Backlinks 右侧栏内接线）
 
 ---

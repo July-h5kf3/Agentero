@@ -5,7 +5,7 @@ import { I18nextProvider } from "react-i18next";
 import {
 	parseSettingsSection,
 	SettingsWindowRoot,
-} from "@/components/settings-window-root";
+} from "@/components/settings/settings-window-root";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";

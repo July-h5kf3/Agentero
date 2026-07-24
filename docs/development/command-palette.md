@@ -2,7 +2,7 @@
 
 > 状态：**Phase A 已落地**（⌘P/⌘K 快速打开 · ⇧⌘P 命令面板 · `>` 前缀；命令注册表 Phase B 仍待）  
 > 目标：对齐 VS Code 的 **⌘P 快速打开** 与 **⇧⌘P 命令面板** 交互心智，在 Agentero 中落地「全局搜索框」能力，并给出实现边界与分期。  
-> 相关：现有 `src/components/layout/dialogs/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
+> 相关：现有 `src/components/dialogs/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
 
 ---
 
@@ -113,7 +113,7 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 
 | 能力 | 位置 | 说明 |
 |---|---|---|
-| 全局浮层 UI | `src/components/layout/dialogs/command-palette.tsx` | shadcn `CommandDialog` + `CommandInput` + `CommandList` |
+| 全局浮层 UI | `src/components/dialogs/command-palette.tsx` | shadcn `CommandDialog` + `CommandInput` + `CommandList` |
 | 快捷键 | `shortcuts.ts` → `commandPalette` | **⌘K** 与 **⌘P**（`App.tsx` 另绑 p）打开**同一面板** |
 | 论文 quick-open | 前端内存 `libraryPapers` | 标题 / 作者 / id 即时过滤，无 RPC |
 | 全文搜索 | Host `vault_search` | walk `*.md`，AND 分词，片段 + 行号 |
@@ -331,7 +331,7 @@ src/lib/commands/
   types.ts          # AppCommand, PaletteItem
   registry.ts       # register / list / execute
   builtins.ts       # 内置命令 id 与工厂（注入 deps）
-src/components/layout/dialogs/
+src/components/dialogs/
   command-palette.tsx   # UI；按 mode 组合 providers
   # 可选拆分：
   # command-palette-go.tsx / command-palette-commands.tsx

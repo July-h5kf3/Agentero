@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
-import { PapersLibrary } from "@/components/layout/workspace/library/papers-library";
-import { RecycleBinView } from "@/components/layout/workspace/recycle-bin-view";
+import { PapersLibrary } from "@/components/library/papers-library";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	PdfViewer,
@@ -9,6 +8,7 @@ import {
 } from "@/components/viewer/embed/pdf-viewer";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
+import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
 import type { PaperMetadata } from "@/lib/paper-metadata";
 import type { PdfAskThread } from "@/lib/pdf-ask/types";
 import type { PdfHighlight } from "@/lib/pdf-highlight/types";

@@ -1,11 +1,11 @@
 import { FolderOpen, FolderPlus, Server, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import {
 	type OpenRemoteVaultArgs,
 	RemoteVaultDialog,
-} from "@/components/layout/dialogs/remote-vault-dialog";
+} from "@/components/dialogs/remote-vault-dialog";
+import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import { Button } from "@/components/ui/button";
 import {
 	getRecentRemoteVaults,

@@ -21,7 +21,7 @@ import {
 import {
 	TabCenter,
 	type TabCenterProps,
-} from "@/components/layout/workspace/tab-center";
+} from "@/components/workspace/tab-center";
 import { agenteroDockTheme } from "@/lib/dockview-theme";
 import { isSplitDragPayload, readDraggedVaultPaths } from "@/lib/tab-dnd";
 import {

@@ -367,7 +367,7 @@ match do_thing() {
 | Commands | `src-tauri/src/commands/{vault,lookup,agent,paper,trash,zotero,connector,translate,watcher,graph,window}.rs`（按 §5.2） |
 | 替换 eprintln | `services/watcher.rs`、`agent/*`、`lib.rs` menu 等 |
 | 前端 logger | `src/lib/logger.ts` |
-| 横切 | `src/lib/background-tasks.ts`、`src/main.tsx`、`src/components/error-boundary.tsx` |
+| 横切 | `src/lib/background-tasks.ts`、`src/main.tsx`、`src/components/shell/error-boundary.tsx` |
 | 业务埋点 | `src/lib/{vault,lookup,paper-read,agent}.ts`、`agent-panel` 发消息路径等 |
 | CLI | `cli/src/main.rs` + 写命令 |
 | 文档 | 本文、`development/index.md`、`mkdocs.yml`；落地后勾 `todo.md` / roadmap 一句 |

@@ -3,45 +3,45 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import { ErrorBoundary } from "@/components/error-boundary";
-import { AgentPanel } from "@/components/layout/agent/agent-panel";
-import { CommandPalette } from "@/components/layout/dialogs/command-palette";
-import { ImportLocalPdfDialog } from "@/components/layout/dialogs/import-local-pdf-dialog";
-import { MovePapersDialog } from "@/components/layout/dialogs/move-papers-dialog";
-import { ZoteroMigrateDialog } from "@/components/layout/dialogs/zotero-migrate-dialog";
-import { BackgroundTasksPanel } from "@/components/layout/shell/background-tasks-panel";
+import { AgentPanel } from "@/components/agent/agent-panel";
+import { CommandPalette } from "@/components/dialogs/command-palette";
+import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
+import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
+import { MovePapersDialog } from "@/components/library/move-papers-dialog";
+import {
+	type SettingsSection,
+	SettingsWindow,
+} from "@/components/settings/settings-window";
+import { BackgroundTasksPanel } from "@/components/shell/background-tasks-panel";
+import { ErrorBoundary } from "@/components/shell/error-boundary";
 import {
 	ResizableGroup,
 	ResizableHandle,
 	ResizablePanel,
-} from "@/components/layout/shell/resizable";
-import { VaultWelcome } from "@/components/layout/shell/vault-welcome";
-import { WorkspaceHeader } from "@/components/layout/shell/workspace-header";
-import { BacklinksPanel } from "@/components/layout/sidebar/backlinks-panel";
+} from "@/components/shell/resizable";
+import { VaultWelcome } from "@/components/shell/vault-welcome";
+import { WorkspaceHeader } from "@/components/shell/workspace-header";
 import {
 	FileTree,
 	type FileTreeHandle,
 	type TreeCreateDraft,
 	type TreeCreateKind,
 	VaultSidebarHeader,
-} from "@/components/layout/sidebar/file-tree";
-import { GraphPanel } from "@/components/layout/sidebar/graph-panel";
-import { PaperInfoPanel } from "@/components/layout/sidebar/paper-info-panel";
-import {
-	TabWorkspace,
-	type TabWorkspaceHandle,
-	type WorkspaceExternalDrop,
-} from "@/components/layout/workspace/tab-workspace";
-import {
-	type SettingsSection,
-	SettingsWindow,
-} from "@/components/settings-window";
+} from "@/components/vault/file-tree";
+import { PaperInfoPanel } from "@/components/vault/paper-info-panel";
 import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
+import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
+import { GraphPanel } from "@/components/wiki/graph-panel";
+import {
+	TabWorkspace,
+	type TabWorkspaceHandle,
+	type WorkspaceExternalDrop,
+} from "@/components/workspace/tab-workspace";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";

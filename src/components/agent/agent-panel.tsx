@@ -110,7 +110,7 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
-import { PaneHeader } from "@/components/layout/shell/pane-header";
+import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,

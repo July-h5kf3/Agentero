@@ -22,7 +22,7 @@ import { useTranslation } from "react-i18next";
 import {
 	PaperTagChip,
 	PaperTagRemoveButton,
-} from "@/components/layout/workspace/library/paper-tag-chip";
+} from "@/components/library/paper-tag-chip";
 import {
 	Collapsible,
 	CollapsibleContent,

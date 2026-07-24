@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
 	SettingsContent,
 	type SettingsSection,
-} from "@/components/settings-window";
+} from "@/components/settings/settings-window";
 import i18n, { resolveLocale } from "@/i18n";
 import {
 	type AppSettings,

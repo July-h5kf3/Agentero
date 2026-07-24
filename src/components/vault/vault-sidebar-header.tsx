@@ -19,8 +19,8 @@ import { useTranslation } from "react-i18next";
 import {
 	type OpenRemoteVaultArgs,
 	RemoteVaultDialog,
-} from "@/components/layout/dialogs/remote-vault-dialog";
-import { PaneHeader } from "@/components/layout/shell/pane-header";
+} from "@/components/dialogs/remote-vault-dialog";
+import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
