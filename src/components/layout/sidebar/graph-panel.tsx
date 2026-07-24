@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useTranslation } from "react-i18next";
 
-import { PaneHeader } from "@/components/layout/pane-header";
+import { PaneHeader } from "@/components/layout/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { paperDirFromPath } from "@/lib/paper-metadata";
 import { cn } from "@/lib/utils";

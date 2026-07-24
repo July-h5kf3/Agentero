@@ -31,7 +31,7 @@
 
 ### 2.1 侧边栏文件树
 
-- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
+- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/layout/sidebar/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **性能（虚拟化）**：树把可见节点**拍平为一维列表 + 窗口化**（`@tanstack/react-virtual`），只渲染视口内的行；FileTree 自持滚动容器（`treeScrollRef`），折叠文件夹用扫平行组件 `FileTreeFolderRow`（`ai-elements/file-tree.tsx`）。避免大 Vault（成百上千篇）时常驻海量 DOM，以及选中/展开/拖拽时的全树重渲染。
 - **建树策略（懒加载）**（`src/lib/vault.ts` `loadVaultTree` / `listVaultDirChildren`）：
   - **全量递归（eager）**：`papers/`、`notes/`、`plans/`、`.agents/`（产品面：paper marker、笔记、skill）。
@@ -93,7 +93,7 @@
 
 ### 2.1.1 后台任务（左下角，IDE 风格）
 
-- **位置**：窗口左下角固定悬浮（`BackgroundTasksPanel`，`src/components/layout/background-tasks-panel.tsx`），不占用侧栏布局；禅模式隐藏。
+- **位置**：窗口左下角固定悬浮（`BackgroundTasksPanel`，`src/components/layout/shell/background-tasks-panel.tsx`），不占用侧栏布局；禅模式隐藏。
 - **显示时机**：**有任务时**才出现；全部结束后约 4s 自动消失。
 - **收起态**：一条状态条——转圈 / 完成勾 + 当前任务标题或「N 个进行中」+ 进度条；点击展开/收起。
 - **展开态**：任务列表（队列序号、标题、详情、进度）；可清除已完成项。
@@ -119,7 +119,7 @@
 
 ### 2.2 无 Vault 欢迎页
 
-当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/vault-welcome.tsx`）：
+当当前窗口未打开 Vault 时，中间栏显示欢迎页（`src/components/layout/shell/vault-welcome.tsx`）：
 
 - **内容**：图标 + **Create vault** / **Open vault** / **Open remote…** / **Migrate from Zotero** 同一行按钮 + **Recent** 列表。
 - **Open remote…**：共用 `RemoteVaultDialog`（SSH host / 可选 user / 远端绝对路径）；成功后进入 `remote:<sessionId>` 会话。
@@ -131,14 +131,14 @@
 
 ### 2.2.1 侧栏切换知识库（有 Vault 时）
 
-左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/layout/file-tree.tsx`）为下拉菜单：
+左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/layout/sidebar/file-tree.tsx`）为下拉菜单：
 
 | 区块 | 内容 |
 |---|---|
 | Recent | 远程 MRU（徽章）+ 本地 MRU；当前项 ✓；可单项移除 |
 | 操作 | **Open vault…** / **Open remote…** / **Create vault** |
 
-- **Open remote…** 与欢迎页共用 `RemoteVaultDialog`（`src/components/layout/remote-vault-dialog.tsx`）。
+- **Open remote…** 与欢迎页共用 `RemoteVaultDialog`（`src/components/layout/dialogs/remote-vault-dialog.tsx`）。
 - 远程会话伪路径 **`remote:<sessionId>` 不得**写入本地 recent（见 §2.3 存储表）；每次 SSH 连接都会换新 session id，误写入会导致「同一远端目录出现多条不同建议」。
 
 ### 2.3 原生菜单与多窗口
@@ -194,7 +194,7 @@
 单测：`test/overlay-stack.test.ts`。
 
 - 工作台默认 **三栏**：文件树 + 中间内容 + 可选右侧栏（Agent / Backlinks）。中间内容为**文档标签页**（浏览器式多 tab，见 §3.1.1），Notes 随激活文档切换。
-- **论文库表格**（`src/components/layout/papers-library.tsx`）：
+- **论文库表格**（`src/components/layout/workspace/library/papers-library.tsx`）：
   - **入口**：
     1. 虚拟节点 `agentero:library` → **全库**（清除 `libraryScopePath`）；
     2. 单击**非 paper** 目录 → 聚焦**同一** Library tab，设置 `libraryScopePath` 做前缀过滤（**不新建 tab**）；
@@ -226,7 +226,7 @@
     - 数据约定：[`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」。
   - **Notes 显示开关 / 快速打开**：`showNotes`（默认显示）控制右侧 Notes 栏是否挂载。看 PDF/HTML 时，中间栏 header 右侧提供 `NotebookPen` 快捷开关（一键显示/隐藏 Notes）；全局入口则在标题栏 **Layout 菜单**（见下）；`⌘3` 聚焦 Notes（隐藏时先显示再聚焦）。关闭当前标签走标题栏标签页上的 `X` 或 `⌘W`（有弹层时 `⌘W` 先关弹层，见 §3.0）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
-- **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
+- **Layout 菜单**（标题栏 `PanelsTopLeft` 图标，`src/components/layout/shell/layout-menu.tsx`）：集中式面板可见性开关（对齐 VS Code「Customize Layout」）。以复选项反映并切换 **左侧边栏 / Notes / 右侧边栏 / 禅模式**，各项显示对应快捷键；Notes 项仅在打开论文 PDF/HTML 时可用；切换时菜单保持打开。i18n `app:titlebar.layout*`。
 - Backlinks 入口内采用上下分区：上方反链列表，下方 Graph。Graph 不再是独立顶层 tab。
 - **Agent 禅模式**（quest / Cursor Agents Window 心智，`⌥⌘Z` 或标题栏 **Layout / 面板** 菜单中的禅模式项）：
   - 进入后：折叠左栏与中间主栏，右栏 Agent 铺满；系统标题栏仅拖拽区 + **返回**（`ArrowLeft`，不再用关闭 `X`）；隐藏后台任务条与 Notes；Agent 面板头**无**重复退出按钮。
@@ -245,7 +245,7 @@
 - **文档标签栏位置**：标题栏**无**文档 tab 条；文档 tab 由中间栏 dockview 原生管理。中间栏仅保留 view mode / 文档标题工具行。
 - 各栏 header 等高：统一 `h-10`（`PaneHeader` / `PANE_HEADER_CLASS`），水平对齐；全局操作错误走右上角 toast（§2.1.2），不撑高标题栏。
 - 边距、分割线保持轻量；控件密度偏紧凑（icon-xs / icon-sm）。
-- **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/resizable.tsx`。
+- **面板分隔（sash）**：对齐 VS Code / Cursor——默认 **1px** 细线，hover / 拖拽时略提亮；可点区域略宽但视觉不占粗条。实现见 `src/components/layout/shell/resizable.tsx`。
 - **独立滚动**：侧边栏 / 中间内容 / 右侧 Notes **各自**滚动，顶栏固定；禁止整页连带滚动。
   - 默认竖向：`.agentero-scroll`（`overflow-x: hidden; overflow-y: auto`）。
   - 需双向滚动（论文库表）：`.agentero-scroll-both`。
@@ -365,7 +365,7 @@
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
 | 输入 | 单层 Composer：当前聚焦论文/文件**默认**加入上下文（实心 chip + 名称，可 X 移除；无虚线加号切换）；chip 展示 **paper-name / 文件名**（最后一段路径或 catalog 论文标题），tooltip 与 prompt 仍用 Vault 相对路径；`@` 文件提及和 `$` 本机技能为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性 `@`/`$` 上下文（当前论文保持默认附带）；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；**IME 组字中 `↵` 只确认候选、不发送**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)）；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
-| 业务壳 | `src/components/layout/agent-panel.tsx`：注册表、流式事件、默认 Agent |
+| 业务壳 | `src/components/layout/agent/agent-panel.tsx`：注册表、流式事件、默认 Agent |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
 | 规范文档 | **`docs/frontend/components.md`** |

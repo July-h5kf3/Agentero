@@ -25,8 +25,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { ZoteroIcon } from "@/components/icons/zotero-icon";
-import { PaperTagChip } from "@/components/layout/paper-tag-chip";
-import { ReadingTitleHeat } from "@/components/layout/reading-heatmap";
+import { PaperTagChip } from "@/components/layout/workspace/library/paper-tag-chip";
+import { ReadingTitleHeat } from "@/components/layout/workspace/library/reading-heatmap";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,

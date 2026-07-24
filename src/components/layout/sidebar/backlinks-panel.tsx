@@ -2,7 +2,7 @@ import { Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { PaneHeader } from "@/components/layout/pane-header";
+import { PaneHeader } from "@/components/layout/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type Backlink, getBacklinks } from "@/lib/wiki";

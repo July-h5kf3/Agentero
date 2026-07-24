@@ -5,7 +5,7 @@ import { ZoteroIcon } from "@/components/icons/zotero-icon";
 import {
 	type OpenRemoteVaultArgs,
 	RemoteVaultDialog,
-} from "@/components/layout/remote-vault-dialog";
+} from "@/components/layout/dialogs/remote-vault-dialog";
 import { Button } from "@/components/ui/button";
 import {
 	getRecentRemoteVaults,

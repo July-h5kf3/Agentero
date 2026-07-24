@@ -8,8 +8,8 @@ import {
 	Settings,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { LayoutMenu } from "@/components/layout/layout-menu";
-import { WindowControls } from "@/components/layout/window-controls";
+import { LayoutMenu } from "@/components/layout/shell/layout-menu";
+import { WindowControls } from "@/components/layout/shell/window-controls";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,

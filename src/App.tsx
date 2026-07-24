@@ -4,34 +4,34 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { AgentPanel } from "@/components/layout/agent-panel";
-import { BackgroundTasksPanel } from "@/components/layout/background-tasks-panel";
-import { BacklinksPanel } from "@/components/layout/backlinks-panel";
-import { CommandPalette } from "@/components/layout/command-palette";
+import { AgentPanel } from "@/components/layout/agent/agent-panel";
+import { CommandPalette } from "@/components/layout/dialogs/command-palette";
+import { ImportLocalPdfDialog } from "@/components/layout/dialogs/import-local-pdf-dialog";
+import { MovePapersDialog } from "@/components/layout/dialogs/move-papers-dialog";
+import { ZoteroMigrateDialog } from "@/components/layout/dialogs/zotero-migrate-dialog";
+import { BackgroundTasksPanel } from "@/components/layout/shell/background-tasks-panel";
+import {
+	ResizableGroup,
+	ResizableHandle,
+	ResizablePanel,
+} from "@/components/layout/shell/resizable";
+import { VaultWelcome } from "@/components/layout/shell/vault-welcome";
+import { WorkspaceHeader } from "@/components/layout/shell/workspace-header";
+import { BacklinksPanel } from "@/components/layout/sidebar/backlinks-panel";
 import {
 	FileTree,
 	type FileTreeHandle,
 	type TreeCreateDraft,
 	type TreeCreateKind,
 	VaultSidebarHeader,
-} from "@/components/layout/file-tree";
-import { GraphPanel } from "@/components/layout/graph-panel";
-import { ImportLocalPdfDialog } from "@/components/layout/import-local-pdf-dialog";
-import { MovePapersDialog } from "@/components/layout/move-papers-dialog";
-import { PaperInfoPanel } from "@/components/layout/paper-info-panel";
-import {
-	ResizableGroup,
-	ResizableHandle,
-	ResizablePanel,
-} from "@/components/layout/resizable";
+} from "@/components/layout/sidebar/file-tree";
+import { GraphPanel } from "@/components/layout/sidebar/graph-panel";
+import { PaperInfoPanel } from "@/components/layout/sidebar/paper-info-panel";
 import {
 	TabWorkspace,
 	type TabWorkspaceHandle,
 	type WorkspaceExternalDrop,
-} from "@/components/layout/tab-workspace";
-import { VaultWelcome } from "@/components/layout/vault-welcome";
-import { WorkspaceHeader } from "@/components/layout/workspace-header";
-import { ZoteroMigrateDialog } from "@/components/layout/zotero-migrate-dialog";
+} from "@/components/layout/workspace/tab-workspace";
 import {
 	type SettingsSection,
 	SettingsWindow,

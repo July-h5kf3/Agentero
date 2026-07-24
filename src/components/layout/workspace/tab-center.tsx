@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
-import { PapersLibrary } from "@/components/layout/papers-library";
-import { RecycleBinView } from "@/components/layout/recycle-bin-view";
+import { PapersLibrary } from "@/components/layout/workspace/library/papers-library";
+import { RecycleBinView } from "@/components/layout/workspace/recycle-bin-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	PdfViewer,

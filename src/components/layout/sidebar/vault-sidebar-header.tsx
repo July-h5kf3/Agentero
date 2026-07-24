@@ -16,11 +16,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PaneHeader } from "@/components/layout/pane-header";
 import {
 	type OpenRemoteVaultArgs,
 	RemoteVaultDialog,
-} from "@/components/layout/remote-vault-dialog";
+} from "@/components/layout/dialogs/remote-vault-dialog";
+import { PaneHeader } from "@/components/layout/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
