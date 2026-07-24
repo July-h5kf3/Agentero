@@ -31,7 +31,7 @@
 
 ### 2.1 侧边栏文件树
 
-- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/vault/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
+- 树 UI：**AI Elements** `FileTree`（业务包装：`src/components/sidebar/file-tree.tsx`；约定见 `docs/frontend/components.md`）。
 - **性能（虚拟化）**：树把可见节点**拍平为一维列表 + 窗口化**（`@tanstack/react-virtual`），只渲染视口内的行；FileTree 自持滚动容器（`treeScrollRef`），折叠文件夹用扫平行组件 `FileTreeFolderRow`（`ai-elements/file-tree.tsx`）。避免大 Vault（成百上千篇）时常驻海量 DOM，以及选中/展开/拖拽时的全树重渲染。
 - **建树策略（懒加载）**（`src/lib/vault.ts` `loadVaultTree` / `listVaultDirChildren`）：
   - **全量递归（eager）**：`papers/`、`notes/`、`plans/`、`.agents/`（产品面：paper marker、笔记、skill）。
@@ -131,7 +131,7 @@
 
 ### 2.2.1 侧栏切换知识库（有 Vault 时）
 
-左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/vault/file-tree.tsx`）为下拉菜单：
+左侧文件树顶栏标题（`VaultSidebarHeader`，`src/components/sidebar/file-tree.tsx`）为下拉菜单：
 
 | 区块 | 内容 |
 |---|---|
@@ -521,7 +521,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 | `ai-elements/` | AI Elements registry |
 | `icons/` | 品牌图标（勿并入 `ui/`） |
 | `shell/` | 真壳 + 共享 chrome（标题栏、sash、欢迎页、后台任务、ErrorBoundary） |
-| `vault/` | 左栏：文件树、Paper Info、侧栏头 |
+| `sidebar/` | 左栏：文件树、Paper Info、侧栏头 |
 | `wiki/` | 双链：Backlinks、Graph |
 | `agent/` | Agent 对话面板 |
 | `workspace/` | Dockview 中间栏（tab 工作区 / 回收站） |

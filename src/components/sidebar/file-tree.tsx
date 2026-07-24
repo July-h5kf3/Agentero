@@ -1826,5 +1826,5 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 	},
 );
 
-export type { VaultSidebarHeaderProps } from "@/components/vault/vault-sidebar-header";
-export { VaultSidebarHeader } from "@/components/vault/vault-sidebar-header";
+export type { VaultSidebarHeaderProps } from "@/components/sidebar/vault-sidebar-header";
+export { VaultSidebarHeader } from "@/components/sidebar/vault-sidebar-header";

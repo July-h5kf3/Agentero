@@ -27,8 +27,8 @@ import {
 	type TreeCreateDraft,
 	type TreeCreateKind,
 	VaultSidebarHeader,
-} from "@/components/vault/file-tree";
-import { PaperInfoPanel } from "@/components/vault/paper-info-panel";
+} from "@/components/sidebar/file-tree";
+import { PaperInfoPanel } from "@/components/sidebar/paper-info-panel";
 import {
 	type AnnotationRow,
 	AnnotationsPanel,

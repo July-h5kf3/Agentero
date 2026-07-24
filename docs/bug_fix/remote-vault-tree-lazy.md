@@ -5,7 +5,7 @@
 **相关代码**：
 
 - `src/lib/vault.ts` — `loadVaultTree` / `listVaultDirChildren` / `shouldIgnoreTreeName` / `isEagerTreeRel` / `replaceTreeNodeChildren`
-- `src/components/vault/file-tree.tsx` — 展开时触发懒加载、pending spinner
+- `src/components/sidebar/file-tree.tsx` — 展开时触发懒加载、pending spinner
 - `src/App.tsx` — `onLoadDirChildren` 合并子树
 - `test/vault-tree.test.ts` — 忽略规则、eager 判定、pending 合并
 - 产品约定：[`../frontend/ui.md`](../frontend/ui.md) §2.1；远程设计：[`../development/remote-vault.md`](../development/remote-vault.md) §6
