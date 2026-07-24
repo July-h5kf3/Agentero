@@ -347,7 +347,7 @@
 | 消息组件 | AI Elements `Message` + `MessageContent` + `MessageResponse`（`from="user" \| "assistant"`） |
 | 列表滚动 | `Conversation` + `use-stick-to-bottom`（`ConversationScrollButton`） |
 | 输入 | 单层 Composer：当前聚焦论文/文件**默认**加入上下文（实心 chip + 名称，可 X 移除；无虚线加号切换）；chip 展示 **paper-name / 文件名**（最后一段路径或 catalog 论文标题），tooltip 与 prompt 仍用 Vault 相对路径；`@` 文件提及和 `$` 本机技能为可移除 context chip；候选列表支持 `↑` / `↓`、`Enter`，当前项仅使用背景高亮；文字与 context chip 按 Vault、Agent、session 独立持久化，发送成功后清空该 session 已发送的一次性 `@`/`$` 上下文（当前论文保持默认附带）；发送按钮与 `↵` 均可提交，输出期间按钮和 `Esc` 均可中止，`⇧↵` 换行；**IME 组字中 `↵` 只确认候选、不发送**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)）；Agent 输出期间仍可编辑下一条输入；底栏空闲时使用主要色，仅存在正在输出的 Agent 消息时切换为次要色，Fast 的启用色保持不变；`/` 文本原样透传给 ACP Agent |
-| 业务壳 | `src/components/agent/agent-panel.tsx`：注册表、流式事件、默认 Agent |
+| 业务壳 | `src/components/agent/`：`agent-panel` 编排 + `use-agent-panel`（注册表 / 流式 / 历史）+ Composer / Transcript 子组件 |
 | Sources | `ai-elements/sources`：Vault 相对路径列表 |
 | 不内置 | 模型 Key、Agent 二进制（BYOA） |
 | 规范文档 | **`docs/frontend/components.md`** |

@@ -1,0 +1,504 @@
+import { CopyIcon, Pencil } from "lucide-react";
+import type { RefObject } from "react";
+import { useTranslation } from "react-i18next";
+import {
+	Checkpoint,
+	CheckpointIcon,
+	CheckpointTrigger,
+} from "@/components/ai-elements/checkpoint";
+import {
+	Conversation,
+	ConversationContent,
+	ConversationEmptyState,
+	ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+	InlineCitation,
+	InlineCitationCard,
+	InlineCitationCardBody,
+	InlineCitationCardTrigger,
+	InlineCitationCarousel,
+	InlineCitationCarouselContent,
+	InlineCitationCarouselHeader,
+	InlineCitationCarouselIndex,
+	InlineCitationCarouselItem,
+	InlineCitationCarouselNext,
+	InlineCitationCarouselPrev,
+	InlineCitationSource,
+} from "@/components/ai-elements/inline-citation";
+import {
+	Message,
+	MessageAction,
+	MessageActions,
+	MessageContent,
+	MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+	Plan,
+	PlanAction,
+	PlanContent,
+	PlanDescription,
+	PlanHeader,
+	PlanTitle,
+	PlanTrigger,
+} from "@/components/ai-elements/plan";
+import {
+	Reasoning,
+	ReasoningContent,
+	ReasoningTrigger,
+} from "@/components/ai-elements/reasoning";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+	Source,
+	Sources,
+	SourcesContent,
+	SourcesTrigger,
+} from "@/components/ai-elements/sources";
+import { Suggestion } from "@/components/ai-elements/suggestion";
+import {
+	Tool,
+	ToolContent,
+	ToolHeader,
+	ToolInput,
+	ToolOutput,
+} from "@/components/ai-elements/tool";
+import { Button } from "@/components/ui/button";
+import {
+	agentTextFromParts,
+	type ChatLine,
+	copyText,
+	SUGGESTION_KEYS,
+	SUGGESTION_WORKFLOW,
+	toolPartState,
+} from "@/lib/agent-chat-state";
+import { stripPromptEnvelopeForDisplay } from "@/lib/agent-prompt-display";
+import { cn } from "@/lib/utils";
+
+export function ChatTranscript({
+	isZen,
+	lines,
+	activeTabId,
+	agentName,
+	activeTabIsRunning,
+	submitting,
+	switching,
+	editingLineId,
+	editingText,
+	editTextareaRef,
+	editCompositionProps,
+	isEditBlockedByIme,
+	onEditingTextChange,
+	onCancelEditing,
+	onResendEdited,
+	onStartEditing,
+	onSendSuggestion,
+}: {
+	isZen: boolean;
+	lines: ChatLine[];
+	activeTabId: string;
+	agentName: string;
+	activeTabIsRunning: boolean;
+	submitting: boolean;
+	switching: boolean;
+	editingLineId: string | null;
+	editingText: string;
+	editTextareaRef: RefObject<HTMLTextAreaElement | null>;
+	editCompositionProps: {
+		onCompositionStart?: () => void;
+		onCompositionEnd?: () => void;
+	};
+	isEditBlockedByIme: (event: {
+		nativeEvent?: { isComposing?: boolean; keyCode?: number };
+		isComposing?: boolean;
+		keyCode?: number;
+	}) => boolean;
+	onEditingTextChange: (text: string) => void;
+	onCancelEditing: () => void;
+	onResendEdited: (lineId: string) => void;
+	onStartEditing: (lineId: string, text: string) => void;
+	onSendSuggestion: (label: string, workflow?: string) => void;
+}) {
+	const { t } = useTranslation("agent");
+
+	return (
+		<Conversation className="min-h-0 flex-1">
+			<ConversationContent
+				className={cn(
+					isZen &&
+						(lines.length === 0
+							? "min-h-full justify-center px-0 py-6"
+							: "px-0 py-6"),
+				)}
+			>
+				<div
+					className={cn(
+						"flex w-full flex-col gap-8",
+						isZen && "mx-auto max-w-2xl px-4 sm:px-6",
+					)}
+				>
+					{lines.length === 0 ? (
+						<ConversationEmptyState
+							className={cn(isZen ? "max-w-md p-0" : undefined)}
+							title={t("empty.title")}
+							description={t("empty.description")}
+						>
+							<div
+								className={cn(
+									"mt-4 flex w-full flex-col items-stretch gap-2",
+									isZen ? "max-w-md" : "max-w-sm",
+								)}
+							>
+								{activeTabIsRunning ? (
+									<Shimmer className="text-center text-sm">
+										{t("empty.waiting")}
+									</Shimmer>
+								) : (
+									SUGGESTION_KEYS.map((key) => {
+										const label = t(`suggestions.${key}`);
+										return (
+											<Suggestion
+												key={key}
+												suggestion={label}
+												className="h-auto w-full justify-start whitespace-normal rounded-lg px-3 py-2.5 text-left"
+												onClick={(v) =>
+													onSendSuggestion(v, SUGGESTION_WORKFLOW[key])
+												}
+												disabled={activeTabIsRunning}
+											/>
+										);
+									})
+								)}
+							</div>
+						</ConversationEmptyState>
+					) : (
+						lines.map((line) => {
+							if (line.kind === "user") {
+								const isEditing = editingLineId === line.id;
+								if (isEditing) {
+									return (
+										<Message key={line.id} from="user">
+											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-secondary px-3 py-2.5 ring-1 ring-primary/40">
+												<textarea
+													ref={editTextareaRef}
+													className="max-h-60 min-h-16 w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-6 outline-none"
+													value={editingText}
+													onChange={(event) =>
+														onEditingTextChange(event.currentTarget.value)
+													}
+													{...editCompositionProps}
+													onKeyDown={(event) => {
+														if (event.key === "Escape") {
+															event.preventDefault();
+															onCancelEditing();
+														} else if (
+															event.key === "Enter" &&
+															!event.shiftKey &&
+															!isEditBlockedByIme(event)
+														) {
+															event.preventDefault();
+															onResendEdited(line.id);
+														}
+													}}
+												/>
+												<div className="flex items-center justify-end gap-2">
+													<Button
+														type="button"
+														variant="ghost"
+														size="sm"
+														onClick={onCancelEditing}
+													>
+														{t("edit.cancel")}
+													</Button>
+													<Button
+														type="button"
+														size="sm"
+														disabled={
+															!editingText.trim() || submitting || switching
+														}
+														onClick={() => onResendEdited(line.id)}
+													>
+														{t("edit.resend")}
+													</Button>
+												</div>
+											</div>
+										</Message>
+									);
+								}
+								const userDisplay = stripPromptEnvelopeForDisplay(line.text);
+								// Never render Codex env / Host system envelopes as user bubbles.
+								if (!userDisplay) return null;
+								return (
+									<Message key={line.id} from="user">
+										<MessageContent>
+											<MessageResponse>{userDisplay}</MessageResponse>
+										</MessageContent>
+										{/* Align under user bubble (Message is full-width) */}
+										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+											{activeTabIsRunning ? null : (
+												<MessageAction
+													tooltip={t("edit.action")}
+													label={t("edit.action")}
+													disabled={submitting || switching}
+													onClick={() => onStartEditing(line.id, userDisplay)}
+												>
+													<Pencil className="size-3.5" />
+												</MessageAction>
+											)}
+											<MessageAction
+												tooltip={t("copy")}
+												label={t("copy")}
+												onClick={() => void copyText(userDisplay)}
+											>
+												<CopyIcon className="size-3.5" />
+											</MessageAction>
+										</MessageActions>
+									</Message>
+								);
+							}
+							if (line.kind === "agent") {
+								// Include activeTabId so per-part Reasoning/Tool state never
+								// leaks across sessions when history line ids collide
+								// (e.g. Codex thread message ids).
+								const rowKey = `${activeTabId}:${line.id}`;
+								const parts = line.parts;
+								const lastIndex = parts.length - 1;
+								let lastTextIndex = -1;
+								for (let i = lastIndex; i >= 0; i--) {
+									if (parts[i].type === "text") {
+										lastTextIndex = i;
+										break;
+									}
+								}
+								const agentText = agentTextFromParts(parts);
+								const showThinking =
+									Boolean(line.streaming) && parts.length === 0;
+								return (
+									<div key={rowKey} className="flex w-full flex-col gap-2">
+										<Message from="assistant">
+											<MessageContent>
+												<p className="mb-1 font-medium text-muted-foreground text-xs">
+													{agentName}
+												</p>
+												{parts.map((part, index) => {
+													const partKey = `${rowKey}:${part.id}`;
+													if (part.type === "reasoning") {
+														const streaming =
+															Boolean(line.streaming) && index === lastIndex;
+														if (!part.text.trim() && !streaming) return null;
+														return (
+															<Reasoning
+																key={partKey}
+																className="mb-2"
+																isStreaming={streaming}
+															>
+																<ReasoningTrigger />
+																<ReasoningContent>{part.text}</ReasoningContent>
+															</Reasoning>
+														);
+													}
+													if (part.type === "plan") {
+														const plan = part.entries;
+														if (plan.length === 0) return null;
+														const planStreaming =
+															Boolean(line.streaming) &&
+															plan.some((p) => p.status !== "completed");
+														return (
+															<Plan
+																key={partKey}
+																className="mb-2"
+																defaultOpen
+																isStreaming={planStreaming}
+															>
+																<PlanHeader>
+																	<div className="min-w-0 flex-1 space-y-1">
+																		<PlanTitle>{t("plan.title")}</PlanTitle>
+																		<PlanDescription>
+																			{t("plan.steps", {
+																				completed: plan.filter(
+																					(p) => p.status === "completed",
+																				).length,
+																				total: plan.length,
+																			})}
+																		</PlanDescription>
+																	</div>
+																	<PlanAction>
+																		<PlanTrigger />
+																	</PlanAction>
+																</PlanHeader>
+																<PlanContent className="space-y-2 pt-0">
+																	{plan.map((entry) => (
+																		<div
+																			key={`${entry.status}:${entry.priority}:${entry.content}`}
+																			className="flex items-start gap-2 text-sm"
+																		>
+																			<span
+																				className={cn(
+																					"mt-1 size-1.5 shrink-0 rounded-full",
+																					entry.status === "completed" &&
+																						"bg-emerald-500",
+																					entry.status === "in_progress" &&
+																						"bg-amber-500",
+																					entry.status === "pending" &&
+																						"bg-muted-foreground/40",
+																				)}
+																			/>
+																			<span
+																				className={cn(
+																					entry.status === "completed" &&
+																						"text-muted-foreground line-through",
+																				)}
+																			>
+																				{entry.content}
+																			</span>
+																		</div>
+																	))}
+																</PlanContent>
+															</Plan>
+														);
+													}
+													if (part.type === "tool") {
+														const tool = part.tool;
+														const state = toolPartState(tool.status);
+														return (
+															<Tool key={partKey} defaultOpen={false}>
+																<ToolHeader
+																	title={tool.title || t("tool.defaultTitle")}
+																	type={`tool-${tool.kind}`}
+																	state={state}
+																/>
+																<ToolContent>
+																	{tool.input !== undefined ? (
+																		<ToolInput input={tool.input} />
+																	) : null}
+																	<ToolOutput
+																		output={tool.output}
+																		errorText={
+																			tool.status === "failed"
+																				? t("tool.failed")
+																				: undefined
+																		}
+																	/>
+																</ToolContent>
+															</Tool>
+														);
+													}
+													if (!part.text) return null;
+													const isAnimating =
+														Boolean(line.streaming) &&
+														index === lastIndex &&
+														part.text.length > 0;
+													const showCitation =
+														!line.streaming &&
+														index === lastTextIndex &&
+														Boolean(line.sources && line.sources.length > 0);
+													return (
+														<div key={partKey} className="min-w-0">
+															<MessageResponse isAnimating={isAnimating}>
+																{part.text}
+															</MessageResponse>
+															{showCitation && line.sources ? (
+																<span className="mt-1 inline-flex items-center">
+																	<InlineCitation>
+																		<InlineCitationCard>
+																			<InlineCitationCardTrigger
+																				sources={line.sources}
+																			/>
+																			<InlineCitationCardBody>
+																				<InlineCitationCarousel>
+																					<InlineCitationCarouselHeader>
+																						<InlineCitationCarouselPrev />
+																						<InlineCitationCarouselNext />
+																						<InlineCitationCarouselIndex />
+																					</InlineCitationCarouselHeader>
+																					<InlineCitationCarouselContent>
+																						{line.sources.map((s) => (
+																							<InlineCitationCarouselItem
+																								key={s}
+																							>
+																								<InlineCitationSource
+																									title={
+																										s.split(/[/\\]/).pop() || s
+																									}
+																									url={s}
+																									description={
+																										/^https?:\/\//i.test(s)
+																											? undefined
+																											: t("citation.vaultPath")
+																									}
+																								/>
+																							</InlineCitationCarouselItem>
+																						))}
+																					</InlineCitationCarouselContent>
+																				</InlineCitationCarousel>
+																			</InlineCitationCardBody>
+																		</InlineCitationCard>
+																	</InlineCitation>
+																</span>
+															) : null}
+														</div>
+													);
+												})}
+												{showThinking ? (
+													<Shimmer className="text-sm">{t("thinking")}</Shimmer>
+												) : null}
+											</MessageContent>
+											{!line.streaming && agentText ? (
+												<MessageActions className="-mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+													<MessageAction
+														tooltip={t("copy")}
+														label={t("copy")}
+														onClick={() => void copyText(agentText)}
+													>
+														<CopyIcon className="size-3.5" />
+													</MessageAction>
+												</MessageActions>
+											) : null}
+										</Message>
+										{line.sources && line.sources.length > 0 ? (
+											<Sources>
+												<SourcesTrigger count={line.sources.length} />
+												<SourcesContent>
+													{line.sources.map((s) => (
+														<Source
+															key={s}
+															title={s}
+															href={`#${encodeURIComponent(s)}`}
+														/>
+													))}
+												</SourcesContent>
+											</Sources>
+										) : null}
+									</div>
+								);
+							}
+							if (line.kind === "error") {
+								return (
+									<Message key={line.id} from="assistant">
+										<MessageContent className="text-destructive">
+											<MessageResponse>{line.text}</MessageResponse>
+										</MessageContent>
+									</Message>
+								);
+							}
+							return (
+								<Checkpoint key={line.id} className="my-1 px-1">
+									<CheckpointIcon />
+									<CheckpointTrigger
+										className="h-auto px-1 py-0.5 text-muted-foreground text-xs"
+										variant="ghost"
+										tooltip={line.text}
+									>
+										{line.text}
+									</CheckpointTrigger>
+								</Checkpoint>
+							);
+						})
+					)}
+				</div>
+			</ConversationContent>
+			<ConversationScrollButton
+				className={cn(isZen && "right-4 bottom-4 left-auto translate-x-0")}
+			/>
+		</Conversation>
+	);
+}

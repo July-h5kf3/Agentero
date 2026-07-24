@@ -5,7 +5,7 @@
 **相关代码**：
 
 - `src/lib/agent-stream-parse.ts` — 标签拆分与 orphan thought 提升
-- `src/components/agent/agent-panel.tsx` — 流式接入与 turn 完成处理
+- `src/components/agent/use-agent-panel.ts` — 流式接入与 turn 完成处理
 - `test/agent-stream-parse.test.ts` — 单测
 - Host：`src-tauri/src/services/agent/acp.rs`（`AgentMessageChunk` → `message`，`AgentThoughtChunk` → `thought`）
 
@@ -88,7 +88,7 @@ Agentero 经 ACP 接收流更新：
   Agentero Host (acp.rs)  →  agent:stream 事件
         │
         ▼
-  agent-panel：classifyStreamChunk / promoteOrphanThoughtToText
+  use-agent-panel：classifyStreamChunk / promoteOrphanThoughtToText
         │
         ▼
   UI：Reasoning 块 + 正文 Markdown
@@ -113,7 +113,7 @@ Agentero 经 ACP 接收流更新：
 
 `kind=thought` **不**再做标签反解为正文（通道语义已是思考）；误标正文的情况交给完成时兜底。
 
-接入点：`agent-panel` 的 `applyStreamEvent` → `classifyStreamChunk` → `appendStreamPart`。
+接入点：`use-agent-panel` 的 `applyStreamEvent` → `classifyStreamChunk` → `appendStreamPart`。
 
 ### 3.2 完成时兜底：提升 orphan thought
 
@@ -185,7 +185,7 @@ Agentero 经 ACP 接收流更新：
 ### 本仓库
 
 - 实现：`src/lib/agent-stream-parse.ts`  
-- UI 接入：`src/components/agent/agent-panel.tsx`（`applyStreamEvent`、turn 完成分支中的 `promoteOrphanThoughtToText`）  
+- UI 接入：`src/components/agent/use-agent-panel.ts`（`applyStreamEvent`、turn 完成分支中的 `promoteOrphanThoughtToText`）  
 - Host 通道映射：`src-tauri/src/services/agent/acp.rs` → `stream_from_update`  
 - 备忘勾选：`docs/development/bug.md`（对话 / Agent 一节）
 

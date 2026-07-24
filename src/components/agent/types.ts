@@ -1,0 +1,40 @@
+import type { ReactNode } from "react";
+import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper-metadata";
+
+export type AgentPanelProps = {
+	vaultPath: string | null;
+	selectedPath?: string | null;
+	/**
+	 * Catalog title for the focused paper (chip label prefers this over folder name).
+	 */
+	selectedPaperTitle?: string | null;
+	vaultMarkdownPaths?: string[];
+	/**
+	 * Vault-relative directory paths from the file tree.
+	 * Used so context chips show a folder icon for org / notes dirs.
+	 */
+	vaultDirectoryPaths?: string[];
+	/**
+	 * Vault-relative **paper** folder paths (marker-based under `papers/`).
+	 * Chips use the same ScrollText paper icon as the file tree.
+	 */
+	vaultPaperPaths?: string[];
+	/**
+	 * Catalog rows by vault-relative paper path — same source as the file tree.
+	 * Used so `@` / chips show paper titles per `paperTreeLabelMode`.
+	 */
+	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata> | null;
+	/** Settings → General: paper labels in file tree (display-only). */
+	paperTreeLabelMode?: PaperTreeLabelMode;
+	className?: string;
+	headerActions?: ReactNode;
+	autoFocus?: boolean;
+	title?: string;
+	/**
+	 * `sidebar` — right rail chat (default).
+	 * `zen` — full-workbench focus: centered conversation column (AI Elements layout).
+	 */
+	variant?: "sidebar" | "zen";
+	/** Open Settings → Agent (ACP backend registry). */
+	onOpenAgentSettings?: () => void;
+};

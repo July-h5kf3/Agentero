@@ -248,8 +248,16 @@ src/components/
 ├── wiki/                # 双链
 │   ├── backlinks-panel.tsx
 │   └── graph-panel.tsx
-├── agent/               # Phase1：agent-panel；可再拆子文件
-│   └── agent-panel.tsx
+├── agent/               # Chat 业务壳（编排 + 子 UI + 运行时 hook）
+│   ├── agent-panel.tsx          # 薄编排（sidebar / zen）
+│   ├── use-agent-panel.ts       # 注册表 / 流式 / 历史 / send / 上下文
+│   ├── chat-transcript.tsx      # Conversation + 消息行
+│   ├── agent-composer.tsx       # PromptInput + @/$ + model/effort
+│   ├── agent-history.tsx        # 侧栏历史 popover + 禅模式左轨
+│   ├── agent-switcher.tsx
+│   ├── agent-permission-dialog.tsx
+│   ├── context-path-icon.tsx
+│   └── types.ts
 ├── workspace/           # dockview 中间栏
 │   ├── tab-workspace.tsx
 │   ├── tab-center.tsx
@@ -286,4 +294,4 @@ src/components/
 - [Components](https://elements.ai-sdk.dev/components)  
 - [Docs / Setup](https://elements.ai-sdk.dev/docs/setup)  
 - [Conversation](https://elements.ai-sdk.dev/components/conversation) · [Message](https://elements.ai-sdk.dev/components/message) · [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) · [Sources](https://elements.ai-sdk.dev/components/sources) · [File Tree](https://elements.ai-sdk.dev/components/file-tree)  
-- 业务：`src/components/agent/agent-panel.tsx` · `src/components/sidebar/file-tree.tsx`
+- 业务：`src/components/agent/`（`agent-panel` + `use-agent-panel` 等）· `src/components/sidebar/file-tree.tsx`
