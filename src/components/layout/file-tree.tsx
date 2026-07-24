@@ -306,6 +306,10 @@ type FileTreeProps = {
 	onSelectTrash?: () => void;
 	/** Empty recycle bin (confirm + purge). From trash node context menu. */
 	onEmptyTrash?: () => void | Promise<void>;
+	/** Export library bibliography (Library node context menu). */
+	onExportLibrary?: () => void | Promise<void>;
+	/** True while export (or other library IO) is in progress — disables menu item. */
+	libraryExportBusy?: boolean;
 	/**
 	 * Start an inline create rename for a new file/folder under the given parent.
 	 * Parent is derived from the right-clicked path (folder itself, or file's parent).
@@ -385,6 +389,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onSelectLibrary,
 			onSelectTrash,
 			onEmptyTrash,
+			onExportLibrary,
+			libraryExportBusy = false,
 			onStartCreate,
 			onDownloadPaperAssets,
 			onDownloadAllMissingAssets,
@@ -1198,20 +1204,33 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 		const handleContextMenuPath = useCallback(
 			(path: string, event: ReactMouseEvent) => {
 				if (createDraft) return;
-				// Real vault paths + recycle bin (empty action); not Library.
-				if (!canRevealPath(path) && path !== TRASH_VIRTUAL_PATH) return;
+				// Real vault paths + virtual Library (export) / Recycle Bin (empty).
+				if (
+					!canRevealPath(path) &&
+					path !== TRASH_VIRTUAL_PATH &&
+					path !== LIBRARY_VIRTUAL_PATH
+				) {
+					return;
+				}
+				// Library menu only when export is wired.
+				if (path === LIBRARY_VIRTUAL_PATH && !onExportLibrary) return;
 				event.preventDefault();
 				event.stopPropagation();
 				setRevealError(null);
 				setContextMenu({ path, x: event.clientX, y: event.clientY });
 			},
-			[canRevealPath, createDraft],
+			[canRevealPath, createDraft, onExportLibrary],
 		);
 
 		const handleEmptyTrashFromMenu = useCallback(() => {
 			setContextMenu(null);
 			void onEmptyTrash?.();
 		}, [onEmptyTrash]);
+
+		const handleExportLibraryFromMenu = useCallback(() => {
+			setContextMenu(null);
+			void onExportLibrary?.();
+		}, [onExportLibrary]);
 
 		useEffect(() => {
 			if (!contextMenu) return;
@@ -1286,6 +1305,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 
 		const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
 		const isTrashMenu = contextMenu?.path === TRASH_VIRTUAL_PATH;
+		const isLibraryMenu = contextMenu?.path === LIBRARY_VIRTUAL_PATH;
 		const contextMenuPortal =
 			contextMenu && typeof document !== "undefined"
 				? createPortal(
@@ -1298,7 +1318,31 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 								top: Math.min(contextMenu.y, window.innerHeight - 120),
 							}}
 						>
-							{isTrashMenu ? (
+							{isLibraryMenu ? (
+								onExportLibrary ? (
+									<button
+										type="button"
+										role="menuitem"
+										disabled={libraryExportBusy}
+										className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+										onClick={handleExportLibraryFromMenu}
+									>
+										{libraryExportBusy ? (
+											<Loader2
+												className="size-3.5 shrink-0 animate-spin"
+												aria-hidden
+											/>
+										) : (
+											<Download className="size-3.5 shrink-0" aria-hidden />
+										)}
+										<span>
+											{libraryExportBusy
+												? t("papersLibrary.exporting")
+												: t("papersLibrary.export")}
+										</span>
+									</button>
+								) : null
+							) : isTrashMenu ? (
 								onEmptyTrash ? (
 									<button
 										type="button"

@@ -67,7 +67,8 @@
   - **右键**真实文件 / 文件夹 / paper 行 → 上下文菜单「在 Finder 中显示」（文案随平台切换；旁注 `⌥⌘R`）。
   - **`⌥⌘R`**：对当前选中路径执行相同操作（`shortcuts.ts` → `revealInFinder`）。
   - **不**绑定双击（单击选中 / 打开文档；双击不触发 Finder）。
-  - 虚拟节点 **Library**（`agentero:library`）不提供此操作；仅桌面端可用。
+  - 虚拟节点 **Library**（`agentero:library`）不提供此操作（Library 右键仅 **导出论文库**）；仅桌面端可用。
+- **导出论文库**（侧栏虚拟 Library 节点右键）：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`。
 - **在终端中打开**（Host `path_open_in_terminal` / `src/lib/reveal.ts` `openInTerminal`）：
   - **右键**真实文件 / 文件夹 / paper 行 →「在终端中打开」（旁注 `⌥⌘T`）。
   - **`⌥⌘T`**：对当前选中路径执行相同操作（`shortcuts.ts` → `openInTerminal`）。
@@ -208,8 +209,8 @@
   - **标签**：行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串（无表上方 chip 筛选条）。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
-  - **中间栏 header**：搜索框；全库另有 Zotero 迁移；**导出**（Download 图标）。
-    - **导出**：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`。
+  - **中间栏 header**：搜索框；全库另有 Zotero 迁移。
+  - **导出**（侧栏 Library 虚拟节点 **右键菜单**）：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`（与回收站「清空」同为虚拟节点右键入口，不在中间栏 header）。
   - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
   - **从 Zotero 迁移**：仅**全库**视图工具栏。
 - **Paper Info / Notes——仅具体论文**：

@@ -10,8 +10,6 @@ import {
 	ArrowDown,
 	ArrowUp,
 	ArrowUpDown,
-	Download,
-	Loader2,
 	RefreshCw,
 	Search,
 } from "lucide-react";
@@ -89,9 +87,6 @@ export type PapersLibraryProps = {
 	/** Rebuild the catalog from papers/ on disk (empty-state recovery). */
 	onRescan?: () => void;
 	rescanning?: boolean;
-	/** Export bibliography (shown in in-panel toolbar). */
-	onExport?: () => void;
-	exportBusy?: boolean;
 	/** Zotero migrate (full library only). */
 	onMigrateZotero?: () => void;
 	className?: string;
@@ -301,8 +296,6 @@ export function PapersLibrary({
 	onColumnsChange,
 	onRescan,
 	rescanning,
-	onExport,
-	exportBusy = false,
 	onMigrateZotero,
 	className,
 }: PapersLibraryProps) {
@@ -639,8 +632,8 @@ export function PapersLibrary({
 					className="h-7 pl-7 text-xs"
 				/>
 			</div>
-			<div className="flex h-7 shrink-0 items-center gap-1.5">
-				{showFullLibrary && onMigrateZotero ? (
+			{showFullLibrary && onMigrateZotero ? (
+				<div className="flex h-7 shrink-0 items-center gap-1.5">
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
@@ -659,32 +652,8 @@ export function PapersLibrary({
 							{t("zoteroMigrate.button")}
 						</TooltipContent>
 					</Tooltip>
-				) : null}
-				{onExport ? (
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								className="size-7 shrink-0"
-								aria-label={t("papersLibrary.export")}
-								disabled={!vaultPath || exportBusy || papers.length === 0}
-								onClick={onExport}
-							>
-								{exportBusy ? (
-									<Loader2 className="size-3.5 animate-spin" />
-								) : (
-									<Download className="size-3.5" />
-								)}
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{t("papersLibrary.export")}
-						</TooltipContent>
-					</Tooltip>
-				) : null}
-			</div>
+				</div>
+			) : null}
 		</div>
 	) : null;
 

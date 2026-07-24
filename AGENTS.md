@@ -10,7 +10,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
 - CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
-  - 左侧：Vault 文件树（顶部虚拟 **Library** + 其下 **Recycle Bin**、魔棒；右键 **新建文件/文件夹 / Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
+  - 左侧：Vault 文件树（顶部虚拟 **Library**（右键 **导出论文库**）+ 其下 **Recycle Bin**、魔棒；右键 **新建文件/文件夹 / Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
   - 中间：无 Vault 时欢迎页；有 Vault 时 **全局 Dockview 工作区**（每个打开文档一个 panel：Library / PDF / HTML / 图片 / Markdown / Trash）；单击非 paper 文件夹在 Library panel 就地按路径筛选；关光文档后回到全库；
   - 论文 NOTES：作为独立 dockview panel 与 PDF 同组 sibling tab（`openPanel` within）；Layout 菜单 / 快捷键切换；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
@@ -29,7 +29,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索（`vault_search`）。
 - **设置窗口**：Tauri 下为**独立原生单例窗口**（`⌘,` / 菜单 / 齿轮 → Host `settings_window_open`，label `agentero-settings`，原生标题栏，`⌘W` 关闭）；`?window=settings` 由 `main.tsx` 渲染 `SettingsWindowRoot`；保存后 Host 广播 `settings:changed` 同步所有窗口；纯浏览器 dev 回退 modal。
 - **配色主题**：设置 → Appearance **`uiTheme`**（默认 `default` = 内置外观）；36 个 tweakcn 预设打包于 `src/themes/tweakcn.json`（仅颜色 + radius），`src/lib/ui-theme.ts` 运行时注入 `:root`/`.dark` 变量覆盖；刷新数据 `node scripts/fetch-tweakcn-themes.mjs`。
-- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；**`⌘←` 折叠选中文件夹**、**`⇧⌘←` 折叠至默认**（只展开 `papers/`，不展开其子目录）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；Library 下方虚拟节点 **Recycle Bin**（`agentero:trash`）打开中间栏回收站视图（恢复 / 永久删除；**清空**在该节点右键菜单）。打开 Vault 时默认只展开 `papers/` 及其一级子目录；激活文档变化时树展开祖先并滚到对应行。**建树**：`papers/`/`notes/`/`plans/`/`.agents/` 全量递归；其它根目录（`src/` 等）只 list 一层，子目录 `childrenPending`、展开再 list；忽略名（`.git`/`.venv`/`node_modules`/…）永不 list。Paper 行标签默认 **标题 · 作者**（设置 → 通用 `paperTreeLabelMode`，展示用、不改磁盘名）；同目录排序默认 **显示名称 A–Z**（与 `paperTreeLabelMode` 标签一致；`paperTreeSortMode`：标题 / 作者 / 年份 / 添加时间等预设，展示用）。
+- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；**`⌘←` 折叠选中文件夹**、**`⇧⌘←` 折叠至默认**（只展开 `papers/`，不展开其子目录）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；Library 虚拟节点右键 **导出论文库**（BibTeX）；其下虚拟节点 **Recycle Bin**（`agentero:trash`）打开中间栏回收站视图（恢复 / 永久删除；**清空**在该节点右键菜单）。打开 Vault 时默认只展开 `papers/` 及其一级子目录；激活文档变化时树展开祖先并滚到对应行。**建树**：`papers/`/`notes/`/`plans/`/`.agents/` 全量递归；其它根目录（`src/` 等）只 list 一层，子目录 `childrenPending`、展开再 list；忽略名（`.git`/`.venv`/`node_modules`/…）永不 list。Paper 行标签默认 **标题 · 作者**（设置 → 通用 `paperTreeLabelMode`，展示用、不改磁盘名）；同目录排序默认 **显示名称 A–Z**（与 `paperTreeLabelMode` 标签一致；`paperTreeSortMode`：标题 / 作者 / 年份 / 添加时间等预设，展示用）。
 - 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
 - PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 批注 / 提问 / 翻译，见 `docs/development/pdf-ask.md`）。**批注** = 高亮 + 内联评论（`comment`），带 comment 的高亮显示页边批注针，右侧 **批注** 面板列出当前 PDF 的批注卡（跳转 / 编辑 / 删除），不写入 `NOTES.md`。
 - **翻译服务**：应用级可插拔 `TranslateService`（免费 MT + BYOA Agent，无付费 API），设置 → 翻译；PDF 划词等为消费方；见 `docs/development/translate.md`。

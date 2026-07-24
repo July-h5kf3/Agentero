@@ -2520,8 +2520,6 @@ export default function App() {
 			rescanning,
 			onOpenLibraryPaper: handleOpenLibraryPaper,
 			onRescanPapers: handleRescanPapers,
-			onLibraryExport: handleLibraryExportClick,
-			libraryExportBusy: libraryIoBusy === "export",
 			onMigrateZotero: handleMigrateZoteroOpen,
 			onTrashChanged: handleTrashChanged,
 			trashReloadSignal,
@@ -2553,8 +2551,6 @@ export default function App() {
 			rescanning,
 			handleOpenLibraryPaper,
 			handleRescanPapers,
-			handleLibraryExportClick,
-			libraryIoBusy,
 			handleMigrateZoteroOpen,
 			handleTrashChanged,
 			trashReloadSignal,
@@ -3291,6 +3287,8 @@ export default function App() {
 										onSelectLibrary={handleSelectLibrary}
 										onSelectTrash={handleSelectTrash}
 										onEmptyTrash={() => void handleEmptyTrash()}
+										onExportLibrary={handleLibraryExportClick}
+										libraryExportBusy={libraryIoBusy === "export"}
 										onStartCreate={handleStartCreate}
 										onDownloadPaperAssets={handleDownloadPaperAssets}
 										onDownloadAllMissingAssets={handleDownloadAllMissingAssets}

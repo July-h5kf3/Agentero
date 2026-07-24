@@ -40,8 +40,6 @@ export type TabCenterProps = {
 	rescanning: boolean;
 	onOpenLibraryPaper: (paper: PaperMetadata) => void;
 	onRescanPapers: () => void;
-	onLibraryExport: () => void;
-	libraryExportBusy: boolean;
 	onMigrateZotero: () => void;
 	onTrashChanged: () => void;
 	/** Bump to reload recycle bin after Empty Recycle Bin from the sidebar. */
@@ -103,8 +101,6 @@ export const TabCenter = memo(function TabCenter({
 	rescanning,
 	onOpenLibraryPaper,
 	onRescanPapers,
-	onLibraryExport,
-	libraryExportBusy,
 	onMigrateZotero,
 	onTrashChanged,
 	trashReloadSignal = 0,
@@ -141,8 +137,6 @@ export const TabCenter = memo(function TabCenter({
 				onOpenPaper={onOpenLibraryPaper}
 				onRescan={onRescanPapers}
 				rescanning={rescanning}
-				onExport={onLibraryExport}
-				exportBusy={libraryExportBusy}
 				onMigrateZotero={onMigrateZotero}
 				className="bg-muted/20"
 			/>
