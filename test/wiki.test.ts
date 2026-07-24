@@ -18,7 +18,13 @@ describe("wikilink extraction", () => {
 		)?.content;
 		expect(source).toBeTruthy();
 		const links = extractWikilinks(source ?? "");
-		expect(links.map((link) => link.targetRaw)).toEqual(["Target", "", ""]);
+		expect(links.map((link) => link.targetRaw)).toEqual([
+			"Target",
+			"",
+			"",
+			"Target",
+		]);
+		expect(links[3]?.embed).toBe(true);
 	});
 
 	it("extracts typed fragments while skipping inline and fenced code", () => {

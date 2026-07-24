@@ -2,7 +2,7 @@
 	"documents": [
 		{
 			"path": "notes/Source.md",
-			"content": "---\naliases:\n  - Source alias\n---\n# Root\n## Child\nBlock text ^summary\n[[Target#Overview]] [[#Root#Child]] [[#^summary]] [relative](./Target.md#Overview)\n`[[ignored-inline]]`\n```md\n[[ignored-fence]]\n```\n"
+			"content": "---\naliases:\n  - Source alias\n---\n# Root\n## Child\nBlock text ^summary\n[[Target#Overview]] [[#Root#Child]] [[#^summary]] ![[Target#^target-block]] [relative](./Target.md#Overview)\n`[[ignored-inline]]`\n```md\n[[ignored-fence]]\n```\n"
 		},
 		{
 			"path": "notes/Target.md",

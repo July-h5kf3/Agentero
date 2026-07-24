@@ -126,6 +126,7 @@ export function toVaultRelative(
 type Extracted = {
 	targetRaw: string;
 	alias?: string;
+	embed?: boolean;
 	fragment?: LinkFragment;
 	line?: number;
 	context?: string;
@@ -206,16 +207,19 @@ export function extractWikilinks(md: string): Extracted[] {
 		const orig = [...line];
 		let i = 0;
 		while (i + 1 < chars.length) {
-			if (chars[i] === "[" && chars[i + 1] === "[") {
-				let j = i + 2;
+			const embed = chars[i] === "!" && chars[i + 1] === "[";
+			const opening = embed ? i + 1 : i;
+			if (chars[opening] === "[" && chars[opening + 1] === "[") {
+				let j = opening + 2;
 				while (j + 1 < chars.length) {
 					if (chars[j] === "]" && chars[j + 1] === "]") {
-						const body = orig.slice(i + 2, j).join("");
+						const body = orig.slice(opening + 2, j).join("");
 						const parsed = parseLinkBody(body);
 						if (parsed) {
 							const ctx = line.trim();
 							results.push({
 								...parsed,
+								embed,
 								line: lineNo,
 								context: ctx || undefined,
 							});
