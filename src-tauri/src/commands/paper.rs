@@ -136,6 +136,10 @@ pub struct PaperMoveArgs {
     pub from_rel: String,
     /// Vault-relative destination parent (`papers` or under `papers/`).
     pub dest_parent_rel: String,
+    /// Dirty open Markdown/NOTES paths supplied by the renderer. The Host
+    /// rejects a transaction that would move or rewrite one of these files.
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -201,12 +205,13 @@ fn move_inner(
     if new_rel == from {
         return Err(AppError::message("already in this folder"));
     }
-    let link_update = run_local_rename_transaction(&vault, index, &from, &new_rel, || {
-        papers::move_under_path(&vault, &from, &new_rel)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
-    })
-    .map_err(|error| AppError::message(error.to_string()))?;
+    let link_update =
+        run_local_rename_transaction(&vault, index, &from, &new_rel, &args.dirty_paths, || {
+            papers::move_under_path(&vault, &from, &new_rel)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .map_err(|error| AppError::message(error.to_string()))?;
     Ok(PaperMoveResult {
         new_rel,
         link_update,

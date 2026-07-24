@@ -239,6 +239,24 @@ impl WikiRenameTransaction {
             .collect()
     }
 
+    fn reject_dirty_paths(&self, dirty_paths: &[String]) -> Result<(), WikiRenameError> {
+        for raw_path in dirty_paths {
+            let path = normalize_vault_path(raw_path)?;
+            let touches_primary_move = is_at_or_under(&path, &self.from);
+            let touches_rewrite = self
+                .sources
+                .iter()
+                .any(|source| source.original_path == path);
+            if touches_primary_move || touches_rewrite {
+                return Err(WikiRenameError::new(
+                    WikiRenameErrorCode::UnsavedEdits,
+                    format!("unsaved editor changes block move: {path}"),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Execute the filesystem move, all planned atomic writes, and then an
     /// optional dependent commit (for example a catalog path update). A failed
     /// dependent commit still rolls the Markdown and primary move back.
@@ -383,6 +401,7 @@ pub fn run_local_rename_transaction<F>(
     index: &mut WikiIndex,
     from: &str,
     to: &str,
+    dirty_paths: &[String],
     commit: F,
 ) -> Result<WikiRenameResult, WikiRenameError>
 where
@@ -401,6 +420,7 @@ where
         )
     })?;
     let transaction = WikiRenameTransaction::plan(vault_root, index, from, to)?;
+    transaction.reject_dirty_paths(dirty_paths)?;
     let result = transaction.execute(commit)?;
     index.rebuild(vault_path).map_err(|error| {
         WikiRenameError::new(
@@ -725,6 +745,25 @@ mod tests {
             fs::read_to_string(root.join("notes/Source.md")).unwrap(),
             "[[notes/Target]]\n"
         );
+        assert!(root.join("notes/Target.md").exists());
+        assert!(!root.join("archive/Target.md").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unsaved_source_or_moved_path_blocks_before_any_mutation() {
+        let root = temp_vault();
+        write(&root, "notes/Source.md", "[[notes/Target]]\n");
+        write(&root, "notes/Target.md", "# Target\n");
+        let index = snapshot(&root);
+        let transaction =
+            WikiRenameTransaction::plan(&root, &index, "notes/Target.md", "archive/Target.md")
+                .expect("plan");
+
+        let error = transaction
+            .reject_dirty_paths(&["notes/Source.md".to_string()])
+            .expect_err("dirty incoming source must block the move");
+        assert_eq!(error.code, WikiRenameErrorCode::UnsavedEdits);
         assert!(root.join("notes/Target.md").exists());
         assert!(!root.join("archive/Target.md").exists());
         let _ = fs::remove_dir_all(root);

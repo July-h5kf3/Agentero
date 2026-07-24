@@ -83,6 +83,9 @@ pub struct WikiMoveArgs {
     pub from_rel: String,
     /// Vault-relative final path, including the new basename.
     pub to_rel: String,
+    /// Dirty open Markdown/NOTES paths supplied by the renderer.
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
 }
 
 /// Move or rename one local Vault path while updating resolved internal links.
@@ -100,8 +103,14 @@ pub fn wiki_move(
         Ok(guard) => guard,
         Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
     };
-    match run_local_rename_transaction(&vault, &mut guard, &args.from_rel, &args.to_rel, || Ok(()))
-    {
+    match run_local_rename_transaction(
+        &vault,
+        &mut guard,
+        &args.from_rel,
+        &args.to_rel,
+        &args.dirty_paths,
+        || Ok(()),
+    ) {
         Ok(result) => ApiResult::ok(result),
         Err(error) => map_err(AppError::message(error.to_string())),
     }
