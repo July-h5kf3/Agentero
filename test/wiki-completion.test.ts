@@ -2,9 +2,11 @@ import { createSlateEditor } from "platejs";
 import { describe, expect, it } from "vitest";
 
 import {
+	isWikiLinkDraftEditingOffset,
 	parseWikiLinkMarkdown,
 	WikiLinkPlugin,
 	wikiLinkDraftEditableBounds,
+	wikiLinkDraftExteriorPlacement,
 	wikiLinkRules,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
@@ -610,6 +612,239 @@ describe("wikilink completion grammar", () => {
 			start: 3,
 			end: 13,
 		});
+	});
+
+	it("projects a complete draft as soon as the caret leaves its source range", () => {
+		const raw = "![[验收说明#3. 编辑器补全与序列化]]";
+		expect(isWikiLinkDraftEditingOffset(raw, 0)).toBe(false);
+		expect(isWikiLinkDraftEditingOffset(raw, 1)).toBe(true);
+		expect(isWikiLinkDraftEditingOffset(raw, raw.length - 1)).toBe(true);
+		expect(isWikiLinkDraftEditingOffset(raw, raw.length)).toBe(false);
+		expect(wikiLinkDraftExteriorPlacement(raw, 0)).toBe("before");
+		expect(wikiLinkDraftExteriorPlacement(raw, raw.length)).toBe("after");
+
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [{ type: "p", children: [{ text: raw, wikiLinkDraft: true }] }],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: raw.length },
+			focus: { path: [0, 0], offset: raw.length },
+		});
+		if (!editor.selection) throw new Error("expected an exterior selection");
+		const parsed = parseWikiLinkMarkdown(raw);
+		if (!parsed) throw new Error("expected a parsed embed");
+		const linkRefs: { unref: () => number[] | null }[] = [];
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 0] });
+			editor.tf.insertNodes(parsed, { at: [0, 0] });
+			linkRefs.push(editor.api.pathRef([0, 0], { affinity: "forward" }));
+		});
+		const linkPath = linkRefs[0]?.unref() ?? null;
+		if (!linkPath) throw new Error("expected the rendered embed path");
+		const after = editor.api.after(linkPath);
+		if (!after) throw new Error("expected a point after the rendered embed");
+		editor.tf.select(after);
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [{ text: "" }, parsed, { text: "" }],
+			},
+		]);
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 2],
+			offset: 0,
+		});
+	});
+
+	it("moves through both closing and opening delimiters without skipping them", () => {
+		const raw = "![[验收说明#4. Agentero 内改名]]";
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{ type: "p", children: [{ text: raw, wikiLinkDraft: true }] },
+				{ type: "p", children: [{ text: "next" }] },
+			],
+		});
+		const { start, end } = wikiLinkDraftEditableBounds(raw);
+
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: end },
+			focus: { path: [0, 0], offset: end },
+		});
+		editor.tf.move({ distance: 1 });
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 0],
+			offset: end + 1,
+		});
+		editor.tf.move({ distance: 1 });
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 0],
+			offset: raw.length,
+		});
+		editor.tf.move({ distance: 1 });
+		expect(editor.selection?.anchor).toEqual({
+			path: [1, 0],
+			offset: 0,
+		});
+
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: start },
+			focus: { path: [0, 0], offset: start },
+		});
+		editor.tf.move({ distance: 1, reverse: true });
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 0],
+			offset: start - 1,
+		});
+		editor.tf.move({ distance: 1, reverse: true });
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 0],
+			offset: start - 2,
+		});
+	});
+
+	it("places text typed at the exterior boundary after the rendered embed", () => {
+		const raw = "![[验收说明#4. Agentero 内改名]]";
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "12 " }, { text: raw, wikiLinkDraft: true }],
+				},
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 1], offset: raw.length },
+			focus: { path: [0, 1], offset: raw.length },
+		});
+		const parsed = parseWikiLinkMarkdown(raw);
+		if (!parsed) throw new Error("expected a parsed embed");
+		const linkRefs: { unref: () => number[] | null }[] = [];
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 1] });
+			editor.tf.insertNodes(parsed, { at: [0, 1] });
+			linkRefs.push(editor.api.pathRef([0, 1], { affinity: "forward" }));
+		});
+		const linkPath = linkRefs[0]?.unref() ?? null;
+		if (!linkPath) throw new Error("expected an inserted embed path");
+		const after = editor.api.after(linkPath);
+		if (!after) throw new Error("expected a point after the embed");
+		editor.tf.select(after);
+		editor.tf.insertBreak();
+		editor.tf.insertText("x");
+
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "12 " },
+					{
+						type: "wikiLink",
+						value: "验收说明",
+						heading: "4. Agentero 内改名",
+						alias: null,
+						embed: true,
+						children: [{ text: "" }],
+					},
+					{ text: "" },
+				],
+			},
+			{ type: "p", children: [{ text: "x" }] },
+		]);
+	});
+
+	it("expands a rendered embed before deleting its final bracket", () => {
+		const raw = "![[2026-W29#今日计划]]";
+		const parsed = parseWikiLinkMarkdown(raw);
+		if (!parsed) throw new Error("expected a parsed embed");
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "12 " }, parsed, { text: "" }],
+				},
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 2], offset: 0 },
+			focus: { path: [0, 2], offset: 0 },
+		});
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 1] });
+			editor.tf.insertNodes({ text: raw, wikiLinkDraft: true }, { at: [0, 1] });
+			editor.tf.select({
+				anchor: { path: [0, 1], offset: raw.length },
+				focus: { path: [0, 1], offset: raw.length },
+			});
+		});
+		editor.tf.delete({
+			at: {
+				anchor: { path: [0, 1], offset: raw.length - 1 },
+				focus: { path: [0, 1], offset: raw.length },
+			},
+		});
+
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "12 " },
+					{ text: raw.slice(0, -1), wikiLinkDraft: true },
+				],
+			},
+		]);
+		expect(editor.selection?.anchor).toEqual({
+			path: [0, 1],
+			offset: raw.length - 1,
+		});
+	});
+
+	it("keeps text typed after a rendered ordinary Wikilink inline", () => {
+		const raw = "[[验收说明#4. Agentero 内改名]]";
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "12 " }, { text: raw, wikiLinkDraft: true }],
+				},
+			],
+		});
+		const parsed = parseWikiLinkMarkdown(raw);
+		if (!parsed) throw new Error("expected a parsed Wikilink");
+		const linkRefs: { unref: () => number[] | null }[] = [];
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 1] });
+			editor.tf.insertNodes(parsed, { at: [0, 1] });
+			linkRefs.push(editor.api.pathRef([0, 1], { affinity: "forward" }));
+		});
+		const linkPath = linkRefs[0]?.unref() ?? null;
+		if (!linkPath) throw new Error("expected an inserted Wikilink path");
+		const after = editor.api.after(linkPath);
+		if (!after) throw new Error("expected a point after the Wikilink");
+		editor.tf.select(after);
+		editor.tf.insertText("x");
+
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "12 " },
+					{
+						type: "wikiLink",
+						value: "验收说明",
+						heading: "4. Agentero 内改名",
+						alias: null,
+						embed: false,
+						children: [{ text: "" }],
+					},
+					{ text: "x" },
+				],
+			},
+		]);
 	});
 
 	it("preserves an external selection while a complete draft is reified", () => {

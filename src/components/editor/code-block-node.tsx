@@ -12,7 +12,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 	return (
 		<PlateElement className="py-1" {...props}>
 			<div className="rounded-md bg-muted/50">
-				<pre className="agentero-scroll overflow-x-auto p-4 font-mono text-sm leading-[normal] [tab-size:2]">
+				<pre className="agentero-scroll-both overflow-x-auto p-4 font-mono text-sm leading-[normal] [tab-size:2]">
 					<code>{props.children}</code>
 				</pre>
 			</div>

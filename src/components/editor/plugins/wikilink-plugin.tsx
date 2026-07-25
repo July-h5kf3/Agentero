@@ -109,6 +109,26 @@ export function wikiLinkDraftEditableBounds(raw: string): {
 	};
 }
 
+/**
+ * Source syntax stays visible only while the caret is on one of its characters.
+ * Offsets 0 and `raw.length` are outside the source and must project immediately.
+ */
+export function isWikiLinkDraftEditingOffset(
+	raw: string,
+	offset: number,
+): boolean {
+	return offset > 0 && offset < raw.length;
+}
+
+export function wikiLinkDraftExteriorPlacement(
+	raw: string,
+	offset: number,
+): "before" | "after" | null {
+	if (offset === 0) return "before";
+	if (offset === raw.length) return "after";
+	return null;
+}
+
 export function isWikiLinkNode(node: unknown): node is WikiSlateNode {
 	return (
 		typeof node === "object" &&
