@@ -227,7 +227,10 @@ async fn ensure_paper_assets_impl(
                 .await
             {
                 Ok(()) => {
-                    out.tex = true;
+                    // A PDF-only e-print also returns Ok (the PDF is written to
+                    // the paper root and no TeX is extracted), so success here
+                    // does not guarantee TeX. The has_local_tex refresh below
+                    // sets `tex` from what actually landed on disk.
                     out.messages.push("tex ok".into());
                 }
                 Err(e) => out.messages.push(format!("tex failed: {e}")),
