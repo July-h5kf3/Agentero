@@ -27,6 +27,7 @@
 | V0.5 Importer | 🟡 本地 PDF ✅ | **本地 PDF 入库**（魔棒多选 / 拖到 `papers/`）已落地；Importer trait / DOI / MinerU 仍待 |
 | V0.6 标签页与分屏 | ✅ | **全局 Dockview**：中间栏文档 panel + 上下左右/多格分屏；论文默认 PDF\|NOTES **左右分屏**；标题栏无文档 tab（见 [`tab-split.md`](tab-split.md)） |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
+| 广场（Plaza） | 📋 设计中 | 侧栏虚拟「广场」：Cool Papers WebView + 推荐 v0 + 播客占位；**P0 不入库**；见 [`plaza.md`](plaza.md) |
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper tag *`；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
 | Zotero Connector 兼容 | ✅ MVP | 本机 `23119`：`saveItems` + 子文件夹 targets + **`saveAttachment`**；设置开关默认关；见 [`../backend/connector.md`](../backend/connector.md) |
@@ -52,6 +53,7 @@
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
 - [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 左右分屏。
+- [`plaza.md`](plaza.md)：广场（Plaza）——侧栏虚拟发现入口；Cool Papers WebView、推荐 v0、播客占位；P0 不做入库。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
 
 - [`.md`](.md)：简短产品假设。

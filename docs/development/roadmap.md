@@ -20,6 +20,7 @@
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟢 已完成 | **全局 Dockview 工作区 + 默认全库 + 文件夹作用域库 + 上下左右多分屏（PDF\|NOTES / 拖文件树并入）已落地**；标题栏无文档 tab；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 先落地本地 PDF citation/figure sidecar 与 Paper Content 侧栏，再做引用图、Connected Papers 和外部关系补全。 |
+| **广场 Plaza** | 📋 设计中 | 侧栏虚拟发现入口：Cool Papers（WebView）、推荐 v0（本地）、播客占位；P0 **不入库**。见 [`plaza.md`](plaza.md)。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | **远程 Vault（SSH/SFTP）+ 远端 BYOA** | ✅ MVP | 文件权威远端；SFTP IO；catalog work mirror；ACP over SSH；PDF cache。设计见 [`remote-vault.md`](remote-vault.md)。 |

@@ -212,6 +212,16 @@
 - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）
 - [x] 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开
 
+### 4b. 广场 Plaza（发现入口）
+
+设计见 [`plaza.md`](plaza.md)。
+
+- [ ] **P0a 壳**：侧栏虚拟 `agentero:plaza` + 子节点 Cool Papers / 播客 / 推荐（位于 Library+Trash 下、真实目录上）；`PlazaView` 首页卡片；i18n
+- [ ] **P0b Cool Papers**：中间栏内嵌 WebView 打开 papers.cool；后退/前进/刷新/外链；加载失败降级
+- [ ] **P0c 推荐 v0**：本地启发式分组（待精读 / 最近入库 / 同标签）；点击 `openPaper`；无云端上传
+- [ ] **P0d 播客**：占位空态页
+- [ ] **P1 入库**：从 Cool Papers URL/arXiv 解析 → 魔棒管线；预览抽屉 / 批量（**当前不做**）
+
 ### 5. 引用关系 / Connected Papers（roadmap V0.7）
 
 - [ ] **P0：本地 PDF citation/figure analysis**：按 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md) 实现 Host `paper_analyze_pdf`、sidecar、TeX/PDF 双解析和 PNG 派生。

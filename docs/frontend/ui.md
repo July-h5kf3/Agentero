@@ -47,6 +47,7 @@
 - **虚拟节点 Library**：树顶固定一项 **Library / 论文库**（路径常量 `agentero:library`，非真实目录、不写盘）。图标 `Library`。选中后中间栏显示**全库**论文表格（见 §3）。空 Vault 时仍显示该节点。
 - **组织文件夹 → 作用域论文库**：单击**非 paper** 目录（如 `papers/`、`papers/nlp/`、`papers/nlp/pretrain`）时 **同时**：(1) 树内展开/折叠子节点；(2) **同一** Library 标签页（`agentero:library`）就地按路径前缀筛选，**不**为文件夹新建 tab。点顶栏 Library 虚拟节点清除筛选回全库。**paper 文件夹**仍打开该篇 PDF/Notes（叶子、不展开）。
 - **虚拟节点 Recycle Bin**：紧挨 **Library** 下方固定一项 **Recycle Bin / 回收站**（路径常量 `agentero:trash`，非真实目录、不写盘）。图标 `Trash2`。选中后中间栏显示回收站视图（见「删除」）。空 Vault 时仍显示该节点。
+- **虚拟节点 广场（Plaza）**（**设计中**，见 [`../development/plaza.md`](../development/plaza.md)）：位于 Library + Recycle Bin **之下**、真实 Vault 根目录 **之上**。父节点 `agentero:plaza` 可折叠；子节点 **Cool Papers**（中间栏 WebView 打开 papers.cool）、**播客**（占位）、**推荐**（本地库启发式列表）。**P0 不提供入库**；与 Library 正交（发现 vs 已收藏）。
 - **Library 行 Download**：当库内**任一** paper 资源不完整时，Library 标题右侧显示 Download；点击**批量** `paper_download_assets`。
 - **Paper 行 Download**：下列任一成立即显示，hover 列出原因：
   - 本地**没有 PDF**（期望在论文根目录 `{id}.pdf`）；
