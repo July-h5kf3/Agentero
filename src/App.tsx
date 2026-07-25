@@ -229,6 +229,7 @@ import {
 	type WikiRenameResult,
 	wikiRenameFailure,
 } from "@/lib/wiki";
+import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
 import { WikiNavContext } from "@/lib/wiki-nav-context";
 
 /**
@@ -447,6 +448,8 @@ export default function App() {
 	const wikiRebuildTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** Watcher paths collected for the current debounced Wiki rebuild. */
+	const wikiRebuildPathsRef = useRef<Set<string>>(new Set());
 	/** Host watcher paths caused by a committed rename transaction. */
 	const internalRenamePathsRef = useRef(new Map<string, number>());
 	/** Latest rebuildWikiAndNotify (defined below) for the stable wiki scheduler. */
@@ -1279,12 +1282,17 @@ export default function App() {
 		) {
 			return;
 		}
+		wikiRebuildPathsRef.current.add(absPath);
 		if (wikiRebuildTimerRef.current) clearTimeout(wikiRebuildTimerRef.current);
 		wikiRebuildTimerRef.current = setTimeout(() => {
 			wikiRebuildTimerRef.current = null;
+			const changedPaths = [...wikiRebuildPathsRef.current];
+			wikiRebuildPathsRef.current.clear();
 			const vault = vaultPathRef.current;
 			if (!vault) return;
-			void rebuildWikiRef.current(vault);
+			void rebuildWikiRef
+				.current(vault)
+				.finally(() => notifyWikiEmbedTargets(changedPaths));
 		}, 900);
 	}, []);
 
@@ -3341,10 +3349,9 @@ export default function App() {
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
 			mdFiles: vaultWikiTargetFiles,
-			revision: wikiIndexRevision,
 			vaultPath,
 		}),
-		[handleWikiNavigate, vaultPath, vaultWikiTargetFiles, wikiIndexRevision],
+		[handleWikiNavigate, vaultPath, vaultWikiTargetFiles],
 	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {

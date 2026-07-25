@@ -1546,6 +1546,31 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 `syntax: "markdown"` 将 destination 按来源目录优先解析；若 `..` 会离开 Vault，返回 `missing`，不会降级匹配 Vault 根或同名文件。
 
+#### `wiki_embed_read`
+
+解析一个 `![[...]]` 并读取只读投影。目标和 fragment 完全复用 `wiki_resolve` 的语义；前端不自行猜测文件、标题或 block。
+
+```ts
+{
+  vaultPath: string;
+  sourcePath: string;
+  linkText: string; // 不含外层 ![[ ]]
+}
+// => {
+//   ok: true;
+//   data: {
+//     link: ResolvedLink;
+//     contentKind?: "markdown" | "image" | "pdf" | "unsupported";
+//     content?: string; // 仅 Markdown 全文、标题区段或 block 投影
+//   }
+// }
+```
+
+- `link` 始终返回规范解析状态；`missing`、`ambiguous`、`invalidFragment` 不读取猜测目标。
+- Markdown heading 投影包含命中的 heading，并持续到下一个同级或更高层级 heading；block 投影只返回索引命中的 block 行。
+- 图片与 PDF 只返回类型和规范目标路径，前端通过本地文件字节加载既有图片/PDF 组件。
+- Canvas、音视频、远程 URL 及其它未支持类型返回 `unsupported`。
+
 #### `wiki_search`
 
 返回可写入的文件、heading 和 block 候选；候选带规范路径与 `insertText`，重名场景由 UI 显示路径供用户选择。
@@ -1596,7 +1621,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 #### `graph_get_graph`
 
 获取全量或局部 wikilink 图谱。数据来自内存索引（必要时 `ensure_vault` 先 rebuild）。  
-设计见 **`docs/backend/wikilinks.md` §4.4 / §6.3**。
+设计见 **`docs/backend/wikilinks.md` §4.6 / §6.3**。
 
 - **参数**
 

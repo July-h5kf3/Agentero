@@ -25,6 +25,7 @@ import {
 	readWikiEmbed,
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
+import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 import { useWikiNav } from "@/lib/wiki-nav-context";
 
 const EmbeddedMarkdownProjection = lazy(async () => {
@@ -52,6 +53,40 @@ type EmbedLoadState =
 			response?: WikiEmbedResponse;
 			detail?: string;
 	  };
+
+type CachedEmbedLoad = {
+	requestKey: string | null;
+	state: EmbedLoadState;
+};
+
+const EMBED_CACHE_LIMIT = 128;
+const embedStateCache = new Map<string, EmbedLoadState>();
+const embedRequestCache = new Map<string, Promise<EmbedLoadState>>();
+
+function embedRequestKey(
+	vaultPath: string | null | undefined,
+	sourcePath: string | null,
+	target: string,
+	targetRevision: number,
+): string | null {
+	if (!vaultPath || !sourcePath) return null;
+	return JSON.stringify([vaultPath, sourcePath, target, targetRevision]);
+}
+
+function cachedEmbedState(key: string): EmbedLoadState | undefined {
+	return embedStateCache.get(key);
+}
+
+function retainEmbedState(key: string, state: EmbedLoadState): void {
+	if (state.kind === "error" || state.kind === "loading") return;
+	embedStateCache.delete(key);
+	embedStateCache.set(key, state);
+	while (embedStateCache.size > EMBED_CACHE_LIMIT) {
+		const oldest = embedStateCache.keys().next().value;
+		if (typeof oldest !== "string") break;
+		embedStateCache.delete(oldest);
+	}
+}
 
 function fragmentKey(link: ResolvedLink): string {
 	const fragment = link.occurrence.fragment;
@@ -82,6 +117,36 @@ function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
 	}
 }
 
+function loadEmbedState(
+	key: string,
+	vaultPath: string,
+	sourcePath: string,
+	target: string,
+): Promise<EmbedLoadState> {
+	const cached = cachedEmbedState(key);
+	if (cached) return Promise.resolve(cached);
+	const pending = embedRequestCache.get(key);
+	if (pending) return pending;
+
+	const request = readWikiEmbed(vaultPath, sourcePath, target)
+		.then((response) => stateFromResponse(response))
+		.catch(
+			(error): EmbedLoadState => ({
+				kind: "error",
+				detail: error instanceof Error ? error.message : String(error),
+			}),
+		)
+		.then((state) => {
+			retainEmbedState(key, state);
+			return state;
+		})
+		.finally(() => {
+			embedRequestCache.delete(key);
+		});
+	embedRequestCache.set(key, request);
+	return request;
+}
+
 function EmbedStatus({ message }: { message: string }) {
 	return (
 		<span className="block px-4 py-3 text-muted-foreground text-sm">
@@ -90,50 +155,80 @@ function EmbedStatus({ message }: { message: string }) {
 	);
 }
 
-export function WikiEmbedElement(props: PlateElementProps) {
+export function WikiEmbedElement({
+	editing,
+	...props
+}: PlateElementProps & { editing: boolean }) {
 	const { t } = useTranslation("editor");
 	const element = props.element as unknown as WikiLinkEl;
 	const wikiNav = useWikiNav();
 	const markdownDoc = useMarkdownDoc();
 	const ancestry = useWikiEmbedAncestry();
-	const [state, setState] = useState<EmbedLoadState>({ kind: "loading" });
 
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
 		? `${target}#${element.heading}`
 		: target;
-	const refreshRevision = wikiNav?.revision;
+	const [targetRevision, setTargetRevision] = useState(0);
+	const requestKey = embedRequestKey(
+		wikiNav?.vaultPath,
+		markdownDoc.filePath,
+		targetWithFragment,
+		targetRevision,
+	);
+	const [load, setLoad] = useState<CachedEmbedLoad>(() => ({
+		requestKey,
+		state: requestKey
+			? (cachedEmbedState(requestKey) ?? { kind: "loading" })
+			: {
+					kind: "error",
+				},
+	}));
+	const fallbackState =
+		load.requestKey === requestKey || !requestKey
+			? undefined
+			: cachedEmbedState(requestKey);
+	const state =
+		load.requestKey === requestKey
+			? load.state
+			: requestKey
+				? (fallbackState ?? { kind: "loading" })
+				: { kind: "error" as const };
 
 	useEffect(() => {
-		// The revision is intentionally consumed as an invalidation token after
-		// the Host rebuilds the source-backed Wiki index.
-		void refreshRevision;
 		const vaultPath = wikiNav?.vaultPath;
 		const sourcePath = markdownDoc.filePath;
-		if (!vaultPath || !sourcePath) {
-			setState({ kind: "error" });
+		if (!vaultPath || !sourcePath || !requestKey) {
+			setLoad({ requestKey: null, state: { kind: "error" } });
+			return;
+		}
+
+		const cached = cachedEmbedState(requestKey);
+		if (cached) {
+			setLoad((previous) =>
+				previous.requestKey === requestKey && previous.state === cached
+					? previous
+					: { requestKey, state: cached },
+			);
 			return;
 		}
 
 		let cancelled = false;
-		setState({ kind: "loading" });
-		void readWikiEmbed(vaultPath, sourcePath, targetWithFragment)
-			.then((response) => {
-				if (!cancelled) setState(stateFromResponse(response));
-			})
-			.catch((error) => {
-				if (cancelled) return;
-				setState({
-					kind: "error",
-					detail: error instanceof Error ? error.message : String(error),
-				});
-			});
+		setLoad({ requestKey, state: { kind: "loading" } });
+		void loadEmbedState(
+			requestKey,
+			vaultPath,
+			sourcePath,
+			targetWithFragment,
+		).then((nextState) => {
+			if (!cancelled) setLoad({ requestKey, state: nextState });
+		});
 		return () => {
 			cancelled = true;
 		};
 	}, [
 		markdownDoc.filePath,
-		refreshRevision,
+		requestKey,
 		targetWithFragment,
 		wikiNav?.vaultPath,
 	]);
@@ -178,14 +273,25 @@ export function WikiEmbedElement(props: PlateElementProps) {
 			? joinVaultPath(wikiNav.vaultPath, state.response.link.targetPath)
 			: "";
 
+	useEffect(() => {
+		if (!absoluteTarget) return;
+		return subscribeWikiEmbedTarget(absoluteTarget, () => {
+			setTargetRevision((revision) => revision + 1);
+		});
+	}, [absoluteTarget]);
+
 	return (
 		<PlateElement
 			{...props}
 			as="span"
-			className="my-2 block w-full max-w-full align-top"
+			className={cn(
+				"relative max-w-full align-top",
+				editing ? "inline text-foreground" : "my-2 block w-full",
+			)}
 			attributes={{
 				...props.attributes,
 				"data-wiki-embed": presentation.kind,
+				"data-wiki-source": editing ? "embed" : undefined,
 			}}
 		>
 			<span
@@ -193,6 +299,7 @@ export function WikiEmbedElement(props: PlateElementProps) {
 				className={cn(
 					"group/embed block max-h-96 overflow-auto rounded-md border border-border bg-muted/20 shadow-sm",
 					presentation.kind !== "ready" && "border-dashed",
+					editing && "hidden",
 				)}
 			>
 				<span className="sticky top-0 z-10 flex items-center justify-between gap-3 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
@@ -225,7 +332,7 @@ export function WikiEmbedElement(props: PlateElementProps) {
 								ancestry={[...ancestry, presentation.key]}
 							>
 								<EmbeddedMarkdownProjection
-									key={`${presentation.key}:${wikiNav?.revision ?? 0}`}
+									key={`${presentation.key}:${targetRevision}`}
 									markdown={presentation.response.content ?? ""}
 									filePath={absoluteTarget}
 								/>
@@ -236,7 +343,7 @@ export function WikiEmbedElement(props: PlateElementProps) {
 								kind={presentation.response.contentKind}
 								absoluteTarget={absoluteTarget}
 								targetPath={presentation.response.link.targetPath ?? target}
-								revision={wikiNav?.revision ?? 0}
+								revision={targetRevision}
 								imageSize={element.alias}
 							/>
 						) : (
@@ -253,7 +360,16 @@ export function WikiEmbedElement(props: PlateElementProps) {
 					/>
 				)}
 			</span>
-			{props.children}
+			<span
+				aria-hidden={editing ? undefined : true}
+				className={
+					editing
+						? undefined
+						: "pointer-events-none absolute size-px overflow-hidden opacity-0"
+				}
+			>
+				{props.children}
+			</span>
 		</PlateElement>
 	);
 }

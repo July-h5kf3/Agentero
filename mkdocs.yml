@@ -49,6 +49,7 @@ nav:
       - DeepSeek 正文落入 Thinking: bug_fix/deepseek-thinking-body.md
       - ACP 会话恢复 ID 错误: bug_fix/acp-session-resume-id.md
       - 输入法组字 Enter 误发送: bug_fix/ime-composition-enter-submit.md
+      - 普通编辑触发全部 Wiki 嵌入闪烁: bug_fix/wiki-embed-unrelated-refresh.md
 
 markdown_extensions:
   - admonition

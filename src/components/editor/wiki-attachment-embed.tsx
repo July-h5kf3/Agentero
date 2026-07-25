@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PdfViewer } from "@/components/viewer/embed/pdf-viewer";
-import {
-	localFileToArrayBuffer,
-	localImageToViewerSource,
-	revokePdfViewerSource,
-} from "@/lib/paper-metadata";
+import { localFileToArrayBuffer } from "@/lib/paper-metadata";
 import { imageMimeFromPath } from "@/lib/viewer";
 
 type WikiAttachmentEmbedProps = {
@@ -21,8 +17,56 @@ type WikiAttachmentEmbedProps = {
 type AttachmentState =
 	| { kind: "loading" }
 	| { kind: "error" }
-	| { kind: "image"; source: string }
-	| { kind: "pdf"; bytes: ArrayBuffer };
+	| { kind: "ready"; bytes: ArrayBuffer };
+
+type CachedAttachmentLoad = {
+	requestKey: string;
+	state: AttachmentState;
+};
+
+const ATTACHMENT_CACHE_LIMIT = 32;
+const attachmentBytesCache = new Map<string, ArrayBuffer>();
+const attachmentRequestCache = new Map<string, Promise<ArrayBuffer | null>>();
+
+function attachmentRequestKey(
+	kind: "image" | "pdf",
+	absoluteTarget: string,
+	revision: number,
+): string {
+	return JSON.stringify([kind, absoluteTarget, revision]);
+}
+
+function cachedAttachmentBytes(key: string): ArrayBuffer | undefined {
+	return attachmentBytesCache.get(key);
+}
+
+function loadAttachmentBytes(
+	key: string,
+	absoluteTarget: string,
+): Promise<ArrayBuffer | null> {
+	const cached = cachedAttachmentBytes(key);
+	if (cached) return Promise.resolve(cached);
+	const pending = attachmentRequestCache.get(key);
+	if (pending) return pending;
+
+	const request = localFileToArrayBuffer(absoluteTarget)
+		.then((bytes) => {
+			if (!bytes) return null;
+			attachmentBytesCache.delete(key);
+			attachmentBytesCache.set(key, bytes);
+			while (attachmentBytesCache.size > ATTACHMENT_CACHE_LIMIT) {
+				const oldest = attachmentBytesCache.keys().next().value;
+				if (typeof oldest !== "string") break;
+				attachmentBytesCache.delete(oldest);
+			}
+			return bytes;
+		})
+		.finally(() => {
+			attachmentRequestCache.delete(key);
+		});
+	attachmentRequestCache.set(key, request);
+	return request;
+}
 
 export type WikiImageEmbedDimensions = {
 	width: number;
@@ -54,45 +98,69 @@ export function WikiAttachmentEmbed({
 	imageSize,
 }: WikiAttachmentEmbedProps) {
 	const { t } = useTranslation("editor");
-	const [state, setState] = useState<AttachmentState>({ kind: "loading" });
 	const dimensions = parseWikiImageEmbedDimensions(imageSize);
+	const requestKey = attachmentRequestKey(kind, absoluteTarget, revision);
+	const [load, setLoad] = useState<CachedAttachmentLoad>(() => {
+		const bytes = cachedAttachmentBytes(requestKey);
+		return {
+			requestKey,
+			state: bytes ? { kind: "ready", bytes } : { kind: "loading" },
+		};
+	});
+	const fallbackBytes =
+		load.requestKey === requestKey
+			? undefined
+			: cachedAttachmentBytes(requestKey);
+	const state =
+		load.requestKey === requestKey
+			? load.state
+			: fallbackBytes
+				? {
+						kind: "ready" as const,
+						bytes: fallbackBytes,
+					}
+				: { kind: "loading" as const };
+	const attachmentBytes = state.kind === "ready" ? state.bytes : null;
+	const imageSource = useMemo(() => {
+		if (kind !== "image" || !attachmentBytes) return null;
+		return URL.createObjectURL(
+			new Blob([attachmentBytes], { type: imageMimeFromPath(targetPath) }),
+		);
+	}, [attachmentBytes, kind, targetPath]);
 
 	useEffect(() => {
-		// Re-read attachment bytes after the Host rebuild invalidates projections.
-		void revision;
 		let cancelled = false;
-		let imageSource: string | null = null;
-		setState({ kind: "loading" });
-
-		void (async () => {
-			if (kind === "image") {
-				const source = await localImageToViewerSource(
-					absoluteTarget,
-					imageMimeFromPath(targetPath),
-				);
-				if (cancelled) {
-					revokePdfViewerSource(source);
-					return;
-				}
-				if (!source) {
-					setState({ kind: "error" });
-					return;
-				}
-				imageSource = source;
-				setState({ kind: "image", source });
-				return;
-			}
-
-			const bytes = await localFileToArrayBuffer(absoluteTarget);
+		const cached = cachedAttachmentBytes(requestKey);
+		if (cached) {
+			setLoad((previous) =>
+				previous.requestKey === requestKey &&
+				previous.state.kind === "ready" &&
+				previous.state.bytes === cached
+					? previous
+					: { requestKey, state: { kind: "ready", bytes: cached } },
+			);
+			return;
+		}
+		setLoad({ requestKey, state: { kind: "loading" } });
+		void loadAttachmentBytes(requestKey, absoluteTarget).then((bytes) => {
 			if (cancelled) return;
-			setState(bytes ? { kind: "pdf", bytes } : { kind: "error" });
-		})();
+			setLoad({
+				requestKey,
+				state: bytes ? { kind: "ready", bytes } : { kind: "error" },
+			});
+		});
 
 		return () => {
 			cancelled = true;
-			revokePdfViewerSource(imageSource);
 		};
-	}, [absoluteTarget, kind, revision, targetPath]);
+	}, [absoluteTarget, requestKey]);
+
+	useEffect(
+		() => () => {
+			if (imageSource) URL.revokeObjectURL(imageSource);
+		},
+		[imageSource],
+	);
 
 	if (state.kind === "loading") {
 		return (
@@ -108,11 +176,11 @@ export function WikiAttachmentEmbed({
 			</span>
 		);
 	}
-	if (state.kind === "image") {
+	if (kind === "image" && state.kind === "ready" && imageSource) {
 		return (
 			<span className="flex justify-center p-3">
 				<img
-					src={state.source}
+					src={imageSource}
 					alt={targetPath}
 					className="max-h-96 max-w-full rounded-sm object-contain"
 					style={{
@@ -125,6 +193,7 @@ export function WikiAttachmentEmbed({
 			</span>
 		);
 	}
+	if (state.kind !== "ready") return null;
 	return (
 		<PdfViewer
 			source={null}

@@ -26,6 +26,8 @@ import {
 	parseWikiLinkMarkdown,
 	wikiLinkDraftEditableBounds,
 	wikiLinkDraftExteriorPlacement,
+	wikiLinkNodeMatchesSource,
+	wikiLinkNodeSource,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
 import {
@@ -87,7 +89,7 @@ type WikiLinkExteriorBoundary = {
 	path: number[];
 	placement: "before" | "after";
 	embed: boolean;
-	source: "draft" | "display";
+	source: "draft" | "stable" | "display";
 };
 
 export function MarkdownEditor({
@@ -135,6 +137,11 @@ export function MarkdownEditor({
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
 	const wikiLinkPresentationFrameRef = useRef<number | null>(null);
+	const wikiLinkPresentationMarkdownRef = useRef<string | null>(null);
+	const activeWikiLinkPathRef = useRef<{
+		current: number[] | null;
+		unref: () => number[] | null;
+	} | null>(null);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
 
@@ -337,18 +344,23 @@ export function MarkdownEditor({
 		(path: number[], cursorOffset: number) => {
 			const entry = editor.api.node(path);
 			if (!entry || !isWikiLinkNode(entry[0])) return false;
-			const raw = wikiLinkToMarkdown(entry[0]);
-			editor.tf.withoutNormalizing(() => {
-				editor.tf.removeNodes({ at: path });
-				editor.tf.insertNodes({ text: raw, wikiLinkDraft: true }, { at: path });
-				editor.tf.select({
-					anchor: { path, offset: cursorOffset },
-					focus: { path, offset: cursorOffset },
+			const sourcePath = [...path, 0];
+			let raw = wikiLinkNodeSource(entry[0]);
+			if (!raw) {
+				raw = wikiLinkToMarkdown(entry[0]);
+				wikiLinkPresentationMarkdownRef.current = serialize();
+				editor.tf.insertText(raw, {
+					at: { path: sourcePath, offset: 0 },
 				});
-			});
+			}
+			const point = {
+				path: sourcePath,
+				offset: Math.max(0, Math.min(cursorOffset, raw.length)),
+			};
+			editor.tf.select({ anchor: point, focus: point });
 			return true;
 		},
-		[editor],
+		[editor, serialize],
 	);
 
 	const isSelectionEditingWikiLinkDraft = useCallback(
@@ -366,6 +378,59 @@ export function MarkdownEditor({
 				: false;
 		},
 		[editor],
+	);
+
+	const selectedWikiLinkPath = useCallback(
+		(selection: typeof editor.selection): number[] | null => {
+			if (!selection) return null;
+			for (const point of [selection.anchor, selection.focus]) {
+				const parent = editor.api.parent(point.path);
+				if (parent && isWikiLinkNode(parent[0])) return parent[1];
+			}
+			return null;
+		},
+		[editor],
+	);
+
+	/**
+	 * Commit an edited source child back into the stable node's navigation
+	 * attributes. Valid links keep the same element identity; invalid syntax is
+	 * deliberately unwrapped to ordinary text so user input is never discarded.
+	 */
+	const syncWikiLinkNodeAt = useCallback(
+		(path: number[]) => {
+			const entry = editor.api.node(path);
+			if (!entry || !isWikiLinkNode(entry[0])) return false;
+			const raw = wikiLinkNodeSource(entry[0]);
+			const parsed = parseWikiLinkMarkdown(raw);
+			if (parsed && wikiLinkNodeMatchesSource(entry[0], parsed)) return true;
+
+			wikiLinkPresentationMarkdownRef.current = serialize();
+			if (parsed) {
+				editor.tf.setNodes(
+					{
+						value: parsed.value,
+						heading: parsed.heading,
+						alias: parsed.alias ?? undefined,
+						embed: parsed.embed === true ? true : undefined,
+					},
+					{ at: path },
+				);
+				return true;
+			}
+
+			const selectionRef = editor.selection
+				? editor.api.rangeRef(editor.selection, { affinity: "forward" })
+				: null;
+			editor.tf.withoutNormalizing(() => {
+				editor.tf.removeNodes({ at: path });
+				editor.tf.insertNodes({ text: raw }, { at: path });
+			});
+			const selection = selectionRef?.unref();
+			if (selection) editor.tf.select(selection);
+			return false;
+		},
+		[editor, serialize],
 	);
 
 	/**
@@ -395,6 +460,7 @@ export function MarkdownEditor({
 						editor.selection.anchor.offset,
 					) ?? placement;
 			}
+			wikiLinkPresentationMarkdownRef.current = serialize();
 			const selectionRefs: { unref: () => typeof editor.selection }[] = [];
 			const linkRefs: { unref: () => number[] | null }[] = [];
 			editor.tf.withoutNormalizing(() => {
@@ -425,7 +491,7 @@ export function MarkdownEditor({
 			if (cursor) editor.tf.select(cursor);
 			return true;
 		},
-		[editor],
+		[editor, serialize],
 	);
 
 	/**
@@ -450,19 +516,48 @@ export function MarkdownEditor({
 					);
 				})
 				.map(([, path]) => editor.api.pathRef(path, { affinity: "forward" }));
-			if (!draftRefs.length) return;
+			const selectedPath = selectedWikiLinkPath(selection);
+			const activeRef = activeWikiLinkPathRef.current;
+			const activePath = activeRef?.current;
+			const selectionStayedInActive =
+				activePath &&
+				selectedPath &&
+				activePath.join(",") === selectedPath.join(",");
+			const stablePathToSync =
+				activeRef && !selectionStayedInActive ? activeRef.unref() : null;
+			if (activeRef && !selectionStayedInActive) {
+				activeWikiLinkPathRef.current = null;
+			}
+			if (
+				selectedPath &&
+				(!activeWikiLinkPathRef.current ||
+					activeWikiLinkPathRef.current.current?.join(",") !==
+						selectedPath.join(","))
+			) {
+				activeWikiLinkPathRef.current = editor.api.pathRef(selectedPath, {
+					affinity: "forward",
+				});
+			}
+			if (!draftRefs.length && !stablePathToSync) return;
 			syncingWikiLinkPresentationRef.current = true;
 			try {
 				for (const ref of draftRefs) {
 					const path = ref.unref();
 					if (path) reifyWikiLinkDraftAt(path);
 				}
+				if (stablePathToSync) syncWikiLinkNodeAt(stablePathToSync);
 			} finally {
 				for (const ref of draftRefs) ref.unref();
 				syncingWikiLinkPresentationRef.current = false;
 			}
 		},
-		[editor, isSelectionEditingWikiLinkDraft, reifyWikiLinkDraftAt],
+		[
+			editor,
+			isSelectionEditingWikiLinkDraft,
+			reifyWikiLinkDraftAt,
+			selectedWikiLinkPath,
+			syncWikiLinkNodeAt,
+		],
 	);
 
 	const scheduleWikiLinkPresentationSync = useCallback(() => {
@@ -475,6 +570,8 @@ export function MarkdownEditor({
 
 	useEffect(
 		() => () => {
+			activeWikiLinkPathRef.current?.unref();
+			activeWikiLinkPathRef.current = null;
 			if (wikiLinkPresentationFrameRef.current === null) return;
 			window.cancelAnimationFrame(wikiLinkPresentationFrameRef.current);
 			wikiLinkPresentationFrameRef.current = null;
@@ -511,6 +608,21 @@ export function MarkdownEditor({
 			const parentEntry = editor.api.parent(leafPath);
 			if (!parentEntry || leafPath.length !== parentEntry[1].length + 1) {
 				return null;
+			}
+			if (isWikiLinkNode(parentEntry[0])) {
+				const raw = wikiLinkNodeSource(parentEntry[0]);
+				const placement = wikiLinkDraftExteriorPlacement(
+					raw,
+					selection.anchor.offset,
+				);
+				return placement
+					? {
+							path: parentEntry[1],
+							placement,
+							embed: parentEntry[0].embed === true,
+							source: "stable",
+						}
+					: null;
 			}
 			const [parent, parentPath] = parentEntry as [
 				{ children?: unknown[] },
@@ -549,6 +661,14 @@ export function MarkdownEditor({
 			) {
 				return false;
 			}
+			if (boundary.source === "stable") {
+				const point =
+					boundary.placement === "before"
+						? editor.api.before(boundary.path)
+						: editor.api.after(boundary.path);
+				if (!point) return false;
+				editor.tf.select(point);
+			}
 			if (boundary.embed && boundary.placement === "after") {
 				editor.tf.insertBreak();
 			}
@@ -573,6 +693,29 @@ export function MarkdownEditor({
 				"";
 			if (!text) return;
 			const boundary = getWikiLinkExteriorBoundary();
+			if (
+				text === "!" &&
+				boundary?.placement === "before" &&
+				!boundary.embed &&
+				boundary.source !== "draft"
+			) {
+				const entry = editor.api.node(boundary.path);
+				if (!entry || !isWikiLinkNode(entry[0])) return;
+				const link = entry[0];
+				const raw = wikiLinkNodeSource(link);
+				const sourcePath = [...boundary.path, 0];
+				editor.tf.withoutNormalizing(() => {
+					editor.tf.insertText(raw ? "!" : `!${wikiLinkToMarkdown(link)}`, {
+						at: { path: sourcePath, offset: 0 },
+					});
+					editor.tf.setNodes({ embed: true }, { at: boundary.path });
+					const point = { path: sourcePath, offset: 1 };
+					editor.tf.select({ anchor: point, focus: point });
+				});
+				event.preventDefault();
+				event.stopPropagation();
+				return;
+			}
 			if (!boundary || !prepareWikiLinkBoundaryInput(boundary)) {
 				return;
 			}
@@ -621,7 +764,7 @@ export function MarkdownEditor({
 			if (adjacentIndex < 0 || !isWikiLinkNode(adjacent)) return false;
 			const isVertical = event.key === "ArrowUp" || event.key === "ArrowDown";
 			if (isVertical && !adjacent.embed) return false;
-			const raw = wikiLinkToMarkdown(adjacent);
+			const raw = wikiLinkNodeSource(adjacent) || wikiLinkToMarkdown(adjacent);
 			const { start, end } = wikiLinkDraftEditableBounds(raw);
 			const expanded = expandWikiLinkAt(
 				[...parentPath, adjacentIndex],
@@ -682,7 +825,23 @@ export function MarkdownEditor({
 				return false;
 			}
 			const entry = editor.api.node(selection.anchor.path);
-			if (!entry || !isWikiLinkDraftText(entry[0])) return false;
+			if (!entry) return false;
+			if (!isWikiLinkDraftText(entry[0])) {
+				const parentEntry = editor.api.parent(entry[1]);
+				if (!parentEntry || !isWikiLinkNode(parentEntry[0])) return false;
+				const raw = wikiLinkNodeSource(parentEntry[0]);
+				const { end } = wikiLinkDraftEditableBounds(raw);
+				if (selection.anchor.offset !== end || !parseWikiLinkMarkdown(raw)) {
+					return false;
+				}
+				syncWikiLinkNodeAt(parentEntry[1]);
+				const after = editor.api.after(parentEntry[1]);
+				if (!after) return false;
+				editor.tf.select(after);
+				event.preventDefault();
+				editor.tf.insertBreak();
+				return true;
+			}
 			const { end } = wikiLinkDraftEditableBounds(entry[0].text);
 			const boundary = getWikiLinkExteriorBoundary();
 			const placement =
@@ -695,7 +854,12 @@ export function MarkdownEditor({
 			editor.tf.insertBreak();
 			return true;
 		},
-		[editor, getWikiLinkExteriorBoundary, reifyWikiLinkDraftAt],
+		[
+			editor,
+			getWikiLinkExteriorBoundary,
+			reifyWikiLinkDraftAt,
+			syncWikiLinkNodeAt,
+		],
 	);
 
 	const handleKeyDown = useCallback(
@@ -766,7 +930,8 @@ export function MarkdownEditor({
 			for (const ref of draftRefs) ref.unref();
 			syncingWikiLinkPresentationRef.current = false;
 		}
-	}, [editor, reifyWikiLinkDraftAt]);
+		syncWikiLinkPresentation(null);
+	}, [editor, reifyWikiLinkDraftAt, syncWikiLinkPresentation]);
 
 	const handleEditorBlur = useCallback(
 		(event: React.FocusEvent<HTMLDivElement>) => {
@@ -798,16 +963,28 @@ export function MarkdownEditor({
 	);
 
 	const handleEditorValueChange = useCallback(() => {
+		const presentationMarkdown = wikiLinkPresentationMarkdownRef.current;
+		if (presentationMarkdown !== null) {
+			wikiLinkPresentationMarkdownRef.current = null;
+			window.requestAnimationFrame(updateWikiCompletionDraft);
+			scheduleWikiLinkPresentationSync();
+			if (serialize() === presentationMarkdown) return;
+		}
 		handleChange();
 		scheduleWikiLinkPresentationSync();
-	}, [handleChange, scheduleWikiLinkPresentationSync]);
+	}, [
+		handleChange,
+		scheduleWikiLinkPresentationSync,
+		serialize,
+		updateWikiCompletionDraft,
+	]);
 
 	return (
 		<MarkdownDocProvider value={docCtx}>
 			<Plate
 				editor={editor}
 				onSelectionChange={() => {
-					scheduleWikiLinkPresentationSync();
+					syncWikiLinkPresentation(editor.selection);
 				}}
 				onValueChange={handleEditorValueChange}
 			>

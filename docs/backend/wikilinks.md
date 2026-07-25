@@ -1,6 +1,6 @@
 # Agentero 双链设计（Obsidian 兼容）
 
-> 状态：语义索引、精确导航、入/出链关系面、输入补全，以及链接感知的改名/移动与外部改名修复均已实现；嵌入内容渲染仍由后续工作覆盖。
+> 状态：语义索引、精确导航、入/出链关系面、输入补全、链接感知的改名/移动，以及 Markdown、图片与 PDF 的只读嵌入均已实现。
 > 相关：`docs/development/prd.md` · `docs/development/technical-plan.md` §5.5–5.6 · `docs/development/roadmap.md` V0.4 · `docs/backend/api.md` §3.8 · `docs/backend/data-model.md`
 
 本文定义 Agentero 如何实现类似 Obsidian 的 `[[双链]]`：语法、索引、反链、编辑器与开源选型。
@@ -15,13 +15,14 @@
 - 点击双链可跳转到 Vault 内文件、标题或 block ID；目标文件缺失时可创建，缺失或歧义的 fragment 只报告错误。
 - 查看某文件的显式 **入链（backlinks）** 与 **出链（outgoing links）**。
 - 图谱视图展示节点与 `links_to` 等边；**可从 Markdown 全量重建**。
+- `![[...]]` 使用同一 resolver 显示 Vault 内 Markdown 全文、标题、block、图片或 PDF，并允许跳转到来源。
 - Agent 生成/改写笔记时 **保留** `[[...]]` 字面量，不破坏链接。
 
 ### 1.2 非目标（MVP）
 
 - **不**在目标文件正文里自动插入回链（不做“双向写盘”）。
 - **不**把 SQLite 当作第二事实来源。
-- **不**在本阶段渲染 embed `![[...]]` 的内容；它仍作为显式关系参与解析。
+- **不**渲染远程 URL、Canvas、搜索结果、音频/视频或插件自定义 embed；未支持类型保留原始 Markdown 并显示可诊断状态。
 - **不**替换 Plate 编辑器为 Logseq/Foam 等整应用。
 
 ### 1.3 核心模型（与 Obsidian 一致）
@@ -57,7 +58,10 @@
 | `[[Note#Heading]]` / `[[#Heading]]` | 跳到跨文件或当前文件标题；重复标题不会任意选择 |
 | `[[Note#^block-id]]` / `[[#^block-id]]` | 跳到可验证的 Obsidian block ID |
 | `[显示名](./Note.md#Heading)` | Vault 内标准 Markdown 相对链接，与 Wikilink 共享 resolver |
-| `![[Note]]` | 作为显式关系建索引；视觉嵌入尚未实现 |
+| `![[Note]]` | 只读嵌入整篇 Markdown |
+| `![[Note#Heading]]` / `![[Note#^block-id]]` | 只读嵌入标题区段或 block 所在行 |
+| `![[image.png]]` / `![[image.png\|320x200]]` | 嵌入 Vault 图片；alias 可指定宽度或宽高 |
+| `![[document.pdf]]` | 使用现有 PDF 组件嵌入 Vault PDF |
 
 leading YAML frontmatter 的 `aliases` 列表会参与目标解析；`title` 不会被当作 alias。
 
@@ -108,7 +112,7 @@ backlinks(path) = { e.source | e.target_path == path }
 - 双链边：当前为**内存索引**；后续可落入 `.agentero/catalog.sqlite` 的可重建表（与 `papers` 权威表区分，见 [`catalog.md`](catalog.md) §6）。
 - **Paper 标题**：读 catalog `papers.title`，不读 `metadata.json`。
 - 可整删重建：重扫全部 Markdown 中的 Wikilink 与 Vault-local Markdown link，再 join catalog 取 paper label。
-- 当前更新策略：文件系统事件经约 900ms 防抖后全量重建内存索引；边级增量重建与 SQLite 边缓存仍是后续工作。
+- 当前更新策略：文件系统事件经约 900ms 防抖后全量重建内存索引；Backlinks / Graph 使用全局索引 revision 刷新。嵌入内容另按解析后的目标绝对路径订阅，只使被改目标的投影失效，避免普通文本自动保存让全部嵌入重新加载。边级增量重建与 SQLite 边缓存仍是后续工作。
 
 ### 3.3 图谱节点 / 边类型（与 TECH §5.6 对齐）
 
@@ -128,27 +132,36 @@ backlinks(path) = { e.source | e.target_path == path }
 |---|---|
 | 链接点击 | Wikilink 和 Vault-local Markdown link 都先交给 Host resolver；后者按来源目录解析，外部 URL 保持普通外链行为。 |
 | `[[` 补全 | 搜索 Vault 路径、alias、标题与 block；重名时显示路径，写入规范化可移植文本。 |
-| Plate WYSIWYG | Wikilink 使用内联节点，但序列化仍为 `[[...]]`。 |
+| Plate WYSIWYG | Wikilink 使用稳定的 non-void 内联节点；文本子节点保存完整 `[[...]]` / `![[...]]` 源码。selection 进入语法范围时显示源码，离开后立即恢复链接或嵌入投影，序列化仍写回原生 Markdown。 |
 
-### 4.2 入链与出链面板
+### 4.2 只读嵌入
+
+- `wiki_embed_read` 先使用 Host resolver 得到规范目标，再返回 Markdown 全文、一个标题区段、一个 block 行，或图片/PDF 类型；前端不复制 fragment 解析规则。
+- Markdown 投影在独立的只读 Plate 子树中渲染，不参与父文档 selection、autosave、dirty state 或图片 GC。嵌入内部的普通双链继续使用现有跳转契约。
+- 嵌入预览保持挂载；光标进入对应语法时仅隐藏预览并显示源码，离开后恢复预览，避免编辑态/预览态反复销毁组件。
+- 多层嵌入通过规范目标与 fragment 组成 ancestry key；检测循环引用，并限制为最多 4 层。
+- 图片与 PDF 复用本地文件字节缓存和既有查看组件。Markdown 投影缓存上限为 128 项，附件字节缓存上限为 32 项。
+- watcher 完成索引重建后，只通知本批次真正变化的目标路径。普通编辑触发的全局索引刷新不会改变其它嵌入的请求 key。
+
+### 4.3 入链与出链面板
 
 - Backlinks 入口的上半区域显示入链、出链两个区段；Graph 仍在下方。
 - 每个 occurrence 显示路径、可选 fragment、上下文和解析状态。缺失、歧义、无效 fragment 可诊断，不能伪装成可跳转按钮。
 - 点击入链打开其来源；点击出链使用同一 fragment-navigation 链路。
 
-### 4.3 缺失目标
+### 4.4 缺失目标
 
 - 点击不存在的 `[[Concept]]` → 确认创建 `notes/<slug>.md`（默认 frontmatter 可极简）。
 - 创建后刷新索引并跳转。
 
-### 4.4 改名与移动稳定性
+### 4.5 改名与移动稳定性
 
 - Agentero 发起的文件、目录与 `papers/` 内移动先从改名前的 `WikiIndex` 生成精确编辑计划，再执行主路径移动、Markdown 原子写入、catalog path 更新（如适用）与索引重建。只改写此前已明确解析到被移动路径的 occurrence；alias、heading/block fragment、embed 标记及 Markdown link label 保持不变。
 - 每个来源文件均经过未保存编辑和内容 hash 预检；写入或后续 catalog 更新失败时，事务尽力恢复已写 Markdown 与主路径。结果显式报告 `not-needed`、`completed` 或 `manual-recovery-required` 的 rollback 状态。
 - 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；预检失败不会写 Markdown。apply 在写入后失败时 Host 返回 rollback 状态，审阅 Dialog 据此区分零写入、已回滚和需要人工恢复，避免把部分写入报成未写入。不可信事件只刷新树和索引，不授权 Markdown 改写。
 - 外部修复只改写引用文件，不会移动已由 Finder、Obsidian 或 Agent 改名的主文件。remote Vault 没有本地 watcher 自动修复；显式 Agentero 改名/移动仍由 Host capability 与事务预检决定是否可执行。
 
-### 4.5 图谱（Backlinks 右侧栏下方）
+### 4.6 图谱（Backlinks 右侧栏下方）
 
 产品形态：
 
@@ -176,6 +189,7 @@ backlinks(path) = { e.source | e.target_path == path }
 | `graph_get_backlinks` | ✅ | `{ vaultPath, path }` → 反链列表 |
 | `wiki_get_outgoing` | ✅ | `{ vaultPath, path }` → 当前文件的显式出链 occurrence |
 | `wiki_resolve` | ✅ | `{ vaultPath, sourcePath, linkText, syntax? }` → 统一解析结果 |
+| `wiki_embed_read` | ✅ | `{ vaultPath, sourcePath, linkText }` → 规范解析结果与 Markdown / image / PDF 投影类型 |
 | `wiki_search` | ✅ | `{ vaultPath, query }` → 文件、标题、block 候选 |
 | `wiki_move` | ✅ | `{ vaultPath, fromRel, toRel, dirtyPaths? }` → 链接感知的本地文件/目录 rename 或 move |
 | `wiki_external_rename_preview` | ✅ | 可信外部 rename 的只读 repair candidate |
@@ -255,7 +269,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 1. Rust：`extract_wikilinks(md)` + `resolve` + **内存索引**（全量 `graph_rebuild`；尚无 SQLite 落盘）。  
 2. Tauri：`graph_get_backlinks` / `graph_rebuild`（参数 `vaultPath` + `path`）。  
 3. 前端：`src/lib/wiki.ts` + `BacklinksPanel`；Demo 模式纯前端索引。  
-4. **文件变更防抖重建**（已落地）：Vault watcher 报告 `.md` 变更后，前端 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 **900ms** 防抖）触发全量 rebuild，使 Backlinks / Graph 在外部或 Agent 写盘后保持新鲜。非边级增量；SQLite 边缓存仍待。
+4. **文件变更防抖重建**（已落地）：Vault watcher 报告 Markdown、图片或 PDF 变更后，前端 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 **900ms** 防抖）触发全量 rebuild，使 Backlinks / Graph 在外部或 Agent 写盘后保持新鲜；嵌入内容只按 watcher 本批次实际触及的目标路径失效。非边级增量；SQLite 边缓存仍待。
 
 **代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/layout/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
 
@@ -264,7 +278,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 1. Host 解析结果贯穿 Plate link node、Document tabs 和 Markdown editor；已打开 tab 通过 one-shot navigation intent 保持编辑状态。
 2. 标题与 block fragment 滚动定位并短暂高亮；`missing` 文件仍可创建，错误 fragment 不创建伪目标。
 
-**代码**：`src/lib/wiki.ts` · `link-node.tsx` · `WikiNavContext`
+**代码**：`src/lib/wiki.ts` · `src/components/editor/wikilink-node.tsx` · `src/lib/wiki-nav-context.tsx`
 
 ### Phase C — 输入补全 + Plate ✅
 
@@ -293,6 +307,13 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 2. 外部本地 rename 只在 watcher 提供单个可靠 old/new 配对时建立 repair candidate；`ask` 显示确认弹层，`always` 在全部安全门禁通过时执行。
 3. 所有写入均重新校验 dirty path 与内容 hash；失败时报告并尽力回滚。Finder、Obsidian、Agent 已完成的主路径改名不会被 repair 反向移动。
 
+### Phase F — Live Preview 与只读嵌入 ✅
+
+1. `wikiLink` 使用稳定 non-void inline 保存完整源语法；selection 只切换源码/投影可见性，不替换节点。
+2. `wiki_embed_read` 复用规范 resolver，支持 Markdown 全文、标题区段、block、图片和 PDF。
+3. 嵌入内容只读、可点击跳转；嵌套投影具有循环检测和深度上限。
+4. projection/request/附件字节使用有界缓存；watcher 按目标路径精确失效，普通父文档编辑不会刷新无关嵌入。
+
 ---
 
 ## 8. 与现有代码的关系
@@ -314,6 +335,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 | 标题歧义（重名笔记） | resolve 规则文档化；偏好显式路径 |
 | 与 Obsidian 细节不一致 | 优先兼容常见 `[[path]]` / `[[name]]` / alias |
 | 编辑器插件复杂 | 保持 Plate 内联节点与 Markdown 序列化的可逆边界，新增交互须补 round-trip 测试 |
+| 嵌入递归或刷新风暴 | ancestry cycle/depth 门禁；全局索引 revision 与目标级 projection revision 分离 |
 
 ---
 

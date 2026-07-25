@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import {
 	isWikiLinkDraftText,
+	isWikiLinkNode,
 	parseWikiLinkMarkdown,
 	wikiLinkDraftEditableBounds,
 	wikiLinkToMarkdown,
@@ -273,8 +274,55 @@ export function WikiLinkSuggestion({
 			const link =
 				submitKey === "Enter" ? parseWikiLinkMarkdown(markdown) : null;
 			if (submitKey === "Enter" && !link) return false;
+			const parentEntry = editor.api.parent(selection.anchor.path);
+			const stableLinkPath =
+				parentEntry && isWikiLinkNode(parentEntry[0]) ? parentEntry[1] : null;
 			controllerRef.current = null;
 			editor.tf.delete({ at: { anchor: start, focus: end } });
+			if (stableLinkPath) {
+				const parsed = parseWikiLinkMarkdown(markdown);
+				if (!parsed) return false;
+				editor.tf.withoutNormalizing(() => {
+					editor.tf.insertText(markdown);
+					editor.tf.setNodes(
+						{
+							value: parsed.value,
+							heading: parsed.heading,
+							alias: parsed.alias ?? undefined,
+							embed: parsed.embed === true ? true : undefined,
+						},
+						{ at: stableLinkPath },
+					);
+				});
+				if (submitKey === "Tab") {
+					const point = {
+						path: selection.anchor.path,
+						offset: wikiLinkDraftEditableBounds(markdown).end,
+					};
+					editor.tf.select({ anchor: point, focus: point });
+					const bounds = wikiLinkDraftEditableBounds(markdown);
+					const nextRaw = markdown.slice(bounds.start, bounds.end);
+					const nextRequest = parseWikiCompletionQuery(nextRaw);
+					if (nextRequest && candidate.kind === nextRequest.kind) {
+						setCandidateState({
+							requestKey: completionRequestKey(nextRequest),
+							items: [candidate],
+						});
+						setSelectedIndex(0);
+						onContinue(nextRaw);
+					} else {
+						onClose();
+					}
+				} else {
+					const after = editor.api.after(stableLinkPath);
+					if (after) editor.tf.select(after);
+					onClose();
+				}
+				setRecentCandidates((recent) =>
+					addRecentWikiCandidate(recent, candidate),
+				);
+				return true;
+			}
 			const remainder = editor.api.node(start.path);
 			if (remainder && isWikiLinkDraftText(remainder[0])) {
 				editor.tf.unsetNodes("wikiLinkDraft", { at: remainder[1] });

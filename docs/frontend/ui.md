@@ -254,7 +254,8 @@
 - **中间栏视图切换**（纯图标 + Tooltip）：**仅 PDF · HTML**（`ViewModeToggle`）；无 PDF/HTML 时不显示切换。论文库视图下不显示。
   - Notes / 普通 Markdown 文件：**所见即所得富文本编辑**（Plate），在 Notes 侧栏或打开 `.md` 时编辑；不占中间栏切换卡片。
   - **保存**：编辑防抖后 **自动写回** 磁盘 `.md`，`⌘S` 立即保存；有未保存更改时 pane header 显示小圆点。未发生真实编辑不会写盘（打开文件不触发保存）。
-  - **双链**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析；链接节点无损回写 Markdown。输入 `[[` 提供文件、alias、标题和 block 候选，选择 alias 会写出规范路径。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast 而不跳到文件开头。embed 内容渲染尚未实现。
+  - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑的 `[[...]]` / `![[...]]`，离开后立即恢复链接或嵌入投影，不通过替换节点切换状态。输入 `[[` 提供文件、alias、标题和 block 候选，选择 alias 会写出规范路径；Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast 而不跳到文件开头。
+  - **只读嵌入**：`![[note]]`、`![[note#heading]]` 与 `![[note#^block-id]]` 分别显示整篇 Markdown、标题区段或 block；`![[image.png]]`（可用 `|宽度` / `|宽x高`）和 `![[document.pdf]]` 复用现有图片/PDF 组件。投影从当前行之后以块布局显示，内部链接可点击跳转；进入源码时隐藏但不卸载投影。嵌入内容不属于父编辑器的 selection、autosave、dirty state 或图片 GC；循环嵌入与超过 4 层的嵌套显示有界状态。
   - **YAML frontmatter** 按字节原样保留（不经 Plate 往返）；注意 Plate 会归一化部分 Markdown 风格（列表 `-`→`*`、斜体 `*`→`_`），内容语义不变。
   - PDF / HTML / **图片** **预览**：
     - **PDF（任意路径）**：Vault 内任意位置的 `.pdf`（根目录、`notes/`、paper 内嵌套文件等）均可直接打开；`readFile` → `blob:` → PDF.js（**不用** `convertFileSrc`/`asset://`）。
@@ -342,7 +343,7 @@
 - **NOTES 编辑器**：每篇 paper 的 `NOTES.md` 编辑器也按 tab 常驻挂载在右侧 Notes 栏；paper-reader / download 写回后按路径 reseed 对应 tab。
 - **外部/Agent 改动自动重载**：Host `notify` 监听 Vault，发 `vault:file-changed`（`src/lib/fs-watch.ts`、`App.tsx` 的 `applyDiskChange`）。打开中的 `.md`/`NOTES.md` 若磁盘内容与当前 seed 不同：**无未存改动时**从盘重载（key bump 重挂载）；**有未存改动时不静默覆盖**，弹 toast（`diskConflict`，操作「载入磁盘版」；忽略则保留本地改动）；内容相等即判定为自身 autosave 回声、跳过；重载期内 `reseedGuardRef` 阻止旧实例卸载 flush 覆盖新盘内容。结构性变更（create/remove/rename）去抖刷新文件树；纯 `modify` 不刷新树。
 - **外部本地改名 repair**：只有 Host 明确给出单个可信 `rename { from, to }` 时才进入内链 repair。General 的默认 `autoUpdateInternalLinks: "ask"` 先用 Dialog 显示旧/新路径、影响来源与跳过项；用户确认后才写 Markdown。`"always"` 仍要求 Host 的 dirty path、hash、旧/新磁盘状态门禁全部通过；若预检或最终校验失败，保持零写入并打开审阅 Dialog，展示旧/新路径、已知影响范围与错误，明确用户可手动修复链接或在 Agentero 中重新执行改名。成功后，已打开 tab、活动路径、树选中、Library scope 与 PDF highlights 统一按 `from → to` 重映射，避免重复 tab；不可信事件仅刷新，remote Vault 不自动修复。
-- **Wiki 索引刷新**：`.md` 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph，避免外部/Agent 写盘后图谱陈旧。
+- **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更经 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 900ms 防抖）重建双链 / Backlinks / Graph。嵌入投影不消费全局索引 revision；重建后只按本批 watcher 实际触及的目标路径刷新对应 Markdown、图片或 PDF，普通父文档编辑不会让其它嵌入重新加载。
 - **保存冲突检测（防丢数据）**：autosave / `⌘S` / 卸载 flush 写盘前，`persistFile` 比对磁盘内容与上次落盘内容；若文件已被外部修改则**中止写入**并 `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖外部变更。
 
 规划中（尚未实现）：

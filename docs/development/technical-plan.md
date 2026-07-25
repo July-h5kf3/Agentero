@@ -220,7 +220,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 **原因**：产品对照 Obsidian 式「中心 + 辐射」力导向图；右侧栏内 Canvas 性能足够；数据来自 wikilink 索引而非手写布局。  
 **壳**：右侧栏只有 `agent` 与 `backlinks` 两个顶层 tab；`GraphPanel` 嵌在 Backlinks 下方，与反链共享上下文。  
-**详设**：`docs/backend/wikilinks.md` §4.4 / §6.3；Host 契约 `docs/backend/api.md` §3.7 `graph_get_graph`。
+**详设**：`docs/backend/wikilinks.md` §4.6 / §6.3；Host 契约 `docs/backend/api.md` §3.8 `graph_get_graph`。
 
 ### 3.6 状态管理
 
@@ -450,7 +450,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 
 ### 5.6 关系图谱
 
-- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/backend/api.md` §3.7；设计 `docs/backend/wikilinks.md` §4.4）。
+- **数据来源**：`graph_get_graph` → `{ nodes, edges, center, depth }`（`docs/backend/api.md` §3.8；设计 `docs/backend/wikilinks.md` §4.6）。
 - **节点类型（路径启发）**：`paper` | `note` | `index` | `stub`。
 - **边**：wikilink 有向边 `source → target`（未解析目标为 `stub:<raw>`）；邻域模式用无向 BFS 裁剪。
 - **前端渲染**：`react-force-graph-2d`；`GraphPanel` 位于 Backlinks 右侧栏下方，点击节点打开文件/paper。

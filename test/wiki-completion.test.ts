@@ -1,6 +1,9 @@
+import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlateEditor } from "platejs";
+import { ParagraphPlugin } from "platejs/react";
 import { describe, expect, it } from "vitest";
 
+import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
 	isWikiLinkDraftEditingOffset,
 	parseWikiLinkMarkdown,
@@ -202,7 +205,7 @@ describe("wikilink completion grammar", () => {
 			heading: "^summary",
 			alias: "Short name",
 			embed: false,
-			children: [{ text: "" }],
+			children: [{ text: raw }],
 		});
 	});
 
@@ -231,6 +234,92 @@ describe("wikilink completion grammar", () => {
 			type: "embed",
 			value: "notes/Canonical#Overview",
 			data: {},
+		});
+	});
+
+	it("serializes display and editable embed projections identically", () => {
+		const raw = "![[notes/Canonical#Overview]]";
+		const parsed = parseWikiLinkMarkdown(raw);
+		if (!parsed) throw new Error("expected a parsed embed");
+		const editor = createSlateEditor({
+			plugins: [ParagraphPlugin, WikiLinkPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [{ text: "before " }, parsed] }],
+		});
+		const displayMarkdown = editor.getApi(MarkdownPlugin).markdown.serialize();
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.removeNodes({ at: [0, 1] });
+			editor.tf.insertNodes({ text: raw, wikiLinkDraft: true }, { at: [0, 1] });
+		});
+		const draftMarkdown = editor.getApi(MarkdownPlugin).markdown.serialize();
+
+		expect(draftMarkdown).toBe(displayMarkdown);
+		expect(displayMarkdown.trimEnd()).toBe(
+			"before ![[notes/Canonical#Overview]]",
+		);
+	});
+
+	it("keeps a rendered Wikilink node stable when the caret enters its source", () => {
+		const parsed = parseWikiLinkMarkdown("[[AGENTS#Rules]]");
+		if (!parsed) throw new Error("expected a parsed Wikilink");
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "before " }, parsed, { text: " after" }],
+				},
+			],
+		});
+		const before = editor.api.node([0, 1])?.[0];
+		editor.tf.select({
+			anchor: { path: [0, 1, 0], offset: 2 },
+			focus: { path: [0, 1, 0], offset: 2 },
+		});
+
+		expect(editor.api.node([0, 1])?.[0]).toBe(before);
+		expect(editor.operations.map((operation) => operation.type)).toEqual([
+			"set_selection",
+		]);
+	});
+
+	it("serializes edited stable source instead of stale link attributes", () => {
+		const parsed = parseWikiLinkMarkdown("[[AGENTS#Rules]]");
+		if (!parsed) throw new Error("expected a parsed Wikilink");
+		parsed.children = [{ text: "[[AGENTS#Workflow]]" }];
+		expect(wikiLinkRules.wikiLink.serialize(parsed)).toEqual({
+			type: "wikiLink",
+			value: "AGENTS#Workflow",
+			data: {},
+		});
+	});
+
+	it("promotes an existing stable Wikilink to an embed without replacing it", () => {
+		const parsed = parseWikiLinkMarkdown("[[abc]]");
+		if (!parsed) throw new Error("expected a parsed Wikilink");
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [
+				{
+					type: "p",
+					children: [{ text: "" }, parsed, { text: "" }],
+				},
+			],
+		});
+		editor.tf.withoutNormalizing(() => {
+			editor.tf.insertText("!", {
+				at: { path: [0, 1, 0], offset: 0 },
+			});
+			editor.tf.setNodes({ embed: true }, { at: [0, 1] });
+		});
+
+		expect(editor.api.node([0, 1])?.[0]).toMatchObject({
+			type: "wikiLink",
+			value: "abc",
+			embed: true,
+			children: [{ text: "![[abc]]" }],
+		});
+		expect(editor.children[0]).toMatchObject({
+			children: [{ text: "" }, { type: "wikiLink" }, { text: "" }],
 		});
 	});
 
@@ -404,7 +493,7 @@ describe("wikilink completion grammar", () => {
 						heading: undefined,
 						alias: null,
 						embed: true,
-						children: [{ text: "" }],
+						children: [{ text: "![[Target]]" }],
 					},
 					{ text: "" },
 				],
@@ -594,7 +683,7 @@ describe("wikilink completion grammar", () => {
 						heading: undefined,
 						embed: false,
 						alias: null,
-						children: [{ text: "" }],
+						children: [{ text: "[[2026-W30]]" }],
 					},
 					{ text: "" },
 				],
@@ -746,7 +835,7 @@ describe("wikilink completion grammar", () => {
 						heading: "4. Agentero 内改名",
 						alias: null,
 						embed: true,
-						children: [{ text: "" }],
+						children: [{ text: raw }],
 					},
 					{ text: "" },
 				],
@@ -839,7 +928,7 @@ describe("wikilink completion grammar", () => {
 						heading: "4. Agentero 内改名",
 						alias: null,
 						embed: false,
-						children: [{ text: "" }],
+						children: [{ text: raw }],
 					},
 					{ text: "x" },
 				],

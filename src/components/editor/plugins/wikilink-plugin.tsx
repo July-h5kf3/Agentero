@@ -3,10 +3,16 @@
 import { createPlatePlugin } from "platejs/react";
 import { WikiLinkElement } from "@/components/editor/wikilink-node";
 
-/** Inline atomic `[[wikilink]]` / `![[embed]]` node. */
+/**
+ * Stable inline `[[wikilink]]` / `![[embed]]` node.
+ *
+ * Its text child owns the portable source syntax. Selection only changes how
+ * the component projects that child; it must never replace the element merely
+ * to enter or leave Live Preview editing.
+ */
 export const WikiLinkPlugin = createPlatePlugin({
 	key: "wikiLink",
-	node: { isElement: true, isInline: true, isVoid: true },
+	node: { isElement: true, isInline: true },
 }).withComponent(WikiLinkElement);
 
 /** mdast node produced by `@flowershow/remark-wiki-link`. */
@@ -22,7 +28,7 @@ type MdWikiLink = {
 export type WikiSlateNode = {
 	type: "wikiLink";
 	value: string;
-	heading?: string;
+	heading?: string | null;
 	alias?: string | null;
 	embed?: boolean;
 	children: { text: string }[];
@@ -54,7 +60,7 @@ function findWikiLinkAliasSeparator(raw: string): number {
 /** Convert the structured display node into the portable text a user edits. */
 export function wikiLinkToMarkdown(node: {
 	value: string;
-	heading?: string;
+	heading?: string | null;
 	alias?: string | null;
 	embed?: boolean;
 }): string {
@@ -78,13 +84,16 @@ export function parseWikiLinkMarkdown(raw: string): WikiSlateNode | null {
 	if (targetWithHeading.endsWith("#") || aliasText === "") return null;
 	const { target, heading } = splitWikiLinkTarget(targetWithHeading);
 	if (!target && !heading) return null;
-	return {
+	const parsed: Omit<WikiSlateNode, "children"> = {
 		type: "wikiLink",
 		value: target,
 		heading: heading || undefined,
 		alias: aliasText,
 		embed: embedMarker === "!",
-		children: [{ text: "" }],
+	};
+	return {
+		...parsed,
+		children: [{ text: wikiLinkToMarkdown(parsed) }],
 	};
 }
 
@@ -138,6 +147,26 @@ export function isWikiLinkNode(node: unknown): node is WikiSlateNode {
 	);
 }
 
+/** Return the editable Markdown source retained by a stable Wikilink node. */
+export function wikiLinkNodeSource(node: WikiSlateNode): string {
+	return node.children
+		.map((child) => (typeof child.text === "string" ? child.text : ""))
+		.join("");
+}
+
+/** Whether cached navigation attributes already match the editable source. */
+export function wikiLinkNodeMatchesSource(
+	node: WikiSlateNode,
+	parsed: WikiSlateNode,
+): boolean {
+	return (
+		node.value === parsed.value &&
+		(node.heading ?? undefined) === (parsed.heading ?? undefined) &&
+		(node.alias ?? null) === (parsed.alias ?? null) &&
+		(node.embed === true) === (parsed.embed === true)
+	);
+}
+
 function toSlate(node: MdWikiLink, embed: boolean): WikiSlateNode {
 	const raw = node.value ?? "";
 	const { target, heading } = splitWikiLinkTarget(raw);
@@ -148,14 +177,29 @@ function toSlate(node: MdWikiLink, embed: boolean): WikiSlateNode {
 		const h = node.data?.hProperties?.["data-fs-height"];
 		if (w || h) alias = w && h ? `${w}x${h}` : String(w || h);
 	}
-	return {
+	const parsed: Omit<WikiSlateNode, "children"> = {
 		type: "wikiLink",
 		value: target,
-		heading,
+		heading: heading || undefined,
 		alias,
 		embed,
-		children: [{ text: "" }],
 	};
+	return {
+		...parsed,
+		children: [{ text: wikiLinkToMarkdown(parsed) }],
+	};
+}
+
+function serializeWikiLinkNode(node: {
+	value: string;
+	heading?: string | null;
+	alias?: string | null;
+	embed?: boolean;
+}) {
+	const value = node.heading ? `${node.value}#${node.heading}` : node.value;
+	const data: { alias?: string } = {};
+	if (node.alias) data.alias = node.alias;
+	return { type: node.embed ? "embed" : "wikiLink", value, data };
 }
 
 /**
@@ -168,13 +212,23 @@ export const wikiLinkRules = {
 	wikiLink: {
 		deserialize: (node: MdWikiLink) => toSlate(node, false),
 		serialize: (node: WikiSlateNode) => {
-			const value = node.heading ? `${node.value}#${node.heading}` : node.value;
-			const data: { alias?: string } = {};
-			if (node.alias) data.alias = node.alias;
-			return { type: node.embed ? "embed" : "wikiLink", value, data };
+			const raw = wikiLinkNodeSource(node) || wikiLinkToMarkdown(node);
+			const parsed = parseWikiLinkMarkdown(raw);
+			return parsed
+				? serializeWikiLinkNode(parsed)
+				: { type: "text", value: raw };
 		},
 	},
 	embed: {
 		deserialize: (node: MdWikiLink) => toSlate(node, true),
+	},
+	wikiLinkDraft: {
+		mark: true,
+		serialize: (node: WikiLinkDraftText) => {
+			const parsed = parseWikiLinkMarkdown(node.text);
+			return parsed
+				? serializeWikiLinkNode(parsed)
+				: { type: "text", value: node.text };
+		},
 	},
 };

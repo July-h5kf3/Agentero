@@ -58,7 +58,8 @@ Agentero 桌面应用
 - 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
 - **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。
 - **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
-- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；`.md` 变更防抖重建 wiki 索引；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
+- **双链与嵌入**：`[[...]]` Live Preview、标题/block 精确跳转，以及 `![[...]]` Markdown/图片/PDF 只读投影；普通编辑不会刷新无关嵌入（见 [`backend/wikilinks.md`](backend/wikilinks.md)）。
+- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；Markdown、图片与 PDF 变更防抖重建 wiki 索引，嵌入按目标路径刷新；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
 - **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
 - **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
 - **远程 Vault（SSH/SFTP）+ 远端 BYOA**：**MVP 已落地**（见 [`development/remote-vault.md`](development/remote-vault.md)）。
