@@ -160,6 +160,7 @@ backlinks(path) = { e.source | e.target_path == path }
 - 每个来源文件均经过未保存编辑和内容 hash 预检；写入或后续 catalog 更新失败时，事务尽力恢复已写 Markdown 与主路径。结果显式报告 `not-needed`、`completed` 或 `manual-recovery-required` 的 rollback 状态。
 - 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；预检失败不会写 Markdown。apply 在写入后失败时 Host 返回 rollback 状态，审阅 Dialog 据此区分零写入、已回滚和需要人工恢复，避免把部分写入报成未写入。不可信事件只刷新树和索引，不授权 Markdown 改写。
 - 外部修复只改写引用文件，不会移动已由 Finder、Obsidian 或 Agent 改名的主文件。remote Vault 没有本地 watcher 自动修复；显式 Agentero 改名/移动仍由 Host capability 与事务预检决定是否可执行。
+- 已知限制：手工修改 Markdown heading 不会同步其它文件中的 `#heading` fragment。后续应通过显式“重命名当前小标题”事务修正，并将可持久化 Metadata Cache 作为独立的索引加速层；调研与实施边界见 [`../research/wikilink-heading-reference-stability.md`](../research/wikilink-heading-reference-stability.md)。
 
 ### 4.6 图谱（Backlinks 右侧栏下方）
 

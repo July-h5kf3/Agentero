@@ -33,6 +33,8 @@ nav:
       - 双链与图谱: backend/wikilinks.md
   - 测试:
       - 概览: test/index.md
+  - 调研:
+      - 标题双链稳定性与 Metadata Cache: research/wikilink-heading-reference-stability.md
   - 开发:
       - 概览: development/index.md
       - 产品需求: development/prd.md
