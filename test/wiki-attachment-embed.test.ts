@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { parseWikiImageEmbedDimensions } from "@/components/editor/wiki-attachment-embed";
+import { describe, expect, it, vi } from "vitest";
+import {
+	createWikiImageObjectUrlLease,
+	parseWikiImageEmbedDimensions,
+} from "@/components/editor/wiki-attachment-embed";
 import type { WikiEmbedResponse } from "@/lib/wiki";
 import { wikiEmbedResponseKind } from "@/lib/wiki-embed";
 
@@ -34,6 +37,44 @@ describe("parseWikiImageEmbedDimensions", () => {
 		expect(parseWikiImageEmbedDimensions("Figure 1")).toBeNull();
 		expect(parseWikiImageEmbedDimensions("0")).toBeNull();
 		expect(parseWikiImageEmbedDimensions("100x")).toBeNull();
+	});
+});
+
+describe("createWikiImageObjectUrlLease", () => {
+	it("creates a fresh URL after a StrictMode-style cleanup and releases each once", () => {
+		const createObjectURL = vi
+			.fn()
+			.mockReturnValueOnce("blob:first")
+			.mockReturnValueOnce("blob:second");
+		const revokeObjectURL = vi.fn();
+		const urlApi = { createObjectURL, revokeObjectURL };
+		const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer;
+
+		const first = createWikiImageObjectUrlLease(
+			bytes,
+			"assets/example.jpg",
+			urlApi,
+		);
+		first.release();
+		first.release();
+		const second = createWikiImageObjectUrlLease(
+			bytes,
+			"assets/example.jpg",
+			urlApi,
+		);
+
+		expect(first.source).toBe("blob:first");
+		expect(second.source).toBe("blob:second");
+		expect(createObjectURL).toHaveBeenCalledTimes(2);
+		expect(createObjectURL.mock.calls[0]?.[0]).toBeInstanceOf(Blob);
+		expect((createObjectURL.mock.calls[0]?.[0] as Blob).type).toBe(
+			"image/jpeg",
+		);
+		expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+		expect(revokeObjectURL).toHaveBeenCalledWith("blob:first");
+
+		second.release();
+		expect(revokeObjectURL).toHaveBeenLastCalledWith("blob:second");
 	});
 });
 

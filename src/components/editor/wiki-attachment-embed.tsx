@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PdfViewer } from "@/components/viewer/embed/pdf-viewer";
 import { localFileToArrayBuffer } from "@/lib/paper/media";
@@ -22,6 +22,13 @@ type AttachmentState =
 type CachedAttachmentLoad = {
 	requestKey: string;
 	state: AttachmentState;
+};
+
+type ObjectUrlApi = Pick<typeof URL, "createObjectURL" | "revokeObjectURL">;
+
+export type WikiImageObjectUrlLease = {
+	source: string;
+	release: () => void;
 };
 
 const ATTACHMENT_CACHE_LIMIT = 32;
@@ -90,6 +97,32 @@ export function parseWikiImageEmbedDimensions(
 	return height ? { width, height } : { width };
 }
 
+/**
+ * Create one image URL lease for one mounted render.
+ *
+ * React StrictMode may run an effect as setup → cleanup → setup. Each setup
+ * must therefore create a fresh URL instead of reusing one that the preceding
+ * cleanup already revoked.
+ */
+export function createWikiImageObjectUrlLease(
+	bytes: ArrayBuffer,
+	targetPath: string,
+	urlApi: ObjectUrlApi = URL,
+): WikiImageObjectUrlLease {
+	const source = urlApi.createObjectURL(
+		new Blob([bytes], { type: imageMimeFromPath(targetPath) }),
+	);
+	let active = true;
+	return {
+		source,
+		release: () => {
+			if (!active) return;
+			active = false;
+			urlApi.revokeObjectURL(source);
+		},
+	};
+}
+
 export function WikiAttachmentEmbed({
 	kind,
 	absoluteTarget,
@@ -121,12 +154,18 @@ export function WikiAttachmentEmbed({
 					}
 				: { kind: "loading" as const };
 	const attachmentBytes = state.kind === "ready" ? state.bytes : null;
-	const imageSource = useMemo(() => {
-		if (kind !== "image" || !attachmentBytes) return null;
-		return URL.createObjectURL(
-			new Blob([attachmentBytes], { type: imageMimeFromPath(targetPath) }),
-		);
-	}, [attachmentBytes, kind, targetPath]);
+	const imageResourceKey =
+		kind === "image" && attachmentBytes
+			? JSON.stringify([requestKey, imageMimeFromPath(targetPath)])
+			: null;
+	const [imageResource, setImageResource] = useState<{
+		key: string;
+		source: string;
+	} | null>(null);
+	const imageSource =
+		imageResourceKey && imageResource?.key === imageResourceKey
+			? imageResource.source
+			: null;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -155,12 +194,15 @@ export function WikiAttachmentEmbed({
 		};
 	}, [absoluteTarget, requestKey]);
 
-	useEffect(
-		() => () => {
-			if (imageSource) URL.revokeObjectURL(imageSource);
-		},
-		[imageSource],
-	);
+	useEffect(() => {
+		if (!imageResourceKey || !attachmentBytes) {
+			setImageResource(null);
+			return;
+		}
+		const lease = createWikiImageObjectUrlLease(attachmentBytes, targetPath);
+		setImageResource({ key: imageResourceKey, source: lease.source });
+		return lease.release;
+	}, [attachmentBytes, imageResourceKey, targetPath]);
 
 	if (state.kind === "loading") {
 		return (
@@ -190,6 +232,13 @@ export function WikiAttachmentEmbed({
 					loading="lazy"
 					draggable={false}
 				/>
+			</span>
+		);
+	}
+	if (kind === "image" && state.kind === "ready") {
+		return (
+			<span className="block px-4 py-3 text-muted-foreground text-sm">
+				{t("embed.loading")}
 			</span>
 		);
 	}

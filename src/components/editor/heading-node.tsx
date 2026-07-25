@@ -5,7 +5,7 @@ import type { PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
 
 const headingVariants = cva(
-	"relative mb-1 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-(--color-highlight)",
+	"relative mb-1 transition-colors duration-300 data-[nav-target=true]:rounded-md data-[nav-target=true]:bg-highlight/20",
 	{
 		variants: {
 			variant: {
