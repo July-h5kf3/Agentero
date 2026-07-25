@@ -123,6 +123,7 @@ import {
 import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
 import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf/ask/types";
+import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
 import {
 	hasAnnotationsFile,
 	highlightViewFromObject,
@@ -230,8 +231,9 @@ function OutlineTree({
 						style={{ paddingLeft: 8 + depth * 12 }}
 						title={n.title}
 						onClick={() => {
-							if (n.target?.type === "destination") {
-								onGoToPage(n.target.destination.pageIndex + 1);
+							const pageIndex = bookmarkPageIndex(n);
+							if (pageIndex != null) {
+								onGoToPage(pageIndex + 1);
 							}
 						}}
 					>
