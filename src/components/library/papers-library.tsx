@@ -58,7 +58,7 @@ import {
 	type LibraryColumnPref,
 	useUiScale,
 } from "@/lib/settings";
-import { coercePaperTags } from "@/lib/ui/tag-colors";
+import { coercePaperTags, type PaperTag } from "@/lib/ui/tag-colors";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -102,42 +102,78 @@ const CELL_COPY_CLICK_DELAY_MS = 320;
 type SortKey = LibraryColumnKey;
 type SortDir = "asc" | "desc";
 
-/** Per-column display metadata (i18n label + fixed layout weight). */
-const COLUMN_META = {
-	title: {
-		labelKey: "papersLibrary.colTitle",
-		widthWeight: 32,
-		headerClassName: "min-w-[240px]",
-	},
-	authors: {
-		labelKey: "papersLibrary.colAuthors",
-		widthWeight: 18,
-		headerClassName: "min-w-[140px]",
-	},
-	year: {
-		labelKey: "papersLibrary.colYear",
-		widthWeight: 8,
-		headerClassName: "min-w-16",
-	},
-	tags: {
-		labelKey: "papersLibrary.colTags",
-		widthWeight: 18,
-		headerClassName: "min-w-[120px]",
-	},
-	type: {
-		labelKey: "papersLibrary.colType",
-		widthWeight: 10,
-		headerClassName: "min-w-24",
-	},
-	id: {
-		labelKey: "papersLibrary.colId",
-		widthWeight: 14,
-		headerClassName: "min-w-[160px]",
-	},
-} as const satisfies Record<
-	SortKey,
-	{ labelKey: string; widthWeight: number; headerClassName: string }
->;
+/** Full author list for clipboard (not the abbreviated display form). */
+function authorsCopyText(authors: string[] | undefined): string | null {
+	if (!authors?.length) return null;
+	return authors.join(", ");
+}
+
+/** Identifier for display / copy / sort — null when nothing usable. */
+function identifierValue(p: PaperMetadata): string | null {
+	if (p.arxiv_id) return p.arxiv_id;
+	if (p.doi) return p.doi;
+	if (p.pmid) return `PMID:${p.pmid}`;
+	return p.id || null;
+}
+
+/** Precomputed per-paper keys so sort/filter avoid O(n log n) re-coerce. */
+type PaperRow = {
+	paper: PaperMetadata;
+	tags: PaperTag[];
+	tagSearch: string;
+	sort: Record<SortKey, string | number>;
+};
+
+function buildPaperRow(p: PaperMetadata): PaperRow {
+	const tags = coercePaperTags(p.tags);
+	const id = identifierValue(p) ?? "";
+	return {
+		paper: p,
+		tags,
+		tagSearch: tags
+			.map((t) => t.name)
+			.join(" ")
+			.toLocaleLowerCase(),
+		sort: {
+			title: (p.title ?? "").toLocaleLowerCase(),
+			authors: (p.authors?.[0] ?? "").toLocaleLowerCase(),
+			year: p.year ?? Number.NEGATIVE_INFINITY,
+			type: (p.type ?? "").toLocaleLowerCase(),
+			id: id.toLocaleLowerCase(),
+			tags: tags
+				.map((t) => t.name)
+				.join(", ")
+				.toLocaleLowerCase(),
+		},
+	};
+}
+
+function comparePaperRows(
+	a: PaperRow,
+	b: PaperRow,
+	key: SortKey,
+	dir: SortDir,
+): number {
+	const av = a.sort[key];
+	const bv = b.sort[key];
+	let cmp = 0;
+	if (typeof av === "number" && typeof bv === "number") {
+		cmp = av - bv;
+	} else {
+		cmp = String(av).localeCompare(String(bv), undefined, {
+			numeric: true,
+			sensitivity: "base",
+		});
+	}
+	if (cmp === 0) {
+		// Stable secondary: title then id
+		cmp = (a.paper.title ?? "").localeCompare(b.paper.title ?? "", undefined, {
+			sensitivity: "base",
+		});
+		if (cmp === 0) cmp = (a.paper.id ?? "").localeCompare(b.paper.id ?? "");
+	}
+	return dir === "asc" ? cmp : -cmp;
+}
 
 /** Move `fromKey` to sit just before `toKey` in the full column list. */
 function reorderColumns(
@@ -164,75 +200,88 @@ function toggleColumnVisibility(
 	return cols.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c));
 }
 
-/** Display authors (compact) — empty becomes an em dash for the table. */
-function formatAuthors(authors: string[] | undefined): string {
-	return formatAuthorsShort(authors) || "—";
+/** Narrow i18n helper for column renderers (avoids strict TFunction key unions). */
+type CellT = (key: string, options?: Record<string, unknown>) => string;
+
+type CellCtx = {
+	t: CellT;
+	onCellCopy: (
+		e: ReactMouseEvent,
+		text: string | null | undefined,
+		label: string,
+	) => void;
+	heat: ReadingHeatmap | undefined;
+	tags: PaperTag[];
+};
+
+type ColumnDef = {
+	labelKey: string;
+	widthWeight: number;
+	headerClassName: string;
+	render: (p: PaperMetadata, ctx: CellCtx) => ReactNode;
+};
+
+const COPY_CELL_BASE =
+	"cursor-pointer rounded-sm hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+/** Single-click-to-copy cell control shared by library columns. */
+function CopyCellButton({
+	copyText,
+	labelKey,
+	ctx,
+	className,
+	children,
+}: {
+	copyText: string | null | undefined;
+	labelKey: string;
+	ctx: Pick<CellCtx, "t" | "onCellCopy">;
+	className?: string;
+	children: ReactNode;
+}) {
+	const label = ctx.t(labelKey);
+	const copyHint = ctx.t("papersLibrary.copyHint", { label });
+	const canCopy = Boolean(copyText?.trim());
+	return (
+		<button
+			type="button"
+			className={cn(COPY_CELL_BASE, className)}
+			title={canCopy ? copyHint : undefined}
+			aria-label={copyHint}
+			onClick={(e) => ctx.onCellCopy(e, copyText, label)}
+		>
+			{children}
+		</button>
+	);
 }
 
-/** Full author list for clipboard (not the abbreviated display form). */
-function authorsCopyText(authors: string[] | undefined): string | null {
-	if (!authors?.length) return null;
-	return authors.join(", ");
-}
-
-function identifierLabel(p: PaperMetadata): string {
-	if (p.arxiv_id) return p.arxiv_id;
-	if (p.doi) return p.doi;
-	if (p.pmid) return `PMID:${p.pmid}`;
-	return p.id || "—";
-}
-
-function identifierCopyText(p: PaperMetadata): string | null {
-	const label = identifierLabel(p);
-	return label && label !== "—" ? label : null;
-}
-
-function paperTagNames(p: PaperMetadata): string[] {
-	return coercePaperTags(p.tags).map((t) => t.name);
-}
-
-function sortValue(p: PaperMetadata, key: SortKey): string | number {
-	switch (key) {
-		case "title":
-			return (p.title ?? "").toLocaleLowerCase();
-		case "authors":
-			return (p.authors?.[0] ?? "").toLocaleLowerCase();
-		case "year":
-			return p.year ?? Number.NEGATIVE_INFINITY;
-		case "type":
-			return (p.type ?? "").toLocaleLowerCase();
-		case "id":
-			return identifierLabel(p).toLocaleLowerCase();
-		case "tags":
-			return paperTagNames(p).join(", ").toLocaleLowerCase();
-	}
-}
-
-function comparePapers(
-	a: PaperMetadata,
-	b: PaperMetadata,
-	key: SortKey,
-	dir: SortDir,
-): number {
-	const av = sortValue(a, key);
-	const bv = sortValue(b, key);
-	let cmp = 0;
-	if (typeof av === "number" && typeof bv === "number") {
-		cmp = av - bv;
-	} else {
-		cmp = String(av).localeCompare(String(bv), undefined, {
-			numeric: true,
-			sensitivity: "base",
-		});
-	}
-	if (cmp === 0) {
-		// Stable secondary: title then id
-		cmp = (a.title ?? "").localeCompare(b.title ?? "", undefined, {
-			sensitivity: "base",
-		});
-		if (cmp === 0) cmp = (a.id ?? "").localeCompare(b.id ?? "");
-	}
-	return dir === "asc" ? cmp : -cmp;
+/** `<td>` + copy button for plain columns (year / type / id …). */
+function CopyTd({
+	tdClassName,
+	copyText,
+	labelKey,
+	ctx,
+	buttonClassName,
+	children,
+}: {
+	tdClassName: string;
+	copyText: string | null | undefined;
+	labelKey: string;
+	ctx: Pick<CellCtx, "t" | "onCellCopy">;
+	buttonClassName?: string;
+	children: ReactNode;
+}) {
+	return (
+		<td className={tdClassName}>
+			<CopyCellButton
+				copyText={copyText}
+				labelKey={labelKey}
+				ctx={ctx}
+				className={buttonClassName}
+			>
+				{children}
+			</CopyCellButton>
+		</td>
+	);
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -246,42 +295,151 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 	);
 }
 
-const COPY_CELL_BASE =
-	"cursor-pointer rounded-sm hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-
-/** Single-click-to-copy cell control shared by library columns. */
-function CopyCellButton({
-	copyText,
-	label,
-	copyHint,
-	onCellCopy,
-	className,
-	children,
-}: {
-	copyText: string | null | undefined;
-	label: string;
-	copyHint: string;
-	onCellCopy: (
-		e: ReactMouseEvent,
-		text: string | null | undefined,
-		label: string,
-	) => void;
-	className?: string;
-	children: ReactNode;
-}) {
-	const canCopy = Boolean(copyText?.trim() && copyText !== "—");
-	return (
-		<button
-			type="button"
-			className={cn(COPY_CELL_BASE, className)}
-			title={canCopy ? copyHint : undefined}
-			aria-label={copyHint}
-			onClick={(e) => onCellCopy(e, copyText, label)}
-		>
-			{children}
-		</button>
-	);
-}
+/** Column layout + cell renderers (data-driven; no switch in the component). */
+const COLUMN_META = {
+	title: {
+		labelKey: "papersLibrary.colTitle",
+		widthWeight: 32,
+		headerClassName: "min-w-[240px]",
+		render: (p, ctx) => (
+			<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
+				<CopyCellButton
+					copyText={p.title}
+					labelKey="papersLibrary.colTitle"
+					ctx={ctx}
+					className="block w-full text-left font-medium"
+				>
+					<ReadingTitleHeat heatmap={ctx.heat} className="line-clamp-1">
+						<span className="block truncate" title={p.title}>
+							{p.title}
+						</span>
+					</ReadingTitleHeat>
+				</CopyCellButton>
+				{p.publication ? (
+					<CopyCellButton
+						copyText={p.publication}
+						labelKey="papersLibrary.colPublication"
+						ctx={ctx}
+						className="mt-0.5 block w-full text-left text-muted-foreground text-xs"
+					>
+						<span className="line-clamp-1" title={p.publication}>
+							{p.publication}
+						</span>
+					</CopyCellButton>
+				) : null}
+			</td>
+		),
+	},
+	authors: {
+		labelKey: "papersLibrary.colAuthors",
+		widthWeight: 18,
+		headerClassName: "min-w-[140px]",
+		render: (p, ctx) => (
+			<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 text-muted-foreground text-xs">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<CopyCellButton
+							copyText={authorsCopyText(p.authors)}
+							labelKey="papersLibrary.colAuthors"
+							ctx={ctx}
+							className="block w-full text-left"
+						>
+							<span>{formatAuthorsShort(p.authors) || "—"}</span>
+						</CopyCellButton>
+					</TooltipTrigger>
+					{p.authors && p.authors.length > 2 ? (
+						<TooltipContent side="top" align="start" className="max-w-xs">
+							{p.authors.join(", ")}
+						</TooltipContent>
+					) : null}
+				</Tooltip>
+			</td>
+		),
+	},
+	year: {
+		labelKey: "papersLibrary.colYear",
+		widthWeight: 8,
+		headerClassName: "min-w-16",
+		render: (p, ctx) => (
+			<CopyTd
+				tdClassName="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs"
+				copyText={p.year != null ? String(p.year) : null}
+				labelKey="papersLibrary.colYear"
+				ctx={ctx}
+				buttonClassName="px-0.5"
+			>
+				{p.year ?? "—"}
+			</CopyTd>
+		),
+	},
+	tags: {
+		labelKey: "papersLibrary.colTags",
+		widthWeight: 18,
+		headerClassName: "min-w-[120px]",
+		render: (_p, { t, onCellCopy, tags }) => {
+			const label = t("papersLibrary.colTags");
+			const hint = t("papersLibrary.copyHint", { label });
+			return (
+				<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
+					{tags.length ? (
+						<div className="flex flex-wrap gap-1">
+							{tags.map((tag) => (
+								<PaperTagChip
+									key={tag.name}
+									tag={tag}
+									title={hint}
+									aria-label={t("papersLibrary.copyHint", {
+										label: tag.name,
+									})}
+									onClick={(e) => onCellCopy(e, tag.name, label)}
+								/>
+							))}
+						</div>
+					) : (
+						<span className="text-muted-foreground text-xs">—</span>
+					)}
+				</td>
+			);
+		},
+	},
+	type: {
+		labelKey: "papersLibrary.colType",
+		widthWeight: 10,
+		headerClassName: "min-w-24",
+		render: (p, ctx) => (
+			<CopyTd
+				tdClassName="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize"
+				copyText={p.type || null}
+				labelKey="papersLibrary.colType"
+				ctx={ctx}
+				buttonClassName="px-0.5"
+			>
+				{p.type || "—"}
+			</CopyTd>
+		),
+	},
+	id: {
+		labelKey: "papersLibrary.colId",
+		widthWeight: 14,
+		headerClassName: "min-w-[160px]",
+		render: (p, ctx) => {
+			const value = identifierValue(p);
+			return (
+				<CopyTd
+					tdClassName="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 font-mono text-muted-foreground text-xs"
+					copyText={value}
+					labelKey="papersLibrary.colId"
+					ctx={ctx}
+					buttonClassName="block w-full text-left"
+				>
+					<span className="line-clamp-1" title={value ?? undefined}>
+						{value ?? "—"}
+					</span>
+				</CopyTd>
+			);
+		},
+	},
+} as const satisfies Record<SortKey, ColumnDef>;
 
 export function PapersLibrary({
 	papers,
@@ -299,7 +457,9 @@ export function PapersLibrary({
 	onMigrateZotero,
 	className,
 }: PapersLibraryProps) {
-	const { t, i18n } = useTranslation("sidebar");
+	const { t: tRaw, i18n } = useTranslation("sidebar");
+	/** Column renderers take plain string keys; cast off strict resource unions. */
+	const t = tRaw as unknown as CellT;
 	const [sortKey, setSortKey] = useState<SortKey>("title");
 	const [sortDir, setSortDir] = useState<SortDir>("asc");
 	const [heatmaps, setHeatmaps] = useState<Map<string, ReadingHeatmap>>(
@@ -332,11 +492,11 @@ export function PapersLibrary({
 		[sortKey],
 	);
 
-	/** Single-click a cell → copy that field; skip empty placeholders. */
+	/** Single-click a cell → copy that field; skip empty values. */
 	const copyField = useCallback(
 		async (text: string | null | undefined, label: string) => {
 			const value = text?.trim();
-			if (!value || value === "—") return;
+			if (!value) return;
 			await copyTextToClipboard(value, {
 				successMessage: t("papersLibrary.copied", { label }),
 				errorMessage: t("papersLibrary.copyFailed"),
@@ -419,142 +579,6 @@ export function PapersLibrary({
 		[columns, dragKey, onColumnsChange],
 	);
 
-	/** Render one table cell for a column key (order-independent). */
-	const renderCell = useCallback(
-		(
-			key: SortKey,
-			p: PaperMetadata,
-			heat: ReadingHeatmap | undefined,
-		): ReactNode => {
-			const copyHint = (label: string) =>
-				t("papersLibrary.copyHint", { label });
-			switch (key) {
-				case "title":
-					return (
-						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
-							<CopyCellButton
-								copyText={p.title}
-								label={t("papersLibrary.colTitle")}
-								copyHint={copyHint(t("papersLibrary.colTitle"))}
-								onCellCopy={onCellCopy}
-								className="block w-full text-left font-medium hover:bg-muted/60"
-							>
-								<ReadingTitleHeat heatmap={heat} className="line-clamp-1">
-									<span className="block truncate" title={p.title}>
-										{p.title}
-									</span>
-								</ReadingTitleHeat>
-							</CopyCellButton>
-							{p.publication ? (
-								<CopyCellButton
-									copyText={p.publication}
-									label={t("papersLibrary.colPublication")}
-									copyHint={copyHint(t("papersLibrary.colPublication"))}
-									onCellCopy={onCellCopy}
-									className="mt-0.5 block w-full text-left text-muted-foreground text-xs"
-								>
-									<span className="line-clamp-1" title={p.publication}>
-										{p.publication}
-									</span>
-								</CopyCellButton>
-							) : null}
-						</td>
-					);
-				case "authors":
-					return (
-						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 text-muted-foreground text-xs">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<CopyCellButton
-										copyText={authorsCopyText(p.authors)}
-										label={t("papersLibrary.colAuthors")}
-										copyHint={copyHint(t("papersLibrary.colAuthors"))}
-										onCellCopy={onCellCopy}
-										className="block w-full text-left"
-									>
-										<span>{formatAuthors(p.authors)}</span>
-									</CopyCellButton>
-								</TooltipTrigger>
-								{p.authors && p.authors.length > 2 ? (
-									<TooltipContent side="top" align="start" className="max-w-xs">
-										{p.authors.join(", ")}
-									</TooltipContent>
-								) : null}
-							</Tooltip>
-						</td>
-					);
-				case "year":
-					return (
-						<td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground text-xs">
-							<CopyCellButton
-								copyText={p.year != null ? String(p.year) : null}
-								label={t("papersLibrary.colYear")}
-								copyHint={copyHint(t("papersLibrary.colYear"))}
-								onCellCopy={onCellCopy}
-								className="px-0.5"
-							>
-								{p.year ?? "—"}
-							</CopyCellButton>
-						</td>
-					);
-				case "tags":
-					return (
-						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5">
-							{coercePaperTags(p.tags).length ? (
-								<div className="flex flex-wrap gap-1">
-									{coercePaperTags(p.tags).map((tag) => (
-										<PaperTagChip
-											key={tag.name}
-											tag={tag}
-											size="xs"
-											title={copyHint(t("papersLibrary.colTags"))}
-											aria-label={copyHint(tag.name)}
-											onClick={(e) =>
-												onCellCopy(e, tag.name, t("papersLibrary.colTags"))
-											}
-										/>
-									))}
-								</div>
-							) : (
-								<span className="text-muted-foreground text-xs">—</span>
-							)}
-						</td>
-					);
-				case "type":
-					return (
-						<td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground text-xs capitalize">
-							<CopyCellButton
-								copyText={p.type}
-								label={t("papersLibrary.colType")}
-								copyHint={copyHint(t("papersLibrary.colType"))}
-								onCellCopy={onCellCopy}
-								className="px-0.5"
-							>
-								{p.type || "—"}
-							</CopyCellButton>
-						</td>
-					);
-				case "id":
-					return (
-						<td className="min-w-0 max-w-0 overflow-hidden px-3 py-2.5 font-mono text-muted-foreground text-xs">
-							<CopyCellButton
-								copyText={identifierCopyText(p)}
-								label={t("papersLibrary.colId")}
-								copyHint={copyHint(t("papersLibrary.colId"))}
-								onCellCopy={onCellCopy}
-								className="block w-full text-left"
-							>
-								<span className="line-clamp-1" title={identifierLabel(p)}>
-									{identifierLabel(p)}
-								</span>
-							</CopyCellButton>
-						</td>
-					);
-			}
-		},
-		[t, onCellCopy],
-	);
-
 	/** Folder scope first (cheap path-prefix filter on in-memory catalog). */
 	const scopedPapers = useMemo(
 		() => filterPapersByScope(papers, scopePath),
@@ -581,19 +605,21 @@ export function PapersLibrary({
 
 	const normalizedQuery = (query ?? "").trim().toLocaleLowerCase();
 
+	/** Coerce tags + sort keys once per paper; filter/sort reuse them. */
 	const rows = useMemo(() => {
-		let filtered = scopedPapers;
+		const indexed = scopedPapers.map(buildPaperRow);
+		let filtered = indexed;
 		if (normalizedQuery) {
-			filtered = filtered.filter((p) => {
-				const title = (p.title ?? "").toLocaleLowerCase();
-				const tags = paperTagNames(p).join(" ").toLocaleLowerCase();
+			filtered = indexed.filter((row) => {
+				const title = (row.paper.title ?? "").toLocaleLowerCase();
 				return (
-					title.includes(normalizedQuery) || tags.includes(normalizedQuery)
+					title.includes(normalizedQuery) ||
+					row.tagSearch.includes(normalizedQuery)
 				);
 			});
 		}
 		const copy = [...filtered];
-		copy.sort((a, b) => comparePapers(a, b, sortKey, sortDir));
+		copy.sort((a, b) => comparePaperRows(a, b, sortKey, sortDir));
 		return copy;
 	}, [scopedPapers, sortKey, sortDir, normalizedQuery]);
 
@@ -657,55 +683,45 @@ export function PapersLibrary({
 		</div>
 	) : null;
 
+	let body: ReactNode;
 	if (loading) {
-		return (
-			<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-				{toolbar}
-				<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
-					{t("papersLibrary.loading")}
-				</div>
+		body = (
+			<div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground text-sm">
+				{t("papersLibrary.loading")}
 			</div>
 		);
-	}
-
-	if (!rows.length) {
-		return (
-			<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-				{toolbar}
-				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-					<p className="font-medium text-sm">
-						{searching
-							? t("papersLibrary.noMatch")
-							: t("papersLibrary.emptyTitle")}
+	} else if (!rows.length) {
+		body = (
+			<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+				<p className="font-medium text-sm">
+					{searching
+						? t("papersLibrary.noMatch")
+						: t("papersLibrary.emptyTitle")}
+				</p>
+				{searching ? null : (
+					<p className="max-w-sm text-muted-foreground text-xs">
+						{t("papersLibrary.emptyHint")}
 					</p>
-					{searching ? null : (
-						<p className="max-w-sm text-muted-foreground text-xs">
-							{t("papersLibrary.emptyHint")}
-						</p>
-					)}
-					{!searching && onRescan ? (
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="mt-1"
-							disabled={rescanning}
-							onClick={onRescan}
-						>
-							<RefreshCw
-								className={cn("size-3.5", rescanning && "animate-spin")}
-							/>
-							{t("papersLibrary.rescan")}
-						</Button>
-					) : null}
-				</div>
+				)}
+				{!searching && onRescan ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="mt-1"
+						disabled={rescanning}
+						onClick={onRescan}
+					>
+						<RefreshCw
+							className={cn("size-3.5", rescanning && "animate-spin")}
+						/>
+						{t("papersLibrary.rescan")}
+					</Button>
+				) : null}
 			</div>
 		);
-	}
-
-	return (
-		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-			{toolbar}
+	} else {
+		body = (
 			<div
 				ref={scrollRef}
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
@@ -824,8 +840,15 @@ export function PapersLibrary({
 							</tr>
 						) : null}
 						{virtualRows.map((vr) => {
-							const p = rows[vr.index];
+							const row = rows[vr.index];
+							const p = row.paper;
 							const heat = heatmaps.get(heatmapCacheKey(p));
+							const cellCtx: CellCtx = {
+								t,
+								onCellCopy,
+								heat,
+								tags: row.tags,
+							};
 							return (
 								<tr
 									key={p.path ?? p.id}
@@ -836,7 +859,7 @@ export function PapersLibrary({
 								>
 									{visibleColumns.map((col) => (
 										<Fragment key={col.key}>
-											{renderCell(col.key, p, heat)}
+											{COLUMN_META[col.key].render(p, cellCtx)}
 										</Fragment>
 									))}
 								</tr>
@@ -859,6 +882,13 @@ export function PapersLibrary({
 					})}
 				</p>
 			</div>
+		);
+	}
+
+	return (
+		<div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
+			{toolbar}
+			{body}
 		</div>
 	);
 }

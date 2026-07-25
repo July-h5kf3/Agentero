@@ -264,7 +264,6 @@ function TagsEditor({
 						<PaperTagChip
 							key={tag.name}
 							tag={tag}
-							size="sm"
 							trailing={
 								disabled ? null : (
 									<PaperTagRemoveButton

@@ -14,8 +14,6 @@ import {
 type PaperTagChipProps = {
 	tag: PaperTag;
 	className?: string;
-	/** `xs` matches library cells; `sm` matches Paper Info. */
-	size?: "xs" | "sm";
 	/** When set, chip is a button (e.g. copy-on-click in Library). */
 	onClick?: (e: ReactMouseEvent<HTMLButtonElement>) => void;
 	title?: string;
@@ -24,21 +22,26 @@ type PaperTagChipProps = {
 	trailing?: ReactNode;
 };
 
-const SIZE_CLASS = {
-	xs: "text-[0.625rem] leading-none",
-	sm: "text-[10px]",
-} as const;
-
 export function PaperTagChip({
 	tag,
 	className,
-	size = "sm",
 	onClick,
 	title,
 	"aria-label": ariaLabel,
 	trailing,
 }: PaperTagChipProps) {
 	const colored = tagChipStyle(tag.color);
+	const classNames = cn(
+		"inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] leading-none",
+		colored ? "font-medium" : "bg-muted text-muted-foreground",
+		onClick &&
+			"cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+		onClick &&
+			(colored
+				? "hover:opacity-90"
+				: "hover:bg-muted-foreground/20 hover:text-foreground"),
+		className,
+	);
 	const body = (
 		<>
 			{tag.color ? (
@@ -52,24 +55,12 @@ export function PaperTagChip({
 			{trailing}
 		</>
 	);
-	const baseClass = cn(
-		"inline-flex items-center gap-1 rounded px-1.5 py-0.5",
-		SIZE_CLASS[size],
-		colored ? "font-medium" : "bg-muted text-muted-foreground",
-		onClick &&
-			"cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-		onClick &&
-			(colored
-				? "hover:opacity-90"
-				: "hover:bg-muted-foreground/20 hover:text-foreground"),
-		className,
-	);
 
 	if (onClick) {
 		return (
 			<button
 				type="button"
-				className={baseClass}
+				className={classNames}
 				style={colored}
 				title={title}
 				aria-label={ariaLabel}
@@ -81,7 +72,7 @@ export function PaperTagChip({
 	}
 
 	return (
-		<span className={baseClass} style={colored} title={title}>
+		<span className={classNames} style={colored} title={title}>
 			{body}
 		</span>
 	);

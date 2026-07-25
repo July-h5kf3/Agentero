@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import { normalizePath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { isPaperDirectory } from "@/lib/paper";
 import { type FileNode, vaultRelativePath } from "@/lib/vault";
@@ -57,14 +58,12 @@ export function MovePapersDialog({
 	const folders = useMemo(() => {
 		const out = ["papers"];
 		if (!vaultPath) return out;
-		const excluded = sourcePaths.map((p) =>
-			p.replace(/\\/g, "/").replace(/\/+$/, ""),
-		);
+		const excluded = sourcePaths.map((p) => normalizePath(p));
 		const walk = (list: FileNode[]) => {
 			for (const n of list) {
 				if (n.kind !== "directory") continue;
 				if (isPaperDirectory(n.path, n.children)) continue;
-				const norm = n.path.replace(/\\/g, "/").replace(/\/+$/, "");
+				const norm = normalizePath(n.path);
 				const rel = vaultRelativePath(vaultPath, n.path);
 				const under = rel && (rel === "papers" || rel.startsWith("papers/"));
 				const isSourceOrChild = excluded.some(
@@ -80,9 +79,7 @@ export function MovePapersDialog({
 
 	const typed = newFolder.trim();
 	const dest = typed
-		? (typed.startsWith("papers") ? typed : `papers/${typed}`)
-				.replace(/\\/g, "/")
-				.replace(/\/+$/, "")
+		? normalizePath(typed.startsWith("papers") ? typed : `papers/${typed}`)
 		: selected;
 
 	return (

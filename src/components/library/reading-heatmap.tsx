@@ -38,7 +38,7 @@ function binFill(intensity: number): string {
  * Left→right linear-gradient spine from fixed bins.
  * Each bin is a hard stop segment so position along the title maps to the PDF.
  */
-export function titleReadingSpineStyle(
+function titleReadingSpineStyle(
 	bins: readonly number[] | undefined,
 ): CSSProperties | undefined {
 	if (!bins?.length) return undefined;
@@ -70,12 +70,6 @@ export function titleReadingSpineStyle(
 	};
 }
 
-export type ReadingTitleHeatProps = {
-	heatmap: ReadingHeatmap | null | undefined;
-	children: ReactNode;
-	className?: string;
-};
-
 /**
  * Wraps title text with a document-spine background (front → back) and tooltip.
  * Empty / missing heatmaps render children unchanged (no tooltip).
@@ -84,7 +78,11 @@ export function ReadingTitleHeat({
 	heatmap,
 	children,
 	className,
-}: ReadingTitleHeatProps) {
+}: {
+	heatmap: ReadingHeatmap | null | undefined;
+	children: ReactNode;
+	className?: string;
+}) {
 	const { t } = useTranslation("sidebar");
 	const empty = isEmptyHeatmap(heatmap);
 	const style = empty ? undefined : titleReadingSpineStyle(heatmap?.bins);
