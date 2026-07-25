@@ -237,6 +237,7 @@
 - **中间栏视图**：
   - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。
   - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；`[[#` 仅列出当前文件标题，`[[^` 仅列出当前文件中已有 ID 的 block，并将选择结果写成 `[[#^block-id]]`。Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast。
+  - **重命名当前小标题**：光标位于 heading 时，编辑器右键菜单提供“重命名当前小标题…”并打开受控输入 Dialog。命令仅对本地、可写、无未保存修改且保存态中能以 heading path + line 唯一确认的文档启用；普通直接编辑标题只保存当前文档，不同步入链。成功后重载所有受影响的已打开文档并刷新 Backlinks、Outgoing links、Graph 与嵌入；dirty/stale/歧义或事务失败显示结构化错误，不覆盖编辑器内容。
   - **只读嵌入**：`![[note]]`、`![[note#heading]]` 与 `![[note#^block-id]]` 分别显示整篇 Markdown、标题区段或 block；`![[image.png]]`（支持 `|宽度` / `|宽x高`）和 `![[document.pdf]]` 复用现有图片/PDF 组件。投影从当前行之后以块布局显示，内部链接可点击跳转；进入源码时隐藏但不卸载投影。循环嵌入与超过 4 层的嵌套显示有界状态。
   - **YAML frontmatter** 按字节保留；Plate 会归一化部分 Markdown 风格。
   - PDF / HTML / **图片** 预览：
@@ -332,7 +333,7 @@
 - **NOTES**：`createNotesSplitPane` 派生独立 panel；paper-reader / download 写回后按路径 reseed。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`src/lib/vault/fs-watch.ts`）。打开中的 `.md`/`NOTES.md`：无未存改动则重载；有未存改动 toast 提示不静默覆盖；内容相等抑制自写回声。结构性变更去抖刷新文件树。
 - **外部本地改名 repair**：只有 Host 明确给出可信 `rename { from, to }` 时才进入内链 repair。General 的 `autoUpdateInternalLinks: "ask"` 默认先显示影响范围；`"always"` 仍要求 dirty path、hash、磁盘状态门禁全部通过。成功后 Dockview panel、活动路径、树选中、Library scope 与 PDF highlights 统一重映射；remote Vault 不自动修复。
-- **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。
+- **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。Host 可从应用 cache 目录中的版本化 SQLite snapshot warm restore；任一目标文件指纹变化、版本不匹配或缓存损坏即从 Vault 冷重建，cache 失败不阻塞 UI。
 - **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。
 
 后续增强（未做）：

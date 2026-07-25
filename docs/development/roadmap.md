@@ -16,7 +16,7 @@
 | V0.1 本地 Vault 与 Markdown 工作台 | ✅ 基本完成 | 工作台、Create Vault + catalog、多窗口（⌘N）+ 欢迎页、树内联新建 / Finder / **回收站删除** / 多选拖拽、PDF 阅读工具（导航·适应整页·大纲·查找·平滑划词）/ 图片 / Notes、WYSIWYG + 内嵌图 `./assets/`、**Library + tags + Rescan**、**Vault 文件监听**、左右侧栏 collapsible、后台任务条、**全局错误 Toast**。 |
 | V0.2 arXiv / 标识符入库闭环 | 🟡 精确路径基本完成 | **魔棒 + Translator** 入库、catalog 权威、`paper_list` / `paper_get` / `paper_set_tags`、**默认下载 PDF + arXiv e-print 解压 LaTeX**、单篇/Library **补下缺失资源**、**无 TeX 时 liteparse → `PAPER.md`** 已落地；Agent 关键词候选、`catalog:export_*` 仍待。 |
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Codex、Qoder、Grok、自定义）统一 ACP 协议（Codex 经 `@agentclientprotocol/codex-acp` 适配器）；**统一会话历史**（`agent_list_sessions` / `agent_load_session`，ACP `session/list` + `session/load`）；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**。 |
-| V0.4 双链、反链与图谱 | ✅ 基本完成 | 语义解析、标题/block 精确跳转、入/出链、Graph、Live Preview、`[[` 文件/alias/标题/block 候选，以及 Markdown/图片/PDF 的 `![[...]]` 只读嵌入已落地；**链接感知的文件/目录/paper 移动**和可信本地外部 rename 的 `ask` / `always` repair 也已落地；文件变更防抖重建索引，嵌入按目标路径精确刷新。 |
+| V0.4 双链、反链与图谱 | ✅ 基本完成 | 语义解析、标题/block 精确跳转、入/出链、Graph、Live Preview、`[[` 文件/alias/标题/block 候选，以及 Markdown/图片/PDF 的 `![[...]]` 只读嵌入已落地；**链接感知的文件/目录/paper 移动**、可信本地外部 rename repair、**显式标题重命名事务**与 Host SQLite 派生 snapshot 也已落地。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
 | V0.6 工作区标签页与分屏 | 🟢 已完成 | **全局 Dockview 工作区 + 默认全库 + 文件夹作用域库 + 上下左右多分屏（PDF\|NOTES / 拖文件树并入）已落地**；标题栏无文档 tab；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 先落地本地 PDF citation/figure sidecar 与 Paper Content 侧栏，再做引用图、Connected Papers 和外部关系补全。 |
@@ -189,12 +189,15 @@
 - [x] 嵌入按解析后的目标路径刷新；普通文本自动保存与全局 Wiki 索引 revision 不会重载无关嵌入。
 - [x] Agentero 发起的文件、目录与 paper 移动通过 pre-rename snapshot 更新已解析内链，并同步 tab、tree、catalog 与索引。
 - [x] 可信本地外部 rename 支持默认 `ask` 确认与严格门禁下的 `always` repair；remote Vault 不自动修复。
+- [x] 编辑器标题右键“重命名当前小标题…”通过保存态 heading identity 与精确 fragment range 同步普通双链、嵌入、Vault-local Markdown link、同文件与多级标题 fragment；普通手工编辑不推断 rename。
+- [x] Host 将可重建 Wiki snapshot 保存到应用 cache 目录；仅在 schema/parser/Vault identity、完整文件指纹与 snapshot hash 全部匹配时 warm restore，损坏/过期/不可写均降级为 Vault 冷重建或内存索引。
 
 验收标准：
 
 - [x] 双链可以跨 `papers/`、`notes/`、`plans/` 跳转。
 - [x] 反链能显示所有引用当前文件的来源。
 - [x] 图谱能从 Markdown 重建，不依赖手写数据库。
+- [x] 删除 Wiki cache 后能从 Vault 重建相同的索引语义；cache 不写入 Vault 或 catalog。
 - [x] 20 个节点以内交互流畅。
 
 后续增强 TODO：
@@ -203,6 +206,8 @@
 - [x] 源码编辑中的 `[[` 路径、alias、标题和 block 补全。
 - [x] Plate 内联 wikilink 节点与规范链接序列化。
 - [x] Markdown、图片与 PDF 的 `![[...]]` 只读嵌入及目标级刷新。
+- [x] 显式标题重命名事务与编辑器入口。
+- [x] Host 版本化 SQLite Wiki Metadata Cache 与冷重建诊断命令。
 - [ ] 图谱 hover 时只高亮直接邻居。
 - [ ] 增加 Graph 全屏/聚焦模式，保留右侧栏小图作为默认入口。
 - [ ] 真正的增量边更新（当前为防抖全量 rebuild，非边级增量）。
