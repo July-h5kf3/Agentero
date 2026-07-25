@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
 import { initLogger, logger } from "@/lib/core/logger";
+import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
@@ -26,6 +27,7 @@ async function boot() {
 	initSettingsSync();
 	applyUiTheme(loadSettings().uiTheme);
 	subscribeSettings((s) => applyUiTheme(s.uiTheme));
+	initAutoHideScrollbars();
 	const locale = resolveLocale(loadSettings().locale);
 	await i18n.changeLanguage(locale);
 	if (typeof document !== "undefined") {

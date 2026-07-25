@@ -162,14 +162,16 @@
 	}
 }
 
-/* Subtle, independent pane scrollbars (VS Code / Cursor style) */
+/*
+ * Auto-hiding pane scrollbars: hidden by default, shown while scrolling or on
+ * hover so content bounds stay clean when idle.
+ */
 .agentero-scroll {
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
-		transparent;
+	scrollbar-color: transparent transparent;
 }
 
 /* Both axes (e.g. papers library table) */
@@ -177,8 +179,7 @@
 	overflow: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
-		transparent;
+	scrollbar-color: transparent transparent;
 }
 
 .agentero-scroll::-webkit-scrollbar,
@@ -194,18 +195,28 @@
 
 .agentero-scroll::-webkit-scrollbar-thumb,
 .agentero-scroll-both::-webkit-scrollbar-thumb {
+	background-color: transparent;
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+	transition: background-color 0.2s ease;
+}
+
+.agentero-scroll.scrolling::-webkit-scrollbar-thumb,
+.agentero-scroll-both.scrolling::-webkit-scrollbar-thumb,
+.agentero-scroll:hover::-webkit-scrollbar-thumb,
+.agentero-scroll-both:hover::-webkit-scrollbar-thumb {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 28%,
 		transparent
 	);
-	border-radius: 999px;
-	border: 2px solid transparent;
-	background-clip: content-box;
 }
 
-.agentero-scroll::-webkit-scrollbar-thumb:hover,
-.agentero-scroll-both::-webkit-scrollbar-thumb:hover {
+.agentero-scroll.scrolling::-webkit-scrollbar-thumb:hover,
+.agentero-scroll-both.scrolling::-webkit-scrollbar-thumb:hover,
+.agentero-scroll:hover::-webkit-scrollbar-thumb:hover,
+.agentero-scroll-both:hover::-webkit-scrollbar-thumb:hover {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 48%,
@@ -218,6 +229,15 @@
 .agentero-scroll::-webkit-scrollbar-corner,
 .agentero-scroll-both::-webkit-scrollbar-corner {
 	background: transparent;
+}
+
+/* Firefox: restore thumb color while scrolling or hovering. */
+.agentero-scroll.scrolling,
+.agentero-scroll-both.scrolling,
+.agentero-scroll:hover,
+.agentero-scroll-both:hover {
+	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
+		transparent;
 }
 
 /* dockview: map native theme class to app design tokens */
