@@ -1,5 +1,5 @@
 import { useTheme } from "next-themes";
-import { useId } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	PageTitle,
@@ -22,21 +22,46 @@ import type {
 import { UI_SCALE_PRESETS } from "@/lib/settings";
 import { applyUiTheme, DEFAULT_UI_THEME, UI_THEMES } from "@/lib/ui/theme";
 
-export function AppearancePane({
-	settings,
-	patch,
-}: {
-	settings: AppSettings;
+export type AppearancePaneProps = {
+	theme: ThemePreference;
+	uiTheme: string;
+	locale: LocalePreference;
+	uiScale: number;
+	editorFontSize: number;
+	showEditorToolbar: boolean;
 	patch: (p: Partial<AppSettings>) => void;
-}) {
+};
+
+function AppearancePaneInner({
+	theme,
+	uiTheme,
+	locale,
+	uiScale,
+	editorFontSize,
+	showEditorToolbar,
+	patch,
+}: AppearancePaneProps) {
 	const { t } = useTranslation("settings");
 	const { setTheme } = useTheme();
 	const fontId = useId();
 	const uiScaleId = useId();
 
-	const setThemePref = (theme: ThemePreference) => {
-		patch({ theme });
-		setTheme(theme);
+	const [fontSize, setFontSize] = useState(editorFontSize);
+	useEffect(() => {
+		setFontSize(editorFontSize);
+	}, [editorFontSize]);
+
+	useEffect(() => {
+		if (fontSize === editorFontSize) return;
+		const id = setTimeout(() => {
+			patch({ editorFontSize: fontSize });
+		}, 150);
+		return () => clearTimeout(id);
+	}, [fontSize, editorFontSize, patch]);
+
+	const setThemePref = (next: ThemePreference) => {
+		patch({ theme: next });
+		setTheme(next);
 	};
 
 	return (
@@ -45,7 +70,7 @@ export function AppearancePane({
 			<SettingsGroup>
 				<SettingsRow label={t("appearance.themeLabel")}>
 					<Select
-						value={settings.theme}
+						value={theme}
 						onValueChange={(v) => setThemePref(v as ThemePreference)}
 					>
 						<SelectTrigger size="sm" className="min-w-[120px]">
@@ -64,10 +89,10 @@ export function AppearancePane({
 				</SettingsRow>
 				<SettingsRow label={t("appearance.uiThemeLabel")}>
 					<Select
-						value={settings.uiTheme}
+						value={uiTheme}
 						onValueChange={(v) => {
 							patch({ uiTheme: v });
-							applyUiTheme(v);
+							void applyUiTheme(v);
 						}}
 					>
 						<SelectTrigger size="sm" className="min-w-[160px] max-w-[220px]">
@@ -77,9 +102,9 @@ export function AppearancePane({
 							<SelectItem value={DEFAULT_UI_THEME}>
 								{t("appearance.uiTheme.default")}
 							</SelectItem>
-							{UI_THEMES.map((theme) => (
-								<SelectItem key={theme.name} value={theme.name}>
-									{theme.title}
+							{UI_THEMES.map((item) => (
+								<SelectItem key={item.name} value={item.name}>
+									{item.title}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -87,7 +112,7 @@ export function AppearancePane({
 				</SettingsRow>
 				<SettingsRow label={t("appearance.languageLabel")}>
 					<Select
-						value={settings.locale}
+						value={locale}
 						onValueChange={(v) => patch({ locale: v as LocalePreference })}
 					>
 						<SelectTrigger size="sm" className="min-w-[120px]">
@@ -106,7 +131,7 @@ export function AppearancePane({
 				</SettingsRow>
 				<SettingsRow label={t("appearance.uiScale.label")} htmlFor={uiScaleId}>
 					<Select
-						value={String(settings.uiScale)}
+						value={String(uiScale)}
 						onValueChange={(v) => patch({ uiScale: Number(v) })}
 					>
 						<SelectTrigger id={uiScaleId} size="sm" className="min-w-[120px]">
@@ -137,16 +162,12 @@ export function AppearancePane({
 							min={12}
 							max={20}
 							step={1}
-							value={settings.editorFontSize}
-							onChange={(e) =>
-								patch({ editorFontSize: Number(e.target.value) })
-							}
+							value={fontSize}
+							onChange={(e) => setFontSize(Number(e.target.value))}
 							className="w-28 accent-primary"
 						/>
 						<span className="w-12 text-right text-muted-foreground text-xs tabular-nums">
-							{t("appearance.fontSize.value", {
-								size: settings.editorFontSize,
-							})}
+							{t("appearance.fontSize.value", { size: fontSize })}
 						</span>
 					</div>
 				</SettingsRow>
@@ -156,7 +177,7 @@ export function AppearancePane({
 				>
 					<Switch
 						id="editor-toolbar"
-						checked={settings.showEditorToolbar}
+						checked={showEditorToolbar}
 						onCheckedChange={(v) => patch({ showEditorToolbar: v })}
 					/>
 				</SettingsRow>
@@ -164,3 +185,5 @@ export function AppearancePane({
 		</>
 	);
 }
+
+export const AppearancePane = memo(AppearancePaneInner);

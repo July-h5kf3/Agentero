@@ -25,8 +25,12 @@ async function boot() {
 	// Host XDG settings.json (migrates legacy localStorage once).
 	await ensureSettingsLoaded();
 	initSettingsSync();
-	applyUiTheme(loadSettings().uiTheme);
-	subscribeSettings((s) => applyUiTheme(s.uiTheme));
+	await applyUiTheme(loadSettings().uiTheme).catch((e) => {
+		console.warn("[theme] failed to apply initial UI theme", e);
+	});
+	subscribeSettings((s) => {
+		void applyUiTheme(s.uiTheme);
+	});
 	initAutoHideScrollbars();
 	const locale = resolveLocale(loadSettings().locale);
 	await i18n.changeLanguage(locale);

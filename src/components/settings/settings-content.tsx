@@ -7,7 +7,14 @@ import {
 	SlidersHorizontal,
 	X,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { HostOsIcon, normalizeHostOs } from "@/components/icons/host-os-icon";
 import { AboutPane } from "@/components/settings/panes/about-pane";
@@ -168,8 +175,10 @@ export function SettingsContent({
 
 	const hostOs = hostContext.kind === "remote" ? remoteOs : localOs;
 
-	const patch = (partial: Partial<AppSettings>) =>
-		onChange({ ...settings, ...partial });
+	const patch = useCallback(
+		(partial: Partial<AppSettings>) => onChange({ ...settings, ...partial }),
+		[onChange, settings],
+	);
 
 	return (
 		<>
@@ -272,7 +281,15 @@ export function SettingsContent({
 					)}
 					{visitedSections.includes("appearance") && (
 						<div hidden={section !== "appearance"}>
-							<AppearancePane settings={settings} patch={patch} />
+							<AppearancePane
+								theme={settings.theme}
+								uiTheme={settings.uiTheme}
+								locale={settings.locale}
+								uiScale={settings.uiScale}
+								editorFontSize={settings.editorFontSize}
+								showEditorToolbar={settings.showEditorToolbar}
+								patch={patch}
+							/>
 						</div>
 					)}
 					{visitedSections.includes("agent") && (
