@@ -3,6 +3,7 @@ import type { WikiRenameHeadingResult } from "@/lib/wiki";
 import {
 	buildWikiHeadingRenameRequest,
 	canRenameWikiHeading,
+	currentWikiHeadingOrdinal,
 	extractWikiHeadingAnchors,
 	savedWikiHeadingAt,
 	wikiHeadingRenameAffectedPaths,
@@ -55,6 +56,20 @@ describe("saved Wiki heading identity", () => {
 		const markdown = "# One\nText\n## Two\n";
 		expect(savedWikiHeadingAt(markdown, 1, 2)?.path).toEqual(["One", "Two"]);
 		expect(savedWikiHeadingAt(markdown, 1, 3)).toBeNull();
+	});
+
+	it("resolves the heading that owns the cursor's current section", () => {
+		const headings = [[1], [4], [8]];
+		expect(currentWikiHeadingOrdinal(headings, [1, 0])).toBe(0);
+		expect(currentWikiHeadingOrdinal(headings, [3, 0])).toBe(0);
+		expect(currentWikiHeadingOrdinal(headings, [4, 0])).toBe(1);
+		expect(currentWikiHeadingOrdinal(headings, [7, 0])).toBe(1);
+		expect(currentWikiHeadingOrdinal(headings, [9, 0])).toBe(2);
+	});
+
+	it("falls forward to the first heading when the cursor is above it", () => {
+		expect(currentWikiHeadingOrdinal([[3], [7]], [0, 0])).toBe(0);
+		expect(currentWikiHeadingOrdinal([], [0, 0])).toBeNull();
 	});
 
 	it("enables the command only for a clean editable local heading", () => {

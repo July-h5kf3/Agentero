@@ -33,8 +33,8 @@
 		"pasteFailed": "无法读取剪贴板中的文本。"
 	},
 	"headingRename": {
-		"menu": "重命名当前小标题…",
-		"title": "重命名当前小标题",
+		"menu": "重命名当前标题",
+		"title": "重命名当前标题",
 		"description": "更新这个已保存的标题，并同步知识库中所有已解析的标题引用。",
 		"label": "标题",
 		"cancel": "取消",

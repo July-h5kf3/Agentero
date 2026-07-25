@@ -33,8 +33,8 @@
 		"pasteFailed": "Could not read text from the clipboard."
 	},
 	"headingRename": {
-		"menu": "Rename this heading…",
-		"title": "Rename this heading",
+		"menu": "Rename current heading",
+		"title": "Rename current heading",
 		"description": "Update this saved heading and every resolved heading reference in the Vault.",
 		"label": "Heading",
 		"cancel": "Cancel",

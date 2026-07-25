@@ -159,7 +159,7 @@ backlinks(path) = { e.source | e.target_path == path }
 ### 4.5 改名与移动稳定性
 
 - Agentero 发起的文件、目录与 `papers/` 内移动先从改名前的 `WikiIndex` 生成精确编辑计划，再执行主路径移动、Markdown 原子写入、catalog path 更新（如适用）与索引重建。只改写此前已明确解析到被移动路径的 occurrence；alias、heading/block fragment、embed 标记及 Markdown link label 保持不变。
-- 标题右键菜单的“重命名当前小标题…”是独立事务：只对本地、可写、已保存且 selection 位于标题的 Markdown 启用。Host 以 `expectedContent + headingPath + headingLine` 确认标题身份，精确改写已解析到该标题或受影响后代的 Wikilink、嵌入、Vault-local Markdown link 与同文件 fragment；文件目标、alias、label、embed 标记和无关正文保持不变。
+- 编辑器右键菜单的“重命名当前标题…”是独立事务：只对本地、可写、已保存且文档中存在标题的 Markdown 启用。光标在标题内时使用该标题；在正文中使用当前章节之前最近的标题；在首个标题之前则使用首个标题。Host 以 `expectedContent + headingPath + headingLine` 确认标题身份，精确改写已解析到该标题或受影响后代的 Wikilink、嵌入、Vault-local Markdown link 与同文件 fragment；文件目标、alias、label、embed 标记和无关正文保持不变。
 - 普通手工编辑或 autosave heading 不触发跨文件改写。dirty source、磁盘内容变化、无效/歧义新标题、重叠范围或中途写入失败会在写入前中止，或回滚已写 Markdown 并返回结构化 rollback；成功后打开的目标与来源文档、Backlinks、Outgoing links、Graph 和嵌入投影统一刷新。
 - 每个来源文件均经过未保存编辑和内容 hash 预检；写入或后续 catalog 更新失败时，事务尽力恢复已写 Markdown 与主路径。结果显式报告 `not-needed`、`completed` 或 `manual-recovery-required` 的 rollback 状态。
 - 本地外部改名只接受 watcher 提供的单个可靠 old/new 配对。默认 General 设置 `autoUpdateInternalLinks: "ask"`：先显示旧/新路径、受影响来源和跳过项，确认后才写入。`"always"` 仍须通过同一配对、dirty path、hash 与最终磁盘状态校验；预检失败不会写 Markdown。apply 在写入后失败时 Host 返回 rollback 状态，审阅 Dialog 据此区分零写入、已回滚和需要人工恢复，避免把部分写入报成未写入。不可信事件只刷新树和索引，不授权 Markdown 改写。
@@ -324,7 +324,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 ### Phase G — 标题重命名与 Metadata Cache ✅
 
 1. `InternalLinkOccurrence.fragmentRange` 精确覆盖 fragment 正文；`wiki_rename_heading` 以保存态标题身份生成跨文件编辑计划，并复用 dirty/hash/原子写入/回滚纪律。
-2. Plate 标题右键菜单提供受控“重命名当前小标题…”Dialog；成功后重载受影响的打开文档并刷新关系与嵌入投影。普通 heading 编辑不推断 rename。
+2. Plate 编辑器右键菜单提供受控“重命名当前标题…”Dialog，并按光标所在章节定位保存态标题；成功后重载受影响的打开文档并刷新关系与嵌入投影。普通 heading 编辑不推断 rename。
 3. `WikiIndex.rebuild` 优先校验应用 cache 下的版本化 SQLite snapshot；文件集合、size、mtime、SHA-256、schema/parser/Vault identity 与 snapshot hash 完全一致才恢复。
 4. stale/corrupt snapshot 自动删除并从 Vault 重建；store failure 降级为内存索引。`wiki_cache_rebuild` 提供删除 snapshot 后冷重建的内部诊断路径。
 

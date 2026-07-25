@@ -30,6 +30,43 @@ export type WikiHeadingRenameAvailability = {
 	readOnly: boolean | undefined;
 };
 
+function compareDocumentPaths(left: number[], right: number[]): number {
+	const sharedLength = Math.min(left.length, right.length);
+	for (let index = 0; index < sharedLength; index++) {
+		const difference = (left[index] ?? 0) - (right[index] ?? 0);
+		if (difference !== 0) return difference;
+	}
+	return left.length - right.length;
+}
+
+function isPathAncestorOrEqual(ancestor: number[], path: number[]): boolean {
+	return (
+		ancestor.length <= path.length &&
+		ancestor.every((index, depth) => path[depth] === index)
+	);
+}
+
+/**
+ * Resolve the heading that owns the cursor's current document section.
+ *
+ * Prefer an enclosing heading, otherwise use the closest preceding heading.
+ * A cursor before the first heading falls forward to that first heading so the
+ * command remains available anywhere in a document that contains headings.
+ */
+export function currentWikiHeadingOrdinal(
+	headingPaths: number[][],
+	cursorPath: number[],
+): number | null {
+	if (headingPaths.length === 0) return null;
+	let preceding = 0;
+	for (const [ordinal, headingPath] of headingPaths.entries()) {
+		if (isPathAncestorOrEqual(headingPath, cursorPath)) return ordinal;
+		if (compareDocumentPaths(headingPath, cursorPath) > 0) return preceding;
+		preceding = ordinal;
+	}
+	return preceding;
+}
+
 export function canRenameWikiHeading({
 	dirty,
 	filePath,

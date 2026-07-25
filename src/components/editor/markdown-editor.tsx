@@ -71,6 +71,7 @@ import {
 } from "@/lib/wiki-completion";
 import {
 	canRenameWikiHeading,
+	currentWikiHeadingOrdinal,
 	savedWikiHeadingAt,
 	type WikiHeadingAnchor,
 } from "@/lib/wiki-heading-rename";
@@ -1007,42 +1008,24 @@ export function MarkdownEditor({
 		scheduleWikiLinkPresentationSync();
 	}, [scheduleWikiLinkPresentationSync]);
 
-	const selectedHeadingAnchor = useCallback((): WikiHeadingAnchor | null => {
+	const currentHeadingAnchor = useCallback((): WikiHeadingAnchor | null => {
 		const selection = editor.selection;
 		if (!selection) return null;
-		const headingLevelAt = (pointPath: number[]) => {
-			for (let length = pointPath.length - 1; length > 0; length--) {
-				const path = pointPath.slice(0, length);
-				const entry = editor.api.node(path);
-				const type = (entry?.[0] as { type?: unknown } | undefined)?.type;
-				const match = typeof type === "string" ? /^h([1-6])$/.exec(type) : null;
-				if (match) return { path, level: Number(match[1]) };
-			}
-			return null;
-		};
-		const anchorHeading = headingLevelAt(selection.anchor.path);
-		const focusHeading = headingLevelAt(selection.focus.path);
-		if (
-			!anchorHeading ||
-			!focusHeading ||
-			anchorHeading.path.join(",") !== focusHeading.path.join(",")
-		) {
-			return null;
-		}
-		let ordinal = 0;
+		const headings: Array<{ level: number; path: number[] }> = [];
 		for (const [node, path] of editor.api.nodes({ at: [] })) {
 			const type = (node as { type?: unknown }).type;
 			if (typeof type !== "string" || !/^h[1-6]$/.test(type)) continue;
-			if (path.join(",") === anchorHeading.path.join(",")) {
-				return savedWikiHeadingAt(
-					savedRef.current,
-					ordinal,
-					anchorHeading.level,
-				);
-			}
-			ordinal += 1;
+			headings.push({ path, level: Number(type.slice(1)) });
 		}
-		return null;
+		const ordinal = currentWikiHeadingOrdinal(
+			headings.map((heading) => heading.path),
+			selection.focus.path,
+		);
+		if (ordinal === null) return null;
+		const heading = headings[ordinal];
+		return heading
+			? savedWikiHeadingAt(savedRef.current, ordinal, heading.level)
+			: null;
 	}, [editor]);
 
 	const handleEditorContextMenu = useCallback(() => {
@@ -1054,7 +1037,7 @@ export function MarkdownEditor({
 		setContextMenuSelectionExpanded(
 			Boolean(selection && !RangeApi.isCollapsed(selection)),
 		);
-		const heading = selectedHeadingAnchor();
+		const heading = currentHeadingAnchor();
 		setHeadingContext(
 			canRenameWikiHeading({
 				dirty: dirtyRef.current,
@@ -1066,7 +1049,7 @@ export function MarkdownEditor({
 				? heading
 				: null,
 		);
-	}, [editor, onRenameHeading, readOnly, selectedHeadingAnchor]);
+	}, [currentHeadingAnchor, editor, onRenameHeading, readOnly]);
 
 	const handleContextMenuOpenChange = useCallback((open: boolean) => {
 		if (open) return;

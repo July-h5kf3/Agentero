@@ -198,7 +198,7 @@
 - [x] Plate 内联 wikilink 节点，序列化仍保持 `[[...]]`
 - [x] Live Preview 稳定节点：selection 进入时显示源码、离开时恢复投影，不替换节点
 - [x] `![[...]]` 只读嵌入 Markdown 全文/标题/block、图片和 PDF；内部跳转、循环/深度门禁、目标级刷新
-- [x] 显式“重命名当前小标题”事务：精确同步普通双链、嵌入、Vault-local Markdown link、同文件与多级 heading fragment；普通手工编辑不推断 rename（见 [`../research/wikilink-heading-reference-stability.md`](../research/wikilink-heading-reference-stability.md)）
+- [x] 显式“重命名当前标题”事务：按光标所在章节定位保存态标题，精确同步普通双链、嵌入、Vault-local Markdown link、同文件与多级 heading fragment；普通手工编辑不推断 rename（见 [`../research/wikilink-heading-reference-stability.md`](../research/wikilink-heading-reference-stability.md)）
 - [x] Host 侧持久化、可删除并可重建的 Wiki Metadata Cache；版本/身份/完整文件指纹与 snapshot hash 全部匹配才 warm restore，缓存不能成为 Markdown 之外的关系事实来源
 - [ ] Graph 增加全屏/聚焦模式、邻居高亮、节点搜索
 - [ ] 双链边可选写入 catalog 可重建表，并支持边级增量重建（当前为内存全量重建）

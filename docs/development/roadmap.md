@@ -189,7 +189,7 @@
 - [x] 嵌入按解析后的目标路径刷新；普通文本自动保存与全局 Wiki 索引 revision 不会重载无关嵌入。
 - [x] Agentero 发起的文件、目录与 paper 移动通过 pre-rename snapshot 更新已解析内链，并同步 tab、tree、catalog 与索引。
 - [x] 可信本地外部 rename 支持默认 `ask` 确认与严格门禁下的 `always` repair；remote Vault 不自动修复。
-- [x] 编辑器标题右键“重命名当前小标题…”通过保存态 heading identity 与精确 fragment range 同步普通双链、嵌入、Vault-local Markdown link、同文件与多级标题 fragment；普通手工编辑不推断 rename。
+- [x] 编辑器右键“重命名当前标题…”按光标所在章节定位保存态 heading identity，并通过精确 fragment range 同步普通双链、嵌入、Vault-local Markdown link、同文件与多级标题 fragment；普通手工编辑不推断 rename。
 - [x] Host 将可重建 Wiki snapshot 保存到应用 cache 目录；仅在 schema/parser/Vault identity、完整文件指纹与 snapshot hash 全部匹配时 warm restore，损坏/过期/不可写均降级为 Vault 冷重建或内存索引。
 
 验收标准：
