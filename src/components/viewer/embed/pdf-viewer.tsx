@@ -747,6 +747,8 @@ function PdfViewerInner({
 			thread: PdfAskThread,
 			question: string,
 			agentOpts?: { agentId?: string; modelId?: string },
+			/** When set (edit/resend), replace the transcript from this base instead of appending to full history. */
+			baseMessages?: PdfAskThread["messages"],
 		) => {
 			const threadId = thread.id;
 			if (!question.trim()) return;
@@ -756,10 +758,11 @@ function PdfViewerInner({
 				content: question,
 				createdAt: new Date().toISOString(),
 			};
+			const prior = baseMessages ?? thread.messages;
 			const withUser: PdfAskThread = {
 				...thread,
 				status: "open",
-				messages: [...thread.messages, userMsg],
+				messages: [...prior, userMsg],
 				updatedAt: new Date().toISOString(),
 			};
 			upsertThread(withUser);
@@ -872,6 +875,18 @@ function PdfViewerInner({
 		[upsertThread, persist, vaultPath, t],
 	);
 
+	const resolvePdfAskAgent = useCallback(async () => {
+		const registry = await listAgents().catch(() => null);
+		const resolved = resolveTranslateAgent(loadSettings().pdfAsk, registry);
+		if (!resolved.agentId) {
+			const msg = t("pdfAsk.noAgent");
+			notifyError(msg);
+			setAskError(msg);
+			return null;
+		}
+		return resolved;
+	}, [t]);
+
 	const handleSend = useCallback(
 		(question: string) => {
 			const card = activeCardRef.current;
@@ -881,17 +896,8 @@ function PdfViewerInner({
 			if (!thread) return;
 			void (async () => {
 				try {
-					const registry = await listAgents().catch(() => null);
-					const resolved = resolveTranslateAgent(
-						loadSettings().pdfAsk,
-						registry,
-					);
-					if (!resolved.agentId) {
-						const msg = t("pdfAsk.noAgent");
-						notifyError(msg);
-						setAskError(msg);
-						return;
-					}
+					const resolved = await resolvePdfAskAgent();
+					if (!resolved) return;
 					void sendToThread(thread, question, {
 						agentId: resolved.agentId,
 						modelId: resolved.modelId,
@@ -903,7 +909,43 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[sendToThread, t],
+		[sendToThread, resolvePdfAskAgent],
+	);
+
+	/** Edit last (or any) user turn: drop that message and everything after, then re-send. */
+	const handleResend = useCallback(
+		(messageId: string, question: string) => {
+			const card = activeCardRef.current;
+			const threadId = card?.kind === "ask" ? card.id : null;
+			if (!threadId) return;
+			const thread = threadsRef.current.find((th) => th.id === threadId);
+			if (!thread) return;
+			const index = thread.messages.findIndex(
+				(m) => m.id === messageId && m.role === "user",
+			);
+			if (index < 0) return;
+			const baseMessages = thread.messages.slice(0, index);
+			void (async () => {
+				try {
+					const resolved = await resolvePdfAskAgent();
+					if (!resolved) return;
+					void sendToThread(
+						thread,
+						question,
+						{
+							agentId: resolved.agentId,
+							modelId: resolved.modelId,
+						},
+						baseMessages,
+					);
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					notifyError(message);
+					setAskError(message);
+				}
+			})();
+		},
+		[sendToThread, resolvePdfAskAgent],
 	);
 
 	const dismissAskChrome = useCallback(() => {
@@ -1822,6 +1864,7 @@ function PdfViewerInner({
 					streaming={streaming}
 					error={askError}
 					onSend={handleSend}
+					onResend={handleResend}
 					onHide={handleHide}
 					onDelete={handleDelete}
 					onPointerEnter={cancelHoverHide}

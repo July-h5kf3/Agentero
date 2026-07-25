@@ -104,6 +104,10 @@ import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { loadSettings } from "@/lib/settings";
+import {
+	findLastUserMessageIndex,
+	shouldRecallPreviousPrompt,
+} from "@/lib/ui/prompt-recall";
 import { toVaultRelative } from "@/lib/wiki";
 
 export type UseAgentPanelArgs = Pick<
@@ -1725,6 +1729,25 @@ export function useAgentPanel({
 				const skill = skillOptions[skillActiveIndex] ?? skillOptions[0];
 				if (skill) attachSkill(skill);
 			}
+			return;
+		}
+
+		// Empty composer + ↑ → edit last user prompt (rollback & resend).
+		// Reuses the same edit/resend path as the hover Pencil action.
+		if (
+			shouldRecallPreviousPrompt(event, event.currentTarget) &&
+			!activeTabIsRunning &&
+			!submittingRef.current &&
+			!switchingRef.current
+		) {
+			const index = findLastUserMessageIndex(lines);
+			if (index < 0) return;
+			const line = lines[index];
+			if (line.kind !== "user") return;
+			const display = stripPromptEnvelopeForDisplay(line.text);
+			if (!display) return;
+			event.preventDefault();
+			startEditingMessage(line.id, display);
 		}
 	};
 

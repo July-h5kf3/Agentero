@@ -376,6 +376,8 @@ PromptInput → Body / Footer / Submit
 
 **消息编辑与重发**：会话空闲时（发送成功、停止或失败后）hover 已发送的用户消息会显示 **Edit（铅笔）** 与 **Copy** 两个图标按钮；运行中不显示 Edit，须先按 `Esc` / 点击停止。点击 Edit 就地把气泡替换为文本框（`↵` 重新发送、`⇧↵` 换行、`Esc` 取消；**IME 组字中 `↵` 不重发**，见 [IME composition race](../bug_fix/ime-composition-enter-submit.md)），重发时会丢弃**该消息及其之后的所有内容**（旧回答 / 被中断的运行）并以新文本发起一次全新的 turn，用于修正发错的输入。切换会话 / 标签 / 新建对话会自动取消未完成的编辑。（重发沿用普通发送的 session 续接规则：有 `sessionId` 时经 ACP `session/resume` 续接，可见转录被截断但 Agent 侧会话记忆不随之回退。）
 
+**↑ 回滚上一条 prompt**：Composer 为空（或仅空白）且光标在开头时，按 **`↑`** 进入**最后一条用户消息**的编辑态（与铅笔 Edit 同一路径；侧边栏与禅模式共用 `AgentPanel`）。`@` / `$` 菜单打开时 `↑`/`↓` 仍只导航候选。实现见 `src/lib/ui/prompt-recall.ts`。
+
 **会话标签**：运行中的 Agent session 不会锁定标签栏。用户可随时切换并查看其它已打开的会话，也可在新会话中发起独立运行；同一 session 在运行期间保持只读，避免重入。流式消息、工具调用和最终状态仍只写回它们所属的 session。
 
 **上下文提及**：Composer **默认附带**当前聚焦的论文单元（文件在 paper 内时解析为 paper 文件夹）或其它打开的 Vault 路径，无需点击加号；chip 标签为 **虚拟名称**（论文优先 catalog 标题，否则路径最后一段 / paper-name），完整 Vault 相对路径仅作 tooltip 与发送给 Agent 的引用。输入 `@` 打开候选菜单：候选为 **论文文件夹 + 其它目录 + paper 外 Markdown**（paper 内 `NOTES.md` 等折叠为 paper 单元）；**空 `@`** 优先展示最近选用路径与浅层目录树（depth ≤ 2）；行右侧 **›** 可进入子目录（论文单元为叶子、不可再下钻；顶部 ‹ 或 `←` / `Esc` 返回上级）；输入关键字按路径或论文显示名筛选。论文候选标签与文件树一致（设置 → 通用 `paperTreeLabelMode`：标题 · 作者等）。从左侧文件树**拖入**文件/文件夹到输入区同样解析为 chip（`text/plain` 路径 → `mentionedPaths`，不插入纯文本路径）。Chip 图标按路径类型选择（`src/lib/agent/context-path-icon.ts`）：**论文文件夹**用 `ScrollText`（与文件树 paper 行一致，依据 marker 收集的 `vaultPaperPaths`）；**其它文件夹**用 `Folder`；**文件**按扩展名（PDF / 图片 / 代码 / Markdown 等）。发送时 Agentero 将这些 Vault 相对路径追加到 prompt，并将第一个路径传为 `target`，Agent 仍按自身权限读取文件。

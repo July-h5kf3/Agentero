@@ -35,7 +35,10 @@
 		"thinking": "思考中…",
 		"agentFailed": "Agent 调用失败。请检查 Agent 设置后重试。",
 		"noAgent": "没有可用的 Agent 用于 PDF 提问，请先在设置 → Agent 中配置。",
-		"pillAria": "打开提问：{{preview}}"
+		"pillAria": "打开提问：{{preview}}",
+		"editAction": "编辑",
+		"editResend": "重新发送",
+		"editCancel": "取消"
 	},
 	"annotations": {
 		"title": "批注",

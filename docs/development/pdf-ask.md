@@ -19,6 +19,7 @@
 | **操作菜单** | 共用框架；落盘 **`marks/<id>.json`**（`kind` 区分）；滚动/缩放 **重定位** 卡片不关闭 |
 | **双击 / 悬停** | 直接开提问卡（页码上下文；悬停有防误触阈值） |
 | **提问** | `runOnce` + `hideFromChatHistory`；有用户消息后保留页边提问针 |
+| **编辑 / 重发** | 会话空闲时 hover 用户气泡 **Edit**，或底部输入为空时按 **`↑`** → 编辑最后一条用户问题；重发丢弃该条及之后消息再发起新 turn（与 Agent Chat 同语义；`src/lib/ui/prompt-recall.ts`） |
 | **回访** | `SelectionGutter`：提问 Hover 打开；批注/翻译点击打开；Hide 留针、Delete 删盘 |
 
 参考形态：浮层卡片 + 底部输入（类似常见 AI 浮层；本应用内需对齐 shadcn / AI Elements，且不引入外部 Chat 产品壳）。
