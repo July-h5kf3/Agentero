@@ -225,7 +225,7 @@ export function ZoteroMigrateDialog({
 		});
 		setBusy(true);
 		setError(null);
-		setProgress({ current: 0, total: scan.items.length });
+		setProgress({ current: 0, total: selectedItems.size });
 		try {
 			const res = await runBackgroundTask(
 				{

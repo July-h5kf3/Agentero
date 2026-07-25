@@ -230,23 +230,29 @@ pub async fn migrate_zotero(
         migrate_annotations: args.migrate_annotations,
     };
 
-    let total = items.len();
-    for (idx, item) in items.into_iter().enumerate() {
-        progress(idx, total, "migrate");
-        if let Some(set) = &include_items {
-            if !set.contains(&item.item_id) {
-                continue;
-            }
-        } else if let Some(set) = &include_colls {
-            let selected = if item.collection_ids.is_empty() {
-                set.contains(&0)
+    // Apply per-paper / collection selection up front so the progress total
+    // reflects only the items that will actually be processed (previously the
+    // bar counted the whole library even when only a subset was selected).
+    let selected_items: Vec<ReadItem> = items
+        .into_iter()
+        .filter(|item| {
+            if let Some(set) = &include_items {
+                set.contains(&item.item_id)
+            } else if let Some(set) = &include_colls {
+                if item.collection_ids.is_empty() {
+                    set.contains(&0)
+                } else {
+                    item.collection_ids.iter().any(|c| set.contains(c))
+                }
             } else {
-                item.collection_ids.iter().any(|c| set.contains(c))
-            };
-            if !selected {
-                continue;
+                true
             }
-        }
+        })
+        .collect();
+
+    let total = selected_items.len();
+    for (idx, item) in selected_items.into_iter().enumerate() {
+        progress(idx, total, "migrate");
         match migrate_one(&vault, &parent_rel, &item, flags, &mut dedup).await {
             Ok(MigrateOutcome::Imported { path, copied_pdf }) => {
                 out.imported += 1;
