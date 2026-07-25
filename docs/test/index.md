@@ -2,6 +2,12 @@
 
 当代码依赖 Vault 路径、Markdown 双链或论文元数据时，测试应优先创建真实的临时 Vault 目录和文件。保持 `src/` 与 `test/` 解耦：应用代码不能 import 测试 fixture 或 helper。
 
+## 发布前验收
+
+产品发布 / 打 tag / 分发安装包前的完整手工 Checklist 见：
+
+- **[发布前测试大纲（Checklist）](release-checklist.md)** — 按功能域（Vault、Library、入库、PDF、Agent、远程、CLI、平台矩阵）勾选；含 5 分钟冒烟与明确非目标说明。
+
 ## 目录结构
 
 ```text

@@ -33,6 +33,7 @@ nav:
       - 双链与图谱: backend/wikilinks.md
   - 测试:
       - 概览: test/index.md
+      - 发布前 Checklist: test/release-checklist.md
   - 开发:
       - 概览: development/index.md
       - 产品需求: development/prd.md
