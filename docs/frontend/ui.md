@@ -213,7 +213,7 @@
   - **表头内控件**（无独立中间栏 header 行）：**标题列标题右侧**为无 placeholder 的搜索框；**标签列表头**为筛选图标（Popover 勾选标签）。
   - **导出**（侧栏 Library 虚拟节点 **右键菜单**）：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`（与回收站「清空」同为虚拟节点右键入口）。
   - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
-  - **从 Zotero 迁移**：左侧栏 Header **魔杖旁 Zotero 图标**（欢迎页仍有入口）；不在 Library 中间栏。
+  - **从 Zotero 迁移**：魔棒 Popover 左下角，**导入文献图标右侧**（欢迎页仍有入口）；不在 Library 中间栏。
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`sidebar/paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。展开时顶部边框为**纵向拖拽把手**（可键盘 ↑/↓，Shift 加速），调节内容区高度（120–560px，localStorage `agentero.paperInfoHeight` 持久化）；作者与摘要不再行数截断，超出滚动。**Tags** 可编辑：输入框在 chip 上方；输入框**右侧圆形色点**打开色盘（Apple 风格 8 色 + 默认）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`）。
   - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF **左右分屏**：左 PDF、右 NOTES）；Layout / 快捷键开关。论文库视图或未选论文时不自动开 NOTES。
