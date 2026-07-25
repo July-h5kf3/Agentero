@@ -916,6 +916,49 @@ mod tests {
     }
 
     #[test]
+    fn resolves_current_file_heading_and_block_through_the_command_path() {
+        let root = test_vault();
+        fs::write(
+            root.join("notes/Current.md"),
+            "# Overview\nCurrent block ^summary\n",
+        )
+        .expect("write current note");
+
+        let vault = root.to_str().expect("utf-8 fixture path");
+        let mut index = WikiIndex::default();
+        index.rebuild(vault).expect("rebuild index");
+
+        let current_file = index
+            .resolve_text(vault, "notes/Current.md", "", InternalLinkSyntax::Wikilink)
+            .link;
+        assert_eq!(current_file.status, LinkResolutionStatus::Resolved);
+        assert_eq!(
+            current_file.target_path.as_deref(),
+            Some("notes/Current.md")
+        );
+
+        for link_text in ["#Overview", "#^summary"] {
+            let link = index
+                .resolve_text(
+                    vault,
+                    "notes/Current.md",
+                    link_text,
+                    InternalLinkSyntax::Wikilink,
+                )
+                .link;
+            assert_eq!(link.status, LinkResolutionStatus::Resolved, "{link_text}");
+            assert_eq!(
+                link.target_path.as_deref(),
+                Some("notes/Current.md"),
+                "{link_text}"
+            );
+            assert!(link.occurrence.target_raw.is_empty(), "{link_text}");
+        }
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
     fn resolves_and_projects_image_and_pdf_targets() {
         let root = test_vault();
         fs::create_dir_all(root.join("assets")).expect("create attachment directory");

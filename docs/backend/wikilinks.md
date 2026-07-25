@@ -63,6 +63,8 @@
 | `![[image.png]]` / `![[image.png\|320x200]]` | 嵌入 Vault 图片；alias 可指定宽度或宽高 |
 | `![[document.pdf]]` | 使用现有 PDF 组件嵌入 Vault PDF |
 
+编辑器输入 `[[#` 时只搜索当前文件的标题；输入 `[[^` 时只搜索当前文件中已有 ID 的 block。选择 block 后按 Obsidian 规范落盘为 `[[#^block-id]]`，空文件目标始终由 Host 解析为当前来源文件。
+
 leading YAML frontmatter 的 `aliases` 列表会参与目标解析；`title` 不会被当作 alias。
 
 ### 2.2 解析规则（概要）
@@ -283,7 +285,7 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 ### Phase C — 输入补全 + Plate ✅
 
-1. 输入 `[[` 时从 Host 搜索文件和 alias；`#` 和 `^` 仅显示已解析目标内的标题或 block 候选。Esc、方向键和 Enter 均不干扰输入法 composition。
+1. 输入 `[[` 时从 Host 搜索文件和 alias；`[[#` / `[[^` 仅显示当前文件的标题 / block，显式目标后的 `#` / `^` 仅显示该目标内的候选。Esc、方向键和 Enter 均不干扰输入法 composition。
 2. 选择 alias 时写入 `[[规范路径|alias]]`；标题/block 选择写入可跳转的 `#heading` / `#^block-id`。Plate 内联节点序列化回 `[[...]]`。
 
 ### Phase D — 图谱 ✅

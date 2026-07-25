@@ -37,7 +37,22 @@ describe("wikilink completion grammar", () => {
 			target: "Target",
 			query: "Overview",
 		});
+		expect(parseWikiCompletionQuery("#")).toEqual({
+			kind: "heading",
+			target: "",
+			query: "",
+		});
 		expect(parseWikiCompletionQuery("#^summary")).toEqual({
+			kind: "block",
+			target: "",
+			query: "summary",
+		});
+		expect(parseWikiCompletionQuery("^")).toEqual({
+			kind: "block",
+			target: "",
+			query: "",
+		});
+		expect(parseWikiCompletionQuery("^summary")).toEqual({
 			kind: "block",
 			target: "",
 			query: "summary",
@@ -62,6 +77,36 @@ describe("wikilink completion grammar", () => {
 			target: "Target",
 			query: "",
 		});
+	});
+
+	it("keeps current-file heading and block completions targetless", () => {
+		const heading = wikiCompletionInsert(
+			{
+				kind: "heading",
+				path: "notes/Current.md",
+				insertText: "Current#Overview",
+				label: "Overview",
+				fragment: { kind: "heading", path: ["Overview"] },
+			},
+			{ kind: "heading", target: "", query: "Over" },
+		);
+		expect(
+			wikiLinkToMarkdown({ value: heading.target, heading: heading.heading }),
+		).toBe("[[#Overview]]");
+
+		const block = wikiCompletionInsert(
+			{
+				kind: "block",
+				path: "notes/Current.md",
+				insertText: "Current#^summary",
+				label: "^summary",
+				fragment: { kind: "block", id: "summary" },
+			},
+			{ kind: "block", target: "", query: "sum" },
+		);
+		expect(
+			wikiLinkToMarkdown({ value: block.target, heading: block.heading }),
+		).toBe("[[#^summary]]");
 	});
 
 	it("writes an alias as display text around a canonical target", () => {
@@ -256,6 +301,41 @@ describe("wikilink completion grammar", () => {
 		expect(displayMarkdown.trimEnd()).toBe(
 			"before ![[notes/Canonical#Overview]]",
 		);
+	});
+
+	it("keeps ^ as Wikilink text after [[ while preserving footnote input", () => {
+		const wikiEditor = createSlateEditor({
+			plugins: [ParagraphPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [{ text: "[[" }] }],
+		});
+		wikiEditor.tf.select({
+			anchor: { path: [0, 0], offset: 2 },
+			focus: { path: [0, 0], offset: 2 },
+		});
+		wikiEditor.tf.insertText("^");
+		expect(wikiEditor.children).toEqual([
+			{ type: "p", children: [{ text: "[[^" }] },
+		]);
+
+		const footnoteEditor = createSlateEditor({
+			plugins: [ParagraphPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [{ text: "[" }] }],
+		});
+		footnoteEditor.tf.select({
+			anchor: { path: [0, 0], offset: 1 },
+			focus: { path: [0, 0], offset: 1 },
+		});
+		footnoteEditor.tf.insertText("^");
+		expect(footnoteEditor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: "[" },
+					{ type: "footnoteInput", children: [{ text: "" }] },
+					{ text: "" },
+				],
+			},
+		]);
 	});
 
 	it("keeps a rendered Wikilink node stable when the caret enters its source", () => {

@@ -236,7 +236,7 @@
   - 默认竖向：`.agentero-scroll`；双向（论文库表）：`.agentero-scroll-both`。
 - **中间栏视图**：
   - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。
-  - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast。
+  - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；`[[#` 仅列出当前文件标题，`[[^` 仅列出当前文件中已有 ID 的 block，并将选择结果写成 `[[#^block-id]]`。Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast。
   - **只读嵌入**：`![[note]]`、`![[note#heading]]` 与 `![[note#^block-id]]` 分别显示整篇 Markdown、标题区段或 block；`![[image.png]]`（支持 `|宽度` / `|宽x高`）和 `![[document.pdf]]` 复用现有图片/PDF 组件。投影从当前行之后以块布局显示，内部链接可点击跳转；进入源码时隐藏但不卸载投影。循环嵌入与超过 4 层的嵌套显示有界状态。
   - **YAML frontmatter** 按字节保留；Plate 会归一化部分 Markdown 风格。
   - PDF / HTML / **图片** 预览：

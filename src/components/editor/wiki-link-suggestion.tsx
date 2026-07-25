@@ -189,13 +189,13 @@ export function WikiLinkSuggestion({
 					}
 					return;
 				}
-				const targetText = `${request.target}#${
-					request.kind === "block" ? "^" : ""
-				}${request.query}`;
+				// Resolve only the file portion before searching its anchors.
+				// An empty target intentionally resolves to the source document, so
+				// the initial `[[#` / `[[^` trigger can list every local anchor.
 				const resolved = await resolveWikiReference(
 					vaultPath,
 					filePath,
-					targetText,
+					request.target,
 				);
 				if (
 					cancelled ||
