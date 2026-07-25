@@ -3,8 +3,11 @@ import {
 	DockviewDefaultTab,
 	type DockviewDidDropEvent,
 	type DockviewDndOverlayEvent,
+	type DockviewPanelRenderer,
 	DockviewReact,
 	type DockviewReadyEvent,
+	type GetTabContextMenuItemsParams,
+	type IDockviewPanel,
 	type IDockviewPanelProps,
 } from "dockview-react";
 import {
@@ -18,6 +21,7 @@ import {
 	useMemo,
 	useRef,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
 	TabCenter,
 	type TabCenterProps,
@@ -34,6 +38,7 @@ import {
 	panelPersistParams,
 	type SplitDirection,
 } from "@/lib/workspace/tabs";
+import type { CenterViewMode } from "@/lib/workspace/viewer";
 
 export type WorkspaceExternalDrop = {
 	paths: string[];
@@ -122,6 +127,22 @@ function resolveReferencePanel(
 	return api.panels[0]?.id;
 }
 
+/**
+ * PDF panels use dockview `renderer: 'always'` so inactive sibling tabs keep
+ * their React shell mounted (enables App-level PDF LRU keep-alive).
+ * Other modes stay `onlyWhenVisible` to free DOM when not shown.
+ */
+function rendererForMode(mode: CenterViewMode): DockviewPanelRenderer {
+	return mode === "pdf" ? "always" : "onlyWhenVisible";
+}
+
+function applyPanelRenderer(panel: IDockviewPanel, mode: CenterViewMode): void {
+	const want = rendererForMode(mode);
+	if (panel.api.renderer !== want) {
+		panel.api.setRenderer(want);
+	}
+}
+
 function addPanelWithPlacement(
 	api: DockviewApi,
 	tab: DocTab,
@@ -137,6 +158,7 @@ function addPanelWithPlacement(
 		// if not registered (undefined is not a React component).
 		title: tab.title,
 		params: panelPersistParams(tab),
+		renderer: rendererForMode(tab.mode),
 		...(referencePanel
 			? {
 					position: {
@@ -188,6 +210,7 @@ export const TabWorkspace = memo(
 		},
 		ref,
 	) {
+		const { t } = useTranslation("app");
 		const apiRef = useRef<DockviewApi | null>(null);
 		const syncingRef = useRef(false);
 		const layoutTimerRef = useRef<number | null>(null);
@@ -349,11 +372,14 @@ export const TabWorkspace = memo(
 					syncingRef.current = true;
 					try {
 						api.fromJSON(snap as Parameters<DockviewApi["fromJSON"]>[0]);
-						for (const t of list) {
-							const p = api.getPanel(t.id);
+						for (const tab of list) {
+							const p = api.getPanel(tab.id);
 							if (!p) continue;
-							p.api.setTitle(t.title);
-							p.api.updateParameters(panelPersistParams(t));
+							p.api.setTitle(tab.title);
+							p.api.updateParameters(panelPersistParams(tab));
+							// fromJSON may restore an older snapshot without renderer;
+							// re-apply mode-based keep-alive (PDF → always).
+							applyPanelRenderer(p, tab.mode);
 						}
 						// Drop layout panels that are no longer in React (stale ids).
 						const want = new Set(list.map((t) => t.id));
@@ -388,7 +414,7 @@ export const TabWorkspace = memo(
 			syncPanels(api);
 		}, [panelIdsKey, syncPanels]);
 
-		// Title + persist params channel (mode/path updates without full reconcile).
+		// Title + persist params + renderer channel (mode/path without full reconcile).
 		const metaKey = tabs.map((t) => `${t.id}:${t.title}:${t.mode}`).join("|");
 		useEffect(() => {
 			void metaKey;
@@ -401,6 +427,7 @@ export const TabWorkspace = memo(
 					panel.api.setTitle(tab.title);
 				}
 				panel.api.updateParameters(panelPersistParams(tab));
+				applyPanelRenderer(panel, tab.mode);
 			}
 		}, [metaKey]);
 
@@ -441,6 +468,41 @@ export const TabWorkspace = memo(
 			onDropRef.current({ paths, direction, referencePanelId });
 		}, []);
 
+		/**
+		 * Tab right-click menu (dockview opt-in). Labels via i18n; actions match
+		 * built-in close / closeOthers / closeAll (group-scoped for Others/All).
+		 * Closures go through panel.api.close() → onDidRemovePanel → React tabs[].
+		 */
+		const getTabContextMenuItems = useCallback(
+			({ panel, group }: GetTabContextMenuItemsParams) => {
+				const hasOthers = group.panels.length > 1;
+				return [
+					{
+						label: t("tabs.contextClose"),
+						action: () => panel.api.close(),
+					},
+					{
+						label: t("tabs.contextCloseOthers"),
+						disabled: !hasOthers,
+						action: () => {
+							for (const p of group.panels) {
+								if (p !== panel) p.api.close();
+							}
+						},
+					},
+					{
+						label: t("tabs.contextCloseAll"),
+						action: () => {
+							for (const p of [...group.panels]) {
+								p.api.close();
+							}
+						},
+					},
+				];
+			},
+			[t],
+		);
+
 		return (
 			<WorkspaceContext.Provider value={ctx}>
 				<div
@@ -456,7 +518,11 @@ export const TabWorkspace = memo(
 						tabComponents={tabComponents}
 						defaultTabComponent={DockviewDefaultTab}
 						disableFloatingGroups
+						// Tauri WKWebView: HTML5 DnD is unreliable; pointer covers mouse+touch.
+						// Floating/popout already disabled — no cross-window HTML5 drag needed.
+						dndStrategy="pointer"
 						dndEdges={{ size: { value: 24, type: "pixels" } }}
+						getTabContextMenuItems={getTabContextMenuItems}
 						onReady={onReady}
 						onDidDrop={handleExternalDrop}
 					/>

@@ -67,11 +67,13 @@ export type DocTab = {
 | 能力 | 谁负责 |
 |---|---|
 | Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
+| Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部；**同组**；i18n 标签；关闭经 `panel.api.close` → `onDidRemovePanel`） |
 | 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
 | 布局持久化 | **仅** `api.toJSON()`（params 含 path/mode） |
 | 打开放置 / 循环焦点 | `TabWorkspaceHandle`（imperative） |
 | 文档内容 / 资源加载 | React `DocTab` + `TabCenter` |
 | 侧栏 Paper Info / active id | `onDidActivePanelChange` → React |
+| PDF panel 壳保活 | `addPanel({ renderer: 'always' })`（仅 `mode === 'pdf'`；非 PDF 为 `onlyWhenVisible`）；与 App `PDF_TAB_MOUNT_LRU` 叠加：壳常驻 + EmbedPDF 最多保活 N 份 |
 
 ## 5. 标题栏
 
@@ -83,3 +85,30 @@ export type DocTab = {
 - 浮动窗 / popout 关闭（`disableFloatingGroups`）。
 - 文件树拖入开新 panel；dockview 内部 panel 拖拽重组不经 React。
 - Library / Trash 也是普通 panel（可与其它文档并排）。
+
+## 7. 拖拽分屏（DnD）可靠性
+
+| 项 | 处理 |
+|---|---|
+| **内部 tab 分屏** | `DockviewReact` 使用 **`dndStrategy="pointer"`**（非默认 HTML5）。Tauri WKWebView 上 HTML5 DnD 不稳；pointer 用几何 hit-test，不依赖 `dragover` 冒泡。浮动/popout 已关，无跨窗 HTML5 需求。 |
+| **HTML 面板 iframe** | `HtmlViewer` 在 `dragstart`…`dragend`/`drop` 期间给 sandboxed iframe 加 `pointer-events: none`，避免 HTML5 外部拖拽（文件树路径）经过 iframe 时 `dragover` 被吞、分屏 overlay 失效。PDF（EmbedPDF）无 iframe，不受影响。 |
+| 文件树拖入 | 仍走 HTML5 `text/plain` + `onUnhandledDragOver` / `onDidDrop`；路径 payload 见 `tab-dnd.ts`。 |
+
+## 8. PDF 保活策略（壳 vs 引擎）
+
+两层分工，不要混为一谈：
+
+| 层 | 机制 | 目的 |
+|---|---|---|
+| dockview panel 壳 | PDF → `renderer: 'always'`；其它 mode → `onlyWhenVisible` | 同组切 tab 时 PDF 的 React 树不被 dockview 卸掉，LRU 才有机会命中 |
+| EmbedPDF / PDFium | `App` `PDF_TAB_MOUNT_LRU`（默认 4）+ `TabCenter` `if (!active && !pdfKeepMounted) return null` | 限制主线程上同时存活的 PDF 文档数 |
+
+`fromJSON` 恢复布局后按 `tab.mode` 再 `setRenderer`，避免旧快照缺 renderer 字段时丢失保活。
+
+## 9. 已用 / 刻意未用的 dockview 能力（7.0.x）
+
+| 状态 | 能力 |
+|---|---|
+| 已用 | `dndStrategy: 'pointer'`、`dndEdges`、`disableFloatingGroups`、外部 DnD、`getTabContextMenuItems`、PDF `renderer: 'always'` |
+| 刻意未用 | popout / floating（与 `⌘N` 多窗口策略一致）、全局 `defaultRenderer: 'always'`（非 PDF 不需要壳常驻） |
+| backlog | `maximizeGroup`、watermark、header actions、keyboardNavigation、tab group 染色 |
