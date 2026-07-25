@@ -245,7 +245,8 @@
 .agentero-dockview-theme {
 	--dv-group-view-background-color: var(--background);
 	--dv-tabs-and-actions-container-background-color: var(--muted);
-	--dv-tabs-and-actions-container-height: 2rem;
+	/* Match PaneHeader (`h-10`) so the workspace aligns with side-pane headers. */
+	--dv-tabs-and-actions-container-height: 2.5rem;
 	--dv-tabs-and-actions-container-font-size: 0.75rem;
 	--dv-activegroup-visiblepanel-tab-background-color: var(--background);
 	--dv-activegroup-hiddenpanel-tab-background-color: color-mix(
