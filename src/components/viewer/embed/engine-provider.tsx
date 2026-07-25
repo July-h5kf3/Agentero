@@ -22,9 +22,10 @@ const PdfEngineContext = createContext<PdfEngineContextValue>({
  *
  * The wasm binary is bundled as a local asset (offline-first Tauri); font
  * fallback is disabled so no external font requests are made. `worker: false`
- * runs PDFium on the main thread: under Tauri's WKWebView the worker variant
- * re-fetches the wasm from a `blob:` worker context and silently stalls, so the
- * main-thread engine (loading the wasm via the Vite `?url` asset) is used.
+ * runs PDFium on the main thread. The worker variant was tried (including on
+ * Windows WebView2) but document loading stalls inside the worker — the engine
+ * initializes yet pages never render — so the main-thread engine (loading the
+ * wasm via the Vite `?url` asset) is used on every platform.
  */
 export function PdfEngineHost({ children }: { children: ReactNode }) {
 	const { engine, isLoading, error } = usePdfiumEngine({
