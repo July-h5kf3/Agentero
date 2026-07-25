@@ -4,26 +4,16 @@ import {
 	LIBRARY_VIRTUAL_PATH,
 	TRASH_VIRTUAL_PATH,
 } from "@/lib/paper/api";
+import { basenameOf, normalizePathKey } from "@/lib/vault/path";
 import type { DocTab } from "@/lib/workspace/tabs/types";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
 
-export function normalizeTabPath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
+export { basenameOf, normalizePathKey as normalizeTabPath };
 
 export function tabIdForPath(path: string): string {
 	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;
 	if (isTrashVirtualPath(path)) return TRASH_VIRTUAL_PATH;
-	return normalizeTabPath(path);
-}
-
-export function basenameOf(path: string): string {
-	return (
-		path
-			.replace(/[\\/]+$/, "")
-			.split(/[\\/]/)
-			.pop() ?? path
-	);
+	return normalizePathKey(path);
 }
 
 export function createPlaceholderTab(
@@ -127,9 +117,9 @@ export function removeTabsUnderPath(
 	tabs: DocTab[];
 	removed: DocTab[];
 } {
-	const key = normalizeTabPath(path);
+	const key = normalizePathKey(path);
 	const hit = (p: string) => {
-		const k = normalizeTabPath(p);
+		const k = normalizePathKey(p);
 		return k === key || k.startsWith(`${key}/`);
 	};
 	const survivors: DocTab[] = [];

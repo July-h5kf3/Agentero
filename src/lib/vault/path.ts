@@ -1,4 +1,10 @@
 import i18n from "@/i18n";
+import {
+	basenameOf,
+	dirnameOf,
+	joinPath,
+	normalizePath,
+} from "@/lib/core/path";
 import { isMarkdownPath } from "@/lib/vault/fs";
 import {
 	getRemoteSessionMeta,
@@ -7,18 +13,12 @@ import {
 import type { FileNode } from "@/lib/vault/types";
 import { toVaultRelative } from "@/lib/wiki";
 
-function joinPath(parent: string, name: string): string {
-	if (!parent) return name;
-	const sep = parent.includes("\\") ? "\\" : "/";
-	return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
-}
-
 export function vaultRelativePath(
 	vaultRoot: string,
 	absPath: string,
 ): string | null {
-	const root = vaultRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-	const abs = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+	const root = normalizePath(vaultRoot);
+	const abs = normalizePath(absPath);
 	if (abs === root) return "";
 	const prefix = `${root}/`;
 	if (abs.startsWith(prefix)) return abs.slice(prefix.length);
@@ -47,15 +47,14 @@ export function vaultDisplayName(rootPath: string | null): string {
 		if (meta?.displayName) return meta.displayName;
 		return rootPath;
 	}
-	const parts = rootPath.replace(/[\\/]+$/, "").split(/[\\/]/);
-	return parts[parts.length - 1] || rootPath;
+	return basenameOf(rootPath) || rootPath;
 }
 
 // --- File-tree path helpers (unit-tested in test/vault-tree.test.ts) ---
 
 /** Normalize an absolute path for case-insensitive equality (forward slashes, no trailing slash). */
 export function normalizePathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+	return normalizePath(path).toLowerCase();
 }
 
 /** Find a tree node by absolute path (case-insensitive, separator-agnostic). */
@@ -86,7 +85,7 @@ export function resolveCreateParent(
 	if (!selectedPath) return vaultRoot;
 	const node = treeFindNode(tree, selectedPath);
 	if (node?.kind === "directory") return selectedPath;
-	const parent = selectedPath.replace(/[\\/][^\\/]+$/, "");
+	const parent = dirnameOf(selectedPath);
 	return parent && parent !== selectedPath ? parent : vaultRoot;
 }
 
@@ -134,9 +133,11 @@ export function paperRelFromNotes(
 	vaultPath: string | null,
 ): string | null {
 	if (!notesPath || !vaultPath) return null;
-	const abs = notesPath.replace(/[\\/]NOTES\.md$/i, "").replace(/\\/g, "/");
-	const root = vaultPath.replace(/\\/g, "/").replace(/\/$/, "");
+	const abs = normalizePath(notesPath.replace(/[\\/]NOTES\.md$/i, ""));
+	const root = normalizePath(vaultPath);
 	if (abs === root) return "";
 	if (abs.startsWith(`${root}/`)) return abs.slice(root.length + 1);
 	return abs;
 }
+
+export { basenameOf } from "@/lib/core/path";

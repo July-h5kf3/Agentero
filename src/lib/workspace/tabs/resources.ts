@@ -26,8 +26,8 @@ import {
 	isTextOpenable,
 	readVaultFile,
 } from "@/lib/vault";
+import { basenameOf, normalizePathKey, treeFindNode } from "@/lib/vault/path";
 import { toVaultRelative } from "@/lib/wiki";
-import { basenameOf, normalizeTabPath } from "@/lib/workspace/tabs/model";
 import {
 	type DocTab,
 	NOTES_PLACEHOLDER,
@@ -42,23 +42,8 @@ import {
 	preferredModeForPath,
 } from "@/lib/workspace/viewer";
 
-function findNode(nodes: FileNode[], path: string): FileNode | undefined {
-	const key = normalizeTabPath(path);
-	const walk = (list: FileNode[]): FileNode | undefined => {
-		for (const n of list) {
-			if (normalizeTabPath(n.path) === key) return n;
-			if (n.children?.length) {
-				const hit = walk(n.children);
-				if (hit) return hit;
-			}
-		}
-		return undefined;
-	};
-	return walk(nodes);
-}
-
 function findChildren(nodes: FileNode[], path: string): FileNode[] | undefined {
-	return findNode(nodes, path)?.children;
+	return treeFindNode(nodes, path)?.children;
 }
 
 const pdfAutoDownloadTried = new Set<string>();
@@ -224,7 +209,7 @@ export async function loadTabResources(
 		paperDir = path.replace(/[\\/]+$/, "");
 	}
 
-	const treeNode = findNode(tree, path);
+	const treeNode = treeFindNode(tree, path);
 	// Tree markers can identify a paper folder before paperFolders refreshes.
 	if (
 		!paperDir &&
@@ -271,7 +256,11 @@ export async function loadTabResources(
 			didDownload,
 		} = await resolvePaperPdfSource(paperDir, vaultPath, meta, remotePdf);
 		if (!didDownload) {
-			maybeTriggerDeferredParse(paperDir, vaultPath, findNode(tree, paperDir));
+			maybeTriggerDeferredParse(
+				paperDir,
+				vaultPath,
+				treeFindNode(tree, paperDir),
+			);
 		}
 		const notesPath = notesPathForPaper(paperDir);
 		let notesSeed = NOTES_PLACEHOLDER;
@@ -282,7 +271,7 @@ export async function loadTabResources(
 		}
 
 		const openingPaperRoot =
-			normalizeTabPath(path) === normalizeTabPath(paperDir) ||
+			normalizePathKey(path) === normalizePathKey(paperDir) ||
 			isPaperDirectory(path, findChildren(tree, path));
 
 		if (openingPaperRoot) {

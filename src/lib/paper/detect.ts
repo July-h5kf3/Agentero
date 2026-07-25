@@ -1,3 +1,4 @@
+import { normalizePath } from "@/lib/core/path";
 import { paperNeedsAssetDownload } from "@/lib/paper/assets";
 import {
 	isPapersRoot,
@@ -7,25 +8,14 @@ import {
 } from "@/lib/paper/paths";
 import type { FileNode } from "@/lib/vault";
 import { readVaultFile } from "@/lib/vault";
+import { treeFindNode } from "@/lib/vault/path";
 
 type NameKind = { name: string; kind?: "file" | "directory" | string };
 
-function normalizePath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "");
-}
 export function resolvePapersParentDir(
 	vaultRoot: string | null,
 	selectedPath: string | null,
-	tree: Array<{
-		path: string;
-		kind: "file" | "directory";
-		children?: Array<{
-			path: string;
-			kind: "file" | "directory";
-			name: string;
-			children?: unknown[];
-		}>;
-	}>,
+	tree: FileNode[],
 ): string {
 	const papersRel = "papers";
 	if (!vaultRoot) return papersRel;
@@ -39,21 +29,6 @@ export function resolvePapersParentDir(
 		// Already vault-relative?
 		if (n === "papers" || n.startsWith("papers/")) return n;
 		return n;
-	};
-
-	const findNode = (
-		nodes: typeof tree,
-		absPath: string,
-	): (typeof tree)[0] | null => {
-		const key = normalizePath(absPath).toLowerCase();
-		for (const n of nodes) {
-			if (normalizePath(n.path).toLowerCase() === key) return n;
-			if (n.children?.length) {
-				const hit = findNode(n.children as typeof tree, absPath);
-				if (hit) return hit;
-			}
-		}
-		return null;
 	};
 
 	const paperFolders = collectPaperFoldersFromTree(tree);
@@ -77,7 +52,7 @@ export function resolvePapersParentDir(
 		return papersRel;
 	}
 
-	const node = findNode(tree, selectedPath);
+	const node = treeFindNode(tree, selectedPath);
 	if (node?.kind === "directory") {
 		const rel = toRel(selectedPath);
 		if (isPapersRoot(selectedPath) || rel === "papers" || isPapersRoot(rel)) {

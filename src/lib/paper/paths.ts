@@ -1,6 +1,4 @@
-function normalizePath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "");
-}
+import { normalizePath } from "@/lib/core/path";
 
 /** True when path is the `papers` directory itself (Vault-relative or absolute). */
 export function isPapersRoot(path: string | null): boolean {

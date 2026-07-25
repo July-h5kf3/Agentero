@@ -1,20 +1,12 @@
+import { basenameOf } from "@/lib/core/path";
+
 /**
  * Client-side defaults for local PDF import (mirrors Host `title_from_stem` / `slug_from_stem`).
  */
 
-/** Basename without directory; keeps extension if present. */
-export function basenameOfPath(path: string): string {
-	return (
-		path
-			.replace(/[\\/]+$/, "")
-			.split(/[\\/]/)
-			.pop() ?? path
-	);
-}
-
 /** Filename stem (no extension). */
 export function stemFromPath(path: string): string {
-	const base = basenameOfPath(path);
+	const base = basenameOf(path);
 	const i = base.lastIndexOf(".");
 	if (i <= 0) return base;
 	return base.slice(0, i);

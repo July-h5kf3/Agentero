@@ -12,11 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
-import {
-	basenameOfPath,
-	slugFromPdfPath,
-	titleFromPdfPath,
-} from "@/lib/paper/local-pdf-meta";
+import { basenameOf } from "@/lib/core/path";
+import { slugFromPdfPath, titleFromPdfPath } from "@/lib/paper/local-pdf-meta";
 import type { LocalPdfImportEntry } from "@/lib/paper/lookup";
 
 type DraftRow = {
@@ -39,7 +36,7 @@ function draftsFromItems(items: ImportLocalPdfDraftItem[]): DraftRow[] {
 		const nameForMeta = item.sourceName || item.path;
 		return {
 			filePath: item.path,
-			sourceName: item.sourceName || basenameOfPath(item.path),
+			sourceName: item.sourceName || basenameOf(item.path),
 			title: titleFromPdfPath(nameForMeta),
 			authors: "",
 			year: "",
@@ -153,7 +150,7 @@ export function ImportLocalPdfDialog({
 									className="truncate font-medium text-muted-foreground text-xs"
 									title={row.filePath}
 								>
-									{row.sourceName || basenameOfPath(row.filePath)}
+									{row.sourceName || basenameOf(row.filePath)}
 								</p>
 								<div className="space-y-1.5">
 									<Label className="text-xs">
