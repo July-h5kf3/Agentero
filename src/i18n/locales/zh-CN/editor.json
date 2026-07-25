@@ -23,6 +23,37 @@
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
 	},
+	"contextMenu": {
+		"cut": "剪切",
+		"copy": "复制",
+		"paste": "粘贴",
+		"insertWikiLink": "新增双链",
+		"insertExternalLink": "新增外部链接",
+		"copyFailed": "无法复制选中的文本。",
+		"pasteFailed": "无法读取剪贴板中的文本。"
+	},
+	"headingRename": {
+		"menu": "重命名当前标题",
+		"title": "重命名当前标题",
+		"description": "更新这个已保存的标题，并同步知识库中所有已解析的标题引用。",
+		"label": "标题",
+		"cancel": "取消",
+		"confirm": "重命名",
+		"renaming": "正在重命名…",
+		"success": "标题已重命名，并更新 {{count}} 个引用文件。",
+		"errors": {
+			"localOnly": "只有本地知识库中的文件支持标题重命名。",
+			"unsavedEdits": "请先保存或放弃所有受影响文件中的未保存修改。",
+			"sourceChanged": "有引用文件已在磁盘上变化。请重新载入后再重试。",
+			"headingMissing": "无法继续识别这个已保存标题。请重新载入笔记后再试。",
+			"invalidHeading": "请输入不同且有效的单行标题。",
+			"ambiguousHeading": "本次改名会产生或更新有歧义的标题引用。",
+			"overlappingEdits": "无法安全改写相关标题引用。",
+			"rolledBack": "标题重命名失败，所有 Markdown 改动均已回滚。",
+			"manualRecovery": "标题重命名未能完整回滚。继续前请检查受影响的 Markdown 文件。",
+			"generic": "无法重命名当前标题。"
+		}
+	},
 	"embed": {
 		"loading": "正在加载嵌入内容…",
 		"missing": "找不到嵌入的笔记。",

@@ -3,7 +3,7 @@
 import "katex/dist/katex.min.css";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
-import { RangeApi } from "platejs";
+import { RangeApi, type RangeRef } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
@@ -17,6 +17,7 @@ import {
 } from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
+import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
@@ -37,20 +38,43 @@ import {
 	type WikiCompletionDraft,
 	WikiLinkSuggestion,
 } from "@/components/editor/wiki-link-suggestion";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuShortcut,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import i18n from "@/i18n";
+import {
+	copyTextToClipboard,
+	readTextFromClipboard,
+} from "@/lib/core/clipboard";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
+import {
+	type EditorLinkTemplateKind,
+	editorContextMenuCapabilities,
+	insertEditorLinkTemplate,
+} from "@/lib/markdown/editor-context-menu";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown/image";
-import type { LinkFragment } from "@/lib/wiki";
+import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import {
 	findWikiCompletionTrigger,
 	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
+import {
+	canRenameWikiHeading,
+	currentWikiHeadingOrdinal,
+	savedWikiHeadingAt,
+	type WikiHeadingAnchor,
+} from "@/lib/wiki-heading-rename";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -81,6 +105,11 @@ export type MarkdownEditorProps = {
 	onDirtyChange?: (dirty: boolean) => void;
 	/** After writing an image under `./assets/` (refresh file tree). */
 	onAssetsChanged?: () => void;
+	/** Explicitly rename one saved heading and repair its inbound fragments. */
+	onRenameHeading?: (
+		path: string,
+		request: Omit<WikiRenameHeadingRequest, "path">,
+	) => Promise<void>;
 	/** A one-shot request to scroll to a resolved internal-link anchor. */
 	navigationIntent?: { id: number; fragment: LinkFragment };
 };
@@ -112,6 +141,7 @@ export function MarkdownEditor({
 	onPersist,
 	onDirtyChange,
 	onAssetsChanged,
+	onRenameHeading,
 	navigationIntent,
 }: MarkdownEditorProps) {
 	const frontmatterRef = useRef("");
@@ -142,6 +172,7 @@ export function MarkdownEditor({
 		}),
 	);
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
@@ -153,6 +184,20 @@ export function MarkdownEditor({
 	} | null>(null);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
+	const [headingContext, setHeadingContext] =
+		useState<WikiHeadingAnchor | null>(null);
+	const [contextMenuSelectionExpanded, setContextMenuSelectionExpanded] =
+		useState(false);
+	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
+	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
+
+	useEffect(
+		() => () => {
+			contextMenuSelectionRef.current?.unref();
+			contextMenuSelectionRef.current = null;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -963,6 +1008,162 @@ export function MarkdownEditor({
 		scheduleWikiLinkPresentationSync();
 	}, [scheduleWikiLinkPresentationSync]);
 
+	const currentHeadingAnchor = useCallback((): WikiHeadingAnchor | null => {
+		const selection = editor.selection;
+		if (!selection) return null;
+		const headings: Array<{ level: number; path: number[] }> = [];
+		for (const [node, path] of editor.api.nodes({ at: [] })) {
+			const type = (node as { type?: unknown }).type;
+			if (typeof type !== "string" || !/^h[1-6]$/.test(type)) continue;
+			headings.push({ path, level: Number(type.slice(1)) });
+		}
+		const ordinal = currentWikiHeadingOrdinal(
+			headings.map((heading) => heading.path),
+			selection.focus.path,
+		);
+		if (ordinal === null) return null;
+		const heading = headings[ordinal];
+		return heading
+			? savedWikiHeadingAt(savedRef.current, ordinal, heading.level)
+			: null;
+	}, [editor]);
+
+	const handleEditorContextMenu = useCallback(() => {
+		contextMenuSelectionRef.current?.unref();
+		const selection = editor.selection;
+		contextMenuSelectionRef.current = selection
+			? editor.api.rangeRef(selection, { affinity: "forward" })
+			: null;
+		setContextMenuSelectionExpanded(
+			Boolean(selection && !RangeApi.isCollapsed(selection)),
+		);
+		const heading = currentHeadingAnchor();
+		setHeadingContext(
+			canRenameWikiHeading({
+				dirty: dirtyRef.current,
+				filePath: filePathRef.current,
+				hasHandler: Boolean(onRenameHeading),
+				heading,
+				readOnly,
+			})
+				? heading
+				: null,
+		);
+	}, [currentHeadingAnchor, editor, onRenameHeading, readOnly]);
+
+	const handleContextMenuOpenChange = useCallback((open: boolean) => {
+		if (open) return;
+		const selectionRef = contextMenuSelectionRef.current;
+		window.setTimeout(() => {
+			if (contextMenuSelectionRef.current !== selectionRef) return;
+			selectionRef?.unref();
+			contextMenuSelectionRef.current = null;
+		}, 0);
+	}, []);
+
+	const takeContextMenuSelection = useCallback(() => {
+		const selectionRef = contextMenuSelectionRef.current;
+		contextMenuSelectionRef.current = null;
+		return selectionRef?.unref() ?? editor.selection;
+	}, [editor]);
+
+	const focusEditorAt = useCallback(
+		(selection: NonNullable<typeof editor.selection>) => {
+			if (!editorContainerRef.current?.isConnected) return;
+			editor.tf.focus({ at: selection });
+		},
+		[editor],
+	);
+
+	const handleContextMenuCopy = useCallback(async () => {
+		const selection = takeContextMenuSelection();
+		if (!selection || RangeApi.isCollapsed(selection)) return;
+		const text = editor.api.string(selection);
+		await copyTextToClipboard(text, {
+			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+		});
+		focusEditorAt(selection);
+	}, [editor, focusEditorAt, takeContextMenuSelection]);
+
+	const handleContextMenuCut = useCallback(async () => {
+		if (readOnly) return;
+		const selection = takeContextMenuSelection();
+		if (!selection || RangeApi.isCollapsed(selection)) return;
+		const text = editor.api.string(selection);
+		const copied = await copyTextToClipboard(text, {
+			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+		});
+		if (!copied || !editorContainerRef.current?.isConnected) return;
+		editor.tf.focus({ at: selection });
+		editor.tf.deleteFragment();
+	}, [editor, readOnly, takeContextMenuSelection]);
+
+	const handleContextMenuPaste = useCallback(async () => {
+		if (readOnly) return;
+		const selection = takeContextMenuSelection();
+		if (!selection) return;
+		const text = await readTextFromClipboard({
+			errorMessage: i18n.t("editor:contextMenu.pasteFailed"),
+		});
+		if (text === null || !editorContainerRef.current?.isConnected) return;
+		editor.tf.focus({ at: selection });
+		if (typeof DataTransfer === "function") {
+			const data = new DataTransfer();
+			data.setData("text/plain", text);
+			editor.tf.insertData(data);
+		} else {
+			editor.tf.insertText(text);
+		}
+		editor.tf.focus({ at: editor.selection ?? selection });
+	}, [editor, readOnly, takeContextMenuSelection]);
+
+	const insertContextMenuLink = useCallback(
+		(kind: EditorLinkTemplateKind) => {
+			if (readOnly) return;
+			const selection = takeContextMenuSelection();
+			if (!selection || !editorContainerRef.current?.isConnected) return;
+			const template = insertEditorLinkTemplate(editor, kind, selection);
+			editor.tf.focus({ at: editor.selection ?? selection });
+			if (template.wikiLinkDraft) {
+				window.requestAnimationFrame(updateWikiCompletionDraft);
+			}
+		},
+		[editor, readOnly, takeContextMenuSelection, updateWikiCompletionDraft],
+	);
+
+	const confirmHeadingRename = useCallback(
+		async (newText: string) => {
+			const path = filePathRef.current;
+			const heading = headingContext;
+			if (
+				!path ||
+				!heading ||
+				!onRenameHeading ||
+				readOnly ||
+				dirtyRef.current
+			) {
+				return;
+			}
+			setHeadingRenameBusy(true);
+			try {
+				await onRenameHeading(path, {
+					headingPath: heading.path,
+					headingLine: heading.line,
+					expectedContent: savedRef.current,
+					newText,
+				});
+				setHeadingRenameOpen(false);
+				setHeadingContext(null);
+			} catch {
+				// App owns the translated error toast. Keep the dialog open so the
+				// user can retry after resolving dirty/stale source state.
+			} finally {
+				setHeadingRenameBusy(false);
+			}
+		},
+		[headingContext, onRenameHeading, readOnly],
+	);
+
 	const docCtx = useMemo(
 		() => ({
 			filePath: filePath ?? null,
@@ -987,6 +1188,11 @@ export function MarkdownEditor({
 		serialize,
 		updateWikiCompletionDraft,
 	]);
+	const contextMenuCapabilities = editorContextMenuCapabilities({
+		headingRenameAvailable: Boolean(headingContext),
+		readOnly: Boolean(readOnly),
+		selectionExpanded: contextMenuSelectionExpanded,
+	});
 
 	return (
 		<WikiEmbedProjectionProvider component={EmbeddedMarkdownProjection}>
@@ -1005,46 +1211,109 @@ export function MarkdownEditor({
 						)}
 					>
 						{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
-						<EditorContainer
-							ref={editorContainerRef}
-							className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
-							onKeyDownCapture={readOnly ? undefined : handleKeyDown}
-							onBeforeInputCapture={
-								readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
-							}
-							onBlur={readOnly ? undefined : handleEditorBlur}
-							onCompositionStartCapture={
-								readOnly ? undefined : handleWikiLinkCompositionStart
-							}
-							onCompositionEndCapture={
-								readOnly ? undefined : handleWikiLinkCompositionEnd
-							}
-						>
-							{/*
-							 * min-h-full + generous bottom padding so the last line is easy
-							 * to click and Enter can always create a new block below it
-							 * (matches Plate default variant pb-72).
-							 */}
-							<Editor
-								variant="none"
-								placeholder={placeholder}
-								readOnly={readOnly}
-								className="min-h-full px-6 pt-4 pb-48"
-								style={fontSize ? { fontSize } : undefined}
-							/>
-							{!readOnly ? (
-								<WikiLinkSuggestion
-									draft={wikiCompletionDraft}
-									onClose={() => setWikiCompletionDraft(null)}
-									onContinue={(raw) =>
-										setWikiCompletionDraft((current) =>
-											current ? { ...current, raw } : current,
-										)
+						<ContextMenu onOpenChange={handleContextMenuOpenChange}>
+							<ContextMenuTrigger asChild>
+								<EditorContainer
+									ref={editorContainerRef}
+									className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
+									onContextMenuCapture={handleEditorContextMenu}
+									onKeyDownCapture={readOnly ? undefined : handleKeyDown}
+									onBeforeInputCapture={
+										readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
 									}
-									controllerRef={completionControllerRef}
-								/>
-							) : null}
-						</EditorContainer>
+									onBlur={readOnly ? undefined : handleEditorBlur}
+									onCompositionStartCapture={
+										readOnly ? undefined : handleWikiLinkCompositionStart
+									}
+									onCompositionEndCapture={
+										readOnly ? undefined : handleWikiLinkCompositionEnd
+									}
+								>
+									{/*
+									 * min-h-full + generous bottom padding so the last line is easy
+									 * to click and Enter can always create a new block below it
+									 * (matches Plate default variant pb-72).
+									 */}
+									<Editor
+										variant="none"
+										placeholder={placeholder}
+										readOnly={readOnly}
+										className="min-h-full px-6 pt-4 pb-48"
+										style={fontSize ? { fontSize } : undefined}
+									/>
+									{!readOnly ? (
+										<WikiLinkSuggestion
+											draft={wikiCompletionDraft}
+											onClose={() => setWikiCompletionDraft(null)}
+											onContinue={(raw) =>
+												setWikiCompletionDraft((current) =>
+													current ? { ...current, raw } : current,
+												)
+											}
+											controllerRef={completionControllerRef}
+										/>
+									) : null}
+								</EditorContainer>
+							</ContextMenuTrigger>
+							<ContextMenuContent className="w-56">
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.cut}
+									onSelect={() => {
+										void handleContextMenuCut();
+									}}
+								>
+									{i18n.t("editor:contextMenu.cut")}
+									<ContextMenuShortcut>⌘X</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.copy}
+									onSelect={() => {
+										void handleContextMenuCopy();
+									}}
+								>
+									{i18n.t("editor:contextMenu.copy")}
+									<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.paste}
+									onSelect={() => {
+										void handleContextMenuPaste();
+									}}
+								>
+									{i18n.t("editor:contextMenu.paste")}
+									<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.insertLink}
+									onSelect={() => insertContextMenuLink("wiki")}
+								>
+									{i18n.t("editor:contextMenu.insertWikiLink")}
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.insertLink}
+									onSelect={() => insertContextMenuLink("external")}
+								>
+									{i18n.t("editor:contextMenu.insertExternalLink")}
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.renameHeading}
+									onSelect={() => {
+										if (headingContext) setHeadingRenameOpen(true);
+									}}
+								>
+									{i18n.t("editor:headingRename.menu")}
+								</ContextMenuItem>
+							</ContextMenuContent>
+						</ContextMenu>
+						<HeadingRenameDialog
+							open={headingRenameOpen}
+							heading={headingContext}
+							busy={headingRenameBusy}
+							onOpenChange={setHeadingRenameOpen}
+							onConfirm={confirmHeadingRename}
+						/>
 					</div>
 				</Plate>
 			</MarkdownDocProvider>

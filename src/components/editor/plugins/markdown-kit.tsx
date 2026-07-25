@@ -11,7 +11,25 @@ import remarkMath from "remark-math";
 import { wikiLinkRules } from "@/components/editor/plugins/wikilink-model";
 
 export const MarkdownKit = [
-	BaseFootnoteReferencePlugin,
+	BaseFootnoteReferencePlugin.configure({
+		options: {
+			triggerQuery: (editor) => {
+				const { selection } = editor;
+				if (!selection || !editor.api.isCollapsed()) return true;
+				const start = editor.api.before(selection, {
+					distance: 2,
+					unit: "character",
+				});
+				if (!start) return true;
+				return (
+					editor.api.string({
+						anchor: start,
+						focus: selection.anchor,
+					}) !== "[["
+				);
+			},
+		},
+	}),
 	BaseFootnoteDefinitionPlugin,
 	MarkdownPlugin.configure({
 		options: {

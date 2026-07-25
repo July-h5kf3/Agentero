@@ -139,6 +139,8 @@ export type DocTab = {
 
 `fromJSON` 恢复布局后按 `tab.mode` 再 `setRenderer`，避免旧快照缺 renderer 字段时丢失保活。
 
+Dockview 7 为尚未测量的 inactive `renderer: 'always'` panel 创建 `.dv-render-overlay` 时，只先写入 `visibility: hidden` 与 `pointer-events: none`。此时 overlay 还没有 inline `left/top/width/height`，绝对定位的 static position 可能落在当前内容之后并扩大滚动区。`src/index.css` 因此在 `.agentero-dockview .dv-render-overlay` 提供 `top: 0; left: 0` 初始锚点；panel 完成布局后 Dockview 的 inline 坐标覆盖该 fallback。不得用 `display: none` 或卸载 overlay 规避空白，否则 PDF 壳保活失效。
+
 ## 9. 已用 / 刻意未用的 dockview 能力（7.0.x）
 
 | 状态 | 能力 |

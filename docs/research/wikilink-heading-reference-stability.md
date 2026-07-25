@@ -4,17 +4,19 @@
 |---|---|
 | 创建日期 | 2026-07-25 |
 | 类型 | 问题分析 / 架构演进 |
-| 状态 | 调研完成，实施延期 |
+| 状态 | 已实现，等待真实 Vault E2E |
 | 相关文档 | [双链、反链与图谱](../backend/wikilinks.md)、[开发 TODO](../development/todo.md) |
 
 ## 1. 结论
 
-当前发版不实现标题改名后的跨文件引用同步。后续修正应包含两个相互独立的能力：
+Agentero 已按调研结论实现两个相互独立的能力：
 
-1. 显式“重命名当前小标题”命令：负责精确改写来源 Markdown 中的标题双链与嵌入，是关系正确性的实现。
-2. 可持久化 Metadata Cache：负责加速索引恢复、反链、补全和图谱查询，是性能优化，不能替代 Markdown 改写。
+1. 显式“重命名当前标题”命令：负责精确改写来源 Markdown 中的标题双链与嵌入，是关系正确性的实现。
+2. 可持久化 Metadata Cache：负责加速索引恢复、反链、补全和图谱查询，是性能优化，不替代 Markdown 改写。
 
-Agentero 应复用 Obsidian 的产品语义，不照搬前端 IndexedDB 技术栈。Wiki 解析、查询和写入事务均由 Rust Host 管理，因此缓存更适合由 Host 保存到应用缓存目录中的 SQLite。Markdown 继续作为唯一事实来源；缓存损坏、缺失或版本不兼容时必须能够直接重建。
+实现复用 Obsidian 的产品语义，没有照搬前端 IndexedDB 技术栈。Wiki 解析、查询和写入事务均由 Rust Host 管理，缓存由 Host 保存到应用缓存目录中的 SQLite。Markdown 继续作为唯一事实来源；缓存损坏、缺失、过期或版本不兼容时直接从 Vault 重建。
+
+自动化已经覆盖显式事务的精确改写、门禁与回滚，以及 cache 的 warm/cold 等价、文件变化、损坏/版本失配、完整性篡改、删除重建和不可写降级。真实 Vault 中的交互、重启与删除 cache 后复验由 Owner E2E 完成。
 
 ## 2. 问题
 
@@ -66,7 +68,7 @@ Obsidian 将笔记保存在 Markdown 文件中，并把 Metadata Cache 持久化
 | 修改 block 正文并保留 `^id` | block 引用保持稳定 | 否 |
 | 修改或删除 `^id` | 旧 block 引用失效 | 需要显式改写 |
 
-Obsidian 社区的受限模式复现表明，手工改标题不会更新来源链接，右键“重命名当前小标题”才会更新。多级标题的官方重命名能力仍只有部分支持。可审查的 Keep Headings 插件同样只调用官方 `editor:rename-heading` 命令，没有维护私有关系数据库。
+Obsidian 社区的受限模式复现表明，手工改标题不会更新来源链接，右键“重命名当前标题”才会更新。多级标题的官方重命名能力仍只有部分支持。可审查的 Keep Headings 插件同样只调用官方 `editor:rename-heading` 命令，没有维护私有关系数据库。
 
 ## 4. 已放弃的自动推断方案
 
@@ -89,11 +91,11 @@ Obsidian 社区的受限模式复现表明，手工改标题不会更新来源�
 
 ## 5. 推荐设计
 
-### 5.1 显式重命名当前小标题
+### 5.1 显式重命名当前标题
 
-编辑器在标题右键菜单和命令入口提供“重命名当前小标题…”。命令只作用于当前光标所在标题，并显示可编辑的新标题输入框。
+编辑器已在右键菜单提供“重命名当前标题…”。命令优先作用于光标所在标题；光标在正文时定位当前章节之前最近的标题，位于首个标题之前时定位首个标题。只要文档存在标题且 dirty、只读、remote/非本地等门禁未触发，命令即可显示受控的新标题输入框；无法从保存态唯一确认标题时禁用。
 
-建议 Host 接口：
+已实现的 Host 接口：
 
 ```text
 wiki_rename_heading {
@@ -116,7 +118,7 @@ wiki_rename_heading {
 控制流：
 
 ```text
-用户执行“重命名当前小标题”
+用户执行“重命名当前标题”
   → Host 校验目标文件内容仍等于 expectedContent
   → 从旧 WikiIndex 确认目标 heading
   → 生成目标文件的新 Markdown
@@ -141,7 +143,7 @@ wiki_rename_heading {
 
 ### 5.2 Host 侧持久化 Metadata Cache
 
-当前 `WikiIndex` 是 Rust Host 中的内存结构，全量 `graph_rebuild` 从 Vault 文件生成。持久化层建议位于：
+`WikiIndex` 仍是 Rust Host 中的内存查询结构；`graph_rebuild` 优先校验 warm snapshot，未命中时从 Vault 文件全量生成。持久化层位于：
 
 ```text
 agentero_cache_dir()/wiki/<vault-key>.sqlite
@@ -149,19 +151,21 @@ agentero_cache_dir()/wiki/<vault-key>.sqlite
 
 缓存不写入 Vault，不参与同步，也不进入 `.agentero/catalog.sqlite`。`catalog.sqlite` 是论文 metadata 的权威存储，Wiki Cache 只能是可删除的派生数据。
 
-建议保存：
+当前 snapshot 保存：
 
 ```text
 cache_metadata
   schema_version
   parser_version
   vault_key
+  vault_path
   built_at
+  snapshot_hash
 
 files
   relative_path
   size
-  modified_time
+  modified_time_ns
   content_hash
 
 documents
@@ -171,15 +175,8 @@ documents
   blocks
 
 occurrences
-  source_path
-  target_text
-  syntax
-  embed
-  fragment
-  source_range
-  fragment_range
-  resolution_status
-  resolved_target
+  ordinal
+  resolved_link_json
 ```
 
 加载规则：
@@ -187,7 +184,7 @@ occurrences
 1. 校验缓存 schema、parser 版本和 Vault 身份。
 2. 比较文件集合及 size、mtime、content hash。
 3. 完全一致时恢复内存 `WikiIndex`。
-4. 存在差异时只信任未变化文件；首版也可以立即全量重建，再覆盖缓存。
+4. 存在任一差异时立即全量重建，再覆盖缓存。
 5. 缓存损坏、缺表、版本变化或读取失败时删除对应快照并重建。
 6. 缓存写入失败只记录日志，不能阻塞 Markdown 保存、导航或重命名事务。
 
@@ -205,21 +202,21 @@ Markdown
 
 删除整个 Cache 后，所有链接解析、重命名和图谱结果必须与删除前一致。
 
-## 6. 后续实施顺序
+## 6. 实施状态
 
-### Phase 1：显式标题重命名事务
+### Phase 1：显式标题重命名事务 ✅
 
 - 在 Host 增加 heading 身份、精确 fragment range 和 `wiki_rename_heading`。
 - 复用文件改名事务的 hash、dirty path、原子替换和回滚纪律。
 - 覆盖 Wikilink、嵌入、Markdown link、同文件 fragment 和多级标题路径。
 
-### Phase 2：编辑器入口
+### Phase 2：编辑器入口 ✅
 
-- 标题右键菜单增加“重命名当前小标题…”。
-- 只在 selection 位于 heading 时启用。
+- 编辑器右键菜单增加“重命名当前标题…”，并按光标所在章节定位标题。
+- 文档存在可映射到保存态的标题且 dirty、只读、remote 等门禁通过时启用。
 - 成功后同步目标编辑器、受影响标签页、Backlinks、Graph 和嵌入投影。
 
-### Phase 3：Metadata Cache 持久化
+### Phase 3：Metadata Cache 持久化 ✅
 
 - 为 `WikiIndex` 增加版本化 SQLite snapshot。
 - 打开 Vault 时加载并校验缓存。
@@ -228,9 +225,9 @@ Markdown
 
 ### Phase 4：回归与真实 Vault 验收
 
-- 自动化覆盖成功、歧义、dirty source、磁盘冲突、写入失败和回滚。
-- 使用真实 Vault 验证普通双链、嵌入、同文件标题、多级标题和同名文件。
-- 删除缓存、重启应用后重复验收，确认缓存不影响语义。
+- [x] 自动化覆盖成功、歧义、dirty source、磁盘冲突、写入失败和回滚。
+- [ ] Owner E2E：使用真实 Vault 验证普通双链、嵌入、同文件标题、多级标题和同名文件。
+- [ ] Owner E2E：删除缓存、重启应用后重复验收，确认缓存不影响语义。
 
 ## 7. 验收标准
 

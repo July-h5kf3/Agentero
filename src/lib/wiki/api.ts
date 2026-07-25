@@ -28,6 +28,7 @@ export type InternalLinkOccurrence = {
 	displayText?: string;
 	fragment?: LinkFragment;
 	sourceRange: { start: number; end: number };
+	fragmentRange?: { start: number; end: number };
 	line: number;
 	context?: string;
 };
@@ -89,6 +90,22 @@ export type WikiRenameResult = {
 	movedPath: string;
 	updatedSources: string[];
 	skipped: WikiRenameSkipped[];
+	rollback: WikiRenameRollback;
+};
+
+export type WikiRenameHeadingRequest = {
+	path: string;
+	headingPath: string[];
+	headingLine: number;
+	expectedContent: string;
+	newText: string;
+};
+
+export type WikiRenameHeadingResult = {
+	path: string;
+	oldPath: string[];
+	newPath: string[];
+	updatedSources: string[];
 	rollback: WikiRenameRollback;
 };
 
@@ -174,6 +191,17 @@ export async function moveVaultPath(
 ): Promise<WikiRenameResult> {
 	return invokeWikiApi<WikiRenameResult>("wiki_move", {
 		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
+}
+
+/** Explicitly rename one saved heading and repair resolved heading fragments. */
+export async function renameWikiHeading(
+	vaultPath: string,
+	request: WikiRenameHeadingRequest,
+	dirtyPaths: string[],
+): Promise<WikiRenameHeadingResult> {
+	return invokeWikiApi<WikiRenameHeadingResult>("wiki_rename_heading", {
+		args: { vaultPath, ...request, dirtyPaths },
 	});
 }
 
@@ -602,6 +630,27 @@ export type WikiNavTarget = {
 	status: LinkResolutionStatus;
 	fragment?: LinkFragment;
 };
+
+/**
+ * Select the file-level destination for a link click.
+ *
+ * An invalid fragment still has a valid target file, so navigation degrades to
+ * that file without forwarding the stale heading/block intent.
+ */
+export function wikiNavigationDestination(nav: WikiNavTarget): {
+	path: string;
+	fragment?: LinkFragment;
+	warning?: "invalidFragment";
+} | null {
+	if (!nav.path) return null;
+	if (nav.status === "resolved") {
+		return { path: nav.path, fragment: nav.fragment };
+	}
+	if (nav.status === "invalidFragment") {
+		return { path: nav.path, warning: "invalidFragment" };
+	}
+	return null;
+}
 
 /** Encode navigation payload into a markdown-safe href. */
 export function encodeWikiHref(nav: WikiNavTarget): string {

@@ -220,6 +220,7 @@
   - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF **左右分屏**：左 PDF、右 NOTES）；Layout / 快捷键开关。论文库视图或未选论文时不自动开 NOTES。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选固定工具栏（`editor-toolbar.tsx`）：标题、引用、加粗/斜体等、列表、**插入图片**。全局设置 `showEditorToolbar`（默认开）；只读时不渲染。i18n `editor:toolbar.*`。
   - **编辑体验**：Plate list 可编辑；文本选区中性色；文档末与图片后保持 trailing paragraph。
+  - **编辑器右键菜单**：保留剪切 / 复制 / 粘贴；只读文档仅允许复制。新增“双链”插入 `[[]]` 并把光标置于双括号内，新增“外部链接”插入 `[]()` 并把光标置于方括号内；已有单行选区会作为链接文本保留并保持选中。菜单打开时用 Slate range ref 保留选区，避免 portal 接管焦点后命令落到错误位置；“重命名当前标题…”继续按独立门禁启用。
   - **Markdown 图片**（已落地）：粘贴/工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时延迟 GC。实现：`src/lib/markdown/image.ts`；约定见 [`../backend/data-model.md`](../backend/data-model.md)。
   - **Notes 开关**：Layout 菜单 / 快捷键切换当前论文的 NOTES panel（`toggleNotesSplit`）；`⌘3` 聚焦 Notes（未开则先打开）。关闭文档 panel 走 dockview tab `X` 或 `⌘W`（有弹层时先关弹层，见 §3.0）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。
@@ -236,7 +237,8 @@
   - 默认竖向：`.agentero-scroll`；双向（论文库表）：`.agentero-scroll-both`。
 - **中间栏视图**：
   - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。
-  - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行，错误 fragment 显示 Toast。
+  - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；`[[#` 仅列出当前文件标题，`[[^` 仅列出当前文件中已有 ID 的 block，并将选择结果写成 `[[#^block-id]]`。Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行；fragment 已失效但文件仍存在时降级打开目标文件，不定位 fragment，并显示错误 Toast。
+  - **重命名当前标题**：编辑器右键菜单提供“重命名当前标题…”并打开受控输入 Dialog。光标在标题内时定位该标题；在正文中定位当前章节之前最近的标题；若光标位于首个标题之前则定位首个标题，因此只要文档含标题且其它门禁通过，菜单即可执行。命令仅对本地、可写、无未保存修改且保存态中能以 heading path + line 唯一确认的文档启用；普通直接编辑标题只保存当前文档，不同步入链。成功后重载所有受影响的已打开文档并刷新 Backlinks、Outgoing links、Graph 与嵌入；dirty/stale/歧义或事务失败显示结构化错误，不覆盖编辑器内容。
   - **只读嵌入**：`![[note]]`、`![[note#heading]]` 与 `![[note#^block-id]]` 分别显示整篇 Markdown、标题区段或 block；`![[image.png]]`（支持 `|宽度` / `|宽x高`）和 `![[document.pdf]]` 复用现有图片/PDF 组件。投影从当前行之后以块布局显示，内部链接可点击跳转；进入源码时隐藏但不卸载投影。循环嵌入与超过 4 层的嵌套显示有界状态。
   - **YAML frontmatter** 按字节保留；Plate 会归一化部分 Markdown 风格。
   - PDF / HTML / **图片** 预览：
@@ -326,13 +328,13 @@
   - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。
   - 关 panel 后列表为空 → 自动打开全库。
   - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关 active panel，关空后回全库。
-- **挂载策略**：PDF panel 壳用 dockview `renderer: 'always'` 保活；EmbedPDF 引擎由 App **PDF LRU**（默认 4）限流。非 PDF 默认 `onlyWhenVisible`。作用域 / 全库共用 `libraryPapers` 缓存。
+- **挂载策略**：PDF panel 壳用 dockview `renderer: 'always'` 保活；EmbedPDF 引擎由 App **PDF LRU**（默认 4）限流。非 PDF 默认 `onlyWhenVisible`。Dockview 首次尚未测量 inactive panel 时，隐藏 `.dv-render-overlay` 由 `.agentero-dockview` 样式提供 `top: 0; left: 0` 初始锚点，避免绝对定位元素的 static position 扩大文档滚动区；后续 inline 坐标正常覆盖该 fallback。作用域 / 全库共用 `libraryPapers` 缓存。
 - **焦点**：完全听 dockview `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` **视觉序**循环。
 - **持久化**：**只存** dockview `toJSON()`（panel params 含 path/mode）；按窗口恢复。
 - **NOTES**：`createNotesSplitPane` 派生独立 panel；paper-reader / download 写回后按路径 reseed。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`src/lib/vault/fs-watch.ts`）。打开中的 `.md`/`NOTES.md`：无未存改动则重载；有未存改动 toast 提示不静默覆盖；内容相等抑制自写回声。结构性变更去抖刷新文件树。
 - **外部本地改名 repair**：只有 Host 明确给出可信 `rename { from, to }` 时才进入内链 repair。General 的 `autoUpdateInternalLinks: "ask"` 默认先显示影响范围；`"always"` 仍要求 dirty path、hash、磁盘状态门禁全部通过。成功后 Dockview panel、活动路径、树选中、Library scope 与 PDF highlights 统一重映射；remote Vault 不自动修复。
-- **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。
+- **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。Host 可从应用 cache 目录中的版本化 SQLite snapshot warm restore；任一目标文件指纹变化、版本不匹配或缓存损坏即从 Vault 冷重建，cache 失败不阻塞 UI。
 - **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。
 
 后续增强（未做）：

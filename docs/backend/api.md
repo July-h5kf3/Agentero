@@ -1500,7 +1500,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
-`ResolvedLink` 保留 occurrence 的 `source`、`targetRaw`、`syntax`、`embed`、`displayText?`、typed `fragment?`、`sourceRange`、`line`、`context?`，并返回 `status`（`resolved` / `missing` / `ambiguous` / `invalidFragment`）、`targetPath?` 与 `candidates?`。反链和出链以 occurrence 为单位，不能由 Graph 去重结果反推。
+`ResolvedLink` 保留 occurrence 的 `source`、`targetRaw`、`syntax`、`embed`、`displayText?`、typed `fragment?`、`sourceRange`、`fragmentRange?`、`line`、`context?`，并返回 `status`（`resolved` / `missing` / `ambiguous` / `invalidFragment`）、`targetPath?` 与 `candidates?`。`fragmentRange` 仅覆盖 `#` 后的 heading/block 正文，供显式标题事务精确改写；反链和出链以 occurrence 为单位，不能由 Graph 去重结果反推。
 
 #### `wiki_get_outgoing`
 
@@ -1577,6 +1577,34 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 `WikiRenameResult` 为 `{ movedPath, updatedSources, skipped: { path, reason }[], rollback }`，其中 `rollback` 为 `notNeeded`、`completed` 或 `manualRecoveryRequired`。冲突、未保存编辑、来源内容已变、目标已存在或失败回滚均返回错误；remote Vault 不通过该本地命令执行。
 
+#### `wiki_rename_heading`
+
+显式重命名一个本地、可写且已保存 Markdown 文档中的标题，并同步所有已解析到该标题或受影响后代的 heading fragment。普通编辑与 autosave 不调用此命令。
+
+```ts
+{
+  vaultPath: string;
+  path: string;
+  headingPath: string[];
+  headingLine: number;
+  expectedContent: string;
+  newText: string;
+  dirtyPaths?: string[];
+}
+// => {
+//   ok: true;
+//   data: {
+//     path: string;
+//     oldPath: string[];
+//     newPath: string[];
+//     updatedSources: string[];
+//     rollback: "not-needed" | "completed" | "manual-recovery-required";
+//   }
+// }
+```
+
+Host 以 `expectedContent + headingPath + headingLine` 复核保存态标题身份，只改写 occurrence 的精确 `fragmentRange`。Wikilink、嵌入、Vault-local Markdown link、同文件 fragment 与多级 heading path 均走同一事务；文件目标、alias、Markdown label 和周围正文保持不变。dirty source、stale content、标题缺失、新标题无效/歧义或重叠编辑会在写入前失败；写入或索引重建失败返回 `{ code, rollback }` 结构化 details。
+
 #### `wiki_external_rename_preview`
 
 为已由 Finder、Obsidian 或 Agent 完成的**可信本地外部 rename**创建只读 repair candidate。调用方传入 watcher 的 old/new Vault 相对路径与当前 dirty path；Host 必须仍持有改名前索引，且验证旧路径已不存在、新路径存在后才返回 candidate。
@@ -1647,7 +1675,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `graph_rebuild`
 
-全量扫描 Vault 内 Markdown，重建内存 wikilink 索引。
+校验当前 Vault 的版本化 Wiki snapshot；完全命中时恢复内存索引，否则全量扫描 Vault target 文件、重建索引并 best-effort 覆盖 snapshot。缓存位于应用 cache 目录，不写入 Vault 或 `.agentero/catalog.sqlite`。
 
 - **参数**
 
@@ -1669,6 +1697,20 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   };
 }
 ```
+
+#### `wiki_cache_rebuild`
+
+内部诊断命令。删除当前 Vault 的派生 Wiki snapshot，再从 Vault 文件冷重建并写入新 snapshot；删除或写 cache 失败不改变 Markdown 事实来源。
+
+```ts
+{ vaultPath: string }
+// => {
+//   ok: true;
+//   data: { indexedFiles: number; edges: number; nodes: number }
+// }
+```
+
+snapshot 保存所有 Wiki target 的 size、mtime、SHA-256，以及 documents 与 resolved occurrences。schema/parser version、Vault identity、文件指纹或 snapshot integrity hash 任一不匹配时，普通 rebuild 会丢弃旧 snapshot 并冷重建；cache 写失败只记录 warning，内存 rebuild 仍成功。
 
 ### 3.9 配置
 

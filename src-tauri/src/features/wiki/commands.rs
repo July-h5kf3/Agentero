@@ -1,10 +1,26 @@
 use crate::core::error::{map_err, ApiResult, AppError};
+use crate::features::wiki::heading_rename::run_heading_rename_transaction;
 use crate::features::wiki::models::{
     BacklinksResponse, GraphResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult,
-    WikiEmbedResponse, WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
+    WikiEmbedResponse, WikiRenameHeadingResult, WikiResolveResponse, WikiSearchCandidate,
+    WikiSearchCandidateKind,
 };
 use crate::features::wiki::WikiIndexState;
+use std::path::PathBuf;
 use tauri::State;
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiRenameHeadingArgs {
+    pub vault_path: String,
+    pub path: String,
+    pub heading_path: Vec<String>,
+    pub heading_line: u32,
+    pub expected_content: String,
+    pub new_text: String,
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
+}
 
 #[tauri::command]
 pub fn graph_get_backlinks(
@@ -103,6 +119,42 @@ pub fn wiki_search(
     ApiResult::ok(guard.search_scoped(&query, path.as_deref(), kind.as_ref()))
 }
 
+/// Explicitly rename one saved heading and rewrite every resolved inbound
+/// heading fragment as one rollback-capable local transaction.
+#[tauri::command]
+pub fn wiki_rename_heading(
+    args: WikiRenameHeadingArgs,
+    index: State<'_, WikiIndexState>,
+) -> ApiResult<WikiRenameHeadingResult> {
+    let vault = PathBuf::from(&args.vault_path);
+    if !vault.is_dir() {
+        return map_err(AppError::message("vault path is not a directory"));
+    }
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    match run_heading_rename_transaction(
+        &vault,
+        &mut guard,
+        &args.path,
+        &args.heading_path,
+        args.heading_line,
+        &args.expected_content,
+        &args.new_text,
+        &args.dirty_paths,
+    ) {
+        Ok(result) => ApiResult::ok(result),
+        Err(error) => ApiResult::err_with_details(
+            AppError::message(error.to_string()),
+            serde_json::json!({
+                "code": error.code,
+                "rollback": error.rollback,
+            }),
+        ),
+    }
+}
+
 #[tauri::command]
 pub fn graph_get_graph(
     index: State<'_, WikiIndexState>,
@@ -147,5 +199,23 @@ pub fn graph_rebuild(
             op.finish_err(&err);
             map_err(err)
         }
+    }
+}
+
+/// Internal diagnostic: remove the derived snapshot and rebuild it from Vault files.
+#[tauri::command]
+pub fn wiki_cache_rebuild(
+    index: State<'_, WikiIndexState>,
+    vault_path: String,
+) -> ApiResult<RebuildResult> {
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => {
+            return map_err(AppError::message(format!("wiki index lock: {error}")));
+        }
+    };
+    match guard.rebuild_fresh(&vault_path) {
+        Ok(result) => ApiResult::ok(result),
+        Err(error) => map_err(AppError::message(error)),
     }
 }

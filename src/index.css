@@ -296,6 +296,17 @@
 }
 
 /*
+ * Dockview keeps `renderer: "always"` panels mounted in `.dv-render-overlay`.
+ * Before its first measured layout, a hidden overlay has no inline coordinates;
+ * anchor that fallback at the workspace origin so its static position cannot
+ * extend the document scroll area. Later inline left/top values still win.
+ */
+.agentero-dockview .dv-render-overlay {
+	top: 0;
+	left: 0;
+}
+
+/*
  * Fill grid/split ancestry. Do NOT set height:100% on .dv-content-container —
  * groupview is a flex column (tabs chrome + content). Forcing content to 100% of
  * the group makes it overflow by the tab bar height, so editor toolbars stack

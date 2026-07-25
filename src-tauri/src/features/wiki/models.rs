@@ -47,6 +47,11 @@ pub struct InternalLinkOccurrence {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fragment: Option<LinkFragment>,
     pub source_range: SourceRange,
+    /// Byte range of the fragment text after `#`, excluding the separator,
+    /// display alias/label, and closing syntax. Heading rename transactions use
+    /// this range instead of reconstructing source syntax.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragment_range: Option<SourceRange>,
     pub line: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
@@ -193,6 +198,9 @@ pub enum WikiRenameErrorCode {
     UnsavedEdits,
     PermissionDenied,
     AtomicRenameUnsupported,
+    HeadingMissing,
+    InvalidHeading,
+    AmbiguousHeading,
     OverlappingEdits,
     MoveFailed,
     WriteFailed,
@@ -223,6 +231,17 @@ pub struct WikiRenameResult {
     pub moved_path: String,
     pub updated_sources: Vec<String>,
     pub skipped: Vec<WikiRenameSkipped>,
+    pub rollback: WikiRenameRollback,
+}
+
+/// Observable outcome of a successful explicit heading rename.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiRenameHeadingResult {
+    pub path: String,
+    pub old_path: Vec<String>,
+    pub new_path: Vec<String>,
+    pub updated_sources: Vec<String>,
     pub rollback: WikiRenameRollback,
 }
 
@@ -300,6 +319,7 @@ mod tests {
                     display_text: None,
                     fragment: None,
                     source_range: SourceRange { start: 4, end: 16 },
+                    fragment_range: None,
                     line: 1,
                     context: Some("[[notes/Target]]".to_string()),
                 },

@@ -6,7 +6,7 @@
 
 use crate::features::wiki::index::WikiIndex;
 use crate::features::wiki::models::{
-    InternalLinkSyntax, LinkResolutionStatus, WikiRenameErrorCode, WikiRenameResult,
+    InternalLinkSyntax, LinkResolutionStatus, ResolvedLink, WikiRenameErrorCode, WikiRenameResult,
     WikiRenameRollback, WikiRenameSkipped,
 };
 use sha2::{Digest, Sha256};
@@ -26,7 +26,7 @@ pub struct WikiRenameError {
 }
 
 impl WikiRenameError {
-    fn new(code: WikiRenameErrorCode, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: WikiRenameErrorCode, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -34,7 +34,7 @@ impl WikiRenameError {
         }
     }
 
-    fn after_mutation(
+    pub(crate) fn after_mutation(
         code: WikiRenameErrorCode,
         message: impl Into<String>,
         rollback: WikiRenameRollback,
@@ -142,6 +142,20 @@ pub struct WikiRenameTransaction {
     skipped: Vec<WikiRenameSkipped>,
 }
 
+/// Return the uniquely resolved document target independently of fragment health.
+///
+/// File moves replace only `target_raw`; heading/block fragments stay untouched.
+/// A stale fragment therefore must not make an otherwise unambiguous Wikilink or
+/// embed keep pointing at the old file path.
+fn unique_document_target(edge: &ResolvedLink) -> Option<&str> {
+    match edge.status {
+        LinkResolutionStatus::Resolved | LinkResolutionStatus::InvalidFragment => {
+            edge.target_path.as_deref()
+        }
+        LinkResolutionStatus::Missing | LinkResolutionStatus::Ambiguous => None,
+    }
+}
+
 impl WikiRenameTransaction {
     /// Create a transaction from an index that still describes the old Vault
     /// state. The caller must rebuild immediately before calling this function.
@@ -230,10 +244,8 @@ impl WikiRenameTransaction {
 
         for edge in &index.edges {
             let source_moved = is_at_or_under(&edge.occurrence.source, &from);
-            let target_moved = edge
-                .target_path
-                .as_deref()
-                .is_some_and(|target| is_at_or_under(target, &from));
+            let unique_target = unique_document_target(edge);
+            let target_moved = unique_target.is_some_and(|target| is_at_or_under(target, &from));
             let candidate_target_moved = edge
                 .candidates
                 .iter()
@@ -244,14 +256,11 @@ impl WikiRenameTransaction {
             if !target_moved && !candidate_target_moved && !source_moved_markdown {
                 continue;
             }
-            if !matches!(edge.status, LinkResolutionStatus::Resolved) {
+            let Some(target) = unique_target else {
                 skipped
                     .entry(edge.occurrence.source.clone())
                     .or_default()
                     .insert("unresolved or ambiguous link".to_string());
-                continue;
-            }
-            let Some(target) = edge.target_path.as_deref() else {
                 continue;
             };
             let final_source = remap_path(&edge.occurrence.source, &from, &to);
@@ -606,7 +615,7 @@ pub fn run_prepared_external_rename_repair(
     Ok(result)
 }
 
-fn normalize_vault_path(path: &str) -> Result<String, WikiRenameError> {
+pub(crate) fn normalize_vault_path(path: &str) -> Result<String, WikiRenameError> {
     let path = path.trim().replace('\\', "/");
     let path = path.trim_matches('/');
     if path.is_empty() {
@@ -701,7 +710,7 @@ fn component_name(component: Component<'_>) -> Option<&str> {
     }
 }
 
-fn content_hash(content: &str) -> String {
+pub(crate) fn content_hash(content: &str) -> String {
     hex::encode(Sha256::digest(content.as_bytes()))
 }
 
@@ -713,7 +722,7 @@ fn apply_edits(content: &str, edits: &[PlannedEdit]) -> String {
     rewritten
 }
 
-fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("{} has no parent", path.display()))?;
@@ -799,6 +808,30 @@ mod tests {
             "[[archive/Renamed#Overview|Alias]] ![[archive/Renamed#^block]] [label](../archive/Renamed.md#Overview) `[[notes/Target]]`\n"
         );
         assert!(root.join("archive/Renamed.md").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rewrites_unique_file_targets_even_when_an_embed_fragment_is_invalid() {
+        let root = temp_vault();
+        write(
+            &root,
+            "notes/Source.md",
+            "[[notes/Target#Overview]]\n![[notes/Target#Renamed heading]]\n",
+        );
+        write(&root, "notes/Target.md", "# Overview\n");
+        let index = snapshot(&root);
+        let transaction =
+            WikiRenameTransaction::plan(&root, &index, "notes/Target.md", "archive/Renamed.md")
+                .expect("plan");
+
+        assert_eq!(transaction.updated_sources(), vec!["notes/Source.md"]);
+        assert!(transaction.skipped().is_empty());
+        transaction.execute(|| Ok(())).expect("execute");
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).expect("source"),
+            "[[archive/Renamed#Overview]]\n![[archive/Renamed#Renamed heading]]\n"
+        );
         let _ = fs::remove_dir_all(root);
     }
 

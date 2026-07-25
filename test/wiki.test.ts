@@ -10,6 +10,7 @@ import {
 	rewriteWikilinksForPreview,
 	toVaultRelative,
 	WIKI_HREF_PREFIX,
+	wikiNavigationDestination,
 } from "@/lib/wiki";
 import semanticFixture from "./fixtures/wikilinks/semantic-cases.json";
 import { createTestVault } from "./helpers/create-test-vault";
@@ -251,5 +252,36 @@ describe("wikilink preview rewrite", () => {
 		} finally {
 			await vault.cleanup();
 		}
+	});
+});
+
+describe("wikilink click destination", () => {
+	it("opens the target file without a stale heading when the fragment is missing", () => {
+		expect(
+			wikiNavigationDestination({
+				targetRaw: "02-链接目标",
+				path: "notes/02-链接目标.md",
+				status: "invalidFragment",
+				fragment: { kind: "heading", path: ["已删除标题"] },
+			}),
+		).toEqual({
+			path: "notes/02-链接目标.md",
+			warning: "invalidFragment",
+		});
+	});
+
+	it("keeps a valid fragment for precise navigation", () => {
+		const fragment = { kind: "heading" as const, path: ["现有标题"] };
+		expect(
+			wikiNavigationDestination({
+				targetRaw: "02-链接目标",
+				path: "notes/02-链接目标.md",
+				status: "resolved",
+				fragment,
+			}),
+		).toEqual({
+			path: "notes/02-链接目标.md",
+			fragment,
+		});
 	});
 });
