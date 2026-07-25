@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	externalRenameRepairHadZeroWrites,
+	externalRenameRepairNeeded,
 	extractWikilinks,
 	isVaultLocalMarkdownLink,
 	parseWikiHref,
@@ -204,6 +205,15 @@ describe("wikilink resolution", () => {
 		expect(externalRenameRepairHadZeroWrites(rolledBack)).toBe(false);
 		expect(externalRenameRepairHadZeroWrites(manualRecovery)).toBe(false);
 		expect(externalRenameRepairHadZeroWrites(new Error("unknown"))).toBe(false);
+	});
+
+	it("only offers external rename repair when a source needs rewriting", () => {
+		expect(externalRenameRepairNeeded({ affectedSources: [] })).toBe(false);
+		expect(
+			externalRenameRepairNeeded({
+				affectedSources: ["notes/Source.md"],
+			}),
+		).toBe(true);
 	});
 });
 

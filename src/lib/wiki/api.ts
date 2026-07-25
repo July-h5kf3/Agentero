@@ -101,6 +101,13 @@ export type WikiExternalRenamePreview = {
 	skipped: WikiRenameSkipped[];
 };
 
+/** Whether an external rename preview contains any safe link rewrites to apply. */
+export function externalRenameRepairNeeded(
+	preview: Pick<WikiExternalRenamePreview, "affectedSources">,
+): boolean {
+	return preview.affectedSources.length > 0;
+}
+
 export type GraphNodeType = "paper" | "note" | "index" | "stub";
 
 export type GraphNode = {

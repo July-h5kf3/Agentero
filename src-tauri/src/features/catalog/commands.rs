@@ -143,8 +143,8 @@ fn move_inner(
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
-    let from = args.from_rel.trim().trim_matches('/').replace('\\', "/");
-    let new_rel = super::move_paper_under(&vault, &args.from_rel, &args.dest_parent_rel)?;
+    let (from, new_rel) =
+        super::plan_paper_move_under(&vault, &args.from_rel, &args.dest_parent_rel)?;
     if new_rel == from {
         return Err(AppError::message("already in this folder"));
     }
@@ -159,6 +159,40 @@ fn move_inner(
         new_rel,
         link_update,
     })
+}
+
+#[cfg(test)]
+mod move_tests {
+    use super::*;
+    use crate::features::wiki::index::WikiIndex;
+    use std::fs;
+    use uuid::Uuid;
+
+    #[test]
+    fn paper_move_runs_the_filesystem_move_inside_the_wiki_transaction() {
+        let vault = std::env::temp_dir().join(format!("agentero-paper-move-{}", Uuid::new_v4()));
+        let source = vault.join("papers/inbox/New note.md");
+        fs::create_dir_all(source.parent().expect("source parent")).expect("create source parent");
+        fs::write(&source, "# New note\n").expect("write source");
+
+        let mut index = WikiIndex::default();
+        let result = move_inner(
+            PaperMoveArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                from_rel: "papers/inbox/New note.md".to_string(),
+                dest_parent_rel: "papers/archive".to_string(),
+                dirty_paths: Vec::new(),
+            },
+            &mut index,
+        )
+        .expect("move succeeds");
+
+        assert_eq!(result.new_rel, "papers/archive/New note.md");
+        assert!(result.link_update.updated_sources.is_empty());
+        assert!(!source.exists());
+        assert!(vault.join(&result.new_rel).exists());
+        let _ = fs::remove_dir_all(vault);
+    }
 }
 
 #[derive(Debug, Deserialize)]

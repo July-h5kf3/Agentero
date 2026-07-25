@@ -183,6 +183,7 @@ import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import {
 	applyExternalRenameRepair,
 	externalRenameRepairHadZeroWrites,
+	externalRenameRepairNeeded,
 	missingNotePath,
 	moveVaultPath,
 	newNoteMarkdown,
@@ -1523,6 +1524,15 @@ export default function App() {
 		}, 900);
 	}, []);
 
+	const trackInternalRenamePaths = useCallback(
+		(paths: string[], expiresAt: number) => {
+			for (const path of paths) {
+				internalRenamePathsRef.current.set(normalizeTabPath(path), expiresAt);
+			}
+		},
+		[],
+	);
+
 	const shouldIgnoreInternalRenameEvent = useCallback(
 		(payload: VaultFileChangedPayload): boolean => {
 			const now = Date.now();
@@ -1883,6 +1893,7 @@ export default function App() {
 				);
 			if (valid.length === 0) return;
 			setBusy(true);
+			trackInternalRenamePaths(valid, Number.POSITIVE_INFINITY);
 			try {
 				const rels = valid
 					.map((p) => vaultRelativePath(vaultPath, p))
@@ -1908,6 +1919,7 @@ export default function App() {
 					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
 				);
 			} finally {
+				trackInternalRenamePaths(valid, Date.now() + 2000);
 				setBusy(false);
 			}
 		},
@@ -1918,6 +1930,7 @@ export default function App() {
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
+			trackInternalRenamePaths,
 			t,
 		],
 	);
@@ -2038,15 +2051,16 @@ export default function App() {
 			linkUpdate: WikiRenameResult,
 		) => {
 			const expiresAt = Date.now() + 2000;
-			for (const path of [
-				fromAbs,
-				toAbs,
-				...linkUpdate.updatedSources.map((source) =>
-					joinVaultPath(root, source),
-				),
-			]) {
-				internalRenamePathsRef.current.set(normalizeTabPath(path), expiresAt);
-			}
+			trackInternalRenamePaths(
+				[
+					fromAbs,
+					toAbs,
+					...linkUpdate.updatedSources.map((source) =>
+						joinVaultPath(root, source),
+					),
+				],
+				expiresAt,
+			);
 			remapMovedWorkspacePaths(fromAbs, toAbs, fromRel, toRel);
 			setWikiIndexRevision((revision) => revision + 1);
 			window.setTimeout(() => {
@@ -2055,7 +2069,7 @@ export default function App() {
 				}
 			}, 0);
 		},
-		[applyDiskChange, remapMovedWorkspacePaths],
+		[applyDiskChange, remapMovedWorkspacePaths, trackInternalRenamePaths],
 	);
 
 	const applyPendingExternalRenameRepair = useCallback(
@@ -2107,6 +2121,12 @@ export default function App() {
 					toRel,
 					dirtyVaultPaths(root),
 				);
+				if (!externalRenameRepairNeeded(preview)) {
+					setExternalRenameVaultPath(null);
+					setExternalRenamePreview(null);
+					setExternalRenameFailure(null);
+					return;
+				}
 				if (settingsRef.current.autoUpdateInternalLinks === "always") {
 					try {
 						await applyPendingExternalRenameRepair(preview, root);
@@ -2216,6 +2236,14 @@ export default function App() {
 						failed++;
 						continue;
 					}
+					const destinationParent =
+						normalizeVaultRel(destParentRel) || "papers";
+					const expectedToRel = `${destinationParent}/${basenameOf(rel)}`;
+					const pendingEventPaths = [
+						path,
+						joinVaultPath(vaultPath, expectedToRel),
+					];
+					trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
 					try {
 						const result = await movePaperFolder(
 							vaultPath,
@@ -2233,6 +2261,7 @@ export default function App() {
 							result.linkUpdate,
 						);
 					} catch {
+						trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
 						failed++;
 					}
 				}
@@ -2257,6 +2286,7 @@ export default function App() {
 			refreshTree,
 			refreshLibrary,
 			syncMovedPaths,
+			trackInternalRenamePaths,
 			t,
 		],
 	);
@@ -2297,6 +2327,9 @@ export default function App() {
 			? fromRel.slice(0, fromRel.lastIndexOf("/"))
 			: "";
 		const toRel = parent ? `${parent}/${nextName}` : nextName;
+		const toAbs = joinVaultPath(vaultPath, toRel);
+		const pendingEventPaths = [renameDraft.path, toAbs];
+		trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
 		try {
 			setRenameBusy(true);
 			setRenameError(null);
@@ -2306,7 +2339,6 @@ export default function App() {
 				toRel,
 				dirtyVaultPaths(vaultPath),
 			);
-			const toAbs = joinVaultPath(vaultPath, toRel);
 			syncMovedPaths(
 				vaultPath,
 				renameDraft.path,
@@ -2324,6 +2356,7 @@ export default function App() {
 				}),
 			);
 		} catch (error) {
+			trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
 			setRenameError(
 				error instanceof Error
 					? error.message
@@ -2340,6 +2373,7 @@ export default function App() {
 		refreshLibrary,
 		refreshTree,
 		syncMovedPaths,
+		trackInternalRenamePaths,
 		t,
 	]);
 
