@@ -3,7 +3,6 @@ import {
 	Calendar,
 	ChevronRight,
 	ExternalLink,
-	FileText,
 	Info,
 	Tag,
 	Users,
@@ -284,8 +283,8 @@ function TagsEditor({
 
 const HEIGHT_STORAGE_KEY = "agentero.paperInfoHeight";
 const MIN_CONTENT_HEIGHT = 120;
-const MAX_CONTENT_HEIGHT = 560;
-const DEFAULT_CONTENT_HEIGHT = 224;
+const MAX_CONTENT_HEIGHT = 720;
+const DEFAULT_CONTENT_HEIGHT = 320;
 
 function clampHeight(value: number) {
 	return Math.min(MAX_CONTENT_HEIGHT, Math.max(MIN_CONTENT_HEIGHT, value));
@@ -409,11 +408,6 @@ export function PaperInfoPanel({
 					/>
 					<Info className="size-3.5 shrink-0" aria-hidden />
 					<span className="truncate">{t("paperInfo.info")}</span>
-					{meta ? (
-						<span className="ml-auto max-w-[40%] truncate font-normal text-[10px] opacity-70">
-							{meta.id}
-						</span>
-					) : null}
 				</CollapsibleTrigger>
 				<CollapsibleContent>
 					{!meta ? (
@@ -449,11 +443,6 @@ export function PaperInfoPanel({
 									}}
 								/>
 							</MetaRow>
-							{meta.abstract ? (
-								<MetaRow icon={FileText} label={t("paperInfo.abstract")}>
-									<p className="text-muted-foreground">{meta.abstract}</p>
-								</MetaRow>
-							) : null}
 							{(meta.pdf_url ||
 								meta.html_url ||
 								meta.source_url ||
