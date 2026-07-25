@@ -11,6 +11,12 @@ export {
 } from "@/lib/workspace/tabs/model";
 export {
 	createNotesSplitPane,
+	findNotesColumnAnchor,
+	findPaperColumnAnchor,
+	findReadingCompanion,
+	isPaperContentTab,
+	paperReadingPlacements,
+	readingPairCloseIds,
 	reseedMarkdownTab,
 	reseedNotesTab,
 	syncTabSeedsForPath,

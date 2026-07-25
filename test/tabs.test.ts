@@ -7,7 +7,9 @@ import {
 	extractTabsFromLayout,
 	insertPlaceholderTab,
 	loadPersistedTabs,
+	paperReadingPlacements,
 	patchTab,
+	readingPairCloseIds,
 	removeTab,
 	removeTabsUnderPath,
 	reseedMarkdownTab,
@@ -327,5 +329,63 @@ describe("flat workspace helpers", () => {
 		if (!notes) return;
 		expect(tabHasNotesSplit([paper], paper)).toBe(false);
 		expect(tabHasNotesSplit([paper, notes], paper)).toBe(true);
+	});
+
+	it("paperReadingPlacements stacks into existing left|right columns", () => {
+		const paperA = makeTab("/vault/a", {
+			kind: "paper",
+			mode: "pdf",
+			notesPath: "/vault/a/NOTES.md",
+			paperMeta: { path: "a", title: "A" } as DocTab["paperMeta"],
+		});
+		const notesA = createNotesSplitPane(paperA);
+		expect(notesA).not.toBeNull();
+		if (!notesA) return;
+
+		const place = paperReadingPlacements([paperA, notesA], {
+			paperId: "paper-b",
+			notesId: "notes-b",
+		});
+		expect(place.paper).toEqual({
+			direction: "within",
+			referencePanelId: paperA.id,
+		});
+		expect(place.notes).toEqual({
+			direction: "within",
+			referencePanelId: notesA.id,
+		});
+	});
+
+	it("paperReadingPlacements first paper uses right split for NOTES", () => {
+		const place = paperReadingPlacements([], {
+			paperId: "paper-a",
+			notesId: "notes-a",
+		});
+		expect(place.paper).toBeNull();
+		expect(place.notes).toEqual({
+			direction: "right",
+			referencePanelId: "paper-a",
+		});
+	});
+
+	it("readingPairCloseIds is bidirectional for paper body and NOTES", () => {
+		const paper = makeTab("/vault/p", {
+			kind: "paper",
+			mode: "pdf",
+			notesPath: "/vault/p/NOTES.md",
+			paperMeta: { path: "p", title: "P" } as DocTab["paperMeta"],
+		});
+		const notes = createNotesSplitPane(paper);
+		expect(notes).not.toBeNull();
+		if (!notes) return;
+		const open = [paper, notes];
+		expect(readingPairCloseIds(open, paper.id).sort()).toEqual(
+			[paper.id, notes.id].sort(),
+		);
+		expect(readingPairCloseIds(open, notes.id).sort()).toEqual(
+			[paper.id, notes.id].sort(),
+		);
+		expect(readingPairCloseIds([paper], paper.id)).toEqual([paper.id]);
+		expect(readingPairCloseIds([notes], notes.id)).toEqual([notes.id]);
 	});
 });

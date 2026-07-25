@@ -12,7 +12,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - 工作台布局：
   - 左侧：Vault 文件树（顶部虚拟 **Library**（右键 **导出论文库**）+ 其下 **Recycle Bin**、魔棒；右键 **新建文件/文件夹 / Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
   - 中间：无 Vault 时欢迎页；有 Vault 时 **全局 Dockview 工作区**（每个打开文档一个 panel：Library / PDF / HTML / 图片 / Markdown / Trash）；单击非 paper 文件夹在 Library panel 就地按路径筛选；关光文档后回到全库；
-  - 论文 NOTES：作为独立 dockview panel 与 PDF 同组 sibling tab（`openPanel` within）；Layout 菜单 / 快捷键切换；
+  - 论文 NOTES：打开 paper 时默认 **左右分屏**（PDF/HTML 左、`NOTES.md` 右）；再开新 paper **叠到同一两栏**（不拆第三列），body/NOTES tab **同步切换**；Layout 菜单 / 快捷键开关 NOTES；
   - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
   - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/core/notify.ts`）弹出；表单就地校验除外。
   - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Layout「面板」菜单）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话；左侧栏 Quest 式弱对比（新建 + 单行历史）；主区顶栏仅 Agent 切换（无 1/2/3 标签）；对话区全宽滚动 + AI Elements；标题栏返回图标退出。精读 / PDF 划词等后台运行不进对话历史。

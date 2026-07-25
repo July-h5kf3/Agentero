@@ -181,11 +181,14 @@ import {
 	type DocTab,
 	ensureFullLibraryTab,
 	insertPlaceholderTab,
+	isPaperContentTab,
 	loadPersistedTabs,
 	loadTabResources,
 	normalizeTabPath,
 	type OpenPlacement,
+	paperReadingPlacements,
 	patchTab,
+	readingPairCloseIds,
 	removeTab,
 	removeTabsUnderPath,
 	reseedMarkdownTab,
@@ -451,9 +454,87 @@ export default function App() {
 	}, []);
 
 	/**
-	 * Open a document panel. If already open → activate it.
-	 * Otherwise insert a placeholder, imperatively place in dockview, load
-	 * resources, and optionally open NOTES as a same-group sibling.
+	 * Suppress companion-tab sync while we programmatically flip paper+NOTES
+	 * (avoids onActivePanelChange recursion).
+	 */
+	const readingSyncRef = useRef(false);
+
+	/**
+	 * Bring a paper body panel to front; if its NOTES panel is already open,
+	 * activate that tab in the notes column too (focus ends on the paper).
+	 */
+	const activatePaperWithNotes = useCallback((paperTab: DocTab) => {
+		const notesId = paperTab.notesPath
+			? tabIdForPath(paperTab.notesPath)
+			: null;
+		const notesOpen =
+			notesId != null && tabsRef.current.some((t) => t.id === notesId);
+		readingSyncRef.current = true;
+		try {
+			// Activate NOTES first so its group shows the matching tab; then paper
+			// so focus/active id land on the body panel.
+			if (notesOpen && notesId) {
+				workspaceRef.current?.activatePanel(notesId);
+			}
+			workspaceRef.current?.activatePanel(paperTab.id);
+		} finally {
+			queueMicrotask(() => {
+				readingSyncRef.current = false;
+			});
+		}
+		setActiveTabId(paperTab.id);
+	}, []);
+
+	/**
+	 * Dockview focus changed: keep paper body and NOTES columns in sync when
+	 * the user clicks a tab in either column.
+	 */
+	const handleActivePanelChange = useCallback((panelId: string | null) => {
+		setActiveTabId(panelId);
+		if (!panelId || readingSyncRef.current) return;
+		const tab = tabsRef.current.find((t) => t.id === panelId);
+		if (!tab) return;
+
+		if (isPaperContentTab(tab) && tab.notesPath) {
+			const notesId = tabIdForPath(tab.notesPath);
+			if (!tabsRef.current.some((t) => t.id === notesId)) return;
+			readingSyncRef.current = true;
+			try {
+				workspaceRef.current?.activatePanel(notesId);
+				workspaceRef.current?.activatePanel(panelId);
+			} finally {
+				queueMicrotask(() => {
+					readingSyncRef.current = false;
+				});
+			}
+			return;
+		}
+
+		if (tabIsPaperNotes(tab)) {
+			const companion = tabsRef.current.find(
+				(t) =>
+					isPaperContentTab(t) &&
+					t.notesPath &&
+					tabIdForPath(t.notesPath) === tab.id,
+			);
+			if (!companion) return;
+			readingSyncRef.current = true;
+			try {
+				workspaceRef.current?.activatePanel(companion.id);
+				workspaceRef.current?.activatePanel(panelId);
+			} finally {
+				queueMicrotask(() => {
+					readingSyncRef.current = false;
+				});
+			}
+		}
+	}, []);
+
+	/**
+	 * Open a document panel. If already open → activate it (and companion NOTES).
+	 * Otherwise insert a placeholder, place in dockview (stack into the paper
+	 * column when one exists), load resources, and open NOTES into the notes
+	 * column (or create a right split for the first paper).
 	 */
 	const openTab = useCallback(
 		(
@@ -469,22 +550,41 @@ export default function App() {
 			const id = tabIdForPath(path);
 			const existing = tabsRef.current.find((t) => t.id === id);
 			if (existing) {
-				setActiveTabId(id);
-				workspaceRef.current?.activatePanel(id);
+				// Sync paper + NOTES tabs when re-opening an already-mounted paper.
+				if (
+					existing.kind === "paper" &&
+					(existing.mode === "pdf" || existing.mode === "html")
+				) {
+					activatePaperWithNotes(existing);
+				} else {
+					setActiveTabId(id);
+					workspaceRef.current?.activatePanel(id);
+				}
 				return;
 			}
+
+			const beforeTabs = tabsRef.current;
 			const { tabs: nextTabs, id: insertedId } = insertPlaceholderTab(
-				tabsRef.current,
+				beforeTabs,
 				path,
 				opts?.preferMode,
 			);
 			const placeholder =
 				nextTabs.find((t) => t.id === insertedId) ??
 				createPlaceholderTab(path, opts?.preferMode);
+
+			// Stack new paper bodies into the existing left reading column.
+			const initialPlacement =
+				opts?.placement ??
+				paperReadingPlacements(beforeTabs, {
+					paperId: insertedId,
+					activeId: activeTabIdRef.current,
+				}).paper;
+
 			tabsRef.current = nextTabs;
 			setTabs(nextTabs);
 			setActiveTabId(insertedId);
-			workspaceRef.current?.openPanel(placeholder, opts?.placement ?? null);
+			workspaceRef.current?.openPanel(placeholder, initialPlacement);
 
 			void (async () => {
 				const res = await loadTabResources(
@@ -517,7 +617,7 @@ export default function App() {
 				};
 				updateTab(id, patch);
 
-				// Paper default: open NOTES as a sibling tab in the same group (within).
+				// Paper default: NOTES in the notes column (or first-time right split).
 				const wantDefaultNotes =
 					!opts?.skipDefaultNotes &&
 					!opts?.placement &&
@@ -526,23 +626,37 @@ export default function App() {
 					(res.mode === "pdf" || res.mode === "html");
 				if (wantDefaultNotes && res.notesPath) {
 					const notesId = tabIdForPath(res.notesPath);
-					if (!tabsRef.current.some((t) => t.id === notesId)) {
+					const notesAlreadyOpen = tabsRef.current.some(
+						(t) => t.id === notesId,
+					);
+					if (notesAlreadyOpen) {
+						workspaceRef.current?.activatePanel(notesId);
+						workspaceRef.current?.activatePanel(id);
+					} else {
 						const paperLike = {
 							...createPlaceholderTab(path, res.mode),
 							...patch,
 						} as DocTab;
 						const notesPane = createNotesSplitPane(paperLike);
 						if (notesPane) {
+							const { notes: notesPlacement } = paperReadingPlacements(
+								tabsRef.current,
+								{
+									paperId: id,
+									notesId: notesPane.id,
+									activeId: activeTabIdRef.current,
+									forcedPaperPlacement: opts?.placement,
+								},
+							);
 							setTabs((prev) => {
 								if (prev.some((t) => t.id === notesPane.id)) return prev;
 								const next = [...prev, notesPane];
 								tabsRef.current = next;
 								return next;
 							});
-							workspaceRef.current?.openPanel(notesPane, {
-								direction: "within",
-								referencePanelId: id,
-							});
+							workspaceRef.current?.openPanel(notesPane, notesPlacement);
+							// Keep focus on the paper body after NOTES joins the right column.
+							workspaceRef.current?.activatePanel(id);
 						}
 					}
 				}
@@ -564,23 +678,40 @@ export default function App() {
 				}
 			})();
 		},
-		[t, updateTab],
+		[t, updateTab, activatePaperWithNotes],
 	);
 
-	/** Close a tab; focus stays with dockview; full Library when emptied. */
+	/**
+	 * Close a tab; focus stays with dockview; full Library when emptied.
+	 * Paper body (PDF/HTML) and its NOTES companion close as a pair (either side).
+	 */
 	const closeTab = useCallback(
 		(id: string) => {
+			// Resolve pair before setState so Strict Mode double-invoke is stable.
+			const idsToClose = readingPairCloseIds(tabsRef.current, id);
+
 			setTabs((prev) => {
-				const { tabs, removed } = removeTab(prev, id);
-				if (!removed) return prev;
-				revokeTabMediaSources(removed);
-				return withLibraryIfEmpty(tabs);
+				let next = prev;
+				const removedList: DocTab[] = [];
+				for (const closeId of idsToClose) {
+					const result = removeTab(next, closeId);
+					next = result.tabs;
+					if (result.removed) removedList.push(result.removed);
+				}
+				if (!removedList.length) return prev;
+				for (const r of removedList) revokeTabMediaSources(r);
+				return withLibraryIfEmpty(next);
 			});
 			setPdfHighlightsByTab((prev) => {
-				if (!(id in prev)) return prev;
+				let changed = false;
 				const next = { ...prev };
-				delete next[id];
-				return next;
+				for (const closeId of idsToClose) {
+					if (closeId in next) {
+						delete next[closeId];
+						changed = true;
+					}
+				}
+				return changed ? next : prev;
 			});
 		},
 		[withLibraryIfEmpty],
@@ -770,17 +901,19 @@ export default function App() {
 		if (!tabNotesEligible(target) && target.kind !== "paper") return;
 		const notesPane = createNotesSplitPane(target);
 		if (!notesPane) return;
-		// Same group as the paper panel (tab strip), not a new split.
+		// Stack into the notes column when one exists; else first right split.
+		const { notes: notesPlacement } = paperReadingPlacements(tabsRef.current, {
+			paperId: target.id,
+			notesId: notesPane.id,
+			activeId: activeTabIdRef.current,
+		});
 		setTabs((prev) => {
 			if (prev.some((t) => t.id === notesPane.id)) return prev;
 			const next = [...prev, notesPane];
 			tabsRef.current = next;
 			return next;
 		});
-		workspaceRef.current?.openPanel(notesPane, {
-			direction: "within",
-			referencePanelId: target.id,
-		});
+		workspaceRef.current?.openPanel(notesPane, notesPlacement);
 		setActiveTabId(notesPane.id);
 	}, [closeTab]);
 
@@ -3380,7 +3513,7 @@ export default function App() {
 													: []),
 											]}
 											centerProps={centerProps}
-											onActivePanelChange={setActiveTabId}
+											onActivePanelChange={handleActivePanelChange}
 											onClosePanel={closeTab}
 											onLayoutChange={handleLayoutChange}
 											onExternalDrop={handleWorkspaceDrop}

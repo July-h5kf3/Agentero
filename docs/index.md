@@ -41,7 +41,7 @@ Agentero 桌面应用
 ## 当前 UI 形态
 
 - 默认工作台：左栏文件树 + 中间 **Dockview 工作区** + 可选右侧栏（Agent / Backlinks）。见 [`development/tab-split.md`](development/tab-split.md)。
-- **文档 panel**：中间栏 dockview 原生管理 tab / 关闭 / 上下左右分屏 / 多格网格；**标题栏无文档 tab 条**。打开 paper 时默认 PDF 与 `NOTES.md` 为同组 sibling tab。布局只存 dockview `toJSON()`。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`），否则关 active panel，仅剩全库时关窗；`⌥⌘←/→` 按视觉序循环 panel。
+- **文档 panel**：中间栏 dockview 原生管理 tab / 关闭 / 上下左右分屏 / 多格网格；**标题栏无文档 tab 条**。打开 paper 时默认 PDF 与 `NOTES.md` **左右分屏**（左 PDF、右 NOTES）。布局只存 dockview `toJSON()`。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`），否则关 active panel，仅剩全库时关窗；`⌥⌘←/→` 按视觉序循环 panel。
 - 文件树顶部虚拟节点 **Library**；中间栏 catalog **论文库表格**（排序、**tags** 染色 chip、双向滚动），数据来自 `paper_list`。
 - 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下 `agentero:trash` → 中间栏恢复 / 永久删除，侧栏右键清空）。Paper 行默认 **标题 · 作者**（设置可切换标签/排序预设）。
 - **Paper Info** 仅选中具体论文时出现；**Tags** 可编辑并可设 Apple 8 色（`paper_set_tags`）。Library 空态可 **Rescan**（`paper_rescan`）。

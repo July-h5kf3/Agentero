@@ -193,7 +193,7 @@
 
 单测：`test/overlay-stack.test.ts`。
 
-- 工作台默认 **三栏**：文件树 + 中间 **Dockview 工作区** + 可选右侧栏（Agent / Backlinks）。文档 panel 由 dockview 管理（见 §3.1.1 / [`../development/tab-split.md`](../development/tab-split.md)）；论文 NOTES 为同组 sibling panel，非独立右列。
+- 工作台默认 **三栏**：文件树 + 中间 **Dockview 工作区** + 可选右侧栏（Agent / Backlinks）。文档 panel 由 dockview 管理（见 §3.1.1 / [`../development/tab-split.md`](../development/tab-split.md)）；论文 NOTES 为独立 dockview panel，默认与 PDF **左右分屏**。
 - **论文库表格**（`src/components/library/papers-library.tsx`）：
   - **入口**：
     1. 虚拟节点 `agentero:library` → **全库**（清除 `libraryScopePath`）；
@@ -215,7 +215,7 @@
   - **从 Zotero 迁移**：仅**全库**视图工具栏。
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`sidebar/paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。展开时顶部边框为**纵向拖拽把手**（可键盘 ↑/↓，Shift 加速），调节内容区高度（120–560px，localStorage `agentero.paperInfoHeight` 持久化）；作者与摘要不再行数截断，超出滚动。**Tags** 可编辑：输入框在 chip 上方；输入框**右侧圆形色点**打开色盘（Apple 风格 8 色 + 默认）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`）。
-  - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF 同组 sibling tab）；非独立右侧 Notes 列。论文库视图或未选论文时不自动开 NOTES。
+  - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF **左右分屏**：左 PDF、右 NOTES）；Layout / 快捷键开关。论文库视图或未选论文时不自动开 NOTES。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选固定工具栏（`editor-toolbar.tsx`）：标题、引用、加粗/斜体等、列表、**插入图片**。全局设置 `showEditorToolbar`（默认开）；只读时不渲染。i18n `editor:toolbar.*`。
   - **编辑体验**：Plate list 可编辑；文本选区中性色；文档末与图片后保持 trailing paragraph。
   - **Markdown 图片**（已落地）：粘贴/工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时延迟 GC。实现：`src/lib/markdown/image.ts`；约定见 [`../backend/data-model.md`](../backend/data-model.md)。
@@ -317,7 +317,7 @@
 - **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
 - **Tab 右键菜单**：关闭 / 关闭其他 / 关闭全部（**同组**）；新建标签组 / 从标签组移除（`getTabContextMenuItems`；文案走 i18n）。
 - **Tab 组**：chip 右键重命名、染色、解散（`getTabGroupChipContextMenuItems`）；随布局 `toJSON()` 持久化。
-- **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **同组 sibling tab**。`dropOverlayModel` 调大 content 边激活区；未知外部拖拽由 `onWillShowOverlay` / `onWillDrop` 否决。
+- **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **左右分屏**（首篇 `right`，后续叠到同两栏 `within`）；切换论文时同步切换其 NOTES tab。`dropOverlayModel` 调大 content 边激活区；未知外部拖拽由 `onWillShowOverlay` / `onWillDrop` 否决。
 - **默认页 = 全库 Library**：
   - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。
   - 关 panel 后列表为空 → 自动打开全库。

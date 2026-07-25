@@ -241,7 +241,7 @@
 - [x] **panel 状态**：内容常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush）。
 - [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。
-- [x] **分屏**：上下左右 + 多格；论文默认 PDF\|NOTES sibling；拖文件树 → 任意边；布局仅 `toJSON()`。
+- [x] **分屏**：上下左右 + 多格；论文默认 PDF\|NOTES 左右分屏；拖文件树 → 任意边；布局仅 `toJSON()`。
 - [x] **快捷键**：关闭 panel `⌘W`（弹层 → active panel → 关窗）、下一/上一 panel `⌥⌘→ / ⌥⌘←`；NOTES 切换见 Layout 菜单。
 - [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 panel。
 - [x] **多窗口兼容**：`⌘N` 窗口各自独立 dock 布局（按窗口持久化恢复）。

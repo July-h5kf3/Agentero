@@ -12,11 +12,15 @@
 ## 2. 行为定义
 
 - **打开文档**：文件树 / 库表 / 命令面板 → `openTab(path)` → React `tabs[]` 插入 + **`workspaceRef.openPanel(tab, placement)`**（命令式 `addPanel`，不再经 `pendingPlacement` state 往返）。
-- **论文默认**：paper（pdf/html）打开时，再开 `NOTES.md` 为**同一 group 内的 sibling tab**（`openPanel(..., { direction: "within", referencePanelId })`），与 PDF 共用 tab 条。
-- **文件树拖入**：`onUnhandledDragOver.accept` + `onDidDrop` → `openTab(path, { placement })`；方向为 left/right/above/below/within（中心落点 = 同组 tab）。
-- **关 panel**：dockview 原生 tab X → `onDidRemovePanel` → React 只删 `tabs[]` 数据；**焦点完全听 `onDidActivePanelChange`**（不按扁平列表另算 neighbor）。
+- **论文默认（阅读布局）**：
+  - 首篇 paper：PDF/HTML 打开后，`NOTES.md` **右侧分屏**（左 body、右 NOTES）。
+  - 再开新 paper：**叠到同一左右两栏**（body → 左列 `within`，NOTES → 右列 `within`），**不**再拆第三列；`paperReadingPlacements` 选锚点。
+  - **同步切换**：激活某篇 body tab 时，若其 NOTES 已开则同时激活右列对应 NOTES；点 NOTES tab 亦同步左列 body（`handleActivePanelChange`）。
+  - **同步关闭**：paper body（PDF/HTML）与 NOTES **双向**成对关闭（`readingPairCloseIds` → `closeTab`）；任一侧 X 都会摘掉 companion。
+- **文件树拖入**：`onUnhandledDragOver.accept` + `onDidDrop` → `openTab(path, { placement })`；方向为 left/right/above/below/within（中心落点 = 同组 tab）；带 placement 时不套阅读布局叠放。
+- **关 panel**：dockview 原生 tab X → `onDidRemovePanel` → React `closeTab`；**焦点听 `onDidActivePanelChange`**（并做阅读布局 companion 同步）。
 - **循环 panel**（`⌥⌘←/→`）：`workspaceRef.cycleActive` 按 **`api.panels` 视觉顺序** 循环，不是 React 插入序。
-- **NOTES 切换**：Layout 菜单 / 快捷键 → 开/关 NOTES 为同组 tab。
+- **NOTES 切换**：Layout 菜单 / 快捷键 → 开/关 NOTES；开启时优先叠入右列，否则首次右侧分屏。
 - **无 PDF/HTML 切换条**：`mode` 在 `loadTabResources` 时按路径与可用资源确定。
 
 ## 3. 数据结构（`src/lib/workspace/tabs`）

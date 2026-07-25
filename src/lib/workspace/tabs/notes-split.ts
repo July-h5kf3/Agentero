@@ -5,7 +5,7 @@ import {
 	normalizeTabPath,
 	tabIdForPath,
 } from "@/lib/workspace/tabs/model";
-import type { DocTab } from "@/lib/workspace/tabs/types";
+import type { DocTab, OpenPlacement } from "@/lib/workspace/tabs/types";
 
 export function tabNotesEligible(tab: DocTab | null): boolean {
 	if (!tab) return false;
@@ -14,6 +14,14 @@ export function tabNotesEligible(tab: DocTab | null): boolean {
 		Boolean(tab.paperMeta) &&
 		(tab.mode === "pdf" || tab.mode === "html")
 	);
+}
+
+/**
+ * Paper body panel (PDF/HTML) — left column of the reading split.
+ * Distinct from the NOTES.md markdown panel for the same paper.
+ */
+export function isPaperContentTab(tab: DocTab | null): boolean {
+	return tabNotesEligible(tab);
 }
 
 /** Center Markdown mode while a paper is open edits its NOTES.md live. */
@@ -25,6 +33,94 @@ export function tabIsPaperNotes(tab: DocTab | null): boolean {
 	const notesPath = normalizeTabPath(tab.notesPath);
 	const paperDir = notesPath.replace(/\/notes\.md$/, "");
 	return tabPath === notesPath || tabPath === paperDir;
+}
+
+/**
+ * Anchor for stacking another paper body as a sibling tab (same dock group),
+ * so opening paper B does not create a third column beside PDF|NOTES.
+ */
+export function findPaperColumnAnchor(
+	tabs: DocTab[],
+	opts?: { excludeId?: string; preferId?: string | null },
+): DocTab | null {
+	const candidates = tabs.filter(
+		(t) => t.id !== opts?.excludeId && isPaperContentTab(t),
+	);
+	if (!candidates.length) return null;
+	if (opts?.preferId) {
+		const preferred = candidates.find((t) => t.id === opts.preferId);
+		if (preferred) return preferred;
+	}
+	// Prefer a paper that already has NOTES open (established reading layout).
+	const withNotes = candidates.find((t) => tabHasNotesSplit(tabs, t));
+	return withNotes ?? candidates[0] ?? null;
+}
+
+/**
+ * Anchor for stacking another NOTES panel into the right reading column.
+ */
+export function findNotesColumnAnchor(
+	tabs: DocTab[],
+	opts?: { excludeId?: string; preferId?: string | null },
+): DocTab | null {
+	const candidates = tabs.filter(
+		(t) => t.id !== opts?.excludeId && tabIsPaperNotes(t),
+	);
+	if (!candidates.length) return null;
+	if (opts?.preferId) {
+		const preferred = candidates.find((t) => t.id === opts.preferId);
+		if (preferred) return preferred;
+	}
+	return candidates[0] ?? null;
+}
+
+/**
+ * Where to place a newly opened paper body / NOTES companion so multi-paper
+ * reading stays a stable left|right layout (tabs stack, no extra columns).
+ */
+export function paperReadingPlacements(
+	tabs: DocTab[],
+	opts: {
+		paperId: string;
+		notesId?: string | null;
+		/** Prefer stacking relative to the currently active panel when possible. */
+		activeId?: string | null;
+		/** Explicit placement from file-tree drop etc. wins for the paper body. */
+		forcedPaperPlacement?: OpenPlacement;
+	},
+): {
+	paper: OpenPlacement;
+	notes: OpenPlacement;
+} {
+	if (opts.forcedPaperPlacement) {
+		return {
+			paper: opts.forcedPaperPlacement,
+			notes: {
+				direction: "right",
+				referencePanelId: opts.paperId,
+			},
+		};
+	}
+
+	const paperAnchor = findPaperColumnAnchor(tabs, {
+		excludeId: opts.paperId,
+		preferId: opts.activeId,
+	});
+	const paper: OpenPlacement = paperAnchor
+		? { direction: "within", referencePanelId: paperAnchor.id }
+		: null;
+
+	const notesAnchor = opts.notesId
+		? findNotesColumnAnchor(tabs, {
+				excludeId: opts.notesId,
+				preferId: opts.activeId,
+			})
+		: null;
+	const notes: OpenPlacement = notesAnchor
+		? { direction: "within", referencePanelId: notesAnchor.id }
+		: { direction: "right", referencePanelId: opts.paperId };
+
+	return { paper, notes };
 }
 
 export function createNotesSplitPane(tab: DocTab): DocTab | null {
@@ -48,6 +144,44 @@ export function tabHasNotesSplit(
 	if (!paperTab?.notesPath) return false;
 	const notesId = tabIdForPath(paperTab.notesPath);
 	return tabs.some((t) => t.id === notesId);
+}
+
+/**
+ * Companion of a paper body (PDF/HTML) → open NOTES panel, or of a NOTES
+ * panel → open paper body. Null when no pair is currently open.
+ */
+export function findReadingCompanion(
+	tabs: DocTab[],
+	tab: DocTab | null,
+): DocTab | null {
+	if (!tab) return null;
+	if (isPaperContentTab(tab) && tab.notesPath) {
+		const notesId = tabIdForPath(tab.notesPath);
+		return tabs.find((t) => t.id === notesId) ?? null;
+	}
+	if (tabIsPaperNotes(tab)) {
+		return (
+			tabs.find(
+				(t) =>
+					isPaperContentTab(t) &&
+					t.notesPath != null &&
+					tabIdForPath(t.notesPath) === tab.id,
+			) ?? null
+		);
+	}
+	return null;
+}
+
+/**
+ * Panel ids to close together for a reading pair (paper body ↔ NOTES).
+ * Always includes `id`; appends the open companion when present (deduped).
+ */
+export function readingPairCloseIds(tabs: DocTab[], id: string): string[] {
+	const tab = tabs.find((t) => t.id === id) ?? null;
+	const companion = findReadingCompanion(tabs, tab);
+	if (!companion || companion.id === id) return [id];
+	// Companion first so body/NOTES order is stable for tests and revoke order.
+	return [companion.id, id];
 }
 
 /** Reseed an open paper tab's NOTES editor (bumps notesKey to remount). */

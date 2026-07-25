@@ -25,7 +25,7 @@
 | 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 → `marks/*.json`；无文本层降级仍待 |
 | 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
 | V0.5 Importer | 🟡 本地 PDF ✅ | **本地 PDF 入库**（魔棒多选 / 拖到 `papers/`）已落地；Importer trait / DOI / MinerU 仍待 |
-| V0.6 标签页与分屏 | ✅ | **全局 Dockview**：中间栏文档 panel + 上下左右/多格分屏；论文默认 PDF\|NOTES sibling；标题栏无文档 tab（见 [`tab-split.md`](tab-split.md)） |
+| V0.6 标签页与分屏 | ✅ | **全局 Dockview**：中间栏文档 panel + 上下左右/多格分屏；论文默认 PDF\|NOTES **左右分屏**；标题栏无文档 tab（见 [`tab-split.md`](tab-split.md)） |
 | V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
 | CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper tag *`；无 BYOA（见 [`cli.md`](cli.md)） |
 | Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
@@ -51,7 +51,7 @@
 - [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
 - [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
 - [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
-- [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 并排。
+- [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 左右分屏。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
 
 - [`.md`](.md)：简短产品假设。
