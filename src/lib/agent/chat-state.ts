@@ -59,6 +59,8 @@ export type ChatSessionHistoryItem = {
 	startedAt: string;
 	lines: ChatLine[];
 	status: "running" | "completed" | "cancelled" | "failed";
+	/** Durable ACP provider session id used to resume this conversation. */
+	providerSessionId?: string | null;
 };
 
 export type PendingTerminalEvent =

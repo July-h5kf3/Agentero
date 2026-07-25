@@ -674,8 +674,17 @@ export function useAgentPanel({
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
-			if (ev.providerSessionId && activeTabRef.current === ev.sessionId) {
-				activeConversationRef.current = ev.providerSessionId;
+			if (ev.providerSessionId) {
+				if (activeTabRef.current === ev.sessionId) {
+					activeConversationRef.current = ev.providerSessionId;
+				}
+				setSessionHistory((prev) =>
+					prev.map((item) =>
+						item.id === ev.sessionId
+							? { ...item, providerSessionId: ev.providerSessionId }
+							: item,
+					),
+				);
 			}
 			if (ev.stopReason === "cancelled") {
 				const cancelledLine: ChatLine = {
@@ -955,6 +964,7 @@ export function useAgentPanel({
 							agentName: selected?.name ?? "Agent",
 							title,
 							startedAt: current.startedAt || startedAt,
+							providerSessionId: session.sessionId,
 						};
 					}
 					return {
@@ -969,6 +979,7 @@ export function useAgentPanel({
 						startedAt,
 						lines: [],
 						status: "completed" as const,
+						providerSessionId: session.sessionId,
 					};
 				});
 				const importedIds = new Set(
@@ -2102,7 +2113,7 @@ export function useAgentPanel({
 			activeTabRef.current = item.id;
 			setActiveTabId(item.id);
 			if (supportsResume) {
-				activeConversationRef.current = item.id;
+				activeConversationRef.current = item.providerSessionId ?? item.id;
 			}
 			return;
 		}
@@ -2168,7 +2179,7 @@ export function useAgentPanel({
 							: entry,
 					),
 				);
-				activeConversationRef.current = item.id;
+				activeConversationRef.current = item.providerSessionId ?? item.id;
 				activateComposerSession(item.id);
 				activeTabRef.current = item.id;
 				setActiveTabId(item.id);
