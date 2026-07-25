@@ -12,7 +12,7 @@ pub fn fs_watch_start(
     controller: State<'_, FsWatchController>,
     vault_path: String,
 ) -> Result<(), String> {
-    use crate::log_util::{trunc, OpTimer};
+    use crate::core::log_util::{trunc, OpTimer};
 
     let vault = vault_path.trim().to_string();
     let op = OpTimer::start_with("fs_watch_start", format!("path={}", trunc(&vault, 160)));
@@ -40,7 +40,7 @@ pub fn fs_watch_stop(
     window: tauri::WebviewWindow,
     controller: State<'_, FsWatchController>,
 ) -> Result<(), String> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start("fs_watch_stop");
     controller.stop(window.label());

@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::models::agent::{
     AcpHistoryLine, AcpListSessionsResult, AcpLoadSessionResult, AcpSessionCapabilities,
     AcpSessionInfo, AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent,

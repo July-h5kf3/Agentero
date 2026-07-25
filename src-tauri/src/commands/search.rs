@@ -1,6 +1,6 @@
 //! Vault-wide full-text Markdown search (command palette "contents" tier).
 
-use crate::error::{map_err, ApiResult};
+use crate::core::error::{map_err, ApiResult};
 use crate::services::search::{self, VaultSearchArgs, VaultSearchResult};
 
 /// Full-text search over the Vault's Markdown files. See `services::search`.

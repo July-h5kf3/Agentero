@@ -5,7 +5,7 @@ use super::import::{
     write_snapshot_html, write_snapshot_html_remote,
 };
 use super::state::{ConnectorController, ConnectorItemSaved, ProgressAttachment, ProgressItem};
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::remote::parse_remote_handle;
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, Query, State};

@@ -8,7 +8,7 @@
 
 use super::map::{enrich_remote_urls, map_zotero_item};
 use super::{allocate_paper_path, normalize_parent_dir, paper_record_from_meta, write_paper_shell};
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};

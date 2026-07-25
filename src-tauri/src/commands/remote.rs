@@ -3,10 +3,10 @@
 //! Async commands return `Result<ApiResult<T>, String>` so `State` borrows are valid
 //! (same pattern as `agent_probe`).
 
-use crate::error::{map_err, ApiResult, AppError};
-use crate::log_util::{trunc, OpTimer};
+use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::fs::{FsDirEntry, FsFileMeta, WriteOpts};
+use crate::core::log_util::{trunc, OpTimer};
 use crate::services::catalog::papers::{self, PaperRecord};
-use crate::services::fs::{FsDirEntry, FsFileMeta, WriteOpts};
 use crate::services::remote::agent_exec;
 use crate::services::remote::{
     ensure_remote_vault_skills, parse_remote_handle, RemoteRegistry, RemoteSessionInfo,

@@ -1,6 +1,6 @@
 //! Open the system default terminal at a local path, or with a confirm-then-run command.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;

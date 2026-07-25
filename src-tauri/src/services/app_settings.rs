@@ -1,10 +1,10 @@
 //! Application UI settings — XDG config file `settings.json`.
 //!
 //! Frontend `AppSettings` (camelCase JSON) is the source of shape; Host owns
-//! the durable file under [`crate::services::paths::settings_path`].
+//! the durable file under [`crate::core::paths::settings_path`].
 
-use crate::error::AppError;
-use crate::services::paths::{self, settings_path};
+use crate::core::error::AppError;
+use crate::core::paths::{self, settings_path};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

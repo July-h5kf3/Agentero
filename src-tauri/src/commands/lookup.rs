@@ -1,8 +1,8 @@
 //! Magic-wand / identifier import commands + catalog export/import via Translator.
 //! Also `paper_parse_body` (liteparse → PAPER.md).
 
-use crate::error::ApiResult;
-use crate::log_util::{trunc, OpTimer};
+use crate::core::error::ApiResult;
+use crate::core::log_util::{trunc, OpTimer};
 use crate::services::lookup::{
     self, AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
     LookupImportBatchArgs, LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs,
@@ -46,7 +46,7 @@ pub async fn lookup_import(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(
@@ -76,7 +76,7 @@ pub async fn lookup_import_batch(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(
@@ -106,7 +106,7 @@ pub async fn paper_download_assets(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(
@@ -134,7 +134,7 @@ pub async fn paper_import_local_pdf(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(op.finish_result_ok_extra(
@@ -172,7 +172,7 @@ pub async fn paper_parse_body(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(op.finish_result(
@@ -202,7 +202,7 @@ pub async fn paper_import(
             Ok(s) => s,
             Err(e) => {
                 op.finish_err(&e);
-                return Ok(crate::error::map_err(e));
+                return Ok(crate::core::error::map_err(e));
             }
         };
         return Ok(op.finish_result_ok_extra(

@@ -5,7 +5,7 @@
 
 use super::map::{enrich_remote_urls, map_zotero_item};
 use super::{normalize_parent_dir, DEFAULT_TRANSLATOR_BASE_URL};
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

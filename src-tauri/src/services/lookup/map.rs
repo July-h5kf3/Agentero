@@ -1,6 +1,6 @@
 //! Map Translator (Zotero API JSON) / arXiv Atom → PaperMeta.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

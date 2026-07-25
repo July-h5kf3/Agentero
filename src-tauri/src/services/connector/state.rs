@@ -1,7 +1,7 @@
 //! Process-wide connector server state and lifecycle.
 
 use super::server;
-use crate::error::AppError;
+use crate::core::error::AppError;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -670,7 +670,7 @@ impl ConnectorController {
                     .write(
                         &format!("{path}/metadata.json"),
                         &metadata,
-                        crate::services::fs::WriteOpts {
+                        crate::core::fs::WriteOpts {
                             create_parents: true,
                         },
                     )

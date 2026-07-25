@@ -2,9 +2,9 @@
 //!
 //! SQLite cannot open over SFTP; Host keeps an ephemeral work copy and push-after-write.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
+use crate::core::fs::{FsFileMeta, VaultFs, WriteOpts};
 use crate::services::catalog::{ensure_catalog, schema_version, SCHEMA_VERSION};
-use crate::services::fs::{FsFileMeta, VaultFs, WriteOpts};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -147,7 +147,7 @@ impl CatalogMirror {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::fs::LocalFs;
+    use crate::core::fs::LocalFs;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
 

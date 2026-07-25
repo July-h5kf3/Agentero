@@ -1,5 +1,5 @@
-use crate::error::{map_err, ApiResult, AppError};
-use crate::log_util::{trunc, OpTimer};
+use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::log_util::{trunc, OpTimer};
 use crate::services::vault::{self, CreateVaultResult};
 use std::path::PathBuf;
 use tauri::{AppHandle, Runtime};

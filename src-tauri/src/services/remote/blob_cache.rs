@@ -3,7 +3,7 @@
 //! Layout: `~/.cache/agentero/remote/<session-hash>/blobs/{hash}.{ext}`
 //! Key = sha256(rel\0size\0mtime). On hit we touch mtime for LRU order.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};

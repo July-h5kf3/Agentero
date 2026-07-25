@@ -1,8 +1,8 @@
 //! Active remote vault sessions (SSH/SFTP or local-sim for tests).
 
 use super::catalog_mirror::CatalogMirror;
-use crate::error::AppError;
-use crate::services::fs::{FsCaps, LocalFs, VaultFs};
+use crate::core::error::AppError;
+use crate::core::fs::{FsCaps, LocalFs, VaultFs};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -182,7 +182,7 @@ pub fn parse_remote_handle(vault_handle: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::fs::WriteOpts;
+    use crate::core::fs::WriteOpts;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp_vault() -> PathBuf {
@@ -256,7 +256,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
     async fn live_ssh_remote_vault() {
-        use crate::services::fs::WriteOpts;
+        use crate::core::fs::WriteOpts;
         use crate::services::remote::agent_exec;
 
         let host = std::env::var("AGENTERO_REMOTE_SSH_HOST")
@@ -441,8 +441,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "set AGENTERO_REMOTE_SSH_HOST + AGENTERO_REMOTE_SSH_PATH for live SSH"]
     async fn live_paper_features() {
+        use crate::core::fs::WriteOpts;
         use crate::services::catalog::papers::{self, PaperRecord, PaperTag};
-        use crate::services::fs::WriteOpts;
         use crate::services::remote::catalog_mirror::CatalogMirror;
 
         let host = std::env::var("AGENTERO_REMOTE_SSH_HOST").expect("AGENTERO_REMOTE_SSH_HOST");

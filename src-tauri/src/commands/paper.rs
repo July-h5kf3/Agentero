@@ -1,6 +1,6 @@
 //! Paper metadata commands — catalog.sqlite is authoritative.
 
-use crate::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult, AppError};
 use crate::services::catalog::papers::{self, PaperRecord};
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -246,7 +246,7 @@ pub struct PaperRescanResult {
 /// on disk but missing from the catalog (added externally, or a lost row).
 #[tauri::command]
 pub fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let vault = PathBuf::from(args.vault_path.trim());
     let op = OpTimer::start("paper_rescan");

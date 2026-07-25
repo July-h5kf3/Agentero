@@ -1,4 +1,4 @@
-use crate::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult, AppError};
 use crate::models::wiki::{BacklinksResponse, GraphResponse, RebuildResult};
 use crate::services::wiki::WikiIndexState;
 use tauri::State;
@@ -42,7 +42,7 @@ pub fn graph_rebuild(
     index: State<'_, WikiIndexState>,
     vault_path: String,
 ) -> ApiResult<RebuildResult> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start("graph_rebuild");
     let mut guard = match index.inner.lock() {

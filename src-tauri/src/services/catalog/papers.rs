@@ -2,7 +2,7 @@
 //! `metadata.json` is a projection written after SQLite upsert.
 
 use super::schema::ensure_catalog;
-use crate::error::AppError;
+use crate::core::error::AppError;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;

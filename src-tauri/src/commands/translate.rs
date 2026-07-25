@@ -1,11 +1,11 @@
 //! Application translation commands (free MT; Agent path stays on the frontend ACP).
 
-use crate::error::{map_err, ApiResult};
+use crate::core::error::{map_err, ApiResult};
 use crate::services::translate::{self, TranslateTextArgs, TranslateTextResult};
 
 #[tauri::command]
 pub async fn translate_text(args: TranslateTextArgs) -> ApiResult<TranslateTextResult> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let text_len = args.text.chars().count();
     let op = OpTimer::start_with(

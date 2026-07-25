@@ -1,6 +1,6 @@
 //! App settings commands — durable XDG config file.
 
-use crate::error::{map_err, ApiResult};
+use crate::core::error::{map_err, ApiResult};
 use crate::services::app_settings::{AppSettings, AppSettingsStore, SettingsGetResult};
 use crate::services::connector::ConnectorController;
 use serde::Serialize;

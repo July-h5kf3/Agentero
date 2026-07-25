@@ -13,7 +13,7 @@ pub const SETTINGS_WINDOW_LABEL: &str = "agentero-settings";
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 #[tauri::command]
 pub fn window_new(app: AppHandle) -> Result<(), String> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start("window_new");
     let label = format!("agentero-{}", uuid::Uuid::new_v4().simple());
@@ -86,7 +86,7 @@ pub fn settings_window_open(
     section: Option<String>,
     vault: Option<String>,
 ) -> Result<(), String> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start("settings_window_open");
 

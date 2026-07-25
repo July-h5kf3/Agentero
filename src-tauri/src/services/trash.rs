@@ -6,7 +6,7 @@
 //! undoable — files move back and catalog rows are re-inserted — without
 //! depending on platform-specific OS trash restore.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use serde::{Deserialize, Serialize};
 use std::fs;

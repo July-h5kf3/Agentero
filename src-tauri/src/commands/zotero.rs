@@ -1,7 +1,7 @@
 //! Zotero migration commands: scan a Zotero data directory and migrate its
 //! library into the catalog. Fully local (no Translator).
 
-use crate::error::ApiResult;
+use crate::core::error::ApiResult;
 use crate::services::lookup::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
     ZoteroScan, ZoteroScanArgs,
@@ -11,7 +11,7 @@ use tauri::ipc::Channel;
 /// Read-only preview of a Zotero data directory (item + local-PDF counts).
 #[tauri::command]
 pub fn zotero_scan(args: ZoteroScanArgs) -> ApiResult<ZoteroScan> {
-    use crate::log_util::{trunc, OpTimer};
+    use crate::core::log_util::{trunc, OpTimer};
 
     let op = OpTimer::start_with(
         "zotero_scan",
@@ -27,7 +27,7 @@ pub async fn zotero_migrate(
     args: ZoteroMigrateArgs,
     on_progress: Channel<MigrateProgress>,
 ) -> ApiResult<ZoteroMigrateResult> {
-    use crate::log_util::{trunc, OpTimer};
+    use crate::core::log_util::{trunc, OpTimer};
 
     let op = OpTimer::start_with(
         "zotero_migrate",

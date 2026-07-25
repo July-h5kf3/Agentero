@@ -3,7 +3,7 @@
 use super::agent_exec;
 use super::launch::{resolve_remote_target, RemoteAgentTarget};
 use super::session::{RemoteRegistry, RemoteSession, LOCAL_SIM_HOST};
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::models::agent::{AgentDescriptor, CatalogAcpStatus, CatalogEntry, ProbeResult};
 use crate::services::agent::probe_agent;
 use crate::services::agent::templates::{catalog_templates, template_from_id, template_info};

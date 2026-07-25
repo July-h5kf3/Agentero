@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::models::agent::{AgentSkill, AgentTemplate};
 use std::collections::HashSet;
 use std::fs;

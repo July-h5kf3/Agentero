@@ -5,7 +5,7 @@
 //! hits with a snippet + line number. Hits inside a `papers/<…>` folder carry
 //! `paper_path` so the UI can open the paper instead of the raw file.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};

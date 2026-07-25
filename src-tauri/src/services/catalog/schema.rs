@@ -4,7 +4,7 @@
 //! - v2: Translator / magic-wand fields (publication, volume, isbn, …)
 //! - v3: `is_read` for paper-reader workflow
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use rusqlite::Connection;
 use std::fs;
 use std::path::Path;

@@ -3,7 +3,7 @@
 //! @see docs/backend/data-model.md § PAPER.md
 //! @see docs/backend/api.md `paper_parse_body`
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers;
 use crate::services::lookup::{has_local_pdf, has_local_tex};
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};

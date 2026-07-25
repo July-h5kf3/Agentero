@@ -1,9 +1,9 @@
 //! Map Connector `saveItems` payloads into Vault papers (reuse lookup pipeline).
 
-use crate::error::AppError;
+use crate::core::error::AppError;
+use crate::core::fs::WriteOpts;
 use crate::services::catalog::papers;
 use crate::services::connector::{ConnectorController, ConnectorProgress};
-use crate::services::fs::WriteOpts;
 use crate::services::lookup::{
     enrich_remote_urls, ensure_paper_assets_with_cookies, free_mt_to_zh, looks_mostly_cjk,
     map_zotero_item, normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts,

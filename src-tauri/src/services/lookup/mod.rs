@@ -22,7 +22,7 @@ pub use zotero_io::{
     PaperImportResult,
 };
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use crate::services::lookup::assets::AssetDownloadProgress;
 use futures_util::StreamExt;

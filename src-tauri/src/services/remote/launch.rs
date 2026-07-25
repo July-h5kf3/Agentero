@@ -1,8 +1,8 @@
 //! Resolve how to launch BYOA when the active vault is remote.
 
 use super::session::{parse_remote_handle, RemoteRegistry, RemoteSession, LOCAL_SIM_HOST};
-use crate::error::AppError;
-use crate::services::fs::WriteOpts;
+use crate::core::error::AppError;
+use crate::core::fs::WriteOpts;
 use crate::services::vault::{self, CreateVaultResult};
 use std::path::PathBuf;
 use std::sync::Arc;

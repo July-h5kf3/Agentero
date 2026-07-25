@@ -1,7 +1,7 @@
 //! SFTP-backed [`VaultFs`] using system OpenSSH (`openssh` + `openssh-sftp-client`).
 
-use crate::error::AppError;
-use crate::services::fs::{
+use crate::core::error::AppError;
+use crate::core::fs::{
     join_remote, normalize_rel, FsCaps, FsDirEntry, FsFileMeta, VaultFs, WriteOpts,
 };
 use async_trait::async_trait;

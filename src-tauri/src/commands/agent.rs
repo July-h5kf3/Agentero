@@ -1,4 +1,4 @@
-use crate::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult, AppError};
 use crate::models::agent::{
     AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplateInfo, CatalogScanResponse,
     ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
@@ -272,7 +272,7 @@ pub async fn agent_run_once(
     remote_registry: State<'_, Arc<RemoteRegistry>>,
     request: RunOnceRequest,
 ) -> Result<ApiResult<RunOnceAccepted>, String> {
-    use crate::log_util::{trunc, OpTimer};
+    use crate::core::log_util::{trunc, OpTimer};
 
     let op = OpTimer::start_with(
         "agent_run_once",

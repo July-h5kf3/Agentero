@@ -1,4 +1,4 @@
-use crate::error::ApiResult;
+use crate::core::error::ApiResult;
 
 /// Request cooperative cancellation for a frontend background task.
 #[tauri::command]

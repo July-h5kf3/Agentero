@@ -3,7 +3,7 @@
 //! MVP: separate `ssh` process (does not share the SFTP mux session). Uses system
 //! OpenSSH so `~/.ssh/config`, agent, and ProxyJump work.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 use tokio::time::{timeout, Duration};

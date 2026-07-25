@@ -5,9 +5,9 @@
 //! fallback). Catalog mutations hit the session work mirror then PUT.
 
 use super::session::RemoteSession;
-use crate::error::AppError;
+use crate::core::error::AppError;
+use crate::core::fs::{VaultFs, WriteOpts};
 use crate::services::catalog::papers::{self, PaperRecord};
-use crate::services::fs::{VaultFs, WriteOpts};
 use crate::services::trash::{TrashEntry, TrashResult};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -367,7 +367,7 @@ async fn copy_tree(fs: &dyn VaultFs, from: &str, to: &str) -> Result<(), AppErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::fs::WriteOpts;
+    use crate::core::fs::WriteOpts;
     use crate::services::remote::session::{RemoteRegistry, LOCAL_SIM_HOST};
     use std::env;
 

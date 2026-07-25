@@ -1,9 +1,9 @@
 //! Magic-wand / asset import into a remote vault (stage locally → SFTP → catalog push).
 
 use super::session::RemoteSession;
-use crate::error::AppError;
+use crate::core::error::AppError;
+use crate::core::fs::{VaultFs, WriteOpts};
 use crate::services::catalog::papers::{self, PaperRecord};
-use crate::services::fs::{VaultFs, WriteOpts};
 use crate::services::lookup::parse::{extract_arxiv_id, extract_primary_identifier};
 use crate::services::lookup::{
     enrich_remote_urls, ensure_paper_assets, identifier_kind_column, identifier_kind_str,

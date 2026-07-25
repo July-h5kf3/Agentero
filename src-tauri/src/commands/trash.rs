@@ -1,7 +1,7 @@
 //! Recycle-bin commands: undoable delete + restore (local + remote).
 
-use crate::error::{map_err, ApiResult, AppError};
-use crate::log_util::{trunc, OpTimer};
+use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::log_util::{trunc, OpTimer};
 use crate::services::remote::{parse_remote_handle, trash_bridge, RemoteRegistry};
 use crate::services::trash;
 use serde::Deserialize;

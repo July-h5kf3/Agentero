@@ -2,7 +2,7 @@
 //! Google / Bing Edge / Youdao / Volcengine / Tencent Transmart / LibreTranslate.
 //! Unofficial / best-effort; may break or rate-limit.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Mutex;

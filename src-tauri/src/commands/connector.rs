@@ -1,6 +1,6 @@
 //! Tauri commands for the Zotero Connector–compatible local server.
 
-use crate::error::ApiResult;
+use crate::core::error::ApiResult;
 use crate::services::connector::{ConnectorController, ConnectorStatus};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub fn connector_set_enabled(
     ctrl: State<'_, Arc<ConnectorController>>,
     args: ConnectorSetEnabledArgs,
 ) -> ApiResult<ConnectorStatus> {
-    use crate::log_util::OpTimer;
+    use crate::core::log_util::OpTimer;
 
     let op = OpTimer::start_with("connector_set_enabled", format!("enabled={}", args.enabled));
     let status = ctrl.set_enabled(args.enabled);

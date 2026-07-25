@@ -1,6 +1,6 @@
 //! Vault create / scaffold helpers.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog;
 use serde::Serialize;
 use std::fs;

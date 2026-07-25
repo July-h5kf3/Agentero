@@ -2,7 +2,7 @@
 //!
 //! Flow: always try PDF → arXiv also tries e-print TeX → caller may liteparse when no TeX.
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use flate2::read::GzDecoder;
 use serde::Serialize;
 use std::fs::{self, File};

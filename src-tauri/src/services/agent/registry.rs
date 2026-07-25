@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::models::agent::{
     default_agent_proxy_url, AgentDescriptor, AgentRegistryState, AgentTemplate, CatalogAcpStatus,
     CatalogEntry, CatalogScanResponse, ProbeResult, UpsertAgentRequest,
@@ -486,8 +486,8 @@ fn chrono_like_now() -> String {
 }
 
 fn config_path() -> PathBuf {
-    let path = crate::services::paths::agents_path();
-    crate::services::paths::migrate_legacy_file("agents.json", &path);
+    let path = crate::core::paths::agents_path();
+    crate::core::paths::migrate_legacy_file("agents.json", &path);
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }

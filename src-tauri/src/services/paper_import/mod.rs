@@ -5,7 +5,7 @@
 //!
 //! @see docs/backend/paper-import-pipeline.md
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use crate::services::catalog::papers;
 use crate::services::lookup::{
     allocate_paper_path, ensure_paper_assets_with_progress, has_local_pdf, has_local_tex,
