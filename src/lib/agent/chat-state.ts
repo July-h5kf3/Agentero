@@ -10,6 +10,7 @@ import type {
 	AgentPlanEvent,
 	AgentResultPayload,
 	AgentStreamEvent,
+	AgentTemplate,
 	AgentToolEvent,
 	CatalogScanResponse,
 } from "@/lib/agent/api";
@@ -146,7 +147,23 @@ export type AgentOption = {
 	name: string;
 	isDefault: boolean;
 	source: "registry" | "catalog";
+	template?: AgentTemplate;
 };
+
+function catalogTemplateFromId(templateId: string): AgentTemplate | undefined {
+	switch (templateId) {
+		case "opencode":
+		case "gemini":
+		case "claude-acp":
+		case "codex-acp":
+		case "qodercli":
+		case "grok-build":
+		case "custom":
+			return templateId;
+		default:
+			return undefined;
+	}
+}
 
 /** Catalog entry is usable in Chat only when ACP handshake succeeded. */
 export function catalogEntryUsable(e: {
@@ -187,6 +204,7 @@ export function buildOptions(
 				name: e.name,
 				isDefault: e.isDefault,
 				source: "catalog",
+				template: catalogTemplateFromId(e.templateId),
 			});
 		}
 		for (const a of catalog.customAgents) {
@@ -200,6 +218,7 @@ export function buildOptions(
 				name: a.name,
 				isDefault: catalog.defaultId === a.id,
 				source: "registry",
+				template: a.template,
 			});
 		}
 	}
@@ -216,6 +235,7 @@ export function buildOptions(
 				name: a.name,
 				isDefault: registry.defaultId === a.id,
 				source: "registry",
+				template: a.template,
 			});
 		}
 	}

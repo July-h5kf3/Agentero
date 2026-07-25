@@ -25,15 +25,14 @@ pub enum SkillMentionStyle {
 /// Map Agentero agent template → native skill mention style.
 pub fn skill_mention_style(template: &AgentTemplate) -> SkillMentionStyle {
     match template {
-        AgentTemplate::ClaudeAcp => SkillMentionStyle::Slash,
-        // All other agents (OpenCode / Codex ACP / Gemini / Qoder / Grok / custom):
-        // Agentero injection is the reliable path.
-        AgentTemplate::Opencode
-        | AgentTemplate::CodexAcp
+        AgentTemplate::CodexAcp => SkillMentionStyle::Dollar,
+        // All other agents use slash-style skill mentions.
+        AgentTemplate::ClaudeAcp
+        | AgentTemplate::Opencode
         | AgentTemplate::Gemini
         | AgentTemplate::QoderCli
         | AgentTemplate::GrokBuild
-        | AgentTemplate::Custom => SkillMentionStyle::InjectedOnly,
+        | AgentTemplate::Custom => SkillMentionStyle::Slash,
     }
 }
 
@@ -241,10 +240,14 @@ mod tests {
     }
 
     #[test]
-    fn codex_uses_injected_mentions() {
+    fn codex_uses_dollar_mentions() {
         assert_eq!(
             skill_mention_style(&AgentTemplate::CodexAcp),
-            SkillMentionStyle::InjectedOnly
+            SkillMentionStyle::Dollar
+        );
+        assert_eq!(
+            format_skill_mention("paper-reader", SkillMentionStyle::Dollar),
+            "$paper-reader"
         );
     }
 
@@ -261,14 +264,14 @@ mod tests {
     }
 
     #[test]
-    fn generic_agents_inject_only() {
+    fn generic_agents_use_slash_mentions() {
         assert_eq!(
             skill_mention_style(&AgentTemplate::Opencode),
-            SkillMentionStyle::InjectedOnly
+            SkillMentionStyle::Slash
         );
         assert!(
-            skill_activation_prefix(&["paper-reader".into()], SkillMentionStyle::InjectedOnly)
-                .is_empty()
+            skill_activation_prefix(&["paper-reader".into()], SkillMentionStyle::Slash)
+                .contains("/paper-reader")
         );
     }
 }
