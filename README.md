@@ -90,6 +90,8 @@ agentero/
 
 - **桌面壳**：[Tauri 2](https://v2.tauri.app/)
 - **前端**：[React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[AI Elements](https://elements.ai-sdk.dev/)
+- **窗口管理**： Dockview
+- **PDF**： Embedded PDF
 - **编辑器**：[Plate](https://platejs.org/) / Markdown
 - **Agent**：[Agent Client Protocol](https://agentclientprotocol.com/)、BYOA
 
