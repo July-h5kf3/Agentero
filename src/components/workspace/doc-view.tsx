@@ -29,8 +29,6 @@ export type DocViewLibraryProps = {
 	rescanning: boolean;
 	onOpenPaper: (paper: PaperMetadata) => void;
 	onRescan: () => void;
-	/** Zotero migrate (full library only). */
-	onMigrateZotero?: () => void;
 };
 
 /** Markdown / NOTES editor props. */
@@ -127,7 +125,6 @@ export const DocView = memo(function DocView({
 				onOpenPaper={library.onOpenPaper}
 				onRescan={library.onRescan}
 				rescanning={library.rescanning}
-				onMigrateZotero={library.onMigrateZotero}
 				className="bg-muted/20"
 			/>
 		);

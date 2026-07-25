@@ -1969,9 +1969,7 @@ export default function App() {
 	);
 
 	const openSettings = useCallback((section: SettingsSection = "general") => {
-		// In-app modal on every platform. The native settings window
-		// (`settings_window_open`) renders blank on Windows (second-webview boot),
-		// so we use the proven overlay that shares the same `SettingsContent`.
+		// In-app modal on every platform (shared `SettingsContent`).
 		setSettingsSection(section);
 		setSettingsOpen(true);
 	}, []);
@@ -2654,7 +2652,6 @@ export default function App() {
 				rescanning,
 				onOpenPaper: handleOpenLibraryPaper,
 				onRescan: handleRescanPapers,
-				onMigrateZotero: handleMigrateZoteroOpen,
 			},
 			editor: {
 				fontSize: settings.editorFontSize,
@@ -2690,7 +2687,6 @@ export default function App() {
 			rescanning,
 			handleOpenLibraryPaper,
 			handleRescanPapers,
-			handleMigrateZoteroOpen,
 			handleTrashChanged,
 			trashReloadSignal,
 			t,
@@ -3405,6 +3401,7 @@ export default function App() {
 										onOpenRemoteVault={(args) =>
 											void handleOpenRemoteVault(args)
 										}
+										onMigrateZotero={handleMigrateZoteroOpen}
 									/>
 								</div>
 								<div className="flex min-h-0 flex-1 flex-col px-1">
