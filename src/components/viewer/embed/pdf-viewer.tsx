@@ -50,6 +50,7 @@ import {
 	TilingPluginPackage,
 } from "@embedpdf/plugin-tiling/react";
 import {
+	useViewportElement,
 	Viewport,
 	ViewportPluginPackage,
 } from "@embedpdf/plugin-viewport/react";
@@ -372,6 +373,70 @@ export function PdfViewer(props: PdfViewerProps) {
 }
 
 type PdfViewerInnerProps = PdfViewerProps & { docId: string };
+
+const WHEEL_ZOOM_THRESHOLD = 100;
+
+/**
+ * Custom Ctrl/Cmd+wheel zoom handler.
+ *
+ * EmbedPDF's ZoomGestureWrapper multiplies the current scale by a factor
+ * derived from `deltaY`, which makes a single mouse-wheel tick double or
+ * halve the zoom. We disable that built-in behavior and instead step the zoom
+ * with the same fixed increments used by the toolbar +/- buttons.
+ */
+function WheelZoomHandler({ docId }: { docId: string }) {
+	const viewportRef = useViewportElement();
+	const { provides: zoom } = useZoom(docId);
+	const zoomRef = useRef(zoom);
+	zoomRef.current = zoom;
+
+	useEffect(() => {
+		const container = viewportRef?.current;
+		if (!container) return;
+
+		let accumulated = 0;
+		let resetTimeout: ReturnType<typeof setTimeout> | null = null;
+
+		const resetAccumulation = () => {
+			accumulated = 0;
+			resetTimeout = null;
+		};
+
+		const scheduleReset = () => {
+			if (resetTimeout) clearTimeout(resetTimeout);
+			resetTimeout = setTimeout(resetAccumulation, 150);
+		};
+
+		const handleWheel = (e: WheelEvent) => {
+			if (!e.ctrlKey && !e.metaKey) return;
+			e.preventDefault();
+
+			const z = zoomRef.current;
+			if (!z) return;
+
+			accumulated += e.deltaY;
+			scheduleReset();
+
+			while (Math.abs(accumulated) >= WHEEL_ZOOM_THRESHOLD) {
+				if (accumulated > 0) {
+					z.zoomOut();
+					accumulated -= WHEEL_ZOOM_THRESHOLD;
+				} else {
+					z.zoomIn();
+					accumulated += WHEEL_ZOOM_THRESHOLD;
+				}
+			}
+		};
+
+		container.addEventListener("wheel", handleWheel, { passive: false });
+		return () => {
+			container.removeEventListener("wheel", handleWheel);
+			if (resetTimeout) clearTimeout(resetTimeout);
+		};
+	}, [viewportRef]);
+
+	return null;
+}
 
 type SelectionMenuState = {
 	screen: { x: number; y: number };
@@ -1839,8 +1904,10 @@ function PdfViewerInner({
 				documentId={docId}
 				className="agentero-scroll-both min-h-0 flex-1"
 			>
-				{/* Ctrl/Cmd+wheel + pinch zoom (EmbedPDF headless requires this wrapper). */}
-				<ZoomGestureWrapper documentId={docId}>
+				<WheelZoomHandler docId={docId} />
+				{/* Pinch zoom still handled by EmbedPDF; wheel zoom is replaced above so
+				    the step size matches the toolbar +/- buttons. */}
+				<ZoomGestureWrapper documentId={docId} enableWheel={false}>
 					<GlobalPointerProvider documentId={docId}>
 						<Scroller documentId={docId} renderPage={renderPage} />
 					</GlobalPointerProvider>
