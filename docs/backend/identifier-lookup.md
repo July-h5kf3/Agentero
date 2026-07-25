@@ -1,6 +1,6 @@
 # 魔棒入库（Identifier Lookup）与 Translator 后端
 
-> 状态：**v0 已落地**（侧栏魔棒 + `lookup_import` + HTTP Translator + 默认 PDF/LaTeX 下载；sidecar/批量/快捷键仍可扩展）  
+> 状态：**v0 已落地**（侧栏魔棒 + `lookup_import_batch` + HTTP Translator + 默认 PDF/LaTeX 下载；sidecar/批量/快捷键仍可扩展）  
 > 目标：用户点击 **魔棒**，粘贴 **链接或编号** → 用 **Translator** 解析元数据 → **写 catalog + paper 文件夹**（`NOTES.md` 壳 + **PDF 默认到论文根目录**；arXiv **e-print 解压 LaTeX 到 `source/`**）→ 落到 `papers/` 或当前 Papers 子文件夹。catalog 仍保留远程 `pdf_url`/`html_url`（PDF 预览本地优先，远程作下载候选与回退；HTML 仍远程 iframe）。
 
 相关文档：
@@ -83,7 +83,7 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 **精读（Zap 图标 + 自动触发）**：
 
 - **显示条件（Zap）**：本地资源齐全且 catalog **`is_read === false`**（与 Download 互斥）。
-- **自动触发**：`lookup_import`（魔棒）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
+- **自动触发**：`lookup_import_batch`（魔棒，单条）或单篇 `paper_download_assets` 成功且 PDF/TeX/`PAPER.md` 任一可读正文/归档就绪时，前端 `maybeAutoRunPaperReader` 自动跑同一工作流（批量 Library 导入/批量 Download **不**自动连跑，避免并发炸 Agent）。
 - **手动**：点击 Zap → 同上。
 - **实现**：`src/lib/paper/reader.ts` → `agent_run_once` + skill（**`hideFromChatHistory: true`**，不进 Agent 对话记录）；Codex `$paper-reader` / Claude `/paper-reader` / 其它注入 `SKILL.md` → 写 `{paper}/NOTES.md` → `paper_set_is_read(true)`；进度在左下角后台任务条。
 - **进度**：左下角后台任务条——入库/下载阶段 `kind=lookup|download`（分阶段 detail/progress），随后精读 `kind=paperRead`。
@@ -98,7 +98,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | 默认 | **`https://translator.philfan.cn`** |
 | Host 常量 | `DEFAULT_TRANSLATOR_BASE_URL`（与设置默认一致） |
 
-- 魔棒入库时前端把设置中的 URL 传入 `lookup_import.args.translatorBaseUrl`。
+- 魔棒入库时前端把设置中的 URL 传入 `lookup_import_batch.args.translatorBaseUrl`。
 - Host：`POST {base}/search` 或 `/web`（`Content-Type: text/plain`）。
 - 服务不可达且输入为 arXiv 时，回退 export.arxiv.org。
 
@@ -403,7 +403,7 @@ catalog **schema v2** 起补齐期刊/卷期页等字段（见 [`catalog.md`](ca
 入库前 Host 手中只有 **`PaperMetadata`（已 map）**；不必单独长期持有 Zotero Item。调试可选暂存 `raw` 日志，不进 catalog。
 
 ```ts
-// 概念：一次魔棒调用（落地：lookup_import）
+// 概念：一次魔棒调用（落地：lookup_import_batch）
 const item = await translator.searchOrWeb(input); // Zotero Item
 const metadata = mapZoteroItemToPaperMetadata(item); // → PaperMetadata
 enrichRemoteUrls(metadata); // arxiv/doi 推导
@@ -481,7 +481,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
 // 或同步：{ ok: true; data: { paths: string[] } }
 ```
 
-**Host 行为**（落地实现：`lookup_import`）：
+**Host 行为**（落地实现：`lookup_import_batch` 单条路径）：
 
 1. 规范化 `parent_dir`（必须位于 `papers` 下）。
 2. `path = {parent_dir}/{id}`。
@@ -501,7 +501,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
     vaultPath: string;
     parentDir: string;              // "papers" | "papers/nlp"
     texts: string[];                // 用户输入拆分后的原始 token 数组
-    translatorBaseUrl?: string;     // 同 lookup_import
+    translatorBaseUrl?: string;     // 同上
     taskId?: string;                // 前端后台任务 id
     concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
   }
@@ -591,7 +591,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
   → 展示目标路径提示：将加入「papers/」或「papers/nlp/」（来自 §1.2）
   → 用户 Enter 或点「添加」
   → lookup:search（Translator）→ 可选极简预览
-  → lookup_import({ parent_dir, text, translatorBaseUrl })
+  → lookup_import_batch({ parent_dir, texts, translatorBaseUrl })
   → 成功：catalog + source/PDF（arXiv 含 TeX）；刷新文件树 / Library / wiki；`openPaper` 打开 paper（PDF 预览优先本地）并 **左侧树展开祖先、滚到新论文行**
   → 失败：全局 Toast（`notifyError`，见 [`../frontend/ui.md`](../frontend/ui.md) §2.1.2）；Popover 内字段校验可仍就地显示
 ```
@@ -685,7 +685,7 @@ arXiv URL 推导：
 - [x] 文档：交互、目标文件夹、默认下载约定
 - [x] 魔棒 Popover + `parent_dir` 解析 + i18n（侧栏 `WandSparkles`）
 - [x] Host 解析 + arXiv fallback（Translator 失败时）
-- [x] `lookup_import`：catalog upsert + NOTES 壳 + PDF/LaTeX 下载
+- [x] 魔棒入库：catalog upsert + NOTES 壳 + PDF/LaTeX 下载
 
 ### Phase B — Translator 服务
 
@@ -700,7 +700,7 @@ arXiv URL 推导：
 - [x] 与文件树选中态同步目标 `parent_dir`
 - [x] 论文库 UI：`paper_list` 表格 + 虚拟 Library 节点（见 [`../frontend/ui.md`](../frontend/ui.md)）
 - [x] 单篇 / Library 批量补下缺失 PDF 与 arXiv TeX（`paper_download_assets`）
-- [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`）
+- [x] 无 TeX 时 liteparse → `PAPER.md`（下载后自动）
 - [x] `⇧⌘I` 魔棒快捷键
 - [x] 魔棒批量入库：多标识符粘贴、去重、批量下载、进度聚合
 - [ ] 重复提示增强（单条弹层内）、入库任务可取消
@@ -770,7 +770,7 @@ arXiv URL 推导：
 | 2026-07-15 | 下载策略：无预览 URL 始终尝试下载；有 URL 时仅 `downloadFulltextToLocal` 开才额外本地下载 |
 | 2026-07-15 | 实现进度：`lookup_import` / 设置 Translator URL / catalog 权威 / `paper_list` + Library UI；metadata.json 仅为投影 |
 | 2026-07-15 | 默认下载 PDF；arXiv 解压 LaTeX；移除 `downloadFulltextToLocal`；`paper_download_assets` + 树行 Download |
-| 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动 + `paper_parse_body`） |
+| 2026-07-15 | 无 TeX 时 liteparse → `PAPER.md`（下载后自动） |
 | 2026-07-16 | 从本地 Zotero 迁移（直读 `zotero.sqlite` + `storage/`；`zotero_scan` / `zotero_migrate`；可选拷 PDF） |
 
 ---

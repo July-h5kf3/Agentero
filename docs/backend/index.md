@@ -25,7 +25,7 @@
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理 **ACP-compatible Agent**（现网：本机进程；规划中：远程 Vault 时经 SSH 在**远端**启动），但不托管模型密钥（BYOA）。远程设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
-- 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
+- 标识符魔棒入库：`lookup_import_batch` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时下载后自动 **liteparse → `PAPER.md`**；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
 - 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换；元素可为字符串或 `{name,color?}` Apple 8 色）；Paper Info 增删与选色；Library 染色 chip 与筛选；CLI `paper tag list|set|add|rm` / `list --tag`（CLI 仅名称）。
 - **Zotero Connector 兼容服务**（MVP）：本机 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；见 [`connector.md`](connector.md)。
@@ -57,7 +57,7 @@ src-tauri/src/
   main.rs
 ```
 
-入库相关在 **`features/import/`**（原 `lookup` + `pdf_parse` + `paper_import` + Zotero 迁移命令）。魔棒 Tauri command 名仍为 `lookup_import` 等（契约不变）。
+入库相关在 **`features/import/`**（原 `lookup` + `pdf_parse` + `paper_import` + Zotero 迁移命令）。魔棒 Tauri command 名仍为 `lookup_import_batch` 等（契约不变）。
 
 ## 交叉引用
 

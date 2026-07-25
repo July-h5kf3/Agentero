@@ -34,7 +34,7 @@
 2. **笔记与 source 仍是可再生之外的用户资产**；catalog 损坏时，磁盘上的 paper 文件夹仍在，但 meta 字段不可从 NOTES 可靠还原。
 3. **导出是单向投影**：`PAPERS.md` / `library.bib` 不是写回入口；改元数据只走 `paper:*` / 入库命令写 SQLite。
 4. **`metadata.json` 是投影**：读路径走 `paper_get`（catalog）；每次 `upsert` 后同步写到对应 paper 文件夹，便于外部工具浏览，**不是** UI 主数据源。
-5. **删除**：文件树删除磁盘后，若路径在 `papers/` 下，调用 Host `paper_delete` 清理 catalog 行（`path = ? OR path LIKE '{path}/%'`），避免 Library 残留幽灵条目。
+5. **删除**：文件树删除走回收站（`path_trash`）；`papers/` 下的路径由回收站快照同步清理 catalog 行（底层 `papers::delete_under_path`，`path = ? OR path LIKE '{path}/%'`），避免 Library 残留幽灵条目。
 
 ---
 
@@ -253,7 +253,7 @@ src-tauri/src/features/
 ### 5.5 与 importer 的写路径
 
 ```text
-import paper（魔棒 lookup_import）
+import paper（魔棒 lookup_import_batch）
   → 创建 paper 文件夹（默认 `papers/<id>/`，也可 `papers/<org>/…/<id>/`）
   → 事务写入 catalog.papers（path = 该文件夹相对路径）
   → ensure_paper_assets：PDF → 论文根目录；arXiv e-print TeX → 解压到 source/
@@ -320,10 +320,10 @@ import paper（魔棒 lookup_import）
 ## 9. 验收要点
 
 - [x] Create Vault 生成 `.agentero/catalog.sqlite`（schema 当前版本），**不**生成 `PAPERS.md` / `library.bib`。
-- [x] 魔棒 / `lookup_import` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
+- [x] 魔棒 / `lookup_import_batch` 入库后 `paper_list` 可见新行；UI 论文库表格展示。
 - [x] 读路径走 `paper_get` / `paper_list`；`metadata.json` 仅为 upsert 后投影（非 UI 主源）。
 - [x] 入库默认写 PDF（及 arXiv TeX）到 `source/`；`paper_download_assets` 可补缺失。
-- [x] 无 TeX 时 liteparse 写 `PAPER.md`，catalog 更新 `body_source` / `body_quality`（`paper_parse_body`）。
+- [x] 无 TeX 时 liteparse 写 `PAPER.md`，catalog 更新 `body_source` / `body_quality`（下载后自动）。
 - [ ] `catalog:export_papers_md` / `catalog:export_bibtex` 能生成与历史格式兼容的文本。
 - [ ] 删除导出文件不影响 catalog 与 UI 列表。
 - [ ] 打开缺 catalog 的旧目录能 init 或从 `metadata.json` 迁移。
@@ -333,7 +333,7 @@ import paper（魔棒 lookup_import）
 ## 10. 相关文档
 
 - [`data-model.md`](data-model.md) — Vault 分层与类型
-- [`api.md`](api.md) — `paper_list` / `paper_get` / `lookup_import` 等已落地契约 + 规划扩展
+- [`api.md`](api.md) — `paper_list` / `paper_get` / `lookup_import_batch` 等已落地契约 + 规划扩展
 - [`identifier-lookup.md`](identifier-lookup.md) — 魔棒元数据 → catalog 写入路径
 - [`paper-import-pipeline.md`](paper-import-pipeline.md) — 多入口入库统一（`paper_commit` / 去重 / 前端后置）
 - [`../frontend/ui.md`](../frontend/ui.md) — 论文库表格与虚拟 Library 节点

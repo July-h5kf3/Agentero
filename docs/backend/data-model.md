@@ -190,15 +190,15 @@ papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import �
 | 来源情况 | `source/` 放什么 | `PAPER.md` |
 |---|---|---|
 | arxiv 有 LaTeX | **默认下载**：`{id}.pdf` + e-print 解包的 `.tex` 工程 | **不自动生成**（Agent 可直接读 `.tex`） |
-| 无 TeX（非 arXiv / e-print 失败 / PDF-only） | **默认下载** PDF | **下载后** liteparse 生成 Markdown（`paper_parse_body` 亦可手动） |
+| 无 TeX（非 arXiv / e-print 失败 / PDF-only） | **默认下载** PDF | **下载后** liteparse 生成 Markdown（下载后自动） |
 | 扫描件 | 原始 PDF | liteparse OCR → Markdown，`body_quality=low` |
 
-**入库下载**（`lookup_import` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
+**入库下载**（`lookup_import_batch` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
 
 - PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
 - arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
 - **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
-- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse / `paper_parse_body`；设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Zap 手动精读
+- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse；设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Zap 手动精读
 
 正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建，`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
 

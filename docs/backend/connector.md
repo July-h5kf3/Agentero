@@ -37,7 +37,7 @@
 
 | 路径 | 入口 | 元数据来源 | 与本方案关系 |
 |---|---|---|---|
-| 魔棒 `lookup_import` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；落盘应对齐同一 paper 单元语义（统一方案见 [`paper-import-pipeline.md`](paper-import-pipeline.md)） |
+| 魔棒 `lookup_import_batch` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；落盘应对齐同一 paper 单元语义（统一方案见 [`paper-import-pipeline.md`](paper-import-pipeline.md)） |
 | 本地 PDF 导入 | 魔棒弹层多选 | 文件名 + liteparse | 并存；目标共用 `paper_commit` |
 | Zotero 迁移 | 欢迎页 / 侧栏 | `zotero.sqlite` + storage | **存量**；本方案是 **增量** |
 | Connector 兼容（本方案） | 官方浏览器插件 | 插件侧 Translator → HTTP | 本文件 |
@@ -110,7 +110,7 @@ services/connector  →  map_zotero_item（复用 lookup/map）
         │
         ▼
 写 papers/<id>/ + catalog.sqlite
-（对齐 lookup_import：NOTES 壳、尽量 PDF、arXiv TeX…）
+（对齐魔棒入库：NOTES 壳、尽量 PDF、arXiv TeX…）
         │
         ▼
 Tauri event: connector:item-saved / connector:error
@@ -183,7 +183,7 @@ Tauri event: connector:item-saved / connector:error
    - `map_zotero_item`（或等价）→ `PaperMeta`；
    - `meta_source` 建议标记为 `zotero-connector`（或现有枚举扩展）；
    - 目标 `parent_dir`：见 §5.2；
-   - 创建 paper 文件夹 + catalog 行（对齐 `lookup_import` / migration 的去重策略，见 §5.3）；
+   - 创建 paper 文件夹 + catalog 行（对齐魔棒入库 / migration 的去重策略，见 §5.3）；
    - **尽量**下载 PDF（attachments 中 PDF URL、或 DOI/arXiv 派生 URL）；失败不导致整次 5xx，但 progress 可标失败。
 3. 注册 session，供 `sessionProgress` 查询。
 4. 尽快返回 `201`（可先完成元数据落盘，附件异步——若异步，progress 必须反映，避免插件一直转圈）。
