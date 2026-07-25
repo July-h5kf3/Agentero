@@ -199,7 +199,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper/reader.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - PDF 引用/插图解析的落盘契约、TeX/PDF 双路径和交互边界见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。首版只分析本地 paper PDF；sidecar 写入 paper `source/`，不覆盖原始资产。
-- **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
+- **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载（不注入主文档 DOM）。
 
 **可插拔 PDF 解析器（`PdfParser`）**：
 
@@ -642,7 +642,6 @@ pnpm tauri build
   "@platejs/markdown": "^53",
   "@platejs/basic-nodes": "^53",
   "@platejs/ai": "^53",
-  "dompurify": "^3",
   "lucide-react": "^1",
   "remark-gfm": "^4",
   "remark-math": "^6",
@@ -687,13 +686,7 @@ walkdir = "2"
 tempfile = "3"
 ```
 
-### 8.3 安全相关依赖
-
-| 库 | 用途 | 说明 |
-|---|---|---|
-| `dompurify` | HTML XSS 消毒 | 已接入；封装见 `src/lib/core/sanitize.ts` 的 `sanitizeHtml`。内联 HTML 渲染前必须调用。 |
-
-### 8.4 可选依赖
+### 8.3 可选依赖
 
 | 场景 | 库 |
 |---|---|

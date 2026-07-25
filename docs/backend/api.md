@@ -1090,7 +1090,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 - **返回**：`{ ok: true; data: { removed: number } }`（删除行数；无匹配时 `removed: 0`）。
 - **SQL**：`DELETE FROM papers WHERE path = ? OR path LIKE '{path}/%'`。
-- **前端**：`src/lib/paper/api.ts` → `deletePapersUnderPath`；侧栏右键删除 / `⌘⌫`。
+- **前端**：删除走 `path_trash`（`trashPaths`）；catalog 行随回收站快照清理，不再单独调 `paper_delete`。
 
 #### `paper_move`（已落地）
 
