@@ -217,6 +217,9 @@ export const DocView = memo(function DocView({
 			</div>
 		);
 	}
+	// HTML pages are remote documents. Do not create their iframe (and therefore
+	// do not start a network request) until the panel is actually activated.
+	if (!active) return null;
 	return (
 		<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
 			<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />

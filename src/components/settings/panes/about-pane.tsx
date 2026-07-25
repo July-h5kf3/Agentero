@@ -11,7 +11,9 @@ export function AboutPane() {
 	const [version, setVersion] = useState<string>();
 
 	useEffect(() => {
-		void getVersion().then(setVersion).catch(() => undefined);
+		void getVersion()
+			.then(setVersion)
+			.catch(() => undefined);
 	}, []);
 
 	return (
