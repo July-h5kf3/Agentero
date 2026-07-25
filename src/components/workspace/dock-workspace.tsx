@@ -36,7 +36,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { cn } from "@/lib/core/utils";
-import { TAG_COLOR_IDS, tagColorTokens } from "@/lib/ui/tag-colors";
+import { TAG_COLOR_IDS, tagSwatchStyle } from "@/lib/ui/tag-colors";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
 import {
 	isSplitDragPayload,
@@ -324,7 +324,7 @@ export const DockWorkspace = memo(
 					value:
 						id === "grey"
 							? "var(--muted-foreground)"
-							: tagColorTokens(id)!.swatch,
+							: (tagSwatchStyle(id)?.backgroundColor ?? ""),
 					label: t(`tabs.tabGroupColor.${id}` as const),
 				})),
 			[t],
