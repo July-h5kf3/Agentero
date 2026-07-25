@@ -102,7 +102,6 @@
 		"reportedTooltip": "Models appear after your agent reports them",
 		"loading": "Loading…",
 		"button": "Model",
-		"title": "Select model",
 		"searchPlaceholder": "Search models…",
 		"emptyNone": "No models yet. Run once so the ACP agent can advertise models.",
 		"emptyNoMatch": "No match."

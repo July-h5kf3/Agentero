@@ -65,16 +65,6 @@ export function GeneralPane({
 						onCheckedChange={(v) => patch({ restoreLastVault: v })}
 					/>
 				</SettingsRow>
-				<SettingsRow
-					label={t("general.confirmClose.label")}
-					htmlFor="confirm-close"
-				>
-					<Switch
-						id="confirm-close"
-						checked={settings.confirmBeforeClose}
-						onCheckedChange={(v) => patch({ confirmBeforeClose: v })}
-					/>
-				</SettingsRow>
 				<SettingsRow label={t("general.paperTreeLabelMode.label")}>
 					<Select
 						value={settings.paperTreeLabelMode}

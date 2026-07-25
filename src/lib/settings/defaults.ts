@@ -19,7 +19,6 @@ export const UI_SCALE_PRESETS = [0.8, 0.9, 1, 1.25, 1.5] as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
 	restoreLastVault: true,
-	confirmBeforeClose: false,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
@@ -33,14 +32,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	editorFontSize: 14,
 	uiScale: 1,
 	showEditorToolbar: true,
-	agentEnabled: true,
 	agentPermissionMode: "restricted",
 	autoPaperReader: false,
 	aiResponseLanguage: "auto",
 	agentPersonalPrompt: "",
 	pdfAsk: { ...DEFAULT_PDF_ASK_SETTINGS },
-	analyticsEnabled: false,
-	shareCrashReports: false,
 	translate: { ...DEFAULT_TRANSLATE_SETTINGS },
 };
 

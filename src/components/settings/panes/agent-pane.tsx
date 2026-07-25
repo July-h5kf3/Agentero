@@ -27,14 +27,12 @@ import {
 import {
 	PageTitle,
 	SettingsGroup,
-	SettingsRow,
 } from "@/components/settings/settings-layout";
 import type { SettingsHostContext } from "@/components/settings/types";
 import { useProbingKeys } from "@/components/settings/use-probing-keys";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	type AgentTemplate,
@@ -49,7 +47,6 @@ import {
 	probeCatalogAgent,
 	removeAgent,
 	scanCatalog,
-	setAgentEnabled,
 	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
@@ -243,20 +240,6 @@ export function AgentPane({
 		void refreshPdfAskRegistry();
 	}, [catalog, refreshPdfAskRegistry]);
 
-	const onToggleEnabled = async (v: boolean) => {
-		patch({ agentEnabled: v });
-		if (!isTauri()) return;
-		setLoading(true);
-		try {
-			await setAgentEnabled(v);
-			await scanOnce();
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setLoading(false);
-		}
-	};
-
 	/**
 	 * Persist proxy then force re-probe (host clears last_probe_* on change).
 	 * Proxy switch stays enabled during the batch.
@@ -366,13 +349,6 @@ export function AgentPane({
 		<>
 			<PageTitle title={t("agent.title")} />
 			<SettingsGroup>
-				<SettingsRow label={t("agent.enable.label")} htmlFor="agent-enabled">
-					<Switch
-						id="agent-enabled"
-						checked={settings.agentEnabled}
-						onCheckedChange={(v) => void onToggleEnabled(v)}
-					/>
-				</SettingsRow>
 				<AgentProxyRow
 					htmlFor="agent-proxy-enabled"
 					label={t("agent.proxy.label")}

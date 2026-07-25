@@ -4,7 +4,6 @@ import {
 	Keyboard,
 	Languages,
 	Paintbrush,
-	Shield,
 	SlidersHorizontal,
 	X,
 } from "lucide-react";
@@ -19,7 +18,6 @@ import {
 import { AppearancePane } from "@/components/settings/panes/appearance-pane";
 import { GeneralPane } from "@/components/settings/panes/general-pane";
 import { KeyboardPane } from "@/components/settings/panes/keyboard-pane";
-import { PrivacyPane } from "@/components/settings/panes/privacy-pane";
 import { TranslatePane } from "@/components/settings/panes/translate-pane";
 import type {
 	SettingsHostContext,
@@ -46,7 +44,6 @@ const NAV: {
 	{ id: "agent", icon: Bot },
 	{ id: "translate", icon: Languages },
 	{ id: "keyboard", icon: Keyboard },
-	{ id: "privacy", icon: Shield },
 	{ id: "about", icon: Info },
 ];
 
@@ -303,11 +300,6 @@ export function SettingsContent({
 					{visitedSections.includes("keyboard") && (
 						<div hidden={section !== "keyboard"}>
 							<KeyboardPane />
-						</div>
-					)}
-					{visitedSections.includes("privacy") && (
-						<div hidden={section !== "privacy"}>
-							<PrivacyPane settings={settings} patch={patch} />
 						</div>
 					)}
 					{visitedSections.includes("about") && (

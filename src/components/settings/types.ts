@@ -4,7 +4,6 @@ export type SettingsSection =
 	| "agent"
 	| "translate"
 	| "keyboard"
-	| "privacy"
 	| "about";
 
 /** Which machine the Agent catalog / probe targets. */

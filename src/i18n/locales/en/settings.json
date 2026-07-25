@@ -1,6 +1,5 @@
 {
 	"title": "Settings",
-	"dismiss": "Dismiss settings",
 	"host": {
 		"thisComputer": "This computer",
 		"remote": "Remote",
@@ -14,16 +13,12 @@
 		"agent": "Agent",
 		"translate": "Translate",
 		"keyboard": "Keyboard",
-		"privacy": "Privacy",
 		"about": "About"
 	},
 	"general": {
 		"title": "General",
 		"restoreVault": {
 			"label": "Restore last vault"
-		},
-		"confirmClose": {
-			"label": "Confirm before quit"
 		},
 		"paperTreeLabelMode": {
 			"label": "Paper labels in file tree",
@@ -109,9 +104,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"enable": {
-			"label": "Enable Agent"
-		},
 		"proxy": {
 			"label": "Agent proxy"
 		},
@@ -238,15 +230,6 @@
 	},
 	"keyboard": {
 		"title": "Keyboard"
-	},
-	"privacy": {
-		"title": "Privacy",
-		"analytics": {
-			"label": "Analytics"
-		},
-		"crash": {
-			"label": "Crash reports"
-		}
 	},
 	"about": {
 		"title": "About",

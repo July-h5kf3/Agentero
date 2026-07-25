@@ -33,12 +33,6 @@ pub fn settings_set(
     }
 }
 
-/// Absolute path to the settings file (for About / diagnostics).
-#[tauri::command]
-pub fn settings_path(store: State<'_, AppSettingsStore>) -> ApiResult<String> {
-    ApiResult::ok(store.path().to_string_lossy().into_owned())
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostIdentity {

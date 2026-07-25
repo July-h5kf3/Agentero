@@ -289,13 +289,6 @@ export async function setDefaultAgent(
 	return invokeAgentApi("agent_set_default", { id });
 }
 
-export async function setAgentEnabled(enabled: boolean): Promise<boolean> {
-	const res = await invokeAgentApi<{ enabled: boolean }>("agent_set_enabled", {
-		enabled,
-	});
-	return res.enabled;
-}
-
 export async function setAgentProxy(
 	proxyEnabled: boolean,
 	proxyUrl: string,

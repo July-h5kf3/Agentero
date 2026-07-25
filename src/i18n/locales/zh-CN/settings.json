@@ -1,6 +1,5 @@
 {
 	"title": "设置",
-	"dismiss": "关闭设置",
 	"host": {
 		"thisComputer": "本机",
 		"remote": "远端",
@@ -14,16 +13,12 @@
 		"agent": "Agent",
 		"translate": "翻译",
 		"keyboard": "键盘",
-		"privacy": "隐私",
 		"about": "关于"
 	},
 	"general": {
 		"title": "通用",
 		"restoreVault": {
 			"label": "恢复上次的知识库"
-		},
-		"confirmClose": {
-			"label": "退出前确认"
 		},
 		"paperTreeLabelMode": {
 			"label": "文件树论文显示",
@@ -109,9 +104,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"enable": {
-			"label": "启用 Agent"
-		},
 		"proxy": {
 			"label": "Agent 代理"
 		},
@@ -238,15 +230,6 @@
 	},
 	"keyboard": {
 		"title": "键盘"
-	},
-	"privacy": {
-		"title": "隐私",
-		"analytics": {
-			"label": "使用分析"
-		},
-		"crash": {
-			"label": "崩溃报告"
-		}
 	},
 	"about": {
 		"title": "关于",

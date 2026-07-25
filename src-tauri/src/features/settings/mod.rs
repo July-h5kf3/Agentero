@@ -17,8 +17,6 @@ pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 pub struct AppSettings {
     #[serde(default = "default_true")]
     pub restore_last_vault: bool,
-    #[serde(default)]
-    pub confirm_before_close: bool,
     #[serde(default = "default_translator_base_url")]
     pub translator_base_url: String,
     #[serde(default = "default_paper_tree_label_mode")]
@@ -45,8 +43,6 @@ pub struct AppSettings {
     pub ui_scale: f64,
     #[serde(default = "default_true")]
     pub show_editor_toolbar: bool,
-    #[serde(default = "default_true")]
-    pub agent_enabled: bool,
     #[serde(default = "default_permission_mode")]
     pub agent_permission_mode: String,
     #[serde(default)]
@@ -57,10 +53,6 @@ pub struct AppSettings {
     pub agent_personal_prompt: String,
     #[serde(default)]
     pub pdf_ask: PdfAskSettings,
-    #[serde(default)]
-    pub analytics_enabled: bool,
-    #[serde(default)]
-    pub share_crash_reports: bool,
     #[serde(default)]
     pub translate: TranslateSettings,
 }
@@ -119,7 +111,6 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             restore_last_vault: true,
-            confirm_before_close: false,
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
@@ -133,14 +124,11 @@ impl Default for AppSettings {
             editor_font_size: default_editor_font_size(),
             ui_scale: default_ui_scale(),
             show_editor_toolbar: true,
-            agent_enabled: true,
             agent_permission_mode: default_permission_mode(),
             auto_paper_reader: false,
             ai_response_language: default_ai_response_language(),
             agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),
-            analytics_enabled: false,
-            share_crash_reports: false,
             translate: TranslateSettings::default(),
         }
     }

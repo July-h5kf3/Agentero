@@ -102,7 +102,6 @@
 		"reportedTooltip": "Agent 上报模型后将在此显示",
 		"loading": "加载中……",
 		"button": "模型",
-		"title": "选择模型",
 		"searchPlaceholder": "搜索模型……",
 		"emptyNone": "暂无模型。先运行一次，让 ACP Agent 上报可用模型。",
 		"emptyNoMatch": "无匹配项。"
