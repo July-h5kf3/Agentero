@@ -1,65 +1,15 @@
 //! Magic-wand / identifier import commands + catalog export/import via Translator.
-//! Also `paper_parse_body` (liteparse → PAPER.md).
 
 use crate::core::error::ApiResult;
 use crate::core::log_util::{trunc, OpTimer};
-use crate::features::import::pdf_parse::{self, PaperParseBodyArgs, PaperParseResult};
 use crate::features::import::{
-    AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportArgs,
-    LookupImportBatchArgs, LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs,
-    PaperExportArgs, PaperExportResult, PaperImportArgs, PaperImportResult, StageImportFileArgs,
-    StageImportFileResult, DEFAULT_TRANSLATOR_BASE_URL,
+    AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
+    LookupImportBatchResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
+    PaperImportArgs, PaperImportResult, StageImportFileArgs, StageImportFileResult,
 };
 use crate::features::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
-use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TranslatorConfig {
-    /// Placeholder base URL for Zotero translation-server.
-    pub default_base_url: String,
-}
-
-/// Return default Translator Runtime base URL (Settings default).
-#[tauri::command]
-pub fn lookup_translator_config() -> ApiResult<TranslatorConfig> {
-    ApiResult::ok(TranslatorConfig {
-        default_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
-    })
-}
-
-/// Resolve identifier via Translator (placeholder URL) and write paper into vault.
-/// Always downloads PDF; arXiv also downloads and unpacks LaTeX into `source/`.
-/// Remote vaults (`remote:<sessionId>`) stage locally then SFTP-upload + catalog push.
-#[tauri::command]
-pub async fn lookup_import(
-    app: tauri::AppHandle,
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: LookupImportArgs,
-) -> Result<ApiResult<LookupImportResult>, String> {
-    let id = trunc(&args.text, 80);
-    let op = OpTimer::start_with("lookup_import", format!("query={id}"));
-    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
-        let session = match registry.get(session_id).await {
-            Ok(s) => s,
-            Err(e) => {
-                op.finish_err(&e);
-                return Ok(crate::core::error::map_err(e));
-            }
-        };
-        return Ok(
-            op.finish_result(import_bridge::import_by_identifier_remote(session, args).await)
-        );
-    }
-    let task_id = args.task_id.clone();
-    let result = super::import_by_identifier_with_progress(args, Some(&app)).await;
-    if let Some(task_id) = task_id.as_deref() {
-        crate::features::agent::background_tasks::finish(task_id);
-    }
-    Ok(op.finish_result(result))
-}
 
 /// Batch resolve identifiers and write papers into vault.
 /// Deduplicates within the batch and against existing catalog entries.
@@ -155,31 +105,6 @@ pub fn paper_stage_import_file(args: StageImportFileArgs) -> ApiResult<StageImpo
     let name = trunc(&args.file_name, 80);
     let op = OpTimer::start_with("paper_stage_import_file", format!("name={name}"));
     op.finish_result(super::stage_import_file(args))
-}
-
-/// Generate PAPER.md from PDF via liteparse when the paper has no TeX.
-/// Remote vaults: pull PDF to work mirror → parse → SFTP put `PAPER.md`.
-
-#[tauri::command]
-pub async fn paper_parse_body(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: PaperParseBodyArgs,
-) -> Result<ApiResult<PaperParseResult>, String> {
-    let path = trunc(&args.path, 120);
-    let op = OpTimer::start_with("paper_parse_body", format!("path={path}"));
-    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
-        let session = match registry.get(session_id).await {
-            Ok(s) => s,
-            Err(e) => {
-                op.finish_err(&e);
-                return Ok(crate::core::error::map_err(e));
-            }
-        };
-        return Ok(op.finish_result(
-            import_bridge::parse_paper_body_remote(session, &args.path, args.force).await,
-        ));
-    }
-    Ok(op.finish_result(pdf_parse::parse_paper_body(args).await))
 }
 
 /// Export catalog papers via Translator `POST /export` (Zotero JSON array → BibTeX/RIS/…).

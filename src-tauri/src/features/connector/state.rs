@@ -241,21 +241,6 @@ impl ConnectorController {
         Ok((handle, g.parent_dir.clone()))
     }
 
-    /// Local vault absolute path + parent (errors if remote or missing).
-    pub fn vault_and_parent(&self) -> Result<(PathBuf, String), AppError> {
-        let (handle, parent) = self.vault_handle_and_parent()?;
-        if handle.starts_with("remote:") {
-            return Err(AppError::message(
-                "use remote import path for remote vault handles",
-            ));
-        }
-        let vault = PathBuf::from(&handle);
-        if !vault.is_dir() {
-            return Err(AppError::message("Vault path is not a directory"));
-        }
-        Ok((vault, parent))
-    }
-
     pub fn is_remote_vault(&self) -> bool {
         self.inner
             .lock()
@@ -389,10 +374,6 @@ impl ConnectorController {
             g.listening = false;
         }
         self.running.store(false, Ordering::SeqCst);
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
     }
 
     pub fn create_session(

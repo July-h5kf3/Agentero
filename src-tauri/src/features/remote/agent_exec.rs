@@ -4,8 +4,7 @@
 //! OpenSSH so `~/.ssh/config`, agent, and ProxyJump work.
 
 use crate::core::error::AppError;
-use std::process::Stdio;
-use tokio::process::{Child, Command};
+use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -118,37 +117,6 @@ fn shell_quote(s: &str) -> String {
         return s.to_string();
     }
     format!("'{}'", s.replace('\'', "'\"'\"'"))
-}
-
-/// Destination for OpenSSH: `host` or `user@host`.
-pub async fn spawn_remote_agent(
-    destination: &str,
-    remote_cwd: &str,
-    command: &str,
-    args: &[String],
-) -> Result<Child, AppError> {
-    let remote = remote_agent_shell_command(remote_cwd, command, args, &[]);
-    let mut cmd = Command::new("ssh");
-    cmd.arg("-T")
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg(format!("ConnectTimeout={}", SSH_CONNECT_TIMEOUT.as_secs()))
-        .arg("-o")
-        .arg(format!(
-            "ServerAliveInterval={SSH_SERVER_ALIVE_INTERVAL_SECS}"
-        ))
-        .arg("-o")
-        .arg(format!("ServerAliveCountMax={SSH_SERVER_ALIVE_COUNT_MAX}"))
-        .arg(destination)
-        .arg(remote)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-
-    cmd.spawn()
-        .map_err(|e| AppError::message(format!("ssh spawn agent: {e}")))
 }
 
 /// Remote kernel name via `uname -s` (login shell), mapped to a Settings OS family.

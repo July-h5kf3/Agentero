@@ -1,6 +1,6 @@
 //! Recycle-bin commands: undoable delete + restore (local + remote).
 
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::{map_err, ApiResult};
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::remote::{parse_remote_handle, trash_bridge, RemoteRegistry};
 use crate::features::trash;
@@ -57,64 +57,6 @@ pub async fn path_trash(
                     res.count
                 ));
                 Ok(ApiResult::ok(res))
-            }
-            Err(e) => {
-                op.finish_err(&e);
-                Ok(map_err(e))
-            }
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PathUntrashArgs {
-    pub vault_path: String,
-    /// Batch id returned by `path_trash`.
-    pub batch_id: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PathUntrashResult {
-    /// Number of items restored to their original location.
-    pub restored: usize,
-}
-
-/// Restore a recycle-bin batch (undo a delete).
-#[tauri::command]
-pub async fn path_untrash(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: PathUntrashArgs,
-) -> Result<ApiResult<PathUntrashResult>, String> {
-    let op = OpTimer::start_with(
-        "path_untrash",
-        format!("batch_id={}", trunc(&args.batch_id, 40)),
-    );
-    if let Some(sid) = parse_remote_handle(args.vault_path.trim()) {
-        let session = match registry.get(sid).await {
-            Ok(s) => s,
-            Err(e) => {
-                op.finish_err(&e);
-                return Ok(map_err(e));
-            }
-        };
-        match trash_bridge::restore_batch(&session, &args.batch_id).await {
-            Ok(restored) => {
-                op.finish_ok_extra(format!("restored={restored}"));
-                Ok(ApiResult::ok(PathUntrashResult { restored }))
-            }
-            Err(e) => {
-                op.finish_err(&e);
-                Ok(map_err(e))
-            }
-        }
-    } else {
-        let vault = PathBuf::from(args.vault_path.trim());
-        match trash::restore_batch(&vault, &args.batch_id) {
-            Ok(restored) => {
-                op.finish_ok_extra(format!("restored={restored}"));
-                Ok(ApiResult::ok(PathUntrashResult { restored }))
             }
             Err(e) => {
                 op.finish_err(&e);
@@ -303,7 +245,3 @@ pub async fn path_purge_item(
         }
     }
 }
-
-// Silence unused import when only used in type position in some builds.
-#[allow(dead_code)]
-fn _unused_app_error(_: AppError) {}

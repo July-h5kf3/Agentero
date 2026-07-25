@@ -1,12 +1,12 @@
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::agent::models::{
-    AgentDescriptor, AgentListResponse, AgentSkill, AgentTemplateInfo, CatalogScanResponse,
-    ProbeResult, RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
+    AgentDescriptor, AgentListResponse, AgentSkill, CatalogScanResponse, ProbeResult,
+    RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
 use crate::features::agent::templates::template_info;
 use crate::features::agent::{
-    builtin_templates, list_agent_skills, new_ids, probe_agent, run_once, warm_agent,
-    AgentEventEmitter, AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
+    list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
+    AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
 use crate::features::terminal;
@@ -19,12 +19,6 @@ use tauri::{Manager, State};
 #[serde(rename_all = "camelCase")]
 pub struct AgentOnly {
     pub agent: AgentDescriptor,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TemplatesResponse {
-    pub templates: Vec<AgentTemplateInfo>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,13 +48,6 @@ pub fn agent_list_agents(registry: State<'_, AgentRegistry>) -> ApiResult<AgentL
         Ok(s) => ApiResult::ok(list_from_state(s)),
         Err(e) => map_err(e),
     }
-}
-
-#[tauri::command]
-pub fn agent_list_templates() -> ApiResult<TemplatesResponse> {
-    ApiResult::ok(TemplatesResponse {
-        templates: builtin_templates(),
-    })
 }
 
 #[tauri::command]
@@ -161,20 +148,6 @@ pub fn agent_set_proxy(
             proxy_enabled: s.proxy_enabled,
             proxy_url: s.proxy_url,
         }),
-        Err(e) => map_err(e),
-    }
-}
-
-#[tauri::command]
-pub fn agent_discover(
-    registry: State<'_, AgentRegistry>,
-    id: Option<String>,
-) -> ApiResult<AgentListResponse> {
-    match registry.discover(id.as_deref()) {
-        Ok(_) => match registry.snapshot() {
-            Ok(s) => ApiResult::ok(list_from_state(s)),
-            Err(e) => map_err(e),
-        },
         Err(e) => map_err(e),
     }
 }

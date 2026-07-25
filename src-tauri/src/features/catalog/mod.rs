@@ -7,7 +7,6 @@
 pub mod papers;
 mod schema;
 
-#[allow(unused_imports)] // public surface for tests / future commands
 pub use schema::{catalog_db_path, ensure_catalog, schema_version, SCHEMA_VERSION};
 
 pub mod commands;

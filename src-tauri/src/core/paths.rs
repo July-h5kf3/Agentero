@@ -48,11 +48,6 @@ pub fn agentero_config_dir() -> PathBuf {
     xdg_config_home().join("agentero")
 }
 
-/// `$XDG_CACHE_HOME/agentero`.
-pub fn agentero_cache_dir() -> PathBuf {
-    xdg_cache_home().join("agentero")
-}
-
 /// App settings file: `…/agentero/settings.json`.
 pub fn settings_path() -> PathBuf {
     agentero_config_dir().join("settings.json")

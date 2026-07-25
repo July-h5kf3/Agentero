@@ -4,13 +4,11 @@
 //! (same pattern as `agent_probe`).
 
 use crate::core::error::{map_err, ApiResult, AppError};
-use crate::core::fs::{FsDirEntry, FsFileMeta, WriteOpts};
+use crate::core::fs::{FsDirEntry, WriteOpts};
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::catalog::papers::{self, PaperRecord};
 use crate::features::remote::agent_exec;
-use crate::features::remote::{
-    ensure_remote_vault_skills, parse_remote_handle, RemoteRegistry, RemoteSessionInfo,
-};
+use crate::features::remote::{ensure_remote_vault_skills, RemoteRegistry, RemoteSessionInfo};
 use crate::features::vault::CreateVaultResult;
 use serde::Deserialize;
 use serde::Serialize;
@@ -100,17 +98,6 @@ pub async fn remote_disconnect(
     }
 }
 
-#[tauri::command]
-pub async fn remote_status(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemoteSessionArgs,
-) -> Result<ApiResult<RemoteSessionInfo>, String> {
-    match registry.get(&args.session_id).await {
-        Ok(s) => Ok(ApiResult::ok(s.info())),
-        Err(e) => Ok(map_err(e)),
-    }
-}
-
 /// Ensure missing bundled skills in a remote vault without overwriting user files.
 #[tauri::command]
 pub async fn remote_vault_ensure(
@@ -145,21 +132,6 @@ pub async fn remote_list(
         Err(e) => return Ok(map_err(e)),
     };
     match session.fs.list(&args.path).await {
-        Ok(v) => Ok(ApiResult::ok(v)),
-        Err(e) => Ok(map_err(e)),
-    }
-}
-
-#[tauri::command]
-pub async fn remote_stat(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemotePathArgs,
-) -> Result<ApiResult<FsFileMeta>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
-    match session.fs.stat(&args.path).await {
         Ok(v) => Ok(ApiResult::ok(v)),
         Err(e) => Ok(map_err(e)),
     }
@@ -212,21 +184,6 @@ pub async fn remote_write_text(
         .await
     {
         Ok(()) => Ok(ApiResult::ok(())),
-        Err(e) => Ok(map_err(e)),
-    }
-}
-
-#[tauri::command]
-pub async fn remote_read_bytes(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemotePathArgs,
-) -> Result<ApiResult<Vec<u8>>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
-    match session.fs.read(&args.path).await {
-        Ok(v) => Ok(ApiResult::ok(v)),
         Err(e) => Ok(map_err(e)),
     }
 }
@@ -311,45 +268,6 @@ pub struct RemotePaperGetArgs {
     pub path: Option<String>,
     #[serde(default)]
     pub id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemotePaperDeleteArgs {
-    pub session_id: String,
-    pub path: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemotePaperDeleteResult {
-    pub removed: usize,
-}
-
-#[tauri::command]
-pub async fn remote_paper_delete(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemotePaperDeleteArgs,
-) -> Result<ApiResult<RemotePaperDeleteResult>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
-    let path = args.path.trim().trim_matches('/').replace('\\', "/");
-    if path.is_empty() {
-        return Ok(map_err(AppError::message("path is required")));
-    }
-    let removed = match papers::delete_under_path(&session.work_root, &path) {
-        Ok(n) => n,
-        Err(e) => return Ok(map_err(e)),
-    };
-    {
-        let mut cat = session.catalog.lock().await;
-        if let Err(e) = cat.push(session.fs.clone()).await {
-            return Ok(map_err(e));
-        }
-    }
-    Ok(ApiResult::ok(RemotePaperDeleteResult { removed }))
 }
 
 #[tauri::command]
@@ -719,28 +637,6 @@ async fn remote_rescan_impl(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RemoteAgentDiscoverArgs {
-    pub session_id: String,
-    #[serde(default)]
-    pub bins: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteAgentDiscoverResult {
-    pub destination: String,
-    pub found: Vec<RemoteAgentBin>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteAgentBin {
-    pub bin: String,
-    pub path: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RemoteAgentScanArgs {
     pub session_id: String,
 }
@@ -931,73 +827,4 @@ pub async fn remote_agent_open_install_terminal(
         Ok(()) => Ok(ApiResult::ok(serde_json::Value::Null)),
         Err(e) => Ok(map_err(e)),
     }
-}
-
-#[tauri::command]
-pub async fn remote_agent_discover(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemoteAgentDiscoverArgs,
-) -> Result<ApiResult<RemoteAgentDiscoverResult>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
-    if session.kind == "local-sim" {
-        let bins = if args.bins.is_empty() {
-            vec![
-                "opencode".into(),
-                "claude-agent-acp".into(),
-                "codex".into(),
-                "qodercli".into(),
-            ]
-        } else {
-            args.bins
-        };
-        let mut found = Vec::new();
-        for bin in bins {
-            if let Ok(path) = which::which(&bin) {
-                found.push(RemoteAgentBin {
-                    bin: bin.clone(),
-                    path: path.display().to_string(),
-                });
-            }
-        }
-        return Ok(ApiResult::ok(RemoteAgentDiscoverResult {
-            destination: "local-sim".into(),
-            found,
-        }));
-    }
-
-    let destination = session.host.clone();
-    let bins = if args.bins.is_empty() {
-        vec![
-            "opencode".into(),
-            "claude-agent-acp".into(),
-            "codex".into(),
-            "qodercli".into(),
-        ]
-    } else {
-        args.bins
-    };
-    let mut found = Vec::new();
-    for bin in bins {
-        match agent_exec::remote_which(&destination, &bin).await {
-            Ok(Some(path)) => found.push(RemoteAgentBin { bin, path }),
-            Ok(None) => {}
-            Err(e) => return Ok(map_err(e)),
-        }
-    }
-    Ok(ApiResult::ok(RemoteAgentDiscoverResult {
-        destination,
-        found,
-    }))
-}
-
-#[allow(dead_code)]
-pub async fn session_from_vault_handle(
-    registry: &RemoteRegistry,
-    vault_handle: &str,
-) -> Result<Arc<crate::features::remote::RemoteSession>, AppError> {
-    let id = parse_remote_handle(vault_handle).unwrap_or(vault_handle);
-    registry.get(id).await
 }
