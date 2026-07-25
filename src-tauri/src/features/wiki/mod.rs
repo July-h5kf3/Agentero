@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod embed;
 pub mod extract;
+mod heading_rename;
 pub mod index;
 pub mod models;
 pub mod rename;

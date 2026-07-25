@@ -26,7 +26,7 @@ pub struct WikiRenameError {
 }
 
 impl WikiRenameError {
-    fn new(code: WikiRenameErrorCode, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: WikiRenameErrorCode, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -34,7 +34,7 @@ impl WikiRenameError {
         }
     }
 
-    fn after_mutation(
+    pub(crate) fn after_mutation(
         code: WikiRenameErrorCode,
         message: impl Into<String>,
         rollback: WikiRenameRollback,
@@ -606,7 +606,7 @@ pub fn run_prepared_external_rename_repair(
     Ok(result)
 }
 
-fn normalize_vault_path(path: &str) -> Result<String, WikiRenameError> {
+pub(crate) fn normalize_vault_path(path: &str) -> Result<String, WikiRenameError> {
     let path = path.trim().replace('\\', "/");
     let path = path.trim_matches('/');
     if path.is_empty() {
@@ -701,7 +701,7 @@ fn component_name(component: Component<'_>) -> Option<&str> {
     }
 }
 
-fn content_hash(content: &str) -> String {
+pub(crate) fn content_hash(content: &str) -> String {
     hex::encode(Sha256::digest(content.as_bytes()))
 }
 
@@ -713,7 +713,7 @@ fn apply_edits(content: &str, edits: &[PlannedEdit]) -> String {
     rewritten
 }
 
-fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("{} has no parent", path.display()))?;

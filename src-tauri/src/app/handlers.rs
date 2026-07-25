@@ -30,6 +30,7 @@ macro_rules! common_commands {
             crate::features::wiki::commands::wiki_resolve,
             crate::features::wiki::commands::wiki_embed_read,
             crate::features::wiki::commands::wiki_search,
+            crate::features::wiki::commands::wiki_rename_heading,
             crate::features::wiki::commands::graph_get_graph,
             crate::features::wiki::commands::graph_rebuild,
             crate::features::vault::commands::vault_create,

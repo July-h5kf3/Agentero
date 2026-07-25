@@ -311,6 +311,7 @@ pub fn resolve_target(target_raw: &str, vault_files: &[String]) -> Option<String
         display_text: None,
         fragment: None,
         source_range: crate::features::wiki::models::SourceRange { start: 0, end: 0 },
+        fragment_range: None,
         line: 0,
         context: None,
     };
@@ -343,6 +344,7 @@ mod tests {
                 start: 0,
                 end: target.len(),
             },
+            fragment_range: None,
             line: 1,
             context: None,
         }

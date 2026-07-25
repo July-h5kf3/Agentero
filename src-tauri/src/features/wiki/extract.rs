@@ -101,9 +101,13 @@ fn parse_wikilink(
         let value = body[alias_split + 1..].trim();
         (!value.is_empty()).then_some(value.to_string())
     };
-    let (target_part, fragment_raw) = match main.find('#') {
-        Some(index) => (&main[..index], Some(&main[index + 1..])),
-        None => (main, None),
+    let (target_part, fragment_raw, fragment_offset) = match main.find('#') {
+        Some(index) => (
+            &main[..index],
+            Some(&main[index + 1..]),
+            Some(body_start + main_start + index + 1),
+        ),
+        None => (main, None, None),
     };
     let (target_start, target_end) = trim_bounds(target_part);
     let target_raw = target_part[target_start..target_end].to_string();
@@ -112,6 +116,13 @@ fn parse_wikilink(
         return None;
     }
     let target_offset = body_start + main_start + target_start;
+    let fragment_range = fragment_raw.zip(fragment_offset).and_then(|(raw, offset)| {
+        let (start, end) = trim_bounds(raw);
+        (start < end).then_some(SourceRange {
+            start: offset + start,
+            end: offset + end,
+        })
+    });
     Some(InternalLinkOccurrence {
         source: source_path.to_string(),
         target_raw,
@@ -123,6 +134,7 @@ fn parse_wikilink(
             start: target_offset,
             end: target_offset + target_part[target_start..target_end].len(),
         },
+        fragment_range,
         line,
         context,
     })
@@ -165,9 +177,13 @@ fn parse_markdown_link(
     if destination.is_empty() || looks_external_markdown_target(destination) {
         return None;
     }
-    let (target_part, fragment_raw) = match destination.find('#') {
-        Some(index) => (&destination[..index], Some(&destination[index + 1..])),
-        None => (destination, None),
+    let (target_part, fragment_raw, fragment_index) = match destination.find('#') {
+        Some(index) => (
+            &destination[..index],
+            Some(&destination[index + 1..]),
+            Some(index + 1),
+        ),
+        None => (destination, None, None),
     };
     let fragment = fragment_raw.and_then(parse_fragment);
     if target_part.trim().is_empty() && fragment.is_none() {
@@ -176,6 +192,13 @@ fn parse_markdown_link(
     let raw_dest = source[destination_start..destination_end].trim();
     let leading = raw_dest.len() - raw_dest.trim_start().len();
     let target_offset = destination_start + leading + angle_offset;
+    let fragment_range = fragment_raw.zip(fragment_index).and_then(|(raw, index)| {
+        let (start, end) = trim_bounds(raw);
+        (start < end).then_some(SourceRange {
+            start: target_offset + index + start,
+            end: target_offset + index + end,
+        })
+    });
     Some(InternalLinkOccurrence {
         source: occurrence_context.source_path.to_string(),
         target_raw: target_part.trim().to_string(),
@@ -187,6 +210,7 @@ fn parse_markdown_link(
             start: target_offset,
             end: target_offset + target_part.len(),
         },
+        fragment_range,
         line: occurrence_context.line,
         context: occurrence_context.context.clone(),
     })
@@ -236,14 +260,36 @@ fn parse_frontmatter_aliases(markdown: &str) -> (usize, Vec<String>) {
     (0, Vec::new())
 }
 
-fn parse_heading(line: &str) -> Option<(usize, String)> {
+/// Parse one ATX heading and retain the exact byte range of its visible text.
+/// The range excludes indentation, `#` markers, surrounding whitespace, and
+/// optional closing markers so a heading rename can preserve the rest of the
+/// source line byte-for-byte.
+pub(crate) fn parse_heading_source(
+    line: &str,
+    line_start: usize,
+) -> Option<(usize, String, SourceRange)> {
     let trimmed = line.trim_start();
+    let leading = line.len() - trimmed.len();
     let hashes = trimmed.bytes().take_while(|byte| *byte == b'#').count();
     if !(1..=6).contains(&hashes) || trimmed.as_bytes().get(hashes) != Some(&b' ') {
         return None;
     }
-    let text = trimmed[hashes..].trim().trim_end_matches('#').trim();
-    (!text.is_empty()).then_some((hashes, text.to_string()))
+    let body = &trimmed[hashes..];
+    let body_start = body.len() - body.trim_start().len();
+    let visible = body.trim_start().trim_end();
+    let visible = visible.trim_end_matches('#').trim_end();
+    if visible.is_empty() {
+        return None;
+    }
+    let start = line_start + leading + hashes + body_start;
+    Some((
+        hashes,
+        visible.to_string(),
+        SourceRange {
+            start,
+            end: start + visible.len(),
+        },
+    ))
 }
 
 fn collect_block_ids(line: &str, line_no: u32, blocks: &mut Vec<BlockAnchor>) {
@@ -391,7 +437,7 @@ pub fn extract_document(
             continue;
         }
         if !in_fence {
-            if let Some((level, text)) = parse_heading(content) {
+            if let Some((level, text, _)) = parse_heading_source(content, byte_start) {
                 heading_stack.truncate(level);
                 while heading_stack.len() < level {
                     heading_stack.push(None);
@@ -450,6 +496,32 @@ mod tests {
         assert_eq!(document.blocks[1].id, "验收块");
         assert_eq!(document.blocks[1].preview, "中文块");
         assert_eq!(links.len(), 3);
+        assert_eq!(
+            &source[links[0]
+                .fragment_range
+                .as_ref()
+                .expect("wikilink fragment range")
+                .start
+                ..links[0]
+                    .fragment_range
+                    .as_ref()
+                    .expect("wikilink fragment range")
+                    .end],
+            "Root#Child"
+        );
+        assert_eq!(
+            &source[links[2]
+                .fragment_range
+                .as_ref()
+                .expect("markdown fragment range")
+                .start
+                ..links[2]
+                    .fragment_range
+                    .as_ref()
+                    .expect("markdown fragment range")
+                    .end],
+            "Root"
+        );
         assert!(matches!(
             links[0].fragment,
             Some(LinkFragment::Heading { .. })
@@ -469,9 +541,15 @@ mod tests {
 
     #[test]
     fn accepts_same_file_block_fragments() {
-        let (_, links) = extract_document("notes/source.md", "[[#^summary]]");
+        let source = "[[#^summary]]";
+        let (_, links) = extract_document("notes/source.md", source);
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].target_raw, "");
+        let range = links[0]
+            .fragment_range
+            .as_ref()
+            .expect("same-file fragment range");
+        assert_eq!(&source[range.start..range.end], "^summary");
         assert!(matches!(
             links[0].fragment,
             Some(LinkFragment::Block { .. })

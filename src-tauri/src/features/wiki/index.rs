@@ -151,6 +151,10 @@ pub struct WikiIndex {
 }
 
 impl WikiIndex {
+    pub(crate) fn document(&self, path: &str) -> Option<&WikiDocument> {
+        self.documents.iter().find(|document| document.path == path)
+    }
+
     pub fn rebuild(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
         let root = PathBuf::from(vault_path);
         if !root.is_dir() {
@@ -303,6 +307,7 @@ impl WikiIndex {
                     start: 0,
                     end: text.len(),
                 },
+                fragment_range: None,
                 line: 1,
                 context: None,
             }

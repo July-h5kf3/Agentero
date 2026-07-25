@@ -28,6 +28,7 @@ export type InternalLinkOccurrence = {
 	displayText?: string;
 	fragment?: LinkFragment;
 	sourceRange: { start: number; end: number };
+	fragmentRange?: { start: number; end: number };
 	line: number;
 	context?: string;
 };
@@ -89,6 +90,22 @@ export type WikiRenameResult = {
 	movedPath: string;
 	updatedSources: string[];
 	skipped: WikiRenameSkipped[];
+	rollback: WikiRenameRollback;
+};
+
+export type WikiRenameHeadingRequest = {
+	path: string;
+	headingPath: string[];
+	headingLine: number;
+	expectedContent: string;
+	newText: string;
+};
+
+export type WikiRenameHeadingResult = {
+	path: string;
+	oldPath: string[];
+	newPath: string[];
+	updatedSources: string[];
 	rollback: WikiRenameRollback;
 };
 
@@ -174,6 +191,17 @@ export async function moveVaultPath(
 ): Promise<WikiRenameResult> {
 	return invokeWikiApi<WikiRenameResult>("wiki_move", {
 		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
+}
+
+/** Explicitly rename one saved heading and repair resolved heading fragments. */
+export async function renameWikiHeading(
+	vaultPath: string,
+	request: WikiRenameHeadingRequest,
+	dirtyPaths: string[],
+): Promise<WikiRenameHeadingResult> {
+	return invokeWikiApi<WikiRenameHeadingResult>("wiki_rename_heading", {
+		args: { vaultPath, ...request, dirtyPaths },
 	});
 }
 
