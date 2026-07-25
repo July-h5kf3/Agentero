@@ -72,7 +72,7 @@ pub fn looks_mostly_cjk(s: &str) -> bool {
     cjk > 0 && cjk >= letters
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslateTextArgs {
     pub text: String,
@@ -88,7 +88,7 @@ pub struct TranslateTextArgs {
     /// Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
     /// Settings probe uses a shorter value for snappy parallel checks.
     #[serde(default)]
-    pub timeout_ms: Option<u64>,
+    pub timeout_ms: Option<u32>,
 }
 
 fn default_source() -> String {
@@ -99,7 +99,7 @@ fn default_provider() -> String {
     "bing".to_string()
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslateTextResult {
     pub text: String,
@@ -213,9 +213,9 @@ fn lang_base(code: &str) -> &str {
 }
 
 /// Clamp optional timeout_ms to 1s–30s; default 30s.
-fn resolve_timeout(timeout_ms: Option<u64>) -> Duration {
+fn resolve_timeout(timeout_ms: Option<u32>) -> Duration {
     match timeout_ms {
-        Some(ms) => Duration::from_millis(ms.clamp(1_000, 30_000)),
+        Some(ms) => Duration::from_millis(u64::from(ms.clamp(1_000, 30_000))),
         None => Duration::from_secs(30),
     }
 }

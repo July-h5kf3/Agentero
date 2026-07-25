@@ -48,20 +48,18 @@ impl AppError {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorBody {
     pub code: String,
     pub message: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ApiResult<T: Serialize> {
+pub struct ApiResult<T> {
     pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<ErrorBody>,
 }
 

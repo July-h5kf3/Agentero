@@ -51,6 +51,9 @@ base64 = "0.22"
 urlencoding = "2"
 # Used by lookup batch import (all platforms); also needed by Unix remote vault.
 futures-util = "0.3.33"
+tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+specta = { version = "2.0.0-rc.22", features = ["derive"] }
+specta-typescript = "0.0.12"
 
 # openssh / sendfd are Unix-only (ControlMaster fd passing). Remote vault SFTP
 # is therefore unavailable on Windows until a portable backend lands.
