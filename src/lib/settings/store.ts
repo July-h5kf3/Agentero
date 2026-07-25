@@ -4,7 +4,7 @@ import { isTauri } from "@/lib/core/tauri";
 import {
 	isPaperTreeLabelMode,
 	isPaperTreeSortMode,
-} from "@/lib/paper/tree-label";
+} from "@/lib/paper/tree-modes";
 import {
 	DEFAULT_PDF_ASK_SETTINGS,
 	DEFAULT_SETTINGS,

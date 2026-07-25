@@ -6,9 +6,9 @@ import {
 	metadataPathForPaper,
 	notesPathForPaper,
 } from "@/lib/paper/paths";
-import type { FileNode } from "@/lib/vault";
-import { readVaultFile } from "@/lib/vault";
+import { readVaultFile } from "@/lib/vault/fs";
 import { treeFindNode } from "@/lib/vault/path";
+import type { FileNode } from "@/lib/vault/types";
 
 type NameKind = { name: string; kind?: "file" | "directory" | string };
 

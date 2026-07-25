@@ -291,7 +291,7 @@ export async function remotePaperRescan(
 export type RemoteAgentScanResponse = {
 	sessionId: string;
 	destination: string;
-	entries: import("@/lib/agent").CatalogEntry[];
+	entries: import("@/lib/agent/api").CatalogEntry[];
 };
 
 export async function remoteAgentScan(
@@ -312,8 +312,8 @@ export async function remoteAgentScan(
 export async function remoteAgentProbe(
 	sessionId: string,
 	templateId: string,
-): Promise<import("@/lib/agent").ProbeResult> {
-	return invokeApi<import("@/lib/agent").ProbeResult>(
+): Promise<import("@/lib/agent/api").ProbeResult> {
+	return invokeApi<import("@/lib/agent/api").ProbeResult>(
 		"remote_agent_probe",
 		{
 			args: { sessionId, templateId },

@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import { runBackgroundTask } from "@/lib/core/background-tasks";
+import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	canAttemptPdfDownload,
@@ -27,7 +28,6 @@ import {
 	readVaultFile,
 } from "@/lib/vault";
 import { basenameOf, normalizePathKey, treeFindNode } from "@/lib/vault/path";
-import { toVaultRelative } from "@/lib/wiki";
 import {
 	type DocTab,
 	NOTES_PLACEHOLDER,

@@ -1,9 +1,9 @@
 import { invokeApi } from "@/lib/core/ipc";
+import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import { withNormalizedTags } from "@/lib/paper/tags";
 import type { PaperMetadata } from "@/lib/paper/types";
-import { toVaultRelative } from "@/lib/wiki";
 
 function enrichArxivUrls(data: PaperMetadata): PaperMetadata {
 	if (!data.arxiv_id) return data;

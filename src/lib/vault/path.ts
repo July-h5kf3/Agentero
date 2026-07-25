@@ -4,6 +4,7 @@ import {
 	dirnameOf,
 	joinPath,
 	normalizePath,
+	toVaultRelative,
 } from "@/lib/core/path";
 import { isMarkdownPath } from "@/lib/vault/fs";
 import {
@@ -11,7 +12,6 @@ import {
 	isRemoteVaultHandle,
 } from "@/lib/vault/remote/remote-vault";
 import type { FileNode } from "@/lib/vault/types";
-import { toVaultRelative } from "@/lib/wiki";
 
 export function vaultRelativePath(
 	vaultRoot: string,

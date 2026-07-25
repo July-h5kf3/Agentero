@@ -8,7 +8,10 @@ import {
 	Folder,
 	ScrollText,
 } from "lucide-react";
-import { formatPaperTreeLabel, type PaperTreeLabelMode } from "@/lib/paper";
+import {
+	formatPaperTreeLabel,
+	type PaperTreeLabelMode,
+} from "@/lib/paper/tree-label";
 
 /**
  * Normalize a vault-relative (or absolute-looking) path for kind / icon lookup.

@@ -35,8 +35,8 @@ import {
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
 import { isTauri } from "@/lib/core/tauri";
-import { loadPaperMetadata } from "@/lib/paper";
 import { setPaperIsRead } from "@/lib/paper/api";
+import { loadPaperMetadata } from "@/lib/paper/load-meta";
 import { loadSettings } from "@/lib/settings";
 import { joinVaultPath } from "@/lib/vault";
 

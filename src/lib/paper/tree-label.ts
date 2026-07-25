@@ -1,62 +1,19 @@
 import { isPaperDirectory } from "@/lib/paper/detect";
+import type {
+	PaperTreeLabelMode,
+	PaperTreeSortMode,
+} from "@/lib/paper/tree-modes";
 import type { PaperMetadata } from "@/lib/paper/types";
-import type { FileNode } from "@/lib/vault";
+import type { FileNode } from "@/lib/vault/types";
 
-export type PaperTreeLabelMode =
-	| "title-author"
-	| "title"
-	| "author-year-title"
-	| "folder";
-
-export const PAPER_TREE_LABEL_MODES: readonly PaperTreeLabelMode[] = [
-	"title-author",
-	"title",
-	"author-year-title",
-	"folder",
-] as const;
-
-export function isPaperTreeLabelMode(v: unknown): v is PaperTreeLabelMode {
-	return (
-		typeof v === "string" &&
-		(PAPER_TREE_LABEL_MODES as readonly string[]).includes(v)
-	);
-}
-
-/**
- * How children under each folder are ordered in the file tree (Settings → General).
- * Display-only; does not rename or move disk folders.
- *
- * - `folder`: display label A–Z (uses `paperTreeLabelMode` for papers; org folders by name)
- * - `title` / `author`: catalog fields, missing → folder name
- * - `year-desc` / `year-asc`: publication year; missing year last
- * - `added-desc`: catalog `added_at` newest first; missing last
- *
- * Directories before files. `folder` mode mixes org folders and papers by name.
- * Other modes: org folders first (by name), then papers by the chosen key.
- */
-export type PaperTreeSortMode =
-	| "folder"
-	| "title"
-	| "author"
-	| "year-desc"
-	| "year-asc"
-	| "added-desc";
-
-export const PAPER_TREE_SORT_MODES: readonly PaperTreeSortMode[] = [
-	"folder",
-	"title",
-	"author",
-	"year-desc",
-	"year-asc",
-	"added-desc",
-] as const;
-
-export function isPaperTreeSortMode(v: unknown): v is PaperTreeSortMode {
-	return (
-		typeof v === "string" &&
-		(PAPER_TREE_SORT_MODES as readonly string[]).includes(v)
-	);
-}
+export {
+	isPaperTreeLabelMode,
+	isPaperTreeSortMode,
+	PAPER_TREE_LABEL_MODES,
+	PAPER_TREE_SORT_MODES,
+	type PaperTreeLabelMode,
+	type PaperTreeSortMode,
+} from "@/lib/paper/tree-modes";
 
 const LOCALE_CMP = { sensitivity: "base" as const };
 

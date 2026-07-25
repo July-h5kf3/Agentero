@@ -12,7 +12,7 @@ import type {
 	AgentStreamEvent,
 	AgentToolEvent,
 	CatalogScanResponse,
-} from "@/lib/agent";
+} from "@/lib/agent/api";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 

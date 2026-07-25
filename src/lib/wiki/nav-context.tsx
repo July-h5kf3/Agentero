@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import type { WikiNavTarget } from "@/lib/wiki";
+import type { WikiNavTarget } from "@/lib/wiki/api";
 
 export type WikiNavContextValue = {
 	onWikiNavigate: (nav: WikiNavTarget) => void;

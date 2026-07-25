@@ -1,7 +1,7 @@
 import type {
 	PaperTreeLabelMode,
 	PaperTreeSortMode,
-} from "@/lib/paper/tree-label";
+} from "@/lib/paper/tree-modes";
 import type {
 	TranslateProviderId,
 	TranslateSettings,
@@ -66,7 +66,6 @@ export type AiResponseLanguage = "auto" | "en" | "zh-CN";
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
-	confirmBeforeClose: boolean;
 	/**
 	 * Translator Runtime base URL for magic-wand / identifier import.
 	 * Default: hosted poco-ai service.
@@ -117,7 +116,6 @@ export type AppSettings = {
 	/** Show the WYSIWYG formatting toolbar above Markdown/notes editors. */
 	showEditorToolbar: boolean;
 	// Agent (local UI prefs; registry lives in Host agents.json)
-	agentEnabled: boolean;
 	/** Global permission handling applied to every agent run. */
 	agentPermissionMode: AgentPermissionMode;
 	/**
@@ -139,9 +137,6 @@ export type AppSettings = {
 	 * Empty agentId / modelId = follow app default agent / that agent's model pref.
 	 */
 	pdfAsk: PdfAskSettings;
-	// Privacy
-	analyticsEnabled: boolean;
-	shareCrashReports: boolean;
 	/** Application-level translation service (free MT + BYOA Agent). */
 	translate: TranslateSettings;
 };

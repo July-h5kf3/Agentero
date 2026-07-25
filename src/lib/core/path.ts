@@ -34,3 +34,18 @@ export function joinPath(parent: string, name: string): string {
 	const sep = parent.includes("\\") ? "\\" : "/";
 	return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
 }
+
+/** Strip vault root prefix when path is absolute. */
+export function toVaultRelative(
+	vaultPath: string | null,
+	path: string,
+): string {
+	const n = normalizeRelPath(path);
+	if (!vaultPath) {
+		return n;
+	}
+	const root = normalizeRelPath(vaultPath);
+	if (n === root) return "";
+	if (n.startsWith(`${root}/`)) return n.slice(root.length + 1);
+	return n;
+}

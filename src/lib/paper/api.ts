@@ -8,7 +8,8 @@ import i18n from "@/i18n";
 import { invokeApi } from "@/lib/core/ipc";
 import { normalizeRelPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
-import { type PaperMetadata, withNormalizedTags } from "@/lib/paper";
+import { withNormalizedTags } from "@/lib/paper/tags";
+import type { PaperMetadata } from "@/lib/paper/types";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
 import type { PaperTagInput } from "@/lib/ui/tag-colors";
 

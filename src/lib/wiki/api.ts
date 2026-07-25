@@ -1,8 +1,8 @@
 import { invokeApi } from "@/lib/core/ipc";
-import { normalizeRelPath } from "@/lib/core/path";
+import { normalizeRelPath, toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 
-export { normalizeRelPath as normalizeVaultRel };
+export { normalizeRelPath as normalizeVaultRel, toVaultRelative };
 
 export type Backlink = {
 	source: string;
@@ -53,21 +53,6 @@ async function invokeWikiApi<T>(
 	return invokeApi<T>(cmd, args, {
 		desktopOnly: "Wiki index requires the Tauri desktop app.",
 	});
-}
-
-/** Strip vault root prefix when path is absolute. */
-export function toVaultRelative(
-	vaultPath: string | null,
-	path: string,
-): string {
-	const n = normalizeRelPath(path);
-	if (!vaultPath) {
-		return n;
-	}
-	const root = normalizeRelPath(vaultPath);
-	if (n === root) return "";
-	if (n.startsWith(`${root}/`)) return n.slice(root.length + 1);
-	return n;
 }
 
 type Extracted = {
