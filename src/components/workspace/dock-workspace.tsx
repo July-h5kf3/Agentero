@@ -8,7 +8,7 @@
 import "dockview";
 import {
 	type DockviewApi,
-	DockviewDefaultTab,
+	type DockviewDefaultTab,
 	type DockviewDidDropEvent,
 	type DockviewDndOverlayEvent,
 	type DockviewPanelRenderer,
@@ -22,7 +22,9 @@ import {
 	type IDockviewPanel,
 	type IDockviewPanelProps,
 } from "dockview-react";
+import { FileCode2, X } from "lucide-react";
 import {
+	type ComponentProps,
 	createContext,
 	forwardRef,
 	memo,
@@ -32,8 +34,14 @@ import {
 	useImperativeHandle,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { AgenteroTabGroupChip } from "@/components/workspace/tab-group-chip";
 import { cn } from "@/lib/core/utils";
@@ -75,6 +83,7 @@ type WorkspaceCtx = {
 	activePanelId: string | null;
 	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
 	pdfKeepMountedIds: Set<string>;
+	onToggleHtmlMode: (panelId: string) => void;
 };
 
 const WorkspaceContext = createContext<WorkspaceCtx | null>(null);
@@ -107,8 +116,97 @@ function WorkspacePane(props: IDockviewPanelProps<{ panelId: string }>) {
 }
 
 const components = { pane: WorkspacePane };
-/** Alias so layout snapshots that stored tabComponent:"default" still resolve. */
-const tabComponents = { default: DockviewDefaultTab };
+
+function WorkspaceTab({
+	api,
+	containerApi: _containerApi,
+	params: _params,
+	onPointerDown,
+	onPointerUp,
+	onPointerLeave,
+	tabLocation: _tabLocation,
+	...rest
+}: ComponentProps<typeof DockviewDefaultTab>) {
+	const { t } = useTranslation("app");
+	const { tabsById, onToggleHtmlMode } = useWorkspace();
+	const [title, setTitle] = useState(api.title);
+	const middleClickRef = useRef(false);
+	const tab = tabsById.get(api.id) ?? null;
+	const canToggleHtml =
+		Boolean(tab?.htmlUrl) && (tab?.mode === "pdf" || tab?.mode === "html");
+
+	useEffect(() => {
+		const disposable = api.onDidTitleChange((event) => setTitle(event.title));
+		return () => disposable.dispose();
+	}, [api]);
+
+	const close = useCallback(() => api.close(), [api]);
+	const toggleHtml = useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			onToggleHtmlMode(api.id);
+		},
+		[api.id, onToggleHtmlMode],
+	);
+
+	return (
+		<div
+			{...rest}
+			className="dv-default-tab"
+			onPointerDown={(event) => {
+				middleClickRef.current = event.button === 1;
+				onPointerDown?.(event);
+			}}
+			onPointerUp={(event) => {
+				if (middleClickRef.current && event.button === 1) close();
+				middleClickRef.current = false;
+				onPointerUp?.(event);
+			}}
+			onPointerLeave={(event) => {
+				middleClickRef.current = false;
+				onPointerLeave?.(event);
+			}}
+		>
+			<span className="dv-default-tab-content">{title}</span>
+			{canToggleHtml ? (
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							className="dv-default-tab-action"
+							aria-label={
+								tab?.mode === "pdf" ? t("tabs.showHtml") : t("tabs.showPdf")
+							}
+							onPointerDown={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onClick={toggleHtml}
+						>
+							<FileCode2 className="size-3.5" />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{tab?.mode === "pdf" ? t("tabs.showHtml") : t("tabs.showPdf")}
+					</TooltipContent>
+				</Tooltip>
+			) : null}
+			<button
+				type="button"
+				className="dv-default-tab-action"
+				aria-label={t("tabs.close", { title })}
+				onPointerDown={(event) => event.preventDefault()}
+				onClick={() => close()}
+			>
+				<X className="size-3.5" />
+			</button>
+		</div>
+	);
+}
+
+/** Alias preserves layout snapshots that stored tabComponent:"default". */
+const tabComponents = { default: WorkspaceTab };
 
 /**
  * Map dockview drop Position → addPanel Direction.
@@ -270,6 +368,8 @@ type DockWorkspaceProps = {
 	onActivePanelChange: (panelId: string | null) => void;
 	onClosePanel: (panelId: string) => void;
 	onLayoutChange: (layout: unknown) => void;
+	/** Switch an HTML-backed paper panel between its PDF and HTML views. */
+	onToggleHtmlMode: (panelId: string) => void;
 	/** File-tree path drop into a split zone (title-bar tabs gone — only paths). */
 	onExternalDrop: (drop: WorkspaceExternalDrop) => void;
 	className?: string;
@@ -295,6 +395,7 @@ export const DockWorkspace = memo(
 			onActivePanelChange,
 			onClosePanel,
 			onLayoutChange,
+			onToggleHtmlMode,
 			onExternalDrop,
 			className,
 		},
@@ -315,6 +416,8 @@ export const DockWorkspace = memo(
 		onActiveRef.current = onActivePanelChange;
 		const onLayoutRef = useRef(onLayoutChange);
 		onLayoutRef.current = onLayoutChange;
+		const onToggleHtmlRef = useRef(onToggleHtmlMode);
+		onToggleHtmlRef.current = onToggleHtmlMode;
 		const onDropRef = useRef(onExternalDrop);
 		onDropRef.current = onExternalDrop;
 
@@ -380,6 +483,7 @@ export const DockWorkspace = memo(
 				activePanelId,
 				centerProps,
 				pdfKeepMountedIds: pdfKeepSet,
+				onToggleHtmlMode: (panelId) => onToggleHtmlRef.current(panelId),
 			}),
 			[tabsById, activePanelId, centerProps, pdfKeepSet],
 		);
@@ -659,7 +763,7 @@ export const DockWorkspace = memo(
 						theme={agenteroDockTheme}
 						components={components}
 						tabComponents={tabComponents}
-						defaultTabComponent={DockviewDefaultTab}
+						defaultTabComponent={WorkspaceTab}
 						disableFloatingGroups
 						// Tauri WKWebView: HTML5 DnD is unreliable; pointer covers mouse+touch.
 						// Floating/popout already disabled — no cross-window HTML5 drag needed.

@@ -444,6 +444,21 @@ export default function App() {
 		setTabs((prev) => patchTab(prev, id, patch));
 	}, []);
 
+	const toggleTabHtmlMode = useCallback((id: string) => {
+		setTabs((prev) =>
+			prev.map((tab) => {
+				if (
+					tab.id !== id ||
+					!tab.htmlUrl ||
+					(tab.mode !== "pdf" && tab.mode !== "html")
+				) {
+					return tab;
+				}
+				return { ...tab, mode: tab.mode === "pdf" ? "html" : "pdf" };
+			}),
+		);
+	}, []);
+
 	/**
 	 * When the strip would be empty with a Vault open, insert full Library.
 	 * Active focus is left to dockview (`onDidActivePanelChange` / sync end).
@@ -3538,6 +3553,7 @@ export default function App() {
 											onActivePanelChange={handleActivePanelChange}
 											onClosePanel={closeTab}
 											onLayoutChange={handleLayoutChange}
+											onToggleHtmlMode={toggleTabHtmlMode}
 											onExternalDrop={handleWorkspaceDrop}
 										/>
 									</div>

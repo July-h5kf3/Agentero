@@ -86,6 +86,8 @@
 	"tabs": {
 		"strip": "Open documents",
 		"close": "Close {{title}}",
+		"showHtml": "Show HTML version",
+		"showPdf": "Show PDF version",
 		"closeSplit": "Close split · {{title}}",
 		"contextClose": "Close",
 		"contextCloseOthers": "Close Others",

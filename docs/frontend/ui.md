@@ -316,6 +316,7 @@
 中间栏由 **单一全局 Dockview** 管理全部打开文档（`src/components/workspace/dock-workspace.tsx`、模型 `src/lib/workspace/tabs`）。**标题栏无文档 tab 条**。完整契约见 [`../development/tab-split.md`](../development/tab-split.md)。
 
 - **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
+- **论文 HTML 切换**：PDF tab 仅在 `htmlUrl` 可用时，于关闭按钮左侧显示 HTML 图标；点击在**同一 panel**内切换 PDF / HTML，不新增 tab；无 HTML 链接时不显示该图标。
 - **Tab 右键菜单**：关闭 / 关闭其他 / 关闭全部（**同组**）；新建标签组 / 从标签组移除（`getTabContextMenuItems`；文案走 i18n）。
 - **Tab 组**：chip **双击**内联重命名（或 `F2`）；右键重命名 / 染色 / 解散；单击折叠；chip **无底色**（仅图标+名）；**展开**时保留底部分组色线，**折叠**时不显示 chip 下色条。
 - **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **左右分屏**（首篇 `right`，后续叠到同两栏 `within`）；切换论文时同步切换其 NOTES tab。`dropOverlayModel` 调大 content 边激活区；未知外部拖拽由 `onWillShowOverlay` / `onWillDrop` 否决。

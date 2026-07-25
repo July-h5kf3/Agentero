@@ -59,7 +59,7 @@ export type DocTab = {
 中间栏一个 <DockWorkspace ref={workspaceRef}>
   └─ DockviewReact
        components.pane → DocView（params.panelId）
-       tabComponents.default → DockviewDefaultTab（原生标题/关闭）
+       tabComponents.default → WorkspaceTab（标题 / HTML 切换 / 关闭）
        tabs[] ↔ syncPanels（仅 membership：add 缺失 / remove 多余）
        title/mode → panel.api.setTitle / updateParameters（独立通道）
        openPanel(tab, placement) → api.addPanel({ position }) 命令式
@@ -70,7 +70,7 @@ export type DocTab = {
 
 | 能力 | 谁负责 |
 |---|---|
-| Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
+| Tab 标题 / 关闭 / 组内切换 | dockview 原生；有 `htmlUrl` 的 PDF/HTML panel 额外显示同 panel 的 HTML 切换图标 |
 | Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部 / 新建·移出标签组；**同组**；i18n；关闭经 `panel.api.close` → `onDidRemovePanel`） |
 | Tab 组染色 / 命名 | dockview tab groups：chip **双击**内联重命名（`tabGroupChipComponent`）+ 右键 `rename` / `colorPicker` / 解散；色板复用论文标签 `tag-colors`（+ grey）；随 `toJSON()` 持久化。视觉：chip **无底色**（图标+名）；**展开**保留底部分组色线，**折叠**无 chip 下色条 |
 | 键盘分屏导航 | `keyboardNavigation`（组内 `Ctrl+]`/`[`、组间 `F6`、键盘停靠 `Ctrl+M`）；与 App `⌥⌘←/→` 全局循环正交 |

@@ -86,6 +86,8 @@
 	"tabs": {
 		"strip": "已打开的文档",
 		"close": "关闭 {{title}}",
+		"showHtml": "显示 HTML 版本",
+		"showPdf": "显示 PDF 版本",
 		"closeSplit": "关闭分屏 · {{title}}",
 		"contextClose": "关闭",
 		"contextCloseOthers": "关闭其他",
