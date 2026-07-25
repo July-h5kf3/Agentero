@@ -11,9 +11,6 @@ export {
 } from "@/lib/workspace/tabs/model";
 export {
 	createNotesSplitPane,
-	findNotesColumnAnchor,
-	findPaperColumnAnchor,
-	findReadingCompanion,
 	isPaperContentTab,
 	paperReadingPlacements,
 	readingPairCloseIds,
@@ -36,12 +33,6 @@ export {
 } from "@/lib/workspace/tabs/resources";
 export type {
 	DocTab,
-	DocTabKind,
 	OpenPlacement,
-	PanelPersistParams,
-	PersistedTab,
-	PersistedTabs,
 	SplitDirection,
-	TabResources,
 } from "@/lib/workspace/tabs/types";
-export { NOTES_PLACEHOLDER } from "@/lib/workspace/tabs/types";

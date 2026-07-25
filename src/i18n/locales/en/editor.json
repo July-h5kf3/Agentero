@@ -14,9 +14,7 @@
 		"bulletedList": "Bulleted list",
 		"numberedList": "Numbered list",
 		"todoList": "To-do list",
-		"image": "Insert image",
-		"show": "Show formatting toolbar",
-		"hide": "Hide formatting toolbar"
+		"image": "Insert image"
 	},
 	"image": {
 		"noFile": "Save the note to a file before inserting images.",

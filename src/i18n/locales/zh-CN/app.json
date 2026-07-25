@@ -61,7 +61,6 @@
 		"hideRightSidebarHint": "隐藏右侧边栏 ({{shortcut}})",
 		"enterAgentZen": "Agent 禅模式",
 		"exitAgentZen": "退出禅模式",
-		"enterAgentZenHint": "全屏 Agent 对话 ({{shortcut}})",
 		"exitAgentZenHint": "返回工作台 ({{shortcut}})",
 		"settings": "设置",
 		"settingsHint": "设置 ({{shortcut}})",
@@ -73,16 +72,11 @@
 		"layoutHint": "配置面板",
 		"layoutPanels": "面板",
 		"layoutLeftSidebar": "左侧边栏",
-		"layoutRightSidebar": "右侧边栏",
-		"showNotes": "显示笔记",
-		"hideNotes": "隐藏笔记",
-		"showNotesHint": "显示笔记栏",
-		"hideNotesHint": "隐藏笔记栏"
+		"layoutRightSidebar": "右侧边栏"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",
-		"notesPlaceholder": "在此撰写这篇论文的笔记……",
-		"unsaved": "有未保存的更改"
+		"notesPlaceholder": "在此撰写这篇论文的笔记……"
 	},
 	"diskConflict": {
 		"title": "“{{name}}” 已被外部修改（已保留你的未存改动）",

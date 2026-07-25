@@ -61,7 +61,6 @@
 		"hideRightSidebarHint": "Hide right sidebar ({{shortcut}})",
 		"enterAgentZen": "Agent zen mode",
 		"exitAgentZen": "Exit zen mode",
-		"enterAgentZenHint": "Full-screen Agent chat ({{shortcut}})",
 		"exitAgentZenHint": "Back to workbench ({{shortcut}})",
 		"settings": "Settings",
 		"settingsHint": "Settings ({{shortcut}})",
@@ -73,16 +72,11 @@
 		"layoutHint": "Configure panels",
 		"layoutPanels": "Panels",
 		"layoutLeftSidebar": "Left sidebar",
-		"layoutRightSidebar": "Right sidebar",
-		"showNotes": "Show notes",
-		"hideNotes": "Hide notes",
-		"showNotesHint": "Show notes panel",
-		"hideNotesHint": "Hide notes panel"
+		"layoutRightSidebar": "Right sidebar"
 	},
 	"editor": {
 		"markdownPlaceholder": "Type Markdown here...",
-		"notesPlaceholder": "Write notes for this paper...",
-		"unsaved": "Unsaved changes"
+		"notesPlaceholder": "Write notes for this paper..."
 	},
 	"diskConflict": {
 		"title": "“{{name}}” changed on disk — kept your unsaved edits",
