@@ -22,7 +22,7 @@
 ## 布局模型
 
 - 左侧栏：Vault 文件树（虚拟 **Library** + **Recycle Bin**；魔棒；右键新建 / Finder / 终端 / **删除→回收站**；多选拖拽；Paper 行标签/排序可配）+ 选中论文时 **Paper Info**（Tags 可编辑）。
-- 中间栏：**全局 Dockview**（`workspace/tab-workspace`）。无 Vault 时欢迎页；有 Vault 时可开 **Library** / Markdown / PDF / HTML / **图片** / **回收站** / 论文 **NOTES**。
+- 中间栏：**全局 Dockview**（`workspace/dock-workspace`）。无 Vault 时欢迎页；有 Vault 时可开 **Library** / Markdown / PDF / HTML / **图片** / **回收站** / 论文 **NOTES**。
   - 论文默认：PDF 与 `NOTES.md` 为**同组 sibling tab**（Layout 菜单 / 快捷键切换 NOTES）。
   - 分屏：上下左右 + 多格；文件树可拖入任意边；布局只存 `toJSON()`。
   - PDF：任意路径本地预览；导航 / 适应宽·整页 / 大纲 / ⌘F；平滑划词；操作菜单（高亮 / 批注 / 提问 / 翻译）。

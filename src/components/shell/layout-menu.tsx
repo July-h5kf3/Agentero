@@ -16,17 +16,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-	formatShortcut,
-	SHORTCUTS,
-	type ShortcutId,
-} from "@/lib/shell/shortcuts";
-
-/** Display string (⌥⌘S / Ctrl+Alt+S …) for a shortcut id, empty if none. */
-function shortcutFor(id: ShortcutId): string {
-	const def = SHORTCUTS.find((s) => s.id === id);
-	return def ? formatShortcut(def) : "";
-}
+import { formatShortcutById } from "@/lib/shell/shortcuts";
 
 type LayoutMenuProps = {
 	leftSidebarOpen: boolean;
@@ -86,7 +76,7 @@ export function LayoutMenu({
 				>
 					{t("titlebar.layoutLeftSidebar")}
 					<DropdownMenuShortcut>
-						{shortcutFor("toggleSidebar")}
+						{formatShortcutById("toggleSidebar")}
 					</DropdownMenuShortcut>
 				</DropdownMenuCheckboxItem>
 				<DropdownMenuCheckboxItem
@@ -104,7 +94,7 @@ export function LayoutMenu({
 				>
 					{t("titlebar.layoutRightSidebar")}
 					<DropdownMenuShortcut>
-						{shortcutFor("toggleChat")}
+						{formatShortcutById("toggleChat")}
 					</DropdownMenuShortcut>
 				</DropdownMenuCheckboxItem>
 				<DropdownMenuSeparator />
@@ -115,7 +105,7 @@ export function LayoutMenu({
 				>
 					{t("titlebar.enterAgentZen")}
 					<DropdownMenuShortcut>
-						{shortcutFor("toggleAgentZen")}
+						{formatShortcutById("toggleAgentZen")}
 					</DropdownMenuShortcut>
 				</DropdownMenuCheckboxItem>
 			</DropdownMenuContent>

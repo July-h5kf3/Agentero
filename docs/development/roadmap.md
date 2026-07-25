@@ -237,7 +237,7 @@
 
 关键交付：
 
-- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/tab-workspace.tsx`、`src/lib/workspace/tabs`；见 [`tab-split.md`](tab-split.md)）
+- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/dock-workspace.tsx`、`src/lib/workspace/tabs`；见 [`tab-split.md`](tab-split.md)）
 - [x] **panel 状态**：内容常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush）。
 - [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。

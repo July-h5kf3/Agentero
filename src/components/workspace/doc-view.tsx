@@ -16,7 +16,46 @@ import type { LibraryColumnPref } from "@/lib/settings";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
 
-export type TabCenterProps = {
+/** Library-tab-only props (ignored by PDF / editor / trash). */
+export type DocViewLibraryProps = {
+	papers: PaperMetadata[];
+	loading: boolean;
+	query: string;
+	onQueryChange: (query: string) => void;
+	/** Vault-relative folder scope; null = full library. */
+	scopePath: string | null;
+	columns: LibraryColumnPref[];
+	onColumnsChange: (columns: LibraryColumnPref[]) => void;
+	rescanning: boolean;
+	onOpenPaper: (paper: PaperMetadata) => void;
+	onRescan: () => void;
+	/** Zotero migrate (full library only). */
+	onMigrateZotero?: () => void;
+};
+
+/** Markdown / NOTES editor props. */
+export type DocViewEditorProps = {
+	fontSize: number;
+	showToolbar: boolean;
+	notesPlaceholder: string;
+	markdownPlaceholder: string;
+	onPersistFile: (path: string, md: string, lastSaved: string) => void;
+	onAssetsChanged: () => void;
+	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
+};
+
+/** PDF viewer props. */
+export type DocViewPdfProps = {
+	zen: boolean;
+	onToggleZen: () => void;
+	onOpenAnnotations: () => void;
+	onOpenSettings: () => void;
+	registerHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
+	onHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
+	onAsksChange: (tabId: string, list: PdfAskThread[]) => void;
+};
+
+export type DocViewProps = {
 	/** Primary tab or split pane (shared fields). */
 	tab: DocTab;
 	active: boolean;
@@ -27,39 +66,12 @@ export type TabCenterProps = {
 	 */
 	pdfKeepMounted: boolean;
 	vaultPath: string | null;
-	/** Papers library (only used by the Library tab). */
-	libraryPapers: PaperMetadata[];
-	libraryLoading: boolean;
-	libraryQuery: string;
-	onLibraryQueryChange: (query: string) => void;
-	/** Vault-relative folder scope; null = full library. */
-	libraryScopePath: string | null;
-	/** Library table column order + visibility. */
-	libraryColumns: LibraryColumnPref[];
-	onLibraryColumnsChange: (columns: LibraryColumnPref[]) => void;
-	rescanning: boolean;
-	onOpenLibraryPaper: (paper: PaperMetadata) => void;
-	onRescanPapers: () => void;
-	onMigrateZotero: () => void;
+	library: DocViewLibraryProps;
+	editor: DocViewEditorProps;
+	pdf: DocViewPdfProps;
 	onTrashChanged: () => void;
 	/** Bump to reload recycle bin after Empty Recycle Bin from the sidebar. */
 	trashReloadSignal?: number;
-	/** Markdown editor config. */
-	editorFontSize: number;
-	showEditorToolbar: boolean;
-	notesPlaceholder: string;
-	markdownPlaceholder: string;
-	onPersistFile: (path: string, md: string, lastSaved: string) => void;
-	onEditorAssetsChanged: () => void;
-	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
-	/** Immersive full-window PDF reading. */
-	pdfZen: boolean;
-	onTogglePdfZen: () => void;
-	onOpenAnnotations: () => void;
-	onOpenSettings: () => void;
-	registerPdfHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
-	onPdfHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
-	onPdfAsksChange: (tabId: string, list: PdfAskThread[]) => void;
 };
 
 function TabLoadingSkeleton() {
@@ -85,59 +97,37 @@ function TabLoadingSkeleton() {
 	);
 }
 
-/** Center-pane view for a single open tab (library, trash, editor, PDF, image, HTML). */
-export const TabCenter = memo(function TabCenter({
+/** Document content router by tab.kind / mode (library, trash, editor, PDF, image, HTML). */
+export const DocView = memo(function DocView({
 	tab,
 	active,
 	pdfKeepMounted,
 	vaultPath,
-	libraryPapers,
-	libraryLoading,
-	libraryQuery,
-	onLibraryQueryChange,
-	libraryScopePath,
-	libraryColumns,
-	onLibraryColumnsChange,
-	rescanning,
-	onOpenLibraryPaper,
-	onRescanPapers,
-	onMigrateZotero,
+	library,
+	editor,
+	pdf,
 	onTrashChanged,
 	trashReloadSignal = 0,
-	editorFontSize,
-	showEditorToolbar,
-	notesPlaceholder,
-	markdownPlaceholder,
-	onPersistFile,
-	onEditorAssetsChanged,
-	onTabPatch,
-	pdfZen,
-	onTogglePdfZen,
-	onOpenAnnotations,
-	onOpenSettings,
-	registerPdfHandle,
-	onPdfHighlightsChange,
-	onPdfAsksChange,
-}: TabCenterProps) {
+}: DocViewProps) {
 	if (!tab.loaded) {
 		return <TabLoadingSkeleton />;
 	}
 	if (tab.kind === "library") {
 		return (
 			<PapersLibrary
-				papers={libraryPapers}
+				papers={library.papers}
 				vaultPath={vaultPath}
 				active={active}
-				loading={libraryLoading}
-				query={libraryQuery}
-				onQueryChange={onLibraryQueryChange}
-				scopePath={libraryScopePath}
-				columns={libraryColumns}
-				onColumnsChange={onLibraryColumnsChange}
-				onOpenPaper={onOpenLibraryPaper}
-				onRescan={onRescanPapers}
-				rescanning={rescanning}
-				onMigrateZotero={onMigrateZotero}
+				loading={library.loading}
+				query={library.query}
+				onQueryChange={library.onQueryChange}
+				scopePath={library.scopePath}
+				columns={library.columns}
+				onColumnsChange={library.onColumnsChange}
+				onOpenPaper={library.onOpenPaper}
+				onRescan={library.onRescan}
+				rescanning={library.rescanning}
+				onMigrateZotero={library.onMigrateZotero}
 				className="bg-muted/20"
 			/>
 		);
@@ -168,13 +158,15 @@ export const TabCenter = memo(function TabCenter({
 					filePath={
 						isNotes ? tab.notesPath : isMarkdownPath(tab.path) ? tab.path : null
 					}
-					fontSize={editorFontSize}
-					showToolbar={showEditorToolbar}
-					placeholder={isNotes ? notesPlaceholder : markdownPlaceholder}
-					onPersist={onPersistFile}
-					onAssetsChanged={onEditorAssetsChanged}
+					fontSize={editor.fontSize}
+					showToolbar={editor.showToolbar}
+					placeholder={
+						isNotes ? editor.notesPlaceholder : editor.markdownPlaceholder
+					}
+					onPersist={editor.onPersistFile}
+					onAssetsChanged={editor.onAssetsChanged}
 					onDirtyChange={(d) =>
-						onTabPatch(
+						editor.onTabPatch(
 							tab.id,
 							isNotes ? { notesDirty: d } : { markdownDirty: d },
 						)
@@ -185,7 +177,7 @@ export const TabCenter = memo(function TabCenter({
 	}
 	if (tab.mode === "pdf") {
 		// PERF: dockview keeps PDF panel shells mounted (`renderer: 'always'` in
-		// tab-workspace) so inactive siblings stay in the React tree. We still
+		// dock-workspace) so inactive siblings stay in the React tree. We still
 		// gate the heavyweight EmbedPDF viewer with App-level PDF LRU
 		// (`pdfKeepMounted`): only the active tab + a few recently viewed PDFs
 		// keep PDFium documents alive (main-thread cost). Older inactive PDFs
@@ -205,14 +197,14 @@ export const TabCenter = memo(function TabCenter({
 						tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
 					}
 					vaultPath={vaultPath}
-					zen={pdfZen}
-					onToggleZen={onTogglePdfZen}
-					onOpenAnnotations={onOpenAnnotations}
-					onOpenSettings={onOpenSettings}
+					zen={pdf.zen}
+					onToggleZen={pdf.onToggleZen}
+					onOpenAnnotations={pdf.onOpenAnnotations}
+					onOpenSettings={pdf.onOpenSettings}
 					className="h-full w-full"
-					onHandle={(h) => registerPdfHandle(tab.id, h)}
-					onHighlightsChange={(list) => onPdfHighlightsChange(tab.id, list)}
-					onAsksChange={(list) => onPdfAsksChange(tab.id, list)}
+					onHandle={(h) => pdf.registerHandle(tab.id, h)}
+					onHighlightsChange={(list) => pdf.onHighlightsChange(tab.id, list)}
+					onAsksChange={(list) => pdf.onAsksChange(tab.id, list)}
 				/>
 			</div>
 		);

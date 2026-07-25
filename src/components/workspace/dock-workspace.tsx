@@ -34,10 +34,7 @@ import {
 	useRef,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	TabCenter,
-	type TabCenterProps,
-} from "@/components/workspace/tab-center";
+import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { cn } from "@/lib/core/utils";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
 import {
@@ -74,7 +71,7 @@ export type WorkspaceExternalDrop = {
 };
 
 /** Imperative API for App: open with placement, cycle focus (visual dockview order). */
-export type TabWorkspaceHandle = {
+export type DockWorkspaceHandle = {
 	/** Add (or activate) a panel with optional split placement. */
 	openPanel: (tab: DocTab, placement?: OpenPlacement) => void;
 	/** Cycle active panel by dockview `api.panels` order (wraps). */
@@ -86,7 +83,7 @@ export type TabWorkspaceHandle = {
 type WorkspaceCtx = {
 	tabsById: Map<string, DocTab>;
 	activePanelId: string | null;
-	centerProps: Omit<TabCenterProps, "tab" | "active" | "pdfKeepMounted">;
+	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
 	pdfKeepMountedIds: Set<string>;
 };
 
@@ -94,7 +91,7 @@ const WorkspaceContext = createContext<WorkspaceCtx | null>(null);
 
 function useWorkspace(): WorkspaceCtx {
 	const ctx = useContext(WorkspaceContext);
-	if (!ctx) throw new Error("DockviewWorkspace context missing");
+	if (!ctx) throw new Error("DockWorkspace context missing");
 	return ctx;
 }
 
@@ -109,7 +106,7 @@ function WorkspacePane(props: IDockviewPanelProps<{ panelId: string }>) {
 	const active = activePanelId === panelId;
 	return (
 		<div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-			<TabCenter
+			<DocView
 				{...centerProps}
 				tab={tab}
 				active={active}
@@ -232,13 +229,54 @@ function addPanelWithPlacement(
 	});
 }
 
-type DockviewWorkspaceProps = {
+/** Push React tab title / persist params / renderer onto an existing dockview panel. */
+function applyTabPanelMeta(panel: IDockviewPanel, tab: DocTab): void {
+	if (panel.title !== tab.title) {
+		panel.api.setTitle(tab.title);
+	}
+	panel.api.updateParameters(panelPersistParams(tab));
+	applyPanelRenderer(panel, tab.mode);
+}
+
+/**
+ * Align dockview panel membership with React `tabs[]`:
+ * drop stale panels, add missing ones (default placement).
+ */
+function reconcilePanelMembership(api: DockviewApi, list: DocTab[]): void {
+	const wantIds = new Set(list.map((t) => t.id));
+	for (const panel of [...api.panels]) {
+		if (!wantIds.has(panel.id)) {
+			api.removePanel(panel);
+		}
+	}
+	for (const tab of list) {
+		if (api.getPanel(tab.id)) continue;
+		addPanelWithPlacement(api, tab, null);
+	}
+}
+
+/**
+ * After fromJSON restore: refresh meta for surviving panels, then membership.
+ */
+function reconcileAfterLayoutRestore(api: DockviewApi, list: DocTab[]): void {
+	for (const tab of list) {
+		const panel = api.getPanel(tab.id);
+		if (!panel) continue;
+		// Always re-apply: fromJSON may restore older title/params/renderer.
+		panel.api.setTitle(tab.title);
+		panel.api.updateParameters(panelPersistParams(tab));
+		applyPanelRenderer(panel, tab.mode);
+	}
+	reconcilePanelMembership(api, list);
+}
+
+type DockWorkspaceProps = {
 	tabs: DocTab[];
 	activePanelId: string | null;
 	/** Global dockview layout snapshot (null = rebuild from panel list). */
 	layout: unknown | null;
 	pdfKeepMountedIds: string[];
-	centerProps: Omit<TabCenterProps, "tab" | "active" | "pdfKeepMounted">;
+	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
 	onActivePanelChange: (panelId: string | null) => void;
 	onClosePanel: (panelId: string) => void;
 	onLayoutChange: (layout: unknown) => void;
@@ -256,8 +294,8 @@ type DockviewWorkspaceProps = {
  *
  * @see https://dockview.dev/docs/core/dnd/external
  */
-export const TabWorkspace = memo(
-	forwardRef<TabWorkspaceHandle, DockviewWorkspaceProps>(function TabWorkspace(
+export const DockWorkspace = memo(
+	forwardRef<DockWorkspaceHandle, DockWorkspaceProps>(function DockWorkspace(
 		{
 			tabs,
 			activePanelId,
@@ -356,21 +394,9 @@ export const TabWorkspace = memo(
 		/** Membership only: add missing / remove closed. Placement is imperative. */
 		const syncPanels = useCallback(
 			(api: DockviewApi) => {
-				const list = tabsRef.current;
-				const wantIds = new Set(list.map((t) => t.id));
-
 				syncingRef.current = true;
 				try {
-					for (const panel of [...api.panels]) {
-						if (!wantIds.has(panel.id)) {
-							api.removePanel(panel);
-						}
-					}
-
-					for (const tab of list) {
-						if (api.getPanel(tab.id)) continue;
-						addPanelWithPlacement(api, tab, null);
-					}
+					reconcilePanelMembership(api, tabsRef.current);
 				} finally {
 					endSync(api);
 				}
@@ -452,26 +478,9 @@ export const TabWorkspace = memo(
 					syncingRef.current = true;
 					try {
 						api.fromJSON(snap as Parameters<DockviewApi["fromJSON"]>[0]);
-						for (const tab of list) {
-							const p = api.getPanel(tab.id);
-							if (!p) continue;
-							p.api.setTitle(tab.title);
-							p.api.updateParameters(panelPersistParams(tab));
-							// fromJSON may restore an older snapshot without renderer;
-							// re-apply mode-based keep-alive (PDF → always).
-							applyPanelRenderer(p, tab.mode);
-						}
-						// Drop layout panels that are no longer in React (stale ids).
-						const want = new Set(list.map((t) => t.id));
-						for (const panel of [...api.panels]) {
-							if (!want.has(panel.id)) api.removePanel(panel);
-						}
-						// Add any React tabs missing from the snapshot.
-						for (const tab of list) {
-							if (!api.getPanel(tab.id)) {
-								addPanelWithPlacement(api, tab, null);
-							}
-						}
+						// fromJSON may restore older title/params/renderer; drop stale /
+						// add missing panels.
+						reconcileAfterLayoutRestore(api, list);
 						endSync(api);
 					} catch {
 						api.clear();
@@ -494,7 +503,7 @@ export const TabWorkspace = memo(
 			syncPanels(api);
 		}, [panelIdsKey, syncPanels]);
 
-		// Title + persist params + renderer channel (mode/path without full reconcile).
+		// Title + persist params + renderer channel (mode/path without full membership).
 		const metaKey = tabs.map((t) => `${t.id}:${t.title}:${t.mode}`).join("|");
 		useEffect(() => {
 			void metaKey;
@@ -503,11 +512,7 @@ export const TabWorkspace = memo(
 			for (const tab of tabsRef.current) {
 				const panel = api.getPanel(tab.id);
 				if (!panel) continue;
-				if (panel.title !== tab.title) {
-					panel.api.setTitle(tab.title);
-				}
-				panel.api.updateParameters(panelPersistParams(tab));
-				applyPanelRenderer(panel, tab.mode);
+				applyTabPanelMeta(panel, tab);
 			}
 		}, [metaKey]);
 
@@ -685,4 +690,4 @@ export const TabWorkspace = memo(
 	}),
 );
 
-TabWorkspace.displayName = "TabWorkspace";
+DockWorkspace.displayName = "DockWorkspace";

@@ -26,7 +26,7 @@ const CHAT_SHORTCUT = formatShortcutById("toggleChat");
 const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
 const SETTINGS_SHORTCUT = formatShortcutById("settings");
 
-type WorkspaceHeaderProps = {
+type TitleBarProps = {
 	isMacDesktop: boolean;
 	showWindowControls: boolean;
 	agentZenMode: boolean;
@@ -49,7 +49,7 @@ type WorkspaceHeaderProps = {
  * Title-bar row: window chrome + sidebar / layout controls.
  * Document tabs live inside the center Dockview workspace (not here).
  */
-export function WorkspaceHeader({
+export function TitleBar({
 	isMacDesktop,
 	showWindowControls,
 	agentZenMode,
@@ -65,7 +65,7 @@ export function WorkspaceHeader({
 	onToggleAgentZen,
 	onOpenRightTab,
 	onOpenSettings,
-}: WorkspaceHeaderProps) {
+}: TitleBarProps) {
 	const { t } = useTranslation(["app"]);
 
 	return (
@@ -157,73 +157,50 @@ export function WorkspaceHeader({
 								zenMode={agentZenMode}
 								onToggleZen={onToggleAgentZen}
 							/>
-							{rightSidebarOpen ? (
-								<>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.agentPanel")}
-												aria-pressed={rightSidebarTab === "agent"}
-												className={cn(
-													rightSidebarTab === "agent" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => onOpenRightTab("agent")}
-											>
-												<Bot className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("labels.agent")}
-										</TooltipContent>
-									</Tooltip>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.backlinksPanel")}
-												aria-pressed={rightSidebarTab === "backlinks"}
-												className={cn(
-													rightSidebarTab === "backlinks" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => onOpenRightTab("backlinks")}
-											>
-												<Link2 className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("labels.backlinks")}
-										</TooltipContent>
-									</Tooltip>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label={t("titlebar.annotationsPanel")}
-												aria-pressed={rightSidebarTab === "annotations"}
-												className={cn(
-													rightSidebarTab === "annotations" &&
-														"bg-muted text-foreground",
-												)}
-												onClick={() => onOpenRightTab("annotations")}
-											>
-												<MessageSquareText className="size-3.5" />
-											</Button>
-										</TooltipTrigger>
-										<TooltipContent side="bottom">
-											{t("annotations.title", { ns: "viewer" })}
-										</TooltipContent>
-									</Tooltip>
-								</>
-							) : null}
+							{rightSidebarOpen
+								? (
+										[
+											{
+												id: "agent" as const,
+												aria: t("titlebar.agentPanel"),
+												tooltip: t("labels.agent"),
+												Icon: Bot,
+											},
+											{
+												id: "backlinks" as const,
+												aria: t("titlebar.backlinksPanel"),
+												tooltip: t("labels.backlinks"),
+												Icon: Link2,
+											},
+											{
+												id: "annotations" as const,
+												aria: t("titlebar.annotationsPanel"),
+												tooltip: t("annotations.title", { ns: "viewer" }),
+												Icon: MessageSquareText,
+											},
+										] as const
+									).map(({ id, aria, tooltip, Icon }) => (
+										<Tooltip key={id}>
+											<TooltipTrigger asChild>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-xs"
+													aria-label={aria}
+													aria-pressed={rightSidebarTab === id}
+													className={cn(
+														rightSidebarTab === id &&
+															"bg-muted text-foreground",
+													)}
+													onClick={() => onOpenRightTab(id)}
+												>
+													<Icon className="size-3.5" />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent side="bottom">{tooltip}</TooltipContent>
+										</Tooltip>
+									))
+								: null}
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<Button

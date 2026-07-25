@@ -14,13 +14,8 @@ import {
 } from "@/components/settings/settings-window";
 import { BackgroundTasksPanel } from "@/components/shell/background-tasks-panel";
 import { ErrorBoundary } from "@/components/shell/error-boundary";
-import {
-	ResizableGroup,
-	ResizableHandle,
-	ResizablePanel,
-} from "@/components/shell/resizable";
+import { TitleBar } from "@/components/shell/title-bar";
 import { VaultWelcome } from "@/components/shell/vault-welcome";
-import { WorkspaceHeader } from "@/components/shell/workspace-header";
 import {
 	FileTree,
 	type FileTreeHandle,
@@ -30,6 +25,11 @@ import {
 } from "@/components/sidebar/file-tree";
 import { PaperInfoPanel } from "@/components/sidebar/paper-info-panel";
 import {
+	ResizableGroup,
+	ResizableHandle,
+	ResizablePanel,
+} from "@/components/ui/resizable";
+import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
@@ -38,10 +38,10 @@ import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
 import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
-	TabWorkspace,
-	type TabWorkspaceHandle,
+	DockWorkspace,
+	type DockWorkspaceHandle,
 	type WorkspaceExternalDrop,
-} from "@/components/workspace/tab-workspace";
+} from "@/components/workspace/dock-workspace";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
@@ -233,7 +233,7 @@ export default function App() {
 	const [tree, setTree] = useState<FileNode[]>([]);
 	const [treeLoading, setTreeLoading] = useState(() => Boolean(vaultPath));
 	/**
-	 * Seed open panels + layout from localStorage on first paint so TabWorkspace
+	 * Seed open panels + layout from localStorage on first paint so DockWorkspace
 	 * onReady can fromJSON before any membership sync (avoids empty→rebuild race).
 	 */
 	const persistedSession = useMemo(() => {
@@ -255,7 +255,7 @@ export default function App() {
 		() => persistedSession?.layout ?? null,
 	);
 	/** Imperative open/cycle against live dockview (placement, visual order). */
-	const workspaceRef = useRef<TabWorkspaceHandle>(null);
+	const workspaceRef = useRef<DockWorkspaceHandle>(null);
 	/** Most-recently-viewed PDF tab ids kept mounted (see PDF_TAB_MOUNT_LRU). */
 	const [pdfLru, setPdfLru] = useState<string[]>([]);
 	/**
@@ -1845,7 +1845,7 @@ export default function App() {
 
 	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
-	// Stable handlers passed to TabCenter so its React.memo can bail out on
+	// Stable handlers passed to DocView so its React.memo can bail out on
 	// unrelated App re-renders (otherwise every mounted tab's viewer/editor
 	// re-renders on any App state change).
 	const handleLibraryColumnsChange = useCallback(
@@ -2503,39 +2503,46 @@ export default function App() {
 	const handleMigrateZoteroOpen = useCallback(() => setZoteroOpen(true), []);
 
 	/**
-	 * Memoized TabCenter props — must not be an inline object in JSX, or
-	 * TabCenter's React.memo never bails out (see comment on stable handlers).
+	 * Memoized DocView props — must not be an inline object in JSX, or
+	 * DocView's React.memo never bails out (see comment on stable handlers).
+	 * Grouped by kind so library / editor / PDF surfaces stay decoupled.
 	 */
 	const centerProps = useMemo(
 		() => ({
 			vaultPath,
-			libraryPapers,
-			libraryLoading,
-			libraryQuery,
-			onLibraryQueryChange: setLibraryQuery,
-			libraryScopePath,
-			libraryColumns: settings.libraryColumns,
-			onLibraryColumnsChange: handleLibraryColumnsChange,
-			rescanning,
-			onOpenLibraryPaper: handleOpenLibraryPaper,
-			onRescanPapers: handleRescanPapers,
-			onMigrateZotero: handleMigrateZoteroOpen,
+			library: {
+				papers: libraryPapers,
+				loading: libraryLoading,
+				query: libraryQuery,
+				onQueryChange: setLibraryQuery,
+				scopePath: libraryScopePath,
+				columns: settings.libraryColumns,
+				onColumnsChange: handleLibraryColumnsChange,
+				rescanning,
+				onOpenPaper: handleOpenLibraryPaper,
+				onRescan: handleRescanPapers,
+				onMigrateZotero: handleMigrateZoteroOpen,
+			},
+			editor: {
+				fontSize: settings.editorFontSize,
+				showToolbar: settings.showEditorToolbar,
+				notesPlaceholder: t("editor.notesPlaceholder"),
+				markdownPlaceholder: t("editor.markdownPlaceholder"),
+				onPersistFile: persistFile,
+				onAssetsChanged: handleEditorAssetsChanged,
+				onTabPatch: updateTab,
+			},
+			pdf: {
+				zen: pdfZenMode,
+				onToggleZen: togglePdfZen,
+				onOpenAnnotations: openAnnotationsTab,
+				onOpenSettings: handleOpenSettingsTranslate,
+				registerHandle: registerPdfHandle,
+				onHighlightsChange: handlePdfHighlightsChange,
+				onAsksChange: handlePdfAsksChange,
+			},
 			onTrashChanged: handleTrashChanged,
 			trashReloadSignal,
-			editorFontSize: settings.editorFontSize,
-			showEditorToolbar: settings.showEditorToolbar,
-			notesPlaceholder: t("editor.notesPlaceholder"),
-			markdownPlaceholder: t("editor.markdownPlaceholder"),
-			onPersistFile: persistFile,
-			onEditorAssetsChanged: handleEditorAssetsChanged,
-			onTabPatch: updateTab,
-			pdfZen: pdfZenMode,
-			onTogglePdfZen: togglePdfZen,
-			onOpenAnnotations: openAnnotationsTab,
-			onOpenSettings: handleOpenSettingsTranslate,
-			registerPdfHandle,
-			onPdfHighlightsChange: handlePdfHighlightsChange,
-			onPdfAsksChange: handlePdfAsksChange,
 		}),
 		[
 			vaultPath,
@@ -3193,7 +3200,7 @@ export default function App() {
 				  Title bar height must match trafficLightPosition math in tao:
 				  titleBarH ≈ closeButtonH(~14) + y(18) ≈ 32 → h-8
 				*/}
-				<WorkspaceHeader
+				<TitleBar
 					isMacDesktop={isMacDesktop}
 					showWindowControls={showWindowControls}
 					agentZenMode={agentZenMode}
@@ -3361,7 +3368,7 @@ export default function App() {
 									)
 								) : (
 									<div className="relative min-h-0 flex-1 overflow-hidden">
-										<TabWorkspace
+										<DockWorkspace
 											ref={workspaceRef}
 											tabs={tabs}
 											activePanelId={activeTabId}

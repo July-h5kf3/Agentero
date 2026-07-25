@@ -49,12 +49,12 @@ export type DocTab = {
 | `extractTabsFromLayout` / `panelPersistParams` | 从 layout 反推 tab 列表；写入 panel params |
 | 持久化 | **只存 `{ layout }`**；restore 时从 layout.panels 的 params 反推 `tabs[]` + active |
 
-## 4. 渲染（`TabWorkspace` = 全局 Dockview）
+## 4. 渲染（`DockWorkspace` = 全局 Dockview）
 
 ```
-中间栏一个 <TabWorkspace ref={workspaceRef}>
+中间栏一个 <DockWorkspace ref={workspaceRef}>
   └─ DockviewReact
-       components.pane → TabCenter（params.panelId）
+       components.pane → DocView（params.panelId）
        tabComponents.default → DockviewDefaultTab（原生标题/关闭）
        tabs[] ↔ syncPanels（仅 membership：add 缺失 / remove 多余）
        title/mode → panel.api.setTitle / updateParameters（独立通道）
@@ -73,8 +73,8 @@ export type DocTab = {
 | 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
 | 落点 overlay | `dropOverlayModel`（content 25% 边激活）+ `onWillShowOverlay` / `onWillDrop` 否决未知外部拖拽 |
 | 布局持久化 | **仅** `api.toJSON()`（params 含 path/mode；含 tab groups） |
-| 打开放置 / 循环焦点 | `TabWorkspaceHandle`（imperative） |
-| 文档内容 / 资源加载 | React `DocTab` + `TabCenter` |
+| 打开放置 / 循环焦点 | `DockWorkspaceHandle`（imperative） |
+| 文档内容 / 资源加载 | React `DocTab` + `DocView` |
 | 侧栏 Paper Info / active id | `onDidActivePanelChange` → React |
 | PDF panel 壳保活 | `addPanel({ renderer: 'always' })`（仅 `mode === 'pdf'`；非 PDF 为 `onlyWhenVisible`）；与 App `PDF_TAB_MOUNT_LRU` 叠加：壳常驻 + EmbedPDF 最多保活 N 份 |
 
@@ -128,7 +128,7 @@ export type DocTab = {
 | 层 | 机制 | 目的 |
 |---|---|---|
 | dockview panel 壳 | PDF → `renderer: 'always'`；其它 mode → `onlyWhenVisible` | 同组切 tab 时 PDF 的 React 树不被 dockview 卸掉，LRU 才有机会命中 |
-| EmbedPDF / PDFium | `App` `PDF_TAB_MOUNT_LRU`（默认 4）+ `TabCenter` `if (!active && !pdfKeepMounted) return null` | 限制主线程上同时存活的 PDF 文档数 |
+| EmbedPDF / PDFium | `App` `PDF_TAB_MOUNT_LRU`（默认 4）+ `DocView` `if (!active && !pdfKeepMounted) return null` | 限制主线程上同时存活的 PDF 文档数 |
 
 `fromJSON` 恢复布局后按 `tab.mode` 再 `setRenderer`，避免旧快照缺 renderer 字段时丢失保活。
 
@@ -137,6 +137,6 @@ export type DocTab = {
 | 状态 | 能力 |
 |---|---|
 | 已用 | `dndStrategy: 'pointer'`、`dndEdges`、`dropOverlayModel`、`onWillDrop` / `onWillShowOverlay`、`disableFloatingGroups`、外部 DnD、`getTabContextMenuItems`、`getTabGroupChipContextMenuItems`、`tabGroupColors` / `tabGroupAccent`、`keyboardNavigation`、PDF `renderer: 'always'` |
-| **模块注册** | dockview 7 的 ContextMenu / TabGroup / keyboard-dock 在 `dockview` 包 `registerModules`；`tab-workspace` 必须 `import "dockview"` 副作用导入，否则只引 `dockview-react` 时可能 tree-shake 掉注册 → **右键 tab 静默无菜单** |
+| **模块注册** | dockview 7 的 ContextMenu / TabGroup / keyboard-dock 在 `dockview` 包 `registerModules`；`dock-workspace` 必须 `import "dockview"` 副作用导入，否则只引 `dockview-react` 时可能 tree-shake 掉注册 → **右键 tab 静默无菜单** |
 | 刻意未用 | popout / floating（与 `⌘N` 多窗口策略一致）、全局 `defaultRenderer: 'always'`（非 PDF 不需要壳常驻） |
 | backlog | `maximizeGroup`、watermark、header actions |

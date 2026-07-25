@@ -229,7 +229,7 @@
   - `groupResizeBehavior="preserve-pixel-size"`；上次展开像素宽记入 ref。
 - **文档 tab 位置**：标题栏**无**文档 tab；由中间栏 dockview 原生管理（见 §3.1.1）。
 - 各栏 header 等高：`h-10`（`PaneHeader`）；操作错误走右上角 toast（§2.1.2）。
-- **面板分隔（sash）**：默认 **1px** 细线；实现见 `src/components/shell/resizable.tsx`。
+- **面板分隔（sash）**：默认 **1px** 细线；实现见 `src/components/ui/resizable.tsx`。
 - **独立滚动**：侧边栏 / 中间 dockview 内容 **各自**滚动，顶栏固定。
   - 默认竖向：`.agentero-scroll`；双向（论文库表）：`.agentero-scroll-both`。
 - **中间栏视图**：
@@ -312,7 +312,7 @@
 
 ### 3.1.1 全局 Dockview 工作区（V0.6 已落地）
 
-中间栏由 **单一全局 Dockview** 管理全部打开文档（`src/components/workspace/tab-workspace.tsx`、模型 `src/lib/workspace/tabs`）。**标题栏无文档 tab 条**。完整契约见 [`../development/tab-split.md`](../development/tab-split.md)。
+中间栏由 **单一全局 Dockview** 管理全部打开文档（`src/components/workspace/dock-workspace.tsx`、模型 `src/lib/workspace/tabs`）。**标题栏无文档 tab 条**。完整契约见 [`../development/tab-split.md`](../development/tab-split.md)。
 
 - **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
 - **Tab 右键菜单**：关闭 / 关闭其他 / 关闭全部（**同组**）；新建标签组 / 从标签组移除（`getTabContextMenuItems`；文案走 i18n）。
@@ -435,7 +435,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 | 要求 | 说明 |
 |---|---|
-| 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`workspace-header.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
+| 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`title-bar.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog（backdrop 半透明模糊） |
 | 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
