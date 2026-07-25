@@ -263,6 +263,7 @@ fn collect_block_ids(line: &str, line_no: u32, blocks: &mut Vec<BlockAnchor>) {
     if is_valid_block_id(id) {
         blocks.push(BlockAnchor {
             id: id.to_string(),
+            preview: trimmed[..caret].trim_end().to_string(),
             line: line_no,
         });
     }
@@ -400,6 +401,7 @@ pub fn extract_document(
                 headings.push(HeadingAnchor {
                     text,
                     path,
+                    level: level as u8,
                     line: line_no,
                 });
             }
@@ -442,8 +444,11 @@ mod tests {
         let (document, links) = extract_document("notes/source.md", source);
         assert_eq!(document.aliases, vec!["Research note"]);
         assert_eq!(document.headings[1].path, vec!["Root", "Child"]);
+        assert_eq!(document.headings[1].level, 2);
         assert_eq!(document.blocks[0].id, "summary");
+        assert_eq!(document.blocks[0].preview, "Block");
         assert_eq!(document.blocks[1].id, "验收块");
+        assert_eq!(document.blocks[1].preview, "中文块");
         assert_eq!(links.len(), 3);
         assert!(matches!(
             links[0].fragment,

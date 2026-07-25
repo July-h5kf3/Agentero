@@ -67,6 +67,8 @@ pub struct WikiDocument {
 pub struct HeadingAnchor {
     pub text: String,
     pub path: Vec<String>,
+    #[serde(default)]
+    pub level: u8,
     pub line: u32,
 }
 
@@ -74,6 +76,8 @@ pub struct HeadingAnchor {
 #[serde(rename_all = "camelCase")]
 pub struct BlockAnchor {
     pub id: String,
+    #[serde(default)]
+    pub preview: String,
     pub line: u32,
 }
 
@@ -132,6 +136,8 @@ pub struct WikiSearchCandidate {
     pub path: String,
     pub insert_text: String,
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
     /// A human-facing alias selected by the user. The editor writes this as a
     /// display alias while preserving `insert_text` as the canonical target.
     #[serde(default, skip_serializing_if = "Option::is_none")]

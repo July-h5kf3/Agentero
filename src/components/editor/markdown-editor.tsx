@@ -237,7 +237,7 @@ export function MarkdownEditor({
 		);
 		const triggerIndex = textBeforeCursor.lastIndexOf("[[");
 		const raw = textBeforeCursor.slice(triggerIndex + 2);
-		if (triggerIndex < 0 || /[\]\n|]/.test(raw)) {
+		if (triggerIndex < 0 || /[\]\n]/.test(raw)) {
 			setWikiCompletionDraft(null);
 			return;
 		}

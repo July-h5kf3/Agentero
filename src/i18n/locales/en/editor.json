@@ -27,6 +27,8 @@
 	"wikiCompletion": {
 		"label": "Internal link suggestions",
 		"loading": "Searching links…",
-		"empty": "No matching internal links"
+		"empty": "No matching internal links",
+		"displayName": "Display name",
+		"syntaxHint": "Type # to link a heading · ^ to link a text block · | to set display text"
 	}
 }

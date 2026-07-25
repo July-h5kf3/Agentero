@@ -328,6 +328,7 @@ mod tests {
                 headings: vec![HeadingAnchor {
                     text: "Root".into(),
                     path: vec!["Root".into()],
+                    level: 1,
                     line: 1,
                 }],
                 blocks: Vec::new(),

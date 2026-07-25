@@ -45,7 +45,16 @@ describe("wikilink completion grammar", () => {
 			target: "Target",
 			query: "验收",
 		});
-		expect(parseWikiCompletionQuery("Target|alias")).toBeNull();
+		expect(parseWikiCompletionQuery("Target|alias")).toEqual({
+			kind: "alias",
+			target: "Target",
+			query: "alias",
+		});
+		expect(parseWikiCompletionQuery("Target|")).toEqual({
+			kind: "alias",
+			target: "Target",
+			query: "",
+		});
 	});
 
 	it("writes an alias as display text around a canonical target", () => {
@@ -108,6 +117,33 @@ describe("wikilink completion grammar", () => {
 				{ kind: "block", target: "AGENTS", query: "" },
 			),
 		).toEqual({ target: "AGENTS", heading: "^reading-order" });
+	});
+
+	it("turns a local alias candidate into portable display text", () => {
+		const completion = wikiCompletionInsert(
+			{
+				kind: "alias",
+				path: "PAL#Overview",
+				insertText: "PAL#Overview",
+				label: "name",
+				detail: "PAL#Overview",
+				alias: "name",
+			},
+			{ kind: "alias", target: "PAL#Overview", query: "name" },
+		);
+
+		expect(completion).toEqual({
+			target: "PAL",
+			heading: "Overview",
+			alias: "name",
+		});
+		expect(
+			wikiLinkToMarkdown({
+				value: completion.target,
+				heading: completion.heading,
+				alias: completion.alias,
+			}),
+		).toBe("[[PAL#Overview|name]]");
 	});
 
 	it("keeps the most recently selected candidates unique and bounded", () => {
@@ -236,6 +272,11 @@ describe("wikilink completion grammar", () => {
 			start: 7,
 			end: 16,
 			raw: "AGENTS#",
+		});
+		expect(findWikiCompletionMatch("[[PAL|name]]", 10, "PAL|name")).toEqual({
+			start: 0,
+			end: 12,
+			raw: "PAL|name",
 		});
 	});
 

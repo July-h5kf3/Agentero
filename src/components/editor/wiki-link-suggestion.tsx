@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Hash, TextQuote } from "lucide-react";
+import { CornerDownLeft, FileText, Hash, TextQuote } from "lucide-react";
 import { useEditorRef } from "platejs/react";
 import type {
 	MutableRefObject,
@@ -11,6 +11,7 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -68,6 +69,7 @@ function completionRequestKey(
 }
 
 function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
+	if (kind === "alias") return null;
 	const Icon =
 		kind === "file" ? FileText : kind === "heading" ? Hash : TextQuote;
 	return (
@@ -79,9 +81,8 @@ function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 }
 
 /**
- * Suggestions are deliberately Host-backed. The editor only recognizes the
- * local `[[` trigger and inserts the canonical candidate returned by the
- * resolver; it never derives a target from an unqualified label.
+ * File and anchor suggestions are Host-backed. Alias completion is local
+ * because it only wraps the already selected target with user-authored text.
  */
 export function WikiLinkSuggestion({
 	draft,
@@ -109,11 +110,41 @@ export function WikiLinkSuggestion({
 	>([]);
 	const [loading, setLoading] = useState(false);
 	const [selectedIndex, setSelectedIndex] = useState(0);
+	const listRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!candidates[selectedIndex]) return;
+		listRef.current
+			?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
+			?.scrollIntoView({ block: "nearest" });
+	}, [candidates, selectedIndex]);
 
 	useEffect(() => {
 		setSelectedIndex(0);
+		if (!request) {
+			setCandidateState({ requestKey: null, items: [] });
+			setLoading(false);
+			return;
+		}
+		if (request.kind === "alias") {
+			setCandidateState({
+				requestKey,
+				items: [
+					{
+						kind: "alias",
+						path: request.target,
+						insertText: request.target,
+						label: request.query,
+						detail: request.target,
+						alias: request.query || undefined,
+					},
+				],
+			});
+			setLoading(false);
+			return;
+		}
 		const vaultPath = wikiNav?.vaultPath;
-		if (!request || !vaultPath || !filePath) {
+		if (!vaultPath || !filePath) {
 			setCandidateState({ requestKey: null, items: [] });
 			setLoading(false);
 			return;
@@ -200,6 +231,7 @@ export function WikiLinkSuggestion({
 	const selectCandidate = useCallback(
 		(candidate: WikiSearchCandidate, submitKey: "Enter" | "Tab" = "Enter") => {
 			if (!draft || !request || candidate.kind !== request.kind) return false;
+			if (request.kind === "alias" && !request.query) return false;
 			const selection = editor.selection;
 			if (
 				!selection ||
@@ -300,10 +332,14 @@ export function WikiLinkSuggestion({
 					event.preventDefault();
 					return true;
 				}
+				if (request?.kind === "alias" && !request.query) {
+					event.preventDefault();
+					return true;
+				}
 			}
 			return false;
 		},
-		[candidates, draft, onClose, selectCandidate, selectedIndex],
+		[candidates, draft, onClose, request, selectCandidate, selectedIndex],
 	);
 
 	useLayoutEffect(() => {
@@ -316,46 +352,74 @@ export function WikiLinkSuggestion({
 	if (!draft || !request) return null;
 	return (
 		<div
-			className="absolute z-50 max-h-56 w-80 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+			className="absolute z-50 flex w-96 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
 			style={{ left: draft.left, top: draft.top }}
-			role="listbox"
-			aria-label={t("wikiCompletion.label")}
 		>
-			{loading ? (
-				<p className="px-2 py-1.5 text-muted-foreground text-xs">
-					{t("wikiCompletion.loading")}
-				</p>
-			) : null}
-			{!loading && !candidates.length ? (
-				<p className="px-2 py-1.5 text-muted-foreground text-xs">
-					{t("wikiCompletion.empty")}
-				</p>
-			) : null}
-			{candidates.map((candidate, index) => (
-				<button
-					key={`${candidate.kind}:${candidate.path}:${candidate.insertText}:${candidate.alias ?? ""}`}
-					type="button"
-					role="option"
-					aria-selected={index === selectedIndex}
-					className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs outline-none ${
-						index === selectedIndex
-							? "bg-accent text-accent-foreground"
-							: "hover:bg-accent/60"
-					}`}
-					onMouseDown={(event) => event.preventDefault()}
-					onClick={() => selectCandidate(candidate)}
-				>
-					<CandidateIcon kind={candidate.kind} />
-					<span className="min-w-0 flex-1">
-						<span className="block truncate font-medium">
-							{candidate.label}
-						</span>
-						<span className="block truncate text-muted-foreground">
-							{candidate.path}
-						</span>
-					</span>
-				</button>
-			))}
+			<div
+				ref={listRef}
+				className="max-h-56 overflow-y-auto p-1"
+				role="listbox"
+				aria-label={t("wikiCompletion.label")}
+			>
+				{loading ? (
+					<p className="px-2 py-1.5 text-muted-foreground text-xs">
+						{t("wikiCompletion.loading")}
+					</p>
+				) : null}
+				{!loading && !candidates.length ? (
+					<p className="px-2 py-1.5 text-muted-foreground text-xs">
+						{t("wikiCompletion.empty")}
+					</p>
+				) : null}
+				{candidates.map((candidate, index) => {
+					const detail =
+						candidate.kind === "file" ? candidate.path : candidate.detail;
+					const isAliasPlaceholder =
+						candidate.kind === "alias" && !candidate.label;
+					return (
+						<button
+							key={`${candidate.kind}:${candidate.path}:${candidate.insertText}:${candidate.alias ?? ""}`}
+							type="button"
+							role="option"
+							aria-selected={index === selectedIndex}
+							className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs outline-none ${
+								index === selectedIndex
+									? "bg-accent text-accent-foreground"
+									: "hover:bg-accent/60"
+							}`}
+							onMouseDown={(event) => event.preventDefault()}
+							onClick={() => selectCandidate(candidate)}
+						>
+							<CandidateIcon kind={candidate.kind} />
+							<span className="min-w-0 flex-1">
+								<span
+									className={`block truncate font-medium ${
+										isAliasPlaceholder ? "text-muted-foreground" : ""
+									}`}
+								>
+									{isAliasPlaceholder
+										? t("wikiCompletion.displayName")
+										: candidate.label}
+								</span>
+								{detail ? (
+									<span className="block truncate text-muted-foreground">
+										{detail}
+									</span>
+								) : null}
+							</span>
+							{candidate.kind === "alias" ? (
+								<CornerDownLeft
+									className="mt-2 size-4 shrink-0 text-muted-foreground"
+									aria-hidden
+								/>
+							) : null}
+						</button>
+					);
+				})}
+			</div>
+			<p className="shrink-0 border-t px-2 py-1.5 text-[11px] text-muted-foreground text-center leading-4">
+				{t("wikiCompletion.syntaxHint")}
+			</p>
 		</div>
 	);
 }

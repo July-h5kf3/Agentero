@@ -321,6 +321,7 @@ impl WikiIndex {
                     path: document.path.clone(),
                     insert_text: target.clone(),
                     label: file_name.clone(),
+                    detail: None,
                     alias: None,
                     fragment: None,
                 });
@@ -333,6 +334,7 @@ impl WikiIndex {
                             path: document.path.clone(),
                             insert_text: target.clone(),
                             label: alias.clone(),
+                            detail: None,
                             alias: Some(alias.clone()),
                             fragment: None,
                         });
@@ -348,6 +350,7 @@ impl WikiIndex {
                             path: document.path.clone(),
                             insert_text: format!("{}#{}", target, heading.text),
                             label,
+                            detail: Some(format!("H{}", heading.level)),
                             alias: None,
                             fragment: Some(LinkFragment::Heading {
                                 path: heading.path.clone(),
@@ -364,6 +367,7 @@ impl WikiIndex {
                             path: document.path.clone(),
                             insert_text: format!("{}#^{}", target, block.id),
                             label: format!("^{}", block.id),
+                            detail: (!block.preview.is_empty()).then(|| block.preview.clone()),
                             alias: None,
                             fragment: Some(LinkFragment::Block {
                                 id: block.id.clone(),
@@ -762,10 +766,12 @@ mod tests {
                 headings: vec![HeadingAnchor {
                     text: "Overview".into(),
                     path: vec!["Canonical".into(), "Overview".into()],
+                    level: 2,
                     line: 4,
                 }],
                 blocks: vec![BlockAnchor {
                     id: "验收块".into(),
+                    preview: "Canonical block preview".into(),
                     line: 8,
                 }],
             }],
@@ -785,6 +791,7 @@ mod tests {
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
             .expect("heading candidate");
         assert_eq!(heading.insert_text, "Canonical#Overview");
+        assert_eq!(heading.detail.as_deref(), Some("H2"));
 
         let block = index
             .search("验收")
@@ -792,6 +799,7 @@ mod tests {
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Block)
             .expect("block candidate");
         assert_eq!(block.insert_text, "Canonical#^验收块");
+        assert_eq!(block.detail.as_deref(), Some("Canonical block preview"));
     }
 
     #[test]
@@ -853,10 +861,12 @@ mod tests {
             blocks: vec![
                 BlockAnchor {
                     id: "验收块".into(),
+                    preview: "可精确定位到本段。".into(),
                     line: 17,
                 },
                 BlockAnchor {
                     id: "asb".into(),
+                    preview: "请仅在 Agentero 内将本文件改名。".into(),
                     line: 21,
                 },
             ],
@@ -873,7 +883,13 @@ mod tests {
         );
 
         assert_eq!(blocks.len(), 2);
-        assert!(blocks.iter().any(|candidate| candidate.label == "^验收块"));
-        assert!(blocks.iter().any(|candidate| candidate.label == "^asb"));
+        assert!(blocks.iter().any(|candidate| {
+            candidate.label == "^验收块"
+                && candidate.detail.as_deref() == Some("可精确定位到本段。")
+        }));
+        assert!(blocks.iter().any(|candidate| {
+            candidate.label == "^asb"
+                && candidate.detail.as_deref() == Some("请仅在 Agentero 内将本文件改名。")
+        }));
     }
 }

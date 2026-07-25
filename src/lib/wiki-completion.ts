@@ -3,7 +3,8 @@ import type { WikiSearchCandidate } from "@/lib/wiki";
 export type WikiCompletionRequest =
 	| { kind: "file"; query: string }
 	| { kind: "heading"; target: string; query: string }
-	| { kind: "block"; target: string; query: string };
+	| { kind: "block"; target: string; query: string }
+	| { kind: "alias"; target: string; query: string };
 
 /**
  * Interpret the text after a live `[[` trigger. The caller owns where that
@@ -13,7 +14,17 @@ export type WikiCompletionRequest =
 export function parseWikiCompletionQuery(
 	draft: string,
 ): WikiCompletionRequest | null {
-	if (/[\]\n|]/.test(draft)) return null;
+	if (/[\]\n]/.test(draft)) return null;
+	const alias = draft.indexOf("|");
+	if (alias >= 0) {
+		const target = draft.slice(0, alias).trim();
+		if (!target) return null;
+		return {
+			kind: "alias",
+			target,
+			query: draft.slice(alias + 1),
+		};
+	}
 	const hash = draft.indexOf("#");
 	if (hash < 0) {
 		const caret = draft.indexOf("^");
@@ -88,7 +99,7 @@ export function findWikiCompletionMatch(
 	const start = before.lastIndexOf("[[");
 	if (start < 0) return null;
 	const raw = before.slice(start + 2);
-	if (raw !== expectedRaw || /[\]\n|]/.test(raw)) return null;
+	if (raw !== expectedRaw || /[\]\n]/.test(raw)) return null;
 	const end = text.startsWith("]]", cursorOffset)
 		? cursorOffset + 2
 		: cursorOffset;

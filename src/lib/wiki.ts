@@ -49,10 +49,12 @@ export type OutgoingLinksResponse = {
 };
 
 export type WikiSearchCandidate = {
-	kind: "file" | "heading" | "block";
+	kind: "file" | "heading" | "block" | "alias";
 	path: string;
 	insertText: string;
 	label: string;
+	/** Context shown below the label: heading level or block text preview. */
+	detail?: string;
 	/** Display alias chosen by the user; `insertText` stays canonical. */
 	alias?: string;
 	fragment?: LinkFragment;
