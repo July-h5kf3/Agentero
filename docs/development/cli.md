@@ -13,7 +13,7 @@
 | 范围 | Vault **创建 / 管理 / 发现 / 暴露** + 文献库基础能力（catalog、入库、资源、导出） |
 | 设计取向 | **给外部 Agent / 脚本当工具用**（稳定 JSON、可组合、可发现），不是第二个 Agent 运行时 |
 | **代码位置** | 仓库根 **`cli/`**（独立 crate，与 `src-tauri` 并列） |
-| **domain 复用** | **不迁 core**；path 依赖 `src-tauri` 的 `agentero_lib`，直接 `use services::{vault,catalog,lookup,…}` |
+| **domain 复用** | path 依赖 `src-tauri` 的 `agentero_lib`，直接 `use features::{vault,catalog,import,…}` + `core::error` |
 | 实现状态 | **MVP**：`vault` / `tree` / `paper` / `import` / `export` / `config`；集成测试 `cli/tests/cli_mvp.rs` |
 | **Vault skill** | Create Vault 种子 **`templates/vault/.agents/skills/agentero-cli/SKILL.md`** → `.agents/skills/agentero-cli/` |
 
@@ -107,10 +107,10 @@ binary is unavailable, it reports that fact and falls back to Vault files.
 
 | 域 | 含义 | 现网 Host 锚点 |
 |---|---|---|
-| **Vault 生命周期** | 创建、识别、校验、摘要 | `vault_create`、`services/vault` |
+| **Vault 生命周期** | 创建、识别、校验、摘要 | `vault_create`、`features/vault` |
 | **发现** | 当前 vault 是谁、树形结构、catalog 有哪些 paper | 上溯解析 + catalog + 目录扫描 |
 | **暴露** | 把库内容以稳定结构交给 Agent/脚本（路径、meta、资源状态） | `paper_list` / `paper_get` + 落盘状态探测 |
-| **文献基础** | 标识符入库、补 PDF/TeX、`PAPER.md`、bib 导入导出 | `lookup_*` / `paper_*` import-export / parse |
+| **文献基础** | 标识符入库、补 PDF/TeX、`PAPER.md`、bib 导入导出 | `features/import`（Tauri 仍暴露 `lookup_*` / `paper_*`） |
 | **双链索引（只读 + 重建）** | 反链查询、图导出、重建 | `graph_*`（不依赖 Agent） |
 | **Catalog 标记** | `is_read` / `tags` 等字段读写（**仅字段**，不触发精读） | `paper_set_is_read`、`paper_set_tags` |
 
@@ -462,73 +462,74 @@ translator_base_url = "https://translator.philfan.cn"
 
 ### 6.0 底层能力能否复用？（结论：**能，且应以复用为主**）
 
-当前仓库已是 **「薄 command + 厚 service」**，CLI 应对齐同一 service，**禁止**再写一套 catalog/入库逻辑。
+当前 Host 为 **feature-first**：每域 `features/<name>/` 内含业务逻辑 + 薄 `commands` 壳。CLI 对齐同一 feature API，**禁止**再写一套 catalog/入库逻辑。
 
 #### 分层现状（代码事实）
 
 ```text
-commands/*     → 参数校验、ApiResult 包装、部分 State/AppHandle
-services/*     → 真正的业务（文件系统、SQLite、HTTP、liteparse、wiki）
+features/<domain>/commands.rs  → 参数校验、ApiResult 包装、部分 State/AppHandle
+features/<domain>/             → 真正的业务（文件系统、SQLite、HTTP、liteparse、wiki）
+core/                          → error、fs、paths、log_util
+app/                           → 装配 / 菜单 / command 注册（仅 Desktop）
 ```
 
 | 模块 | 路径 | 是否依赖 `tauri` | CLI 复用 |
 |---|---|---|---|
-| `services/vault` | `create_vault` 等 | **否** | ✅ 直接 `use` |
-| `services/catalog` | `papers::list_all/get/delete/set_is_read/set_tags/add_tags/remove_tags/list_all_tags` | **否** | ✅ 直接 `use` |
-| `services/lookup` | `import_by_identifier`、`download_paper_assets`、export/import | **否** | ✅ 直接 `use`（async） |
-| `services/pdf_parse` | `parse_paper_body` | **否** | ✅ 直接 `use` |
-| `services/wiki` | 索引 / 反链 / 图 | **service 本身否**；`commands/graph` 用 `State<WikiIndexState>` | ✅ 调 service；CLI 自建 `WikiIndexState` 或每次 rebuild |
-| `error` / `ApiResult` | 统一错误 | **否** | ✅ 可共用；CLI 映射到退出码 + JSON |
-| `commands/vault|paper|lookup` | 薄包装 | 仅 `#[tauri::command]` 宏 | ⚠️ 不调用 command；CLI 自己做 argv → 调 service |
-| `services/agent/*` | ACP / Codex / registry | **是**（`AppHandle`/`Emitter`） | ❌ **不复用、不链接**（CLI 无 BYOA） |
-| `commands/window`、菜单 | GUI | **是** | ❌ |
+| `features/vault` | `create_vault` 等 | **否** | ✅ 直接 `use` |
+| `features/catalog` | `papers::list_all/get/delete/set_is_read/set_tags/…` | **否** | ✅ 直接 `use` |
+| `features/import` | `import_by_identifier`、`download_paper_assets`、export/import | **否** | ✅ 直接 `use`（async） |
+| `features/import/pdf_parse` | `parse_paper_body` | **否** | ✅ 直接 `use` |
+| `features/wiki` | 索引 / 反链 / 图 | **feature 本身否**；`commands` 用 `State<WikiIndexState>` | ✅ 调 feature；CLI 自建 `WikiIndexState` 或每次 rebuild |
+| `core::error` / `ApiResult` | 统一错误 | **否** | ✅ 可共用；CLI 映射到退出码 + JSON |
+| `features/*/commands` | 薄包装 | 仅 `#[tauri::command]` 宏 | ⚠️ 不调用 command；CLI 自己做 argv → 调 feature |
+| `features/agent/*` | ACP / Codex / registry | **是**（`AppHandle`/`Emitter`） | ❌ **不复用、不链接**（CLI 无 BYOA） |
+| `features/window`、菜单 | GUI | **是** | ❌ |
 
 证据要点：
 
-- `vault_create` / `paper_list` / `lookup_import` 等 command 本体只是 `PathBuf` 校验后调用 `services::*`，**无** `AppHandle`。
-- 全仓 `services/` 里 **`use tauri` 仅出现在 `services/agent/events.rs` 及 agent 运行时**；vault/catalog/lookup/pdf_parse/wiki 与 Tauri 解耦。
-- `agentero_lib` 已是 `crate-type = ["staticlib", "cdylib", "rlib"]`，可被外部 crate **path 依赖** 并 `use agentero_lib::services::…`（实现时注意 service 项需 `pub`，若现为 `pub(crate)` 则放宽可见性或加 thin re-export）。
+- `vault_create` / `paper_list` / `lookup_import` 等 command 本体只是 `PathBuf` 校验后调用 feature API，**无** `AppHandle`（部分入库命令会传 progress emitter）。
+- vault / catalog / import / pdf_parse / wiki 与 Tauri 解耦；`agent` 与部分 import 进度路径用 `AppHandle`/`Emitter`。
+- `agentero_lib` 已是 `crate-type = ["staticlib", "cdylib", "rlib"]`，可被外部 crate **path 依赖** 并 `use agentero_lib::features::…`。
 
-#### 目录布局（已拍板）
+#### 目录布局
 
-**放在仓库根 `cli/`，不迁 core，不放进 `src-tauri`。**
+**放在仓库根 `cli/`，不放进 `src-tauri`。**
 
 ```text
 motif/
-├── Cargo.toml                 # workspace（实现时新增）
-│                              # members = ["src-tauri", "cli"]
-├── cli/                       # ← CLI crate（独立目录）
+├── Cargo.toml                 # workspace members = ["src-tauri", "cli"]
+├── cli/                       # ← CLI crate
 │   ├── Cargo.toml             # name = "agentero-cli"；bin name = "agentero"
 │   │                          # agentero_lib = { path = "../src-tauri" }
 │   └── src/
-│       └── main.rs            # clap → services::*
-├── src-tauri/                 # 桌面 Host（不变）
-│   └── src/services/          # domain 仍在此；CLI path 复用
-│       ├── vault / catalog / lookup / pdf_parse / wiki
-│       └── agent/             # BYOA：仅桌面；CLI 禁止 use
+│       └── main.rs            # clap → features::*
+├── src-tauri/
+│   └── src/
+│       ├── app/               # 装配（Desktop only）
+│       ├── core/              # error / fs / paths
+│       └── features/          # vault · catalog · import · wiki · …
+│           └── agent/         # BYOA：仅桌面；CLI 禁止 use
 └── src/                       # React 前端
 ```
 
 | 决策 | 结论 |
 |---|---|
 | CLI 路径 | **`cli/`**（与 `src-tauri`、`src` 并列） |
-| core 迁移 | **现阶段不做**；domain 继续住在 `src-tauri/src/services/*` |
+| Host 布局 | **feature-first**（`features/*` + `core/` + `app/`） |
 | 依赖方向 | `cli` → path → `agentero_lib`（`src-tauri`） |
-| 不用 | `src-tauri/src/bin/*`、Node CLI、`crates/agentero-core`（可留作远期选项） |
+| 不用 | `src-tauri/src/bin/*`、Node CLI 作为主路径 |
 
-**代价（已知且接受）**：CLI 编译会带上 `agentero_lib` 的依赖图（含 tauri 等），即使不初始化 Tauri、不调用 `services/agent`。纪律：CLI 源码 **禁止** `use agentero_lib::services::agent`。
-
-**远期（非现在）**：若体积/边界需要，再把无 Agent 的 service 抽到独立 core；当前文档与排期 **不** 以此为前提。
+**代价（已知且接受）**：CLI 编译会带上 `agentero_lib` 的依赖图（含 tauri 等），即使不初始化 Tauri、不调用 `features::agent`。纪律：CLI 源码 **禁止** `use agentero_lib::features::agent`。
 
 #### 复用关系
 
 ```text
-┌─ commands/*          (Tauri only)
+┌─ features/*/commands   (Tauri only)
 Desktop ─┤
-         └─ services/{vault,catalog,lookup,wiki,pdf_parse}  ←─┐
-                                                              │ 同一实现（不迁）
-cli/ (clap, bin: agentero) ── path ──► agentero_lib ──────────┘
-Desktop-only: services/agent/*   （CLI 不引用）
+         └─ features/{vault,catalog,import,wiki,…}  ←─┐
+                                                      │ 同一实现
+cli/ (clap, bin: agentero) ── path ──► agentero_lib ──┘
+Desktop-only: features/agent/*   （CLI 不引用）
 ```
 
 #### CLI 需要「新写」的部分（非业务重复）
@@ -537,16 +538,15 @@ Desktop-only: services/agent/*   （CLI 不引用）
 |---|---|---|
 | clap 命令树 / argv | `cli/src/` | 无现成 |
 | Vault 上溯解析、`config.toml` | `cli/src/` | Host 目前多在前端；CLI 自管 |
-| `tree` / `suggestedReads` 编排 | `cli/src/` | service 结果 + 磁盘 `exists` |
+| `tree` / `suggestedReads` 编排 | `cli/src/` | feature 结果 + 磁盘 `exists` |
 | text 表格、退出码、JSON 包装 | `cli/src/` | 展示层 |
 | `WikiIndexState` 生命周期 | `cli/src/` | GUI 用 `manage`；CLI 进程内新建 |
 
 #### 语义一致性纪律
 
-- 入库 / 删 catalog / parse 规则 **只改** `src-tauri` 的 service；UI 与 CLI 同步受益。
+- 入库 / 删 catalog / parse 规则 **只改** `src-tauri` 的 feature；UI 与 CLI 同步受益。
 - CLI 的 `--json` 字段尽量对齐现有 `PaperRecord` / `LookupImportResult` 等 serde 形状，避免第三套 DTO。
-- **禁止** CLI 直接 `INSERT` catalog 或手写 paper 目录绕过 `lookup`/`catalog`。
-- service 若当前 `pub(crate)`，实现 CLI 时改为 `pub` 或经 `lib.rs` re-export（**小改可见性，不迁模块**）。
+- **禁止** CLI 直接 `INSERT` catalog 或手写 paper 目录绕过 `features::import` / `features::catalog`。
 
 ### 6.1 技术栈
 
@@ -575,9 +575,9 @@ Desktop-only: services/agent/*   （CLI 不引用）
            │                           │ path dep
            ▼                           ▼
 ┌──────────────────────────────────────────────────┐
-│  agentero_lib::services（仍在 src-tauri，不迁）     │
-│  vault · catalog · lookup · wiki · pdf_parse     │
-│  （agent/* 仅 Desktop 使用）                        │
+│  agentero_lib::features + core                   │
+│  vault · catalog · import · wiki · …             │
+│  （features::agent 仅 Desktop 使用）               │
 └──────────────────────────────────────────────────┘
            │
            ▼

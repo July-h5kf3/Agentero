@@ -182,15 +182,14 @@ interface Paper extends PaperMetadata {
 ### 5.1 模块划分
 
 ```text
-src-tauri/src/
-  services/catalog/
+src-tauri/src/features/
+  catalog/
     mod.rs          # 打开/关闭连接、per-vault 连接池（当前 1 vault）
     schema.rs       # DDL + migrations
     papers.rs       # CRUD、列表过滤、按 id 查询
-    export.rs       # → PAPERS.md / library.bib 字符串或写路径
-  commands/
-    catalog.rs      # 或并入 paper.rs：list / get / upsert / export
-    vault.rs        # create/open 时 ensure_catalog
+    commands.rs     # paper_list / get / delete / set_tags / …
+  vault/
+    commands.rs     # create/open 时 ensure_catalog
 ```
 
 依赖：**`rusqlite`**（`bundled` feature，避免系统 sqlite 差异）。

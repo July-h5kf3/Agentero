@@ -42,7 +42,22 @@
 - [`paper-import-pipeline.md`](paper-import-pipeline.md)：多入口入库现状、统一 `paper_commit` / `afterPaperImport` 设计与分期（**设计已落库**）。
 - [`connector.md`](connector.md)：Zotero Connector 兼容 HTTP 服务（方案一：本机 23119；MVP 已落地）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型（与 V0.7 文献引用图边界见文内 §6.5）。
-- CLI（MVP）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**（bin `agentero`）；不迁 core，复用 `services/*`；Vault 管理/发现/暴露；无 BYOA。
+- CLI（MVP）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**（bin `agentero`）；path 复用 `features::{vault,catalog,import}` + `core::error`；Vault 管理/发现/暴露；无 BYOA。
+
+## Host 源码布局（feature-first）
+
+```text
+src-tauri/src/
+  app/           # run()、menu、logging、command 注册
+  core/          # error、fs、paths、log_util
+  features/      # 每域一文件夹（与前端 src/lib 对齐）
+    vault/ catalog/ import/ wiki/ agent/ connector/ remote/ …
+    # 每域：mod.rs 对外 API + commands.rs 薄壳 + 按需 models.rs
+  lib.rs         # mod 声明 + pub 导出
+  main.rs
+```
+
+入库相关在 **`features/import/`**（原 `lookup` + `pdf_parse` + `paper_import` + Zotero 迁移命令）。魔棒 Tauri command 名仍为 `lookup_import` 等（契约不变）。
 
 ## 交叉引用
 
