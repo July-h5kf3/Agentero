@@ -1,9 +1,16 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, ComponentPropsWithRef } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 
 import { cn } from "@/lib/core/utils";
 
-export { Group as ResizableGroup, Panel as ResizablePanel };
+export { Panel as ResizablePanel };
+
+export function ResizableGroup({
+	className,
+	...props
+}: ComponentPropsWithRef<typeof Group>) {
+	return <Group className={cn("isolate", className)} {...props} />;
+}
 
 /**
  * Editor-style sash (VS Code / Cursor): 1px line, wider invisible hit target.
