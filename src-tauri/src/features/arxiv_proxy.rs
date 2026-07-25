@@ -4,7 +4,7 @@ use tauri::http::{header, Response, StatusCode};
 
 const ARXIV_ORIGIN: &str = "https://arxiv.org";
 const READER_STYLE: &str =
-    "<style>.desktop_header, nav.ltx_TOC, .btn.btn-primary.hover-rp-button { display: none !important; }</style>";
+    "<style>.desktop_header, nav.ltx_TOC, .btn.btn-primary.hover-rp-button, #footer, .ltx_page_footer { display: none !important; }</style>";
 
 fn response(status: StatusCode, content_type: &str, body: Vec<u8>) -> Response<Vec<u8>> {
     Response::builder()
