@@ -53,22 +53,6 @@ export function normalizeHighlightColor(
 }
 
 // Static class maps (Tailwind cannot see dynamically built class names).
-const FILL: Record<HighlightColor, string> = {
-	yellow: "bg-amber-300/40 dark:bg-amber-400/30",
-	green: "bg-green-300/40 dark:bg-green-400/30",
-	blue: "bg-sky-300/40 dark:bg-sky-400/30",
-	pink: "bg-pink-300/40 dark:bg-pink-400/30",
-	purple: "bg-purple-300/40 dark:bg-purple-400/30",
-};
-
-const FILL_ACTIVE: Record<HighlightColor, string> = {
-	yellow: "bg-amber-300/60 dark:bg-amber-400/45",
-	green: "bg-green-300/60 dark:bg-green-400/45",
-	blue: "bg-sky-300/60 dark:bg-sky-400/45",
-	pink: "bg-pink-300/60 dark:bg-pink-400/45",
-	purple: "bg-purple-300/60 dark:bg-purple-400/45",
-};
-
 const SWATCH: Record<HighlightColor, string> = {
 	yellow: "bg-amber-400",
 	green: "bg-green-400",
@@ -84,15 +68,6 @@ const BORDER: Record<HighlightColor, string> = {
 	pink: "border-pink-400",
 	purple: "border-purple-400",
 };
-
-/** Translucent fill class for a highlight band. */
-export function highlightFillClass(
-	color: string | undefined,
-	active: boolean,
-): string {
-	const c = normalizeHighlightColor(color);
-	return active ? FILL_ACTIVE[c] : FILL[c];
-}
 
 /** Solid dot class for the color picker swatch. */
 export function swatchColorClass(color: HighlightColor): string {

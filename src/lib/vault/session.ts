@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 
 /** Per-window vault (sessionStorage — isolated across ⌘N windows). */
@@ -68,59 +69,40 @@ export function getSavedVaultPath(opts?: {
 }
 
 export function getRecentVaults(): string[] {
-	try {
-		const raw = localStorage.getItem(RECENT_VAULTS_KEY);
-		if (!raw) {
-			// Migrate single last-vault into recents once.
-			const last = getLastVaultPath();
-			return last ? [last] : [];
-		}
-		const parsed = JSON.parse(raw) as unknown;
-		if (!Array.isArray(parsed)) return [];
-		const list = parsed.filter(
-			(p): p is string =>
-				typeof p === "string" && p.length > 0 && !isEphemeralRemoteHandle(p),
-		);
-		// Self-heal: strip remote handles written by older builds.
-		if (list.length !== parsed.length) {
-			try {
-				localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(list));
-			} catch {
-				// ignore
-			}
-		}
-		return list;
-	} catch {
-		return [];
+	// null sentinel = key missing (migrate from single last-vault once).
+	const parsed = readJsonStorage<unknown>(RECENT_VAULTS_KEY, null);
+	if (parsed == null) {
+		const last = getLastVaultPath();
+		return last ? [last] : [];
 	}
+	if (!Array.isArray(parsed)) return [];
+	const list = parsed.filter(
+		(p): p is string =>
+			typeof p === "string" && p.length > 0 && !isEphemeralRemoteHandle(p),
+	);
+	// Self-heal: strip remote handles written by older builds.
+	if (list.length !== parsed.length) {
+		writeJsonStorage(RECENT_VAULTS_KEY, list);
+	}
+	return list;
 }
 
 export function rememberRecentVault(path: string): void {
 	const normalized = path.replace(/[\\/]+$/, "");
 	if (!normalized || isEphemeralRemoteHandle(normalized)) return;
-	try {
-		const next = [
-			normalized,
-			...getRecentVaults().filter(
-				(p) => p.replace(/[\\/]+$/, "") !== normalized,
-			),
-		].slice(0, MAX_RECENT_VAULTS);
-		localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(next));
-	} catch {
-		// ignore
-	}
+	const next = [
+		normalized,
+		...getRecentVaults().filter((p) => p.replace(/[\\/]+$/, "") !== normalized),
+	].slice(0, MAX_RECENT_VAULTS);
+	writeJsonStorage(RECENT_VAULTS_KEY, next);
 }
 
 export function removeRecentVault(path: string): void {
 	const normalized = path.replace(/[\\/]+$/, "");
-	try {
-		const next = getRecentVaults().filter(
-			(p) => p.replace(/[\\/]+$/, "") !== normalized,
-		);
-		localStorage.setItem(RECENT_VAULTS_KEY, JSON.stringify(next));
-	} catch {
-		// ignore
-	}
+	const next = getRecentVaults().filter(
+		(p) => p.replace(/[\\/]+$/, "") !== normalized,
+	);
+	writeJsonStorage(RECENT_VAULTS_KEY, next);
 }
 
 export function saveVaultPath(path: string | null): void {

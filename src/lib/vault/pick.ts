@@ -1,18 +1,12 @@
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import i18n from "@/i18n";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	remoteEnsureVault,
 	remoteSessionIdFromHandle,
 } from "@/lib/vault/remote/remote-vault";
 import type { CreateVaultResult } from "@/lib/vault/types";
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 export async function pickVaultDirectory(): Promise<string | null> {
 	if (!isTauri()) {
@@ -59,15 +53,13 @@ export async function createVault(path: string): Promise<CreateVaultResult> {
 
 	const { logOp } = await import("@/lib/core/logger");
 	return logOp("createVault", { path }, async () => {
-		const result = await invoke<ApiResult<CreateVaultResult>>("vault_create", {
-			path,
-		});
-		if (!result.ok || !result.data) {
-			throw new Error(
-				result.error?.message ?? i18n.t("app:vault.createFailed"),
-			);
-		}
-		return result.data;
+		return invokeApi<CreateVaultResult>(
+			"vault_create",
+			{ path },
+			{
+				fallback: i18n.t("app:vault.createFailed"),
+			},
+		);
 	});
 }
 
@@ -87,15 +79,13 @@ export async function ensureVault(path: string): Promise<CreateVaultResult> {
 		if (remoteSessionId) {
 			return remoteEnsureVault(remoteSessionId);
 		}
-		const result = await invoke<ApiResult<CreateVaultResult>>("vault_ensure", {
-			path,
-		});
-		if (!result.ok || !result.data) {
-			throw new Error(
-				result.error?.message ?? i18n.t("app:vault.createFailed"),
-			);
-		}
-		return result.data;
+		return invokeApi<CreateVaultResult>(
+			"vault_ensure",
+			{ path },
+			{
+				fallback: i18n.t("app:vault.createFailed"),
+			},
+		);
 	});
 }
 

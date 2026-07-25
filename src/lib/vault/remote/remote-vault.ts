@@ -3,15 +3,9 @@
  * Design: `docs/development/remote-vault.md`
  */
 
-import { invoke } from "@tauri-apps/api/core";
-
+import { invokeApi } from "@/lib/core/ipc";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 export type FsCaps = {
 	atomicRename: boolean;
@@ -65,60 +59,35 @@ const RECENT_REMOTE_KEY = "agentero-recent-remote-vaults";
 const MAX_RECENT = 8;
 
 export function getRecentRemoteVaults(): RecentRemoteVault[] {
-	try {
-		const raw = localStorage.getItem(RECENT_REMOTE_KEY);
-		if (!raw) return [];
-		const parsed = JSON.parse(raw) as unknown;
-		if (!Array.isArray(parsed)) return [];
-		return parsed.filter(
-			(x): x is RecentRemoteVault =>
-				!!x &&
-				typeof x === "object" &&
-				(x as RecentRemoteVault).kind === "remote" &&
-				typeof (x as RecentRemoteVault).host === "string" &&
-				typeof (x as RecentRemoteVault).remotePath === "string",
-		);
-	} catch {
-		return [];
-	}
+	const parsed = readJsonStorage<unknown>(RECENT_REMOTE_KEY, []);
+	if (!Array.isArray(parsed)) return [];
+	return parsed.filter(
+		(x): x is RecentRemoteVault =>
+			!!x &&
+			typeof x === "object" &&
+			(x as RecentRemoteVault).kind === "remote" &&
+			typeof (x as RecentRemoteVault).host === "string" &&
+			typeof (x as RecentRemoteVault).remotePath === "string",
+	);
 }
 
 export function rememberRecentRemoteVault(entry: RecentRemoteVault): void {
-	try {
-		const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
-		const next = [
-			entry,
-			...getRecentRemoteVaults().filter(
-				(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
-			),
-		].slice(0, MAX_RECENT);
-		localStorage.setItem(RECENT_REMOTE_KEY, JSON.stringify(next));
-	} catch {
-		// ignore
-	}
+	const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+	const next = [
+		entry,
+		...getRecentRemoteVaults().filter(
+			(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
+		),
+	].slice(0, MAX_RECENT);
+	writeJsonStorage(RECENT_REMOTE_KEY, next);
 }
 
 export function removeRecentRemoteVault(entry: RecentRemoteVault): void {
-	try {
-		const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
-		const next = getRecentRemoteVaults().filter(
-			(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
-		);
-		localStorage.setItem(RECENT_REMOTE_KEY, JSON.stringify(next));
-	} catch {
-		// ignore
-	}
-}
-
-async function unwrap<T>(
-	promise: Promise<ApiResult<T>>,
-	fallback: string,
-): Promise<T> {
-	const result = await promise;
-	if (!result.ok || result.data === undefined) {
-		throw new Error(result.error?.message ?? fallback);
-	}
-	return result.data;
+	const key = `${entry.host}\0${entry.user ?? ""}\0${entry.remotePath}`;
+	const next = getRecentRemoteVaults().filter(
+		(e) => `${e.host}\0${e.user ?? ""}\0${e.remotePath}` !== key,
+	);
+	writeJsonStorage(RECENT_REMOTE_KEY, next);
 }
 
 export async function remoteConnect(args: {
@@ -129,9 +98,12 @@ export async function remoteConnect(args: {
 	if (!isTauri()) {
 		throw new Error("Remote vault requires the desktop app");
 	}
-	return unwrap(
-		invoke<ApiResult<RemoteSessionInfo>>("remote_connect", { args }),
-		"Failed to connect remote vault",
+	return invokeApi<RemoteSessionInfo>(
+		"remote_connect",
+		{ args },
+		{
+			fallback: "Failed to connect remote vault",
+		},
 	);
 }
 
@@ -145,21 +117,26 @@ export type RemoteVaultEnsureResult = {
 export async function remoteEnsureVault(
 	sessionId: string,
 ): Promise<RemoteVaultEnsureResult> {
-	return unwrap(
-		invoke<ApiResult<RemoteVaultEnsureResult>>("remote_vault_ensure", {
+	return invokeApi<RemoteVaultEnsureResult>(
+		"remote_vault_ensure",
+		{
 			args: { sessionId },
-		}),
-		"Failed to update remote vault skills",
+		},
+		{
+			fallback: "Failed to update remote vault skills",
+		},
 	);
 }
 
 export async function remoteDisconnect(sessionId: string): Promise<void> {
 	if (!isTauri()) return;
-	await unwrap(
-		invoke<ApiResult<null>>("remote_disconnect", {
-			args: { sessionId },
-		}),
-		"Failed to disconnect",
+	await invokeApi<null>(
+		"remote_disconnect",
+		{ args: { sessionId } },
+		{
+			fallback: "Failed to disconnect",
+			allowVoid: true,
+		},
 	);
 }
 
@@ -167,11 +144,14 @@ export async function remoteList(
 	sessionId: string,
 	path = "",
 ): Promise<RemoteDirEntry[]> {
-	return unwrap(
-		invoke<ApiResult<RemoteDirEntry[]>>("remote_list", {
+	return invokeApi<RemoteDirEntry[]>(
+		"remote_list",
+		{
 			args: { sessionId, path },
-		}),
-		"Failed to list remote directory",
+		},
+		{
+			fallback: "Failed to list remote directory",
+		},
 	);
 }
 
@@ -179,11 +159,12 @@ export async function remoteReadText(
 	sessionId: string,
 	path: string,
 ): Promise<string> {
-	return unwrap(
-		invoke<ApiResult<string>>("remote_read_text", {
-			args: { sessionId, path },
-		}),
-		"Failed to read remote file",
+	return invokeApi<string>(
+		"remote_read_text",
+		{ args: { sessionId, path } },
+		{
+			fallback: "Failed to read remote file",
+		},
 	);
 }
 
@@ -192,36 +173,29 @@ export async function remoteWriteText(
 	path: string,
 	content: string,
 ): Promise<void> {
-	await unwrap(
-		invoke<ApiResult<null>>("remote_write_text", {
+	await invokeApi<null>(
+		"remote_write_text",
+		{
 			args: { sessionId, path, content },
-		}),
-		"Failed to write remote file",
+		},
+		{
+			fallback: "Failed to write remote file",
+			allowVoid: true,
+		},
 	);
-}
-
-export async function remoteReadBytes(
-	sessionId: string,
-	path: string,
-): Promise<Uint8Array> {
-	const data = await unwrap(
-		invoke<ApiResult<number[]>>("remote_read_bytes", {
-			args: { sessionId, path },
-		}),
-		"Failed to read remote bytes",
-	);
-	return new Uint8Array(data);
 }
 
 export async function remoteMkdir(
 	sessionId: string,
 	path: string,
 ): Promise<void> {
-	await unwrap(
-		invoke<ApiResult<null>>("remote_mkdir", {
-			args: { sessionId, path },
-		}),
-		"Failed to mkdir",
+	await invokeApi<null>(
+		"remote_mkdir",
+		{ args: { sessionId, path } },
+		{
+			fallback: "Failed to mkdir",
+			allowVoid: true,
+		},
 	);
 }
 
@@ -230,11 +204,15 @@ export async function remoteRemove(
 	path: string,
 	recursive = true,
 ): Promise<void> {
-	await unwrap(
-		invoke<ApiResult<null>>("remote_remove", {
+	await invokeApi<null>(
+		"remote_remove",
+		{
 			args: { sessionId, path, recursive },
-		}),
-		"Failed to remove remote path",
+		},
+		{
+			fallback: "Failed to remove remote path",
+			allowVoid: true,
+		},
 	);
 }
 
@@ -243,11 +221,15 @@ export async function remoteWriteBytes(
 	path: string,
 	data: Uint8Array,
 ): Promise<void> {
-	await unwrap(
-		invoke<ApiResult<null>>("remote_write_bytes", {
+	await invokeApi<null>(
+		"remote_write_bytes",
+		{
 			args: { sessionId, path, data: Array.from(data) },
-		}),
-		"Failed to write remote bytes",
+		},
+		{
+			fallback: "Failed to write remote bytes",
+			allowVoid: true,
+		},
 	);
 }
 
@@ -255,11 +237,14 @@ export async function remotePaperGet(
 	sessionId: string,
 	args: { path?: string; id?: string },
 ): Promise<unknown> {
-	return unwrap(
-		invoke<ApiResult<unknown>>("remote_paper_get", {
+	return invokeApi<unknown>(
+		"remote_paper_get",
+		{
 			args: { sessionId, path: args.path, id: args.id },
-		}),
-		"Failed to get paper",
+		},
+		{
+			fallback: "Failed to get paper",
+		},
 	);
 }
 
@@ -279,36 +264,26 @@ export function parseRemoteJoinedPath(
 }
 
 export async function remotePaperList(sessionId: string): Promise<unknown[]> {
-	return unwrap(
-		invoke<ApiResult<unknown[]>>("remote_paper_list", {
-			args: { sessionId },
-		}),
-		"Failed to list papers",
+	return invokeApi<unknown[]>(
+		"remote_paper_list",
+		{ args: { sessionId } },
+		{
+			fallback: "Failed to list papers",
+		},
 	);
 }
 
 export async function remotePaperRescan(
 	sessionId: string,
 ): Promise<{ count: number }> {
-	return unwrap(
-		invoke<ApiResult<{ count: number }>>("remote_paper_rescan", {
+	return invokeApi<{ count: number }>(
+		"remote_paper_rescan",
+		{
 			args: { sessionId },
-		}),
-		"Failed to rescan",
-	);
-}
-
-export async function remoteAgentDiscover(sessionId: string): Promise<{
-	destination: string;
-	found: { bin: string; path: string }[];
-}> {
-	return unwrap(
-		invoke<
-			ApiResult<{ destination: string; found: { bin: string; path: string }[] }>
-		>("remote_agent_discover", {
-			args: { sessionId, bins: [] },
-		}),
-		"Failed to discover remote agents",
+		},
+		{
+			fallback: "Failed to rescan",
+		},
 	);
 }
 
@@ -322,11 +297,14 @@ export type RemoteAgentScanResponse = {
 export async function remoteAgentScan(
 	sessionId: string,
 ): Promise<RemoteAgentScanResponse> {
-	return unwrap(
-		invoke<ApiResult<RemoteAgentScanResponse>>("remote_agent_scan", {
+	return invokeApi<RemoteAgentScanResponse>(
+		"remote_agent_scan",
+		{
 			args: { sessionId },
-		}),
-		"Failed to scan remote agents",
+		},
+		{
+			fallback: "Failed to scan remote agents",
+		},
 	);
 }
 
@@ -335,11 +313,14 @@ export async function remoteAgentProbe(
 	sessionId: string,
 	templateId: string,
 ): Promise<import("@/lib/agent").ProbeResult> {
-	return unwrap(
-		invoke<ApiResult<import("@/lib/agent").ProbeResult>>("remote_agent_probe", {
+	return invokeApi<import("@/lib/agent").ProbeResult>(
+		"remote_agent_probe",
+		{
 			args: { sessionId, templateId },
-		}),
-		"Failed to probe remote agent",
+		},
+		{
+			fallback: "Failed to probe remote agent",
+		},
 	);
 }
 
@@ -351,11 +332,15 @@ export async function remoteAgentOpenInstallTerminal(
 	sessionId: string,
 	templateId: string,
 ): Promise<void> {
-	await unwrap(
-		invoke<ApiResult<null>>("remote_agent_open_install_terminal", {
+	await invokeApi<null>(
+		"remote_agent_open_install_terminal",
+		{
 			args: { sessionId, templateId },
-		}),
-		"Failed to open remote install terminal",
+		},
+		{
+			fallback: "Failed to open remote install terminal",
+			allowVoid: true,
+		},
 	);
 }
 
@@ -370,10 +355,9 @@ export type HostIdentity = {
 
 /** Local machine hostname for Settings host badge. */
 export async function fetchHostIdentity(): Promise<HostIdentity> {
-	return unwrap(
-		invoke<ApiResult<HostIdentity>>("host_identity"),
-		"Failed to read host identity",
-	);
+	return invokeApi<HostIdentity>("host_identity", undefined, {
+		fallback: "Failed to read host identity",
+	});
 }
 
 export type RemoteHostIdentity = {
@@ -387,11 +371,14 @@ export type RemoteHostIdentity = {
 export async function fetchRemoteHostIdentity(
 	sessionId: string,
 ): Promise<RemoteHostIdentity> {
-	return unwrap(
-		invoke<ApiResult<RemoteHostIdentity>>("remote_host_identity", {
+	return invokeApi<RemoteHostIdentity>(
+		"remote_host_identity",
+		{
 			args: { sessionId },
-		}),
-		"Failed to read remote host identity",
+		},
+		{
+			fallback: "Failed to read remote host identity",
+		},
 	);
 }
 
@@ -400,11 +387,14 @@ export async function remoteCacheFile(
 	sessionId: string,
 	path: string,
 ): Promise<string> {
-	const r = await unwrap(
-		invoke<ApiResult<{ localPath: string }>>("remote_cache_file", {
+	const r = await invokeApi<{ localPath: string }>(
+		"remote_cache_file",
+		{
 			args: { sessionId, path },
-		}),
-		"Failed to cache remote file",
+		},
+		{
+			fallback: "Failed to cache remote file",
+		},
 	);
 	return r.localPath;
 }
@@ -420,11 +410,14 @@ export type RemoteCacheStats = {
 export async function remoteCacheStats(
 	sessionId?: string | null,
 ): Promise<RemoteCacheStats> {
-	return unwrap(
-		invoke<ApiResult<RemoteCacheStats>>("remote_cache_stats", {
+	return invokeApi<RemoteCacheStats>(
+		"remote_cache_stats",
+		{
 			args: { sessionId: sessionId ?? null },
-		}),
-		"Failed to read remote cache stats",
+		},
+		{
+			fallback: "Failed to read remote cache stats",
+		},
 	);
 }
 
@@ -432,11 +425,14 @@ export async function remoteCacheStats(
 export async function remoteCacheClear(
 	sessionId?: string | null,
 ): Promise<{ freedBytes: number }> {
-	return unwrap(
-		invoke<ApiResult<{ freedBytes: number }>>("remote_cache_clear", {
+	return invokeApi<{ freedBytes: number }>(
+		"remote_cache_clear",
+		{
 			args: { sessionId: sessionId ?? null },
-		}),
-		"Failed to clear remote cache",
+		},
+		{
+			fallback: "Failed to clear remote cache",
+		},
 	);
 }
 

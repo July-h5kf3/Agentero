@@ -2,7 +2,8 @@
  * Vault-wide full-text Markdown search via Host `vault_search`.
  * Powers the command palette's "In contents" tier (see command-palette.tsx).
  */
-import { invoke } from "@tauri-apps/api/core";
+
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 
 export type SearchHit = {
@@ -22,12 +23,6 @@ export type VaultSearchResult = {
 	truncated: boolean;
 };
 
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
-
 const EMPTY: VaultSearchResult = { hits: [], truncated: false };
 
 /** Full-text search over the Vault's Markdown files. Returns empty off-desktop. */
@@ -39,11 +34,9 @@ export async function searchVault(opts: {
 	if (!isTauri()) return EMPTY;
 	const query = opts.query.trim();
 	if (!query) return EMPTY;
-	const res = await invoke<ApiResult<VaultSearchResult>>("vault_search", {
-		args: { vaultPath: opts.vaultPath, query, limit: opts.limit },
-	});
-	if (!res.ok || !res.data) {
-		throw new Error(res.error?.message ?? "vault_search failed");
-	}
-	return res.data;
+	return invokeApi<VaultSearchResult>(
+		"vault_search",
+		{ args: { vaultPath: opts.vaultPath, query, limit: opts.limit } },
+		{ fallback: "vault_search failed" },
+	);
 }

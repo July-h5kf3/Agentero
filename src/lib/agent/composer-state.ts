@@ -1,3 +1,10 @@
+import {
+	readJsonStorage,
+	removeStorageKey,
+	type StorageLike,
+	writeJsonStorage,
+} from "@/lib/core/storage";
+
 export type AgentComposerState = {
 	text: string;
 	mentionedPaths: string[];
@@ -5,10 +12,8 @@ export type AgentComposerState = {
 	includeSelectedFile: boolean;
 };
 
-export type ComposerStateStorage = Pick<
-	Storage,
-	"getItem" | "setItem" | "removeItem"
->;
+/** Storage surface for composer draft + mention recents (tests inject mocks). */
+export type ComposerStateStorage = StorageLike;
 
 const COMPOSER_STATE_PREFIX = "agentero-agent-composer-state-v1";
 
@@ -74,13 +79,12 @@ export function loadAgentComposerState(
 	scopeKey: string,
 	sessionId: string,
 ): AgentComposerState | null {
-	try {
-		const raw = storage.getItem(storageKey(scopeKey, sessionId));
-		if (!raw) return null;
-		return parseState(JSON.parse(raw));
-	} catch {
-		return null;
-	}
+	const raw = readJsonStorage<unknown>(
+		storageKey(scopeKey, sessionId),
+		null,
+		storage,
+	);
+	return parseState(raw);
 }
 
 export function saveAgentComposerState(
@@ -89,11 +93,8 @@ export function saveAgentComposerState(
 	sessionId: string,
 	state: AgentComposerState,
 ) {
-	try {
-		storage.setItem(storageKey(scopeKey, sessionId), JSON.stringify(state));
-	} catch {
-		// Persistence is best-effort; the in-memory Composer remains usable.
-	}
+	// Persistence is best-effort; the in-memory Composer remains usable.
+	writeJsonStorage(storageKey(scopeKey, sessionId), state, storage);
 }
 
 export function removeAgentComposerState(
@@ -101,9 +102,5 @@ export function removeAgentComposerState(
 	scopeKey: string,
 	sessionId: string,
 ) {
-	try {
-		storage.removeItem(storageKey(scopeKey, sessionId));
-	} catch {
-		// ignore
-	}
+	removeStorageKey(storageKey(scopeKey, sessionId), storage);
 }

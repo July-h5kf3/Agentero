@@ -1,3 +1,8 @@
+import {
+	readJsonStorage,
+	removeStorageKey,
+	writeJsonStorage,
+} from "@/lib/core/storage";
 import { tabIdForPath } from "@/lib/workspace/tabs/model";
 import type {
 	DocTab,
@@ -111,54 +116,48 @@ export function extractTabsFromLayout(layout: unknown): {
 
 /** Read the previously persisted workspace for this window. */
 export function loadPersistedTabs(): PersistedTabs | null {
-	try {
-		const raw = localStorage.getItem(TABS_STORAGE_KEY);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw) as {
-			layout?: unknown | null;
-			/** @deprecated layout-only storage; still accepted for one-shot restore */
-			tabs?: Array<{ path?: string; mode?: string }>;
-			/** @deprecated */
-			activeIndex?: number;
-		};
-		if (!parsed || typeof parsed !== "object") return null;
+	const parsed = readJsonStorage<{
+		layout?: unknown | null;
+		/** @deprecated layout-only storage; still accepted for one-shot restore */
+		tabs?: Array<{ path?: string; mode?: string }>;
+		/** @deprecated */
+		activeIndex?: number;
+	} | null>(TABS_STORAGE_KEY, null);
+	if (!parsed || typeof parsed !== "object") return null;
 
-		// Preferred: layout alone (params carry path/mode).
-		if (parsed.layout != null && typeof parsed.layout === "object") {
-			const extracted = extractTabsFromLayout(parsed.layout);
-			if (!extracted.tabs.length) return null;
-			return {
-				tabs: extracted.tabs,
-				activeId: extracted.activeId,
-				layout: parsed.layout,
-			};
-		}
-
-		// Legacy: explicit tabs[] without layout (pre layout-only storage).
-		if (!Array.isArray(parsed.tabs) || !parsed.tabs.length) return null;
-		const flat: PersistedTab[] = [];
-		const seen = new Set<string>();
-		for (const pt of parsed.tabs) {
-			if (!pt || typeof pt.path !== "string" || !pt.path) continue;
-			const id = tabIdForPath(pt.path);
-			if (seen.has(id)) continue;
-			seen.add(id);
-			flat.push({
-				path: pt.path,
-				mode: isCenterViewMode(pt.mode) ? pt.mode : "markdown",
-			});
-		}
-		if (!flat.length) return null;
-		const idx = Math.min(Math.max(0, parsed.activeIndex ?? 0), flat.length - 1);
-		const activePath = flat[idx]?.path;
+	// Preferred: layout alone (params carry path/mode).
+	if (parsed.layout != null && typeof parsed.layout === "object") {
+		const extracted = extractTabsFromLayout(parsed.layout);
+		if (!extracted.tabs.length) return null;
 		return {
-			tabs: flat,
-			activeId: activePath ? tabIdForPath(activePath) : null,
-			layout: null,
+			tabs: extracted.tabs,
+			activeId: extracted.activeId,
+			layout: parsed.layout,
 		};
-	} catch {
-		return null;
 	}
+
+	// Legacy: explicit tabs[] without layout (pre layout-only storage).
+	if (!Array.isArray(parsed.tabs) || !parsed.tabs.length) return null;
+	const flat: PersistedTab[] = [];
+	const seen = new Set<string>();
+	for (const pt of parsed.tabs) {
+		if (!pt || typeof pt.path !== "string" || !pt.path) continue;
+		const id = tabIdForPath(pt.path);
+		if (seen.has(id)) continue;
+		seen.add(id);
+		flat.push({
+			path: pt.path,
+			mode: isCenterViewMode(pt.mode) ? pt.mode : "markdown",
+		});
+	}
+	if (!flat.length) return null;
+	const idx = Math.min(Math.max(0, parsed.activeIndex ?? 0), flat.length - 1);
+	const activePath = flat[idx]?.path;
+	return {
+		tabs: flat,
+		activeId: activePath ? tabIdForPath(activePath) : null,
+		layout: null,
+	};
 }
 
 /**
@@ -166,18 +165,15 @@ export function loadPersistedTabs(): PersistedTabs | null {
  * Empty / missing layout clears storage.
  */
 export function savePersistedTabs(layout: unknown | null): void {
-	try {
-		if (layout == null || typeof layout !== "object") {
-			localStorage.removeItem(TABS_STORAGE_KEY);
-			return;
-		}
-		const panels = (layout as { panels?: Record<string, unknown> }).panels;
-		if (!panels || !Object.keys(panels).length) {
-			localStorage.removeItem(TABS_STORAGE_KEY);
-			return;
-		}
-		localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify({ layout }));
-	} catch {
-		// localStorage may be unavailable; tab restore is best-effort.
+	if (layout == null || typeof layout !== "object") {
+		removeStorageKey(TABS_STORAGE_KEY);
+		return;
 	}
+	const panels = (layout as { panels?: Record<string, unknown> }).panels;
+	if (!panels || !Object.keys(panels).length) {
+		removeStorageKey(TABS_STORAGE_KEY);
+		return;
+	}
+	// localStorage may be unavailable; tab restore is best-effort.
+	writeJsonStorage(TABS_STORAGE_KEY, { layout });
 }

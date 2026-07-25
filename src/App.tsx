@@ -49,6 +49,7 @@ import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import {
+	BackgroundTaskCancelledError,
 	completeBackgroundTask,
 	failBackgroundTask,
 	isBackgroundTaskCancelledError,
@@ -2457,7 +2458,7 @@ export default function App() {
 				async ({ id, signal, setProgress, setDetail }) => {
 					let i = 0;
 					for (const paperPath of queue) {
-						if (signal.aborted) throw new Error("background task cancelled");
+						if (signal.aborted) throw new BackgroundTaskCancelledError();
 						const rel = toVaultRelative(vaultPath, paperPath)
 							.replace(/\\/g, "/")
 							.replace(/^\/+|\/+$/g, "");

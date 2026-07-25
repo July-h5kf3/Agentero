@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { runBackgroundTask } from "@/lib/core/background-tasks";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	migrateZotero,
@@ -60,21 +61,11 @@ const DEFAULT_OPTS: SavedOpts = {
 	parentDir: "papers",
 };
 function loadOpts(): SavedOpts {
-	try {
-		return {
-			...DEFAULT_OPTS,
-			...JSON.parse(localStorage.getItem(OPTS_KEY) ?? "{}"),
-		};
-	} catch {
-		return DEFAULT_OPTS;
-	}
+	const stored = readJsonStorage<Partial<SavedOpts>>(OPTS_KEY, {});
+	return { ...DEFAULT_OPTS, ...stored };
 }
 function saveOpts(o: SavedOpts) {
-	try {
-		localStorage.setItem(OPTS_KEY, JSON.stringify(o));
-	} catch {
-		// ignore quota / non-browser environments
-	}
+	writeJsonStorage(OPTS_KEY, o);
 }
 
 /** "View import tutorial" target. Replace with your hosted tutorial/docs URL. */

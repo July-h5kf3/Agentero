@@ -1,7 +1,6 @@
 export * from "@/lib/paper/api";
 export * from "@/lib/paper/arxiv";
 export {
-	folderNameLooksLikeArxivId,
 	PAPER_DIR_MARKERS,
 	PAPER_FILE_MARKERS,
 	type PaperDownloadReason,
@@ -9,7 +8,6 @@ export {
 	paperAssetsComplete,
 	paperHasLocalPaperMd,
 	paperHasLocalPdf,
-	paperHasLocalSourceDir,
 	paperHasLocalTex,
 	paperNeedsAssetDownload,
 	paperNeedsRead,

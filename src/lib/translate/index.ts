@@ -5,6 +5,7 @@ export {
 	resolveSourceLangCode,
 	resolveTargetLangCode,
 	resolveTargetLangName,
+	targetLangDisplayName,
 } from "@/lib/translate/lang";
 export type {
 	FreeMtProbeMap,

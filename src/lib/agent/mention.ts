@@ -3,18 +3,15 @@
  * Empty query surfaces recent paths and shallow tree hints; typed query filters by path.
  */
 
+import type { ComposerStateStorage } from "@/lib/agent/composer-state";
 import { normalizeContextPath } from "@/lib/agent/context-path-icon";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 
 const RECENT_PREFIX = "agentero-agent-mention-recent-v1";
 const RECENT_LIMIT = 12;
 const DEFAULT_MENU_LIMIT = 8;
 
-export type MentionPathKind = "paper" | "directory" | "file";
-
-export type ComposerStateStorage = Pick<
-	Storage,
-	"getItem" | "setItem" | "removeItem"
->;
+export type { ComposerStateStorage };
 
 function normPath(path: string): string {
 	return normalizeContextPath(path);
@@ -87,22 +84,6 @@ export function buildMentionCandidatePaths(options: {
 	}
 
 	return out;
-}
-
-export function mentionPathKind(
-	path: string,
-	paperPaths: ReadonlySet<string>,
-	directoryPaths?: ReadonlySet<string> | null,
-): MentionPathKind {
-	const n = normPath(path);
-	if (paperPaths.has(n)) return "paper";
-	if (directoryPaths?.has(n)) return "directory";
-	// No extension → directory heuristic for bare folder paths
-	const base = n.includes("/") ? (n.split("/").pop() ?? n) : n;
-	if (base && !base.includes(".")) {
-		if (directoryPaths == null) return "directory";
-	}
-	return "file";
 }
 
 function pathMatchesQuery(path: string, query: string): boolean {
@@ -281,22 +262,20 @@ export function loadRecentMentionPaths(
 	vaultPath: string | null,
 ): string[] {
 	if (!storage || !vaultPath) return [];
-	try {
-		const raw = storage.getItem(recentStorageKey(vaultPath));
-		if (!raw) return [];
-		const parsed = JSON.parse(raw) as unknown;
-		if (!Array.isArray(parsed)) return [];
-		return [
-			...new Set(
-				parsed
-					.filter((item): item is string => typeof item === "string")
-					.map(normPath)
-					.filter(Boolean),
-			),
-		].slice(0, RECENT_LIMIT);
-	} catch {
-		return [];
-	}
+	const parsed = readJsonStorage<unknown>(
+		recentStorageKey(vaultPath),
+		null,
+		storage,
+	);
+	if (!Array.isArray(parsed)) return [];
+	return [
+		...new Set(
+			parsed
+				.filter((item): item is string => typeof item === "string")
+				.map(normPath)
+				.filter(Boolean),
+		),
+	].slice(0, RECENT_LIMIT);
 }
 
 export function pushRecentMentionPath(
@@ -311,10 +290,7 @@ export function pushRecentMentionPath(
 		(p) => p !== next,
 	);
 	const updated = [next, ...prev].slice(0, RECENT_LIMIT);
-	try {
-		storage.setItem(recentStorageKey(vaultPath), JSON.stringify(updated));
-	} catch {
-		// best-effort
-	}
+	// best-effort
+	writeJsonStorage(recentStorageKey(vaultPath), updated, storage);
 	return updated;
 }

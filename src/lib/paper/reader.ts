@@ -25,6 +25,7 @@ import {
 	runOnce,
 } from "@/lib/agent";
 import {
+	BackgroundTaskCancelledError,
 	completeBackgroundTask,
 	failBackgroundTask,
 	isBackgroundTaskCancelledError,
@@ -252,7 +253,7 @@ export async function runPaperReaderWorkflow(opts: {
 		};
 		if (cancellation.aborted) {
 			cancelAgent();
-			throw new Error("background task cancelled");
+			throw new BackgroundTaskCancelledError();
 		}
 		cancellation.addEventListener("abort", cancelAgent, { once: true });
 

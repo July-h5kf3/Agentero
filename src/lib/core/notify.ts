@@ -6,6 +6,7 @@
  */
 
 import { toast } from "sonner";
+import { BACKGROUND_TASK_CANCELLED_MESSAGE } from "@/lib/core/background-tasks";
 
 export type NotifyOptions = {
 	/** Optional secondary line under the title. */
@@ -23,7 +24,8 @@ export function notifyError(
 ): string | number {
 	const text = message?.trim();
 	if (!text) return "";
-	if (text === "background task cancelled") return "";
+	// User-initiated cancel is not an error — do not toast.
+	if (text === BACKGROUND_TASK_CANCELLED_MESSAGE) return "";
 	return toast.error(text, {
 		description: opts.description,
 		id: opts.id,
@@ -77,12 +79,6 @@ export function notifyUndo(
 		duration: duration ?? 8000,
 		action: { label: actionLabel, onClick: onAction },
 	});
-}
-
-/** Dismiss one toast by id, or all if omitted. */
-export function dismissNotify(id?: string | number): void {
-	if (id === undefined) toast.dismiss();
-	else toast.dismiss(id);
 }
 
 /** Coerce unknown catch values into a display string. */

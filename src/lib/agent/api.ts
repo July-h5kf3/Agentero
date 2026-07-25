@@ -1,8 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import i18n from "@/i18n";
-import { isTauri } from "@/lib/core/tauri";
+import { invokeApi } from "@/lib/core/ipc";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { loadSettings } from "@/lib/settings";
 
 export type AgentTemplate =
@@ -35,16 +35,6 @@ export type AgentListResponse = {
 	agents: AgentDescriptor[];
 	defaultId: string | null;
 	enabled: boolean;
-};
-
-export type AgentTemplateInfo = {
-	id: string;
-	name: string;
-	description?: string;
-	command: string;
-	args: string[];
-	detectCommand?: string | null;
-	installHint: string;
 };
 
 export type CatalogEntry = {
@@ -239,45 +229,27 @@ export type PermissionRequest = {
 	options: PermissionOption[];
 };
 
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
-
-async function invokeApi<T>(
+async function invokeAgentApi<T>(
 	cmd: string,
 	args?: Record<string, unknown>,
 ): Promise<T> {
-	if (!isTauri()) {
-		throw new Error("Agent features require the Tauri desktop app.");
-	}
-	const res = await invoke<ApiResult<T>>(cmd, args);
-	if (!res.ok || res.data === undefined) {
-		throw new Error(res.error?.message ?? `Command ${cmd} failed`);
-	}
-	return res.data;
+	return invokeApi<T>(cmd, args, {
+		desktopOnly: "Agent features require the Tauri desktop app.",
+	});
 }
 
 export async function listAgents(): Promise<AgentListResponse> {
-	return invokeApi("agent_list_agents");
-}
-
-export async function listTemplates(): Promise<AgentTemplateInfo[]> {
-	const res = await invokeApi<{ templates: AgentTemplateInfo[] }>(
-		"agent_list_templates",
-	);
-	return res.templates;
+	return invokeAgentApi("agent_list_agents");
 }
 
 export async function listAgentSkills(
 	vaultPath?: string,
 ): Promise<AgentSkill[]> {
-	return invokeApi("agent_list_skills", { vaultPath: vaultPath ?? null });
+	return invokeAgentApi("agent_list_skills", { vaultPath: vaultPath ?? null });
 }
 
 export async function scanCatalog(): Promise<CatalogScanResponse> {
-	return invokeApi("agent_scan_catalog");
+	return invokeAgentApi("agent_scan_catalog");
 }
 
 export async function upsertAgent(request: {
@@ -289,7 +261,7 @@ export async function upsertAgent(request: {
 	env?: Record<string, string>;
 	setDefault?: boolean;
 }): Promise<AgentDescriptor> {
-	const res = await invokeApi<{ agent: AgentDescriptor }>(
+	const res = await invokeAgentApi<{ agent: AgentDescriptor }>(
 		"agent_upsert_agent",
 		{ request },
 	);
@@ -300,7 +272,7 @@ export async function ensureCatalogAgent(
 	templateId: string,
 	setDefault = false,
 ): Promise<AgentDescriptor> {
-	const res = await invokeApi<{ agent: AgentDescriptor }>(
+	const res = await invokeAgentApi<{ agent: AgentDescriptor }>(
 		"agent_ensure_catalog",
 		{ templateId, setDefault },
 	);
@@ -308,17 +280,17 @@ export async function ensureCatalogAgent(
 }
 
 export async function removeAgent(id: string): Promise<void> {
-	await invokeApi("agent_remove_agent", { id });
+	await invokeAgentApi("agent_remove_agent", { id });
 }
 
 export async function setDefaultAgent(
 	id: string | null,
 ): Promise<AgentListResponse> {
-	return invokeApi("agent_set_default", { id });
+	return invokeAgentApi("agent_set_default", { id });
 }
 
 export async function setAgentEnabled(enabled: boolean): Promise<boolean> {
-	const res = await invokeApi<{ enabled: boolean }>("agent_set_enabled", {
+	const res = await invokeAgentApi<{ enabled: boolean }>("agent_set_enabled", {
 		enabled,
 	});
 	return res.enabled;
@@ -328,21 +300,17 @@ export async function setAgentProxy(
 	proxyEnabled: boolean,
 	proxyUrl: string,
 ): Promise<{ proxyEnabled: boolean; proxyUrl: string }> {
-	return invokeApi("agent_set_proxy", { proxyEnabled, proxyUrl });
-}
-
-export async function discoverAgents(id?: string): Promise<AgentListResponse> {
-	return invokeApi("agent_discover", { id: id ?? null });
+	return invokeAgentApi("agent_set_proxy", { proxyEnabled, proxyUrl });
 }
 
 export async function probeAgent(id: string): Promise<ProbeResult> {
-	return invokeApi("agent_probe", { id });
+	return invokeAgentApi("agent_probe", { id });
 }
 
 export async function probeCatalogAgent(
 	templateId: string,
 ): Promise<ProbeResult> {
-	return invokeApi("agent_probe_catalog", { templateId });
+	return invokeAgentApi("agent_probe_catalog", { templateId });
 }
 
 /**
@@ -350,7 +318,7 @@ export async function probeCatalogAgent(
  * the user to confirm (Enter) before running. Host only allows known templates.
  */
 export async function openInstallTerminal(templateId: string): Promise<void> {
-	await invokeApi("agent_open_install_terminal", { templateId });
+	await invokeAgentApi("agent_open_install_terminal", { templateId });
 }
 
 export type PromptImage = {
@@ -405,7 +373,7 @@ export async function runOnce(request: {
 		language && language !== "auto" ? language : undefined;
 	const personalRaw = request.personalPrompt ?? settings.agentPersonalPrompt;
 	const personalPrompt = personalRaw?.trim() ? personalRaw.trim() : undefined;
-	return invokeApi("agent_run_once", {
+	return invokeAgentApi("agent_run_once", {
 		request: {
 			agentId: request.agentId,
 			sessionId: request.sessionId,
@@ -433,7 +401,7 @@ export async function listSessions(request: {
 	vaultPath?: string;
 	cursor?: string;
 }): Promise<AcpListSessionsResult> {
-	return invokeApi("agent_list_sessions", {
+	return invokeAgentApi("agent_list_sessions", {
 		agentId: request.agentId ?? null,
 		vaultPath: request.vaultPath ?? null,
 		cursor: request.cursor ?? null,
@@ -446,7 +414,7 @@ export async function loadSession(request: {
 	sessionId: string;
 	vaultPath?: string;
 }): Promise<AcpLoadSessionResult> {
-	return invokeApi("agent_load_session", {
+	return invokeAgentApi("agent_load_session", {
 		agentId: request.agentId ?? null,
 		sessionId: request.sessionId,
 		vaultPath: request.vaultPath ?? null,
@@ -455,7 +423,7 @@ export async function loadSession(request: {
 
 /** Request cooperative cancellation of the active ACP session. */
 export async function cancelAgentRun(sessionId: string): Promise<void> {
-	await invokeApi<boolean>("agent_cancel_run", { sessionId });
+	await invokeAgentApi<boolean>("agent_cancel_run", { sessionId });
 }
 
 /** Answer a pending ACP permission request (ask mode). `optionId = null` cancels. */
@@ -463,7 +431,7 @@ export async function respondPermission(
 	requestId: string,
 	optionId: string | null,
 ): Promise<void> {
-	await invokeApi<{ resolved: boolean }>("agent_respond_permission", {
+	await invokeAgentApi<{ resolved: boolean }>("agent_respond_permission", {
 		request: { requestId, optionId },
 	});
 }
@@ -483,7 +451,7 @@ export async function warmAgent(request: {
 	vaultPath?: string;
 	modelId?: string;
 }): Promise<WarmResult> {
-	return invokeApi("agent_warm", {
+	return invokeAgentApi("agent_warm", {
 		request: {
 			agentId: request.agentId,
 			vaultPath: request.vaultPath,
@@ -560,25 +528,14 @@ const MODEL_PREF_KEY = "agentero-agent-model-pref";
 /** Persist last chosen model id per agent. */
 export function loadModelPref(agentId: string | null): string | null {
 	if (!agentId) return null;
-	try {
-		const raw = localStorage.getItem(MODEL_PREF_KEY);
-		if (!raw) return null;
-		const map = JSON.parse(raw) as Record<string, string>;
-		return map[agentId] ?? null;
-	} catch {
-		return null;
-	}
+	const map = readJsonStorage<Record<string, string>>(MODEL_PREF_KEY, {});
+	return typeof map[agentId] === "string" ? map[agentId] : null;
 }
 
 export function saveModelPref(agentId: string, modelId: string): void {
-	try {
-		const raw = localStorage.getItem(MODEL_PREF_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<string, string>;
-		map[agentId] = modelId;
-		localStorage.setItem(MODEL_PREF_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
+	const map = readJsonStorage<Record<string, string>>(MODEL_PREF_KEY, {});
+	map[agentId] = modelId;
+	writeJsonStorage(MODEL_PREF_KEY, map);
 }
 
 const MODEL_FAVORITES_KEY = "agentero-agent-model-favorites";
@@ -586,26 +543,21 @@ const MODEL_FAVORITES_KEY = "agentero-agent-model-favorites";
 /** Per-agent ordered list of favorited model ids. */
 export function loadModelFavorites(agentId: string | null): string[] {
 	if (!agentId) return [];
-	try {
-		const raw = localStorage.getItem(MODEL_FAVORITES_KEY);
-		if (!raw) return [];
-		const map = JSON.parse(raw) as Record<string, string[]>;
-		const list = map[agentId];
-		return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
-	} catch {
-		return [];
-	}
+	const map = readJsonStorage<Record<string, string[]>>(
+		MODEL_FAVORITES_KEY,
+		{},
+	);
+	const list = map[agentId];
+	return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
 }
 
 export function saveModelFavorites(agentId: string, ids: string[]): void {
-	try {
-		const raw = localStorage.getItem(MODEL_FAVORITES_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<string, string[]>;
-		map[agentId] = ids;
-		localStorage.setItem(MODEL_FAVORITES_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
+	const map = readJsonStorage<Record<string, string[]>>(
+		MODEL_FAVORITES_KEY,
+		{},
+	);
+	map[agentId] = ids;
+	writeJsonStorage(MODEL_FAVORITES_KEY, map);
 }
 
 const MODEL_CATALOG_KEY = "agentero-agent-model-catalog";
@@ -620,31 +572,23 @@ export function loadModelCatalog(
 	agentId: string | null,
 ): CachedModelCatalog | null {
 	if (!agentId) return null;
-	try {
-		const raw = localStorage.getItem(MODEL_CATALOG_KEY);
-		if (!raw) return null;
-		const map = JSON.parse(raw) as Record<string, CachedModelCatalog>;
-		return map[agentId] ?? null;
-	} catch {
-		return null;
-	}
+	const map = readJsonStorage<Record<string, CachedModelCatalog>>(
+		MODEL_CATALOG_KEY,
+		{},
+	);
+	return map[agentId] ?? null;
 }
 
 export function saveModelCatalog(
 	agentId: string,
 	catalog: CachedModelCatalog,
 ): void {
-	try {
-		const raw = localStorage.getItem(MODEL_CATALOG_KEY);
-		const map = (raw ? JSON.parse(raw) : {}) as Record<
-			string,
-			CachedModelCatalog
-		>;
-		map[agentId] = catalog;
-		localStorage.setItem(MODEL_CATALOG_KEY, JSON.stringify(map));
-	} catch {
-		// ignore
-	}
+	const map = readJsonStorage<Record<string, CachedModelCatalog>>(
+		MODEL_CATALOG_KEY,
+		{},
+	);
+	map[agentId] = catalog;
+	writeJsonStorage(MODEL_CATALOG_KEY, map);
 }
 
 export function acpStatusLabel(status: CatalogAcpStatus): string {

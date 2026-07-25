@@ -4,19 +4,15 @@
  * path; loose PDFs without a paper path are not tracked.
  */
 
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
+
 const KEY = "agentero-pdf-reading-pos";
 
 function readMap(): Record<string, number> {
-	if (typeof localStorage === "undefined") return {};
-	try {
-		const raw = localStorage.getItem(KEY);
-		const parsed = raw ? (JSON.parse(raw) as unknown) : {};
-		return parsed && typeof parsed === "object"
-			? (parsed as Record<string, number>)
-			: {};
-	} catch {
-		return {};
-	}
+	const parsed = readJsonStorage<unknown>(KEY, {});
+	return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+		? (parsed as Record<string, number>)
+		: {};
 }
 
 /** Last read 1-based page for a paper key, or 0 when none worth restoring. */
@@ -26,13 +22,8 @@ export function readReadingPage(key: string): number {
 }
 
 export function writeReadingPage(key: string, page: number): void {
-	if (typeof localStorage === "undefined") return;
-	try {
-		const map = readMap();
-		if (page > 1) map[key] = Math.floor(page);
-		else delete map[key];
-		localStorage.setItem(KEY, JSON.stringify(map));
-	} catch {
-		// ignore quota / serialization errors
-	}
+	const map = readMap();
+	if (page > 1) map[key] = Math.floor(page);
+	else delete map[key];
+	writeJsonStorage(KEY, map);
 }

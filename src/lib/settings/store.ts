@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	isPaperTreeLabelMode,
@@ -28,12 +28,6 @@ import type {
 import { isKnownUiTheme } from "@/lib/ui/theme";
 
 const LEGACY_SETTINGS_KEY = "agentero-settings";
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 type SettingsGetResult = {
 	settings: AppSettings;
@@ -90,14 +84,17 @@ export async function ensureSettingsLoaded(): Promise<AppSettings> {
 	loadPromise = (async () => {
 		try {
 			if (isTauri()) {
-				const res = await invoke<ApiResult<SettingsGetResult>>("settings_get");
-				if (!res.ok || !res.data) {
-					throw new Error(res.error?.message ?? "settings_get failed");
-				}
-				settingsFilePath = res.data.path;
-				let next = normalizeSettings(res.data.settings);
+				const res = await invokeApi<SettingsGetResult>(
+					"settings_get",
+					undefined,
+					{
+						fallback: "settings_get failed",
+					},
+				);
+				settingsFilePath = res.path;
+				let next = normalizeSettings(res.settings);
 
-				if (!res.data.existed) {
+				if (!res.existed) {
 					const legacy = readLegacyLocalStorage();
 					if (legacy) {
 						next = normalizeSettings(legacy);
@@ -207,13 +204,12 @@ export async function saveSettingsAsync(
 }
 
 async function persistToHost(settings: AppSettings): Promise<AppSettings> {
-	const res = await invoke<ApiResult<AppSettings>>("settings_set", {
-		settings,
-	});
-	if (!res.ok || !res.data) {
-		throw new Error(res.error?.message ?? "settings_set failed");
-	}
-	return setCache(normalizeSettings(res.data));
+	const res = await invokeApi<AppSettings>(
+		"settings_set",
+		{ settings },
+		{ fallback: "settings_set failed" },
+	);
+	return setCache(normalizeSettings(res));
 }
 
 function readLegacyLocalStorage(): AppSettings | null {

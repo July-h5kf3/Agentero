@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import { withNormalizedTags } from "@/lib/paper/tags";
@@ -14,12 +14,6 @@ function enrichArxivUrls(data: PaperMetadata): PaperMetadata {
 	if (!data.source_url) data.source_url = urls.abs;
 	return data;
 }
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 /**
  * Vault-relative paper folder path for catalog APIs.
@@ -64,10 +58,12 @@ export async function loadPaperMetadata(
 				data = (await remotePaperGet(sessionId, { path })) as PaperMetadata;
 			}
 		} else {
-			const res = await invoke<ApiResult<PaperMetadata>>("paper_get", {
-				args: { vaultPath: vaultRoot, path },
-			});
-			if (res.ok && res.data) data = res.data;
+			data =
+				(await invokeApi<PaperMetadata>(
+					"paper_get",
+					{ args: { vaultPath: vaultRoot, path } },
+					{ allowVoid: true },
+				)) ?? null;
 		}
 		if (data?.id) {
 			return withNormalizedTags(

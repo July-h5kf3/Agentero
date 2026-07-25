@@ -1,3 +1,4 @@
+import { targetLangDisplayName } from "@/lib/translate/lang";
 import { buildTranslatePrompt } from "@/lib/translate/prompt";
 import type { TranslateService } from "@/lib/translate/types";
 
@@ -5,6 +6,9 @@ import type { TranslateService } from "@/lib/translate/types";
  * BYOA Agent adapter.
  * Callers that need streaming (PDF popover) should use {@link buildTranslatePrompt}
  * + ACP directly; this path is for non-streaming `runTranslate`.
+ *
+ * Expects `task.targetLang` as a BCP-47 code (`zh-CN` / `en`); maps via
+ * {@link targetLangDisplayName} for the prompt.
  */
 export const AgentTranslateService: TranslateService = {
 	id: "agent",
@@ -23,15 +27,9 @@ export const AgentTranslateService: TranslateService = {
 				"Agent translation requires a configured Agent runner (BYOA).",
 			);
 		}
-		const targetLangName =
-			task.targetLang === "zh-CN" || task.targetLang === "zh"
-				? "Chinese"
-				: task.targetLang === "en"
-					? "English"
-					: task.targetLang;
 		const prompt = buildTranslatePrompt({
 			text,
-			targetLangName,
+			targetLangName: targetLangDisplayName(task.targetLang),
 			page: task.context?.page,
 			surface: task.context?.surface,
 		});

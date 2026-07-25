@@ -1,12 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 /** Platform-aware label key under `sidebar:fileTree.*`. */
 export function revealInOsLabelKey():
@@ -48,11 +42,9 @@ export async function openInTerminal(path: string): Promise<void> {
 	if (!isTauri()) {
 		throw new Error("Open in terminal requires the desktop app.");
 	}
-	const result = await invoke<ApiResult<{ cwd: string }>>(
+	await invokeApi<{ cwd: string }>(
 		"path_open_in_terminal",
 		{ path: trimmed },
+		{ allowVoid: true, fallback: "Failed to open terminal." },
 	);
-	if (!result.ok) {
-		throw new Error(result.error?.message ?? "Failed to open terminal.");
-	}
 }

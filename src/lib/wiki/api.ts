@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 
 export type Backlink = {
@@ -43,24 +43,13 @@ export type GraphResponse = {
 	depth: number;
 };
 
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
-
-async function invokeApi<T>(
+async function invokeWikiApi<T>(
 	cmd: string,
 	args?: Record<string, unknown>,
 ): Promise<T> {
-	if (!isTauri()) {
-		throw new Error("Wiki index requires the Tauri desktop app.");
-	}
-	const res = await invoke<ApiResult<T>>(cmd, args);
-	if (!res.ok || res.data === undefined) {
-		throw new Error(res.error?.message ?? `Command ${cmd} failed`);
-	}
-	return res.data;
+	return invokeApi<T>(cmd, args, {
+		desktopOnly: "Wiki index requires the Tauri desktop app.",
+	});
 }
 
 /** Normalize vault-relative path (forward slashes, no leading ./). */
@@ -373,7 +362,7 @@ export async function getBacklinks(
 	if (!vaultPath || !isTauri()) {
 		return { path: toVaultRelative(vaultPath, path), backlinks: [] };
 	}
-	return invokeApi<BacklinksResponse>("graph_get_backlinks", {
+	return invokeWikiApi<BacklinksResponse>("graph_get_backlinks", {
 		vaultPath,
 		path,
 	});
@@ -382,7 +371,7 @@ export async function getBacklinks(
 export async function rebuildWikiIndex(
 	vaultPath: string,
 ): Promise<RebuildResult> {
-	return invokeApi<RebuildResult>("graph_rebuild", { vaultPath });
+	return invokeWikiApi<RebuildResult>("graph_rebuild", { vaultPath });
 }
 
 export async function getGraph(
@@ -394,7 +383,7 @@ export async function getGraph(
 	if (!vaultPath || !isTauri()) {
 		return { nodes: [], edges: [], center: null, depth };
 	}
-	return invokeApi<GraphResponse>("graph_get_graph", {
+	return invokeWikiApi<GraphResponse>("graph_get_graph", {
 		vaultPath,
 		center,
 		depth,

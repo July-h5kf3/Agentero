@@ -7,7 +7,7 @@
  * File bytes via Host `paper_stage_import_file` into `~/.agentero/import-tmp/`.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 
 /** A dropped PDF ready for the confirm dialog / import host. */
@@ -16,12 +16,6 @@ export type ResolvedDropPdf = {
 	path: string;
 	/** Original filename for title/id defaults (e.g. `Attention.pdf`). */
 	sourceName: string;
-};
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
 };
 
 /** True when the drag payload includes OS files (not in-app text/plain moves). */
@@ -306,19 +300,16 @@ async function stageImportBytes(
 	bytes: Uint8Array,
 ): Promise<string> {
 	const contentBase64 = uint8ToBase64(bytes);
-	const result = await invoke<ApiResult<{ path: string }>>(
-		"paper_stage_import_file",
-		{
-			args: {
-				fileName: fileName || "drop.pdf",
-				contentBase64,
-			},
+	const result = await invokeApi<{ path: string }>("paper_stage_import_file", {
+		args: {
+			fileName: fileName || "drop.pdf",
+			contentBase64,
 		},
-	);
-	if (!result.ok || !result.data?.path) {
-		throw new Error(result.error?.message ?? "stage import failed");
+	});
+	if (!result.path) {
+		throw new Error("stage import failed");
 	}
-	return result.data.path;
+	return result.path;
 }
 
 /** Chunked btoa for large ArrayBuffers (avoids call-stack limits). */

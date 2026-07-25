@@ -49,19 +49,6 @@ export function paperHasLocalPaperMd(node: TreeWalkNode): boolean {
 	return false;
 }
 
-/** True when paper folder has a direct child directory named `source`. */
-export function paperHasLocalSourceDir(node: TreeWalkNode): boolean {
-	for (const child of node.children ?? []) {
-		if (
-			(child.kind === "directory" || !child.kind) &&
-			/^source$/i.test(child.name)
-		) {
-			return true;
-		}
-	}
-	return false;
-}
-
 /**
  * Reasons a paper row should show the Download icon (for hover tooltip).
  * Keys are i18n suffixes under `sidebar:fileTree.downloadReason.*`.
@@ -112,11 +99,4 @@ export function paperNeedsRead(
 ): boolean {
 	if (!paperAssetsComplete(node)) return false;
 	return !(meta?.is_read === true);
-}
-
-/** Folder-name heuristic: looks like bare arXiv id. */
-export function folderNameLooksLikeArxivId(name: string): boolean {
-	return /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/i.test(
-		name.trim(),
-	);
 }

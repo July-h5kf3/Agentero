@@ -2,16 +2,11 @@
  * One-click Zotero migration: read a local Zotero data directory (zotero.sqlite
  * + storage/) via the Host and write papers into the catalog. Fully local.
  */
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import i18n from "@/i18n";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
 
 export type ZoteroCollectionInfo = {
 	id: number;
@@ -62,13 +57,13 @@ export async function scanZotero(zoteroDir: string): Promise<ZoteroScan> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:zoteroMigrate.desktopOnly"));
 	}
-	const res = await invoke<ApiResult<ZoteroScan>>("zotero_scan", {
-		args: { zoteroDir },
-	});
-	if (!res.ok || !res.data) {
-		throw new Error(res.error?.message ?? "zotero_scan failed");
-	}
-	return res.data;
+	return invokeApi<ZoteroScan>(
+		"zotero_scan",
+		{ args: { zoteroDir } },
+		{
+			fallback: "zotero_scan failed",
+		},
+	);
 }
 
 /** Migrate the Zotero library into `parentDir` + catalog; optionally copy PDFs. */
@@ -100,22 +95,22 @@ export async function migrateZotero(opts: {
 		const cb = opts.onProgress;
 		onProgress.onmessage = (m) => cb(m.current, m.total, m.phase);
 	}
-	const res = await invoke<ApiResult<ZoteroMigrateResult>>("zotero_migrate", {
-		args: {
-			vaultPath: opts.vaultPath,
-			zoteroDir: opts.zoteroDir,
-			parentDir: opts.parentDir ?? "papers",
-			copyPdfs: opts.copyPdfs,
-			preserveCollections: opts.preserveCollections,
-			migrateNotes: opts.migrateNotes,
-			migrateAnnotations: opts.migrateAnnotations,
-			includeCollections: opts.includeCollections ?? null,
-			includeItems: opts.includeItems ?? null,
+	return invokeApi<ZoteroMigrateResult>(
+		"zotero_migrate",
+		{
+			args: {
+				vaultPath: opts.vaultPath,
+				zoteroDir: opts.zoteroDir,
+				parentDir: opts.parentDir ?? "papers",
+				copyPdfs: opts.copyPdfs,
+				preserveCollections: opts.preserveCollections,
+				migrateNotes: opts.migrateNotes,
+				migrateAnnotations: opts.migrateAnnotations,
+				includeCollections: opts.includeCollections ?? null,
+				includeItems: opts.includeItems ?? null,
+			},
+			onProgress,
 		},
-		onProgress,
-	});
-	if (!res.ok || !res.data) {
-		throw new Error(res.error?.message ?? "zotero_migrate failed");
-	}
-	return res.data;
+		{ fallback: "zotero_migrate failed" },
+	);
 }

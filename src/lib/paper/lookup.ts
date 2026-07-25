@@ -4,9 +4,9 @@
  * Translator base URL comes from Settings (`translatorBaseUrl`).
  * @see docs/backend/identifier-lookup.md
  */
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import i18n from "@/i18n";
+import { invokeApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
 
@@ -30,19 +30,6 @@ export type PaperAssetsDownloadResult = {
 	tex: boolean;
 	paperMd?: boolean;
 	messages: string[];
-};
-
-export type PaperParseBodyResult = {
-	paperMd: boolean;
-	bodySource?: string;
-	bodyQuality?: string;
-	messages: string[];
-};
-
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
 };
 
 type HostLookupResult = {
@@ -84,56 +71,6 @@ function toLookupAddResult(d: HostLookupResult): LookupAddResult {
 	};
 }
 
-/**
- * Add a paper by identifier/URL into `vaultRoot/parentDir/<id>/`.
- * Host calls Translator at Settings `translatorBaseUrl`
- * (default https://translator.philfan.cn); falls back to arXiv API
- * when Runtime is down and input is an arXiv id.
- * Always mirrors PDF into `source/`; arXiv also unpacks e-print TeX.
- */
-export async function addPaperByIdentifier(opts: {
-	vaultRoot: string;
-	/** Vault-relative, e.g. `papers` or `papers/nlp` */
-	parentDir: string;
-	text: string;
-	settings: AppSettings;
-	/** Override settings URL for this call */
-	translatorBaseUrl?: string;
-	progressTaskId?: string;
-}): Promise<LookupAddResult> {
-	if (!isTauri()) {
-		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
-	}
-
-	const text = opts.text.trim();
-	if (!text) {
-		throw new Error(i18n.t("sidebar:lookup.invalidId"));
-	}
-
-	const translatorBaseUrl = resolveTranslatorBaseUrl(
-		opts.settings,
-		opts.translatorBaseUrl,
-	);
-
-	const result = await invoke<ApiResult<HostLookupResult>>("lookup_import", {
-		args: {
-			vaultPath: opts.vaultRoot,
-			parentDir: opts.parentDir.replace(/\\/g, "/"),
-			text,
-			translatorBaseUrl,
-			taskId: opts.progressTaskId,
-		},
-	});
-
-	if (!result.ok || !result.data) {
-		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:lookup.fetchFailed"),
-		);
-	}
-
-	return toLookupAddResult(result.data);
-}
-
 export type LookupBatchAddResult = {
 	imported: LookupAddResult[];
 	skipped: { raw: string; kind: string; value: string; reason: string }[];
@@ -168,7 +105,7 @@ export async function addPapersByIdentifiers(opts: {
 		opts.translatorBaseUrl,
 	);
 
-	const result = await invoke<ApiResult<LookupBatchAddResult>>(
+	const result = await invokeApi<LookupBatchAddResult>(
 		"lookup_import_batch",
 		{
 			args: {
@@ -180,18 +117,13 @@ export async function addPapersByIdentifiers(opts: {
 				concurrency: opts.settings.batchImportConcurrency,
 			},
 		},
+		{ fallback: i18n.t("sidebar:lookup.fetchFailed") },
 	);
 
-	if (!result.ok || !result.data) {
-		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:lookup.fetchFailed"),
-		);
-	}
-
 	return {
-		imported: result.data.imported.map(toLookupAddResult),
-		skipped: result.data.skipped,
-		errors: result.data.errors,
+		imported: result.imported.map(toLookupAddResult),
+		skipped: result.skipped,
+		errors: result.errors,
 	};
 }
 
@@ -207,7 +139,7 @@ export async function downloadPaperAssets(opts: {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
 	}
-	const result = await invoke<ApiResult<PaperAssetsDownloadResult>>(
+	return invokeApi<PaperAssetsDownloadResult>(
 		"paper_download_assets",
 		{
 			args: {
@@ -216,43 +148,8 @@ export async function downloadPaperAssets(opts: {
 				taskId: opts.progressTaskId,
 			},
 		},
+		{ fallback: i18n.t("sidebar:fileTree.downloadFailed") },
 	);
-	if (!result.ok || !result.data) {
-		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:fileTree.downloadFailed"),
-		);
-	}
-	return result.data;
-}
-
-/**
- * Parse local PDF → PAPER.md via liteparse when the paper has no TeX.
- * `paperPath` is vault-relative (e.g. `papers/1706.03762`).
- */
-export async function parsePaperBody(opts: {
-	vaultRoot: string;
-	paperPath: string;
-	force?: boolean;
-}): Promise<PaperParseBodyResult> {
-	if (!isTauri()) {
-		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
-	}
-	const result = await invoke<ApiResult<PaperParseBodyResult>>(
-		"paper_parse_body",
-		{
-			args: {
-				vaultPath: opts.vaultRoot,
-				path: opts.paperPath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
-				force: opts.force ?? false,
-			},
-		},
-	);
-	if (!result.ok || !result.data) {
-		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:fileTree.downloadFailed"),
-		);
-	}
-	return result.data;
 }
 
 type HostLocalPdfImportResult = {
@@ -311,7 +208,7 @@ export async function importLocalPdfs(opts: {
 	}
 	if (!entries.length) return null;
 
-	const result = await invoke<ApiResult<HostLocalPdfImportResult>>(
+	const result = await invokeApi<HostLocalPdfImportResult>(
 		"paper_import_local_pdf",
 		{
 			args: {
@@ -321,14 +218,10 @@ export async function importLocalPdfs(opts: {
 				entries,
 			},
 		},
+		{ fallback: i18n.t("sidebar:lookup.fetchFailed") },
 	);
-	if (!result.ok || !result.data) {
-		throw new Error(
-			result.error?.message ?? i18n.t("sidebar:lookup.fetchFailed"),
-		);
-	}
 	return {
-		papers: result.data.papers.map(toLookupAddResult),
-		errors: result.data.errors ?? [],
+		papers: result.papers.map(toLookupAddResult),
+		errors: result.errors ?? [],
 	};
 }

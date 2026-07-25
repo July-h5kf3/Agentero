@@ -88,11 +88,14 @@ let store: Store = {
 const listeners = new Set<Listener>();
 const controllers = new Map<string, AbortController>();
 
+/** Stable cancel message; keep in sync with {@link notifyError} filter. */
+export const BACKGROUND_TASK_CANCELLED_MESSAGE = "background task cancelled";
+
 export class BackgroundTaskCancelledError extends Error {
 	readonly code = "BACKGROUND_TASK_CANCELLED";
 
 	constructor() {
-		super("background task cancelled");
+		super(BACKGROUND_TASK_CANCELLED_MESSAGE);
 		this.name = "BackgroundTaskCancelledError";
 	}
 }
@@ -100,7 +103,9 @@ export class BackgroundTaskCancelledError extends Error {
 export function isBackgroundTaskCancelledError(error: unknown): boolean {
 	return (
 		error instanceof BackgroundTaskCancelledError ||
-		(error instanceof Error && error.name === "AbortError")
+		(error instanceof Error &&
+			(error.name === "AbortError" ||
+				error.message === BACKGROUND_TASK_CANCELLED_MESSAGE))
 	);
 }
 
