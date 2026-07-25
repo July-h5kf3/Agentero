@@ -140,16 +140,18 @@ fn resolve_document(
         Err(_) => {}
     }
 
-    let wanted_stem = normalize_key(&stem_of(raw));
-    let stem_hits = documents
-        .iter()
-        .filter(|document| normalize_key(&stem_of(&document.path)) == wanted_stem)
-        .map(|document| document.path.clone())
-        .collect::<Vec<_>>();
-    match unique(stem_hits) {
-        Ok(path) => return Ok(path),
-        Err(candidates) if candidates.len() > 1 => return Err(candidates),
-        Err(_) => {}
+    if Path::new(raw).extension().is_none() {
+        let wanted_stem = normalize_key(&stem_of(raw));
+        let stem_hits = documents
+            .iter()
+            .filter(|document| normalize_key(&stem_of(&document.path)) == wanted_stem)
+            .map(|document| document.path.clone())
+            .collect::<Vec<_>>();
+        match unique(stem_hits) {
+            Ok(path) => return Ok(path),
+            Err(candidates) if candidates.len() > 1 => return Err(candidates),
+            Err(_) => {}
+        }
     }
 
     let wanted_alias = normalize_key(raw);

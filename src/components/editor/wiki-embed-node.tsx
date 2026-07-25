@@ -34,6 +34,11 @@ const EmbeddedMarkdownProjection = lazy(async () => {
 	return { default: module.EmbeddedMarkdownProjection };
 });
 
+const WikiAttachmentEmbed = lazy(async () => {
+	const module = await import("@/components/editor/wiki-attachment-embed");
+	return { default: module.WikiAttachmentEmbed };
+});
+
 type EmbedLoadState =
 	| { kind: "loading" }
 	| { kind: "ready"; response: WikiEmbedResponse; key: string }
@@ -64,13 +69,17 @@ function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
 	if (response.link.status !== "resolved") {
 		return { kind: response.link.status, response };
 	}
-	if (
-		response.contentKind !== "markdown" ||
-		typeof response.content !== "string"
-	) {
-		return { kind: "unsupported", response };
+	switch (response.contentKind) {
+		case "markdown":
+			return typeof response.content === "string"
+				? { kind: "ready", response, key: embedKey(response.link) }
+				: { kind: "unsupported", response };
+		case "image":
+		case "pdf":
+			return { kind: "ready", response, key: embedKey(response.link) };
+		default:
+			return { kind: "unsupported", response };
 	}
-	return { kind: "ready", response, key: embedKey(response.link) };
 }
 
 function EmbedStatus({ message }: { message: string }) {
@@ -153,8 +162,15 @@ export function WikiEmbedElement(props: PlateElementProps) {
 		return state;
 	}, [ancestry, state]);
 
+	const imageSizeAlias =
+		state.kind === "ready" &&
+		state.response.contentKind === "image" &&
+		/^([1-9]\d*)(?:x([1-9]\d*))?$/i.test(element.alias?.trim() ?? "");
 	const sourceLabel =
-		element.alias || targetWithFragment || resolvedLink?.targetPath || "";
+		(imageSizeAlias ? "" : element.alias) ||
+		targetWithFragment ||
+		resolvedLink?.targetPath ||
+		"";
 	const absoluteTarget =
 		state.kind === "ready" &&
 		wikiNav?.vaultPath &&
@@ -203,15 +219,30 @@ export function WikiEmbedElement(props: PlateElementProps) {
 				{presentation.kind === "loading" ? (
 					<EmbedStatus message={t("embed.loading")} />
 				) : presentation.kind === "ready" ? (
-					<WikiEmbedAncestryProvider ancestry={[...ancestry, presentation.key]}>
-						<Suspense fallback={<EmbedStatus message={t("embed.loading")} />}>
-							<EmbeddedMarkdownProjection
-								key={`${presentation.key}:${wikiNav?.revision ?? 0}`}
-								markdown={presentation.response.content ?? ""}
-								filePath={absoluteTarget}
+					<Suspense fallback={<EmbedStatus message={t("embed.loading")} />}>
+						{presentation.response.contentKind === "markdown" ? (
+							<WikiEmbedAncestryProvider
+								ancestry={[...ancestry, presentation.key]}
+							>
+								<EmbeddedMarkdownProjection
+									key={`${presentation.key}:${wikiNav?.revision ?? 0}`}
+									markdown={presentation.response.content ?? ""}
+									filePath={absoluteTarget}
+								/>
+							</WikiEmbedAncestryProvider>
+						) : presentation.response.contentKind === "image" ||
+							presentation.response.contentKind === "pdf" ? (
+							<WikiAttachmentEmbed
+								kind={presentation.response.contentKind}
+								absoluteTarget={absoluteTarget}
+								targetPath={presentation.response.link.targetPath ?? target}
+								revision={wikiNav?.revision ?? 0}
+								imageSize={element.alias}
 							/>
-						</Suspense>
-					</WikiEmbedAncestryProvider>
+						) : (
+							<EmbedStatus message={t("embed.unsupported")} />
+						)}
+					</Suspense>
 				) : (
 					<EmbedStatus
 						message={t(

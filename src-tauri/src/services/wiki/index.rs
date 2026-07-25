@@ -33,6 +33,27 @@ fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_pdf(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+}
+
+fn is_image(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "avif" | "ico"
+            )
+        })
+}
+
+fn is_wiki_target(path: &Path) -> bool {
+    is_markdown(path) || is_pdf(path) || is_image(path)
+}
+
 fn without_markdown_extension(path: &str) -> String {
     let lower = path.to_ascii_lowercase();
     for extension in [".markdown", ".mdx", ".md"] {
@@ -51,6 +72,17 @@ fn document_stem(path: &str) -> String {
         .to_string()
 }
 
+fn document_link_name(path: &str) -> String {
+    if is_markdown(Path::new(path)) {
+        return document_stem(path);
+    }
+    Path::new(path)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn should_skip_name(name: &str) -> bool {
     if IGNORE_NAMES.contains(&name) {
         return true;
@@ -59,15 +91,15 @@ fn should_skip_name(name: &str) -> bool {
     name.starts_with('.')
 }
 
-/// Collect vault-relative Markdown paths (forward slashes).
-pub fn collect_markdown_files(vault_root: &Path) -> std::io::Result<Vec<String>> {
+/// Collect vault-relative Markdown, image, and PDF targets (forward slashes).
+pub fn collect_wiki_target_files(vault_root: &Path) -> std::io::Result<Vec<String>> {
     let mut out = Vec::new();
-    walk_md(vault_root, vault_root, 0, &mut out)?;
+    walk_wiki_targets(vault_root, vault_root, 0, &mut out)?;
     out.sort();
     Ok(out)
 }
 
-fn walk_md(
+fn walk_wiki_targets(
     vault_root: &Path,
     dir: &Path,
     depth: usize,
@@ -86,8 +118,8 @@ fn walk_md(
         let path = entry.path();
         let ft = entry.file_type()?;
         if ft.is_dir() {
-            walk_md(vault_root, &path, depth + 1, out)?;
-        } else if ft.is_file() && is_markdown(&path) {
+            walk_wiki_targets(vault_root, &path, depth + 1, out)?;
+        } else if ft.is_file() && is_wiki_target(&path) {
             if let Ok(rel) = path.strip_prefix(vault_root) {
                 out.push(normalize_rel(&rel.to_string_lossy()));
             }
@@ -125,10 +157,19 @@ impl WikiIndex {
             return Err(format!("vault path is not a directory: {vault_path}"));
         }
 
-        let files = collect_markdown_files(&root).map_err(|e| e.to_string())?;
+        let files = collect_wiki_target_files(&root).map_err(|e| e.to_string())?;
         let mut parsed = Vec::new();
         let mut documents = Vec::new();
         for rel in &files {
+            if !is_markdown(Path::new(rel)) {
+                documents.push(WikiDocument {
+                    path: rel.clone(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                });
+                continue;
+            }
             let abs = root.join(rel);
             let content = match fs::read_to_string(&abs) {
                 Ok(content) => content,
@@ -302,6 +343,20 @@ impl WikiIndex {
             });
         };
         let target = Path::new(vault_root).join(target_path);
+        if is_image(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Image),
+                content: None,
+            });
+        }
+        if is_pdf(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Pdf),
+                content: None,
+            });
+        }
         if !is_markdown(&target) {
             return Ok(WikiEmbedResponse {
                 link,
@@ -340,7 +395,7 @@ impl WikiIndex {
                 .iter()
                 .fold(HashMap::<String, usize>::new(), |mut counts, document| {
                     *counts
-                        .entry(document_stem(&document.path).to_lowercase())
+                        .entry(document_link_name(&document.path).to_lowercase())
                         .or_default() += 1;
                     counts
                 });
@@ -349,14 +404,18 @@ impl WikiIndex {
             if path.is_some_and(|path| !document.path.eq_ignore_ascii_case(path)) {
                 continue;
             }
-            let file_name = document_stem(&document.path);
+            let file_name = document_link_name(&document.path);
             let target = if stem_counts
                 .get(&file_name.to_lowercase())
                 .copied()
                 .unwrap_or_default()
                 > 1
             {
-                without_markdown_extension(&document.path)
+                if is_markdown(Path::new(&document.path)) {
+                    without_markdown_extension(&document.path)
+                } else {
+                    document.path.clone()
+                }
             } else {
                 file_name.clone()
             };
@@ -809,7 +868,7 @@ impl Default for WikiIndexState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::wiki::{BlockAnchor, HeadingAnchor};
+    use crate::models::wiki::{BlockAnchor, HeadingAnchor, LinkResolutionStatus};
     use uuid::Uuid;
 
     fn test_vault() -> PathBuf {
@@ -853,6 +912,108 @@ mod tests {
             )
             .expect("read block embed");
         assert_eq!(block.content.as_deref(), Some("Block text ^focus\n"));
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn resolves_and_projects_image_and_pdf_targets() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("assets")).expect("create attachment directory");
+        fs::write(root.join("assets/figure.png"), b"png fixture").expect("write image fixture");
+        fs::write(root.join("assets/paper.pdf"), b"pdf fixture").expect("write pdf fixture");
+        fs::write(
+            root.join("notes/Source.md"),
+            "[[figure.png]]\n[[paper.pdf]]\n![[figure.png]]\n![[paper.pdf]]\n",
+        )
+        .expect("write attachment links");
+
+        let vault = root.to_str().expect("utf-8 fixture path");
+        let mut index = WikiIndex::default();
+        index.rebuild(vault).expect("rebuild attachment index");
+
+        let image = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "figure.png",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(image.status, LinkResolutionStatus::Resolved);
+        assert_eq!(image.target_path.as_deref(), Some("assets/figure.png"));
+
+        let pdf = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "paper.pdf",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(pdf.status, LinkResolutionStatus::Resolved);
+        assert_eq!(pdf.target_path.as_deref(), Some("assets/paper.pdf"));
+
+        let image_embed = index
+            .read_embed(vault, "notes/Source.md", "figure.png")
+            .expect("read image embed");
+        assert_eq!(image_embed.content_kind, Some(WikiEmbedContentKind::Image));
+        assert_eq!(image_embed.content, None);
+
+        let pdf_embed = index
+            .read_embed(vault, "notes/Source.md", "paper.pdf")
+            .expect("read pdf embed");
+        assert_eq!(pdf_embed.content_kind, Some(WikiEmbedContentKind::Pdf));
+        assert_eq!(pdf_embed.content, None);
+
+        let file_targets = index
+            .search("")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert!(file_targets.contains(&"figure.png".to_string()));
+        assert!(file_targets.contains(&"paper.pdf".to_string()));
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn duplicate_attachment_names_require_vault_relative_targets() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("assets/first")).expect("create first asset directory");
+        fs::create_dir_all(root.join("assets/second")).expect("create second asset directory");
+        fs::write(root.join("assets/first/figure.png"), b"first image").expect("write first image");
+        fs::write(root.join("assets/second/figure.png"), b"second image")
+            .expect("write second image");
+
+        let vault = root.to_str().expect("utf-8 fixture path");
+        let mut index = WikiIndex::default();
+        index.rebuild(vault).expect("rebuild attachment index");
+
+        let ambiguous = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "figure.png",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(ambiguous.status, LinkResolutionStatus::Ambiguous);
+
+        let targets = index
+            .search("figure.png")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            targets,
+            vec![
+                "assets/first/figure.png".to_string(),
+                "assets/second/figure.png".to_string()
+            ]
+        );
 
         fs::remove_dir_all(root).expect("remove fixture vault");
     }

@@ -125,6 +125,8 @@ pub struct WikiResolveResponse {
 #[serde(rename_all = "camelCase")]
 pub enum WikiEmbedContentKind {
     Markdown,
+    Image,
+    Pdf,
     Unsupported,
 }
 

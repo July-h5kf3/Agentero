@@ -6,7 +6,7 @@ export type WikiNavContextValue = {
 	onWikiNavigate: (nav: WikiNavTarget) => void;
 	/** Active Vault root for Host-backed semantic resolution. */
 	vaultPath?: string | null;
-	/** Vault-relative Markdown paths, used to resolve `[[wikilink]]` targets. */
+	/** Vault-relative Markdown, image, and PDF paths used by link rendering. */
 	mdFiles?: string[];
 	/** Bumped after the rebuildable Wiki index refreshes. */
 	revision?: number;

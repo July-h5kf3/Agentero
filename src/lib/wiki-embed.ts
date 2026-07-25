@@ -25,8 +25,13 @@ export function wikiEmbedResponseKind(
 	response: WikiEmbedResponse,
 ): WikiEmbedResponseKind {
 	if (response.link.status !== "resolved") return response.link.status;
-	return response.contentKind === "markdown" &&
+	if (
+		response.contentKind === "markdown" &&
 		typeof response.content === "string"
+	) {
+		return "ready";
+	}
+	return response.contentKind === "image" || response.contentKind === "pdf"
 		? "ready"
 		: "unsupported";
 }

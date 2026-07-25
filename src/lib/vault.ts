@@ -17,6 +17,7 @@ import {
 	remoteWriteText,
 } from "@/lib/remote-vault";
 import { isTauri } from "@/lib/tauri";
+import { isImagePath, isPdfPath } from "@/lib/viewer";
 import { toVaultRelative } from "@/lib/wiki";
 
 export type CreateVaultResult = {
@@ -886,6 +887,30 @@ export function collectMarkdownRelPaths(
 			if (n.kind === "directory" && n.children) walk(n.children);
 			else if (n.kind === "file" && isMarkdownPath(n.path)) {
 				out.push(toVaultRelative(vaultPath, n.path));
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
+/** Flatten the tree to Vault-relative files supported by internal links. */
+export function collectWikiTargetRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const node of list) {
+			if (node.kind === "directory" && node.children) {
+				walk(node.children);
+			} else if (
+				node.kind === "file" &&
+				(isMarkdownPath(node.path) ||
+					isImagePath(node.path) ||
+					isPdfPath(node.path))
+			) {
+				out.push(toVaultRelative(vaultPath, node.path));
 			}
 		}
 	};

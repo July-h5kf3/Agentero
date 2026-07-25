@@ -38,7 +38,7 @@ export type ResolvedLink = {
 
 export type WikiEmbedResponse = {
 	link: ResolvedLink;
-	contentKind?: "markdown" | "unsupported";
+	contentKind?: "markdown" | "image" | "pdf" | "unsupported";
 	content?: string;
 };
 

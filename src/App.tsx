@@ -187,6 +187,7 @@ import { cn } from "@/lib/utils";
 import {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
+	collectWikiTargetRelPaths,
 	createVault,
 	createVaultDirectory,
 	ensureLocalFsScope,
@@ -365,6 +366,10 @@ export default function App() {
 	const showWindowControls = isTauri() && !isMacOS();
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
+		[tree, vaultPath],
+	);
+	const vaultWikiTargetFiles = useMemo(
+		() => collectWikiTargetRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
 	/** Directory paths for Agent context chip folder icons. */
@@ -1262,11 +1267,18 @@ export default function App() {
 
 	/**
 	 * Debounced wiki / backlinks / graph index rebuild after any on-disk change
-	 * (external edit or Agent write). Only `.md` files carry wikilinks, so other
-	 * extensions are ignored; the rebuild is full but cheap for a research vault.
+	 * (external edit or Agent write). Markdown files carry references; images and
+	 * PDFs are canonical targets whose create/remove/modify events also invalidate
+	 * link resolution and embedded attachment projections.
 	 */
 	const scheduleWikiRebuild = useCallback((absPath: string) => {
-		if (!/\.md$/i.test(absPath)) return;
+		if (
+			!/\.(md|mdx|markdown|pdf|png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(
+				absPath,
+			)
+		) {
+			return;
+		}
 		if (wikiRebuildTimerRef.current) clearTimeout(wikiRebuildTimerRef.current);
 		wikiRebuildTimerRef.current = setTimeout(() => {
 			wikiRebuildTimerRef.current = null;
@@ -3273,7 +3285,7 @@ export default function App() {
 					return;
 				}
 				const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(nav.path)}`;
-				openTab(full, { preferMode: "markdown" });
+				openTab(full, { preferMode: preferredModeForPath(full) });
 				if (nav.fragment) {
 					const intent = {
 						id: ++wikiNavigationIntentIdRef.current,
@@ -3328,11 +3340,11 @@ export default function App() {
 	const wikiNavValue = useMemo(
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
-			mdFiles: vaultMdFiles,
+			mdFiles: vaultWikiTargetFiles,
 			revision: wikiIndexRevision,
 			vaultPath,
 		}),
-		[handleWikiNavigate, vaultMdFiles, vaultPath, wikiIndexRevision],
+		[handleWikiNavigate, vaultPath, vaultWikiTargetFiles, wikiIndexRevision],
 	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
