@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 .env
+.env.*
+!.env.example
+# macOS signing / notarization artifacts (never commit)
+*.p12
+*.p8
+AuthKey_*.p8
+certificate-base64.txt
 
 # Editor directories and files
 .vscode/*

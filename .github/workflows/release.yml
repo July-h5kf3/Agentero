@@ -84,10 +84,61 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # macOS: Developer ID signing + notarytool (see docs/development/macos-signing.md).
+      # Without APPLE_CERTIFICATE the build still runs unsigned (existing behavior).
+      - name: Prepare macOS signing and notarization
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
+            echo "::warning::APPLE_CERTIFICATE not configured; macOS installer will be unsigned"
+            exit 0
+          fi
+          echo "APPLE_CERTIFICATE present — Tauri will import the .p12 and codesign"
+
+          if [[ -n "${APPLE_API_KEY_P8:-}" && -n "${APPLE_API_KEY:-}" ]]; then
+            KEY_PATH="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY}.p8"
+            if [[ "$APPLE_API_KEY_P8" == -----BEGIN* ]]; then
+              printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
+            else
+              # Accept base64-encoded PEM (avoids multiline secret edge cases)
+              echo "$APPLE_API_KEY_P8" | base64 --decode > "$KEY_PATH"
+            fi
+            chmod 600 "$KEY_PATH"
+            echo "APPLE_API_KEY_PATH=${KEY_PATH}" >> "$GITHUB_ENV"
+            echo "App Store Connect API key written for notarytool"
+          else
+            # APPLE_ID fallback is read by Tauri from env on the build step; detect here without echoing values
+            if [[ -n "${APPLE_ID:-}" ]]; then
+              echo "Notarization will use APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID (build step)"
+            else
+              echo "::warning::No notarization credentials (APPLE_API_KEY_P8 or APPLE_ID); signed app may not be notarized"
+            fi
+          fi
+
       - name: Build Tauri installers
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Developer ID Application (.p12 base64) + password — see macos-signing.md
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Optional if the .p12 contains a single identity, e.g.
+          # "Developer ID Application: Your Name (TEAMID)"
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # Preferred notarization auth (App Store Connect API key)
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          # APPLE_API_KEY_PATH set by the prepare step when present
+          # Fallback: Apple ID + app-specific password
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Agentero ${{ github.ref_name }}
