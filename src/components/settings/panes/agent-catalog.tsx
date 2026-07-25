@@ -1,0 +1,125 @@
+import { Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
+import type {
+	CatalogEntry,
+	CatalogScanResponse,
+	ProbeResult,
+} from "@/lib/agent";
+import { cn } from "@/lib/core/utils";
+
+export function StatusBadge({
+	tone,
+	children,
+	className,
+	title,
+}: {
+	tone: "ok" | "warn" | "err" | "muted" | "primary";
+	children: ReactNode;
+	className?: string;
+	title?: string;
+}) {
+	return (
+		<span
+			title={title}
+			className={cn(
+				"inline-flex shrink-0 items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none",
+				tone === "ok" &&
+					"bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+				tone === "warn" && "bg-amber-500/15 text-amber-800 dark:text-amber-400",
+				tone === "err" && "bg-destructive/15 text-destructive",
+				tone === "muted" && "bg-muted text-muted-foreground",
+				tone === "primary" && "bg-primary/10 text-primary",
+				className,
+			)}
+		>
+			{children}
+		</span>
+	);
+}
+
+/** ACP badge while a probe is in flight (replaces static “not probed”). */
+export function ProbingBadge({ label }: { label: string }) {
+	return (
+		<StatusBadge tone="warn">
+			<Loader2 className="size-2.5 shrink-0 animate-spin" aria-hidden />
+			{label}
+		</StatusBadge>
+	);
+}
+
+export function catalogProbeKey(templateId: string): string {
+	return `catalog:${templateId}`;
+}
+
+export function customProbeKey(id: string): string {
+	return `custom:${id}`;
+}
+
+/** Whether a catalog row still needs ACP initialize (skip already-ready on soft open). */
+export function catalogNeedsProbe(
+	entry: CatalogEntry,
+	force: boolean,
+): boolean {
+	if (!(entry.binaryAvailable || entry.acpCommandAvailable)) return false;
+	if (force) return true;
+	return entry.acpStatus === "not-probed" || entry.acpStatus === "failed";
+}
+
+export function patchCatalogProbe(
+	scan: CatalogScanResponse,
+	templateId: string,
+	result: ProbeResult,
+): CatalogScanResponse {
+	return {
+		...scan,
+		entries: scan.entries.map((entry) => {
+			if (entry.templateId !== templateId) return entry;
+			return {
+				...entry,
+				registeredId: entry.registeredId ?? result.agentId,
+				acpStatus: result.available ? "ready" : "failed",
+				acpAgentName: result.agentName ?? null,
+				lastProbeError: result.error ?? null,
+				lastProbedAt: new Date().toISOString(),
+			};
+		}),
+	};
+}
+
+export function patchCustomProbe(
+	scan: CatalogScanResponse,
+	agentId: string,
+	result: ProbeResult,
+): CatalogScanResponse {
+	return {
+		...scan,
+		customAgents: scan.customAgents.map((agent) => {
+			if (agent.id !== agentId) return agent;
+			return {
+				...agent,
+				available: result.available ? true : agent.available,
+				lastProbeOk: result.available,
+				lastProbeAgentName: result.agentName ?? null,
+				lastProbeError: result.error ?? null,
+				lastProbedAt: new Date().toISOString(),
+			};
+		}),
+	};
+}
+
+export function catalogStatusTone(
+	status: CatalogEntry["acpStatus"],
+): "ok" | "warn" | "err" | "muted" {
+	switch (status) {
+		case "ready":
+			return "ok";
+		case "failed":
+			return "err";
+		case "not-probed":
+			return "warn";
+		case "missing":
+			return "muted";
+	}
+}
+
+/** Availability icon for free-MT providers in the default-service Select. */
