@@ -1,3 +1,11 @@
+/**
+ * Side-effect import: dockview 7 registers optional modules
+ * (ContextMenu, TabGroupChips, AdvancedDnD, Accessibility/keyboard dock)
+ * only when the `dockview` package is evaluated. Importing `dockview-react`
+ * alone can tree-shake that registration, leaving contextMenuService
+ * undefined so tab right-click silently does nothing.
+ */
+import "dockview";
 import {
 	type DockviewApi,
 	DockviewDefaultTab,

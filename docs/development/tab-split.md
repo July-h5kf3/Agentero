@@ -137,5 +137,6 @@ export type DocTab = {
 | 状态 | 能力 |
 |---|---|
 | 已用 | `dndStrategy: 'pointer'`、`dndEdges`、`dropOverlayModel`、`onWillDrop` / `onWillShowOverlay`、`disableFloatingGroups`、外部 DnD、`getTabContextMenuItems`、`getTabGroupChipContextMenuItems`、`tabGroupColors` / `tabGroupAccent`、`keyboardNavigation`、PDF `renderer: 'always'` |
+| **模块注册** | dockview 7 的 ContextMenu / TabGroup / keyboard-dock 在 `dockview` 包 `registerModules`；`tab-workspace` 必须 `import "dockview"` 副作用导入，否则只引 `dockview-react` 时可能 tree-shake 掉注册 → **右键 tab 静默无菜单** |
 | 刻意未用 | popout / floating（与 `⌘N` 多窗口策略一致）、全局 `defaultRenderer: 'always'`（非 PDF 不需要壳常驻） |
 | backlog | `maximizeGroup`、watermark、header actions |

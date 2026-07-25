@@ -268,12 +268,18 @@
 	--dv-tab-group-chip-font-size: 0.6875rem;
 	--dv-context-menu-background-color: var(--popover);
 	--dv-context-menu-color: var(--popover-foreground);
+	--dv-overlay-z-index: 1000;
 	--dv-floating-box-shadow: 0 8px 24px
 		color-mix(in oklab, var(--foreground) 12%, transparent);
 	background-color: var(--background);
 	color: var(--foreground);
 	height: 100%;
 	width: 100%;
+}
+
+/* Context menu / overflow popovers mount on this anchor (prepended to root). */
+.agentero-dockview .dv-popover-anchor {
+	z-index: var(--dv-overlay-z-index, 1000);
 }
 
 /*
