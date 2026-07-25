@@ -254,7 +254,8 @@
 ### 8. Release 完善
 
 - [x] tag 构建已完成（`v*` → 三平台桌面安装包草稿 Release）
-- [ ] 签名、公证、自动 changelog
+- [x] macOS Developer ID 签名 + notarytool 公证（工程/CI/文档；需配置 secrets）— 见 `macos-signing.md`
+- [ ] 自动 changelog
 - [ ] 同步 `package.json`、`src-tauri/tauri.conf.json` 和 tag 版本号
 - [ ] Release artifact 命名规范化，区分 macOS arch / Windows / Linux
 
@@ -463,5 +464,6 @@
 ### 发布
 
 - [x] tag → 三平台草稿 Release
-- [ ] 签名/公证/changelog
+- [x] macOS 签名/公证（待填 secrets 后验证首个 tag）
+- [ ] changelog
 - [ ] 可选 artifact 命名规范化

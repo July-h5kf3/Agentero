@@ -124,4 +124,4 @@ cargo test -p agentero-cli
 
 版本 bump 提交完成后，才能创建对应的 `vX.Y.Z` tag；tag 去掉 `v` 后必须与上述版本完全一致。发布工作流中，Tauri 安装包版本来自 Tauri/Cargo 配置，CLI 压缩包文件名来自 tag，不能只改 tag 而跳过 manifest 版本更新。发布前应检查 `git diff <previous-tag>..<new-tag> -- package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml cli/Cargo.toml Cargo.lock`，并确认构建产物、应用内版本和 `agentero --version` 没有混用两个版本。
 
-不要在未补充文档和 secrets 说明的情况下加入签名、公证或自动发布步骤；本地开发构建不能依赖发布凭据。
+macOS 店外分发签名与公证（Developer ID + notarytool）见 `docs/development/macos-signing.md`；CI 通过可选 GitHub secrets 启用，**本地 `pnpm tauri dev` / 日常构建不依赖这些凭据**。证书、`.p12`、`.p8`、App 专用密码不得提交进仓库。Mac App Store 上架是另一条链路（强制沙箱），勿与 Developer ID 配置混用。

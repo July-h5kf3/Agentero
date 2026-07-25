@@ -11,7 +11,7 @@
 | TypeScript 质量 | [Biome](https://biomejs.dev/) | 前端代码与文档相关文件的格式化和检查。 |
 | Rust 质量 | [`cargo fmt`](https://doc.rust-lang.org/cargo/commands/cargo-fmt.html) + [`cargo clippy`](https://doc.rust-lang.org/clippy/) | Rust 官方格式化与 lint 工具。 |
 | 桌面构建 | [Tauri CLI](https://v2.tauri.app/reference/cli/) | 本地和 CI 中构建桌面应用。 |
-| 发布 CI | [GitHub Actions](https://docs.github.com/actions) + [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) | `v*` tag 触发 macOS、Linux、Windows 安装包构建。 |
+| 发布 CI | [GitHub Actions](https://docs.github.com/actions) + [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) | `v*` tag 触发 macOS、Linux、Windows 安装包构建；macOS 可选 Developer ID 签名 + notarytool 公证。 |
 | 文档站 | [MkDocs](https://www.mkdocs.org/) + Read the Docs 主题 | 静态文档部署到 `gh-pages` 分支。 |
 
 ## 当前实现状态
@@ -34,6 +34,7 @@
 | 全库搜索 / 命令面板 | ✅ Phase A | `⌘P`/`⌘K` 快速打开 + `⇧⌘P` 命令模式；`>` 前缀；见 [`command-palette.md`](command-palette.md) |
 | 应用弹层栈 | ✅ | `overlay-stack`：Esc/`⌘W` 统一关最顶层 sheet/Dialog；见 [`../frontend/ui.md`](../frontend/ui.md) §3.0 |
 | Release CI | ✅ | `v*` tag → **prepare** 草稿 Release；**installers** / **cli** 并行矩阵上传（同草稿） |
+| macOS 签名/公证 | 🟡 | 工程与 CI 已接 Developer ID + notarytool；需配置证书与 GitHub secrets（见 [`macos-signing.md`](macos-signing.md)） |
 | 远程 Vault（SSH/SFTP） | ✅ MVP | 文件权威远端 + 远端 BYOA（ACP over SSH）；见 [`remote-vault.md`](remote-vault.md) |
 
 更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
@@ -55,6 +56,8 @@
 - [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 左右分屏。
 - [`plaza.md`](plaza.md)：广场（Plaza）——侧栏虚拟发现入口；Cool Papers WebView、推荐 v0、播客占位；P0 不做入库。
 - [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
+- [`macos-signing.md`](macos-signing.md)：macOS **Developer ID** 签名、**notarytool** 公证与 staple、CI secrets。
+- [`release.md`](release.md)：版本 bump / tag 发布流程；含 iPadOS 上架调研与 macOS 签名入口。
 
 - [`.md`](.md)：简短产品假设。
 - Bug 修复记录：

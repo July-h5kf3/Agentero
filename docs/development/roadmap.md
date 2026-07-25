@@ -24,7 +24,7 @@
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | **远程 Vault（SSH/SFTP）+ 远端 BYOA** | ✅ MVP | 文件权威远端；SFTP IO；catalog work mirror；ACP over SSH；PDF cache。设计见 [`remote-vault.md`](remote-vault.md)。 |
-| Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release。 |
+| Release CI | ✅ 完成 | push `v*` tag 时构建 macOS/Linux/Windows Tauri 安装包并上传草稿 Release；macOS 可选 Developer ID + notarytool（secrets 齐后生效）。 |
 
 **精确 arXiv/标识符入库（可用）**：魔棒粘贴 ID/URL → Translator → catalog + `NOTES.md` 壳 → `source/` PDF（arXiv 含 TeX）→ Library 表可见；缺资源时树行/Library 可补下。
 
