@@ -89,6 +89,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::remote::commands::remote_host_identity,
             crate::features::terminal::commands::path_open_in_terminal,
             crate::features::window::commands::window_new,
+            crate::features::window::commands::settings_window_open,
             crate::features::import::zotero_commands::zotero_scan,
             crate::features::import::zotero_commands::zotero_migrate,
             crate::features::watcher::commands::fs_watch_start,

@@ -8,10 +8,7 @@ import { CommandPalette } from "@/components/dialogs/command-palette";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
 import { MovePapersDialog } from "@/components/library/move-papers-dialog";
-import {
-	type SettingsSection,
-	SettingsWindow,
-} from "@/components/settings/settings-window";
+import type { SettingsSection } from "@/components/settings/types";
 import { BackgroundTasksPanel } from "@/components/shell/background-tasks-panel";
 import { ErrorBoundary } from "@/components/shell/error-boundary";
 import { TitleBar } from "@/components/shell/title-bar";
@@ -222,8 +219,6 @@ export default function App() {
 	const settingsRef = useRef(settings);
 	settingsRef.current = settings;
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [settingsSection, setSettingsSection] =
-		useState<SettingsSection>("general");
 	const settingsOpenRef = useRef(settingsOpen);
 	settingsOpenRef.current = settingsOpen;
 
@@ -1983,13 +1978,48 @@ export default function App() {
 		[vaultPath, treeSelectedPath, tree],
 	);
 
-	const openSettings = useCallback((section: SettingsSection = "general") => {
-		// In-app modal on every platform (shared `SettingsContent`).
-		setSettingsSection(section);
-		setSettingsOpen(true);
+	const openSettings = useCallback(
+		(section: SettingsSection = "general") => {
+			if (!isTauri()) return;
+			void (async () => {
+				try {
+					const { invoke } = await import("@tauri-apps/api/core");
+					await invoke("settings_window_open", { section, vaultPath });
+					setSettingsOpen(true);
+				} catch (e) {
+					notifyError(String(e));
+				}
+			})();
+		},
+		[vaultPath],
+	);
+
+	const closeSettings = useCallback(() => {
+		if (!isTauri()) return;
+		void (async () => {
+			try {
+				const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+				const win = await WebviewWindow.getByLabel("settings");
+				await win?.close();
+			} catch {
+				// ignore
+			}
+		})();
 	}, []);
 
-	const closeSettings = useCallback(() => setSettingsOpen(false), []);
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unlisten: (() => void) | undefined;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			unlisten = await listen("settings_window_closed", () => {
+				setSettingsOpen(false);
+			});
+		})();
+		return () => {
+			unlisten?.();
+		};
+	}, []);
 
 	// Stable handlers passed to DocView so its React.memo can bail out on
 	// unrelated App re-renders (otherwise every mounted tab's viewer/editor
@@ -3662,16 +3692,6 @@ export default function App() {
 						</ResizablePanel>
 					</ResizableGroup>
 				</ErrorBoundary>
-
-				<SettingsWindow
-					open={settingsOpen}
-					section={settingsSection}
-					onSectionChange={setSettingsSection}
-					onClose={closeSettings}
-					settings={settings}
-					onChange={updateSettings}
-					vaultPath={vaultPath}
-				/>
 
 				<ZoteroMigrateDialog
 					open={zoteroOpen}

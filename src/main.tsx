@@ -18,6 +18,9 @@ import App from "./App";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
 
+const searchParams = new URLSearchParams(window.location.search);
+const isSettingsWindow = searchParams.get("window") === "settings";
+
 async function boot() {
 	await initLogger();
 	logger.info("op start frontend_boot");
@@ -38,7 +41,28 @@ async function boot() {
 		document.documentElement.lang = locale;
 	}
 
-	ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+	const root = document.getElementById("root") as HTMLElement;
+	if (isSettingsWindow) {
+		const { SettingsNativeRoot } = await import(
+			"@/components/settings/settings-native-root"
+		);
+		ReactDOM.createRoot(root).render(
+			<React.StrictMode>
+				<I18nextProvider i18n={i18n}>
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+						<TooltipProvider delayDuration={300}>
+							<SettingsNativeRoot />
+							{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
+							<Toaster />
+						</TooltipProvider>
+					</ThemeProvider>
+				</I18nextProvider>
+			</React.StrictMode>,
+		);
+		return;
+	}
+
+	ReactDOM.createRoot(root).render(
 		<React.StrictMode>
 			<I18nextProvider i18n={i18n}>
 				<ThemeProvider attribute="class" defaultTheme="system" enableSystem>

@@ -17,6 +17,12 @@ const TRAFFIC_LIGHT_Y_DEFAULT: f64 = 18.0;
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 14.0;
 
+/// Traffic-light position for the narrower Settings window.
+#[cfg(target_os = "macos")]
+const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 14.0;
+
+pub const SETTINGS_WINDOW_LABEL: &str = "settings";
+
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
 #[tauri::command]
 pub fn window_new(app: AppHandle) -> Result<(), String> {
@@ -80,5 +86,75 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
     }
 
     op.finish_ok_extra(format!("label={label}"));
+    Ok(())
+}
+
+/// Open a singleton native Settings window, or focus it if already open.
+#[tauri::command]
+pub fn settings_window_open(
+    app: AppHandle,
+    section: String,
+    vault_path: Option<String>,
+) -> Result<(), String> {
+    use crate::core::log_util::OpTimer;
+
+    let op = OpTimer::start("settings_window_open");
+
+    if let Some(win) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        let _ = win.set_focus();
+        op.finish_ok_extra("existing");
+        return Ok(());
+    }
+
+    let mut url = format!(
+        "index.html?window=settings&section={}",
+        urlencoding::encode(&section)
+    );
+    if let Some(path) = vault_path {
+        url.push_str(&format!("&vault_path={}", urlencoding::encode(&path)));
+    }
+
+    let mut builder =
+        WebviewWindowBuilder::new(&app, SETTINGS_WINDOW_LABEL, WebviewUrl::App(url.into()))
+            .title("Settings")
+            .inner_size(720.0, 560.0)
+            .min_inner_size(640.0, 480.0)
+            .resizable(true)
+            .center()
+            .focused(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        let scale = app
+            .state::<AppSettingsStore>()
+            .get()
+            .map(|r| r.settings.ui_scale)
+            .unwrap_or(1.0);
+        let y = if scale.is_finite() && (0.8..=1.5).contains(&scale) {
+            SETTINGS_TRAFFIC_LIGHT_Y * scale
+        } else {
+            SETTINGS_TRAFFIC_LIGHT_Y
+        };
+        builder = builder
+            .hidden_title(true)
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_LIGHT_X, y));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.decorations(false);
+    }
+
+    let window = match builder.build() {
+        Ok(w) => w,
+        Err(e) => {
+            op.finish_err_msg("settings", &e);
+            return Err(e.to_string());
+        }
+    };
+    let _ = window.set_focus();
+
+    op.finish_ok_extra("new");
     Ok(())
 }

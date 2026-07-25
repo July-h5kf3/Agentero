@@ -109,6 +109,9 @@ pub fn run() {
         builder = builder.on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 window.state::<FsWatchController>().stop(window.label());
+                if window.label() == crate::features::window::commands::SETTINGS_WINDOW_LABEL {
+                    let _ = window.app_handle().emit("settings_window_closed", ());
+                }
             }
         });
     }

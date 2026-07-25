@@ -6,6 +6,7 @@ export {
 	ensureSettingsLoaded,
 	loadSettings,
 	saveSettings,
+	saveSettingsAsync,
 	subscribeSettings,
 	useUiScale,
 } from "@/lib/settings/store";

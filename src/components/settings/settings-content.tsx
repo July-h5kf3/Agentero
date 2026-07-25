@@ -207,7 +207,7 @@ export function SettingsContent({
 				) : null}
 				<ul
 					className={cn(
-						"flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2",
+						"agentero-scroll flex min-h-0 flex-1 flex-col gap-0.5 px-2 pb-2",
 						!onClose && "pt-3",
 					)}
 				>
@@ -268,7 +268,7 @@ export function SettingsContent({
 			</nav>
 
 			{/* Content */}
-			<div ref={contentScrollRef} className="min-w-0 flex-1 overflow-y-auto">
+			<div ref={contentScrollRef} className="agentero-scroll min-w-0 flex-1">
 				<div className="px-6 py-5">
 					{visitedSections.includes("general") && (
 						<div hidden={section !== "general"}>
