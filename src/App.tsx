@@ -467,6 +467,9 @@ export default function App() {
 	/** Normalized paths currently being reloaded from disk; suppresses the editor
 	 * unmount-flush so an external/Agent write is never clobbered by stale in-memory text. */
 	const reseedGuardRef = useRef<Set<string>>(new Set());
+	/** Serialize Markdown saves per absolute path so overlapping editor lifecycles
+	 * cannot race their disk snapshot checks and writes. */
+	const markdownPersistQueuesRef = useRef(new Map<string, Promise<boolean>>());
 	const treeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -2045,7 +2048,16 @@ export default function App() {
 			} catch (error) {
 				trackInternalRenamePaths(pendingPaths, Date.now() + 2000);
 				const key = wikiHeadingRenameErrorKey(error);
-				notifyError(t(`editor:headingRename.errors.${key}`));
+				const failure = wikiRenameFailure(error);
+				const blockedPaths =
+					failure?.code === "unsavedEdits" ? failure.paths : undefined;
+				notifyError(t(`editor:headingRename.errors.${key}`), {
+					description: blockedPaths?.length
+						? t("editor:headingRename.errors.unsavedFiles", {
+								paths: blockedPaths.join(" · "),
+							})
+						: undefined,
+				});
 				throw error;
 			}
 		},
@@ -2542,34 +2554,61 @@ export default function App() {
 	// its own fixed path (debounced autosave, ⌘S, and unmount flush), so writes always
 	// target the correct file even when switching files quickly.
 	const persistFile = useCallback(
-		(path: string, md: string, lastSaved: string) => {
-			if (!isTauri() || !vaultPath || !path) return;
-			// Skip while this path is being reloaded from disk (external/Agent write):
-			// the remount's unmount-flush must not clobber the fresh disk content.
-			if (reseedGuardRef.current.has(normalizeTabPath(path))) return;
-			void (async () => {
-				// Conflict guard: if the file changed on disk since we last saved
-				// (external editor / Agent), do NOT silently overwrite — keep the
-				// user's in-memory edit and warn. (readVaultFile throws when the file
-				// is missing → treat as no conflict and create it.)
-				try {
-					const disk = await readVaultFile(path);
-					if (disk !== lastSaved) {
-						const name = path.split(/[\\/]/).pop() ?? path;
-						notifyWarning(t("diskConflict.saveBlocked", { name }));
-						return;
+		(path: string, md: string, lastSaved: string): Promise<boolean> => {
+			if (!isTauri() || !vaultPath || !path) return Promise.resolve(false);
+			const normalizedPath = normalizeTabPath(path);
+			const previous =
+				markdownPersistQueuesRef.current.get(normalizedPath) ??
+				Promise.resolve(false);
+			const attempt = previous
+				.catch(() => false)
+				.then(async () => {
+					// Skip while this path is being reloaded from disk (external/Agent write):
+					// the remount's unmount-flush must not clobber the fresh disk content.
+					if (reseedGuardRef.current.has(normalizedPath)) return false;
+					// Conflict guard: if the file changed on disk since we last saved
+					// (external editor / Agent), do NOT silently overwrite — keep the
+					// user's in-memory edit and warn. (readVaultFile throws when the file
+					// is missing → treat as no conflict and create it.)
+					try {
+						const disk = await readVaultFile(path);
+						if (disk !== lastSaved) {
+							const name = path.split(/[\\/]/).pop() ?? path;
+							notifyWarning(t("diskConflict.saveBlocked", { name }));
+							return false;
+						}
+					} catch {
+						// Missing/unreadable file → no conflict to guard against.
 					}
-				} catch {
-					// Missing/unreadable file → no conflict to guard against.
-				}
-				// Keep the owning tab's seed in sync so PDF↔Notes / tab switches see latest text.
-				setTabs((prev) => syncTabSeedsForPath(prev, path, md));
-				try {
-					await writeVaultFile(path, md);
-				} catch (e) {
-					notifyError(e instanceof Error ? e.message : String(e));
-				}
-			})();
+					try {
+						await writeVaultFile(path, md);
+						// Advance the owning tab's seed only after the write is confirmed.
+						// PDF↔Notes / tab switches then see the last disk-backed text.
+						setTabs((prev) => syncTabSeedsForPath(prev, path, md));
+						return true;
+					} catch (e) {
+						notifyError(e instanceof Error ? e.message : String(e));
+						return false;
+					}
+				});
+			markdownPersistQueuesRef.current.set(normalizedPath, attempt);
+			void attempt.then(
+				() => {
+					if (
+						markdownPersistQueuesRef.current.get(normalizedPath) === attempt
+					) {
+						markdownPersistQueuesRef.current.delete(normalizedPath);
+					}
+				},
+				() => {
+					if (
+						markdownPersistQueuesRef.current.get(normalizedPath) === attempt
+					) {
+						markdownPersistQueuesRef.current.delete(normalizedPath);
+					}
+				},
+			);
+			return attempt;
 		},
 		[vaultPath, t],
 	);

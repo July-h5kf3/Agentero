@@ -335,7 +335,7 @@
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`src/lib/vault/fs-watch.ts`）。打开中的 `.md`/`NOTES.md`：无未存改动则重载；有未存改动 toast 提示不静默覆盖；内容相等抑制自写回声。结构性变更去抖刷新文件树。
 - **外部本地改名 repair**：只有 Host 明确给出可信 `rename { from, to }` 时才进入内链 repair。General 的 `autoUpdateInternalLinks: "ask"` 默认先显示影响范围；`"always"` 仍要求 dirty path、hash、磁盘状态门禁全部通过。成功后 Dockview panel、活动路径、树选中、Library scope 与 PDF highlights 统一重映射；remote Vault 不自动修复。
 - **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。Host 可从应用 cache 目录中的版本化 SQLite snapshot warm restore；任一目标文件指纹变化、版本不匹配或缓存损坏即从 Vault 冷重建，cache 失败不阻塞 UI。
-- **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。
+- **保存冲突**：写盘前比对最后一次确认写入磁盘的内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。冲突或写入失败不会推进编辑器的保存基线，也不会清除 dirty；同一路径的保存请求串行执行，只有写盘成功后才同步 tab seed。
 
 后续增强（未做）：
 

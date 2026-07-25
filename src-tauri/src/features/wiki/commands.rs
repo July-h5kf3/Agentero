@@ -150,6 +150,7 @@ pub fn wiki_rename_heading(
             serde_json::json!({
                 "code": error.code,
                 "rollback": error.rollback,
+                "paths": error.paths,
             }),
         ),
     }

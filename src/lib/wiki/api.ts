@@ -151,6 +151,7 @@ export type GraphResponse = {
 export type WikiRenameFailure = {
 	code: string;
 	rollback: WikiRenameRollback;
+	paths?: string[];
 };
 
 export type WikiApiError = Error & { details?: unknown };
@@ -165,7 +166,14 @@ export function wikiRenameFailure(error: unknown): WikiRenameFailure | null {
 	) {
 		return null;
 	}
-	return details as WikiRenameFailure;
+	const paths = (details as { paths?: unknown }).paths;
+	return {
+		code: (details as { code: string }).code,
+		rollback: (details as { rollback: WikiRenameRollback }).rollback,
+		...(Array.isArray(paths) && paths.every((path) => typeof path === "string")
+			? { paths }
+			: {}),
+	};
 }
 
 /** A failed external repair is zero-write only when the Host confirmed it. */

@@ -38,7 +38,11 @@ export type DocViewEditorProps = {
 	showToolbar: boolean;
 	notesPlaceholder: string;
 	markdownPlaceholder: string;
-	onPersistFile: (path: string, md: string, lastSaved: string) => void;
+	onPersistFile: (
+		path: string,
+		md: string,
+		lastSaved: string,
+	) => Promise<boolean>;
 	onAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
 	onRenameHeading?: (

@@ -23,6 +23,7 @@ pub struct WikiRenameError {
     pub code: WikiRenameErrorCode,
     pub message: String,
     pub rollback: WikiRenameRollback,
+    pub paths: Vec<String>,
 }
 
 impl WikiRenameError {
@@ -31,6 +32,7 @@ impl WikiRenameError {
             code,
             message: message.into(),
             rollback: WikiRenameRollback::NotNeeded,
+            paths: Vec::new(),
         }
     }
 
@@ -43,7 +45,13 @@ impl WikiRenameError {
             code,
             message: message.into(),
             rollback,
+            paths: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_paths(mut self, paths: Vec<String>) -> Self {
+        self.paths = paths;
+        self
     }
 }
 
@@ -359,6 +367,7 @@ impl WikiRenameTransaction {
     }
 
     pub fn reject_dirty_paths(&self, dirty_paths: &[String]) -> Result<(), WikiRenameError> {
+        let mut affected = BTreeSet::new();
         for raw_path in dirty_paths {
             let path = normalize_vault_path(raw_path)?;
             let touches_primary_move = is_at_or_under(&path, &self.from);
@@ -367,11 +376,16 @@ impl WikiRenameTransaction {
                 .iter()
                 .any(|source| source.current_path == path);
             if touches_primary_move || touches_rewrite {
-                return Err(WikiRenameError::new(
-                    WikiRenameErrorCode::UnsavedEdits,
-                    format!("unsaved editor changes block move: {path}"),
-                ));
+                affected.insert(path);
             }
+        }
+        if !affected.is_empty() {
+            let paths = affected.into_iter().collect::<Vec<_>>();
+            return Err(WikiRenameError::new(
+                WikiRenameErrorCode::UnsavedEdits,
+                format!("unsaved editor changes block move: {}", paths.join(", ")),
+            )
+            .with_paths(paths));
         }
         Ok(())
     }
@@ -969,9 +983,17 @@ mod tests {
                 .expect("plan");
 
         let error = transaction
-            .reject_dirty_paths(&["notes/Source.md".to_string()])
+            .reject_dirty_paths(&[
+                "notes/Target.md".to_string(),
+                "notes/Unrelated.md".to_string(),
+                "notes/Source.md".to_string(),
+            ])
             .expect_err("dirty incoming source must block the move");
         assert_eq!(error.code, WikiRenameErrorCode::UnsavedEdits);
+        assert_eq!(
+            error.paths,
+            vec!["notes/Source.md".to_string(), "notes/Target.md".to_string()]
+        );
         assert!(root.join("notes/Target.md").exists());
         assert!(!root.join("archive/Target.md").exists());
         let _ = fs::remove_dir_all(root);
@@ -1052,6 +1074,7 @@ mod tests {
             .reject_dirty_paths(&["notes/Source.md".to_string()])
             .expect_err("dirty source blocks repair");
         assert_eq!(dirty.code, WikiRenameErrorCode::UnsavedEdits);
+        assert_eq!(dirty.paths, vec!["notes/Source.md".to_string()]);
         write(&root, "notes/Source.md", "[[manually changed]]\n");
         let stale = transaction
             .execute_external_repair()

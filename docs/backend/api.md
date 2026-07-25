@@ -1603,7 +1603,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 // }
 ```
 
-Host 以 `expectedContent + headingPath + headingLine` 复核保存态标题身份，只改写 occurrence 的精确 `fragmentRange`。Wikilink、嵌入、Vault-local Markdown link、同文件 fragment 与多级 heading path 均走同一事务；文件目标、alias、Markdown label 和周围正文保持不变。dirty source、stale content、标题缺失、新标题无效/歧义或重叠编辑会在写入前失败；写入或索引重建失败返回 `{ code, rollback }` 结构化 details。
+Host 以 `expectedContent + headingPath + headingLine` 复核保存态标题身份，只改写 occurrence 的精确 `fragmentRange`。Wikilink、嵌入、Vault-local Markdown link、同文件 fragment 与多级 heading path 均走同一事务；文件目标、alias、Markdown label 和周围正文保持不变。dirty source、stale content、标题缺失、新标题无效/歧义或重叠编辑会在写入前失败；失败返回 `{ code, rollback, paths? }` 结构化 details，其中 `unsavedEdits` 的 `paths` 只列出本次事务实际会改写的未保存 Vault 相对路径。
 
 #### `wiki_external_rename_preview`
 
@@ -1625,7 +1625,7 @@ Host 以 `expectedContent + headingPath + headingLine` 复核保存态标题身�
 // => { ok: true; data: WikiRenameResult }
 ```
 
-失败会移除无效 candidate；仅未保存编辑错误保留 candidate，允许用户先处理编辑后重试。执行失败响应的 `error.details` 为 `{ code: WikiRenameErrorCode, rollback: "not-needed" | "completed" | "manual-recovery-required" }`；调用方仅在 `rollback === "not-needed"` 时可表述为零写入。
+失败会移除无效 candidate；仅未保存编辑错误保留 candidate，允许用户先处理编辑后重试。执行失败响应的 `error.details` 为 `{ code: WikiRenameErrorCode, rollback: "not-needed" | "completed" | "manual-recovery-required", paths?: string[] }`；`unsavedEdits` 会返回实际阻塞事务的 Vault 相对路径，调用方仅在 `rollback === "not-needed"` 时可表述为零写入。
 
 #### `graph_get_graph`
 

@@ -44,6 +44,7 @@
 		"errors": {
 			"localOnly": "Heading rename is available only for files in a local Vault.",
 			"unsavedEdits": "Save or discard all affected unsaved edits before renaming this heading.",
+			"unsavedFiles": "Unsaved files: {{paths}}",
 			"sourceChanged": "A linked file changed on disk. Reload it, then try the heading rename again.",
 			"headingMissing": "The saved heading could no longer be identified. Reload the note and try again.",
 			"invalidHeading": "Enter a different, valid single-line heading.",
