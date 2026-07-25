@@ -28,6 +28,7 @@ import {
 	cancelBackgroundTask,
 	clearFinishedBackgroundTasks,
 	getActiveBackgroundTasks,
+	isFinishedBackgroundTask,
 	setBackgroundTasksExpanded,
 } from "@/lib/core/background-tasks";
 import { cn } from "@/lib/core/utils";
@@ -134,20 +135,16 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 	const active = useMemo(() => getActiveBackgroundTasks(tasks), [tasks]);
 	const visible = useMemo(() => {
 		// Active first (by queue), then recent finished (newest last → reverse for display)
-		const act = tasks
-			.filter((x) => x.status === "queued" || x.status === "running")
-			.sort((a, b) => a.queueIndex - b.queueIndex);
+		const act = [...active].sort((a, b) => a.queueIndex - b.queueIndex);
 		const done = tasks
-			.filter((x) => ["completed", "failed", "cancelled"].includes(x.status))
+			.filter(isFinishedBackgroundTask)
 			.sort((a, b) => b.updatedAt - a.updatedAt)
 			.slice(0, 6);
 		return [...act, ...done];
-	}, [tasks]);
+	}, [tasks, active]);
 
 	const running = active.find((t) => t.status === "running") ?? active[0];
-	const hasFinished = tasks.some((t) =>
-		["completed", "failed", "cancelled"].includes(t.status),
-	);
+	const hasFinished = tasks.some(isFinishedBackgroundTask);
 
 	if (tasks.length === 0) return null;
 

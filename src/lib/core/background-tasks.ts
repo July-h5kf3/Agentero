@@ -431,6 +431,16 @@ export function getActiveBackgroundTasks(
 	return tasks.filter((t) => t.status === "queued" || t.status === "running");
 }
 
+const FINISHED_STATUSES: ReadonlySet<BackgroundTaskStatus> = new Set([
+	"completed",
+	"failed",
+	"cancelled",
+]);
+
+export function isFinishedBackgroundTask(task: BackgroundTask): boolean {
+	return FINISHED_STATUSES.has(task.status);
+}
+
 /**
  * Run an async job as a background task with automatic complete/fail.
  */
