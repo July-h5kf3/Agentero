@@ -1,10 +1,12 @@
 /**
  * Lightweight background-task store (IDE-style progress / queue).
- * No external state lib — useSyncExternalStore for React subscriptions.
+ * zustand vanilla store — usable from plain modules; React subscribes
+ * via `useStore` in `use-background-tasks`.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { createStore } from "zustand/vanilla";
 import i18n from "@/i18n";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
@@ -44,8 +46,6 @@ export type BackgroundTask = {
 	updatedAt: number;
 };
 
-type Listener = () => void;
-
 type Store = {
 	tasks: BackgroundTask[];
 	expanded: boolean;
@@ -80,12 +80,12 @@ function phaseLabel(phase: string): string {
 	return i18n.t("app:tasks.downloadPhaseAsset");
 }
 
-let store: Store = {
+/** Vanilla store so plain modules can start/patch tasks without React. */
+export const backgroundTasksStore = createStore<Store>(() => ({
 	tasks: [],
 	expanded: false,
-};
+}));
 
-const listeners = new Set<Listener>();
 const controllers = new Map<string, AbortController>();
 
 /** Stable cancel message; keep in sync with {@link notifyError} filter. */
@@ -109,10 +109,6 @@ export function isBackgroundTaskCancelledError(error: unknown): boolean {
 	);
 }
 
-function emit() {
-	for (const l of listeners) l();
-}
-
 function reindexQueue(tasks: BackgroundTask[]): BackgroundTask[] {
 	let i = 1;
 	return tasks.map((t) => {
@@ -124,20 +120,21 @@ function reindexQueue(tasks: BackgroundTask[]): BackgroundTask[] {
 }
 
 function setStore(next: Store) {
-	store = {
-		...next,
-		tasks: reindexQueue(next.tasks),
-	};
-	emit();
+	backgroundTasksStore.setState(
+		{
+			...next,
+			tasks: reindexQueue(next.tasks),
+		},
+		true,
+	);
+}
+
+function store(): Store {
+	return backgroundTasksStore.getState();
 }
 
 export function getBackgroundTasksSnapshot(): Store {
-	return store;
-}
-
-export function subscribeBackgroundTasks(listener: Listener): () => void {
-	listeners.add(listener);
-	return () => listeners.delete(listener);
+	return backgroundTasksStore.getState();
 }
 
 function uid(): string {
@@ -185,8 +182,8 @@ export function startBackgroundTask(input: {
 		createdAt: now,
 		updatedAt: now,
 	};
-	const tasks = [...store.tasks, task].slice(-MAX_HISTORY - 8);
-	setStore({ ...store, tasks, expanded: store.expanded });
+	const tasks = [...store().tasks, task].slice(-MAX_HISTORY - 8);
+	setStore({ ...store(), tasks, expanded: store().expanded });
 	return task.id;
 }
 
@@ -196,10 +193,10 @@ export function updateBackgroundTask(
 		Pick<BackgroundTask, "title" | "detail" | "status" | "progress" | "error">
 	>,
 ): void {
-	const tasks = store.tasks.map((t) =>
+	const tasks = store().tasks.map((t) =>
 		t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t,
 	);
-	setStore({ ...store, tasks });
+	setStore({ ...store(), tasks });
 }
 
 export function completeBackgroundTask(id: string, detail?: string): void {
@@ -221,7 +218,7 @@ export function failBackgroundTask(id: string, error: string): void {
 }
 
 export function cancelBackgroundTask(id: string): void {
-	const task = store.tasks.find((item) => item.id === id);
+	const task = store().tasks.find((item) => item.id === id);
 	if (!task || (task.status !== "queued" && task.status !== "running")) return;
 	controllers.get(id)?.abort();
 	updateBackgroundTask(id, {
@@ -411,17 +408,17 @@ export async function runQueuedBackgroundTask<T>(
 }
 
 export function setBackgroundTasksExpanded(expanded: boolean): void {
-	setStore({ ...store, expanded });
+	setStore({ ...store(), expanded });
 }
 
 export function clearFinishedBackgroundTasks(): void {
-	const tasks = store.tasks.filter(
+	const tasks = store().tasks.filter(
 		(t) => t.status === "queued" || t.status === "running",
 	);
 	setStore({
-		...store,
+		...store(),
 		tasks,
-		expanded: tasks.length > 0 ? store.expanded : false,
+		expanded: tasks.length > 0 ? store().expanded : false,
 	});
 }
 
