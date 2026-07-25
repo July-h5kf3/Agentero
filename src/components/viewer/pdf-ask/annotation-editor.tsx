@@ -9,8 +9,6 @@ import { useImeGuard } from "@/hooks/use-ime-guard";
 type AnnotationEditorProps = {
 	/** Screen point near the highlight (from popoverScreenPoint) */
 	screen: { x: number; y: number };
-	/** Highlighted passage (read-only context for the note) */
-	quote: string;
 	/** Existing note text when editing; empty for a fresh annotation */
 	initialComment?: string;
 	/** Save the (possibly empty) note; empty means "no comment / plain highlight" */
@@ -28,7 +26,6 @@ type AnnotationEditorProps = {
  */
 export function AnnotationEditor({
 	screen,
-	quote,
 	initialComment,
 	onSave,
 	onClose,
@@ -52,9 +49,9 @@ export function AnnotationEditor({
 	return (
 		<SelectionCard
 			screen={screen}
-			width={280}
-			height={320}
-			preferRight={false}
+			width={240}
+			height={200}
+			preferRight
 			title={t("annotations.editorLabel")}
 			icon={NotebookPen}
 			ariaLabel={t("annotations.editorLabel")}
@@ -72,11 +69,6 @@ export function AnnotationEditor({
 				</div>
 			}
 		>
-			{quote.trim() ? (
-				<blockquote className="agentero-scroll max-h-20 shrink-0 overflow-y-auto border-border/70 border-l-2 pl-2 text-muted-foreground text-xs leading-relaxed">
-					{quote.trim()}
-				</blockquote>
-			) : null}
 			<textarea
 				ref={ref}
 				className="min-h-16 w-full min-w-0 flex-1 resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm text-foreground/80 outline-none placeholder:text-muted-foreground/80 focus:ring-1 focus:ring-ring"

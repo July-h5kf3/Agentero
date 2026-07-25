@@ -78,6 +78,7 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -757,6 +758,7 @@ function PdfViewerInner({
 		if (cur?.kind === "translate") setTranslateError(null);
 		setActiveCard(null);
 		setCardScreen(null);
+		setEditor(null);
 	}, [discardIfEmptyDraft]);
 
 	const scheduleHoverHide = useCallback(() => {
@@ -1073,6 +1075,25 @@ function PdfViewerInner({
 		hideActiveCard();
 	}, [paperAbsPath, stopTranslateSession, hideActiveCard]);
 
+	const openEditorForAnnotation = useCallback(
+		(id: string) => {
+			const obj = annotationCap
+				?.forDocument(docId)
+				.getAnnotationById(id)?.object;
+			if (!obj || !isHighlightObject(obj)) return;
+			const pageEl = pageElByIndex(hostRef.current, obj.pageIndex);
+			if (!pageEl) return;
+			setEditor({
+				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
+				pageIndex: obj.pageIndex,
+				id,
+				quote: ((obj.custom ?? {}) as { quote?: string }).quote?.trim() ?? "",
+				comment: obj.contents?.trim() ?? "",
+			});
+		},
+		[annotationCap, docId],
+	);
+
 	const handleOpenPin = useCallback(
 		(pin: SelectionPin) => {
 			if (pin.kind === "ask") {
@@ -1084,8 +1105,9 @@ function PdfViewerInner({
 				return;
 			}
 			if (pin.kind === "translate") openCard({ kind: "translate", id: pin.id });
+			if (pin.kind === "annotate") openEditorForAnnotation(pin.id);
 		},
-		[upsertThread, openThread, openCard],
+		[upsertThread, openThread, openCard, openEditorForAnnotation],
 	);
 
 	// ---- Selection action menu ----
@@ -1431,25 +1453,6 @@ function PdfViewerInner({
 		return () => window.removeEventListener("keydown", onKey);
 	}, [search]);
 
-	const openEditorForAnnotation = useCallback(
-		(id: string) => {
-			const obj = annotationCap
-				?.forDocument(docId)
-				.getAnnotationById(id)?.object;
-			if (!obj || !isHighlightObject(obj)) return;
-			const pageEl = pageElByIndex(hostRef.current, obj.pageIndex);
-			if (!pageEl) return;
-			setEditor({
-				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
-				pageIndex: obj.pageIndex,
-				id,
-				quote: ((obj.custom ?? {}) as { quote?: string }).quote?.trim() ?? "",
-				comment: obj.contents?.trim() ?? "",
-			});
-		},
-		[annotationCap, docId],
-	);
-
 	const saveEditor = useCallback(
 		(text: string) => {
 			if (!editor) return;
@@ -1580,6 +1583,42 @@ function PdfViewerInner({
 			const activeTranslateOnPage =
 				activeTranslate?.page === pageNumber ? activeTranslate : null;
 			const pins: SelectionPin[] = [
+				...highlights
+					.filter(
+						(highlight) =>
+							highlight.page === pageNumber &&
+							Boolean(highlight.comment?.trim()),
+					)
+					.flatMap((highlight): SelectionPin[] => {
+						const obj = annotationCap
+							?.forDocument(docId)
+							.getAnnotationById(highlight.id)?.object;
+						if (!obj || !isHighlightObject(obj)) return [];
+						const pageWidth = width / zoomRef.current;
+						const pageHeight = height / zoomRef.current;
+						if (pageWidth <= 0 || pageHeight <= 0) return [];
+						return [
+							{
+								id: highlight.id,
+								kind: "annotate",
+								x: Math.min(
+									0.98,
+									Math.max(
+										0.02,
+										(obj.rect.origin.x + obj.rect.size.width) / pageWidth,
+									),
+								),
+								y: Math.min(
+									0.98,
+									Math.max(
+										0.02,
+										(obj.rect.origin.y + obj.rect.size.height / 2) / pageHeight,
+									),
+								),
+								preview: highlight.comment?.trim() ?? highlight.id,
+							},
+						];
+					}),
 				...askSummaries
 					.filter((s) => s.page === pageNumber)
 					.map(
@@ -1661,6 +1700,8 @@ function PdfViewerInner({
 		},
 		[
 			docId,
+			highlights,
+			annotationCap,
 			askSummaries,
 			translates,
 			activeTranslate,
@@ -1914,63 +1955,71 @@ function PdfViewerInner({
 				</ZoomGestureWrapper>
 			</Viewport>
 
-			{selectionMenu ? (
-				<SelectionMenu
-					screen={selectionMenu.screen}
-					onHighlight={handleHighlight}
-					onCopy={handleCopy}
-					onNote={handleNote}
-					onAsk={handleMenuAsk}
-					onTranslate={handleMenuTranslate}
-					onClose={closeSelectionMenu}
-				/>
-			) : null}
+			{typeof document !== "undefined"
+				? createPortal(
+						<>
+							{selectionMenu ? (
+								<SelectionMenu
+									screen={selectionMenu.screen}
+									onHighlight={handleHighlight}
+									onCopy={handleCopy}
+									onNote={handleNote}
+									onAsk={handleMenuAsk}
+									onTranslate={handleMenuTranslate}
+									onClose={closeSelectionMenu}
+								/>
+							) : null}
 
-			{activeThread && cardScreen ? (
-				<AskPopover
-					thread={activeThread}
-					screen={cardScreen}
-					streaming={streaming}
-					error={askError}
-					onSend={handleSend}
-					onResend={handleResend}
-					onHide={handleHide}
-					onDelete={handleDelete}
-					onPointerEnter={cancelHoverHide}
-					onPointerLeave={scheduleHoverHide}
-					onStop={() => {
-						const sid = activeSessionRef.current;
-						if (!sid) return;
-						void cancelAgentRun(sid).catch(() => undefined);
-						activeSessionRef.current = null;
-						setStreaming(false);
-					}}
-				/>
-			) : null}
+							{activeThread && cardScreen ? (
+								<AskPopover
+									thread={activeThread}
+									screen={cardScreen}
+									streaming={streaming}
+									error={askError}
+									onSend={handleSend}
+									onResend={handleResend}
+									onHide={handleHide}
+									onDelete={handleDelete}
+									onPointerEnter={cancelHoverHide}
+									onPointerLeave={scheduleHoverHide}
+									onStop={() => {
+										const sid = activeSessionRef.current;
+										if (!sid) return;
+										void cancelAgentRun(sid).catch(() => undefined);
+										activeSessionRef.current = null;
+										setStreaming(false);
+									}}
+								/>
+							) : null}
 
-			{activeTranslate && cardScreen ? (
-				<TranslateCard
-					screen={cardScreen}
-					result={activeTranslate.result ?? ""}
-					streaming={translateStreaming}
-					error={translateError ?? activeTranslate.error ?? null}
-					onOpenSettings={() => onOpenSettings?.()}
-					onHide={hideActiveCard}
-					onDelete={deleteTranslateCard}
-					onPointerEnter={cancelHoverHide}
-					onPointerLeave={scheduleHoverHide}
-				/>
-			) : null}
+							{activeTranslate && cardScreen ? (
+								<TranslateCard
+									screen={cardScreen}
+									result={activeTranslate.result ?? ""}
+									streaming={translateStreaming}
+									error={translateError ?? activeTranslate.error ?? null}
+									onOpenSettings={() => onOpenSettings?.()}
+									onHide={hideActiveCard}
+									onDelete={deleteTranslateCard}
+									onPointerEnter={cancelHoverHide}
+									onPointerLeave={scheduleHoverHide}
+								/>
+							) : null}
 
-			{editor ? (
-				<AnnotationEditor
-					screen={editor.screen}
-					quote={editor.quote}
-					initialComment={editor.comment}
-					onSave={saveEditor}
-					onClose={() => setEditor(null)}
-				/>
-			) : null}
+							{editor ? (
+								<AnnotationEditor
+									screen={editor.screen}
+									initialComment={editor.comment}
+									onSave={saveEditor}
+									onClose={() => setEditor(null)}
+									onPointerEnter={cancelHoverHide}
+									onPointerLeave={scheduleHoverHide}
+								/>
+							) : null}
+						</>,
+						document.body,
+					)
+				: null}
 
 			{totalPages > 0 ? (
 				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">

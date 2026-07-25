@@ -120,7 +120,6 @@ export function SelectionGutter({
 						aria-label={aria}
 						onMouseEnter={() => {
 							onEnter?.(item);
-							// Hover opens any pin kind (same as ask); leave schedules hide.
 							onOpen(item);
 						}}
 						onMouseLeave={() => onLeave?.(item)}
