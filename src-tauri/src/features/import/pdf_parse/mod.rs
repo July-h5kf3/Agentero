@@ -167,9 +167,13 @@ async fn parse_paper_body_inner(
 }
 
 async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, String), AppError> {
-    let path_str = pdf_path
-        .to_str()
-        .ok_or_else(|| AppError::message("pdf path is not valid utf-8"))?;
+    // Read the PDF via std::fs (Unicode-safe on Windows) and hand PDFium an
+    // in-memory buffer. `FPDF_LoadDocument`'s path handling is unreliable for
+    // non-ASCII paths on Windows (e.g. a Chinese `文档` segment in a OneDrive
+    // vault path), which made Zotero-imported papers silently fail to produce
+    // PAPER.md; `FPDF_LoadMemDocument` (used for `PdfInput::Bytes`) has no path
+    // step and is immune.
+    let data = fs::read(pdf_path).map_err(|e| AppError::message(format!("read pdf: {e}")))?;
 
     // Prefer native text; OCR is best-effort and must not abort the whole parse.
     let config = LiteParseConfig {
@@ -187,7 +191,7 @@ async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, Stri
 
     // Complexity pre-pass for quality labeling (cheap text-layer only).
     let needs_ocr = match parser
-        .is_complex(liteparse::types::PdfInput::Path(path_str.to_string()))
+        .is_complex(liteparse::types::PdfInput::Bytes(data.clone()))
         .await
     {
         Ok(pages) => pages.iter().any(|p| p.needs_ocr),
@@ -195,7 +199,7 @@ async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, Stri
     };
 
     let result = parser
-        .parse(path_str)
+        .parse_input(liteparse::types::PdfInput::Bytes(data))
         .await
         .map_err(|e| AppError::message(format!("liteparse: {e}")))?;
 
