@@ -39,6 +39,45 @@ pub fn put_or_touch(dest: &Path, bytes: Option<&[u8]>) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Cache-file destination for a vault-relative path with known size/mtime.
+/// Key = sha256(rel\0size\0mtime), extension preserved for preview mime.
+pub fn dest_for(blob_root: &Path, rel: &str, size: u64, mtime: u64) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    let key = format!("{rel}\0{size}\0{mtime}");
+    let hash = hex::encode(Sha256::digest(key.as_bytes()));
+    let ext = Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin");
+    blob_root.join(format!("{hash}.{ext}"))
+}
+
+/// Full cache flow: hit → touch mtime; miss → `fetch` bytes, write, enforce LRU.
+/// Returns the absolute local path of the cached blob.
+pub async fn ensure_cached<F, Fut>(
+    blob_root: &Path,
+    rel: &str,
+    size: u64,
+    mtime: u64,
+    fetch: F,
+) -> Result<PathBuf, AppError>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, AppError>>,
+{
+    let dest = dest_for(blob_root, rel, size, mtime);
+    if dest.is_file() {
+        touch_mtime(&dest);
+        return Ok(dest);
+    }
+    let bytes = fetch().await?;
+    put_or_touch(&dest, Some(&bytes))?;
+    if let Err(e) = enforce_lru(blob_root, DEFAULT_MAX_BYTES) {
+        log::warn!("blob LRU enforce: {e}");
+    }
+    Ok(dest)
+}
+
 pub fn touch_mtime(path: &Path) {
     let now = SystemTime::now();
     let _ = fs::File::options()

@@ -498,35 +498,20 @@ pub async fn remote_cache_file(
         Ok(m) => m,
         Err(e) => return Ok(map_err(e)),
     };
-    // Cache key: path + size + mtime
-    let key = format!("{rel}\0{}\0{}", meta.size, meta.mtime);
-    let hash = {
-        use sha2::{Digest, Sha256};
-        hex::encode(Sha256::digest(key.as_bytes()))
-    };
-    let ext = std::path::Path::new(&rel)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("bin");
-    let dest = session.blob_root.join(format!("{hash}.{ext}"));
-    use crate::features::remote::blob_cache::{self, DEFAULT_MAX_BYTES};
-    if dest.is_file() {
-        blob_cache::touch_mtime(&dest);
-    } else {
-        let bytes = match session.fs.read(&rel).await {
-            Ok(b) => b,
-            Err(e) => return Ok(map_err(e)),
-        };
-        if let Err(e) = blob_cache::put_or_touch(&dest, Some(&bytes)) {
-            return Ok(map_err(e));
-        }
-        if let Err(e) = blob_cache::enforce_lru(&session.blob_root, DEFAULT_MAX_BYTES) {
-            log::warn!("blob LRU enforce: {e}");
-        }
+    let dest = crate::features::remote::blob_cache::ensure_cached(
+        &session.blob_root,
+        &rel,
+        meta.size,
+        meta.mtime,
+        || async { session.fs.read(&rel).await },
+    )
+    .await;
+    match dest {
+        Ok(dest) => Ok(ApiResult::ok(RemoteCacheFileResult {
+            local_path: dest.to_string_lossy().into_owned(),
+        })),
+        Err(e) => Ok(map_err(e)),
     }
-    Ok(ApiResult::ok(RemoteCacheFileResult {
-        local_path: dest.to_string_lossy().into_owned(),
-    }))
 }
 
 #[derive(Debug, Deserialize)]
