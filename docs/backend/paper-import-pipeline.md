@@ -362,7 +362,7 @@ MVP 统一管线时选 **A**，避免与后台任务条并发策略纠缠。
 
 代码锚点（迁移前参考）：
 
-- Host：`src-tauri/src/services/lookup/mod.rs`、`connector/import.rs`、`lookup/zotero_io.rs`、`lookup/zotero_db.rs`
+- Host：`src-tauri/src/features/import/`（含 `paper_import`、`zotero_*`）、`features/connector/import.rs`
 - 前端：`src/App.tsx`（lookup / connector / local pdf / library import）、`src/lib/paper/lookup.ts`、`src/lib/paper/api.ts`、`src/lib/paper/import/connector.ts`
 
 ---

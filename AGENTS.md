@@ -7,8 +7,8 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 ## 当前应用形态
 
 - 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
-- Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。
-- CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
+- Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。布局 **feature-first**：`app/` 装配、`core/` 基础、`features/<域>/`（`mod` + `commands` + 按需 `models`）；原 `services/` / `commands/` / `models/` 已取消。
+- CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`，`use features::{vault,catalog,import}` + `core::error`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：
   - 左侧：Vault 文件树（顶部虚拟 **Library**（右键 **导出论文库**）+ 其下 **Recycle Bin**、魔棒；右键 **新建文件/文件夹 / Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
   - 中间：无 Vault 时欢迎页；有 Vault 时 **全局 Dockview 工作区**（每个打开文档一个 panel：Library / PDF / HTML / 图片 / Markdown / Trash）；单击非 paper 文件夹在 Library panel 就地按路径筛选；关光文档后回到全库；
