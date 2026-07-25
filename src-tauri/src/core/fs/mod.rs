@@ -8,7 +8,7 @@ mod path;
 pub use local::LocalFs;
 pub use path::{join_remote, normalize_rel, path_escapes_root, FsCaps, FsDirEntry, FsFileMeta};
 
-use crate::error::AppError;
+use crate::core::error::AppError;
 use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy, Default)]

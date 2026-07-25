@@ -1,7 +1,7 @@
 //! Local disk implementation of [`VaultFs`].
 
 use super::{normalize_rel, path_escapes_root, FsCaps, FsDirEntry, FsFileMeta, VaultFs, WriteOpts};
-use crate::error::AppError;
+use crate::core::error::AppError;
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
