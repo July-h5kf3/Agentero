@@ -23,6 +23,15 @@
 		"pickTitle": "Insert image into note",
 		"pickFilter": "Images"
 	},
+	"contextMenu": {
+		"cut": "Cut",
+		"copy": "Copy",
+		"paste": "Paste",
+		"insertWikiLink": "Add internal link",
+		"insertExternalLink": "Add external link",
+		"copyFailed": "Could not copy the selected text.",
+		"pasteFailed": "Could not read text from the clipboard."
+	},
 	"headingRename": {
 		"menu": "Rename this heading…",
 		"title": "Rename this heading",

@@ -3,7 +3,7 @@
 import "katex/dist/katex.min.css";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
-import { RangeApi } from "platejs";
+import { RangeApi, type RangeRef } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
@@ -42,12 +42,23 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuShortcut,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import i18n from "@/i18n";
+import {
+	copyTextToClipboard,
+	readTextFromClipboard,
+} from "@/lib/core/clipboard";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
+import {
+	type EditorLinkTemplateKind,
+	editorContextMenuCapabilities,
+	insertEditorLinkTemplate,
+} from "@/lib/markdown/editor-context-menu";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
@@ -160,6 +171,7 @@ export function MarkdownEditor({
 		}),
 	);
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
+	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
@@ -173,8 +185,18 @@ export function MarkdownEditor({
 		useState<WikiCompletionDraft | null>(null);
 	const [headingContext, setHeadingContext] =
 		useState<WikiHeadingAnchor | null>(null);
+	const [contextMenuSelectionExpanded, setContextMenuSelectionExpanded] =
+		useState(false);
 	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
 	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
+
+	useEffect(
+		() => () => {
+			contextMenuSelectionRef.current?.unref();
+			contextMenuSelectionRef.current = null;
+		},
+		[],
+	);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -1023,7 +1045,15 @@ export function MarkdownEditor({
 		return null;
 	}, [editor]);
 
-	const handleHeadingContextMenu = useCallback(() => {
+	const handleEditorContextMenu = useCallback(() => {
+		contextMenuSelectionRef.current?.unref();
+		const selection = editor.selection;
+		contextMenuSelectionRef.current = selection
+			? editor.api.rangeRef(selection, { affinity: "forward" })
+			: null;
+		setContextMenuSelectionExpanded(
+			Boolean(selection && !RangeApi.isCollapsed(selection)),
+		);
 		const heading = selectedHeadingAnchor();
 		setHeadingContext(
 			canRenameWikiHeading({
@@ -1036,7 +1066,87 @@ export function MarkdownEditor({
 				? heading
 				: null,
 		);
-	}, [onRenameHeading, readOnly, selectedHeadingAnchor]);
+	}, [editor, onRenameHeading, readOnly, selectedHeadingAnchor]);
+
+	const handleContextMenuOpenChange = useCallback((open: boolean) => {
+		if (open) return;
+		const selectionRef = contextMenuSelectionRef.current;
+		window.setTimeout(() => {
+			if (contextMenuSelectionRef.current !== selectionRef) return;
+			selectionRef?.unref();
+			contextMenuSelectionRef.current = null;
+		}, 0);
+	}, []);
+
+	const takeContextMenuSelection = useCallback(() => {
+		const selectionRef = contextMenuSelectionRef.current;
+		contextMenuSelectionRef.current = null;
+		return selectionRef?.unref() ?? editor.selection;
+	}, [editor]);
+
+	const focusEditorAt = useCallback(
+		(selection: NonNullable<typeof editor.selection>) => {
+			if (!editorContainerRef.current?.isConnected) return;
+			editor.tf.focus({ at: selection });
+		},
+		[editor],
+	);
+
+	const handleContextMenuCopy = useCallback(async () => {
+		const selection = takeContextMenuSelection();
+		if (!selection || RangeApi.isCollapsed(selection)) return;
+		const text = editor.api.string(selection);
+		await copyTextToClipboard(text, {
+			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+		});
+		focusEditorAt(selection);
+	}, [editor, focusEditorAt, takeContextMenuSelection]);
+
+	const handleContextMenuCut = useCallback(async () => {
+		if (readOnly) return;
+		const selection = takeContextMenuSelection();
+		if (!selection || RangeApi.isCollapsed(selection)) return;
+		const text = editor.api.string(selection);
+		const copied = await copyTextToClipboard(text, {
+			errorMessage: i18n.t("editor:contextMenu.copyFailed"),
+		});
+		if (!copied || !editorContainerRef.current?.isConnected) return;
+		editor.tf.focus({ at: selection });
+		editor.tf.deleteFragment();
+	}, [editor, readOnly, takeContextMenuSelection]);
+
+	const handleContextMenuPaste = useCallback(async () => {
+		if (readOnly) return;
+		const selection = takeContextMenuSelection();
+		if (!selection) return;
+		const text = await readTextFromClipboard({
+			errorMessage: i18n.t("editor:contextMenu.pasteFailed"),
+		});
+		if (text === null || !editorContainerRef.current?.isConnected) return;
+		editor.tf.focus({ at: selection });
+		if (typeof DataTransfer === "function") {
+			const data = new DataTransfer();
+			data.setData("text/plain", text);
+			editor.tf.insertData(data);
+		} else {
+			editor.tf.insertText(text);
+		}
+		editor.tf.focus({ at: editor.selection ?? selection });
+	}, [editor, readOnly, takeContextMenuSelection]);
+
+	const insertContextMenuLink = useCallback(
+		(kind: EditorLinkTemplateKind) => {
+			if (readOnly) return;
+			const selection = takeContextMenuSelection();
+			if (!selection || !editorContainerRef.current?.isConnected) return;
+			const template = insertEditorLinkTemplate(editor, kind, selection);
+			editor.tf.focus({ at: editor.selection ?? selection });
+			if (template.wikiLinkDraft) {
+				window.requestAnimationFrame(updateWikiCompletionDraft);
+			}
+		},
+		[editor, readOnly, takeContextMenuSelection, updateWikiCompletionDraft],
+	);
 
 	const confirmHeadingRename = useCallback(
 		async (newText: string) => {
@@ -1095,6 +1205,11 @@ export function MarkdownEditor({
 		serialize,
 		updateWikiCompletionDraft,
 	]);
+	const contextMenuCapabilities = editorContextMenuCapabilities({
+		headingRenameAvailable: Boolean(headingContext),
+		readOnly: Boolean(readOnly),
+		selectionExpanded: contextMenuSelectionExpanded,
+	});
 
 	return (
 		<WikiEmbedProjectionProvider component={EmbeddedMarkdownProjection}>
@@ -1113,12 +1228,12 @@ export function MarkdownEditor({
 						)}
 					>
 						{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
-						<ContextMenu>
+						<ContextMenu onOpenChange={handleContextMenuOpenChange}>
 							<ContextMenuTrigger asChild>
 								<EditorContainer
 									ref={editorContainerRef}
 									className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
-									onContextMenuCapture={handleHeadingContextMenu}
+									onContextMenuCapture={handleEditorContextMenu}
 									onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 									onBeforeInputCapture={
 										readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
@@ -1157,9 +1272,50 @@ export function MarkdownEditor({
 									) : null}
 								</EditorContainer>
 							</ContextMenuTrigger>
-							<ContextMenuContent>
+							<ContextMenuContent className="w-56">
 								<ContextMenuItem
-									disabled={!headingContext}
+									disabled={!contextMenuCapabilities.cut}
+									onSelect={() => {
+										void handleContextMenuCut();
+									}}
+								>
+									{i18n.t("editor:contextMenu.cut")}
+									<ContextMenuShortcut>⌘X</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.copy}
+									onSelect={() => {
+										void handleContextMenuCopy();
+									}}
+								>
+									{i18n.t("editor:contextMenu.copy")}
+									<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.paste}
+									onSelect={() => {
+										void handleContextMenuPaste();
+									}}
+								>
+									{i18n.t("editor:contextMenu.paste")}
+									<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.insertLink}
+									onSelect={() => insertContextMenuLink("wiki")}
+								>
+									{i18n.t("editor:contextMenu.insertWikiLink")}
+								</ContextMenuItem>
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.insertLink}
+									onSelect={() => insertContextMenuLink("external")}
+								>
+									{i18n.t("editor:contextMenu.insertExternalLink")}
+								</ContextMenuItem>
+								<ContextMenuSeparator />
+								<ContextMenuItem
+									disabled={!contextMenuCapabilities.renameHeading}
 									onSelect={() => {
 										if (headingContext) setHeadingRenameOpen(true);
 									}}

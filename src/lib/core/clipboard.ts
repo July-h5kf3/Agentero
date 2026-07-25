@@ -17,6 +17,11 @@ export type CopyTextOptions = {
 	successNotify?: NotifyOptions;
 };
 
+export type ReadTextOptions = {
+	/** Error toast; omit for silent failure (still returns null). */
+	errorMessage?: string;
+};
+
 /**
  * Write plain text to the system clipboard.
  * @returns true when the write succeeded.
@@ -39,5 +44,25 @@ export async function copyTextToClipboard(
 			notifyError(opts.errorMessage);
 		}
 		return false;
+	}
+}
+
+/**
+ * Read plain text from the system clipboard.
+ * @returns clipboard text, including an empty string, or null when unavailable.
+ */
+export async function readTextFromClipboard(
+	opts: ReadTextOptions = {},
+): Promise<string | null> {
+	try {
+		if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
+			throw new Error("clipboard unavailable");
+		}
+		return await navigator.clipboard.readText();
+	} catch {
+		if (opts.errorMessage) {
+			notifyError(opts.errorMessage);
+		}
+		return null;
 	}
 }

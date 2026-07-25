@@ -23,6 +23,15 @@
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
 	},
+	"contextMenu": {
+		"cut": "剪切",
+		"copy": "复制",
+		"paste": "粘贴",
+		"insertWikiLink": "新增双链",
+		"insertExternalLink": "新增外部链接",
+		"copyFailed": "无法复制选中的文本。",
+		"pasteFailed": "无法读取剪贴板中的文本。"
+	},
 	"headingRename": {
 		"menu": "重命名当前小标题…",
 		"title": "重命名当前小标题",

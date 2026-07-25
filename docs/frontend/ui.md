@@ -220,6 +220,7 @@
   - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF **左右分屏**：左 PDF、右 NOTES）；Layout / 快捷键开关。论文库视图或未选论文时不自动开 NOTES。
   - **格式工具栏（WYSIWYG toolbar）**：`MarkdownEditor` 顶部可选固定工具栏（`editor-toolbar.tsx`）：标题、引用、加粗/斜体等、列表、**插入图片**。全局设置 `showEditorToolbar`（默认开）；只读时不渲染。i18n `editor:toolbar.*`。
   - **编辑体验**：Plate list 可编辑；文本选区中性色；文档末与图片后保持 trailing paragraph。
+  - **编辑器右键菜单**：保留剪切 / 复制 / 粘贴；只读文档仅允许复制。新增“双链”插入 `[[]]` 并把光标置于双括号内，新增“外部链接”插入 `[]()` 并把光标置于方括号内；已有单行选区会作为链接文本保留并保持选中。菜单打开时用 Slate range ref 保留选区，避免 portal 接管焦点后命令落到错误位置；标题上的“重命名当前小标题…”继续按独立门禁启用。
   - **Markdown 图片**（已落地）：粘贴/工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时延迟 GC。实现：`src/lib/markdown/image.ts`；约定见 [`../backend/data-model.md`](../backend/data-model.md)。
   - **Notes 开关**：Layout 菜单 / 快捷键切换当前论文的 NOTES panel（`toggleNotesSplit`）；`⌘3` 聚焦 Notes（未开则先打开）。关闭文档 panel 走 dockview tab `X` 或 `⌘W`（有弹层时先关弹层，见 §3.0）。
 - **⌘L** 显示 / 隐藏右侧栏；右侧栏入口为 **Agent** 与 **Backlinks**。

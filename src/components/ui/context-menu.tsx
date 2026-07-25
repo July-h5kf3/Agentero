@@ -117,6 +117,22 @@ function ContextMenuSeparator({
 	);
 }
 
+function ContextMenuShortcut({
+	className,
+	...props
+}: React.ComponentProps<"span">) {
+	return (
+		<span
+			data-slot="context-menu-shortcut"
+			className={cn(
+				"ml-auto pl-4 text-xs tracking-widest text-muted-foreground",
+				className,
+			)}
+			{...props}
+		/>
+	);
+}
+
 export {
 	ContextMenu,
 	ContextMenuCheckboxItem,
@@ -124,5 +140,6 @@ export {
 	ContextMenuItem,
 	ContextMenuLabel,
 	ContextMenuSeparator,
+	ContextMenuShortcut,
 	ContextMenuTrigger,
 };
