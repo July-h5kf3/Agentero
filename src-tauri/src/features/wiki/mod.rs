@@ -1,3 +1,4 @@
+mod cache;
 pub mod commands;
 pub mod embed;
 pub mod extract;

@@ -48,6 +48,11 @@ pub fn agentero_config_dir() -> PathBuf {
     xdg_config_home().join("agentero")
 }
 
+/// `$XDG_CACHE_HOME/agentero` (created on demand by callers).
+pub fn agentero_cache_dir() -> PathBuf {
+    xdg_cache_home().join("agentero")
+}
+
 /// App settings file: `…/agentero/settings.json`.
 pub fn settings_path() -> PathBuf {
     agentero_config_dir().join("settings.json")
@@ -130,5 +135,11 @@ mod tests {
     #[test]
     fn settings_and_agents_share_config_dir() {
         assert_eq!(settings_path().parent(), agents_path().parent());
+    }
+
+    #[test]
+    fn cache_dir_ends_with_agentero() {
+        let p = agentero_cache_dir();
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agentero"));
     }
 }

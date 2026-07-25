@@ -201,3 +201,21 @@ pub fn graph_rebuild(
         }
     }
 }
+
+/// Internal diagnostic: remove the derived snapshot and rebuild it from Vault files.
+#[tauri::command]
+pub fn wiki_cache_rebuild(
+    index: State<'_, WikiIndexState>,
+    vault_path: String,
+) -> ApiResult<RebuildResult> {
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => {
+            return map_err(AppError::message(format!("wiki index lock: {error}")));
+        }
+    };
+    match guard.rebuild_fresh(&vault_path) {
+        Ok(result) => ApiResult::ok(result),
+        Err(error) => map_err(AppError::message(error)),
+    }
+}

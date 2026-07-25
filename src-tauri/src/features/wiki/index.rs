@@ -1,5 +1,9 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
+use crate::features::wiki::cache::{
+    discard_snapshot, fingerprint_bytes, fingerprint_file, fingerprint_files, load_snapshot,
+    store_snapshot, wiki_cache_path, WikiCacheLoad, WikiFileFingerprint,
+};
 use crate::features::wiki::embed::project_markdown;
 use crate::features::wiki::extract::extract_document;
 use crate::features::wiki::models::{
@@ -162,8 +166,93 @@ impl WikiIndex {
         }
 
         let files = collect_wiki_target_files(&root).map_err(|e| e.to_string())?;
+        if cfg!(test) {
+            return self.rebuild_cold(vault_path, &root, files, None);
+        }
+        let cache_path = wiki_cache_path(&root);
+        self.rebuild_with_cache_path(vault_path, &root, files, &cache_path, true)
+    }
+
+    pub fn rebuild_fresh(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
+        let root = PathBuf::from(vault_path);
+        let cache_path = wiki_cache_path(&root);
+        self.rebuild_fresh_with_cache_path(vault_path, &cache_path)
+    }
+
+    fn rebuild_fresh_with_cache_path(
+        &mut self,
+        vault_path: &str,
+        cache_path: &Path,
+    ) -> Result<RebuildResult, String> {
+        let root = PathBuf::from(vault_path);
+        if !root.is_dir() {
+            return Err(format!("vault path is not a directory: {vault_path}"));
+        }
+        let files = collect_wiki_target_files(&root).map_err(|error| error.to_string())?;
+        if let Err(error) = discard_snapshot(cache_path) {
+            log::warn!(target: "agentero::wiki", "{error}");
+        }
+        self.rebuild_cold(vault_path, &root, files, Some(cache_path))
+    }
+
+    fn rebuild_with_cache_path(
+        &mut self,
+        vault_path: &str,
+        root: &Path,
+        files: Vec<String>,
+        cache_path: &Path,
+        restore: bool,
+    ) -> Result<RebuildResult, String> {
+        if restore {
+            match fingerprint_files(root, &files) {
+                Ok(fingerprints) => match load_snapshot(cache_path, root, &fingerprints) {
+                    WikiCacheLoad::Hit(snapshot) => {
+                        return Ok(self.install_snapshot(
+                            vault_path,
+                            snapshot.files,
+                            snapshot.documents,
+                            snapshot.edges,
+                        ));
+                    }
+                    WikiCacheLoad::Miss => {}
+                    WikiCacheLoad::Stale => {
+                        if let Err(discard_error) = discard_snapshot(cache_path) {
+                            log::warn!(target: "agentero::wiki", "{discard_error}");
+                        }
+                    }
+                    WikiCacheLoad::Invalid(error) => {
+                        log::warn!(
+                            target: "agentero::wiki",
+                            "discarding invalid Wiki cache {}: {error}",
+                            cache_path.display()
+                        );
+                        if let Err(discard_error) = discard_snapshot(cache_path) {
+                            log::warn!(target: "agentero::wiki", "{discard_error}");
+                        }
+                    }
+                },
+                Err(error) => {
+                    log::warn!(
+                        target: "agentero::wiki",
+                        "Wiki cache fingerprint validation unavailable: {error}"
+                    );
+                }
+            }
+        }
+        self.rebuild_cold(vault_path, root, files, Some(cache_path))
+    }
+
+    fn rebuild_cold(
+        &mut self,
+        vault_path: &str,
+        root: &Path,
+        files: Vec<String>,
+        cache_path: Option<&Path>,
+    ) -> Result<RebuildResult, String> {
         let mut parsed = Vec::new();
         let mut documents = Vec::new();
+        let mut fingerprints = Vec::<WikiFileFingerprint>::new();
+        let mut cacheable = cache_path.is_some();
         for rel in &files {
             if !is_markdown(Path::new(rel)) {
                 documents.push(WikiDocument {
@@ -172,10 +261,25 @@ impl WikiIndex {
                     headings: Vec::new(),
                     blocks: Vec::new(),
                 });
+                match fingerprint_file(rel, &root.join(rel)) {
+                    Ok(fingerprint) => fingerprints.push(fingerprint),
+                    Err(_) => cacheable = false,
+                }
                 continue;
             }
             let abs = root.join(rel);
-            let content = match fs::read_to_string(&abs) {
+            let bytes = match fs::read(&abs) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    cacheable = false;
+                    continue;
+                }
+            };
+            match fingerprint_bytes(rel, &abs, &bytes) {
+                Ok(fingerprint) => fingerprints.push(fingerprint),
+                Err(_) => cacheable = false,
+            }
+            let content = match String::from_utf8(bytes) {
                 Ok(content) => content,
                 Err(_) => continue,
             };
@@ -185,14 +289,42 @@ impl WikiIndex {
         }
 
         let mut edges = Vec::new();
-        let mut reverse: HashMap<String, Vec<ResolvedLink>> = HashMap::new();
-        let mut nodes: HashSet<String> = HashSet::new();
-
-        for rel in &files {
-            nodes.insert(rel.clone());
-        }
         for occurrence in parsed {
-            let edge = resolve_occurrence(occurrence, &documents);
+            edges.push(resolve_occurrence(occurrence, &documents));
+        }
+
+        let result = self.install_snapshot(vault_path, files, documents, edges);
+        if cacheable {
+            fingerprints.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+            if let Some(cache_path) = cache_path {
+                if let Err(error) = store_snapshot(
+                    cache_path,
+                    root,
+                    &fingerprints,
+                    &self.documents,
+                    &self.edges,
+                ) {
+                    log::warn!(
+                        target: "agentero::wiki",
+                        "could not persist Wiki cache {}: {error}",
+                        cache_path.display()
+                    );
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn install_snapshot(
+        &mut self,
+        vault_path: &str,
+        files: Vec<String>,
+        documents: Vec<WikiDocument>,
+        edges: Vec<ResolvedLink>,
+    ) -> RebuildResult {
+        let mut reverse: HashMap<String, Vec<ResolvedLink>> = HashMap::new();
+        let mut nodes = files.iter().cloned().collect::<HashSet<_>>();
+        for edge in &edges {
             if let Some(target_path) = &edge.target_path {
                 nodes.insert(target_path.clone());
                 reverse
@@ -202,14 +334,10 @@ impl WikiIndex {
             } else {
                 nodes.insert(format!("stub:{}", edge.occurrence.target_raw));
             }
-            edges.push(edge);
         }
-
-        // Stable order for UI
         for list in reverse.values_mut() {
-            list.sort_by(|a, b| a.occurrence.source.cmp(&b.occurrence.source));
+            list.sort_by(|left, right| left.occurrence.source.cmp(&right.occurrence.source));
         }
-
         let result = RebuildResult {
             indexed_files: files.len() as u32,
             edges: edges.len() as u32,
@@ -222,7 +350,7 @@ impl WikiIndex {
         self.files = files;
         self.documents = documents;
 
-        Ok(result)
+        result
     }
 
     pub fn ensure_vault(&mut self, vault_path: &str) -> Result<(), String> {
@@ -1199,5 +1327,228 @@ mod tests {
             candidate.label == "^asb"
                 && candidate.detail.as_deref() == Some("请仅在 Agentero 内将本文件改名。")
         }));
+    }
+
+    fn cache_fixture() -> (PathBuf, PathBuf) {
+        let root = test_vault();
+        fs::create_dir_all(root.join("assets")).expect("create cache asset directory");
+        fs::write(
+            root.join("notes/Target.md"),
+            "# Root\n## Child\nTarget block ^focus\n",
+        )
+        .expect("write cache target");
+        fs::write(
+            root.join("notes/Source.md"),
+            "[[Target#Child]]\n![[Target#^focus]]\n![[figure.png]]\n",
+        )
+        .expect("write cache source");
+        fs::write(root.join("assets/figure.png"), b"cache image").expect("write cache image");
+        let cache_path =
+            std::env::temp_dir().join(format!("agentero-wiki-cache-{}.sqlite", Uuid::new_v4()));
+        (root, cache_path)
+    }
+
+    fn rebuild_with_test_cache(
+        index: &mut WikiIndex,
+        root: &Path,
+        cache_path: &Path,
+    ) -> RebuildResult {
+        let vault = root.to_str().expect("utf-8 cache fixture path");
+        let files = collect_wiki_target_files(root).expect("collect cache fixture files");
+        index
+            .rebuild_with_cache_path(vault, root, files, cache_path, true)
+            .expect("rebuild with cache")
+    }
+
+    fn cleanup_cache_fixture(root: &Path, cache_path: &Path) {
+        let _ = discard_snapshot(cache_path);
+        fs::remove_dir_all(root).expect("remove cache fixture vault");
+    }
+
+    #[test]
+    fn restores_warm_snapshot_with_cold_query_semantics() {
+        let (root, cache_path) = cache_fixture();
+        let vault = root.to_str().expect("utf-8 cache fixture path");
+        assert!(!cache_path.starts_with(&root));
+
+        let mut cold = WikiIndex::default();
+        let cold_result = rebuild_with_test_cache(&mut cold, &root, &cache_path);
+        assert!(cache_path.is_file());
+
+        let mut warm = WikiIndex::default();
+        let warm_result = rebuild_with_test_cache(&mut warm, &root, &cache_path);
+        assert_eq!(warm_result.indexed_files, cold_result.indexed_files);
+        assert_eq!(warm_result.edges, cold_result.edges);
+        assert_eq!(warm_result.nodes, cold_result.nodes);
+        assert_eq!(warm.files, cold.files);
+        assert_eq!(warm.documents, cold.documents);
+        assert_eq!(warm.edges, cold.edges);
+        assert_eq!(warm.reverse, cold.reverse);
+        assert_eq!(warm.search("Child"), cold.search("Child"));
+        assert_eq!(
+            serde_json::to_value(warm.get_backlinks(vault, "notes/Target.md"))
+                .expect("serialize warm backlinks"),
+            serde_json::to_value(cold.get_backlinks(vault, "notes/Target.md"))
+                .expect("serialize cold backlinks")
+        );
+        assert_eq!(
+            serde_json::to_value(warm.get_outgoing(vault, "notes/Source.md"))
+                .expect("serialize warm outgoing"),
+            serde_json::to_value(cold.get_outgoing(vault, "notes/Source.md"))
+                .expect("serialize cold outgoing")
+        );
+        assert_eq!(
+            serde_json::to_value(warm.get_graph(vault, Some("notes/Target.md"), Some(2)))
+                .expect("serialize warm graph"),
+            serde_json::to_value(cold.get_graph(vault, Some("notes/Target.md"), Some(2)))
+                .expect("serialize cold graph")
+        );
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    #[test]
+    fn invalidates_cache_when_a_vault_file_changes() {
+        let (root, cache_path) = cache_fixture();
+        let mut initial = WikiIndex::default();
+        rebuild_with_test_cache(&mut initial, &root, &cache_path);
+
+        fs::write(
+            root.join("notes/Target.md"),
+            "# Root\n## Renamed\nTarget block ^focus\n",
+        )
+        .expect("change cached target");
+        let mut changed = WikiIndex::default();
+        rebuild_with_test_cache(&mut changed, &root, &cache_path);
+
+        let target = changed
+            .document("notes/Target.md")
+            .expect("changed target document");
+        assert_eq!(target.headings[1].text, "Renamed");
+        assert_eq!(
+            changed.edges[0].status,
+            LinkResolutionStatus::InvalidFragment
+        );
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    #[test]
+    fn rebuilds_corrupt_version_mismatched_and_tampered_cache_files() {
+        let (root, cache_path) = cache_fixture();
+        let mut initial = WikiIndex::default();
+        rebuild_with_test_cache(&mut initial, &root, &cache_path);
+
+        fs::write(&cache_path, b"not a sqlite database").expect("corrupt wiki cache");
+        let mut recovered = WikiIndex::default();
+        rebuild_with_test_cache(&mut recovered, &root, &cache_path);
+        assert_eq!(
+            recovered
+                .document("notes/Target.md")
+                .expect("recovered target")
+                .headings[1]
+                .text,
+            "Child"
+        );
+
+        {
+            let connection = rusqlite::Connection::open(&cache_path).expect("open cache metadata");
+            connection
+                .execute(
+                    "UPDATE cache_metadata SET schema_version = 999 WHERE id = 1",
+                    [],
+                )
+                .expect("invalidate cache schema");
+        }
+        let mut version_recovered = WikiIndex::default();
+        rebuild_with_test_cache(&mut version_recovered, &root, &cache_path);
+        let connection =
+            rusqlite::Connection::open(&cache_path).expect("open rebuilt cache metadata");
+        let schema_version: i64 = connection
+            .query_row(
+                "SELECT schema_version FROM cache_metadata WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read rebuilt cache schema");
+        assert_eq!(
+            schema_version,
+            crate::features::wiki::cache::WIKI_CACHE_SCHEMA_VERSION
+        );
+        connection
+            .execute(
+                "UPDATE documents SET headings_json = '[]' WHERE path = 'notes/Target.md'",
+                [],
+            )
+            .expect("tamper valid cache JSON");
+        drop(connection);
+
+        let mut tamper_recovered = WikiIndex::default();
+        rebuild_with_test_cache(&mut tamper_recovered, &root, &cache_path);
+        assert_eq!(
+            tamper_recovered
+                .document("notes/Target.md")
+                .expect("tamper recovered target")
+                .headings
+                .len(),
+            2
+        );
+
+        cleanup_cache_fixture(&root, &cache_path);
+    }
+
+    #[test]
+    fn cache_store_failure_does_not_block_in_memory_rebuild() {
+        let (root, unused_cache_path) = cache_fixture();
+        let blocker =
+            std::env::temp_dir().join(format!("agentero-wiki-cache-blocker-{}", Uuid::new_v4()));
+        fs::write(&blocker, b"not a directory").expect("write cache parent blocker");
+        let cache_path = blocker.join("wiki.sqlite");
+        let mut index = WikiIndex::default();
+
+        let result = rebuild_with_test_cache(&mut index, &root, &cache_path);
+        assert_eq!(result.edges, 3);
+        assert_eq!(index.edges.len(), 3);
+        assert!(blocker.is_file());
+
+        fs::remove_file(blocker).expect("remove cache blocker");
+        cleanup_cache_fixture(&root, &unused_cache_path);
+    }
+
+    #[test]
+    fn fresh_rebuild_discards_and_replaces_the_snapshot() {
+        let (root, cache_path) = cache_fixture();
+        let vault = root.to_str().expect("utf-8 cache fixture path");
+        let mut initial = WikiIndex::default();
+        rebuild_with_test_cache(&mut initial, &root, &cache_path);
+        {
+            let connection = rusqlite::Connection::open(&cache_path).expect("open cache");
+            connection
+                .execute(
+                    "UPDATE cache_metadata SET parser_version = 'stale' WHERE id = 1",
+                    [],
+                )
+                .expect("stale parser version");
+        }
+
+        let mut fresh = WikiIndex::default();
+        let result = fresh
+            .rebuild_fresh_with_cache_path(vault, &cache_path)
+            .expect("fresh cache rebuild");
+        assert_eq!(result.edges, 3);
+        let connection = rusqlite::Connection::open(&cache_path).expect("open fresh cache");
+        let parser_version: String = connection
+            .query_row(
+                "SELECT parser_version FROM cache_metadata WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read fresh parser version");
+        assert_eq!(
+            parser_version,
+            crate::features::wiki::cache::WIKI_PARSER_VERSION
+        );
+
+        cleanup_cache_fixture(&root, &cache_path);
     }
 }

@@ -33,6 +33,7 @@ macro_rules! common_commands {
             crate::features::wiki::commands::wiki_rename_heading,
             crate::features::wiki::commands::graph_get_graph,
             crate::features::wiki::commands::graph_rebuild,
+            crate::features::wiki::commands::wiki_cache_rebuild,
             crate::features::vault::commands::vault_create,
             crate::features::vault::commands::vault_ensure,
             crate::features::vault::commands::vault_allow_fs_scope,
