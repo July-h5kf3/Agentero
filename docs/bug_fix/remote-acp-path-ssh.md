@@ -9,7 +9,7 @@
 - `src-tauri/src/services/terminal.rs` — `open_terminal_confirm_remote_install`（SSH 安装引号）
 - `src-tauri/src/services/agent/templates.rs` — Claude 安装命令（用户 prefix）
 - `src-tauri/src/services/agent/acp.rs` — 远端 spawn 注入 proxy env
-- `src/components/settings/settings-window.tsx` — 远端 Agent 页：代理、Install ACP
+- `src/components/settings/settings-content.tsx` / `agent-pane.tsx` — 远端 Agent 页：代理、Install ACP
 - 设计总览：[`../development/remote-vault.md`](../development/remote-vault.md) §5 / §11
 
 ---

@@ -178,13 +178,12 @@
 | 注册 | 弹层 `open === true` 时 `pushOverlay({ id, close })`；关闭或卸载时 dispose（idempotent） |
 | 关闭 | `closeTopOverlay()` 弹出栈顶并调用其 `close`；`⌘W`（`closeTabOrWindow`）与 `Esc`（`closeSheet`）共用 |
 | 门控 | `useAppShortcuts(anyOverlayOpen, …)`：`whenSettingsClosed` 实际表示「无弹层」；有弹层时挡 Vault/导航类快捷键，避免误触 |
-| 开关类 | `⌘,` 设置、`⌘K`/`⌘P` 命令面板、`⇧⌘P` 命令模式：自身可再按关闭（不依赖 `whenSettingsClosed`） |
+| 开关类 | `⌘K`/`⌘P` 命令面板、`⇧⌘P` 命令模式：自身可再按关闭（不依赖 `whenSettingsClosed`）；`⌘,` 设置现为原生窗口 toggle，不在 overlay-stack 中 |
 
 **已注册 id（须保持稳定）**
 
 | id | 组件 |
 |---|---|
-| `settings` | `SettingsWindow`（App 内浮层，所有平台） |
 | `command-palette` | `CommandPalette`（Go / Commands 共用） |
 | `zotero-migrate` | `ZoteroMigrateDialog` |
 | `move-papers` | `MovePapersDialog` |
@@ -433,18 +432,18 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 ## 4. 设置窗口（Settings）
 
-参考 **macOS System Settings / 传统 Preferences** 形态：所有平台均为 App 内**居中浮层 dialog**（`SettingsWindow` 包 `SettingsContent`，经 `overlay-stack` 注册 `settings`）。
+参考 **macOS System Settings / 传统 Preferences** 形态：所有平台均为**独立原生单例窗口**（Host `settings_window_open` + `?window=settings` 路由，`SettingsNativeRoot` 渲染 `SettingsContent`）。
 
-> **注**：曾实现独立原生单例窗口（Host `settings_window_open` + `?window=settings` 路由），但该第二 webview 在 **Windows 下白屏卡死**；已改回 App 内浮层。前端路由与 `settings-window-root.tsx` 已删除，仅 Host 命令暂时保留但不再调用。
+> **注**：早期版本曾因第二 webview 在 **Windows 下白屏卡死** 而临时改回 App 内浮层；当前实现复用了已验证的多窗口模式（与 `window_new` 同源），并将 Settings 页面拆分为独立轻量路由，避免在主窗口外加载完整 `App`。
 
 | 要求 | 说明 |
 |---|---|
 | 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`title-bar.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
-| 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog（backdrop 半透明模糊） |
+| 结构 | 左侧分类导航 + 右侧内容；独立窗口（macOS 使用 Overlay 标题栏 + 原生交通灯，Windows / Linux 使用与主窗口一致的无框自定义标题栏） |
 | 分类 | General · Appearance · Agent · **Translate** · Keyboard · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
-| 关闭 | 右上角 `X`、点遮罩、`Esc`、`⌘W`、再次 `⌘,`（均经 `overlay-stack`） |
+| 关闭 | 窗口标题栏 `X`、`Esc`、再次 `⌘,`（聚焦时若已打开则关闭） |
 | 同步 | 保存经 `settings_set` → Host 广播 `settings:changed` → 各窗口即时应用（主题 / 语言 / 列配置等），见 `../backend/api.md` |
 | 文案 | 支持国际化（i18n）：English 与简体中文可切换，English 为源语言与兜底；简短说明可作 footer |
 
@@ -474,7 +473,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings/settings-window.tsx`（`SettingsWindow` 浮层 + 共用 `SettingsContent`）。**应用设置**持久化为 Host 文件（XDG）：
+实现：`src/components/settings/settings-native-root.tsx`（原生窗口 chrome）+ `src/components/settings/settings-content.tsx`（共用 `SettingsContent`）。`src/main.tsx` 通过 `?window=settings` 路由分支渲染轻量 Settings 页面，避免加载完整 `App`。**应用设置**持久化为 Host 文件（XDG）：
 
 | 路径 | 说明 |
 |---|---|

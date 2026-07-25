@@ -278,8 +278,9 @@ src/components/
 ├── editor/              # Plate Markdown 编辑器
 ├── viewer/              # PDF / HTML / 图片
 ├── settings/
-│   ├── settings-window.tsx
-│   └── settings-window-root.tsx
+│   ├── settings-content.tsx
+│   ├── settings-native-root.tsx
+│   └── types.ts
 └── dialogs/             # 仅全局 / 跨域
     ├── command-palette.tsx
     ├── remote-vault-dialog.tsx

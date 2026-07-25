@@ -489,7 +489,7 @@ Connector 的后台 PDF/TeX/PAPER.md 处理创建 `kind=connector` 任务。任�
 | Commands | `src-tauri/src/commands/connector.rs` |
 | 注册 | `lib.rs`、`services/mod.rs`、`commands/mod.rs`、`Cargo.toml`（HTTP 依赖，如 `hyper`/`axum`/`tiny_http` + tokio net） |
 | 映射复用 | `services/lookup/map.rs`（可能抽 `import_zotero_items`） |
-| 前端 | `settings/settings-window.tsx`、settings store、`App.tsx` |
+| 前端 | `settings/settings-content.tsx`（General 页开关）、settings store、`App.tsx` |
 | i18n | `en/settings.json`、`zh-CN/settings.json` |
 | 文档 | 本文、`api.md` 摘要、`roadmap` / `todo`、可选 `ui.md` §4 |
 

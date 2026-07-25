@@ -2,7 +2,7 @@
 
 > 状态：**首版已落地**（免费 MT + BYOA Agent；无付费 API）。  
 > 范围：应用级 **文本翻译服务层**（架构对齐 [zotero-pdf-translate](https://github.com/windingwind/zotero-pdf-translate)）→ **免费 MT** 与 **BYOA Agent** → **设置 → 翻译** → 消费方经 `runTranslate` / Agent 流式 prompt。  
-> 实现入口：`src/lib/translate/`、Host `services/translate/` + `translate_text`、`src/components/settings/settings-window.tsx`（Translate 页）、PDF 划词菜单（[`pdf-ask.md`](pdf-ask.md)）。  
+> 实现入口：`src/lib/translate/`、Host `services/translate/` + `translate_text`、`src/components/settings/settings-content.tsx`（Translate 页）、PDF 划词菜单（[`pdf-ask.md`](pdf-ask.md)）。  
 > 相关：[`../frontend/ui.md`](../frontend/ui.md) §4 设置、[`../backend/api.md`](../backend/api.md)、[`pdf-ask.md`](pdf-ask.md)、[`roadmap.md`](roadmap.md)、[`todo.md`](todo.md)。
 
 ## 1. 产品目标
@@ -309,7 +309,7 @@ resolveTranslateModel(id):
 
 设置窗左侧导航 **Translate（翻译）**，与 General · Appearance · Agent · Keyboard · Privacy · About 并列。
 
-实现：`settings-window.tsx`；持久化 `src/lib/settings`。
+实现：`settings-content.tsx`（Translate 页）；持久化 `src/lib/settings`。
 
 ### 7.2 设计原则：最小选择
 
@@ -515,7 +515,8 @@ src-tauri/src/
   commands/translate.rs # translate_text（free）
   services/translate/   # HTTP 客户端、错误映射
 
-src/components/settings/settings-window.tsx  # Translate 导航页
+src/components/settings/settings-content.tsx  # Translate 导航页
+src/components/settings/settings-native-root.tsx  # 原生 Settings 窗口入口
 src/lib/settings                 # translate 字段
 src/i18n/locales/{en,zh-CN}/settings.json
 

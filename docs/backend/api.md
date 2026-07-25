@@ -254,6 +254,26 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返。
 
+#### `settings_window_open`（已实现）
+
+打开 Settings 原生单例窗口（菜单 **Agentero → Settings…** / `⌘,` / 标题栏齿轮）。
+
+- **参数**
+
+```ts
+{
+  section: "general" | "appearance" | "agent" | "translate" | "keyboard" | "about";
+  vaultPath?: string | null; // 当前 Vault 路径，用于远端 Agent 页上下文
+}
+```
+
+- **返回**：`Result<(), String>`
+- **行为**
+  - 若 label 为 `settings` 的窗口已存在，则将其聚焦并返回；否则新建。
+  - URL 带 `?window=settings&section=...&vault_path=...`，由 `src/main.tsx` 分支渲染轻量 Settings 页面（不加载完整 `App`）。
+  - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用与主窗口一致的无框窗口 + React 自定义标题栏。
+  - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）。
+
 #### `fs_watch_start` / `fs_watch_stop`（已实现）
 
 按窗口启停 Vault 文件系统监听（Rust `notify` 递归监听），用于外部编辑器 / Agent 写盘后自动重载编辑器与文件树。
@@ -1625,7 +1645,9 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 > 设置文件绝对路径已包含在 `settings_get` 返回的 `path` 字段中（About / 诊断用），无独立 command。
 
-实现：`src-tauri/src/features/settings/`（`mod.rs` + `commands.rs`）、`core/paths.rs`。
+UI 入口见 `settings_window_open`：Settings 现为独立原生单例窗口，`?window=settings` 路由由 `src/main.tsx` 分支渲染。
+
+实现：`src-tauri/src/features/settings/`（`mod.rs` + `commands.rs`）、`core/paths.rs`、`src-tauri/src/features/window/commands.rs`。
 
 ### 3.11 界面与本地化（UI / i18n）
 
