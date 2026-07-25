@@ -102,14 +102,14 @@
 		"tabGroupDissolve": "Dissolve Tab Group",
 		"tabGroupColor": {
 			"grey": "Grey",
-			"blue": "Blue",
 			"red": "Red",
+			"orange": "Orange",
 			"yellow": "Yellow",
 			"green": "Green",
-			"pink": "Pink",
-			"purple": "Purple",
-			"cyan": "Cyan",
-			"orange": "Orange"
+			"teal": "Teal",
+			"blue": "Blue",
+			"indigo": "Indigo",
+			"purple": "Purple"
 		},
 		"splitDropHint": "Drop to open as split",
 		"splitNotAllowed": "This item cannot open in a split pane.",

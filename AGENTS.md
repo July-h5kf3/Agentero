@@ -48,6 +48,8 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 
 - 优先做小而聚焦的改动，避免无关重构。
 - 保持 local-first：不要引入私有存储作为事实来源。
+- 高内聚、低耦合
+- 能复用能力，避免重复造轮子。
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
 - Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。

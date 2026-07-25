@@ -255,17 +255,10 @@
 	--dv-drag-over-border-color: var(--primary);
 	--dv-drag-over-border: 2px solid var(--primary);
 	--dv-icon-hover-background-color: var(--accent);
-	/* Tab-group chip palette — stay readable in light/dark via theme tokens */
-	--dv-tab-group-color-grey: var(--muted-foreground);
-	--dv-tab-group-color-blue: var(--primary);
-	--dv-tab-group-color-red: var(--destructive);
-	--dv-tab-group-color-yellow: oklch(0.75 0.15 85);
-	--dv-tab-group-color-green: oklch(0.62 0.15 145);
-	--dv-tab-group-color-pink: oklch(0.65 0.18 350);
-	--dv-tab-group-color-purple: oklch(0.58 0.18 300);
-	--dv-tab-group-color-cyan: oklch(0.65 0.12 210);
-	--dv-tab-group-color-orange: oklch(0.7 0.16 55);
+	/* Tab-group hues: paper tag swatches via dock-workspace (tag-colors). */
 	--dv-tab-group-chip-font-size: 0.6875rem;
+	--dv-tab-group-chip-border-radius: 0.375rem;
+	--agentero-tab-group-chip-tint: 28%;
 	--dv-context-menu-background-color: var(--popover);
 	--dv-context-menu-color: var(--popover-foreground);
 	--dv-overlay-z-index: 1000;
@@ -329,6 +322,29 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/*
+ * Tab group name chip only: soft text-background fill (override dockview solid + white).
+ * Bottom underline and member tabs stay dockview defaults.
+ */
+.agentero-dockview .dv-tab-group-chip:not(.dv-tab-group-chip--accent-off) {
+	background-color: color-mix(
+		in oklab,
+		var(--dv-tab-group-color) var(--agentero-tab-group-chip-tint),
+		var(--background)
+	);
+	color: color-mix(in oklab, var(--dv-tab-group-color) 45%, var(--foreground));
+	font-weight: 500;
+}
+
+/* Nameless chip is a small swatch — keep solid accent so it stays legible. */
+.agentero-dockview
+.dv-tab-group-chip:not(.dv-tab-group-chip--accent-off):has(
+	.dv-tab-group-chip-label--empty
+) {
+	background-color: var(--dv-tab-group-color);
+	color: transparent;
 }
 
 /* Global workspace: always show dockview tab chrome (it owns document tabs). */

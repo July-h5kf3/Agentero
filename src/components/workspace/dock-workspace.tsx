@@ -36,6 +36,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { cn } from "@/lib/core/utils";
+import { TAG_COLOR_IDS, tagColorTokens } from "@/lib/ui/tag-colors";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
 import {
 	isSplitDragPayload,
@@ -49,20 +50,8 @@ import {
 } from "@/lib/workspace/tabs";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
 
-/** Palette ids match dockview defaults; CSS values come from index.css tokens. */
-const TAB_GROUP_COLOR_IDS = [
-	"grey",
-	"blue",
-	"red",
-	"yellow",
-	"green",
-	"pink",
-	"purple",
-	"cyan",
-	"orange",
-] as const;
-
-type TabGroupColorId = (typeof TAB_GROUP_COLOR_IDS)[number];
+/** Grey + paper tag palette (same swatches as library tags). */
+const TAB_GROUP_COLORS = ["grey", ...TAG_COLOR_IDS] as const;
 
 export type WorkspaceExternalDrop = {
 	paths: string[];
@@ -330,9 +319,12 @@ export const DockWorkspace = memo(
 
 		const tabGroupColors = useMemo<DockviewTabGroupColorEntry[]>(
 			() =>
-				TAB_GROUP_COLOR_IDS.map((id) => ({
+				TAB_GROUP_COLORS.map((id) => ({
 					id,
-					value: `var(--dv-tab-group-color-${id})`,
+					value:
+						id === "grey"
+							? "var(--muted-foreground)"
+							: tagColorTokens(id)!.swatch,
 					label: t(`tabs.tabGroupColor.${id}` as const),
 				})),
 			[t],
@@ -617,7 +609,7 @@ export const DockWorkspace = memo(
 							const tg = api.createTabGroup({
 								groupId: group.id,
 								label: t("tabs.tabGroupDefaultName"),
-								color: "blue" satisfies TabGroupColorId,
+								color: "blue",
 							});
 							api.addPanelToTabGroup({
 								groupId: group.id,

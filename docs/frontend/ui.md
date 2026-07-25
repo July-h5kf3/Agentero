@@ -316,7 +316,7 @@
 
 - **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
 - **Tab 右键菜单**：关闭 / 关闭其他 / 关闭全部（**同组**）；新建标签组 / 从标签组移除（`getTabContextMenuItems`；文案走 i18n）。
-- **Tab 组**：chip 右键重命名、染色、解散（`getTabGroupChipContextMenuItems`）；随布局 `toJSON()` 持久化。
+- **Tab 组**：chip 右键重命名、染色、解散（`getTabGroupChipContextMenuItems`）；色板复用论文标签（`tag-colors` + grey）；底部分组线保留；仅组名 chip 浅色底（`index.css` `color-mix`）。
 - **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **左右分屏**（首篇 `right`，后续叠到同两栏 `within`）；切换论文时同步切换其 NOTES tab。`dropOverlayModel` 调大 content 边激活区；未知外部拖拽由 `onWillShowOverlay` / `onWillDrop` 否决。
 - **默认页 = 全库 Library**：
   - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。

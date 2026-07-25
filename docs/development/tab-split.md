@@ -72,7 +72,7 @@ export type DocTab = {
 |---|---|
 | Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
 | Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部 / 新建·移出标签组；**同组**；i18n；关闭经 `panel.api.close` → `onDidRemovePanel`） |
-| Tab 组染色 / 命名 | dockview tab groups：chip 右键 `rename` + `colorPicker` + 解散；`tabGroupColors` i18n 标签；随 `toJSON()` 持久化 |
+| Tab 组染色 / 命名 | dockview tab groups：chip 右键 `rename` + `colorPicker` + 解散；色板复用论文标签 `tag-colors`（+ grey）；随 `toJSON()` 持久化。视觉：底部分组线保留；仅组名 chip 浅色底（`index.css` `color-mix`） |
 | 键盘分屏导航 | `keyboardNavigation`（组内 `Ctrl+]`/`[`、组间 `F6`、键盘停靠 `Ctrl+M`）；与 App `⌥⌘←/→` 全局循环正交 |
 | 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
 | 落点 overlay | `dropOverlayModel`（content 25% 边激活）+ `onWillShowOverlay` / `onWillDrop` 否决未知外部拖拽 |
