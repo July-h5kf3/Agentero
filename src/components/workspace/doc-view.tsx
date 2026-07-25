@@ -155,6 +155,7 @@ export const DocView = memo(function DocView({
 					filePath={
 						isNotes ? tab.notesPath : isMarkdownPath(tab.path) ? tab.path : null
 					}
+					navigationIntent={tab.navigationIntent}
 					fontSize={editor.fontSize}
 					showToolbar={editor.showToolbar}
 					placeholder={

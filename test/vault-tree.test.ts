@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	collectMarkdownRelPaths,
+	collectWikiTargetRelPaths,
 	type FileNode,
 	isEagerTreeRel,
 	isMarkdownPath,
@@ -78,6 +79,16 @@ describe("collectMarkdownRelPaths", () => {
 		expect(collectMarkdownRelPaths(tree, "/v").sort()).toEqual([
 			"notes/todo.md",
 			"papers/x/NOTES.md",
+		]);
+	});
+});
+
+describe("collectWikiTargetRelPaths", () => {
+	it("includes Markdown, image, and PDF targets", () => {
+		expect(collectWikiTargetRelPaths(tree, "/v").sort()).toEqual([
+			"notes/todo.md",
+			"papers/x/NOTES.md",
+			"papers/x/a.pdf",
 		]);
 	});
 });

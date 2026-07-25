@@ -1,11 +1,14 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
-use crate::features::wiki::extract::extract_wikilinks;
+use crate::features::wiki::embed::project_markdown;
+use crate::features::wiki::extract::extract_document;
 use crate::features::wiki::models::{
-    Backlink, BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, RebuildResult,
-    WikiLinkEdge,
+    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkSyntax,
+    LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument,
+    WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse,
+    WikiSearchCandidate, WikiSearchCandidateKind,
 };
-use crate::features::wiki::resolve::{normalize_rel, resolve_target};
+use crate::features::wiki::resolve::{normalize_rel, resolve_occurrence};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,6 +33,56 @@ fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_pdf(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+}
+
+fn is_image(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "avif" | "ico"
+            )
+        })
+}
+
+fn is_wiki_target(path: &Path) -> bool {
+    is_markdown(path) || is_pdf(path) || is_image(path)
+}
+
+fn without_markdown_extension(path: &str) -> String {
+    let lower = path.to_ascii_lowercase();
+    for extension in [".markdown", ".mdx", ".md"] {
+        if lower.ends_with(extension) {
+            return path[..path.len() - extension.len()].to_string();
+        }
+    }
+    path.to_string()
+}
+
+fn document_stem(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn document_link_name(path: &str) -> String {
+    if is_markdown(Path::new(path)) {
+        return document_stem(path);
+    }
+    Path::new(path)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
 fn should_skip_name(name: &str) -> bool {
     if IGNORE_NAMES.contains(&name) {
         return true;
@@ -38,15 +91,15 @@ fn should_skip_name(name: &str) -> bool {
     name.starts_with('.')
 }
 
-/// Collect vault-relative Markdown paths (forward slashes).
-pub fn collect_markdown_files(vault_root: &Path) -> std::io::Result<Vec<String>> {
+/// Collect vault-relative Markdown, image, and PDF targets (forward slashes).
+pub fn collect_wiki_target_files(vault_root: &Path) -> std::io::Result<Vec<String>> {
     let mut out = Vec::new();
-    walk_md(vault_root, vault_root, 0, &mut out)?;
+    walk_wiki_targets(vault_root, vault_root, 0, &mut out)?;
     out.sort();
     Ok(out)
 }
 
-fn walk_md(
+fn walk_wiki_targets(
     vault_root: &Path,
     dir: &Path,
     depth: usize,
@@ -65,8 +118,8 @@ fn walk_md(
         let path = entry.path();
         let ft = entry.file_type()?;
         if ft.is_dir() {
-            walk_md(vault_root, &path, depth + 1, out)?;
-        } else if ft.is_file() && is_markdown(&path) {
+            walk_wiki_targets(vault_root, &path, depth + 1, out)?;
+        } else if ft.is_file() && is_wiki_target(&path) {
             if let Ok(rel) = path.strip_prefix(vault_root) {
                 out.push(normalize_rel(&rel.to_string_lossy()));
             }
@@ -89,10 +142,12 @@ pub struct WikiIndex {
     pub vault_path: Option<String>,
     /// All outgoing edges.
     pub edges: Vec<WikiLinkEdge>,
-    /// target_path → backlinks
-    reverse: HashMap<String, Vec<Backlink>>,
+    /// target_path → incoming occurrences
+    reverse: HashMap<String, Vec<ResolvedLink>>,
     /// Indexed markdown relative paths.
     files: Vec<String>,
+    /// File metadata and anchors, rebuilt entirely from Markdown source.
+    documents: Vec<WikiDocument>,
 }
 
 impl WikiIndex {
@@ -102,55 +157,53 @@ impl WikiIndex {
             return Err(format!("vault path is not a directory: {vault_path}"));
         }
 
-        let files = collect_markdown_files(&root).map_err(|e| e.to_string())?;
+        let files = collect_wiki_target_files(&root).map_err(|e| e.to_string())?;
+        let mut parsed = Vec::new();
+        let mut documents = Vec::new();
+        for rel in &files {
+            if !is_markdown(Path::new(rel)) {
+                documents.push(WikiDocument {
+                    path: rel.clone(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                });
+                continue;
+            }
+            let abs = root.join(rel);
+            let content = match fs::read_to_string(&abs) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+            let (document, occurrences) = extract_document(rel, &content);
+            documents.push(document);
+            parsed.extend(occurrences);
+        }
+
         let mut edges = Vec::new();
-        let mut reverse: HashMap<String, Vec<Backlink>> = HashMap::new();
+        let mut reverse: HashMap<String, Vec<ResolvedLink>> = HashMap::new();
         let mut nodes: HashSet<String> = HashSet::new();
 
         for rel in &files {
             nodes.insert(rel.clone());
-            let abs = root.join(rel);
-            let content = match fs::read_to_string(&abs) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let links = extract_wikilinks(&content);
-            for link in links {
-                let target_path = resolve_target(&link.target_raw, &files);
-                if let Some(ref tp) = target_path {
-                    nodes.insert(tp.clone());
-                } else {
-                    // dangling concept still a node id by raw target
-                    nodes.insert(format!("stub:{}", link.target_raw));
-                }
-
-                let edge = WikiLinkEdge {
-                    source: rel.clone(),
-                    target_raw: link.target_raw.clone(),
-                    target_path: target_path.clone(),
-                    alias: link.alias.clone(),
-                    heading: link.heading.clone(),
-                    line: link.line,
-                    context: link.context.clone(),
-                };
-
-                if let Some(tp) = &target_path {
-                    reverse.entry(tp.clone()).or_default().push(Backlink {
-                        source: rel.clone(),
-                        target_raw: link.target_raw.clone(),
-                        alias: link.alias.clone(),
-                        context: link.context.clone(),
-                        line: link.line,
-                    });
-                }
-
-                edges.push(edge);
+        }
+        for occurrence in parsed {
+            let edge = resolve_occurrence(occurrence, &documents);
+            if let Some(target_path) = &edge.target_path {
+                nodes.insert(target_path.clone());
+                reverse
+                    .entry(target_path.clone())
+                    .or_default()
+                    .push(edge.clone());
+            } else {
+                nodes.insert(format!("stub:{}", edge.occurrence.target_raw));
             }
+            edges.push(edge);
         }
 
         // Stable order for UI
         for list in reverse.values_mut() {
-            list.sort_by(|a, b| a.source.cmp(&b.source));
+            list.sort_by(|a, b| a.occurrence.source.cmp(&b.occurrence.source));
         }
 
         let result = RebuildResult {
@@ -163,6 +216,7 @@ impl WikiIndex {
         self.edges = edges;
         self.reverse = reverse;
         self.files = files;
+        self.documents = documents;
 
         Ok(result)
     }
@@ -189,21 +243,259 @@ impl WikiIndex {
                 backlinks.extend(list.iter().cloned());
             }
         }
-        // Dedupe by source+line+target_raw
+        // Preserve every occurrence: different fragments on one line are distinct.
         backlinks.sort_by(|a, b| {
-            a.source
-                .cmp(&b.source)
-                .then(a.line.cmp(&b.line))
-                .then(a.target_raw.cmp(&b.target_raw))
-        });
-        backlinks.dedup_by(|a, b| {
-            a.source == b.source && a.line == b.line && a.target_raw == b.target_raw
+            a.occurrence
+                .source
+                .cmp(&b.occurrence.source)
+                .then(a.occurrence.line.cmp(&b.occurrence.line))
+                .then(
+                    a.occurrence
+                        .source_range
+                        .start
+                        .cmp(&b.occurrence.source_range.start),
+                )
         });
 
         BacklinksResponse {
             path: rel,
             backlinks,
         }
+    }
+
+    pub fn get_outgoing(&self, vault_root: &str, path: &str) -> OutgoingLinksResponse {
+        let rel = to_vault_rel(Path::new(vault_root), path);
+        let outgoing = self
+            .edges
+            .iter()
+            .filter(|edge| edge.occurrence.source == rel)
+            .cloned()
+            .collect();
+        OutgoingLinksResponse {
+            path: rel,
+            outgoing,
+        }
+    }
+
+    pub fn resolve_text(
+        &self,
+        vault_root: &str,
+        source_path: &str,
+        text: &str,
+        syntax: InternalLinkSyntax,
+    ) -> WikiResolveResponse {
+        let source = to_vault_rel(Path::new(vault_root), source_path);
+        let input = match syntax {
+            InternalLinkSyntax::Wikilink if text.trim_start().starts_with("[[") => text.to_string(),
+            InternalLinkSyntax::Wikilink => format!("[[{}]]", text.trim()),
+            InternalLinkSyntax::Markdown => format!("[link]({})", text.trim()),
+        };
+        let (_, mut occurrences) = extract_document(&source, &input);
+        let occurrence = occurrences.pop().unwrap_or_else(|| {
+            crate::features::wiki::models::InternalLinkOccurrence {
+                source,
+                target_raw: text.trim().to_string(),
+                syntax,
+                embed: false,
+                display_text: None,
+                fragment: None,
+                source_range: crate::features::wiki::models::SourceRange {
+                    start: 0,
+                    end: text.len(),
+                },
+                line: 1,
+                context: None,
+            }
+        });
+        WikiResolveResponse {
+            link: resolve_occurrence(occurrence, &self.documents),
+        }
+    }
+
+    pub fn read_embed(
+        &self,
+        vault_root: &str,
+        source_path: &str,
+        text: &str,
+    ) -> Result<WikiEmbedResponse, String> {
+        let mut link = self
+            .resolve_text(vault_root, source_path, text, InternalLinkSyntax::Wikilink)
+            .link;
+        link.occurrence.embed = true;
+
+        if !matches!(
+            link.status,
+            crate::features::wiki::models::LinkResolutionStatus::Resolved
+        ) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: None,
+                content: None,
+            });
+        }
+
+        let Some(target_path) = link.target_path.as_deref() else {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: None,
+                content: None,
+            });
+        };
+        let target = Path::new(vault_root).join(target_path);
+        if is_image(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Image),
+                content: None,
+            });
+        }
+        if is_pdf(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Pdf),
+                content: None,
+            });
+        }
+        if !is_markdown(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Unsupported),
+                content: None,
+            });
+        }
+        let markdown = fs::read_to_string(&target)
+            .map_err(|error| format!("read embedded Markdown {target_path}: {error}"))?;
+        let (document, _) = extract_document(target_path, &markdown);
+        let content = project_markdown(&markdown, &document, link.occurrence.fragment.as_ref());
+        if content.is_none() {
+            link.status = crate::features::wiki::models::LinkResolutionStatus::InvalidFragment;
+        }
+
+        Ok(WikiEmbedResponse {
+            link,
+            content_kind: content.as_ref().map(|_| WikiEmbedContentKind::Markdown),
+            content,
+        })
+    }
+
+    pub fn search(&self, query: &str) -> Vec<WikiSearchCandidate> {
+        self.search_scoped(query, None, None)
+    }
+
+    pub fn search_scoped(
+        &self,
+        query: &str,
+        path: Option<&str>,
+        kind: Option<&WikiSearchCandidateKind>,
+    ) -> Vec<WikiSearchCandidate> {
+        let query_key = query.trim().to_lowercase();
+        let stem_counts =
+            self.documents
+                .iter()
+                .fold(HashMap::<String, usize>::new(), |mut counts, document| {
+                    *counts
+                        .entry(document_link_name(&document.path).to_lowercase())
+                        .or_default() += 1;
+                    counts
+                });
+        let mut candidates = Vec::new();
+        for document in &self.documents {
+            if path.is_some_and(|path| !document.path.eq_ignore_ascii_case(path)) {
+                continue;
+            }
+            let file_name = document_link_name(&document.path);
+            let target = if stem_counts
+                .get(&file_name.to_lowercase())
+                .copied()
+                .unwrap_or_default()
+                > 1
+            {
+                if is_markdown(Path::new(&document.path)) {
+                    without_markdown_extension(&document.path)
+                } else {
+                    document.path.clone()
+                }
+            } else {
+                file_name.clone()
+            };
+            let file_match = query_key.is_empty()
+                || document.path.to_lowercase().contains(&query_key)
+                || document
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.to_lowercase().contains(&query_key));
+            let include_file = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::File);
+            let include_heading = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Heading);
+            let include_block = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Block);
+            if include_file && file_match {
+                candidates.push(WikiSearchCandidate {
+                    kind: WikiSearchCandidateKind::File,
+                    path: document.path.clone(),
+                    insert_text: target.clone(),
+                    label: file_name.clone(),
+                    detail: None,
+                    alias: None,
+                    fragment: None,
+                });
+            }
+            if include_file {
+                for alias in &document.aliases {
+                    if query_key.is_empty() || alias.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::File,
+                            path: document.path.clone(),
+                            insert_text: target.clone(),
+                            label: alias.clone(),
+                            detail: None,
+                            alias: Some(alias.clone()),
+                            fragment: None,
+                        });
+                    }
+                }
+            }
+            if include_heading {
+                for heading in &document.headings {
+                    let label = heading.path.join(" › ");
+                    if query_key.is_empty() || label.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::Heading,
+                            path: document.path.clone(),
+                            insert_text: format!("{}#{}", target, heading.text),
+                            label,
+                            detail: Some(format!("H{}", heading.level)),
+                            alias: None,
+                            fragment: Some(LinkFragment::Heading {
+                                path: heading.path.clone(),
+                            }),
+                        });
+                    }
+                }
+            }
+            if include_block {
+                for block in &document.blocks {
+                    if query_key.is_empty() || block.id.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::Block,
+                            path: document.path.clone(),
+                            insert_text: format!("{}#^{}", target, block.id),
+                            label: format!("^{}", block.id),
+                            detail: (!block.preview.is_empty()).then(|| block.preview.clone()),
+                            alias: None,
+                            fragment: Some(LinkFragment::Block {
+                                id: block.id.clone(),
+                            }),
+                        });
+                    }
+                }
+            }
+        }
+        candidates.sort_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then(left.label.cmp(&right.label))
+        });
+        candidates.truncate(100);
+        candidates
     }
 
     /// Full graph or undirected BFS neighborhood around `center`.
@@ -230,17 +522,17 @@ impl WikiIndex {
         }
 
         for e in &self.edges {
-            let source = collapse_graph_id(&e.source, &paper_folders);
+            let source = collapse_graph_id(&e.occurrence.source, &paper_folders);
             let target = match &e.target_path {
                 Some(tp) => collapse_graph_id(tp, &paper_folders),
-                None => format!("stub:{}", e.target_raw),
+                None => format!("stub:{}", e.occurrence.target_raw),
             };
             if source == target {
                 continue; // self-loop after collapse (e.g. NOTES ↔ paper internals)
             }
             node_ids.insert(source.clone());
             node_ids.insert(target.clone());
-            full_edges.push((source, target, e.target_raw.clone()));
+            full_edges.push((source, target, e.occurrence.target_raw.clone()));
         }
 
         // Dedupe edges by (source, target)
@@ -569,5 +861,295 @@ impl WikiIndexState {
 impl Default for WikiIndexState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::wiki::models::{BlockAnchor, HeadingAnchor, LinkResolutionStatus};
+    use uuid::Uuid;
+
+    fn test_vault() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("agentero-wiki-embed-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("notes")).expect("create embed fixture vault");
+        root
+    }
+
+    #[test]
+    fn reads_resolved_heading_and_block_embed_projections() {
+        let root = test_vault();
+        fs::write(
+            root.join("notes/Target.md"),
+            "# Root\nintro\n## Child\nchild\nBlock text ^focus\n## Sibling\nend\n",
+        )
+        .expect("write target");
+        fs::write(root.join("notes/Source.md"), "![[Target#Child]]").expect("write source");
+
+        let mut index = WikiIndex::default();
+        index
+            .rebuild(root.to_str().expect("utf-8 fixture path"))
+            .expect("rebuild index");
+        let heading = index
+            .read_embed(
+                root.to_str().expect("utf-8 fixture path"),
+                "notes/Source.md",
+                "Target#Child",
+            )
+            .expect("read heading embed");
+        assert_eq!(
+            heading.content.as_deref(),
+            Some("## Child\nchild\nBlock text ^focus\n")
+        );
+        assert!(heading.link.occurrence.embed);
+
+        let block = index
+            .read_embed(
+                root.to_str().expect("utf-8 fixture path"),
+                "notes/Source.md",
+                "Target#^focus",
+            )
+            .expect("read block embed");
+        assert_eq!(block.content.as_deref(), Some("Block text ^focus\n"));
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn resolves_and_projects_image_and_pdf_targets() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("assets")).expect("create attachment directory");
+        fs::write(root.join("assets/figure.png"), b"png fixture").expect("write image fixture");
+        fs::write(root.join("assets/paper.pdf"), b"pdf fixture").expect("write pdf fixture");
+        fs::write(
+            root.join("notes/Source.md"),
+            "[[figure.png]]\n[[paper.pdf]]\n![[figure.png]]\n![[paper.pdf]]\n",
+        )
+        .expect("write attachment links");
+
+        let vault = root.to_str().expect("utf-8 fixture path");
+        let mut index = WikiIndex::default();
+        index.rebuild(vault).expect("rebuild attachment index");
+
+        let image = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "figure.png",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(image.status, LinkResolutionStatus::Resolved);
+        assert_eq!(image.target_path.as_deref(), Some("assets/figure.png"));
+
+        let pdf = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "paper.pdf",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(pdf.status, LinkResolutionStatus::Resolved);
+        assert_eq!(pdf.target_path.as_deref(), Some("assets/paper.pdf"));
+
+        let image_embed = index
+            .read_embed(vault, "notes/Source.md", "figure.png")
+            .expect("read image embed");
+        assert_eq!(image_embed.content_kind, Some(WikiEmbedContentKind::Image));
+        assert_eq!(image_embed.content, None);
+
+        let pdf_embed = index
+            .read_embed(vault, "notes/Source.md", "paper.pdf")
+            .expect("read pdf embed");
+        assert_eq!(pdf_embed.content_kind, Some(WikiEmbedContentKind::Pdf));
+        assert_eq!(pdf_embed.content, None);
+
+        let file_targets = index
+            .search("")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert!(file_targets.contains(&"figure.png".to_string()));
+        assert!(file_targets.contains(&"paper.pdf".to_string()));
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn duplicate_attachment_names_require_vault_relative_targets() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("assets/first")).expect("create first asset directory");
+        fs::create_dir_all(root.join("assets/second")).expect("create second asset directory");
+        fs::write(root.join("assets/first/figure.png"), b"first image").expect("write first image");
+        fs::write(root.join("assets/second/figure.png"), b"second image")
+            .expect("write second image");
+
+        let vault = root.to_str().expect("utf-8 fixture path");
+        let mut index = WikiIndex::default();
+        index.rebuild(vault).expect("rebuild attachment index");
+
+        let ambiguous = index
+            .resolve_text(
+                vault,
+                "notes/Source.md",
+                "figure.png",
+                InternalLinkSyntax::Wikilink,
+            )
+            .link;
+        assert_eq!(ambiguous.status, LinkResolutionStatus::Ambiguous);
+
+        let targets = index
+            .search("figure.png")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            targets,
+            vec![
+                "assets/first/figure.png".to_string(),
+                "assets/second/figure.png".to_string()
+            ]
+        );
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn search_keeps_alias_display_separate_from_canonical_target() {
+        let index = WikiIndex {
+            documents: vec![WikiDocument {
+                path: "notes/Canonical.md".into(),
+                aliases: vec!["Short name".into()],
+                headings: vec![HeadingAnchor {
+                    text: "Overview".into(),
+                    path: vec!["Canonical".into(), "Overview".into()],
+                    level: 2,
+                    line: 4,
+                }],
+                blocks: vec![BlockAnchor {
+                    id: "验收块".into(),
+                    preview: "Canonical block preview".into(),
+                    line: 8,
+                }],
+            }],
+            ..Default::default()
+        };
+
+        let alias = index
+            .search("Short")
+            .into_iter()
+            .find(|candidate| candidate.alias.as_deref() == Some("Short name"))
+            .expect("alias candidate");
+        assert_eq!(alias.insert_text, "Canonical");
+
+        let heading = index
+            .search("Overview")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
+            .expect("heading candidate");
+        assert_eq!(heading.insert_text, "Canonical#Overview");
+        assert_eq!(heading.detail.as_deref(), Some("H2"));
+
+        let block = index
+            .search("验收")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Block)
+            .expect("block candidate");
+        assert_eq!(block.insert_text, "Canonical#^验收块");
+        assert_eq!(block.detail.as_deref(), Some("Canonical block preview"));
+    }
+
+    #[test]
+    fn search_uses_vault_relative_paths_for_duplicate_file_names() {
+        let index = WikiIndex {
+            documents: vec![
+                WikiDocument {
+                    path: "notes/Target.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+                WikiDocument {
+                    path: "references/target.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+                WikiDocument {
+                    path: "papers/Fara-1.5.md".into(),
+                    aliases: Vec::new(),
+                    headings: Vec::new(),
+                    blocks: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let duplicate_targets = index
+            .search("Target")
+            .into_iter()
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .map(|candidate| candidate.insert_text)
+            .collect::<Vec<_>>();
+        assert_eq!(duplicate_targets, vec!["notes/Target", "references/target"]);
+
+        let unique = index
+            .search("Fara-1.5")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .expect("unique file candidate");
+        assert_eq!(unique.insert_text, "Fara-1.5");
+    }
+
+    #[test]
+    fn scoped_search_filters_before_the_global_candidate_limit() {
+        let mut documents = (0..101)
+            .map(|index| WikiDocument {
+                path: format!("early/{index:03}.md"),
+                aliases: Vec::new(),
+                headings: Vec::new(),
+                blocks: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        documents.push(WikiDocument {
+            path: "notes/双链验收/目标笔记.md".into(),
+            aliases: Vec::new(),
+            headings: Vec::new(),
+            blocks: vec![
+                BlockAnchor {
+                    id: "验收块".into(),
+                    preview: "可精确定位到本段。".into(),
+                    line: 17,
+                },
+                BlockAnchor {
+                    id: "asb".into(),
+                    preview: "请仅在 Agentero 内将本文件改名。".into(),
+                    line: 21,
+                },
+            ],
+        });
+        let index = WikiIndex {
+            documents,
+            ..Default::default()
+        };
+
+        let blocks = index.search_scoped(
+            "",
+            Some("notes/双链验收/目标笔记.md"),
+            Some(&WikiSearchCandidateKind::Block),
+        );
+
+        assert_eq!(blocks.len(), 2);
+        assert!(blocks.iter().any(|candidate| {
+            candidate.label == "^验收块"
+                && candidate.detail.as_deref() == Some("可精确定位到本段。")
+        }));
+        assert!(blocks.iter().any(|candidate| {
+            candidate.label == "^asb"
+                && candidate.detail.as_deref() == Some("请仅在 Agentero 内将本文件改名。")
+        }));
     }
 }

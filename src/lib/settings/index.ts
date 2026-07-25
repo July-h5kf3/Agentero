@@ -15,6 +15,7 @@ export type {
 	AgentPermissionMode,
 	AiResponseLanguage,
 	AppSettings,
+	AutoUpdateInternalLinks,
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,
@@ -22,4 +23,7 @@ export type {
 	TranslateProviderId,
 	TranslateTargetLang,
 } from "@/lib/settings/types";
-export { DEFAULT_LIBRARY_COLUMNS } from "@/lib/settings/types";
+export {
+	AUTO_UPDATE_INTERNAL_LINKS,
+	DEFAULT_LIBRARY_COLUMNS,
+} from "@/lib/settings/types";

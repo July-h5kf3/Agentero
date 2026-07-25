@@ -31,7 +31,12 @@ import {
 	connectorSetEnabled,
 	connectorSetPort,
 } from "@/lib/paper/import/connector";
-import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
+import {
+	type AppSettings,
+	AUTO_UPDATE_INTERNAL_LINKS,
+	type AutoUpdateInternalLinks,
+	DEFAULT_TRANSLATOR_BASE_URL,
+} from "@/lib/settings";
 
 export function GeneralPane({
 	settings,
@@ -98,6 +103,30 @@ export function GeneralPane({
 							{PAPER_TREE_SORT_MODES.map((mode) => (
 								<SelectItem key={mode} value={mode}>
 									{t(`general.paperTreeSortMode.${mode}`)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
+				<SettingsRow
+					label={t("general.autoUpdateInternalLinks.label")}
+					description={t("general.autoUpdateInternalLinks.hint")}
+				>
+					<Select
+						value={settings.autoUpdateInternalLinks}
+						onValueChange={(value) =>
+							patch({
+								autoUpdateInternalLinks: value as AutoUpdateInternalLinks,
+							})
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{AUTO_UPDATE_INTERNAL_LINKS.map((mode) => (
+								<SelectItem key={mode} value={mode}>
+									{t(`general.autoUpdateInternalLinks.${mode}`)}
 								</SelectItem>
 							))}
 						</SelectContent>

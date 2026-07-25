@@ -63,6 +63,14 @@ export type AgentPermissionMode = "restricted" | "ask" | "auto";
  */
 export type AiResponseLanguage = "auto" | "en" | "zh-CN";
 
+/** How a verified external local rename may repair resolved internal links. */
+export type AutoUpdateInternalLinks = "ask" | "always";
+
+export const AUTO_UPDATE_INTERNAL_LINKS: AutoUpdateInternalLinks[] = [
+	"ask",
+	"always",
+];
+
 export type AppSettings = {
 	// General
 	restoreLastVault: boolean;
@@ -81,6 +89,8 @@ export type AppSettings = {
 	 * Default: display name A–Z (matches paperTreeLabelMode labels).
 	 */
 	paperTreeSortMode: PaperTreeSortMode;
+	/** Default `ask`: external local renames are previewed before Markdown writes. */
+	autoUpdateInternalLinks: AutoUpdateInternalLinks;
 	/**
 	 * Papers Library table columns: order (array position) + visibility.
 	 * Reconciled against {@link LIBRARY_COLUMN_KEYS}; `title` is always visible.

@@ -53,6 +53,8 @@ impl AppError {
 pub struct ErrorBody {
     pub code: String,
     pub message: String,
+    #[specta(skip)]
+    pub details: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, specta::Type)]
@@ -79,6 +81,19 @@ impl<T: Serialize> ApiResult<T> {
             error: Some(ErrorBody {
                 code: err.code().to_string(),
                 message: err.to_string(),
+                details: None,
+            }),
+        }
+    }
+
+    pub fn err_with_details(err: AppError, details: serde_json::Value) -> Self {
+        Self {
+            ok: false,
+            data: None,
+            error: Some(ErrorBody {
+                code: err.code().to_string(),
+                message: err.to_string(),
+                details: Some(details),
             }),
         }
     }
@@ -86,4 +101,27 @@ impl<T: Serialize> ApiResult<T> {
 
 pub fn map_err<T: Serialize>(err: AppError) -> ApiResult<T> {
     ApiResult::err(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_structured_recovery_details_in_api_errors() {
+        let result: ApiResult<()> = ApiResult::err_with_details(
+            AppError::message("external repair failed"),
+            serde_json::json!({
+                "code": "writeFailed",
+                "rollback": "manual-recovery-required",
+            }),
+        );
+
+        let value = serde_json::to_value(result).expect("error response serializes");
+        assert_eq!(value["error"]["details"]["code"], "writeFailed");
+        assert_eq!(
+            value["error"]["details"]["rollback"],
+            "manual-recovery-required"
+        );
+    }
 }

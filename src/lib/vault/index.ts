@@ -34,6 +34,7 @@ export {
 	saveVaultPath,
 } from "@/lib/vault/session";
 export {
+	collectWikiTargetRelPaths,
 	isEagerTreeRel,
 	listVaultDirChildren,
 	loadVaultTree,

@@ -27,6 +27,7 @@ import type {
 } from "@/lib/translate/types";
 import { isKnownUiTheme } from "@/lib/ui/theme";
 
+/** Legacy browser key — only used once to migrate into Host `settings.json`. */
 const LEGACY_SETTINGS_KEY = "agentero-settings";
 
 type SettingsGetResult = {
@@ -282,6 +283,12 @@ function normalizePartial(
 	}
 	if (!isPaperTreeSortMode(merged.paperTreeSortMode)) {
 		merged.paperTreeSortMode = DEFAULT_SETTINGS.paperTreeSortMode;
+	}
+	if (
+		merged.autoUpdateInternalLinks !== "ask" &&
+		merged.autoUpdateInternalLinks !== "always"
+	) {
+		merged.autoUpdateInternalLinks = DEFAULT_SETTINGS.autoUpdateInternalLinks;
 	}
 	merged.libraryColumns = normalizeLibraryColumns(merged.libraryColumns);
 	if (typeof parsed.autoPaperReader !== "boolean") {

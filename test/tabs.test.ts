@@ -10,6 +10,8 @@ import {
 	paperReadingPlacements,
 	patchTab,
 	readingPairCloseIds,
+	remapPathUnder,
+	remapTabsUnderPath,
 	removeTab,
 	removeTabsUnderPath,
 	reseedMarkdownTab,
@@ -121,6 +123,37 @@ describe("removeTabsUnderPath", () => {
 	});
 });
 
+describe("remapTabsUnderPath", () => {
+	it("keeps moved tabs mounted and updates nested paths", () => {
+		const start = [
+			makeTab("/vault/papers/nlp/paper", {
+				paperMeta: { path: "papers/nlp/paper" } as DocTab["paperMeta"],
+				notesPath: "/vault/papers/nlp/paper/NOTES.md",
+			}),
+			makeTab("/vault/notes/other.md"),
+		];
+		const next = remapTabsUnderPath(
+			start,
+			"/vault/papers/nlp",
+			"/vault/papers/archive/nlp",
+			"papers/nlp",
+			"papers/archive/nlp",
+		);
+		expect(next[0]?.id).toBe("/vault/papers/archive/nlp/paper");
+		expect(next[0]?.notesPath).toBe("/vault/papers/archive/nlp/paper/NOTES.md");
+		expect(next[0]?.paperMeta?.path).toBe("papers/archive/nlp/paper");
+		expect(next[1]).toBe(start[1]);
+	});
+
+	it("leaves unrelated and virtual paths unchanged", () => {
+		expect(remapPathUnder(LIBRARY_VIRTUAL_PATH, "/vault/a", "/vault/b")).toBe(
+			LIBRARY_VIRTUAL_PATH,
+		);
+		expect(remapPathUnder("/vault/c.md", "/vault/a", "/vault/b")).toBe(
+			"/vault/c.md",
+		);
+	});
+});
 describe("reseed helpers", () => {
 	it("reseedNotesTab bumps notesKey and clears notesDirty", () => {
 		const start = [

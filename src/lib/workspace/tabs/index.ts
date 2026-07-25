@@ -5,6 +5,8 @@ export {
 	insertPlaceholderTab,
 	normalizeTabPath,
 	patchTab,
+	remapPathUnder,
+	remapTabsUnderPath,
 	removeTab,
 	removeTabsUnderPath,
 	tabIdForPath,

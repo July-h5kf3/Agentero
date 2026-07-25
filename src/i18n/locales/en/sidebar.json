@@ -39,6 +39,13 @@
 		"moveSelected": "Move {{count}}",
 		"clearSelection": "Clear selection",
 		"move": "Move…",
+		"rename": "Rename…",
+		"renameDialogTitle": "Rename “{{name}}”",
+		"renameNameLabel": "Name",
+		"renameConfirm": "Rename",
+		"renameCancel": "Cancel",
+		"renameFailed": "Failed to rename.",
+		"renamedLinks": "Renamed and updated {{count}} linked file(s).",
 		"movedWithErrors": "{{count}} item(s) could not be moved.",
 		"moveFailed": "Failed to move.",
 		"moveDesktopOnly": "Move requires the desktop app.",
@@ -168,7 +175,17 @@
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",
+		"loadFailed": "Could not load internal links",
 		"none": "No backlinks",
+		"incoming": "Incoming ({{count}})",
+		"outgoing": "Outgoing ({{count}})",
+		"noneIncoming": "No incoming links",
+		"noneOutgoing": "No outgoing links",
+		"status": {
+			"missing": "Missing",
+			"ambiguous": "Ambiguous",
+			"invalidFragment": "Invalid fragment"
+		},
 		"title": "Backlinks"
 	},
 	"graph": {

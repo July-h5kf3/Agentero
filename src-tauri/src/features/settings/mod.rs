@@ -23,6 +23,8 @@ pub struct AppSettings {
     pub paper_tree_label_mode: String,
     #[serde(default = "default_paper_tree_sort_mode")]
     pub paper_tree_sort_mode: String,
+    #[serde(default = "default_auto_update_internal_links")]
+    pub auto_update_internal_links: String,
     #[serde(default = "default_library_columns")]
     pub library_columns: Vec<LibraryColumnPref>,
     #[serde(default)]
@@ -114,6 +116,7 @@ impl Default for AppSettings {
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
+            auto_update_internal_links: default_auto_update_internal_links(),
             library_columns: default_library_columns(),
             connector_enabled: false,
             connector_port: default_connector_port(),
@@ -145,6 +148,9 @@ fn default_paper_tree_label_mode() -> String {
 }
 fn default_paper_tree_sort_mode() -> String {
     "folder".into()
+}
+fn default_auto_update_internal_links() -> String {
+    "ask".into()
 }
 /// Canonical papers-Library column keys, in default order.
 const LIBRARY_COLUMN_KEYS: &[&str] = &["title", "authors", "year", "tags", "type", "id"];
@@ -332,6 +338,10 @@ fn normalize(s: &mut AppSettings) {
     if !SORT_MODES.contains(&s.paper_tree_sort_mode.as_str()) {
         s.paper_tree_sort_mode = default_paper_tree_sort_mode();
     }
+    const AUTO_UPDATE_INTERNAL_LINKS: &[&str] = &["ask", "always"];
+    if !AUTO_UPDATE_INTERNAL_LINKS.contains(&s.auto_update_internal_links.as_str()) {
+        s.auto_update_internal_links = default_auto_update_internal_links();
+    }
 
     // Library columns: drop unknown/duplicate keys, append missing ones
     // (visible), and keep `title` visible so rows stay identifiable.
@@ -441,6 +451,7 @@ mod tests {
         assert!(existed);
         assert_eq!(loaded.theme, "system");
         assert_eq!(loaded.translator_base_url, DEFAULT_TRANSLATOR_BASE_URL);
+        assert_eq!(loaded.auto_update_internal_links, "ask");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -452,6 +463,16 @@ mod tests {
         };
         normalize(&mut s);
         assert_eq!(s.translator_base_url, DEFAULT_TRANSLATOR_BASE_URL);
+    }
+
+    #[test]
+    fn normalize_rejects_unknown_internal_link_rename_policy() {
+        let mut s = AppSettings {
+            auto_update_internal_links: "unsafe".into(),
+            ..AppSettings::default()
+        };
+        normalize(&mut s);
+        assert_eq!(s.auto_update_internal_links, "ask");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +21,16 @@ import {
 	VaultSidebarHeader,
 } from "@/components/sidebar/file-tree";
 import { PaperInfoPanel } from "@/components/sidebar/paper-info-panel";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
 	ResizableGroup,
 	ResizableHandle,
@@ -42,7 +52,10 @@ import {
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
-import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
+import {
+	useAnyOverlayOpen,
+	useOverlayRegistration,
+} from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import i18n, { resolveLocale } from "@/i18n";
 import {
@@ -128,6 +141,7 @@ import {
 import {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
+	collectWikiTargetRelPaths,
 	createVault,
 	createVaultDirectory,
 	ensureLocalFsScope,
@@ -152,6 +166,7 @@ import {
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
+import type { VaultFileChangedPayload } from "@/lib/vault/fs-watch";
 import {
 	clearRemoteSessionMeta,
 	isRemoteVaultHandle,
@@ -163,14 +178,23 @@ import {
 } from "@/lib/vault/remote/remote-vault";
 import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
 import {
+	applyExternalRenameRepair,
+	externalRenameRepairHadZeroWrites,
+	externalRenameRepairNeeded,
 	missingNotePath,
+	moveVaultPath,
 	newNoteMarkdown,
 	normalizeVaultRel,
+	previewExternalRenameRepair,
 	rebuildWikiIndex,
 	toVaultRelative,
+	type WikiExternalRenamePreview,
 	type WikiNavTarget,
+	type WikiRenameResult,
+	wikiRenameFailure,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
+import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
 import {
 	basenameOf,
 	createNotesSplitPane,
@@ -186,6 +210,8 @@ import {
 	paperReadingPlacements,
 	patchTab,
 	readingPairCloseIds,
+	remapPathUnder,
+	remapTabsUnderPath,
 	removeTab,
 	removeTabsUnderPath,
 	reseedMarkdownTab,
@@ -301,6 +327,45 @@ export default function App() {
 	const [lookupOpenSignal, setLookupOpenSignal] = useState(0);
 	/** Zotero one-click migration dialog. */
 	const [zoteroOpen, setZoteroOpen] = useState(false);
+	/** Awaiting the user's decision for one verified external local rename. */
+	const [externalRenamePreview, setExternalRenamePreview] =
+		useState<WikiExternalRenamePreview | null>(null);
+	const [externalRenameVaultPath, setExternalRenameVaultPath] = useState<
+		string | null
+	>(null);
+	const [externalRenameRepairing, setExternalRenameRepairing] = useState(false);
+	/** App-native rename input; WebView JavaScript prompts are not portable. */
+	const [renameDraft, setRenameDraft] = useState<{
+		path: string;
+		currentName: string;
+		value: string;
+	} | null>(null);
+	const [renameBusy, setRenameBusy] = useState(false);
+	const [renameError, setRenameError] = useState<string | null>(null);
+	useOverlayRegistration("rename-path", renameDraft !== null, () => {
+		if (renameBusy) return;
+		setRenameDraft(null);
+		setRenameError(null);
+	});
+	/** A no-write preflight failure that still needs an actionable review surface. */
+	const [externalRenameFailure, setExternalRenameFailure] = useState<{
+		from: string;
+		to: string;
+		error: string;
+		affectedSources: number | null;
+		zeroWrite: boolean;
+		rollback?: string;
+	} | null>(null);
+	useOverlayRegistration(
+		"external-rename-repair",
+		externalRenamePreview !== null || externalRenameFailure !== null,
+		() => {
+			if (externalRenameRepairing) return;
+			setExternalRenamePreview(null);
+			setExternalRenameVaultPath(null);
+			setExternalRenameFailure(null);
+		},
+	);
 	const sidebarPanelRef = usePanelRef();
 	const rightSidebarPanelRef = usePanelRef();
 	const sourcePanelRef = usePanelRef();
@@ -308,6 +373,7 @@ export default function App() {
 	const fileTreeRef = useRef<FileTreeHandle>(null);
 	const sidebarAsideRef = useRef<HTMLElement>(null);
 	const chatInputFocusKey = useRef(0);
+	const wikiNavigationIntentIdRef = useRef(0);
 	const agentZenModeRef = useRef(false);
 	const pdfZenModeRef = useRef(false);
 	pdfZenModeRef.current = pdfZenMode;
@@ -325,6 +391,10 @@ export default function App() {
 	const showWindowControls = isTauri() && !isMacOS();
 	const vaultMdFiles = useMemo(
 		() => collectMarkdownRelPaths(tree, vaultPath),
+		[tree, vaultPath],
+	);
+	const vaultWikiTargetFiles = useMemo(
+		() => collectWikiTargetRelPaths(tree, vaultPath),
 		[tree, vaultPath],
 	);
 	/** Directory paths for Agent context chip folder icons. */
@@ -397,6 +467,10 @@ export default function App() {
 	const wikiRebuildTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** Watcher paths collected for the current debounced Wiki rebuild. */
+	const wikiRebuildPathsRef = useRef<Set<string>>(new Set());
+	/** Host watcher paths caused by a committed rename transaction. */
+	const internalRenamePathsRef = useRef(new Map<string, number>());
 	/** Latest rebuildWikiAndNotify (defined below) for the stable wiki scheduler. */
 	const rebuildWikiRef = useRef<(path: string) => Promise<void>>(
 		async () => {},
@@ -1434,28 +1508,71 @@ export default function App() {
 
 	/**
 	 * Debounced wiki / backlinks / graph index rebuild after any on-disk change
-	 * (external edit or Agent write). Only `.md` files carry wikilinks, so other
-	 * extensions are ignored; the rebuild is full but cheap for a research vault.
+	 * (external edit or Agent write). Markdown files carry references; images and
+	 * PDFs are canonical targets whose create/remove/modify events also invalidate
+	 * link resolution and embedded attachment projections.
 	 */
 	const scheduleWikiRebuild = useCallback((absPath: string) => {
-		if (!/\.md$/i.test(absPath)) return;
+		if (
+			!/\.(md|mdx|markdown|pdf|png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(
+				absPath,
+			)
+		) {
+			return;
+		}
+		wikiRebuildPathsRef.current.add(absPath);
 		if (wikiRebuildTimerRef.current) clearTimeout(wikiRebuildTimerRef.current);
 		wikiRebuildTimerRef.current = setTimeout(() => {
 			wikiRebuildTimerRef.current = null;
+			const changedPaths = [...wikiRebuildPathsRef.current];
+			wikiRebuildPathsRef.current.clear();
 			const vault = vaultPathRef.current;
 			if (!vault) return;
-			void rebuildWikiRef.current(vault);
+			void rebuildWikiRef
+				.current(vault)
+				.finally(() => notifyWikiEmbedTargets(changedPaths));
 		}, 900);
 	}, []);
 
-	// Start/stop the Host Vault filesystem watcher for this window's active Vault.
-	// Live-reload open editors + file tree, and keep the wiki index fresh.
-	useVaultFileEvents({
-		vaultPath,
-		onDiskChange: applyDiskChange,
-		onStructuralChange: scheduleTreeRefresh,
-		onWikiChange: scheduleWikiRebuild,
-	});
+	const trackInternalRenamePaths = useCallback(
+		(paths: string[], expiresAt: number) => {
+			for (const path of paths) {
+				internalRenamePathsRef.current.set(normalizeTabPath(path), expiresAt);
+			}
+		},
+		[],
+	);
+
+	const shouldIgnoreInternalRenameEvent = useCallback(
+		(payload: VaultFileChangedPayload): boolean => {
+			const now = Date.now();
+			for (const [path, expiresAt] of internalRenamePathsRef.current) {
+				if (expiresAt <= now) internalRenamePathsRef.current.delete(path);
+			}
+			if (
+				payload.paths.length === 0 ||
+				internalRenamePathsRef.current.size === 0
+			) {
+				return false;
+			}
+			return payload.paths.every((path) => {
+				const normalized = normalizeTabPath(path);
+				for (const tracked of internalRenamePathsRef.current.keys()) {
+					if (
+						normalized === tracked ||
+						normalized.startsWith(`${tracked}/`) ||
+						(normalized.includes(".agentero-rename-") &&
+							normalized.slice(0, normalized.lastIndexOf("/")) ===
+								tracked.slice(0, tracked.lastIndexOf("/")))
+					) {
+						return true;
+					}
+				}
+				return false;
+			});
+		},
+		[],
+	);
 
 	/** Rebuild wiki index and notify Backlinks/Graph panels to re-fetch. */
 	const rebuildWikiAndNotify = useCallback(async (path: string) => {
@@ -1786,6 +1903,7 @@ export default function App() {
 				);
 			if (valid.length === 0) return;
 			setBusy(true);
+			trackInternalRenamePaths(valid, Number.POSITIVE_INFINITY);
 			try {
 				const rels = valid
 					.map((p) => vaultRelativePath(vaultPath, p))
@@ -1811,6 +1929,7 @@ export default function App() {
 					e instanceof Error ? e.message : t("sidebar:fileTree.deleteFailed"),
 				);
 			} finally {
+				trackInternalRenamePaths(valid, Date.now() + 2000);
 				setBusy(false);
 			}
 		},
@@ -1821,6 +1940,7 @@ export default function App() {
 			refreshTree,
 			rebuildWikiAndNotify,
 			refreshLibrary,
+			trackInternalRenamePaths,
 			t,
 		],
 	);
@@ -1866,6 +1986,218 @@ export default function App() {
 		await rebuildWikiAndNotify(vaultPath);
 		await refreshLibrary();
 	}, [vaultPath, refreshTree, rebuildWikiAndNotify, refreshLibrary]);
+
+	const dirtyVaultPaths = useCallback((root: string): string[] => {
+		const dirty = new Set<string>();
+		for (const tab of tabsRef.current) {
+			if (tab.markdownDirty) {
+				const rel = vaultRelativePath(root, tab.path);
+				if (rel) dirty.add(rel);
+			}
+			if (tab.notesDirty && tab.notesPath) {
+				const rel = vaultRelativePath(root, tab.notesPath);
+				if (rel) dirty.add(rel);
+			}
+		}
+		return [...dirty];
+	}, []);
+
+	/** Preserve mounted workspace state when a filesystem path changes identity. */
+	const remapMovedWorkspacePaths = useCallback(
+		(fromAbs: string, toAbs: string, fromRel: string, toRel: string) => {
+			const previousTabs = tabsRef.current;
+			const remappedTabs = remapTabsUnderPath(
+				previousTabs,
+				fromAbs,
+				toAbs,
+				fromRel,
+				toRel,
+			);
+			for (let index = 0; index < previousTabs.length; index++) {
+				const previous = previousTabs[index];
+				const remapped = remappedTabs[index];
+				if (previous && remapped && previous.id !== remapped.id) {
+					workspaceRef.current?.remapPanel(previous.id, remapped);
+				}
+			}
+			const active = previousTabs.find(
+				(tab) => tab.id === activeTabIdRef.current,
+			);
+			if (active) {
+				setActiveTabId(
+					tabIdForPath(remapPathUnder(active.path, fromAbs, toAbs)),
+				);
+			}
+			setTabs(remappedTabs);
+			setPdfHighlightsByTab((previous) => {
+				const next = { ...previous };
+				for (const tab of tabsRef.current) {
+					const remapped = remapPathUnder(tab.path, fromAbs, toAbs);
+					const nextId = tabIdForPath(remapped);
+					if (nextId !== tab.id && tab.id in next) {
+						next[nextId] = next[tab.id];
+						delete next[tab.id];
+					}
+				}
+				return next;
+			});
+			setTreeSelectedPath((path) =>
+				path ? remapPathUnder(path, fromAbs, toAbs) : path,
+			);
+			setLibraryScopePath((scope) =>
+				scope ? remapPathUnder(scope, fromRel, toRel) : scope,
+			);
+		},
+		[],
+	);
+
+	const syncMovedPaths = useCallback(
+		(
+			root: string,
+			fromAbs: string,
+			toAbs: string,
+			fromRel: string,
+			toRel: string,
+			linkUpdate: WikiRenameResult,
+		) => {
+			const expiresAt = Date.now() + 2000;
+			trackInternalRenamePaths(
+				[
+					fromAbs,
+					toAbs,
+					...linkUpdate.updatedSources.map((source) =>
+						joinVaultPath(root, source),
+					),
+				],
+				expiresAt,
+			);
+			remapMovedWorkspacePaths(fromAbs, toAbs, fromRel, toRel);
+			setWikiIndexRevision((revision) => revision + 1);
+			window.setTimeout(() => {
+				for (const source of linkUpdate.updatedSources) {
+					void applyDiskChange(joinVaultPath(root, source));
+				}
+			}, 0);
+		},
+		[applyDiskChange, remapMovedWorkspacePaths, trackInternalRenamePaths],
+	);
+
+	const applyPendingExternalRenameRepair = useCallback(
+		async (preview: WikiExternalRenamePreview, root: string) => {
+			if (vaultPathRef.current !== root || isRemoteVaultHandle(root)) {
+				throw new Error(t("vault.externalRename.vaultChanged"));
+			}
+			setExternalRenameRepairing(true);
+			try {
+				const result = await applyExternalRenameRepair(
+					root,
+					preview.candidateId,
+					dirtyVaultPaths(root),
+				);
+				const fromAbs = joinVaultPath(root, preview.from);
+				const toAbs = joinVaultPath(root, preview.to);
+				syncMovedPaths(root, fromAbs, toAbs, preview.from, preview.to, result);
+				await refreshTree(root);
+				await refreshLibrary();
+				setExternalRenamePreview(null);
+				setExternalRenameVaultPath(null);
+				setExternalRenameFailure(null);
+				notifySuccess(
+					t("vault.externalRename.repaired", {
+						count: result.updatedSources.length,
+					}),
+				);
+			} finally {
+				setExternalRenameRepairing(false);
+			}
+		},
+		[dirtyVaultPaths, refreshLibrary, refreshTree, syncMovedPaths, t],
+	);
+
+	const handleExternalRename = useCallback(
+		async (rename: NonNullable<VaultFileChangedPayload["rename"]>) => {
+			const root = vaultPathRef.current;
+			if (!root || isRemoteVaultHandle(root)) return;
+			const fromRel = vaultRelativePath(root, rename.from);
+			const toRel = vaultRelativePath(root, rename.to);
+			if (!fromRel || !toRel || fromRel === toRel) {
+				notifyWarning(t("vault.externalRename.unverified"));
+				return;
+			}
+			try {
+				const preview = await previewExternalRenameRepair(
+					root,
+					fromRel,
+					toRel,
+					dirtyVaultPaths(root),
+				);
+				if (!externalRenameRepairNeeded(preview)) {
+					setExternalRenameVaultPath(null);
+					setExternalRenamePreview(null);
+					setExternalRenameFailure(null);
+					return;
+				}
+				if (settingsRef.current.autoUpdateInternalLinks === "always") {
+					try {
+						await applyPendingExternalRenameRepair(preview, root);
+					} catch (error) {
+						console.warn(
+							"[wiki] automatic external rename repair blocked",
+							error,
+						);
+						setExternalRenameVaultPath(root);
+						setExternalRenamePreview(null);
+						const failure = wikiRenameFailure(error);
+						setExternalRenameFailure({
+							from: preview.from,
+							to: preview.to,
+							affectedSources: preview.affectedSources.length,
+							zeroWrite: externalRenameRepairHadZeroWrites(error),
+							rollback: failure?.rollback,
+							error:
+								error instanceof Error
+									? error.message
+									: t("vault.externalRename.failed"),
+						});
+					}
+					return;
+				}
+				setExternalRenameVaultPath(root);
+				setExternalRenameFailure(null);
+				setExternalRenamePreview(preview);
+			} catch (error) {
+				console.warn("[wiki] external rename repair unavailable", error);
+				setExternalRenameVaultPath(root);
+				setExternalRenamePreview(null);
+				setExternalRenameFailure({
+					from: fromRel,
+					to: toRel,
+					affectedSources: null,
+					zeroWrite: true,
+					error:
+						error instanceof Error
+							? error.message
+							: t("vault.externalRename.failed"),
+				});
+			}
+		},
+		[applyPendingExternalRenameRepair, dirtyVaultPaths, t],
+	);
+
+	// Start/stop the Host Vault filesystem watcher for the active Vault. A
+	// trustworthy rename pair is preflighted before ordinary watcher work can
+	// replace the old semantic index snapshot.
+	useVaultFileEvents({
+		vaultPath,
+		onDiskChange: applyDiskChange,
+		onStructuralChange: scheduleTreeRefresh,
+		onWikiChange: scheduleWikiRebuild,
+		shouldIgnoreEvent: shouldIgnoreInternalRenameEvent,
+		onExternalRename: handleExternalRename,
+		onUnverifiedRename: () => {
+			notifyWarning(t("vault.externalRename.unverified"));
+		},
+	});
 
 	/** Empty recycle bin from the trash node context menu (confirm + purge). */
 	const handleEmptyTrash = useCallback(async () => {
@@ -1914,16 +2246,36 @@ export default function App() {
 						failed++;
 						continue;
 					}
+					const destinationParent =
+						normalizeVaultRel(destParentRel) || "papers";
+					const expectedToRel = `${destinationParent}/${basenameOf(rel)}`;
+					const pendingEventPaths = [
+						path,
+						joinVaultPath(vaultPath, expectedToRel),
+					];
+					trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
 					try {
-						await movePaperFolder(vaultPath, rel, destParentRel);
-						closeTabsUnderPath(path);
+						const result = await movePaperFolder(
+							vaultPath,
+							rel,
+							destParentRel,
+							dirtyVaultPaths(vaultPath),
+						);
+						const toAbs = joinVaultPath(vaultPath, result.newRel);
+						syncMovedPaths(
+							vaultPath,
+							path,
+							toAbs,
+							rel,
+							result.newRel,
+							result.linkUpdate,
+						);
 					} catch {
+						trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
 						failed++;
 					}
 				}
-				setTreeSelectedPath(null);
 				await refreshTree(vaultPath);
-				await rebuildWikiAndNotify(vaultPath);
 				await refreshLibrary();
 				if (failed > 0) {
 					notifyWarning(
@@ -1940,13 +2292,100 @@ export default function App() {
 		},
 		[
 			vaultPath,
-			closeTabsUnderPath,
+			dirtyVaultPaths,
 			refreshTree,
-			rebuildWikiAndNotify,
 			refreshLibrary,
+			syncMovedPaths,
+			trackInternalRenamePaths,
 			t,
 		],
 	);
+
+	const handleRenamePath = useCallback(
+		(path: string) => {
+			if (!vaultPath || isRemoteVaultHandle(vaultPath)) {
+				notifyWarning(t("vault.remoteNoAutoLinkRepair"));
+				return;
+			}
+			const fromRel = vaultRelativePath(vaultPath, path);
+			if (!fromRel) return;
+			const currentName = basenameOf(path);
+			setRenameError(null);
+			setRenameDraft({ path, currentName, value: currentName });
+		},
+		[vaultPath, t],
+	);
+
+	const confirmRenamePath = useCallback(async () => {
+		if (!renameDraft || !vaultPath || renameBusy) return;
+		const nextName = renameDraft.value.trim();
+		if (!isValidVaultEntryName(nextName)) {
+			setRenameError(t("sidebar:fileTree.invalidName"));
+			return;
+		}
+		if (nextName === renameDraft.currentName) {
+			setRenameDraft(null);
+			setRenameError(null);
+			return;
+		}
+		const fromRel = vaultRelativePath(vaultPath, renameDraft.path);
+		if (!fromRel) {
+			setRenameError(t("sidebar:fileTree.renameFailed"));
+			return;
+		}
+		const parent = fromRel.includes("/")
+			? fromRel.slice(0, fromRel.lastIndexOf("/"))
+			: "";
+		const toRel = parent ? `${parent}/${nextName}` : nextName;
+		const toAbs = joinVaultPath(vaultPath, toRel);
+		const pendingEventPaths = [renameDraft.path, toAbs];
+		trackInternalRenamePaths(pendingEventPaths, Number.POSITIVE_INFINITY);
+		try {
+			setRenameBusy(true);
+			setRenameError(null);
+			const result = await moveVaultPath(
+				vaultPath,
+				fromRel,
+				toRel,
+				dirtyVaultPaths(vaultPath),
+			);
+			syncMovedPaths(
+				vaultPath,
+				renameDraft.path,
+				toAbs,
+				fromRel,
+				toRel,
+				result,
+			);
+			await refreshTree(vaultPath);
+			await refreshLibrary();
+			setRenameDraft(null);
+			notifySuccess(
+				t("sidebar:fileTree.renamedLinks", {
+					count: result.updatedSources.length,
+				}),
+			);
+		} catch (error) {
+			trackInternalRenamePaths(pendingEventPaths, Date.now() + 2000);
+			setRenameError(
+				error instanceof Error
+					? error.message
+					: t("sidebar:fileTree.renameFailed"),
+			);
+		} finally {
+			setRenameBusy(false);
+		}
+	}, [
+		renameDraft,
+		vaultPath,
+		renameBusy,
+		dirtyVaultPaths,
+		refreshLibrary,
+		refreshTree,
+		syncMovedPaths,
+		trackInternalRenamePaths,
+		t,
+	]);
 
 	const runMovePaths = useCallback(
 		async (destParentRel: string) => {
@@ -3318,8 +3757,34 @@ export default function App() {
 
 	const handleWikiNavigate = useCallback(
 		async (nav: WikiNavTarget) => {
-			if (nav.exists && nav.path) {
-				handleOpenVaultRel(nav.path);
+			if (nav.status === "resolved" && nav.path) {
+				if (!vaultPath) {
+					notifyError(t("errors.openVaultForLinks"));
+					return;
+				}
+				const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(nav.path)}`;
+				openTab(full, { preferMode: preferredModeForPath(full) });
+				if (nav.fragment) {
+					const intent = {
+						id: ++wikiNavigationIntentIdRef.current,
+						fragment: nav.fragment,
+					};
+					setTabs((previous) =>
+						patchTab(previous, tabIdForPath(full), {
+							navigationIntent: intent,
+						}),
+					);
+				}
+				return;
+			}
+			if (nav.status === "ambiguous") {
+				notifyError(t("errors.wikiLinkAmbiguous", { target: nav.targetRaw }));
+				return;
+			}
+			if (nav.status === "invalidFragment") {
+				notifyError(
+					t("errors.wikiLinkInvalidFragment", { target: nav.targetRaw }),
+				);
 				return;
 			}
 			if (!vaultPath) {
@@ -3347,22 +3812,16 @@ export default function App() {
 				notifyError(e instanceof Error ? e.message : String(e));
 			}
 		},
-		[
-			vaultPath,
-			handleOpenVaultRel,
-			openPath,
-			refreshTree,
-			rebuildWikiAndNotify,
-			t,
-		],
+		[vaultPath, openPath, openTab, refreshTree, rebuildWikiAndNotify, t],
 	);
 
 	const wikiNavValue = useMemo(
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
-			mdFiles: vaultMdFiles,
+			mdFiles: vaultWikiTargetFiles,
+			vaultPath,
 		}),
-		[handleWikiNavigate, vaultMdFiles],
+		[handleWikiNavigate, vaultPath, vaultWikiTargetFiles],
 	);
 
 	/** NOTES toggle: eligible when active panel is a paper PDF/HTML, or its NOTES. */
@@ -3486,6 +3945,7 @@ export default function App() {
 										onCancelCreate={handleCancelCreate}
 										onDeletePath={(path) => void handleDeletePath(path)}
 										onDeletePaths={(paths) => void handleDeletePaths(paths)}
+										onRenamePath={(path) => void handleRenamePath(path)}
 										onMovePaths={handleMovePaths}
 										onMoveTo={(paths, dest) => void movePathsTo(paths, dest)}
 										onDropLocalPdfs={handleDropLocalPdfs}
@@ -3658,7 +4118,14 @@ export default function App() {
 									<BacklinksPanel
 										vaultPath={vaultPath}
 										selectedPath={selectedPath}
-										onOpenPath={handleOpenVaultRel}
+										onNavigate={(link) =>
+											void handleWikiNavigate({
+												targetRaw: link.occurrence.targetRaw,
+												path: link.targetPath ?? null,
+												status: link.status,
+												fragment: link.occurrence.fragment,
+											})
+										}
 										className="min-h-0 basis-[42%] border-b"
 										wikiIndexRevision={wikiIndexRevision}
 									/>
@@ -3699,6 +4166,223 @@ export default function App() {
 					vaultPath={vaultPath}
 					onDone={handleRefresh}
 				/>
+
+				<Dialog
+					open={renameDraft !== null}
+					onOpenChange={(open) => {
+						if (!open && !renameBusy) {
+							setRenameDraft(null);
+							setRenameError(null);
+						}
+					}}
+				>
+					<DialogContent showCloseButton={!renameBusy} className="sm:max-w-sm">
+						<form
+							className="space-y-4"
+							onSubmit={(event) => {
+								event.preventDefault();
+								void confirmRenamePath();
+							}}
+						>
+							<DialogHeader>
+								<DialogTitle>
+									{t("sidebar:fileTree.renameDialogTitle", {
+										name: renameDraft?.currentName ?? "",
+									})}
+								</DialogTitle>
+							</DialogHeader>
+							<div className="space-y-1.5">
+								<label
+									htmlFor="rename-path-name"
+									className="block pt-2 font-medium text-sm"
+								>
+									{t("sidebar:fileTree.renameNameLabel")}
+								</label>
+								<Input
+									id="rename-path-name"
+									autoFocus
+									value={renameDraft?.value ?? ""}
+									disabled={renameBusy}
+									onFocus={(event) => event.currentTarget.select()}
+									onChange={(event) => {
+										const value = event.target.value;
+										setRenameDraft((current) =>
+											current ? { ...current, value } : current,
+										);
+										if (renameError) setRenameError(null);
+									}}
+								/>
+								{renameError ? (
+									<p className="text-destructive text-xs" role="alert">
+										{renameError}
+									</p>
+								) : null}
+							</div>
+							<DialogFooter>
+								<Button
+									type="button"
+									variant="outline"
+									disabled={renameBusy}
+									onClick={() => {
+										setRenameDraft(null);
+										setRenameError(null);
+									}}
+								>
+									{t("sidebar:fileTree.renameCancel")}
+								</Button>
+								<Button
+									type="submit"
+									disabled={renameBusy || !renameDraft?.value.trim()}
+								>
+									{renameBusy ? <Loader2 className="animate-spin" /> : null}
+									{t("sidebar:fileTree.renameConfirm")}
+								</Button>
+							</DialogFooter>
+						</form>
+					</DialogContent>
+				</Dialog>
+
+				<Dialog
+					open={
+						externalRenamePreview !== null || externalRenameFailure !== null
+					}
+					onOpenChange={(open) => {
+						if (!open && !externalRenameRepairing) {
+							setExternalRenamePreview(null);
+							setExternalRenameVaultPath(null);
+							setExternalRenameFailure(null);
+						}
+					}}
+				>
+					<DialogContent
+						showCloseButton={!externalRenameRepairing}
+						className="sm:max-w-md"
+					>
+						<DialogHeader>
+							<DialogTitle>
+								{externalRenameFailure
+									? t("vault.externalRename.reviewTitle")
+									: t("vault.externalRename.title")}
+							</DialogTitle>
+							<DialogDescription>
+								{externalRenameFailure
+									? externalRenameFailure.zeroWrite
+										? t("vault.externalRename.reviewDescription")
+										: t("vault.externalRename.recoveryDescription")
+									: t("vault.externalRename.description", {
+											count: externalRenamePreview?.affectedSources.length ?? 0,
+										})}
+							</DialogDescription>
+						</DialogHeader>
+						{externalRenamePreview || externalRenameFailure ? (
+							<div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-xs">
+								<div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+									<span className="text-muted-foreground">
+										{t("vault.externalRename.from")}
+									</span>
+									<code className="truncate">
+										{externalRenamePreview?.from ?? externalRenameFailure?.from}
+									</code>
+									<span className="text-muted-foreground">
+										{t("vault.externalRename.to")}
+									</span>
+									<code className="truncate">
+										{externalRenamePreview?.to ?? externalRenameFailure?.to}
+									</code>
+								</div>
+								<p className="text-muted-foreground">
+									{externalRenamePreview ||
+									externalRenameFailure?.affectedSources != null
+										? t("vault.externalRename.impact", {
+												count:
+													externalRenamePreview?.affectedSources.length ??
+													externalRenameFailure?.affectedSources ??
+													0,
+											})
+										: t("vault.externalRename.impactUnknown")}
+								</p>
+								{externalRenamePreview &&
+								externalRenamePreview.skipped.length > 0 ? (
+									<p className="text-muted-foreground">
+										{t("vault.externalRename.skipped", {
+											count: externalRenamePreview.skipped.length,
+										})}
+									</p>
+								) : null}
+								{externalRenameFailure ? (
+									<div
+										className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-destructive"
+										role="alert"
+									>
+										<p>
+											{externalRenameFailure.zeroWrite
+												? t("vault.externalRename.repairBlocked")
+												: t("vault.externalRename.recoveryBlocked", {
+														rollback:
+															externalRenameFailure.rollback ?? "unknown",
+													})}
+										</p>
+										<p className="break-words text-xs">
+											{externalRenameFailure.error}
+										</p>
+									</div>
+								) : null}
+							</div>
+						) : null}
+						<DialogFooter>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={externalRenameRepairing}
+								onClick={() => {
+									setExternalRenamePreview(null);
+									setExternalRenameVaultPath(null);
+									setExternalRenameFailure(null);
+								}}
+							>
+								{t("vault.externalRename.cancel")}
+							</Button>
+							{externalRenamePreview ? (
+								<Button
+									type="button"
+									disabled={
+										externalRenameRepairing ||
+										!externalRenamePreview ||
+										!externalRenameVaultPath
+									}
+									onClick={() => {
+										if (!externalRenamePreview || !externalRenameVaultPath)
+											return;
+										void applyPendingExternalRenameRepair(
+											externalRenamePreview,
+											externalRenameVaultPath,
+										).catch((error) => {
+											const failure = wikiRenameFailure(error);
+											setExternalRenamePreview(null);
+											setExternalRenameFailure({
+												from: externalRenamePreview.from,
+												to: externalRenamePreview.to,
+												affectedSources:
+													externalRenamePreview.affectedSources.length,
+												zeroWrite: externalRenameRepairHadZeroWrites(error),
+												rollback: failure?.rollback,
+												error:
+													error instanceof Error
+														? error.message
+														: t("vault.externalRename.failed"),
+											});
+										});
+									}}
+								>
+									{externalRenameRepairing ? (
+										<Loader2 className="animate-spin" />
+									) : null}
+									{t("vault.externalRename.repair")}
+								</Button>
+							) : null}
+						</DialogFooter>
+					</DialogContent>
+				</Dialog>
 
 				<MovePapersDialog
 					open={movePaths !== null}

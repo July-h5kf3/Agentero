@@ -1,4 +1,6 @@
 import { readDir } from "@tauri-apps/plugin-fs";
+import { toVaultRelative } from "@/lib/core/path";
+import { isMarkdownPath } from "@/lib/vault/fs";
 import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
 import {
 	isRemoteVaultHandle,
@@ -8,6 +10,7 @@ import {
 import { joinRemotePath, remoteRelFromJoined } from "@/lib/vault/remote-path";
 import { ensureLocalFsScope } from "@/lib/vault/scope";
 import type { FileNode } from "@/lib/vault/types";
+import { isImagePath, isPdfPath } from "@/lib/workspace/viewer";
 
 /**
  * Names never listed in the file tree (local or remote).
@@ -287,6 +290,30 @@ export function treeHasPendingChildren(nodes: FileNode[]): boolean {
 		if (n.children?.length && treeHasPendingChildren(n.children)) return true;
 	}
 	return false;
+}
+
+/** Flatten the loaded tree to Vault-relative internal-link targets. */
+export function collectWikiTargetRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const node of list) {
+			if (node.kind === "directory" && node.children) {
+				walk(node.children);
+			} else if (
+				node.kind === "file" &&
+				(isMarkdownPath(node.path) ||
+					isImagePath(node.path) ||
+					isPdfPath(node.path))
+			) {
+				out.push(toVaultRelative(vaultPath, node.path));
+			}
+		}
+	};
+	walk(nodes);
+	return out;
 }
 
 /**

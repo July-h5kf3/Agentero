@@ -2,8 +2,12 @@
 
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::catalog::papers::{self, PaperRecord};
+use crate::features::wiki::models::WikiRenameResult;
+use crate::features::wiki::rename::run_local_rename_transaction;
+use crate::features::wiki::WikiIndexState;
 use serde::Deserialize;
 use std::path::PathBuf;
+use tauri::State;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +103,10 @@ pub struct PaperMoveArgs {
     pub from_rel: String,
     /// Vault-relative destination parent (`papers` or under `papers/`).
     pub dest_parent_rel: String,
+    /// Dirty open Markdown/NOTES paths supplied by the renderer. The Host
+    /// rejects a transaction that would move or rewrite one of these files.
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -106,29 +114,85 @@ pub struct PaperMoveArgs {
 pub struct PaperMoveResult {
     /// New vault-relative path of the moved item.
     pub new_rel: String,
+    /// Link-aware transaction details for UI refresh and diagnostics.
+    pub link_update: WikiRenameResult,
 }
 
 /// Move an item into another `papers/` folder on disk and rewrite matching
 /// catalog path prefixes. Never overwrites an existing target.
 #[tauri::command]
-pub fn paper_move(args: PaperMoveArgs) -> ApiResult<PaperMoveResult> {
-    match move_inner(args) {
+pub fn paper_move(
+    args: PaperMoveArgs,
+    index: State<'_, WikiIndexState>,
+) -> ApiResult<PaperMoveResult> {
+    let mut guard = match index.inner.lock() {
+        Ok(guard) => guard,
+        Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
+    };
+    match move_inner(args, &mut guard) {
         Ok(r) => ApiResult::ok(r),
         Err(e) => map_err(e),
     }
 }
 
-fn move_inner(args: PaperMoveArgs) -> Result<PaperMoveResult, AppError> {
+fn move_inner(
+    args: PaperMoveArgs,
+    index: &mut crate::features::wiki::index::WikiIndex,
+) -> Result<PaperMoveResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
-    let from = args.from_rel.trim().trim_matches('/').replace('\\', "/");
-    let new_rel = super::move_paper_under(&vault, &args.from_rel, &args.dest_parent_rel)?;
+    let (from, new_rel) =
+        super::plan_paper_move_under(&vault, &args.from_rel, &args.dest_parent_rel)?;
     if new_rel == from {
         return Err(AppError::message("already in this folder"));
     }
-    Ok(PaperMoveResult { new_rel })
+    let link_update =
+        run_local_rename_transaction(&vault, index, &from, &new_rel, &args.dirty_paths, || {
+            papers::move_under_path(&vault, &from, &new_rel)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        })
+        .map_err(|error| AppError::message(error.to_string()))?;
+    Ok(PaperMoveResult {
+        new_rel,
+        link_update,
+    })
+}
+
+#[cfg(test)]
+mod move_tests {
+    use super::*;
+    use crate::features::wiki::index::WikiIndex;
+    use std::fs;
+    use uuid::Uuid;
+
+    #[test]
+    fn paper_move_runs_the_filesystem_move_inside_the_wiki_transaction() {
+        let vault = std::env::temp_dir().join(format!("agentero-paper-move-{}", Uuid::new_v4()));
+        let source = vault.join("papers/inbox/New note.md");
+        fs::create_dir_all(source.parent().expect("source parent")).expect("create source parent");
+        fs::write(&source, "# New note\n").expect("write source");
+
+        let mut index = WikiIndex::default();
+        let result = move_inner(
+            PaperMoveArgs {
+                vault_path: vault.to_string_lossy().to_string(),
+                from_rel: "papers/inbox/New note.md".to_string(),
+                dest_parent_rel: "papers/archive".to_string(),
+                dirty_paths: Vec::new(),
+            },
+            &mut index,
+        )
+        .expect("move succeeds");
+
+        assert_eq!(result.new_rel, "papers/archive/New note.md");
+        assert!(result.link_update.updated_sources.is_empty());
+        assert!(!source.exists());
+        assert!(vault.join(&result.new_rel).exists());
+        let _ = fs::remove_dir_all(vault);
+    }
 }
 
 #[derive(Debug, Deserialize)]

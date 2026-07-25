@@ -118,7 +118,7 @@
 
 - [ ] 将最近 Vault、UI 偏好迁到 Tauri Store
 - [x] 文件监听（`notify` → `vault:file-changed`）：外部编辑器 / Agent 修改后自动重载当前打开的 `.md`/`NOTES.md` 与文件树；有未存改动时提示重载（不静默覆盖）
-- [x] 文件变更后防抖重建 wiki 双链 / Backlinks / Graph 索引（`scheduleWikiRebuild`，仅 `.md`，~900ms 防抖）
+- [x] Markdown、图片与 PDF 变更后防抖重建 wiki 双链 / Backlinks / Graph 索引（`scheduleWikiRebuild`，~900ms）；嵌入投影按目标路径刷新，不消费全局索引 revision
 - [x] 保存冲突检测：写盘前比对上次落盘内容，被外部修改则中止写入 + `notifyWarning`（`diskConflict.saveBlocked`），不静默覆盖本地未存改动
 
 ### 4b. Vault 采纳 / 现有文件夹发现（编程优先）
@@ -194,10 +194,14 @@
 
 ### 3. 双链与图谱增强
 
-- [ ] 源码编辑 `[[` 补全
-- [ ] Plate 内联 wikilink 节点，序列化仍保持 `[[...]]`
+- [x] 源码编辑 `[[` 补全（文件、alias、标题与 block 候选）
+- [x] Plate 内联 wikilink 节点，序列化仍保持 `[[...]]`
+- [x] Live Preview 稳定节点：selection 进入时显示源码、离开时恢复投影，不替换节点
+- [x] `![[...]]` 只读嵌入 Markdown 全文/标题/block、图片和 PDF；内部跳转、循环/深度门禁、目标级刷新
+- [ ] 显式“重命名当前小标题”事务：精确同步普通双链、嵌入、Vault-local Markdown link 与同文件 fragment（见 [`../research/wikilink-heading-reference-stability.md`](../research/wikilink-heading-reference-stability.md)）
+- [ ] Host 侧持久化、可删除并可重建的 Wiki Metadata Cache；缓存不能成为 Markdown 之外的关系事实来源
 - [ ] Graph 增加全屏/聚焦模式、邻居高亮、节点搜索
-- [ ] 双链边可写入 catalog 可重建表并支持增量重建
+- [ ] 双链边可选写入 catalog 可重建表，并支持边级增量重建（当前为内存全量重建）
 
 ### 4. 工作区标签页与分屏（roadmap V0.6）
 
@@ -412,9 +416,11 @@
 
 ### 双链 / Graph
 
-- [x] `[[wikilink]]` 跳转、反链、缺失创建、Backlinks 下 Graph
-- [x] **`.md` 变更防抖重建索引**
-- [ ] `[[` 补全、Plate 内联节点、Graph 全屏/邻居高亮
+- [x] Wikilink / Vault-local Markdown link 语义索引、标题与 block 精确跳转、入链/出链、缺失文件创建、Backlinks 下 Graph
+- [x] **Markdown、图片与 PDF 变更防抖重建索引；嵌入按目标路径刷新**
+- [x] `[[` 文件、alias、标题和 block 补全；Plate 内联节点的规范链接序列化
+- [x] `![[...]]` Markdown/图片/PDF 只读嵌入；稳定 Live Preview 与目标路径级缓存失效
+- [ ] Graph 全屏/邻居高亮
 - [ ] 边级增量索引
 
 ### 文献引用图

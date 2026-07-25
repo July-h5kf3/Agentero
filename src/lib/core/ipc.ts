@@ -8,8 +8,10 @@ import { isTauri } from "@/lib/core/tauri";
 export type ApiResult<T> = {
 	ok: boolean;
 	data?: T;
-	error?: { code: string; message: string };
+	error?: { code: string; message: string; details?: unknown };
 };
+
+export type ApiError = Error & { details?: unknown };
 
 export type InvokeApiOptions = {
 	/** Error message when `ok` is false or data is missing. */
@@ -44,9 +46,11 @@ export async function invokeApi<T>(
 	}
 	const res = await invoke<ApiResult<T>>(cmd, args);
 	if (!res.ok) {
-		throw new Error(
+		const error = new Error(
 			res.error?.message ?? opts.fallback ?? `Command ${cmd} failed`,
-		);
+		) as ApiError;
+		error.details = res.error?.details;
+		throw error;
 	}
 	if (res.data === undefined) {
 		if (opts.allowVoid) return undefined as T;

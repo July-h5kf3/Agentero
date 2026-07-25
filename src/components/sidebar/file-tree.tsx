@@ -340,6 +340,8 @@ type FileTreeProps = {
 	onDeletePath?: (path: string) => void | Promise<void>;
 	/** Batch delete multiple real tree paths (one confirm). */
 	onDeletePaths?: (paths: string[]) => void | Promise<void>;
+	/** Rename one real tree path through the link-aware Vault transaction. */
+	onRenamePath?: (path: string) => void | Promise<void>;
 	/** Batch move: parent opens a destination picker for these paths. */
 	onMovePaths?: (paths: string[]) => void;
 	/** Drag-and-drop move: relocate paths into an existing folder (no dialog). */
@@ -400,6 +402,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onReadPaper,
 			onDeletePath,
 			onDeletePaths,
+			onRenamePath,
 			onMovePaths,
 			onMoveTo,
 			onDropLocalPdfs,
@@ -1279,6 +1282,13 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 			onMovePaths(targets);
 		}, [contextMenu, menuTargets, onMovePaths]);
 
+		const handleRenameFromMenu = useCallback(() => {
+			if (!contextMenu || !onRenamePath) return;
+			const path = contextMenu.path;
+			setContextMenu(null);
+			void onRenamePath(path);
+		}, [contextMenu, onRenamePath]);
+
 		const handleNewFileFromMenu = useCallback(() => {
 			if (!contextMenu || !vaultPath || !onStartCreate) return;
 			const parent = resolveCreateParent(vaultPath, contextMenu.path, nodes);
@@ -1430,6 +1440,16 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 													? t("fileTree.moveSelected", { count: menuCount })
 													: t("fileTree.move")}
 											</span>
+										</button>
+									) : null}
+									{menuCount === 1 && onRenamePath ? (
+										<button
+											type="button"
+											role="menuitem"
+											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+											onClick={handleRenameFromMenu}
+										>
+											<span>{t("fileTree.rename")}</span>
 										</button>
 									) : null}
 									{onDeletePath || onDeletePaths ? (

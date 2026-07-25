@@ -4,17 +4,69 @@ import { isTauri } from "@/lib/core/tauri";
 
 export { normalizeRelPath as normalizeVaultRel, toVaultRelative };
 
-export type Backlink = {
+export type LinkFragment =
+	| { kind: "heading"; path: string[] }
+	| { kind: "block"; id: string };
+
+export type LinkResolutionStatus =
+	| "resolved"
+	| "missing"
+	| "ambiguous"
+	| "invalidFragment";
+
+export type InternalLinkSyntax = "wikilink" | "markdown";
+
+function isValidBlockId(id: string): boolean {
+	return id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id);
+}
+
+export type InternalLinkOccurrence = {
 	source: string;
 	targetRaw: string;
-	alias?: string;
+	syntax: InternalLinkSyntax;
+	embed: boolean;
+	displayText?: string;
+	fragment?: LinkFragment;
+	sourceRange: { start: number; end: number };
+	line: number;
 	context?: string;
-	line?: number;
 };
+
+export type ResolvedLink = {
+	occurrence: InternalLinkOccurrence;
+	status: LinkResolutionStatus;
+	targetPath?: string;
+	candidates?: string[];
+};
+
+export type WikiEmbedResponse = {
+	link: ResolvedLink;
+	contentKind?: "markdown" | "image" | "pdf" | "unsupported";
+	content?: string;
+};
+
+export type Backlink = ResolvedLink;
 
 export type BacklinksResponse = {
 	path: string;
 	backlinks: Backlink[];
+};
+
+export type OutgoingLinksResponse = {
+	path: string;
+	outgoing: ResolvedLink[];
+};
+
+export type WikiSearchCandidate = {
+	kind: "file" | "heading" | "block" | "alias";
+	path: string;
+	insertText: string;
+	label: string;
+	/** Context shown below the label: heading level or block text preview. */
+	detail?: string;
+	/** Display alias chosen by the user; `insertText` stays canonical. */
+	alias?: string;
+	fragment?: LinkFragment;
 };
 
 export type RebuildResult = {
@@ -22,6 +74,39 @@ export type RebuildResult = {
 	edges: number;
 	nodes: number;
 };
+
+export type WikiRenameRollback =
+	| "not-needed"
+	| "completed"
+	| "manual-recovery-required";
+
+export type WikiRenameSkipped = {
+	path: string;
+	reason: string;
+};
+
+export type WikiRenameResult = {
+	movedPath: string;
+	updatedSources: string[];
+	skipped: WikiRenameSkipped[];
+	rollback: WikiRenameRollback;
+};
+
+/** Host-held pre-rename snapshot for an externally observed local move. */
+export type WikiExternalRenamePreview = {
+	candidateId: string;
+	from: string;
+	to: string;
+	affectedSources: string[];
+	skipped: WikiRenameSkipped[];
+};
+
+/** Whether an external rename preview contains any safe link rewrites to apply. */
+export function externalRenameRepairNeeded(
+	preview: Pick<WikiExternalRenamePreview, "affectedSources">,
+): boolean {
+	return preview.affectedSources.length > 0;
+}
 
 export type GraphNodeType = "paper" | "note" | "index" | "stub";
 
@@ -46,6 +131,31 @@ export type GraphResponse = {
 	depth: number;
 };
 
+export type WikiRenameFailure = {
+	code: string;
+	rollback: WikiRenameRollback;
+};
+
+export type WikiApiError = Error & { details?: unknown };
+
+export function wikiRenameFailure(error: unknown): WikiRenameFailure | null {
+	const details = (error as WikiApiError | undefined)?.details;
+	if (
+		!details ||
+		typeof details !== "object" ||
+		typeof (details as { code?: unknown }).code !== "string" ||
+		typeof (details as { rollback?: unknown }).rollback !== "string"
+	) {
+		return null;
+	}
+	return details as WikiRenameFailure;
+}
+
+/** A failed external repair is zero-write only when the Host confirmed it. */
+export function externalRenameRepairHadZeroWrites(error: unknown): boolean {
+	return wikiRenameFailure(error)?.rollback === "not-needed";
+}
+
 async function invokeWikiApi<T>(
 	cmd: string,
 	args?: Record<string, unknown>,
@@ -55,17 +165,70 @@ async function invokeWikiApi<T>(
 	});
 }
 
+/** Rename or move a local Vault path and repair resolved internal links. */
+export async function moveVaultPath(
+	vaultPath: string,
+	fromRel: string,
+	toRel: string,
+	dirtyPaths: string[],
+): Promise<WikiRenameResult> {
+	return invokeWikiApi<WikiRenameResult>("wiki_move", {
+		args: { vaultPath, fromRel, toRel, dirtyPaths },
+	});
+}
+
+/** Create a no-write repair candidate from a trustworthy external rename pair. */
+export async function previewExternalRenameRepair(
+	vaultPath: string,
+	fromRel: string,
+	toRel: string,
+	dirtyPaths: string[],
+): Promise<WikiExternalRenamePreview> {
+	return invokeWikiApi<WikiExternalRenamePreview>(
+		"wiki_external_rename_preview",
+		{
+			args: { vaultPath, fromRel, toRel, dirtyPaths },
+		},
+	);
+}
+
+/** Apply a previously previewed external rename repair after a fresh dirty check. */
+export async function applyExternalRenameRepair(
+	vaultPath: string,
+	candidateId: string,
+	dirtyPaths: string[],
+): Promise<WikiRenameResult> {
+	return invokeWikiApi<WikiRenameResult>("wiki_apply_external_rename_repair", {
+		args: { vaultPath, candidateId, dirtyPaths },
+	});
+}
+
+/** Whether a Markdown destination can be resolved inside the active Vault. */
+export function isVaultLocalMarkdownLink(target: string): boolean {
+	const value = target.trim().replace(/^<|>$/g, "");
+	const lower = value.toLowerCase();
+	return (
+		value.length > 0 &&
+		!value.startsWith("/") &&
+		!lower.startsWith("//") &&
+		!lower.startsWith("mailto:") &&
+		!lower.startsWith("data:") &&
+		!/^[a-z][a-z0-9+.-]*:/i.test(value)
+	);
+}
+
 type Extracted = {
 	targetRaw: string;
 	alias?: string;
-	heading?: string;
+	embed?: boolean;
+	fragment?: LinkFragment;
 	line?: number;
 	context?: string;
 };
 
 function parseLinkBody(
 	body: string,
-): { targetRaw: string; alias?: string; heading?: string } | null {
+): { targetRaw: string; alias?: string; fragment?: LinkFragment } | null {
 	const trimmed = body.trim();
 	if (!trimmed) return null;
 	const pipe = trimmed.indexOf("|");
@@ -74,12 +237,23 @@ function parseLinkBody(
 	if (!main) return null;
 	const hash = main.indexOf("#");
 	const targetRaw = (hash >= 0 ? main.slice(0, hash) : main).trim();
-	const heading = hash >= 0 ? main.slice(hash + 1).trim() : "";
-	if (!targetRaw) return null;
+	const fragmentRaw = hash >= 0 ? main.slice(hash + 1).trim() : "";
+	const fragment = fragmentRaw
+		? fragmentRaw.startsWith("^")
+			? { kind: "block" as const, id: fragmentRaw.slice(1) }
+			: {
+					kind: "heading" as const,
+					path: fragmentRaw
+						.split("#")
+						.map((part) => part.trim())
+						.filter(Boolean),
+				}
+		: undefined;
+	if (!targetRaw && !fragment) return null;
 	return {
 		targetRaw,
 		alias: aliasRaw || undefined,
-		heading: heading || undefined,
+		fragment,
 	};
 }
 
@@ -127,16 +301,19 @@ export function extractWikilinks(md: string): Extracted[] {
 		const orig = [...line];
 		let i = 0;
 		while (i + 1 < chars.length) {
-			if (chars[i] === "[" && chars[i + 1] === "[") {
-				let j = i + 2;
+			const embed = chars[i] === "!" && chars[i + 1] === "[";
+			const opening = embed ? i + 1 : i;
+			if (chars[opening] === "[" && chars[opening + 1] === "[") {
+				let j = opening + 2;
 				while (j + 1 < chars.length) {
 					if (chars[j] === "]" && chars[j + 1] === "]") {
-						const body = orig.slice(i + 2, j).join("");
+						const body = orig.slice(opening + 2, j).join("");
 						const parsed = parseLinkBody(body);
 						if (parsed) {
 							const ctx = line.trim();
 							results.push({
 								...parsed,
+								embed,
 								line: lineNo,
 								context: ctx || undefined,
 							});
@@ -194,6 +371,227 @@ export function resolveWikiTarget(
 	return null;
 }
 
+/**
+ * Minimal semantic resolver for the browser-only demo. Desktop production paths
+ * call `wiki_resolve` in Rust; this duplicate is intentionally fixture-tested so
+ * the demo never presents a more precise result than the Host can justify.
+ */
+export function resolveDemoWikiReference(
+	sourcePath: string,
+	linkText: string,
+	documents: Array<{ path: string; content: string }>,
+	syntax: InternalLinkSyntax = "wikilink",
+): Pick<ResolvedLink, "status" | "targetPath" | "candidates"> & {
+	fragment?: LinkFragment;
+} {
+	const hash = linkText.indexOf("#");
+	const targetRaw = (hash >= 0 ? linkText.slice(0, hash) : linkText).trim();
+	const fragmentRaw = hash >= 0 ? linkText.slice(hash + 1).trim() : "";
+	const fragment = fragmentRaw
+		? fragmentRaw.startsWith("^")
+			? { kind: "block" as const, id: fragmentRaw.slice(1) }
+			: {
+					kind: "heading" as const,
+					path: fragmentRaw
+						.split("#")
+						.map((part) => part.trim())
+						.filter(Boolean),
+				}
+		: undefined;
+	const key = (value: string) =>
+		value.trim().replace(/\s+/g, " ").toLowerCase();
+	const addExtensions = (value: string) => {
+		const normalized = normalizeRelPath(value);
+		if (!normalized) return [];
+		return /\.(md|mdx|markdown)$/i.test(normalized)
+			? [normalized]
+			: [
+					normalized,
+					`${normalized}.md`,
+					`${normalized}.mdx`,
+					`${normalized}.markdown`,
+				];
+	};
+	const sourceRelative = (value: string) => {
+		const parts = sourcePath.split("/").slice(0, -1);
+		for (const part of value.replace(/\\/g, "/").split("/")) {
+			if (!part || part === ".") continue;
+			if (part === "..") {
+				if (parts.length === 0) return null;
+				parts.pop();
+			} else {
+				parts.push(part);
+			}
+		}
+		return parts.join("/");
+	};
+	const aliasesFor = (content: string) => {
+		const lines = content.split(/\r?\n/);
+		if (lines[0]?.trim() !== "---") return [];
+		const aliases: string[] = [];
+		let reading = false;
+		for (const line of lines.slice(1)) {
+			const trimmed = line.trim();
+			if (trimmed === "---" || trimmed === "...") break;
+			if (trimmed.startsWith("aliases:")) {
+				reading = true;
+				const inline = trimmed.slice("aliases:".length).trim();
+				if (inline.startsWith("[") && inline.endsWith("]")) {
+					aliases.push(
+						...inline
+							.slice(1, -1)
+							.split(",")
+							.map((item) => item.trim().replace(/^['"]|['"]$/g, ""))
+							.filter(Boolean),
+					);
+					reading = false;
+				}
+			} else if (reading && trimmed.startsWith("-")) {
+				aliases.push(
+					trimmed
+						.slice(1)
+						.trim()
+						.replace(/^['"]|['"]$/g, ""),
+				);
+			} else if (trimmed && !/^\s/.test(line)) {
+				reading = false;
+			}
+		}
+		return aliases;
+	};
+	const choose = (matches: string[]) => {
+		const unique = [...new Set(matches)].sort();
+		return unique.length === 1
+			? { path: unique[0] }
+			: unique.length
+				? { candidates: unique }
+				: null;
+	};
+	let selected: { path?: string; candidates?: string[] } | null;
+	if (!targetRaw) {
+		selected = choose(
+			documents
+				.filter((document) => document.path === sourcePath)
+				.map((document) => document.path),
+		);
+	} else {
+		const candidates = addExtensions(targetRaw);
+		const relativeTarget =
+			syntax === "markdown" && !targetRaw.startsWith("/")
+				? sourceRelative(targetRaw)
+				: undefined;
+		if (relativeTarget === null) {
+			return { status: "missing", candidates: [] };
+		}
+		const relativeCandidates =
+			typeof relativeTarget === "string" ? addExtensions(relativeTarget) : [];
+		const matchCandidates = (values: string[], insensitive = false) =>
+			choose(
+				documents
+					.filter((document) =>
+						values.some((candidate) =>
+							insensitive
+								? candidate.toLowerCase() === document.path.toLowerCase()
+								: candidate === document.path,
+						),
+					)
+					.map((document) => document.path),
+			);
+		const exact =
+			matchCandidates(relativeCandidates) ?? matchCandidates(candidates);
+		const insensitive =
+			matchCandidates(relativeCandidates, true) ??
+			matchCandidates(candidates, true);
+		const suffix = choose(
+			documents
+				.filter((document) =>
+					candidates.some(
+						(candidate) =>
+							document.path.endsWith(`/${candidate}`) ||
+							document.path === candidate,
+					),
+				)
+				.map((document) => document.path),
+		);
+		const stem =
+			targetRaw
+				.split("/")
+				.pop()
+				?.replace(/\.(md|mdx|markdown)$/i, "") ?? targetRaw;
+		const stemMatch = choose(
+			documents
+				.filter(
+					(document) =>
+						document.path
+							.split("/")
+							.pop()
+							?.replace(/\.(md|mdx|markdown)$/i, "")
+							.toLowerCase() === stem.toLowerCase(),
+				)
+				.map((document) => document.path),
+		);
+		const alias = choose(
+			documents
+				.filter((document) =>
+					aliasesFor(document.content).some(
+						(value) => key(value) === key(targetRaw),
+					),
+				)
+				.map((document) => document.path),
+		);
+		selected = exact ?? insensitive ?? suffix ?? stemMatch ?? alias;
+	}
+	if (!selected) return { status: "missing", fragment };
+	if (!selected.path)
+		return { status: "ambiguous", candidates: selected.candidates, fragment };
+	if (!fragment) return { status: "resolved", targetPath: selected.path };
+	if (fragment.kind === "block" && !isValidBlockId(fragment.id)) {
+		return {
+			status: "invalidFragment",
+			targetPath: selected.path,
+			fragment,
+		};
+	}
+	const content =
+		documents.find((document) => document.path === selected.path)?.content ??
+		"";
+	const matches =
+		fragment.kind === "block"
+			? [...content.matchAll(new RegExp(`\\^${fragment.id}(?=\\s*$)`, "gm"))]
+					.length
+			: (() => {
+					const stack: Array<{ level: number; text: string }> = [];
+					return content
+						.split(/\r?\n/)
+						.flatMap((line) => {
+							const match = line.match(/^(#{1,6})\s+(.+?)(?:\s+#+\s*)?$/);
+							if (!match) return [];
+							const level = match[1].length;
+							while (
+								stack.length > 0 &&
+								stack[stack.length - 1].level >= level
+							) {
+								stack.pop();
+							}
+							stack.push({ level, text: match[2].trim() });
+							return [stack.map((heading) => heading.text)];
+						})
+						.filter((path) => {
+							const expected = fragment.path.map(key);
+							const actual = path.map(key);
+							return expected.length === 1
+								? actual.at(-1) === expected.at(-1)
+								: actual.length === expected.length &&
+										actual.every((part, index) => part === expected[index]);
+						}).length;
+				})();
+	return matches === 1
+		? { status: "resolved", targetPath: selected.path, fragment }
+		: matches > 1
+			? { status: "ambiguous", targetPath: selected.path, fragment }
+			: { status: "invalidFragment", targetPath: selected.path, fragment };
+}
+
 /** Protocol for preview-only markdown links generated from `[[wikilinks]]`. */
 export const WIKI_HREF_PREFIX = "agentero-wiki:";
 
@@ -201,17 +599,17 @@ export type WikiNavTarget = {
 	targetRaw: string;
 	/** Resolved vault-relative path when exists */
 	path: string | null;
-	exists: boolean;
-	heading?: string;
+	status: LinkResolutionStatus;
+	fragment?: LinkFragment;
 };
 
 /** Encode navigation payload into a markdown-safe href. */
 export function encodeWikiHref(nav: WikiNavTarget): string {
 	const payload = [
-		nav.exists ? "1" : "0",
+		nav.status,
 		encodeURIComponent(nav.targetRaw),
 		encodeURIComponent(nav.path ?? ""),
-		encodeURIComponent(nav.heading ?? ""),
+		encodeURIComponent(nav.fragment ? JSON.stringify(nav.fragment) : ""),
 	].join("/");
 	return `${WIKI_HREF_PREFIX}${payload}`;
 }
@@ -221,17 +619,30 @@ export function parseWikiHref(href: string): WikiNavTarget | null {
 	const rest = href.slice(WIKI_HREF_PREFIX.length);
 	const parts = rest.split("/");
 	if (parts.length < 3) return null;
-	const [existsFlag, rawTarget, rawPath, rawHeading] = parts;
+	const [statusRaw, rawTarget, rawPath, rawFragment] = parts;
 	const targetRaw = decodeURIComponent(rawTarget ?? "");
 	const path = decodeURIComponent(rawPath ?? "");
-	const heading = decodeURIComponent(rawHeading ?? "");
-	if (!targetRaw) return null;
+	const fragmentRaw = decodeURIComponent(rawFragment ?? "");
+	if (!targetRaw && !fragmentRaw) return null;
 	return {
 		targetRaw,
 		path: path || null,
-		exists: existsFlag === "1",
-		heading: heading || undefined,
+		status: isLinkResolutionStatus(statusRaw) ? statusRaw : "missing",
+		fragment: fragmentRaw
+			? (JSON.parse(fragmentRaw) as LinkFragment)
+			: undefined,
 	};
+}
+
+function isLinkResolutionStatus(
+	value: string | undefined,
+): value is LinkResolutionStatus {
+	return (
+		value === "resolved" ||
+		value === "missing" ||
+		value === "ambiguous" ||
+		value === "invalidFragment"
+	);
 }
 
 function escapeMdLabel(label: string): string {
@@ -281,8 +692,8 @@ export function rewriteWikilinksForPreview(
 							const href = encodeWikiHref({
 								targetRaw: parsed.targetRaw,
 								path: resolved,
-								exists: Boolean(resolved),
-								heading: parsed.heading,
+								status: resolved ? "resolved" : "missing",
+								fragment: parsed.fragment,
 							});
 							rebuilt += `[${label}](${href})`;
 						} else {
@@ -348,6 +759,65 @@ export async function getBacklinks(
 	return invokeWikiApi<BacklinksResponse>("graph_get_backlinks", {
 		vaultPath,
 		path,
+	});
+}
+
+export async function getOutgoingLinks(
+	vaultPath: string | null,
+	path: string,
+): Promise<OutgoingLinksResponse> {
+	if (!path) return { path: "", outgoing: [] };
+	if (!vaultPath || !isTauri()) {
+		return { path: toVaultRelative(vaultPath, path), outgoing: [] };
+	}
+	return invokeWikiApi<OutgoingLinksResponse>("wiki_get_outgoing", {
+		vaultPath,
+		path,
+	});
+}
+
+export async function resolveWikiReference(
+	vaultPath: string | null,
+	sourcePath: string,
+	linkText: string,
+	syntax: InternalLinkSyntax = "wikilink",
+): Promise<ResolvedLink | null> {
+	if (!vaultPath || !isTauri()) return null;
+	const response = await invokeWikiApi<{ link: ResolvedLink }>("wiki_resolve", {
+		vaultPath,
+		sourcePath,
+		linkText,
+		syntax,
+	});
+	return response.link;
+}
+
+export async function readWikiEmbed(
+	vaultPath: string | null,
+	sourcePath: string,
+	linkText: string,
+): Promise<WikiEmbedResponse> {
+	return invokeWikiApi<WikiEmbedResponse>("wiki_embed_read", {
+		vaultPath,
+		sourcePath,
+		linkText,
+	});
+}
+
+export async function searchWikiLinks(
+	vaultPath: string | null,
+	query: string,
+	scope?: {
+		path?: string | null;
+		kind?: WikiSearchCandidate["kind"] | null;
+	},
+): Promise<WikiSearchCandidate[]> {
+	if (!vaultPath || !isTauri()) return [];
+	return invokeWikiApi<WikiSearchCandidate[]>("wiki_search", {
+		vaultPath,
+		query,
+		path: scope?.path ?? null,
+		kind: scope?.kind ?? null,
 	});
 }
 

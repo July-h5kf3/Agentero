@@ -72,6 +72,8 @@ export type WorkspaceExternalDrop = {
 export type DockWorkspaceHandle = {
 	/** Add (or activate) a panel with optional split placement. */
 	openPanel: (tab: DocTab, placement?: OpenPlacement) => void;
+	/** Replace a panel id after a filesystem move while preserving its group. */
+	remapPanel: (previousPanelId: string, tab: DocTab) => void;
 	/** Cycle active panel by dockview `api.panels` order (wraps). */
 	cycleActive: (delta: number) => void;
 	/** Activate an existing panel by id. */
@@ -515,6 +517,29 @@ export const DockWorkspace = memo(
 					syncingRef.current = true;
 					try {
 						addPanelWithPlacement(api, tab, placement);
+					} finally {
+						endSync(api);
+					}
+				},
+				remapPanel(previousPanelId, tab) {
+					const api = apiRef.current;
+					if (!api || previousPanelId === tab.id) return;
+					const previous = api.getPanel(previousPanelId);
+					if (!previous) return;
+					const activate = api.activePanel?.id === previousPanelId;
+					syncingRef.current = true;
+					try {
+						const existing = api.getPanel(tab.id);
+						if (!existing) {
+							addPanelWithPlacement(api, tab, {
+								direction: "within",
+								referencePanelId: previousPanelId,
+							});
+						}
+						api.removePanel(previous);
+						if (activate) {
+							api.getPanel(tab.id)?.api.setActive();
+						}
 					} finally {
 						endSync(api);
 					}

@@ -12,7 +12,7 @@ use crate::features::remote::RemoteRegistry;
 use crate::features::settings::AppSettingsStore;
 #[cfg(not(target_os = "ios"))]
 use crate::features::watcher::FsWatchController;
-use crate::features::wiki::WikiIndexState;
+use crate::features::wiki::{ExternalRenameRepairStore, WikiIndexState};
 #[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 #[cfg(not(target_os = "ios"))]
@@ -41,7 +41,8 @@ pub fn run() {
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(crate::features::agent::PermissionGate::new())
-        .manage(WikiIndexState::new());
+        .manage(WikiIndexState::new())
+        .manage(ExternalRenameRepairStore::new());
 
     #[cfg(not(target_os = "ios"))]
     {
@@ -75,6 +76,7 @@ pub fn run() {
         // Ensure registry is loaded early.
         let _ = app.state::<AgentRegistry>();
         let _ = app.state::<WikiIndexState>();
+        let _ = app.state::<ExternalRenameRepairStore>();
         #[cfg(not(target_os = "ios"))]
         {
             let connector = app.state::<Arc<ConnectorController>>();

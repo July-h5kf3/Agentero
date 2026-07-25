@@ -1,16 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
+	externalRenameRepairHadZeroWrites,
+	externalRenameRepairNeeded,
 	extractWikilinks,
+	isVaultLocalMarkdownLink,
 	parseWikiHref,
+	resolveDemoWikiReference,
 	resolveWikiTarget,
 	rewriteWikilinksForPreview,
 	toVaultRelative,
 	WIKI_HREF_PREFIX,
 } from "@/lib/wiki";
+import semanticFixture from "./fixtures/wikilinks/semantic-cases.json";
 import { createTestVault } from "./helpers/create-test-vault";
 
 describe("wikilink extraction", () => {
-	it("extracts aliases and headings while skipping inline and fenced code", () => {
+	it("uses the shared semantic fixture without parsing code examples", () => {
+		const source = semanticFixture.documents.find(
+			(document) => document.path === "notes/Source.md",
+		)?.content;
+		expect(source).toBeTruthy();
+		const links = extractWikilinks(source ?? "");
+		expect(links.map((link) => link.targetRaw)).toEqual([
+			"notes/Target",
+			"",
+			"",
+			"notes/Target",
+		]);
+		expect(links[3]?.embed).toBe(true);
+	});
+
+	it("extracts typed fragments while skipping inline and fenced code", () => {
 		const links = extractWikilinks(
 			[
 				"See [[notes/Target#Intro|Target Note]] and `[[ignored-inline]]`.",
@@ -24,7 +44,7 @@ describe("wikilink extraction", () => {
 		expect(links).toHaveLength(2);
 		expect(links[0]).toMatchObject({
 			targetRaw: "notes/Target",
-			heading: "Intro",
+			fragment: { kind: "heading", path: ["Intro"] },
 			alias: "Target Note",
 			line: 1,
 		});
@@ -33,9 +53,38 @@ describe("wikilink extraction", () => {
 			line: 5,
 		});
 	});
+
+	it("accepts same-file heading and block fragments", () => {
+		const links = extractWikilinks("[[#Root#Child]] and [[#^summary]]");
+		expect(links).toMatchObject([
+			{ targetRaw: "", fragment: { kind: "heading", path: ["Root", "Child"] } },
+			{ targetRaw: "", fragment: { kind: "block", id: "summary" } },
+		]);
+	});
+
+	it("retains malformed block fragments so navigation can report invalidFragment", () => {
+		const links = extractWikilinks("[[#^bad id]] and [[Target#^also-bad!]]");
+		expect(links).toMatchObject([
+			{ targetRaw: "", fragment: { kind: "block", id: "bad id" } },
+			{ targetRaw: "Target", fragment: { kind: "block", id: "also-bad!" } },
+		]);
+	});
 });
 
 describe("wikilink resolution", () => {
+	it("keeps the browser demo aligned with the shared semantic fixture", () => {
+		for (const fixtureCase of semanticFixture.cases) {
+			const result = resolveDemoWikiReference(
+				fixtureCase.source,
+				fixtureCase.link,
+				semanticFixture.documents,
+				fixtureCase.syntax ?? "wikilink",
+			);
+			expect(result.status, fixtureCase.link).toBe(fixtureCase.status);
+			expect(result.targetPath, fixtureCase.link).toBe(fixtureCase.path);
+		}
+	});
+
 	it("resolves targets against markdown files in a real vault directory", async () => {
 		const vault = await createTestVault({
 			"notes/Index.md": "[[Target]] [[Case]]",
@@ -69,6 +118,103 @@ describe("wikilink resolution", () => {
 			await vault.cleanup();
 		}
 	});
+
+	it("reports malformed same-file and cross-file block references as invalid fragments", () => {
+		const documents = [
+			{ path: "notes/Source.md", content: "# Source\nText ^bad id\n" },
+			{
+				path: "notes/Target.md",
+				content: "# Target\nText ^also-bad!\nBlock ^valid\n",
+			},
+		];
+
+		expect(
+			resolveDemoWikiReference("notes/Source.md", "#^bad id", documents),
+		).toMatchObject({
+			status: "invalidFragment",
+			targetPath: "notes/Source.md",
+		});
+		expect(
+			resolveDemoWikiReference(
+				"notes/Source.md",
+				"Target#^also-bad!",
+				documents,
+			),
+		).toMatchObject({
+			status: "invalidFragment",
+			targetPath: "notes/Target.md",
+		});
+	});
+
+	it("resolves Unicode block IDs in the browser demo", () => {
+		const documents = [
+			{ path: "notes/Source.md", content: "[[Target#^验收块]]\n" },
+			{
+				path: "notes/Target.md",
+				content: "# Target\n可精确定位到本段。 ^验收块\n",
+			},
+		];
+
+		expect(
+			resolveDemoWikiReference("notes/Source.md", "Target#^验收块", documents),
+		).toMatchObject({
+			status: "resolved",
+			targetPath: "notes/Target.md",
+			fragment: { kind: "block", id: "验收块" },
+		});
+	});
+
+	it("keeps source-relative Markdown links inside the Vault", () => {
+		const documents = [
+			{ path: "Target.md", content: "# Root target\n" },
+			{ path: "notes/Target.md", content: "# Nearby target\n" },
+		];
+
+		expect(
+			resolveDemoWikiReference(
+				"notes/Source.md",
+				"../../Target.md",
+				documents,
+				"markdown",
+			),
+		).toMatchObject({ status: "missing" });
+	});
+
+	it("classifies LinkElement destinations before choosing local Host navigation", () => {
+		expect(isVaultLocalMarkdownLink("Target.md#Overview")).toBe(true);
+		expect(isVaultLocalMarkdownLink("./Target.md#^block-id")).toBe(true);
+		expect(isVaultLocalMarkdownLink("#Current heading")).toBe(true);
+		expect(isVaultLocalMarkdownLink("https://example.com/Target.md")).toBe(
+			false,
+		);
+		expect(isVaultLocalMarkdownLink("mailto:author@example.com")).toBe(false);
+	});
+
+	it("only reports zero writes when external repair details confirm it", () => {
+		const preflight = Object.assign(new Error("source changed"), {
+			details: { code: "sourceChanged", rollback: "not-needed" },
+		});
+		const rolledBack = Object.assign(new Error("write failed"), {
+			details: { code: "writeFailed", rollback: "completed" },
+		});
+		const manualRecovery = Object.assign(new Error("write failed"), {
+			details: { code: "writeFailed", rollback: "manual-recovery-required" },
+		});
+
+		expect(externalRenameRepairHadZeroWrites(preflight)).toBe(true);
+		expect(externalRenameRepairHadZeroWrites(rolledBack)).toBe(false);
+		expect(externalRenameRepairHadZeroWrites(manualRecovery)).toBe(false);
+		expect(externalRenameRepairHadZeroWrites(new Error("unknown"))).toBe(false);
+	});
+
+	it("only offers external rename repair when a source needs rewriting", () => {
+		expect(externalRenameRepairNeeded({ affectedSources: [] })).toBe(false);
+		expect(
+			externalRenameRepairNeeded({
+				affectedSources: ["notes/Source.md"],
+			}),
+		).toBe(true);
+	});
 });
 
 describe("wikilink preview rewrite", () => {
@@ -99,8 +245,8 @@ describe("wikilink preview rewrite", () => {
 			expect(parseWikiHref(href ?? "")).toEqual({
 				targetRaw: "notes/Target",
 				path: "notes/Target.md",
-				exists: true,
-				heading: "Intro",
+				status: "resolved",
+				fragment: { kind: "heading", path: ["Intro"] },
 			});
 		} finally {
 			await vault.cleanup();

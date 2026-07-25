@@ -39,6 +39,13 @@
 		"moveSelected": "移动 {{count}} 项",
 		"clearSelection": "清除选择",
 		"move": "移动…",
+		"rename": "重命名…",
+		"renameDialogTitle": "重命名“{{name}}”",
+		"renameNameLabel": "名称",
+		"renameConfirm": "重命名",
+		"renameCancel": "取消",
+		"renameFailed": "重命名失败。",
+		"renamedLinks": "已重命名，并更新 {{count}} 个引用文件。",
 		"movedWithErrors": "{{count}} 项移动失败。",
 		"moveFailed": "移动失败。",
 		"moveDesktopOnly": "移动需要桌面应用。",
@@ -168,7 +175,17 @@
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",
+		"loadFailed": "无法加载双链关系",
 		"none": "暂无反向链接",
+		"incoming": "入链（{{count}}）",
+		"outgoing": "出链（{{count}}）",
+		"noneIncoming": "暂无入链",
+		"noneOutgoing": "暂无出链",
+		"status": {
+			"missing": "目标缺失",
+			"ambiguous": "目标不明确",
+			"invalidFragment": "片段无效"
+		},
 		"title": "反向链接"
 	},
 	"graph": {

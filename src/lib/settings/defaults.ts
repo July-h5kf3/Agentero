@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
+	autoUpdateInternalLinks: "ask",
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,

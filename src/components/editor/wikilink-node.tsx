@@ -1,38 +1,81 @@
 "use client";
 
-import { PlateElement, type PlateElementProps } from "platejs/react";
+import {
+	PlateElement,
+	type PlateElementProps,
+	useSelected,
+} from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
+import { WikiEmbedElement } from "@/components/editor/wiki-embed-node";
 import { cn } from "@/lib/core/utils";
-import { resolveWikiTarget } from "@/lib/wiki";
+import {
+	type LinkFragment,
+	resolveWikiReference,
+	resolveWikiTarget,
+} from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
 
-export type WikiLinkEl = {
-	value: string;
-	heading?: string;
-	alias?: string | null;
-	embed?: boolean;
-};
-
 export function WikiLinkElement(props: PlateElementProps) {
+	const element = props.element as unknown as WikiSlateNode;
+	const editing = useSelected();
+	return element.embed ? (
+		<WikiEmbedElement {...props} editing={editing} />
+	) : (
+		<WikiLinkNavigationElement {...props} editing={editing} />
+	);
+}
+
+function WikiLinkNavigationElement({
+	editing,
+	...props
+}: PlateElementProps & { editing: boolean }) {
 	const { t } = useTranslation("editor");
-	const el = props.element as unknown as WikiLinkEl;
+	const el = props.element as unknown as WikiSlateNode;
 	const wikiNav = useWikiNav();
+	const markdownDoc = useMarkdownDoc();
 
 	const target = el.value ?? "";
 	const path = resolveWikiTarget(target, wikiNav?.mdFiles ?? []);
-	const exists = Boolean(path);
+	const fragment: LinkFragment | undefined = el.heading
+		? el.heading.startsWith("^")
+			? { kind: "block", id: el.heading.slice(1) }
+			: { kind: "heading", path: el.heading.split("#").filter(Boolean) }
+		: undefined;
+	const fallbackStatus = path || (!target && fragment) ? "resolved" : "missing";
 	const withHeading = el.heading ? `${target}#${el.heading}` : target;
 	const label = el.alias || withHeading;
 
-	const navigate = (event: MouseEvent) => {
+	const navigate = async (event: MouseEvent) => {
 		event.preventDefault();
 		event.stopPropagation();
+		if (wikiNav?.vaultPath && markdownDoc.filePath) {
+			try {
+				const resolved = await resolveWikiReference(
+					wikiNav.vaultPath,
+					markdownDoc.filePath,
+					withHeading,
+				);
+				if (resolved) {
+					wikiNav.onWikiNavigate({
+						targetRaw: resolved.occurrence.targetRaw,
+						path: resolved.targetPath ?? null,
+						status: resolved.status,
+						fragment: resolved.occurrence.fragment,
+					});
+					return;
+				}
+			} catch {
+				// Demo/offline fallback remains deliberately file-only.
+			}
+		}
 		wikiNav?.onWikiNavigate({
 			targetRaw: target,
 			path,
-			exists,
-			heading: el.heading || undefined,
+			status: fallbackStatus,
+			fragment,
 		});
 	};
 
@@ -41,20 +84,37 @@ export function WikiLinkElement(props: PlateElementProps) {
 			{...props}
 			as="span"
 			className={cn(
-				"cursor-pointer font-medium underline-offset-2 transition-colors",
-				exists
-					? "text-primary underline decoration-primary/40 hover:decoration-primary"
-					: "text-muted-foreground underline decoration-dashed decoration-muted-foreground/60 hover:text-foreground",
+				"relative underline-offset-2 transition-colors",
+				editing
+					? "cursor-text font-normal text-foreground"
+					: fallbackStatus === "resolved"
+						? "cursor-pointer font-medium text-primary underline decoration-primary/40 hover:decoration-primary"
+						: "cursor-pointer font-medium text-muted-foreground underline decoration-dashed decoration-muted-foreground/60 hover:text-foreground",
 			)}
 			attributes={{
 				...props.attributes,
-				title: exists ? (path ?? target) : t("missingLink", { target }),
-				"data-wiki": exists ? "ok" : "missing",
-				onClick: navigate,
+				title:
+					fallbackStatus === "resolved"
+						? (path ?? target)
+						: t("missingLink", { target }),
+				"data-wiki": fallbackStatus === "resolved" ? "ok" : "missing",
+				onClick: editing ? undefined : navigate,
+				"data-wiki-source": editing ? "link" : undefined,
 			}}
 		>
-			<span contentEditable={false}>{el.embed ? `!${label}` : label}</span>
-			{props.children}
+			<span className={editing ? "hidden" : undefined} contentEditable={false}>
+				{label}
+			</span>
+			<span
+				aria-hidden={editing ? undefined : true}
+				className={
+					editing
+						? undefined
+						: "pointer-events-none absolute size-px overflow-hidden opacity-0"
+				}
+			>
+				{props.children}
+			</span>
 		</PlateElement>
 	);
 }

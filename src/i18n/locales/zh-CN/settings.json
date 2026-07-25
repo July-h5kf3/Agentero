@@ -38,6 +38,12 @@
 			"year-asc": "年份（旧 → 新）",
 			"added-desc": "添加时间（新 → 旧）"
 		},
+		"autoUpdateInternalLinks": {
+			"label": "外部改名后更新双链",
+			"hint": "对可信的本地改名，「询问」会先展示受影响链接再写入 Markdown；「始终」只在 watcher 路径对和所有来源哈希都安全时修复。远程 Vault 变更永不自动修复。",
+			"ask": "询问",
+			"always": "始终（安全时）"
+		},
 		"translatorBaseUrl": {
 			"label": "Translator 服务地址",
 			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"

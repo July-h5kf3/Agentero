@@ -48,6 +48,8 @@ Agentero 桌面应用
 - 无 Vault 时中间栏为欢迎页；有 Vault 时侧栏标题可切换知识库（含 **打开远程…**）；`⌘N` 多窗口。
 - 可选右侧栏：Agent 与 Backlinks（常驻 collapsible）。Backlinks 上方反链、下方 **双链** Graph（非文献引用图）。
 - 魔棒 / Zotero Connector / 补资源 Download / 精读 Zap / Agent 权限与面板工作流 / 命令面板 / PDF 划词 / 翻译 / Markdown 内嵌图 / 外部改盘重载 / 全局 Toast：见下表与对应文档。
+- **双链与嵌入**：`[[...]]` Live Preview、标题/block 精确跳转，以及 `![[...]]` Markdown/图片/PDF 只读投影；普通编辑不会刷新无关嵌入（见 [`backend/wikilinks.md`](backend/wikilinks.md)）。
+- **链接稳定性**：Agentero 发起的文件/目录/paper 改名与移动会事务化修复已解析链接；可信外部本地 rename 受 `ask` / `always` 设置控制。
 - **规划中**（roadmap）：**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域（**V0.6 标签页 + 多分屏已落地**）。
 - **远程 Vault（SSH/SFTP）+ 远端 BYOA**：**MVP 已落地**（见 [`development/remote-vault.md`](development/remote-vault.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。

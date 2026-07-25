@@ -12,6 +12,7 @@ import { withNormalizedTags } from "@/lib/paper/tags";
 import type { PaperMetadata } from "@/lib/paper/types";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
 import type { PaperTagInput } from "@/lib/ui/tag-colors";
+import type { WikiRenameResult } from "@/lib/wiki";
 
 /**
  * Virtual file-tree path for the papers library table.
@@ -212,6 +213,7 @@ export async function purgeAllTrash(vaultPath: string): Promise<void> {
 
 export type PaperMoveResult = {
 	newRel: string;
+	linkUpdate: WikiRenameResult;
 };
 
 /**
@@ -222,6 +224,7 @@ export async function movePaperFolder(
 	vaultPath: string,
 	fromRel: string,
 	destParentRel: string,
+	dirtyPaths: string[],
 ): Promise<PaperMoveResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:fileTree.moveDesktopOnly"));
@@ -229,7 +232,7 @@ export async function movePaperFolder(
 	return invokeApi<PaperMoveResult>(
 		"paper_move",
 		{
-			args: { vaultPath, fromRel, destParentRel },
+			args: { vaultPath, fromRel, destParentRel, dirtyPaths },
 		},
 		{
 			fallback: i18n.t("sidebar:fileTree.moveFailed"),

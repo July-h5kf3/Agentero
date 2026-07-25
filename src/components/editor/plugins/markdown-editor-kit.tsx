@@ -86,6 +86,7 @@ import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
+import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
 import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	TableCellElement,
@@ -182,6 +183,7 @@ export const MarkdownEditorKit = [
 		node: { component: HighlightLeaf },
 	}),
 	KbdPlugin.withComponent(KbdLeaf),
+	WikiBlockIdPlugin,
 
 	// Indentation + lists
 	IndentPlugin.configure({
