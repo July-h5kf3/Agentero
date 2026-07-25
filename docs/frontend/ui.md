@@ -207,13 +207,13 @@
   - **列**：标题、作者、年份、**标签**、类型、标识符；**单击**单元格复制对应字段（作者复制完整列表，非 et al. 缩写；标题下出版物单独可复制；行内标签 chip 复制该标签；复制**短延迟提交**，双击打开论文时取消，避免与双击冲突）；**双击**行打开对应 paper 文件夹。
   - **列自定义**（顺序 + 显隐）：**右键表头**弹出上下文菜单勾选显示/隐藏列；**拖拽表头** `<th>` 改变列顺序（拖拽时列半透明、落点高亮）；菜单底部「重置列」恢复默认。**标题列不可隐藏**（承载阅读热力与出版物副标题，勾选框禁用且 normalize 强制可见）；表格使用固定布局和各列固定权重，标题列约占 32%，标题正文单行显示，超出以省略号截断，悬浮仍可查看完整标题。布局持久化到 `settings.json` 的 `libraryColumns`（`LibraryColumnPref[] = {key, visible}[]`，数组顺序即显示顺序），前后端均 reconcile（去重、丢未知 key、补新列为可见、强制 title 可见）。实现：`COLUMN_META` + `colgroup` + `renderCell` 按 key 渲染；右键菜单基于 `src/components/ui/context-menu.tsx`（radix `ContextMenu`）。
   - **阅读热力（标题背景）**：聚合该篇 `marks/`（`kind`: highlight / ask / translate）的**页码 + 页内 y**，画成**标题文字横向背景脊条**（左=文首、右=文末；局部深浅=该位置交互强度）。颜色为 **Apple system green** 浅色洗（`oklch(0.65 0.17 145)` ≈ `#34C759`，与标签 green 同系，低比例 `color-mix` 保持浅色不抢眼）。悬停标题可看高亮 / 对话 / 翻译分项。可选 `reading-meta.json` 记录 PDF 总页数以对齐全文跨度。实现：`src/lib/paper/reading-heatmap/`、`ReadingTitleHeat`。
-  - **标签**：行内 tag 单击复制该标签。标题搜索同时匹配 tag 子串（无表上方 chip 筛选条）。
+  - **标签**：行内 tag 单击复制该标签。标题列搜索同时匹配 title / tag 子串；**标签列表头**筛选图标可多选标签（OR）过滤行。
   - **排序**：点击表头升序 / 降序；年份列首次为降序；文字列默认升序。
   - **滚动**：`.agentero-scroll-both`；表格 `w-max min-w-full`。
-  - **中间栏 header**：搜索框；全库另有 Zotero 迁移。
-  - **导出**（侧栏 Library 虚拟节点 **右键菜单**）：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`（与回收站「清空」同为虚拟节点右键入口，不在中间栏 header）。
+  - **表头内控件**（无独立中间栏 header 行）：**标题列标题右侧**为无 placeholder 的搜索框；**标签列表头**为筛选图标（Popover 勾选标签）。
+  - **导出**（侧栏 Library 虚拟节点 **右键菜单**）：`paper_export` → Translator `/export?format=bibtex` → 保存 `.bib`（与回收站「清空」同为虚拟节点右键入口）。
   - **导入**（Upload）：魔棒 Popover 左下角 → `paper_import`。
-  - **从 Zotero 迁移**：仅**全库**视图工具栏。
+  - **从 Zotero 迁移**：左侧栏 Header **魔杖旁 Zotero 图标**（欢迎页仍有入口）；不在 Library 中间栏。
 - **Paper Info / Notes——仅具体论文**：
   - **左侧 Paper Info**（`sidebar/paper-info-panel`）：仅当存在 `paperMeta`（选中 paper 文件夹）时渲染；论文库 / 普通笔记时隐藏。展开时顶部边框为**纵向拖拽把手**（可键盘 ↑/↓，Shift 加速），调节内容区高度（120–560px，localStorage `agentero.paperInfoHeight` 持久化）；作者与摘要不再行数截断，超出滚动。**Tags** 可编辑：输入框在 chip 上方；输入框**右侧圆形色点**打开色盘（Apple 风格 8 色 + 默认）；回车添加、chip 上 × 删除 → Host `paper_set_tags`（catalog 权威；`tags_json` 可为 `"name"` 或 `{"name","color"}`）。
   - **Notes（WYSIWYG）**：作为 **dockview panel** 打开 `NOTES.md`（论文默认与 PDF **左右分屏**：左 PDF、右 NOTES）；Layout / 快捷键开关。论文库视图或未选论文时不自动开 NOTES。
@@ -432,13 +432,13 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 参考 **macOS System Settings / 传统 Preferences** 形态：所有平台均为 App 内**居中浮层 dialog**（`SettingsWindow` 包 `SettingsContent`，经 `overlay-stack` 注册 `settings`）。
 
-> **注**：曾实现独立原生单例窗口（Host `settings_window_open` + `settings-window-root.tsx` + `main.tsx` `?window=settings` 路由），但该第二 webview 在 **Windows 下白屏卡死**；已改回 App 内浮层。相关 Host 命令与路由代码暂时保留但不再调用，待根因修复后再启用。
+> **注**：曾实现独立原生单例窗口（Host `settings_window_open` + `?window=settings` 路由），但该第二 webview 在 **Windows 下白屏卡死**；已改回 App 内浮层。前端路由与 `settings-window-root.tsx` 已删除，仅 Host 命令暂时保留但不再调用。
 
 | 要求 | 说明 |
 |---|---|
 | 入口 | macOS：顶部菜单栏 **agentero → Settings…**，或 `⌘,`；Windows / Linux 无原生菜单栏，标题栏窗口控制按钮左侧显示 **齿轮图标**（`Settings`，hover 旋转 90°，Tooltip 含快捷键；`title-bar.tsx`，i18n `app:titlebar.settings*`）。不在侧边栏放设置图标 |
 | 结构 | 左侧分类导航 + 右侧内容；居中浮层 dialog（backdrop 半透明模糊） |
-| 分类 | General · Appearance · Agent · **Translate** · Keyboard · Privacy · About |
+| 分类 | General · Appearance · Agent · **Translate** · Keyboard · About |
 | 行样式 | 分组卡片（rounded + border）；左标签、右控件；行间细分隔 |
 | 控件 | Switch / Select / Input；避免花哨装饰 |
 | 关闭 | 右上角 `X`、点遮罩、`Esc`、`⌘W`、再次 `⌘,`（均经 `overlay-stack`） |
@@ -447,10 +447,9 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 **页面职责**
 
-- **General**：恢复上次 Vault、退出确认；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者 (年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
+- **General**：恢复上次 Vault；**文件树论文显示**（`paperTreeLabelMode`，默认 `title-author`：标题 · 作者；另有标题 / 作者 (年)·标题 / 文件夹名）；**文件树论文排序**（`paperTreeSortMode`，默认 `folder`：显示名称 A–Z，跟随 `paperTreeLabelMode`；另有标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；**Translator 服务地址**（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）。入库默认下载 PDF（arXiv 含 LaTeX），无「是否本地下载」开关。**Zotero Connector 兼容**开关（`connectorEnabled`，默认关；与 Zotero 桌面端互斥占用 `23119`；状态行显示监听地址 / 错误；保存成功后刷新树/Library 并 **`openPaper` 打开论文 tab**；见 [`../backend/connector.md`](../backend/connector.md)），勿与 Translator 地址混为同一设置项。
 - **Appearance**：主题、**配色主题**（`uiTheme`，tweakcn 预设，默认 `default`，见 §1）、**界面缩放**（`uiScale`：80% / 90% / 100% / 125% / 150%，默认 100%；通过 `<html>` `font-size` 全局缩放，旧 `toolbarIconSize` 仅一次性迁移）、**语言（跟随系统 / English / 简体中文）**；其下分组 **Markdown 编辑器**：编辑字号、**格式工具栏**（`showEditorToolbar`，默认开）。
 - **Agent**（BYOA，非模型 BYOK 表单）：
-  - 总开关。
   - **权限模式**（`agentPermissionMode`：受限 / 每次询问 / 自动批准，见 §3.2）。
   - **回答语言**（自动 / English / 简体中文，独立于界面语言）。
   - **个人偏好提示词**（`agentPersonalPrompt`，多行，默认空）：自由文本注入每次 Agent turn 的 prompt envelope；留空关闭。
@@ -470,14 +469,13 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
     - 不在此页 Probe / 装适配器 / 填 API Key；不复制 Chat 完整 ModelSelector。
   - 运行时：翻译偏好独立于 Chat 当前选中；未指定则回落 default Agent + 该 Agent 模型偏好。
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
-- **Privacy**：分析与崩溃上报（默认关，本地优先）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings/settings-window.tsx`（`SettingsWindow` 浮层 + 共用 `SettingsContent`）；`src/components/settings/settings-window-root.tsx` / `main.tsx` `?window=settings` 为休眠的原生窗口入口（暂不使用）。**应用设置**持久化为 Host 文件（XDG）：
+实现：`src/components/settings/settings-window.tsx`（`SettingsWindow` 浮层 + 共用 `SettingsContent`）。**应用设置**持久化为 Host 文件（XDG）：
 
 | 路径 | 说明 |
 |---|---|
-| `$XDG_CONFIG_HOME/agentero/settings.json` | UI 设置（通用 / 外观 / Agent 权限与语言 / 翻译 / 隐私等）；未设 env 时 Unix 默认 `~/.config/agentero/settings.json` |
+| `$XDG_CONFIG_HOME/agentero/settings.json` | UI 设置（通用 / 外观 / Agent 权限与语言 / 翻译等）；未设 env 时 Unix 默认 `~/.config/agentero/settings.json` |
 | `$XDG_CONFIG_HOME/agentero/agents.json` | BYOA Agent 注册表（默认 Agent、自定义 command、代理） |
 
 - 前端：`src/lib/settings`（内存缓存 + `settings_get` / `settings_set`）；启动时 `ensureSettingsLoaded()`，旧 `localStorage` 键 `agentero-settings` **一次性迁移后删除**。
