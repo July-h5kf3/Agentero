@@ -255,6 +255,21 @@
 	--dv-drag-over-border-color: var(--primary);
 	--dv-drag-over-border: 2px solid var(--primary);
 	--dv-icon-hover-background-color: var(--accent);
+	/* Tab-group chip palette — stay readable in light/dark via theme tokens */
+	--dv-tab-group-color-grey: var(--muted-foreground);
+	--dv-tab-group-color-blue: var(--primary);
+	--dv-tab-group-color-red: var(--destructive);
+	--dv-tab-group-color-yellow: oklch(0.75 0.15 85);
+	--dv-tab-group-color-green: oklch(0.62 0.15 145);
+	--dv-tab-group-color-pink: oklch(0.65 0.18 350);
+	--dv-tab-group-color-purple: oklch(0.58 0.18 300);
+	--dv-tab-group-color-cyan: oklch(0.65 0.12 210);
+	--dv-tab-group-color-orange: oklch(0.7 0.16 55);
+	--dv-tab-group-chip-font-size: 0.6875rem;
+	--dv-context-menu-background-color: var(--popover);
+	--dv-context-menu-color: var(--popover-foreground);
+	--dv-floating-box-shadow: 0 8px 24px
+		color-mix(in oklab, var(--foreground) 12%, transparent);
 	background-color: var(--background);
 	color: var(--foreground);
 	height: 100%;

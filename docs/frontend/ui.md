@@ -290,13 +290,16 @@
 | `⌘1` | 聚焦侧边栏 | 分区焦点（Mail 等） |
 | `⌘2` | 聚焦编辑器 | |
 | `⌘3` | 聚焦 Notes（`focusNotes`；论文 PDF/HTML 侧栏 Notes） | |
-| `⌥⌘→` / `⌥⌘←` | 下一 / 上一 panel | 按 dockview `api.panels` 视觉序循环（`cycleActive`） |
+| `⌥⌘→` / `⌥⌘←` | 下一 / 上一 panel | 按 dockview `api.panels` **全局**视觉序循环（`cycleActive`） |
+| `Ctrl+]` / `Ctrl+[` | 组内下一 / 上一 tab | dockview `keyboardNavigation`（当前聚焦 **group 内**） |
+| `F6` / `Shift+F6` | 下一 / 上一分屏 group | dockview；`Ctrl+Shift+方向键` 按空间方向聚焦相邻 group |
+| `Ctrl+M` | 键盘停靠 panel | dockview：武装 → 方向键选目标 → `Enter` / `Esc` |
 | `⌘L` | 显示 / 隐藏右侧栏 | Agent / Backlinks（含 Graph） |
 | `⌥⌘Z` | Agent 禅模式 | 全屏仅 Agent 对话；再按退出；`toggleAgentZen` |
 | `⇧⌘I` | 魔棒（按标识符添加） | 打开侧栏魔棒 Popover；`shortcuts.ts` → `magicWand` |
 
 - 在编辑区聚焦时同样生效；涉及浏览器保留键时需 `preventDefault`。
-- 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shell/shortcuts.ts`。
+- 快捷键清单以设置页 **Keyboard** 为准，实现见 `src/lib/shell/shortcuts.ts`；上表 dockview 组内 / 组间键由 `keyboardNavigation` 处理，不进 `shortcuts.ts`（避免与 App 全局循环双触发）。
 - **魔棒**（已落地 v0/v1）：侧栏 `WandSparkles` Popover；输入框为**可变高度 textarea**（最低约 2 行、最大高度限制，可滚动），支持一次粘贴多个标识符，以空格 / 逗号 `,` / 分号 `;` / 中文逗号 `，` / 中文分号 `；` / 换行分隔。提交后走 Host `lookup_import_batch` → Translator（`translatorBaseUrl`，默认 `https://translator.philfan.cn`）→ 逐条解析、去重、入库。  
   - 目标目录：默认 `papers/`；当前在 Papers 子文件夹时写入该子路径。  
   - **始终下载 PDF** 到 `{paper}/{id}.pdf`（论文文件夹根目录）。  
@@ -312,12 +315,14 @@
 中间栏由 **单一全局 Dockview** 管理全部打开文档（`src/components/workspace/tab-workspace.tsx`、模型 `src/lib/workspace/tabs`）。**标题栏无文档 tab 条**。完整契约见 [`../development/tab-split.md`](../development/tab-split.md)。
 
 - **文档 panel**：paper / Markdown / PDF / HTML / **Library（全库或文件夹作用域）** / 回收站 / **NOTES** 各为一个 dockview panel；原生 tab 切换、关闭（`X` / `⌘W`）、组内拖拽重排；同一 path 已开则 `activatePanel`。
-- **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **同组 sibling tab**。
+- **Tab 右键菜单**：关闭 / 关闭其他 / 关闭全部（**同组**）；新建标签组 / 从标签组移除（`getTabContextMenuItems`；文案走 i18n）。
+- **Tab 组**：chip 右键重命名、染色、解散（`getTabGroupChipContextMenuItems`）；随布局 `toJSON()` 持久化。
+- **分屏**：上下左右 + 多格网格（dockview 原生）；文件树路径可拖入任意边；论文打开时默认 PDF 与 `NOTES.md` **同组 sibling tab**。`dropOverlayModel` 调大 content 边激活区；未知外部拖拽由 `onWillShowOverlay` / `onWillDrop` 否决。
 - **默认页 = 全库 Library**：
   - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。
   - 关 panel 后列表为空 → 自动打开全库。
   - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关 active panel，关空后回全库。
-- **常驻挂载**：panel 内容保持 mounted；切换保留 PDF 滚动/缩放与编辑器状态。作用域 / 全库共用 `libraryPapers` 缓存。
+- **挂载策略**：PDF panel 壳用 dockview `renderer: 'always'` 保活；EmbedPDF 引擎由 App **PDF LRU**（默认 4）限流。非 PDF 默认 `onlyWhenVisible`。作用域 / 全库共用 `libraryPapers` 缓存。
 - **焦点**：完全听 dockview `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` **视觉序**循环。
 - **持久化**：**只存** dockview `toJSON()`（panel params 含 path/mode）；按窗口恢复。
 - **NOTES**：`createNotesSplitPane` 派生独立 panel；paper-reader / download 写回后按路径 reseed。
@@ -328,6 +333,7 @@
 后续增强（未做）：
 
 - tab 固定（pin）、按 paper 分组、「当前 panel vs 新 panel 打开」策略可配。
+- 组最大化（`maximizeGroup`）、watermark / header actions 等。
 - 与 Agent 面板 **会话标签** 分离（不同概念，已成立）。
 
 ### 3.1.2 规划：PDF 引用与插图

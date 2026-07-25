@@ -184,11 +184,13 @@ export const TabCenter = memo(function TabCenter({
 		);
 	}
 	if (tab.mode === "pdf") {
-		// PERF: only mount the heavyweight EmbedPDF viewer for the active tab.
-		// Inactive PDF tabs release their engine document + plugin registry so a
-		// large open-tab set keeps at most one PDFium document alive (PDFium runs
-		// on the main thread). Reading position / annotations / ask threads are
-		// persisted, so remounting on re-activation restores them automatically.
+		// PERF: dockview keeps PDF panel shells mounted (`renderer: 'always'` in
+		// tab-workspace) so inactive siblings stay in the React tree. We still
+		// gate the heavyweight EmbedPDF viewer with App-level PDF LRU
+		// (`pdfKeepMounted`): only the active tab + a few recently viewed PDFs
+		// keep PDFium documents alive (main-thread cost). Older inactive PDFs
+		// return null here to release the engine; position / annotations / ask
+		// threads are persisted and restore on remount.
 		if (!active && !pdfKeepMounted) return null;
 		return (
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">

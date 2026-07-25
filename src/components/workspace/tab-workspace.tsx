@@ -6,7 +6,11 @@ import {
 	type DockviewPanelRenderer,
 	DockviewReact,
 	type DockviewReadyEvent,
+	type DockviewTabGroupColorEntry,
+	type DockviewWillDropEvent,
+	type DropOverlayModelParams,
 	type GetTabContextMenuItemsParams,
+	type GetTabGroupChipContextMenuItemsParams,
 	type IDockviewPanel,
 	type IDockviewPanelProps,
 } from "dockview-react";
@@ -39,6 +43,21 @@ import {
 	type SplitDirection,
 } from "@/lib/workspace/tabs";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
+
+/** Palette ids match dockview defaults; CSS values come from index.css tokens. */
+const TAB_GROUP_COLOR_IDS = [
+	"grey",
+	"blue",
+	"red",
+	"yellow",
+	"green",
+	"pink",
+	"purple",
+	"cyan",
+	"orange",
+] as const;
+
+type TabGroupColorId = (typeof TAB_GROUP_COLOR_IDS)[number];
 
 export type WorkspaceExternalDrop = {
 	paths: string[];
@@ -114,6 +133,41 @@ function toSplitDirection(
 function isExternalPathDrag(native: DragEvent | PointerEvent): boolean {
 	if (!(native instanceof DragEvent) || !native.dataTransfer) return false;
 	return isSplitDragPayload(native.dataTransfer);
+}
+
+/**
+ * True when the drag is a dockview-internal panel/group move (PanelTransfer
+ * present). Group drags may have `panelId: null` — still internal. External
+ * file-tree path drops return undefined from getData().
+ */
+function isInternalDockDrag(getData: () => unknown): boolean {
+	return getData() != null;
+}
+
+/**
+ * Per-target overlay geometry. Content gets a slightly larger edge activation
+ * than dockview's 20% default so left/right/above/below splits are easier in
+ * wide panels; header void stays generous for "merge as sibling tab".
+ */
+function resolveDropOverlayModel({ location }: DropOverlayModelParams):
+	| {
+			size?: { value: number; type: "percentage" };
+			activationSize?: { value: number; type: "percentage" };
+	  }
+	| undefined {
+	if (location === "content") {
+		return {
+			activationSize: { value: 25, type: "percentage" },
+			size: { value: 50, type: "percentage" },
+		};
+	}
+	if (location === "header_space") {
+		return {
+			activationSize: { value: 50, type: "percentage" },
+		};
+	}
+	// tab / edge: keep dockview defaults (edge shaped by dndEdges).
+	return undefined;
 }
 
 function resolveReferencePanel(
@@ -227,6 +281,16 @@ export const TabWorkspace = memo(
 		onLayoutRef.current = onLayoutChange;
 		const onDropRef = useRef(onExternalDrop);
 		onDropRef.current = onExternalDrop;
+
+		const tabGroupColors = useMemo<DockviewTabGroupColorEntry[]>(
+			() =>
+				TAB_GROUP_COLOR_IDS.map((id) => ({
+					id,
+					value: `var(--dv-tab-group-color-${id})`,
+					label: t(`tabs.tabGroupColor.${id}` as const),
+				})),
+			[t],
+		);
 
 		const scheduleLayoutSave = useCallback((api: DockviewApi) => {
 			if (layoutTimerRef.current != null) {
@@ -351,6 +415,13 @@ export const TabWorkspace = memo(
 						if (!isExternalPathDrag(e.nativeEvent)) return;
 						e.accept();
 					}),
+					// Veto overlay for unknown external drags (keep internal + path drops).
+					api.onWillShowOverlay((e) => {
+						if (isInternalDockDrag(() => e.getData())) return;
+						if (!isExternalPathDrag(e.nativeEvent)) {
+							e.preventDefault();
+						}
+					}),
 					api.onDidActivePanelChange((ev) => {
 						if (syncingRef.current) return;
 						onActiveRef.current(ev.panel?.id ?? null);
@@ -359,7 +430,8 @@ export const TabWorkspace = memo(
 						if (syncingRef.current) return;
 						onCloseRef.current(panel.id);
 					}),
-					// Single layout-save path (debounce). Programmatic + user changes.
+					// Single layout-save path (debounce). Programmatic + user changes
+					// (incl. tab-group rename / color / membership via toJSON).
 					api.onDidLayoutChange(() => {
 						scheduleLayoutSave(api);
 					}),
@@ -468,15 +540,29 @@ export const TabWorkspace = memo(
 			onDropRef.current({ paths, direction, referencePanelId });
 		}, []);
 
+		/** Cancel drop for unknown external payloads; internal moves always ok. */
+		const handleWillDrop = useCallback((e: DockviewWillDropEvent) => {
+			if (isInternalDockDrag(() => e.getData())) return;
+			if (!isExternalPathDrag(e.nativeEvent)) {
+				e.preventDefault();
+			}
+		}, []);
+
 		/**
-		 * Tab right-click menu (dockview opt-in). Labels via i18n; actions match
-		 * built-in close / closeOthers / closeAll (group-scoped for Others/All).
-		 * Closures go through panel.api.close() → onDidRemovePanel → React tabs[].
+		 * Tab right-click menu (dockview opt-in). Close actions + tab-group
+		 * create/remove. Closures go through panel.api.close() → onDidRemovePanel.
 		 */
 		const getTabContextMenuItems = useCallback(
-			({ panel, group }: GetTabContextMenuItemsParams) => {
+			({ panel, group, api }: GetTabContextMenuItemsParams) => {
 				const hasOthers = group.panels.length > 1;
-				return [
+				const existing = api.getTabGroupForPanel({
+					groupId: group.id,
+					panelId: panel.id,
+				});
+				const menu: Array<
+					| "separator"
+					| { label: string; disabled?: boolean; action: () => void }
+				> = [
 					{
 						label: t("tabs.contextClose"),
 						action: () => panel.api.close(),
@@ -496,6 +582,57 @@ export const TabWorkspace = memo(
 							for (const p of [...group.panels]) {
 								p.api.close();
 							}
+						},
+					},
+					"separator",
+				];
+
+				if (existing) {
+					menu.push({
+						label: t("tabs.contextRemoveFromTabGroup"),
+						action: () => {
+							api.removePanelFromTabGroup({
+								groupId: group.id,
+								panelId: panel.id,
+							});
+						},
+					});
+				} else {
+					menu.push({
+						label: t("tabs.contextCreateTabGroup"),
+						action: () => {
+							const tg = api.createTabGroup({
+								groupId: group.id,
+								label: t("tabs.tabGroupDefaultName"),
+								color: "blue" satisfies TabGroupColorId,
+							});
+							api.addPanelToTabGroup({
+								groupId: group.id,
+								tabGroupId: tg.id,
+								panelId: panel.id,
+							});
+						},
+					});
+				}
+
+				return menu;
+			},
+			[t],
+		);
+
+		const getTabGroupChipContextMenuItems = useCallback(
+			({ tabGroup, group, api }: GetTabGroupChipContextMenuItemsParams) => {
+				return [
+					"rename" as const,
+					"colorPicker" as const,
+					"separator" as const,
+					{
+						label: t("tabs.tabGroupDissolve"),
+						action: () => {
+							api.dissolveTabGroup({
+								groupId: group.id,
+								tabGroupId: tabGroup.id,
+							});
 						},
 					},
 				];
@@ -522,8 +659,16 @@ export const TabWorkspace = memo(
 						// Floating/popout already disabled — no cross-window HTML5 drag needed.
 						dndStrategy="pointer"
 						dndEdges={{ size: { value: 24, type: "pixels" } }}
+						dropOverlayModel={resolveDropOverlayModel}
+						// Within-group tabs + between groups + Ctrl+M keyboard dock.
+						// Orthogonal to App ⌥⌘←/→ which cycles all panels by visual order.
+						keyboardNavigation
+						tabGroupAccent="palette"
+						tabGroupColors={tabGroupColors}
 						getTabContextMenuItems={getTabContextMenuItems}
+						getTabGroupChipContextMenuItems={getTabGroupChipContextMenuItems}
 						onReady={onReady}
+						onWillDrop={handleWillDrop}
 						onDidDrop={handleExternalDrop}
 					/>
 				</div>

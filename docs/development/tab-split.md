@@ -67,9 +67,12 @@ export type DocTab = {
 | 能力 | 谁负责 |
 |---|---|
 | Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
-| Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部；**同组**；i18n 标签；关闭经 `panel.api.close` → `onDidRemovePanel`） |
+| Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部 / 新建·移出标签组；**同组**；i18n；关闭经 `panel.api.close` → `onDidRemovePanel`） |
+| Tab 组染色 / 命名 | dockview tab groups：chip 右键 `rename` + `colorPicker` + 解散；`tabGroupColors` i18n 标签；随 `toJSON()` 持久化 |
+| 键盘分屏导航 | `keyboardNavigation`（组内 `Ctrl+]`/`[`、组间 `F6`、键盘停靠 `Ctrl+M`）；与 App `⌥⌘←/→` 全局循环正交 |
 | 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
-| 布局持久化 | **仅** `api.toJSON()`（params 含 path/mode） |
+| 落点 overlay | `dropOverlayModel`（content 25% 边激活）+ `onWillShowOverlay` / `onWillDrop` 否决未知外部拖拽 |
+| 布局持久化 | **仅** `api.toJSON()`（params 含 path/mode；含 tab groups） |
 | 打开放置 / 循环焦点 | `TabWorkspaceHandle`（imperative） |
 | 文档内容 / 资源加载 | React `DocTab` + `TabCenter` |
 | 侧栏 Paper Info / active id | `onDidActivePanelChange` → React |
@@ -93,6 +96,30 @@ export type DocTab = {
 | **内部 tab 分屏** | `DockviewReact` 使用 **`dndStrategy="pointer"`**（非默认 HTML5）。Tauri WKWebView 上 HTML5 DnD 不稳；pointer 用几何 hit-test，不依赖 `dragover` 冒泡。浮动/popout 已关，无跨窗 HTML5 需求。 |
 | **HTML 面板 iframe** | `HtmlViewer` 在 `dragstart`…`dragend`/`drop` 期间给 sandboxed iframe 加 `pointer-events: none`，避免 HTML5 外部拖拽（文件树路径）经过 iframe 时 `dragover` 被吞、分屏 overlay 失效。PDF（EmbedPDF）无 iframe，不受影响。 |
 | 文件树拖入 | 仍走 HTML5 `text/plain` + `onUnhandledDragOver` / `onDidDrop`；路径 payload 见 `tab-dnd.ts`。 |
+| **overlay 几何** | `dropOverlayModel`：`content` 边激活 25%（默认 20%，宽 panel 更易分屏）；`header_space` 50%。外缘仍由 `dndEdges` 24px。 |
+| **否决** | `onWillShowOverlay` / `onWillDrop`：内部 panel 拖拽一律放行；外部仅接受 vault 路径 payload，其它拖拽 `preventDefault`。 |
+
+## 7.1 键盘导航（dockview `keyboardNavigation`）
+
+与 App 全局快捷键**并存、职责不同**：
+
+| 快捷键 | 作用域 | 说明 |
+|---|---|---|
+| `⌥⌘←` / `⌥⌘→` | App（`cycleActive`） | 按 `api.panels` **全局**视觉序循环 |
+| `Ctrl+]` / `Ctrl+[` | dockview | **当前聚焦组内**下一 / 上一 tab |
+| `F6` / `Shift+F6` | dockview | 下一 / 上一 **group**（多分屏格子） |
+| `Ctrl+Shift+方向键` | dockview | 按空间方向聚焦相邻 group |
+| `Ctrl+M` | dockview | 武装键盘停靠：方向键选目标 → `Enter` 停靠 / `Esc` 取消 |
+
+默认避开 `Cmd`（如 `Cmd+M` 为 macOS 最小化窗口）。中间栏聚焦时生效。
+
+## 7.2 Tab 组（染色 / 命名）
+
+- **创建**：tab 右键「新建标签组」→ `createTabGroup` + `addPanelToTabGroup`（默认名 i18n、色 `blue`）。
+- **chip 右键**：重命名、调色板、解散（`getTabGroupChipContextMenuItems`）。
+- **移出**：tab 已在组内时右键「从标签组移除」。
+- **持久化**：tab groups 含在 dockview `toJSON()` / `fromJSON()` 中，无需 React 额外状态。
+- 典型用途：把同一主题的多篇 PDF + NOTES 编成带色 chip 的逻辑组（仍在同一 dock group 的 tab 条上）。
 
 ## 8. PDF 保活策略（壳 vs 引擎）
 
@@ -109,6 +136,6 @@ export type DocTab = {
 
 | 状态 | 能力 |
 |---|---|
-| 已用 | `dndStrategy: 'pointer'`、`dndEdges`、`disableFloatingGroups`、外部 DnD、`getTabContextMenuItems`、PDF `renderer: 'always'` |
+| 已用 | `dndStrategy: 'pointer'`、`dndEdges`、`dropOverlayModel`、`onWillDrop` / `onWillShowOverlay`、`disableFloatingGroups`、外部 DnD、`getTabContextMenuItems`、`getTabGroupChipContextMenuItems`、`tabGroupColors` / `tabGroupAccent`、`keyboardNavigation`、PDF `renderer: 'always'` |
 | 刻意未用 | popout / floating（与 `⌘N` 多窗口策略一致）、全局 `defaultRenderer: 'always'`（非 PDF 不需要壳常驻） |
-| backlog | `maximizeGroup`、watermark、header actions、keyboardNavigation、tab group 染色 |
+| backlog | `maximizeGroup`、watermark、header actions |
