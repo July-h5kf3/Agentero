@@ -23,6 +23,28 @@
 		"pickTitle": "Insert image into note",
 		"pickFilter": "Images"
 	},
+	"headingRename": {
+		"menu": "Rename this heading…",
+		"title": "Rename this heading",
+		"description": "Update this saved heading and every resolved heading reference in the Vault.",
+		"label": "Heading",
+		"cancel": "Cancel",
+		"confirm": "Rename",
+		"renaming": "Renaming…",
+		"success": "Renamed the heading and updated {{count}} linked file(s).",
+		"errors": {
+			"localOnly": "Heading rename is available only for files in a local Vault.",
+			"unsavedEdits": "Save or discard all affected unsaved edits before renaming this heading.",
+			"sourceChanged": "A linked file changed on disk. Reload it, then try the heading rename again.",
+			"headingMissing": "The saved heading could no longer be identified. Reload the note and try again.",
+			"invalidHeading": "Enter a different, valid single-line heading.",
+			"ambiguousHeading": "This rename would create or update an ambiguous heading reference.",
+			"overlappingEdits": "The heading references could not be rewritten safely.",
+			"rolledBack": "The heading rename failed and all Markdown changes were rolled back.",
+			"manualRecovery": "The heading rename could not be rolled back completely. Inspect the affected Markdown files before continuing.",
+			"generic": "Could not rename this heading."
+		}
+	},
 	"embed": {
 		"loading": "Loading embedded content…",
 		"missing": "The embedded note could not be found.",

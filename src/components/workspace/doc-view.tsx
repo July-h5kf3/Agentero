@@ -14,6 +14,7 @@ import type { PdfAskThread } from "@/lib/pdf/ask/types";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { LibraryColumnPref } from "@/lib/settings";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
+import type { WikiRenameHeadingRequest } from "@/lib/wiki";
 import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
 
 /** Library-tab-only props (ignored by PDF / editor / trash). */
@@ -40,6 +41,10 @@ export type DocViewEditorProps = {
 	onPersistFile: (path: string, md: string, lastSaved: string) => void;
 	onAssetsChanged: () => void;
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
+	onRenameHeading?: (
+		path: string,
+		request: Omit<WikiRenameHeadingRequest, "path">,
+	) => Promise<void>;
 };
 
 /** PDF viewer props. */
@@ -163,6 +168,7 @@ export const DocView = memo(function DocView({
 					}
 					onPersist={editor.onPersistFile}
 					onAssetsChanged={editor.onAssetsChanged}
+					onRenameHeading={editor.onRenameHeading}
 					onDirtyChange={(d) =>
 						editor.onTabPatch(
 							tab.id,

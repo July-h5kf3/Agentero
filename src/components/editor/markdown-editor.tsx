@@ -17,6 +17,7 @@ import {
 } from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
+import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
@@ -37,6 +38,12 @@ import {
 	type WikiCompletionDraft,
 	WikiLinkSuggestion,
 } from "@/components/editor/wiki-link-suggestion";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import i18n from "@/i18n";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
@@ -46,11 +53,16 @@ import {
 	createManagedAssetGc,
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown/image";
-import type { LinkFragment } from "@/lib/wiki";
+import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import {
 	findWikiCompletionTrigger,
 	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
+import {
+	canRenameWikiHeading,
+	savedWikiHeadingAt,
+	type WikiHeadingAnchor,
+} from "@/lib/wiki-heading-rename";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -81,6 +93,11 @@ export type MarkdownEditorProps = {
 	onDirtyChange?: (dirty: boolean) => void;
 	/** After writing an image under `./assets/` (refresh file tree). */
 	onAssetsChanged?: () => void;
+	/** Explicitly rename one saved heading and repair its inbound fragments. */
+	onRenameHeading?: (
+		path: string,
+		request: Omit<WikiRenameHeadingRequest, "path">,
+	) => Promise<void>;
 	/** A one-shot request to scroll to a resolved internal-link anchor. */
 	navigationIntent?: { id: number; fragment: LinkFragment };
 };
@@ -112,6 +129,7 @@ export function MarkdownEditor({
 	onPersist,
 	onDirtyChange,
 	onAssetsChanged,
+	onRenameHeading,
 	navigationIntent,
 }: MarkdownEditorProps) {
 	const frontmatterRef = useRef("");
@@ -153,6 +171,10 @@ export function MarkdownEditor({
 	} | null>(null);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
+	const [headingContext, setHeadingContext] =
+		useState<WikiHeadingAnchor | null>(null);
+	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
+	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
 
 	useEffect(() => {
 		if (!navigationIntent) return;
@@ -963,6 +985,92 @@ export function MarkdownEditor({
 		scheduleWikiLinkPresentationSync();
 	}, [scheduleWikiLinkPresentationSync]);
 
+	const selectedHeadingAnchor = useCallback((): WikiHeadingAnchor | null => {
+		const selection = editor.selection;
+		if (!selection) return null;
+		const headingLevelAt = (pointPath: number[]) => {
+			for (let length = pointPath.length - 1; length > 0; length--) {
+				const path = pointPath.slice(0, length);
+				const entry = editor.api.node(path);
+				const type = (entry?.[0] as { type?: unknown } | undefined)?.type;
+				const match = typeof type === "string" ? /^h([1-6])$/.exec(type) : null;
+				if (match) return { path, level: Number(match[1]) };
+			}
+			return null;
+		};
+		const anchorHeading = headingLevelAt(selection.anchor.path);
+		const focusHeading = headingLevelAt(selection.focus.path);
+		if (
+			!anchorHeading ||
+			!focusHeading ||
+			anchorHeading.path.join(",") !== focusHeading.path.join(",")
+		) {
+			return null;
+		}
+		let ordinal = 0;
+		for (const [node, path] of editor.api.nodes({ at: [] })) {
+			const type = (node as { type?: unknown }).type;
+			if (typeof type !== "string" || !/^h[1-6]$/.test(type)) continue;
+			if (path.join(",") === anchorHeading.path.join(",")) {
+				return savedWikiHeadingAt(
+					savedRef.current,
+					ordinal,
+					anchorHeading.level,
+				);
+			}
+			ordinal += 1;
+		}
+		return null;
+	}, [editor]);
+
+	const handleHeadingContextMenu = useCallback(() => {
+		const heading = selectedHeadingAnchor();
+		setHeadingContext(
+			canRenameWikiHeading({
+				dirty: dirtyRef.current,
+				filePath: filePathRef.current,
+				hasHandler: Boolean(onRenameHeading),
+				heading,
+				readOnly,
+			})
+				? heading
+				: null,
+		);
+	}, [onRenameHeading, readOnly, selectedHeadingAnchor]);
+
+	const confirmHeadingRename = useCallback(
+		async (newText: string) => {
+			const path = filePathRef.current;
+			const heading = headingContext;
+			if (
+				!path ||
+				!heading ||
+				!onRenameHeading ||
+				readOnly ||
+				dirtyRef.current
+			) {
+				return;
+			}
+			setHeadingRenameBusy(true);
+			try {
+				await onRenameHeading(path, {
+					headingPath: heading.path,
+					headingLine: heading.line,
+					expectedContent: savedRef.current,
+					newText,
+				});
+				setHeadingRenameOpen(false);
+				setHeadingContext(null);
+			} catch {
+				// App owns the translated error toast. Keep the dialog open so the
+				// user can retry after resolving dirty/stale source state.
+			} finally {
+				setHeadingRenameBusy(false);
+			}
+		},
+		[headingContext, onRenameHeading, readOnly],
+	);
+
 	const docCtx = useMemo(
 		() => ({
 			filePath: filePath ?? null,
@@ -1005,46 +1113,68 @@ export function MarkdownEditor({
 						)}
 					>
 						{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
-						<EditorContainer
-							ref={editorContainerRef}
-							className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
-							onKeyDownCapture={readOnly ? undefined : handleKeyDown}
-							onBeforeInputCapture={
-								readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
-							}
-							onBlur={readOnly ? undefined : handleEditorBlur}
-							onCompositionStartCapture={
-								readOnly ? undefined : handleWikiLinkCompositionStart
-							}
-							onCompositionEndCapture={
-								readOnly ? undefined : handleWikiLinkCompositionEnd
-							}
-						>
-							{/*
-							 * min-h-full + generous bottom padding so the last line is easy
-							 * to click and Enter can always create a new block below it
-							 * (matches Plate default variant pb-72).
-							 */}
-							<Editor
-								variant="none"
-								placeholder={placeholder}
-								readOnly={readOnly}
-								className="min-h-full px-6 pt-4 pb-48"
-								style={fontSize ? { fontSize } : undefined}
-							/>
-							{!readOnly ? (
-								<WikiLinkSuggestion
-									draft={wikiCompletionDraft}
-									onClose={() => setWikiCompletionDraft(null)}
-									onContinue={(raw) =>
-										setWikiCompletionDraft((current) =>
-											current ? { ...current, raw } : current,
-										)
+						<ContextMenu>
+							<ContextMenuTrigger asChild>
+								<EditorContainer
+									ref={editorContainerRef}
+									className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
+									onContextMenuCapture={handleHeadingContextMenu}
+									onKeyDownCapture={readOnly ? undefined : handleKeyDown}
+									onBeforeInputCapture={
+										readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
 									}
-									controllerRef={completionControllerRef}
-								/>
-							) : null}
-						</EditorContainer>
+									onBlur={readOnly ? undefined : handleEditorBlur}
+									onCompositionStartCapture={
+										readOnly ? undefined : handleWikiLinkCompositionStart
+									}
+									onCompositionEndCapture={
+										readOnly ? undefined : handleWikiLinkCompositionEnd
+									}
+								>
+									{/*
+									 * min-h-full + generous bottom padding so the last line is easy
+									 * to click and Enter can always create a new block below it
+									 * (matches Plate default variant pb-72).
+									 */}
+									<Editor
+										variant="none"
+										placeholder={placeholder}
+										readOnly={readOnly}
+										className="min-h-full px-6 pt-4 pb-48"
+										style={fontSize ? { fontSize } : undefined}
+									/>
+									{!readOnly ? (
+										<WikiLinkSuggestion
+											draft={wikiCompletionDraft}
+											onClose={() => setWikiCompletionDraft(null)}
+											onContinue={(raw) =>
+												setWikiCompletionDraft((current) =>
+													current ? { ...current, raw } : current,
+												)
+											}
+											controllerRef={completionControllerRef}
+										/>
+									) : null}
+								</EditorContainer>
+							</ContextMenuTrigger>
+							<ContextMenuContent>
+								<ContextMenuItem
+									disabled={!headingContext}
+									onSelect={() => {
+										if (headingContext) setHeadingRenameOpen(true);
+									}}
+								>
+									{i18n.t("editor:headingRename.menu")}
+								</ContextMenuItem>
+							</ContextMenuContent>
+						</ContextMenu>
+						<HeadingRenameDialog
+							open={headingRenameOpen}
+							heading={headingContext}
+							busy={headingRenameBusy}
+							onOpenChange={setHeadingRenameOpen}
+							onConfirm={confirmHeadingRename}
+						/>
 					</div>
 				</Plate>
 			</MarkdownDocProvider>

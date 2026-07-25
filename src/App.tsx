@@ -187,14 +187,20 @@ import {
 	normalizeVaultRel,
 	previewExternalRenameRepair,
 	rebuildWikiIndex,
+	renameWikiHeading,
 	toVaultRelative,
 	type WikiExternalRenamePreview,
 	type WikiNavTarget,
+	type WikiRenameHeadingRequest,
 	type WikiRenameResult,
 	wikiRenameFailure,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
 import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
+import {
+	wikiHeadingRenameAffectedPaths,
+	wikiHeadingRenameErrorKey,
+} from "@/lib/wiki-heading-rename";
 import {
 	basenameOf,
 	createNotesSplitPane,
@@ -2002,6 +2008,49 @@ export default function App() {
 		return [...dirty];
 	}, []);
 
+	const handleRenameWikiHeading = useCallback(
+		async (
+			absPath: string,
+			request: Omit<WikiRenameHeadingRequest, "path">,
+		) => {
+			const root = vaultPathRef.current;
+			const path = root ? vaultRelativePath(root, absPath) : null;
+			if (!root || !path || isRemoteVaultHandle(root)) {
+				const error = new Error(t("editor:headingRename.errors.localOnly"));
+				notifyError(error.message);
+				throw error;
+			}
+			const pendingPaths = [absPath];
+			trackInternalRenamePaths(pendingPaths, Number.POSITIVE_INFINITY);
+			try {
+				const result = await renameWikiHeading(
+					root,
+					{ path, ...request },
+					dirtyVaultPaths(root),
+				);
+				const affectedRelative = wikiHeadingRenameAffectedPaths(result);
+				const affectedAbsolute = affectedRelative.map((source) =>
+					joinVaultPath(root, source),
+				);
+				trackInternalRenamePaths(affectedAbsolute, Date.now() + 2000);
+				await Promise.all(affectedAbsolute.map(applyDiskChange));
+				setWikiIndexRevision((revision) => revision + 1);
+				notifyWikiEmbedTargets(affectedAbsolute);
+				notifySuccess(
+					t("editor:headingRename.success", {
+						count: result.updatedSources.length,
+					}),
+				);
+			} catch (error) {
+				trackInternalRenamePaths(pendingPaths, Date.now() + 2000);
+				const key = wikiHeadingRenameErrorKey(error);
+				notifyError(t(`editor:headingRename.errors.${key}`));
+				throw error;
+			}
+		},
+		[applyDiskChange, dirtyVaultPaths, t, trackInternalRenamePaths],
+	);
+
 	/** Preserve mounted workspace state when a filesystem path changes identity. */
 	const remapMovedWorkspacePaths = useCallback(
 		(fromAbs: string, toAbs: string, fromRel: string, toRel: string) => {
@@ -3145,6 +3194,10 @@ export default function App() {
 				onPersistFile: persistFile,
 				onAssetsChanged: handleEditorAssetsChanged,
 				onTabPatch: updateTab,
+				onRenameHeading:
+					vaultPath && !isRemoteVaultHandle(vaultPath)
+						? handleRenameWikiHeading
+						: undefined,
 			},
 			pdf: {
 				zen: pdfZenMode,
@@ -3177,6 +3230,7 @@ export default function App() {
 			persistFile,
 			handleEditorAssetsChanged,
 			updateTab,
+			handleRenameWikiHeading,
 			pdfZenMode,
 			togglePdfZen,
 			openAnnotationsTab,
