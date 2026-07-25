@@ -4,7 +4,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import i18n from "@/i18n";
 import { logger } from "@/lib/core/logger";
 import { isTauri } from "@/lib/core/tauri";
@@ -150,23 +150,17 @@ const MAX_HISTORY = 12;
 
 function schedulePrune(id: string) {
 	window.setTimeout(() => {
-		const tasks = store.tasks.filter((t) => t.id !== id);
-		if (tasks.length !== store.tasks.length) {
-			setStore({ ...store, tasks });
-		}
-		// Collapse when nothing left
-		if (
-			tasks.every((t) =>
-				["completed", "failed", "cancelled"].includes(t.status),
-			) ||
-			tasks.length === 0
-		) {
-			const stillActive = tasks.some(
+		const snapshot = getBackgroundTasksSnapshot();
+		const tasks = snapshot.tasks.filter((t) => t.id !== id);
+		if (tasks.length !== snapshot.tasks.length) {
+			const active = tasks.some(
 				(t) => t.status === "queued" || t.status === "running",
 			);
-			if (!stillActive && tasks.length === 0) {
-				setStore({ ...store, tasks: [], expanded: false });
-			}
+			setStore({
+				...snapshot,
+				tasks,
+				expanded: active ? snapshot.expanded : false,
+			});
 		}
 	}, COMPLETED_TTL_MS);
 }
@@ -261,6 +255,57 @@ type BackgroundTaskFn<T> = (ctx: {
 	setDetail: (d: string) => void;
 }) => Promise<T>;
 
+function isTaskCancelled(id: string, signal: AbortSignal): boolean {
+	return (
+		signal.aborted ||
+		getBackgroundTasksSnapshot().tasks.find((t) => t.id === id)?.status ===
+			"cancelled"
+	);
+}
+
+function throwIfTaskCancelled(id: string, signal: AbortSignal): void {
+	if (isTaskCancelled(id, signal)) {
+		throw new BackgroundTaskCancelledError();
+	}
+}
+
+async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
+	if (!isTauri()) return null;
+	return listen<BackgroundTaskProgressEvent>(
+		"background-task:progress",
+		(event) => {
+			if (event.payload.taskId !== id) return;
+			const { downloadedBytes, totalBytes, currentCount, totalCount } =
+				event.payload;
+			if (currentCount != null && totalCount != null) {
+				updateBackgroundTask(id, {
+					progress: event.payload.progress,
+					detail: i18n.t("app:tasks.batchProgress", {
+						phase: phaseLabel(event.payload.phase),
+						current: currentCount,
+						total: totalCount,
+					}),
+				});
+				return;
+			}
+			updateBackgroundTask(id, {
+				progress: event.payload.progress,
+				detail:
+					totalBytes == null
+						? i18n.t("app:tasks.downloadBytesUnknown", {
+								phase: phaseLabel(event.payload.phase),
+								downloaded: formatBytes(downloadedBytes),
+							})
+						: i18n.t("app:tasks.downloadBytes", {
+								phase: phaseLabel(event.payload.phase),
+								downloaded: formatBytes(downloadedBytes),
+								total: formatBytes(totalBytes),
+							}),
+			});
+		},
+	);
+}
+
 class Semaphore {
 	private running = 0;
 	private queue: Array<() => void> = [];
@@ -320,60 +365,16 @@ export async function runQueuedBackgroundTask<T>(
 	});
 	const controller = new AbortController();
 	controllers.set(id, controller);
-	const unlisten = isTauri()
-		? await listen<BackgroundTaskProgressEvent>(
-				"background-task:progress",
-				(event) => {
-					if (event.payload.taskId !== id) return;
-					const { downloadedBytes, totalBytes, currentCount, totalCount } =
-						event.payload;
-					if (currentCount != null && totalCount != null) {
-						updateBackgroundTask(id, {
-							progress: event.payload.progress,
-							detail: i18n.t("app:tasks.batchProgress", {
-								phase: phaseLabel(event.payload.phase),
-								current: currentCount,
-								total: totalCount,
-							}),
-						});
-						return;
-					}
-					updateBackgroundTask(id, {
-						progress: event.payload.progress,
-						detail:
-							totalBytes == null
-								? i18n.t("app:tasks.downloadBytesUnknown", {
-										phase: phaseLabel(event.payload.phase),
-										downloaded: formatBytes(downloadedBytes),
-									})
-								: i18n.t("app:tasks.downloadBytes", {
-										phase: phaseLabel(event.payload.phase),
-										downloaded: formatBytes(downloadedBytes),
-										total: formatBytes(totalBytes),
-									}),
-					});
-				},
-			)
-		: null;
+	const unlisten = await attachProgressListener(id);
 	logger.info(
 		`op enqueue background_task kind=${input.kind} task_id=${id} title=${input.title}`,
 	);
 	let acquired = false;
 	try {
-		if (
-			controller.signal.aborted ||
-			store.tasks.find((t) => t.id === id)?.status === "cancelled"
-		) {
-			throw new BackgroundTaskCancelledError();
-		}
+		throwIfTaskCancelled(id, controller.signal);
 		await getSemaphore(input.kind, concurrency).acquire();
 		acquired = true;
-		if (
-			controller.signal.aborted ||
-			store.tasks.find((t) => t.id === id)?.status === "cancelled"
-		) {
-			throw new BackgroundTaskCancelledError();
-		}
+		throwIfTaskCancelled(id, controller.signal);
 		updateBackgroundTask(id, { status: "running" });
 		const result = await fn({
 			id,
@@ -381,17 +382,18 @@ export async function runQueuedBackgroundTask<T>(
 			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
 			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
 		});
-		if (
-			controller.signal.aborted ||
-			store.tasks.find((t) => t.id === id)?.status === "cancelled"
-		) {
-			throw new BackgroundTaskCancelledError();
-		}
+		throwIfTaskCancelled(id, controller.signal);
 		completeBackgroundTask(id);
 		return result;
 	} catch (e) {
-		if (controller.signal.aborted || isBackgroundTaskCancelledError(e)) {
-			if (store.tasks.find((t) => t.id === id)?.status !== "cancelled") {
+		if (
+			isTaskCancelled(id, controller.signal) ||
+			isBackgroundTaskCancelledError(e)
+		) {
+			if (
+				getBackgroundTasksSnapshot().tasks.find((t) => t.id === id)?.status !==
+				"cancelled"
+			) {
 				cancelBackgroundTask(id);
 			}
 			throw new BackgroundTaskCancelledError();
@@ -455,41 +457,7 @@ export async function runBackgroundTask<T>(
 	const controller = new AbortController();
 	controllers.set(id, controller);
 	const start = performance.now();
-	const unlisten = isTauri()
-		? await listen<BackgroundTaskProgressEvent>(
-				"background-task:progress",
-				(event) => {
-					if (event.payload.taskId !== id) return;
-					const { downloadedBytes, totalBytes, currentCount, totalCount } =
-						event.payload;
-					if (currentCount != null && totalCount != null) {
-						updateBackgroundTask(id, {
-							progress: event.payload.progress,
-							detail: i18n.t("app:tasks.batchProgress", {
-								phase: phaseLabel(event.payload.phase),
-								current: currentCount,
-								total: totalCount,
-							}),
-						});
-						return;
-					}
-					updateBackgroundTask(id, {
-						progress: event.payload.progress,
-						detail:
-							totalBytes == null
-								? i18n.t("app:tasks.downloadBytesUnknown", {
-										phase: phaseLabel(event.payload.phase),
-										downloaded: formatBytes(downloadedBytes),
-									})
-								: i18n.t("app:tasks.downloadBytes", {
-										phase: phaseLabel(event.payload.phase),
-										downloaded: formatBytes(downloadedBytes),
-										total: formatBytes(totalBytes),
-									}),
-					});
-				},
-			)
-		: null;
+	const unlisten = await attachProgressListener(id);
 	logger.info(
 		`op start background_task kind=${input.kind} task_id=${id} title=${input.title}`,
 	);
@@ -500,12 +468,7 @@ export async function runBackgroundTask<T>(
 			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
 			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
 		});
-		if (
-			controller.signal.aborted ||
-			store.tasks.find((t) => t.id === id)?.status === "cancelled"
-		) {
-			throw new BackgroundTaskCancelledError();
-		}
+		throwIfTaskCancelled(id, controller.signal);
 		completeBackgroundTask(id);
 		const ms = Math.round(performance.now() - start);
 		logger.info(
@@ -513,8 +476,14 @@ export async function runBackgroundTask<T>(
 		);
 		return result;
 	} catch (e) {
-		if (controller.signal.aborted || isBackgroundTaskCancelledError(e)) {
-			if (store.tasks.find((t) => t.id === id)?.status !== "cancelled") {
+		if (
+			isTaskCancelled(id, controller.signal) ||
+			isBackgroundTaskCancelledError(e)
+		) {
+			if (
+				getBackgroundTasksSnapshot().tasks.find((t) => t.id === id)?.status !==
+				"cancelled"
+			) {
 				cancelBackgroundTask(id);
 			}
 			throw new BackgroundTaskCancelledError();
