@@ -86,13 +86,19 @@ jobs:
 
       # macOS: Developer ID signing + notarytool (see docs/development/macos-signing.md).
       # Without APPLE_CERTIFICATE the build still runs unsigned (existing behavior).
+      # Do NOT pass empty APPLE_TEAM_ID/APPLE_ID via the build env — empty strings make
+      # Tauri/notarytool fail with "Team ID must be at least 3 characters".
       - name: Prepare macOS signing and notarization
         if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           if [[ -z "${APPLE_CERTIFICATE:-}" ]]; then
@@ -112,13 +118,32 @@ jobs:
             chmod 600 "$KEY_PATH"
             echo "APPLE_API_KEY_PATH=${KEY_PATH}" >> "$GITHUB_ENV"
             echo "App Store Connect API key written for notarytool"
+            if [[ -n "${APPLE_API_ISSUER:-}" && ! "$APPLE_API_ISSUER" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+              echo "::warning::APPLE_API_ISSUER does not look like a UUID; Team API keys require Issuer ID format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            fi
           else
-            # APPLE_ID fallback is read by Tauri from env on the build step; detect here without echoing values
             if [[ -n "${APPLE_ID:-}" ]]; then
-              echo "Notarization will use APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID (build step)"
+              echo "APPLE_ID=${APPLE_ID}" >> "$GITHUB_ENV"
+              echo "Notarization will use APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID"
             else
               echo "::warning::No notarization credentials (APPLE_API_KEY_P8 or APPLE_ID); signed app may not be notarized"
             fi
+          fi
+
+          # Only export Apple ID password / team id when non-empty (empty breaks notarytool).
+          if [[ -n "${APPLE_PASSWORD:-}" ]]; then
+            echo "APPLE_PASSWORD=${APPLE_PASSWORD}" >> "$GITHUB_ENV"
+          fi
+          TEAM="${APPLE_TEAM_ID:-}"
+          if [[ -z "$TEAM" && -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            # "Developer ID Application: Name (TEAMID)" → TEAMID
+            if [[ "$APPLE_SIGNING_IDENTITY" =~ \(([A-Z0-9]{10})\)$ ]]; then
+              TEAM="${BASH_REMATCH[1]}"
+              echo "Derived APPLE_TEAM_ID from APPLE_SIGNING_IDENTITY"
+            fi
+          fi
+          if [[ -n "$TEAM" && ${#TEAM} -ge 3 ]]; then
+            echo "APPLE_TEAM_ID=${TEAM}" >> "$GITHUB_ENV"
           fi
 
       - name: Build Tauri installers
@@ -134,11 +159,8 @@ jobs:
           # Preferred notarization auth (App Store Connect API key)
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          # APPLE_API_KEY_PATH set by the prepare step when present
-          # Fallback: Apple ID + app-specific password
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # APPLE_API_KEY_PATH, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID come from
+          # the prepare step via GITHUB_ENV only when non-empty.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Agentero ${{ github.ref_name }}
