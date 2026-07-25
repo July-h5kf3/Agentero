@@ -11,12 +11,14 @@ import {
 import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,
+	findWikiCompletionTrigger,
 	isPlainWikiLinkArrowKey,
 	isWikiCompletionSubmitKey,
 	narrowExactWikiFileCandidates,
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionInsert,
+	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
 
 describe("wikilink completion grammar", () => {
@@ -202,6 +204,34 @@ describe("wikilink completion grammar", () => {
 		});
 	});
 
+	it("preserves an embed token while its content is projected read-only", () => {
+		const raw = wikiLinkToMarkdown({
+			value: "notes/Canonical",
+			heading: "Overview",
+			embed: true,
+		});
+		expect(raw).toBe("![[notes/Canonical#Overview]]");
+		expect(parseWikiLinkMarkdown(raw)).toMatchObject({
+			type: "wikiLink",
+			value: "notes/Canonical",
+			heading: "Overview",
+			embed: true,
+		});
+		expect(
+			wikiLinkRules.wikiLink.serialize({
+				type: "wikiLink",
+				value: "notes/Canonical",
+				heading: "Overview",
+				embed: true,
+				children: [{ text: "" }],
+			}),
+		).toEqual({
+			type: "embed",
+			value: "notes/Canonical#Overview",
+			data: {},
+		});
+	});
+
 	it("preserves an escaped pipe in an editable alias", () => {
 		const raw = wikiLinkToMarkdown({
 			value: "notes/Canonical",
@@ -245,6 +275,10 @@ describe("wikilink completion grammar", () => {
 
 		expect(isPlainWikiLinkArrowKey(arrow("ArrowLeft"))).toBe(true);
 		expect(isPlainWikiLinkArrowKey(arrow("ArrowRight"))).toBe(true);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowUp"))).toBe(true);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowDown"))).toBe(true);
+		expect(wikiLinkArrowDirection(arrow("ArrowUp"))).toBe("backward");
+		expect(wikiLinkArrowDirection(arrow("ArrowDown"))).toBe("forward");
 		expect(
 			isPlainWikiLinkArrowKey(
 				arrow("ArrowLeft", { metaKey: true, shiftKey: true }),
@@ -257,6 +291,9 @@ describe("wikilink completion grammar", () => {
 			false,
 		);
 		expect(isPlainWikiLinkArrowKey(arrow("ArrowLeft", { ctrlKey: true }))).toBe(
+			false,
+		);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowUp", { shiftKey: true }))).toBe(
 			false,
 		);
 		expect(isPlainWikiLinkArrowKey(arrow("Enter"))).toBe(false);
@@ -278,6 +315,99 @@ describe("wikilink completion grammar", () => {
 			end: 12,
 			raw: "PAL|name",
 		});
+	});
+
+	it("treats the bang as part of an embed completion token", () => {
+		expect(findWikiCompletionTrigger("before ![[Target#", 17)).toEqual({
+			start: 7,
+			raw: "Target#",
+			embed: true,
+		});
+		expect(findWikiCompletionMatch("![[Target]]", 9, "Target", true)).toEqual({
+			start: 0,
+			end: 11,
+			raw: "Target",
+		});
+		expect(findWikiCompletionMatch("![[Target]]", 9, "Target")).toBeNull();
+	});
+
+	it("creates an embed node for Enter and preserves embed syntax for Tab", () => {
+		const completion = wikiCompletionInsert(
+			{
+				kind: "heading",
+				path: "notes/Target.md",
+				insertText: "notes/Target#Overview",
+				label: "Overview",
+				fragment: { kind: "heading", path: ["Overview"] },
+			},
+			{ kind: "heading", target: "Target", query: "" },
+		);
+		const markdown = wikiLinkToMarkdown({
+			value: completion.target,
+			heading: completion.heading,
+			embed: true,
+		});
+		expect(markdown).toBe("![[Target#Overview]]");
+		expect(parseWikiLinkMarkdown(markdown)).toMatchObject({
+			type: "wikiLink",
+			value: "Target",
+			heading: "Overview",
+			embed: true,
+		});
+		const bounds = wikiLinkDraftEditableBounds(markdown);
+		expect(markdown.slice(bounds.start, bounds.end)).toBe("Target#Overview");
+	});
+
+	it("replaces the complete embed draft without leaving a detached bang", () => {
+		const initial = "![[Target";
+		const editor = createSlateEditor({
+			plugins: [WikiLinkPlugin],
+			value: [{ type: "p", children: [{ text: initial }] }],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: initial.length },
+			focus: { path: [0, 0], offset: initial.length },
+		});
+		const trigger = findWikiCompletionTrigger(initial, initial.length);
+		expect(trigger?.embed).toBe(true);
+		const match = findWikiCompletionMatch(
+			initial,
+			initial.length,
+			trigger?.raw ?? "",
+			trigger?.embed,
+		);
+		expect(match).toEqual({
+			start: 0,
+			end: initial.length,
+			raw: "Target",
+		});
+		if (!match) throw new Error("expected an embed completion match");
+		const parsed = parseWikiLinkMarkdown("![[Target]]");
+		if (!parsed) throw new Error("expected a parsed embed");
+		editor.tf.delete({
+			at: {
+				anchor: { path: [0, 0], offset: match.start },
+				focus: { path: [0, 0], offset: match.end },
+			},
+		});
+		editor.tf.insertNodes([parsed, { text: "" }]);
+		expect(editor.children).toEqual([
+			{
+				type: "p",
+				children: [
+					{ text: "" },
+					{
+						type: "wikiLink",
+						value: "Target",
+						heading: undefined,
+						alias: null,
+						embed: true,
+						children: [{ text: "" }],
+					},
+					{ text: "" },
+				],
+			},
+		]);
 	});
 
 	it("does not leave closing brackets after confirming a heading draft", () => {

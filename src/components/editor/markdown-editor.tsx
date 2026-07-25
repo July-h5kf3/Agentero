@@ -40,7 +40,10 @@ import {
 import { errorMessage, notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { LinkFragment } from "@/lib/wiki";
-import { isPlainWikiLinkArrowKey } from "@/lib/wiki-completion";
+import {
+	findWikiCompletionTrigger,
+	wikiLinkArrowDirection,
+} from "@/lib/wiki-completion";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -231,13 +234,11 @@ export function MarkdownEditor({
 			setWikiCompletionDraft(null);
 			return;
 		}
-		const textBeforeCursor = (leaf as { text: string }).text.slice(
-			0,
+		const trigger = findWikiCompletionTrigger(
+			(leaf as { text: string }).text,
 			slateSelection.anchor.offset,
 		);
-		const triggerIndex = textBeforeCursor.lastIndexOf("[[");
-		const raw = textBeforeCursor.slice(triggerIndex + 2);
-		if (triggerIndex < 0 || /[\]\n]/.test(raw)) {
+		if (!trigger) {
 			setWikiCompletionDraft(null);
 			return;
 		}
@@ -248,7 +249,8 @@ export function MarkdownEditor({
 		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
 		const bounds = container.getBoundingClientRect();
 		setWikiCompletionDraft({
-			raw,
+			raw: trigger.raw,
+			embed: trigger.embed,
 			left: Math.max(8, cursor.left - bounds.left),
 			top: cursor.bottom - bounds.top + container.scrollTop + 4,
 		});
@@ -443,7 +445,8 @@ export function MarkdownEditor({
 
 	const handleWikiLinkArrow = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
-			if (!isPlainWikiLinkArrowKey(event)) return false;
+			const direction = wikiLinkArrowDirection(event);
+			if (!direction) return false;
 			const selection = editor.selection;
 			if (
 				!selection ||
@@ -480,19 +483,21 @@ export function MarkdownEditor({
 			];
 			const index = leafPath[leafPath.length - 1];
 			const adjacentIndex =
-				event.key === "ArrowLeft" && selection.anchor.offset === 0
+				direction === "backward" && selection.anchor.offset === 0
 					? index - 1
-					: event.key === "ArrowRight" &&
+					: direction === "forward" &&
 							selection.anchor.offset === leaf.text.length
 						? index + 1
 						: -1;
 			const adjacent = parent.children?.[adjacentIndex];
 			if (adjacentIndex < 0 || !isWikiLinkNode(adjacent)) return false;
+			const isVertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+			if (isVertical && !adjacent.embed) return false;
 			const raw = wikiLinkToMarkdown(adjacent);
 			const { start, end } = wikiLinkDraftEditableBounds(raw);
 			const expanded = expandWikiLinkAt(
 				[...parentPath, adjacentIndex],
-				event.key === "ArrowLeft" ? end : start,
+				direction === "backward" ? end : start,
 			);
 			if (expanded) event.preventDefault();
 			return expanded;

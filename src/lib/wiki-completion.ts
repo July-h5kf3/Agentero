@@ -57,6 +57,12 @@ export type WikiCompletionMatch = {
 	raw: string;
 };
 
+export type WikiCompletionTrigger = {
+	start: number;
+	raw: string;
+	embed: boolean;
+};
+
 type WikiArrowKeyEvent = {
 	key: string;
 	altKey: boolean;
@@ -65,23 +71,54 @@ type WikiArrowKeyEvent = {
 	shiftKey: boolean;
 };
 
+export type WikiLinkArrowDirection = "backward" | "forward";
+
 /** Completion accepts the same primary action from keyboard-only workflows. */
 export function isWikiCompletionSubmitKey(key: string): key is "Enter" | "Tab" {
 	return key === "Enter" || key === "Tab";
 }
 
 /**
- * Link-boundary projection is a plain-caret behavior. Modified arrows belong
- * to the editor/OS selection and word/line navigation commands.
+ * Resolve a plain arrow into the source-entry direction. Vertical arrows use
+ * the same boundary semantics as horizontal arrows for block-like embeds.
+ * Modified arrows remain native editor/OS selection and navigation commands.
  */
+export function wikiLinkArrowDirection(
+	event: WikiArrowKeyEvent,
+): WikiLinkArrowDirection | null {
+	if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+		return null;
+	}
+	if (event.key === "ArrowLeft" || event.key === "ArrowUp") return "backward";
+	if (event.key === "ArrowRight" || event.key === "ArrowDown") return "forward";
+	return null;
+}
+
 export function isPlainWikiLinkArrowKey(event: WikiArrowKeyEvent): boolean {
-	return (
-		(event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-		!event.altKey &&
-		!event.ctrlKey &&
-		!event.metaKey &&
-		!event.shiftKey
-	);
+	return wikiLinkArrowDirection(event) !== null;
+}
+
+/**
+ * Locate the active `[[` / `![[` token ending at the caret. The returned start
+ * owns the complete syntax prefix, including `!` for an embed, so completion
+ * never leaves a detached bang in the document.
+ */
+export function findWikiCompletionTrigger(
+	text: string,
+	cursorOffset: number,
+): WikiCompletionTrigger | null {
+	if (cursorOffset < 0 || cursorOffset > text.length) return null;
+	const before = text.slice(0, cursorOffset);
+	const bracketsStart = before.lastIndexOf("[[");
+	if (bracketsStart < 0) return null;
+	const raw = before.slice(bracketsStart + 2);
+	if (/[\]\n]/.test(raw)) return null;
+	const embed = bracketsStart > 0 && before[bracketsStart - 1] === "!";
+	return {
+		start: embed ? bracketsStart - 1 : bracketsStart,
+		raw,
+		embed,
+	};
 }
 
 /**
@@ -93,17 +130,20 @@ export function findWikiCompletionMatch(
 	text: string,
 	cursorOffset: number,
 	expectedRaw: string,
+	expectedEmbed = false,
 ): WikiCompletionMatch | null {
-	if (cursorOffset < 0 || cursorOffset > text.length) return null;
-	const before = text.slice(0, cursorOffset);
-	const start = before.lastIndexOf("[[");
-	if (start < 0) return null;
-	const raw = before.slice(start + 2);
-	if (raw !== expectedRaw || /[\]\n]/.test(raw)) return null;
+	const trigger = findWikiCompletionTrigger(text, cursorOffset);
+	if (
+		!trigger ||
+		trigger.raw !== expectedRaw ||
+		trigger.embed !== expectedEmbed
+	) {
+		return null;
+	}
 	const end = text.startsWith("]]", cursorOffset)
 		? cursorOffset + 2
 		: cursorOffset;
-	return { start, end, raw };
+	return { start: trigger.start, end, raw: trigger.raw };
 }
 
 /** Convert a canonical Host candidate into the persisted `wikiLink` node data. */

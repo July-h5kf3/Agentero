@@ -8,6 +8,8 @@ export type WikiNavContextValue = {
 	vaultPath?: string | null;
 	/** Vault-relative Markdown paths, used to resolve `[[wikilink]]` targets. */
 	mdFiles?: string[];
+	/** Bumped after the rebuildable Wiki index refreshes. */
+	revision?: number;
 };
 
 export const WikiNavContext = createContext<WikiNavContextValue | null>(null);

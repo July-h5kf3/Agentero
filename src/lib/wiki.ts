@@ -36,6 +36,12 @@ export type ResolvedLink = {
 	candidates?: string[];
 };
 
+export type WikiEmbedResponse = {
+	link: ResolvedLink;
+	contentKind?: "markdown" | "unsupported";
+	content?: string;
+};
+
 export type Backlink = ResolvedLink;
 
 export type BacklinksResponse = {
@@ -806,6 +812,18 @@ export async function resolveWikiReference(
 		syntax,
 	});
 	return response.link;
+}
+
+export async function readWikiEmbed(
+	vaultPath: string | null,
+	sourcePath: string,
+	linkText: string,
+): Promise<WikiEmbedResponse> {
+	return invokeApi<WikiEmbedResponse>("wiki_embed_read", {
+		vaultPath,
+		sourcePath,
+		linkText,
+	});
 }
 
 export async function searchWikiLinks(

@@ -2,9 +2,11 @@
 
 use crate::models::wiki::{
     BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkSyntax,
-    LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument, WikiLinkEdge,
-    WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
+    LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument,
+    WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse,
+    WikiSearchCandidate, WikiSearchCandidateKind,
 };
+use crate::services::wiki::embed::project_markdown;
 use crate::services::wiki::extract::extract_document;
 use crate::services::wiki::resolve::{normalize_rel, resolve_occurrence};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -268,6 +270,58 @@ impl WikiIndex {
         WikiResolveResponse {
             link: resolve_occurrence(occurrence, &self.documents),
         }
+    }
+
+    pub fn read_embed(
+        &self,
+        vault_root: &str,
+        source_path: &str,
+        text: &str,
+    ) -> Result<WikiEmbedResponse, String> {
+        let mut link = self
+            .resolve_text(vault_root, source_path, text, InternalLinkSyntax::Wikilink)
+            .link;
+        link.occurrence.embed = true;
+
+        if !matches!(
+            link.status,
+            crate::models::wiki::LinkResolutionStatus::Resolved
+        ) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: None,
+                content: None,
+            });
+        }
+
+        let Some(target_path) = link.target_path.as_deref() else {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: None,
+                content: None,
+            });
+        };
+        let target = Path::new(vault_root).join(target_path);
+        if !is_markdown(&target) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Unsupported),
+                content: None,
+            });
+        }
+        let markdown = fs::read_to_string(&target)
+            .map_err(|error| format!("read embedded Markdown {target_path}: {error}"))?;
+        let (document, _) = extract_document(target_path, &markdown);
+        let content = project_markdown(&markdown, &document, link.occurrence.fragment.as_ref());
+        if content.is_none() {
+            link.status = crate::models::wiki::LinkResolutionStatus::InvalidFragment;
+        }
+
+        Ok(WikiEmbedResponse {
+            link,
+            content_kind: content.as_ref().map(|_| WikiEmbedContentKind::Markdown),
+            content,
+        })
     }
 
     pub fn search(&self, query: &str) -> Vec<WikiSearchCandidate> {
@@ -756,6 +810,52 @@ impl Default for WikiIndexState {
 mod tests {
     use super::*;
     use crate::models::wiki::{BlockAnchor, HeadingAnchor};
+    use uuid::Uuid;
+
+    fn test_vault() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("agentero-wiki-embed-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("notes")).expect("create embed fixture vault");
+        root
+    }
+
+    #[test]
+    fn reads_resolved_heading_and_block_embed_projections() {
+        let root = test_vault();
+        fs::write(
+            root.join("notes/Target.md"),
+            "# Root\nintro\n## Child\nchild\nBlock text ^focus\n## Sibling\nend\n",
+        )
+        .expect("write target");
+        fs::write(root.join("notes/Source.md"), "![[Target#Child]]").expect("write source");
+
+        let mut index = WikiIndex::default();
+        index
+            .rebuild(root.to_str().expect("utf-8 fixture path"))
+            .expect("rebuild index");
+        let heading = index
+            .read_embed(
+                root.to_str().expect("utf-8 fixture path"),
+                "notes/Source.md",
+                "Target#Child",
+            )
+            .expect("read heading embed");
+        assert_eq!(
+            heading.content.as_deref(),
+            Some("## Child\nchild\nBlock text ^focus\n")
+        );
+        assert!(heading.link.occurrence.embed);
+
+        let block = index
+            .read_embed(
+                root.to_str().expect("utf-8 fixture path"),
+                "notes/Source.md",
+                "Target#^focus",
+            )
+            .expect("read block embed");
+        assert_eq!(block.content.as_deref(), Some("Block text ^focus\n"));
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
 
     #[test]
     fn search_keeps_alias_display_separate_from_canonical_target() {

@@ -1,8 +1,8 @@
 //! Resolve parsed local-link occurrences against a rebuildable Vault document index.
 
 use crate::models::wiki::{
-    InternalLinkOccurrence, InternalLinkSyntax, LinkFragment, LinkResolutionStatus, ResolvedLink,
-    WikiDocument,
+    BlockAnchor, HeadingAnchor, InternalLinkOccurrence, InternalLinkSyntax, LinkFragment,
+    LinkResolutionStatus, ResolvedLink, WikiDocument,
 };
 use std::path::Path;
 
@@ -166,7 +166,28 @@ fn resolve_document(
     unique(alias_hits)
 }
 
-fn fragment_candidates(document: &WikiDocument, fragment: &LinkFragment) -> Vec<String> {
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FragmentAnchor<'a> {
+    Heading(&'a HeadingAnchor),
+    Block(&'a BlockAnchor),
+}
+
+impl FragmentAnchor<'_> {
+    fn label(self) -> String {
+        match self {
+            Self::Heading(heading) => heading.path.join("#"),
+            Self::Block(block) => block.id.clone(),
+        }
+    }
+}
+
+/// Return the exact anchors that satisfy one fragment using the same matching
+/// rules as navigation. Embed projection consumes this instead of maintaining a
+/// second heading/block resolver.
+pub(crate) fn fragment_anchors<'a>(
+    document: &'a WikiDocument,
+    fragment: &LinkFragment,
+) -> Vec<FragmentAnchor<'a>> {
     match fragment {
         LinkFragment::Heading { path } => {
             let wanted = path
@@ -188,7 +209,7 @@ fn fragment_candidates(document: &WikiDocument, fragment: &LinkFragment) -> Vec<
                         current == wanted
                     }
                 })
-                .map(|heading| heading.path.join("#"))
+                .map(FragmentAnchor::Heading)
                 .collect()
         }
         LinkFragment::Block { id } if crate::services::wiki::extract::is_valid_block_id(id) => {
@@ -196,7 +217,7 @@ fn fragment_candidates(document: &WikiDocument, fragment: &LinkFragment) -> Vec<
                 .blocks
                 .iter()
                 .filter(|block| block.id == *id)
-                .map(|block| block.id.clone())
+                .map(FragmentAnchor::Block)
                 .collect()
         }
         LinkFragment::Block { .. } => Vec::new(),
@@ -231,8 +252,13 @@ pub fn resolve_occurrence(
 
     if let Some(fragment) = &occurrence.fragment {
         let document = documents.iter().find(|document| document.path == path);
-        let candidates = document
-            .map(|document| fragment_candidates(document, fragment))
+        let candidates: Vec<String> = document
+            .map(|document| {
+                fragment_anchors(document, fragment)
+                    .into_iter()
+                    .map(FragmentAnchor::label)
+                    .collect()
+            })
             .unwrap_or_default();
         return match candidates.len() {
             1 => ResolvedLink {

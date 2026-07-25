@@ -123,6 +123,27 @@ pub struct WikiResolveResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub enum WikiEmbedContentKind {
+    Markdown,
+    Unsupported,
+}
+
+/// Read-only source projection for one resolved `![[...]]` reference.
+///
+/// `link` always carries the canonical resolution status. Content is present
+/// only when that status is resolved and the target kind is supported.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiEmbedResponse {
+    pub link: ResolvedLink,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_kind: Option<WikiEmbedContentKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum WikiSearchCandidateKind {
     File,
     Heading,

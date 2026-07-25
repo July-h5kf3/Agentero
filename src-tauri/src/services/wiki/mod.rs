@@ -1,3 +1,4 @@
+pub mod embed;
 pub mod extract;
 pub mod index;
 pub mod rename;

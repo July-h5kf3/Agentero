@@ -24,6 +24,17 @@
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
 	},
+	"embed": {
+		"loading": "正在加载嵌入内容…",
+		"missing": "找不到嵌入的笔记。",
+		"ambiguous": "嵌入目标存在歧义，请使用 Vault 相对路径。",
+		"invalidFragment": "找不到嵌入的标题或文本块。",
+		"cycle": "该嵌入会重复当前嵌入链中已有的内容。",
+		"depth": "已达到嵌入层级上限，后续内容已隐藏。",
+		"unsupported": "该嵌入类型会保留为 Markdown，但暂不渲染。",
+		"error": "无法加载嵌入内容。",
+		"openSource": "打开 {{target}}"
+	},
 	"wikiCompletion": {
 		"label": "双链候选",
 		"loading": "正在搜索双链…",

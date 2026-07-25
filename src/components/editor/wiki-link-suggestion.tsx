@@ -18,6 +18,8 @@ import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import {
 	isWikiLinkDraftText,
+	parseWikiLinkMarkdown,
+	wikiLinkDraftEditableBounds,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
 import {
@@ -39,6 +41,7 @@ import { useWikiNav } from "@/lib/wiki-nav-context";
 
 export type WikiCompletionDraft = {
 	raw: string;
+	embed: boolean;
 	left: number;
 	top: number;
 };
@@ -249,6 +252,7 @@ export function WikiLinkSuggestion({
 				(leaf as { text: string }).text,
 				selection.anchor.offset,
 				draft.raw,
+				draft.embed,
 			);
 			if (!match) return false;
 			const start = {
@@ -260,6 +264,15 @@ export function WikiLinkSuggestion({
 				offset: match.end,
 			};
 			const insert = wikiCompletionInsert(candidate, request);
+			const markdown = wikiLinkToMarkdown({
+				value: insert.target,
+				heading: insert.heading,
+				alias: insert.alias,
+				embed: draft.embed,
+			});
+			const link =
+				submitKey === "Enter" ? parseWikiLinkMarkdown(markdown) : null;
+			if (submitKey === "Enter" && !link) return false;
 			controllerRef.current = null;
 			editor.tf.delete({ at: { anchor: start, focus: end } });
 			const remainder = editor.api.node(start.path);
@@ -267,14 +280,10 @@ export function WikiLinkSuggestion({
 				editor.tf.unsetNodes("wikiLinkDraft", { at: remainder[1] });
 			}
 			if (submitKey === "Tab") {
-				const raw = wikiLinkToMarkdown({
-					value: insert.target,
-					heading: insert.heading,
-					alias: insert.alias,
-				});
-				editor.tf.insertNodes({ text: raw, wikiLinkDraft: true });
+				editor.tf.insertNodes({ text: markdown, wikiLinkDraft: true });
 				editor.tf.move({ distance: 2, reverse: true });
-				const nextRaw = raw.slice(2, -2);
+				const bounds = wikiLinkDraftEditableBounds(markdown);
+				const nextRaw = markdown.slice(bounds.start, bounds.end);
 				const nextRequest = parseWikiCompletionQuery(nextRaw);
 				if (nextRequest && candidate.kind === nextRequest.kind) {
 					setCandidateState({
@@ -287,16 +296,8 @@ export function WikiLinkSuggestion({
 					onClose();
 				}
 			} else {
-				editor.tf.insertNodes([
-					{
-						type: "wikiLink",
-						value: insert.target,
-						heading: insert.heading,
-						alias: insert.alias ?? null,
-						children: [{ text: "" }],
-					},
-					{ text: "" },
-				]);
+				if (!link) return false;
+				editor.tf.insertNodes([link, { text: "" }]);
 				onClose();
 			}
 			setRecentCandidates((recent) =>

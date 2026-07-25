@@ -4,6 +4,7 @@ import { PlateElement, type PlateElementProps } from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { WikiEmbedElement } from "@/components/editor/wiki-embed-node";
 import { cn } from "@/lib/utils";
 import {
 	type LinkFragment,
@@ -20,6 +21,15 @@ export type WikiLinkEl = {
 };
 
 export function WikiLinkElement(props: PlateElementProps) {
+	const element = props.element as unknown as WikiLinkEl;
+	return element.embed ? (
+		<WikiEmbedElement {...props} />
+	) : (
+		<WikiLinkNavigationElement {...props} />
+	);
+}
+
+function WikiLinkNavigationElement(props: PlateElementProps) {
 	const { t } = useTranslation("editor");
 	const el = props.element as unknown as WikiLinkEl;
 	const wikiNav = useWikiNav();
@@ -87,7 +97,7 @@ export function WikiLinkElement(props: PlateElementProps) {
 				onClick: navigate,
 			}}
 		>
-			<span contentEditable={false}>{el.embed ? `!${label}` : label}</span>
+			<span contentEditable={false}>{label}</span>
 			{props.children}
 		</PlateElement>
 	);

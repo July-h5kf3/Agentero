@@ -1,7 +1,7 @@
 use crate::error::{map_err, ApiResult, AppError};
 use crate::models::wiki::{
     BacklinksResponse, GraphResponse, InternalLinkSyntax, OutgoingLinksResponse, RebuildResult,
-    WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
+    WikiEmbedResponse, WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::services::wiki::WikiIndexState;
 use tauri::State;
@@ -62,6 +62,27 @@ pub fn wiki_resolve(
         &link_text,
         syntax.unwrap_or(InternalLinkSyntax::Wikilink),
     ))
+}
+
+/// Resolve and read the exact source projection for one `![[...]]` embed.
+#[tauri::command]
+pub fn wiki_embed_read(
+    index: State<'_, WikiIndexState>,
+    vault_path: String,
+    source_path: String,
+    link_text: String,
+) -> ApiResult<WikiEmbedResponse> {
+    let mut guard = match index.inner.lock() {
+        Ok(g) => g,
+        Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
+    };
+    if let Err(e) = guard.ensure_vault(&vault_path) {
+        return map_err(AppError::message(e));
+    }
+    match guard.read_embed(&vault_path, &source_path, &link_text) {
+        Ok(response) => ApiResult::ok(response),
+        Err(error) => map_err(AppError::message(error)),
+    }
 }
 
 #[tauri::command]

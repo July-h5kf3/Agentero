@@ -3329,9 +3329,10 @@ export default function App() {
 		() => ({
 			onWikiNavigate: (nav: WikiNavTarget) => void handleWikiNavigate(nav),
 			mdFiles: vaultMdFiles,
+			revision: wikiIndexRevision,
 			vaultPath,
 		}),
-		[handleWikiNavigate, vaultMdFiles, vaultPath],
+		[handleWikiNavigate, vaultMdFiles, vaultPath, wikiIndexRevision],
 	);
 
 	const handleCenterModeChange = (mode: CenterViewMode) => {
