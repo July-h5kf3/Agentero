@@ -1,18 +1,5 @@
 import type { PdfHighlight, PdfHighlightRect } from "@/lib/pdf/highlight/types";
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-	return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function isRect(v: unknown): v is PdfHighlightRect {
-	if (!isRecord(v)) return false;
-	return (
-		typeof v.x === "number" &&
-		typeof v.y === "number" &&
-		typeof v.w === "number" &&
-		typeof v.h === "number"
-	);
-}
+import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 
 /** Validate and normalize a highlight JSON payload. Returns null if invalid. */
 export function parsePdfHighlight(raw: unknown): PdfHighlight | null {

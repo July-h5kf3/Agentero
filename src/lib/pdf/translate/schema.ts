@@ -1,21 +1,8 @@
+import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 import type {
 	PdfTranslateRecord,
 	PdfTranslateRect,
 } from "@/lib/pdf/translate/types";
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-	return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function isRect(v: unknown): v is PdfTranslateRect {
-	if (!isRecord(v)) return false;
-	return (
-		typeof v.x === "number" &&
-		typeof v.y === "number" &&
-		typeof v.w === "number" &&
-		typeof v.h === "number"
-	);
-}
 
 /** Validate and normalize a translate JSON payload. Returns null if invalid. */
 export function parsePdfTranslateRecord(

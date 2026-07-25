@@ -5,21 +5,8 @@ import type {
 	PdfAskThread,
 	PdfAskTrigger,
 } from "@/lib/pdf/ask/types";
+import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 import { pinFromRects } from "@/lib/pdf/selection/pin";
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-	return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function isRect(v: unknown): v is PdfAskNormalizedRect {
-	if (!isRecord(v)) return false;
-	return (
-		typeof v.x === "number" &&
-		typeof v.y === "number" &&
-		typeof v.w === "number" &&
-		typeof v.h === "number"
-	);
-}
 
 function isTrigger(v: unknown): v is PdfAskTrigger {
 	return v === "selection" || v === "dblclick" || v === "dwell";

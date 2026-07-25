@@ -1,14 +1,19 @@
 import { nanoid } from "nanoid";
-import { isTauri } from "@/lib/core/tauri";
 import { parsePdfHighlight } from "@/lib/pdf/highlight/schema";
 import type { PdfHighlight, PdfHighlightRect } from "@/lib/pdf/highlight/types";
-import { listMarkRaw } from "@/lib/pdf/selection/marks-io";
+import { createMarkStore } from "@/lib/pdf/marks/io";
 
 /**
  * Marks IO for **legacy / read-side** highlight files (`marks/*.json`).
  * Runtime write path is {@link annotation-store} (EmbedPDF annotations);
  * keep only list + factory helpers used by migrate/heatmap/tests.
  */
+
+const store = createMarkStore<PdfHighlight>({
+	parse: parsePdfHighlight,
+	sort: (a, b) => b.createdAt.localeCompare(a.createdAt),
+	noMemory: true,
+});
 
 export function newHighlightId(): string {
 	return nanoid(10);
@@ -41,16 +46,4 @@ export function createHighlight(input: {
 }
 
 /** List legacy mark-file highlights (migration / reading heatmap). */
-export async function listPdfHighlights(
-	paperAbsPath: string,
-): Promise<PdfHighlight[]> {
-	if (!paperAbsPath || !isTauri()) return [];
-
-	const highlights: PdfHighlight[] = [];
-	for (const raw of await listMarkRaw(paperAbsPath)) {
-		const parsed = parsePdfHighlight(raw);
-		if (parsed) highlights.push(parsed);
-	}
-	highlights.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-	return highlights;
-}
+export const listPdfHighlights = store.list;
