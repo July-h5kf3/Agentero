@@ -49,10 +49,11 @@ hex = "0.4.3"
 walkdir = "2.5.0"
 base64 = "0.22"
 urlencoding = "2"
+# Used by lookup batch import (all platforms); also needed by Unix remote vault.
+futures-util = "0.3.33"
 
 # openssh / sendfd are Unix-only (ControlMaster fd passing). Remote vault SFTP
 # is therefore unavailable on Windows until a portable backend lands.
 [target.'cfg(unix)'.dependencies]
 openssh = { version = "0.11.6", features = ["native-mux"] }
 openssh-sftp-client = { version = "0.15.7", features = ["openssh"] }
-futures-util = "0.3.33"
