@@ -4,15 +4,14 @@ use super::session::RemoteSession;
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use crate::services::fs::{VaultFs, WriteOpts};
-use crate::services::lookup::parse::{
-    extract_arxiv_id, extract_primary_identifier, IdentifierKind,
-};
+use crate::services::lookup::parse::{extract_arxiv_id, extract_primary_identifier};
 use crate::services::lookup::{
-    enrich_remote_urls, ensure_paper_assets, map_zotero_item, normalize_parent_dir,
-    paper_record_from_meta, resolve_metadata, write_paper_shell, AssetDownloadResult,
-    ImportLocalPdfArgs, ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs,
-    LookupImportBatchArgs, LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs,
-    PaperImportArgs, PaperImportResult, SkippedImport, DEFAULT_TRANSLATOR_BASE_URL,
+    enrich_remote_urls, ensure_paper_assets, identifier_kind_column, identifier_kind_str,
+    map_zotero_item, normalize_parent_dir, paper_record_from_meta, resolve_metadata,
+    slug_from_stem, title_from_stem, write_paper_shell, AssetDownloadResult, ImportLocalPdfArgs,
+    ImportLocalPdfResult, LocalPdfImportEntry, LookupImportArgs, LookupImportBatchArgs,
+    LookupImportBatchResult, LookupImportResult, PaperDownloadAssetsArgs, PaperImportArgs,
+    PaperImportResult, SkippedImport, DEFAULT_TRANSLATOR_BASE_URL,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -176,29 +175,6 @@ pub async fn import_by_identifier_batch_remote(
         skipped,
         errors,
     })
-}
-
-fn identifier_kind_str(kind: IdentifierKind) -> String {
-    match kind {
-        IdentifierKind::Doi => "doi",
-        IdentifierKind::Isbn => "isbn",
-        IdentifierKind::Arxiv => "arxiv",
-        IdentifierKind::Pmid => "pmid",
-        IdentifierKind::AdsBibcode => "ads",
-        IdentifierKind::Url => "url",
-    }
-    .to_string()
-}
-
-fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static str> {
-    match kind {
-        IdentifierKind::Arxiv => Some("arxiv_id"),
-        IdentifierKind::Doi => Some("doi"),
-        IdentifierKind::Isbn => Some("isbn"),
-        IdentifierKind::Pmid => Some("pmid"),
-        IdentifierKind::AdsBibcode => Some("id"),
-        IdentifierKind::Url => None,
-    }
 }
 
 /// Download missing PDF/TeX for an existing remote paper folder.
@@ -504,41 +480,6 @@ async fn import_one_zotero_item_remote(
 
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
     Ok(Some((path_rel, meta.title)))
-}
-
-fn slug_from_stem(stem: &str) -> String {
-    let mut s = String::new();
-    let mut prev_sep = true;
-    for c in stem.trim().chars() {
-        if c.is_ascii_alphanumeric() || c == '.' {
-            s.push(c);
-            prev_sep = false;
-        } else if !prev_sep {
-            s.push('-');
-            prev_sep = true;
-        }
-    }
-    let s: String = s.chars().take(60).collect();
-    let s = s.trim_matches(|c| c == '-' || c == '.').to_string();
-    if s.is_empty() {
-        "paper".into()
-    } else {
-        s
-    }
-}
-
-fn title_from_stem(stem: &str) -> String {
-    let spaced: String = stem
-        .trim()
-        .chars()
-        .map(|c| if c == '_' { ' ' } else { c })
-        .collect();
-    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    if collapsed.is_empty() {
-        "Untitled".into()
-    } else {
-        collapsed
-    }
 }
 
 pub async fn unique_remote_paper_path(

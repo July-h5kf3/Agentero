@@ -4,15 +4,11 @@
 //! Import body is plain text (BibTeX / RIS / …) → returns the same item array shape.
 
 use super::map::{enrich_remote_urls, map_zotero_item};
-use super::{
-    ensure_paper_assets, normalize_parent_dir, paper_record_from_meta, write_paper_shell,
-    DEFAULT_TRANSLATOR_BASE_URL,
-};
+use super::{normalize_parent_dir, DEFAULT_TRANSLATOR_BASE_URL};
 use crate::error::AppError;
 use crate::services::catalog::papers::{self, PaperRecord};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -176,42 +172,37 @@ async fn import_one_item(
     parent_rel: &str,
     item: &Value,
 ) -> Result<Option<(String, String)>, AppError> {
+    use crate::services::lookup::AssetProgressContext;
+    use crate::services::paper_import::{
+        paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
+    };
+
     let mut meta = map_zotero_item(item)?;
     enrich_remote_urls(&mut meta);
-    let id = meta.id.clone();
-    if id.is_empty() {
-        return Err(AppError::message("imported item has empty id"));
-    }
 
-    let path_rel = format!("{parent_rel}/{id}").replace('\\', "/");
-    let paper_dir = vault.join(&path_rel);
-
-    // Skip if already present (do not overwrite NOTES.md)
-    if paper_dir.is_dir()
-        && (paper_dir.join("NOTES.md").is_file()
-            || papers::get_by_path(vault, &path_rel)?.is_some())
-    {
-        return Ok(None);
-    }
-
-    fs::create_dir_all(&paper_dir)?;
-    write_paper_shell(&paper_dir, &meta).await?;
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(vault, &record)?;
-    let _ = ensure_paper_assets(
-        &paper_dir,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
+    let commit = paper_commit(
+        meta,
+        PaperCommitOptions {
+            vault,
+            parent_dir: parent_rel,
+            dedupe: DedupePolicy::ByPathOrNotes,
+            assets: AssetsPolicy::SyncDownload {
+                cookies: None,
+                progress: AssetProgressContext {
+                    app: None,
+                    task_id: None,
+                },
+            },
+            translate_abstract: true,
+            fresh_timestamps: false,
+        },
     )
-    .await;
-    let _ = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-        vault, &path_rel, &paper_dir,
-    )
-    .await;
+    .await?;
 
-    Ok(Some((path_rel, meta.title)))
+    match commit.status {
+        CommitStatus::Created => Ok(Some((commit.path, commit.title))),
+        CommitStatus::Skipped | CommitStatus::Deduped => Ok(None),
+    }
 }
 
 /// Fetch Zotero-shaped items from Translator `/import` (used by local + remote vault import).

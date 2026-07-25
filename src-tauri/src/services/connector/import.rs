@@ -5,8 +5,9 @@ use crate::services::catalog::papers;
 use crate::services::connector::{ConnectorController, ConnectorProgress};
 use crate::services::fs::WriteOpts;
 use crate::services::lookup::{
-    enrich_remote_urls, ensure_paper_assets_with_cookies, looks_mostly_cjk, map_zotero_item,
-    normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts,
+    enrich_remote_urls, ensure_paper_assets_with_cookies, free_mt_to_zh, looks_mostly_cjk,
+    map_zotero_item, normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts,
+    PaperMeta,
 };
 use crate::services::remote::import_bridge::{unique_remote_paper_path, upload_tree};
 use crate::services::remote::RemoteSession;
@@ -35,7 +36,10 @@ pub async fn import_connector_item_with_cookies(
     page_uri: Option<&str>,
     cookies: Option<&str>,
 ) -> Result<ConnectorImportResult, AppError> {
-    let parent_rel = normalize_parent_dir(parent_dir)?;
+    use crate::services::paper_import::{
+        paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
+    };
+
     let connector_item_id = item.get("id").cloned().unwrap_or(Value::Null);
     let item_type = item
         .get("itemType")
@@ -43,68 +47,49 @@ pub async fn import_connector_item_with_cookies(
         .unwrap_or("journalArticle")
         .to_string();
 
-    let mut meta = map_zotero_item(item)?;
-    meta.meta_source = Some("zotero-connector".into());
-    if meta.source_url.is_none() {
-        if let Some(uri) = page_uri.filter(|s| !s.is_empty()) {
-            meta.source_url = Some(uri.to_string());
-        }
-    }
-    if meta.html_url.is_none() {
-        meta.html_url = meta.source_url.clone();
-    }
-    enrich_remote_urls(&mut meta);
+    let meta = connector_paper_meta(item, page_uri)?;
+    let (abstract_text, arxiv_id, pdf_url, doi) = (
+        meta.abstract_text.clone(),
+        meta.arxiv_id.clone(),
+        meta.pdf_url.clone(),
+        meta.doi.clone(),
+    );
 
-    // Prefer a PDF attachment URL surfaced by the browser connector when the
-    // translator gave none — ACM/IEEE et al. often only expose the PDF through
-    // the page the user is on, which the connector captures as an attachment.
-    if meta.pdf_url.as_deref().map(str::is_empty).unwrap_or(true) {
-        meta.pdf_url = pdf_attachment_url(item);
-    }
+    // No abstract MT and no awaited downloads — the browser extension's HTTP
+    // request must finish within ~15s, so assets stay Deferred.
+    let commit = paper_commit(
+        meta,
+        PaperCommitOptions {
+            vault,
+            parent_dir,
+            dedupe: DedupePolicy::ByCatalogId,
+            assets: AssetsPolicy::Deferred,
+            translate_abstract: false,
+            fresh_timestamps: true,
+        },
+    )
+    .await?;
 
-    let id = meta.id.clone();
-    if id.is_empty() {
-        return Err(AppError::message("resolved metadata has empty id"));
-    }
-
-    // Dedup by catalog id
-    if let Ok(Some(existing)) = papers::get_by_id(vault, &id) {
+    if commit.status == CommitStatus::Deduped {
         return Ok(ConnectorImportResult {
-            path: existing.path,
-            id: existing.id,
-            title: existing.title,
+            path: commit.path,
+            id: commit.id,
+            title: commit.title,
             deduped: true,
             connector_item_id,
             item_type,
         });
     }
 
-    let path_rel = unique_paper_path(vault, &parent_rel, &id)?;
-    let paper_dir = vault.join(&path_rel);
-    fs::create_dir_all(&paper_dir)?;
-
-    // Fresh timestamps for this import
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    meta.added_at = now.clone();
-    meta.updated_at = now;
-    // Keep folder id as path segment (may differ if unique_paper_path added suffix)
-    let folder_id = path_rel.rsplit('/').next().unwrap_or(&id).to_string();
-    if folder_id != meta.id {
-        meta.id = folder_id.clone();
-    }
-
-    // No abstract MT here — free MT can exceed the Connector's 15s request timeout.
-    write_paper_shell_opts(&paper_dir, &meta, false).await?;
-    let created_at = fs::metadata(paper_dir.join("NOTES.md"))
-        .and_then(|m| m.modified())
-        .ok();
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(vault, &record)?;
+    let paper_dir = PathBuf::from(&commit.paper_dir);
 
     // Translate the abstract to Chinese in the background (the synchronous shell
     // write above skips MT to stay within the Connector's 15s timeout). Guarded
     // by NOTES.md mtime so a user edit is never overwritten.
-    if let Some(abstract_text) = meta.abstract_text.clone() {
+    let created_at = fs::metadata(paper_dir.join("NOTES.md"))
+        .and_then(|m| m.modified())
+        .ok();
+    if let Some(abstract_text) = abstract_text {
         let abs = abstract_text.trim().to_string();
         if !abs.is_empty() && !looks_mostly_cjk(&abs) {
             let notes_path = paper_dir.join("NOTES.md");
@@ -117,33 +102,36 @@ pub async fn import_connector_item_with_cookies(
     schedule_asset_download_with_cookies(
         Some(ctrl),
         session_id,
-        &meta.title,
+        &commit.title,
         vault.to_path_buf(),
-        path_rel.clone(),
+        commit.path.clone(),
         paper_dir,
-        meta.id.clone(),
-        meta.arxiv_id.clone(),
-        meta.pdf_url.clone(),
-        meta.doi.clone(),
+        commit.id.clone(),
+        arxiv_id,
+        pdf_url,
+        doi,
         cookies.map(str::to_string),
+        None,
     );
 
     Ok(ConnectorImportResult {
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         deduped: false,
         connector_item_id,
         item_type,
     })
 }
 
+/// Background asset download + liteparse with connector progress events.
+/// With `remote` set, the staged tree is uploaded after parsing (remote vault).
 #[allow(clippy::too_many_arguments)]
 fn schedule_asset_download_with_cookies(
     ctrl: Option<Arc<ConnectorController>>,
     session_id: &str,
     title: &str,
-    vault: PathBuf,
+    vault_root: PathBuf,
     path_rel: String,
     paper_dir: PathBuf,
     id: String,
@@ -151,23 +139,27 @@ fn schedule_asset_download_with_cookies(
     pdf_url: Option<String>,
     doi: Option<String>,
     cookies: Option<String>,
+    remote: Option<Arc<RemoteSession>>,
 ) {
     let session_id = session_id.to_string();
     let title = title.to_string();
     let path_key = path_rel.clone();
     tauri::async_runtime::spawn(async move {
-        if let Some(ctrl) = ctrl.as_ref() {
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id: session_id.clone(),
-                path: path_key.clone(),
-                title: title.clone(),
-                status: "running".into(),
-                progress: None,
-                detail: Some("Downloading paper assets".into()),
-                error: None,
-            });
-        }
+        let emit = |status: &str, detail: &str, error: Option<String>| {
+            if let Some(ctrl) = ctrl.as_ref() {
+                ctrl.emit_progress(ConnectorProgress {
+                    key: format!("{session_id}:{path_key}"),
+                    session_id: session_id.clone(),
+                    path: path_key.clone(),
+                    title: title.clone(),
+                    status: status.into(),
+                    progress: None,
+                    detail: Some(detail.into()),
+                    error,
+                });
+            }
+        };
+        emit("running", "Downloading paper assets", None);
         let assets = ensure_paper_assets_with_cookies(
             &paper_dir,
             &id,
@@ -177,47 +169,27 @@ fn schedule_asset_download_with_cookies(
             cookies.as_deref(),
         )
         .await;
-        if let Some(ctrl) = ctrl.as_ref() {
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id: session_id.clone(),
-                path: path_key.clone(),
-                title: title.clone(),
-                status: "running".into(),
-                progress: None,
-                detail: Some("Generating readable paper text".into()),
-                error: None,
-            });
-        }
+        emit("running", "Generating readable paper text", None);
         let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-            &vault, &path_rel, &paper_dir,
+            &vault_root,
+            &path_rel,
+            &paper_dir,
         )
         .await;
-        if let Some(ctrl) = ctrl.as_ref() {
-            let error = match (&assets, &parse) {
-                (Err(e), _) => Some(e.to_string()),
-                (_, p) if !p.messages.is_empty() && !p.paper_md => Some(p.messages.join("; ")),
-                _ => None,
-            };
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id,
-                path: path_key,
-                title,
-                status: if error.is_some() {
-                    "failed"
-                } else {
-                    "completed"
-                }
-                .into(),
-                progress: None,
-                detail: Some(if error.is_some() {
-                    "Asset download failed".into()
-                } else {
-                    "Assets ready".into()
-                }),
-                error,
-            });
+        let upload = match &remote {
+            Some(session) => upload_tree(session.fs.as_ref(), &paper_dir, &path_rel).await,
+            None => Ok(()),
+        };
+        let error = match (&assets, &parse, &upload) {
+            (Err(e), _, _) => Some(e.to_string()),
+            (_, p, _) if !p.messages.is_empty() && !p.paper_md => Some(p.messages.join("; ")),
+            (_, _, Err(e)) => Some(e.to_string()),
+            _ => None,
+        };
+        if error.is_some() {
+            emit("failed", "Asset download failed", error);
+        } else {
+            emit("completed", "Assets ready", None);
         }
     });
 }
@@ -240,23 +212,7 @@ pub async fn import_connector_item_remote_with_cookies(
         .unwrap_or("journalArticle")
         .to_string();
 
-    let mut meta = map_zotero_item(item)?;
-    meta.meta_source = Some("zotero-connector".into());
-    if meta.source_url.is_none() {
-        if let Some(uri) = page_uri.filter(|s| !s.is_empty()) {
-            meta.source_url = Some(uri.to_string());
-        }
-    }
-    if meta.html_url.is_none() {
-        meta.html_url = meta.source_url.clone();
-    }
-    enrich_remote_urls(&mut meta);
-
-    // Prefer a PDF attachment URL from the browser connector when the
-    // translator gave none (same as local import_connector_item).
-    if meta.pdf_url.as_deref().map(str::is_empty).unwrap_or(true) {
-        meta.pdf_url = pdf_attachment_url(item);
-    }
+    let mut meta = connector_paper_meta(item, page_uri)?;
 
     let id = meta.id.clone();
     if id.is_empty() {
@@ -297,11 +253,11 @@ pub async fn import_connector_item_remote_with_cookies(
         cat.push(session.fs.clone()).await?;
     }
 
-    schedule_remote_asset_download_with_cookies(
+    schedule_asset_download_with_cookies(
         Some(ctrl),
         session_id,
         &meta.title,
-        session.clone(),
+        session.work_root.clone(),
         path_rel.clone(),
         staging,
         meta.id.clone(),
@@ -309,6 +265,7 @@ pub async fn import_connector_item_remote_with_cookies(
         meta.pdf_url.clone(),
         meta.doi.clone(),
         cookies.map(str::to_string),
+        Some(session.clone()),
     );
 
     Ok(ConnectorImportResult {
@@ -319,94 +276,6 @@ pub async fn import_connector_item_remote_with_cookies(
         connector_item_id,
         item_type,
     })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn schedule_remote_asset_download_with_cookies(
-    ctrl: Option<Arc<ConnectorController>>,
-    session_id: &str,
-    title: &str,
-    session: Arc<RemoteSession>,
-    path_rel: String,
-    paper_dir: PathBuf,
-    id: String,
-    arxiv_id: Option<String>,
-    pdf_url: Option<String>,
-    doi: Option<String>,
-    cookies: Option<String>,
-) {
-    let session_id = session_id.to_string();
-    let title = title.to_string();
-    let path_key = path_rel.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Some(ctrl) = ctrl.as_ref() {
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id: session_id.clone(),
-                path: path_key.clone(),
-                title: title.clone(),
-                status: "running".into(),
-                progress: None,
-                detail: Some("Downloading paper assets".into()),
-                error: None,
-            });
-        }
-        let assets = ensure_paper_assets_with_cookies(
-            &paper_dir,
-            &id,
-            arxiv_id.as_deref(),
-            pdf_url.as_deref(),
-            doi.as_deref(),
-            cookies.as_deref(),
-        )
-        .await;
-        if let Some(ctrl) = ctrl.as_ref() {
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id: session_id.clone(),
-                path: path_key.clone(),
-                title: title.clone(),
-                status: "running".into(),
-                progress: None,
-                detail: Some("Generating readable paper text".into()),
-                error: None,
-            });
-        }
-        let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-            &session.work_root,
-            &path_rel,
-            &paper_dir,
-        )
-        .await;
-        let upload = upload_tree(session.fs.as_ref(), &paper_dir, &path_rel).await;
-        if let Some(ctrl) = ctrl.as_ref() {
-            let error = match (&assets, &parse, &upload) {
-                (Err(e), _, _) => Some(e.to_string()),
-                (_, p, _) if !p.messages.is_empty() && !p.paper_md => Some(p.messages.join("; ")),
-                (_, _, Err(e)) => Some(e.to_string()),
-                _ => None,
-            };
-            ctrl.emit_progress(ConnectorProgress {
-                key: format!("{session_id}:{path_key}"),
-                session_id,
-                path: path_key,
-                title,
-                status: if error.is_some() {
-                    "failed"
-                } else {
-                    "completed"
-                }
-                .into(),
-                progress: None,
-                detail: Some(if error.is_some() {
-                    "Asset download failed".into()
-                } else {
-                    "Assets ready".into()
-                }),
-                error,
-            });
-        }
-    });
 }
 
 /// Store a SingleFile HTML snapshot inside a paper unit.
@@ -605,6 +474,28 @@ pub async fn move_paper_folder_remote(
     Ok(new_rel)
 }
 
+/// Map a connector item and apply connector-specific meta fixups: tag the
+/// source, fall back to the captured page URI for source/html URLs, and prefer
+/// a browser-captured PDF attachment URL when the translator gave none —
+/// ACM/IEEE et al. often only expose the PDF through the page the user is on.
+fn connector_paper_meta(item: &Value, page_uri: Option<&str>) -> Result<PaperMeta, AppError> {
+    let mut meta = map_zotero_item(item)?;
+    meta.meta_source = Some("zotero-connector".into());
+    if meta.source_url.is_none() {
+        if let Some(uri) = page_uri.filter(|s| !s.is_empty()) {
+            meta.source_url = Some(uri.to_string());
+        }
+    }
+    if meta.html_url.is_none() {
+        meta.html_url = meta.source_url.clone();
+    }
+    enrich_remote_urls(&mut meta);
+    if meta.pdf_url.as_deref().map(str::is_empty).unwrap_or(true) {
+        meta.pdf_url = pdf_attachment_url(item);
+    }
+    Ok(meta)
+}
+
 /// First PDF attachment URL from a connector item (browser-captured PDF link).
 fn pdf_attachment_url(item: &Value) -> Option<String> {
     let atts = item.get("attachments").and_then(|v| v.as_array())?;
@@ -633,8 +524,6 @@ async fn translate_notes_abstract(
     abstract_text: String,
     created: Option<SystemTime>,
 ) {
-    use crate::services::translate::{translate_text, TranslateTextArgs, MAX_TEXT_CHARS};
-
     // User edited the note after the shell was written → leave it alone.
     if let (Some(created), Ok(meta)) = (created, fs::metadata(&notes_path)) {
         if meta.modified().map(|m| m > created).unwrap_or(false) {
@@ -642,33 +531,7 @@ async fn translate_notes_abstract(
         }
     }
 
-    let slice: String = abstract_text.chars().take(MAX_TEXT_CHARS).collect();
-    let mut translated: Option<String> = None;
-    for provider in [
-        "googleapi",
-        "bing",
-        "youdao",
-        "huoshanweb",
-        "tencenttransmart",
-    ] {
-        if let Ok(r) = translate_text(TranslateTextArgs {
-            text: slice.clone(),
-            source_lang: "auto".into(),
-            target_lang: "zh-CN".into(),
-            provider: provider.into(),
-            free_base_url: None,
-            timeout_ms: Some(15_000),
-        })
-        .await
-        {
-            let t = r.text.trim().to_string();
-            if !t.is_empty() {
-                translated = Some(t);
-                break;
-            }
-        }
-    }
-    let Some(translated) = translated else {
+    let Some(translated) = free_mt_to_zh(&abstract_text).await else {
         return;
     };
 
@@ -694,22 +557,6 @@ async fn translate_notes_abstract(
     if replaced {
         let _ = fs::write(&notes_path, out.join("\n"));
     }
-}
-
-fn unique_paper_path(vault: &Path, parent_rel: &str, id: &str) -> Result<String, AppError> {
-    let base = format!("{parent_rel}/{id}").replace('\\', "/");
-    let candidate = vault.join(&base);
-    if !candidate.exists() {
-        return Ok(base);
-    }
-    // If catalog already has this path, treat as collision on disk only.
-    for n in 2..50 {
-        let alt = format!("{parent_rel}/{id}-{n}").replace('\\', "/");
-        if !vault.join(&alt).exists() {
-            return Ok(alt);
-        }
-    }
-    Err(AppError::message("could not allocate unique paper path"))
 }
 
 #[cfg(test)]

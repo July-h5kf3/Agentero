@@ -1,6 +1,6 @@
 # Paper 入库流水线（统一方案）
 
-> 状态：**设计已落库，实现未统一**（各入口仍分叉编排；砖块已部分复用）  
+> 状态：**Host 内核已实现（P0 + P2 本地部分）**——`services/paper_import::paper_commit` 已落地，魔棒单篇 / Connector（本地+远程壳）/ 本地 PDF / Bib 四个本地入口已迁入；路径分配统一为 `lookup::allocate_paper_path`（盘 + catalog 双查，撞名改写 `meta.id`）。未完成：Zotero 迁移（P3）、remote 镜像层收敛、前端 `afterPaperImport`（P1）、统一事件（P4）。  
 > 目标：把「创建 paper 单元」收敛为 **Host 唯一落盘内核 + 前端唯一后置策略**；各入口只做元数据 / 来源适配。  
 > 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒）、[`connector.md`](connector.md)（浏览器插件）、[`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)、[`api.md`](api.md)、[`../development/cli.md`](../development/cli.md)、[`../frontend/ui.md`](../frontend/ui.md)。
 
@@ -383,3 +383,4 @@ MVP 统一管线时选 **A**，避免与后台任务条并发策略纠缠。
 | 日期 | 说明 |
 |------|------|
 | 2026-07-19 | 初稿：现状盘点 + `paper_commit` / `afterPaperImport` 目标架构与分期 |
+| 2026-07-25 | 落地 `services/paper_import::paper_commit`（dedupe / path / assets 策略 + `PaperCommitResult`）；魔棒单篇（改 `ByCatalogId`，重复不再覆盖 NOTES）、Connector（`Deferred` assets，本地+远程共用一个后台下载调度器）、本地 PDF（`CopyPdf`）、Bib（`ByPathOrNotes`）迁入；4 份路径分配合并为 `allocate_paper_path`（盘+catalog，撞名同步改写 `meta.id`，修复迁移 id 不一致）；合并 `identifier_kind_*` / `slug_from_stem` / 免费 MT 链 / connector meta 后处理重复实现 |

@@ -7,7 +7,7 @@
 //! Everything is local: no Translator is contacted.
 
 use super::map::{enrich_remote_urls, map_zotero_item};
-use super::{normalize_parent_dir, paper_record_from_meta, write_paper_shell};
+use super::{allocate_paper_path, normalize_parent_dir, paper_record_from_meta, write_paper_shell};
 use crate::error::AppError;
 use crate::services::catalog::papers;
 use rusqlite::{params, Connection};
@@ -341,8 +341,8 @@ async fn migrate_one(
     } else {
         parent_rel.to_string()
     };
-    let path_rel = free_path(vault, &base_parent, &id);
-    let paper_dir = vault.join(&path_rel);
+    let (folder_id, path_rel, paper_dir) = allocate_paper_path(vault, &base_parent, &id);
+    meta.id = folder_id;
     fs::create_dir_all(&paper_dir)?;
     write_paper_shell(&paper_dir, &meta).await?;
     if !blocks.is_empty() {
@@ -355,7 +355,7 @@ async fn migrate_one(
     let mut copied = false;
     if flags.copy_pdfs {
         if let Some(src) = item.pdfs.first() {
-            let dest = paper_dir.join(pdf_dest_name(&id));
+            let dest = paper_dir.join(pdf_dest_name(&meta.id));
             if fs::copy(src, &dest).is_ok() {
                 copied = true;
             }
@@ -489,29 +489,6 @@ fn normalize_title(title: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .to_lowercase()
-}
-
-/// Free `{parent}/{id}` folder, else suffix `-2`, `-3`, … for distinct papers
-/// whose citekey collides with an existing folder.
-fn free_path(vault: &Path, parent_rel: &str, id: &str) -> String {
-    let base = format!("{parent_rel}/{id}").replace('\\', "/");
-    if !path_taken(vault, &base) {
-        return base;
-    }
-    for n in 2..1000 {
-        let cand = format!("{parent_rel}/{id}-{n}").replace('\\', "/");
-        if !path_taken(vault, &cand) {
-            return cand;
-        }
-    }
-    base
-}
-
-fn path_taken(vault: &Path, path_rel: &str) -> bool {
-    if vault.join(path_rel).exists() {
-        return true;
-    }
-    matches!(papers::get_by_path(vault, path_rel), Ok(Some(_)))
 }
 
 /// PDF destination filename inside the paper folder (matches the download path).

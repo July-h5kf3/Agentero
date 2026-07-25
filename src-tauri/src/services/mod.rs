@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod connector;
 pub mod fs;
 pub mod lookup;
+pub mod paper_import;
 pub mod paths;
 pub mod pdf_parse;
 pub mod remote;

@@ -391,9 +391,9 @@
 - [x] Library 导入导出 Bib、`paper_set_tags`、`paper_rescan`
 - [x] **Zotero Connector MVP**（含 `saveAttachment`）+ **保存后 `openPaper`**
 - [x] **入库流水线统一设计**（[`paper-import-pipeline.md`](../backend/paper-import-pipeline.md)）
-- [ ] **P0** Host `paper_commit` + 魔棒 / Connector / 本地 PDF 迁入
+- [x] **P0** Host `paper_commit` + 魔棒 / Connector / 本地 PDF 迁入（含 Bib；`allocate_paper_path` 统一路径分配；CLI 复用同一 Host 路径）
 - [ ] **P1** 前端 `afterPaperImport` 策略表
-- [ ] **P2** Bib / CLI 走 commit；**P3** Zotero 迁移；**P4** `paper:imported` 事件
+- [ ] **P3** Zotero 迁移走 commit；remote 镜像层收敛；**P4** `paper:imported` 事件
 - [ ] 关键词/Agent 候选
 - [ ] 本地 PDF 拖拽 / DOI 识别与元数据确认
 - [ ] MinerU 云端解析

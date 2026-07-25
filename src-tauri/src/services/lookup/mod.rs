@@ -194,12 +194,15 @@ pub async fn import_by_identifier_with_progress(
     args: LookupImportArgs,
     app: Option<&tauri::AppHandle>,
 ) -> Result<LookupImportResult, AppError> {
+    use crate::services::paper_import::{
+        paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
+    };
+
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
 
-    let parent_rel = normalize_parent_dir(&args.parent_dir)?;
     let base = args
         .translator_base_url
         .as_deref()
@@ -217,64 +220,36 @@ pub async fn import_by_identifier_with_progress(
     let (mut meta, used_translator) = resolve_metadata(text, &base).await?;
     enrich_remote_urls(&mut meta);
 
-    let id = meta.id.clone();
-    if id.is_empty() {
-        return Err(AppError::message("resolved metadata has empty id"));
-    }
-
-    let path_rel = format!("{parent_rel}/{id}").replace('\\', "/");
-    let paper_dir = vault.join(&path_rel);
-    fs::create_dir_all(&paper_dir)?;
-
-    write_paper_shell(&paper_dir, &meta).await?;
-
-    // 1) Catalog SQLite is authoritative; metadata.json is a projection
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(&vault, &record)?;
-
-    // 2) Always download PDF into source/; arXiv also unpacks LaTeX
-    // 3) No TeX → liteparse PAPER.md after download
-    let mut assets = ensure_paper_assets_with_progress(
-        &paper_dir,
-        &id,
-        meta.arxiv_id.as_deref(),
-        meta.pdf_url.as_deref(),
-        meta.doi.as_deref(),
-        None,
-        AssetProgressContext {
-            app,
-            task_id: args.task_id.as_deref(),
+    let commit = paper_commit(
+        meta,
+        PaperCommitOptions {
+            vault: &vault,
+            parent_dir: &args.parent_dir,
+            dedupe: DedupePolicy::ByCatalogId,
+            assets: AssetsPolicy::SyncDownload {
+                cookies: None,
+                progress: AssetProgressContext {
+                    app,
+                    task_id: args.task_id.as_deref(),
+                },
+            },
+            translate_abstract: true,
+            fresh_timestamps: false,
         },
     )
-    .await
-    .unwrap_or_else(|e| {
-        let mut r = AssetDownloadResult::default();
-        r.messages.push(format!("asset download error: {e}"));
-        r
-    });
-
-    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-        &vault, &path_rel, &paper_dir,
-    )
-    .await;
-    assets.paper_md = parse.paper_md;
-    for m in parse.messages {
-        assets.messages.push(m);
-    }
-
-    let paper_dir_str = paper_dir.to_string_lossy().to_string();
+    .await?;
 
     Ok(LookupImportResult {
-        paper_dir: paper_dir_str,
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        paper_dir: commit.paper_dir,
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         used_translator,
         translator_base_url: base,
-        pdf: assets.pdf,
-        tex: assets.tex,
-        paper_md: assets.paper_md,
-        asset_messages: assets.messages,
+        pdf: commit.pdf,
+        tex: commit.tex,
+        paper_md: commit.paper_md,
+        asset_messages: commit.asset_messages,
     })
 }
 
@@ -426,7 +401,7 @@ fn emit_batch_progress(
     );
 }
 
-fn identifier_kind_str(kind: IdentifierKind) -> String {
+pub(crate) fn identifier_kind_str(kind: IdentifierKind) -> String {
     match kind {
         IdentifierKind::Doi => "doi",
         IdentifierKind::Isbn => "isbn",
@@ -438,7 +413,7 @@ fn identifier_kind_str(kind: IdentifierKind) -> String {
     .to_string()
 }
 
-fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static str> {
+pub(crate) fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static str> {
     match kind {
         IdentifierKind::Arxiv => Some("arxiv_id"),
         IdentifierKind::Doi => Some("doi"),
@@ -623,6 +598,10 @@ async fn import_one_local_pdf(
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
 ) -> Result<LookupImportResult, AppError> {
+    use crate::services::paper_import::{
+        paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
+    };
+
     let src = PathBuf::from(entry.file_path.trim());
     if !src.is_file() {
         return Err(AppError::message("file not found"));
@@ -651,14 +630,8 @@ async fn import_one_local_pdf(
         .map(slug_from_stem)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug_from_stem(stem));
-    let (id, path_rel, paper_dir) = unique_paper_path(vault, parent_rel, &base_id);
-    fs::create_dir_all(&paper_dir)?;
 
-    // PDF lives in the paper folder root as `{id}.pdf` (same as downloaded PDFs).
-    fs::copy(&src, paper_dir.join(format!("{id}.pdf")))
-        .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
-
-    let mut meta = local_pdf_meta(id.clone(), title.clone());
+    let mut meta = local_pdf_meta(base_id, title);
     if let Some(authors) = &entry.authors {
         meta.authors = authors
             .iter()
@@ -670,32 +643,36 @@ async fn import_one_local_pdf(
     if let Some(year) = entry.year {
         meta.year = Some(year);
     }
-    write_paper_shell(&paper_dir, &meta).await?;
-    let record = paper_record_from_meta(&path_rel, &meta);
-    papers::upsert_paper(vault, &record)?;
 
-    // No TeX + has PDF → liteparse PAPER.md so the paper has a readable body.
-    let parse = crate::services::pdf_parse::maybe_generate_paper_md_after_download(
-        vault, &path_rel, &paper_dir,
+    let commit = paper_commit(
+        meta,
+        PaperCommitOptions {
+            vault,
+            parent_dir: parent_rel,
+            dedupe: DedupePolicy::None,
+            assets: AssetsPolicy::CopyPdf { src: &src },
+            translate_abstract: true,
+            fresh_timestamps: false,
+        },
     )
-    .await;
+    .await?;
 
     Ok(LookupImportResult {
-        paper_dir: paper_dir.to_string_lossy().to_string(),
-        path: path_rel,
-        id: meta.id,
-        title: meta.title,
+        paper_dir: commit.paper_dir,
+        path: commit.path,
+        id: commit.id,
+        title: commit.title,
         used_translator: false,
         translator_base_url: String::new(),
-        pdf: true,
-        tex: false,
-        paper_md: parse.paper_md,
-        asset_messages: parse.messages,
+        pdf: commit.pdf,
+        tex: commit.tex,
+        paper_md: commit.paper_md,
+        asset_messages: commit.asset_messages,
     })
 }
 
 /// Folder-safe slug from a filename stem (alphanumerics + dots; other runs → `-`).
-fn slug_from_stem(stem: &str) -> String {
+pub(crate) fn slug_from_stem(stem: &str) -> String {
     let mut s = String::new();
     let mut prev_sep = true; // suppress leading separators
     for c in stem.trim().chars() {
@@ -717,7 +694,7 @@ fn slug_from_stem(stem: &str) -> String {
 }
 
 /// Human title from a filename stem (underscores → spaces, whitespace collapsed).
-fn title_from_stem(stem: &str) -> String {
+pub(crate) fn title_from_stem(stem: &str) -> String {
     let spaced: String = stem
         .trim()
         .chars()
@@ -731,15 +708,25 @@ fn title_from_stem(stem: &str) -> String {
     }
 }
 
-/// Pick a non-existing `{parent}/{id}` folder, suffixing `-2`, `-3`, … on collision.
-/// Returns `(id, path_rel, absolute_dir)`.
-fn unique_paper_path(vault: &Path, parent_rel: &str, base_id: &str) -> (String, String, PathBuf) {
+/// Allocate a free `{parent}/{id}` paper folder, suffixing `-2`, `-3`, … on
+/// collision. A path counts as taken when the folder exists on disk **or** the
+/// catalog has a row for it (folder may have been deleted externally).
+/// Returns `(id, path_rel, absolute_dir)` — callers must adopt the returned id
+/// into `meta.id` so folder name and catalog id never diverge.
+pub(crate) fn allocate_paper_path(
+    vault: &Path,
+    parent_rel: &str,
+    base_id: &str,
+) -> (String, String, PathBuf) {
+    let taken = |path_rel: &str| -> bool {
+        vault.join(path_rel).exists() || matches!(papers::get_by_path(vault, path_rel), Ok(Some(_)))
+    };
     let mut id = base_id.to_string();
     let mut n = 2;
     loop {
-        let path_rel = format!("{parent_rel}/{id}");
-        let dir = vault.join(&path_rel);
-        if !dir.exists() || n > 999 {
+        let path_rel = format!("{parent_rel}/{id}").replace('\\', "/");
+        if !taken(&path_rel) || n > 999 {
+            let dir = vault.join(&path_rel);
             return (id, path_rel, dir);
         }
         id = format!("{base_id}-{n}");
@@ -971,6 +958,15 @@ async fn abstract_for_notes(text: &str) -> String {
     if looks_mostly_cjk(text) {
         return text.to_string();
     }
+    free_mt_to_zh(text)
+        .await
+        .unwrap_or_else(|| text.to_string())
+}
+
+/// zh-CN via the free-MT fallback chain; `None` when every engine fails.
+/// Free MT endpoints are unofficial and any single one may be blocked or
+/// rate-limited (e.g. Google is unreachable from mainland China).
+pub(crate) async fn free_mt_to_zh(text: &str) -> Option<String> {
     let slice: String = text
         .chars()
         .take(crate::services::translate::MAX_TEXT_CHARS)
@@ -996,11 +992,11 @@ async fn abstract_for_notes(text: &str) -> String {
         {
             let t = r.text.trim();
             if !t.is_empty() {
-                return t.to_string();
+                return Some(t.to_string());
             }
         }
     }
-    text.to_string()
+    None
 }
 
 /// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
@@ -1070,5 +1066,29 @@ mod tests {
             "We propose a new attention mechanism for sequence transduction."
         ));
         assert!(!looks_mostly_cjk(""));
+    }
+
+    #[test]
+    fn allocate_paper_path_free_and_collision() {
+        let vault = std::env::temp_dir().join(format!(
+            "agentero-alloc-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir_all(vault.join("papers")).unwrap();
+
+        // Free path → base id unchanged.
+        let (id, rel, dir) = allocate_paper_path(&vault, "papers", "1706.03762");
+        assert_eq!(id, "1706.03762");
+        assert_eq!(rel, "papers/1706.03762");
+        assert_eq!(dir, vault.join("papers/1706.03762"));
+
+        // Folder on disk → suffix -2, and returned id matches the folder name.
+        fs::create_dir_all(vault.join("papers/1706.03762")).unwrap();
+        let (id, rel, _) = allocate_paper_path(&vault, "papers", "1706.03762");
+        assert_eq!(id, "1706.03762-2");
+        assert_eq!(rel, "papers/1706.03762-2");
+
+        let _ = fs::remove_dir_all(&vault);
     }
 }
