@@ -327,7 +327,7 @@
   - 打开 Vault 无持久化布局 → `ensureFullLibraryTab()`。
   - 关 panel 后列表为空 → 自动打开全库。
   - **`⌘W` / tab X**：有注册弹层时**先关最顶层**（见 §3.0）；否则仅剩全库 `agentero:library` 时**关窗**；否则关 active panel，关空后回全库。
-- **挂载策略**：PDF panel 壳用 dockview `renderer: 'always'` 保活；EmbedPDF 引擎由 App **PDF LRU**（默认 4）限流。非 PDF 默认 `onlyWhenVisible`。作用域 / 全库共用 `libraryPapers` 缓存。
+- **挂载策略**：PDF panel 壳用 dockview `renderer: 'always'` 保活；EmbedPDF 引擎由 App **PDF LRU**（默认 4）限流。非 PDF 默认 `onlyWhenVisible`。Dockview 首次尚未测量 inactive panel 时，隐藏 `.dv-render-overlay` 由 `.agentero-dockview` 样式提供 `top: 0; left: 0` 初始锚点，避免绝对定位元素的 static position 扩大文档滚动区；后续 inline 坐标正常覆盖该 fallback。作用域 / 全库共用 `libraryPapers` 缓存。
 - **焦点**：完全听 dockview `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` **视觉序**循环。
 - **持久化**：**只存** dockview `toJSON()`（panel params 含 path/mode）；按窗口恢复。
 - **NOTES**：`createNotesSplitPane` 派生独立 panel；paper-reader / download 写回后按路径 reseed。
