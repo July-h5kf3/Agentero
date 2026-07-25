@@ -599,7 +599,7 @@ impl ConnectorController {
         } else {
             let vault = PathBuf::from(&handle);
             for from in &paths_to_move {
-                match move_paper_folder(&vault, from, &parent) {
+                match crate::features::catalog::move_paper_under(&vault, from, &parent) {
                     Ok(new_rel) => new_paths.push(new_rel),
                     Err(e) => {
                         self.emit_error(&format!("move {from}: {e}"), Some(session_id));
@@ -855,42 +855,6 @@ impl ConnectorController {
             ("X-Zotero-Connector-API-Version", CONNECTOR_API_VERSION),
         ]
     }
-}
-
-/// Move a paper folder under a new org parent and rewrite catalog paths.
-fn move_paper_folder(
-    vault: &std::path::Path,
-    from_rel: &str,
-    dest_parent: &str,
-) -> Result<String, AppError> {
-    use crate::features::catalog::papers;
-
-    let from = from_rel.trim().trim_matches('/').replace('\\', "/");
-    let dest_parent = dest_parent.trim().trim_matches('/').replace('\\', "/");
-    if from.is_empty() {
-        return Err(AppError::message("empty paper path"));
-    }
-    let base = from.rsplit('/').next().unwrap_or(from.as_str()).to_string();
-    let new_rel = format!("{dest_parent}/{base}");
-    if new_rel == from {
-        return Ok(from);
-    }
-    let from_abs = vault.join(&from);
-    let new_abs = vault.join(&new_rel);
-    if !from_abs.is_dir() {
-        return Err(AppError::message(format!("paper folder missing: {from}")));
-    }
-    if new_abs.exists() {
-        return Err(AppError::message(format!(
-            "destination already exists: {new_rel}"
-        )));
-    }
-    if let Some(parent) = new_abs.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::rename(&from_abs, &new_abs)?;
-    let _ = papers::move_under_path(vault, &from, &new_rel);
-    Ok(new_rel)
 }
 
 #[cfg(test)]
