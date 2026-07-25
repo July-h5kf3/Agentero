@@ -1,6 +1,5 @@
 {
 	"title": "设置",
-	"dismiss": "关闭设置",
 	"host": {
 		"thisComputer": "本机",
 		"remote": "远端",
@@ -14,16 +13,12 @@
 		"agent": "Agent",
 		"translate": "翻译",
 		"keyboard": "键盘",
-		"privacy": "隐私",
 		"about": "关于"
 	},
 	"general": {
 		"title": "通用",
 		"restoreVault": {
 			"label": "恢复上次的知识库"
-		},
-		"confirmClose": {
-			"label": "退出前确认"
 		},
 		"paperTreeLabelMode": {
 			"label": "文件树论文显示",
@@ -52,6 +47,10 @@
 		"translatorBaseUrl": {
 			"label": "Translator 服务地址",
 			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"
+		},
+		"batchImportConcurrency": {
+			"label": "批量导入并发数",
+			"hint": "一次粘贴多个标识符时，同时入库的最大并行数量。值越小对远端服务越友好；网络良好时适当提高可加快批量入库。"
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
@@ -111,9 +110,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"enable": {
-			"label": "启用 Agent"
-		},
 		"proxy": {
 			"label": "Agent 代理"
 		},
@@ -240,15 +236,6 @@
 	},
 	"keyboard": {
 		"title": "键盘"
-	},
-	"privacy": {
-		"title": "隐私",
-		"analytics": {
-			"label": "使用分析"
-		},
-		"crash": {
-			"label": "崩溃报告"
-		}
 	},
 	"about": {
 		"title": "关于",

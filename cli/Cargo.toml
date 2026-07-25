@@ -1,6 +1,6 @@
 [package]
 name = "agentero-cli"
-version = "0.1.2"
+version = "0.1.4"
 edition = "2021"
 description = "Headless Agentero CLI for Vault / Catalog (no BYOA)"
 authors = ["you"]
@@ -19,7 +19,6 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 dirs = "6"
 toml = "0.8"
-thiserror = "2"
 # Interactive prompts (TTY only; skipped under --json / non-TTY)
 inquire = "0.7"
 log = "0.4"

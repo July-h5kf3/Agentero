@@ -18,8 +18,9 @@
 | V0.3 Agent 工作流（BYOA） | 🟡 进行中 | 通用 ACP Client（OpenCode、Gemini、Claude、Codex、Qoder、Grok、自定义）统一 ACP 协议（Codex 经 `@agentclientprotocol/codex-acp` 适配器）；**统一会话历史**（`agent_list_sessions` / `agent_load_session`，ACP `session/list` + `session/load`）；**paper-reader 精读**（可选自动 + Zap 手动；`is_read`）；**全局权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize → `summary`、Ask library / List claims → `qa`、Draft Related Work → `related_work`）；**信任闭环**（`agent:permission-request` 对话框 + `agent:notes-review` **统一 Diff** Keep/Revert）；**当前论文默认 context** + **`agentPersonalPrompt`**；模型收藏；**AGENTS.md 自动注入仍待**。 |
 | V0.4 双链、反链与图谱 | ✅ 基本完成 | 语义解析、标题/block 精确跳转、入/出链、Graph、Live Preview、`[[` 文件/alias/标题/block 候选，以及 Markdown/图片/PDF 的 `![[...]]` 只读嵌入已落地；**链接感知的文件/目录/paper 移动**和可信本地外部 rename 的 `ask` / `always` repair 也已落地；文件变更防抖重建索引，嵌入按目标路径精确刷新。 |
 | V0.5 Importer 架构与本地 PDF 入库 | 🟡 本地 PDF 入库已落地 | **本地 PDF 导入**（魔棒弹层多选 / **拖到 `papers/` 组织夹** → metadata 确认 → 复制 PDF + catalog + liteparse `PAPER.md`）已落地；Importer trait 抽象、DOI 识别、PdfParser（MinerU）仍在规划。 |
-| V0.6 工作区标签页与分屏 | 🟡 标签页已完成 | **文档标签页 + 默认全库 + 文件夹作用域库已落地**；**分屏（split）仍待**；与左右侧栏 collapsible 共存。 |
+| V0.6 工作区标签页与分屏 | 🟢 已完成 | **全局 Dockview 工作区 + 默认全库 + 文件夹作用域库 + 上下左右多分屏（PDF\|NOTES / 拖文件树并入）已落地**；标题栏无文档 tab；与左右侧栏 collapsible 共存。 |
 | V0.7 引用关系与 Connected Papers | ⏳ 待实现 | 先落地本地 PDF citation/figure sidecar 与 Paper Content 侧栏，再做引用图、Connected Papers 和外部关系补全。 |
+| **广场 Plaza** | 📋 设计中 | 侧栏虚拟发现入口：Cool Papers（WebView）、推荐 v0（本地）、播客占位；P0 **不入库**。见 [`plaza.md`](plaza.md)。 |
 | **CLI（headless Vault 接口）** | ✅ MVP | 设计见 [`cli.md`](cli.md)；代码 **`cli/`** + workspace；path 依赖 `agentero_lib`；`vault`/`tree`/`paper`/`import`/`export`/`config`；**无 BYOA**；`cargo build -p agentero-cli`。graph/doctor 仍待 P1。 |
 | **Vault 采纳 / 现有文件夹整理** | ⏳ 待设计 | 打开非标准或半结构目录时 **自动发现与改造** 为 Agentero Vault（脚手架 + catalog + paper 单元识别）；**编程路径**（确定性扫描/迁移）与 **Skill + Agent 路径** 均可；不静默覆盖用户文件。 |
 | **远程 Vault（SSH/SFTP）+ 远端 BYOA** | ✅ MVP | 文件权威远端；SFTP IO；catalog work mirror；ACP over SSH；PDF cache。设计见 [`remote-vault.md`](remote-vault.md)。 |
@@ -39,11 +40,11 @@
 - [x] 创建空 Vault 并初始化 `AGENTS.md` / `papers` / `notes` / `plans` / `.agents`（含 `skills/`）/ `.agentero/catalog.sqlite`。
 - [x] 工作台：文件树 + 中间内容 + Preview/Notes + 可选右侧栏。
 - [x] Markdown 文件读取、编辑、保存（Plate WYSIWYG + 自动保存；顶部可选**格式工具栏**，设置 `showEditorToolbar` / Notes header 一键开关）。
-- [x] Markdown **图片**：粘贴 / 工具栏 → `./assets/` + `![](./assets/…)`；相对路径预览；**选中显示源码**；删除节点且无引用时同步删 assets 文件（见 `src/lib/markdown-image.ts`、data-model）。
+- [x] Markdown **图片**：粘贴 / 工具栏 → `./assets/` + `![](./assets/…)`；相对路径预览；**选中显示源码**；删除节点且无引用时同步删 assets 文件（见 `src/lib/markdown/image.ts`、data-model）。
 - [x] 最近 Vault 列表（欢迎页）与主窗口恢复上次 Vault。
 - [x] 多窗口：`⌘N` 新建窗口，session 级 Vault 隔离。
 - [x] 树内联新建文件 / 文件夹。
-- [x] 文件树：**Finder 显示**（`⌥⌘R`）；**终端打开**（`⌥⌘T`）；**多选 + 拖拽移动**；**删除**走回收站（`path_trash`，无确认 / 无 Undo toast；Library 下虚拟节点 `agentero:trash` → 中间栏浏览 / 恢复 / 清空；`papers/` 快照 catalog）；**选中同步 / 定位**（激活文档与魔棒入库后展开祖先并滚到对应行）；**Paper 行标签**默认标题 · 作者（`paperTreeLabelMode`，设置 → 通用）。
+- [x] 文件树：**Finder 显示**（`⌥⌘R`）；**终端打开**（`⌥⌘T`）；**多选 + 拖拽移动**；**删除**走回收站（`path_trash`，无确认 / 无 Undo toast；Library 下虚拟节点 `agentero:trash` → 中间栏浏览 / 恢复 / 永久删除，侧栏右键清空；`papers/` 快照 catalog）；**选中同步 / 定位**（激活文档与魔棒入库后展开祖先并滚到对应行）；**Paper 行标签**默认标题 · 作者（`paperTreeLabelMode`，设置 → 通用）。
 - [x] Paper-centric 视图：选中 paper 后中间 PDF（本地优先 / 远程回退）或 HTML，右侧 `NOTES.md`（**仅具体论文**）。
 - [x] Vault **任意路径** PDF / 常见图片中间栏预览（`blob:`）。
 - [x] **PDF 阅读操作**：页码导航；**适应宽度 / 适应整页**；真实 scale 重渲染 + 放大后平移；**大纲**；**⌘F 查找**；**平滑划词覆盖层**；**沉浸式阅读**（全屏 + 限宽居中）；**标注面板**（高亮总览·改色·导出 NOTES）。
@@ -100,6 +101,7 @@
 - [x] 入库后刷新 Backlinks/Graph 索引
 - [x] 魔棒快捷键 `⇧⌘I`；
 - [x] 非 arxiv 下载 PDF：下载改用浏览器 UA（绕开出版商 403）+ DOI 走 Crossref 取直链 / OA PDF 兜底（如 10.1371/journal.pbio.0040157）。
+- [x] 魔棒批量入库：多标识符粘贴、去重、顺序入库、批量下载队列、进度聚合。
 
 验收标准：
 
@@ -118,7 +120,7 @@
 关键交付：
 
 - [x] ACP Client：stdio JSON-RPC 会话、流式输出事件。
-- [x] Codex ACP 迁移：经 `@agentclientprotocol/codex-acp`（npm）适配器接入标准 ACP 协议；原生 `codex app-server` 模块（`src-tauri/src/services/agent/codex/`）已删除；`agent_codex_list_threads` / `agent_codex_read_thread` 由统一的 `agent_list_sessions` / `agent_load_session` 替代。
+- [x] Codex ACP 迁移：经 `@agentclientprotocol/codex-acp`（npm）适配器接入标准 ACP 协议；原生 `codex app-server` 模块已删除；`agent_codex_list_threads` / `agent_codex_read_thread` 由统一的 `agent_list_sessions` / `agent_load_session` 替代。
 - [x] BYOA 注册表：预设模板 + 自定义 `command` / `args` / `env`；默认 agent 选择。
 - [x] 可执行文件探测与空状态安装指引（Agentero **不打包** agent 二进制）。
 - [x] Composer 上下文：当前文件 chip、`@` / `$` 候选的键盘选择、本地会话标签切换。
@@ -136,7 +138,6 @@
   - skill（**provider 分流：Claude `/` / 其它（含 Codex）注入**）→ 写 `NOTES.md` → catalog `is_read=true`；左下角任务条（入库/下载 → 精读衔接）。
 - [x] **Skill 提及按 Agent 模板**：Host `SkillMentionStyle`（`skills.rs`）；Composer `$` 仅为 UI 选 skill。
 - [x] **面板内置工作流入口**（建议 chips → 后端 workflow）：Summarize → `summary`；Ask library / List claims → `qa`；Draft Related Work → `related_work`；目标为当前聚焦 paper（提及路径或选中路径）。引用类 workflow 见 V0.7。
-- [x] **笔记写后审阅（信任闭环）**：运行前快照目标笔记；若 Agent 重写则 `agent:notes-review`，前端**统一 Diff**（`NotesReviewDiff`），**Keep / Revert**（BYOA 直接写盘，无法可靠事前拦截）。
 - [x] Agent 读取路径回显（Sources）。
 - [x] 密钥边界：模型 API Key 由 Agent CLI 管理，Agentero 不要求模型 BYOK 表单。
 
@@ -160,7 +161,6 @@
 - [x] 把“总结当前论文 / 本地库问答 / Related Work”做成 Agent 面板可点击 workflow。
 - [ ] 将 `AGENTS.md` 自动注入 workflow prompt，并在缺失时提示初始化。
 - [x] 接入 ACP 权限确认 UI（「每次询问」档）。
-- [x] 笔记写后 diff/preview 审阅（Keep / Revert）；写前草稿拦截仍待（若 BYOA 可支持）。
 - [x] Codex 会话恢复：经 ACP `session/resume` 统一恢复，与所有 provider 一致。
 - [x] 为通用 ACP provider 定义持久 session 与历史契约：`agent_list_sessions` / `agent_load_session`（ACP `session/list` + `session/load`）。
 - [ ] Agent 输出期间的后续交互：普通 Agent 排队下一条消息，Codex 支持 guide / 引导消息。
@@ -241,32 +241,32 @@
 
 现状对照：
 
-- **标签页 + 默认全库 + 文件夹作用域库已落地**。**分屏（split）仍待实现**。
+- **标签页 + 默认全库 + 文件夹作用域库 + 分屏（dockview）已落地**（见 `docs/development/tab-split.md`）。
 - 左右侧栏已是常驻 collapsible（`preserve-pixel-size`）；Agent 禅模式是全屏 Agent，不是编辑区分屏。
 - Agent 面板内部已有 **会话标签**（多 session），与「文档标签页」是不同概念。
 
 关键交付：
 
-- [x] **文档标签栏**：打开 paper / Markdown / PDF / HTML / Library 时在标题栏（与禅模式图标同行）以 tab 呈现，可关闭、切换、拖拽重排。（`src/components/layout/document-tab-bar.tsx`、`src/lib/tabs.ts`）
-- [x] **标签状态**：每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush），关闭不丢内容。
+- [x] **全局 Dockview 文档工作区**：中间栏管理 paper / Markdown / PDF / HTML / Library / 回收站 / NOTES 等 panel；dockview 原生 tab、关闭、重排；**标题栏无文档 tab**。（`src/components/workspace/dock-workspace.tsx`、`src/lib/workspace/tabs`；见 [`tab-split.md`](tab-split.md)）
+- [x] **panel 状态**：内容常驻挂载，保留滚动位置、PDF 缩放、视图模式；Markdown/NOTES 自动保存（debounce + 卸载 flush）。
 - [x] **默认页 = 全库 Library**：`ensureFullLibraryTab`；仅剩全库时 `⌘W` 关窗。
 - [x] **文件夹作用域库**：非 paper 目录 → `filterPapersByScope` 内存前缀过滤。
-- [ ] **分屏（split）**：水平或垂直拆成 2 格（MVP 可先 2 格；后续可扩展 3–4 格），每格独立 tab 栈或共享 tab 池。
-- [x] **快捷键**：关闭 tab `⌘W`（有弹层先关 `overlay-stack` 顶层；仅剩全库关窗）、下一/上一 tab `⌥⌘→ / ⌥⌘←`；分屏快捷键随 split 一并补。
-- [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 tab。
-- [x] **多窗口兼容**：`⌘N` 窗口各自有独立 tab 集（`agentero-open-tabs` 按窗口 localStorage 恢复）。
+- [x] **分屏**：上下左右 + 多格；论文默认 PDF\|NOTES 左右分屏；拖文件树 → 任意边；布局仅 `toJSON()`。
+- [x] **快捷键**：关闭 panel `⌘W`（弹层 → active panel → 关窗）、下一/上一 panel `⌥⌘→ / ⌥⌘←`；NOTES 切换见 Layout 菜单。
+- [x] **与文件树联动**：树选中 / Library / Graph / Backlinks / wiki 跳转统一走 `openTab`；同一路径已开则聚焦其 panel。
+- [x] **多窗口兼容**：`⌘N` 窗口各自独立 dock 布局（按窗口持久化恢复）。
 
 验收标准：
 
 - [x] 可同时打开至少 3 个文档标签并在其间切换而不丢滚动位置。
 - [x] 关光文档 tab 后中间栏为全库；点组织文件夹只看到该路径下论文且不重新 `paper_list`。
-- [ ] 分屏下左格读 PDF、右格写 `NOTES.md`（或两篇 paper 并排）可用。
+- [x] 分屏下左格读 PDF、右格写 `NOTES.md`（或两篇 paper 并排）可用。
 - [x] 关闭 Vault / 关窗不损坏磁盘文件；tab 布局可恢复（localStorage）。
 
 后续增强：
 
 - [ ] tab 固定（pin）、按 paper 分组、从 Backlinks/Graph 中键新 tab 打开。
-- [ ] 超过 2 格的网格分屏与拖拽合并。
+- [x] 超过 2 格的网格分屏与拖拽合并（dockview multi-pane）。
 
 ## V0.7 引用关系与 Connected Papers
 
@@ -456,7 +456,7 @@
 
 ### Milestone C：Agent 可协作 🟡
 
-包含 V0.3。**已可用**：ACP 连接（含 Codex 经 `codex-acp` 适配器）、统一会话历史、paper-reader、面板 workflow、权限三档、笔记写后审阅。**仍待**：`AGENTS.md` 自动注入、写前草稿拦截。
+包含 V0.3。**已可用**：ACP 连接（含 Codex 经 `codex-acp` 适配器）、统一会话历史、paper-reader、面板 workflow、权限三档。**仍待**：`AGENTS.md` 自动注入。
 
 ### Milestone D：知识可导航 ✅
 
@@ -498,7 +498,6 @@
 - [x] paper-reader 精读：可选自动（入库/单篇 Download）+ Zap 手动；`is_read`；任务条进度。
 - [x] Agent 全局权限模式（受限 / **每次询问** / 自动批准）+ 权限对话框。
 - [x] Agent 面板 workflow：Summarize / Ask library / Draft Related Work。
-- [x] Agent 笔记写后审阅（Keep / Revert）。
 - [ ] Agent 关键词候选 / 自然语言入库闭环。
 - [ ] workflow prompt 自动注入 Vault `AGENTS.md`。
 - [ ] Tauri Store 替代当前 localStorage 中的最近 Vault / UI 偏好。
@@ -517,7 +516,7 @@
 - [ ] `catalog:export_papers_md`（Markdown 表）。
 - [ ] Graph 全屏/聚焦模式与邻居高亮。
 - [x] **工作区标签页**：多文档 tab、关闭/重排、滚动与视图状态保留；`⌘W` 关 tab / 无 tab 关窗（V0.6 标签页部分）。
-- [ ] **分屏**：中间栏 2 格并排（PDF | NOTES 或 paper | paper）（V0.6 余量）。
+- [x] **分屏**：中间栏全局 dockview 多格（PDF | NOTES、三分屏等）（扁平 `DocTab[]` + `dockLayout`）。
 - [ ] **文内引用 hover → 右侧 Paper Info**（库内/远程缓存 + 一键入库）（V0.7-A）。
 - [ ] **引用关系图 / Connected Papers 式邻域**（cites / cited_by 缓存 + 列表/简图）（V0.7-B）。
 - [ ] **Agent 引用工作流**：Explore citations / Map related work / Ingest neighborhood（V0.7-C）。
@@ -545,7 +544,8 @@ Codex 已迁移至标准 ACP（经 `@agentclientprotocol/codex-acp`），不再�
 - [ ] HTML iframe 标注（PDF 侧 `marks/` 已落地）。
 - [ ] 多 Agent 并行综述与评估。
 - [ ] 作者 / 机构 / 会议关系图谱；更深的 prior–derivative 引用布局。
-- [ ] 复杂分屏（>2 格）与命名工作区会话。
+- [x] 复杂分屏（>2 格，上下左右）。
+- [ ] 命名工作区会话。
 - [ ] iPadOS 文件系统与触控布局适配。
 - [ ] （可选）从 `agentero_lib` 抽出无 Agent 的 domain crate，供 CLI 零 tauri 依赖——**非当前 CLI 范围**。
 

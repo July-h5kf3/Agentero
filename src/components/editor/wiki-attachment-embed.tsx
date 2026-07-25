@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PdfViewer } from "@/components/viewer/embed/pdf-viewer";
-import { localFileToArrayBuffer } from "@/lib/paper-metadata";
-import { imageMimeFromPath } from "@/lib/viewer";
+import { localFileToArrayBuffer } from "@/lib/paper/media";
+import { imageMimeFromPath } from "@/lib/workspace/viewer";
 
 type WikiAttachmentEmbedProps = {
 	kind: "image" | "pdf";

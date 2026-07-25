@@ -5,14 +5,14 @@ import { PlateElement } from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import {
 	isVaultLocalMarkdownLink,
 	parseWikiHref,
 	resolveWikiReference,
 	WIKI_HREF_PREFIX,
 } from "@/lib/wiki";
-import { useWikiNav } from "@/lib/wiki-nav-context";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 
 type LinkEl = {
 	url?: string;

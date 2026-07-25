@@ -1,0 +1,333 @@
+import { readDir } from "@tauri-apps/plugin-fs";
+import { toVaultRelative } from "@/lib/core/path";
+import { isMarkdownPath } from "@/lib/vault/fs";
+import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
+import {
+	isRemoteVaultHandle,
+	remoteList,
+	remoteSessionIdFromHandle,
+} from "@/lib/vault/remote/remote-vault";
+import { joinRemotePath, remoteRelFromJoined } from "@/lib/vault/remote-path";
+import { ensureLocalFsScope } from "@/lib/vault/scope";
+import type { FileNode } from "@/lib/vault/types";
+import { isImagePath, isPdfPath } from "@/lib/workspace/viewer";
+
+/**
+ * Names never listed in the file tree (local or remote).
+ * Includes VCS, build/cache, virtualenvs, and Host-only `.agentero`.
+ */
+export const TREE_IGNORE_NAMES = new Set([
+	".git",
+	".DS_Store",
+	"node_modules",
+	"target",
+	"dist",
+	".agentero",
+	".venv",
+	"venv",
+	"__pycache__",
+	".pytest_cache",
+	".mypy_cache",
+	".ruff_cache",
+	".tox",
+	".eggs",
+	".codex",
+	".idea",
+	".vscode",
+	"site-packages",
+]);
+
+/**
+ * Vault-root segment names that are fully recursive on open (product surface).
+ * Everything else at the vault root is shallow (one level) until expanded.
+ */
+export const TREE_EAGER_ROOT_NAMES = new Set([
+	"papers",
+	"notes",
+	"plans",
+	".agents",
+]);
+
+/**
+ * Dot-directories that are still part of the product surface (not ignored).
+ * Must stay in sync with {@link TREE_EAGER_ROOT_NAMES} where applicable.
+ */
+const TREE_ALLOWED_DOT_NAMES = new Set([".env.example", ".agents"]);
+
+/** True when this basename should never appear in the tree. */
+export function shouldIgnoreTreeName(name: string): boolean {
+	if (!name) return true;
+	if (TREE_IGNORE_NAMES.has(name)) return true;
+	if (TREE_ALLOWED_DOT_NAMES.has(name)) return false;
+	// Other hidden entries (`.git`, `.venv`, `.codex`, …).
+	if (name.startsWith(".")) return true;
+	// Python packaging / build noise.
+	if (name.endsWith(".egg-info")) return true;
+	return false;
+}
+
+/**
+ * Whether a directory under the vault should be fully walked on open.
+ * - Under `papers/` / `notes/` / `plans/` / `.agents/`: always eager (markers, skills).
+ * - Other vault-root trees (`src/`, `thesis/`, …): shallow only until user expands.
+ */
+export function isEagerTreeRel(rel: string): boolean {
+	const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!r) return true; // vault root itself is always listed
+	const top = r.split("/")[0]?.toLowerCase() ?? "";
+	return TREE_EAGER_ROOT_NAMES.has(top);
+}
+
+function sortNodes(nodes: FileNode[]): FileNode[] {
+	return [...nodes].sort((a, b) => {
+		if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+		return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+	});
+}
+
+/**
+ * Build directory children.
+ *
+ * - `shallowOnly=false` (initial open): eager roots recurse fully; other dirs
+ *   are listed **once** (one level of files + subdir shells with `childrenPending`).
+ * - `shallowOnly=true` (inside a non-eager tree, or expand): files only; subdirs
+ *   become pending shells (no further list until expand).
+ *
+ * `rel` is vault-relative (`""` at root). Local uses absolute `dirPath`.
+ */
+type TreeListEntry = {
+	name: string;
+	childPath: string;
+	childRel: string;
+	isDir: boolean;
+	isFile: boolean;
+};
+
+type TreeAdapter = {
+	list(dirPath: string, rel: string): Promise<TreeListEntry[]>;
+};
+
+function localTreeAdapter(): TreeAdapter {
+	return {
+		async list(dirPath, rel) {
+			const entries = await readDir(dirPath);
+			return entries
+				.filter((e): e is typeof e & { name: string } => !!e.name)
+				.map((e) => ({
+					name: e.name,
+					childPath: joinVaultPath(dirPath, e.name),
+					childRel: rel ? `${rel}/${e.name}` : e.name,
+					isDir: e.isDirectory,
+					isFile: e.isFile,
+				}));
+		},
+	};
+}
+
+function remoteTreeAdapter(handle: string): TreeAdapter {
+	const sessionId = remoteSessionIdFromHandle(handle);
+	return {
+		async list(_dirPath, rel) {
+			if (!sessionId) return [];
+			const entries = await remoteList(sessionId, rel);
+			return entries.map((e) => ({
+				name: e.name,
+				childPath: joinRemotePath(handle, e.path),
+				childRel: e.path,
+				isDir: e.isDir,
+				isFile: e.isFile,
+			}));
+		},
+	};
+}
+
+async function buildTree(
+	adapter: TreeAdapter,
+	dirPath: string,
+	rel: string,
+	depth = 0,
+	shallowOnly = false,
+): Promise<FileNode[]> {
+	if (depth > 12) return [];
+
+	const entries = await adapter.list(dirPath, rel);
+	const nodes: FileNode[] = [];
+
+	for (const entry of entries) {
+		if (shouldIgnoreTreeName(entry.name)) continue;
+
+		if (entry.isDir) {
+			const node = await buildDirNode(
+				adapter,
+				entry.childPath,
+				entry.name,
+				entry.childRel,
+				depth,
+				shallowOnly,
+			);
+			nodes.push(node);
+		} else if (entry.isFile) {
+			nodes.push({
+				id: entry.childPath,
+				name: entry.name,
+				path: entry.childPath,
+				kind: "file",
+			});
+		}
+	}
+
+	return sortNodes(nodes);
+}
+
+async function buildDirNode(
+	adapter: TreeAdapter,
+	path: string,
+	name: string,
+	childRel: string,
+	depth: number,
+	shallowOnly: boolean,
+): Promise<FileNode> {
+	// Already one level into a non-eager tree (or expand): do not list further.
+	if (shallowOnly) {
+		return {
+			id: path,
+			name,
+			path,
+			kind: "directory",
+			children: [],
+			childrenPending: true,
+		};
+	}
+	if (isEagerTreeRel(childRel)) {
+		const children = await buildTree(adapter, path, childRel, depth + 1, false);
+		return {
+			id: path,
+			name,
+			path,
+			kind: "directory",
+			children,
+		};
+	}
+	// Non-product dir: list exactly one level; nested dirs stay pending.
+	const children = await buildTree(adapter, path, childRel, depth + 1, true);
+	return {
+		id: path,
+		name,
+		path,
+		kind: "directory",
+		children,
+		childrenPending: false,
+	};
+}
+
+/**
+ * List one directory level only (used when expanding a lazy folder).
+ * Nested directories stay `childrenPending` (expand again to go deeper).
+ */
+export async function listVaultDirChildren(
+	rootPath: string,
+	dirAbsPath: string,
+): Promise<FileNode[]> {
+	if (isRemoteVaultHandle(rootPath)) {
+		const rel = remoteRelFromJoined(rootPath, dirAbsPath);
+		// Expanding a non-eager folder: only one more level; subdirs stay pending.
+		return buildTree(remoteTreeAdapter(rootPath), dirAbsPath, rel, 0, true);
+	}
+	// Local: dirAbsPath is absolute; rel only used for eager checks (disabled here).
+	return buildTree(localTreeAdapter(), dirAbsPath, "", 0, true);
+}
+
+/**
+ * Paths of directory nodes that still need listing, among `expandedPaths`.
+ * Used to load children when the user expands a lazy folder.
+ */
+export function pendingDirsAmongExpanded(
+	nodes: FileNode[],
+	expandedPaths: ReadonlySet<string>,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind !== "directory") continue;
+			if (n.childrenPending && expandedPaths.has(n.path)) {
+				out.push(n.path);
+			}
+			if (n.children?.length) walk(n.children);
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
+/** Immutable replace of a directory node's children (by absolute path). */
+export function replaceTreeNodeChildren(
+	nodes: FileNode[],
+	dirPath: string,
+	children: FileNode[],
+): FileNode[] {
+	const key = normalizePathKey(dirPath);
+	const walk = (list: FileNode[]): FileNode[] =>
+		list.map((n) => {
+			if (normalizePathKey(n.path) === key && n.kind === "directory") {
+				return {
+					...n,
+					children,
+					childrenPending: false,
+				};
+			}
+			if (n.children?.length) {
+				return { ...n, children: walk(n.children) };
+			}
+			return n;
+		});
+	return walk(nodes);
+}
+
+/** True if any directory under `nodes` still needs listing. */
+export function treeHasPendingChildren(nodes: FileNode[]): boolean {
+	for (const n of nodes) {
+		if (n.kind === "directory" && n.childrenPending) return true;
+		if (n.children?.length && treeHasPendingChildren(n.children)) return true;
+	}
+	return false;
+}
+
+/** Flatten the loaded tree to Vault-relative internal-link targets. */
+export function collectWikiTargetRelPaths(
+	nodes: FileNode[],
+	vaultPath: string | null,
+): string[] {
+	const out: string[] = [];
+	const walk = (list: FileNode[]) => {
+		for (const node of list) {
+			if (node.kind === "directory" && node.children) {
+				walk(node.children);
+			} else if (
+				node.kind === "file" &&
+				(isMarkdownPath(node.path) ||
+					isImagePath(node.path) ||
+					isPdfPath(node.path))
+			) {
+				out.push(toVaultRelative(vaultPath, node.path));
+			}
+		}
+	};
+	walk(nodes);
+	return out;
+}
+
+/**
+ * Build the vault file tree.
+ *
+ * - Eager recursive: `papers/`, `notes/`, `plans/`, `.agents/`
+ * - Shallow elsewhere: vault-root extras (`src/`, `thesis/`, …) appear as
+ *   one level with `childrenPending`; expand via {@link listVaultDirChildren}.
+ * - Ignored names ({@link TREE_IGNORE_NAMES} / dots / `*.egg-info`) are never listed.
+ */
+export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
+	if (isRemoteVaultHandle(rootPath)) {
+		return buildTree(remoteTreeAdapter(rootPath), rootPath, "");
+	}
+	await ensureLocalFsScope(rootPath);
+	return buildTree(localTreeAdapter(), rootPath, "");
+}

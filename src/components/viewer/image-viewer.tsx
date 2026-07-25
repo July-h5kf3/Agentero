@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
-import { isImageViewerSource } from "@/lib/viewer";
+import { cn } from "@/lib/core/utils";
+import { isImageViewerSource } from "@/lib/workspace/viewer";
 
 type ImageViewerProps = {
 	/** Local `blob:` URL (or remote https) for the image. */

@@ -15,8 +15,8 @@
 | 安装 | `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o` |
 | 通用 UI | 继续 shadcn `src/components/ui/`（AI Elements 依赖其 peers） |
 | 传输层 | Agentero **ACP Client**（`agent_run_once` + 事件流），**不是**默认 `useChat` |
-| 业务壳 | `layout/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation`；无会话数字标签；`hideFromChatHistory` 过滤后台运行；**权限三档** + `agent:permission-request` 对话框；**空态 suggestion → workflow**；**`agent:notes-review` → `NotesReviewDiff` 统一 Diff + Keep/Revert**；Composer **当前论文默认 context** + **`@`（最近路径 / 浅层树 / 下钻子目录；论文标签同 `paperTreeLabelMode`）/ 文件树拖入 → context chip**（展示 paper-name/标题；图标：`context-path-icon` — paper `ScrollText` / 文件夹 `Folder` / 文件按扩展名））、`layout/command-palette`（`⌘K`/`⌘P` 论文 quick-open + `vault_search`）、`layout/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 折叠快捷键 + 回收站入口；**外部 PDF 拖到 `papers/` 组织夹 → metadata 确认入库**）、`layout/import-local-pdf-dialog`（本地 PDF 元数据确认）、`layout/recycle-bin-view`（中间栏回收站）、`layout/papers-library`（catalog 表 + **染色 tags** + **阅读热力 spine** + **Rescan** + 文件夹作用域）、`layout/paper-info-panel`（Tags 色盘）、`layout/document-tab-bar`、`layout/backlinks-panel`、`layout/graph-panel`、`layout/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；批注 **Enter 保存**；划词提问 `hideFromChatHistory`） |
-| 全局通知 | shadcn `ui/sonner` + `src/lib/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
+| 业务壳 | `agent/agent-panel`（Chat；`sidebar`/`zen`：禅模式左侧历史 + 全宽 `Conversation`；无会话数字标签；`hideFromChatHistory` 过滤后台运行；**权限三档** + `agent:permission-request` 对话框；**空态 suggestion → workflow**；Composer **当前论文默认 context** + **`@`（最近路径 / 浅层树 / 下钻子目录；论文标签同 `paperTreeLabelMode`）/ 文件树拖入 → context chip**（展示 paper-name/标题；图标：`context-path-icon` — paper `ScrollText` / 文件夹 `Folder` / 文件按扩展名））、`dialogs/command-palette`（`⌘K`/`⌘P` 论文 quick-open + `vault_search`）、`sidebar/file-tree`（Vault 树 + Library + 魔棒 + paper **Download / Zap** + 多选拖拽 + 折叠快捷键 + 回收站入口；**外部 PDF 拖到 `papers/` 组织夹 → metadata 确认入库**）、`library/import-local-pdf-dialog`（本地 PDF 元数据确认）、`workspace/recycle-bin-view`（中间栏回收站）、`library/papers-library`（catalog 表 + **标题列表内搜索** + **标签列筛选** + **染色 tags** + **阅读热力 spine** + **Rescan** + 文件夹作用域；Zotero 迁移在侧栏 Library）、`sidebar/paper-info-panel`（Tags 色盘）、`workspace/dock-workspace`、`wiki/backlinks-panel`、`wiki/graph-panel`、`shell/background-tasks-panel`；`viewer/pdf-viewer`（导航/大纲/查找/平滑划词；批注 **Enter 保存**；划词提问 `hideFromChatHistory`） |
+| 全局通知 | shadcn `ui/sonner` + `src/lib/core/notify.ts`（`notifyError` / `notifyWarning`）；右上角操作失败 Toast（见 [`ui.md`](ui.md) §2.1.2） |
 | 状态列 | ✅ 已装并接线 · 📦 已装未接线 · — 未安装 |
 
 安装命令中的 `<name>` 与下表 **Registry 名**（URL 路径）一致。
@@ -57,7 +57,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Confirmation](https://elements.ai-sdk.dev/components/confirmation) | `confirmation` | 人在环确认 | 📦（Host 仍自动选第一项） |
 | [Task](https://elements.ai-sdk.dev/components/task) | `task` | 任务列表 / 进度折叠 | ✅ 工具调用摘要 |
 | [Plan](https://elements.ai-sdk.dev/components/plan) | `plan` | 计划步骤展示 | ✅ `agent:plan` |
-| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办 | 📦 |
+| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办 | ✅ Composer waitlist（运行中继续输入的后续消息） |
 | [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint) | `checkpoint` | 检查点 / 里程碑 | ✅ 系统行 |
 | [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份 UI | — |
 | [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量 | ✅ `agent:usage` |
@@ -121,20 +121,21 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 
 | 文件 | 主要导出 | 接线位置 |
 |---|---|---|
-| `conversation.tsx` | 列表 / 空态 / 贴底 | `layout/agent-panel` |
-| `message.tsx` | Message + Actions / Response | `layout/agent-panel` |
-| `prompt-input.tsx` | Composer；**IME 组字中 Enter 不提交**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)） | `layout/agent-panel` |
-| `sources.tsx` | Vault 引用 | `layout/agent-panel` |
-| `reasoning.tsx` | Thought 折叠 | `layout/agent-panel` |
-| `tool.tsx` | ACP tool 调用 | `layout/agent-panel` |
-| `plan.tsx` | ACP plan | `layout/agent-panel` |
-| `task.tsx` | 工具摘要 | `layout/agent-panel` |
-| `suggestion.tsx` / `shimmer.tsx` | 建议 chip / 加载 | `layout/agent-panel` |
-| `checkpoint.tsx` | 系统切换行 | `layout/agent-panel` |
-| `context.tsx` | Token 用量 | `layout/agent-panel` header |
-| `file-tree.tsx` | Vault 树 | `layout/file-tree` |
-| `inline-citation.tsx` | 正文旁引用徽章 | `layout/agent-panel` |
-| 其它已装未接 | chain-of-thought, queue, confirmation, persona, attachments, code-block | 按需扩展 |
+| `conversation.tsx` | 列表 / 空态 / 贴底 | `agent/agent-panel` |
+| `message.tsx` | Message + Actions / Response | `agent/agent-panel` |
+| `prompt-input.tsx` | Composer；**IME 组字中 Enter 不提交**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)） | `agent/agent-panel` |
+| `queue.tsx` | 运行中 follow-up waitlist（可折叠列表 + 移除） | `agent/agent-composer` |
+| `sources.tsx` | Vault 引用 | `agent/agent-panel` |
+| `reasoning.tsx` | Thought 折叠 | `agent/agent-panel` |
+| `tool.tsx` | ACP tool 调用 | `agent/agent-panel` |
+| `plan.tsx` | ACP plan | `agent/agent-panel` |
+| `task.tsx` | 工具摘要 | `agent/agent-panel` |
+| `suggestion.tsx` / `shimmer.tsx` | 建议 chip / 加载 | `agent/agent-panel` |
+| `checkpoint.tsx` | 系统切换行 | `agent/agent-panel` |
+| `context.tsx` | Token 用量 | `agent/agent-panel` header |
+| `file-tree.tsx` | Vault 树 | `sidebar/file-tree` |
+| `inline-citation.tsx` | 正文旁引用徽章 | `agent/agent-panel` |
+| 其它已装未接 | chain-of-thought, confirmation, persona, attachments, code-block | 按需扩展 |
 
 ---
 
@@ -151,10 +152,14 @@ Conversation
         MessageResponse                                    // ACP message
     Sources（可选）
   ConversationScrollButton
+Queue（可选，运行中已排队的 follow-up）
+  QueueSection → QueueList → QueueItem
 PromptInput
   PromptInputBody → PromptInputTextarea
   PromptInputFooter → PromptInputTools + PromptInputSubmit
 ```
+
+运行中仍可输入：有正文时提交进入 waitlist（当前回复结束后自动 `runOnce`）；空输入时按钮为停止（Esc 同效）。
 
 ### 4.2 流式事件映射
 
@@ -165,6 +170,8 @@ PromptInput
 | `agent:stream` `kind=message`（默认） | 追加到最后一条 agent 的正文 `MessageResponse` |
 | `agent:completed` | 定稿正文 / reasoning + `sources` |
 | `agent:failed` | 去掉未完成 streaming，追加 error |
+
+**Sources / 行内引用点击**：Vault 相对路径（如 `papers/…/NOTES.md`）经 `onOpenSource` → 若属于论文单元则 `openPaper`（PDF + NOTES），否则打开对应文件 tab；`http(s)` 用系统浏览器。禅模式下会先退出禅模式再打开论文。
 
 监听需可取消，避免 Strict Mode 双挂载导致重复气泡。
 
@@ -217,7 +224,7 @@ import {
 
 1. 在 [组件目录](https://elements.ai-sdk.dev/components) 确认名称与文档。  
 2. `pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/<name>.json -y -o`  
-3. 仅在 `layout/*` 等业务壳接线；不复制平行实现。  
+3. 仅在业务域（`agent/`、`sidebar/`、`workspace/` 等）接线；不复制平行实现。  
 4. 更新本文 **§2 状态列** 与 **§3**。  
 5. 传输仍走 ACP，除非产品明确改为 HTTP Agent。
 
@@ -225,21 +232,65 @@ import {
 
 ## 6. 仓库目录（非 AI Elements）
 
+业务组件按**域**顶层分目录（勿再挂 `layout/` 大杂烩；`library` 顶层，不挂 `workspace`；双链用 `wiki/` 而非 `feature`）：
+
 ```text
 src/components/
-├── ui/                  # shadcn 原语
-├── ai-elements/         # 本文档对应内容
-├── layout/              # 工作台：分栏、文件树、Agent、Backlinks、Graph
+├── ui/                  # shadcn only
+├── ai-elements/         # registry only
+├── icons/               # 品牌图标（勿并 ui）
+├── shell/               # 真壳 + 共享 chrome
+│   ├── title-bar.tsx
+│   ├── layout-menu.tsx
+│   ├── window-controls.tsx
+│   ├── pane-header.tsx
+│   ├── resizable.tsx
+│   ├── vault-welcome.tsx
+│   ├── background-tasks-panel.tsx
+│   └── error-boundary.tsx
+├── sidebar/             # 左栏导航
+│   ├── file-tree.tsx
+│   ├── paper-info-panel.tsx
+│   └── vault-sidebar-header.tsx
+├── wiki/                # 双链
+│   ├── backlinks-panel.tsx
+│   └── graph-panel.tsx
+├── agent/               # Chat 业务壳（编排 + 子 UI + 运行时 hook）
+│   ├── agent-panel.tsx          # 薄编排（sidebar / zen）
+│   ├── use-agent-panel.ts       # 注册表 / 流式 / 历史 / send / 上下文
+│   ├── chat-transcript.tsx      # Conversation + 消息行
+│   ├── agent-composer.tsx       # PromptInput + @/$ + model/effort
+│   ├── agent-history.tsx        # 侧栏历史 popover + 禅模式左轨
+│   ├── agent-switcher.tsx
+│   ├── agent-permission-dialog.tsx
+│   ├── context-path-icon.tsx
+│   └── types.ts
+├── workspace/           # dockview 中间栏
+│   ├── dock-workspace.tsx
+│   ├── doc-view.tsx
+│   └── recycle-bin-view.tsx
+├── library/             # 论文域（顶层）
+│   ├── papers-library.tsx
+│   ├── paper-tag-chip.tsx
+│   ├── reading-heatmap.tsx
+│   ├── import-local-pdf-dialog.tsx
+│   └── move-papers-dialog.tsx
 ├── editor/              # Plate Markdown 编辑器
-├── viewer/              # PDF / HTML
-└── settings-window.tsx
+├── viewer/              # PDF / HTML / 图片
+├── settings/
+│   ├── settings-window.tsx
+│   └── settings-window-root.tsx
+└── dialogs/             # 仅全局 / 跨域
+    ├── command-palette.tsx
+    ├── remote-vault-dialog.tsx
+    └── zotero-migrate-dialog.tsx
 ```
 
 - **Plate**（`editor/`）：笔记 WYSIWYG，不是 AI Elements。  
   - `markdown-editor.tsx`：防抖保存、`ImagePlugin.uploadImage` → `./assets/`、引用计数 GC。  
   - `image-node.tsx`：相对路径 `blob:` 预览；选中显示 `![alt](url)` 源码。  
   - `editor-toolbar.tsx`：格式按钮 +「插入图片」。  
-  - `src/lib/markdown-image.ts`：路径 / 落盘 / GC 工具（单测 `test/markdown-image.test.ts`）。  
+  - `src/lib/markdown/image.ts`：路径 / 落盘 / GC 工具（单测 `test/markdown-image.test.ts`）。  
 - **禁止**把 Chat 塞进 `ui/` 或与 shadcn Message/Bubble 混用。
 
 ---
@@ -250,4 +301,4 @@ src/components/
 - [Components](https://elements.ai-sdk.dev/components)  
 - [Docs / Setup](https://elements.ai-sdk.dev/docs/setup)  
 - [Conversation](https://elements.ai-sdk.dev/components/conversation) · [Message](https://elements.ai-sdk.dev/components/message) · [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input) · [Sources](https://elements.ai-sdk.dev/components/sources) · [File Tree](https://elements.ai-sdk.dev/components/file-tree)  
-- 业务：`src/components/layout/agent-panel.tsx` · `src/components/layout/file-tree.tsx`
+- 业务：`src/components/agent/`（`agent-panel` + `use-agent-panel` 等）· `src/components/sidebar/file-tree.tsx`

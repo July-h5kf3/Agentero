@@ -3,7 +3,7 @@ import {
 	IME_COMPOSITION_END_GRACE_MS,
 	IME_KEY_CODE,
 	isImeKeyboardEvent,
-} from "@/lib/ime";
+} from "@/lib/core/ime";
 
 describe("isImeKeyboardEvent", () => {
 	it("detects React nativeEvent.isComposing", () => {

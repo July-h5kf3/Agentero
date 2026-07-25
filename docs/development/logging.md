@@ -2,7 +2,7 @@
 
 > 状态：**P0 已落地**（基础设施 + 关键操作 start/end；P1 导出日志 UI 仍待）。  
 > 范围：Tauri Host + React 前端 + 共享 `agentero_lib` + headless CLI 的 **本地运行日志**；与 **错误契约 / 用户 Toast** 分层，不替代现有 UX。  
-> 实现入口：`src-tauri/src/log_util.rs`、`src-tauri/src/lib.rs`（`tauri-plugin-log`）、`src/lib/logger.ts`、CLI `env_logger`（`cli/src/main.rs`）。  
+> 实现入口：`src-tauri/src/log_util.rs`、`src-tauri/src/lib.rs`（`tauri-plugin-log`）、`src/lib/core/logger.ts`、CLI `env_logger`（`cli/src/main.rs`）。  
 > 相关：[`technical-plan.md`](technical-plan.md)、[`../backend/api.md`](../backend/api.md)、[`../frontend/ui.md`](../frontend/ui.md) §2.1.2、[`cli.md`](cli.md)、[`roadmap.md`](roadmap.md)、[`todo.md`](todo.md)。
 
 ## 1. 背景与问题
@@ -75,7 +75,7 @@
 |---|---|---|
 | **桌面 Host 胶水** | [`tauri-plugin-log`](https://v2.tauri.app/plugin/logging/) | 官方插件；stdout / LogDir / Webview；rotation、level、按模块过滤 |
 | **Rust facade** | [`log`](https://crates.io/crates/log) `0.4` | `log::info!` / `error!`；commands / services 统一入口 |
-| **前端** | `@tauri-apps/plugin-log` + `src/lib/logger.ts` | 统一 `logger.info/warn/error`；浏览器 dev 回退 `console` |
+| **前端** | `@tauri-apps/plugin-log` + `src/lib/core/logger.ts` | 统一 `logger.info/warn/error`；浏览器 dev 回退 `console` |
 | **CLI** | 同一 `log` facade + `env_logger`（或等价） | `RUST_LOG`；业务 `--json` 仍只走 stdout envelope |
 | **用户可见错误** | 保持现有 `notify.ts` 等 | 不改产品行为 |
 
@@ -168,7 +168,7 @@ logger.error(`op end openVault ok=false duration_ms=${ms} error=${msg}`);
 
 按「用户可感知、有副作用或长耗时」优先。
 
-#### Host（Rust command / service）
+#### Host (Rust command / service)
 
 | 操作名（log name） | 入口 | 必记字段（脱敏） | 备注 |
 |---|---|---|---|
@@ -207,7 +207,7 @@ pub struct OpGuard { name: &'static str, start: Instant, /* fields */ }
 | 操作名 | 入口建议 | 备注 |
 |---|---|---|
 | `openVault` / `createVault` | `App` / `vault.ts` | 与 Host create 可双端都有；字段对齐 |
-| `runBackgroundTask` | `background-tasks.ts` | **统一包一层**：任意 kind 自动 start/end | 
+| `runBackgroundTask` | `background-tasks.ts` | **统一包一层**：任意 kind 自动 start/end |
 | `lookupImport` / 批量下载 | lookup 调用点 / App | 若已走 background task，可只靠 task 层 |
 | `paperRead` | `paper-read.ts` | 与 agent session 关联 sessionId |
 | `agentRunOnce`（Chat） | agent-panel | start 发消息；end 在 completed/failed |
@@ -236,7 +236,7 @@ pub struct OpGuard { name: &'static str, start: Instant, /* fields */ }
 
 ## 6. 前端模块设计
 
-### 6.1 `src/lib/logger.ts`
+### 6.1 `src/lib/core/logger.ts`
 
 ```ts
 // 职责：统一门面；Tauri 用 plugin-log；纯浏览器用 console
@@ -319,7 +319,7 @@ match do_thing() {
 ### P0 — 基础设施 + 关键操作起止（本方案主交付）
 
 1. 接入 `tauri-plugin-log` + `log` + capabilities + Builder（dev/release level/targets）。
-2. 前端 `src/lib/logger.ts` + `logOp`；`main.tsx` 初始化（dev attachConsole 可选）。
+2. 前端 `src/lib/core/logger.ts` + `logOp`；`main.tsx` 初始化（dev attachConsole 可选）。
 3. `runBackgroundTask` 自动 start/end。
 4. Host 表 §5.2 中 **写/长耗时 command** 成对 log；替换关键 `eprintln!`。
 5. ErrorBoundary → `logger.error`。
@@ -366,9 +366,9 @@ match do_thing() {
 | 可选 util | `src-tauri/src/log_util.rs`（OpGuard） |
 | Commands | `src-tauri/src/commands/{vault,lookup,agent,paper,trash,zotero,connector,translate,watcher,graph,window}.rs`（按 §5.2） |
 | 替换 eprintln | `services/watcher.rs`、`agent/*`、`lib.rs` menu 等 |
-| 前端 logger | `src/lib/logger.ts` |
-| 横切 | `src/lib/background-tasks.ts`、`src/main.tsx`、`src/components/error-boundary.tsx` |
-| 业务埋点 | `src/lib/{vault,lookup,paper-read,agent}.ts`、`agent-panel` 发消息路径等 |
+| 前端 logger | `src/lib/core/logger.ts` |
+| 横切 | `src/lib/core/background-tasks.ts`、`src/main.tsx`、`src/components/shell/error-boundary.tsx` |
+| 业务埋点 | `src/lib/{vault,paper,agent}/…`、`agent-panel` 发消息路径等 |
 | CLI | `cli/src/main.rs` + 写命令 |
 | 文档 | 本文、`development/index.md`、`mkdocs.yml`；落地后勾 `todo.md` / roadmap 一句 |
 

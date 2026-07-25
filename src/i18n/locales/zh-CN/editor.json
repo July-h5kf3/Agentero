@@ -15,8 +15,7 @@
 		"numberedList": "有序列表",
 		"todoList": "待办列表",
 		"image": "插入图片",
-		"show": "显示格式工具栏",
-		"hide": "隐藏格式工具栏"
+		"more": "更多"
 	},
 	"image": {
 		"noFile": "请先将笔记保存为文件，再插入图片。",

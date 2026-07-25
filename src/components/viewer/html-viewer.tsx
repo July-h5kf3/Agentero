@@ -1,7 +1,7 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-import { isArxivHostedUrl } from "@/lib/arxiv";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { isArxivHostedUrl } from "@/lib/paper/arxiv";
 
 type HtmlViewerProps = {
 	/** Remote URL only — streamed in a sandboxed iframe (no local download) */
@@ -15,6 +15,24 @@ type HtmlViewerProps = {
  */
 export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 	const { t } = useTranslation("viewer");
+	/** While HTML5 DnD is active, disable iframe hit-testing so dragover
+	 *  reaches dockview drop targets (sandboxed iframe swallows drag events). */
+	const [dragShield, setDragShield] = useState(false);
+
+	useEffect(() => {
+		const arm = () => setDragShield(true);
+		const disarm = () => setDragShield(false);
+		// Capture phase: see tree/OS drags before the event enters the iframe.
+		window.addEventListener("dragstart", arm, true);
+		window.addEventListener("dragend", disarm, true);
+		window.addEventListener("drop", disarm, true);
+		return () => {
+			window.removeEventListener("dragstart", arm, true);
+			window.removeEventListener("dragend", disarm, true);
+			window.removeEventListener("drop", disarm, true);
+		};
+	}, []);
+
 	if (!srcUrl || !/^https?:\/\//i.test(srcUrl)) {
 		return (
 			<div
@@ -45,7 +63,10 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 				src={srcUrl}
 				sandbox={sandbox}
 				referrerPolicy="no-referrer-when-downgrade"
-				className="absolute inset-0 block h-full w-full border-0 bg-background"
+				className={cn(
+					"absolute inset-0 block h-full w-full border-0 bg-background",
+					dragShield && "pointer-events-none",
+				)}
 				style={{ colorScheme: "light dark" }}
 			/>
 		</div>

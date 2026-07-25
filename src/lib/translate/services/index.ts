@@ -1,13 +1,5 @@
 import { AgentTranslateService } from "@/lib/translate/services/agent";
-import {
-	BingTranslateService,
-	GoogleApiTranslateService,
-	GoogleTranslateService,
-	HuoshanWebTranslateService,
-	LibreTranslateService,
-	TencentTransmartTranslateService,
-	YoudaoTranslateService,
-} from "@/lib/translate/services/free";
+import { makeFreeMtService } from "@/lib/translate/services/free";
 import type {
 	FreeTranslateProviderId,
 	TranslateProviderId,
@@ -15,15 +7,12 @@ import type {
 } from "@/lib/translate/types";
 import { FREE_MT_PROVIDER_IDS } from "@/lib/translate/types";
 
-/** Free web engines + BYOA Agent (no paid APIs). */
+/**
+ * Free web engines + BYOA Agent (no paid APIs).
+ * Derived from FREE_MT_PROVIDER_IDS — the single ordered provider list.
+ */
 export const TRANSLATE_SERVICES: TranslateService[] = [
-	BingTranslateService,
-	YoudaoTranslateService,
-	HuoshanWebTranslateService,
-	TencentTransmartTranslateService,
-	GoogleApiTranslateService,
-	GoogleTranslateService,
-	LibreTranslateService,
+	...FREE_MT_PROVIDER_IDS.map(makeFreeMtService),
 	AgentTranslateService,
 ];
 

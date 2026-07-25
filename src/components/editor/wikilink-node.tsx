@@ -8,24 +8,18 @@ import {
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
 import { WikiEmbedElement } from "@/components/editor/wiki-embed-node";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import {
 	type LinkFragment,
 	resolveWikiReference,
 	resolveWikiTarget,
 } from "@/lib/wiki";
-import { useWikiNav } from "@/lib/wiki-nav-context";
-
-export type WikiLinkEl = {
-	value: string;
-	heading?: string | null;
-	alias?: string | null;
-	embed?: boolean;
-};
+import { useWikiNav } from "@/lib/wiki/nav-context";
 
 export function WikiLinkElement(props: PlateElementProps) {
-	const element = props.element as unknown as WikiLinkEl;
+	const element = props.element as unknown as WikiSlateNode;
 	const editing = useSelected();
 	return element.embed ? (
 		<WikiEmbedElement {...props} editing={editing} />
@@ -39,7 +33,7 @@ function WikiLinkNavigationElement({
 	...props
 }: PlateElementProps & { editing: boolean }) {
 	const { t } = useTranslation("editor");
-	const el = props.element as unknown as WikiLinkEl;
+	const el = props.element as unknown as WikiSlateNode;
 	const wikiNav = useWikiNav();
 	const markdownDoc = useMarkdownDoc();
 

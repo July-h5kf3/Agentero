@@ -1,6 +1,6 @@
 # Paper 入库流水线（统一方案）
 
-> 状态：**设计已落库，实现未统一**（各入口仍分叉编排；砖块已部分复用）  
+> 状态：**Host 内核已实现（P0 + P2 本地部分）**——`features/import/paper_import::paper_commit` 已落地，魔棒单篇 / Connector（本地+远程壳）/ 本地 PDF / Bib 四个本地入口已迁入；路径分配统一为 `import::allocate_paper_path`（盘 + catalog 双查，撞名改写 `meta.id`）。未完成：Zotero 迁移（P3）、remote 镜像层收敛、前端 `afterPaperImport`（P1）、统一事件（P4）。  
 > 目标：把「创建 paper 单元」收敛为 **Host 唯一落盘内核 + 前端唯一后置策略**；各入口只做元数据 / 来源适配。  
 > 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒）、[`connector.md`](connector.md)（浏览器插件）、[`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)、[`api.md`](api.md)、[`../development/cli.md`](../development/cli.md)、[`../frontend/ui.md`](../frontend/ui.md)。
 
@@ -36,7 +36,7 @@ Agentero 已有多条「把论文放进 Vault」的路径。落盘相关 **砖�
 
 | # | 入口 | 用户从哪进 | Host 主路径 | 元数据来源 | 资源策略 | 前端完成后 |
 |---|------|------------|-------------|------------|----------|------------|
-| 1 | **魔棒** | 侧栏 / `⇧⌘I` | `lookup_import` → `import_by_identifier` | Translator（标识符/URL）+ arXiv 回退 | **同步** `ensure_paper_assets` + liteparse | 刷树 / Library / wiki → **`openPaper`** → 可选 **auto paper-reader** |
+| 1 | **魔棒** | 侧栏 / `⇧⌘I` | `lookup_import_batch` → `import_by_identifier` | Translator（标识符/URL）+ arXiv 回退 | **同步** `ensure_paper_assets` + liteparse | 刷树 / Library / wiki → **`openPaper`** → 可选 **auto paper-reader** |
 | 2 | **Zotero Connector** | 官方浏览器扩展 | HTTP `saveItems` → `import_connector_item` | 插件 Translator JSON → `map_zotero_item` | **异步** 后台下载（躲 ~15s 超时）；`saveAttachment` 再写 PDF | `connector:item-saved` → 刷树/Library → **`openPaper`** + toast；**无** auto reader |
 | 3 | **本地 PDF** | 魔棒弹层 / Library 导入 / **拖到 papers/ 组织夹** | `paper_import_local_pdf` → `import_local_pdfs`（`entries` 可带 title/authors/year/id） | 默认文件名 stem；拖入弹窗可确认/改 meta | **复制** `{id}.pdf` + liteparse | 刷树/wiki/Library → **只 open 第一篇**；**无** auto reader；非 PDF / 非 papers 落点：仅 `preventDefault` 不导航 |
 | 4 | **Bib/RIS 等文献库** | Library 导入 | `paper_import` → `import_catalog` | Translator `/import` 批量 | **同步** 每篇 `ensure_paper_assets` | 刷树/Library；错误 toast；**不 open**、**无** reader |
@@ -110,7 +110,7 @@ Rescan / Download / saveAttachment **不必**全部塞进「新建 commit」，�
 
 ```text
 ┌──────────── UI / CLI / HTTP Connector ────────────┐
-│  魔棒  Connector  本地PDF  Bib  迁移  CLI  Rescan* │
+│  魔棒  Connector  本地 PDF  Bib  迁移  CLI  Rescan* │
 └───────────────┬───────────────────────────────────┘
                 │  Source adapter → PaperDraft
                 ▼
@@ -129,9 +129,9 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 
 ---
 
-## 4. Host：`paper_commit`
+## 4. Host:`paper_commit`
 
-建议模块：`src-tauri/src/services/lookup/commit.rs`（或新建 `services/paper_import/`，初期放 lookup 旁即可，避免过早拆 crate）。
+统一内核已在 **`src-tauri/src/features/import/paper_import/`**（`paper_commit`）；入口适配仍在 `features/import`、`features/connector`、`features/remote`。
 
 ### 4.1 输入：`PaperDraft` + `PaperCommitOptions`
 
@@ -246,7 +246,7 @@ Download / saveAttachment → paper_attach_assets（结果字段对齐 commit）
 ### 5.1 策略表
 
 ```ts
-// 概念：src/lib/paper-import.ts（或同类）
+// 概念：src/lib/paper/import（或同类）
 type AfterImportPolicy = {
   refreshTree: boolean;
   refreshLibrary: boolean;
@@ -362,8 +362,8 @@ MVP 统一管线时选 **A**，避免与后台任务条并发策略纠缠。
 
 代码锚点（迁移前参考）：
 
-- Host：`src-tauri/src/services/lookup/mod.rs`、`connector/import.rs`、`lookup/zotero_io.rs`、`lookup/zotero_db.rs`
-- 前端：`src/App.tsx`（lookup / connector / local pdf / library import）、`src/lib/lookup.ts`、`src/lib/papers-api.ts`、`src/lib/connector.ts`
+- Host：`src-tauri/src/features/import/`（含 `paper_import`、`zotero_*`）、`features/connector/import.rs`
+- 前端：`src/App.tsx`（lookup / connector / local pdf / library import）、`src/lib/paper/lookup.ts`、`src/lib/paper/api.ts`、`src/lib/paper/import/connector.ts`
 
 ---
 
@@ -383,3 +383,4 @@ MVP 统一管线时选 **A**，避免与后台任务条并发策略纠缠。
 | 日期 | 说明 |
 |------|------|
 | 2026-07-19 | 初稿：现状盘点 + `paper_commit` / `afterPaperImport` 目标架构与分期 |
+| 2026-07-25 | 落地 `services/paper_import::paper_commit`（dedupe / path / assets 策略 + `PaperCommitResult`）；魔棒单篇（改 `ByCatalogId`，重复不再覆盖 NOTES）、Connector（`Deferred` assets，本地+远程共用一个后台下载调度器）、本地 PDF（`CopyPdf`）、Bib（`ByPathOrNotes`）迁入；4 份路径分配合并为 `allocate_paper_path`（盘+catalog，撞名同步改写 `meta.id`，修复迁移 id 不一致）；合并 `identifier_kind_*` / `slug_from_stem` / 免费 MT 链 / connector meta 后处理重复实现 |

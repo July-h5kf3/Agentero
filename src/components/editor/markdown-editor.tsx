@@ -8,6 +8,7 @@ import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
 	type KeyboardEvent,
+	lazy,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -30,20 +31,21 @@ import {
 	wikiLinkNodeSource,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
+import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
 import {
 	type WikiCompletionController,
 	type WikiCompletionDraft,
 	WikiLinkSuggestion,
 } from "@/components/editor/wiki-link-suggestion";
 import i18n from "@/i18n";
-import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown-doc";
+import { errorMessage, notifyError } from "@/lib/core/notify";
+import { cn } from "@/lib/core/utils";
+import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
 	saveImageToMarkdownAssets,
-} from "@/lib/markdown-image";
-import { errorMessage, notifyError } from "@/lib/notify";
-import { cn } from "@/lib/utils";
+} from "@/lib/markdown/image";
 import type { LinkFragment } from "@/lib/wiki";
 import {
 	findWikiCompletionTrigger,
@@ -84,6 +86,13 @@ export type MarkdownEditorProps = {
 };
 
 const CHANGE_DEBOUNCE_MS = 500;
+
+const EmbeddedMarkdownProjection = lazy(async () => {
+	const module = await import(
+		"@/components/editor/embedded-markdown-projection"
+	);
+	return { default: module.EmbeddedMarkdownProjection };
+});
 
 type WikiLinkExteriorBoundary = {
 	path: number[];
@@ -980,58 +989,65 @@ export function MarkdownEditor({
 	]);
 
 	return (
-		<MarkdownDocProvider value={docCtx}>
-			<Plate
-				editor={editor}
-				onSelectionChange={() => {
-					syncWikiLinkPresentation(editor.selection);
-				}}
-				onValueChange={handleEditorValueChange}
-			>
-				<div className={cn("flex h-full min-h-0 flex-col", className)}>
-					{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
-					<EditorContainer
-						ref={editorContainerRef}
-						className="agentero-scroll min-h-0 flex-1"
-						onKeyDownCapture={readOnly ? undefined : handleKeyDown}
-						onBeforeInputCapture={
-							readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
-						}
-						onBlur={readOnly ? undefined : handleEditorBlur}
-						onCompositionStartCapture={
-							readOnly ? undefined : handleWikiLinkCompositionStart
-						}
-						onCompositionEndCapture={
-							readOnly ? undefined : handleWikiLinkCompositionEnd
-						}
+		<WikiEmbedProjectionProvider component={EmbeddedMarkdownProjection}>
+			<MarkdownDocProvider value={docCtx}>
+				<Plate
+					editor={editor}
+					onSelectionChange={() => {
+						syncWikiLinkPresentation(editor.selection);
+					}}
+					onValueChange={handleEditorValueChange}
+				>
+					<div
+						className={cn(
+							"flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
+							className,
+						)}
 					>
-						{/*
-						 * min-h-full + generous bottom padding so the last line is easy
-						 * to click and Enter can always create a new block below it
-						 * (matches Plate default variant pb-72).
-						 */}
-						<Editor
-							variant="none"
-							placeholder={placeholder}
-							readOnly={readOnly}
-							className="min-h-full px-6 pt-4 pb-48"
-							style={fontSize ? { fontSize } : undefined}
-						/>
-						{!readOnly ? (
-							<WikiLinkSuggestion
-								draft={wikiCompletionDraft}
-								onClose={() => setWikiCompletionDraft(null)}
-								onContinue={(raw) =>
-									setWikiCompletionDraft((current) =>
-										current ? { ...current, raw } : current,
-									)
-								}
-								controllerRef={completionControllerRef}
+						{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
+						<EditorContainer
+							ref={editorContainerRef}
+							className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
+							onKeyDownCapture={readOnly ? undefined : handleKeyDown}
+							onBeforeInputCapture={
+								readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
+							}
+							onBlur={readOnly ? undefined : handleEditorBlur}
+							onCompositionStartCapture={
+								readOnly ? undefined : handleWikiLinkCompositionStart
+							}
+							onCompositionEndCapture={
+								readOnly ? undefined : handleWikiLinkCompositionEnd
+							}
+						>
+							{/*
+							 * min-h-full + generous bottom padding so the last line is easy
+							 * to click and Enter can always create a new block below it
+							 * (matches Plate default variant pb-72).
+							 */}
+							<Editor
+								variant="none"
+								placeholder={placeholder}
+								readOnly={readOnly}
+								className="min-h-full px-6 pt-4 pb-48"
+								style={fontSize ? { fontSize } : undefined}
 							/>
-						) : null}
-					</EditorContainer>
-				</div>
-			</Plate>
-		</MarkdownDocProvider>
+							{!readOnly ? (
+								<WikiLinkSuggestion
+									draft={wikiCompletionDraft}
+									onClose={() => setWikiCompletionDraft(null)}
+									onContinue={(raw) =>
+										setWikiCompletionDraft((current) =>
+											current ? { ...current, raw } : current,
+										)
+									}
+									controllerRef={completionControllerRef}
+								/>
+							) : null}
+						</EditorContainer>
+					</div>
+				</Plate>
+			</MarkdownDocProvider>
+		</WikiEmbedProjectionProvider>
 	);
 }

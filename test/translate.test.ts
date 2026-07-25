@@ -12,6 +12,7 @@ import {
 	resolveTargetLangCode,
 	resolveTargetLangName,
 	resolveTranslateAgent,
+	targetLangDisplayName,
 } from "@/lib/translate";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
 
@@ -22,6 +23,14 @@ describe("translate lang", () => {
 		expect(resolveTargetLangCode("en", "zh-CN")).toBe("en");
 		expect(resolveTargetLangName("ui", "zh-CN")).toBe("Chinese");
 		expect(resolveTargetLangName("en", "zh-CN")).toBe("English");
+	});
+
+	it("maps codes and names via targetLangDisplayName", () => {
+		expect(targetLangDisplayName("zh-CN")).toBe("Chinese");
+		expect(targetLangDisplayName("zh")).toBe("Chinese");
+		expect(targetLangDisplayName("en")).toBe("English");
+		expect(targetLangDisplayName("Chinese")).toBe("Chinese");
+		expect(targetLangDisplayName("English")).toBe("English");
 	});
 
 	it("builds langs from settings", () => {

@@ -31,17 +31,13 @@ export async function runTranslate(
 		throw new Error(`Unknown translation provider: ${providerId}`);
 	}
 
+	// Always keep BCP-47 codes on the task; Agent service maps to display names.
 	const task: TranslateTask = {
 		text,
 		sourceLang: partial.sourceLang ?? langs.sourceLang,
 		targetLang: partial.targetLang ?? langs.targetLang,
 		context: partial.context,
 	};
-
-	// Agent prompts prefer human language names
-	if (providerId === "agent" && !partial.targetLang) {
-		task.targetLang = langs.targetLangName;
-	}
 
 	const runOpts: TranslateRunOptions = {
 		...opts,

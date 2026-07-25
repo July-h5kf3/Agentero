@@ -6,8 +6,8 @@
 
 - `src-tauri/src/models/agent.rs` — `AgentResultPayload.provider_session_id`
 - `src-tauri/src/services/agent/acp.rs` — 返回 ACP provider session ID
-- `src/lib/agent.ts` — 前端结果 payload 类型
-- `src/components/layout/agent-panel.tsx` — 保存并复用 provider session ID
+- `src/lib/agent/api.ts` — 前端结果 payload 类型
+- `src/components/agent/use-agent-panel.ts` — 保存并复用 provider session ID
 
 ## 1. 问题现象
 

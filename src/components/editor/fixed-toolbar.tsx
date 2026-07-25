@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 import { Toolbar } from "./toolbar";
 
@@ -9,7 +9,9 @@ export function FixedToolbar(props: React.ComponentProps<typeof Toolbar>) {
 		<Toolbar
 			{...props}
 			className={cn(
-				"scrollbar-hide sticky top-0 left-0 z-50 h-10 w-full items-center justify-between overflow-x-auto rounded-t-lg border-b border-b-border bg-background/95 p-1 backdrop-blur-sm supports-backdrop-blur:bg-background/60",
+				/* shrink-0 in flex editor column — avoid sticky+z-50 so the bar
+				 * cannot paint over dockview tab chrome if content height overflows. */
+				"h-10 w-full shrink-0 items-center justify-between rounded-none border-b border-b-border bg-background/95 p-1 backdrop-blur-sm supports-backdrop-blur:bg-background/60",
 				props.className,
 			)}
 		/>

@@ -8,8 +8,8 @@ import {
 	threadPin,
 	threadPreview,
 	threadTitle,
-} from "@/lib/pdf-ask";
-import { buildPdfAskPrompt } from "@/lib/pdf-ask/prompt";
+} from "@/lib/pdf/ask";
+import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
 
 describe("pdf-ask schema", () => {
 	it("parses a valid thread", () => {

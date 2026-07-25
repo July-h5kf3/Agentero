@@ -12,28 +12,22 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
 import {
 	MAX_WIKI_EMBED_DEPTH,
 	useWikiEmbedAncestry,
 	WikiEmbedAncestryProvider,
 } from "@/components/editor/wiki-embed-context";
-import type { WikiLinkEl } from "@/components/editor/wikilink-node";
-import { cn } from "@/lib/utils";
+import { useWikiEmbedProjection } from "@/components/editor/wiki-embed-projection-context";
+import { cn } from "@/lib/core/utils";
 import { joinVaultPath } from "@/lib/vault";
 import {
 	type ResolvedLink,
 	readWikiEmbed,
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
-import { useWikiNav } from "@/lib/wiki-nav-context";
-
-const EmbeddedMarkdownProjection = lazy(async () => {
-	const module = await import(
-		"@/components/editor/embedded-markdown-projection"
-	);
-	return { default: module.EmbeddedMarkdownProjection };
-});
 
 const WikiAttachmentEmbed = lazy(async () => {
 	const module = await import("@/components/editor/wiki-attachment-embed");
@@ -160,10 +154,11 @@ export function WikiEmbedElement({
 	...props
 }: PlateElementProps & { editing: boolean }) {
 	const { t } = useTranslation("editor");
-	const element = props.element as unknown as WikiLinkEl;
+	const element = props.element as unknown as WikiSlateNode;
 	const wikiNav = useWikiNav();
 	const markdownDoc = useMarkdownDoc();
 	const ancestry = useWikiEmbedAncestry();
+	const EmbeddedMarkdownProjection = useWikiEmbedProjection();
 
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
@@ -327,7 +322,8 @@ export function WikiEmbedElement({
 					<EmbedStatus message={t("embed.loading")} />
 				) : presentation.kind === "ready" ? (
 					<Suspense fallback={<EmbedStatus message={t("embed.loading")} />}>
-						{presentation.response.contentKind === "markdown" ? (
+						{presentation.response.contentKind === "markdown" &&
+						EmbeddedMarkdownProjection ? (
 							<WikiEmbedAncestryProvider
 								ancestry={[...ancestry, presentation.key]}
 							>

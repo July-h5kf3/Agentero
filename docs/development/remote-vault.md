@@ -3,7 +3,7 @@
 > **状态**：**MVP 已落地**（M0–M3）；M4 加固中（远端 trash ✅、入库写远端 ✅、blob LRU ✅、Connector 远程 ✅；Codex-SSH 待办）  
 > **分支**：`docs/remote-vault-ssh`  
 > **相关**：[`data-model.md`](../backend/data-model.md)、[`catalog.md`](../backend/catalog.md)、[`api.md`](../backend/api.md)、Agent 运行时 `src-tauri/src/services/agent/`  
-> **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/remote-vault.ts`、`vault.ts` 远程 IO
+> **代码**：`src-tauri/src/services/fs/`、`services/remote/`、`commands/remote.rs`；前端 `src/lib/vault/remote/remote-vault.ts`、`vault.ts` 远程 IO
 
 本文定义：如何通过 SSH 打开**服务器上的** Agentero Vault，并在**同一台远端机器**上运行 BYOA Agent（ACP），使文件权威与 Agent 工作目录始终同机。
 
@@ -19,7 +19,7 @@
 | G2 | **SFTP 服务 UI 文件 IO** | 文件树、读写 Markdown、PDF 预览、目录操作经 SFTP（经 SSH 会话） |
 | G3 | **BYOA 跑在远端** | Codex / Claude-ACP / OpenCode 等进程在服务器上启动；`cwd` = 远端 Vault 根 |
 | G4 | **本机不持有第二套库** | 允许 ephemeral 工作副本与 PDF blob 缓存；断开后不得变成可独立打开的「本地 Vault」 |
-| G5 | **复用现有产品契约** | Vault 相对路径、catalog 语义、ACP 事件、权限三档、notes-review 尽量同构 |
+| G5 | **复用现有产品契约** | Vault 相对路径、catalog 语义、ACP 事件、权限三档尽量同构 |
 
 ### 1.2 非目标（MVP 不做）
 
@@ -189,7 +189,7 @@ mutation（tags / rescan / is_read…）:
   立刻 SFTP PUT（建议 catalog.sqlite.tmp + rename）
   更新 FileMeta；失败则整次操作失败 + toast
 
-写前乐观锁:
+写前乐观锁：
   stat 远端；与打开/上次 push 的 meta 不一致 → Conflict，提示重新打开
 ```
 
@@ -248,7 +248,7 @@ cd /data/my-vault && exec opencode acp
 4. ACP 写入 → channel stdin  
 5. 退出码 / 断开 → `agent:completed` / `agent:failed`  
 
-**协议与 UI 复用**：`agent:stream`、`agent:permission-request`、`agent:notes-review`、权限三档、paper-reader skill 触发语法不变；路径展示尽量 strip 为 vault-relative。
+**协议与 UI 复用**：`agent:stream`、`agent:permission-request`、权限三档、paper-reader skill 触发语法不变；路径展示尽量 strip 为 vault-relative。
 
 ### 5.3 Provider 配置扩展（草案）
 
@@ -294,7 +294,7 @@ type RemoteAgentLaunch = {
 | 最近本地 | **不得**收录 `remote:<sessionId>`（每次连接新 UUID；见 `rememberRecentVault` 过滤） |
 | 标题栏 / 树标题 | 远程展示 `displayName` + 「远程」徽章；会话内用伪路径 `remote:<sessionId>` |
 | 文件树 | **懒加载**：`papers/`/`notes/`/`plans/`/`.agents/` 打开时全量递归；其它根目录仅一层，`childrenPending` 展开再 list；忽略名永不 list。隐藏 Finder / 系统终端（`FsCaps`） |
-| Agent 面板 | 远端 transport；Codex+纯 SSH 暂拒 |
+| Agent 面板 | 远端 transport；Codex+ 纯 SSH 暂拒 |
 | 设置 → 通用 | 「清除远程缓存」（blob LRU 2 GiB/库） |
 | i18n | 全部 `t()`；先 `en` 再 `zh-CN` |
 
@@ -330,7 +330,7 @@ type RemoteAgentLaunch = {
 | **M0** | `VaultFs` + `LocalFs` 迁移关键读写路径；本地零回归 | 本地 |
 | **M1** | SSH 连接、SFTP 树、md 读写、PDF blob 预览、远程徽章 | 文件远端 |
 | **M2** | catalog GET/PUT、`paper_list` / tags / rescan、冲突 stat | **含 sqlite 远端** |
-| **M3** | `SshStdio` ACP、远端 discover/warm、精读 Zap、permission/notes-review | 远端 BYOA |
+| **M3** | `SshStdio` ACP、远端 discover/warm、精读 Zap、permission | 远端 BYOA |
 | **M4** | 连接复用、atomic catalog PUT、**trash ✅**、**入库写远端 ✅**、**缓存 LRU ✅** | 加固 |
 
 **MVP 闭环** = M0–M3。M1 无 catalog 不算完整远程 Vault；M2 无 Agent 不满足「要 BYOA」。
@@ -377,7 +377,7 @@ type RemoteAgentLaunch = {
 ### 9.3 前端
 
 - 无新重视图库；状态：远程 session + caps  
-- PDF 仍 `blob:` / react-pdf  
+- PDF 仍 `blob:` / EmbedPDF  
 - 设置页：远程条目；i18n `en` + `zh-CN`
 
 ### 9.4 明确不采用（MVP）
@@ -506,4 +506,4 @@ cargo test --lib live_ssh_remote_vault -- --ignored --nocapture
 
 - Codex App Server 经 SSH  
 - 更完整设置页远程偏好（默认 identity 等）  
-- 更广的 `std::fs` → `VaultFs` 迁移 
+- 更广的 `std::fs` → `VaultFs` 迁移

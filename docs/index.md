@@ -10,7 +10,7 @@ Agentero 桌面应用
 │   ├── React 19 + TypeScript + Vite
 │   ├── Tailwind CSS 4 + shadcn/ui + AI Elements
 │   ├── Plate Markdown 编辑
-│   ├── react-pdf / iframe 阅读器
+│   ├── EmbedPDF（PDFium）/ iframe 阅读器
 │   └── react-force-graph-2d 图谱面板
 ├── Tauri Host
 │   ├── Rust + Tauri 2 commands/events
@@ -40,28 +40,17 @@ Agentero 桌面应用
 
 ## 当前 UI 形态
 
-- 默认工作台：文件树 + **文档标签页**中间内容 +（按需）Notes + 可选右侧栏。
-- **文档标签**：标题栏浏览器式多 tab（paper / PDF / HTML / Markdown / Library / 图片）；常驻挂载，切换保留 PDF 滚动/缩放与编辑器状态。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`：设置 / 快捷键清单 / 命令面板 / 迁移对话框等），否则逐个关标签，仅剩全库时关窗；`⌥⌘←/→` 切换。**分屏（split）** 仍规划见 V0.6。
-- 文件树顶部有虚拟节点 **Library**；中间栏可展示 catalog **论文库表格**（排序、**tags** 染色 chip + 筛选、双向滚动），数据来自 `paper_list`。
-- 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下虚拟节点 `agentero:trash` → 中间栏回收站视图恢复 / 清空，无 Undo toast）。Paper 行默认 **标题 · 作者**（设置 → 通用可切换标签/排序预设，不改磁盘文件夹名）。
-- **Paper Info / Notes** 仅在选中具体论文时出现；论文库视图不显示。Paper Info **Tags** 可编辑并可设 **Apple 8 色**（`paper_set_tags`，`tags_json` 字符串或 `{name,color}`）。Library 空态可 **Rescan**（`paper_rescan`）从盘补 catalog。
-- 无 Vault 时中间栏为欢迎页（最近本地/远程 + 打开 / **打开远程** / 创建 / 从 Zotero 迁移）；有 Vault 时侧栏标题可切换知识库（含 **打开远程…**）；`⌘N` 可开多窗口。
-- 可选右侧栏只有两个顶层入口：Agent 与 Backlinks（左右侧栏均为 collapsible 常驻面板，交替快捷键互不冲折叠态）。
-- Backlinks 视图上方显示反链，下方显示 Graph；Graph 不是独立顶层 tab（**双链图**，非文献引用图）。
-- 魔棒：侧栏粘贴标识符 → Translator → catalog + **默认下载 PDF**（arXiv 含 LaTeX 解压）。
-- **Zotero Connector 兼容**（MVP）：设置开启后本机 `23119` 接收官方浏览器扩展 `saveItems` + **`saveAttachment`** → Vault（与 Zotero 桌面互斥）— 见 [`backend/connector.md`](backend/connector.md)。
-- 补资源：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时 Download；Library 行可**批量**补全部缺失。无 TeX 时下载后 liteparse 生成 `PAPER.md`。
-- **精读**：设置 → Agent 可开「入库后自动精读」（默认关）；**Zap** 始终可手动。Skill 按 provider → 写 `NOTES.md` → `is_read=true`。
-- **Agent 权限**：设置 → Agent 全局「权限模式」（受限默认 / **每次询问** / 自动批准）；`ask` 时弹权限对话框。
-- **Agent 面板**：空态建议 → summary / qa / related_work；笔记被 Agent 改写后 **统一 Diff** + Keep / Revert。
-- **命令面板**（`⌘K` / `⌘P`）：论文 quick-open + Vault Markdown 全文搜索。
-- 预览：任意路径 PDF / 图片 `blob:`；PDF **导航 / 适应宽·整页 / 大纲 / ⌘F / 平滑划词** + 划词操作菜单（见 [`development/pdf-ask.md`](development/pdf-ask.md)）。
-- **翻译服务**（首版：免费 MT + BYOA Agent）：见 [`development/translate.md`](development/translate.md)。
-- **Markdown 内嵌图片**：`./assets/` 落盘 + 选中源码 + 删除 GC（见 [`backend/data-model.md`](backend/data-model.md)）。
+- 默认工作台：左栏文件树 + 中间 **Dockview 工作区** + 可选右侧栏（Agent / Backlinks）。见 [`development/tab-split.md`](development/tab-split.md)。
+- **文档 panel**：中间栏 dockview 原生管理 tab / 关闭 / 上下左右分屏 / 多格网格；**标题栏无文档 tab 条**。打开 paper 时默认 PDF 与 `NOTES.md` **左右分屏**（左 PDF、右 NOTES）。布局只存 dockview `toJSON()`。`⌘W` / `Esc` 优先关最顶层弹层（`overlay-stack`），否则关 active panel，仅剩全库时关窗；`⌥⌘←/→` 按视觉序循环 panel。
+- 文件树顶部虚拟节点 **Library**；中间栏 catalog **论文库表格**（排序、**tags** 染色 chip、双向滚动），数据来自 `paper_list`。
+- 文件树：右键 / `⌥⌘R` **Finder 显示**；右键 / `⌥⌘T` **终端打开**；多选 + 拖拽移动；右键 / `⌘⌫` **移入回收站**（Library 下 `agentero:trash` → 中间栏恢复 / 永久删除，侧栏右键清空）。Paper 行默认 **标题 · 作者**（设置可切换标签/排序预设）。
+- **Paper Info** 仅选中具体论文时出现；**Tags** 可编辑并可设 Apple 8 色（`paper_set_tags`）。Library 空态可 **Rescan**（`paper_rescan`）。
+- 无 Vault 时中间栏为欢迎页；有 Vault 时侧栏标题可切换知识库（含 **打开远程…**）；`⌘N` 多窗口。
+- 可选右侧栏：Agent 与 Backlinks（常驻 collapsible）。Backlinks 上方反链、下方 **双链** Graph（非文献引用图）。
+- 魔棒 / Zotero Connector / 补资源 Download / 精读 Zap / Agent 权限与面板工作流 / 命令面板 / PDF 划词 / 翻译 / Markdown 内嵌图 / 外部改盘重载 / 全局 Toast：见下表与对应文档。
 - **双链与嵌入**：`[[...]]` Live Preview、标题/block 精确跳转，以及 `![[...]]` Markdown/图片/PDF 只读投影；普通编辑不会刷新无关嵌入（见 [`backend/wikilinks.md`](backend/wikilinks.md)）。
-- **外部改盘自动重载**：`notify` → `vault:file-changed` 刷新打开的 Markdown / 文件树；Markdown、图片与 PDF 变更防抖重建 wiki 索引，嵌入按目标路径刷新；写盘前保存冲突检测（见 [`frontend/ui.md`](frontend/ui.md)）。
-- **全局错误 Toast**（右上角 Sonner）：`notifyError`；表单就地校验除外。
-- **规划中**（见 roadmap）：**V0.6** 分屏；**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域。
+- **链接稳定性**：Agentero 发起的文件/目录/paper 改名与移动会事务化修复已解析链接；可信外部本地 rename 受 `ask` / `always` 设置控制。
+- **规划中**（roadmap）：**V0.7** 文内引用 hover→Paper Info、Connected Papers 式邻域（**V0.6 标签页 + 多分屏已落地**）。
 - **远程 Vault（SSH/SFTP）+ 远端 BYOA**：**MVP 已落地**（见 [`development/remote-vault.md`](development/remote-vault.md)）。
 - 实现状态与路线图：[`development/roadmap.md`](development/roadmap.md)。
 
@@ -73,7 +62,7 @@ Agentero 桌面应用
 | 前端运行时 | [React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Vite](https://vite.dev/) |
 | 样式与 UI | [Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[Radix UI](https://www.radix-ui.com/)、[Lucide](https://lucide.dev/) |
 | Agent UI | [AI Elements](https://elements.ai-sdk.dev/)、[Streamdown](https://github.com/vercel/streamdown)、[Agent Client Protocol](https://agentclientprotocol.com/) |
-| 编辑器与阅读器 | [Plate](https://platejs.org/)、[react-pdf](https://github.com/wojtekmaj/react-pdf)、[pdfjs-dist](https://github.com/mozilla/pdf.js) |
+| 编辑器与阅读器 | [Plate](https://platejs.org/)、[EmbedPDF](https://www.embedpdf.com/) + PDFium |
 | 图谱 | [react-force-graph-2d](https://github.com/vasturiano/react-force-graph) |
 | 文档站 | [MkDocs](https://www.mkdocs.org/) + [Read the Docs 主题](https://www.mkdocs.org/user-guide/choosing-your-theme/#readthedocs) |
 

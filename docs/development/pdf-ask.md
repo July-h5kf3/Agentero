@@ -1,18 +1,13 @@
 # PDF 划词（Selection：高亮 / 批注 / 提问 / 翻译）
 
-> ⚠️ **EmbedPDF 迁移（2026-07）**：PDF 渲染 / 选中 / 批注引擎已从 `react-pdf` + `pdfjs-dist` 全量切换到 **[@embedpdf](https://www.embedpdf.com)（PDFium / WASM，headless 插件式）**。
-> - **新组件**：`src/components/viewer/embed/pdf-viewer.tsx`（`Viewport`/`Scroller`/`RenderLayer`/`TilingLayer` + selection / annotation / search / bookmark 插件）；共享 PDFium 引擎在 `src/components/viewer/embed/engine-provider.tsx`（`main.tsx` 挂载，`worker:false` 主线程加载本地 wasm）。
-> - **高亮 / 批注 = EmbedPDF 注解**（唯一事实来源），落盘 `papers/<id>/marks/annotations.json`（`exportAnnotations()` / `importAnnotations()` 传输格式；批注 = 注解 `contents` 非空；调色板键 / quote 存于注解 `custom`）。首次打开若存在旧版 `marks/<id>.json`（`kind: highlight`）会**一次性迁移**到 `marks/annotations.json` 并删除旧高亮标记；若仍有论文根目录遗留的 `annotations.json` 也会迁入 `marks/`（`lib/pdf-highlight/annotation-store.ts` + `migrate-marks.ts`）。
-> - **提问 / 翻译仍为应用层浮层**，几何来自 selection 插件；成功翻译落盘 `papers/<id>/marks/<id>.json`（`kind` ∈ `ask` \| `translate`），翻译失败仅显示当前错误卡片，不生成持久化入口。
-> - **查找（⌘F）/ 大纲** 改用 `@embedpdf/plugin-search` / `plugin-bookmark`。
-> - 下方各节仍描述历史 `react-pdf` 设计，待完整重写。
-
-> 状态：**MVP 已落地（前端 + Vault 文件 IO）**。  
-> 范围：阅读 PDF 时选中文本 → **操作菜单** → 高亮 / 批注 / 提问 / 翻译；共用 **`activeCard` + `SelectionCard` + `SelectionGutter`**。  
-> **落盘（唯一）**：`papers/<id>/marks/<id>.json`，`kind` ∈ `highlight` \| `ask` \| `translate`（pretty JSON；**无** `asks/` / `highlights/` / `translates/` 兼容路径）。  
-> 批注 = `kind: highlight` 且 `comment` 非空；提问 / 翻译 / 批注均可页边针回访。  
-> 实现：`pdf-viewer.tsx`、`pdf-ask/*`、`lib/pdf-selection`（路径）、`lib/pdf-ask|pdf-highlight|pdf-translate`（类型与 IO）、`annotations-panel.tsx`。  
-> 相关：[`technical-plan.md`](technical-plan.md)、[`translate.md`](translate.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md)（问答复用 `agent_run_once`）。
+> 状态：**MVP 已落地**（EmbedPDF / PDFium + Vault 文件 IO）。
+>
+> **引擎**：[@embedpdf](https://www.embedpdf.com)（PDFium / WASM）。组件：`src/components/viewer/embed/pdf-viewer.tsx`；共享引擎 `engine-provider.tsx`（`main.tsx` 挂载）。
+> **高亮 / 批注** = EmbedPDF 注解，落盘 `papers/<id>/marks/annotations.json`（批注 = `contents` 非空）。旧 highlight json / 根目录 `annotations.json` 首次打开时一次性迁入。
+> **提问 / 翻译** = 应用层浮层；成功翻译落盘 `marks/<id>.json`（`kind` ∈ `ask` | `translate`）。
+> **查找 / 大纲**：`@embedpdf/plugin-search` / `plugin-bookmark`。
+> 实现：`viewer/embed/*`、`viewer/pdf-ask/*`、`lib/pdf-selection`、`lib/pdf-ask|pdf-highlight|pdf-translate`、`annotations-panel.tsx`。
+> 相关：[`technical-plan.md`](technical-plan.md)、[`translate.md`](translate.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/data-model.md`](../backend/data-model.md)、[`../backend/api.md`](../backend/api.md)。
 
 ## 1. 产品目标
 
@@ -24,6 +19,7 @@
 | **操作菜单** | 共用框架；落盘 **`marks/<id>.json`**（`kind` 区分）；滚动/缩放 **重定位** 卡片不关闭 |
 | **双击 / 悬停** | 直接开提问卡（页码上下文；悬停有防误触阈值） |
 | **提问** | `runOnce` + `hideFromChatHistory`；有用户消息后保留页边提问针 |
+| **编辑 / 重发** | 会话空闲时 hover 用户气泡 **Edit**，或底部输入为空时按 **`↑`** → 编辑最后一条用户问题；重发丢弃该条及之后消息再发起新 turn。Agent 侧栏 Chat 的 **`↑`/`↓`** 则是把历史 prompt **回填到输入框**（不回滚气泡；见 `src/lib/ui/prompt-recall.ts`） |
 | **回访** | `SelectionGutter`：提问 Hover 打开；批注/翻译点击打开；Hide 留针、Delete 删盘 |
 
 参考形态：浮层卡片 + 底部输入（类似常见 AI 浮层；本应用内需对齐 shadcn / AI Elements，且不引入外部 Chat 产品壳）。
@@ -38,24 +34,25 @@
 ## 2. 与现有架构的关系
 
 ```text
-中间栏 PdfViewer（react-pdf + pdf.js TextLayer）
+中间栏 PdfViewer（EmbedPDF / PDFium + selection / annotation 插件）
         │
         ├─ 划词 → SelectionMenu
         ├─ activeCard: ask | annotate | translate
         │     ├─ AskPopover / AnnotationEditor / TranslateCard（SelectionCard）
         │     └─ 滚动/缩放 → placeActiveCard（不关卡）
         ├─ SelectionGutter → 页边针
-        ├─ marks IO        → papers/<id>/marks/<id>.json
+        ├─ 高亮/批注 IO   → papers/<id>/marks/annotations.json
+        ├─ 提问/翻译 IO    → papers/<id>/marks/<id>.json
         └─ 提问 / Agent 译 → agent_run_once + stream（hideFromChatHistory）
 ```
 
 | 已有能力 | 本功能用法 |
 |---|---|
-| `react-pdf` TextLayer | 选区与坐标 |
-| `PdfViewer` | 菜单 / activeCard / gutter / 落盘 |
+| EmbedPDF selection / annotation | 选区几何、高亮与批注 |
+| `viewer/embed/pdf-viewer` | 菜单 / activeCard / gutter / 落盘 |
 | ACP `agent_run_once` | 提问与可选 Agent 翻译 |
 | AI Elements | 提问卡 Conversation / PromptInput |
-| Vault 文件 | **仅** `marks/*.json` |
+| Vault 文件 | `marks/annotations.json` + `marks/<id>.json` |
 
 ## 3. 技术栈分析
 
@@ -63,8 +60,8 @@
 
 | 层 | 选型 | 理由 | 是否新增依赖 |
 |---|---|---|---|
-| PDF 渲染 | **既有** `react-pdf` + `pdfjs-dist` | 已渲染 TextLayer / AnnotationLayer，适合划词 | 否 |
-| 选区与几何 | **DOM Selection + TextLayer span 几何**；必要时读 `page.getTextContent()` | 浏览器原生选区成本低；bbox 用 `getClientRects()` 映射到页坐标 | 否 |
+| PDF 渲染 | **EmbedPDF** + PDFium（WASM） | 统一渲染 / 选区 / 注解 / 查找 / 大纲 | 已装 `@embedpdf/*` |
+| 选区与几何 | selection 插件 + `selection-anchor` / geometry | 页内归一化坐标；滚动/缩放后重算 | 否 |
 | 浮层定位 | **Floating UI**（`@floating-ui/react`）或 Radix **Popover** 定位 primitives | 处理碰撞、滚动、缩放后重算；与 shadcn 生态一致 | 建议新增 Floating UI（若未间接依赖） |
 | 迷你对话 UI | **AI Elements** 精简组合 + shadcn Card/Button/Tooltip | 与 Agent 面板视觉一致；图标 + Tooltip，无常驻说明文案 | 否 |
 | 状态 | React 局部 state + 可选轻量 store（若已有 Zustand 可复用） | 当前选区线程、打开中的 threadId、流式 buffer | 视实现而定 |
@@ -204,7 +201,7 @@ interface PdfTranslateRecord {
 }
 ```
 
-实现：`src/lib/pdf-selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
+实现：`src/lib/pdf/selection/marks-io.ts`（路径）+ 各 `parse*` / `list*` / `write*`。
 
 ### 5.3 存储边界
 
@@ -226,8 +223,8 @@ src/components/viewer/
     selection-gutter.tsx         # 共用页边针
     ask-popover.tsx | annotation-editor.tsx | translate-card.tsx
     highlight-layer.tsx | highlight-menu.tsx
-src/lib/pdf-selection/           # marks-io + pin + ActiveSelectionCard
-src/lib/pdf-ask|pdf-highlight|pdf-translate/
+src/lib/pdf/selection/           # marks-io + pin + ActiveSelectionCard
+src/lib/pdf/ask|pdf-highlight|pdf-translate/
 ```
 
 **UI**：i18n `viewer`；图标 + Tooltip；卡片 Esc/收起/删除；滚动重定位。
@@ -240,7 +237,7 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 
 - `agent_run_once`（`hideFromChatHistory: true`）
 - `agent:stream` / `agent:completed` / `agent:failed`
-- 提问 prompt：`src/lib/pdf-ask/prompt.ts`；Agent/模型：`settings.pdfAsk`
+- 提问 prompt：`src/lib/pdf/ask/prompt.ts`；Agent/模型：`settings.pdfAsk`
 - 翻译：应用级 `translate` 服务（免费 MT 或 BYOA Agent，见 [`translate.md`](translate.md)）
 
 ## 8. 页边圆片布局算法
@@ -294,9 +291,9 @@ src/lib/pdf-ask|pdf-highlight|pdf-translate/
 
 ## 13. 决策摘要
 
-1. **渲染**：`react-pdf` TextLayer。  
+1. **渲染**：EmbedPDF / PDFium。  
 2. **交互**：划词菜单 + 统一 activeCard；页边针回访。  
-3. **存储**：**仅** `papers/<id>/marks/<id>.json` + `kind`；坐标 0–1 归一化。  
+3. **存储**：高亮/批注 → `marks/annotations.json`；提问/翻译 → `marks/<id>.json`；坐标归一化。  
 4. **智能**：ACP BYOA；不在应用内嵌模型 Key。  
 5. **UI**：SelectionCard / Gutter + AI Elements 提问卡。  
-6. **标注层唯一**：`marks/*.json`（不写 NOTES / 不另建 Markdown 证据文件）。
+6. **标注层**：`marks/` 下 JSON（不写 NOTES / 不改 PDF 二进制）。

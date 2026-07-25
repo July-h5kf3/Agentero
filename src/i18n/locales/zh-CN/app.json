@@ -28,7 +28,6 @@
 		"catTab": "标签",
 		"settingsOpen": "打开设置",
 		"settingsClose": "关闭设置",
-		"shortcutsShow": "键盘快捷键",
 		"vaultOpen": "打开 Vault…",
 		"vaultCreate": "创建 Vault…",
 		"vaultRefresh": "刷新文件树",
@@ -62,7 +61,6 @@
 		"hideRightSidebarHint": "隐藏右侧边栏 ({{shortcut}})",
 		"enterAgentZen": "Agent 禅模式",
 		"exitAgentZen": "退出禅模式",
-		"enterAgentZenHint": "全屏 Agent 对话 ({{shortcut}})",
 		"exitAgentZenHint": "返回工作台 ({{shortcut}})",
 		"settings": "设置",
 		"settingsHint": "设置 ({{shortcut}})",
@@ -74,16 +72,11 @@
 		"layoutHint": "配置面板",
 		"layoutPanels": "面板",
 		"layoutLeftSidebar": "左侧边栏",
-		"layoutRightSidebar": "右侧边栏",
-		"showNotes": "显示笔记",
-		"hideNotes": "隐藏笔记",
-		"showNotesHint": "显示笔记栏",
-		"hideNotesHint": "隐藏笔记栏"
+		"layoutRightSidebar": "右侧边栏"
 	},
 	"editor": {
 		"markdownPlaceholder": "在此输入 Markdown……",
-		"notesPlaceholder": "在此撰写这篇论文的笔记……",
-		"unsaved": "有未保存的更改"
+		"notesPlaceholder": "在此撰写这篇论文的笔记……"
 	},
 	"diskConflict": {
 		"title": "“{{name}}” 已被外部修改（已保留你的未存改动）",
@@ -93,6 +86,29 @@
 	"tabs": {
 		"strip": "已打开的文档",
 		"close": "关闭 {{title}}",
+		"closeSplit": "关闭分屏 · {{title}}",
+		"contextClose": "关闭",
+		"contextCloseOthers": "关闭其他",
+		"contextCloseAll": "关闭全部",
+		"contextCreateTabGroup": "新建标签组",
+		"contextRemoveFromTabGroup": "从标签组移除",
+		"tabGroupDefaultName": "分组",
+		"tabGroupDissolve": "解散标签组",
+		"tabGroupRenameAria": "重命名标签组",
+		"tabGroupChipAria": "标签组 {{name}}。双击重命名，单击展开或折叠。",
+		"tabGroupColor": {
+			"grey": "灰",
+			"red": "红",
+			"orange": "橙",
+			"yellow": "黄",
+			"green": "绿",
+			"teal": "青",
+			"blue": "蓝",
+			"indigo": "靛",
+			"purple": "紫"
+		},
+		"splitDropHint": "松开放到分屏",
+		"splitNotAllowed": "此项无法在分屏中打开。",
 		"emptyTitle": "未打开任何文档",
 		"emptyHint": "从侧边栏选择文件或论文即可在标签中打开。"
 	},
@@ -187,6 +203,7 @@
 		"downloadPhaseAsset": "资源",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
+		"batchProgress": "{{phase}} · {{current}} / {{total}}",
 		"downloadRefreshing": "正在刷新论文库… · {{path}}",
 		"lookupImport": "添加论文",
 		"lookupFetching": "正在拉取元数据与资源… · {{id}}",

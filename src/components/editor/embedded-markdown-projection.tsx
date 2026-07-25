@@ -8,7 +8,8 @@ import { Editor } from "@/components/editor/editor";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
-import { splitFrontmatter } from "@/lib/markdown-doc";
+import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
+import { splitFrontmatter } from "@/lib/markdown/doc";
 
 export const EmbeddedMarkdownProjection = memo(
 	function EmbeddedMarkdownProjection({
@@ -33,15 +34,17 @@ export const EmbeddedMarkdownProjection = memo(
 		});
 
 		return (
-			<MarkdownDocProvider value={{ filePath }}>
-				<Plate editor={editor}>
-					<Editor
-						variant="none"
-						readOnly
-						className="min-h-0 cursor-default px-4 pb-3 pt-2 text-sm leading-relaxed [&>*:first-child]:mt-0"
-					/>
-				</Plate>
-			</MarkdownDocProvider>
+			<WikiEmbedProjectionProvider component={EmbeddedMarkdownProjection}>
+				<MarkdownDocProvider value={{ filePath }}>
+					<Plate editor={editor}>
+						<Editor
+							variant="none"
+							readOnly
+							className="min-h-0 cursor-default px-4 pt-2 pb-3 text-sm leading-relaxed [&>*:first-child]:mt-0"
+						/>
+					</Plate>
+				</MarkdownDocProvider>
+			</WikiEmbedProjectionProvider>
 		);
 	},
 );

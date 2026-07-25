@@ -28,6 +28,7 @@ import {
 	searchWikiLinks,
 	type WikiSearchCandidate,
 } from "@/lib/wiki";
+import { useWikiNav } from "@/lib/wiki/nav-context";
 import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,
@@ -38,7 +39,6 @@ import {
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
 } from "@/lib/wiki-completion";
-import { useWikiNav } from "@/lib/wiki-nav-context";
 
 export type WikiCompletionDraft = {
 	raw: string;

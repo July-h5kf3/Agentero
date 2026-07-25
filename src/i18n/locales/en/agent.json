@@ -16,16 +16,6 @@
 			"rejectAlways": "Always reject"
 		}
 	},
-	"review": {
-		"title": "Review note changes",
-		"description": "The agent rewrote “{{name}}”. Keep the new version or revert to the original.",
-		"before": "Before",
-		"after": "Agent version",
-		"diffAria": "Unified diff of note changes",
-		"keep": "Keep",
-		"revert": "Revert",
-		"empty": "(empty)"
-	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
 	"suggestions": {
@@ -61,6 +51,9 @@
 	"composer": {
 		"placeholder": "How can I help you today?",
 		"interruptHint": "Press Esc to interrupt",
+		"queueHint": "Type a follow-up — it waits until the current reply finishes (Esc to stop)",
+		"queueLabel": "Queued",
+		"queueRemove": "Remove from queue",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
 		"removeSkill": "Remove ${{skill}} from context",
@@ -112,7 +105,6 @@
 		"reportedTooltip": "Models appear after your agent reports them",
 		"loading": "Loading…",
 		"button": "Model",
-		"title": "Select model",
 		"searchPlaceholder": "Search models…",
 		"emptyNone": "No models yet. Run once so the ACP agent can advertise models.",
 		"emptyNoMatch": "No match."
@@ -121,7 +113,6 @@
 		"cancelled": "Stopped the current run.",
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
-		"noAgent": "No available agent. Open Settings → Agent to configure one.",
-		"notAvailable": "{{name}} is not available. Pick another or open Settings → Agent."
+		"noAgent": "No available agent. Open Settings → Agent to configure one."
 	}
 }

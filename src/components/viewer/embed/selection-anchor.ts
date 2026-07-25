@@ -5,7 +5,7 @@ import type {
 	PdfAskAnchor,
 	PdfAskNormalizedRect,
 	PdfAskTrigger,
-} from "@/lib/pdf-ask/types";
+} from "@/lib/pdf/ask/types";
 
 function clamp01(n: number): number {
 	if (!Number.isFinite(n)) return 0;

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { dataTransferHasFiles } from "@/lib/external-file-drop";
+import { dataTransferHasFiles } from "@/lib/shell/external-file-drop";
 
 /**
  * Block OS file drops from navigating the webview away from the SPA.

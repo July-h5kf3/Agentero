@@ -44,6 +44,7 @@
 - [x] 精读：设置 `autoPaperReader`（默认关）+ 魔棒/单篇 Download 自动；资源齐全且未读时 Zap 可手动 → `is_read`
 - [x] Library 行：库内任一篇仍缺资源 → 批量 Download
 - [x] 快捷键 `⇧⌘I`（打开魔棒）
+- [x] 魔棒批量入库：多标识符粘贴（空格 / 逗号 / 分号 / 换行 / 中文标点）、去重、顺序入库、批量下载、进度聚合；不自动连跑 paper-reader
 - [ ] 本机 Translator sidecar 捆绑
 
 ### 2c. 论文库表格 UI
@@ -53,9 +54,9 @@
 - [x] 表头排序；横向/纵向滚动
 - [x] 仅具体论文时显示 Paper Info / Notes（Library 隐藏）
 - [x] Library 行批量补资源（与 2b 联动）
-- [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示 + chip 筛选
+- [x] **Tags**：Paper Info 增删 → `paper_set_tags`；Library 列展示（搜索匹配标签；无表上方 chip 筛选条）
 - [x] **Tags CLI**：`paper tag list|set|add|rm` / `list --tag`（与 Host 共用 `papers::set_tags`）
-- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/tag-colors.ts`）
+- [x] **Tags 颜色**：Apple 风格 8 色 id；`tags_json` 字符串或 `{name,color}`；Paper Info 色盘；Library 染色 chip（`src/lib/ui/tag-colors.ts`）
 
 ### 2c-2. 论文库默认页 + 文件夹作用域库
 
@@ -67,16 +68,16 @@
 ### 2d. 文件树与侧栏 UX
 
 - [x] **文件树与侧栏 UX**（整项）
-- [x] **回收站虚拟节点**：Library 下方 `agentero:trash`（不在侧栏 Header）；`RecycleBinView` 自持 `PaneHeader`（与侧栏同高）；中间栏不重复 title/关闭行
+- [x] **回收站虚拟节点**：Library 下方 `agentero:trash`（不在侧栏 Header）；中间栏 `RecycleBinView` 无独立 header；中间栏不重复 title/关闭行
 - [x] **选中同步 / 定位**：激活文档与入库完成后树展开祖先并 `scrollToIndex`
 - [x] 在 Finder 中显示：右键 / `⌥⌘R`（`revealItemInDir`；无双击）
 - [x] 在终端中打开：右键 / `⌥⌘T`（文件夹 = 自身；文件 = 父目录；Host `path_open_in_terminal`）
-- [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除 / 清空
+- [x] **回收站删除**：右键 / `⌘⌫` / 批量 → `path_trash`（无确认、无 Undo toast）；文件树虚拟节点 `agentero:trash` → 中间栏 `RecycleBinView` 恢复 / 永久删除；**清空**在侧栏回收站右键
 - [x] 多选（⌘/Shift 行高亮）+ 拖拽移动到 `papers/` 组织夹 + 批量移动对话框
 - [x] 左右侧栏 collapsible 常驻 + `preserve-pixel-size`（交替 `⌥⌘S` / `⌘L` 不重叠）
 - [x] 后台任务条（下载 / 入库 / 导入导出 / paper-reader；hover 实色不透明；任务可取消）
 - [x] 精读触发图标 **Zap**（非 Eye）；tooltip 单行
-- [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者(年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
+- [x] **Paper 行标签预设**：默认标题 · 作者；设置 → 通用 `paperTreeLabelMode`（标题 / 作者 (年)·标题 / 文件夹名）；展示用、不改磁盘名（`formatPaperTreeLabel`）
 - [x] **文件树论文排序预设**：默认文件夹名 A–Z；设置 → 通用 `paperTreeSortMode`（标题 / 作者 / 年份新→旧 / 年份旧→新 / 添加时间新→旧）；展示用、不移动磁盘（`sortFileTreeNodes`）
 
 ### 2e. PDF 阅读增强
@@ -92,7 +93,7 @@
 ### 2f. Markdown 内嵌图片
 
 - [x] **Markdown 内嵌图片**（整项）
-- [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown-image.ts`）
+- [x] 粘贴 / 工具栏插入 → `{mdDir}/assets/` + `![](./assets/…)`（`src/lib/markdown/image.ts`）
 - [x] 选中图片节点显示 Markdown 源码；未选中 `blob:` 预览
 - [x] 删除节点且引用计数归零时 GC managed assets 文件并刷新文件树
 - [x] 单测 + 文档（data-model / ui / technical-plan / test 冒烟表）
@@ -111,7 +112,6 @@
 - [x] 在 Agent 面板增加“Summarize paper / Ask library / Draft Related Work”（建议按钮接通后端 `summary`/`qa`/`related_work` workflow）
 - [ ] workflow prompt 自动注入 Vault 内 `AGENTS.md`
 - [x] 输出必须包含 Sources（workflow prompt 已要求 `## Sources`）
-- [x] 写后审阅：`agent:notes-review` → **统一 Diff**（`NotesReviewDiff`）Keep / Revert（BYOA 写盘后对照；写前草稿拦截仍待）
 - [x] 权限「每次询问」档（`agentPermissionMode: ask` → `agent:permission-request` 对话框 + `agent_respond_permission`）
 
 ### 4. 文件与索引同步
@@ -158,7 +158,7 @@
 - [x] 分层：log（诊断）≠ `ApiResult` / CLI envelope ≠ `notifyError` / 任务条 / Agent error 行
 - [x] 栈：`tauri-plugin-log` + `log` + `@tauri-apps/plugin-log`；CLI `env_logger` / `RUST_LOG`；默认无远程遥测
 - [x] Host：插件注册、capabilities `log:default`、dev/release level 与 LogDir
-- [x] 前端：`src/lib/logger.ts` + `logOp`；ErrorBoundary 打 error
+- [x] 前端：`src/lib/core/logger.ts` + `logOp`；ErrorBoundary 打 error
 - [x] **关键操作成对** `op start` / `op end`（`ok`、`duration_ms`）；`runBackgroundTask` 横切自动埋点
 - [x] Host 写/长耗时 command（vault、lookup、agent_run、trash、zotero、parse…）与 CLI 每命令 op 对
 - [x] 隐私：不写 Vault；不记 NOTES/PDF/prompt 全文（仅 path/id/len）
@@ -208,12 +208,23 @@
 - [x] 中间栏文档 **标签栏**：paper / MD / PDF / HTML / 图片 / Library 以 tab 打开，可关闭、切换、拖拽重排
 - [x] 每 tab 常驻挂载，保留滚动位置、PDF 缩放、视图模式；MD/NOTES 自动保存，关闭不丢内容
 - [x] **默认页全库 + 文件夹作用域库**（2c-2）
-- [ ] **分屏**：水平或垂直 2 格；每格独立内容（典型：PDF | NOTES，或两篇 paper 并排）
-- [x] 快捷键：关 tab `⌘W`（有弹层先关顶层；仅剩全库时关窗；File → Close 同源）/ 切 tab `⌥⌘→·⌥⌘←`；分屏随 split 补
+- [x] **全局 Dockview**：中间栏单一工作区管理全部文档 panel；上下左右 + 多格；拖文件树并入任意边
+- [x] 快捷键：关 panel `⌘W`（弹层 → active panel → 关窗；File → Close 同源）/ 切 panel `⌥⌘→·⌥⌘←`
+- [x] 去掉标题栏文档 tab 条与中间栏 PDF/HTML 模式切换
 - [x] 文件树 / Library / Graph / Backlinks / wiki 跳转统一 `openTab`；同路径已开则聚焦
 - [x] 与 `⌘N` 多窗口隔离：每窗口独立 tab 集（`agentero-open-tabs`）；关窗/换 Vault 可恢复布局
 - [x] 全局操作错误 Toast（`notifyError`，右上角；替代侧栏 header 错误条）
 - [x] 说明：Agent 面板内的 **会话标签** 已存在，与本项「文档标签」分开
+
+### 4b. 广场 Plaza（发现入口）
+
+设计见 [`plaza.md`](plaza.md)。
+
+- [ ] **P0a 壳**：侧栏虚拟 `agentero:plaza` + 子节点 Cool Papers / 播客 / 推荐（位于 Library+Trash 下、真实目录上）；`PlazaView` 首页卡片；i18n
+- [ ] **P0b Cool Papers**：中间栏内嵌 WebView 打开 papers.cool；后退/前进/刷新/外链；加载失败降级
+- [ ] **P0c 推荐 v0**：本地启发式分组（待精读 / 最近入库 / 同标签）；点击 `openPaper`；无云端上传
+- [ ] **P0d 播客**：占位空态页
+- [ ] **P1 入库**：从 Cool Papers URL/arXiv 解析 → 魔棒管线；预览抽屉 / 批量（**当前不做**）
 
 ### 5. 引用关系 / Connected Papers（roadmap V0.7）
 
@@ -256,7 +267,7 @@
 - [x] 按 Zotero collection 还原文件夹层级（可选；collection 名写入 tags）
 - [x] 选择性导入指定 collection + 迁移前自愈 catalog 孤儿行（`prune_missing`）
 - [x] 迁移 Zotero 笔记（子笔记 HTML→Markdown 追加进 NOTES.md；`htmd`）
-- [x] 迁移 PDF 批注文本（高亮+评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项
+- [x] 迁移 PDF 批注文本（高亮 + 评论→NOTES.md）+ 逐条选择/搜索 + 迁移进度 + 记住选项
 - [x] 批注原位高亮渲染（`marks/` + 页边针 + 右侧批注面板）
 
 ### 1b. Zotero Connector 兼容服务（方案一）
@@ -329,7 +340,8 @@
 
 ### 7. 工作区增强
 
-- [ ] 超过 2 格的网格分屏；tab 固定（pin）、按 paper 分组
+- [x] 超过 2 格的网格分屏（dockview multi-pane + layout 快照）
+- [ ] tab 固定（pin）、按 paper 分组
 - [ ] 命名工作区会话（保存/恢复一整套 tab + 分屏布局）
 
 ### 8. 多端与协作
@@ -368,7 +380,7 @@
 - [x] Library 表 + **tags** + **Rescan** + **文件夹作用域**
 - [x] PDF / HTML / 图片 / Markdown WYSIWYG（内嵌图 → `./assets/`）
 - [x] Notes 仅具体论文时显示
-- [ ] **分屏**（V0.6 余量）
+- [x] **分屏**（V0.6：dockview tab 内上下左右 + 多格；见 `tab-split.md`）
 
 ### 查找
 
@@ -383,9 +395,9 @@
 - [x] Library 导入导出 Bib、`paper_set_tags`、`paper_rescan`
 - [x] **Zotero Connector MVP**（含 `saveAttachment`）+ **保存后 `openPaper`**
 - [x] **入库流水线统一设计**（[`paper-import-pipeline.md`](../backend/paper-import-pipeline.md)）
-- [ ] **P0** Host `paper_commit` + 魔棒 / Connector / 本地 PDF 迁入
+- [x] **P0** Host `paper_commit` + 魔棒 / Connector / 本地 PDF 迁入（含 Bib；`allocate_paper_path` 统一路径分配；CLI 复用同一 Host 路径）
 - [ ] **P1** 前端 `afterPaperImport` 策略表
-- [ ] **P2** Bib / CLI 走 commit；**P3** Zotero 迁移；**P4** `paper:imported` 事件
+- [ ] **P3** Zotero 迁移走 commit；remote 镜像层收敛；**P4** `paper:imported` 事件
 - [ ] 关键词/Agent 候选
 - [ ] 本地 PDF 拖拽 / DOI 识别与元数据确认
 - [ ] MinerU 云端解析
@@ -397,7 +409,6 @@
 - [x] **paper-reader**（Zap + 可选自动默认关；**不进对话历史**）
 - [x] **权限三档**（受限 / 每次询问 / 自动批准）
 - [x] **面板 workflow**（summary / qa / related_work）
-- [x] **笔记写后审阅** Keep/Revert
 - [x] 模型收藏、Skill 提及分流、**禅模式左侧历史栏**
 - [ ] `AGENTS.md` 自动注入
 - [ ] 写前草稿拦截
@@ -436,7 +447,7 @@
 - [x] **M0** `VaultFs` / `LocalFs` + path 安全；单测（`services/fs/`）
 - [x] **M1** SSH/SFTP + `__local_sim__`；`remote_*`；欢迎页；树 / md / mkdir / remove / bytes
 - [x] **M2** catalog work mirror；list/get/delete/rescan/tags/is_read + PUT
-- [x] **M3** ACP over SSH；skill materialize；notes-review；Codex-SSH 明确拒绝
+- [x] **M3** ACP over SSH；skill materialize；Codex-SSH 明确拒绝
 - [x] PDF cache + 预览；最近远程 reopen；侧栏远程徽章；禁 Finder/终端
 - [x] 切换 Vault 时 disconnect 远程会话
 - [x] 侧栏「切换知识库」菜单：**打开远程…** + 最近远程 MRU（共用 `RemoteVaultDialog`）

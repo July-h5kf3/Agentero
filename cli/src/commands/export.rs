@@ -3,7 +3,7 @@
 use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{resolve_vault, GlobalOpts};
-use agentero_lib::services::lookup::{self, PaperExportArgs};
+use agentero_lib::features::import::{self, PaperExportArgs};
 use clap::Subcommand;
 use serde_json::{json, Value};
 use std::fs;
@@ -32,7 +32,7 @@ pub async fn run(cmd: ExportCmd, globals: &GlobalOpts) -> Result<Value, CliError
 
 async fn export_bib(globals: &GlobalOpts, format: &str, out: &PathBuf) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let result = lookup::export_catalog(PaperExportArgs {
+    let result = import::export_catalog(PaperExportArgs {
         vault_path: vault.to_string_lossy().to_string(),
         format: Some(format.to_string()),
         translator_base_url: globals.translator_base_url(),

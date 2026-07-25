@@ -11,7 +11,7 @@ import {
 	parseImagePayload,
 	resolveMarkdownImageAbs,
 	sanitizeAssetFileName,
-} from "@/lib/markdown-image";
+} from "@/lib/markdown/image";
 
 describe("markdown-image path helpers", () => {
 	it("parentDir handles posix and windows separators", () => {

@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "dockview-react/dist/styles/dockview.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -161,14 +162,16 @@
 	}
 }
 
-/* Subtle, independent pane scrollbars (VS Code / Cursor style) */
+/*
+ * Auto-hiding pane scrollbars: hidden by default, shown while scrolling or on
+ * hover so content bounds stay clean when idle.
+ */
 .agentero-scroll {
 	overflow-x: hidden;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
-		transparent;
+	scrollbar-color: transparent transparent;
 }
 
 /* Both axes (e.g. papers library table) */
@@ -176,8 +179,7 @@
 	overflow: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
-		transparent;
+	scrollbar-color: transparent transparent;
 }
 
 .agentero-scroll::-webkit-scrollbar,
@@ -193,18 +195,28 @@
 
 .agentero-scroll::-webkit-scrollbar-thumb,
 .agentero-scroll-both::-webkit-scrollbar-thumb {
+	background-color: transparent;
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+	transition: background-color 0.2s ease;
+}
+
+.agentero-scroll.scrolling::-webkit-scrollbar-thumb,
+.agentero-scroll-both.scrolling::-webkit-scrollbar-thumb,
+.agentero-scroll:hover::-webkit-scrollbar-thumb,
+.agentero-scroll-both:hover::-webkit-scrollbar-thumb {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 28%,
 		transparent
 	);
-	border-radius: 999px;
-	border: 2px solid transparent;
-	background-clip: content-box;
 }
 
-.agentero-scroll::-webkit-scrollbar-thumb:hover,
-.agentero-scroll-both::-webkit-scrollbar-thumb:hover {
+.agentero-scroll.scrolling::-webkit-scrollbar-thumb:hover,
+.agentero-scroll-both.scrolling::-webkit-scrollbar-thumb:hover,
+.agentero-scroll:hover::-webkit-scrollbar-thumb:hover,
+.agentero-scroll-both:hover::-webkit-scrollbar-thumb:hover {
 	background-color: color-mix(
 		in oklch,
 		var(--muted-foreground) 48%,
@@ -217,4 +229,153 @@
 .agentero-scroll::-webkit-scrollbar-corner,
 .agentero-scroll-both::-webkit-scrollbar-corner {
 	background: transparent;
+}
+
+/* Firefox: restore thumb color while scrolling or hovering. */
+.agentero-scroll.scrolling,
+.agentero-scroll-both.scrolling,
+.agentero-scroll:hover,
+.agentero-scroll-both:hover {
+	scrollbar-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent)
+		transparent;
+}
+
+/* dockview: map native theme class to app design tokens */
+.agentero-dockview,
+.agentero-dockview-theme {
+	--dv-group-view-background-color: var(--background);
+	--dv-tabs-and-actions-container-background-color: var(--muted);
+	/* Match PaneHeader (`h-10`) so the workspace aligns with side-pane headers. */
+	--dv-tabs-and-actions-container-height: 2.5rem;
+	--dv-tabs-and-actions-container-font-size: 0.75rem;
+	--dv-activegroup-visiblepanel-tab-background-color: var(--background);
+	--dv-activegroup-hiddenpanel-tab-background-color: color-mix(
+		in oklab,
+		var(--muted) 80%,
+		transparent
+	);
+	--dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+	--dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+	--dv-activegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-tab-divider-color: var(--border);
+	--dv-separator-border: var(--border);
+	--dv-sash-color: var(--border);
+	--dv-active-sash-color: color-mix(
+		in oklab,
+		var(--primary) 50%,
+		var(--border)
+	);
+	--dv-drag-over-background-color: color-mix(
+		in oklab,
+		var(--primary) 16%,
+		transparent
+	);
+	--dv-drag-over-border-color: var(--primary);
+	--dv-drag-over-border: 2px solid var(--primary);
+	--dv-icon-hover-background-color: var(--accent);
+	/* Tab-group hues: paper tag swatches via dock-workspace (tag-colors). */
+	--dv-tab-group-chip-font-size: 0.6875rem;
+	--dv-tab-group-chip-border-radius: 0.375rem;
+	--dv-context-menu-background-color: var(--popover);
+	--dv-context-menu-color: var(--popover-foreground);
+	--dv-overlay-z-index: 1000;
+	--dv-floating-box-shadow: 0 8px 24px
+		color-mix(in oklab, var(--foreground) 12%, transparent);
+	background-color: var(--background);
+	color: var(--foreground);
+	height: 100%;
+	width: 100%;
+}
+
+/* Context menu / overflow popovers mount on this anchor (prepended to root). */
+.agentero-dockview .dv-popover-anchor {
+	z-index: var(--dv-overlay-z-index, 1000);
+}
+
+/*
+ * Fill grid/split ancestry. Do NOT set height:100% on .dv-content-container —
+ * groupview is a flex column (tabs chrome + content). Forcing content to 100% of
+ * the group makes it overflow by the tab bar height, so editor toolbars stack
+ * over NOTES.md / tab titles.
+ */
+.agentero-dockview .dv-dockview,
+.agentero-dockview .dv-groupview,
+.agentero-dockview .dv-view,
+.agentero-dockview .dv-split-view-container {
+	height: 100%;
+	min-height: 0;
+}
+
+.agentero-dockview .dv-groupview > .dv-content-container {
+	/* dockview defaults: flex-grow:1; min-height:0 */
+	min-height: 0;
+	overflow: hidden;
+	background-color: var(--background);
+}
+
+.agentero-dockview .dv-tabs-and-actions-container {
+	flex-shrink: 0;
+	position: relative;
+	z-index: 2;
+}
+
+/*
+ * Cap each document tab so long paper titles do not dominate the tab strip.
+ * Ellipsis needs min-width:0 on the flex chain + overflow on the title span.
+ */
+.agentero-dockview .dv-tab {
+	max-width: 12rem;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.agentero-dockview .dv-tab .dv-default-tab {
+	min-width: 0;
+	overflow: hidden;
+}
+
+.agentero-dockview .dv-tab .dv-default-tab-content {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/*
+ * Tab group chip: no fill — icon + label only (override dockview solid + white).
+ * Expanded: dockview bottom underline under member tabs keeps group color.
+ * Collapsed: no extra bar under the chip (dockview underline width is already 0).
+ */
+.agentero-dockview .dv-tab-group-chip {
+	background-color: transparent !important;
+	color: var(--muted-foreground);
+	font-weight: 500;
+	border: none;
+	box-shadow: none;
+}
+
+.agentero-dockview .dv-tab-group-chip:hover {
+	color: var(--foreground);
+	background-color: transparent !important;
+}
+
+/* Nameless chip: solid accent swatch (identity only). */
+.agentero-dockview .dv-tab-group-chip:has(.dv-tab-group-chip-label--empty) {
+	background-color: var(
+		--dv-tab-group-color,
+		var(--muted-foreground)
+	) !important;
+	color: transparent !important;
+	width: 12px;
+	height: 12px;
+	padding: 0;
+	border-radius: 50%;
+}
+
+/* Global workspace: always show dockview tab chrome (it owns document tabs). */
+.agentero-dockview.agentero-dock-global .dv-tabs-and-actions-container {
+	display: flex !important;
 }

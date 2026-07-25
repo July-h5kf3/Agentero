@@ -6,7 +6,7 @@ import {
 	isImageViewerSource,
 	isPdfPath,
 	preferredModeForPath,
-} from "@/lib/viewer";
+} from "@/lib/workspace/viewer";
 
 describe("viewer path helpers", () => {
 	it("detects pdf / html / image extensions", () => {

@@ -1,14 +1,10 @@
 {
-	"loading": "Loading…",
 	"error": "Error",
 	"tryAgain": "Try again",
 	"somethingWrong": "Something went wrong",
-	"retry": "Retry",
 	"close": "Close",
 	"cancel": "Cancel",
 	"save": "Save",
 	"remove": "Remove",
-	"open": "Open",
-	"delete": "Delete",
-	"dismiss": "Dismiss"
+	"open": "Open"
 }

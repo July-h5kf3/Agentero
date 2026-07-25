@@ -25,7 +25,7 @@
 - 向前端暴露 Tauri invoke commands 与 event streams。
 - 启动并管理 **ACP-compatible Agent**（现网：本机进程；规划中：远程 Vault 时经 SSH 在**远端**启动），但不托管模型密钥（BYOA）。远程设计见 [`../development/remote-vault.md`](../development/remote-vault.md)。
 - 提供 catalog 导出；双链等可重建索引与 catalog 分层清晰。
-- 标识符魔棒入库：`lookup_import` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时 **liteparse → `PAPER.md`**（`paper_parse_body`）；论文库列表 `paper_list`。
+- 标识符魔棒入库：`lookup_import_batch` 调用 Translator（可配置 base URL）、写 catalog，并**默认下载 PDF**（arXiv 另解压 LaTeX）；`paper_download_assets` 按需补下；无 TeX 时下载后自动 **liteparse → `PAPER.md`**；论文库列表 `paper_list`。
 - 精读状态：`paper_set_is_read`（catalog `is_read`）；前端入库/单篇 Download 后可自动跑 paper-reader。
 - 标签：`paper_set_tags` / `papers::set_tags`（catalog `tags_json` 整表替换；元素可为字符串或 `{name,color?}` Apple 8 色）；Paper Info 增删与选色；Library 染色 chip 与筛选；CLI `paper tag list|set|add|rm` / `list --tag`（CLI 仅名称）。
 - **Zotero Connector 兼容服务**（MVP）：本机 `127.0.0.1:23119` 兼容官方浏览器扩展保存协议 → 当前 Vault；与 Zotero 桌面端端口互斥、默认关；见 [`connector.md`](connector.md)。
@@ -42,7 +42,22 @@
 - [`paper-import-pipeline.md`](paper-import-pipeline.md)：多入口入库现状、统一 `paper_commit` / `afterPaperImport` 设计与分期（**设计已落库**）。
 - [`connector.md`](connector.md)：Zotero Connector 兼容 HTTP 服务（方案一：本机 23119；MVP 已落地）。
 - [`wikilinks.md`](wikilinks.md)：Obsidian 兼容双链语法、反链查询、图谱模型（与 V0.7 文献引用图边界见文内 §6.5）。
-- CLI（MVP）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**（bin `agentero`）；不迁 core，复用 `services/*`；Vault 管理/发现/暴露；无 BYOA。
+- CLI（MVP）：[`../development/cli.md`](../development/cli.md) — 代码在 **`cli/`**（bin `agentero`）；path 复用 `features::{vault,catalog,import}` + `core::error`；Vault 管理/发现/暴露；无 BYOA。
+
+## Host 源码布局（feature-first）
+
+```text
+src-tauri/src/
+  app/           # run()、menu、logging、command 注册
+  core/          # error、fs、paths、log_util
+  features/      # 每域一文件夹（与前端 src/lib 对齐）
+    vault/ catalog/ import/ wiki/ agent/ connector/ remote/ …
+    # 每域：mod.rs 对外 API + commands.rs 薄壳 + 按需 models.rs
+  lib.rs         # mod 声明 + pub 导出
+  main.rs
+```
+
+入库相关在 **`features/import/`**（原 `lookup` + `pdf_parse` + `paper_import` + Zotero 迁移命令）。魔棒 Tauri command 名仍为 `lookup_import_batch` 等（契约不变）。
 
 ## 交叉引用
 

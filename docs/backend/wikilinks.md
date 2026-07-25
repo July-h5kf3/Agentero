@@ -269,17 +269,17 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 1. Rust：`extract_wikilinks(md)` + `resolve` + **内存索引**（全量 `graph_rebuild`；尚无 SQLite 落盘）。  
 2. Tauri：`graph_get_backlinks` / `graph_rebuild`（参数 `vaultPath` + `path`）。  
-3. 前端：`src/lib/wiki.ts` + `BacklinksPanel`；Demo 模式纯前端索引。  
+3. 前端：`src/lib/wiki/api.ts` + `BacklinksPanel`；Demo 模式纯前端索引。  
 4. **文件变更防抖重建**（已落地）：Vault watcher 报告 Markdown、图片或 PDF 变更后，前端 `useVaultFileEvents.onWikiChange` → `scheduleWikiRebuild`（约 **900ms** 防抖）触发全量 rebuild，使 Backlinks / Graph 在外部或 Agent 写盘后保持新鲜；嵌入内容只按 watcher 本批次实际触及的目标路径失效。非边级增量；SQLite 边缓存仍待。
 
-**代码位置**：`src-tauri/src/services/wiki/` · `src-tauri/src/commands/graph.rs` · `src/components/layout/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
+**代码位置**：`src-tauri/src/features/wiki/` · `src-tauri/src/features/wiki/commands.rs` · `src/components/wiki/backlinks-panel.tsx` · `src/hooks/use-vault-file-events.ts`
 
 ### Phase B — 精确导航 ✅
 
 1. Host 解析结果贯穿 Plate link node、Document tabs 和 Markdown editor；已打开 tab 通过 one-shot navigation intent 保持编辑状态。
 2. 标题与 block fragment 滚动定位并短暂高亮；`missing` 文件仍可创建，错误 fragment 不创建伪目标。
 
-**代码**：`src/lib/wiki.ts` · `src/components/editor/wikilink-node.tsx` · `src/lib/wiki-nav-context.tsx`
+**代码**：`src/lib/wiki/api.ts` · `src/components/editor/link-node.tsx` · `src/components/editor/wikilink-node.tsx` · `src/lib/wiki/nav-context.tsx`
 
 ### Phase C — 输入补全 + Plate ✅
 
@@ -295,11 +295,11 @@ Agentero 预览侧已用自定义 `rewriteWikilinksForPreview` + Plate Link；�
 
 **代码位置**：
 
-- `src-tauri/src/models/wiki.rs`（`GraphNode` / `GraphEdge` / `GraphResponse`）
-- `src-tauri/src/services/wiki/index.rs`（`get_graph`）
-- `src-tauri/src/commands/graph.rs`（`graph_get_graph`）
-- `src/lib/wiki.ts`（`getGraph` / demo）
-- `src/components/layout/graph-panel.tsx`
+- `src-tauri/src/features/wiki/models.rs`（`GraphNode` / `GraphEdge` / `GraphResponse`）
+- `src-tauri/src/features/wiki/index.rs`（`get_graph`）
+- `src-tauri/src/features/wiki/commands.rs`（`graph_get_graph`）
+- `src/lib/wiki/api.ts`（`getGraph` / demo）
+- `src/components/wiki/graph-panel.tsx`
 - `src/App.tsx`（Backlinks 右侧栏内接线）
 
 ### Phase E — 链接感知改名与移动 ✅

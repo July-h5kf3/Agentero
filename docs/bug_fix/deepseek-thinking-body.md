@@ -4,8 +4,8 @@
 **影响面**：Agent 对话面板（ACP 流式 UI）  
 **相关代码**：
 
-- `src/lib/agent-stream-parse.ts` — 标签拆分与 orphan thought 提升
-- `src/components/layout/agent-panel.tsx` — 流式接入与 turn 完成处理
+- `src/lib/agent/stream-parse.ts` — 标签拆分与 orphan thought 提升
+- `src/components/agent/use-agent-panel.ts` — 流式接入与 turn 完成处理
 - `test/agent-stream-parse.test.ts` — 单测
 - Host：`src-tauri/src/services/agent/acp.rs`（`AgentMessageChunk` → `message`，`AgentThoughtChunk` → `thought`）
 
@@ -17,7 +17,7 @@
 
 1. **最终回答只出现在「Thinking / Reasoning」折叠块**，正文区为空或显示 `(empty response)`。
 2. **正文与思考混在同一段 message 文本里**，且被 `<think>…</think>`（或同类标签）包住，未拆成 reasoning + text 两部分。
-3. 流式过程中界面长时间停在 “thinking”，结束后正文仍不可见或整段被当成思考。
+3. 流式过程中界面长时间停在“thinking”，结束后正文仍不可见或整段被当成思考。
 
 用户侧观感：模型「想完了但没回复」，或「答案被藏在思考里」。
 
@@ -88,7 +88,7 @@ Agentero 经 ACP 接收流更新：
   Agentero Host (acp.rs)  →  agent:stream 事件
         │
         ▼
-  agent-panel：classifyStreamChunk / promoteOrphanThoughtToText
+  use-agent-panel：classifyStreamChunk / promoteOrphanThoughtToText
         │
         ▼
   UI：Reasoning 块 + 正文 Markdown
@@ -113,7 +113,7 @@ Agentero 经 ACP 接收流更新：
 
 `kind=thought` **不**再做标签反解为正文（通道语义已是思考）；误标正文的情况交给完成时兜底。
 
-接入点：`agent-panel` 的 `applyStreamEvent` → `classifyStreamChunk` → `appendStreamPart`。
+接入点：`use-agent-panel` 的 `applyStreamEvent` → `classifyStreamChunk` → `appendStreamPart`。
 
 ### 3.2 完成时兜底：提升 orphan thought
 
@@ -184,8 +184,8 @@ Agentero 经 ACP 接收流更新：
 
 ### 本仓库
 
-- 实现：`src/lib/agent-stream-parse.ts`  
-- UI 接入：`src/components/layout/agent-panel.tsx`（`applyStreamEvent`、turn 完成分支中的 `promoteOrphanThoughtToText`）  
+- 实现：`src/lib/agent/stream-parse.ts`  
+- UI 接入：`src/components/agent/use-agent-panel.ts`（`applyStreamEvent`、turn 完成分支中的 `promoteOrphanThoughtToText`）  
 - Host 通道映射：`src-tauri/src/services/agent/acp.rs` → `stream_from_update`  
 - 备忘勾选：`docs/development/bug.md`（对话 / Agent 一节）
 

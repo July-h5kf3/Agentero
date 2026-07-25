@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { isTauri } from "@/lib/tauri";
+import { isTauri } from "@/lib/core/tauri";
 
 type NativeMenuHandlers = {
 	onSettings: () => void;

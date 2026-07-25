@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { basenameOf } from "@/lib/core/path";
 import {
-	basenameOfPath,
 	slugFromPdfPath,
 	slugFromStem,
 	stemFromPath,
 	titleFromPdfPath,
 	titleFromStem,
-} from "@/lib/local-pdf-meta";
+} from "@/lib/paper/local-pdf-meta";
 
 describe("local-pdf-meta", () => {
 	it("basename and stem", () => {
-		expect(basenameOfPath("/Users/me/a.pdf")).toBe("a.pdf");
+		expect(basenameOf("/Users/me/a.pdf")).toBe("a.pdf");
 		expect(stemFromPath("/Users/me/a.pdf")).toBe("a");
 		expect(stemFromPath("C:\\x\\vaswani_2017.pdf")).toBe("vaswani_2017");
 	});

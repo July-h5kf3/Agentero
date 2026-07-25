@@ -2,11 +2,11 @@
 
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
-import type { PlateContentProps, PlateViewProps } from "platejs/react";
-import { PlateContainer, PlateContent, PlateView } from "platejs/react";
+import type { PlateContentProps } from "platejs/react";
+import { PlateContainer, PlateContent } from "platejs/react";
 import type * as React from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 const editorContainerVariants = cva(
 	// Neutral selection (not brand blue) so selected text stays readable in light/dark.
@@ -114,18 +114,3 @@ export const Editor = ({
 );
 
 Editor.displayName = "Editor";
-
-export function EditorView({
-	className,
-	variant,
-	...props
-}: PlateViewProps & VariantProps<typeof editorVariants>) {
-	return (
-		<PlateView
-			{...props}
-			className={cn(editorVariants({ variant }), className)}
-		/>
-	);
-}
-
-EditorView.displayName = "EditorView";

@@ -4,7 +4,7 @@ import {
 	isTagColorId,
 	normalizePaperTags,
 	tagChipStyle,
-} from "@/lib/tag-colors";
+} from "@/lib/ui/tag-colors";
 
 describe("tag colors", () => {
 	it("accepts preset ids only", () => {

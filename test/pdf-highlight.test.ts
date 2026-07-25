@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createHighlight } from "@/lib/pdf-highlight/io";
-import { parsePdfHighlight } from "@/lib/pdf-highlight/schema";
+import { createHighlight } from "@/lib/pdf/highlight/io";
+import { parsePdfHighlight } from "@/lib/pdf/highlight/schema";
 
 const base = {
 	version: 1,

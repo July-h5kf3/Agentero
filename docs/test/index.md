@@ -2,6 +2,12 @@
 
 当代码依赖 Vault 路径、Markdown 双链或论文元数据时，测试应优先创建真实的临时 Vault 目录和文件。保持 `src/` 与 `test/` 解耦：应用代码不能 import 测试 fixture 或 helper。
 
+## 发布前验收
+
+产品发布 / 打 tag / 分发安装包前的完整手工 Checklist 见：
+
+- **[发布前测试大纲（Checklist）](release-checklist.md)** — 按功能域（Vault、Library、入库、PDF、Agent、远程、CLI、平台矩阵）勾选；含 5 分钟冒烟与明确非目标说明。
+
 ## 目录结构
 
 ```text
@@ -64,15 +70,15 @@ Vitest 适合覆盖纯 TypeScript 逻辑，例如：
 
 ```ts
 const vault = await createTestVault({
-	"notes/Source.md": "See [[notes/Target]].",
-	"notes/Target.md": "# Target",
+ "notes/Source.md": "See [[notes/Target]].",
+ "notes/Target.md": "# Target",
 });
 
 try {
-	const files = await vault.listMarkdownFiles();
-	// assertions
+ const files = await vault.listMarkdownFiles();
+ // assertions
 } finally {
-	await vault.cleanup();
+ await vault.cleanup();
 }
 ```
 
@@ -107,8 +113,6 @@ cargo test --manifest-path src-tauri/Cargo.toml
 | 外部编辑器改打开的 `.md` | 应用内编辑器自动重载为磁盘内容 |
 | 打开多 tab 后连按 `⌘W` | 无弹层时逐个关 tab；仅剩全库后再按关窗口 |
 | 打开设置后 `⌘W` / `Esc` | 先关设置，不关标签 |
-| `⌘/` 打开快捷键清单后再按 `⌘/` | 关闭清单（开关） |
-| 打开设置后再开快捷键清单，连按 `Esc` | 先关清单，再关设置（LIFO） |
 | 命令面板 `⌘P` / `⇧⌘P` 打开后再按同键或 `⌘W` | 关闭面板 |
 | 触发删除失败 / 无 Vault 操作等 | 右上角 Toast，不出现侧栏 header 错误条 |
 

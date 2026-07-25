@@ -2,7 +2,7 @@
 
 > 状态：**MVP 已落地**（元数据保存 + 文件夹选择 + 超时规避 + **附件二进制上传 `saveAttachment`** + **快照 / cookies / 后台进度** + **远程 Vault（SSH）**）
 > 范围：Agentero Host 在本机 **模拟 Zotero 桌面端 Connector HTTP Server**，使官方 [Zotero Connector](https://www.zotero.org/download/connectors) 浏览器扩展把「保存」请求打到 Agentero，条目落入当前 Vault 的 catalog + paper 文件夹。  
-> 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
+> 实现入口：`src-tauri/src/services/connector/`、`commands/connector.rs`、`src/lib/paper/import/connector.ts`、设置 → 通用、`App.tsx` 监听 `connector:*`。  
 > **HTTP 覆盖总表**：见本文 [§4.5](#45-上游-api-覆盖总表实现-vs-缺口)。  
 > 相关：[`identifier-lookup.md`](identifier-lookup.md)（魔棒入库与 `map_zotero_item`）、[`paper-import-pipeline.md`](paper-import-pipeline.md)（与其它入库入口的统一 `paper_commit` 方案）、[`catalog.md`](catalog.md)、[`api.md`](api.md)、[`data-model.md`](data-model.md)、[`../frontend/ui.md`](../frontend/ui.md)、[`../development/roadmap.md`](../development/roadmap.md)、[`../development/todo.md`](../development/todo.md)。
 
@@ -37,7 +37,7 @@
 
 | 路径 | 入口 | 元数据来源 | 与本方案关系 |
 |---|---|---|---|
-| 魔棒 `lookup_import` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；落盘应对齐同一 paper 单元语义（统一方案见 [`paper-import-pipeline.md`](paper-import-pipeline.md)） |
+| 魔棒 `lookup_import_batch` | 侧栏 ⇧⌘I | Host 调 Translator Runtime | **并存**；落盘应对齐同一 paper 单元语义（统一方案见 [`paper-import-pipeline.md`](paper-import-pipeline.md)） |
 | 本地 PDF 导入 | 魔棒弹层多选 | 文件名 + liteparse | 并存；目标共用 `paper_commit` |
 | Zotero 迁移 | 欢迎页 / 侧栏 | `zotero.sqlite` + storage | **存量**；本方案是 **增量** |
 | Connector 兼容（本方案） | 官方浏览器插件 | 插件侧 Translator → HTTP | 本文件 |
@@ -110,7 +110,7 @@ services/connector  →  map_zotero_item（复用 lookup/map）
         │
         ▼
 写 papers/<id>/ + catalog.sqlite
-（对齐 lookup_import：NOTES 壳、尽量 PDF、arXiv TeX…）
+（对齐魔棒入库：NOTES 壳、尽量 PDF、arXiv TeX…）
         │
         ▼
 Tauri event: connector:item-saved / connector:error
@@ -183,7 +183,7 @@ Tauri event: connector:item-saved / connector:error
    - `map_zotero_item`（或等价）→ `PaperMeta`；
    - `meta_source` 建议标记为 `zotero-connector`（或现有枚举扩展）；
    - 目标 `parent_dir`：见 §5.2；
-   - 创建 paper 文件夹 + catalog 行（对齐 `lookup_import` / migration 的去重策略，见 §5.3）；
+   - 创建 paper 文件夹 + catalog 行（对齐魔棒入库 / migration 的去重策略，见 §5.3）；
    - **尽量**下载 PDF（attachments 中 PDF URL、或 DOI/arXiv 派生 URL）；失败不导致整次 5xx，但 progress 可标失败。
 3. 注册 session，供 `sessionProgress` 查询。
 4. 尽快返回 `201`（可先完成元数据落盘，附件异步——若异步，progress 必须反映，避免插件一直转圈）。
@@ -489,7 +489,7 @@ Connector 的后台 PDF/TeX/PAPER.md 处理创建 `kind=connector` 任务。任�
 | Commands | `src-tauri/src/commands/connector.rs` |
 | 注册 | `lib.rs`、`services/mod.rs`、`commands/mod.rs`、`Cargo.toml`（HTTP 依赖，如 `hyper`/`axum`/`tiny_http` + tokio net） |
 | 映射复用 | `services/lookup/map.rs`（可能抽 `import_zotero_items`） |
-| 前端 | `settings-window.tsx`、settings store、`App.tsx` 或 layout 事件 |
+| 前端 | `settings/settings-window.tsx`、settings store、`App.tsx` |
 | i18n | `en/settings.json`、`zh-CN/settings.json` |
 | 文档 | 本文、`api.md` 摘要、`roadmap` / `todo`、可选 `ui.md` §4 |
 

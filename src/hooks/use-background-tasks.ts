@@ -1,13 +1,6 @@
-import { useSyncExternalStore } from "react";
-import {
-	getBackgroundTasksSnapshot,
-	subscribeBackgroundTasks,
-} from "@/lib/background-tasks";
+import { useStore } from "zustand";
+import { backgroundTasksStore } from "@/lib/core/background-tasks";
 
 export function useBackgroundTasks() {
-	return useSyncExternalStore(
-		subscribeBackgroundTasks,
-		getBackgroundTasksSnapshot,
-		getBackgroundTasksSnapshot,
-	);
+	return useStore(backgroundTasksStore);
 }

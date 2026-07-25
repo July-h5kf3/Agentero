@@ -15,8 +15,14 @@
 	},
 	"linter": {
 		"enabled": true,
+		"domains": {
+			"project": "recommended"
+		},
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"suspicious": {
+				"noImportCycles": "warn"
+			}
 		}
 	},
 	"javascript": {

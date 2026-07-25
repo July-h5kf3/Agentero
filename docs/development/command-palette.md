@@ -2,7 +2,7 @@
 
 > 状态：**Phase A 已落地**（⌘P/⌘K 快速打开 · ⇧⌘P 命令面板 · `>` 前缀；命令注册表 Phase B 仍待）  
 > 目标：对齐 VS Code 的 **⌘P 快速打开** 与 **⇧⌘P 命令面板** 交互心智，在 Agentero 中落地「全局搜索框」能力，并给出实现边界与分期。  
-> 相关：现有 `src/components/layout/command-palette.tsx`、`src/lib/vault-search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
+> 相关：现有 `src/components/dialogs/command-palette.tsx`、`src/lib/vault/search.ts`、Host `vault_search`、[`../frontend/ui.md`](../frontend/ui.md) §3.0 弹层栈、[`../backend/api.md`](../backend/api.md)。
 
 ---
 
@@ -20,7 +20,7 @@
 **产品目标（Agentero）**
 
 1. **全局入口**：任意焦点（编辑器 / PDF / 文件树）均可唤起，模态遮罩；`Esc` / `⌘W` 经 `overlay-stack` 关闭；同键再按亦可关闭。
-2. **双模式心智**：快速打开（资源） vs 执行命令（动作）。
+2. **双模式心智**：快速打开（资源）vs 执行命令（动作）。
 3. **科研场景优先**：论文 / 笔记 / Library 路径优先于「任意工作区文件」。
 4. **可扩展**：新功能以注册命令方式进入面板，而不是硬编码一长串菜单。
 
@@ -113,24 +113,25 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 
 | 能力 | 位置 | 说明 |
 |---|---|---|
-| 全局浮层 UI | `src/components/layout/command-palette.tsx` | shadcn `CommandDialog` + `CommandInput` + `CommandList` |
-| 快捷键 | `shortcuts.ts` → `commandPalette` | **⌘K** 与 **⌘P**（`App.tsx` 另绑 p）打开**同一面板** |
+| 全局浮层 UI | `src/components/dialogs/command-palette.tsx` | shadcn `CommandDialog` + `CommandInput` + `CommandList` |
+| 快捷键 | `shortcuts.ts` | **⌘P / ⌘K** → 快速打开（`quickOpen`）；**⇧⌘P** → 命令模式（`commandPalette`） |
 | 论文 quick-open | 前端内存 `libraryPapers` | 标题 / 作者 / id 即时过滤，无 RPC |
 | 全文搜索 | Host `vault_search` | walk `*.md`，AND 分词，片段 + 行号 |
+| 命令模式 | 内置命令列表 + `>` 前缀 | 设置 / 侧栏 / Vault / 布局等可执行动作（Phase A） |
 | 打开目标 | `onOpenPaper` / `onOpenVaultRel` | 命中 `papers/` 打开论文，否则打开笔记路径 |
 
-**语义上：当前面板 ≈ VS Code 的 ⌘P（资源导航）+ 内容搜索**，**还不是** ⇧⌘P 的「执行任意命令」。
+**Phase A**：⌘P 资源导航 + 内容搜索 + ⇧⌘P / `>` 命令执行。**Phase B** 仍待：统一 `src/lib/shell/commands` 注册表（现仅有 `types.ts` / `match.ts`）、扩展贡献、更丰富 when / MRU。
 
 ### 3.2 与 VS Code 的差距
 
 | 维度 | VS Code | Agentero 现状 |
 |---|---|---|
-| 快捷键分工 | ⌘P 文件 / ⇧⌘P 命令 | ⌘K ≈ ⌘P，**无 ⇧⌘P** |
-| 前缀模式 | `>` `@` `#` `:` `?` | 无 |
-| 命令注册表 | 全局 CommandService + 扩展贡献 | 无统一命令模型；动作散落 App / 菜单 / 快捷键 |
-| 执行命令 | 面板即执行器 | 面板只 **打开资源** |
-| 最近项 | 最近文件 / 最近命令 | 空查询 ≈ 论文列表前 N 条（非真实 MRU） |
-| 上下文 when | 丰富 | 仅「有无 Vault」空态 |
+| 快捷键分工 | ⌘P 文件 / ⇧⌘P 命令 | ✅ 已分工（⌘P/⌘K go · ⇧⌘P commands） |
+| 前缀模式 | `>` `@` `#` `:` `?` | `>` 命令模式；`@`/`#`/`:` 无 |
+| 命令注册表 | 全局 CommandService + 扩展贡献 | 内置列表；完整 registry 仍 Phase B |
+| 执行命令 | 面板即执行器 | ✅ 命令模式可执行内置动作 |
+| 最近项 | 最近文件 / 最近命令 | 空查询 ≈ 论文列表前 N 条（非完整 MRU） |
+| 上下文 when | 丰富 | 有限（有无 Vault 等） |
 | 符号 / 行号 | 一等能力 | 无 |
 
 ### 3.3 现有可复用资产
@@ -182,7 +183,7 @@ Command Palette（⇧⌘P）走 **CommandService 中所有「面向用户」的�
 
 ### 4.3 命令注册表（核心，对应 VS Code CommandService）
 
-新建轻量模块（建议 `src/lib/commands/`）：
+新建轻量模块（建议 `src/lib/shell/commands/`）：
 
 ```ts
 type AppCommand = {
@@ -226,7 +227,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 ### 4.6 无 Vault / 其它弹层打开时
 
 - **无 Vault**：Go 模式可展示「打开 Vault / 创建 Vault」类命令；内容搜索禁用。  
-- **其它弹层**（设置 / 快捷键清单等）：与 Dialog 共用 [`overlay-stack`](../frontend/ui.md)（§3.0）。`⌘P`/`⌘K`/`⇧⌘P` 自身可再按关闭；`Esc` / `⌘W` 关最顶层。有弹层时 `whenSettingsClosed` 门控挡住 Vault 树类快捷键，但开关类（设置 / 面板 / 清单）仍可匹配。
+- **其它弹层**（设置等）：与 Dialog 共用 [`overlay-stack`](../frontend/ui.md)（§3.0）。`⌘P`/`⌘K`/`⇧⌘P` 自身可再按关闭；`Esc` / `⌘W` 关最顶层。有弹层时 `whenSettingsClosed` 门控挡住 Vault 树类快捷键，但开关类（设置 / 面板）仍可匹配。
 
 ---
 
@@ -246,7 +247,7 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 
 ### Phase B — 命令注册表与 MRU
 
-1. `src/lib/commands/registry.ts` + 内置命令迁移（从 App 抽出绑定）。  
+1. `src/lib/shell/commands/（`types.ts` / `match.ts`；完整 registry 仍为 Phase B）` + 内置命令迁移（从 App 抽出绑定）。  
 2. localStorage：`command-mru`、`paper-mru`。  
 3. 空查询：最近论文 + 最近命令。  
 4. 可选前缀：`>` 强制命令模式。
@@ -327,11 +328,11 @@ UI 按 `kind` 分组渲染（Papers / Files / Commands / Open tabs）。
 ## 9. 建议的文件布局
 
 ```text
-src/lib/commands/
+src/lib/shell/commands/
   types.ts          # AppCommand, PaletteItem
   registry.ts       # register / list / execute
   builtins.ts       # 内置命令 id 与工厂（注入 deps）
-src/components/layout/
+src/components/dialogs/
   command-palette.tsx   # UI；按 mode 组合 providers
   # 可选拆分：
   # command-palette-go.tsx / command-palette-commands.tsx

@@ -1,14 +1,10 @@
 {
-	"loading": "加载中…",
 	"error": "错误",
 	"tryAgain": "重试",
 	"somethingWrong": "出错了",
-	"retry": "重试",
 	"close": "关闭",
 	"cancel": "取消",
 	"save": "保存",
 	"remove": "移除",
-	"open": "打开",
-	"delete": "删除",
-	"dismiss": "关闭"
+	"open": "打开"
 }

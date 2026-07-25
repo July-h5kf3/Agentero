@@ -18,7 +18,7 @@
 | Title | Agentero |
 | Visibility | 私有（org 默认；可在网页改为 Public） |
 | 关联仓库 | [`poco-ai/Agentero`](https://github.com/poco-ai/Agentero)（`gh project link`） |
-| 看板 URL | https://github.com/orgs/poco-ai/projects/1 |
+| 看板 URL | <https://github.com/orgs/poco-ai/projects/1> |
 
 ### 1.1 推荐视图
 
@@ -142,7 +142,7 @@ F7 双链 Graph（wikilink，非文献引用）
 F1 Vault 采纳 ────── F17 平台/同步（远期可共用路径语义）
 
 B1 入库 bug ──────── F2（修 bug 时避免与 commit 管线冲突）
-B4/B5 编辑器 ─────── F7 / notes-review UX
+B4/B5 编辑器 ─────── F7 编辑器 UX
 ```
 
 ### 3.4 远期 Epic 范围拆解（结构冻结；非 GitHub Issue）
@@ -190,7 +190,7 @@ B4/B5 编辑器 ─────── F7 / notes-review UX
 
 | 步骤 | 状态 |
 |---|---|
-| 创建 Org Project「Agentero」 | ✅ https://github.com/orgs/poco-ai/projects/1 |
+| 创建 Org Project「Agentero」 | ✅ <https://github.com/orgs/poco-ai/projects/1> |
 | Link 仓库 Agentero | ✅ |
 | 本结构文档入库 | ✅ 本文 |
 | 创建仓库 Labels | ✅ `type:*` / `area:*` / `priority:*` / `status:wip` |

@@ -7,7 +7,7 @@ import {
 	useReadOnly,
 	useSelected,
 } from "platejs/react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export function HrElement(props: PlateElementProps) {
 	const readOnly = useReadOnly();

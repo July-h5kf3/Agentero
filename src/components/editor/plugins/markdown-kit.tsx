@@ -8,7 +8,7 @@ import { KEYS } from "platejs";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { wikiLinkRules } from "@/components/editor/plugins/wikilink-plugin";
+import { wikiLinkRules } from "@/components/editor/plugins/wikilink-model";
 
 export const MarkdownKit = [
 	BaseFootnoteReferencePlugin,

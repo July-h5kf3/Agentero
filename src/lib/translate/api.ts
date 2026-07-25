@@ -1,20 +1,16 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "@/lib/tauri";
+import {
+	commands,
+	type TranslateTextArgs,
+	type TranslateTextResult,
+} from "@/lib/core/bindings";
+import { isTauri } from "@/lib/core/tauri";
 
-type ApiResult<T> = {
-	ok: boolean;
-	data?: T;
-	error?: { code: string; message: string };
-};
-
-export type TranslateTextResult = {
-	text: string;
-	provider?: string;
-};
+export type { TranslateTextArgs, TranslateTextResult };
 
 /**
- * Host free-MT command. `provider` selects the web engine
- * (googleapi / bing / youdao / …).
+ * Host free-MT command via the generated typed binding (tauri-specta pilot).
+ * `provider` selects the web engine (googleapi / bing / youdao / …).
+ * Regenerate bindings: `cargo test -p agentero export_typescript_bindings`.
  */
 export async function invokeTranslateText(args: {
 	text: string;
@@ -28,18 +24,16 @@ export async function invokeTranslateText(args: {
 	if (!isTauri()) {
 		throw new Error("Free translation requires the Tauri desktop app.");
 	}
-	const res = await invoke<ApiResult<TranslateTextResult>>("translate_text", {
-		args: {
-			text: args.text,
-			sourceLang: args.sourceLang,
-			targetLang: args.targetLang,
-			provider: args.provider,
-			freeBaseUrl: args.freeBaseUrl?.trim() || null,
-			timeoutMs: args.timeoutMs ?? null,
-		},
+	const res = await commands.translateText({
+		text: args.text,
+		sourceLang: args.sourceLang,
+		targetLang: args.targetLang,
+		provider: args.provider,
+		freeBaseUrl: args.freeBaseUrl?.trim() || null,
+		timeoutMs: args.timeoutMs ?? null,
 	});
 	if (!res.ok || !res.data) {
-		throw new Error(res.error?.message ?? "translate_text failed");
+		throw new Error(res.error?.message ?? "translate failed");
 	}
 	return res.data.text;
 }

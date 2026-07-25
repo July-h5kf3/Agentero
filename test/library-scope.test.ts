@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { PaperMetadata } from "@/lib/paper-metadata";
+import type { PaperMetadata } from "@/lib/paper";
 import {
 	filterPapersByScope,
 	LIBRARY_VIRTUAL_PATH,
 	normalizeLibraryScope,
 	paperInLibraryScope,
-} from "@/lib/papers-api";
+} from "@/lib/paper/api";
 import {
 	createPlaceholderTab,
 	ensureFullLibraryTab,
 	removeTab,
-} from "@/lib/tabs";
+} from "@/lib/workspace/tabs";
 
 function paper(
 	path: string,
@@ -137,7 +137,7 @@ describe("ensureFullLibraryTab", () => {
 describe("removeTab + ensureFullLibraryTab", () => {
 	it("can rebuild library after the last document closes", () => {
 		const doc = createPlaceholderTab("/vault/notes/a.md");
-		const { tabs } = removeTab([doc], doc.id, doc.id);
+		const { tabs } = removeTab([doc], doc.id);
 		expect(tabs).toHaveLength(0);
 		const ensured = ensureFullLibraryTab(tabs);
 		expect(ensured.tabs[0]?.path).toBe(LIBRARY_VIRTUAL_PATH);

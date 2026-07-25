@@ -1,0 +1,114 @@
+//! Command registration shared between desktop and iOS.
+//!
+//! Desktop-only commands are listed once via `$($desktop:path),*` so the iOS
+//! branch does not duplicate the common list.
+
+/// Commands available on every platform (including iOS).
+/// Desktop-only extras are appended by the caller.
+macro_rules! common_commands {
+    ($($extra:path),* $(,)?) => {
+        ::tauri::generate_handler![
+            crate::features::settings::commands::settings_get,
+            crate::features::settings::commands::settings_set,
+            crate::features::settings::commands::host_identity,
+            crate::features::agent::commands::agent_list_agents,
+            crate::features::agent::commands::agent_list_skills,
+            crate::features::agent::commands::agent_scan_catalog,
+            crate::features::agent::commands::agent_upsert_agent,
+            crate::features::agent::commands::agent_ensure_catalog,
+            crate::features::agent::commands::agent_remove_agent,
+            crate::features::agent::commands::agent_set_default,
+            crate::features::agent::commands::agent_set_enabled,
+            crate::features::agent::commands::agent_set_proxy,
+            crate::features::agent::commands::agent_probe,
+            crate::features::agent::commands::agent_probe_catalog,
+            crate::features::agent::commands::agent_cancel_run,
+            crate::features::agent::background_commands::background_task_cancel,
+            crate::features::agent::commands::agent_respond_permission,
+            crate::features::wiki::commands::graph_get_backlinks,
+            crate::features::wiki::commands::wiki_get_outgoing,
+            crate::features::wiki::commands::wiki_resolve,
+            crate::features::wiki::commands::wiki_embed_read,
+            crate::features::wiki::commands::wiki_search,
+            crate::features::wiki::commands::graph_get_graph,
+            crate::features::wiki::commands::graph_rebuild,
+            crate::features::vault::commands::vault_create,
+            crate::features::vault::commands::vault_ensure,
+            crate::features::vault::commands::vault_allow_fs_scope,
+            crate::features::vault::commands::wiki_move,
+            crate::features::vault::commands::wiki_external_rename_preview,
+            crate::features::vault::commands::wiki_apply_external_rename_repair,
+            crate::features::trash::commands::path_trash,
+            crate::features::trash::commands::path_list_trash,
+            crate::features::trash::commands::path_restore_item,
+            crate::features::trash::commands::path_purge_item,
+            crate::features::trash::commands::path_purge_trash,
+            crate::features::translate::commands::translate_text,
+            crate::features::import::commands::lookup_import_batch,
+            crate::features::import::commands::paper_download_assets,
+            crate::features::import::commands::paper_import_local_pdf,
+            crate::features::import::commands::paper_stage_import_file,
+            crate::features::import::commands::paper_export,
+            crate::features::import::commands::paper_import,
+            crate::features::catalog::commands::paper_get,
+            crate::features::catalog::commands::paper_list,
+            crate::features::catalog::commands::paper_move,
+            crate::features::catalog::commands::paper_set_is_read,
+            crate::features::catalog::commands::paper_set_tags,
+            crate::features::catalog::commands::paper_rescan,
+            crate::features::search::commands::vault_search,
+            crate::app::menu::set_locale,
+            $($extra),*
+        ]
+    };
+}
+
+/// Attach the platform-appropriate invoke handler to the builder.
+pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder.invoke_handler(common_commands![
+            crate::features::agent::commands::agent_open_install_terminal,
+            crate::features::agent::commands::agent_run_once,
+            crate::features::agent::commands::agent_list_sessions,
+            crate::features::agent::commands::agent_load_session,
+            crate::features::agent::commands::agent_warm,
+            crate::features::remote::commands::remote_connect,
+            crate::features::remote::commands::remote_disconnect,
+            crate::features::remote::commands::remote_vault_ensure,
+            crate::features::remote::commands::remote_list,
+            crate::features::remote::commands::remote_read_text,
+            crate::features::remote::commands::remote_write_text,
+            crate::features::remote::commands::remote_mkdir,
+            crate::features::remote::commands::remote_remove,
+            crate::features::remote::commands::remote_write_bytes,
+            crate::features::remote::commands::remote_paper_list,
+            crate::features::remote::commands::remote_paper_get,
+            crate::features::remote::commands::remote_paper_rescan,
+            crate::features::remote::commands::remote_paper_set_tags,
+            crate::features::remote::commands::remote_paper_set_is_read,
+            crate::features::remote::commands::remote_cache_file,
+            crate::features::remote::commands::remote_cache_stats,
+            crate::features::remote::commands::remote_cache_clear,
+            crate::features::remote::commands::remote_agent_scan,
+            crate::features::remote::commands::remote_agent_probe,
+            crate::features::remote::commands::remote_agent_open_install_terminal,
+            crate::features::remote::commands::remote_host_identity,
+            crate::features::terminal::commands::path_open_in_terminal,
+            crate::features::window::commands::window_new,
+            crate::features::import::zotero_commands::zotero_scan,
+            crate::features::import::zotero_commands::zotero_migrate,
+            crate::features::watcher::commands::fs_watch_start,
+            crate::features::watcher::commands::fs_watch_stop,
+            crate::features::connector::commands::connector_get_status,
+            crate::features::connector::commands::connector_set_enabled,
+            crate::features::connector::commands::connector_set_vault,
+            crate::features::connector::commands::connector_set_parent_dir,
+            crate::features::connector::commands::connector_set_port,
+        ])
+    }
+    #[cfg(target_os = "ios")]
+    {
+        builder.invoke_handler(common_commands![])
+    }
+}

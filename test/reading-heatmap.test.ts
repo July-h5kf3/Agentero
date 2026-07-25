@@ -4,7 +4,7 @@ import {
 	documentPosition,
 	meanRectY,
 	READING_HEATMAP_BIN_COUNT,
-} from "@/lib/reading-heatmap";
+} from "@/lib/paper/reading-heatmap";
 
 describe("meanRectY", () => {
 	it("defaults to 0.5 for empty rects", () => {

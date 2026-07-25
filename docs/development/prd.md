@@ -10,7 +10,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - 每次和 Agent 对话都需要重新提供上下文，知识库缺少稳定的路由表。
 - PDF 对人眼友好，但对模型有大量排版噪音，公式、表格、引用关系也不够可寻址。
 
-本产品的核心主张是：让人和 Agent 都可以读、改、链接文献，并且把论文粗读、Idea寻找等工作让 Agent 帮忙。
+本产品的核心主张是：让人和 Agent 都可以读、改、链接文献，并且把论文粗读、Idea 寻找等工作让 Agent 帮忙。
 
 ## 2. 产品目标
 
@@ -23,7 +23,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 3. Agent 完成粗读生成结构化 `NOTES.md`；metadata 写入 catalog（可选再导出索引）。
 
 用户部分：
-4. Markdown 工作台里审阅、编辑、补充双链。可以选择预览pdf、html版本，并可以做批注
+4. Markdown 工作台里审阅、编辑、补充双链。可以选择预览 pdf、html 版本，并可以做批注
 5. Agent 基于本地索引和笔记回答问题，并输出读取过的本地文件路径。
 6. 关系图谱展示论文、笔记、概念之间的连接。
 
@@ -89,9 +89,8 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 #### Markdown 工作台
 
 - 左侧：Vault 文件树与 paper 元信息。
-- 中间：Markdown / PDF / HTML 视图切换。
-- 中间栏：论文库表格（Library / vault home）或 Markdown / PDF / HTML。
-- 右侧 Notes（Preview）：**仅**打开具体论文且 PDF/HTML 时展示该篇 `NOTES.md`；论文库视图隐藏。
+- 中间：**Dockview 工作区**——Library / Markdown / PDF / HTML / 图片 / 回收站 / 论文 NOTES 等 panel；可分屏。
+- 论文 NOTES：打开 paper 时默认与 PDF 为同组 sibling tab（非独立右列预览栏）。
 - 可选右侧栏：Agent，或 Backlinks+Graph（上方反链，下方图谱）。
 - 支持打开、编辑、保存 Markdown。
 - 支持基本标题、列表、代码块、链接、表格预览。
@@ -109,7 +108,7 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 - Agentero 作为 **ACP Client** 连接用户本机已安装的 coding agent；**不内置、不捆绑** Agent 二进制或 Claude Agent SDK。
 - **BYOA（Bring Your Own Agent）**：用户在设置中添加 Agent（预设模板：OpenCode / Gemini CLI / Claude ACP / Codex ACP，或自定义 `command` + `args` + `env`）。模型与 API Key 由各 Agent CLI 自行管理，Agentero 不持有模型密钥。
 - 会话工作目录为当前 Vault 根目录，使 Agent 直接读写本地 Markdown 资产。
-- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**笔记写后审阅**（统一 Diff + Keep / Revert）；**当前论文默认 context** + **个人偏好提示词**（`agentPersonalPrompt`）。
+- 已落地：**paper-reader 精读**（设置 `autoPaperReader` 默认关；可选自动 + 文件树 Zap 手动；catalog `is_read`）；全局 Agent **权限模式**（受限 / **每次询问** / 自动批准）；**面板工作流**（Summarize / Ask library / Draft Related Work → `summary` / `qa` / `related_work`）；**当前论文默认 context** + **个人偏好提示词**（`agentPersonalPrompt`）。
 - 面板空态建议 chips 接通上述 workflow；`AGENTS.md` 自动注入 workflow prompt 仍待。
 - 后续（roadmap V0.7）：沿文献引用链的 Explore citations / Map related work / Ingest neighborhood。
 - Agent 读取顺序遵循渐进式披露：`AGENTS.md` →（catalog/列表或可选导出）→ `NOTES.md` → `marks/` → `PAPER.md` → `source/`，仅在需要时逐层下钻。
@@ -134,14 +133,13 @@ Agentero / notemd 是一个面向人和 Agent 共用的本地科研文献库。�
 
 #### 工作区
 
-- **文档标签页已落地**：中间栏以浏览器式多 tab 管理 Library / PDF / HTML / Markdown / 图片等；常驻挂载，切换保留滚动与编辑状态；`⌘W` / `Esc` 优先关最顶层应用弹层（设置、快捷键清单、命令面板、迁移对话框等，见 `overlay-stack`），否则先关标签，仅剩全库时关窗口。
-- **规划（roadmap V0.6 余量）**：2 格分屏并排（PDF | NOTES 等）。
+- **全局 Dockview 已落地（V0.6）**：中间栏管理 Library / PDF / HTML / Markdown / 图片 / 回收站 / NOTES 等文档 panel；dockview 原生 tab、关闭、上下左右/多格分屏；论文默认 PDF 与 `NOTES.md` 同组 sibling。标题栏**无**文档 tab 条。`⌘W` / `Esc` 优先关最顶层应用弹层（`overlay-stack`），否则关 active panel，仅剩全库时关窗。详见 [`tab-split.md`](tab-split.md)。
 - **操作错误**：全局右上角 Toast（`notifyError`），不占用侧栏 header。
 
 ### 4.2 P1 暂缓 / 后续版本
 
-- 分屏（V0.6 余量；标签页已完成）。
-- 文献引用关系探索与 hover Paper Info（升格为 roadmap V0.7）。
+- tab 固定（pin）、按 paper 分组等工作区增强（V0.6 后续）。
+- 文献引用关系探索与 hover Paper Info（roadmap V0.7）。
 - Zotero 全量替代能力。
 - 云同步、多人协作、权限管理。
 - 浏览器插件。

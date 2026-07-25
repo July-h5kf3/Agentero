@@ -14,13 +14,30 @@ export function resolveTargetLangCode(
 	return uiLanguage.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
+/**
+ * Map a language code (or already-human name) → prompt-facing display name.
+ * Single source of truth for Agent prompts.
+ */
+export function targetLangDisplayName(codeOrName: string): string {
+	const raw = codeOrName.trim();
+	if (!raw) return "English";
+	const c = raw.toLowerCase();
+	if (c === "zh" || c === "zh-cn" || c.startsWith("zh-") || c === "chinese") {
+		return "Chinese";
+	}
+	if (c === "en" || c.startsWith("en-") || c === "english") {
+		return "English";
+	}
+	// Unknown code / custom name: pass through for prompt flexibility.
+	return raw;
+}
+
 /** Human-readable name for Agent prompts. */
 export function resolveTargetLangName(
 	targetLang: TranslateTargetLang,
 	uiLanguage: string,
 ): string {
-	const code = resolveTargetLangCode(targetLang, uiLanguage);
-	return code === "zh-CN" ? "Chinese" : "English";
+	return targetLangDisplayName(resolveTargetLangCode(targetLang, uiLanguage));
 }
 
 export function resolveSourceLangCode(sourceLang: string): string {

@@ -1,11 +1,11 @@
 import { useEffect } from "react";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	startVaultWatch,
 	stopVaultWatch,
 	VAULT_FILE_CHANGED_EVENT,
 	type VaultFileChangedPayload,
-} from "@/lib/fs-watch";
-import { isTauri } from "@/lib/tauri";
+} from "@/lib/vault/fs-watch";
 
 type VaultFileEventsParams = {
 	vaultPath: string | null;

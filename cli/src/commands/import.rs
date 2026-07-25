@@ -3,7 +3,8 @@
 use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{resolve_vault, GlobalOpts};
-use agentero_lib::services::lookup::{self, LookupImportArgs, PaperImportArgs};
+use agentero_lib::features::import as paper_import;
+use agentero_lib::features::import::{LookupImportArgs, PaperImportArgs};
 use clap::Subcommand;
 use serde_json::{json, Value};
 use std::fs;
@@ -38,7 +39,7 @@ pub async fn run(cmd: ImportCmd, globals: &GlobalOpts) -> Result<Value, CliError
 
 async fn import_id(globals: &GlobalOpts, text: &str, parent: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let result = lookup::import_by_identifier(LookupImportArgs {
+    let result = paper_import::import_by_identifier(LookupImportArgs {
         vault_path: vault.to_string_lossy().to_string(),
         parent_dir: parent.to_string(),
         text: text.to_string(),
@@ -87,7 +88,7 @@ async fn import_id(globals: &GlobalOpts, text: &str, parent: &str) -> Result<Val
 async fn import_bib(globals: &GlobalOpts, file: &PathBuf, parent: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let content = read_input(file)?;
-    let result = lookup::import_catalog(PaperImportArgs {
+    let result = paper_import::import_catalog(PaperImportArgs {
         vault_path: vault.to_string_lossy().to_string(),
         parent_dir: Some(parent.to_string()),
         content,

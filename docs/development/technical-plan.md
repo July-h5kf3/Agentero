@@ -115,9 +115,9 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 模块 | 路径 | 说明 |
 |---|---|---|
-| 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/layout/resizable.tsx`；左右侧栏 **collapsible 常驻** + `preserve-pixel-size` |
-| 侧边栏文件树 | `src/components/layout/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 快捷键 |
-| Vault IO | `src/lib/vault.ts` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/reveal.ts` 系统文件管理器定位 / 终端打开 |
+| 可伸缩面板 | `react-resizable-panels`（`Group` / `Panel` / `Separator`） | v4 API；封装见 `src/components/ui/resizable.tsx`；左右侧栏 **collapsible 常驻** + `preserve-pixel-size` |
+| 侧边栏文件树 | `src/components/sidebar/file-tree.tsx` | 包装 **AI Elements** `FileTree`；右键 / 快捷键 |
+| Vault IO | `src/lib/vault` | 选目录、建树、读写文本、建目录、删除路径；`src/lib/vault/reveal.ts` 系统文件管理器定位 / 终端打开 |
 | Catalog 删除 | Host `paper_delete` | 删除 paper 或组织目录下 catalog 行（`path` / `path/%`） |
 
 **交互（当前实现）**
@@ -152,6 +152,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 自定义 `[[双链]]` 插件 | 基于 Plate 插件机制实现双链输入、解析、高亮与点击跳转 |
 
 **选型理由**：
+
 - **所见即所得**：用户无需在源码和预览之间切换，编辑体验接近 Notion/Obsidian Live Preview。
 - **与 shadcn/ui 原生集成**：Plate 的 UI 组件直接基于 shadcn/ui 构建，与项目现有组件体系无缝配合。
 - **内置 AI 能力**：`@platejs/ai` 提供编辑器内 AI 交互（补全、改写、内联建议），可通过 ACP 对接 Agent 工作流。
@@ -159,6 +160,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 - **Markdown 兼容**：通过 `@platejs/markdown` 实现 Markdown 文件的导入（反序列化为 Slate 文档）和保存（序列化为 Markdown 文本），保持与 Vault 文件的兼容。
 
 **注意事项**：
+
 - Plate 内部使用 Slate 数据模型，保存时需序列化为 Markdown 再写入磁盘，确保 Vault 文件仍为标准 Markdown。
 - Agent 写入的 Markdown 同样需反序列化为 Slate 文档后展示在编辑器中。
 - 对于习惯源码编辑的用户，后续可考虑提供 CodeMirror 源码模式作为可选切换。
@@ -171,7 +173,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 插入 | Plate `ImagePlugin.uploadImage`（粘贴）+ 工具栏 `pickImageFiles` → `writeVaultBytes` |
 | 预览 | 相对路径 → fs `readFile` → `blob:`；**选中**节点时渲染 Markdown 源码而非位图 |
 | GC | `collectImageUrlCounts` 引用计数；归零且 managed `./assets/` 时 `remove` 文件 |
-| 代码 | `src/lib/markdown-image.ts`；`MarkdownEditor` 配置 `ImagePlugin`；`ImageElement` |
+| 代码 | `src/lib/markdown/image.ts`；`MarkdownEditor` 配置 `ImagePlugin`；`ImageElement` |
 | 权限 | `fs:allow-write-file`（capabilities） |
 
 详见 [`../backend/data-model.md`](../backend/data-model.md)「Markdown 内嵌图片」、[`../frontend/ui.md`](../frontend/ui.md)。
@@ -180,7 +182,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 
 | 类型 | 方案 |
 |---|---|
-| PDF 渲染（前端） | **已接入** `react-pdf` + `pdfjs-dist`：本地优先 `blob:` → 自动下载 → 远程回退；**真实 scale 重渲染**（缩放停后 `width = 基准×缩放`）；放大后双向滚动 |
+| PDF 渲染（前端） | **已接入** EmbedPDF + PDFium：本地优先 `blob:` → 自动下载 → 远程回退；**真实 scale 重渲染**（缩放停后 `width = 基准×缩放`）；放大后双向滚动 |
 | PDF 工具栏 | 适应宽 / **适应整页**；页码 pill + 跳转；`PageDown/Up`；大纲浮层；**⌘F 查找**（`pdf-find.ts` + 文本层 rects 高亮） |
 | PDF 本地归档（Host） | 魔棒 / `paper_download_assets` → `{paper}/{id}.pdf` |
 | arXiv LaTeX 归档 | e-print 解压到 `source/`（`lookup/assets.rs`） |
@@ -191,14 +193,16 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 翻译服务 | 应用级可插拔 `TranslateService`（free + agent）；见 [`translate.md`](translate.md) |
 
 **分工说明**：
-- **渲染层**（`react-pdf`）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
+
+- **渲染层**（EmbedPDF / PDFium）：负责在 Webview 中展示 PDF 页面，供用户审阅、缩放、翻页浏览。
 - **解析层**（`liteparse`，crate `2.5+`）：在 Rust 端提取 PDF 文本内容，用于生成 `PAPER.md`、Agent 上下文读取、全文检索索引等。输出支持 Markdown（含标题/表格/列表重建）、JSON（含 bounding box）和纯文本。
-- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper-read.ts`）。
+- **当前落地**：无本地 TeX 时，在 `lookup_import` / `paper_download_assets` **下载之后**自动 liteparse → `PAPER.md`；`paper_parse_body` 亦可手动。有 TeX 不自动生成。Download 图标补资源。精读：**入库/单篇 Download 后自动** paper-reader，资源齐全且未读时 Zap 可手动（catalog `is_read`；skill 触发：**Codex `$paper-reader`**、**Claude `/paper-reader`**、其它仅注入 `SKILL.md`，见 Host `SkillMentionStyle`；前端 `src/lib/paper/reader.ts`）。
 - `liteparse` 内置 Tesseract OCR，对扫描型 PDF 也能处理；支持多格式（PDF/DOCX/XLSX/PPTX/图片）。
 - PDF 引用/插图解析的落盘契约、TeX/PDF 双路径和交互边界见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。首版只分析本地 paper PDF；sidecar 写入 paper `source/`，不覆盖原始资产。
-- **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载；任何会进入主文档 DOM 的不可信 HTML 字符串必须调用 `sanitizeHtml`（DOMPurify）。许可证 Apache-2.0。
+- **HTML 安全**：完整远程/本地 HTML 文档优先用隔离 `iframe` 或 `convertFileSrc` 加载（不注入主文档 DOM）。
 
 **可插拔 PDF 解析器（`PdfParser`）**：
+
 - 抽象 `PdfParser` trait，提供两个后端：本地 `LiteparseBackend`（默认，离线开箱即用）与云端 `MineruCloudBackend`（BYOK，配置 MinerU API Key 后启用）。
 - 选择策略：配置并启用 MinerU 时优先云端（解析质量更高），失败自动降级本地 `liteparse`；未配置时始终本地。
 - 质量映射：MinerU → `body_quality=high`；liteparse 文本层 → `medium`；扫描件 OCR → `low`，写入 catalog。
@@ -343,6 +347,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 | 损坏处理 | 丢失后用户重新配置 | meta 需备份/export；笔记目录仍在。双链缓存表可删重建 |
 
 **使用原则**：
+
 - Tauri Store 只存配置和机密，不存论文元数据。
 - 论文集合与 metadata 的权威来源是 **catalog**；根级 `PAPERS.md` / `library.bib` **默认不生成**，仅 `catalog:export_*` 按需写出。
 - 人写笔记（`NOTES.md`）与 `marks/`、`source/` 仍是文件；`PAPER.md` 仍是可选派生文件。
@@ -386,12 +391,14 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```
 
 **输入分类与 Agent 解析**：
+
 - 规则层先用正则识别 arXiv ID（如 `1706.03762`、`arXiv:1706.03762`）和 URL。
 - 非精确输入统一交给 Agent，Agent 可调用 arXiv API 进行关键词/摘要搜索，并返回 Top-K 候选。
 - 候选需包含：标题、作者、年份、arXiv ID、摘要片段、与输入意图的匹配理由。
 - 用户可在列表中多选批量入库，或拒绝全部候选后重新输入。
 
 **PAPER.md 生成策略**（魔棒路径已部分落地）：
+
 - `papers/<id>/source/` 存 PDF / 可选 LaTeX；Agent 优先读 `.tex`。
 - **无本地 TeX**：在 PDF（及 e-print 尝试）**下载之后**，Host 用 **liteparse** 写 `PAPER.md`，并更新 catalog `body_source` / `body_quality`；亦可 `paper_parse_body`（Download 路径内触发）。
 - **有 TeX**：不自动生成 `PAPER.md`。
@@ -417,6 +424,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 ```
 
 **与 arXiv 入库的差异**：
+
 - 目录名用 citekey 而非 arXiv ID；无 arXiv API 提供权威元数据，改由“标识符查询 + Agent 抽取 + 用户确认”混合获取。
 - 无 LaTeX source，`PAPER.md` 必定生成，是该篇唯一结构化可读正文。
 - 解析器可插拔：默认本地 `liteparse`，配置 MinerU API Key 后优先云端 MinerU，失败自动降级；arXiv 入库在缺 LaTeX/HTML 时复用同一 `PdfParser`。
@@ -461,6 +469,7 @@ MVP 涉及两类本地持久化需求，需要明确分层：
 Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **ACP Client**，通过 `agent-client-protocol` crate 与用户本机 **已安装** 的 Agent 子进程进行 stdio JSON-RPC 通信。Agentero **不打包** 任何 agent 二进制。
 
 **BYOA 原则**：
+
 - 用户在设置中添加 / 选择 Agent（预设模板或自定义 `command` + `args` + `env`）。
 - 会话 `cwd` = 当前 Vault 根目录，使 Agent 直接面对 `AGENTS.md` / `papers/` 等本地资产（无默认 PAPERS.md）。
 - 模型与 API Key 完全由 Agent CLI 管理；Agentero 只负责 Client 侧会话、权限 UX 与工作流 prompt。
@@ -495,14 +504,16 @@ Agent 层统一基于 **ACP（Agent Client Protocol）**：Rust Host 作为 **AC
 | `custom` | 任意 command + args + env | 用户完全自定义 |
 
 **Agent 切换**：
+
 - 切换只改注册表中的默认 agent id 与启动参数，不改变 Rust 业务逻辑。
 - ACP 保证接口统一；某 agent 不可用时展示探测失败原因与重试，不静默回退到「内置」agent。
 
 **权限与写入**：
+
 - **全局权限模式**（设置 → Agent，`agentPermissionMode`）：**受限**（默认）取消 ACP 权限请求 / Codex `workspace-write`；**每次询问**（`ask`）经 `agent:permission-request` + `agent_respond_permission` 对话框；**自动批准**（`auto`）选第一项 AllowOnce / Codex `danger-full-access`。运行经 `permissionMode` 传入（旧 `autoApprove` 仍兼容）。
-- **笔记写后审阅**：BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 统一 Diff + Keep/Revert。写前 dry-run / `agent:accept_draft` 路径仍可后续加强。
 
 **Agent 输出规范**（工作流 prompt + `AGENTS.md` 强约束）：
+
 - 结果末尾必须包含 `## Sources` 或 `读取文件：` 列表（相对 Vault 路径）。
 - 涉及双链的内容必须保留 `[[...]]` 格式。
 - Agent 可先查 SQLite 索引加速路由，但最终引用与展示必须落回本地文件路径。
@@ -559,7 +570,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 | 三栏固定布局 | 侧边栏可收起，主编辑区全屏；使用 Sheet/Popover 展示右侧面板 |
 | 鼠标悬停提示 | 长按菜单替代 |
 | 小点击区域 | 增大按钮/节点热区至 44pt |
-| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口与**文档标签页**；**分屏** 规划见 roadmap V0.6 余量 |
+| 多窗口自由拖拽 | 已支持 `⌘N` 多窗口与中间栏 **Dockview** 多分屏（V0.6 已落地） |
 | PDF 阅读器 | 支持 pinch 缩放、滚动阅读、Apple Pencil 批注（后续） |
 | 键盘快捷键 | 同时支持外接键盘快捷键与屏幕触摸操作 |
 
@@ -579,7 +590,7 @@ Tauri 2 支持 iOS/iPadOS，但需针对触控设备做以下调整：
 
 - **共享层**：Rust 业务逻辑（Vault、Markdown 索引、ACP Client）完全跨平台。
 - **前端适配层**：通过 `useMediaQuery` / 平台检测（Tauri `os` API）切换布局组件。
-- **平台特定代码**：封装在 `src/platform/` 下，如 `desktop.ts`、`mobile.ts`。
+- **平台特定代码**：按需拆分平台入口（当前无独立 platform 目录）。
 
 ## 7. 开发/构建/部署
 
@@ -631,21 +642,21 @@ pnpm tauri build
   "@platejs/markdown": "^53",
   "@platejs/basic-nodes": "^53",
   "@platejs/ai": "^53",
-  "dompurify": "^3",
   "lucide-react": "^1",
   "remark-gfm": "^4",
   "remark-math": "^6",
   "remark-emoji": "^5",
   "zustand": "^5",
   "react-force-graph-2d": "^1",
-  "react-pdf": "^9",
+  "@embedpdf/*": "版本见 package.json",
+  "dockview": "版本见 package.json",
   "class-variance-authority": "^0.7",
   "clsx": "^2",
   "tailwind-merge": "^3"
 }
 ```
 
-> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、`react-pdf`、双链反链、`react-force-graph-2d` + `graph_get_graph`。  
+> **已落地**：`react-resizable-panels`、`@tauri-apps/plugin-fs`、`@tauri-apps/plugin-dialog`、EmbedPDF、双链反链、`react-force-graph-2d` + `graph_get_graph`。  
 > **图谱 UI**：Graph 位于 Backlinks 右侧栏下方，支持 Near / All 模式和节点点击打开。  
 > **仍为计划**：`zustand`（可选）。
 
@@ -675,13 +686,7 @@ walkdir = "2"
 tempfile = "3"
 ```
 
-### 8.3 安全相关依赖
-
-| 库 | 用途 | 说明 |
-|---|---|---|
-| `dompurify` | HTML XSS 消毒 | 已接入；封装见 `src/lib/sanitize.ts` 的 `sanitizeHtml`。内联 HTML 渲染前必须调用。 |
-
-### 8.4 可选依赖
+### 8.3 可选依赖
 
 | 场景 | 库 |
 |---|---|
@@ -698,13 +703,13 @@ tempfile = "3"
 |---|---|
 | V0.1 | Tauri + React 工作台基本完成；可伸缩文件树（Finder / 删除）、Create Vault + catalog、Open vault、读写 Markdown、最近 Vault、PDF/HTML/图片/Notes、Library 表 + tags、左右侧栏 collapsible 隔离、左下角后台任务条（实色 hover）、右上角全局 Toast（`notifyError`）；文件监听（`notify` → `vault:file-changed`，编辑器/文件树自动重载）已落地。 |
 | V0.2 | 魔棒 + Translator 入库、catalog 权威、`paper_download_assets`、`paper_set_tags`、无 TeX 时 liteparse → `PAPER.md`、Library 导入导出已落地；关键词候选等仍待。 |
-| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（可选自动 + Zap 手动 + `is_read`）、**SkillMentionStyle**、**权限三档**（`restricted` / `ask` / `auto` + `agent:permission-request`）、**面板 workflow**（summary / qa / related_work）、**笔记写后审阅**（`agent:notes-review` Keep/Revert）、模型收藏已接入；`AGENTS.md` 自动注入与写前草稿拦截仍待。 |
+| V0.3 | BYOA 面板进行中；通用 provider 走 ACP，Codex 走原生 App Server thread；`@` / `$` 上下文、**paper-reader**（可选自动 + Zap 手动 + `is_read`）、**SkillMentionStyle**、**权限三档**（`restricted` / `ask` / `auto` + `agent:permission-request`）、**面板 workflow**（summary / qa / related_work）、模型收藏已接入；`AGENTS.md` 自动注入仍待。 |
 | V0.4 | 双链解析、反链面板、`graph_get_graph`、`react-force-graph-2d` 图谱已落地；Graph 嵌在 Backlinks 右侧栏下方（**双链图**）；`.md` 变更经 `scheduleWikiRebuild` 防抖重建索引。 |
 | V0.5 | 抽象 `Importer` trait 与可插拔 `PdfParser`；落地 arXiv 与本地 PDF 两个 importer（liteparse 默认 + 云端 MinerU）；预留 DOI/BibTeX 扩展点。 |
-| V0.6 | **文档标签页已落地**（标题栏多 tab、常驻挂载、`⌘W` 关 tab / 无 tab 关窗、多窗口独立 tab 集）；**2 格分屏**仍待；与 Agent 会话标签分离。 |
+| V0.6 | **全局 Dockview 已落地**：中间栏文档 panel（非标题栏 tab）；上下左右/多格分屏；论文默认 PDF\|NOTES sibling；布局 `toJSON()`；与 Agent 会话标签分离。见 [`tab-split.md`](tab-split.md)。 |
 | V0.7 | **文献引用图**：cites/cited_by 可重建缓存（API 可插拔）；文内引用 hover → 右侧 Paper Info；Agent 工作流 Explore citations / Map related work / Ingest neighborhood。 |
 | Release | push `v*` tag 构建 macOS / Linux / Windows Tauri 安装包并上传草稿 GitHub Release。 |
-| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局、>2 格分屏。 |
+| Later | iPadOS 构建、完整 PDF 批注、云同步、多 Agent 并行、更深 prior–derivative 引用布局。 |
 
 ## 10. 风险与技术对策
 
@@ -712,7 +717,7 @@ tempfile = "3"
 |---|---|
 | arXiv HTML/LaTeX 不可用 | 降级到 `liteparse` PDF 解析（支持 Markdown 输出 + OCR），并在 catalog 中标记 `body_source`/`body_quality`。 |
 | 云端 MinerU 不可用或数据敏感 | 默认本地 `liteparse` 解析不外传；MinerU 失败自动降级本地；启用前提示 PDF 将上传第三方。 |
-| Agent 输出破坏用户笔记 | BYOA 直接写盘，运行前快照目标笔记；重写后 `agent:notes-review` 统一 Diff + Keep/Revert。写前 dry-run 拦截仍待。 |
+| Agent 输出破坏用户笔记 | BYOA 直接写盘；依赖用户本地版本管理 / 外部 diff。写前 dry-run 拦截仍可后续加强。 |
 | 论文列表性能差 | Catalog SQLite 权威查询；双链边增量索引。 |
 | Catalog 损坏 | 启动校验 schema；提示从备份恢复；可选从历史 `metadata.json` 导入；导出 `PAPERS.md`/BibTeX 作可读快照。 |
 | iPadOS 文件沙盒限制 | 使用系统文件选择器；Vault 结构保持与 macOS 一致。 |

@@ -1,6 +1,5 @@
 {
 	"title": "Settings",
-	"dismiss": "Dismiss settings",
 	"host": {
 		"thisComputer": "This computer",
 		"remote": "Remote",
@@ -14,16 +13,12 @@
 		"agent": "Agent",
 		"translate": "Translate",
 		"keyboard": "Keyboard",
-		"privacy": "Privacy",
 		"about": "About"
 	},
 	"general": {
 		"title": "General",
 		"restoreVault": {
 			"label": "Restore last vault"
-		},
-		"confirmClose": {
-			"label": "Confirm before quit"
 		},
 		"paperTreeLabelMode": {
 			"label": "Paper labels in file tree",
@@ -52,6 +47,10 @@
 		"translatorBaseUrl": {
 			"label": "Translator service URL",
 			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn. Adding a paper always downloads PDF; arXiv also unpacks LaTeX into source/."
+		},
+		"batchImportConcurrency": {
+			"label": "Batch import concurrency",
+			"hint": "Maximum parallel identifier imports when adding multiple papers at once. Lower values are gentler to remote services; higher values import faster on a good connection."
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
@@ -111,9 +110,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"enable": {
-			"label": "Enable Agent"
-		},
 		"proxy": {
 			"label": "Agent proxy"
 		},
@@ -240,15 +236,6 @@
 	},
 	"keyboard": {
 		"title": "Keyboard"
-	},
-	"privacy": {
-		"title": "Privacy",
-		"analytics": {
-			"label": "Analytics"
-		},
-		"crash": {
-			"label": "Crash reports"
-		}
 	},
 	"about": {
 		"title": "About",
