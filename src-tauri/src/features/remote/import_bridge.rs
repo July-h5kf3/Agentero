@@ -182,15 +182,8 @@ pub async fn download_paper_assets_remote(
     session: Arc<RemoteSession>,
     args: PaperDownloadAssetsArgs,
 ) -> Result<AssetDownloadResult, AppError> {
-    let path_rel = args
-        .path
-        .trim()
-        .replace('\\', "/")
-        .trim_matches('/')
-        .to_string();
-    if path_rel.is_empty() || path_rel.split('/').any(|p| p == ".." || p.is_empty()) {
-        return Err(AppError::message("invalid paper path"));
-    }
+    let path_rel = crate::core::fs::sanitize_vault_rel(&args.path)
+        .map_err(|_| AppError::message("invalid paper path"))?;
     if !session.fs.exists(&path_rel).await? {
         return Err(AppError::message("paper folder not found"));
     }

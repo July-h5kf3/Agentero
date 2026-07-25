@@ -4,9 +4,7 @@ use std::path::Path;
 
 /// Normalize to vault-relative forward-slash path (no leading `./`).
 pub fn normalize_rel(path: &str) -> String {
-    let p = path.replace('\\', "/");
-    let p = p.trim_start_matches("./");
-    p.trim_matches('/').to_string()
+    crate::core::fs::normalize_rel(path)
 }
 
 fn stem_of(path: &str) -> String {

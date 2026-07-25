@@ -490,10 +490,10 @@ pub async fn remote_cache_file(
         Ok(s) => s,
         Err(e) => return Ok(map_err(e)),
     };
-    let rel = args.path.trim().trim_matches('/').replace('\\', "/");
-    if rel.is_empty() || rel.contains("..") {
-        return Ok(map_err(AppError::message("invalid path")));
-    }
+    let rel = match crate::core::fs::sanitize_vault_rel(&args.path) {
+        Ok(r) => r,
+        Err(_) => return Ok(map_err(AppError::message("invalid path"))),
+    };
     let meta = match session.fs.stat(&rel).await {
         Ok(m) => m,
         Err(e) => return Ok(map_err(e)),

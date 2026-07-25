@@ -55,27 +55,14 @@ pub struct FsFileMeta {
 }
 
 /// Normalize a vault-relative path to UNIX style without leading `/`.
+/// Drops `.` segments and collapses duplicate slashes.
 pub fn normalize_rel(rel: &str) -> String {
     let s = rel.trim().replace('\\', "/");
-    let s = s.trim_matches('/');
-    if s.is_empty() || s == "." {
-        return String::new();
-    }
-    // Collapse duplicate slashes
-    let mut out = String::with_capacity(s.len());
-    let mut prev_slash = false;
-    for ch in s.chars() {
-        if ch == '/' {
-            if !prev_slash {
-                out.push('/');
-            }
-            prev_slash = true;
-        } else {
-            out.push(ch);
-            prev_slash = false;
-        }
-    }
-    out
+    let parts: Vec<&str> = s
+        .split('/')
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect();
+    parts.join("/")
 }
 
 /// Returns true if `rel` attempts to escape the vault root via `..` segments.
@@ -90,6 +77,19 @@ pub fn path_escapes_root(rel: &str) -> bool {
         }
     }
     false
+}
+
+/// Normalize a vault-relative path and reject empty or root-escaping inputs.
+/// The canonical guard for user/IPC-provided paper/file paths.
+pub fn sanitize_vault_rel(rel: &str) -> Result<String, String> {
+    let norm = normalize_rel(rel);
+    if norm.is_empty() {
+        return Err("empty vault path".into());
+    }
+    if norm.split('/').any(|p| p == "..") {
+        return Err("path escapes vault root".into());
+    }
+    Ok(norm)
 }
 
 /// Join remote root (absolute remote path) with vault-relative path.
@@ -120,6 +120,8 @@ mod tests {
     fn normalize_strips_and_collapses() {
         assert_eq!(normalize_rel("/a//b/"), "a/b");
         assert_eq!(normalize_rel("."), "");
+        assert_eq!(normalize_rel("./notes/x.md"), "notes/x.md");
+        assert_eq!(normalize_rel("a/./b"), "a/b");
         assert_eq!(normalize_rel("papers\\x\\NOTES.md"), "papers/x/NOTES.md");
     }
 
@@ -129,6 +131,18 @@ mod tests {
         assert!(path_escapes_root("a/../../b"));
         assert!(!path_escapes_root("papers/1706.03762/NOTES.md"));
         assert!(!path_escapes_root(""));
+    }
+
+    #[test]
+    fn sanitize_vault_rel_guards() {
+        assert_eq!(
+            sanitize_vault_rel("/papers//x\\NOTES.md").unwrap(),
+            "papers/x/NOTES.md"
+        );
+        assert!(sanitize_vault_rel("").is_err());
+        assert!(sanitize_vault_rel("a/../b").is_err());
+        // Dots inside names are fine (unlike a naive contains("..") check).
+        assert_eq!(sanitize_vault_rel("notes..md").unwrap(), "notes..md");
     }
 
     #[test]

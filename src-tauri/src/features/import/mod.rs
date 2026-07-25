@@ -445,15 +445,8 @@ pub async fn download_paper_assets_with_progress(
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
-    let path_rel = args
-        .path
-        .trim()
-        .replace('\\', "/")
-        .trim_matches('/')
-        .to_string();
-    if path_rel.is_empty() || path_rel.split('/').any(|p| p == ".." || p.is_empty()) {
-        return Err(AppError::message("invalid paper path"));
-    }
+    let path_rel = crate::core::fs::sanitize_vault_rel(&args.path)
+        .map_err(|_| AppError::message("invalid paper path"))?;
     let paper_dir = vault.join(&path_rel);
     if !paper_dir.is_dir() {
         return Err(AppError::message("paper folder not found"));

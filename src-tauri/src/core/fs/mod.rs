@@ -6,7 +6,10 @@ mod local;
 mod path;
 
 pub use local::LocalFs;
-pub use path::{join_remote, normalize_rel, path_escapes_root, FsCaps, FsDirEntry, FsFileMeta};
+pub use path::{
+    join_remote, normalize_rel, path_escapes_root, sanitize_vault_rel, FsCaps, FsDirEntry,
+    FsFileMeta,
+};
 
 use crate::core::error::AppError;
 use async_trait::async_trait;
