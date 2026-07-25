@@ -53,12 +53,6 @@ export const readPdfAskThread = store.read;
 export const writePdfAskThread = store.write;
 export const deletePdfAskThread = store.remove;
 
-export async function listPdfAskSummaries(
-	paperAbsPath: string,
-): Promise<PdfAskThreadSummary[]> {
-	return toSummaries(await listPdfAskThreads(paperAbsPath));
-}
-
 export function toSummaries(threads: PdfAskThread[]): PdfAskThreadSummary[] {
 	return threads.map((t) => {
 		const pin = threadPin(t);

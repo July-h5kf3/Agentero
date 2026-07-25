@@ -52,43 +52,6 @@ export function clientRectsToNormalized(
 	return out;
 }
 
-/** Build anchor from a live Selection inside the PDF host. */
-export function anchorFromSelection(
-	selection: Selection,
-	host: HTMLElement,
-	trigger: PdfAskTrigger,
-): PdfAskAnchor | null {
-	if (selection.rangeCount === 0 || selection.isCollapsed) return null;
-	const range = selection.getRangeAt(0);
-	const text = selection.toString().replace(/\s+/g, " ").trim();
-	if (!text) return null;
-
-	const pageEl =
-		findPageElement(range.commonAncestorContainer, host) ??
-		findPageElement(range.startContainer, host);
-	if (!pageEl || !host.contains(pageEl)) return null;
-
-	const rects = clientRectsToNormalized(pageEl, range.getClientRects());
-	if (!rects.length) {
-		const br = range.getBoundingClientRect();
-		const fallback = clientRectsToNormalized(pageEl, [br]);
-		if (!fallback.length) return null;
-		return {
-			page: pageNumberOf(pageEl),
-			rects: fallback,
-			quote: text,
-			trigger,
-		};
-	}
-
-	return {
-		page: pageNumberOf(pageEl),
-		rects,
-		quote: text,
-		trigger,
-	};
-}
-
 /** Anchor from a point inside a page (dwell / empty double-click). */
 export function anchorFromPoint(
 	clientX: number,

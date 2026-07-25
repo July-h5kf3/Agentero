@@ -31,11 +31,6 @@ export function isPdfFileName(name: string): boolean {
 	return /\.pdf$/i.test(name.trim());
 }
 
-export function isPdfFile(file: File): boolean {
-	if (file.type === "application/pdf") return true;
-	return isPdfFileName(file.name);
-}
-
 /** Absolute paths for local files in a Drop/Drag event, when the host exposes them. */
 export function pathsFromDataTransfer(dt: DataTransfer | null): string[] {
 	if (!dt) return [];
