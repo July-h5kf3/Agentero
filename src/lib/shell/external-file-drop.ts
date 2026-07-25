@@ -8,6 +8,7 @@
  */
 
 import { invokeApi } from "@/lib/core/ipc";
+import { basenameOf } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 
 /** A dropped PDF ready for the confirm dialog / import host. */
@@ -79,15 +80,6 @@ export function pathsFromDataTransfer(dt: DataTransfer | null): string[] {
 export function pdfPathsFromDataTransfer(dt: DataTransfer | null): string[] {
 	return pathsFromDataTransfer(dt).filter((p) =>
 		isPdfFileName(p.replace(/[\\/]+$/, "")),
-	);
-}
-
-function basenameOfAbs(path: string): string {
-	return (
-		path
-			.replace(/[\\/]+$/, "")
-			.split(/[\\/]/)
-			.pop() ?? path
 	);
 }
 
@@ -198,13 +190,13 @@ export async function resolveDroppedPdfPaths(
 	const push = (path: string, sourceName: string) => {
 		if (!path || seen.has(path)) return;
 		seen.add(path);
-		out.push({ path, sourceName: sourceName || basenameOfAbs(path) });
+		out.push({ path, sourceName: sourceName || basenameOf(path) });
 	};
 
 	// Path metadata first (when the webview exposes it).
 	for (const p of snap.paths) {
 		if (isPdfFileName(p.replace(/[\\/]+$/, ""))) {
-			push(p, basenameOfAbs(p));
+			push(p, basenameOf(p));
 		}
 	}
 	if (out.length) return out;
@@ -234,7 +226,7 @@ export async function resolveDroppedPdfPaths(
 
 	for (const entry of candidates) {
 		if (entry.path) {
-			push(entry.path, entry.name || basenameOfAbs(entry.path));
+			push(entry.path, entry.name || basenameOf(entry.path));
 			continue;
 		}
 
@@ -248,7 +240,7 @@ export async function resolveDroppedPdfPaths(
 				entry.name || "drop.pdf",
 				new Uint8Array(buf),
 			);
-			push(staged, entry.name || basenameOfAbs(staged));
+			push(staged, entry.name || basenameOf(staged));
 		} catch (e) {
 			errors.push(
 				`${entry.name || "file"}: ${e instanceof Error ? e.message : String(e)}`,

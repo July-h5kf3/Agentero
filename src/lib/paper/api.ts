@@ -6,6 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import i18n from "@/i18n";
 import { invokeApi } from "@/lib/core/ipc";
+import { normalizeRelPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { type PaperMetadata, withNormalizedTags } from "@/lib/paper";
 import { type AppSettings, DEFAULT_TRANSLATOR_BASE_URL } from "@/lib/settings";
@@ -30,10 +31,7 @@ export function isTrashVirtualPath(path: string | null | undefined): boolean {
 
 /** Normalize vault-relative path for library scope comparisons. */
 export function normalizeLibraryScope(path: string): string {
-	return path
-		.replace(/\\/g, "/")
-		.replace(/^\/+|\/+$/g, "")
-		.toLowerCase();
+	return normalizeRelPath(path).toLowerCase();
 }
 
 /**

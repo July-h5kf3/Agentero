@@ -1,5 +1,8 @@
 import { invokeApi } from "@/lib/core/ipc";
+import { normalizeRelPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
+
+export { normalizeRelPath as normalizeVaultRel };
 
 export type Backlink = {
 	source: string;
@@ -52,21 +55,16 @@ async function invokeWikiApi<T>(
 	});
 }
 
-/** Normalize vault-relative path (forward slashes, no leading ./). */
-export function normalizeVaultRel(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
-}
-
 /** Strip vault root prefix when path is absolute. */
 export function toVaultRelative(
 	vaultPath: string | null,
 	path: string,
 ): string {
-	const n = normalizeVaultRel(path);
+	const n = normalizeRelPath(path);
 	if (!vaultPath) {
 		return n;
 	}
-	const root = normalizeVaultRel(vaultPath);
+	const root = normalizeRelPath(vaultPath);
 	if (n === root) return "";
 	if (n.startsWith(`${root}/`)) return n.slice(root.length + 1);
 	return n;
@@ -177,7 +175,7 @@ export function resolveWikiTarget(
 	targetRaw: string,
 	files: string[],
 ): string | null {
-	const t = normalizeVaultRel(targetRaw.trim());
+	const t = normalizeRelPath(targetRaw.trim());
 	if (!t || files.length === 0) return null;
 	const candidates = [t, `${t}.md`, `${t}.mdx`, `${t}.markdown`];
 	for (const c of candidates) {
@@ -328,7 +326,7 @@ export function rewriteWikilinksForPreview(
 
 /** Default path for a missing wikilink (Obsidian-ish: notes/<name>.md). */
 export function missingNotePath(targetRaw: string): string {
-	const t = normalizeVaultRel(targetRaw.trim());
+	const t = normalizeRelPath(targetRaw.trim());
 	if (!t) return "notes/untitled.md";
 	if (t.includes("/")) {
 		return /\.(md|mdx|markdown)$/i.test(t) ? t : `${t}.md`;
@@ -345,7 +343,7 @@ export function missingNotePath(targetRaw: string): string {
 /** Seed content for a newly created note. */
 export function newNoteMarkdown(targetRaw: string): string {
 	const title =
-		normalizeVaultRel(targetRaw)
+		normalizeRelPath(targetRaw)
 			.split("/")
 			.pop()
 			?.replace(/\.(md|mdx|markdown)$/i, "") || "Untitled";
