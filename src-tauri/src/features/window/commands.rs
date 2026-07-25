@@ -1,13 +1,8 @@
 //! Multi-window helpers.
 
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// `Manager` (for `.state()`/`.menu()`) and the settings store are only touched
-// by the macOS traffic-light branch below; importing them unconditionally trips
-// `unused_imports` (and thus `clippy -D warnings`) on Windows/Linux.
-#[cfg(target_os = "macos")]
-use tauri::Manager;
-
+// Settings store is only used for macOS traffic-light y scaling.
 #[cfg(target_os = "macos")]
 use crate::features::settings::AppSettingsStore;
 
