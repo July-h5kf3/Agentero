@@ -26,84 +26,93 @@ import {
 	Underline,
 } from "lucide-react";
 import { KEYS } from "platejs";
-import { useEditorRef, useSelectionFragmentProp } from "platejs/react";
-import { useCallback, useState } from "react";
+import {
+	useEditorRef,
+	useMarkToolbarButton,
+	useMarkToolbarButtonState,
+	useSelectionFragmentProp,
+} from "platejs/react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
 
-import { FixedToolbar } from "./fixed-toolbar";
-import { MarkToolbarButton } from "./mark-toolbar-button";
-import { ToolbarButton, ToolbarGroup } from "./toolbar";
+import {
+	ResponsiveFixedToolbar,
+	type ToolbarAction,
+} from "./responsive-toolbar";
 
-/** Toggle the current block between `type` and paragraph. */
-function BlockTypeButton({
-	blockType,
-	type,
-	icon: Icon,
-	label,
-}: {
-	blockType: string | undefined;
-	type: string;
-	icon: LucideIcon;
-	label: string;
-}) {
+function useBlockTypeAction(
+	blockType: string | undefined,
+	type: string,
+	icon: LucideIcon,
+	label: string,
+): ToolbarAction {
 	const editor = useEditorRef();
-	return (
-		<ToolbarButton
-			pressed={blockType === type}
-			tooltip={label}
-			aria-label={label}
-			onClick={() => editor.tf.toggleBlock(type)}
-		>
-			<Icon />
-		</ToolbarButton>
-	);
+	const Icon = icon;
+	return {
+		id: type,
+		icon: <Icon />,
+		label,
+		pressed: blockType === type,
+		onClick: () => editor.tf.toggleBlock(type),
+		group: 0,
+	};
 }
 
-/** Bulleted / numbered list toggle (indent-based `@platejs/list`). */
-function ListToolbarButton({
-	nodeType,
-	icon: Icon,
-	label,
-}: {
-	nodeType: string;
-	icon: LucideIcon;
-	label: string;
-}) {
+function useMarkAction(
+	nodeType: string,
+	icon: LucideIcon,
+	label: string,
+): ToolbarAction {
+	const state = useMarkToolbarButtonState({ nodeType });
+	const { props } = useMarkToolbarButton(state);
+	const Icon = icon;
+	return {
+		id: nodeType,
+		icon: <Icon />,
+		label,
+		pressed: props.pressed,
+		onClick: props.onClick,
+		group: 1,
+	};
+}
+
+function useListAction(
+	nodeType: string,
+	icon: LucideIcon,
+	label: string,
+): ToolbarAction {
 	const state = useListToolbarButtonState({ nodeType });
 	const { props } = useListToolbarButton(state);
-	return (
-		<ToolbarButton tooltip={label} aria-label={label} {...props}>
-			<Icon />
-		</ToolbarButton>
-	);
+	const Icon = icon;
+	return {
+		id: nodeType,
+		icon: <Icon />,
+		label,
+		pressed: props.pressed,
+		onClick: props.onClick,
+		group: 2,
+	};
 }
 
-/** To-do (checkbox) list toggle. */
-function TodoListToolbarButton({
-	icon: Icon,
-	label,
-}: {
-	icon: LucideIcon;
-	label: string;
-}) {
+function useTodoListAction(icon: LucideIcon, label: string): ToolbarAction {
 	const state = useIndentTodoToolBarButtonState({ nodeType: KEYS.listTodo });
 	const { props } = useIndentTodoToolBarButton(state);
-	return (
-		<ToolbarButton tooltip={label} aria-label={label} {...props}>
-			<Icon />
-		</ToolbarButton>
-	);
+	const Icon = icon;
+	return {
+		id: KEYS.listTodo,
+		icon: <Icon />,
+		label,
+		pressed: props.pressed,
+		onClick: props.onClick,
+		group: 2,
+	};
 }
 
-/**
- * Pick local image files → copy into `./assets/` next to the Markdown file →
- * insert `![](./assets/…)` nodes.
- */
-function ImageToolbarButton({ label }: { label: string }) {
+function useImageAction(label: string): ToolbarAction {
 	const { t } = useTranslation("editor");
 	const editor = useEditorRef();
 	const { filePath, onAssetsChanged } = useMarkdownDoc();
@@ -130,16 +139,14 @@ function ImageToolbarButton({ label }: { label: string }) {
 		}
 	}, [busy, editor, filePath, onAssetsChanged, t]);
 
-	return (
-		<ToolbarButton
-			tooltip={label}
-			aria-label={label}
-			disabled={!filePath || busy}
-			onClick={() => void onClick()}
-		>
-			<ImageIcon />
-		</ToolbarButton>
-	);
+	return {
+		id: "image",
+		icon: <ImageIcon />,
+		label,
+		disabled: !filePath || busy,
+		onClick,
+		group: 2,
+	};
 }
 
 /**
@@ -153,94 +160,82 @@ export function MarkdownEditorToolbar() {
 		getProp: (node) => node.type,
 	});
 
-	return (
-		<FixedToolbar className="justify-start rounded-none">
-			<ToolbarGroup>
-				<BlockTypeButton
-					blockType={blockType}
-					type={KEYS.h1}
-					icon={Heading1}
-					label={t("toolbar.h1")}
-				/>
-				<BlockTypeButton
-					blockType={blockType}
-					type={KEYS.h2}
-					icon={Heading2}
-					label={t("toolbar.h2")}
-				/>
-				<BlockTypeButton
-					blockType={blockType}
-					type={KEYS.h3}
-					icon={Heading3}
-					label={t("toolbar.h3")}
-				/>
-				<BlockTypeButton
-					blockType={blockType}
-					type={KEYS.blockquote}
-					icon={Quote}
-					label={t("toolbar.quote")}
-				/>
-			</ToolbarGroup>
-
-			<ToolbarGroup>
-				<MarkToolbarButton
-					nodeType={KEYS.bold}
-					tooltip={t("toolbar.bold")}
-					aria-label={t("toolbar.bold")}
-				>
-					<Bold />
-				</MarkToolbarButton>
-				<MarkToolbarButton
-					nodeType={KEYS.italic}
-					tooltip={t("toolbar.italic")}
-					aria-label={t("toolbar.italic")}
-				>
-					<Italic />
-				</MarkToolbarButton>
-				<MarkToolbarButton
-					nodeType={KEYS.underline}
-					tooltip={t("toolbar.underline")}
-					aria-label={t("toolbar.underline")}
-				>
-					<Underline />
-				</MarkToolbarButton>
-				<MarkToolbarButton
-					nodeType={KEYS.strikethrough}
-					tooltip={t("toolbar.strikethrough")}
-					aria-label={t("toolbar.strikethrough")}
-				>
-					<Strikethrough />
-				</MarkToolbarButton>
-				<MarkToolbarButton
-					nodeType={KEYS.code}
-					tooltip={t("toolbar.code")}
-					aria-label={t("toolbar.code")}
-				>
-					<Code />
-				</MarkToolbarButton>
-				<MarkToolbarButton
-					nodeType={KEYS.highlight}
-					tooltip={t("toolbar.highlight")}
-					aria-label={t("toolbar.highlight")}
-				>
-					<Highlighter />
-				</MarkToolbarButton>
-			</ToolbarGroup>
-
-			<ToolbarGroup>
-				<ListToolbarButton
-					nodeType={ListStyleType.Disc}
-					icon={List}
-					label={t("toolbar.bulletedList")}
-				/>
-				<ListToolbarButton
-					nodeType={ListStyleType.Decimal}
-					icon={ListOrdered}
-					label={t("toolbar.numberedList")}
-				/>
-				<TodoListToolbarButton icon={ListTodo} label={t("toolbar.todoList")} />
-				<ImageToolbarButton label={t("toolbar.image")} />
-			</ToolbarGroup>
-		</FixedToolbar>
+	const h1 = useBlockTypeAction(blockType, KEYS.h1, Heading1, t("toolbar.h1"));
+	const h2 = useBlockTypeAction(blockType, KEYS.h2, Heading2, t("toolbar.h2"));
+	const h3 = useBlockTypeAction(blockType, KEYS.h3, Heading3, t("toolbar.h3"));
+	const quote = useBlockTypeAction(
+		blockType,
+		KEYS.blockquote,
+		Quote,
+		t("toolbar.quote"),
 	);
+
+	const bold = useMarkAction(KEYS.bold, Bold, t("toolbar.bold"));
+	const italic = useMarkAction(KEYS.italic, Italic, t("toolbar.italic"));
+	const underline = useMarkAction(
+		KEYS.underline,
+		Underline,
+		t("toolbar.underline"),
+	);
+	const strikethrough = useMarkAction(
+		KEYS.strikethrough,
+		Strikethrough,
+		t("toolbar.strikethrough"),
+	);
+	const code = useMarkAction(KEYS.code, Code, t("toolbar.code"));
+	const highlight = useMarkAction(
+		KEYS.highlight,
+		Highlighter,
+		t("toolbar.highlight"),
+	);
+
+	const bulletedList = useListAction(
+		ListStyleType.Disc,
+		List,
+		t("toolbar.bulletedList"),
+	);
+	const numberedList = useListAction(
+		ListStyleType.Decimal,
+		ListOrdered,
+		t("toolbar.numberedList"),
+	);
+	const todoList = useTodoListAction(ListTodo, t("toolbar.todoList"));
+	const image = useImageAction(t("toolbar.image"));
+
+	const actions = useMemo<ToolbarAction[]>(
+		() => [
+			h1,
+			h2,
+			h3,
+			quote,
+			bold,
+			italic,
+			underline,
+			strikethrough,
+			code,
+			highlight,
+			bulletedList,
+			numberedList,
+			todoList,
+			image,
+		],
+		[
+			h1,
+			h2,
+			h3,
+			quote,
+			bold,
+			italic,
+			underline,
+			strikethrough,
+			code,
+			highlight,
+			bulletedList,
+			numberedList,
+			todoList,
+			image,
+		],
+	);
+
+	return <ResponsiveFixedToolbar actions={actions} className="rounded-none" />;
 }

@@ -14,7 +14,8 @@
 		"bulletedList": "无序列表",
 		"numberedList": "有序列表",
 		"todoList": "待办列表",
-		"image": "插入图片"
+		"image": "插入图片",
+		"more": "更多"
 	},
 	"image": {
 		"noFile": "请先将笔记保存为文件，再插入图片。",

@@ -14,7 +14,8 @@
 		"bulletedList": "Bulleted list",
 		"numberedList": "Numbered list",
 		"todoList": "To-do list",
-		"image": "Insert image"
+		"image": "Insert image",
+		"more": "More"
 	},
 	"image": {
 		"noFile": "Save the note to a file before inserting images.",
