@@ -322,6 +322,19 @@ export default function App() {
 		string | null
 	>(null);
 	const [externalRenameRepairing, setExternalRenameRepairing] = useState(false);
+	/** App-native rename input; WebView JavaScript prompts are not portable. */
+	const [renameDraft, setRenameDraft] = useState<{
+		path: string;
+		currentName: string;
+		value: string;
+	} | null>(null);
+	const [renameBusy, setRenameBusy] = useState(false);
+	const [renameError, setRenameError] = useState<string | null>(null);
+	useOverlayRegistration("rename-path", renameDraft !== null, () => {
+		if (renameBusy) return;
+		setRenameDraft(null);
+		setRenameError(null);
+	});
 	/** A no-write preflight failure that still needs an actionable review surface. */
 	const [externalRenameFailure, setExternalRenameFailure] = useState<{
 		from: string;
@@ -2005,7 +2018,7 @@ export default function App() {
 	);
 
 	const handleRenamePath = useCallback(
-		async (path: string) => {
+		(path: string) => {
 			if (!vaultPath || isRemoteVaultHandle(vaultPath)) {
 				notifyWarning(t("vault.remoteNoAutoLinkRepair"));
 				return;
@@ -2013,55 +2026,78 @@ export default function App() {
 			const fromRel = vaultRelativePath(vaultPath, path);
 			if (!fromRel) return;
 			const currentName = basenameOf(path);
-			const nextName = window.prompt(
-				t("sidebar:fileTree.renamePrompt", { name: currentName }),
-				currentName,
-			);
-			if (nextName == null || nextName.trim() === currentName) return;
-			if (!isValidVaultEntryName(nextName)) {
-				notifyError(t("sidebar:fileTree.invalidName"));
-				return;
-			}
-			const parent = fromRel.includes("/")
-				? fromRel.slice(0, fromRel.lastIndexOf("/"))
-				: "";
-			const toRel = parent ? `${parent}/${nextName.trim()}` : nextName.trim();
-			try {
-				setBusy(true);
-				const result = await moveVaultPath(
-					vaultPath,
-					fromRel,
-					toRel,
-					dirtyVaultPaths(vaultPath),
-				);
-				const toAbs = joinVaultPath(vaultPath, toRel);
-				syncMovedPaths(vaultPath, path, toAbs, fromRel, toRel, result);
-				await refreshTree(vaultPath);
-				await refreshLibrary();
-				notifySuccess(
-					t("sidebar:fileTree.renamedLinks", {
-						count: result.updatedSources.length,
-					}),
-				);
-			} catch (error) {
-				notifyError(
-					error instanceof Error
-						? error.message
-						: t("sidebar:fileTree.renameFailed"),
-				);
-			} finally {
-				setBusy(false);
-			}
+			setRenameError(null);
+			setRenameDraft({ path, currentName, value: currentName });
 		},
-		[
-			vaultPath,
-			dirtyVaultPaths,
-			refreshLibrary,
-			refreshTree,
-			syncMovedPaths,
-			t,
-		],
+		[vaultPath, t],
 	);
+
+	const confirmRenamePath = useCallback(async () => {
+		if (!renameDraft || !vaultPath || renameBusy) return;
+		const nextName = renameDraft.value.trim();
+		if (!isValidVaultEntryName(nextName)) {
+			setRenameError(t("sidebar:fileTree.invalidName"));
+			return;
+		}
+		if (nextName === renameDraft.currentName) {
+			setRenameDraft(null);
+			setRenameError(null);
+			return;
+		}
+		const fromRel = vaultRelativePath(vaultPath, renameDraft.path);
+		if (!fromRel) {
+			setRenameError(t("sidebar:fileTree.renameFailed"));
+			return;
+		}
+		const parent = fromRel.includes("/")
+			? fromRel.slice(0, fromRel.lastIndexOf("/"))
+			: "";
+		const toRel = parent ? `${parent}/${nextName}` : nextName;
+		try {
+			setRenameBusy(true);
+			setRenameError(null);
+			const result = await moveVaultPath(
+				vaultPath,
+				fromRel,
+				toRel,
+				dirtyVaultPaths(vaultPath),
+			);
+			const toAbs = joinVaultPath(vaultPath, toRel);
+			syncMovedPaths(
+				vaultPath,
+				renameDraft.path,
+				toAbs,
+				fromRel,
+				toRel,
+				result,
+			);
+			await refreshTree(vaultPath);
+			await refreshLibrary();
+			setRenameDraft(null);
+			notifySuccess(
+				t("sidebar:fileTree.renamedLinks", {
+					count: result.updatedSources.length,
+				}),
+			);
+		} catch (error) {
+			setRenameError(
+				error instanceof Error
+					? error.message
+					: t("sidebar:fileTree.renameFailed"),
+			);
+		} finally {
+			setRenameBusy(false);
+		}
+	}, [
+		renameDraft,
+		vaultPath,
+		renameBusy,
+		dirtyVaultPaths,
+		refreshLibrary,
+		refreshTree,
+		syncMovedPaths,
+		t,
+	]);
 
 	const runMovePaths = useCallback(
 		async (destParentRel: string) => {
@@ -4018,6 +4054,81 @@ export default function App() {
 					vaultPath={vaultPath}
 					onDone={handleRefresh}
 				/>
+
+				<Dialog
+					open={renameDraft !== null}
+					onOpenChange={(open) => {
+						if (!open && !renameBusy) {
+							setRenameDraft(null);
+							setRenameError(null);
+						}
+					}}
+				>
+					<DialogContent showCloseButton={!renameBusy} className="sm:max-w-sm">
+						<form
+							className="space-y-4"
+							onSubmit={(event) => {
+								event.preventDefault();
+								void confirmRenamePath();
+							}}
+						>
+							<DialogHeader>
+								<DialogTitle>
+									{t("sidebar:fileTree.renameDialogTitle", {
+										name: renameDraft?.currentName ?? "",
+									})}
+								</DialogTitle>
+							</DialogHeader>
+							<div className="space-y-1.5">
+								<label
+									htmlFor="rename-path-name"
+									className="block pt-2 font-medium text-sm"
+								>
+									{t("sidebar:fileTree.renameNameLabel")}
+								</label>
+								<Input
+									id="rename-path-name"
+									autoFocus
+									value={renameDraft?.value ?? ""}
+									disabled={renameBusy}
+									onFocus={(event) => event.currentTarget.select()}
+									onChange={(event) => {
+										const value = event.target.value;
+										setRenameDraft((current) =>
+											current ? { ...current, value } : current,
+										);
+										if (renameError) setRenameError(null);
+									}}
+								/>
+								{renameError ? (
+									<p className="text-destructive text-xs" role="alert">
+										{renameError}
+									</p>
+								) : null}
+							</div>
+							<DialogFooter>
+								<Button
+									type="button"
+									variant="outline"
+									disabled={renameBusy}
+									onClick={() => {
+										setRenameDraft(null);
+										setRenameError(null);
+									}}
+								>
+									{t("sidebar:fileTree.renameCancel")}
+								</Button>
+								<Button
+									type="submit"
+									disabled={renameBusy || !renameDraft?.value.trim()}
+								>
+									{renameBusy ? <Loader2 className="animate-spin" /> : null}
+									{t("sidebar:fileTree.renameConfirm")}
+								</Button>
+							</DialogFooter>
+						</form>
+					</DialogContent>
+				</Dialog>
 
 				<Dialog
 					open={
