@@ -40,6 +40,7 @@ import {
 import { errorMessage, notifyError } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import type { LinkFragment } from "@/lib/wiki";
+import { isPlainWikiLinkArrowKey } from "@/lib/wiki-completion";
 import {
 	findWikiHeadingIndex,
 	hasWikiBlockAnchor,
@@ -442,7 +443,7 @@ export function MarkdownEditor({
 
 	const handleWikiLinkArrow = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
-			if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return false;
+			if (!isPlainWikiLinkArrowKey(event)) return false;
 			const selection = editor.selection;
 			if (
 				!selection ||

@@ -27,6 +27,21 @@ export function findWikiHeadingIndex(
 	return -1;
 }
 
+export type WikiBlockIdRange = {
+	start: number;
+	end: number;
+};
+
+/** Locate a valid Obsidian block ID at the end of a rendered text leaf. */
+export function findWikiBlockIdRange(text: string): WikiBlockIdRange | null {
+	const match = text.match(/(?:^|\s)(\^[\p{L}\p{N}-]+)\s*$/u);
+	const marker = match?.[1];
+	if (!match || !marker || match.index === undefined) return null;
+	const start = match.index + match[0].indexOf(marker);
+	return { start, end: start + marker.length };
+}
+
 export function hasWikiBlockAnchor(text: string, id: string): boolean {
-	return normalizeWikiAnchorText(text).endsWith(`^${id}`);
+	const range = findWikiBlockIdRange(text);
+	return range ? text.slice(range.start + 1, range.end) === id : false;
 }

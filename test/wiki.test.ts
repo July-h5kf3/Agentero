@@ -145,6 +145,24 @@ describe("wikilink resolution", () => {
 		});
 	});
 
+	it("resolves Unicode block IDs in the browser demo", () => {
+		const documents = [
+			{ path: "notes/Source.md", content: "[[Target#^验收块]]\n" },
+			{
+				path: "notes/Target.md",
+				content: "# Target\n可精确定位到本段。 ^验收块\n",
+			},
+		];
+
+		expect(
+			resolveDemoWikiReference("notes/Source.md", "Target#^验收块", documents),
+		).toMatchObject({
+			status: "resolved",
+			targetPath: "notes/Target.md",
+			fragment: { kind: "block", id: "验收块" },
+		});
+	});
+
 	it("keeps source-relative Markdown links inside the Vault", () => {
 		const documents = [
 			{ path: "Target.md", content: "# Root target\n" },

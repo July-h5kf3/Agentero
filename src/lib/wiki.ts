@@ -14,7 +14,7 @@ export type LinkResolutionStatus =
 export type InternalLinkSyntax = "wikilink" | "markdown";
 
 function isValidBlockId(id: string): boolean {
-	return id.length > 0 && /^[A-Za-z0-9-]+$/.test(id);
+	return id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id);
 }
 
 export type InternalLinkOccurrence = {
@@ -809,9 +809,18 @@ export async function resolveWikiReference(
 export async function searchWikiLinks(
 	vaultPath: string | null,
 	query: string,
+	scope?: {
+		path?: string | null;
+		kind?: WikiSearchCandidate["kind"] | null;
+	},
 ): Promise<WikiSearchCandidate[]> {
 	if (!vaultPath || !isTauri()) return [];
-	return invokeApi<WikiSearchCandidate[]>("wiki_search", { vaultPath, query });
+	return invokeApi<WikiSearchCandidate[]>("wiki_search", {
+		vaultPath,
+		query,
+		path: scope?.path ?? null,
+		kind: scope?.kind ?? null,
+	});
 }
 
 export async function rebuildWikiIndex(

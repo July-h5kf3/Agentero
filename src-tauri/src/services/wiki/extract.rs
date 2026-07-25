@@ -36,8 +36,8 @@ pub fn parse_fragment(value: &str) -> Option<LinkFragment> {
 pub fn is_valid_block_id(id: &str) -> bool {
     !id.is_empty()
         && id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '-')
 }
 
 fn mask_inline_code(line: &str) -> Vec<u8> {
@@ -247,23 +247,24 @@ fn parse_heading(line: &str) -> Option<(usize, String)> {
 }
 
 fn collect_block_ids(line: &str, line_no: u32, blocks: &mut Vec<BlockAnchor>) {
-    let bytes = line.as_bytes();
-    for index in 0..bytes.len() {
-        if bytes[index] != b'^' || (index > 0 && !bytes[index - 1].is_ascii_whitespace()) {
-            continue;
-        }
-        let end = bytes[index + 1..]
-            .iter()
-            .position(|byte| !byte.is_ascii_alphanumeric() && *byte != b'-')
-            .map(|offset| index + 1 + offset)
-            .unwrap_or(bytes.len());
-        let id = &line[index + 1..end];
-        if is_valid_block_id(id) && line[end..].trim().is_empty() {
-            blocks.push(BlockAnchor {
-                id: id.to_string(),
-                line: line_no,
-            });
-        }
+    let trimmed = line.trim_end();
+    let Some(caret) = trimmed.rfind('^') else {
+        return;
+    };
+    if caret > 0
+        && !trimmed[..caret]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_whitespace)
+    {
+        return;
+    }
+    let id = &trimmed[caret + 1..];
+    if is_valid_block_id(id) {
+        blocks.push(BlockAnchor {
+            id: id.to_string(),
+            line: line_no,
+        });
     }
 }
 
@@ -437,11 +438,12 @@ mod tests {
 
     #[test]
     fn extracts_semantic_wikilinks_and_markdown_links() {
-        let source = "---\naliases:\n  - Research note\n---\n# Root\n## Child\nText [[#Root#Child|jump]] and ![[other#^summary]].\n[relative](../notes/a.md#Root).\nBlock ^summary\n";
+        let source = "---\naliases:\n  - Research note\n---\n# Root\n## Child\nText [[#Root#Child|jump]] and ![[other#^summary]].\n[relative](../notes/a.md#Root).\nBlock ^summary\n中文块 ^验收块\n";
         let (document, links) = extract_document("notes/source.md", source);
         assert_eq!(document.aliases, vec!["Research note"]);
         assert_eq!(document.headings[1].path, vec!["Root", "Child"]);
         assert_eq!(document.blocks[0].id, "summary");
+        assert_eq!(document.blocks[1].id, "验收块");
         assert_eq!(links.len(), 3);
         assert!(matches!(
             links[0].fragment,
@@ -487,5 +489,13 @@ mod tests {
             links[1].fragment,
             Some(LinkFragment::Block { ref id }) if id == "also-bad!"
         ));
+    }
+
+    #[test]
+    fn accepts_unicode_letters_and_numbers_in_block_ids() {
+        assert!(is_valid_block_id("验收块-2"));
+        assert!(is_valid_block_id("résumé-3"));
+        assert!(!is_valid_block_id("bad id"));
+        assert!(!is_valid_block_id("emoji-🔗"));
     }
 }

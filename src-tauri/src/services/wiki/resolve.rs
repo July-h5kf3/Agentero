@@ -423,6 +423,20 @@ mod tests {
     }
 
     #[test]
+    fn resolves_unicode_block_fragments() {
+        let (source, links) = extract_document("notes/source.md", "[[Target#^验收块]]");
+        let (target, _) =
+            extract_document("notes/Target.md", "# Target\n可精确定位到本段。 ^验收块\n");
+        let link = resolve_occurrence(
+            links.into_iter().next().expect("unicode block link"),
+            &[source, target],
+        );
+
+        assert_eq!(link.status, LinkResolutionStatus::Resolved);
+        assert_eq!(link.target_path.as_deref(), Some("notes/Target.md"));
+    }
+
+    #[test]
     fn never_resolves_markdown_paths_outside_the_vault() {
         let mut docs = documents();
         docs.push(WikiDocument {

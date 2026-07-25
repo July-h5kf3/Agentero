@@ -123,7 +123,9 @@ export function WikiLinkSuggestion({
 		void (async () => {
 			try {
 				if (request.kind === "file") {
-					const results = await searchWikiLinks(vaultPath, request.query);
+					const results = await searchWikiLinks(vaultPath, request.query, {
+						kind: "file",
+					});
 					if (!cancelled) {
 						const matching = narrowExactWikiFileCandidates(
 							results.filter((candidate) => candidate.kind === "file"),
@@ -170,7 +172,10 @@ export function WikiLinkSuggestion({
 					}
 					return;
 				}
-				const results = await searchWikiLinks(vaultPath, request.query);
+				const results = await searchWikiLinks(vaultPath, request.query, {
+					path: resolved.targetPath,
+					kind: request.kind,
+				});
 				if (!cancelled) {
 					setCandidateState({
 						requestKey,

@@ -15,7 +15,17 @@ export function parseWikiCompletionQuery(
 ): WikiCompletionRequest | null {
 	if (/[\]\n|]/.test(draft)) return null;
 	const hash = draft.indexOf("#");
-	if (hash < 0) return { kind: "file", query: draft.trim() };
+	if (hash < 0) {
+		const caret = draft.indexOf("^");
+		if (caret >= 0) {
+			return {
+				kind: "block",
+				target: draft.slice(0, caret).trim(),
+				query: draft.slice(caret + 1).trim(),
+			};
+		}
+		return { kind: "file", query: draft.trim() };
+	}
 	const target = draft.slice(0, hash).trim();
 	const fragment = draft.slice(hash + 1);
 	if (fragment.startsWith("^")) {
@@ -36,9 +46,31 @@ export type WikiCompletionMatch = {
 	raw: string;
 };
 
+type WikiArrowKeyEvent = {
+	key: string;
+	altKey: boolean;
+	ctrlKey: boolean;
+	metaKey: boolean;
+	shiftKey: boolean;
+};
+
 /** Completion accepts the same primary action from keyboard-only workflows. */
 export function isWikiCompletionSubmitKey(key: string): key is "Enter" | "Tab" {
 	return key === "Enter" || key === "Tab";
+}
+
+/**
+ * Link-boundary projection is a plain-caret behavior. Modified arrows belong
+ * to the editor/OS selection and word/line navigation commands.
+ */
+export function isPlainWikiLinkArrowKey(event: WikiArrowKeyEvent): boolean {
+	return (
+		(event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+		!event.altKey &&
+		!event.ctrlKey &&
+		!event.metaKey &&
+		!event.shiftKey
+	);
 }
 
 /**

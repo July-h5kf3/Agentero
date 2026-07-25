@@ -11,6 +11,7 @@ import {
 import {
 	addRecentWikiCandidate,
 	findWikiCompletionMatch,
+	isPlainWikiLinkArrowKey,
 	isWikiCompletionSubmitKey,
 	narrowExactWikiFileCandidates,
 	parseWikiCompletionQuery,
@@ -33,6 +34,16 @@ describe("wikilink completion grammar", () => {
 			kind: "block",
 			target: "",
 			query: "summary",
+		});
+		expect(parseWikiCompletionQuery("Target#^验收")).toEqual({
+			kind: "block",
+			target: "Target",
+			query: "验收",
+		});
+		expect(parseWikiCompletionQuery("Target^验收")).toEqual({
+			kind: "block",
+			target: "Target",
+			query: "验收",
 		});
 		expect(parseWikiCompletionQuery("Target|alias")).toBeNull();
 	});
@@ -176,6 +187,43 @@ describe("wikilink completion grammar", () => {
 		expect(isWikiCompletionSubmitKey("Enter")).toBe(true);
 		expect(isWikiCompletionSubmitKey("Tab")).toBe(true);
 		expect(isWikiCompletionSubmitKey(" ")).toBe(false);
+	});
+
+	it("reserves modified arrows for selection and native navigation", () => {
+		const arrow = (
+			key: string,
+			modifiers: Partial<{
+				altKey: boolean;
+				ctrlKey: boolean;
+				metaKey: boolean;
+				shiftKey: boolean;
+			}> = {},
+		) => ({
+			key,
+			altKey: false,
+			ctrlKey: false,
+			metaKey: false,
+			shiftKey: false,
+			...modifiers,
+		});
+
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowLeft"))).toBe(true);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowRight"))).toBe(true);
+		expect(
+			isPlainWikiLinkArrowKey(
+				arrow("ArrowLeft", { metaKey: true, shiftKey: true }),
+			),
+		).toBe(false);
+		expect(
+			isPlainWikiLinkArrowKey(arrow("ArrowLeft", { shiftKey: true })),
+		).toBe(false);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowLeft", { altKey: true }))).toBe(
+			false,
+		);
+		expect(isPlainWikiLinkArrowKey(arrow("ArrowLeft", { ctrlKey: true }))).toBe(
+			false,
+		);
+		expect(isPlainWikiLinkArrowKey(arrow("Enter"))).toBe(false);
 	});
 
 	it("replaces a completed Tab draft including its existing closing brackets", () => {

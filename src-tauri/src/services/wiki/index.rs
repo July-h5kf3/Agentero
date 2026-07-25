@@ -271,6 +271,15 @@ impl WikiIndex {
     }
 
     pub fn search(&self, query: &str) -> Vec<WikiSearchCandidate> {
+        self.search_scoped(query, None, None)
+    }
+
+    pub fn search_scoped(
+        &self,
+        query: &str,
+        path: Option<&str>,
+        kind: Option<&WikiSearchCandidateKind>,
+    ) -> Vec<WikiSearchCandidate> {
         let query_key = query.trim().to_lowercase();
         let stem_counts =
             self.documents
@@ -283,6 +292,9 @@ impl WikiIndex {
                 });
         let mut candidates = Vec::new();
         for document in &self.documents {
+            if path.is_some_and(|path| !document.path.eq_ignore_ascii_case(path)) {
+                continue;
+            }
             let file_name = document_stem(&document.path);
             let target = if stem_counts
                 .get(&file_name.to_lowercase())
@@ -300,7 +312,10 @@ impl WikiIndex {
                     .aliases
                     .iter()
                     .any(|alias| alias.to_lowercase().contains(&query_key));
-            if file_match {
+            let include_file = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::File);
+            let include_heading = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Heading);
+            let include_block = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Block);
+            if include_file && file_match {
                 candidates.push(WikiSearchCandidate {
                     kind: WikiSearchCandidateKind::File,
                     path: document.path.clone(),
@@ -310,45 +325,51 @@ impl WikiIndex {
                     fragment: None,
                 });
             }
-            for alias in &document.aliases {
-                if query_key.is_empty() || alias.to_lowercase().contains(&query_key) {
-                    candidates.push(WikiSearchCandidate {
-                        kind: WikiSearchCandidateKind::File,
-                        path: document.path.clone(),
-                        insert_text: target.clone(),
-                        label: alias.clone(),
-                        alias: Some(alias.clone()),
-                        fragment: None,
-                    });
+            if include_file {
+                for alias in &document.aliases {
+                    if query_key.is_empty() || alias.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::File,
+                            path: document.path.clone(),
+                            insert_text: target.clone(),
+                            label: alias.clone(),
+                            alias: Some(alias.clone()),
+                            fragment: None,
+                        });
+                    }
                 }
             }
-            for heading in &document.headings {
-                let label = heading.path.join(" › ");
-                if query_key.is_empty() || label.to_lowercase().contains(&query_key) {
-                    candidates.push(WikiSearchCandidate {
-                        kind: WikiSearchCandidateKind::Heading,
-                        path: document.path.clone(),
-                        insert_text: format!("{}#{}", target, heading.text),
-                        label,
-                        alias: None,
-                        fragment: Some(LinkFragment::Heading {
-                            path: heading.path.clone(),
-                        }),
-                    });
+            if include_heading {
+                for heading in &document.headings {
+                    let label = heading.path.join(" › ");
+                    if query_key.is_empty() || label.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::Heading,
+                            path: document.path.clone(),
+                            insert_text: format!("{}#{}", target, heading.text),
+                            label,
+                            alias: None,
+                            fragment: Some(LinkFragment::Heading {
+                                path: heading.path.clone(),
+                            }),
+                        });
+                    }
                 }
             }
-            for block in &document.blocks {
-                if query_key.is_empty() || block.id.to_lowercase().contains(&query_key) {
-                    candidates.push(WikiSearchCandidate {
-                        kind: WikiSearchCandidateKind::Block,
-                        path: document.path.clone(),
-                        insert_text: format!("{}#^{}", target, block.id),
-                        label: format!("^{}", block.id),
-                        alias: None,
-                        fragment: Some(LinkFragment::Block {
-                            id: block.id.clone(),
-                        }),
-                    });
+            if include_block {
+                for block in &document.blocks {
+                    if query_key.is_empty() || block.id.to_lowercase().contains(&query_key) {
+                        candidates.push(WikiSearchCandidate {
+                            kind: WikiSearchCandidateKind::Block,
+                            path: document.path.clone(),
+                            insert_text: format!("{}#^{}", target, block.id),
+                            label: format!("^{}", block.id),
+                            alias: None,
+                            fragment: Some(LinkFragment::Block {
+                                id: block.id.clone(),
+                            }),
+                        });
+                    }
                 }
             }
         }
@@ -744,7 +765,7 @@ mod tests {
                     line: 4,
                 }],
                 blocks: vec![BlockAnchor {
-                    id: "summary".into(),
+                    id: "验收块".into(),
                     line: 8,
                 }],
             }],
@@ -766,11 +787,11 @@ mod tests {
         assert_eq!(heading.insert_text, "Canonical#Overview");
 
         let block = index
-            .search("summary")
+            .search("验收")
             .into_iter()
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Block)
             .expect("block candidate");
-        assert_eq!(block.insert_text, "Canonical#^summary");
+        assert_eq!(block.insert_text, "Canonical#^验收块");
     }
 
     #[test]
@@ -813,5 +834,46 @@ mod tests {
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::File)
             .expect("unique file candidate");
         assert_eq!(unique.insert_text, "Fara-1.5");
+    }
+
+    #[test]
+    fn scoped_search_filters_before_the_global_candidate_limit() {
+        let mut documents = (0..101)
+            .map(|index| WikiDocument {
+                path: format!("early/{index:03}.md"),
+                aliases: Vec::new(),
+                headings: Vec::new(),
+                blocks: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        documents.push(WikiDocument {
+            path: "notes/双链验收/目标笔记.md".into(),
+            aliases: Vec::new(),
+            headings: Vec::new(),
+            blocks: vec![
+                BlockAnchor {
+                    id: "验收块".into(),
+                    line: 17,
+                },
+                BlockAnchor {
+                    id: "asb".into(),
+                    line: 21,
+                },
+            ],
+        });
+        let index = WikiIndex {
+            documents,
+            ..Default::default()
+        };
+
+        let blocks = index.search_scoped(
+            "",
+            Some("notes/双链验收/目标笔记.md"),
+            Some(&WikiSearchCandidateKind::Block),
+        );
+
+        assert_eq!(blocks.len(), 2);
+        assert!(blocks.iter().any(|candidate| candidate.label == "^验收块"));
+        assert!(blocks.iter().any(|candidate| candidate.label == "^asb"));
     }
 }
