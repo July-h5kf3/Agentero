@@ -1,8 +1,14 @@
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import { logger } from "@/lib/core/logger";
+import { joinPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import type { PaperMetadata } from "@/lib/paper/types";
+import {
+	parseRemoteJoinedPath,
+	remoteCacheFile,
+	remoteList,
+} from "@/lib/vault/remote/remote-vault";
 
 const PDF_NAME_RE = /\.pdf$/i;
 
@@ -26,6 +32,32 @@ export function isPdfViewerSource(
 	return false;
 }
 
+async function readVaultBytes(absPath: string): Promise<Uint8Array | null> {
+	if (!isTauri() || !absPath?.trim()) return null;
+	try {
+		let bytes: Uint8Array;
+		const parsed = parseRemoteJoinedPath(absPath);
+		if (parsed) {
+			const localPath = await remoteCacheFile(parsed.sessionId, parsed.rel);
+			bytes = await readFile(localPath);
+		} else {
+			bytes = await readFile(absPath);
+		}
+		// Copy into a fresh ArrayBuffer consumers can own (plugin may return a view).
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		return copy;
+	} catch (e) {
+		// Read failed (fs scope / OneDrive placeholder / missing file). Log so the
+		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
+		logger.warn("pdf: read local bytes failed", {
+			path: absPath,
+			error: e instanceof Error ? e.message : String(e),
+		});
+		return null;
+	}
+}
+
 /**
  * Read a local file into a `blob:` URL for in-app viewers (PDF.js, img tags).
  *
@@ -37,38 +69,10 @@ export async function localBytesToViewerSource(
 	absPath: string,
 	mimeType: string,
 ): Promise<string | null> {
-	if (!isTauri() || !absPath?.trim()) return null;
-	try {
-		let bytes: Uint8Array;
-		if (absPath.startsWith("remote:")) {
-			const slash = absPath.indexOf("/", "remote:".length);
-			if (slash === -1) return null;
-			const handle = absPath.slice(0, slash);
-			const rel = absPath.slice(slash + 1);
-			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
-				"@/lib/vault/remote/remote-vault"
-			);
-			const sessionId = remoteSessionIdFromHandle(handle);
-			if (!sessionId) return null;
-			const localPath = await remoteCacheFile(sessionId, rel);
-			bytes = await readFile(localPath);
-		} else {
-			bytes = await readFile(absPath);
-		}
-		// Copy so Blob owns a stable ArrayBuffer (plugin may return a view)
-		const copy = new Uint8Array(bytes.byteLength);
-		copy.set(bytes);
-		const blob = new Blob([copy], { type: mimeType });
-		return URL.createObjectURL(blob);
-	} catch (e) {
-		// Read failed (fs scope / OneDrive placeholder / missing file). Log so the
-		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
-		logger.warn("pdf: read local bytes failed", {
-			path: absPath,
-			error: e instanceof Error ? e.message : String(e),
-		});
-		return null;
-	}
+	const bytes = await readVaultBytes(absPath);
+	if (!bytes) return null;
+	const blob = new Blob([bytes], { type: mimeType });
+	return URL.createObjectURL(blob);
 }
 
 /**
@@ -93,35 +97,8 @@ export async function localPdfToViewerSource(
 export async function localFileToArrayBuffer(
 	absPath: string,
 ): Promise<ArrayBuffer | null> {
-	if (!isTauri() || !absPath?.trim()) return null;
-	try {
-		let bytes: Uint8Array;
-		if (absPath.startsWith("remote:")) {
-			const slash = absPath.indexOf("/", "remote:".length);
-			if (slash === -1) return null;
-			const handle = absPath.slice(0, slash);
-			const rel = absPath.slice(slash + 1);
-			const { remoteCacheFile, remoteSessionIdFromHandle } = await import(
-				"@/lib/vault/remote/remote-vault"
-			);
-			const sessionId = remoteSessionIdFromHandle(handle);
-			if (!sessionId) return null;
-			const localPath = await remoteCacheFile(sessionId, rel);
-			bytes = await readFile(localPath);
-		} else {
-			bytes = await readFile(absPath);
-		}
-		// Copy into a fresh ArrayBuffer the engine can own (plugin may return a view).
-		const copy = new Uint8Array(bytes.byteLength);
-		copy.set(bytes);
-		return copy.buffer;
-	} catch (e) {
-		logger.warn("pdf: read local bytes failed", {
-			path: absPath,
-			error: e instanceof Error ? e.message : String(e),
-		});
-		return null;
-	}
+	const bytes = await readVaultBytes(absPath);
+	return bytes ? bytes.buffer : null;
 }
 
 /**
@@ -146,12 +123,6 @@ export function revokePdfViewerSource(source: string | null | undefined): void {
 	}
 }
 
-function joinDir(parent: string, name: string): string {
-	const sep = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
-	const base = parent.replace(/[/\\]+$/, "");
-	return `${base}${sep}${name}`;
-}
-
 /**
  * Find first local PDF under a paper folder.
  * Prefer root-level `*.pdf` (canonical `{id}.pdf`), then shallow recursive
@@ -163,15 +134,10 @@ export async function findLocalPdfPath(
 	if (!isTauri() || !paperDir?.trim()) return null;
 	const root = paperDir.replace(/[/\\]+$/, "");
 	// Remote joined path: list via Host SFTP
-	if (root.startsWith("remote:")) {
-		const slash = root.indexOf("/", "remote:".length);
-		const handle = slash === -1 ? root : root.slice(0, slash);
-		const rel = slash === -1 ? "" : root.slice(slash + 1);
-		const { remoteList, remoteSessionIdFromHandle } = await import(
-			"@/lib/vault/remote/remote-vault"
-		);
-		const sessionId = remoteSessionIdFromHandle(handle);
-		if (!sessionId) return null;
+	const parsed = parseRemoteJoinedPath(root);
+	if (parsed) {
+		const { sessionId, rel } = parsed;
+		const handle = `remote:${sessionId}`;
 		try {
 			const entries = await remoteList(sessionId, rel);
 			const pdfs = entries
@@ -200,7 +166,7 @@ export async function findLocalPdfPath(
 		for (const e of entries) {
 			if (!e.name || !e.isFile) continue;
 			if (PDF_NAME_RE.test(e.name)) {
-				rootPdfs.push(joinDir(root, e.name));
+				rootPdfs.push(joinPath(root, e.name));
 			}
 		}
 		if (rootPdfs.length > 0) {
@@ -234,7 +200,7 @@ async function findPdfUnder(
 	for (const e of entries) {
 		if (!e.name) continue;
 		if (e.name.startsWith(".")) continue;
-		const full = joinDir(dir, e.name);
+		const full = joinPath(dir, e.name);
 		if (e.isFile && PDF_NAME_RE.test(e.name)) return full;
 		if (e.isDirectory) subdirs.push(full);
 	}

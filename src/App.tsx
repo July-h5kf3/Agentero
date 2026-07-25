@@ -204,10 +204,11 @@ import {
 } from "@/lib/workspace/viewer";
 
 /**
- * Number of PDF tabs kept mounted (most recent first). The active PDF tab is
- * always mounted; recently viewed PDF tabs stay mounted so switching between
- * them is instant (re-opening a PDFium document blocks the main thread). Older
- * PDF tabs beyond this cap unmount and release their engine document.
+ * Number of PDF *viewers* kept mounted (most recent first). Dockview already
+ * keeps PDF panel shells mounted (`renderer: 'always'`); this LRU only gates
+ * EmbedPDF/PDFium so switching among recent PDFs is instant without holding
+ * every open document on the main thread. Older PDF tabs beyond this cap
+ * unmount the viewer and release their engine document.
  */
 const PDF_TAB_MOUNT_LRU = 4;
 
@@ -1582,10 +1583,7 @@ export default function App() {
 	const handleRevealInFinder = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
-		if (
-			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
-			path.startsWith("remote:")
-		) {
+		if (isRemoteVaultHandle(vaultPath) || isRemoteVaultHandle(path)) {
 			notifyWarning(t("app:vault.remoteNoFinder"));
 			return;
 		}
@@ -1606,10 +1604,7 @@ export default function App() {
 	const handleOpenInTerminal = useCallback(() => {
 		const path = treeSelectedPath;
 		if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) return;
-		if (
-			(vaultPath && isRemoteVaultHandle(vaultPath)) ||
-			path.startsWith("remote:")
-		) {
+		if (isRemoteVaultHandle(vaultPath) || isRemoteVaultHandle(path)) {
 			notifyWarning(t("app:vault.remoteNoTerminal"));
 			return;
 		}

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { isTauri } from "@/lib/core/tauri";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 
 /** Payload of the `vault:file-changed` event emitted by the Host watcher. */
 export type VaultFileChangedPayload = {
@@ -17,7 +18,7 @@ export const VAULT_FILE_CHANGED_EVENT = "vault:file-changed";
 export async function startVaultWatch(vaultPath: string): Promise<void> {
 	if (!isTauri() || !vaultPath) return;
 	// Remote vaults (`remote:<sessionId>`) have no local notify path.
-	if (vaultPath.startsWith("remote:")) return;
+	if (isRemoteVaultHandle(vaultPath)) return;
 	await invoke("fs_watch_start", { vaultPath });
 }
 

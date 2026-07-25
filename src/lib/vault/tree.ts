@@ -1,5 +1,5 @@
 import { readDir } from "@tauri-apps/plugin-fs";
-import { normalizePathKey } from "@/lib/vault/path";
+import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
 import {
 	isRemoteVaultHandle,
 	remoteList,
@@ -75,12 +75,6 @@ export function isEagerTreeRel(rel: string): boolean {
 	return TREE_EAGER_ROOT_NAMES.has(top);
 }
 
-function joinPath(parent: string, name: string): string {
-	if (!parent) return name;
-	const sep = parent.includes("\\") ? "\\" : "/";
-	return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
-}
-
 function sortNodes(nodes: FileNode[]): FileNode[] {
 	return [...nodes].sort((a, b) => {
 		if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
@@ -98,7 +92,54 @@ function sortNodes(nodes: FileNode[]): FileNode[] {
  *
  * `rel` is vault-relative (`""` at root). Local uses absolute `dirPath`.
  */
-async function buildTreeLocal(
+type TreeListEntry = {
+	name: string;
+	childPath: string;
+	childRel: string;
+	isDir: boolean;
+	isFile: boolean;
+};
+
+type TreeAdapter = {
+	list(dirPath: string, rel: string): Promise<TreeListEntry[]>;
+};
+
+function localTreeAdapter(): TreeAdapter {
+	return {
+		async list(dirPath, rel) {
+			const entries = await readDir(dirPath);
+			return entries
+				.filter((e): e is typeof e & { name: string } => !!e.name)
+				.map((e) => ({
+					name: e.name,
+					childPath: joinVaultPath(dirPath, e.name),
+					childRel: rel ? `${rel}/${e.name}` : e.name,
+					isDir: e.isDirectory,
+					isFile: e.isFile,
+				}));
+		},
+	};
+}
+
+function remoteTreeAdapter(handle: string): TreeAdapter {
+	const sessionId = remoteSessionIdFromHandle(handle);
+	return {
+		async list(_dirPath, rel) {
+			if (!sessionId) return [];
+			const entries = await remoteList(sessionId, rel);
+			return entries.map((e) => ({
+				name: e.name,
+				childPath: joinRemotePath(handle, e.path),
+				childRel: e.path,
+				isDir: e.isDir,
+				isFile: e.isFile,
+			}));
+		},
+	};
+}
+
+async function buildTree(
+	adapter: TreeAdapter,
 	dirPath: string,
 	rel: string,
 	depth = 0,
@@ -106,28 +147,27 @@ async function buildTreeLocal(
 ): Promise<FileNode[]> {
 	if (depth > 12) return [];
 
-	const entries = await readDir(dirPath);
+	const entries = await adapter.list(dirPath, rel);
 	const nodes: FileNode[] = [];
 
 	for (const entry of entries) {
-		if (!entry.name || shouldIgnoreTreeName(entry.name)) continue;
+		if (shouldIgnoreTreeName(entry.name)) continue;
 
-		const path = joinPath(dirPath, entry.name);
-		const childRel = rel ? `${rel}/${entry.name}` : entry.name;
-		if (entry.isDirectory) {
-			const node = await buildDirNodeLocal(
-				path,
+		if (entry.isDir) {
+			const node = await buildDirNode(
+				adapter,
+				entry.childPath,
 				entry.name,
-				childRel,
+				entry.childRel,
 				depth,
 				shallowOnly,
 			);
 			nodes.push(node);
 		} else if (entry.isFile) {
 			nodes.push({
-				id: path,
+				id: entry.childPath,
 				name: entry.name,
-				path,
+				path: entry.childPath,
 				kind: "file",
 			});
 		}
@@ -136,7 +176,8 @@ async function buildTreeLocal(
 	return sortNodes(nodes);
 }
 
-async function buildDirNodeLocal(
+async function buildDirNode(
+	adapter: TreeAdapter,
 	path: string,
 	name: string,
 	childRel: string,
@@ -155,7 +196,7 @@ async function buildDirNodeLocal(
 		};
 	}
 	if (isEagerTreeRel(childRel)) {
-		const children = await buildTreeLocal(path, childRel, depth + 1, false);
+		const children = await buildTree(adapter, path, childRel, depth + 1, false);
 		return {
 			id: path,
 			name,
@@ -165,87 +206,7 @@ async function buildDirNodeLocal(
 		};
 	}
 	// Non-product dir: list exactly one level; nested dirs stay pending.
-	const children = await buildTreeLocal(path, childRel, depth + 1, true);
-	return {
-		id: path,
-		name,
-		path,
-		kind: "directory",
-		children,
-		childrenPending: false,
-	};
-}
-
-async function buildTreeRemote(
-	handle: string,
-	rel: string,
-	depth = 0,
-	shallowOnly = false,
-): Promise<FileNode[]> {
-	if (depth > 12) return [];
-	const sessionId = remoteSessionIdFromHandle(handle);
-	if (!sessionId) return [];
-
-	const entries = await remoteList(sessionId, rel);
-	const nodes: FileNode[] = [];
-
-	for (const entry of entries) {
-		if (!entry.name || shouldIgnoreTreeName(entry.name)) continue;
-
-		const childRel = entry.path;
-		const path = joinRemotePath(handle, childRel);
-		if (entry.isDir) {
-			const node = await buildDirNodeRemote(
-				handle,
-				path,
-				entry.name,
-				childRel,
-				depth,
-				shallowOnly,
-			);
-			nodes.push(node);
-		} else if (entry.isFile) {
-			nodes.push({
-				id: path,
-				name: entry.name,
-				path,
-				kind: "file",
-			});
-		}
-	}
-
-	return sortNodes(nodes);
-}
-
-async function buildDirNodeRemote(
-	handle: string,
-	path: string,
-	name: string,
-	childRel: string,
-	depth: number,
-	shallowOnly: boolean,
-): Promise<FileNode> {
-	if (shallowOnly) {
-		return {
-			id: path,
-			name,
-			path,
-			kind: "directory",
-			children: [],
-			childrenPending: true,
-		};
-	}
-	if (isEagerTreeRel(childRel)) {
-		const children = await buildTreeRemote(handle, childRel, depth + 1, false);
-		return {
-			id: path,
-			name,
-			path,
-			kind: "directory",
-			children,
-		};
-	}
-	const children = await buildTreeRemote(handle, childRel, depth + 1, true);
+	const children = await buildTree(adapter, path, childRel, depth + 1, true);
 	return {
 		id: path,
 		name,
@@ -265,14 +226,12 @@ export async function listVaultDirChildren(
 	dirAbsPath: string,
 ): Promise<FileNode[]> {
 	if (isRemoteVaultHandle(rootPath)) {
-		const sessionId = remoteSessionIdFromHandle(rootPath);
-		if (!sessionId) return [];
 		const rel = remoteRelFromJoined(rootPath, dirAbsPath);
 		// Expanding a non-eager folder: only one more level; subdirs stay pending.
-		return buildTreeRemote(rootPath, rel, 0, true);
+		return buildTree(remoteTreeAdapter(rootPath), dirAbsPath, rel, 0, true);
 	}
 	// Local: dirAbsPath is absolute; rel only used for eager checks (disabled here).
-	return buildTreeLocal(dirAbsPath, "", 0, true);
+	return buildTree(localTreeAdapter(), dirAbsPath, "", 0, true);
 }
 
 /**
@@ -340,8 +299,8 @@ export function treeHasPendingChildren(nodes: FileNode[]): boolean {
  */
 export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
 	if (isRemoteVaultHandle(rootPath)) {
-		return buildTreeRemote(rootPath, "");
+		return buildTree(remoteTreeAdapter(rootPath), rootPath, "");
 	}
 	await ensureLocalFsScope(rootPath);
-	return buildTreeLocal(rootPath, "");
+	return buildTree(localTreeAdapter(), rootPath, "");
 }

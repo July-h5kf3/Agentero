@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import i18n from "@/i18n";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 
 /** Per-window vault (sessionStorage — isolated across ⌘N windows). */
 const SESSION_VAULT_KEY = "agentero-vault-path";
@@ -28,22 +29,12 @@ export function getSessionVaultPath(): string | null {
 	}
 }
 
-/**
- * Remote vault handles (`remote:<sessionId>`) are ephemeral: a new UUID is
- * issued on every SSH connect. They must not pollute the durable "recent local
- * vaults" list or "restore last vault" — remote recents live in
- * `agentero-recent-remote-vaults` (host + remotePath).
- */
-function isEphemeralRemoteHandle(path: string): boolean {
-	return path.startsWith("remote:");
-}
-
 /** Last vault path (localStorage) — used when restore-last is enabled. */
 export function getLastVaultPath(): string | null {
 	try {
 		const last = localStorage.getItem(LAST_VAULT_KEY);
 		// Drop stale remote handles left by older builds (session no longer exists).
-		if (last && isEphemeralRemoteHandle(last)) return null;
+		if (last && isRemoteVaultHandle(last)) return null;
 		return last;
 	} catch {
 		return null;
@@ -78,7 +69,7 @@ export function getRecentVaults(): string[] {
 	if (!Array.isArray(parsed)) return [];
 	const list = parsed.filter(
 		(p): p is string =>
-			typeof p === "string" && p.length > 0 && !isEphemeralRemoteHandle(p),
+			typeof p === "string" && p.length > 0 && !isRemoteVaultHandle(p),
 	);
 	// Self-heal: strip remote handles written by older builds.
 	if (list.length !== parsed.length) {
@@ -89,7 +80,7 @@ export function getRecentVaults(): string[] {
 
 export function rememberRecentVault(path: string): void {
 	const normalized = path.replace(/[\\/]+$/, "");
-	if (!normalized || isEphemeralRemoteHandle(normalized)) return;
+	if (!normalized || isRemoteVaultHandle(normalized)) return;
 	const next = [
 		normalized,
 		...getRecentVaults().filter((p) => p.replace(/[\\/]+$/, "") !== normalized),
@@ -111,7 +102,7 @@ export function saveVaultPath(path: string | null): void {
 			// Always keep window-session binding (local path or live remote handle).
 			sessionStorage.setItem(SESSION_VAULT_KEY, path);
 			// Durable "last / recent local" only for real filesystem roots.
-			if (!isEphemeralRemoteHandle(path)) {
+			if (!isRemoteVaultHandle(path)) {
 				localStorage.setItem(LAST_VAULT_KEY, path);
 				rememberRecentVault(path);
 			}
