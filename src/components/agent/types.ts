@@ -1,6 +1,17 @@
 import type { ReactNode } from "react";
 import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper";
 
+/** Follow-up prompts waiting until the active run finishes. */
+export type QueuedPrompt = {
+	id: string;
+	text: string;
+	workflow?: string;
+	/** Vault paths frozen when the user queued the message. */
+	contextPaths: string[];
+	/** Skill ids frozen when the user queued the message. */
+	skillIds: string[];
+};
+
 export type AgentPanelProps = {
 	vaultPath: string | null;
 	selectedPath?: string | null;
@@ -37,4 +48,9 @@ export type AgentPanelProps = {
 	variant?: "sidebar" | "zen";
 	/** Open Settings → Agent (ACP backend registry). */
 	onOpenAgentSettings?: () => void;
+	/**
+	 * Open a chat source path (vault-relative paper/file, or http URL).
+	 * Paper paths should open the paper workspace (PDF + NOTES).
+	 */
+	onOpenSource?: (source: string) => void;
 };

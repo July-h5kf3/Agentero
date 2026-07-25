@@ -28,6 +28,7 @@ export function AgentPanel({
 	title = "Chat",
 	variant = "sidebar",
 	onOpenAgentSettings,
+	onOpenSource,
 }: AgentPanelProps) {
 	const panel = useAgentPanel({
 		vaultPath,
@@ -59,7 +60,9 @@ export function AgentPanel({
 		cancelEditingMessage,
 		resendEditedMessage,
 		startEditingMessage,
-		send,
+		submitComposer,
+		messageQueue,
+		removeQueuedMessage,
 		sessionHistory,
 		historyOpen,
 		setHistoryOpen,
@@ -70,7 +73,7 @@ export function AgentPanel({
 		hasRunningSessions,
 		selectAgent,
 		composerText,
-		setComposerText,
+		onComposerTextChangeFromUser,
 		setComposerMenuDismissed,
 		setMentionActiveIndex,
 		setSkillActiveIndex,
@@ -98,6 +101,11 @@ export function AgentPanel({
 		skillOptions,
 		skillActiveIndex,
 		attachSkill,
+		showSlashMenu,
+		slashOptions,
+		slashActiveIndex,
+		setSlashActiveIndex,
+		attachSlashCommand,
 		modelSelectorOpen,
 		setModelSelectorOpen,
 		models,
@@ -117,8 +125,6 @@ export function AgentPanel({
 		fastEnabled,
 		setFastEnabled,
 		cancelCurrentRun,
-		hasStreamingAgentMessage,
-		composerControlsMuted,
 		permissionRequest,
 		setPermissionRequest,
 		switchingRef,
@@ -126,7 +132,7 @@ export function AgentPanel({
 	} = panel;
 
 	const sendSuggestion = (label: string, workflow?: string) => {
-		void send(label, undefined, workflow);
+		void submitComposer(label, workflow);
 	};
 
 	return (
@@ -200,6 +206,7 @@ export function AgentPanel({
 						onResendEdited={(lineId) => void resendEditedMessage(lineId)}
 						onStartEditing={startEditingMessage}
 						onSendSuggestion={sendSuggestion}
+						onOpenSource={onOpenSource}
 					/>
 
 					<AgentComposer
@@ -209,28 +216,25 @@ export function AgentPanel({
 						activeTabIsRunning={activeTabIsRunning}
 						switching={switching}
 						submitting={submitting}
-						hasStreamingAgentMessage={hasStreamingAgentMessage}
-						composerControlsMuted={composerControlsMuted}
 						composerText={composerText}
 						onComposerTextChange={(text) => {
-							setComposerText(text);
+							onComposerTextChangeFromUser(text);
 							setComposerMenuDismissed(false);
 							setMentionActiveIndex(0);
 							setSkillActiveIndex(0);
+							setSlashActiveIndex(0);
 						}}
 						onSubmit={async (text) => {
-							if (
-								activeTabIsRunning ||
-								switchingRef.current ||
-								submittingRef.current
-							) {
+							if (switchingRef.current || submittingRef.current) {
 								return;
 							}
-							await send(text);
+							await submitComposer(text);
 						}}
 						onComposerKeyDown={handleComposerMenuKeyDown}
 						onComposerDragOver={handleComposerDragOver}
 						onComposerDrop={handleComposerDrop}
+						messageQueue={messageQueue}
+						onRemoveQueuedMessage={removeQueuedMessage}
 						currentFilePath={currentFilePath}
 						currentFileLabel={currentFileLabel}
 						mentionChipPaths={mentionChipPaths}
@@ -256,6 +260,11 @@ export function AgentPanel({
 						skillActiveIndex={skillActiveIndex}
 						onAttachSkill={attachSkill}
 						onSkillActiveIndexChange={setSkillActiveIndex}
+						showSlashMenu={showSlashMenu}
+						slashOptions={slashOptions}
+						slashActiveIndex={slashActiveIndex}
+						onAttachSlashCommand={attachSlashCommand}
+						onSlashActiveIndexChange={setSlashActiveIndex}
 						modelSelectorOpen={modelSelectorOpen}
 						onModelSelectorOpenChange={setModelSelectorOpen}
 						models={models}

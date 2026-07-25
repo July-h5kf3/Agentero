@@ -3246,6 +3246,31 @@ export default function App() {
 		[vaultPath, openPaper, handleOpenVaultRel, paperFolders, t],
 	);
 
+	/**
+	 * Agent chat Sources / inline citation click:
+	 * vault paper paths → paper workspace; other vault files → open tab;
+	 * http(s) → system browser. Exit zen so the paper is visible.
+	 */
+	const handleAgentOpenSource = useCallback(
+		(source: string) => {
+			const trimmed = source.trim();
+			if (!trimmed) return;
+			if (/^https?:\/\//i.test(trimmed)) {
+				void import("@tauri-apps/plugin-opener")
+					.then(({ openUrl }) => openUrl(trimmed))
+					.catch(() => {
+						window.open(trimmed, "_blank", "noopener,noreferrer");
+					});
+				return;
+			}
+			if (agentZenModeRef.current) {
+				exitAgentZen();
+			}
+			handleGraphOpenPath(trimmed);
+		},
+		[exitAgentZen, handleGraphOpenPath],
+	);
+
 	const handleWikiNavigate = useCallback(
 		async (nav: WikiNavTarget) => {
 			if (nav.exists && nav.path) {
@@ -3576,6 +3601,7 @@ export default function App() {
 											(rightSidebarOpen && rightSidebarTab === "agent")
 										}
 										onOpenAgentSettings={() => openSettings("agent")}
+										onOpenSource={handleAgentOpenSource}
 									/>
 								</div>
 							)}

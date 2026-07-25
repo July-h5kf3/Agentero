@@ -3,6 +3,7 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	ListTodoIcon,
 	Star,
 	X,
 	Zap,
@@ -10,6 +11,7 @@ import {
 import type { KeyboardEvent, DragEvent as ReactDragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ContextPathIcon } from "@/components/agent/context-path-icon";
+import type { QueuedPrompt } from "@/components/agent/types";
 import {
 	Context,
 	ContextContent,
@@ -35,6 +37,19 @@ import {
 	PromptInputTextarea,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import {
+	Queue,
+	QueueItem,
+	QueueItemAction,
+	QueueItemActions,
+	QueueItemContent,
+	QueueItemIndicator,
+	QueueList,
+	QueueSection,
+	QueueSectionContent,
+	QueueSectionLabel,
+	QueueSectionTrigger,
+} from "@/components/ai-elements/queue";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import {
 	DropdownMenu,
@@ -46,6 +61,7 @@ import type {
 	AgentEffortChoice,
 	AgentModelChoice,
 	AgentSkill,
+	SlashCommand,
 } from "@/lib/agent";
 import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
@@ -65,8 +81,6 @@ export function AgentComposer({
 	activeTabIsRunning,
 	switching,
 	submitting,
-	hasStreamingAgentMessage,
-	composerControlsMuted,
 	composerText,
 	onComposerTextChange,
 	onSubmit,
@@ -100,6 +114,12 @@ export function AgentComposer({
 	skillActiveIndex,
 	onAttachSkill,
 	onSkillActiveIndexChange,
+	// Slash menu
+	showSlashMenu,
+	slashOptions,
+	slashActiveIndex,
+	onAttachSlashCommand,
+	onSlashActiveIndexChange,
 	// Model / effort / usage / fast
 	modelSelectorOpen,
 	onModelSelectorOpenChange,
@@ -119,8 +139,10 @@ export function AgentComposer({
 	fastAvailable,
 	fastEnabled,
 	onFastEnabledToggle,
-	// Submit / stop
+	// Submit / stop / waitlist
 	onCancelRun,
+	messageQueue,
+	onRemoveQueuedMessage,
 	// Follow-up suggestions
 	onSendSuggestion,
 }: {
@@ -130,14 +152,14 @@ export function AgentComposer({
 	activeTabIsRunning: boolean;
 	switching: boolean;
 	submitting: boolean;
-	hasStreamingAgentMessage: boolean;
-	composerControlsMuted: boolean;
 	composerText: string;
 	onComposerTextChange: (text: string) => void;
 	onSubmit: (text: string) => Promise<void>;
 	onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 	onComposerDragOver: (e: ReactDragEvent) => void;
 	onComposerDrop: (e: ReactDragEvent) => void;
+	messageQueue: QueuedPrompt[];
+	onRemoveQueuedMessage: (id: string) => void;
 	currentFilePath: string | null;
 	currentFileLabel: string;
 	mentionChipPaths: string[];
@@ -161,6 +183,11 @@ export function AgentComposer({
 	skillActiveIndex: number;
 	onAttachSkill: (skill: AgentSkill) => void;
 	onSkillActiveIndexChange: (index: number) => void;
+	showSlashMenu: boolean;
+	slashOptions: SlashCommand[];
+	slashActiveIndex: number;
+	onAttachSlashCommand: (command: SlashCommand) => void;
+	onSlashActiveIndexChange: (index: number) => void;
 	modelSelectorOpen: boolean;
 	onModelSelectorOpenChange: (open: boolean) => void;
 	models: AgentModelChoice[];
@@ -183,6 +210,9 @@ export function AgentComposer({
 	onSendSuggestion: (label: string, workflow?: string) => void;
 }) {
 	const { t } = useTranslation("agent");
+	const hasComposerText = Boolean(composerText.trim());
+	// While streaming: empty input → stop; with text → queue as follow-up.
+	const showStop = activeTabIsRunning && !hasComposerText;
 
 	return (
 		<div
@@ -208,6 +238,42 @@ export function AgentComposer({
 					})}
 				</Suggestions>
 			) : null}
+			{messageQueue.length > 0 ? (
+				<Queue className={cn(isZen && "shadow-sm")}>
+					<QueueSection defaultOpen>
+						<QueueSectionTrigger>
+							<QueueSectionLabel
+								count={messageQueue.length}
+								icon={<ListTodoIcon className="size-4" />}
+								label={t("composer.queueLabel")}
+							/>
+						</QueueSectionTrigger>
+						<QueueSectionContent>
+							<QueueList>
+								{messageQueue.map((item) => (
+									<QueueItem key={item.id}>
+										<div className="flex items-center gap-2">
+											<QueueItemIndicator />
+											<QueueItemContent title={item.text}>
+												{item.text}
+											</QueueItemContent>
+											<QueueItemActions>
+												<QueueItemAction
+													aria-label={t("composer.queueRemove")}
+													title={t("composer.queueRemove")}
+													onClick={() => onRemoveQueuedMessage(item.id)}
+												>
+													<X className="size-3.5" />
+												</QueueItemAction>
+											</QueueItemActions>
+										</div>
+									</QueueItem>
+								))}
+							</QueueList>
+						</QueueSectionContent>
+					</QueueSection>
+				</Queue>
+			) : null}
 			<PromptInput
 				className={cn(
 					"w-full rounded-xl border-border bg-background shadow-none",
@@ -215,8 +281,9 @@ export function AgentComposer({
 				)}
 				inputGroupClassName={cn(
 					"overflow-visible",
-					!hasStreamingAgentMessage &&
-						"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
+					// Keep the same surface while any child is disabled or a run is
+					// in progress — never dim / recolor the composer for "processing".
+					"has-disabled:bg-transparent has-disabled:opacity-100 dark:has-disabled:bg-input/30",
 				)}
 				onSubmit={async ({ text }) => {
 					await onSubmit(text);
@@ -237,7 +304,6 @@ export function AgentComposer({
 									<button
 										type="button"
 										className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-										disabled={activeTabIsRunning}
 										onClick={() => onRemoveContextPath(currentFilePath)}
 										title={t("composer.currentFileRemove")}
 									>
@@ -440,6 +506,41 @@ export function AgentComposer({
 								))}
 							</div>
 						) : null}
+						{showSlashMenu ? (
+							<div
+								id="agent-slash-menu"
+								role="listbox"
+								className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+							>
+								{slashOptions.map((command, index) => (
+									<button
+										key={command.id}
+										id={`agent-slash-option-${index}`}
+										type="button"
+										role="option"
+										aria-selected={slashActiveIndex === index}
+										className={cn(
+											"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+											slashActiveIndex === index
+												? "bg-muted"
+												: "hover:bg-muted/70",
+										)}
+										onMouseEnter={() => onSlashActiveIndexChange(index)}
+										onClick={() => onAttachSlashCommand(command)}
+									>
+										<span className="font-mono text-muted-foreground">/</span>
+										<span className="min-w-0 flex-1 truncate">
+											{command.title}
+										</span>
+										{command.description ? (
+											<span className="max-w-40 truncate text-muted-foreground text-xs">
+												{command.description}
+											</span>
+										) : null}
+									</button>
+								))}
+							</div>
+						) : null}
 						<PromptInputTextarea
 							autoFocus={autoFocus || undefined}
 							className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
@@ -448,27 +549,31 @@ export function AgentComposer({
 								onComposerTextChange(event.currentTarget.value);
 							}}
 							onKeyDown={onComposerKeyDown}
-							aria-expanded={showMentionMenu || showSkillMenu}
+							aria-expanded={showMentionMenu || showSkillMenu || showSlashMenu}
 							aria-autocomplete="list"
 							aria-controls={
 								showMentionMenu
 									? "agent-mention-menu"
 									: showSkillMenu
 										? "agent-skill-menu"
-										: undefined
+										: showSlashMenu
+											? "agent-slash-menu"
+											: undefined
 							}
 							aria-activedescendant={
 								showMentionMenu
 									? `agent-mention-option-${mentionActiveIndex}`
 									: showSkillMenu
 										? `agent-skill-option-${skillActiveIndex}`
-										: undefined
+										: showSlashMenu
+											? `agent-slash-option-${slashActiveIndex}`
+											: undefined
 							}
 							role="combobox"
 							disabled={switching}
 							placeholder={
 								activeTabIsRunning
-									? t("composer.interruptHint")
+									? t("composer.queueHint")
 									: t("composer.placeholder")
 							}
 						/>
@@ -483,15 +588,8 @@ export function AgentComposer({
 							<ModelSelectorTrigger asChild>
 								<PromptInputButton
 									type="button"
-									className={cn(
-										"h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium",
-										composerControlsMuted
-											? "text-muted-foreground"
-											: "text-foreground",
-									)}
-									disabled={
-										activeTabIsRunning || warming || models.length === 0
-									}
+									className="h-7 max-w-[min(16rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
+									disabled={warming || models.length === 0}
 									tooltip={
 										models.length > 0
 											? t("models.selectTooltip")
@@ -581,13 +679,7 @@ export function AgentComposer({
 								<DropdownMenuTrigger asChild>
 									<PromptInputButton
 										type="button"
-										className={cn(
-											"h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium",
-											composerControlsMuted
-												? "text-muted-foreground"
-												: "text-foreground",
-										)}
-										disabled={activeTabIsRunning}
+										className="h-7 max-w-[min(8rem,100%)] gap-1 px-1.5 text-xs font-medium text-foreground"
 										tooltip={t("composer.effortTooltip")}
 									>
 										<span className="truncate">
@@ -631,14 +723,10 @@ export function AgentComposer({
 							<PromptInputButton
 								type="button"
 								className={cn(
-									"size-7",
-									composerControlsMuted
-										? "text-muted-foreground"
-										: "text-foreground",
+									"size-7 text-foreground",
 									fastEnabled && "text-amber-500 hover:text-amber-500",
 								)}
 								aria-pressed={fastEnabled}
-								disabled={activeTabIsRunning}
 								onClick={onFastEnabledToggle}
 								tooltip={t("composer.fastToggle")}
 							>
@@ -656,16 +744,17 @@ export function AgentComposer({
 						className="ml-auto shrink-0"
 						size="icon-xs"
 						status={
-							activeTabIsRunning
+							showStop
 								? "streaming"
-								: submitting
+								: submitting && !activeTabIsRunning
 									? "submitted"
 									: "ready"
 						}
-						onStop={activeTabIsRunning ? onCancelRun : undefined}
+						onStop={showStop ? onCancelRun : undefined}
 						disabled={
-							!activeTabIsRunning &&
-							(switching || submitting || !composerText.trim())
+							switching ||
+							(submitting && !activeTabIsRunning) ||
+							(!showStop && !hasComposerText)
 						}
 					/>
 				</PromptInputFooter>

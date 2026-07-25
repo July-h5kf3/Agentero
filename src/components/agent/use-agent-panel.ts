@@ -12,7 +12,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { AgentPanelProps } from "@/components/agent/types";
+import type { AgentPanelProps, QueuedPrompt } from "@/components/agent/types";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
@@ -95,18 +95,29 @@ import {
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent/prompt-display";
 import {
+	buildSlashCommands,
+	filterSlashCommands,
+	type SlashCommand,
+	skillMentionStyleForTemplate,
+} from "@/lib/agent/slash-commands";
+import {
 	classifyStreamChunk,
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
 import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { loadSettings } from "@/lib/settings";
 import {
-	findLastUserMessageIndex,
-	shouldRecallPreviousPrompt,
+	collectUserPromptTexts,
+	nextHistoryIndexOnDown,
+	nextHistoryIndexOnUp,
+	placeCaretAtEnd,
+	shouldNavigateHistoryDown,
+	shouldNavigateHistoryUp,
 } from "@/lib/ui/prompt-recall";
 import { toVaultRelative } from "@/lib/wiki";
 
@@ -220,7 +231,10 @@ export function useAgentPanel({
 	const [composerMenuDismissed, setComposerMenuDismissed] = useState(false);
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
+	const [slashActiveIndex, setSlashActiveIndex] = useState(0);
 	const [activeTabId, setActiveTabId] = useState("draft");
+	/** Follow-ups typed while the active session is still running. */
+	const [messageQueue, setMessageQueue] = useState<QueuedPrompt[]>([]);
 	// Inline edit-and-resend of a sent user message (only when not running).
 	const [editingLineId, setEditingLineId] = useState<string | null>(null);
 	const [editingText, setEditingText] = useState("");
@@ -258,6 +272,16 @@ export function useAgentPanel({
 	const switchingRef = useRef(false);
 	const submittingRef = useRef(false);
 	const submissionGenRef = useRef(0);
+	/** Prevents overlapping drain of the follow-up waitlist. */
+	const drainInFlightRef = useRef(false);
+	const messageQueueRef = useRef<QueuedPrompt[]>([]);
+	/**
+	 * ↑/↓ prompt history: index into chronological user prompts, or null when
+	 * not browsing. Draft is restored when stepping past the newest entry.
+	 */
+	const promptHistoryIndexRef = useRef<number | null>(null);
+	const promptHistoryDraftRef = useRef("");
+	const promptHistoryAppliedRef = useRef<string | null>(null);
 	const pendingTerminalEventsRef = useRef(
 		new Map<string, PendingTerminalEvent>(),
 	);
@@ -353,6 +377,9 @@ export function useAgentPanel({
 		// reopens under a different line that reused the same id.
 		setEditingLineId(null);
 		setEditingText("");
+		promptHistoryIndexRef.current = null;
+		promptHistoryDraftRef.current = "";
+		promptHistoryAppliedRef.current = null;
 	}, [activeTabId]);
 
 	// Focus the inline editor (and place the caret at the end) when it opens.
@@ -369,8 +396,18 @@ export function useAgentPanel({
 	}, [sessionHistory]);
 
 	useEffect(() => {
+		messageQueueRef.current = messageQueue;
+	}, [messageQueue]);
+
+	useEffect(() => {
 		vaultPathRef.current = vaultPath;
 	}, [vaultPath]);
+
+	const clearMessageQueue = useCallback(() => {
+		messageQueueRef.current = [];
+		setMessageQueue([]);
+		drainInFlightRef.current = false;
+	}, []);
 
 	useEffect(() => {
 		if (previousVaultPathRef.current === vaultPath) return;
@@ -402,7 +439,8 @@ export function useAgentPanel({
 		setActiveTabId("draft");
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
-	}, [vaultPath]);
+		clearMessageQueue();
+	}, [vaultPath, clearMessageQueue]);
 
 	// Restore last model catalog / preference for the selected agent.
 	useEffect(() => {
@@ -1141,11 +1179,35 @@ export function useAgentPanel({
 			.slice(0, 6);
 	}, [selectedSkillIds, skillMatch, skillQuery, skills]);
 
+	const slashMatch = composerText.match(/(^|\s)\/([^\s]*)$/);
+	const slashQuery = slashMatch?.[2]?.toLocaleLowerCase() ?? "";
+	const slashCommands = useMemo(
+		() =>
+			buildSlashCommands(skills, {
+				skillMentionStyle: skillMentionStyleForTemplate(selected?.template),
+			}),
+		[skills, selected?.template],
+	);
+	const slashOptions = useMemo(() => {
+		if (!slashMatch) return [];
+		return filterSlashCommands(slashCommands, slashQuery, {
+			hasContext: contextPaths.length > 0,
+			selectedSkillIds,
+		});
+	}, [
+		contextPaths.length,
+		selectedSkillIds,
+		slashCommands,
+		slashMatch,
+		slashQuery,
+	]);
+
 	const showMentionMenu =
 		!composerMenuDismissed &&
 		Boolean(mentionMatch) &&
 		(mentionOptions.length > 0 || mentionBrowseRoot != null);
 	const showSkillMenu = !composerMenuDismissed && skillOptions.length > 0;
+	const showSlashMenu = !composerMenuDismissed && slashOptions.length > 0;
 
 	useEffect(() => {
 		setMentionActiveIndex((index) =>
@@ -1162,6 +1224,14 @@ export function useAgentPanel({
 				: 0,
 		);
 	}, [skillOptions.length]);
+
+	useEffect(() => {
+		setSlashActiveIndex((index) =>
+			slashOptions.length
+				? Math.max(0, Math.min(index, slashOptions.length - 1))
+				: 0,
+		);
+	}, [slashOptions.length]);
 
 	const effortOptionsInDisplayOrder = useMemo(() => {
 		const order = ["max", "xhigh", "high", "medium", "low"];
@@ -1201,10 +1271,6 @@ export function useAgentPanel({
 		(session) => session.id === activeTabId,
 	);
 	const activeTabIsRunning = activeTabSession?.status === "running";
-	const hasStreamingAgentMessage = lines.some(
-		(line) => line.kind === "agent" && line.streaming,
-	);
-	const composerControlsMuted = hasStreamingAgentMessage;
 	const activeUsage = usageBySession[activeTabId] ?? usage;
 	const hasRunningSessions = sessionHistory.some(
 		(session) => session.status === "running",
@@ -1290,6 +1356,7 @@ export function useAgentPanel({
 			setActiveTabId("draft");
 			setLines([]);
 			setSessionHistory([]);
+			clearMessageQueue();
 			setSelectedAgentId(agentId);
 			await refresh();
 			setLines((p) => [
@@ -1339,10 +1406,19 @@ export function useAgentPanel({
 		};
 	}, []);
 
+	type SendOptions = {
+		baseLines?: ChatLine[];
+		workflow?: string;
+		/** Frozen context from a waitlisted follow-up (else live composer). */
+		contextPaths?: string[];
+		skillIds?: string[];
+		/** When true, do not wipe the live composer (already cleared on enqueue). */
+		fromQueue?: boolean;
+	};
+
 	const send = async (
 		textRaw: string,
-		baseLinesOverride?: ChatLine[],
-		workflow?: string,
+		options?: SendOptions,
 	): Promise<boolean> => {
 		const text = textRaw.trim();
 		if (
@@ -1352,10 +1428,22 @@ export function useAgentPanel({
 			submittingRef.current
 		)
 			return false;
-		const submittedComposerState = {
-			...snapshotComposerState(),
-			text: textRaw,
-		};
+		const fromQueue = options?.fromQueue === true;
+		const snap = snapshotComposerState();
+		const submittedComposerState = fromQueue
+			? {
+					text: textRaw,
+					mentionedPaths: [],
+					selectedSkillIds: options?.skillIds ?? [],
+					includeSelectedFile: snap.includeSelectedFile,
+				}
+			: {
+					...snap,
+					text: textRaw,
+				};
+		const resolvedContextPaths = options?.contextPaths ?? contextPaths;
+		const resolvedSkillIds =
+			options?.skillIds ?? submittedComposerState.selectedSkillIds;
 		const submissionGeneration = ++submissionGenRef.current;
 		const sessionContextGeneration = sessionContextGenRef.current;
 		const requestVaultPath = vaultPath;
@@ -1394,18 +1482,19 @@ export function useAgentPanel({
 
 			// Options are availability-filtered in buildOptions; unavailable agents
 			// never appear in the switcher.
-			const prompt = contextPaths.length
-				? `${text}\n\n${t("composer.contextInstruction")}\n${contextPaths
+			const prompt = resolvedContextPaths.length
+				? `${text}\n\n${t("composer.contextInstruction")}\n${resolvedContextPaths
 						.map((path) => `- ${path}`)
 						.join("\n")}`
 				: text;
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
+			const workflow = options?.workflow;
 			const workflowTarget = workflow
-				? (contextPaths[0] ?? selectedVaultPath ?? undefined)
-				: contextPaths[0];
+				? (resolvedContextPaths[0] ?? selectedVaultPath ?? undefined)
+				: resolvedContextPaths[0];
 			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
-			const sessionStartLines = [...(baseLinesOverride ?? lines), userLine];
+			const sessionStartLines = [...(options?.baseLines ?? lines), userLine];
 			setLines(sessionStartLines);
 			pendingSubmissionSessionIdRef.current = supportsResume
 				? activeConversationRef.current
@@ -1422,7 +1511,7 @@ export function useAgentPanel({
 				modelId: modelId ?? undefined,
 				reasoningEffort: reasoningEffort ?? undefined,
 				fastMode: fastAvailable ? fastEnabled : undefined,
-				skillIds: submittedComposerState.selectedSkillIds,
+				skillIds: resolvedSkillIds,
 				autoApprove: loadSettings().agentPermissionMode === "auto",
 				permissionMode: loadSettings().agentPermissionMode,
 			});
@@ -1507,6 +1596,108 @@ export function useAgentPanel({
 		}
 	};
 
+	const enqueueMessage = useCallback(
+		(textRaw: string, workflow?: string): boolean => {
+			const text = textRaw.trim();
+			if (!text || switchingRef.current) return false;
+			const snap = snapshotComposerState();
+			const paths = [
+				...(snap.includeSelectedFile && selectedVaultPath
+					? [selectedVaultPath]
+					: []),
+				...snap.mentionedPaths,
+			];
+			const item: QueuedPrompt = {
+				id: nextLineId("queue"),
+				text,
+				workflow,
+				contextPaths: paths,
+				skillIds: [...snap.selectedSkillIds],
+			};
+			setMessageQueue((prev) => {
+				const next = [...prev, item];
+				messageQueueRef.current = next;
+				return next;
+			});
+			// Mirror post-submit composer cleanup for the queued turn.
+			setComposerText((current) => (current === textRaw ? "" : current));
+			setSelectedSkillIds((prev) =>
+				prev.filter((id) => !snap.selectedSkillIds.includes(id)),
+			);
+			setMentionedPaths((prev) =>
+				prev.filter((path) => !snap.mentionedPaths.includes(path)),
+			);
+			return true;
+		},
+		[
+			selectedVaultPath,
+			setComposerText,
+			setMentionedPaths,
+			setSelectedSkillIds,
+			snapshotComposerState,
+		],
+	);
+
+	const resetPromptHistoryBrowse = useCallback(() => {
+		promptHistoryIndexRef.current = null;
+		promptHistoryDraftRef.current = "";
+		promptHistoryAppliedRef.current = null;
+	}, []);
+
+	/** Submit now, or append to the waitlist when the active run is still open. */
+	const submitComposer = async (
+		textRaw: string,
+		workflow?: string,
+	): Promise<void> => {
+		if (switchingRef.current || submittingRef.current) return;
+		resetPromptHistoryBrowse();
+		if (activeTabIsRunning) {
+			enqueueMessage(textRaw, workflow);
+			return;
+		}
+		await send(textRaw, { workflow });
+	};
+
+	const removeQueuedMessage = useCallback((id: string) => {
+		setMessageQueue((prev) => {
+			const next = prev.filter((item) => item.id !== id);
+			messageQueueRef.current = next;
+			return next;
+		});
+	}, []);
+
+	const sendRef = useRef(send);
+	sendRef.current = send;
+
+	// Drain waitlist once the active session is idle again.
+	useEffect(() => {
+		if (activeTabIsRunning || submitting || switching) return;
+		if (messageQueue.length === 0) return;
+		if (drainInFlightRef.current) return;
+
+		const head = messageQueue[0];
+		if (!head) return;
+		drainInFlightRef.current = true;
+		setMessageQueue((prev) => {
+			const next = prev.filter((item) => item.id !== head.id);
+			messageQueueRef.current = next;
+			return next;
+		});
+
+		void (async () => {
+			try {
+				await sendRef.current(head.text, {
+					workflow: head.workflow,
+					contextPaths: head.contextPaths,
+					skillIds: head.skillIds,
+					fromQueue: true,
+				});
+			} finally {
+				drainInFlightRef.current = false;
+			}
+		})();
+	}, [activeTabIsRunning, submitting, switching, messageQueue]);
+
 	const cancelCurrentRun = async () => {
 		const sessionId = activeTabIsRunning ? activeTabId : null;
 		if (!sessionId || !isTauri()) return;
@@ -1547,7 +1738,7 @@ export function useAgentPanel({
 		const baseLines = lines.slice(0, index);
 		setEditingLineId(null);
 		setEditingText("");
-		await send(text, baseLines);
+		await send(text, { baseLines });
 	};
 
 	/** Add Vault-relative path(s) as removable context chips (same as @mention). */
@@ -1650,6 +1841,26 @@ export function useAgentPanel({
 		);
 	};
 
+	const clearConversation = useCallback(() => {
+		setLines([]);
+		resetComposerSession("draft");
+		setActiveTabId("draft");
+		activeTabRef.current = "draft";
+		activeConversationRef.current = null;
+		clearMessageQueue();
+	}, [clearMessageQueue, resetComposerSession]);
+
+	const copyLastReply = useCallback(async () => {
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const line = lines[i];
+			if (line.kind !== "agent") continue;
+			const text = agentTextFromParts(line.parts).trim();
+			if (!text) continue;
+			await copyTextToClipboard(text);
+			return;
+		}
+	}, [lines]);
+
 	const handleComposerMenuKeyDown = (
 		event: KeyboardEvent<HTMLTextAreaElement>,
 	) => {
@@ -1666,7 +1877,10 @@ export function useAgentPanel({
 			return;
 		}
 
-		if (event.key === "Escape" && (showMentionMenu || showSkillMenu)) {
+		if (
+			event.key === "Escape" &&
+			(showMentionMenu || showSkillMenu || showSlashMenu)
+		) {
 			event.preventDefault();
 			// While browsing a folder, Esc steps up; only dismiss at root.
 			if (showMentionMenu && mentionBrowseRoot) {
@@ -1732,24 +1946,91 @@ export function useAgentPanel({
 			return;
 		}
 
-		// Empty composer + ↑ → edit last user prompt (rollback & resend).
-		// Reuses the same edit/resend path as the hover Pencil action.
-		if (
-			shouldRecallPreviousPrompt(event, event.currentTarget) &&
-			!activeTabIsRunning &&
-			!submittingRef.current &&
-			!switchingRef.current
-		) {
-			const index = findLastUserMessageIndex(lines);
-			if (index < 0) return;
-			const line = lines[index];
-			if (line.kind !== "user") return;
-			const display = stripPromptEnvelopeForDisplay(line.text);
-			if (!display) return;
+		if (showSlashMenu) {
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				setSlashActiveIndex((index) =>
+					event.key === "ArrowDown"
+						? (index + 1) % slashOptions.length
+						: (index - 1 + slashOptions.length) % slashOptions.length,
+				);
+				return;
+			}
+			if (event.key === "Enter") {
+				event.preventDefault();
+				const command = slashOptions[slashActiveIndex] ?? slashOptions[0];
+				if (command) attachSlashCommand(command);
+			}
+			return;
+		}
+
+		// ↑ / ↓ → walk previous user prompts into the composer (shell-style).
+		// Does not open inline edit / rollback — Pencil still does that.
+		if (switchingRef.current) return;
+		const el = event.currentTarget;
+		const isBrowsing = promptHistoryIndexRef.current !== null;
+		const history = collectUserPromptTexts(
+			lines,
+			stripPromptEnvelopeForDisplay,
+		);
+
+		if (shouldNavigateHistoryUp(event, el, isBrowsing)) {
+			if (history.length === 0) return;
 			event.preventDefault();
-			startEditingMessage(line.id, display);
+			if (!isBrowsing) {
+				promptHistoryDraftRef.current = el.value;
+			}
+			const nextIndex = nextHistoryIndexOnUp(
+				history.length,
+				promptHistoryIndexRef.current,
+			);
+			if (nextIndex === null) return;
+			const text = history[nextIndex] ?? "";
+			promptHistoryIndexRef.current = nextIndex;
+			promptHistoryAppliedRef.current = text;
+			setComposerText(text);
+			placeCaretAtEnd(el, text);
+			return;
+		}
+
+		if (shouldNavigateHistoryDown(event, el, isBrowsing)) {
+			event.preventDefault();
+			const nextIndex = nextHistoryIndexOnDown(
+				history.length,
+				promptHistoryIndexRef.current,
+			);
+			if (nextIndex === null) {
+				const draft = promptHistoryDraftRef.current;
+				promptHistoryIndexRef.current = null;
+				promptHistoryDraftRef.current = "";
+				promptHistoryAppliedRef.current = null;
+				setComposerText(draft);
+				placeCaretAtEnd(el, draft);
+				return;
+			}
+			const text = history[nextIndex] ?? "";
+			promptHistoryIndexRef.current = nextIndex;
+			promptHistoryAppliedRef.current = text;
+			setComposerText(text);
+			placeCaretAtEnd(el, text);
 		}
 	};
+
+	/** Clear ↑/↓ history browse when the user edits the recalled text. */
+	const onComposerTextChangeFromUser = useCallback(
+		(text: string) => {
+			if (
+				promptHistoryIndexRef.current !== null &&
+				text !== promptHistoryAppliedRef.current
+			) {
+				promptHistoryIndexRef.current = null;
+				promptHistoryDraftRef.current = "";
+				promptHistoryAppliedRef.current = null;
+			}
+			setComposerText(text);
+		},
+		[setComposerText],
+	);
 
 	const newConversation = () => {
 		if (submittingRef.current) return;
@@ -1759,7 +2040,46 @@ export function useAgentPanel({
 		setActiveTabId("draft");
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
+		clearMessageQueue();
 	};
+
+	const newConversationRef = useRef(newConversation);
+	newConversationRef.current = newConversation;
+	const cancelCurrentRunRef = useRef(cancelCurrentRun);
+	cancelCurrentRunRef.current = cancelCurrentRun;
+
+	const attachSlashCommand = useCallback(
+		(command: SlashCommand) => {
+			setComposerMenuDismissed(true);
+			if (command.kind === "action") {
+				void command.run?.({
+					newConversation: () => newConversationRef.current(),
+					clearConversation,
+					cancelRun: () => void cancelCurrentRunRef.current(),
+					copyLastReply,
+				});
+				setComposerText((prev) =>
+					prev.replace(
+						/(^|\s)\/[^\s]*$/,
+						(_match, prefix: string) => `${prefix}`,
+					),
+				);
+				return;
+			}
+			const skillId = command.skillId;
+			if (skillId) {
+				setSelectedSkillIds((prev) => [...new Set([...prev, skillId])]);
+			}
+			const template = command.template ?? "";
+			setComposerText((prev) =>
+				prev.replace(
+					/(^|\s)\/[^\s]*$/,
+					(_match, prefix: string) => `${prefix}${template}`,
+				),
+			);
+		},
+		[clearConversation, copyLastReply, setSelectedSkillIds, setComposerText],
+	);
 
 	/** Strip Host/Codex machine envelopes so Chat never shows system preamble. */
 	const sanitizeChatLines = (raw: ChatLine[]): ChatLine[] =>
@@ -1775,6 +2095,7 @@ export function useAgentPanel({
 		if (submittingRef.current) return;
 		const hydrationGeneration = ++historyHydrationGenRef.current;
 		setHistoryOpen(false);
+		clearMessageQueue();
 		if (!supportsResume || item.lines.length > 0) {
 			activateComposerSession(item.id);
 			setLines(sanitizeChatLines(item.lines));
@@ -1885,6 +2206,9 @@ export function useAgentPanel({
 		resendEditedMessage,
 		startEditingMessage,
 		send,
+		submitComposer,
+		messageQueue,
+		removeQueuedMessage,
 		// History
 		sessionHistory,
 		historyOpen,
@@ -1899,9 +2223,11 @@ export function useAgentPanel({
 		// Composer
 		composerText,
 		setComposerText,
+		onComposerTextChangeFromUser,
 		setComposerMenuDismissed,
 		setMentionActiveIndex,
 		setSkillActiveIndex,
+		setSlashActiveIndex,
 		handleComposerMenuKeyDown,
 		handleComposerDragOver,
 		handleComposerDrop,
@@ -1926,6 +2252,10 @@ export function useAgentPanel({
 		skillOptions,
 		skillActiveIndex,
 		attachSkill,
+		showSlashMenu,
+		slashOptions,
+		slashActiveIndex,
+		attachSlashCommand,
 		modelSelectorOpen,
 		setModelSelectorOpen,
 		models,
@@ -1945,8 +2275,6 @@ export function useAgentPanel({
 		fastEnabled,
 		setFastEnabled,
 		cancelCurrentRun,
-		hasStreamingAgentMessage,
-		composerControlsMuted,
 		// Permission
 		permissionRequest,
 		setPermissionRequest,

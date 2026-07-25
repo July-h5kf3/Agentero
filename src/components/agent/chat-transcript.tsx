@@ -92,6 +92,7 @@ export function ChatTranscript({
 	onResendEdited,
 	onStartEditing,
 	onSendSuggestion,
+	onOpenSource,
 }: {
 	isZen: boolean;
 	lines: ChatLine[];
@@ -117,6 +118,8 @@ export function ChatTranscript({
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
+	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
+	onOpenSource?: (source: string) => void;
 }) {
 	const { t } = useTranslation("agent");
 
@@ -425,6 +428,11 @@ export function ChatTranscript({
 																											? undefined
 																											: t("citation.vaultPath")
 																									}
+																									onOpen={
+																										onOpenSource
+																											? () => onOpenSource(s)
+																											: undefined
+																									}
 																								/>
 																							</InlineCitationCarouselItem>
 																						))}
@@ -458,13 +466,21 @@ export function ChatTranscript({
 											<Sources>
 												<SourcesTrigger count={line.sources.length} />
 												<SourcesContent>
-													{line.sources.map((s) => (
-														<Source
-															key={s}
-															title={s}
-															href={`#${encodeURIComponent(s)}`}
-														/>
-													))}
+													{line.sources.map((s) => {
+														const isHttp = /^https?:\/\//i.test(s);
+														return (
+															<Source
+																key={s}
+																title={s}
+																href={isHttp ? s : undefined}
+																onClick={
+																	onOpenSource
+																		? () => onOpenSource(s)
+																		: undefined
+																}
+															/>
+														);
+													})}
 												</SourcesContent>
 											</Sources>
 										) : null}

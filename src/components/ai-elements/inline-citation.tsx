@@ -271,6 +271,8 @@ export type InlineCitationSourceProps = ComponentProps<"div"> & {
 	title?: string;
 	url?: string;
 	description?: string;
+	/** When set, the card body is clickable (e.g. open paper in the workspace). */
+	onOpen?: () => void;
 };
 
 export const InlineCitationSource = ({
@@ -279,23 +281,49 @@ export const InlineCitationSource = ({
 	description,
 	className,
 	children,
+	onOpen,
 	...props
-}: InlineCitationSourceProps) => (
-	<div className={cn("space-y-1", className)} {...props}>
-		{title && (
-			<h4 className="truncate font-medium text-sm leading-tight">{title}</h4>
-		)}
-		{url && (
-			<p className="truncate break-all text-muted-foreground text-xs">{url}</p>
-		)}
-		{description && (
-			<p className="line-clamp-3 text-muted-foreground text-sm leading-relaxed">
-				{description}
-			</p>
-		)}
-		{children}
-	</div>
-);
+}: InlineCitationSourceProps) => {
+	const content = (
+		<>
+			{title && (
+				<h4 className="truncate font-medium text-sm leading-tight">{title}</h4>
+			)}
+			{url && (
+				<p className="truncate break-all text-muted-foreground text-xs">
+					{url}
+				</p>
+			)}
+			{description && (
+				<p className="line-clamp-3 text-muted-foreground text-sm leading-relaxed">
+					{description}
+				</p>
+			)}
+			{children}
+		</>
+	);
+
+	if (onOpen) {
+		return (
+			<button
+				type="button"
+				className={cn(
+					"w-full space-y-1 rounded-md text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring",
+					className,
+				)}
+				onClick={onOpen}
+			>
+				{content}
+			</button>
+		);
+	}
+
+	return (
+		<div className={cn("space-y-1", className)} {...props}>
+			{content}
+		</div>
+	);
+};
 
 export type InlineCitationQuoteProps = ComponentProps<"blockquote">;
 

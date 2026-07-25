@@ -64,19 +64,41 @@ export const SourcesContent = ({
 
 export type SourceProps = ComponentProps<"a">;
 
-export const Source = ({ href, title, children, ...props }: SourceProps) => (
-	<a
-		className="flex items-center gap-2"
-		href={href}
-		rel="noreferrer"
-		target="_blank"
-		{...props}
-	>
-		{children ?? (
-			<>
-				<BookIcon className="h-4 w-4" />
-				<span className="block font-medium">{title}</span>
-			</>
-		)}
-	</a>
-);
+export const Source = ({
+	href,
+	title,
+	children,
+	className,
+	onClick,
+	...props
+}: SourceProps) => {
+	const isExternal = Boolean(href && /^https?:\/\//i.test(href));
+
+	return (
+		<a
+			className={cn(
+				"flex items-center gap-2 rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+				onClick || href ? "cursor-pointer" : undefined,
+				className,
+			)}
+			href={href ?? "#"}
+			rel={isExternal ? "noreferrer" : undefined}
+			target={isExternal ? "_blank" : undefined}
+			onClick={(event) => {
+				// Vault paths / app navigation: parent handles open; prevent hash jump.
+				if (onClick) {
+					event.preventDefault();
+					onClick(event);
+				}
+			}}
+			{...props}
+		>
+			{children ?? (
+				<>
+					<BookIcon className="h-4 w-4 shrink-0" />
+					<span className="block min-w-0 truncate font-medium">{title}</span>
+				</>
+			)}
+		</a>
+	);
+};

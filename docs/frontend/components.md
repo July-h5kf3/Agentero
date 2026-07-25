@@ -57,7 +57,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | [Confirmation](https://elements.ai-sdk.dev/components/confirmation) | `confirmation` | 人在环确认 | 📦（Host 仍自动选第一项） |
 | [Task](https://elements.ai-sdk.dev/components/task) | `task` | 任务列表 / 进度折叠 | ✅ 工具调用摘要 |
 | [Plan](https://elements.ai-sdk.dev/components/plan) | `plan` | 计划步骤展示 | ✅ `agent:plan` |
-| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办 | 📦 |
+| [Queue](https://elements.ai-sdk.dev/components/queue) | `queue` | 消息队列、待办 | ✅ Composer waitlist（运行中继续输入的后续消息） |
 | [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint) | `checkpoint` | 检查点 / 里程碑 | ✅ 系统行 |
 | [Agent](https://elements.ai-sdk.dev/components/agent) | `agent` | Agent 身份 UI | — |
 | [Context](https://elements.ai-sdk.dev/components/context) | `context` | 上下文窗口/用量 | ✅ `agent:usage` |
@@ -124,6 +124,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | `conversation.tsx` | 列表 / 空态 / 贴底 | `agent/agent-panel` |
 | `message.tsx` | Message + Actions / Response | `agent/agent-panel` |
 | `prompt-input.tsx` | Composer；**IME 组字中 Enter 不提交**（见 [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)） | `agent/agent-panel` |
+| `queue.tsx` | 运行中 follow-up waitlist（可折叠列表 + 移除） | `agent/agent-composer` |
 | `sources.tsx` | Vault 引用 | `agent/agent-panel` |
 | `reasoning.tsx` | Thought 折叠 | `agent/agent-panel` |
 | `tool.tsx` | ACP tool 调用 | `agent/agent-panel` |
@@ -134,7 +135,7 @@ pnpm dlx shadcn@latest add https://elements.ai-sdk.dev/api/registry/message.json
 | `context.tsx` | Token 用量 | `agent/agent-panel` header |
 | `file-tree.tsx` | Vault 树 | `sidebar/file-tree` |
 | `inline-citation.tsx` | 正文旁引用徽章 | `agent/agent-panel` |
-| 其它已装未接 | chain-of-thought, queue, confirmation, persona, attachments, code-block | 按需扩展 |
+| 其它已装未接 | chain-of-thought, confirmation, persona, attachments, code-block | 按需扩展 |
 
 ---
 
@@ -151,10 +152,14 @@ Conversation
         MessageResponse                                    // ACP message
     Sources（可选）
   ConversationScrollButton
+Queue（可选，运行中已排队的 follow-up）
+  QueueSection → QueueList → QueueItem
 PromptInput
   PromptInputBody → PromptInputTextarea
   PromptInputFooter → PromptInputTools + PromptInputSubmit
 ```
+
+运行中仍可输入：有正文时提交进入 waitlist（当前回复结束后自动 `runOnce`）；空输入时按钮为停止（Esc 同效）。
 
 ### 4.2 流式事件映射
 
@@ -165,6 +170,8 @@ PromptInput
 | `agent:stream` `kind=message`（默认） | 追加到最后一条 agent 的正文 `MessageResponse` |
 | `agent:completed` | 定稿正文 / reasoning + `sources` |
 | `agent:failed` | 去掉未完成 streaming，追加 error |
+
+**Sources / 行内引用点击**：Vault 相对路径（如 `papers/…/NOTES.md`）经 `onOpenSource` → 若属于论文单元则 `openPaper`（PDF + NOTES），否则打开对应文件 tab；`http(s)` 用系统浏览器。禅模式下会先退出禅模式再打开论文。
 
 监听需可取消，避免 Strict Mode 双挂载导致重复气泡。
 
