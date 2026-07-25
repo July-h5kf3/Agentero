@@ -72,7 +72,7 @@ leading YAML frontmatter 的 `aliases` 列表会参与目标解析；`title` 不
 1. 从 Markdown 源文本提取 Wikilink、embed token 和 Vault-local Markdown links；fenced code、inline code、外部 URL 不产生关系。
 2. occurrence 保留语法、embed 标记、目标字节范围、alias/label、typed fragment、行号和上下文。
 3. resolver 先匹配路径（Markdown link 先按来源目录），再匹配唯一后缀、唯一文件名和唯一 YAML alias；任意多命中返回 `ambiguous`。
-4. 目标文件命中后按 heading 层级或 block ID 验证 fragment，返回 `resolved`、`missing`、`ambiguous` 或 `invalidFragment`。
+4. 目标文件命中后按 heading 层级或 block ID 验证 fragment，返回 `resolved`、`missing`、`ambiguous` 或 `invalidFragment`。点击 `invalidFragment` 链接时仍打开已解析的目标文件，但不继续定位失效 fragment，并保留错误 Toast。
 
 ### 2.3 落盘纪律
 

@@ -631,6 +631,27 @@ export type WikiNavTarget = {
 	fragment?: LinkFragment;
 };
 
+/**
+ * Select the file-level destination for a link click.
+ *
+ * An invalid fragment still has a valid target file, so navigation degrades to
+ * that file without forwarding the stale heading/block intent.
+ */
+export function wikiNavigationDestination(nav: WikiNavTarget): {
+	path: string;
+	fragment?: LinkFragment;
+	warning?: "invalidFragment";
+} | null {
+	if (!nav.path) return null;
+	if (nav.status === "resolved") {
+		return { path: nav.path, fragment: nav.fragment };
+	}
+	if (nav.status === "invalidFragment") {
+		return { path: nav.path, warning: "invalidFragment" };
+	}
+	return null;
+}
+
 /** Encode navigation payload into a markdown-safe href. */
 export function encodeWikiHref(nav: WikiNavTarget): string {
 	const payload = [

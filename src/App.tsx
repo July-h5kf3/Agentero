@@ -193,6 +193,7 @@ import {
 	type WikiNavTarget,
 	type WikiRenameHeadingRequest,
 	type WikiRenameResult,
+	wikiNavigationDestination,
 	wikiRenameFailure,
 } from "@/lib/wiki";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
@@ -3811,22 +3812,33 @@ export default function App() {
 
 	const handleWikiNavigate = useCallback(
 		async (nav: WikiNavTarget) => {
-			if (nav.status === "resolved" && nav.path) {
+			const destination = wikiNavigationDestination(nav);
+			if (destination) {
 				if (!vaultPath) {
 					notifyError(t("errors.openVaultForLinks"));
 					return;
 				}
-				const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(nav.path)}`;
+				const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(destination.path)}`;
 				openTab(full, { preferMode: preferredModeForPath(full) });
-				if (nav.fragment) {
+				if (destination.fragment) {
 					const intent = {
 						id: ++wikiNavigationIntentIdRef.current,
-						fragment: nav.fragment,
+						fragment: destination.fragment,
 					};
 					setTabs((previous) =>
 						patchTab(previous, tabIdForPath(full), {
 							navigationIntent: intent,
 						}),
+					);
+				}
+				if (destination.warning === "invalidFragment") {
+					setTabs((previous) =>
+						patchTab(previous, tabIdForPath(full), {
+							navigationIntent: undefined,
+						}),
+					);
+					notifyError(
+						t("errors.wikiLinkInvalidFragment", { target: nav.targetRaw }),
 					);
 				}
 				return;
