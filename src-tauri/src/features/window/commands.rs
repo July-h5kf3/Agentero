@@ -1,11 +1,20 @@
 //! Multi-window helpers.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
 
+// `Manager` (for `.state()`/`.menu()`) and the settings store are only touched
+// by the macOS traffic-light branch below; importing them unconditionally trips
+// `unused_imports` (and thus `clippy -D warnings`) on Windows/Linux.
+#[cfg(target_os = "macos")]
+use tauri::Manager;
+
+#[cfg(target_os = "macos")]
 use crate::features::settings::AppSettingsStore;
 
 /// Default traffic-light y position at 100% UI scale. Matches tauri.conf.json.
+#[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_Y_DEFAULT: f64 = 18.0;
+#[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 14.0;
 
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).

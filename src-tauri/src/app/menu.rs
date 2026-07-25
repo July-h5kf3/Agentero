@@ -4,6 +4,7 @@
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 
 /// Labels for the native application menu.
+#[cfg(target_os = "macos")]
 pub struct MenuLabels {
     pub settings: &'static str,
     pub new_window: &'static str,
@@ -20,6 +21,7 @@ pub struct MenuLabels {
     pub window: &'static str,
 }
 
+#[cfg(target_os = "macos")]
 const EN: MenuLabels = MenuLabels {
     settings: "Settings…",
     new_window: "New Window",
@@ -37,6 +39,7 @@ const EN: MenuLabels = MenuLabels {
     window: "Window",
 };
 
+#[cfg(target_os = "macos")]
 const ZH_CN: MenuLabels = MenuLabels {
     settings: "设置…",
     new_window: "新建窗口",
@@ -54,6 +57,7 @@ const ZH_CN: MenuLabels = MenuLabels {
 };
 
 /// Return the menu label set for a locale, falling back to English.
+#[cfg(target_os = "macos")]
 pub fn menu_labels(lang: &str) -> &'static MenuLabels {
     match lang {
         "zh-CN" | "zh" => &ZH_CN,
