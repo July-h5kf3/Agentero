@@ -5,12 +5,12 @@ use crate::core::fs::WriteOpts;
 use crate::features::catalog::papers;
 use crate::features::connector::{ConnectorController, ConnectorProgress};
 use crate::features::import::{
-    enrich_remote_urls, ensure_paper_assets_with_cookies, free_mt_to_zh, looks_mostly_cjk,
-    map_zotero_item, normalize_parent_dir, paper_record_from_meta, write_paper_shell_opts,
-    PaperMeta,
+    enrich_remote_urls, ensure_paper_assets_with_cookies, map_zotero_item, normalize_parent_dir,
+    paper_record_from_meta, write_paper_shell_opts, PaperMeta,
 };
 use crate::features::remote::import_bridge::{unique_remote_paper_path, upload_tree};
 use crate::features::remote::RemoteSession;
+use crate::features::translate::{free_mt_to_zh, looks_mostly_cjk};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};

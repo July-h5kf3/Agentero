@@ -949,67 +949,15 @@ pub(crate) async fn write_paper_shell_opts(
 }
 
 /// Prefer zh-CN translation of the abstract for NOTES.md display.
-///
-/// Free MT endpoints are unofficial and any single one may be blocked or
-/// rate-limited (e.g. Google is unreachable from mainland China), so try a
-/// small fallback chain and keep the original text only when every engine fails.
+/// Falls back to the original text when every free engine fails.
 async fn abstract_for_notes(text: &str) -> String {
+    use crate::features::translate::{free_mt_to_zh, looks_mostly_cjk};
     if looks_mostly_cjk(text) {
         return text.to_string();
     }
     free_mt_to_zh(text)
         .await
         .unwrap_or_else(|| text.to_string())
-}
-
-/// zh-CN via the free-MT fallback chain; `None` when every engine fails.
-/// Free MT endpoints are unofficial and any single one may be blocked or
-/// rate-limited (e.g. Google is unreachable from mainland China).
-pub(crate) async fn free_mt_to_zh(text: &str) -> Option<String> {
-    let slice: String = text
-        .chars()
-        .take(crate::features::translate::MAX_TEXT_CHARS)
-        .collect();
-    for provider in [
-        "googleapi",
-        "bing",
-        "youdao",
-        "huoshanweb",
-        "tencenttransmart",
-    ] {
-        if let Ok(r) = crate::features::translate::translate_text(
-            crate::features::translate::TranslateTextArgs {
-                text: slice.clone(),
-                source_lang: "auto".into(),
-                target_lang: "zh-CN".into(),
-                provider: provider.into(),
-                free_base_url: None,
-                timeout_ms: Some(15_000),
-            },
-        )
-        .await
-        {
-            let t = r.text.trim();
-            if !t.is_empty() {
-                return Some(t.to_string());
-            }
-        }
-    }
-    None
-}
-
-/// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
-pub(crate) fn looks_mostly_cjk(s: &str) -> bool {
-    let mut cjk = 0usize;
-    let mut letters = 0usize;
-    for c in s.chars() {
-        if ('\u{4e00}'..='\u{9fff}').contains(&c) {
-            cjk += 1;
-        } else if c.is_ascii_alphabetic() {
-            letters += 1;
-        }
-    }
-    cjk > 0 && cjk >= letters
 }
 
 pub(crate) fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
@@ -1056,15 +1004,6 @@ mod tests {
         );
         assert_eq!(title_from_stem("  Hello   World  "), "Hello World");
         assert_eq!(title_from_stem("   "), "Untitled");
-    }
-
-    #[test]
-    fn looks_mostly_cjk_detects_chinese() {
-        assert!(looks_mostly_cjk("本文提出了一种新的注意力机制。"));
-        assert!(!looks_mostly_cjk(
-            "We propose a new attention mechanism for sequence transduction."
-        ));
-        assert!(!looks_mostly_cjk(""));
     }
 
     #[test]

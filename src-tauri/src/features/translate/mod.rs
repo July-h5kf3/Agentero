@@ -24,6 +24,54 @@ pub const FREE_PROVIDERS: &[&str] = &[
     "libre",
 ];
 
+/// Fallback order for best-effort zh-CN translation (NOTES abstract etc.).
+/// Any single engine may be blocked or rate-limited (e.g. Google from
+/// mainland China), so callers walk this chain until one succeeds.
+pub const ZH_FALLBACK_CHAIN: &[&str] = &[
+    "googleapi",
+    "bing",
+    "youdao",
+    "huoshanweb",
+    "tencenttransmart",
+];
+
+/// zh-CN via the free-MT fallback chain; `None` when every engine fails.
+pub async fn free_mt_to_zh(text: &str) -> Option<String> {
+    let slice: String = text.chars().take(MAX_TEXT_CHARS).collect();
+    for provider in ZH_FALLBACK_CHAIN {
+        if let Ok(r) = translate_text(TranslateTextArgs {
+            text: slice.clone(),
+            source_lang: "auto".into(),
+            target_lang: "zh-CN".into(),
+            provider: (*provider).into(),
+            free_base_url: None,
+            timeout_ms: Some(15_000),
+        })
+        .await
+        {
+            let t = r.text.trim();
+            if !t.is_empty() {
+                return Some(t.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Heuristic: already mostly CJK → skip MT (e.g. Chinese papers).
+pub fn looks_mostly_cjk(s: &str) -> bool {
+    let mut cjk = 0usize;
+    let mut letters = 0usize;
+    for c in s.chars() {
+        if ('\u{4e00}'..='\u{9fff}').contains(&c) {
+            cjk += 1;
+        } else if c.is_ascii_alphabetic() {
+            letters += 1;
+        }
+    }
+    cjk > 0 && cjk >= letters
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslateTextArgs {
@@ -573,6 +621,21 @@ mod tests {
         assert!(FREE_PROVIDERS.contains(&"bing"));
         assert!(FREE_PROVIDERS.contains(&"youdao"));
         assert!(FREE_PROVIDERS.contains(&"huoshanweb"));
+        for p in ZH_FALLBACK_CHAIN {
+            assert!(
+                FREE_PROVIDERS.contains(p),
+                "{p} missing from FREE_PROVIDERS"
+            );
+        }
+    }
+
+    #[test]
+    fn looks_mostly_cjk_detects_chinese() {
+        assert!(looks_mostly_cjk("本文提出了一种新的注意力机制。"));
+        assert!(!looks_mostly_cjk(
+            "We propose a new attention mechanism for sequence transduction."
+        ));
+        assert!(!looks_mostly_cjk(""));
     }
 }
 
