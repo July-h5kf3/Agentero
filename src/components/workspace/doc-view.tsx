@@ -1,11 +1,7 @@
-import { memo } from "react";
-import { MarkdownEditor } from "@/components/editor/markdown-editor";
+import { lazy, memo, Suspense } from "react";
 import { PapersLibrary } from "@/components/library/papers-library";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-	PdfViewer,
-	type PdfViewerHandle,
-} from "@/components/viewer/embed/pdf-viewer";
+import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
 import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
@@ -16,6 +12,19 @@ import type { LibraryColumnPref } from "@/lib/settings";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 import type { WikiRenameHeadingRequest } from "@/lib/wiki";
 import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
+
+// Heavyweight viewers are lazy-loaded so the EmbedPDF (PDFium) and Plate
+// editor bundles stay out of the initial chunk and are fetched on first use.
+const PdfViewer = lazy(() =>
+	import("@/components/viewer/embed/pdf-viewer").then((m) => ({
+		default: m.PdfViewer,
+	})),
+);
+const MarkdownEditor = lazy(() =>
+	import("@/components/editor/markdown-editor").then((m) => ({
+		default: m.MarkdownEditor,
+	})),
+);
 
 /** Library-tab-only props (ignored by PDF / editor / trash). */
 export type DocViewLibraryProps = {
@@ -149,33 +158,39 @@ export const DocView = memo(function DocView({
 	if (tab.mode === "markdown") {
 		return (
 			<div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-muted/30">
-				<MarkdownEditor
-					key={
-						isNotes
-							? `notes-center-${tab.id}-${tab.notesKey}`
-							: `file-${tab.id}-${tab.seedKey}`
-					}
-					className="h-full min-h-0"
-					initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
-					filePath={
-						isNotes ? tab.notesPath : isMarkdownPath(tab.path) ? tab.path : null
-					}
-					navigationIntent={tab.navigationIntent}
-					fontSize={editor.fontSize}
-					showToolbar={editor.showToolbar}
-					placeholder={
-						isNotes ? editor.notesPlaceholder : editor.markdownPlaceholder
-					}
-					onPersist={editor.onPersistFile}
-					onAssetsChanged={editor.onAssetsChanged}
-					onRenameHeading={editor.onRenameHeading}
-					onDirtyChange={(d) =>
-						editor.onTabPatch(
-							tab.id,
-							isNotes ? { notesDirty: d } : { markdownDirty: d },
-						)
-					}
-				/>
+				<Suspense fallback={<TabLoadingSkeleton />}>
+					<MarkdownEditor
+						key={
+							isNotes
+								? `notes-center-${tab.id}-${tab.notesKey}`
+								: `file-${tab.id}-${tab.seedKey}`
+						}
+						className="h-full min-h-0"
+						initialMarkdown={isNotes ? tab.notesSeed : tab.markdownSeed}
+						filePath={
+							isNotes
+								? tab.notesPath
+								: isMarkdownPath(tab.path)
+									? tab.path
+									: null
+						}
+						navigationIntent={tab.navigationIntent}
+						fontSize={editor.fontSize}
+						showToolbar={editor.showToolbar}
+						placeholder={
+							isNotes ? editor.notesPlaceholder : editor.markdownPlaceholder
+						}
+						onPersist={editor.onPersistFile}
+						onAssetsChanged={editor.onAssetsChanged}
+						onRenameHeading={editor.onRenameHeading}
+						onDirtyChange={(d) =>
+							editor.onTabPatch(
+								tab.id,
+								isNotes ? { notesDirty: d } : { markdownDirty: d },
+							)
+						}
+					/>
+				</Suspense>
 			</div>
 		);
 	}
@@ -190,26 +205,30 @@ export const DocView = memo(function DocView({
 		if (!active && !pdfKeepMounted) return null;
 		return (
 			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-				<PdfViewer
-					source={tab.pdfUrl}
-					sourceBytes={tab.pdfBytes}
-					docId={tab.id}
-					paperAbsPath={
-						tab.notesPath ? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "") : null
-					}
-					paperRelPath={
-						tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
-					}
-					vaultPath={vaultPath}
-					zen={pdf.zen}
-					onToggleZen={pdf.onToggleZen}
-					onOpenAnnotations={pdf.onOpenAnnotations}
-					onOpenSettings={pdf.onOpenSettings}
-					className="h-full w-full"
-					onHandle={(h) => pdf.registerHandle(tab.id, h)}
-					onHighlightsChange={(list) => pdf.onHighlightsChange(tab.id, list)}
-					onAsksChange={(list) => pdf.onAsksChange(tab.id, list)}
-				/>
+				<Suspense fallback={<TabLoadingSkeleton />}>
+					<PdfViewer
+						source={tab.pdfUrl}
+						sourceBytes={tab.pdfBytes}
+						docId={tab.id}
+						paperAbsPath={
+							tab.notesPath
+								? tab.notesPath.replace(/[\\/]NOTES\.md$/i, "")
+								: null
+						}
+						paperRelPath={
+							tab.paperMeta?.path ?? paperRelFromNotes(tab.notesPath, vaultPath)
+						}
+						vaultPath={vaultPath}
+						zen={pdf.zen}
+						onToggleZen={pdf.onToggleZen}
+						onOpenAnnotations={pdf.onOpenAnnotations}
+						onOpenSettings={pdf.onOpenSettings}
+						className="h-full w-full"
+						onHandle={(h) => pdf.registerHandle(tab.id, h)}
+						onHighlightsChange={(list) => pdf.onHighlightsChange(tab.id, list)}
+						onAsksChange={(list) => pdf.onAsksChange(tab.id, list)}
+					/>
+				</Suspense>
 			</div>
 		);
 	}

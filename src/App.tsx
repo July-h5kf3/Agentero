@@ -1,9 +1,16 @@
 import { FolderOpen, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { usePanelRef } from "react-resizable-panels";
-import { AgentPanel } from "@/components/agent/agent-panel";
 import { CommandPalette } from "@/components/dialogs/command-palette";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
@@ -235,6 +242,14 @@ import {
 	type CenterViewMode,
 	preferredModeForPath,
 } from "@/lib/workspace/viewer";
+
+// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar /
+// zen mode is opened, so its (large) bundle stays out of the initial chunk.
+const AgentPanel = lazy(() =>
+	import("@/components/agent/agent-panel").then((m) => ({
+		default: m.AgentPanel,
+	})),
+);
 
 /**
  * Number of PDF *viewers* kept mounted (most recent first). Dockview already
@@ -4156,25 +4171,27 @@ export default function App() {
 											"hidden",
 									)}
 								>
-									<AgentPanel
-										vaultPath={vaultPath}
-										selectedPath={selectedPath}
-										selectedPaperTitle={paperMeta?.title ?? null}
-										vaultMarkdownPaths={vaultMdFiles}
-										vaultDirectoryPaths={vaultDirPaths}
-										vaultPaperPaths={vaultPaperPaths}
-										paperMetaByRelPath={paperMetaByRelPath}
-										paperTreeLabelMode={settings.paperTreeLabelMode}
-										className="min-h-0 h-full"
-										title={t("labels.agent")}
-										variant={agentZenMode ? "zen" : "sidebar"}
-										autoFocus={
-											agentZenMode ||
-											(rightSidebarOpen && rightSidebarTab === "agent")
-										}
-										onOpenAgentSettings={() => openSettings("agent")}
-										onOpenSource={handleAgentOpenSource}
-									/>
+									<Suspense fallback={null}>
+										<AgentPanel
+											vaultPath={vaultPath}
+											selectedPath={selectedPath}
+											selectedPaperTitle={paperMeta?.title ?? null}
+											vaultMarkdownPaths={vaultMdFiles}
+											vaultDirectoryPaths={vaultDirPaths}
+											vaultPaperPaths={vaultPaperPaths}
+											paperMetaByRelPath={paperMetaByRelPath}
+											paperTreeLabelMode={settings.paperTreeLabelMode}
+											className="min-h-0 h-full"
+											title={t("labels.agent")}
+											variant={agentZenMode ? "zen" : "sidebar"}
+											autoFocus={
+												agentZenMode ||
+												(rightSidebarOpen && rightSidebarTab === "agent")
+											}
+											onOpenAgentSettings={() => openSettings("agent")}
+											onOpenSource={handleAgentOpenSource}
+										/>
+									</Suspense>
 								</div>
 							)}
 							{rightSidebarOpen &&
