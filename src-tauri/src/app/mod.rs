@@ -4,15 +4,15 @@ mod handlers;
 mod logging;
 pub mod menu;
 
-use crate::services::agent::{AgentRegistry, AgentRunController};
-use crate::services::app_settings::AppSettingsStore;
+use crate::features::agent::{AgentRegistry, AgentRunController};
 #[cfg(not(target_os = "ios"))]
-use crate::services::connector::ConnectorController;
+use crate::features::connector::ConnectorController;
 #[cfg(not(target_os = "ios"))]
-use crate::services::remote::RemoteRegistry;
+use crate::features::remote::RemoteRegistry;
+use crate::features::settings::AppSettingsStore;
 #[cfg(not(target_os = "ios"))]
-use crate::services::watcher::FsWatchController;
-use crate::services::wiki::WikiIndexState;
+use crate::features::watcher::FsWatchController;
+use crate::features::wiki::WikiIndexState;
 #[cfg(not(target_os = "ios"))]
 use std::sync::Arc;
 #[cfg(not(target_os = "ios"))]
@@ -37,7 +37,7 @@ pub fn run() {
         .manage(AppSettingsStore::load())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
-        .manage(crate::services::agent::PermissionGate::new())
+        .manage(crate::features::agent::PermissionGate::new())
         .manage(WikiIndexState::new());
 
     #[cfg(not(target_os = "ios"))]
@@ -92,7 +92,7 @@ pub fn run() {
         builder = builder.on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if id == "new_window" {
-                if let Err(e) = crate::commands::window::window_new(app.clone()) {
+                if let Err(e) = crate::features::window::commands::window_new(app.clone()) {
                     log::error!(target: "agentero::op", "op end window_new ok=false error={e}");
                 }
                 return;

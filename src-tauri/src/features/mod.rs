@@ -1,0 +1,19 @@
+//! Domain features (feature-first layout, aligned with frontend `src/lib`).
+//!
+//! Each submodule owns its service logic and thin `commands` shells.
+//! The headless CLI may import non-agent features; BYOA (`agent`) is desktop-only.
+
+pub mod agent;
+pub mod catalog;
+pub mod connector;
+pub mod import;
+pub mod remote;
+pub mod search;
+pub mod settings;
+pub mod terminal;
+pub mod translate;
+pub mod trash;
+pub mod vault;
+pub mod watcher;
+pub mod wiki;
+pub mod window;

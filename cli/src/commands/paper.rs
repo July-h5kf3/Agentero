@@ -4,9 +4,9 @@ use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
 use crate::style::{format_table, truncate_chars};
-use agentero_lib::services::catalog::papers::{self, PaperRecord, PaperTag};
-use agentero_lib::services::lookup::{self, PaperDownloadAssetsArgs};
-use agentero_lib::services::pdf_parse::{self, PaperParseBodyArgs};
+use agentero_lib::features::catalog::papers::{self, PaperRecord, PaperTag};
+use agentero_lib::features::import::{self, PaperDownloadAssetsArgs};
+use agentero_lib::features::import::pdf_parse::{self, PaperParseBodyArgs};
 use clap::Subcommand;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -500,7 +500,7 @@ fn set_tags(
 async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
-    let result = lookup::download_paper_assets(PaperDownloadAssetsArgs {
+    let result = import::download_paper_assets(PaperDownloadAssetsArgs {
         vault_path: vault.to_string_lossy().to_string(),
         path: paper.path.clone(),
         task_id: None,
@@ -529,12 +529,12 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
-    if lookup::has_local_tex(&dir) {
+    if import::has_local_tex(&dir) {
         return Err(CliError::message(
             "paper has TeX source; PAPER.md is optional — not forcing liteparse",
         ));
     }
-    if !lookup::has_local_pdf(&dir) {
+    if !import::has_local_pdf(&dir) {
         return Err(CliError::asset_missing(
             "no local PDF to parse; run paper download first",
         ));
@@ -564,8 +564,8 @@ async fn parse(globals: &GlobalOpts, ref_: &str, force: bool) -> Result<Value, C
 
 fn probe_assets(dir: &std::path::Path) -> Assets {
     Assets {
-        pdf: lookup::has_local_pdf(dir),
-        tex: lookup::has_local_tex(dir),
+        pdf: import::has_local_pdf(dir),
+        tex: import::has_local_tex(dir),
         paper_md: pdf_parse::has_paper_md(dir),
         notes_md: dir.join("NOTES.md").is_file(),
         marks_dir: dir.join("marks").is_dir(),

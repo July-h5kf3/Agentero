@@ -16,7 +16,7 @@ pub fn build_log_plugin() -> tauri_plugin_log::Builder {
 
     let mut builder = tauri_plugin_log::Builder::new()
         .level(default_level)
-        .level_for("agentero_lib::services::agent", agent_level)
+        .level_for("agentero_lib::features::agent", agent_level)
         .level_for("agentero::op", log::LevelFilter::Info)
         .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
         .max_file_size(5_000_000)
