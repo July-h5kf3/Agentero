@@ -382,8 +382,20 @@ pause\r\n"
     fs::write(&path, body)
         .map_err(|e| AppError::message(format!("failed to write install script: {e}")))?;
 
+    // Rust's `Command` spawns wt directly (no shell), so a literal
+    // `%USERPROFILE%` is never expanded and wt fails with "cannot access startup
+    // directory" (it resolves the literal against the app's cwd). Resolve the
+    // real profile path; fall back to the temp dir, which is guaranteed to
+    // exist (the script was just written under it).
+    let start_dir = std::env::var("USERPROFILE")
+        .ok()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or_else(|| dir.display().to_string());
+
     if Command::new("wt")
-        .args(["-d", "%USERPROFILE%", "cmd", "/K"])
+        .arg("-d")
+        .arg(&start_dir)
+        .args(["cmd", "/K"])
         .arg(&path)
         .spawn()
         .is_ok()
