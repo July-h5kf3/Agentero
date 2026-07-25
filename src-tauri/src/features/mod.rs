@@ -4,6 +4,7 @@
 //! The headless CLI may import non-agent features; BYOA (`agent`) is desktop-only.
 
 pub mod agent;
+pub mod arxiv_proxy;
 pub mod catalog;
 pub mod connector;
 pub mod import;

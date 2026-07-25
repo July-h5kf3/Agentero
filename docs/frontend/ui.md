@@ -260,7 +260,7 @@
     - 划词标记统一落在 **`papers/<id>/marks/`**：高亮 / 批注 → **`marks/annotations.json`**（EmbedPDF 注解；`contents` 非空 = 批注）；提问 / 翻译 → **`marks/<id>.json`**（`kind`: `ask` / `translate`）。提问为多轮 `messages`；成功翻译含 `result` 可回访。翻译 API 失败时仅保留当前错误卡片，不落盘且不显示页边入口，卡片提供跳转翻译设置。均不写 PDF 二进制 / 默认不写 `NOTES.md`。右侧「批注」tab 总览高亮与提问。
   - **PDF 引用与插图（规划中）**：本地 paper PDF 由 Host 生成 `source/agentero-cite.json`、`source/agentero-figures.json` 和 `source/agentero-figures/*.png`；右侧 `Paper Content` 展示 citations/figures。引用 hover 只高亮并预览，点击或侧栏操作跳至参考文献；figure card 跳至 PDF bbox。`@` 菜单和拖拽支持结构化 citation/figure context。完整契约见 [`../backend/pdf-analysis.md`](../backend/pdf-analysis.md)。
   - **PDF/HTML 时默认同组打开 `NOTES.md` panel**（可编辑，自动保存 / `⌘S`；Layout 菜单可关）
-  - **HTML 沙盒**：独立 `<iframe>`；arXiv 允许 scripts（对方 origin）；布局铺满中间栏
+  - **HTML 沙盒**：独立 `<iframe>`；arXiv HTML 经受限 `agentero-arxiv` Host 协议加载，代理同源子资源并隐藏 `.desktop_header` 与展开目录 `nav.ltx_TOC`；其它远程 HTML 保持原始沙盒 iframe；布局铺满中间栏
 - 无障碍：图标按钮必须有可访问名称；焦点环使用主题 `ring`。
 
 ### 3.1 快捷键（对齐 macOS / Apple HIG 习惯）

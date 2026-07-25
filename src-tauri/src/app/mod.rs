@@ -22,6 +22,9 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("agentero-arxiv", |_ctx, request, responder| {
+            crate::features::arxiv_proxy::handle(request, responder);
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())

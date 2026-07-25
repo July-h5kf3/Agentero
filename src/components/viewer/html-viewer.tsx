@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/core/utils";
-import { isArxivHostedUrl } from "@/lib/paper/arxiv";
+import { arxivReaderUrl, isArxivHostedUrl } from "@/lib/paper/arxiv";
 
 type HtmlViewerProps = {
 	/** Remote URL only — streamed in a sandboxed iframe (no local download) */
@@ -47,6 +47,7 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 	}
 
 	const trusted = isArxivHostedUrl(srcUrl);
+	const iframeUrl = trusted ? arxivReaderUrl(srcUrl) : srcUrl;
 	const sandbox = trusted
 		? "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
 		: "allow-popups allow-popups-to-escape-sandbox";
@@ -60,7 +61,7 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 		>
 			<iframe
 				title={t("html.sandboxTitle")}
-				src={srcUrl}
+				src={iframeUrl}
 				sandbox={sandbox}
 				referrerPolicy="no-referrer-when-downgrade"
 				className={cn(
