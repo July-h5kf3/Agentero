@@ -94,6 +94,8 @@
 		"contextRemoveFromTabGroup": "Remove from Tab Group",
 		"tabGroupDefaultName": "Group",
 		"tabGroupDissolve": "Dissolve Tab Group",
+		"tabGroupRenameAria": "Rename tab group",
+		"tabGroupChipAria": "Tab group {{name}}. Double-click to rename, click to expand or collapse.",
 		"tabGroupColor": {
 			"grey": "Grey",
 			"red": "Red",

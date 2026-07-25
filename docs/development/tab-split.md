@@ -72,7 +72,7 @@ export type DocTab = {
 |---|---|
 | Tab 标题 / 关闭 / 组内切换 | dockview 原生 |
 | Tab 右键菜单 | dockview `getTabContextMenuItems`（关闭 / 关闭其他 / 关闭全部 / 新建·移出标签组；**同组**；i18n；关闭经 `panel.api.close` → `onDidRemovePanel`） |
-| Tab 组染色 / 命名 | dockview tab groups：chip 右键 `rename` + `colorPicker` + 解散；色板复用论文标签 `tag-colors`（+ grey）；随 `toJSON()` 持久化。视觉：底部分组线保留；仅组名 chip 浅色底（`index.css` `color-mix`） |
+| Tab 组染色 / 命名 | dockview tab groups：chip **双击**内联重命名（`tabGroupChipComponent`）+ 右键 `rename` / `colorPicker` / 解散；色板复用论文标签 `tag-colors`（+ grey）；随 `toJSON()` 持久化。视觉：chip **无底色**（图标+名）；**展开**保留底部分组色线，**折叠**无 chip 下色条 |
 | 键盘分屏导航 | `keyboardNavigation`（组内 `Ctrl+]`/`[`、组间 `F6`、键盘停靠 `Ctrl+M`）；与 App `⌥⌘←/→` 全局循环正交 |
 | 上下左右分屏、多格网格 | dockview 原生 `addPanel({ position })` + 内部拖拽 |
 | 落点 overlay | `dropOverlayModel`（content 25% 边激活）+ `onWillShowOverlay` / `onWillDrop` 否决未知外部拖拽 |
@@ -120,10 +120,13 @@ export type DocTab = {
 ## 7.2 Tab 组（染色 / 命名）
 
 - **创建**：tab 右键「新建标签组」→ `createTabGroup` + `addPanelToTabGroup`（默认名 i18n、色 `blue`）。
+- **重命名**：chip **双击**（或聚焦后 `F2`）进入内联编辑；Enter / 失焦保存，Esc 取消；空名回退默认名。
 - **chip 右键**：重命名、调色板、解散（`getTabGroupChipContextMenuItems`）。
 - **移出**：tab 已在组内时右键「从标签组移除」。
+- **单击 chip**：折叠 / 展开组（与双击重命名错开短延时）。
+- **折叠态**：dockview 底部分组线缩到 0；不在 chip 下补色条；组内 tab 由 dockview 隐藏。
 - **持久化**：tab groups 含在 dockview `toJSON()` / `fromJSON()` 中，无需 React 额外状态。
-- 典型用途：把同一主题的多篇 PDF + NOTES 编成带色 chip 的逻辑组（仍在同一 dock group 的 tab 条上）。
+- 典型用途：把同一主题的多篇 PDF + NOTES 编成带色底线的逻辑组（仍在同一 dock group 的 tab 条上）。
 
 ## 8. PDF 保活策略（壳 vs 引擎）
 

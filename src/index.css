@@ -279,7 +279,6 @@
 	/* Tab-group hues: paper tag swatches via dock-workspace (tag-colors). */
 	--dv-tab-group-chip-font-size: 0.6875rem;
 	--dv-tab-group-chip-border-radius: 0.375rem;
-	--agentero-tab-group-chip-tint: 28%;
 	--dv-context-menu-background-color: var(--popover);
 	--dv-context-menu-color: var(--popover-foreground);
 	--dv-overlay-z-index: 1000;
@@ -346,26 +345,34 @@
 }
 
 /*
- * Tab group name chip only: soft text-background fill (override dockview solid + white).
- * Bottom underline and member tabs stay dockview defaults.
+ * Tab group chip: no fill — icon + label only (override dockview solid + white).
+ * Expanded: dockview bottom underline under member tabs keeps group color.
+ * Collapsed: no extra bar under the chip (dockview underline width is already 0).
  */
-.agentero-dockview .dv-tab-group-chip:not(.dv-tab-group-chip--accent-off) {
-	background-color: color-mix(
-		in oklab,
-		var(--dv-tab-group-color) var(--agentero-tab-group-chip-tint),
-		var(--background)
-	);
-	color: color-mix(in oklab, var(--dv-tab-group-color) 45%, var(--foreground));
+.agentero-dockview .dv-tab-group-chip {
+	background-color: transparent !important;
+	color: var(--muted-foreground);
 	font-weight: 500;
+	border: none;
+	box-shadow: none;
 }
 
-/* Nameless chip is a small swatch — keep solid accent so it stays legible. */
-.agentero-dockview
-.dv-tab-group-chip:not(.dv-tab-group-chip--accent-off):has(
-	.dv-tab-group-chip-label--empty
-) {
-	background-color: var(--dv-tab-group-color);
-	color: transparent;
+.agentero-dockview .dv-tab-group-chip:hover {
+	color: var(--foreground);
+	background-color: transparent !important;
+}
+
+/* Nameless chip: solid accent swatch (identity only). */
+.agentero-dockview .dv-tab-group-chip:has(.dv-tab-group-chip-label--empty) {
+	background-color: var(
+		--dv-tab-group-color,
+		var(--muted-foreground)
+	) !important;
+	color: transparent !important;
+	width: 12px;
+	height: 12px;
+	padding: 0;
+	border-radius: 50%;
 }
 
 /* Global workspace: always show dockview tab chrome (it owns document tabs). */

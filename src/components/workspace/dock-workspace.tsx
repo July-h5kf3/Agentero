@@ -35,6 +35,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
+import { AgenteroTabGroupChip } from "@/components/workspace/tab-group-chip";
 import { cn } from "@/lib/core/utils";
 import { TAG_COLOR_IDS, tagSwatchStyle } from "@/lib/ui/tag-colors";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
@@ -670,6 +671,7 @@ export const DockWorkspace = memo(
 						keyboardNavigation
 						tabGroupAccent="palette"
 						tabGroupColors={tabGroupColors}
+						tabGroupChipComponent={AgenteroTabGroupChip}
 						getTabContextMenuItems={getTabContextMenuItems}
 						getTabGroupChipContextMenuItems={getTabGroupChipContextMenuItems}
 						onReady={onReady}

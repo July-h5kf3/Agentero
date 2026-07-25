@@ -94,6 +94,8 @@
 		"contextRemoveFromTabGroup": "从标签组移除",
 		"tabGroupDefaultName": "分组",
 		"tabGroupDissolve": "解散标签组",
+		"tabGroupRenameAria": "重命名标签组",
+		"tabGroupChipAria": "标签组 {{name}}。双击重命名，单击展开或折叠。",
 		"tabGroupColor": {
 			"grey": "灰",
 			"red": "红",
