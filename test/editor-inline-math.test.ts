@@ -1,7 +1,9 @@
+import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlateEditor, createSlatePlugin, KEYS } from "platejs";
 import { describe, expect, it } from "vitest";
 
 import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
+import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 
 const TestParagraphPlugin = createSlatePlugin({
 	key: KEYS.p,
@@ -31,6 +33,12 @@ function createInlineMathEditor(text: string) {
 		anchor: { path: [0, 0], offset: text.length },
 		focus: { path: [0, 0], offset: text.length },
 	});
+	return editor;
+}
+
+function typeInlineMath(text: string) {
+	const editor = createInlineMathEditor("");
+	for (const character of text) editor.tf.insertText(character);
 	return editor;
 }
 
@@ -76,5 +84,59 @@ describe("Markdown inline math input", () => {
 				],
 			},
 		]);
+	});
+
+	it("keeps escaped dollar delimiters as ordinary text", () => {
+		const editor = typeInlineMath("\\$xxca\\$");
+
+		expect(editor.children).toEqual([
+			{ type: "p", children: [{ text: "$xxca$" }] },
+		]);
+	});
+
+	it("treats an even backslash run before the opening dollar as unescaped", () => {
+		const editor = createInlineMathEditor("\\\\$c");
+
+		editor.tf.insertText("$");
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: "\\\\" },
+					{ type: "inline_equation", texExpression: "c" },
+					{ text: "" },
+				],
+			},
+		]);
+	});
+
+	it("serializes literal dollar text with Markdown escapes", () => {
+		const editor = createSlateEditor({
+			plugins: [TestParagraphPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [{ text: "$a$" }] }],
+		});
+
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize().trimEnd()).toBe(
+			"\\$a\\$",
+		);
+	});
+
+	it("round-trips escaped dollar text without showing backslashes", () => {
+		const editor = createSlateEditor({
+			plugins: [TestParagraphPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [{ text: "" }] }],
+		});
+
+		editor.children = editor
+			.getApi(MarkdownPlugin)
+			.markdown.deserialize("\\$a\\$");
+
+		expect(editor.children).toMatchObject([
+			{ type: "p", children: [{ text: "$a$" }] },
+		]);
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize().trimEnd()).toBe(
+			"\\$a\\$",
+		);
 	});
 });
