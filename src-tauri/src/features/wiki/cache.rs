@@ -1,8 +1,9 @@
 //! Best-effort persistent snapshot for the rebuildable Wiki index.
 //!
 //! Markdown and Vault target files remain the only facts. A snapshot is restored
-//! only when its schema, parser, vault identity, integrity hash, and every target
-//! file fingerprint match the current Vault.
+//! only when its schema, parser, vault identity, and integrity hash match; the
+//! caller compares per-file stat fingerprints (size + mtime) to decide between a
+//! full restore and an incremental rebuild of changed files.
 
 use crate::core::paths::agentero_cache_dir;
 use crate::features::wiki::models::{ResolvedLink, WikiDocument};
@@ -10,11 +11,11 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub(crate) const WIKI_CACHE_SCHEMA_VERSION: i64 = 1;
+pub(crate) const WIKI_CACHE_SCHEMA_VERSION: i64 = 2;
 pub(crate) const WIKI_PARSER_VERSION: &str = "wiki-parser-2026-07-25-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -22,12 +23,11 @@ pub(crate) struct WikiFileFingerprint {
     pub relative_path: String,
     pub size: i64,
     pub modified_time_ns: i64,
-    pub content_hash: String,
 }
 
 #[derive(Debug)]
 pub(crate) struct WikiCacheSnapshot {
-    pub files: Vec<String>,
+    pub fingerprints: Vec<WikiFileFingerprint>,
     pub documents: Vec<WikiDocument>,
     pub edges: Vec<ResolvedLink>,
 }
@@ -70,40 +70,15 @@ fn hash_bytes(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-pub(crate) fn fingerprint_bytes(
-    relative_path: &str,
-    absolute_path: &Path,
-    bytes: &[u8],
-) -> io::Result<WikiFileFingerprint> {
-    let metadata = fs::metadata(absolute_path)?;
-    Ok(WikiFileFingerprint {
-        relative_path: relative_path.to_string(),
-        size: i64::try_from(metadata.len()).unwrap_or(i64::MAX),
-        modified_time_ns: modified_time_ns(&metadata),
-        content_hash: hash_bytes(bytes),
-    })
-}
-
 pub(crate) fn fingerprint_file(
     relative_path: &str,
     absolute_path: &Path,
 ) -> io::Result<WikiFileFingerprint> {
-    let mut file = fs::File::open(absolute_path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
     let metadata = fs::metadata(absolute_path)?;
     Ok(WikiFileFingerprint {
         relative_path: relative_path.to_string(),
         size: i64::try_from(metadata.len()).unwrap_or(i64::MAX),
         modified_time_ns: modified_time_ns(&metadata),
-        content_hash: hex::encode(hasher.finalize()),
     })
 }
 
@@ -136,11 +111,7 @@ fn open_read_only(path: &Path) -> Result<Connection, String> {
     Ok(connection)
 }
 
-pub(crate) fn load_snapshot(
-    cache_path: &Path,
-    vault_root: &Path,
-    current_fingerprints: &[WikiFileFingerprint],
-) -> WikiCacheLoad {
+pub(crate) fn load_snapshot(cache_path: &Path, vault_root: &Path) -> WikiCacheLoad {
     if !cache_path.is_file() {
         return WikiCacheLoad::Miss;
     }
@@ -175,25 +146,21 @@ pub(crate) fn load_snapshot(
 
         let mut file_statement = connection
             .prepare(
-                "SELECT relative_path, size, modified_time_ns, content_hash
+                "SELECT relative_path, size, modified_time_ns
                  FROM files ORDER BY relative_path",
             )
             .map_err(|error| format!("prepare wiki cache fingerprints: {error}"))?;
-        let stored_fingerprints = file_statement
+        let fingerprints = file_statement
             .query_map([], |row| {
                 Ok(WikiFileFingerprint {
                     relative_path: row.get(0)?,
                     size: row.get(1)?,
                     modified_time_ns: row.get(2)?,
-                    content_hash: row.get(3)?,
                 })
             })
             .map_err(|error| format!("read wiki cache fingerprints: {error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("decode wiki cache fingerprints: {error}"))?;
-        if stored_fingerprints != current_fingerprints {
-            return Err("wiki cache file fingerprints are stale".to_string());
-        }
 
         let mut document_statement = connection
             .prepare(
@@ -244,15 +211,12 @@ pub(crate) fn load_snapshot(
             })
             .collect::<Result<Vec<ResolvedLink>, String>>()?;
 
-        let calculated_hash = snapshot_hash(&stored_fingerprints, &documents, &edges)?;
+        let calculated_hash = snapshot_hash(&fingerprints, &documents, &edges)?;
         if metadata.4 != calculated_hash {
             return Err("wiki cache snapshot integrity hash does not match".to_string());
         }
         Ok(WikiCacheSnapshot {
-            files: stored_fingerprints
-                .iter()
-                .map(|fingerprint| fingerprint.relative_path.clone())
-                .collect(),
+            fingerprints,
             documents,
             edges,
         })
@@ -260,10 +224,7 @@ pub(crate) fn load_snapshot(
 
     match result {
         Ok(snapshot) => WikiCacheLoad::Hit(snapshot),
-        Err(error)
-            if error == "wiki cache version or vault identity is stale"
-                || error == "wiki cache file fingerprints are stale" =>
-        {
+        Err(error) if error == "wiki cache version or vault identity is stale" => {
             WikiCacheLoad::Stale
         }
         Err(error) => WikiCacheLoad::Invalid(error),
@@ -287,8 +248,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), String> {
              CREATE TABLE IF NOT EXISTS files (
                relative_path TEXT PRIMARY KEY,
                size INTEGER NOT NULL,
-               modified_time_ns INTEGER NOT NULL,
-               content_hash TEXT NOT NULL
+               modified_time_ns INTEGER NOT NULL
              );
              CREATE TABLE IF NOT EXISTS documents (
                path TEXT PRIMARY KEY,
@@ -357,14 +317,12 @@ pub(crate) fn store_snapshot(
     for fingerprint in fingerprints {
         transaction
             .execute(
-                "INSERT INTO files
-                 (relative_path, size, modified_time_ns, content_hash)
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO files (relative_path, size, modified_time_ns)
+                 VALUES (?1, ?2, ?3)",
                 params![
                     fingerprint.relative_path,
                     fingerprint.size,
-                    fingerprint.modified_time_ns,
-                    fingerprint.content_hash
+                    fingerprint.modified_time_ns
                 ],
             )
             .map_err(|error| format!("write wiki cache fingerprint: {error}"))?;

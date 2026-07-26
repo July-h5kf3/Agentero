@@ -1,15 +1,15 @@
 //! In-memory wikilink graph index (rebuildable from Vault Markdown).
 
 use crate::features::wiki::cache::{
-    discard_snapshot, fingerprint_bytes, fingerprint_file, fingerprint_files, load_snapshot,
-    store_snapshot, wiki_cache_path, WikiCacheLoad, WikiFileFingerprint,
+    discard_snapshot, fingerprint_files, load_snapshot, store_snapshot, wiki_cache_path,
+    WikiCacheLoad, WikiCacheSnapshot, WikiFileFingerprint,
 };
 use crate::features::wiki::embed::project_markdown;
 use crate::features::wiki::extract::extract_document;
 use crate::features::wiki::models::{
-    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkSyntax,
-    LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink, WikiDocument,
-    WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse,
+    BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkOccurrence,
+    InternalLinkSyntax, LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink,
+    WikiDocument, WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse,
     WikiSearchCandidate, WikiSearchCandidateKind,
 };
 use crate::features::wiki::resolve::{normalize_rel, resolve_occurrence};
@@ -167,7 +167,7 @@ impl WikiIndex {
 
         let files = collect_wiki_target_files(&root).map_err(|e| e.to_string())?;
         if cfg!(test) {
-            return self.rebuild_cold(vault_path, &root, files, None);
+            return self.rebuild_from(vault_path, &root, files, Vec::new(), None, None);
         }
         let cache_path = wiki_cache_path(&root);
         self.rebuild_with_cache_path(vault_path, &root, files, &cache_path, true)
@@ -192,7 +192,7 @@ impl WikiIndex {
         if let Err(error) = discard_snapshot(cache_path) {
             log::warn!(target: "agentero::wiki", "{error}");
         }
-        self.rebuild_cold(vault_path, &root, files, Some(cache_path))
+        self.rebuild_with_cache_path(vault_path, &root, files, cache_path, false)
     }
 
     fn rebuild_with_cache_path(
@@ -203,57 +203,111 @@ impl WikiIndex {
         cache_path: &Path,
         restore: bool,
     ) -> Result<RebuildResult, String> {
-        if restore {
-            match fingerprint_files(root, &files) {
-                Ok(fingerprints) => match load_snapshot(cache_path, root, &fingerprints) {
-                    WikiCacheLoad::Hit(snapshot) => {
+        let fingerprints = match fingerprint_files(root, &files) {
+            Ok(fingerprints) => fingerprints,
+            Err(error) => {
+                log::warn!(
+                    target: "agentero::wiki",
+                    "Wiki cache fingerprint validation unavailable: {error}"
+                );
+                return self.rebuild_from(vault_path, root, files, Vec::new(), None, None);
+            }
+        };
+        let previous = if restore {
+            match load_snapshot(cache_path, root) {
+                WikiCacheLoad::Hit(snapshot) => {
+                    if snapshot.fingerprints == fingerprints {
                         return Ok(self.install_snapshot(
                             vault_path,
-                            snapshot.files,
+                            files,
                             snapshot.documents,
                             snapshot.edges,
                         ));
                     }
-                    WikiCacheLoad::Miss => {}
-                    WikiCacheLoad::Stale => {
-                        if let Err(discard_error) = discard_snapshot(cache_path) {
-                            log::warn!(target: "agentero::wiki", "{discard_error}");
-                        }
+                    Some(snapshot)
+                }
+                WikiCacheLoad::Miss => None,
+                WikiCacheLoad::Stale => {
+                    if let Err(discard_error) = discard_snapshot(cache_path) {
+                        log::warn!(target: "agentero::wiki", "{discard_error}");
                     }
-                    WikiCacheLoad::Invalid(error) => {
-                        log::warn!(
-                            target: "agentero::wiki",
-                            "discarding invalid Wiki cache {}: {error}",
-                            cache_path.display()
-                        );
-                        if let Err(discard_error) = discard_snapshot(cache_path) {
-                            log::warn!(target: "agentero::wiki", "{discard_error}");
-                        }
-                    }
-                },
-                Err(error) => {
+                    None
+                }
+                WikiCacheLoad::Invalid(error) => {
                     log::warn!(
                         target: "agentero::wiki",
-                        "Wiki cache fingerprint validation unavailable: {error}"
+                        "discarding invalid Wiki cache {}: {error}",
+                        cache_path.display()
                     );
+                    if let Err(discard_error) = discard_snapshot(cache_path) {
+                        log::warn!(target: "agentero::wiki", "{discard_error}");
+                    }
+                    None
                 }
             }
-        }
-        self.rebuild_cold(vault_path, root, files, Some(cache_path))
+        } else {
+            None
+        };
+        self.rebuild_from(
+            vault_path,
+            root,
+            files,
+            fingerprints,
+            previous,
+            Some(cache_path),
+        )
     }
 
-    fn rebuild_cold(
+    /// Rebuild the index, reusing parsed documents and occurrences from a prior
+    /// snapshot for every file whose stat fingerprint is unchanged. Only changed
+    /// or new Markdown files are read from disk; link resolution always runs
+    /// against the complete document set.
+    fn rebuild_from(
         &mut self,
         vault_path: &str,
         root: &Path,
         files: Vec<String>,
+        fingerprints: Vec<WikiFileFingerprint>,
+        previous: Option<WikiCacheSnapshot>,
         cache_path: Option<&Path>,
     ) -> Result<RebuildResult, String> {
-        let mut parsed = Vec::new();
+        let current: HashMap<&str, &WikiFileFingerprint> = fingerprints
+            .iter()
+            .map(|fingerprint| (fingerprint.relative_path.as_str(), fingerprint))
+            .collect();
+        let mut prev_documents = HashMap::new();
+        let mut prev_occurrences: HashMap<String, Vec<InternalLinkOccurrence>> = HashMap::new();
+        if let Some(snapshot) = previous {
+            let unchanged: HashSet<String> = snapshot
+                .fingerprints
+                .into_iter()
+                .filter(|stored| current.get(stored.relative_path.as_str()) == Some(&stored))
+                .map(|stored| stored.relative_path)
+                .collect();
+            for document in snapshot.documents {
+                if unchanged.contains(&document.path) {
+                    prev_documents.insert(document.path.clone(), document);
+                }
+            }
+            for edge in snapshot.edges {
+                if unchanged.contains(&edge.occurrence.source) {
+                    prev_occurrences
+                        .entry(edge.occurrence.source.clone())
+                        .or_default()
+                        .push(edge.occurrence);
+                }
+            }
+        }
+
         let mut documents = Vec::new();
-        let mut fingerprints = Vec::<WikiFileFingerprint>::new();
+        let mut occurrences = Vec::new();
         let mut cacheable = cache_path.is_some();
         for rel in &files {
+            if let Some(document) = prev_documents.remove(rel) {
+                documents.push(document);
+                occurrences.extend(prev_occurrences.remove(rel).unwrap_or_default());
+                continue;
+            }
             if !is_markdown(Path::new(rel)) {
                 documents.push(WikiDocument {
                     path: rel.clone(),
@@ -261,41 +315,30 @@ impl WikiIndex {
                     headings: Vec::new(),
                     blocks: Vec::new(),
                 });
-                match fingerprint_file(rel, &root.join(rel)) {
-                    Ok(fingerprint) => fingerprints.push(fingerprint),
-                    Err(_) => cacheable = false,
-                }
                 continue;
             }
-            let abs = root.join(rel);
-            let bytes = match fs::read(&abs) {
+            let bytes = match fs::read(root.join(rel)) {
                 Ok(bytes) => bytes,
                 Err(_) => {
                     cacheable = false;
                     continue;
                 }
             };
-            match fingerprint_bytes(rel, &abs, &bytes) {
-                Ok(fingerprint) => fingerprints.push(fingerprint),
-                Err(_) => cacheable = false,
-            }
-            let content = match String::from_utf8(bytes) {
-                Ok(content) => content,
-                Err(_) => continue,
+            let Ok(content) = String::from_utf8(bytes) else {
+                continue;
             };
-            let (document, occurrences) = extract_document(rel, &content);
+            let (document, parsed) = extract_document(rel, &content);
             documents.push(document);
-            parsed.extend(occurrences);
+            occurrences.extend(parsed);
         }
 
-        let mut edges = Vec::new();
-        for occurrence in parsed {
-            edges.push(resolve_occurrence(occurrence, &documents));
-        }
+        let edges = occurrences
+            .into_iter()
+            .map(|occurrence| resolve_occurrence(occurrence, &documents))
+            .collect();
 
         let result = self.install_snapshot(vault_path, files, documents, edges);
         if cacheable {
-            fingerprints.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
             if let Some(cache_path) = cache_path {
                 if let Err(error) = store_snapshot(
                     cache_path,

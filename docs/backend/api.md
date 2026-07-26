@@ -1710,7 +1710,7 @@ Host 以 `expectedContent + headingPath + headingLine` 复核保存态标题身�
 // }
 ```
 
-snapshot 保存所有 Wiki target 的 size、mtime、SHA-256，以及 documents 与 resolved occurrences。schema/parser version、Vault identity、文件指纹或 snapshot integrity hash 任一不匹配时，普通 rebuild 会丢弃旧 snapshot 并冷重建；cache 写失败只记录 warning，内存 rebuild 仍成功。
+snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内容），以及 documents 与 resolved occurrences。schema/parser version、Vault identity 或 snapshot integrity hash 不匹配时丢弃旧 snapshot 并冷重建；指纹部分不一致时增量重建（只重新解析变化的 Markdown，未变文件复用缓存解析结果，链接解析全量重跑）；cache 写失败只记录 warning，内存 rebuild 仍成功。
 
 ### 3.9 配置
 
