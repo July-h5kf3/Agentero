@@ -37,11 +37,17 @@ import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 
 // Languages actually registered with lowlight, kept in sync by sourcing the
-// same `common` bundle the plugin uses (markdown-editor-kit.tsx).
+// same `common` bundle the plugin uses (markdown-editor-kit.tsx). `plaintext`
+// is part of `common` and serves as the default "no highlighting" entry.
 const LANGUAGES = Object.keys(common).sort();
 
-/** Sentinel value for the "no language / plain text" option. */
-const PLAIN = "__plain__";
+/**
+ * Languages that mean "no highlighting". Selecting one clears the persisted
+ * `lang` (writes `undefined`) so the block serializes as a bare fenced block
+ * rather than ```` ```plaintext ````, while still matching the "plain" intent.
+ * lowlight treats both undefined and "plaintext" as a no-op (no decorations).
+ */
+const PLAIN_LANGS = new Set(["plaintext", "plain"]);
 
 function CodeLanguageSelect() {
 	const { t } = useTranslation("editor");
@@ -54,12 +60,15 @@ function CodeLanguageSelect() {
 	// still renders from the persisted `lang` attribute.
 	if (readOnly) return null;
 
+	// `lang: undefined` (no highlighting) is represented in the picker by the
+	// `plaintext` option.
 	const current = element.lang ?? "";
-	const value = current ? current : PLAIN;
+	const value = current ? current : "plaintext";
 	const label = current ? current : t("codeBlock.plainText");
 
 	const onSelect = (next: string) => {
-		const lang = next === PLAIN ? undefined : next;
+		// Plain variants clear `lang` so the block serializes without a fence lang.
+		const lang = PLAIN_LANGS.has(next) ? undefined : next;
 		editor.tf.setNodes<TCodeBlockElement>({ lang }, { at: element });
 		setOpen(false);
 	};
@@ -72,7 +81,7 @@ function CodeLanguageSelect() {
 						type="button"
 						aria-label={t("codeBlock.languageLabel")}
 						className={cn(
-							"flex h-6 items-center gap-1 rounded-md bg-background/80 px-1.5 font-mono text-xs text-muted-foreground opacity-0 backdrop-blur transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
+							"flex h-6 items-center rounded-md bg-background/80 px-1.5 font-mono text-xs text-muted-foreground opacity-0 backdrop-blur transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
 						)}
 					>
 						{label}
@@ -88,12 +97,6 @@ function CodeLanguageSelect() {
 						<CommandList className="max-h-[40vh]">
 							<CommandEmpty>{t("codeBlock.noMatch")}</CommandEmpty>
 							<CommandGroup>
-								<LanguageItem
-									value={PLAIN}
-									label={t("codeBlock.plainText")}
-									selected={value === PLAIN}
-									onSelect={onSelect}
-								/>
 								{LANGUAGES.map((lang) => (
 									<LanguageItem
 										key={lang}
