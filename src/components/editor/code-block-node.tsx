@@ -1,7 +1,8 @@
 "use client";
 
 import { common } from "lowlight";
-import type { TCodeBlockElement, TCodeSyntaxLeaf } from "platejs";
+import { CheckIcon, CopyIcon } from "lucide-react";
+import { NodeApi, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
 import {
 	PlateElement,
 	type PlateElementProps,
@@ -26,6 +27,13 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 
 // Languages actually registered with lowlight, kept in sync by sourcing the
@@ -126,6 +134,58 @@ function LanguageItem({
 	);
 }
 
+function CopyCodeButton({ element }: { element: TCodeBlockElement }) {
+	const { t } = useTranslation("editor");
+	const [copied, setCopied] = React.useState(false);
+	const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	React.useEffect(
+		() => () => {
+			if (timerRef.current) clearTimeout(timerRef.current);
+		},
+		[],
+	);
+
+	const onCopy = async () => {
+		// NodeApi.string recurses every descendant text of the code_block, joining
+		// code_line children with newlines — the raw code without markers/markup.
+		const text = NodeApi.string(element);
+		const ok = await copyTextToClipboard(text, {
+			errorMessage: t("codeBlock.copyFailed"),
+		});
+		if (!ok) return;
+		setCopied(true);
+		if (timerRef.current) clearTimeout(timerRef.current);
+		timerRef.current = setTimeout(() => setCopied(false), 1500);
+	};
+
+	return (
+		<div contentEditable={false} className="absolute top-1.5 right-1.5 z-10">
+			<TooltipProvider delayDuration={300}>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							aria-label={t("codeBlock.copy")}
+							onClick={onCopy}
+							className={cn(
+								"flex size-6 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none group-focus-within:opacity-100 group-hover:opacity-100",
+							)}
+						>
+							{copied ? (
+								<CheckIcon className="size-3.5 text-green-600 dark:text-green-500" />
+							) : (
+								<CopyIcon className="size-3.5" />
+							)}
+						</button>
+					</TooltipTrigger>
+					<TooltipContent>{t("codeBlock.copy")}</TooltipContent>
+				</Tooltip>
+			</TooltipProvider>
+		</div>
+	);
+}
+
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 	return (
 		// Constrain width so long lines overflow inside <pre> (scroll), not the editor.
@@ -136,6 +196,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 		<PlateElement className="max-w-full min-w-0 py-1" {...props}>
 			<div className="agentero-codeblock group relative max-w-full min-w-0 overflow-hidden rounded-md bg-muted/50">
 				<CodeLanguageSelect />
+				<CopyCodeButton element={props.element} />
 				<pre className="agentero-scroll-both agentero-scroll-x-only max-w-full overflow-x-auto p-4 font-mono text-sm leading-[normal] whitespace-pre [tab-size:2]">
 					<code className="block w-max min-w-full">{props.children}</code>
 				</pre>
