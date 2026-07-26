@@ -8,6 +8,7 @@ import { KEYS } from "platejs";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { MarkdownPastePlugin } from "@/components/editor/plugins/markdown-paste-plugin";
 import { wikiLinkRules } from "@/components/editor/plugins/wikilink-model";
 
 export const MarkdownKit = [
@@ -46,4 +47,5 @@ export const MarkdownKit = [
 			rules: { ...wikiLinkRules },
 		},
 	}),
+	MarkdownPastePlugin,
 ];

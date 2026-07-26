@@ -1,3 +1,4 @@
+import { BaseListPlugin } from "@platejs/list";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlateEditor, createSlatePlugin, KEYS } from "platejs";
 import { describe, expect, it } from "vitest";
@@ -40,6 +41,34 @@ function typeInlineMath(text: string) {
 	const editor = createInlineMathEditor("");
 	for (const character of text) editor.tf.insertText(character);
 	return editor;
+}
+
+function createMarkdownPasteEditor() {
+	const editor = createSlateEditor({
+		plugins: [
+			TestParagraphPlugin,
+			TestInlineEquationPlugin,
+			BaseListPlugin,
+			...MarkdownKit,
+		],
+		value: [{ type: "p", children: [{ text: "" }] }],
+	});
+	editor.tf.select({
+		anchor: { path: [0, 0], offset: 0 },
+		focus: { path: [0, 0], offset: 0 },
+	});
+	return editor;
+}
+
+function markdownClipboard(text: string, html = "") {
+	return {
+		files: [],
+		getData: (type: string) => {
+			if (type === "text/plain") return text;
+			if (type === "text/html") return html;
+			return "";
+		},
+	} as unknown as DataTransfer;
 }
 
 describe("Markdown inline math input", () => {
@@ -137,6 +166,52 @@ describe("Markdown inline math input", () => {
 		]);
 		expect(editor.getApi(MarkdownPlugin).markdown.serialize().trimEnd()).toBe(
 			"\\$a\\$",
+		);
+	});
+
+	it("parses pasted Markdown math even when the clipboard also contains HTML", () => {
+		const editor = createMarkdownPasteEditor();
+
+		editor.tf.insertData(
+			markdownClipboard("$a$", '<span class="katex-source">$a$</span>'),
+		);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "p",
+				children: [
+					{ text: "" },
+					{ type: "inline_equation", texExpression: "a" },
+					{ text: "" },
+				],
+			},
+		]);
+		expect(editor.selection).toEqual({
+			anchor: { path: [0, 2], offset: 0 },
+			focus: { path: [0, 2], offset: 0 },
+		});
+
+		editor.tf.insertText("b");
+		expect(editor.api.string([])).toBe("b");
+	});
+
+	it("parses pasted Markdown escapes into literal dollar text", () => {
+		const editor = createMarkdownPasteEditor();
+
+		editor.tf.insertData(markdownClipboard("\\$a\\$"));
+
+		expect(editor.children).toEqual([
+			{ type: "p", children: [{ text: "$a$" }] },
+		]);
+	});
+
+	it("parses pasted Markdown lists as structured list nodes", () => {
+		const editor = createMarkdownPasteEditor();
+
+		editor.tf.insertData(markdownClipboard("- one\n- two"));
+
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize()).toBe(
+			"* one\n* two\n",
 		);
 	});
 });

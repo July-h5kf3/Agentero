@@ -236,7 +236,7 @@
 - **独立滚动**：侧边栏 / 中间 dockview 内容 **各自**滚动，顶栏固定。
   - 默认竖向：`.agentero-scroll`；双向（论文库表）：`.agentero-scroll-both`。
 - **中间栏视图**：
-  - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。行内公式使用 `$...$`，起始 `$` 可紧邻普通正文；输入闭合 `$` 渲染后，光标停在公式后方，可直接继续输入。需要保留普通 `$` 时使用 Markdown 转义 `\$`：编辑器只显示 `$`，保存时仍写回 `\$`；奇数个连续反斜杠转义定界符，偶数个仍按公式解析。
+  - 普通 Markdown / NOTES：**Plate WYSIWYG**；防抖自动保存 + `⌘S`；未真实编辑不写盘。正文文本粘贴统一按 Markdown 反序列化（即使剪贴板同时带 HTML），因此公式、列表等结构与文件打开后的渲染一致；代码块内仍保留源码文本，纯文件 payload 继续交给图片等媒体处理。行内公式使用 `$...$`，起始 `$` 可紧邻普通正文；输入闭合 `$` 渲染后，光标停在公式后方，可直接继续输入。需要保留普通 `$` 时使用 Markdown 转义 `\$`：编辑器只显示 `$`，保存时仍写回 `\$`；奇数个连续反斜杠转义定界符，偶数个仍按公式解析。
   - **代码块滚动**：fenced code block 保留独立横向滚动；鼠标或触控板的纵向滚动继续传递给 Markdown 文档容器，不在代码块上截断。
   - **代码块语言**：每个 fenced code block 左上角显示一个语言选择器（hover / focus-within / 展开时显现），弹出面板顶部为搜索框，下方为候选列表（最高 `40vh`），列出 lowlight `common` 注册的全部语言 + 「Plain text」（清空 `lang`）。选中后写入 `code_block.lang` 并经 `@platejs/markdown` 序列化为 ```` ```lang ```` 围栏，lowlight 据此生成 highlight.js token class，由 `src/index.css` 的 `.agentero-codeblock .hljs-*`（GitHub 主题，浅色 / `.dark` 深色）着色。新建代码块默认无语言（不高亮，避免对纯文本误判）。只读 / 预览态不渲染选择器，但仍按已存 `lang` 高亮。
   - **代码块复制**：每个 fenced code block 右上角显示复制按钮（hover / focus-within 时显现），点击经 `copyTextToClipboard`（`src/lib/core/clipboard.ts`）复制代码块纯文本（`NodeApi.string`，去掉围栏与语言标记），成功后短暂切换为 ✓ 并 1.5s 后还原；失败弹右上角 Toast。只读 / 预览态同样可用。
