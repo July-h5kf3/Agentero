@@ -182,6 +182,16 @@
 	scrollbar-color: transparent transparent;
 }
 
+/*
+ * Horizontal-only nested scrollers (Markdown code blocks) must not trap a
+ * vertical wheel gesture before it reaches the document pane.
+ */
+.agentero-scroll-both.agentero-scroll-x-only {
+	overflow-y: hidden;
+	overscroll-behavior-x: contain;
+	overscroll-behavior-y: auto;
+}
+
 .agentero-scroll::-webkit-scrollbar,
 .agentero-scroll-both::-webkit-scrollbar {
 	width: 8px;
