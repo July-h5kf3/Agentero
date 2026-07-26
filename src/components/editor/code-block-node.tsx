@@ -150,9 +150,13 @@ function CopyCodeButton({ element }: { element: TCodeBlockElement }) {
 	);
 
 	const onCopy = async () => {
-		// NodeApi.string recurses every descendant text of the code_block, joining
-		// code_line children with newlines — the raw code without markers/markup.
-		const text = NodeApi.string(element);
+		// Per code_line: stringify each line, then join with "\n". Using
+		// NodeApi.string on the whole code_block would flatten all descendant text
+		// without inserting line breaks (Slate joins text nodes with ""), so lines
+		// would collapse into one. Mirrors platejs's codeBlockToDecorations.
+		const text = element.children
+			.map((line) => NodeApi.string(line))
+			.join("\n");
 		const ok = await copyTextToClipboard(text, {
 			errorMessage: t("codeBlock.copyFailed"),
 		});
