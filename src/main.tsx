@@ -17,6 +17,9 @@ import { applyUiTheme } from "@/lib/ui/theme";
 import App from "./App";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
+// KaTeX CSS must load with the main bundle: lazy-loaded editors are not the
+// only consumers (Streamdown in the Agent panel renders math too).
+import "katex/dist/katex.min.css";
 
 const searchParams = new URLSearchParams(window.location.search);
 const isSettingsWindow = searchParams.get("window") === "settings";

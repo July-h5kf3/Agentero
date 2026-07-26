@@ -1,6 +1,5 @@
 "use client";
 
-import "katex/dist/katex.min.css";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
 import { RangeApi, type RangeRef } from "platejs";
