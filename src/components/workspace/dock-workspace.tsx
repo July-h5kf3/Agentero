@@ -46,6 +46,7 @@ import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { AgenteroTabGroupChip } from "@/components/workspace/tab-group-chip";
 import { cn } from "@/lib/core/utils";
 import { TAG_COLOR_IDS, tagSwatchStyle } from "@/lib/ui/tag-colors";
+import { installDockviewSashFrameLoop } from "@/lib/workspace/dockview-sash";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
 import {
 	isSplitDragPayload,
@@ -405,6 +406,7 @@ export const DockWorkspace = memo(
 	) {
 		const { t } = useTranslation("app");
 		const apiRef = useRef<DockviewApi | null>(null);
+		const workspaceRootRef = useRef<HTMLDivElement>(null);
 		const syncingRef = useRef(false);
 		const layoutTimerRef = useRef<number | null>(null);
 		const disposablesRef = useRef<{ dispose: () => void }[]>([]);
@@ -422,6 +424,12 @@ export const DockWorkspace = memo(
 		onToggleHtmlRef.current = onToggleHtmlMode;
 		const onDropRef = useRef(onExternalDrop);
 		onDropRef.current = onExternalDrop;
+
+		useEffect(() => {
+			const root = workspaceRootRef.current;
+			if (!root) return;
+			return installDockviewSashFrameLoop(root);
+		}, []);
 
 		const tabGroupColors = useMemo<DockviewTabGroupColorEntry[]>(
 			() =>
@@ -778,6 +786,7 @@ export const DockWorkspace = memo(
 		return (
 			<WorkspaceContext.Provider value={ctx}>
 				<div
+					ref={workspaceRootRef}
 					className={cn(
 						"agentero-dockview agentero-dock-global h-full min-h-0 min-w-0 w-full",
 						className,

@@ -253,7 +253,7 @@
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/paper/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
   - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 EmbedPDF（PDFium）渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
-  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）；**放大后**缩放停下 ~160ms 后按**真实比例**重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero），手势中以 transform 比值即时反馈；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
+  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。拖动 Dockview 的 PDF / NOTES 分隔条时，高频 pointermove 先按 animation frame 合并，viewport DOM 边界和工具栏逐帧跟随，页面按实际 panel 边界连续裁剪或展开；拖动期间暂停 EmbedPDF 的 resize metrics，松手前补齐最终指针坐标，松手后一次性同步最终宽高。手动数值缩放（如 125%）保持不变。**放大后**按真实比例重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero）；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
   - **PDF 性能**：EmbedPDF Tiling / 视口渲染，按可见区域绘制；缩放与滚动由引擎插件处理。
   - **PDF 页码导航**：底部居中页码 pill（`‹ [当前页] / 总页数 ›`，输入数字回车跳页）；当前页用 `IntersectionObserver` 跟踪；键盘 `PageDown/PageUp` 翻页、`Home/End` 首/末页（PDF 区悬停或聚焦时生效，输入框内不拦截）；**续读**：按论文（路径）记住上次页码，重开自动续上（`pdf-reading-position.ts`，localStorage）。i18n `viewer:pdf.prevPage/nextPage/goToPage`。
   - **PDF 大纲（书签）**：有大纲时左上 `List` 切换左侧浮层目录（`@embedpdf/plugin-bookmark`）；点条目跳页；无大纲不显示。i18n `viewer:pdf.outline`。
