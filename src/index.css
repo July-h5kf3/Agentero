@@ -415,3 +415,119 @@
 .agentero-dockview.agentero-dock-global .dv-tabs-and-actions-container {
 	display: flex !important;
 }
+
+/*
+ * Code block syntax highlighting. lowlight (via @platejs/code-block) emits
+ * highlight.js token class names (.hljs-keyword etc.) on code_syntax leaves;
+ * these rules give them color. Scoped to .agentero-codeblock so inline code
+ * (code-leaf.tsx) is unaffected. Colors: GitHub light / dark themes. Only color
+ * declarations are kept — the upstream themes' padding/display/background rules
+ * are dropped to preserve the editor's own code-block layout.
+ */
+.agentero-codeblock .hljs-doctag,
+.agentero-codeblock .hljs-keyword,
+.agentero-codeblock .hljs-meta .hljs-keyword,
+.agentero-codeblock .hljs-template-tag,
+.agentero-codeblock .hljs-template-variable,
+.agentero-codeblock .hljs-type,
+.agentero-codeblock .hljs-variable.language_ {
+	color: #d73a49;
+}
+.agentero-codeblock .hljs-title,
+.agentero-codeblock .hljs-title.class_,
+.agentero-codeblock .hljs-title.class_.inherited__,
+.agentero-codeblock .hljs-title.function_ {
+	color: #6f42c1;
+}
+.agentero-codeblock .hljs-attr,
+.agentero-codeblock .hljs-attribute,
+.agentero-codeblock .hljs-literal,
+.agentero-codeblock .hljs-meta,
+.agentero-codeblock .hljs-number,
+.agentero-codeblock .hljs-operator,
+.agentero-codeblock .hljs-variable,
+.agentero-codeblock .hljs-selector-attr,
+.agentero-codeblock .hljs-selector-class,
+.agentero-codeblock .hljs-selector-id {
+	color: #005cc5;
+}
+.agentero-codeblock .hljs-regexp,
+.agentero-codeblock .hljs-string,
+.agentero-codeblock .hljs-meta .hljs-string {
+	color: #032f62;
+}
+.agentero-codeblock .hljs-built_in,
+.agentero-codeblock .hljs-symbol {
+	color: #e36209;
+}
+.agentero-codeblock .hljs-comment,
+.agentero-codeblock .hljs-code,
+.agentero-codeblock .hljs-formula {
+	color: #6a737d;
+}
+.agentero-codeblock .hljs-name,
+.agentero-codeblock .hljs-quote,
+.agentero-codeblock .hljs-selector-tag,
+.agentero-codeblock .hljs-selector-pseudo {
+	color: #22863a;
+}
+.agentero-codeblock .hljs-subst {
+	color: #24292e;
+}
+.agentero-codeblock .hljs-bullet {
+	color: #735c0f;
+}
+
+.dark .agentero-codeblock .hljs-doctag,
+.dark .agentero-codeblock .hljs-keyword,
+.dark .agentero-codeblock .hljs-meta .hljs-keyword,
+.dark .agentero-codeblock .hljs-template-tag,
+.dark .agentero-codeblock .hljs-template-variable,
+.dark .agentero-codeblock .hljs-type,
+.dark .agentero-codeblock .hljs-variable.language_ {
+	color: #ff7b72;
+}
+.dark .agentero-codeblock .hljs-title,
+.dark .agentero-codeblock .hljs-title.class_,
+.dark .agentero-codeblock .hljs-title.class_.inherited__,
+.dark .agentero-codeblock .hljs-title.function_ {
+	color: #d2a8ff;
+}
+.dark .agentero-codeblock .hljs-attr,
+.dark .agentero-codeblock .hljs-attribute,
+.dark .agentero-codeblock .hljs-literal,
+.dark .agentero-codeblock .hljs-meta,
+.dark .agentero-codeblock .hljs-number,
+.dark .agentero-codeblock .hljs-operator,
+.dark .agentero-codeblock .hljs-variable,
+.dark .agentero-codeblock .hljs-selector-attr,
+.dark .agentero-codeblock .hljs-selector-class,
+.dark .agentero-codeblock .hljs-selector-id {
+	color: #79c0ff;
+}
+.dark .agentero-codeblock .hljs-regexp,
+.dark .agentero-codeblock .hljs-string,
+.dark .agentero-codeblock .hljs-meta .hljs-string {
+	color: #a5d6ff;
+}
+.dark .agentero-codeblock .hljs-built_in,
+.dark .agentero-codeblock .hljs-symbol {
+	color: #ffa657;
+}
+.dark .agentero-codeblock .hljs-comment,
+.dark .agentero-codeblock .hljs-code,
+.dark .agentero-codeblock .hljs-formula {
+	color: #8b949e;
+}
+.dark .agentero-codeblock .hljs-name,
+.dark .agentero-codeblock .hljs-quote,
+.dark .agentero-codeblock .hljs-selector-tag,
+.dark .agentero-codeblock .hljs-selector-pseudo {
+	color: #7ee787;
+}
+.dark .agentero-codeblock .hljs-subst {
+	color: #c9d1d9;
+}
+.dark .agentero-codeblock .hljs-bullet {
+	color: #f2cc60;
+}

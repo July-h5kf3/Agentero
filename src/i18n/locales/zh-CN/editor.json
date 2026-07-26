@@ -17,6 +17,13 @@
 		"image": "插入图片",
 		"more": "更多"
 	},
+	"codeBlock": {
+		"languageLabel": "代码语言",
+		"language": "语言",
+		"plainText": "纯文本",
+		"search": "搜索语言…",
+		"noMatch": "没有匹配的语言"
+	},
 	"image": {
 		"noFile": "请先将笔记保存为文件，再插入图片。",
 		"invalidPayload": "无法读取粘贴的图片数据。",
