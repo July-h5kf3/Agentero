@@ -6,7 +6,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 
 ## 当前应用形态
 
-- 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。
+- 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。全局状态为按域 **zustand vanilla store**（`src/lib/<域>/store.ts` + 同域 `actions.ts` 普通函数；React 经 `hooks/use-app-stores.ts` selector 订阅）；`App.tsx` 只是薄组装层（见 `docs/frontend/index.md` §状态管理）。
 - Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。布局 **feature-first**：`app/` 装配、`core/` 基础、`features/<域>/`（`mod` + `commands` + 按需 `models`）；原 `services/` / `commands/` / `models/` 已取消。
 - CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`，`use features::{vault,catalog,import}` + `core::error`；**无 BYOA / 无 paper-reader**（见 `docs/development/cli.md`）。
 - 工作台布局：

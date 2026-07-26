@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
 	forwardRef,
+	memo,
 	type DragEvent as ReactDragEvent,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
@@ -377,8 +378,8 @@ type TreeContextMenu = {
 	y: number;
 };
 
-export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
-	function FileTree(
+export const FileTree = memo(
+	forwardRef<FileTreeHandle, FileTreeProps>(function FileTree(
 		{
 			nodes,
 			loading = false,
@@ -1843,7 +1844,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
 				</div>
 			</TooltipProvider>
 		);
-	},
+	}),
 );
 
 export type { VaultSidebarHeaderProps } from "@/components/sidebar/vault-sidebar-header";

@@ -1,0 +1,167 @@
+/**
+ * Zotero Connector server sync: bind the active vault + Library folder scope,
+ * honor the settings toggle, and surface save/progress events as background
+ * tasks. Extracted from App so connector traffic never re-renders the shell.
+ */
+
+import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import {
+	useLibraryStore,
+	useSettings,
+	useVaultStore,
+} from "@/hooks/use-app-stores";
+import {
+	completeBackgroundTask,
+	failBackgroundTask,
+	startBackgroundTask,
+	updateBackgroundTask,
+} from "@/lib/core/background-tasks";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { isTauri } from "@/lib/core/tauri";
+import {
+	type ConnectorItemSaved,
+	type ConnectorProgress,
+	connectorSetEnabled,
+	connectorSetParentDir,
+	connectorSetVault,
+} from "@/lib/paper/import/connector";
+import { refreshLibrary } from "@/lib/paper/library-store";
+import { getVaultPath, refreshTree } from "@/lib/vault/store";
+import { openPaper } from "@/lib/workspace/actions";
+
+export function useConnectorSync(): void {
+	const { t } = useTranslation(["app", "sidebar"]);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const libraryScopePath = useLibraryStore((s) => s.scopePath);
+	const connectorEnabled = useSettings((s) => s.connectorEnabled);
+	const progressTasksRef = useRef(new Map<string, string>());
+
+	// Sync active vault into the Connector server (save target).
+	useEffect(() => {
+		if (!isTauri()) return;
+		void connectorSetVault(vaultPath).catch((e) => {
+			console.warn("[connector] setVault failed", e);
+		});
+	}, [vaultPath]);
+
+	// Mirror Library folder scope → Connector default collection.
+	useEffect(() => {
+		if (!isTauri() || !connectorEnabled) return;
+		const scope = libraryScopePath
+			?.replace(/\\/g, "/")
+			.replace(/^\/+|\/+$/g, "");
+		const parent =
+			scope && (scope === "papers" || scope.startsWith("papers/"))
+				? scope
+				: "papers";
+		void connectorSetParentDir(parent).catch(() => {
+			/* ignore */
+		});
+	}, [libraryScopePath, connectorEnabled]);
+
+	// Restore Connector server from settings on launch / toggle.
+	useEffect(() => {
+		if (!isTauri()) return;
+		void connectorSetEnabled(connectorEnabled)
+			.then(async (st) => {
+				if (connectorEnabled && st.lastError) {
+					notifyError(st.lastError);
+				}
+				// After the HTTP server starts, re-bind vault (Host may be unbound).
+				if (connectorEnabled && getVaultPath()) {
+					try {
+						await connectorSetVault(getVaultPath());
+					} catch (e) {
+						console.warn("[connector] re-bind vault after enable failed", e);
+					}
+				}
+			})
+			.catch((e) => {
+				notifyError(e instanceof Error ? e.message : String(e));
+			});
+	}, [connectorEnabled]);
+
+	// Refresh tree/library when the Connector saves into the vault; open the
+	// paper tab (same as magic-wand import).
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		const unsubs: Array<() => void> = [];
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsubs.push(
+				await listen<ConnectorItemSaved>("connector:item-saved", (ev) => {
+					const p = ev.payload;
+					const vault = getVaultPath();
+					if (vault) {
+						void refreshTree(vault);
+						void refreshLibrary();
+					}
+					// Open/focus the paper tab (metadata save, upload, or move).
+					const rel = (p?.path ?? "")
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "");
+					if (vault && rel) {
+						const paperAbs = `${vault
+							.replace(/\\/g, "/")
+							.replace(/\/+$/, "")}/${rel}`;
+						openPaper(paperAbs);
+					}
+					if (p?.title) {
+						notifySuccess(
+							p.deduped
+								? t("sidebar:connector.deduped", { title: p.title })
+								: t("sidebar:connector.saved", { title: p.title }),
+						);
+					}
+				}),
+			);
+			unsubs.push(
+				await listen<ConnectorProgress>("connector:progress", (ev) => {
+					const p = ev.payload;
+					if (!p?.key) return;
+					let taskId = progressTasksRef.current.get(p.key);
+					if (!taskId) {
+						taskId = startBackgroundTask({
+							kind: "connector",
+							title: p.title || t("app:tasks.connector"),
+							detail: p.detail ?? undefined,
+							progress: p.progress ?? null,
+						});
+						progressTasksRef.current.set(p.key, taskId);
+					} else {
+						updateBackgroundTask(taskId, {
+							detail: p.detail ?? undefined,
+							progress: p.progress ?? null,
+						});
+					}
+					if (p.status === "completed") {
+						completeBackgroundTask(
+							taskId,
+							p.detail ?? t("app:tasks.connectorComplete"),
+						);
+						progressTasksRef.current.delete(p.key);
+					} else if (p.status === "failed") {
+						failBackgroundTask(
+							taskId,
+							p.error ?? p.detail ?? t("app:tasks.connectorFailed"),
+						);
+						progressTasksRef.current.delete(p.key);
+					}
+				}),
+			);
+			unsubs.push(
+				await listen<{ message?: string }>("connector:error", (ev) => {
+					const msg = ev.payload?.message?.trim();
+					if (msg) notifyError(msg);
+				}),
+			);
+		})();
+		return () => {
+			cancelled = true;
+			for (const u of unsubs) u();
+		};
+	}, [t]);
+}

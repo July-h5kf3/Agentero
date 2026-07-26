@@ -1,0 +1,364 @@
+/**
+ * Library actions: rescan, bibliography import/export, asset downloads, the
+ * paper-reader workflow, and tag persistence. Long operations surface in the
+ * background-tasks panel.
+ */
+
+import i18n from "@/i18n";
+import {
+	BackgroundTaskCancelledError,
+	runBackgroundTask,
+} from "@/lib/core/background-tasks";
+import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
+import {
+	collectPapersNeedingAssetDownload,
+	detectPaperDirectory,
+	notesPathForPaper,
+	type PaperMetadata,
+	type PaperTag,
+	paperCatalogPath,
+	paperDirFromPath,
+	resolvePapersParentDir,
+} from "@/lib/paper";
+import {
+	exportLibraryToFile,
+	importLibraryFromFile,
+	rescanPapers,
+	setPaperTags,
+} from "@/lib/paper/api";
+import {
+	libraryStore,
+	refreshLibrary,
+	setLibraryIoBusy,
+	setLibraryPapers,
+	setLibraryRescanning,
+} from "@/lib/paper/library-store";
+import { downloadPaperAssets } from "@/lib/paper/lookup";
+import {
+	maybeAutoRunPaperReader,
+	paperAssetsReadyForReader,
+	runPaperReaderWorkflow,
+} from "@/lib/paper/reader";
+import { getSettings } from "@/lib/settings/react-store";
+import type { FileNode } from "@/lib/vault";
+import { joinVaultPath, readVaultFile } from "@/lib/vault";
+import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
+import { toVaultRelative } from "@/lib/wiki";
+import { openPaper } from "@/lib/workspace/actions";
+import {
+	getActiveTabId,
+	refreshTabNotes,
+	setTabs,
+	workspaceStore,
+} from "@/lib/workspace/store";
+
+/** Import target directory derived from the current tree selection. */
+export function currentLookupParentDir(): string {
+	const { vaultPath, treeSelectedPath, tree } = vaultStore.getState();
+	return resolvePapersParentDir(vaultPath, treeSelectedPath, tree);
+}
+
+/** Rebuild the catalog from papers/ on disk (recover disk-only papers). */
+export async function rescanLibraryPapers(): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || libraryStore.getState().rescanning) return;
+	setLibraryRescanning(true);
+	try {
+		const n = await rescanPapers(vaultPath);
+		await refreshLibrary();
+		await refreshTree(vaultPath);
+		if (n > 0) {
+			notifySuccess(i18n.t("sidebar:papersLibrary.rescanned", { count: n }));
+		} else {
+			notifyWarning(i18n.t("sidebar:papersLibrary.rescanEmpty"));
+		}
+	} catch (e) {
+		notifyError(
+			e instanceof Error
+				? e.message
+				: i18n.t("sidebar:papersLibrary.rescanFailed"),
+		);
+	} finally {
+		setLibraryRescanning(false);
+	}
+}
+
+export async function libraryExport(): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || libraryStore.getState().ioBusy) return;
+	setLibraryIoBusy("export");
+	try {
+		await runBackgroundTask(
+			{ kind: "export", title: i18n.t("app:tasks.libraryExport") },
+			async () => {
+				const result = await exportLibraryToFile({
+					vaultPath,
+					settings: getSettings(),
+					format: "bibtex",
+				});
+				// User cancelled dialog — treat as soft cancel, not failure.
+				return result ?? null;
+			},
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	} finally {
+		setLibraryIoBusy(null);
+	}
+}
+
+export async function libraryImport(): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || libraryStore.getState().ioBusy) return;
+	setLibraryIoBusy("import");
+	try {
+		const result = await runBackgroundTask(
+			{ kind: "import", title: i18n.t("app:tasks.libraryImport") },
+			async ({ setDetail }) => {
+				const r = await importLibraryFromFile({
+					vaultPath,
+					parentDir: currentLookupParentDir(),
+					settings: getSettings(),
+				});
+				if (!r) return null;
+				setDetail(
+					i18n.t("sidebar:papersLibrary.importDone", { count: r.imported }),
+				);
+				await refreshTree(vaultPath);
+				await refreshLibrary();
+				return r;
+			},
+		);
+		if (result?.errors.length) {
+			notifyWarning(
+				`${i18n.t("sidebar:papersLibrary.importDone", { count: result.imported })}; ${result.errors.slice(0, 2).join("; ")}`,
+			);
+		}
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	} finally {
+		setLibraryIoBusy(null);
+	}
+}
+
+/**
+ * On-demand assets: missing local PDF, and/or arXiv TeX when fetchable but
+ * absent. Auto-runs the paper reader afterwards when everything is ready.
+ */
+export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return;
+	const rel = toVaultRelative(vaultPath, node.path)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	try {
+		const assets = await runBackgroundTask(
+			{
+				kind: "download",
+				title: i18n.t("app:tasks.downloadPaper"),
+				detail: rel,
+			},
+			async ({ id, setDetail }) => {
+				setDetail(rel);
+				const r = await downloadPaperAssets({
+					vaultRoot: vaultPath,
+					paperPath: rel,
+					progressTaskId: id,
+				});
+				setDetail(i18n.t("app:tasks.downloadRefreshing", { path: rel }));
+				await refreshTree(vaultPath);
+				await refreshLibrary();
+				return r;
+			},
+		);
+		// After PDF/TeX/PAPER.md ready → auto paper-reader with task progress.
+		if (
+			paperAssetsReadyForReader({
+				pdf: assets.pdf,
+				tex: assets.tex,
+				paperMd: assets.paperMd,
+			})
+		) {
+			// Fire-and-forget: reader progress shows in the task bar. Do NOT
+			// await — awaiting keeps every paper row busy during reading.
+			void maybeAutoRunPaperReader({
+				vaultRoot: vaultPath,
+				paperPath: rel,
+				assetsReady: true,
+			})
+				.then(async (started) => {
+					if (!started) return;
+					await refreshLibrary();
+					const notesAbs = notesPathForPaper(node.path);
+					try {
+						const content = await readVaultFile(notesAbs);
+						refreshTabNotes(node.path, content);
+					} catch {
+						// ignore
+					}
+				})
+				.catch((e) => {
+					notifyError(e instanceof Error ? e.message : String(e));
+				});
+		}
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	}
+}
+
+/**
+ * paper-reader workflow: Zap on complete + unread papers.
+ * Progress surfaces in the bottom-left background tasks panel.
+ */
+export async function readPaper(node: FileNode): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return;
+	const rel = toVaultRelative(vaultPath, node.path)
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	// Fire-and-forget: reader progress shows in the bottom-left task bar.
+	void runPaperReaderWorkflow({ vaultRoot: vaultPath, paperPath: rel })
+		.then(async () => {
+			await refreshLibrary();
+			// Refresh NOTES pane if this paper is open in a tab.
+			const notesAbs = notesPathForPaper(node.path);
+			try {
+				const content = await readVaultFile(notesAbs);
+				refreshTabNotes(node.path, content);
+			} catch {
+				// ignore
+			}
+		})
+		.catch((e) => {
+			notifyError(e instanceof Error ? e.message : String(e));
+		});
+}
+
+/**
+ * Library bulk download: every paper folder missing PDF and/or fetchable TeX.
+ * Walks the file tree so local source/ presence matches the row icons.
+ */
+export async function downloadAllMissingAssets(): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return;
+	const queue = collectPapersNeedingAssetDownload(vaultStore.getState().tree);
+	if (!queue.length) return;
+
+	const errors: string[] = [];
+	try {
+		await runBackgroundTask(
+			{
+				kind: "downloadAll",
+				title: i18n.t("app:tasks.downloadAll"),
+				detail: i18n.t("app:tasks.downloadProgress", {
+					current: 0,
+					total: queue.length,
+				}),
+			},
+			async ({ id, signal, setProgress, setDetail }) => {
+				let i = 0;
+				for (const paperPath of queue) {
+					if (signal.aborted) throw new BackgroundTaskCancelledError();
+					const rel = toVaultRelative(vaultPath, paperPath)
+						.replace(/\\/g, "/")
+						.replace(/^\/+|\/+$/g, "");
+					i += 1;
+					setDetail(
+						`${i18n.t("app:tasks.downloadProgress", { current: i, total: queue.length })} · ${rel}`,
+					);
+					setProgress(Math.round(((i - 1) / queue.length) * 100));
+					try {
+						await downloadPaperAssets({
+							vaultRoot: vaultPath,
+							paperPath: rel,
+							progressTaskId: id,
+						});
+					} catch (e) {
+						if (signal.aborted) throw e;
+						errors.push(
+							`${rel}: ${e instanceof Error ? e.message : String(e)}`,
+						);
+					}
+					setProgress(Math.round((i / queue.length) * 100));
+				}
+				await refreshTree(vaultPath);
+				await refreshLibrary();
+			},
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	}
+	if (errors.length) {
+		notifyError(errors.slice(0, 3).join("; "));
+	}
+}
+
+export function openLibraryPaper(paper: PaperMetadata): void {
+	const vaultPath = getVaultPath();
+	if (!vaultPath || !paper.path) return;
+	openPaper(joinVaultPath(vaultPath, paper.path));
+}
+
+/** Persist tags from Paper Info and keep library + open tabs in sync. */
+export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
+	const vaultPath = getVaultPath();
+	const activeTab = workspaceStore
+		.getState()
+		.tabs.find((t) => t.id === getActiveTabId());
+	const paperMeta = activeTab?.paperMeta ?? null;
+	const selectedPath = activeTab?.path ?? null;
+	if (!vaultPath || !paperMeta) return;
+	// Prefer catalog path on meta; projection may omit `path` — fall back to
+	// the open paper folder.
+	let path = (paperMeta.path ?? "")
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	if (!path && selectedPath) {
+		let paperDir = paperDirFromPath(
+			selectedPath,
+			vaultStore.getState().paperFolders,
+		);
+		if (!paperDir && (await detectPaperDirectory(selectedPath))) {
+			paperDir = selectedPath.replace(/[\\/]+$/, "");
+		}
+		path = paperCatalogPath(paperDir ?? "", vaultPath) ?? "";
+	}
+	if (!path) {
+		notifyError(i18n.t("sidebar:paperInfo.tagsSaveFailed"));
+		return;
+	}
+	try {
+		const updated = await setPaperTags(vaultPath, path, tags);
+		setLibraryPapers((prev) =>
+			prev.map((p) => {
+				const key = (p.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				return key === path ? { ...p, ...updated } : p;
+			}),
+		);
+		const activeId = getActiveTabId();
+		setTabs((prev) =>
+			prev.map((tab) => {
+				if (!tab.paperMeta) return tab;
+				const key = (tab.paperMeta.path ?? "")
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "");
+				const samePath = key === path;
+				const sameOpenPaper =
+					!key && tab.id === activeId && tab.paperMeta.id === paperMeta.id;
+				if (!samePath && !sameOpenPaper) return tab;
+				return {
+					...tab,
+					paperMeta: {
+						...tab.paperMeta,
+						...updated,
+						path: updated.path ?? path,
+					},
+				};
+			}),
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	}
+}

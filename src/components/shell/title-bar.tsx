@@ -7,6 +7,7 @@ import {
 	PanelRight,
 	Settings,
 } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutMenu } from "@/components/shell/layout-menu";
 import { WindowControls } from "@/components/shell/window-controls";
@@ -49,7 +50,7 @@ type TitleBarProps = {
  * Title-bar row: window chrome + sidebar / layout controls.
  * Document tabs live inside the center Dockview workspace (not here).
  */
-export function TitleBar({
+export const TitleBar = memo(function TitleBar({
 	isMacDesktop,
 	showWindowControls,
 	agentZenMode,
@@ -267,4 +268,4 @@ export function TitleBar({
 			</TooltipProvider>
 		</header>
 	);
-}
+});

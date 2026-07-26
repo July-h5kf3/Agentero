@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { AgentComposer } from "@/components/agent/agent-composer";
 import {
 	SidebarHistoryTrailing,
@@ -13,7 +14,7 @@ import { cn } from "@/lib/core/utils";
 
 export type { AgentPanelProps } from "@/components/agent/types";
 
-export function AgentPanel({
+export const AgentPanel = memo(function AgentPanel({
 	vaultPath,
 	selectedPath = null,
 	selectedPaperTitle = null,
@@ -295,4 +296,4 @@ export function AgentPanel({
 			/>
 		</section>
 	);
-}
+});

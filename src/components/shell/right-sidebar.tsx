@@ -1,0 +1,224 @@
+/**
+ * Right rail: Agent chat (kept mounted across sidebar ↔ zen), Backlinks +
+ * Graph, or PDF annotations. Subscribes to its stores directly.
+ */
+
+import { lazy, Suspense, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import {
+	type AnnotationRow,
+	AnnotationsPanel,
+	type AskRow,
+} from "@/components/viewer/annotations-panel";
+import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
+import { pdfHandleFor } from "@/components/viewer/pdf-viewer-registry";
+import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
+import { GraphPanel } from "@/components/wiki/graph-panel";
+import {
+	useAnnotationsStore,
+	useLibraryStore,
+	useSettings,
+	useUiStore,
+	useVaultStore,
+	useWikiStore,
+	useWorkspaceStore,
+} from "@/hooks/use-app-stores";
+import { cn } from "@/lib/core/utils";
+import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
+import { openSettingsWindow } from "@/lib/shell/settings-window";
+import { layout, uiStore } from "@/lib/shell/ui-store";
+import { navigateWiki, openGraphPath } from "@/lib/workspace/actions";
+import { getActiveTabId } from "@/lib/workspace/store";
+
+// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar /
+// zen mode is opened, so its (large) bundle stays out of the initial chunk.
+const AgentPanel = lazy(() =>
+	import("@/components/agent/agent-panel").then((m) => ({
+		default: m.AgentPanel,
+	})),
+);
+
+/**
+ * Agent chat Sources / inline citation click: vault paper paths → paper
+ * workspace; other vault files → open tab; http(s) → system browser.
+ * Exit zen so the paper is visible.
+ */
+function onOpenAgentSettings(): void {
+	openSettingsWindow("agent");
+}
+
+function handleAgentOpenSource(source: string): void {
+	const trimmed = source.trim();
+	if (!trimmed) return;
+	if (/^https?:\/\//i.test(trimmed)) {
+		void import("@tauri-apps/plugin-opener")
+			.then(({ openUrl }) => openUrl(trimmed))
+			.catch(() => {
+				window.open(trimmed, "_blank", "noopener,noreferrer");
+			});
+		return;
+	}
+	if (uiStore.getState().agentZenMode) {
+		layout()?.exitAgentZen();
+	}
+	openGraphPath(trimmed);
+}
+
+function annotationAction(fn: (h: PdfViewerHandle) => void): void {
+	const handle = pdfHandleFor(getActiveTabId());
+	if (handle) fn(handle);
+}
+
+function AnnotationsSidebar() {
+	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
+	const highlights = useAnnotationsStore((s) =>
+		activeTabId ? s.highlightsByTab[activeTabId] : undefined,
+	);
+	const asks = useAnnotationsStore((s) =>
+		activeTabId ? s.asksByTab[activeTabId] : undefined,
+	);
+
+	const items = useMemo<AnnotationRow[]>(() => {
+		if (!highlights) return [];
+		return [...highlights]
+			.sort(
+				(a, b) =>
+					a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+			)
+			.map((h) => ({
+				id: h.id,
+				page: h.page,
+				quote: h.quote,
+				comment: h.comment ?? "",
+				color: normalizeHighlightColor(h.color),
+			}));
+	}, [highlights]);
+
+	const askRows = useMemo<AskRow[]>(() => {
+		if (!asks) return [];
+		return [...asks]
+			.sort(
+				(a, b) =>
+					a.anchor.page - b.anchor.page ||
+					(a.anchor.rects[0]?.y ?? 0) - (b.anchor.rects[0]?.y ?? 0),
+			)
+			.map((th) => {
+				const firstUser = th.messages.find((m) => m.role === "user");
+				const preview =
+					firstUser?.content.trim() || th.anchor.quote?.trim() || th.id;
+				return {
+					id: th.id,
+					page: th.anchor.page,
+					preview,
+					messageCount: th.messages.filter(
+						(m) => m.role === "user" || m.role === "assistant",
+					).length,
+				};
+			});
+	}, [asks]);
+
+	return (
+		<AnnotationsPanel
+			items={items}
+			asks={askRows}
+			onJump={(id) => annotationAction((h) => h.scrollToHighlight(id))}
+			onEdit={(id) => annotationAction((h) => h.editComment(id))}
+			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}
+			onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
+			onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
+			onClose={() => layout()?.setRightCollapsed(true)}
+		/>
+	);
+}
+
+export function RightSidebar() {
+	const { t } = useTranslation(["app"]);
+	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
+	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
+	const agentZenMode = useUiStore((s) => s.agentZenMode);
+	const agentPanelMounted = useUiStore((s) => s.agentPanelMounted);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const vaultMdFiles = useVaultStore((s) => s.vaultMdFiles);
+	const vaultDirPaths = useVaultStore((s) => s.vaultDirPaths);
+	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
+	const wikiIndexRevision = useWikiStore((s) => s.wikiIndexRevision);
+	const selectedPath = useWorkspaceStore(
+		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
+	);
+	const selectedPaperTitle = useWorkspaceStore(
+		(s) =>
+			s.tabs.find((tab) => tab.id === s.activeTabId)?.paperMeta?.title ?? null,
+	);
+
+	return (
+		<>
+			{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat). */}
+			{(agentPanelMounted ||
+				agentZenMode ||
+				(rightSidebarOpen && rightSidebarTab === "agent")) && (
+				<div
+					className={cn(
+						"h-full min-h-0",
+						!agentZenMode &&
+							(!rightSidebarOpen || rightSidebarTab !== "agent") &&
+							"hidden",
+					)}
+				>
+					<Suspense fallback={null}>
+						<AgentPanel
+							vaultPath={vaultPath}
+							selectedPath={selectedPath}
+							selectedPaperTitle={selectedPaperTitle}
+							vaultMarkdownPaths={vaultMdFiles}
+							vaultDirectoryPaths={vaultDirPaths}
+							vaultPaperPaths={vaultPaperPaths}
+							paperMetaByRelPath={paperMetaByRelPath}
+							paperTreeLabelMode={paperTreeLabelMode}
+							className="min-h-0 h-full"
+							title={t("labels.agent")}
+							variant={agentZenMode ? "zen" : "sidebar"}
+							autoFocus={
+								agentZenMode ||
+								(rightSidebarOpen && rightSidebarTab === "agent")
+							}
+							onOpenAgentSettings={onOpenAgentSettings}
+							onOpenSource={handleAgentOpenSource}
+						/>
+					</Suspense>
+				</div>
+			)}
+			{rightSidebarOpen && !agentZenMode && rightSidebarTab === "backlinks" ? (
+				<div className="flex h-full min-h-0 flex-col overflow-hidden">
+					<BacklinksPanel
+						vaultPath={vaultPath}
+						selectedPath={selectedPath}
+						onNavigate={(link) =>
+							void navigateWiki({
+								targetRaw: link.occurrence.targetRaw,
+								path: link.targetPath ?? null,
+								status: link.status,
+								fragment: link.occurrence.fragment,
+							})
+						}
+						className="min-h-0 basis-[42%] border-b"
+						wikiIndexRevision={wikiIndexRevision}
+					/>
+					<GraphPanel
+						vaultPath={vaultPath}
+						selectedPath={selectedPath}
+						onOpenPath={openGraphPath}
+						className="min-h-0 flex-1"
+						wikiIndexRevision={wikiIndexRevision}
+					/>
+				</div>
+			) : null}
+			{rightSidebarOpen &&
+			!agentZenMode &&
+			rightSidebarTab === "annotations" ? (
+				<AnnotationsSidebar />
+			) : null}
+		</>
+	);
+}

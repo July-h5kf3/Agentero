@@ -18,6 +18,21 @@
 | 图谱 | [react-force-graph-2d](https://github.com/vasturiano/react-force-graph) | Canvas 力导向图，适合 Obsidian 式研究网络。 |
 | 左右分栏 | [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels) | 左/右 collapsible 侧栏 + 中间主栏。 |
 | 中间文档工作区 | [dockview](https://dockview.dev/) | 文档 panel 的 tab / 分屏 / 布局持久化（见 [`../development/tab-split.md`](../development/tab-split.md)）。 |
+| 状态管理 | [zustand](https://zustand.docs.pmnd.rs/) vanilla store | 按域拆分的全局状态（vault / workspace / library / annotations / wiki / ui）；纯模块可直接读写，组件用 selector 订阅切片。 |
+
+## 状态管理
+
+全局状态按域拆成 **zustand vanilla store**（`src/lib/<域>/store.ts`），沿用 `lib/core/background-tasks.ts` 的范式：store 只存可序列化数据，mutation 与跨域编排是同域 `actions.ts` 里的**普通函数**（用 `getState()` 读取，替代旧的 `tabsRef` / `vaultPathRef` 等 ref 镜像），React 侧只通过 `src/hooks/use-app-stores.ts` 的 selector hook 订阅自己消费的切片。
+
+- `lib/vault/store.ts`：`vaultPath` / `tree` / 选中路径 / 派生列表（`vaultMdFiles`、`paperFolders` 等在 `setTree` 时一次算好）；树刷新的 generation 守卫与防抖计时器为模块级变量。
+- `lib/workspace/store.ts`：dockview 面板 `tabs` / `activeTabId` / `dockLayout` / PDF LRU；命令式 dockview 句柄经 `dock-registry.ts` 注册。
+- `lib/paper/library-store.ts`：论文库行、搜索 `query`、文件夹 scope、导入导出 busy；搜索按键只重渲染 Library 面板。
+- `lib/pdf/annotations-store.ts`：按 tab 的高亮 / Ask；划词只重渲染批注面板。
+- `lib/wiki/store.ts`：wiki 索引 revision、重命名 / 外部重命名对话框状态、防抖 rebuild 与内部重命名回声过滤。
+- `lib/shell/ui-store.ts`：侧栏折叠 / zen / 命令面板 / 对话框开关与一次性信号；命令式布局（panel ref、zen 进出）经 `registerLayoutController` 由 `hooks/use-zen-layout.ts` 提供。
+- Settings 仍以 `lib/settings` 模块 cache 为准，`lib/settings/react-store.ts` 做 React 镜像并同步跨窗口快照。
+
+`App.tsx` 仅为薄组装层：三栏布局 + panel ref + 启动 effect（`useAppBootstrap`）+ 快捷键 / 原生菜单绑定；文件树（`shell/vault-sidebar`）、工作区（`workspace/workspace-host`）、右栏（`shell/right-sidebar`）、对话框（`shell/app-dialogs`）各自订阅所需切片，布局级变化（切 vault、折叠、zen）之外不整树重渲染。`lib/` 不得反向依赖 `components/`（`pnpm deps:check`）。
 
 ## 布局模型
 

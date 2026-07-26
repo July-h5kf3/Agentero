@@ -14,7 +14,7 @@ import {
 	WandSparkles,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	type OpenRemoteVaultArgs,
@@ -83,7 +83,7 @@ export type VaultSidebarHeaderProps = {
 	onMigrateZotero?: () => void;
 };
 
-export function VaultSidebarHeader({
+export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 	title,
 	lookupParentDir,
 	onLookupSubmit,
@@ -499,4 +499,4 @@ export function VaultSidebarHeader({
 			</div>
 		</TooltipProvider>
 	);
-}
+});
