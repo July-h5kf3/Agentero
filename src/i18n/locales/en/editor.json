@@ -17,6 +17,15 @@
 		"image": "Insert image",
 		"more": "More"
 	},
+	"codeBlock": {
+		"languageLabel": "Code language",
+		"language": "Language",
+		"plainText": "Plain text",
+		"search": "Search language…",
+		"noMatch": "No matching language",
+		"copy": "Copy code",
+		"copyFailed": "Could not copy the code."
+	},
 	"image": {
 		"noFile": "Save the note to a file before inserting images.",
 		"invalidPayload": "Could not read the pasted image data.",
