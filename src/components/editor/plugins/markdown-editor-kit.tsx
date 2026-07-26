@@ -84,6 +84,7 @@ import { HrElement } from "@/components/editor/hr-node";
 import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
+import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
@@ -244,7 +245,7 @@ export const MarkdownEditorKit = [
 
 	// Math
 	InlineEquationPlugin.configure({
-		inputRules: [MathRules.markdown({ variant: "$" })],
+		inputRules: [inlineMathInputRule],
 		node: { component: InlineEquationElement },
 	}),
 	EquationPlugin.configure({
