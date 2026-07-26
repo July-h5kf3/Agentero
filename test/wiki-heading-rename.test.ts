@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WikiRenameHeadingResult } from "@/lib/wiki";
+import { type WikiRenameHeadingResult, wikiRenameFailure } from "@/lib/wiki";
 import {
 	buildWikiHeadingRenameRequest,
 	canRenameWikiHeading,
@@ -136,10 +136,18 @@ describe("heading rename refresh and errors", () => {
 			},
 		});
 		const dirty = Object.assign(new Error("blocked"), {
-			details: { code: "unsavedEdits", rollback: "not-needed" },
+			details: {
+				code: "unsavedEdits",
+				rollback: "not-needed",
+				paths: ["notes/Source.md", "notes/Target.md"],
+			},
 		});
 		expect(wikiHeadingRenameErrorKey(manual)).toBe("manualRecovery");
 		expect(wikiHeadingRenameErrorKey(dirty)).toBe("unsavedEdits");
+		expect(wikiRenameFailure(dirty)?.paths).toEqual([
+			"notes/Source.md",
+			"notes/Target.md",
+		]);
 		expect(wikiHeadingRenameErrorKey(new Error("unknown"))).toBe("generic");
 	});
 });

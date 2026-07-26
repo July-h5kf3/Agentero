@@ -225,6 +225,7 @@ pub fn wiki_apply_external_rename_repair(
                 serde_json::json!({
                     "code": error.code,
                     "rollback": error.rollback,
+                    "paths": error.paths,
                 }),
             )
         }

@@ -253,7 +253,7 @@
     - `source_url`: `https://arxiv.org/abs/{id}`
   - 若只有 `arxiv_id`，用 `src/lib/paper/arxiv.ts` 推导远程 URL（作下载候选与 HTML/远程回退）
   - PDF：本地经 `blob:`（fs `readFile`）/ 远程 `https` 由 EmbedPDF（PDFium）渲染；HTML：独立 iframe 打开远程页；图片：`blob:` + `<img>`
-  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）；**放大后**缩放停下 ~160ms 后按**真实比例**重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero），手势中以 transform 比值即时反馈；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
+  - **PDF 缩放**（`PdfViewer`）：工具栏放大 / 缩小 / 重置 / **适应宽度**（`RotateCcw`，= 重置到 100%）/ **适应整页**（`MoveVertical`，缩放到整页高度铺满视口）；`⌘/Ctrl`+滚轮缩放；范围约 **0.5×–3×**；**100% = 适应中间栏宽度**（非固定 pt）。拖动 Dockview 的 PDF / NOTES 分隔条时，高频 pointermove 先按 animation frame 合并，viewport DOM 边界和工具栏逐帧跟随，页面按实际 panel 边界连续裁剪或展开；拖动期间暂停 EmbedPDF 的 resize metrics，松手前补齐最终指针坐标，松手后一次性同步最终宽高。手动数值缩放（如 125%）保持不变。**放大后**按真实比例重渲染页面（`width = 基准宽 × 缩放`、transform 归 1），文本层与画布同尺度 → 清晰且**划词/高亮顺滑**（对齐 Zotero）；**缩放后**中间栏可**双向滚动/平移**（横向 + 纵向，`agentero-scroll-both`），滚轮缩放以光标为锚点。i18n `viewer:pdf.zoom*`。
   - **PDF 性能**：EmbedPDF Tiling / 视口渲染，按可见区域绘制；缩放与滚动由引擎插件处理。
   - **PDF 页码导航**：底部居中页码 pill（`‹ [当前页] / 总页数 ›`，输入数字回车跳页）；当前页用 `IntersectionObserver` 跟踪；键盘 `PageDown/PageUp` 翻页、`Home/End` 首/末页（PDF 区悬停或聚焦时生效，输入框内不拦截）；**续读**：按论文（路径）记住上次页码，重开自动续上（`pdf-reading-position.ts`，localStorage）。i18n `viewer:pdf.prevPage/nextPage/goToPage`。
   - **PDF 大纲（书签）**：有大纲时左上 `List` 切换左侧浮层目录（`@embedpdf/plugin-bookmark`）；点条目跳页；无大纲不显示。i18n `viewer:pdf.outline`。
@@ -335,7 +335,7 @@
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`src/lib/vault/fs-watch.ts`）。打开中的 `.md`/`NOTES.md`：无未存改动则重载；有未存改动 toast 提示不静默覆盖；内容相等抑制自写回声。结构性变更去抖刷新文件树。
 - **外部本地改名 repair**：只有 Host 明确给出可信 `rename { from, to }` 时才进入内链 repair。General 的 `autoUpdateInternalLinks: "ask"` 默认先显示影响范围；`"always"` 仍要求 dirty path、hash、磁盘状态门禁全部通过。成功后 Dockview panel、活动路径、树选中、Library scope 与 PDF highlights 统一重映射；remote Vault 不自动修复。
 - **Wiki 索引与嵌入刷新**：Markdown、图片或 PDF 变更触发约 900ms 防抖 rebuild；嵌入投影只按本批 watcher 实际触及的目标路径刷新，普通父文档编辑不会让其它嵌入重新加载。Host 可从应用 cache 目录中的版本化 SQLite snapshot warm restore；任一目标文件指纹变化、版本不匹配或缓存损坏即从 Vault 冷重建，cache 失败不阻塞 UI。
-- **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。
+- **保存冲突**：写盘前比对最后一次确认写入磁盘的内容；磁盘已被外部改则中止并 `notifyWarning`（`diskConflict.saveBlocked`）。冲突或写入失败不会推进编辑器的保存基线，也不会清除 dirty；同一路径的保存请求串行执行，只有写盘成功后才同步 tab seed。
 
 后续增强（未做）：
 

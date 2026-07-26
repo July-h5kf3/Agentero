@@ -14,7 +14,7 @@ use crate::features::wiki::rename::{
     atomic_write, content_hash, normalize_vault_path, WikiRenameError,
 };
 use crate::features::wiki::resolve::{fragment_anchors, FragmentAnchor};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -271,12 +271,18 @@ impl WikiHeadingRenameTransaction {
         let dirty = dirty_paths
             .iter()
             .map(|candidate| normalize_vault_path(candidate))
-            .collect::<Result<Vec<_>, _>>()?;
-        if edits_by_source.keys().any(|source| dirty.contains(source)) {
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let affected_dirty = edits_by_source
+            .keys()
+            .filter(|source| dirty.contains(*source))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !affected_dirty.is_empty() {
             return Err(WikiRenameError::new(
                 WikiRenameErrorCode::UnsavedEdits,
                 "unsaved editor changes block heading rename",
-            ));
+            )
+            .with_paths(affected_dirty));
         }
 
         let mut sources = Vec::new();
@@ -627,10 +633,18 @@ mod tests {
             2,
             target,
             "New",
-            &["notes/Source.md".into()],
+            &[
+                "notes/Target.md".into(),
+                "notes/Unrelated.md".into(),
+                "notes/Source.md".into(),
+            ],
         )
         .expect_err("dirty source must block");
         assert_eq!(dirty.code, WikiRenameErrorCode::UnsavedEdits);
+        assert_eq!(
+            dirty.paths,
+            vec!["notes/Source.md".to_string(), "notes/Target.md".to_string()]
+        );
 
         let stale = WikiHeadingRenameTransaction::plan(
             &root,

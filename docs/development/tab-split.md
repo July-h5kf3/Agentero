@@ -139,6 +139,8 @@ export type DocTab = {
 
 `fromJSON` 恢复布局后按 `tab.mode` 再 `setRenderer`，避免旧快照缺 renderer 字段时丢失保活。
 
+Dockview 拖动分隔条时会逐次更新 panel 几何，但布局持久化的 `onDidLayoutChange` 只在 sash 松手后触发。Dockview 7 默认在每个原始 `pointermove` 中同步执行递归 `layoutViews()`；高刷新输入设备可能在一帧内触发多次布局。`installDockviewSashFrameLoop` 因此只向 Dockview 转发每个 animation frame 的最后坐标，并在 `pointerup` 进入 Dockview 前同步刷新尚未处理的最终坐标；拖动状态还会阻止浏览器原生文本选择，并临时对 `.dv-view` / `.dv-render-overlay` 启用 layout + paint containment，限制 PDF 或编辑器的重排范围。PDF 的另一层成本来自 EmbedPDF viewport 的 `ResizeObserver`：每次宽高变化都会提交 viewport metrics，并带动 Scroll 可见页计算和 React 状态更新。`DockviewViewport` 保留 viewport DOM 边界对 panel 的即时跟随，sash 拖动期间仅暂停向 EmbedPDF 提交 resize metrics，因此旧页面布局会随实际边界连续裁剪或展开；松手后经单个 animation frame 提交最终尺寸。工具栏和 panel 边界始终跟随 Dockview，手动数值缩放不会被覆盖。
+
 Dockview 7 为尚未测量的 inactive `renderer: 'always'` panel 创建 `.dv-render-overlay` 时，只先写入 `visibility: hidden` 与 `pointer-events: none`。此时 overlay 还没有 inline `left/top/width/height`，绝对定位的 static position 可能落在当前内容之后并扩大滚动区。`src/index.css` 因此在 `.agentero-dockview .dv-render-overlay` 提供 `top: 0; left: 0` 初始锚点；panel 完成布局后 Dockview 的 inline 坐标覆盖该 fallback。不得用 `display: none` 或卸载 overlay 规避空白，否则 PDF 壳保活失效。
 
 ## 9. 已用 / 刻意未用的 dockview 能力（7.0.x）

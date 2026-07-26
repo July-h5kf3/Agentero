@@ -327,6 +327,21 @@
 	background-color: var(--background);
 }
 
+/*
+ * A Dockview sash move resizes multiple nested views in the same frame.
+ * Temporarily contain those layout/paint trees so a heavy PDF or editor panel
+ * cannot invalidate sibling panels while the divider is moving.
+ */
+.agentero-dockview.agentero-dock-sash-active .dv-view,
+.agentero-dockview.agentero-dock-sash-active .dv-render-overlay {
+	contain: layout paint;
+}
+
+.agentero-dockview.agentero-dock-sash-active {
+	-webkit-user-select: none;
+	user-select: none;
+}
+
 .agentero-dockview .dv-tabs-and-actions-container {
 	flex-shrink: 0;
 	position: relative;

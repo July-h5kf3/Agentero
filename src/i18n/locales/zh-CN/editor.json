@@ -44,6 +44,7 @@
 		"errors": {
 			"localOnly": "只有本地知识库中的文件支持标题重命名。",
 			"unsavedEdits": "请先保存或放弃所有受影响文件中的未保存修改。",
+			"unsavedFiles": "未保存文件：{{paths}}",
 			"sourceChanged": "有引用文件已在磁盘上变化。请重新载入后再重试。",
 			"headingMissing": "无法继续识别这个已保存标题。请重新载入笔记后再试。",
 			"invalidHeading": "请输入不同且有效的单行标题。",

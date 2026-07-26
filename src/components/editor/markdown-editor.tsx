@@ -64,6 +64,7 @@ import {
 	createManagedAssetGc,
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown/image";
+import { settleMarkdownSaveAttempt } from "@/lib/markdown/save-state";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import {
 	findWikiCompletionTrigger,
@@ -101,7 +102,11 @@ export type MarkdownEditorProps = {
 	 * persist / load seed) so the host can detect external modifications and avoid
 	 * silently overwriting them.
 	 */
-	onPersist?: (path: string, markdown: string, lastSaved: string) => void;
+	onPersist?: (
+		path: string,
+		markdown: string,
+		lastSaved: string,
+	) => Promise<boolean>;
 	onDirtyChange?: (dirty: boolean) => void;
 	/** After writing an image under `./assets/` (refresh file tree). */
 	onAssetsChanged?: () => void;
@@ -154,6 +159,8 @@ export function MarkdownEditor({
 	 */
 	const dirtyRef = useRef(false);
 	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const persistInFlightRef = useRef<Promise<void> | null>(null);
+	const persistQueuedRef = useRef(false);
 	const filePathRef = useRef(filePath ?? null);
 	filePathRef.current = filePath ?? null;
 	const onAssetsChangedRef = useRef(onAssetsChanged);
@@ -333,19 +340,62 @@ export function MarkdownEditor({
 		return joinFrontmatter(frontmatterRef.current, body);
 	}, [editor]);
 
+	const setDirty = useCallback(
+		(dirty: boolean) => {
+			if (dirtyRef.current === dirty) return;
+			dirtyRef.current = dirty;
+			onDirtyChange?.(dirty);
+		},
+		[onDirtyChange],
+	);
+
 	const persist = useCallback(() => {
-		if (readOnly) return;
-		const md = serialize();
-		if (md === savedRef.current) return;
-		if (!md.trim() && savedRef.current.trim()) return;
-		const lastSaved = savedRef.current;
-		savedRef.current = md;
-		if (dirtyRef.current) {
-			dirtyRef.current = false;
-			onDirtyChange?.(false);
-		}
-		if (filePath && onPersist) onPersist(filePath, md, lastSaved);
-	}, [readOnly, serialize, filePath, onPersist, onDirtyChange]);
+		if (readOnly || !filePath || !onPersist) return;
+		persistQueuedRef.current = true;
+		if (persistInFlightRef.current) return;
+
+		const task = (async () => {
+			while (persistQueuedRef.current) {
+				persistQueuedRef.current = false;
+				const markdown = serialize();
+				const lastSaved = savedRef.current;
+				if (markdown === lastSaved) {
+					setDirty(false);
+					continue;
+				}
+				if (!markdown.trim() && lastSaved.trim()) return;
+
+				let persisted = false;
+				try {
+					persisted = await onPersist(filePath, markdown, lastSaved);
+				} catch {
+					// The App owns user-facing persistence errors. Keep this editor
+					// dirty and retain the last disk-confirmed snapshot.
+				}
+				const settlement = settleMarkdownSaveAttempt({
+					attemptedMarkdown: markdown,
+					currentMarkdown: serialize(),
+					lastSaved,
+					persisted,
+				});
+				savedRef.current = settlement.savedMarkdown;
+				setDirty(settlement.dirty);
+				if (!persisted) {
+					persistQueuedRef.current = false;
+					return;
+				}
+				if (settlement.retryLatest) persistQueuedRef.current = true;
+			}
+		})();
+		persistInFlightRef.current = task;
+		const finish = () => {
+			if (persistInFlightRef.current === task) {
+				persistInFlightRef.current = null;
+				if (persistQueuedRef.current) persistRef.current();
+			}
+		};
+		void task.then(finish, finish);
+	}, [filePath, onPersist, readOnly, serialize, setDirty]);
 
 	// Latest persist closure, for the unmount flush (captures this file's path).
 	const persistRef = useRef(persist);
@@ -384,15 +434,14 @@ export function MarkdownEditor({
 
 		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
 		if (!dirtyRef.current) {
-			dirtyRef.current = true;
-			onDirtyChange?.(true);
+			setDirty(true);
 		}
 		if (timerRef.current) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(() => {
 			timerRef.current = null;
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
-	}, [editor, readOnly, onDirtyChange, updateWikiCompletionDraft]);
+	}, [editor, readOnly, setDirty, updateWikiCompletionDraft]);
 
 	const expandWikiLinkAt = useCallback(
 		(path: number[], cursorOffset: number) => {
