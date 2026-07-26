@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	collectMarkdownRelPaths,
+	collectTreeRefreshTargets,
 	collectWikiTargetRelPaths,
 	type FileNode,
 	isEagerTreeRel,
@@ -199,5 +200,61 @@ describe("replaceTreeNodeChildren / lazy pending", () => {
 			pendingDirsAmongExpanded(lazyTree, new Set(["/v/src/agents"])),
 		).toEqual(["/v/src/agents"]);
 		expect(pendingDirsAmongExpanded(lazyTree, new Set(["/v/src"]))).toEqual([]);
+	});
+});
+
+describe("collectTreeRefreshTargets", () => {
+	const refreshTree: FileNode[] = [
+		dir("/v/papers", [
+			dir("/v/papers/x", [
+				file("/v/papers/x/NOTES.md"),
+				dir("/v/papers/x/source", [], { childrenPending: true }),
+			]),
+		]),
+		dir("/v/src", [
+			file("/v/src/README.md"),
+			dir("/v/src/agents", [], { childrenPending: true }),
+		]),
+	];
+
+	it("maps changed files to their loaded parent directory", () => {
+		expect(
+			collectTreeRefreshTargets(refreshTree, "/v", ["/v/papers/x/a.pdf"]),
+		).toEqual(["/v/papers/x"]);
+	});
+
+	it("resolves changes inside a pending subtree to the nearest loaded ancestor", () => {
+		expect(
+			collectTreeRefreshTargets(refreshTree, "/v", [
+				"/v/papers/x/source/figs/a.png",
+				"/v/src/agents/deep/file.ts",
+			])?.sort(),
+		).toEqual(["/v/papers/x", "/v/src"]);
+	});
+
+	it("coalesces descendants under an eager ancestor target", () => {
+		expect(
+			collectTreeRefreshTargets(refreshTree, "/v", [
+				"/v/papers/new-dir",
+				"/v/papers/x/b.pdf",
+			]),
+		).toEqual(["/v/papers"]);
+	});
+
+	it("skips ignored names and returns [] when nothing visible changed", () => {
+		expect(
+			collectTreeRefreshTargets(refreshTree, "/v", [
+				"/v/papers/x/.git/config",
+				"/v/.agentero/catalog.sqlite",
+				"/other/vault/file.md",
+			]),
+		).toEqual([]);
+	});
+
+	it("falls back to a full rebuild for vault-root changes", () => {
+		expect(collectTreeRefreshTargets(refreshTree, "/v", ["/v/new.md"])).toBe(
+			null,
+		);
+		expect(collectTreeRefreshTargets(refreshTree, "/v", ["/v"])).toBe(null);
 	});
 });

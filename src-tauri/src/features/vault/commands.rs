@@ -1,6 +1,7 @@
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
-use crate::features::vault::{self, CreateVaultResult};
+use crate::features::vault::tree::VaultTreeNode;
+use crate::features::vault::{self, tree, CreateVaultResult};
 use crate::features::wiki::models::{
     WikiExternalRenamePreview, WikiRenameErrorCode, WikiRenameResult,
 };
@@ -78,6 +79,52 @@ pub fn vault_allow_fs_scope<R: Runtime>(app: AppHandle<R>, path: String) -> ApiR
             map_err(err)
         }
     }
+}
+
+/// Build the whole vault file tree in one pass (single IPC).
+#[tauri::command]
+pub fn vault_tree_build(vault_path: String) -> ApiResult<Vec<VaultTreeNode>> {
+    let op = OpTimer::start_with(
+        "vault_tree_build",
+        format!("vault={}", trunc(&vault_path, 200)),
+    );
+    let root = match vault_path_arg(&vault_path) {
+        Ok(root) if root.is_dir() => root,
+        Ok(_) => {
+            let err = AppError::message("vault path is not a directory");
+            op.finish_err(&err);
+            return map_err(err);
+        }
+        Err(err) => {
+            op.finish_err(&err);
+            return map_err(err);
+        }
+    };
+    op.finish_result(Ok(tree::build_tree(&root)))
+}
+
+/// List one directory's children (lazy expand / targeted tree refresh).
+#[tauri::command]
+pub fn vault_tree_children(vault_path: String, dir_path: String) -> ApiResult<Vec<VaultTreeNode>> {
+    let op = OpTimer::start_with(
+        "vault_tree_children",
+        format!("dir={}", trunc(&dir_path, 200)),
+    );
+    let root = match vault_path_arg(&vault_path) {
+        Ok(root) => root,
+        Err(err) => {
+            op.finish_err(&err);
+            return map_err(err);
+        }
+    };
+    let dir = match vault_path_arg(&dir_path) {
+        Ok(dir) => dir,
+        Err(err) => {
+            op.finish_err(&err);
+            return map_err(err);
+        }
+    };
+    op.finish_result(tree::list_children(&root, &dir))
 }
 
 #[derive(Debug, serde::Deserialize)]

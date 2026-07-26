@@ -12,7 +12,7 @@ type VaultFileEventsParams = {
 	/** Reload the matching open editor(s) after a file's content changed on disk. */
 	onDiskChange: (absPath: string) => void;
 	/** Refresh the file tree after a structural change (create/delete/rename). */
-	onStructuralChange: () => void;
+	onStructuralChange: (changedAbsPaths: string[]) => void;
 	/**
 	 * Any touched path (content or structural). Used to (debounced) rebuild the
 	 * wiki / backlinks / graph index so it never goes stale after external writes.
@@ -76,7 +76,7 @@ export function useVaultFileEvents({
 						onWikiChange?.(p);
 					}
 					// Structural changes affect the tree; plain content edits don't.
-					if (payload.kind !== "modify") onStructuralChange();
+					if (payload.kind !== "modify") onStructuralChange(payload.paths);
 				},
 			);
 		})();

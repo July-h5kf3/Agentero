@@ -82,8 +82,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 > **实现状态（V0.1）**  
 >
-> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`vault_allow_fs_scope`、`path_open_in_terminal`、`path_trash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
-> - 打开 Vault / 最近列表 / 树加载：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
+> - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`vault_allow_fs_scope`、`vault_tree_build` / `vault_tree_children`、`path_open_in_terminal`、`path_trash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
+> - 打开 Vault / 最近列表：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；本地树加载走 Host `vault_tree_build`（一次 IPC）；打开或恢复时会调用 `vault_ensure` 补种缺失 bundled skills。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。  
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
 #### `vault_create`（已实现）
@@ -147,6 +147,30 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 - **参数**：`{ path: string }`（本地绝对路径）。**返回**：`ApiResult<null>`。
 - **动机**：静态 scope 仅允许 `$HOME/**` / `$DOCUMENT/**` / `$DESKTOP/**` / `$DOWNLOAD/**`（`capabilities/default.json`）。dialog 选目录时 Tauri 会为该目录授予运行时 scope，但**不持久化**；重启后恢复位于上述根之外的 Vault（如 `D:\…`）会让每次 `plugin-fs` 调用（`readDir` / `readTextFile` / `exists`）报 **`forbidden path`**，直到再次用 dialog 打开。
 - **调用点**：前端 `ensureLocalFsScope(root)`（`src/lib/vault`，按根去重、并发共享同一 grant、幂等）在**任何 `plugin-fs` 读之前**调用 —— `loadVaultTree`、`loadTabResources`（恢复的标签页与树并发加载）、启动时校验恢复路径是否存在的 effect。远端 handle / 非 Tauri 环境为 no-op。
+
+#### `vault_tree_build` / `vault_tree_children`（已实现）
+
+本地文件树由 Host **一次 IPC** 构建（此前前端用 `plugin-fs readDir` 逐目录串行递归，目录数 = IPC 往返数）。远端 Vault 仍走 `remote_list` 的 TS 递归。
+
+- **`vault_tree_build`**：`{ vaultPath: string }` → `ApiResult<VaultTreeNode[]>`，一次递归 walk 返回整棵树。
+- **`vault_tree_children`**：`{ vaultPath: string, dirPath: string }` → `ApiResult<VaultTreeNode[]>`，列出单个目录的子节点；用于懒展开与 watcher 触发的**按路径局部刷新**。`dirPath` 必须在 Vault 内，否则报错。
+
+```ts
+type VaultTreeNode = {
+  name: string;
+  path: string;              // 绝对路径（前端映射为 FileNode，id = path）
+  kind: "file" | "directory";
+  children?: VaultTreeNode[];
+  childrenPending?: boolean; // 懒目录：未列出，展开时经 vault_tree_children 加载
+};
+```
+
+- **语义**（Rust `features/vault/tree.rs`，与 `src/lib/vault/tree.ts` 的远端路径保持一致）：
+  - eager 根（`papers/` / `notes/` / `plans/` / `.agents/`）全量递归；其它根目录列一层，子目录 `childrenPending`。
+  - **论文文件夹内的 `source/`**（含 `metadata.json` / `NOTES.md` / `PAPER.md` 任一 marker 的目录）不再递归 —— arXiv e-print 解压产物动辄上百文件，标记 `childrenPending` 懒加载。
+  - 忽略名（`.git` / `.venv` / `node_modules` / `*.egg-info` / 其它 dot 名，白名单 `.agents` / `.env.example`）与深度上限 12 同前端规则。
+  - 排序仍在前端（`sortNodes`，locale 感知）。
+- **局部刷新**：`vault:file-changed`（非 `modify`）携带的路径经 `collectTreeRefreshTargets`（`src/lib/vault/tree.ts`）映射到已加载的最近祖先目录节点，防抖 400ms 后仅对这些目录调 `vault_tree_children` 打补丁；根级变化 / 目标过多（>8）/ 无路径信息时回退整树 `vault_tree_build`。
 
 #### 远程 Vault（SSH/SFTP，MVP 已实现）
 

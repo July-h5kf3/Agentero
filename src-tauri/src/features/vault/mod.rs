@@ -456,3 +456,4 @@ mod tests {
 
 /// Tauri command shells for this feature.
 pub mod commands;
+pub mod tree;

@@ -148,6 +148,7 @@ import {
 import {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
+	collectTreeRefreshTargets,
 	collectWikiTargetRelPaths,
 	createVault,
 	createVaultDirectory,
@@ -488,6 +489,8 @@ export default function App() {
 	const treeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** Changed paths accumulated for the next debounced (targeted) tree refresh. */
+	const treeRefreshPathsRef = useRef<Set<string>>(new Set());
 	/** Debounced wiki/backlinks/graph index rebuild after on-disk changes. */
 	const wikiRebuildTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
@@ -1508,26 +1511,65 @@ export default function App() {
 		[refreshTabNotes, refreshTabMarkdown, t],
 	);
 
-	/** Debounced, quiet file-tree reload (no busy flicker) for external create/delete/rename. */
-	const scheduleTreeRefresh = useCallback(() => {
+	/**
+	 * Debounced, quiet file-tree reload (no busy flicker) for external
+	 * create/delete/rename. Re-lists only the affected directories when the
+	 * changed paths map onto loaded tree nodes; falls back to a full rebuild
+	 * otherwise (change at the vault root, too many targets, remote vault).
+	 */
+	const scheduleTreeRefresh = useCallback((changedAbsPaths?: string[]) => {
+		const pending = treeRefreshPathsRef.current;
+		// Callers without path info (rescan, manual) force a full rebuild.
+		if (!changedAbsPaths?.length) pending.add("");
+		else for (const p of changedAbsPaths) pending.add(p);
 		if (treeRefreshTimerRef.current) clearTimeout(treeRefreshTimerRef.current);
 		treeRefreshTimerRef.current = setTimeout(() => {
 			treeRefreshTimerRef.current = null;
 			const vault = vaultPathRef.current;
+			const changed = [...pending];
+			pending.clear();
 			if (!vault) return;
 			const generation = treeLoadGenerationRef.current;
-			void loadVaultTree(vault)
-				.then((nodes) => {
-					if (
-						vaultPathRef.current === vault &&
-						treeLoadGenerationRef.current === generation
-					) {
-						setTree(nodes);
-					}
-				})
-				.catch(() => {
-					// best-effort background refresh
-				});
+			const fresh = () =>
+				vaultPathRef.current === vault &&
+				treeLoadGenerationRef.current === generation;
+
+			const targets = changed.includes("")
+				? null
+				: collectTreeRefreshTargets(treeRef.current, vault, changed);
+			if (targets && targets.length === 0) return;
+
+			const refresh = async () => {
+				if (targets) {
+					const patches = await Promise.all(
+						targets.map(async (dir) => ({
+							dir,
+							children: await listVaultDirChildren(vault, dir),
+						})),
+					);
+					if (!fresh()) return;
+					setTree((prev) =>
+						patches.reduce(
+							(acc, p) => replaceTreeNodeChildren(acc, p.dir, p.children),
+							prev,
+						),
+					);
+					return;
+				}
+				const nodes = await loadVaultTree(vault);
+				if (fresh()) setTree(nodes);
+			};
+			void refresh().catch(() => {
+				// A target may have vanished mid-refresh: fall back to a full reload.
+				if (!targets) return;
+				void loadVaultTree(vault)
+					.then((nodes) => {
+						if (fresh()) setTree(nodes);
+					})
+					.catch(() => {
+						// best-effort background refresh
+					});
+			});
 		}, 400);
 	}, []);
 
@@ -1617,6 +1659,7 @@ export default function App() {
 				clearTimeout(treeRefreshTimerRef.current);
 				treeRefreshTimerRef.current = null;
 			}
+			treeRefreshPathsRef.current.clear();
 			setTree([]);
 			setTreeLoading(true);
 			// Tear down previous remote session so work catalogs are flushed.

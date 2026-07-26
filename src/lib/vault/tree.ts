@@ -1,7 +1,7 @@
-import { readDir } from "@tauri-apps/plugin-fs";
+import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
 import { isMarkdownPath } from "@/lib/vault/fs";
-import { joinVaultPath, normalizePathKey } from "@/lib/vault/path";
+import { normalizePathKey } from "@/lib/vault/path";
 import {
 	isRemoteVaultHandle,
 	remoteList,
@@ -53,6 +53,16 @@ export const TREE_EAGER_ROOT_NAMES = new Set([
  * Must stay in sync with {@link TREE_EAGER_ROOT_NAMES} where applicable.
  */
 const TREE_ALLOWED_DOT_NAMES = new Set([".env.example", ".agents"]);
+
+/** Any of these marks a directory as a paper unit whose `source/` is lazy. */
+const PAPER_MARKER_FILE_NAMES = new Set([
+	"metadata.json",
+	"NOTES.md",
+	"PAPER.md",
+]);
+
+/** Paper subdirectory listed lazily (arXiv e-prints hold hundreds of files). */
+const LAZY_PAPER_DIR_NAME = "source";
 
 /** True when this basename should never appear in the tree. */
 export function shouldIgnoreTreeName(name: string): boolean {
@@ -107,23 +117,6 @@ type TreeAdapter = {
 	list(dirPath: string, rel: string): Promise<TreeListEntry[]>;
 };
 
-function localTreeAdapter(): TreeAdapter {
-	return {
-		async list(dirPath, rel) {
-			const entries = await readDir(dirPath);
-			return entries
-				.filter((e): e is typeof e & { name: string } => !!e.name)
-				.map((e) => ({
-					name: e.name,
-					childPath: joinVaultPath(dirPath, e.name),
-					childRel: rel ? `${rel}/${e.name}` : e.name,
-					isDir: e.isDirectory,
-					isFile: e.isFile,
-				}));
-		},
-	};
-}
-
 function remoteTreeAdapter(handle: string): TreeAdapter {
 	const sessionId = remoteSessionIdFromHandle(handle);
 	return {
@@ -152,11 +145,30 @@ async function buildTree(
 
 	const entries = await adapter.list(dirPath, rel);
 	const nodes: FileNode[] = [];
+	const hasPaperMarker = entries.some(
+		(e) => e.isFile && PAPER_MARKER_FILE_NAMES.has(e.name),
+	);
 
 	for (const entry of entries) {
 		if (shouldIgnoreTreeName(entry.name)) continue;
 
 		if (entry.isDir) {
+			// Paper `source/` (arXiv e-print) is listed lazily on expand.
+			if (
+				!shallowOnly &&
+				hasPaperMarker &&
+				entry.name === LAZY_PAPER_DIR_NAME
+			) {
+				nodes.push({
+					id: entry.childPath,
+					name: entry.name,
+					path: entry.childPath,
+					kind: "directory",
+					children: [],
+					childrenPending: true,
+				});
+				continue;
+			}
 			const node = await buildDirNode(
 				adapter,
 				entry.childPath,
@@ -220,6 +232,33 @@ async function buildDirNode(
 	};
 }
 
+/** Host `VaultTreeNode` payload (`vault_tree_build` / `vault_tree_children`). */
+type VaultTreeNodeDto = {
+	name: string;
+	path: string;
+	kind: "file" | "directory";
+	children?: VaultTreeNodeDto[];
+	childrenPending?: boolean;
+};
+
+/** Map Host nodes to `FileNode`s, sorting each level like {@link sortNodes}. */
+function mapHostTreeNodes(nodes: VaultTreeNodeDto[]): FileNode[] {
+	return sortNodes(
+		nodes.map((n) => {
+			const node: FileNode = {
+				id: n.path,
+				name: n.name,
+				path: n.path,
+				kind: n.kind,
+			};
+			if (n.children) node.children = mapHostTreeNodes(n.children);
+			if (n.childrenPending !== undefined)
+				node.childrenPending = n.childrenPending;
+			return node;
+		}),
+	);
+}
+
 /**
  * List one directory level only (used when expanding a lazy folder).
  * Nested directories stay `childrenPending` (expand again to go deeper).
@@ -233,8 +272,12 @@ export async function listVaultDirChildren(
 		// Expanding a non-eager folder: only one more level; subdirs stay pending.
 		return buildTree(remoteTreeAdapter(rootPath), dirAbsPath, rel, 0, true);
 	}
-	// Local: dirAbsPath is absolute; rel only used for eager checks (disabled here).
-	return buildTree(localTreeAdapter(), dirAbsPath, "", 0, true);
+	// Local: single IPC; the Host applies the same eager/lazy semantics.
+	const nodes = await invokeApi<VaultTreeNodeDto[]>("vault_tree_children", {
+		vaultPath: rootPath,
+		dirPath: dirAbsPath,
+	});
+	return mapHostTreeNodes(nodes);
 }
 
 /**
@@ -292,6 +335,69 @@ export function treeHasPendingChildren(nodes: FileNode[]): boolean {
 	return false;
 }
 
+/** Max targeted refreshes per debounce window before falling back to a full rebuild. */
+const MAX_TREE_REFRESH_TARGETS = 8;
+
+/**
+ * Map watcher-changed absolute paths to the loaded directory nodes that need
+ * re-listing (targeted refresh instead of a full tree rebuild).
+ *
+ * Returns `null` when a full rebuild is required (change at the vault root,
+ * no loaded ancestor, or too many distinct targets). Returns `[]` when every
+ * change is invisible to the tree (e.g. only ignored names).
+ */
+export function collectTreeRefreshTargets(
+	nodes: FileNode[],
+	vaultPath: string,
+	changedAbsPaths: string[],
+): string[] | null {
+	const rootKey = normalizePathKey(vaultPath);
+
+	// Loaded (non-pending) directory nodes, keyed for case-insensitive lookup.
+	const loadedDirs = new Map<string, string>();
+	const walk = (list: FileNode[]) => {
+		for (const n of list) {
+			if (n.kind !== "directory") continue;
+			if (!n.childrenPending) loadedDirs.set(normalizePathKey(n.path), n.path);
+			if (n.children?.length) walk(n.children);
+		}
+	};
+	walk(nodes);
+
+	const targetKeys = new Set<string>();
+	for (const changed of changedAbsPaths) {
+		const key = normalizePathKey(changed);
+		if (key === rootKey) return null;
+		if (!key.startsWith(`${rootKey}/`)) continue;
+		const relSegments = key.slice(rootKey.length + 1).split("/");
+		if (relSegments.some((s) => shouldIgnoreTreeName(s))) continue;
+
+		let dirKey = key.slice(0, key.lastIndexOf("/"));
+		while (dirKey.length > rootKey.length) {
+			if (loadedDirs.has(dirKey)) {
+				targetKeys.add(dirKey);
+				break;
+			}
+			dirKey = dirKey.slice(0, dirKey.lastIndexOf("/"));
+		}
+		// Nearest loaded ancestor is the vault root: needs a full rebuild.
+		if (dirKey.length <= rootKey.length) return null;
+	}
+
+	// Drop targets covered by an ancestor target whose refresh recurses (eager).
+	const keys = [...targetKeys].sort((a, b) => a.length - b.length);
+	const kept: string[] = [];
+	for (const key of keys) {
+		const covered = kept.some(
+			(k) =>
+				key.startsWith(`${k}/`) && isEagerTreeRel(k.slice(rootKey.length + 1)),
+		);
+		if (!covered) kept.push(key);
+	}
+	if (kept.length > MAX_TREE_REFRESH_TARGETS) return null;
+	return kept.map((k) => loadedDirs.get(k) ?? k);
+}
+
 /** Flatten the loaded tree to Vault-relative internal-link targets. */
 export function collectWikiTargetRelPaths(
 	nodes: FileNode[],
@@ -329,5 +435,9 @@ export async function loadVaultTree(rootPath: string): Promise<FileNode[]> {
 		return buildTree(remoteTreeAdapter(rootPath), rootPath, "");
 	}
 	await ensureLocalFsScope(rootPath);
-	return buildTree(localTreeAdapter(), rootPath, "");
+	// Local: the Host walks the vault in-process and returns the tree in one IPC.
+	const nodes = await invokeApi<VaultTreeNodeDto[]>("vault_tree_build", {
+		vaultPath: rootPath,
+	});
+	return mapHostTreeNodes(nodes);
 }

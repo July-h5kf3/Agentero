@@ -37,6 +37,8 @@ macro_rules! common_commands {
             crate::features::vault::commands::vault_create,
             crate::features::vault::commands::vault_ensure,
             crate::features::vault::commands::vault_allow_fs_scope,
+            crate::features::vault::commands::vault_tree_build,
+            crate::features::vault::commands::vault_tree_children,
             crate::features::vault::commands::wiki_move,
             crate::features::vault::commands::wiki_external_rename_preview,
             crate::features::vault::commands::wiki_apply_external_rename_repair,
