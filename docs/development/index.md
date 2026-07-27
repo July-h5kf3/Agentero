@@ -4,6 +4,38 @@
 
 ## 技术与流程选型
 
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend (Web)                          │
+│  React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui    │
+│  - 三栏工作台                                                │
+│  - Markdown 编辑/预览                                        │
+│  - PDF / HTML 阅读器                                         │
+│  - 双链/反链/图谱                                            │
+│  - Agent 面板（会话 / 权限确认 / 读取路径回显）               │
+└───────────────────────────┬─────────────────────────────────┘
+│                           │ Tauri invoke / event
+┌───────────────────────────▼─────────────────────────────────┐
+│           Host (Tauri 2 + Rust) = ACP Client                 │
+│  - 文件系统操作（读写 Vault、文件树、文件监听）               │
+│  - arXiv / HTTP 抓取                                         │
+│  - Markdown / 双链 / 图谱索引                                 │
+│  - Agent 注册表 / 发现 / 会话 / 权限 UX                       │
+│  - 工作流 prompt 模板（总结 / 问答 / Related Work）           │
+│  - 本地配置与最近 Vault 存储                                  │
+└───────────────────────────┬─────────────────────────────────┘
+│                           │ Provider runtime (JSON-RPC 2.0 over stdio)
+┌───────────────────────────▼─────────────────────────────────┐
+│     用户本机已安装的 Agent（BYOA，Agentero 不打包）               │
+│  - ACP: OpenCode / Gemini CLI / Claude ACP / 自定义           │
+│  - Native: Codex App Server                                   │
+│  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Agentero 始终作为 **Client**，Agent CLI 作为 **Server**。
+
+
 | 领域 | 选型 | 原因 |
 |---|---|---|
 | 产品文档来源 | `docs/development/` 下的 Markdown | 需求和路线图可以在 Git 中 review、追踪和重构。 |
@@ -12,7 +44,7 @@
 | Rust 质量 | [`cargo fmt`](https://doc.rust-lang.org/cargo/commands/cargo-fmt.html) + [`cargo clippy`](https://doc.rust-lang.org/clippy/) | Rust 官方格式化与 lint 工具。 |
 | 桌面构建 | [Tauri CLI](https://v2.tauri.app/reference/cli/) | 本地和 CI 中构建桌面应用。 |
 | 发布 CI | [GitHub Actions](https://docs.github.com/actions) + [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) | `v*` tag 触发 macOS、Linux、Windows 安装包构建；macOS 可选 Developer ID 签名 + notarytool 公证。 |
-| 文档站 | [MkDocs](https://www.mkdocs.org/) + Read the Docs 主题 | 静态文档部署到 `gh-pages` 分支。 |
+| 文档站 | [MkDocs](https://www.mkdocs.org/) + Material for MkDocs | 静态文档部署到 `gh-pages` 分支。 |
 
 ## 当前实现状态
 

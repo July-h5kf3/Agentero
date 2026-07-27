@@ -19,6 +19,7 @@ dist-ssr
 *.p8
 AuthKey_*.p8
 certificate-base64.txt
+site/
 
 # Editor directories and files
 .vscode/*

@@ -64,7 +64,7 @@ Agentero 桌面应用
 | Agent UI | [AI Elements](https://elements.ai-sdk.dev/)、[Streamdown](https://github.com/vercel/streamdown)、[Agent Client Protocol](https://agentclientprotocol.com/) |
 | 编辑器与阅读器 | [Plate](https://platejs.org/)、[EmbedPDF](https://www.embedpdf.com/) + PDFium |
 | 图谱 | [react-force-graph-2d](https://github.com/vasturiano/react-force-graph) |
-| 文档站 | [MkDocs](https://www.mkdocs.org/) + [Read the Docs 主题](https://www.mkdocs.org/user-guide/choosing-your-theme/#readthedocs) |
+| 文档站 | [MkDocs](https://www.mkdocs.org/) + [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/) |
 
 ## 推荐阅读顺序
 

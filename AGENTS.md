@@ -103,8 +103,8 @@ cargo test -p agentero-cli
 
 ## 文档站与发布
 
-- 文档站使用 [MkDocs](https://www.mkdocs.org/) 与 Read the Docs 主题。
-- 本地预览：`python3 -m venv .venv-docs && . .venv-docs/bin/activate && pip install mkdocs==1.6.1 && mkdocs serve`。
+- 文档站使用 [MkDocs](https://www.mkdocs.org/) 与 Material for MkDocs 主题。
+- 本地预览：`python3 -m venv .venv-docs && . .venv-docs/bin/activate && pip install mkdocs-material==9.7.1 && mkdocs serve`。
 - `.github/workflows/docs.yml` 在文档相关文件变更后构建文档并部署到 `gh-pages` 分支。
 
 ## Commit

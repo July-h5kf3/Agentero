@@ -5,19 +5,47 @@ repo_name: poco-ai/agentero
 edit_uri: edit/main/docs/
 
 theme:
-  name: readthedocs
-  highlightjs: true
+  name: material
+  language: zh
+  logo: assets/agentero-app-icon.svg
+  palette:
+    scheme: default
+    primary: black
+    accent: grey
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.tracking
+    - navigation.top
+    - search.suggest
+    - search.highlight
 
 nav:
-  - 首页: index.md
-  - 用户指南:
-      - 使用指南: usage/index.md
+  - 教程:
+      - 快速上手: usage/index.md
       - 安装与首次使用: usage/getting-started.md
       - 导入和管理论文: usage/import-papers.md
       - 阅读、标注与整理: usage/read-and-organize.md
       - 接入 Agent: usage/agents.md
       - 使用 Zotero Connector: usage/zotero.md
       - 打开远程 Vault: usage/remote-vault.md
+
+  - 功能原型:
+      - 概览: development/index.md
+      - TODO: development/todo.md
+      - 路线图: development/roadmap.md
+      - 技术方案: development/technical-plan.md
+      - CLI 设计: development/cli.md
+      - PDF 划词提问: development/pdf-ask.md
+      - 翻译服务: development/translate.md
+      - Tab 内分屏: development/tab-split.md
+      - 广场 Plaza: development/plaza.md
+      - 运行日志: development/logging.md
+      - 远程 Vault（SSH/SFTP）: development/remote-vault.md
+      - 发布流程: development/release.md
+      - 标题双链稳定性与 Metadata Cache: development/wikilink-heading-reference-stability.md
+  
   - 前端:
       - 概览: frontend/index.md
       - UI 规范: frontend/ui.md
@@ -34,31 +62,14 @@ nav:
   - 测试:
       - 概览: test/index.md
       - 发布前 Checklist: test/release-checklist.md
-  - 调研:
-      - 标题双链稳定性与 Metadata Cache: research/wikilink-heading-reference-stability.md
-  - 开发:
-      - 概览: development/index.md
-      - 产品需求: development/prd.md
-      - 技术方案: development/technical-plan.md
-      - CLI 设计: development/cli.md
-      - PDF 划词提问: development/pdf-ask.md
-      - 翻译服务: development/translate.md
-      - Tab 内分屏: development/tab-split.md
-      - 广场 Plaza: development/plaza.md
-      - 运行日志: development/logging.md
-      - 远程 Vault（SSH/SFTP）: development/remote-vault.md
-      - macOS 签名与公证: development/macos-signing.md
-      - 发布流程: development/release.md
-      - 路线图: development/roadmap.md
-      - TODO: development/todo.md
-      - GitHub Project: development/github-project.md
+
   - Bug 修复记录:
       - DeepSeek 正文落入 Thinking: bug_fix/deepseek-thinking-body.md
       - ACP 会话恢复 ID 错误: bug_fix/acp-session-resume-id.md
       - 输入法组字 Enter 误发送: bug_fix/ime-composition-enter-submit.md
       - 普通编辑触发全部 Wiki 嵌入闪烁: bug_fix/wiki-embed-unrelated-refresh.md
       - 拖动 Dockview 分隔条时 PDF 卡顿: bug_fix/dockview-sash-pdf-resize-jank.md
-
+      - macOS 签名与公证: bug_fix/macos-signing.md
 markdown_extensions:
   - admonition
   - tables

@@ -129,6 +129,6 @@ mkdocs build --strict
 ```bash
 python3 -m venv .venv-docs
 . .venv-docs/bin/activate
-pip install mkdocs==1.6.1
+pip install mkdocs-material==9.7.1
 mkdocs build --strict
 ```
