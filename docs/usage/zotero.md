@@ -41,7 +41,7 @@ Agentero Connector 服务默认监听本机 `127.0.0.1:23119`。它只接受本�
 | 任务 | 推荐方式 |
 |---|---|
 | 浏览器中逐篇保存 | Connector |
-| 整体迁移已有 Zotero 文库 | [从 Zotero 迁移](import-papers.md#从-zotero-迁移) |
+| 整体迁移已有 Zotero 文库 | [从 Zotero 迁移](import-papers.md) |
 | 粘贴 DOI 或 arXiv ID | 魔棒 |
 | 管理完整 Zotero 数据库 | Zotero 本身 |
 
@@ -60,7 +60,7 @@ Connector 是增量导入入口，不会把 Agentero 变成 Zotero 的同步数�
 
 ## 当前限制
 
-- Connector 服务仅监听本机 loopback。
+- Connector 服务仅监听本机 loopback，不要暴露到局域网或公网。
 - 不能与 Zotero 桌面端同时占用 `23119`。
-- 快照、Cookies 和部分高级文档集成功能尚未实现。
-- 远程 Vault 可以使用 Connector，但必须先连接远程 Vault，并确认状态绑定到了远程会话。
+- 支持保存条目与 PDF 附件（含浏览器上传登录墙 PDF）；部分站点仍可能需在 Agentero 内手动 Download。
+- 远程 Vault 可以使用 Connector，但必须先连接远程会话，并确认状态绑定到该 Vault。

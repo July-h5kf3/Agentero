@@ -1,8 +1,7 @@
 # 广场（Plaza）— 外部来源发现
 
-> 状态：**设计已定（未实现）**  
 > 范围：侧栏虚拟节点 **广场** 及其子来源（Cool Papers / 播客 / 论文推荐）；中间栏发现流。  
-> 相关：[`../frontend/ui.md`](../frontend/ui.md)、[`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)、[`roadmap.md`](roadmap.md)、[`todo.md`](todo.md)。
+> 相关：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)、[`../backend/paper-import.md`](../backend/paper-import.md)、[`roadmap.md`](roadmap.md)、[`todo.md`](todo.md)。
 
 ## 0. 产品结论（2026-07-25）
 
@@ -189,7 +188,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | 区域 | 路径 |
 |---|---|
 | 设计 | `docs/development/plaza.md`（本文） |
-| UI 规范摘录 | `docs/frontend/ui.md` § 广场 |
+| UI 规范摘录 | `docs/frontend/shell.md` § 广场 |
 | 虚拟 path | `src/lib/paper/api.ts` 或 `src/lib/plaza/` |
 | 文件树 | `src/components/sidebar/file-tree.tsx` |
 | 中间栏 | `src/components/plaza/*` + `doc-view` |

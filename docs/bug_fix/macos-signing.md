@@ -241,4 +241,4 @@ src-tauri/target/release/bundle/dmg/…
 - `src-tauri/Info.plist`  
 - `src-tauri/tauri.conf.json`  
 - `.github/workflows/release.yml`  
-- [`release.md`](release.md)（版本 bump / tag 流程）  
+- [`release.md`](../development/release.md)（版本 bump / tag 流程）  

@@ -1,399 +1,57 @@
-# Agentero / notemd 数据模型
+# Vault 数据模型
 
-> 定义 Vault 的落盘结构、事实来源分层与核心数据类型。时间戳统一为 ISO 8601 字符串。  
-> **论文集合与结构化元数据**见专题 [`catalog.md`](catalog.md)（`.agentero/catalog.sqlite`）。
+事实来源分层：
 
-## 0. 设计原则
-
-Agentero 的存储遵循两条原则：
-
-1. **人的知识与原始归档以文件为准；结构化论文目录以 Catalog SQLite 为准**:笔记、标注、源文件必须是普通文件，可被外部编辑器打开；论文集合与 metadata 进入 `.agentero/catalog.sqlite`，支持查询与入库事务。这与 Zotero（几乎一切锁在单一 sqlite、笔记不可便携）不同：**笔记层仍是 Markdown**。
-2. **渐进式披露 (Progressive Disclosure)**:目录与 catalog 共同构成 Agent 接口。信息按"体量递增、成本递增"分层，Agent 按需逐层下钻，而不是一次性加载整篇论文。
-
-### 0.1 渐进式披露分层
-
-| 层 | 载体 | Agent / UI 何时用 | 体量 |
-|---|---|---|---|
-| L0 指令 | `AGENTS.md` | 会话开始，总是 | 极小 |
-| L1 索引 | **Catalog**（`paper_list` / 可选导出的 `PAPERS.md`） | 需要"库里有什么" | 小 (每篇一行) |
-| L2 条目 | `{paper}/NOTES.md` | 锁定某篇之后 | 小 |
-| L2.5 证据 | `{paper}/marks/*.json`（划词高亮 / 批注 / 提问 / 翻译） | 需要用户标注 / 精确引文 | 中 |
-| L3 正文 | `{paper}/PAPER.md` | 需要公式 / 实验细节 / 原文 | 大 |
-| L4 原始 | `{paper}/source/*` | 需追溯或重新解析 | 很大 |
-
-其中 `{paper}` = paper 文件夹（`papers/` 下任意深度，见下）。
-
-`AGENTS.md` 是渐进式披露的"总开关":它本身很短，只写清楚库怎么组织、L1 以 catalog 为准（根目录通常无 `PAPERS.md`）、按什么顺序读笔记与正文、引用要带本地路径、写入先走临时文件。
-
-### 0.2 事实来源分层
-
-| 层级 | 内容 | 落盘 |
-|---|---|---|
-| **Tier 1a 人的知识 + 原始归档** | `AGENTS.md`、`NOTES.md`、`marks/`、`notes/`、`plans/`、`.agents/`（skills 等）、`source/`、**用户插入的** `{mdDir}/assets/*`（见下） | 文件 |
-| **Tier 1b 结构化论文目录** | 论文集合 + 每篇 metadata | **`.agentero/catalog.sqlite`** |
-| **Tier 2 可选导出 / 派生** | `PAPERS.md`、`library.bib`、`PAPER.md`、**解析派生**的 `assets/` 图 | **按需**生成，非 Vault 必备 |
-| **Tier 3 可重建缓存** | 双链边、标注坐标、全文 FTS 副本等 | 可与 catalog 同库分表；可整删后重建 |
-
-- 删除 Tier 3:重扫 Markdown + 读 catalog 标题即可恢复图谱等。
-- 删除 Tier 2:可从 catalog / source 再导出或再解析（**不含**用户粘贴进笔记的图片）。
-- **删除 `catalog.sqlite`**:结构化 meta 丢失（除非事先 export 备份）；`papers/<id>/` 目录仍在。
-- Tier 1a 是不可再生的用户手写与归档，任何写入都要谨慎 (先临时文件、确认后落盘)。
-- **`assets/` 双义**：同一目录可同时存放（1）用户经编辑器插入的图（Tier 1a，删节点可 GC）；（2）PDF 解析等派生资源（Tier 2，可再生成）。二者文件名唯一，互不覆盖。
-
-## 1. Vault 结构
-
-```text
-agentero-vault/
-├── AGENTS.md              # L0 Agent 行为规范与读取协议
-├── papers/                # 文献区；可含组织子目录
-│   ├── 1706.03762/        # paper 单元（一级）
-│   │   ├── NOTES.md
-│   │   ├── marks/         # 划词：ask/translate 单文件 + annotations.json 高亮/批注
-│   │   ├── PAPER.md       # 可选
-│   │   ├── assets/
-│   │   └── source/
-│   └── nlp/               # 组织目录（非 paper）
-│       └── transformers/
-│           └── 1706.03762/  # paper 单元（嵌套，最小单元仍是该文件夹）
-│               ├── NOTES.md
-│               └── source/
-├── notes/                 # 概念笔记；亦可放 loose 附件（如 notes/attachments/*.pdf）
-├── plans/
-├── assets/                # 可选：非 paper 媒体（demo / 用户图床）；不进 catalog
-├── .agents/               # Vault 本地 Agent 资产（Create Vault 脚手架）
-│   ├── README.md
-│   └── skills/            # `$` 技能：`skills/<id>/SKILL.md`
-└── .agentero/
-    ├── catalog.sqlite     # path = paper 文件夹相对路径；schema_version = 3
-    ├── .trash/            # 回收站：删除移入 <批次>/（manifest.json + 文件）；撤销可恢复
-    └── config.json
-```
-
-> **预览**：Vault 内**任意路径**的 `.pdf` 与常见图片（png/jpg/gif/webp/bmp/svg/avif/ico）均可在中间栏打开；不要求位于 `papers/`。Demo 脚手架见 [`../test/index.md`](../test/index.md)。
-
-> **默认不生成**：根级 `PAPERS.md`、`library.bib`、各篇 `metadata.json`。  
-> 需要可读索引或 BibTeX 时，使用 `catalog:export_papers_md` / `catalog:export_bibtex`（见 [`catalog.md`](catalog.md) §5.4）。
-
-### 1.1 PDF 分析派生 sidecar
-
-论文 PDF 的引用与插图解析结果固定写入 `source/agentero-cite.json`、`source/agentero-figures.json` 和 `source/agentero-figures/*.png`。它们是可删除、可重建的派生数据，不属于用户笔记或原始归档；字段契约和重建规则见 [`pdf-analysis.md`](pdf-analysis.md)。
-
-> **Paper 文件夹**是最小单元：以标记文件/目录识别（`NOTES.md` / `marks/` / `source/` / `assets/` 等），可位于 `papers/` 下任意深度。  
-> **Catalog `path`**（Vault 相对路径）标识位置；**`id`** 为逻辑 id（arXiv ID 或 citekey）。  
-> 默认入库可仍写 `papers/<id>/`；用户也可整理到 `papers/<topic>/…/<id>/`。citekey 冲突时追加字母后缀。
-
-## 2. 核心文件约定
-
-### `AGENTS.md`(L0，事实来源)
-
-Vault 内的 Agent 行为规范，至少包含：
-
-- **读取协议**:L1 以应用 catalog 为准（无默认 `PAPERS.md`）；锁定篇目后按 `NOTES.md → marks/ → PAPER.md → source/` 下钻。
-- 笔记结构规范 (三段论)。
-- 引用路径要求：回答必须列出读取过的本地文件路径。
-- 生成内容的双链要求：保留 `[[...]]` 格式。
-- 写入规范：先写临时文件，用户确认后落盘;不得覆盖用户手写笔记。
-
-### 论文集合与 metadata（Catalog，非 Markdown 文件）
-
-权威存储：**`.agentero/catalog.sqlite`** 的 `papers` 表。  
-字段、schema、导出与实现见 **[`catalog.md`](catalog.md)**。  
-UI 论文库（`paper_list`）/ Paper Info / 远程 PDF·HTML URL（`paper_get`）均读 catalog，不扫 `metadata.json`。
-
-其中 **`is_read`**（bool，schema v3）：是否已完成 **paper-reader** 精读工作流。默认 `false`。触发：魔棒入库 / 单篇 Download 资源就绪后可**自动**精读；文件树在「本地 PDF +（TeX 或 `PAPER.md`）齐全且未读」时显示 **Zap** 图标供**手动**重跑。成功写入 `NOTES.md` 后置 `true`。Skill 触发语法按 provider（Codex `$` / Claude `/` / 其它注入正文）；进度在左下角后台任务条（可与入库/下载任务衔接）。
-
-Vault 技能种子（**Create Vault** 与 **打开/恢复 Vault 时的 `vault_ensure`**；模板见 `templates/vault/.agents/skills/`）：
-
-| Skill | 用途 | 备注 |
-| --- | --- | --- |
-| `paper-reader` | 精读 → `{paper}/NOTES.md` | 本项目维护 |
-| `agentero-cli` | headless `agentero` CLI | 本项目维护 |
-| `vault-normalizer` | 将现有研究目录整理为 Agentero Vault 规范 | 本项目维护 |
-| `idea-evaluator` | 研究 idea 评审 | 来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)（**CC BY-NC-SA 4.0**） |
-| `deep-research` | 综述级文献调研 | 同上 |
-
-- **已存在不覆盖**：用户改过的 skill 文件保持原样。
-- **应用更新**：发行版模板里**新增**的 skill 在下次 `vault_ensure`（打开 Vault）时写入缺失路径；不会静默覆盖旧版用户副本。
-
-亦可放在 `~/.agents/skills` / `~/.claude/skills`。第三方 skill 的来源与 LICENSE 见 vault 内 `.agents/skills/README.md`。
-
-### 可选导出：`PAPERS.md` / `library.bib`
-
-| 文件 | 含义 | 何时出现 |
-|---|---|---|
-| `PAPERS.md` | Markdown 表形态的论文索引（历史 L1 文件形态） | 仅用户或工作流**显式导出** |
-| `library.bib` | BibTeX 汇总 | 仅**显式导出** |
-
-二者**不是**手工 master，也**不是**入库写路径；改 meta 只写 SQLite。导出后若用户再入库，导出文件**不会**自动更新（避免假装它是权威源）。
-
-### `NOTES.md`(L2，事实来源)
-
-单篇论文的结构化压缩笔记，纯粹是人的知识/综合产物，不掺元数据 frontmatter。
-
-默认结构：
-
-```md
-# 解决了什么问题
-
-# 方法是什么
-
-# 效果怎么样
-```
-
-### Markdown 内嵌图片（`./assets/`）
-
-编辑任意 Markdown（含 `NOTES.md` 与 `notes/**/*.md`）时，**粘贴 / 工具栏插入**的图片统一落在**该 `.md` 文件旁**的 `assets/` 目录，正文写入便携相对路径（Obsidian 兼容；**禁止**把大图 base64 写进 `.md`）：
-
-```md
-![可选说明](./assets/image-2026-07-16_12-00-00-abc123.png)
-```
-
-| 项 | 约定 |
+| 数据 | 权威 |
 |---|---|
-| 落盘目录 | `{mdDir}/assets/`（对 paper 的 `NOTES.md` 即 `{paper}/assets/`） |
-| 链接写法 | `./assets/<file>`（相对当前 `.md`） |
-| 触发 | 剪贴板粘贴图片；工具栏「插入图片」选本地文件 |
-| 展示 | 相对路径 → 本地 `blob:` 位图预览；**选中时保留位图** + ring + 下方 monospace 源码 `![alt](url)`（不再用源码替换位图，避免剪切/粘贴冲突） |
-| 删除 / GC | 文档中移除图片节点后，若该 URL 在**全文引用计数为 0**，且路径属于本笔记 managed `assets/`，则 **延迟 ~15s** 删磁盘文件（剪切→粘贴 / 撤销期间可取消）；离开编辑器时 flush 待删项；`https://` / `data:` 等远程或内联 URL **不**删盘 |
-| 安全 | GC 仅限 `{mdDir}/assets/` 下文件；拒绝 `..` 穿越；不删 `assets` 目录本身 |
-| 命名 | 粘贴：`image-<时间戳>-<短 id>.ext`；点选文件尽量保留原名，冲突则 `-1` / `-2` 后缀 |
-| 实现 | `src/lib/markdown/image.ts`；编辑器 `MarkdownEditor` + `ImageElement`；插入/删除后 `onAssetsChanged` 刷新文件树 |
-| 权限 | Host capability 含 `fs:allow-write-file`（二进制写入 assets） |
+| 笔记、PDF、TeX、marks | Vault 普通文件 |
+| 论文集合与结构化 metadata | `.agentero/catalog.sqlite` |
+| 双链索引 | 由 Markdown 重建（不落业务库） |
 
-与 PDF 解析派生资源共用同一 `assets/` 文件夹时互不冲突（文件名唯一）。用户插入图属 **Tier 1a**；勿把仅由解析生成的图误当成可随意 GC 的临时缓存（当前 GC **只**针对编辑器移除的 managed `./assets/` 链接）。
+`PAPERS.md` / `library.bib` **不**默认生成；需要时导出。
 
-### `marks/`（L2.5，PDF 划词标记 — 唯一运行时事实来源）
-
-划词后的 **提问 / 高亮·批注 / 翻译** 全部为 **JSON**，落在同一目录（pretty，便于 Git diff）：
+## 根目录
 
 ```text
-papers/<id>/marks/<id>.json           # kind: ask | translate（及遗留 kind: highlight）
-papers/<id>/marks/annotations.json    # EmbedPDF 高亮/批注（export/import 传输格式）
+Vault/
+├── AGENTS.md
+├── papers/
+├── notes/
+├── plans/
+├── .agents/skills/
+└── .agentero/
+    ├── catalog.sqlite
+    └── .trash/
 ```
 
-| 文件 | 含义 | 主要字段 |
-|------|------|----------|
-| `marks/<id>.json` · `kind: ask` | 多轮就地提问 | `anchor`（page/rects/quote）、`messages[]`、`status` |
-| `marks/<id>.json` · `kind: translate` | 成功划词翻译（可页边回访） | `page`、`rects`、`quote?`、`result?`、`error?` |
-| `marks/annotations.json` | **高亮 / 批注**（EmbedPDF 注解数组；`contents` 非空 = 批注） | 插件 transfer item；调色板键 / quote 在注解 `custom` |
-| （遗留）`marks/<id>.json` · `kind: highlight` | 旧归一化高亮；打开时一次性迁入 `annotations.json` 后删除 | `page`、`rects`、`quote`、`color?`、`comment?` |
+## Paper 单元
 
-- **不**写 PDF 二进制、**不**进 catalog 正文、**不**默认写 `NOTES.md`。
-- 提问 / 翻译坐标为页内归一化 0–1；高亮几何由 EmbedPDF 注解（页点坐标）保存。
-- 实现：`src/lib/pdf/selection/marks-io.ts` + `pdf-ask` / `pdf-highlight`（含 `annotation-store.ts`）/ `pdf-translate` 的 IO；UI 见 [`../development/pdf-ask.md`](../development/pdf-ask.md)。
-- **阅读热力**：聚合 ask / translate mark 与高亮视图的 page + y，Library 标题文字横向背景（左=文首、右=文末）表示位置强度；可选 `{paper}/reading-meta.json`（`pageCount`）。
-
-### `PAPER.md`(L3，派生)
-
-位于 paper 文件夹根部的 `PAPER.md`(不在 `source/` 内)。面向 Agent 阅读的统一可读正文。**仍是文件，不进 catalog 正文列。**
-
-| 来源情况 | `source/` 放什么 | `PAPER.md` |
-|---|---|---|
-| arxiv 有 LaTeX | **默认下载**：`{id}.pdf` + e-print 解包的 `.tex` 工程 | **不自动生成**（Agent 可直接读 `.tex`） |
-| 无 TeX（非 arXiv / e-print 失败 / PDF-only） | **默认下载** PDF | **下载后** liteparse 生成 Markdown（下载后自动） |
-| 扫描件 | 原始 PDF | liteparse OCR → Markdown，`body_quality=low` |
-
-**入库下载**（`lookup_import_batch` / `paper_download_assets`，见 [`identifier-lookup.md`](identifier-lookup.md) §1.3）：
-
-- PDF → `{paper}/{id}.pdf`（论文文件夹根目录，不在 `source/` 下）
-- arXiv LaTeX → `https://arxiv.org/e-print/{id}` → 解压进 `source/`（拒绝路径穿越）
-- **无 TeX 且有 PDF**：下载流程结束后用 **liteparse** 写 `{paper}/PAPER.md`，并更新 catalog `body_source` / `body_quality`（文本层 `pdf`+`medium`；OCR 主导 `ocr`+`low`）
-- 文件树：paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` → Download（hover 列原因）；Library 行可批量 Download；解析走 Download 后 liteparse；设置 `autoPaperReader`（默认关）开启时入库/单篇 Download 后可自动精读；资源齐全且 `is_read=false` → Zap 手动精读
-
-正文来源与质量记录在 **catalog** 的 `body_source` / `body_quality` 字段。`PAPER.md` 可删可重建，`source/` 中的原始文件才是归档事实来源。中间栏 **PDF 预览**优先本地 `{paper}/*.pdf`（无本地则先下载，失败再远程 `pdf_url`）；**HTML 预览**仍走 catalog 远程 `html_url`。
-
-## 3. 数据类型
-
-### 3.1 Vault
-
-```ts
-interface VaultInfo {
-  id: string;
-  name: string;
-  root_path: string;
-}
+```text
+papers/<id>/
+├── NOTES.md          # 人/Agent 笔记
+├── <id>.pdf          # 可选
+├── marks/            # 高亮/批注/提问/翻译 JSON
+├── source/           # TeX 等（可懒加载）
+├── PAPER.md          # 无 TeX 时 liteparse 正文
+├── assets/           # NOTES 内嵌图等
+└── metadata.json     # 可选投影（catalog 为权威）
 ```
 
-### 3.2 文件树
+## marks/
 
-```ts
-interface FileNode {
-  path: string;
-  name: string;
-  type: 'file' | 'directory';
-  children?: FileNode[];
-}
-```
+- 高亮/批注：`annotations.json`（含 `comment` 的为批注）
+- 提问/翻译：`<id>.json`（`kind`）
+- 不写 PDF 二进制，不强制写入 NOTES
 
-### 3.3 论文元数据 (Catalog `papers` 行)
+## Markdown 内嵌图
 
-与 `.agentero/catalog.sqlite` 中一行对应，是单篇论文结构化元数据的事实来源（不再默认落盘 `metadata.json`）。
+`{mdDir}/assets/` + 相对路径 `![](./assets/…)`；前端 GC 无引用文件。
 
-```ts
-interface PaperMetadata {
-  path: string;               // paper 文件夹 Vault 相对路径（主键语义）
-  id: string;                 // 逻辑 id：arXiv ID 或 citekey
-  type: 'arxiv' | 'pdf' | 'html' | 'doi' | 'other';
-  title: string;
-  authors: string[];          // 展示用
-  /** 完整 creators（Translator 映射，含 creatorType） */
-  creators?: { firstName?: string; lastName?: string; name?: string; creatorType?: string }[];
-  year?: number;
-  /** 原始日期串（Translator `date`） */
-  date?: string;
-  abstract?: string;
-  /**
-   * Catalog 标签。序列化兼容：无色为字符串，有色为 `{ name, color }`。
-   * `color` 预置 id：red/orange/yellow/green/teal/blue/indigo/purple。
-   * 前端读写经 `coercePaperTags` / `normalizePaperTags`（`src/lib/ui/tag-colors.ts`）。
-   */
-  tags: Array<string | { name: string; color?: string }>;
+## 远程
 
-  // 标识符
-  arxiv_id?: string;
-  doi?: string;
-  isbn?: string;
-  issn?: string;
-  pmid?: string;
+逻辑模型相同；物理 IO 为 SFTP，catalog 有 work mirror。见 [remote.md](remote.md)。
 
-  // 出版信息（Translator 期刊/图书字段并入）
-  publication?: string;       // publicationTitle / proceedingsTitle / bookTitle
-  volume?: string;
-  issue?: string;
-  pages?: string;
-  publisher?: string;
-  place?: string;
-  series?: string;
-  language?: string;
+## 类型
 
-  // 来源链接（catalog 存远程 URL；PDF 预览优先本地文件）
-  /**
-   * 远程 PDF URL：下载候选；本地 PDF 缺失且下载失败时作预览回退。
-   * 推荐 arXiv: `https://arxiv.org/pdf/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
-   */
-  pdf_url?: string;
-  /**
-   * 远程 HTML URL（iframe 预览，不强制本地下载）。
-   * 推荐 arXiv: `https://arxiv.org/html/{arxiv_id}`；缺省且有 arxiv_id 时自动推导。
-   */
-  html_url?: string;
-  /** 摘要页 / 条目页，如 arXiv abs、doi.org */
-  source_url?: string;
-
-  // 正文来源与质量（本地 PDF 解析时用；魔棒通常不填）
-  body_source?: 'latex' | 'html' | 'pdf' | 'ocr';
-  body_quality?: 'high' | 'medium' | 'low';
-
-  // 引用与溯源
-  bibtex_key?: string;
-  citation_count?: number;
-  /** Translator itemType，如 journalArticle / preprint / book */
-  zotero_item_type?: string;
-  /** libraryCatalog，如 DOI.org (Crossref)、arXiv.org */
-  meta_source?: string;
-  /** Translator extra 残余 */
-  extra?: string;
-
-  /** 列表/导出用一行说明（可选） */
-  summary?: string;
-
-  // 状态与时间
-  status: 'pending' | 'importing' | 'completed' | 'failed';
-  added_at: string;   // ISO 8601
-  updated_at: string; // ISO 8601
-}
-```
-
-**元数据来源**（统一）:
-
-- **魔棒 / 标识符入库**：Translator（含 arXiv、DOI、ISBN、PMID 等）→ **直接 map 进 `PaperMetadata`** → catalog；`pdf_url`/`html_url` 只存远程 URL。见 [`identifier-lookup.md`](identifier-lookup.md) §5。
-- **本地 PDF**：提取 DOI/arXiv 后同样可走 Translator 补全，再经用户确认写 catalog。
-- `type='pdf'` 时 `body_source` 为 `pdf` 或 `ocr`，`body_quality` 由解析后端决定。
-
-### 3.4 论文运行时对象 (Paper)
-
-Host 返回给前端的运行时对象 = catalog 行 + 解析出的 Vault 相对路径。
-
-```ts
-interface Paper extends PaperMetadata {
-  vault_path: string;        // = path，paper 文件夹
-  notes_path: string;        // {path}/NOTES.md
-  marks_dir: string;         // {path}/marks/
-  source_dir: string;        // {path}/source/
-  paper_md_path?: string;    // {path}/PAPER.md
-  pdf_path?: string;         // {path}/source/original.pdf
-  assets_dir?: string;       // {path}/assets/
-}
-```
-
-### 3.5 标注（`marks/*.json`）
-
-运行时标注见 §2 `marks/`：`kind` ∈ `highlight` | `ask` | `translate`。高亮/批注字段摘要：
-
-```ts
-interface PdfHighlight {
-  version: 1;
-  kind: "highlight";
-  id: string;
-  page: number;
-  rects: { x: number; y: number; w: number; h: number }[]; // 0–1 归一化
-  quote?: string;
-  color?: string;
-  comment?: string; // 非空 = 批注
-  createdAt: string;
-  updatedAt?: string;
-}
-```
-
-## 4. Catalog 与缓存纪律
-
-详见 [`catalog.md`](catalog.md)。摘要：
-
-1. **Catalog（`papers` 表）是结构化目录的权威来源**，备份应包含 `.agentero/catalog.sqlite`。
-2. **入库与改 meta**：写 SQLite；文件系统负责对应 paper 文件夹下笔记与 source。
-3. **导出** `PAPERS.md` / `library.bib` 为只读投影，默认不生成、不自动刷新。
-4. **双链等 Tier 3**：可从 Markdown 重建；与 catalog 冲突时，**笔记文件赢**（链接文本）、**paper 标题以 catalog 为准**。
-5. 历史 Vault 若仍有 `metadata.json`，打开时可导入 catalog（见 catalog 迁移节）。
-
-## 5. Agent 运行时类型（应用配置，非 Vault 文件）
-
-以下类型由 Host 配置与会话层持有，**不** 写入 Vault 目录；模型密钥不在此模型中出现。
-
-```ts
-/** 用户本机 ACP Agent 注册项（BYOA） */
-interface AgentDescriptor {
-  id: string;
-  name: string;
-  template: 'opencode' | 'gemini' | 'claude-acp' | 'codex-acp' | 'qodercli' | 'custom';
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-  available: boolean; // PATH / 绝对路径探测结果
-  last_error?: string;
-}
-
-interface AgentSession {
-  id: string;
-  agent_id: string;
-  vault_path: string;
-  workflow: 'summary' | 'qa' | 'related_work' | 'free';
-  created_at: string;
-  status: 'idle' | 'running' | 'awaiting_permission' | 'closed' | 'failed';
-}
-
-interface AgentResult {
-  session_id: string;
-  message_id: string;
-  content: string;
-  sources: string[]; // Vault 相对路径
-  draft_path?: string; // 待用户确认的临时草稿
-}
-```
-
-## 6. 相关文档
-
-- [`catalog.md`](catalog.md)：Catalog schema、导出、Host 实现。
-- `docs/development/prd.md`:产品需求与验收标准 (§5 文件结构)。
-- `docs/development/technical-plan.md`:存储分层与入库/Agent 数据流；ACP Client + BYOA。
-- `docs/backend/api.md`:Host 命令与数据模型引用。
-- `docs/backend/wikilinks.md`:双链与图谱（paper 标题读 catalog）。
+时间戳 ISO 8601 字符串。运行时 TS/Rust 类型以代码与 [api.md](api.md) 为准。  
+Catalog 列定义：[catalog.md](catalog.md)。

@@ -10,7 +10,7 @@
 - `src-tauri/src/services/agent/templates.rs` — Claude 安装命令（用户 prefix）
 - `src-tauri/src/services/agent/acp.rs` — 远端 spawn 注入 proxy env
 - `src/components/settings/settings-content.tsx` / `agent-pane.tsx` — 远端 Agent 页：代理、Install ACP
-- 设计总览：[`../development/remote-vault.md`](../development/remote-vault.md) §5 / §11
+- 设计总览：[`../backend/remote.md`](../backend/remote.md) §5 / §11
 
 ---
 
@@ -170,5 +170,5 @@ npm i -g @agentclientprotocol/claude-agent-acp --prefix "$HOME/.local"
 
 - OpenSSH 非交互与 login shell：`bash -lc`、无 TTY
 - Linuxbrew 路径：`/home/linuxbrew/.linuxbrew`
-- 产品设计：[`remote-vault.md`](../development/remote-vault.md) §5 远端 BYOA、§11 风险（nvm/PATH）
+- 产品设计：[`remote.md`](../backend/remote.md) §5 远端 BYOA、§11 风险（nvm/PATH）
 - API：`remote_agent_scan` / `remote_agent_probe` / `remote_agent_open_install_terminal`（[`api.md`](../backend/api.md)）

@@ -115,6 +115,6 @@ keydown Enter    →  处理器仍把这次 Enter 当成「发送」
 
 ## 6. 参考
 
-- UI 约定（Composer Enter / 换行）：[`../frontend/ui.md`](../frontend/ui.md) §3.2  
+- UI 约定（Composer Enter / 换行）：[`../frontend/shell.md`](../frontend/shell.md) §3.2  
 - AI Elements Prompt Input：[`../frontend/components.md`](../frontend/components.md)  
 - MDN：[`KeyboardEvent.isComposing`](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/isComposing)、[`compositionend`](https://developer.mozilla.org/en-US/docs/Web/API/Element/compositionend_event)  

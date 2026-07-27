@@ -31,34 +31,48 @@ nav:
       - 使用 Zotero Connector: usage/zotero.md
       - 打开远程 Vault: usage/remote-vault.md
 
-  - 功能原型:
-      - 概览: development/index.md
-      - TODO: development/todo.md
-      - 路线图: development/roadmap.md
-      - 技术方案: development/technical-plan.md
-      - CLI 设计: development/cli.md
-      - PDF 划词提问: development/pdf-ask.md
-      - 翻译服务: development/translate.md
-      - Tab 内分屏: development/tab-split.md
-      - 广场 Plaza: development/plaza.md
-      - 运行日志: development/logging.md
-      - 远程 Vault（SSH/SFTP）: development/remote-vault.md
-      - 发布流程: development/release.md
-      - 标题双链稳定性与 Metadata Cache: development/wikilink-heading-reference-stability.md
-  
   - 前端:
       - 概览: frontend/index.md
-      - UI 规范: frontend/ui.md
+      - 工作台壳: frontend/shell.md
+      - Dockview 工作区: frontend/workspace.md
+      - 文件树: frontend/vault-tree.md
+      - 论文库 Library: frontend/library.md
+      - 入库 UI: frontend/paper-import.md
+      - Markdown 编辑: frontend/markdown.md
+      - PDF 阅读与划词: frontend/pdf.md
+      - Agent 面板: frontend/agent.md
+      - 双链 UI: frontend/wiki.md
+      - 命令面板: frontend/command-palette.md
+      - 翻译: frontend/translate.md
+      - 设置与主题: frontend/settings.md
       - 组件约定: frontend/components.md
+
   - 后端:
       - 概览: backend/index.md
-      - API 契约: backend/api.md
       - 数据模型: backend/data-model.md
-      - 论文目录库: backend/catalog.md
-      - 魔棒与 Translator: backend/identifier-lookup.md
-      - Paper 入库流水线: backend/paper-import-pipeline.md
-      - Zotero Connector 兼容: backend/connector.md
-      - 双链与图谱: backend/wikilinks.md
+      - Catalog: backend/catalog.md
+      - Vault FS: backend/vault.md
+      - 论文入库: backend/paper-import.md
+      - Zotero Connector: backend/connector.md
+      - 双链索引: backend/wiki.md
+      - Agent Host: backend/agent.md
+      - 远程 Vault: backend/remote.md
+      - 搜索: backend/search.md
+      - 设置: backend/settings.md
+      - 翻译: backend/translate.md
+      - 运行日志: backend/logging.md
+      - CLI: backend/cli.md
+      - API 全表: backend/api.md
+
+  - 开发草稿:
+      - 概览: development/index.md
+      - 路线图: development/roadmap.md
+      - TODO: development/todo.md
+      - 广场 Plaza: development/plaza.md
+      - PDF 引用与插图: development/pdf-analysis.md
+      - 标题双链调研: development/wikilink-heading-reference-stability.md
+      - 发布流程: development/release.md
+
   - 测试:
       - 概览: test/index.md
       - 发布前 Checklist: test/release-checklist.md
@@ -69,7 +83,10 @@ nav:
       - 输入法组字 Enter 误发送: bug_fix/ime-composition-enter-submit.md
       - 普通编辑触发全部 Wiki 嵌入闪烁: bug_fix/wiki-embed-unrelated-refresh.md
       - 拖动 Dockview 分隔条时 PDF 卡顿: bug_fix/dockview-sash-pdf-resize-jank.md
+      - 远端 ACP PATH / SSH: bug_fix/remote-acp-path-ssh.md
+      - 远程 Vault 文件树懒加载: bug_fix/remote-vault-tree-lazy.md
       - macOS 签名与公证: bug_fix/macos-signing.md
+
 markdown_extensions:
   - admonition
   - tables

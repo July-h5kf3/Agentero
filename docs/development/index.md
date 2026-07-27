@@ -1,108 +1,28 @@
-# 开发
+# 开发草稿
 
-开发分区说明 Agentero 要构建什么、当前完成了什么、还剩什么，以及发布和文档如何维护。
+本目录只放：
 
-## 技术与流程选型
+1. **路线图 / TODO / 技术方案 / 发布**（工程规划）
+2. **尚未实现**的功能设计稿
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (Web)                          │
-│  React 19 + TypeScript + Vite + Tailwind CSS + shadcn/ui    │
-│  - 三栏工作台                                                │
-│  - Markdown 编辑/预览                                        │
-│  - PDF / HTML 阅读器                                         │
-│  - 双链/反链/图谱                                            │
-│  - Agent 面板（会话 / 权限确认 / 读取路径回显）               │
-└───────────────────────────┬─────────────────────────────────┘
-│                           │ Tauri invoke / event
-┌───────────────────────────▼─────────────────────────────────┐
-│           Host (Tauri 2 + Rust) = ACP Client                 │
-│  - 文件系统操作（读写 Vault、文件树、文件监听）               │
-│  - arXiv / HTTP 抓取                                         │
-│  - Markdown / 双链 / 图谱索引                                 │
-│  - Agent 注册表 / 发现 / 会话 / 权限 UX                       │
-│  - 工作流 prompt 模板（总结 / 问答 / Related Work）           │
-│  - 本地配置与最近 Vault 存储                                  │
-└───────────────────────────┬─────────────────────────────────┘
-│                           │ Provider runtime (JSON-RPC 2.0 over stdio)
-┌───────────────────────────▼─────────────────────────────────┐
-│     用户本机已安装的 Agent（BYOA，Agentero 不打包）               │
-│  - ACP: OpenCode / Gemini CLI / Claude ACP / 自定义           │
-│  - Native: Codex App Server                                   │
-│  - cwd = 当前 Vault；密钥与模型由 Agent CLI 自行管理          │
-└─────────────────────────────────────────────────────────────┘
-```
+已实现功能的说明在 [`../frontend/`](../frontend/index.md) 与 [`../backend/`](../backend/index.md)，按功能分篇。
 
-> **协议说明**：此处 ACP 指编辑器 ↔ coding agent 的 [Agent Client Protocol](https://agentclientprotocol.com/)（stdio 上的 JSON-RPC 2.0），**不是** Linux Foundation 的 REST 风格 ACP。Agentero 始终作为 **Client**，Agent CLI 作为 **Server**。
+## 规划
 
+| 文档 | 说明 |
+|---|---|
+| [roadmap.md](roadmap.md) | 自 **0.2.1** 起的未来版本切片（无已实现清单） |
+| [todo.md](todo.md) | **仅未完成** backlog（按 0.3 / 0.4… 分组） |
+| [technical-plan.md](technical-plan.md) | 入口：指向前后端 index（正文已拆分） |
+| [release.md](release.md) | bump / tag / Release |
+| [bug.md](bug.md) | 已知问题语料（精简） |
 
-| 领域 | 选型 | 原因 |
-|---|---|---|
-| 产品文档来源 | `docs/development/` 下的 Markdown | 需求和路线图可以在 Git 中 review、追踪和重构。 |
-| 应用包管理 | [pnpm](https://pnpm.io/) | 快速、基于 lockfile 的 Node 依赖管理。 |
-| TypeScript 质量 | [Biome](https://biomejs.dev/) | 前端代码与文档相关文件的格式化和检查。 |
-| Rust 质量 | [`cargo fmt`](https://doc.rust-lang.org/cargo/commands/cargo-fmt.html) + [`cargo clippy`](https://doc.rust-lang.org/clippy/) | Rust 官方格式化与 lint 工具。 |
-| 桌面构建 | [Tauri CLI](https://v2.tauri.app/reference/cli/) | 本地和 CI 中构建桌面应用。 |
-| 发布 CI | [GitHub Actions](https://docs.github.com/actions) + [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) | `v*` tag 触发 macOS、Linux、Windows 安装包构建；macOS 可选 Developer ID 签名 + notarytool 公证。 |
-| 文档站 | [MkDocs](https://www.mkdocs.org/) + Material for MkDocs | 静态文档部署到 `gh-pages` 分支。 |
+## 未实现草稿
 
-## 当前实现状态
+| 文档 | 主题 |
+|---|---|
+| [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
+| [pdf-analysis.md](pdf-analysis.md) | PDF 引用与插图 sidecar |
+| [wikilink-heading-reference-stability.md](wikilink-heading-reference-stability.md) | 标题双链调研补充 |
 
-| 区域 | 状态 | 摘要 |
-|---|---|---|
-| V0.1 工作台 | ✅ | 文件树（Finder / **回收站** / 多选拖拽）、Markdown IO + **内嵌图**、**文件监听**、Library + tags + **Rescan**、多窗口、catalog、后台任务条、全局 Toast |
-| V0.2 标识符入库 | 🟡 精确路径 ✅ | 魔棒 + Translator、catalog 权威、**默认 PDF + arXiv TeX**、单篇/Library **补下缺失**；关键词 Agent 候选与 export 仍待 |
-| V0.3 Agent | 🟡 | BYOA + ACP / Codex 原生 runtime、流式 UI、Sources、**paper-reader**（Zap + 可选自动默认关）、**权限三档**（含每次询问）、**面板 workflow**；`AGENTS.md` 注入仍待 |
-| V0.4 双链/图谱 | ✅ | Backlinks + Graph 同栏；`graph_get_graph`；**文件变更防抖重建索引** |
-| 阅读增强 | 🟡 | 任意路径 PDF/图；**导航·适应整页·大纲·⌘F·真实 scale·平滑划词**；划词菜单 → `marks/*.json`；无文本层降级仍待 |
-| 翻译服务 | ✅ 首版 | 应用级可插拔 TranslateService（free + BYOA Agent，无付费 API）；设置 → 翻译；见 [`translate.md`](translate.md) |
-| V0.5 Importer | 🟡 本地 PDF ✅ | **本地 PDF 入库**（魔棒多选 / 拖到 `papers/`）已落地；Importer trait / DOI / MinerU 仍待 |
-| V0.6 标签页与分屏 | ✅ | **全局 Dockview**：中间栏文档 panel + 上下左右/多格分屏；论文默认 PDF\|NOTES **左右分屏**；标题栏无文档 tab（见 [`tab-split.md`](tab-split.md)） |
-| V0.7 引用关系 | ⏳ | Connected Papers 式邻域、文内引用 hover→Info、引用 Agent 工作流（规划中） |
-| 广场（Plaza） | 📋 设计中 | 侧栏虚拟「广场」：Cool Papers WebView + 推荐 v0 + 播客占位；**P0 不入库**；见 [`plaza.md`](plaza.md) |
-| CLI headless | ✅ MVP | `cli/` + workspace；`agentero` bin；Vault/catalog/import/export/`paper tag *`；无 BYOA（见 [`cli.md`](cli.md)） |
-| Vault 采纳 | ⏳ | 打开已有文件夹时自动发现/整理；编程 + 可选 Skill（见 roadmap） |
-| Zotero Connector 兼容 | ✅ MVP | 本机 `23119`：`saveItems` + 子文件夹 targets + **`saveAttachment`**；设置开关默认关；见 [`../backend/connector.md`](../backend/connector.md) |
-| 全库搜索 / 命令面板 | ✅ Phase A | `⌘P`/`⌘K` 快速打开 + `⇧⌘P` 命令模式；`>` 前缀；见 [`command-palette.md`](command-palette.md) |
-| 应用弹层栈 | ✅ | `overlay-stack`：Esc/`⌘W` 统一关最顶层 sheet/Dialog；见 [`../frontend/ui.md`](../frontend/ui.md) §3.0 |
-| Release CI | ✅ | `v*` tag → **prepare** 草稿 Release；**installers** / **cli** 并行矩阵上传（同草稿） |
-| macOS 签名/公证 | 🟡 | 工程与 CI 已接 Developer ID + notarytool；需配置证书与 GitHub secrets（见 [`macos-signing.md`](macos-signing.md)） |
-| 远程 Vault（SSH/SFTP） | ✅ MVP | 文件权威远端 + 远端 BYOA（ACP over SSH）；见 [`remote-vault.md`](remote-vault.md) |
-
-更细的勾选表见 [`roadmap.md`](roadmap.md)；可执行任务见 [`todo.md`](todo.md)。
-
-## 本分区文档
-
-- [`prd.md`](prd.md)：产品需求、范围、用户流程、验收标准。
-- [`roadmap.md`](roadmap.md)：状态快照、完成项和优先级路线图。
-- [`todo.md`](todo.md)：按 P0/P1/P2 拆分的可执行 backlog。
-- [`github-project.md`](github-project.md)：GitHub Project「Agentero」结构、标签、Issue 映射（B1–B8 / F1–F18 → #7–#32；B2/B4–B8 已关闭；#33 非 Codex 历史；看板 [orgs/poco-ai/projects/1](https://github.com/orgs/poco-ai/projects/1)）。
-- [`bug.md`](bug.md)：已知 bug / UX 语料与勾选状态（与 GitHub B1–B8 对齐）。
-- [`technical-plan.md`](technical-plan.md)：跨前后端的技术方案和模块设计。
-- [`lib-layout.md`](lib-layout.md)：前端 `src/lib` 领域分包布局与导入约定。
-- [`cli.md`](cli.md)：CLI 语义与技术栈——目录 **`cli/`**，不迁 core，path 依赖 `agentero_lib`；Vault 管理/发现/暴露 + 文献基础；无 BYOA；Agent 友好 JSON（**MVP 已落地**）。
-- [`pdf-ask.md`](pdf-ask.md)：PDF 划词提问（MVP 已落地；选区/双击/悬停 → 迷你问答 → JSON → 锚点图标）技术栈与数据契约。
-- [`translate.md`](translate.md)：翻译服务（首版已落地；应用级可插拔 **免费 MT + BYOA Agent**；设置 → 翻译页；PDF 划词为首个消费方）。
-- [`logging.md`](logging.md)：运行日志（**P0 已落地**；`tauri-plugin-log` + `log` + CLI `env_logger`；关键操作 start/end；与 Toast / `ApiResult` 分层）。
-- [`command-palette.md`](command-palette.md)：全局命令面板 / 快速打开（对照 VS Code ⇧⌘P · ⌘P；现状与分期设计）。
-- [`tab-split.md`](tab-split.md)：全局 Dockview 工作区（V0.6）——中间栏单一 dockview 管理全部文档 panel；标题栏无文档 tab；论文默认 PDF | NOTES 左右分屏。
-- [`plaza.md`](plaza.md)：广场（Plaza）——侧栏虚拟发现入口；Cool Papers WebView、推荐 v0、播客占位；P0 不做入库。
-- [`remote-vault.md`](remote-vault.md)：远程 Vault（SSH/SFTP）与**远端 BYOA**——文件权威全在服务器、ACP over SSH；含技术栈与开源参考（**MVP 已实现**）。
-- [`macos-signing.md`](macos-signing.md)：macOS **Developer ID** 签名、**notarytool** 公证与 staple、CI secrets。
-- [`release.md`](release.md)：版本 bump / tag 发布流程；含 iPadOS 上架调研与 macOS 签名入口。
-
-- [`.md`](.md)：简短产品假设。
-- Bug 修复记录：
-  - [`../bug_fix/deepseek-thinking-body.md`](../bug_fix/deepseek-thinking-body.md)（DeepSeek 正文落入 Thinking）
-  - [`../bug_fix/acp-session-resume-id.md`](../bug_fix/acp-session-resume-id.md)（ACP 会话恢复使用错误的 provider session ID）
-  - [`../bug_fix/ime-composition-enter-submit.md`](../bug_fix/ime-composition-enter-submit.md)（输入法组字时 Enter 误发送）
-  - [`../bug_fix/remote-acp-path-ssh.md`](../bug_fix/remote-acp-path-ssh.md)（远端 ACP：BatchMode SSH PATH / Linuxbrew / Install 引号）
-- Paper 入库流水线统一：[`../backend/paper-import-pipeline.md`](../backend/paper-import-pipeline.md)。
-
-## 交叉引用
-
-- 前端 UI 细节：[`../frontend/index.md`](../frontend/index.md)
-- 后端数据与 API 契约：[`../backend/index.md`](../backend/index.md)
-- 论文目录库 Catalog：[`../backend/catalog.md`](../backend/catalog.md)
-- 魔棒与 Translator：[`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)
-- 总体技术框架：[`../index.md`](../index.md)
+macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。

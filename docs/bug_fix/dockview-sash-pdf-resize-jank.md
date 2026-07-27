@@ -11,7 +11,7 @@
 - `src/index.css` — `.agentero-dock-sash-active` 期间的 `contain: layout paint` 与 `user-select: none`
 - `test/dockview-sash-pointer.test.ts` — sash frame 调度与 pointerup 补齐测试
 - `test/pdf-dockview-resize.test.ts` — resize gate 合并 / suppress / 一次性提交测试
-- 文档：`docs/development/tab-split.md`、`docs/frontend/ui.md`、`docs/test/release-checklist.md`
+- 文档：`docs/frontend/workspace.md`、`docs/frontend/shell.md`、`docs/test/release-checklist.md`
 
 ---
 
@@ -106,7 +106,7 @@ Dockview 7 在每个原始 `pointermove` 中同步执行递归 `layoutViews()`�
 }
 ```
 
-注意**不能用 `display: none` 或卸载 render overlay**——那会让 PDF 壳保活失效（见 `docs/development/tab-split.md` 的 overlay 锚点说明）。
+注意**不能用 `display: none` 或卸载 render overlay**——那会让 PDF 壳保活失效（见 `docs/frontend/workspace.md` 的 overlay 锚点说明）。
 
 ### 3.4 前后对比
 

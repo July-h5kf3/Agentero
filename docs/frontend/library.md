@@ -1,0 +1,34 @@
+# 论文库 Library
+
+中间栏 catalog 表格；数据一次 `paper_list` 进内存。
+
+## 视图
+
+- 虚拟路径 `agentero:library`（不写盘）。
+- **全库**：点 Library 节点或关光文档后默认页。
+- **文件夹作用域**：单击非 paper 目录 → 同一 Library panel 上按 `paper.path` **前缀过滤**（不新开 tab、不重新 RPC）。
+- Paper Info / NOTES 仅选中**具体论文**时出现。
+
+## 表格能力
+
+| 能力 | 说明 |
+|---|---|
+| 排序 | 表头点击 |
+| 列 | 表头右键选列 / 拖拽排序；顺序+显隐持久化 `libraryColumns`；标题列不可隐藏 |
+| 滚动 | 横向 + 纵向 |
+| tags | 染色 chip；搜索框匹配标签子串 |
+| Rescan | `paper_rescan`：盘上有、catalog 无则补齐 |
+| Download | 库内任一篇缺资源时批量补下 |
+| 导入/导出 | Library 工具栏；导出 BibTeX 亦可在 Library 节点右键 |
+
+## Tags（前端）
+
+- Paper Info 增删 + Apple 8 色色盘 → `paper_set_tags`。
+- 色板：`src/lib/ui/tag-colors.ts`。
+- CLI 标签见 [../backend/catalog.md](../backend/catalog.md)。
+
+## 代码
+
+- UI：`src/components/library/`
+- 状态：`src/lib/paper/library-store.ts`、`library-actions.ts`
+- 单测：`test/library-scope.test.ts`

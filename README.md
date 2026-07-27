@@ -72,9 +72,9 @@ agentero/
 ├── mkdocs.yml            # MkDocs 文档站配置
 ├── src/                  # React + TypeScript 前端
 ├── src-tauri/            # Tauri 2 + Rust Host（Vault、Wiki、ACP）
-├── cli/                  # headless CLI（bin agentero；见 docs/development/cli.md）
+├── cli/                  # headless CLI（bin agentero；见 docs/backend/cli.md）
 ├── templates/vault/      # Create Vault 脚手架（含 .agents/skills）
-├── docs/                 # MkDocs 文档源文件
+├── docs/                 # MkDocs：usage / frontend / backend / development（草稿）
 └── package.json
 ```
 
