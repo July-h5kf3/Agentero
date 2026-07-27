@@ -22,6 +22,7 @@ import {
 	ListTodo,
 	type LucideIcon,
 	Quote,
+	Search,
 	Strikethrough,
 	Underline,
 } from "lucide-react";
@@ -43,6 +44,7 @@ import {
 	ResponsiveFixedToolbar,
 	type ToolbarAction,
 } from "./responsive-toolbar";
+import { ToolbarButton } from "./toolbar";
 
 function useBlockTypeAction(
 	blockType: string | undefined,
@@ -153,7 +155,12 @@ function useImageAction(label: string): ToolbarAction {
  * WYSIWYG formatting toolbar for the Markdown/notes editor. Must be rendered
  * inside a `<Plate>` provider (it reads editor state via Plate hooks).
  */
-export function MarkdownEditorToolbar() {
+export function MarkdownEditorToolbar({
+	onOpenFind,
+}: {
+	/** Show the Search button at the right end; opens the find & replace bar. */
+	onOpenFind?: () => void;
+}) {
 	const { t } = useTranslation("editor");
 	const blockType = useSelectionFragmentProp({
 		defaultValue: KEYS.p,
@@ -237,5 +244,21 @@ export function MarkdownEditorToolbar() {
 		],
 	);
 
-	return <ResponsiveFixedToolbar actions={actions} className="rounded-none" />;
+	return (
+		<ResponsiveFixedToolbar
+			actions={actions}
+			className="rounded-none"
+			trailing={
+				onOpenFind ? (
+					<ToolbarButton
+						tooltip={`${t("findReplace.title")} (⌘F)`}
+						aria-label={t("findReplace.title")}
+						onClick={onOpenFind}
+					>
+						<Search />
+					</ToolbarButton>
+				) : undefined
+			}
+		/>
+	);
 }

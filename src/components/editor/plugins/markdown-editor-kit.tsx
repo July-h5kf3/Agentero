@@ -84,6 +84,7 @@ import { HrElement } from "@/components/editor/hr-node";
 import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
+import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
 import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
@@ -258,6 +259,9 @@ export const MarkdownEditorKit = [
 	MentionPlugin.withComponent(MentionElement),
 	WikiLinkPlugin,
 	LinkPlugin,
+
+	// Find & replace (⌘F) — search highlight decorations
+	...FindReplaceKit,
 
 	// Always end with a paragraph so void blocks (image / HR / table) leave a
 	// place to click, arrow-down, or type after the last content.

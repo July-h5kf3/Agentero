@@ -240,6 +240,7 @@
   - **代码块滚动**：fenced code block 保留独立横向滚动；鼠标或触控板的纵向滚动继续传递给 Markdown 文档容器，不在代码块上截断。
   - **代码块语言**：每个 fenced code block 左上角显示一个语言选择器（hover / focus-within / 展开时显现），弹出面板顶部为搜索框，下方为候选列表（最高 `40vh`），列出 lowlight `common` 注册的全部语言 + 「Plain text」（清空 `lang`）。选中后写入 `code_block.lang` 并经 `@platejs/markdown` 序列化为 ```` ```lang ```` 围栏，lowlight 据此生成 highlight.js token class，由 `src/index.css` 的 `.agentero-codeblock .hljs-*`（GitHub 主题，浅色 / `.dark` 深色）着色。新建代码块默认无语言（不高亮，避免对纯文本误判）。只读 / 预览态不渲染选择器，但仍按已存 `lang` 高亮。
   - **代码块复制**：每个 fenced code block 右上角显示复制按钮（hover / focus-within 时显现），点击经 `copyTextToClipboard`（`src/lib/core/clipboard.ts`）复制代码块纯文本（`NodeApi.string`，去掉围栏与语言标记），成功后短暂切换为 ✓ 并 1.5s 后还原；失败弹右上角 Toast。只读 / 预览态同样可用。
+  - **文档内查找替换**（`⌘/Ctrl+F` 或工具栏右端放大镜）：右上浮动查找条（`find-replace-bar.tsx`）：查询 + 命中计数 + 上/下一个（`Enter`/`Shift+Enter` 循环）+ 左侧折叠箭头展开替换行（替换当前 / 全部替换）；`Esc` 关闭并回焦编辑器；打开时若有单行选区自动预填。高亮经 `@platejs/find-replace` decoration（自定义 decorate 支持含链接/行内公式的段落，当前命中另用强调色，见 `plugins/find-replace-kit.tsx`）；替换用 editor transforms，大小写不敏感。仅可编辑态启用。i18n `editor:findReplace.*`。
   - **双链 Live Preview**：`[[目标#标题|别名]]`、`[[#^block-id]]`、`![[嵌入]]` 和 Vault 内 Markdown links 均由 Host 统一解析。Plate 使用稳定的 non-void inline 保存完整源码；selection 进入语法范围时显示可编辑源码，离开后立即恢复链接或嵌入投影。输入 `[[` 提供文件、alias、标题和 block 候选；`[[#` 仅列出当前文件标题，`[[^` 仅列出当前文件中已有 ID 的 block，并将选择结果写成 `[[#^block-id]]`。Tab 将光标保留在闭合括号前，Enter 完成并离开链接。标题/block 跳转在目标编辑器挂载后执行；fragment 已失效但文件仍存在时降级打开目标文件，不定位 fragment，并显示错误 Toast。
   - **重命名当前标题**：编辑器右键菜单提供“重命名当前标题…”并打开受控输入 Dialog。光标在标题内时定位该标题；在正文中定位当前章节之前最近的标题；若光标位于首个标题之前则定位首个标题，因此只要文档含标题且其它门禁通过，菜单即可执行。命令仅对本地、可写、无未保存修改且保存态中能以 heading path + line 唯一确认的文档启用；普通直接编辑标题只保存当前文档，不同步入链。成功后重载所有受影响的已打开文档并刷新 Backlinks、Outgoing links、Graph 与嵌入；dirty/stale/歧义或事务失败显示结构化错误，不覆盖编辑器内容。
   - **只读嵌入**：`![[note]]`、`![[note#heading]]` 与 `![[note#^block-id]]` 分别显示整篇 Markdown、标题区段或 block；`![[image.png]]`（支持 `|宽度` / `|宽x高`）和 `![[document.pdf]]` 复用现有图片/PDF 组件。投影从当前行之后以块布局显示，内部链接可点击跳转；进入源码时隐藏但不卸载投影。循环嵌入与超过 4 层的嵌套显示有界状态。
@@ -282,6 +283,7 @@
 | `⌘0` | 重置界面缩放 | 恢复 100%（`zoomReset`） |
 | `⌘P` / `⌘K` | 快速打开（开关） | 论文标题·作者·id 即时 quick-open + 去抖 `vault_search` 全文；输入 `>` 可切命令模式（`CommandPalette` · `quickOpen`） |
 | `⇧⌘P` | 命令面板（开关） | 执行应用命令（设置 / 侧栏 / Vault / 标签…）；与快速打开共用浮层（`commandPalette`） |
+| `⌘F` | Markdown 编辑器查找替换 | 编辑器聚焦时唤起右上查找条（非全局快捷键，见 §3 中间栏「文档内查找替换」）；PDF 查看器的 `⌘F` 为文档内查找 |
 | `Esc` | 关闭最顶层弹层 | 统一经 `overlay-stack`：设置 / 命令面板 / Zotero 迁移 / 移动论文 / Agent 权限等 |
 | `⌘W` | 关闭最顶层弹层 / 标签 / 窗口 | 有注册弹层时先关弹层；否则关当前 tab；仅剩全库 Library 时关窗（File → Close 同源） |
 | `⌘N` | 新建窗口 | `window_new`；欢迎页 + 最近列表，不恢复上次 Vault |

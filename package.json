@@ -48,6 +48,7 @@
 		"@fontsource-variable/geist": "^5.2.9",
 		"@platejs/basic-nodes": "^53.0.0",
 		"@platejs/code-block": "^53.0.0",
+		"@platejs/find-replace": "^53.0.0",
 		"@platejs/footnote": "^53.0.0",
 		"@platejs/indent": "^53.0.0",
 		"@platejs/list": "^53.1.3",

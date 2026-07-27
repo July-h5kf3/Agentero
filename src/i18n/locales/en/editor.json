@@ -32,6 +32,18 @@
 		"pickTitle": "Insert image into note",
 		"pickFilter": "Images"
 	},
+	"findReplace": {
+		"title": "Find & replace",
+		"searchPlaceholder": "Find",
+		"replacePlaceholder": "Replace",
+		"noResults": "No results",
+		"prev": "Previous match",
+		"next": "Next match",
+		"close": "Close",
+		"toggleReplace": "Toggle replace",
+		"replace": "Replace",
+		"replaceAll": "Replace all"
+	},
 	"contextMenu": {
 		"cut": "Cut",
 		"copy": "Copy",

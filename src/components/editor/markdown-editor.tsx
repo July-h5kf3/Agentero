@@ -16,6 +16,7 @@ import {
 } from "react";
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
+import { FindReplaceBar } from "@/components/editor/find-replace-bar";
 import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
@@ -196,6 +197,8 @@ export function MarkdownEditor({
 		useState(false);
 	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
 	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
+	const [findOpen, setFindOpen] = useState(false);
+	const [findFocusTick, setFindFocusTick] = useState(0);
 
 	useEffect(
 		() => () => {
@@ -983,7 +986,22 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
-				if (event.key === "Escape") setWikiCompletionDraft(null);
+				if (event.key === "Escape") {
+					setWikiCompletionDraft(null);
+					setFindOpen(false);
+				}
+			}
+			if (
+				(event.metaKey || event.ctrlKey) &&
+				!event.shiftKey &&
+				!event.altKey &&
+				event.key.toLowerCase() === "f"
+			) {
+				event.preventDefault();
+				event.stopPropagation();
+				setFindOpen(true);
+				setFindFocusTick((tick) => tick + 1);
+				return;
 			}
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
 				event.preventDefault();
@@ -1258,103 +1276,121 @@ export function MarkdownEditor({
 							className,
 						)}
 					>
-						{showToolbar && !readOnly ? <MarkdownEditorToolbar /> : null}
-						<ContextMenu onOpenChange={handleContextMenuOpenChange}>
-							<ContextMenuTrigger asChild>
-								<EditorContainer
-									ref={editorContainerRef}
-									className="agentero-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
-									onContextMenuCapture={handleEditorContextMenu}
-									onKeyDownCapture={readOnly ? undefined : handleKeyDown}
-									onBeforeInputCapture={
-										readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
-									}
-									onBlur={readOnly ? undefined : handleEditorBlur}
-									onCompositionStartCapture={
-										readOnly ? undefined : handleWikiLinkCompositionStart
-									}
-									onCompositionEndCapture={
-										readOnly ? undefined : handleWikiLinkCompositionEnd
-									}
-								>
-									{/*
-									 * min-h-full + generous bottom padding so the last line is easy
-									 * to click and Enter can always create a new block below it
-									 * (matches Plate default variant pb-72).
-									 */}
-									<Editor
-										variant="none"
-										placeholder={placeholder}
-										readOnly={readOnly}
-										className="min-h-full px-6 pt-4 pb-48"
-										style={fontSize ? { fontSize } : undefined}
-									/>
-									{!readOnly ? (
-										<WikiLinkSuggestion
-											draft={wikiCompletionDraft}
-											onClose={() => setWikiCompletionDraft(null)}
-											onContinue={(raw) =>
-												setWikiCompletionDraft((current) =>
-													current ? { ...current, raw } : current,
-												)
-											}
-											controllerRef={completionControllerRef}
+						{showToolbar && !readOnly ? (
+							<MarkdownEditorToolbar
+								onOpenFind={() => {
+									setFindOpen(true);
+									setFindFocusTick((tick) => tick + 1);
+								}}
+							/>
+						) : null}
+						<div className="relative min-h-0 min-w-0 flex-1">
+							<ContextMenu onOpenChange={handleContextMenuOpenChange}>
+								<ContextMenuTrigger asChild>
+									<EditorContainer
+										ref={editorContainerRef}
+										className="agentero-scroll h-full min-w-0 overflow-y-auto"
+										onContextMenuCapture={handleEditorContextMenu}
+										onKeyDownCapture={readOnly ? undefined : handleKeyDown}
+										onBeforeInputCapture={
+											readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
+										}
+										onBlur={readOnly ? undefined : handleEditorBlur}
+										onCompositionStartCapture={
+											readOnly ? undefined : handleWikiLinkCompositionStart
+										}
+										onCompositionEndCapture={
+											readOnly ? undefined : handleWikiLinkCompositionEnd
+										}
+									>
+										{/*
+										 * min-h-full + generous bottom padding so the last line is easy
+										 * to click and Enter can always create a new block below it
+										 * (matches Plate default variant pb-72).
+										 */}
+										<Editor
+											variant="none"
+											placeholder={placeholder}
+											readOnly={readOnly}
+											className="min-h-full px-6 pt-4 pb-48"
+											style={fontSize ? { fontSize } : undefined}
 										/>
-									) : null}
-								</EditorContainer>
-							</ContextMenuTrigger>
-							<ContextMenuContent className="w-56">
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.cut}
-									onSelect={() => {
-										void handleContextMenuCut();
+										{!readOnly ? (
+											<WikiLinkSuggestion
+												draft={wikiCompletionDraft}
+												onClose={() => setWikiCompletionDraft(null)}
+												onContinue={(raw) =>
+													setWikiCompletionDraft((current) =>
+														current ? { ...current, raw } : current,
+													)
+												}
+												controllerRef={completionControllerRef}
+											/>
+										) : null}
+									</EditorContainer>
+								</ContextMenuTrigger>
+								<ContextMenuContent className="w-56">
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.cut}
+										onSelect={() => {
+											void handleContextMenuCut();
+										}}
+									>
+										{i18n.t("editor:contextMenu.cut")}
+										<ContextMenuShortcut>⌘X</ContextMenuShortcut>
+									</ContextMenuItem>
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.copy}
+										onSelect={() => {
+											void handleContextMenuCopy();
+										}}
+									>
+										{i18n.t("editor:contextMenu.copy")}
+										<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+									</ContextMenuItem>
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.paste}
+										onSelect={() => {
+											void handleContextMenuPaste();
+										}}
+									>
+										{i18n.t("editor:contextMenu.paste")}
+										<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+									</ContextMenuItem>
+									<ContextMenuSeparator />
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.insertLink}
+										onSelect={() => insertContextMenuLink("wiki")}
+									>
+										{i18n.t("editor:contextMenu.insertWikiLink")}
+									</ContextMenuItem>
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.insertLink}
+										onSelect={() => insertContextMenuLink("external")}
+									>
+										{i18n.t("editor:contextMenu.insertExternalLink")}
+									</ContextMenuItem>
+									<ContextMenuSeparator />
+									<ContextMenuItem
+										disabled={!contextMenuCapabilities.renameHeading}
+										onSelect={() => {
+											if (headingContext) setHeadingRenameOpen(true);
+										}}
+									>
+										{i18n.t("editor:headingRename.menu")}
+									</ContextMenuItem>
+								</ContextMenuContent>
+							</ContextMenu>
+							{findOpen && !readOnly ? (
+								<FindReplaceBar
+									focusTick={findFocusTick}
+									onClose={() => {
+										setFindOpen(false);
+										editor.tf.focus();
 									}}
-								>
-									{i18n.t("editor:contextMenu.cut")}
-									<ContextMenuShortcut>⌘X</ContextMenuShortcut>
-								</ContextMenuItem>
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.copy}
-									onSelect={() => {
-										void handleContextMenuCopy();
-									}}
-								>
-									{i18n.t("editor:contextMenu.copy")}
-									<ContextMenuShortcut>⌘C</ContextMenuShortcut>
-								</ContextMenuItem>
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.paste}
-									onSelect={() => {
-										void handleContextMenuPaste();
-									}}
-								>
-									{i18n.t("editor:contextMenu.paste")}
-									<ContextMenuShortcut>⌘V</ContextMenuShortcut>
-								</ContextMenuItem>
-								<ContextMenuSeparator />
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.insertLink}
-									onSelect={() => insertContextMenuLink("wiki")}
-								>
-									{i18n.t("editor:contextMenu.insertWikiLink")}
-								</ContextMenuItem>
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.insertLink}
-									onSelect={() => insertContextMenuLink("external")}
-								>
-									{i18n.t("editor:contextMenu.insertExternalLink")}
-								</ContextMenuItem>
-								<ContextMenuSeparator />
-								<ContextMenuItem
-									disabled={!contextMenuCapabilities.renameHeading}
-									onSelect={() => {
-										if (headingContext) setHeadingRenameOpen(true);
-									}}
-								>
-									{i18n.t("editor:headingRename.menu")}
-								</ContextMenuItem>
-							</ContextMenuContent>
-						</ContextMenu>
+								/>
+							) : null}
+						</div>
 						<HeadingRenameDialog
 							open={headingRenameOpen}
 							heading={headingContext}

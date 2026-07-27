@@ -56,9 +56,12 @@ function ActionButton({
 export function ResponsiveFixedToolbar({
 	actions,
 	className,
+	trailing,
 }: {
 	actions: ToolbarAction[];
 	className?: string;
+	/** Pinned at the right end; never collapses into the overflow menu. */
+	trailing?: React.ReactNode;
 }) {
 	const { t } = useTranslation("editor");
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -153,6 +156,10 @@ export function ResponsiveFixedToolbar({
 					</DropdownMenuContent>
 				</DropdownMenu>
 			)}
+
+			{trailing ? (
+				<div className="ml-auto flex shrink-0 items-center">{trailing}</div>
+			) : null}
 
 			{/* Invisible measurement row so we can decide what fits without
 			    causing a visible reflow loop. */}
