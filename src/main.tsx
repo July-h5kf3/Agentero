@@ -14,7 +14,6 @@ import {
 	subscribeSettings,
 } from "@/lib/settings";
 import { applyUiTheme } from "@/lib/ui/theme";
-import App from "./App";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
 // KaTeX CSS must load with the main bundle: lazy-loaded editors are not the
@@ -65,6 +64,9 @@ async function boot() {
 		return;
 	}
 
+	// Lazy-load the full app so the settings window (which returns above) never
+	// downloads/parses the heavyweight workspace bundle.
+	const { default: App } = await import("./App");
 	ReactDOM.createRoot(root).render(
 		<React.StrictMode>
 			<I18nextProvider i18n={i18n}>
@@ -82,4 +84,27 @@ async function boot() {
 	);
 }
 
-void boot();
+void boot().catch((e) => {
+	// A failed boot used to leave an empty <body> with no key handlers, so the
+	// window (especially the separate Settings webview) looked blank and could
+	// not be dismissed from the keyboard. Surface the error and wire Esc/⌘W so
+	// the window is always closable.
+	console.error("[boot] failed", e);
+	const root = document.getElementById("root");
+	if (root) {
+		root.textContent = `Failed to start: ${e instanceof Error ? e.message : String(e)}`;
+		root.setAttribute(
+			"style",
+			"padding:24px;font:13px system-ui;white-space:pre-wrap;",
+		);
+	}
+	window.addEventListener("keydown", (event) => {
+		const quit =
+			event.key === "Escape" ||
+			((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w");
+		if (!quit) return;
+		void import("@tauri-apps/api/window")
+			.then(({ getCurrentWindow }) => getCurrentWindow().close())
+			.catch(() => undefined);
+	});
+});

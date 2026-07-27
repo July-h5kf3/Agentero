@@ -482,7 +482,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 - **Keyboard**：只读快捷键表（按 App / Vault / Navigation 分组）。
 - **About**：版本与一句话定位。
 
-实现：`src/components/settings/settings-native-root.tsx`（原生窗口 chrome）+ `src/components/settings/settings-content.tsx`（共用 `SettingsContent`）。`src/main.tsx` 通过 `?window=settings` 路由分支渲染轻量 Settings 页面，避免加载完整 `App`。**应用设置**持久化为 Host 文件（XDG）：
+实现：`src/components/settings/settings-native-root.tsx`（原生窗口 chrome）+ `src/components/settings/settings-content.tsx`（共用 `SettingsContent`）。`src/main.tsx` 通过 `?window=settings` 路由分支渲染轻量 Settings 页面；`App` 也改为动态 `import()`，因此 Settings 窗口不会下载 / 解析工作区 bundle。`boot()` 失败时会在页面上直接展示错误并绑定 Esc / `⌘W` 关窗，避免出现“空白且关不掉”的窗口。**应用设置**持久化为 Host 文件（XDG）：
 
 | 路径 | 说明 |
 |---|---|
