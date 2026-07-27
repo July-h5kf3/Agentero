@@ -1,6 +1,8 @@
 //! Multi-window helpers.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+use crate::core::log_util::OpTimer;
 
 // Settings store is only used for macOS traffic-light y scaling.
 #[cfg(target_os = "macos")]
@@ -19,10 +21,16 @@ const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 14.0;
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
 /// Open a fresh Agentero window without restoring the last vault (`?fresh=1`).
+///
+/// `async` is load-bearing: sync command handlers run on the main thread inside
+/// the calling webview's IPC callback, and building a webview from there hangs
+/// on Windows — wry waits in a nested message loop for the WebView2 controller
+/// callback, which WebView2 only runs once the current handler returns, so
+/// `build()` never comes back and the new window stays blank. Async handlers run
+/// off the main thread, so window creation is queued onto the event loop
+/// instead of nested inside another handler.
 #[tauri::command]
-pub fn window_new(app: AppHandle) -> Result<(), String> {
-    use crate::core::log_util::OpTimer;
-
+pub async fn window_new(app: AppHandle) -> Result<(), String> {
     let op = OpTimer::start("window_new");
     let label = format!("agentero-{}", uuid::Uuid::new_v4().simple());
 
@@ -31,6 +39,7 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
     // frontend so the webview never navigates to a dropped PDF.
     // WebviewWindowBuilder in this Tauri version has no drag_drop_enabled();
     // secondary windows inherit platform defaults — frontend still preventDefaults.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder =
         WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html?fresh=1".into()))
             .title("Agentero")
@@ -78,14 +87,14 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
 }
 
 /// Open a singleton native Settings window, or focus it if already open.
+///
+/// See [`window_new`] for why this must stay `async`.
 #[tauri::command]
-pub fn settings_window_open(
+pub async fn settings_window_open(
     app: AppHandle,
     section: String,
     vault_path: Option<String>,
 ) -> Result<(), String> {
-    use crate::core::log_util::OpTimer;
-
     let op = OpTimer::start("settings_window_open");
 
     if let Some(win) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
@@ -102,13 +111,14 @@ pub fn settings_window_open(
         url.push_str(&format!("&vault_path={}", urlencoding::encode(&path)));
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder =
         WebviewWindowBuilder::new(&app, SETTINGS_WINDOW_LABEL, WebviewUrl::App(url.into()))
             .title("Settings")
             .inner_size(720.0, 560.0)
             .min_inner_size(640.0, 480.0)
-            .resizable(true)
             .center()
+            .resizable(true)
             .focused(true);
 
     #[cfg(target_os = "macos")]
@@ -133,6 +143,8 @@ pub fn settings_window_open(
         Ok(w) => w,
         Err(e) => {
             op.finish_err_msg("settings", &e);
+            // Keep the main window's `⌘,` toggle out of a stuck "open" state.
+            let _ = app.emit("settings_window_closed", ());
             return Err(e.to_string());
         }
     };

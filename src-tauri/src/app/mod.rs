@@ -93,9 +93,14 @@ pub fn run() {
         builder = builder.on_menu_event(|app, event| {
             let id = event.id().as_ref();
             if id == "new_window" {
-                if let Err(e) = crate::features::window::commands::window_new(app.clone()) {
-                    log::error!(target: "agentero::op", "op end window_new ok=false error={e}");
-                }
+                // `window_new` is async so webview creation never runs inside this
+                // main-thread menu callback (see its doc comment).
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::features::window::commands::window_new(app).await {
+                        log::error!(target: "agentero::op", "op end window_new ok=false error={e}");
+                    }
+                });
                 return;
             }
             let _ = app.emit(id, ());

@@ -443,7 +443,7 @@ paper-reader 精读工作流与 Composer 共用这套规则，避免把 Codex �
 
 参考 **macOS System Settings / 传统 Preferences** 形态：所有平台均为**独立原生单例窗口**（Host `settings_window_open` + `?window=settings` 路由，`SettingsNativeRoot` 渲染 `SettingsContent`）。
 
-> **注**：早期版本曾因第二 webview 在 **Windows 下白屏卡死** 而临时改回 App 内浮层；当前实现复用了已验证的多窗口模式（与 `window_new` 同源），并将 Settings 页面拆分为独立轻量路由，避免在主窗口外加载完整 `App`。
+> **注**：早期版本曾因第二 webview 在 **Windows 下白屏卡死** 而临时改回 App 内浮层；当前实现复用了已验证的多窗口模式（与 `window_new` 同源），并将 Settings 页面拆分为独立轻量路由，避免在主窗口外加载完整 `App`。白屏卡死的真正根因是建窗 command 为同步函数（见 `docs/backend/api.md` §`settings_window_open`），已改为 `async`。
 
 | 要求 | 说明 |
 |---|---|

@@ -276,7 +276,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 创建 label 为 `agentero-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
   - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
-  - 菜单点击由 Host 直接调用，不经过前端 event 往返。
+  - 菜单点击由 Host 直接调用，不经过前端 event 往返（Host 内用 `tauri::async_runtime::spawn` 调用）。
+  - **必须是 `async` command**：同步 command 在主线程、且处于调用方 webview 的 IPC 回调内执行，Windows 上从那里 build webview 会卡死（wry 进入嵌套消息循环等 WebView2 controller 回调，而该回调要等当前处理器返回），新窗口表现为空白且无法关闭。
 
 #### `settings_window_open`（已实现）
 
@@ -296,7 +297,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 若 label 为 `settings` 的窗口已存在，则将其聚焦并返回；否则新建。
   - URL 带 `?window=settings&section=...&vault_path=...`，由 `src/main.tsx` 分支渲染轻量 Settings 页面（不加载完整 `App`）。
   - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用系统原生窗口边框（OS 自绘标题栏与 caption 按钮）。
-  - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）。
+  - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）；建窗失败时也会 emit 一次，避免 toggle 卡在“已打开”。
+  - 与 `window_new` 同理，**必须是 `async` command**。
 
 #### `fs_watch_start` / `fs_watch_stop`（已实现）
 
