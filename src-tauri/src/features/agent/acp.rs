@@ -1804,3 +1804,174 @@ mod config_option_tests {
         assert!(fast.enabled);
     }
 }
+
+#[cfg(test)]
+mod replay_builder_tests {
+    use super::ReplayBuilder;
+    use crate::features::agent::models::{AcpHistoryPart, AgentPlanEntry};
+
+    fn plan(content: &str, status: &str) -> AgentPlanEntry {
+        AgentPlanEntry {
+            content: content.to_string(),
+            status: status.to_string(),
+            priority: "medium".to_string(),
+        }
+    }
+
+    fn id(v: &str) -> Option<String> {
+        Some(v.to_string())
+    }
+
+    #[test]
+    fn keeps_user_turns_and_alternates_speakers() {
+        let mut b = ReplayBuilder::default();
+        b.push_user_chunk("first question".into(), id("u1"));
+        b.push_agent_chunk(false, "first answer".into(), id("m1"));
+        b.push_user_chunk("second question".into(), id("u2"));
+        b.push_agent_chunk(false, "second answer".into(), id("m2"));
+
+        let (lines, _) = b.finish();
+        let shape: Vec<(&str, &str)> = lines
+            .iter()
+            .map(|l| (l.kind.as_str(), l.text.as_str()))
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                ("user", "first question"),
+                ("agent", "first answer"),
+                ("user", "second question"),
+                ("agent", "second answer"),
+            ]
+        );
+    }
+
+    #[test]
+    fn merges_chunks_sharing_a_message_id() {
+        let mut b = ReplayBuilder::default();
+        b.push_agent_chunk(false, "he".into(), id("m1"));
+        b.push_agent_chunk(false, "llo".into(), id("m1"));
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "hello");
+        assert_eq!(lines[0].parts.len(), 1);
+    }
+
+    #[test]
+    fn a_new_message_id_starts_a_new_part() {
+        let mut b = ReplayBuilder::default();
+        b.push_agent_chunk(false, "a".into(), id("m1"));
+        b.push_agent_chunk(false, "b".into(), id("m2"));
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].parts.len(), 2);
+        assert_eq!(lines[0].text, "ab");
+    }
+
+    #[test]
+    fn preserves_interleaved_reasoning_and_answer_order() {
+        let mut b = ReplayBuilder::default();
+        b.push_agent_chunk(true, "think".into(), id("r1"));
+        b.push_agent_chunk(false, "answer".into(), id("m1"));
+        b.push_agent_chunk(true, "rethink".into(), id("r2"));
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        let kinds: Vec<&str> = lines[0]
+            .parts
+            .iter()
+            .map(|p| match p {
+                AcpHistoryPart::Reasoning { .. } => "reasoning",
+                AcpHistoryPart::Text { .. } => "text",
+                AcpHistoryPart::Tool { .. } => "tool",
+                AcpHistoryPart::Plan { .. } => "plan",
+            })
+            .collect();
+        assert_eq!(kinds, vec!["reasoning", "text", "reasoning"]);
+        assert_eq!(lines[0].reasoning.as_deref(), Some("think\n\nrethink"));
+    }
+
+    #[test]
+    fn agent_turns_recover_sources_from_replayed_text() {
+        let mut b = ReplayBuilder::default();
+        b.push_agent_chunk(
+            false,
+            "Answer.\n\n## Sources\n- papers/a/NOTES.md\n".into(),
+            id("m1"),
+        );
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines[0].sources, vec!["papers/a/NOTES.md".to_string()]);
+    }
+
+    #[test]
+    fn tool_updates_patch_the_existing_part_by_id() {
+        let mut b = ReplayBuilder::default();
+        b.apply_tool(
+            "t1".into(),
+            Some("Read file".into()),
+            Some("read".into()),
+            Some("pending".into()),
+            None,
+            None,
+        );
+        b.apply_tool(
+            "t1".into(),
+            None,
+            None,
+            Some("completed".into()),
+            None,
+            None,
+        );
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].parts.len(), 1);
+        let AcpHistoryPart::Tool { tool } = &lines[0].parts[0] else {
+            panic!("expected a tool part");
+        };
+        assert_eq!(tool.title, "Read file");
+        assert_eq!(tool.status, "completed");
+    }
+
+    #[test]
+    fn plan_snapshots_replace_the_single_plan_part() {
+        let mut b = ReplayBuilder::default();
+        b.apply_plan(vec![plan("step one", "pending")]);
+        b.apply_plan(vec![
+            plan("step one", "completed"),
+            plan("step two", "pending"),
+        ]);
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines[0].parts.len(), 1);
+        let AcpHistoryPart::Plan { entries } = &lines[0].parts[0] else {
+            panic!("expected a plan part");
+        };
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].status, "completed");
+    }
+
+    #[test]
+    fn drops_turns_without_any_content() {
+        let mut b = ReplayBuilder::default();
+        b.push_user_chunk("   ".into(), id("u1"));
+        b.push_agent_chunk(false, "  ".into(), id("m1"));
+
+        let (lines, _) = b.finish();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn a_tool_only_turn_survives_the_empty_text_filter() {
+        let mut b = ReplayBuilder::default();
+        b.apply_tool("t1".into(), None, None, None, None, None);
+
+        let (lines, _) = b.finish();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].text.is_empty());
+        assert_eq!(lines[0].parts.len(), 1);
+    }
+}
