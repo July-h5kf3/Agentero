@@ -7,8 +7,18 @@ fn extra_path_dirs() -> Vec<PathBuf> {
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".cargo/bin"));
         dirs.push(home.join("bin"));
-        // fnm / nvm common locations (best-effort)
-        dirs.push(home.join(".fnm"));
+        dirs.push(home.join(".npm-global/bin"));
+        dirs.push(home.join(".volta/bin"));
+        dirs.extend(nvm_bin_dirs(&home));
+        // fnm keeps node versions under its data dir; the `default` alias points
+        // at the active one (session multishell dirs are ephemeral, skip them).
+        for fnm_dir in [
+            home.join("Library/Application Support/fnm"),
+            home.join(".local/share/fnm"),
+            home.join(".fnm"),
+        ] {
+            dirs.push(fnm_dir.join("aliases/default/bin"));
+        }
     }
     // Windows: a GUI app often starts without the user's full PATH, and npm/pnpm
     // global bins plus package-manager shims (.cmd) live outside the default PATH.
@@ -34,6 +44,43 @@ fn extra_path_dirs() -> Vec<PathBuf> {
         dirs.push(PathBuf::from("/bin"));
     }
     dirs
+}
+
+/// nvm installs binaries under `~/.nvm/versions/node/<ver>/bin`, which GUI apps
+/// never see (nvm only mutates PATH in interactive shells). Prefer the version
+/// pinned by `~/.nvm/alias/default`, then the rest newest-first.
+fn nvm_bin_dirs(home: &Path) -> Vec<PathBuf> {
+    let versions_dir = home.join(".nvm/versions/node");
+    let Ok(entries) = std::fs::read_dir(&versions_dir) else {
+        return Vec::new();
+    };
+    let mut versions: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    versions.sort_by_key(|v| std::cmp::Reverse(version_key(v)));
+    if let Ok(alias) = std::fs::read_to_string(home.join(".nvm/alias/default")) {
+        let alias = alias.trim();
+        if let Some(pos) = versions
+            .iter()
+            .position(|v| v == alias || v.strip_prefix('v') == Some(alias))
+        {
+            let default = versions.remove(pos);
+            versions.insert(0, default);
+        }
+    }
+    versions
+        .into_iter()
+        .map(|v| versions_dir.join(v).join("bin"))
+        .collect()
+}
+
+fn version_key(name: &str) -> Vec<u64> {
+    name.trim_start_matches('v')
+        .split('.')
+        .map(|p| p.parse::<u64>().unwrap_or(0))
+        .collect()
 }
 
 pub fn path_entries() -> Vec<PathBuf> {
@@ -124,5 +171,12 @@ mod tests {
     fn finds_sh_on_unix() {
         let p = resolve_command("sh");
         assert!(p.is_some());
+    }
+
+    #[test]
+    fn version_key_sorts_numerically() {
+        let mut v = vec!["v9.11.2", "v24.3.0", "v10.0.0"];
+        v.sort_by_key(|b| std::cmp::Reverse(super::version_key(b)));
+        assert_eq!(v, vec!["v24.3.0", "v10.0.0", "v9.11.2"]);
     }
 }
