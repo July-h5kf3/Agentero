@@ -10,7 +10,6 @@ import {
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutMenu } from "@/components/shell/layout-menu";
-import { WindowControls } from "@/components/shell/window-controls";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -29,7 +28,7 @@ const SETTINGS_SHORTCUT = formatShortcutById("settings");
 
 type TitleBarProps = {
 	isMacDesktop: boolean;
-	showWindowControls: boolean;
+	showSettingsGear: boolean;
 	agentZenMode: boolean;
 	sidebarCollapsed: boolean;
 	notesEligible: boolean;
@@ -52,7 +51,7 @@ type TitleBarProps = {
  */
 export const TitleBar = memo(function TitleBar({
 	isMacDesktop,
-	showWindowControls,
+	showSettingsGear,
 	agentZenMode,
 	sidebarCollapsed,
 	notesEligible,
@@ -234,9 +233,10 @@ export const TitleBar = memo(function TitleBar({
 				)}
 				{/*
 				  Windows / Linux have no native menu bar, so Settings needs a
-				  visible entry point. Gear sits just left of the caption buttons.
+				  visible entry point. The gear sits at the far right of the title
+				  bar (caption buttons are drawn by the OS).
 				*/}
-				{showWindowControls ? (
+				{showSettingsGear ? (
 					<div className="flex shrink-0 items-center gap-0.5 pl-1">
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -264,7 +264,6 @@ export const TitleBar = memo(function TitleBar({
 						</Tooltip>
 					</div>
 				) : null}
-				{showWindowControls ? <WindowControls /> : null}
 			</TooltipProvider>
 		</header>
 	);

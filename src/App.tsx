@@ -90,10 +90,11 @@ import {
 	tabNotesEligible,
 } from "@/lib/workspace/tabs";
 
-// macOS keeps native traffic lights (Overlay title bar); other desktop
-// platforms are frameless and draw their own caption buttons on the right.
+// macOS keeps native traffic lights (Overlay title bar) and a native menu bar.
+// Other desktop platforms also use native decorations, but have no native menu
+// bar, so the title bar shows a Settings gear as the entry point.
 const isMacDesktop = isTauri() && isMacOS();
-const showWindowControls = isTauri() && !isMacOS();
+const showSettingsGear = isTauri() && !isMacOS();
 
 function zoomIn(): void {
 	const current = getSettings().uiScale;
@@ -155,7 +156,7 @@ function AppTitleBar() {
 	return (
 		<TitleBar
 			isMacDesktop={isMacDesktop}
-			showWindowControls={showWindowControls}
+			showSettingsGear={showSettingsGear}
 			agentZenMode={agentZenMode}
 			sidebarCollapsed={sidebarCollapsed}
 			notesEligible={Boolean(notesEligiblePaper)}

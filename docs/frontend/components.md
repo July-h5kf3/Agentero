@@ -242,7 +242,6 @@ src/components/
 ├── shell/               # 真壳 + 共享 chrome
 │   ├── title-bar.tsx
 │   ├── layout-menu.tsx
-│   ├── window-controls.tsx
 │   ├── pane-header.tsx
 │   ├── resizable.tsx
 │   ├── vault-welcome.tsx

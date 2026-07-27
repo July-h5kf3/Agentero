@@ -1,10 +1,6 @@
-import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { SettingsSection } from "@/components/settings/types";
-import { WindowControls } from "@/components/shell/window-controls";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
-import { cn } from "@/lib/core/utils";
 import {
 	ensureSettingsLoaded,
 	loadSettings,
@@ -39,7 +35,6 @@ function closeCurrentWindow() {
  * the full `App`, so the second webview stays lightweight.
  */
 export function SettingsNativeRoot() {
-	const { t } = useTranslation(["settings", "app"]);
 	const [{ section, vaultPath }, setSearchParams] = useState(readSearchParams);
 	const [settings, setSettings] = useState(loadSettings);
 	const isMac = useMemo(() => isMacOS(), []);
@@ -95,29 +90,19 @@ export function SettingsNativeRoot() {
 
 	return (
 		<div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-			{/* Window chrome */}
-			<header
-				className={cn(
-					"flex h-8 shrink-0 items-center border-b select-none",
-					isMac && "bg-muted/40",
-				)}
-			>
-				{isMac ? (
+			{/*
+			  Window chrome: macOS reserves a drag strip for the native traffic
+			  lights (Overlay title bar). Windows / Linux use native decorations,
+			  so the OS title bar already provides the title and caption buttons.
+			*/}
+			{isMac ? (
+				<header className="flex h-8 shrink-0 items-center border-b bg-muted/40 select-none">
 					<div
 						className="w-[92px] shrink-0 self-stretch"
 						data-tauri-drag-region
 					/>
-				) : (
-					<div
-						className="flex flex-1 items-center gap-1.5 px-2"
-						data-tauri-drag-region
-					>
-						<Settings className="size-3.5 text-muted-foreground" />
-						<span className="text-[13px] font-medium">{t("title")}</span>
-					</div>
-				)}
-				{!isMac && <WindowControls />}
-			</header>
+				</header>
+			) : null}
 
 			{/* Content */}
 			<div className="flex min-h-0 flex-1">

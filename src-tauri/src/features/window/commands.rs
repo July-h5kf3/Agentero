@@ -57,13 +57,6 @@ pub fn window_new(app: AppHandle) -> Result<(), String> {
             .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_LIGHT_X, y));
     }
 
-    // Non-macOS: frameless window; caption buttons are drawn in the React title
-    // bar (see WindowControls) so the chrome matches the macOS Overlay look.
-    #[cfg(not(target_os = "macos"))]
-    {
-        builder = builder.decorations(false);
-    }
-
     let window = match builder.build() {
         Ok(w) => w,
         Err(e) => {
@@ -134,11 +127,6 @@ pub fn settings_window_open(
             .hidden_title(true)
             .title_bar_style(tauri::TitleBarStyle::Overlay)
             .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_LIGHT_X, y));
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        builder = builder.decorations(false);
     }
 
     let window = match builder.build() {

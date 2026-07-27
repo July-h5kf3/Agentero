@@ -295,7 +295,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **行为**
   - 若 label 为 `settings` 的窗口已存在，则将其聚焦并返回；否则新建。
   - URL 带 `?window=settings&section=...&vault_path=...`，由 `src/main.tsx` 分支渲染轻量 Settings 页面（不加载完整 `App`）。
-  - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用与主窗口一致的无框窗口 + React 自定义标题栏。
+  - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用系统原生窗口边框（OS 自绘标题栏与 caption 按钮）。
   - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）。
 
 #### `fs_watch_start` / `fs_watch_stop`（已实现）

@@ -59,10 +59,6 @@ pub fn run() {
         // embedder and do not expose these APIs.
         #[cfg(not(target_os = "ios"))]
         {
-            #[cfg(not(target_os = "macos"))]
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_decorations(false);
-            }
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
             }
