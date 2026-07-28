@@ -12,6 +12,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 spawn 用户配置的 agent
   → ACP ready
   → session create / load
+  → available_commands_update → `agent:commands`
   → build_prompt（workflow + 可选 agentPersonalPrompt）
   → 流式 stdout → agent:stream
   → 权限请求 → 前端（ask 模式）
@@ -27,6 +28,11 @@ spawn 用户配置的 agent
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
+
+ACP slash command 不是独立的 `session/compact` RPC。Host 转发 Agent 广播的
+`available_commands_update`；前端提交命令时设置 `isAcpCommand`，Host 跳过
+Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
+`session/prompt` 发送到当前 provider session。
 
 ## 权限
 

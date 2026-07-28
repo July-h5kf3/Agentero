@@ -19,6 +19,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - `@`：空时优先最近路径与浅层目录；› 进入子目录；论文标签与 `paperTreeLabelMode` 一致。
 - 运行中可继续输入 → Queue waitlist；Esc / 停止中止。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
+- Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。命令以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
 
 ## 禅模式
 
