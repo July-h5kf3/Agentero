@@ -87,6 +87,16 @@ fn document_link_name(path: &str) -> String {
         .to_string()
 }
 
+fn normalize_heading_search(value: &str) -> String {
+    value
+        .split(['#', '›'])
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" › ")
+        .to_lowercase()
+}
+
 fn should_skip_name(name: &str) -> bool {
     if IGNORE_NAMES.contains(&name) {
         return true;
@@ -565,6 +575,7 @@ impl WikiIndex {
         kind: Option<&WikiSearchCandidateKind>,
     ) -> Vec<WikiSearchCandidate> {
         let query_key = query.trim().to_lowercase();
+        let heading_query_key = normalize_heading_search(query);
         let stem_counts =
             self.documents
                 .iter()
@@ -632,11 +643,13 @@ impl WikiIndex {
             if include_heading {
                 for heading in &document.headings {
                     let label = heading.path.join(" › ");
-                    if query_key.is_empty() || label.to_lowercase().contains(&query_key) {
+                    if heading_query_key.is_empty()
+                        || label.to_lowercase().contains(&heading_query_key)
+                    {
                         candidates.push(WikiSearchCandidate {
                             kind: WikiSearchCandidateKind::Heading,
                             path: document.path.clone(),
-                            insert_text: format!("{}#{}", target, heading.text),
+                            insert_text: format!("{}#{}", target, heading.path.join("#")),
                             label,
                             detail: Some(format!("H{}", heading.level)),
                             alias: None,
@@ -1242,12 +1255,26 @@ mod tests {
             documents: vec![WikiDocument {
                 path: "notes/Canonical.md".into(),
                 aliases: vec!["Short name".into()],
-                headings: vec![HeadingAnchor {
-                    text: "Overview".into(),
-                    path: vec!["Canonical".into(), "Overview".into()],
-                    level: 2,
-                    line: 4,
-                }],
+                headings: vec![
+                    HeadingAnchor {
+                        text: "Overview".into(),
+                        path: vec!["Outer".into(), "Overview".into()],
+                        level: 2,
+                        line: 4,
+                    },
+                    HeadingAnchor {
+                        text: "Overview".into(),
+                        path: vec!["Other".into(), "Overview".into()],
+                        level: 2,
+                        line: 8,
+                    },
+                    HeadingAnchor {
+                        text: "内层".into(),
+                        path: vec!["中文外层".into(), "内层".into()],
+                        level: 3,
+                        line: 12,
+                    },
+                ],
                 blocks: vec![BlockAnchor {
                     id: "验收块".into(),
                     preview: "Canonical block preview".into(),
@@ -1265,12 +1292,31 @@ mod tests {
         assert_eq!(alias.insert_text, "Canonical");
 
         let heading = index
-            .search("Overview")
+            .search("Outer#Overview")
             .into_iter()
             .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
             .expect("heading candidate");
-        assert_eq!(heading.insert_text, "Canonical#Overview");
+        assert_eq!(heading.insert_text, "Canonical#Outer#Overview");
+        assert_eq!(heading.label, "Outer › Overview");
         assert_eq!(heading.detail.as_deref(), Some("H2"));
+
+        let heading_by_display_path = index
+            .search("Other › Overview")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
+            .expect("heading candidate by display path");
+        assert_eq!(
+            heading_by_display_path.insert_text,
+            "Canonical#Other#Overview"
+        );
+
+        let unicode_heading = index
+            .search("中文外层#内层")
+            .into_iter()
+            .find(|candidate| candidate.kind == WikiSearchCandidateKind::Heading)
+            .expect("Unicode heading candidate by persisted path");
+        assert_eq!(unicode_heading.insert_text, "Canonical#中文外层#内层");
+        assert_eq!(unicode_heading.label, "中文外层 › 内层");
 
         let block = index
             .search("验收")
