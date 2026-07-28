@@ -61,10 +61,10 @@ import type {
 	AgentEffortChoice,
 	AgentModelChoice,
 	AgentSkill,
-	SlashCommand,
 } from "@/lib/agent";
 import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
+import type { AcpCommand } from "@/lib/agent/slash-commands";
 import { cn } from "@/lib/core/utils";
 
 export type GroupedModel = {
@@ -184,9 +184,9 @@ export function AgentComposer({
 	onAttachSkill: (skill: AgentSkill) => void;
 	onSkillActiveIndexChange: (index: number) => void;
 	showSlashMenu: boolean;
-	slashOptions: SlashCommand[];
+	slashOptions: AcpCommand[];
 	slashActiveIndex: number;
-	onAttachSlashCommand: (command: SlashCommand) => void;
+	onAttachSlashCommand: (command: AcpCommand) => void;
 	onSlashActiveIndexChange: (index: number) => void;
 	modelSelectorOpen: boolean;
 	onModelSelectorOpenChange: (open: boolean) => void;
@@ -528,12 +528,16 @@ export function AgentComposer({
 										onMouseEnter={() => onSlashActiveIndexChange(index)}
 										onClick={() => onAttachSlashCommand(command)}
 									>
-										<span className="font-mono text-muted-foreground">/</span>
-										<span className="min-w-0 flex-1 truncate">
-											{command.title}
+										<span className="flex min-w-0 flex-1 items-center truncate">
+											<span className="shrink-0 font-mono text-muted-foreground">
+												/
+											</span>
+											<span className="shrink-0 whitespace-nowrap">
+												{command.title}
+											</span>
 										</span>
 										{command.description ? (
-											<span className="max-w-40 truncate text-muted-foreground text-xs">
+											<span className="min-w-0 max-w-40 flex-1 truncate text-muted-foreground text-xs">
 												{command.description}
 											</span>
 										) : null}

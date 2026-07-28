@@ -226,6 +226,9 @@ pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub prompt: String,
+    /// Send the prompt verbatim as an ACP slash command.
+    #[serde(default)]
+    pub is_acp_command: bool,
     /// Optional images attached to this prompt (ACP `ContentBlock::Image`).
     #[serde(default)]
     pub images: Vec<PromptImage>,
@@ -395,6 +398,29 @@ pub struct AgentUsageEvent {
     pub session_id: String,
     pub used: u64,
     pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommandInput {
+    pub hint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommand {
+    pub name: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<AgentCommandInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCommandsEvent {
+    pub session_id: String,
+    pub agent_id: String,
+    pub commands: Vec<AgentCommand>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

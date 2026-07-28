@@ -3,10 +3,11 @@ use crate::features::agent::discover::{path_entries, resolve_command};
 use crate::features::agent::events::AgentEventEmitter;
 use crate::features::agent::models::{
     AcpHistoryLine, AcpHistoryPart, AcpHistoryTool, AcpListSessionsResult, AcpLoadSessionResult,
-    AcpSessionCapabilities, AcpSessionInfo, AgentDescriptor, AgentEffortChoice, AgentEffortEvent,
-    AgentFailedEvent, AgentFastModeEvent, AgentModelChoice, AgentModelsEvent, AgentPlanEntry,
-    AgentPlanEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind, AgentToolEvent,
-    AgentUsageEvent, ProbeResult, PromptImage, WarmResult,
+    AcpSessionCapabilities, AcpSessionInfo, AgentCommand, AgentCommandInput, AgentCommandsEvent,
+    AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
+    AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
+    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
+    WarmResult,
 };
 use crate::features::agent::permission::PermissionGate;
 use crate::features::agent::prompts::{build_prompt, extract_sources};
@@ -14,9 +15,9 @@ use crate::features::agent::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
 use agent_client_protocol::schema::v1::{
-    CancelNotification, ContentBlock, EnvVariable, ImageContent, InitializeRequest,
-    ListSessionsRequest, LoadSessionRequest, McpServer, McpServerStdio, NewSessionRequest,
-    PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
+    AvailableCommandInput, CancelNotification, ContentBlock, EnvVariable, ImageContent,
+    InitializeRequest, ListSessionsRequest, LoadSessionRequest, McpServer, McpServerStdio,
+    NewSessionRequest, PermissionOptionKind, PlanEntryPriority, PlanEntryStatus, PromptRequest,
     RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
     ResumeSessionRequest, SelectedPermissionOutcome, SessionConfigId, SessionConfigKind,
     SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
@@ -418,6 +419,33 @@ fn emit_rich_session_update(
     update: &SessionUpdate,
 ) {
     match update {
+        SessionUpdate::AvailableCommandsUpdate(upd) => {
+            let commands = upd
+                .available_commands
+                .iter()
+                .map(|command| AgentCommand {
+                    name: command.name.clone(),
+                    description: command.description.clone(),
+                    input: match &command.input {
+                        Some(AvailableCommandInput::Unstructured(input)) => {
+                            Some(AgentCommandInput {
+                                hint: input.hint.clone(),
+                            })
+                        }
+                        _ => None,
+                    },
+                })
+                .filter(|command| !command.name.trim().is_empty())
+                .collect();
+            let _ = app.emit(
+                "agent:commands",
+                AgentCommandsEvent {
+                    session_id: session_id.to_string(),
+                    agent_id: agent_id.to_string(),
+                    commands,
+                },
+            );
+        }
         SessionUpdate::ConfigOptionUpdate(upd) => {
             emit_session_config_options(app, session_id, agent_id, &upd.config_options);
         }
@@ -738,6 +766,7 @@ pub async fn run_once(
     session_id: String,
     message_id: String,
     prompt: String,
+    is_acp_command: bool,
     images: Vec<PromptImage>,
     workflow: Option<String>,
     target: Option<String>,
@@ -755,16 +784,18 @@ pub async fn run_once(
     resume_session_id: Option<String>,
 ) -> Result<AgentResultPayload, AppError> {
     let skill_style = skill_mention_style(&desc.template);
-    // Skills: local vault path, or remote work_root after materializing SKILL.md from SFTP.
-    let skill_vault = if let Some(ref r) = remote {
-        if let Err(e) = crate::features::remote::materialize_skills_to_work(&r.session).await {
-            log::warn!(target: "agentero::agent", "materialize remote skills: {e}");
-        }
-        Some(r.work_root.to_string_lossy().into_owned())
+    let skill_instructions = if is_acp_command {
+        String::new()
     } else {
-        vault_path.clone()
-    };
-    let skill_instructions =
+        // Skills: local vault path, or remote work_root after materializing SKILL.md from SFTP.
+        let skill_vault = if let Some(ref r) = remote {
+            if let Err(e) = crate::features::remote::materialize_skills_to_work(&r.session).await {
+                log::warn!(target: "agentero::agent", "materialize remote skills: {e}");
+            }
+            Some(r.work_root.to_string_lossy().into_owned())
+        } else {
+            vault_path.clone()
+        };
         match load_skill_instructions(&skill_ids, skill_vault.as_deref(), skill_style) {
             Ok(instructions) => instructions,
             Err(error) => {
@@ -777,28 +808,33 @@ pub async fn run_once(
                 );
                 return Err(error);
             }
-        };
-    let user_prompt = if prompt.trim().is_empty() && !images.is_empty() {
-        "Please analyze the attached image crop from the research paper PDF.".to_string()
-    } else {
-        prompt
+        }
     };
-    // Prefix native skill triggers (e.g. Codex `$id`) so the CLI can activate them.
-    let activation = skill_activation_prefix(&skill_ids, skill_style);
-    let user_prompt = format!("{activation}{user_prompt}");
-    let full_prompt = format!(
-        "{}{}",
-        build_prompt(
-            workflow.as_deref(),
-            &user_prompt,
-            target.as_deref(),
-            skill_style,
-            &skill_ids,
-            response_language.as_deref(),
-            personal_prompt.as_deref(),
-        ),
-        skill_instructions
-    );
+    let full_prompt = if is_acp_command {
+        prompt.clone()
+    } else {
+        let user_prompt = if prompt.trim().is_empty() && !images.is_empty() {
+            "Please analyze the attached image crop from the research paper PDF.".to_string()
+        } else {
+            prompt
+        };
+        // Prefix native skill triggers (e.g. Codex `$id`) so the CLI can activate them.
+        let activation = skill_activation_prefix(&skill_ids, skill_style);
+        let user_prompt = format!("{activation}{user_prompt}");
+        format!(
+            "{}{}",
+            build_prompt(
+                workflow.as_deref(),
+                &user_prompt,
+                target.as_deref(),
+                skill_style,
+                &skill_ids,
+                response_language.as_deref(),
+                personal_prompt.as_deref(),
+            ),
+            skill_instructions
+        )
+    };
     let prompt_images = images;
     let cwd = if let Some(ref r) = remote {
         r.agent_cwd()
@@ -1246,6 +1282,14 @@ pub async fn warm_agent(
                             used: u.used,
                             size: u.size,
                         },
+                    );
+                }
+                if let SessionUpdate::AvailableCommandsUpdate(_) = &notification.update {
+                    emit_rich_session_update(
+                        &app_for_notif,
+                        &session_for_notif,
+                        &agent_for_notif,
+                        &notification.update,
                     );
                 }
                 if let SessionUpdate::ConfigOptionUpdate(upd) = &notification.update {

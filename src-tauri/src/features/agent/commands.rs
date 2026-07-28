@@ -314,6 +314,7 @@ pub async fn agent_run_once(
             session_id.clone(),
             message_id,
             request.prompt,
+            request.is_acp_command,
             request.images,
             request.workflow,
             request.target.clone(),

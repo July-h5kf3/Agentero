@@ -190,6 +190,18 @@ export type AgentUsageEvent = {
 	size: number;
 };
 
+export type AgentCommand = {
+	name: string;
+	description: string;
+	input?: { hint: string } | null;
+};
+
+export type AgentCommandsEvent = {
+	sessionId: string;
+	agentId: string;
+	commands: AgentCommand[];
+};
+
 export type AgentModelChoice = {
 	id: string;
 	name: string;
@@ -343,6 +355,7 @@ export async function runOnce(request: {
 	/** Durable provider conversation id; Codex uses its native thread id. */
 	sessionId?: string;
 	prompt: string;
+	isAcpCommand?: boolean;
 	/** Multimodal crops for ACP Image content blocks */
 	images?: PromptImage[];
 	vaultPath?: string;
@@ -389,6 +402,7 @@ export async function runOnce(request: {
 			agentId: request.agentId,
 			sessionId: request.sessionId,
 			prompt: request.prompt,
+			isAcpCommand: request.isAcpCommand ?? false,
 			images: request.images ?? [],
 			vaultPath: request.vaultPath,
 			workflow: request.workflow,
@@ -514,6 +528,12 @@ export async function listenAgentUsage(
 	handler: (e: AgentUsageEvent) => void,
 ): Promise<UnlistenFn> {
 	return listenAgentEvent("agent:usage", handler);
+}
+
+export async function listenAgentCommands(
+	handler: (e: AgentCommandsEvent) => void,
+): Promise<UnlistenFn> {
+	return listenAgentEvent("agent:commands", handler);
 }
 
 export async function listenAgentModels(

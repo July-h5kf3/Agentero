@@ -30,6 +30,7 @@ import {
 	ensureCatalogAgent,
 	listAgentSkills,
 	listAgents,
+	listenAgentCommands,
 	listenAgentCompleted,
 	listenAgentEffort,
 	listenAgentFailed,
@@ -96,17 +97,15 @@ import {
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent/prompt-display";
 import {
-	buildSlashCommands,
+	type AcpCommand,
 	filterSlashCommands,
-	type SlashCommand,
-	skillMentionStyleForTemplate,
+	mapAcpCommands,
 } from "@/lib/agent/slash-commands";
 import {
 	classifyStreamChunk,
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
-import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
 import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
@@ -215,6 +214,9 @@ export function useAgentPanel({
 	);
 	const [usageBySession, setUsageBySession] = useState<
 		Record<string, { used: number; size: number }>
+	>({});
+	const [acpCommandsByAgent, setAcpCommandsByAgent] = useState<
+		Record<string, AcpCommand[]>
 	>({});
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const [models, setModels] = useState<AgentModelChoice[]>([]);
@@ -856,6 +858,12 @@ export function useAgentPanel({
 					[ev.sessionId]: { used: ev.used, size: ev.size },
 				}));
 			});
+			const uCommands = await listenAgentCommands((ev) => {
+				setAcpCommandsByAgent((prev) => ({
+					...prev,
+					[ev.agentId]: mapAcpCommands(ev.commands),
+				}));
+			});
 			const uModels = await listenAgentModels((ev) => {
 				applyModelsEvent(ev);
 			});
@@ -891,6 +899,7 @@ export function useAgentPanel({
 				uTool();
 				uPlan();
 				uUsage();
+				uCommands();
 				uModels();
 				uEffort();
 				uFast();
@@ -898,7 +907,18 @@ export function useAgentPanel({
 				u3();
 				return;
 			}
-			unsubs.push(u1, uTool, uPlan, uUsage, uModels, uEffort, uFast, u2, u3);
+			unsubs.push(
+				u1,
+				uTool,
+				uPlan,
+				uUsage,
+				uCommands,
+				uModels,
+				uEffort,
+				uFast,
+				u2,
+				u3,
+			);
 			setAgentListenersReady(true);
 		})();
 
@@ -1193,26 +1213,11 @@ export function useAgentPanel({
 
 	const slashMatch = composerText.match(/(^|\s)\/([^\s]*)$/);
 	const slashQuery = slashMatch?.[2]?.toLocaleLowerCase() ?? "";
-	const slashCommands = useMemo(
-		() =>
-			buildSlashCommands(skills, {
-				skillMentionStyle: skillMentionStyleForTemplate(selected?.template),
-			}),
-		[skills, selected?.template],
-	);
+	const slashCommands = acpCommandsByAgent[selectedAgentId ?? ""] ?? [];
 	const slashOptions = useMemo(() => {
 		if (!slashMatch) return [];
-		return filterSlashCommands(slashCommands, slashQuery, {
-			hasContext: contextPaths.length > 0,
-			selectedSkillIds,
-		});
-	}, [
-		contextPaths.length,
-		selectedSkillIds,
-		slashCommands,
-		slashMatch,
-		slashQuery,
-	]);
+		return filterSlashCommands(slashCommands, slashQuery);
+	}, [slashCommands, slashMatch, slashQuery]);
 
 	const showMentionMenu =
 		!composerMenuDismissed &&
@@ -1494,14 +1499,22 @@ export function useAgentPanel({
 
 			// Options are availability-filtered in buildOptions; unavailable agents
 			// never appear in the switcher.
-			const prompt = resolvedContextPaths.length
-				? `${text}\n\n${t("composer.contextInstruction")}\n${resolvedContextPaths
-						.map((path) => `- ${path}`)
-						.join("\n")}`
-				: text;
+			const isAcpCommand = (
+				acpCommandsByAgent[selectedAgentId ?? ""] ?? []
+			).some(
+				(command) =>
+					text === `/${command.name}` || text.startsWith(`/${command.name} `),
+			);
+			const prompt = isAcpCommand
+				? text
+				: resolvedContextPaths.length
+					? `${text}\n\n${t("composer.contextInstruction")}\n${resolvedContextPaths
+							.map((path) => `- ${path}`)
+							.join("\n")}`
+					: text;
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
-			const workflow = options?.workflow;
+			const workflow = isAcpCommand ? undefined : options?.workflow;
 			const workflowTarget = workflow
 				? (resolvedContextPaths[0] ?? selectedVaultPath ?? undefined)
 				: resolvedContextPaths[0];
@@ -1517,6 +1530,7 @@ export function useAgentPanel({
 					? (activeConversationRef.current ?? undefined)
 					: undefined,
 				prompt,
+				isAcpCommand,
 				vaultPath: vaultPath ?? undefined,
 				workflow: workflow ?? "free",
 				target: workflowTarget,
@@ -1853,26 +1867,6 @@ export function useAgentPanel({
 		);
 	};
 
-	const clearConversation = useCallback(() => {
-		setLines([]);
-		resetComposerSession("draft");
-		setActiveTabId("draft");
-		activeTabRef.current = "draft";
-		activeConversationRef.current = null;
-		clearMessageQueue();
-	}, [clearMessageQueue, resetComposerSession]);
-
-	const copyLastReply = useCallback(async () => {
-		for (let i = lines.length - 1; i >= 0; i--) {
-			const line = lines[i];
-			if (line.kind !== "agent") continue;
-			const text = agentTextFromParts(line.parts).trim();
-			if (!text) continue;
-			await copyTextToClipboard(text);
-			return;
-		}
-	}, [lines]);
-
 	const handleComposerMenuKeyDown = (
 		event: KeyboardEvent<HTMLTextAreaElement>,
 	) => {
@@ -1968,7 +1962,7 @@ export function useAgentPanel({
 				);
 				return;
 			}
-			if (event.key === "Enter") {
+			if (event.key === "Enter" || event.key === "Tab") {
 				event.preventDefault();
 				const command = slashOptions[slashActiveIndex] ?? slashOptions[0];
 				if (command) attachSlashCommand(command);
@@ -2055,42 +2049,17 @@ export function useAgentPanel({
 		clearMessageQueue();
 	};
 
-	const newConversationRef = useRef(newConversation);
-	newConversationRef.current = newConversation;
-	const cancelCurrentRunRef = useRef(cancelCurrentRun);
-	cancelCurrentRunRef.current = cancelCurrentRun;
-
 	const attachSlashCommand = useCallback(
-		(command: SlashCommand) => {
+		(command: AcpCommand) => {
 			setComposerMenuDismissed(true);
-			if (command.kind === "action") {
-				void command.run?.({
-					newConversation: () => newConversationRef.current(),
-					clearConversation,
-					cancelRun: () => void cancelCurrentRunRef.current(),
-					copyLastReply,
-				});
-				setComposerText((prev) =>
-					prev.replace(
-						/(^|\s)\/[^\s]*$/,
-						(_match, prefix: string) => `${prefix}`,
-					),
-				);
-				return;
-			}
-			const skillId = command.skillId;
-			if (skillId) {
-				setSelectedSkillIds((prev) => [...new Set([...prev, skillId])]);
-			}
-			const template = command.template ?? "";
 			setComposerText((prev) =>
 				prev.replace(
 					/(^|\s)\/[^\s]*$/,
-					(_match, prefix: string) => `${prefix}${template}`,
+					(_match, prefix: string) => `${prefix}/${command.name} `,
 				),
 			);
 		},
-		[clearConversation, copyLastReply, setSelectedSkillIds, setComposerText],
+		[setComposerText],
 	);
 
 	/** Strip Host/Codex machine envelopes so Chat never shows system preamble. */
