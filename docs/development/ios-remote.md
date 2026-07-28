@@ -116,8 +116,31 @@ QR = App URL + fragment 中的 offer；解析入口 `parseConnectionOfferFromUrl
 ```
 
 - **桌面 Bridge**（新 feature `src-tauri/src/features/bridge/`）：桌面 App 内的连接端点，不是独立进程。开关在 Settings → 远程访问（默认关）。开启后向 relay 建立控制通道，并为每个已配对设备的连接建数据通道。
-- **Relay**：拓扑照 paseo（serverId 路由 + 纯密文转发），实现自选 —— 官方 paseo relay 是 AGPL Elixir 服务，我们**不复用其代码**；首选 Cloudflare Workers + Durable Objects 自写一份（约几百行，状态只有「按 serverId 配对两条 WS + 少量缓冲」），部署为 `bridge.agentero.*`，并允许用户在设置里改成自托管地址。
+- **Relay**：**自建**（决策已定，见 §3.1）。拓扑照 paseo（serverId 路由 + 纯密文转发），代码独立编写（官方 paseo relay 是 AGPL Elixir 服务，不复用）。
 - **iOS App**：Tauri 2 iOS 壳 + 复用现有 React 前端；不注册任何本地 Vault 命令，所有数据经 Bridge RPC。
+
+### 3.1 Relay 服务（自建）
+
+relay 解决的唯一问题：手机在外网、电脑在 NAT 后面，双方都无法主动连对方 —— relay 是公网**会合点**。它不存数据、不解密、无数据库；因为上层已 E2EE，relay 只见 IP / 时间 / 包大小。本质是一个按 `serverId` 配对两条 WebSocket 的交换机。
+
+**技术选型**：Cloudflare Workers + Durable Objects。理由：全球 anycast 边缘、原生 WebSocket hibernation、按 DO 名字天然做「每 serverId 一个单点」，无需自己管进程/负载均衡；免费额度对个人与早期用户量级足够。仓库：**独立 repo [`poco-ai/agentero-relay`](https://github.com/poco-ai/agentero-relay)**（现为 private，实现完成后转公开 MIT 以支持自托管），不进本 monorepo —— 部署节奏（`wrangler deploy`）与桌面 `v*` tag 发布无关，CF 凭据也不应进桌面仓库；relay 不解析上层协议，只需共享少量常量（query 参数名、控制消息 type），复制常量比耦合构建更划算。
+
+**路由与角色**（一个 DO 实例 = 一个 `serverId`）：
+
+```
+GET /ws?v=1&serverId=<agt_…>&role=host                       → host-control（每 serverId 唯一）
+GET /ws?v=1&serverId=<agt_…>&role=host&connectionId=<conn_…> → host-data（每设备连接一条）
+GET /ws?v=1&serverId=<agt_…>&role=client                     → client（relay 分配 connectionId）
+```
+
+- client 接入 → DO 分配 `conn_<16hex>`，经 host-control 下发 `{type:"connected",connectionId}`；host 建对应 host-data 通道后按 connectionId 一对一转发；
+- host-data 未就绪期间 client 帧进环形缓冲（上限 ~200 帧 / 4MB，超限直接关连接，避免 DO 内存放大）；
+- 断开时向对端发 `{type:"disconnected",connectionId}`；host-control 重连后经 `{type:"sync",connectionIds:[…]}` 对账；
+- host-control 每 10s 应用层 ping，30s 无响应视为掉线；client 侧指数退避重连（1s→30s，带抖动）。
+
+**relay 自身不做认证**（照 paseo）：`serverId` 是路由键不是秘密，安全性完全由 Bridge 侧的 E2EE + 设备验签兜底（§5.3）。relay 只做**滥用防护**：每 serverId 并发 client 上限、每 IP 建连速率限制、单帧大小上限、空闲会话回收。
+
+**运维与自托管**：官方实例 `bridge.agentero.app`（域名待定）；协议与 Worker 源码开源，设置里 relay endpoint 可改（企业/隐私用户自托管）。offer 里携带 `relay.endpoint`，所以换 relay 只需重新出二维码。日志只记连接元数据（serverId 前缀哈希、时长、字节数），不记内容，不记完整 IP。
 
 ---
 
@@ -326,15 +349,15 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| M1 Bridge 内核 | `features/bridge/`：身份/密钥、relay 控制+数据通道、E2EE、RPC 白名单映射、devices.json；Settings 开关 + 二维码 | 桌面↔桌面模拟 client 全流程 e2e 测试 |
-| M2 Relay 部署 | 自写 CF Workers relay（拓扑参考 paseo DO 模型，**不复用 AGPL 代码**）；自托管 endpoint 可配置 | 公网双设备互通 |
-| M3 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | TestFlight 内测；`docs/development/release.md` 上架清单 |
-| M4 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
+| M0 Relay | 独立 repo `agentero-relay`：CF Workers + DO，三角色路由、缓冲、限流、部署到官方域名 | 两个 `wscat` 客户端经 relay 互通；断线重连与 sync 对账通过 |
+| M1 Bridge 内核 | `features/bridge/`：身份/密钥、relay 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | 桌面↔桌面模拟 client 经**真实 relay** 跑完配对 + RPC + Agent 流式 e2e |
+| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | TestFlight 内测；`docs/development/release.md` 上架清单 |
+| M3 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
 | P2 之后 | APNs 推送、LAN 直连兜底（含 Tailscale 手动地址）、headless `agentero bridge serve`、`remote:` Vault 透传 | — |
 
 ## 12. 开放问题
 
-- relay 域名与托管成本；是否随开源提供官方公共 relay，还是默认要求自托管；
+- relay 域名与免费额度耗尽后的成本分担（官方实例托底 + 自托管开放，已定；定价/限额策略未定）；
 - 协议 schema 的单一来源：Rust 定义 + 生成 TS 类型（`ts-rs`/specta），避免手写两份；
 - iOS 端 Markdown 编辑器裁剪范围（桌面 CodeMirror 栈在移动端的可用性）；
 - 多设备同时在线的写并发（MVP：允许多设备连接，写入走桌面现有保存冲突检查即可）。
