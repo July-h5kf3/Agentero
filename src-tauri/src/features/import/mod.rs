@@ -483,6 +483,21 @@ pub async fn download_paper_assets_with_progress(
     )
     .await?;
 
+    // When TeX was downloaded into source/, record body_source = "latex" in catalog
+    // so the frontend doesn't show "download TeX" even though source/ is lazy‑loaded.
+    if result.tex {
+        if let Ok(Some(mut row)) = papers::get_by_path(&vault, &path_rel) {
+            let changed = row.body_source.as_deref() != Some("latex");
+            if changed {
+                row.body_source = Some("latex".to_string());
+                row.body_quality = Some("high".to_string());
+                row.updated_at =
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                let _ = papers::upsert_paper(&vault, &row);
+            }
+        }
+    }
+
     // After download: no TeX + has PDF → liteparse PAPER.md
     let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
         &vault, &path_rel, &paper_dir,
@@ -567,6 +582,7 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
             })
             .collect()
     };
+    let entries = dedupe_local_pdf_entries(entries);
 
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
@@ -590,6 +606,22 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
         papers: papers_out,
         errors,
     })
+}
+
+/// Drop repeated source files (same path spelled with `\` vs `/`, or Windows
+/// case variants) so one drop/pick never commits the same PDF twice.
+fn dedupe_local_pdf_entries(entries: Vec<LocalPdfImportEntry>) -> Vec<LocalPdfImportEntry> {
+    let mut seen = std::collections::HashSet::new();
+    entries
+        .into_iter()
+        .filter(|e| {
+            let mut key = e.file_path.trim().replace('\\', "/");
+            if cfg!(windows) {
+                key = key.to_lowercase();
+            }
+            seen.insert(key)
+        })
+        .collect()
 }
 
 async fn import_one_local_pdf(
@@ -1004,6 +1036,25 @@ mod tests {
         );
         assert_eq!(title_from_stem("  Hello   World  "), "Hello World");
         assert_eq!(title_from_stem("   "), "Untitled");
+    }
+
+    #[test]
+    fn dedupe_local_pdf_entries_mixed_separators() {
+        let entry = |p: &str| LocalPdfImportEntry {
+            file_path: p.to_string(),
+            title: None,
+            authors: None,
+            year: None,
+            id: None,
+        };
+        let out = dedupe_local_pdf_entries(vec![
+            entry(r"C:\Users\me\x.pdf"),
+            entry("C:/Users/me/x.pdf"),
+            entry("C:/Users/me/y.pdf"),
+        ]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].file_path, r"C:\Users\me\x.pdf");
+        assert_eq!(out[1].file_path, "C:/Users/me/y.pdf");
     }
 
     #[test]
