@@ -147,34 +147,21 @@ export function tabHasNotesSplit(
 }
 
 /**
- * Companion of a paper body (PDF/HTML) → open NOTES panel, or of a NOTES
- * panel → open paper body. Null when no pair is currently open.
+ * Open NOTES companion of a paper body (PDF/HTML). Null when the tab is not
+ * a paper body or its NOTES panel is not open.
  */
 export function findReadingCompanion(
 	tabs: DocTab[],
 	tab: DocTab | null,
 ): DocTab | null {
-	if (!tab) return null;
-	if (isPaperContentTab(tab) && tab.notesPath) {
-		const notesId = tabIdForPath(tab.notesPath);
-		return tabs.find((t) => t.id === notesId) ?? null;
-	}
-	if (tabIsPaperNotes(tab)) {
-		return (
-			tabs.find(
-				(t) =>
-					isPaperContentTab(t) &&
-					t.notesPath != null &&
-					tabIdForPath(t.notesPath) === tab.id,
-			) ?? null
-		);
-	}
-	return null;
+	if (!tab || !isPaperContentTab(tab) || !tab.notesPath) return null;
+	const notesId = tabIdForPath(tab.notesPath);
+	return tabs.find((t) => t.id === notesId) ?? null;
 }
 
 /**
- * Panel ids to close together for a reading pair (paper body ↔ NOTES).
- * Always includes `id`; appends the open companion when present (deduped).
+ * Panel ids to close together: closing a paper body (PDF/HTML) also closes
+ * its open NOTES panel, but closing NOTES leaves the body open.
  */
 export function readingPairCloseIds(tabs: DocTab[], id: string): string[] {
 	const tab = tabs.find((t) => t.id === id) ?? null;

@@ -295,7 +295,8 @@ export function openTab(
 
 /**
  * Close a tab; focus stays with dockview; full Library when emptied.
- * Paper body (PDF/HTML) and its NOTES companion close as a pair (either side).
+ * Closing a paper body (PDF/HTML) also closes its NOTES companion;
+ * closing NOTES leaves the body open.
  */
 export function closeTab(id: string): void {
 	// Resolve pair before setState so Strict Mode double-invoke is stable.

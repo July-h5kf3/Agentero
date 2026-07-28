@@ -9,7 +9,7 @@
 | 打开文档 | 文件树 / Library / 命令面板 → `openTab` → `workspaceRef.openPanel` |
 | 首篇 paper | PDF/HTML 左 + `NOTES.md` 右分屏 |
 | 再开 paper | 叠到同一左右两栏（body / NOTES **同步切换**）；不拆第三列 |
-| 同步关闭 | paper body 与 NOTES 成对关闭 |
+| 同步关闭 | 关 paper body 时一并关 NOTES；关 NOTES 保留 body |
 | 文件树拖入 | left/right/above/below/within 分屏落点 |
 | 关 panel | dockview X → `closeTab`；焦点 `onDidActivePanelChange` |
 | 循环 | `⌥⌘←/→` 按 `api.panels` **视觉序** |

@@ -401,7 +401,7 @@ describe("flat workspace helpers", () => {
 		});
 	});
 
-	it("readingPairCloseIds is bidirectional for paper body and NOTES", () => {
+	it("readingPairCloseIds pairs body→NOTES but not NOTES→body", () => {
 		const paper = makeTab("/vault/p", {
 			kind: "paper",
 			mode: "pdf",
@@ -415,9 +415,7 @@ describe("flat workspace helpers", () => {
 		expect(readingPairCloseIds(open, paper.id).sort()).toEqual(
 			[paper.id, notes.id].sort(),
 		);
-		expect(readingPairCloseIds(open, notes.id).sort()).toEqual(
-			[paper.id, notes.id].sort(),
-		);
+		expect(readingPairCloseIds(open, notes.id)).toEqual([notes.id]);
 		expect(readingPairCloseIds([paper], paper.id)).toEqual([paper.id]);
 		expect(readingPairCloseIds([notes], notes.id)).toEqual([notes.id]);
 	});
