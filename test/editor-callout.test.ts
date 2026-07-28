@@ -130,6 +130,38 @@ describe("Obsidian callout Markdown model", () => {
 		]);
 	});
 
+	it("supports a hard break between the marker title and body", () => {
+		const editor = createCalloutEditor(
+			"> [!important] Summary\\\n> Body with $a$.",
+		);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "important",
+				title: "Summary",
+				children: [
+					{
+						type: "p",
+						children: [
+							{ text: "Body with " },
+							{ type: "inline_equation", texExpression: "a" },
+							{ text: "." },
+						],
+					},
+				],
+			},
+		]);
+	});
+
+	it("keeps an escaped callout marker as literal blockquote text", () => {
+		const editor = createCalloutEditor(
+			"> \\[!important] Literal marker\\\n> Body",
+		);
+
+		expect(editor.children).toMatchObject([{ type: "blockquote" }]);
+	});
+
 	it("retains lists, math, and wikilinks inside the callout body", () => {
 		const editor = createCalloutEditor(
 			"> [!important] Mixed body\n>\n> See [[Other]] and $a$.\n>\n> - one\n> - two",

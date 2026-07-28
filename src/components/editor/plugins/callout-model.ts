@@ -22,6 +22,13 @@ type MdNode = {
 	calloutTypeRaw?: string;
 	title?: string;
 	attributes?: unknown[];
+	position?: {
+		start?: { offset?: number };
+	};
+};
+
+type RemarkFile = {
+	value?: unknown;
 };
 
 export type CalloutMarker = {
@@ -44,7 +51,7 @@ export function parseCalloutMarker(line: string): CalloutMarker | null {
 	};
 }
 
-function calloutFromBlockquote(node: MdNode): MdNode | null {
+function calloutFromBlockquote(node: MdNode, source: string): MdNode | null {
 	if (node.type !== "blockquote") return null;
 	const firstParagraph = node.children?.[0];
 	const firstText = firstParagraph?.children?.[0];
@@ -55,19 +62,35 @@ function calloutFromBlockquote(node: MdNode): MdNode | null {
 	) {
 		return null;
 	}
+	const sourceOffset = firstText.position?.start?.offset;
+	if (
+		sourceOffset !== undefined &&
+		source.slice(sourceOffset, sourceOffset + 2) === "\\["
+	) {
+		return null;
+	}
 
 	const newline = firstText.value.indexOf("\n");
 	const header =
 		newline < 0 ? firstText.value : firstText.value.slice(0, newline);
 	const marker = parseCalloutMarker(header);
 	if (!marker) return null;
-	if (newline < 0 && (firstParagraph.children?.length ?? 0) > 1) {
-		return null;
-	}
 
 	const body = [...(node.children ?? [])];
 	if (newline < 0) {
-		body.shift();
+		const paragraphChildren = firstParagraph.children ?? [];
+		if (paragraphChildren.length === 1) {
+			body.shift();
+		} else if (paragraphChildren[1]?.type === "break") {
+			const bodyChildren = paragraphChildren.slice(2);
+			if (bodyChildren.length) {
+				body[0] = { ...firstParagraph, children: bodyChildren };
+			} else {
+				body.shift();
+			}
+		} else {
+			return null;
+		}
 	} else {
 		const bodyPrefix = firstText.value.slice(newline + 1);
 		const paragraphChildren = [...(firstParagraph.children ?? [])];
@@ -110,8 +133,14 @@ function transformTree(
  * Serialization emits blockquote mdast directly from the callout rule below.
  */
 export function remarkObsidianCallout() {
-	return (tree: MdNode) => {
-		transformTree(tree, calloutFromBlockquote);
+	return (tree: MdNode, file: RemarkFile) => {
+		const source =
+			typeof file?.value === "string"
+				? file.value
+				: file?.value
+					? String(file.value)
+					: "";
+		transformTree(tree, (node) => calloutFromBlockquote(node, source));
 	};
 }
 
