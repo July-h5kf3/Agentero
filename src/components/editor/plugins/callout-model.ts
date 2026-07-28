@@ -2,6 +2,8 @@ import {
 	convertChildrenDeserialize,
 	convertNodesSerialize,
 	type MdRules,
+	parseAttributes,
+	propsToAttributes,
 } from "@platejs/markdown";
 
 export type CalloutSlateNode = {
@@ -19,6 +21,7 @@ type MdNode = {
 	calloutType?: string;
 	calloutTypeRaw?: string;
 	title?: string;
+	attributes?: unknown[];
 };
 
 export type CalloutMarker = {
@@ -35,7 +38,7 @@ export function parseCalloutMarker(line: string): CalloutMarker | null {
 	const typeRaw = match[1];
 	const title = match[2]?.trim();
 	return {
-		type: typeRaw.toLocaleLowerCase(),
+		type: typeRaw.toLowerCase(),
 		typeRaw,
 		...(title ? { title } : {}),
 	};
@@ -120,6 +123,15 @@ export const obsidianCalloutRules = {
 				deco,
 				options,
 			);
+			if (!node.calloutType && node.attributes) {
+				return {
+					type: "callout",
+					...parseAttributes(node.attributes),
+					children: children.length
+						? children
+						: [{ type: "p", children: [{ text: "" }] }],
+				};
+			}
 			return {
 				type: "callout",
 				calloutType: node.calloutType,
@@ -131,6 +143,15 @@ export const obsidianCalloutRules = {
 			};
 		},
 		serialize: (node, options) => {
+			if (!node.calloutType && !node.calloutTypeRaw) {
+				const { children, type: _type, ...props } = node;
+				return {
+					type: "mdxJsxFlowElement",
+					name: "callout",
+					attributes: propsToAttributes(props),
+					children: convertNodesSerialize(children, options),
+				};
+			}
 			const typeRaw = node.calloutTypeRaw || node.calloutType || "note";
 			const title = node.title ? ` ${node.title}` : "";
 			return {

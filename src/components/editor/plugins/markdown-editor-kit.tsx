@@ -84,6 +84,7 @@ import { HrElement } from "@/components/editor/hr-node";
 import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
+import { CalloutPlugin } from "@/components/editor/plugins/callout-plugin";
 import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
 import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
@@ -148,6 +149,7 @@ export const MarkdownEditorKit = [
 		inputRules: [BlockquoteRules.markdown()],
 		node: { component: BlockquoteElement },
 	}),
+	CalloutPlugin,
 	HorizontalRulePlugin.configure({
 		inputRules: [
 			HorizontalRuleRules.markdown({ variant: "-" }),

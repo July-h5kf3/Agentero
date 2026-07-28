@@ -1,6 +1,6 @@
 import wikiLink from "@flowershow/remark-wiki-link";
 import { BaseListPlugin } from "@platejs/list";
-import { MarkdownPlugin } from "@platejs/markdown";
+import { MarkdownPlugin, remarkMdx } from "@platejs/markdown";
 import { createSlateEditor, createSlatePlugin, KEYS } from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -11,6 +11,8 @@ import {
 	parseCalloutMarker,
 	remarkObsidianCallout,
 } from "@/components/editor/plugins/callout-model";
+import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
+import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
 	WikiLinkPlugin,
 	wikiLinkRules,
@@ -38,6 +40,7 @@ const TestMarkdownPlugin = MarkdownPlugin.configure({
 			remarkMath,
 			remarkGfm,
 			[wikiLink, { aliasDivider: "|" }],
+			remarkMdx,
 			remarkObsidianCallout,
 		],
 		rules: { ...wikiLinkRules, ...obsidianCalloutRules },
@@ -154,5 +157,112 @@ describe("Obsidian callout Markdown model", () => {
 		const serialized = editor.getApi(MarkdownPlugin).markdown.serialize();
 		expect(serialized).toContain("> See [[Other]] and $a$.");
 		expect(serialized).toContain("> * one\n> * two");
+	});
+
+	it("uses the production Markdown kit for Obsidian callouts", () => {
+		const editor = createSlateEditor({
+			plugins: [
+				TestParagraphPlugin,
+				TestBlockquotePlugin,
+				TestCalloutPlugin,
+				TestInlineEquationPlugin,
+				BaseListPlugin,
+				WikiLinkPlugin,
+				...MarkdownKit,
+			],
+			value: (currentEditor) =>
+				currentEditor
+					.getApi(MarkdownPlugin)
+					.markdown.deserialize("> [!My-Type]\n> Body"),
+		});
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "my-type",
+				calloutTypeRaw: "My-Type",
+				children: [{ type: "p", children: [{ text: "Body" }] }],
+			},
+		]);
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize()).toBe(
+			"> [!My-Type]\n>\n> Body\n",
+		);
+	});
+
+	it("converts a completed live marker and selects the editable body", () => {
+		const editor = createSlateEditor({
+			plugins: [
+				TestParagraphPlugin,
+				TestBlockquotePlugin,
+				TestCalloutPlugin,
+				TestMarkdownPlugin,
+			],
+			value: [
+				{
+					type: "blockquote",
+					children: [{ text: "[!important] Read this" }],
+				},
+			],
+		});
+		const offset = "[!important] Read this".length;
+		editor.tf.select({
+			anchor: { path: [0, 0], offset },
+			focus: { path: [0, 0], offset },
+		});
+
+		expect(convertBlockquoteMarkerToCallout(editor)).toBe(true);
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "important",
+				calloutTypeRaw: "important",
+				title: "Read this",
+				children: [{ type: "p", children: [{ text: "" }] }],
+			},
+		]);
+		expect(editor.selection).toEqual({
+			anchor: { path: [0, 0, 0], offset: 0 },
+			focus: { path: [0, 0, 0], offset: 0 },
+		});
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize()).toContain(
+			"> [!important] Read this",
+		);
+	});
+
+	it("does not live-convert unsupported folded markers", () => {
+		const marker = "[!important]- Folded";
+		const editor = createSlateEditor({
+			plugins: [
+				TestParagraphPlugin,
+				TestBlockquotePlugin,
+				TestCalloutPlugin,
+				TestMarkdownPlugin,
+			],
+			value: [{ type: "blockquote", children: [{ text: marker }] }],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: marker.length },
+			focus: { path: [0, 0], offset: marker.length },
+		});
+
+		expect(convertBlockquoteMarkerToCallout(editor)).toBe(false);
+		expect(editor.children).toMatchObject([{ type: "blockquote" }]);
+	});
+
+	it("keeps MDX callout attributes on the existing portable path", () => {
+		const editor = createCalloutEditor(
+			'<callout variant="warning">\n\nMDX body\n\n</callout>',
+		);
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				variant: "warning",
+				children: [{ type: "p", children: [{ text: "MDX body" }] }],
+			},
+		]);
+		const serialized = editor.getApi(MarkdownPlugin).markdown.serialize();
+		expect(serialized).toContain('<callout variant="warning">');
+		expect(serialized).toContain("MDX body");
 	});
 });

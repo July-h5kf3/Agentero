@@ -32,6 +32,24 @@
 		"pickTitle": "Insert image into note",
 		"pickFilter": "Images"
 	},
+	"callout": {
+		"types": {
+			"note": "Note",
+			"abstract": "Abstract",
+			"info": "Info",
+			"todo": "To-do",
+			"tip": "Tip",
+			"success": "Success",
+			"question": "Question",
+			"warning": "Warning",
+			"failure": "Failure",
+			"danger": "Danger",
+			"bug": "Bug",
+			"example": "Example",
+			"quote": "Quote",
+			"important": "Important"
+		}
+	},
 	"findReplace": {
 		"title": "Find & replace",
 		"searchPlaceholder": "Find",

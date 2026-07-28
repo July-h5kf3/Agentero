@@ -32,6 +32,24 @@
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
 	},
+	"callout": {
+		"types": {
+			"note": "笔记",
+			"abstract": "摘要",
+			"info": "信息",
+			"todo": "待办",
+			"tip": "提示",
+			"success": "成功",
+			"question": "问题",
+			"warning": "警告",
+			"failure": "失败",
+			"danger": "危险",
+			"bug": "缺陷",
+			"example": "示例",
+			"quote": "引用",
+			"important": "重要"
+		}
+	},
 	"findReplace": {
 		"title": "查找替换",
 		"searchPlaceholder": "查找",

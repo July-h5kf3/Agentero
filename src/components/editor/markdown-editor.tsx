@@ -20,6 +20,7 @@ import { FindReplaceBar } from "@/components/editor/find-replace-bar";
 import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
+import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import {
 	isWikiLinkDraftEditingOffset,
@@ -993,6 +994,11 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
+				if (event.key === "Enter" && convertBlockquoteMarkerToCallout(editor)) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
 				if (event.key === "Escape") {
 					setWikiCompletionDraft(null);
 					setFindOpen(false);
@@ -1020,6 +1026,7 @@ export function MarkdownEditor({
 			}
 		},
 		[
+			editor,
 			handleWikiLinkArrow,
 			handleWikiLinkBoundaryDelete,
 			handleWikiLinkDraftEnter,
