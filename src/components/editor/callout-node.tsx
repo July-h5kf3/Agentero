@@ -278,7 +278,7 @@ export function CalloutElement(props: PlateElementProps) {
 					</Popover>
 					<input
 						type="text"
-						className="h-6 min-w-0 flex-1 rounded-sm bg-transparent px-1 font-semibold text-sm outline-none placeholder:text-current placeholder:opacity-100 hover:bg-foreground/5 focus:bg-background/45 focus:ring-2 focus:ring-ring/50"
+						className="h-6 min-w-0 flex-1 border-0 bg-transparent px-1 font-semibold text-sm outline-none shadow-none placeholder:text-current placeholder:opacity-100 hover:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0"
 						value={titleEditing ? titleDraft : (element.title ?? "")}
 						placeholder={title}
 						aria-label={t("callout.titleInputLabel")}
