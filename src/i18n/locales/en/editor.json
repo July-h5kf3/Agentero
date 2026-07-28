@@ -48,10 +48,14 @@
 		"cut": "Cut",
 		"copy": "Copy",
 		"paste": "Paste",
+		"formatMarkdown": "Format Markdown",
+		"formatMarkdownBusy": "Formatting Markdown…",
 		"insertWikiLink": "Add internal link",
 		"insertExternalLink": "Add external link",
 		"copyFailed": "Could not copy the selected text.",
-		"pasteFailed": "Could not read text from the clipboard."
+		"pasteFailed": "Could not read text from the clipboard.",
+		"formatFailed": "Could not format this Markdown document.",
+		"formatStale": "The note changed while Markdown was being formatted. Try again."
 	},
 	"headingRename": {
 		"menu": "Rename current heading",

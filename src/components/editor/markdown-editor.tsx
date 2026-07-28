@@ -51,7 +51,7 @@ import {
 	copyTextToClipboard,
 	readTextFromClipboard,
 } from "@/lib/core/clipboard";
-import { errorMessage, notifyError } from "@/lib/core/notify";
+import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
@@ -59,6 +59,12 @@ import {
 	editorContextMenuCapabilities,
 	insertEditorLinkTemplate,
 } from "@/lib/markdown/editor-context-menu";
+import {
+	captureMarkdownSelectionBookmark,
+	prepareMarkdownFormat,
+	replaceMarkdownEditorValue,
+} from "@/lib/markdown/editor-format";
+import { formatMarkdownSource } from "@/lib/markdown/format";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
@@ -197,6 +203,7 @@ export function MarkdownEditor({
 		useState(false);
 	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
 	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
+	const [formattingMarkdown, setFormattingMarkdown] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusTick, setFindFocusTick] = useState(0);
 
@@ -1197,6 +1204,61 @@ export function MarkdownEditor({
 		[editor, readOnly, takeContextMenuSelection, updateWikiCompletionDraft],
 	);
 
+	const handleContextMenuFormatMarkdown = useCallback(async () => {
+		if (readOnly || formattingMarkdown) return;
+		const selection = takeContextMenuSelection();
+		const bookmark = captureMarkdownSelectionBookmark(
+			editor.children,
+			selection ?? editor.selection,
+		);
+		const snapshot = serialize();
+		setFormattingMarkdown(true);
+		try {
+			const prepared = await prepareMarkdownFormat({
+				currentSource: serialize,
+				deserialize: (body) =>
+					editor.getApi(MarkdownPlugin).markdown.deserialize(body),
+				formatSource: formatMarkdownSource,
+				snapshot,
+			});
+			if (prepared.status === "stale") {
+				notifyWarning(i18n.t("editor:contextMenu.formatStale"));
+				return;
+			}
+			if (prepared.status === "unchanged") {
+				if (selection) focusEditorAt(selection);
+				else editor.tf.focus();
+				return;
+			}
+			const nextSelection = replaceMarkdownEditorValue(
+				editor,
+				prepared.value,
+				bookmark,
+			);
+			window.requestAnimationFrame(() => {
+				if (!editorContainerRef.current?.isConnected) return;
+				if (nextSelection) editor.tf.focus({ at: nextSelection });
+				else editor.tf.focus({ edge: "end" });
+			});
+		} catch (error) {
+			notifyError(i18n.t("editor:contextMenu.formatFailed"), {
+				description: errorMessage(error),
+			});
+			if (selection && editorContainerRef.current?.isConnected) {
+				focusEditorAt(selection);
+			}
+		} finally {
+			setFormattingMarkdown(false);
+		}
+	}, [
+		editor,
+		focusEditorAt,
+		formattingMarkdown,
+		readOnly,
+		serialize,
+		takeContextMenuSelection,
+	]);
+
 	const confirmHeadingRename = useCallback(
 		async (newText: string) => {
 			const path = filePathRef.current;
@@ -1356,6 +1418,22 @@ export function MarkdownEditor({
 									>
 										{i18n.t("editor:contextMenu.paste")}
 										<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+									</ContextMenuItem>
+									<ContextMenuSeparator />
+									<ContextMenuItem
+										disabled={
+											!contextMenuCapabilities.formatMarkdown ||
+											formattingMarkdown
+										}
+										onSelect={() => {
+											void handleContextMenuFormatMarkdown();
+										}}
+									>
+										{i18n.t(
+											formattingMarkdown
+												? "editor:contextMenu.formatMarkdownBusy"
+												: "editor:contextMenu.formatMarkdown",
+										)}
 									</ContextMenuItem>
 									<ContextMenuSeparator />
 									<ContextMenuItem

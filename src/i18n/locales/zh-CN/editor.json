@@ -48,10 +48,14 @@
 		"cut": "剪切",
 		"copy": "复制",
 		"paste": "粘贴",
+		"formatMarkdown": "整理 Markdown 格式",
+		"formatMarkdownBusy": "正在整理 Markdown…",
 		"insertWikiLink": "新增双链",
 		"insertExternalLink": "新增外部链接",
 		"copyFailed": "无法复制选中的文本。",
-		"pasteFailed": "无法读取剪贴板中的文本。"
+		"pasteFailed": "无法读取剪贴板中的文本。",
+		"formatFailed": "无法整理当前 Markdown 文档。",
+		"formatStale": "整理 Markdown 期间笔记已发生变化，请重试。"
 	},
 	"headingRename": {
 		"menu": "重命名当前标题",

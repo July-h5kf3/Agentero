@@ -90,6 +90,7 @@ describe("Markdown editor context menu", () => {
 		).toEqual({
 			copy: true,
 			cut: false,
+			formatMarkdown: false,
 			insertLink: false,
 			paste: false,
 			renameHeading: false,
@@ -106,6 +107,7 @@ describe("Markdown editor context menu", () => {
 		).toEqual({
 			copy: false,
 			cut: false,
+			formatMarkdown: true,
 			insertLink: true,
 			paste: true,
 			renameHeading: true,
