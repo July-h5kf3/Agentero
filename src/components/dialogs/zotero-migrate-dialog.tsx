@@ -31,6 +31,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
+import i18n from "@/i18n";
 import { runBackgroundTask } from "@/lib/core/background-tasks";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
@@ -41,6 +42,7 @@ import {
 	type ZoteroMigrateResult,
 	type ZoteroScan,
 } from "@/lib/paper/import/zotero-migrate";
+import { ensureVault } from "@/lib/vault";
 
 /** Remembered import options (localStorage). */
 const OPTS_KEY = "motif.zotero.opts";
@@ -234,6 +236,13 @@ export function ZoteroMigrateDialog({
 					detail: dir,
 				},
 				async ({ setDetail, setProgress: setBg }) => {
+					// Ensure onboarding tutorial notes exist before migration
+					// (new vaults already have them; existing vaults may be missing them).
+					try {
+						await ensureVault(vaultPath, i18n.language);
+					} catch {
+						// Best-effort: do not block Zotero migration if ensure fails.
+					}
 					return migrateZotero({
 						vaultPath,
 						zoteroDir: dir,
