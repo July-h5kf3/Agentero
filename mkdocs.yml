@@ -70,6 +70,7 @@ nav:
       - TODO: development/todo.md
       - 广场 Plaza: development/plaza.md
       - PDF 引用与插图: development/pdf-analysis.md
+      - iOS 远程连接: development/ios-remote.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md
 
