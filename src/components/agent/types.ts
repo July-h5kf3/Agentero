@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper";
 
 /** Follow-up prompts waiting until the active run finishes. */
@@ -10,6 +11,8 @@ export type QueuedPrompt = {
 	contextPaths: string[];
 	/** Skill ids frozen when the user queued the message. */
 	skillIds: string[];
+	/** Selection chips frozen when the user queued the message. */
+	selections: SelectionContext[];
 };
 
 export type AgentPanelProps = {

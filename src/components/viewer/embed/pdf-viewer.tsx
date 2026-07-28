@@ -122,6 +122,11 @@ import {
 	listenAgentStream,
 	runOnce,
 } from "@/lib/agent";
+import {
+	clearActiveSelection,
+	pinActiveSelection,
+	publishSelection,
+} from "@/lib/agent/selection-store";
 import { notifyError } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
@@ -170,6 +175,7 @@ import {
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { loadSettings } from "@/lib/settings";
+import { openRightTab } from "@/lib/shell/ui-store";
 import {
 	buildTranslatePrompt,
 	prepareTranslateTask,
@@ -1372,6 +1378,24 @@ function PdfViewerInner({
 		startFromAnchor(anchor);
 	}, [selectionMenu, startFromAnchor, selectionCap, docId]);
 
+	const handleMenuAddToChat = useCallback(() => {
+		if (!selectionMenu) return;
+		const anchor = selectionMenu.anchor;
+		const quote = anchor.quote?.trim();
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		if (!quote) return;
+		// Re-publish after clear: clearing the PDF selection also drops the live chip.
+		publishSelection({
+			text: quote,
+			sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
+			origin: "pdf",
+			page: anchor.page,
+		});
+		pinActiveSelection();
+		openRightTab("agent");
+	}, [selectionMenu, selectionCap, docId, paperRelPath, paperAbsPath]);
+
 	const handleMenuTranslate = useCallback(() => {
 		if (!selectionMenu) return;
 		const anchor = selectionMenu.anchor;
@@ -1559,16 +1583,26 @@ function PdfViewerInner({
 				);
 				if (!anchor) return;
 				setSelectionMenu({ screen, anchor, pages });
+				publishSelection({
+					text: quote,
+					sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
+					origin: "pdf",
+					page: anchor.page,
+				});
 			})();
 		});
 		const offChange = scope.onSelectionChange((sel) => {
-			if (!sel) setSelectionMenu(null);
+			if (!sel) {
+				setSelectionMenu(null);
+				clearActiveSelection("pdf");
+			}
 		});
 		return () => {
 			offEnd();
 			offChange();
+			clearActiveSelection("pdf");
 		};
-	}, [selectionCap, docCap, docId]);
+	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
 
 	// Re-anchor the active ask/translate card on scroll + zoom. zoomLevel is an
 	// intentional dep: it forces re-placement after a zoom (body reads live zoom).
@@ -2144,6 +2178,7 @@ function PdfViewerInner({
 									onCopy={handleCopy}
 									onNote={handleNote}
 									onAsk={handleMenuAsk}
+									onAddToChat={handleMenuAddToChat}
 									onTranslate={handleMenuTranslate}
 									onClose={closeSelectionMenu}
 								/>

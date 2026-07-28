@@ -57,6 +57,8 @@
 		"contextInstruction": "Read these Vault files before answering when relevant:",
 		"removeContext": "Remove {{path}} from context",
 		"removeSkill": "Remove ${{skill}} from context",
+		"removeSelection": "Remove selected text from context",
+		"selection": "Selection",
 		"currentFileRemove": "Remove current file from context",
 		"mentionEnterFolder": "Open {{name}}",
 		"mentionBack": "Back to parent folder",

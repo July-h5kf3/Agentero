@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentPanelProps, QueuedPrompt } from "@/components/agent/types";
+import { useSelectionStore } from "@/hooks/use-app-stores";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
@@ -96,6 +97,12 @@ import {
 	displayHistoryTitle,
 	stripPromptEnvelopeForDisplay,
 } from "@/lib/agent/prompt-display";
+import {
+	consumeSelections,
+	currentSelections,
+	type SelectionContext,
+	selectionsPromptBlock,
+} from "@/lib/agent/selection-store";
 import {
 	type AcpCommand,
 	filterSlashCommands,
@@ -1106,6 +1113,17 @@ export function useAgentPanel({
 		[contextPaths, selectedVaultPath],
 	);
 
+	// Editor/PDF selection chips: pinned first, live selection last (Cursor-style).
+	const activeSelection = useSelectionStore((s) => s.active);
+	const pinnedSelections = useSelectionStore((s) => s.pinned);
+	const selectionChips = useMemo(
+		() =>
+			activeSelection
+				? [...pinnedSelections, activeSelection]
+				: pinnedSelections,
+		[activeSelection, pinnedSelections],
+	);
+
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
 	/** Raw @query (preserve case for display; matching is case-insensitive). */
 	const mentionQueryRaw = mentionMatch?.[2] ?? "";
@@ -1429,6 +1447,8 @@ export function useAgentPanel({
 		/** Frozen context from a waitlisted follow-up (else live composer). */
 		contextPaths?: string[];
 		skillIds?: string[];
+		/** Frozen selection chips from a waitlisted follow-up (else live store). */
+		selections?: SelectionContext[];
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
 	};
@@ -1459,6 +1479,7 @@ export function useAgentPanel({
 					text: textRaw,
 				};
 		const resolvedContextPaths = options?.contextPaths ?? contextPaths;
+		const resolvedSelections = options?.selections ?? currentSelections();
 		const resolvedSkillIds =
 			options?.skillIds ?? submittedComposerState.selectedSkillIds;
 		const submissionGeneration = ++submissionGenRef.current;
@@ -1505,13 +1526,21 @@ export function useAgentPanel({
 				(command) =>
 					text === `/${command.name}` || text.startsWith(`/${command.name} `),
 			);
-			const prompt = isAcpCommand
-				? text
-				: resolvedContextPaths.length
-					? `${text}\n\n${t("composer.contextInstruction")}\n${resolvedContextPaths
-							.map((path) => `- ${path}`)
-							.join("\n")}`
-					: text;
+			const contextBlocks: string[] = [];
+			if (resolvedContextPaths.length) {
+				contextBlocks.push(
+					`${t("composer.contextInstruction")}\n${resolvedContextPaths
+						.map((path) => `- ${path}`)
+						.join("\n")}`,
+				);
+			}
+			if (resolvedSelections.length) {
+				contextBlocks.push(selectionsPromptBlock(resolvedSelections));
+			}
+			const prompt =
+				isAcpCommand || contextBlocks.length === 0
+					? text
+					: `${text}\n\n${contextBlocks.join("\n\n")}`;
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
@@ -1551,6 +1580,8 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			// A submitted turn consumes its selection chips (queued turns already did).
+			if (!options?.selections) consumeSelections();
 			const pendingTerminal = pendingTerminalEventsRef.current.get(
 				accepted.sessionId,
 			);
@@ -1639,6 +1670,7 @@ export function useAgentPanel({
 				workflow,
 				contextPaths: paths,
 				skillIds: [...snap.selectedSkillIds],
+				selections: consumeSelections(),
 			};
 			setMessageQueue((prev) => {
 				const next = [...prev, item];
@@ -1716,6 +1748,7 @@ export function useAgentPanel({
 					workflow: head.workflow,
 					contextPaths: head.contextPaths,
 					skillIds: head.skillIds,
+					selections: head.selections,
 					fromQueue: true,
 				});
 			} finally {
@@ -2257,6 +2290,7 @@ export function useAgentPanel({
 		currentFilePath,
 		currentFileLabel,
 		mentionChipPaths,
+		selectionChips,
 		directoryPathSet,
 		paperPathSet,
 		labelForPath,

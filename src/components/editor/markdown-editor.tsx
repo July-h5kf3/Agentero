@@ -56,6 +56,10 @@ import {
 } from "@/components/ui/context-menu";
 import i18n from "@/i18n";
 import {
+	clearActiveSelection,
+	publishSelection,
+} from "@/lib/agent/selection-store";
+import {
 	copyTextToClipboard,
 	readTextFromClipboard,
 } from "@/lib/core/clipboard";
@@ -1410,6 +1414,39 @@ export function MarkdownEditor({
 		[filePath, onAssetsChanged],
 	);
 
+	// Mirror the live text selection into the Agent composer as an ephemeral
+	// context chip (debounced; collapsed selection clears it).
+	const selectionPublishTimerRef = useRef<number | null>(null);
+	const scheduleSelectionContextPublish = useCallback(() => {
+		if (selectionPublishTimerRef.current !== null) {
+			window.clearTimeout(selectionPublishTimerRef.current);
+		}
+		selectionPublishTimerRef.current = window.setTimeout(() => {
+			selectionPublishTimerRef.current = null;
+			const selection = editor.selection;
+			if (!selection || RangeApi.isCollapsed(selection)) {
+				clearActiveSelection("markdown");
+				return;
+			}
+			const path = filePathRef.current;
+			if (!path) return;
+			publishSelection({
+				text: editor.api.string(selection),
+				sourcePath: path,
+				origin: "markdown",
+			});
+		}, 300);
+	}, [editor]);
+
+	useEffect(() => {
+		return () => {
+			if (selectionPublishTimerRef.current !== null) {
+				window.clearTimeout(selectionPublishTimerRef.current);
+			}
+			clearActiveSelection("markdown");
+		};
+	}, []);
+
 	const handleEditorValueChange = useCallback(() => {
 		const presentationMarkdown = wikiLinkPresentationMarkdownRef.current;
 		if (presentationMarkdown !== null) {
@@ -1440,6 +1477,7 @@ export function MarkdownEditor({
 					onSelectionChange={() => {
 						syncWikiLinkPresentation(editor.selection);
 						window.requestAnimationFrame(updateSlashCommandDraft);
+						scheduleSelectionContextPublish();
 					}}
 					onValueChange={handleEditorValueChange}
 				>

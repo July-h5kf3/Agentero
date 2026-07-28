@@ -5,6 +5,7 @@ import {
 	ChevronRight,
 	ListTodoIcon,
 	Star,
+	TextSelect,
 	X,
 	Zap,
 } from "lucide-react";
@@ -64,7 +65,9 @@ import type {
 } from "@/lib/agent";
 import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
+import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { AcpCommand } from "@/lib/agent/slash-commands";
+import { basenameOf } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 
 export type GroupedModel = {
@@ -91,6 +94,8 @@ export function AgentComposer({
 	currentFilePath,
 	currentFileLabel,
 	mentionChipPaths,
+	selectionChips,
+	onRemoveSelection,
 	directoryPathSet,
 	paperPathSet,
 	labelForPath,
@@ -163,6 +168,8 @@ export function AgentComposer({
 	currentFilePath: string | null;
 	currentFileLabel: string;
 	mentionChipPaths: string[];
+	selectionChips: SelectionContext[];
+	onRemoveSelection: (id: string) => void;
 	directoryPathSet: ReadonlySet<string>;
 	paperPathSet: ReadonlySet<string>;
 	labelForPath: (path: string) => string;
@@ -298,7 +305,9 @@ export function AgentComposer({
 						onDragOverCapture={onComposerDragOver}
 						onDropCapture={onComposerDrop}
 					>
-						{currentFilePath || mentionChipPaths.length > 0 ? (
+						{currentFilePath ||
+						mentionChipPaths.length > 0 ||
+						selectionChips.length > 0 ? (
 							<div className="mb-2 flex flex-wrap gap-1.5">
 								{currentFilePath ? (
 									<button
@@ -334,6 +343,31 @@ export function AgentComposer({
 												paperPaths={paperPathSet}
 											/>
 											<span className="max-w-[16rem] truncate" title={path}>
+												{label}
+											</span>
+											<X className="size-3 shrink-0 text-muted-foreground" />
+										</button>
+									);
+								})}
+								{selectionChips.map((sel) => {
+									const name =
+										basenameOf(sel.sourcePath) || t("composer.selection");
+									const label = sel.page ? `${name} · p.${sel.page}` : name;
+									return (
+										<button
+											key={sel.id}
+											type="button"
+											className={cn(
+												"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-foreground text-xs transition-colors hover:bg-muted",
+												sel.pinned
+													? "bg-muted/20"
+													: "border-dashed bg-transparent",
+											)}
+											onClick={() => onRemoveSelection(sel.id)}
+											title={t("composer.removeSelection")}
+										>
+											<TextSelect className="size-3.5 shrink-0 text-muted-foreground" />
+											<span className="max-w-[16rem] truncate" title={sel.text}>
 												{label}
 											</span>
 											<X className="size-3 shrink-0 text-muted-foreground" />

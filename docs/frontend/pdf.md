@@ -22,13 +22,14 @@
 
 ## 划词菜单
 
-选区后：高亮 / 批注 / 提问 / 翻译。
+选区后：高亮 / 批注 / 提问 / 加入对话 / 翻译。
 
 | 动作 | 落盘 | UI |
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
 | 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
+| 加入对话 | 不落盘 | 选区固定为 Agent composer 选区 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。

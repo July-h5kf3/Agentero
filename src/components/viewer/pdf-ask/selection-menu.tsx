@@ -3,6 +3,7 @@ import {
 	Copy,
 	Languages,
 	MessageSquare,
+	MessageSquarePlus,
 	NotebookPen,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -32,12 +33,14 @@ type SelectionMenuProps = {
 	/** Annotate: create a highlight and open its inline note editor */
 	onNote: () => void;
 	onAsk: () => void;
+	/** Pin the selection as an Agent composer context chip and open the chat. */
+	onAddToChat: () => void;
 	onTranslate: () => void;
 	/** Dismiss the menu without acting */
 	onClose: () => void;
 };
 
-const BAR_W = 300;
+const BAR_W = 336;
 const BAR_H = 40;
 const COPIED_FLASH_MS = 1500;
 
@@ -52,6 +55,7 @@ export function SelectionMenu({
 	onCopy,
 	onNote,
 	onAsk,
+	onAddToChat,
 	onTranslate,
 	onClose,
 }: SelectionMenuProps) {
@@ -192,6 +196,20 @@ export function SelectionMenu({
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.addToChat")}
+							onClick={onAddToChat}
+						>
+							<MessageSquarePlus className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t("selection.addToChat")}</TooltipContent>
 				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>

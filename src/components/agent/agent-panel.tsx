@@ -10,6 +10,7 @@ import { ChatTranscript } from "@/components/agent/chat-transcript";
 import type { AgentPanelProps } from "@/components/agent/types";
 import { useAgentPanel } from "@/components/agent/use-agent-panel";
 import { PaneHeader } from "@/components/shell/pane-header";
+import { removeSelection } from "@/lib/agent/selection-store";
 import { cn } from "@/lib/core/utils";
 
 export type { AgentPanelProps } from "@/components/agent/types";
@@ -84,6 +85,7 @@ export const AgentPanel = memo(function AgentPanel({
 		currentFilePath,
 		currentFileLabel,
 		mentionChipPaths,
+		selectionChips,
 		directoryPathSet,
 		paperPathSet,
 		labelForPath,
@@ -239,6 +241,8 @@ export const AgentPanel = memo(function AgentPanel({
 						currentFilePath={currentFilePath}
 						currentFileLabel={currentFileLabel}
 						mentionChipPaths={mentionChipPaths}
+						selectionChips={selectionChips}
+						onRemoveSelection={removeSelection}
 						directoryPathSet={directoryPathSet}
 						paperPathSet={paperPathSet}
 						labelForPath={labelForPath}

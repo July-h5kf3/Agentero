@@ -4,6 +4,7 @@
  */
 
 import { useStore } from "zustand";
+import { selectionStore } from "@/lib/agent/selection-store";
 import { libraryStore } from "@/lib/paper/library-store";
 import { annotationsStore } from "@/lib/pdf/annotations-store";
 import { settingsStore } from "@/lib/settings/react-store";
@@ -48,6 +49,12 @@ export function useUiStore<T>(
 	selector: (state: ExtractState<typeof uiStore>) => T,
 ): T {
 	return useStore(uiStore, selector);
+}
+
+export function useSelectionStore<T>(
+	selector: (state: ExtractState<typeof selectionStore>) => T,
+): T {
+	return useStore(selectionStore, selector);
 }
 
 export function useSettings<T>(

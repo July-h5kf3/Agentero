@@ -36,6 +36,7 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import { SIDEBAR_DEFAULT_PX, useZenLayout } from "@/hooks/use-zen-layout";
+import { pinActiveSelection } from "@/lib/agent/selection-store";
 import { notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
@@ -263,7 +264,14 @@ export default function App() {
 		quickOpen: () => openPalette("go"),
 		commandPalette: () => openPalette("commands"),
 		toggleSidebar,
-		toggleChat,
+		// ⌘L (Cursor-style): pin the live selection into the Agent context and
+		// focus the chat; with no selection it just toggles the sidebar.
+		toggleChat: () => {
+			if (pinActiveSelection()) {
+				// Zen mode already shows the Agent panel fullscreen.
+				if (!uiStore.getState().agentZenMode) openRightTab("agent");
+			} else toggleChat();
+		},
 		toggleAgentZen,
 		focusSidebar: () => layout()?.focusSidebar(),
 		focusEditor: () => layout()?.focusEditorPane(),

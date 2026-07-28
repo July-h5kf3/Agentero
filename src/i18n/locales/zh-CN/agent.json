@@ -57,6 +57,8 @@
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
 		"removeContext": "从上下文移除 {{path}}",
 		"removeSkill": "从上下文移除 ${{skill}}",
+		"removeSelection": "从上下文移除选中文本",
+		"selection": "选中文本",
 		"currentFileRemove": "从上下文移除当前文件",
 		"mentionEnterFolder": "进入 {{name}}",
 		"mentionBack": "返回上级目录",
