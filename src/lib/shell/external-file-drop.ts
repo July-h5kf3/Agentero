@@ -326,6 +326,9 @@ function normalizeDroppedPath(raw: string): string | null {
 	}
 	// Absolute local paths only — ignore http(s) and relative junk.
 	if (/^https?:\/\//i.test(s)) return null;
-	if (s.startsWith("/") || /^[A-Za-z]:[\\/]/.test(s)) return s;
+	// Unify separators so `C:\a\b.pdf` (File.path / text/plain) dedupes against
+	// `C:/a/b.pdf` from file:// URIs — Windows drops carry both forms.
+	if (s.startsWith("/") || /^[A-Za-z]:[\\/]/.test(s))
+		return s.replace(/\\/g, "/");
 	return null;
 }

@@ -567,6 +567,7 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
             })
             .collect()
     };
+    let entries = dedupe_local_pdf_entries(entries);
 
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
@@ -590,6 +591,22 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
         papers: papers_out,
         errors,
     })
+}
+
+/// Drop repeated source files (same path spelled with `\` vs `/`, or Windows
+/// case variants) so one drop/pick never commits the same PDF twice.
+fn dedupe_local_pdf_entries(entries: Vec<LocalPdfImportEntry>) -> Vec<LocalPdfImportEntry> {
+    let mut seen = std::collections::HashSet::new();
+    entries
+        .into_iter()
+        .filter(|e| {
+            let mut key = e.file_path.trim().replace('\\', "/");
+            if cfg!(windows) {
+                key = key.to_lowercase();
+            }
+            seen.insert(key)
+        })
+        .collect()
 }
 
 async fn import_one_local_pdf(
@@ -1004,6 +1021,25 @@ mod tests {
         );
         assert_eq!(title_from_stem("  Hello   World  "), "Hello World");
         assert_eq!(title_from_stem("   "), "Untitled");
+    }
+
+    #[test]
+    fn dedupe_local_pdf_entries_mixed_separators() {
+        let entry = |p: &str| LocalPdfImportEntry {
+            file_path: p.to_string(),
+            title: None,
+            authors: None,
+            year: None,
+            id: None,
+        };
+        let out = dedupe_local_pdf_entries(vec![
+            entry(r"C:\Users\me\x.pdf"),
+            entry("C:/Users/me/x.pdf"),
+            entry("C:/Users/me/y.pdf"),
+        ]);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].file_path, r"C:\Users\me\x.pdf");
+        assert_eq!(out[1].file_path, "C:/Users/me/y.pdf");
     }
 
     #[test]

@@ -66,6 +66,15 @@ describe("external-file-drop", () => {
 		expect(pdfPathsFromDataTransfer(dt)).toEqual(["C:/Users/me/x.PDF"]);
 	});
 
+	it("dedupes the same Windows file across backslash and file:// forms", () => {
+		const dt = mockDt({
+			types: ["Files", "text/uri-list"],
+			files: [{ path: "C:\\Users\\me\\x.pdf", name: "x.pdf" }],
+			data: { "text/uri-list": "file:///C:/Users/me/x.pdf" },
+		});
+		expect(pathsFromDataTransfer(dt)).toEqual(["C:/Users/me/x.pdf"]);
+	});
+
 	it("ignores http URLs", () => {
 		const dt = mockDt({
 			types: ["text/uri-list"],
