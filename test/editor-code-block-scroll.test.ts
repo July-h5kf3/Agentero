@@ -20,4 +20,24 @@ describe("Markdown code block scrolling", () => {
 		expect(rule).toContain("overscroll-behavior-x: contain");
 		expect(rule).toContain("overscroll-behavior-y: auto");
 	});
+
+	it("places the language selector immediately before copy in the top-right actions", () => {
+		const component = readFileSync(
+			new URL("../src/components/editor/code-block-node.tsx", import.meta.url),
+			"utf8",
+		);
+		const actions = component.indexOf(
+			'className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1"',
+		);
+		const language = component.indexOf("<CodeLanguageSelect />", actions);
+		const copy = component.indexOf(
+			"<CopyCodeButton element={props.element} />",
+			actions,
+		);
+
+		expect(actions).toBeGreaterThan(-1);
+		expect(language).toBeGreaterThan(actions);
+		expect(copy).toBeGreaterThan(language);
+		expect(component).not.toContain("absolute top-1.5 left-1.5");
+	});
 });
