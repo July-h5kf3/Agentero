@@ -85,7 +85,8 @@
 		},
 		"uiThemeLabel": "Color theme",
 		"uiTheme": {
-			"default": "Default"
+			"default": "Default",
+			"select": "Use {{name}} theme"
 		},
 		"languageLabel": "Language",
 		"language": {

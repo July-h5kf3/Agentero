@@ -20,6 +20,7 @@
 ## 主题
 
 - `uiTheme` 默认 `default`（内置外观）。
+- 外观设置中的配色主题以紧凑预览网格展示背景、卡片、主色和强调色；点击预览项即可应用主题。
 - 36 个 tweakcn 预设：`src/themes/tweakcn.json`；`src/lib/ui/theme.ts` 注入 CSS 变量。
 - 刷新主题数据：`node scripts/fetch-tweakcn-themes.mjs`。
 - `uiScale`：80%–150% 五档，改 `html` font-size。

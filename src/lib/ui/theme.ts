@@ -44,6 +44,11 @@ async function loadThemeData(): Promise<UiThemeDef[]> {
 	return themeDataPromise;
 }
 
+/** Load bundled variables for consumers that render theme previews. */
+export function loadUiThemes(): Promise<UiThemeDef[]> {
+	return loadThemeData();
+}
+
 function toCssBlock(selector: string, vars: Record<string, string>): string {
 	const body = Object.entries(vars)
 		.map(([k, v]) => `\t--${k}: ${v};`)
@@ -67,7 +72,7 @@ export async function applyUiTheme(name: string): Promise<void> {
 		return;
 	}
 
-	const themes = await loadThemeData();
+	const themes = await loadUiThemes();
 	const theme = themes.find((t) => t.name === name);
 	if (!theme) {
 		existing?.remove();
