@@ -87,14 +87,52 @@ fn document_link_name(path: &str) -> String {
         .to_string()
 }
 
-fn normalize_heading_search(value: &str) -> String {
-    value
+#[derive(Debug)]
+struct HeadingSearch {
+    parent_suffix: Vec<String>,
+    leaf_query: String,
+    has_path_separator: bool,
+    valid: bool,
+}
+
+fn parse_heading_search(value: &str) -> HeadingSearch {
+    let parts = value
         .split(['#', '›'])
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" › ")
-        .to_lowercase()
+        .map(|part| part.trim().to_lowercase())
+        .collect::<Vec<_>>();
+    let has_path_separator = parts.len() > 1;
+    let leaf_query = parts.last().cloned().unwrap_or_default();
+    let parent_suffix = parts
+        .get(..parts.len().saturating_sub(1))
+        .unwrap_or_default()
+        .to_vec();
+    let valid = parent_suffix.iter().all(|part| !part.is_empty());
+    HeadingSearch {
+        parent_suffix,
+        leaf_query,
+        has_path_separator,
+        valid,
+    }
+}
+
+fn heading_matches_search(path: &[String], search: &HeadingSearch) -> bool {
+    if !search.valid {
+        return false;
+    }
+    if !search.has_path_separator {
+        return search.leaf_query.is_empty()
+            || path
+                .iter()
+                .map(|part| part.to_lowercase())
+                .collect::<Vec<_>>()
+                .join(" › ")
+                .contains(&search.leaf_query);
+    }
+    let Some((leaf, parents)) = path.split_last() else {
+        return false;
+    };
+    crate::features::wiki::resolve::heading_path_ends_with(parents, &search.parent_suffix)
+        && leaf.to_lowercase().contains(&search.leaf_query)
 }
 
 fn should_skip_name(name: &str) -> bool {
@@ -575,7 +613,7 @@ impl WikiIndex {
         kind: Option<&WikiSearchCandidateKind>,
     ) -> Vec<WikiSearchCandidate> {
         let query_key = query.trim().to_lowercase();
-        let heading_query_key = normalize_heading_search(query);
+        let heading_search = parse_heading_search(query);
         let stem_counts =
             self.documents
                 .iter()
@@ -643,9 +681,7 @@ impl WikiIndex {
             if include_heading {
                 for heading in &document.headings {
                     let label = heading.path.join(" › ");
-                    if heading_query_key.is_empty()
-                        || label.to_lowercase().contains(&heading_query_key)
-                    {
+                    if heading_matches_search(&heading.path, &heading_search) {
                         candidates.push(WikiSearchCandidate {
                             kind: WikiSearchCandidateKind::Heading,
                             path: document.path.clone(),
@@ -1325,6 +1361,89 @@ mod tests {
             .expect("block candidate");
         assert_eq!(block.insert_text, "Canonical#^验收块");
         assert_eq!(block.detail.as_deref(), Some("Canonical block preview"));
+    }
+
+    #[test]
+    fn heading_search_scopes_each_hash_to_the_next_child_level() {
+        let index = WikiIndex {
+            documents: vec![WikiDocument {
+                path: "notes/2026-W31.md".into(),
+                aliases: Vec::new(),
+                headings: vec![
+                    HeadingAnchor {
+                        text: "Week".into(),
+                        path: vec!["Week".into()],
+                        level: 1,
+                        line: 1,
+                    },
+                    HeadingAnchor {
+                        text: "07-28 周二".into(),
+                        path: vec!["Week".into(), "07-28 周二".into()],
+                        level: 2,
+                        line: 2,
+                    },
+                    HeadingAnchor {
+                        text: "复盘分析".into(),
+                        path: vec!["Week".into(), "07-28 周二".into(), "复盘分析".into()],
+                        level: 3,
+                        line: 3,
+                    },
+                    HeadingAnchor {
+                        text: "paper 阅读".into(),
+                        path: vec![
+                            "Week".into(),
+                            "07-28 周二".into(),
+                            "复盘分析".into(),
+                            "paper 阅读".into(),
+                        ],
+                        level: 4,
+                        line: 4,
+                    },
+                    HeadingAnchor {
+                        text: "其他分支".into(),
+                        path: vec!["Week".into(), "其他分支".into()],
+                        level: 2,
+                        line: 5,
+                    },
+                ],
+                blocks: Vec::new(),
+            }],
+            ..Default::default()
+        };
+
+        let children = index.search_scoped(
+            "07-28 周二#",
+            Some("notes/2026-W31.md"),
+            Some(&WikiSearchCandidateKind::Heading),
+        );
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].label, "Week › 07-28 周二 › 复盘分析");
+
+        let grandchildren = index.search_scoped(
+            "07-28 周二#复盘分析#",
+            Some("notes/2026-W31.md"),
+            Some(&WikiSearchCandidateKind::Heading),
+        );
+        assert_eq!(grandchildren.len(), 1);
+        assert_eq!(
+            grandchildren[0].insert_text,
+            "2026-W31#Week#07-28 周二#复盘分析#paper 阅读"
+        );
+
+        let suffix = index.search_scoped(
+            "复盘分析#paper",
+            Some("notes/2026-W31.md"),
+            Some(&WikiSearchCandidateKind::Heading),
+        );
+        assert_eq!(suffix.len(), 1);
+        assert_eq!(suffix[0].label, "Week › 07-28 周二 › 复盘分析 › paper 阅读");
+
+        let invalid_gap = index.search_scoped(
+            "07-28 周二##paper",
+            Some("notes/2026-W31.md"),
+            Some(&WikiSearchCandidateKind::Heading),
+        );
+        assert!(invalid_gap.is_empty());
     }
 
     #[test]

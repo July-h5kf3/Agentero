@@ -42,6 +42,18 @@ describe("wikilink completion grammar", () => {
 			target: "Target",
 			query: "Outer#Inner",
 		});
+		expect(
+			parseWikiCompletionQuery("2026-W31#07-28 周二#复盘分析#paper 阅读#结论"),
+		).toEqual({
+			kind: "heading",
+			target: "2026-W31",
+			query: "07-28 周二#复盘分析#paper 阅读#结论",
+		});
+		expect(parseWikiCompletionQuery("2026-W31#07-28 周二#")).toEqual({
+			kind: "heading",
+			target: "2026-W31",
+			query: "07-28 周二#",
+		});
 		expect(parseWikiCompletionQuery("#")).toEqual({
 			kind: "heading",
 			target: "",
@@ -174,6 +186,31 @@ describe("wikilink completion grammar", () => {
 				{ kind: "block", target: "AGENTS", query: "" },
 			),
 		).toEqual({ target: "AGENTS", heading: "^reading-order" });
+	});
+
+	it("writes an arbitrarily deep canonical heading path from a scoped child candidate", () => {
+		const heading = wikiCompletionInsert(
+			{
+				kind: "heading",
+				path: "notes/2026-W31.md",
+				insertText: "2026-W31#Week#07-28 周二#复盘分析#paper 阅读",
+				label: "Week › 07-28 周二 › 复盘分析 › paper 阅读",
+				fragment: {
+					kind: "heading",
+					path: ["Week", "07-28 周二", "复盘分析", "paper 阅读"],
+				},
+			},
+			{
+				kind: "heading",
+				target: "2026-W31",
+				query: "07-28 周二#复盘分析#paper",
+			},
+		);
+
+		expect(heading).toEqual({
+			target: "2026-W31",
+			heading: "Week#07-28 周二#复盘分析#paper 阅读",
+		});
 	});
 
 	it("turns a local alias candidate into portable display text", () => {

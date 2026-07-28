@@ -32,6 +32,15 @@ fn normalize_key(value: &str) -> String {
         .to_lowercase()
 }
 
+pub(crate) fn heading_path_ends_with(path: &[String], suffix: &[String]) -> bool {
+    !suffix.is_empty()
+        && path.len() >= suffix.len()
+        && path[path.len() - suffix.len()..]
+            .iter()
+            .zip(suffix)
+            .all(|(current, wanted)| normalize_key(current) == normalize_key(wanted))
+}
+
 fn stem_of(path: &str) -> String {
     Path::new(path)
         .file_stem()
@@ -191,29 +200,12 @@ pub(crate) fn fragment_anchors<'a>(
     fragment: &LinkFragment,
 ) -> Vec<FragmentAnchor<'a>> {
     match fragment {
-        LinkFragment::Heading { path } => {
-            let wanted = path
-                .iter()
-                .map(|part| normalize_key(part))
-                .collect::<Vec<_>>();
-            document
-                .headings
-                .iter()
-                .filter(|heading| {
-                    let current = heading
-                        .path
-                        .iter()
-                        .map(|part| normalize_key(part))
-                        .collect::<Vec<_>>();
-                    if wanted.len() == 1 {
-                        current.last() == wanted.last()
-                    } else {
-                        current == wanted
-                    }
-                })
-                .map(FragmentAnchor::Heading)
-                .collect()
-        }
+        LinkFragment::Heading { path } => document
+            .headings
+            .iter()
+            .filter(|heading| heading_path_ends_with(&heading.path, path))
+            .map(FragmentAnchor::Heading)
+            .collect(),
         LinkFragment::Block { id } if crate::features::wiki::extract::is_valid_block_id(id) => {
             document
                 .blocks
@@ -388,6 +380,47 @@ mod tests {
             &docs,
         );
         assert!(matches!(same_file.status, LinkResolutionStatus::Resolved));
+    }
+
+    #[test]
+    fn resolves_unique_heading_path_suffixes_at_any_depth() {
+        let (source, mut links) = extract_document(
+            "notes/source.md",
+            "[[Nested#Week#Day#Review#Paper]] [[Nested#Review#Paper]]",
+        );
+        let (target, _) = extract_document(
+            "notes/Nested.md",
+            "# Week\n## Day\n### Review\n#### Paper\n",
+        );
+        let documents = vec![source, target];
+
+        let suffix = resolve_occurrence(links.pop().expect("suffix link"), &documents);
+        let full = resolve_occurrence(links.pop().expect("full path link"), &documents);
+
+        assert_eq!(full.status, LinkResolutionStatus::Resolved);
+        assert_eq!(suffix.status, LinkResolutionStatus::Resolved);
+        assert_eq!(suffix.target_path.as_deref(), Some("notes/Nested.md"));
+    }
+
+    #[test]
+    fn reports_ambiguous_heading_path_suffixes() {
+        let (source, mut links) = extract_document("notes/source.md", "[[Nested#Review#Paper]]");
+        let (target, _) = extract_document(
+            "notes/Nested.md",
+            "# Week A\n## Review\n### Paper\n# Week B\n## Review\n### Paper\n",
+        );
+
+        let resolved = resolve_occurrence(
+            links.pop().expect("ambiguous suffix link"),
+            &[source, target],
+        );
+
+        assert_eq!(resolved.status, LinkResolutionStatus::Ambiguous);
+        assert_eq!(resolved.target_path.as_deref(), Some("notes/Nested.md"));
+        assert_eq!(
+            resolved.candidates,
+            vec!["Week A#Review#Paper", "Week B#Review#Paper"]
+        );
     }
 
     #[test]

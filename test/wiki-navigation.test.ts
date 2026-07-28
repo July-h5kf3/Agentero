@@ -15,7 +15,58 @@ describe("wikilink navigation anchors", () => {
 			{ level: 2, text: "Child" },
 		];
 		expect(findWikiHeadingIndex(headings, ["Root B", "Child"])).toBe(3);
+		expect(findWikiHeadingIndex(headings, ["Child"])).toBe(-1);
 		expect(findWikiHeadingIndex(headings, ["Missing"])).toBe(-1);
+	});
+
+	it("uses a unique heading-path suffix without imposing a depth limit", () => {
+		const headings = [
+			{ level: 1, text: "Week" },
+			{ level: 2, text: "07-28 周二" },
+			{ level: 3, text: "复盘分析" },
+			{ level: 4, text: "paper 阅读" },
+			{ level: 1, text: "Other" },
+			{ level: 2, text: "复盘分析" },
+			{ level: 3, text: "notes 整理" },
+		];
+
+		expect(findWikiHeadingIndex(headings, ["复盘分析", "paper 阅读"])).toBe(3);
+		expect(
+			findWikiHeadingIndex(headings, [
+				"Week",
+				"07-28 周二",
+				"复盘分析",
+				"paper 阅读",
+			]),
+		).toBe(3);
+	});
+
+	it("rejects an ambiguous multi-segment heading-path suffix", () => {
+		const headings = [
+			{ level: 1, text: "Week A" },
+			{ level: 2, text: "复盘分析" },
+			{ level: 3, text: "paper 阅读" },
+			{ level: 1, text: "Week B" },
+			{ level: 2, text: "复盘分析" },
+			{ level: 3, text: "paper 阅读" },
+		];
+
+		expect(findWikiHeadingIndex(headings, ["复盘分析", "paper 阅读"])).toBe(-1);
+	});
+
+	it("matches the canonical path when heading levels are skipped", () => {
+		const headings = [
+			{ level: 1, text: "Root" },
+			{ level: 3, text: "Skipped level child" },
+			{ level: 4, text: "Leaf" },
+		];
+
+		expect(
+			findWikiHeadingIndex(headings, ["Skipped level child", "Leaf"]),
+		).toBe(2);
+		expect(
+			findWikiHeadingIndex(headings, ["Root", "Skipped level child", "Leaf"]),
+		).toBe(2);
 	});
 
 	it("recognizes block IDs only at the end of their rendered block", () => {

@@ -591,34 +591,60 @@ export function resolveDemoWikiReference(
 	const content =
 		documents.find((document) => document.path === selected.path)?.content ??
 		"";
+	const lines = content.split(/\r?\n/);
+	const frontmatterEnd =
+		lines[0]?.trim() === "---"
+			? lines.findIndex(
+					(line, index) =>
+						index > 0 && (line.trim() === "---" || line.trim() === "..."),
+				)
+			: -1;
+	let inFence = false;
+	const semanticLines = lines.filter((line, index) => {
+		if (frontmatterEnd >= 0 && index <= frontmatterEnd) return false;
+		const trimmed = line.trimStart();
+		if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+			inFence = !inFence;
+			return false;
+		}
+		return !inFence;
+	});
 	const matches =
 		fragment.kind === "block"
-			? [...content.matchAll(new RegExp(`\\^${fragment.id}(?=\\s*$)`, "gm"))]
-					.length
+			? semanticLines.filter((line) =>
+					new RegExp(`\\^${fragment.id}(?=\\s*$)`).test(line),
+				).length
 			: (() => {
 					const stack: Array<{ level: number; text: string }> = [];
-					return content
-						.split(/\r?\n/)
+					return semanticLines
 						.flatMap((line) => {
-							const match = line.match(/^(#{1,6})\s+(.+?)(?:\s+#+\s*)?$/);
+							const match = line.trimStart().match(/^(#{1,6}) (.*)$/);
 							if (!match) return [];
 							const level = match[1].length;
+							const text = match[2]
+								.trimStart()
+								.trimEnd()
+								.replace(/#+$/, "")
+								.trimEnd();
+							if (!text) return [];
 							while (
 								stack.length > 0 &&
 								stack[stack.length - 1].level >= level
 							) {
 								stack.pop();
 							}
-							stack.push({ level, text: match[2].trim() });
+							stack.push({ level, text });
 							return [stack.map((heading) => heading.text)];
 						})
 						.filter((path) => {
 							const expected = fragment.path.map(key);
 							const actual = path.map(key);
-							return expected.length === 1
-								? actual.at(-1) === expected.at(-1)
-								: actual.length === expected.length &&
-										actual.every((part, index) => part === expected[index]);
+							const suffix = actual.slice(-expected.length);
+							return (
+								expected.length > 0 &&
+								suffix.length === expected.length &&
+								suffix.every((part, index) => part === expected[index])
+							);
 						}).length;
 				})();
 	return matches === 1
