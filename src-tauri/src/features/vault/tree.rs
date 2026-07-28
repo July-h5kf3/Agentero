@@ -9,6 +9,7 @@
 //!   files) is a pending shell listed lazily on expand.
 
 use crate::core::error::AppError;
+use crate::features::import::has_local_tex;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -56,6 +57,10 @@ pub struct VaultTreeNode {
     pub children: Option<Vec<VaultTreeNode>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children_pending: Option<bool>,
+    /// Paper `source/` shells only: whether TeX exists on disk (children are
+    /// lazy, so the renderer cannot infer this from the tree itself).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_tex: Option<bool>,
 }
 
 fn should_ignore(name: &str) -> bool {
@@ -103,6 +108,7 @@ fn pending_shell(name: String, path: String) -> VaultTreeNode {
         kind: "directory",
         children: Some(Vec::new()),
         children_pending: Some(true),
+        has_tex: None,
     }
 }
 
@@ -150,6 +156,7 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
                 kind: "file",
                 children: None,
                 children_pending: None,
+                has_tex: None,
             });
         }
     }
@@ -161,7 +168,9 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
             Mode::OneLevel => pending_shell(name, path_str),
             Mode::Eager => {
                 if paper_marker && name == LAZY_PAPER_DIR {
-                    pending_shell(name, path_str)
+                    let mut shell = pending_shell(name, path_str);
+                    shell.has_tex = Some(has_local_tex(&child_path));
+                    shell
                 } else if is_eager_rel(&child_rel) {
                     VaultTreeNode {
                         name,
@@ -169,6 +178,7 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
                         kind: "directory",
                         children: Some(list_dir(&child_path, &child_rel, depth + 1, Mode::Eager)),
                         children_pending: None,
+                        has_tex: None,
                     }
                 } else {
                     VaultTreeNode {
@@ -182,6 +192,7 @@ fn list_dir(dir: &Path, rel: &str, depth: usize, mode: Mode) -> Vec<VaultTreeNod
                             Mode::OneLevel,
                         )),
                         children_pending: Some(false),
+                        has_tex: None,
                     }
                 }
             }
@@ -283,6 +294,7 @@ mod tests {
         let source = find(p1.children.as_ref().unwrap(), "source").unwrap();
         assert_eq!(source.children_pending, Some(true));
         assert!(source.children.as_ref().unwrap().is_empty());
+        assert_eq!(source.has_tex, Some(true));
         let assets = find(p1.children.as_ref().unwrap(), "assets").unwrap();
         assert_ne!(assets.children_pending, Some(true));
         assert_eq!(assets.children.as_ref().unwrap().len(), 1);
@@ -312,8 +324,22 @@ mod tests {
         let children = list_children(root, &paper).unwrap();
         let source = find(&children, "source").unwrap();
         assert_eq!(source.children_pending, Some(true));
+        assert_eq!(source.has_tex, Some(true));
 
         // Outside the vault is rejected.
         assert!(list_children(root, Path::new("/")).is_err());
+    }
+
+    #[test]
+    fn source_shell_without_tex_reports_has_tex_false() {
+        let root = &temp_root("notex");
+        write(&root.join("papers/p1/metadata.json"), "{}");
+        write(&root.join("papers/p1/source/figs/a.png"), "x");
+
+        let tree = build_tree(root);
+        let papers = find(&tree, "papers").unwrap();
+        let p1 = find(papers.children.as_ref().unwrap(), "p1").unwrap();
+        let source = find(p1.children.as_ref().unwrap(), "source").unwrap();
+        assert_eq!(source.has_tex, Some(false));
     }
 }

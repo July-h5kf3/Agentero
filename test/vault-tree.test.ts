@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { paperAssetDownloadReasons } from "@/lib/paper/assets";
 import {
 	collectMarkdownRelPaths,
 	collectTreeRefreshTargets,
@@ -256,5 +257,34 @@ describe("collectTreeRefreshTargets", () => {
 			null,
 		);
 		expect(collectTreeRefreshTargets(refreshTree, "/v", ["/v"])).toBe(null);
+	});
+});
+
+describe("paperAssetDownloadReasons", () => {
+	it("trusts hasTex on a lazy source/ shell (no listed .tex children)", () => {
+		const paper = dir("/v/papers/x", [
+			file("/v/papers/x/metadata.json"),
+			file("/v/papers/x/a.pdf"),
+			dir("/v/papers/x/source", [], { childrenPending: true, hasTex: true }),
+		]);
+		expect(paperAssetDownloadReasons(paper)).toEqual([]);
+	});
+
+	it("flags noBody when the source/ shell has no TeX and PAPER.md is absent", () => {
+		const paper = dir("/v/papers/x", [
+			file("/v/papers/x/metadata.json"),
+			file("/v/papers/x/a.pdf"),
+			dir("/v/papers/x/source", [], { childrenPending: true, hasTex: false }),
+		]);
+		expect(paperAssetDownloadReasons(paper)).toEqual(["noBody"]);
+	});
+
+	it("still detects listed .tex files without the flag", () => {
+		const paper = dir("/v/papers/x", [
+			file("/v/papers/x/metadata.json"),
+			file("/v/papers/x/a.pdf"),
+			dir("/v/papers/x/source", [file("/v/papers/x/source/main.tex")]),
+		]);
+		expect(paperAssetDownloadReasons(paper)).toEqual([]);
 	});
 });

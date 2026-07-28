@@ -25,7 +25,7 @@
 |---|---|
 | 标签 | 默认「标题 · 作者」；`paperTreeLabelMode` 可改（展示用，不改磁盘名） |
 | 排序 | `paperTreeSortMode`（标题/作者/年份/添加时间等） |
-| Download | 缺 PDF，或既无 TeX 也无 `PAPER.md` |
+| Download | 缺 PDF，或既无 TeX 也无 `PAPER.md`（`source/` 为懒壳时按其 `hasTex` 标记判定） |
 | Zap | 资源齐且 `is_read === false` → paper-reader |
 
 ## 交互

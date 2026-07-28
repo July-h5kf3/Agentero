@@ -159,6 +159,11 @@ async function buildTree(
 				hasPaperMarker &&
 				entry.name === LAZY_PAPER_DIR_NAME
 			) {
+				// One-level probe so asset detection still sees TeX archives.
+				const sourceEntries = await adapter.list(
+					entry.childPath,
+					entry.childRel,
+				);
 				nodes.push({
 					id: entry.childPath,
 					name: entry.name,
@@ -166,6 +171,9 @@ async function buildTree(
 					kind: "directory",
 					children: [],
 					childrenPending: true,
+					hasTex: sourceEntries.some(
+						(e) => e.isFile && /\.(tex|ltx)$/i.test(e.name),
+					),
 				});
 				continue;
 			}
@@ -239,6 +247,7 @@ type VaultTreeNodeDto = {
 	kind: "file" | "directory";
 	children?: VaultTreeNodeDto[];
 	childrenPending?: boolean;
+	hasTex?: boolean;
 };
 
 /** Map Host nodes to `FileNode`s, sorting each level like {@link sortNodes}. */
@@ -254,6 +263,7 @@ function mapHostTreeNodes(nodes: VaultTreeNodeDto[]): FileNode[] {
 			if (n.children) node.children = mapHostTreeNodes(n.children);
 			if (n.childrenPending !== undefined)
 				node.childrenPending = n.childrenPending;
+			if (n.hasTex !== undefined) node.hasTex = n.hasTex;
 			return node;
 		}),
 	);

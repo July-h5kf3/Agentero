@@ -15,10 +15,13 @@ type TreeWalkNode = {
 	name: string;
 	kind?: string;
 	path?: string;
+	/** Lazy `source/` shells carry a Host-computed TeX-on-disk flag. */
+	hasTex?: boolean;
 	children?: Array<{
 		name: string;
 		kind?: string;
 		path?: string;
+		hasTex?: boolean;
 		children?: unknown[];
 	}>;
 };
@@ -37,7 +40,12 @@ export function paperHasLocalPdf(node: TreeWalkNode): boolean {
 }
 
 export function paperHasLocalTex(node: TreeWalkNode): boolean {
-	return treeHasFileExt(node, TEX_NAME_RE);
+	// Lazy `source/` shells have no listed children; trust the on-disk flag.
+	if (node.hasTex === true) return true;
+	for (const child of node.children ?? []) {
+		if (paperHasLocalTex(child as TreeWalkNode)) return true;
+	}
+	return node.kind !== "directory" && TEX_NAME_RE.test(node.name);
 }
 
 /** True when the paper folder has a direct-child `PAPER.md` (any depth name match). */

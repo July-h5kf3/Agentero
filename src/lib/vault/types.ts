@@ -16,4 +16,9 @@ export type FileNode = {
 	 * (including empty dirs, which use `children: []`).
 	 */
 	childrenPending?: boolean;
+	/**
+	 * Paper `source/` shells only: whether TeX exists on disk. Needed because
+	 * lazy children hide `.tex` files from tree-based asset detection.
+	 */
+	hasTex?: boolean;
 };
