@@ -168,7 +168,7 @@ export function VaultSidebar() {
 					onLoadDirChildren={loadDirChildren}
 				/>
 			</div>
-			{/* Paper info only when a specific paper is selected */}
+			{/* Paper info is a resizable, unboxed section below the file tree. */}
 			{paperMeta ? (
 				<PaperInfoPanel meta={paperMeta} onTagsChange={paperTagsChange} />
 			) : null}

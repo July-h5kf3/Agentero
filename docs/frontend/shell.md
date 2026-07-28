@@ -2,7 +2,7 @@
 
 ## 布局
 
-- **左栏**：文件树 + 选中论文时 Paper Info（常驻 collapsible，`preserve-pixel-size`）。
+- **左栏**：文件树 + 选中论文时 Paper Info（无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`）。
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
 - **右栏**（可选）：Agent 或 Backlinks（同样 collapsible）。
 - 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。

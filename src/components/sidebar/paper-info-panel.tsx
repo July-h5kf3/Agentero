@@ -283,11 +283,11 @@ function TagsEditor({
 
 const HEIGHT_STORAGE_KEY = "agentero.paperInfoHeight";
 const MIN_CONTENT_HEIGHT = 120;
-const MAX_CONTENT_HEIGHT = 720;
 const DEFAULT_CONTENT_HEIGHT = 320;
+const HEADER_HEIGHT = 32;
 
 function clampHeight(value: number) {
-	return Math.min(MAX_CONTENT_HEIGHT, Math.max(MIN_CONTENT_HEIGHT, value));
+	return Math.max(MIN_CONTENT_HEIGHT, value);
 }
 
 function loadStoredHeight(): number {
@@ -309,7 +309,11 @@ export function PaperInfoPanel({
 	const { t } = useTranslation("sidebar");
 	const [open, setOpen] = useState(Boolean(meta));
 	const [contentHeight, setContentHeight] = useState(loadStoredHeight);
-	const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+	const dragRef = useRef<{
+		startY: number;
+		startHeight: number;
+		collapseOnRelease: boolean;
+	} | null>(null);
 
 	const persistHeight = (value: number) => {
 		try {
@@ -321,7 +325,11 @@ export function PaperInfoPanel({
 
 	const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
 		if (e.button !== 0) return;
-		dragRef.current = { startY: e.clientY, startHeight: contentHeight };
+		dragRef.current = {
+			startY: e.clientY,
+			startHeight: contentHeight,
+			collapseOnRelease: false,
+		};
 		e.currentTarget.setPointerCapture(e.pointerId);
 	};
 
@@ -329,17 +337,21 @@ export function PaperInfoPanel({
 		const drag = dragRef.current;
 		if (!drag) return;
 		// Dragging up grows the panel.
-		setContentHeight(clampHeight(drag.startHeight + (drag.startY - e.clientY)));
+		const next = drag.startHeight + (drag.startY - e.clientY);
+		drag.collapseOnRelease = next <= MIN_CONTENT_HEIGHT;
+		setContentHeight(clampHeight(next));
 	};
 
 	const onHandlePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-		if (!dragRef.current) return;
+		const drag = dragRef.current;
+		if (!drag) return;
 		dragRef.current = null;
 		e.currentTarget.releasePointerCapture(e.pointerId);
 		setContentHeight((h) => {
 			persistHeight(h);
 			return h;
 		});
+		if (drag.collapseOnRelease) setOpen(false);
 	};
 
 	const onHandleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -349,6 +361,10 @@ export function PaperInfoPanel({
 		else if (e.key === "ArrowDown") next = clampHeight(contentHeight - step);
 		if (next == null) return;
 		e.preventDefault();
+		if (e.key === "ArrowDown" && contentHeight <= MIN_CONTENT_HEIGHT) {
+			setOpen(false);
+			return;
+		}
 		setContentHeight(next);
 		persistHeight(next);
 	};
@@ -365,7 +381,13 @@ export function PaperInfoPanel({
 	const resizable = open && Boolean(meta);
 
 	return (
-		<div className={cn("relative shrink-0 border-t bg-muted/10", className)}>
+		<div
+			className={cn(
+				"relative flex min-h-0 shrink-0 flex-col border-t",
+				className,
+			)}
+			style={{ height: open ? contentHeight + HEADER_HEIGHT : HEADER_HEIGHT }}
+		>
 			{resizable ? (
 				// biome-ignore lint/a11y/useSemanticElements: a focusable drag separator cannot be a native <hr>
 				<div
@@ -374,7 +396,6 @@ export function PaperInfoPanel({
 					aria-label={t("paperInfo.resize")}
 					aria-valuenow={Math.round(contentHeight)}
 					aria-valuemin={MIN_CONTENT_HEIGHT}
-					aria-valuemax={MAX_CONTENT_HEIGHT}
 					title={t("paperInfo.resize")}
 					tabIndex={0}
 					onPointerDown={onHandlePointerDown}
@@ -390,10 +411,14 @@ export function PaperInfoPanel({
 					)}
 				/>
 			) : null}
-			<Collapsible open={open} onOpenChange={setOpen}>
+			<Collapsible
+				open={open}
+				onOpenChange={setOpen}
+				className="flex min-h-0 flex-1 flex-col"
+			>
 				<CollapsibleTrigger
 					className={cn(
-						"flex h-8 w-full items-center gap-1.5 px-2 text-left outline-none",
+						"flex h-8 min-h-8 shrink-0 w-full items-center gap-1.5 px-2 text-left outline-none",
 						"text-muted-foreground text-xs font-medium tracking-wide",
 						"hover:bg-muted/40 hover:text-foreground",
 						"focus-visible:ring-1 focus-visible:ring-ring",
@@ -409,16 +434,13 @@ export function PaperInfoPanel({
 					<Info className="size-3.5 shrink-0" aria-hidden />
 					<span className="truncate">{t("paperInfo.info")}</span>
 				</CollapsibleTrigger>
-				<CollapsibleContent>
+				<CollapsibleContent className="flex min-h-0 flex-1 flex-col">
 					{!meta ? (
 						<p className="px-3 pb-3 text-muted-foreground text-xs leading-snug">
 							{t("paperInfo.selectPrompt")}
 						</p>
 					) : (
-						<div
-							className="agentero-scroll overflow-y-auto border-t pb-2"
-							style={{ maxHeight: contentHeight }}
-						>
+						<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto pb-2">
 							<MetaRow icon={BookOpen} label={t("paperInfo.title")}>
 								<span className="font-medium">{meta.title}</span>
 							</MetaRow>
