@@ -117,5 +117,20 @@
 		"empty": "没有匹配的双链",
 		"displayName": "显示名称",
 		"syntaxHint": "# 链接标题 · ^ 链接文本块 · | 指定显示文本; tab 选择候选 · enter 结束编辑"
+	},
+	"slashCommand": {
+		"label": "格式命令",
+		"empty": "没有匹配的命令",
+		"commands": {
+			"heading1": "一级标题",
+			"heading2": "二级标题",
+			"heading3": "三级标题",
+			"bulletedList": "无序列表",
+			"numberedList": "有序列表",
+			"todoList": "待办列表",
+			"quote": "引用",
+			"codeBlock": "代码块",
+			"callout": "Callout"
+		}
 	}
 }

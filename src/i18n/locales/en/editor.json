@@ -117,5 +117,20 @@
 		"empty": "No matching internal links",
 		"displayName": "Display name",
 		"syntaxHint": "Type # to link a heading · ^ to link a text block · | to set display text"
+	},
+	"slashCommand": {
+		"label": "Formatting commands",
+		"empty": "No matching commands",
+		"commands": {
+			"heading1": "Heading 1",
+			"heading2": "Heading 2",
+			"heading3": "Heading 3",
+			"bulletedList": "Bulleted list",
+			"numberedList": "Numbered list",
+			"todoList": "To-do list",
+			"quote": "Quote",
+			"codeBlock": "Code block",
+			"callout": "Callout"
+		}
 	}
 }
