@@ -24,7 +24,9 @@
 		"search": "Search language…",
 		"noMatch": "No matching language",
 		"copy": "Copy code",
-		"copyFailed": "Could not copy the code."
+		"copyFailed": "Could not copy the code.",
+		"mermaidPreview": "Mermaid preview",
+		"mermaidPreviewError": "This Mermaid diagram could not be rendered."
 	},
 	"image": {
 		"noFile": "Save the note to a file before inserting images.",
@@ -130,6 +132,7 @@
 			"todoList": "To-do list",
 			"quote": "Quote",
 			"codeBlock": "Code block",
+			"mermaid": "Mermaid diagram",
 			"callout": "Callout"
 		}
 	}

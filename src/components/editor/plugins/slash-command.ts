@@ -8,6 +8,7 @@ import {
 	KEYS,
 	RangeApi,
 	type SlateEditor,
+	type TCodeBlockElement,
 	type TElement,
 	type TText,
 } from "platejs";
@@ -26,6 +27,7 @@ export type SlashCommandId =
 	| "todoList"
 	| "quote"
 	| "codeBlock"
+	| "mermaid"
 	| "internalLink"
 	| "externalLink"
 	| "callout";
@@ -41,6 +43,7 @@ export type SlashCommand = {
 		| "slashCommand.commands.todoList"
 		| "slashCommand.commands.quote"
 		| "slashCommand.commands.codeBlock"
+		| "slashCommand.commands.mermaid"
 		| "slashCommand.commands.callout"
 		| "contextMenu.insertWikiLink"
 		| "contextMenu.insertExternalLink";
@@ -56,6 +59,10 @@ export type SlashCommandTrigger = {
 export type SlashCommandTarget = SlashCommandTrigger & {
 	path: number[];
 };
+
+export function isSlashCommandSubmitKey(key: string): key is "Enter" | "Tab" {
+	return key === "Enter" || key === "Tab";
+}
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
 	{
@@ -97,6 +104,18 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
 		id: "codeBlock",
 		labelKey: "slashCommand.commands.codeBlock",
 		keywords: ["code", "fence", "代码", "代码块"],
+	},
+	{
+		id: "mermaid",
+		labelKey: "slashCommand.commands.mermaid",
+		keywords: [
+			"mermaid",
+			"diagram",
+			"flowchart",
+			"sequence",
+			"流程图",
+			"时序图",
+		],
 	},
 	{
 		id: "internalLink",
@@ -253,6 +272,56 @@ function applyBlockType(editor: SlateEditor, type: string): void {
 	const block = editor.api.block();
 	if (!block || (block[0] as TElement).type === type) return;
 	editor.tf.setNodes({ type }, { at: block[1] });
+	const blockEnd = editor.api.end(block[1]);
+	if (blockEnd) editor.tf.select(blockEnd);
+}
+
+function insertCodeBlock(editor: SlateEditor, language?: string): void {
+	clearCurrentList(editor);
+	const block = editor.api.block();
+	if (!block) return;
+	toggleCodeBlock(editor);
+	if (language) {
+		editor.tf.setNodes<TCodeBlockElement>({ lang: language }, { at: block[1] });
+	}
+}
+
+function insertMermaidCodeBlock(editor: SlateEditor): void {
+	clearCurrentList(editor);
+	const block = editor.api.block();
+	if (!block) return;
+	const hasExistingText = editor.api.string(block[1]).trim().length > 0;
+
+	toggleCodeBlock(editor);
+	if (hasExistingText) {
+		editor.tf.setNodes<TCodeBlockElement>(
+			{ lang: "mermaid" },
+			{ at: block[1] },
+		);
+		return;
+	}
+
+	const codeLineType = editor.getType(KEYS.codeLine);
+	const children = [
+		{ type: codeLineType, children: [{ text: "graph LR" }] },
+		{ type: codeLineType, children: [{ text: "A[Start] --> B[Process]" }] },
+		{ type: codeLineType, children: [{ text: "B --> C[End]" }] },
+	];
+	editor.tf.replaceNodes(
+		{
+			type: editor.getType(KEYS.codeBlock),
+			lang: "mermaid",
+			children,
+		},
+		{ at: block[1] },
+	);
+
+	const lastLinePath = [...block[1], children.length - 1, 0];
+	const lastLineOffset = children.at(-1)?.children[0].text.length ?? 0;
+	editor.tf.select({
+		anchor: { path: lastLinePath, offset: lastLineOffset },
+		focus: { path: lastLinePath, offset: lastLineOffset },
+	});
 }
 
 function insertLinkTemplate(
@@ -332,8 +401,10 @@ export function executeSlashCommand(
 			applyBlockType(editor, editor.getType(KEYS.blockquote));
 			break;
 		case "codeBlock":
-			clearCurrentList(editor);
-			toggleCodeBlock(editor);
+			insertCodeBlock(editor);
+			break;
+		case "mermaid":
+			insertMermaidCodeBlock(editor);
 			break;
 		case "internalLink":
 			insertLinkTemplate(editor, "wiki");

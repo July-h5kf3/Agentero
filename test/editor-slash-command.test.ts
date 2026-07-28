@@ -13,6 +13,7 @@ import {
 	executeSlashCommand,
 	filterSlashCommands,
 	findSlashCommandTrigger,
+	isSlashCommandSubmitKey,
 	type SlashCommandTarget,
 } from "@/components/editor/plugins/slash-command";
 
@@ -99,6 +100,12 @@ describe("slash command trigger", () => {
 	it("does not compete with an active wiki completion draft", () => {
 		expect(findSlashCommandTrigger("[[/h2", 5)).toBeNull();
 		expect(findSlashCommandTrigger("See [[Target#/h2", 16)).toBeNull();
+	});
+
+	it("accepts Enter and Tab as command selection keys", () => {
+		expect(isSlashCommandSubmitKey("Enter")).toBe(true);
+		expect(isSlashCommandSubmitKey("Tab")).toBe(true);
+		expect(isSlashCommandSubmitKey(" ")).toBe(false);
 	});
 
 	it("filters localized labels and can hide nested callout insertion", () => {
@@ -200,6 +207,25 @@ describe("slash command execution", () => {
 				children: [{ type: KEYS.codeLine, children: [{ text: "" }] }],
 			},
 		]);
+
+		const mermaid = createSlashEditor("/mermaid");
+		expect(
+			executeSlashCommand(mermaid, "mermaid", currentSlashTarget(mermaid)),
+		).toBe(true);
+		expect(mermaid.children).toMatchObject([
+			{
+				type: KEYS.codeBlock,
+				lang: "mermaid",
+				children: [
+					{ type: KEYS.codeLine, children: [{ text: "graph LR" }] },
+					{
+						type: KEYS.codeLine,
+						children: [{ text: "A[Start] --> B[Process]" }],
+					},
+					{ type: KEYS.codeLine, children: [{ text: "B --> C[End]" }] },
+				],
+			},
+		]);
 	});
 
 	it("inserts internal and external links with the context-menu caret behavior", () => {
@@ -297,6 +323,10 @@ describe("slash command execution", () => {
 		expect(quote.children).toEqual([
 			{ type: KEYS.blockquote, children: [{ text: "" }] },
 		]);
+		expect(quote.selection).toEqual({
+			anchor: { path: [0, 0], offset: 0 },
+			focus: { path: [0, 0], offset: 0 },
+		});
 	});
 
 	it("inserts the existing Obsidian callout node and keeps preceding text", () => {

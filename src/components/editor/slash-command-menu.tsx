@@ -13,6 +13,7 @@ import {
 	type LucideIcon,
 	MessageSquareWarning,
 	Quote,
+	Workflow,
 } from "lucide-react";
 import { useEditorRef } from "platejs/react";
 import type {
@@ -31,6 +32,7 @@ import { useTranslation } from "react-i18next";
 import {
 	executeSlashCommand,
 	filterSlashCommands,
+	isSlashCommandSubmitKey,
 	type SlashCommand,
 	type SlashCommandId,
 } from "@/components/editor/plugins/slash-command";
@@ -64,6 +66,7 @@ const COMMAND_ICONS: Record<SlashCommandId, LucideIcon> = {
 	todoList: ListTodo,
 	quote: Quote,
 	codeBlock: Code2,
+	mermaid: Workflow,
 	internalLink: Link2,
 	externalLink: ExternalLink,
 	callout: MessageSquareWarning,
@@ -137,7 +140,7 @@ export function SlashCommandMenu({
 				);
 				return true;
 			}
-			if (event.key === "Enter" && commands[selectedIndex]) {
+			if (isSlashCommandSubmitKey(event.key) && commands[selectedIndex]) {
 				if (selectCommand(commands[selectedIndex])) {
 					event.preventDefault();
 					return true;

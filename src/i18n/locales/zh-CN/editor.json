@@ -24,7 +24,9 @@
 		"search": "搜索语言…",
 		"noMatch": "没有匹配的语言",
 		"copy": "复制代码",
-		"copyFailed": "无法复制代码。"
+		"copyFailed": "无法复制代码。",
+		"mermaidPreview": "Mermaid 预览",
+		"mermaidPreviewError": "这个 Mermaid 图表暂时无法渲染。"
 	},
 	"image": {
 		"noFile": "请先将笔记保存为文件，再插入图片。",
@@ -130,6 +132,7 @@
 			"todoList": "待办列表",
 			"quote": "引用",
 			"codeBlock": "代码块",
+			"mermaid": "Mermaid 图表",
 			"callout": "Callout"
 		}
 	}

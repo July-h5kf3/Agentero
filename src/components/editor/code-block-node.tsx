@@ -1,5 +1,7 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: Mermaid strict mode produces the SVG markup shown in this preview.
 "use client";
 
+import { mermaid as mermaidPlugin } from "@streamdown/mermaid";
 import { common } from "lowlight";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { NodeApi, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
@@ -36,10 +38,9 @@ import {
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 
-// Languages actually registered with lowlight, kept in sync by sourcing the
-// same `common` bundle the plugin uses (markdown-editor-kit.tsx). `plaintext`
-// is part of `common` and serves as the default "no highlighting" entry.
-const LANGUAGES = Object.keys(common).sort();
+// Mermaid is preserved as code-block metadata even though it is not included
+// in lowlight's common syntax bundle.
+const LANGUAGES = [...new Set([...Object.keys(common), "mermaid"])].sort();
 
 /**
  * Languages that mean "no highlighting". Selecting one clears the persisted
@@ -193,7 +194,79 @@ function CopyCodeButton({ element }: { element: TCodeBlockElement }) {
 	);
 }
 
+function MermaidPreview({ source }: { source: string }) {
+	const { t } = useTranslation("editor");
+	const previewId = React.useId().replace(/:/g, "");
+	const [svg, setSvg] = React.useState<string | null>(null);
+	const [renderError, setRenderError] = React.useState(false);
+	const renderVersionRef = React.useRef(0);
+
+	React.useEffect(() => {
+		const sourceText = source.trim();
+		const renderVersion = ++renderVersionRef.current;
+		if (!sourceText) {
+			setSvg(null);
+			setRenderError(false);
+			return;
+		}
+
+		let cancelled = false;
+		const timeout = window.setTimeout(() => {
+			void mermaidPlugin
+				.getMermaid()
+				.render(`agentero-mermaid-${previewId}-${renderVersion}`, sourceText)
+				.then((result) => {
+					if (cancelled || renderVersionRef.current !== renderVersion) return;
+					setSvg(result.svg);
+					setRenderError(false);
+				})
+				.catch(() => {
+					if (cancelled || renderVersionRef.current !== renderVersion) return;
+					setSvg(null);
+					setRenderError(true);
+				});
+		}, 160);
+
+		return () => {
+			cancelled = true;
+			window.clearTimeout(timeout);
+		};
+	}, [previewId, source]);
+
+	if (!svg && !renderError) return null;
+
+	return (
+		<div
+			className="border-border/40 border-t bg-background/30 px-4 py-3 [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+			contentEditable={false}
+		>
+			{svg ? (
+				<MermaidSvg svg={svg} label={t("codeBlock.mermaidPreview")} />
+			) : (
+				<p className="m-0 text-muted-foreground text-xs">
+					{t("codeBlock.mermaidPreviewError")}
+				</p>
+			)}
+		</div>
+	);
+}
+
+function MermaidSvg({ svg, label }: { svg: string; label: string }) {
+	return (
+		<div
+			aria-label={label}
+			dangerouslySetInnerHTML={{ __html: svg }}
+			role="img"
+		/>
+	);
+}
+
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
+	const isMermaid = props.element.lang?.toLowerCase() === "mermaid";
+	const source = isMermaid
+		? props.element.children.map((line) => NodeApi.string(line)).join("\n")
+		: "";
+
 	return (
 		// Constrain width so long lines overflow inside <pre> (scroll), not the editor.
 		// Use agentero-scroll-both: agentero-scroll sets overflow-x:hidden (unlayered CSS
@@ -212,6 +285,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 				<pre className="agentero-scroll-both agentero-scroll-x-only max-w-full overflow-x-auto p-4 font-mono text-sm leading-[normal] whitespace-pre [tab-size:2]">
 					<code className="block w-max min-w-full">{props.children}</code>
 				</pre>
+				{isMermaid ? <MermaidPreview source={source} /> : null}
 			</div>
 		</PlateElement>
 	);
