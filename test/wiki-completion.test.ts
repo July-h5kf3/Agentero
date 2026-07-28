@@ -37,6 +37,23 @@ describe("wikilink completion grammar", () => {
 			target: "Target",
 			query: "Overview",
 		});
+		expect(parseWikiCompletionQuery("Target#Outer#Inner")).toEqual({
+			kind: "heading",
+			target: "Target",
+			query: "Outer#Inner",
+		});
+		expect(
+			parseWikiCompletionQuery("2026-W31#07-28 周二#复盘分析#paper 阅读#结论"),
+		).toEqual({
+			kind: "heading",
+			target: "2026-W31",
+			query: "07-28 周二#复盘分析#paper 阅读#结论",
+		});
+		expect(parseWikiCompletionQuery("2026-W31#07-28 周二#")).toEqual({
+			kind: "heading",
+			target: "2026-W31",
+			query: "07-28 周二#",
+		});
 		expect(parseWikiCompletionQuery("#")).toEqual({
 			kind: "heading",
 			target: "",
@@ -84,15 +101,15 @@ describe("wikilink completion grammar", () => {
 			{
 				kind: "heading",
 				path: "notes/Current.md",
-				insertText: "Current#Overview",
-				label: "Overview",
-				fragment: { kind: "heading", path: ["Overview"] },
+				insertText: "Current#Outer#Overview",
+				label: "Outer › Overview",
+				fragment: { kind: "heading", path: ["Outer", "Overview"] },
 			},
 			{ kind: "heading", target: "", query: "Over" },
 		);
 		expect(
 			wikiLinkToMarkdown({ value: heading.target, heading: heading.heading }),
-		).toBe("[[#Overview]]");
+		).toBe("[[#Outer#Overview]]");
 
 		const block = wikiCompletionInsert(
 			{
@@ -140,22 +157,22 @@ describe("wikilink completion grammar", () => {
 			{
 				kind: "heading",
 				path: "AGENTS.md",
-				insertText: "AGENTS.md#Paper reading order",
-				label: "Paper reading order",
+				insertText: "AGENTS.md#Guide#Paper reading order",
+				label: "Guide › Paper reading order",
 				fragment: {
 					kind: "heading",
-					path: ["AGENTS.md", "Paper reading order"],
+					path: ["Guide", "Paper reading order"],
 				},
 			},
 			{ kind: "heading", target: "AGENTS", query: "" },
 		);
 		expect(heading).toEqual({
 			target: "AGENTS",
-			heading: "Paper reading order",
+			heading: "Guide#Paper reading order",
 		});
 		expect(
 			wikiLinkToMarkdown({ value: heading.target, heading: heading.heading }),
-		).toBe("[[AGENTS#Paper reading order]]");
+		).toBe("[[AGENTS#Guide#Paper reading order]]");
 
 		expect(
 			wikiCompletionInsert(
@@ -171,22 +188,47 @@ describe("wikilink completion grammar", () => {
 		).toEqual({ target: "AGENTS", heading: "^reading-order" });
 	});
 
+	it("writes an arbitrarily deep canonical heading path from a scoped child candidate", () => {
+		const heading = wikiCompletionInsert(
+			{
+				kind: "heading",
+				path: "notes/2026-W31.md",
+				insertText: "2026-W31#Week#07-28 周二#复盘分析#paper 阅读",
+				label: "Week › 07-28 周二 › 复盘分析 › paper 阅读",
+				fragment: {
+					kind: "heading",
+					path: ["Week", "07-28 周二", "复盘分析", "paper 阅读"],
+				},
+			},
+			{
+				kind: "heading",
+				target: "2026-W31",
+				query: "07-28 周二#复盘分析#paper",
+			},
+		);
+
+		expect(heading).toEqual({
+			target: "2026-W31",
+			heading: "Week#07-28 周二#复盘分析#paper 阅读",
+		});
+	});
+
 	it("turns a local alias candidate into portable display text", () => {
 		const completion = wikiCompletionInsert(
 			{
 				kind: "alias",
-				path: "PAL#Overview",
-				insertText: "PAL#Overview",
+				path: "PAL#Outer#Overview",
+				insertText: "PAL#Outer#Overview",
 				label: "name",
-				detail: "PAL#Overview",
+				detail: "PAL#Outer#Overview",
 				alias: "name",
 			},
-			{ kind: "alias", target: "PAL#Overview", query: "name" },
+			{ kind: "alias", target: "PAL#Outer#Overview", query: "name" },
 		);
 
 		expect(completion).toEqual({
 			target: "PAL",
-			heading: "Overview",
+			heading: "Outer#Overview",
 			alias: "name",
 		});
 		expect(
@@ -195,7 +237,7 @@ describe("wikilink completion grammar", () => {
 				heading: completion.heading,
 				alias: completion.alias,
 			}),
-		).toBe("[[PAL#Overview|name]]");
+		).toBe("[[PAL#Outer#Overview|name]]");
 	});
 
 	it("keeps the most recently selected candidates unique and bounded", () => {
@@ -507,9 +549,9 @@ describe("wikilink completion grammar", () => {
 			{
 				kind: "heading",
 				path: "notes/Target.md",
-				insertText: "notes/Target#Overview",
-				label: "Overview",
-				fragment: { kind: "heading", path: ["Overview"] },
+				insertText: "notes/Target#Outer#Overview",
+				label: "Outer › Overview",
+				fragment: { kind: "heading", path: ["Outer", "Overview"] },
 			},
 			{ kind: "heading", target: "Target", query: "" },
 		);
@@ -518,15 +560,17 @@ describe("wikilink completion grammar", () => {
 			heading: completion.heading,
 			embed: true,
 		});
-		expect(markdown).toBe("![[Target#Overview]]");
+		expect(markdown).toBe("![[Target#Outer#Overview]]");
 		expect(parseWikiLinkMarkdown(markdown)).toMatchObject({
 			type: "wikiLink",
 			value: "Target",
-			heading: "Overview",
+			heading: "Outer#Overview",
 			embed: true,
 		});
 		const bounds = wikiLinkDraftEditableBounds(markdown);
-		expect(markdown.slice(bounds.start, bounds.end)).toBe("Target#Overview");
+		expect(markdown.slice(bounds.start, bounds.end)).toBe(
+			"Target#Outer#Overview",
+		);
 	});
 
 	it("replaces the complete embed draft without leaving a detached bang", () => {

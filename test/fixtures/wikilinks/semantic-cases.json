@@ -17,6 +17,18 @@
 			"content": "# Parent\n## Child\n# Other\n## Child\n"
 		},
 		{
+			"path": "notes/Nested.md",
+			"content": "# 2026-W31\n## 07-28 周二\n### 复盘分析\n#### paper 阅读\n"
+		},
+		{
+			"path": "notes/AmbiguousNested.md",
+			"content": "# Week A\n## 复盘分析\n### paper 阅读\n# Week B\n## 复盘分析\n### paper 阅读\n"
+		},
+		{
+			"path": "notes/HeadingSyntax.md",
+			"content": "---\n# Frontmatter only\n---\n  # Indented\n   ## Deep\n```md\n# Fence\n## Ghost\n```\n"
+		},
+		{
 			"path": "a/Shared.md",
 			"content": "# Shared A\n"
 		},
@@ -122,6 +134,42 @@
 			"link": "notes/Headings#Child",
 			"status": "ambiguous",
 			"path": "notes/Headings.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/Nested#2026-W31#07-28 周二#复盘分析#paper 阅读",
+			"status": "resolved",
+			"path": "notes/Nested.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/Nested#复盘分析#paper 阅读",
+			"status": "resolved",
+			"path": "notes/Nested.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/AmbiguousNested#复盘分析#paper 阅读",
+			"status": "ambiguous",
+			"path": "notes/AmbiguousNested.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/HeadingSyntax#Indented#Deep",
+			"status": "resolved",
+			"path": "notes/HeadingSyntax.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/HeadingSyntax#Frontmatter only",
+			"status": "invalidFragment",
+			"path": "notes/HeadingSyntax.md"
+		},
+		{
+			"source": "notes/Source.md",
+			"link": "notes/HeadingSyntax#Fence#Ghost",
+			"status": "invalidFragment",
+			"path": "notes/HeadingSyntax.md"
 		}
 	],
 	"moveCases": [

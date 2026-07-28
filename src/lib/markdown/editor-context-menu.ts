@@ -13,6 +13,7 @@ export type EditorLinkTemplate = {
 export type EditorContextMenuCapabilities = {
 	copy: boolean;
 	cut: boolean;
+	formatMarkdown: boolean;
 	insertLink: boolean;
 	paste: boolean;
 	renameHeading: boolean;
@@ -30,6 +31,7 @@ export function editorContextMenuCapabilities({
 	return {
 		copy: selectionExpanded,
 		cut: !readOnly && selectionExpanded,
+		formatMarkdown: !readOnly,
 		insertLink: !readOnly,
 		paste: !readOnly,
 		renameHeading: headingRenameAvailable,

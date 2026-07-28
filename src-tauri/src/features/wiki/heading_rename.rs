@@ -223,25 +223,15 @@ impl WikiHeadingRenameTransaction {
                 continue;
             }
 
-            let replacement_path = if fragment_path.len() == 1 {
-                if actual_heading.path != heading.path {
-                    // A unique leaf-only reference to a descendant remains valid
-                    // when only its parent heading is renamed.
-                    continue;
-                }
-                vec![new_text.to_string()]
-            } else {
-                let mut replacement = fragment_path.clone();
-                let renamed_index = heading.path.len().saturating_sub(1);
-                if renamed_index >= replacement.len() {
-                    return Err(WikiRenameError::new(
-                        WikiRenameErrorCode::OverlappingEdits,
-                        "resolved fragment path is shorter than its heading identity",
-                    ));
-                }
-                replacement[renamed_index] = new_text.to_string();
-                replacement
-            };
+            let fragment_start = actual_heading.path.len() - fragment_path.len();
+            let renamed_index = heading.path.len().saturating_sub(1);
+            if renamed_index < fragment_start {
+                // The suffix reference omitted the renamed ancestor, so its
+                // persisted text remains valid after the parent rename.
+                continue;
+            }
+            let mut replacement_path = fragment_path.clone();
+            replacement_path[renamed_index - fragment_start] = new_text.to_string();
             let replacement = replacement_path.join("#");
             let candidate_fragment = LinkFragment::Heading {
                 path: replacement_path,
@@ -496,7 +486,7 @@ fn reject_affected_unresolved_links(
         let affected_raw = matches!(
             &edge.occurrence.fragment,
             Some(LinkFragment::Heading { path })
-                if path_is_at_or_under(path, old_path)
+                if path_may_reference_at_or_under(path, old_path)
         );
         if affected_candidate || affected_raw {
             return Err(WikiRenameError::new(
@@ -526,6 +516,14 @@ fn heading_range_at(markdown: &str, line: u32) -> Option<SourceRange> {
 
 fn path_is_at_or_under(path: &[String], root: &[String]) -> bool {
     path.len() >= root.len() && path.iter().zip(root).all(|(left, right)| left == right)
+}
+
+fn path_may_reference_at_or_under(path: &[String], root: &[String]) -> bool {
+    (0..root.len()).any(|start| {
+        let suffix = &root[start..];
+        path.len() >= suffix.len()
+            && crate::features::wiki::resolve::heading_path_ends_with(&path[..suffix.len()], suffix)
+    })
 }
 
 fn validate_edits(
@@ -584,7 +582,7 @@ mod tests {
     fn rewrites_resolved_heading_fragments_and_preserves_surrounding_markdown() {
         let root = fixture_vault();
         let target = "# Parent\n## Old\n[[#Old|self alias]]\n### Child\nBody\n";
-        let source = "[[Target#Parent#Old|Alias]]\n![[Target#Parent#Old#Child]]\n[label](Target.md#Parent#Old)\n[[Target#Child]]\n";
+        let source = "[[Target#Parent#Old|Alias]]\n![[Target#Old#Child]]\n[label](Target.md#Parent#Old)\n[[Target#Child]]\n";
         fs::write(root.join("notes/Target.md"), target).expect("write target");
         fs::write(root.join("notes/Source.md"), source).expect("write source");
         let mut index = build_index(&root);
@@ -610,7 +608,7 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(root.join("notes/Source.md")).expect("read source"),
-            "[[Target#Parent#New|Alias]]\n![[Target#Parent#New#Child]]\n[label](Target.md#Parent#New)\n[[Target#Child]]\n"
+            "[[Target#Parent#New|Alias]]\n![[Target#New#Child]]\n[label](Target.md#Parent#New)\n[[Target#Child]]\n"
         );
 
         fs::remove_dir_all(root).expect("remove fixture vault");
@@ -674,6 +672,41 @@ mod tests {
         assert_eq!(
             fs::read_to_string(root.join("notes/Target.md")).expect("read target"),
             target
+        );
+
+        fs::remove_dir_all(root).expect("remove fixture vault");
+    }
+
+    #[test]
+    fn rejects_a_deep_suffix_rewrite_that_would_become_ambiguous() {
+        let root = fixture_vault();
+        let target =
+            "# Root\n## Old\n### Section\n#### Leaf\n# Other\n## New\n### Section\n#### Leaf\n";
+        let source = "[[Target#Old#Section#Leaf]]\n";
+        fs::write(root.join("notes/Target.md"), target).expect("write target");
+        fs::write(root.join("notes/Source.md"), source).expect("write source");
+        let index = build_index(&root);
+
+        let error = WikiHeadingRenameTransaction::plan(
+            &root,
+            &index,
+            "notes/Target.md",
+            &["Root".into(), "Old".into()],
+            2,
+            target,
+            "New",
+            &[],
+        )
+        .expect_err("ambiguous rewritten suffix must block");
+
+        assert_eq!(error.code, WikiRenameErrorCode::AmbiguousHeading);
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Target.md")).expect("read target"),
+            target
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("notes/Source.md")).expect("read source"),
+            source
         );
 
         fs::remove_dir_all(root).expect("remove fixture vault");

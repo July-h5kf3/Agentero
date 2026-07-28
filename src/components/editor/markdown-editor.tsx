@@ -2,7 +2,7 @@
 
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
-import { RangeApi, type RangeRef } from "platejs";
+import { KEYS, RangeApi, type RangeRef } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
 	type FormEvent,
@@ -20,7 +20,10 @@ import { FindReplaceBar } from "@/components/editor/find-replace-bar";
 import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
+import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
+import { editorCompletionHasFocus } from "@/components/editor/plugins/completion-focus";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
+import { findSlashCommandTrigger } from "@/components/editor/plugins/slash-command";
 import {
 	isWikiLinkDraftEditingOffset,
 	isWikiLinkDraftText,
@@ -32,6 +35,11 @@ import {
 	wikiLinkNodeSource,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
+import {
+	type SlashCommandController,
+	type SlashCommandDraft,
+	SlashCommandMenu,
+} from "@/components/editor/slash-command-menu";
 import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
 import {
 	type WikiCompletionController,
@@ -51,7 +59,7 @@ import {
 	copyTextToClipboard,
 	readTextFromClipboard,
 } from "@/lib/core/clipboard";
-import { errorMessage, notifyError } from "@/lib/core/notify";
+import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
@@ -59,6 +67,12 @@ import {
 	editorContextMenuCapabilities,
 	insertEditorLinkTemplate,
 } from "@/lib/markdown/editor-context-menu";
+import {
+	captureMarkdownSelectionBookmark,
+	prepareMarkdownFormat,
+	replaceMarkdownEditorValue,
+} from "@/lib/markdown/editor-format";
+import { formatMarkdownSource } from "@/lib/markdown/format";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
@@ -181,6 +195,7 @@ export function MarkdownEditor({
 	const editorContainerRef = useRef<HTMLDivElement | null>(null);
 	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
+	const slashCommandControllerRef = useRef<SlashCommandController | null>(null);
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
 	const wikiLinkPresentationFrameRef = useRef<number | null>(null);
@@ -191,12 +206,15 @@ export function MarkdownEditor({
 	} | null>(null);
 	const [wikiCompletionDraft, setWikiCompletionDraft] =
 		useState<WikiCompletionDraft | null>(null);
+	const [slashCommandDraft, setSlashCommandDraft] =
+		useState<SlashCommandDraft | null>(null);
 	const [headingContext, setHeadingContext] =
 		useState<WikiHeadingAnchor | null>(null);
 	const [contextMenuSelectionExpanded, setContextMenuSelectionExpanded] =
 		useState(false);
 	const [headingRenameOpen, setHeadingRenameOpen] = useState(false);
 	const [headingRenameBusy, setHeadingRenameBusy] = useState(false);
+	const [formattingMarkdown, setFormattingMarkdown] = useState(false);
 	const [findOpen, setFindOpen] = useState(false);
 	const [findFocusTick, setFindFocusTick] = useState(0);
 
@@ -287,6 +305,14 @@ export function MarkdownEditor({
 	 * Checking the DOM code ancestor avoids turning code examples into links.
 	 */
 	const updateWikiCompletionDraft = useCallback(() => {
+		const container = editorContainerRef.current;
+		if (
+			!container ||
+			!editorCompletionHasFocus(container, document.activeElement)
+		) {
+			setWikiCompletionDraft(null);
+			return;
+		}
 		const slateSelection = editor.selection;
 		if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) {
 			setWikiCompletionDraft(null);
@@ -298,10 +324,9 @@ export function MarkdownEditor({
 			setWikiCompletionDraft(null);
 			return;
 		}
-		const container = editorContainerRef.current;
 		const nativeSelection = window.getSelection();
 		const anchor = nativeSelection?.anchorNode;
-		if (!container || !nativeSelection?.isCollapsed || !anchor) {
+		if (!nativeSelection?.isCollapsed || !anchor) {
 			setWikiCompletionDraft(null);
 			return;
 		}
@@ -334,6 +359,78 @@ export function MarkdownEditor({
 			embed: trigger.embed,
 			left: Math.max(8, cursor.left - bounds.left),
 			top: cursor.bottom - bounds.top + container.scrollTop + 4,
+		});
+	}, [editor]);
+
+	/**
+	 * Slash commands deliberately reuse the editor's current AST transforms
+	 * instead of installing the full Plate SlashKit. A trigger is valid only in
+	 * editable text, outside code/void DOM, and at the current collapsed cursor.
+	 */
+	const updateSlashCommandDraft = useCallback(() => {
+		const container = editorContainerRef.current;
+		if (
+			!container ||
+			!editorCompletionHasFocus(container, document.activeElement)
+		) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const slateSelection = editor.selection;
+		if (!slateSelection || !RangeApi.isCollapsed(slateSelection)) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const entry = editor.api.node(slateSelection.anchor.path);
+		const leaf = entry?.[0];
+		if (!leaf || typeof (leaf as { text?: unknown }).text !== "string") {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const nativeSelection = window.getSelection();
+		const anchor = nativeSelection?.anchorNode;
+		if (!nativeSelection?.isCollapsed || !anchor) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const anchorElement =
+			anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : null;
+		if (
+			!anchorElement ||
+			!container.contains(anchorElement) ||
+			anchorElement.closest("code, pre, [data-slate-void='true']")
+		) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const trigger = findSlashCommandTrigger(
+			(leaf as { text: string }).text,
+			slateSelection.anchor.offset,
+		);
+		if (!trigger || !nativeSelection.rangeCount) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const block = editor.api.block();
+		if (!block) {
+			setSlashCommandDraft(null);
+			return;
+		}
+		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
+		const bounds = container.getBoundingClientRect();
+		const insideCallout = Boolean(
+			editor.api.above({
+				match: { type: editor.getType(KEYS.callout) },
+			}),
+		);
+		setSlashCommandDraft({
+			query: trigger.query,
+			path: [...slateSelection.anchor.path],
+			start: trigger.start,
+			end: trigger.end,
+			left: Math.max(8, cursor.left - bounds.left),
+			top: cursor.bottom - bounds.top + container.scrollTop + 4,
+			allowCallout: block[1].length === 1 && !insideCallout,
 		});
 	}, [editor]);
 
@@ -422,6 +519,7 @@ export function MarkdownEditor({
 
 	const handleChange = useCallback(() => {
 		window.requestAnimationFrame(updateWikiCompletionDraft);
+		window.requestAnimationFrame(updateSlashCommandDraft);
 		if (readOnly || !readyRef.current) return;
 
 		// Schedule (or cancel) managed asset GC from ref-count deltas.
@@ -443,7 +541,13 @@ export function MarkdownEditor({
 			timerRef.current = null;
 			persistRef.current();
 		}, CHANGE_DEBOUNCE_MS);
-	}, [editor, readOnly, setDirty, updateWikiCompletionDraft]);
+	}, [
+		editor,
+		readOnly,
+		setDirty,
+		updateSlashCommandDraft,
+		updateWikiCompletionDraft,
+	]);
 
 	const expandWikiLinkAt = useCallback(
 		(path: number[], cursorOffset: number) => {
@@ -974,6 +1078,10 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
+				if (slashCommandControllerRef.current?.handleKeyDown(event)) {
+					event.stopPropagation();
+					return;
+				}
 				if (handleWikiLinkBoundaryDelete(event)) {
 					event.stopPropagation();
 					return;
@@ -986,8 +1094,14 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
+				if (event.key === "Enter" && convertBlockquoteMarkerToCallout(editor)) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
 				if (event.key === "Escape") {
 					setWikiCompletionDraft(null);
+					setSlashCommandDraft(null);
 					setFindOpen(false);
 				}
 			}
@@ -1013,6 +1127,7 @@ export function MarkdownEditor({
 			}
 		},
 		[
+			editor,
 			handleWikiLinkArrow,
 			handleWikiLinkBoundaryDelete,
 			handleWikiLinkDraftEnter,
@@ -1056,6 +1171,8 @@ export function MarkdownEditor({
 	const handleEditorBlur = useCallback(
 		(event: React.FocusEvent<HTMLDivElement>) => {
 			if (event.currentTarget.contains(event.relatedTarget)) return;
+			setWikiCompletionDraft(null);
+			setSlashCommandDraft(null);
 			finalizeWikiLinkDrafts();
 		},
 		[finalizeWikiLinkDrafts],
@@ -1197,6 +1314,61 @@ export function MarkdownEditor({
 		[editor, readOnly, takeContextMenuSelection, updateWikiCompletionDraft],
 	);
 
+	const handleContextMenuFormatMarkdown = useCallback(async () => {
+		if (readOnly || formattingMarkdown) return;
+		const selection = takeContextMenuSelection();
+		const bookmark = captureMarkdownSelectionBookmark(
+			editor.children,
+			selection ?? editor.selection,
+		);
+		const snapshot = serialize();
+		setFormattingMarkdown(true);
+		try {
+			const prepared = await prepareMarkdownFormat({
+				currentSource: serialize,
+				deserialize: (body) =>
+					editor.getApi(MarkdownPlugin).markdown.deserialize(body),
+				formatSource: formatMarkdownSource,
+				snapshot,
+			});
+			if (prepared.status === "stale") {
+				notifyWarning(i18n.t("editor:contextMenu.formatStale"));
+				return;
+			}
+			if (prepared.status === "unchanged") {
+				if (selection) focusEditorAt(selection);
+				else editor.tf.focus();
+				return;
+			}
+			const nextSelection = replaceMarkdownEditorValue(
+				editor,
+				prepared.value,
+				bookmark,
+			);
+			window.requestAnimationFrame(() => {
+				if (!editorContainerRef.current?.isConnected) return;
+				if (nextSelection) editor.tf.focus({ at: nextSelection });
+				else editor.tf.focus({ edge: "end" });
+			});
+		} catch (error) {
+			notifyError(i18n.t("editor:contextMenu.formatFailed"), {
+				description: errorMessage(error),
+			});
+			if (selection && editorContainerRef.current?.isConnected) {
+				focusEditorAt(selection);
+			}
+		} finally {
+			setFormattingMarkdown(false);
+		}
+	}, [
+		editor,
+		focusEditorAt,
+		formattingMarkdown,
+		readOnly,
+		serialize,
+		takeContextMenuSelection,
+	]);
+
 	const confirmHeadingRename = useCallback(
 		async (newText: string) => {
 			const path = filePathRef.current;
@@ -1267,6 +1439,7 @@ export function MarkdownEditor({
 					editor={editor}
 					onSelectionChange={() => {
 						syncWikiLinkPresentation(editor.selection);
+						window.requestAnimationFrame(updateSlashCommandDraft);
 					}}
 					onValueChange={handleEditorValueChange}
 				>
@@ -1327,6 +1500,13 @@ export function MarkdownEditor({
 												controllerRef={completionControllerRef}
 											/>
 										) : null}
+										{!readOnly ? (
+											<SlashCommandMenu
+												draft={slashCommandDraft}
+												onClose={() => setSlashCommandDraft(null)}
+												controllerRef={slashCommandControllerRef}
+											/>
+										) : null}
 									</EditorContainer>
 								</ContextMenuTrigger>
 								<ContextMenuContent className="w-56">
@@ -1356,6 +1536,22 @@ export function MarkdownEditor({
 									>
 										{i18n.t("editor:contextMenu.paste")}
 										<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+									</ContextMenuItem>
+									<ContextMenuSeparator />
+									<ContextMenuItem
+										disabled={
+											!contextMenuCapabilities.formatMarkdown ||
+											formattingMarkdown
+										}
+										onSelect={() => {
+											void handleContextMenuFormatMarkdown();
+										}}
+									>
+										{i18n.t(
+											formattingMarkdown
+												? "editor:contextMenu.formatMarkdownBusy"
+												: "editor:contextMenu.formatMarkdown",
+										)}
 									</ContextMenuItem>
 									<ContextMenuSeparator />
 									<ContextMenuItem

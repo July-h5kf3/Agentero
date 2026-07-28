@@ -74,7 +74,7 @@ function CodeLanguageSelect() {
 	};
 
 	return (
-		<div contentEditable={false} className="absolute top-1.5 left-1.5 z-10">
+		<div contentEditable={false}>
 			<Popover open={open} onOpenChange={setOpen} modal={false}>
 				<PopoverTrigger asChild>
 					<button
@@ -88,7 +88,7 @@ function CodeLanguageSelect() {
 					</button>
 				</PopoverTrigger>
 				<PopoverContent
-					align="start"
+					align="end"
 					className="w-48 p-0"
 					onOpenAutoFocus={(e) => e.preventDefault()}
 				>
@@ -167,7 +167,7 @@ function CopyCodeButton({ element }: { element: TCodeBlockElement }) {
 	};
 
 	return (
-		<div contentEditable={false} className="absolute top-1.5 right-1.5 z-10">
+		<div contentEditable={false}>
 			<TooltipProvider delayDuration={300}>
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -202,8 +202,13 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 		// break-spaces.
 		<PlateElement className="max-w-full min-w-0 py-1" {...props}>
 			<div className="agentero-codeblock group relative max-w-full min-w-0 overflow-hidden rounded-md bg-muted/50">
-				<CodeLanguageSelect />
-				<CopyCodeButton element={props.element} />
+				<div
+					contentEditable={false}
+					className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1"
+				>
+					<CodeLanguageSelect />
+					<CopyCodeButton element={props.element} />
+				</div>
 				<pre className="agentero-scroll-both agentero-scroll-x-only max-w-full overflow-x-auto p-4 font-mono text-sm leading-[normal] whitespace-pre [tab-size:2]">
 					<code className="block w-max min-w-full">{props.children}</code>
 				</pre>

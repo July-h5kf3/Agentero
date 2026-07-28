@@ -32,6 +32,26 @@
 		"pickTitle": "插入图片到笔记",
 		"pickFilter": "图片"
 	},
+	"callout": {
+		"typePickerLabel": "切换 Callout 类型",
+		"titleInputLabel": "Callout 标题",
+		"types": {
+			"note": "笔记",
+			"abstract": "摘要",
+			"info": "信息",
+			"todo": "待办",
+			"tip": "提示",
+			"success": "成功",
+			"question": "问题",
+			"warning": "警告",
+			"failure": "失败",
+			"danger": "危险",
+			"bug": "缺陷",
+			"example": "示例",
+			"quote": "引用",
+			"important": "重要"
+		}
+	},
 	"findReplace": {
 		"title": "查找替换",
 		"searchPlaceholder": "查找",
@@ -48,10 +68,14 @@
 		"cut": "剪切",
 		"copy": "复制",
 		"paste": "粘贴",
+		"formatMarkdown": "整理 Markdown 格式",
+		"formatMarkdownBusy": "正在整理 Markdown…",
 		"insertWikiLink": "新增双链",
 		"insertExternalLink": "新增外部链接",
 		"copyFailed": "无法复制选中的文本。",
-		"pasteFailed": "无法读取剪贴板中的文本。"
+		"pasteFailed": "无法读取剪贴板中的文本。",
+		"formatFailed": "无法整理当前 Markdown 文档。",
+		"formatStale": "整理 Markdown 期间笔记已发生变化，请重试。"
 	},
 	"headingRename": {
 		"menu": "重命名当前标题",
@@ -93,5 +117,20 @@
 		"empty": "没有匹配的双链",
 		"displayName": "显示名称",
 		"syntaxHint": "# 链接标题 · ^ 链接文本块 · | 指定显示文本; tab 选择候选 · enter 结束编辑"
+	},
+	"slashCommand": {
+		"label": "格式命令",
+		"empty": "没有匹配的命令",
+		"commands": {
+			"heading1": "一级标题",
+			"heading2": "二级标题",
+			"heading3": "三级标题",
+			"bulletedList": "无序列表",
+			"numberedList": "有序列表",
+			"todoList": "待办列表",
+			"quote": "引用",
+			"codeBlock": "代码块",
+			"callout": "Callout"
+		}
 	}
 }

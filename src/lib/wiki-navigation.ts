@@ -4,27 +4,30 @@ export function normalizeWikiAnchorText(value: string): string {
 
 type HeadingEntry = { level: number; text: string };
 
-/** Find a heading by its full Obsidian heading path, not only its leaf text. */
+/** Find the one heading identified by an Obsidian heading-path suffix. */
 export function findWikiHeadingIndex(
 	headings: HeadingEntry[],
 	fragmentPath: string[],
 ): number {
 	const target = fragmentPath.map(normalizeWikiAnchorText);
-	const stack: string[] = [];
+	if (!target.length) return -1;
+	const stack: Array<string | undefined> = [];
+	const matches: number[] = [];
 	for (const [index, heading] of headings.entries()) {
 		stack.length = Math.max(0, heading.level - 1);
 		stack[heading.level - 1] = normalizeWikiAnchorText(heading.text);
-		const current = stack.slice(0, heading.level);
+		const current = stack
+			.slice(0, heading.level)
+			.filter((part): part is string => part !== undefined);
+		const suffix = current.slice(-target.length);
 		if (
-			target.length === 1
-				? current.at(-1) === target[0]
-				: current.length === target.length &&
-					current.every((part, pathIndex) => part === target[pathIndex])
+			suffix.length === target.length &&
+			suffix.every((part, pathIndex) => part === target[pathIndex])
 		) {
-			return index;
+			matches.push(index);
 		}
 	}
-	return -1;
+	return matches.length === 1 ? matches[0] : -1;
 }
 
 export type WikiBlockIdRange = {

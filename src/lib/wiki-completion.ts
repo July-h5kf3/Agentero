@@ -159,7 +159,7 @@ export function wikiCompletionInsert(
 	) {
 		return {
 			target: request.target,
-			heading: candidate.fragment.path.at(-1),
+			heading: candidate.fragment.path.join("#"),
 			alias: candidate.alias,
 		};
 	}
