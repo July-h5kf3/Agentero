@@ -35,6 +35,9 @@ Vault 是普通目录。建议不要放在临时目录、下载目录或会被�
 ResearchVault/
 ├── papers/
 ├── notes/
+│   ├── 01 Markdown 与双链.md
+│   ├── 02 Agent 与 Skill.md
+│   └── 03 论文导入与管理.md
 ├── plans/
 ├── .agents/
 │   └── skills/
@@ -43,7 +46,9 @@ ResearchVault/
     └── catalog.sqlite
 ```
 
-不要手动编辑 `.agentero/catalog.sqlite`。论文正文和笔记可以直接用外部编辑器修改，但结构化论文元数据应通过 Agentero 操作。
+- `notes/` 下的三篇教程会按当前语言自动生成，首次创建 Vault 后会自动打开第一篇。
+- 这些教程只是普通 Markdown，你可以自由编辑或删除；删除后不会自动恢复。
+- 不要手动编辑 `.agentero/catalog.sqlite`。论文正文和笔记可以直接用外部编辑器修改，但结构化论文元数据应通过 Agentero 操作。
 
 ## 打开已有 Vault
 

@@ -46,16 +46,19 @@ export async function pickCreateVaultDirectory(): Promise<string | null> {
  * Creates papers/notes/plans/.agentero, AGENTS.md, catalog.sqlite.
  * Does not create PAPERS.md / library.bib. Does not overwrite existing files.
  */
-export async function createVault(path: string): Promise<CreateVaultResult> {
+export async function createVault(
+	path: string,
+	locale?: string,
+): Promise<CreateVaultResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
 
 	const { logOp } = await import("@/lib/core/logger");
-	return logOp("createVault", { path }, async () => {
+	return logOp("createVault", { path, locale }, async () => {
 		return invokeApi<CreateVaultResult>(
 			"vault_create",
-			{ path },
+			{ path, locale },
 			{
 				fallback: i18n.t("app:vault.createFailed"),
 			},
@@ -68,20 +71,23 @@ export async function createVault(path: string): Promise<CreateVaultResult> {
  * Seeds any **missing** bundled skills under `.agents/skills/` after app updates;
  * never overwrites user-edited skill files. Safe to call on every open.
  */
-export async function ensureVault(path: string): Promise<CreateVaultResult> {
+export async function ensureVault(
+	path: string,
+	locale?: string,
+): Promise<CreateVaultResult> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
 
 	const { logOp } = await import("@/lib/core/logger");
-	return logOp("ensureVault", { path }, async () => {
+	return logOp("ensureVault", { path, locale }, async () => {
 		const remoteSessionId = remoteSessionIdFromHandle(path);
 		if (remoteSessionId) {
-			return remoteEnsureVault(remoteSessionId);
+			return remoteEnsureVault(remoteSessionId, locale);
 		}
 		return invokeApi<CreateVaultResult>(
 			"vault_ensure",
-			{ path },
+			{ path, locale },
 			{
 				fallback: i18n.t("app:vault.createFailed"),
 			},

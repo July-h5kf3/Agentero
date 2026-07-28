@@ -10,11 +10,14 @@
 用户选择目录（dialog）
   → vault_create / 打开已有
   → papers/ notes/ plans/ .agents/skills/ AGENTS.md
+  → notes/ 下三篇本地化新手教程（缺失时才写入）
   → .agentero/catalog.sqlite
-  → 前端加载树（Create 后可打开 AGENTS.md）
+  → 前端加载树（Create 后自动打开 notes/01 ...）
 ```
 
-模板：`templates/vault/`。
+- 模板：`templates/vault/`。
+- 教程文件按 UI 语言选择 `en/` 或 `zh-CN/`；不覆盖用户已编辑的同名文件。
+- `vault_create` 返回的 `openPath` 为首篇教程路径；若教程已存在则回退到 `AGENTS.md`。
 
 ## 文件树
 

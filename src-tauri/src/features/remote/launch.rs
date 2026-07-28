@@ -59,12 +59,14 @@ pub async fn resolve_remote_target(
     }))
 }
 
-/// Seed missing bundled skills directly into the remote vault.
+/// Seed missing bundled skills (and optionally onboarding notes) into the remote vault.
 ///
 /// Remote vault handles are opaque session ids, so the local `vault_ensure`
 /// command cannot be used for them. Existing remote files are never replaced.
+/// When `locale` is `Some`, localized onboarding tutorial notes are also seeded.
 pub async fn ensure_remote_vault_skills(
     session: &RemoteSession,
+    locale: Option<&str>,
 ) -> Result<CreateVaultResult, AppError> {
     let mut created = Vec::new();
     for (rel, content) in vault::bundled_skill_files() {
@@ -84,10 +86,40 @@ pub async fn ensure_remote_vault_skills(
         created.push((*rel).to_string());
     }
 
+    let onboarding_files = locale.map(vault::bundled_onboarding_files);
+    if let Some(files) = onboarding_files {
+        for (rel, content) in files {
+            if session.fs.exists(rel).await? {
+                continue;
+            }
+            session
+                .fs
+                .write(
+                    rel,
+                    content.as_bytes(),
+                    WriteOpts {
+                        create_parents: true,
+                    },
+                )
+                .await?;
+            created.push((*rel).to_string());
+        }
+    }
+
+    let open_path = onboarding_files
+        .and_then(|files| files.first())
+        .and_then(|(rel, _)| {
+            created
+                .iter()
+                .find(|c| c == rel)
+                .map(|_| (*rel).to_string())
+        })
+        .unwrap_or_else(|| "AGENTS.md".into());
+
     Ok(CreateVaultResult {
         path: session.remote_path.clone(),
         created,
-        open_path: "AGENTS.md".into(),
+        open_path,
     })
 }
 
@@ -175,21 +207,30 @@ mod tests {
             .unwrap();
         let session = registry.get(&info.session_id).await.unwrap();
 
-        let first = ensure_remote_vault_skills(&session).await.unwrap();
+        let first = ensure_remote_vault_skills(&session, Some("en"))
+            .await
+            .unwrap();
         assert!(first
             .created
             .contains(&".agents/skills/deep-research/SKILL.md".to_string()));
         assert!(!first
             .created
             .contains(&".agents/skills/paper-reader/SKILL.md".to_string()));
+        assert!(first
+            .created
+            .contains(&"notes/01 Markdown and Wikilinks.md".to_string()));
+        assert_eq!(first.open_path, "notes/01 Markdown and Wikilinks.md");
         assert_eq!(std::fs::read_to_string(&agents).unwrap(), "# user agents\n");
         assert_eq!(
             std::fs::read_to_string(&existing_skill).unwrap(),
             "# user skill\n"
         );
 
-        let second = ensure_remote_vault_skills(&session).await.unwrap();
+        let second = ensure_remote_vault_skills(&session, Some("en"))
+            .await
+            .unwrap();
         assert!(second.created.is_empty());
+        assert_eq!(second.open_path, "AGENTS.md");
 
         registry.disconnect(&info.session_id).await.unwrap();
         let _ = std::fs::remove_dir_all(root);

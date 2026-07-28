@@ -25,10 +25,11 @@ fn vault_path_arg(path: &str) -> Result<std::path::PathBuf, AppError> {
 
 /// Create / scaffold a Agentero vault at the given absolute path.
 #[tauri::command]
-pub fn vault_create(path: String) -> ApiResult<CreateVaultResult> {
+pub fn vault_create(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
     let op = OpTimer::start_with("vault_create", format!("path={}", trunc(&path, 200)));
+    let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
     match vault_path_arg(&path) {
-        Ok(p) => op.finish_result(vault::create_vault(&p)),
+        Ok(p) => op.finish_result(vault::create_vault(&p, locale)),
         Err(err) => {
             op.finish_err(&err);
             map_err(err)
@@ -36,15 +37,16 @@ pub fn vault_create(path: String) -> ApiResult<CreateVaultResult> {
     }
 }
 
-/// Ensure vault scaffold + seed any **missing** bundled skills (no overwrite).
+/// Ensure vault scaffold + seed any **missing** bundled skills/onboarding notes (no overwrite).
 ///
-/// Call on vault open so app updates can ship new `.agents/skills/*` without
-/// requiring the user to re-run Create Vault.
+/// Call on vault open so app updates can ship new `.agents/skills/*` or onboarding
+/// content without requiring the user to re-run Create Vault.
 #[tauri::command]
-pub fn vault_ensure(path: String) -> ApiResult<CreateVaultResult> {
+pub fn vault_ensure(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
     let op = OpTimer::start_with("vault_ensure", format!("path={}", trunc(&path, 200)));
+    let locale = vault::resolve_vault_locale(locale.as_deref().unwrap_or(""));
     match vault_path_arg(&path) {
-        Ok(p) => op.finish_result(vault::ensure_vault(&p)),
+        Ok(p) => op.finish_result(vault::ensure_vault(&p, locale)),
         Err(err) => {
             op.finish_err(&err);
             map_err(err)

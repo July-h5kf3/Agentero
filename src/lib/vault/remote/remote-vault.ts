@@ -113,14 +113,15 @@ export type RemoteVaultEnsureResult = {
 	openPath: string;
 };
 
-/** Seed missing bundled skills in the connected remote vault. */
+/** Seed missing bundled skills/onboarding notes in the connected remote vault. */
 export async function remoteEnsureVault(
 	sessionId: string,
+	locale?: string,
 ): Promise<RemoteVaultEnsureResult> {
 	return invokeApi<RemoteVaultEnsureResult>(
 		"remote_vault_ensure",
 		{
-			args: { sessionId },
+			args: { sessionId, locale },
 		},
 		{
 			fallback: "Failed to update remote vault skills",

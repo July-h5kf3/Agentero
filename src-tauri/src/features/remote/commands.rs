@@ -65,6 +65,8 @@ pub async fn remote_connect(
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSessionArgs {
     pub session_id: String,
+    #[serde(default)]
+    pub locale: Option<String>,
 }
 
 #[tauri::command]
@@ -98,7 +100,7 @@ pub async fn remote_disconnect(
     }
 }
 
-/// Ensure missing bundled skills in a remote vault without overwriting user files.
+/// Ensure missing bundled skills/onboarding notes in a remote vault without overwriting user files.
 #[tauri::command]
 pub async fn remote_vault_ensure(
     registry: State<'_, Arc<RemoteRegistry>>,
@@ -108,7 +110,7 @@ pub async fn remote_vault_ensure(
         Ok(s) => s,
         Err(e) => return Ok(map_err(e)),
     };
-    match ensure_remote_vault_skills(&session).await {
+    match ensure_remote_vault_skills(&session, args.locale.as_deref()).await {
         Ok(result) => Ok(ApiResult::ok(result)),
         Err(e) => Ok(map_err(e)),
     }

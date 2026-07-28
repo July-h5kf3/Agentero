@@ -216,7 +216,7 @@ export function refreshAll(): void {
  */
 export function seedVaultSkills(path: string): void {
 	if (!isTauri() || !path) return;
-	void ensureVault(path)
+	void ensureVault(path, i18n.language)
 		.then((result) => {
 			const skills = seededSkillIdsFromCreated(result.created);
 			if (skills.length === 0) return;
@@ -565,7 +565,7 @@ export async function createNewVault(): Promise<void> {
 		setVaultBusy(true);
 		const path = await pickCreateVaultDirectory();
 		if (!path) return;
-		const result = await createVault(path);
+		const result = await createVault(path, i18n.language);
 		const root = result.path || path;
 		await activateVault(root);
 		const sep = root.includes("\\") ? "\\" : "/";
@@ -589,7 +589,7 @@ export async function migrateZoteroFromWelcome(): Promise<void> {
 		setVaultBusy(true);
 		const path = await pickCreateVaultDirectory();
 		if (!path) return;
-		const result = await createVault(path);
+		const result = await createVault(path, i18n.language);
 		const root = result.path || path;
 		await activateVault(root);
 		setZoteroOpen(true);

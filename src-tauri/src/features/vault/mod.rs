@@ -73,6 +73,22 @@ pub const IDEA_EVALUATOR_SKILL: &str =
 pub const DEEP_RESEARCH_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/deep-research/SKILL.md");
 
+// Onboarding tutorial notes seeded under `notes/` for new/empty vaults.
+
+pub const ONBOARDING_MARKDOWN_EN: &str =
+    include_str!("../../../../templates/vault/notes/en/01 Markdown and Wikilinks.md");
+pub const ONBOARDING_AGENT_EN: &str =
+    include_str!("../../../../templates/vault/notes/en/02 Agent and Skills.md");
+pub const ONBOARDING_PAPERS_EN: &str =
+    include_str!("../../../../templates/vault/notes/en/03 Papers and Import.md");
+
+pub const ONBOARDING_MARKDOWN_ZH: &str =
+    include_str!("../../../../templates/vault/notes/zh-CN/01 Markdown 与双链.md");
+pub const ONBOARDING_AGENT_ZH: &str =
+    include_str!("../../../../templates/vault/notes/zh-CN/02 Agent 与 Skill.md");
+pub const ONBOARDING_PAPERS_ZH: &str =
+    include_str!("../../../../templates/vault/notes/zh-CN/03 论文导入与管理.md");
+
 /// Vault-relative path → content for bundled skill seeding (no overwrite).
 /// Paths are under the vault root (e.g. `.agents/skills/...`).
 ///
@@ -212,6 +228,32 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
     ]
 }
 
+/// Normalize a frontend/CLI locale preference to a supported onboarding locale.
+/// Unknown or missing values fall back to English.
+pub fn resolve_vault_locale(locale: &str) -> &str {
+    match locale.trim().to_lowercase().as_str() {
+        "zh-cn" | "zh" => "zh-CN",
+        _ => "en",
+    }
+}
+
+/// Vault-relative path → content for onboarding tutorial notes.
+/// Files are written only if missing so user edits survive app updates.
+pub(crate) fn bundled_onboarding_files(locale: &str) -> &'static [(&'static str, &'static str)] {
+    match resolve_vault_locale(locale) {
+        "zh-CN" => &[
+            ("notes/01 Markdown 与双链.md", ONBOARDING_MARKDOWN_ZH),
+            ("notes/02 Agent 与 Skill.md", ONBOARDING_AGENT_ZH),
+            ("notes/03 论文导入与管理.md", ONBOARDING_PAPERS_ZH),
+        ],
+        _ => &[
+            ("notes/01 Markdown and Wikilinks.md", ONBOARDING_MARKDOWN_EN),
+            ("notes/02 Agent and Skills.md", ONBOARDING_AGENT_EN),
+            ("notes/03 Papers and Import.md", ONBOARDING_PAPERS_EN),
+        ],
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateVaultResult {
@@ -252,12 +294,13 @@ fn seed_file_if_missing(
 ///
 /// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md` and **any missing** bundled
-/// skills from the app template, and initializes `.agentero/catalog.sqlite`.
+/// skills from the app template, seeds localized onboarding tutorial notes under
+/// `notes/`, and initializes `.agentero/catalog.sqlite`.
 /// Does **not** create `PAPERS.md` / `library.bib`.
 ///
 /// Safe to call on every vault open after an app update so newly shipped skills
-/// appear under `.agents/skills/` while customized files stay intact.
-pub fn ensure_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
+/// and onboarding notes appear while customized files stay intact.
+pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppError> {
     if !path.exists() {
         fs::create_dir_all(path)?;
     }
@@ -298,6 +341,12 @@ pub fn ensure_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         seed_file_if_missing(path, rel, content, &mut created)?;
     }
 
+    // Seed localized onboarding tutorial notes under `notes/` (no overwrite).
+    let onboarding_files = bundled_onboarding_files(locale);
+    for (rel, content) in onboarding_files {
+        seed_file_if_missing(path, rel, content, &mut created)?;
+    }
+
     // Catalog: always ensure schema (may create catalog.sqlite)
     let db_path = catalog::catalog_db_path(path);
     let db_existed = db_path.exists();
@@ -313,16 +362,27 @@ pub fn ensure_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
         .to_string_lossy()
         .to_string();
 
+    // Open the first onboarding note when it is newly created; otherwise AGENTS.md.
+    let open_path = onboarding_files
+        .first()
+        .and_then(|(rel, _)| {
+            created
+                .iter()
+                .find(|c| c == rel)
+                .map(|_| (*rel).to_string())
+        })
+        .unwrap_or_else(|| "AGENTS.md".into());
+
     Ok(CreateVaultResult {
         path: path_str,
         created,
-        open_path: "AGENTS.md".into(),
+        open_path,
     })
 }
 
 /// Create Agentero vault skeleton (alias of [`ensure_vault`]).
-pub fn create_vault(path: &Path) -> Result<CreateVaultResult, AppError> {
-    ensure_vault(path)
+pub fn create_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppError> {
+    ensure_vault(path, locale)
 }
 
 #[cfg(test)]
@@ -336,7 +396,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        let r = create_vault(&dir).expect("create");
+        let r = create_vault(&dir, "en").expect("create");
         assert!(dir.join("papers").is_dir());
         assert!(dir.join("notes").is_dir());
         assert!(dir.join("plans").is_dir());
@@ -360,6 +420,10 @@ mod tests {
             .is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
+        assert!(dir.join("notes/01 Markdown and Wikilinks.md").is_file());
+        assert!(dir.join("notes/02 Agent and Skills.md").is_file());
+        assert!(dir.join("notes/03 Papers and Import.md").is_file());
+        assert_eq!(r.open_path, "notes/01 Markdown and Wikilinks.md");
         assert!(!dir.join("PAPERS.md").exists());
         assert!(!dir.join("library.bib").exists());
         assert!(r
@@ -367,17 +431,26 @@ mod tests {
             .iter()
             .any(|c| c.contains("catalog") || c == "AGENTS.md" || c.ends_with('/')));
         assert!(r.created.iter().any(|c| c.starts_with(".agents")));
+        assert!(r.created.iter().any(|c| c.starts_with("notes/")));
 
-        // Second call does not wipe AGENTS.md or .agents/README.md
+        // Second call does not wipe AGENTS.md, .agents/README.md, or onboarding notes
         fs::write(dir.join("AGENTS.md"), "# custom\n").unwrap();
         fs::write(dir.join(".agents/README.md"), "# keep\n").unwrap();
-        let r2 = create_vault(&dir).expect("again");
+        fs::write(dir.join("notes/01 Markdown and Wikilinks.md"), "# edited\n").unwrap();
+        let r2 = create_vault(&dir, "en").expect("again");
         let content = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
         assert!(content.starts_with("# custom"));
         assert!(!r2.created.iter().any(|c| c == "AGENTS.md"));
         let agents_readme = fs::read_to_string(dir.join(".agents/README.md")).unwrap();
         assert!(agents_readme.starts_with("# keep"));
         assert!(!r2.created.iter().any(|c| c == ".agents/README.md"));
+        let onboarding =
+            fs::read_to_string(dir.join("notes/01 Markdown and Wikilinks.md")).unwrap();
+        assert!(onboarding.starts_with("# edited"));
+        assert!(!r2
+            .created
+            .iter()
+            .any(|c| c == "notes/01 Markdown and Wikilinks.md"));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -392,7 +465,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        create_vault(&dir).expect("create");
+        create_vault(&dir, "en").expect("create");
 
         // Simulate an older vault that lacked a later-bundled skill, plus a user edit.
         let deep = dir.join(".agents/skills/deep-research");
@@ -400,7 +473,7 @@ mod tests {
         let paper_skill = dir.join(".agents/skills/paper-reader/SKILL.md");
         fs::write(&paper_skill, "# my custom paper-reader\n").unwrap();
 
-        let r = ensure_vault(&dir).expect("ensure after update");
+        let r = ensure_vault(&dir, "en").expect("ensure after update");
         assert!(
             r.created
                 .iter()
@@ -421,7 +494,7 @@ mod tests {
             .any(|c| c == ".agents/skills/paper-reader/SKILL.md"));
 
         // Idempotent: second ensure adds nothing for already-present skills
-        let r2 = ensure_vault(&dir).expect("ensure again");
+        let r2 = ensure_vault(&dir, "en").expect("ensure again");
         assert!(!r2
             .created
             .iter()
@@ -441,7 +514,7 @@ mod tests {
             let _ = fs::remove_dir_all(dir);
         }
         fs::create_dir_all(dir).unwrap();
-        let r = create_vault(dir).expect("create");
+        let r = create_vault(dir, "en").expect("create");
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join("papers").is_dir());

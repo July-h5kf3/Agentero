@@ -84,13 +84,26 @@ pub async fn run(cmd: VaultCmd, globals: &GlobalOpts) -> Result<Value, CliError>
     }
 }
 
+fn detect_cli_locale() -> String {
+    let env = std::env::var("LC_ALL")
+        .or_else(|_| std::env::var("LANG"))
+        .unwrap_or_default()
+        .to_lowercase();
+    if env.starts_with("zh") {
+        "zh-CN".into()
+    } else {
+        "en".into()
+    }
+}
+
 fn create(path: &Path, open: bool, globals: &GlobalOpts) -> Result<Value, CliError> {
     let abs = if path.is_absolute() {
         path.to_path_buf()
     } else {
         std::env::current_dir()?.join(path)
     };
-    let result = vault_svc::create_vault(&abs)?;
+    let locale = detect_cli_locale();
+    let result = vault_svc::create_vault(&abs, &locale)?;
     let mut v = to_value(&result)?;
     if open {
         if let Some(obj) = v.as_object_mut() {

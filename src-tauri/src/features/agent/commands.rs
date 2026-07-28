@@ -61,7 +61,9 @@ pub async fn agent_list_skills(
             Err(e) => return Ok(map_err(e)),
         };
     if let Some(remote) = remote_target {
-        if let Err(e) = crate::features::remote::ensure_remote_vault_skills(&remote.session).await {
+        if let Err(e) =
+            crate::features::remote::ensure_remote_vault_skills(&remote.session, None).await
+        {
             return Ok(map_err(e));
         }
         if let Err(e) = materialize_skills_to_work(&remote.session).await {
