@@ -1,6 +1,7 @@
 import wikiLink from "@flowershow/remark-wiki-link";
 import { BlockquoteRules } from "@platejs/basic-nodes";
 import { BlockquotePlugin } from "@platejs/basic-nodes/react";
+import { CodeBlockPlugin, CodeLinePlugin } from "@platejs/code-block/react";
 import { BaseListPlugin } from "@platejs/list";
 import { ListPlugin } from "@platejs/list/react";
 import { MarkdownPlugin, remarkMdx } from "@platejs/markdown";
@@ -430,6 +431,41 @@ describe("Obsidian callout Markdown model", () => {
 				],
 			},
 		]);
+	});
+
+	it("selects the current callout before selecting the whole document", () => {
+		const editor = createSlateEditor({
+			plugins: [
+				TestParagraphPlugin,
+				CalloutPlugin,
+				CodeBlockPlugin,
+				CodeLinePlugin,
+			],
+			value: [
+				{ type: "p", children: [{ text: "Before" }] },
+				{
+					type: "callout",
+					calloutType: "important",
+					calloutTypeRaw: "important",
+					children: [
+						{ type: "p", children: [{ text: "First" }] },
+						{ type: "p", children: [{ text: "Second" }] },
+					],
+				},
+				{ type: "p", children: [{ text: "After" }] },
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [1, 0, 0], offset: 2 },
+			focus: { path: [1, 0, 0], offset: 2 },
+		});
+
+		editor.tf.selectAll();
+
+		expect(editor.selection).toEqual({
+			anchor: { path: [1, 0, 0], offset: 0 },
+			focus: { path: [1, 1, 0], offset: 6 },
+		});
 	});
 
 	it("does not live-convert unsupported folded markers", () => {
