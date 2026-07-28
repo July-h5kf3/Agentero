@@ -33,6 +33,8 @@
 		"pickFilter": "图片"
 	},
 	"callout": {
+		"typePickerLabel": "切换 Callout 类型",
+		"titleInputLabel": "Callout 标题",
 		"types": {
 			"note": "笔记",
 			"abstract": "摘要",

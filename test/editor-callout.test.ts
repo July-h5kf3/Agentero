@@ -1,17 +1,28 @@
 import wikiLink from "@flowershow/remark-wiki-link";
+import { BlockquoteRules } from "@platejs/basic-nodes";
+import { BlockquotePlugin } from "@platejs/basic-nodes/react";
 import { BaseListPlugin } from "@platejs/list";
+import { ListPlugin } from "@platejs/list/react";
 import { MarkdownPlugin, remarkMdx } from "@platejs/markdown";
-import { createSlateEditor, createSlatePlugin, KEYS } from "platejs";
+import {
+	createSlateEditor,
+	createSlatePlugin,
+	KEYS,
+	type TElement,
+} from "platejs";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { describe, expect, it } from "vitest";
-
+import { updateCalloutMetadata } from "@/components/editor/plugins/callout-actions";
 import {
 	obsidianCalloutRules,
 	parseCalloutMarker,
 	remarkObsidianCallout,
 } from "@/components/editor/plugins/callout-model";
-import { convertBlockquoteMarkerToCallout } from "@/components/editor/plugins/callout-plugin";
+import {
+	CalloutPlugin,
+	convertBlockquoteMarkerToCallout,
+} from "@/components/editor/plugins/callout-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
 	WikiLinkPlugin,
@@ -259,6 +270,166 @@ describe("Obsidian callout Markdown model", () => {
 		expect(editor.getApi(MarkdownPlugin).markdown.serialize()).toContain(
 			"> [!important] Read this",
 		);
+	});
+
+	it("converts a marker typed through the production blockquote input rule", () => {
+		const editor = createSlateEditor({
+			plugins: [
+				TestParagraphPlugin,
+				BlockquotePlugin.configure({
+					inputRules: [BlockquoteRules.markdown()],
+				}),
+				TestCalloutPlugin,
+				TestMarkdownPlugin,
+			],
+			value: [{ type: "p", children: [{ text: "" }] }],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0], offset: 0 },
+			focus: { path: [0, 0], offset: 0 },
+		});
+		for (const character of "> [!important] 一句话抓住全文") {
+			editor.tf.insertText(character);
+		}
+
+		expect(convertBlockquoteMarkerToCallout(editor)).toBe(true);
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "important",
+				title: "一句话抓住全文",
+				children: [{ type: "p", children: [{ text: "" }] }],
+			},
+		]);
+	});
+
+	it("updates editable callout type and title metadata", () => {
+		const editor = createCalloutEditor("> [!note] Old title\n>\n> Body");
+		const element = editor.children[0] as TElement;
+
+		expect(
+			updateCalloutMetadata(editor, element, {
+				typeRaw: "Important",
+				title: "  New title  ",
+			}),
+		).toBe(true);
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "important",
+				calloutTypeRaw: "Important",
+				title: "New title",
+			},
+		]);
+		expect(editor.getApi(MarkdownPlugin).markdown.serialize()).toContain(
+			"> [!Important] New title",
+		);
+		expect(
+			updateCalloutMetadata(editor, editor.children[0] as TElement, {
+				typeRaw: "bad type",
+				title: "",
+			}),
+		).toBe(false);
+		expect(editor.children).toMatchObject([
+			{
+				calloutTypeRaw: "Important",
+				title: "New title",
+			},
+		]);
+	});
+
+	it("keeps Enter inside the current callout body", () => {
+		const editor = createSlateEditor({
+			plugins: [TestParagraphPlugin, CalloutPlugin],
+			value: [
+				{
+					type: "callout",
+					calloutType: "important",
+					calloutTypeRaw: "important",
+					title: "Editable",
+					children: [{ type: "p", children: [{ text: "BeforeAfter" }] }],
+				},
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0, 0], offset: 6 },
+			focus: { path: [0, 0, 0], offset: 6 },
+		});
+
+		editor.tf.insertBreak();
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				calloutType: "important",
+				title: "Editable",
+				children: [
+					{ type: "p", children: [{ text: "Before" }] },
+					{ type: "p", children: [{ text: "After" }] },
+				],
+			},
+		]);
+		expect(editor.selection).toEqual({
+			anchor: { path: [0, 1, 0], offset: 0 },
+			focus: { path: [0, 1, 0], offset: 0 },
+		});
+	});
+
+	it("preserves list Enter behavior inside a callout", () => {
+		const editor = createSlateEditor({
+			plugins: [TestParagraphPlugin, CalloutPlugin, ListPlugin],
+			value: [
+				{
+					type: "callout",
+					calloutType: "important",
+					calloutTypeRaw: "important",
+					children: [
+						{
+							type: "p",
+							listStyleType: "disc",
+							indent: 1,
+							children: [{ text: "item one" }],
+						},
+						{
+							type: "p",
+							listStyleType: "disc",
+							indent: 1,
+							children: [{ text: "item two" }],
+						},
+					],
+				},
+			],
+		});
+		editor.tf.select({
+			anchor: { path: [0, 0, 0], offset: 8 },
+			focus: { path: [0, 0, 0], offset: 8 },
+		});
+
+		editor.tf.insertBreak();
+		editor.tf.insertText("item one b");
+
+		expect(editor.children).toMatchObject([
+			{
+				type: "callout",
+				children: [
+					{
+						type: "p",
+						listStyleType: "disc",
+						children: [{ text: "item one" }],
+					},
+					{
+						type: "p",
+						listStyleType: "disc",
+						children: [{ text: "item one b" }],
+					},
+					{
+						type: "p",
+						listStyleType: "disc",
+						children: [{ text: "item two" }],
+					},
+				],
+			},
+		]);
 	});
 
 	it("does not live-convert unsupported folded markers", () => {

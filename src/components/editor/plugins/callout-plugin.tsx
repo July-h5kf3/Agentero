@@ -1,6 +1,12 @@
 "use client";
 
-import { KEYS, RangeApi, type SlateEditor } from "platejs";
+import {
+	KEYS,
+	PathApi,
+	RangeApi,
+	type SlateEditor,
+	type TElement,
+} from "platejs";
 import { createPlatePlugin } from "platejs/react";
 import { CalloutElement } from "@/components/editor/callout-node";
 import { parseCalloutMarker } from "@/components/editor/plugins/callout-model";
@@ -8,7 +14,47 @@ import { parseCalloutMarker } from "@/components/editor/plugins/callout-model";
 export const CalloutPlugin = createPlatePlugin({
 	key: KEYS.callout,
 	node: { isElement: true },
-}).withComponent(CalloutElement);
+})
+	.withComponent(CalloutElement)
+	.overrideEditor(({ editor, tf: { insertBreak } }) => ({
+		transforms: {
+			insertBreak() {
+				if (insertCalloutParagraphBreak(editor)) return;
+				insertBreak();
+			},
+		},
+	}));
+
+/**
+ * Keep a normal paragraph break inside its owning callout. Other child blocks
+ * (lists, nested quotes, etc.) retain their plugin-specific Enter behavior.
+ */
+export function insertCalloutParagraphBreak(editor: SlateEditor): boolean {
+	const selection = editor.selection;
+	if (!selection) return false;
+
+	const callout = editor.api.above({
+		match: { type: editor.getType(KEYS.callout) },
+	});
+	const paragraph = editor.api.above({
+		match: { type: editor.getType(KEYS.p) },
+	});
+	if (
+		!callout ||
+		!paragraph ||
+		!PathApi.isParent(callout[1], paragraph[1]) ||
+		(paragraph[0] as TElement & { listStyleType?: string }).listStyleType
+	) {
+		return false;
+	}
+
+	editor.tf.splitNodes({
+		always: true,
+		at: selection,
+		match: { type: editor.getType(KEYS.p) },
+	});
+	return true;
+}
 
 /**
  * Convert a complete marker in the current blockquote into a callout body.
@@ -18,13 +64,16 @@ export const CalloutPlugin = createPlatePlugin({
 export function convertBlockquoteMarkerToCallout(editor: SlateEditor): boolean {
 	const selection = editor.selection;
 	if (!selection || !RangeApi.isCollapsed(selection)) return false;
-	const block = editor.api.block();
-	if (!block || block[0].type !== editor.getType(KEYS.blockquote)) return false;
-	if (!editor.api.isEnd(selection.anchor, block[1])) return false;
+	const blockquote = editor.api.above({
+		match: { type: editor.getType(KEYS.blockquote) },
+	});
+	if (!blockquote || !editor.api.isEnd(selection.anchor, blockquote[1])) {
+		return false;
+	}
 
-	const marker = parseCalloutMarker(editor.api.string(block[1]));
+	const marker = parseCalloutMarker(editor.api.string(blockquote[1]));
 	if (!marker) return false;
-	const bodyPoint = { path: [...block[1], 0, 0], offset: 0 };
+	const bodyPoint = { path: [...blockquote[1], 0, 0], offset: 0 };
 	editor.tf.withoutNormalizing(() => {
 		editor.tf.replaceNodes(
 			{
@@ -39,7 +88,7 @@ export function convertBlockquoteMarkerToCallout(editor: SlateEditor): boolean {
 					},
 				],
 			},
-			{ at: block[1] },
+			{ at: blockquote[1] },
 		);
 		editor.tf.select({ anchor: bodyPoint, focus: bodyPoint });
 	});

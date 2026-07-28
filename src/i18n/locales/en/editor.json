@@ -33,6 +33,8 @@
 		"pickFilter": "Images"
 	},
 	"callout": {
+		"typePickerLabel": "Change callout type",
+		"titleInputLabel": "Callout title",
 		"types": {
 			"note": "Note",
 			"abstract": "Abstract",

@@ -4,7 +4,8 @@
 
 ## 模型
 
-- 格式：`[[Concept]]`、`[[papers/…/NOTES]]`、`[[note#heading]]`、`[[note#^block]]`。
+- 格式：`[[Concept]]`、`[[papers/…/NOTES]]`、`[[note#heading]]`、`[[note#outer#inner]]`、`[[note#^block]]`。
+- 标题 fragment 以 `LinkFragment::Heading { path: Vec<String> }` 保存完整层级；`outer#inner` 的身份不同于另一个父标题下的同名 `inner`。
 - **单向写入** Markdown + 索引反查（不做目标文件自动插回链）。
 - 未解析目标可为 stub 节点。
 - 与 **文献引用图**（路线图 0.6）分层，边语义不复用。
@@ -12,11 +13,14 @@
 ## Host 能力
 
 - 语义解析：文件、标题、block
+- 标题候选：展示 `outer › inner`，`insert_text` 写完整 `target#outer#inner`；查询中的 `#` 与 `›` 会归一到同一路径分隔语义
 - 反链 / 出链查询
 - `graph_get_graph` 等（nodes / edges / center / depth）— 见 [api.md](api.md)
 - 嵌入目标解析（供前端 `![[...]]`）
 - 链接感知重命名/移动；标题重命名事务
 - 索引：`.md` 变更防抖重建（前端调度 + Host 重建）
+
+解析、resolve、嵌入投影与显式标题重命名共享完整 heading path。不存在或有歧义的 path 保持既有 `invalidFragment` / `ambiguous` 结果，不回退到任意同名叶标题。
 
 ## 数据流（简）
 

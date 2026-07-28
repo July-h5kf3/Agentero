@@ -35,6 +35,8 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - **翻译服务**：应用级可插拔 `TranslateService`（免费 MT + BYOA Agent，无付费 API），设置 → 翻译；PDF 划词等为消费方；见 `docs/frontend/translate.md`。
 - 图片：常见格式任意路径 `blob:` 中间栏预览。
 - **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown/image.ts`）。
+- **Markdown 编辑语义**：普通文本粘贴默认按 Markdown 解析；右键 **整理 Markdown 格式** 对整篇文档执行显式 Prettier round-trip，带 stale guard、单次 Undo 与焦点恢复；`\$a\$` 保持普通文本、`$a$` 保持公式；标准 `> [!type]` Obsidian Callout 结构化渲染并原样写回。
+- **嵌套标题双链**：`[[文件#外层标题#内层标题]]`、同文件 fragment 与对应 embed 使用完整 heading path；候选展示 `外层 › 内层`，写回 `外层#内层`。
 - **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘变化：**无未存改动则重载**；**有未存改动则 toast 提示**（不静默覆盖）；内容相等抑制自写回声；create/remove/rename 去抖刷新文件树。
 - **Wiki 索引**：`.md` 变更防抖重建（`scheduleWikiRebuild`，~900ms），Backlinks/Graph 保持新鲜。
 - **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止写入并警告（`diskConflict.saveBlocked`）。
