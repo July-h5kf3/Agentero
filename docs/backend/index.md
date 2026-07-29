@@ -2,6 +2,8 @@
 
 Tauri 2 + Rust Host：文件系统、Catalog、索引、ACP Client、远程 Vault。CLI（`cli/`）path 依赖同一 `agentero_lib`。
 
+> 整体架构与跨层工作流见 [../architecture.md](../architecture.md)。
+
 ## 定位
 
 - **本地优先**：Vault 文件为笔记/源事实来源；catalog 权威存论文集合与结构化 meta。

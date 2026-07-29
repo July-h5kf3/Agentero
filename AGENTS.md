@@ -2,62 +2,39 @@
 
 ## 项目概览
 
-Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中：人的笔记与 source 以 Markdown/文件为准；论文集合与结构化 metadata 以 `.agentero/catalog.sqlite` 为准（可导出 `PAPERS.md` / BibTeX，非默认落盘）。离开应用后笔记与源文件仍可被外部工具读取。
+Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中笔记与源文件以 Markdown/文件为准，论文结构化 metadata 以 `.agentero/catalog.sqlite` 为准。离开应用后数据仍可被外部工具读取。
 
-## 当前应用形态
+**核心能力：**
 
-- 前端：`src/`（React、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements）。全局状态为按域 **zustand vanilla store**（`src/lib/<域>/store.ts` + 同域 `actions.ts` 普通函数；React 经 `hooks/use-app-stores.ts` selector 订阅）；`App.tsx` 只是薄组装层（见 `docs/frontend/index.md`）。
-- Host：`src-tauri/`（Rust、Tauri commands、本地文件系统、Wiki 索引、ACP Client）。布局 **feature-first**：`app/` 装配、`core/` 基础、`features/<域>/`（`mod` + `commands` + 按需 `models`）；原 `services/` / `commands/` / `models/` 已取消。
-- CLI：`cli/`（package `agentero-cli`，bin **`agentero`**）— headless Vault/Catalog；path 依赖 `agentero_lib`，`use features::{vault,catalog,import}` + `core::error`；**无 BYOA / 无 paper-reader**（见 `docs/backend/cli.md`）。
-- 工作台布局：
-  - 左侧：Vault 文件树（顶部虚拟 **Library**（右键 **导出论文库**）+ 其下 **Recycle Bin**、魔棒；右键 **新建文件/文件夹 / Finder 显示 / 终端打开 / 删除**）+ 选中论文时 **Paper Info**；
-  - 中间：无 Vault 时欢迎页；有 Vault 时 **全局 Dockview 工作区**（每个打开文档一个 panel：Library / PDF / HTML / 图片 / Markdown / Trash）；单击非 paper 文件夹在 Library panel 就地按路径筛选；关光文档后回到全库；
-  - 论文 NOTES：打开 paper 时默认 **左右分屏**（PDF/HTML 左、`NOTES.md` 右）；再开新 paper **叠到同一两栏**（不拆第三列），body/NOTES tab **同步切换**；Layout 菜单 / 快捷键开关 NOTES；
-  - 可选右侧栏：`Agent` 或 `Backlinks`（与左栏均为 **常驻 collapsible**，`preserve-pixel-size`）。
-  - **全局错误 Toast**（右上角 Sonner）：操作失败经 `notifyError`（`src/lib/core/notify.ts`）弹出；表单就地校验除外。
-  - **Agent 禅模式**（`⌥⌘Z` / 标题栏 Layout「面板」菜单）：仅全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`），不 remount 丢会话；左侧栏 Quest 式弱对比（新建 + 单行历史）；主区顶栏仅 Agent 切换（无 1/2/3 标签）；对话区全宽滚动 + AI Elements；标题栏返回图标退出。精读 / PDF 划词等后台运行不进对话历史。
-  - **文档面板**由中间栏 **dockview** 原生管理（tab 条、关闭、上下左右分屏、多格网格；**布局只存 `toJSON()`**，path/mode 在 panel params）；标题栏**无**文档 tab 条。打开带放置走 `workspaceRef.openPanel`；关闭焦点听 `onDidActivePanelChange`；`⌥⌘←/→` 按 `api.panels` 视觉序循环。见 `docs/frontend/workspace.md`。
-- 论文库：`paper_list` 读 catalog 一次进内存；表头排序；**表头右键选列 / 拖拽排序**（顺序 + 显隐持久化到 `settings.json` 的 `libraryColumns`，标题列不可隐藏）；横向/纵向滚动；**tags** 列展示（搜索框可匹配标签子串）；**文件夹作用域**按 `paper.path` 前缀过滤（不扫盘、无 per-folder RPC）。虚拟路径 `agentero:library` 不写盘。
-- 标签：Paper Info 增删与 **Apple 风格 8 色** → Host `paper_set_tags`（catalog `tags_json` 权威；元素为字符串或 `{name,color}`）；Library 染色 chip 与筛选；CLI `paper tag list|set|add|rm` / `list --tag`（CLI 仅名称；text 按 color 上色）。
-- 魔棒入库：默认下载 PDF 到 **论文文件夹根目录** `{paper}/{id}.pdf`；arXiv 另解压 e-print LaTeX 到 `source/`。入库成功后刷新树并 `openPaper`，左侧文件树**展开并滚到新论文**。paper 行缺 PDF，或既无 TeX 也无 `PAPER.md` 时显示 Download（hover 说明原因）；Library 行可批量补下。
-- **Zotero Connector 兼容**（MVP）：设置 → 通用开关（默认关）；Host 在 `127.0.0.1:23119` 收官方浏览器扩展 `saveItems` + **`saveAttachment`**（浏览器上传登录墙 PDF）→ 当前 Vault；组织子文件夹可选；与 Zotero 桌面端口互斥。见 `docs/backend/connector.md`。
-- **可读正文**：TeX 与 `PAPER.md` 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 `PAPER.md`；有 TeX 不强制 `PAPER.md`。
-- **精读工作流**：设置 → Agent **`autoPaperReader`**（**默认关**）；开启后魔棒入库 / 单篇 Download 资源就绪且未读时自动 paper-reader。资源齐全且 `is_read === false` 时文件树 **Zap** 可手动。写入 `NOTES.md`，成功后 `is_read = true`。进度在左下角后台任务条（**hover 实色不透明**）。Skill 运行时语法按 Agent：**Claude `/id`**、其它（含 Codex）仅注入 `SKILL.md`。
-- **Agent 权限**：设置 → Agent **全局权限模式**（`restricted` 默认 / **`ask` 每次询问** / `auto` 自动批准）；非 per-provider YOLO。`ask` 时弹权限对话框 → `agent_respond_permission`。
-- **个人偏好提示词**：设置 → Agent **`agentPersonalPrompt`**（多行，默认空）；非空时经 `runOnce` → Host `build_prompt` 注入 envelope（所有 workflow）；留空不注入，Chat 不展示该块。
-- **Agent 面板工作流**：空态建议 chips → `summary` / `qa` / `related_work`（Summarize、Ask library、Draft Related Work 等）；目标为当前聚焦 paper。Composer：**当前论文默认加入**上下文（实心 chip + paper-name/标题，无加号切换；可 X 移除）；`@` 提及（论文文件夹 + 目录 + paper 外 Markdown；空 `@` 优先最近路径与浅层目录树；行右 **›** 进入子目录、‹/`←`/`Esc` 返回；论文标签与文件树 `paperTreeLabelMode` 一致）与从文件树**拖入**路径均为可移除 context chip（路径引用，非 AI Elements Attachments 二进制）；chip 展示虚拟名（paper-name），prompt 仍用 Vault 相对路径；图标见 `context-path-icon`（**paper** → `ScrollText`，其它文件夹 → `Folder`，文件按扩展名）。**运行中可继续输入**：后续消息进 AI Elements Queue waitlist，当前回复结束后自动发送（Esc / 空输入时停止按钮中止）。**选区上下文**（Cursor 式）：Markdown / PDF 选中文字 → composer 瞬时选区 chip（虚线、跟随最新选区）；`⌘L` 或 PDF 划词菜单「加入对话」固定为 chip 并打开面板；发送时以引用块随 prompt 消费（`src/lib/agent/selection-store.ts`）。
-- **命令面板**：`⌘P`/`⌘K` 快速打开（论文 + `vault_search` 全文）；`⇧⌘P` / `>` 执行内置命令。
-- **设置窗口**：独立原生单例窗口（Host `settings_window_open` + `?window=settings` 路由，`SettingsNativeRoot` 渲染 `SettingsContent`）。macOS 使用 Overlay 标题栏 + 原生交通灯；Windows / Linux 使用系统原生窗口边框（OS 自绘标题栏与最小化/最大化/关闭按钮）。`⌘,` / 菜单 / 齿轮打开，再次 `⌘,` 关闭；`Esc` / 标题栏 `X` 亦可关闭。保存经 `settings_set` → 广播 `settings:changed` 同步。
-- **配色主题**：设置 → Appearance **`uiTheme`**（默认 `default` = 内置外观）；36 个 tweakcn 预设打包于 `src/themes/tweakcn.json`（仅颜色 + radius），`src/lib/ui/theme.ts` 运行时注入 `:root`/`.dark` 变量覆盖；刷新数据 `node scripts/fetch-tweakcn-themes.mjs`。
-- 文件树：右键 / `⌥⌘R` 在 Finder 中显示（无双击）；右键 / `⌥⌘T` 在终端中打开（文件夹 = 自身 cwd，文件 = 父目录；系统默认终端）；**`⌘←` 折叠选中文件夹**、**`⇧⌘←` 折叠至默认**（只展开 `papers/`，不展开其子目录）；多选（⌘/Shift）+ 拖拽移动；**删除**走回收站（`path_trash` → `.agentero/.trash/`，**无确认 / 无 Undo toast**）；Library 虚拟节点右键 **导出论文库**（BibTeX）；其下虚拟节点 **Recycle Bin**（`agentero:trash`）打开中间栏回收站视图（恢复 / 永久删除；**清空**在该节点右键菜单）。打开 Vault 时默认只展开 `papers/` 及其一级子目录；激活文档变化时树展开祖先并滚到对应行。**建树**：本地 Vault 由 Host `vault_tree_build` **一次 IPC** 递归返回整树（`src-tauri/src/features/vault/tree.rs`；远端仍走 `remote_list` TS 递归）；`papers/`/`notes/`/`plans/`/`.agents/` 全量递归，但**论文文件夹内 `source/` 懒加载**（`childrenPending`，展开经 `vault_tree_children`）；其它根目录（`src/` 等）只 list 一层，子目录 `childrenPending`、展开再 list；忽略名（`.git`/`.venv`/`node_modules`/…）永不 list；watcher 结构变化按变更路径**局部刷新**受影响目录（`collectTreeRefreshTargets`），根级变化或目标过多时回退整树重建。Paper 行标签默认 **标题 · 作者**（设置 → 通用 `paperTreeLabelMode`，展示用、不改磁盘名）；同目录排序默认 **显示名称 A–Z**（与 `paperTreeLabelMode` 标签一致；`paperTreeSortMode`：标题 / 作者 / 年份 / 添加时间等预设，展示用）。
-- 论文库：**Rescan**（`paper_rescan`）从 `papers/` + `metadata.json` 补齐盘上有、catalog 无的条目。
-- PDF：Vault **任意路径** `.pdf` → `blob:` 预览；论文单元本地优先 → 自动下载 → 远程回退；**页码导航 / 适应宽·整页 / 大纲 / ⌘F 查找**；真实 scale 渲染 + 平滑划词覆盖层；划词操作菜单（高亮 / 批注 / 提问 / 翻译，见 `docs/frontend/pdf.md`）。**批注** = 高亮 + 内联评论（`comment`），带 comment 的高亮显示页边批注针，右侧 **批注** 面板列出当前 PDF 的批注卡（跳转 / 编辑 / 删除），不写入 `NOTES.md`。
-- **翻译服务**：应用级可插拔 `TranslateService`（免费 MT + BYOA Agent，无付费 API），设置 → 翻译；PDF 划词等为消费方；见 `docs/frontend/translate.md`。
-- 图片：常见格式任意路径 `blob:` 中间栏预览。
-- **Markdown 内嵌图片**：粘贴 / 工具栏 → `{mdDir}/assets/` + `![](./assets/…)`；选中显示源码；删节点且无引用时 GC（`src/lib/markdown/image.ts`）。
-- **Markdown 编辑语义**：普通文本粘贴默认按 Markdown 解析；右键 **整理 Markdown 格式** 对整篇文档执行显式 Prettier round-trip，带 stale guard、单次 Undo 与焦点恢复；`\$a\$` 保持普通文本、`$a$` 保持公式；标准 `> [!type]` Obsidian Callout 结构化渲染并原样写回。
-- **嵌套标题双链**：`[[文件#外层标题#内层标题]]`、同文件 fragment 与对应 embed 使用完整 heading path；候选展示 `外层 › 内层`，写回 `外层#内层`。
-- **外部/Agent 改动自动重载**：Host `notify` → `vault:file-changed`（`watcher.rs` / `fs-watch.ts`）；打开中的 `.md`/`NOTES.md` 磁盘变化：**无未存改动则重载**；**有未存改动则 toast 提示**（不静默覆盖）；内容相等抑制自写回声；create/remove/rename 去抖刷新文件树。
-- **Wiki 索引**：`.md` 变更防抖重建（`scheduleWikiRebuild`，~900ms），Backlinks/Graph 保持新鲜。
-- **保存冲突**：写盘前比对上次落盘内容；磁盘已被外部改则中止写入并警告（`diskConflict.saveBlocked`）。
-- **运行日志**：Host `tauri-plugin-log` + 前端 `logger` + CLI `env_logger`；关键操作 op start/end（见 `docs/backend/logging.md`）。
-- 路线图与 backlog：`docs/development/roadmap.md`、`docs/development/todo.md`（当前发布 **0.2.1**；未完成按 0.3 / 0.4 / 0.5 / 0.6… 切片；改能力时同步勾选）。
-- 多窗口：`⌘N` → Host `window_new`；当前 Vault 按窗口 session 隔离，最近列表在 localStorage。
-- Backlinks 右侧栏布局：上方 Backlinks，下方 Graph；Graph 不是独立顶层 tab；Graph 为 **双链图**（非文献引用图）。
-- Graph 数据必须来自 Markdown 双链或可重建索引，不能来自手工维护的图数据库。
+- **论文库**：Catalog SQLite 管理论文集合，支持表头排序/选列/标签筛选、BibTeX 导出
+- **魔棒入库**：通过 URL/arXiv ID/DOI 一键导入论文，自动下载 PDF、解压 LaTeX 源码
+- **PDF 阅读与标注**：分屏阅读（左 PDF/右笔记），划词高亮/批注/翻译/提问，大纲与页码导航
+- **Agent 工作流**：BYOA 接入本机 ACP Agent，支持论文总结/问答/精读，选区上下文与 @ 提及
+- **Markdown 编辑**：Plate 编辑器，双链 `[[...]]`、Obsidian Callout、嵌套标题引用、内嵌图片管理
+- **Zotero Connector**：兼容官方浏览器扩展，一键保存文献到当前 Vault
+
+架构总览：[docs/architecture.md](docs/architecture.md)
+
+## 技术速览
+
+| 层 | 技术栈 | 关键能力 | 入口 |
+|---|---|---|---|
+| 前端 | React 19、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements | zustand 按域状态管理、Plate Markdown 编辑器、EmbedPDF 渲染、Dockview 多面板工作区 | [docs/frontend/](docs/frontend/index.md) |
+| Host | Rust、Tauri 2、feature-first 布局 | 文件系统与 Vault 树、Catalog SQLite、Wiki 双链索引、ACP Client、本地文件监听 | [docs/backend/](docs/backend/index.md) |
+| CLI | Rust、`agentero` bin | headless Vault/Catalog 操作、论文标签管理、BibTeX 导入导出 | [docs/backend/cli.md](docs/backend/cli.md) |
 
 ## 开发规则
 
 - 优先做小而聚焦的改动，避免无关重构。
 - 保持 local-first：不要引入私有存储作为事实来源。
-- 高内聚、低耦合
+- 高内聚、低耦合。
 - 能复用能力，避免重复造轮子。
 - 未经明确确认，不要覆盖用户手写的 Vault 文件。
 - 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
 - Agent 集成采用 BYOA：Agentero 只配置如何启动本机 ACP-compatible Agent，不要求用户在 Agentero 内填写模型 API Key。
-- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；除非是必要的空状态/错误说明，否则避免常驻解释文案。操作失败用右上角 `notifyError` Toast，不要在侧栏 header 挂常驻错误条。
-- 国际化（i18n）：所有面向用户的文案都必须经 `t()` 走 `react-i18next`，禁止硬编码字符串。English（`en`）为源语言，新增文案先登记 `en` 词条再同步 `zh-CN`（`src/i18n/locales/`）。跨命名空间用 `t("ns:key")` 并在 `useTranslation([...])` 声明；React 之外用全局 `i18n.t()`。数字/日期用 `i18n.language` 格式化。详见 `docs/frontend/shell.md` §4.1。
-- 修改后需要同步更新相关文档。如果修改了 UI、数据契约、发布流程或 Vault 语义，必须同步更新相关文档。并检查 Roadmap 和 Todo。
+- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；避免常驻解释文案。操作失败用 `notifyError` Toast，不在侧栏 header 挂常驻错误条。
+- 国际化（i18n）：所有面向用户文案必须经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [docs/frontend/shell.md](docs/frontend/shell.md)。
+- 修改后需同步更新相关文档，并检查 Roadmap 和 Todo。
 
 ## 常用命令
 
@@ -76,42 +53,32 @@ cargo run -p agentero-cli -- vault which --json
 cargo test -p agentero-cli
 ```
 
-完成实现前运行最小必要验证。UI 改动优先启动应用并检查对应流程；如果 dev 端口被占用或无法做浏览器级验证，需要明确说明。
+完成实现前运行最小必要验证。UI 改动优先启动应用检查对应流程。
 
 ## 文档地图
 
-约定：**已实现**按功能写在 `docs/frontend/` / `docs/backend/`；**未实现**草稿与 TODO 在 `docs/development/`；教程在 `docs/usage/`；Bug 复盘在 `docs/bug_fix/`（不删除）。
+| 分类 | 内容 | 路径 |
+|---|---|---|
+| **架构** | 整体架构、工作台布局、核心工作流、数据流 | [docs/architecture.md](docs/architecture.md) |
+| **前端** | 壳、工作区、文件树、论文库、入库、Markdown、PDF、Agent、双链、翻译、设置 | [docs/frontend/](docs/frontend/index.md) |
+| **后端** | 数据模型、Catalog、Vault、入库、Connector、Wiki、Agent、远程、搜索、日志、CLI、API | [docs/backend/](docs/backend/index.md) |
+| **教程** | 快速上手、导入论文、阅读整理、接入 Agent、Zotero | [docs/usage/](docs/usage/index.md) |
+| **开发** | 路线图、TODO、设计记录 | [docs/development/](docs/development/index.md) |
+| **测试** | 测试策略、发布 Checklist | [docs/test/](docs/test/index.md) |
+| **Bug 复盘** | 历史 Bug 分析（不删除） | [docs/bug_fix/](docs/bug_fix/) |
 
-- `docs/usage/`：新手教程（文档站默认入口）
-- `docs/frontend/`：shell、workspace、vault-tree、library、paper-import、markdown、pdf、agent、wiki、command-palette、translate、settings
-- `docs/backend/`：data-model、catalog、vault、paper-import、connector、wiki、agent、remote、search、settings、translate、logging、cli、api
-- `docs/development/`：roadmap、todo（仅未完成）、Plaza / PDF 分析等草稿
-- `docs/test/`：测试与发布 Checklist
-
-当修改 UI、数据契约、发布流程或 Vault 语义时，同步更新对应功能文档，并检查 `development/todo.md`。
-
+约定：已实现按功能写在 `docs/frontend/` / `docs/backend/`；未实现草稿在 `docs/development/`。
 
 ## 文档站与发布
 
 - 文档站使用 [MkDocs](https://www.mkdocs.org/) 与 Material for MkDocs 主题。
-- 本地预览：`python3 -m venv .venv-docs && . .venv-docs/bin/activate && pip install mkdocs-material==9.7.1 && mkdocs serve`。
-- `.github/workflows/docs.yml` 在文档相关文件变更后构建文档并部署到 `gh-pages` 分支。
+- `.github/workflows/docs.yml` 在文档相关文件变更后构建并部署到 `gh-pages` 分支。
 
 ## Commit
 
 - 提交信息必须符合 [Conventional Commits](https://www.conventionalcommits.org/) 规范。
 - 一次提交只做一件事，避免混合多个 unrelated changes。
 - 项目级 Agent Skill：`.agents/skills/bump/SKILL.md` 定义版本升级流程；`.agents/skills/commit/SKILL.md` 定义按逻辑拆分当前改动并提交的流程。
-- `bump` Skill 只更新并校验版本来源，默认不创建 commit、tag 或 push；版本 bump 完成后再使用 `commit` Skill 创建独立的 release commit。
+- `bump` Skill 只更新并校验版本来源，默认不创建 commit、tag 或 push。
 - `commit` Skill 必须保留用户已有改动，按目的精确暂存，检查相关文档，并只创建本地 Conventional Commit。
-- 如果库当中有对应的 issue，则在提交信息中引用，例如 `Fix #123`，如果解决了该 issue，则关闭该 issue；如果解决了部分，则在 issue 区评论一下。
-
-## 应用发布流程
-
-推送 `v*` tag 会触发 `.github/workflows/release.yml`（Release）：先 **prepare** 草稿 Release，再并行 **installers**（Tauri）与 **cli**（`agentero` 预编译包），上传到同一草稿。
-
-使用文件夹当中自带的 bump skill
-
-版本 bump 提交完成后，才能创建对应的 `vX.Y.Z` tag；tag 去掉 `v` 后必须与上述版本完全一致。发布工作流中，Tauri 安装包版本来自 Tauri/Cargo 配置，CLI 压缩包文件名来自 tag，不能只改 tag 而跳过 manifest 版本更新。发布前应检查 `git diff <previous-tag>..<new-tag> -- package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml cli/Cargo.toml Cargo.lock`，并确认构建产物、应用内版本和 `agentero --version` 没有混用两个版本。
-
-macOS 店外分发签名与公证（Developer ID + notarytool）见 `docs/bug_fix/macos-signing.md`；CI 通过可选 GitHub secrets 启用，**本地 `pnpm tauri dev` / 日常构建不依赖这些凭据**。证书、`.p12`、`.p8`、App 专用密码不得提交进仓库。Mac App Store 上架是另一条链路（强制沙箱），勿与 Developer ID 配置混用。
+- 如果库当中有对应的 issue，则在提交信息中引用（如 `Fix #123`）；解决了该 issue 则关闭；部分解决则在 issue 区评论。

@@ -24,6 +24,8 @@ theme:
 nav:
   - 首页: index.md
 
+  - 架构总览: architecture.md
+
   - 教程:
       - 快速上手: usage/index.md
       - 安装与首次使用: usage/getting-started.md
