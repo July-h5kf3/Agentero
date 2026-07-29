@@ -345,44 +345,6 @@ export async function remoteAgentOpenInstallTerminal(
 	);
 }
 
-export type HostOsKind = "macos" | "windows" | "linux" | "other";
-
-export type HostIdentity = {
-	hostname: string;
-	label: string;
-	/** Guest OS family for brand icon. */
-	os: HostOsKind | string;
-};
-
-/** Local machine hostname for Settings host badge. */
-export async function fetchHostIdentity(): Promise<HostIdentity> {
-	return invokeApi<HostIdentity>("host_identity", undefined, {
-		fallback: "Failed to read host identity",
-	});
-}
-
-export type RemoteHostIdentity = {
-	sessionId: string;
-	destination: string;
-	os: HostOsKind | string;
-	uname: string;
-};
-
-/** Remote OS family (`uname -s`) for Settings host badge. */
-export async function fetchRemoteHostIdentity(
-	sessionId: string,
-): Promise<RemoteHostIdentity> {
-	return invokeApi<RemoteHostIdentity>(
-		"remote_host_identity",
-		{
-			args: { sessionId },
-		},
-		{
-			fallback: "Failed to read remote host identity",
-		},
-	);
-}
-
 /** Download a remote file into Host cache; returns local absolute path. */
 export async function remoteCacheFile(
 	sessionId: string,

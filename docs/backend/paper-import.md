@@ -38,7 +38,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 
 ```text
 粘贴 arXiv ID / DOI / URL
-  → Translator（或 arXiv Atom fallback）
+  → arXiv 输入先规范为 `https://arxiv.org/abs/<id>`，再交给 Translator（或 arXiv Atom fallback）
   → PaperMetadata → catalog upsert
   → papers/<id>/ + NOTES.md 壳（不覆盖已有 NOTES）
   → PDF → {paper}/{id}.pdf
@@ -48,6 +48,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 ```
 
 - 设置：`translatorBaseUrl`。
+- arXiv 的 `abs` / `pdf` / `html` / `src` / `e-print` URL 与裸 ID 都会先提取 ID；不会将 PDF 二进制 URL 交给 Translator 的网页解析器。
 - 补资源：`paper_download_assets`（单篇 / Library 批量）。
 - 错误：全局 Toast；重复不破坏用户 NOTES。
 

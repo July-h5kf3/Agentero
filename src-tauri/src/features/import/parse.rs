@@ -186,7 +186,7 @@ pub fn extract_arxiv_id(text: &str) -> Option<String> {
     let after_path = if let Some(rest) = stripped.strip_prefix("abs/") {
         rest
     } else if let Some(rest) = stripped.strip_prefix("pdf/") {
-        rest.trim_end_matches(".pdf")
+        rest
     } else if let Some(rest) = stripped.strip_prefix("html/") {
         rest
     } else if let Some(rest) = stripped.strip_prefix("src/") {
@@ -199,7 +199,8 @@ pub fn extract_arxiv_id(text: &str) -> Option<String> {
     let id = after_path
         .split(['?', '#', '/'])
         .next()
-        .unwrap_or(after_path);
+        .unwrap_or(after_path)
+        .trim_end_matches(".pdf");
     let id = id.trim().trim_end_matches('/');
     // new-style 1706.03762 or old-style hep-th/9901001
     let bare = strip_version(id);
@@ -312,6 +313,10 @@ mod tests {
         assert_eq!(
             extract_arxiv_id("https://arxiv.org/abs/1706.03762v1").as_deref(),
             Some("1706.03762")
+        );
+        assert_eq!(
+            extract_arxiv_id("https://arxiv.org/pdf/2508.05004.pdf?download=1").as_deref(),
+            Some("2508.05004")
         );
     }
 

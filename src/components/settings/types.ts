@@ -8,7 +8,7 @@ export type SettingsSection =
 
 /** Which machine the Agent catalog / probe targets. */
 export type SettingsHostContext =
-	| { kind: "local"; label: string }
+	| { kind: "local" }
 	| {
 			kind: "remote";
 			label: string;

@@ -131,67 +131,6 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\"'\"'"))
 }
 
-/// Remote kernel name via `uname -s` (login shell), mapped to a Settings OS family.
-/// Returns `(raw_uname, os)` where `os` is `macos` | `windows` | `linux` | `other`.
-pub async fn remote_uname(destination: &str) -> Result<(String, String), AppError> {
-    let remote = format!("bash -lc {}", shell_quote("uname -s"));
-    let output = timeout(
-        SSH_COMMAND_TIMEOUT,
-        Command::new("ssh")
-            .arg("-T")
-            .arg("-o")
-            .arg("BatchMode=yes")
-            .arg("-o")
-            .arg(format!("ConnectTimeout={}", SSH_CONNECT_TIMEOUT.as_secs()))
-            .arg("-o")
-            .arg(format!(
-                "ServerAliveInterval={SSH_SERVER_ALIVE_INTERVAL_SECS}"
-            ))
-            .arg("-o")
-            .arg(format!("ServerAliveCountMax={SSH_SERVER_ALIVE_COUNT_MAX}"))
-            .arg(destination)
-            .arg(remote)
-            .output(),
-    )
-    .await
-    .map_err(|_| {
-        AppError::message(format!(
-            "ssh uname timeout after {}s",
-            SSH_COMMAND_TIMEOUT.as_secs()
-        ))
-    })?
-    .map_err(|e| AppError::message(format!("ssh uname: {e}")))?;
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(AppError::message(if err.is_empty() {
-            "ssh uname failed".into()
-        } else {
-            format!("ssh uname: {err}")
-        }));
-    }
-    let uname = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let os = map_uname_to_os(&uname);
-    Ok((uname, os))
-}
-
-fn map_uname_to_os(uname: &str) -> String {
-    let u = uname.to_ascii_lowercase();
-    if u.contains("darwin") {
-        "macos".into()
-    } else if u.contains("linux") {
-        "linux".into()
-    } else if u.contains("mingw")
-        || u.contains("msys")
-        || u.contains("cygwin")
-        || u.contains("windows_nt")
-        || u.contains("windows")
-    {
-        "windows".into()
-    } else {
-        "other".into()
-    }
-}
-
 /// Discover whether a binary exists on the remote host.
 ///
 /// Non-interactive SSH often omits Linuxbrew from PATH (interactive-only

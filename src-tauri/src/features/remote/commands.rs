@@ -645,62 +645,6 @@ pub struct RemoteAgentScanArgs {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RemoteHostIdentityArgs {
-    pub session_id: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteHostIdentity {
-    pub session_id: String,
-    pub destination: String,
-    /// `macos` | `windows` | `linux` | `other`
-    pub os: String,
-    /// Raw `uname -s` (or local-sim compile target).
-    pub uname: String,
-}
-
-/// Best-effort remote OS family for Settings host badge icons.
-#[tauri::command]
-pub async fn remote_host_identity(
-    registry: State<'_, Arc<RemoteRegistry>>,
-    args: RemoteHostIdentityArgs,
-) -> Result<ApiResult<RemoteHostIdentity>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
-    if session.kind == "local-sim" {
-        let os = if cfg!(target_os = "macos") {
-            "macos"
-        } else if cfg!(target_os = "windows") {
-            "windows"
-        } else if cfg!(target_os = "linux") {
-            "linux"
-        } else {
-            "other"
-        };
-        return Ok(ApiResult::ok(RemoteHostIdentity {
-            session_id: args.session_id,
-            destination: "local-sim".into(),
-            os: os.into(),
-            uname: std::env::consts::OS.into(),
-        }));
-    }
-    let destination = session.host.clone();
-    match agent_exec::remote_uname(&destination).await {
-        Ok((uname, os)) => Ok(ApiResult::ok(RemoteHostIdentity {
-            session_id: args.session_id,
-            destination,
-            os,
-            uname,
-        })),
-        Err(e) => Ok(map_err(e)),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RemoteAgentProbeArgs {
     pub session_id: String,
     pub template_id: String,

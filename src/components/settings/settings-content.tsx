@@ -16,7 +16,6 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { HostOsIcon, normalizeHostOs } from "@/components/icons/host-os-icon";
 import { AboutPane } from "@/components/settings/panes/about-pane";
 import {
 	AgentPane,
@@ -31,12 +30,9 @@ import type {
 	SettingsSection,
 } from "@/components/settings/types";
 import { Button } from "@/components/ui/button";
-import { getPlatformOS, isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import type { AppSettings } from "@/lib/settings";
 import {
-	fetchHostIdentity,
-	fetchRemoteHostIdentity,
 	getRemoteSessionMeta,
 	isRemoteVaultHandle,
 	remoteSessionIdFromHandle,
@@ -80,13 +76,6 @@ export function SettingsContent({
 	const { t } = useTranslation(["settings", "common"]);
 	const fallbackTitleId = useId();
 	const headingId = titleId ?? fallbackTitleId;
-	const [localHostLabel, setLocalHostLabel] = useState(() =>
-		t("host.thisComputer"),
-	);
-	const [localOs, setLocalOs] = useState(() =>
-		normalizeHostOs(getPlatformOS()),
-	);
-	const [remoteOs, setRemoteOs] = useState(() => normalizeHostOs("other"));
 
 	// Keep visited panes mounted (hidden when inactive) so switching sections
 	// doesn't unmount/remount them — avoids re-running their load effects
@@ -105,24 +94,6 @@ export function SettingsContent({
 	useEffect(() => {
 		contentScrollRef.current?.scrollTo({ top: 0 });
 	}, [section]);
-
-	// Local hostname + OS for the host chip (when vault is local / none).
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		void fetchHostIdentity()
-			.then((h) => {
-				if (cancelled) return;
-				if (h.label.trim()) setLocalHostLabel(h.label.trim());
-				setLocalOs(normalizeHostOs(h.os));
-			})
-			.catch(() => {
-				/* keep fallback */
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	const hostContext = useMemo((): SettingsHostContext => {
 		if (vaultPath && isRemoteVaultHandle(vaultPath)) {
@@ -151,29 +122,8 @@ export function SettingsContent({
 				};
 			}
 		}
-		return { kind: "local", label: localHostLabel };
-	}, [vaultPath, localHostLabel, t]);
-
-	// Remote OS via uname -s (for brand icon on remote host chip).
-	useEffect(() => {
-		if (!isTauri() || hostContext.kind !== "remote") {
-			return;
-		}
-		let cancelled = false;
-		setRemoteOs(normalizeHostOs("other"));
-		void fetchRemoteHostIdentity(hostContext.sessionId)
-			.then((info) => {
-				if (!cancelled) setRemoteOs(normalizeHostOs(info.os));
-			})
-			.catch(() => {
-				if (!cancelled) setRemoteOs(normalizeHostOs("other"));
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [hostContext]);
-
-	const hostOs = hostContext.kind === "remote" ? remoteOs : localOs;
+		return { kind: "local" };
+	}, [vaultPath, t]);
 
 	const patch = useCallback(
 		(partial: Partial<AppSettings>) => onChange({ ...settings, ...partial }),
@@ -234,37 +184,6 @@ export function SettingsContent({
 						);
 					})}
 				</ul>
-				{/* Host context — pinned to sidebar footer */}
-				<div
-					className="mt-auto flex items-center gap-1.5 border-t px-3 py-2.5 text-muted-foreground"
-					title={
-						hostContext.kind === "remote"
-							? t("host.remoteTooltip", {
-									host: hostContext.label,
-									path: hostContext.remotePath || "—",
-								})
-							: t("host.localTooltip", { name: hostContext.label })
-					}
-				>
-					<span className="inline-flex size-3.5 shrink-0 items-center justify-center">
-						<HostOsIcon
-							os={hostOs}
-							className="block size-3.5"
-							title={
-								hostOs === "macos"
-									? "macOS"
-									: hostOs === "windows"
-										? "Windows"
-										: hostOs === "linux"
-											? "Linux"
-											: undefined
-							}
-						/>
-					</span>
-					<span className="min-w-0 truncate text-[12px] leading-none">
-						{hostContext.label}
-					</span>
-				</div>
 			</nav>
 
 			{/* Content */}

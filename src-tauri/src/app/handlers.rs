@@ -10,7 +10,6 @@ macro_rules! common_commands {
         ::tauri::generate_handler![
             crate::features::settings::commands::settings_get,
             crate::features::settings::commands::settings_set,
-            crate::features::settings::commands::host_identity,
             crate::features::agent::commands::agent_list_agents,
             crate::features::agent::commands::agent_list_skills,
             crate::features::agent::commands::agent_scan_catalog,
@@ -101,7 +100,6 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::remote::commands::remote_agent_scan,
             crate::features::remote::commands::remote_agent_probe,
             crate::features::remote::commands::remote_agent_open_install_terminal,
-            crate::features::remote::commands::remote_host_identity,
             crate::features::terminal::commands::path_open_in_terminal,
             crate::features::window::commands::window_new,
             crate::features::window::commands::settings_window_open,

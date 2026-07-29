@@ -192,12 +192,10 @@ type VaultTreeNode = {
 | `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env） |
 | `remote_agent_open_install_terminal` | 本机终端确认后 `ssh -t` 在远端执行模板 `install_command`（如 Claude ACP 适配器） |
 | `remote_vault_ensure` | `{ sessionId }` → 通过 SFTP 补种缺失 bundled skills，不覆盖远端用户文件 |
-| `host_identity` | 本机 hostname + `os`（macos/windows/linux）/ 设置 Host 徽章 |
-| `remote_host_identity` | 远端 `uname -s` → `os` 家族（Host 徽章系统图标） |
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
 
-**远程超时与保活**：SSH/SFTP 建连、SFTP subsystem 启动和远端根目录校验默认最多 15 秒；每次 SFTP 文件操作默认最多 30 秒。SSH 使用 `ServerAliveInterval=30` 和 `ServerAliveCountMax=3`，约 90 秒无响应后判定连接失效。远端 `uname`/`which` 探测最多 30 秒；远端 ACP Agent 仅限制 15 秒建连，不限制正常运行时长。当前不自动重连、不重放写操作，详见 [`remote.md`](remote.md) §2.1。
+**远程超时与保活**：SSH/SFTP 建连、SFTP subsystem 启动和远端根目录校验默认最多 15 秒；每次 SFTP 文件操作默认最多 30 秒。SSH 使用 `ServerAliveInterval=30` 和 `ServerAliveCountMax=3`，约 90 秒无响应后判定连接失效。远端 Agent `which` 探测最多 30 秒；远端 ACP Agent 仅限制 15 秒建连，不限制正常运行时长。当前不自动重连、不重放写操作，详见 [`remote.md`](remote.md) §2.1。
 
 **入库入口与远程 Vault**：
 

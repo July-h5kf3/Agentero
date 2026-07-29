@@ -826,19 +826,7 @@ async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError>
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
 
-    let ident = extract_primary_identifier(text);
-    let (endpoint, body) = match &ident {
-        Some((IdentifierKind::Url, url)) => (format!("{base}/web"), url.clone()),
-        Some((_, value)) => (format!("{base}/search"), value.clone()),
-        None => {
-            // Treat as search raw text / possible URL
-            if text.starts_with("http://") || text.starts_with("https://") {
-                (format!("{base}/web"), text.to_string())
-            } else {
-                (format!("{base}/search"), text.to_string())
-            }
-        }
-    };
+    let (endpoint, body) = translator_request(text, base);
 
     let res = client
         .post(&endpoint)
@@ -884,6 +872,34 @@ async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError>
     };
 
     map_zotero_item(&item)
+}
+
+/// Build a Translator Runtime request from an identifier.
+///
+/// arXiv's PDF endpoints are binary resources, which the Translator Runtime
+/// cannot parse as web pages. Canonicalizing every recognized arXiv form to
+/// its abstract page also gives direct IDs and URLs the same metadata path.
+fn translator_request(text: &str, base: &str) -> (String, String) {
+    if let Some(arxiv_id) = parse::extract_arxiv_id(text) {
+        return (
+            format!("{base}/web"),
+            format!("https://arxiv.org/abs/{arxiv_id}"),
+        );
+    }
+
+    let ident = extract_primary_identifier(text);
+    match &ident {
+        Some((IdentifierKind::Url, url)) => (format!("{base}/web"), url.clone()),
+        Some((_, value)) => (format!("{base}/search"), value.clone()),
+        None => {
+            // Treat as search raw text / possible URL.
+            if text.starts_with("http://") || text.starts_with("https://") {
+                (format!("{base}/web"), text.to_string())
+            } else {
+                (format!("{base}/search"), text.to_string())
+            }
+        }
+    }
 }
 
 async fn fetch_arxiv_metadata(arxiv_id: &str) -> Result<PaperMeta, AppError> {
@@ -1112,5 +1128,27 @@ mod tests {
         assert_eq!(rel, "papers/1706.03762-2");
 
         let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn translator_request_canonicalizes_arxiv_to_abs() {
+        let base = "https://translator.example";
+
+        for input in [
+            "2508.05004",
+            "arXiv:2508.05004v2",
+            "https://arxiv.org/pdf/2508.05004",
+            "https://arxiv.org/pdf/2508.05004.pdf?download=1",
+            "https://arxiv.org/html/2508.05004",
+        ] {
+            assert_eq!(
+                translator_request(input, base),
+                (
+                    "https://translator.example/web".to_string(),
+                    "https://arxiv.org/abs/2508.05004".to_string(),
+                ),
+                "input: {input}"
+            );
+        }
     }
 }
