@@ -10,7 +10,35 @@
 		"agent": "Agent",
 		"translate": "翻译",
 		"keyboard": "键盘",
+		"remote-access": "远程访问",
 		"about": "关于"
+	},
+	"remoteAccess": {
+		"title": "远程访问",
+		"localVaultRequired": "请打开本地 Vault 后再提供远程访问。",
+		"hostName": {
+			"label": "电脑名称",
+			"hint": "会显示在已配对的 iPhone 和 iPad 上。"
+		},
+		"relay": {
+			"label": "Relay 地址",
+			"hint": "用于转发端到端加密帧的公开 WSS Relay。"
+		},
+		"status": { "label": "Relay 状态", "online": "在线", "offline": "离线" },
+		"start": "开启远程访问",
+		"stop": "关闭远程访问",
+		"qrAlt": "配对二维码",
+		"pairing": {
+			"title": "配对 iPhone 或 iPad",
+			"hint": "在 Agentero 中扫描二维码，然后在两台设备确认相同验证码。"
+		},
+		"copyLink": "复制配对链接",
+		"copied": "已复制配对链接",
+		"copyFailed": "无法复制配对链接",
+		"request": { "title": "配对 {{device}}", "code": "确认码：{{code}}" },
+		"approve": "允许",
+		"deny": "拒绝",
+		"devices": { "empty": "尚未配对设备", "revoke": "撤销 {{device}}" }
 	},
 	"general": {
 		"title": "通用",

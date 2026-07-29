@@ -10,7 +10,42 @@
 		"agent": "Agent",
 		"translate": "Translate",
 		"keyboard": "Keyboard",
+		"remote-access": "Remote access",
 		"about": "About"
+	},
+	"remoteAccess": {
+		"title": "Remote access",
+		"localVaultRequired": "Open a local Vault to provide remote access.",
+		"hostName": {
+			"label": "Computer name",
+			"hint": "Shown to paired iPhone and iPad devices."
+		},
+		"relay": {
+			"label": "Relay endpoint",
+			"hint": "Public WSS Relay used to route encrypted frames."
+		},
+		"status": {
+			"label": "Relay status",
+			"online": "Online",
+			"offline": "Offline"
+		},
+		"start": "Enable remote access",
+		"stop": "Disable remote access",
+		"qrAlt": "Pairing QR code",
+		"pairing": {
+			"title": "Pair an iPhone or iPad",
+			"hint": "Scan this code in Agentero, then confirm the same code on both devices."
+		},
+		"copyLink": "Copy pairing link",
+		"copied": "Pairing link copied",
+		"copyFailed": "Could not copy pairing link",
+		"request": {
+			"title": "Pair {{device}}",
+			"code": "Confirmation code: {{code}}"
+		},
+		"approve": "Approve",
+		"deny": "Deny",
+		"devices": { "empty": "No paired devices", "revoke": "Revoke {{device}}" }
 	},
 	"general": {
 		"title": "General",
