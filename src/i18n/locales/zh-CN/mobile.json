@@ -22,6 +22,10 @@
 	"library": { "title": "论文库", "search": "搜索论文", "empty": "暂无论文" },
 	"reader": {
 		"title": "笔记",
+		"pdf": "PDF",
+		"notes": "笔记",
+		"loadingPdf": "正在加载 PDF…",
+		"pdfUnavailable": "桌面端没有可用的论文 PDF。",
 		"empty": "选择一篇论文",
 		"save": "保存笔记",
 		"saving": "保存中…"

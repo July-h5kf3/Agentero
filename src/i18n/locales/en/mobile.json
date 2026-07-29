@@ -26,6 +26,10 @@
 	},
 	"reader": {
 		"title": "Notes",
+		"pdf": "PDF",
+		"notes": "Notes",
+		"loadingPdf": "Loading PDF…",
+		"pdfUnavailable": "This paper has no PDF available on the desktop.",
 		"empty": "Choose a paper",
 		"save": "Save notes",
 		"saving": "Saving…"
