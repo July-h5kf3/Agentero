@@ -1,6 +1,6 @@
 # iOS 远程连接方案（paseo 式二维码配对）
 
-> 状态：**未实现草稿**。定位在 roadmap 0.7+「平台」切片。
+> 状态：**M1 已实现，M2 部分实现**。Relay、Bridge、E2EE、二维码配对、设备验签、iOS Keychain、Library/NOTES、桌面 Agent 流式输出与权限应答已落地；PDF 分块缓存、多主机/LAN 回退、深链和 Agent 会话恢复仍在后续范围。
 > 决策：iOS **不做本地 Vault**，App 是桌面端的纯远程客户端 —— 扫码配对后经 **relay + 端到端加密** 连接电脑上的 Agentero，读写电脑上的库，并驱动电脑上的 BYOA Agent。
 
 ---
@@ -245,7 +245,7 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 | Vault | `vault_tree_build` / `vault_tree_children` / `vault_read_text` / `vault_write_text` / `vault_search` |
 | Catalog | `paper_list` / `paper_get` / `paper_set_tags` / `paper_set_is_read` |
 | 文件 | `bridge_read_bytes`（分块拉 PDF/图片，见 6.3） |
-| Agent | `agent_run_once` / `agent_cancel` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
+| Agent | `agent_run_once` / `agent_cancel_run` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
 | Wiki | `wiki_backlinks` / `wiki_graph`（P1） |
 
 **不暴露**：`remote_*`（SSH）、window/terminal/finder、Zotero connector、settings 写入、任意绝对路径读写（所有 path 参数强制 Vault 相对路径 + canonicalize 防逃逸）。
@@ -355,8 +355,8 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | M0 Relay | [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)：Paseo-compatible 三角色路由与部署适配器，公网入口 `relay.philfan.cn` | `GET /health`、`GET /ready` 通过；两个 WebSocket 客户端经 relay 互通；断线重连与 sync 对账通过 |
-| M1 Bridge 内核 | `features/bridge/`：身份/密钥、v2 `server` 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | 桌面↔桌面模拟 client 经 `wss://relay.philfan.cn/ws` 跑完配对 + 加密 ping/pong + RPC + Agent 流式 e2e |
-| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | TestFlight 内测；`docs/development/release.md` 上架清单 |
+| M1 Bridge 内核 | `features/bridge/`：身份/密钥、v2 `server` 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | **已完成**：已对 `wss://relay.philfan.cn/ws` 完成加密双向帧联调，Bridge 单元测试覆盖协议、加密、认证与 Agent 会话过滤 |
+| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | **部分完成**：扫码、Library、NOTES 编辑、Agent 流式输出和权限应答已实现；PDF 分块缓存与会话恢复完成后进入 TestFlight 内测 |
 | M3 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
 | P2 之后 | APNs 推送、LAN 直连兜底（含 Tailscale 手动地址）、headless `agentero bridge serve`、`remote:` Vault 透传 | — |
 
