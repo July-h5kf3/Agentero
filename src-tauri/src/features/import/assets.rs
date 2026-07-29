@@ -534,7 +534,7 @@ fn looks_like_tar(bytes: &[u8]) -> bool {
     bytes.len() >= 512 && bytes[0] != 0 && bytes.iter().take(100).any(|&b| b == 0)
 }
 
-fn extract_tar_safe(dest: &Path, tar_bytes: &[u8]) -> Result<(), AppError> {
+pub(crate) fn extract_tar_safe(dest: &Path, tar_bytes: &[u8]) -> Result<(), AppError> {
     let mut archive = Archive::new(Cursor::new(tar_bytes));
     let entries = archive
         .entries()
@@ -592,7 +592,7 @@ fn sanitize_tar_path(path: &Path) -> Result<PathBuf, AppError> {
     Ok(out)
 }
 
-async fn http_get_bytes_with_progress(
+pub(crate) async fn http_get_bytes_with_progress(
     url: &str,
     timeout: Duration,
     app: Option<&AppHandle>,
