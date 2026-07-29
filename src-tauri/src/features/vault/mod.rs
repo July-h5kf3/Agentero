@@ -14,7 +14,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 ## Layout
 
 - `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `PAPER.md` / `marks/`, and `source/`.
-- `notes/` — free-form concept notes and ideas (`[[wikilinks]]` welcome).
+- `notes/` — free-form concept notes and ideas. Supports `[[wikilinks]]`, `![[embeds]]`, Mermaid diagrams, and Obsidian `> [!callout]` blocks.
 - `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
@@ -36,7 +36,8 @@ For a paper folder, use the richest available source in this order:
 - Prefer short, structured notes (problem / method / results).
 - Keep original files under `source/` unchanged; treat `PAPER.md` as a derived, regenerable artifact.
 - Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty explicitly.
-- Keep `[[wikilinks]]` as written; do not rewrite them to plain URLs.
+- Keep `[[wikilinks]]` and `![[embeds]]` as written; do not rewrite them to plain URLs or inline text.
+- Preserve Mermaid fenced code blocks (` ```mermaid `); do not flatten diagrams to prose.
 - Cite the Vault-relative paths actually read; end substantial answers with `## Sources`.
 - Never overwrite user notes without an explicit draft + confirmation path.
 - Do not store API keys or other secrets in the Vault.

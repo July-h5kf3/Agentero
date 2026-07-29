@@ -45,6 +45,7 @@ Skill 存放在 `.agents/skills/<id>/SKILL.md`，Agent 可以通过 `$skill-id` 
 
 - `paper-reader` — 精读论文并写入 `NOTES.md`。
 - `agentero-cli` — 通过 CLI 执行 Vault 操作。
+- `vault-normalizer` — 将现有研究目录整理为 Agentero Vault 布局。
 - `deep-research` — 多轮研究并带引用。
 - `idea-evaluator` — 多角度评估研究想法。
 

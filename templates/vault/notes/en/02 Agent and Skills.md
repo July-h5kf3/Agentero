@@ -42,6 +42,7 @@ Bundled skills include:
 
 - `paper-reader` — deep-read a paper and write `NOTES.md`.
 - `agentero-cli` — run headless Vault commands via the CLI.
+- `vault-normalizer` — reorganize an existing research directory into Vault layout.
 - `deep-research` — multi-step research with citations.
 - `idea-evaluator` — evaluate research ideas across dimensions.
 
