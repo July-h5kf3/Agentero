@@ -1,6 +1,8 @@
+import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
 	BookOpen,
 	Bot,
+	Camera,
 	ChevronRight,
 	Circle,
 	Laptop,
@@ -11,9 +13,10 @@ import {
 	Send,
 	Settings2,
 	WifiOff,
+	X,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -207,6 +210,7 @@ function MobilePairing({
 	const [offerUrl, setOfferUrl] = useState("");
 	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [scannerOpen, setScannerOpen] = useState(false);
 	const connect = async () => {
 		setConnecting(true);
 		setError(null);
@@ -254,6 +258,15 @@ function MobilePairing({
 						)}
 						{connecting ? t("connect.connecting") : t("connect.action")}
 					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						className="w-full"
+						onClick={() => setScannerOpen(true)}
+					>
+						<Camera className="size-4" />
+						{t("connect.camera")}
+					</Button>
 				</div>
 				{pending ? (
 					<div className="mt-8 border-l-2 border-foreground px-4 py-2">
@@ -269,6 +282,89 @@ function MobilePairing({
 					</p>
 				) : null}
 			</div>
+			{scannerOpen ? (
+				<MobileQrScanner
+					onClose={() => setScannerOpen(false)}
+					onScan={(value) => {
+						setOfferUrl(value);
+						setError(null);
+						setScannerOpen(false);
+					}}
+				/>
+			) : null}
+		</div>
+	);
+}
+
+function MobileQrScanner({
+	onClose,
+	onScan,
+}: {
+	onClose: () => void;
+	onScan: (value: string) => void;
+}) {
+	const { t } = useTranslation("mobile");
+	const videoRef = useRef<HTMLVideoElement>(null);
+	const controlsRef = useRef<IScannerControls | null>(null);
+	const [failed, setFailed] = useState(false);
+
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!video) return;
+		let active = true;
+		const reader = new BrowserQRCodeReader();
+		void reader
+			.decodeFromConstraints(
+				{ audio: false, video: { facingMode: { ideal: "environment" } } },
+				video,
+				(result, _error, controls) => {
+					controlsRef.current = controls;
+					if (!result || !active) return;
+					controls.stop();
+					onScan(result.getText());
+				},
+			)
+			.then((controls) => {
+				controlsRef.current = controls;
+			})
+			.catch(() => active && setFailed(true));
+		return () => {
+			active = false;
+			controlsRef.current?.stop();
+		};
+	}, [onScan]);
+
+	return (
+		<div
+			className="fixed inset-0 z-50 flex flex-col bg-background px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+			role="dialog"
+			aria-modal="true"
+			aria-label={t("connect.camera")}
+		>
+			<div className="flex items-center justify-between">
+				<p className="font-medium text-sm">{t("connect.camera")}</p>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={t("connect.cancel")}
+					onClick={onClose}
+				>
+					<X className="size-4" />
+				</Button>
+			</div>
+			<div className="relative my-auto aspect-square overflow-hidden border bg-black">
+				<video
+					ref={videoRef}
+					className="size-full object-cover"
+					muted
+					playsInline
+				/>
+				<div className="pointer-events-none absolute inset-[15%] border-2 border-white/90" />
+			</div>
+			<p className="mt-5 text-center text-muted-foreground text-sm">
+				{failed ? t("connect.cameraUnavailable") : t("connect.cameraHint")}
+			</p>
 		</div>
 	);
 }

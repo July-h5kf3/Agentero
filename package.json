@@ -71,6 +71,7 @@
 		"@tauri-apps/plugin-fs": "^2.5.1",
 		"@tauri-apps/plugin-log": "2.9.0",
 		"@tauri-apps/plugin-opener": "^2",
+		"@zxing/browser": "^0.2.1",
 		"ai": "^7.0.26",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
