@@ -25,11 +25,13 @@ use crypto_box::aead::rand_core::RngCore;
 use crypto_box::PublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Digest;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 #[cfg(not(target_os = "ios"))]
 use tauri::Manager;
 use tauri::{AppHandle, Emitter, EventId, Listener};
@@ -37,6 +39,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(300);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+const MAX_BRIDGE_READ_BYTES: usize = 256 * 1024;
 const FORWARDED_AGENT_EVENTS: [&str; 7] = [
     "agent:stream",
     "agent:completed",
@@ -56,6 +59,23 @@ struct AgentEventForwarder {
     app: AppHandle,
     listeners: Vec<EventId>,
     receiver: mpsc::UnboundedReceiver<ForwardedAgentEvent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeFileInfo {
+    path: String,
+    size: u64,
+    modified_at: u64,
+    sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeReadBytesResult {
+    file: BridgeFileInfo,
+    offset: u64,
+    bytes_b64: String,
 }
 
 impl AgentEventForwarder {
@@ -796,6 +816,30 @@ async fn dispatch_rpc(
             fs::write(file, content)?;
             Ok(Value::Null)
         }
+        "bridge_file_info" => {
+            let path = required_bridge_path(&params)?;
+            to_value(bridge_file_info(vault_root, path)?)
+        }
+        "bridge_paper_pdf_info" => {
+            let paper_path = params
+                .get("paperPath")
+                .and_then(Value::as_str)
+                .ok_or_else(|| AppError::message("paperPath is required"))?;
+            to_value(bridge_paper_pdf_info(vault_root, paper_path)?)
+        }
+        "bridge_read_bytes" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Params {
+                path: String,
+                offset: u64,
+                #[serde(default)]
+                len: Option<usize>,
+            }
+            let args: Params = serde_json::from_value(params)?;
+            let len = args.len.unwrap_or(MAX_BRIDGE_READ_BYTES);
+            to_value(bridge_read_bytes(vault_root, &args.path, args.offset, len)?)
+        }
         "paper_get" => {
             let path = params.get("path").and_then(Value::as_str);
             let id = params.get("id").and_then(Value::as_str);
@@ -923,6 +967,109 @@ fn to_value<T: Serialize>(value: T) -> Result<Value, AppError> {
     serde_json::to_value(value).map_err(AppError::from)
 }
 
+fn required_bridge_path(params: &Value) -> Result<&str, AppError> {
+    params
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.trim().is_empty())
+        .ok_or_else(|| AppError::message("path is required"))
+}
+
+fn bridge_file_info(vault_root: &Path, path: &str) -> Result<BridgeFileInfo, AppError> {
+    let file = vault_relative_path(vault_root, path, false)?;
+    file_info(vault_root, &file)
+}
+
+fn bridge_paper_pdf_info(vault_root: &Path, paper_path: &str) -> Result<BridgeFileInfo, AppError> {
+    let paper_dir = vault_relative_path(vault_root, paper_path, false)?;
+    if !paper_dir.is_dir() {
+        return Err(AppError::message(
+            "paperPath must identify a paper directory",
+        ));
+    }
+    let mut candidates = fs::read_dir(&paper_dir)?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    let file = candidates
+        .into_iter()
+        .next()
+        .ok_or_else(|| AppError::message("paper has no local PDF"))?;
+    file_info(vault_root, &file)
+}
+
+fn bridge_read_bytes(
+    vault_root: &Path,
+    path: &str,
+    offset: u64,
+    len: usize,
+) -> Result<BridgeReadBytesResult, AppError> {
+    if !(1..=MAX_BRIDGE_READ_BYTES).contains(&len) {
+        return Err(AppError::message(format!(
+            "len must be between 1 and {MAX_BRIDGE_READ_BYTES} bytes"
+        )));
+    }
+    let file = vault_relative_path(vault_root, path, false)?;
+    let info = file_info(vault_root, &file)?;
+    if offset > info.size {
+        return Err(AppError::message("offset exceeds file size"));
+    }
+    let remaining = info.size.saturating_sub(offset);
+    let to_read = remaining.min(len as u64) as usize;
+    let mut bytes = vec![0; to_read];
+    let mut source = fs::File::open(file)?;
+    source.seek(SeekFrom::Start(offset))?;
+    source.read_exact(&mut bytes)?;
+    Ok(BridgeReadBytesResult {
+        file: info,
+        offset,
+        bytes_b64: URL_SAFE_NO_PAD.encode(bytes),
+    })
+}
+
+fn file_info(vault_root: &Path, file: &Path) -> Result<BridgeFileInfo, AppError> {
+    if !file.is_file() {
+        return Err(AppError::message("Bridge path must identify a file"));
+    }
+    let root = vault_root.canonicalize()?;
+    let rel = file
+        .strip_prefix(root)
+        .map_err(|_| AppError::message("Bridge path escapes the Vault"))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let metadata = fs::metadata(file)?;
+    let modified_at = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default();
+    let mut source = fs::File::open(file)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let count = source.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        sha2::Digest::update(&mut hasher, &buffer[..count]);
+    }
+    Ok(BridgeFileInfo {
+        path: rel,
+        size: metadata.len(),
+        modified_at,
+        sha256: hex::encode(sha2::Digest::finalize(hasher)),
+    })
+}
+
 fn vault_relative_path(vault_root: &Path, value: &str, writing: bool) -> Result<PathBuf, AppError> {
     let relative = Path::new(value.trim());
     if relative.as_os_str().is_empty()
@@ -1005,6 +1152,35 @@ mod tests {
     fn relay_offer_keeps_the_explicit_secure_port() {
         let endpoint = RelayEndpoint::parse("relay.philfan.cn:443").expect("parse endpoint");
         assert_eq!(relay_endpoint_for_offer(&endpoint), "relay.philfan.cn:443");
+    }
+
+    #[test]
+    fn bridge_pdf_reads_vault_relative_chunks_with_metadata() {
+        let vault =
+            std::env::temp_dir().join(format!("agentero-bridge-pdf-{}", uuid::Uuid::new_v4()));
+        let paper_dir = vault.join("papers/example");
+        fs::create_dir_all(&paper_dir).expect("create paper dir");
+        fs::write(paper_dir.join("source.pdf"), b"%PDF-1.7 bridge test")
+            .expect("write fixture PDF");
+
+        let info = bridge_paper_pdf_info(&vault, "papers/example").expect("discover PDF");
+        assert_eq!(info.path, "papers/example/source.pdf");
+        assert_eq!(info.size, 20);
+        assert!(!info.sha256.is_empty());
+
+        let chunk = bridge_read_bytes(&vault, &info.path, 5, 4).expect("read PDF chunk");
+        assert_eq!(chunk.file.path, info.path);
+        assert_eq!(chunk.offset, 5);
+        assert_eq!(
+            URL_SAFE_NO_PAD
+                .decode(chunk.bytes_b64)
+                .expect("decode chunk"),
+            b"1.7 "
+        );
+        assert!(bridge_read_bytes(&vault, "../source.pdf", 0, 1).is_err());
+        assert!(bridge_read_bytes(&vault, &info.path, 0, MAX_BRIDGE_READ_BYTES + 1).is_err());
+
+        fs::remove_dir_all(vault).expect("clean vault");
     }
 
     #[test]
