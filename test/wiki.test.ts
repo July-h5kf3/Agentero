@@ -4,7 +4,9 @@ import {
 	externalRenameRepairNeeded,
 	extractWikilinks,
 	isVaultLocalMarkdownLink,
+	isWikiTargetPath,
 	parseWikiHref,
+	renameMayAffectWikiTargets,
 	resolveDemoWikiReference,
 	resolveWikiTarget,
 	rewriteWikilinksForPreview,
@@ -215,6 +217,51 @@ describe("wikilink resolution", () => {
 				affectedSources: ["notes/Source.md"],
 			}),
 		).toBe(true);
+	});
+});
+
+describe("Wiki rename target classification", () => {
+	it("recognizes every file type supported as a Wiki target", () => {
+		for (const path of [
+			"/vault/notes/Source.md",
+			"/vault/notes/Source.MDX",
+			"/vault/notes/Source.markdown",
+			"/vault/assets/paper.PDF",
+			"/vault/assets/figure.png",
+			"/vault/assets/figure.JPEG",
+			"/vault/assets/figure.gif",
+			"/vault/assets/figure.webp",
+			"/vault/assets/figure.bmp",
+			"/vault/assets/figure.svg",
+			"/vault/assets/figure.avif",
+			"/vault/assets/figure.ico",
+		]) {
+			expect(isWikiTargetPath(path), path).toBe(true);
+		}
+		expect(isWikiTargetPath("/vault/source/agentero-cite.json")).toBe(false);
+	});
+
+	it("handles Wiki targets, mixed events, and directory-like paths", () => {
+		expect(renameMayAffectWikiTargets(["/vault/notes/Source.md"])).toBe(true);
+		expect(
+			renameMayAffectWikiTargets([
+				"/vault/source/agentero-cite.json",
+				"/vault/assets/paper.pdf",
+			]),
+		).toBe(true);
+		expect(renameMayAffectWikiTargets(["/vault/notes/topic"])).toBe(true);
+		expect(renameMayAffectWikiTargets(["C:\\vault\\notes\\topic"])).toBe(true);
+		expect(renameMayAffectWikiTargets([])).toBe(true);
+	});
+
+	it("skips Wiki handling for explicit non-target file extensions", () => {
+		expect(
+			renameMayAffectWikiTargets([
+				"/vault/source/agentero-cite.json.tmp",
+				"/vault/source/agentero-cite.json",
+				"C:\\vault\\source\\references.bib",
+			]),
+		).toBe(false);
 	});
 });
 

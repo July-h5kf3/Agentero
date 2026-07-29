@@ -73,6 +73,7 @@ import {
 	revealSelectedInFinder,
 } from "@/lib/vault/actions";
 import { scheduleTreeRefresh } from "@/lib/vault/store";
+import { renameMayAffectWikiTargets } from "@/lib/wiki";
 import { handleExternalRename } from "@/lib/wiki/actions";
 import {
 	scheduleWikiRebuild,
@@ -238,9 +239,15 @@ export default function App() {
 		onStructuralChange: scheduleTreeRefresh,
 		onWikiChange: scheduleWikiRebuild,
 		shouldIgnoreEvent: shouldIgnoreInternalRenameEvent,
-		onExternalRename: (rename) => void handleExternalRename(rename),
-		onUnverifiedRename: () => {
-			notifyWarning(t("vault.externalRename.unverified"));
+		onExternalRename: (rename, payload) => {
+			if (renameMayAffectWikiTargets(payload.paths)) {
+				void handleExternalRename(rename);
+			}
+		},
+		onUnverifiedRename: (payload) => {
+			if (renameMayAffectWikiTargets(payload.paths)) {
+				notifyWarning(t("vault.externalRename.unverified"));
+			}
 		},
 	});
 

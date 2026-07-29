@@ -9,6 +9,7 @@ import { createStore } from "zustand/vanilla";
 import type { VaultFileChangedPayload } from "@/lib/vault/fs-watch";
 import { getVaultPath } from "@/lib/vault/store";
 import { rebuildWikiIndex, type WikiExternalRenamePreview } from "@/lib/wiki";
+import { isWikiTargetPath } from "@/lib/wiki/target-path";
 import { notifyWikiEmbedTargets } from "@/lib/wiki-embed-refresh";
 import { normalizeTabPath } from "@/lib/workspace/tabs";
 
@@ -119,13 +120,7 @@ const wikiRebuildPaths = new Set<string>();
  * embedded attachment projections.
  */
 export function scheduleWikiRebuild(absPath: string): void {
-	if (
-		!/\.(md|mdx|markdown|pdf|png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(
-			absPath,
-		)
-	) {
-		return;
-	}
+	if (!isWikiTargetPath(absPath)) return;
 	wikiRebuildPaths.add(absPath);
 	if (wikiRebuildTimer) clearTimeout(wikiRebuildTimer);
 	wikiRebuildTimer = setTimeout(() => {

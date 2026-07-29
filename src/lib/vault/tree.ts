@@ -1,6 +1,5 @@
 import { invokeApi } from "@/lib/core/ipc";
 import { toVaultRelative } from "@/lib/core/path";
-import { isMarkdownPath } from "@/lib/vault/fs";
 import { normalizePathKey } from "@/lib/vault/path";
 import {
 	isRemoteVaultHandle,
@@ -10,7 +9,7 @@ import {
 import { joinRemotePath, remoteRelFromJoined } from "@/lib/vault/remote-path";
 import { ensureLocalFsScope } from "@/lib/vault/scope";
 import type { FileNode } from "@/lib/vault/types";
-import { isImagePath, isPdfPath } from "@/lib/workspace/viewer";
+import { isWikiTargetPath } from "@/lib/wiki/target-path";
 
 /**
  * Names never listed in the file tree (local or remote).
@@ -418,12 +417,7 @@ export function collectWikiTargetRelPaths(
 		for (const node of list) {
 			if (node.kind === "directory" && node.children) {
 				walk(node.children);
-			} else if (
-				node.kind === "file" &&
-				(isMarkdownPath(node.path) ||
-					isImagePath(node.path) ||
-					isPdfPath(node.path))
-			) {
+			} else if (node.kind === "file" && isWikiTargetPath(node.path)) {
 				out.push(toVaultRelative(vaultPath, node.path));
 			}
 		}
