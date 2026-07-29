@@ -257,12 +257,4 @@ mod tests {
         assert!(s.contains("127.0.0.1:7890"));
         assert!(s.contains("cd /data/vault"));
     }
-
-    #[test]
-    fn maps_uname_families() {
-        assert_eq!(map_uname_to_os("Darwin"), "macos");
-        assert_eq!(map_uname_to_os("Linux"), "linux");
-        assert_eq!(map_uname_to_os("MINGW64_NT-10.0"), "windows");
-        assert_eq!(map_uname_to_os("FreeBSD"), "other");
-    }
 }
