@@ -55,6 +55,7 @@
 		"agentPanel": "Agent 面板",
 		"backlinksPanel": "反向链接面板",
 		"annotationsPanel": "批注",
+		"referencesPanel": "参考文献",
 		"showRightSidebar": "显示右侧边栏",
 		"hideRightSidebar": "隐藏右侧边栏",
 		"showRightSidebarHint": "显示右侧边栏 ({{shortcut}})",

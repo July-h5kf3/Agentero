@@ -194,6 +194,17 @@ export function GeneralPane({
 						className="h-8 w-20 tabular-nums"
 					/>
 				</SettingsRow>
+				<SettingsRow
+					label={t("general.citationOnline.label")}
+					htmlFor="citation-online"
+					description={t("general.citationOnline.hint")}
+				>
+					<Switch
+						id="citation-online"
+						checked={settings.citationOnlineEnabled}
+						onCheckedChange={(v) => patch({ citationOnlineEnabled: v })}
+					/>
+				</SettingsRow>
 			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />

@@ -8,6 +8,7 @@ pub mod arxiv_proxy;
 pub mod catalog;
 pub mod connector;
 pub mod import;
+pub mod refs;
 pub mod remote;
 pub mod search;
 pub mod settings;

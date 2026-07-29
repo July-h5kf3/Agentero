@@ -55,6 +55,7 @@
 		"agentPanel": "Agent panel",
 		"backlinksPanel": "Backlinks panel",
 		"annotationsPanel": "Annotations",
+		"referencesPanel": "References",
 		"showRightSidebar": "Show right sidebar",
 		"hideRightSidebar": "Hide right sidebar",
 		"showRightSidebarHint": "Show right sidebar ({{shortcut}})",

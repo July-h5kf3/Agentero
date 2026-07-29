@@ -7,7 +7,11 @@
 import { createStore } from "zustand/vanilla";
 import type { PaletteMode } from "@/lib/shell/commands/types";
 
-export type RightSidebarTab = "agent" | "backlinks" | "annotations";
+export type RightSidebarTab =
+	| "agent"
+	| "backlinks"
+	| "annotations"
+	| "references";
 
 type UiStore = {
 	sidebarCollapsed: boolean;

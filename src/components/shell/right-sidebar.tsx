@@ -12,6 +12,7 @@ import {
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
 import { pdfHandleFor } from "@/components/viewer/pdf-viewer-registry";
+import { ReferencesPanel } from "@/components/viewer/references-panel";
 import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
 import { GraphPanel } from "@/components/wiki/graph-panel";
 import {
@@ -23,7 +24,10 @@ import {
 	useWikiStore,
 	useWorkspaceStore,
 } from "@/hooks/use-app-stores";
+import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { paperDirFromPath } from "@/lib/paper/detect";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { layout, uiStore } from "@/lib/shell/ui-store";
@@ -67,6 +71,27 @@ function handleAgentOpenSource(source: string): void {
 function annotationAction(fn: (h: PdfViewerHandle) => void): void {
 	const handle = pdfHandleFor(getActiveTabId());
 	if (handle) fn(handle);
+}
+
+function ReferencesSidebar() {
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
+	const selectedPath = useWorkspaceStore(
+		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
+	);
+	const paperPath = useMemo(() => {
+		if (
+			!selectedPath ||
+			isLibraryVirtualPath(selectedPath) ||
+			isTrashVirtualPath(selectedPath)
+		) {
+			return null;
+		}
+		const relative = toVaultRelative(vaultPath, selectedPath);
+		return paperDirFromPath(relative, vaultPaperPaths);
+	}, [selectedPath, vaultPath, vaultPaperPaths]);
+
+	return <ReferencesPanel vaultPath={vaultPath} paperPath={paperPath} />;
 }
 
 function AnnotationsSidebar() {
@@ -126,7 +151,6 @@ function AnnotationsSidebar() {
 			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}
 			onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
 			onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
-			onClose={() => layout()?.setRightCollapsed(true)}
 		/>
 	);
 }
@@ -218,6 +242,9 @@ export function RightSidebar() {
 			!agentZenMode &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
+			) : null}
+			{rightSidebarOpen && !agentZenMode && rightSidebarTab === "references" ? (
+				<ReferencesSidebar />
 			) : null}
 		</>
 	);

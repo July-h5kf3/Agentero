@@ -43,7 +43,6 @@
 	"annotations": {
 		"title": "Annotations",
 		"pageLabel": "Page {{page}}",
-		"close": "Close",
 		"empty": "No highlights, notes, or asks yet. Select text in the PDF to highlight, annotate, or ask.",
 		"placeholder": "Write a note…",
 		"save": "Save",
@@ -58,6 +57,22 @@
 		"askTurns": "{{count}} messages",
 		"expandNote": "Expand note",
 		"collapseNote": "Collapse note"
+	},
+	"references": {
+		"title": "References",
+		"panelAria": "References of this paper",
+		"noPaper": "Open a paper to see its references.",
+		"empty": "References have not been parsed for this paper yet.",
+		"emptyParsed": "No references found. arXiv papers parse from source/ BibTeX/.bbl; online lookup needs a DOI or arXiv id.",
+		"parse": "Parse references",
+		"reparse": "Re-parse references",
+		"parseFailed": "Failed to parse references",
+		"filterPlaceholder": "Filter references…",
+		"noFilterMatch": "No references match the filter.",
+		"inLibrary": "In library",
+		"import": "Import into library",
+		"importFailed": "Failed to import reference",
+		"openLink": "Open link"
 	},
 	"selection": {
 		"menuLabel": "Selection actions",

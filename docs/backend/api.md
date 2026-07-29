@@ -963,6 +963,49 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **返回**：`{ ok: true; data: { imported, skipped, paths, titles, errors } }`
 - **行为**：已存在同 path 的 paper（有 NOTES 或 catalog 行）→ **skip**，不覆盖 `NOTES.md`。
 
+#### `paper_refs_parse`
+
+解析一篇论文的参考文献并写入可重建 sidecar `{paper}/source/agentero-cite.json`。优先级：在线结构化（Semantic Scholar `paper/{id}/references` → Crossref `works/{doi}.reference`，受设置 `citationOnlineEnabled` 控制，默认开）→ 本地 `source/*.bbl` / `*.bib` / 内联 `thebibliography`。本地条目提供编号顺序与 raw 文本，在线条目按 DOI / arXiv / 标题对齐后覆盖元数据；解析后按 DOI → arXiv → 归一化标题匹配库内论文写入 `localMatch`。输入指纹（DOI/arXiv + bib/bbl/tex 文件清单）未变时直接返回缓存，不重复请求 API。
+
+- **参数**（`args`）：
+
+  ```ts
+  {
+    vaultPath: string;
+    path: string;                 // paper 文件夹 Vault 相对路径
+    force?: boolean;              // 忽略指纹强制重解析
+  }
+  ```
+
+- **返回**：`{ ok: true; data: CiteSidecar }`，其中：
+
+  ```ts
+  type CiteSidecar = {
+    schemaVersion: number;        // 1
+    source: { mode: string; generatedAt: string; fingerprint: string };
+    citations: Array<{
+      id: string;                 // "cite-{key}" 或 "ref-{n}"
+      rawKey?: string;
+      display?: string;           // "[12]"（仅本地书目顺序可知时）
+      raw?: string;               // 原始条目文本（bbl/tex 来源必有）
+      metadata: { title?; authors?; year?; venue?; doi?; arxivId?; url? };
+      localMatch?: { paperPath: string; matchBy: "doi" | "arxiv" | "title" };
+      source: string;             // "bbl" | "bib" | "tex" | "s2" | "crossref" | "bbl+s2" | …
+      status: "resolved" | "unresolved";
+    }>;
+    messages: string[];
+  };
+  ```
+
+- **行为**：无参考文献不算错误（空 sidecar 也落盘并记录指纹）；魔棒入库与单篇 Download 完成后 Host 自动后台触发（失败仅记日志）。远程 Vault 不支持。
+
+#### `paper_refs_list`
+
+读取已存在的引用 sidecar；未解析过返回 `data: null`。
+
+- **参数**（`args`）：`{ vaultPath: string; path: string }`
+- **返回**：`{ ok: true; data: CiteSidecar | null }`
+
 ### 3.6 论文
 
 论文**集合与元数据**存于 `.agentero/catalog.sqlite`；本组命令读写 catalog，并附带 Vault 相对路径字段。详见 [`catalog.md`](catalog.md)、[`data-model.md`](data-model.md)。

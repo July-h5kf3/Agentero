@@ -1,6 +1,6 @@
 # 参考文献解析（Citation Parsing）设计草稿
 
-> 状态：未实现草稿。与 [pdf-analysis.md](pdf-analysis.md)（PDF 引用与插图 sidecar）**同一功能域**：该文档已定义 sidecar 落盘契约（`agentero-cite.json`）、bbox 定位与 `paper_analyze_pdf` 命令；本文聚焦「参考文献**元数据**怎么解析（按来源分层）」与「引用侧栏 / Agent `#` 提及」两块补充，存储与交互契约以 pdf-analysis.md 为准，冲突处以本文标注的 delta 为演进方向。
+> 状态：**M1 + M2 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配 + 设置 `citationOnlineEnabled`，命令契约见 [`../backend/api.md`](../backend/api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [`../frontend/shell.md`](../frontend/shell.md)）。M3+（文中 citation hover/click 联动、Agent `#` 提及）仍为草稿。与 [pdf-analysis.md](pdf-analysis.md)（PDF 引用与插图 sidecar）**同一功能域**：该文档已定义 sidecar 落盘契约（`agentero-cite.json`）、bbox 定位与 `paper_analyze_pdf` 命令；本文聚焦「参考文献**元数据**怎么解析（按来源分层）」与「引用侧栏 / Agent `#` 提及」两块补充，存储与交互契约以 pdf-analysis.md 为准，冲突处以本文标注的 delta 为演进方向。
 
 ## 1. 背景与现状
 

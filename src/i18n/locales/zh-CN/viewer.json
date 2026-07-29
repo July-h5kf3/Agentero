@@ -43,7 +43,6 @@
 	"annotations": {
 		"title": "批注",
 		"pageLabel": "第 {{page}} 页",
-		"close": "关闭",
 		"empty": "还没有高亮、批注或提问。在 PDF 中划选文字即可高亮、批注或提问。",
 		"placeholder": "写点备注…",
 		"save": "保存",
@@ -58,6 +57,22 @@
 		"askTurns": "{{count}} 条消息",
 		"expandNote": "展开备注",
 		"collapseNote": "收起备注"
+	},
+	"references": {
+		"title": "参考文献",
+		"panelAria": "本论文的参考文献",
+		"noPaper": "打开一篇论文即可查看它的参考文献。",
+		"empty": "这篇论文还没有解析过参考文献。",
+		"emptyParsed": "没有找到参考文献。arXiv 论文从 source/ 的 BibTeX/.bbl 解析；在线查询需要 DOI 或 arXiv 编号。",
+		"parse": "解析参考文献",
+		"reparse": "重新解析",
+		"parseFailed": "参考文献解析失败",
+		"filterPlaceholder": "过滤参考文献…",
+		"noFilterMatch": "没有匹配的参考文献。",
+		"inLibrary": "已在文库",
+		"import": "导入文库",
+		"importFailed": "导入参考文献失败",
+		"openLink": "打开链接"
 	},
 	"selection": {
 		"menuLabel": "选区操作",

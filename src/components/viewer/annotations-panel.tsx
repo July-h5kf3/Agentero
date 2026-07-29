@@ -5,7 +5,6 @@ import {
 	MessageSquareText,
 	Pencil,
 	Trash2,
-	X,
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,8 +44,6 @@ type AnnotationsPanelProps = {
 	onDelete: (id: string) => void;
 	onJumpAsk?: (id: string) => void;
 	onDeleteAsk?: (id: string) => void;
-	/** Collapse the right sidebar (close the panel). */
-	onClose?: () => void;
 	className?: string;
 };
 
@@ -66,7 +63,6 @@ export function AnnotationsPanel({
 	onDelete,
 	onJumpAsk,
 	onDeleteAsk,
-	onClose,
 	className,
 }: AnnotationsPanelProps) {
 	const { t } = useTranslation("viewer");
@@ -80,29 +76,7 @@ export function AnnotationsPanel({
 			)}
 			aria-label={t("annotations.panelAria")}
 		>
-			<PaneHeader
-				trailing={
-					<>
-						{total > 0 ? (
-							<span className="min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center font-medium text-[11px] text-muted-foreground tabular-nums">
-								{total}
-							</span>
-						) : null}
-						{onClose ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								className="size-6 text-muted-foreground hover:text-foreground"
-								aria-label={t("annotations.close")}
-								onClick={onClose}
-							>
-								<X className="size-4" />
-							</Button>
-						) : null}
-					</>
-				}
-			>
+			<PaneHeader>
 				<MessageSquareText
 					className="size-4 text-muted-foreground"
 					aria-hidden

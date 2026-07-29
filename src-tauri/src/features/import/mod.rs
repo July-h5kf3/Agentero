@@ -376,6 +376,10 @@ pub async fn import_by_identifier_batch(
         .expect("all import futures finished")
         .into_inner();
 
+    for r in &imported {
+        crate::features::refs::spawn_parse_after_import(app, &vault, &r.path);
+    }
+
     Ok(LookupImportBatchResult {
         imported,
         skipped,
@@ -507,6 +511,7 @@ pub async fn download_paper_assets_with_progress(
     for m in parse.messages {
         result.messages.push(m);
     }
+    crate::features::refs::spawn_parse_after_import(app, &vault, &path_rel);
     Ok(result)
 }
 

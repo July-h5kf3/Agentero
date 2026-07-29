@@ -52,6 +52,10 @@
 			"label": "Batch import concurrency",
 			"hint": "Maximum parallel identifier imports when adding multiple papers at once. Lower values are gentler to remote services; higher values import faster on a good connection."
 		},
+		"citationOnline": {
+			"label": "Online reference lookup",
+			"hint": "Fetch structured references from Semantic Scholar / Crossref (free APIs) when parsing a paper's citations. Local BibTeX/.bbl parsing still runs when disabled."
+		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Works with local and remote vaults; off by default.",
