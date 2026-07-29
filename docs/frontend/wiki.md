@@ -25,6 +25,8 @@
 
 数据必须来自 Markdown 双链索引，不能来自手工图数据库。
 
+派生全文 `PAPER.md` 只作为可链接目标和标题来源，不向 Graph 贡献 outgoing edges；用户笔记中的 `NOTES.md` 和普通 Markdown 仍参与完整索引。
+
 ## 链接修复（前端触发）
 
 - Agentero 内重命名/移动：事务化修复已解析链接。

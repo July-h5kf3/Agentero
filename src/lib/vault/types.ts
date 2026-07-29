@@ -1,6 +1,7 @@
 export type CreateVaultResult = {
 	path: string;
 	created: string[];
+	updated: string[];
 	openPath: string;
 };
 

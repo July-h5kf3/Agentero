@@ -17,6 +17,9 @@ Convert an existing research directory into an Agentero-compatible Vault without
 - Prefer copying or staged moves when the source directory is not already a Vault.
 - Never treat `.agentero/catalog.sqlite` as disposable cache; it is the authoritative paper collection and metadata store.
 - Do not make root `PAPERS.md`, `library.bib`, or per-paper `metadata.json` the source of truth. They are optional exports or projections.
+- Treat link repair as a separate, reviewable change. Do not invent missing
+  notes, select an ambiguous candidate, or rewrite a user-authored link without
+  approval.
 
 ## Target layout
 
@@ -66,10 +69,15 @@ agentero-vault/
 2. Inventory the existing directory:
    - Identify PDFs, paper folders, TeX/source folders, Markdown notes, images/assets, BibTeX files, exported `PAPERS.md`, Zotero exports, and loose attachments.
    - Separate user-authored files from generated files.
+   - When `agentero wiki check --json` is available, run it before migration and
+     retain the complete `missing` / `ambiguous` / `invalidFragment` baseline.
+     The command is read-only; a non-zero result carries the report in
+     `error.details`.
 3. Propose a migration table before editing:
    - Current path → target Vault-relative path
    - Operation: keep, copy, move, merge, import, or ignore
-   - Risk: overwrite, ambiguous paper identity, duplicate PDF, or missing metadata
+   - Risk: overwrite, ambiguous paper identity, duplicate PDF, missing metadata,
+     or a wikilink target affected by the move
 4. Create or ensure the Vault skeleton:
    - Required app structure: `papers/`, `.agents/skills/`, `.agentero/`; create `notes/` and `plans/` only when useful for the user's organization.
    - Ensure `AGENTS.md` exists only if missing. If it already exists, keep it unchanged.
@@ -89,7 +97,28 @@ agentero-vault/
 8. Verify:
    - Run `agentero vault check --json` or `agentero vault info --json` if available.
    - Confirm that paper paths, local PDFs, `NOTES.md`, `PAPER.md`/`source/`, and `marks/` are discoverable.
+   - Run `agentero wiki check --json` again. For a staged subset, pass its
+     Vault-relative Markdown file or directory to isolate that scope.
+   - Compare the post-migration report with the baseline and separate
+     pre-existing issues from links broken by this migration.
+   - If the CLI command is unavailable, report that semantic link validation
+     was not completed; do not substitute a regex-only parser and claim parity
+     with Agentero.
    - Summarize remaining ambiguities and any files intentionally left in place.
+
+## Wikilink diagnostics
+
+Classify every reported occurrence without guessing:
+
+| Status | Meaning | Default action |
+| --- | --- | --- |
+| `missing` | No compatible target exists | Propose an existing target, plain text, or an explicitly approved new note |
+| `ambiguous` | More than one target matches | Present candidates and require a canonical Vault-relative choice |
+| `invalidFragment` | The file resolves but its heading or block does not | Propose an existing full heading path or removal of the stale fragment |
+
+Report source path, line, raw target, candidates, and whether the issue existed
+before migration. Link changes belong in the migration table and require the
+same confirmation as moves or merges.
 
 ## Migration heuristics
 
@@ -114,5 +143,6 @@ When asked to normalize a directory, respond with:
 2. Proposed target tree.
 3. Migration table.
 4. Required confirmations for overwrites, merges, or destructive moves.
-5. Exact commands or file operations to execute after approval.
-6. Verification results and unresolved ambiguities.
+5. Wikilink baseline and proposed repairs.
+6. Exact commands or file operations to execute after approval.
+7. Verification results, newly introduced link issues, and unresolved ambiguities.

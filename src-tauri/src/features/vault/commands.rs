@@ -37,10 +37,12 @@ pub fn vault_create(path: String, locale: Option<String>) -> ApiResult<CreateVau
     }
 }
 
-/// Ensure vault scaffold + seed any **missing** bundled skills/onboarding notes (no overwrite).
+/// Ensure scaffold, seed missing bundled content, and safely update untouched
+/// first-party skills.
 ///
 /// Call on vault open so app updates can ship new `.agents/skills/*` or onboarding
-/// content without requiring the user to re-run Create Vault.
+/// content without requiring the user to re-run Create Vault. User-customized
+/// files are never overwritten.
 #[tauri::command]
 pub fn vault_ensure(path: String, locale: Option<String>) -> ApiResult<CreateVaultResult> {
     let op = OpTimer::start_with("vault_ensure", format!("path={}", trunc(&path, 200)));

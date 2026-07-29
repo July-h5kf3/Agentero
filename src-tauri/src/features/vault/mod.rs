@@ -3,6 +3,7 @@
 use crate::core::error::AppError;
 use crate::features::catalog;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
@@ -14,7 +15,7 @@ This file is the L0 map for agents working in this Agentero research vault.
 ## Layout
 
 - `papers/` — paper folders (any depth). A **paper folder** is the minimal unit: it contains `NOTES.md`, optional `PAPER.md` / `marks/`, and `source/`.
-- `notes/` — free-form concept notes and ideas (`[[wikilinks]]` welcome).
+- `notes/` — free-form concept notes and ideas. Supports `[[wikilinks]]`, `![[embeds]]`, Mermaid diagrams, and Obsidian `> [!callout]` blocks.
 - `plans/` — research plans and drafts.
 - `.agents/` — vault-local agent assets (e.g. `skills/<id>/SKILL.md` for Composer `$` skills).
 - `.agentero/catalog.sqlite` — paper **catalog** (collection + metadata). There is usually **no** root `PAPERS.md` or `library.bib` unless the user exports them.
@@ -36,7 +37,8 @@ For a paper folder, use the richest available source in this order:
 - Prefer short, structured notes (problem / method / results).
 - Keep original files under `source/` unchanged; treat `PAPER.md` as a derived, regenerable artifact.
 - Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty explicitly.
-- Keep `[[wikilinks]]` as written; do not rewrite them to plain URLs.
+- Keep `[[wikilinks]]` and `![[embeds]]` as written; do not rewrite them to plain URLs or inline text.
+- Preserve Mermaid fenced code blocks (` ```mermaid `); do not flatten diagrams to prose.
 - Cite the Vault-relative paths actually read; end substantial answers with `## Sources`.
 - Never overwrite user notes without an explicit draft + confirmation path.
 - Do not store API keys or other secrets in the Vault.
@@ -228,6 +230,45 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
     ]
 }
 
+/// Previous first-party SKILL.md hashes eligible for an automatic bundled
+/// update. Byte equality by SHA-256 proves that the user has not customized the
+/// seeded file. Any other content is preserved.
+const LEGACY_BUNDLED_SKILL_HASHES: &[(&str, &str)] = &[
+    (
+        ".agents/skills/agentero-cli/SKILL.md",
+        "8195723fd1b75a7c8c396f382b2c5b079d812246a693c65be0b9cd91bfb70f67",
+    ),
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "e8ded7c1b6eec291b8b7ad3069b45ce42708d422597eaa620a0e73103a9cc478",
+    ),
+    (
+        ".agents/skills/vault-normalizer/SKILL.md",
+        "bec14afc8ad2d9c8b3f2ad06c7c84ef6e99fe546a8c944b757213d743feb2f33",
+    ),
+];
+
+fn sha256_hex(content: &[u8]) -> String {
+    hex::encode(Sha256::digest(content))
+}
+
+fn matches_legacy_bundled_skill(rel: &str, content: &[u8], hashes: &[(&str, &str)]) -> bool {
+    let hash = sha256_hex(content);
+    hashes
+        .iter()
+        .any(|(path, legacy_hash)| *path == rel && *legacy_hash == hash)
+}
+
+pub(crate) fn is_legacy_bundled_skill(rel: &str, content: &[u8]) -> bool {
+    matches_legacy_bundled_skill(rel, content, LEGACY_BUNDLED_SKILL_HASHES)
+}
+
+pub(crate) fn bundled_skill_has_legacy_version(rel: &str) -> bool {
+    LEGACY_BUNDLED_SKILL_HASHES
+        .iter()
+        .any(|(path, _)| *path == rel)
+}
+
 /// Normalize a frontend/CLI locale preference to a supported onboarding locale.
 /// Unknown or missing values fall back to English.
 pub fn resolve_vault_locale(locale: &str) -> &str {
@@ -259,6 +300,8 @@ pub(crate) fn bundled_onboarding_files(locale: &str) -> &'static [(&'static str,
 pub struct CreateVaultResult {
     pub path: String,
     pub created: Vec<String>,
+    /// Untouched first-party bundled skills upgraded to the current template.
+    pub updated: Vec<String>,
     /// Relative path suggested for first open (e.g. `AGENTS.md`).
     pub open_path: String,
 }
@@ -290,12 +333,55 @@ fn seed_file_if_missing(
     Ok(())
 }
 
+/// Seed a missing bundled file, or update an untouched first-party SKILL.md
+/// whose bytes match a known previous bundled version.
+fn seed_or_upgrade_bundled_file_with_hashes(
+    root: &Path,
+    rel: &str,
+    content: &str,
+    created: &mut Vec<String>,
+    updated: &mut Vec<String>,
+    hashes: &[(&str, &str)],
+) -> Result<(), AppError> {
+    let path = join_rel(root, rel);
+    if !path.exists() {
+        return seed_file_if_missing(root, rel, content, created);
+    }
+    if !hashes.iter().any(|(path, _)| *path == rel) {
+        return Ok(());
+    }
+    let existing = fs::read(&path)?;
+    if existing != content.as_bytes() && matches_legacy_bundled_skill(rel, &existing, hashes) {
+        fs::write(&path, content)?;
+        updated.push(rel.to_string());
+    }
+    Ok(())
+}
+
+fn seed_or_upgrade_bundled_file(
+    root: &Path,
+    rel: &str,
+    content: &str,
+    created: &mut Vec<String>,
+    updated: &mut Vec<String>,
+) -> Result<(), AppError> {
+    seed_or_upgrade_bundled_file_with_hashes(
+        root,
+        rel,
+        content,
+        created,
+        updated,
+        LEGACY_BUNDLED_SKILL_HASHES,
+    )
+}
+
 /// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
 /// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
-/// `AGENTS.md` (if missing), seeds `.agents/README.md` and **any missing** bundled
-/// skills from the app template, seeds localized onboarding tutorial notes under
-/// `notes/`, and initializes `.agentero/catalog.sqlite`.
+/// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills from
+/// the app template, safely upgrades untouched first-party skills, seeds
+/// localized onboarding tutorial notes under `notes/`, and initializes
+/// `.agentero/catalog.sqlite`.
 /// Does **not** create `PAPERS.md` / `library.bib`.
 ///
 /// Safe to call on every vault open after an app update so newly shipped skills
@@ -312,6 +398,7 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     }
 
     let mut created: Vec<String> = Vec::new();
+    let mut updated: Vec<String> = Vec::new();
 
     for dir in [
         "papers",
@@ -334,11 +421,11 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
         created.push("AGENTS.md".into());
     }
 
-    // Seed vault-local agent layout from `templates/vault/.agents/` (no overwrite).
-    // Includes newly bundled skills that did not exist when the vault was first created.
+    // Seed vault-local agent layout from `templates/vault/.agents/`. Missing
+    // files are created; known untouched first-party skills may be upgraded.
     seed_file_if_missing(path, ".agents/README.md", AGENTS_DIR_README, &mut created)?;
     for (rel, content) in bundled_skill_files() {
-        seed_file_if_missing(path, rel, content, &mut created)?;
+        seed_or_upgrade_bundled_file(path, rel, content, &mut created, &mut updated)?;
     }
 
     // Seed localized onboarding tutorial notes under `notes/` (no overwrite).
@@ -376,6 +463,7 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     Ok(CreateVaultResult {
         path: path_str,
         created,
+        updated,
         open_path,
     })
 }
@@ -455,9 +543,9 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    /// After app update: missing bundled skills are added; customized files stay.
+    /// After app update: missing bundled skills are added and customized files stay.
     #[test]
-    fn ensure_vault_seeds_missing_bundled_skills_only() {
+    fn ensure_vault_seeds_missing_bundled_skills_without_overwriting_customized_files() {
         let dir = env::temp_dir().join(format!(
             "agentero-vault-ensure-skills-{}",
             std::process::id()
@@ -492,6 +580,10 @@ mod tests {
             .created
             .iter()
             .any(|c| c == ".agents/skills/paper-reader/SKILL.md"));
+        assert!(!r
+            .updated
+            .iter()
+            .any(|c| c == ".agents/skills/paper-reader/SKILL.md"));
 
         // Idempotent: second ensure adds nothing for already-present skills
         let r2 = ensure_vault(&dir, "en").expect("ensure again");
@@ -499,6 +591,54 @@ mod tests {
             .created
             .iter()
             .any(|c| c.starts_with(".agents/skills/deep-research/")));
+        assert!(r2.updated.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bundled_skill_upgrade_requires_an_exact_known_hash() {
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-upgrade-skill-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let rel = ".agents/skills/example/SKILL.md";
+        let path = join_rel(&dir, rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "old bundled skill\n").unwrap();
+        let legacy_hash = sha256_hex(b"old bundled skill\n");
+        let hashes = [(rel, legacy_hash.as_str())];
+        let mut created = Vec::new();
+        let mut updated = Vec::new();
+
+        seed_or_upgrade_bundled_file_with_hashes(
+            &dir,
+            rel,
+            "new bundled skill\n",
+            &mut created,
+            &mut updated,
+            &hashes,
+        )
+        .unwrap();
+        assert!(created.is_empty());
+        assert_eq!(updated, vec![rel]);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new bundled skill\n");
+
+        fs::write(&path, "user customization\n").unwrap();
+        updated.clear();
+        seed_or_upgrade_bundled_file_with_hashes(
+            &dir,
+            rel,
+            "another bundled skill\n",
+            &mut created,
+            &mut updated,
+            &hashes,
+        )
+        .unwrap();
+        assert!(updated.is_empty());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "user customization\n");
 
         let _ = fs::remove_dir_all(&dir);
     }

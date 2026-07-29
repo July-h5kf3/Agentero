@@ -1,5 +1,8 @@
 {
 	"missingLink": "Missing: {{target}} (click to create)",
+	"toc": {
+		"label": "Table of contents"
+	},
 	"toolbar": {
 		"h1": "Heading 1",
 		"h2": "Heading 2",

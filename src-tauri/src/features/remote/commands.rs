@@ -99,7 +99,8 @@ pub async fn remote_disconnect(
     }
 }
 
-/// Ensure missing bundled skills/onboarding notes in a remote vault without overwriting user files.
+/// Seed bundled content and safely update untouched first-party skills in a
+/// remote vault without overwriting user files.
 #[tauri::command]
 pub async fn remote_vault_ensure(
     registry: State<'_, Arc<RemoteRegistry>>,

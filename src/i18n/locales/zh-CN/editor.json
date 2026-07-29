@@ -1,5 +1,8 @@
 {
 	"missingLink": "缺失：{{target}}（点击创建）",
+	"toc": {
+		"label": "文档目录"
+	},
 	"toolbar": {
 		"h1": "标题 1",
 		"h2": "标题 2",

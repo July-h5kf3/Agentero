@@ -464,6 +464,99 @@ fn tree_and_vault_resolve_from_cwd() {
 }
 
 #[test]
+fn wiki_check_reports_semantic_issues_and_honors_file_scope() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+    fs::create_dir_all(vault.join("notes/a")).unwrap();
+    fs::create_dir_all(vault.join("notes/b")).unwrap();
+    fs::write(vault.join("notes/Target.md"), "# Existing\n").unwrap();
+    fs::write(vault.join("notes/a/Topic.md"), "# A\n").unwrap();
+    fs::write(vault.join("notes/b/Topic.md"), "# B\n").unwrap();
+    fs::write(vault.join("notes/Clean.md"), "[[Target]]\n").unwrap();
+    let broken_source = "[[Target]]\n[[Missing]]\n[[Topic]]\n[[Target#Gone]]\n";
+    fs::write(vault.join("notes/Broken.md"), broken_source).unwrap();
+    fs::create_dir_all(vault.join("papers/demo")).unwrap();
+    fs::write(
+        vault.join("papers/demo/PAPER.md"),
+        "[web](chat.openai.com)\n[[MissingFromPaper]]\n",
+    )
+    .unwrap();
+
+    let clean = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "wiki",
+            "check",
+            "notes/Clean.md",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let clean: Value = serde_json::from_slice(&clean).unwrap();
+    assert_eq!(clean["ok"], true);
+    assert_eq!(clean["data"]["checkedFiles"], 1);
+    assert_eq!(clean["data"]["counts"]["resolved"], 1);
+    assert!(clean["data"]["issues"].as_array().unwrap().is_empty());
+
+    let broken = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "wiki",
+            "check",
+            "notes/Broken.md",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let broken: Value = serde_json::from_slice(&broken).unwrap();
+    assert_eq!(broken["ok"], false);
+    assert_eq!(broken["error"]["code"], "wikilink_check_failed");
+    assert_eq!(broken["error"]["details"]["checkedFiles"], 1);
+    assert_eq!(broken["error"]["details"]["counts"]["resolved"], 1);
+    assert_eq!(broken["error"]["details"]["counts"]["missing"], 1);
+    assert_eq!(broken["error"]["details"]["counts"]["ambiguous"], 1);
+    assert_eq!(broken["error"]["details"]["counts"]["invalidFragment"], 1);
+    assert_eq!(
+        broken["error"]["details"]["issues"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(
+        fs::read_to_string(vault.join("notes/Broken.md")).unwrap(),
+        broken_source
+    );
+
+    let paper = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "wiki",
+            "check",
+            "papers/demo/PAPER.md",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let paper: Value = serde_json::from_slice(&paper).unwrap();
+    assert_eq!(paper["data"]["checkedFiles"], 0);
+    assert!(paper["data"]["issues"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn delete_files_requires_yes() {
     let tmp = tempdir().unwrap();
     let vault = tmp.path().join("v");

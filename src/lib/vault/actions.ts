@@ -211,24 +211,36 @@ export function refreshAll(): void {
 }
 
 /**
- * After app updates, seed any **new** bundled skills into `.agents/skills/`
- * (missing files only — never overwrite user edits).
+ * After app updates, seed new bundled skills and safely update untouched
+ * first-party skills. User-edited files are never overwritten.
  */
 export function seedVaultSkills(path: string): void {
 	if (!isTauri() || !path) return;
 	void ensureVault(path, i18n.language)
 		.then((result) => {
-			const skills = seededSkillIdsFromCreated(result.created);
-			if (skills.length === 0) return;
+			const installed = seededSkillIdsFromCreated(result.created);
+			const updated = seededSkillIdsFromCreated(result.updated);
+			if (installed.length === 0 && updated.length === 0) return;
 			// Path may have changed while ensure was in flight.
 			if (getVaultPath() !== path) return;
-			notifySuccess(
-				i18n.t("app:vault.skillsSeeded", {
-					count: skills.length,
-					names: skills.join(", "),
-				}),
-				{ id: "vault-skills-seeded" },
-			);
+			if (installed.length > 0) {
+				notifySuccess(
+					i18n.t("app:vault.skillsSeeded", {
+						count: installed.length,
+						names: installed.join(", "),
+					}),
+					{ id: "vault-skills-seeded" },
+				);
+			}
+			if (updated.length > 0) {
+				notifySuccess(
+					i18n.t("app:vault.skillsUpdated", {
+						count: updated.length,
+						names: updated.join(", "),
+					}),
+					{ id: "vault-skills-updated" },
+				);
+			}
 		})
 		.catch(() => {
 			// Best-effort: opening the vault must not fail if seed is blocked.

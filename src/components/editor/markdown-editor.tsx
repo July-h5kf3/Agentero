@@ -2,6 +2,7 @@
 
 import { MarkdownPlugin } from "@platejs/markdown";
 import { ImagePlugin } from "@platejs/media/react";
+import { TocPlugin } from "@platejs/toc/react";
 import { KEYS, RangeApi, type RangeRef } from "platejs";
 import { Plate, usePlateEditor } from "platejs/react";
 import {
@@ -40,6 +41,7 @@ import {
 	type SlashCommandDraft,
 	SlashCommandMenu,
 } from "@/components/editor/slash-command-menu";
+import { TocSidebar } from "@/components/editor/toc-sidebar";
 import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
 import {
 	type WikiCompletionController,
@@ -270,6 +272,7 @@ export function MarkdownEditor({
 	const plugins = useMemo(
 		() => [
 			...MarkdownEditorKit,
+			TocPlugin,
 			ImagePlugin.configure({
 				options: {
 					uploadImage: async (dataUrl: ArrayBuffer | string) => {
@@ -1626,6 +1629,7 @@ export function MarkdownEditor({
 									}}
 								/>
 							) : null}
+							<TocSidebar rootMargin="-8px 0px -80% 0px" topOffset={16} />
 						</div>
 						<HeadingRenameDialog
 							open={headingRenameOpen}

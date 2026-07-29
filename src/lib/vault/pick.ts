@@ -68,8 +68,8 @@ export async function createVault(
 
 /**
  * Idempotent ensure for an open vault (Host: vault_ensure).
- * Seeds any **missing** bundled skills under `.agents/skills/` after app updates;
- * never overwrites user-edited skill files. Safe to call on every open.
+ * Seeds missing bundled skills and updates only first-party skills whose bytes
+ * still match a known bundled version. User-edited files are preserved.
  */
 export async function ensureVault(
 	path: string,

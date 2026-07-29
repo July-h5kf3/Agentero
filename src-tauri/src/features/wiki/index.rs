@@ -9,8 +9,9 @@ use crate::features::wiki::extract::extract_document;
 use crate::features::wiki::models::{
     BacklinksResponse, GraphEdge, GraphNode, GraphNodeType, GraphResponse, InternalLinkOccurrence,
     InternalLinkSyntax, LinkFragment, OutgoingLinksResponse, RebuildResult, ResolvedLink,
-    WikiDocument, WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse,
-    WikiSearchCandidate, WikiSearchCandidateKind,
+    WikiCheckCounts, WikiCheckIssue, WikiCheckResult, WikiDocument, WikiEmbedContentKind,
+    WikiEmbedResponse, WikiLinkEdge, WikiResolveResponse, WikiSearchCandidate,
+    WikiSearchCandidateKind,
 };
 use crate::features::wiki::resolve::{normalize_rel, resolve_occurrence};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -35,6 +36,19 @@ fn is_markdown(path: &Path) -> bool {
             e == "md" || e == "mdx" || e == "markdown"
         })
         .unwrap_or(false)
+}
+
+/// `PAPER.md` is derived full text. Keep it in the document index so links can
+/// target its headings, but do not treat links extracted from it as authored
+/// Vault knowledge.
+fn is_derived_paper_body(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("PAPER.md"))
+}
+
+fn is_wiki_source(path: &Path) -> bool {
+    is_markdown(path) && !is_derived_paper_body(path)
 }
 
 fn is_pdf(path: &Path) -> bool {
@@ -353,7 +367,9 @@ impl WikiIndex {
         for rel in &files {
             if let Some(document) = prev_documents.remove(rel) {
                 documents.push(document);
-                occurrences.extend(prev_occurrences.remove(rel).unwrap_or_default());
+                if is_wiki_source(Path::new(rel)) {
+                    occurrences.extend(prev_occurrences.remove(rel).unwrap_or_default());
+                }
                 continue;
             }
             if !is_markdown(Path::new(rel)) {
@@ -377,7 +393,9 @@ impl WikiIndex {
             };
             let (document, parsed) = extract_document(rel, &content);
             documents.push(document);
-            occurrences.extend(parsed);
+            if is_wiki_source(Path::new(rel)) {
+                occurrences.extend(parsed);
+            }
         }
 
         let edges = occurrences
@@ -497,6 +515,76 @@ impl WikiIndex {
         OutgoingLinksResponse {
             path: rel,
             outgoing,
+        }
+    }
+
+    /// Validate all explicit links authored by one Markdown file, a directory,
+    /// or the complete Vault. Resolution always reuses the same canonical Wiki
+    /// index consumed by navigation, embeds, backlinks, and rename repair.
+    pub fn check_links(&self, vault_root: &str, scope: Option<&str>) -> WikiCheckResult {
+        let root = Path::new(vault_root);
+        let normalized_scope = scope.map(|value| to_vault_rel(root, value));
+        let scope_is_dir = normalized_scope
+            .as_deref()
+            .is_some_and(|value| root.join(value).is_dir());
+        let source_matches = |source: &str| match normalized_scope.as_deref() {
+            None => true,
+            Some(value) if scope_is_dir => {
+                source == value || source.starts_with(&format!("{value}/"))
+            }
+            Some(value) => source == value,
+        };
+
+        let checked_files = self
+            .documents
+            .iter()
+            .filter(|document| {
+                is_wiki_source(Path::new(&document.path)) && source_matches(&document.path)
+            })
+            .count() as u32;
+        let mut counts = WikiCheckCounts::default();
+        let mut issues = Vec::new();
+
+        for link in self
+            .edges
+            .iter()
+            .filter(|link| source_matches(&link.occurrence.source))
+        {
+            use crate::features::wiki::models::LinkResolutionStatus;
+
+            match link.status {
+                LinkResolutionStatus::Resolved => counts.resolved += 1,
+                LinkResolutionStatus::Missing => counts.missing += 1,
+                LinkResolutionStatus::Ambiguous => counts.ambiguous += 1,
+                LinkResolutionStatus::InvalidFragment => counts.invalid_fragment += 1,
+            }
+            if link.status == LinkResolutionStatus::Resolved {
+                continue;
+            }
+            issues.push(WikiCheckIssue {
+                status: link.status.clone(),
+                source: link.occurrence.source.clone(),
+                line: link.occurrence.line,
+                target_raw: link.occurrence.target_raw.clone(),
+                syntax: link.occurrence.syntax.clone(),
+                embed: link.occurrence.embed,
+                target_path: link.target_path.clone(),
+                candidates: link.candidates.clone(),
+                context: link.occurrence.context.clone(),
+            });
+        }
+        issues.sort_by(|left, right| {
+            left.source
+                .cmp(&right.source)
+                .then(left.line.cmp(&right.line))
+                .then(left.target_raw.cmp(&right.target_raw))
+        });
+
+        WikiCheckResult {
+            scope: normalized_scope,
+            checked_files,
+            counts,
+            issues,
         }
     }
 
@@ -1099,6 +1187,86 @@ mod tests {
         let root = std::env::temp_dir().join(format!("agentero-wiki-embed-{}", Uuid::new_v4()));
         fs::create_dir_all(root.join("notes")).expect("create embed fixture vault");
         root
+    }
+
+    #[test]
+    fn checks_links_with_shared_resolution_and_source_scope() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("notes/a")).expect("create first topic dir");
+        fs::create_dir_all(root.join("notes/b")).expect("create second topic dir");
+        fs::write(root.join("notes/Target.md"), "# Existing\n").expect("write target");
+        fs::write(root.join("notes/a/Topic.md"), "# A\n").expect("write first topic");
+        fs::write(root.join("notes/b/Topic.md"), "# B\n").expect("write second topic");
+        fs::write(
+            root.join("notes/Source.md"),
+            "[[Target]]\n[[Missing]]\n[[Topic]]\n[[Target#Gone]]\n",
+        )
+        .expect("write source");
+        fs::write(root.join("notes/Clean.md"), "[[Target]]\n").expect("write clean source");
+
+        let vault = root.to_string_lossy().to_string();
+        let mut index = WikiIndex::default();
+        index.rebuild(&vault).expect("rebuild");
+
+        let source = index.check_links(&vault, Some("notes/Source.md"));
+        assert_eq!(source.checked_files, 1);
+        assert_eq!(source.counts.resolved, 1);
+        assert_eq!(source.counts.missing, 1);
+        assert_eq!(source.counts.ambiguous, 1);
+        assert_eq!(source.counts.invalid_fragment, 1);
+        assert_eq!(source.issues.len(), 3);
+        assert_eq!(source.issues[0].source, "notes/Source.md");
+        assert_eq!(source.issues[0].line, 2);
+
+        let clean = index.check_links(&vault, Some("notes/Clean.md"));
+        assert_eq!(clean.checked_files, 1);
+        assert_eq!(clean.counts.resolved, 1);
+        assert!(clean.issues.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn keeps_paper_body_as_a_target_without_indexing_its_outgoing_links() {
+        let root = test_vault();
+        fs::create_dir_all(root.join("papers/demo")).expect("create paper dir");
+        fs::write(
+            root.join("papers/demo/PAPER.md"),
+            "# Paper\n## Method\n[web](chat.openai.com) [[MissingFromPaper]]\n",
+        )
+        .expect("write derived paper body");
+        fs::write(
+            root.join("notes/Source.md"),
+            "[[papers/demo/PAPER#Paper#Method]]\n[missing](Missing.md)\n",
+        )
+        .expect("write authored source");
+
+        let vault = root.to_string_lossy().to_string();
+        let mut index = WikiIndex::default();
+        index.rebuild(&vault).expect("rebuild");
+
+        let paper = index.get_outgoing(&vault, "papers/demo/PAPER.md");
+        assert!(paper.outgoing.is_empty());
+        let source = index.get_outgoing(&vault, "notes/Source.md");
+        assert_eq!(source.outgoing.len(), 2);
+        assert_eq!(source.outgoing[0].status, LinkResolutionStatus::Resolved);
+        assert_eq!(
+            source.outgoing[0].target_path.as_deref(),
+            Some("papers/demo/PAPER.md")
+        );
+
+        let report = index.check_links(&vault, None);
+        assert_eq!(report.checked_files, 1);
+        assert_eq!(report.counts.resolved, 1);
+        assert_eq!(report.counts.missing, 1);
+        assert_eq!(report.issues.len(), 1);
+        assert_eq!(report.issues[0].source, "notes/Source.md");
+
+        let paper_report = index.check_links(&vault, Some("papers/demo/PAPER.md"));
+        assert_eq!(paper_report.checked_files, 0);
+        assert!(paper_report.issues.is_empty());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
