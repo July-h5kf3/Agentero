@@ -36,6 +36,12 @@ export async function bridgeDisconnect(): Promise<void> {
 	});
 }
 
+export async function bridgeResume(): Promise<BridgeClientStatus> {
+	return invokeApi<BridgeClientStatus>("bridge_resume", undefined, {
+		fallback: "Could not resume this desktop connection",
+	});
+}
+
 export async function bridgeStatus(): Promise<BridgeClientStatus> {
 	return invokeApi<BridgeClientStatus>("bridge_status", undefined, {
 		fallback: "Could not read connection status",

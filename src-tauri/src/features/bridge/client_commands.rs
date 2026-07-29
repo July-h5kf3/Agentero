@@ -24,6 +24,18 @@ pub fn bridge_connect(
 }
 
 #[tauri::command]
+#[cfg(target_os = "ios")]
+pub fn bridge_resume(
+    app: AppHandle,
+    controller: State<'_, BridgeClientController>,
+) -> ApiResult<BridgeClientStatus> {
+    match controller.resume(app) {
+        Ok(status) => ApiResult::ok(status),
+        Err(error) => map_err(error),
+    }
+}
+
+#[tauri::command]
 pub fn bridge_disconnect(controller: State<'_, BridgeClientController>) -> ApiResult<()> {
     match controller.disconnect() {
         Ok(()) => ApiResult::ok(()),

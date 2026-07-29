@@ -1,7 +1,7 @@
 use super::{
     connect_relay, next_frame, send_binary, send_text, BridgeClientIdentity,
-    BridgeClientIdentityStore, BridgeMessage, BridgeOffer, E2eeHandshake, RelayEndpoint,
-    RelayFrame, SessionCipher,
+    BridgeClientIdentityStore, BridgeClientProfile, BridgeClientProfileStore, BridgeMessage,
+    BridgeOffer, E2eeHandshake, RelayEndpoint, RelayFrame, SessionCipher,
 };
 use crate::core::error::AppError;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -76,17 +76,41 @@ impl BridgeClientController {
         offer_url: String,
         device_name: String,
     ) -> Result<BridgeClientStatus, AppError> {
-        let offer = BridgeOffer::from_pair_url(&offer_url)?;
         let device_name = device_name.trim().to_string();
         if device_name.is_empty() {
             return Err(AppError::message("device name is required"));
         }
+        let profile = BridgeClientProfile {
+            offer_url,
+            device_name,
+            paired: false,
+        };
+        BridgeClientProfileStore::at_default_path().save(&profile)?;
+        self.start_profile(app, profile)
+    }
+
+    pub fn resume(&self, app: AppHandle) -> Result<BridgeClientStatus, AppError> {
+        let Some(profile) = BridgeClientProfileStore::at_default_path().load()? else {
+            return Ok(BridgeClientStatus::disconnected());
+        };
+        if !profile.paired {
+            return Ok(BridgeClientStatus::disconnected());
+        }
+        self.start_profile(app, profile)
+    }
+
+    fn start_profile(
+        &self,
+        app: AppHandle,
+        profile: BridgeClientProfile,
+    ) -> Result<BridgeClientStatus, AppError> {
+        let offer = BridgeOffer::from_pair_url(&profile.offer_url)?;
         let identity = BridgeClientIdentityStore::at_default_path().load_or_create()?;
         self.disconnect()?;
 
         let status = Arc::new(Mutex::new(BridgeClientStatus {
             connected: false,
-            paired: false,
+            paired: profile.paired,
             server_id: Some(offer.server_id.clone()),
             host_name: Some(offer.host_name.clone()),
             relay_endpoint: Some(offer.relay.endpoint.clone()),
@@ -107,7 +131,7 @@ impl BridgeClientController {
             app,
             offer,
             identity,
-            device_name,
+            profile.device_name,
             Arc::clone(&status),
             command_rx,
             stop_rx,
@@ -205,6 +229,7 @@ async fn run_client_loop(
                     &identity,
                     &device_name,
                     &status,
+                    &BridgeClientProfileStore::at_default_path(),
                     &mut commands,
                     &mut stop,
                 )
@@ -231,6 +256,7 @@ async fn run_client_session(
     identity: &BridgeClientIdentity,
     device_name: &str,
     status: &Arc<Mutex<BridgeClientStatus>>,
+    profile_store: &BridgeClientProfileStore,
     commands: &mut mpsc::Receiver<ClientCommand>,
     stop: &mut watch::Receiver<bool>,
 ) -> Result<(), AppError> {
@@ -328,7 +354,7 @@ async fn run_client_session(
                     )
                     .await?;
                 } else {
-                    handle_message(app, status, &mut pending, message)?;
+                    handle_message(app, status, &mut pending, profile_store, message)?;
                 }
             }
         }
@@ -339,6 +365,7 @@ fn handle_message(
     app: &AppHandle,
     status: &Arc<Mutex<BridgeClientStatus>>,
     pending: &mut HashMap<String, oneshot::Sender<Result<Value, AppError>>>,
+    profile_store: &BridgeClientProfileStore,
     message: BridgeMessage,
 ) -> Result<(), AppError> {
     match message {
@@ -352,6 +379,7 @@ fn handle_message(
             );
         }
         BridgeMessage::PairOk { .. } => {
+            profile_store.mark_paired()?;
             let mut current = status
                 .lock()
                 .map_err(|_| AppError::message("Bridge client status lock poisoned"))?;

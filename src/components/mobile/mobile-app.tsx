@@ -22,6 +22,7 @@ import {
 	type BridgeClientStatus,
 	bridgeConnect,
 	bridgeDisconnect,
+	bridgeResume,
 	bridgeRpc,
 	bridgeStatus,
 	listenBridgeStatus,
@@ -58,7 +59,8 @@ export default function MobileApp() {
 		if (!isTauri()) return;
 		let active = true;
 		const unlisten: Array<() => void> = [];
-		void bridgeStatus()
+		void bridgeResume()
+			.catch(() => bridgeStatus())
 			.then((next) => active && setStatus(next))
 			.catch(() => undefined);
 		void listenBridgeStatus((next) => active && setStatus(next)).then((off) =>

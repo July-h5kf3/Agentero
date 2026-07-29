@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 const IDENTITY_FILE: &str = "identity.json";
 const DEVICES_FILE: &str = "devices.json";
 const CLIENT_IDENTITY_FILE: &str = "client-identity.json";
+const CLIENT_PROFILE_FILE: &str = "client-profile.json";
 
 /// Long-lived desktop identity. The secret key stays in the local config dir
 /// and is never added to a QR offer or sent to the Relay.
@@ -77,6 +78,17 @@ pub struct BridgeClientIdentity {
     pub public_key_b64: String,
     pub secret_key_b64: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// The non-secret connection profile for the most recently paired desktop.
+/// The device signing key remains in `BridgeClientIdentity`; this record only
+/// tells iOS which Relay endpoint and server should be resumed at launch.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeClientProfile {
+    pub offer_url: String,
+    pub device_name: String,
+    pub paired: bool,
 }
 
 impl BridgeClientIdentity {
@@ -276,6 +288,44 @@ impl BridgeClientIdentityStore {
     }
 }
 
+#[derive(Clone)]
+pub struct BridgeClientProfileStore {
+    dir: PathBuf,
+}
+
+impl BridgeClientProfileStore {
+    pub fn at_default_path() -> Self {
+        Self {
+            dir: crate::core::paths::bridge_config_dir(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn at_path(dir: PathBuf) -> Self {
+        Self { dir }
+    }
+
+    pub fn load(&self) -> Result<Option<BridgeClientProfile>, AppError> {
+        let path = self.dir.join(CLIENT_PROFILE_FILE);
+        if !path.is_file() {
+            return Ok(None);
+        }
+        read_json(&path).map(Some)
+    }
+
+    pub fn save(&self, profile: &BridgeClientProfile) -> Result<(), AppError> {
+        write_private_json(&self.dir.join(CLIENT_PROFILE_FILE), profile)
+    }
+
+    pub fn mark_paired(&self) -> Result<(), AppError> {
+        let Some(mut profile) = self.load()? else {
+            return Err(AppError::message("Bridge connection profile is missing"));
+        };
+        profile.paired = true;
+        self.save(&profile)
+    }
+}
+
 fn decode_32(value: &str, label: &str) -> Result<[u8; 32], AppError> {
     let bytes = URL_SAFE_NO_PAD
         .decode(value)
@@ -397,6 +447,22 @@ mod tests {
             current.verifying_key().expect("verifying key").to_bytes()
         );
 
+        fs::remove_dir_all(dir).expect("clean test directory");
+    }
+
+    #[test]
+    fn client_profile_persists_pairing_state() {
+        let dir = test_dir();
+        let store = BridgeClientProfileStore::at_path(dir.clone());
+        store
+            .save(&BridgeClientProfile {
+                offer_url: "agentero://pair#offer=example".to_string(),
+                device_name: "iPhone".to_string(),
+                paired: false,
+            })
+            .expect("save profile");
+        store.mark_paired().expect("mark profile paired");
+        assert!(store.load().expect("load profile").expect("profile").paired);
         fs::remove_dir_all(dir).expect("clean test directory");
     }
 }
