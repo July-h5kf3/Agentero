@@ -36,7 +36,7 @@ thiserror = "2"
 which = "7"
 rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 flate2 = "1.1.9"
 tar = "0.4.46"
 htmd = "0.5.4"
@@ -50,6 +50,8 @@ walkdir = "2.5.0"
 base64 = "0.22"
 urlencoding = "2"
 url = "2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 # Used by lookup batch import (all platforms); also needed by Unix remote vault.
 futures-util = "0.3.33"
 tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }

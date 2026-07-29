@@ -63,6 +63,11 @@ pub fn agents_path() -> PathBuf {
     agentero_config_dir().join("agents.json")
 }
 
+/// Long-lived desktop Bridge identity and paired-device registry.
+pub fn bridge_config_dir() -> PathBuf {
+    agentero_config_dir().join("bridge")
+}
+
 /// Pre-XDG path used by older builds (`dirs::config_dir()/agentero`).
 /// On Linux this often equals the XDG path; on macOS it was
 /// `~/Library/Application Support/agentero`.
