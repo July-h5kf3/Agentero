@@ -58,6 +58,11 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+	Popover,
+	PopoverAnchor,
+	PopoverContent,
+} from "@/components/ui/popover";
 import type {
 	AgentEffortChoice,
 	AgentModelChoice,
@@ -90,6 +95,7 @@ export function AgentComposer({
 	onComposerKeyDown,
 	onComposerDragOver,
 	onComposerDrop,
+	onDismissComposerMenu,
 	// Context chips
 	currentFilePath,
 	currentFileLabel,
@@ -163,6 +169,7 @@ export function AgentComposer({
 	onComposerKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 	onComposerDragOver: (e: ReactDragEvent) => void;
 	onComposerDrop: (e: ReactDragEvent) => void;
+	onDismissComposerMenu: () => void;
 	messageQueue: QueuedPrompt[];
 	onRemoveQueuedMessage: (id: string) => void;
 	currentFilePath: string | null;
@@ -218,6 +225,7 @@ export function AgentComposer({
 }) {
 	const { t } = useTranslation("agent");
 	const hasComposerText = Boolean(composerText.trim());
+	const composerMenuOpen = showMentionMenu || showSkillMenu || showSlashMenu;
 	// While streaming: empty input → stop; with text → queue as follow-up.
 	const showStop = activeTabIsRunning && !hasComposerText;
 
@@ -297,325 +305,361 @@ export function AgentComposer({
 				}}
 			>
 				<PromptInputBody>
-					<div
-						className={cn(
-							"relative flex w-full flex-col px-3 pt-3",
-							isZen ? "min-h-[120px]" : "min-h-[96px]",
-						)}
-						onDragOverCapture={onComposerDragOver}
-						onDropCapture={onComposerDrop}
+					<Popover
+						open={composerMenuOpen}
+						modal={false}
+						onOpenChange={(open) => {
+							if (!open) onDismissComposerMenu();
+						}}
 					>
-						{currentFilePath ||
-						mentionChipPaths.length > 0 ||
-						selectionChips.length > 0 ? (
-							<div className="mb-2 flex flex-wrap gap-1.5">
-								{currentFilePath ? (
-									<button
-										type="button"
-										className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-										onClick={() => onRemoveContextPath(currentFilePath)}
-										title={t("composer.currentFileRemove")}
-									>
-										<ContextPathIcon
-											path={currentFilePath}
-											directoryPaths={directoryPathSet}
-											paperPaths={paperPathSet}
-										/>
-										<span className="truncate" title={currentFilePath}>
-											{currentFileLabel}
-										</span>
-										<X className="size-3 shrink-0 text-muted-foreground" />
-									</button>
-								) : null}
-								{mentionChipPaths.map((path) => {
-									const label = labelForPath(path);
-									return (
-										<button
-											key={path}
-											type="button"
-											className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-											onClick={() => onRemoveContextPath(path)}
-											title={t("composer.removeContext", { path })}
-										>
-											<ContextPathIcon
-												path={path}
-												directoryPaths={directoryPathSet}
-												paperPaths={paperPathSet}
-											/>
-											<span className="max-w-[16rem] truncate" title={path}>
-												{label}
-											</span>
-											<X className="size-3 shrink-0 text-muted-foreground" />
-										</button>
-									);
-								})}
-								{selectionChips.map((sel) => {
-									const name =
-										basenameOf(sel.sourcePath) || t("composer.selection");
-									const label = sel.page ? `${name} · p.${sel.page}` : name;
-									return (
-										<button
-											key={sel.id}
-											type="button"
-											className={cn(
-												"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-foreground text-xs transition-colors hover:bg-muted",
-												sel.pinned
-													? "bg-muted/20"
-													: "border-dashed bg-transparent",
-											)}
-											onClick={() => onRemoveSelection(sel.id)}
-											title={t("composer.removeSelection")}
-										>
-											<TextSelect className="size-3.5 shrink-0 text-muted-foreground" />
-											<span className="max-w-[16rem] truncate" title={sel.text}>
-												{label}
-											</span>
-											<X className="size-3 shrink-0 text-muted-foreground" />
-										</button>
-									);
-								})}
-							</div>
-						) : null}
-						{selectedSkills.length > 0 ? (
-							<div className="mb-2 flex flex-wrap gap-1.5">
-								{selectedSkills.map((skill) => (
-									<button
-										key={skill.id}
-										type="button"
-										className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
-										onClick={() => onRemoveSkill(skill.id)}
-										title={t("composer.removeSkill", {
-											skill: skill.name,
-										})}
-									>
-										<span className="font-mono text-muted-foreground">$</span>
-										<span className="truncate">{skill.name}</span>
-										<X className="size-3 shrink-0 text-muted-foreground" />
-									</button>
-								))}
-							</div>
-						) : null}
-						{showMentionMenu ? (
+						<PopoverAnchor asChild>
 							<div
-								id="agent-mention-menu"
-								role="listbox"
-								className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
+								className={cn(
+									"relative flex w-full flex-col px-3 pt-3",
+									isZen ? "min-h-[120px]" : "min-h-[96px]",
+								)}
+								onDragOverCapture={onComposerDragOver}
+								onDropCapture={onComposerDrop}
 							>
-								{mentionBrowseRoot ? (
-									<div className="mb-0.5 flex items-center gap-0.5 border-border/60 border-b px-0.5 pb-1">
-										<button
-											type="button"
-											className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-											aria-label={t("composer.mentionBack")}
-											title={t("composer.mentionBack")}
-											onClick={onLeaveMentionFolder}
-										>
-											<ChevronLeft className="size-3.5" aria-hidden />
-										</button>
-										<span
-											className="min-w-0 flex-1 truncate pr-1 text-muted-foreground text-xs"
-											title={mentionBrowseRoot}
-										>
-											{labelForPath(mentionBrowseRoot)}
-										</span>
-									</div>
-								) : null}
-								{mentionOptions.length === 0 ? (
-									<div className="px-2 py-2 text-muted-foreground text-xs">
-										{t("composer.mentionEmptyFolder")}
-									</div>
-								) : (
-									mentionOptions.map((path, index) => {
-										const label = labelForPath(path);
-										const showPathHint =
-											!mentionBrowseRoot &&
-											label !== path &&
-											path.includes("/");
-										const canEnter = mentionPathHasChildren(
-											path,
-											mentionCandidates,
-											paperPathSet,
-										);
-										return (
-											<div
-												key={path}
-												className={cn(
-													"flex w-full items-center gap-0.5 rounded-md text-sm",
-													mentionActiveIndex === index
-														? "bg-muted"
-														: "hover:bg-muted/70",
-												)}
+								{currentFilePath ||
+								mentionChipPaths.length > 0 ||
+								selectionChips.length > 0 ? (
+									<div className="mb-2 flex flex-wrap gap-1.5">
+										{currentFilePath ? (
+											<button
+												type="button"
+												className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+												onClick={() => onRemoveContextPath(currentFilePath)}
+												title={t("composer.currentFileRemove")}
 											>
+												<ContextPathIcon
+													path={currentFilePath}
+													directoryPaths={directoryPathSet}
+													paperPaths={paperPathSet}
+												/>
+												<span className="truncate" title={currentFilePath}>
+													{currentFileLabel}
+												</span>
+												<X className="size-3 shrink-0 text-muted-foreground" />
+											</button>
+										) : null}
+										{mentionChipPaths.map((path) => {
+											const label = labelForPath(path);
+											return (
 												<button
+													key={path}
 													type="button"
-													id={`agent-mention-option-${index}`}
-													role="option"
-													aria-selected={mentionActiveIndex === index}
-													className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left focus-visible:outline-none"
-													onMouseEnter={() => onMentionActiveIndexChange(index)}
-													onClick={() => onAttachMention(path)}
+													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+													onClick={() => onRemoveContextPath(path)}
+													title={t("composer.removeContext", { path })}
 												>
 													<ContextPathIcon
 														path={path}
 														directoryPaths={directoryPathSet}
 														paperPaths={paperPathSet}
 													/>
-													<span className="min-w-0 flex-1 truncate">
-														<span className="block truncate" title={path}>
-															{label}
-														</span>
-														{showPathHint ? (
-															<span
-																className="block truncate text-[11px] text-muted-foreground"
-																title={path}
-															>
-																{path}
-															</span>
-														) : null}
+													<span className="max-w-[16rem] truncate" title={path}>
+														{label}
 													</span>
+													<X className="size-3 shrink-0 text-muted-foreground" />
 												</button>
-												{canEnter ? (
-													<button
-														type="button"
-														tabIndex={-1}
-														className="mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-														aria-label={t("composer.mentionEnterFolder", {
-															name: label,
-														})}
-														title={t("composer.mentionEnterFolder", {
-															name: label,
-														})}
-														onMouseEnter={() =>
-															onMentionActiveIndexChange(index)
-														}
-														onClick={(e) => {
-															e.preventDefault();
-															e.stopPropagation();
-															onEnterMentionFolder(path);
-														}}
+											);
+										})}
+										{selectionChips.map((sel) => {
+											const name =
+												basenameOf(sel.sourcePath) || t("composer.selection");
+											const label = sel.page ? `${name} · p.${sel.page}` : name;
+											return (
+												<button
+													key={sel.id}
+													type="button"
+													className={cn(
+														"inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-2 text-foreground text-xs transition-colors hover:bg-muted",
+														sel.pinned
+															? "bg-muted/20"
+															: "border-dashed bg-transparent",
+													)}
+													onClick={() => onRemoveSelection(sel.id)}
+													title={t("composer.removeSelection")}
+												>
+													<TextSelect className="size-3.5 shrink-0 text-muted-foreground" />
+													<span
+														className="max-w-[16rem] truncate"
+														title={sel.text}
 													>
-														<ChevronRight className="size-3.5" aria-hidden />
-													</button>
-												) : (
-													<span className="mr-0.5 size-7 shrink-0" />
-												)}
+														{label}
+													</span>
+													<X className="size-3 shrink-0 text-muted-foreground" />
+												</button>
+											);
+										})}
+									</div>
+								) : null}
+								{selectedSkills.length > 0 ? (
+									<div className="mb-2 flex flex-wrap gap-1.5">
+										{selectedSkills.map((skill) => (
+											<button
+												key={skill.id}
+												type="button"
+												className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-2 text-foreground text-xs transition-colors hover:bg-muted"
+												onClick={() => onRemoveSkill(skill.id)}
+												title={t("composer.removeSkill", {
+													skill: skill.name,
+												})}
+											>
+												<span className="font-mono text-muted-foreground">
+													$
+												</span>
+												<span className="truncate">{skill.name}</span>
+												<X className="size-3 shrink-0 text-muted-foreground" />
+											</button>
+										))}
+									</div>
+								) : null}
+								{showMentionMenu ? (
+									<PopoverContent
+										id="agent-mention-menu"
+										role="listbox"
+										side="top"
+										align="start"
+										sideOffset={8}
+										onOpenAutoFocus={(event) => event.preventDefault()}
+										className="max-h-(--radix-popover-content-available-height) w-[min(28rem,calc(100vw-1rem))] gap-0 overflow-y-auto p-1"
+									>
+										{mentionBrowseRoot ? (
+											<div className="mb-0.5 flex items-center gap-0.5 border-border/60 border-b px-0.5 pb-1">
+												<button
+													type="button"
+													className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+													aria-label={t("composer.mentionBack")}
+													title={t("composer.mentionBack")}
+													onClick={onLeaveMentionFolder}
+												>
+													<ChevronLeft className="size-3.5" aria-hidden />
+												</button>
+												<span
+													className="min-w-0 flex-1 truncate pr-1 text-muted-foreground text-xs"
+													title={mentionBrowseRoot}
+												>
+													{labelForPath(mentionBrowseRoot)}
+												</span>
 											</div>
-										);
-									})
-								)}
-							</div>
-						) : null}
-						{showSkillMenu ? (
-							<div
-								id="agent-skill-menu"
-								role="listbox"
-								className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
-							>
-								{skillOptions.map((skill, index) => (
-									<button
-										key={skill.id}
-										id={`agent-skill-option-${index}`}
-										type="button"
-										role="option"
-										aria-selected={skillActiveIndex === index}
-										className={cn(
-											"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-											skillActiveIndex === index
-												? "bg-muted"
-												: "hover:bg-muted/70",
-										)}
-										onMouseEnter={() => onSkillActiveIndexChange(index)}
-										onClick={() => onAttachSkill(skill)}
-									>
-										<span className="font-mono text-muted-foreground">$</span>
-										<span className="min-w-0 flex-1 truncate">
-											{skill.name}
-										</span>
-										{skill.description ? (
-											<span className="max-w-40 truncate text-muted-foreground text-xs">
-												{skill.description}
-											</span>
 										) : null}
-									</button>
-								))}
-							</div>
-						) : null}
-						{showSlashMenu ? (
-							<div
-								id="agent-slash-menu"
-								role="listbox"
-								className="absolute right-3 bottom-full left-3 z-20 mb-2 overflow-hidden rounded-lg border bg-popover p-1 shadow-md"
-							>
-								{slashOptions.map((command, index) => (
-									<button
-										key={command.id}
-										id={`agent-slash-option-${index}`}
-										type="button"
-										role="option"
-										aria-selected={slashActiveIndex === index}
-										className={cn(
-											"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
-											slashActiveIndex === index
-												? "bg-muted"
-												: "hover:bg-muted/70",
+										{mentionOptions.length === 0 ? (
+											<div className="px-2 py-2 text-muted-foreground text-xs">
+												{t("composer.mentionEmptyFolder")}
+											</div>
+										) : (
+											mentionOptions.map((path, index) => {
+												const label = labelForPath(path);
+												const showPathHint =
+													!mentionBrowseRoot &&
+													label !== path &&
+													path.includes("/");
+												const canEnter = mentionPathHasChildren(
+													path,
+													mentionCandidates,
+													paperPathSet,
+												);
+												return (
+													<div
+														key={path}
+														className={cn(
+															"flex w-full items-center gap-0.5 rounded-md text-sm",
+															mentionActiveIndex === index
+																? "bg-muted"
+																: "hover:bg-muted/70",
+														)}
+													>
+														<button
+															type="button"
+															id={`agent-mention-option-${index}`}
+															role="option"
+															aria-selected={mentionActiveIndex === index}
+															className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left focus-visible:outline-none"
+															onMouseEnter={() =>
+																onMentionActiveIndexChange(index)
+															}
+															onClick={() => onAttachMention(path)}
+														>
+															<ContextPathIcon
+																path={path}
+																directoryPaths={directoryPathSet}
+																paperPaths={paperPathSet}
+															/>
+															<span className="min-w-0 flex-1 truncate">
+																<span className="block truncate" title={path}>
+																	{label}
+																</span>
+																{showPathHint ? (
+																	<span
+																		className="block truncate text-[11px] text-muted-foreground"
+																		title={path}
+																	>
+																		{path}
+																	</span>
+																) : null}
+															</span>
+														</button>
+														{canEnter ? (
+															<button
+																type="button"
+																tabIndex={-1}
+																className="mr-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+																aria-label={t("composer.mentionEnterFolder", {
+																	name: label,
+																})}
+																title={t("composer.mentionEnterFolder", {
+																	name: label,
+																})}
+																onMouseEnter={() =>
+																	onMentionActiveIndexChange(index)
+																}
+																onClick={(e) => {
+																	e.preventDefault();
+																	e.stopPropagation();
+																	onEnterMentionFolder(path);
+																}}
+															>
+																<ChevronRight
+																	className="size-3.5"
+																	aria-hidden
+																/>
+															</button>
+														) : (
+															<span className="mr-0.5 size-7 shrink-0" />
+														)}
+													</div>
+												);
+											})
 										)}
-										onMouseEnter={() => onSlashActiveIndexChange(index)}
-										onClick={() => onAttachSlashCommand(command)}
+									</PopoverContent>
+								) : null}
+								{showSkillMenu ? (
+									<PopoverContent
+										id="agent-skill-menu"
+										role="listbox"
+										side="top"
+										align="start"
+										sideOffset={8}
+										onOpenAutoFocus={(event) => event.preventDefault()}
+										className="max-h-(--radix-popover-content-available-height) w-[min(28rem,calc(100vw-1rem))] gap-0 overflow-y-auto p-1"
 									>
-										<span className="flex min-w-0 flex-1 items-center truncate">
-											<span className="shrink-0 font-mono text-muted-foreground">
-												/
-											</span>
-											<span className="shrink-0 whitespace-nowrap">
-												{command.title}
-											</span>
-										</span>
-										{command.description ? (
-											<span className="min-w-0 max-w-40 flex-1 truncate text-muted-foreground text-xs">
-												{command.description}
-											</span>
-										) : null}
-									</button>
-								))}
+										{skillOptions.map((skill, index) => (
+											<button
+												key={skill.id}
+												id={`agent-skill-option-${index}`}
+												type="button"
+												role="option"
+												aria-selected={skillActiveIndex === index}
+												className={cn(
+													"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+													skillActiveIndex === index
+														? "bg-muted"
+														: "hover:bg-muted/70",
+												)}
+												onMouseEnter={() => onSkillActiveIndexChange(index)}
+												onClick={() => onAttachSkill(skill)}
+											>
+												<span className="font-mono text-muted-foreground">
+													$
+												</span>
+												<span className="min-w-0 flex-1 truncate">
+													{skill.name}
+												</span>
+												{skill.description ? (
+													<span className="max-w-40 truncate text-muted-foreground text-xs">
+														{skill.description}
+													</span>
+												) : null}
+											</button>
+										))}
+									</PopoverContent>
+								) : null}
+								{showSlashMenu ? (
+									<PopoverContent
+										id="agent-slash-menu"
+										role="listbox"
+										side="top"
+										align="start"
+										sideOffset={8}
+										onOpenAutoFocus={(event) => event.preventDefault()}
+										className="max-h-(--radix-popover-content-available-height) w-[min(28rem,calc(100vw-1rem))] gap-0 overflow-y-auto p-1"
+									>
+										{slashOptions.map((command, index) => (
+											<button
+												key={command.id}
+												id={`agent-slash-option-${index}`}
+												type="button"
+												role="option"
+												aria-selected={slashActiveIndex === index}
+												className={cn(
+													"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none",
+													slashActiveIndex === index
+														? "bg-muted"
+														: "hover:bg-muted/70",
+												)}
+												onMouseEnter={() => onSlashActiveIndexChange(index)}
+												onClick={() => onAttachSlashCommand(command)}
+											>
+												<span className="flex min-w-0 flex-1 items-center truncate">
+													<span className="shrink-0 font-mono text-muted-foreground">
+														/
+													</span>
+													<span className="shrink-0 whitespace-nowrap">
+														{command.title}
+													</span>
+												</span>
+												{command.description ? (
+													<span className="min-w-0 max-w-40 flex-1 truncate text-muted-foreground text-xs">
+														{command.description}
+													</span>
+												) : null}
+											</button>
+										))}
+									</PopoverContent>
+								) : null}
+								<PromptInputTextarea
+									autoFocus={autoFocus || undefined}
+									className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
+									value={composerText}
+									onChange={(event) => {
+										onComposerTextChange(event.currentTarget.value);
+									}}
+									onKeyDown={onComposerKeyDown}
+									aria-expanded={
+										showMentionMenu || showSkillMenu || showSlashMenu
+									}
+									aria-autocomplete="list"
+									aria-controls={
+										showMentionMenu
+											? "agent-mention-menu"
+											: showSkillMenu
+												? "agent-skill-menu"
+												: showSlashMenu
+													? "agent-slash-menu"
+													: undefined
+									}
+									aria-activedescendant={
+										showMentionMenu
+											? `agent-mention-option-${mentionActiveIndex}`
+											: showSkillMenu
+												? `agent-skill-option-${skillActiveIndex}`
+												: showSlashMenu
+													? `agent-slash-option-${slashActiveIndex}`
+													: undefined
+									}
+									role="combobox"
+									disabled={switching}
+									placeholder={
+										activeTabIsRunning
+											? t("composer.queueHint")
+											: t("composer.placeholder")
+									}
+								/>
 							</div>
-						) : null}
-						<PromptInputTextarea
-							autoFocus={autoFocus || undefined}
-							className="min-h-[82px] px-0 py-1 text-[15px] leading-6 placeholder:text-muted-foreground/80"
-							value={composerText}
-							onChange={(event) => {
-								onComposerTextChange(event.currentTarget.value);
-							}}
-							onKeyDown={onComposerKeyDown}
-							aria-expanded={showMentionMenu || showSkillMenu || showSlashMenu}
-							aria-autocomplete="list"
-							aria-controls={
-								showMentionMenu
-									? "agent-mention-menu"
-									: showSkillMenu
-										? "agent-skill-menu"
-										: showSlashMenu
-											? "agent-slash-menu"
-											: undefined
-							}
-							aria-activedescendant={
-								showMentionMenu
-									? `agent-mention-option-${mentionActiveIndex}`
-									: showSkillMenu
-										? `agent-skill-option-${skillActiveIndex}`
-										: showSlashMenu
-											? `agent-slash-option-${slashActiveIndex}`
-											: undefined
-							}
-							role="combobox"
-							disabled={switching}
-							placeholder={
-								activeTabIsRunning
-									? t("composer.queueHint")
-									: t("composer.placeholder")
-							}
-						/>
-					</div>
+						</PopoverAnchor>
+					</Popover>
 				</PromptInputBody>
 				<PromptInputFooter className="flex-wrap items-end gap-x-2 gap-y-1.5 px-3 pb-2.5">
 					<PromptInputTools className="min-w-0 flex-1 flex-wrap gap-1">

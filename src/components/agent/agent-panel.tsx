@@ -236,6 +236,7 @@ export const AgentPanel = memo(function AgentPanel({
 						onComposerKeyDown={handleComposerMenuKeyDown}
 						onComposerDragOver={handleComposerDragOver}
 						onComposerDrop={handleComposerDrop}
+						onDismissComposerMenu={() => setComposerMenuDismissed(true)}
 						messageQueue={messageQueue}
 						onRemoveQueuedMessage={removeQueuedMessage}
 						currentFilePath={currentFilePath}
