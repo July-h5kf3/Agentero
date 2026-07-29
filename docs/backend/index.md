@@ -90,6 +90,7 @@ src-tauri/src/
 | Catalog | [catalog.md](catalog.md) |
 | Vault FS | [vault.md](vault.md) |
 | 论文入库 | [paper-import.md](paper-import.md) |
+| Identifier Lookup / 魔棒入库 | [identifier-lookup.md](identifier-lookup.md) |
 | Zotero Connector | [connector.md](connector.md) |
 | 双链索引 | [wiki.md](wiki.md) |
 | Agent Host | [agent.md](agent.md) |

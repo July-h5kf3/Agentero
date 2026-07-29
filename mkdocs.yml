@@ -22,6 +22,8 @@ theme:
     - search.highlight
 
 nav:
+  - 首页: index.md
+
   - 教程:
       - 快速上手: usage/index.md
       - 安装与首次使用: usage/getting-started.md
@@ -53,6 +55,9 @@ nav:
       - Catalog: backend/catalog.md
       - Vault FS: backend/vault.md
       - 论文入库: backend/paper-import.md
+      - Identifier Lookup: backend/identifier-lookup.md
+      - 参考文献解析: backend/citation-parsing.md
+      - Skill 导入: backend/skill-import.md
       - Zotero Connector: backend/connector.md
       - 双链索引: backend/wiki.md
       - Agent Host: backend/agent.md
@@ -74,18 +79,6 @@ nav:
       - 发布流程: development/release.md
       - 应用内更新: development/app-updater.md
       - Bug 汇总: development/bug.md
-
-  - Backend:
-      - 概览: backend/index.md
-      - 数据模型: backend/data-model.md
-      - Catalog: backend/catalog.md
-      - Vault: backend/vault.md
-      - 论文导入: backend/paper-import.md
-      - 参考文献解析: backend/citation-parsing.md
-      - Skill 导入: backend/skill-import.md
-      - Wiki 索引: backend/wiki.md
-      - Agent: backend/agent.md
-      - API 全表: backend/api.md
 
   - 测试:
       - 概览: test/index.md
