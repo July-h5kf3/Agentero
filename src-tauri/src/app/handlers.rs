@@ -123,6 +123,11 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
     }
     #[cfg(target_os = "ios")]
     {
-        builder.invoke_handler(common_commands![])
+        builder.invoke_handler(common_commands![
+            crate::features::bridge::client_commands::bridge_connect,
+            crate::features::bridge::client_commands::bridge_disconnect,
+            crate::features::bridge::client_commands::bridge_status,
+            crate::features::bridge::client_commands::bridge_rpc,
+        ])
     }
 }

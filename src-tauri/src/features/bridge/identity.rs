@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 const IDENTITY_FILE: &str = "identity.json";
 const DEVICES_FILE: &str = "devices.json";
+const CLIENT_IDENTITY_FILE: &str = "client-identity.json";
 
 /// Long-lived desktop identity. The secret key stays in the local config dir
 /// and is never added to a QR offer or sent to the Relay.
@@ -62,6 +63,42 @@ pub struct BridgeDevice {
     pub last_seen_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub revoked: bool,
+}
+
+/// Long-lived identity for one mobile device. Its public half is sent only in
+/// an encrypted `pair_request`; the secret half must stay in the app sandbox.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeClientIdentity {
+    pub v: u8,
+    pub device_id: String,
+    pub public_key_b64: String,
+    pub secret_key_b64: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl BridgeClientIdentity {
+    pub fn create() -> Self {
+        let secret = SecretKey::generate(&mut OsRng);
+        let public = secret.public_key();
+        Self {
+            v: 1,
+            device_id: format!(
+                "ios_{}",
+                URL_SAFE_NO_PAD.encode(uuid::Uuid::new_v4().as_bytes())
+            ),
+            public_key_b64: URL_SAFE_NO_PAD.encode(public.as_bytes()),
+            secret_key_b64: URL_SAFE_NO_PAD.encode(secret.to_bytes()),
+            created_at: Utc::now(),
+        }
+    }
+
+    pub fn secret_key(&self) -> Result<SecretKey, AppError> {
+        Ok(SecretKey::from(decode_32(
+            &self.secret_key_b64,
+            "Bridge client secret key",
+        )?))
+    }
 }
 
 #[derive(Clone)]
@@ -148,6 +185,34 @@ impl BridgeDeviceStore {
         device.revoked = true;
         write_private_json(&self.dir.join(DEVICES_FILE), &devices)?;
         Ok(true)
+    }
+}
+
+#[derive(Clone)]
+pub struct BridgeClientIdentityStore {
+    dir: PathBuf,
+}
+
+impl BridgeClientIdentityStore {
+    pub fn at_default_path() -> Self {
+        Self {
+            dir: crate::core::paths::bridge_config_dir(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn at_path(dir: PathBuf) -> Self {
+        Self { dir }
+    }
+
+    pub fn load_or_create(&self) -> Result<BridgeClientIdentity, AppError> {
+        let path = self.dir.join(CLIENT_IDENTITY_FILE);
+        if path.is_file() {
+            return read_json(&path);
+        }
+        let identity = BridgeClientIdentity::create();
+        write_private_json(&path, &identity)?;
+        Ok(identity)
     }
 }
 

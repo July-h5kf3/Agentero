@@ -4,6 +4,8 @@
 //! Host identity, pairing registry, and QR offer wire format; transport and RPC
 //! execution are layered on top in sibling modules.
 
+mod client;
+pub mod client_commands;
 pub mod commands;
 mod crypto;
 mod host;
@@ -12,9 +14,13 @@ mod messages;
 mod protocol;
 mod relay;
 
+pub use client::{BridgeClientController, BridgeClientStatus};
 pub use crypto::SessionCipher;
 pub use host::{BridgeController, BridgeStatus, PairingRequest};
-pub use identity::{BridgeDevice, BridgeDeviceStore, BridgeIdentity, BridgeIdentityStore};
+pub use identity::{
+    BridgeClientIdentity, BridgeClientIdentityStore, BridgeDevice, BridgeDeviceStore,
+    BridgeIdentity, BridgeIdentityStore,
+};
 pub use messages::{BridgeMessage, E2eeHandshake, RelayControlMessage, RpcError};
 pub use protocol::{
     BridgeOffer, RelayEndpoint, RelayOffer, DEFAULT_RELAY_ENDPOINT, RELAY_PROTOCOL_VERSION,

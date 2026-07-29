@@ -39,6 +39,7 @@ pub fn bridge_stop(controller: State<'_, BridgeController>) -> ApiResult<()> {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 #[tauri::command]
 pub fn bridge_status(controller: State<'_, BridgeController>) -> ApiResult<BridgeStatus> {
     match controller.status() {
