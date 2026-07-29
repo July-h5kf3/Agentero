@@ -46,11 +46,14 @@ For each candidate change:
 - Use the first-parent commit subject, body, and changed files when no merged PR
   covers the commit.
 - Inspect the relevant diff or documentation when the public effect is unclear.
+- Collect issues closed during the release range that are not already covered by
+  a merged PR. Use `gh issue list --state closed --search "closed:>={base-date}"`
+  or inspect `Closes` / `Fixes` references in commit messages.
 - Exclude release bumps, formatting, tests, internal refactors, and routine
   documentation unless they change installation, compatibility, security, or
   visible behavior.
 - Combine multiple commits that implement one user-visible outcome.
-- Keep a PR or commit URL as evidence for every bullet.
+- Keep a PR, commit, or issue URL as evidence for every bullet.
 - Report uncertainty or conflicting evidence instead of inventing behavior.
 
 ## Draft the notes
@@ -77,6 +80,10 @@ Use this shape:
 
 - **<Keyword or short phrase>**: <One or two concrete sentences.> ([#124](...))
 
+## Resolved Issues
+
+- **<Keyword or short phrase>**: <One or two concrete sentences.> ([#125](...))
+
 ---
 
 ## 概要
@@ -94,6 +101,10 @@ Use this shape:
 ## 修复
 
 - **<关键词或短语>**: <一到两句具体介绍。>（[#124](...)）
+
+## 已解决问题
+
+- **<关键词或短语>**: <一到两句具体介绍。>（[#125](...)）
 ```
 
 Apply these writing rules:
@@ -108,10 +119,12 @@ Apply these writing rules:
   colon and following space outside the bold markers in both languages; never
   write `**<keyword>:**` or `**<关键词>：**`.
 - Follow the keyword with one or two specific, user-facing sentences.
-- Use `Features / 新功能`, `Improvements / 改进`, and `Fixes / 修复` when
-  evidence exists. Add mirrored groups such as
-  `Security / 安全性`, `Breaking Changes / 破坏性变更`, or
-  `Known Limitations / 已知限制` only when needed.
+- Use `Features / 新功能`, `Improvements / 改进`, `Fixes / 修复`, and
+  `Resolved Issues / 已解决问题` when evidence exists. `Resolved Issues` is for
+  issues closed during the release that are not already covered by a merged PR.
+  Add mirrored groups such as `Security / 安全性`,
+  `Breaking Changes / 破坏性变更`, or `Known Limitations / 已知限制` only when
+  needed.
 - Omit empty groups.
 - Describe shipped behavior, not implementation activity or test counts.
 - Keep terminology and factual scope equivalent across languages; do not make
