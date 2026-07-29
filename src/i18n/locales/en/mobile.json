@@ -12,6 +12,7 @@
 		"action": "Connect",
 		"connecting": "Connecting…",
 		"camera": "Scan QR code",
+		"manual": "Enter pairing link",
 		"cancel": "Cancel",
 		"cameraHint": "Point the camera at the pairing code on your computer.",
 		"cameraUnavailable": "Camera access is unavailable. Paste the pairing link instead.",

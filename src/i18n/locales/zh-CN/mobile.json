@@ -12,6 +12,7 @@
 		"action": "连接",
 		"connecting": "连接中…",
 		"camera": "扫码连接",
+		"manual": "输入配对链接",
 		"cancel": "取消",
 		"cameraHint": "将相机对准电脑上的配对二维码。",
 		"cameraUnavailable": "无法使用相机，请改为粘贴配对链接。",

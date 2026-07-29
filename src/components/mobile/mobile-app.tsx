@@ -8,6 +8,7 @@ import {
 	Circle,
 	FileText,
 	History,
+	Keyboard,
 	Laptop,
 	Library,
 	LoaderCircle,
@@ -29,6 +30,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import agenteroLogo from "@/assets/agentero-logo.svg";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -237,11 +239,7 @@ function isPairOfferUrl(value: string): boolean {
 }
 
 function MobileBrand() {
-	return (
-		<div className="grid size-8 place-items-center border bg-foreground text-background">
-			<span className="font-semibold text-sm">A</span>
-		</div>
-	);
+	return <img src={agenteroLogo} alt="Agentero" className="size-8" />;
 }
 
 function MobileNav({
@@ -300,76 +298,82 @@ function MobilePairing({
 	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [scannerOpen, setScannerOpen] = useState(false);
-	const handleScannedOffer = useCallback((value: string) => {
-		setOfferUrl(value);
-		setError(null);
-		setScannerOpen(false);
-	}, []);
+	const [linkOpen, setLinkOpen] = useState(false);
+	const connect = useCallback(
+		async (value: string) => {
+			const offer = value.trim();
+			if (!offer) return;
+			setConnecting(true);
+			setError(null);
+			try {
+				const next = await bridgeConnect({
+					offerUrl: offer,
+					deviceName: navigator.userAgent.includes("iPad") ? "iPad" : "iPhone",
+				});
+				setLinkOpen(false);
+				onStatus(next);
+				onDone();
+			} catch (cause) {
+				setError(cause instanceof Error ? cause.message : t("errors.connect"));
+			} finally {
+				setConnecting(false);
+			}
+		},
+		[onStatus, onDone, t],
+	);
+	const handleScannedOffer = useCallback(
+		(value: string) => {
+			setScannerOpen(false);
+			setOfferUrl(value);
+			void connect(value);
+		},
+		[connect],
+	);
 	useEffect(() => {
 		if (!initialOffer) return;
 		setOfferUrl(initialOffer);
 		setError(null);
+		setLinkOpen(true);
 	}, [initialOffer]);
-	const connect = async () => {
-		setConnecting(true);
-		setError(null);
-		try {
-			const next = await bridgeConnect({
-				offerUrl,
-				deviceName: navigator.userAgent.includes("iPad") ? "iPad" : "iPhone",
-			});
-			onStatus(next);
-			onDone();
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : t("errors.connect"));
-		} finally {
-			setConnecting(false);
-		}
-	};
 	return (
-		<div className="flex min-h-dvh flex-col bg-background px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8 sm:px-8 md:mx-auto md:max-w-2xl">
-			<MobileBrand />
-			<div className="flex flex-1 flex-col justify-center py-12">
-				<h1 className="text-2xl font-semibold">{t("connect.title")}</h1>
-				<div className="mt-8 space-y-3">
-					<label className="text-sm font-medium" htmlFor="pair-link">
-						{t("connect.paste")}
-					</label>
-					<Textarea
-						id="pair-link"
-						value={offerUrl}
-						onChange={(event) => setOfferUrl(event.target.value)}
-						placeholder={t("connect.placeholder")}
-						className="min-h-28 resize-none font-mono text-xs"
-						autoCapitalize="off"
-						autoCorrect="off"
-						spellCheck={false}
-					/>
+		<div className="flex min-h-dvh w-full flex-col bg-background px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8 sm:px-8 md:mx-auto md:max-w-md">
+			<div className="flex flex-1 flex-col items-center justify-center">
+				<img src={agenteroLogo} alt="Agentero" className="size-28" />
+				<h1 className="mt-6 font-semibold text-2xl">{t("connect.title")}</h1>
+				<div className="mt-10 w-full space-y-3">
 					<Button
 						className="w-full"
 						size="lg"
-						disabled={connecting || !offerUrl.trim()}
-						onClick={() => void connect()}
+						disabled={connecting}
+						onClick={() => {
+							setError(null);
+							setScannerOpen(true);
+						}}
 					>
 						{connecting ? (
 							<LoaderCircle className="size-4 animate-spin" />
 						) : (
-							<Laptop className="size-4" />
+							<Camera className="size-4" />
 						)}
-						{connecting ? t("connect.connecting") : t("connect.action")}
+						{connecting ? t("connect.connecting") : t("connect.camera")}
 					</Button>
 					<Button
 						type="button"
 						variant="outline"
 						className="w-full"
-						onClick={() => setScannerOpen(true)}
+						size="lg"
+						disabled={connecting}
+						onClick={() => {
+							setError(null);
+							setLinkOpen(true);
+						}}
 					>
-						<Camera className="size-4" />
-						{t("connect.camera")}
+						<Keyboard className="size-4" />
+						{t("connect.manual")}
 					</Button>
 				</div>
 				{pending ? (
-					<div className="mt-8 border-l-2 border-foreground px-4 py-2">
+					<div className="mt-8 w-full border-l-2 border-foreground px-4 py-2">
 						<p className="text-sm">{t("connect.pending")}</p>
 						<p className="mt-1 font-mono text-2xl tabular-nums">
 							{pending.verificationCode}
@@ -377,7 +381,7 @@ function MobilePairing({
 					</div>
 				) : null}
 				{error || status.lastError ? (
-					<p className="mt-4 text-destructive text-sm">
+					<p className="mt-4 w-full text-destructive text-sm">
 						{error ?? status.lastError}
 					</p>
 				) : null}
@@ -388,6 +392,41 @@ function MobilePairing({
 					onScan={handleScannedOffer}
 				/>
 			) : null}
+			<Dialog
+				open={linkOpen}
+				onOpenChange={(open) => {
+					if (!open) setLinkOpen(false);
+				}}
+			>
+				<DialogContent className="max-w-md rounded-lg">
+					<DialogHeader>
+						<DialogTitle>{t("connect.paste")}</DialogTitle>
+					</DialogHeader>
+					<Textarea
+						value={offerUrl}
+						onChange={(event) => setOfferUrl(event.target.value)}
+						placeholder={t("connect.placeholder")}
+						className="min-h-28 resize-none font-mono text-xs"
+						autoCapitalize="off"
+						autoCorrect="off"
+						spellCheck={false}
+					/>
+					{error ? <p className="text-destructive text-sm">{error}</p> : null}
+					<DialogFooter>
+						<Button
+							disabled={connecting || !offerUrl.trim()}
+							onClick={() => void connect(offerUrl)}
+						>
+							{connecting ? (
+								<LoaderCircle className="size-4 animate-spin" />
+							) : (
+								<Laptop className="size-4" />
+							)}
+							{connecting ? t("connect.connecting") : t("connect.action")}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
