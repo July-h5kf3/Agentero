@@ -10,6 +10,7 @@
 		"preview": "vite preview",
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",
+		"ios:release:check": "node scripts/ios-release-check.mjs",
 		"demo:vault": "node test/scripts/create-demo-vault.mjs",
 		"demo:vault:downloads": "node test/scripts/create-demo-vault.mjs --downloads",
 		"demo:vault:empty": "node test/scripts/create-demo-vault.mjs --empty",
