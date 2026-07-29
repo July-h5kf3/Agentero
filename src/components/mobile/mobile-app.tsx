@@ -7,6 +7,7 @@ import {
 	ChevronRight,
 	Circle,
 	FileText,
+	History,
 	Laptop,
 	Library,
 	LoaderCircle,
@@ -84,6 +85,7 @@ export default function MobileApp() {
 	const [selectedPaper, setSelectedPaper] = useState<PaperMetadata | null>(
 		null,
 	);
+	const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
 	const [pairPending, setPairPending] = useState<PairPendingEvent | null>(null);
 
 	useEffect(() => {
@@ -134,6 +136,7 @@ export default function MobileApp() {
 		if (!status.paired) {
 			setPapers([]);
 			setSelectedPaper(null);
+			setAgentSessionId(null);
 			return;
 		}
 		void bridgeRpc<PaperMetadata[]>("paper_list")
@@ -195,7 +198,12 @@ export default function MobileApp() {
 						/>
 					) : null}
 					{tab === "reader" ? <MobileReader paper={selectedPaper} /> : null}
-					{tab === "agent" ? <MobileAgent /> : null}
+					{tab === "agent" ? (
+						<MobileAgent
+							sessionId={agentSessionId}
+							onSessionId={setAgentSessionId}
+						/>
+					) : null}
 					{tab === "settings" ? (
 						<MobileSettings
 							status={status}
@@ -731,17 +739,87 @@ type AgentLine = {
 	streaming?: boolean;
 };
 
-function MobileAgent() {
+type AcpSessionInfo = {
+	sessionId: string;
+	title?: string;
+	updatedAt?: string;
+};
+
+type AcpListSessionsResult = {
+	sessions: AcpSessionInfo[];
+	supported: boolean;
+};
+
+type AcpHistoryLine = {
+	id: string;
+	kind: string;
+	text: string;
+};
+
+type AcpLoadSessionResult = {
+	sessionId: string;
+	title?: string;
+	lines: AcpHistoryLine[];
+};
+
+function MobileAgent({
+	sessionId,
+	onSessionId,
+}: {
+	sessionId: string | null;
+	onSessionId: (sessionId: string | null) => void;
+}) {
 	const { t } = useTranslation("mobile");
 	const [text, setText] = useState("");
 	const [lines, setLines] = useState<AgentLine[]>([]);
 	const [sending, setSending] = useState(false);
+	const [restoring, setRestoring] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 	const [permission, setPermission] = useState<AgentPermissionRequest | null>(
 		null,
 	);
-	const sessionRef = useRef<string | null>(null);
+	const sessionRef = useRef<string | null>(sessionId);
 	const pendingPermissionRef = useRef<AgentPermissionRequest | null>(null);
 	pendingPermissionRef.current = permission;
+
+	const restore = useCallback(
+		async (target: string) => {
+			setRestoring(true);
+			try {
+				const history = await bridgeRpc<AcpLoadSessionResult>(
+					"agent_load_session",
+					{ sessionId: target },
+				);
+				sessionRef.current = history.sessionId;
+				onSessionId(history.sessionId);
+				setLines(
+					history.lines.map((line) => ({
+						id: line.id,
+						role: line.kind === "user" ? "user" : "assistant",
+						text: line.text,
+					})),
+				);
+			} catch {
+				// Session history is best-effort; keep the current timeline.
+			} finally {
+				setRestoring(false);
+			}
+		},
+		[onSessionId],
+	);
+
+	useEffect(() => {
+		if (sessionRef.current) void restore(sessionRef.current);
+	}, [restore]);
+
+	useEffect(() => {
+		const onVisible = () => {
+			if (document.visibilityState !== "visible") return;
+			if (sessionRef.current) void restore(sessionRef.current);
+		};
+		document.addEventListener("visibilitychange", onVisible);
+		return () => document.removeEventListener("visibilitychange", onVisible);
+	}, [restore]);
 
 	useEffect(() => {
 		let active = true;
@@ -846,6 +924,7 @@ function MobileAgent() {
 				},
 			);
 			sessionRef.current = accepted.sessionId;
+			onSessionId(accepted.sessionId);
 		} catch (error) {
 			setSending(false);
 			setLines((current) => [
@@ -861,11 +940,26 @@ function MobileAgent() {
 	return (
 		<>
 			<section className="flex h-full min-h-0 flex-col">
-				<header className="border-b px-4 py-4 md:px-6">
+				<header className="flex items-center justify-between border-b px-4 py-4 md:px-6">
 					<h1 className="font-semibold text-lg">{t("agent.title")}</h1>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						aria-label={t("agent.history")}
+						onClick={() => setHistoryOpen(true)}
+					>
+						<History className="size-4" />
+					</Button>
 				</header>
 				<div className="agentero-scroll flex-1 px-4 py-5 md:px-6">
-					{lines.length === 0 ? (
+					{restoring ? (
+						<p className="mb-3 flex items-center gap-2 text-muted-foreground text-sm">
+							<LoaderCircle className="size-4 animate-spin" />
+							{t("agent.restoring")}
+						</p>
+					) : null}
+					{lines.length === 0 && !restoring ? (
 						<p className="text-muted-foreground text-sm">{t("agent.empty")}</p>
 					) : (
 						<div className="space-y-3">
@@ -915,7 +1009,90 @@ function MobileAgent() {
 				permission={permission}
 				onRespond={respondToPermission}
 			/>
+			<MobileAgentHistoryDialog
+				open={historyOpen}
+				onClose={() => setHistoryOpen(false)}
+				onPick={(target) => {
+					setHistoryOpen(false);
+					void restore(target);
+				}}
+			/>
 		</>
+	);
+}
+
+function MobileAgentHistoryDialog({
+	open,
+	onClose,
+	onPick,
+}: {
+	open: boolean;
+	onClose: () => void;
+	onPick: (sessionId: string) => void;
+}) {
+	const { t } = useTranslation("mobile");
+	const [loading, setLoading] = useState(false);
+	const [result, setResult] = useState<AcpListSessionsResult | null>(null);
+	useEffect(() => {
+		if (!open) return;
+		let active = true;
+		setLoading(true);
+		setResult(null);
+		void bridgeRpc<AcpListSessionsResult>("agent_list_sessions")
+			.then((next) => active && setResult(next))
+			.catch(() => active && setResult({ sessions: [], supported: false }))
+			.finally(() => active && setLoading(false));
+		return () => {
+			active = false;
+		};
+	}, [open]);
+	return (
+		<Dialog
+			open={open}
+			onOpenChange={(next) => {
+				if (!next) onClose();
+			}}
+		>
+			<DialogContent className="max-w-md rounded-lg">
+				<DialogHeader>
+					<DialogTitle>{t("agent.history")}</DialogTitle>
+				</DialogHeader>
+				{loading ? (
+					<div className="grid place-items-center py-6">
+						<LoaderCircle className="size-5 animate-spin text-muted-foreground" />
+					</div>
+				) : result && !result.supported ? (
+					<p className="py-2 text-muted-foreground text-sm">
+						{t("agent.historyUnsupported")}
+					</p>
+				) : result && result.sessions.length === 0 ? (
+					<p className="py-2 text-muted-foreground text-sm">
+						{t("agent.historyEmpty")}
+					</p>
+				) : (
+					<ul className="agentero-scroll max-h-80 divide-y">
+						{result?.sessions.map((session) => (
+							<li key={session.sessionId}>
+								<button
+									type="button"
+									className="flex w-full flex-col gap-0.5 px-1 py-3 text-left"
+									onClick={() => onPick(session.sessionId)}
+								>
+									<span className="line-clamp-2 text-sm">
+										{session.title?.trim() || session.sessionId}
+									</span>
+									{session.updatedAt ? (
+										<span className="text-muted-foreground text-xs">
+											{session.updatedAt}
+										</span>
+									) : null}
+								</button>
+							</li>
+						))}
+					</ul>
+				)}
+			</DialogContent>
+		</Dialog>
 	);
 }
 

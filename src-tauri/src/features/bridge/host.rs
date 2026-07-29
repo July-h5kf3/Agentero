@@ -602,7 +602,7 @@ async fn run_data_channel(
                             continue;
                         }
                         let result = dispatch_rpc(&app, &shared.vault_root, &method, params).await;
-                        if method == "agent_run_once" {
+                        if matches!(method.as_str(), "agent_run_once" | "agent_load_session") {
                             if let Ok(data) = &result {
                                 if let Some(session_id) =
                                     data.get("sessionId").and_then(Value::as_str)
@@ -920,6 +920,31 @@ async fn dispatch_agent_rpc(
                 request,
             ))
         }
+        "agent_list_sessions" => {
+            let result = crate::features::agent::commands::agent_list_sessions(
+                app.state::<AgentRegistry>(),
+                app.state::<std::sync::Arc<RemoteRegistry>>(),
+                optional_string(&params, "agentId"),
+                vault_path,
+                optional_string(&params, "cursor"),
+            )
+            .await
+            .map_err(AppError::message)?;
+            api_result_data(result)
+        }
+        "agent_load_session" => {
+            let session_id = required_string(&params, "sessionId")?;
+            let result = crate::features::agent::commands::agent_load_session(
+                app.state::<AgentRegistry>(),
+                app.state::<std::sync::Arc<RemoteRegistry>>(),
+                optional_string(&params, "agentId"),
+                session_id,
+                vault_path,
+            )
+            .await
+            .map_err(AppError::message)?;
+            api_result_data(result)
+        }
         _ => Err(AppError::message("Bridge Agent RPC method is not allowed")),
     }
 }
@@ -961,6 +986,15 @@ fn required_string(params: &Value, field: &str) -> Result<String, AppError> {
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string)
         .ok_or_else(|| AppError::message(format!("{field} is required")))
+}
+
+#[cfg(not(target_os = "ios"))]
+fn optional_string(params: &Value, field: &str) -> Option<String> {
+    params
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
 }
 
 fn to_value<T: Serialize>(value: T) -> Result<Value, AppError> {

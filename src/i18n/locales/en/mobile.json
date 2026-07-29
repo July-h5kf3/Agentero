@@ -39,12 +39,17 @@
 		"placeholder": "Ask about your research",
 		"send": "Send",
 		"empty": "Start a conversation",
-		"failed": "The desktop Agent could not complete this request."
+		"failed": "The desktop Agent could not complete this request.",
+		"history": "Sessions",
+		"historyEmpty": "No past sessions",
+		"historyUnsupported": "This Agent does not expose past sessions.",
+		"restoring": "Restoring session…"
 	},
 	"settings": {
 		"title": "Connection",
 		"connected": "Connected",
 		"offline": "Offline",
+		"addDesktop": "Connect another desktop",
 		"disconnect": "Disconnect",
 		"computer": "Computer",
 		"vault": "Vault"

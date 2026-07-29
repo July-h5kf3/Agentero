@@ -35,12 +35,17 @@
 		"placeholder": "向 Agent 提问",
 		"send": "发送",
 		"empty": "开始一段对话",
-		"failed": "桌面 Agent 未能完成此请求。"
+		"failed": "桌面 Agent 未能完成此请求。",
+		"history": "历史会话",
+		"historyEmpty": "暂无历史会话",
+		"historyUnsupported": "当前 Agent 不支持查看历史会话。",
+		"restoring": "正在恢复会话…"
 	},
 	"settings": {
 		"title": "连接",
 		"connected": "已连接",
 		"offline": "离线",
+		"addDesktop": "连接另一台电脑",
 		"disconnect": "断开连接",
 		"computer": "电脑",
 		"vault": "知识库"

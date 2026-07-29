@@ -1,6 +1,6 @@
 # iOS 远程连接方案（paseo 式二维码配对）
 
-> 状态：**M1 已实现，M2 部分实现**。Relay、Bridge、E2EE、二维码配对、设备验签、iOS Keychain、Library/NOTES、桌面 Agent 流式输出与权限应答已落地；PDF 分块缓存、多主机/LAN 回退、深链和 Agent 会话恢复仍在后续范围。
+> 状态：**M1 已实现，M2 功能已实现（待 TestFlight 内测）**。Relay、Bridge、E2EE、二维码配对、设备验签、iOS Keychain、Library/NOTES、桌面 Agent 流式输出与权限应答、PDF 分块缓存、Agent 会话恢复（历史会话列表 + 回前台补齐时间线）已落地；多主机/LAN 回退仍在后续范围。
 > 决策：iOS **不做本地 Vault**，App 是桌面端的纯远程客户端 —— 扫码配对后经 **relay + 端到端加密** 连接电脑上的 Agentero，读写电脑上的库，并驱动电脑上的 BYOA Agent。
 
 ---
@@ -356,7 +356,7 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 |---|---|---|
 | M0 Relay | [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)：Paseo-compatible 三角色路由与部署适配器，公网入口 `relay.philfan.cn` | `GET /health`、`GET /ready` 通过；两个 WebSocket 客户端经 relay 互通；断线重连与 sync 对账通过 |
 | M1 Bridge 内核 | `features/bridge/`：身份/密钥、v2 `server` 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | **已完成**：已对 `wss://relay.philfan.cn/ws` 完成加密双向帧联调，Bridge 单元测试覆盖协议、加密、认证与 Agent 会话过滤 |
-| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | **部分完成**：扫码、Library、NOTES 编辑、Agent 流式输出和权限应答已实现；PDF 分块缓存与会话恢复完成后进入 TestFlight 内测 |
+| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | **功能已实现**：扫码、Library、NOTES 编辑、Agent 流式输出与权限应答、PDF 分块缓存、会话恢复（`agent_list_sessions` / `agent_load_session` 已入 Bridge 白名单，iOS 回前台自动补齐时间线）；下一步进入 TestFlight 内测 |
 | M3 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
 | P2 之后 | APNs 推送、LAN 直连兜底（含 Tailscale 手动地址）、headless `agentero bridge serve`、`remote:` Vault 透传 | — |
 
