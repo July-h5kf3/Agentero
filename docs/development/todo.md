@@ -5,7 +5,7 @@
 ## 0.3 — 入库与 Agent 补强
 
 - [ ] 关键词/描述 → Agent 候选列表确认后入库
-- [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [skill-import.md](skill-import.md)；首版）
+- [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [../backend/skill-import.md](../backend/skill-import.md)；首版）
 - [ ] 本机 Translator sidecar 捆绑（可选）
 - [ ] 前端 `afterPaperImport` 策略表统一各入口后置
 - [ ] Zotero 迁移走 `paper_commit`；remote 镜像层收敛；统一 `paper:imported` 事件
@@ -34,12 +34,12 @@
 
 ## 0.6 — 引用关系
 
-设计稿：[`pdf-analysis.md`](pdf-analysis.md) · [`citation-parsing.md`](citation-parsing.md)
+设计稿与实现：[../backend/citation-parsing.md](../backend/citation-parsing.md)
 
 - [x] 参考文献元数据解析 M1：S2/Crossref 在线 + 本地 bib/bbl → `agentero-cite.json` sidecar + 库内匹配 + `citationOnlineEnabled` 开关（Host `features/refs/`）
 - [x] 引用侧栏 References 卡片（右侧栏 tab：编号/标题/作者·年份·venue/DOI·arXiv 徽标/已入库打开/未入库导入/过滤/重解析）
 - [x] PDF 文中 citation 交互：Link annotation 覆盖层（点击 GoTo 跳页 / URI 外链）+ hover 锚文本 → References 卡片高亮滚动（`citation-links.tsx` / `citation-hover-store.ts`）
-- [ ] 反向联动：hover 引用卡片 → PDF 文中 anchor 高亮（需 anchors bbox，见 pdf-analysis P1–P3）
+- [ ] 反向联动：hover 引用卡片 → PDF 文中 anchor 高亮（需 anchors bbox）
 - [ ] 本地 PDF citation/figure sidecar + Paper Content 侧栏
 - [ ] 文内引用 hover → Paper Info
 - [ ] Agent `#` 编号提及 + 引用卡片拖拽（citation-parsing M3/M5）

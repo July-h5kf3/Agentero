@@ -22,10 +22,7 @@
 | 文档 | 主题 |
 |---|---|
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
-| [pdf-analysis.md](pdf-analysis.md) | PDF 引用与插图 sidecar |
-| [citation-parsing.md](citation-parsing.md) | 参考文献元数据解析（bbl/bib/PDF 文本分层）+ 引用卡片 / Agent `#` 提及（pdf-analysis 补充篇） |
 | [ios-remote.md](ios-remote.md) | iOS 远程连接（paseo 式二维码配对 + relay E2EE + 远程 Agent） |
-| [skill-import.md](skill-import.md) | 魔棒解析 GitHub / `npx skills` 指令，Skill 下载到 `.agents/skills/`（#118） |
 | [wikilink-heading-reference-stability.md](wikilink-heading-reference-stability.md) | 标题双链调研补充 |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。

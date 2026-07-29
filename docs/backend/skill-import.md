@@ -1,6 +1,6 @@
 # 魔棒解析 GitHub Skill 入库（Skill Import）
 
-> 状态：首版已实现。对应 [#118](https://github.com/poco-ai/Agentero/issues/118)。魔棒（⇧⌘I）除论文标识符外，还能识别 **GitHub 仓库链接 / `npx skills add` 指令**，把 Agent Skill 下载到当前 Vault 的 `.agents/skills/<name>/`。相关：[../backend/paper-import.md](../backend/paper-import.md)、[../backend/agent.md](../backend/agent.md)。
+> 状态：首版已实现。对应 [#118](https://github.com/poco-ai/Agentero/issues/118)。魔棒（⇧⌘I）除论文标识符外，还能识别 **GitHub 仓库链接 / `npx skills add` 指令**，把 Agent Skill 下载到当前 Vault 的 `.agents/skills/<name>/`。相关：[paper-import.md](paper-import.md)、[agent.md](agent.md)。
 
 ## 1. 背景与现状
 

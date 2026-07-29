@@ -69,15 +69,24 @@ nav:
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
       - 广场 Plaza: development/plaza.md
-      - PDF 引用与插图: development/pdf-analysis.md
       - iOS 远程连接: development/ios-remote.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md
       - 应用内更新: development/app-updater.md
       - Bug 汇总: development/bug.md
-      - 参考文献解析: development/citation-parsing.md
-      - 魔棒 GitHub Skill: development/skill-import.md
       - 技术方案: development/technical-plan.md
+
+  - Backend:
+      - 概览: backend/index.md
+      - 数据模型: backend/data-model.md
+      - Catalog: backend/catalog.md
+      - Vault: backend/vault.md
+      - 论文导入: backend/paper-import.md
+      - 参考文献解析: backend/citation-parsing.md
+      - Skill 导入: backend/skill-import.md
+      - Wiki 索引: backend/wiki.md
+      - Agent: backend/agent.md
+      - API 全表: backend/api.md
 
   - 测试:
       - 概览: test/index.md

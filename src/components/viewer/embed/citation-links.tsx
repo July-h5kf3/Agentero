@@ -2,7 +2,7 @@
  * Per-page overlay for PDF Link annotations (in-text citations, figure/section
  * refs, external URLs). PDFium already parses each link's rect + target; this
  * layer makes them clickable and publishes hover anchor text for the
- * References sidebar. See docs/development/citation-parsing.md (M3).
+ * References sidebar. See docs/backend/citation-parsing.md (M3).
  */
 
 import type {

@@ -49,4 +49,4 @@
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。  
-引用元数据解析与 References 侧栏：[../development/citation-parsing.md](../development/citation-parsing.md)；插图 sidecar（未实现）：[../development/pdf-analysis.md](../development/pdf-analysis.md)。
+引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；插图 sidecar 尚未实现。

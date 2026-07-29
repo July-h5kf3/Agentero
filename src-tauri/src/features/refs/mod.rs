@@ -4,7 +4,7 @@
 //! local `source/` BibTeX / `.bbl` / inline `thebibliography` fallback.
 //! Results persist to the rebuildable sidecar `{paper}/source/agentero-cite.json`.
 //!
-//! @see docs/development/citation-parsing.md
+//! @see docs/backend/citation-parsing.md
 
 pub mod bbl;
 pub mod bib;
