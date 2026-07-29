@@ -1,0 +1,41 @@
+{
+	"tabs": {
+		"library": "论文库",
+		"reader": "阅读",
+		"agent": "Agent",
+		"settings": "设置"
+	},
+	"connect": {
+		"title": "连接电脑",
+		"paste": "粘贴配对链接",
+		"placeholder": "agentero://pair#offer=…",
+		"action": "连接",
+		"connecting": "连接中…",
+		"camera": "扫码连接",
+		"offline": "电脑离线",
+		"pending": "请在电脑上确认验证码",
+		"code": "确认码"
+	},
+	"library": { "title": "论文库", "search": "搜索论文", "empty": "暂无论文" },
+	"reader": {
+		"title": "笔记",
+		"empty": "选择一篇论文",
+		"save": "保存笔记",
+		"saving": "保存中…"
+	},
+	"agent": {
+		"title": "Agent",
+		"placeholder": "向 Agent 提问",
+		"send": "发送",
+		"empty": "开始一段对话"
+	},
+	"settings": {
+		"title": "连接",
+		"connected": "已连接",
+		"offline": "离线",
+		"disconnect": "断开连接",
+		"computer": "电脑",
+		"vault": "知识库"
+	},
+	"errors": { "load": "无法加载远程数据", "connect": "无法连接" }
+}

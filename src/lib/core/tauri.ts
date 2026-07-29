@@ -27,3 +27,22 @@ export function getPlatformOS(): "macos" | "windows" | "linux" | "other" {
 export function isMacOS(): boolean {
 	return getPlatformOS() === "macos";
 }
+
+/** iPhone/iPad app shell (including iPadOS devices reporting `MacIntel`). */
+export function isAppleMobile(): boolean {
+	if (typeof window === "undefined" || typeof navigator === "undefined") {
+		return false;
+	}
+	if (
+		new URLSearchParams(window.location.search).get("mobilePreview") === "1"
+	) {
+		return true;
+	}
+	const platform = navigator.platform ?? "";
+	const ua = navigator.userAgent ?? "";
+	return (
+		/iPhone|iPad|iPod/.test(platform) ||
+		/iPhone|iPad|iPod/.test(ua) ||
+		(platform === "MacIntel" && navigator.maxTouchPoints > 1)
+	);
+}

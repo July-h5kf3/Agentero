@@ -1,0 +1,48 @@
+{
+	"tabs": {
+		"library": "Library",
+		"reader": "Read",
+		"agent": "Agent",
+		"settings": "Settings"
+	},
+	"connect": {
+		"title": "Connect a desktop",
+		"paste": "Paste pairing link",
+		"placeholder": "agentero://pair#offer=…",
+		"action": "Connect",
+		"connecting": "Connecting…",
+		"camera": "Scan QR code",
+		"offline": "Desktop offline",
+		"pending": "Confirm the code on your desktop",
+		"code": "Confirmation code"
+	},
+	"library": {
+		"title": "Library",
+		"search": "Search papers",
+		"empty": "No papers"
+	},
+	"reader": {
+		"title": "Notes",
+		"empty": "Choose a paper",
+		"save": "Save notes",
+		"saving": "Saving…"
+	},
+	"agent": {
+		"title": "Agent",
+		"placeholder": "Ask about your research",
+		"send": "Send",
+		"empty": "Start a conversation"
+	},
+	"settings": {
+		"title": "Connection",
+		"connected": "Connected",
+		"offline": "Offline",
+		"disconnect": "Disconnect",
+		"computer": "Computer",
+		"vault": "Vault"
+	},
+	"errors": {
+		"load": "Could not load remote data",
+		"connect": "Could not connect"
+	}
+}
