@@ -34,9 +34,11 @@
 - **远程文献访问**：通过 SSH 隧道浏览远程知识库，数据保留在用户自己的服务器上。
 - **多系统兼容**：Mac、Windows、Linux，快捷键与常用软件保持对齐，不改变使用习惯。
 
+![demo-1](docs/assets/ui-1.png)
 ![demo-2](docs/assets/ui-2.png)
 ![demo-3](docs/assets/ui-3.png)
 ![demo-4](docs/assets/ui-4.png)
+![demo-5](docs/assets/ui-5.png)
 
 ## Quick Start
 

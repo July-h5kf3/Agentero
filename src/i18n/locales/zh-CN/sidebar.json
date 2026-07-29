@@ -163,7 +163,7 @@
 	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",
-		"placeholder": "arXiv / DOI、GitHub Skill 链接或 npx skills add…",
+		"placeholder": "输入论文或 Skill 链接",
 		"add": "添加",
 		"adding": "添加中…",
 		"addTo": "加入 {{path}}",
