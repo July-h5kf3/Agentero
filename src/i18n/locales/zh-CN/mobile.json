@@ -30,7 +30,8 @@
 		"title": "Agent",
 		"placeholder": "向 Agent 提问",
 		"send": "发送",
-		"empty": "开始一段对话"
+		"empty": "开始一段对话",
+		"failed": "桌面 Agent 未能完成此请求。"
 	},
 	"settings": {
 		"title": "连接",

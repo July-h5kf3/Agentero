@@ -34,7 +34,8 @@
 		"title": "Agent",
 		"placeholder": "Ask about your research",
 		"send": "Send",
-		"empty": "Start a conversation"
+		"empty": "Start a conversation",
+		"failed": "The desktop Agent could not complete this request."
 	},
 	"settings": {
 		"title": "Connection",

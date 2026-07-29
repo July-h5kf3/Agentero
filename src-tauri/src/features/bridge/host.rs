@@ -4,8 +4,18 @@ use super::{
     BridgeMessage, BridgeOffer, E2eeHandshake, RelayControlMessage, RelayEndpoint, RelayFrame,
     RelayOffer, RpcError, SessionCipher, DEFAULT_RELAY_ENDPOINT,
 };
+#[cfg(not(target_os = "ios"))]
+use crate::core::error::ApiResult;
 use crate::core::error::AppError;
+#[cfg(not(target_os = "ios"))]
+use crate::features::agent::commands::PermissionResponseRequest;
+#[cfg(not(target_os = "ios"))]
+use crate::features::agent::models::RunOnceRequest;
+#[cfg(not(target_os = "ios"))]
+use crate::features::agent::{AgentRegistry, AgentRunController, PermissionGate};
 use crate::features::catalog::papers;
+#[cfg(not(target_os = "ios"))]
+use crate::features::remote::RemoteRegistry;
 use crate::features::search::{self, VaultSearchArgs};
 use crate::features::vault::tree;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -20,11 +30,68 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
-use tokio::sync::{oneshot, watch};
+#[cfg(not(target_os = "ios"))]
+use tauri::Manager;
+use tauri::{AppHandle, Emitter, EventId, Listener};
+use tokio::sync::{mpsc, oneshot, watch};
 
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(300);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+const FORWARDED_AGENT_EVENTS: [&str; 7] = [
+    "agent:stream",
+    "agent:completed",
+    "agent:failed",
+    "agent:tool",
+    "agent:plan",
+    "agent:usage",
+    "agent:permission-request",
+];
+
+struct ForwardedAgentEvent {
+    name: String,
+    payload: Value,
+}
+
+struct AgentEventForwarder {
+    app: AppHandle,
+    listeners: Vec<EventId>,
+    receiver: mpsc::UnboundedReceiver<ForwardedAgentEvent>,
+}
+
+impl AgentEventForwarder {
+    fn new(app: &AppHandle) -> Self {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let listeners = FORWARDED_AGENT_EVENTS
+            .iter()
+            .map(|event_name| {
+                let sender = sender.clone();
+                let event_name = (*event_name).to_string();
+                app.listen_any(event_name.clone(), move |event| {
+                    let Ok(payload) = serde_json::from_str(event.payload()) else {
+                        return;
+                    };
+                    let _ = sender.send(ForwardedAgentEvent {
+                        name: event_name.clone(),
+                        payload,
+                    });
+                })
+            })
+            .collect();
+        Self {
+            app: app.clone(),
+            listeners,
+            receiver,
+        }
+    }
+}
+
+impl Drop for AgentEventForwarder {
+    fn drop(&mut self) {
+        for listener in self.listeners.drain(..) {
+            self.app.unlisten(listener);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -403,6 +470,8 @@ async fn run_data_channel(
 
     let mut authenticated = false;
     let mut challenge: Option<(BridgeDevice, Vec<u8>)> = None;
+    let mut agent_sessions = HashSet::new();
+    let mut agent_events = AgentEventForwarder::new(&app);
     loop {
         tokio::select! {
             changed = stop.changed() => {
@@ -512,7 +581,17 @@ async fn run_data_channel(
                             let _ = send_rpc_error(&mut socket, &cipher, id, "unauthorized", "Pair this device before using remote access").await;
                             continue;
                         }
-                        let response = match dispatch_rpc(&shared.vault_root, &method, params) {
+                        let result = dispatch_rpc(&app, &shared.vault_root, &method, params).await;
+                        if method == "agent_run_once" {
+                            if let Ok(data) = &result {
+                                if let Some(session_id) =
+                                    data.get("sessionId").and_then(Value::as_str)
+                                {
+                                    agent_sessions.insert(session_id.to_string());
+                                }
+                            }
+                        }
+                        let response = match result {
                             Ok(data) => BridgeMessage::RpcResult { id, ok: true, data: Some(data), error: None },
                             Err(error) => BridgeMessage::RpcResult {
                                 id,
@@ -528,8 +607,34 @@ async fn run_data_channel(
                     _ => {}
                 }
             }
+            event = agent_events.receiver.recv() => {
+                let Some(event) = event else { return; };
+                if !agent_event_belongs_to_session(&event.payload, &agent_sessions) {
+                    continue;
+                }
+                if send_encrypted(
+                    &mut socket,
+                    &cipher,
+                    &BridgeMessage::Event {
+                        name: event.name,
+                        payload: event.payload,
+                    },
+                )
+                .await
+                .is_err()
+                {
+                    return;
+                }
+            }
         }
     }
+}
+
+fn agent_event_belongs_to_session(payload: &Value, sessions: &HashSet<String>) -> bool {
+    payload
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .is_some_and(|session_id| sessions.contains(session_id))
 }
 
 fn begin_pairing(
@@ -643,7 +748,15 @@ async fn send_encrypted(
     send_binary(socket, cipher.encrypt(&raw)?).await
 }
 
-fn dispatch_rpc(vault_root: &Path, method: &str, params: Value) -> Result<Value, AppError> {
+async fn dispatch_rpc(
+    app: &AppHandle,
+    vault_root: &Path,
+    method: &str,
+    params: Value,
+) -> Result<Value, AppError> {
+    if method.starts_with("agent_") {
+        return dispatch_agent_rpc(app, vault_root, method, params).await;
+    }
     match method {
         "vault_tree_build" => to_value(tree::build_tree(vault_root)),
         "paper_list" => to_value(papers::list_all(vault_root)?),
@@ -718,6 +831,92 @@ fn dispatch_rpc(vault_root: &Path, method: &str, params: Value) -> Result<Value,
         }
         _ => Err(AppError::message("Bridge RPC method is not allowed")),
     }
+}
+
+#[cfg(not(target_os = "ios"))]
+async fn dispatch_agent_rpc(
+    app: &AppHandle,
+    vault_root: &Path,
+    method: &str,
+    params: Value,
+) -> Result<Value, AppError> {
+    let vault_path = Some(vault_root.to_string_lossy().into_owned());
+    match method {
+        "agent_run_once" => {
+            let mut request: RunOnceRequest = serde_json::from_value(params)?;
+            request.vault_path = vault_path;
+            request.hide_from_chat_history = false;
+            let window = app
+                .get_webview_window("main")
+                .or_else(|| app.webview_windows().into_values().next())
+                .ok_or_else(|| AppError::message("No desktop window is available for Agent"))?;
+            let result = crate::features::agent::commands::agent_run_once(
+                window,
+                app.state::<AgentRegistry>(),
+                app.state::<AgentRunController>(),
+                app.state::<PermissionGate>(),
+                app.state::<std::sync::Arc<RemoteRegistry>>(),
+                request,
+            )
+            .await
+            .map_err(AppError::message)?;
+            api_result_data(result)
+        }
+        "agent_cancel_run" => {
+            let session_id = required_string(&params, "sessionId")?;
+            api_result_data(crate::features::agent::commands::agent_cancel_run(
+                app.state::<AgentRunController>(),
+                session_id,
+            ))
+        }
+        "agent_respond_permission" => {
+            let request: PermissionResponseRequest = serde_json::from_value(params)?;
+            api_result_data(crate::features::agent::commands::agent_respond_permission(
+                app.state::<PermissionGate>(),
+                request,
+            ))
+        }
+        _ => Err(AppError::message("Bridge Agent RPC method is not allowed")),
+    }
+}
+
+#[cfg(target_os = "ios")]
+async fn dispatch_agent_rpc(
+    _app: &AppHandle,
+    _vault_root: &Path,
+    _method: &str,
+    _params: Value,
+) -> Result<Value, AppError> {
+    Err(AppError::message(
+        "Agent runs are available only from the paired desktop Host",
+    ))
+}
+
+#[cfg(not(target_os = "ios"))]
+fn api_result_data<T: Serialize>(result: ApiResult<T>) -> Result<Value, AppError> {
+    if result.ok {
+        return result
+            .data
+            .map(to_value)
+            .transpose()?
+            .ok_or_else(|| AppError::message("Agent RPC returned no data"));
+    }
+    Err(AppError::message(
+        result
+            .error
+            .map(|error| error.message)
+            .unwrap_or_else(|| "Agent RPC failed".to_string()),
+    ))
+}
+
+#[cfg(not(target_os = "ios"))]
+fn required_string(params: &Value, field: &str) -> Result<String, AppError> {
+    params
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| AppError::message(format!("{field} is required")))
 }
 
 fn to_value<T: Serialize>(value: T) -> Result<Value, AppError> {
@@ -806,5 +1005,22 @@ mod tests {
     fn relay_offer_keeps_the_explicit_secure_port() {
         let endpoint = RelayEndpoint::parse("relay.philfan.cn:443").expect("parse endpoint");
         assert_eq!(relay_endpoint_for_offer(&endpoint), "relay.philfan.cn:443");
+    }
+
+    #[test]
+    fn agent_events_only_forward_for_the_requesting_session() {
+        let sessions = HashSet::from(["session_remote".to_string()]);
+        assert!(agent_event_belongs_to_session(
+            &serde_json::json!({"sessionId": "session_remote"}),
+            &sessions,
+        ));
+        assert!(!agent_event_belongs_to_session(
+            &serde_json::json!({"sessionId": "session_other"}),
+            &sessions,
+        ));
+        assert!(!agent_event_belongs_to_session(
+            &serde_json::json!({}),
+            &sessions
+        ));
     }
 }

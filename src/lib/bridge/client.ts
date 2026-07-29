@@ -76,3 +76,10 @@ export async function listenPairPending(
 		handler(event.payload),
 	);
 }
+
+export async function listenBridgeEvent<T>(
+	name: string,
+	handler: (payload: T) => void,
+): Promise<() => void> {
+	return listen<T>(`bridge:event:${name}`, (event) => handler(event.payload));
+}

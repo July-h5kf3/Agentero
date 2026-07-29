@@ -16,9 +16,17 @@ import {
 	X,
 } from "lucide-react";
 import { nanoid } from "nanoid";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -28,6 +36,7 @@ import {
 	bridgeResume,
 	bridgeRpc,
 	bridgeStatus,
+	listenBridgeEvent,
 	listenBridgeStatus,
 	listenPairPending,
 	type PairPendingEvent,
@@ -211,6 +220,11 @@ function MobilePairing({
 	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [scannerOpen, setScannerOpen] = useState(false);
+	const handleScannedOffer = useCallback((value: string) => {
+		setOfferUrl(value);
+		setError(null);
+		setScannerOpen(false);
+	}, []);
 	const connect = async () => {
 		setConnecting(true);
 		setError(null);
@@ -285,11 +299,7 @@ function MobilePairing({
 			{scannerOpen ? (
 				<MobileQrScanner
 					onClose={() => setScannerOpen(false)}
-					onScan={(value) => {
-						setOfferUrl(value);
-						setError(null);
-						setScannerOpen(false);
-					}}
+					onScan={handleScannedOffer}
 				/>
 			) : null}
 		</div>
@@ -497,51 +507,280 @@ function MobileReader({ paper }: { paper: PaperMetadata | null }) {
 	);
 }
 
+type AgentStreamEvent = {
+	sessionId: string;
+	chunk: string;
+};
+
+type AgentResultEvent = {
+	sessionId: string;
+	content: string;
+};
+
+type AgentPermissionOption = {
+	optionId: string;
+	name: string;
+	kind: string;
+};
+
+type AgentPermissionRequest = {
+	requestId: string;
+	sessionId: string;
+	title: string;
+	paths: string[];
+	options: AgentPermissionOption[];
+};
+
+type AgentLine = {
+	id: string;
+	role: "assistant" | "user";
+	text: string;
+	streaming?: boolean;
+};
+
 function MobileAgent() {
 	const { t } = useTranslation("mobile");
 	const [text, setText] = useState("");
-	const [lines, setLines] = useState<Array<{ id: string; text: string }>>([]);
-	const send = () => {
+	const [lines, setLines] = useState<AgentLine[]>([]);
+	const [sending, setSending] = useState(false);
+	const [permission, setPermission] = useState<AgentPermissionRequest | null>(
+		null,
+	);
+	const sessionRef = useRef<string | null>(null);
+	const pendingPermissionRef = useRef<AgentPermissionRequest | null>(null);
+	pendingPermissionRef.current = permission;
+
+	useEffect(() => {
+		let active = true;
+		const unlisten: Array<() => void> = [];
+		void listenBridgeEvent<AgentStreamEvent>("agent:stream", (event) => {
+			if (!active || event.sessionId !== sessionRef.current) return;
+			setLines((current) => {
+				const last = current.at(-1);
+				if (last?.role === "assistant" && last.streaming) {
+					return [
+						...current.slice(0, -1),
+						{ ...last, text: `${last.text}${event.chunk}` },
+					];
+				}
+				return [
+					...current,
+					{
+						id: nanoid(),
+						role: "assistant",
+						text: event.chunk,
+						streaming: true,
+					},
+				];
+			});
+		}).then((off) => unlisten.push(off));
+		void listenBridgeEvent<AgentResultEvent>("agent:completed", (event) => {
+			if (!active || event.sessionId !== sessionRef.current) return;
+			setSending(false);
+			setLines((current) => {
+				const last = current.at(-1);
+				if (last?.role === "assistant" && last.streaming) {
+					return [...current.slice(0, -1), { ...last, streaming: false }];
+				}
+				return event.content
+					? [
+							...current,
+							{ id: nanoid(), role: "assistant", text: event.content },
+						]
+					: current;
+			});
+		}).then((off) => unlisten.push(off));
+		void listenBridgeEvent<{ sessionId: string; error?: string }>(
+			"agent:failed",
+			(event) => {
+				if (!active || event.sessionId !== sessionRef.current) return;
+				setSending(false);
+				setLines((current) => [
+					...current,
+					{
+						id: nanoid(),
+						role: "assistant",
+						text: event.error ?? t("agent.failed"),
+					},
+				]);
+			},
+		).then((off) => unlisten.push(off));
+		void listenBridgeEvent<AgentPermissionRequest>(
+			"agent:permission-request",
+			(event) => {
+				if (!active || event.sessionId !== sessionRef.current) return;
+				setPermission(event);
+			},
+		).then((off) => unlisten.push(off));
+		return () => {
+			active = false;
+			for (const off of unlisten) off();
+			const pending = pendingPermissionRef.current;
+			if (pending) {
+				void bridgeRpc("agent_respond_permission", {
+					requestId: pending.requestId,
+					optionId: null,
+				});
+			}
+		};
+	}, [t]);
+
+	const respondToPermission = (optionId: string | null) => {
+		const pending = permission;
+		if (!pending) return;
+		setPermission(null);
+		void bridgeRpc("agent_respond_permission", {
+			requestId: pending.requestId,
+			optionId,
+		});
+	};
+
+	const send = async () => {
 		const next = text.trim();
-		if (!next) return;
-		setLines((previous) => [...previous, { id: nanoid(), text: next }]);
+		if (!next || sending) return;
+		setLines((previous) => [
+			...previous,
+			{ id: nanoid(), role: "user", text: next },
+		]);
 		setText("");
+		setSending(true);
+		try {
+			const accepted = await bridgeRpc<{ sessionId: string }>(
+				"agent_run_once",
+				{
+					prompt: next,
+					permissionMode: "ask",
+				},
+			);
+			sessionRef.current = accepted.sessionId;
+		} catch (error) {
+			setSending(false);
+			setLines((current) => [
+				...current,
+				{
+					id: nanoid(),
+					role: "assistant",
+					text: error instanceof Error ? error.message : t("agent.failed"),
+				},
+			]);
+		}
 	};
 	return (
-		<section className="flex h-full min-h-0 flex-col">
-			<header className="border-b px-4 py-4 md:px-6">
-				<h1 className="font-semibold text-lg">{t("agent.title")}</h1>
-			</header>
-			<div className="agentero-scroll flex-1 px-4 py-5 md:px-6">
-				{lines.length === 0 ? (
-					<p className="text-muted-foreground text-sm">{t("agent.empty")}</p>
-				) : (
-					<div className="space-y-3">
-						{lines.map((line) => (
-							<div
-								key={line.id}
-								className="ml-auto max-w-[85%] border bg-muted px-3 py-2 text-sm"
-							>
-								{line.text}
+		<>
+			<section className="flex h-full min-h-0 flex-col">
+				<header className="border-b px-4 py-4 md:px-6">
+					<h1 className="font-semibold text-lg">{t("agent.title")}</h1>
+				</header>
+				<div className="agentero-scroll flex-1 px-4 py-5 md:px-6">
+					{lines.length === 0 ? (
+						<p className="text-muted-foreground text-sm">{t("agent.empty")}</p>
+					) : (
+						<div className="space-y-3">
+							{lines.map((line) => (
+								<div
+									key={line.id}
+									className={cn(
+										"max-w-[85%] border px-3 py-2 text-sm",
+										line.role === "user"
+											? "ml-auto bg-muted"
+											: "mr-auto bg-background",
+									)}
+								>
+									{line.text}
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+				<footer className="flex gap-2 border-t p-3 md:px-6">
+					<Input
+						value={text}
+						onChange={(event) => setText(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && !event.shiftKey) {
+								event.preventDefault();
+								void send();
+							}
+						}}
+						placeholder={t("agent.placeholder")}
+					/>
+					<Button
+						size="icon"
+						aria-label={t("agent.send")}
+						disabled={sending || !text.trim()}
+						onClick={() => void send()}
+					>
+						{sending ? (
+							<LoaderCircle className="size-4 animate-spin" />
+						) : (
+							<Send className="size-4" />
+						)}
+					</Button>
+				</footer>
+			</section>
+			<MobilePermissionDialog
+				permission={permission}
+				onRespond={respondToPermission}
+			/>
+		</>
+	);
+}
+
+function MobilePermissionDialog({
+	permission,
+	onRespond,
+}: {
+	permission: AgentPermissionRequest | null;
+	onRespond: (optionId: string | null) => void;
+}) {
+	const { t } = useTranslation("agent");
+	return (
+		<Dialog
+			open={permission !== null}
+			onOpenChange={(open) => {
+				if (!open) onRespond(null);
+			}}
+		>
+			<DialogContent showCloseButton={false} className="max-w-md rounded-lg">
+				{permission ? (
+					<>
+						<DialogHeader>
+							<DialogTitle>{t("permission.title")}</DialogTitle>
+							<DialogDescription>{permission.title}</DialogDescription>
+						</DialogHeader>
+						{permission.paths.length ? (
+							<div className="space-y-1">
+								{permission.paths.map((path) => (
+									<code
+										key={path}
+										className="block truncate bg-muted px-2 py-1 text-xs"
+										title={path}
+									>
+										{path}
+									</code>
+								))}
 							</div>
-						))}
-					</div>
-				)}
-			</div>
-			<footer className="flex gap-2 border-t p-3 md:px-6">
-				<Input
-					value={text}
-					onChange={(event) => setText(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") send();
-					}}
-					placeholder={t("agent.placeholder")}
-				/>
-				<Button size="icon" aria-label={t("agent.send")} onClick={send}>
-					<Send className="size-4" />
-				</Button>
-			</footer>
-		</section>
+						) : null}
+						<DialogFooter className="sm:flex-col">
+							{permission.options.map((option) => (
+								<Button
+									key={option.optionId}
+									variant={
+										option.kind.startsWith("allow") ? "default" : "outline"
+									}
+									onClick={() => onRespond(option.optionId)}
+								>
+									{option.name || option.kind}
+								</Button>
+							))}
+							<Button variant="ghost" onClick={() => onRespond(null)}>
+								{t("permission.deny")}
+							</Button>
+						</DialogFooter>
+					</>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 }
 
