@@ -3,7 +3,12 @@
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 import type { PlateContentProps } from "platejs/react";
-import { PlateContainer, PlateContent } from "platejs/react";
+import {
+	PlateContainer,
+	PlateContent,
+	useComposedRef,
+	useEditorContainerRef,
+} from "platejs/react";
 import type * as React from "react";
 
 import { cn } from "@/lib/core/utils";
@@ -36,9 +41,17 @@ const editorContainerVariants = cva(
 
 export function EditorContainer({
 	className,
+	ref,
 	variant,
 	...props
 }: React.ComponentProps<"div"> & VariantProps<typeof editorContainerVariants>) {
+	const plateContainerRef = useEditorContainerRef();
+	const composedRef = useComposedRef(plateContainerRef, ref);
+	const containerProps: React.ComponentProps<"div"> = {
+		...props,
+		ref: composedRef,
+	};
+
 	return (
 		<PlateContainer
 			className={cn(
@@ -46,7 +59,7 @@ export function EditorContainer({
 				editorContainerVariants({ variant }),
 				className,
 			)}
-			{...props}
+			{...containerProps}
 		/>
 	);
 }

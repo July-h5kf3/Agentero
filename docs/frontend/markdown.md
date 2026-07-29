@@ -17,6 +17,7 @@ Plate WYSIWYG；用于普通笔记与论文 `NOTES.md`。磁盘上始终是标�
 ## 能力
 
 - 自动保存；可选顶部格式工具栏（`showEditorToolbar`）。
+- **文档目录**：存在标题时在编辑器右侧四分之一高度显示层级标记，一级标题标记最长，后续层级依次缩短；收起时保持紧凑，悬停或键盘聚焦后以动效展开标题；滚动时以当前 UI 主题主色高亮视口对应的标题，点击标题会在当前 Dockview 文档面板内平滑滚动并高亮目标。
 - **Markdown 粘贴**：普通文本粘贴默认按 Markdown 反序列化，粘贴后光标保持在插入内容之后。
 - **整理 Markdown 格式**：编辑器右键显式整理当前整篇文档；只读编辑器禁用。
 - **Slash 格式命令**：在可编辑正文中输入 `/` 打开轻量命令列表；使用上下方向键选择、Enter 执行、Escape 关闭。Slash 与双链候选会在可视窗口边缘自动翻转并限制高度；滚动编辑器时关闭候选，避免脱离光标。
@@ -99,6 +100,7 @@ B --> C[End]
 | 路径 | 职责 |
 |---|---|
 | `src/components/editor/` | Plate 编辑器 |
+| `src/components/editor/toc-sidebar.tsx` | 基于 Plate TOC hooks 的悬浮目录、当前标题跟踪与跳转 |
 | `src/components/editor/code-block-node.tsx` | 代码语言选择、复制与 Mermaid 预览 |
 | `src/components/editor/plugins/callout-actions.ts` | Callout 类型与标题的校验和 AST 更新 |
 | `src/components/editor/plugins/slash-command.ts` | Slash trigger、过滤、stale guard 与格式转换 |

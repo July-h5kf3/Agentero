@@ -24,11 +24,19 @@ export function HeadingElement({
 	variant = "h1",
 	...props
 }: PlateElementProps & VariantProps<typeof headingVariants>) {
+	const attributes = {
+		...props.attributes,
+		// @platejs/toc 53.0.0 identifies IntersectionObserver targets by DOM
+		// `id`. Plate 53.2.x only emits `data-block-id`, so mirror the node id.
+		id: typeof props.element.id === "string" ? props.element.id : undefined,
+	};
+
 	return (
 		<PlateElement
 			as={variant ?? "h1"}
 			className={headingVariants({ variant })}
 			{...props}
+			attributes={attributes}
 		>
 			{props.children}
 		</PlateElement>
