@@ -53,6 +53,7 @@ url = "2"
 crypto_box = "0.9"
 # Used by lookup batch import (all platforms); also needed by Unix remote vault.
 futures-util = "0.3.33"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
 specta = { version = "2.0.0-rc.22", features = ["derive"] }
 specta-typescript = "0.0.12"
