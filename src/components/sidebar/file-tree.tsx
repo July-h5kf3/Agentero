@@ -24,7 +24,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
 	FileTree as AiFileTree,
@@ -42,6 +41,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ViewportFloating } from "@/components/ui/viewport-floating";
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { notifyError } from "@/lib/core/notify";
@@ -1317,167 +1317,160 @@ export const FileTree = memo(
 		const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
 		const isTrashMenu = contextMenu?.path === TRASH_VIRTUAL_PATH;
 		const isLibraryMenu = contextMenu?.path === LIBRARY_VIRTUAL_PATH;
-		const contextMenuPortal =
-			contextMenu && typeof document !== "undefined"
-				? createPortal(
-						<div
-							ref={contextMenuRef}
-							role="menu"
-							className="fixed z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
-							style={{
-								left: Math.min(contextMenu.x, window.innerWidth - 200),
-								top: Math.min(contextMenu.y, window.innerHeight - 120),
-							}}
+		const contextMenuPortal = contextMenu ? (
+			<ViewportFloating
+				floatingRef={contextMenuRef}
+				point={{ x: contextMenu.x, y: contextMenu.y }}
+				role="menu"
+				className="z-50 min-w-44 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
+			>
+				{isLibraryMenu ? (
+					onExportLibrary ? (
+						<button
+							type="button"
+							role="menuitem"
+							disabled={libraryExportBusy}
+							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+							onClick={handleExportLibraryFromMenu}
 						>
-							{isLibraryMenu ? (
-								onExportLibrary ? (
-									<button
-										type="button"
-										role="menuitem"
-										disabled={libraryExportBusy}
-										className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
-										onClick={handleExportLibraryFromMenu}
-									>
-										{libraryExportBusy ? (
-											<Loader2
-												className="size-3.5 shrink-0 animate-spin"
-												aria-hidden
-											/>
-										) : (
-											<Download className="size-3.5 shrink-0" aria-hidden />
-										)}
-										<span>
-											{libraryExportBusy
-												? t("papersLibrary.exporting")
-												: t("papersLibrary.export")}
-										</span>
-									</button>
-								) : null
-							) : isTrashMenu ? (
-								onEmptyTrash ? (
-									<button
-										type="button"
-										role="menuitem"
-										className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
-										onClick={handleEmptyTrashFromMenu}
-									>
-										<Trash2 className="size-3.5 shrink-0" aria-hidden />
-										<span>{t("recycleBin.emptyTrash")}</span>
-									</button>
-								) : null
+							{libraryExportBusy ? (
+								<Loader2
+									className="size-3.5 shrink-0 animate-spin"
+									aria-hidden
+								/>
 							) : (
-								<>
-									{menuCount === 1 && onStartCreate ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={handleNewFileFromMenu}
-										>
-											<span>{t("fileTree.newFile")}</span>
-										</button>
-									) : null}
-									{menuCount === 1 && onStartCreate ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={handleNewFolderFromMenu}
-										>
-											<span>{t("fileTree.newFolder")}</span>
-										</button>
-									) : null}
-									{menuCount === 1 ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={() => {
-												void handleCopyPathFromMenu();
-											}}
-										>
-											<span>{t("fileTree.copyPath")}</span>
-										</button>
-									) : null}
-									{menuCount === 1 ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={() => {
-												void handleReveal(contextMenu.path);
-											}}
-										>
-											<span>{revealLabel}</span>
-											<span className="text-muted-foreground text-xs tracking-wide">
-												{revealShortcut}
-											</span>
-										</button>
-									) : null}
-									{menuCount === 1 ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={() => {
-												void handleOpenInTerminal(contextMenu.path);
-											}}
-										>
-											<span>{t("fileTree.openInTerminal")}</span>
-											<span className="text-muted-foreground text-xs tracking-wide">
-												{openInTerminalShortcut}
-											</span>
-										</button>
-									) : null}
-									{onMovePaths ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={handleMoveFromMenu}
-										>
-											<span>
-												{menuCount > 1
-													? t("fileTree.moveSelected", { count: menuCount })
-													: t("fileTree.move")}
-											</span>
-										</button>
-									) : null}
-									{menuCount === 1 && onRenamePath ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-											onClick={handleRenameFromMenu}
-										>
-											<span>{t("fileTree.rename")}</span>
-										</button>
-									) : null}
-									{onDeletePath || onDeletePaths ? (
-										<button
-											type="button"
-											role="menuitem"
-											className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
-											onClick={handleDeleteFromMenu}
-										>
-											<span>
-												{menuCount > 1
-													? t("fileTree.deleteSelected", { count: menuCount })
-													: t("fileTree.delete")}
-											</span>
-											{menuCount === 1 ? (
-												<span className="text-xs tracking-wide opacity-80">
-													{deleteShortcut}
-												</span>
-											) : null}
-										</button>
-									) : null}
-								</>
+								<Download className="size-3.5 shrink-0" aria-hidden />
 							)}
-						</div>,
-						document.body,
-					)
-				: null;
+							<span>
+								{libraryExportBusy
+									? t("papersLibrary.exporting")
+									: t("papersLibrary.export")}
+							</span>
+						</button>
+					) : null
+				) : isTrashMenu ? (
+					onEmptyTrash ? (
+						<button
+							type="button"
+							role="menuitem"
+							className="flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
+							onClick={handleEmptyTrashFromMenu}
+						>
+							<Trash2 className="size-3.5 shrink-0" aria-hidden />
+							<span>{t("recycleBin.emptyTrash")}</span>
+						</button>
+					) : null
+				) : (
+					<>
+						{menuCount === 1 && onStartCreate ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleNewFileFromMenu}
+							>
+								<span>{t("fileTree.newFile")}</span>
+							</button>
+						) : null}
+						{menuCount === 1 && onStartCreate ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleNewFolderFromMenu}
+							>
+								<span>{t("fileTree.newFolder")}</span>
+							</button>
+						) : null}
+						{menuCount === 1 ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={() => {
+									void handleCopyPathFromMenu();
+								}}
+							>
+								<span>{t("fileTree.copyPath")}</span>
+							</button>
+						) : null}
+						{menuCount === 1 ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={() => {
+									void handleReveal(contextMenu.path);
+								}}
+							>
+								<span>{revealLabel}</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{revealShortcut}
+								</span>
+							</button>
+						) : null}
+						{menuCount === 1 ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={() => {
+									void handleOpenInTerminal(contextMenu.path);
+								}}
+							>
+								<span>{t("fileTree.openInTerminal")}</span>
+								<span className="text-muted-foreground text-xs tracking-wide">
+									{openInTerminalShortcut}
+								</span>
+							</button>
+						) : null}
+						{onMovePaths ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleMoveFromMenu}
+							>
+								<span>
+									{menuCount > 1
+										? t("fileTree.moveSelected", { count: menuCount })
+										: t("fileTree.move")}
+								</span>
+							</button>
+						) : null}
+						{menuCount === 1 && onRenamePath ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleRenameFromMenu}
+							>
+								<span>{t("fileTree.rename")}</span>
+							</button>
+						) : null}
+						{onDeletePath || onDeletePaths ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm text-destructive outline-hidden select-none hover:bg-destructive/10 focus:bg-destructive/10"
+								onClick={handleDeleteFromMenu}
+							>
+								<span>
+									{menuCount > 1
+										? t("fileTree.deleteSelected", { count: menuCount })
+										: t("fileTree.delete")}
+								</span>
+								{menuCount === 1 ? (
+									<span className="text-xs tracking-wide opacity-80">
+										{deleteShortcut}
+									</span>
+								) : null}
+							</button>
+						) : null}
+					</>
+				)}
+			</ViewportFloating>
+		) : null;
 
 		const libraryRow = (
 			<FileTreeFile path={LIBRARY_VIRTUAL_PATH} name={t("papersLibrary.title")}>

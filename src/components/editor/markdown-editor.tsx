@@ -357,12 +357,11 @@ export function MarkdownEditor({
 			return;
 		}
 		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
-		const bounds = container.getBoundingClientRect();
 		setWikiCompletionDraft({
 			raw: trigger.raw,
 			embed: trigger.embed,
-			left: Math.max(8, cursor.left - bounds.left),
-			top: cursor.bottom - bounds.top + container.scrollTop + 4,
+			left: cursor.left,
+			top: cursor.bottom + 4,
 		});
 	}, [editor]);
 
@@ -421,7 +420,6 @@ export function MarkdownEditor({
 			return;
 		}
 		const cursor = nativeSelection.getRangeAt(0).getBoundingClientRect();
-		const bounds = container.getBoundingClientRect();
 		const insideCallout = Boolean(
 			editor.api.above({
 				match: { type: editor.getType(KEYS.callout) },
@@ -432,8 +430,8 @@ export function MarkdownEditor({
 			path: [...slateSelection.anchor.path],
 			start: trigger.start,
 			end: trigger.end,
-			left: Math.max(8, cursor.left - bounds.left),
-			top: cursor.bottom - bounds.top + container.scrollTop + 4,
+			left: cursor.left,
+			top: cursor.bottom + 4,
 			allowCallout: block[1].length === 1 && !insideCallout,
 		});
 	}, [editor]);
@@ -1501,6 +1499,10 @@ export function MarkdownEditor({
 									<EditorContainer
 										ref={editorContainerRef}
 										className="agentero-scroll h-full min-w-0 overflow-y-auto"
+										onScrollCapture={() => {
+											setWikiCompletionDraft(null);
+											setSlashCommandDraft(null);
+										}}
 										onContextMenuCapture={handleEditorContextMenu}
 										onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 										onBeforeInputCapture={

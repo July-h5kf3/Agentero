@@ -23,6 +23,7 @@ import {
 	wikiLinkDraftEditableBounds,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
+import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
 	resolveWikiReference,
 	searchWikiLinks,
@@ -400,9 +401,9 @@ export function WikiLinkSuggestion({
 
 	if (!draft || !request) return null;
 	return (
-		<div
-			className="absolute z-50 flex w-96 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
-			style={{ left: draft.left, top: draft.top }}
+		<ViewportFloating
+			point={{ x: draft.left, y: draft.top }}
+			className="z-50 flex w-96 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
 		>
 			<div
 				ref={listRef}
@@ -469,6 +470,6 @@ export function WikiLinkSuggestion({
 			<p className="shrink-0 border-t px-2 py-1.5 text-[11px] text-muted-foreground text-center leading-4">
 				{t("wikiCompletion.syntaxHint")}
 			</p>
-		</div>
+		</ViewportFloating>
 	);
 }

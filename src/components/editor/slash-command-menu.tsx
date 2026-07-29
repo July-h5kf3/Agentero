@@ -36,6 +36,7 @@ import {
 	type SlashCommand,
 	type SlashCommandId,
 } from "@/components/editor/plugins/slash-command";
+import { ViewportFloating } from "@/components/ui/viewport-floating";
 
 export type SlashCommandDraft = {
 	query: string;
@@ -160,9 +161,9 @@ export function SlashCommandMenu({
 
 	if (!draft) return null;
 	return (
-		<div
-			className="absolute z-50 w-64 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
-			style={{ left: draft.left, top: draft.top }}
+		<ViewportFloating
+			point={{ x: draft.left, y: draft.top }}
+			className="z-50 w-64 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
 		>
 			<div
 				ref={listRef}
@@ -201,6 +202,6 @@ export function SlashCommandMenu({
 					</p>
 				)}
 			</div>
-		</div>
+		</ViewportFloating>
 	);
 }
