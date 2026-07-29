@@ -5,6 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(all(unix, not(target_os = "macos")))]
+type TerminalCommandFactory = fn(&str) -> Command;
+
 /// Resolve the directory to open: folders stay as-is; files use their parent.
 pub fn terminal_cwd_for_path(path: &Path) -> Result<PathBuf, AppError> {
     if path.as_os_str().is_empty() {
@@ -257,7 +260,7 @@ fn open_terminal_confirm_command_unix(command: &str) -> Result<(), AppError> {
                 return Ok(());
             }
         }
-        let candidates: &[(&str, fn(&str) -> Command)] = &[
+        let candidates: &[(&str, TerminalCommandFactory)] = &[
             ("gnome-terminal", |c| {
                 let mut cmd = Command::new("gnome-terminal");
                 cmd.args(["--", "bash", "-lc", c]);
