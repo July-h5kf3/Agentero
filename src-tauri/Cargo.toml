@@ -63,6 +63,10 @@ specta-typescript = "0.0.12"
 [target.'cfg(all(unix, not(target_os = "ios")))'.dependencies]
 liteparse = "2.5"
 
+[target.'cfg(target_os = "ios")'.dependencies]
+security-framework = "3.7"
+security-framework-sys = "2.17"
+
 # openssh / sendfd are Unix-only (ControlMaster fd passing). Remote vault SFTP
 # is therefore unavailable on Windows until a portable backend lands.
 [target.'cfg(unix)'.dependencies]

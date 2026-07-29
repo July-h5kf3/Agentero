@@ -13,6 +13,10 @@ const IDENTITY_FILE: &str = "identity.json";
 const DEVICES_FILE: &str = "devices.json";
 const CLIENT_IDENTITY_FILE: &str = "client-identity.json";
 const CLIENT_PROFILE_FILE: &str = "client-profile.json";
+#[cfg(target_os = "ios")]
+const IOS_KEYCHAIN_SERVICE: &str = "com.poco-ai.agentero.bridge";
+#[cfg(target_os = "ios")]
+const IOS_KEYCHAIN_ACCOUNT: &str = "client-identity-v2";
 
 /// Long-lived desktop identity. The secret key stays in the local config dir
 /// and is never added to a QR offer or sent to the Relay.
@@ -69,7 +73,7 @@ pub struct BridgeDevice {
 
 /// Long-lived Ed25519 identity for one mobile device. Its public half is sent
 /// only in an encrypted `pair_request`; the secret half signs each future
-/// connection challenge and must stay in the app sandbox.
+/// connection challenge and is stored in the iOS Keychain on mobile.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeClientIdentity {
@@ -269,23 +273,84 @@ impl BridgeClientIdentityStore {
     }
 
     pub fn load_or_create(&self) -> Result<BridgeClientIdentity, AppError> {
+        #[cfg(target_os = "ios")]
+        {
+            if let Some(identity) = load_ios_client_identity()? {
+                Ok(identity)
+            } else if let Some(identity) = self.load_legacy_identity()? {
+                save_ios_client_identity(&identity)?;
+                let _ = fs::remove_file(self.dir.join(CLIENT_IDENTITY_FILE));
+                Ok(identity)
+            } else {
+                let identity = BridgeClientIdentity::create();
+                save_ios_client_identity(&identity)?;
+                Ok(identity)
+            }
+        }
+
+        #[cfg(not(target_os = "ios"))]
+        self.load_or_create_file()
+    }
+
+    fn load_legacy_identity(&self) -> Result<Option<BridgeClientIdentity>, AppError> {
         let path = self.dir.join(CLIENT_IDENTITY_FILE);
         if path.is_file() {
             let identity: BridgeClientIdentity = read_json(&path)?;
-            if identity.v >= 2
-                && identity
-                    .signing_key()
-                    .map(|key| key.verifying_key().to_bytes())
-                    .ok()
-                    == identity.verifying_key().map(|key| key.to_bytes()).ok()
-            {
-                return Ok(identity);
-            }
+            return Ok(valid_client_identity(identity));
+        }
+        Ok(None)
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    fn load_or_create_file(&self) -> Result<BridgeClientIdentity, AppError> {
+        if let Some(identity) = self.load_legacy_identity()? {
+            return Ok(identity);
         }
         let identity = BridgeClientIdentity::create();
-        write_private_json(&path, &identity)?;
+        write_private_json(&self.dir.join(CLIENT_IDENTITY_FILE), &identity)?;
         Ok(identity)
     }
+}
+
+fn valid_client_identity(identity: BridgeClientIdentity) -> Option<BridgeClientIdentity> {
+    (identity.v >= 2
+        && identity
+            .signing_key()
+            .map(|key| key.verifying_key().to_bytes())
+            .ok()
+            == identity.verifying_key().map(|key| key.to_bytes()).ok())
+    .then_some(identity)
+}
+
+#[cfg(target_os = "ios")]
+fn load_ios_client_identity() -> Result<Option<BridgeClientIdentity>, AppError> {
+    use security_framework::passwords::get_generic_password;
+    use security_framework_sys::base::errSecItemNotFound;
+
+    match get_generic_password(IOS_KEYCHAIN_SERVICE, IOS_KEYCHAIN_ACCOUNT) {
+        Ok(raw) => {
+            let identity: BridgeClientIdentity = serde_json::from_slice(&raw)?;
+            valid_client_identity(identity)
+                .map(Some)
+                .ok_or_else(|| AppError::message("iOS Keychain bridge identity is invalid"))
+        }
+        Err(error) if error.code() == errSecItemNotFound => Ok(None),
+        Err(error) => Err(AppError::message(format!(
+            "Could not read the iOS Keychain bridge identity: {error}"
+        ))),
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn save_ios_client_identity(identity: &BridgeClientIdentity) -> Result<(), AppError> {
+    use security_framework::passwords::set_generic_password;
+
+    let raw = serde_json::to_vec(identity)?;
+    set_generic_password(IOS_KEYCHAIN_SERVICE, IOS_KEYCHAIN_ACCOUNT, &raw).map_err(|error| {
+        AppError::message(format!(
+            "Could not save the iOS Keychain bridge identity: {error}"
+        ))
+    })
 }
 
 #[derive(Clone)]
