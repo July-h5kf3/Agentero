@@ -76,6 +76,7 @@ function annotationAction(fn: (h: PdfViewerHandle) => void): void {
 function ReferencesSidebar() {
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
+	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
 	const selectedPath = useWorkspaceStore(
 		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.path ?? null,
 	);
@@ -91,7 +92,13 @@ function ReferencesSidebar() {
 		return paperDirFromPath(relative, vaultPaperPaths);
 	}, [selectedPath, vaultPath, vaultPaperPaths]);
 
-	return <ReferencesPanel vaultPath={vaultPath} paperPath={paperPath} />;
+	return (
+		<ReferencesPanel
+			vaultPath={vaultPath}
+			paperPath={paperPath}
+			activeTabId={activeTabId}
+		/>
+	);
 }
 
 function AnnotationsSidebar() {

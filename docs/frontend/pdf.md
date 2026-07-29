@@ -19,6 +19,7 @@
 | 查找 | `⌘F` + 命中高亮 |
 | 沉浸 | 全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
+| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）经 `citation-hover-store` 联动右侧 References 卡片高亮（`embed/citation-links.tsx`） |
 
 ## 划词菜单
 
@@ -48,4 +49,4 @@
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。  
-引用/插图解析（未实现）：[../development/pdf-analysis.md](../development/pdf-analysis.md)。
+引用元数据解析与 References 侧栏：[../development/citation-parsing.md](../development/citation-parsing.md)；插图 sidecar（未实现）：[../development/pdf-analysis.md](../development/pdf-analysis.md)。

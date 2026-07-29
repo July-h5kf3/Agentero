@@ -6,8 +6,9 @@ import {
 	Loader2,
 	RefreshCw,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useStore } from "zustand";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,18 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { notifyError } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import { lookupSubmit } from "@/lib/paper/import-actions";
 import {
 	type Citation,
 	type CiteSidecar,
 	citationImportIdentifier,
+	matchCitationByMarker,
 	paperRefsList,
 	paperRefsParse,
 } from "@/lib/paper/refs";
+import { citationHoverStore } from "@/lib/pdf/citation-hover-store";
 import { joinVaultPath } from "@/lib/vault/path";
 import { openPaper } from "@/lib/workspace/actions";
 
@@ -35,6 +39,8 @@ type ReferencesPanelProps = {
 	vaultPath: string | null;
 	/** Vault-relative paper folder of the active document; null = not a paper. */
 	paperPath: string | null;
+	/** Active workspace tab id (=== PDF docId) for hover sync. */
+	activeTabId?: string | null;
 	className?: string;
 };
 
@@ -45,14 +51,6 @@ function externalUrl(citation: Citation): string | null {
 	if (doi?.trim()) return `https://doi.org/${doi.trim()}`;
 	if (arxivId?.trim()) return `https://arxiv.org/abs/${arxivId.trim()}`;
 	return null;
-}
-
-function openExternal(url: string): void {
-	void import("@tauri-apps/plugin-opener")
-		.then(({ openUrl }) => openUrl(url))
-		.catch(() => {
-			window.open(url, "_blank", "noopener,noreferrer");
-		});
 }
 
 function citationMatchesFilter(citation: Citation, needle: string): boolean {
@@ -82,6 +80,7 @@ function citationMatchesFilter(citation: Citation, needle: string): boolean {
 export function ReferencesPanel({
 	vaultPath,
 	paperPath,
+	activeTabId = null,
 	className,
 }: ReferencesPanelProps) {
 	const { t } = useTranslation("viewer");
@@ -92,6 +91,25 @@ export function ReferencesPanel({
 	const [importingId, setImportingId] = useState<string | null>(null);
 	const paperPathRef = useRef(paperPath);
 	paperPathRef.current = paperPath;
+	const listRef = useRef<HTMLDivElement>(null);
+
+	// PDF in-text citation hover → highlight + reveal the matching card.
+	const hoverMarker = useStore(citationHoverStore, (s) =>
+		activeTabId && s.tabId === activeTabId ? s.marker : null,
+	);
+	const hoveredId = useMemo(
+		() =>
+			hoverMarker && sidecar
+				? matchCitationByMarker(sidecar.citations, hoverMarker)
+				: null,
+		[hoverMarker, sidecar],
+	);
+	useEffect(() => {
+		if (!hoveredId) return;
+		listRef.current
+			?.querySelector(`[data-citation-id="${CSS.escape(hoveredId)}"]`)
+			?.scrollIntoView({ block: "nearest" });
+	}, [hoveredId]);
 
 	useEffect(() => {
 		setSidecar(null);
@@ -236,7 +254,10 @@ export function ReferencesPanel({
 							spellCheck={false}
 						/>
 					</div>
-					<div className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2">
+					<div
+						ref={listRef}
+						className="agentero-scroll min-h-0 flex-1 overflow-y-auto p-2"
+					>
 						{visible.length === 0 ? (
 							<p className="px-2 py-6 text-center text-muted-foreground text-xs">
 								{t("references.noFilterMatch")}
@@ -247,7 +268,9 @@ export function ReferencesPanel({
 									<li key={citation.id}>
 										<CitationCard
 											citation={citation}
+											ordinal={citations.indexOf(citation) + 1}
 											importing={importingId === citation.id}
+											hovered={citation.id === hoveredId}
 											onOpenMatched={openMatched}
 											onImport={importCitation}
 										/>
@@ -284,12 +307,18 @@ function EmptyState({
 
 function CitationCard({
 	citation,
+	ordinal,
 	importing,
+	hovered,
 	onOpenMatched,
 	onImport,
 }: {
 	citation: Citation;
+	/** 1-based position in the full (unfiltered) sidecar list. */
+	ordinal: number;
 	importing: boolean;
+	/** In-text citation under the pointer in the PDF matches this card. */
+	hovered: boolean;
 	onOpenMatched: (citation: Citation) => void;
 	onImport: (citation: Citation) => void;
 }) {
@@ -313,12 +342,18 @@ function CitationCard({
 		if (matched) {
 			onOpenMatched(citation);
 		} else if (link) {
-			openExternal(link);
+			openExternalUrl(link);
 		}
 	};
 
 	return (
-		<div className="group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40">
+		<div
+			data-citation-id={citation.id}
+			className={cn(
+				"group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40",
+				hovered && "border-border/60 bg-muted/50",
+			)}
+		>
 			{/* biome-ignore lint/a11y/useSemanticElements: role=button wrapper for card activation */}
 			<div
 				role="button"
@@ -333,11 +368,9 @@ function CitationCard({
 				}}
 			>
 				<div className="flex items-center gap-1.5">
-					{citation.display ? (
-						<span className="shrink-0 font-medium text-[10px] text-muted-foreground tabular-nums">
-							{citation.display}
-						</span>
-					) : null}
+					<span className="shrink-0 font-medium text-[10px] text-muted-foreground tabular-nums">
+						{citation.display ?? `[${ordinal}]`}
+					</span>
 					{matched ? (
 						<BookCheck
 							className="size-3 shrink-0 text-emerald-600 dark:text-emerald-500"
@@ -404,7 +437,7 @@ function CitationCard({
 									size="icon-xs"
 									className="size-6 text-muted-foreground hover:text-foreground"
 									aria-label={t("references.openLink")}
-									onClick={() => openExternal(link)}
+									onClick={() => openExternalUrl(link)}
 								>
 									<ArrowUpRight className="size-3.5" />
 								</Button>

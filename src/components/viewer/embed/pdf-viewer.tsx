@@ -3,6 +3,7 @@ import { EmbedPDF } from "@embedpdf/core/react";
 import type {
 	PdfBookmarkObject,
 	PdfHighlightAnnoObject,
+	PdfLinkAnnoObject,
 } from "@embedpdf/models";
 import { PdfAnnotationSubtype } from "@embedpdf/models";
 import {
@@ -101,6 +102,11 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+	CitationLinkLayer,
+	isLinkObject,
+	useLinkTextResolver,
+} from "@/components/viewer/embed/citation-links";
 import { usePdfEngineContext } from "@/components/viewer/embed/engine-provider";
 import {
 	EMBED_PAGE_ATTR,
@@ -128,6 +134,7 @@ import {
 	publishSelection,
 } from "@/lib/agent/selection-store";
 import { notifyError } from "@/lib/core/notify";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
@@ -144,6 +151,10 @@ import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
 import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf/ask/types";
 import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
+import {
+	clearCitationHover,
+	setCitationHover,
+} from "@/lib/pdf/citation-hover-store";
 import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
 import {
 	hasAnnotationsFile,
@@ -731,16 +742,30 @@ function PdfViewerInner({
 
 	// ---- Highlights (EmbedPDF annotations) ----
 
+	const [citationLinks, setCitationLinks] = useState<
+		Map<number, PdfLinkAnnoObject[]>
+	>(new Map());
+
 	const rebuildHighlights = useCallback(() => {
 		if (!annotationCap) return;
 		const scope = annotationCap.forDocument(docId);
-		const list = scope
-			.getAnnotations()
+		const all = scope.getAnnotations();
+		const list = all
 			.map((a) => a.object)
 			.filter(isHighlightObject)
 			.map((o) => highlightViewFromObject(o, paperKey ?? ""));
 		setHighlights(list);
 		onHighlightsChange?.(list);
+		const links = new Map<number, PdfLinkAnnoObject[]>();
+		for (const tracked of all) {
+			const o = tracked.object;
+			if (isLinkObject(o) && o.target) {
+				const arr = links.get(o.pageIndex);
+				if (arr) arr.push(o);
+				else links.set(o.pageIndex, [o]);
+			}
+		}
+		setCitationLinks(links);
 	}, [annotationCap, docId, paperKey, onHighlightsChange]);
 
 	const scheduleSave = useCallback(() => {
@@ -1776,6 +1801,44 @@ function PdfViewerInner({
 		else setPageField(String(currentPage));
 	};
 
+	// ---- In-text citation / internal PDF links ----
+
+	const resolveLinkText = useLinkTextResolver(docId);
+	const linkHoverSeqRef = useRef(0);
+
+	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
+	const handleCitationLinkActivate = useCallback(
+		(link: PdfLinkAnnoObject) => {
+			const target = link.target;
+			if (!target || !annotationCap) return;
+			annotationCap
+				.navigateTarget(target, docId)
+				.toPromise()
+				.then((result) => {
+					if (result.outcome === "uri") openExternalUrl(result.uri);
+				})
+				.catch(() => {});
+		},
+		[annotationCap, docId],
+	);
+
+	const handleCitationLinkHover = useCallback(
+		(link: PdfLinkAnnoObject | null) => {
+			const seq = ++linkHoverSeqRef.current;
+			if (!link) {
+				clearCitationHover(docId);
+				return;
+			}
+			void resolveLinkText(link).then((text) => {
+				if (linkHoverSeqRef.current !== seq || !text) return;
+				setCitationHover(docId, text);
+			});
+		},
+		[docId, resolveLinkText],
+	);
+
+	useEffect(() => () => clearCitationHover(docId), [docId]);
+
 	/**
 	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
 	 * (which only change `currentPage`/`zoomLevel`) keep a stable callback
@@ -1884,6 +1947,14 @@ function PdfViewerInner({
 					>
 						<SelectionLayer documentId={docId} pageIndex={pageIndex} />
 						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
+						<CitationLinkLayer
+							links={citationLinks.get(pageIndex) ?? []}
+							pageWidthPt={width / zoomRef.current}
+							pageHeightPt={height / zoomRef.current}
+							label={t("pdf.linkAria")}
+							onActivate={handleCitationLinkActivate}
+							onHover={handleCitationLinkHover}
+						/>
 						{activeTranslateOnPage
 							? activeTranslateOnPage.rects.map((rect) => (
 									<div
@@ -1921,6 +1992,10 @@ function PdfViewerInner({
 			handleOpenPin,
 			cancelHoverHide,
 			scheduleHoverHide,
+			citationLinks,
+			handleCitationLinkActivate,
+			handleCitationLinkHover,
+			t,
 		],
 	);
 
