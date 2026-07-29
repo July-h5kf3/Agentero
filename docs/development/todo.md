@@ -5,6 +5,7 @@
 ## 0.3 — 入库与 Agent 补强
 
 - [ ] 关键词/描述 → Agent 候选列表确认后入库
+- [ ] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [skill-import.md](skill-import.md)）
 - [ ] 本机 Translator sidecar 捆绑（可选）
 - [ ] 前端 `afterPaperImport` 策略表统一各入口后置
 - [ ] Zotero 迁移走 `paper_commit`；remote 镜像层收敛；统一 `paper:imported` 事件
@@ -33,10 +34,14 @@
 
 ## 0.6 — 引用关系
 
-设计稿：[`pdf-analysis.md`](pdf-analysis.md)
+设计稿：[`pdf-analysis.md`](pdf-analysis.md) · [`citation-parsing.md`](citation-parsing.md)
 
+- [x] 参考文献元数据解析 M1：S2/Crossref 在线 + 本地 bib/bbl → `agentero-cite.json` sidecar + 库内匹配 + `citationOnlineEnabled` 开关（Host `features/refs/`）
+- [x] 引用侧栏 References 卡片（右侧栏 tab：编号/标题/作者·年份·venue/DOI·arXiv 徽标/已入库打开/未入库导入/过滤/重解析）
+- [ ] 文中 citation ↔ 引用卡片 hover/click 双向联动（依赖 PDF anchors，见 pdf-analysis P1–P3）
 - [ ] 本地 PDF citation/figure sidecar + Paper Content 侧栏
 - [ ] 文内引用 hover → Paper Info
+- [ ] Agent `#` 编号提及 + 引用卡片拖拽（citation-parsing M3/M5）
 - [ ] cites/cited_by 缓存 + Connected Papers 式邻域 UI
 - [ ] Agent：Explore citations / Map related work / Ingest neighborhood
 - [ ] PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU
