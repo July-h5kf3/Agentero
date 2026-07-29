@@ -18,6 +18,7 @@
 - 模板：`templates/vault/`。
 - 教程文件按 UI 语言选择 `en/` 或 `zh-CN/`；不覆盖用户已编辑的同名文件。
 - `vault_create` 返回的 `openPath` 为首篇教程路径；若教程已存在则回退到 `AGENTS.md`。
+- 每次打开会补种缺失的 bundled skills；第一方 `SKILL.md` 只有在内容 hash 与已知旧版模板完全一致时才升级。用户改过的文件保持原样，返回值的 `updated` 列出本次安全升级路径。
 
 ## 文件树
 

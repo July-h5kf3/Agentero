@@ -187,6 +187,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::config_cmd::ConfigCmd,
     },
+    /// Inspect Vault-local wikilinks.
+    Wiki {
+        #[command(subcommand)]
+        cmd: commands::wiki::WikiCmd,
+    },
 }
 
 fn init_logging() {
@@ -298,6 +303,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Import { .. } => "cli.import",
         Commands::Export { .. } => "cli.export",
         Commands::Config { .. } => "cli.config",
+        Commands::Wiki { .. } => "cli.wiki",
     }
 }
 
@@ -326,5 +332,6 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Import { cmd } => commands::import::run(cmd, globals).await,
         Commands::Export { cmd } => commands::export::run(cmd, globals).await,
         Commands::Config { cmd } => commands::config_cmd::run(cmd, globals),
+        Commands::Wiki { cmd } => commands::wiki::run(cmd, globals),
     }
 }

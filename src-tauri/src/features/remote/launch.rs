@@ -59,18 +59,38 @@ pub async fn resolve_remote_target(
     }))
 }
 
-/// Seed missing bundled skills (and optionally onboarding notes) into the remote vault.
+/// Seed or safely upgrade bundled skills (and optionally onboarding notes) in
+/// the remote vault.
 ///
 /// Remote vault handles are opaque session ids, so the local `vault_ensure`
-/// command cannot be used for them. Existing remote files are never replaced.
-/// When `locale` is `Some`, localized onboarding tutorial notes are also seeded.
+/// command cannot be used for them. User-customized remote files are never
+/// replaced. When `locale` is `Some`, localized onboarding tutorial notes are
+/// also seeded.
 pub async fn ensure_remote_vault_skills(
     session: &RemoteSession,
     locale: Option<&str>,
 ) -> Result<CreateVaultResult, AppError> {
     let mut created = Vec::new();
+    let mut updated = Vec::new();
     for (rel, content) in vault::bundled_skill_files() {
         if session.fs.exists(rel).await? {
+            if vault::bundled_skill_has_legacy_version(rel) {
+                let existing = session.fs.read(rel).await?;
+                if existing != content.as_bytes() && vault::is_legacy_bundled_skill(rel, &existing)
+                {
+                    session
+                        .fs
+                        .write(
+                            rel,
+                            content.as_bytes(),
+                            WriteOpts {
+                                create_parents: true,
+                            },
+                        )
+                        .await?;
+                    updated.push((*rel).to_string());
+                }
+            }
             continue;
         }
         session
@@ -119,6 +139,7 @@ pub async fn ensure_remote_vault_skills(
     Ok(CreateVaultResult {
         path: session.remote_path.clone(),
         created,
+        updated,
         open_path,
     })
 }
@@ -216,6 +237,9 @@ mod tests {
         assert!(!first
             .created
             .contains(&".agents/skills/paper-reader/SKILL.md".to_string()));
+        assert!(!first
+            .updated
+            .contains(&".agents/skills/paper-reader/SKILL.md".to_string()));
         assert!(first
             .created
             .contains(&"notes/01 Markdown and Wikilinks.md".to_string()));
@@ -230,6 +254,7 @@ mod tests {
             .await
             .unwrap();
         assert!(second.created.is_empty());
+        assert!(second.updated.is_empty());
         assert_eq!(second.open_path, "AGENTS.md");
 
         registry.disconnect(&info.session_id).await.unwrap();

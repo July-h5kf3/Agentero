@@ -179,7 +179,8 @@
 		"remoteDeleteDirect": "远程删除将直接移除服务器上的文件（无回收站）。",
 		"runTauriPrefix": "运行",
 		"runTauriSuffix": "以打开知识库。",
-		"skillsSeeded": "已安装 {{count}} 个新技能：{{names}}"
+		"skillsSeeded": "已安装 {{count}} 个新技能：{{names}}",
+		"skillsUpdated": "已更新 {{count}} 个内置技能：{{names}}"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」不存在。\n\n是否创建 {{path}}？"

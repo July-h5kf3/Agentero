@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub(crate) const WIKI_CACHE_SCHEMA_VERSION: i64 = 2;
-pub(crate) const WIKI_PARSER_VERSION: &str = "wiki-parser-2026-07-25-v1";
+pub(crate) const WIKI_PARSER_VERSION: &str = "wiki-parser-2026-07-29-v2";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct WikiFileFingerprint {

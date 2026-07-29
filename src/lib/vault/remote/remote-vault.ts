@@ -110,10 +110,11 @@ export async function remoteConnect(args: {
 export type RemoteVaultEnsureResult = {
 	path: string;
 	created: string[];
+	updated: string[];
 	openPath: string;
 };
 
-/** Seed missing bundled skills/onboarding notes in the connected remote vault. */
+/** Seed or safely update bundled skills/onboarding notes in a remote vault. */
 export async function remoteEnsureVault(
 	sessionId: string,
 	locale?: string,

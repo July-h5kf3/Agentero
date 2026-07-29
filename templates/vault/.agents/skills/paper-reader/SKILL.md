@@ -77,6 +77,26 @@ If you cannot spawn subagents, simulate the teacher–student dialogue inline un
 - Deployment / practical risks.
 - Natural follow-up directions.
 
+## Wikilink policy
+
+Use wikilinks to connect this paper to knowledge that is already present in the
+Vault. A link is a navigable relationship, not decoration for every technical
+term.
+
+- Before adding a link, confirm its target exists with `agentero tree --json`,
+  `agentero paper list --json`, or direct Vault file inspection.
+- Link a cataloged paper to its note with a canonical Vault-relative target,
+  for example `[[papers/nlp/1706.03762/NOTES|Attention Is All You Need]]`.
+- Link an existing concept note by path, for example
+  `[[notes/attention-mechanism|attention mechanism]]`.
+- If a concept has no note, keep it as plain text. Create a concept note first
+  only when the user explicitly requests that additional deliverable.
+- For heading links, prefer the complete canonical heading path
+  (`[[notes/topic#Outer#Inner|label]]`) so duplicate leaf headings cannot make
+  the link ambiguous.
+- Preserve user-authored wikilinks. Repair only links introduced or changed by
+  this run unless the user separately approves broader cleanup.
+
 ## Workflow
 
 1. Resolve the paper folder path (from user / Agentero target).
@@ -84,11 +104,16 @@ If you cannot spawn subagents, simulate the teacher–student dialogue inline un
 3. Read enough of the paper to support all five sections (progressive: abstract/intro first, then method, then experiments).
 4. Generate the structured notes.
 5. Write / update `{paper}/NOTES.md`.
-6. End with `## Sources` listing **Vault-relative** paths you actually read.
+6. Run `agentero wiki check {paper}/NOTES.md --json`.
+   - Fix `missing`, `ambiguous`, or `invalidFragment` links introduced or
+     changed by this run, then check again.
+   - If this CLI command is unavailable, report that semantic link validation
+     was not completed. Do not claim that every link resolves.
+7. End with `## Sources` listing **Vault-relative** paths you actually read.
 
 ## Rules
 
-- Keep Obsidian-style wikilinks `[[...]]` if you create them.
+- Keep valid Obsidian-style wikilinks `[[...]]`; do not invent targets.
 - Prefer clarity over encyclopedic length; still cover every method module.
 - Never invent experimental numbers; if something is unclear, say so.
 - Final deliverable path: `{paper}/NOTES.md` only for the lecture notes body.

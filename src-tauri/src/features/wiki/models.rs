@@ -120,6 +120,47 @@ pub struct OutgoingLinksResponse {
     pub outgoing: Vec<ResolvedLink>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiCheckCounts {
+    pub resolved: u32,
+    pub missing: u32,
+    pub ambiguous: u32,
+    pub invalid_fragment: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiCheckIssue {
+    pub status: LinkResolutionStatus,
+    pub source: String,
+    pub line: u32,
+    pub target_raw: String,
+    pub syntax: InternalLinkSyntax,
+    pub embed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+/// Read-only semantic validation of explicit Vault-local links.
+///
+/// `scope` is a normalized Vault-relative Markdown file or directory. `None`
+/// means the complete Vault. Only non-resolved occurrences appear in `issues`;
+/// `counts` still includes resolved links for an auditable total.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiCheckResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    pub checked_files: u32,
+    pub counts: WikiCheckCounts,
+    pub issues: Vec<WikiCheckIssue>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiResolveResponse {

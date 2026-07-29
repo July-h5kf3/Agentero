@@ -1,11 +1,11 @@
 ---
 name: agentero-cli
 description: >-
-  Use the Agentero CLI (bin `agentero`) to create, discover, and expose a local
-  research vault and catalog—list/get papers, import by id/URL, download assets,
-  parse PAPER.md, export bib—without BYOA. Prefer --json. Use when managing a
-  vault headless, scripting Motif/Agentero, or exploring papers via machine APIs
-  ($agentero-cli / /agentero-cli).
+  Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
+  research vault and catalog—list/get papers, import by id/URL, check wikilinks,
+  download assets, parse PAPER.md, export bib—without BYOA. Prefer --json. Use
+  when managing a vault headless, scripting Motif/Agentero, or exploring papers
+  via machine APIs ($agentero-cli / /agentero-cli).
 ---
 
 # Agentero CLI
@@ -96,6 +96,7 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Current vault path | `agentero vault which --json` |
 | Summary / health | `agentero vault info --json` / `vault check --json` |
 | File tree | `agentero tree [path] --json` |
+| Wikilink integrity | `agentero wiki check [file-or-directory] --json` |
 | List papers | `agentero paper list [--unread] [--query …] [--tag …] --json` |
 | List tags | `agentero paper tag list --json` |
 | Get paper | `agentero paper get <path\|id> --json` |
@@ -130,7 +131,12 @@ Stdout = result; stderr = progress/diagnostics. Parse `error.code` when retrying
 
 Common codes: `vault_not_found`, `vault_invalid`, `paper_not_found`,
 `paper_ambiguous`, `import_failed`, `export_failed`, `asset_missing`,
-`needs_confirmation`.
+`needs_confirmation`, `wikilink_check_failed`, `wiki_index_failed`.
+
+`wiki check` uses the same resolver as Agentero navigation and returns non-zero
+when it finds `missing`, `ambiguous`, or `invalidFragment` occurrences. The
+structured report remains available in `error.details`; pass a Vault-relative
+Markdown file or directory to isolate the scope.
 
 ## Path / id resolution
 

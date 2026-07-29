@@ -4,9 +4,9 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 
 | Skill | Role |
 | --- | --- |
-| `paper-reader` | 精读 → `{paper}/NOTES.md` |
-| `agentero-cli` | headless `agentero` CLI |
-| `vault-normalizer` | 将现有研究目录整理为 Agentero Vault 规范 |
+| `paper-reader` | 精读 → `{paper}/NOTES.md`，只创建可解析双链 |
+| `agentero-cli` | headless `agentero` CLI，含只读双链检查 |
+| `vault-normalizer` | 整理现有研究目录并对比迁移前后的双链诊断 |
 | `idea-evaluator` | 研究 idea 评审 |
 | `deep-research` | 综述级文献调研 |
 

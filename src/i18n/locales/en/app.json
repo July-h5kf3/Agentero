@@ -179,7 +179,8 @@
 		"remoteDeleteDirect": "Remote delete removes files on the server (no recycle bin).",
 		"runTauriPrefix": "Run the app with",
 		"runTauriSuffix": "to open a vault.",
-		"skillsSeeded": "Installed {{count}} new skill(s): {{names}}"
+		"skillsSeeded": "Installed {{count}} new skill(s): {{names}}",
+		"skillsUpdated": "Updated {{count}} bundled skill(s): {{names}}"
 	},
 	"confirm": {
 		"createNote": "「{{target}}」 does not exist.\n\nCreate {{path}}?"

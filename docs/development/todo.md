@@ -13,7 +13,7 @@
 - [ ] 最近 Vault / UI 偏好与 XDG settings 完全对齐
 - [ ] 设置「打开/导出日志文件夹」
 - [ ] `catalog:export_papers_md`（Markdown 表）
-- [ ] CLI：`graph` / `doctor` / shell completions
+- [ ] CLI：`graph` / `doctor` / shell completions（只读 `wiki check` 已实现）
 - [ ] CLI：`export papers-md`（随 Host 导出）
 
 ## 0.4 — Vault 采纳与导入加深
