@@ -13,13 +13,13 @@
 
 ## Codebase Facts
 
-- 当前版本显示仅存在于 [`src/components/settings/panes/about-pane.tsx`](../../src/components/settings/panes/about-pane.tsx:1)，只有 `getVersion()` 和静态 About 内容。
-- 设置页通过 [`SettingsContent`](../../src/components/settings/settings-content.tsx:70) 挂载 About pane；About 是独立原生窗口，主窗口和设置窗口都会渲染 Sonner。
-- 启动入口 [`src/main.tsx`](../../src/main.tsx:26) 已有统一 `boot()`，适合在主窗口完成初始化后异步触发后台更新检查。
-- Tauri 插件在 [`src-tauri/src/app/mod.rs`](../../src-tauri/src/app/mod.rs:24) 统一注册；当前尚未注册 updater plugin。
-- [`src-tauri/tauri.conf.json`](../../src-tauri/tauri.conf.json:34) 没有 updater 配置；[`src-tauri/capabilities/default.json`](../../src-tauri/capabilities/default.json:10) 也没有 updater 权限。
-- Release workflow [` .github/workflows/release.yml`](../../.github/workflows/release.yml:46) 目前只构建并上传普通 installer 和 CLI 产物，没有 updater JSON、签名公钥或 updater 私钥配置。
-- 当前项目版本来源同步规则见 [`docs/development/release.md`](../../docs/development/release.md:7)，不能只改 tag。
+- 当前版本显示仅存在于 `src/components/settings/panes/about-pane.tsx`，只有 `getVersion()` 和静态 About 内容。
+- 设置页通过 `SettingsContent` 挂载 About pane；About 是独立原生窗口，主窗口和设置窗口都会渲染 Sonner。
+- 启动入口 `src/main.tsx` 已有统一 `boot()`，适合在主窗口完成初始化后异步触发后台更新检查。
+- Tauri 插件在 `src-tauri/src/app/mod.rs` 统一注册；当前尚未注册 updater plugin。
+- `src-tauri/tauri.conf.json` 没有 updater 配置；`src-tauri/capabilities/default.json` 也没有 updater 权限。
+- Release workflow `.github/workflows/release.yml` 目前只构建并上传普通 installer 和 CLI 产物，没有 updater JSON、签名公钥或 updater 私钥配置。
+- 当前项目版本来源同步规则见 `docs/development/release.md`，不能只改 tag。
 
 ## Acceptance Criteria
 
@@ -80,7 +80,7 @@
 
 ### 3. 修改 About 页面
 
-- 修改 [`src/components/settings/panes/about-pane.tsx`](../../src/components/settings/panes/about-pane.tsx:9)：
+- 修改 `src/components/settings/panes/about-pane.tsx`：
   - 保留现有版本与 tagline；
   - 增加更新卡片/行；
   - 右侧使用带无障碍名称和 tooltip 的图标按钮；
@@ -90,7 +90,7 @@
 
 ### 4. 启动后台检查与 toast
 
-- 在 [`src/main.tsx`](../../src/main.tsx:26) 的主窗口 boot 路径中，完成 i18n 和主题初始化后异步触发一次更新检查。
+- 在 `src/main.tsx` 的主窗口 boot 路径中，完成 i18n 和主题初始化后异步触发一次更新检查。
 - 设置窗口单独打开时不重复触发启动检查；可通过 `isSettingsWindow` 分支排除。
 - 启动检查使用稳定 toast id，避免 StrictMode、重复窗口或多次 boot 造成重复提醒。
 - 有新版本时 toast 展示目标版本，并提供「下载并安装」动作；点击后调用更新服务。
@@ -98,13 +98,13 @@
 
 ### 5. 国际化
 
-- 在 [`src/i18n/locales/en/settings.json`](../../src/i18n/locales/en/settings.json:240) 和 [`src/i18n/locales/zh-CN/settings.json`](../../src/i18n/locales/zh-CN/settings.json:240) 增加 About 更新相关词条。
+- 在 `src/i18n/locales/en/settings.json` 和 `src/i18n/locales/zh-CN/settings.json` 增加 About 更新相关词条。
 - 在需要时为启动 toast 增加 `app` namespace 词条；React 外部使用全局 `i18n.t()`。
 - 不在更新服务和组件中硬编码面向用户的文案。
 
 ### 6. Release workflow 与文档
 
-- 修改 [` .github/workflows/release.yml`](../../.github/workflows/release.yml:46)：
+- 修改 `.github/workflows/release.yml`：
   - 注入 updater 私钥和 key password（仅 CI secret）；
   - 让 Tauri action/build 生成并上传 updater metadata 与各平台签名包；
   - 保证 draft release 在 metadata 生成前后顺序正确；
