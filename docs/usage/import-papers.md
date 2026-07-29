@@ -5,6 +5,7 @@ Agentero 提供多种入库入口。选择哪一种取决于你手上的资料�
 | 手上的资料 | 推荐入口 |
 |---|---|
 | DOI、arXiv ID、PMID、ISBN 或论文链接 | 魔棒（可批量粘贴） |
+| GitHub Skill 链接或 `npx skills add …` | 魔棒（Skill 导入） |
 | 浏览器中正在打开的论文网页 | [Zotero Connector](zotero.md) |
 | 本地 PDF 文件 | 魔棒本地导入，或拖到 `papers/` 组织夹 |
 | 已有 Zotero 文库 | 欢迎页「从 Zotero 迁移」 |
@@ -14,11 +15,27 @@ Agentero 提供多种入库入口。选择哪一种取决于你手上的资料�
 
 1. 打开一个 Vault。
 2. 点击左侧 **魔棒**，或按 `⇧⌘I`。
-3. 粘贴一个或多个标识符（空格、逗号、分号、换行均可分隔）。
+3. 粘贴一个或多个标识符或 Skill 来源（空格、逗号、分号、换行均可分隔）。
 4. 确认目标文件夹（默认为 `papers/`，或当前选中的 Papers 子文件夹）。
 5. 开始导入；左下角任务条会显示进度。
 
 导入成功后，Agentero 会创建论文目录、写入 catalog，并尽量下载 PDF。对 arXiv 论文还会尝试把 e-print LaTeX 解压到 `source/`。随后会刷新文件树、展开并打开新论文。
+
+### 同时导入 Skill
+
+魔棒也支持把 GitHub 上的 Agent Skill 装入当前 Vault：
+
+```text
+https://github.com/mattpocock/skills
+npx skills add https://github.com/anthropics/skills --skill pptx
+```
+
+1. 粘贴 Skill 来源后，Agentero 会解析仓库并列出候选 Skill。
+2. 弹出的选择窗口会显示名称与已安装状态；勾选需要的项。
+3. 确认后仅安装选中 Skill 到 `.agents/skills/<name>/`；已存在的 Skill 不会覆盖。
+4. 取消或关闭窗口会清理本次解析的临时包，不会修改 Vault。
+
+Skill 导入当前**仅支持本地 Vault**，远程 Vault 会提示暂不支持。
 
 ```text
 papers/<paper-id>/

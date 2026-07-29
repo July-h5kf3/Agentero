@@ -204,6 +204,7 @@ Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用�
 | 入口 | Command | 远程 `remote:…` |
 |---|---|---|
 | 魔棒标识符 | `lookup_import_batch` | ✅ staging → SFTP → catalog PUT |
+| 魔棒 Skill 导入 | `skill_install` / `skill_discard` | ❌ 仅本地 Vault |
 | 补资源 Download | `paper_download_assets` | ✅ |
 | 本地 PDF | `paper_import_local_pdf` | ✅ 本机选 PDF → 上传远端 |
 | Bib/RIS 库导入 | `paper_import` | ✅ Translator → 上传远端 |
@@ -827,6 +828,8 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     ok: true;
     data: {
       imported: LookupImportResult[];
+      skills: SkillImportResult[];
+      skillCandidates: SkillDiscovery[];
       skipped: { raw: string; kind: string; value: string; reason: 'duplicate_in_batch' | 'already_in_library' }[];
       errors: string[];
     }
@@ -834,13 +837,41 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 
   其中 `LookupImportResult` 为单条入库结果（含 `paperDir`、`path`、`id`、`title`、`usedTranslator`、`translatorBaseUrl`、`pdf?`、`tex?`、`paperMd?`、`assetMessages?`）。
+  `skills` 为魔棒直接安装的 Skill（当前仅当来源含 `--skill` 等明确过滤且候选唯一时可能非空）；`skillCandidates` 为需要前端弹窗确认的候选列表，见下方 `skill_install` / `skill_discard`。
 - **单条行为**：Translator 优先；失败且输入为 arXiv 时回退 export.arxiv.org；**catalog upsert**（权威）+ 写 `NOTES.md` 壳（摘要块优先经免费 MT 译为中文，失败则保留原文；catalog 中 `abstract` 仍为原文）；`metadata.json` 为 catalog 投影同步；**始终下载 PDF**；**arXiv 另下载 e-print 并解压 LaTeX** 到 `source/`；下载后若**无 TeX 且有 PDF 且无 `PAPER.md`**，用 **liteparse** 生成 `PAPER.md` 并更新 `body_source` / `body_quality`。
+  当 `texts` 某条被识别为 `IdentifierKind::Skill`（GitHub URL、`npx skills add …`、`github:`、`skills.sh`）时，该条进入 Skill 解析管线，不写入 catalog/papers。
 - **行为**：
-  1. 逐条解析 `texts`；未识别则加入 `errors`。
+  1. 逐条解析 `texts`；未识别则加入 `errors`；Skill 来源进入 `skillCandidates`（或唯一命中时直接入 `skills`）。
   2. 按规范化 value 去重（arXiv 去 version、DOI 小写等）；batch 内重复 → `skipped.reason = 'duplicate_in_batch'`。
   3. 查 catalog：`arxiv_id` / `doi` / `isbn` / `pmid` / `id` 已存在 → `skipped.reason = 'already_in_library'`。
   4. 其余以 `concurrency`（默认 3，范围 1–10）为上限并发调 `import_by_identifier_with_progress`，共用 `taskId`；单条失败继续，错误加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
-  5. 前端收到 `imported` 后刷新树 / Library / wiki，并对其中仍缺资源的 paper 逐个入下载队列，每篇一个独立的 `download` 后台任务，按并发上限排队执行。**不**自动连跑 paper-reader。
+  5. 前端收到 `imported` / `skills` / `skillCandidates` 后刷新树 / Library / wiki，并对其中仍缺资源的 paper 逐个入下载队列，每篇一个独立的 `download` 后台任务，按并发上限排队执行。**不**自动连跑 paper-reader。若存在 `skillCandidates`，前端打开选择弹窗；用户取消时调用 `skill_discard` 清理临时 discovery。
+
+#### `skill_install`
+
+安装由 `lookup_import_batch` 发现的一次性 Skill 候选。
+
+- **参数**（invoke 字段名 `args`）：
+
+  ```ts
+  {
+    vaultPath: string;
+    discoveryId: string;      // lookup_import_batch 返回的 SkillDiscovery.discoveryId
+    selectedNames: string[];  // 用户勾选的候选 Skill 名称
+  }
+  ```
+
+- **返回**：`{ ok: true; data: SkillImportResult[] }`，每项含 `name`、`description`、`path`、 `source`、`skipped`（已存在时跳过）。
+- **行为**：从临时 discovery 解压 GitHub tarball，将选中 Skill 目录复制到 `.agents/skills/<name>/`，并写入 `agentero-skill.json` 来源记录。已存在目录**不覆盖**。安装完成后由前端 `refreshTree`。
+- **限制**：仅本地 Vault；远程 Vault 应在 `lookup_import_batch` 阶段直接拒绝。
+
+#### `skill_discard`
+
+取消/关闭 Skill 选择窗口时调用，删除 `lookup_import_batch` 创建的临时 discovery 包。
+
+- **参数**：`{ discoveryId: string }`
+- **返回**：`{ ok: true; data: null }`
+- **行为**：删除临时目录与归档；不触碰 `.agents/skills/`。
 
 #### `paper_download_assets`
 

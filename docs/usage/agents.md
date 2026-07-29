@@ -24,6 +24,23 @@ Agentero 使用 **BYOA**（Bring Your Own Agent）：Agent 由你安装和登录
 
 若终端里能跑、应用内探测不到：图形应用的 PATH 可能与 shell 不同，请填写**绝对路径**。远程 Vault 时，Agent 装在**服务器**上，见 [打开远程 Vault](remote-vault.md)。
 
+## 使用 Skill
+
+Agentero 的 Skill 是放在 Vault `.agents/skills/<name>/` 下的 prompt 包，含 `SKILL.md` 与可选的 `scripts/`、`references/`、`assets/`。
+
+### 安装 Skill
+
+1. 复制 GitHub Skill 链接，或 `npx skills add <repo> --skill <name>` 文本。
+2. 打开魔棒（`⇧⌘I`）并粘贴。
+3. 在弹出的选择窗口中勾选要安装的 Skill；已安装的会标记出来，不会被覆盖。
+4. 确认后 Skill 写入 `.agents/skills/<name>/`，即可在 Agent 工作流中使用。
+
+Skill 来源不受 Agentero 审计，安装第三方 Skill 等于引入外部指令，请自行判断信任度。
+
+### 运行 Skill
+
+在 Agent 面板 Composer 中按 Agent 约定触发：Claude 用 `/skill-id`，其他 Agent 由 `SKILL.md` 自动注入。具体写法见 Skill 自身的 `SKILL.md`。
+
 ## 第一次对话
 
 1. 打开一篇论文（默认 PDF | NOTES 分屏）。
