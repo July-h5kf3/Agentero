@@ -5,6 +5,7 @@
  */
 
 import { createStore } from "zustand/vanilla";
+import type { SkillDiscovery } from "@/lib/paper/lookup";
 import type { PaletteMode } from "@/lib/shell/commands/types";
 
 export type RightSidebarTab =
@@ -31,6 +32,7 @@ type UiStore = {
 	commandOpen: boolean;
 	commandMode: PaletteMode;
 	settingsOpen: boolean;
+	skillImportDraft: SkillDiscovery[] | null;
 };
 
 export const uiStore = createStore<UiStore>(() => ({
@@ -45,6 +47,7 @@ export const uiStore = createStore<UiStore>(() => ({
 	commandOpen: false,
 	commandMode: "go",
 	settingsOpen: false,
+	skillImportDraft: null,
 }));
 
 export function setSidebarCollapsedState(collapsed: boolean): void {
@@ -98,6 +101,10 @@ export function openPalette(mode: PaletteMode): void {
 
 export function setSettingsOpenState(open: boolean): void {
 	uiStore.setState({ settingsOpen: open });
+}
+
+export function setSkillImportDraft(draft: SkillDiscovery[] | null): void {
+	uiStore.setState({ skillImportDraft: draft });
 }
 
 /**

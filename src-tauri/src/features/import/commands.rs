@@ -5,7 +5,8 @@ use crate::core::log_util::{trunc, OpTimer};
 use crate::features::import::{
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
     LookupImportBatchResult, PaperDownloadAssetsArgs, PaperExportArgs, PaperExportResult,
-    PaperImportArgs, PaperImportResult, StageImportFileArgs, StageImportFileResult,
+    PaperImportArgs, PaperImportResult, SkillImportResult, StageImportFileArgs,
+    StageImportFileResult,
 };
 use crate::features::remote::{import_bridge, parse_remote_handle, RemoteRegistry};
 use std::sync::Arc;
@@ -39,6 +40,40 @@ pub async fn lookup_import_batch(
         crate::features::agent::background_tasks::finish(task_id);
     }
     Ok(op.finish_result(result))
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInstallArgs {
+    pub vault_path: String,
+    pub discovery_id: String,
+    #[serde(default)]
+    pub selected_names: Vec<String>,
+    #[serde(default)]
+    pub task_id: Option<String>,
+}
+
+#[tauri::command]
+pub fn skill_install(args: SkillInstallArgs) -> ApiResult<Vec<SkillImportResult>> {
+    let op = OpTimer::start_with(
+        "skill_install",
+        format!("discovery_id={}", trunc(&args.discovery_id, 40)),
+    );
+    let result = super::install_discovered_skills(
+        std::path::Path::new(&args.vault_path),
+        &args.discovery_id,
+        &args.selected_names,
+    );
+    op.finish_result(result)
+}
+
+#[tauri::command]
+pub fn skill_discard(discovery_id: String) -> ApiResult<()> {
+    let op = OpTimer::start_with(
+        "skill_discard",
+        format!("discovery_id={}", trunc(&discovery_id, 40)),
+    );
+    op.finish_result(super::discard_skill_discovery(&discovery_id))
 }
 
 /// Download PDF (+ arXiv LaTeX) for an existing paper folder that is missing local assets.

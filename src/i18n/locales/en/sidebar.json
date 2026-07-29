@@ -163,7 +163,7 @@
 	},
 	"lookup": {
 		"magicWand": "Add by identifier",
-		"placeholder": "arXiv URL / ID, DOI… one or more",
+		"placeholder": "arXiv / DOI, GitHub Skill URL, or npx skills add…",
 		"add": "Add",
 		"adding": "Adding…",
 		"addTo": "Add to {{path}}",
@@ -171,7 +171,17 @@
 		"fetchFailed": "Failed to fetch metadata.",
 		"needsVault": "Open a vault first.",
 		"batchEmpty": "No valid identifiers found.",
-		"batchSummary": "Imported {{imported}}, skipped {{skipped}}, failed {{failed}}"
+		"batchSummary": "Imported {{imported}} papers and {{skills}} skills, skipped {{skipped}}, failed {{failed}}",
+		"skillImportTitle": "Choose Skills to install",
+		"skillImportCancel": "Cancel",
+		"skillImportConfirm": "Install {{count}}",
+		"skillImportTask": "Install Skills",
+		"skillImporting": "Installing selected Skills…",
+		"skillImportDone": "Installed {{installed}} Skills; skipped {{skipped}}",
+		"skillImportInstalled": "Installed",
+		"skillImportSelectAll": "Select all",
+		"skillImportSelectNone": "Select none",
+		"skillCandidatesFound": "Found {{count}} Skill candidates. Choose which to install."
 	},
 	"backlinks": {
 		"openNote": "Open a note to see backlinks",

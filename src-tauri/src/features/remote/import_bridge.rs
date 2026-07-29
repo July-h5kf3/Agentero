@@ -4,7 +4,9 @@ use super::session::RemoteSession;
 use crate::core::error::AppError;
 use crate::core::fs::{VaultFs, WriteOpts};
 use crate::features::catalog::papers;
-use crate::features::import::parse::{extract_arxiv_id, extract_primary_identifier};
+use crate::features::import::parse::{
+    extract_arxiv_id, extract_primary_identifier, IdentifierKind,
+};
 use crate::features::import::{
     enrich_remote_urls, ensure_paper_assets, identifier_kind_column, identifier_kind_str,
     map_zotero_item, normalize_parent_dir, paper_record_from_meta, resolve_metadata,
@@ -125,6 +127,12 @@ pub async fn import_by_identifier_batch_remote(
             errors.push(format!("{raw}: unrecognized identifier"));
             continue;
         };
+        if kind == IdentifierKind::Skill {
+            errors.push(format!(
+                "{raw}: skill import is not supported for remote vaults"
+            ));
+            continue;
+        }
 
         let kind_str = identifier_kind_str(kind);
         let dedup_key = format!("{kind_str}:{value}");
@@ -172,6 +180,8 @@ pub async fn import_by_identifier_batch_remote(
 
     Ok(LookupImportBatchResult {
         imported,
+        skills: Vec::new(),
+        skill_candidates: Vec::new(),
         skipped,
         errors,
     })

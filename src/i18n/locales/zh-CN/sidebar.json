@@ -163,7 +163,7 @@
 	},
 	"lookup": {
 		"magicWand": "按标识符添加论文",
-		"placeholder": "arXiv 链接/编号、DOI… 可输入多个",
+		"placeholder": "arXiv / DOI、GitHub Skill 链接或 npx skills add…",
 		"add": "添加",
 		"adding": "添加中…",
 		"addTo": "加入 {{path}}",
@@ -171,7 +171,17 @@
 		"fetchFailed": "获取元数据失败。",
 		"needsVault": "请先打开知识库。",
 		"batchEmpty": "未识别到有效标识符。",
-		"batchSummary": "已导入 {{imported}} 篇，跳过 {{skipped}} 篇，失败 {{failed}} 篇"
+		"batchSummary": "已导入 {{imported}} 篇论文、{{skills}} 个 Skill，跳过 {{skipped}} 条，失败 {{failed}} 条",
+		"skillImportTitle": "选择要安装的 Skill",
+		"skillImportCancel": "取消",
+		"skillImportConfirm": "安装 {{count}} 个",
+		"skillImportTask": "安装 Skill",
+		"skillImporting": "正在安装选中的 Skill…",
+		"skillImportDone": "已安装 {{installed}} 个 Skill，跳过 {{skipped}} 个",
+		"skillImportInstalled": "已安装",
+		"skillImportSelectAll": "全选",
+		"skillImportSelectNone": "全不选",
+		"skillCandidatesFound": "找到 {{count}} 个 Skill 候选，请选择要安装的项目。"
 	},
 	"backlinks": {
 		"openNote": "打开一篇笔记以查看反向链接",

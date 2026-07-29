@@ -25,6 +25,28 @@ export type LookupAddResult = {
 	assetMessages?: string[];
 };
 
+export type SkillImportResult = {
+	name: string;
+	description: string;
+	path: string;
+	source: string;
+	skipped: boolean;
+};
+
+export type SkillCandidate = {
+	name: string;
+	description: string;
+	source: string;
+	relativePath: string;
+	alreadyInstalled: boolean;
+};
+
+export type SkillDiscovery = {
+	discoveryId: string;
+	source: string;
+	candidates: SkillCandidate[];
+};
+
 export type PaperAssetsDownloadResult = {
 	pdf: boolean;
 	tex: boolean;
@@ -73,6 +95,8 @@ function toLookupAddResult(d: HostLookupResult): LookupAddResult {
 
 export type LookupBatchAddResult = {
 	imported: LookupAddResult[];
+	skills: SkillImportResult[];
+	skillCandidates: SkillDiscovery[];
 	skipped: { raw: string; kind: string; value: string; reason: string }[];
 	errors: string[];
 };
@@ -122,9 +146,43 @@ export async function addPapersByIdentifiers(opts: {
 
 	return {
 		imported: result.imported.map(toLookupAddResult),
+		skills: result.skills ?? [],
+		skillCandidates: result.skillCandidates ?? [],
 		skipped: result.skipped,
 		errors: result.errors,
 	};
+}
+
+export async function installDiscoveredSkills(opts: {
+	vaultRoot: string;
+	discoveryId: string;
+	selectedNames: string[];
+}): Promise<SkillImportResult[]> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
+	}
+	return invokeApi<SkillImportResult[]>(
+		"skill_install",
+		{
+			args: {
+				vaultPath: opts.vaultRoot,
+				discoveryId: opts.discoveryId,
+				selectedNames: opts.selectedNames,
+			},
+		},
+		{ fallback: i18n.t("sidebar:lookup.fetchFailed") },
+	);
+}
+
+export async function discardSkillDiscovery(
+	discoveryId: string,
+): Promise<void> {
+	if (!isTauri()) return;
+	await invokeApi<void>(
+		"skill_discard",
+		{ discoveryId },
+		{ fallback: i18n.t("sidebar:lookup.fetchFailed"), allowVoid: true },
+	);
 }
 
 /**

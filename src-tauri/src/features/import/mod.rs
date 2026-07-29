@@ -11,6 +11,7 @@ pub mod zotero_commands;
 mod assets;
 mod map;
 pub(crate) mod parse;
+mod skill_import;
 mod zotero_db;
 pub(crate) mod zotero_io;
 
@@ -19,6 +20,10 @@ pub use assets::{
     has_local_pdf, has_local_tex, AssetDownloadResult, AssetProgressContext,
 };
 pub use map::{enrich_remote_urls, map_zotero_item, PaperMeta};
+pub use skill_import::{
+    discard_skill_discovery, discover_skill_source, install_discovered_skills, SkillCandidate,
+    SkillDiscovery, SkillImportResult,
+};
 pub use zotero_db::{
     migrate_zotero, scan_zotero, MigrateProgress, ZoteroMigrateArgs, ZoteroMigrateResult,
     ZoteroScan, ZoteroScanArgs,
@@ -187,6 +192,10 @@ pub struct SkippedImport {
 pub struct LookupImportBatchResult {
     pub imported: Vec<LookupImportResult>,
     #[serde(default)]
+    pub skills: Vec<SkillImportResult>,
+    #[serde(default)]
+    pub skill_candidates: Vec<SkillDiscovery>,
+    #[serde(default)]
     pub skipped: Vec<SkippedImport>,
     #[serde(default)]
     pub errors: Vec<String>,
@@ -273,6 +282,8 @@ pub async fn import_by_identifier_batch(
 
     let mut skipped: Vec<SkippedImport> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
+    let skills: Vec<SkillImportResult> = Vec::new();
+    let mut skill_candidates: Vec<SkillDiscovery> = Vec::new();
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
     // Phase 1: parse, deduplicate, and filter against existing catalog.
@@ -299,6 +310,18 @@ pub async fn import_by_identifier_batch(
             continue;
         }
         seen.insert(dedup_key.clone(), raw.to_string());
+
+        if kind == IdentifierKind::Skill {
+            let Some(source) = parse::extract_skill_source(raw) else {
+                errors.push(format!("{raw}: invalid skill source"));
+                continue;
+            };
+            match discover_skill_source(&vault, &source, app, args.task_id.as_deref()).await {
+                Ok(discovery) => skill_candidates.push(discovery),
+                Err(e) => errors.push(format!("{raw}: {e}")),
+            }
+            continue;
+        }
 
         // Check catalog for existing paper by canonical identifier.
         if let Some(column) = identifier_kind_column(kind) {
@@ -336,6 +359,8 @@ pub async fn import_by_identifier_batch(
     if total == 0 {
         return Ok(LookupImportBatchResult {
             imported: Vec::new(),
+            skills,
+            skill_candidates,
             skipped,
             errors,
         });
@@ -382,6 +407,8 @@ pub async fn import_by_identifier_batch(
 
     Ok(LookupImportBatchResult {
         imported,
+        skills,
+        skill_candidates,
         skipped,
         errors,
     })
@@ -419,6 +446,7 @@ pub(crate) fn identifier_kind_str(kind: IdentifierKind) -> String {
         IdentifierKind::Pmid => "pmid",
         IdentifierKind::AdsBibcode => "ads",
         IdentifierKind::Url => "url",
+        IdentifierKind::Skill => "skill",
     }
     .to_string()
 }
@@ -430,7 +458,7 @@ pub(crate) fn identifier_kind_column(kind: IdentifierKind) -> Option<&'static st
         IdentifierKind::Isbn => Some("isbn"),
         IdentifierKind::Pmid => Some("pmid"),
         IdentifierKind::AdsBibcode => Some("id"),
-        IdentifierKind::Url => None,
+        IdentifierKind::Url | IdentifierKind::Skill => None,
     }
 }
 

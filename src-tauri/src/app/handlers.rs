@@ -49,6 +49,8 @@ macro_rules! common_commands {
             crate::features::trash::commands::path_purge_trash,
             crate::features::translate::commands::translate_text,
             crate::features::import::commands::lookup_import_batch,
+            crate::features::import::commands::skill_install,
+            crate::features::import::commands::skill_discard,
             crate::features::import::commands::paper_download_assets,
             crate::features::import::commands::paper_import_local_pdf,
             crate::features::import::commands::paper_stage_import_file,

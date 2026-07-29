@@ -7,6 +7,7 @@
 import { CommandPalette } from "@/components/dialogs/command-palette";
 import { ExternalRenameDialog } from "@/components/dialogs/external-rename-dialog";
 import { RenamePathDialog } from "@/components/dialogs/rename-path-dialog";
+import { SkillImportDialog } from "@/components/dialogs/skill-import-dialog";
 import { ZoteroMigrateDialog } from "@/components/dialogs/zotero-migrate-dialog";
 import { ImportLocalPdfDialog } from "@/components/library/import-local-pdf-dialog";
 import { MovePapersDialog } from "@/components/library/move-papers-dialog";
@@ -17,7 +18,9 @@ import {
 	useVaultStore,
 } from "@/hooks/use-app-stores";
 import {
+	cancelSkillImport,
 	confirmImportLocalPdf,
+	confirmSkillImport,
 	importPdfDialogOpenChange,
 } from "@/lib/paper/import-actions";
 import { setMovePaths } from "@/lib/paper/library-store";
@@ -35,6 +38,7 @@ export function AppDialogs() {
 	const movePaths = useLibraryStore((s) => s.movePaths);
 	const importPdfDraft = useLibraryStore((s) => s.importPdfDraft);
 	const ioBusy = useLibraryStore((s) => s.ioBusy);
+	const skillImportDraft = useUiStore((s) => s.skillImportDraft);
 
 	return (
 		<>
@@ -43,6 +47,11 @@ export function AppDialogs() {
 				onOpenChange={setZoteroOpen}
 				vaultPath={vaultPath}
 				onDone={refreshAll}
+			/>
+			<SkillImportDialog
+				discoveries={skillImportDraft}
+				onCancel={cancelSkillImport}
+				onConfirm={confirmSkillImport}
 			/>
 
 			<RenamePathDialog />

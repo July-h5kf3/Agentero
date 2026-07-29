@@ -15,6 +15,25 @@
 
 路径分配：`import::allocate_paper_path`（盘 + catalog 双查，撞名改写 id）。
 
+## Skill 导入
+
+魔棒 `lookup_import_batch` 同时接受论文标识符和 Skill 来源。Host 在普通 URL
+识别之前检测 `IdentifierKind::Skill`，通过 `SkillSource` 解析 GitHub 仓库、
+GitHub tree、`github:`、`skills.sh` 和 `npx skills add` 输入。
+
+Skill 安装管线位于 `features/import/skill_import.rs`：
+
+1. 解析默认分支并下载 GitHub codeload tarball；
+2. gzip/tar 安全解包，限制归档大小和文件数；
+3. 扫描并校验 `SKILL.md` frontmatter；
+4. 将压缩包和候选 metadata 保存为一次性 discovery，返回 `skillCandidates`；
+5. `skill_install` 仅安装前端确认的 Skill 名称，复制整个 Skill 目录到 `.agents/skills/<name>/`；
+6. 写入 `agentero-skill.json` 来源记录；取消操作由 `skill_discard` 清理 discovery。
+
+Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。已有目录跳过，
+不会覆盖用户文件。批量候选通过 `LookupImportBatchResult.skillCandidates` 返回。远程 Vault
+当前显式拒绝 Skill 导入。
+
 ## 魔棒（精确 ID/URL）
 
 ```text

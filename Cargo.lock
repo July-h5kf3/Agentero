@@ -111,6 +111,7 @@ dependencies = [
  "tauri-specta",
  "thiserror 2.0.18",
  "tokio",
+ "url",
  "urlencoding",
  "uuid",
  "walkdir",

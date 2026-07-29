@@ -20,8 +20,10 @@ import {
 } from "@/lib/paper/library-store";
 import {
 	addPapersByIdentifiers,
+	discardSkillDiscovery,
 	downloadPaperAssets,
 	importLocalPdfs,
+	installDiscoveredSkills,
 	type LocalPdfImportEntry,
 } from "@/lib/paper/lookup";
 import { getSettings } from "@/lib/settings/react-store";
@@ -29,7 +31,12 @@ import {
 	cleanupImportTempPaths,
 	isImportTempPath,
 } from "@/lib/shell/external-file-drop";
-import { bumpLookupOpenSignal, layout, uiStore } from "@/lib/shell/ui-store";
+import {
+	bumpLookupOpenSignal,
+	layout,
+	setSkillImportDraft,
+	uiStore,
+} from "@/lib/shell/ui-store";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
@@ -77,19 +84,31 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 				progressTaskId: id,
 			});
 			setDetail(
-				i18n.t("app:tasks.lookupRefreshing", {
-					title: i18n.t("sidebar:lookup.batchSummary", {
-						imported: r.imported.length,
-						skipped: r.skipped.length,
-						failed: r.errors.length,
-					}),
-				}),
+				r.skillCandidates.length > 0
+					? i18n.t("sidebar:lookup.skillCandidatesFound", {
+							count: r.skillCandidates.reduce(
+								(total: number, discovery) =>
+									total + discovery.candidates.length,
+								0,
+							),
+						})
+					: i18n.t("app:tasks.lookupRefreshing", {
+							title: i18n.t("sidebar:lookup.batchSummary", {
+								imported: r.imported.length,
+								skills: r.skills.length,
+								skipped: r.skipped.length,
+								failed: r.errors.length,
+							}),
+						}),
 			);
 			await refreshTree(vaultPath);
 			if (!isRemoteVaultHandle(vaultPath)) {
 				await rebuildWikiAndNotify(vaultPath);
 			}
 			await refreshLibrary();
+			if (r.skillCandidates.length > 0) {
+				setSkillImportDraft(r.skillCandidates);
+			}
 			return r;
 		},
 	);
@@ -107,13 +126,19 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 	// Summary toast.
 	const summary = i18n.t("sidebar:lookup.batchSummary", {
 		imported: result.imported.length,
+		skills: result.skills.length,
 		skipped: result.skipped.length,
 		failed: result.errors.length,
 	});
-	if (result.errors.length > 0 || result.imported.length === 0) {
-		notifyError(summary);
-	} else {
-		notifySuccess(summary);
+	if (result.skillCandidates.length === 0 || result.errors.length > 0) {
+		if (
+			result.errors.length > 0 ||
+			(result.imported.length === 0 && result.skills.length === 0)
+		) {
+			notifyError(summary);
+		} else {
+			notifySuccess(summary);
+		}
 	}
 
 	// Enqueue any newly imported papers that still lack assets.
@@ -154,6 +179,56 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 				notifyError(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
 			});
 		}
+	}
+}
+
+export async function confirmSkillImport(
+	selections: Array<{ discoveryId: string; selectedNames: string[] }>,
+): Promise<void> {
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return;
+	setSkillImportDraft(null);
+	try {
+		const result = await runBackgroundTask(
+			{
+				kind: "import",
+				title: i18n.t("sidebar:lookup.skillImportTask"),
+				detail: i18n.t("sidebar:lookup.skillImporting"),
+			},
+			async () => {
+				const installed = [];
+				for (const selection of selections) {
+					if (selection.selectedNames.length === 0) continue;
+					installed.push(
+						...(await installDiscoveredSkills({
+							vaultRoot: vaultPath,
+							discoveryId: selection.discoveryId,
+							selectedNames: selection.selectedNames,
+						})),
+					);
+				}
+				await refreshTree(vaultPath);
+				return installed;
+			},
+		);
+		const installedCount = result.filter((item) => !item.skipped).length;
+		const skippedCount = result.length - installedCount;
+		notifySuccess(
+			i18n.t("sidebar:lookup.skillImportDone", {
+				installed: installedCount,
+				skipped: skippedCount,
+			}),
+		);
+	} catch (e) {
+		notifyError(e instanceof Error ? e.message : String(e));
+	}
+}
+
+export function cancelSkillImport(): void {
+	const draft = uiStore.getState().skillImportDraft;
+	setSkillImportDraft(null);
+	for (const discovery of draft ?? []) {
+		void discardSkillDiscovery(discovery.discoveryId);
 	}
 }
 

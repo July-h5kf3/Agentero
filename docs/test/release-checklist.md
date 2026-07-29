@@ -192,6 +192,17 @@ cargo test -p agentero-cli
 | 6.1.6 | 魔棒 | 对已有 NOTES 的 paper 再入同一 ID | **不覆盖**用户 `NOTES.md` | ☐ |
 | 6.1.7 | 设置 → 通用 | 把 Translator URL 改成无效地址，再魔棒入库 | Toast 失败信息可读；改回默认可恢复 | ☐ |
 
+### 6.1.8 魔棒（Skill 导入）
+
+| 编号 | 入口 | 操作 | 预期 | 状态 |
+|---|---|---|---|---|
+| 6.1.8.1 | 魔棒 | 粘贴 `https://github.com/mattpocock/skills` | 弹出候选选择窗口；确认后才下载/安装选中的 Skill | ☐ |
+| 6.1.8.2 | 魔棒 | 粘贴 `https://github.com/alchaincyf/nuwa-skill` | 弹出候选选择窗口；不请求 Translator 论文元数据 | ☐ |
+| 6.1.8.3 | 魔棒 | 粘贴 `npx skills add https://github.com/anthropics/skills --skill pptx` | 窗口只显示匹配的 `pptx`，确认后保留其附属目录 | ☐ |
+| 6.1.8.4 | Skill 选择窗口 | 点击取消或关闭 | 不写入 `.agents/skills/`，临时 discovery 被清理 | ☐ |
+| 6.1.8.5 | 魔棒 | 重复导入同一 Skill | 选择窗口标记已安装；确认后跳过且不覆盖已有 `SKILL.md` | ☐ |
+| 6.1.8.6 | 远程 Vault | 粘贴任一 Skill 来源 | 明确提示远程 Vault 暂不支持 Skill 导入 | ☐ |
+
 ### 6.2 本地 PDF
 
 | # | 界面 | 操作 | 预期 | 结果 |
