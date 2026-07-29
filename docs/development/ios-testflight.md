@@ -44,9 +44,12 @@ Create a signed TestFlight archive after a clean release build:
 ```bash
 APPLE_DEVELOPMENT_TEAM="$APPLE_DEVELOPMENT_TEAM" \
   pnpm tauri ios build --config src-tauri/tauri.ios.conf.json \
-  --target aarch64 --build-number "$(date +%Y%m%d%H%M)" \
+  --target aarch64 --build-number "$(date +%y%m%d%H%M)" \
   --export-method app-store-connect
 ```
+
+The build number must fit in a 32-bit unsigned integer, so the timestamp uses a
+two-digit year.
 
 Upload the generated IPA through Xcode Organizer or Transporter if the CLI does
 not upload it as part of the selected export flow.
