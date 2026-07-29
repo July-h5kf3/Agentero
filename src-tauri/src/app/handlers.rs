@@ -75,6 +75,13 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
     #[cfg(not(target_os = "ios"))]
     {
         builder.invoke_handler(common_commands![
+            crate::features::bridge::commands::bridge_start,
+            crate::features::bridge::commands::bridge_stop,
+            crate::features::bridge::commands::bridge_status,
+            crate::features::bridge::commands::bridge_offer,
+            crate::features::bridge::commands::bridge_pair_respond,
+            crate::features::bridge::commands::bridge_devices,
+            crate::features::bridge::commands::bridge_revoke_device,
             crate::features::agent::commands::agent_open_install_terminal,
             crate::features::agent::commands::agent_run_once,
             crate::features::agent::commands::agent_list_sessions,

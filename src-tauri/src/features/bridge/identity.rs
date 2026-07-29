@@ -64,6 +64,7 @@ pub struct BridgeDevice {
     pub revoked: bool,
 }
 
+#[derive(Clone)]
 pub struct BridgeIdentityStore {
     dir: PathBuf,
 }
@@ -98,6 +99,7 @@ impl BridgeIdentityStore {
     }
 }
 
+#[derive(Clone)]
 pub struct BridgeDeviceStore {
     dir: PathBuf,
 }

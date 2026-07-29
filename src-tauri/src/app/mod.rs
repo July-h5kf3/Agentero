@@ -41,6 +41,7 @@ pub fn run() {
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(crate::features::agent::PermissionGate::new())
+        .manage(crate::features::bridge::BridgeController::new())
         .manage(WikiIndexState::new())
         .manage(ExternalRenameRepairStore::new());
 
