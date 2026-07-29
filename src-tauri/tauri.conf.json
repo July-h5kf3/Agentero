@@ -36,7 +36,7 @@
 			"requireLiteralLeadingDot": false
 		},
 		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVDNDA0RkM1RjE1MEQ3QjYKUldTMjExRHh4VTlBWEMrb2pJVzhUZjR0ekNFM3A1UzJNbGtmSGR1Q3dacElnbnQ2cVVMUzNTVzUK",
+			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc4Q0VGREIxQjk3OTBDQkQKUldTOURIbTVzZjNPZUwzVW9OcExLS0VxUTVyOExrTEJ1VmZQcVdmVTBqaUZ0WW8zak53MnpNQ0oK",
 			"endpoints": [
 				"https://github.com/poco-ai/motif/releases/latest/download/latest.json"
 			]
