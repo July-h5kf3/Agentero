@@ -16,6 +16,8 @@
 | NOTES 开关 | Layout 菜单 / 快捷键；优先叠右列 |
 | 关光文档 | 回到全库 Library panel |
 
+标签组 chip 的颜色菜单会将展开/收起 icon 染为对应颜色，并同步用于组内 tab 的强调线；清除颜色后恢复默认颜色。
+
 布局只存 dockview `toJSON()`；path/mode 在 panel params。
 
 ## 面板类型

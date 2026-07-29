@@ -202,9 +202,17 @@ export function AgenteroTabGroupChip({ tabGroup }: IDockviewTabGroupChipProps) {
 		>
 			{/* Collapse affordance: › when folded, ▾ when open. */}
 			{collapsed ? (
-				<ChevronRight className="size-3 shrink-0 opacity-80" aria-hidden />
+				<ChevronRight
+					className="size-3 shrink-0 opacity-80"
+					style={accent ? { color: accent } : undefined}
+					aria-hidden
+				/>
 			) : (
-				<ChevronDown className="size-3 shrink-0 opacity-80" aria-hidden />
+				<ChevronDown
+					className="size-3 shrink-0 opacity-80"
+					style={accent ? { color: accent } : undefined}
+					aria-hidden
+				/>
 			)}
 			{editing ? (
 				<>
