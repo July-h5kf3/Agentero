@@ -1,3 +1,4 @@
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
 	BookOpen,
@@ -73,6 +74,8 @@ const TABS: Array<{ id: MobileTab; icon: typeof Library }> = [
 export default function MobileApp() {
 	const { t } = useTranslation("mobile");
 	const [tab, setTab] = useState<MobileTab>("library");
+	const [pairingRequested, setPairingRequested] = useState(false);
+	const [pendingOffer, setPendingOffer] = useState<string | null>(null);
 	const [status, setStatus] = useState<BridgeClientStatus>({
 		connected: false,
 		paired: false,
@@ -104,6 +107,30 @@ export default function MobileApp() {
 	}, []);
 
 	useEffect(() => {
+		if (!isTauri()) return;
+		let active = true;
+		const acceptOffer = (value: string) => {
+			if (!isPairOfferUrl(value)) return;
+			setPendingOffer(value);
+			setPairingRequested(true);
+		};
+		void getCurrent()
+			.then((urls) => urls?.forEach(acceptOffer))
+			.catch(() => undefined);
+		let unlisten: (() => void) | undefined;
+		void onOpenUrl((urls) => urls.forEach(acceptOffer))
+			.then((off) => {
+				if (active) unlisten = off;
+				else off();
+			})
+			.catch(() => undefined);
+		return () => {
+			active = false;
+			unlisten?.();
+		};
+	}, []);
+
+	useEffect(() => {
 		if (!status.paired) {
 			setPapers([]);
 			setSelectedPaper(null);
@@ -114,12 +141,17 @@ export default function MobileApp() {
 			.catch(() => undefined);
 	}, [status.paired]);
 
-	if (!status.paired) {
+	if (!status.paired || pairingRequested) {
 		return (
 			<MobilePairing
 				status={status}
 				pending={pairPending}
+				initialOffer={pendingOffer}
 				onStatus={setStatus}
+				onDone={() => {
+					setPendingOffer(null);
+					setPairingRequested(false);
+				}}
 			/>
 		);
 	}
@@ -165,7 +197,14 @@ export default function MobileApp() {
 					{tab === "reader" ? <MobileReader paper={selectedPaper} /> : null}
 					{tab === "agent" ? <MobileAgent /> : null}
 					{tab === "settings" ? (
-						<MobileSettings status={status} onStatus={setStatus} />
+						<MobileSettings
+							status={status}
+							onStatus={setStatus}
+							onPairAnother={() => {
+								setPendingOffer(null);
+								setPairingRequested(true);
+							}}
+						/>
 					) : null}
 				</div>
 			</main>
@@ -174,6 +213,19 @@ export default function MobileApp() {
 			</nav>
 		</div>
 	);
+}
+
+function isPairOfferUrl(value: string): boolean {
+	try {
+		const url = new URL(value);
+		return (
+			url.protocol === "agentero:" &&
+			url.hostname === "pair" &&
+			url.hash.startsWith("#offer=")
+		);
+	} catch {
+		return false;
+	}
 }
 
 function MobileBrand() {
@@ -225,11 +277,15 @@ function MobileNav({
 function MobilePairing({
 	status,
 	pending,
+	initialOffer,
 	onStatus,
+	onDone,
 }: {
 	status: BridgeClientStatus;
 	pending: PairPendingEvent | null;
+	initialOffer: string | null;
 	onStatus: (status: BridgeClientStatus) => void;
+	onDone: () => void;
 }) {
 	const { t } = useTranslation("mobile");
 	const [offerUrl, setOfferUrl] = useState("");
@@ -241,6 +297,11 @@ function MobilePairing({
 		setError(null);
 		setScannerOpen(false);
 	}, []);
+	useEffect(() => {
+		if (!initialOffer) return;
+		setOfferUrl(initialOffer);
+		setError(null);
+	}, [initialOffer]);
 	const connect = async () => {
 		setConnecting(true);
 		setError(null);
@@ -250,6 +311,7 @@ function MobilePairing({
 				deviceName: navigator.userAgent.includes("iPad") ? "iPad" : "iPhone",
 			});
 			onStatus(next);
+			onDone();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : t("errors.connect"));
 		} finally {
@@ -918,9 +980,11 @@ function MobilePermissionDialog({
 function MobileSettings({
 	status,
 	onStatus,
+	onPairAnother,
 }: {
 	status: BridgeClientStatus;
 	onStatus: (status: BridgeClientStatus) => void;
+	onPairAnother: () => void;
 }) {
 	const { t } = useTranslation("mobile");
 	const disconnect = async () => {
@@ -944,9 +1008,13 @@ function MobileSettings({
 					<dd className="truncate text-sm">{status.vaultName ?? "-"}</dd>
 				</div>
 			</dl>
+			<Button variant="outline" className="mt-5" onClick={onPairAnother}>
+				<Camera className="size-4" />
+				{t("settings.addDesktop")}
+			</Button>
 			<Button
 				variant="outline"
-				className="mt-5"
+				className="mt-3"
 				onClick={() => void disconnect()}
 			>
 				<LogOut className="size-4" />

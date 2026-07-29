@@ -42,6 +42,9 @@ targets:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
         NSCameraUsageDescription: Agentero uses the camera to scan a pairing QR code from your computer.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.poco-ai.agentero
+            CFBundleURLSchemes: [agentero]
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

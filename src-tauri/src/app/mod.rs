@@ -29,6 +29,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(logging::build_log_plugin().build());
 
     #[cfg(not(target_os = "ios"))]
