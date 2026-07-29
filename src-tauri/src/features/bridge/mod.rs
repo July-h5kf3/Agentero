@@ -6,10 +6,12 @@
 
 mod crypto;
 mod identity;
+mod messages;
 mod protocol;
 
 pub use crypto::SessionCipher;
 pub use identity::{BridgeDevice, BridgeDeviceStore, BridgeIdentity, BridgeIdentityStore};
+pub use messages::{BridgeMessage, E2eeHandshake, RelayControlMessage, RpcError};
 pub use protocol::{
     BridgeOffer, RelayEndpoint, RelayOffer, DEFAULT_RELAY_ENDPOINT, RELAY_PROTOCOL_VERSION,
 };
