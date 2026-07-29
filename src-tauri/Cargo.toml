@@ -50,8 +50,7 @@ walkdir = "2.5.0"
 base64 = "0.22"
 urlencoding = "2"
 url = "2"
-x25519-dalek = { version = "2", features = ["static_secrets"] }
-rand_core = { version = "0.6", features = ["getrandom"] }
+crypto_box = "0.9"
 # Used by lookup batch import (all platforms); also needed by Unix remote vault.
 futures-util = "0.3.33"
 tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }

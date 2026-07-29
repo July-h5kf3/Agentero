@@ -2,11 +2,11 @@ use crate::core::error::AppError;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use chrono::{DateTime, Utc};
-use rand_core::OsRng;
+use crypto_box::aead::OsRng;
+use crypto_box::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use x25519_dalek::{PublicKey, StaticSecret};
 
 const IDENTITY_FILE: &str = "identity.json";
 const DEVICES_FILE: &str = "devices.json";
@@ -25,8 +25,8 @@ pub struct BridgeIdentity {
 
 impl BridgeIdentity {
     pub fn create() -> Self {
-        let secret = StaticSecret::random_from_rng(OsRng);
-        let public = PublicKey::from(&secret);
+        let secret = SecretKey::generate(&mut OsRng);
+        let public = secret.public_key();
         let server_id = format!(
             "agt_{}",
             URL_SAFE_NO_PAD.encode(uuid::Uuid::new_v4().as_bytes())
@@ -40,9 +40,9 @@ impl BridgeIdentity {
         }
     }
 
-    pub fn secret_key(&self) -> Result<StaticSecret, AppError> {
+    pub fn secret_key(&self) -> Result<SecretKey, AppError> {
         let bytes = decode_32(&self.secret_key_b64, "Bridge secret key")?;
-        Ok(StaticSecret::from(bytes))
+        Ok(SecretKey::from(bytes))
     }
 
     pub fn public_key(&self) -> Result<PublicKey, AppError> {
@@ -198,7 +198,7 @@ mod tests {
         assert!(first.server_id.starts_with("agt_"));
         assert_eq!(
             first.public_key().expect("public key"),
-            PublicKey::from(&first.secret_key().expect("secret key"))
+            first.secret_key().expect("secret key").public_key()
         );
 
         fs::remove_dir_all(dir).expect("clean test directory");
