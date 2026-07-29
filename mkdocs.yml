@@ -79,7 +79,6 @@ nav:
       - iOS 远程连接: development/ios-remote.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md
-      - 应用内更新: development/app-updater.md
       - Bug 汇总: development/bug.md
 
   - 测试:

@@ -6,7 +6,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
 import { initLogger, logger } from "@/lib/core/logger";
+import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
+import { isTauri } from "@/lib/core/tauri";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
@@ -14,6 +16,7 @@ import {
 	subscribeSettings,
 } from "@/lib/settings";
 import { applyUiTheme } from "@/lib/ui/theme";
+import { checkForUpdate, installAvailableUpdate } from "@/lib/update";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
 // KaTeX CSS must load with the main bundle: lazy-loaded editors are not the
@@ -82,6 +85,39 @@ async function boot() {
 			</I18nextProvider>
 		</React.StrictMode>,
 	);
+	void checkForStartupUpdate();
+}
+
+/** A single main window owns the background update notification. */
+async function checkForStartupUpdate(): Promise<void> {
+	if (!isTauri()) return;
+	try {
+		const { getCurrentWindow } = await import("@tauri-apps/api/window");
+		if (getCurrentWindow().label !== "main") return;
+		const update = await checkForUpdate();
+		if (update.phase !== "available" || !update.availableVersion) return;
+		notifyAction(
+			i18n.t("settings:about.update.toastTitle", {
+				version: update.availableVersion,
+			}),
+			{
+				id: "app-update-available",
+				description: i18n.t("settings:about.update.toastDescription"),
+				actionLabel: i18n.t("settings:about.update.downloadInstall"),
+				onAction: () => {
+					void installAvailableUpdate().then((next) => {
+						if (next.phase === "error") {
+							notifyError(i18n.t("settings:about.update.installFailed"));
+						}
+					});
+				},
+			},
+		);
+	} catch (error) {
+		logger.warn("op end updater_startup_check ok=false", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
 }
 
 void boot().catch((e) => {

@@ -81,6 +81,26 @@ export function notifyUndo(
 	});
 }
 
+export type ActionOptions = NotifyOptions & {
+	actionLabel: string;
+	onAction: () => void;
+};
+
+/** Neutral notice with an explicit action, for non-destructive workflows. */
+export function notifyAction(
+	message: string,
+	{ actionLabel, onAction, description, id, duration }: ActionOptions,
+): string | number {
+	const text = message?.trim();
+	if (!text) return "";
+	return toast(text, {
+		description,
+		id,
+		duration: duration ?? 12_000,
+		action: { label: actionLabel, onClick: onAction },
+	});
+}
+
 /** Coerce unknown catch values into a display string. */
 export function errorMessage(err: unknown, fallback = "Error"): string {
 	if (err instanceof Error && err.message.trim()) return err.message;

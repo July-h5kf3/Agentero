@@ -14,9 +14,33 @@
 2. 执行 `/commit`，将版本 bump 作为独立的 `chore(release): bump version to <version>` commit。
 3. 确认 tag `v<version>` 指向该版本 bump commit，且 tag 去掉 `v` 后与所有版本字段一致。
 4. 推送 tag，等待 `.github/workflows/release.yml` 构建 Tauri installers 和 CLI artifacts。
-5. 发布前确认桌面安装包、应用内版本、CLI `--version` 和 CLI 文件名没有混用不同版本。
+5. 在 Draft Release 中确认桌面安装包、应用内版本、CLI `--version` 和 CLI 文件名没有混用不同版本；确认 `latest.json` 与 updater `.sig` 资产齐全后才发布 Release。
 
 `/bump` 和 `/commit` 默认只修改工作区或创建本地 commit，不会自动创建 tag、push 或发布 Release。
+
+### 应用内更新签名
+
+Tauri Updater 的签名密钥与 Apple Developer ID 签名、公证凭据无关。应用内置的公钥位于 `src-tauri/tauri.conf.json`，私钥绝不能提交或写入本机项目配置。
+
+GitHub Actions 必须配置以下 repository secrets；`release.yml` 会在创建 Draft Release 前显式验证它们，缺失即失败：
+
+| Secret | 用途 |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 产生的完整 minisign 私钥内容 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 生成该私钥时使用的密码 |
+
+发布工作流设置 `createUpdaterArtifacts`，由 `tauri-apps/tauri-action@v1` 上传签名更新包、`.sig` 和聚合后的 `latest.json`。客户端请求 `https://github.com/poco-ai/motif/releases/latest/download/latest.json`，因此：
+
+- Draft Release 用于验收，发布前不会被客户端读取；
+- 只有完整、已发布的稳定版 Release 才会成为更新源；
+- Windows metadata 优先采用 NSIS updater 包；macOS 与 Linux 使用 Tauri 生成的对应更新产物；
+- 上述签名只证明更新包完整性，macOS 的 Developer ID 签名和 notarization 仍必须照常完成。
+
+生成或轮换密钥时，在安全位置执行以下命令，将公钥替换到 `tauri.conf.json`，并将私钥/密码写入 GitHub Actions Secrets：
+
+```bash
+pnpm tauri signer generate --password '<strong password>' --write-keys /secure/path/agentero-updater.key
+```
 
 ### macOS 签名与公证（店外分发）
 

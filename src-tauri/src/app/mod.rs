@@ -31,6 +31,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(logging::build_log_plugin().build());
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
+    }
+
     #[cfg(not(target_os = "ios"))]
     {
         builder = builder.plugin(tauri_plugin_shell::init());

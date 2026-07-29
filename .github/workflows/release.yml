@@ -14,6 +14,21 @@ jobs:
     name: Create draft release
     runs-on: ubuntu-latest
     steps:
+      - name: Verify updater signing configuration
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+            echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY. Refusing to publish an unsigned updater release."
+            exit 1
+          fi
+          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]]; then
+            echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
+            exit 1
+          fi
+
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -147,9 +162,12 @@ jobs:
           fi
 
       - name: Build Tauri installers
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tauri updater signature, independent from Apple code signing.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Developer ID Application (.p12 base64) + password — see macos-signing.md
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -167,6 +185,11 @@ jobs:
           # Body is set by the prepare job; keep draft + same tag.
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          # The action merges per-platform signed artifacts into latest.json.
+          # NSIS supports user-level update installation; prefer it over MSI.
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
 
   cli:
     name: CLI (${{ matrix.platform }})

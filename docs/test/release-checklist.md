@@ -59,6 +59,8 @@ cargo test -p agentero-cli
 | # | 界面 | 操作 | 预期 | 结果 |
 |---|---|---|---|---|
 | 0.2.1 | 终端 | 跑上列命令 | 全部通过 | ☐ |
+| 0.2.2 | GitHub Actions | Release job 的 updater secret 校验 | `TAURI_SIGNING_PRIVATE_KEY` 和密码缺失时在创建 Draft 前失败 | ☐ |
+| 0.2.3 | Draft Release | 检查 updater 资产 | 有 `latest.json`、各平台 updater 包与对应 `.sig`；`latest.json` 包含每个平台的 URL 和签名 | ☐ |
 
 ### 0.3 安装启动
 
@@ -66,6 +68,8 @@ cargo test -p agentero-cli
 |---|---|---|---|---|
 | 0.3.1 | 系统 | 安装本次产物并首次启动 | 无崩溃、无白屏；进入**欢迎页** | ☐ |
 | 0.3.2 | 欢迎页 | 不打开 Vault，空看界面 | 同一行有 Create / Open / Open remote / Migrate from Zotero + Recent 列表；无大段说明文案 | ☐ |
+| 0.3.3 | 设置 → 关于 | 已安装旧版时检查已发布新版，点「安装并重启」 | 有新版提示、下载进度；重启后 About 显示新版本 | ☐ |
+| 0.3.4 | 主窗口 | 启动已安装旧版 | 首屏不阻塞；有新版时只出现一个「安装并重启」Toast；无更新或离线时不弹错误 | ☐ |
 
 ---
 

@@ -242,6 +242,23 @@
 	"about": {
 		"title": "About",
 		"version": "Version {{version}}",
-		"tagline": "Local-first research vault for people and agents."
+		"tagline": "Local-first research vault for people and agents.",
+		"update": {
+			"label": "Updates",
+			"idle": "Check for the latest Agentero release.",
+			"unsupported": "Updates are available in installed desktop builds.",
+			"checking": "Checking for updates...",
+			"upToDate": "You're up to date.",
+			"available": "Version {{version}} is ready.",
+			"downloading": "Downloading update...",
+			"downloadingProgress": "Downloading update: {{progress}}%",
+			"installing": "Installing update and restarting...",
+			"checkFailed": "Couldn't check for updates.",
+			"installFailed": "Couldn't install the update. Try again.",
+			"check": "Check for updates",
+			"downloadInstall": "Install and restart",
+			"toastTitle": "Agentero {{version}} is available",
+			"toastDescription": "Download the verified update and restart Agentero."
+		}
 	}
 }
