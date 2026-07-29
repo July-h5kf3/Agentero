@@ -18,8 +18,9 @@ pub use client::{BridgeClientController, BridgeClientStatus};
 pub use crypto::SessionCipher;
 pub use host::{BridgeController, BridgeStatus, PairingRequest};
 pub use identity::{
-    BridgeClientIdentity, BridgeClientIdentityStore, BridgeDevice, BridgeDeviceStore,
-    BridgeIdentity, BridgeIdentityStore,
+    validate_device_public_key, verify_device_challenge, BridgeClientIdentity,
+    BridgeClientIdentityStore, BridgeDevice, BridgeDeviceStore, BridgeIdentity,
+    BridgeIdentityStore,
 };
 pub use messages::{BridgeMessage, E2eeHandshake, RelayControlMessage, RpcError};
 pub use protocol::{

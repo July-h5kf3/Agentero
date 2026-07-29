@@ -314,12 +314,22 @@ async fn run_client_session(
             }
             Ok(Ok(RelayFrame::Text(_))) => continue,
             Ok(Ok(RelayFrame::Binary(frame))) => {
-                handle_message(
-                    app,
-                    status,
-                    &mut pending,
-                    serde_json::from_slice(&cipher.decrypt(&frame)?)?,
-                )?;
+                let message = serde_json::from_slice(&cipher.decrypt(&frame)?)?;
+                if let BridgeMessage::DeviceChallenge { nonce_b64 } = message {
+                    let nonce = URL_SAFE_NO_PAD.decode(nonce_b64).map_err(|_| {
+                        AppError::message("Bridge challenge is not valid base64url")
+                    })?;
+                    send_encrypted(
+                        socket,
+                        &cipher,
+                        &BridgeMessage::DeviceProof {
+                            signature_b64: identity.sign_challenge(&nonce)?,
+                        },
+                    )
+                    .await?;
+                } else {
+                    handle_message(app, status, &mut pending, message)?;
+                }
             }
         }
     }

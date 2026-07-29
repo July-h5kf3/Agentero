@@ -4,6 +4,7 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use crypto_box::aead::OsRng;
 use crypto_box::{PublicKey, SecretKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -65,8 +66,9 @@ pub struct BridgeDevice {
     pub revoked: bool,
 }
 
-/// Long-lived identity for one mobile device. Its public half is sent only in
-/// an encrypted `pair_request`; the secret half must stay in the app sandbox.
+/// Long-lived Ed25519 identity for one mobile device. Its public half is sent
+/// only in an encrypted `pair_request`; the secret half signs each future
+/// connection challenge and must stay in the app sandbox.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct BridgeClientIdentity {
@@ -79,10 +81,11 @@ pub struct BridgeClientIdentity {
 
 impl BridgeClientIdentity {
     pub fn create() -> Self {
-        let secret = SecretKey::generate(&mut OsRng);
-        let public = secret.public_key();
+        let secret =
+            SigningKey::from_bytes(&crypto_box::SecretKey::generate(&mut OsRng).to_bytes());
+        let public = secret.verifying_key();
         Self {
-            v: 1,
+            v: 2,
             device_id: format!(
                 "ios_{}",
                 URL_SAFE_NO_PAD.encode(uuid::Uuid::new_v4().as_bytes())
@@ -93,12 +96,47 @@ impl BridgeClientIdentity {
         }
     }
 
-    pub fn secret_key(&self) -> Result<SecretKey, AppError> {
-        Ok(SecretKey::from(decode_32(
+    pub fn signing_key(&self) -> Result<SigningKey, AppError> {
+        Ok(SigningKey::from_bytes(&decode_32(
             &self.secret_key_b64,
-            "Bridge client secret key",
+            "Bridge client signing key",
         )?))
     }
+
+    pub fn verifying_key(&self) -> Result<VerifyingKey, AppError> {
+        let bytes = decode_32(&self.public_key_b64, "Bridge client public key")?;
+        VerifyingKey::from_bytes(&bytes)
+            .map_err(|_| AppError::message("Bridge client public key is invalid"))
+    }
+
+    pub fn sign_challenge(&self, nonce: &[u8]) -> Result<String, AppError> {
+        Ok(URL_SAFE_NO_PAD.encode(self.signing_key()?.sign(nonce).to_bytes()))
+    }
+}
+
+pub fn verify_device_challenge(
+    public_key_b64: &str,
+    nonce: &[u8],
+    signature_b64: &str,
+) -> Result<(), AppError> {
+    let public = decode_32(public_key_b64, "Bridge device public key")?;
+    let public = VerifyingKey::from_bytes(&public)
+        .map_err(|_| AppError::message("Bridge device public key is invalid"))?;
+    let signature: [u8; 64] = URL_SAFE_NO_PAD
+        .decode(signature_b64)
+        .map_err(|_| AppError::message("Bridge device signature is not valid base64url"))?
+        .try_into()
+        .map_err(|_| AppError::message("Bridge device signature must contain 64 bytes"))?;
+    public
+        .verify(nonce, &Signature::from_bytes(&signature))
+        .map_err(|_| AppError::message("Bridge device signature did not verify"))
+}
+
+pub fn validate_device_public_key(value: &str) -> Result<(), AppError> {
+    let public = decode_32(value, "Bridge device public key")?;
+    VerifyingKey::from_bytes(&public)
+        .map(|_| ())
+        .map_err(|_| AppError::message("Bridge device public key is invalid"))
 }
 
 #[derive(Clone)]
@@ -186,6 +224,19 @@ impl BridgeDeviceStore {
         write_private_json(&self.dir.join(DEVICES_FILE), &devices)?;
         Ok(true)
     }
+
+    pub fn mark_seen(&self, device_id: &str) -> Result<bool, AppError> {
+        let mut devices = self.list()?;
+        let Some(device) = devices
+            .iter_mut()
+            .find(|candidate| candidate.device_id == device_id && !candidate.revoked)
+        else {
+            return Ok(false);
+        };
+        device.last_seen_at = Some(Utc::now());
+        write_private_json(&self.dir.join(DEVICES_FILE), &devices)?;
+        Ok(true)
+    }
 }
 
 #[derive(Clone)]
@@ -208,7 +259,16 @@ impl BridgeClientIdentityStore {
     pub fn load_or_create(&self) -> Result<BridgeClientIdentity, AppError> {
         let path = self.dir.join(CLIENT_IDENTITY_FILE);
         if path.is_file() {
-            return read_json(&path);
+            let identity: BridgeClientIdentity = read_json(&path)?;
+            if identity.v >= 2
+                && identity
+                    .signing_key()
+                    .map(|key| key.verifying_key().to_bytes())
+                    .ok()
+                    == identity.verifying_key().map(|key| key.to_bytes()).ok()
+            {
+                return Ok(identity);
+            }
         }
         let identity = BridgeClientIdentity::create();
         write_private_json(&path, &identity)?;
@@ -287,6 +347,55 @@ mod tests {
 
         assert!(store.revoke("ios_1").expect("revoke device"));
         assert!(store.list().expect("list devices")[0].revoked);
+
+        fs::remove_dir_all(dir).expect("clean test directory");
+    }
+
+    #[test]
+    fn client_identity_signs_a_challenge() {
+        let identity = BridgeClientIdentity::create();
+        let nonce = b"relay-connection-nonce";
+        let signature = identity.sign_challenge(nonce).expect("sign challenge");
+        verify_device_challenge(&identity.public_key_b64, nonce, &signature)
+            .expect("verify challenge");
+        assert!(verify_device_challenge(&identity.public_key_b64, b"wrong", &signature).is_err());
+        assert_eq!(
+            identity
+                .verifying_key()
+                .expect("valid public key")
+                .to_bytes(),
+            identity
+                .signing_key()
+                .expect("valid private key")
+                .verifying_key()
+                .to_bytes()
+        );
+    }
+
+    #[test]
+    fn old_client_identity_is_replaced_before_pairing() {
+        let dir = test_dir();
+        let store = BridgeClientIdentityStore::at_path(dir.clone());
+        let old = BridgeClientIdentity {
+            v: 1,
+            device_id: "ios_old".to_string(),
+            public_key_b64: URL_SAFE_NO_PAD.encode([1_u8; 32]),
+            secret_key_b64: URL_SAFE_NO_PAD.encode([2_u8; 32]),
+            created_at: Utc::now(),
+        };
+        write_private_json(&dir.join(CLIENT_IDENTITY_FILE), &old).expect("write old identity");
+
+        let current = store.load_or_create().expect("replace old identity");
+        assert_eq!(current.v, 2);
+        assert_ne!(current.device_id, old.device_id);
+        assert_eq!(
+            current
+                .signing_key()
+                .expect("signing key")
+                .verifying_key()
+                .to_bytes(),
+            current.verifying_key().expect("verifying key").to_bytes()
+        );
 
         fs::remove_dir_all(dir).expect("clean test directory");
     }

@@ -1,8 +1,8 @@
 use super::{
-    connect_relay, next_frame, send_binary, send_text, BridgeDevice, BridgeDeviceStore,
-    BridgeIdentity, BridgeIdentityStore, BridgeMessage, BridgeOffer, E2eeHandshake,
-    RelayControlMessage, RelayEndpoint, RelayFrame, RelayOffer, RpcError, SessionCipher,
-    DEFAULT_RELAY_ENDPOINT,
+    connect_relay, next_frame, send_binary, send_text, validate_device_public_key,
+    verify_device_challenge, BridgeDevice, BridgeDeviceStore, BridgeIdentity, BridgeIdentityStore,
+    BridgeMessage, BridgeOffer, E2eeHandshake, RelayControlMessage, RelayEndpoint, RelayFrame,
+    RelayOffer, RpcError, SessionCipher, DEFAULT_RELAY_ENDPOINT,
 };
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
@@ -11,6 +11,7 @@ use crate::features::vault::tree;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use chrono::Utc;
+use crypto_box::aead::rand_core::RngCore;
 use crypto_box::PublicKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -401,6 +402,7 @@ async fn run_data_channel(
     }
 
     let mut authenticated = false;
+    let mut challenge: Option<(BridgeDevice, Vec<u8>)> = None;
     loop {
         tokio::select! {
             changed = stop.changed() => {
@@ -423,6 +425,10 @@ async fn run_data_channel(
                     }
                     BridgeMessage::PairRequest { request_id, device_id, device_name, device_public_key_b64 } => {
                         if authenticated {
+                            continue;
+                        }
+                        if validate_device_public_key(&device_public_key_b64).is_err() {
+                            let _ = send_encrypted(&mut socket, &cipher, &BridgeMessage::PairDenied { request_id, reason: "Invalid pairing request".to_string() }).await;
                             continue;
                         }
                         let pairing = begin_pairing(
@@ -474,11 +480,29 @@ async fn run_data_channel(
                         }
                     }
                     BridgeMessage::Hello { device_id, .. } => {
-                        authenticated = shared.devices.list().map(|devices| {
-                            devices.iter().any(|device| device.device_id == device_id && !device.revoked)
-                        }).unwrap_or(false);
-                        if authenticated
-                            && send_server_info(&mut socket, &cipher, &shared).await.is_err()
+                        let device = shared.devices.list().ok().and_then(|devices| {
+                            devices.into_iter().find(|device| device.device_id == device_id && !device.revoked)
+                        });
+                        if let Some(device) = device {
+                            let mut nonce = vec![0_u8; 32];
+                            crypto_box::aead::OsRng.fill_bytes(&mut nonce);
+                            let nonce_b64 = URL_SAFE_NO_PAD.encode(&nonce);
+                            challenge = Some((device, nonce));
+                            if send_encrypted(&mut socket, &cipher, &BridgeMessage::DeviceChallenge { nonce_b64 }).await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+                    BridgeMessage::DeviceProof { signature_b64 } => {
+                        let Some((device, nonce)) = challenge.take() else {
+                            continue;
+                        };
+                        if verify_device_challenge(&device.public_key_b64, &nonce, &signature_b64).is_err() {
+                            continue;
+                        }
+                        authenticated = true;
+                        if shared.devices.mark_seen(&device.device_id).is_err()
+                            || send_server_info(&mut socket, &cipher, &shared).await.is_err()
                         {
                             return;
                         }
