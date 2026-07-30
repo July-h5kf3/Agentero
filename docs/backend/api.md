@@ -996,7 +996,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_refs_parse`
 
-解析一篇论文的参考文献并写入可重建 sidecar `{paper}/source/agentero-cite.json`。优先级：在线结构化（Semantic Scholar `paper/{id}/references` → Crossref `works/{doi}.reference`，受设置 `citationOnlineEnabled` 控制，默认开）→ 本地 `source/*.bbl` / `*.bib` / 内联 `thebibliography`。本地条目提供编号顺序与 raw 文本，在线条目按 DOI / arXiv / 标题对齐后覆盖元数据；解析后按 DOI → arXiv → 归一化标题匹配库内论文写入 `localMatch`。输入指纹（DOI/arXiv + bib/bbl/tex 文件清单）未变时直接返回缓存，不重复请求 API。
+解析一篇论文的参考文献并写入可重建 sidecar `{paper}/source/agentero-cite.json`。优先级：在线结构化（Semantic Scholar `paper/{id}/references` → Crossref `works/{doi}.reference`）→ 本地 `source/*.bbl` / `*.bib` / 内联 `thebibliography`。本地条目提供编号顺序与 raw 文本，在线条目按 DOI / arXiv / 标题对齐后覆盖元数据；解析后按 DOI → arXiv → 归一化标题匹配库内论文写入 `localMatch`。输入指纹（DOI/arXiv + bib/bbl/tex 文件清单）未变时直接返回缓存，不重复请求 API。
 
 - **参数**（`args`）：
 

@@ -26,7 +26,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	connectorEnabled: false,
 	connectorPort: 23119,
 	batchImportConcurrency: 3,
-	citationOnlineEnabled: true,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",

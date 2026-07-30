@@ -206,21 +206,13 @@ pub async fn parse_paper_refs(
 }
 
 /// Fire-and-forget refs parse after an import/download finished (GUI only).
-/// Reads the online toggle from settings; all failures are logged, never surfaced.
+/// Online reference lookup is always on; all failures are logged, never surfaced.
 pub fn spawn_parse_after_import(app: Option<&tauri::AppHandle>, vault: &Path, path_rel: &str) {
-    let Some(app) = app else {
-        return;
-    };
-    use tauri::Manager;
-    let online = app
-        .state::<crate::features::settings::AppSettingsStore>()
-        .get()
-        .map(|r| r.settings.citation_online_enabled)
-        .unwrap_or(true);
+    let _ = app; // kept for symmetry; previously used to read the online toggle
     let vault = vault.to_path_buf();
     let path_rel = path_rel.to_string();
     tauri::async_runtime::spawn(async move {
-        match parse_paper_refs(&vault, &path_rel, online, false).await {
+        match parse_paper_refs(&vault, &path_rel, true, false).await {
             Ok(s) => log::info!(
                 "op=paper_refs_parse status=ok path={path_rel} mode={} count={}",
                 s.source.mode,

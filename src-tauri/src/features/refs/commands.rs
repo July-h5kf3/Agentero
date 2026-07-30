@@ -2,10 +2,8 @@
 
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
-use crate::features::settings::AppSettingsStore;
 use serde::Deserialize;
 use std::path::PathBuf;
-use tauri::Manager;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,11 +21,10 @@ pub struct PaperRefsListArgs {
     pub path: String,
 }
 
-/// Parse (or refresh with `force`) the reference sidecar for one paper.
-/// Online lookup follows the `citationOnlineEnabled` setting.
+/// Parse (or refresh with `force`) the reference sidecar for one paper. Online
+/// reference lookup is always on; local bib/bbl parsing still runs.
 #[tauri::command]
 pub async fn paper_refs_parse(
-    app: tauri::AppHandle,
     args: PaperRefsParseArgs,
 ) -> Result<ApiResult<super::CiteSidecar>, String> {
     let op = OpTimer::start_with(
@@ -40,12 +37,7 @@ pub async fn paper_refs_parse(
         op.finish_err(&err);
         return Ok(map_err(err));
     }
-    let online = app
-        .state::<AppSettingsStore>()
-        .get()
-        .map(|r| r.settings.citation_online_enabled)
-        .unwrap_or(true);
-    Ok(op.finish_result(super::parse_paper_refs(&vault, &args.path, online, args.force).await))
+    Ok(op.finish_result(super::parse_paper_refs(&vault, &args.path, true, args.force).await))
 }
 
 /// Read the existing reference sidecar; `None` when it has not been parsed yet.

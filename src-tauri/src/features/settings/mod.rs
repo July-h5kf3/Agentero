@@ -47,9 +47,6 @@ pub struct AppSettings {
     pub agent_permission_mode: String,
     #[serde(default)]
     pub auto_paper_reader: bool,
-    /// Online reference lookup (Semantic Scholar / Crossref) during citation parsing.
-    #[serde(default = "default_true")]
-    pub citation_online_enabled: bool,
     #[serde(default = "default_ai_response_language")]
     pub ai_response_language: String,
     #[serde(default)]
@@ -129,7 +126,6 @@ impl Default for AppSettings {
             show_editor_toolbar: true,
             agent_permission_mode: default_permission_mode(),
             auto_paper_reader: false,
-            citation_online_enabled: true,
             ai_response_language: default_ai_response_language(),
             agent_personal_prompt: String::new(),
             pdf_ask: PdfAskSettings::default(),

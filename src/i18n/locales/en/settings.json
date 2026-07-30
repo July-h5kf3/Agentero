@@ -67,9 +67,6 @@
 		"batchImportConcurrency": {
 			"label": "Batch import concurrency"
 		},
-		"citationOnline": {
-			"label": "Online reference lookup"
-		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",

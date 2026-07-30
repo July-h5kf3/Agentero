@@ -303,19 +303,6 @@ function normalizePartial(
 	if (typeof parsed.connectorEnabled !== "boolean") {
 		merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
 	}
-	if (typeof parsed.citationOnlineEnabled !== "boolean") {
-		merged.citationOnlineEnabled = DEFAULT_SETTINGS.citationOnlineEnabled;
-	}
-	if (
-		typeof merged.batchImportConcurrency !== "number" ||
-		!Number.isFinite(merged.batchImportConcurrency) ||
-		merged.batchImportConcurrency < 1 ||
-		merged.batchImportConcurrency > 10
-	) {
-		merged.batchImportConcurrency = DEFAULT_SETTINGS.batchImportConcurrency;
-	} else {
-		merged.batchImportConcurrency = Math.round(merged.batchImportConcurrency);
-	}
 	if (
 		merged.theme !== "system" &&
 		merged.theme !== "light" &&

@@ -1,6 +1,6 @@
 # 参考文献解析（Citation Parsing）
 
-> 状态：**M1 + M2 + M3(PDF 内交互) 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配 + 设置 `citationOnlineEnabled`，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 锚文本联动引用卡片高亮，`src/components/viewer/embed/citation-links.tsx` + `src/lib/pdf/citation-hover-store.ts`）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及。
+> 状态：**M1 + M2 + M3(PDF 内交互) 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 锚文本联动引用卡片高亮，`src/components/viewer/embed/citation-links.tsx` + `src/lib/pdf/citation-hover-store.ts`）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及。
 
 ## 1. 背景与现状
 

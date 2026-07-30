@@ -60,9 +60,6 @@
 		"batchImportConcurrency": {
 			"label": "批量导入并发数"
 		},
-		"citationOnline": {
-			"label": "在线引用解析"
-		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "请先退出本地Zotero",

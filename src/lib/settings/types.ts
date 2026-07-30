@@ -107,11 +107,6 @@ export type AppSettings = {
 	 * increase rate-limit risk.
 	 */
 	batchImportConcurrency: number;
-	/**
-	 * Online reference lookup (Semantic Scholar / Crossref) during citation
-	 * parsing. Default **on**; local bib/bbl parsing still runs when off.
-	 */
-	citationOnlineEnabled: boolean;
 	// Appearance
 	theme: ThemePreference;
 	/**
