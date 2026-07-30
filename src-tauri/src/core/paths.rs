@@ -8,8 +8,10 @@
 //! | data | `$XDG_DATA_HOME` | `~/.local/share` | reserved |
 //! | state | `$XDG_STATE_HOME` | `~/.local/state` | reserved |
 //!
-//! On Windows, when XDG env vars are unset, falls back to the platform dirs
-//! crate (`config` → `%APPDATA%`, `cache` → `%LOCALAPPDATA%`).
+//! On Windows and iOS, when XDG env vars are unset, falls back to the platform
+//! dirs crate (Windows: `config` → `%APPDATA%`, `cache` → `%LOCALAPPDATA%`;
+//! iOS: `Library/Application Support` / `Library/Caches` — the container root
+//! itself is not writable, so `~/.config` would fail with EPERM).
 
 use std::path::PathBuf;
 
@@ -18,11 +20,11 @@ pub fn xdg_config_home() -> PathBuf {
     if let Some(p) = env_dir("XDG_CONFIG_HOME") {
         return p;
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "ios"))]
     {
         dirs::config_dir().unwrap_or_else(|| PathBuf::from("."))
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "ios")))]
     {
         home_dir().join(".config")
     }
@@ -33,11 +35,11 @@ pub fn xdg_cache_home() -> PathBuf {
     if let Some(p) = env_dir("XDG_CACHE_HOME") {
         return p;
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "ios"))]
     {
         dirs::cache_dir().unwrap_or_else(|| PathBuf::from("."))
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "ios")))]
     {
         home_dir().join(".cache")
     }
@@ -119,10 +121,10 @@ fn env_dir(key: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Fallback home directory for XDG defaults. Only used on non-Windows platforms
-/// (Windows uses `dirs::config_dir`/`cache_dir` directly), hence the cfg gate to
-/// avoid a dead-code warning on Windows builds.
-#[cfg(not(windows))]
+/// Fallback home directory for XDG defaults. Only used where the `~/.config`
+/// convention applies (not Windows/iOS), hence the cfg gate to avoid a
+/// dead-code warning on those builds.
+#[cfg(not(any(windows, target_os = "ios")))]
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
