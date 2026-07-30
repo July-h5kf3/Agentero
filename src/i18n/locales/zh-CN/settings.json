@@ -9,7 +9,7 @@
 		"appearance": "外观",
 		"agent": "Agent",
 		"translate": "翻译",
-		"keyboard": "键盘",
+		"keyboard": "快捷键",
 		"remote-access": "远程访问",
 		"about": "关于"
 	},
@@ -241,7 +241,7 @@
 		}
 	},
 	"keyboard": {
-		"title": "键盘"
+		"title": "快捷键"
 	},
 	"about": {
 		"title": "关于",
