@@ -85,6 +85,10 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup MSVC developer environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install Linux dependencies
         if: startsWith(matrix.platform, 'ubuntu-')
         run: |
@@ -206,6 +210,10 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup MSVC developer environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       # agentero-cli path-depends agentero_lib (Tauri), so Linux still needs WebKit link libs.
       - name: Install Linux dependencies
