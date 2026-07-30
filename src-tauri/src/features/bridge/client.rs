@@ -205,7 +205,7 @@ async fn run_client_loop(
     let endpoint = match RelayEndpoint::parse(&offer.relay.endpoint) {
         Ok(endpoint) => endpoint,
         Err(error) => {
-            set_error(&status, error.to_string());
+            set_error(&app, &status, error.to_string());
             return;
         }
     };
@@ -216,7 +216,7 @@ async fn run_client_loop(
         let url = match endpoint.connection_url(&offer.server_id, "client", None) {
             Ok(url) => url,
             Err(error) => {
-                set_error(&status, error.to_string());
+                set_error(&app, &status, error.to_string());
                 return;
             }
         };
@@ -235,12 +235,12 @@ async fn run_client_loop(
                 )
                 .await
                 {
-                    set_error(&status, error.to_string());
+                    set_error(&app, &status, error.to_string());
                 }
             }
-            Err(error) => set_error(&status, error.to_string()),
+            Err(error) => set_error(&app, &status, error.to_string()),
         }
-        set_connected(&status, false);
+        set_connected(&app, &status, false);
         tokio::select! {
             _ = tokio::time::sleep(RECONNECT_DELAY) => {}
             changed = stop.changed() => if changed.is_err() || *stop.borrow() { return; },
@@ -291,7 +291,7 @@ async fn run_client_session(
         }
     };
     send_encrypted(socket, &cipher, &initial).await?;
-    set_connected(status, true);
+    set_connected(app, status, true);
     let mut pending = HashMap::new();
 
     loop {
@@ -387,7 +387,7 @@ fn handle_message(
             current.last_error = None;
             let _ = app.emit("bridge:status", current.clone());
         }
-        BridgeMessage::PairDenied { reason, .. } => set_error(status, reason),
+        BridgeMessage::PairDenied { reason, .. } => set_error(app, status, reason),
         BridgeMessage::ServerInfo { vault_name, .. } => {
             let mut current = status
                 .lock()
@@ -449,19 +449,21 @@ fn status_snapshot(
         .map_err(|_| AppError::message("Bridge client status lock poisoned"))
 }
 
-fn set_connected(status: &Arc<Mutex<BridgeClientStatus>>, connected: bool) {
+fn set_connected(app: &AppHandle, status: &Arc<Mutex<BridgeClientStatus>>, connected: bool) {
     if let Ok(mut current) = status.lock() {
         current.connected = connected;
         if connected {
             current.last_error = None;
         }
+        let _ = app.emit("bridge:status", current.clone());
     }
 }
 
-fn set_error(status: &Arc<Mutex<BridgeClientStatus>>, error: String) {
+fn set_error(app: &AppHandle, status: &Arc<Mutex<BridgeClientStatus>>, error: String) {
     if let Ok(mut current) = status.lock() {
         current.connected = false;
         current.last_error = Some(error);
+        let _ = app.emit("bridge:status", current.clone());
     }
 }
 

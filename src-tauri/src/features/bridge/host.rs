@@ -886,6 +886,42 @@ async fn dispatch_agent_rpc(
 ) -> Result<Value, AppError> {
     let vault_path = Some(vault_root.to_string_lossy().into_owned());
     match method {
+        "agent_list_agents" => api_result_data(
+            crate::features::agent::commands::agent_list_agents(app.state::<AgentRegistry>()),
+        ),
+        "agent_scan_catalog" => api_result_data(
+            crate::features::agent::commands::agent_scan_catalog(app.state::<AgentRegistry>()),
+        ),
+        "agent_ensure_catalog" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Params {
+                template_id: String,
+                #[serde(default)]
+                set_default: bool,
+            }
+            let args: Params = serde_json::from_value(params)?;
+            api_result_data(crate::features::agent::commands::agent_ensure_catalog(
+                app.state::<AgentRegistry>(),
+                args.template_id,
+                args.set_default,
+            ))
+        }
+        "agent_probe_catalog" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Params {
+                template_id: String,
+            }
+            let args: Params = serde_json::from_value(params)?;
+            let result = crate::features::agent::commands::agent_probe_catalog(
+                app.state::<AgentRegistry>(),
+                args.template_id,
+            )
+            .await
+            .map_err(AppError::message)?;
+            api_result_data(result)
+        }
         "agent_run_once" => {
             let mut request: RunOnceRequest = serde_json::from_value(params)?;
             request.vault_path = vault_path;

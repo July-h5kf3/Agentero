@@ -201,7 +201,7 @@ iOS 首启：
 4. **桌面弹确认**：「iPhone 15 Pro 请求连接，确认码 483-921」，iOS 同屏显示相同确认码，用户在桌面点允许；
 5. 桌面把设备写入 `devices.json`，回 `pair_ok`；iOS 保存 `{offer, deviceKeypair}`，进入主界面。
 
-再次启动：直接用保存的 offer + 设备密钥静默重连；失败时显示离线态与「重新扫码」入口。
+再次启动：直接用保存的 offer + 设备密钥静默重连；Relay 断线后客户端会持续重试。连接状态变化会主动同步到移动端 UI，App 从后台回到前台时也会重新检查并触发恢复；失败时显示离线态与「重新扫码」入口。
 
 **多台电脑**：借鉴 paseo 的 `HostProfile` 模型 —— iOS 侧保存 `hosts[]`（每台 `{serverId, label, connections[], preferredConnectionId}`，一台 host 可同时有 relay 与 LAN 两条通道，按候选顺序回退），顶部可切换当前电脑。与 paseo 不同：凭据（设备私钥 + host 公钥）存 **iOS Keychain**，不落 AsyncStorage 明文。
 
@@ -245,7 +245,7 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 | Vault | `vault_tree_build` / `vault_tree_children` / `vault_read_text` / `vault_write_text` / `vault_search` |
 | Catalog | `paper_list` / `paper_get` / `paper_set_tags` / `paper_set_is_read` |
 | 文件 | `bridge_read_bytes`（分块拉 PDF/图片，见 6.3） |
-| Agent | `agent_run_once` / `agent_cancel_run` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
+| Agent | `agent_list_agents` / `agent_run_once` / `agent_cancel_run` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
 | Wiki | `wiki_backlinks` / `wiki_graph`（P1） |
 
 **不暴露**：`remote_*`（SSH）、window/terminal/finder、Zotero connector、settings 写入、任意绝对路径读写（所有 path 参数强制 Vault 相对路径 + canonicalize 防逃逸）。
@@ -311,7 +311,7 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 
 ### 8.2 对话体验
 
-- iOS Agent 面板 = 精简禅模式：流式 markdown、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
+- iOS Agent 面板 = 精简禅模式：流式 markdown、Agent 后端选择、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
 - 上下文 chips：当前打开论文默认加入（与桌面一致）；`@` 提及数据源改走 `vault_tree_children` RPC；
 - 运行中锁屏/切后台：桌面侧继续跑（这是远程执行的天然优势）；回前台经 `agent_load_session` 补齐时间线。
 
