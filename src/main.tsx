@@ -26,22 +26,35 @@ import "katex/dist/katex.min.css";
 const searchParams = new URLSearchParams(window.location.search);
 const isSettingsWindow = searchParams.get("window") === "settings";
 
+// `performance.now()` is measured from navigation start, so these numbers cover
+// index.html + main.tsx module loading too, not just the boot chain. `boot` is a
+// serial await chain and in dev every step is a module request, so a slow window
+// needs per-stage numbers to be actionable rather than guesswork.
+const bootElapsed = () => Math.round(performance.now());
+function bootStage(name: string) {
+	logger.info(`boot stage=${name} ms=${bootElapsed()}`);
+}
+
 async function boot() {
 	await initLogger();
 	logger.info("op start frontend_boot");
+	bootStage("logger");
 
 	// Host XDG settings.json (migrates legacy localStorage once).
 	await ensureSettingsLoaded();
+	bootStage("settings");
 	initSettingsSync();
 	await applyUiTheme(loadSettings().uiTheme).catch((e) => {
 		console.warn("[theme] failed to apply initial UI theme", e);
 	});
+	bootStage("theme");
 	subscribeSettings((s) => {
 		void applyUiTheme(s.uiTheme);
 	});
 	initAutoHideScrollbars();
 	const locale = resolveLocale(loadSettings().locale);
 	await i18n.changeLanguage(locale);
+	bootStage("i18n");
 	if (typeof document !== "undefined") {
 		document.documentElement.lang = locale;
 	}
@@ -51,6 +64,7 @@ async function boot() {
 		const { SettingsNativeRoot } = await import(
 			"@/components/settings/settings-native-root"
 		);
+		bootStage("settings-module");
 		ReactDOM.createRoot(root).render(
 			<React.StrictMode>
 				<I18nextProvider i18n={i18n}>
@@ -64,6 +78,9 @@ async function boot() {
 				</I18nextProvider>
 			</React.StrictMode>,
 		);
+		logger.info(
+			`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=settings`,
+		);
 		return;
 	}
 
@@ -72,6 +89,7 @@ async function boot() {
 	const { default: App } = await import(
 		isAppleMobile() ? "./components/mobile/mobile-app" : "./App"
 	);
+	bootStage("app-module");
 	ReactDOM.createRoot(root).render(
 		<React.StrictMode>
 			<I18nextProvider i18n={i18n}>
@@ -86,6 +104,9 @@ async function boot() {
 				</ThemeProvider>
 			</I18nextProvider>
 		</React.StrictMode>,
+	);
+	logger.info(
+		`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=main`,
 	);
 	void checkForStartupUpdate();
 }

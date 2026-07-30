@@ -8,4 +8,5 @@
 
 - 与用户 Toast / `ApiResult` **分层**：日志不替代错误 UX。
 - 关键操作记录 op start/end。
-- 日志目录由插件约定；设置内「打开日志文件夹」若未做则仍可用系统日志路径排查。
+- 前端启动：`main.tsx` 在 `op start/end frontend_boot` 之间输出 `boot stage=<阶段> ms=<累计>`（logger / settings / theme / i18n / 模块加载）。计时基准是 `performance.now()`，即从页面导航开始，因此包含 HTML 与入口模块本身的加载；多窗口时用末尾的 `window=main|settings` 区分。
+- 日志目录由插件约定（Windows 为 `%LOCALAPPDATA%\<identifier>\logs\agentero.log`）；设置内「打开日志文件夹」若未做则仍可用系统日志路径排查。
