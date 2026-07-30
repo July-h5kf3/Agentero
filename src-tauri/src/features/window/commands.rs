@@ -14,9 +14,10 @@ const TRAFFIC_LIGHT_Y_DEFAULT: f64 = 18.0;
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_X: f64 = 14.0;
 
-/// Traffic-light position for the narrower Settings window.
+/// Top-left y for the macOS traffic-light buttons in the 32px Settings header.
+/// 9 + 14 (button height) = 23, leaving 9px above and 9px below for vertical centering.
 #[cfg(target_os = "macos")]
-const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 14.0;
+const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 9.0;
 
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
@@ -120,20 +121,15 @@ pub async fn settings_window_open(
 
     #[cfg(target_os = "macos")]
     {
-        let scale = app
-            .state::<AppSettingsStore>()
-            .get()
-            .map(|r| r.settings.ui_scale)
-            .unwrap_or(1.0);
-        let y = if scale.is_finite() && (0.8..=1.5).contains(&scale) {
-            SETTINGS_TRAFFIC_LIGHT_Y * scale
-        } else {
-            SETTINGS_TRAFFIC_LIGHT_Y
-        };
+        // The 32px header (Tailwind h-8) does not scale with `ui_scale`, so the
+        // y position stays at the constant that vertically centers the buttons.
         builder = builder
             .hidden_title(true)
             .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .traffic_light_position(tauri::LogicalPosition::new(TRAFFIC_LIGHT_X, y));
+            .traffic_light_position(tauri::LogicalPosition::new(
+                TRAFFIC_LIGHT_X,
+                SETTINGS_TRAFFIC_LIGHT_Y,
+            ));
     }
 
     let window = match builder.build() {
