@@ -9,6 +9,8 @@ import {
 	X,
 } from "lucide-react";
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useId,
@@ -17,16 +19,6 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { AboutPane } from "@/components/settings/panes/about-pane";
-import {
-	AgentPane,
-	RemoteAgentPane,
-} from "@/components/settings/panes/agent-pane";
-import { AppearancePane } from "@/components/settings/panes/appearance-pane";
-import { GeneralPane } from "@/components/settings/panes/general-pane";
-import { KeyboardPane } from "@/components/settings/panes/keyboard-pane";
-import { RemoteAccessPane } from "@/components/settings/panes/remote-access-pane";
-import { TranslatePane } from "@/components/settings/panes/translate-pane";
 import type {
 	SettingsHostContext,
 	SettingsSection,
@@ -40,6 +32,58 @@ import {
 	remoteSessionIdFromHandle,
 } from "@/lib/vault/remote/remote-vault";
 
+// Panes load per section instead of riding along with the settings shell:
+// importing them statically pulled the whole surface (agent pane + model picker
+// + translate) into the first paint. The *current* section is preloaded next to
+// the shell (see `preloadSettingsPane`), so only the sections you actually visit
+// pay for a chunk — a lazy default pane would just move the stall after render.
+const PANE_LOADERS = {
+	general: () => import("@/components/settings/panes/general-pane"),
+	appearance: () => import("@/components/settings/panes/appearance-pane"),
+	agent: () => import("@/components/settings/panes/agent-pane"),
+	translate: () => import("@/components/settings/panes/translate-pane"),
+	keyboard: () => import("@/components/settings/panes/keyboard-pane"),
+	"remote-access": () =>
+		import("@/components/settings/panes/remote-access-pane"),
+	about: () => import("@/components/settings/panes/about-pane"),
+} satisfies Record<SettingsSection, () => Promise<unknown>>;
+
+/**
+ * Warm the chunk for `section` before the shell renders. Module promises are
+ * cached, so the matching `lazy()` below resolves without a second request.
+ */
+export function preloadSettingsPane(section: string): Promise<unknown> {
+	const load = PANE_LOADERS[section as SettingsSection] ?? PANE_LOADERS.general;
+	return load();
+}
+
+const GeneralPane = lazy(() =>
+	PANE_LOADERS.general().then((m) => ({ default: m.GeneralPane })),
+);
+const AppearancePane = lazy(() =>
+	PANE_LOADERS.appearance().then((m) => ({ default: m.AppearancePane })),
+);
+const AgentPane = lazy(() =>
+	PANE_LOADERS.agent().then((m) => ({ default: m.AgentPane })),
+);
+const RemoteAgentPane = lazy(() =>
+	PANE_LOADERS.agent().then((m) => ({ default: m.RemoteAgentPane })),
+);
+const TranslatePane = lazy(() =>
+	PANE_LOADERS.translate().then((m) => ({ default: m.TranslatePane })),
+);
+const KeyboardPane = lazy(() =>
+	PANE_LOADERS.keyboard().then((m) => ({ default: m.KeyboardPane })),
+);
+const RemoteAccessPane = lazy(() =>
+	PANE_LOADERS["remote-access"]().then((m) => ({
+		default: m.RemoteAccessPane,
+	})),
+);
+const AboutPane = lazy(() =>
+	PANE_LOADERS.about().then((m) => ({ default: m.AboutPane })),
+);
+
 const NAV: {
 	id: SettingsSection;
 	icon: typeof Bot;
@@ -52,6 +96,11 @@ const NAV: {
 	{ id: "remote-access", icon: MonitorSmartphone },
 	{ id: "about", icon: Info },
 ];
+
+/** Reserves height while a pane chunk loads so the window does not jump. */
+function PaneFallback() {
+	return <div className="h-64" aria-hidden />;
+}
 
 type SettingsContentProps = {
 	section: SettingsSection;
@@ -192,63 +241,79 @@ export function SettingsContent({
 			{/* Content */}
 			<div ref={contentScrollRef} className="agentero-scroll min-w-0 flex-1">
 				<div className="px-6 py-5">
+					{/* One boundary per pane: a section still loading must not blank out
+					    the panes already visited and kept mounted next to it. */}
 					{visitedSections.includes("general") && (
 						<div hidden={section !== "general"}>
-							<GeneralPane
-								settings={settings}
-								patch={patch}
-								hostContext={hostContext}
-							/>
-						</div>
-					)}
-					{visitedSections.includes("appearance") && (
-						<div hidden={section !== "appearance"}>
-							<AppearancePane
-								theme={settings.theme}
-								uiTheme={settings.uiTheme}
-								locale={settings.locale}
-								uiScale={settings.uiScale}
-								editorFontSize={settings.editorFontSize}
-								showEditorToolbar={settings.showEditorToolbar}
-								patch={patch}
-							/>
-						</div>
-					)}
-					{visitedSections.includes("agent") && (
-						<div hidden={section !== "agent"}>
-							{hostContext.kind === "remote" ? (
-								<RemoteAgentPane
+							<Suspense fallback={<PaneFallback />}>
+								<GeneralPane
 									settings={settings}
 									patch={patch}
 									hostContext={hostContext}
 								/>
-							) : (
-								<AgentPane settings={settings} patch={patch} />
-							)}
+							</Suspense>
+						</div>
+					)}
+					{visitedSections.includes("appearance") && (
+						<div hidden={section !== "appearance"}>
+							<Suspense fallback={<PaneFallback />}>
+								<AppearancePane
+									theme={settings.theme}
+									uiTheme={settings.uiTheme}
+									locale={settings.locale}
+									uiScale={settings.uiScale}
+									editorFontSize={settings.editorFontSize}
+									showEditorToolbar={settings.showEditorToolbar}
+									patch={patch}
+								/>
+							</Suspense>
+						</div>
+					)}
+					{visitedSections.includes("agent") && (
+						<div hidden={section !== "agent"}>
+							<Suspense fallback={<PaneFallback />}>
+								{hostContext.kind === "remote" ? (
+									<RemoteAgentPane
+										settings={settings}
+										patch={patch}
+										hostContext={hostContext}
+									/>
+								) : (
+									<AgentPane settings={settings} patch={patch} />
+								)}
+							</Suspense>
 						</div>
 					)}
 					{visitedSections.includes("translate") && (
 						<div hidden={section !== "translate"}>
-							<TranslatePane
-								settings={settings}
-								patch={patch}
-								onOpenAgentSettings={() => onSectionChange("agent")}
-							/>
+							<Suspense fallback={<PaneFallback />}>
+								<TranslatePane
+									settings={settings}
+									patch={patch}
+									onOpenAgentSettings={() => onSectionChange("agent")}
+								/>
+							</Suspense>
 						</div>
 					)}
 					{visitedSections.includes("keyboard") && (
 						<div hidden={section !== "keyboard"}>
-							<KeyboardPane />
+							<Suspense fallback={<PaneFallback />}>
+								<KeyboardPane />
+							</Suspense>
 						</div>
 					)}
 					{visitedSections.includes("remote-access") && (
 						<div hidden={section !== "remote-access"}>
-							<RemoteAccessPane vaultPath={vaultPath} />
+							<Suspense fallback={<PaneFallback />}>
+								<RemoteAccessPane vaultPath={vaultPath} />
+							</Suspense>
 						</div>
 					)}
 					{visitedSections.includes("about") && (
 						<div hidden={section !== "about"}>
-							<AboutPane />
+							<Suspense fallback={<PaneFallback />}>
+								<AboutPane />
+							</Suspense>
 						</div>
 					)}
 				</div>

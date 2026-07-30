@@ -4,7 +4,6 @@ import ReactDOM from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
 import { initLogger, logger } from "@/lib/core/logger";
 import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
@@ -19,38 +18,55 @@ import { applyUiTheme } from "@/lib/ui/theme";
 import { checkForUpdate, installAvailableUpdate } from "@/lib/update";
 import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
-// KaTeX CSS must load with the main bundle: lazy-loaded editors are not the
-// only consumers (Streamdown in the Agent panel renders math too).
-import "katex/dist/katex.min.css";
 
 const searchParams = new URLSearchParams(window.location.search);
 const isSettingsWindow = searchParams.get("window") === "settings";
 
+// `performance.now()` is measured from navigation start, so these numbers cover
+// index.html + main.tsx module loading too, not just the boot chain. `boot` is a
+// serial await chain and in dev every step is a module request, so a slow window
+// needs per-stage numbers to be actionable rather than guesswork.
+const bootElapsed = () => Math.round(performance.now());
+function bootStage(name: string) {
+	logger.info(`boot stage=${name} ms=${bootElapsed()}`);
+}
+
 async function boot() {
 	await initLogger();
 	logger.info("op start frontend_boot");
+	bootStage("logger");
 
 	// Host XDG settings.json (migrates legacy localStorage once).
 	await ensureSettingsLoaded();
+	bootStage("settings");
 	initSettingsSync();
 	await applyUiTheme(loadSettings().uiTheme).catch((e) => {
 		console.warn("[theme] failed to apply initial UI theme", e);
 	});
+	bootStage("theme");
 	subscribeSettings((s) => {
 		void applyUiTheme(s.uiTheme);
 	});
 	initAutoHideScrollbars();
 	const locale = resolveLocale(loadSettings().locale);
 	await i18n.changeLanguage(locale);
+	bootStage("i18n");
 	if (typeof document !== "undefined") {
 		document.documentElement.lang = locale;
 	}
 
 	const root = document.getElementById("root") as HTMLElement;
 	if (isSettingsWindow) {
-		const { SettingsNativeRoot } = await import(
-			"@/components/settings/settings-native-root"
-		);
+		// Load the shell and the pane for the requested section together: the pane
+		// is behind `lazy()`, so leaving it until after render would stall the
+		// window right when it first looks interactive.
+		const [{ SettingsNativeRoot }] = await Promise.all([
+			import("@/components/settings/settings-native-root"),
+			import("@/components/settings/settings-content").then((m) =>
+				m.preloadSettingsPane(searchParams.get("section") ?? "general"),
+			),
+		]);
+		bootStage("settings-module");
 		ReactDOM.createRoot(root).render(
 			<React.StrictMode>
 				<I18nextProvider i18n={i18n}>
@@ -64,14 +80,22 @@ async function boot() {
 				</I18nextProvider>
 			</React.StrictMode>,
 		);
+		logger.info(
+			`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=settings`,
+		);
 		return;
 	}
 
 	// Lazy-load the full app so the settings window (which returns above) never
-	// downloads/parses the heavyweight workspace bundle.
-	const { default: App } = await import(
-		isAppleMobile() ? "./components/mobile/mobile-app" : "./App"
-	);
+	// downloads/parses the heavyweight workspace bundle. The PDF engine host and
+	// KaTeX styles ride along here for the same reason: the settings webview has
+	// no viewer and no math, so it must not pay for PDFium or the KaTeX fonts.
+	const [{ default: App }, { PdfEngineHost }] = await Promise.all([
+		import(isAppleMobile() ? "./components/mobile/mobile-app" : "./App"),
+		import("@/components/viewer/embed/engine-provider"),
+		import("katex/dist/katex.min.css"),
+	]);
+	bootStage("app-module");
 	ReactDOM.createRoot(root).render(
 		<React.StrictMode>
 			<I18nextProvider i18n={i18n}>
@@ -86,6 +110,9 @@ async function boot() {
 				</ThemeProvider>
 			</I18nextProvider>
 		</React.StrictMode>,
+	);
+	logger.info(
+		`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=main`,
 	);
 	void checkForStartupUpdate();
 }
