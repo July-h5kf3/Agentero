@@ -21,6 +21,9 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Both ring and aws-lc-rs backends exist in the dependency tree; rustls
+    // panics at connect time unless a process-wide default is installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut builder = tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("agentero-arxiv", |_ctx, request, responder| {
             crate::features::arxiv_proxy::handle(request, responder);
@@ -29,6 +32,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(logging::build_log_plugin().build());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -48,6 +52,8 @@ pub fn run() {
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
         .manage(crate::features::agent::PermissionGate::new())
+        .manage(crate::features::bridge::BridgeController::new())
+        .manage(crate::features::bridge::BridgeClientController::new())
         .manage(WikiIndexState::new())
         .manage(ExternalRenameRepairStore::new());
 
@@ -130,6 +136,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            let _ = &app;
             if matches!(
                 event,
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }

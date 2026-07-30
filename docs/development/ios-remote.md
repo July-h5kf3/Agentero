@@ -1,6 +1,6 @@
 # iOS 远程连接方案（paseo 式二维码配对）
 
-> 状态：**未实现草稿**。定位在 roadmap 0.7+「平台」切片。
+> 状态：**M1 已实现，M2 功能已实现（待 TestFlight 内测）**。Relay、Bridge、E2EE、二维码配对、设备验签、iOS Keychain、Library/NOTES、桌面 Agent 流式输出与权限应答、PDF 分块缓存、Agent 会话恢复（历史会话列表 + 回前台补齐时间线）已落地；多主机/LAN 回退仍在后续范围。
 > 决策：iOS **不做本地 Vault**，App 是桌面端的纯远程客户端 —— 扫码配对后经 **relay + 端到端加密** 连接电脑上的 Agentero，读写电脑上的库，并驱动电脑上的 BYOA Agent。
 
 ---
@@ -31,7 +31,7 @@
 
 调研对象：**源码仓库** [`getpaseo/paseo`](https://github.com/getpaseo/paseo)（monorepo，clone 于 `~/f/paseo`，约 0.2.3）+ 本机 `@getpaseo/cli` 0.1.53 发行产物 + 本机 `~/.paseo/` 运行时数据。下文路径均相对 `~/f/paseo`。
 
-> **许可证约束（重要）**：paseo 是 **AGPLv3**（`LICENSE`，Copyright Mohamed Boudra）。Agentero 是 **MIT**（`LICENSE`）。因此**只能参考其协议设计与交互流程，绝不复制其源码**（含片段、逐行改写）。本方案的所有实现必须独立编写（Rust Host + 现有 React 前端），协议字段名可以兼容/借鉴（接口事实不受版权保护），代码不得搬运。
+> **许可证约束（重要）**：当前 `getpaseo/paseo-relay` 仓库为 **Apache-2.0**；Agentero 是 **MIT**（`LICENSE`）。Relay 的维护 fork 为 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)，保留上游许可证、归属与 fork 关联。Bridge 与应用协议仍由 Agentero 独立实现，不能把 Paseo 的其他 AGPL 组件或源码带入本仓库。
 
 ### 2.1 三方架构
 
@@ -94,7 +94,7 @@ QR = App URL + fragment 中的 offer；解析入口 `parseConnectionOfferFromUrl
 
 | 借鉴 | 不照搬 |
 |---|---|
-| offer-in-QR（serverId + 公钥 + relay 地址），无账号体系 | **代码**：AGPLv3，只参考设计不复制实现 |
+| offer-in-QR（serverId + 公钥 + relay 地址），无账号体系 | Paseo 的其他 AGPL 组件和源码；Relay fork 仅使用 Apache-2.0 授权部分，并保留上游 LICENSE 与 fork 关联 |
 | relay 只转发密文、daemon 出站连接（无公网暴露面） | 客户端零认证（「QR 即密码」）：我们加**配对确认 + 设备密钥**（见 §5.3） |
 | E2EE：静态 daemon 公钥 + 临时 client 密钥 ECDH，握手前不受理命令 | 直连明文 + 可选 bcrypt 密码：我们的直连也走同一套 E2EE |
 | 多 host / 多通道 profile + 候选回退 + 深链配对 | host 凭据存 AsyncStorage：我们存 **iOS Keychain** |
@@ -108,39 +108,38 @@ QR = App URL + fragment 中的 offer；解析入口 `parseConnectionOfferFromUrl
 ```
 ┌─────────────┐   wss (E2EE 密文)   ┌──────────────┐   wss (出站)   ┌───────────────────────┐
 │  iOS App    │ ◄────────────────► │    Relay      │ ◄───────────► │  桌面 Agentero (Host)  │
-│  (Tauri 2,  │                    │ (CF Workers/  │               │  features/bridge/      │
-│   复用 src/) │                    │  自托管, 仅转发)│               │   ├ RPC → 现有命令面    │
+│  (Tauri 2,  │                    │ (Elixir/OTP,  │               │  features/bridge/      │
+│   复用 src/) │                    │  仅密文转发)  │               │   ├ RPC → 现有命令面    │
 └─────────────┘                    └──────────────┘               │   ├ 事件转发 agent:* 等 │
       扫码 ▲                                                       │   └ 设备配对/密钥       │
           └── 桌面 Settings → 远程访问 → 显示二维码 offer            └───────────────────────┘
 ```
 
 - **桌面 Bridge**（新 feature `src-tauri/src/features/bridge/`）：桌面 App 内的连接端点，不是独立进程。开关在 Settings → 远程访问（默认关）。开启后向 relay 建立控制通道，并为每个已配对设备的连接建数据通道。
-- **Relay**：**自建**（决策已定，见 §3.1）。拓扑照 paseo（serverId 路由 + 纯密文转发），代码独立编写（官方 paseo relay 是 AGPL Elixir 服务，不复用）。
+- **Relay**：**自建**（决策已定，见 §3.1）。当前采用 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 的 Apache-2.0 Paseo-compatible fork，部署于 `relay.philfan.cn`；拓扑沿用 `serverId` 路由 + 纯密文转发，Agentero 的 Bridge/E2EE 仍独立实现。
 - **iOS App**：Tauri 2 iOS 壳 + 复用现有 React 前端；不注册任何本地 Vault 命令，所有数据经 Bridge RPC。
 
 ### 3.1 Relay 服务（自建）
 
 relay 解决的唯一问题：手机在外网、电脑在 NAT 后面，双方都无法主动连对方 —— relay 是公网**会合点**。它不存数据、不解密、无数据库；因为上层已 E2EE，relay 只见 IP / 时间 / 包大小。本质是一个按 `serverId` 配对两条 WebSocket 的交换机。
 
-**技术选型**：Cloudflare Workers + Durable Objects。理由：全球 anycast 边缘、原生 WebSocket hibernation、按 DO 名字天然做「每 serverId 一个单点」，无需自己管进程/负载均衡；免费额度对个人与早期用户量级足够。仓库：**独立 repo [`poco-ai/agentero-relay`](https://github.com/poco-ai/agentero-relay)**（现为 private，实现完成后转公开 MIT 以支持自托管），不进本 monorepo —— 部署节奏（`wrangler deploy`）与桌面 `v*` tag 发布无关，CF 凭据也不应进桌面仓库；relay 不解析上层协议，只需共享少量常量（query 参数名、控制消息 type），复制常量比耦合构建更划算。
+**技术选型**：采用 Elixir/OTP + Bandit + Syn 的现成实现，维护于 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)，作为独立服务运行在 `relay.philfan.cn`。这样先验证真实 WebSocket、跨节点 ownership 和部署适配器；后续如需要 Cloudflare Workers + Durable Objects，再将同一公开协议实现为另一个部署适配器，不改变 Bridge 接口。Relay 不解析上层协议，只处理 query 参数、控制消息和帧转发。
 
-**路由与角色**（一个 DO 实例 = 一个 `serverId`）：
+**路由与角色**（Paseo Relay v2）：
 
 ```
-GET /ws?v=1&serverId=<agt_…>&role=host                       → host-control（每 serverId 唯一）
-GET /ws?v=1&serverId=<agt_…>&role=host&connectionId=<conn_…> → host-data（每设备连接一条）
-GET /ws?v=1&serverId=<agt_…>&role=client                     → client（relay 分配 connectionId）
+GET /ws?v=2&serverId=<agt_…>&role=server                       → server-control（每 serverId 唯一）
+GET /ws?v=2&serverId=<agt_…>&role=server&connectionId=<conn_…> → server-data（每设备连接一条）
+GET /ws?v=2&serverId=<agt_…>&role=client                       → client（relay 分配 connectionId）
 ```
 
-- client 接入 → DO 分配 `conn_<16hex>`，经 host-control 下发 `{type:"connected",connectionId}`；host 建对应 host-data 通道后按 connectionId 一对一转发；
-- host-data 未就绪期间 client 帧进环形缓冲（上限 ~200 帧 / 4MB，超限直接关连接，避免 DO 内存放大）；
-- 断开时向对端发 `{type:"disconnected",connectionId}`；host-control 重连后经 `{type:"sync",connectionIds:[…]}` 对账；
-- host-control 每 10s 应用层 ping，30s 无响应视为掉线；client 侧指数退避重连（1s→30s，带抖动）。
+- client 接入 → Relay 分配 `connectionId`，经 server-control 下发 `{type:"connected",connectionId}`；Bridge 建对应 server-data 通道后按 connectionId 一对一转发；
+- 断开时 Relay 向对端发 `{type:"disconnected",connectionId}`；Bridge 控制通道重连后经 `{type:"sync",connectionIds:[…]}` 对账；
+- Bridge 控制通道每 10s 应用层 ping，30s 无响应视为掉线；client 侧指数退避重连（1s→30s，带抖动）。
 
 **relay 自身不做认证**（照 paseo）：`serverId` 是路由键不是秘密，安全性完全由 Bridge 侧的 E2EE + 设备验签兜底（§5.3）。relay 只做**滥用防护**：每 serverId 并发 client 上限、每 IP 建连速率限制、单帧大小上限、空闲会话回收。
 
-**运维与自托管**：官方实例 `bridge.agentero.app`（域名待定）；协议与 Worker 源码开源，设置里 relay endpoint 可改（企业/隐私用户自托管）。offer 里携带 `relay.endpoint`，所以换 relay 只需重新出二维码。日志只记连接元数据（serverId 前缀哈希、时长、字节数），不记内容，不记完整 IP。
+**运维与自托管**：当前公网入口为 `wss://relay.philfan.cn/ws`，其 `GET /health` 用于存活检查，`GET /ready` 用于就绪检查。TLS 终止层必须支持 WebSocket Upgrade 且保留 query 参数；入口层负责按 IP 限制新建连接速率与帧大小。协议与 Relay 源码开源；设置界面不展示 relay 地址（默认端点内置），自托管用户可经 `bridge_start` 的 `relayEndpoint` 参数替换。offer 里携带 `relay.endpoint`，所以换 relay 只需重新出二维码。日志只记连接元数据（serverId 前缀哈希、时长、字节数），不记内容，不记完整 IP。
 
 ---
 
@@ -161,7 +160,7 @@ Rust 侧密码学选型：`crypto_box`（X25519 + XSalsa20-Poly1305，与 NaCl b
 ### 4.2 生命周期
 
 - Settings 开启「远程访问」→ Bridge 随桌面 App 启动/停止；桌面 App 退出即失联（iOS 端显示「电脑离线」）。
-- 控制通道：`wss://<relay>/ws?serverId=…&role=server`，应用层 ping 10s 保活，断线指数退避重连。
+- 控制通道：`wss://<relay>/ws?v=2&serverId=…&role=server`，应用层 ping 10s 保活，断线指数退避重连。
 - relay 经控制通道下发 `{type:"connected", connectionId}` → Bridge 建对应数据通道并做 E2EE 握手。
 - 后续（0.8+）：可选「无界面常驻」模式复用 `agentero-cli`（`agentero bridge serve`），电脑不开 GUI 也能连——依赖 CLI 侧补 agent 能力，暂不承诺。
 
@@ -181,7 +180,7 @@ Bridge 服务的是**桌面当前打开的 Vault**（多窗口时取发起开关
   "v": 1,
   "serverId": "agt_…",
   "hostPublicKeyB64": "…",         // Bridge 静态公钥
-  "relay": { "endpoint": "bridge.agentero.example:443" },
+  "relay": { "endpoint": "relay.philfan.cn:443" },
   "hostName": "Phil 的 MacBook Pro", // 展示用
   "pin": false                       // 预留：true 时要求确认码
 }
@@ -202,7 +201,7 @@ iOS 首启：
 4. **桌面弹确认**：「iPhone 15 Pro 请求连接，确认码 483-921」，iOS 同屏显示相同确认码，用户在桌面点允许；
 5. 桌面把设备写入 `devices.json`，回 `pair_ok`；iOS 保存 `{offer, deviceKeypair}`，进入主界面。
 
-再次启动：直接用保存的 offer + 设备密钥静默重连；失败时显示离线态与「重新扫码」入口。
+再次启动：直接用保存的 offer + 设备密钥静默重连；Relay 断线后客户端会持续重试。连接状态变化会主动同步到移动端 UI，App 从后台回到前台时也会重新检查并触发恢复；失败时显示离线态与「重新扫码」入口。
 
 **多台电脑**：借鉴 paseo 的 `HostProfile` 模型 —— iOS 侧保存 `hosts[]`（每台 `{serverId, label, connections[], preferredConnectionId}`，一台 host 可同时有 relay 与 LAN 两条通道，按候选顺序回退），顶部可切换当前电脑。与 paseo 不同：凭据（设备私钥 + host 公钥）存 **iOS Keychain**，不落 AsyncStorage 明文。
 
@@ -246,7 +245,7 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 | Vault | `vault_tree_build` / `vault_tree_children` / `vault_read_text` / `vault_write_text` / `vault_search` |
 | Catalog | `paper_list` / `paper_get` / `paper_set_tags` / `paper_set_is_read` |
 | 文件 | `bridge_read_bytes`（分块拉 PDF/图片，见 6.3） |
-| Agent | `agent_run_once` / `agent_cancel` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
+| Agent | `agent_list_agents` / `agent_run_once` / `agent_cancel_run` / `agent_respond_permission` / `agent_list_sessions` / `agent_load_session` |
 | Wiki | `wiki_backlinks` / `wiki_graph`（P1） |
 
 **不暴露**：`remote_*`（SSH）、window/terminal/finder、Zotero connector、settings 写入、任意绝对路径读写（所有 path 参数强制 Vault 相对路径 + canonicalize 防逃逸）。
@@ -273,7 +272,13 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 - 关键抽象：在 `src/lib/core/` 加 **transport 层** —— 桌面构建下 `invoke` 直连本地命令；iOS 构建下同名调用路由到 Bridge RPC（WS 客户端可放 Rust 侧、经本地 `invoke("bridge_rpc")` 代理，密钥不出 Rust）；
 - Vault handle 采用伪路径 `bridge:<serverId>`，复用现有 `isRemoteVaultHandle` 式分流经验（远端已有 `remote:<sessionId>` 先例）：跳过 fs-watch、跳过本地 wiki 索引（wiki 数据改从 RPC 拿）。
 
-### 7.2 界面裁剪（手机优先）
+### 7.2 数据与代码边界
+
+- **不新建手机 Vault 或 catalog**：文件、`catalog.sqlite` 和 Agent 会话仅在桌面存在；手机的读写一律经 Bridge RPC 回到桌面。
+- **不新建独立前端仓库**：Library、阅读与 Agent 等业务界面继续复用 `src/` 中的 React 代码；仅新增扫码配对、主机切换、离线态和窄屏导航等 iOS 专用页面/组件。
+- **手机本地只保存最小状态**：设备私钥与配对凭据存 iOS Keychain；PDF、图片和最近阅读内容可放 App 沙箱的可丢弃缓存，离线时只读，不建立写回队列。
+
+### 7.3 界面裁剪（手机优先）
 
 不搬桌面三栏 Dockview。iOS MVP 四个面板：
 
@@ -286,11 +291,11 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 
 iPad 后续可回到双栏（Library + 阅读/Agent 分屏）。
 
-### 7.3 handlers.rs 收敛
+### 7.4 handlers.rs 收敛
 
 原 `common_commands!` iOS 分支的本地 Vault 命令**移除**；iOS 目标只注册：`bridge_pair_scan`（相机结果入口）、`bridge_connect/disconnect/status`、`bridge_rpc`、`settings_get/set`（仅 App 本地偏好）、translate（可选，走免费 MT 直连）。桌面命令集不变。
 
-### 7.4 离线行为
+### 7.5 离线行为
 
 - 已缓存的 PDF / 最近打开的 NOTES 只读可看；
 - 一切写操作与 Agent 需在线；离线时置灰并提示「电脑离线」；
@@ -306,7 +311,7 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 
 ### 8.2 对话体验
 
-- iOS Agent 面板 = 精简禅模式：流式 markdown、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
+- iOS Agent 面板 = 精简禅模式：流式 markdown、Agent 后端选择、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
 - 上下文 chips：当前打开论文默认加入（与桌面一致）；`@` 提及数据源改走 `vault_tree_children` RPC；
 - 运行中锁屏/切后台：桌面侧继续跑（这是远程执行的天然优势）；回前台经 `agent_load_session` 补齐时间线。
 
@@ -349,18 +354,77 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| M0 Relay | 独立 repo `agentero-relay`：CF Workers + DO，三角色路由、缓冲、限流、部署到官方域名 | 两个 `wscat` 客户端经 relay 互通；断线重连与 sync 对账通过 |
-| M1 Bridge 内核 | `features/bridge/`：身份/密钥、relay 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | 桌面↔桌面模拟 client 经**真实 relay** 跑完配对 + RPC + Agent 流式 e2e |
-| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | TestFlight 内测；`docs/development/release.md` 上架清单 |
+| M0 Relay | [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)：Paseo-compatible 三角色路由与部署适配器，公网入口 `relay.philfan.cn` | `GET /health`、`GET /ready` 通过；两个 WebSocket 客户端经 relay 互通；断线重连与 sync 对账通过 |
+| M1 Bridge 内核 | `features/bridge/`：身份/密钥、v2 `server` 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | **已完成**：已对 `wss://relay.philfan.cn/ws` 完成加密双向帧联调，Bridge 单元测试覆盖协议、加密、认证与 Agent 会话过滤 |
+| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | **功能已实现**：扫码、Library、NOTES 编辑、Agent 流式输出与权限应答、PDF 分块缓存、会话恢复（`agent_list_sessions` / `agent_load_session` 已入 Bridge 白名单，iOS 回前台自动补齐时间线）；下一步进入 TestFlight 内测 |
 | M3 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
 | P2 之后 | APNs 推送、LAN 直连兜底（含 Tailscale 手动地址）、headless `agentero bridge serve`、`remote:` Vault 透传 | — |
 
 ## 12. 开放问题
 
-- relay 域名与免费额度耗尽后的成本分担（官方实例托底 + 自托管开放，已定；定价/限额策略未定）；
+- Relay 域名已定为 `relay.philfan.cn`；免费额度耗尽后的成本分担、定价与限额策略未定；
 - 协议 schema 的单一来源：Rust 定义 + 生成 TS 类型（`ts-rs`/specta），避免手写两份；
 - iOS 端 Markdown 编辑器裁剪范围（桌面 CodeMirror 栈在移动端的可用性）；
 - 多设备同时在线的写并发（MVP：允许多设备连接，写入走桌面现有保存冲突检查即可）。
+
+## 13. iOS 本地开发与构建
+
+### 13.1 新电脑初始化
+
+iOS 构建必须在 macOS 上进行，并需要安装 Xcode、Node.js、pnpm 和 Rust
+stable。克隆仓库后执行：
+
+```bash
+pnpm install
+rustup target add aarch64-apple-ios-sim
+pnpm tauri ios init
+```
+
+`src-tauri/ios-project.yml`、`src-tauri/tauri.ios.conf.json` 和
+`src-tauri/Info.ios.plist` 是 iOS 工程的可复现配置。`src-tauri/gen/apple/`
+是 Tauri 根据模板生成的本机 Xcode 工程，不应手工维护或提交本机生成的
+`libapp.a`、开发者 Team 和 scheme 噪声。
+
+### 13.2 模拟器开发
+
+启动指定的 iOS Simulator：
+
+```bash
+pnpm tauri ios dev "iPhone 17 Pro"
+```
+
+开发模式使用 Vite 的 `http://localhost:1420`。开发服务器必须在 App
+运行期间保持启动；不要使用会在部署完成后退出并关闭 Vite 的一次性命令。
+首次启动时，如果 iOS 请求本地网络权限，需要允许 Agentero 访问本地网络。
+
+### 13.3 真机开发
+
+真机不能访问 Mac 的 `localhost`，需要使用 Mac 的局域网地址：
+
+```bash
+pnpm tauri ios dev --host <Mac局域网IP> "<设备名称>"
+```
+
+例如：
+
+```bash
+pnpm tauri ios dev --host 192.168.1.20 "Philfan iPhone"
+```
+
+Mac 和 iPhone 必须处于可互通的网络中。真机调试还需要在 Xcode 中配置
+Apple Development Team 和签名证书。
+
+### 13.4 正式构建
+
+正式构建会把前端打包进 App，不依赖 Vite 或 `localhost:1420`：
+
+```bash
+pnpm ios:release:check
+pnpm tauri ios build
+```
+
+TestFlight 的签名、构建号和上传流程见
+[iOS TestFlight Release](ios-testflight.md)。
 
 ## 相关文档
 

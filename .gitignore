@@ -39,6 +39,7 @@ site/
 # Rust workspace (root target/ for agentero-cli + src-tauri)
 /target/
 src-tauri/target/
+/target-ios/
 
 # Local scratch / demo vaults
 /tmp/

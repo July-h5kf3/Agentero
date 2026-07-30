@@ -7,6 +7,7 @@ import enAiElements from "./locales/en/aiElements.json";
 import enApp from "./locales/en/app.json";
 import enCommon from "./locales/en/common.json";
 import enEditor from "./locales/en/editor.json";
+import enMobile from "./locales/en/mobile.json";
 import enSettings from "./locales/en/settings.json";
 import enShortcuts from "./locales/en/shortcuts.json";
 import enSidebar from "./locales/en/sidebar.json";
@@ -16,6 +17,7 @@ import zhAiElements from "./locales/zh-CN/aiElements.json";
 import zhApp from "./locales/zh-CN/app.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhEditor from "./locales/zh-CN/editor.json";
+import zhMobile from "./locales/zh-CN/mobile.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhShortcuts from "./locales/zh-CN/shortcuts.json";
 import zhSidebar from "./locales/zh-CN/sidebar.json";
@@ -37,6 +39,7 @@ export const resources = {
 		editor: enEditor,
 		shortcuts: enShortcuts,
 		aiElements: enAiElements,
+		mobile: enMobile,
 	},
 	"zh-CN": {
 		common: zhCommon,
@@ -48,6 +51,7 @@ export const resources = {
 		editor: zhEditor,
 		shortcuts: zhShortcuts,
 		aiElements: zhAiElements,
+		mobile: zhMobile,
 	},
 } as const;
 

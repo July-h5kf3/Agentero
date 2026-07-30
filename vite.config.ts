@@ -42,7 +42,9 @@ export default defineConfig(async () => ({
 	server: {
 		port: 1420,
 		strictPort: true,
-		host: host || false,
+		// iOS Simulator reaches the Mac dev server through the local network
+		// bridge; binding only to loopback makes localhost:1420 unreachable.
+		host: host || "0.0.0.0",
 		hmr: host
 			? {
 					protocol: "ws",
