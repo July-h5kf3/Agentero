@@ -2,7 +2,7 @@ import {
 	Check,
 	ChevronDown,
 	Circle,
-	Database,
+	Folder,
 	Laptop,
 	LogOut,
 	QrCode,
@@ -112,11 +112,14 @@ export function MobileSidebar({
 				</header>
 
 				<div className="flex-1 overflow-y-auto px-4 py-5">
-					<section>
+					<section className="rounded-xl border bg-background shadow-sm">
 						<button
 							type="button"
 							aria-expanded={expandedDevice}
-							className="flex min-h-20 w-full items-center gap-3 rounded-xl border bg-background px-3 text-left shadow-sm outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+							className={cn(
+								"flex min-h-20 w-full items-center gap-3 rounded-xl px-3 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring",
+								expandedDevice && "rounded-b-none",
+							)}
 							onClick={() => setExpandedDevice((expanded) => !expanded)}
 						>
 							<div className="grid size-11 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
@@ -155,29 +158,36 @@ export function MobileSidebar({
 							/>
 						</button>
 						{expandedDevice ? (
-							<div className="mt-2 rounded-xl border bg-muted/20 p-2">
-								<p className="px-2 py-1 font-medium text-muted-foreground text-xs">
-									{t("settings.vaults")}
-								</p>
-								<button
-									type="button"
-									className="flex min-h-14 w-full items-center gap-3 rounded-lg bg-background px-2.5 text-left shadow-sm outline-none ring-1 ring-border/60 transition-colors focus-visible:ring-2 focus-visible:ring-ring"
-									aria-pressed="true"
-								>
-									<div className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-										<Database className="size-4" />
-									</div>
-									<span className="min-w-0 flex-1 truncate font-medium text-sm">
-										{status.vaultName ?? "-"}
-									</span>
-									<Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-								</button>
+							<div className="border-t px-3 pt-1.5 pb-2">
+								<div className="ml-[21px] border-border/70 border-l pt-1 pl-3">
+									<button
+										type="button"
+										className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+										aria-pressed="true"
+									>
+										<Folder className="size-4 shrink-0 text-muted-foreground" />
+										<span className="min-w-0 flex-1 truncate font-medium text-sm">
+											{status.vaultName ?? "-"}
+										</span>
+										<Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+									</button>
+									<button
+										type="button"
+										className="mt-0.5 flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 text-left text-destructive outline-none transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring"
+										onClick={() => void disconnect()}
+									>
+										<LogOut className="size-4 shrink-0" />
+										<span className="min-w-0 flex-1 truncate font-medium text-sm">
+											{t("settings.disconnect")}
+										</span>
+									</button>
+								</div>
 							</div>
 						) : null}
 					</section>
 				</div>
 
-				<footer className="space-y-2 border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+				<footer className="border-t p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
 					<Button
 						type="button"
 						size="lg"
@@ -189,16 +199,6 @@ export function MobileSidebar({
 					>
 						<QrCode className="size-5 text-primary-foreground" />
 						<span>{t("settings.addDevice")}</span>
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						size="lg"
-						className="h-12 w-full justify-start gap-3 rounded-xl border-destructive/30 bg-destructive/5 px-3 text-base text-destructive hover:bg-destructive/10 hover:text-destructive"
-						onClick={() => void disconnect()}
-					>
-						<LogOut className="size-5" />
-						<span>{t("settings.disconnect")}</span>
 					</Button>
 				</footer>
 			</aside>
