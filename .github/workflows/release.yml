@@ -44,7 +44,7 @@ jobs:
 
             ## CLI (`agentero`)
             Headless Vault / Catalog machine interface (no BYOA).
-            Download the matching `agentero-*-…` archive, extract, and put `agentero` on your `PATH`.
+            Download the matching `agentero-cli-<version>-<rust-host>…` archive, extract, and put `agentero` on your `PATH`.
 
             ```bash
             agentero --version
@@ -230,7 +230,7 @@ jobs:
           OUT_DIR="dist-cli"
           mkdir -p "$OUT_DIR"
 
-          STAGE="agentero-${VERSION}-${HOST}"
+          STAGE="agentero-cli-${VERSION}-${HOST}"
           mkdir -p "$STAGE"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             cp "target/release/agentero.exe" "$STAGE/agentero.exe"

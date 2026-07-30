@@ -6,6 +6,10 @@
 App Store Connect. It runs on `v*` tag pushes (alongside the desktop Release
 workflow) and can be triggered manually from the Actions tab.
 
+When the signing secrets are not configured, an automatic tag run exits
+successfully with a warning and skips the iOS build. A manually triggered run
+still fails during preflight so missing release configuration is explicit.
+
 Required secrets (org or repo level):
 
 | Secret | Content |

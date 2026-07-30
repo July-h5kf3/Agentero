@@ -77,9 +77,9 @@ jobs:
           }
 
           expected_assets=(
-            "agentero-${VERSION}-aarch64-apple-darwin.tar.gz"
-            "agentero-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-            "agentero-${VERSION}-aarch64-unknown-linux-gnu.tar.gz"
+            "agentero-cli-${VERSION}-aarch64-apple-darwin.tar.gz"
+            "agentero-cli-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+            "agentero-cli-${VERSION}-aarch64-unknown-linux-gnu.tar.gz"
           )
           for asset in "${expected_assets[@]}"; do
             grep -Fxq "$asset" assets.txt || {
@@ -90,15 +90,15 @@ jobs:
 
           while IFS= read -r asset; do
             case "$asset" in
-              agentero-${VERSION}-aarch64-apple-darwin.tar.gz)
+              agentero-cli-${VERSION}-aarch64-apple-darwin.tar.gz)
                 sha=$(download_and_hash "$asset")
                 update_checksum ../Formula/agentero.rb "$asset" "$sha"
                 ;;
-              agentero-${VERSION}-x86_64-unknown-linux-gnu.tar.gz)
+              agentero-cli-${VERSION}-x86_64-unknown-linux-gnu.tar.gz)
                 sha=$(download_and_hash "$asset")
                 update_checksum ../Formula/agentero.rb "$asset" "$sha"
                 ;;
-              agentero-${VERSION}-aarch64-unknown-linux-gnu.tar.gz)
+              agentero-cli-${VERSION}-aarch64-unknown-linux-gnu.tar.gz)
                 sha=$(download_and_hash "$asset")
                 update_checksum ../Formula/agentero.rb "$asset" "$sha"
                 ;;

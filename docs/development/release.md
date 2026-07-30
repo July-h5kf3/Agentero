@@ -6,7 +6,7 @@
 
 ## Agentero Desktop/CLI 版本发布
 
-桌面安装包由 Tauri 配置和 Rust package 版本决定，CLI 归档文件名由发布 tag 决定。因此发布时不能只创建 `v*` tag，必须先同步版本并提交。
+桌面安装包由 Tauri 配置和 Rust package 版本决定，CLI 归档文件名由发布 tag 和 Rust target 决定。因此发布时不能只创建 `v*` tag，必须先同步版本并提交。
 
 推荐流程：
 
@@ -17,6 +17,25 @@
 5. 在 Draft Release 中确认桌面安装包、应用内版本、CLI `--version` 和 CLI 文件名没有混用不同版本；确认 `latest.json` 与 updater `.sig` 资产齐全后才发布 Release。
 
 `/bump` 和 `/commit` 默认只修改工作区或创建本地 commit，不会自动创建 tag、push 或发布 Release。
+
+### Release 资产命名
+
+Release 中区分两类资产：
+
+| 类型 | 命名规范 | 示例 |
+|---|---|---|
+| 桌面安装包 | `Agentero_<version>_<arch>.<format>` | `Agentero_0.3.2_aarch64.dmg` |
+| CLI 归档 | `agentero-cli-<version>-<rust-host>.<archive>` | `agentero-cli-0.3.2-aarch64-apple-darwin.tar.gz` |
+| CLI 校验文件 | `<CLI 归档文件名>.sha256` | `agentero-cli-0.3.2-aarch64-apple-darwin.tar.gz.sha256` |
+
+CLI 的 `<rust-host>` 来自发布 runner 上 `rustc -vV` 的 `host` 字段，不由工作流手写映射。例如：
+
+- `aarch64-apple-darwin`：Apple Silicon macOS；
+- `x86_64-unknown-linux-gnu`：x86_64 Linux；
+- `aarch64-unknown-linux-gnu`：ARM64 Linux；
+- `x86_64-pc-windows-msvc`：Windows MSVC。
+
+CLI 压缩包内部统一包含名为 `agentero`（Windows 为 `agentero.exe`）的可执行文件；外部归档名使用 `agentero-cli-` 前缀，避免与桌面安装包混淆。
 
 ### 应用内更新签名
 

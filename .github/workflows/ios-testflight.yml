@@ -17,16 +17,54 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify iOS signing configuration
+      - name: Check iOS signing configuration
+        id: signing-config
         env:
           IOS_CERTIFICATE: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for VAR in IOS_CERTIFICATE IOS_CERTIFICATE_PASSWORD IOS_MOBILE_PROVISION APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_ISSUER; do
+            if [[ -z "${!VAR:-}" ]]; then
+              missing+=("$VAR")
+            fi
+          done
+          if [[ -z "${APPLE_TEAM_ID:-}" && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            missing+=("APPLE_TEAM_ID or APPLE_SIGNING_IDENTITY")
+          fi
+
+          if ((${#missing[@]} > 0)); then
+            echo "iOS TestFlight signing is not configured; missing: ${missing[*]}"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+              echo "::error::Manual TestFlight builds require all signing secrets"
+            else
+              echo "::warning::Skipping automatic TestFlight build because signing secrets are not configured"
+            fi
+            exit 0
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify iOS signing configuration
+        if: steps.signing-config.outputs.ready == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          IOS_CERTIFICATE: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           set -euo pipefail
-          for VAR in IOS_CERTIFICATE IOS_MOBILE_PROVISION APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_ISSUER; do
+          for VAR in IOS_CERTIFICATE IOS_CERTIFICATE_PASSWORD IOS_MOBILE_PROVISION APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_ISSUER; do
             if [[ -z "${!VAR:-}" ]]; then
               echo "::error::Missing secret for ${VAR}; cannot sign or upload a TestFlight build"
               exit 1
@@ -34,28 +72,34 @@ jobs:
           done
 
       - name: Setup pnpm
+        if: steps.signing-config.outputs.ready == 'true'
         uses: pnpm/action-setup@v4
         with:
           run_install: false
 
       - name: Setup Node.js
+        if: steps.signing-config.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
 
       - name: Setup Rust
+        if: steps.signing-config.outputs.ready == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
 
       - name: Install frontend dependencies
+        if: steps.signing-config.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: iOS release preflight
+        if: steps.signing-config.outputs.ready == 'true'
         run: pnpm ios:release:check
 
       - name: Resolve Apple development team
+        if: steps.signing-config.outputs.ready == 'true'
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -73,6 +117,7 @@ jobs:
           echo "APPLE_DEVELOPMENT_TEAM=${TEAM}" >> "$GITHUB_ENV"
 
       - name: Build signed IPA
+        if: steps.signing-config.outputs.ready == 'true'
         env:
           # Tauri CLI imports the certificate into a temp keychain and installs
           # the provisioning profile when these are present on CI.
@@ -91,6 +136,7 @@ jobs:
             --export-method app-store-connect
 
       - name: Upload to App Store Connect
+        if: steps.signing-config.outputs.ready == 'true'
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
