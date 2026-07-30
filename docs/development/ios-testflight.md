@@ -1,5 +1,24 @@
 # iOS TestFlight Release
 
+## GitHub Actions (recommended)
+
+`.github/workflows/ios-testflight.yml` builds a signed IPA and uploads it to
+App Store Connect. It runs on `v*` tag pushes (alongside the desktop Release
+workflow) and can be triggered manually from the Actions tab.
+
+Required secrets (org or repo level):
+
+| Secret | Content |
+|---|---|
+| `APPLE_DISTRIBUTION_CERTIFICATE` | Apple Distribution `.p12`, base64 |
+| `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD` | `.p12` export password |
+| `IOS_MOBILE_PROVISION` | App Store provisioning profile, base64 |
+| `APPLE_API_KEY` / `APPLE_API_KEY_P8` / `APPLE_API_ISSUER` | App Store Connect API key (shared with the macOS notarization flow) |
+| `APPLE_TEAM_ID` or `APPLE_SIGNING_IDENTITY` | Team ID, or an identity string ending in `(TEAMID)` |
+
+The build number is a `yymmddHHMM` timestamp, so each run produces a strictly
+increasing build for the same version.
+
 ## New Machine Setup
 
 iOS builds require macOS, Xcode, Node.js, pnpm, and the stable Rust toolchain.

@@ -1,0 +1,115 @@
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-upload:
+    name: Build and upload to TestFlight
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify iOS signing configuration
+        env:
+          IOS_CERTIFICATE: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          for VAR in IOS_CERTIFICATE IOS_MOBILE_PROVISION APPLE_API_KEY APPLE_API_KEY_P8 APPLE_API_ISSUER; do
+            if [[ -z "${!VAR:-}" ]]; then
+              echo "::error::Missing secret for ${VAR}; cannot sign or upload a TestFlight build"
+              exit 1
+            fi
+          done
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: iOS release preflight
+        run: pnpm ios:release:check
+
+      - name: Resolve Apple development team
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          TEAM="${APPLE_TEAM_ID:-}"
+          if [[ -z "$TEAM" && "$APPLE_SIGNING_IDENTITY" =~ \(([A-Z0-9]{10})\)$ ]]; then
+            TEAM="${BASH_REMATCH[1]}"
+            echo "Derived team from APPLE_SIGNING_IDENTITY"
+          fi
+          if [[ -z "$TEAM" ]]; then
+            echo "::error::Cannot resolve team ID; set APPLE_TEAM_ID or APPLE_SIGNING_IDENTITY"
+            exit 1
+          fi
+          echo "APPLE_DEVELOPMENT_TEAM=${TEAM}" >> "$GITHUB_ENV"
+
+      - name: Build signed IPA
+        env:
+          # Tauri CLI imports the certificate into a temp keychain and installs
+          # the provisioning profile when these are present on CI.
+          IOS_CERTIFICATE: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+        run: |
+          set -euo pipefail
+          # Two-digit year keeps the build number within u32 (see ios-testflight.md).
+          BUILD_NUMBER="$(date +%y%m%d%H%M)"
+          echo "Build number: ${BUILD_NUMBER}"
+          pnpm tauri ios build \
+            --config src-tauri/tauri.ios.conf.json \
+            --target aarch64 \
+            --build-number "${BUILD_NUMBER}" \
+            --export-method app-store-connect
+
+      - name: Upload to App Store Connect
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          IPA="src-tauri/gen/apple/build/arm64/Agentero.ipa"
+          if [[ ! -f "$IPA" ]]; then
+            echo "::error::IPA not found at ${IPA}"
+            exit 1
+          fi
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          KEY_PATH="${KEY_DIR}/AuthKey_${APPLE_API_KEY}.p8"
+          if [[ "$APPLE_API_KEY_P8" == -----BEGIN* ]]; then
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
+          else
+            echo "$APPLE_API_KEY_P8" | base64 --decode > "$KEY_PATH"
+          fi
+          chmod 600 "$KEY_PATH"
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
