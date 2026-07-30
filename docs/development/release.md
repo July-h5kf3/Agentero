@@ -153,7 +153,7 @@ Apple 不仅检查 App 能否安装，还会关注 iPad 上的实际体验。建
 
 如果 App 有以下情况，应在审核备注中主动说明：
 
-- 测试账号、密码、验证码或演示模式进入方式。
+- 测试账号、密码、验证码或演示模式进入方式（**仅当应用确实需要登录时**）。
 - 需要扫码、特定硬件、特定地区或特定网络环境的功能。
 - 付费功能、订阅、App 内购买的测试方式。
 - 非显而易见的功能入口。
@@ -161,6 +161,13 @@ Apple 不仅检查 App 能否安装，还会关注 iPad 上的实际体验。建
 - 使用相机、麦克风、定位、蓝牙、健康数据等敏感权限的原因。
 
 Apple 要求审核人员能够完整访问和验证 App 的核心功能。后端服务在审核期间也必须保持在线。
+
+**Agentero iOS 特有约定（无登录）：**
+
+- **Sign-in required = No**，演示账号留空；不要为过审单独做假登录页或「输入测试网站账号」流程。
+- 核心能力依赖桌面端配对：在 **App Review Notes** 中写清扫码 / 粘贴配对链接步骤，并保证中继与（可选）演示桌面在审核窗口可用。
+- 可复制的元数据与 Notes 全文见 [ios-testflight.md](ios-testflight.md) 的
+  [Beta review: no login, no fake test page](ios-testflight.md#beta-review-no-login-no-fake-test-page)。
 
 ## 4. iPad 商店截图要求
 

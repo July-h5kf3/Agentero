@@ -14,6 +14,7 @@
 | [roadmap.md](roadmap.md) | 自 **0.2.1** 起的未来版本切片（无已实现清单） |
 | [todo.md](todo.md) | **仅未完成** backlog（按 0.3 / 0.4… 分组） |
 | [release.md](release.md) | bump / tag / Release |
+| [ios-testflight.md](ios-testflight.md) | iOS TestFlight / App Store Connect 元数据与审核说明（无登录、配对 Notes） |
 | [bug.md](bug.md) | 已知问题语料（精简） |
 
 ## 未实现草稿

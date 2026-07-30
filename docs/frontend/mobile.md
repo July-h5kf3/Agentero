@@ -423,7 +423,9 @@ pnpm tauri ios build
 ```
 
 TestFlight 的签名、构建号和上传流程见
-[iOS TestFlight Release](../development/ios-testflight.md)。
+[iOS TestFlight Release](../development/ios-testflight.md)。应用无账号、不需要演示登录页；
+审核侧填 **Sign-in required = No**，用 **App Review Notes** 说明如何与桌面端配对
+（见该文档 [Beta review: no login, no fake test page](../development/ios-testflight.md#beta-review-no-login-no-fake-test-page)）。
 
 ## 相关文档
 

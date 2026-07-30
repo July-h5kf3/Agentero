@@ -102,8 +102,9 @@ not upload it as part of the selected export flow.
 - Complete export-compliance questions. Agentero uses standard TLS plus
   X25519/XSalsa20-Poly1305 and Ed25519 for the remote pairing protocol; do not
   claim the build is exempt without confirming the App Store Connect answers.
-- Provide test credentials or an App Review note explaining how to pair an iOS
-  device with the desktop Host at `relay.philfan.cn`.
+- Fill **App Review Information** per
+  [Beta review: no login, no fake test page](#beta-review-no-login-no-fake-test-page)
+  (Sign-in required = No; paste pairing Notes; no demo username/password).
 - Add beta review contact information and test iPhone and iPad builds before
   inviting external testers.
 
@@ -112,6 +113,70 @@ requires a privacy policy URL and accurate app privacy disclosures. See
 [camera usage description](https://developer.apple.com/documentation/bundleresources/information-property-list/nscamerausagedescription),
 [app privacy](https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/),
 and [upload builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/).
+
+## Beta review: no login, no fake test page
+
+Agentero iOS has **no accounts and no in-app sign-in**. Do not invent a login
+screen, a “reviewer password”, or a website where Apple must enter credentials
+just to pass review. That is the wrong fix for a no-account app.
+
+### What to put in App Store Connect
+
+| Field | Value |
+|---|---|
+| **Sign-in required** | **No** |
+| **Demo account (username / password)** | **None** — leave blank |
+| **App Review Notes** | **Required** — how to pair with a desktop Host (English block below) |
+| **Contact email / phone** | Real contact during Beta and full App Review |
+
+A **TestFlight invite link** (for human testers) is unrelated to “demo login”.
+Internal testers need the invite; Apple reviewers need Notes, not a fake login
+URL.
+
+### Why Notes matter (not a test login page)
+
+The iOS app is a **remote client**: without a paired desktop Vault it stays on
+the Connect screen by design. Reviewers care whether they can reach Library /
+PDF / Notes / Agent — not whether a username exists.
+
+Provide **App Review Notes** that explain:
+
+1. Install desktop Agentero and open a Vault
+   (`https://agentero.poco-ai.com`).
+2. Enable Bridge (Settings → Remote Access → Start); keep the QR / 6-digit
+   code visible.
+3. On iOS: Scan QR, or paste a pairing link (`agentero://pair#offer=...`).
+4. Confirm the code; then exercise Library → PDF / Notes → Agent over
+   `wss://relay.philfan.cn`.
+
+Paste the full English **App Review notes** block under
+[App Store Connect Metadata](#app-store-connect-metadata). Keep the same
+English Notes for every localization.
+
+### Optional: help reviewers finish pairing
+
+If you worry reviewers have no desktop:
+
+- Keep a **demo desktop + Bridge** online during review, and put contact info
+  in App Review Information so they can schedule pairing help; and/or
+- Offer a **time-limited pairing link** (revocable) in Notes, with step-by-step
+  paste instructions.
+
+Still **not** a fake in-app login page. A later product choice of a limited
+**offline demo vault** (read-only sample content without desktop) is optional
+and separate — only consider it if review fails under Guideline 2.1 because
+core flows cannot be verified without pairing.
+
+### TestFlight vs App Store review
+
+| Stage | Apple review of the build? | Demo account? | What you prepare |
+|---|---|---|---|
+| **Internal TestFlight** | No (same developer team) | No | Invite internal testers; smoke-test Connect → Library → PDF/Notes → Agent |
+| **External TestFlight** | Yes (Beta App Review) | No | Same Sign-in = No + pairing Notes; beta contact info |
+| **App Store version** | Yes (full App Review) | No | Same fields + privacy, screenshots, export compliance, etc. |
+
+Ensure `relay.philfan.cn` (or the relay named in Notes) is up for the whole
+review window.
 
 ## App Store Connect Metadata
 
@@ -197,8 +262,9 @@ research,vault,papers,PDF,notes,agent,markdown,obsidian,bibliography,academic
 **Privacy policy URL:** `https://agentero.poco-ai.com/privacy/` (must
 exist before the version can be submitted for review).
 
-**Sign-in required:** No
-**Demo account:** None
+**Sign-in required:** No  
+**Demo account:** None (leave username and password empty — the app has no
+login; do not create a dummy account form for review)
 
 **App Review notes (paste verbatim):**
 
@@ -355,7 +421,11 @@ Notes → Agent chat) before the public App Store submission.
 - [ ] App Privacy questionnaire completed (all 14 categories →
       "Data Not Collected").
 - [ ] Export compliance answered as exempt under Category 5 Part 2.
-- [ ] App Review notes field filled with the English block above.
+- [ ] **Sign-in required = No**; demo username/password left empty
+      (no fake login or “test website login” for review).
+- [ ] App Review notes field filled with the English pairing block above.
+- [ ] Review contact email/phone filled; relay reachable for the review window
+      (optional: demo desktop or revocable pairing link if reviewers need help).
 - [ ] `ios-testflight.yml` GitHub Actions run produced the uploaded
       build (or the local `bash scripts/ios-testflight.sh` produced it
       with a matching build number).
