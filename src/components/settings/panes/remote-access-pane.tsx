@@ -147,21 +147,31 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 				title={t("remoteAccess.title")}
 				actions={
 					unavailable ? undefined : (
-						<Button
-							type="button"
-							size="sm"
-							onClick={status?.enabled ? stop : start}
-							disabled={busy}
-						>
-							{busy ? (
-								<LoaderCircle className="size-4 animate-spin" />
-							) : (
-								<Power className="size-4" />
-							)}
-							{status?.enabled
-								? t("remoteAccess.stop")
-								: t("remoteAccess.start")}
-						</Button>
+						<div className="flex items-center gap-3">
+							<span className="flex items-center gap-2 text-muted-foreground text-xs">
+								<span
+									className={`size-2 rounded-full ${status?.online ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
+								/>
+								{status?.online
+									? t("remoteAccess.status.online")
+									: t("remoteAccess.status.offline")}
+							</span>
+							<Button
+								type="button"
+								size="sm"
+								onClick={status?.enabled ? stop : start}
+								disabled={busy}
+							>
+								{busy ? (
+									<LoaderCircle className="size-4 animate-spin" />
+								) : (
+									<Power className="size-4" />
+								)}
+								{status?.enabled
+									? t("remoteAccess.stop")
+									: t("remoteAccess.start")}
+							</Button>
+						</div>
 					)
 				}
 			/>
@@ -183,16 +193,6 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 								disabled={status?.enabled}
 								className="h-8 w-44"
 							/>
-						</SettingsRow>
-						<SettingsRow label={t("remoteAccess.status.label")}>
-							<span className="flex items-center gap-2 text-xs">
-								<span
-									className={`size-2 rounded-full ${status?.online ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
-								/>
-								{status?.online
-									? t("remoteAccess.status.online")
-									: t("remoteAccess.status.offline")}
-							</span>
 						</SettingsRow>
 					</SettingsGroup>
 					{status?.lastError ? (
