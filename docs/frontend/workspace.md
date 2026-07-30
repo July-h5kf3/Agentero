@@ -14,6 +14,7 @@
 | 关 panel | dockview X → `closeTab`；焦点 `onDidActivePanelChange` |
 | 循环 | `⌥⌘←/→` 按 `api.panels` **视觉序** |
 | NOTES 开关 | Layout 菜单 / 快捷键；优先叠右列 |
+| 打开笔记 | 论文 tab 右键 /文件树论文行右键 → NOTES 进右侧阅读列（已开则聚焦） |
 | 关光文档 | 回到全库 Library panel |
 
 标签组 chip 的颜色菜单会将展开/收起 icon 染为对应颜色，并同步用于组内 tab 的强调线；清除颜色后恢复默认颜色。

@@ -41,6 +41,7 @@ import {
 	handleActivePanelChange,
 	hydratePlaceholderTabs,
 	openTab,
+	openTabNotes,
 	persistFile,
 } from "@/lib/workspace/actions";
 import { registerDockHandle } from "@/lib/workspace/dock-registry";
@@ -239,6 +240,7 @@ export function WorkspaceHost() {
 			onClosePanel={closeTab}
 			onLayoutChange={setDockLayout}
 			onToggleHtmlMode={toggleTabHtmlMode}
+			onOpenNotesPanel={openTabNotes}
 			onExternalDrop={handleWorkspaceDrop}
 		/>
 	);

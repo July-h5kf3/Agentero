@@ -416,6 +416,44 @@ export function toggleNotesSplit(): void {
 	setActiveTabId(notesPane.id);
 }
 
+/** Open (or focus) the NOTES.md panel of a paper body tab (tab context menu). */
+export function openTabNotes(tabId: string): void {
+	const target = getTabs().find((t) => t.id === tabId);
+	if (!target?.notesPath || !tabNotesEligible(target)) return;
+	const notesId = tabIdForPath(target.notesPath);
+	if (tabHasNotesSplit(getTabs(), target)) {
+		dockHandle()?.activatePanel(notesId);
+		setActiveTabId(notesId);
+		return;
+	}
+	const notesPane = createNotesSplitPane(target);
+	if (!notesPane) return;
+	// Stack into the notes column when one exists; else first right split.
+	const { notes: notesPlacement } = paperReadingPlacements(getTabs(), {
+		paperId: target.id,
+		notesId: notesPane.id,
+		activeId: getActiveTabId(),
+	});
+	setTabs((prev) => {
+		if (prev.some((t) => t.id === notesPane.id)) return prev;
+		return [...prev, notesPane];
+	});
+	dockHandle()?.openPanel(notesPane, notesPlacement);
+	setActiveTabId(notesPane.id);
+}
+
+/** File-tree "Open notes": reading layout with NOTES in the right column. */
+export function openPaperNotes(paperDir: string): void {
+	const abs = paperDir.replace(/\\/g, "/").replace(/\/+$/, "");
+	const existing = getTabs().find((t) => t.id === tabIdForPath(abs));
+	if (existing && tabNotesEligible(existing)) {
+		setTreeSelectedPath(abs);
+		openTabNotes(existing.id);
+		return;
+	}
+	openPaper(abs);
+}
+
 /** Open a paper folder in a tab: center PDF, right Notes (resolved on load).
  *  Also selects/reveals the paper in the left file tree. */
 export function openPaper(paperDir: string): void {

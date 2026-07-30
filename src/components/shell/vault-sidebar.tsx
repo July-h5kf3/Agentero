@@ -54,6 +54,7 @@ import {
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { loadDirChildren } from "@/lib/vault/store";
 import {
+	openPaperNotes,
 	selectFileNode,
 	selectLibrary,
 	selectTrash,
@@ -165,6 +166,7 @@ export function VaultSidebar() {
 					paperTreeLabelMode={paperTreeLabelMode}
 					paperTreeSortMode={paperTreeSortMode}
 					onReadPaper={readPaper}
+					onOpenPaperNotes={openPaperNotes}
 					onLoadDirChildren={loadDirChildren}
 				/>
 			</div>

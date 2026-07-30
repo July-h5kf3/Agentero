@@ -337,6 +337,8 @@ type FileTreeProps = {
 	paperTreeSortMode?: PaperTreeSortMode;
 	/** Start paper-reader workflow for a paper folder with complete local assets. */
 	onReadPaper?: (paperNode: FileNode) => Promise<void>;
+	/** Paper row context menu: open the paper's NOTES.md in the reading split. */
+	onOpenPaperNotes?: (paperDir: string) => void;
 	/** Delete a real tree path (file / folder / paper). Parent confirms + performs IO. */
 	onDeletePath?: (path: string) => void | Promise<void>;
 	/** Batch delete multiple real tree paths (one confirm). */
@@ -401,6 +403,7 @@ export const FileTree = memo(
 			paperTreeLabelMode = "title-author",
 			paperTreeSortMode = "folder",
 			onReadPaper,
+			onOpenPaperNotes,
 			onDeletePath,
 			onDeletePaths,
 			onRenamePath,
@@ -1315,6 +1318,16 @@ export const FileTree = memo(
 		}, [contextMenu, t]);
 
 		const menuCount = contextMenu ? menuTargets(contextMenu.path).length : 1;
+		const menuNode = contextMenu ? byPath.get(contextMenu.path) : undefined;
+		const isPaperMenu =
+			menuNode?.kind === "directory" &&
+			isPaperDirectory(menuNode.path, menuNode.children);
+		const handleOpenNotesFromMenu = useCallback(() => {
+			if (!contextMenu || !onOpenPaperNotes) return;
+			const path = contextMenu.path;
+			setContextMenu(null);
+			onOpenPaperNotes(path);
+		}, [contextMenu, onOpenPaperNotes]);
 		const isTrashMenu = contextMenu?.path === TRASH_VIRTUAL_PATH;
 		const isLibraryMenu = contextMenu?.path === LIBRARY_VIRTUAL_PATH;
 		const contextMenuPortal = contextMenu ? (
@@ -1362,6 +1375,16 @@ export const FileTree = memo(
 					) : null
 				) : (
 					<>
+						{menuCount === 1 && isPaperMenu && onOpenPaperNotes ? (
+							<button
+								type="button"
+								role="menuitem"
+								className="flex w-full cursor-default items-center gap-4 rounded-md px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+								onClick={handleOpenNotesFromMenu}
+							>
+								<span>{t("fileTree.openNotes")}</span>
+							</button>
+						) : null}
 						{menuCount === 1 && onStartCreate ? (
 							<button
 								type="button"

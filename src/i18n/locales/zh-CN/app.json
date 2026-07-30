@@ -87,6 +87,7 @@
 		"showPdf": "显示 PDF 版本",
 		"closeSplit": "关闭分屏 · {{title}}",
 		"contextClose": "关闭",
+		"contextOpenNotes": "打开笔记",
 		"contextCloseOthers": "关闭其他",
 		"contextCloseAll": "关闭全部",
 		"contextCreateTabGroup": "新建标签组",

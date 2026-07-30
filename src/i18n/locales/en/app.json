@@ -87,6 +87,7 @@
 		"showPdf": "Show PDF version",
 		"closeSplit": "Close split · {{title}}",
 		"contextClose": "Close",
+		"contextOpenNotes": "Open Notes",
 		"contextCloseOthers": "Close Others",
 		"contextCloseAll": "Close All",
 		"contextCreateTabGroup": "New Tab Group",

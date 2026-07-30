@@ -57,6 +57,7 @@ import {
 	type OpenPlacement,
 	panelPersistParams,
 	type SplitDirection,
+	tabNotesEligible,
 } from "@/lib/workspace/tabs";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
 
@@ -373,6 +374,8 @@ type DockWorkspaceProps = {
 	onLayoutChange: (layout: unknown) => void;
 	/** Switch an HTML-backed paper panel between its PDF and HTML views. */
 	onToggleHtmlMode: (panelId: string) => void;
+	/** Tab context menu: open the NOTES.md companion of a paper body panel. */
+	onOpenNotesPanel?: (panelId: string) => void;
 	/** File-tree path drop into a split zone (title-bar tabs gone — only paths). */
 	onExternalDrop: (drop: WorkspaceExternalDrop) => void;
 	className?: string;
@@ -399,6 +402,7 @@ export const DockWorkspace = memo(
 			onClosePanel,
 			onLayoutChange,
 			onToggleHtmlMode,
+			onOpenNotesPanel,
 			onExternalDrop,
 			className,
 		},
@@ -422,6 +426,8 @@ export const DockWorkspace = memo(
 		onLayoutRef.current = onLayoutChange;
 		const onToggleHtmlRef = useRef(onToggleHtmlMode);
 		onToggleHtmlRef.current = onToggleHtmlMode;
+		const onOpenNotesRef = useRef(onOpenNotesPanel);
+		onOpenNotesRef.current = onOpenNotesPanel;
 		const onDropRef = useRef(onExternalDrop);
 		onDropRef.current = onExternalDrop;
 
@@ -702,10 +708,21 @@ export const DockWorkspace = memo(
 					groupId: group.id,
 					panelId: panel.id,
 				});
+				const tab = tabsRef.current.find((t) => t.id === panel.id) ?? null;
 				const menu: Array<
 					| "separator"
 					| { label: string; disabled?: boolean; action: () => void }
-				> = [
+				> = [];
+				if (onOpenNotesRef.current && tabNotesEligible(tab) && tab?.notesPath) {
+					menu.push(
+						{
+							label: t("tabs.contextOpenNotes"),
+							action: () => onOpenNotesRef.current?.(panel.id),
+						},
+						"separator",
+					);
+				}
+				menu.push(
 					{
 						label: t("tabs.contextClose"),
 						action: () => panel.api.close(),
@@ -728,7 +745,7 @@ export const DockWorkspace = memo(
 						},
 					},
 					"separator",
-				];
+				);
 
 				if (existing) {
 					menu.push({
