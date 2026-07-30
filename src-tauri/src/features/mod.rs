@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod arxiv_proxy;
+pub mod bridge;
 pub mod catalog;
 pub mod connector;
 pub mod import;

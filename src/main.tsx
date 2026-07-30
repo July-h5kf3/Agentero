@@ -8,7 +8,7 @@ import { PdfEngineHost } from "@/components/viewer/embed/engine-provider";
 import { initLogger, logger } from "@/lib/core/logger";
 import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
-import { isTauri } from "@/lib/core/tauri";
+import { isAppleMobile, isTauri } from "@/lib/core/tauri";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
@@ -69,7 +69,9 @@ async function boot() {
 
 	// Lazy-load the full app so the settings window (which returns above) never
 	// downloads/parses the heavyweight workspace bundle.
-	const { default: App } = await import("./App");
+	const { default: App } = await import(
+		isAppleMobile() ? "./components/mobile/mobile-app" : "./App"
+	);
 	ReactDOM.createRoot(root).render(
 		<React.StrictMode>
 			<I18nextProvider i18n={i18n}>
