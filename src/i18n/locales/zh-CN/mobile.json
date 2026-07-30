@@ -1,5 +1,6 @@
 {
 	"tabs": {
+		"navigation": "主导航",
 		"library": "论文库",
 		"agent": "Agent",
 		"settings": "设置"
@@ -36,6 +37,7 @@
 		"placeholder": "向 Agent 提问",
 		"send": "发送",
 		"empty": "开始一段对话",
+		"thinking": "思考中...",
 		"failed": "桌面 Agent 未能完成此请求。",
 		"history": "历史会话",
 		"historyEmpty": "暂无历史会话",
@@ -44,6 +46,8 @@
 	},
 	"settings": {
 		"title": "连接",
+		"menu": "打开菜单",
+		"closeMenu": "关闭菜单",
 		"connected": "已连接",
 		"offline": "离线",
 		"addDesktop": "连接另一台电脑",

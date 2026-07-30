@@ -8,6 +8,8 @@ export function MobileHeader({
 	status,
 	statusLabel,
 	brand,
+	brandButtonLabel,
+	onBrandClick,
 	leading,
 	trailing,
 }: {
@@ -15,6 +17,8 @@ export function MobileHeader({
 	status: BridgeClientStatus;
 	statusLabel: string;
 	brand: ReactNode;
+	brandButtonLabel?: string;
+	onBrandClick?: () => void;
 	leading?: ReactNode;
 	trailing?: ReactNode;
 }) {
@@ -22,7 +26,20 @@ export function MobileHeader({
 		<header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-3 md:px-6">
 			{leading}
 			<div className="flex min-w-0 flex-1 items-center gap-2">
-				<div className="md:hidden">{brand}</div>
+				<div className="md:hidden">
+					{onBrandClick ? (
+						<button
+							type="button"
+							className="rounded-md outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring active:opacity-70"
+							aria-label={brandButtonLabel}
+							onClick={onBrandClick}
+						>
+							{brand}
+						</button>
+					) : (
+						brand
+					)}
+				</div>
 				<span className="truncate font-semibold text-sm">{title}</span>
 				<Circle
 					className={cn(

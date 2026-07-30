@@ -3,7 +3,6 @@ import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
 	ArrowLeft,
 	BookOpen,
-	Bot,
 	Camera,
 	ChevronRight,
 	Circle,
@@ -11,13 +10,8 @@ import {
 	History,
 	Keyboard,
 	Laptop,
-	Library,
 	LoaderCircle,
-	LogOut,
 	Search,
-	Send,
-	Settings2,
-	WifiOff,
 	X,
 } from "lucide-react";
 import { nanoid } from "nanoid";
@@ -25,6 +19,7 @@ import {
 	lazy,
 	type ReactNode,
 	Suspense,
+	type TouchEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -33,10 +28,29 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import agenteroLogo from "@/assets/agentero-logo.svg";
+import {
+	Conversation,
+	ConversationContent,
+	ConversationEmptyState,
+	ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+	Message,
+	MessageContent,
+	MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+	PromptInput,
+	PromptInputBody,
+	PromptInputSubmit,
+	PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { MobileHeader as MobileHeaderPage } from "@/components/mobile/mobile-header";
 import { MobileLibraryPage } from "@/components/mobile/mobile-library-page";
+import { MobileNav, type MobileTab } from "@/components/mobile/mobile-nav";
 import { MobileReaderPage } from "@/components/mobile/mobile-reader-page";
-import { MobileSettingsPage } from "@/components/mobile/mobile-settings-page";
+import { MobileSidebar } from "@/components/mobile/mobile-sidebar";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -52,7 +66,6 @@ import { displayHistoryTitle } from "@/lib/agent/prompt-display";
 import {
 	type BridgeClientStatus,
 	bridgeConnect,
-	bridgeDisconnect,
 	bridgeResume,
 	bridgeRpc,
 	bridgeStatus,
@@ -66,23 +79,16 @@ import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper/types";
 
-type MobileTab = "library" | "agent" | "settings";
-
 const MobilePdfViewer = lazy(() =>
 	import("@/components/viewer/embed/pdf-viewer").then((module) => ({
 		default: module.PdfViewer,
 	})),
 );
 
-const TABS: Array<{ id: MobileTab; icon: typeof Library }> = [
-	{ id: "library", icon: Library },
-	{ id: "agent", icon: Bot },
-	{ id: "settings", icon: Settings2 },
-];
-
 export default function MobileApp() {
 	const { t } = useTranslation("mobile");
 	const [tab, setTab] = useState<MobileTab>("library");
+	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [pairingRequested, setPairingRequested] = useState(false);
 	const [pendingOffer, setPendingOffer] = useState<string | null>(null);
 	const [status, setStatus] = useState<BridgeClientStatus>({
@@ -95,6 +101,35 @@ export default function MobileApp() {
 	);
 	const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
 	const [pairPending, setPairPending] = useState<PairPendingEvent | null>(null);
+	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+	const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+		const touch = event.touches[0];
+		if (touch && !sidebarOpen) {
+			touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+		}
+	};
+
+	const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
+		const start = touchStartRef.current;
+		touchStartRef.current = null;
+		if (!start || sidebarOpen) return;
+		const touch = event.changedTouches[0];
+		if (!touch) return;
+		const deltaX = touch.clientX - start.x;
+		const deltaY = Math.abs(touch.clientY - start.y);
+		if (deltaX > 60 && deltaX > deltaY * 1.25 && start.x <= 32) {
+			setSidebarOpen(true);
+			return;
+		}
+		if (deltaX < -60 && -deltaX > deltaY * 1.25 && tab === "library") {
+			setTab("agent");
+			return;
+		}
+		if (deltaX > 60 && deltaX > deltaY * 1.25 && tab === "agent") {
+			setTab("library");
+		}
+	};
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -168,12 +203,16 @@ export default function MobileApp() {
 	}
 
 	return (
-		<div className="mobile-shell flex min-h-dvh bg-background text-foreground">
+		<div
+			className="mobile-shell flex min-h-dvh bg-background text-foreground"
+			onTouchStart={handleTouchStart}
+			onTouchEnd={handleTouchEnd}
+		>
 			<aside className="hidden w-20 shrink-0 flex-col items-center border-r bg-muted/25 py-6 md:flex">
 				<MobileBrand />
-				<MobileNav tab={tab} onTab={setTab} vertical />
+				<MobileNav tab={tab} onTab={setTab} />
 			</aside>
-			<main className="flex min-h-dvh min-w-0 flex-1 flex-col pb-20 md:pb-0">
+			<main className="flex min-h-dvh min-w-0 flex-1 flex-col">
 				<MobileHeaderPage
 					title={
 						tab === "library" && selectedPaper
@@ -185,6 +224,8 @@ export default function MobileApp() {
 						status.connected ? t("settings.connected") : t("settings.offline")
 					}
 					brand={<MobileBrand />}
+					brandButtonLabel={t("settings.menu")}
+					onBrandClick={() => setSidebarOpen(true)}
 					leading={
 						tab === "library" && selectedPaper ? (
 							<Button
@@ -232,21 +273,23 @@ export default function MobileApp() {
 							onSessionId={setAgentSessionId}
 						/>
 					) : null}
-					{tab === "settings" ? (
-						<MobileSettingsPage
-							status={status}
-							onStatus={setStatus}
-							onPairAnother={() => {
-								setPendingOffer(null);
-								setPairingRequested(true);
-							}}
-						/>
-					) : null}
 				</div>
 			</main>
-			<nav className="fixed right-0 bottom-0 left-0 z-20 border-t bg-background/95 px-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
-				<MobileNav tab={tab} onTab={setTab} />
-			</nav>
+			<MobileSidebar
+				open={sidebarOpen}
+				tab={tab}
+				status={status}
+				onTab={(nextTab) => {
+					setTab(nextTab);
+					setSidebarOpen(false);
+				}}
+				onClose={() => setSidebarOpen(false)}
+				onStatus={setStatus}
+				onPairAnother={() => {
+					setPendingOffer(null);
+					setPairingRequested(true);
+				}}
+			/>
 		</div>
 	);
 }
@@ -300,44 +343,6 @@ function isPairOfferUrl(value: string): boolean {
 
 function MobileBrand() {
 	return <img src={agenteroLogo} alt="Agentero" className="size-8" />;
-}
-
-function MobileNav({
-	tab,
-	onTab,
-	vertical = false,
-}: {
-	tab: MobileTab;
-	onTab: (tab: MobileTab) => void;
-	vertical?: boolean;
-}) {
-	const { t } = useTranslation("mobile");
-	return (
-		<div
-			className={cn(
-				"flex gap-1",
-				vertical ? "mt-10 flex-col" : "justify-around",
-			)}
-		>
-			{TABS.map(({ id, icon: Icon }) => (
-				<button
-					key={id}
-					type="button"
-					onClick={() => onTab(id)}
-					className={cn(
-						"flex items-center justify-center gap-1.5 px-3 py-2 text-xs outline-none transition-colors",
-						vertical ? "size-10 px-0" : "min-w-14 flex-1 flex-col py-1",
-						tab === id ? "text-foreground" : "text-muted-foreground",
-					)}
-					aria-label={t(`tabs.${id}`)}
-					aria-current={tab === id ? "page" : undefined}
-				>
-					<Icon className="size-5" />
-					{vertical ? null : <span>{t(`tabs.${id}`)}</span>}
-				</button>
-			))}
-		</div>
-	);
 }
 
 function MobilePairing({
@@ -862,7 +867,6 @@ function MobileAgent({
 	onSessionId: (sessionId: string | null) => void;
 }) {
 	const { t } = useTranslation("mobile");
-	const [text, setText] = useState("");
 	const [lines, setLines] = useState<AgentLine[]>([]);
 	const [sending, setSending] = useState(false);
 	const [restoring, setRestoring] = useState(false);
@@ -1004,14 +1008,13 @@ function MobileAgent({
 		});
 	};
 
-	const send = async () => {
-		const next = text.trim();
+	const send = async (value: string) => {
+		const next = value.trim();
 		if (!next || sending) return;
 		setLines((previous) => [
 			...previous,
 			{ id: nanoid(), role: "user", text: next },
 		]);
-		setText("");
 		setSending(true);
 		try {
 			const accepted = await bridgeRpc<{ sessionId: string }>(
@@ -1038,55 +1041,73 @@ function MobileAgent({
 	return (
 		<>
 			<section className="flex h-full min-h-0 flex-col">
-				<div className="agentero-scroll flex-1 px-4 py-5 md:px-6">
-					{restoring ? (
-						<p className="mb-3 flex items-center gap-2 text-muted-foreground text-sm">
-							<LoaderCircle className="size-4 animate-spin" />
-							{t("agent.restoring")}
-						</p>
-					) : null}
-					{lines.length === 0 && !restoring ? (
-						<p className="text-muted-foreground text-sm">{t("agent.empty")}</p>
-					) : (
-						<div className="space-y-3">
-							{lines.map((line) => (
-								<div
-									key={line.id}
-									className={cn(
-										"max-w-[85%] border px-3 py-2 text-sm",
-										line.role === "user"
-											? "ml-auto bg-muted"
-											: "mr-auto bg-background",
-									)}
-								>
-									{line.text}
-								</div>
-							))}
-						</div>
-					)}
-				</div>
-				<footer className="flex gap-2 border-t p-3 md:px-6">
-					<Textarea
-						value={text}
-						onChange={(event) => setText(event.target.value)}
-						enterKeyHint="enter"
-						rows={1}
-						className="min-h-10 resize-none py-2"
-						placeholder={t("agent.placeholder")}
-					/>
-					<Button
-						size="icon"
-						aria-label={t("agent.send")}
-						disabled={sending || !text.trim()}
-						onClick={() => void send()}
-					>
-						{sending ? (
-							<LoaderCircle className="size-4 animate-spin" />
+				<Conversation className="min-h-0 flex-1">
+					<ConversationContent className="gap-4 px-4 py-5 md:px-6">
+						{restoring ? (
+							<p className="mb-3 flex items-center gap-2 text-muted-foreground text-sm">
+								<LoaderCircle className="size-4 animate-spin" />
+								{t("agent.restoring")}
+							</p>
+						) : null}
+						{lines.length === 0 && !restoring ? (
+							<ConversationEmptyState
+								className="min-h-0 flex-1 p-4"
+								title={t("agent.empty")}
+							/>
 						) : (
-							<Send className="size-4" />
+							lines.map((line) => (
+								<Message
+									key={line.id}
+									from={line.role}
+									className={
+										line.role === "assistant" ? "max-w-full" : undefined
+									}
+								>
+									<MessageContent
+										className={cn(
+											line.role === "user" && "rounded-lg bg-muted px-3 py-2",
+											line.role === "assistant" && "w-full max-w-full",
+										)}
+									>
+										{line.role === "assistant" &&
+										!line.text.trim() &&
+										line.streaming ? (
+											<Shimmer className="text-sm">
+												{t("agent.thinking")}
+											</Shimmer>
+										) : (
+											<MessageResponse isAnimating={line.streaming}>
+												{line.text}
+											</MessageResponse>
+										)}
+									</MessageContent>
+								</Message>
+							))
 						)}
-					</Button>
-				</footer>
+					</ConversationContent>
+					<ConversationScrollButton className="bottom-3 size-8 shadow-md" />
+				</Conversation>
+				<PromptInput
+					className="shrink-0 rounded-none border-0 border-t bg-muted/10 p-3 shadow-none md:px-6"
+					inputGroupClassName="overflow-visible"
+					onSubmit={({ text: value }) => void send(value)}
+				>
+					<PromptInputBody>
+						<div className="flex w-full items-center gap-1 rounded-xl border bg-background px-1.5 py-0.5">
+							<PromptInputTextarea
+								placeholder={t("agent.placeholder")}
+								disabled={sending}
+								rows={1}
+								className="min-h-9 max-h-32 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
+							/>
+							<PromptInputSubmit
+								status={sending ? "submitted" : "ready"}
+								disabled={sending}
+								className="shrink-0"
+							/>
+						</div>
+					</PromptInputBody>
+				</PromptInput>
 			</section>
 			<MobilePermissionDialog
 				permission={permission}
@@ -1237,57 +1258,5 @@ function MobilePermissionDialog({
 				) : null}
 			</DialogContent>
 		</Dialog>
-	);
-}
-
-export function LegacyMobileSettings({
-	status,
-	onStatus,
-	onPairAnother,
-}: {
-	status: BridgeClientStatus;
-	onStatus: (status: BridgeClientStatus) => void;
-	onPairAnother: () => void;
-}) {
-	const { t } = useTranslation("mobile");
-	const disconnect = async () => {
-		await bridgeDisconnect();
-		onStatus({ connected: false, paired: false });
-	};
-	return (
-		<section className="px-4 py-5 md:px-6">
-			<dl className="mt-5 divide-y border-y">
-				<div className="flex items-center justify-between gap-4 py-3">
-					<dt className="text-muted-foreground text-sm">
-						{t("settings.computer")}
-					</dt>
-					<dd className="truncate text-sm">{status.hostName ?? "-"}</dd>
-				</div>
-				<div className="flex items-center justify-between gap-4 py-3">
-					<dt className="text-muted-foreground text-sm">
-						{t("settings.vault")}
-					</dt>
-					<dd className="truncate text-sm">{status.vaultName ?? "-"}</dd>
-				</div>
-			</dl>
-			<Button variant="outline" className="mt-5" onClick={onPairAnother}>
-				<Camera className="size-4" />
-				{t("settings.addDesktop")}
-			</Button>
-			<Button
-				variant="outline"
-				className="mt-3"
-				onClick={() => void disconnect()}
-			>
-				<LogOut className="size-4" />
-				{t("settings.disconnect")}
-			</Button>
-			{!status.connected ? (
-				<p className="mt-4 flex items-center gap-2 text-muted-foreground text-sm">
-					<WifiOff className="size-4" />
-					{t("connect.offline")}
-				</p>
-			) : null}
-		</section>
 	);
 }

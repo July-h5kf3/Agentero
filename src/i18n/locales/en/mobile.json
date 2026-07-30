@@ -1,5 +1,6 @@
 {
 	"tabs": {
+		"navigation": "Main navigation",
 		"library": "Library",
 		"agent": "Agent",
 		"settings": "Settings"
@@ -40,6 +41,7 @@
 		"placeholder": "Ask about your research",
 		"send": "Send",
 		"empty": "Start a conversation",
+		"thinking": "Thinking...",
 		"failed": "The desktop Agent could not complete this request.",
 		"history": "Sessions",
 		"historyEmpty": "No past sessions",
@@ -48,6 +50,8 @@
 	},
 	"settings": {
 		"title": "Connection",
+		"menu": "Open menu",
+		"closeMenu": "Close menu",
 		"connected": "Connected",
 		"offline": "Offline",
 		"addDesktop": "Connect another desktop",
