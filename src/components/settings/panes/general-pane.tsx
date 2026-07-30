@@ -124,39 +124,9 @@ export function GeneralPane({
 	);
 }
 
-function formatBytes(n: number): string {
-	if (!Number.isFinite(n) || n < 0) return "0 B";
-	if (n < 1024) return `${n} B`;
-	if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-	if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
 function RemoteCacheSettingsBlock() {
 	const { t } = useTranslation("settings");
-	const [stats, setStats] = useState<{
-		bytes: number;
-		files: number;
-		maxBytes: number;
-	} | null>(null);
 	const [busy, setBusy] = useState(false);
-
-	const refresh = useCallback(async () => {
-		if (!isTauri()) return;
-		try {
-			const { remoteCacheStats } = await import(
-				"@/lib/vault/remote/remote-vault"
-			);
-			const s = await remoteCacheStats();
-			setStats({ bytes: s.bytes, files: s.files, maxBytes: s.maxBytes });
-		} catch {
-			setStats(null);
-		}
-	}, []);
-
-	useEffect(() => {
-		void refresh();
-	}, [refresh]);
 
 	const onClear = async () => {
 		if (!isTauri() || busy) return;
@@ -166,7 +136,6 @@ function RemoteCacheSettingsBlock() {
 				"@/lib/vault/remote/remote-vault"
 			);
 			await remoteCacheClear();
-			await refresh();
 		} catch (e) {
 			notifyError(
 				e instanceof Error ? e.message : t("general.remoteCache.clearFailed"),
@@ -175,14 +144,6 @@ function RemoteCacheSettingsBlock() {
 			setBusy(false);
 		}
 	};
-
-	const sizeLine = stats
-		? t("general.remoteCache.size", {
-				used: formatBytes(stats.bytes),
-				files: stats.files,
-				max: formatBytes(stats.maxBytes),
-			})
-		: t("general.remoteCache.sizeUnknown");
 
 	return (
 		<div className="mt-4">
@@ -205,9 +166,6 @@ function RemoteCacheSettingsBlock() {
 					</Button>
 				</SettingsRow>
 			</SettingsGroup>
-			<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
-				{sizeLine}
-			</p>
 		</div>
 	);
 }

@@ -78,8 +78,6 @@
 		"remoteCache": {
 			"section": "Remote vault cache",
 			"label": "PDF preview cache",
-			"size": "{{used}} in {{files}} files (cap {{max}})",
-			"sizeUnknown": "Cache size unavailable",
 			"clear": "Clear remote cache",
 			"clearing": "Clearing…",
 			"clearFailed": "Failed to clear remote cache"
