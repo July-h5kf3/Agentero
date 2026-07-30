@@ -68,7 +68,9 @@ tauri-plugin-process = "2"
 
 # LiteParse relies on a desktop PDFium binary. iOS uses the paired desktop Host
 # for PDF parsing instead of packaging PDFium in the mobile app.
-[target.'cfg(all(unix, not(target_os = "ios")))'.dependencies]
+# Keep this cfg in sync with the #[cfg(not(target_os = "ios"))] gates in
+# src/features/import/pdf_parse/mod.rs — desktop (incl. Windows) needs it.
+[target.'cfg(not(target_os = "ios"))'.dependencies]
 liteparse = "2.5"
 
 [target.'cfg(target_os = "ios")'.dependencies]
