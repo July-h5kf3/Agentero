@@ -319,9 +319,7 @@ impl ConnectorController {
         })
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::AddrInUse {
-                AppError::message(format!(
-                    "Port {port} is already in use (often Zotero is running). Quit the other app and try again."
-                ))
+                AppError::message("请先退出本地Zotero".to_string())
             } else {
                 AppError::message(format!("Failed to bind 127.0.0.1:{port}: {e}"))
             }

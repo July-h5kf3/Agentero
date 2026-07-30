@@ -109,11 +109,7 @@ export function AgentCommonRows({
 					</SelectContent>
 				</Select>
 			</SettingsRow>
-			<SettingsRow
-				label={t("agent.autoPaperReader.label")}
-				htmlFor={autoId}
-				description={t("agent.autoPaperReader.hint")}
-			>
+			<SettingsRow label={t("agent.autoPaperReader.label")} htmlFor={autoId}>
 				<Switch
 					id={autoId}
 					checked={settings.autoPaperReader}

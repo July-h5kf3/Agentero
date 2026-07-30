@@ -174,7 +174,6 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 					<SettingsGroup>
 						<SettingsRow
 							label={t("remoteAccess.hostName.label")}
-							description={t("remoteAccess.hostName.hint")}
 							htmlFor="bridge-host-name"
 						>
 							<Input
@@ -216,9 +215,6 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 								<div className="min-w-0 space-y-3">
 									<p className="font-medium text-sm">
 										{t("remoteAccess.pairing.title")}
-									</p>
-									<p className="text-muted-foreground text-xs leading-relaxed">
-										{t("remoteAccess.pairing.hint")}
 									</p>
 									<Button
 										type="button"

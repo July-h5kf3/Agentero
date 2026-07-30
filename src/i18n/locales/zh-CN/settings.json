@@ -17,16 +17,14 @@
 		"title": "远程访问",
 		"localVaultRequired": "请打开本地 Vault 后再提供远程访问。",
 		"hostName": {
-			"label": "电脑名称",
-			"hint": "会显示在已配对的 iPhone 和 iPad 上。"
+			"label": "电脑名称"
 		},
 		"status": { "label": "Relay 状态", "online": "在线", "offline": "离线" },
 		"start": "开启远程访问",
 		"stop": "关闭远程访问",
 		"qrAlt": "配对二维码",
 		"pairing": {
-			"title": "配对 iPhone 或 iPad",
-			"hint": "在 Agentero 中扫描二维码，然后在两台设备确认相同验证码。"
+			"title": "配对 iPhone 或 iPad"
 		},
 		"copyLink": "复制配对链接",
 		"copied": "已复制配对链接",
@@ -38,12 +36,8 @@
 	},
 	"general": {
 		"title": "通用",
-		"restoreVault": {
-			"label": "恢复上次的知识库"
-		},
 		"paperTreeLabelMode": {
 			"label": "文件树论文显示",
-			"hint": "仅影响展示，不改磁盘文件夹名；无元数据时回退为文件夹名。",
 			"title-author": "标题 · 作者",
 			"title": "标题",
 			"author-year-title": "作者 (年份) · 标题",
@@ -51,7 +45,6 @@
 		},
 		"paperTreeSortMode": {
 			"label": "文件树论文排序",
-			"hint": "仅影响各文件夹下的显示顺序，不改名、不移动。默认模式按目录树中的显示名称排序（与「论文显示」设置一致）。缺元数据时按文件夹名（年份 / 添加时间缺失则排在最后）。",
 			"folder": "显示名称 A–Z",
 			"title": "标题 A–Z",
 			"author": "作者 A–Z",
@@ -61,26 +54,18 @@
 		},
 		"autoUpdateInternalLinks": {
 			"label": "外部改名后更新双链",
-			"hint": "对可信的本地改名，「询问」会先展示受影响链接再写入 Markdown；「始终」只在 watcher 路径对和所有来源哈希都安全时修复。远程 Vault 变更永不自动修复。",
 			"ask": "询问",
 			"always": "始终（安全时）"
 		},
-		"translatorBaseUrl": {
-			"label": "Translator 服务地址",
-			"hint": "标识符入库用的 Translator 服务根地址（兼容 translation-server）。默认：https://translator.philfan.cn。添加论文时始终下载 PDF；arXiv 会同时解压 LaTeX 到 source/。"
-		},
 		"batchImportConcurrency": {
-			"label": "批量导入并发数",
-			"hint": "一次粘贴多个标识符时，同时入库的最大并行数量。值越小对远端服务越友好；网络良好时适当提高可加快批量入库。"
+			"label": "批量导入并发数"
 		},
 		"citationOnline": {
-			"label": "在线引用解析",
-			"hint": "解析论文参考文献时从 Semantic Scholar / Crossref（免费 API）拉取结构化条目。关闭后仍会解析本地 BibTeX/.bbl。"
+			"label": "在线引用解析"
 		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
-			"hint": "开启后 Agentero 在 127.0.0.1:23119 监听，官方 Zotero 浏览器扩展可将条目保存到当前知识库。请先退出 Zotero 桌面端（同端口互斥）。支持本地与远程 Vault；默认关闭。",
-			"statusListening": "监听中 {{address}}",
+			"hint": "请先退出本地Zotero",
 			"statusOff": "已关闭",
 			"statusStarting": "启动中…",
 			"statusError": "错误：{{message}}",
@@ -92,7 +77,6 @@
 		"remoteCache": {
 			"section": "远程 Vault 缓存",
 			"label": "PDF 预览缓存",
-			"hint": "远端 PDF 与大文件的本机临时副本。超过上限（每个远程库 2 GB）时按最近最少使用淘汰。",
 			"size": "已用 {{used}}，{{files}} 个文件（上限 {{max}}）",
 			"sizeUnknown": "无法读取缓存用量",
 			"clear": "清除远程缓存",
@@ -171,8 +155,7 @@
 			}
 		},
 		"autoPaperReader": {
-			"label": "入库后自动精读",
-			"hint": "仅魔棒与单篇 Download；关闭时仍可用 Zap 手动精读。"
+			"label": "入库后自动精读"
 		},
 		"responseLanguage": {
 			"label": "回答语言",
@@ -182,12 +165,10 @@
 		},
 		"personalPrompt": {
 			"label": "个人偏好提示词",
-			"hint": "可选的自由文本，会注入到每一次 Agent 对话（Chat、精读、工作流等）。留空则不注入；不会显示在对话记录里。",
 			"placeholder": "例如：优先简洁要点列表；始终保留 [[双链]]；引用 Vault 路径。"
 		},
 		"pdfAsk": {
 			"section": "PDF 划词提问",
-			"hint": "PDF 划词「提问」对话框使用的 Agent 与模型（与 Chat、翻译设置相互独立）。",
 			"agentId": {
 				"label": "提问 Agent",
 				"followDefault": "跟随默认",
@@ -200,7 +181,7 @@
 			}
 		},
 		"form": {
-			"defaultName": "自定义 Agent",
+			"defaultName": "Desktop",
 			"name": "名称",
 			"command": "命令",
 			"args": "参数"
@@ -257,8 +238,7 @@
 			"label": "模型",
 			"followAgent": "跟随 Agent 默认",
 			"needWarm": "在 Chat 中打开过该 Agent 后，可在此选择具体模型。"
-		},
-		"footer": "免费引擎使用非官方网页接口，可能限流或失效。Agent 路径仅经本机 CLI；Agent/模型留空则跟随应用默认。本版不接入付费翻译 API。"
+		}
 	},
 	"keyboard": {
 		"title": "键盘"

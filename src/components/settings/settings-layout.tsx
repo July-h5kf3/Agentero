@@ -37,7 +37,7 @@ export function SettingsRow({
 	description,
 	children,
 }: {
-	label: string;
+	label: ReactNode;
 	htmlFor?: string;
 	/** Optional muted secondary line under the label. */
 	description?: string;

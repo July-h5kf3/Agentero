@@ -326,9 +326,6 @@ export function TranslatePane({
 					</p>
 				</>
 			)}
-			<p className="mt-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("translate.footer")}
-			</p>
 		</>
 	);
 }

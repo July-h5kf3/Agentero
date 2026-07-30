@@ -8,7 +8,6 @@ import {
 import type { SettingsHostContext } from "@/components/settings/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -35,7 +34,6 @@ import {
 	type AppSettings,
 	AUTO_UPDATE_INTERNAL_LINKS,
 	type AutoUpdateInternalLinks,
-	DEFAULT_TRANSLATOR_BASE_URL,
 } from "@/lib/settings";
 
 export function GeneralPane({
@@ -60,16 +58,6 @@ export function GeneralPane({
 				</p>
 			) : null}
 			<SettingsGroup>
-				<SettingsRow
-					label={t("general.restoreVault.label")}
-					htmlFor="restore-vault"
-				>
-					<Switch
-						id="restore-vault"
-						checked={settings.restoreLastVault}
-						onCheckedChange={(v) => patch({ restoreLastVault: v })}
-					/>
-				</SettingsRow>
 				<SettingsRow label={t("general.paperTreeLabelMode.label")}>
 					<Select
 						value={settings.paperTreeLabelMode}
@@ -108,10 +96,7 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
-				<SettingsRow
-					label={t("general.autoUpdateInternalLinks.label")}
-					description={t("general.autoUpdateInternalLinks.hint")}
-				>
+				<SettingsRow label={t("general.autoUpdateInternalLinks.label")}>
 					<Select
 						value={settings.autoUpdateInternalLinks}
 						onValueChange={(value) =>
@@ -133,49 +118,10 @@ export function GeneralPane({
 					</Select>
 				</SettingsRow>
 			</SettingsGroup>
-			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("general.paperTreeLabelMode.hint")}
-			</p>
-			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("general.paperTreeSortMode.hint")}
-			</p>
-			<SettingsGroup>
-				<div className="flex flex-col gap-1.5 border-b px-3.5 py-2.5 last:border-b-0">
-					<Label
-						htmlFor="translator-base-url"
-						className="font-normal text-[13px]"
-					>
-						{t("general.translatorBaseUrl.label")}
-					</Label>
-					<Input
-						id="translator-base-url"
-						value={settings.translatorBaseUrl}
-						onChange={(e) => patch({ translatorBaseUrl: e.target.value })}
-						onBlur={() => {
-							const trimmed = settings.translatorBaseUrl
-								.trim()
-								.replace(/\/+$/, "");
-							if (!trimmed) {
-								patch({ translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL });
-							} else if (trimmed !== settings.translatorBaseUrl) {
-								patch({ translatorBaseUrl: trimmed });
-							}
-						}}
-						placeholder={DEFAULT_TRANSLATOR_BASE_URL}
-						className="h-8 font-mono text-xs"
-						spellCheck={false}
-						autoComplete="off"
-					/>
-				</div>
-			</SettingsGroup>
-			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("general.translatorBaseUrl.hint")}
-			</p>
 			<SettingsGroup>
 				<SettingsRow
 					label={t("general.batchImportConcurrency.label")}
 					htmlFor="batch-import-concurrency"
-					description={t("general.batchImportConcurrency.hint")}
 				>
 					<Input
 						id="batch-import-concurrency"
@@ -197,7 +143,6 @@ export function GeneralPane({
 				<SettingsRow
 					label={t("general.citationOnline.label")}
 					htmlFor="citation-online"
-					description={t("general.citationOnline.hint")}
 				>
 					<Switch
 						id="citation-online"
@@ -293,9 +238,6 @@ function RemoteCacheSettingsBlock() {
 					</Button>
 				</SettingsRow>
 			</SettingsGroup>
-			<p className="mt-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("general.remoteCache.hint")}
-			</p>
 			<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
 				{sizeLine}
 			</p>
@@ -391,14 +333,11 @@ function ConnectorSettingsBlock({
 				message: status.lastError,
 			});
 		}
+		if (status.listening && !status.vaultPath) {
+			return t("general.connector.statusNoVault");
+		}
 		if (status.listening) {
-			const base = t("general.connector.statusListening", {
-				address: status.boundAddress ?? `127.0.0.1:${status.port}`,
-			});
-			if (!status.vaultPath) {
-				return `${base} · ${t("general.connector.statusNoVault")}`;
-			}
-			return base;
+			return null;
 		}
 		if (settings.connectorEnabled) {
 			return t("general.connector.statusStarting");
@@ -412,6 +351,7 @@ function ConnectorSettingsBlock({
 				<SettingsRow
 					label={t("general.connector.label")}
 					htmlFor="connector-enabled"
+					description={t("general.connector.hint")}
 				>
 					<Switch
 						id="connector-enabled"
@@ -421,7 +361,18 @@ function ConnectorSettingsBlock({
 					/>
 				</SettingsRow>
 				<SettingsRow
-					label={t("general.connector.portLabel")}
+					label={
+						<>
+							{t("general.connector.portLabel")}
+							{status?.listening ? (
+								<span
+									role="img"
+									aria-label="listening"
+									className="ml-1.5 inline-block size-2 rounded-full bg-emerald-500 align-middle"
+								/>
+							) : null}
+						</>
+					}
 					htmlFor="connector-port"
 				>
 					<Input
@@ -436,12 +387,11 @@ function ConnectorSettingsBlock({
 					/>
 				</SettingsRow>
 			</SettingsGroup>
-			<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("general.connector.hint")}
-			</p>
-			<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
-				{statusLine}
-			</p>
+			{statusLine ? (
+				<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
+					{statusLine}
+				</p>
+			) : null}
 		</>
 	);
 }

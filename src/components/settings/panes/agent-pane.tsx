@@ -349,6 +349,7 @@ export function AgentPane({
 		<>
 			<PageTitle title={t("agent.title")} />
 			<SettingsGroup>
+				<AgentCommonRows settings={settings} patch={patch} />
 				<AgentProxyRow
 					htmlFor="agent-proxy-enabled"
 					label={t("agent.proxy.label")}
@@ -358,7 +359,6 @@ export function AgentPane({
 					onCommitProxyUrl={() => void onCommitProxyUrl()}
 					onToggleProxy={(v) => void onToggleProxy(v)}
 				/>
-				<AgentCommonRows settings={settings} patch={patch} />
 			</SettingsGroup>
 
 			<SettingsGroup>
@@ -369,9 +369,6 @@ export function AgentPane({
 					>
 						{t("agent.personalPrompt.label")}
 					</Label>
-					<p className="text-muted-foreground text-xs leading-relaxed">
-						{t("agent.personalPrompt.hint")}
-					</p>
 					<Textarea
 						id="agent-personal-prompt"
 						value={settings.agentPersonalPrompt}
@@ -388,7 +385,7 @@ export function AgentPane({
 						}}
 						placeholder={t("agent.personalPrompt.placeholder")}
 						rows={4}
-						className="min-h-[88px] resize-y text-xs"
+						className="min-h-[88px] resize-y text-xs placeholder:text-muted-foreground/50"
 						spellCheck={true}
 					/>
 				</div>
@@ -396,9 +393,6 @@ export function AgentPane({
 
 			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
 				{t("agent.pdfAsk.section")}
-			</p>
-			<p className="mb-2 px-0.5 text-muted-foreground text-xs leading-relaxed">
-				{t("agent.pdfAsk.hint")}
 			</p>
 			<SettingsGroup>
 				<AgentModelPicker
@@ -889,6 +883,7 @@ export function RemoteAgentPane({
 			</p>
 
 			<SettingsGroup>
+				<AgentCommonRows settings={settings} patch={patch} idSuffix="-r" />
 				<AgentProxyRow
 					htmlFor="agent-proxy-enabled-r"
 					label={t("agent.proxy.label")}
@@ -901,7 +896,6 @@ export function RemoteAgentPane({
 				<p className="border-b px-3.5 py-2 text-muted-foreground text-[11px] leading-relaxed last:border-b-0">
 					{t("agent.remote.proxyHint")}
 				</p>
-				<AgentCommonRows settings={settings} patch={patch} idSuffix="-r" />
 			</SettingsGroup>
 
 			{!isTauri() ? (

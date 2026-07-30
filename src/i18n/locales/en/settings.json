@@ -17,8 +17,7 @@
 		"title": "Remote access",
 		"localVaultRequired": "Open a local Vault to provide remote access.",
 		"hostName": {
-			"label": "Computer name",
-			"hint": "Shown to paired iPhone and iPad devices."
+			"label": "Computer name"
 		},
 		"status": {
 			"label": "Relay status",
@@ -29,8 +28,7 @@
 		"stop": "Disable remote access",
 		"qrAlt": "Pairing QR code",
 		"pairing": {
-			"title": "Pair an iPhone or iPad",
-			"hint": "Scan this code in Agentero, then confirm the same code on both devices."
+			"title": "Pair an iPhone or iPad"
 		},
 		"copyLink": "Copy pairing link",
 		"copied": "Pairing link copied",
@@ -45,12 +43,8 @@
 	},
 	"general": {
 		"title": "General",
-		"restoreVault": {
-			"label": "Restore last vault"
-		},
 		"paperTreeLabelMode": {
 			"label": "Paper labels in file tree",
-			"hint": "Display-only. Folder names on disk stay the same; missing metadata falls back to the folder name.",
 			"title-author": "Title · Author",
 			"title": "Title",
 			"author-year-title": "Author (year) · Title",
@@ -58,7 +52,6 @@
 		},
 		"paperTreeSortMode": {
 			"label": "Sort papers in file tree",
-			"hint": "Display-only order under each folder. The default mode sorts by the same labels shown in the tree (Settings → paper labels). Does not rename or move folders. Missing metadata sorts by folder name (or last for year / date).",
 			"folder": "Display name A–Z",
 			"title": "Title A–Z",
 			"author": "Author A–Z",
@@ -68,26 +61,18 @@
 		},
 		"autoUpdateInternalLinks": {
 			"label": "Update internal links after external renames",
-			"hint": "For a verified local rename, Ask shows the affected links before writing Markdown. Always repairs only when the watcher pair and every source hash are safe. Remote vault changes are never repaired automatically.",
 			"ask": "Ask",
 			"always": "Always when safe"
 		},
-		"translatorBaseUrl": {
-			"label": "Translator service URL",
-			"hint": "Base URL for identifier lookup (Zotero translation-server compatible). Default: https://translator.philfan.cn. Adding a paper always downloads PDF; arXiv also unpacks LaTeX into source/."
-		},
 		"batchImportConcurrency": {
-			"label": "Batch import concurrency",
-			"hint": "Maximum parallel identifier imports when adding multiple papers at once. Lower values are gentler to remote services; higher values import faster on a good connection."
+			"label": "Batch import concurrency"
 		},
 		"citationOnline": {
-			"label": "Online reference lookup",
-			"hint": "Fetch structured references from Semantic Scholar / Crossref (free APIs) when parsing a paper's citations. Local BibTeX/.bbl parsing still runs when disabled."
+			"label": "Online reference lookup"
 		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
-			"hint": "When on, Agentero listens on 127.0.0.1:23119 so the official Zotero browser extension can save into the current vault. Quit Zotero desktop first (same port). Works with local and remote vaults; off by default.",
-			"statusListening": "Listening on {{address}}",
+			"hint": "Quit local Zotero first",
 			"statusOff": "Off",
 			"statusStarting": "Starting…",
 			"statusError": "Error: {{message}}",
@@ -99,7 +84,6 @@
 		"remoteCache": {
 			"section": "Remote vault cache",
 			"label": "PDF preview cache",
-			"hint": "Ephemeral local copies of remote PDFs and large files. Oldest files are removed when usage exceeds the cap (2 GB per remote vault).",
 			"size": "{{used}} in {{files}} files (cap {{max}})",
 			"sizeUnknown": "Cache size unavailable",
 			"clear": "Clear remote cache",
@@ -178,8 +162,7 @@
 			}
 		},
 		"autoPaperReader": {
-			"label": "Auto paper-reader after import",
-			"hint": "Magic-wand and single Download only. Zap still works when off."
+			"label": "Auto paper-reader after import"
 		},
 		"responseLanguage": {
 			"label": "Response language",
@@ -189,12 +172,10 @@
 		},
 		"personalPrompt": {
 			"label": "Personal preference prompt",
-			"hint": "Optional free-form instructions injected into every Agent turn (chat, paper-reader, workflows). Leave empty to disable. Not shown in the chat transcript.",
 			"placeholder": "e.g. Prefer concise bullet points; always keep [[wikilinks]]; cite Vault paths."
 		},
 		"pdfAsk": {
 			"section": "PDF selection Ask",
-			"hint": "Agent and model used by the PDF highlight Ask dialog (independent of Chat and Translate).",
 			"agentId": {
 				"label": "Ask agent",
 				"followDefault": "Follow default",
@@ -207,7 +188,7 @@
 			}
 		},
 		"form": {
-			"defaultName": "Custom agent",
+			"defaultName": "Desktop",
 			"name": "Name",
 			"command": "Command",
 			"args": "Args"
@@ -264,8 +245,7 @@
 			"label": "Model",
 			"followAgent": "Follow agent default",
 			"needWarm": "Open this agent in Chat once to list models here."
-		},
-		"footer": "Free engines use unofficial web endpoints (may rate-limit or break). Agent path uses your local Agent CLI only; empty Agent/Model follow the app default. No paid API keys in this release."
+		}
 	},
 	"keyboard": {
 		"title": "Keyboard"
