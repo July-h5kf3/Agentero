@@ -73,6 +73,9 @@ targets:
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
       configs:
+        debug:
+          CODE_SIGN_STYLE: Automatic
+          CODE_SIGN_IDENTITY: iPhone Developer
         release:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Distribution
