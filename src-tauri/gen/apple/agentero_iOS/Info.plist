@@ -55,5 +55,7 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Agentero uses the local network to connect to its development server.</string>
 </dict>
 </plist>
