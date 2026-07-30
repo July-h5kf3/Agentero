@@ -367,6 +367,65 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 - iOS 端 Markdown 编辑器裁剪范围（桌面 CodeMirror 栈在移动端的可用性）；
 - 多设备同时在线的写并发（MVP：允许多设备连接，写入走桌面现有保存冲突检查即可）。
 
+## 13. iOS 本地开发与构建
+
+### 13.1 新电脑初始化
+
+iOS 构建必须在 macOS 上进行，并需要安装 Xcode、Node.js、pnpm 和 Rust
+stable。克隆仓库后执行：
+
+```bash
+pnpm install
+rustup target add aarch64-apple-ios-sim
+pnpm tauri ios init
+```
+
+`src-tauri/ios-project.yml`、`src-tauri/tauri.ios.conf.json` 和
+`src-tauri/Info.ios.plist` 是 iOS 工程的可复现配置。`src-tauri/gen/apple/`
+是 Tauri 根据模板生成的本机 Xcode 工程，不应手工维护或提交本机生成的
+`libapp.a`、开发者 Team 和 scheme 噪声。
+
+### 13.2 模拟器开发
+
+启动指定的 iOS Simulator：
+
+```bash
+pnpm tauri ios dev "iPhone 17 Pro"
+```
+
+开发模式使用 Vite 的 `http://localhost:1420`。开发服务器必须在 App
+运行期间保持启动；不要使用会在部署完成后退出并关闭 Vite 的一次性命令。
+首次启动时，如果 iOS 请求本地网络权限，需要允许 Agentero 访问本地网络。
+
+### 13.3 真机开发
+
+真机不能访问 Mac 的 `localhost`，需要使用 Mac 的局域网地址：
+
+```bash
+pnpm tauri ios dev --host <Mac局域网IP> "<设备名称>"
+```
+
+例如：
+
+```bash
+pnpm tauri ios dev --host 192.168.1.20 "Philfan iPhone"
+```
+
+Mac 和 iPhone 必须处于可互通的网络中。真机调试还需要在 Xcode 中配置
+Apple Development Team 和签名证书。
+
+### 13.4 正式构建
+
+正式构建会把前端打包进 App，不依赖 Vite 或 `localhost:1420`：
+
+```bash
+pnpm ios:release:check
+pnpm tauri ios build
+```
+
+TestFlight 的签名、构建号和上传流程见
+[iOS TestFlight Release](ios-testflight.md)。
+
 ## 相关文档
 
 - 调研来源：paseo `@getpaseo/{cli,server,relay}` 发行产物（§2 有函数/文件级证据）

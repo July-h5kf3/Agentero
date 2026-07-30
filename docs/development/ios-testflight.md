@@ -1,5 +1,22 @@
 # iOS TestFlight Release
 
+## New Machine Setup
+
+iOS builds require macOS, Xcode, Node.js, pnpm, and the stable Rust toolchain.
+After cloning the repository, initialize the local Tauri project:
+
+```bash
+pnpm install
+rustup target add aarch64-apple-ios-sim
+pnpm tauri ios init
+```
+
+The committed sources of truth are `src-tauri/ios-project.yml`,
+`src-tauri/tauri.ios.conf.json`, and `src-tauri/Info.ios.plist`.
+`src-tauri/gen/apple/` is generated locally by Tauri and should not contain
+machine-specific `libapp.a`, Xcode scheme, or developer-team changes in a
+commit.
+
 ## Repository checks
 
 Run these before creating an archive:
