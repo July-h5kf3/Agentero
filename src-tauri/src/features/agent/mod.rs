@@ -21,6 +21,6 @@ pub use acp::{
 pub use events::AgentEventEmitter;
 pub use permission::PermissionGate;
 pub use registry::AgentRegistry;
-pub use runtime::AgentRunController;
+pub use runtime::{AgentRunController, AgentWarmGate};
 pub use skills::list_agent_skills;
 pub use templates::builtin_templates;

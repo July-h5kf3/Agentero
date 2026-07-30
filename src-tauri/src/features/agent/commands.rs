@@ -6,7 +6,7 @@ use crate::features::agent::models::{
 use crate::features::agent::templates::template_info;
 use crate::features::agent::{
     list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
-    AgentRegistry, AgentRunController, PermissionGate, PermissionPolicy,
+    AgentRegistry, AgentRunController, AgentWarmGate, PermissionGate, PermissionPolicy,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
 use crate::features::terminal;
@@ -310,7 +310,7 @@ pub async fn agent_run_once(
     let session_agent_id = log_agent_id.clone();
     let remote_for_spawn = remote_target_early;
     tauri::async_runtime::spawn(async move {
-        let _ = run_once(
+        let run_result = run_once(
             events.clone(),
             desc,
             session_id.clone(),
@@ -334,6 +334,9 @@ pub async fn agent_run_once(
             request.session_id.clone(),
         )
         .await;
+        if run_result.is_ok() {
+            app_handle.state::<AgentWarmGate>().clear(&session_agent_id);
+        }
         let _ = app_handle.state::<AgentRunController>().finish(&session_id);
         log::info!(
             target: "agentero::op",
@@ -356,6 +359,7 @@ pub async fn agent_run_once(
 pub async fn agent_list_sessions(
     registry: State<'_, AgentRegistry>,
     remote_registry: State<'_, Arc<RemoteRegistry>>,
+    warm_gate: State<'_, AgentWarmGate>,
     agent_id: Option<String>,
     vault_path: Option<String>,
     cursor: Option<String>,
@@ -364,6 +368,9 @@ pub async fn agent_list_sessions(
         Ok(desc) => desc,
         Err(error) => return Ok(map_err(error)),
     };
+    if let Some(error) = warm_gate.blocked(&desc.id) {
+        return Ok(map_err(AppError::message(error)));
+    }
     let remote_target =
         match resolve_remote_target(remote_registry.inner(), vault_path.as_deref()).await {
             Ok(t) => t,
@@ -380,8 +387,14 @@ pub async fn agent_list_sessions(
     match crate::features::agent::list_acp_sessions(&desc, cwd, cursor, remote_target.as_ref())
         .await
     {
-        Ok(result) => Ok(ApiResult::ok(result)),
-        Err(error) => Ok(map_err(error)),
+        Ok(result) => {
+            warm_gate.clear(&desc.id);
+            Ok(ApiResult::ok(result))
+        }
+        Err(error) => {
+            warm_gate.record_failure(&desc.id, &error.to_string());
+            Ok(map_err(error))
+        }
     }
 }
 
@@ -462,6 +475,7 @@ pub async fn agent_warm(
     window: tauri::WebviewWindow,
     registry: State<'_, AgentRegistry>,
     remote_registry: State<'_, Arc<RemoteRegistry>>,
+    warm_gate: State<'_, AgentWarmGate>,
     request: WarmRequest,
 ) -> Result<ApiResult<WarmResult>, String> {
     let desc = match registry.resolve_default(request.agent_id.as_deref()) {
@@ -477,6 +491,17 @@ pub async fn agent_warm(
             }));
         }
     };
+
+    if let Some(error) = warm_gate.blocked(&desc.id) {
+        return Ok(ApiResult::ok(WarmResult {
+            agent_id: desc.id,
+            ok: false,
+            models: None,
+            usage_used: None,
+            usage_size: None,
+            error: Some(error),
+        }));
+    }
 
     let remote =
         match resolve_remote_target(remote_registry.inner(), request.vault_path.as_deref()).await {
@@ -494,6 +519,15 @@ pub async fn agent_warm(
         };
 
     let events = AgentEventEmitter::new(window.app_handle().clone(), window.label());
+    let agent_id = desc.id.clone();
     let result = warm_agent(events, desc, request.vault_path, request.model_id, remote).await;
+    if result.ok {
+        warm_gate.clear(&agent_id);
+    } else {
+        warm_gate.record_failure(
+            &agent_id,
+            result.error.as_deref().unwrap_or("agent warm failed"),
+        );
+    }
     Ok(ApiResult::ok(result))
 }

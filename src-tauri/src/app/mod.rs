@@ -51,6 +51,7 @@ pub fn run() {
         .manage(AppSettingsStore::load())
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
+        .manage(crate::features::agent::AgentWarmGate::new())
         .manage(crate::features::agent::PermissionGate::new())
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())

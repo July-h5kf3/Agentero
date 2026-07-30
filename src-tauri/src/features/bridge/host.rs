@@ -960,6 +960,7 @@ async fn dispatch_agent_rpc(
             let result = crate::features::agent::commands::agent_list_sessions(
                 app.state::<AgentRegistry>(),
                 app.state::<std::sync::Arc<RemoteRegistry>>(),
+                app.state::<crate::features::agent::AgentWarmGate>(),
                 optional_string(&params, "agentId"),
                 vault_path,
                 optional_string(&params, "cursor"),

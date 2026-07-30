@@ -6,8 +6,8 @@ use crate::features::agent::models::{
     AcpSessionCapabilities, AcpSessionInfo, AgentCommand, AgentCommandInput, AgentCommandsEvent,
     AgentDescriptor, AgentEffortChoice, AgentEffortEvent, AgentFailedEvent, AgentFastModeEvent,
     AgentModelChoice, AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentResultPayload,
-    AgentStreamEvent, AgentStreamKind, AgentToolEvent, AgentUsageEvent, ProbeResult, PromptImage,
-    WarmResult,
+    AgentStreamEvent, AgentStreamKind, AgentTemplate, AgentToolEvent, AgentUsageEvent, ProbeResult,
+    PromptImage, WarmResult,
 };
 use crate::features::agent::permission::PermissionGate;
 use crate::features::agent::prompts::{build_prompt, extract_sources};
@@ -39,6 +39,13 @@ fn to_acp_agent_local(desc: &AgentDescriptor) -> Result<AcpAgent, AppError> {
         if let Ok(path) = std::env::join_paths(path_entries()) {
             child_env.insert("PATH".to_string(), path.to_string_lossy().to_string());
         }
+    }
+    // Gemini CLI launches a browser OAuth flow from `new_session` when it has no
+    // cached credentials; our 15s ACP timeout kills the child before login can
+    // finish, so the browser would pop up on every spawn. Sign-in must happen in
+    // a terminal instead (BYOA).
+    if matches!(desc.template, AgentTemplate::Gemini) && !child_env.contains_key("NO_BROWSER") {
+        child_env.insert("NO_BROWSER".to_string(), "true".to_string());
     }
     let env: Vec<EnvVariable> = child_env
         .into_iter()
