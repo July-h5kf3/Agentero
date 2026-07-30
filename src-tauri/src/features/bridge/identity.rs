@@ -413,7 +413,10 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), AppErr
     let raw = serde_json::to_vec_pretty(value)?;
     fs::write(path, raw)?;
 
-    #[cfg(unix)]
+    // iOS owns the app container and may reject chmod even for files created
+    // by the app. The container already provides the required isolation;
+    // keep explicit 0600 hardening for desktop Unix targets.
+    #[cfg(all(unix, not(target_os = "ios")))]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
