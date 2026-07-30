@@ -21,7 +21,6 @@ import {
 	lazy,
 	type ReactNode,
 	Suspense,
-	type TouchEvent,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -49,6 +48,10 @@ import {
 	PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+	EdgeSwipeBack,
+	useHorizontalSwipe,
+} from "@/components/mobile/mobile-gestures";
 import { MobileHeader as MobileHeaderPage } from "@/components/mobile/mobile-header";
 import { MobileLibraryPage } from "@/components/mobile/mobile-library-page";
 import { MobileNav, type MobileTab } from "@/components/mobile/mobile-nav";
@@ -122,39 +125,26 @@ export default function MobileApp() {
 	const [agentsLoading, setAgentsLoading] = useState(false);
 	const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
 	const [pairPending, setPairPending] = useState<PairPendingEvent | null>(null);
-	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
-	const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-		const touch = event.touches[0];
-		if (touch && !sidebarOpen) {
-			touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-		}
-	};
-
-	const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
-		const start = touchStartRef.current;
-		touchStartRef.current = null;
-		if (!start || sidebarOpen) return;
-		const touch = event.changedTouches[0];
-		if (!touch) return;
-		const deltaX = touch.clientX - start.x;
-		const deltaY = Math.abs(touch.clientY - start.y);
-		if (selectedPaper && deltaX > 60 && deltaX > deltaY * 1.25) {
-			setSelectedPaper(null);
-			return;
-		}
-		if (deltaX > 60 && deltaX > deltaY * 1.25 && start.x <= 32) {
-			setSidebarOpen(true);
-			return;
-		}
-		if (deltaX < -60 && -deltaX > deltaY * 1.25 && tab === "library") {
-			setTab("agent");
-			return;
-		}
-		if (deltaX > 60 && deltaX > deltaY * 1.25 && tab === "agent") {
-			setTab("library");
-		}
-	};
+	const swipeHandlers = useHorizontalSwipe(
+		({ dx, dy, fromEdge, durationMs }) => {
+			if (sidebarOpen || selectedPaper) return;
+			if (durationMs > 500 || Math.abs(dy) > 60) return;
+			const horizontal = Math.abs(dx) > Math.abs(dy) * 1.25;
+			if (!horizontal) return;
+			if (dx > 60 && fromEdge) {
+				setSidebarOpen(true);
+				return;
+			}
+			if (dx < -60 && tab === "library") {
+				setTab("agent");
+				return;
+			}
+			if (dx > 60 && tab === "agent") {
+				setTab("library");
+			}
+		},
+	);
 
 	useEffect(() => {
 		if (!isTauri()) return;
@@ -344,8 +334,7 @@ export default function MobileApp() {
 	return (
 		<div
 			className="mobile-shell flex h-dvh min-h-0 overflow-hidden bg-background text-foreground"
-			onTouchStart={handleTouchStart}
-			onTouchEnd={handleTouchEnd}
+			{...swipeHandlers}
 		>
 			<aside className="hidden w-20 shrink-0 flex-col items-center border-r bg-muted/25 py-6 md:flex">
 				<MobileBrand />
@@ -486,7 +475,14 @@ export default function MobileApp() {
 				<div className="min-h-0 flex-1 overflow-hidden">
 					{tab === "library" ? (
 						selectedPaper ? (
-							<MobileReaderPage paper={selectedPaper} mode={readerMode} />
+							<EdgeSwipeBack
+								onBack={() => {
+									setSelectedPaper(null);
+									setReaderMode("pdf");
+								}}
+							>
+								<MobileReaderPage paper={selectedPaper} mode={readerMode} />
+							</EdgeSwipeBack>
 						) : (
 							<MobileLibraryPage
 								papers={papers}
