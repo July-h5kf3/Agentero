@@ -1,8 +1,24 @@
 import type { ReactNode } from "react";
 import { Label } from "@/components/ui/label";
 
-export function PageTitle({ title }: { title: string }) {
-	return <h2 className="mb-4 font-semibold text-lg tracking-tight">{title}</h2>;
+export function PageTitle({
+	title,
+	actions,
+}: {
+	title: string;
+	actions?: ReactNode;
+}) {
+	if (!actions) {
+		return (
+			<h2 className="mb-4 font-semibold text-lg tracking-tight">{title}</h2>
+		);
+	}
+	return (
+		<div className="mb-4 flex items-center justify-between gap-3">
+			<h2 className="font-semibold text-lg tracking-tight">{title}</h2>
+			{actions}
+		</div>
+	);
 }
 
 export function SettingsGroup({ children }: { children: ReactNode }) {

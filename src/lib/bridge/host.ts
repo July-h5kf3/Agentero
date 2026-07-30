@@ -72,3 +72,11 @@ export function listenPairingRequest(
 		handler(event.payload),
 	);
 }
+
+export function listenHostStatus(
+	handler: (online: boolean) => void,
+): Promise<() => void> {
+	return listen<boolean>("bridge:host-status", (event) =>
+		handler(event.payload),
+	);
+}

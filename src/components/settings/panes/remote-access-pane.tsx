@@ -26,6 +26,7 @@ import {
 	bridgeRevokeDevice,
 	bridgeStart,
 	bridgeStop,
+	listenHostStatus,
 	listenPairingRequest,
 	type PairingRequest,
 } from "@/lib/bridge/host";
@@ -46,7 +47,6 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 	const [hostName, setHostName] = useState(
 		() => window.location.hostname || "Agentero",
 	);
-	const [relayEndpoint, setRelayEndpoint] = useState(DEFAULT_RELAY);
 	const [busy, setBusy] = useState(false);
 
 	const refresh = useCallback(async () => {
@@ -79,23 +79,26 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 		void refresh().catch((error) =>
 			notifyError(error instanceof Error ? error.message : String(error)),
 		);
-		let unlisten: (() => void) | undefined;
+		const unlisten: Array<() => void> = [];
 		void listenPairingRequest((request) => {
 			setPending((current) => [
 				...current.filter((item) => item.requestId !== request.requestId),
 				request,
 			]);
-		}).then((off) => {
-			unlisten = off;
-		});
-		return () => unlisten?.();
+		}).then((off) => unlisten.push(off));
+		void listenHostStatus(() => {
+			void refresh().catch(() => undefined);
+		}).then((off) => unlisten.push(off));
+		return () => {
+			for (const off of unlisten) off();
+		};
 	}, [refresh]);
 
 	const start = async () => {
 		if (!vaultPath || isRemoteVaultHandle(vaultPath)) return;
 		setBusy(true);
 		try {
-			await bridgeStart({ vaultPath, hostName, relayEndpoint });
+			await bridgeStart({ vaultPath, hostName, relayEndpoint: DEFAULT_RELAY });
 			await refresh();
 		} catch (error) {
 			notifyError(error instanceof Error ? error.message : String(error));
@@ -140,7 +143,28 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 	const unavailable = !vaultPath || isRemoteVaultHandle(vaultPath);
 	return (
 		<>
-			<PageTitle title={t("remoteAccess.title")} />
+			<PageTitle
+				title={t("remoteAccess.title")}
+				actions={
+					unavailable ? undefined : (
+						<Button
+							type="button"
+							size="sm"
+							onClick={status?.enabled ? stop : start}
+							disabled={busy}
+						>
+							{busy ? (
+								<LoaderCircle className="size-4 animate-spin" />
+							) : (
+								<Power className="size-4" />
+							)}
+							{status?.enabled
+								? t("remoteAccess.stop")
+								: t("remoteAccess.start")}
+						</Button>
+					)
+				}
+			/>
 			{unavailable ? (
 				<p className="text-muted-foreground text-sm leading-relaxed">
 					{t("remoteAccess.localVaultRequired")}
@@ -161,20 +185,6 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 								className="h-8 w-44"
 							/>
 						</SettingsRow>
-						<SettingsRow
-							label={t("remoteAccess.relay.label")}
-							description={t("remoteAccess.relay.hint")}
-							htmlFor="bridge-relay-endpoint"
-						>
-							<Input
-								id="bridge-relay-endpoint"
-								value={relayEndpoint}
-								onChange={(event) => setRelayEndpoint(event.target.value)}
-								disabled={status?.enabled}
-								className="h-8 w-44 font-mono text-xs"
-								spellCheck={false}
-							/>
-						</SettingsRow>
 						<SettingsRow label={t("remoteAccess.status.label")}>
 							<span className="flex items-center gap-2 text-xs">
 								<span
@@ -186,27 +196,9 @@ export function RemoteAccessPane({ vaultPath }: { vaultPath: string | null }) {
 							</span>
 						</SettingsRow>
 					</SettingsGroup>
-					<div className="mb-5 flex items-center gap-2">
-						<Button
-							type="button"
-							onClick={status?.enabled ? stop : start}
-							disabled={busy}
-						>
-							{busy ? (
-								<LoaderCircle className="size-4 animate-spin" />
-							) : (
-								<Power className="size-4" />
-							)}
-							{status?.enabled
-								? t("remoteAccess.stop")
-								: t("remoteAccess.start")}
-						</Button>
-						{status?.lastError ? (
-							<span className="min-w-0 truncate text-destructive text-xs">
-								{status.lastError}
-							</span>
-						) : null}
-					</div>
+					{status?.lastError ? (
+						<p className="mb-5 text-destructive text-xs">{status.lastError}</p>
+					) : null}
 					{status?.enabled && offerUrl ? (
 						<SettingsGroup>
 							<div className="flex items-center gap-5 px-3.5 py-4">

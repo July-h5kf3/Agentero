@@ -21,6 +21,9 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Both ring and aws-lc-rs backends exist in the dependency tree; rustls
+    // panics at connect time unless a process-wide default is installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut builder = tauri::Builder::default()
         .register_asynchronous_uri_scheme_protocol("agentero-arxiv", |_ctx, request, responder| {
             crate::features::arxiv_proxy::handle(request, responder);

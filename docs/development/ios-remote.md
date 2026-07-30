@@ -139,7 +139,7 @@ GET /ws?v=2&serverId=<agt_…>&role=client                       → client（re
 
 **relay 自身不做认证**（照 paseo）：`serverId` 是路由键不是秘密，安全性完全由 Bridge 侧的 E2EE + 设备验签兜底（§5.3）。relay 只做**滥用防护**：每 serverId 并发 client 上限、每 IP 建连速率限制、单帧大小上限、空闲会话回收。
 
-**运维与自托管**：当前公网入口为 `wss://relay.philfan.cn/ws`，其 `GET /health` 用于存活检查，`GET /ready` 用于就绪检查。TLS 终止层必须支持 WebSocket Upgrade 且保留 query 参数；入口层负责按 IP 限制新建连接速率与帧大小。协议与 Relay 源码开源，设置里 relay endpoint 可改（企业/隐私用户自托管）。offer 里携带 `relay.endpoint`，所以换 relay 只需重新出二维码。日志只记连接元数据（serverId 前缀哈希、时长、字节数），不记内容，不记完整 IP。
+**运维与自托管**：当前公网入口为 `wss://relay.philfan.cn/ws`，其 `GET /health` 用于存活检查，`GET /ready` 用于就绪检查。TLS 终止层必须支持 WebSocket Upgrade 且保留 query 参数；入口层负责按 IP 限制新建连接速率与帧大小。协议与 Relay 源码开源；设置界面不展示 relay 地址（默认端点内置），自托管用户可经 `bridge_start` 的 `relayEndpoint` 参数替换。offer 里携带 `relay.endpoint`，所以换 relay 只需重新出二维码。日志只记连接元数据（serverId 前缀哈希、时长、字节数），不记内容，不记完整 IP。
 
 ---
 

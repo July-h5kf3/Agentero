@@ -20,10 +20,6 @@
 			"label": "Computer name",
 			"hint": "Shown to paired iPhone and iPad devices."
 		},
-		"relay": {
-			"label": "Relay endpoint",
-			"hint": "Public WSS Relay used to route encrypted frames."
-		},
 		"status": {
 			"label": "Relay status",
 			"online": "Online",

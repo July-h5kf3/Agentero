@@ -20,10 +20,6 @@
 			"label": "电脑名称",
 			"hint": "会显示在已配对的 iPhone 和 iPad 上。"
 		},
-		"relay": {
-			"label": "Relay 地址",
-			"hint": "用于转发端到端加密帧的公开 WSS Relay。"
-		},
 		"status": { "label": "Relay 状态", "online": "在线", "offline": "离线" },
 		"start": "开启远程访问",
 		"stop": "关闭远程访问",

@@ -365,13 +365,13 @@ async fn run_control_loop(
         {
             Ok(url) => url,
             Err(error) => {
-                set_error(&shared, error.to_string());
+                set_error(&app, &shared, error.to_string());
                 return;
             }
         };
         match connect_relay(url).await {
             Ok(mut socket) => {
-                set_online(&shared, true);
+                set_online(&app, &shared, true);
                 loop {
                     tokio::select! {
                         changed = stop.changed() => {
@@ -402,16 +402,16 @@ async fn run_control_loop(
                             Ok(RelayFrame::Close) => break,
                             Ok(RelayFrame::Binary(_)) => log::warn!(target: "agentero::bridge", "unexpected binary Relay control frame"),
                             Err(error) => {
-                                set_error(&shared, error.to_string());
+                                set_error(&app, &shared, error.to_string());
                                 break;
                             }
                         }
                     }
                 }
             }
-            Err(error) => set_error(&shared, error.to_string()),
+            Err(error) => set_error(&app, &shared, error.to_string()),
         }
-        set_online(&shared, false);
+        set_online(&app, &shared, false);
         tokio::select! {
             _ = tokio::time::sleep(RECONNECT_DELAY) => {}
             changed = stop.changed() => {
@@ -458,7 +458,7 @@ async fn run_data_channel(
     ) {
         Ok(url) => url,
         Err(error) => {
-            set_error(&shared, error.to_string());
+            set_error(&app, &shared, error.to_string());
             return;
         }
     };
@@ -1153,20 +1153,22 @@ fn relay_endpoint_for_offer(endpoint: &RelayEndpoint) -> String {
     }
 }
 
-fn set_online(shared: &HostShared, online: bool) {
+fn set_online(app: &AppHandle, shared: &HostShared, online: bool) {
     if let Ok(mut state) = shared.state.lock() {
         state.online = online;
         if online {
             state.last_error = None;
         }
     }
+    let _ = app.emit("bridge:host-status", online);
 }
 
-fn set_error(shared: &HostShared, error: String) {
+fn set_error(app: &AppHandle, shared: &HostShared, error: String) {
     if let Ok(mut state) = shared.state.lock() {
         state.online = false;
         state.last_error = Some(error);
     }
+    let _ = app.emit("bridge:host-status", false);
 }
 
 #[cfg(test)]
