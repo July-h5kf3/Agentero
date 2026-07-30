@@ -69,6 +69,21 @@ export async function listenBridgeStatus(
 	);
 }
 
+export type BridgeProgressPhase =
+	| "relayConnecting"
+	| "e2eeHandshake"
+	| "pairing"
+	| "authenticating"
+	| "connected";
+
+export async function listenBridgeProgress(
+	handler: (phase: BridgeProgressPhase) => void,
+): Promise<() => void> {
+	return listen<BridgeProgressPhase>("bridge:progress", (event) =>
+		handler(event.payload),
+	);
+}
+
 export async function listenPairPending(
 	handler: (event: PairPendingEvent) => void,
 ): Promise<() => void> {

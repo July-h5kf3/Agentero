@@ -220,8 +220,10 @@ async fn run_client_loop(
                 return;
             }
         };
+        emit_progress(&app, "relayConnecting");
         match connect_relay(url).await {
             Ok(mut socket) => {
+                emit_progress(&app, "e2eeHandshake");
                 if let Err(error) = run_client_session(
                     &app,
                     &mut socket,
@@ -277,12 +279,14 @@ async fn run_client_session(
     }
     let cipher = SessionCipher::from_keys(&ephemeral, &host_public);
     let initial = if status_snapshot(status)?.paired {
+        emit_progress(app, "authenticating");
         BridgeMessage::Hello {
             device_id: identity.device_id.clone(),
             protocol_version: 1,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
         }
     } else {
+        emit_progress(app, "pairing");
         BridgeMessage::PairRequest {
             request_id: format!("pair_{}", uuid::Uuid::new_v4().simple()),
             device_id: identity.device_id.clone(),
@@ -292,6 +296,7 @@ async fn run_client_session(
     };
     send_encrypted(socket, &cipher, &initial).await?;
     set_connected(app, status, true);
+    emit_progress(app, "connected");
     let mut pending = HashMap::new();
 
     loop {
@@ -457,6 +462,10 @@ fn set_connected(app: &AppHandle, status: &Arc<Mutex<BridgeClientStatus>>, conne
         }
         let _ = app.emit("bridge:status", current.clone());
     }
+}
+
+fn emit_progress(app: &AppHandle, phase: &str) {
+    let _ = app.emit("bridge:progress", phase);
 }
 
 fn set_error(app: &AppHandle, status: &Arc<Mutex<BridgeClientStatus>>, error: String) {

@@ -29,6 +29,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import agenteroLogo from "@/assets/agentero-logo.svg";
 import {
 	Conversation,
@@ -83,6 +84,7 @@ import {
 	bridgeRpc,
 	bridgeStatus,
 	listenBridgeEvent,
+	listenBridgeProgress,
 	listenBridgeStatus,
 	listenPairPending,
 	type PairPendingEvent,
@@ -566,6 +568,17 @@ function isPairOfferUrl(value: string): boolean {
 	}
 }
 
+function describeBridgeError(
+	message: string | undefined,
+	networkPermissionMessage: string,
+): string | null {
+	if (!message) return null;
+	if (/operation not permitted/i.test(message)) {
+		return networkPermissionMessage;
+	}
+	return message;
+}
+
 function MobileBrand() {
 	return <img src={agenteroLogo} alt="Agentero" className="size-8" />;
 }
@@ -589,6 +602,27 @@ function MobilePairing({
 	const [error, setError] = useState<string | null>(null);
 	const [scannerOpen, setScannerOpen] = useState(false);
 	const [linkOpen, setLinkOpen] = useState(false);
+	useEffect(() => {
+		let dispose: (() => void) | undefined;
+		let active = true;
+		void listenBridgeProgress((phase) => {
+			if (!active) return;
+			const message = t(`connect.progress.${phase}`);
+			if (phase === "connected") {
+				toast.success(message, { id: "bridge-progress", duration: 2500 });
+			} else {
+				toast.loading(message, { id: "bridge-progress" });
+			}
+		}).then((fn) => {
+			if (active) dispose = fn;
+			else fn();
+		});
+		return () => {
+			active = false;
+			dispose?.();
+			toast.dismiss("bridge-progress");
+		};
+	}, [t]);
 	const connect = useCallback(
 		async (value: string) => {
 			const offer = value.trim();
@@ -604,7 +638,13 @@ function MobilePairing({
 				onStatus(next);
 				onDone();
 			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : t("errors.connect"));
+				toast.dismiss("bridge-progress");
+				setError(
+					describeBridgeError(
+						cause instanceof Error ? cause.message : undefined,
+						t("errors.networkPermission"),
+					) ?? t("errors.connect"),
+				);
 			} finally {
 				setConnecting(false);
 			}
@@ -672,7 +712,11 @@ function MobilePairing({
 				) : null}
 				{error || status.lastError ? (
 					<p className="mt-4 w-full text-destructive text-sm">
-						{error ?? status.lastError}
+						{error ??
+							describeBridgeError(
+								status.lastError,
+								t("errors.networkPermission"),
+							)}
 					</p>
 				) : null}
 			</div>
