@@ -118,29 +118,6 @@ export function GeneralPane({
 					</Select>
 				</SettingsRow>
 			</SettingsGroup>
-			<SettingsGroup>
-				<SettingsRow
-					label={t("general.batchImportConcurrency.label")}
-					htmlFor="batch-import-concurrency"
-				>
-					<Input
-						id="batch-import-concurrency"
-						type="number"
-						min={1}
-						max={10}
-						step={1}
-						value={settings.batchImportConcurrency}
-						onChange={(e) => {
-							const v = Number.parseInt(e.target.value, 10);
-							if (Number.isNaN(v)) return;
-							patch({
-								batchImportConcurrency: Math.max(1, Math.min(10, v)),
-							});
-						}}
-						className="h-8 w-20 tabular-nums"
-					/>
-				</SettingsRow>
-			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />
 		</>

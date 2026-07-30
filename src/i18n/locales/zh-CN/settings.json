@@ -57,9 +57,6 @@
 			"ask": "询问",
 			"always": "始终（安全时）"
 		},
-		"batchImportConcurrency": {
-			"label": "批量导入并发数"
-		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "请先退出本地Zotero",

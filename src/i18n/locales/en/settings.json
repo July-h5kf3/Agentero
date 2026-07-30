@@ -64,9 +64,6 @@
 			"ask": "Ask",
 			"always": "Always when safe"
 		},
-		"batchImportConcurrency": {
-			"label": "Batch import concurrency"
-		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",
