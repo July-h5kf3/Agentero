@@ -17,7 +17,7 @@ const TRAFFIC_LIGHT_X: f64 = 14.0;
 /// Top-left y for the macOS traffic-light buttons in the 32px Settings header.
 /// 9 + 14 (button height) = 23, leaving 9px above and 9px below for vertical centering.
 #[cfg(target_os = "macos")]
-const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 9.0;
+const SETTINGS_TRAFFIC_LIGHT_Y: f64 = 16.0;
 
 pub const SETTINGS_WINDOW_LABEL: &str = "settings";
 
