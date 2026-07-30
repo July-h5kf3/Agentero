@@ -15,8 +15,6 @@ pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
-    #[serde(default = "default_true")]
-    pub restore_last_vault: bool,
     #[serde(default = "default_translator_base_url")]
     pub translator_base_url: String,
     #[serde(default = "default_paper_tree_label_mode")]
@@ -115,7 +113,6 @@ impl Default for TranslateSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            restore_last_vault: true,
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),

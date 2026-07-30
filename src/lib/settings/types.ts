@@ -73,7 +73,6 @@ export const AUTO_UPDATE_INTERNAL_LINKS: AutoUpdateInternalLinks[] = [
 
 export type AppSettings = {
 	// General
-	restoreLastVault: boolean;
 	/**
 	 * Translator Runtime base URL for magic-wand / identifier import.
 	 * Default: hosted poco-ai service.

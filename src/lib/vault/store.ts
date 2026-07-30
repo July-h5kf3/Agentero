@@ -9,7 +9,6 @@ import { createStore } from "zustand/vanilla";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { collectPaperFoldersFromTree } from "@/lib/paper";
-import { loadSettings } from "@/lib/settings";
 import {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
@@ -89,7 +88,7 @@ export function initVaultStore(): void {
 	if (initialized) return;
 	initialized = true;
 	const vaultPath = isTauri()
-		? getSavedVaultPath({ allowRestore: loadSettings().restoreLastVault })
+		? getSavedVaultPath({ allowRestore: true })
 		: null;
 	vaultStore.setState({
 		vaultPath,

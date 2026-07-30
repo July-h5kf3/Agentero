@@ -18,7 +18,6 @@ export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
 export const UI_SCALE_PRESETS = [0.8, 0.9, 1, 1.25, 1.5] as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
-	restoreLastVault: true,
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
