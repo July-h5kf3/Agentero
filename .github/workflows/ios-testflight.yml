@@ -116,6 +116,33 @@ jobs:
           fi
           echo "APPLE_DEVELOPMENT_TEAM=${TEAM}" >> "$GITHUB_ENV"
 
+      - name: Install and validate App Store provisioning profile
+        if: steps.signing-config.outputs.ready == 'true'
+        env:
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+        run: |
+          set -euo pipefail
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_PATH="${PROFILE_DIR}/Agentero_AppStore.mobileprovision"
+          DECODED_PLIST="${RUNNER_TEMP}/agentero-profile.plist"
+          mkdir -p "$PROFILE_DIR"
+
+          echo "$IOS_MOBILE_PROVISION" | base64 --decode > "$PROFILE_PATH"
+          security cms -D -i "$PROFILE_PATH" > "$DECODED_PLIST"
+
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$DECODED_PLIST")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$DECODED_PLIST")
+          APP_IDENTIFIER=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$DECODED_PLIST")
+          EXPECTED_IDENTIFIER="${APPLE_DEVELOPMENT_TEAM}.com.poco-ai.agentero"
+
+          if [[ "$APP_IDENTIFIER" != "$EXPECTED_IDENTIFIER" ]]; then
+            echo "::error::Provisioning profile application identifier is ${APP_IDENTIFIER}, expected ${EXPECTED_IDENTIFIER}"
+            exit 1
+          fi
+
+          echo "Installed provisioning profile: ${PROFILE_NAME} (${PROFILE_UUID})"
+          echo "PROVISIONING_PROFILE_SPECIFIER=${PROFILE_UUID}" >> "$GITHUB_ENV"
+
       - name: Build signed IPA
         if: steps.signing-config.outputs.ready == 'true'
         env:
