@@ -32,6 +32,7 @@ nav:
       - 导入和管理论文: usage/import-papers.md
       - 阅读、标注与整理: usage/read-and-organize.md
       - 接入 Agent: usage/agents.md
+      - 移动端: usage/mobile.md
       - 使用 Zotero Connector: usage/zotero.md
       - 打开远程 Vault: usage/remote-vault.md
 
@@ -45,6 +46,7 @@ nav:
       - Markdown 编辑: frontend/markdown.md
       - PDF 阅读与划词: frontend/pdf.md
       - Agent 面板: frontend/agent.md
+      - 移动端: frontend/mobile.md
       - 双链 UI: frontend/wiki.md
       - 命令面板: frontend/command-palette.md
       - 翻译: frontend/translate.md
@@ -76,7 +78,6 @@ nav:
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
       - 广场 Plaza: development/plaza.md
-      - iOS 远程连接: development/ios-remote.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md
       - Bug 汇总: development/bug.md

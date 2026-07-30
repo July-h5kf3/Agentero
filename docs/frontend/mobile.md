@@ -1,6 +1,6 @@
-# iOS 远程连接方案（paseo 式二维码配对）
+# 移动端前端与 iOS 远程连接
 
-> 状态：**M1 已实现，M2 功能已实现（待 TestFlight 内测）**。Relay、Bridge、E2EE、二维码配对、设备验签、iOS Keychain、Library/NOTES、桌面 Agent 流式输出与权限应答、PDF 分块缓存、Agent 会话恢复（历史会话列表 + 回前台补齐时间线）已落地；多主机/LAN 回退仍在后续范围。
+> 状态：**M1 已实现，M2 功能已实现（待 TestFlight 内测）**。当前移动端已包含二维码/配对链接连接、连接状态恢复、论文库搜索、PDF 分块缓存、NOTES 编辑、桌面 Agent 流式输出与权限应答、ACP Agent 切换、历史会话恢复和移动端侧栏；多主机/LAN 回退仍在后续范围。面向用户的操作说明见 [移动端](../usage/mobile.md)。
 > 决策：iOS **不做本地 Vault**，App 是桌面端的纯远程客户端 —— 扫码配对后经 **relay + 端到端加密** 连接电脑上的 Agentero，读写电脑上的库，并驱动电脑上的 BYOA Agent。
 
 ---
@@ -284,10 +284,9 @@ Bridge 不发明新领域 API：`method` 直接映射到现有 `#[tauri::command
 
 | Tab | 内容 | 复用 |
 |---|---|---|
-| Library | 论文列表（搜索 / 标签筛选 / 已读态） | `paper_list` 数据模型 |
-| 阅读 | PDF 预览（分块缓存）+ NOTES.md 只读→可编辑 | pdf.js / Markdown 渲染 |
-| Agent | 对话面板，等价桌面禅模式（AgentPanel `variant="zen"` 思路） | AI Elements |
-| 设置 | 连接状态 / 已配对电脑 / 重新扫码 / 断开 | — |
+| Library | 论文列表与搜索；进入单篇论文后切换 PDF / NOTES | `paper_list`、Bridge 文件 RPC |
+| Agent | 对话面板、ACP Agent 切换、历史会话、权限应答 | AI Elements |
+| 侧栏 | 连接状态、当前电脑/Vault、断开、重新配对 | Bridge status |
 
 iPad 后续可回到双栏（Library + 阅读/Agent 分屏）。
 
@@ -356,7 +355,7 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 |---|---|---|
 | M0 Relay | [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay)：Paseo-compatible 三角色路由与部署适配器，公网入口 `relay.philfan.cn` | `GET /health`、`GET /ready` 通过；两个 WebSocket 客户端经 relay 互通；断线重连与 sync 对账通过 |
 | M1 Bridge 内核 | `features/bridge/`：身份/密钥、v2 `server` 控制+数据通道、E2EE、设备配对与验签、RPC 白名单映射；Settings 开关 + 二维码 | **已完成**：已对 `wss://relay.philfan.cn/ws` 完成加密双向帧联调，Bridge 单元测试覆盖协议、加密、认证与 Agent 会话过滤 |
-| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES 只读）/ Agent 对话 + 权限应答 | **功能已实现**：扫码、Library、NOTES 编辑、Agent 流式输出与权限应答、PDF 分块缓存、会话恢复（`agent_list_sessions` / `agent_load_session` 已入 Bridge 白名单，iOS 回前台自动补齐时间线）；下一步进入 TestFlight 内测 |
+| M2 iOS MVP | 扫码配对 + Library / 阅读（PDF+NOTES）/ Agent 对话 + 权限应答 | **功能已实现**：扫码/粘贴链接、Library 搜索、NOTES 编辑、Agent 切换、流式输出与权限应答、PDF 分块缓存、会话恢复（`agent_list_sessions` / `agent_load_session` 已入 Bridge 白名单，iOS 回前台自动补齐时间线）；下一步进入 TestFlight 内测 |
 | M3 打磨 | NOTES 编辑（含保存冲突检查）、标签/已读、wiki backlinks、多主机切换、iPad 双栏 | — |
 | P2 之后 | APNs 推送、LAN 直连兜底（含 Tailscale 手动地址）、headless `agentero bridge serve`、`remote:` Vault 透传 | — |
 
@@ -424,10 +423,10 @@ pnpm tauri ios build
 ```
 
 TestFlight 的签名、构建号和上传流程见
-[iOS TestFlight Release](ios-testflight.md)。
+[iOS TestFlight Release](../development/ios-testflight.md)。
 
 ## 相关文档
 
 - 调研来源：paseo `@getpaseo/{cli,server,relay}` 发行产物（§2 有函数/文件级证据）
 - [../backend/remote.md](../backend/remote.md) · [../backend/agent.md](../backend/agent.md) · [../backend/catalog.md](../backend/catalog.md)
-- [release.md](release.md)（iPadOS/iOS 上架清单） · [roadmap.md](roadmap.md)
+- [release.md](../development/release.md)（iPadOS/iOS 上架清单） · [roadmap.md](../development/roadmap.md)

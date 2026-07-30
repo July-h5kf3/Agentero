@@ -55,7 +55,8 @@
 - [ ] 翻译：更多 adapter / 消费方 / 词典
 - [ ] 更多 Skills（多篇对比、Idea 评估、实验复现清单等）
 - [ ] 自动 changelog；多 arch artifact 命名
-- [ ] iOS/iPad 纯远程客户端：Bridge + 二维码配对 + relay E2EE + 远程 Agent（[`ios-remote.md`](ios-remote.md)）— MVP 功能已实现（含 PDF 分块缓存与 Agent 会话恢复），剩 TestFlight 内测与 M3 打磨
+- [x] iOS/iPad 纯远程客户端 M2：Bridge + 二维码/链接配对 + relay E2EE + Library/阅读/NOTES + 远程 Agent（见 [移动端前端与远程架构](../frontend/mobile.md)）
+- [ ] iOS/iPad M3：TestFlight 内测、多主机切换、iPad 双栏、wiki backlinks、离线体验打磨
 - [ ] Git 集成 / 可选云同步
 - [ ] 引用图 deeper（聚类、作者机构图）
 - [ ] CLI domain 抽离独立 crate（仅当边界成为问题时）

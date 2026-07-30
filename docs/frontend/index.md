@@ -92,6 +92,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | Markdown 编辑 | [markdown.md](markdown.md) |
 | PDF 阅读与划词 | [pdf.md](pdf.md) |
 | Agent 面板 | [agent.md](agent.md) |
+| 移动端壳与 Bridge 客户端 | [mobile.md](mobile.md) |
 | 双链 UI | [wiki.md](wiki.md) |
 | 命令面板 | [command-palette.md](command-palette.md) |
 | 翻译 | [translate.md](translate.md) |

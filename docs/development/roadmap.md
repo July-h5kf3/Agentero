@@ -99,7 +99,7 @@
 | PDF / 翻译 | 无文本层降级；HTML 标注；更多翻译 adapter/消费方 |
 | Skills | 多篇对比、Idea 评估、实验复现清单 |
 | 发布 | 自动 changelog；多 arch artifact 命名 |
-| 平台 | **iOS/iPad 纯远程客户端**（见 [ios-remote.md](ios-remote.md)）、自托管 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 远程中继、Git 集成、可选云同步 |
+| 平台 | **iOS/iPad 纯远程客户端 M2 已实现**（见 [移动端前端与远程架构](../frontend/mobile.md)），待 TestFlight 内测和 M3 打磨；自托管 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 远程中继、Git 集成、可选云同步 |
 | 引用图 deeper | 聚类、作者/机构图 |
 | 工程 | CLI domain 抽离独立 crate（仅当边界成为问题时） |
 
