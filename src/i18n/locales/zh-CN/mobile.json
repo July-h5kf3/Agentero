@@ -1,7 +1,6 @@
 {
 	"tabs": {
 		"library": "论文库",
-		"reader": "阅读",
 		"agent": "Agent",
 		"settings": "设置"
 	},
@@ -23,6 +22,7 @@
 	"library": { "title": "论文库", "search": "搜索论文", "empty": "暂无论文" },
 	"reader": {
 		"title": "笔记",
+		"back": "返回论文库",
 		"pdf": "PDF",
 		"notes": "笔记",
 		"loadingPdf": "正在加载 PDF…",

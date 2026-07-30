@@ -1,6 +1,7 @@
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import {
+	ArrowLeft,
 	BookOpen,
 	Bot,
 	Camera,
@@ -22,6 +23,7 @@ import {
 import { nanoid } from "nanoid";
 import {
 	lazy,
+	type ReactNode,
 	Suspense,
 	useCallback,
 	useEffect,
@@ -31,6 +33,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import agenteroLogo from "@/assets/agentero-logo.svg";
+import { MobileHeader as MobileHeaderPage } from "@/components/mobile/mobile-header";
+import { MobileLibraryPage } from "@/components/mobile/mobile-library-page";
+import { MobileReaderPage } from "@/components/mobile/mobile-reader-page";
+import { MobileSettingsPage } from "@/components/mobile/mobile-settings-page";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -42,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { displayHistoryTitle } from "@/lib/agent/prompt-display";
 import {
 	type BridgeClientStatus,
 	bridgeConnect,
@@ -59,7 +66,7 @@ import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper/types";
 
-type MobileTab = "library" | "reader" | "agent" | "settings";
+type MobileTab = "library" | "agent" | "settings";
 
 const MobilePdfViewer = lazy(() =>
 	import("@/components/viewer/embed/pdf-viewer").then((module) => ({
@@ -69,7 +76,6 @@ const MobilePdfViewer = lazy(() =>
 
 const TABS: Array<{ id: MobileTab; icon: typeof Library }> = [
 	{ id: "library", icon: Library },
-	{ id: "reader", icon: BookOpen },
 	{ id: "agent", icon: Bot },
 	{ id: "settings", icon: Settings2 },
 ];
@@ -168,38 +174,58 @@ export default function MobileApp() {
 				<MobileNav tab={tab} onTab={setTab} vertical />
 			</aside>
 			<main className="flex min-h-dvh min-w-0 flex-1 flex-col pb-20 md:pb-0">
-				<header className="flex h-14 shrink-0 items-center justify-between border-b px-4 md:px-6">
-					<div className="flex min-w-0 items-center gap-2">
-						<div className="md:hidden">
-							<MobileBrand />
-						</div>
-						<Laptop className="size-4 shrink-0 text-muted-foreground" />
-						<span className="truncate font-medium text-sm">
-							{status.hostName ?? t("connect.offline")}
-						</span>
-					</div>
-					<span className="flex items-center gap-1.5 text-muted-foreground text-xs">
-						<Circle
-							className={cn(
-								"size-2 fill-current",
-								status.connected ? "text-emerald-500" : "text-muted-foreground",
-							)}
-						/>
-						{status.connected ? t("settings.connected") : t("settings.offline")}
-					</span>
-				</header>
+				<MobileHeaderPage
+					title={
+						tab === "library" && selectedPaper
+							? selectedPaper.title
+							: t(`tabs.${tab}`)
+					}
+					status={status}
+					statusLabel={
+						status.connected ? t("settings.connected") : t("settings.offline")
+					}
+					brand={<MobileBrand />}
+					leading={
+						tab === "library" && selectedPaper ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={t("reader.back")}
+								onClick={() => setSelectedPaper(null)}
+							>
+								<ArrowLeft className="size-4" />
+							</Button>
+						) : undefined
+					}
+					trailing={
+						tab === "agent" ? (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={t("agent.history")}
+								onClick={() => {
+									window.dispatchEvent(new CustomEvent("mobile:agent-history"));
+								}}
+							>
+								<History className="size-4" />
+							</Button>
+						) : undefined
+					}
+				/>
 				<div className="min-h-0 flex-1 overflow-hidden">
 					{tab === "library" ? (
-						<MobileLibrary
-							papers={papers}
-							selected={selectedPaper}
-							onSelect={(paper) => {
-								setSelectedPaper(paper);
-								setTab("reader");
-							}}
-						/>
+						selectedPaper ? (
+							<MobileReaderPage paper={selectedPaper} />
+						) : (
+							<MobileLibraryPage
+								papers={papers}
+								selected={selectedPaper}
+								onSelect={setSelectedPaper}
+							/>
+						)
 					) : null}
-					{tab === "reader" ? <MobileReader paper={selectedPaper} /> : null}
 					{tab === "agent" ? (
 						<MobileAgent
 							sessionId={agentSessionId}
@@ -207,7 +233,7 @@ export default function MobileApp() {
 						/>
 					) : null}
 					{tab === "settings" ? (
-						<MobileSettings
+						<MobileSettingsPage
 							status={status}
 							onStatus={setStatus}
 							onPairAnother={() => {
@@ -222,6 +248,40 @@ export default function MobileApp() {
 				<MobileNav tab={tab} onTab={setTab} />
 			</nav>
 		</div>
+	);
+}
+
+export function LegacyMobileHeader({
+	title,
+	status,
+	statusLabel,
+	leading,
+	trailing,
+}: {
+	title: string;
+	status: BridgeClientStatus;
+	statusLabel: string;
+	leading?: ReactNode;
+	trailing?: ReactNode;
+}) {
+	return (
+		<header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-3 md:px-6">
+			{leading}
+			<div className="flex min-w-0 flex-1 items-center gap-2">
+				<div className="md:hidden">
+					<MobileBrand />
+				</div>
+				<span className="truncate font-semibold text-sm">{title}</span>
+				<Circle
+					className={cn(
+						"size-2 shrink-0 fill-current",
+						status.connected ? "text-emerald-500" : "text-muted-foreground",
+					)}
+					aria-label={statusLabel}
+				/>
+			</div>
+			{trailing}
+		</header>
 	);
 }
 
@@ -504,7 +564,7 @@ function MobileQrScanner({
 	);
 }
 
-function MobileLibrary({
+export function LegacyMobileLibrary({
 	papers,
 	selected,
 	onSelect,
@@ -526,9 +586,8 @@ function MobileLibrary({
 	}, [papers, query]);
 	return (
 		<section className="flex h-full min-h-0 flex-col">
-			<div className="border-b px-4 py-4 md:px-6">
-				<h1 className="font-semibold text-lg">{t("library.title")}</h1>
-				<div className="relative mt-3">
+			<div className="border-b px-4 py-3 md:px-6">
+				<div className="relative">
 					<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						value={query}
@@ -577,7 +636,7 @@ function MobileLibrary({
 	);
 }
 
-function MobileReader({ paper }: { paper: PaperMetadata | null }) {
+export function LegacyMobileReader({ paper }: { paper: PaperMetadata | null }) {
 	const { t } = useTranslation("mobile");
 	const [notes, setNotes] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -627,7 +686,7 @@ function MobileReader({ paper }: { paper: PaperMetadata | null }) {
 		}
 	};
 	const pdf = (
-		<MobilePdfPreview
+		<LegacyMobilePdfPreview
 			bytes={pdfBytes}
 			error={pdfError}
 			docId={`bridge:${paper.id}`}
@@ -653,13 +712,7 @@ function MobileReader({ paper }: { paper: PaperMetadata | null }) {
 	);
 	return (
 		<section className="flex h-full min-h-0 flex-col">
-			<header className="flex shrink-0 items-center gap-3 border-b px-4 py-3 md:px-6">
-				<div className="min-w-0 flex-1">
-					<p className="line-clamp-2 font-semibold text-base">{paper.title}</p>
-					<p className="mt-1 text-muted-foreground text-xs">
-						{t("reader.title")}
-					</p>
-				</div>
+			<div className="flex shrink-0 items-center justify-end border-b px-4 py-2 md:px-6">
 				<div className="flex shrink-0 border bg-muted p-0.5 md:hidden">
 					<button
 						type="button"
@@ -686,7 +739,7 @@ function MobileReader({ paper }: { paper: PaperMetadata | null }) {
 						<FileText className="size-4" />
 					</button>
 				</div>
-			</header>
+			</div>
 			<div className="min-h-0 flex-1 md:hidden">
 				{mode === "pdf" ? pdf : notesEditor}
 			</div>
@@ -698,7 +751,7 @@ function MobileReader({ paper }: { paper: PaperMetadata | null }) {
 	);
 }
 
-function MobilePdfPreview({
+export function LegacyMobilePdfPreview({
 	bytes,
 	error,
 	docId,
@@ -861,6 +914,12 @@ function MobileAgent({
 	}, [restore]);
 
 	useEffect(() => {
+		const onHistory = () => setHistoryOpen(true);
+		window.addEventListener("mobile:agent-history", onHistory);
+		return () => window.removeEventListener("mobile:agent-history", onHistory);
+	}, []);
+
+	useEffect(() => {
 		let active = true;
 		const unlisten: Array<() => void> = [];
 		void listenBridgeEvent<AgentStreamEvent>("agent:stream", (event) => {
@@ -979,18 +1038,6 @@ function MobileAgent({
 	return (
 		<>
 			<section className="flex h-full min-h-0 flex-col">
-				<header className="flex items-center justify-between border-b px-4 py-4 md:px-6">
-					<h1 className="font-semibold text-lg">{t("agent.title")}</h1>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-sm"
-						aria-label={t("agent.history")}
-						onClick={() => setHistoryOpen(true)}
-					>
-						<History className="size-4" />
-					</Button>
-				</header>
 				<div className="agentero-scroll flex-1 px-4 py-5 md:px-6">
 					{restoring ? (
 						<p className="mb-3 flex items-center gap-2 text-muted-foreground text-sm">
@@ -1019,15 +1066,12 @@ function MobileAgent({
 					)}
 				</div>
 				<footer className="flex gap-2 border-t p-3 md:px-6">
-					<Input
+					<Textarea
 						value={text}
 						onChange={(event) => setText(event.target.value)}
-						onKeyDown={(event) => {
-							if (event.key === "Enter" && !event.shiftKey) {
-								event.preventDefault();
-								void send();
-							}
-						}}
+						enterKeyHint="enter"
+						rows={1}
+						className="min-h-10 resize-none py-2"
 						placeholder={t("agent.placeholder")}
 					/>
 					<Button
@@ -1118,7 +1162,10 @@ function MobileAgentHistoryDialog({
 									onClick={() => onPick(session.sessionId)}
 								>
 									<span className="line-clamp-2 text-sm">
-										{session.title?.trim() || session.sessionId}
+										{displayHistoryTitle(
+											session.title ?? "",
+											session.sessionId.slice(0, 8),
+										)}
 									</span>
 									{session.updatedAt ? (
 										<span className="text-muted-foreground text-xs">
@@ -1193,7 +1240,7 @@ function MobilePermissionDialog({
 	);
 }
 
-function MobileSettings({
+export function LegacyMobileSettings({
 	status,
 	onStatus,
 	onPairAnother,
@@ -1209,7 +1256,6 @@ function MobileSettings({
 	};
 	return (
 		<section className="px-4 py-5 md:px-6">
-			<h1 className="font-semibold text-lg">{t("settings.title")}</h1>
 			<dl className="mt-5 divide-y border-y">
 				<div className="flex items-center justify-between gap-4 py-3">
 					<dt className="text-muted-foreground text-sm">

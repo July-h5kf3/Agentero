@@ -1,7 +1,6 @@
 {
 	"tabs": {
 		"library": "Library",
-		"reader": "Read",
 		"agent": "Agent",
 		"settings": "Settings"
 	},
@@ -27,6 +26,7 @@
 	},
 	"reader": {
 		"title": "Notes",
+		"back": "Back to library",
 		"pdf": "PDF",
 		"notes": "Notes",
 		"loadingPdf": "Loading PDF…",
