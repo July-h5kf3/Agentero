@@ -97,10 +97,17 @@ export function SettingsNativeRoot() {
 			*/}
 			{isMac ? (
 				<header className="flex h-8 shrink-0 items-center border-b bg-muted/40 select-none">
+					{/*
+					  Traffic lights: x=14, three ~14px buttons + gaps → ends ~68px.
+					  Keep the same 92px reserved strip as the main title bar so the
+					  drag region layout matches across windows, then let the rest of
+					  the header be draggable too.
+					*/}
 					<div
 						className="w-[92px] shrink-0 self-stretch"
 						data-tauri-drag-region
 					/>
+					<div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
 				</header>
 			) : null}
 
