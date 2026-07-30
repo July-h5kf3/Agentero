@@ -20,7 +20,12 @@
 		"pending": "请在电脑上确认验证码",
 		"code": "确认码"
 	},
-	"library": { "title": "论文库", "search": "搜索论文", "empty": "暂无论文" },
+	"library": {
+		"title": "论文库",
+		"search": "搜索论文",
+		"loading": "正在加载论文…",
+		"empty": "暂无论文"
+	},
 	"reader": {
 		"title": "笔记",
 		"back": "返回论文库",
@@ -39,6 +44,8 @@
 		"empty": "开始一段对话",
 		"thinking": "思考中...",
 		"failed": "桌面 Agent 未能完成此请求。",
+		"switchBackend": "切换 Agent 后端",
+		"defaultBackend": "默认 Agent",
 		"history": "历史会话",
 		"historyEmpty": "暂无历史会话",
 		"historyUnsupported": "当前 Agent 不支持查看历史会话。",
@@ -51,9 +58,11 @@
 		"connected": "已连接",
 		"offline": "离线",
 		"addDesktop": "连接另一台电脑",
+		"addDevice": "添加设备",
 		"disconnect": "断开连接",
 		"computer": "电脑",
-		"vault": "知识库"
+		"vault": "知识库",
+		"vaults": "知识库"
 	},
 	"errors": { "load": "无法加载远程数据", "connect": "无法连接" }
 }

@@ -4,6 +4,8 @@ import {
 	ArrowLeft,
 	BookOpen,
 	Camera,
+	Check,
+	ChevronDown,
 	ChevronRight,
 	Circle,
 	FileText,
@@ -60,8 +62,19 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type {
+	AgentDescriptor,
+	AgentListResponse,
+	CatalogScanResponse,
+} from "@/lib/agent/api";
 import { displayHistoryTitle } from "@/lib/agent/prompt-display";
 import {
 	type BridgeClientStatus,
@@ -88,6 +101,7 @@ const MobilePdfViewer = lazy(() =>
 export default function MobileApp() {
 	const { t } = useTranslation("mobile");
 	const [tab, setTab] = useState<MobileTab>("library");
+	const [libraryQuery, setLibraryQuery] = useState("");
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [pairingRequested, setPairingRequested] = useState(false);
 	const [pendingOffer, setPendingOffer] = useState<string | null>(null);
@@ -96,9 +110,14 @@ export default function MobileApp() {
 		paired: false,
 	});
 	const [papers, setPapers] = useState<PaperMetadata[]>([]);
+	const [papersLoading, setPapersLoading] = useState(false);
 	const [selectedPaper, setSelectedPaper] = useState<PaperMetadata | null>(
 		null,
 	);
+	const [readerMode, setReaderMode] = useState<"pdf" | "notes">("pdf");
+	const [agents, setAgents] = useState<AgentDescriptor[]>([]);
+	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+	const [agentsLoading, setAgentsLoading] = useState(false);
 	const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
 	const [pairPending, setPairPending] = useState<PairPendingEvent | null>(null);
 	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -118,6 +137,10 @@ export default function MobileApp() {
 		if (!touch) return;
 		const deltaX = touch.clientX - start.x;
 		const deltaY = Math.abs(touch.clientY - start.y);
+		if (selectedPaper && deltaX > 60 && deltaX > deltaY * 1.25) {
+			setSelectedPaper(null);
+			return;
+		}
 		if (deltaX > 60 && deltaX > deltaY * 1.25 && start.x <= 32) {
 			setSidebarOpen(true);
 			return;
@@ -135,18 +158,44 @@ export default function MobileApp() {
 		if (!isTauri()) return;
 		let active = true;
 		const unlisten: Array<() => void> = [];
-		void bridgeResume()
-			.catch(() => bridgeStatus())
-			.then((next) => active && setStatus(next))
-			.catch(() => undefined);
-		void listenBridgeStatus((next) => active && setStatus(next)).then((off) =>
-			unlisten.push(off),
-		);
-		void listenPairPending((next) => active && setPairPending(next)).then(
-			(off) => unlisten.push(off),
-		);
+		const resume = async () => {
+			try {
+				const [offStatus, offPairPending] = await Promise.all([
+					listenBridgeStatus((next) => active && setStatus(next)),
+					listenPairPending((next) => active && setPairPending(next)),
+				]);
+				if (!active) {
+					offStatus();
+					offPairPending();
+					return;
+				}
+				unlisten.push(offStatus, offPairPending);
+				const next = await bridgeResume().catch(() => bridgeStatus());
+				if (active) setStatus(next);
+			} catch {
+				// Keep the pairing screen usable when the native bridge is unavailable.
+			}
+		};
+		void resume();
+
+		const onVisible = () => {
+			if (document.visibilityState !== "visible" || !active) return;
+			void bridgeStatus()
+				.then((next) => {
+					if (active) setStatus(next);
+					if (active && next.paired && !next.connected) {
+						return bridgeResume().then((resumed) => {
+							if (active) setStatus(resumed);
+						});
+					}
+					return undefined;
+				})
+				.catch(() => undefined);
+		};
+		document.addEventListener("visibilitychange", onVisible);
 		return () => {
 			active = false;
+			document.removeEventListener("visibilitychange", onVisible);
 			for (const off of unlisten) off();
 		};
 	}, []);
@@ -175,17 +224,105 @@ export default function MobileApp() {
 		};
 	}, []);
 
+	const refreshPapers = useCallback(async () => {
+		if (!status.paired || !status.connected) return;
+		setPapersLoading(true);
+		try {
+			const next = await bridgeRpc<PaperMetadata[]>("paper_list");
+			setPapers(next);
+		} catch {
+			// Keep the last successful list during a transient bridge failure.
+		} finally {
+			setPapersLoading(false);
+		}
+	}, [status.connected, status.paired]);
+
 	useEffect(() => {
 		if (!status.paired) {
 			setPapers([]);
+			setPapersLoading(false);
 			setSelectedPaper(null);
+			setAgents([]);
+			setSelectedAgentId(null);
 			setAgentSessionId(null);
 			return;
 		}
-		void bridgeRpc<PaperMetadata[]>("paper_list")
-			.then(setPapers)
-			.catch(() => undefined);
-	}, [status.paired]);
+		if (!status.connected) return;
+
+		void refreshPapers();
+		const refreshWhenVisible = () => {
+			if (document.visibilityState === "visible") void refreshPapers();
+		};
+		window.addEventListener("focus", refreshWhenVisible);
+		document.addEventListener("visibilitychange", refreshWhenVisible);
+		const interval = window.setInterval(() => {
+			if (document.visibilityState === "visible" && tab === "library") {
+				void refreshPapers();
+			}
+		}, 10_000);
+
+		return () => {
+			window.removeEventListener("focus", refreshWhenVisible);
+			document.removeEventListener("visibilitychange", refreshWhenVisible);
+			window.clearInterval(interval);
+		};
+	}, [refreshPapers, status.connected, status.paired, tab]);
+
+	useEffect(() => {
+		if (!status.paired || !status.connected || tab !== "agent") return;
+		let active = true;
+		setAgentsLoading(true);
+		void Promise.all([
+			bridgeRpc<AgentListResponse>("agent_list_agents"),
+			bridgeRpc<CatalogScanResponse>("agent_scan_catalog"),
+		])
+			.then(([result, catalog]) => {
+				if (!active) return;
+				const byId = new Map(result.agents.map((agent) => [agent.id, agent]));
+				for (const agent of catalog.customAgents) {
+					byId.set(agent.id, agent);
+				}
+				for (const entry of catalog.entries) {
+					if (entry.acpStatus !== "ready" || !entry.registeredId) continue;
+					if (byId.has(entry.registeredId)) continue;
+					byId.set(entry.registeredId, {
+						id: entry.registeredId,
+						name: entry.acpAgentName ?? entry.name,
+						template: entry.templateId as AgentDescriptor["template"],
+						command: entry.command,
+						args: entry.args,
+						env: {},
+						available: true,
+						lastProbeOk: true,
+					});
+				}
+				const nextAgents = [...byId.values()];
+				setAgents(nextAgents);
+				setSelectedAgentId((current) => {
+					if (current && nextAgents.some((agent) => agent.id === current)) {
+						return current;
+					}
+					return (
+						result.defaultId ??
+						catalog.defaultId ??
+						nextAgents.find((agent) => agent.available)?.id ??
+						nextAgents[0]?.id ??
+						null
+					);
+				});
+			})
+			.catch(() => {
+				if (active) setAgents([]);
+			})
+			.finally(() => {
+				if (active) setAgentsLoading(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [status.connected, status.paired, tab]);
+
+	const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
 
 	if (!status.paired || pairingRequested) {
 		return (
@@ -204,7 +341,7 @@ export default function MobileApp() {
 
 	return (
 		<div
-			className="mobile-shell flex min-h-dvh bg-background text-foreground"
+			className="mobile-shell flex h-dvh min-h-0 overflow-hidden bg-background text-foreground"
 			onTouchStart={handleTouchStart}
 			onTouchEnd={handleTouchEnd}
 		>
@@ -212,7 +349,7 @@ export default function MobileApp() {
 				<MobileBrand />
 				<MobileNav tab={tab} onTab={setTab} />
 			</aside>
-			<main className="flex min-h-dvh min-w-0 flex-1 flex-col">
+			<main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
 				<MobileHeaderPage
 					title={
 						tab === "library" && selectedPaper
@@ -226,6 +363,7 @@ export default function MobileApp() {
 					brand={<MobileBrand />}
 					brandButtonLabel={t("settings.menu")}
 					onBrandClick={() => setSidebarOpen(true)}
+					showBrand={!selectedPaper}
 					leading={
 						tab === "library" && selectedPaper ? (
 							<Button
@@ -233,42 +371,134 @@ export default function MobileApp() {
 								variant="ghost"
 								size="icon-sm"
 								aria-label={t("reader.back")}
-								onClick={() => setSelectedPaper(null)}
+								onClick={() => {
+									setSelectedPaper(null);
+									setReaderMode("pdf");
+								}}
 							>
 								<ArrowLeft className="size-4" />
 							</Button>
 						) : undefined
 					}
 					trailing={
-						tab === "agent" ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-sm"
-								aria-label={t("agent.history")}
-								onClick={() => {
-									window.dispatchEvent(new CustomEvent("mobile:agent-history"));
-								}}
-							>
-								<History className="size-4" />
-							</Button>
+						tab === "library" && selectedPaper ? (
+							<div className="flex shrink-0 rounded-lg border bg-muted p-0.5">
+								<button
+									type="button"
+									aria-label={t("reader.pdf")}
+									aria-pressed={readerMode === "pdf"}
+									onClick={() => setReaderMode("pdf")}
+									className={cn(
+										"grid size-9 place-items-center rounded-md",
+										readerMode === "pdf" && "bg-background shadow-sm",
+									)}
+								>
+									<BookOpen className="size-4" />
+								</button>
+								<button
+									type="button"
+									aria-label={t("reader.notes")}
+									aria-pressed={readerMode === "notes"}
+									onClick={() => setReaderMode("notes")}
+									className={cn(
+										"grid size-9 place-items-center rounded-md",
+										readerMode === "notes" && "bg-background shadow-sm",
+									)}
+								>
+									<FileText className="size-4" />
+								</button>
+							</div>
+						) : tab === "library" ? (
+							<div className="relative w-[min(10rem,38vw)] shrink-0">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={libraryQuery}
+									onChange={(event) => setLibraryQuery(event.target.value)}
+									placeholder={t("library.search")}
+									aria-label={t("library.search")}
+									className="h-10 w-full pl-8 text-base md:text-sm"
+								/>
+							</div>
+						) : tab === "agent" ? (
+							<div className="flex min-w-0 items-center gap-1">
+								<DropdownMenu>
+									<DropdownMenuTrigger
+										asChild
+										disabled={agentsLoading || agents.length === 0}
+									>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="h-9 min-w-0 max-w-[min(48vw,12rem)] justify-between gap-1.5 rounded-lg px-2.5"
+											aria-label={t("agent.switchBackend")}
+											title={t("agent.switchBackend")}
+										>
+											<span className="truncate">
+												{selectedAgent?.name ?? t("agent.defaultBackend")}
+											</span>
+											<ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end" className="w-56">
+										{agents.map((agent) => (
+											<DropdownMenuItem
+												key={agent.id}
+												disabled={!agent.available}
+												onSelect={() => {
+													if (agent.id !== selectedAgentId) {
+														setSelectedAgentId(agent.id);
+														setAgentSessionId(null);
+													}
+												}}
+												className="gap-2"
+											>
+												<span className="min-w-0 flex-1 truncate">
+													{agent.name}
+												</span>
+												{agent.id === selectedAgentId ? (
+													<Check className="size-4 shrink-0" />
+												) : null}
+											</DropdownMenuItem>
+										))}
+									</DropdownMenuContent>
+								</DropdownMenu>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-sm"
+									aria-label={t("agent.history")}
+									onClick={() => {
+										window.dispatchEvent(
+											new CustomEvent("mobile:agent-history"),
+										);
+									}}
+								>
+									<History className="size-4" />
+								</Button>
+							</div>
 						) : undefined
 					}
 				/>
+				<div className="h-16 shrink-0 md:hidden" aria-hidden="true" />
 				<div className="min-h-0 flex-1 overflow-hidden">
 					{tab === "library" ? (
 						selectedPaper ? (
-							<MobileReaderPage paper={selectedPaper} />
+							<MobileReaderPage paper={selectedPaper} mode={readerMode} />
 						) : (
 							<MobileLibraryPage
 								papers={papers}
+								loading={papersLoading}
 								selected={selectedPaper}
 								onSelect={setSelectedPaper}
+								query={libraryQuery}
 							/>
 						)
 					) : null}
 					{tab === "agent" ? (
 						<MobileAgent
+							key={selectedAgentId ?? "default"}
+							selectedAgentId={selectedAgentId}
 							sessionId={agentSessionId}
 							onSessionId={setAgentSessionId}
 						/>
@@ -277,12 +507,7 @@ export default function MobileApp() {
 			</main>
 			<MobileSidebar
 				open={sidebarOpen}
-				tab={tab}
 				status={status}
-				onTab={(nextTab) => {
-					setTab(nextTab);
-					setSidebarOpen(false);
-				}}
 				onClose={() => setSidebarOpen(false)}
 				onStatus={setStatus}
 				onPairAnother={() => {
@@ -401,7 +626,7 @@ function MobilePairing({
 		setLinkOpen(true);
 	}, [initialOffer]);
 	return (
-		<div className="flex min-h-dvh w-full flex-col bg-background px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8 sm:px-8 md:mx-auto md:max-w-md">
+		<div className="mobile-shell flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-background px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8 sm:px-8 md:mx-auto md:max-w-md">
 			<div className="flex flex-1 flex-col items-center justify-center">
 				<img src={agenteroLogo} alt="Agentero" className="size-28" />
 				<h1 className="mt-6 font-semibold text-2xl">{t("connect.title")}</h1>
@@ -471,7 +696,7 @@ function MobilePairing({
 						value={offerUrl}
 						onChange={(event) => setOfferUrl(event.target.value)}
 						placeholder={t("connect.placeholder")}
-						className="min-h-28 resize-none font-mono text-xs"
+						className="min-h-28 resize-none font-mono text-base md:text-xs"
 						autoCapitalize="off"
 						autoCorrect="off"
 						spellCheck={false}
@@ -700,15 +925,22 @@ export function LegacyMobileReader({ paper }: { paper: PaperMetadata | null }) {
 		/>
 	);
 	const notesEditor = (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<Textarea
-				value={notes}
-				onChange={(event) => setNotes(event.target.value)}
-				className="min-h-0 flex-1 resize-none rounded-none border-0 p-4 font-mono text-sm shadow-none focus-visible:ring-0 md:px-6"
-				placeholder=""
-			/>
-			<footer className="flex justify-end border-t px-4 py-3 md:px-6">
-				<Button size="sm" disabled={saving} onClick={() => void save()}>
+		<div className="relative flex h-full min-h-0 flex-1 flex-col">
+			<div className="min-h-0 flex-1 overflow-y-auto pb-20">
+				<Textarea
+					value={notes}
+					onChange={(event) => setNotes(event.target.value)}
+					className="min-h-full w-full resize-none overflow-y-auto rounded-none border-0 p-4 font-mono text-base shadow-none field-sizing-fixed focus-visible:ring-0 md:px-6 md:text-sm"
+					placeholder=""
+				/>
+			</div>
+			<footer className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end border-t bg-background/95 px-4 py-3 backdrop-blur md:px-6">
+				<Button
+					size="sm"
+					className="pointer-events-auto"
+					disabled={saving}
+					onClick={() => void save()}
+				>
 					{saving ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
 					{saving ? t("reader.saving") : t("reader.save")}
 				</Button>
@@ -745,7 +977,7 @@ export function LegacyMobileReader({ paper }: { paper: PaperMetadata | null }) {
 					</button>
 				</div>
 			</div>
-			<div className="min-h-0 flex-1 md:hidden">
+			<div className="h-full min-h-0 flex-1 md:hidden">
 				{mode === "pdf" ? pdf : notesEditor}
 			</div>
 			<div className="hidden min-h-0 flex-1 md:grid md:grid-cols-2 md:divide-x">
@@ -860,9 +1092,11 @@ type AcpLoadSessionResult = {
 };
 
 function MobileAgent({
+	selectedAgentId,
 	sessionId,
 	onSessionId,
 }: {
+	selectedAgentId: string | null;
 	sessionId: string | null;
 	onSessionId: (sessionId: string | null) => void;
 }) {
@@ -884,7 +1118,10 @@ function MobileAgent({
 			try {
 				const history = await bridgeRpc<AcpLoadSessionResult>(
 					"agent_load_session",
-					{ sessionId: target },
+					{
+						agentId: selectedAgentId ?? undefined,
+						sessionId: target,
+					},
 				);
 				sessionRef.current = history.sessionId;
 				onSessionId(history.sessionId);
@@ -901,7 +1138,7 @@ function MobileAgent({
 				setRestoring(false);
 			}
 		},
-		[onSessionId],
+		[onSessionId, selectedAgentId],
 	);
 
 	useEffect(() => {
@@ -1020,6 +1257,7 @@ function MobileAgent({
 			const accepted = await bridgeRpc<{ sessionId: string }>(
 				"agent_run_once",
 				{
+					agentId: selectedAgentId ?? undefined,
 					prompt: next,
 					permissionMode: "ask",
 				},
@@ -1038,11 +1276,12 @@ function MobileAgent({
 			]);
 		}
 	};
+
 	return (
 		<>
 			<section className="flex h-full min-h-0 flex-col">
 				<Conversation className="min-h-0 flex-1">
-					<ConversationContent className="gap-4 px-4 py-5 md:px-6">
+					<ConversationContent className="gap-5 px-4 py-5 md:px-6">
 						{restoring ? (
 							<p className="mb-3 flex items-center gap-2 text-muted-foreground text-sm">
 								<LoaderCircle className="size-4 animate-spin" />
@@ -1051,7 +1290,7 @@ function MobileAgent({
 						) : null}
 						{lines.length === 0 && !restoring ? (
 							<ConversationEmptyState
-								className="min-h-0 flex-1 p-4"
+								className="min-h-0 flex-1 p-4 text-base"
 								title={t("agent.empty")}
 							/>
 						) : (
@@ -1065,7 +1304,8 @@ function MobileAgent({
 								>
 									<MessageContent
 										className={cn(
-											line.role === "user" && "rounded-lg bg-muted px-3 py-2",
+											"text-[15px] leading-6",
+											line.role === "user" && "rounded-lg bg-muted px-3 py-2.5",
 											line.role === "assistant" && "w-full max-w-full",
 										)}
 									>
@@ -1088,7 +1328,7 @@ function MobileAgent({
 					<ConversationScrollButton className="bottom-3 size-8 shadow-md" />
 				</Conversation>
 				<PromptInput
-					className="shrink-0 rounded-none border-0 border-t bg-muted/10 p-3 shadow-none md:px-6"
+					className="shrink-0 rounded-none border-0 border-t bg-muted/10 p-3.5 shadow-none md:px-6"
 					inputGroupClassName="overflow-visible"
 					onSubmit={({ text: value }) => void send(value)}
 				>
@@ -1098,7 +1338,7 @@ function MobileAgent({
 								placeholder={t("agent.placeholder")}
 								disabled={sending}
 								rows={1}
-								className="min-h-9 max-h-32 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
+								className="min-h-10 max-h-32 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-base shadow-none focus-visible:ring-0 md:text-[15px]"
 							/>
 							<PromptInputSubmit
 								status={sending ? "submitted" : "ready"}
@@ -1115,6 +1355,7 @@ function MobileAgent({
 			/>
 			<MobileAgentHistoryDialog
 				open={historyOpen}
+				agentId={selectedAgentId}
 				onClose={() => setHistoryOpen(false)}
 				onPick={(target) => {
 					setHistoryOpen(false);
@@ -1127,10 +1368,12 @@ function MobileAgent({
 
 function MobileAgentHistoryDialog({
 	open,
+	agentId,
 	onClose,
 	onPick,
 }: {
 	open: boolean;
+	agentId: string | null;
 	onClose: () => void;
 	onPick: (sessionId: string) => void;
 }) {
@@ -1142,14 +1385,16 @@ function MobileAgentHistoryDialog({
 		let active = true;
 		setLoading(true);
 		setResult(null);
-		void bridgeRpc<AcpListSessionsResult>("agent_list_sessions")
+		void bridgeRpc<AcpListSessionsResult>("agent_list_sessions", {
+			agentId: agentId ?? undefined,
+		})
 			.then((next) => active && setResult(next))
 			.catch(() => active && setResult({ sessions: [], supported: false }))
 			.finally(() => active && setLoading(false));
 		return () => {
 			active = false;
 		};
-	}, [open]);
+	}, [agentId, open]);
 	return (
 		<Dialog
 			open={open}

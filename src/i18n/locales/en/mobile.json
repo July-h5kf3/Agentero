@@ -23,6 +23,7 @@
 	"library": {
 		"title": "Library",
 		"search": "Search papers",
+		"loading": "Loading papers…",
 		"empty": "No papers"
 	},
 	"reader": {
@@ -43,6 +44,8 @@
 		"empty": "Start a conversation",
 		"thinking": "Thinking...",
 		"failed": "The desktop Agent could not complete this request.",
+		"switchBackend": "Switch Agent backend",
+		"defaultBackend": "Default Agent",
 		"history": "Sessions",
 		"historyEmpty": "No past sessions",
 		"historyUnsupported": "This Agent does not expose past sessions.",
@@ -55,9 +58,11 @@
 		"connected": "Connected",
 		"offline": "Offline",
 		"addDesktop": "Connect another desktop",
+		"addDevice": "Add device",
 		"disconnect": "Disconnect",
 		"computer": "Computer",
-		"vault": "Vault"
+		"vault": "Vault",
+		"vaults": "Vaults"
 	},
 	"errors": {
 		"load": "Could not load remote data",

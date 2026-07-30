@@ -10,6 +10,7 @@ export function MobileHeader({
 	brand,
 	brandButtonLabel,
 	onBrandClick,
+	showBrand = true,
 	leading,
 	trailing,
 }: {
@@ -19,14 +20,15 @@ export function MobileHeader({
 	brand: ReactNode;
 	brandButtonLabel?: string;
 	onBrandClick?: () => void;
+	showBrand?: boolean;
 	leading?: ReactNode;
 	trailing?: ReactNode;
 }) {
 	return (
-		<header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-3 md:px-6">
+		<header className="fixed inset-x-0 top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background px-4 md:static md:h-auto md:min-h-16 md:px-6">
 			{leading}
 			<div className="flex min-w-0 flex-1 items-center gap-2">
-				<div className="md:hidden">
+				<div className={cn("md:hidden", !showBrand && "hidden")}>
 					{onBrandClick ? (
 						<button
 							type="button"
@@ -40,10 +42,10 @@ export function MobileHeader({
 						brand
 					)}
 				</div>
-				<span className="truncate font-semibold text-sm">{title}</span>
+				<span className="truncate font-semibold text-base">{title}</span>
 				<Circle
 					className={cn(
-						"size-2 shrink-0 fill-current",
+						"size-2.5 shrink-0 fill-current",
 						status.connected ? "text-emerald-500" : "text-muted-foreground",
 					)}
 					aria-label={statusLabel}

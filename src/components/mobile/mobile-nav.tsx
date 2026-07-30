@@ -34,7 +34,7 @@ export function MobileNav({
 					className={cn(
 						"flex items-center rounded-lg outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
 						sidebar
-							? "h-11 w-full gap-3 px-3 text-sm"
+							? "h-12 w-full gap-3 px-3 text-base"
 							: "size-10 justify-center px-0",
 						tab === id
 							? "bg-muted/80 font-medium text-foreground"
