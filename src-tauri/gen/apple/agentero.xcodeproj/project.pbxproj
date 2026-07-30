@@ -48,6 +48,7 @@
 		22BD8A7C03E73F2F0CBB9C8C /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
 		2390C3B6D7485AB8414FC22B /* acp.rs */ = {isa = PBXFileReference; path = acp.rs; sourceTree = "<group>"; };
 		25DFE88529B913A3FCE4CA51 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		260CC1950811AFF9090FAEB0 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		269691DF4D5D2259054FFF13 /* commands.rs */ = {isa = PBXFileReference; path = commands.rs; sourceTree = "<group>"; };
 		28C69513E43D0A9C47ED43FE /* targets.rs */ = {isa = PBXFileReference; path = targets.rs; sourceTree = "<group>"; };
 		2E14872E39C0706A619B7DCB /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
@@ -165,6 +166,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		004A87C6ABDD50FE7ADFEFE1 /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+				22DF74595460FEB2CA267F90 /* debug */,
+			);
+			path = arm64;
+			sourceTree = "<group>";
+		};
 		020519B1C80F785487BA205D /* core */ = {
 			isa = PBXGroup;
 			children = (
@@ -237,6 +246,14 @@
 			path = bindings;
 			sourceTree = "<group>";
 		};
+		22DF74595460FEB2CA267F90 /* debug */ = {
+			isa = PBXGroup;
+			children = (
+				260CC1950811AFF9090FAEB0 /* libapp.a */,
+			);
+			path = debug;
+			sourceTree = "<group>";
+		};
 		279DA5F375D85E5E1E925911 /* remote */ = {
 			isa = PBXGroup;
 			children = (
@@ -258,6 +275,7 @@
 		2895D9E0B6D0DAAEF79CD911 /* Externals */ = {
 			isa = PBXGroup;
 			children = (
+				004A87C6ABDD50FE7ADFEFE1 /* arm64 */,
 			);
 			path = Externals;
 			sourceTree = "<group>";
@@ -534,6 +552,13 @@
 			path = wiki;
 			sourceTree = "<group>";
 		};
+		"TEMP_9FE9B7DF-2E7B-46BC-9516-55A02A8AA667" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -664,6 +689,7 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
+				DEVELOPMENT_TEAM = "43B86K77UU";
 			};
 			name = release;
 		};
@@ -758,6 +784,7 @@
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
+				DEVELOPMENT_TEAM = "43B86K77UU";
 			};
 			name = debug;
 		};
