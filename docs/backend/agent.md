@@ -7,6 +7,12 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 - Crate：`agent-client-protocol`（及 Codex 的 npm ACP 适配器进程）。
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。
 - 统一接口：OpenCode、Gemini、Claude ACP、Codex ACP、Qoder、Grok、自定义 `command`/`args`/`env`。
+- Gemini：spawn 时注入 `NO_BROWSER=true`（用户显式配置则不覆盖），避免未登录时
+  `new_session` 反复拉起浏览器 OAuth；登录须在终端完成（BYOA）。
+- 后台熔断（`AgentWarmGate`）：`agent_warm` / `agent_list_sessions` 失败后进入
+  120s 冷却，冷却期内直接返回上次错误、不再 spawn；成功或用户消息
+  （`agent_run_once`）成功后清除。详见
+  [bug_fix/gemini-login-browser-loop.md](../bug_fix/gemini-login-browser-loop.md)。
 
 ```text
 spawn 用户配置的 agent
