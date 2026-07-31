@@ -29,8 +29,9 @@ function chipLabel(
 }
 
 /**
- * Composer-style chips for visual annotations on a user chat turn.
- * Click opens a dialog with the crop image and the user's comment.
+ * Message-row chips for visual annotations (Agent transcript + pin modal).
+ * Image-only — comment/page text stays on the composer pending chips and in
+ * the detail dialog. Click opens the crop + comment dialog.
  */
 export function ChatVisualAnnotations({
 	annotations,
@@ -66,7 +67,7 @@ export function ChatVisualAnnotations({
 						<button
 							key={annotation.id}
 							type="button"
-							className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-border/80 bg-background/80 px-1.5 pr-2.5 text-foreground text-xs shadow-sm transition-colors hover:bg-muted"
+							className="inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/80 bg-background/80 shadow-sm transition-colors hover:bg-muted"
 							onClick={() => setOpenId(annotation.id)}
 							title={t("composer.visualAnnotationOpen")}
 							aria-label={t("composer.visualAnnotationOpenAria", {
@@ -75,15 +76,10 @@ export function ChatVisualAnnotations({
 							})}
 						>
 							{thumb ? (
-								<img
-									src={thumb}
-									alt=""
-									className="size-5 shrink-0 rounded object-cover ring-1 ring-border/60"
-								/>
+								<img src={thumb} alt="" className="size-full object-cover" />
 							) : (
-								<ScanSearch className="size-3.5 shrink-0 text-muted-foreground" />
+								<ScanSearch className="size-3.5 text-muted-foreground" />
 							)}
-							<span className="max-w-[14rem] truncate">{label}</span>
 						</button>
 					);
 				})}

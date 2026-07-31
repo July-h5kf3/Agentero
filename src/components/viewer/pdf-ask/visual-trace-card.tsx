@@ -302,30 +302,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			? messages[messages.length - 1]?.id
 			: null;
 
-	// Blob URL once per crop — avoid re-binding multi-MB data: URIs on re-render.
-	const imageSrc = useMemo(() => {
-		const image = trace.image;
-		if (!image?.data) return null;
-		const mime = image.mimeType || "image/png";
-		try {
-			const binary = atob(image.data);
-			const bytes = new Uint8Array(binary.length);
-			for (let i = 0; i < binary.length; i++) {
-				bytes[i] = binary.charCodeAt(i);
-			}
-			return URL.createObjectURL(new Blob([bytes], { type: mime }));
-		} catch {
-			return `data:${mime};base64,${image.data}`;
-		}
-	}, [trace.image]);
-
-	useEffect(() => {
-		if (!imageSrc?.startsWith("blob:")) return;
-		return () => {
-			URL.revokeObjectURL(imageSrc);
-		};
-	}, [imageSrc]);
-
 	// Pin open: place the user message in view once (never stick to the bottom).
 	useEffect(() => {
 		if (scrolledForTraceRef.current === trace.id) return;
@@ -437,17 +413,7 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 						!expanded && "gap-2",
 					)}
 				>
-					{imageSrc ? (
-						<img
-							src={imageSrc}
-							alt={t("pdfExplain.annotationPreviewAlt", { page: trace.page })}
-							className={cn(
-								"w-full rounded-md border border-border/70 bg-muted/30 object-contain",
-								expanded ? "max-h-28" : "max-h-16",
-							)}
-							draggable={false}
-						/>
-					) : null}
+					{/* Crop preview lives on the PDF (dashed region + pin); omit modal image. */}
 					<p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider tabular-nums">
 						{t("annotations.pageLabel", { page: trace.page })}
 					</p>

@@ -1087,35 +1087,43 @@ function PdfViewerInner({
 	}, [visualTraces]);
 
 	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
-	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
+	/**
+	 * Place the open pin card next to its anchor. Returns false when the page
+	 * DOM is not mounted yet (virtualized) so callers can retry — never flash
+	 * a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 */
+	const placeActiveCard = useCallback((card: ActiveSelectionCard): boolean => {
 		const host = hostRef.current;
-		if (!host) return;
+		if (!host) return false;
 		let page = 1;
 		let rects: PdfAskAnchor["rects"] = [];
 		let pin: { x: number; y: number } | null = null;
 		if (card.kind === "ask") {
 			const thread = threadsRef.current.find((th) => th.id === card.id);
-			if (!thread) return;
+			if (!thread) return false;
 			page = thread.anchor.page;
 			rects = thread.anchor.rects;
 			pin = threadPin(thread);
 		} else if (card.kind === "translate") {
 			const tr = translatesRef.current.find((r) => r.id === card.id);
-			if (!tr) return;
+			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
 			pin = pinFromRects(tr.rects);
 		} else if (card.kind === "agent-trace") {
 			const tr = visualTracesRef.current.find((item) => item.id === card.id);
-			if (!tr) return;
+			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
 			pin = tracePin(tr);
 		} else {
-			return;
+			return false;
 		}
 		const pageEl = pageElByIndex(host, page - 1);
-		const pt = popoverScreenPoint(pageEl, rects, pin) ?? { x: 80, y: 120 };
+		const pt = popoverScreenPoint(pageEl, rects, pin);
+		// Target page not in the virtual DOM yet — keep cardScreen null so the
+		// modal stays hidden until onScroll / rAF retry can place it for real.
+		if (!pt) return false;
 		// Skip identical coords — avoids re-rendering the open card (and its
 		// input) on every scroll tick when the pin did not actually move.
 		const prev = cardScreenRef.current;
@@ -1124,11 +1132,27 @@ function PdfViewerInner({
 			Math.round(prev.x) === Math.round(pt.x) &&
 			Math.round(prev.y) === Math.round(pt.y)
 		) {
-			return;
+			return true;
 		}
 		cardScreenRef.current = pt;
 		setCardScreen(pt);
+		return true;
 	}, []);
+
+	/** After instant page jumps, the virtual page may land a few frames later. */
+	const placeActiveCardWithRetry = useCallback(
+		(card: ActiveSelectionCard, attempts = 12) => {
+			let tries = 0;
+			const tick = () => {
+				if (placeActiveCard(card)) return;
+				tries += 1;
+				if (tries >= attempts) return;
+				requestAnimationFrame(tick);
+			};
+			requestAnimationFrame(tick);
+		},
+		[placeActiveCard],
+	);
 
 	const cancelHoverHide = useCallback(() => {
 		if (hidePopoverTimerRef.current) {
@@ -1191,9 +1215,21 @@ function PdfViewerInner({
 			setActiveCard(card);
 			if (card.kind === "ask") setAskError(null);
 			if (card.kind === "translate") setTranslateError(null);
-			placeActiveCard(card);
+			// Place now if the page is mounted. If not (far jump / virtualized),
+			// clear stale coords so the modal does not flash at the old pin, then
+			// retry for a few frames after instant scroll mounts the page.
+			if (!placeActiveCard(card)) {
+				cardScreenRef.current = null;
+				setCardScreen(null);
+				placeActiveCardWithRetry(card);
+			}
 		},
-		[cancelHoverHide, placeActiveCard, stopTranslateSession],
+		[
+			cancelHoverHide,
+			placeActiveCard,
+			placeActiveCardWithRetry,
+			stopTranslateSession,
+		],
 	);
 
 	const openThread = useCallback(
@@ -1892,25 +1928,11 @@ function PdfViewerInner({
 				const markId = pin.traceId || pin.id;
 				const tr = visualTracesRef.current.find((item) => item.id === markId);
 				if (!tr) return;
-				const host = hostRef.current;
-				if (host) {
-					const pageEl = pageElByIndex(host, tr.page - 1);
-					const pt = popoverScreenPoint(pageEl, tr.rects, tracePin(tr));
-					cancelHoverHide();
-					setActiveCard({ kind: "agent-trace", id: tr.id });
-					setCardScreen(pt ?? { x: 80, y: 120 });
-					return;
-				}
+				// Pin hover: page is already on-screen; openCard places beside the mark.
 				openCard({ kind: "agent-trace", id: tr.id });
 			}
 		},
-		[
-			upsertThread,
-			openThread,
-			openCard,
-			openEditorForAnnotation,
-			cancelHoverHide,
-		],
+		[upsertThread, openThread, openCard, openEditorForAnnotation],
 	);
 
 	// ---- Selection action menu ----
@@ -2326,7 +2348,11 @@ function PdfViewerInner({
 					?.forDocument(docId)
 					.getAnnotationById(id)?.object;
 				if (!obj || !isHighlightObject(obj)) return;
-				scrollRef.current?.scrollToPage({ pageNumber: obj.pageIndex + 1 });
+				// Instant: smooth jumps across distant pages feel like slow render.
+				scrollRef.current?.scrollToPage({
+					pageNumber: obj.pageIndex + 1,
+					behavior: "instant",
+				});
 				annotationCap?.forDocument(docId).selectAnnotation(obj.pageIndex, id);
 			},
 			editComment: (id) => openEditorForAnnotation(id),
@@ -2340,7 +2366,11 @@ function PdfViewerInner({
 			scrollToAsk: (id) => {
 				const thread = threadsRef.current.find((th) => th.id === id);
 				if (!thread) return;
-				scrollRef.current?.scrollToPage({ pageNumber: thread.anchor.page });
+				scrollRef.current?.scrollToPage({
+					pageNumber: thread.anchor.page,
+					behavior: "instant",
+				});
+				// openThread → openCard places after page mount (retry if virtualized).
 				openThread({ ...thread, status: "open" });
 			},
 			deleteAsk: (id) => {
@@ -2350,7 +2380,10 @@ function PdfViewerInner({
 			scrollToVisualTrace: (id) => {
 				const tr = visualTracesRef.current.find((item) => item.id === id);
 				if (!tr) return;
-				scrollRef.current?.scrollToPage({ pageNumber: tr.page });
+				scrollRef.current?.scrollToPage({
+					pageNumber: tr.page,
+					behavior: "instant",
+				});
 				openCard({ kind: "agent-trace", id: tr.id });
 			},
 			deleteVisualTrace: (id) => {
@@ -2397,7 +2430,10 @@ function PdfViewerInner({
 		if (paperKey) {
 			const saved = readReadingPage(paperKey);
 			if (saved && saved > 1 && saved <= totalPages) {
-				scrollScope.scrollToPage({ pageNumber: saved });
+				scrollScope.scrollToPage({
+					pageNumber: saved,
+					behavior: "instant",
+				});
 			}
 		}
 	}, [totalPages, scrollReady, paperAbsPath, paperKey]);
@@ -2413,7 +2449,11 @@ function PdfViewerInner({
 
 	const scrollToResult = (idx: number) => {
 		const r = searchState.results[idx];
-		if (r && scroll) scroll.scrollToPage({ pageNumber: r.pageIndex + 1 });
+		if (r && scroll)
+			scroll.scrollToPage({
+				pageNumber: r.pageIndex + 1,
+				behavior: "instant",
+			});
 	};
 
 	const closeFind = () => {
@@ -2425,7 +2465,7 @@ function PdfViewerInner({
 	const goToPage = (n: number) => {
 		if (!scroll || totalPages <= 0) return;
 		const clamped = Math.min(totalPages, Math.max(1, Math.floor(n)));
-		scroll.scrollToPage({ pageNumber: clamped });
+		scroll.scrollToPage({ pageNumber: clamped, behavior: "instant" });
 	};
 
 	const commitPageField = () => {
@@ -2565,6 +2605,8 @@ function PdfViewerInner({
 			const pageNumber = pageIndex + 1;
 			const activeTranslateOnPage =
 				activeTranslate?.page === pageNumber ? activeTranslate : null;
+			const activeVisualOnPage =
+				activeVisualTrace?.page === pageNumber ? activeVisualTrace : null;
 			const pins: SelectionPin[] = [
 				...highlights
 					.filter(
@@ -2704,6 +2746,22 @@ function PdfViewerInner({
 									/>
 								))
 							: null}
+						{/* Active visual mark: dashed theme outline of the crop region. */}
+						{activeVisualOnPage
+							? activeVisualOnPage.rects.map((rect) => (
+									<div
+										key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-none absolute z-[1] rounded-sm border border-dashed border-primary/45 bg-primary/5"
+										style={{
+											left: `${rect.x * 100}%`,
+											top: `${rect.y * 100}%`,
+											width: `${rect.w * 100}%`,
+											height: `${rect.h * 100}%`,
+										}}
+										aria-hidden="true"
+									/>
+								))
+							: null}
 						<SelectionGutter
 							items={pins}
 							activeId={activeCard?.id ?? null}
@@ -2723,6 +2781,7 @@ function PdfViewerInner({
 			visualTraces,
 			translates,
 			activeTranslate,
+			activeVisualTrace,
 			activeCard?.id,
 			handleOpenPin,
 			cancelHoverHide,
