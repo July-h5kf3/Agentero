@@ -29,6 +29,11 @@ spawn 用户配置的 agent
 声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
 `Method not found`，Host 应改走 `session/load`。
 
+`session/load` 会把历史以 `SessionNotification` 回放。Host 在
+`session/prompt` 之前 **suppress** 回放中的 stream/tool/plan（不 `agent:stream`、
+不写入本轮 content buffer），避免第二轮气泡开头重复上一轮回答；usage /
+commands / config 仍可在 load 期间转发。
+
 ## 命令（摘要）
 
 | Command | 说明 |
