@@ -160,7 +160,8 @@ export function buildVisualTraceHistoryItem(input: {
 		startedAt: input.startedAt,
 		lines,
 		status,
-		// Keep last runtime id for reference; do not use as history primary key.
+		// Source ACP session — Host continues via resume or load (Grok: load).
 		providerSessionId: trace.providerSessionId ?? null,
+		resumeable: true,
 	};
 }

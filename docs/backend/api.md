@@ -1272,7 +1272,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_run_once`
 
-通用 ACP provider 创建或恢复会话并发送 prompt。所有 provider（含 Codex）统一使用 ACP `session/new` 或 `session/resume` 管理会话；历史经 `session/list` + `session/load` 获取。
+通用 ACP provider 创建或恢复会话并发送 prompt。`sessionId` 省略时走 `session/new`；提供时按 agent 能力选择恢复方式：`sessionCapabilities.resume` → `session/resume`，否则若 `loadSession` → `session/load`（Grok Build 实测仅支持 load，不支持 resume）。历史列表经 `session/list` + `session/load` 获取。
 
 - **参数**
 

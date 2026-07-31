@@ -22,24 +22,35 @@ export const annotationsStore = createStore<AnnotationsStore>(() => ({
 }));
 
 export function setTabHighlights(tabId: string, list: PdfHighlight[]): void {
-	annotationsStore.setState((s) => ({
-		highlightsByTab: { ...s.highlightsByTab, [tabId]: list },
-	}));
+	annotationsStore.setState((s) => {
+		if (s.highlightsByTab[tabId] === list) return s;
+		return {
+			highlightsByTab: { ...s.highlightsByTab, [tabId]: list },
+		};
+	});
 }
 
 export function setTabAsks(tabId: string, list: PdfAskThread[]): void {
-	annotationsStore.setState((s) => ({
-		asksByTab: { ...s.asksByTab, [tabId]: list },
-	}));
+	annotationsStore.setState((s) => {
+		if (s.asksByTab[tabId] === list) return s;
+		return {
+			asksByTab: { ...s.asksByTab, [tabId]: list },
+		};
+	});
 }
 
 export function setTabVisualTraces(
 	tabId: string,
 	list: PdfVisualSessionTrace[],
 ): void {
-	annotationsStore.setState((s) => ({
-		visualTracesByTab: { ...s.visualTracesByTab, [tabId]: list },
-	}));
+	annotationsStore.setState((s) => {
+		// Same array reference → no update (prevents publish-effect infinite loops
+		// when parent passes an unstable onVisualTracesChange callback).
+		if (s.visualTracesByTab[tabId] === list) return s;
+		return {
+			visualTracesByTab: { ...s.visualTracesByTab, [tabId]: list },
+		};
+	});
 }
 
 /** Drop highlight state for closed panels. */

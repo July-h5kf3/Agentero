@@ -951,13 +951,13 @@ pub async fn run_once(
             let agent_id_for_models = desc.id.clone();
             let resume_id = resume_session_id.clone();
             move |connection: ConnectionTo<Agent>| async move {
-                tokio::select! {
+                let init = tokio::select! {
                     result = timed_acp_request(
                         "initialize",
                         connection
                             .send_request(InitializeRequest::new(ProtocolVersion::V1))
                             .block_task(),
-                    ) => { result?; }
+                    ) => result?,
                     () = wait_for_cancellation(&mut cancellation) => {
                         let payload = cancelled_payload(
                             session_for_conn.clone(),
@@ -968,34 +968,81 @@ pub async fn run_once(
                         let _ = app_for_conn.emit("agent:completed", payload.clone());
                         return Ok(payload);
                     }
-                }
+                };
+
+                // Capability-aware continue (Grok advertises loadSession but not
+                // session/resume — calling resume yields Method not found).
+                let can_resume = init
+                    .agent_capabilities
+                    .session_capabilities
+                    .resume
+                    .is_some();
+                let can_load = init.agent_capabilities.load_session;
 
                 let (acp_session_id, mut config_options) = if let Some(ref rid) = resume_id {
-                    let resp = tokio::select! {
-                        result = timed_acp_request(
-                            "resume_session",
-                            connection
-                                .send_request(ResumeSessionRequest::new(
-                                    SessionId::new(rid.as_str()),
-                                    cwd.clone(),
-                                ))
-                                .block_task(),
-                        ) => result?,
-                        () = wait_for_cancellation(&mut cancellation) => {
-                            let payload = cancelled_payload(
-                                session_for_conn.clone(),
-                                message_for_conn.clone(),
-                                &content_for_conn,
-                                &thought_for_conn,
-                            );
-                            let _ = app_for_conn.emit("agent:completed", payload.clone());
-                            return Ok(payload);
-                        }
-                    };
-                    (
-                        SessionId::new(rid.as_str()),
-                        resp.config_options.unwrap_or_default(),
-                    )
+                    if can_resume {
+                        let resp = tokio::select! {
+                            result = timed_acp_request(
+                                "session/resume",
+                                connection
+                                    .send_request(ResumeSessionRequest::new(
+                                        SessionId::new(rid.as_str()),
+                                        cwd.clone(),
+                                    ))
+                                    .block_task(),
+                            ) => result?,
+                            () = wait_for_cancellation(&mut cancellation) => {
+                                let payload = cancelled_payload(
+                                    session_for_conn.clone(),
+                                    message_for_conn.clone(),
+                                    &content_for_conn,
+                                    &thought_for_conn,
+                                );
+                                let _ = app_for_conn.emit("agent:completed", payload.clone());
+                                return Ok(payload);
+                            }
+                        };
+                        (
+                            SessionId::new(rid.as_str()),
+                            resp.config_options.unwrap_or_default(),
+                        )
+                    } else if can_load {
+                        // Grok and similar: continue across process restarts via
+                        // session/load (requires mcpServers; schema defaults to []).
+                        let resp = tokio::select! {
+                            result = timed_acp_request(
+                                "session/load",
+                                connection
+                                    .send_request(
+                                        LoadSessionRequest::new(
+                                            SessionId::new(rid.as_str()),
+                                            cwd.clone(),
+                                        )
+                                        .mcp_servers(vec![]),
+                                    )
+                                    .block_task(),
+                            ) => result?,
+                            () = wait_for_cancellation(&mut cancellation) => {
+                                let payload = cancelled_payload(
+                                    session_for_conn.clone(),
+                                    message_for_conn.clone(),
+                                    &content_for_conn,
+                                    &thought_for_conn,
+                                );
+                                let _ = app_for_conn.emit("agent:completed", payload.clone());
+                                return Ok(payload);
+                            }
+                        };
+                        (
+                            SessionId::new(rid.as_str()),
+                            resp.config_options.unwrap_or_default(),
+                        )
+                    } else {
+                        return Err(acp_err(format!(
+                            "Agent does not support continuing session {rid} \
+                             (no session/resume or session/load capability)"
+                        )));
+                    }
                 } else {
                     let new_session = tokio::select! {
                         result = timed_acp_request(
@@ -1782,7 +1829,10 @@ pub async fn load_acp_session(
                 timed_acp_request(
                     "session/load",
                     connection
-                        .send_request(LoadSessionRequest::new(SessionId::new(sid.as_str()), cwd))
+                        .send_request(
+                            LoadSessionRequest::new(SessionId::new(sid.as_str()), cwd)
+                                .mcp_servers(vec![]),
+                        )
                         .block_task(),
                 )
                 .await?;

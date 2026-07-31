@@ -20,7 +20,7 @@
 | 沉浸 | 全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
 | 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示元数据预览并联动右侧 References 卡片高亮。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
-| 视觉批注 | 工具栏或 **⌘.** 进入框选；裁图后输入批注。**Enter** 加入右侧 Agent composer 草稿（可累加多条后统一发送）；**⌘/Ctrl+Enter** 立即在浮层内开聊（落 `agent-trace` 针，可继续多轮）。页边针 hover 默认紧凑预览消息列表，移入卡片后放大并显示输入框；右上角可「在 Agent 中打开」（按 `messages[]` 重建完整 transcript + 图片 chip）。**逻辑会话**以 mark `id` + `messages[]` 为准；每轮 `runOnce` 仅为执行会话，不 resume。裁剪最长边 1600 px |
+| 视觉批注 | 工具栏或 **⌘.** 进入框选。**Enter** → composer 草稿；**⌘/Ctrl+Enter** → 浮层。浮层与右侧 Agent **共用** `agentSessionStore` 会话（同一 send 管线、同一 `lines`），不是两套记录。Host 按能力 `session/load`（Grok）或 `session/resume` 续聊。裁剪最长边 1600 px |
 
 ## 划词菜单
 
@@ -33,7 +33,7 @@
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
 | 加入对话 | 不落盘 | 选区固定为 Agent composer 文本 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
-| 视觉批注 | `marks/<id>.json`（kind `agent-trace`）；`messages[]` 为产品多轮 transcript；`runtimeSessionId` 仅最近一次 run | 框选 → 编辑器：**Enter** → composer chip；**⌘↵** → 浮层对话（prompt 内嵌历史，不 session/resume）。针 hover 消息列表（紧凑→展开）+ 继续输入；「在 Agent 中打开」写入稳定 local history `visual-trace:<markId>`，剥系统提示、带图 chip；ACP 侧 visual prompt 会话从列表过滤 |
+| 视觉批注 | `marks/<id>.json`（kind `agent-trace`）；`providerSessionId` 为源会话；`messages[]` 本地 transcript | 框选 → **Enter** → composer；**⌘↵** → 浮层。多轮续聊走 ACP 同一 session（load/resume），不重放全文。打开 Agent 与 pin 共享 `providerSessionId` |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。

@@ -27,6 +27,8 @@ import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
+import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
+import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";
 import { cn } from "@/lib/core/utils";
 import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
@@ -81,16 +83,19 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 	onStop?: () => void;
 	onFocusInput: () => void;
 }) {
-	const [text, setText] = useState("");
+	// Uncontrolled: AX set_value / OS automation write the DOM node directly.
+	// A controlled `value={text}` would immediately overwrite that on re-render.
+	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 	const { isBlockedByIme, compositionProps } = useImeGuard();
 
 	const submit = useCallback(() => {
-		const q = text.trim();
+		const el = textareaRef.current;
+		const q = (el?.value ?? "").trim();
 		if (streaming || !q) return;
 		onFocusInput();
 		onSend(q);
-		setText("");
-	}, [text, streaming, onFocusInput, onSend]);
+		if (el) el.value = "";
+	}, [streaming, onFocusInput, onSend]);
 
 	const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.key === "Escape") {
@@ -107,8 +112,8 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 	return (
 		<div className="flex w-full items-center gap-1 rounded-full border border-border/80 bg-background px-1.5 py-0.5">
 			<textarea
-				value={text}
-				onChange={(e) => setText(e.currentTarget.value)}
+				ref={textareaRef}
+				defaultValue=""
 				placeholder={placeholder}
 				disabled={streaming}
 				rows={1}
@@ -135,7 +140,8 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 					size="icon-xs"
 					className="shrink-0 rounded-full"
 					aria-label={sendLabel}
-					disabled={!text.trim()}
+					// Always clickable when idle: submit() validates DOM value (AX set_value).
+					disabled={streaming}
 					onClick={submit}
 				>
 					<ArrowUpIcon className="size-3.5" />
@@ -152,10 +158,38 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
  * Scroll is manual only — no stick-to-bottom. Pin open keeps the user turn in
  * view; expanding preserves scrollTop so the answer is not jumped to.
  */
+/** Map shared Agent session lines → pin-modal bubbles (same source as sidebar). */
+function chatLinesToTraceMessages(lines: ChatLine[]) {
+	const out: Array<{
+		id: string;
+		role: "user" | "assistant";
+		content: string;
+	}> = [];
+	for (const line of lines) {
+		if (line.kind === "user") {
+			out.push({
+				id: line.id,
+				role: "user",
+				content: line.text,
+			});
+			continue;
+		}
+		if (line.kind === "agent") {
+			const content = agentTextFromParts(line.parts);
+			out.push({
+				id: line.id,
+				role: "assistant",
+				content,
+			});
+		}
+	}
+	return out;
+}
+
 export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
 	screen,
-	streaming = false,
+	streaming: streamingProp = false,
 	error = null,
 	initialExpanded = false,
 	onOpenSession,
@@ -168,7 +202,34 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 }: VisualTraceCardProps) {
 	const { t } = useTranslation("viewer");
 	const [expanded, setExpanded] = useState(initialExpanded);
-	const messages = useMemo(() => traceMessages(trace), [trace]);
+	// Same transcript as the right-rail Agent panel (single store).
+	const boundSessionId = useAgentSessionStore(
+		(s) =>
+			s.sessions.find((item) => item.visualTraceId === trace.id)?.id ?? null,
+	);
+	const boundLines = useAgentSessionStore((s) => {
+		const session = s.sessions.find((item) => item.visualTraceId === trace.id);
+		return session?.lines ?? null;
+	});
+	const boundStatus = useAgentSessionStore(
+		(s) =>
+			s.sessions.find((item) => item.visualTraceId === trace.id)?.status ??
+			null,
+	);
+	const storeSubmitting = useAgentSessionStore((s) => s.submitting);
+	const activeTabId = useAgentSessionStore((s) => s.activeTabId);
+	const streaming =
+		streamingProp ||
+		boundStatus === "running" ||
+		(storeSubmitting &&
+			boundSessionId !== null &&
+			boundSessionId === activeTabId);
+	const messages = useMemo(() => {
+		if (boundLines && boundLines.length > 0) {
+			return chatLinesToTraceMessages(boundLines);
+		}
+		return traceMessages(trace);
+	}, [boundLines, trace]);
 	const preview = tracePreview(trace, t("pdfExplain.visualAnnotation"), 280);
 	const title = preview || t("pdfExplain.traceCardTitle");
 	/** Keep the user's annotation turn in view; do not auto-jump to the answer. */

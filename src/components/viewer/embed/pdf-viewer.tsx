@@ -136,6 +136,7 @@ import {
 	type PromptImage,
 	runOnce,
 } from "@/lib/agent";
+import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {
 	clearActiveSelection,
 	pinActiveSelection,
@@ -154,19 +155,14 @@ import {
 	paperRefsList,
 } from "@/lib/paper/refs";
 import {
-	buildVisualAnnotationsPrompt,
-	buildVisualTraceContinuePrompt,
-	completeTrace,
 	createRunningTraces,
 	deletePdfVisualTrace,
-	failTrace,
 	listPdfVisualTraces,
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
 	tracePin,
 	tracePreview,
-	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import {
 	createEmptyThread,
@@ -227,7 +223,11 @@ import {
 } from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
-import { openRightTab, requestOpenAgentSession } from "@/lib/shell/ui-store";
+import {
+	openRightTab,
+	requestOpenAgentSession,
+	setAgentPanelMounted,
+} from "@/lib/shell/ui-store";
 import {
 	buildTranslatePrompt,
 	prepareTranslateTask,
@@ -721,6 +721,15 @@ function PdfViewerInner({
 	onVisualTracesChange,
 }: PdfViewerInnerProps) {
 	const { t } = useTranslation("viewer");
+	// Parent often passes inline lambdas; keep latest in refs so data effects
+	// do not re-fire every parent render (was Maximum update depth exceeded).
+	const onAsksChangeRef = useRef(onAsksChange);
+	onAsksChangeRef.current = onAsksChange;
+	const onVisualTracesChangeRef = useRef(onVisualTracesChange);
+	onVisualTracesChangeRef.current = onVisualTracesChange;
+	const onHighlightsChangeRef = useRef(onHighlightsChange);
+	onHighlightsChangeRef.current = onHighlightsChange;
+
 	const { engine } = usePdfEngineContext();
 	const { provides: zoom, state: zoomState } = useZoom(docId);
 	const { provides: scroll, state: scrollState } = useScroll(docId);
@@ -730,6 +739,13 @@ function PdfViewerInner({
 	const { provides: docCap } = useDocumentManagerCapability();
 	const { state: searchState, provides: search } = useSearch(docId);
 	const { provides: bookmarkCap } = useBookmarkCapability();
+
+	// EmbedPDF's useScroll calls forDocument() every render and returns a fresh
+	// scope object (createScrollScope). Never put `scroll` in useEffect deps —
+	// only primitive readiness (scrollReady) or scrollState fields.
+	const scrollRef = useRef(scroll);
+	scrollRef.current = scroll;
+	const scrollReady = Boolean(scroll);
 
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
@@ -880,7 +896,7 @@ function PdfViewerInner({
 			.filter(isHighlightObject)
 			.map((o) => highlightViewFromObject(o, paperKey ?? ""));
 		setHighlights(list);
-		onHighlightsChange?.(list);
+		onHighlightsChangeRef.current?.(list);
 		const links = new Map<number, PdfLinkAnnoObject[]>();
 		for (const tracked of all) {
 			const o = tracked.object;
@@ -891,7 +907,7 @@ function PdfViewerInner({
 			}
 		}
 		setCitationLinks(links);
-	}, [annotationCap, docId, paperKey, onHighlightsChange]);
+	}, [annotationCap, docId, paperKey]);
 
 	const scheduleSave = useCallback(() => {
 		if (!paperAbsPath || !annotationCap) return;
@@ -1062,13 +1078,13 @@ function PdfViewerInner({
 
 	// Publish ask threads (with a real question) to the annotations panel.
 	useEffect(() => {
-		onAsksChange?.(threads.filter(threadHasUserQuestion));
-	}, [threads, onAsksChange]);
+		onAsksChangeRef.current?.(threads.filter(threadHasUserQuestion));
+	}, [threads]);
 
 	// Publish visual agent-trace marks to the annotations panel.
 	useEffect(() => {
-		onVisualTracesChange?.(visualTraces);
-	}, [visualTraces, onVisualTracesChange]);
+		onVisualTracesChangeRef.current?.(visualTraces);
+	}, [visualTraces]);
 
 	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
 	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
@@ -1423,245 +1439,36 @@ function PdfViewerInner({
 		});
 	}, []);
 
-	const persistVisualTrace = useCallback(
-		async (trace: PdfVisualSessionTrace) => {
-			if (!paperAbsPath) return;
-			try {
-				await writePdfVisualTrace(paperAbsPath, trace);
-			} catch {
-				// Best-effort; in-memory card still works for this session.
-			}
-		},
-		[paperAbsPath],
-	);
-
 	/**
-	 * Run (or continue) a visual-trace conversation in the pin modal.
-	 * First turn may attach the crop image; follow-ups use history in the prompt.
+	 * Pin modal chat is the same product session as the right-rail Agent panel.
+	 * All turns go through agentSessionStore.requestTurn → panel send pipeline.
 	 */
-	const sendToVisualTrace = useCallback(
-		async (
-			trace: PdfVisualSessionTrace,
-			question: string,
-			opts?: {
-				images?: PromptImage[];
-				/** When true, use the multi-annotation first-turn prompt. */
-				firstTurn?: boolean;
-				agentOpts?: { agentId?: string; modelId?: string };
-			},
-		) => {
-			const q = question.trim();
-			if (!q && !opts?.firstTurn) return;
-			const content =
-				q || trace.comment.trim() || t("pdfExplain.visualAnnotation");
-			const now = new Date().toISOString();
-			const userMsg = {
-				id: newTraceMessageId(),
-				role: "user" as const,
-				content,
-				createdAt: now,
-			};
-			// Prefer stored transcript; fall back to synthesized comment+answer so
-			// continue never drops the first turn (which looked like "replacing" it).
-			const prior = traceMessages(trace);
-			// Avoid duplicating the seed user message when firstTurn already seeded it.
-			const baseMessages =
-				opts?.firstTurn &&
-				prior.length === 1 &&
-				prior[0]?.role === "user" &&
-				prior[0].content === content
-					? prior
-					: [...prior, userMsg];
-			const withUser: PdfVisualSessionTrace = {
-				...trace,
-				status: "running",
-				// Never overwrite the original annotation comment on follow-ups.
-				comment: trace.comment.trim() || content,
-				messages: baseMessages,
-				updatedAt: now,
-				error: undefined,
-			};
-			upsertVisualTrace(withUser);
-			void persistVisualTrace(withUser);
+	const requestVisualAgentTurn = useCallback(
+		(input: {
+			trace: PdfVisualSessionTrace;
+			text: string;
+			visualDrafts?: import("@/lib/agent/visual-context-store").PdfVisualDraft[];
+			agentId?: string;
+			modelId?: string;
+		}) => {
+			const { trace, text, visualDrafts, agentId, modelId } = input;
+			setAgentPanelMounted(true);
 			setVisualError(null);
-			setVisualStreaming(true);
-
-			const assistantId = newTraceMessageId();
-			const prompt = opts?.firstTurn
-				? buildVisualAnnotationsPrompt([
-						{ page: withUser.page, comment: content },
-					])
-				: buildVisualTraceContinuePrompt({
-						page: withUser.page,
-						comment: withUser.comment,
-						messages: baseMessages,
-						latestUserQuestion: content,
-					});
-			// Crop for visual context: first turn uses caller images; follow-ups
-			// re-attach the stored crop because we do NOT session/resume (many
-			// PDF-Ask agents lack resume_session → "Method not found").
-			const cropImages: PromptImage[] | undefined = opts?.images?.length
-				? opts.images
-				: withUser.image?.data
-					? [
-							{
-								data: withUser.image.data,
-								mimeType: withUser.image.mimeType || "image/png",
-							},
-						]
-					: undefined;
-			try {
-				// Same pattern as PDF Ask: each turn is a fresh runOnce with
-				// history embedded in the prompt — never pass sessionId here.
-				const accepted = await runOnce({
-					prompt,
-					agentId: opts?.agentOpts?.agentId ?? withUser.agentId,
-					modelId: opts?.agentOpts?.modelId,
-					images: cropImages,
-					vaultPath: vaultPath ?? undefined,
-					workflow: "free",
-					autoApprove: true,
-					hideFromChatHistory: true,
-				});
-				visualSessionRef.current = accepted.sessionId;
-				const withAssistant: PdfVisualSessionTrace = {
-					...withUser,
-					agentId: accepted.agentId || withUser.agentId,
-					runtimeSessionId: accepted.sessionId,
-					messageId: accepted.messageId,
-					messages: [
-						...baseMessages,
-						{
-							id: assistantId,
-							role: "assistant",
-							content: "",
-							createdAt: new Date().toISOString(),
-							agentSessionId: accepted.sessionId,
-						},
-					],
-				};
-				upsertVisualTrace(withAssistant);
-				void persistVisualTrace(withAssistant);
-
-				const sessionId = accepted.sessionId;
-				const unsubs: UnlistenFn[] = [];
-				// Coalesce stream chunks to ~1 React update per frame so the
-				// message list does not thrash the main thread while open.
-				let pendingChunk = "";
-				let streamRaf: number | null = null;
-				const flushStreamChunk = () => {
-					streamRaf = null;
-					if (!pendingChunk) return;
-					const chunk = pendingChunk;
-					pendingChunk = "";
-					setVisualTraces((prev) =>
-						prev.map((tr) => {
-							if (tr.id !== withUser.id) return tr;
-							const msgs = [...(tr.messages ?? [])];
-							const last = msgs[msgs.length - 1];
-							if (last?.id !== assistantId) return tr;
-							msgs[msgs.length - 1] = {
-								...last,
-								content: last.content + chunk,
-							};
-							return { ...tr, messages: msgs };
-						}),
-					);
-				};
-				const cleanup = () => {
-					if (streamRaf != null) {
-						cancelAnimationFrame(streamRaf);
-						streamRaf = null;
-					}
-					if (pendingChunk) flushStreamChunk();
-					for (const u of unsubs) u();
-					if (visualSessionRef.current === sessionId) {
-						visualSessionRef.current = null;
-					}
-					setVisualStreaming(false);
-				};
-				unsubs.push(
-					await listenAgentStream((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if ((ev.kind ?? "message") === "thought") return;
-						pendingChunk += ev.chunk;
-						if (streamRaf == null) {
-							streamRaf = requestAnimationFrame(flushStreamChunk);
-						}
-					}),
-				);
-				unsubs.push(
-					await listenAgentCompleted((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						if (streamRaf != null) {
-							cancelAnimationFrame(streamRaf);
-							streamRaf = null;
-						}
-						if (pendingChunk) flushStreamChunk();
-						setVisualTraces((prev) => {
-							const current = prev.find((tr) => tr.id === withUser.id);
-							if (!current) return prev;
-							const done = completeTrace(current, {
-								providerSessionId: ev.providerSessionId ?? undefined,
-								answerSnapshot: ev.content || undefined,
-								sources: ev.sources ?? undefined,
-								assistantMessageId: assistantId,
-							});
-							// Ensure final assistant text is set even if stream was empty.
-							if (ev.content) {
-								const msgs = [...(done.messages ?? [])];
-								const last = msgs[msgs.length - 1];
-								if (last?.id === assistantId) {
-									msgs[msgs.length - 1] = {
-										...last,
-										content: ev.content || last.content,
-									};
-									done.messages = msgs;
-									done.answerSnapshot = ev.content || last.content;
-								}
-							}
-							void persistVisualTrace(done);
-							return prev.map((tr) => (tr.id === done.id ? done : tr));
-						});
-						cleanup();
-					}),
-				);
-				unsubs.push(
-					await listenAgentFailed((ev) => {
-						if (ev.sessionId !== sessionId) return;
-						const err = ev.error || t("pdfAsk.agentFailed");
-						setVisualError(err);
-						setVisualTraces((prev) => {
-							const current = prev.find((tr) => tr.id === withUser.id);
-							if (!current) return prev;
-							// Drop only the empty streaming assistant bubble; keep
-							// every user turn so multi-turn history is not lost.
-							const failed = failTrace(current, {
-								error: err,
-								assistantMessageId: assistantId,
-							});
-							void persistVisualTrace(failed);
-							return prev.map((tr) => (tr.id === failed.id ? failed : tr));
-						});
-						cleanup();
-					}),
-				);
-			} catch (e) {
-				setVisualStreaming(false);
-				const message =
-					e instanceof Error ? e.message : t("pdfAsk.agentFailed");
-				setVisualError(message);
-				// Keep baseMessages (incl. the new user turn) so the failure does
-				// not look like it replaced the first message.
-				const failed = failTrace(withUser, { error: message });
-				upsertVisualTrace(failed);
-				void persistVisualTrace(failed);
-			}
+			agentSessionStore.getState().requestTurn({
+				text,
+				visualTraceId: trace.id,
+				paperAbsPath: paperAbsPath ?? undefined,
+				agentId,
+				modelId,
+				title: text.trim() || trace.comment || t("pdfExplain.visualAnnotation"),
+				providerSessionId: trace.providerSessionId,
+				visualDrafts,
+			});
 		},
-		[persistVisualTrace, t, upsertVisualTrace, vaultPath],
+		[paperAbsPath, t],
 	);
 
-	/** ⌘/Ctrl+Enter from the region editor: create mark + chat in-place. */
+	/** ⌘/Ctrl+Enter from the region editor: pin + same Agent session as sidebar. */
 	const handleVisualSendNow = useCallback(
 		(comment: string) => {
 			const draft = visualDraftEditor;
@@ -1675,7 +1482,7 @@ function PdfViewerInner({
 				content,
 				createdAt: now,
 			};
-			// Provisional mark so the card can open before runOnce accepts.
+			// Provisional pin (geometry + crop). Transcript lives in agent session store.
 			const [provisional] = createRunningTraces({
 				paperPath,
 				agentId: "pending",
@@ -1700,7 +1507,6 @@ function PdfViewerInner({
 			upsertVisualTrace(provisional);
 			setVisualCardExpanded(true);
 			setVisualError(null);
-			// Use crop screen immediately; placeActiveCard also works via synced ref.
 			cardScreenRef.current = draft.screen;
 			setCardScreen(draft.screen);
 			openCard({ kind: "agent-trace", id: provisional.id });
@@ -1716,13 +1522,26 @@ function PdfViewerInner({
 						hideActiveCard();
 						return;
 					}
-					await sendToVisualTrace({ ...provisional, agentId }, content, {
-						firstTurn: true,
-						images: [draft.image],
-						agentOpts: {
-							agentId,
-							modelId: resolved.modelId,
-						},
+					// Same draft shape the sidebar composer uses — one send path.
+					const visualDraft: import("@/lib/agent/visual-context-store").PdfVisualDraft =
+						{
+							id: provisional.id,
+							paperPath,
+							paperAbsPath: paperAbsPath ?? undefined,
+							page: draft.page,
+							rects: [draft.region],
+							comment: content,
+							image: {
+								data: draft.image.data,
+								mimeType: draft.image.mimeType || "image/png",
+							},
+						};
+					requestVisualAgentTurn({
+						trace: { ...provisional, agentId },
+						text: content,
+						visualDrafts: [visualDraft],
+						agentId,
+						modelId: resolved.modelId,
 					});
 				} catch (e) {
 					const message =
@@ -1740,7 +1559,7 @@ function PdfViewerInner({
 			upsertVisualTrace,
 			openCard,
 			resolvePdfAskAgent,
-			sendToVisualTrace,
+			requestVisualAgentTurn,
 			hideActiveCard,
 		],
 	);
@@ -1755,17 +1574,26 @@ function PdfViewerInner({
 				try {
 					const resolved = await resolvePdfAskAgent();
 					if (!resolved) return;
-					// Re-read after await so we append onto the latest transcript,
-					// not a stale snapshot that could drop the first turn.
 					const latest = visualTracesRef.current.find(
 						(tr) => tr.id === traceId,
 					);
 					if (!latest) return;
-					void sendToVisualTrace(latest, question, {
-						agentOpts: {
-							agentId: resolved.agentId,
-							modelId: resolved.modelId,
+					// Prefer live providerSessionId from shared agent session.
+					const bound = agentSessionStore
+						.getState()
+						.findByVisualTraceId(traceId);
+					const providerSessionId =
+						bound?.providerSessionId ?? latest.providerSessionId;
+					requestVisualAgentTurn({
+						trace: {
+							...latest,
+							providerSessionId:
+								providerSessionId ?? latest.providerSessionId ?? undefined,
+							agentId: resolved.agentId ?? latest.agentId,
 						},
+						text: question,
+						agentId: resolved.agentId ?? undefined,
+						modelId: resolved.modelId,
 					});
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
@@ -1774,7 +1602,7 @@ function PdfViewerInner({
 				}
 			})();
 		},
-		[resolvePdfAskAgent, sendToVisualTrace],
+		[resolvePdfAskAgent, requestVisualAgentTurn],
 	);
 
 	const handleSend = useCallback(
@@ -1921,38 +1749,44 @@ function PdfViewerInner({
 
 	const openVisualTraceSession = useCallback(
 		(trace: PdfVisualSessionTrace) => {
-			if (!trace.agentId || trace.agentId === "pending") {
-				notifyError(t("pdfAsk.noAgent"));
-				return;
+			// Same session as the pin modal — activate it in the shared store.
+			setAgentPanelMounted(true);
+			const store = agentSessionStore.getState();
+			const existing =
+				store.findByVisualTraceId(trace.id) ||
+				(trace.providerSessionId
+					? store.findByProviderSessionId(trace.providerSessionId)
+					: undefined);
+			if (existing) {
+				store.setActiveTabId(existing.id);
+				store.setLines(existing.lines);
+			} else {
+				// Seed from mark once so sidebar opens the same transcript.
+				const messages = traceMessages(trace);
+				const title =
+					messages.find((m) => m.role === "user")?.content.trim() ||
+					trace.comment.trim() ||
+					t("pdfExplain.visualAnnotation");
+				requestOpenAgentSession({
+					agentId: trace.agentId === "pending" ? "" : trace.agentId,
+					runtimeSessionId: trace.runtimeSessionId,
+					providerSessionId: trace.providerSessionId,
+					messageId: trace.messageId,
+					title,
+					prompt: title,
+					answerSnapshot: trace.answerSnapshot,
+					visualTrace: {
+						traceId: trace.id,
+						page: trace.page,
+						comment: trace.comment,
+						paperPath: trace.paperPath,
+						image: trace.image,
+						messages: messages.map((m) => ({ ...m })),
+						status: trace.status,
+					},
+				});
 			}
-			if (!trace.runtimeSessionId || trace.runtimeSessionId === "pending") {
-				notifyError(t("pdfExplain.traceSessionUnavailable"));
-				return;
-			}
-			const messages = traceMessages(trace);
-			const title =
-				messages.find((m) => m.role === "user")?.content.trim() ||
-				trace.comment.trim() ||
-				t("pdfExplain.visualAnnotation");
-			requestOpenAgentSession({
-				agentId: trace.agentId,
-				// Runtime id is last run only; product key is visualTrace.traceId.
-				runtimeSessionId: trace.runtimeSessionId,
-				providerSessionId: trace.providerSessionId,
-				messageId: trace.messageId,
-				title,
-				prompt: title,
-				answerSnapshot: trace.answerSnapshot,
-				visualTrace: {
-					traceId: trace.id,
-					page: trace.page,
-					comment: trace.comment,
-					paperPath: trace.paperPath,
-					image: trace.image,
-					messages: messages.map((m) => ({ ...m })),
-					status: trace.status,
-				},
-			});
+			openRightTab("agent");
 			hideActiveCard();
 		},
 		[hideActiveCard, t],
@@ -1967,11 +1801,46 @@ function PdfViewerInner({
 	}, [openVisualTraceSession]);
 
 	const handleStopVisualSession = useCallback(() => {
-		const sid = visualSessionRef.current;
-		if (!sid) return;
-		void cancelAgentRun(sid).catch(() => undefined);
+		// Shared agent session store is the source of truth after modal↔panel
+		// unification. visualSessionRef is legacy and may be null for turns
+		// that went through requestTurn → panel send.
+		const store = agentSessionStore.getState();
+		const card = activeCardRef.current;
+		const traceId = card?.kind === "agent-trace" ? card.id : null;
+		const bound = traceId ? store.findByVisualTraceId(traceId) : undefined;
+		const sid =
+			visualSessionRef.current ||
+			bound?.id ||
+			(store.submitting && store.activeTabId !== "draft"
+				? store.activeTabId
+				: null);
+		if (sid && sid !== "draft") {
+			void cancelAgentRun(sid).catch(() => undefined);
+			store.setSessions((prev) =>
+				prev.map((item) =>
+					item.id === sid && item.status === "running"
+						? { ...item, status: "cancelled" }
+						: item,
+				),
+			);
+		}
+		// Also clear any other visual-bound sessions stuck as running (e.g.
+		// after an ErrorBoundary crash mid-stream).
+		if (traceId) {
+			store.setSessions((prev) =>
+				prev.map((item) =>
+					"visualTraceId" in item &&
+					(item as { visualTraceId?: string }).visualTraceId === traceId &&
+					item.status === "running"
+						? { ...item, status: "cancelled" }
+						: item,
+				),
+			);
+		}
+		store.setSubmitting(false);
 		visualSessionRef.current = null;
 		setVisualStreaming(false);
+		setVisualError(null);
 	}, []);
 
 	const openEditorForAnnotation = useCallback(
@@ -2340,17 +2209,21 @@ function PdfViewerInner({
 		};
 	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
 
-	// Re-anchor the active ask/translate card on scroll + zoom. zoomLevel is an
-	// intentional dep: it forces re-placement after a zoom (body reads live zoom).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor after zoom
+	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
+	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
+	// because EmbedPDF returns a new scope object every render; depending on
+	// it re-fired this effect → setCardScreen → re-render → Maximum update depth
+	// when a modal card was open (visual-trace chat + agent panel re-renders).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady/zoomLevel are intentional re-place triggers
 	useEffect(() => {
 		if (!activeCard) return;
-		// Force re-place after zoom even if rounded coords match the previous pin.
+		// Force re-place after zoom / card change even if rounded coords match.
 		cardScreenRef.current = null;
 		placeActiveCard(activeCard);
-		if (!scroll) return;
+		const scrollScope = scrollRef.current;
+		if (!scrollScope) return;
 		let raf: number | null = null;
-		const off = scroll.onScroll(() => {
+		const off = scrollScope.onScroll(() => {
 			if (raf != null) return;
 			raf = requestAnimationFrame(() => {
 				raf = null;
@@ -2361,7 +2234,7 @@ function PdfViewerInner({
 			if (raf != null) cancelAnimationFrame(raf);
 			off();
 		};
-	}, [activeCard, scroll, placeActiveCard, zoomLevel]);
+	}, [activeCard, scrollReady, placeActiveCard, zoomLevel]);
 
 	// Run a debounced full-document search as the query changes.
 	useEffect(() => {
@@ -2425,8 +2298,13 @@ function PdfViewerInner({
 	);
 
 	// Register the imperative handle for the annotations panel.
+	// Parent often passes an inline onHandle; keep it in a ref. Read scroll via
+	// scrollRef so EmbedPDF's fresh scope object does not re-register every paint.
+	const onHandleRef = useRef(onHandle);
+	onHandleRef.current = onHandle;
 	useEffect(() => {
-		if (!onHandle) return;
+		const register = onHandleRef.current;
+		if (!register) return;
 		const handle: PdfViewerHandle = {
 			getHighlights: () => highlightsRef.current,
 			scrollToHighlight: (id) => {
@@ -2434,7 +2312,7 @@ function PdfViewerInner({
 					?.forDocument(docId)
 					.getAnnotationById(id)?.object;
 				if (!obj || !isHighlightObject(obj)) return;
-				scroll?.scrollToPage({ pageNumber: obj.pageIndex + 1 });
+				scrollRef.current?.scrollToPage({ pageNumber: obj.pageIndex + 1 });
 				annotationCap?.forDocument(docId).selectAnnotation(obj.pageIndex, id);
 			},
 			editComment: (id) => openEditorForAnnotation(id),
@@ -2448,7 +2326,7 @@ function PdfViewerInner({
 			scrollToAsk: (id) => {
 				const thread = threadsRef.current.find((th) => th.id === id);
 				if (!thread) return;
-				scroll?.scrollToPage({ pageNumber: thread.anchor.page });
+				scrollRef.current?.scrollToPage({ pageNumber: thread.anchor.page });
 				openThread({ ...thread, status: "open" });
 			},
 			deleteAsk: (id) => {
@@ -2458,7 +2336,7 @@ function PdfViewerInner({
 			scrollToVisualTrace: (id) => {
 				const tr = visualTracesRef.current.find((item) => item.id === id);
 				if (!tr) return;
-				scroll?.scrollToPage({ pageNumber: tr.page });
+				scrollRef.current?.scrollToPage({ pageNumber: tr.page });
 				openCard({ kind: "agent-trace", id: tr.id });
 			},
 			deleteVisualTrace: (id) => {
@@ -2472,12 +2350,10 @@ function PdfViewerInner({
 				setRegionSelecting((active) => !active);
 			},
 		};
-		onHandle(handle);
-		return () => onHandle(null);
+		register(handle);
+		return () => register(null);
 	}, [
-		onHandle,
 		annotationCap,
-		scroll,
 		docId,
 		paperAbsPath,
 		openEditorForAnnotation,
@@ -2494,8 +2370,10 @@ function PdfViewerInner({
 	}, [currentPage]);
 
 	// On first load: record page count (reading heatmap) and restore last page.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady waits for EmbedPDF scope
 	useEffect(() => {
-		if (restoredRef.current || totalPages <= 0 || !scroll) return;
+		const scrollScope = scrollRef.current;
+		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
 		restoredRef.current = true;
 		if (paperAbsPath) {
 			void writeReadingMetaPageCount(paperAbsPath, totalPages).catch(
@@ -2505,10 +2383,10 @@ function PdfViewerInner({
 		if (paperKey) {
 			const saved = readReadingPage(paperKey);
 			if (saved && saved > 1 && saved <= totalPages) {
-				scroll.scrollToPage({ pageNumber: saved });
+				scrollScope.scrollToPage({ pageNumber: saved });
 			}
 		}
-	}, [totalPages, scroll, paperAbsPath, paperKey]);
+	}, [totalPages, scrollReady, paperAbsPath, paperKey]);
 
 	// Persist the last read page (debounced) as the user scrolls.
 	useEffect(() => {

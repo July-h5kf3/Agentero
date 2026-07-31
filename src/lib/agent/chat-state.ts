@@ -83,7 +83,48 @@ export type ChatSessionHistoryItem = {
 	status: "running" | "completed" | "cancelled" | "failed";
 	/** Durable ACP provider session id used to resume this conversation. */
 	providerSessionId?: string | null;
+	/**
+	 * When false, never pass sessionId to runOnce (no ACP session/resume).
+	 * Used for PDF visual-trace pin chats whose multi-turn context lives in
+	 * local lines + prompt history, not provider sessions.
+	 * Default/undefined = resume allowed when the agent supports it.
+	 */
+	resumeable?: boolean;
 };
+
+/** Format prior user/agent turns for agents that cannot session/resume. */
+export function buildLocalTranscriptPrompt(
+	lines: ChatLine[],
+	/** Exclude the just-appended latest user turn (already in `prompt`). */
+	opts?: { excludeTrailingUserText?: string },
+): string {
+	const turns: string[] = [];
+	for (const line of lines) {
+		if (line.kind === "user") {
+			const text = line.text.trim();
+			if (!text && !line.visualAnnotations?.length) continue;
+			const label = text || "(visual annotation)";
+			turns.push(`User: ${label}`);
+			continue;
+		}
+		if (line.kind === "agent") {
+			const text = agentTextFromParts(line.parts).trim();
+			if (!text) continue;
+			turns.push(`Assistant: ${text}`);
+		}
+	}
+	if (opts?.excludeTrailingUserText != null) {
+		const needle = opts.excludeTrailingUserText.trim();
+		if (needle) {
+			const last = turns[turns.length - 1];
+			if (last === `User: ${needle}`) turns.pop();
+		}
+	}
+	if (turns.length === 0) return "";
+	return ["Earlier turns in this conversation:", turns.join("\n\n")].join(
+		"\n\n",
+	);
+}
 
 export type PendingTerminalEvent =
 	| { kind: "completed"; event: AgentResultPayload }

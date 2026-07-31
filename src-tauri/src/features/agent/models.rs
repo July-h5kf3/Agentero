@@ -221,8 +221,10 @@ pub struct PromptImage {
 pub struct RunOnceRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
-    /// ACP session id for multi-turn: when provided, `session/resume` is used
-    /// instead of `session/new` so the agent retains conversation context.
+    /// ACP provider session id for multi-turn continue.
+    /// Host picks restore method from agent capabilities:
+    /// `session/resume` if advertised, else `session/load` (e.g. Grok Build).
+    /// Omit to create a new session via `session/new`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
     pub prompt: String,
@@ -301,8 +303,9 @@ pub struct AgentResultPayload {
     pub sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
-    /// Durable ACP provider session id used by `session/resume`.
-    /// This is distinct from Agentero's per-run event correlation id.
+    /// Durable ACP provider session id for the next continue
+    /// (`session/resume` or `session/load` depending on agent capabilities).
+    /// Distinct from Agentero's per-run event correlation id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_session_id: Option<String>,
 }

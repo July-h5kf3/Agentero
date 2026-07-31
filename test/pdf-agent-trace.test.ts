@@ -461,5 +461,7 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(history.id).toBe(visualTraceHistoryId("tr1"));
 		expect(history.lines).toHaveLength(4);
 		expect(history.id).not.toBe("rt-last");
+		expect(history.resumeable).toBe(true);
+		expect(history.providerSessionId).toBe("prov");
 	});
 });
