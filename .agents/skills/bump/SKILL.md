@@ -23,6 +23,8 @@ description: >-
    - `src-tauri/Cargo.toml` 的 package `version`。
    - `cli/Cargo.toml` 的 package `version`。
    - `src-tauri/ios-project.yml` 的 `CFBundleShortVersionString` 与 `CFBundleVersion`。
+
+   Android 不需要手动修改：`tauri android build` 会从 `tauri.conf.json` 的 `version` 重新生成 `src-tauri/gen/android/app/tauri.properties`（gitignored）中的 `versionName` 与 `versionCode`。
 4. 如果 Cargo manifest 版本变化，运行必要的 Cargo 元数据/检查命令并确认 `Cargo.lock` 没有保留旧的本地 package 版本。
 5. 检查版本字段全部等于目标版本，并检查 `agentero --version` 的来源仍然是 CLI package version。
 6. 检查 `AGENTS.md` 和 `docs/development/release.md` 中的发布规则仍与实现一致；只有规则变化时才修改文档，不要伪造版本说明或变更日志。
