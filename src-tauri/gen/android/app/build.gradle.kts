@@ -13,6 +13,15 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// CI writes keystore.properties (gitignored) with keyAlias/keyPassword/
+// storeFile/storePassword; local builds without it stay unsigned.
+val keystoreProperties = Properties().apply {
+    val propFile = file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "com.poco_ai.agentero"
@@ -23,6 +32,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            keystoreProperties.getProperty("storeFile")?.let { path ->
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(path)
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -38,6 +57,9 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
+            if (keystoreProperties.getProperty("storeFile") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))

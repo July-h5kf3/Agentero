@@ -2,7 +2,7 @@
 
 > 状态：**M1 已实现，M2 功能已实现（待 TestFlight 内测）**。当前移动端已包含二维码/配对链接连接、连接状态恢复、论文库搜索、PDF 分块缓存、NOTES 编辑、桌面 Agent 流式输出与权限应答、ACP Agent 切换、历史会话恢复和移动端侧栏；多主机/LAN 回退仍在后续范围。面向用户的操作说明见 [移动端](../usage/mobile.md)。
 > 决策：iOS **不做本地 Vault**，App 是桌面端的纯远程客户端 —— 扫码配对后经 **relay + 端到端加密** 连接电脑上的 Agentero，读写电脑上的库，并驱动电脑上的 BYOA Agent。
-> Android：已初始化 Tauri Android 目标（`src-tauri/gen/android`，包名 `com.poco_ai.agentero`）。定位与 iOS 相同——纯远程客户端，`src/main.tsx` 经 `isMobileApp()`（`src/lib/core/tauri.ts`，iOS/Android UA 检测）加载同一移动壳；liteparse、菜单事件等桌面能力用 `cfg(not(any(target_os = "ios", target_os = "android")))` 一并排除。本地调试：`pnpm tauri android dev` / `pnpm tauri android build --apk`（需 ANDROID_HOME + NDK）。发布流水线待建。
+> Android：已初始化 Tauri Android 目标（`src-tauri/gen/android`，包名 `com.poco_ai.agentero`）。定位与 iOS 相同——纯远程客户端，`src/main.tsx` 经 `isMobileApp()`（`src/lib/core/tauri.ts`，iOS/Android UA 检测）加载同一移动壳；liteparse、菜单事件等桌面能力用 `cfg(not(any(target_os = "ios", target_os = "android")))` 一并排除。本地调试：`pnpm tauri android dev` / `pnpm tauri android build --apk`（需 ANDROID_HOME + NDK）。发布：`.github/workflows/android-release.yml` 在 tag 推送时构建签名 APK 并上传 GitHub Release（需 `ANDROID_KEYSTORE*` secrets，缺失则跳过）。
 
 ---
 
