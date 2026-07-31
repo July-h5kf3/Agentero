@@ -49,10 +49,14 @@ function WikiLinkNavigationElement({
 	const fallbackStatus = path || (!target && fragment) ? "resolved" : "missing";
 	const withHeading = el.heading
 		? el.heading.startsWith("@")
-			? `${target}${el.heading}`
-			: `${target}#${el.heading}`
+			? target
+				? `${target}${el.heading}`
+				: el.heading
+			: target
+				? `${target}#${el.heading}`
+				: `#${el.heading}`
 		: target;
-	const label = el.alias || withHeading;
+	const label = el.alias || withHeading || target;
 
 	const navigate = async (event: MouseEvent) => {
 		event.preventDefault();

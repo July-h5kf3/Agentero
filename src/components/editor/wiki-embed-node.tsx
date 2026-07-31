@@ -169,8 +169,12 @@ export function WikiEmbedElement({
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
 		? element.heading.startsWith("@")
-			? `${target}${element.heading}`
-			: `${target}#${element.heading}`
+			? target
+				? `${target}${element.heading}`
+				: element.heading
+			: target
+				? `${target}#${element.heading}`
+				: `#${element.heading}`
 		: target;
 	const [targetRevision, setTargetRevision] = useState(0);
 	const requestKey = embedRequestKey(

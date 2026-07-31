@@ -21,23 +21,26 @@ function isValidBlockId(id: string): boolean {
 	return id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id);
 }
 
-/** Same charset as block ids (UUID + nanoid). */
+/**
+ * Annotation ids accept nanoid url-alphabet extras (`_`) and UUID hyphens.
+ * Markdown `^block` ids stay stricter via {@link isValidBlockId}.
+ */
 export function isValidAnnotationId(id: string): boolean {
-	return isValidBlockId(id);
+	return id.length > 0 && /^[\p{L}\p{N}_-]+$/u.test(id);
 }
 
 /**
- * Sugar `target@id` when the right side is a well-formed annotation id.
- * Uses the last `@` so path segments may contain `@`.
+ * Sugar `target@id` or same-note `[[@id]]` when the right side is a well-formed
+ * annotation id. Uses the last `@` so path segments may contain `@`.
  */
 export function splitAnnotationSugar(
 	main: string,
 ): { target: string; id: string } | null {
 	const at = main.lastIndexOf("@");
-	if (at <= 0) return null;
+	if (at < 0) return null;
 	const target = main.slice(0, at).trimEnd();
 	const id = main.slice(at + 1).trim();
-	if (!target || !isValidAnnotationId(id)) return null;
+	if (!isValidAnnotationId(id)) return null;
 	return { target, id };
 }
 
@@ -79,9 +82,12 @@ export function formatWikiLinkBody(
 ): string {
 	let main = targetRaw;
 	if (fragment?.kind === "annotation") {
-		main = `${targetRaw}@${fragment.id}`;
+		// Same-note form is `[[@id]]` (empty target).
+		main = targetRaw ? `${targetRaw}@${fragment.id}` : `@${fragment.id}`;
 	} else if (fragment) {
-		main = `${targetRaw}#${formatWikiFragment(fragment)}`;
+		main = targetRaw
+			? `${targetRaw}#${formatWikiFragment(fragment)}`
+			: `#${formatWikiFragment(fragment)}`;
 	}
 	return alias ? `${main}|${alias}` : main;
 }
@@ -125,7 +131,7 @@ export type OutgoingLinksResponse = {
 };
 
 export type WikiSearchCandidate = {
-	kind: "file" | "heading" | "block" | "alias";
+	kind: "file" | "heading" | "block" | "alias" | "annotation";
 	path: string;
 	insertText: string;
 	label: string;

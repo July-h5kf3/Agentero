@@ -109,6 +109,7 @@ function AnnotationsSidebar() {
 	const activeTab = useWorkspaceStore((s) =>
 		s.tabs.find((tab) => tab.id === s.activeTabId),
 	);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const highlights = useAnnotationsStore((s) =>
 		activeTabId ? s.highlightsByTab[activeTabId] : undefined,
 	);
@@ -119,17 +120,26 @@ function AnnotationsSidebar() {
 		activeTabId ? s.visualTracesByTab[activeTabId] : undefined,
 	);
 
+	/** Resolvable vault-relative target (never display title alone). */
 	const wikiTarget = useMemo(() => {
-		const title = activeTab?.paperMeta?.title?.trim();
-		if (title) return title;
-		const paperPath = activeTab?.paperMeta?.path;
+		const paperPath = activeTab?.paperMeta?.path?.replace(/\\/g, "/");
 		if (paperPath) return wikiTargetForPaper(paperPath, paperPath);
-		if (activeTab?.notesPath) {
-			return wikiTargetForPaper(activeTab.notesPath);
+		if (activeTab?.notesPath && vaultPath) {
+			const rel = toVaultRelative(vaultPath, activeTab.notesPath);
+			if (rel) return wikiTargetForPaper(rel, rel);
 		}
-		if (activeTab?.path) return wikiTargetForPaper(activeTab.path);
+		if (activeTab?.path && vaultPath) {
+			const rel = toVaultRelative(vaultPath, activeTab.path);
+			if (rel) return wikiTargetForPaper(rel, rel);
+		}
 		return null;
-	}, [activeTab]);
+	}, [activeTab, vaultPath]);
+
+	/** Optional display alias for copied links (paper title). */
+	const wikiAlias = useMemo(
+		() => activeTab?.paperMeta?.title?.trim() || null,
+		[activeTab?.paperMeta?.title],
+	);
 
 	const items = useMemo<AnnotationRow[]>(() => {
 		if (!highlights) return [];
@@ -190,6 +200,7 @@ function AnnotationsSidebar() {
 			asks={askRows}
 			visualTraces={visualTraceRows}
 			wikiTarget={wikiTarget}
+			wikiAlias={wikiAlias}
 			onJump={(id) => annotationAction((h) => h.scrollToHighlight(id))}
 			onEdit={(id) => annotationAction((h) => h.editComment(id))}
 			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}

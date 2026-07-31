@@ -96,16 +96,18 @@ fn resolve_document(
     }
 
     let raw = occurrence.target_raw.trim();
-    // Markdown destinations without a leading slash are relative to the source
-    // document, including bare `Target.md`. Try that location before the
-    // vault-root spelling so a nearby same-named document keeps its Markdown
-    // meaning instead of being shadowed by a root-level file.
+    // Path-like destinations (Markdown links, or wikilinks with `/` / `.`) are
+    // resolved relative to the source document first so `../NOTES.md@id` and
+    // `./paper.pdf@id` work from nested notes.
     let mut exact_candidates = Vec::new();
-    if matches!(occurrence.syntax, InternalLinkSyntax::Markdown) && !raw.starts_with('/') {
+    let path_like = raw.contains('/') || raw.starts_with('.');
+    let try_relative = !raw.starts_with('/')
+        && (matches!(occurrence.syntax, InternalLinkSyntax::Markdown) || path_like);
+    if try_relative {
         let relative = source_relative(&occurrence.source, raw);
-        // A Markdown destination is source-relative. If resolving it would
-        // escape the Vault, do not fall through to a root/suffix/stem match:
-        // `../../Target.md` must never silently become `Target.md` in Vault.
+        // If resolving would escape the Vault, do not fall through to a
+        // root/suffix/stem match: `../../Target.md` must never silently become
+        // `Target.md` at vault root.
         if relative == ".." || relative.starts_with("../") {
             return Err(Vec::new());
         }

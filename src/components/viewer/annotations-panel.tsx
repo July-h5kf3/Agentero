@@ -54,10 +54,12 @@ type AnnotationsPanelProps = {
 	/** Visual agent-trace marks for this paper. */
 	visualTraces?: VisualTraceRow[];
 	/**
-	 * Wiki target for `[[target@id]]` (paper folder basename / title).
+	 * Resolvable wiki target for `[[target@id]]` (e.g. `papers/…/NOTES`).
 	 * When set, highlight and visual cards expose copy-link / copy-embed.
 	 */
 	wikiTarget?: string | null;
+	/** Optional display alias (paper title) — not used as the resolvable path. */
+	wikiAlias?: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
@@ -81,6 +83,7 @@ export function AnnotationsPanel({
 	asks = [],
 	visualTraces = [],
 	wikiTarget = null,
+	wikiAlias = null,
 	onJump,
 	onEdit,
 	onDelete,
@@ -96,6 +99,7 @@ export function AnnotationsPanel({
 		[items.length > 0, asks.length > 0, visualTraces.length > 0].filter(Boolean)
 			.length > 1;
 	const linkTarget = wikiTarget?.trim() || null;
+	const linkAlias = wikiAlias?.trim() || null;
 
 	return (
 		<section
@@ -137,6 +141,7 @@ export function AnnotationsPanel({
 										<AnnotationCard
 											item={a}
 											wikiTarget={linkTarget}
+											wikiAlias={linkAlias}
 											onJump={onJump}
 											onEdit={onEdit}
 											onDelete={onDelete}
@@ -181,6 +186,7 @@ export function AnnotationsPanel({
 										<VisualTraceListCard
 											item={trace}
 											wikiTarget={linkTarget}
+											wikiAlias={linkAlias}
 											onJump={onJumpVisual}
 											onDelete={onDeleteVisual}
 										/>
@@ -198,17 +204,26 @@ export function AnnotationsPanel({
 function AnnotationCard({
 	item: a,
 	wikiTarget,
+	wikiAlias,
 	onJump,
 	onEdit,
 	onDelete,
 }: {
 	item: AnnotationRow;
 	wikiTarget: string | null;
+	wikiAlias: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
 }) {
 	const { t } = useTranslation("viewer");
+	const linkOpts = wikiTarget
+		? {
+				target: wikiTarget,
+				id: a.id,
+				...(wikiAlias && wikiAlias !== wikiTarget ? { alias: wikiAlias } : {}),
+			}
+		: null;
 
 	return (
 		<div className="group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40">
@@ -256,7 +271,7 @@ function AnnotationCard({
 				) : null}
 			</div>
 			<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-				{wikiTarget ? (
+				{linkOpts ? (
 					<>
 						<Button
 							type="button"
@@ -266,13 +281,9 @@ function AnnotationCard({
 							aria-label={t("annotations.copyLink")}
 							title={t("annotations.copyLink")}
 							onClick={() =>
-								void copyTextToClipboard(
-									annotationWikilinkMarkdown({
-										target: wikiTarget,
-										id: a.id,
-									}),
-									{ successMessage: t("annotations.linkCopied") },
-								)
+								void copyTextToClipboard(annotationWikilinkMarkdown(linkOpts), {
+									successMessage: t("annotations.linkCopied"),
+								})
 							}
 						>
 							<Link2 className="size-3.5" />
@@ -287,8 +298,7 @@ function AnnotationCard({
 							onClick={() =>
 								void copyTextToClipboard(
 									annotationWikilinkMarkdown({
-										target: wikiTarget,
-										id: a.id,
+										...linkOpts,
 										embed: true,
 									}),
 									{ successMessage: t("annotations.embedCopied") },
@@ -389,15 +399,24 @@ function AskCard({
 function VisualTraceListCard({
 	item: trace,
 	wikiTarget,
+	wikiAlias,
 	onJump,
 	onDelete,
 }: {
 	item: VisualTraceRow;
 	wikiTarget: string | null;
+	wikiAlias: string | null;
 	onJump?: (id: string) => void;
 	onDelete?: (id: string) => void;
 }) {
 	const { t } = useTranslation("viewer");
+	const linkOpts = wikiTarget
+		? {
+				target: wikiTarget,
+				id: trace.id,
+				...(wikiAlias && wikiAlias !== wikiTarget ? { alias: wikiAlias } : {}),
+			}
+		: null;
 
 	return (
 		<div className="group relative rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:border-border/60 hover:bg-muted/40">
@@ -429,7 +448,7 @@ function VisualTraceListCard({
 			</div>
 			{onDelete || wikiTarget ? (
 				<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-					{wikiTarget ? (
+					{linkOpts ? (
 						<>
 							<Button
 								type="button"
@@ -440,10 +459,7 @@ function VisualTraceListCard({
 								title={t("annotations.copyLink")}
 								onClick={() =>
 									void copyTextToClipboard(
-										annotationWikilinkMarkdown({
-											target: wikiTarget,
-											id: trace.id,
-										}),
+										annotationWikilinkMarkdown(linkOpts),
 										{ successMessage: t("annotations.linkCopied") },
 									)
 								}
@@ -460,8 +476,7 @@ function VisualTraceListCard({
 								onClick={() =>
 									void copyTextToClipboard(
 										annotationWikilinkMarkdown({
-											target: wikiTarget,
-											id: trace.id,
+											...linkOpts,
 											embed: true,
 										}),
 										{ successMessage: t("annotations.embedCopied") },

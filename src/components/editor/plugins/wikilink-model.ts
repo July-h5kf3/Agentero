@@ -44,10 +44,10 @@ export function splitWikiLinkTarget(raw: string): {
 		return { target: raw.slice(0, h), heading: raw.slice(h + 1) };
 	}
 	const at = raw.lastIndexOf("@");
-	if (at > 0) {
+	if (at >= 0) {
 		const id = raw.slice(at + 1);
-		// Keep sugar only for well-formed annotation ids (mirror Host extract).
-		if (id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id)) {
+		// nanoid may include `_`; mirror Host `is_valid_annotation_id`.
+		if (id.length > 0 && /^[\p{L}\p{N}_-]+$/u.test(id)) {
 			return { target: raw.slice(0, at), heading: `@${id}` };
 		}
 	}
@@ -71,10 +71,14 @@ export function wikiLinkToMarkdown(node: {
 }): string {
 	let target = node.value;
 	if (node.heading) {
-		// Prefer user-facing sugar `target@id` for annotation fragments.
+		// Prefer sugar `target@id`, or same-note `[[@id]]` when value is empty.
 		target = node.heading.startsWith("@")
-			? `${node.value}${node.heading}`
-			: `${node.value}#${node.heading}`;
+			? node.value
+				? `${node.value}${node.heading}`
+				: node.heading
+			: node.value
+				? `${node.value}#${node.heading}`
+				: `#${node.heading}`;
 	}
 	const alias = node.alias ? `|${node.alias.replaceAll("|", "\\|")}` : "";
 	return `${node.embed ? "!" : ""}[[${target}${alias}]]`;

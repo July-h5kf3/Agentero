@@ -1,6 +1,12 @@
 "use client";
 
-import { CornerDownLeft, FileText, Hash, TextQuote } from "lucide-react";
+import {
+	CornerDownLeft,
+	FileText,
+	Hash,
+	ScanSearch,
+	TextQuote,
+} from "lucide-react";
 import { useEditorRef } from "platejs/react";
 import type {
 	MutableRefObject,
@@ -24,6 +30,7 @@ import {
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
+import { annotationsStore } from "@/lib/pdf/annotations-store";
 import {
 	resolveWikiReference,
 	searchWikiLinks,
@@ -40,6 +47,7 @@ import {
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
 } from "@/lib/wiki-completion";
+import { getActiveTabId, workspaceStore } from "@/lib/workspace/store";
 
 export type WikiCompletionDraft = {
 	raw: string;
@@ -76,13 +84,61 @@ function completionRequestKey(
 function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 	if (kind === "alias") return null;
 	const Icon =
-		kind === "file" ? FileText : kind === "heading" ? Hash : TextQuote;
+		kind === "file"
+			? FileText
+			: kind === "heading"
+				? Hash
+				: kind === "annotation"
+					? ScanSearch
+					: TextQuote;
 	return (
 		<Icon
 			className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
 			aria-hidden
 		/>
 	);
+}
+
+/** Build annotation candidates from the open paper's in-memory marks. */
+function annotationCandidatesFromOpenPaper(
+	query: string,
+	target: string,
+	pathHint: string,
+): WikiSearchCandidate[] {
+	const tabId = getActiveTabId();
+	if (!tabId) return [];
+	const state = annotationsStore.getState();
+	const highlights = state.highlightsByTab[tabId] ?? [];
+	const visuals = state.visualTracesByTab[tabId] ?? [];
+	const q = query.trim().toLowerCase();
+	const out: WikiSearchCandidate[] = [];
+	for (const h of highlights) {
+		const label = (h.comment || h.quote || h.id).trim() || h.id;
+		const hay = `${label} ${h.id}`.toLowerCase();
+		if (q && !hay.includes(q)) continue;
+		out.push({
+			kind: "annotation",
+			path: pathHint,
+			insertText: target ? `${target}@${h.id}` : `@${h.id}`,
+			label,
+			detail: `p.${h.page} · highlight`,
+			fragment: { kind: "annotation", id: h.id },
+		});
+	}
+	for (const v of visuals) {
+		const label = (v.comment || v.id).trim() || v.id;
+		const hay = `${label} ${v.id}`.toLowerCase();
+		if (q && !hay.includes(q)) continue;
+		out.push({
+			kind: "annotation",
+			path: pathHint,
+			insertText: target ? `${target}@${v.id}` : `@${v.id}`,
+			label,
+			detail: `p.${v.page} · visual`,
+			fragment: { kind: "annotation", id: v.id },
+		});
+	}
+	return out;
 }
 
 /**
@@ -190,6 +246,30 @@ export function WikiLinkSuggestion({
 					}
 					return;
 				}
+				// Annotation completion is frontend-backed (marks live outside the
+				// Markdown wiki index). Prefer the open paper's in-memory store.
+				if (request.kind === "annotation") {
+					const resolved = request.target
+						? await resolveWikiReference(vaultPath, filePath, request.target)
+						: await resolveWikiReference(vaultPath, filePath, "");
+					const pathHint =
+						resolved?.targetPath ||
+						workspaceStore
+							.getState()
+							.tabs.find((tab) => tab.id === getActiveTabId())?.paperMeta
+							?.path ||
+						filePath;
+					const items = annotationCandidatesFromOpenPaper(
+						request.query,
+						request.target,
+						pathHint,
+					);
+					if (!cancelled) {
+						setCandidateState({ requestKey, items });
+					}
+					return;
+				}
+
 				// Resolve only the file portion before searching its anchors.
 				// An empty target intentionally resolves to the source document, so
 				// the initial `[[#` / `[[^` trigger can list every local anchor.

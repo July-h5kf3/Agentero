@@ -46,23 +46,25 @@ pub fn is_valid_block_id(id: &str) -> bool {
             .all(|character| character.is_alphanumeric() || character == '-')
 }
 
-/// Same charset as block ids (UUID + nanoid).
+/// Annotation ids accept nanoid's url alphabet extras (`_`) and UUID hyphens.
+/// Markdown block ids stay stricter (`is_valid_block_id`).
 pub fn is_valid_annotation_id(id: &str) -> bool {
-    is_valid_block_id(id)
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '-' || character == '_')
 }
 
-/// Sugar: `target@id` → (target, Annotation { id }) when the right side is a
-/// well-formed annotation id. Uses the last `@` so path segments may contain `@`.
+/// Sugar: `target@id` or same-note `[[@id]]` when the right side is a well-formed
+/// annotation id. Uses the last `@` so path segments may contain `@`.
 pub fn split_annotation_sugar(main: &str) -> Option<(&str, &str)> {
     let at = main.rfind('@')?;
-    if at == 0 {
-        return None;
-    }
     let target = main[..at].trim_end();
     let id = main[at + 1..].trim();
-    if target.is_empty() || !is_valid_annotation_id(id) {
+    if !is_valid_annotation_id(id) {
         return None;
     }
+    // Empty target = current source note / paper (`[[@id]]`).
     Some((target, id))
 }
 
@@ -584,9 +586,9 @@ mod tests {
 
     #[test]
     fn extracts_annotation_sugar_and_canonical_fragment() {
-        let source = "See [[NOTES@abc-123|quote]] and ![[paper#@def456]] and [[keep@not valid]].\n";
+        let source = "See [[NOTES@abc-123|quote]] and ![[paper#@def456]] and [[keep@not valid]] and [[@TGDf_eZGV4]] and [[../NOTES.md@x_y-1]].\n";
         let (_, links) = extract_document("notes/source.md", source);
-        assert_eq!(links.len(), 3);
+        assert_eq!(links.len(), 5);
         assert_eq!(links[0].target_raw, "NOTES");
         assert_eq!(
             links[0].fragment,
@@ -606,6 +608,19 @@ mod tests {
         // Invalid sugar id must not strip `@…` from the target.
         assert_eq!(links[2].target_raw, "keep@not valid");
         assert!(links[2].fragment.is_none());
+        // Same-note sugar + nanoid underscore ids.
+        assert_eq!(links[3].target_raw, "");
+        assert_eq!(
+            links[3].fragment,
+            Some(LinkFragment::Annotation {
+                id: "TGDf_eZGV4".into()
+            })
+        );
+        assert_eq!(links[4].target_raw, "../NOTES.md");
+        assert_eq!(
+            links[4].fragment,
+            Some(LinkFragment::Annotation { id: "x_y-1".into() })
+        );
     }
 
     #[test]

@@ -127,31 +127,49 @@ export async function annotationRefExists(
 }
 
 /**
- * Best-effort wiki target text for a paper: prefer folder basename so
- * `[[folder@id]]` resolves via stem match.
+ * Resolvable wiki target for a paper unit — never the display title alone.
+ *
+ * Prefer vault-relative `…/NOTES` (indexed Markdown). Fallbacks: paper folder
+ * basename (stem match against NOTES/PDF) or a PDF path when known.
  */
 export function wikiTargetForPaper(
 	paperAbsPath: string,
 	paperRelPath?: string | null,
 ): string {
-	const rel = (paperRelPath ?? paperAbsPath).replace(/\\/g, "/");
+	const rel = (paperRelPath ?? paperAbsPath)
+		.replace(/\\/g, "/")
+		.replace(/\/+$/, "");
 	const parts = rel.split("/").filter(Boolean);
 	const last = parts[parts.length - 1] ?? rel;
-	if (last.toLowerCase() === "notes.md" && parts.length >= 2) {
-		return parts[parts.length - 2] ?? last;
+	if (last.toLowerCase() === "notes.md") {
+		// papers/foo/NOTES.md → papers/foo/NOTES (extension optional for resolve)
+		const without = rel.replace(/\/NOTES\.md$/i, "/NOTES");
+		return without.replace(/^\//, "");
+	}
+	if (/\.pdf$/i.test(last)) {
+		return rel.replace(/^\//, "");
+	}
+	// Paper folder vault-rel → NOTES target (most stable across renames of PDF name)
+	if (parts[0]?.toLowerCase() === "papers" || rel.includes("/papers/")) {
+		return `${rel.replace(/^\//, "")}/NOTES`;
 	}
 	return last.replace(/\.(md|mdx|markdown|pdf)$/i, "") || last;
 }
 
-/** Build portable wikilink markdown for an annotation id. */
+/**
+ * Prefer a target that wiki resolve can open; optional alias is display-only
+ * (paper title). Same-note form is `[[@id]]` when `sameNote` is true.
+ */
 export function annotationWikilinkMarkdown(input: {
 	target: string;
 	id: string;
 	embed?: boolean;
 	alias?: string;
+	/** When true, omit target → `[[@id]]` (current NOTES / paper). */
+	sameNote?: boolean;
 }): string {
 	const body = formatWikiLinkBody(
-		input.target,
+		input.sameNote ? "" : input.target,
 		{ kind: "annotation", id: input.id },
 		input.alias,
 	);

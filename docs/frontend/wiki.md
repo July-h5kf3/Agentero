@@ -47,12 +47,16 @@
 语法（与 `[[` / `![[` 同一套壳）：
 
 ```markdown
-[[论文或笔记目标@批注id]]           # 点击跳转 PDF 位置
-![[论文或笔记目标@批注id]]          # 只读嵌入引用卡
-[[论文或笔记目标@批注id|显示名]]    # 别名
-[[论文#@批注id]]                    # 与 `@id` sugar 等价的 fragment 形态
+[[@批注id]]                              # 当前 NOTES / 当前 paper
+[[papers/…/NOTES@批注id]]                # 稳定 vault 相对路径（面板复制默认）
+[[paper.pdf@批注id]]                     # PDF 文件名 / 路径
+[[../NOTES.md@批注id]]                   # 相对路径
+[[papers/…/NOTES@批注id|显示标题]]       # 路径解析 + 标题只作 alias
+![[…@批注id]]                            # 只读嵌入
+[[…#@批注id]]                            # 与 `@id` sugar 等价
 ```
 
-- `id` 为 PDF 高亮/批注（`marks/annotations.json`）或视觉批注（`marks/<id>.json` kind `agent-trace`）的系统 id。
-- 嵌入卡只读：quote/comment 不可在笔记里改；源批注删除后为断链。
-- 批注面板可复制双链 / 嵌入语法。
+- **target 必须是可解析路径/文件名**（`NOTES`、`paper.pdf`、`papers/…/NOTES`），**不要**单独用论文展示标题当 target。
+- 面板复制：`[[papers/…/NOTES@id|论文标题]]`（标题只在 `|` 后）。
+- `id` 为高亮（`annotations.json`）或视觉批注（`agent-trace`，nanoid 可含 `_`）。
+- 嵌入卡只读；`[[@` 补全列出当前 paper 批注。
