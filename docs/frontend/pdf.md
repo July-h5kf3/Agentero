@@ -19,17 +19,19 @@
 | 查找 | `⌘F` + 命中高亮 |
 | 沉浸 | 全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
-| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）经 `citation-hover-store` 联动右侧 References 卡片高亮（`embed/citation-links.tsx`） |
+| 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示元数据预览并联动右侧 References 卡片高亮。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
+| 视觉解析 | 文字选区的放大镜可截取公式并请求多模态 Agent；工具栏放大镜进入框选模式，可截取图片、图表或表格区域。裁剪图最长边限制为 1600 px，仅随当次 Agent 请求发送 |
 
 ## 划词菜单
 
-选区后：高亮 / 批注 / 提问 / 加入对话 / 翻译。
+选区后：高亮 / 批注 / 提问 / 视觉解释 / 加入对话 / 翻译。
 
 | 动作 | 落盘 | UI |
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
 | 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
+| 视觉解释 | `marks/<id>.json`（kind ask，anchor 含 `visualKind`） | 截取公式选区并发送图片；结果复用提问卡片，可继续追问 |
 | 加入对话 | 不落盘 | 选区固定为 Agent composer 选区 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
 
@@ -42,11 +44,16 @@
 | 路径 | 职责 |
 |---|---|
 | `src/components/viewer/embed/pdf-viewer.tsx` | 阅读器 |
+| `src/components/viewer/embed/pdf-region-select-layer.tsx` | 图片区域框选覆盖层 |
+| `src/components/viewer/embed/pdf-region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
+| `src/components/viewer/pdf-citation-preview.tsx` | 文中引用悬浮预览 |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
+| `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
-Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。  
-引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；插图 sidecar 尚未实现。
+Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
+
+引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；插图 sidecar 与自动视觉区域检测尚未实现。

@@ -77,7 +77,8 @@
 | 主题 | 交付 |
 |---|---|
 | 解析 | 本地 PDF/TeX → citation/figure sidecar |
-| UI | Paper Content 侧栏；文内引用 hover → Paper Info |
+| UI | Paper Content 侧栏；文内引用 hover → Paper Info 已实现；待补卡片到 PDF 的反向高亮 |
+| PDF Agent | 公式选区与图片区域框选 → 多模态解释已实现；待补自动视觉区域检测 |
 | 图 | cites / cited_by 缓存；Connected Papers 式邻域 |
 | Agent | Explore citations / Map related work / Ingest neighborhood |
 | 检索 | PDF 正文层检索；搜索历史/过滤；命令注册表 + MRU |
