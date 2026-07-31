@@ -15,7 +15,10 @@ import type {
 	CatalogScanResponse,
 	PromptImage,
 } from "@/lib/agent/api";
-import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import {
+	isVisualAnnotationPromptText,
+	stripPromptEnvelopeForDisplay,
+} from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 
 /** Snapshot of a visual PDF annotation attached to a local user chat line. */
@@ -120,12 +123,15 @@ export function errorText(error: unknown): string {
 }
 
 /**
- * Background workflows (paper-reader, etc.) must not appear in Agent chat history.
- * Matches titles already indexed before hideFromChatHistory existed.
+ * Background workflows (paper-reader, visual pin chat, etc.) must not appear
+ * in Agent chat history as separate ACP sessions. Matches titles already
+ * indexed before hideFromChatHistory existed; visual prompts are filtered
+ * because hideFromChatHistory is not yet enforced on the host list path.
  */
 export function isBackgroundWorkflowHistoryTitle(title: string): boolean {
 	const t = stripPromptEnvelopeForDisplay(title).toLowerCase();
 	const raw = title.toLowerCase();
+	if (isVisualAnnotationPromptText(title)) return true;
 	return (
 		raw.includes("paper-reader") ||
 		raw.includes("paper_reader") ||
@@ -134,6 +140,7 @@ export function isBackgroundWorkflowHistoryTitle(title: string): boolean {
 		raw.includes("activate and follow $paper-reader") ||
 		raw.includes("activate and follow /paper-reader") ||
 		raw.includes("you are running the agentero paper-reader") ||
+		raw.includes("you are helping the user discuss a visual region") ||
 		t.includes("activate and follow $paper-reader") ||
 		t.includes("write structured lecture notes")
 	);

@@ -185,4 +185,15 @@ describe("isBackgroundWorkflowHistoryTitle", () => {
 			false,
 		);
 	});
+
+	it("hides visual-annotation system prompts from history list", () => {
+		const title = `You are reviewing 1 visual annotation from a research paper PDF.
+
+## Annotation 1
+User comment: 这里最值得读的是什么?`;
+		expect(isBackgroundWorkflowHistoryTitle(title)).toBe(true);
+		expect(isBackgroundWorkflowHistoryTitle("这里最值得读的是什么?")).toBe(
+			false,
+		);
+	});
 });
