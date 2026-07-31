@@ -30,6 +30,7 @@
 		"focusNotes": "Focus notes",
 		"closeTab": "Close dialog, tab, or window",
 		"nextTab": "Next tab",
-		"prevTab": "Previous tab"
+		"prevTab": "Previous tab",
+		"visualAnnotation": "Add visual annotation (PDF)"
 	}
 }
