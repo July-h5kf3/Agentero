@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, ScanSearch } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/core/utils";
@@ -15,8 +15,12 @@ import {
 	swatchBorderClass,
 	swatchColorClass,
 } from "@/lib/pdf/highlight/palette";
+import { ANNOTATIONS_JSON, MARKS_FOLDER } from "@/lib/pdf/selection/marks-io";
+import { joinVaultPath } from "@/lib/vault";
+import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
 const COMMENT_COLLAPSE_CHARS = 120;
+const ANNOTATION_REF_CACHE_LIMIT = 64;
 
 type WikiAnnotationEmbedProps = {
 	vaultPath: string;
@@ -29,11 +33,92 @@ type WikiAnnotationEmbedProps = {
 	className?: string;
 };
 
+type AnnotationLoadState =
+	| { kind: "loading" }
+	| { kind: "missing" }
+	| { kind: "ready"; ref: AnnotationRef };
+
+const annotationRefCache = new Map<string, AnnotationLoadState>();
+const annotationRequestCache = new Map<string, Promise<AnnotationLoadState>>();
+
+function annotationCacheKey(
+	vaultPath: string,
+	targetPath: string,
+	annotationId: string,
+	revision: number,
+): string {
+	return JSON.stringify([vaultPath, targetPath, annotationId, revision]);
+}
+
+function cachedAnnotationState(key: string): AnnotationLoadState | undefined {
+	return annotationRefCache.get(key);
+}
+
+function retainAnnotationState(key: string, state: AnnotationLoadState): void {
+	if (state.kind === "loading") return;
+	annotationRefCache.delete(key);
+	annotationRefCache.set(key, state);
+	while (annotationRefCache.size > ANNOTATION_REF_CACHE_LIMIT) {
+		const oldest = annotationRefCache.keys().next().value;
+		if (typeof oldest !== "string") break;
+		annotationRefCache.delete(oldest);
+	}
+}
+
+function loadAnnotationState(
+	key: string,
+	vaultPath: string,
+	targetPath: string,
+	annotationId: string,
+): Promise<AnnotationLoadState> {
+	const cached = cachedAnnotationState(key);
+	if (cached && cached.kind !== "loading") return Promise.resolve(cached);
+	const pending = annotationRequestCache.get(key);
+	if (pending) return pending;
+
+	const paperAbs = paperAbsFromWikiTarget(vaultPath, targetPath);
+	const request = lookupAnnotationRef(paperAbs, annotationId)
+		.then(
+			(ref): AnnotationLoadState =>
+				ref ? { kind: "ready", ref } : { kind: "missing" },
+		)
+		.then((state) => {
+			retainAnnotationState(key, state);
+			return state;
+		})
+		.finally(() => {
+			annotationRequestCache.delete(key);
+		});
+	annotationRequestCache.set(key, request);
+	return request;
+}
+
+/**
+ * Absolute mark files that back one annotation embed. Subscribe to these — not
+ * NOTES.md — so editing the hosting note never invalidates the projection.
+ */
+export function annotationEmbedWatchPaths(
+	vaultPath: string,
+	targetPath: string,
+	annotationId: string,
+): string[] {
+	const paperAbs = paperAbsFromWikiTarget(vaultPath, targetPath);
+	if (!paperAbs || !annotationId) return [];
+	return [
+		joinVaultPath(joinVaultPath(paperAbs, MARKS_FOLDER), ANNOTATIONS_JSON),
+		joinVaultPath(
+			joinVaultPath(paperAbs, MARKS_FOLDER),
+			`${annotationId}.json`,
+		),
+	];
+}
+
 /**
  * Read-only projection of a PDF highlight or visual-trace for `![[target@id]]`.
- * Quote/comment body is never editable here — source of truth stays in marks/.
+ * Uses a module-level cache so parent remounts / selection toggles do not flash
+ * a loading state (same pattern as image/PDF attachment embeds).
  */
-export function WikiAnnotationEmbed({
+export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	vaultPath,
 	targetPath,
 	annotationId,
@@ -42,25 +127,77 @@ export function WikiAnnotationEmbed({
 	className,
 }: WikiAnnotationEmbedProps) {
 	const { t } = useTranslation("editor");
-	const [state, setState] = useState<
-		| { kind: "loading" }
-		| { kind: "missing" }
-		| { kind: "ready"; ref: AnnotationRef }
-	>({ kind: "loading" });
+	const [marksRevision, setMarksRevision] = useState(0);
+	const requestKey = annotationCacheKey(
+		vaultPath,
+		targetPath,
+		annotationId,
+		marksRevision,
+	);
+	const [load, setLoad] = useState<{
+		requestKey: string;
+		state: AnnotationLoadState;
+	}>(() => ({
+		requestKey,
+		state: cachedAnnotationState(requestKey) ?? { kind: "loading" },
+	}));
+	const fallback =
+		load.requestKey === requestKey
+			? undefined
+			: cachedAnnotationState(requestKey);
+	// Prefer: exact key → cache for new key → previous ready card (SWR) → loading.
+	const state: AnnotationLoadState =
+		load.requestKey === requestKey
+			? load.state
+			: (fallback ??
+				(load.state.kind === "ready" ? load.state : { kind: "loading" }));
 	const [expanded, setExpanded] = useState(false);
 
 	useEffect(() => {
+		const paths = annotationEmbedWatchPaths(
+			vaultPath,
+			targetPath,
+			annotationId,
+		);
+		if (!paths.length) return;
+		const unsubs = paths.map((path) =>
+			subscribeWikiEmbedTarget(path, () => {
+				setMarksRevision((revision) => revision + 1);
+			}),
+		);
+		return () => {
+			for (const unsub of unsubs) unsub();
+		};
+	}, [vaultPath, targetPath, annotationId]);
+
+	useEffect(() => {
+		const cached = cachedAnnotationState(requestKey);
+		if (cached && cached.kind !== "loading") {
+			setLoad((previous) =>
+				previous.requestKey === requestKey && previous.state === cached
+					? previous
+					: { requestKey, state: cached },
+			);
+			return;
+		}
+
+		// Stale-while-revalidate: keep the previous ready card visible while the
+		// next revision loads so marks updates do not flash "loading".
 		let cancelled = false;
-		const paperAbs = paperAbsFromWikiTarget(vaultPath, targetPath);
-		void lookupAnnotationRef(paperAbs, annotationId).then((ref) => {
-			if (cancelled) return;
-			setState(ref ? { kind: "ready", ref } : { kind: "missing" });
+		void loadAnnotationState(
+			requestKey,
+			vaultPath,
+			targetPath,
+			annotationId,
+		).then((nextState) => {
+			if (!cancelled) setLoad({ requestKey, state: nextState });
 		});
 		return () => {
 			cancelled = true;
 		};
-	}, [vaultPath, targetPath, annotationId]);
+	}, [requestKey, vaultPath, targetPath, annotationId]);
 
+	// Only the very first load (no cached/stale card) shows a loading label.
 	if (state.kind === "loading") {
 		return (
 			<span
@@ -197,4 +334,4 @@ export function WikiAnnotationEmbed({
 			) : null}
 		</div>
 	);
-}
+});

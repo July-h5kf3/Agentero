@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
+import { WikiAnnotationEmbed } from "@/components/editor/wiki-annotation-embed";
 import {
 	MAX_WIKI_EMBED_DEPTH,
 	useWikiEmbedAncestry,
@@ -24,6 +25,8 @@ import { joinVaultPath } from "@/lib/vault";
 import {
 	type ResolvedLink,
 	readWikiEmbed,
+	resolveWikiTarget,
+	splitAnnotationSugar,
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
@@ -32,11 +35,6 @@ import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 const WikiAttachmentEmbed = lazy(async () => {
 	const module = await import("@/components/editor/wiki-attachment-embed");
 	return { default: module.WikiAttachmentEmbed };
-});
-
-const WikiAnnotationEmbed = lazy(async () => {
-	const module = await import("@/components/editor/wiki-annotation-embed");
-	return { default: module.WikiAnnotationEmbed };
 });
 
 type EmbedLoadState =
@@ -72,12 +70,32 @@ function embedRequestKey(
 	return JSON.stringify([vaultPath, sourcePath, target, targetRevision]);
 }
 
+/** Request key without revision — same embed identity across marks/file reloads. */
+function embedIdentityKey(
+	vaultPath: string | null | undefined,
+	sourcePath: string | null,
+	target: string,
+): string | null {
+	if (!vaultPath || !sourcePath) return null;
+	return JSON.stringify([vaultPath, sourcePath, target]);
+}
+
 function cachedEmbedState(key: string): EmbedLoadState | undefined {
 	return embedStateCache.get(key);
 }
 
 function retainEmbedState(key: string, state: EmbedLoadState): void {
-	if (state.kind === "error" || state.kind === "loading") return;
+	// Never cache terminal "not found" results: cold-start races (index not
+	// ready yet) must be allowed to succeed on the next mount/retry instead of
+	// permanently showing "找不到嵌入的笔记".
+	if (
+		state.kind === "error" ||
+		state.kind === "loading" ||
+		state.kind === "missing" ||
+		state.kind === "ambiguous"
+	) {
+		return;
+	}
 	embedStateCache.delete(key);
 	embedStateCache.set(key, state);
 	while (embedStateCache.size > EMBED_CACHE_LIMIT) {
@@ -117,11 +135,60 @@ function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
 	}
 }
 
+/**
+ * When Host resolve returns `missing` for a `path@annotId` token (cold-start
+ * race, escaped id, or path-like relative mishap), recover via client sugar
+ * parse + vault file list so annotation embeds still open.
+ */
+function recoverAnnotationEmbed(
+	target: string,
+	files: string[],
+	sourcePath: string,
+): WikiEmbedResponse | null {
+	const sugar = splitAnnotationSugar(target);
+	if (!sugar) return null;
+	const targetPath =
+		resolveWikiTarget(sugar.target, files) ||
+		// same-note form: resolve to the source file when listed
+		(sugar.target === ""
+			? files.find(
+					(f) =>
+						f.replace(/\\/g, "/").toLowerCase() ===
+						sourcePath.replace(/\\/g, "/").toLowerCase(),
+				) || null
+			: null);
+	if (!targetPath && sugar.target !== "") return null;
+	const path =
+		targetPath ||
+		sourcePath
+			.replace(/\\/g, "/")
+			.replace(/^.*\/(?=papers\/|notes\/)/i, "") // best-effort vault-rel
+			.replace(/^\//, "");
+	if (!path) return null;
+	return {
+		link: {
+			occurrence: {
+				source: sourcePath,
+				targetRaw: sugar.target,
+				syntax: "wikilink",
+				embed: true,
+				fragment: { kind: "annotation", id: sugar.id },
+				sourceRange: { start: 0, end: 0 },
+				line: 1,
+			},
+			status: "resolved",
+			targetPath: path,
+		},
+		contentKind: "annotation",
+	};
+}
+
 function loadEmbedState(
 	key: string,
 	vaultPath: string,
 	sourcePath: string,
 	target: string,
+	vaultFiles: string[] = [],
 ): Promise<EmbedLoadState> {
 	const cached = cachedEmbedState(key);
 	if (cached) return Promise.resolve(cached);
@@ -129,7 +196,17 @@ function loadEmbedState(
 	if (pending) return pending;
 
 	const request = readWikiEmbed(vaultPath, sourcePath, target)
-		.then((response) => stateFromResponse(response))
+		.then((response) => {
+			if (response.link.status === "missing" && vaultFiles.length) {
+				const recovered = recoverAnnotationEmbed(
+					target,
+					vaultFiles,
+					sourcePath,
+				);
+				if (recovered) return stateFromResponse(recovered);
+			}
+			return stateFromResponse(response);
+		})
 		.catch(
 			(error): EmbedLoadState => ({
 				kind: "error",
@@ -221,12 +298,43 @@ export function WikiEmbedElement({
 		}
 
 		let cancelled = false;
-		setLoad({ requestKey, state: { kind: "loading" } });
+		// Stale-while-revalidate only when the embed identity is unchanged and
+		// only the revision suffix advanced (target file / marks reloaded).
+		// Switching to a different ![[target]] still shows loading.
+		const identity = embedIdentityKey(
+			vaultPath,
+			sourcePath,
+			targetWithFragment,
+		);
+		setLoad((previous) => {
+			if (previous.requestKey === requestKey) return previous;
+			const previousIdentity =
+				previous.requestKey && previous.requestKey.length > 2
+					? (() => {
+							try {
+								const parsed = JSON.parse(previous.requestKey) as unknown[];
+								if (!Array.isArray(parsed) || parsed.length < 3) return null;
+								return JSON.stringify(parsed.slice(0, 3));
+							} catch {
+								return null;
+							}
+						})()
+					: null;
+			const keepProjection =
+				identity &&
+				previousIdentity === identity &&
+				previous.state.kind === "ready";
+			return {
+				requestKey,
+				state: keepProjection ? previous.state : { kind: "loading" },
+			};
+		});
 		void loadEmbedState(
 			requestKey,
 			vaultPath,
 			sourcePath,
 			targetWithFragment,
+			wikiNav?.mdFiles ?? [],
 		).then((nextState) => {
 			if (!cancelled) setLoad({ requestKey, state: nextState });
 		});
@@ -237,6 +345,7 @@ export function WikiEmbedElement({
 		markdownDoc.filePath,
 		requestKey,
 		targetWithFragment,
+		wikiNav?.mdFiles,
 		wikiNav?.vaultPath,
 	]);
 
@@ -280,12 +389,19 @@ export function WikiEmbedElement({
 			? joinVaultPath(wikiNav.vaultPath, state.response.link.targetPath)
 			: "";
 
+	const isAnnotationEmbed =
+		state.kind === "ready" && state.response.contentKind === "annotation";
+
+	// Markdown/image/PDF embeds refresh when their resolved target file changes.
+	// Annotation bodies live under paper marks/, not NOTES.md — subscribing to
+	// absoluteTarget (often the hosting NOTES) made every autosave flash cards.
+	// Mark-path refresh is owned by WikiAnnotationEmbed itself.
 	useEffect(() => {
-		if (!absoluteTarget) return;
+		if (!absoluteTarget || isAnnotationEmbed) return;
 		return subscribeWikiEmbedTarget(absoluteTarget, () => {
 			setTargetRevision((revision) => revision + 1);
 		});
-	}, [absoluteTarget]);
+	}, [absoluteTarget, isAnnotationEmbed]);
 
 	return (
 		<PlateElement
@@ -359,6 +475,8 @@ export function WikiEmbedElement({
 							presentation.response.link.targetPath &&
 							presentation.response.link.occurrence.fragment?.kind ===
 								"annotation" ? (
+							// Eager (non-lazy) so Suspense does not flash "loading" on
+							// each parent re-render after the first annotation embed.
 							<WikiAnnotationEmbed
 								vaultPath={wikiNav.vaultPath}
 								targetPath={presentation.response.link.targetPath}

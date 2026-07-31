@@ -96,13 +96,15 @@ fn resolve_document(
     }
 
     let raw = occurrence.target_raw.trim();
-    // Path-like destinations (Markdown links, or wikilinks with `/` / `.`) are
-    // resolved relative to the source document first so `../NOTES.md@id` and
-    // `./paper.pdf@id` work from nested notes.
+    // Source-relative resolution:
+    // - Markdown destinations are always source-relative (CommonMark).
+    // - Wikilinks only when explicitly relative (`./` / `../`), so vault paths
+    //   like `papers/foo/NOTES` are NOT joined under the source directory
+    //   (which previously produced impossible candidates and flaky misses).
     let mut exact_candidates = Vec::new();
-    let path_like = raw.contains('/') || raw.starts_with('.');
+    let wiki_explicit_relative = raw == "." || raw.starts_with("./") || raw.starts_with("../");
     let try_relative = !raw.starts_with('/')
-        && (matches!(occurrence.syntax, InternalLinkSyntax::Markdown) || path_like);
+        && (matches!(occurrence.syntax, InternalLinkSyntax::Markdown) || wiki_explicit_relative);
     if try_relative {
         let relative = source_relative(&occurrence.source, raw);
         // If resolving would escape the Vault, do not fall through to a

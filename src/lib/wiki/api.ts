@@ -30,6 +30,14 @@ export function isValidAnnotationId(id: string): boolean {
 }
 
 /**
+ * Strip CommonMark-ish escapes (esp. `\_`) that otherwise break sugar split and
+ * make the whole `path@id` look like a missing file.
+ */
+export function normalizeAnnotationId(id: string): string {
+	return id.replace(/\\(.)/g, "$1");
+}
+
+/**
  * Sugar `target@id` or same-note `[[@id]]` when the right side is a well-formed
  * annotation id. Uses the last `@` so path segments may contain `@`.
  */
@@ -39,7 +47,7 @@ export function splitAnnotationSugar(
 	const at = main.lastIndexOf("@");
 	if (at < 0) return null;
 	const target = main.slice(0, at).trimEnd();
-	const id = main.slice(at + 1).trim();
+	const id = normalizeAnnotationId(main.slice(at + 1).trim());
 	if (!isValidAnnotationId(id)) return null;
 	return { target, id };
 }
@@ -54,7 +62,7 @@ export function parseWikiFragment(
 		return { kind: "block", id: raw.slice(1) };
 	}
 	if (raw.startsWith("@")) {
-		return { kind: "annotation", id: raw.slice(1) };
+		return { kind: "annotation", id: normalizeAnnotationId(raw.slice(1)) };
 	}
 	return {
 		kind: "heading",

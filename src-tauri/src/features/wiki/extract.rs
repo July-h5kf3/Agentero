@@ -29,7 +29,9 @@ pub fn parse_fragment(value: &str) -> Option<LinkFragment> {
         // Canonical fragment form: `[[Target#@annotationId]]`.
         // Malformed ids stay as Annotation so the resolver can report
         // `invalidFragment` instead of degrading to a heading path.
-        return Some(LinkFragment::Annotation { id: id.to_string() });
+        return Some(LinkFragment::Annotation {
+            id: normalize_annotation_id(id),
+        });
     }
     let path: Vec<String> = value
         .split('#')
@@ -55,13 +57,32 @@ pub fn is_valid_annotation_id(id: &str) -> bool {
             .all(|character| character.is_alphanumeric() || character == '-' || character == '_')
 }
 
+/// Undo CommonMark-ish escapes that leak into wikilink bodies (esp. `\_` for
+/// nanoid underscores). Without this, `NOTES@TGDf\_eZGV4` fails sugar split and
+/// the whole token is treated as a missing file path → "找不到嵌入的笔记".
+pub fn normalize_annotation_id(id: &str) -> String {
+    let mut out = String::with_capacity(id.len());
+    let mut chars = id.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+            // Lone trailing backslash is dropped.
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
 /// Sugar: `target@id` or same-note `[[@id]]` when the right side is a well-formed
 /// annotation id. Uses the last `@` so path segments may contain `@`.
-pub fn split_annotation_sugar(main: &str) -> Option<(&str, &str)> {
+pub fn split_annotation_sugar(main: &str) -> Option<(&str, String)> {
     let at = main.rfind('@')?;
     let target = main[..at].trim_end();
-    let id = main[at + 1..].trim();
-    if !is_valid_annotation_id(id) {
+    let id = normalize_annotation_id(main[at + 1..].trim());
+    if !is_valid_annotation_id(&id) {
         return None;
     }
     // Empty target = current source note / paper (`[[@id]]`).
@@ -136,14 +157,40 @@ fn parse_wikilink(
             Some(body_start + main_start + index + 1),
         ),
         None => match split_annotation_sugar(main) {
-            Some((target, _id)) => {
+            Some((target, id)) => {
                 let at = main.rfind('@').expect("split_annotation_sugar found @");
-                // fragment_raw is "@id"; fragment_offset points at the id body.
-                (
-                    target,
-                    Some(&main[at..]),
-                    Some(body_start + main_start + at + 1),
-                )
+                // Prefer normalized id (unescaped) as the fragment; range still
+                // points at the source bytes after `@`.
+                return Some(InternalLinkOccurrence {
+                    source: source_path.to_string(),
+                    target_raw: {
+                        let (target_start, target_end) = trim_bounds(target);
+                        target[target_start..target_end].to_string()
+                    },
+                    syntax: InternalLinkSyntax::Wikilink,
+                    embed,
+                    display_text: alias,
+                    fragment: Some(LinkFragment::Annotation { id: id.clone() }),
+                    source_range: {
+                        let (target_start, target_end) = trim_bounds(target);
+                        let target_offset = body_start + main_start + target_start;
+                        SourceRange {
+                            start: target_offset,
+                            end: target_offset + target[target_start..target_end].len(),
+                        }
+                    },
+                    fragment_range: {
+                        let id_start = body_start + main_start + at + 1;
+                        let raw_id = &main[at + 1..];
+                        let (start, end) = trim_bounds(raw_id);
+                        (start < end).then_some(SourceRange {
+                            start: id_start + start,
+                            end: id_start + end,
+                        })
+                    },
+                    line,
+                    context,
+                });
             }
             None => (main, None, None),
         },
@@ -154,8 +201,8 @@ fn parse_wikilink(
         main.find('#').is_none() && fragment_raw.is_some_and(|r| r.starts_with('@'));
     let fragment = fragment_raw.and_then(|raw| {
         if sugar_annotation {
-            let id = raw.strip_prefix('@').unwrap_or(raw);
-            return Some(LinkFragment::Annotation { id: id.to_string() });
+            let id = normalize_annotation_id(raw.strip_prefix('@').unwrap_or(raw));
+            return Some(LinkFragment::Annotation { id });
         }
         parse_fragment(raw)
     });
@@ -586,9 +633,9 @@ mod tests {
 
     #[test]
     fn extracts_annotation_sugar_and_canonical_fragment() {
-        let source = "See [[NOTES@abc-123|quote]] and ![[paper#@def456]] and [[keep@not valid]] and [[@TGDf_eZGV4]] and [[../NOTES.md@x_y-1]].\n";
+        let source = "See [[NOTES@abc-123|quote]] and ![[paper#@def456]] and [[keep@not valid]] and [[@TGDf_eZGV4]] and [[../NOTES.md@x_y-1]] and ![[papers/foo/NOTES@TGDf\\_eZGV4|alias]].\n";
         let (_, links) = extract_document("notes/source.md", source);
-        assert_eq!(links.len(), 5);
+        assert_eq!(links.len(), 6);
         assert_eq!(links[0].target_raw, "NOTES");
         assert_eq!(
             links[0].fragment,
@@ -620,6 +667,15 @@ mod tests {
         assert_eq!(
             links[4].fragment,
             Some(LinkFragment::Annotation { id: "x_y-1".into() })
+        );
+        // Markdown-escaped underscore in nanoid must still parse as annotation.
+        assert!(links[5].embed);
+        assert_eq!(links[5].target_raw, "papers/foo/NOTES");
+        assert_eq!(
+            links[5].fragment,
+            Some(LinkFragment::Annotation {
+                id: "TGDf_eZGV4".into()
+            })
         );
     }
 

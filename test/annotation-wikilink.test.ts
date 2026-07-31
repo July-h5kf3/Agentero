@@ -5,7 +5,9 @@ import {
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-model";
 import {
+	annotationWikilinkAlias,
 	annotationWikilinkMarkdown,
+	truncateAnnotationPreview,
 	wikiTargetForPaper,
 } from "@/lib/pdf/annotation-ref";
 import {
@@ -38,9 +40,9 @@ describe("annotation wikilink parse", () => {
 
 	it("accepts same-note [[@id]] and nanoid underscore ids", () => {
 		const links = extractWikilinks(
-			"[[@TGDf_eZGV4]] and [[../NOTES.md@x_y-1]] and [[paper.pdf@ab_c]].\n",
+			"[[@TGDf_eZGV4]] and [[../NOTES.md@x_y-1]] and [[paper.pdf@ab_c]] and ![[papers/foo/NOTES@TGDf\\_eZGV4|alias]].\n",
 		);
-		expect(links).toHaveLength(3);
+		expect(links).toHaveLength(4);
 		expect(links[0]).toMatchObject({
 			targetRaw: "",
 			fragment: { kind: "annotation", id: "TGDf_eZGV4" },
@@ -52,6 +54,13 @@ describe("annotation wikilink parse", () => {
 		expect(links[2]).toMatchObject({
 			targetRaw: "paper.pdf",
 			fragment: { kind: "annotation", id: "ab_c" },
+		});
+		// Escaped underscore must not collapse the token into a missing file path.
+		expect(links[3]).toMatchObject({
+			targetRaw: "papers/foo/NOTES",
+			embed: true,
+			fragment: { kind: "annotation", id: "TGDf_eZGV4" },
+			alias: "alias",
 		});
 	});
 
@@ -161,5 +170,33 @@ describe("annotation wikilink parse", () => {
 			target: "",
 			query: "x",
 		});
+	});
+
+	it("builds title·snippet aliases with truncation", () => {
+		expect(truncateAnnotationPreview("hello world", 20)).toBe("hello world");
+		expect(truncateAnnotationPreview("a".repeat(50), 10)).toBe(
+			`${"a".repeat(9)}…`,
+		);
+		expect(
+			annotationWikilinkAlias(
+				"Towards Long Horizon Agent",
+				"这是一段很长的批注内容需要截断显示",
+				12,
+			),
+		).toBe(
+			`Towards Long Horizon Agent·${truncateAnnotationPreview("这是一段很长的批注内容需要截断显示", 12)}`,
+		);
+		expect(
+			annotationWikilinkMarkdown({
+				target: "papers/Towards-Long-Horizon-Agent/NOTES",
+				id: "TGDf_eZGV4",
+				alias: annotationWikilinkAlias(
+					"Towards Long Horizon Agent",
+					"short note",
+				),
+			}),
+		).toBe(
+			"[[papers/Towards-Long-Horizon-Agent/NOTES@TGDf_eZGV4|Towards Long Horizon Agent·short note]]",
+		);
 	});
 });

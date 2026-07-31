@@ -45,7 +45,11 @@ export function splitWikiLinkTarget(raw: string): {
 	}
 	const at = raw.lastIndexOf("@");
 	if (at >= 0) {
-		const id = raw.slice(at + 1);
+		// Unescape `\_` etc. so nanoid ids survive Markdown emphasis escaping.
+		const id = raw
+			.slice(at + 1)
+			.replace(/\\(.)/g, "$1")
+			.trim();
 		// nanoid may include `_`; mirror Host `is_valid_annotation_id`.
 		if (id.length > 0 && /^[\p{L}\p{N}_-]+$/u.test(id)) {
 			return { target: raw.slice(0, at), heading: `@${id}` };
