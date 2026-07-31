@@ -109,12 +109,17 @@
 		"loading": "正在加载嵌入内容…",
 		"missing": "找不到嵌入的笔记。",
 		"ambiguous": "嵌入目标存在歧义，请使用 Vault 相对路径。",
-		"invalidFragment": "找不到嵌入的标题或文本块。",
+		"invalidFragment": "嵌入的标题、块或批注找不到。",
 		"cycle": "该嵌入会重复当前嵌入链中已有的内容。",
 		"depth": "已达到嵌入层级上限，后续内容已隐藏。",
 		"unsupported": "该嵌入类型会保留为 Markdown，但暂不渲染。",
 		"error": "无法加载嵌入内容。",
-		"openSource": "打开 {{target}}"
+		"openSource": "打开 {{target}}",
+		"annotationHighlight": "高亮批注",
+		"annotationVisual": "视觉批注",
+		"annotationPage": "第 {{page}} 页",
+		"annotationExpand": "展开",
+		"annotationCollapse": "收起"
 	},
 	"wikiCompletion": {
 		"label": "双链候选",

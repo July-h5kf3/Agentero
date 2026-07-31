@@ -30,6 +30,7 @@ import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
 import { tracePreview } from "@/lib/pdf/agent-trace/schema";
+import { wikiTargetForPaper } from "@/lib/pdf/annotation-ref";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { layout, uiStore } from "@/lib/shell/ui-store";
@@ -105,6 +106,9 @@ function ReferencesSidebar() {
 
 function AnnotationsSidebar() {
 	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
+	const activeTab = useWorkspaceStore((s) =>
+		s.tabs.find((tab) => tab.id === s.activeTabId),
+	);
 	const highlights = useAnnotationsStore((s) =>
 		activeTabId ? s.highlightsByTab[activeTabId] : undefined,
 	);
@@ -114,6 +118,18 @@ function AnnotationsSidebar() {
 	const visualTraces = useAnnotationsStore((s) =>
 		activeTabId ? s.visualTracesByTab[activeTabId] : undefined,
 	);
+
+	const wikiTarget = useMemo(() => {
+		const title = activeTab?.paperMeta?.title?.trim();
+		if (title) return title;
+		const paperPath = activeTab?.paperMeta?.path;
+		if (paperPath) return wikiTargetForPaper(paperPath, paperPath);
+		if (activeTab?.notesPath) {
+			return wikiTargetForPaper(activeTab.notesPath);
+		}
+		if (activeTab?.path) return wikiTargetForPaper(activeTab.path);
+		return null;
+	}, [activeTab]);
 
 	const items = useMemo<AnnotationRow[]>(() => {
 		if (!highlights) return [];
@@ -173,6 +189,7 @@ function AnnotationsSidebar() {
 			items={items}
 			asks={askRows}
 			visualTraces={visualTraceRows}
+			wikiTarget={wikiTarget}
 			onJump={(id) => annotationAction((h) => h.scrollToHighlight(id))}
 			onEdit={(id) => annotationAction((h) => h.editComment(id))}
 			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}

@@ -30,14 +30,28 @@ export type WikiLinkDraftText = {
 	wikiLinkDraft: true;
 };
 
+/**
+ * Split a wikilink main body (no alias) into target + fragment suffix.
+ * - `#…` → heading / `^block` / `@annotation` (fragment keeps leading ^/@ when present)
+ * - sugar `target@id` → heading field `@id` so serialization can prefer sugar form
+ */
 export function splitWikiLinkTarget(raw: string): {
 	target: string;
 	heading: string;
 } {
 	const h = raw.indexOf("#");
-	return h >= 0
-		? { target: raw.slice(0, h), heading: raw.slice(h + 1) }
-		: { target: raw, heading: "" };
+	if (h >= 0) {
+		return { target: raw.slice(0, h), heading: raw.slice(h + 1) };
+	}
+	const at = raw.lastIndexOf("@");
+	if (at > 0) {
+		const id = raw.slice(at + 1);
+		// Keep sugar only for well-formed annotation ids (mirror Host extract).
+		if (id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id)) {
+			return { target: raw.slice(0, at), heading: `@${id}` };
+		}
+	}
+	return { target: raw, heading: "" };
 }
 
 function findWikiLinkAliasSeparator(raw: string): number {
@@ -55,7 +69,13 @@ export function wikiLinkToMarkdown(node: {
 	alias?: string | null;
 	embed?: boolean;
 }): string {
-	const target = node.heading ? `${node.value}#${node.heading}` : node.value;
+	let target = node.value;
+	if (node.heading) {
+		// Prefer user-facing sugar `target@id` for annotation fragments.
+		target = node.heading.startsWith("@")
+			? `${node.value}${node.heading}`
+			: `${node.value}#${node.heading}`;
+	}
 	const alias = node.alias ? `|${node.alias.replaceAll("|", "\\|")}` : "";
 	return `${node.embed ? "!" : ""}[[${target}${alias}]]`;
 }

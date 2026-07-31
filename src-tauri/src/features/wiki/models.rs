@@ -20,8 +20,16 @@ pub enum InternalLinkSyntax {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LinkFragment {
-    Heading { path: Vec<String> },
-    Block { id: String },
+    Heading {
+        path: Vec<String>,
+    },
+    Block {
+        id: String,
+    },
+    /// PDF mark/annotation id (`[[paper@id]]` / `[[paper#@id]]`).
+    Annotation {
+        id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -173,6 +181,8 @@ pub enum WikiEmbedContentKind {
     Markdown,
     Image,
     Pdf,
+    /// PDF highlight / visual-trace reference; content filled by frontend marks IO.
+    Annotation,
     Unsupported,
 }
 

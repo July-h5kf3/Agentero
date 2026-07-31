@@ -53,11 +53,14 @@ export function LinkElement(props: PlateElementProps) {
 						event.stopPropagation();
 						if (wikiNav?.vaultPath && markdownDoc.filePath) {
 							try {
-								const fragment = wiki.fragment
-									? wiki.fragment.kind === "block"
+								const fragment =
+									wiki.fragment?.kind === "block"
 										? `#^${wiki.fragment.id}`
-										: `#${wiki.fragment.path.join("#")}`
-									: "";
+										: wiki.fragment?.kind === "annotation"
+											? `@${wiki.fragment.id}`
+											: wiki.fragment?.kind === "heading"
+												? `#${wiki.fragment.path.join("#")}`
+												: "";
 								const resolved = await resolveWikiReference(
 									wikiNav.vaultPath,
 									markdownDoc.filePath,

@@ -89,7 +89,11 @@
 		"askTurns": "{{count}} messages",
 		"visualRegions": "{{count}} regions",
 		"expandNote": "Expand note",
-		"collapseNote": "Collapse note"
+		"collapseNote": "Collapse note",
+		"copyLink": "Copy wikilink",
+		"copyEmbed": "Copy embed",
+		"linkCopied": "Wikilink copied",
+		"embedCopied": "Embed copied"
 	},
 	"references": {
 		"title": "References",

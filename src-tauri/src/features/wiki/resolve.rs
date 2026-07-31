@@ -215,6 +215,8 @@ pub(crate) fn fragment_anchors<'a>(
                 .collect()
         }
         LinkFragment::Block { .. } => Vec::new(),
+        // Annotations live in paper marks/, not Markdown anchors.
+        LinkFragment::Annotation { .. } => Vec::new(),
     }
 }
 
@@ -245,6 +247,23 @@ pub fn resolve_occurrence(
     };
 
     if let Some(fragment) = &occurrence.fragment {
+        // PDF annotation ids are not Markdown anchors. A well-formed id + resolved
+        // target is enough for link status; existence is refined when a vault root
+        // is available (see WikiIndex) and always re-checked on the frontend for
+        // embed/jump.
+        if let LinkFragment::Annotation { id } = fragment {
+            let status = if crate::features::wiki::extract::is_valid_annotation_id(id) {
+                LinkResolutionStatus::Resolved
+            } else {
+                LinkResolutionStatus::InvalidFragment
+            };
+            return ResolvedLink {
+                occurrence,
+                status,
+                target_path: Some(path),
+                candidates: Vec::new(),
+            };
+        }
         let document = documents.iter().find(|document| document.path == path);
         let candidates: Vec<String> = document
             .map(|document| {

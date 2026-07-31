@@ -1,6 +1,7 @@
 import {
 	ChevronDown,
 	ChevronUp,
+	Link2,
 	MessageCircle,
 	MessageSquareText,
 	Pencil,
@@ -12,7 +13,9 @@ import { useTranslation } from "react-i18next";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
+import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
+import { annotationWikilinkMarkdown } from "@/lib/pdf/annotation-ref";
 import {
 	type HighlightColor,
 	swatchBorderClass,
@@ -50,6 +53,11 @@ type AnnotationsPanelProps = {
 	asks?: AskRow[];
 	/** Visual agent-trace marks for this paper. */
 	visualTraces?: VisualTraceRow[];
+	/**
+	 * Wiki target for `[[target@id]]` (paper folder basename / title).
+	 * When set, highlight and visual cards expose copy-link / copy-embed.
+	 */
+	wikiTarget?: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
@@ -72,6 +80,7 @@ export function AnnotationsPanel({
 	items,
 	asks = [],
 	visualTraces = [],
+	wikiTarget = null,
 	onJump,
 	onEdit,
 	onDelete,
@@ -86,6 +95,7 @@ export function AnnotationsPanel({
 	const multiSection =
 		[items.length > 0, asks.length > 0, visualTraces.length > 0].filter(Boolean)
 			.length > 1;
+	const linkTarget = wikiTarget?.trim() || null;
 
 	return (
 		<section
@@ -126,6 +136,7 @@ export function AnnotationsPanel({
 									<li key={a.id}>
 										<AnnotationCard
 											item={a}
+											wikiTarget={linkTarget}
 											onJump={onJump}
 											onEdit={onEdit}
 											onDelete={onDelete}
@@ -169,6 +180,7 @@ export function AnnotationsPanel({
 									<li key={trace.id}>
 										<VisualTraceListCard
 											item={trace}
+											wikiTarget={linkTarget}
 											onJump={onJumpVisual}
 											onDelete={onDeleteVisual}
 										/>
@@ -185,11 +197,13 @@ export function AnnotationsPanel({
 
 function AnnotationCard({
 	item: a,
+	wikiTarget,
 	onJump,
 	onEdit,
 	onDelete,
 }: {
 	item: AnnotationRow;
+	wikiTarget: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
@@ -242,6 +256,49 @@ function AnnotationCard({
 				) : null}
 			</div>
 			<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+				{wikiTarget ? (
+					<>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-foreground"
+							aria-label={t("annotations.copyLink")}
+							title={t("annotations.copyLink")}
+							onClick={() =>
+								void copyTextToClipboard(
+									annotationWikilinkMarkdown({
+										target: wikiTarget,
+										id: a.id,
+									}),
+									{ successMessage: t("annotations.linkCopied") },
+								)
+							}
+						>
+							<Link2 className="size-3.5" />
+						</Button>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-foreground"
+							aria-label={t("annotations.copyEmbed")}
+							title={t("annotations.copyEmbed")}
+							onClick={() =>
+								void copyTextToClipboard(
+									annotationWikilinkMarkdown({
+										target: wikiTarget,
+										id: a.id,
+										embed: true,
+									}),
+									{ successMessage: t("annotations.embedCopied") },
+								)
+							}
+						>
+							<span className="font-mono text-[10px] leading-none">![[</span>
+						</Button>
+					</>
+				) : null}
 				<Button
 					type="button"
 					variant="ghost"
@@ -331,10 +388,12 @@ function AskCard({
 
 function VisualTraceListCard({
 	item: trace,
+	wikiTarget,
 	onJump,
 	onDelete,
 }: {
 	item: VisualTraceRow;
+	wikiTarget: string | null;
 	onJump?: (id: string) => void;
 	onDelete?: (id: string) => void;
 }) {
@@ -368,18 +427,63 @@ function VisualTraceListCard({
 					{trace.preview}
 				</p>
 			</div>
-			{onDelete ? (
+			{onDelete || wikiTarget ? (
 				<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="size-6 text-muted-foreground hover:text-destructive"
-						aria-label={t("annotations.deleteVisual")}
-						onClick={() => onDelete(trace.id)}
-					>
-						<Trash2 className="size-3.5" />
-					</Button>
+					{wikiTarget ? (
+						<>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 text-muted-foreground hover:text-foreground"
+								aria-label={t("annotations.copyLink")}
+								title={t("annotations.copyLink")}
+								onClick={() =>
+									void copyTextToClipboard(
+										annotationWikilinkMarkdown({
+											target: wikiTarget,
+											id: trace.id,
+										}),
+										{ successMessage: t("annotations.linkCopied") },
+									)
+								}
+							>
+								<Link2 className="size-3.5" />
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								className="size-6 text-muted-foreground hover:text-foreground"
+								aria-label={t("annotations.copyEmbed")}
+								title={t("annotations.copyEmbed")}
+								onClick={() =>
+									void copyTextToClipboard(
+										annotationWikilinkMarkdown({
+											target: wikiTarget,
+											id: trace.id,
+											embed: true,
+										}),
+										{ successMessage: t("annotations.embedCopied") },
+									)
+								}
+							>
+								<span className="font-mono text-[10px] leading-none">![[</span>
+							</Button>
+						</>
+					) : null}
+					{onDelete ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="size-6 text-muted-foreground hover:text-destructive"
+							aria-label={t("annotations.deleteVisual")}
+							onClick={() => onDelete(trace.id)}
+						>
+							<Trash2 className="size-3.5" />
+						</Button>
+					) : null}
 				</div>
 			) : null}
 		</div>

@@ -34,6 +34,11 @@ const WikiAttachmentEmbed = lazy(async () => {
 	return { default: module.WikiAttachmentEmbed };
 });
 
+const WikiAnnotationEmbed = lazy(async () => {
+	const module = await import("@/components/editor/wiki-annotation-embed");
+	return { default: module.WikiAnnotationEmbed };
+});
+
 type EmbedLoadState =
 	| { kind: "loading" }
 	| { kind: "ready"; response: WikiEmbedResponse; key: string }
@@ -85,9 +90,9 @@ function retainEmbedState(key: string, state: EmbedLoadState): void {
 function fragmentKey(link: ResolvedLink): string {
 	const fragment = link.occurrence.fragment;
 	if (!fragment) return "";
-	return fragment.kind === "block"
-		? `#^${fragment.id}`
-		: `#${fragment.path.join("#")}`;
+	if (fragment.kind === "block") return `#^${fragment.id}`;
+	if (fragment.kind === "annotation") return `@${fragment.id}`;
+	return `#${fragment.path.join("#")}`;
 }
 
 function embedKey(link: ResolvedLink): string {
@@ -105,6 +110,7 @@ function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
 				: { kind: "unsupported", response };
 		case "image":
 		case "pdf":
+		case "annotation":
 			return { kind: "ready", response, key: embedKey(response.link) };
 		default:
 			return { kind: "unsupported", response };
@@ -162,7 +168,9 @@ export function WikiEmbedElement({
 
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
-		? `${target}#${element.heading}`
+		? element.heading.startsWith("@")
+			? `${target}${element.heading}`
+			: `${target}#${element.heading}`
 		: target;
 	const [targetRevision, setTargetRevision] = useState(0);
 	const requestKey = embedRequestKey(
@@ -341,6 +349,18 @@ export function WikiEmbedElement({
 								targetPath={presentation.response.link.targetPath ?? target}
 								revision={targetRevision}
 								imageSize={element.alias}
+							/>
+						) : presentation.response.contentKind === "annotation" &&
+							wikiNav?.vaultPath &&
+							presentation.response.link.targetPath &&
+							presentation.response.link.occurrence.fragment?.kind ===
+								"annotation" ? (
+							<WikiAnnotationEmbed
+								vaultPath={wikiNav.vaultPath}
+								targetPath={presentation.response.link.targetPath}
+								annotationId={presentation.response.link.occurrence.fragment.id}
+								alias={element.alias}
+								onOpen={navigate}
 							/>
 						) : (
 							<EmbedStatus message={t("embed.unsupported")} />

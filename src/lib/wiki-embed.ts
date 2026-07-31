@@ -12,9 +12,9 @@ export type WikiEmbedResponseKind =
 function fragmentKey(link: ResolvedLink): string {
 	const fragment = link.occurrence.fragment;
 	if (!fragment) return "";
-	return fragment.kind === "block"
-		? `#^${fragment.id}`
-		: `#${fragment.path.join("#")}`;
+	if (fragment.kind === "block") return `#^${fragment.id}`;
+	if (fragment.kind === "annotation") return `@${fragment.id}`;
+	return `#${fragment.path.join("#")}`;
 }
 
 export function wikiEmbedKey(link: ResolvedLink): string {
@@ -31,7 +31,9 @@ export function wikiEmbedResponseKind(
 	) {
 		return "ready";
 	}
-	return response.contentKind === "image" || response.contentKind === "pdf"
+	return response.contentKind === "image" ||
+		response.contentKind === "pdf" ||
+		response.contentKind === "annotation"
 		? "ready"
 		: "unsupported";
 }

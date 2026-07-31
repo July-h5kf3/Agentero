@@ -237,6 +237,8 @@ export function MarkdownEditor({
 		const root = editorContainerRef.current;
 		if (!root) return;
 		const fragment = navigationIntent.fragment;
+		// Annotation fragments jump in the PDF viewer, not the Markdown editor.
+		if (fragment.kind === "annotation") return;
 		const headings = [
 			...root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6"),
 		];

@@ -25,6 +25,12 @@ pub fn parse_fragment(value: &str) -> Option<LinkFragment> {
         // into a file-only link.
         return Some(LinkFragment::Block { id: id.to_string() });
     }
+    if let Some(id) = value.strip_prefix('@') {
+        // Canonical fragment form: `[[Target#@annotationId]]`.
+        // Malformed ids stay as Annotation so the resolver can report
+        // `invalidFragment` instead of degrading to a heading path.
+        return Some(LinkFragment::Annotation { id: id.to_string() });
+    }
     let path: Vec<String> = value
         .split('#')
         .map(normalise_fragment_part)
@@ -38,6 +44,26 @@ pub fn is_valid_block_id(id: &str) -> bool {
         && id
             .chars()
             .all(|character| character.is_alphanumeric() || character == '-')
+}
+
+/// Same charset as block ids (UUID + nanoid).
+pub fn is_valid_annotation_id(id: &str) -> bool {
+    is_valid_block_id(id)
+}
+
+/// Sugar: `target@id` → (target, Annotation { id }) when the right side is a
+/// well-formed annotation id. Uses the last `@` so path segments may contain `@`.
+pub fn split_annotation_sugar(main: &str) -> Option<(&str, &str)> {
+    let at = main.rfind('@')?;
+    if at == 0 {
+        return None;
+    }
+    let target = main[..at].trim_end();
+    let id = main[at + 1..].trim();
+    if target.is_empty() || !is_valid_annotation_id(id) {
+        return None;
+    }
+    Some((target, id))
 }
 
 fn mask_inline_code(line: &str) -> Vec<u8> {
@@ -107,17 +133,43 @@ fn parse_wikilink(
             Some(&main[index + 1..]),
             Some(body_start + main_start + index + 1),
         ),
-        None => (main, None, None),
+        None => match split_annotation_sugar(main) {
+            Some((target, _id)) => {
+                let at = main.rfind('@').expect("split_annotation_sugar found @");
+                // fragment_raw is "@id"; fragment_offset points at the id body.
+                (
+                    target,
+                    Some(&main[at..]),
+                    Some(body_start + main_start + at + 1),
+                )
+            }
+            None => (main, None, None),
+        },
     };
     let (target_start, target_end) = trim_bounds(target_part);
     let target_raw = target_part[target_start..target_end].to_string();
-    let fragment = fragment_raw.and_then(parse_fragment);
+    let sugar_annotation =
+        main.find('#').is_none() && fragment_raw.is_some_and(|r| r.starts_with('@'));
+    let fragment = fragment_raw.and_then(|raw| {
+        if sugar_annotation {
+            let id = raw.strip_prefix('@').unwrap_or(raw);
+            return Some(LinkFragment::Annotation { id: id.to_string() });
+        }
+        parse_fragment(raw)
+    });
     if target_raw.is_empty() && fragment.is_none() {
         return None;
     }
     let target_offset = body_start + main_start + target_start;
     let fragment_range = fragment_raw.zip(fragment_offset).and_then(|(raw, offset)| {
-        let (start, end) = trim_bounds(raw);
+        // Sugar: offset already skips `@`; range is the id only.
+        // Canonical `#@id`: offset starts at `@…`, range is full fragment text.
+        let text = if sugar_annotation {
+            raw.strip_prefix('@').unwrap_or(raw)
+        } else {
+            raw
+        };
+        let (start, end) = trim_bounds(text);
         (start < end).then_some(SourceRange {
             start: offset + start,
             end: offset + end,
@@ -528,6 +580,32 @@ mod tests {
         ));
         assert!(links[1].embed);
         assert!(matches!(links[2].syntax, InternalLinkSyntax::Markdown));
+    }
+
+    #[test]
+    fn extracts_annotation_sugar_and_canonical_fragment() {
+        let source = "See [[NOTES@abc-123|quote]] and ![[paper#@def456]] and [[keep@not valid]].\n";
+        let (_, links) = extract_document("notes/source.md", source);
+        assert_eq!(links.len(), 3);
+        assert_eq!(links[0].target_raw, "NOTES");
+        assert_eq!(
+            links[0].fragment,
+            Some(LinkFragment::Annotation {
+                id: "abc-123".into()
+            })
+        );
+        assert_eq!(links[0].display_text.as_deref(), Some("quote"));
+        assert!(links[1].embed);
+        assert_eq!(links[1].target_raw, "paper");
+        assert_eq!(
+            links[1].fragment,
+            Some(LinkFragment::Annotation {
+                id: "def456".into()
+            })
+        );
+        // Invalid sugar id must not strip `@…` from the target.
+        assert_eq!(links[2].target_raw, "keep@not valid");
+        assert!(links[2].fragment.is_none());
     }
 
     #[test]
