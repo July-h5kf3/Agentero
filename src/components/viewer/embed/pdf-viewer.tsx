@@ -1572,8 +1572,6 @@ function PdfViewerInner({
 			setVisualCardExpanded(true);
 			void (async () => {
 				try {
-					const resolved = await resolvePdfAskAgent();
-					if (!resolved) return;
 					const latest = visualTracesRef.current.find(
 						(tr) => tr.id === traceId,
 					);
@@ -1584,16 +1582,32 @@ function PdfViewerInner({
 						.findByVisualTraceId(traceId);
 					const providerSessionId =
 						bound?.providerSessionId ?? latest.providerSessionId;
+					// Continue: stick to the agent that owns this session/mark.
+					// New pins use resolvePdfAskAgent (default); do not re-resolve here
+					// or a Grok default would load a Codex providerSessionId.
+					const markAgent =
+						bound?.agentId?.trim() ||
+						(latest.agentId && latest.agentId !== "pending"
+							? latest.agentId
+							: null);
+					let agentId = markAgent;
+					let modelId: string | undefined;
+					if (!agentId) {
+						const resolved = await resolvePdfAskAgent();
+						if (!resolved?.agentId) return;
+						agentId = resolved.agentId;
+						modelId = resolved.modelId;
+					}
 					requestVisualAgentTurn({
 						trace: {
 							...latest,
 							providerSessionId:
 								providerSessionId ?? latest.providerSessionId ?? undefined,
-							agentId: resolved.agentId ?? latest.agentId,
+							agentId,
 						},
 						text: question,
-						agentId: resolved.agentId ?? undefined,
-						modelId: resolved.modelId,
+						agentId,
+						modelId,
 					});
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);

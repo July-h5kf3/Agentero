@@ -17,7 +17,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-
+import { ChatVisualAnnotations } from "@/components/agent/chat-visual-annotations";
 import {
 	Message,
 	MessageContent,
@@ -28,7 +28,12 @@ import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
-import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";
+import {
+	agentTextFromParts,
+	type ChatLine,
+	type ChatVisualAnnotation,
+} from "@/lib/agent/chat-state";
+import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { cn } from "@/lib/core/utils";
 import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
@@ -158,19 +163,48 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
  * Scroll is manual only — no stick-to-bottom. Pin open keeps the user turn in
  * view; expanding preserves scrollTop so the answer is not jumped to.
  */
-/** Map shared Agent session lines → pin-modal bubbles (same source as sidebar). */
-function chatLinesToTraceMessages(lines: ChatLine[]) {
-	const out: Array<{
-		id: string;
-		role: "user" | "assistant";
-		content: string;
-	}> = [];
+type ModalTraceMessage = {
+	id: string;
+	role: "user" | "assistant";
+	content: string;
+	/** Same crop chips as the Agent panel user turn (above the bubble). */
+	visualAnnotations?: ChatVisualAnnotation[];
+};
+
+/** Crop chip for the first user turn when store lines omit visualAnnotations. */
+function chipFromTrace(
+	trace: PdfVisualSessionTrace,
+): ChatVisualAnnotation | null {
+	if (!trace.image?.data) return null;
+	return {
+		id: trace.id,
+		page: trace.page,
+		comment: trace.comment,
+		paperPath: trace.paperPath,
+		image: {
+			data: trace.image.data,
+			mimeType: trace.image.mimeType || "image/png",
+		},
+	};
+}
+
+/**
+ * Map shared Agent session lines → pin-modal bubbles (same source as sidebar).
+ * Keep `visualAnnotations` so crop chips match the right-rail transcript.
+ */
+function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
+	const out: ModalTraceMessage[] = [];
 	for (const line of lines) {
 		if (line.kind === "user") {
+			const content = stripPromptEnvelopeForDisplay(line.text);
+			const visuals = line.visualAnnotations ?? [];
+			// Visual-only turns may have empty free text after envelope strip.
+			if (!content && visuals.length === 0) continue;
 			out.push({
 				id: line.id,
 				role: "user",
-				content: line.text,
+				content,
+				...(visuals.length ? { visualAnnotations: visuals } : {}),
 			});
 			continue;
 		}
@@ -184,6 +218,22 @@ function chatLinesToTraceMessages(lines: ChatLine[]) {
 		}
 	}
 	return out;
+}
+
+/** Ensure the first user bubble has a crop chip (store path or mark fallback). */
+function withTraceCropChip(
+	messages: ModalTraceMessage[],
+	trace: PdfVisualSessionTrace,
+): ModalTraceMessage[] {
+	const chip = chipFromTrace(trace);
+	if (!chip) return messages;
+	let attached = false;
+	return messages.map((m) => {
+		if (m.role !== "user" || attached) return m;
+		attached = true;
+		if (m.visualAnnotations?.length) return m;
+		return { ...m, visualAnnotations: [chip] };
+	});
 }
 
 export const VisualTraceCard = memo(function VisualTraceCard({
@@ -225,10 +275,17 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			boundSessionId !== null &&
 			boundSessionId === activeTabId);
 	const messages = useMemo(() => {
-		if (boundLines && boundLines.length > 0) {
-			return chatLinesToTraceMessages(boundLines);
-		}
-		return traceMessages(trace);
+		const raw: ModalTraceMessage[] =
+			boundLines && boundLines.length > 0
+				? chatLinesToTraceMessages(boundLines)
+				: traceMessages(trace).map((m) => ({
+						id: m.id,
+						role:
+							m.role === "user" ? ("user" as const) : ("assistant" as const),
+						content: m.content,
+					}));
+		// Pin crop chip on first user turn (matches Agent panel Open-in-Agent lines).
+		return withTraceCropChip(raw, trace);
 	}, [boundLines, trace]);
 	const preview = tracePreview(trace, t("pdfExplain.visualAnnotation"), 280);
 	const title = preview || t("pdfExplain.traceCardTitle");
@@ -403,12 +460,18 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 							const from = m.role === "user" ? "user" : "assistant";
 							const isLive = from === "assistant" && m.id === lastStreamingId;
 							const isEmptyAssistant = isLive && !m.content.trim();
+							const visuals = m.visualAnnotations ?? [];
 							const clamp =
 								!expanded && from === "assistant"
 									? "line-clamp-4"
 									: !expanded && from === "user"
 										? "line-clamp-2"
 										: null;
+							const bodyText = m.content.trim();
+							// Match Agent panel: chips above bubble; skip empty text bubble.
+							if (from === "user" && !bodyText && visuals.length === 0) {
+								return null;
+							}
 							return (
 								<Message
 									key={m.id}
@@ -416,30 +479,38 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 									from={from}
 									className="max-w-full"
 								>
-									<MessageContent
-										className={cn(
-											"text-sm",
-											from === "user" && "px-3 py-2",
-											from === "assistant" && "w-full max-w-full",
-											clamp,
-										)}
-									>
-										{isEmptyAssistant ? (
-											<Shimmer className="text-sm" as="p">
-												{t("pdfExplain.traceThinking")}
-											</Shimmer>
-										) : m.content.trim() ? (
-											// Live stream: plain text only. Streamdown after the
-											// turn settles (math/mermaid parse is expensive).
-											expanded && from === "assistant" && !isLive ? (
-												<MessageResponse>{m.content}</MessageResponse>
-											) : (
-												<span className="whitespace-pre-wrap break-words">
-													{m.content}
-												</span>
-											)
-										) : null}
-									</MessageContent>
+									{from === "user" && visuals.length > 0 ? (
+										<ChatVisualAnnotations
+											annotations={visuals}
+											className={cn(!expanded && "scale-95 origin-top-right")}
+										/>
+									) : null}
+									{from === "user" && !bodyText ? null : (
+										<MessageContent
+											className={cn(
+												"text-sm",
+												from === "user" && "px-3 py-2",
+												from === "assistant" && "w-full max-w-full",
+												clamp,
+											)}
+										>
+											{isEmptyAssistant ? (
+												<Shimmer className="text-sm" as="p">
+													{t("pdfExplain.traceThinking")}
+												</Shimmer>
+											) : bodyText ? (
+												// Live stream: plain text only. Streamdown after the
+												// turn settles (math/mermaid parse is expensive).
+												expanded && from === "assistant" && !isLive ? (
+													<MessageResponse>{bodyText}</MessageResponse>
+												) : (
+													<span className="whitespace-pre-wrap break-words">
+														{bodyText}
+													</span>
+												)
+											) : null}
+										</MessageContent>
+									)}
 								</Message>
 							);
 						})

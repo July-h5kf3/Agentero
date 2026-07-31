@@ -1563,6 +1563,14 @@ export function useAgentPanel({
 		visualDrafts?: PdfVisualDraft[];
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
+		/**
+		 * Force this agent for the turn (e.g. visual pin continue bound to mark
+		 * session). Overrides the switcher selection so setState races cannot
+		 * send with the wrong provider.
+		 */
+		agentId?: string;
+		/** Optional model for forced agentId; else loadModelPref(agentId). */
+		modelId?: string;
 	};
 
 	const send = async (
@@ -1608,7 +1616,20 @@ export function useAgentPanel({
 				return false;
 			}
 
-			let agentId = selected?.id ?? registry?.defaultId ?? null;
+			const activeHistoryForAgent = sessionHistoryRef.current.find(
+				(item) => item.id === activeTabRef.current,
+			);
+			// Priority: explicit option → continuing session's agent → switcher → default.
+			// Prevents pin-modal continue from loading Codex session with Grok (pdfAsk default).
+			let agentId =
+				options?.agentId?.trim() ||
+				(activeHistoryForAgent?.providerSessionId &&
+				activeHistoryForAgent.agentId
+					? activeHistoryForAgent.agentId
+					: null) ||
+				selected?.id ||
+				registry?.defaultId ||
+				null;
 			if (!agentId && selected?.templateId) {
 				try {
 					const agent = await ensureCatalogAgent(selected.templateId, true);
@@ -1632,12 +1653,20 @@ export function useAgentPanel({
 				]);
 				return false;
 			}
+			// Keep switcher/ref in sync when the turn forces another agent.
+			if (agentId !== selectedAgentIdRef.current) {
+				selectedAgentIdRef.current = agentId;
+				setSelectedAgentId(agentId);
+			}
+			const resolvedModelId =
+				options?.modelId?.trim() ||
+				(agentId === selected?.id ? modelId : null) ||
+				loadModelPref(agentId) ||
+				undefined;
 
 			// Options are availability-filtered in buildOptions; unavailable agents
 			// never appear in the switcher.
-			const isAcpCommand = (
-				acpCommandsByAgent[selectedAgentId ?? ""] ?? []
-			).some(
+			const isAcpCommand = (acpCommandsByAgent[agentId] ?? []).some(
 				(command) =>
 					text === `/${command.name}` || text.startsWith(`/${command.name} `),
 			);
@@ -1739,7 +1768,7 @@ export function useAgentPanel({
 				vaultPath: vaultPath ?? undefined,
 				workflow: workflow ?? "free",
 				target: workflowTarget,
-				modelId: modelId ?? undefined,
+				modelId: resolvedModelId,
 				reasoningEffort: reasoningEffort ?? undefined,
 				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: resolvedSkillIds,
@@ -2009,15 +2038,22 @@ export function useAgentPanel({
 	useEffect(() => {
 		const handler = async (req: AgentTurnRequest): Promise<boolean> => {
 			const ctx = externalTurnCtxRef.current;
-			if (req.agentId && req.agentId !== selectedAgentIdRef.current) {
-				setSelectedAgentId(req.agentId);
-			}
 			const store = agentSessionStore.getState();
 			let existing = req.visualTraceId
 				? store.findByVisualTraceId(req.visualTraceId)
 				: undefined;
 			if (!existing && req.providerSessionId) {
 				existing = store.findByProviderSessionId(req.providerSessionId);
+			}
+			// Continue: session/mark agent wins. New: req.agentId (pdfAsk default).
+			const boundAgentId =
+				req.agentId?.trim() ||
+				existing?.agentId?.trim() ||
+				selectedAgentIdRef.current ||
+				null;
+			if (boundAgentId && boundAgentId !== selectedAgentIdRef.current) {
+				selectedAgentIdRef.current = boundAgentId;
+				setSelectedAgentId(boundAgentId);
 			}
 			if (existing) {
 				ctx.activateComposerSession(existing.id);
@@ -2030,7 +2066,7 @@ export function useAgentPanel({
 			} else if (req.seedLines?.length && req.visualTraceId) {
 				const seeded = {
 					id: visualTraceHistoryId(req.visualTraceId),
-					agentId: req.agentId || selectedAgentIdRef.current || "agent",
+					agentId: boundAgentId || selectedAgentIdRef.current || "agent",
 					source: "local" as const,
 					title: req.title?.trim() || ctx.t("composer.visualAnnotation"),
 					agentName: ctx.agentName ?? ctx.t("defaultName"),
@@ -2059,6 +2095,8 @@ export function useAgentPanel({
 			return sendRef.current(req.text, {
 				visualDrafts: req.visualDrafts,
 				fromQueue: true,
+				...(boundAgentId ? { agentId: boundAgentId } : {}),
+				...(req.modelId ? { modelId: req.modelId } : {}),
 			});
 		};
 		agentSessionStore.getState().registerSendHandler(handler);
