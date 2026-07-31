@@ -52,3 +52,10 @@ Vault Markdown 变更
 
 `src-tauri/src/features/wiki/`  
 前端 UI：[../frontend/wiki.md](../frontend/wiki.md)
+
+## 批注 fragment
+
+- `LinkFragment::Annotation { id }`：`[[target@id]]` sugar 与 `[[target#@id]]` 等价。
+- 解析时不把 annotation id 当 Markdown heading/block；跳转由前端打开 paper PDF 后 `scrollToHighlight` / `scrollToVisualTrace`。
+- `![[…@id]]` 的 `contentKind` 为 `annotation`，正文投影由前端 marks IO 完成。
+

@@ -41,3 +41,18 @@
 - 面板：`src/components/wiki/`
 - 逻辑：`src/lib/wiki/`、`wiki-completion.ts`、`wiki-embed.ts`、`wiki-navigation.ts`、`wiki-heading-rename.ts`
 - Host：[../backend/wiki.md](../backend/wiki.md)
+
+## 批注双链（PDF annotation refs）
+
+语法（与 `[[` / `![[` 同一套壳）：
+
+```markdown
+[[论文或笔记目标@批注id]]           # 点击跳转 PDF 位置
+![[论文或笔记目标@批注id]]          # 只读嵌入引用卡
+[[论文或笔记目标@批注id|显示名]]    # 别名
+[[论文#@批注id]]                    # 与 `@id` sugar 等价的 fragment 形态
+```
+
+- `id` 为 PDF 高亮/批注（`marks/annotations.json`）或视觉批注（`marks/<id>.json` kind `agent-trace`）的系统 id。
+- 嵌入卡只读：quote/comment 不可在笔记里改；源批注删除后为断链。
+- 批注面板可复制双链 / 嵌入语法。
