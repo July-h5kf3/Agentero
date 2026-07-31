@@ -28,8 +28,8 @@ export function isMacOS(): boolean {
 	return getPlatformOS() === "macos";
 }
 
-/** iPhone/iPad app shell (including iPadOS devices reporting `MacIntel`). */
-export function isAppleMobile(): boolean {
+/** Phone/tablet app shell: iPhone/iPad (incl. iPadOS `MacIntel`) or Android. */
+export function isMobileApp(): boolean {
 	if (typeof window === "undefined" || typeof navigator === "undefined") {
 		return false;
 	}
@@ -42,7 +42,7 @@ export function isAppleMobile(): boolean {
 	const ua = navigator.userAgent ?? "";
 	return (
 		/iPhone|iPad|iPod/.test(platform) ||
-		/iPhone|iPad|iPod/.test(ua) ||
+		/iPhone|iPad|iPod|Android/.test(ua) ||
 		(platform === "MacIntel" && navigator.maxTouchPoints > 1)
 	);
 }

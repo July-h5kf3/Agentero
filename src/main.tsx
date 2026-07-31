@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { initLogger, logger } from "@/lib/core/logger";
 import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
-import { isAppleMobile, isTauri } from "@/lib/core/tauri";
+import { isMobileApp, isTauri } from "@/lib/core/tauri";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
@@ -91,7 +91,7 @@ async function boot() {
 	// KaTeX styles ride along here for the same reason: the settings webview has
 	// no viewer and no math, so it must not pay for PDFium or the KaTeX fonts.
 	const [{ default: App }, { PdfEngineHost }] = await Promise.all([
-		import(isAppleMobile() ? "./components/mobile/mobile-app" : "./App"),
+		import(isMobileApp() ? "./components/mobile/mobile-app" : "./App"),
 		import("@/components/viewer/embed/engine-provider"),
 		import("katex/dist/katex.min.css"),
 	]);
