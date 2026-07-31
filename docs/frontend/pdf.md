@@ -13,7 +13,7 @@
 
 | 能力 | 说明 |
 |---|---|
-| 缩放 | +/-、适应宽/整页、⌘滚轮 0.5×–3×；真实 scale 重渲染 |
+| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、适应宽/整页、⌘滚轮；真实 scale 重渲染 |
 | 导航 | 页码 pill、PageUp/Down、Home/End |
 | 大纲 | 左侧书签浮层 |
 | 查找 | `⌘F` + 命中高亮 |
@@ -45,6 +45,7 @@
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
+| `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 

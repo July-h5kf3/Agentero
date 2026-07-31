@@ -11,7 +11,7 @@
 		"loadError": "Failed to load PDF",
 		"zoomIn": "Zoom in",
 		"zoomOut": "Zoom out",
-		"zoomReset": "Reset zoom",
+		"zoomPercentage": "Zoom percentage",
 		"zoomFit": "Fit width",
 		"prevPage": "Previous page",
 		"nextPage": "Next page",

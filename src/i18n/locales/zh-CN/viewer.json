@@ -11,7 +11,7 @@
 		"loadError": "加载 PDF 失败",
 		"zoomIn": "放大",
 		"zoomOut": "缩小",
-		"zoomReset": "重置缩放",
+		"zoomPercentage": "缩放百分比",
 		"zoomFit": "适应宽度",
 		"prevPage": "上一页",
 		"nextPage": "下一页",
