@@ -30,7 +30,16 @@ import {
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-plugin";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
+import {
+	listPaperAnnotationSummaries,
+	paperAbsFromSourceFile,
+	paperAbsFromWikiTarget,
+	paperAbsFromWorkspaceTab,
+	pdfTabIdForPaper,
+	truncateAnnotationPreview,
+} from "@/lib/pdf/annotation-ref";
 import { annotationsStore } from "@/lib/pdf/annotations-store";
+import { getVaultPath, vaultStore } from "@/lib/vault/store";
 import {
 	resolveWikiReference,
 	searchWikiLinks,
@@ -99,43 +108,73 @@ function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 	);
 }
 
-/** Build annotation candidates from the open paper's in-memory marks. */
-function annotationCandidatesFromOpenPaper(
+function filterAnnotationQuery(
+	query: string,
+	label: string,
+	id: string,
+): boolean {
+	const q = query.trim().toLowerCase();
+	if (!q) return true;
+	return `${label} ${id}`.toLowerCase().includes(q);
+}
+
+/**
+ * Build annotation candidates for `@` completion.
+ * Prefer the PDF tab store when the paper body is open; always fall back to
+ * disk marks so NOTES-focused editing still lists ids.
+ */
+async function buildAnnotationCandidates(
 	query: string,
 	target: string,
+	paperAbs: string | null,
 	pathHint: string,
-): WikiSearchCandidate[] {
-	const tabId = getActiveTabId();
-	if (!tabId) return [];
+): Promise<WikiSearchCandidate[]> {
+	if (!paperAbs) return [];
+	const pdfTabId = pdfTabIdForPaper(paperAbs);
 	const state = annotationsStore.getState();
-	const highlights = state.highlightsByTab[tabId] ?? [];
-	const visuals = state.visualTracesByTab[tabId] ?? [];
-	const q = query.trim().toLowerCase();
+	const storeHighlights = state.highlightsByTab[pdfTabId] ?? [];
+	const storeVisuals = state.visualTracesByTab[pdfTabId] ?? [];
 	const out: WikiSearchCandidate[] = [];
-	for (const h of highlights) {
-		const label = (h.comment || h.quote || h.id).trim() || h.id;
-		const hay = `${label} ${h.id}`.toLowerCase();
-		if (q && !hay.includes(q)) continue;
-		out.push({
-			kind: "annotation",
-			path: pathHint,
-			insertText: target ? `${target}@${h.id}` : `@${h.id}`,
-			label,
-			detail: `p.${h.page} · highlight`,
-			fragment: { kind: "annotation", id: h.id },
-		});
+
+	if (storeHighlights.length || storeVisuals.length) {
+		for (const h of storeHighlights) {
+			const preview =
+				truncateAnnotationPreview(h.comment || h.quote || "") || h.id;
+			if (!filterAnnotationQuery(query, preview, h.id)) continue;
+			out.push({
+				kind: "annotation",
+				path: pathHint,
+				insertText: target ? `${target}@${h.id}` : `@${h.id}`,
+				label: preview,
+				detail: `p.${h.page} · highlight`,
+				fragment: { kind: "annotation", id: h.id },
+			});
+		}
+		for (const v of storeVisuals) {
+			const preview = truncateAnnotationPreview(v.comment || "") || v.id;
+			if (!filterAnnotationQuery(query, preview, v.id)) continue;
+			out.push({
+				kind: "annotation",
+				path: pathHint,
+				insertText: target ? `${target}@${v.id}` : `@${v.id}`,
+				label: preview,
+				detail: `p.${v.page} · visual`,
+				fragment: { kind: "annotation", id: v.id },
+			});
+		}
+		return out;
 	}
-	for (const v of visuals) {
-		const label = (v.comment || v.id).trim() || v.id;
-		const hay = `${label} ${v.id}`.toLowerCase();
-		if (q && !hay.includes(q)) continue;
+
+	const summaries = await listPaperAnnotationSummaries(paperAbs);
+	for (const s of summaries) {
+		if (!filterAnnotationQuery(query, s.preview, s.id)) continue;
 		out.push({
 			kind: "annotation",
 			path: pathHint,
-			insertText: target ? `${target}@${v.id}` : `@${v.id}`,
-			label,
-			detail: `p.${v.page} · visual`,
-			fragment: { kind: "annotation", id: v.id },
+			insertText: target ? `${target}@${s.id}` : `@${s.id}`,
+			label: s.preview,
+			detail: `p.${s.page} · ${s.kind === "agent-trace" ? "visual" : "highlight"}`,
+			fragment: { kind: "annotation", id: s.id },
 		});
 	}
 	return out;
@@ -247,21 +286,43 @@ export function WikiLinkSuggestion({
 					return;
 				}
 				// Annotation completion is frontend-backed (marks live outside the
-				// Markdown wiki index). Prefer the open paper's in-memory store.
+				// Markdown wiki index). Resolve paper from target or NOTES path,
+				// then list from PDF-tab store or disk.
 				if (request.kind === "annotation") {
-					const resolved = request.target
-						? await resolveWikiReference(vaultPath, filePath, request.target)
-						: await resolveWikiReference(vaultPath, filePath, "");
-					const pathHint =
-						resolved?.targetPath ||
-						workspaceStore
+					let paperAbs: string | null = null;
+					let pathHint = filePath;
+					if (request.target) {
+						const resolved = await resolveWikiReference(
+							vaultPath,
+							filePath,
+							request.target,
+						);
+						if (resolved?.targetPath) {
+							pathHint = resolved.targetPath;
+							paperAbs = paperAbsFromWikiTarget(vaultPath, resolved.targetPath);
+						}
+					}
+					if (!paperAbs) {
+						paperAbs = paperAbsFromSourceFile(
+							filePath,
+							vaultStore.getState().paperFolders,
+						);
+					}
+					if (!paperAbs) {
+						const tab = workspaceStore
 							.getState()
-							.tabs.find((tab) => tab.id === getActiveTabId())?.paperMeta
-							?.path ||
-						filePath;
-					const items = annotationCandidatesFromOpenPaper(
+							.tabs.find((item) => item.id === getActiveTabId());
+						paperAbs = paperAbsFromWorkspaceTab(
+							tab ?? null,
+							getVaultPath(),
+							vaultStore.getState().paperFolders,
+						);
+						if (tab?.paperMeta?.path) pathHint = tab.paperMeta.path;
+					}
+					const items = await buildAnnotationCandidates(
 						request.query,
 						request.target,
+						paperAbs,
 						pathHint,
 					);
 					if (!cancelled) {

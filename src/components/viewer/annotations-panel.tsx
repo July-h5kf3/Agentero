@@ -28,6 +28,8 @@ export type AnnotationRow = {
 	quote: string;
 	comment: string;
 	color: HighlightColor;
+	/** Full wikilink alias (`Title·snippet`) when copying. */
+	linkAlias?: string | null;
 };
 
 /** PDF selection-ask conversation for the annotations sidebar. */
@@ -45,6 +47,8 @@ export type VisualTraceRow = {
 	page: number;
 	/** Truncated user comment for this crop. */
 	preview: string;
+	/** Full wikilink alias (`Title·snippet`) when copying. */
+	linkAlias?: string | null;
 };
 
 type AnnotationsPanelProps = {
@@ -58,8 +62,6 @@ type AnnotationsPanelProps = {
 	 * When set, highlight and visual cards expose copy-link / copy-embed.
 	 */
 	wikiTarget?: string | null;
-	/** Optional display alias (paper title) — not used as the resolvable path. */
-	wikiAlias?: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
@@ -83,7 +85,6 @@ export function AnnotationsPanel({
 	asks = [],
 	visualTraces = [],
 	wikiTarget = null,
-	wikiAlias = null,
 	onJump,
 	onEdit,
 	onDelete,
@@ -99,7 +100,6 @@ export function AnnotationsPanel({
 		[items.length > 0, asks.length > 0, visualTraces.length > 0].filter(Boolean)
 			.length > 1;
 	const linkTarget = wikiTarget?.trim() || null;
-	const linkAlias = wikiAlias?.trim() || null;
 
 	return (
 		<section
@@ -141,7 +141,6 @@ export function AnnotationsPanel({
 										<AnnotationCard
 											item={a}
 											wikiTarget={linkTarget}
-											wikiAlias={linkAlias}
 											onJump={onJump}
 											onEdit={onEdit}
 											onDelete={onDelete}
@@ -186,7 +185,6 @@ export function AnnotationsPanel({
 										<VisualTraceListCard
 											item={trace}
 											wikiTarget={linkTarget}
-											wikiAlias={linkAlias}
 											onJump={onJumpVisual}
 											onDelete={onDeleteVisual}
 										/>
@@ -204,14 +202,12 @@ export function AnnotationsPanel({
 function AnnotationCard({
 	item: a,
 	wikiTarget,
-	wikiAlias,
 	onJump,
 	onEdit,
 	onDelete,
 }: {
 	item: AnnotationRow;
 	wikiTarget: string | null;
-	wikiAlias: string | null;
 	onJump: (id: string) => void;
 	onEdit: (id: string) => void;
 	onDelete: (id: string) => void;
@@ -221,7 +217,7 @@ function AnnotationCard({
 		? {
 				target: wikiTarget,
 				id: a.id,
-				...(wikiAlias && wikiAlias !== wikiTarget ? { alias: wikiAlias } : {}),
+				...(a.linkAlias ? { alias: a.linkAlias } : {}),
 			}
 		: null;
 
@@ -399,13 +395,11 @@ function AskCard({
 function VisualTraceListCard({
 	item: trace,
 	wikiTarget,
-	wikiAlias,
 	onJump,
 	onDelete,
 }: {
 	item: VisualTraceRow;
 	wikiTarget: string | null;
-	wikiAlias: string | null;
 	onJump?: (id: string) => void;
 	onDelete?: (id: string) => void;
 }) {
@@ -414,7 +408,7 @@ function VisualTraceListCard({
 		? {
 				target: wikiTarget,
 				id: trace.id,
-				...(wikiAlias && wikiAlias !== wikiTarget ? { alias: wikiAlias } : {}),
+				...(trace.linkAlias ? { alias: trace.linkAlias } : {}),
 			}
 		: null;
 

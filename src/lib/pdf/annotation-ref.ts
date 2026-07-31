@@ -5,19 +5,28 @@
  * Sources (MVP):
  * - highlights / text notes: `marks/annotations.json` (EmbedPDF transfer)
  * - visual agent-traces: `marks/<id>.json` with `kind: "agent-trace"`
+ *
+ * Marks are stored under the paper folder. UI state is often keyed by the PDF
+ * tab id (`tabIdForPath(paperAbs)`), which differs from the NOTES companion
+ * tab — always resolve through the paper folder, not only the active tab id.
  */
 
+import { paperDirFromPath } from "@/lib/paper/detect";
+import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualTraceImage } from "@/lib/pdf/agent-trace/types";
 import {
 	highlightColorOf,
 	highlightQuoteOf,
+	highlightViewFromObject,
 	isHighlightObject,
 	loadAnnotationItems,
 } from "@/lib/pdf/highlight/annotation-store";
 import type { HighlightColor } from "@/lib/pdf/highlight/palette";
 import { readMarkRaw } from "@/lib/pdf/selection/marks-io";
+import { joinVaultPath } from "@/lib/vault";
 import { formatWikiLinkBody } from "@/lib/wiki/api";
+import { tabIdForPath } from "@/lib/workspace/tabs/model";
 
 export type AnnotationRefKind = "highlight" | "agent-trace";
 
@@ -36,6 +45,58 @@ export type AnnotationRef = {
 	/** Optional crop preview for visual traces. */
 	image?: PdfVisualTraceImage;
 };
+
+/** One list row for panels / `@` completion (disk or memory). */
+export type PaperAnnotationSummary = {
+	kind: AnnotationRefKind;
+	id: string;
+	page: number;
+	quote: string;
+	comment: string;
+	color?: HighlightColor;
+	/** Short text for alias / candidate label (already truncated). */
+	preview: string;
+};
+
+/** Default max length for wikilink alias / completion labels. */
+export const ANNOTATION_PREVIEW_MAX = 36;
+
+/** Collapse whitespace and truncate for alias/candidate display. */
+export function truncateAnnotationPreview(
+	text: string,
+	max = ANNOTATION_PREVIEW_MAX,
+): string {
+	const compact = text.replace(/\s+/g, " ").trim();
+	if (!compact) return "";
+	if (compact.length <= max) return compact;
+	if (max <= 1) return "…";
+	return `${compact.slice(0, Math.max(1, max - 1))}…`;
+}
+
+/**
+ * Display alias: `Paper Title·truncated note`.
+ * Falls back to preview-only or title-only when one side is empty.
+ */
+export function annotationWikilinkAlias(
+	paperTitle: string | null | undefined,
+	snippet: string | null | undefined,
+	maxSnippet = ANNOTATION_PREVIEW_MAX,
+): string | undefined {
+	const title = paperTitle?.replace(/\s+/g, " ").trim() || "";
+	const preview = truncateAnnotationPreview(snippet ?? "", maxSnippet);
+	if (title && preview) return `${title}·${preview}`;
+	if (title) return title;
+	if (preview) return preview;
+	return undefined;
+}
+
+/** Prefer comment, else quote, for alias/list preview body. */
+export function annotationSnippet(input: {
+	comment?: string | null;
+	quote?: string | null;
+}): string {
+	return (input.comment?.trim() || input.quote?.trim() || "").trim();
+}
 
 function transferItemId(item: unknown): string | null {
 	if (!item || typeof item !== "object") return null;
@@ -190,9 +251,113 @@ export function paperAbsFromWikiTarget(
 	if (/\/NOTES\.md$/i.test(full)) {
 		return full.replace(/\/NOTES\.md$/i, "");
 	}
+	// Stem-only NOTES resolve target: papers/foo/NOTES
+	if (/\/NOTES$/i.test(full)) {
+		return full.replace(/\/NOTES$/i, "");
+	}
 	if (/\.pdf$/i.test(full)) {
 		const idx = full.lastIndexOf("/");
 		return idx >= 0 ? full.slice(0, idx) : full;
 	}
 	return full.replace(/\/+$/, "");
+}
+
+/**
+ * Absolute paper directory for an open workspace tab (PDF body or NOTES companion).
+ */
+export function paperAbsFromWorkspaceTab(
+	tab: {
+		path: string;
+		notesPath?: string | null;
+		paperMeta?: { path?: string | null } | null;
+		mode?: string;
+		kind?: string;
+	} | null,
+	vaultPath: string | null,
+	paperFolders?: string[] | null,
+): string | null {
+	if (!tab) return null;
+	const root = vaultPath?.replace(/[\\/]+$/, "") ?? "";
+	if (tab.paperMeta?.path && root) {
+		return joinVaultPath(root, tab.paperMeta.path.replace(/\\/g, "/"));
+	}
+	if (tab.notesPath) {
+		return tab.notesPath.replace(/\\/g, "/").replace(/\/NOTES\.md$/i, "");
+	}
+	const path = tab.path.replace(/\\/g, "/");
+	if (/\/NOTES\.md$/i.test(path)) {
+		return path.replace(/\/NOTES\.md$/i, "");
+	}
+	const fromTree = paperDirFromPath(path, paperFolders);
+	if (fromTree) return fromTree;
+	if (tab.mode === "pdf" || tab.kind === "paper") {
+		return path.replace(/\/+$/, "");
+	}
+	return null;
+}
+
+/** PDF body tab id for a paper folder (where highlight store + viewer handle live). */
+export function pdfTabIdForPaper(paperAbsPath: string): string {
+	return tabIdForPath(paperAbsPath.replace(/\\/g, "/").replace(/\/+$/, ""));
+}
+
+/** Absolute paper dir from the NOTES/markdown source file being edited. */
+export function paperAbsFromSourceFile(
+	sourceAbsPath: string | null | undefined,
+	paperFolders?: string[] | null,
+): string | null {
+	if (!sourceAbsPath) return null;
+	const path = sourceAbsPath.replace(/\\/g, "/");
+	if (/\/NOTES\.md$/i.test(path)) {
+		return path.replace(/\/NOTES\.md$/i, "");
+	}
+	return paperDirFromPath(path, paperFolders);
+}
+
+/**
+ * Load all linkable marks for a paper from disk (not the in-memory PDF tab store).
+ * Use when the NOTES companion is focused and the PDF tab store is empty/unmounted.
+ */
+export async function listPaperAnnotationSummaries(
+	paperAbsPath: string,
+): Promise<PaperAnnotationSummary[]> {
+	if (!paperAbsPath) return [];
+	const out: PaperAnnotationSummary[] = [];
+	const items = await loadAnnotationItems(paperAbsPath);
+	for (const item of items) {
+		const annotation = (item as { annotation?: unknown }).annotation;
+		if (!annotation || typeof annotation !== "object") continue;
+		if (!isHighlightObject(annotation as never)) continue;
+		const view = highlightViewFromObject(
+			annotation as Parameters<typeof highlightViewFromObject>[0],
+			paperAbsPath,
+		);
+		const snippet = annotationSnippet({
+			comment: view.comment,
+			quote: view.quote,
+		});
+		out.push({
+			kind: "highlight",
+			id: view.id,
+			page: view.page,
+			quote: view.quote,
+			comment: view.comment ?? "",
+			color: view.color as HighlightColor | undefined,
+			preview: truncateAnnotationPreview(snippet) || view.id,
+		});
+	}
+	const traces = await listPdfVisualTraces(paperAbsPath);
+	for (const trace of traces) {
+		const snippet = annotationSnippet({ comment: trace.comment });
+		out.push({
+			kind: "agent-trace",
+			id: trace.id,
+			page: trace.page,
+			quote: "",
+			comment: trace.comment,
+			preview: truncateAnnotationPreview(snippet) || trace.id,
+		});
+	}
+	out.sort((a, b) => a.page - b.page || a.id.localeCompare(b.id));
+	return out;
 }

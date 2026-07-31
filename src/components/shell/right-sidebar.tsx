@@ -3,7 +3,7 @@
  * Graph, or PDF annotations. Subscribes to its stores directly.
  */
 
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	type AnnotationRow,
@@ -30,11 +30,24 @@ import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
 import { tracePreview } from "@/lib/pdf/agent-trace/schema";
-import { wikiTargetForPaper } from "@/lib/pdf/annotation-ref";
+import {
+	annotationSnippet,
+	annotationWikilinkAlias,
+	listPaperAnnotationSummaries,
+	type PaperAnnotationSummary,
+	paperAbsFromWorkspaceTab,
+	pdfTabIdForPaper,
+	wikiTargetForPaper,
+} from "@/lib/pdf/annotation-ref";
+import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { layout, uiStore } from "@/lib/shell/ui-store";
-import { navigateWiki, openGraphPath } from "@/lib/workspace/actions";
+import {
+	navigateWiki,
+	openGraphPath,
+	openPaper,
+} from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
 
 // The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar /
@@ -71,9 +84,26 @@ function handleAgentOpenSource(source: string): void {
 	openGraphPath(trimmed);
 }
 
-function annotationAction(fn: (h: PdfViewerHandle) => void): void {
-	const handle = pdfHandleFor(getActiveTabId());
-	if (handle) fn(handle);
+/**
+ * PDF handles live on the paper-body tab id. When NOTES is focused, fall back
+ * to the sibling paper tab; if the viewer is unmounted, open the paper first.
+ */
+function annotationAction(
+	paperAbs: string | null,
+	fn: (h: PdfViewerHandle) => void,
+): void {
+	const candidates = [
+		paperAbs ? pdfTabIdForPaper(paperAbs) : null,
+		getActiveTabId(),
+	].filter((id): id is string => Boolean(id));
+	for (const id of candidates) {
+		const handle = pdfHandleFor(id);
+		if (handle) {
+			fn(handle);
+			return;
+		}
+	}
+	if (paperAbs) openPaper(paperAbs);
 }
 
 function ReferencesSidebar() {
@@ -105,94 +135,174 @@ function ReferencesSidebar() {
 }
 
 function AnnotationsSidebar() {
-	const activeTabId = useWorkspaceStore((s) => s.activeTabId);
 	const activeTab = useWorkspaceStore((s) =>
 		s.tabs.find((tab) => tab.id === s.activeTabId),
 	);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
-	const highlights = useAnnotationsStore((s) =>
-		activeTabId ? s.highlightsByTab[activeTabId] : undefined,
+	const paperFolders = useVaultStore((s) => s.paperFolders);
+	const paperAbs = useMemo(
+		() => paperAbsFromWorkspaceTab(activeTab ?? null, vaultPath, paperFolders),
+		[activeTab, vaultPath, paperFolders],
 	);
-	const asks = useAnnotationsStore((s) =>
-		activeTabId ? s.asksByTab[activeTabId] : undefined,
+	// Highlight store + PdfViewerHandle are keyed by the PDF body tab id.
+	const pdfTabId = paperAbs ? pdfTabIdForPaper(paperAbs) : null;
+
+	const storeHighlights = useAnnotationsStore((s) =>
+		pdfTabId ? s.highlightsByTab[pdfTabId] : undefined,
 	);
-	const visualTraces = useAnnotationsStore((s) =>
-		activeTabId ? s.visualTracesByTab[activeTabId] : undefined,
+	const storeAsks = useAnnotationsStore((s) =>
+		pdfTabId ? s.asksByTab[pdfTabId] : undefined,
 	);
+	const storeVisuals = useAnnotationsStore((s) =>
+		pdfTabId ? s.visualTracesByTab[pdfTabId] : undefined,
+	);
+
+	const [diskSummaries, setDiskSummaries] = useState<PaperAnnotationSummary[]>(
+		[],
+	);
+	const [diskAsks, setDiskAsks] = useState<AskRow[]>([]);
+
+	// When NOTES is focused the PDF tab may be unmounted — load marks from disk.
+	useEffect(() => {
+		if (!paperAbs) {
+			setDiskSummaries([]);
+			setDiskAsks([]);
+			return;
+		}
+		const hasLive =
+			(storeHighlights?.length ?? 0) > 0 || (storeVisuals?.length ?? 0) > 0;
+		if (hasLive && (storeAsks?.length ?? 0) > 0) {
+			setDiskSummaries([]);
+			setDiskAsks([]);
+			return;
+		}
+		let cancelled = false;
+		void (async () => {
+			const [summaries, asks] = await Promise.all([
+				hasLive ? Promise.resolve([]) : listPaperAnnotationSummaries(paperAbs),
+				storeAsks?.length ? Promise.resolve([]) : listPdfAskThreads(paperAbs),
+			]);
+			if (cancelled) return;
+			if (!hasLive) setDiskSummaries(summaries);
+			if (!storeAsks?.length) {
+				setDiskAsks(
+					asks
+						.filter((th) => th.messages.some((m) => m.role === "user"))
+						.map((th) => {
+							const firstUser = th.messages.find((m) => m.role === "user");
+							return {
+								id: th.id,
+								page: th.anchor.page,
+								preview:
+									firstUser?.content.trim() || th.anchor.quote?.trim() || th.id,
+								messageCount: th.messages.filter(
+									(m) => m.role === "user" || m.role === "assistant",
+								).length,
+							};
+						}),
+				);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbs, storeHighlights, storeVisuals, storeAsks]);
 
 	/** Resolvable vault-relative target (never display title alone). */
 	const wikiTarget = useMemo(() => {
 		const paperPath = activeTab?.paperMeta?.path?.replace(/\\/g, "/");
 		if (paperPath) return wikiTargetForPaper(paperPath, paperPath);
-		if (activeTab?.notesPath && vaultPath) {
-			const rel = toVaultRelative(vaultPath, activeTab.notesPath);
-			if (rel) return wikiTargetForPaper(rel, rel);
-		}
-		if (activeTab?.path && vaultPath) {
-			const rel = toVaultRelative(vaultPath, activeTab.path);
+		if (paperAbs && vaultPath) {
+			const rel = toVaultRelative(vaultPath, paperAbs);
 			if (rel) return wikiTargetForPaper(rel, rel);
 		}
 		return null;
-	}, [activeTab, vaultPath]);
+	}, [activeTab?.paperMeta?.path, paperAbs, vaultPath]);
 
-	/** Optional display alias for copied links (paper title). */
-	const wikiAlias = useMemo(
-		() => activeTab?.paperMeta?.title?.trim() || null,
-		[activeTab?.paperMeta?.title],
-	);
+	const paperTitle = activeTab?.paperMeta?.title?.trim() || null;
 
 	const items = useMemo<AnnotationRow[]>(() => {
-		if (!highlights) return [];
-		return [...highlights]
-			.sort(
-				(a, b) =>
-					a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
-			)
-			.map((h) => ({
-				id: h.id,
-				page: h.page,
-				quote: h.quote,
-				comment: h.comment ?? "",
-				color: normalizeHighlightColor(h.color),
+		if (storeHighlights?.length) {
+			return [...storeHighlights]
+				.sort(
+					(a, b) =>
+						a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+				)
+				.map((h) => ({
+					id: h.id,
+					page: h.page,
+					quote: h.quote,
+					comment: h.comment ?? "",
+					color: normalizeHighlightColor(h.color),
+					linkAlias: annotationWikilinkAlias(
+						paperTitle,
+						annotationSnippet({ comment: h.comment, quote: h.quote }),
+					),
+				}));
+		}
+		return diskSummaries
+			.filter((s) => s.kind === "highlight")
+			.map((s) => ({
+				id: s.id,
+				page: s.page,
+				quote: s.quote,
+				comment: s.comment,
+				color: normalizeHighlightColor(s.color),
+				linkAlias: annotationWikilinkAlias(paperTitle, s.preview),
 			}));
-	}, [highlights]);
+	}, [storeHighlights, diskSummaries, paperTitle]);
 
 	const askRows = useMemo<AskRow[]>(() => {
-		if (!asks) return [];
-		return [...asks]
-			.sort(
-				(a, b) =>
-					a.anchor.page - b.anchor.page ||
-					(a.anchor.rects[0]?.y ?? 0) - (b.anchor.rects[0]?.y ?? 0),
-			)
-			.map((th) => {
-				const firstUser = th.messages.find((m) => m.role === "user");
-				const preview =
-					firstUser?.content.trim() || th.anchor.quote?.trim() || th.id;
-				return {
-					id: th.id,
-					page: th.anchor.page,
-					preview,
-					messageCount: th.messages.filter(
-						(m) => m.role === "user" || m.role === "assistant",
-					).length,
-				};
-			});
-	}, [asks]);
+		if (storeAsks?.length) {
+			return [...storeAsks]
+				.sort(
+					(a, b) =>
+						a.anchor.page - b.anchor.page ||
+						(a.anchor.rects[0]?.y ?? 0) - (b.anchor.rects[0]?.y ?? 0),
+				)
+				.map((th) => {
+					const firstUser = th.messages.find((m) => m.role === "user");
+					const preview =
+						firstUser?.content.trim() || th.anchor.quote?.trim() || th.id;
+					return {
+						id: th.id,
+						page: th.anchor.page,
+						preview,
+						messageCount: th.messages.filter(
+							(m) => m.role === "user" || m.role === "assistant",
+						).length,
+					};
+				});
+		}
+		return diskAsks;
+	}, [storeAsks, diskAsks]);
 
 	const visualTraceRows = useMemo<VisualTraceRow[]>(() => {
-		if (!visualTraces) return [];
-		return [...visualTraces]
-			.sort(
-				(a, b) =>
-					a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
-			)
-			.map((tr) => ({
-				id: tr.id,
-				page: tr.page,
-				preview: tracePreview(tr, "Visual annotation", 160),
+		if (storeVisuals?.length) {
+			return [...storeVisuals]
+				.sort(
+					(a, b) =>
+						a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+				)
+				.map((tr) => ({
+					id: tr.id,
+					page: tr.page,
+					preview: tracePreview(tr, "Visual annotation", 160),
+					linkAlias: annotationWikilinkAlias(
+						paperTitle,
+						annotationSnippet({ comment: tr.comment }),
+					),
+				}));
+		}
+		return diskSummaries
+			.filter((s) => s.kind === "agent-trace")
+			.map((s) => ({
+				id: s.id,
+				page: s.page,
+				preview: s.preview,
+				linkAlias: annotationWikilinkAlias(paperTitle, s.preview),
 			}));
-	}, [visualTraces]);
+	}, [storeVisuals, diskSummaries, paperTitle]);
 
 	return (
 		<AnnotationsPanel
@@ -200,14 +310,21 @@ function AnnotationsSidebar() {
 			asks={askRows}
 			visualTraces={visualTraceRows}
 			wikiTarget={wikiTarget}
-			wikiAlias={wikiAlias}
-			onJump={(id) => annotationAction((h) => h.scrollToHighlight(id))}
-			onEdit={(id) => annotationAction((h) => h.editComment(id))}
-			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}
-			onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
-			onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
-			onJumpVisual={(id) => annotationAction((h) => h.scrollToVisualTrace(id))}
-			onDeleteVisual={(id) => annotationAction((h) => h.deleteVisualTrace(id))}
+			onJump={(id) =>
+				annotationAction(paperAbs, (h) => h.scrollToHighlight(id))
+			}
+			onEdit={(id) => annotationAction(paperAbs, (h) => h.editComment(id))}
+			onDelete={(id) =>
+				annotationAction(paperAbs, (h) => h.deleteHighlight(id))
+			}
+			onJumpAsk={(id) => annotationAction(paperAbs, (h) => h.scrollToAsk(id))}
+			onDeleteAsk={(id) => annotationAction(paperAbs, (h) => h.deleteAsk(id))}
+			onJumpVisual={(id) =>
+				annotationAction(paperAbs, (h) => h.scrollToVisualTrace(id))
+			}
+			onDeleteVisual={(id) =>
+				annotationAction(paperAbs, (h) => h.deleteVisualTrace(id))
+			}
 		/>
 	);
 }
