@@ -2,6 +2,7 @@ import type {
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
+	PdfVisualTraceMessage,
 	PdfVisualTraceStatus,
 } from "@/lib/pdf/agent-trace/types";
 import { isRecord, isRect } from "@/lib/pdf/marks/schema";
@@ -19,6 +20,29 @@ function parseImage(v: unknown): PdfVisualTraceImage | undefined {
 			? v.mimeType.trim()
 			: "image/png";
 	return { data: v.data, mimeType };
+}
+
+function parseMessages(v: unknown): PdfVisualTraceMessage[] | undefined {
+	if (!Array.isArray(v) || v.length === 0) return undefined;
+	const out: PdfVisualTraceMessage[] = [];
+	for (const item of v) {
+		if (!isRecord(item)) continue;
+		if (typeof item.id !== "string" || !item.id) continue;
+		if (item.role !== "user" && item.role !== "assistant") continue;
+		if (typeof item.content !== "string") continue;
+		if (typeof item.createdAt !== "string" || !item.createdAt) continue;
+		const msg: PdfVisualTraceMessage = {
+			id: item.id,
+			role: item.role,
+			content: item.content,
+			createdAt: item.createdAt,
+		};
+		if (typeof item.agentSessionId === "string" && item.agentSessionId) {
+			msg.agentSessionId = item.agentSessionId;
+		}
+		out.push(msg);
+	}
+	return out.length ? out : undefined;
 }
 
 /** Validate and normalize a visual mark JSON payload. */
@@ -77,6 +101,8 @@ export function parsePdfVisualSessionTrace(
 	if (typeof raw.answerSnapshot === "string") {
 		trace.answerSnapshot = raw.answerSnapshot;
 	}
+	const messages = parseMessages(raw.messages);
+	if (messages) trace.messages = messages;
 	if (Array.isArray(raw.sources)) {
 		trace.sources = raw.sources.filter(
 			(s): s is string => typeof s === "string",
@@ -86,6 +112,44 @@ export function parsePdfVisualSessionTrace(
 		trace.error = raw.error;
 	}
 	return trace;
+}
+
+/**
+ * Messages for hover chat UI. Prefer stored transcript; otherwise synthesize
+ * from comment + answerSnapshot so legacy marks still show a message list.
+ */
+export function traceMessages(
+	trace: PdfVisualSessionTrace,
+): PdfVisualTraceMessage[] {
+	if (trace.messages?.length) return trace.messages;
+	const synthesized: PdfVisualTraceMessage[] = [];
+	const comment = trace.comment.trim();
+	if (comment) {
+		synthesized.push({
+			id: `${trace.id}-user`,
+			role: "user",
+			content: comment,
+			createdAt: trace.createdAt,
+		});
+	}
+	const answer = trace.answerSnapshot?.trim();
+	if (answer) {
+		synthesized.push({
+			id: `${trace.id}-assistant`,
+			role: "assistant",
+			content: answer,
+			createdAt: trace.updatedAt,
+			agentSessionId: trace.runtimeSessionId,
+		});
+	} else if (trace.status === "failed" && trace.error?.trim()) {
+		synthesized.push({
+			id: `${trace.id}-error`,
+			role: "assistant",
+			content: trace.error.trim(),
+			createdAt: trace.updatedAt,
+		});
+	}
+	return synthesized;
 }
 
 function shorten(text: string, max: number): string {

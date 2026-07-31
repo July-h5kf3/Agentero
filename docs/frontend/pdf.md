@@ -20,7 +20,7 @@
 | 沉浸 | 全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
 | 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示元数据预览并联动右侧 References 卡片高亮。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
-| 视觉批注 | 工具栏「添加视觉批注」进入框选；裁图后输入批注，加入右侧 Agent composer 草稿（可累加多条）。统一发送时走多模态 `runOnce`，并在 PDF 上落 `agent-trace` 页边针，点击可回跳 Agent 会话（失败时展示本地回答快照）。裁剪最长边 1600 px |
+| 视觉批注 | 工具栏或 **⌘.** 进入框选；裁图后输入批注。**Enter** 加入右侧 Agent composer 草稿（可累加多条后统一发送）；**⌘/Ctrl+Enter** 立即在浮层内开聊（落 `agent-trace` 针，可继续多轮）。页边针 hover 默认紧凑预览消息列表，移入卡片后放大并显示输入框；右上角可「在 Agent 中打开」。裁剪最长边 1600 px |
 
 ## 划词菜单
 
@@ -33,7 +33,7 @@
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
 | 加入对话 | 不落盘 | 选区固定为 Agent composer 文本 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
-| 视觉批注 | 发送前仅 composer 草稿；发送后 `marks/<id>.json`（kind `agent-trace`） | 工具栏框选 → 批注编辑器 → composer 缩略图 chip；页边针点击打开 Agent session |
+| 视觉批注 | `marks/<id>.json`（kind `agent-trace`）；可选 `messages[]` 本地多轮 | 框选 → 编辑器：**Enter** → composer chip；**⌘↵** → 浮层对话。针 hover 消息列表（紧凑→展开）+ 继续输入；右上角打开 Agent |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。

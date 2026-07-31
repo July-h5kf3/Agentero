@@ -14,19 +14,23 @@ type VisualAnnotationEditorProps = {
 	page: number;
 	/** Crop thumbnail / attachment image. */
 	image: PromptImage;
+	/** Enter: add to Agent composer drafts (default). */
 	onSave: (comment: string) => void;
+	/** ⌘/Ctrl+Enter: start an in-place visual conversation immediately. */
+	onSendNow: (comment: string) => void;
 	onClose: () => void;
 };
 
 /**
- * Floating editor after a PDF region crop: preview + comment → Agent draft.
- * Does not send; saving only adds context to the Agent composer.
+ * Floating editor after a PDF region crop: preview + comment.
+ * Enter → composer draft; ⌘/Ctrl+Enter → immediate pin chat.
  */
 export function VisualAnnotationEditor({
 	screen,
 	page,
 	image,
 	onSave,
+	onSendNow,
 	onClose,
 }: VisualAnnotationEditorProps) {
 	const { t } = useTranslation("viewer");
@@ -44,24 +48,40 @@ export function VisualAnnotationEditor({
 		ref.current?.focus();
 	}, []);
 
+	const submitDraft = () => onSave(text);
+	const submitNow = () => onSendNow(text);
+
 	return (
 		<SelectionCard
 			screen={screen}
 			width={280}
-			height={320}
+			height={340}
 			preferRight
 			title={t("pdfExplain.annotationEditorLabel")}
 			icon={ScanSearch}
 			ariaLabel={t("pdfExplain.annotationEditorLabel")}
 			bodyClassName="gap-2 px-3 py-2.5"
 			footer={
-				<div className="flex items-center justify-end gap-1">
-					<Button type="button" variant="ghost" size="sm" onClick={onClose}>
-						{t("pdfExplain.annotationCancel")}
-					</Button>
-					<Button type="button" size="sm" onClick={() => onSave(text)}>
-						{t("pdfExplain.annotationSave")}
-					</Button>
+				<div className="flex flex-col gap-1.5">
+					<div className="flex items-center justify-end gap-1">
+						<Button type="button" variant="ghost" size="sm" onClick={onClose}>
+							{t("pdfExplain.annotationCancel")}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							size="sm"
+							onClick={submitDraft}
+						>
+							{t("pdfExplain.annotationSave")}
+						</Button>
+						<Button type="button" size="sm" onClick={submitNow}>
+							{t("pdfExplain.annotationSendNow")}
+						</Button>
+					</div>
+					<p className="text-[10px] text-muted-foreground text-right leading-tight">
+						{t("pdfExplain.annotationShortcuts")}
+					</p>
 				</div>
 			}
 		>
@@ -90,10 +110,15 @@ export function VisualAnnotationEditor({
 						onClose();
 						return;
 					}
-					if (e.key === "Enter" && !e.shiftKey && !isBlockedByIme(e)) {
+					if (e.key !== "Enter" || e.shiftKey || isBlockedByIme(e)) return;
+					// ⌘/Ctrl+Enter → immediate conversation; bare Enter → composer draft.
+					if (e.metaKey || e.ctrlKey) {
 						e.preventDefault();
-						onSave(text);
+						submitNow();
+						return;
 					}
+					e.preventDefault();
+					submitDraft();
 				}}
 			/>
 		</SelectionCard>

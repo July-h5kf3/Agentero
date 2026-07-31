@@ -51,7 +51,9 @@
 		"annotationEditorLabel": "Visual annotation",
 		"annotationPlaceholder": "What should the agent look at or answer?",
 		"annotationSave": "Add to chat",
+		"annotationSendNow": "Ask now",
 		"annotationCancel": "Cancel",
+		"annotationShortcuts": "Enter adds to chat · ⌘↵ asks now",
 		"annotationPage": "Page {{page}}",
 		"annotationPreviewAlt": "Cropped region from page {{page}}",
 		"visualAnnotation": "Visual annotation",
@@ -60,7 +62,12 @@
 		"traceAnnotationCount": "{{count}} regions",
 		"traceOpenSession": "Open in Agent",
 		"traceDelete": "Delete",
-		"traceHide": "Hide"
+		"traceHide": "Hide",
+		"traceContinuePlaceholder": "Continue this conversation…",
+		"traceExpandHint": "Hover here to continue chatting",
+		"traceEmptyMessages": "No messages yet. Type below to ask about this region.",
+		"traceThinking": "Thinking…",
+		"traceSessionUnavailable": "This annotation session is not ready yet."
 	},
 	"annotations": {
 		"title": "Annotations",

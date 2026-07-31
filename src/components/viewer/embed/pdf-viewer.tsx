@@ -154,11 +154,18 @@ import {
 	paperRefsList,
 } from "@/lib/paper/refs";
 import {
+	buildVisualAnnotationsPrompt,
+	buildVisualTraceContinuePrompt,
+	completeTrace,
+	createRunningTraces,
 	deletePdfVisualTrace,
+	failTrace,
 	listPdfVisualTraces,
+	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	tracePin,
 	tracePreview,
+	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import {
 	createEmptyThread,
@@ -218,6 +225,7 @@ import {
 	parsePdfZoomPercentage,
 } from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
+import { formatShortcutById } from "@/lib/shell/shortcuts";
 import { openRightTab, requestOpenAgentSession } from "@/lib/shell/ui-store";
 import {
 	buildTranslatePrompt,
@@ -238,6 +246,8 @@ export type PdfViewerHandle = {
 	/** Jump to a visual agent-trace pin and open its preview card. */
 	scrollToVisualTrace: (id: string) => void;
 	deleteVisualTrace: (id: string) => void;
+	/** Toggle visual-region annotation mode (⌘.). */
+	toggleVisualAnnotation: () => void;
 };
 
 export type PdfViewerProps = {
@@ -752,6 +762,10 @@ function PdfViewerInner({
 	);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
+	const [visualStreaming, setVisualStreaming] = useState(false);
+	const [visualError, setVisualError] = useState<string | null>(null);
+	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
+	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
 	const [translateStreaming, setTranslateStreaming] = useState(false);
 	const [translateError, setTranslateError] = useState<string | null>(null);
 
@@ -783,6 +797,7 @@ function PdfViewerInner({
 	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
 	activeCardRef.current = activeCard;
 	const activeSessionRef = useRef<string | null>(null);
+	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
@@ -1107,6 +1122,10 @@ function PdfViewerInner({
 			setAskError(null);
 		}
 		if (cur?.kind === "translate") setTranslateError(null);
+		if (cur?.kind === "agent-trace") {
+			setVisualError(null);
+			setVisualCardExpanded(false);
+		}
 		setActiveCard(null);
 		setCardScreen(null);
 		setEditor(null);
@@ -1381,6 +1400,324 @@ function PdfViewerInner({
 		[visualDraftEditor, paperRelPath, paperAbsPath],
 	);
 
+	const upsertVisualTrace = useCallback((trace: PdfVisualSessionTrace) => {
+		setVisualTraces((prev) => {
+			const next = [trace, ...prev.filter((tr) => tr.id !== trace.id)];
+			// Keep ref in sync so openCard/placeActiveCard can find a just-created mark.
+			visualTracesRef.current = next;
+			return next;
+		});
+	}, []);
+
+	const persistVisualTrace = useCallback(
+		async (trace: PdfVisualSessionTrace) => {
+			if (!paperAbsPath) return;
+			try {
+				await writePdfVisualTrace(paperAbsPath, trace);
+			} catch {
+				// Best-effort; in-memory card still works for this session.
+			}
+		},
+		[paperAbsPath],
+	);
+
+	/**
+	 * Run (or continue) a visual-trace conversation in the pin modal.
+	 * First turn may attach the crop image; follow-ups use history in the prompt.
+	 */
+	const sendToVisualTrace = useCallback(
+		async (
+			trace: PdfVisualSessionTrace,
+			question: string,
+			opts?: {
+				images?: PromptImage[];
+				/** When true, use the multi-annotation first-turn prompt. */
+				firstTurn?: boolean;
+				agentOpts?: { agentId?: string; modelId?: string };
+			},
+		) => {
+			const q = question.trim();
+			if (!q && !opts?.firstTurn) return;
+			const content =
+				q || trace.comment.trim() || t("pdfExplain.visualAnnotation");
+			const now = new Date().toISOString();
+			const userMsg = {
+				id: newTraceMessageId(),
+				role: "user" as const,
+				content,
+				createdAt: now,
+			};
+			const prior = trace.messages ?? [];
+			// Avoid duplicating the seed user message when firstTurn already seeded it.
+			const baseMessages =
+				opts?.firstTurn &&
+				prior.length === 1 &&
+				prior[0]?.role === "user" &&
+				prior[0].content === content
+					? prior
+					: [...prior, userMsg];
+			const withUser: PdfVisualSessionTrace = {
+				...trace,
+				status: "running",
+				comment: trace.comment || content,
+				messages: baseMessages,
+				updatedAt: now,
+			};
+			upsertVisualTrace(withUser);
+			void persistVisualTrace(withUser);
+			setVisualError(null);
+			setVisualStreaming(true);
+
+			const assistantId = newTraceMessageId();
+			const prompt = opts?.firstTurn
+				? buildVisualAnnotationsPrompt([
+						{ page: withUser.page, comment: content },
+					])
+				: buildVisualTraceContinuePrompt({
+						page: withUser.page,
+						comment: withUser.comment,
+						messages: baseMessages,
+						latestUserQuestion: content,
+					});
+			try {
+				const resumeId =
+					withUser.providerSessionId?.trim() ||
+					(withUser.runtimeSessionId && withUser.runtimeSessionId !== "pending"
+						? withUser.runtimeSessionId
+						: undefined);
+				const accepted = await runOnce({
+					prompt,
+					agentId: opts?.agentOpts?.agentId ?? withUser.agentId,
+					modelId: opts?.agentOpts?.modelId,
+					images: opts?.images,
+					// Resume multi-turn when provider session is known; first turn omits.
+					sessionId: opts?.firstTurn ? undefined : resumeId,
+					vaultPath: vaultPath ?? undefined,
+					workflow: "free",
+					autoApprove: true,
+					hideFromChatHistory: true,
+				});
+				visualSessionRef.current = accepted.sessionId;
+				const withAssistant: PdfVisualSessionTrace = {
+					...withUser,
+					agentId: accepted.agentId || withUser.agentId,
+					runtimeSessionId: accepted.sessionId,
+					messageId: accepted.messageId,
+					messages: [
+						...baseMessages,
+						{
+							id: assistantId,
+							role: "assistant",
+							content: "",
+							createdAt: new Date().toISOString(),
+							agentSessionId: accepted.sessionId,
+						},
+					],
+				};
+				upsertVisualTrace(withAssistant);
+				void persistVisualTrace(withAssistant);
+
+				const sessionId = accepted.sessionId;
+				const unsubs: UnlistenFn[] = [];
+				const cleanup = () => {
+					for (const u of unsubs) u();
+					if (visualSessionRef.current === sessionId) {
+						visualSessionRef.current = null;
+					}
+					setVisualStreaming(false);
+				};
+				unsubs.push(
+					await listenAgentStream((ev) => {
+						if (ev.sessionId !== sessionId) return;
+						if ((ev.kind ?? "message") === "thought") return;
+						setVisualTraces((prev) =>
+							prev.map((tr) => {
+								if (tr.id !== withUser.id) return tr;
+								const msgs = [...(tr.messages ?? [])];
+								const last = msgs[msgs.length - 1];
+								if (last?.id !== assistantId) return tr;
+								msgs[msgs.length - 1] = {
+									...last,
+									content: last.content + ev.chunk,
+								};
+								return { ...tr, messages: msgs };
+							}),
+						);
+					}),
+				);
+				unsubs.push(
+					await listenAgentCompleted((ev) => {
+						if (ev.sessionId !== sessionId) return;
+						setVisualTraces((prev) => {
+							const current = prev.find((tr) => tr.id === withUser.id);
+							if (!current) return prev;
+							const done = completeTrace(current, {
+								providerSessionId: ev.providerSessionId ?? undefined,
+								answerSnapshot: ev.content || undefined,
+								sources: ev.sources ?? undefined,
+								assistantMessageId: assistantId,
+							});
+							// Ensure final assistant text is set even if stream was empty.
+							if (ev.content) {
+								const msgs = [...(done.messages ?? [])];
+								const last = msgs[msgs.length - 1];
+								if (last?.id === assistantId) {
+									msgs[msgs.length - 1] = {
+										...last,
+										content: ev.content || last.content,
+									};
+									done.messages = msgs;
+									done.answerSnapshot = ev.content || last.content;
+								}
+							}
+							void persistVisualTrace(done);
+							return prev.map((tr) => (tr.id === done.id ? done : tr));
+						});
+						cleanup();
+					}),
+				);
+				unsubs.push(
+					await listenAgentFailed((ev) => {
+						if (ev.sessionId !== sessionId) return;
+						const err = ev.error || t("pdfAsk.agentFailed");
+						setVisualError(err);
+						setVisualTraces((prev) => {
+							const current = prev.find((tr) => tr.id === withUser.id);
+							if (!current) return prev;
+							const failed = failTrace(current, {
+								error: err,
+								assistantMessageId: assistantId,
+							});
+							void persistVisualTrace(failed);
+							return prev.map((tr) => (tr.id === failed.id ? failed : tr));
+						});
+						cleanup();
+					}),
+				);
+			} catch (e) {
+				setVisualStreaming(false);
+				const message =
+					e instanceof Error ? e.message : t("pdfAsk.agentFailed");
+				setVisualError(message);
+				const failed = failTrace(withUser, { error: message });
+				upsertVisualTrace(failed);
+				void persistVisualTrace(failed);
+			}
+		},
+		[persistVisualTrace, t, upsertVisualTrace, vaultPath],
+	);
+
+	/** ⌘/Ctrl+Enter from the region editor: create mark + chat in-place. */
+	const handleVisualSendNow = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const content = comment.trim() || t("pdfExplain.visualAnnotation");
+			const now = new Date().toISOString();
+			const userMsg = {
+				id: newTraceMessageId(),
+				role: "user" as const,
+				content,
+				createdAt: now,
+			};
+			// Provisional mark so the card can open before runOnce accepts.
+			const [provisional] = createRunningTraces({
+				paperPath,
+				agentId: "pending",
+				runtimeSessionId: "pending",
+				messageId: "pending",
+				items: [
+					{
+						page: draft.page,
+						rects: [draft.region],
+						comment: content,
+						image: {
+							data: draft.image.data,
+							mimeType: draft.image.mimeType || "image/png",
+						},
+						messages: [userMsg],
+					},
+				],
+				createdAt: now,
+			});
+			if (!provisional) return;
+			setVisualDraftEditor(null);
+			upsertVisualTrace(provisional);
+			setVisualCardExpanded(true);
+			setVisualError(null);
+			// Use crop screen immediately; placeActiveCard also works via synced ref.
+			setCardScreen(draft.screen);
+			openCard({ kind: "agent-trace", id: provisional.id });
+
+			void (async () => {
+				try {
+					const resolved = await resolvePdfAskAgent();
+					const agentId = resolved?.agentId;
+					if (!agentId) {
+						setVisualTraces((prev) =>
+							prev.filter((tr) => tr.id !== provisional.id),
+						);
+						hideActiveCard();
+						return;
+					}
+					await sendToVisualTrace({ ...provisional, agentId }, content, {
+						firstTurn: true,
+						images: [draft.image],
+						agentOpts: {
+							agentId,
+							modelId: resolved.modelId,
+						},
+					});
+				} catch (e) {
+					const message =
+						e instanceof Error ? e.message : t("pdfAsk.agentFailed");
+					notifyError(message);
+					setVisualError(message);
+				}
+			})();
+		},
+		[
+			visualDraftEditor,
+			paperRelPath,
+			paperAbsPath,
+			t,
+			upsertVisualTrace,
+			openCard,
+			resolvePdfAskAgent,
+			sendToVisualTrace,
+			hideActiveCard,
+		],
+	);
+
+	const handleVisualContinue = useCallback(
+		(question: string) => {
+			const card = activeCardRef.current;
+			const traceId = card?.kind === "agent-trace" ? card.id : null;
+			if (!traceId) return;
+			const trace = visualTracesRef.current.find((tr) => tr.id === traceId);
+			if (!trace) return;
+			setVisualCardExpanded(true);
+			void (async () => {
+				try {
+					const resolved = await resolvePdfAskAgent();
+					if (!resolved) return;
+					void sendToVisualTrace(trace, question, {
+						agentOpts: {
+							agentId: resolved.agentId,
+							modelId: resolved.modelId,
+						},
+					});
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					notifyError(message);
+					setVisualError(message);
+				}
+			})();
+		},
+		[resolvePdfAskAgent, sendToVisualTrace],
+	);
+
 	const handleSend = useCallback(
 		(question: string) => {
 			const card = activeCardRef.current;
@@ -1525,6 +1862,14 @@ function PdfViewerInner({
 
 	const openVisualTraceSession = useCallback(
 		(trace: PdfVisualSessionTrace) => {
+			if (!trace.agentId || trace.agentId === "pending") {
+				notifyError(t("pdfAsk.noAgent"));
+				return;
+			}
+			if (!trace.runtimeSessionId || trace.runtimeSessionId === "pending") {
+				notifyError(t("pdfExplain.traceSessionUnavailable"));
+				return;
+			}
 			const title = trace.comment.trim() || t("pdfExplain.visualAnnotation");
 			requestOpenAgentSession({
 				agentId: trace.agentId,
@@ -2020,6 +2365,13 @@ function PdfViewerInner({
 			deleteVisualTrace: (id) => {
 				deleteVisualTraceById(id);
 			},
+			toggleVisualAnnotation: () => {
+				if (visualCropPending) return;
+				setSelectionMenu(null);
+				setVisualDraftEditor(null);
+				selectionCap?.clear(docId);
+				setRegionSelecting((active) => !active);
+			},
 		};
 		onHandle(handle);
 		return () => onHandle(null);
@@ -2033,6 +2385,8 @@ function PdfViewerInner({
 		openThread,
 		openCard,
 		deleteVisualTraceById,
+		selectionCap,
+		visualCropPending,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.
@@ -2636,6 +2990,9 @@ function PdfViewerInner({
 								{regionSelecting
 									? t("pdfExplain.cancelRegion")
 									: t("pdfExplain.selectRegion")}
+								<span className="ml-2 text-muted-foreground">
+									{formatShortcutById("visualAnnotation")}
+								</span>
 							</TooltipContent>
 						</Tooltip>
 						{onToggleZen ? (
@@ -2720,6 +3077,7 @@ function PdfViewerInner({
 									page={visualDraftEditor.page}
 									image={visualDraftEditor.image}
 									onSave={handleVisualDraftSave}
+									onSendNow={handleVisualSendNow}
 									onClose={() => setVisualDraftEditor(null)}
 								/>
 							) : null}
@@ -2764,13 +3122,24 @@ function PdfViewerInner({
 								<VisualTraceCard
 									trace={activeVisualTrace}
 									screen={cardScreen}
+									streaming={visualStreaming}
+									error={visualError}
+									initialExpanded={visualCardExpanded}
 									onOpenSession={() =>
 										openVisualTraceSession(activeVisualTrace)
 									}
+									onSend={handleVisualContinue}
 									onDelete={handleDeleteVisualTrace}
 									onHide={hideActiveCard}
 									onPointerEnter={cancelHoverHide}
 									onPointerLeave={scheduleHoverHide}
+									onStop={() => {
+										const sid = visualSessionRef.current;
+										if (!sid) return;
+										void cancelAgentRun(sid).catch(() => undefined);
+										visualSessionRef.current = null;
+										setVisualStreaming(false);
+									}}
 								/>
 							) : null}
 

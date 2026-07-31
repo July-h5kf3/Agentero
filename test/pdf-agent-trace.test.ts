@@ -12,10 +12,12 @@ import {
 } from "@/lib/agent/visual-context-store";
 import {
 	buildVisualAnnotationsPrompt,
+	buildVisualTraceContinuePrompt,
 	completeTrace,
 	createRunningTraces,
 	failTrace,
 	parsePdfVisualSessionTrace,
+	traceMessages,
 	tracePin,
 	tracePreview,
 } from "@/lib/pdf/agent-trace";
@@ -192,6 +194,9 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(marks[0]?.id).not.toBe(marks[1]?.id);
 		expect(marks[0]?.runtimeSessionId).toBe(marks[1]?.runtimeSessionId);
 		expect(marks[0]?.image?.data).toBe("aaa");
+		// Seeded user turn for pin hover message list.
+		expect(marks[0]?.messages?.[0]?.role).toBe("user");
+		expect(marks[0]?.messages?.[0]?.content).toBe("first");
 
 		const completed = completeTrace(marks[0]!, {
 			providerSessionId: "prov-1",
@@ -200,6 +205,7 @@ describe("agent-trace schema and lifecycle", () => {
 		});
 		expect(completed.status).toBe("completed");
 		expect(completed.providerSessionId).toBe("prov-1");
+		expect(completed.messages?.some((m) => m.role === "assistant")).toBe(true);
 
 		const failed = failTrace(marks[1]!, { error: "timeout" });
 		expect(failed.status).toBe("failed");
@@ -233,5 +239,67 @@ describe("agent-trace schema and lifecycle", () => {
 			JSON.parse(JSON.stringify(completed)),
 		);
 		expect(parsed).toEqual(completed);
+	});
+
+	it("synthesizes messages from comment + answerSnapshot for legacy marks", () => {
+		const raw = {
+			version: 1,
+			kind: "agent-trace",
+			id: "legacy",
+			paperPath: "papers/a",
+			index: 1,
+			page: 2,
+			rects: [rect],
+			comment: "what is λ?",
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			status: "completed",
+			answerSnapshot: "λ is the learning rate.",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:01:00.000Z",
+		};
+		const t = parsePdfVisualSessionTrace(raw);
+		expect(t).not.toBeNull();
+		if (!t) return;
+		expect(t.messages).toBeUndefined();
+		const msgs = traceMessages(t);
+		expect(msgs).toHaveLength(2);
+		expect(msgs[0]?.role).toBe("user");
+		expect(msgs[0]?.content).toBe("what is λ?");
+		expect(msgs[1]?.role).toBe("assistant");
+		expect(msgs[1]?.content).toContain("learning rate");
+	});
+
+	it("builds continue prompt with history", () => {
+		const prompt = buildVisualTraceContinuePrompt({
+			page: 3,
+			comment: "explain the figure",
+			messages: [
+				{
+					id: "u1",
+					role: "user",
+					content: "explain the figure",
+					createdAt: "t1",
+				},
+				{
+					id: "a1",
+					role: "assistant",
+					content: "It shows accuracy.",
+					createdAt: "t2",
+				},
+				{
+					id: "u2",
+					role: "user",
+					content: "What about the blue line?",
+					createdAt: "t3",
+				},
+			],
+			latestUserQuestion: "What about the blue line?",
+		});
+		expect(prompt).toContain("Page: 3");
+		expect(prompt).toContain("Original annotation comment: explain the figure");
+		expect(prompt).toContain("Assistant: It shows accuracy.");
+		expect(prompt).toContain("What about the blue line?");
 	});
 });

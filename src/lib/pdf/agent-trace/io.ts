@@ -5,6 +5,7 @@ import type {
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
 	PdfVisualTraceImage,
+	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
 
@@ -22,12 +23,18 @@ export function newTraceId(): string {
 	return nanoid(10);
 }
 
+export function newTraceMessageId(): string {
+	return nanoid(10);
+}
+
 export type CreateRunningTraceItemInput = {
 	id?: string;
 	page: number;
 	rects: PdfVisualNormalizedRect[];
 	comment: string;
 	image?: PdfVisualTraceImage;
+	/** Seed transcript (e.g. first user turn for Cmd+Enter). */
+	messages?: PdfVisualTraceMessage[];
 };
 
 export type CreateRunningTracesInput = {
@@ -48,6 +55,7 @@ export function createRunningTraces(
 		throw new Error("createRunningTraces requires at least one item");
 	}
 	return input.items.map((item, offset) => {
+		const comment = item.comment.trim();
 		const trace: PdfVisualSessionTrace = {
 			version: 1,
 			kind: "agent-trace",
@@ -56,7 +64,7 @@ export function createRunningTraces(
 			index: offset + 1,
 			page: Math.max(1, Math.floor(item.page)),
 			rects: item.rects,
-			comment: item.comment.trim(),
+			comment,
 			agentId: input.agentId,
 			runtimeSessionId: input.runtimeSessionId,
 			messageId: input.messageId,
@@ -70,6 +78,19 @@ export function createRunningTraces(
 				mimeType: item.image.mimeType || "image/png",
 			};
 		}
+		if (item.messages?.length) {
+			trace.messages = item.messages.map((m) => ({ ...m }));
+		} else if (comment) {
+			// Composer-path marks get a seed user turn so pin hover shows a list.
+			trace.messages = [
+				{
+					id: newTraceMessageId(),
+					role: "user",
+					content: comment,
+					createdAt: now,
+				},
+			];
+		}
 		return trace;
 	});
 }
@@ -79,6 +100,8 @@ export type CompleteTraceInput = {
 	answerSnapshot?: string;
 	sources?: string[];
 	updatedAt?: string;
+	/** When set, replace or append the assistant message in the local transcript. */
+	assistantMessageId?: string;
 };
 
 export function completeTrace(
@@ -100,6 +123,38 @@ export function completeTrace(
 	if (input.sources) {
 		next.sources = [...input.sources];
 	}
+	if (typeof input.answerSnapshot === "string") {
+		const content = input.answerSnapshot;
+		const messages = [...(trace.messages ?? [])];
+		const assistantId = input.assistantMessageId;
+		const last = messages[messages.length - 1];
+		if (assistantId && last?.id === assistantId && last.role === "assistant") {
+			messages[messages.length - 1] = {
+				...last,
+				content,
+				createdAt: now,
+				agentSessionId: last.agentSessionId ?? trace.runtimeSessionId,
+			};
+			next.messages = messages;
+		} else if (last?.role === "assistant" && !last.content.trim()) {
+			messages[messages.length - 1] = {
+				...last,
+				content,
+				createdAt: now,
+				agentSessionId: last.agentSessionId ?? trace.runtimeSessionId,
+			};
+			next.messages = messages;
+		} else if (content.trim()) {
+			messages.push({
+				id: assistantId ?? newTraceMessageId(),
+				role: "assistant",
+				content,
+				createdAt: now,
+				agentSessionId: trace.runtimeSessionId,
+			});
+			next.messages = messages;
+		}
+	}
 	delete next.error;
 	return next;
 }
@@ -108,6 +163,7 @@ export type FailTraceInput = {
 	error: string;
 	answerSnapshot?: string;
 	updatedAt?: string;
+	assistantMessageId?: string;
 };
 
 export function failTrace(
@@ -123,6 +179,19 @@ export function failTrace(
 	};
 	if (typeof input.answerSnapshot === "string") {
 		next.answerSnapshot = input.answerSnapshot;
+	}
+	// Drop empty streaming assistant bubble on failure.
+	if (trace.messages?.length) {
+		const messages = [...trace.messages];
+		const last = messages[messages.length - 1];
+		const dropId = input.assistantMessageId;
+		if (
+			last?.role === "assistant" &&
+			(!last.content.trim() || (dropId && last.id === dropId))
+		) {
+			messages.pop();
+			next.messages = messages;
+		}
 	}
 	return next;
 }

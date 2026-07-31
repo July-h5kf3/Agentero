@@ -51,7 +51,9 @@
 		"annotationEditorLabel": "视觉批注",
 		"annotationPlaceholder": "希望 Agent 关注或回答什么？",
 		"annotationSave": "加入对话",
+		"annotationSendNow": "立即提问",
 		"annotationCancel": "取消",
+		"annotationShortcuts": "Enter 加入对话 · ⌘↵ 立即提问",
 		"annotationPage": "第 {{page}} 页",
 		"annotationPreviewAlt": "第 {{page}} 页裁剪区域",
 		"visualAnnotation": "视觉批注",
@@ -60,7 +62,12 @@
 		"traceAnnotationCount": "{{count}} 个区域",
 		"traceOpenSession": "在 Agent 中打开",
 		"traceDelete": "删除",
-		"traceHide": "收起"
+		"traceHide": "收起",
+		"traceContinuePlaceholder": "继续对话…",
+		"traceExpandHint": "移入可继续对话",
+		"traceEmptyMessages": "还没有消息。在下方输入即可针对该区域提问。",
+		"traceThinking": "思考中…",
+		"traceSessionUnavailable": "该批注会话尚未就绪。"
 	},
 	"annotations": {
 		"title": "批注",

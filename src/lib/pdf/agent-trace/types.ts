@@ -19,6 +19,17 @@ export type PdfVisualTraceImage = {
 	mimeType: string;
 };
 
+export type PdfVisualTraceMessageRole = "user" | "assistant";
+
+/** Local multi-turn transcript for pin hover / in-place continue. */
+export type PdfVisualTraceMessage = {
+	id: string;
+	role: PdfVisualTraceMessageRole;
+	content: string;
+	createdAt: string;
+	agentSessionId?: string;
+};
+
 /**
  * One visual pin on a paper (one crop + comment). Marks submitted in the same
  * Agent turn share runtimeSessionId / messageId.
@@ -46,6 +57,11 @@ export type PdfVisualSessionTrace = {
 	status: PdfVisualTraceStatus;
 	/** Local answer text when provider history is unavailable. */
 	answerSnapshot?: string;
+	/**
+	 * Optional multi-turn chat for pin hover / Cmd+Enter modal.
+	 * Legacy marks without this field synthesize from comment + answerSnapshot.
+	 */
+	messages?: PdfVisualTraceMessage[];
 	sources?: string[];
 	error?: string;
 	createdAt: string;
