@@ -6,9 +6,9 @@
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
 use crate::features::import::{has_local_pdf, has_local_tex};
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::LiteParse;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -168,7 +168,7 @@ async fn parse_paper_body_inner(
     out
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, String), AppError> {
     // Read the PDF via std::fs (Unicode-safe on Windows) and hand PDFium an
     // in-memory buffer. `FPDF_LoadDocument`'s path handling is unreliable for
@@ -215,7 +215,7 @@ async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, Stri
     Ok((result.text, body_source, body_quality))
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 async fn run_liteparse_markdown(_pdf_path: &Path) -> Result<(String, String, String), AppError> {
     Err(AppError::message(
         "PDF body parsing runs on the paired desktop host",

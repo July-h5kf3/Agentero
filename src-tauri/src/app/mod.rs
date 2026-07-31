@@ -102,7 +102,7 @@ pub fn run() {
         Ok(())
     });
 
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         builder = builder.on_menu_event(|app, event| {
             let id = event.id().as_ref();
