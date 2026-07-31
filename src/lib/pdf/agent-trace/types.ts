@@ -1,6 +1,6 @@
 /**
- * PDF visual-region → Agent session trace.
- * Persisted under papers/<id>/marks/<trace-id>.json with kind "agent-trace".
+ * PDF visual-region mark → Agent session.
+ * One mark file per crop: papers/<id>/marks/<trace-id>.json (kind "agent-trace").
  */
 
 export type PdfVisualNormalizedRect = {
@@ -13,19 +13,15 @@ export type PdfVisualNormalizedRect = {
 
 export type PdfVisualTraceStatus = "running" | "completed" | "failed";
 
-export type PdfVisualTraceAnnotation = {
-	id: string;
-	/** 1-based order within this trace (matches prompt headings). */
-	index: number;
-	/** 1-based PDF page number. */
-	page: number;
-	rects: PdfVisualNormalizedRect[];
-	comment: string;
+/** Crop snapshot for hover/list preview (base64, no data: prefix). */
+export type PdfVisualTraceImage = {
+	data: string;
+	mimeType: string;
 };
 
 /**
- * One submitted visual batch for a single paper.
- * Multiple annotations share one Agent runtime session / turn.
+ * One visual pin on a paper (one crop + comment). Marks submitted in the same
+ * Agent turn share runtimeSessionId / messageId.
  */
 export type PdfVisualSessionTrace = {
 	version: 1;
@@ -33,7 +29,14 @@ export type PdfVisualSessionTrace = {
 	id: string;
 	/** Vault-relative paper folder when known; else absolute hint. */
 	paperPath: string;
-	annotations: PdfVisualTraceAnnotation[];
+	/** 1-based order within the submitted batch (matches prompt Annotation N). */
+	index: number;
+	/** 1-based PDF page number. */
+	page: number;
+	rects: PdfVisualNormalizedRect[];
+	comment: string;
+	/** Crop image for pin hover preview. */
+	image?: PdfVisualTraceImage;
 	agentId: string;
 	/** Agentero runtime/event session id from runOnce. */
 	runtimeSessionId: string;
@@ -41,21 +44,10 @@ export type PdfVisualSessionTrace = {
 	/** ACP provider session id when available after completion. */
 	providerSessionId?: string;
 	status: PdfVisualTraceStatus;
-	/** Local answer text for fallback when provider history is unavailable. */
+	/** Local answer text when provider history is unavailable. */
 	answerSnapshot?: string;
 	sources?: string[];
 	error?: string;
 	createdAt: string;
 	updatedAt: string;
-};
-
-export type PdfVisualTracePin = {
-	id: string;
-	traceId: string;
-	annotationId: string;
-	page: number;
-	x: number;
-	y: number;
-	preview: string;
-	status: PdfVisualTraceStatus;
 };

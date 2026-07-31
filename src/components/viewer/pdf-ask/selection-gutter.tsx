@@ -79,7 +79,7 @@ function pinIcon(kind: SelectionPin["kind"]) {
 
 /**
  * Unified page pins for selection workflows: ask / annotate / translate / agent-trace.
- * Hover opens ask/translate cards; agent-trace opens only on click (session jump).
+ * Hover opens the kind-specific card (ask / translate / visual-trace preview).
  */
 export function SelectionGutter({
 	items,
@@ -111,7 +111,8 @@ export function SelectionGutter({
 							: item.kind === "agent-trace"
 								? t("pdfExplain.tracePinAria", { preview: item.preview })
 								: t("selection.translatePinAria", { preview: item.preview });
-				const openOnHover = item.kind !== "agent-trace";
+				// agent-trace activeCard.id is the per-annotation pin id.
+				const isActive = activeId === item.id;
 
 				return (
 					<button
@@ -126,18 +127,18 @@ export function SelectionGutter({
 									: item.kind === "agent-trace"
 										? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
 										: "border-border/80 bg-background text-muted-foreground",
-							activeId === item.id && "ring-2 ring-ring ring-offset-1",
+							isActive && "ring-2 ring-ring ring-offset-1",
 						)}
 						style={{ left: `${pos.leftPct}%`, top: `${pos.topPct}%` }}
 						aria-label={aria}
 						onMouseEnter={() => {
 							onEnter?.(item);
-							if (openOnHover) onOpen(item);
+							onOpen(item);
 						}}
 						onMouseLeave={() => onLeave?.(item)}
 						onFocus={() => {
 							onEnter?.(item);
-							if (openOnHover) onOpen(item);
+							onOpen(item);
 						}}
 						onClick={(e) => {
 							e.stopPropagation();

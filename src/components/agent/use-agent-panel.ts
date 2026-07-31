@@ -131,7 +131,7 @@ import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import {
 	buildVisualAnnotationsPrompt,
 	completeTrace,
-	createRunningTrace,
+	createRunningTraces,
 	failTrace,
 	readPdfVisualTrace,
 	rememberPendingVisualTraces,
@@ -1743,20 +1743,27 @@ export function useAgentPanel({
 				}> = [];
 				for (const [paperAbsPath, drafts] of byPaper) {
 					try {
-						const trace = createRunningTrace({
+						// One mark file per crop so pins hover/delete independently.
+						const traces = createRunningTraces({
 							paperPath: drafts[0]?.paperPath || paperAbsPath,
 							agentId,
 							runtimeSessionId: accepted.sessionId,
 							messageId: accepted.messageId,
-							annotations: drafts.map((draft) => ({
+							items: drafts.map((draft) => ({
 								id: draft.id,
 								page: draft.page,
 								rects: draft.rects,
 								comment: draft.comment,
+								image: {
+									data: draft.image.data,
+									mimeType: draft.image.mimeType || "image/png",
+								},
 							})),
 						});
-						await writePdfVisualTrace(paperAbsPath, trace);
-						pendingWrites.push({ paperAbsPath, traceId: trace.id });
+						for (const trace of traces) {
+							await writePdfVisualTrace(paperAbsPath, trace);
+							pendingWrites.push({ paperAbsPath, traceId: trace.id });
+						}
 					} catch {
 						// Keep chat running even if mark write fails.
 					}

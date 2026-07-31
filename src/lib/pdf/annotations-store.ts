@@ -1,21 +1,24 @@
 /**
- * PDF annotation state per open tab (highlights + ask threads), zustand
- * vanilla. Only the annotations side panel and the owning viewers subscribe —
- * a selection highlight no longer re-renders the whole App.
+ * PDF annotation state per open tab (highlights + ask threads + visual traces),
+ * zustand vanilla. Only the annotations side panel and the owning viewers
+ * subscribe — a selection highlight no longer re-renders the whole App.
  */
 
 import { createStore } from "zustand/vanilla";
+import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 
 type AnnotationsStore = {
 	highlightsByTab: Record<string, PdfHighlight[]>;
 	asksByTab: Record<string, PdfAskThread[]>;
+	visualTracesByTab: Record<string, PdfVisualSessionTrace[]>;
 };
 
 export const annotationsStore = createStore<AnnotationsStore>(() => ({
 	highlightsByTab: {},
 	asksByTab: {},
+	visualTracesByTab: {},
 }));
 
 export function setTabHighlights(tabId: string, list: PdfHighlight[]): void {
@@ -27,6 +30,15 @@ export function setTabHighlights(tabId: string, list: PdfHighlight[]): void {
 export function setTabAsks(tabId: string, list: PdfAskThread[]): void {
 	annotationsStore.setState((s) => ({
 		asksByTab: { ...s.asksByTab, [tabId]: list },
+	}));
+}
+
+export function setTabVisualTraces(
+	tabId: string,
+	list: PdfVisualSessionTrace[],
+): void {
+	annotationsStore.setState((s) => ({
+		visualTracesByTab: { ...s.visualTracesByTab, [tabId]: list },
 	}));
 }
 

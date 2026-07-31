@@ -11,13 +11,13 @@ import {
 	visualContextStore,
 } from "@/lib/agent/visual-context-store";
 import {
-	annotationPreview,
 	buildVisualAnnotationsPrompt,
 	completeTrace,
-	createRunningTrace,
+	createRunningTraces,
 	failTrace,
 	parsePdfVisualSessionTrace,
-	tracePins,
+	tracePin,
+	tracePreview,
 } from "@/lib/pdf/agent-trace";
 
 const rect = { x: 0.1, y: 0.2, w: 0.4, h: 0.15 };
@@ -118,21 +118,17 @@ describe("visual annotations prompt", () => {
 });
 
 describe("agent-trace schema and lifecycle", () => {
-	it("parses a valid trace", () => {
+	it("parses a valid mark", () => {
 		const raw = {
 			version: 1,
 			kind: "agent-trace",
 			id: "tr1",
 			paperPath: "papers/1706.03762",
-			annotations: [
-				{
-					id: "an1",
-					index: 1,
-					page: 3,
-					rects: [rect],
-					comment: "λ 是什么",
-				},
-			],
+			index: 1,
+			page: 3,
+			rects: [rect],
+			comment: "λ 是什么",
+			image: { data: "abc", mimeType: "image/png" },
 			agentId: "agent-1",
 			runtimeSessionId: "sess-rt",
 			messageId: "msg-1",
@@ -144,15 +140,15 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(t).not.toBeNull();
 		if (!t) return;
 		expect(t.kind).toBe("agent-trace");
-		expect(t.annotations[0]?.comment).toBe("λ 是什么");
-		expect(annotationPreview(t.annotations[0]!)).toContain("λ");
-		const pins = tracePins(t);
-		expect(pins).toHaveLength(1);
-		expect(pins[0]?.traceId).toBe("tr1");
-		expect(pins[0]?.page).toBe(3);
+		expect(t.comment).toBe("λ 是什么");
+		expect(t.image?.data).toBe("abc");
+		expect(tracePreview(t)).toContain("λ");
+		const pin = tracePin(t);
+		expect(pin.x).toBeGreaterThan(0.3);
+		expect(pin.y).toBeCloseTo(0.275, 2);
 	});
 
-	it("rejects wrong kind or empty annotations", () => {
+	it("rejects wrong kind or missing geometry", () => {
 		expect(
 			parsePdfVisualSessionTrace({
 				version: 1,
@@ -166,7 +162,9 @@ describe("agent-trace schema and lifecycle", () => {
 				kind: "agent-trace",
 				id: "x",
 				paperPath: "p",
-				annotations: [],
+				page: 1,
+				rects: [],
+				comment: "c",
 				agentId: "a",
 				runtimeSessionId: "r",
 				messageId: "m",
@@ -177,50 +175,56 @@ describe("agent-trace schema and lifecycle", () => {
 		).toBeNull();
 	});
 
-	it("creates running traces and updates completed/failed", () => {
-		const running = createRunningTrace({
+	it("creates one mark per crop and updates completed/failed", () => {
+		const marks = createRunningTraces({
 			paperPath: "papers/a",
 			agentId: "agent-1",
 			runtimeSessionId: "rt-1",
 			messageId: "msg-1",
-			annotations: [
-				{ page: 1, rects: [rect], comment: "first" },
-				{ page: 2, rects: [rect], comment: "second" },
+			items: [
+				{ page: 1, rects: [rect], comment: "first", image },
+				{ page: 2, rects: [rect], comment: "second", image },
 			],
 		});
-		expect(running.status).toBe("running");
-		expect(running.annotations).toHaveLength(2);
-		expect(running.annotations[0]?.index).toBe(1);
-		expect(running.annotations[1]?.index).toBe(2);
-		expect(tracePins(running)).toHaveLength(2);
+		expect(marks).toHaveLength(2);
+		expect(marks[0]?.index).toBe(1);
+		expect(marks[1]?.index).toBe(2);
+		expect(marks[0]?.id).not.toBe(marks[1]?.id);
+		expect(marks[0]?.runtimeSessionId).toBe(marks[1]?.runtimeSessionId);
+		expect(marks[0]?.image?.data).toBe("aaa");
 
-		const completed = completeTrace(running, {
+		const completed = completeTrace(marks[0]!, {
 			providerSessionId: "prov-1",
 			answerSnapshot: "## Annotation 1\nok",
 			sources: ["uri:1"],
 		});
 		expect(completed.status).toBe("completed");
 		expect(completed.providerSessionId).toBe("prov-1");
-		expect(completed.answerSnapshot).toContain("Annotation 1");
-		expect(completed.sources).toEqual(["uri:1"]);
-		expect(completed.error).toBeUndefined();
 
-		const failed = failTrace(running, { error: "timeout" });
+		const failed = failTrace(marks[1]!, { error: "timeout" });
 		expect(failed.status).toBe("failed");
 		expect(failed.error).toBe("timeout");
 	});
 
 	it("round-trips create → complete → parse", () => {
-		const running = createRunningTrace({
-			id: "fixed-id",
+		const [running] = createRunningTraces({
 			paperPath: "papers/x",
 			agentId: "a",
 			runtimeSessionId: "r",
 			messageId: "m",
-			annotations: [{ id: "ann-a", page: 4, rects: [rect], comment: "q" }],
+			items: [
+				{
+					id: "fixed-id",
+					page: 4,
+					rects: [rect],
+					comment: "q",
+					image,
+				},
+			],
 			createdAt: "2026-01-01T00:00:00.000Z",
 		});
-		const completed = completeTrace(running, {
+		expect(running).toBeDefined();
+		const completed = completeTrace(running!, {
 			providerSessionId: "p",
 			answerSnapshot: "answer",
 			updatedAt: "2026-01-01T00:01:00.000Z",

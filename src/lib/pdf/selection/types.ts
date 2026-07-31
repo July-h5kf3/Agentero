@@ -8,11 +8,12 @@ export type SelectionOverlayKind =
 
 /**
  * Which selection dialog is open. Anchor geometry lives on the kind-specific
- * record (ask thread / highlight / translate); screen coords are derived.
- * agent-trace opens the Agent panel session instead of a local card.
+ * record (ask thread / highlight / translate / agent-trace); screen coords are
+ * derived. agent-trace shows a preview card; opening the Agent session is a
+ * separate action on that card.
  */
 export type ActiveSelectionCard = {
-	kind: Exclude<SelectionOverlayKind, "agent-trace">;
+	kind: SelectionOverlayKind;
 	id: string;
 };
 
@@ -25,6 +26,6 @@ export type SelectionPin = {
 	preview: string;
 	/** Ask threads that were dismissed still show as “ended” pins */
 	ended?: boolean;
-	/** Parent agent-trace id when kind is agent-trace. */
+	/** Mark id when kind is agent-trace (same as pin id). */
 	traceId?: string;
 };

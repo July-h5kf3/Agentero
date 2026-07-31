@@ -1,8 +1,7 @@
 import type {
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
-	PdfVisualTraceAnnotation,
-	PdfVisualTracePin,
+	PdfVisualTraceImage,
 	PdfVisualTraceStatus,
 } from "@/lib/pdf/agent-trace/types";
 import { isRecord, isRect } from "@/lib/pdf/marks/schema";
@@ -12,23 +11,17 @@ function isStatus(v: unknown): v is PdfVisualTraceStatus {
 	return v === "running" || v === "completed" || v === "failed";
 }
 
-function parseAnnotation(v: unknown): PdfVisualTraceAnnotation | null {
-	if (!isRecord(v)) return null;
-	if (typeof v.id !== "string" || !v.id) return null;
-	if (typeof v.index !== "number" || !Number.isFinite(v.index)) return null;
-	if (typeof v.page !== "number" || !Number.isFinite(v.page)) return null;
-	if (!Array.isArray(v.rects) || !v.rects.every(isRect)) return null;
-	if (typeof v.comment !== "string") return null;
-	return {
-		id: v.id,
-		index: Math.max(1, Math.floor(v.index)),
-		page: Math.max(1, Math.floor(v.page)),
-		rects: v.rects as PdfVisualNormalizedRect[],
-		comment: v.comment,
-	};
+function parseImage(v: unknown): PdfVisualTraceImage | undefined {
+	if (!isRecord(v)) return undefined;
+	if (typeof v.data !== "string" || !v.data) return undefined;
+	const mimeType =
+		typeof v.mimeType === "string" && v.mimeType.trim()
+			? v.mimeType.trim()
+			: "image/png";
+	return { data: v.data, mimeType };
 }
 
-/** Validate and normalize a visual session-trace JSON payload. */
+/** Validate and normalize a visual mark JSON payload. */
 export function parsePdfVisualSessionTrace(
 	raw: unknown,
 ): PdfVisualSessionTrace | null {
@@ -46,21 +39,29 @@ export function parsePdfVisualSessionTrace(
 	if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") {
 		return null;
 	}
-	if (!Array.isArray(raw.annotations) || raw.annotations.length === 0) {
+	if (typeof raw.page !== "number" || !Number.isFinite(raw.page)) return null;
+	if (
+		!Array.isArray(raw.rects) ||
+		raw.rects.length === 0 ||
+		!raw.rects.every(isRect)
+	) {
 		return null;
 	}
-	const annotations: PdfVisualTraceAnnotation[] = [];
-	for (const item of raw.annotations) {
-		const parsed = parseAnnotation(item);
-		if (!parsed) return null;
-		annotations.push(parsed);
-	}
+	if (typeof raw.comment !== "string") return null;
+	const index =
+		typeof raw.index === "number" && Number.isFinite(raw.index)
+			? Math.max(1, Math.floor(raw.index))
+			: 1;
+
 	const trace: PdfVisualSessionTrace = {
 		version: 1,
 		kind: "agent-trace",
 		id: raw.id,
 		paperPath: raw.paperPath,
-		annotations,
+		index,
+		page: Math.max(1, Math.floor(raw.page)),
+		rects: raw.rects as PdfVisualNormalizedRect[],
+		comment: raw.comment,
 		agentId: raw.agentId,
 		runtimeSessionId: raw.runtimeSessionId,
 		messageId: raw.messageId,
@@ -68,6 +69,8 @@ export function parsePdfVisualSessionTrace(
 		createdAt: raw.createdAt,
 		updatedAt: raw.updatedAt,
 	};
+	const image = parseImage(raw.image);
+	if (image) trace.image = image;
 	if (typeof raw.providerSessionId === "string" && raw.providerSessionId) {
 		trace.providerSessionId = raw.providerSessionId;
 	}
@@ -91,37 +94,21 @@ function shorten(text: string, max: number): string {
 	return t.length > max ? `${t.slice(0, Math.max(1, max - 1))}…` : t;
 }
 
-/** Tooltip / gutter preview for one annotation. */
-export function annotationPreview(
-	annotation: PdfVisualTraceAnnotation,
+/** Tooltip / list preview for one mark. */
+export function tracePreview(
+	trace: PdfVisualSessionTrace,
 	fallback = "Visual annotation",
+	max = 80,
 ): string {
-	const comment = annotation.comment.trim();
-	if (comment) return shorten(comment, 80) || fallback;
-	return `${fallback} ${annotation.index}`;
+	const comment = trace.comment.trim();
+	if (comment) return shorten(comment, max) || fallback;
+	return `${fallback} ${trace.index}`;
 }
 
-/** Pin geometry for a single annotation region. */
-export function annotationPin(annotation: PdfVisualTraceAnnotation): {
+/** Pin geometry for a mark. */
+export function tracePin(trace: PdfVisualSessionTrace): {
 	x: number;
 	y: number;
 } {
-	return pinFromRects(annotation.rects);
-}
-
-/** One pin per annotation so multi-region traces light up every crop. */
-export function tracePins(trace: PdfVisualSessionTrace): PdfVisualTracePin[] {
-	return trace.annotations.map((annotation) => {
-		const pin = annotationPin(annotation);
-		return {
-			id: `${trace.id}:${annotation.id}`,
-			traceId: trace.id,
-			annotationId: annotation.id,
-			page: annotation.page,
-			x: pin.x,
-			y: pin.y,
-			preview: annotationPreview(annotation),
-			status: trace.status,
-		};
-	});
+	return pinFromRects(trace.rects);
 }

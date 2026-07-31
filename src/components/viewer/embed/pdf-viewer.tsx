@@ -125,6 +125,7 @@ import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
 import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
+import { VisualTraceCard } from "@/components/viewer/pdf-ask/visual-trace-card";
 import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import {
 	cancelAgentRun,
@@ -153,9 +154,11 @@ import {
 	paperRefsList,
 } from "@/lib/paper/refs";
 import {
+	deletePdfVisualTrace,
 	listPdfVisualTraces,
 	type PdfVisualSessionTrace,
-	tracePins,
+	tracePin,
+	tracePreview,
 } from "@/lib/pdf/agent-trace";
 import {
 	createEmptyThread,
@@ -229,6 +232,9 @@ export type PdfViewerHandle = {
 	/** Jump to an ask pin and reopen its conversation card. */
 	scrollToAsk: (id: string) => void;
 	deleteAsk: (id: string) => void;
+	/** Jump to a visual agent-trace pin and open its preview card. */
+	scrollToVisualTrace: (id: string) => void;
+	deleteVisualTrace: (id: string) => void;
 };
 
 export type PdfViewerProps = {
@@ -266,6 +272,8 @@ export type PdfViewerProps = {
 	onHighlightsChange?: (highlights: PdfHighlight[]) => void;
 	/** Called whenever PDF ask threads change (for the annotations panel) */
 	onAsksChange?: (threads: PdfAskThread[]) => void;
+	/** Called whenever visual agent-trace marks change (for the annotations panel) */
+	onVisualTracesChange?: (traces: PdfVisualSessionTrace[]) => void;
 };
 
 /** Recursive outline (bookmarks) list for the PDF side panel. */
@@ -696,6 +704,7 @@ function PdfViewerInner({
 	onHandle,
 	onHighlightsChange,
 	onAsksChange,
+	onVisualTracesChange,
 }: PdfViewerInnerProps) {
 	const { t } = useTranslation("viewer");
 	const { engine } = usePdfEngineContext();
@@ -809,6 +818,10 @@ function PdfViewerInner({
 		if (activeCard?.kind !== "translate") return null;
 		return translates.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [translates, activeCard]);
+	const activeVisualTrace = useMemo(() => {
+		if (activeCard?.kind !== "agent-trace") return null;
+		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
+	}, [visualTraces, activeCard]);
 
 	// ---- Highlights (EmbedPDF annotations) ----
 
@@ -1010,6 +1023,11 @@ function PdfViewerInner({
 		onAsksChange?.(threads.filter(threadHasUserQuestion));
 	}, [threads, onAsksChange]);
 
+	// Publish visual agent-trace marks to the annotations panel.
+	useEffect(() => {
+		onVisualTracesChange?.(visualTraces);
+	}, [visualTraces, onVisualTracesChange]);
+
 	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
 		const host = hostRef.current;
 		if (!host) return;
@@ -1028,6 +1046,12 @@ function PdfViewerInner({
 			page = tr.page;
 			rects = tr.rects;
 			pin = pinFromRects(tr.rects);
+		} else if (card.kind === "agent-trace") {
+			const tr = visualTracesRef.current.find((item) => item.id === card.id);
+			if (!tr) return;
+			page = tr.page;
+			rects = tr.rects;
+			pin = tracePin(tr);
 		} else {
 			return;
 		}
@@ -1450,6 +1474,46 @@ function PdfViewerInner({
 		hideActiveCard();
 	}, [paperAbsPath, stopTranslateSession, hideActiveCard]);
 
+	const deleteVisualTraceById = useCallback(
+		(id: string) => {
+			setVisualTraces((prev) => prev.filter((tr) => tr.id !== id));
+			if (paperAbsPath) void deletePdfVisualTrace(paperAbsPath, id);
+			if (
+				activeCardRef.current?.kind === "agent-trace" &&
+				activeCardRef.current.id === id
+			) {
+				hideActiveCard();
+			}
+		},
+		[paperAbsPath, hideActiveCard],
+	);
+
+	const handleDeleteVisualTrace = useCallback(() => {
+		const id =
+			activeCardRef.current?.kind === "agent-trace"
+				? activeCardRef.current.id
+				: null;
+		if (id) deleteVisualTraceById(id);
+		else hideActiveCard();
+	}, [deleteVisualTraceById, hideActiveCard]);
+
+	const openVisualTraceSession = useCallback(
+		(trace: PdfVisualSessionTrace) => {
+			const title = trace.comment.trim() || t("pdfExplain.visualAnnotation");
+			requestOpenAgentSession({
+				agentId: trace.agentId,
+				runtimeSessionId: trace.runtimeSessionId,
+				providerSessionId: trace.providerSessionId,
+				messageId: trace.messageId,
+				title,
+				prompt: title,
+				answerSnapshot: trace.answerSnapshot,
+			});
+			hideActiveCard();
+		},
+		[hideActiveCard, t],
+	);
+
 	const openEditorForAnnotation = useCallback(
 		(id: string) => {
 			const obj = annotationCap
@@ -1482,23 +1546,28 @@ function PdfViewerInner({
 			if (pin.kind === "translate") openCard({ kind: "translate", id: pin.id });
 			if (pin.kind === "annotate") openEditorForAnnotation(pin.id);
 			if (pin.kind === "agent-trace") {
-				const traceId = pin.traceId;
-				const trace = visualTracesRef.current.find(
-					(item) => item.id === traceId,
-				);
-				if (!trace) return;
-				requestOpenAgentSession({
-					agentId: trace.agentId,
-					runtimeSessionId: trace.runtimeSessionId,
-					providerSessionId: trace.providerSessionId,
-					messageId: trace.messageId,
-					title: pin.preview,
-					prompt: pin.preview,
-					answerSnapshot: trace.answerSnapshot,
-				});
+				const markId = pin.traceId || pin.id;
+				const tr = visualTracesRef.current.find((item) => item.id === markId);
+				if (!tr) return;
+				const host = hostRef.current;
+				if (host) {
+					const pageEl = pageElByIndex(host, tr.page - 1);
+					const pt = popoverScreenPoint(pageEl, tr.rects, tracePin(tr));
+					cancelHoverHide();
+					setActiveCard({ kind: "agent-trace", id: tr.id });
+					setCardScreen(pt ?? { x: 80, y: 120 });
+					return;
+				}
+				openCard({ kind: "agent-trace", id: tr.id });
 			}
 		},
-		[upsertThread, openThread, openCard, openEditorForAnnotation],
+		[
+			upsertThread,
+			openThread,
+			openCard,
+			openEditorForAnnotation,
+			cancelHoverHide,
+		],
 	);
 
 	// ---- Selection action menu ----
@@ -1916,6 +1985,15 @@ function PdfViewerInner({
 				setThreads((prev) => prev.filter((th) => th.id !== id));
 				if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
 			},
+			scrollToVisualTrace: (id) => {
+				const tr = visualTracesRef.current.find((item) => item.id === id);
+				if (!tr) return;
+				scroll?.scrollToPage({ pageNumber: tr.page });
+				openCard({ kind: "agent-trace", id: tr.id });
+			},
+			deleteVisualTrace: (id) => {
+				deleteVisualTraceById(id);
+			},
 		};
 		onHandle(handle);
 		return () => onHandle(null);
@@ -1927,6 +2005,8 @@ function PdfViewerInner({
 		paperAbsPath,
 		openEditorForAnnotation,
 		openThread,
+		openCard,
+		deleteVisualTraceById,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.
@@ -2175,21 +2255,20 @@ function PdfViewerInner({
 							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
 						};
 					}),
-				...visualTraces.flatMap((trace) =>
-					tracePins(trace)
-						.filter((pin) => pin.page === pageNumber)
-						.map(
-							(pin): SelectionPin => ({
-								id: pin.id,
-								kind: "agent-trace",
-								x: pin.x,
-								y: pin.y,
-								preview: pin.preview,
-								ended: pin.status !== "running",
-								traceId: pin.traceId,
-							}),
-						),
-				),
+				...visualTraces
+					.filter((tr) => tr.page === pageNumber)
+					.map((tr): SelectionPin => {
+						const pin = tracePin(tr);
+						return {
+							id: tr.id,
+							kind: "agent-trace",
+							x: pin.x,
+							y: pin.y,
+							preview: tracePreview(tr),
+							ended: tr.status !== "running",
+							traceId: tr.id,
+						};
+					}),
 			];
 			return (
 				<div
@@ -2620,6 +2699,20 @@ function PdfViewerInner({
 										activeSessionRef.current = null;
 										setStreaming(false);
 									}}
+								/>
+							) : null}
+
+							{activeVisualTrace && cardScreen ? (
+								<VisualTraceCard
+									trace={activeVisualTrace}
+									screen={cardScreen}
+									onOpenSession={() =>
+										openVisualTraceSession(activeVisualTrace)
+									}
+									onDelete={handleDeleteVisualTrace}
+									onHide={hideActiveCard}
+									onPointerEnter={cancelHoverHide}
+									onPointerLeave={scheduleHoverHide}
 								/>
 							) : null}
 

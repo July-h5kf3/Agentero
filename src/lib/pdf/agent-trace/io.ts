@@ -4,7 +4,7 @@ import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type {
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
-	PdfVisualTraceAnnotation,
+	PdfVisualTraceImage,
 } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
 
@@ -22,55 +22,56 @@ export function newTraceId(): string {
 	return nanoid(10);
 }
 
-export function newAnnotationId(): string {
-	return nanoid(10);
-}
+export type CreateRunningTraceItemInput = {
+	id?: string;
+	page: number;
+	rects: PdfVisualNormalizedRect[];
+	comment: string;
+	image?: PdfVisualTraceImage;
+};
 
-export type CreateRunningTraceInput = {
+export type CreateRunningTracesInput = {
 	paperPath: string;
-	annotations: Array<{
-		id?: string;
-		page: number;
-		rects: PdfVisualNormalizedRect[];
-		comment: string;
-	}>;
+	items: CreateRunningTraceItemInput[];
 	agentId: string;
 	runtimeSessionId: string;
 	messageId: string;
-	id?: string;
 	createdAt?: string;
 };
 
-/** Create a running trace after runOnce is accepted. */
-export function createRunningTrace(
-	input: CreateRunningTraceInput,
-): PdfVisualSessionTrace {
+/** One mark file per crop; shared session fields when submitted together. */
+export function createRunningTraces(
+	input: CreateRunningTracesInput,
+): PdfVisualSessionTrace[] {
 	const now = input.createdAt ?? new Date().toISOString();
-	const annotations: PdfVisualTraceAnnotation[] = input.annotations.map(
-		(item, offset) => ({
-			id: item.id ?? newAnnotationId(),
+	if (!input.items.length) {
+		throw new Error("createRunningTraces requires at least one item");
+	}
+	return input.items.map((item, offset) => {
+		const trace: PdfVisualSessionTrace = {
+			version: 1,
+			kind: "agent-trace",
+			id: item.id ?? newTraceId(),
+			paperPath: input.paperPath,
 			index: offset + 1,
 			page: Math.max(1, Math.floor(item.page)),
 			rects: item.rects,
 			comment: item.comment.trim(),
-		}),
-	);
-	if (!annotations.length) {
-		throw new Error("createRunningTrace requires at least one annotation");
-	}
-	return {
-		version: 1,
-		kind: "agent-trace",
-		id: input.id ?? newTraceId(),
-		paperPath: input.paperPath,
-		annotations,
-		agentId: input.agentId,
-		runtimeSessionId: input.runtimeSessionId,
-		messageId: input.messageId,
-		status: "running",
-		createdAt: now,
-		updatedAt: now,
-	};
+			agentId: input.agentId,
+			runtimeSessionId: input.runtimeSessionId,
+			messageId: input.messageId,
+			status: "running",
+			createdAt: now,
+			updatedAt: now,
+		};
+		if (item.image?.data) {
+			trace.image = {
+				data: item.image.data,
+				mimeType: item.image.mimeType || "image/png",
+			};
+		}
+		return trace;
+	});
 }
 
 export type CompleteTraceInput = {
@@ -80,7 +81,6 @@ export type CompleteTraceInput = {
 	updatedAt?: string;
 };
 
-/** Mark a running trace completed and attach answer snapshot. */
 export function completeTrace(
 	trace: PdfVisualSessionTrace,
 	input: CompleteTraceInput = {},
@@ -110,7 +110,6 @@ export type FailTraceInput = {
 	updatedAt?: string;
 };
 
-/** Mark a running trace failed. */
 export function failTrace(
 	trace: PdfVisualSessionTrace,
 	input: FailTraceInput,
