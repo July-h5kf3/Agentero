@@ -39,7 +39,7 @@
 - [x] 参考文献元数据解析 M1：S2/Crossref 在线 + 本地 bib/bbl → `agentero-cite.json` sidecar + 库内匹配 + `citationOnlineEnabled` 开关（Host `features/refs/`）
 - [x] 引用侧栏 References 卡片（右侧栏 tab：编号/标题/作者·年份·venue/DOI·arXiv 徽标/已入库打开/未入库导入/过滤/重解析）
 - [x] PDF 文中 citation 交互：Link annotation 覆盖层（点击 GoTo 跳页 / URI 外链）+ hover 引用元数据预览 → References 卡片高亮滚动（`citation-links.tsx` / `pdf-citation-preview.tsx` / `citation-hover-store.ts`）
-- [x] PDF 公式与视觉区域解释：选区/框选裁剪 → 多模态 Agent → 可追问的 Ask 卡片（[#134](https://github.com/poco-ai/Agentero/issues/134)）
+- [x] PDF 视觉批注 → Agent 会话：工具栏框选裁图 + 批注草稿累加 → 统一多模态发送 → `agent-trace` 页边针回跳 session / answerSnapshot（[#134](https://github.com/poco-ai/Agentero/issues/134)）
 - [ ] 反向联动：hover 引用卡片 → PDF 文中 anchor 高亮（需 anchors bbox）
 - [ ] 本地 PDF citation/figure sidecar + Paper Content 侧栏
 - [ ] Agent `#` 编号提及 + 引用卡片拖拽（citation-parsing M3/M5）

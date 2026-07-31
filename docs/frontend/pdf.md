@@ -20,24 +20,26 @@
 | 沉浸 | 全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
 | 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示元数据预览并联动右侧 References 卡片高亮。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
-| 视觉解析 | 文字选区的放大镜可截取公式并请求多模态 Agent；工具栏放大镜进入框选模式，可截取图片、图表或表格区域。裁剪图最长边限制为 1600 px，仅随当次 Agent 请求发送 |
+| 视觉批注 | 工具栏「添加视觉批注」进入框选；裁图后输入批注，加入右侧 Agent composer 草稿（可累加多条）。统一发送时走多模态 `runOnce`，并在 PDF 上落 `agent-trace` 页边针，点击可回跳 Agent 会话（失败时展示本地回答快照）。裁剪最长边 1600 px |
 
 ## 划词菜单
 
-选区后：高亮 / 批注 / 提问 / 视觉解释 / 加入对话 / 翻译。
+选区后：高亮 / 批注 / 提问 / 加入对话 / 翻译。
 
 | 动作 | 落盘 | UI |
 |---|---|---|
 | 高亮 | `marks/annotations.json` | 颜色 |
 | 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
-| 视觉解释 | `marks/<id>.json`（kind ask，anchor 含 `visualKind`） | 截取公式选区并发送图片；结果复用提问卡片，可继续追问 |
-| 加入对话 | 不落盘 | 选区固定为 Agent composer 选区 chip，见 [agent.md](agent.md) |
+| 加入对话 | 不落盘 | 选区固定为 Agent composer 文本 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
+| 视觉批注 | 发送前仅 composer 草稿；发送后 `marks/<id>.json`（kind `agent-trace`） | 工具栏框选 → 批注编辑器 → composer 缩略图 chip；页边针点击打开 Agent session |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。
 - 坐标归一化；多段 rect 支持双栏。
+- 旧版 visual Ask（`kind: ask` + `visualKind`）仍可读、可打开。
+- 一次提交可包含多条视觉批注：prompt 按 `## Annotation N` 分点，图片顺序与 annotation 对齐。
 
 ## 代码
 
@@ -46,7 +48,10 @@
 | `src/components/viewer/embed/pdf-viewer.tsx` | 阅读器 |
 | `src/components/viewer/embed/pdf-region-select-layer.tsx` | 图片区域框选覆盖层 |
 | `src/components/viewer/embed/pdf-region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
+| `src/components/viewer/pdf-ask/visual-annotation-editor.tsx` | 框选后批注编辑器 |
 | `src/components/viewer/pdf-citation-preview.tsx` | 文中引用悬浮预览 |
+| `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
+| `src/lib/pdf/agent-trace/` | agent-trace 契约 / IO / prompt / 会话回跳 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
