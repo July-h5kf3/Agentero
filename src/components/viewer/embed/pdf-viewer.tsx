@@ -78,6 +78,7 @@ import {
 	MoveVertical,
 	Plus,
 	RotateCcw,
+	ScanSearch,
 	Search,
 	X,
 } from "lucide-react";
@@ -114,18 +115,22 @@ import {
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
+import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
+import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
+import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import {
 	cancelAgentRun,
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
 	listenAgentStream,
+	type PromptImage,
 	runOnce,
 } from "@/lib/agent";
 import {
@@ -139,6 +144,12 @@ import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
 import {
+	type Citation,
+	looksLikeCitationMarker,
+	matchCitationByMarker,
+	paperRefsList,
+} from "@/lib/paper/refs";
+import {
 	createEmptyThread,
 	deletePdfAskThread,
 	listPdfAskThreads,
@@ -149,7 +160,12 @@ import {
 } from "@/lib/pdf/ask";
 import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
-import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf/ask/types";
+import type {
+	PdfAskAnchor,
+	PdfAskNormalizedRect,
+	PdfAskThread,
+	PdfAskVisualKind,
+} from "@/lib/pdf/ask/types";
 import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
 import {
 	clearCitationHover,
@@ -173,6 +189,7 @@ import {
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
+import { unionNormalizedRegions } from "@/lib/pdf/region";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
@@ -640,6 +657,12 @@ type SelectionMenuState = {
 	pages: FormattedSelection[];
 };
 
+type CitationPreviewState = {
+	screen: { x: number; y: number };
+	marker: string;
+	citation: Citation | null;
+};
+
 type EditorState = {
 	screen: { x: number; y: number };
 	pageIndex: number;
@@ -662,6 +685,7 @@ function PdfViewerInner({
 	onAsksChange,
 }: PdfViewerInnerProps) {
 	const { t } = useTranslation("viewer");
+	const { engine } = usePdfEngineContext();
 	const { provides: zoom, state: zoomState } = useZoom(docId);
 	const { provides: scroll, state: scrollState } = useScroll(docId);
 	const { provides: selectionCap } = useSelectionCapability();
@@ -680,6 +704,11 @@ function PdfViewerInner({
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
 	);
+	const [regionSelecting, setRegionSelecting] = useState(false);
+	const [visualExplainPending, setVisualExplainPending] = useState(false);
+	const [citations, setCitations] = useState<Citation[]>([]);
+	const [citationPreview, setCitationPreview] =
+		useState<CitationPreviewState | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
@@ -723,9 +752,31 @@ function PdfViewerInner({
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
 
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
+
+	useEffect(() => {
+		setCitations([]);
+		setCitationPreview(null);
+		setRegionSelecting(false);
+		clearCitationHover(docId);
+		if (!vaultPath || !paperRelPath) return;
+		let cancelled = false;
+		void paperRefsList(vaultPath, paperRelPath)
+			.then((sidecar) => {
+				if (!cancelled) setCitations(sidecar?.citations ?? []);
+			})
+			.catch(() => {
+				if (!cancelled) setCitations([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [docId, vaultPath, paperRelPath]);
 
 	const askSummaries = useMemo(
 		() => toSummaries(threads.filter(threadHasUserQuestion)),
@@ -1010,14 +1061,22 @@ function PdfViewerInner({
 		[openCard],
 	);
 
-	const startFromAnchor = useCallback(
+	const createThreadFromAnchor = useCallback(
 		(anchor: PdfAskAnchor) => {
 			const paperPath = paperRelPath || paperAbsPath || "paper";
 			const thread = createEmptyThread({ paperPath, anchor });
 			setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
+			return thread;
+		},
+		[paperAbsPath, paperRelPath],
+	);
+
+	const startFromAnchor = useCallback(
+		(anchor: PdfAskAnchor) => {
+			const thread = createThreadFromAnchor(anchor);
 			openThread(thread);
 		},
-		[paperAbsPath, paperRelPath, openThread],
+		[createThreadFromAnchor, openThread],
 	);
 
 	const sendToThread = useCallback(
@@ -1027,6 +1086,8 @@ function PdfViewerInner({
 			agentOpts?: { agentId?: string; modelId?: string },
 			/** When set (edit/resend), replace the transcript from this base instead of appending to full history. */
 			baseMessages?: PdfAskThread["messages"],
+			/** Visual PDF crops attached to this turn. */
+			images?: PromptImage[],
 		) => {
 			const threadId = thread.id;
 			if (!question.trim()) return;
@@ -1055,6 +1116,7 @@ function PdfViewerInner({
 					prompt,
 					agentId: agentOpts?.agentId,
 					modelId: agentOpts?.modelId,
+					images,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
@@ -1164,6 +1226,77 @@ function PdfViewerInner({
 		}
 		return resolved;
 	}, [t]);
+
+	const explainVisualRegion = useCallback(
+		async ({
+			page,
+			region,
+			visualKind,
+			quote,
+		}: {
+			page: number;
+			region: PdfAskNormalizedRect;
+			visualKind: PdfAskVisualKind;
+			quote?: string;
+		}) => {
+			if (!engine || !docCap || visualExplainPending) return;
+			const document = docCap.getDocument(docId);
+			if (!document) {
+				notifyError(t("pdfExplain.cropFailed"));
+				return;
+			}
+			setVisualExplainPending(true);
+			setRegionSelecting(false);
+			try {
+				const image = await renderPdfRegionPromptImage({
+					engine,
+					document,
+					pageIndex: page - 1,
+					region,
+				});
+				const resolved = await resolvePdfAskAgent();
+				if (!resolved) return;
+				const anchor: PdfAskAnchor = {
+					page,
+					rects: [region],
+					quote: quote?.trim() || undefined,
+					trigger: "region",
+					visualKind,
+				};
+				const thread = createThreadFromAnchor(anchor);
+				openThread(thread);
+				await sendToThread(
+					thread,
+					visualKind === "formula"
+						? t("pdfExplain.formulaQuestion")
+						: t("pdfExplain.figureQuestion"),
+					{
+						agentId: resolved.agentId,
+						modelId: resolved.modelId,
+					},
+					undefined,
+					[image],
+				);
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : t("pdfExplain.cropFailed");
+				notifyError(t("pdfExplain.cropFailed"), { description: message });
+			} finally {
+				setVisualExplainPending(false);
+			}
+		},
+		[
+			engine,
+			docCap,
+			docId,
+			visualExplainPending,
+			resolvePdfAskAgent,
+			createThreadFromAnchor,
+			openThread,
+			sendToThread,
+			t,
+		],
+	);
 
 	const handleSend = useCallback(
 		(question: string) => {
@@ -1402,6 +1535,21 @@ function PdfViewerInner({
 		selectionCap?.clear(docId);
 		startFromAnchor(anchor);
 	}, [selectionMenu, startFromAnchor, selectionCap, docId]);
+
+	const handleMenuExplain = useCallback(() => {
+		if (!selectionMenu) return;
+		const anchor = selectionMenu.anchor;
+		const region = unionNormalizedRegions(anchor.rects);
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		if (!region) return;
+		void explainVisualRegion({
+			page: anchor.page,
+			region,
+			visualKind: "formula",
+			quote: anchor.quote,
+		});
+	}, [selectionMenu, selectionCap, docId, explainVisualRegion]);
 
 	const handleMenuAddToChat = useCallback(() => {
 		if (!selectionMenu) return;
@@ -1806,6 +1954,20 @@ function PdfViewerInner({
 	const resolveLinkText = useLinkTextResolver(docId);
 	const linkHoverSeqRef = useRef(0);
 
+	const cancelCitationHide = useCallback(() => {
+		if (!citationHideTimerRef.current) return;
+		clearTimeout(citationHideTimerRef.current);
+		citationHideTimerRef.current = null;
+	}, []);
+
+	const scheduleCitationHide = useCallback(() => {
+		cancelCitationHide();
+		citationHideTimerRef.current = setTimeout(() => {
+			citationHideTimerRef.current = null;
+			setCitationPreview(null);
+		}, 250);
+	}, [cancelCitationHide]);
+
 	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
 	const handleCitationLinkActivate = useCallback(
 		(link: PdfLinkAnnoObject) => {
@@ -1827,17 +1989,70 @@ function PdfViewerInner({
 			const seq = ++linkHoverSeqRef.current;
 			if (!link) {
 				clearCitationHover(docId);
+				scheduleCitationHide();
 				return;
 			}
+			cancelCitationHide();
+			setCitationPreview(null);
 			void resolveLinkText(link).then((text) => {
 				if (linkHoverSeqRef.current !== seq || !text) return;
+				if (!looksLikeCitationMarker(text)) {
+					clearCitationHover(docId);
+					return;
+				}
 				setCitationHover(docId, text);
+				const citationId = matchCitationByMarker(citations, text);
+				const citation =
+					citations.find((item) => item.id === citationId) ?? null;
+				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
+				if (!pageEl) return;
+				setCitationPreview({
+					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
+					marker: text,
+					citation,
+				});
 			});
 		},
-		[docId, resolveLinkText],
+		[
+			docId,
+			resolveLinkText,
+			citations,
+			scheduleCitationHide,
+			cancelCitationHide,
+		],
 	);
 
-	useEffect(() => () => clearCitationHover(docId), [docId]);
+	useEffect(
+		() => () => {
+			clearCitationHover(docId);
+			if (citationHideTimerRef.current) {
+				clearTimeout(citationHideTimerRef.current);
+			}
+		},
+		[docId],
+	);
+
+	const handleVisualRegionSelect = useCallback(
+		(page: number, region: PdfAskNormalizedRect) => {
+			void explainVisualRegion({
+				page,
+				region,
+				visualKind: "figure",
+			});
+		},
+		[explainVisualRegion],
+	);
+
+	useEffect(() => {
+		if (!regionSelecting) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			setRegionSelecting(false);
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [regionSelecting]);
 
 	/**
 	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
@@ -1955,6 +2170,15 @@ function PdfViewerInner({
 							onActivate={handleCitationLinkActivate}
 							onHover={handleCitationLinkHover}
 						/>
+						<PdfRegionSelectLayer
+							active={regionSelecting && !visualExplainPending}
+							label={t("pdfExplain.regionSelectionLabel", {
+								page: pageNumber,
+							})}
+							onSelect={(region) =>
+								handleVisualRegionSelect(pageNumber, region)
+							}
+						/>
 						{activeTranslateOnPage
 							? activeTranslateOnPage.rects.map((rect) => (
 									<div
@@ -1995,6 +2219,9 @@ function PdfViewerInner({
 			citationLinks,
 			handleCitationLinkActivate,
 			handleCitationLinkHover,
+			regionSelecting,
+			visualExplainPending,
+			handleVisualRegionSelect,
 			t,
 		],
 	);
@@ -2183,6 +2410,35 @@ function PdfViewerInner({
 								{t("pdf.zoomFitPage")}
 							</TooltipContent>
 						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant={regionSelecting ? "secondary" : "ghost"}
+									aria-label={t("pdfExplain.selectRegion")}
+									aria-pressed={regionSelecting}
+									disabled={visualExplainPending || !engine}
+									onClick={() => {
+										setSelectionMenu(null);
+										selectionCap?.clear(docId);
+										setRegionSelecting((active) => !active);
+									}}
+								>
+									<ScanSearch
+										className={cn(
+											"size-3.5",
+											visualExplainPending && "animate-pulse",
+										)}
+									/>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{regionSelecting
+									? t("pdfExplain.cancelRegion")
+									: t("pdfExplain.selectRegion")}
+							</TooltipContent>
+						</Tooltip>
 						{onToggleZen ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -2253,9 +2509,24 @@ function PdfViewerInner({
 									onCopy={handleCopy}
 									onNote={handleNote}
 									onAsk={handleMenuAsk}
+									onExplain={handleMenuExplain}
 									onAddToChat={handleMenuAddToChat}
 									onTranslate={handleMenuTranslate}
 									onClose={closeSelectionMenu}
+								/>
+							) : null}
+
+							{citationPreview ? (
+								<PdfCitationPreview
+									screen={citationPreview.screen}
+									marker={citationPreview.marker}
+									citation={citationPreview.citation}
+									onOpenReferences={() => {
+										setCitationPreview(null);
+										openRightTab("references");
+									}}
+									onPointerEnter={cancelCitationHide}
+									onPointerLeave={scheduleCitationHide}
 								/>
 							) : null}
 

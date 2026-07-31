@@ -41,6 +41,14 @@
 		"editResend": "Resend",
 		"editCancel": "Cancel"
 	},
+	"pdfExplain": {
+		"selectRegion": "Explain a visual region",
+		"cancelRegion": "Cancel region selection",
+		"regionSelectionLabel": "Select a visual region on page {{page}}",
+		"formulaQuestion": "Explain this formula or technical expression.",
+		"figureQuestion": "Explain this figure, chart, table, or visual region.",
+		"cropFailed": "Could not capture the selected PDF region."
+	},
 	"annotations": {
 		"title": "Annotations",
 		"pageLabel": "Page {{page}}",
@@ -73,7 +81,10 @@
 		"inLibrary": "In library",
 		"import": "Import into library",
 		"importFailed": "Failed to import reference",
-		"openLink": "Open link"
+		"openLink": "Open link",
+		"inspect": "Inspect reference",
+		"previewLabel": "Reference preview for {{marker}}",
+		"previewUnresolved": "Open References to inspect this citation."
 	},
 	"selection": {
 		"menuLabel": "Selection actions",
@@ -88,6 +99,7 @@
 		"copied": "Copied",
 		"note": "Annotate",
 		"ask": "Ask",
+		"explainVisual": "Explain formula or selection",
 		"addToChat": "Add to chat",
 		"translate": "Translate",
 		"removeHighlight": "Remove highlight",

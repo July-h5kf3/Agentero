@@ -41,6 +41,14 @@
 		"editResend": "重新发送",
 		"editCancel": "取消"
 	},
+	"pdfExplain": {
+		"selectRegion": "解析图片区域",
+		"cancelRegion": "取消区域选择",
+		"regionSelectionLabel": "选择第 {{page}} 页的图片区域",
+		"formulaQuestion": "解释这个公式或技术表达式。",
+		"figureQuestion": "解释这张图片、图表、表格或视觉区域。",
+		"cropFailed": "无法截取所选 PDF 区域。"
+	},
 	"annotations": {
 		"title": "批注",
 		"pageLabel": "第 {{page}} 页",
@@ -73,7 +81,10 @@
 		"inLibrary": "已在文库",
 		"import": "导入文库",
 		"importFailed": "导入参考文献失败",
-		"openLink": "打开链接"
+		"openLink": "打开链接",
+		"inspect": "查看引用详情",
+		"previewLabel": "{{marker}} 的引用预览",
+		"previewUnresolved": "打开参考文献侧栏查看这条引用。"
 	},
 	"selection": {
 		"menuLabel": "选区操作",
@@ -88,6 +99,7 @@
 		"copied": "已复制",
 		"note": "批注",
 		"ask": "提问",
+		"explainVisual": "解释公式或选区",
 		"addToChat": "加入对话",
 		"translate": "翻译",
 		"removeHighlight": "删除高亮",

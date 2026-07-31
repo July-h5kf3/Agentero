@@ -5,6 +5,7 @@ import {
 	MessageSquare,
 	MessageSquarePlus,
 	NotebookPen,
+	ScanSearch,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,6 +34,8 @@ type SelectionMenuProps = {
 	/** Annotate: create a highlight and open its inline note editor */
 	onNote: () => void;
 	onAsk: () => void;
+	/** Explain the selected formula/text with a visual PDF crop. */
+	onExplain: () => void;
 	/** Pin the selection as an Agent composer context chip and open the chat. */
 	onAddToChat: () => void;
 	onTranslate: () => void;
@@ -40,7 +43,7 @@ type SelectionMenuProps = {
 	onClose: () => void;
 };
 
-const BAR_W = 336;
+const BAR_W = 372;
 const BAR_H = 40;
 const COPIED_FLASH_MS = 1500;
 
@@ -55,6 +58,7 @@ export function SelectionMenu({
 	onCopy,
 	onNote,
 	onAsk,
+	onExplain,
 	onAddToChat,
 	onTranslate,
 	onClose,
@@ -196,6 +200,22 @@ export function SelectionMenu({
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent side="top">{t("selection.ask")}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-sm"
+							aria-label={t("selection.explainVisual")}
+							onClick={onExplain}
+						>
+							<ScanSearch className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">
+						{t("selection.explainVisual")}
+					</TooltipContent>
 				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>

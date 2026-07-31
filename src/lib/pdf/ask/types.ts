@@ -1,6 +1,8 @@
 /** PDF selection-ask thread model. See docs/development/pdf-ask.md */
 
-export type PdfAskTrigger = "selection" | "dblclick" | "dwell";
+export type PdfAskTrigger = "selection" | "dblclick" | "dwell" | "region";
+
+export type PdfAskVisualKind = "formula" | "figure";
 
 export type PdfAskStatus = "open" | "ended";
 
@@ -19,6 +21,8 @@ export type PdfAskAnchor = {
 	rects: PdfAskNormalizedRect[];
 	quote?: string;
 	trigger: PdfAskTrigger;
+	/** Visual crop semantics for multimodal formula/figure explanations. */
+	visualKind?: PdfAskVisualKind;
 };
 
 export type PdfAskMessage = {

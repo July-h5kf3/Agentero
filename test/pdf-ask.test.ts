@@ -82,6 +82,28 @@ describe("pdf-ask schema", () => {
 	it("rejects bad version", () => {
 		expect(parsePdfAskThread({ version: 2, id: "x" })).toBeNull();
 	});
+
+	it("preserves visual region semantics", () => {
+		const raw = {
+			version: 1,
+			kind: "ask",
+			id: "visual-1",
+			paperPath: "papers/visual",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			status: "open",
+			anchor: {
+				page: 4,
+				rects: [{ x: 0.1, y: 0.2, w: 0.6, h: 0.4 }],
+				trigger: "region",
+				visualKind: "figure",
+			},
+			messages: [],
+		};
+		const thread = parsePdfAskThread(raw);
+		expect(thread?.anchor.trigger).toBe("region");
+		expect(thread?.anchor.visualKind).toBe("figure");
+	});
 });
 
 describe("pdf-ask geometry", () => {
@@ -143,5 +165,26 @@ describe("pdf-ask prompt", () => {
 		expect(p).toContain("Page: 3");
 		expect(p).toContain("Transformer");
 		expect(p).toContain("Explain");
+	});
+
+	it("adds bounded visual instructions for a figure crop", () => {
+		const thread = createEmptyThread({
+			paperPath: "papers/x",
+			anchor: {
+				page: 5,
+				rects: [{ x: 0.1, y: 0.2, w: 0.7, h: 0.5 }],
+				trigger: "region",
+				visualKind: "figure",
+			},
+		});
+		thread.messages.push({
+			id: "u1",
+			role: "user",
+			content: "Explain this figure",
+			createdAt: new Date().toISOString(),
+		});
+		const prompt = buildPdfAskPrompt(thread, "Explain this figure");
+		expect(prompt).toContain("figure, chart, table");
+		expect(prompt).toContain("Do not invent unreadable values");
 	});
 });
