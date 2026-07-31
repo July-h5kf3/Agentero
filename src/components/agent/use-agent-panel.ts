@@ -138,6 +138,10 @@ import {
 	takePendingVisualTraces,
 	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
+import {
+	buildVisualTraceHistoryItem,
+	visualTraceHistoryId,
+} from "@/lib/pdf/agent-trace/open-session";
 import { loadSettings } from "@/lib/settings";
 import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 import {
@@ -2461,14 +2465,66 @@ export function useAgentPanel({
 		}
 		if (!historyLoaded) return;
 
+		const vt = request.visualTrace;
+		// Prefer stable visual-trace history id so multi-turn pin opens one session.
+		const stableId = vt?.traceId
+			? visualTraceHistoryId(vt.traceId)
+			: request.runtimeSessionId;
+
 		const match = sessionHistoryRef.current.find(
 			(item) =>
+				item.id === stableId ||
 				item.id === request.runtimeSessionId ||
 				item.providerSessionId === request.runtimeSessionId ||
 				(request.providerSessionId != null &&
 					(item.id === request.providerSessionId ||
 						item.providerSessionId === request.providerSessionId)),
 		);
+
+		if (vt) {
+			// Always rebuild lines from mark transcript (full multi-turn + image chip).
+			const rebuilt = buildVisualTraceHistoryItem({
+				trace: {
+					id: vt.traceId,
+					page: vt.page,
+					comment: vt.comment,
+					paperPath: vt.paperPath ?? "",
+					image: vt.image,
+					agentId: request.agentId,
+					runtimeSessionId: request.runtimeSessionId,
+					providerSessionId: request.providerSessionId,
+					status: vt.status ?? "completed",
+					messages: vt.messages,
+					answerSnapshot: request.answerSnapshot,
+				},
+				messages: vt.messages,
+				title:
+					request.title?.trim() ||
+					request.prompt?.trim() ||
+					t("composer.visualAnnotation"),
+				agentName: selected?.name ?? t("defaultName"),
+				startedAt: match?.startedAt || new Date().toLocaleString(i18n.language),
+				emptyFallback: t("composer.visualAnnotation"),
+			});
+			// Merge into existing slot if present; drop duplicate runtime-id entries.
+			setSessionHistory((prev) => {
+				const withoutDupes = prev.filter(
+					(item) =>
+						item.id !== rebuilt.id &&
+						item.id !== request.runtimeSessionId &&
+						!(
+							request.providerSessionId &&
+							(item.id === request.providerSessionId ||
+								item.providerSessionId === request.providerSessionId)
+						),
+				);
+				return [rebuilt, ...withoutDupes];
+			});
+			openHistorySessionRef.current(rebuilt);
+			clearAgentSessionOpenRequest();
+			return;
+		}
+
 		if (match) {
 			openHistorySessionRef.current(match);
 			clearAgentSessionOpenRequest();
@@ -2507,7 +2563,7 @@ export function useAgentPanel({
 			});
 		}
 		const fallback: ChatSessionHistoryItem = {
-			id: request.runtimeSessionId,
+			id: stableId,
 			agentId: request.agentId,
 			source: "local",
 			title:

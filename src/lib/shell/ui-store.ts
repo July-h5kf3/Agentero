@@ -14,6 +14,24 @@ export type RightSidebarTab =
 	| "annotations"
 	| "references";
 
+/** Crop + multi-turn payload when opening a visual-trace pin in Agent. */
+export type AgentSessionOpenVisualTrace = {
+	/** Stable mark id (product session key). */
+	traceId: string;
+	page: number;
+	comment: string;
+	paperPath?: string;
+	image?: { data: string; mimeType: string };
+	messages: Array<{
+		id: string;
+		role: "user" | "assistant";
+		content: string;
+		createdAt: string;
+		agentSessionId?: string;
+	}>;
+	status?: "running" | "completed" | "failed";
+};
+
 /** One-shot request to open a specific Agent session from PDF pins. */
 export type AgentSessionOpenRequest = {
 	/** Monotonic id so identical payloads still re-trigger. */
@@ -29,6 +47,11 @@ export type AgentSessionOpenRequest = {
 	prompt?: string;
 	/** Local answer fallback when provider history cannot be loaded. */
 	answerSnapshot?: string;
+	/**
+	 * Full visual-trace transcript for Open in Agent.
+	 * Prefer this over prompt+answerSnapshot alone (multi-turn + image chip).
+	 */
+	visualTrace?: AgentSessionOpenVisualTrace;
 };
 
 type UiStore = {
