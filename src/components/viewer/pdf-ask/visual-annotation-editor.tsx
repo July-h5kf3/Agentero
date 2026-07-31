@@ -1,8 +1,7 @@
-import { ScanSearch } from "lucide-react";
+import { ScanSearch, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import type { PromptImage } from "@/lib/agent";
@@ -24,6 +23,7 @@ type VisualAnnotationEditorProps = {
 /**
  * Floating editor after a PDF region crop: preview + comment.
  * Enter → composer draft; ⌘/Ctrl+Enter → immediate pin chat.
+ * Actions are keyboard-driven; cancel is a header icon only.
  */
 export function VisualAnnotationEditor({
 	screen,
@@ -55,34 +55,23 @@ export function VisualAnnotationEditor({
 		<SelectionCard
 			screen={screen}
 			width={280}
-			height={340}
+			height={320}
 			preferRight
 			title={t("pdfExplain.annotationEditorLabel")}
 			icon={ScanSearch}
 			ariaLabel={t("pdfExplain.annotationEditorLabel")}
 			bodyClassName="gap-2 px-3 py-2.5"
+			actions={[
+				{
+					label: t("pdfExplain.annotationCancel"),
+					onClick: onClose,
+					icon: <X className="size-3.5" />,
+				},
+			]}
 			footer={
-				<div className="flex flex-col gap-1.5">
-					<div className="flex items-center justify-end gap-1">
-						<Button type="button" variant="ghost" size="sm" onClick={onClose}>
-							{t("pdfExplain.annotationCancel")}
-						</Button>
-						<Button
-							type="button"
-							variant="secondary"
-							size="sm"
-							onClick={submitDraft}
-						>
-							{t("pdfExplain.annotationSave")}
-						</Button>
-						<Button type="button" size="sm" onClick={submitNow}>
-							{t("pdfExplain.annotationSendNow")}
-						</Button>
-					</div>
-					<p className="text-[10px] text-muted-foreground text-right leading-tight">
-						{t("pdfExplain.annotationShortcuts")}
-					</p>
-				</div>
+				<p className="px-1 text-center text-[10px] text-muted-foreground leading-tight">
+					{t("pdfExplain.annotationShortcuts")}
+				</p>
 			}
 		>
 			<div className="space-y-1.5">
@@ -93,7 +82,7 @@ export function VisualAnnotationEditor({
 					<img
 						src={thumbnailSrc}
 						alt={t("pdfExplain.annotationPreviewAlt", { page })}
-						className="max-h-28 w-full rounded-md border border-border/70 object-contain bg-muted/30"
+						className="max-h-28 w-full rounded-md border border-border/70 bg-muted/30 object-contain"
 					/>
 				) : null}
 			</div>

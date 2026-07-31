@@ -64,7 +64,6 @@
 		"traceDelete": "删除",
 		"traceHide": "收起",
 		"traceContinuePlaceholder": "继续对话…",
-		"traceExpandHint": "移入可继续对话",
 		"traceEmptyMessages": "还没有消息。在下方输入即可针对该区域提问。",
 		"traceThinking": "思考中…",
 		"traceSessionUnavailable": "该批注会话尚未就绪。"
