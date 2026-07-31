@@ -14,6 +14,23 @@ export type RightSidebarTab =
 	| "annotations"
 	| "references";
 
+/** One-shot request to open a specific Agent session from PDF pins. */
+export type AgentSessionOpenRequest = {
+	/** Monotonic id so identical payloads still re-trigger. */
+	nonce: number;
+	agentId: string;
+	/** Agentero runtime/event session id from runOnce. */
+	runtimeSessionId: string;
+	/** ACP provider session id when available. */
+	providerSessionId?: string;
+	messageId?: string;
+	title?: string;
+	/** Original user prompt / display text. */
+	prompt?: string;
+	/** Local answer fallback when provider history cannot be loaded. */
+	answerSnapshot?: string;
+};
+
 type UiStore = {
 	sidebarCollapsed: boolean;
 	/** Right sidebar (⌘L): Agent (default) or Backlinks with Graph below. */
@@ -33,6 +50,8 @@ type UiStore = {
 	commandMode: PaletteMode;
 	settingsOpen: boolean;
 	skillImportDraft: SkillDiscovery[] | null;
+	/** PDF visual-trace → Agent session open (consumed once). */
+	agentSessionOpenRequest: AgentSessionOpenRequest | null;
 };
 
 export const uiStore = createStore<UiStore>(() => ({
@@ -48,6 +67,7 @@ export const uiStore = createStore<UiStore>(() => ({
 	commandMode: "go",
 	settingsOpen: false,
 	skillImportDraft: null,
+	agentSessionOpenRequest: null,
 }));
 
 export function setSidebarCollapsedState(collapsed: boolean): void {
@@ -172,6 +192,27 @@ export function openRightTab(tab: RightSidebarTab): void {
 	if (!uiStore.getState().rightSidebarOpen) {
 		layout()?.setRightCollapsed(false, { focusAgent: tab === "agent" });
 	}
+}
+
+let agentSessionOpenNonce = 0;
+
+/** Request Agent panel to open a runtime/provider session (PDF pin click). */
+export function requestOpenAgentSession(
+	input: Omit<AgentSessionOpenRequest, "nonce">,
+): void {
+	agentSessionOpenNonce += 1;
+	uiStore.setState({
+		agentSessionOpenRequest: {
+			...input,
+			nonce: agentSessionOpenNonce,
+		},
+	});
+	openRightTab("agent");
+}
+
+export function clearAgentSessionOpenRequest(): void {
+	if (!uiStore.getState().agentSessionOpenRequest) return;
+	uiStore.setState({ agentSessionOpenRequest: null });
 }
 
 export function toggleAgentZen(): void {

@@ -53,7 +53,8 @@
 		"annotationSave": "Add to chat",
 		"annotationCancel": "Cancel",
 		"annotationPage": "Page {{page}}",
-		"annotationPreviewAlt": "Cropped region from page {{page}}"
+		"annotationPreviewAlt": "Cropped region from page {{page}}",
+		"tracePinAria": "Open Agent session: {{preview}}"
 	},
 	"annotations": {
 		"title": "Annotations",

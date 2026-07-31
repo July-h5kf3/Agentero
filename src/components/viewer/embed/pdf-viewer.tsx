@@ -152,6 +152,11 @@ import {
 	paperRefsList,
 } from "@/lib/paper/refs";
 import {
+	listPdfVisualTraces,
+	type PdfVisualSessionTrace,
+	tracePins,
+} from "@/lib/pdf/agent-trace";
+import {
 	createEmptyThread,
 	deletePdfAskThread,
 	listPdfAskThreads,
@@ -203,7 +208,7 @@ import {
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { loadSettings } from "@/lib/settings";
-import { openRightTab } from "@/lib/shell/ui-store";
+import { openRightTab, requestOpenAgentSession } from "@/lib/shell/ui-store";
 import {
 	buildTranslatePrompt,
 	prepareTranslateTask,
@@ -722,6 +727,7 @@ function PdfViewerInner({
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
+	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
 	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
 		null,
 	);
@@ -754,6 +760,8 @@ function PdfViewerInner({
 	threadsRef.current = threads;
 	const translatesRef = useRef(translates);
 	translatesRef.current = translates;
+	const visualTracesRef = useRef(visualTraces);
+	visualTracesRef.current = visualTraces;
 	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
 	activeCardRef.current = activeCard;
 	const activeSessionRef = useRef<string | null>(null);
@@ -959,18 +967,40 @@ function PdfViewerInner({
 		[upsertTranslate],
 	);
 
-	// Load persisted ask threads + translate records once.
+	// Load persisted ask threads + translate records + agent-trace marks once.
 	useEffect(() => {
 		if (marksLoadedRef.current || !paperAbsPath) return;
 		marksLoadedRef.current = true;
 		void (async () => {
-			const [ts, trs] = await Promise.all([
+			const [ts, trs, traces] = await Promise.all([
 				listPdfAskThreads(paperAbsPath),
 				listPdfTranslates(paperAbsPath),
+				listPdfVisualTraces(paperAbsPath),
 			]);
 			if (ts.length) setThreads(ts);
 			if (trs.length) setTranslates(trs);
+			if (traces.length) setVisualTraces(traces);
 		})();
+	}, [paperAbsPath]);
+
+	// Refresh agent-trace pins when returning to this paper after a new send.
+	useEffect(() => {
+		if (!paperAbsPath || !marksLoadedRef.current) return;
+		let cancelled = false;
+		const refresh = () => {
+			void listPdfVisualTraces(paperAbsPath).then((traces) => {
+				if (!cancelled) setVisualTraces(traces);
+			});
+		};
+		refresh();
+		const onFocus = () => refresh();
+		window.addEventListener("focus", onFocus);
+		const timer = window.setInterval(refresh, 4000);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("focus", onFocus);
+			window.clearInterval(timer);
+		};
 	}, [paperAbsPath]);
 
 	// Publish ask threads (with a real question) to the annotations panel.
@@ -1449,6 +1479,22 @@ function PdfViewerInner({
 			}
 			if (pin.kind === "translate") openCard({ kind: "translate", id: pin.id });
 			if (pin.kind === "annotate") openEditorForAnnotation(pin.id);
+			if (pin.kind === "agent-trace") {
+				const traceId = pin.traceId;
+				const trace = visualTracesRef.current.find(
+					(item) => item.id === traceId,
+				);
+				if (!trace) return;
+				requestOpenAgentSession({
+					agentId: trace.agentId,
+					runtimeSessionId: trace.runtimeSessionId,
+					providerSessionId: trace.providerSessionId,
+					messageId: trace.messageId,
+					title: pin.preview,
+					prompt: pin.preview,
+					answerSnapshot: trace.answerSnapshot,
+				});
+			}
 		},
 		[upsertThread, openThread, openCard, openEditorForAnnotation],
 	);
@@ -2115,6 +2161,21 @@ function PdfViewerInner({
 							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
 						};
 					}),
+				...visualTraces.flatMap((trace) =>
+					tracePins(trace)
+						.filter((pin) => pin.page === pageNumber)
+						.map(
+							(pin): SelectionPin => ({
+								id: pin.id,
+								kind: "agent-trace",
+								x: pin.x,
+								y: pin.y,
+								preview: pin.preview,
+								ended: pin.status !== "running",
+								traceId: pin.traceId,
+							}),
+						),
+				),
 			];
 			return (
 				<div
@@ -2192,6 +2253,7 @@ function PdfViewerInner({
 			highlights,
 			annotationCap,
 			askSummaries,
+			visualTraces,
 			translates,
 			activeTranslate,
 			activeCard?.id,

@@ -53,7 +53,8 @@
 		"annotationSave": "加入对话",
 		"annotationCancel": "取消",
 		"annotationPage": "第 {{page}} 页",
-		"annotationPreviewAlt": "第 {{page}} 页裁剪区域"
+		"annotationPreviewAlt": "第 {{page}} 页裁剪区域",
+		"tracePinAria": "打开 Agent 会话：{{preview}}"
 	},
 	"annotations": {
 		"title": "批注",

@@ -119,6 +119,7 @@
 		"cancelled": "Stopped the current run.",
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
-		"noAgent": "No available agent. Open Settings → Agent to configure one."
+		"noAgent": "No available agent. Open Settings → Agent to configure one.",
+		"sessionUnavailable": "Could not restore this Agent session. Showing the saved answer snapshot when available."
 	}
 }

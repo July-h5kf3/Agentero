@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentPanelProps, QueuedPrompt } from "@/components/agent/types";
 import {
 	useSelectionStore,
+	useUiStore,
 	useVisualContextStore,
 } from "@/hooks/use-app-stores";
 import { useImeGuard } from "@/hooks/use-ime-guard";
@@ -123,11 +124,22 @@ import {
 	removeVisualDraft,
 } from "@/lib/agent/visual-context-store";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
+import { joinPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
-import { buildVisualAnnotationsPrompt } from "@/lib/pdf/agent-trace";
+import {
+	buildVisualAnnotationsPrompt,
+	completeTrace,
+	createRunningTrace,
+	failTrace,
+	readPdfVisualTrace,
+	rememberPendingVisualTraces,
+	takePendingVisualTraces,
+	writePdfVisualTrace,
+} from "@/lib/pdf/agent-trace";
 import { loadSettings } from "@/lib/settings";
+import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 import {
 	collectUserPromptTexts,
 	nextHistoryIndexOnDown,
@@ -691,6 +703,46 @@ export function useAgentPanel({
 		[],
 	);
 
+	const finalizeVisualTraces = useCallback(
+		async (
+			runtimeSessionId: string,
+			outcome:
+				| {
+						kind: "completed";
+						providerSessionId?: string | null;
+						answerSnapshot?: string;
+						sources?: string[];
+				  }
+				| { kind: "failed"; error: string; answerSnapshot?: string },
+		) => {
+			const pending = takePendingVisualTraces(runtimeSessionId);
+			if (!pending.length) return;
+			await Promise.all(
+				pending.map(async ({ paperAbsPath, traceId }) => {
+					try {
+						const current = await readPdfVisualTrace(paperAbsPath, traceId);
+						if (!current) return;
+						const next =
+							outcome.kind === "completed"
+								? completeTrace(current, {
+										providerSessionId: outcome.providerSessionId ?? undefined,
+										answerSnapshot: outcome.answerSnapshot,
+										sources: outcome.sources,
+									})
+								: failTrace(current, {
+										error: outcome.error,
+										answerSnapshot: outcome.answerSnapshot,
+									});
+						await writePdfVisualTrace(paperAbsPath, next);
+					} catch {
+						// Trace persistence is best-effort; chat already completed.
+					}
+				}),
+			);
+		},
+		[],
+	);
+
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -732,6 +784,11 @@ export function useAgentPanel({
 						item.id === ev.sessionId ? { ...item, status: "cancelled" } : item,
 					),
 				);
+				void finalizeVisualTraces(ev.sessionId, {
+					kind: "failed",
+					error: t("messages.cancelled"),
+					answerSnapshot: ev.content,
+				});
 				return;
 			}
 			thinkParsersRef.current.delete(ev.sessionId);
@@ -795,8 +852,14 @@ export function useAgentPanel({
 					item.id === ev.sessionId ? { ...item, status: "completed" } : item,
 				),
 			);
+			void finalizeVisualTraces(ev.sessionId, {
+				kind: "completed",
+				providerSessionId: ev.providerSessionId,
+				answerSnapshot: ev.content,
+				sources: ev.sources,
+			});
 		},
-		[isChatOwnedSession, t, updateSessionLines],
+		[finalizeVisualTraces, isChatOwnedSession, t, updateSessionLines],
 	);
 
 	const failSession = useCallback(
@@ -823,8 +886,12 @@ export function useAgentPanel({
 					item.id === sessionId ? { ...item, status: "failed" } : item,
 				),
 			);
+			void finalizeVisualTraces(sessionId, {
+				kind: "failed",
+				error,
+			});
 		},
-		[isChatOwnedSession, updateSessionLines],
+		[finalizeVisualTraces, isChatOwnedSession, updateSessionLines],
 	);
 
 	const shouldDeferTerminalEvent = useCallback((sessionId: string) => {
@@ -960,9 +1027,15 @@ export function useAgentPanel({
 	const selected = resolveSelected(options, selectedAgentId, registry);
 	const [supportsResume, setSupportsResume] = useState(false);
 
+	const [historyLoaded, setHistoryLoaded] = useState(false);
+
 	const loadAgentHistory = useCallback(async () => {
-		if (!isTauri() || !selectedAgentId) return;
+		if (!isTauri() || !selectedAgentId) {
+			setHistoryLoaded(true);
+			return;
+		}
 		const generation = ++historyGenRef.current;
+		setHistoryLoaded(false);
 		try {
 			const result = await listSessions({
 				agentId: selectedAgentId,
@@ -1035,6 +1108,10 @@ export function useAgentPanel({
 			});
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
+		} finally {
+			if (generation === historyGenRef.current) {
+				setHistoryLoaded(true);
+			}
 		}
 	}, [i18n.language, selected?.name, selectedAgentId, vaultPath]);
 
@@ -1044,6 +1121,8 @@ export function useAgentPanel({
 			historyGenRef.current += 1;
 		};
 	}, [loadAgentHistory]);
+
+	const agentSessionOpenRequest = useUiStore((s) => s.agentSessionOpenRequest);
 
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
@@ -1647,6 +1726,45 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			if (hasVisualDrafts) {
+				const byPaper = new Map<string, PdfVisualDraft[]>();
+				for (const draft of resolvedVisualDrafts) {
+					const abs =
+						draft.paperAbsPath?.trim() ||
+						(vaultPath && draft.paperPath
+							? joinPath(vaultPath, draft.paperPath)
+							: draft.paperPath);
+					if (!abs) continue;
+					const list = byPaper.get(abs) ?? [];
+					list.push(draft);
+					byPaper.set(abs, list);
+				}
+				const pendingWrites: Array<{
+					paperAbsPath: string;
+					traceId: string;
+				}> = [];
+				for (const [paperAbsPath, drafts] of byPaper) {
+					try {
+						const trace = createRunningTrace({
+							paperPath: drafts[0]?.paperPath || paperAbsPath,
+							agentId,
+							runtimeSessionId: accepted.sessionId,
+							messageId: accepted.messageId,
+							annotations: drafts.map((draft) => ({
+								id: draft.id,
+								page: draft.page,
+								rects: draft.rects,
+								comment: draft.comment,
+							})),
+						});
+						await writePdfVisualTrace(paperAbsPath, trace);
+						pendingWrites.push({ paperAbsPath, traceId: trace.id });
+					} catch {
+						// Keep chat running even if mark write fails.
+					}
+				}
+				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
 			if (!options?.visualDrafts) consumeVisualDrafts();
@@ -2316,6 +2434,93 @@ export function useAgentPanel({
 			}
 		})();
 	};
+
+	const openHistorySessionRef = useRef(openHistorySession);
+	openHistorySessionRef.current = openHistorySession;
+
+	useEffect(() => {
+		const request = agentSessionOpenRequest;
+		if (!request) return;
+		if (request.agentId && request.agentId !== selectedAgentId) {
+			setSelectedAgentId(request.agentId);
+			// Wait for history reload after agent switch.
+			return;
+		}
+		if (!historyLoaded) return;
+
+		const match = sessionHistoryRef.current.find(
+			(item) =>
+				item.id === request.runtimeSessionId ||
+				item.providerSessionId === request.runtimeSessionId ||
+				(request.providerSessionId != null &&
+					(item.id === request.providerSessionId ||
+						item.providerSessionId === request.providerSessionId)),
+		);
+		if (match) {
+			openHistorySessionRef.current(match);
+			clearAgentSessionOpenRequest();
+			return;
+		}
+
+		const snapshot = request.answerSnapshot?.trim();
+		const fallbackLines: ChatLine[] = [
+			{
+				id: nextLineId("user"),
+				kind: "user",
+				text:
+					request.prompt?.trim() ||
+					request.title?.trim() ||
+					t("composer.visualAnnotation"),
+			},
+		];
+		if (snapshot) {
+			fallbackLines.push({
+				id: nextLineId("agent"),
+				kind: "agent",
+				parts: [
+					{
+						type: "text",
+						id: nextPartId("text"),
+						text: snapshot,
+					},
+				],
+				streaming: false,
+			});
+		} else {
+			fallbackLines.push({
+				id: nextLineId("sys"),
+				kind: "system",
+				text: t("messages.sessionUnavailable"),
+			});
+		}
+		const fallback: ChatSessionHistoryItem = {
+			id: request.runtimeSessionId,
+			agentId: request.agentId,
+			source: "local",
+			title:
+				request.title?.trim() ||
+				request.prompt?.trim() ||
+				t("composer.visualAnnotation"),
+			agentName: selected?.name ?? t("defaultName"),
+			startedAt: new Date().toLocaleString(i18n.language),
+			lines: fallbackLines,
+			status: snapshot ? "completed" : "failed",
+			providerSessionId: request.providerSessionId ?? null,
+		};
+		setSessionHistory((prev) => [
+			fallback,
+			...prev.filter((item) => item.id !== fallback.id),
+		]);
+		openHistorySessionRef.current(fallback);
+		clearAgentSessionOpenRequest();
+	}, [
+		agentSessionOpenRequest,
+		historyLoaded,
+		i18n.language,
+		selected?.name,
+		selectedAgentId,
+		t,
+	]);
 
 	return {
 		isZen,
