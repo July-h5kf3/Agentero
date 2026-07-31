@@ -86,6 +86,8 @@ export const AgentPanel = memo(function AgentPanel({
 		currentFileLabel,
 		mentionChipPaths,
 		selectionChips,
+		visualDrafts,
+		removeVisualDraft,
 		directoryPathSet,
 		paperPathSet,
 		labelForPath,
@@ -244,6 +246,8 @@ export const AgentPanel = memo(function AgentPanel({
 						mentionChipPaths={mentionChipPaths}
 						selectionChips={selectionChips}
 						onRemoveSelection={removeSelection}
+						visualDrafts={visualDrafts}
+						onRemoveVisualDraft={removeVisualDraft}
 						directoryPathSet={directoryPathSet}
 						paperPathSet={paperPathSet}
 						labelForPath={labelForPath}

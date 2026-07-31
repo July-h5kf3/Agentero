@@ -123,6 +123,7 @@ import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
+import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
 import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import {
 	cancelAgentRun,
@@ -138,6 +139,7 @@ import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
+import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
@@ -164,7 +166,6 @@ import type {
 	PdfAskAnchor,
 	PdfAskNormalizedRect,
 	PdfAskThread,
-	PdfAskVisualKind,
 } from "@/lib/pdf/ask/types";
 import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
 import {
@@ -189,7 +190,6 @@ import {
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
-import { unionNormalizedRegions } from "@/lib/pdf/region";
 import {
 	type ActiveSelectionCard,
 	pinFromRects,
@@ -671,6 +671,13 @@ type EditorState = {
 	comment: string;
 };
 
+type VisualDraftEditorState = {
+	screen: { x: number; y: number };
+	page: number;
+	region: PdfAskNormalizedRect;
+	image: PromptImage;
+};
+
 function PdfViewerInner({
 	docId,
 	paperAbsPath = null,
@@ -705,11 +712,13 @@ function PdfViewerInner({
 		null,
 	);
 	const [regionSelecting, setRegionSelecting] = useState(false);
-	const [visualExplainPending, setVisualExplainPending] = useState(false);
+	const [visualCropPending, setVisualCropPending] = useState(false);
 	const [citations, setCitations] = useState<Citation[]>([]);
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
+	const [visualDraftEditor, setVisualDraftEditor] =
+		useState<VisualDraftEditorState | null>(null);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
@@ -1227,25 +1236,16 @@ function PdfViewerInner({
 		return resolved;
 	}, [t]);
 
-	const explainVisualRegion = useCallback(
-		async ({
-			page,
-			region,
-			visualKind,
-			quote,
-		}: {
-			page: number;
-			region: PdfAskNormalizedRect;
-			visualKind: PdfAskVisualKind;
-			quote?: string;
-		}) => {
-			if (!engine || !docCap || visualExplainPending) return;
+	/** Crop a region and open the visual-annotation draft editor (does not send). */
+	const beginVisualAnnotation = useCallback(
+		async (page: number, region: PdfAskNormalizedRect) => {
+			if (!engine || !docCap || visualCropPending) return;
 			const document = docCap.getDocument(docId);
 			if (!document) {
 				notifyError(t("pdfExplain.cropFailed"));
 				return;
 			}
-			setVisualExplainPending(true);
+			setVisualCropPending(true);
 			setRegionSelecting(false);
 			try {
 				const image = await renderPdfRegionPromptImage({
@@ -1254,48 +1254,49 @@ function PdfViewerInner({
 					pageIndex: page - 1,
 					region,
 				});
-				const resolved = await resolvePdfAskAgent();
-				if (!resolved) return;
-				const anchor: PdfAskAnchor = {
+				const pageEl = pageElByIndex(hostRef.current, page - 1);
+				const screen = pageEl
+					? (() => {
+							const box = pageEl.getBoundingClientRect();
+							return {
+								x: box.left + (region.x + region.w) * box.width + 8,
+								y: box.top + region.y * box.height,
+							};
+						})()
+					: { x: 120, y: 120 };
+				setVisualDraftEditor({
+					screen,
 					page,
-					rects: [region],
-					quote: quote?.trim() || undefined,
-					trigger: "region",
-					visualKind,
-				};
-				const thread = createThreadFromAnchor(anchor);
-				openThread(thread);
-				await sendToThread(
-					thread,
-					visualKind === "formula"
-						? t("pdfExplain.formulaQuestion")
-						: t("pdfExplain.figureQuestion"),
-					{
-						agentId: resolved.agentId,
-						modelId: resolved.modelId,
-					},
-					undefined,
-					[image],
-				);
+					region,
+					image,
+				});
 			} catch (error) {
 				const message =
 					error instanceof Error ? error.message : t("pdfExplain.cropFailed");
 				notifyError(t("pdfExplain.cropFailed"), { description: message });
 			} finally {
-				setVisualExplainPending(false);
+				setVisualCropPending(false);
 			}
 		},
-		[
-			engine,
-			docCap,
-			docId,
-			visualExplainPending,
-			resolvePdfAskAgent,
-			createThreadFromAnchor,
-			openThread,
-			sendToThread,
-			t,
-		],
+		[engine, docCap, docId, visualCropPending, t],
+	);
+
+	const handleVisualDraftSave = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			addVisualDraft({
+				paperPath: paperRelPath || paperAbsPath || "paper",
+				paperAbsPath: paperAbsPath ?? undefined,
+				page: draft.page,
+				rects: [draft.region],
+				comment,
+				image: draft.image,
+			});
+			setVisualDraftEditor(null);
+			openRightTab("agent");
+		},
+		[visualDraftEditor, paperRelPath, paperAbsPath],
 	);
 
 	const handleSend = useCallback(
@@ -1535,21 +1536,6 @@ function PdfViewerInner({
 		selectionCap?.clear(docId);
 		startFromAnchor(anchor);
 	}, [selectionMenu, startFromAnchor, selectionCap, docId]);
-
-	const handleMenuExplain = useCallback(() => {
-		if (!selectionMenu) return;
-		const anchor = selectionMenu.anchor;
-		const region = unionNormalizedRegions(anchor.rects);
-		setSelectionMenu(null);
-		selectionCap?.clear(docId);
-		if (!region) return;
-		void explainVisualRegion({
-			page: anchor.page,
-			region,
-			visualKind: "formula",
-			quote: anchor.quote,
-		});
-	}, [selectionMenu, selectionCap, docId, explainVisualRegion]);
 
 	const handleMenuAddToChat = useCallback(() => {
 		if (!selectionMenu) return;
@@ -2034,13 +2020,9 @@ function PdfViewerInner({
 
 	const handleVisualRegionSelect = useCallback(
 		(page: number, region: PdfAskNormalizedRect) => {
-			void explainVisualRegion({
-				page,
-				region,
-				visualKind: "figure",
-			});
+			void beginVisualAnnotation(page, region);
 		},
-		[explainVisualRegion],
+		[beginVisualAnnotation],
 	);
 
 	useEffect(() => {
@@ -2171,7 +2153,7 @@ function PdfViewerInner({
 							onHover={handleCitationLinkHover}
 						/>
 						<PdfRegionSelectLayer
-							active={regionSelecting && !visualExplainPending}
+							active={regionSelecting && !visualCropPending}
 							label={t("pdfExplain.regionSelectionLabel", {
 								page: pageNumber,
 							})}
@@ -2220,7 +2202,7 @@ function PdfViewerInner({
 			handleCitationLinkActivate,
 			handleCitationLinkHover,
 			regionSelecting,
-			visualExplainPending,
+			visualCropPending,
 			handleVisualRegionSelect,
 			t,
 		],
@@ -2418,9 +2400,10 @@ function PdfViewerInner({
 									variant={regionSelecting ? "secondary" : "ghost"}
 									aria-label={t("pdfExplain.selectRegion")}
 									aria-pressed={regionSelecting}
-									disabled={visualExplainPending || !engine}
+									disabled={visualCropPending || !engine}
 									onClick={() => {
 										setSelectionMenu(null);
+										setVisualDraftEditor(null);
 										selectionCap?.clear(docId);
 										setRegionSelecting((active) => !active);
 									}}
@@ -2428,7 +2411,7 @@ function PdfViewerInner({
 									<ScanSearch
 										className={cn(
 											"size-3.5",
-											visualExplainPending && "animate-pulse",
+											visualCropPending && "animate-pulse",
 										)}
 									/>
 								</Button>
@@ -2509,10 +2492,19 @@ function PdfViewerInner({
 									onCopy={handleCopy}
 									onNote={handleNote}
 									onAsk={handleMenuAsk}
-									onExplain={handleMenuExplain}
 									onAddToChat={handleMenuAddToChat}
 									onTranslate={handleMenuTranslate}
 									onClose={closeSelectionMenu}
+								/>
+							) : null}
+
+							{visualDraftEditor ? (
+								<VisualAnnotationEditor
+									screen={visualDraftEditor.screen}
+									page={visualDraftEditor.page}
+									image={visualDraftEditor.image}
+									onSave={handleVisualDraftSave}
+									onClose={() => setVisualDraftEditor(null)}
 								/>
 							) : null}
 

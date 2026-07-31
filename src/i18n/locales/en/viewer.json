@@ -42,12 +42,18 @@
 		"editCancel": "Cancel"
 	},
 	"pdfExplain": {
-		"selectRegion": "Explain a visual region",
+		"selectRegion": "Add visual annotation",
 		"cancelRegion": "Cancel region selection",
 		"regionSelectionLabel": "Select a visual region on page {{page}}",
 		"formulaQuestion": "Explain this formula or technical expression.",
 		"figureQuestion": "Explain this figure, chart, table, or visual region.",
-		"cropFailed": "Could not capture the selected PDF region."
+		"cropFailed": "Could not capture the selected PDF region.",
+		"annotationEditorLabel": "Visual annotation",
+		"annotationPlaceholder": "What should the agent look at or answer?",
+		"annotationSave": "Add to chat",
+		"annotationCancel": "Cancel",
+		"annotationPage": "Page {{page}}",
+		"annotationPreviewAlt": "Cropped region from page {{page}}"
 	},
 	"annotations": {
 		"title": "Annotations",

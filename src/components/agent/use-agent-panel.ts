@@ -13,7 +13,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentPanelProps, QueuedPrompt } from "@/components/agent/types";
-import { useSelectionStore } from "@/hooks/use-app-stores";
+import {
+	useSelectionStore,
+	useVisualContextStore,
+} from "@/hooks/use-app-stores";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
@@ -113,10 +116,17 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
+import {
+	consumeVisualDrafts,
+	currentVisualDrafts,
+	type PdfVisualDraft,
+	removeVisualDraft,
+} from "@/lib/agent/visual-context-store";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
 import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { buildVisualAnnotationsPrompt } from "@/lib/pdf/agent-trace";
 import { loadSettings } from "@/lib/settings";
 import {
 	collectUserPromptTexts,
@@ -1123,6 +1133,26 @@ export function useAgentPanel({
 				: pinnedSelections,
 		[activeSelection, pinnedSelections],
 	);
+	const visualDrafts = useVisualContextStore((s) => s.drafts);
+
+	const visualDraftsDisplayText = useCallback(
+		(drafts: PdfVisualDraft[]): string => {
+			if (!drafts.length) return "";
+			const lines = drafts.map((draft, index) => {
+				const comment = draft.comment.trim();
+				return comment
+					? `${index + 1}. ${comment}`
+					: `${index + 1}. ${t("composer.visualAnnotationPage", {
+							page: draft.page,
+						})}`;
+			});
+			return [
+				t("composer.visualAnnotationsTitle", { count: drafts.length }),
+				...lines,
+			].join("\n");
+		},
+		[t],
+	);
 
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
 	/** Raw @query (preserve case for display; matching is case-insensitive). */
@@ -1449,6 +1479,8 @@ export function useAgentPanel({
 		skillIds?: string[];
 		/** Frozen selection chips from a waitlisted follow-up (else live store). */
 		selections?: SelectionContext[];
+		/** Frozen visual PDF annotation drafts (else live store). */
+		visualDrafts?: PdfVisualDraft[];
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
 	};
@@ -1458,8 +1490,10 @@ export function useAgentPanel({
 		options?: SendOptions,
 	): Promise<boolean> => {
 		const text = textRaw.trim();
+		const resolvedVisualDrafts = options?.visualDrafts ?? currentVisualDrafts();
+		const hasVisualDrafts = resolvedVisualDrafts.length > 0;
 		if (
-			!text ||
+			(!text && !hasVisualDrafts) ||
 			activeTabIsRunning ||
 			switchingRef.current ||
 			submittingRef.current
@@ -1537,17 +1571,49 @@ export function useAgentPanel({
 			if (resolvedSelections.length) {
 				contextBlocks.push(selectionsPromptBlock(resolvedSelections));
 			}
+			if (hasVisualDrafts && !isAcpCommand) {
+				contextBlocks.push(
+					buildVisualAnnotationsPrompt(
+						resolvedVisualDrafts.map((draft) => ({
+							page: draft.page,
+							comment: draft.comment,
+						})),
+					),
+				);
+			}
+			const bodyParts: string[] = [];
+			if (text) bodyParts.push(text);
+			if (!isAcpCommand && contextBlocks.length) {
+				bodyParts.push(...contextBlocks);
+			}
 			const prompt =
-				isAcpCommand || contextBlocks.length === 0
+				isAcpCommand && text
 					? text
-					: `${text}\n\n${contextBlocks.join("\n\n")}`;
+					: bodyParts.join("\n\n") ||
+						buildVisualAnnotationsPrompt(
+							resolvedVisualDrafts.map((draft) => ({
+								page: draft.page,
+								comment: draft.comment,
+							})),
+						);
+			const images = hasVisualDrafts
+				? resolvedVisualDrafts.map((draft) => draft.image)
+				: undefined;
+			const displayText =
+				text ||
+				visualDraftsDisplayText(resolvedVisualDrafts) ||
+				t("composer.visualAnnotation");
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
 			const workflowTarget = workflow
 				? (resolvedContextPaths[0] ?? selectedVaultPath ?? undefined)
 				: resolvedContextPaths[0];
-			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
+			const userLine: ChatLine = {
+				id: nextLineId("user"),
+				kind: "user",
+				text: displayText,
+			};
 			const sessionStartLines = [...(options?.baseLines ?? lines), userLine];
 			setLines(sessionStartLines);
 			pendingSubmissionSessionIdRef.current = supportsResume
@@ -1560,6 +1626,7 @@ export function useAgentPanel({
 					: undefined,
 				prompt,
 				isAcpCommand,
+				images,
 				vaultPath: vaultPath ?? undefined,
 				workflow: workflow ?? "free",
 				target: workflowTarget,
@@ -1582,6 +1649,7 @@ export function useAgentPanel({
 			knownSessionIdsRef.current.add(accepted.sessionId);
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
+			if (!options?.visualDrafts) consumeVisualDrafts();
 			const pendingTerminal = pendingTerminalEventsRef.current.get(
 				accepted.sessionId,
 			);
@@ -1612,7 +1680,7 @@ export function useAgentPanel({
 					id: accepted.sessionId,
 					agentId,
 					source: "local",
-					title: text,
+					title: displayText,
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
 					lines: historyLines,
@@ -1656,7 +1724,10 @@ export function useAgentPanel({
 	const enqueueMessage = useCallback(
 		(textRaw: string, workflow?: string): boolean => {
 			const text = textRaw.trim();
-			if (!text || switchingRef.current) return false;
+			const liveVisualDrafts = currentVisualDrafts();
+			if ((!text && !liveVisualDrafts.length) || switchingRef.current) {
+				return false;
+			}
 			const snap = snapshotComposerState();
 			const paths = [
 				...(snap.includeSelectedFile && selectedVaultPath
@@ -1664,13 +1735,16 @@ export function useAgentPanel({
 					: []),
 				...snap.mentionedPaths,
 			];
+			const frozenVisualDrafts = consumeVisualDrafts();
 			const item: QueuedPrompt = {
 				id: nextLineId("queue"),
+				// Keep the typed text only; visual drafts carry their own prompt payload.
 				text,
 				workflow,
 				contextPaths: paths,
 				skillIds: [...snap.selectedSkillIds],
 				selections: consumeSelections(),
+				visualDrafts: frozenVisualDrafts,
 			};
 			setMessageQueue((prev) => {
 				const next = [...prev, item];
@@ -1749,6 +1823,7 @@ export function useAgentPanel({
 					contextPaths: head.contextPaths,
 					skillIds: head.skillIds,
 					selections: head.selections,
+					visualDrafts: head.visualDrafts,
 					fromQueue: true,
 				});
 			} finally {
@@ -2291,6 +2366,8 @@ export function useAgentPanel({
 		currentFileLabel,
 		mentionChipPaths,
 		selectionChips,
+		visualDrafts,
+		removeVisualDraft,
 		directoryPathSet,
 		paperPathSet,
 		labelForPath,
