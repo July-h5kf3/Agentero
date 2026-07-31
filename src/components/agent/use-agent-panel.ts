@@ -1214,25 +1214,6 @@ export function useAgentPanel({
 	);
 	const visualDrafts = useVisualContextStore((s) => s.drafts);
 
-	const visualDraftsDisplayText = useCallback(
-		(drafts: PdfVisualDraft[]): string => {
-			if (!drafts.length) return "";
-			const lines = drafts.map((draft, index) => {
-				const comment = draft.comment.trim();
-				return comment
-					? `${index + 1}. ${comment}`
-					: `${index + 1}. ${t("composer.visualAnnotationPage", {
-							page: draft.page,
-						})}`;
-			});
-			return [
-				t("composer.visualAnnotationsTitle", { count: drafts.length }),
-				...lines,
-			].join("\n");
-		},
-		[t],
-	);
-
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
 	/** Raw @query (preserve case for display; matching is case-insensitive). */
 	const mentionQueryRaw = mentionMatch?.[2] ?? "";
@@ -1678,10 +1659,26 @@ export function useAgentPanel({
 			const images = hasVisualDrafts
 				? resolvedVisualDrafts.map((draft) => draft.image)
 				: undefined;
-			const displayText =
+			const visualAnnotations = hasVisualDrafts
+				? resolvedVisualDrafts.map((draft) => ({
+						id: draft.id,
+						page: draft.page,
+						comment: draft.comment,
+						paperPath: draft.paperPath,
+						image: {
+							data: draft.image.data,
+							mimeType: draft.image.mimeType || "image/png",
+						},
+					}))
+				: undefined;
+			const historyTitle =
 				text ||
-				visualDraftsDisplayText(resolvedVisualDrafts) ||
-				t("composer.visualAnnotation");
+				resolvedVisualDrafts.find((d) => d.comment.trim())?.comment.trim() ||
+				(hasVisualDrafts
+					? t("composer.visualAnnotationsTitle", {
+							count: resolvedVisualDrafts.length,
+						})
+					: t("composer.visualAnnotation"));
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
@@ -1691,7 +1688,8 @@ export function useAgentPanel({
 			const userLine: ChatLine = {
 				id: nextLineId("user"),
 				kind: "user",
-				text: displayText,
+				text,
+				...(visualAnnotations?.length ? { visualAnnotations } : {}),
 			};
 			const sessionStartLines = [...(options?.baseLines ?? lines), userLine];
 			setLines(sessionStartLines);
@@ -1798,7 +1796,7 @@ export function useAgentPanel({
 					id: accepted.sessionId,
 					agentId,
 					source: "local",
-					title: displayText,
+					title: historyTitle,
 					agentName: selected?.name ?? t("defaultName"),
 					startedAt: new Date().toLocaleString(i18n.language),
 					lines: historyLines,
@@ -2294,7 +2292,15 @@ export function useAgentPanel({
 			.map((line) => {
 				if (line.kind !== "user") return line;
 				const text = stripPromptEnvelopeForDisplay(line.text);
-				return text ? { ...line, text } : null;
+				const hasVisual = Boolean(line.visualAnnotations?.length);
+				if (!text && !hasVisual) return null;
+				return {
+					...line,
+					text: text || "",
+					...(line.visualAnnotations?.length
+						? { visualAnnotations: line.visualAnnotations }
+						: {}),
+				};
 			})
 			.filter((line): line is ChatLine => line !== null);
 

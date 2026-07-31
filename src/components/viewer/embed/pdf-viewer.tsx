@@ -25,6 +25,7 @@ import {
 	GlobalPointerProvider,
 	InteractionManagerPluginPackage,
 	PagePointerProvider,
+	useInteractionManagerCapability,
 } from "@embedpdf/plugin-interaction-manager/react";
 import {
 	RenderLayer,
@@ -701,6 +702,7 @@ function PdfViewerInner({
 	const { provides: zoom, state: zoomState } = useZoom(docId);
 	const { provides: scroll, state: scrollState } = useScroll(docId);
 	const { provides: selectionCap } = useSelectionCapability();
+	const { provides: interactionCap } = useInteractionManagerCapability();
 	const { provides: annotationCap } = useAnnotationCapability();
 	const { provides: docCap } = useDocumentManagerCapability();
 	const { state: searchState, provides: search } = useSearch(docId);
@@ -2082,6 +2084,18 @@ function PdfViewerInner({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [regionSelecting]);
 
+	// Region-select mode must not allow EmbedPDF text selection under the marquee.
+	useEffect(() => {
+		if (!regionSelecting) return;
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		const scope = interactionCap?.forDocument(docId);
+		scope?.pause();
+		return () => {
+			scope?.resume();
+		};
+	}, [regionSelecting, selectionCap, interactionCap, docId]);
+
 	/**
 	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
 	 * (which only change `currentPage`/`zoomLevel`) keep a stable callback
@@ -2203,7 +2217,10 @@ function PdfViewerInner({
 						pageIndex={pageIndex}
 						style={{ position: "absolute", inset: 0 }}
 					>
-						<SelectionLayer documentId={docId} pageIndex={pageIndex} />
+						{/* Unmount text selection while framing a visual region. */}
+						{regionSelecting ? null : (
+							<SelectionLayer documentId={docId} pageIndex={pageIndex} />
+						)}
 						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
 						<CitationLinkLayer
 							links={citationLinks.get(pageIndex) ?? []}

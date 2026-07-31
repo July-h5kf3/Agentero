@@ -13,9 +13,21 @@ import type {
 	AgentTemplate,
 	AgentToolEvent,
 	CatalogScanResponse,
+	PromptImage,
 } from "@/lib/agent/api";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+
+/** Snapshot of a visual PDF annotation attached to a local user chat line. */
+export type ChatVisualAnnotation = {
+	id: string;
+	/** 1-based PDF page number. */
+	page: number;
+	comment: string;
+	image: PromptImage;
+	/** Vault-relative paper path when known. */
+	paperPath?: string;
+};
 
 export type ToolUiState = {
 	id: string;
@@ -39,7 +51,14 @@ export type AgentPart =
 	| { type: "plan"; id: string; entries: AgentPlanEntry[] };
 
 export type ChatLine =
-	| { id: string; kind: "user"; text: string }
+	| {
+			id: string;
+			kind: "user";
+			/** Free-form composer text (may be empty when only visual annotations). */
+			text: string;
+			/** Local multimodal visual crops sent with this turn (session-local). */
+			visualAnnotations?: ChatVisualAnnotation[];
+	  }
 	| {
 			id: string;
 			kind: "agent";

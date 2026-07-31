@@ -35,7 +35,8 @@ export function PdfRegionSelectLayer({
 		<div
 			role="application"
 			aria-label={label}
-			className="absolute inset-0 z-[5] cursor-crosshair touch-none"
+			// Above page content; capture all pointers so EmbedPDF cannot start a text selection.
+			className="absolute inset-0 z-20 cursor-crosshair touch-none select-none"
 			onPointerDown={(event) => {
 				if (event.button !== 0) return;
 				event.preventDefault();
