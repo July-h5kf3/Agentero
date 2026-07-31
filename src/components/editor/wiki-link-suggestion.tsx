@@ -4,6 +4,7 @@ import {
 	CornerDownLeft,
 	FileText,
 	Hash,
+	Highlighter,
 	ScanSearch,
 	TextQuote,
 } from "lucide-react";
@@ -90,16 +91,27 @@ function completionRequestKey(
 		: `${request.kind}\u0000${request.target}\u0000${request.query}`;
 }
 
-function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
+function CandidateIcon({
+	kind,
+	detail,
+}: {
+	kind: WikiSearchCandidate["kind"];
+	detail?: string;
+}) {
 	if (kind === "alias") return null;
+	// Annotation candidates: visual uses magnifier; highlight/划词 uses highlighter.
+	if (kind === "annotation") {
+		const visual = detail?.includes("visual");
+		const Icon = visual ? ScanSearch : Highlighter;
+		return (
+			<Icon
+				className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+				aria-hidden
+			/>
+		);
+	}
 	const Icon =
-		kind === "file"
-			? FileText
-			: kind === "heading"
-				? Hash
-				: kind === "annotation"
-					? ScanSearch
-					: TextQuote;
+		kind === "file" ? FileText : kind === "heading" ? Hash : TextQuote;
 	return (
 		<Icon
 			className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
@@ -581,7 +593,7 @@ export function WikiLinkSuggestion({
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => selectCandidate(candidate)}
 						>
-							<CandidateIcon kind={candidate.kind} />
+							<CandidateIcon kind={candidate.kind} detail={candidate.detail} />
 							<span className="min-w-0 flex-1">
 								<span
 									className={`block truncate font-medium ${

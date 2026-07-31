@@ -119,7 +119,8 @@
 		"annotationVisual": "视觉批注",
 		"annotationPage": "第 {{page}} 页",
 		"annotationExpand": "展开",
-		"annotationCollapse": "收起"
+		"annotationCollapse": "收起",
+		"untitled": "嵌入"
 	},
 	"wikiCompletion": {
 		"label": "双链候选",

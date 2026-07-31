@@ -119,7 +119,8 @@
 		"annotationVisual": "Visual annotation",
 		"annotationPage": "p.{{page}}",
 		"annotationExpand": "Show more",
-		"annotationCollapse": "Show less"
+		"annotationCollapse": "Show less",
+		"untitled": "Embed"
 	},
 	"wikiCompletion": {
 		"label": "Internal link suggestions",

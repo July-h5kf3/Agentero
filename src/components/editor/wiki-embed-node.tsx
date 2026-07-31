@@ -1,6 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import {
+	ExternalLink,
+	FileText,
+	FileType2,
+	Highlighter,
+	ImageIcon,
+	ScanSearch,
+	TextQuote,
+} from "lucide-react";
 import { PlateElement, type PlateElementProps } from "platejs/react";
 import {
 	lazy,
@@ -21,6 +29,7 @@ import {
 } from "@/components/editor/wiki-embed-context";
 import { useWikiEmbedProjection } from "@/components/editor/wiki-embed-projection-context";
 import { cn } from "@/lib/core/utils";
+import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
 import {
 	type ResolvedLink,
@@ -232,6 +241,62 @@ function EmbedStatus({ message }: { message: string }) {
 	);
 }
 
+type EmbedChromeKind =
+	| "markdown"
+	| "image"
+	| "pdf"
+	/** Text highlight / note on PDF. */
+	| "annotation-highlight"
+	/** Visual crop / region mark. */
+	| "annotation-visual"
+	/** Annotation token known, subtype not loaded yet. */
+	| "annotation"
+	| "status";
+
+function embedChromeKind(
+	state: EmbedLoadState,
+	heading: string | null | undefined,
+	annotationKind: AnnotationRefKind | null,
+): EmbedChromeKind {
+	// Prefer resolved subtype once the body has loaded the mark.
+	if (annotationKind === "agent-trace") return "annotation-visual";
+	if (annotationKind === "highlight") return "annotation-highlight";
+
+	if (state.kind === "ready") {
+		const kind = state.response.contentKind;
+		if (kind === "markdown" || kind === "image" || kind === "pdf") {
+			return kind;
+		}
+		if (kind === "annotation") {
+			// Subtype pending → highlighter (划词), not magnifier (视觉).
+			return "annotation-highlight";
+		}
+	}
+	// Token `…@id` is known from the heading field before Host resolves.
+	if (heading?.startsWith("@")) return "annotation-highlight";
+	return "status";
+}
+
+function EmbedTypeIcon({ kind }: { kind: EmbedChromeKind }) {
+	const className = "size-3.5 shrink-0 text-muted-foreground";
+	switch (kind) {
+		case "annotation-visual":
+			return <ScanSearch className={className} aria-hidden />;
+		case "annotation-highlight":
+		case "annotation":
+			// 划词高亮 / 文字批注 — not the visual magnifier.
+			return <Highlighter className={className} aria-hidden />;
+		case "image":
+			return <ImageIcon className={className} aria-hidden />;
+		case "pdf":
+			return <FileType2 className={className} aria-hidden />;
+		case "markdown":
+			return <FileText className={className} aria-hidden />;
+		default:
+			return <TextQuote className={className} aria-hidden />;
+	}
+}
+
 export function WikiEmbedElement({
 	editing,
 	...props
@@ -254,6 +319,23 @@ export function WikiEmbedElement({
 				: `#${element.heading}`
 		: target;
 	const [targetRevision, setTargetRevision] = useState(0);
+	/**
+	 * highlight vs agent-trace for the header icon. Keyed by embed token so a
+	 * subtype from a previous link never sticks after the token changes
+	 * (avoids a reset-only useEffect that trips exhaustive-deps lint).
+	 */
+	const [annotationMeta, setAnnotationMeta] = useState<{
+		token: string;
+		kind: AnnotationRefKind;
+	} | null>(null);
+	const annotationKind =
+		annotationMeta?.token === targetWithFragment ? annotationMeta.kind : null;
+	const onAnnotationKind = useCallback(
+		(kind: AnnotationRefKind) => {
+			setAnnotationMeta({ token: targetWithFragment, kind });
+		},
+		[targetWithFragment],
+	);
 	const requestKey = embedRequestKey(
 		wikiNav?.vaultPath,
 		markdownDoc.filePath,
@@ -391,6 +473,7 @@ export function WikiEmbedElement({
 
 	const isAnnotationEmbed =
 		state.kind === "ready" && state.response.contentKind === "annotation";
+	const chromeKind = embedChromeKind(state, element.heading, annotationKind);
 
 	// Markdown/image/PDF embeds refresh when their resolved target file changes.
 	// Annotation bodies live under paper marks/, not NOTES.md — subscribing to
@@ -425,9 +508,11 @@ export function WikiEmbedElement({
 					editing && "hidden",
 				)}
 			>
-				<span className="sticky top-0 z-10 flex items-center justify-between gap-3 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
-					<span className="min-w-0 truncate text-muted-foreground text-xs">
-						{sourceLabel}
+				{/* Shared chrome: type icon + title · open source on the right */}
+				<span className="sticky top-0 z-10 flex items-center gap-2 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
+					<EmbedTypeIcon kind={chromeKind} />
+					<span className="min-w-0 flex-1 truncate font-medium text-foreground/90 text-xs">
+						{sourceLabel || t("embed.untitled")}
 					</span>
 					{resolvedLink?.status === "resolved" ? (
 						<button
@@ -475,14 +560,13 @@ export function WikiEmbedElement({
 							presentation.response.link.targetPath &&
 							presentation.response.link.occurrence.fragment?.kind ===
 								"annotation" ? (
-							// Eager (non-lazy) so Suspense does not flash "loading" on
-							// each parent re-render after the first annotation embed.
+							// Body-only: title/icon live in the shared header above.
 							<WikiAnnotationEmbed
 								vaultPath={wikiNav.vaultPath}
 								targetPath={presentation.response.link.targetPath}
 								annotationId={presentation.response.link.occurrence.fragment.id}
-								alias={element.alias}
 								onOpen={navigate}
+								onResolvedKind={onAnnotationKind}
 							/>
 						) : (
 							<EmbedStatus message={t("embed.unsupported")} />

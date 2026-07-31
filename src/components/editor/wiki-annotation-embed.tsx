@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, ScanSearch } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -27,9 +27,9 @@ type WikiAnnotationEmbedProps = {
 	/** Vault-relative wiki target path (NOTES / pdf / paper). */
 	targetPath: string;
 	annotationId: string;
-	/** Display alias from `![[…|alias]]`. */
-	alias?: string | null;
 	onOpen: () => void;
+	/** Notify parent so shared header can pick highlight vs visual icon. */
+	onResolvedKind?: (kind: AnnotationRef["kind"]) => void;
 	className?: string;
 };
 
@@ -114,16 +114,15 @@ export function annotationEmbedWatchPaths(
 }
 
 /**
- * Read-only projection of a PDF highlight or visual-trace for `![[target@id]]`.
- * Uses a module-level cache so parent remounts / selection toggles do not flash
- * a loading state (same pattern as image/PDF attachment embeds).
+ * Body-only projection of a PDF highlight / visual-trace for `![[target@id]]`.
+ * Title + type icon live in the shared embed chrome (wiki-embed-node).
  */
 export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	vaultPath,
 	targetPath,
 	annotationId,
-	alias,
 	onOpen,
+	onResolvedKind,
 	className,
 }: WikiAnnotationEmbedProps) {
 	const { t } = useTranslation("editor");
@@ -197,6 +196,12 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		};
 	}, [requestKey, vaultPath, targetPath, annotationId]);
 
+	// Must run every render (before any early return) so hook order stays stable.
+	const resolvedKind = state.kind === "ready" ? state.ref.kind : null;
+	useEffect(() => {
+		if (resolvedKind) onResolvedKind?.(resolvedKind);
+	}, [resolvedKind, onResolvedKind]);
+
 	// Only the very first load (no cached/stale card) shows a loading label.
 	if (state.kind === "loading") {
 		return (
@@ -228,19 +233,17 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	const color: HighlightColor = ref.color ?? "yellow";
 	const body = ref.comment || ref.quote;
 	const long = body.length > COMMENT_COLLAPSE_CHARS;
-	const title =
-		alias?.trim() ||
-		(ref.kind === "agent-trace"
-			? t("embed.annotationVisual")
-			: t("embed.annotationHighlight"));
+	const hasQuote = Boolean(ref.quote?.trim());
+	const hasComment = Boolean(ref.comment?.trim());
+	const hasImage = Boolean(ref.kind === "agent-trace" && ref.image?.data);
 
 	return (
-		// biome-ignore lint/a11y/useSemanticElements: card wraps blockquote; native button cannot
+		// biome-ignore lint/a11y/useSemanticElements: body is a large hit target for jump
 		<div
 			role="button"
 			tabIndex={0}
 			className={cn(
-				"block w-full cursor-pointer rounded-md px-3 py-2.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50",
+				"block w-full cursor-pointer px-3 py-2 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50",
 				className,
 			)}
 			onClick={(e) => {
@@ -255,13 +258,9 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				}
 			}}
 		>
+			{/* Meta row: color/page only — title lives in the shared embed header */}
 			<div className="flex items-center gap-1.5">
-				{ref.kind === "agent-trace" ? (
-					<ScanSearch
-						className="size-3.5 shrink-0 text-muted-foreground"
-						aria-hidden
-					/>
-				) : (
+				{ref.kind === "agent-trace" ? null : (
 					<span
 						className={cn(
 							"size-2 shrink-0 rounded-full",
@@ -270,15 +269,12 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 						aria-hidden
 					/>
 				)}
-				<span className="min-w-0 truncate font-medium text-[11px] text-foreground/90">
-					{title}
-				</span>
 				<span className="shrink-0 font-medium text-[10px] text-muted-foreground uppercase tracking-wider tabular-nums">
 					{t("embed.annotationPage", { page: ref.page })}
 				</span>
 			</div>
 
-			{ref.quote ? (
+			{hasQuote ? (
 				<blockquote
 					className={cn(
 						"mt-1.5 line-clamp-3 border-l-2 pl-2.5 text-xs leading-relaxed text-muted-foreground",
@@ -289,8 +285,8 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</blockquote>
 			) : null}
 
-			{ref.comment ? (
-				<div className="mt-2">
+			{hasComment ? (
+				<div className={cn(hasQuote ? "mt-2" : "mt-1.5")}>
 					<p
 						className={cn(
 							"whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed",
@@ -325,11 +321,14 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</div>
 			) : null}
 
-			{ref.kind === "agent-trace" && ref.image?.data ? (
+			{hasImage ? (
 				<img
-					src={`data:${ref.image.mimeType || "image/png"};base64,${ref.image.data}`}
+					src={`data:${ref.image?.mimeType || "image/png"};base64,${ref.image?.data}`}
 					alt=""
-					className="mt-2 max-h-28 rounded border border-border/60 object-contain"
+					className={cn(
+						"max-h-36 w-full rounded border border-border/60 object-contain",
+						hasQuote || hasComment ? "mt-2" : "mt-1.5",
+					)}
 				/>
 			) : null}
 		</div>
