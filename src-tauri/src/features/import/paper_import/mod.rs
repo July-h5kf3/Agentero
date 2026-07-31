@@ -47,7 +47,10 @@ pub enum AssetsPolicy<'a> {
         progress: AssetProgressContext<'a>,
     },
     /// Copy a local PDF into the folder root as `{id}.pdf` (+ liteparse).
-    CopyPdf { src: &'a Path },
+    CopyPdf {
+        src: &'a Path,
+        progress: AssetProgressContext<'a>,
+    },
     /// Shell + catalog only; the adapter downloads in the background
     /// (Connector must answer inside the browser extension's ~15s timeout).
     Deferred,
@@ -141,7 +144,7 @@ pub async fn paper_commit(
     }
     fs::create_dir_all(&paper_dir)?;
 
-    if let AssetsPolicy::CopyPdf { src } = &opts.assets {
+    if let AssetsPolicy::CopyPdf { src, .. } = &opts.assets {
         // PDF lives in the folder root as `{id}.pdf` (same as downloaded PDFs).
         fs::copy(src, paper_dir.join(format!("{}.pdf", meta.id)))
             .map_err(|e| AppError::message(format!("copy PDF failed: {e}")))?;
@@ -170,15 +173,15 @@ pub async fn paper_commit(
                 r.messages.push(format!("asset download error: {e}"));
                 r
             });
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets).await;
+            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
-        AssetsPolicy::CopyPdf { .. } => {
+        AssetsPolicy::CopyPdf { progress, .. } => {
             let mut assets = AssetDownloadResult {
                 pdf: true,
                 ..Default::default()
             };
-            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets).await;
+            merge_liteparse(vault, &path_rel, &paper_dir, &mut assets, progress).await;
             (assets, false)
         }
         AssetsPolicy::Deferred => (AssetDownloadResult::default(), true),
@@ -204,11 +207,17 @@ async fn merge_liteparse(
     path_rel: &str,
     paper_dir: &Path,
     assets: &mut AssetDownloadResult,
+    progress: AssetProgressContext<'_>,
 ) {
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        vault, path_rel, paper_dir,
-    )
-    .await;
+    progress.emit_phase("parse");
+    let parse =
+        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
+            vault,
+            path_rel,
+            paper_dir,
+            progress.task_id,
+        )
+        .await;
     assets.paper_md = parse.paper_md;
     for m in parse.messages {
         assets.messages.push(m);

@@ -211,6 +211,12 @@ import {
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
+import {
+	formatPdfZoomPercentage,
+	PDF_ZOOM_MAX,
+	PDF_ZOOM_MIN,
+	parsePdfZoomPercentage,
+} from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
 import { openRightTab, requestOpenAgentSession } from "@/lib/shell/ui-store";
 import {
@@ -220,9 +226,6 @@ import {
 	runTranslate,
 } from "@/lib/translate";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
-
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3;
 
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
@@ -361,8 +364,8 @@ export function PdfViewer(props: PdfViewerProps) {
 			createPluginRegistration(TilingPluginPackage),
 			createPluginRegistration(ZoomPluginPackage, {
 				defaultZoomLevel: ZoomMode.FitWidth,
-				minZoom: ZOOM_MIN,
-				maxZoom: ZOOM_MAX,
+				minZoom: PDF_ZOOM_MIN,
+				maxZoom: PDF_ZOOM_MAX,
 			}),
 			createPluginRegistration(InteractionManagerPluginPackage),
 			createPluginRegistration(SelectionPluginPackage),
@@ -720,9 +723,11 @@ function PdfViewerInner({
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
 	const zoomLevel = zoomState.currentZoomLevel || 1;
-	const zoomPct = Math.round(zoomLevel * 100);
 
 	const [pageField, setPageField] = useState("1");
+	const [zoomField, setZoomField] = useState(() =>
+		formatPdfZoomPercentage(zoomLevel),
+	);
 	const [highlights, setHighlights] = useState<PdfHighlight[]>([]);
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
@@ -765,6 +770,8 @@ function PdfViewerInner({
 	const hostRef = useRef<HTMLDivElement>(null);
 	const zoomRef = useRef(zoomLevel);
 	zoomRef.current = zoomLevel;
+	const zoomFieldFocusedRef = useRef(false);
+	const zoomFieldCancelRef = useRef(false);
 	const highlightsRef = useRef(highlights);
 	highlightsRef.current = highlights;
 	const threadsRef = useRef(threads);
@@ -805,6 +812,25 @@ function PdfViewerInner({
 			cancelled = true;
 		};
 	}, [docId, vaultPath, paperRelPath]);
+
+	useEffect(() => {
+		if (!zoomFieldFocusedRef.current) {
+			setZoomField(formatPdfZoomPercentage(zoomLevel));
+		}
+	}, [zoomLevel]);
+
+	const commitZoomField = useCallback(
+		(value: string) => {
+			const requested = parsePdfZoomPercentage(value);
+			if (requested == null) {
+				setZoomField(formatPdfZoomPercentage(zoomLevel));
+				return;
+			}
+			zoom?.requestZoom(requested);
+			setZoomField(formatPdfZoomPercentage(requested));
+		},
+		[zoom, zoomLevel],
+	);
 
 	const askSummaries = useMemo(
 		() => toSummaries(threads.filter(threadHasUserQuestion)),
@@ -2488,7 +2514,7 @@ function PdfViewerInner({
 									size="icon-xs"
 									variant="ghost"
 									aria-label={t("pdf.zoomOut")}
-									disabled={zoomLevel <= ZOOM_MIN}
+									disabled={zoomLevel <= PDF_ZOOM_MIN}
 									onClick={() => zoom?.zoomOut()}
 								>
 									<Minus className="size-3.5" />
@@ -2496,15 +2522,47 @@ function PdfViewerInner({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">{t("pdf.zoomOut")}</TooltipContent>
 						</Tooltip>
-						<button
-							type="button"
-							className="min-w-11 px-1 text-center font-medium text-muted-foreground text-xs tabular-nums hover:text-foreground"
-							aria-label={t("pdf.zoomReset")}
-							title={t("pdf.zoomReset")}
-							onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}
-						>
-							{zoomPct}%
-						</button>
+						<div className="relative">
+							<input
+								type="text"
+								inputMode="decimal"
+								maxLength={6}
+								value={zoomField}
+								aria-label={t("pdf.zoomPercentage")}
+								title={t("pdf.zoomPercentage")}
+								className="h-6 w-12 rounded border border-transparent bg-transparent py-0 pr-3.5 pl-1 text-right font-medium text-muted-foreground text-xs tabular-nums outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+								onChange={(event) => setZoomField(event.target.value)}
+								onFocus={(event) => {
+									zoomFieldFocusedRef.current = true;
+									event.currentTarget.select();
+								}}
+								onBlur={(event) => {
+									zoomFieldFocusedRef.current = false;
+									if (zoomFieldCancelRef.current) {
+										zoomFieldCancelRef.current = false;
+										setZoomField(formatPdfZoomPercentage(zoomLevel));
+										return;
+									}
+									commitZoomField(event.currentTarget.value);
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Enter") {
+										event.preventDefault();
+										event.currentTarget.blur();
+									} else if (event.key === "Escape") {
+										event.preventDefault();
+										zoomFieldCancelRef.current = true;
+										event.currentTarget.blur();
+									}
+								}}
+							/>
+							<span
+								aria-hidden="true"
+								className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground text-xs"
+							>
+								%
+							</span>
+						</div>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
@@ -2512,7 +2570,7 @@ function PdfViewerInner({
 									size="icon-xs"
 									variant="ghost"
 									aria-label={t("pdf.zoomIn")}
-									disabled={zoomLevel >= ZOOM_MAX}
+									disabled={zoomLevel >= PDF_ZOOM_MAX}
 									onClick={() => zoom?.zoomIn()}
 								>
 									<Plus className="size-3.5" />

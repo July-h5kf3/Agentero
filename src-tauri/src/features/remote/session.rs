@@ -883,6 +883,7 @@ mod tests {
                 parent_dir: "papers".into(),
                 file_paths: vec![pdf_path.to_string_lossy().into()],
                 entries: vec![],
+                task_id: None,
             },
         )
         .await

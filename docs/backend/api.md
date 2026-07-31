@@ -57,7 +57,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 | `agent:completed` | Agent 回答完成 | `{ sessionId, messageId, content, reasoning?, sources, stopReason? }` |
 | `agent:failed` | Agent 调用失败 | `{ sessionId, error }` |
 | `agent:permission-request` | 权限「每次询问」档：ACP 权限请求转交用户 | `{ requestId, sessionId, title, kind?, paths, options: { optionId, name, kind }[] }` |
-| `background-task:progress` | 下载任务的实际字节进度 | `{ taskId, phase, downloadedBytes, totalBytes?, progress? }`；无 `Content-Length` 时 `progress` 为空 |
+| `background-task:progress` | 下载/解析任务进度 | `{ taskId, phase, downloadedBytes, totalBytes?, progress? }`；下载无 `Content-Length` 或进入 `parse` 阶段时 `progress` 为空 |
 
 #### `agent_warm`
 
@@ -888,7 +888,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   ```
 
 - **返回**：`{ ok: true; data: { pdf: boolean; tex: boolean; paperMd: boolean; messages: string[] } }`
-- **行为**：读 catalog 取 `pdf_url` / `arxiv_id` / `doi`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。下载客户端使用**浏览器 UA**（绕开部分出版商 403）；若直链/arXiv 候选都失败且有 `doi`，再查 **Crossref** 取直链 / OA PDF 兜底。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。当传入 `taskId` 且响应提供 `Content-Length` 时，通过 `background-task:progress` 按实际已接收字节数推送百分比；无法得知总大小时只推送不确定进度。
+- **行为**：读 catalog 取 `pdf_url` / `arxiv_id` / `doi`；已有对应文件则跳过；PDF → `{paper}/{id}.pdf`（论文根目录）；arXiv e-print TeX → 解压进 `source/`；无 TeX + 有 PDF + 无 `PAPER.md` → liteparse → `PAPER.md`。下载客户端使用**浏览器 UA**（绕开部分出版商 403）；若直链/arXiv 候选都失败且有 `doi`，再查 **Crossref** 取直链 / OA PDF 兜底。打开 paper 预览时若无本地 PDF 也会自动调用本命令（失败则回退远程 `pdf_url`）。当传入 `taskId` 时，通过 `background-task:progress` 推送下载字节与 `parse` 阶段；liteparse 在可终止的子进程中运行，任务取消时立即终止，120 秒超时后保留已经下载的 PDF，并在结果 `messages` 中说明未生成 `PAPER.md`。
 
 #### `background_task_cancel`
 
@@ -919,11 +919,12 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
       year?: number;
       id?: string;       // 文件夹 slug 偏好；Host 仍会做 -2/-3 去重
     }>;
+    taskId?: string;      // 后台任务 id，用于显示 parse 阶段
   }
   ```
 
 - **返回**：`{ ok: true; data: { papers: LookupImportResult[]; errors: string[] } }`（`errors` 为 `"<文件>: <原因>"`；仅当**全部**失败才整体 `ok:false`）。
-- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → liteparse `PAPER.md`。不覆盖已存在文件夹（slug 去重）。
+- **行为**：每个 PDF → 标题/id 优先用 `entries` 覆盖，否则文件名 stem；复制到 `{slug}.pdf`；写 `NOTES.md` 壳 + catalog（type `pdf`，可含 authors/year）；无 TeX → 隔离运行 liteparse 生成 `PAPER.md`。解析最长等待 120 秒，取消任务会终止当前解析子进程；超时只跳过派生正文，PDF、`NOTES.md` 与 catalog 入库结果继续保留。不覆盖已存在文件夹（slug 去重）。
 
 > **无 TeX 正文生成**：对无本地 TeX 的 paper，`paper_download_assets` / 魔棒入库在下载后自动用 liteparse 从 PDF 生成 `{paper}/PAPER.md` 并写 catalog `body_source` / `body_quality`；不再有独立的 `paper_parse_body` command（**Zap 图标**现用于 paper-reader 精读）。
 

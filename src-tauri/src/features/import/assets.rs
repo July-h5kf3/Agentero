@@ -48,6 +48,27 @@ pub struct AssetProgressContext<'a> {
     pub task_id: Option<&'a str>,
 }
 
+impl AssetProgressContext<'_> {
+    /// Emit a phase transition that has no meaningful byte-level progress.
+    pub fn emit_phase(&self, phase: &str) {
+        let (Some(app), Some(task_id)) = (self.app, self.task_id) else {
+            return;
+        };
+        let _ = app.emit(
+            "background-task:progress",
+            AssetDownloadProgress {
+                task_id: task_id.to_string(),
+                phase: phase.to_string(),
+                downloaded_bytes: 0,
+                total_bytes: None,
+                progress: None,
+                current_count: None,
+                total_count: None,
+            },
+        );
+    }
+}
+
 /// True if `source/` (or paper dir) already has a PDF.
 pub fn has_local_pdf(paper_dir: &Path) -> bool {
     walk_has_ext(paper_dir, &["pdf"])
