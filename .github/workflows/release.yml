@@ -257,7 +257,9 @@ jobs:
           NDK_VERSION: ${{ matrix.ndk }}
         run: |
           set -euo pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
+          # `yes` dies with SIGPIPE (141) once sdkmanager stops reading; under
+          # pipefail that would fail the step even when the install succeeded.
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
           echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - name: Setup pnpm
