@@ -163,6 +163,7 @@ import {
 	listPdfVisualTraces,
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
+	traceMessages,
 	tracePin,
 	tracePreview,
 	writePdfVisualTrace,
@@ -1069,6 +1070,7 @@ function PdfViewerInner({
 		onVisualTracesChange?.(visualTraces);
 	}, [visualTraces, onVisualTracesChange]);
 
+	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
 	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
 		const host = hostRef.current;
 		if (!host) return;
@@ -1097,8 +1099,19 @@ function PdfViewerInner({
 			return;
 		}
 		const pageEl = pageElByIndex(host, page - 1);
-		const pt = popoverScreenPoint(pageEl, rects, pin);
-		setCardScreen(pt ?? { x: 80, y: 120 });
+		const pt = popoverScreenPoint(pageEl, rects, pin) ?? { x: 80, y: 120 };
+		// Skip identical coords — avoids re-rendering the open card (and its
+		// input) on every scroll tick when the pin did not actually move.
+		const prev = cardScreenRef.current;
+		if (
+			prev &&
+			Math.round(prev.x) === Math.round(pt.x) &&
+			Math.round(prev.y) === Math.round(pt.y)
+		) {
+			return;
+		}
+		cardScreenRef.current = pt;
+		setCardScreen(pt);
 	}, []);
 
 	const cancelHoverHide = useCallback(() => {
@@ -1127,6 +1140,7 @@ function PdfViewerInner({
 			setVisualCardExpanded(false);
 		}
 		setActiveCard(null);
+		cardScreenRef.current = null;
 		setCardScreen(null);
 		setEditor(null);
 	}, [discardIfEmptyDraft]);
@@ -1447,7 +1461,9 @@ function PdfViewerInner({
 				content,
 				createdAt: now,
 			};
-			const prior = trace.messages ?? [];
+			// Prefer stored transcript; fall back to synthesized comment+answer so
+			// continue never drops the first turn (which looked like "replacing" it).
+			const prior = traceMessages(trace);
 			// Avoid duplicating the seed user message when firstTurn already seeded it.
 			const baseMessages =
 				opts?.firstTurn &&
@@ -1459,9 +1475,11 @@ function PdfViewerInner({
 			const withUser: PdfVisualSessionTrace = {
 				...trace,
 				status: "running",
-				comment: trace.comment || content,
+				// Never overwrite the original annotation comment on follow-ups.
+				comment: trace.comment.trim() || content,
 				messages: baseMessages,
 				updatedAt: now,
+				error: undefined,
 			};
 			upsertVisualTrace(withUser);
 			void persistVisualTrace(withUser);
@@ -1479,19 +1497,27 @@ function PdfViewerInner({
 						messages: baseMessages,
 						latestUserQuestion: content,
 					});
+			// Crop for visual context: first turn uses caller images; follow-ups
+			// re-attach the stored crop because we do NOT session/resume (many
+			// PDF-Ask agents lack resume_session → "Method not found").
+			const cropImages: PromptImage[] | undefined = opts?.images?.length
+				? opts.images
+				: withUser.image?.data
+					? [
+							{
+								data: withUser.image.data,
+								mimeType: withUser.image.mimeType || "image/png",
+							},
+						]
+					: undefined;
 			try {
-				const resumeId =
-					withUser.providerSessionId?.trim() ||
-					(withUser.runtimeSessionId && withUser.runtimeSessionId !== "pending"
-						? withUser.runtimeSessionId
-						: undefined);
+				// Same pattern as PDF Ask: each turn is a fresh runOnce with
+				// history embedded in the prompt — never pass sessionId here.
 				const accepted = await runOnce({
 					prompt,
 					agentId: opts?.agentOpts?.agentId ?? withUser.agentId,
 					modelId: opts?.agentOpts?.modelId,
-					images: opts?.images,
-					// Resume multi-turn when provider session is known; first turn omits.
-					sessionId: opts?.firstTurn ? undefined : resumeId,
+					images: cropImages,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
@@ -1519,7 +1545,35 @@ function PdfViewerInner({
 
 				const sessionId = accepted.sessionId;
 				const unsubs: UnlistenFn[] = [];
+				// Coalesce stream chunks to ~1 React update per frame so the
+				// message list does not thrash the main thread while open.
+				let pendingChunk = "";
+				let streamRaf: number | null = null;
+				const flushStreamChunk = () => {
+					streamRaf = null;
+					if (!pendingChunk) return;
+					const chunk = pendingChunk;
+					pendingChunk = "";
+					setVisualTraces((prev) =>
+						prev.map((tr) => {
+							if (tr.id !== withUser.id) return tr;
+							const msgs = [...(tr.messages ?? [])];
+							const last = msgs[msgs.length - 1];
+							if (last?.id !== assistantId) return tr;
+							msgs[msgs.length - 1] = {
+								...last,
+								content: last.content + chunk,
+							};
+							return { ...tr, messages: msgs };
+						}),
+					);
+				};
 				const cleanup = () => {
+					if (streamRaf != null) {
+						cancelAnimationFrame(streamRaf);
+						streamRaf = null;
+					}
+					if (pendingChunk) flushStreamChunk();
 					for (const u of unsubs) u();
 					if (visualSessionRef.current === sessionId) {
 						visualSessionRef.current = null;
@@ -1530,24 +1584,20 @@ function PdfViewerInner({
 					await listenAgentStream((ev) => {
 						if (ev.sessionId !== sessionId) return;
 						if ((ev.kind ?? "message") === "thought") return;
-						setVisualTraces((prev) =>
-							prev.map((tr) => {
-								if (tr.id !== withUser.id) return tr;
-								const msgs = [...(tr.messages ?? [])];
-								const last = msgs[msgs.length - 1];
-								if (last?.id !== assistantId) return tr;
-								msgs[msgs.length - 1] = {
-									...last,
-									content: last.content + ev.chunk,
-								};
-								return { ...tr, messages: msgs };
-							}),
-						);
+						pendingChunk += ev.chunk;
+						if (streamRaf == null) {
+							streamRaf = requestAnimationFrame(flushStreamChunk);
+						}
 					}),
 				);
 				unsubs.push(
 					await listenAgentCompleted((ev) => {
 						if (ev.sessionId !== sessionId) return;
+						if (streamRaf != null) {
+							cancelAnimationFrame(streamRaf);
+							streamRaf = null;
+						}
+						if (pendingChunk) flushStreamChunk();
 						setVisualTraces((prev) => {
 							const current = prev.find((tr) => tr.id === withUser.id);
 							if (!current) return prev;
@@ -1584,6 +1634,8 @@ function PdfViewerInner({
 						setVisualTraces((prev) => {
 							const current = prev.find((tr) => tr.id === withUser.id);
 							if (!current) return prev;
+							// Drop only the empty streaming assistant bubble; keep
+							// every user turn so multi-turn history is not lost.
 							const failed = failTrace(current, {
 								error: err,
 								assistantMessageId: assistantId,
@@ -1599,6 +1651,8 @@ function PdfViewerInner({
 				const message =
 					e instanceof Error ? e.message : t("pdfAsk.agentFailed");
 				setVisualError(message);
+				// Keep baseMessages (incl. the new user turn) so the failure does
+				// not look like it replaced the first message.
 				const failed = failTrace(withUser, { error: message });
 				upsertVisualTrace(failed);
 				void persistVisualTrace(failed);
@@ -1647,6 +1701,7 @@ function PdfViewerInner({
 			setVisualCardExpanded(true);
 			setVisualError(null);
 			// Use crop screen immediately; placeActiveCard also works via synced ref.
+			cardScreenRef.current = draft.screen;
 			setCardScreen(draft.screen);
 			openCard({ kind: "agent-trace", id: provisional.id });
 
@@ -1695,14 +1750,18 @@ function PdfViewerInner({
 			const card = activeCardRef.current;
 			const traceId = card?.kind === "agent-trace" ? card.id : null;
 			if (!traceId) return;
-			const trace = visualTracesRef.current.find((tr) => tr.id === traceId);
-			if (!trace) return;
 			setVisualCardExpanded(true);
 			void (async () => {
 				try {
 					const resolved = await resolvePdfAskAgent();
 					if (!resolved) return;
-					void sendToVisualTrace(trace, question, {
+					// Re-read after await so we append onto the latest transcript,
+					// not a stale snapshot that could drop the first turn.
+					const latest = visualTracesRef.current.find(
+						(tr) => tr.id === traceId,
+					);
+					if (!latest) return;
+					void sendToVisualTrace(latest, question, {
 						agentOpts: {
 							agentId: resolved.agentId,
 							modelId: resolved.modelId,
@@ -1870,20 +1929,50 @@ function PdfViewerInner({
 				notifyError(t("pdfExplain.traceSessionUnavailable"));
 				return;
 			}
-			const title = trace.comment.trim() || t("pdfExplain.visualAnnotation");
+			const messages = traceMessages(trace);
+			const title =
+				messages.find((m) => m.role === "user")?.content.trim() ||
+				trace.comment.trim() ||
+				t("pdfExplain.visualAnnotation");
 			requestOpenAgentSession({
 				agentId: trace.agentId,
+				// Runtime id is last run only; product key is visualTrace.traceId.
 				runtimeSessionId: trace.runtimeSessionId,
 				providerSessionId: trace.providerSessionId,
 				messageId: trace.messageId,
 				title,
 				prompt: title,
 				answerSnapshot: trace.answerSnapshot,
+				visualTrace: {
+					traceId: trace.id,
+					page: trace.page,
+					comment: trace.comment,
+					paperPath: trace.paperPath,
+					image: trace.image,
+					messages: messages.map((m) => ({ ...m })),
+					status: trace.status,
+				},
 			});
 			hideActiveCard();
 		},
 		[hideActiveCard, t],
 	);
+
+	/** Stable callbacks so VisualTraceCard memo can skip PdfViewer re-renders. */
+	const handleOpenActiveVisualSession = useCallback(() => {
+		const card = activeCardRef.current;
+		if (card?.kind !== "agent-trace") return;
+		const tr = visualTracesRef.current.find((item) => item.id === card.id);
+		if (tr) openVisualTraceSession(tr);
+	}, [openVisualTraceSession]);
+
+	const handleStopVisualSession = useCallback(() => {
+		const sid = visualSessionRef.current;
+		if (!sid) return;
+		void cancelAgentRun(sid).catch(() => undefined);
+		visualSessionRef.current = null;
+		setVisualStreaming(false);
+	}, []);
 
 	const openEditorForAnnotation = useCallback(
 		(id: string) => {
@@ -2256,12 +2345,22 @@ function PdfViewerInner({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor after zoom
 	useEffect(() => {
 		if (!activeCard) return;
+		// Force re-place after zoom even if rounded coords match the previous pin.
+		cardScreenRef.current = null;
 		placeActiveCard(activeCard);
 		if (!scroll) return;
+		let raf: number | null = null;
 		const off = scroll.onScroll(() => {
-			if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+			if (raf != null) return;
+			raf = requestAnimationFrame(() => {
+				raf = null;
+				if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+			});
 		});
-		return () => off();
+		return () => {
+			if (raf != null) cancelAnimationFrame(raf);
+			off();
+		};
 	}, [activeCard, scroll, placeActiveCard, zoomLevel]);
 
 	// Run a debounced full-document search as the query changes.
@@ -3125,21 +3224,13 @@ function PdfViewerInner({
 									streaming={visualStreaming}
 									error={visualError}
 									initialExpanded={visualCardExpanded}
-									onOpenSession={() =>
-										openVisualTraceSession(activeVisualTrace)
-									}
+									onOpenSession={handleOpenActiveVisualSession}
 									onSend={handleVisualContinue}
 									onDelete={handleDeleteVisualTrace}
 									onHide={hideActiveCard}
 									onPointerEnter={cancelHoverHide}
 									onPointerLeave={scheduleHoverHide}
-									onStop={() => {
-										const sid = visualSessionRef.current;
-										if (!sid) return;
-										void cancelAgentRun(sid).catch(() => undefined);
-										visualSessionRef.current = null;
-										setVisualStreaming(false);
-									}}
+									onStop={handleStopVisualSession}
 								/>
 							) : null}
 

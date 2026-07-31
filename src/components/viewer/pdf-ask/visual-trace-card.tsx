@@ -1,5 +1,21 @@
-import { ExternalLink, ScanSearch, Trash2Icon, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	ArrowUpIcon,
+	ExternalLink,
+	ScanSearch,
+	SquareIcon,
+	Trash2Icon,
+	X,
+} from "lucide-react";
+import {
+	type KeyboardEvent,
+	memo,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -7,14 +23,10 @@ import {
 	MessageContent,
 	MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-	PromptInput,
-	PromptInputBody,
-	PromptInputSubmit,
-	PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
+import { useImeGuard } from "@/hooks/use-ime-guard";
 import { cn } from "@/lib/core/utils";
 import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
@@ -44,13 +56,103 @@ type VisualTraceCardProps = {
 };
 
 /**
+ * Lightweight local-state input — intentionally NOT PromptInput.
+ * PromptInput pulls attachments/drag-drop/context providers; combined with
+ * frequent PdfViewer re-renders that made typing feel laggy even when idle.
+ *
+ * memo + local text state: parent stream/list updates must not remount this.
+ */
+const VisualTraceFooter = memo(function VisualTraceFooter({
+	streaming,
+	placeholder,
+	sendLabel,
+	stopLabel,
+	onSend,
+	onHide,
+	onStop,
+	onFocusInput,
+}: {
+	streaming: boolean;
+	placeholder: string;
+	sendLabel: string;
+	stopLabel: string;
+	onSend: (question: string) => void;
+	onHide: () => void;
+	onStop?: () => void;
+	onFocusInput: () => void;
+}) {
+	const [text, setText] = useState("");
+	const { isBlockedByIme, compositionProps } = useImeGuard();
+
+	const submit = useCallback(() => {
+		const q = text.trim();
+		if (streaming || !q) return;
+		onFocusInput();
+		onSend(q);
+		setText("");
+	}, [text, streaming, onFocusInput, onSend]);
+
+	const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (e.key === "Escape") {
+			e.preventDefault();
+			onHide();
+			return;
+		}
+		if (e.key === "Enter" && !e.shiftKey && !isBlockedByIme(e)) {
+			e.preventDefault();
+			submit();
+		}
+	};
+
+	return (
+		<div className="flex w-full items-center gap-1 rounded-full border border-border/80 bg-background px-1.5 py-0.5">
+			<textarea
+				value={text}
+				onChange={(e) => setText(e.currentTarget.value)}
+				placeholder={placeholder}
+				disabled={streaming}
+				rows={1}
+				// Fixed box — no field-sizing-content layout thrash per keystroke.
+				className="min-h-8 max-h-8 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 text-sm leading-5 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+				onFocus={onFocusInput}
+				onKeyDown={onKeyDown}
+				{...compositionProps}
+			/>
+			{streaming ? (
+				<Button
+					type="button"
+					size="icon-xs"
+					variant="secondary"
+					className="shrink-0 rounded-full"
+					aria-label={stopLabel}
+					onClick={() => onStop?.()}
+				>
+					<SquareIcon className="size-3.5" />
+				</Button>
+			) : (
+				<Button
+					type="button"
+					size="icon-xs"
+					className="shrink-0 rounded-full"
+					aria-label={sendLabel}
+					disabled={!text.trim()}
+					onClick={submit}
+				>
+					<ArrowUpIcon className="size-3.5" />
+				</Button>
+			)}
+		</div>
+	);
+});
+
+/**
  * Hover card for one visual mark: compact preview → expand on card hover with
  * message list + continue input. "Open in Agent" sits in the header (top-right).
  *
  * Scroll is manual only — no stick-to-bottom. Pin open keeps the user turn in
  * view; expanding preserves scrollTop so the answer is not jumped to.
  */
-export function VisualTraceCard({
+export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
 	screen,
 	streaming = false,
@@ -77,13 +179,34 @@ export function VisualTraceCard({
 	const scrolledForTraceRef = useRef<string | null>(null);
 	const scrollPortRef = useRef<HTMLDivElement | null>(null);
 	const scrollTopBeforeExpandRef = useRef(0);
+	const lastStreamingId =
+		streaming && messages[messages.length - 1]?.role === "assistant"
+			? messages[messages.length - 1]?.id
+			: null;
 
+	// Blob URL once per crop — avoid re-binding multi-MB data: URIs on re-render.
 	const imageSrc = useMemo(() => {
 		const image = trace.image;
 		if (!image?.data) return null;
 		const mime = image.mimeType || "image/png";
-		return `data:${mime};base64,${image.data}`;
+		try {
+			const binary = atob(image.data);
+			const bytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i++) {
+				bytes[i] = binary.charCodeAt(i);
+			}
+			return URL.createObjectURL(new Blob([bytes], { type: mime }));
+		} catch {
+			return `data:${mime};base64,${image.data}`;
+		}
 	}, [trace.image]);
+
+	useEffect(() => {
+		if (!imageSrc?.startsWith("blob:")) return;
+		return () => {
+			URL.revokeObjectURL(imageSrc);
+		};
+	}, [imageSrc]);
 
 	// Pin open: place the user message in view once (never stick to the bottom).
 	useEffect(() => {
@@ -96,7 +219,6 @@ export function VisualTraceCard({
 		requestAnimationFrame(() => {
 			const portTop = port.getBoundingClientRect().top;
 			const elTop = el.getBoundingClientRect().top;
-			// Keep a little padding above the user bubble.
 			port.scrollTop += elTop - portTop - 8;
 		});
 	}, [trace.id, userAnchorId]);
@@ -105,19 +227,42 @@ export function VisualTraceCard({
 		if (initialExpanded) setExpanded(true);
 	}, [initialExpanded]);
 
-	const expandCard = () => {
-		if (expanded) return;
-		const port = scrollPortRef.current;
-		if (port) scrollTopBeforeExpandRef.current = port.scrollTop;
-		setExpanded(true);
-		// After layout grows, restore scroll so we do not jump to the bottom.
-		requestAnimationFrame(() => {
-			const next = scrollPortRef.current;
-			if (next) next.scrollTop = scrollTopBeforeExpandRef.current;
+	const expandCard = useCallback(() => {
+		setExpanded((prev) => {
+			if (prev) return prev;
+			const port = scrollPortRef.current;
+			if (port) scrollTopBeforeExpandRef.current = port.scrollTop;
+			requestAnimationFrame(() => {
+				const next = scrollPortRef.current;
+				if (next) next.scrollTop = scrollTopBeforeExpandRef.current;
+			});
+			return true;
 		});
-	};
+	}, []);
 
 	const size = expanded ? EXPANDED : COMPACT;
+
+	const actions = useMemo(
+		() => [
+			{
+				label: t("pdfExplain.traceOpenSession"),
+				onClick: onOpenSession,
+				icon: (<ExternalLink className="size-3.5" />) as ReactNode,
+			},
+			{
+				label: t("pdfExplain.traceDelete"),
+				onClick: onDelete,
+				icon: (<Trash2Icon className="size-3.5" />) as ReactNode,
+				destructive: true,
+			},
+			{
+				label: t("pdfExplain.traceHide"),
+				onClick: onHide,
+				icon: (<X className="size-3.5" />) as ReactNode,
+			},
+		],
+		[t, onOpenSession, onDelete, onHide],
+	);
 
 	return (
 		<SelectionCard
@@ -143,63 +288,21 @@ export function VisualTraceCard({
 				onPointerLeave?.();
 			}}
 			bodyClassName="min-h-0 overflow-hidden p-0"
-			className={cn(
-				"transition-[width,max-height,height] duration-200 ease-out",
-			)}
-			actions={[
-				{
-					label: t("pdfExplain.traceOpenSession"),
-					onClick: onOpenSession,
-					icon: <ExternalLink className="size-3.5" />,
-				},
-				{
-					label: t("pdfExplain.traceDelete"),
-					onClick: onDelete,
-					icon: <Trash2Icon className="size-3.5" />,
-					destructive: true,
-				},
-				{
-					label: t("pdfExplain.traceHide"),
-					onClick: onHide,
-					icon: <X className="size-3.5" />,
-				},
-			]}
+			// Light size transition for compact → expanded affordance. Footer is
+			// memoized so the animation does not thrash the textarea.
+			className="origin-top-left transition-[width,height,max-height] duration-150 ease-out"
+			actions={actions}
 			footer={
-				<PromptInput
-					key={trace.id}
-					className="w-full rounded-full border-border/80 bg-background shadow-none"
-					inputGroupClassName="overflow-visible"
-					onSubmit={({ text }) => {
-						const q = text.trim();
-						if (streaming || !q) return;
-						expandCard();
-						onSend(q);
-					}}
-				>
-					<PromptInputBody>
-						<div className="flex w-full items-center gap-1 px-1.5 py-0.5">
-							<PromptInputTextarea
-								placeholder={t("pdfExplain.traceContinuePlaceholder")}
-								disabled={streaming}
-								rows={1}
-								className="min-h-8 max-h-8 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 text-sm leading-5 shadow-none focus-visible:ring-0"
-								onFocus={() => expandCard()}
-								onKeyDown={(e) => {
-									if (e.key === "Escape") {
-										e.preventDefault();
-										onHide();
-									}
-								}}
-							/>
-							<PromptInputSubmit
-								className="shrink-0 rounded-full"
-								size="icon-xs"
-								status={streaming ? "streaming" : "ready"}
-								onStop={streaming ? onStop : undefined}
-							/>
-						</div>
-					</PromptInputBody>
-				</PromptInput>
+				<VisualTraceFooter
+					streaming={streaming}
+					placeholder={t("pdfExplain.traceContinuePlaceholder")}
+					sendLabel={t("pdfExplain.traceSend")}
+					stopLabel={t("pdfExplain.traceStop")}
+					onSend={onSend}
+					onHide={onHide}
+					onStop={onStop}
+					onFocusInput={expandCard}
+				/>
 			}
 		>
 			<div
@@ -221,9 +324,10 @@ export function VisualTraceCard({
 							src={imageSrc}
 							alt={t("pdfExplain.annotationPreviewAlt", { page: trace.page })}
 							className={cn(
-								"w-full rounded-md border border-border/70 bg-muted/30 object-contain transition-[max-height] duration-200",
+								"w-full rounded-md border border-border/70 bg-muted/30 object-contain",
 								expanded ? "max-h-28" : "max-h-16",
 							)}
+							draggable={false}
 						/>
 					) : null}
 					<p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider tabular-nums">
@@ -236,8 +340,8 @@ export function VisualTraceCard({
 					) : (
 						messages.map((m) => {
 							const from = m.role === "user" ? "user" : "assistant";
-							const isEmptyAssistant =
-								from === "assistant" && !m.content.trim() && streaming;
+							const isLive = from === "assistant" && m.id === lastStreamingId;
+							const isEmptyAssistant = isLive && !m.content.trim();
 							const clamp =
 								!expanded && from === "assistant"
 									? "line-clamp-4"
@@ -264,21 +368,10 @@ export function VisualTraceCard({
 												{t("pdfExplain.traceThinking")}
 											</Shimmer>
 										) : m.content.trim() ? (
-											expanded ? (
-												from === "assistant" ? (
-													<MessageResponse
-														isAnimating={
-															streaming &&
-															m.id === messages[messages.length - 1]?.id
-														}
-													>
-														{m.content}
-													</MessageResponse>
-												) : (
-													<span className="whitespace-pre-wrap break-words">
-														{m.content}
-													</span>
-												)
+											// Live stream: plain text only. Streamdown after the
+											// turn settles (math/mermaid parse is expensive).
+											expanded && from === "assistant" && !isLive ? (
+												<MessageResponse>{m.content}</MessageResponse>
 											) : (
 												<span className="whitespace-pre-wrap break-words">
 													{m.content}
@@ -304,4 +397,4 @@ export function VisualTraceCard({
 			</div>
 		</SelectionCard>
 	);
-}
+});

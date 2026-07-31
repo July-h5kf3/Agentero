@@ -180,16 +180,21 @@ export function failTrace(
 	if (typeof input.answerSnapshot === "string") {
 		next.answerSnapshot = input.answerSnapshot;
 	}
-	// Drop empty streaming assistant bubble on failure.
+	// Drop only an empty (or still-streaming) assistant bubble on failure.
+	// Never drop user turns — multi-turn history must survive a failed continue.
 	if (trace.messages?.length) {
 		const messages = [...trace.messages];
 		const last = messages[messages.length - 1];
 		const dropId = input.assistantMessageId;
-		if (
+		const isTargetAssistant =
 			last?.role === "assistant" &&
-			(!last.content.trim() || (dropId && last.id === dropId))
-		) {
+			(!dropId || last.id === dropId) &&
+			!last.content.trim();
+		if (isTargetAssistant) {
 			messages.pop();
+			next.messages = messages;
+		} else {
+			// Explicitly keep the full transcript (incl. the latest user turn).
 			next.messages = messages;
 		}
 	}

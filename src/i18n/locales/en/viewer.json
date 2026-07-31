@@ -66,6 +66,8 @@
 		"traceContinuePlaceholder": "Continue this conversation…",
 		"traceEmptyMessages": "No messages yet. Type below to ask about this region.",
 		"traceThinking": "Thinking…",
+		"traceSend": "Send",
+		"traceStop": "Stop",
 		"traceSessionUnavailable": "This annotation session is not ready yet."
 	},
 	"annotations": {

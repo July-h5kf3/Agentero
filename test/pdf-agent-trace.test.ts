@@ -11,8 +11,10 @@ import {
 	visualContextStore,
 } from "@/lib/agent/visual-context-store";
 import {
+	buildChatLinesFromVisualTrace,
 	buildVisualAnnotationsPrompt,
 	buildVisualTraceContinuePrompt,
+	buildVisualTraceHistoryItem,
 	completeTrace,
 	createRunningTraces,
 	failTrace,
@@ -20,6 +22,7 @@ import {
 	traceMessages,
 	tracePin,
 	tracePreview,
+	visualTraceHistoryId,
 } from "@/lib/pdf/agent-trace";
 
 const rect = { x: 0.1, y: 0.2, w: 0.4, h: 0.15 };
@@ -198,7 +201,11 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(marks[0]?.messages?.[0]?.role).toBe("user");
 		expect(marks[0]?.messages?.[0]?.content).toBe("first");
 
-		const completed = completeTrace(marks[0]!, {
+		const first = marks[0];
+		const second = marks[1];
+		expect(first && second).toBeTruthy();
+		if (!first || !second) return;
+		const completed = completeTrace(first, {
 			providerSessionId: "prov-1",
 			answerSnapshot: "## Annotation 1\nok",
 			sources: ["uri:1"],
@@ -207,9 +214,89 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(completed.providerSessionId).toBe("prov-1");
 		expect(completed.messages?.some((m) => m.role === "assistant")).toBe(true);
 
-		const failed = failTrace(marks[1]!, { error: "timeout" });
+		const failed = failTrace(second, { error: "timeout" });
 		expect(failed.status).toBe("failed");
 		expect(failed.error).toBe("timeout");
+		// First user seed must survive failure (multi-turn continue).
+		expect(failed.messages?.map((m) => m.content)).toEqual(["second"]);
+	});
+
+	it("failTrace keeps prior turns and only drops empty assistant bubble", () => {
+		const [base] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "agent-1",
+			runtimeSessionId: "rt-1",
+			messageId: "msg-1",
+			items: [{ page: 1, rects: [rect], comment: "first", image }],
+		});
+		expect(base).toBeDefined();
+		if (!base) return;
+		const withReply = completeTrace(base, {
+			answerSnapshot: "answer one",
+			assistantMessageId: "asst-1",
+		});
+		// Simulate continue: user2 + empty streaming assistant.
+		const mid = {
+			...withReply,
+			status: "running" as const,
+			messages: [
+				...(withReply.messages ?? []),
+				{
+					id: "user-2",
+					role: "user" as const,
+					content: "follow up",
+					createdAt: "2026-01-01T00:02:00.000Z",
+				},
+				{
+					id: "asst-2",
+					role: "assistant" as const,
+					content: "",
+					createdAt: "2026-01-01T00:02:01.000Z",
+				},
+			],
+		};
+		const failed = failTrace(mid, {
+			error: "resume_session: Method not found",
+			assistantMessageId: "asst-2",
+		});
+		expect(failed.messages?.map((m) => m.content)).toEqual([
+			"first",
+			"answer one",
+			"follow up",
+		]);
+		expect(failed.error).toContain("resume_session");
+	});
+
+	it("continue prompt embeds history without requiring session resume", () => {
+		const prompt = buildVisualTraceContinuePrompt({
+			page: 3,
+			comment: "first",
+			messages: [
+				{
+					id: "u1",
+					role: "user",
+					content: "first",
+					createdAt: "t1",
+				},
+				{
+					id: "a1",
+					role: "assistant",
+					content: "answer one",
+					createdAt: "t2",
+				},
+				{
+					id: "u2",
+					role: "user",
+					content: "follow up",
+					createdAt: "t3",
+				},
+			],
+			latestUserQuestion: "follow up",
+		});
+		expect(prompt).toContain("Earlier turns");
+		expect(prompt).toContain("answer one");
+		expect(prompt).toContain("follow up");
+		expect(prompt).toContain("Page: 3");
 	});
 
 	it("round-trips create → complete → parse", () => {
@@ -230,7 +317,8 @@ describe("agent-trace schema and lifecycle", () => {
 			createdAt: "2026-01-01T00:00:00.000Z",
 		});
 		expect(running).toBeDefined();
-		const completed = completeTrace(running!, {
+		if (!running) return;
+		const completed = completeTrace(running, {
 			providerSessionId: "p",
 			answerSnapshot: "answer",
 			updatedAt: "2026-01-01T00:01:00.000Z",
@@ -301,5 +389,77 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(prompt).toContain("Original annotation comment: explain the figure");
 		expect(prompt).toContain("Assistant: It shows accuracy.");
 		expect(prompt).toContain("What about the blue line?");
+	});
+
+	it("builds Open-in-Agent lines with multi-turn + image chip", () => {
+		const messages = [
+			{
+				id: "u1",
+				role: "user" as const,
+				content: "这里最值得读的是什么?",
+				createdAt: "t1",
+			},
+			{
+				id: "a1",
+				role: "assistant" as const,
+				content: "方法段落。",
+				createdAt: "t2",
+			},
+			{
+				id: "u2",
+				role: "user" as const,
+				content: "还有呢?",
+				createdAt: "t3",
+			},
+			{
+				id: "a2",
+				role: "assistant" as const,
+				content: "实验设置。",
+				createdAt: "t4",
+			},
+		];
+		const lines = buildChatLinesFromVisualTrace({
+			traceId: "tr1",
+			page: 2,
+			comment: "这里最值得读的是什么?",
+			paperPath: "papers/a",
+			image,
+			messages,
+		});
+		expect(lines).toHaveLength(4);
+		expect(lines[0]).toMatchObject({
+			kind: "user",
+			text: "这里最值得读的是什么?",
+		});
+		if (lines[0]?.kind === "user") {
+			expect(lines[0].visualAnnotations).toHaveLength(1);
+			expect(lines[0].visualAnnotations?.[0]?.image.data).toBe("aaa");
+			expect(lines[0].visualAnnotations?.[0]?.page).toBe(2);
+		}
+		// Chip only on first user turn.
+		if (lines[2]?.kind === "user") {
+			expect(lines[2].visualAnnotations).toBeUndefined();
+		}
+		const history = buildVisualTraceHistoryItem({
+			trace: {
+				id: "tr1",
+				page: 2,
+				comment: "这里最值得读的是什么?",
+				paperPath: "papers/a",
+				image,
+				agentId: "agent-1",
+				runtimeSessionId: "rt-last",
+				providerSessionId: "prov",
+				status: "completed",
+				messages,
+			},
+			messages,
+			title: "这里最值得读的是什么?",
+			agentName: "Agent",
+			startedAt: "now",
+		});
+		expect(history.id).toBe(visualTraceHistoryId("tr1"));
+		expect(history.lines).toHaveLength(4);
+		expect(history.id).not.toBe("rt-last");
 	});
 });

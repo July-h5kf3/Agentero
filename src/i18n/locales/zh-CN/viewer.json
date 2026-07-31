@@ -66,6 +66,8 @@
 		"traceContinuePlaceholder": "继续对话…",
 		"traceEmptyMessages": "还没有消息。在下方输入即可针对该区域提问。",
 		"traceThinking": "思考中…",
+		"traceSend": "发送",
+		"traceStop": "停止",
 		"traceSessionUnavailable": "该批注会话尚未就绪。"
 	},
 	"annotations": {
