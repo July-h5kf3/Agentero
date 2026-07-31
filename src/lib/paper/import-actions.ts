@@ -251,11 +251,12 @@ export async function importLocalPdf(opts?: {
 	try {
 		const result = await runBackgroundTask(
 			{ kind: "import", title: i18n.t("app:tasks.importPdf") },
-			async ({ setDetail }) => {
+			async ({ id, setDetail }) => {
 				const r = await importLocalPdfs({
 					vaultRoot: vaultPath,
 					parentDir: opts?.parentDir ?? currentLookupParentDir(),
 					entries: opts?.entries,
+					progressTaskId: id,
 				});
 				if (!r) return null;
 				setDetail(
@@ -278,6 +279,7 @@ export async function importLocalPdf(opts?: {
 			}
 		}
 	} catch (e) {
+		if (isBackgroundTaskCancelledError(e)) return;
 		notifyError(e instanceof Error ? e.message : String(e));
 	} finally {
 		setLibraryIoBusy(null);

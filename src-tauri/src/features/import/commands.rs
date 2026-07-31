@@ -109,29 +109,34 @@ pub async fn paper_download_assets(
 /// Import local PDF file(s) into the vault as paper folders (copy + catalog + liteparse).
 #[tauri::command]
 pub async fn paper_import_local_pdf(
+    app: tauri::AppHandle,
     registry: State<'_, Arc<RemoteRegistry>>,
     args: ImportLocalPdfArgs,
 ) -> Result<ApiResult<ImportLocalPdfResult>, String> {
     let n = args.file_paths.len();
     let op = OpTimer::start_with("paper_import_local_pdf", format!("count={n}"));
-    if let Some(session_id) = parse_remote_handle(&args.vault_path) {
+    let task_id = args.task_id.clone();
+    let result = if let Some(session_id) = parse_remote_handle(&args.vault_path) {
         let session = match registry.get(session_id).await {
             Ok(s) => s,
             Err(e) => {
+                if let Some(task_id) = task_id.as_deref() {
+                    crate::features::agent::background_tasks::finish(task_id);
+                }
                 op.finish_err(&e);
                 return Ok(crate::core::error::map_err(e));
             }
         };
-        return Ok(op.finish_result_ok_extra(
-            import_bridge::import_local_pdfs_remote(session, args).await,
-            |r| format!("imported={} errors={}", r.papers.len(), r.errors.len()),
-        ));
+        import_bridge::import_local_pdfs_remote(session, args).await
+    } else {
+        super::import_local_pdfs(args, Some(&app)).await
+    };
+    if let Some(task_id) = task_id.as_deref() {
+        crate::features::agent::background_tasks::finish(task_id);
     }
-    Ok(
-        op.finish_result_ok_extra(super::import_local_pdfs(args).await, |r| {
-            format!("imported={} errors={}", r.papers.len(), r.errors.len())
-        }),
-    )
+    Ok(op.finish_result_ok_extra(result, |r| {
+        format!("imported={} errors={}", r.papers.len(), r.errors.len())
+    }))
 }
 
 /// Stage a path-less OS drop (File bytes as base64) into `~/.agentero/import-tmp/`.

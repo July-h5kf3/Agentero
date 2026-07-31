@@ -204,6 +204,9 @@ fn init_logging() {
 }
 
 fn main() -> StdExitCode {
+    if let Some(status) = agentero_lib::features::import::pdf_parse::try_run_pdf_parse_worker() {
+        return StdExitCode::from(status as u8);
+    }
     init_logging();
 
     // Apply color choice before parse so `--help` / usage errors use the same styles.

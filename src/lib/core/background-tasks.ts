@@ -77,6 +77,7 @@ function formatBytes(bytes: number): string {
 function phaseLabel(phase: string): string {
 	if (phase === "pdf") return i18n.t("app:tasks.downloadPhasePdf");
 	if (phase === "tex") return i18n.t("app:tasks.downloadPhaseTex");
+	if (phase === "parse") return i18n.t("app:tasks.downloadPhaseParse");
 	return i18n.t("app:tasks.downloadPhaseAsset");
 }
 
@@ -274,6 +275,13 @@ async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
 			if (event.payload.taskId !== id) return;
 			const { downloadedBytes, totalBytes, currentCount, totalCount } =
 				event.payload;
+			if (event.payload.phase === "parse") {
+				updateBackgroundTask(id, {
+					progress: null,
+					detail: phaseLabel(event.payload.phase),
+				});
+				return;
+			}
 			if (currentCount != null && totalCount != null) {
 				updateBackgroundTask(id, {
 					progress: event.payload.progress,

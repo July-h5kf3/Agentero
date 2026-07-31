@@ -243,6 +243,8 @@ export async function importLocalPdfs(opts: {
 	filePaths?: string[];
 	/** Preferred: path + optional title/authors/year/id from the confirm dialog. */
 	entries?: LocalPdfImportEntry[];
+	/** Background task receiving the host parse phase. */
+	progressTaskId?: string;
 }): Promise<LocalPdfImportResult | null> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("sidebar:lookup.desktopOnly"));
@@ -274,6 +276,7 @@ export async function importLocalPdfs(opts: {
 				parentDir: opts.parentDir.replace(/\\/g, "/"),
 				filePaths: [],
 				entries,
+				taskId: opts.progressTaskId,
 			},
 		},
 		{ fallback: i18n.t("sidebar:lookup.fetchFailed") },

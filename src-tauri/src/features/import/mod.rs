@@ -128,6 +128,9 @@ pub struct ImportLocalPdfArgs {
     /// Preferred: path + optional title/authors/year/id from the confirm dialog.
     #[serde(default)]
     pub entries: Vec<LocalPdfImportEntry>,
+    /// Frontend background-task id for parse-phase progress.
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -531,10 +534,19 @@ pub async fn download_paper_assets_with_progress(
     }
 
     // After download: no TeX + has PDF → liteparse PAPER.md
-    let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
-        &vault, &path_rel, &paper_dir,
-    )
-    .await;
+    let parse_progress = AssetProgressContext {
+        app,
+        task_id: args.task_id.as_deref(),
+    };
+    parse_progress.emit_phase("parse");
+    let parse =
+        crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
+            &vault,
+            &path_rel,
+            &paper_dir,
+            args.task_id.as_deref(),
+        )
+        .await;
     result.paper_md = parse.paper_md;
     for m in parse.messages {
         result.messages.push(m);
@@ -594,13 +606,17 @@ pub fn stage_import_file(args: StageImportFileArgs) -> Result<StageImportFileRes
 /// Import one or more local PDF files as paper folders (copy + catalog + liteparse).
 /// Filename-derived title/id by default; optional per-file metadata overrides.
 /// Each PDF becomes `{parent}/{slug}/{slug}.pdf`.
-pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPdfResult, AppError> {
+pub async fn import_local_pdfs(
+    args: ImportLocalPdfArgs,
+    app: Option<&tauri::AppHandle>,
+) -> Result<ImportLocalPdfResult, AppError> {
     let vault = PathBuf::from(args.vault_path.trim());
     if !vault.is_dir() {
         return Err(AppError::message("vault path is not a directory"));
     }
     let parent_rel = normalize_parent_dir(&args.parent_dir)?;
 
+    let task_id = args.task_id.clone();
     let entries: Vec<LocalPdfImportEntry> = if !args.entries.is_empty() {
         args.entries
     } else {
@@ -620,7 +636,17 @@ pub async fn import_local_pdfs(args: ImportLocalPdfArgs) -> Result<ImportLocalPd
     let mut papers_out = Vec::new();
     let mut errors = Vec::new();
     for entry in &entries {
-        match import_one_local_pdf(&vault, &parent_rel, entry).await {
+        match import_one_local_pdf(
+            &vault,
+            &parent_rel,
+            entry,
+            AssetProgressContext {
+                app,
+                task_id: task_id.as_deref(),
+            },
+        )
+        .await
+        {
             Ok(r) => papers_out.push(r),
             Err(e) => {
                 let name = Path::new(entry.file_path.trim())
@@ -661,6 +687,7 @@ async fn import_one_local_pdf(
     vault: &Path,
     parent_rel: &str,
     entry: &LocalPdfImportEntry,
+    progress: AssetProgressContext<'_>,
 ) -> Result<LookupImportResult, AppError> {
     use crate::features::import::paper_import::{
         paper_commit, AssetsPolicy, DedupePolicy, PaperCommitOptions,
@@ -714,7 +741,10 @@ async fn import_one_local_pdf(
             vault,
             parent_dir: parent_rel,
             dedupe: DedupePolicy::None,
-            assets: AssetsPolicy::CopyPdf { src: &src },
+            assets: AssetsPolicy::CopyPdf {
+                src: &src,
+                progress,
+            },
             translate_abstract: true,
             fresh_timestamps: false,
         },

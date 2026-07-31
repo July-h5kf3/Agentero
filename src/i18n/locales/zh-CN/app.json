@@ -201,6 +201,7 @@
 		"downloadProgress": "{{current}} / {{total}}",
 		"downloadPhasePdf": "PDF",
 		"downloadPhaseTex": "TeX 源码",
+		"downloadPhaseParse": "正在解析 PDF",
 		"downloadPhaseAsset": "资源",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",

@@ -11,10 +11,19 @@ use liteparse::config::{ImageMode, LiteParseConfig, OutputFormat};
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 use liteparse::LiteParse;
 use serde::{Deserialize, Serialize};
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use std::process::Stdio;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+use std::time::Duration;
 
 const PAPER_MD: &str = "PAPER.md";
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_PARSE_WORKER_ARG: &str = "--agentero-internal-pdf-parse-worker";
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+const PDF_PARSE_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Default, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,7 +102,21 @@ pub async fn maybe_generate_paper_md_after_download(
     path_rel: &str,
     paper_dir: &Path,
 ) -> PaperParseResult {
-    parse_paper_body_inner(vault, path_rel, paper_dir, false).await
+    maybe_generate_paper_md_after_download_with_task(vault, path_rel, paper_dir, None).await
+}
+
+/// Auto-parse variant used by frontend background tasks.
+///
+/// `task_id` connects frontend cancellation to the parser worker. The parser
+/// runs in a killable child process so a stuck PDFium/OCR call cannot keep the
+/// import or download command alive indefinitely.
+pub async fn maybe_generate_paper_md_after_download_with_task(
+    vault: &Path,
+    path_rel: &str,
+    paper_dir: &Path,
+    task_id: Option<&str>,
+) -> PaperParseResult {
+    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id).await
 }
 
 /// Manual / bulk parse entry (command).
@@ -108,7 +131,7 @@ pub async fn parse_paper_body(args: PaperParseBodyArgs) -> Result<PaperParseResu
     if !paper_dir.is_dir() {
         return Err(AppError::message("paper folder not found"));
     }
-    Ok(parse_paper_body_inner(&vault, &path_rel, &paper_dir, args.force).await)
+    Ok(parse_paper_body_inner(&vault, &path_rel, &paper_dir, args.force, None).await)
 }
 
 async fn parse_paper_body_inner(
@@ -116,6 +139,7 @@ async fn parse_paper_body_inner(
     path_rel: &str,
     paper_dir: &Path,
     force: bool,
+    task_id: Option<&str>,
 ) -> PaperParseResult {
     let mut out = PaperParseResult::default();
 
@@ -140,7 +164,7 @@ async fn parse_paper_body_inner(
         return out;
     };
 
-    match run_liteparse_markdown(&pdf_path).await {
+    match run_liteparse_markdown(&pdf_path, task_id).await {
         Ok((markdown, body_source, body_quality)) => {
             if markdown.trim().is_empty() {
                 out.messages.push("liteparse returned empty text".into());
@@ -169,7 +193,208 @@ async fn parse_paper_body_inner(
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
-async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, String), AppError> {
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+enum PdfParseWorkerResponse {
+    Ok {
+        markdown: String,
+        body_source: String,
+        body_quality: String,
+    },
+    Err {
+        message: String,
+    },
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[derive(Debug, PartialEq, Eq)]
+struct PdfParseWorkerRequest {
+    pdf_path: PathBuf,
+    response_path: PathBuf,
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_worker_request_from_args(
+    args: impl IntoIterator<Item = OsString>,
+) -> Result<Option<PdfParseWorkerRequest>, String> {
+    let mut args = args.into_iter();
+    let _executable = args.next();
+    let Some(mode) = args.next() else {
+        return Ok(None);
+    };
+    if mode != OsStr::new(PDF_PARSE_WORKER_ARG) {
+        return Ok(None);
+    }
+    let pdf_path = args
+        .next()
+        .map(PathBuf::from)
+        .ok_or_else(|| "PDF parse worker is missing its input path".to_string())?;
+    let response_path = args
+        .next()
+        .map(PathBuf::from)
+        .ok_or_else(|| "PDF parse worker is missing its response path".to_string())?;
+    if args.next().is_some() {
+        return Err("PDF parse worker received unexpected arguments".to_string());
+    }
+    Ok(Some(PdfParseWorkerRequest {
+        pdf_path,
+        response_path,
+    }))
+}
+
+/// Handle the private parser-worker mode before Tauri or CLI initialization.
+///
+/// Returns `None` for a normal application launch. Desktop entrypoints exit
+/// immediately with the returned status code when worker mode is selected.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+pub fn try_run_pdf_parse_worker() -> Option<i32> {
+    let request = match pdf_parse_worker_request_from_args(std::env::args_os()) {
+        Ok(Some(request)) => request,
+        Ok(None) => return None,
+        Err(_) => return Some(2),
+    };
+
+    let response = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => match runtime.block_on(run_liteparse_markdown_direct(&request.pdf_path)) {
+            Ok((markdown, body_source, body_quality)) => PdfParseWorkerResponse::Ok {
+                markdown,
+                body_source,
+                body_quality,
+            },
+            Err(error) => PdfParseWorkerResponse::Err {
+                message: error.to_string(),
+            },
+        },
+        Err(error) => PdfParseWorkerResponse::Err {
+            message: format!("start PDF parse worker runtime: {error}"),
+        },
+    };
+
+    let result = serde_json::to_vec(&response)
+        .map_err(|error| AppError::message(format!("serialize PDF parse result: {error}")))
+        .and_then(|bytes| {
+            fs::write(&request.response_path, bytes)
+                .map_err(|error| AppError::message(format!("write PDF parse result: {error}")))
+        });
+    Some(if result.is_ok() { 0 } else { 1 })
+}
+
+#[cfg(any(target_os = "ios", target_os = "android"))]
+pub fn try_run_pdf_parse_worker() -> Option<i32> {
+    None
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn run_liteparse_markdown(
+    pdf_path: &Path,
+    task_id: Option<&str>,
+) -> Result<(String, String, String), AppError> {
+    if pdf_parse_task_is_cancelled(task_id) {
+        return Err(AppError::message("background task cancelled"));
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| AppError::message(format!("resolve PDF parse worker: {error}")))?;
+    let worker_dir = std::env::temp_dir().join(format!(
+        "agentero-pdf-parse-{}-{}",
+        std::process::id(),
+        uuid::Uuid::new_v4().simple()
+    ));
+    fs::create_dir_all(&worker_dir).map_err(|error| {
+        AppError::message(format!("create PDF parse worker directory: {error}"))
+    })?;
+    let response_path = worker_dir.join("response.json");
+
+    let mut child = match tokio::process::Command::new(executable)
+        .arg(PDF_PARSE_WORKER_ARG)
+        .arg(pdf_path)
+        .arg(&response_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&worker_dir);
+            return Err(AppError::message(format!(
+                "start isolated PDF parser: {error}"
+            )));
+        }
+    };
+
+    let timeout = tokio::time::sleep(PDF_PARSE_TIMEOUT);
+    tokio::pin!(timeout);
+    let mut cancel_poll = tokio::time::interval(Duration::from_millis(100));
+    cancel_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let status = loop {
+        tokio::select! {
+            result = child.wait() => {
+                break match result {
+                    Ok(status) => status,
+                    Err(error) => {
+                        let _ = fs::remove_dir_all(&worker_dir);
+                        return Err(AppError::message(format!(
+                            "wait for isolated PDF parser: {error}"
+                        )));
+                    }
+                };
+            }
+            _ = &mut timeout => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                let _ = fs::remove_dir_all(&worker_dir);
+                return Err(AppError::message(format!(
+                    "liteparse timed out after {}s; PDF import completed without PAPER.md",
+                    PDF_PARSE_TIMEOUT.as_secs()
+                )));
+            }
+            _ = cancel_poll.tick(), if task_id.is_some() => {
+                if pdf_parse_task_is_cancelled(task_id) {
+                    let _ = child.kill().await;
+                    let _ = child.wait().await;
+                    let _ = fs::remove_dir_all(&worker_dir);
+                    return Err(AppError::message("background task cancelled"));
+                }
+            }
+        }
+    };
+
+    let response = fs::read(&response_path)
+        .map_err(|error| {
+            AppError::message(format!(
+                "read isolated PDF parser response (status {status}): {error}"
+            ))
+        })
+        .and_then(|bytes| {
+            serde_json::from_slice::<PdfParseWorkerResponse>(&bytes).map_err(|error| {
+                AppError::message(format!("decode isolated PDF parser response: {error}"))
+            })
+        });
+    let _ = fs::remove_dir_all(&worker_dir);
+
+    match response? {
+        PdfParseWorkerResponse::Ok {
+            markdown,
+            body_source,
+            body_quality,
+        } => Ok((markdown, body_source, body_quality)),
+        PdfParseWorkerResponse::Err { message } => Err(AppError::message(message)),
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+fn pdf_parse_task_is_cancelled(task_id: Option<&str>) -> bool {
+    task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled)
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+async fn run_liteparse_markdown_direct(
+    pdf_path: &Path,
+) -> Result<(String, String, String), AppError> {
     // Read the PDF via std::fs (Unicode-safe on Windows) and hand PDFium an
     // in-memory buffer. `FPDF_LoadDocument`'s path handling is unreliable for
     // non-ASCII paths on Windows (e.g. a Chinese `文档` segment in a OneDrive
@@ -216,7 +441,10 @@ async fn run_liteparse_markdown(pdf_path: &Path) -> Result<(String, String, Stri
 }
 
 #[cfg(any(target_os = "ios", target_os = "android"))]
-async fn run_liteparse_markdown(_pdf_path: &Path) -> Result<(String, String, String), AppError> {
+async fn run_liteparse_markdown(
+    _pdf_path: &Path,
+    _task_id: Option<&str>,
+) -> Result<(String, String, String), AppError> {
     Err(AppError::message(
         "PDF body parsing runs on the paired desktop host",
     ))
@@ -237,4 +465,66 @@ fn update_catalog_body(
     row.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     papers::upsert_paper(vault, &row)?;
     Ok(())
+}
+
+#[cfg(all(test, not(any(target_os = "ios", target_os = "android"))))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worker_args_are_private_and_exact() {
+        let normal = vec![OsString::from("agentero"), OsString::from("paper")];
+        assert_eq!(pdf_parse_worker_request_from_args(normal).unwrap(), None);
+
+        let request = pdf_parse_worker_request_from_args(vec![
+            OsString::from("agentero"),
+            OsString::from(PDF_PARSE_WORKER_ARG),
+            OsString::from("input.pdf"),
+            OsString::from("response.json"),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(request.pdf_path, PathBuf::from("input.pdf"));
+        assert_eq!(request.response_path, PathBuf::from("response.json"));
+
+        let incomplete = vec![
+            OsString::from("agentero"),
+            OsString::from(PDF_PARSE_WORKER_ARG),
+            OsString::from("input.pdf"),
+        ];
+        assert!(pdf_parse_worker_request_from_args(incomplete).is_err());
+    }
+
+    #[test]
+    fn worker_response_round_trips_success_and_failure() {
+        for response in [
+            PdfParseWorkerResponse::Ok {
+                markdown: "# Paper".into(),
+                body_source: "pdf".into(),
+                body_quality: "medium".into(),
+            },
+            PdfParseWorkerResponse::Err {
+                message: "broken PDF".into(),
+            },
+        ] {
+            let encoded = serde_json::to_vec(&response).unwrap();
+            let decoded: PdfParseWorkerResponse = serde_json::from_slice(&encoded).unwrap();
+            assert_eq!(
+                serde_json::to_value(decoded).unwrap(),
+                serde_json::to_value(response).unwrap()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_task_does_not_start_parser_worker() {
+        let task_id = format!("pdf-parse-test-{}", uuid::Uuid::new_v4());
+        crate::features::agent::background_tasks::cancel(&task_id);
+
+        let result =
+            run_liteparse_markdown(Path::new("missing-test-input.pdf"), Some(&task_id)).await;
+
+        crate::features::agent::background_tasks::finish(&task_id);
+        assert_eq!(result.unwrap_err().to_string(), "background task cancelled");
+    }
 }

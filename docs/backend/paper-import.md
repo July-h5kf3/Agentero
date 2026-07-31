@@ -57,7 +57,8 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 | 情况 | 行为 |
 |---|---|
 | 有 TeX | 优先 TeX；不强制 `PAPER.md` |
-| 无 TeX 有 PDF | 下载后 liteparse → `PAPER.md`；可 `paper_parse_body` |
+| 无 TeX 有 PDF | 下载后由隔离的 liteparse 子进程生成 `PAPER.md`；单次解析限时 120 秒 |
+| 解析失败或超时 | 保留 PDF、`NOTES.md` 与 catalog；返回诊断消息，后续可重新执行 `paper parse` |
 | 质量字段 | catalog `body_source` / `body_quality`（实现以 schema 为准） |
 
 `PAPER.md` 是派生文件，可删可重建；`source/` 与 PDF 才是归档事实来源。

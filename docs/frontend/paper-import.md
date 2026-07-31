@@ -23,9 +23,11 @@
 
 | 方式 | 行为 |
 |---|---|
-| 魔棒 FileUp | 多选 → metadata 确认 → `paper_import_local_pdf` |
-| 拖到 `papers/` 组织夹 | metadata 确认后入库；无 TeX 时 liteparse → `PAPER.md` |
+| 魔棒 FileUp | 多选 → metadata 确认 → `paper_import_local_pdf`；任务条显示 PDF 解析阶段 |
+| 拖到 `papers/` 组织夹 | metadata 确认后入库；无 TeX 时隔离运行 liteparse → `PAPER.md` |
 | 拖到窗口其它区域 | 不入库（窗口级 `preventDefault` 防 WebView 导航） |
+
+PDF 解析最多等待 120 秒，取消任务会终止当前解析子进程。解析失败或超时时，后台入库任务仍会结束，已复制的 PDF、`NOTES.md` 与 catalog 记录保持可用；用户可稍后通过 CLI `paper parse` 重试派生正文。
 
 ## Zotero
 
