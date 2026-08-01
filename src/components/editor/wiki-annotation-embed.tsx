@@ -3,6 +3,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { MessageResponse } from "@/components/ai-elements/message";
 import { cn } from "@/lib/core/utils";
 import {
 	type AnnotationRef,
@@ -31,7 +32,6 @@ type WikiAnnotationEmbedProps = {
 	/** Vault-relative wiki target path (NOTES / pdf / paper). */
 	targetPath: string;
 	annotationId: string;
-	onOpen: () => void;
 	/** Notify parent so shared header can pick highlight vs visual icon. */
 	onResolvedKind?: (kind: AnnotationRef["kind"]) => void;
 	className?: string;
@@ -139,7 +139,6 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	vaultPath,
 	targetPath,
 	annotationId,
-	onOpen,
 	onResolvedKind,
 	className,
 }: WikiAnnotationEmbedProps) {
@@ -274,27 +273,10 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	const hasImage = Boolean(ref.kind === "agent-trace" && ref.image?.data);
 	const messages = ref.kind === "agent-trace" ? (ref.messages ?? []) : [];
 
+	// Body is not a jump target — open via shared chrome ExternalLink only
+	// (same as markdown / attachment embeds) so selection & scroll stay usable.
 	return (
-		// biome-ignore lint/a11y/useSemanticElements: body is a large hit target for jump
-		<div
-			role="button"
-			tabIndex={0}
-			className={cn(
-				"block w-full cursor-pointer px-3 py-2 text-left outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50",
-				className,
-			)}
-			onClick={(e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				onOpen();
-			}}
-			onKeyDown={(e) => {
-				if (e.key === "Enter" || e.key === " ") {
-					e.preventDefault();
-					onOpen();
-				}
-			}}
-		>
+		<div className={cn("block w-full px-3 py-2 text-left", className)}>
 			{/* Location: outline breadcrumb or page fallback */}
 			<div className="flex items-center gap-1.5">
 				{ref.kind === "agent-trace" ? null : (
@@ -337,19 +319,21 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				/>
 			) : null}
 
-			{/* Highlight note: full text, outer embed scrolls */}
+			{/* Highlight note: markdown when present, outer embed scrolls */}
 			{ref.kind === "highlight" && hasComment ? (
-				<p
+				<div
 					className={cn(
-						"whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed",
+						"min-w-0 text-[13px] text-foreground/85 leading-relaxed",
 						hasQuote || hasImage ? "mt-2" : "mt-1.5",
 					)}
 				>
-					{ref.comment}
-				</p>
+					<MessageResponse className="text-[13px] leading-relaxed">
+						{ref.comment}
+					</MessageResponse>
+				</div>
 			) : null}
 
-			{/* Visual: read-only agent transcript (no composer) */}
+			{/* Visual: read-only agent transcript with md (no composer) */}
 			{ref.kind === "agent-trace" ? (
 				<div
 					className={cn(
@@ -358,9 +342,11 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 					)}
 				>
 					{hasComment && !messages.some((m) => m.content === ref.comment) ? (
-						<p className="whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed">
-							{ref.comment}
-						</p>
+						<div className="min-w-0 text-[13px] text-foreground/85 leading-relaxed">
+							<MessageResponse className="text-[13px] leading-relaxed">
+								{ref.comment}
+							</MessageResponse>
+						</div>
 					) : null}
 					{messages.length === 0 ? (
 						<p className="text-muted-foreground text-xs">
@@ -371,7 +357,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 							<div
 								key={m.id}
 								className={cn(
-									"rounded-md px-2.5 py-1.5 text-[13px] leading-relaxed",
+									"min-w-0 rounded-md px-2.5 py-1.5 text-[13px] leading-relaxed",
 									m.role === "user"
 										? "bg-primary/10 text-foreground/90"
 										: "bg-muted/70 text-foreground/85",
@@ -382,7 +368,9 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 										? t("embed.annotationRoleUser")
 										: t("embed.annotationRoleAssistant")}
 								</div>
-								<p className="whitespace-pre-wrap break-words">{m.content}</p>
+								<MessageResponse className="text-[13px] leading-relaxed">
+									{m.content}
+								</MessageResponse>
 							</div>
 						))
 					)}

@@ -560,12 +560,12 @@ export function WikiEmbedElement({
 							presentation.response.link.targetPath &&
 							presentation.response.link.occurrence.fragment?.kind ===
 								"annotation" ? (
-							// Body-only: title/icon live in the shared header above.
+							// Body-only: title/icon + jump live in the shared header above
+							// (body is not click-to-open, same as markdown embeds).
 							<WikiAnnotationEmbed
 								vaultPath={wikiNav.vaultPath}
 								targetPath={presentation.response.link.targetPath}
 								annotationId={presentation.response.link.occurrence.fragment.id}
-								onOpen={navigate}
 								onResolvedKind={onAnnotationKind}
 							/>
 						) : (
