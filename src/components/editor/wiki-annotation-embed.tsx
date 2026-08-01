@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { MessageResponse } from "@/components/ai-elements/message";
 import { cn } from "@/lib/core/utils";
+import { visualTraceImageAssetRelPath } from "@/lib/pdf/agent-trace/image";
 import {
 	type AnnotationRef,
 	annotationAnchorY,
@@ -81,7 +82,9 @@ function loadAnnotationState(
 	if (pending) return pending;
 
 	const paperAbs = paperAbsFromWikiTarget(vaultPath, targetPath);
-	const request = lookupAnnotationRef(paperAbs, annotationId)
+	const request = lookupAnnotationRef(paperAbs, annotationId, {
+		includeImage: true,
+	})
 		.then(
 			(ref): AnnotationLoadState =>
 				ref ? { kind: "ready", ref } : { kind: "missing" },
@@ -113,6 +116,10 @@ export function annotationEmbedWatchPaths(
 		joinVaultPath(
 			joinVaultPath(paperAbs, MARKS_FOLDER),
 			`${annotationId}.json`,
+		),
+		joinVaultPath(
+			joinVaultPath(paperAbs, MARKS_FOLDER),
+			visualTraceImageAssetRelPath(annotationId, "image/png"),
 		),
 	];
 }

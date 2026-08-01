@@ -21,6 +21,8 @@
 
 布局只存 dockview `toJSON()`；path/mode 在 panel params。
 
+启动恢复只 hydrate 每个 Dockview group 当前可见的 panel；隐藏标签在首次切换到前台时再读取资源。PDFium 保留当前可见与最近使用的至多两个 PDF viewer，本地 PDF `ArrayBuffer` 离开保留集合后释放，避免多标签工作区重启时并发加载全部 PDF 并长期占用 WebContent 内存。
+
 ## 面板类型
 
 Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES。

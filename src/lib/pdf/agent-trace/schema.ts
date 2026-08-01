@@ -1,3 +1,4 @@
+import { normalizeVisualTraceImagePath } from "@/lib/pdf/agent-trace/image";
 import type {
 	PdfVisualNormalizedRect,
 	PdfVisualSessionTrace,
@@ -14,12 +15,13 @@ function isStatus(v: unknown): v is PdfVisualTraceStatus {
 
 function parseImage(v: unknown): PdfVisualTraceImage | undefined {
 	if (!isRecord(v)) return undefined;
-	if (typeof v.data !== "string" || !v.data) return undefined;
+	const path = normalizeVisualTraceImagePath(v.path);
+	if (!path) return undefined;
 	const mimeType =
 		typeof v.mimeType === "string" && v.mimeType.trim()
 			? v.mimeType.trim()
 			: "image/png";
-	return { data: v.data, mimeType };
+	return { path, mimeType };
 }
 
 function parseMessages(v: unknown): PdfVisualTraceMessage[] | undefined {

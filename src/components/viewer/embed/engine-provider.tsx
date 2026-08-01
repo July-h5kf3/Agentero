@@ -1,7 +1,12 @@
-import { usePdfiumEngine } from "@embedpdf/engines/react";
-import type { PdfEngine } from "@embedpdf/models";
+import { ignore, type PdfEngine } from "@embedpdf/models";
 import pdfiumWasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
-import { createContext, type ReactNode, useContext } from "react";
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useState,
+} from "react";
 
 export type PdfEngineContextValue = {
 	engine: PdfEngine | null;
@@ -14,6 +19,55 @@ const PdfEngineContext = createContext<PdfEngineContextValue>({
 	isLoading: true,
 	error: null,
 });
+
+function disposePdfEngine(engine: PdfEngine): void {
+	const destroy = () => {
+		engine.destroy?.().wait(ignore, ignore);
+	};
+	engine.closeAllDocuments().wait(destroy, destroy);
+}
+
+function useAgenteroPdfEngine(): PdfEngineContextValue {
+	const [state, setState] = useState<PdfEngineContextValue>({
+		engine: null,
+		isLoading: true,
+		error: null,
+	});
+
+	useEffect(() => {
+		let cancelled = false;
+		let current: PdfEngine | null = null;
+
+		void import("@embedpdf/engines/pdfium-direct-engine")
+			.then(({ createPdfiumEngine }) =>
+				createPdfiumEngine(pdfiumWasmUrl, { fontFallback: null }),
+			)
+			.then((engine) => {
+				if (cancelled) {
+					disposePdfEngine(engine);
+					return;
+				}
+				current = engine;
+				setState({ engine, isLoading: false, error: null });
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				setState({
+					engine: null,
+					isLoading: false,
+					error: error instanceof Error ? error : new Error(String(error)),
+				});
+			});
+
+		return () => {
+			cancelled = true;
+			if (current) disposePdfEngine(current);
+			current = null;
+		};
+	}, []);
+
+	return state;
+}
 
 /**
  * Creates the PDFium (WASM) engine once for the whole workspace window and
@@ -28,11 +82,7 @@ const PdfEngineContext = createContext<PdfEngineContextValue>({
  * wasm via the Vite `?url` asset) is used on every platform.
  */
 export function PdfEngineHost({ children }: { children: ReactNode }) {
-	const { engine, isLoading, error } = usePdfiumEngine({
-		wasmUrl: pdfiumWasmUrl,
-		worker: false,
-		fontFallback: null,
-	});
+	const { engine, isLoading, error } = useAgenteroPdfEngine();
 	return (
 		<PdfEngineContext.Provider value={{ engine, isLoading, error }}>
 			{children}

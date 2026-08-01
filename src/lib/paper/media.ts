@@ -1,12 +1,12 @@
-import { readDir, readFile } from "@tauri-apps/plugin-fs";
+import { readDir } from "@tauri-apps/plugin-fs";
 import { logger } from "@/lib/core/logger";
 import { joinPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { arxivUrls } from "@/lib/paper/arxiv";
 import type { PaperMetadata } from "@/lib/paper/types";
+import { readVaultBytes } from "@/lib/vault";
 import {
 	parseRemoteJoinedPath,
-	remoteCacheFile,
 	remoteList,
 } from "@/lib/vault/remote/remote-vault";
 
@@ -32,21 +32,10 @@ export function isPdfViewerSource(
 	return false;
 }
 
-async function readVaultBytes(absPath: string): Promise<Uint8Array | null> {
+async function tryReadVaultBytes(absPath: string): Promise<Uint8Array | null> {
 	if (!isTauri() || !absPath?.trim()) return null;
 	try {
-		let bytes: Uint8Array;
-		const parsed = parseRemoteJoinedPath(absPath);
-		if (parsed) {
-			const localPath = await remoteCacheFile(parsed.sessionId, parsed.rel);
-			bytes = await readFile(localPath);
-		} else {
-			bytes = await readFile(absPath);
-		}
-		// Copy into a fresh ArrayBuffer consumers can own (plugin may return a view).
-		const copy = new Uint8Array(bytes.byteLength);
-		copy.set(bytes);
-		return copy;
+		return await readVaultBytes(absPath);
 	} catch (e) {
 		// Read failed (fs scope / OneDrive placeholder / missing file). Log so the
 		// silent fall back to a remote URL (which can fail CORS) is diagnosable.
@@ -69,7 +58,7 @@ export async function localBytesToViewerSource(
 	absPath: string,
 	mimeType: string,
 ): Promise<string | null> {
-	const bytes = await readVaultBytes(absPath);
+	const bytes = await tryReadVaultBytes(absPath);
 	if (!bytes) return null;
 	const blob = new Blob([bytes], { type: mimeType });
 	return URL.createObjectURL(blob);
@@ -97,7 +86,7 @@ export async function localPdfToViewerSource(
 export async function localFileToArrayBuffer(
 	absPath: string,
 ): Promise<ArrayBuffer | null> {
-	const bytes = await readVaultBytes(absPath);
+	const bytes = await tryReadVaultBytes(absPath);
 	return bytes ? bytes.buffer : null;
 }
 

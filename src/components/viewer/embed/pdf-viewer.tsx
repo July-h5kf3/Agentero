@@ -164,6 +164,7 @@ import {
 	tracePin,
 	tracePreview,
 } from "@/lib/pdf/agent-trace";
+import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import {
 	createEmptyThread,
 	deletePdfAskThread,
@@ -1808,7 +1809,7 @@ function PdfViewerInner({
 	}, [deleteVisualTraceById, hideActiveCard]);
 
 	const openVisualTraceSession = useCallback(
-		(trace: PdfVisualSessionTrace) => {
+		async (trace: PdfVisualSessionTrace) => {
 			// Same session as the pin modal — activate it in the shared store.
 			setAgentPanelMounted(true);
 			const store = agentSessionStore.getState();
@@ -1823,6 +1824,10 @@ function PdfViewerInner({
 			} else {
 				// Seed from mark once so sidebar opens the same transcript.
 				const messages = traceMessages(trace);
+				const image = await loadPdfVisualTraceImage(
+					paperAbsPath ?? "",
+					trace.image,
+				);
 				const title =
 					messages.find((m) => m.role === "user")?.content.trim() ||
 					trace.comment.trim() ||
@@ -1841,7 +1846,7 @@ function PdfViewerInner({
 						page: trace.page,
 						comment: trace.comment,
 						paperPath: trace.paperPath,
-						image: trace.image,
+						...(image ? { image } : {}),
 						messages: messages.map((m) => ({ ...m })),
 						status: trace.status,
 					},
@@ -1858,7 +1863,7 @@ function PdfViewerInner({
 		const card = activeCardRef.current;
 		if (card?.kind !== "agent-trace") return;
 		const tr = visualTracesRef.current.find((item) => item.id === card.id);
-		if (tr) openVisualTraceSession(tr);
+		if (tr) void openVisualTraceSession(tr);
 	}, [openVisualTraceSession]);
 
 	const handleStopVisualSession = useCallback(() => {
@@ -3187,6 +3192,7 @@ function PdfViewerInner({
 							{activeVisualTrace && cardScreen ? (
 								<VisualTraceCard
 									trace={activeVisualTrace}
+									paperAbsPath={paperAbsPath ?? undefined}
 									screen={cardScreen}
 									streaming={visualStreaming}
 									error={visualError}

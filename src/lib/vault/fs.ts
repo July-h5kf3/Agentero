@@ -1,8 +1,9 @@
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readFile, readTextFile } from "@tauri-apps/plugin-fs";
 import i18n from "@/i18n";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	parseRemoteJoinedPath,
+	remoteCacheFile,
 	remoteMkdir,
 	remoteReadText,
 	remoteRemove,
@@ -33,6 +34,29 @@ export async function readVaultFile(path: string): Promise<string> {
 	}
 
 	return readTextFile(path);
+}
+
+/** Read a local or remote Vault file into an owned byte array. */
+export async function readVaultBytes(path: string): Promise<Uint8Array> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.readDesktopOnly"));
+	}
+
+	const remoteRead = parseRemoteJoinedPath(path);
+	let bytes: Uint8Array;
+	if (remoteRead) {
+		if (!remoteRead.rel) throw new Error("invalid remote path");
+		const localPath = await remoteCacheFile(
+			remoteRead.sessionId,
+			remoteRead.rel,
+		);
+		bytes = await readFile(localPath);
+	} else {
+		bytes = await readFile(path);
+	}
+	const copy = new Uint8Array(bytes.byteLength);
+	copy.set(bytes);
+	return copy;
 }
 
 /** Write text file (creates parent dirs when possible). */

@@ -35,6 +35,7 @@ import {
 } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { cn } from "@/lib/core/utils";
+import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 
@@ -45,6 +46,7 @@ const EXPANDED = { width: 360, height: 440 } as const;
 
 type VisualTraceCardProps = {
 	trace: PdfVisualSessionTrace;
+	paperAbsPath?: string;
 	screen: { x: number; y: number };
 	streaming?: boolean;
 	error?: string | null;
@@ -174,16 +176,17 @@ type ModalTraceMessage = {
 /** Crop chip for the first user turn when store lines omit visualAnnotations. */
 function chipFromTrace(
 	trace: PdfVisualSessionTrace,
+	image: Awaited<ReturnType<typeof loadPdfVisualTraceImage>>,
 ): ChatVisualAnnotation | null {
-	if (!trace.image?.data) return null;
+	if (!image?.data) return null;
 	return {
 		id: trace.id,
 		page: trace.page,
 		comment: trace.comment,
 		paperPath: trace.paperPath,
 		image: {
-			data: trace.image.data,
-			mimeType: trace.image.mimeType || "image/png",
+			data: image.data,
+			mimeType: image.mimeType || "image/png",
 		},
 	};
 }
@@ -224,8 +227,9 @@ function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 function withTraceCropChip(
 	messages: ModalTraceMessage[],
 	trace: PdfVisualSessionTrace,
+	image: Awaited<ReturnType<typeof loadPdfVisualTraceImage>>,
 ): ModalTraceMessage[] {
-	const chip = chipFromTrace(trace);
+	const chip = chipFromTrace(trace, image);
 	if (!chip) return messages;
 	let attached = false;
 	return messages.map((m) => {
@@ -238,6 +242,7 @@ function withTraceCropChip(
 
 export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
+	paperAbsPath,
 	screen,
 	streaming: streamingProp = false,
 	error = null,
@@ -252,6 +257,34 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 }: VisualTraceCardProps) {
 	const { t } = useTranslation("viewer");
 	const [expanded, setExpanded] = useState(initialExpanded);
+	const cropData = trace.image?.data;
+	const cropMimeType = trace.image?.mimeType || "image/png";
+	const cropPath = trace.image?.path;
+	const [cropImage, setCropImage] = useState<
+		Awaited<ReturnType<typeof loadPdfVisualTraceImage>>
+	>(cropData ? { data: cropData, mimeType: cropMimeType } : null);
+	useEffect(() => {
+		let cancelled = false;
+		if (cropData) {
+			setCropImage({
+				data: cropData,
+				mimeType: cropMimeType,
+			});
+			return () => {
+				cancelled = true;
+			};
+		}
+		setCropImage(null);
+		void loadPdfVisualTraceImage(
+			paperAbsPath ?? "",
+			cropPath ? { path: cropPath, mimeType: cropMimeType } : undefined,
+		).then((image) => {
+			if (!cancelled) setCropImage(image);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [cropData, cropMimeType, cropPath, paperAbsPath]);
 	// Same transcript as the right-rail Agent panel (single store).
 	const boundSessionId = useAgentSessionStore(
 		(s) =>
@@ -285,8 +318,8 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 						content: m.content,
 					}));
 		// Pin crop chip on first user turn (matches Agent panel Open-in-Agent lines).
-		return withTraceCropChip(raw, trace);
-	}, [boundLines, trace]);
+		return withTraceCropChip(raw, trace, cropImage);
+	}, [boundLines, cropImage, trace]);
 	const preview = tracePreview(trace, t("pdfExplain.visualAnnotation"), 280);
 	const title = preview || t("pdfExplain.traceCardTitle");
 	/** Keep the user's annotation turn in view; do not auto-jump to the answer. */

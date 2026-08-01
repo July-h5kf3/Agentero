@@ -16,11 +16,17 @@ import {
 	buildVisualAnnotationsPrompt,
 	buildVisualTraceContinuePrompt,
 	buildVisualTraceHistoryItem,
+	bytesToBase64,
 	completeTrace,
 	createRunningTraces,
+	deletePdfVisualTrace,
 	failTrace,
 	isVisualTraceSessionPending,
+	loadPdfVisualTraceImage,
+	normalizeVisualTraceImagePath,
 	parsePdfVisualSessionTrace,
+	preparePdfVisualTraceImageWrite,
+	readPdfVisualTrace,
 	reconcileOrphanRunningVisualTraces,
 	rememberPendingVisualTraces,
 	resetPendingVisualTracesForTests,
@@ -29,6 +35,7 @@ import {
 	tracePin,
 	tracePreview,
 	visualTraceHistoryId,
+	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 
 const rect = { x: 0.1, y: 0.2, w: 0.4, h: 0.15 };
@@ -169,7 +176,7 @@ describe("agent-trace schema and lifecycle", () => {
 			page: 3,
 			rects: [rect],
 			comment: "λ 是什么",
-			image: { data: "abc", mimeType: "image/png" },
+			image: { path: "assets/tr1.png", mimeType: "image/png" },
 			agentId: "agent-1",
 			runtimeSessionId: "sess-rt",
 			messageId: "msg-1",
@@ -182,11 +189,75 @@ describe("agent-trace schema and lifecycle", () => {
 		if (!t) return;
 		expect(t.kind).toBe("agent-trace");
 		expect(t.comment).toBe("λ 是什么");
-		expect(t.image?.data).toBe("abc");
+		expect(t.image?.path).toBe("assets/tr1.png");
 		expect(tracePreview(t)).toContain("λ");
 		const pin = tracePin(t);
 		expect(pin.x).toBeGreaterThan(0.3);
 		expect(pin.y).toBeCloseTo(0.275, 2);
+	});
+
+	it("rejects inline image data in persisted marks", () => {
+		const trace = parsePdfVisualSessionTrace({
+			version: 1,
+			kind: "agent-trace",
+			id: "inline",
+			paperPath: "papers/a",
+			page: 1,
+			rects: [rect],
+			comment: "inline",
+			image: { data: "abc", mimeType: "image/png" },
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			status: "completed",
+			createdAt: "t1",
+			updatedAt: "t2",
+		});
+		expect(trace?.image).toBeUndefined();
+	});
+
+	it("normalizes mark-owned image paths", () => {
+		expect(normalizeVisualTraceImagePath("./assets/a.png")).toBe(
+			"assets/a.png",
+		);
+		expect(normalizeVisualTraceImagePath("assets\\a.png")).toBe("assets/a.png");
+		expect(normalizeVisualTraceImagePath("assets/nested/a.png")).toBeNull();
+		expect(normalizeVisualTraceImagePath("../a.png")).toBeNull();
+	});
+
+	it("loads inline runtime crops and degrades when an asset is missing", async () => {
+		await expect(
+			loadPdfVisualTraceImage("/vault/papers/a", {
+				data: "YWJj",
+				mimeType: "image/png",
+			}),
+		).resolves.toEqual({ data: "YWJj", mimeType: "image/png" });
+		await expect(
+			loadPdfVisualTraceImage("/vault/papers/a", {
+				path: "assets/missing.png",
+				mimeType: "image/png",
+			}),
+		).resolves.toBeNull();
+	});
+
+	it("deletes visual traces through the lifecycle wrapper", async () => {
+		const [trace] = createRunningTraces({
+			paperPath: "papers/delete",
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			items: [{ id: "delete-me", page: 1, rects: [rect], comment: "q", image }],
+		});
+		expect(trace).toBeDefined();
+		if (!trace) return;
+		await writePdfVisualTrace("/vault/papers/delete", trace);
+		expect(
+			await readPdfVisualTrace("/vault/papers/delete", trace.id),
+		).not.toBeNull();
+		await deletePdfVisualTrace("/vault/papers/delete", trace.id);
+		expect(
+			await readPdfVisualTrace("/vault/papers/delete", trace.id),
+		).toBeNull();
 	});
 
 	it("rejects wrong kind or missing geometry", () => {
@@ -389,7 +460,7 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(prompt).toContain("Page: 3");
 	});
 
-	it("round-trips create → complete → parse", () => {
+	it("externalizes create → complete before persisted parse", () => {
 		const [running] = createRunningTraces({
 			paperPath: "papers/x",
 			agentId: "a",
@@ -413,10 +484,23 @@ describe("agent-trace schema and lifecycle", () => {
 			answerSnapshot: "answer",
 			updatedAt: "2026-01-01T00:01:00.000Z",
 		});
-		const parsed = parsePdfVisualSessionTrace(
-			JSON.parse(JSON.stringify(completed)),
+		const prepared = preparePdfVisualTraceImageWrite({
+			...completed,
+			image: { data: "YWJj", mimeType: "image/png" },
+		});
+		expect(prepared.trace.image).toEqual({
+			path: "assets/fixed-id.png",
+			mimeType: "image/png",
+		});
+		expect(prepared.asset?.path).toBe("assets/fixed-id.png");
+		expect(bytesToBase64(prepared.asset?.bytes ?? new Uint8Array())).toBe(
+			"YWJj",
 		);
-		expect(parsed).toEqual(completed);
+		expect(JSON.stringify(prepared.trace)).not.toContain('"data"');
+		const parsed = parsePdfVisualSessionTrace(
+			JSON.parse(JSON.stringify(prepared.trace)),
+		);
+		expect(parsed).toEqual(prepared.trace);
 	});
 
 	it("synthesizes messages from comment + answerSnapshot for legacy marks", () => {

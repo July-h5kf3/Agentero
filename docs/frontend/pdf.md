@@ -9,6 +9,8 @@
 
 任意 Vault 路径 `.pdf` 可 `blob:` 预览；论文单元：本地优先 → 自动下载 → 远程 `pdf_url` 回退。HTML 用远程 `html_url` iframe（不注入主 DOM）。
 
+PDFium engine 由窗口共享并在主线程运行。Engine 宿主位于 React StrictMode 外，异步初始化即使在完成前被卸载也会主动销毁结果，避免 dev reload 遗留孤儿 WASM engine。工作区只挂载当前可见与最近使用的至多两个 PDF viewer；恢复的隐藏 PDF 标签按需 hydrate，退出保留集合的本地 PDF 字节会释放并在再次激活时重新读取。
+
 ## 阅读能力
 
 | 能力 | 说明 |
@@ -33,13 +35,14 @@
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
 | 加入对话 | 不落盘 | 选区固定为 Agent composer 文本 chip，见 [agent.md](agent.md) |
 | 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
-| 视觉批注 | `marks/<id>.json`（kind `agent-trace`）；`providerSessionId` 为源会话；`messages[]` 本地多轮 transcript（续聊也会落盘） | 框选 → **Enter** → composer；**⌘↵** → 浮层。多轮续聊走 ACP 同一 session（load/resume），同时 `beginTraceContinue` + complete 更新 mark。打开 Agent 与 pin 共享 `providerSessionId` / `visualTraceId` |
+| 视觉批注 | `marks/<id>.json`（kind `agent-trace`）保存会话与 `image.path`；裁剪图位于 `marks/assets/<id>.png`；`providerSessionId` 为源会话；`messages[]` 本地多轮 transcript（续聊也会落盘） | 框选 → **Enter** → composer；**⌘↵** → 浮层。多轮续聊走 ACP 同一 session（load/resume），同时 `beginTraceContinue` + complete 更新 mark。打开 Agent 与 pin 共享 `providerSessionId` / `visualTraceId` |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。
 - 坐标归一化；多段 rect 支持双栏。
 - 旧版 visual Ask（`kind: ask` + `visualKind`）仍可读、可打开。
 - 一次提交可包含多条视觉批注：prompt 按 `## Annotation N` 分点，图片顺序与 annotation 对齐。
+- 视觉裁剪不以 base64 写入 mark JSON；活动 PDF 的 marks 轮询只读取 metadata，悬浮卡片、打开 Agent 与 Wiki 嵌入按需读取图片。图片缺失时仍保留位置、批注和多轮 transcript。
 - **写进笔记**：批注面板复制 / `[[@id]]` / `![[…@id]]`，见 [wiki.md](wiki.md) 编辑器 `@` 说明。
 
 ## 代码
@@ -52,7 +55,7 @@
 | `src/components/viewer/pdf-ask/visual-annotation-editor.tsx` | 框选后批注编辑器 |
 | `src/components/viewer/pdf-citation-preview.tsx` | 文中引用悬浮预览 |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
-| `src/lib/pdf/agent-trace/` | agent-trace 契约 / IO / prompt / Open-in-Agent 重建 / 会话回跳 pending |
+| `src/lib/pdf/agent-trace/` | agent-trace 契约 / mark 资产 IO / prompt / Open-in-Agent 重建 / 会话回跳 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |

@@ -5,7 +5,7 @@
  * annotation updates re-render this host only — never the whole App.
  */
 
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { registerPdfHandle } from "@/components/viewer/pdf-viewer-registry";
 import {
@@ -49,9 +49,11 @@ import {
 	persistFile,
 } from "@/lib/workspace/actions";
 import { registerDockHandle } from "@/lib/workspace/dock-registry";
+import { evictPdfBuffers, nextPdfLru } from "@/lib/workspace/pdf-retention";
 import {
 	setDockLayout,
 	setPdfLru,
+	setTabs,
 	toggleTabHtmlMode,
 	updateTab,
 } from "@/lib/workspace/store";
@@ -63,7 +65,7 @@ import { savePersistedTabs } from "@/lib/workspace/tabs";
  * EmbedPDF/PDFium so switching among recent PDFs is instant without holding
  * every open document on the main thread.
  */
-const PDF_TAB_MOUNT_LRU = 4;
+const PDF_TAB_MOUNT_LRU = 2;
 
 function handleWorkspaceDrop(drop: WorkspaceExternalDrop): void {
 	const path = drop.paths[0];
@@ -98,27 +100,59 @@ export function WorkspaceHost() {
 	const libraryColumns = useSettings((s) => s.libraryColumns);
 	const editorFontSize = useSettings((s) => s.editorFontSize);
 	const showEditorToolbar = useSettings((s) => s.showEditorToolbar);
+	const [visiblePanelIds, setVisiblePanelIds] = useState<string[]>([]);
 
 	const activeTab = useMemo(
 		() => tabs.find((tab) => tab.id === activeTabId) ?? null,
 		[tabs, activeTabId],
 	);
 
-	// Keep active PDF panels plus a few recently viewed ones mounted.
+	const handleVisiblePanelIdsChange = useCallback((ids: string[]) => {
+		setVisiblePanelIds((previous) => {
+			if (
+				ids.length === previous.length &&
+				ids.every((id, index) => id === previous[index])
+			) {
+				return previous;
+			}
+			return ids;
+		});
+	}, []);
+
+	const visiblePdfIds = useMemo(() => {
+		const visible = new Set(visiblePanelIds);
+		return tabs
+			.filter((tab) => tab.mode === "pdf" && visible.has(tab.id))
+			.map((tab) => tab.id);
+	}, [tabs, visiblePanelIds]);
+
+	// Keep visible/recent PDF panels mounted without bootstrapping every restored PDF.
 	useEffect(() => {
 		const ids = tabs.filter((tab) => tab.mode === "pdf").map((tab) => tab.id);
 		const activePdf = activeTab?.mode === "pdf" ? activeTab.id : null;
-		if (!activePdf && !ids.length) return;
-		setPdfLru((prev) => {
-			let next = prev;
-			const promote = activePdf ? [activePdf, ...ids] : ids;
-			for (const id of promote) {
-				if (next[0] === id) continue;
-				next = [id, ...next.filter((x) => x !== id)];
-			}
-			return next.slice(0, PDF_TAB_MOUNT_LRU);
-		});
-	}, [activeTab?.mode, activeTab?.id, tabs]);
+		if (!ids.length) {
+			setPdfLru((previous) => (previous.length ? [] : previous));
+			return;
+		}
+		const promoted = activePdf
+			? [activePdf, ...visiblePdfIds.filter((id) => id !== activePdf)]
+			: visiblePdfIds;
+		setPdfLru((previous) =>
+			nextPdfLru(previous, ids, promoted, PDF_TAB_MOUNT_LRU),
+		);
+	}, [activeTab?.mode, activeTab?.id, tabs, visiblePdfIds]);
+
+	// Local PDF ArrayBuffers are large and keep PDFium documents alive indirectly.
+	// Evicted tabs become placeholders and reload only when one of their groups
+	// exposes them again.
+	useEffect(() => {
+		const retained = new Set([
+			...pdfLru,
+			...visiblePanelIds,
+			...(activeTab?.mode === "pdf" ? [activeTab.id] : []),
+		]);
+		setTabs((previous) => evictPdfBuffers(previous, retained));
+	}, [activeTab?.mode, activeTab?.id, pdfLru, visiblePanelIds]);
 
 	// Tree selection / create-parent follows the active document.
 	// Scoped library keeps the tree highlight on the org folder.
@@ -132,10 +166,16 @@ export function WorkspaceHost() {
 		setTreeSelectedPath(selectedPath);
 	}, [selectedPath, libraryScopePath, vaultPath]);
 
-	// After seeding placeholders from layout, load resources once (mount-only).
+	// Restore only panels visible in a dock group. Hidden historical tabs hydrate
+	// on activation, avoiding concurrent reads and PDFium mounts during startup.
 	useEffect(() => {
-		hydratePlaceholderTabs();
-	}, []);
+		const ids = visiblePanelIds.length
+			? visiblePanelIds
+			: activeTabId
+				? [activeTabId]
+				: [];
+		hydratePlaceholderTabs(ids);
+	}, [activeTabId, visiblePanelIds]);
 
 	// Default page: empty strip with a Vault open → show full Library.
 	useEffect(() => {
@@ -238,10 +278,12 @@ export function WorkspaceHost() {
 			layout={dockLayout}
 			pdfKeepMountedIds={[
 				...pdfLru,
+				...visiblePanelIds,
 				...(activeTab?.mode === "pdf" && activeTab ? [activeTab.id] : []),
 			]}
 			centerProps={centerProps}
 			onActivePanelChange={handleActivePanelChange}
+			onVisiblePanelIdsChange={handleVisiblePanelIdsChange}
 			onClosePanel={closeTab}
 			onLayoutChange={setDockLayout}
 			onToggleHtmlMode={toggleTabHtmlMode}
