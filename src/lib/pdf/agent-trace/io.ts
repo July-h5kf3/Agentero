@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 
+import { isVisualTraceSessionPending } from "@/lib/pdf/agent-trace/pending";
 import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type {
 	PdfVisualNormalizedRect,
@@ -201,7 +202,49 @@ export function failTrace(
 	return next;
 }
 
-export const listPdfVisualTraces = store.list;
+/**
+ * Persist a failed outcome for running marks that no longer have an in-flight
+ * Agent finalizer (app restart, dropped stream, panel unmount mid-run, …).
+ * Skips sessions still in the pending map or within the post-take grace window
+ * so list/refresh cannot race a normal complete/fail write.
+ */
+export async function reconcileOrphanRunningVisualTraces(
+	paperAbsPath: string,
+	traces: PdfVisualSessionTrace[],
+	errorMessage = "Agent session interrupted",
+): Promise<PdfVisualSessionTrace[]> {
+	if (!paperAbsPath || !traces.length) return traces;
+	const out: PdfVisualSessionTrace[] = [];
+	for (const trace of traces) {
+		if (trace.status !== "running") {
+			out.push(trace);
+			continue;
+		}
+		if (isVisualTraceSessionPending(trace.runtimeSessionId)) {
+			out.push(trace);
+			continue;
+		}
+		// Provisional in-memory pins use "pending" before a real session id exists;
+		// they are not disk-backed long-term, but if one lands on disk, fail it too.
+		const failed = failTrace(trace, { error: errorMessage });
+		try {
+			await store.write(paperAbsPath, failed);
+		} catch {
+			// Best-effort: still surface the reconciled status in memory.
+		}
+		out.push(failed);
+	}
+	return out;
+}
+
+/** List marks and fold orphaned `running` pins into `failed` when safe. */
+export async function listPdfVisualTraces(
+	paperAbsPath: string,
+): Promise<PdfVisualSessionTrace[]> {
+	const traces = await store.list(paperAbsPath);
+	return reconcileOrphanRunningVisualTraces(paperAbsPath, traces);
+}
+
 export const readPdfVisualTrace = store.read;
 export const writePdfVisualTrace = store.write;
 export const deletePdfVisualTrace = store.remove;
