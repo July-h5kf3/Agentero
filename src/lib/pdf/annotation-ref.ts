@@ -12,6 +12,7 @@
  */
 
 import { paperDirFromPath } from "@/lib/paper/detect";
+import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import {
 	parsePdfVisualSessionTrace,
@@ -217,6 +218,7 @@ export async function lookupAnnotationRef(
 	const trace = parsePdfVisualSessionTrace(raw);
 	if (trace && trace.id === id) {
 		const messages = traceMessages(trace);
+		const image = await loadPdfVisualTraceImage(paperAbsPath, trace.image);
 		return {
 			kind: "agent-trace",
 			id,
@@ -224,7 +226,7 @@ export async function lookupAnnotationRef(
 			page: trace.page,
 			quote: "",
 			comment: trace.comment,
-			image: trace.image,
+			...(image ? { image } : {}),
 			rects: rectsFromVisual(trace.rects),
 			...(messages.length ? { messages } : {}),
 		};

@@ -1,5 +1,10 @@
 import { nanoid } from "nanoid";
 
+import { isTauri } from "@/lib/core/tauri";
+import {
+	preparePdfVisualTraceImageWrite,
+	visualTraceImageAssetPath,
+} from "@/lib/pdf/agent-trace/image";
 import { isVisualTraceSessionPending } from "@/lib/pdf/agent-trace/pending";
 import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
 import type {
@@ -9,6 +14,7 @@ import type {
 	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
+import { writeVaultBytes } from "@/lib/vault";
 
 const store = createMarkStore<PdfVisualSessionTrace>({
 	parse: parsePdfVisualSessionTrace,
@@ -277,7 +283,7 @@ export async function reconcileOrphanRunningVisualTraces(
 		// they are not disk-backed long-term, but if one lands on disk, fail it too.
 		const failed = failTrace(trace, { error: errorMessage });
 		try {
-			await store.write(paperAbsPath, failed);
+			await writePdfVisualTrace(paperAbsPath, failed);
 		} catch {
 			// Best-effort: still surface the reconciled status in memory.
 		}
@@ -295,5 +301,25 @@ export async function listPdfVisualTraces(
 }
 
 export const readPdfVisualTrace = store.read;
-export const writePdfVisualTrace = store.write;
+
+export async function writePdfVisualTrace(
+	paperAbsPath: string,
+	trace: PdfVisualSessionTrace,
+): Promise<void> {
+	if (!isTauri()) {
+		await store.write(paperAbsPath, trace);
+		return;
+	}
+	const prepared = preparePdfVisualTraceImageWrite(trace);
+	if (prepared.asset) {
+		const assetPath = visualTraceImageAssetPath(
+			paperAbsPath,
+			prepared.asset.path,
+		);
+		if (!assetPath) throw new Error("invalid visual trace asset path");
+		await writeVaultBytes(assetPath, prepared.asset.bytes);
+	}
+	await store.write(paperAbsPath, prepared.trace);
+}
+
 export const deletePdfVisualTrace = store.remove;

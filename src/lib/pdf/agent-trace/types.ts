@@ -13,9 +13,13 @@ export type PdfVisualNormalizedRect = {
 
 export type PdfVisualTraceStatus = "running" | "completed" | "failed";
 
-/** Crop snapshot for hover/list preview (base64, no data: prefix). */
+/**
+ * Crop snapshot. `data` exists only before the first write or after an explicit
+ * asset load; persisted marks contain `path` relative to `marks/`.
+ */
 export type PdfVisualTraceImage = {
-	data: string;
+	data?: string;
+	path?: string;
 	mimeType: string;
 };
 
