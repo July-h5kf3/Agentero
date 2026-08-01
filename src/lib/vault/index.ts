@@ -4,6 +4,7 @@ export {
 	isTextOpenable,
 	readVaultBytes,
 	readVaultFile,
+	removeVaultPath,
 	writeVaultBytes,
 	writeVaultFile,
 } from "@/lib/vault/fs";

@@ -10,7 +10,12 @@
 import { readDir } from "@tauri-apps/plugin-fs";
 
 import { isTauri } from "@/lib/core/tauri";
-import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
+import {
+	joinVaultPath,
+	readVaultFile,
+	removeVaultPath,
+	writeVaultFile,
+} from "@/lib/vault";
 
 export const MARKS_FOLDER = "marks";
 
@@ -85,8 +90,7 @@ export async function deleteMarkFile(
 ): Promise<void> {
 	if (!isTauri() || !paperAbsPath || !id) return;
 	try {
-		const { remove } = await import("@tauri-apps/plugin-fs");
-		await remove(markPath(paperAbsPath, id));
+		await removeVaultPath(markPath(paperAbsPath, id));
 	} catch {
 		// missing is fine
 	}

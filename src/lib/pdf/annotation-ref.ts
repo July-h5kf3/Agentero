@@ -175,6 +175,7 @@ function transferItemId(item: unknown): string | null {
 export async function lookupAnnotationRef(
 	paperAbsPath: string,
 	id: string,
+	options?: { includeImage?: boolean },
 ): Promise<AnnotationRef | null> {
 	if (!paperAbsPath || !id) return null;
 
@@ -218,7 +219,9 @@ export async function lookupAnnotationRef(
 	const trace = parsePdfVisualSessionTrace(raw);
 	if (trace && trace.id === id) {
 		const messages = traceMessages(trace);
-		const image = await loadPdfVisualTraceImage(paperAbsPath, trace.image);
+		const image = options?.includeImage
+			? await loadPdfVisualTraceImage(paperAbsPath, trace.image)
+			: null;
 		return {
 			kind: "agent-trace",
 			id,

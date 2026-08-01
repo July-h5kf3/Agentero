@@ -19,11 +19,14 @@ import {
 	bytesToBase64,
 	completeTrace,
 	createRunningTraces,
+	deletePdfVisualTrace,
 	failTrace,
 	isVisualTraceSessionPending,
+	loadPdfVisualTraceImage,
 	normalizeVisualTraceImagePath,
 	parsePdfVisualSessionTrace,
 	preparePdfVisualTraceImageWrite,
+	readPdfVisualTrace,
 	reconcileOrphanRunningVisualTraces,
 	rememberPendingVisualTraces,
 	resetPendingVisualTracesForTests,
@@ -32,6 +35,7 @@ import {
 	tracePin,
 	tracePreview,
 	visualTraceHistoryId,
+	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 
 const rect = { x: 0.1, y: 0.2, w: 0.4, h: 0.15 };
@@ -219,6 +223,41 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(normalizeVisualTraceImagePath("assets\\a.png")).toBe("assets/a.png");
 		expect(normalizeVisualTraceImagePath("assets/nested/a.png")).toBeNull();
 		expect(normalizeVisualTraceImagePath("../a.png")).toBeNull();
+	});
+
+	it("loads inline runtime crops and degrades when an asset is missing", async () => {
+		await expect(
+			loadPdfVisualTraceImage("/vault/papers/a", {
+				data: "YWJj",
+				mimeType: "image/png",
+			}),
+		).resolves.toEqual({ data: "YWJj", mimeType: "image/png" });
+		await expect(
+			loadPdfVisualTraceImage("/vault/papers/a", {
+				path: "assets/missing.png",
+				mimeType: "image/png",
+			}),
+		).resolves.toBeNull();
+	});
+
+	it("deletes visual traces through the lifecycle wrapper", async () => {
+		const [trace] = createRunningTraces({
+			paperPath: "papers/delete",
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			items: [{ id: "delete-me", page: 1, rects: [rect], comment: "q", image }],
+		});
+		expect(trace).toBeDefined();
+		if (!trace) return;
+		await writePdfVisualTrace("/vault/papers/delete", trace);
+		expect(
+			await readPdfVisualTrace("/vault/papers/delete", trace.id),
+		).not.toBeNull();
+		await deletePdfVisualTrace("/vault/papers/delete", trace.id);
+		expect(
+			await readPdfVisualTrace("/vault/papers/delete", trace.id),
+		).toBeNull();
 	});
 
 	it("rejects wrong kind or missing geometry", () => {

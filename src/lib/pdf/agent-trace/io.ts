@@ -14,7 +14,7 @@ import type {
 	PdfVisualTraceMessage,
 } from "@/lib/pdf/agent-trace/types";
 import { createMarkStore } from "@/lib/pdf/marks/io";
-import { writeVaultBytes } from "@/lib/vault";
+import { removeVaultPath, writeVaultBytes } from "@/lib/vault";
 
 const store = createMarkStore<PdfVisualSessionTrace>({
 	parse: parsePdfVisualSessionTrace,
@@ -322,4 +322,23 @@ export async function writePdfVisualTrace(
 	await store.write(paperAbsPath, prepared.trace);
 }
 
-export const deletePdfVisualTrace = store.remove;
+export async function deletePdfVisualTrace(
+	paperAbsPath: string,
+	id: string,
+): Promise<void> {
+	if (!isTauri()) {
+		await store.remove(paperAbsPath, id);
+		return;
+	}
+	const trace = await store.read(paperAbsPath, id);
+	await store.remove(paperAbsPath, id);
+	const assetPath =
+		trace?.image?.path &&
+		visualTraceImageAssetPath(paperAbsPath, trace.image.path);
+	if (!assetPath) return;
+	try {
+		await removeVaultPath(assetPath);
+	} catch {
+		// Mark deletion remains successful when an owned asset is already missing.
+	}
+}
