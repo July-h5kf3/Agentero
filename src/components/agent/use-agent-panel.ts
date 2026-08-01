@@ -716,7 +716,12 @@ export function useAgentPanel({
 						answerSnapshot?: string;
 						sources?: string[];
 				  }
-				| { kind: "failed"; error: string; answerSnapshot?: string },
+				| {
+						kind: "failed";
+						error: string;
+						providerSessionId?: string | null;
+						answerSnapshot?: string;
+				  },
 		) => {
 			const pending = takePendingVisualTraces(runtimeSessionId);
 			if (!pending.length) return;
@@ -734,6 +739,7 @@ export function useAgentPanel({
 									})
 								: failTrace(current, {
 										error: outcome.error,
+										providerSessionId: outcome.providerSessionId ?? undefined,
 										answerSnapshot: outcome.answerSnapshot,
 									});
 						await writePdfVisualTrace(paperAbsPath, next);
@@ -791,6 +797,7 @@ export function useAgentPanel({
 				void finalizeVisualTraces(ev.sessionId, {
 					kind: "failed",
 					error: t("messages.cancelled"),
+					providerSessionId: ev.providerSessionId,
 					answerSnapshot: ev.content,
 				});
 				return;

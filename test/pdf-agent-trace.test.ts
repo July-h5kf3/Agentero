@@ -293,6 +293,7 @@ describe("agent-trace schema and lifecycle", () => {
 		};
 		const failed = failTrace(mid, {
 			error: "resume_session: Method not found",
+			providerSessionId: "prov-cancelled",
 			assistantMessageId: "asst-2",
 		});
 		expect(failed.messages?.map((m) => m.content)).toEqual([
@@ -301,6 +302,7 @@ describe("agent-trace schema and lifecycle", () => {
 			"follow up",
 		]);
 		expect(failed.error).toContain("resume_session");
+		expect(failed.providerSessionId).toBe("prov-cancelled");
 	});
 
 	it("beginTraceContinue rebinds runtime id and appends user turn", () => {

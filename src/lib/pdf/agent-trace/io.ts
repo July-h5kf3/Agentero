@@ -206,6 +206,8 @@ export function completeTrace(
 
 export type FailTraceInput = {
 	error: string;
+	/** Preserve a resumable provider session when a running turn is cancelled. */
+	providerSessionId?: string;
 	answerSnapshot?: string;
 	updatedAt?: string;
 	assistantMessageId?: string;
@@ -222,6 +224,9 @@ export function failTrace(
 		error: input.error.trim() || "Agent failed",
 		updatedAt: now,
 	};
+	if (input.providerSessionId?.trim()) {
+		next.providerSessionId = input.providerSessionId.trim();
+	}
 	if (typeof input.answerSnapshot === "string") {
 		next.answerSnapshot = input.answerSnapshot;
 	}
