@@ -283,14 +283,18 @@ function formatWikiLinkMdastLiteral(
 		: `${open}${main}]]`;
 }
 
+/** Minimal unified processor surface used by remark plugin setup. */
+type RemarkPluginThis = {
+	data: () => Record<string, unknown[] | undefined>;
+};
+
 /**
  * Remark plugin (after `@flowershow/remark-wiki-link`) that replaces wiki/embed
  * toMarkdown handlers so path underscores are not re-escaped on save.
  */
-export function remarkWikiLinkLiteralPaths() {
-	// unified binds `this` to the processor.
-	// biome-ignore lint/suspicious/noExplicitAny: remark plugin `this` is processor data
-	const data = (this as any).data() as Record<string, unknown[] | undefined>;
+export function remarkWikiLinkLiteralPaths(this: RemarkPluginThis): void {
+	// unified binds `this` to the processor when the plugin is attached.
+	const data = this.data();
 	const add = (field: string, value: unknown) => {
 		const existing = data[field];
 		if (existing) existing.push(value);
