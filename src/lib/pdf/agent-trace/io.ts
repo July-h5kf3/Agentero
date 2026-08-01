@@ -96,6 +96,50 @@ export function createRunningTraces(
 	});
 }
 
+/**
+ * Mark a pin as running for a follow-up turn: append the user message and
+ * rebind runtimeSessionId so complete/fail finalizers and orphan reconcile
+ * track the new Agent run (not the first-turn session id).
+ */
+export function beginTraceContinue(
+	trace: PdfVisualSessionTrace,
+	input: {
+		runtimeSessionId: string;
+		messageId?: string;
+		userContent: string;
+		userMessageId?: string;
+		updatedAt?: string;
+	},
+): PdfVisualSessionTrace {
+	const now = input.updatedAt ?? new Date().toISOString();
+	const messages = [...(trace.messages ?? [])];
+	const content = input.userContent.trim();
+	if (content) {
+		const last = messages[messages.length - 1];
+		// Idempotent retry: do not double-append the same trailing user turn.
+		if (!(last?.role === "user" && last.content === content)) {
+			messages.push({
+				id: input.userMessageId ?? newTraceMessageId(),
+				role: "user",
+				content,
+				createdAt: now,
+			});
+		}
+	}
+	const next: PdfVisualSessionTrace = {
+		...trace,
+		status: "running",
+		runtimeSessionId: input.runtimeSessionId,
+		updatedAt: now,
+		messages,
+	};
+	if (input.messageId?.trim()) {
+		next.messageId = input.messageId.trim();
+	}
+	delete next.error;
+	return next;
+}
+
 export type CompleteTraceInput = {
 	providerSessionId?: string;
 	answerSnapshot?: string;

@@ -52,6 +52,8 @@ export type AgentSessionOpenRequest = {
 	 * Prefer this over prompt+answerSnapshot alone (multi-turn + image chip).
 	 */
 	visualTrace?: AgentSessionOpenVisualTrace;
+	/** Absolute paper path for mark finalizers on follow-up turns. */
+	paperAbsPath?: string;
 };
 
 type UiStore = {

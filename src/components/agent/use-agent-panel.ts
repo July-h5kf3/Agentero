@@ -135,6 +135,7 @@ import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import {
+	beginTraceContinue,
 	buildVisualAnnotationsPrompt,
 	completeTrace,
 	createRunningTraces,
@@ -1561,6 +1562,12 @@ export function useAgentPanel({
 		selections?: SelectionContext[];
 		/** Frozen visual PDF annotation drafts (else live store). */
 		visualDrafts?: PdfVisualDraft[];
+		/**
+		 * Explicit pin binding for follow-ups (pin modal continue). Preferred
+		 * over reading sessionHistoryRef which may lag store upserts.
+		 */
+		visualTraceId?: string;
+		paperAbsPath?: string;
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
 		/**
@@ -1785,6 +1792,26 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			// Bind disk finalizers for this runtime session:
+			// - first turn with visualDrafts → create mark files
+			// - follow-up on a bound pin (no new drafts) → re-register pending
+			//   so complete/fail still patches marks/<id>.json
+			const historyVisualTraceId =
+				activeHistory && "visualTraceId" in activeHistory
+					? (activeHistory as { visualTraceId?: string }).visualTraceId
+					: undefined;
+			const historyPaperAbs =
+				activeHistory && "paperAbsPath" in activeHistory
+					? (activeHistory as { paperAbsPath?: string }).paperAbsPath
+					: undefined;
+			const continueVisualTraceId = !hasVisualDrafts
+				? options?.visualTraceId?.trim() ||
+					historyVisualTraceId?.trim() ||
+					undefined
+				: undefined;
+			const continuePaperAbs = !hasVisualDrafts
+				? options?.paperAbsPath?.trim() || historyPaperAbs?.trim() || undefined
+				: undefined;
 			if (hasVisualDrafts) {
 				const byPaper = new Map<string, PdfVisualDraft[]>();
 				for (const draft of resolvedVisualDrafts) {
@@ -1830,6 +1857,29 @@ export function useAgentPanel({
 					}
 				}
 				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+			} else if (continueVisualTraceId && continuePaperAbs) {
+				try {
+					const current = await readPdfVisualTrace(
+						continuePaperAbs,
+						continueVisualTraceId,
+					);
+					if (current) {
+						const next = beginTraceContinue(current, {
+							runtimeSessionId: accepted.sessionId,
+							messageId: accepted.messageId,
+							userContent: text,
+						});
+						await writePdfVisualTrace(continuePaperAbs, next);
+					}
+				} catch {
+					// Keep chat running even if mark write fails.
+				}
+				rememberPendingVisualTraces(accepted.sessionId, [
+					{
+						paperAbsPath: continuePaperAbs,
+						traceId: continueVisualTraceId,
+					},
+				]);
 			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
@@ -1863,13 +1913,13 @@ export function useAgentPanel({
 			setActiveTabId(accepted.sessionId);
 			knownSessionIdsRef.current.add(accepted.sessionId);
 			const boundVisualTraceId =
-				activeHistory && "visualTraceId" in activeHistory
-					? (activeHistory as { visualTraceId?: string }).visualTraceId
-					: resolvedVisualDrafts[0]?.id;
+				options?.visualTraceId?.trim() ||
+				historyVisualTraceId ||
+				resolvedVisualDrafts[0]?.id;
 			const boundPaperAbs =
-				activeHistory && "paperAbsPath" in activeHistory
-					? (activeHistory as { paperAbsPath?: string }).paperAbsPath
-					: resolvedVisualDrafts[0]?.paperAbsPath;
+				options?.paperAbsPath?.trim() ||
+				historyPaperAbs ||
+				resolvedVisualDrafts[0]?.paperAbsPath;
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,
@@ -2056,12 +2106,35 @@ export function useAgentPanel({
 				setSelectedAgentId(boundAgentId);
 			}
 			if (existing) {
+				// Ensure pin binding fields survive even if the live session row
+				// was created before paperAbsPath was stored.
+				const needsBind =
+					(req.visualTraceId && existing.visualTraceId !== req.visualTraceId) ||
+					(req.paperAbsPath && existing.paperAbsPath !== req.paperAbsPath) ||
+					(req.providerSessionId &&
+						existing.providerSessionId !== req.providerSessionId);
+				if (needsBind) {
+					store.upsertSession(
+						{
+							...existing,
+							...(req.visualTraceId
+								? { visualTraceId: req.visualTraceId }
+								: {}),
+							...(req.paperAbsPath ? { paperAbsPath: req.paperAbsPath } : {}),
+							...(req.providerSessionId
+								? { providerSessionId: req.providerSessionId }
+								: {}),
+						},
+						{ activate: true },
+					);
+				}
 				ctx.activateComposerSession(existing.id);
 				setActiveTabId(existing.id);
 				setLines(existing.lines);
 				activeTabRef.current = existing.id;
-				if (existing.providerSessionId) {
-					activeConversationRef.current = existing.providerSessionId;
+				if (existing.providerSessionId || req.providerSessionId) {
+					activeConversationRef.current =
+						existing.providerSessionId ?? req.providerSessionId ?? null;
 				}
 			} else if (req.seedLines?.length && req.visualTraceId) {
 				const seeded = {
@@ -2092,9 +2165,13 @@ export function useAgentPanel({
 				activeConversationRef.current = req.providerSessionId ?? null;
 			}
 			setHistoryOpen(false);
+			// Keep ref in sync before send (upsert may not have flushed React yet).
+			sessionHistoryRef.current = agentSessionStore.getState().sessions;
 			return sendRef.current(req.text, {
 				visualDrafts: req.visualDrafts,
 				fromQueue: true,
+				...(req.visualTraceId ? { visualTraceId: req.visualTraceId } : {}),
+				...(req.paperAbsPath ? { paperAbsPath: req.paperAbsPath } : {}),
 				...(boundAgentId ? { agentId: boundAgentId } : {}),
 				...(req.modelId ? { modelId: req.modelId } : {}),
 			});
@@ -2688,6 +2765,7 @@ export function useAgentPanel({
 				agentName: selected?.name ?? t("defaultName"),
 				startedAt: match?.startedAt || new Date().toLocaleString(i18n.language),
 				emptyFallback: t("composer.visualAnnotation"),
+				paperAbsPath: request.paperAbsPath,
 			});
 			// Merge into existing slot if present; drop duplicate runtime-id entries.
 			setSessionHistory((prev) => {

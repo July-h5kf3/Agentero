@@ -121,7 +121,12 @@ export function buildVisualTraceHistoryItem(input: {
 	agentName: string;
 	startedAt: string;
 	emptyFallback?: string;
-}): ChatSessionHistoryItem {
+	/** Absolute paper path so follow-up turns can re-bind mark finalizers. */
+	paperAbsPath?: string;
+}): ChatSessionHistoryItem & {
+	visualTraceId: string;
+	paperAbsPath?: string;
+} {
 	const { trace } = input;
 	const lines = buildChatLinesFromVisualTrace(
 		{
@@ -163,5 +168,10 @@ export function buildVisualTraceHistoryItem(input: {
 		// Source ACP session — Host continues via resume or load (Grok: load).
 		providerSessionId: trace.providerSessionId ?? null,
 		resumeable: true,
+		// Keep pin ↔ panel continue bound to the same mark file.
+		visualTraceId: trace.id,
+		...(input.paperAbsPath?.trim()
+			? { paperAbsPath: input.paperAbsPath.trim() }
+			: {}),
 	};
 }
