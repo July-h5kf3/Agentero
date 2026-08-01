@@ -1568,6 +1568,12 @@ export function useAgentPanel({
 		 */
 		visualTraceId?: string;
 		paperAbsPath?: string;
+		/**
+		 * Start a brand-new product + ACP session (Cmd+Enter new pin).
+		 * Ignores the Agent panel's currently open conversation / provider id
+		 * so we never inherit sidebar transcript or session/load into a new mark.
+		 */
+		forceNewSession?: boolean;
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
 		/**
@@ -1623,11 +1629,15 @@ export function useAgentPanel({
 				return false;
 			}
 
-			const activeHistoryForAgent = sessionHistoryRef.current.find(
-				(item) => item.id === activeTabRef.current,
-			);
+			const forceNewSessionEarly = options?.forceNewSession === true;
+			const activeHistoryForAgent = forceNewSessionEarly
+				? undefined
+				: sessionHistoryRef.current.find(
+						(item) => item.id === activeTabRef.current,
+					);
 			// Priority: explicit option → continuing session's agent → switcher → default.
 			// Prevents pin-modal continue from loading Codex session with Grok (pdfAsk default).
+			// forceNewSession (Cmd+Enter new pin) never inherits the open panel agent.
 			let agentId =
 				options?.agentId?.trim() ||
 				(activeHistoryForAgent?.providerSessionId &&
@@ -1698,18 +1708,30 @@ export function useAgentPanel({
 					),
 				);
 			}
-			const activeHistory = sessionHistoryRef.current.find(
-				(item) => item.id === activeTabRef.current,
-			);
+			if (forceNewSessionEarly) {
+				// Drop any panel-level continue target before resolving resume.
+				activeConversationRef.current = null;
+			}
+			const activeHistory = forceNewSessionEarly
+				? undefined
+				: sessionHistoryRef.current.find(
+						(item) => item.id === activeTabRef.current,
+					);
 			// Continue when we have a durable provider session id. Host picks
 			// session/resume vs session/load from agent capabilities (Grok: load).
-			const providerContinueId =
-				activeConversationRef.current?.trim() ||
-				activeHistory?.providerSessionId?.trim() ||
-				null;
+			const providerContinueId = forceNewSessionEarly
+				? null
+				: activeConversationRef.current?.trim() ||
+					activeHistory?.providerSessionId?.trim() ||
+					null;
 			const resumeAllowed =
 				Boolean(providerContinueId) && activeHistory?.resumeable !== false;
-			const priorLines = options?.baseLines ?? lines;
+			// Prefer explicit baseLines (external turn handler) — React `lines`
+			// can still be the previous panel session when setLines([]) has not
+			// flushed (Cmd+Enter inheritance bug).
+			const priorLines = forceNewSessionEarly
+				? (options?.baseLines ?? [])
+				: (options?.baseLines ?? lines);
 			const promptBodyParts: string[] = [];
 			if (text) promptBodyParts.push(text);
 			if (!isAcpCommand && contextBlocks.length) {
@@ -2105,6 +2127,11 @@ export function useAgentPanel({
 				selectedAgentIdRef.current = boundAgentId;
 				setSelectedAgentId(boundAgentId);
 			}
+			// Transcript + resume target must be decided here and passed into
+			// send via options — setLines/setActiveTabId are async and send
+			// would otherwise inherit the sidebar's open conversation.
+			let baseLines: ChatLine[] = [];
+			let forceNewSession = false;
 			if (existing) {
 				// Ensure pin binding fields survive even if the live session row
 				// was created before paperAbsPath was stored.
@@ -2113,9 +2140,8 @@ export function useAgentPanel({
 					(req.paperAbsPath && existing.paperAbsPath !== req.paperAbsPath) ||
 					(req.providerSessionId &&
 						existing.providerSessionId !== req.providerSessionId);
-				if (needsBind) {
-					store.upsertSession(
-						{
+				const bound = needsBind
+					? {
 							...existing,
 							...(req.visualTraceId
 								? { visualTraceId: req.visualTraceId }
@@ -2124,17 +2150,19 @@ export function useAgentPanel({
 							...(req.providerSessionId
 								? { providerSessionId: req.providerSessionId }
 								: {}),
-						},
-						{ activate: true },
-					);
+						}
+					: existing;
+				if (needsBind) {
+					store.upsertSession(bound, { activate: true });
 				}
-				ctx.activateComposerSession(existing.id);
-				setActiveTabId(existing.id);
-				setLines(existing.lines);
-				activeTabRef.current = existing.id;
-				if (existing.providerSessionId || req.providerSessionId) {
+				ctx.activateComposerSession(bound.id);
+				setActiveTabId(bound.id);
+				setLines(bound.lines);
+				activeTabRef.current = bound.id;
+				baseLines = bound.lines;
+				if (bound.providerSessionId || req.providerSessionId) {
 					activeConversationRef.current =
-						existing.providerSessionId ?? req.providerSessionId ?? null;
+						bound.providerSessionId ?? req.providerSessionId ?? null;
 				}
 			} else if (req.seedLines?.length && req.visualTraceId) {
 				const seeded = {
@@ -2154,15 +2182,20 @@ export function useAgentPanel({
 				store.upsertSession(seeded, { activate: true });
 				ctx.activateComposerSession(seeded.id);
 				activeTabRef.current = seeded.id;
+				baseLines = req.seedLines;
 				if (req.providerSessionId) {
 					activeConversationRef.current = req.providerSessionId;
 				}
 			} else {
+				// New pin (Cmd+Enter) or external turn without prior session:
+				// never inherit the Agent panel's open Codex/Grok conversation.
+				forceNewSession = true;
 				setActiveTabId("draft");
 				activeTabRef.current = "draft";
 				setLines([]);
 				ctx.activateComposerSession("draft");
-				activeConversationRef.current = req.providerSessionId ?? null;
+				activeConversationRef.current = null;
+				baseLines = [];
 			}
 			setHistoryOpen(false);
 			// Keep ref in sync before send (upsert may not have flushed React yet).
@@ -2170,6 +2203,8 @@ export function useAgentPanel({
 			return sendRef.current(req.text, {
 				visualDrafts: req.visualDrafts,
 				fromQueue: true,
+				baseLines,
+				forceNewSession,
 				...(req.visualTraceId ? { visualTraceId: req.visualTraceId } : {}),
 				...(req.paperAbsPath ? { paperAbsPath: req.paperAbsPath } : {}),
 				...(boundAgentId ? { agentId: boundAgentId } : {}),
