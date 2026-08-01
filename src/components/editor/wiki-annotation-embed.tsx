@@ -1,12 +1,12 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/core/utils";
 import {
 	type AnnotationRef,
+	annotationAnchorY,
 	lookupAnnotationRef,
 	paperAbsFromWikiTarget,
 } from "@/lib/pdf/annotation-ref";
@@ -15,11 +15,15 @@ import {
 	swatchBorderClass,
 	swatchColorClass,
 } from "@/lib/pdf/highlight/palette";
+import {
+	getPaperOutline,
+	outlineLocationLabelForPaper,
+	subscribePaperOutline,
+} from "@/lib/pdf/outline-location";
 import { ANNOTATIONS_JSON, MARKS_FOLDER } from "@/lib/pdf/selection/marks-io";
 import { joinVaultPath } from "@/lib/vault";
 import { subscribeWikiEmbedTarget } from "@/lib/wiki-embed-refresh";
 
-const COMMENT_COLLAPSE_CHARS = 120;
 const ANNOTATION_REF_CACHE_LIMIT = 64;
 
 type WikiAnnotationEmbedProps = {
@@ -113,9 +117,23 @@ export function annotationEmbedWatchPaths(
 	];
 }
 
+function locationLabelForRef(ref: AnnotationRef): string | null {
+	const y = annotationAnchorY(ref.rects);
+	const keys = [ref.paperAbsPath];
+	for (const key of keys) {
+		const label = outlineLocationLabelForPaper(key, {
+			page: ref.page,
+			...(y != null ? { y } : {}),
+		});
+		if (label) return label;
+	}
+	return null;
+}
+
 /**
  * Body-only projection of a PDF highlight / visual-trace for `![[target@id]]`.
  * Title + type icon live in the shared embed chrome (wiki-embed-node).
+ * Long content scrolls via the outer embed shell (`max-h-96 overflow-auto`).
  */
 export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	vaultPath,
@@ -127,6 +145,8 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 }: WikiAnnotationEmbedProps) {
 	const { t } = useTranslation("editor");
 	const [marksRevision, setMarksRevision] = useState(0);
+	/** Bumped when PDF viewer fills outline cache — forces location re-read. */
+	const [outlineTick, setOutlineTick] = useState(0);
 	const requestKey = annotationCacheKey(
 		vaultPath,
 		targetPath,
@@ -144,13 +164,16 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		load.requestKey === requestKey
 			? undefined
 			: cachedAnnotationState(requestKey);
-	// Prefer: exact key → cache for new key → previous ready card (SWR) → loading.
 	const state: AnnotationLoadState =
 		load.requestKey === requestKey
 			? load.state
 			: (fallback ??
 				(load.state.kind === "ready" ? load.state : { kind: "loading" }));
-	const [expanded, setExpanded] = useState(false);
+
+	const paperAbs = useMemo(
+		() => paperAbsFromWikiTarget(vaultPath, targetPath),
+		[vaultPath, targetPath],
+	);
 
 	useEffect(() => {
 		const paths = annotationEmbedWatchPaths(
@@ -170,6 +193,17 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	}, [vaultPath, targetPath, annotationId]);
 
 	useEffect(() => {
+		if (!paperAbs) return;
+		// Re-render location label when PdfViewer fills the outline cache.
+		if (getPaperOutline(paperAbs)?.length) {
+			setOutlineTick((n) => n + 1);
+		}
+		return subscribePaperOutline(paperAbs, () => {
+			setOutlineTick((n) => n + 1);
+		});
+	}, [paperAbs]);
+
+	useEffect(() => {
 		const cached = cachedAnnotationState(requestKey);
 		if (cached && cached.kind !== "loading") {
 			setLoad((previous) =>
@@ -180,8 +214,6 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 			return;
 		}
 
-		// Stale-while-revalidate: keep the previous ready card visible while the
-		// next revision loads so marks updates do not flash "loading".
 		let cancelled = false;
 		void loadAnnotationState(
 			requestKey,
@@ -196,13 +228,19 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		};
 	}, [requestKey, vaultPath, targetPath, annotationId]);
 
-	// Must run every render (before any early return) so hook order stays stable.
 	const resolvedKind = state.kind === "ready" ? state.ref.kind : null;
 	useEffect(() => {
 		if (resolvedKind) onResolvedKind?.(resolvedKind);
 	}, [resolvedKind, onResolvedKind]);
 
-	// Only the very first load (no cached/stale card) shows a loading label.
+	// Read outline cache each render; outlineTick invalidates after PDF open.
+	void outlineTick;
+	const locationLabel =
+		state.kind === "ready"
+			? locationLabelForRef(state.ref) ||
+				t("embed.annotationPage", { page: state.ref.page })
+			: null;
+
 	if (state.kind === "loading") {
 		return (
 			<span
@@ -231,11 +269,10 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 
 	const { ref } = state;
 	const color: HighlightColor = ref.color ?? "yellow";
-	const body = ref.comment || ref.quote;
-	const long = body.length > COMMENT_COLLAPSE_CHARS;
 	const hasQuote = Boolean(ref.quote?.trim());
 	const hasComment = Boolean(ref.comment?.trim());
 	const hasImage = Boolean(ref.kind === "agent-trace" && ref.image?.data);
+	const messages = ref.kind === "agent-trace" ? (ref.messages ?? []) : [];
 
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: body is a large hit target for jump
@@ -258,7 +295,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				}
 			}}
 		>
-			{/* Meta row: color/page only — title lives in the shared embed header */}
+			{/* Location: outline breadcrumb or page fallback */}
 			<div className="flex items-center gap-1.5">
 				{ref.kind === "agent-trace" ? null : (
 					<span
@@ -269,15 +306,18 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 						aria-hidden
 					/>
 				)}
-				<span className="shrink-0 font-medium text-[10px] text-muted-foreground uppercase tracking-wider tabular-nums">
-					{t("embed.annotationPage", { page: ref.page })}
+				<span
+					className="min-w-0 truncate font-medium text-[10px] text-muted-foreground tracking-wide"
+					title={locationLabel ?? undefined}
+				>
+					{locationLabel}
 				</span>
 			</div>
 
 			{hasQuote ? (
 				<blockquote
 					className={cn(
-						"mt-1.5 line-clamp-3 border-l-2 pl-2.5 text-xs leading-relaxed text-muted-foreground",
+						"mt-1.5 border-l-2 pl-2.5 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words",
 						swatchBorderClass(color),
 					)}
 				>
@@ -285,51 +325,68 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</blockquote>
 			) : null}
 
-			{hasComment ? (
-				<div className={cn(hasQuote ? "mt-2" : "mt-1.5")}>
-					<p
-						className={cn(
-							"whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed",
-							long && !expanded && "line-clamp-3",
-						)}
-					>
-						{ref.comment}
-					</p>
-					{long ? (
-						<button
-							type="button"
-							className="mt-1 inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								setExpanded((v) => !v);
-							}}
-						>
-							{expanded ? (
-								<>
-									<ChevronUp className="size-3" aria-hidden />
-									{t("embed.annotationCollapse")}
-								</>
-							) : (
-								<>
-									<ChevronDown className="size-3" aria-hidden />
-									{t("embed.annotationExpand")}
-								</>
-							)}
-						</button>
-					) : null}
-				</div>
-			) : null}
-
+			{/* Visual crop — capped so conversation can still scroll below */}
 			{hasImage ? (
 				<img
 					src={`data:${ref.image?.mimeType || "image/png"};base64,${ref.image?.data}`}
 					alt=""
 					className={cn(
-						"max-h-36 w-full rounded border border-border/60 object-contain",
-						hasQuote || hasComment ? "mt-2" : "mt-1.5",
+						"max-h-40 w-full rounded border border-border/60 object-contain",
+						hasQuote ? "mt-2" : "mt-1.5",
 					)}
 				/>
+			) : null}
+
+			{/* Highlight note: full text, outer embed scrolls */}
+			{ref.kind === "highlight" && hasComment ? (
+				<p
+					className={cn(
+						"whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed",
+						hasQuote || hasImage ? "mt-2" : "mt-1.5",
+					)}
+				>
+					{ref.comment}
+				</p>
+			) : null}
+
+			{/* Visual: read-only agent transcript (no composer) */}
+			{ref.kind === "agent-trace" ? (
+				<div
+					className={cn(
+						"space-y-2",
+						hasQuote || hasImage || hasComment ? "mt-2" : "mt-1.5",
+					)}
+				>
+					{hasComment && !messages.some((m) => m.content === ref.comment) ? (
+						<p className="whitespace-pre-wrap break-words text-[13px] text-foreground/85 leading-relaxed">
+							{ref.comment}
+						</p>
+					) : null}
+					{messages.length === 0 ? (
+						<p className="text-muted-foreground text-xs">
+							{t("embed.annotationNoTranscript")}
+						</p>
+					) : (
+						messages.map((m) => (
+							<div
+								key={m.id}
+								className={cn(
+									"rounded-md px-2.5 py-1.5 text-[13px] leading-relaxed",
+									m.role === "user"
+										? "bg-primary/10 text-foreground/90"
+										: "bg-muted/70 text-foreground/85",
+								)}
+							>
+								<div className="mb-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+									{m.role === "user"
+										? t("embed.annotationRoleUser")
+										: t("embed.annotationRoleAssistant")}
+								</div>
+								<p className="whitespace-pre-wrap break-words">{m.content}</p>
+							</div>
+						))
+					)}
+				</div>
 			) : null}
 		</div>
 	);

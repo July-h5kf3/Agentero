@@ -202,6 +202,7 @@ import {
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -2295,13 +2296,18 @@ function PdfViewerInner({
 			.getBookmarks()
 			.toPromise()
 			.then((res) => {
-				if (!cancelled) setOutline(res?.bookmarks ?? []);
+				if (cancelled) return;
+				const bookmarks = res?.bookmarks ?? [];
+				setOutline(bookmarks);
+				// Share with annotation embeds for location breadcrumbs.
+				const paperKey = paperAbsPath || paperRelPath;
+				if (paperKey) setPaperOutline(paperKey, bookmarks);
 			})
 			.catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
-	}, [bookmarkCap, docId, totalPages]);
+	}, [bookmarkCap, docId, totalPages, paperAbsPath, paperRelPath]);
 
 	// Cmd/Ctrl+F opens the in-document find bar when the PDF host is focused.
 	useEffect(() => {

@@ -120,7 +120,10 @@
 		"annotationPage": "p.{{page}}",
 		"annotationExpand": "Show more",
 		"annotationCollapse": "Show less",
-		"untitled": "Embed"
+		"untitled": "Embed",
+		"annotationRoleUser": "You",
+		"annotationRoleAssistant": "Assistant",
+		"annotationNoTranscript": "No conversation saved for this mark."
 	},
 	"wikiCompletion": {
 		"label": "Internal link suggestions",

@@ -13,8 +13,15 @@
 
 import { paperDirFromPath } from "@/lib/paper/detect";
 import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
-import { parsePdfVisualSessionTrace } from "@/lib/pdf/agent-trace/schema";
-import type { PdfVisualTraceImage } from "@/lib/pdf/agent-trace/types";
+import {
+	parsePdfVisualSessionTrace,
+	traceMessages,
+} from "@/lib/pdf/agent-trace/schema";
+import type {
+	PdfVisualNormalizedRect,
+	PdfVisualTraceImage,
+	PdfVisualTraceMessage,
+} from "@/lib/pdf/agent-trace/types";
 import {
 	highlightColorOf,
 	highlightQuoteOf,
@@ -30,6 +37,14 @@ import { tabIdForPath } from "@/lib/workspace/tabs/model";
 
 export type AnnotationRefKind = "highlight" | "agent-trace";
 
+export type AnnotationRefRect = {
+	/** 0–1 relative to page box (top-down when from app marks). */
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+};
+
 export type AnnotationRef = {
 	kind: AnnotationRefKind;
 	id: string;
@@ -44,7 +59,53 @@ export type AnnotationRef = {
 	color?: HighlightColor;
 	/** Optional crop preview for visual traces. */
 	image?: PdfVisualTraceImage;
+	/** Normalized rects when known (for outline y matching). */
+	rects?: AnnotationRefRect[];
+	/** Visual-trace multi-turn transcript (read-only embed). */
+	messages?: PdfVisualTraceMessage[];
 };
+
+/** Min y of rects (0–1), for outline location. */
+export function annotationAnchorY(
+	rects: AnnotationRefRect[] | undefined,
+): number | undefined {
+	if (!rects?.length) return undefined;
+	let min = Number.POSITIVE_INFINITY;
+	for (const r of rects) {
+		if (Number.isFinite(r.y)) min = Math.min(min, r.y);
+	}
+	return Number.isFinite(min) ? min : undefined;
+}
+
+function rectsFromHighlightObject(annotation: object): AnnotationRefRect[] {
+	const obj = annotation as {
+		segmentRects?: Array<{
+			origin?: { x?: number; y?: number };
+			size?: { width?: number; height?: number };
+		}>;
+		rect?: {
+			origin?: { x?: number; y?: number };
+			size?: { width?: number; height?: number };
+		};
+	};
+	const segs = obj.segmentRects?.length
+		? obj.segmentRects
+		: obj.rect
+			? [obj.rect]
+			: [];
+	// EmbedPDF rects are in PDF page points — we only need relative y order for
+	// same-page outline ties; store raw points normalized by a fake page height
+	// is wrong. Prefer leaving rects empty for highlights unless we have 0–1.
+	// Visual traces already store 0–1 rects on disk.
+	void segs;
+	return [];
+}
+
+function rectsFromVisual(
+	rects: PdfVisualNormalizedRect[],
+): AnnotationRefRect[] {
+	return rects.map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }));
+}
 
 /** One list row for panels / `@` completion (disk or memory). */
 export type PaperAnnotationSummary = {
@@ -129,6 +190,7 @@ export async function lookupAnnotationRef(
 		if (isHighlightObject(annotation as never)) {
 			const hl = annotation as Parameters<typeof highlightQuoteOf>[0];
 			const comment = obj.contents?.trim() ?? "";
+			const rects = rectsFromHighlightObject(annotation);
 			return {
 				kind: "highlight",
 				id,
@@ -137,6 +199,7 @@ export async function lookupAnnotationRef(
 				quote: highlightQuoteOf(hl),
 				comment,
 				color: highlightColorOf(hl),
+				...(rects.length ? { rects } : {}),
 			};
 		}
 		// Non-highlight annotation objects still jump by id if present.
@@ -153,6 +216,7 @@ export async function lookupAnnotationRef(
 	const raw = await readMarkRaw(paperAbsPath, id);
 	const trace = parsePdfVisualSessionTrace(raw);
 	if (trace && trace.id === id) {
+		const messages = traceMessages(trace);
 		return {
 			kind: "agent-trace",
 			id,
@@ -161,6 +225,8 @@ export async function lookupAnnotationRef(
 			quote: "",
 			comment: trace.comment,
 			image: trace.image,
+			rects: rectsFromVisual(trace.rects),
+			...(messages.length ? { messages } : {}),
 		};
 	}
 

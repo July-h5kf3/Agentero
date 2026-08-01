@@ -120,7 +120,10 @@
 		"annotationPage": "第 {{page}} 页",
 		"annotationExpand": "展开",
 		"annotationCollapse": "收起",
-		"untitled": "嵌入"
+		"untitled": "嵌入",
+		"annotationRoleUser": "用户",
+		"annotationRoleAssistant": "助手",
+		"annotationNoTranscript": "此批注暂无对话记录。"
 	},
 	"wikiCompletion": {
 		"label": "双链候选",
