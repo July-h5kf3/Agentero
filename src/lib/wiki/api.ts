@@ -31,10 +31,17 @@ export function isValidAnnotationId(id: string): boolean {
 
 /**
  * Strip CommonMark-ish escapes (esp. `\_`) that otherwise break sugar split and
- * make the whole `path@id` look like a missing file.
+ * make the whole `path@id` look like a missing file / ambiguous stem match.
+ */
+export function unescapeMarkdownEscapes(raw: string): string {
+	return raw.replace(/\\(.)/g, "$1");
+}
+
+/**
+ * Strip CommonMark-ish escapes from annotation ids (esp. `\_`).
  */
 export function normalizeAnnotationId(id: string): string {
-	return id.replace(/\\(.)/g, "$1");
+	return unescapeMarkdownEscapes(id);
 }
 
 /**
@@ -46,7 +53,9 @@ export function splitAnnotationSugar(
 ): { target: string; id: string } | null {
 	const at = main.lastIndexOf("@");
 	if (at < 0) return null;
-	const target = main.slice(0, at).trimEnd();
+	// Unescape both sides: path stems often contain `_` (DOI-like paper folders)
+	// and may have been corrupted by mdast `state.safe` on a prior save.
+	const target = unescapeMarkdownEscapes(main.slice(0, at).trimEnd());
 	const id = normalizeAnnotationId(main.slice(at + 1).trim());
 	if (!isValidAnnotationId(id)) return null;
 	return { target, id };
@@ -350,15 +359,16 @@ function parseLinkBody(
 	const pipe = trimmed.indexOf("|");
 	const main = (pipe >= 0 ? trimmed.slice(0, pipe) : trimmed).trim();
 	const aliasRaw = pipe >= 0 ? trimmed.slice(pipe + 1).trim() : "";
+	const alias = aliasRaw ? unescapeMarkdownEscapes(aliasRaw) : undefined;
 	if (!main) return null;
 	const hash = main.indexOf("#");
 	if (hash >= 0) {
-		const targetRaw = main.slice(0, hash).trim();
+		const targetRaw = unescapeMarkdownEscapes(main.slice(0, hash).trim());
 		const fragment = parseWikiFragment(main.slice(hash + 1));
 		if (!targetRaw && !fragment) return null;
 		return {
 			targetRaw,
-			alias: aliasRaw || undefined,
+			alias,
 			fragment,
 		};
 	}
@@ -366,13 +376,13 @@ function parseLinkBody(
 	if (sugar) {
 		return {
 			targetRaw: sugar.target,
-			alias: aliasRaw || undefined,
+			alias,
 			fragment: { kind: "annotation", id: sugar.id },
 		};
 	}
 	return {
-		targetRaw: main,
-		alias: aliasRaw || undefined,
+		targetRaw: unescapeMarkdownEscapes(main),
+		alias,
 	};
 }
 

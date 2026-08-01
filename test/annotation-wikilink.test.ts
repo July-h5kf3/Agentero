@@ -1,9 +1,14 @@
+import { MarkdownPlugin } from "@platejs/markdown";
+import { createSlateEditor, createSlatePlugin, KEYS } from "platejs";
 import { describe, expect, it } from "vitest";
 
+import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
 	parseWikiLinkMarkdown,
+	wikiLinkRules,
 	wikiLinkToMarkdown,
 } from "@/components/editor/plugins/wikilink-model";
+import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	annotationWikilinkAlias,
 	annotationWikilinkMarkdown,
@@ -16,6 +21,7 @@ import {
 	isValidAnnotationId,
 	parseWikiFragment,
 	resolveDemoWikiReference,
+	resolveWikiTarget,
 	splitAnnotationSugar,
 } from "@/lib/wiki";
 import { parseWikiCompletionQuery } from "@/lib/wiki-completion";
@@ -86,6 +92,69 @@ describe("annotation wikilink parse", () => {
 			heading: "@TGDf_eZGV4",
 		});
 		expect(wikiLinkToMarkdown(sameNote!)).toBe("[[@TGDf_eZGV4]]");
+	});
+
+	it("unescapes path underscores corrupted by mdast state.safe", () => {
+		const path = "papers/10_1007_s11390-025-5140-6/NOTES";
+		const escaped =
+			"![[papers/10\\_1007\\_s11390-025-5140-6/NOTES@mh8SPQgbMG|Parfxxx]]";
+		const node = parseWikiLinkMarkdown(escaped);
+		expect(node).toMatchObject({
+			value: path,
+			heading: "@mh8SPQgbMG",
+			alias: "Parfxxx",
+			embed: true,
+		});
+		expect(wikiLinkToMarkdown(node!)).toBe(`![[${path}@mh8SPQgbMG|Parfxxx]]`);
+		expect(
+			splitAnnotationSugar("papers/10\\_1007\\_s11390/NOTES@ab_c"),
+		).toEqual({
+			target: "papers/10_1007_s11390/NOTES",
+			id: "ab_c",
+		});
+		// Stem-only "NOTES" would be ambiguous; full path must resolve uniquely.
+		const files = [
+			"papers/10_1007_s11390-025-5140-6/NOTES.md",
+			"papers/other-paper/NOTES.md",
+		];
+		expect(resolveWikiTarget(path, files)).toBe(
+			"papers/10_1007_s11390-025-5140-6/NOTES.md",
+		);
+		expect(
+			resolveWikiTarget("papers/10\\_1007\\_s11390-025-5140-6/NOTES", files),
+		).toBeNull();
+	});
+
+	it("serializes annotation embeds without escaping vault path underscores", () => {
+		const path = "papers/10_1007_s11390-025-5140-6/NOTES";
+		const md = `![[${path}@mh8SPQgbMG|Parfxxx]]`;
+		const node = parseWikiLinkMarkdown(md);
+		if (!node) throw new Error("expected parsed embed");
+		expect(wikiLinkRules.wikiLink.serialize(node)).toEqual({
+			type: "embed",
+			value: `${path}@mh8SPQgbMG`,
+			data: { alias: "Parfxxx" },
+		});
+
+		const ParagraphPlugin = createSlatePlugin({
+			key: KEYS.p,
+			node: { isElement: true },
+		});
+		const editor = createSlateEditor({
+			plugins: [ParagraphPlugin, WikiLinkPlugin, ...MarkdownKit],
+			value: [{ type: "p", children: [node] }],
+		});
+		const serialized = editor.getApi(MarkdownPlugin).markdown.serialize();
+		expect(serialized).not.toContain("\\_");
+		expect(serialized.trimEnd()).toBe(md);
+
+		// Re-open path: deserialize → serialize must keep literal underscores.
+		const reopened = createSlateEditor({
+			plugins: [ParagraphPlugin, WikiLinkPlugin, ...MarkdownKit],
+			value: (ed) => ed.getApi(MarkdownPlugin).markdown.deserialize(serialized),
+		});
+		const again = reopened.getApi(MarkdownPlugin).markdown.serialize();
+		expect(again.trimEnd()).toBe(md);
 	});
 
 	it("formats annotation bodies with preferred sugar", () => {
