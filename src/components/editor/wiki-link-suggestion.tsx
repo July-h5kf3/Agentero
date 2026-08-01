@@ -452,7 +452,9 @@ export function WikiLinkSuggestion({
 			const parentEntry = editor.api.parent(selection.anchor.path);
 			const stableLinkPath =
 				parentEntry && isWikiLinkNode(parentEntry[0]) ? parentEntry[1] : null;
-			controllerRef.current = null;
+			// Do not null controllerRef here. The layout effect only binds once
+			// (stable identity); clearing it permanently kills ↑/↓/Enter until
+			// remount. Closed menus are ignored via draftRef.current === null.
 			editor.tf.delete({ at: { anchor: start, focus: end } });
 			if (stableLinkPath) {
 				const parsed = parseWikiLinkMarkdown(markdown);
@@ -528,7 +530,7 @@ export function WikiLinkSuggestion({
 			);
 			return true;
 		},
-		[controllerRef, draft, editor, onClose, onContinue, request],
+		[draft, editor, onClose, onContinue, request],
 	);
 
 	const selectedIndexRef = useRef(selectedIndex);
