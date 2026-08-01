@@ -68,15 +68,17 @@ pub fn run() {
 
     builder = handlers::attach_handlers(builder);
 
-    builder = builder.setup(|app| {
-        // Window chrome / show is desktop-only; mobile windows are managed by the
-        // embedder and do not expose these APIs.
-        #[cfg(not(target_os = "ios"))]
-        {
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.show();
+    #[cfg(not(target_os = "ios"))]
+    {
+        builder = builder.on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                // The HTML boot shell is ready now; reveal it while React hydrates.
+                let _ = webview.window().show();
             }
-        }
+        });
+    }
+
+    builder = builder.setup(|app| {
         // Native menu is macOS-only; the renderer re-syncs the locale on mount.
         #[cfg(target_os = "macos")]
         {

@@ -4,10 +4,70 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agentero</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        background: #fafafa;
+      }
+
+      #boot-shell {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        place-items: center;
+      }
+
+      #boot-spinner {
+        width: 24px;
+        height: 24px;
+        border: 2px solid #d4d4d8;
+        border-top-color: #52525b;
+        border-radius: 9999px;
+        animation: boot-spin 800ms linear infinite;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #09090b;
+        }
+
+        #boot-spinner {
+          border-color: #3f3f46;
+          border-top-color: #d4d4d8;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #boot-spinner {
+          animation: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-shell" aria-hidden="true">
+        <div id="boot-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

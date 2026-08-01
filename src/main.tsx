@@ -32,9 +32,9 @@ function bootStage(name: string) {
 }
 
 async function boot() {
-	await initLogger();
+	void initLogger();
 	logger.info("op start frontend_boot");
-	bootStage("logger");
+	bootStage("entry");
 
 	// Host XDG settings.json (migrates legacy localStorage once).
 	await ensureSettingsLoaded();

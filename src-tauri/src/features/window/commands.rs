@@ -46,6 +46,7 @@ pub async fn window_new(app: AppHandle) -> Result<(), String> {
             .title("Agentero")
             .inner_size(1280.0, 800.0)
             .min_inner_size(800.0, 520.0)
+            .visible(false)
             .resizable(true);
 
     #[cfg(target_os = "macos")]
@@ -117,6 +118,7 @@ pub async fn settings_window_open(
             .title("Settings")
             .inner_size(720.0, 560.0)
             .min_inner_size(640.0, 480.0)
+            .visible(false)
             .resizable(true);
 
     #[cfg(target_os = "macos")]
