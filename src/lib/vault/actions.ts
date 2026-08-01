@@ -5,6 +5,8 @@
  */
 
 import i18n from "@/i18n";
+import { clearSelections } from "@/lib/agent/selection-store";
+import { clearVisualDrafts } from "@/lib/agent/visual-context-store";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -104,6 +106,10 @@ export async function activateVault(path: string): Promise<void> {
 	setTreeSelectedPath(null);
 	setLibraryQuery("");
 	setLibraryScopePath(null);
+	// Ephemeral composer context is vault-scoped in practice; clear so drafts
+	// never write marks into the previous vault after a switch.
+	clearVisualDrafts();
+	clearSelections();
 	refreshRecentVaults();
 	// Wiki rebuild needs local fs watcher semantics; remote is best-effort.
 	if (!isRemoteVaultHandle(path)) {

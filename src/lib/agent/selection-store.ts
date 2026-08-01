@@ -110,6 +110,13 @@ export function consumeSelections(): SelectionContext[] {
 	return all;
 }
 
+/** Drop every selection chip without returning them (e.g. vault switch). */
+export function clearSelections(): void {
+	const { active, pinned } = selectionStore.getState();
+	if (!active && pinned.length === 0) return;
+	selectionStore.setState({ active: null, pinned: [] });
+}
+
 /** Prompt scaffold in English, matching the PDF-ask quote precedent. */
 export function selectionsPromptBlock(selections: SelectionContext[]): string {
 	return selections
