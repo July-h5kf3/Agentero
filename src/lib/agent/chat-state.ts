@@ -13,9 +13,24 @@ import type {
 	AgentTemplate,
 	AgentToolEvent,
 	CatalogScanResponse,
+	PromptImage,
 } from "@/lib/agent/api";
-import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import {
+	isVisualAnnotationPromptText,
+	stripPromptEnvelopeForDisplay,
+} from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+
+/** Snapshot of a visual PDF annotation attached to a local user chat line. */
+export type ChatVisualAnnotation = {
+	id: string;
+	/** 1-based PDF page number. */
+	page: number;
+	comment: string;
+	image: PromptImage;
+	/** Vault-relative paper path when known. */
+	paperPath?: string;
+};
 
 export type ToolUiState = {
 	id: string;
@@ -39,7 +54,14 @@ export type AgentPart =
 	| { type: "plan"; id: string; entries: AgentPlanEntry[] };
 
 export type ChatLine =
-	| { id: string; kind: "user"; text: string }
+	| {
+			id: string;
+			kind: "user";
+			/** Free-form composer text (may be empty when only visual annotations). */
+			text: string;
+			/** Local multimodal visual crops sent with this turn (session-local). */
+			visualAnnotations?: ChatVisualAnnotation[];
+	  }
 	| {
 			id: string;
 			kind: "agent";
@@ -61,7 +83,48 @@ export type ChatSessionHistoryItem = {
 	status: "running" | "completed" | "cancelled" | "failed";
 	/** Durable ACP provider session id used to resume this conversation. */
 	providerSessionId?: string | null;
+	/**
+	 * When false, never pass sessionId to runOnce (no ACP session/resume).
+	 * Used for PDF visual-trace pin chats whose multi-turn context lives in
+	 * local lines + prompt history, not provider sessions.
+	 * Default/undefined = resume allowed when the agent supports it.
+	 */
+	resumeable?: boolean;
 };
+
+/** Format prior user/agent turns for agents that cannot session/resume. */
+export function buildLocalTranscriptPrompt(
+	lines: ChatLine[],
+	/** Exclude the just-appended latest user turn (already in `prompt`). */
+	opts?: { excludeTrailingUserText?: string },
+): string {
+	const turns: string[] = [];
+	for (const line of lines) {
+		if (line.kind === "user") {
+			const text = line.text.trim();
+			if (!text && !line.visualAnnotations?.length) continue;
+			const label = text || "(visual annotation)";
+			turns.push(`User: ${label}`);
+			continue;
+		}
+		if (line.kind === "agent") {
+			const text = agentTextFromParts(line.parts).trim();
+			if (!text) continue;
+			turns.push(`Assistant: ${text}`);
+		}
+	}
+	if (opts?.excludeTrailingUserText != null) {
+		const needle = opts.excludeTrailingUserText.trim();
+		if (needle) {
+			const last = turns[turns.length - 1];
+			if (last === `User: ${needle}`) turns.pop();
+		}
+	}
+	if (turns.length === 0) return "";
+	return ["Earlier turns in this conversation:", turns.join("\n\n")].join(
+		"\n\n",
+	);
+}
 
 export type PendingTerminalEvent =
 	| { kind: "completed"; event: AgentResultPayload }
@@ -101,12 +164,15 @@ export function errorText(error: unknown): string {
 }
 
 /**
- * Background workflows (paper-reader, etc.) must not appear in Agent chat history.
- * Matches titles already indexed before hideFromChatHistory existed.
+ * Background workflows (paper-reader, visual pin chat, etc.) must not appear
+ * in Agent chat history as separate ACP sessions. Matches titles already
+ * indexed before hideFromChatHistory existed; visual prompts are filtered
+ * because hideFromChatHistory is not yet enforced on the host list path.
  */
 export function isBackgroundWorkflowHistoryTitle(title: string): boolean {
 	const t = stripPromptEnvelopeForDisplay(title).toLowerCase();
 	const raw = title.toLowerCase();
+	if (isVisualAnnotationPromptText(title)) return true;
 	return (
 		raw.includes("paper-reader") ||
 		raw.includes("paper_reader") ||
@@ -115,6 +181,7 @@ export function isBackgroundWorkflowHistoryTitle(title: string): boolean {
 		raw.includes("activate and follow $paper-reader") ||
 		raw.includes("activate and follow /paper-reader") ||
 		raw.includes("you are running the agentero paper-reader") ||
+		raw.includes("you are helping the user discuss a visual region") ||
 		t.includes("activate and follow $paper-reader") ||
 		t.includes("write structured lecture notes")
 	);

@@ -16,21 +16,30 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 
 ```text
 spawn 用户配置的 agent
-  → ACP ready
-  → session create / load
+  → ACP initialize（读 loadSession / sessionCapabilities.resume）
+  → session/new  或  继续：resume 优先，否则 session/load（Grok 仅 load）
   → available_commands_update → `agent:commands`
   → build_prompt（workflow + 可选 agentPersonalPrompt）
-  → 流式 stdout → agent:stream
+  → session/prompt → 流式 agent:stream
   → 权限请求 → 前端（ask 模式）
-  → 完成 / 失败事件
+  → 完成（含 providerSessionId）/ 失败
 ```
+
+多轮续聊必须传 **provider session id**（不是 Agentero runtime id）。Grok Build ACP
+声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
+`Method not found`，Host 应改走 `session/load`。
+
+`session/load` 会把历史以 `SessionNotification` 回放。Host 在
+`session/prompt` 之前 **suppress** 回放中的 stream/tool/plan（不 `agent:stream`、
+不写入本轮 content buffer），避免第二轮气泡开头重复上一轮回答；usage /
+commands / config 仍可在 load 期间转发。
 
 ## 命令（摘要）
 
 | Command | 说明 |
 |---|---|
 | `agent_probe` / `agent_warm` | 探测与预热 |
-| `agent_run_once` | 发起一轮（含 workflow / permissionMode） |
+| `agent_run_once` | 发起一轮；`sessionId` 时按能力 resume 或 load |
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |

@@ -18,6 +18,17 @@ export function buildPdfAskPrompt(
 		"You are helping the user read a research paper PDF in Agentero.",
 		`Page: ${page}`,
 	];
+	if (thread.anchor.visualKind === "formula") {
+		parts.push(
+			"The user attached a crop containing a formula or technical expression.",
+			"Explain its purpose, define the notation, describe how the terms interact, and connect it to the surrounding paper. Do not invent missing context.",
+		);
+	} else if (thread.anchor.visualKind === "figure") {
+		parts.push(
+			"The user attached a crop containing a figure, chart, table, or other visual region.",
+			"Explain the visual structure, axes or legend when present, the main comparison, and the conclusion supported by the crop. Do not invent unreadable values.",
+		);
+	}
 	if (quote) {
 		parts.push("Quoted text from the PDF:", `> ${quote}`);
 	}

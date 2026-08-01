@@ -4,6 +4,7 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	ListTodoIcon,
+	ScanSearch,
 	Star,
 	TextSelect,
 	X,
@@ -72,6 +73,7 @@ import { SUGGESTION_KEYS, SUGGESTION_WORKFLOW } from "@/lib/agent/chat-state";
 import { mentionPathHasChildren } from "@/lib/agent/mention";
 import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { AcpCommand } from "@/lib/agent/slash-commands";
+import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import { basenameOf } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 
@@ -102,6 +104,8 @@ export function AgentComposer({
 	mentionChipPaths,
 	selectionChips,
 	onRemoveSelection,
+	visualDrafts,
+	onRemoveVisualDraft,
 	directoryPathSet,
 	paperPathSet,
 	labelForPath,
@@ -177,6 +181,8 @@ export function AgentComposer({
 	mentionChipPaths: string[];
 	selectionChips: SelectionContext[];
 	onRemoveSelection: (id: string) => void;
+	visualDrafts: PdfVisualDraft[];
+	onRemoveVisualDraft: (id: string) => void;
 	directoryPathSet: ReadonlySet<string>;
 	paperPathSet: ReadonlySet<string>;
 	labelForPath: (path: string) => string;
@@ -225,9 +231,11 @@ export function AgentComposer({
 }) {
 	const { t } = useTranslation("agent");
 	const hasComposerText = Boolean(composerText.trim());
+	const hasVisualDrafts = visualDrafts.length > 0;
+	const canSubmitComposer = hasComposerText || hasVisualDrafts;
 	const composerMenuOpen = showMentionMenu || showSkillMenu || showSlashMenu;
-	// While streaming: empty input → stop; with text → queue as follow-up.
-	const showStop = activeTabIsRunning && !hasComposerText;
+	// While streaming: empty input → stop; with text/visual drafts → queue as follow-up.
+	const showStop = activeTabIsRunning && !canSubmitComposer;
 
 	return (
 		<div
@@ -265,25 +273,34 @@ export function AgentComposer({
 						</QueueSectionTrigger>
 						<QueueSectionContent>
 							<QueueList>
-								{messageQueue.map((item) => (
-									<QueueItem key={item.id}>
-										<div className="flex items-center gap-2">
-											<QueueItemIndicator />
-											<QueueItemContent title={item.text}>
-												{item.text}
-											</QueueItemContent>
-											<QueueItemActions>
-												<QueueItemAction
-													aria-label={t("composer.queueRemove")}
-													title={t("composer.queueRemove")}
-													onClick={() => onRemoveQueuedMessage(item.id)}
-												>
-													<X className="size-3.5" />
-												</QueueItemAction>
-											</QueueItemActions>
-										</div>
-									</QueueItem>
-								))}
+								{messageQueue.map((item) => {
+									const queueLabel =
+										item.text.trim() ||
+										(item.visualDrafts.length
+											? t("composer.visualAnnotationsTitle", {
+													count: item.visualDrafts.length,
+												})
+											: t("composer.visualAnnotation"));
+									return (
+										<QueueItem key={item.id}>
+											<div className="flex items-center gap-2">
+												<QueueItemIndicator />
+												<QueueItemContent title={queueLabel}>
+													{queueLabel}
+												</QueueItemContent>
+												<QueueItemActions>
+													<QueueItemAction
+														aria-label={t("composer.queueRemove")}
+														title={t("composer.queueRemove")}
+														onClick={() => onRemoveQueuedMessage(item.id)}
+													>
+														<X className="size-3.5" />
+													</QueueItemAction>
+												</QueueItemActions>
+											</div>
+										</QueueItem>
+									);
+								})}
 							</QueueList>
 						</QueueSectionContent>
 					</QueueSection>
@@ -323,7 +340,8 @@ export function AgentComposer({
 							>
 								{currentFilePath ||
 								mentionChipPaths.length > 0 ||
-								selectionChips.length > 0 ? (
+								selectionChips.length > 0 ||
+								visualDrafts.length > 0 ? (
 									<div className="mb-2 flex flex-wrap gap-1.5">
 										{currentFilePath ? (
 											<button
@@ -386,6 +404,44 @@ export function AgentComposer({
 													<span
 														className="max-w-[16rem] truncate"
 														title={sel.text}
+													>
+														{label}
+													</span>
+													<X className="size-3 shrink-0 text-muted-foreground" />
+												</button>
+											);
+										})}
+										{visualDrafts.map((draft) => {
+											const pageLabel = t("composer.visualAnnotationPage", {
+												page: draft.page,
+											});
+											const label =
+												draft.comment.trim() ||
+												`${t("composer.visualAnnotation")} · ${pageLabel}`;
+											const thumb =
+												draft.image.data.length > 0
+													? `data:${draft.image.mimeType || "image/png"};base64,${draft.image.data}`
+													: null;
+											return (
+												<button
+													key={draft.id}
+													type="button"
+													className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border bg-muted/20 px-1.5 pr-2 text-foreground text-xs transition-colors hover:bg-muted"
+													onClick={() => onRemoveVisualDraft(draft.id)}
+													title={t("composer.removeVisualDraft")}
+												>
+													{thumb ? (
+														<img
+															src={thumb}
+															alt=""
+															className="size-5 shrink-0 rounded object-cover"
+														/>
+													) : (
+														<ScanSearch className="size-3.5 shrink-0 text-muted-foreground" />
+													)}
+													<span
+														className="max-w-[14rem] truncate"
+														title={draft.comment || pageLabel}
 													>
 														{label}
 													</span>
@@ -836,7 +892,7 @@ export function AgentComposer({
 						disabled={
 							switching ||
 							(submitting && !activeTabIsRunning) ||
-							(!showStop && !hasComposerText)
+							(!showStop && !canSubmitComposer)
 						}
 					/>
 				</PromptInputFooter>

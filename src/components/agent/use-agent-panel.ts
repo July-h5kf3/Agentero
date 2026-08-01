@@ -13,7 +13,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentPanelProps, QueuedPrompt } from "@/components/agent/types";
-import { useSelectionStore } from "@/hooks/use-app-stores";
+import {
+	useSelectionStore,
+	useUiStore,
+	useVisualContextStore,
+} from "@/hooks/use-app-stores";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { useSessionComposerState } from "@/hooks/use-session-composer-state";
@@ -56,6 +60,12 @@ import {
 	setDefaultAgent,
 	warmAgent,
 } from "@/lib/agent";
+import {
+	type AgentTurnRequest,
+	agentSessionStore,
+	useActiveChatLines,
+	useAgentSessionStore,
+} from "@/lib/agent/agent-session-store";
 import {
 	type AgentOption,
 	type AgentPart,
@@ -113,11 +123,34 @@ import {
 	promoteOrphanThoughtToText,
 	ThinkTagParser,
 } from "@/lib/agent/stream-parse";
+import {
+	consumeVisualDrafts,
+	currentVisualDrafts,
+	type PdfVisualDraft,
+	removeVisualDraft,
+} from "@/lib/agent/visual-context-store";
 import { isImeKeyboardEvent } from "@/lib/core/ime";
+import { joinPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import {
+	buildVisualAnnotationsPrompt,
+	completeTrace,
+	createRunningTraces,
+	failTrace,
+	readPdfVisualTrace,
+	rememberPendingVisualTraces,
+	takePendingVisualTraces,
+	writePdfVisualTrace,
+} from "@/lib/pdf/agent-trace";
+import {
+	buildVisualTraceHistoryItem,
+	isVisualTraceHistoryId,
+	visualTraceHistoryId,
+} from "@/lib/pdf/agent-trace/open-session";
 import { loadSettings } from "@/lib/settings";
+import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 import {
 	collectUserPromptTexts,
 	nextHistoryIndexOnDown,
@@ -211,10 +244,14 @@ export function useAgentPanel({
 	const [registry, setRegistry] = useState<AgentListResponse | null>(null);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-	const [lines, setLines] = useState<ChatLine[]>([]);
-	const [sessionHistory, setSessionHistory] = useState<
-		ChatSessionHistoryItem[]
-	>([]);
+	// Single source of truth shared with PDF visual modal (not a parallel store).
+	const lines = useActiveChatLines();
+	const setLines = useAgentSessionStore((s) => s.setLines);
+	const sessionHistory = useAgentSessionStore((s) => s.sessions);
+	const setSessionHistory = useAgentSessionStore((s) => s.setSessions);
+	const activeTabId = useAgentSessionStore((s) => s.activeTabId);
+	const setActiveTabId = useAgentSessionStore((s) => s.setActiveTabId);
+	const setStoreSubmitting = useAgentSessionStore((s) => s.setSubmitting);
 	const [switching, setSwitching] = useState(false);
 	const [usage, setUsage] = useState<{ used: number; size: number } | null>(
 		null,
@@ -242,7 +279,6 @@ export function useAgentPanel({
 	const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
 	const [skillActiveIndex, setSkillActiveIndex] = useState(0);
 	const [slashActiveIndex, setSlashActiveIndex] = useState(0);
-	const [activeTabId, setActiveTabId] = useState("draft");
 	/** Follow-ups typed while the active session is still running. */
 	const [messageQueue, setMessageQueue] = useState<QueuedPrompt[]>([]);
 	// Inline edit-and-resend of a sent user message (only when not running).
@@ -374,7 +410,7 @@ export function useAgentPanel({
 		} catch (e) {
 			setLines((prev) => [...prev, errorChatLine(errorText(e))]);
 		}
-	}, [vaultPath]);
+	}, [vaultPath, setLines]);
 
 	useEffect(() => {
 		void refresh();
@@ -450,7 +486,13 @@ export function useAgentPanel({
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
 		clearMessageQueue();
-	}, [vaultPath, clearMessageQueue]);
+	}, [
+		vaultPath,
+		clearMessageQueue,
+		setLines,
+		setSessionHistory,
+		setActiveTabId,
+	]);
 
 	// Restore last model catalog / preference for the selected agent.
 	useEffect(() => {
@@ -567,26 +609,8 @@ export function useAgentPanel({
 
 	const updateSessionLines = useCallback(
 		(sessionId: string, update: (lines: ChatLine[]) => ChatLine[]) => {
-			// Compute once per session entry so concurrent tabs never share an
-			// updater applied against the wrong `lines` snapshot (tab-switch race).
-			setSessionHistory((prev) => {
-				const idx = prev.findIndex((item) => item.id === sessionId);
-				if (idx < 0) return prev;
-				const newLines = update(prev[idx].lines);
-				if (newLines === prev[idx].lines) return prev;
-				const next = prev.slice();
-				next[idx] = { ...prev[idx], lines: newLines };
-				return next;
-			});
-			// Sync active transcript only if still viewing this session.
-			// Use a value (not a second updater) so a late flush after tab switch
-			// cannot append another session's stream chunks into the new view.
-			if (activeTabRef.current === sessionId) {
-				setLines((prev) => {
-					if (activeTabRef.current !== sessionId) return prev;
-					return update(prev);
-				});
-			}
+			// Shared store: modal pin + sidebar both observe the same lines.
+			agentSessionStore.getState().updateSessionLines(sessionId, update);
 		},
 		[],
 	);
@@ -681,10 +705,51 @@ export function useAgentPanel({
 		[],
 	);
 
+	const finalizeVisualTraces = useCallback(
+		async (
+			runtimeSessionId: string,
+			outcome:
+				| {
+						kind: "completed";
+						providerSessionId?: string | null;
+						answerSnapshot?: string;
+						sources?: string[];
+				  }
+				| { kind: "failed"; error: string; answerSnapshot?: string },
+		) => {
+			const pending = takePendingVisualTraces(runtimeSessionId);
+			if (!pending.length) return;
+			await Promise.all(
+				pending.map(async ({ paperAbsPath, traceId }) => {
+					try {
+						const current = await readPdfVisualTrace(paperAbsPath, traceId);
+						if (!current) return;
+						const next =
+							outcome.kind === "completed"
+								? completeTrace(current, {
+										providerSessionId: outcome.providerSessionId ?? undefined,
+										answerSnapshot: outcome.answerSnapshot,
+										sources: outcome.sources,
+									})
+								: failTrace(current, {
+										error: outcome.error,
+										answerSnapshot: outcome.answerSnapshot,
+									});
+						await writePdfVisualTrace(paperAbsPath, next);
+					} catch {
+						// Trace persistence is best-effort; chat already completed.
+					}
+				}),
+			);
+		},
+		[],
+	);
+
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
 			if (ev.providerSessionId) {
+				// Durable source session for next turn (Host: resume or load).
 				if (activeTabRef.current === ev.sessionId) {
 					activeConversationRef.current = ev.providerSessionId;
 				}
@@ -722,6 +787,11 @@ export function useAgentPanel({
 						item.id === ev.sessionId ? { ...item, status: "cancelled" } : item,
 					),
 				);
+				void finalizeVisualTraces(ev.sessionId, {
+					kind: "failed",
+					error: t("messages.cancelled"),
+					answerSnapshot: ev.content,
+				});
 				return;
 			}
 			thinkParsersRef.current.delete(ev.sessionId);
@@ -785,8 +855,20 @@ export function useAgentPanel({
 					item.id === ev.sessionId ? { ...item, status: "completed" } : item,
 				),
 			);
+			void finalizeVisualTraces(ev.sessionId, {
+				kind: "completed",
+				providerSessionId: ev.providerSessionId,
+				answerSnapshot: ev.content,
+				sources: ev.sources,
+			});
 		},
-		[isChatOwnedSession, t, updateSessionLines],
+		[
+			finalizeVisualTraces,
+			isChatOwnedSession,
+			t,
+			updateSessionLines,
+			setSessionHistory,
+		],
 	);
 
 	const failSession = useCallback(
@@ -813,8 +895,17 @@ export function useAgentPanel({
 					item.id === sessionId ? { ...item, status: "failed" } : item,
 				),
 			);
+			void finalizeVisualTraces(sessionId, {
+				kind: "failed",
+				error,
+			});
 		},
-		[isChatOwnedSession, updateSessionLines],
+		[
+			finalizeVisualTraces,
+			isChatOwnedSession,
+			updateSessionLines,
+			setSessionHistory,
+		],
 	);
 
 	const shouldDeferTerminalEvent = useCallback((sessionId: string) => {
@@ -950,9 +1041,15 @@ export function useAgentPanel({
 	const selected = resolveSelected(options, selectedAgentId, registry);
 	const [supportsResume, setSupportsResume] = useState(false);
 
+	const [historyLoaded, setHistoryLoaded] = useState(false);
+
 	const loadAgentHistory = useCallback(async () => {
-		if (!isTauri() || !selectedAgentId) return;
+		if (!isTauri() || !selectedAgentId) {
+			setHistoryLoaded(true);
+			return;
+		}
 		const generation = ++historyGenRef.current;
+		setHistoryLoaded(false);
 		try {
 			const result = await listSessions({
 				agentId: selectedAgentId,
@@ -1025,8 +1122,18 @@ export function useAgentPanel({
 			});
 		} catch {
 			// History is supplementary: a failed scan must not block the Composer.
+		} finally {
+			if (generation === historyGenRef.current) {
+				setHistoryLoaded(true);
+			}
 		}
-	}, [i18n.language, selected?.name, selectedAgentId, vaultPath]);
+	}, [
+		i18n.language,
+		selected?.name,
+		selectedAgentId,
+		vaultPath,
+		setSessionHistory,
+	]);
 
 	useEffect(() => {
 		void loadAgentHistory();
@@ -1034,6 +1141,8 @@ export function useAgentPanel({
 			historyGenRef.current += 1;
 		};
 	}, [loadAgentHistory]);
+
+	const agentSessionOpenRequest = useUiStore((s) => s.agentSessionOpenRequest);
 
 	const selectedModelName = useMemo(() => {
 		if (!modelId) return null;
@@ -1123,6 +1232,7 @@ export function useAgentPanel({
 				: pinnedSelections,
 		[activeSelection, pinnedSelections],
 	);
+	const visualDrafts = useVisualContextStore((s) => s.drafts);
 
 	const mentionMatch = composerText.match(/(^|\s)@([^\s]*)$/);
 	/** Raw @query (preserve case for display; matching is case-insensitive). */
@@ -1449,8 +1559,18 @@ export function useAgentPanel({
 		skillIds?: string[];
 		/** Frozen selection chips from a waitlisted follow-up (else live store). */
 		selections?: SelectionContext[];
+		/** Frozen visual PDF annotation drafts (else live store). */
+		visualDrafts?: PdfVisualDraft[];
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
+		/**
+		 * Force this agent for the turn (e.g. visual pin continue bound to mark
+		 * session). Overrides the switcher selection so setState races cannot
+		 * send with the wrong provider.
+		 */
+		agentId?: string;
+		/** Optional model for forced agentId; else loadModelPref(agentId). */
+		modelId?: string;
 	};
 
 	const send = async (
@@ -1458,8 +1578,10 @@ export function useAgentPanel({
 		options?: SendOptions,
 	): Promise<boolean> => {
 		const text = textRaw.trim();
+		const resolvedVisualDrafts = options?.visualDrafts ?? currentVisualDrafts();
+		const hasVisualDrafts = resolvedVisualDrafts.length > 0;
 		if (
-			!text ||
+			(!text && !hasVisualDrafts) ||
 			activeTabIsRunning ||
 			switchingRef.current ||
 			submittingRef.current
@@ -1487,13 +1609,27 @@ export function useAgentPanel({
 		const requestVaultPath = vaultPath;
 		submittingRef.current = true;
 		setSubmitting(true);
+		setStoreSubmitting(true);
 		try {
 			if (!isTauri()) {
 				setLines((p) => [...p, errorChatLine(t("messages.desktopOnly"))]);
 				return false;
 			}
 
-			let agentId = selected?.id ?? registry?.defaultId ?? null;
+			const activeHistoryForAgent = sessionHistoryRef.current.find(
+				(item) => item.id === activeTabRef.current,
+			);
+			// Priority: explicit option → continuing session's agent → switcher → default.
+			// Prevents pin-modal continue from loading Codex session with Grok (pdfAsk default).
+			let agentId =
+				options?.agentId?.trim() ||
+				(activeHistoryForAgent?.providerSessionId &&
+				activeHistoryForAgent.agentId
+					? activeHistoryForAgent.agentId
+					: null) ||
+				selected?.id ||
+				registry?.defaultId ||
+				null;
 			if (!agentId && selected?.templateId) {
 				try {
 					const agent = await ensureCatalogAgent(selected.templateId, true);
@@ -1517,12 +1653,20 @@ export function useAgentPanel({
 				]);
 				return false;
 			}
+			// Keep switcher/ref in sync when the turn forces another agent.
+			if (agentId !== selectedAgentIdRef.current) {
+				selectedAgentIdRef.current = agentId;
+				setSelectedAgentId(agentId);
+			}
+			const resolvedModelId =
+				options?.modelId?.trim() ||
+				(agentId === selected?.id ? modelId : null) ||
+				loadModelPref(agentId) ||
+				undefined;
 
 			// Options are availability-filtered in buildOptions; unavailable agents
 			// never appear in the switcher.
-			const isAcpCommand = (
-				acpCommandsByAgent[selectedAgentId ?? ""] ?? []
-			).some(
+			const isAcpCommand = (acpCommandsByAgent[agentId] ?? []).some(
 				(command) =>
 					text === `/${command.name}` || text.startsWith(`/${command.name} `),
 			);
@@ -1537,33 +1681,94 @@ export function useAgentPanel({
 			if (resolvedSelections.length) {
 				contextBlocks.push(selectionsPromptBlock(resolvedSelections));
 			}
+			if (hasVisualDrafts && !isAcpCommand) {
+				contextBlocks.push(
+					buildVisualAnnotationsPrompt(
+						resolvedVisualDrafts.map((draft) => ({
+							page: draft.page,
+							comment: draft.comment,
+						})),
+					),
+				);
+			}
+			const activeHistory = sessionHistoryRef.current.find(
+				(item) => item.id === activeTabRef.current,
+			);
+			// Continue when we have a durable provider session id. Host picks
+			// session/resume vs session/load from agent capabilities (Grok: load).
+			const providerContinueId =
+				activeConversationRef.current?.trim() ||
+				activeHistory?.providerSessionId?.trim() ||
+				null;
+			const resumeAllowed =
+				Boolean(providerContinueId) && activeHistory?.resumeable !== false;
+			const priorLines = options?.baseLines ?? lines;
+			const promptBodyParts: string[] = [];
+			if (text) promptBodyParts.push(text);
+			if (!isAcpCommand && contextBlocks.length) {
+				promptBodyParts.push(...contextBlocks);
+			}
 			const prompt =
-				isAcpCommand || contextBlocks.length === 0
+				isAcpCommand && text
 					? text
-					: `${text}\n\n${contextBlocks.join("\n\n")}`;
+					: promptBodyParts.join("\n\n") ||
+						buildVisualAnnotationsPrompt(
+							resolvedVisualDrafts.map((draft) => ({
+								page: draft.page,
+								comment: draft.comment,
+							})),
+						);
+			const images = hasVisualDrafts
+				? resolvedVisualDrafts.map((draft) => draft.image)
+				: undefined;
+			const visualAnnotations = hasVisualDrafts
+				? resolvedVisualDrafts.map((draft) => ({
+						id: draft.id,
+						page: draft.page,
+						comment: draft.comment,
+						paperPath: draft.paperPath,
+						image: {
+							data: draft.image.data,
+							mimeType: draft.image.mimeType || "image/png",
+						},
+					}))
+				: undefined;
+			const historyTitle =
+				text ||
+				resolvedVisualDrafts.find((d) => d.comment.trim())?.comment.trim() ||
+				(hasVisualDrafts
+					? t("composer.visualAnnotationsTitle", {
+							count: resolvedVisualDrafts.length,
+						})
+					: t("composer.visualAnnotation"));
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
 			const workflowTarget = workflow
 				? (resolvedContextPaths[0] ?? selectedVaultPath ?? undefined)
 				: resolvedContextPaths[0];
-			const userLine: ChatLine = { id: nextLineId("user"), kind: "user", text };
-			const sessionStartLines = [...(options?.baseLines ?? lines), userLine];
+			const userLine: ChatLine = {
+				id: nextLineId("user"),
+				kind: "user",
+				text,
+				...(visualAnnotations?.length ? { visualAnnotations } : {}),
+			};
+			const sessionStartLines = [...priorLines, userLine];
 			setLines(sessionStartLines);
-			pendingSubmissionSessionIdRef.current = supportsResume
-				? activeConversationRef.current
-				: null;
+			const resumeSessionId = resumeAllowed
+				? (providerContinueId ?? undefined)
+				: undefined;
+			pendingSubmissionSessionIdRef.current = resumeSessionId ?? null;
 			const accepted = await runOnce({
 				agentId,
-				sessionId: supportsResume
-					? (activeConversationRef.current ?? undefined)
-					: undefined,
+				sessionId: resumeSessionId,
 				prompt,
 				isAcpCommand,
+				images,
 				vaultPath: vaultPath ?? undefined,
 				workflow: workflow ?? "free",
 				target: workflowTarget,
-				modelId: modelId ?? undefined,
+				modelId: resolvedModelId,
 				reasoningEffort: reasoningEffort ?? undefined,
 				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: resolvedSkillIds,
@@ -1580,8 +1785,55 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			if (hasVisualDrafts) {
+				const byPaper = new Map<string, PdfVisualDraft[]>();
+				for (const draft of resolvedVisualDrafts) {
+					const abs =
+						draft.paperAbsPath?.trim() ||
+						(vaultPath && draft.paperPath
+							? joinPath(vaultPath, draft.paperPath)
+							: draft.paperPath);
+					if (!abs) continue;
+					const list = byPaper.get(abs) ?? [];
+					list.push(draft);
+					byPaper.set(abs, list);
+				}
+				const pendingWrites: Array<{
+					paperAbsPath: string;
+					traceId: string;
+				}> = [];
+				for (const [paperAbsPath, drafts] of byPaper) {
+					try {
+						// One mark file per crop so pins hover/delete independently.
+						const traces = createRunningTraces({
+							paperPath: drafts[0]?.paperPath || paperAbsPath,
+							agentId,
+							runtimeSessionId: accepted.sessionId,
+							messageId: accepted.messageId,
+							items: drafts.map((draft) => ({
+								id: draft.id,
+								page: draft.page,
+								rects: draft.rects,
+								comment: draft.comment,
+								image: {
+									data: draft.image.data,
+									mimeType: draft.image.mimeType || "image/png",
+								},
+							})),
+						});
+						for (const trace of traces) {
+							await writePdfVisualTrace(paperAbsPath, trace);
+							pendingWrites.push({ paperAbsPath, traceId: trace.id });
+						}
+					} catch {
+						// Keep chat running even if mark write fails.
+					}
+				}
+				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
+			if (!options?.visualDrafts) consumeVisualDrafts();
 			const pendingTerminal = pendingTerminalEventsRef.current.get(
 				accepted.sessionId,
 			);
@@ -1605,20 +1857,54 @@ export function useAgentPanel({
 				return { ...line };
 			});
 			completeComposerSubmission(accepted.sessionId, submittedComposerState);
+			// Runtime session id is the stream correlation key; durable continue
+			// uses providerSessionId set on agent:completed (via session/load|resume).
 			activeTabRef.current = accepted.sessionId;
 			setActiveTabId(accepted.sessionId);
+			knownSessionIdsRef.current.add(accepted.sessionId);
+			const boundVisualTraceId =
+				activeHistory && "visualTraceId" in activeHistory
+					? (activeHistory as { visualTraceId?: string }).visualTraceId
+					: resolvedVisualDrafts[0]?.id;
+			const boundPaperAbs =
+				activeHistory && "paperAbsPath" in activeHistory
+					? (activeHistory as { paperAbsPath?: string }).paperAbsPath
+					: resolvedVisualDrafts[0]?.paperAbsPath;
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,
 					agentId,
 					source: "local",
-					title: text,
+					title: historyTitle || activeHistory?.title || t("defaultName"),
 					agentName: selected?.name ?? t("defaultName"),
-					startedAt: new Date().toLocaleString(i18n.language),
+					startedAt:
+						activeHistory?.startedAt ||
+						new Date().toLocaleString(i18n.language),
 					lines: historyLines,
 					status: "running",
+					// Carry over pin session provider id until completed event.
+					providerSessionId: activeHistory?.providerSessionId ?? null,
+					resumeable: true,
+					...(boundVisualTraceId ? { visualTraceId: boundVisualTraceId } : {}),
+					...(boundPaperAbs ? { paperAbsPath: boundPaperAbs } : {}),
 				},
-				...prev.filter((item) => item.id !== accepted.sessionId),
+				// Drop superseded visual-trace placeholder / duplicate runtime rows.
+				...prev.filter(
+					(item) =>
+						item.id !== accepted.sessionId &&
+						!(
+							activeHistory &&
+							isVisualTraceHistoryId(activeHistory.id) &&
+							item.id === activeHistory.id
+						) &&
+						!(
+							boundVisualTraceId &&
+							"visualTraceId" in item &&
+							(item as { visualTraceId?: string }).visualTraceId ===
+								boundVisualTraceId &&
+							item.id !== accepted.sessionId
+						),
+				),
 			]);
 			setLines(pendingLines);
 			for (const pendingEvent of pendingSessionEvents) {
@@ -1649,6 +1935,7 @@ export function useAgentPanel({
 				pendingSubmissionSessionIdRef.current = null;
 				submittingRef.current = false;
 				setSubmitting(false);
+				setStoreSubmitting(false);
 			}
 		}
 	};
@@ -1656,7 +1943,10 @@ export function useAgentPanel({
 	const enqueueMessage = useCallback(
 		(textRaw: string, workflow?: string): boolean => {
 			const text = textRaw.trim();
-			if (!text || switchingRef.current) return false;
+			const liveVisualDrafts = currentVisualDrafts();
+			if ((!text && !liveVisualDrafts.length) || switchingRef.current) {
+				return false;
+			}
 			const snap = snapshotComposerState();
 			const paths = [
 				...(snap.includeSelectedFile && selectedVaultPath
@@ -1664,13 +1954,16 @@ export function useAgentPanel({
 					: []),
 				...snap.mentionedPaths,
 			];
+			const frozenVisualDrafts = consumeVisualDrafts();
 			const item: QueuedPrompt = {
 				id: nextLineId("queue"),
+				// Keep the typed text only; visual drafts carry their own prompt payload.
 				text,
 				workflow,
 				contextPaths: paths,
 				skillIds: [...snap.selectedSkillIds],
 				selections: consumeSelections(),
+				visualDrafts: frozenVisualDrafts,
 			};
 			setMessageQueue((prev) => {
 				const next = [...prev, item];
@@ -1727,6 +2020,93 @@ export function useAgentPanel({
 	const sendRef = useRef(send);
 	sendRef.current = send;
 
+	// PDF pin modal submits through the same send pipeline. Keep handler in a
+	// ref so we only register once (avoids store setState on every render).
+	const externalTurnCtxRef = useRef({
+		activateComposerSession,
+		t,
+		i18nLanguage: i18n.language,
+		agentName: selected?.name as string | undefined,
+	});
+	externalTurnCtxRef.current = {
+		activateComposerSession,
+		t,
+		i18nLanguage: i18n.language,
+		agentName: selected?.name,
+	};
+
+	useEffect(() => {
+		const handler = async (req: AgentTurnRequest): Promise<boolean> => {
+			const ctx = externalTurnCtxRef.current;
+			const store = agentSessionStore.getState();
+			let existing = req.visualTraceId
+				? store.findByVisualTraceId(req.visualTraceId)
+				: undefined;
+			if (!existing && req.providerSessionId) {
+				existing = store.findByProviderSessionId(req.providerSessionId);
+			}
+			// Continue: session/mark agent wins. New: req.agentId (pdfAsk default).
+			const boundAgentId =
+				req.agentId?.trim() ||
+				existing?.agentId?.trim() ||
+				selectedAgentIdRef.current ||
+				null;
+			if (boundAgentId && boundAgentId !== selectedAgentIdRef.current) {
+				selectedAgentIdRef.current = boundAgentId;
+				setSelectedAgentId(boundAgentId);
+			}
+			if (existing) {
+				ctx.activateComposerSession(existing.id);
+				setActiveTabId(existing.id);
+				setLines(existing.lines);
+				activeTabRef.current = existing.id;
+				if (existing.providerSessionId) {
+					activeConversationRef.current = existing.providerSessionId;
+				}
+			} else if (req.seedLines?.length && req.visualTraceId) {
+				const seeded = {
+					id: visualTraceHistoryId(req.visualTraceId),
+					agentId: boundAgentId || selectedAgentIdRef.current || "agent",
+					source: "local" as const,
+					title: req.title?.trim() || ctx.t("composer.visualAnnotation"),
+					agentName: ctx.agentName ?? ctx.t("defaultName"),
+					startedAt: new Date().toLocaleString(ctx.i18nLanguage),
+					lines: req.seedLines,
+					status: "completed" as const,
+					providerSessionId: req.providerSessionId ?? null,
+					resumeable: true,
+					visualTraceId: req.visualTraceId,
+					paperAbsPath: req.paperAbsPath,
+				};
+				store.upsertSession(seeded, { activate: true });
+				ctx.activateComposerSession(seeded.id);
+				activeTabRef.current = seeded.id;
+				if (req.providerSessionId) {
+					activeConversationRef.current = req.providerSessionId;
+				}
+			} else {
+				setActiveTabId("draft");
+				activeTabRef.current = "draft";
+				setLines([]);
+				ctx.activateComposerSession("draft");
+				activeConversationRef.current = req.providerSessionId ?? null;
+			}
+			setHistoryOpen(false);
+			return sendRef.current(req.text, {
+				visualDrafts: req.visualDrafts,
+				fromQueue: true,
+				...(boundAgentId ? { agentId: boundAgentId } : {}),
+				...(req.modelId ? { modelId: req.modelId } : {}),
+			});
+		};
+		agentSessionStore.getState().registerSendHandler(handler);
+		return () => {
+			agentSessionStore.getState().registerSendHandler(null);
+		};
+		// Register once — handler reads sendRef / externalTurnCtxRef for latest.
+		// Stable store setters only; handler body uses refs for everything else.
+	}, [setActiveTabId, setLines]);
+
 	// Drain waitlist once the active session is idle again.
 	useEffect(() => {
 		if (activeTabIsRunning || submitting || switching) return;
@@ -1749,6 +2129,7 @@ export function useAgentPanel({
 					contextPaths: head.contextPaths,
 					skillIds: head.skillIds,
 					selections: head.selections,
+					visualDrafts: head.visualDrafts,
 					fromQueue: true,
 				});
 			} finally {
@@ -2101,7 +2482,15 @@ export function useAgentPanel({
 			.map((line) => {
 				if (line.kind !== "user") return line;
 				const text = stripPromptEnvelopeForDisplay(line.text);
-				return text ? { ...line, text } : null;
+				const hasVisual = Boolean(line.visualAnnotations?.length);
+				if (!text && !hasVisual) return null;
+				return {
+					...line,
+					text: text || "",
+					...(line.visualAnnotations?.length
+						? { visualAnnotations: line.visualAnnotations }
+						: {}),
+				};
 			})
 			.filter((line): line is ChatLine => line !== null);
 
@@ -2115,8 +2504,12 @@ export function useAgentPanel({
 			setLines(sanitizeChatLines(item.lines));
 			activeTabRef.current = item.id;
 			setActiveTabId(item.id);
-			if (supportsResume) {
+			// Visual-trace (and other non-resumeable) sessions keep multi-turn
+			// context in local lines; never set an ACP resume id for them.
+			if (supportsResume && item.resumeable !== false) {
 				activeConversationRef.current = item.providerSessionId ?? item.id;
+			} else {
+				activeConversationRef.current = null;
 			}
 			return;
 		}
@@ -2242,6 +2635,146 @@ export function useAgentPanel({
 		})();
 	};
 
+	const openHistorySessionRef = useRef(openHistorySession);
+	openHistorySessionRef.current = openHistorySession;
+
+	useEffect(() => {
+		const request = agentSessionOpenRequest;
+		if (!request) return;
+		if (request.agentId && request.agentId !== selectedAgentId) {
+			setSelectedAgentId(request.agentId);
+			// Wait for history reload after agent switch.
+			return;
+		}
+		if (!historyLoaded) return;
+
+		const vt = request.visualTrace;
+		// Prefer stable visual-trace history id so multi-turn pin opens one session.
+		const stableId = vt?.traceId
+			? visualTraceHistoryId(vt.traceId)
+			: request.runtimeSessionId;
+
+		const match = sessionHistoryRef.current.find(
+			(item) =>
+				item.id === stableId ||
+				item.id === request.runtimeSessionId ||
+				item.providerSessionId === request.runtimeSessionId ||
+				(request.providerSessionId != null &&
+					(item.id === request.providerSessionId ||
+						item.providerSessionId === request.providerSessionId)),
+		);
+
+		if (vt) {
+			// Always rebuild lines from mark transcript (full multi-turn + image chip).
+			const rebuilt = buildVisualTraceHistoryItem({
+				trace: {
+					id: vt.traceId,
+					page: vt.page,
+					comment: vt.comment,
+					paperPath: vt.paperPath ?? "",
+					image: vt.image,
+					agentId: request.agentId,
+					runtimeSessionId: request.runtimeSessionId,
+					providerSessionId: request.providerSessionId,
+					status: vt.status ?? "completed",
+					messages: vt.messages,
+					answerSnapshot: request.answerSnapshot,
+				},
+				messages: vt.messages,
+				title:
+					request.title?.trim() ||
+					request.prompt?.trim() ||
+					t("composer.visualAnnotation"),
+				agentName: selected?.name ?? t("defaultName"),
+				startedAt: match?.startedAt || new Date().toLocaleString(i18n.language),
+				emptyFallback: t("composer.visualAnnotation"),
+			});
+			// Merge into existing slot if present; drop duplicate runtime-id entries.
+			setSessionHistory((prev) => {
+				const withoutDupes = prev.filter(
+					(item) =>
+						item.id !== rebuilt.id &&
+						item.id !== request.runtimeSessionId &&
+						!(
+							request.providerSessionId &&
+							(item.id === request.providerSessionId ||
+								item.providerSessionId === request.providerSessionId)
+						),
+				);
+				return [rebuilt, ...withoutDupes];
+			});
+			openHistorySessionRef.current(rebuilt);
+			clearAgentSessionOpenRequest();
+			return;
+		}
+
+		if (match) {
+			openHistorySessionRef.current(match);
+			clearAgentSessionOpenRequest();
+			return;
+		}
+
+		const snapshot = request.answerSnapshot?.trim();
+		const fallbackLines: ChatLine[] = [
+			{
+				id: nextLineId("user"),
+				kind: "user",
+				text:
+					request.prompt?.trim() ||
+					request.title?.trim() ||
+					t("composer.visualAnnotation"),
+			},
+		];
+		if (snapshot) {
+			fallbackLines.push({
+				id: nextLineId("agent"),
+				kind: "agent",
+				parts: [
+					{
+						type: "text",
+						id: nextPartId("text"),
+						text: snapshot,
+					},
+				],
+				streaming: false,
+			});
+		} else {
+			fallbackLines.push({
+				id: nextLineId("sys"),
+				kind: "system",
+				text: t("messages.sessionUnavailable"),
+			});
+		}
+		const fallback: ChatSessionHistoryItem = {
+			id: stableId,
+			agentId: request.agentId,
+			source: "local",
+			title:
+				request.title?.trim() ||
+				request.prompt?.trim() ||
+				t("composer.visualAnnotation"),
+			agentName: selected?.name ?? t("defaultName"),
+			startedAt: new Date().toLocaleString(i18n.language),
+			lines: fallbackLines,
+			status: snapshot ? "completed" : "failed",
+			providerSessionId: request.providerSessionId ?? null,
+		};
+		setSessionHistory((prev) => [
+			fallback,
+			...prev.filter((item) => item.id !== fallback.id),
+		]);
+		openHistorySessionRef.current(fallback);
+		clearAgentSessionOpenRequest();
+	}, [
+		agentSessionOpenRequest,
+		historyLoaded,
+		i18n.language,
+		selected?.name,
+		selectedAgentId,
+		t,
+		setSessionHistory,
+	]);
+
 	return {
 		isZen,
 		t,
@@ -2291,6 +2824,8 @@ export function useAgentPanel({
 		currentFileLabel,
 		mentionChipPaths,
 		selectionChips,
+		visualDrafts,
+		removeVisualDraft,
 		directoryPathSet,
 		paperPathSet,
 		labelForPath,

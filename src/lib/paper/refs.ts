@@ -78,6 +78,32 @@ export function citationImportIdentifier(citation: Citation): string | null {
 }
 
 /**
+ * Best-effort guard for text extracted from a PDF link annotation.
+ *
+ * PDF links also cover section, figure, table, and equation jumps. Keep those
+ * navigable without publishing them as citation hover markers.
+ */
+export function looksLikeCitationMarker(marker: string): boolean {
+	const compact = marker.trim().replace(/\s+/g, " ");
+	if (!compact) return false;
+
+	const internalCrossReference =
+		/\b(?:fig(?:ure)?s?|tables?|sections?|secs?|equations?|eqs?|appendi(?:x|ces)|chapters?|pages?|pp?|algorithms?|theorems?|lemmas?|propositions?)\.?\s*\d/iu;
+	if (internalCrossReference.test(compact)) return false;
+
+	const numericBody = "\\d{1,3}(?:\\s*[-–—]\\s*\\d{1,3}|\\s*[,;]\\s*\\d{1,3})*";
+	const numeric = new RegExp(
+		`^(?:\\[\\s*${numericBody}\\s*\\]|\\(\\s*${numericBody}\\s*\\)|${numericBody})[,.;:]?$`,
+		"u",
+	);
+	if (numeric.test(compact)) return true;
+
+	const year = /\b(?:19|20)\d{2}[a-z]?\b/iu;
+	const authorWord = /\p{L}{3,}/u;
+	return year.test(compact) && authorWord.test(compact);
+}
+
+/**
  * Resolve a PDF citation-link anchor text (`[12]`, `12,`, `Vaswani et al.,
  * 2017`) to a sidecar citation id. Numeric anchors match the `[n]` display
  * order; author-year anchors match year + a surname word. Null when unknown.
@@ -87,7 +113,7 @@ export function matchCitationByMarker(
 	marker: string,
 ): string | null {
 	const compact = marker.trim().replace(/\s+/g, " ");
-	if (!compact) return null;
+	if (!looksLikeCitationMarker(compact)) return null;
 
 	const byNumber = (n: string): string | null => {
 		const hit = citations.find((c) => c.display === `[${n}]`);

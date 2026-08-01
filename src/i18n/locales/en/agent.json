@@ -59,6 +59,16 @@
 		"removeSkill": "Remove ${{skill}} from context",
 		"removeSelection": "Remove selected text from context",
 		"selection": "Selection",
+		"removeVisualDraft": "Remove visual annotation from context",
+		"visualAnnotation": "Visual annotation",
+		"visualAnnotationPage": "p.{{page}}",
+		"visualAnnotationsTitle": "Visual annotations ({{count}})",
+		"visualAnnotationOpen": "View crop and comment",
+		"visualAnnotationOpenAria": "Open visual annotation {{index}}: {{label}}",
+		"visualAnnotationDetailTitle": "Visual annotation {{index}}",
+		"visualAnnotationCommentLabel": "Your note",
+		"visualAnnotationNoComment": "(no note)",
+		"visualAnnotationPreviewAlt": "Cropped PDF region from page {{page}}",
 		"currentFileRemove": "Remove current file from context",
 		"mentionEnterFolder": "Open {{name}}",
 		"mentionBack": "Back to parent folder",
@@ -115,6 +125,7 @@
 		"cancelled": "Stopped the current run.",
 		"switchedTo": "Switched to {{name}}",
 		"desktopOnly": "Open the desktop app to run agents.",
-		"noAgent": "No available agent. Open Settings → Agent to configure one."
+		"noAgent": "No available agent. Open Settings → Agent to configure one.",
+		"sessionUnavailable": "Could not restore this Agent session. Showing the saved answer snapshot when available."
 	}
 }

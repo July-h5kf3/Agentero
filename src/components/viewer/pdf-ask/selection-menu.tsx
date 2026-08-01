@@ -40,7 +40,7 @@ type SelectionMenuProps = {
 	onClose: () => void;
 };
 
-const BAR_W = 336;
+const BAR_W = 340;
 const BAR_H = 40;
 const COPIED_FLASH_MS = 1500;
 

@@ -9,6 +9,7 @@ import {
 	type AnnotationRow,
 	AnnotationsPanel,
 	type AskRow,
+	type VisualTraceRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
 import { pdfHandleFor } from "@/components/viewer/pdf-viewer-registry";
@@ -28,6 +29,7 @@ import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
+import { tracePreview } from "@/lib/pdf/agent-trace/schema";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { layout, uiStore } from "@/lib/shell/ui-store";
@@ -109,6 +111,9 @@ function AnnotationsSidebar() {
 	const asks = useAnnotationsStore((s) =>
 		activeTabId ? s.asksByTab[activeTabId] : undefined,
 	);
+	const visualTraces = useAnnotationsStore((s) =>
+		activeTabId ? s.visualTracesByTab[activeTabId] : undefined,
+	);
 
 	const items = useMemo<AnnotationRow[]>(() => {
 		if (!highlights) return [];
@@ -149,15 +154,32 @@ function AnnotationsSidebar() {
 			});
 	}, [asks]);
 
+	const visualTraceRows = useMemo<VisualTraceRow[]>(() => {
+		if (!visualTraces) return [];
+		return [...visualTraces]
+			.sort(
+				(a, b) =>
+					a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+			)
+			.map((tr) => ({
+				id: tr.id,
+				page: tr.page,
+				preview: tracePreview(tr, "Visual annotation", 160),
+			}));
+	}, [visualTraces]);
+
 	return (
 		<AnnotationsPanel
 			items={items}
 			asks={askRows}
+			visualTraces={visualTraceRows}
 			onJump={(id) => annotationAction((h) => h.scrollToHighlight(id))}
 			onEdit={(id) => annotationAction((h) => h.editComment(id))}
 			onDelete={(id) => annotationAction((h) => h.deleteHighlight(id))}
 			onJumpAsk={(id) => annotationAction((h) => h.scrollToAsk(id))}
 			onDeleteAsk={(id) => annotationAction((h) => h.deleteAsk(id))}
+			onJumpVisual={(id) => annotationAction((h) => h.scrollToVisualTrace(id))}
+			onDeleteVisual={(id) => annotationAction((h) => h.deleteVisualTrace(id))}
 		/>
 	);
 }

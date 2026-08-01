@@ -30,6 +30,17 @@ export type PlaceSelectionCardOptions = {
 	width: number;
 	/** Preferred max height; clamped to remaining viewport (px). */
 	height?: number;
+	/**
+	 * Width used only for side choice + horizontal clamp (px).
+	 * Pass the largest size the card may grow to so compact → expanded
+	 * does not flip sides and thrash under the pointer.
+	 */
+	placementWidth?: number;
+	/**
+	 * Height used only for vertical position planning (px).
+	 * Pass the largest size the card may grow to so expand does not jump.
+	 */
+	placementHeight?: number;
 	/** Open to the right of the anchor when there is room (default true). */
 	preferRight?: boolean;
 	/** Gap from the anchor point (default 6). */
@@ -50,6 +61,10 @@ export type PlaceSelectionCardResult = {
  * Clamps left/top and returns a `maxHeight` that fits within the viewport
  * from the chosen top — callers must apply it so tall content scrolls
  * instead of overflowing the window.
+ *
+ * When `placementWidth` / `placementHeight` are set, position is planned for
+ * that larger footprint while `width` / `height` still drive the returned
+ * visual max height. Compact previews that later expand stay on one side.
  */
 export function placeSelectionCard(
 	screen: { x: number; y: number },
@@ -63,28 +78,35 @@ export function placeSelectionCard(
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 
-	const width = Math.min(preferredWidth, Math.max(0, vw - edge * 2));
+	// Layout footprint for flip/clamp (stable across compact → expanded).
+	const planWidth = Math.min(
+		opts.placementWidth ?? preferredWidth,
+		Math.max(0, vw - edge * 2),
+	);
+	const planHeight = Math.min(
+		opts.placementHeight ?? preferredMaxH,
+		Math.max(0, vh - edge * 2),
+	);
 
 	let left = preferRight ? screen.x + gap : screen.x;
-	if (preferRight && left + width > vw - edge) {
-		left = Math.max(edge, screen.x - width - gap);
+	if (preferRight && left + planWidth > vw - edge) {
+		left = Math.max(edge, screen.x - planWidth - gap);
 	}
-	left = Math.min(Math.max(edge, left), Math.max(edge, vw - width - edge));
+	left = Math.min(Math.max(edge, left), Math.max(edge, vw - planWidth - edge));
 
 	const viewportCap = Math.max(SELECTION_CARD_MIN_HEIGHT, vh - edge * 2);
-	let maxHeight = Math.min(preferredMaxH, viewportCap);
-
-	// Prefer slightly above the anchor; then pull up if the card would clip.
+	// Plan top against the largest height so expand does not re-anchor.
+	const plannedMaxH = Math.min(planHeight, viewportCap);
 	let top = screen.y - 12;
-	if (top + maxHeight > vh - edge) {
-		top = vh - edge - maxHeight;
+	if (top + plannedMaxH > vh - edge) {
+		top = vh - edge - plannedMaxH;
 	}
 	if (top < edge) {
 		top = edge;
 	}
 
-	// Remaining space from the final top — this is the hard cap (no overflow).
-	maxHeight = Math.min(maxHeight, vh - edge - top);
+	// Visual max height still follows the caller's current preferred height.
+	let maxHeight = Math.min(preferredMaxH, viewportCap, vh - edge - top);
 	if (
 		maxHeight < SELECTION_CARD_MIN_HEIGHT &&
 		vh - edge * 2 >= SELECTION_CARD_MIN_HEIGHT
@@ -105,6 +127,15 @@ export type SelectionCardProps = {
 	width?: number;
 	/** Preferred max height; actual height is min(this, viewport remainder). */
 	height?: number;
+	/**
+	 * Optional larger width used only for side choice (see placeSelectionCard).
+	 * Useful for compact → expanded hover cards.
+	 */
+	placementWidth?: number;
+	/**
+	 * Optional larger height used only for vertical position planning.
+	 */
+	placementHeight?: number;
 	/**
 	 * Pin the card to the computed max height (not content-sized).
 	 * Needed when the body hosts StickToBottom / `height: 100%` scrollers
@@ -140,6 +171,8 @@ export function SelectionCard({
 	screen,
 	width = 320,
 	height = SELECTION_CARD_DEFAULT_MAX_HEIGHT,
+	placementWidth,
+	placementHeight,
 	lockHeight = false,
 	preferRight = true,
 	title,
@@ -157,6 +190,8 @@ export function SelectionCard({
 	const { left, top, maxHeight } = placeSelectionCard(screen, {
 		width,
 		height,
+		placementWidth,
+		placementHeight,
 		preferRight,
 	});
 

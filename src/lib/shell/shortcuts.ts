@@ -33,7 +33,9 @@ export type ShortcutId =
 	| "prevTab"
 	| "zoomIn"
 	| "zoomOut"
-	| "zoomReset";
+	| "zoomReset"
+	/** ⌘. — start/cancel PDF visual-region annotation (active PDF tab). */
+	| "visualAnnotation";
 
 export type ShortcutGroup = "App" | "Navigation" | "Vault";
 
@@ -266,6 +268,14 @@ export const SHORTCUTS: ShortcutDef[] = [
 		alt: true,
 		whenSettingsClosed: true,
 	},
+	{
+		id: "visualAnnotation",
+		group: "App",
+		// ⌘. — toggle PDF visual annotation region select (active PDF tab)
+		key: ".",
+		meta: true,
+		whenSettingsClosed: true,
+	},
 ];
 
 /** Secondary aliases that still work (documented lightly). */
@@ -314,8 +324,8 @@ export function formatShortcut(def: ShortcutDef): string {
 	if (def.meta) parts.push(isMac ? "⌘" : "Ctrl");
 
 	const keyLabel =
-		def.key === ","
-			? ","
+		def.key === "," || def.key === "."
+			? def.key
 			: def.key === "Backspace"
 				? isMac
 					? "⌫"

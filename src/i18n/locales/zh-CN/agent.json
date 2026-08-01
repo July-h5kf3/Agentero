@@ -59,6 +59,16 @@
 		"removeSkill": "从上下文移除 ${{skill}}",
 		"removeSelection": "从上下文移除选中文本",
 		"selection": "选中文本",
+		"removeVisualDraft": "从上下文移除视觉批注",
+		"visualAnnotation": "视觉批注",
+		"visualAnnotationPage": "第{{page}}页",
+		"visualAnnotationsTitle": "视觉批注（{{count}}）",
+		"visualAnnotationOpen": "查看裁剪图与批注",
+		"visualAnnotationOpenAria": "打开视觉批注 {{index}}：{{label}}",
+		"visualAnnotationDetailTitle": "视觉批注 {{index}}",
+		"visualAnnotationCommentLabel": "你的批注",
+		"visualAnnotationNoComment": "（无文字批注）",
+		"visualAnnotationPreviewAlt": "第 {{page}} 页裁剪区域",
 		"currentFileRemove": "从上下文移除当前文件",
 		"mentionEnterFolder": "进入 {{name}}",
 		"mentionBack": "返回上级目录",
@@ -115,6 +125,7 @@
 		"cancelled": "已停止当前运行。",
 		"switchedTo": "已切换到 {{name}}",
 		"desktopOnly": "请打开桌面应用以运行 Agent。",
-		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。"
+		"noAgent": "没有可用的 Agent。请在 设置 → Agent 中配置。",
+		"sessionUnavailable": "无法恢复该 Agent 会话。若有本地回答快照会一并展示。"
 	}
 }

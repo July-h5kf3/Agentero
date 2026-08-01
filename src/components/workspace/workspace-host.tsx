@@ -25,7 +25,11 @@ import {
 	rescanLibraryPapers,
 } from "@/lib/paper/library-actions";
 import { setLibraryQuery } from "@/lib/paper/library-store";
-import { setTabAsks, setTabHighlights } from "@/lib/pdf/annotations-store";
+import {
+	setTabAsks,
+	setTabHighlights,
+	setTabVisualTraces,
+} from "@/lib/pdf/annotations-store";
 import type { LibraryColumnPref } from "@/lib/settings";
 import { patchSettings } from "@/lib/settings/react-store";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
@@ -205,6 +209,7 @@ export function WorkspaceHost() {
 				registerHandle: registerPdfHandle,
 				onHighlightsChange: setTabHighlights,
 				onAsksChange: setTabAsks,
+				onVisualTracesChange: setTabVisualTraces,
 			},
 			onTrashChanged: () => void handleTrashChanged(),
 			trashReloadSignal,

@@ -5,7 +5,9 @@ import {
 	agentTextFromParts,
 	appendStreamPart,
 	applyToolToParts,
+	buildLocalTranscriptPrompt,
 	buildOptions,
+	type ChatLine,
 	dedupeModelsClient,
 	errorChatLine,
 	errorText,
@@ -184,5 +186,39 @@ describe("isBackgroundWorkflowHistoryTitle", () => {
 		expect(isBackgroundWorkflowHistoryTitle("Summarize this paper")).toBe(
 			false,
 		);
+	});
+
+	it("hides visual-annotation system prompts from history list", () => {
+		const title = `You are reviewing 1 visual annotation from a research paper PDF.
+
+## Annotation 1
+User comment: 这里最值得读的是什么?`;
+		expect(isBackgroundWorkflowHistoryTitle(title)).toBe(true);
+		expect(isBackgroundWorkflowHistoryTitle("这里最值得读的是什么?")).toBe(
+			false,
+		);
+	});
+});
+
+describe("buildLocalTranscriptPrompt", () => {
+	it("formats prior turns for non-resume multi-turn", () => {
+		const lines: ChatLine[] = [
+			{ id: "u1", kind: "user", text: "first question" },
+			{
+				id: "a1",
+				kind: "agent",
+				parts: [{ type: "text", id: "t1", text: "first answer" }],
+			},
+			{ id: "u2", kind: "user", text: "follow up" },
+		];
+		const block = buildLocalTranscriptPrompt(lines);
+		expect(block).toContain("Earlier turns");
+		expect(block).toContain("User: first question");
+		expect(block).toContain("Assistant: first answer");
+		expect(block).toContain("User: follow up");
+	});
+
+	it("returns empty when there is no prior dialogue", () => {
+		expect(buildLocalTranscriptPrompt([])).toBe("");
 	});
 });

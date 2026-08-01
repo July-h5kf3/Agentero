@@ -28,6 +28,7 @@ use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{util, AcpAgent, Agent, ConnectionTo};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 use uuid::Uuid;
@@ -873,6 +874,11 @@ pub async fn run_once(
     let app_for_notif = app.clone();
     let session_for_notif = session_id.clone();
     let agent_id_for_notif = desc.id.clone();
+    // session/load (and some resume paths) replay history as SessionNotification.
+    // Until we open the gate, drop stream/tool/plan so turn N does not re-paint
+    // turn N-1 into the new streaming bubble (Grok multi-turn).
+    let live_stream = Arc::new(AtomicBool::new(resume_session_id.is_none()));
+    let live_for_notif = live_stream.clone();
 
     let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let stop_for_conn = stop_reason.clone();
@@ -889,6 +895,23 @@ pub async fn run_once(
         .name("agentero")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
+                if !live_for_notif.load(Ordering::SeqCst) {
+                    // Still allow usage / command / config during load settle.
+                    match &notification.update {
+                        SessionUpdate::AvailableCommandsUpdate(_)
+                        | SessionUpdate::ConfigOptionUpdate(_)
+                        | SessionUpdate::UsageUpdate(_) => {
+                            emit_rich_session_update(
+                                &app_for_notif,
+                                &session_for_notif,
+                                &agent_id_for_notif,
+                                &notification.update,
+                            );
+                        }
+                        _ => {}
+                    }
+                    return Ok(());
+                }
                 if let Some((chunk, kind)) = stream_from_update(&notification.update) {
                     match kind {
                         AgentStreamKind::Message => {
@@ -950,14 +973,17 @@ pub async fn run_once(
             let session_for_models = session_for_conn.clone();
             let agent_id_for_models = desc.id.clone();
             let resume_id = resume_session_id.clone();
+            let live_stream = live_stream.clone();
+            let content_for_conn = content_for_conn.clone();
+            let thought_for_conn = thought_for_conn.clone();
             move |connection: ConnectionTo<Agent>| async move {
-                tokio::select! {
+                let init = tokio::select! {
                     result = timed_acp_request(
                         "initialize",
                         connection
                             .send_request(InitializeRequest::new(ProtocolVersion::V1))
                             .block_task(),
-                    ) => { result?; }
+                    ) => result?,
                     () = wait_for_cancellation(&mut cancellation) => {
                         let payload = cancelled_payload(
                             session_for_conn.clone(),
@@ -968,34 +994,81 @@ pub async fn run_once(
                         let _ = app_for_conn.emit("agent:completed", payload.clone());
                         return Ok(payload);
                     }
-                }
+                };
+
+                // Capability-aware continue (Grok advertises loadSession but not
+                // session/resume — calling resume yields Method not found).
+                let can_resume = init
+                    .agent_capabilities
+                    .session_capabilities
+                    .resume
+                    .is_some();
+                let can_load = init.agent_capabilities.load_session;
 
                 let (acp_session_id, mut config_options) = if let Some(ref rid) = resume_id {
-                    let resp = tokio::select! {
-                        result = timed_acp_request(
-                            "resume_session",
-                            connection
-                                .send_request(ResumeSessionRequest::new(
-                                    SessionId::new(rid.as_str()),
-                                    cwd.clone(),
-                                ))
-                                .block_task(),
-                        ) => result?,
-                        () = wait_for_cancellation(&mut cancellation) => {
-                            let payload = cancelled_payload(
-                                session_for_conn.clone(),
-                                message_for_conn.clone(),
-                                &content_for_conn,
-                                &thought_for_conn,
-                            );
-                            let _ = app_for_conn.emit("agent:completed", payload.clone());
-                            return Ok(payload);
-                        }
-                    };
-                    (
-                        SessionId::new(rid.as_str()),
-                        resp.config_options.unwrap_or_default(),
-                    )
+                    if can_resume {
+                        let resp = tokio::select! {
+                            result = timed_acp_request(
+                                "session/resume",
+                                connection
+                                    .send_request(ResumeSessionRequest::new(
+                                        SessionId::new(rid.as_str()),
+                                        cwd.clone(),
+                                    ))
+                                    .block_task(),
+                            ) => result?,
+                            () = wait_for_cancellation(&mut cancellation) => {
+                                let payload = cancelled_payload(
+                                    session_for_conn.clone(),
+                                    message_for_conn.clone(),
+                                    &content_for_conn,
+                                    &thought_for_conn,
+                                );
+                                let _ = app_for_conn.emit("agent:completed", payload.clone());
+                                return Ok(payload);
+                            }
+                        };
+                        (
+                            SessionId::new(rid.as_str()),
+                            resp.config_options.unwrap_or_default(),
+                        )
+                    } else if can_load {
+                        // Grok and similar: continue across process restarts via
+                        // session/load (requires mcpServers; schema defaults to []).
+                        let resp = tokio::select! {
+                            result = timed_acp_request(
+                                "session/load",
+                                connection
+                                    .send_request(
+                                        LoadSessionRequest::new(
+                                            SessionId::new(rid.as_str()),
+                                            cwd.clone(),
+                                        )
+                                        .mcp_servers(vec![]),
+                                    )
+                                    .block_task(),
+                            ) => result?,
+                            () = wait_for_cancellation(&mut cancellation) => {
+                                let payload = cancelled_payload(
+                                    session_for_conn.clone(),
+                                    message_for_conn.clone(),
+                                    &content_for_conn,
+                                    &thought_for_conn,
+                                );
+                                let _ = app_for_conn.emit("agent:completed", payload.clone());
+                                return Ok(payload);
+                            }
+                        };
+                        (
+                            SessionId::new(rid.as_str()),
+                            resp.config_options.unwrap_or_default(),
+                        )
+                    } else {
+                        return Err(acp_err(format!(
+                            "Agent does not support continuing session {rid} \
+                             (no session/resume or session/load capability)"
+                        )));
+                    }
                 } else {
                     let new_session = tokio::select! {
                         result = timed_acp_request(
@@ -1140,6 +1213,19 @@ pub async fn run_once(
                     let _ = app_for_conn.emit("agent:completed", payload.clone());
                     return Ok(payload);
                 }
+
+                // After session/load|resume, drop any history-replay chunks that
+                // arrived before this turn's prompt so completed.content and the
+                // UI stream only reflect the new answer.
+                if resume_id.is_some() {
+                    if let Ok(mut buf) = content_for_conn.lock() {
+                        buf.clear();
+                    }
+                    if let Ok(mut buf) = thought_for_conn.lock() {
+                        buf.clear();
+                    }
+                }
+                live_stream.store(true, Ordering::SeqCst);
 
                 let mut content_blocks: Vec<ContentBlock> =
                     vec![ContentBlock::Text(TextContent::new(full_prompt))];
@@ -1782,7 +1868,10 @@ pub async fn load_acp_session(
                 timed_acp_request(
                     "session/load",
                     connection
-                        .send_request(LoadSessionRequest::new(SessionId::new(sid.as_str()), cwd))
+                        .send_request(
+                            LoadSessionRequest::new(SessionId::new(sid.as_str()), cwd)
+                                .mcp_servers(vec![]),
+                        )
                         .block_task(),
                 )
                 .await?;
