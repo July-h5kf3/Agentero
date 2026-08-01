@@ -94,6 +94,12 @@ term.
 - For heading links, prefer the complete canonical heading path
   (`[[notes/topic#Outer#Inner|label]]`) so duplicate leaf headings cannot make
   the link ambiguous.
+- To cite a **PDF highlight or visual mark** already in `{paper}/marks/`, use an
+  annotation wikilink with a **real id** from disk (or the UI copy action), e.g.
+  `[[papers/…/NOTES@<id>|short label]]` or `![[papers/…/NOTES@<id>]]`.
+  - Prefer a vault-relative path target (`NOTES` / `papers/…/NOTES` / `*.pdf`),
+    never invent a paper display title as the only target.
+  - Never invent mark ids. If you did not read `marks/`, keep the claim as prose.
 - Preserve user-authored wikilinks. Repair only links introduced or changed by
   this run unless the user separately approves broader cleanup.
 

@@ -87,9 +87,12 @@ Obsidian 兼容语法：
 这篇工作扩展了 [[另一个论文]] 中的实验设置。
 具体规则见 [[另一个论文#实验设置]]。
 关键结论见 [[另一个论文#^summary]]。
+这条高亮见 [[papers/…/NOTES@批注id|短摘录]]。
 ```
 
-输入 `[[` 后可从文件 / alias / 标题 / block 候选中选择。保存后更新 Backlinks 与 Graph。通过 Agentero 移动或重命名时，会修复已解析到该目标的链接。
+输入 `[[` 后可从文件 / 标题 / block / 批注等候选中选择（`#` 标题 · `^` 文本块 · `|` 显示名 · `@` 批注；↑↓ 循环，tab 补全，enter 确认）。`@` 用于 PDF 划词或视觉批注；target 用路径，不要只用论文展示标题。保存后更新 Backlinks 与 Graph。通过 Agentero 移动或重命名时，会修复已解析到该目标的链接。
+
+更细的编辑器语义见 [双链 UI](../frontend/wiki.md)。
 
 ## 嵌入 Vault 内容
 
@@ -98,6 +101,7 @@ Obsidian 兼容语法：
 ![[另一个论文#实验设置]]
 ![[assets/figure.png|480]]
 ![[papers/example/paper.pdf]]
+![[papers/example/NOTES@批注id]]
 ```
 
 | 语法 | 显示 |
@@ -107,6 +111,7 @@ Obsidian 兼容语法：
 | `![[note#^block-id]]` | block 所在行 |
 | `![[image.png]]` | 图片；alias 可写宽度 |
 | `![[document.pdf]]` | 内嵌 PDF |
+| `![[…@annotationId]]` | 划词 / 视觉批注 |
 
 嵌入只读；光标进入 `![[...]]` 时显示源码。循环或过深嵌套会显示有界提示。
 

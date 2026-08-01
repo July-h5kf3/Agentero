@@ -94,6 +94,16 @@ Nested headings use the full path:
 [[03 Papers and Import#Import#Zotero]]
 ```
 
+Use `@` for PDF highlights / visual marks (`id` from the Annotations panel copy action, or type `[[@` to complete):
+
+```markdown
+[[@annotationId]]
+[[papers/…/NOTES@annotationId|Title]]
+```
+
+- `#` heading · `^` block · `|` alias · `@` annotation; `tab` complete · `enter` confirm.
+- Annotation targets are paths (`NOTES` / `paper.pdf` / `papers/…/NOTES`), not display titles alone.
+
 Agentero indexes all `[[...]]` links for the **Backlinks** panel and the **Graph** view.
 
 ## Embeds
@@ -102,6 +112,7 @@ Prefix a wikilink with `!` to embed its content inline (read-only):
 
 ```markdown
 ![[03 Papers and Import#Library]]
+![[papers/…/NOTES@annotationId]]
 ```
 
 You can embed:
@@ -109,6 +120,7 @@ You can embed:
 - **Note sections** — any heading path: `![[note#Section#Subsection]]`
 - **Images** — `![[diagram.png]]` or `![](./assets/diagram.png)`
 - **PDF pages** — `![[paper.pdf]]`
+- **PDF annotations** — `![[…@annotationId]]`
 
 Embedded content stays in sync with the source. Editing the original file updates all embeds automatically. The embed itself is read-only — edit the source file to change content.
 

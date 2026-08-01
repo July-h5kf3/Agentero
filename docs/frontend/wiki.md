@@ -5,13 +5,14 @@
 ## 编辑器
 
 - `[[wikilink]]` Live Preview；光标进入显示源码。
-- 输入 `[[`：文件 / alias / 标题 / block 候选。
+- 输入 `[[`：文件 / alias / 标题 / block / 批注（`@`）候选；↑↓ 在列表内循环，不关闭菜单；底部提示 `#标题 · ^文本块 · |显示文本 · @批注`。
 - 嵌套标题路径没有层数限制：`[[2026-W31#07-28 周二#复盘分析#paper 阅读]]`、同文件写法与对应 `![[...]]` 均合法。
 - 完整路径是标题的 canonical identity；Markdown 引用也可省略开头祖先，使用任意长度的连续路径后缀，例如唯一时 `[[2026-W31#复盘分析#paper 阅读]]` 合法。后缀命中多个标题时返回歧义，不选择第一个结果。
 - 每输入一个额外 `#`，其前面的路径段成为已确认父路径，候选只显示该父标题的直接子标题。父路径本身也按后缀匹配，因此可从省略祖先的标题继续逐级补全，且没有两级或其他固定深度限制。
 - 标题候选显示 canonical 路径 `外层标题 › 内层标题`，选择候选后写回完整 `外层标题#内层标题`；手写的唯一后缀保持原文。查询接受源码分隔符 `#` 和候选展示分隔符 `›`，并保留用户已输入的文件 target、alias 与 embed 标记。
+- `@` 批注与 `#` / `^` 同属 fragment：`[[@id]]`、`[[papers/…/NOTES@id|alias]]`、`[[paper.pdf@id]]`、`[[…#@id]]`（与 `@id` 等价）。target 必须是可解析路径/文件名，**不要**单独用论文展示标题；面板复制默认 `[[papers/…/NOTES@id|论文标题]]`。id 来自高亮 `annotations.json` 或视觉 `agent-trace`（nanoid 可含 `_`）。
 - 序列化必须写回 `[[...]]`（Obsidian 兼容）。
-- `![[...]]`：嵌入 Markdown 区段、图片、PDF（只读）；普通编辑不刷新无关嵌入。
+- `![[...]]`：嵌入 Markdown 区段、图片、PDF、批注（只读）；普通编辑不刷新无关嵌入。批注嵌入（`contentKind: annotation`）与其它 embed 共用 `max-h` 滚动壳；位置优先大纲路径否则页码；视觉批注展示对话 Markdown（无 composer）；**正文不可点跳转**，仅顶栏 ExternalLink 打开 PDF。Host `wiki check` 校验 path + id 形态，不读 `marks/` 验存活。
 
 ## Graph
 
@@ -41,22 +42,3 @@
 - 面板：`src/components/wiki/`
 - 逻辑：`src/lib/wiki/`、`wiki-completion.ts`、`wiki-embed.ts`、`wiki-navigation.ts`、`wiki-heading-rename.ts`
 - Host：[../backend/wiki.md](../backend/wiki.md)
-
-## 批注双链（PDF annotation refs）
-
-语法（与 `[[` / `![[` 同一套壳）：
-
-```markdown
-[[@批注id]]                              # 当前 NOTES / 当前 paper
-[[papers/…/NOTES@批注id]]                # 稳定 vault 相对路径（面板复制默认）
-[[paper.pdf@批注id]]                     # PDF 文件名 / 路径
-[[../NOTES.md@批注id]]                   # 相对路径
-[[papers/…/NOTES@批注id|显示标题]]       # 路径解析 + 标题只作 alias
-![[…@批注id]]                            # 只读嵌入
-[[…#@批注id]]                            # 与 `@id` sugar 等价
-```
-
-- **target 必须是可解析路径/文件名**（`NOTES`、`paper.pdf`、`papers/…/NOTES`），**不要**单独用论文展示标题当 target。
-- 面板复制：`[[papers/…/NOTES@id|论文标题]]`（标题只在 `|` 后）。
-- `id` 为高亮（`annotations.json`）或视觉批注（`agent-trace`，nanoid 可含 `_`）。
-- 嵌入卡只读；`[[@` 补全列出当前 paper 批注。
