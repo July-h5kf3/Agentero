@@ -25,6 +25,7 @@ import {
 	useWikiStore,
 	useWorkspaceStore,
 } from "@/hooks/use-app-stores";
+import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
@@ -68,7 +69,7 @@ function onOpenAgentSettings(): void {
 }
 
 function handleAgentOpenSource(source: string): void {
-	const trimmed = source.trim();
+	const trimmed = normalizeAgentSourcePath(source);
 	if (!trimmed) return;
 	if (/^https?:\/\//i.test(trimmed)) {
 		void import("@tauri-apps/plugin-opener")
