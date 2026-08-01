@@ -18,7 +18,12 @@ import {
 	completeTrace,
 	createRunningTraces,
 	failTrace,
+	isVisualTraceSessionPending,
 	parsePdfVisualSessionTrace,
+	reconcileOrphanRunningVisualTraces,
+	rememberPendingVisualTraces,
+	resetPendingVisualTracesForTests,
+	takePendingVisualTraces,
 	traceMessages,
 	tracePin,
 	tracePreview,
@@ -463,5 +468,84 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(history.id).not.toBe("rt-last");
 		expect(history.resumeable).toBe(true);
 		expect(history.providerSessionId).toBe("prov");
+	});
+});
+
+describe("pending visual traces lifecycle", () => {
+	beforeEach(() => {
+		resetPendingVisualTracesForTests();
+	});
+
+	it("remembers and takes writes by runtime session", () => {
+		rememberPendingVisualTraces("rt-1", [
+			{ paperAbsPath: "/p/a", traceId: "t1" },
+		]);
+		rememberPendingVisualTraces("rt-1", [
+			{ paperAbsPath: "/p/a", traceId: "t2" },
+		]);
+		expect(isVisualTraceSessionPending("rt-1")).toBe(true);
+		const taken = takePendingVisualTraces("rt-1");
+		expect(taken).toEqual([
+			{ paperAbsPath: "/p/a", traceId: "t1" },
+			{ paperAbsPath: "/p/a", traceId: "t2" },
+		]);
+		// Grace window keeps the session "pending" so list reconcile cannot race.
+		expect(isVisualTraceSessionPending("rt-1")).toBe(true);
+		expect(takePendingVisualTraces("rt-1")).toEqual([]);
+	});
+
+	it("reconciles orphan running marks but keeps in-flight sessions", async () => {
+		const [orphan, active] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "a",
+			runtimeSessionId: "rt-orphan",
+			messageId: "m1",
+			items: [
+				{ page: 1, rects: [rect], comment: "orphan", image },
+				{ page: 2, rects: [rect], comment: "active", image },
+			],
+		});
+		expect(orphan && active).toBeTruthy();
+		if (!orphan || !active) return;
+		const activeRunning = {
+			...active,
+			id: "active-id",
+			runtimeSessionId: "rt-active",
+		};
+		rememberPendingVisualTraces("rt-active", [
+			{ paperAbsPath: "/vault/papers/a", traceId: activeRunning.id },
+		]);
+
+		const reconciled = await reconcileOrphanRunningVisualTraces(
+			"/vault/papers/a",
+			[orphan, activeRunning],
+		);
+		expect(reconciled).toHaveLength(2);
+		expect(reconciled[0]?.status).toBe("failed");
+		expect(reconciled[0]?.error).toMatch(/interrupted/i);
+		// User seed survives fail.
+		expect(reconciled[0]?.messages?.[0]?.content).toBe("orphan");
+		expect(reconciled[1]?.status).toBe("running");
+		expect(reconciled[1]?.id).toBe("active-id");
+	});
+
+	it("does not fail a mark right after take (finalize grace)", async () => {
+		const [running] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "a",
+			runtimeSessionId: "rt-fin",
+			messageId: "m",
+			items: [{ page: 1, rects: [rect], comment: "finishing", image }],
+		});
+		expect(running).toBeDefined();
+		if (!running) return;
+		rememberPendingVisualTraces("rt-fin", [
+			{ paperAbsPath: "/p", traceId: running.id },
+		]);
+		takePendingVisualTraces("rt-fin");
+		const reconciled = await reconcileOrphanRunningVisualTraces("/p", [
+			running,
+		]);
+		expect(reconciled[0]?.status).toBe("running");
 	});
 });
