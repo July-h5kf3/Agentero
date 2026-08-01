@@ -90,6 +90,8 @@ async function boot() {
 	// downloads/parses the heavyweight workspace bundle. The PDF engine host and
 	// KaTeX styles ride along here for the same reason: the settings webview has
 	// no viewer and no math, so it must not pay for PDFium or the KaTeX fonts.
+	// Keep the engine host outside StrictMode below so dev effect replay cannot
+	// initialize a second PDFium instance.
 	const [{ default: App }, { PdfEngineHost }] = await Promise.all([
 		import(isMobileApp() ? "./components/mobile/mobile-app" : "./App"),
 		import("@/components/viewer/embed/engine-provider"),
@@ -97,19 +99,19 @@ async function boot() {
 	]);
 	bootStage("app-module");
 	ReactDOM.createRoot(root).render(
-		<React.StrictMode>
-			<I18nextProvider i18n={i18n}>
-				<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-					<TooltipProvider delayDuration={300}>
-						<PdfEngineHost>
+		<PdfEngineHost>
+			<React.StrictMode>
+				<I18nextProvider i18n={i18n}>
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+						<TooltipProvider delayDuration={300}>
 							<App />
-						</PdfEngineHost>
-						{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
-						<Toaster />
-					</TooltipProvider>
-				</ThemeProvider>
-			</I18nextProvider>
-		</React.StrictMode>,
+							{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
+							<Toaster />
+						</TooltipProvider>
+					</ThemeProvider>
+				</I18nextProvider>
+			</React.StrictMode>
+		</PdfEngineHost>,
 	);
 	logger.info(
 		`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=main`,
