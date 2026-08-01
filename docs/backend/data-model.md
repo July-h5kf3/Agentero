@@ -30,7 +30,7 @@ Vault/
 papers/<id>/
 ├── NOTES.md          # 人/Agent 笔记
 ├── <id>.pdf          # 可选
-├── marks/            # 高亮/批注/提问/翻译 JSON
+├── marks/            # 高亮/批注/提问/翻译 JSON 与 mark 自有资产
 ├── source/           # TeX 等（可懒加载）
 │   └── agentero-cite.json  # 参考文献 sidecar（可重建，见 api.md paper_refs_parse）
 ├── PAPER.md          # 无 TeX 时 liteparse 正文
@@ -42,7 +42,18 @@ papers/<id>/
 
 - 高亮/批注：`annotations.json`（含 `comment` 的为批注）
 - 提问/翻译：`<id>.json`（`kind`）
+- 视觉批注：`<id>.json`（`kind: agent-trace`）保存位置、会话与 `image.path`；裁剪图片位于 `assets/<id>.png`
 - 不写 PDF 二进制，不强制写入 NOTES
+
+```text
+marks/
+├── annotations.json
+├── <id>.json
+└── assets/
+    └── <agent-trace-id>.png
+```
+
+`marks/assets/` 由 mark 拥有，删除视觉批注时同步删除对应图片。列表与轮询只解析 JSON；悬浮预览、打开 Agent 或 Wiki 嵌入需要图片时才读取二进制。该目录与 Paper 单元根部供 `NOTES.md` 引用的 `assets/` 分开。
 
 ## Markdown 内嵌图
 
