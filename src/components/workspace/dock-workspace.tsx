@@ -362,6 +362,12 @@ function reconcileAfterLayoutRestore(api: DockviewApi, list: DocTab[]): void {
 	reconcilePanelMembership(api, list);
 }
 
+function visiblePanelIds(api: DockviewApi): string[] {
+	return api.groups.flatMap((group) =>
+		group.activePanel ? [group.activePanel.id] : [],
+	);
+}
+
 type DockWorkspaceProps = {
 	tabs: DocTab[];
 	activePanelId: string | null;
@@ -370,6 +376,7 @@ type DockWorkspaceProps = {
 	pdfKeepMountedIds: string[];
 	centerProps: Omit<DocViewProps, "tab" | "active" | "pdfKeepMounted">;
 	onActivePanelChange: (panelId: string | null) => void;
+	onVisiblePanelIdsChange: (panelIds: string[]) => void;
 	onClosePanel: (panelId: string) => void;
 	onLayoutChange: (layout: unknown) => void;
 	/** Switch an HTML-backed paper panel between its PDF and HTML views. */
@@ -399,6 +406,7 @@ export const DockWorkspace = memo(
 			pdfKeepMountedIds,
 			centerProps,
 			onActivePanelChange,
+			onVisiblePanelIdsChange,
 			onClosePanel,
 			onLayoutChange,
 			onToggleHtmlMode,
@@ -422,6 +430,8 @@ export const DockWorkspace = memo(
 		onCloseRef.current = onClosePanel;
 		const onActiveRef = useRef(onActivePanelChange);
 		onActiveRef.current = onActivePanelChange;
+		const onVisibleRef = useRef(onVisiblePanelIdsChange);
+		onVisibleRef.current = onVisiblePanelIdsChange;
 		const onLayoutRef = useRef(onLayoutChange);
 		onLayoutRef.current = onLayoutChange;
 		const onToggleHtmlRef = useRef(onToggleHtmlMode);
@@ -471,15 +481,20 @@ export const DockWorkspace = memo(
 			}, 120);
 		}, []);
 
+		const publishVisiblePanels = useCallback((api: DockviewApi) => {
+			onVisibleRef.current(visiblePanelIds(api));
+		}, []);
+
 		const endSync = useCallback(
 			(api: DockviewApi) => {
 				requestAnimationFrame(() => {
 					syncingRef.current = false;
 					onActiveRef.current(api.activePanel?.id ?? null);
+					publishVisiblePanels(api);
 					scheduleLayoutSave(api);
 				});
 			},
-			[scheduleLayoutSave],
+			[publishVisiblePanels, scheduleLayoutSave],
 		);
 
 		const pdfKeepSet = useMemo(
@@ -595,6 +610,7 @@ export const DockWorkspace = memo(
 					api.onDidActivePanelChange((ev) => {
 						if (syncingRef.current) return;
 						onActiveRef.current(ev.panel?.id ?? null);
+						publishVisiblePanels(api);
 					}),
 					api.onDidRemovePanel((panel) => {
 						if (syncingRef.current) return;
@@ -603,6 +619,7 @@ export const DockWorkspace = memo(
 					// Single layout-save path (debounce). Programmatic + user changes
 					// (incl. tab-group rename / color / membership via toJSON).
 					api.onDidLayoutChange(() => {
+						if (!syncingRef.current) publishVisiblePanels(api);
 						scheduleLayoutSave(api);
 					}),
 				];
@@ -627,7 +644,7 @@ export const DockWorkspace = memo(
 					syncPanels(api);
 				}
 			},
-			[endSync, scheduleLayoutSave, syncPanels],
+			[endSync, publishVisiblePanels, scheduleLayoutSave, syncPanels],
 		);
 
 		// Sync membership when panel ids change (not titles).
