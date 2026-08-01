@@ -206,9 +206,12 @@ export function WikiLinkSuggestion({
 	const editor = useEditorRef();
 	const { filePath } = useMarkdownDoc();
 	const wikiNav = useWikiNav();
+	// Depend on raw text only — draft position updates must not recreate the
+	// request object or we re-fetch and snap selection back to 0.
+	const draftRaw = draft?.raw ?? null;
 	const request = useMemo(
-		() => (draft ? parseWikiCompletionQuery(draft.raw) : null),
-		[draft],
+		() => (draftRaw != null ? parseWikiCompletionQuery(draftRaw) : null),
+		[draftRaw],
 	);
 	const requestKey = completionRequestKey(request);
 	const [candidateState, setCandidateState] = useState<CandidateState>({
@@ -217,6 +220,8 @@ export function WikiLinkSuggestion({
 	});
 	const candidates =
 		candidateState.requestKey === requestKey ? candidateState.items : [];
+	const candidatesRef = useRef(candidates);
+	candidatesRef.current = candidates;
 	const [recentCandidates, setRecentCandidates] = useState<
 		WikiSearchCandidate[]
 	>([]);
@@ -224,15 +229,31 @@ export function WikiLinkSuggestion({
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const listRef = useRef<HTMLDivElement>(null);
 
+	// Keep highlight inside the listbox only — scrollIntoView can scroll the
+	// editor container and onScrollCapture closes the completion popup.
 	useEffect(() => {
-		if (!candidates[selectedIndex]) return;
-		listRef.current
-			?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
-			?.scrollIntoView({ block: "nearest" });
+		const list = listRef.current;
+		if (!list || !candidates[selectedIndex]) return;
+		const option = list.querySelector<HTMLElement>(
+			'[role="option"][aria-selected="true"]',
+		);
+		if (!option) return;
+		const listRect = list.getBoundingClientRect();
+		const optionRect = option.getBoundingClientRect();
+		if (optionRect.bottom > listRect.bottom) {
+			list.scrollTop += optionRect.bottom - listRect.bottom;
+		} else if (optionRect.top < listRect.top) {
+			list.scrollTop -= listRect.top - optionRect.top;
+		}
 	}, [candidates, selectedIndex]);
 
 	useEffect(() => {
+		// Reset highlight only when the completion query identity changes.
+		void requestKey;
 		setSelectedIndex(0);
+	}, [requestKey]);
+
+	useEffect(() => {
 		if (!request) {
 			setCandidateState({ requestKey: null, items: [] });
 			setLoading(false);
@@ -510,53 +531,73 @@ export function WikiLinkSuggestion({
 		[controllerRef, draft, editor, onClose, onContinue, request],
 	);
 
-	const handleKeyDown = useCallback(
-		(event: ReactKeyboardEvent<HTMLDivElement>) => {
-			if (!draft) return false;
-			if (event.key === "Escape") {
-				event.preventDefault();
-				onClose();
-				return true;
-			}
-			if (event.key === "ArrowDown" && candidates.length) {
-				event.preventDefault();
-				setSelectedIndex((index) => (index + 1) % candidates.length);
-				return true;
-			}
-			if (event.key === "ArrowUp" && candidates.length) {
-				event.preventDefault();
-				setSelectedIndex(
-					(index) => (index - 1 + candidates.length) % candidates.length,
-				);
-				return true;
-			}
-			if (isWikiCompletionSubmitKey(event.key) && candidates[selectedIndex]) {
-				if (selectCandidate(candidates[selectedIndex], event.key)) {
-					event.preventDefault();
-					return true;
-				}
-				if (request?.kind === "alias" && !request.query) {
-					event.preventDefault();
-					return true;
-				}
-			}
-			return false;
-		},
-		[candidates, draft, onClose, request, selectCandidate, selectedIndex],
-	);
+	const selectedIndexRef = useRef(selectedIndex);
+	selectedIndexRef.current = selectedIndex;
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const requestRef = useRef(request);
+	requestRef.current = request;
+	const selectCandidateRef = useRef(selectCandidate);
+	selectCandidateRef.current = selectCandidate;
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
 
+	// Stable controller identity: re-binding on every highlight change used to
+	// briefly null `controllerRef` in layout cleanup, and selection re-renders
+	// could race with the next keydown.
 	useLayoutEffect(() => {
-		controllerRef.current = { handleKeyDown };
+		controllerRef.current = {
+			handleKeyDown: (event) => {
+				if (!draftRef.current) return false;
+				if (event.key === "Escape") {
+					event.preventDefault();
+					onCloseRef.current();
+					return true;
+				}
+				// Always consume vertical arrows while the menu is open so the caret
+				// cannot leave the `[[` token (which would dismiss the popup). Cycle
+				// selection when there are items; still swallow keys when empty/loading.
+				if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+					event.preventDefault();
+					event.stopPropagation();
+					const items = candidatesRef.current;
+					if (items.length) {
+						const delta = event.key === "ArrowDown" ? 1 : -1;
+						setSelectedIndex(
+							(index) => (index + delta + items.length) % items.length,
+						);
+					}
+					return true;
+				}
+				const items = candidatesRef.current;
+				const index = selectedIndexRef.current;
+				if (isWikiCompletionSubmitKey(event.key) && items[index]) {
+					if (selectCandidateRef.current(items[index], event.key)) {
+						event.preventDefault();
+						return true;
+					}
+					if (
+						requestRef.current?.kind === "alias" &&
+						!requestRef.current.query
+					) {
+						event.preventDefault();
+						return true;
+					}
+				}
+				return false;
+			},
+		};
 		return () => {
 			controllerRef.current = null;
 		};
-	}, [controllerRef, handleKeyDown]);
+	}, [controllerRef]);
 
 	if (!draft || !request) return null;
 	return (
 		<ViewportFloating
 			point={{ x: draft.left, y: draft.top }}
 			className="z-50 flex w-96 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+			data-editor-completion="wiki"
 		>
 			<div
 				ref={listRef}
@@ -584,6 +625,7 @@ export function WikiLinkSuggestion({
 							key={`${candidate.kind}:${candidate.path}:${candidate.insertText}:${candidate.alias ?? ""}`}
 							type="button"
 							role="option"
+							tabIndex={-1}
 							aria-selected={index === selectedIndex}
 							className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs outline-none ${
 								index === selectedIndex

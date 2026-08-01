@@ -91,17 +91,32 @@ export function SlashCommandMenu({
 				: [],
 		[draft, t],
 	);
+	const commandsRef = useRef(commands);
+	commandsRef.current = commands;
+	const draftQuery = draft?.query ?? null;
+	const draftAllowCallout = draft?.allowCallout ?? false;
 
 	useEffect(() => {
-		if (!draft) return;
+		if (draftQuery == null) return;
+		void draftAllowCallout;
 		setSelectedIndex(0);
-	}, [draft]);
+	}, [draftQuery, draftAllowCallout]);
 
+	// Scroll only the menu list — avoid ancestor scroll dismissing UI.
 	useEffect(() => {
-		if (!commands[selectedIndex]) return;
-		listRef.current
-			?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
-			?.scrollIntoView({ block: "nearest" });
+		const list = listRef.current;
+		if (!list || !commands[selectedIndex]) return;
+		const option = list.querySelector<HTMLElement>(
+			'[role="option"][aria-selected="true"]',
+		);
+		if (!option) return;
+		const listRect = list.getBoundingClientRect();
+		const optionRect = option.getBoundingClientRect();
+		if (optionRect.bottom > listRect.bottom) {
+			list.scrollTop += optionRect.bottom - listRect.bottom;
+		} else if (optionRect.top < listRect.top) {
+			list.scrollTop -= listRect.top - optionRect.top;
+		}
 	}, [commands, selectedIndex]);
 
 	const selectCommand = useCallback(
@@ -121,49 +136,58 @@ export function SlashCommandMenu({
 		[draft, editor, onClose],
 	);
 
-	const handleKeyDown = useCallback(
-		(event: ReactKeyboardEvent<HTMLDivElement>) => {
-			if (!draft) return false;
-			if (event.key === "Escape") {
-				event.preventDefault();
-				onClose();
-				return true;
-			}
-			if (event.key === "ArrowDown" && commands.length) {
-				event.preventDefault();
-				setSelectedIndex((index) => (index + 1) % commands.length);
-				return true;
-			}
-			if (event.key === "ArrowUp" && commands.length) {
-				event.preventDefault();
-				setSelectedIndex(
-					(index) => (index - 1 + commands.length) % commands.length,
-				);
-				return true;
-			}
-			if (isSlashCommandSubmitKey(event.key) && commands[selectedIndex]) {
-				if (selectCommand(commands[selectedIndex])) {
-					event.preventDefault();
-					return true;
-				}
-			}
-			return false;
-		},
-		[commands, draft, onClose, selectCommand, selectedIndex],
-	);
+	const selectedIndexRef = useRef(selectedIndex);
+	selectedIndexRef.current = selectedIndex;
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const selectCommandRef = useRef(selectCommand);
+	selectCommandRef.current = selectCommand;
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
 
 	useLayoutEffect(() => {
-		controllerRef.current = { handleKeyDown };
+		controllerRef.current = {
+			handleKeyDown: (event) => {
+				if (!draftRef.current) return false;
+				if (event.key === "Escape") {
+					event.preventDefault();
+					onCloseRef.current();
+					return true;
+				}
+				if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+					event.preventDefault();
+					event.stopPropagation();
+					const items = commandsRef.current;
+					if (items.length) {
+						const delta = event.key === "ArrowDown" ? 1 : -1;
+						setSelectedIndex(
+							(index) => (index + delta + items.length) % items.length,
+						);
+					}
+					return true;
+				}
+				const items = commandsRef.current;
+				const index = selectedIndexRef.current;
+				if (isSlashCommandSubmitKey(event.key) && items[index]) {
+					if (selectCommandRef.current(items[index])) {
+						event.preventDefault();
+						return true;
+					}
+				}
+				return false;
+			},
+		};
 		return () => {
 			controllerRef.current = null;
 		};
-	}, [controllerRef, handleKeyDown]);
+	}, [controllerRef]);
 
 	if (!draft) return null;
 	return (
 		<ViewportFloating
 			point={{ x: draft.left, y: draft.top }}
 			className="z-50 w-64 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+			data-editor-completion="slash"
 		>
 			<div
 				ref={listRef}
@@ -179,6 +203,7 @@ export function SlashCommandMenu({
 								key={command.id}
 								type="button"
 								role="option"
+								tabIndex={-1}
 								aria-selected={index === selectedIndex}
 								className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm outline-none ${
 									index === selectedIndex

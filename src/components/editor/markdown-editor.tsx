@@ -214,6 +214,10 @@ export function MarkdownEditor({
 		useState<WikiCompletionDraft | null>(null);
 	const [slashCommandDraft, setSlashCommandDraft] =
 		useState<SlashCommandDraft | null>(null);
+	const wikiCompletionDraftRef = useRef(wikiCompletionDraft);
+	wikiCompletionDraftRef.current = wikiCompletionDraft;
+	const slashCommandDraftRef = useRef(slashCommandDraft);
+	slashCommandDraftRef.current = slashCommandDraft;
 	const [headingContext, setHeadingContext] =
 		useState<WikiHeadingAnchor | null>(null);
 	const [contextMenuSelectionExpanded, setContextMenuSelectionExpanded] =
@@ -1089,6 +1093,16 @@ export function MarkdownEditor({
 					event.stopPropagation();
 					return;
 				}
+				// If the menu is open but the controller is mid-remount, still
+				// swallow vertical arrows so the caret cannot leave `[[` / `/`.
+				if (
+					(event.key === "ArrowUp" || event.key === "ArrowDown") &&
+					(wikiCompletionDraftRef.current || slashCommandDraftRef.current)
+				) {
+					event.preventDefault();
+					event.stopPropagation();
+					return;
+				}
 				if (handleWikiLinkBoundaryDelete(event)) {
 					event.stopPropagation();
 					return;
@@ -1178,6 +1192,15 @@ export function MarkdownEditor({
 	const handleEditorBlur = useCallback(
 		(event: React.FocusEvent<HTMLDivElement>) => {
 			if (event.currentTarget.contains(event.relatedTarget)) return;
+			// Completion menus portal to document.body — focus moving into them
+			// must not dismiss the list (arrow/click interaction).
+			const related = event.relatedTarget;
+			if (
+				related instanceof Element &&
+				related.closest("[data-editor-completion]")
+			) {
+				return;
+			}
 			setWikiCompletionDraft(null);
 			setSlashCommandDraft(null);
 			finalizeWikiLinkDrafts();
@@ -1479,6 +1502,9 @@ export function MarkdownEditor({
 					editor={editor}
 					onSelectionChange={() => {
 						syncWikiLinkPresentation(editor.selection);
+						// Re-anchor or dismiss completion from caret moves (not only
+						// document edits) so arrow navigation cannot leave a stale menu.
+						window.requestAnimationFrame(updateWikiCompletionDraft);
 						window.requestAnimationFrame(updateSlashCommandDraft);
 						scheduleSelectionContextPublish();
 					}}
@@ -1505,8 +1531,10 @@ export function MarkdownEditor({
 										ref={editorContainerRef}
 										className="agentero-scroll h-full min-w-0 overflow-y-auto"
 										onScrollCapture={() => {
-											setWikiCompletionDraft(null);
-											setSlashCommandDraft(null);
+											// Reposition instead of hard-dismiss: arrow-key list
+											// updates can reflow and fire scroll without leaving [[.
+											window.requestAnimationFrame(updateWikiCompletionDraft);
+											window.requestAnimationFrame(updateSlashCommandDraft);
 										}}
 										onContextMenuCapture={handleEditorContextMenu}
 										onKeyDownCapture={readOnly ? undefined : handleKeyDown}

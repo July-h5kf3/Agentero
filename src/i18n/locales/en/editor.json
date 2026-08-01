@@ -130,7 +130,7 @@
 		"loading": "Searching links…",
 		"empty": "No matching internal links",
 		"displayName": "Display name",
-		"syntaxHint": "Type # to link a heading · ^ to link a text block · | to set display text"
+		"syntaxHint": "#heading · ^block · |alias · @annotation; tab complete · enter confirm"
 	},
 	"slashCommand": {
 		"label": "Formatting commands",
