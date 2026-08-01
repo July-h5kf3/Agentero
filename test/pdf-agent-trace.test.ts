@@ -11,6 +11,7 @@ import {
 	visualContextStore,
 } from "@/lib/agent/visual-context-store";
 import {
+	beginTraceContinue,
 	buildChatLinesFromVisualTrace,
 	buildVisualAnnotationsPrompt,
 	buildVisualTraceContinuePrompt,
@@ -77,6 +78,36 @@ describe("visual-context-store", () => {
 		});
 		clearVisualDrafts();
 		expect(currentVisualDrafts()).toEqual([]);
+	});
+
+	it("assigns unique stable ids (not sequential vis-N filenames)", () => {
+		const a = addVisualDraft({
+			paperPath: "papers/a",
+			page: 1,
+			rects: [rect],
+			comment: "a",
+			image,
+		});
+		const b = addVisualDraft({
+			paperPath: "papers/a",
+			page: 2,
+			rects: [rect],
+			comment: "b",
+			image,
+		});
+		expect(a.id).not.toBe(b.id);
+		expect(a.id).not.toMatch(/^vis-\d+$/);
+		expect(b.id).not.toMatch(/^vis-\d+$/);
+		// Explicit id still wins (Cmd+Enter provisional path).
+		const c = addVisualDraft({
+			id: "custom-id",
+			paperPath: "papers/a",
+			page: 3,
+			rects: [rect],
+			comment: "c",
+			image,
+		});
+		expect(c.id).toBe("custom-id");
 	});
 
 	it("groups drafts by paper path", () => {
@@ -262,6 +293,7 @@ describe("agent-trace schema and lifecycle", () => {
 		};
 		const failed = failTrace(mid, {
 			error: "resume_session: Method not found",
+			providerSessionId: "prov-cancelled",
 			assistantMessageId: "asst-2",
 		});
 		expect(failed.messages?.map((m) => m.content)).toEqual([
@@ -270,6 +302,59 @@ describe("agent-trace schema and lifecycle", () => {
 			"follow up",
 		]);
 		expect(failed.error).toContain("resume_session");
+		expect(failed.providerSessionId).toBe("prov-cancelled");
+	});
+
+	it("beginTraceContinue rebinds runtime id and appends user turn", () => {
+		const [base] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "agent-1",
+			runtimeSessionId: "rt-1",
+			messageId: "msg-1",
+			items: [{ page: 1, rects: [rect], comment: "first", image }],
+		});
+		expect(base).toBeDefined();
+		if (!base) return;
+		const completed = completeTrace(base, {
+			providerSessionId: "prov-1",
+			answerSnapshot: "answer one",
+		});
+		const cont = beginTraceContinue(completed, {
+			runtimeSessionId: "rt-2",
+			messageId: "msg-2",
+			userContent: "follow up",
+			userMessageId: "user-2",
+		});
+		expect(cont.status).toBe("running");
+		expect(cont.runtimeSessionId).toBe("rt-2");
+		expect(cont.messageId).toBe("msg-2");
+		expect(cont.error).toBeUndefined();
+		expect(cont.messages?.map((m) => m.content)).toEqual([
+			"first",
+			"answer one",
+			"follow up",
+		]);
+		// Second complete should grow the on-disk transcript.
+		const done = completeTrace(cont, {
+			providerSessionId: "prov-1",
+			answerSnapshot: "answer two",
+		});
+		expect(done.status).toBe("completed");
+		expect(done.answerSnapshot).toBe("answer two");
+		expect(done.messages?.map((m) => m.content)).toEqual([
+			"first",
+			"answer one",
+			"follow up",
+			"answer two",
+		]);
+		// Idempotent: same trailing user content is not duplicated.
+		const again = beginTraceContinue(cont, {
+			runtimeSessionId: "rt-3",
+			userContent: "follow up",
+		});
+		expect(
+			again.messages?.filter((m) => m.content === "follow up"),
+		).toHaveLength(1);
 	});
 
 	it("continue prompt embeds history without requiring session resume", () => {
@@ -462,12 +547,15 @@ describe("agent-trace schema and lifecycle", () => {
 			title: "这里最值得读的是什么?",
 			agentName: "Agent",
 			startedAt: "now",
+			paperAbsPath: "/vault/papers/a",
 		});
 		expect(history.id).toBe(visualTraceHistoryId("tr1"));
 		expect(history.lines).toHaveLength(4);
 		expect(history.id).not.toBe("rt-last");
 		expect(history.resumeable).toBe(true);
 		expect(history.providerSessionId).toBe("prov");
+		expect(history.visualTraceId).toBe("tr1");
+		expect(history.paperAbsPath).toBe("/vault/papers/a");
 	});
 });
 

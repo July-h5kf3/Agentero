@@ -6,7 +6,8 @@ export { normalizeRelPath as normalizeVaultRel, toVaultRelative };
 
 export type LinkFragment =
 	| { kind: "heading"; path: string[] }
-	| { kind: "block"; id: string };
+	| { kind: "block"; id: string }
+	| { kind: "annotation"; id: string };
 
 export type LinkResolutionStatus =
 	| "resolved"
@@ -18,6 +19,85 @@ export type InternalLinkSyntax = "wikilink" | "markdown";
 
 function isValidBlockId(id: string): boolean {
 	return id.length > 0 && /^[\p{L}\p{N}-]+$/u.test(id);
+}
+
+/**
+ * Annotation ids accept nanoid url-alphabet extras (`_`) and UUID hyphens.
+ * Markdown `^block` ids stay stricter via {@link isValidBlockId}.
+ */
+export function isValidAnnotationId(id: string): boolean {
+	return id.length > 0 && /^[\p{L}\p{N}_-]+$/u.test(id);
+}
+
+/**
+ * Strip CommonMark-ish escapes (esp. `\_`) that otherwise break sugar split and
+ * make the whole `path@id` look like a missing file.
+ */
+export function normalizeAnnotationId(id: string): string {
+	return id.replace(/\\(.)/g, "$1");
+}
+
+/**
+ * Sugar `target@id` or same-note `[[@id]]` when the right side is a well-formed
+ * annotation id. Uses the last `@` so path segments may contain `@`.
+ */
+export function splitAnnotationSugar(
+	main: string,
+): { target: string; id: string } | null {
+	const at = main.lastIndexOf("@");
+	if (at < 0) return null;
+	const target = main.slice(0, at).trimEnd();
+	const id = normalizeAnnotationId(main.slice(at + 1).trim());
+	if (!isValidAnnotationId(id)) return null;
+	return { target, id };
+}
+
+/** Parse `#heading`, `#^block`, `#@annotation`, or bare fragment text. */
+export function parseWikiFragment(
+	fragmentRaw: string,
+): LinkFragment | undefined {
+	const raw = fragmentRaw.trim();
+	if (!raw) return undefined;
+	if (raw.startsWith("^")) {
+		return { kind: "block", id: raw.slice(1) };
+	}
+	if (raw.startsWith("@")) {
+		return { kind: "annotation", id: normalizeAnnotationId(raw.slice(1)) };
+	}
+	return {
+		kind: "heading",
+		path: raw
+			.split("#")
+			.map((part) => part.trim())
+			.filter(Boolean),
+	};
+}
+
+/** Serialize a fragment for wikilink source (`#…` form, including sugar-friendly `@id`). */
+export function formatWikiFragment(fragment: LinkFragment): string {
+	if (fragment.kind === "block") return `^${fragment.id}`;
+	if (fragment.kind === "annotation") return `@${fragment.id}`;
+	return fragment.path.join("#");
+}
+
+/**
+ * Preferred user-facing link body: `target@id` for annotations, else `target#frag`.
+ */
+export function formatWikiLinkBody(
+	targetRaw: string,
+	fragment?: LinkFragment | null,
+	alias?: string | null,
+): string {
+	let main = targetRaw;
+	if (fragment?.kind === "annotation") {
+		// Same-note form is `[[@id]]` (empty target).
+		main = targetRaw ? `${targetRaw}@${fragment.id}` : `@${fragment.id}`;
+	} else if (fragment) {
+		main = targetRaw
+			? `${targetRaw}#${formatWikiFragment(fragment)}`
+			: `#${formatWikiFragment(fragment)}`;
+	}
+	return alias ? `${main}|${alias}` : main;
 }
 
 export type InternalLinkOccurrence = {
@@ -42,7 +122,7 @@ export type ResolvedLink = {
 
 export type WikiEmbedResponse = {
 	link: ResolvedLink;
-	contentKind?: "markdown" | "image" | "pdf" | "unsupported";
+	contentKind?: "markdown" | "image" | "pdf" | "annotation" | "unsupported";
 	content?: string;
 };
 
@@ -59,7 +139,7 @@ export type OutgoingLinksResponse = {
 };
 
 export type WikiSearchCandidate = {
-	kind: "file" | "heading" | "block" | "alias";
+	kind: "file" | "heading" | "block" | "alias" | "annotation";
 	path: string;
 	insertText: string;
 	label: string;
@@ -272,24 +352,27 @@ function parseLinkBody(
 	const aliasRaw = pipe >= 0 ? trimmed.slice(pipe + 1).trim() : "";
 	if (!main) return null;
 	const hash = main.indexOf("#");
-	const targetRaw = (hash >= 0 ? main.slice(0, hash) : main).trim();
-	const fragmentRaw = hash >= 0 ? main.slice(hash + 1).trim() : "";
-	const fragment = fragmentRaw
-		? fragmentRaw.startsWith("^")
-			? { kind: "block" as const, id: fragmentRaw.slice(1) }
-			: {
-					kind: "heading" as const,
-					path: fragmentRaw
-						.split("#")
-						.map((part) => part.trim())
-						.filter(Boolean),
-				}
-		: undefined;
-	if (!targetRaw && !fragment) return null;
+	if (hash >= 0) {
+		const targetRaw = main.slice(0, hash).trim();
+		const fragment = parseWikiFragment(main.slice(hash + 1));
+		if (!targetRaw && !fragment) return null;
+		return {
+			targetRaw,
+			alias: aliasRaw || undefined,
+			fragment,
+		};
+	}
+	const sugar = splitAnnotationSugar(main);
+	if (sugar) {
+		return {
+			targetRaw: sugar.target,
+			alias: aliasRaw || undefined,
+			fragment: { kind: "annotation", id: sugar.id },
+		};
+	}
 	return {
-		targetRaw,
+		targetRaw: main,
 		alias: aliasRaw || undefined,
-		fragment,
 	};
 }
 
@@ -420,20 +503,9 @@ export function resolveDemoWikiReference(
 ): Pick<ResolvedLink, "status" | "targetPath" | "candidates"> & {
 	fragment?: LinkFragment;
 } {
-	const hash = linkText.indexOf("#");
-	const targetRaw = (hash >= 0 ? linkText.slice(0, hash) : linkText).trim();
-	const fragmentRaw = hash >= 0 ? linkText.slice(hash + 1).trim() : "";
-	const fragment = fragmentRaw
-		? fragmentRaw.startsWith("^")
-			? { kind: "block" as const, id: fragmentRaw.slice(1) }
-			: {
-					kind: "heading" as const,
-					path: fragmentRaw
-						.split("#")
-						.map((part) => part.trim())
-						.filter(Boolean),
-				}
-		: undefined;
+	const parsedBody = parseLinkBody(linkText);
+	const targetRaw = parsedBody?.targetRaw ?? linkText.trim();
+	const fragment = parsedBody?.fragment;
 	const key = (value: string) =>
 		value.trim().replace(/\s+/g, " ").toLowerCase();
 	const addExtensions = (value: string) => {
@@ -581,6 +653,15 @@ export function resolveDemoWikiReference(
 	if (!selected.path)
 		return { status: "ambiguous", candidates: selected.candidates, fragment };
 	if (!fragment) return { status: "resolved", targetPath: selected.path };
+	if (fragment.kind === "annotation") {
+		return isValidAnnotationId(fragment.id)
+			? { status: "resolved", targetPath: selected.path, fragment }
+			: {
+					status: "invalidFragment",
+					targetPath: selected.path,
+					fragment,
+				};
+	}
 	if (fragment.kind === "block" && !isValidBlockId(fragment.id)) {
 		return {
 			status: "invalidFragment",
@@ -637,6 +718,7 @@ export function resolveDemoWikiReference(
 							return [stack.map((heading) => heading.text)];
 						})
 						.filter((path) => {
+							if (fragment.kind !== "heading") return false;
 							const expected = fragment.path.map(key);
 							const actual = path.map(key);
 							const suffix = actual.slice(-expected.length);

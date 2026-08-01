@@ -55,6 +55,12 @@ After `paper get --json`, use `data.assets` (`marksDir` = reader annotations),
 `data.suggestedReads` / `paper paths`, then `read_file` those paths. Do **not**
 paste whole sources unless needed.
 
+Reader marks under `{paper}/marks/` can be referenced from Markdown as annotation
+wikilinks: `[[papers/…/NOTES@<id>|label]]` / `![[…@<id>]]` (same sugar as the app).
+When you edit NOTES, prefer real ids from `marks/` or the desktop copy action;
+do not invent ids. `agentero wiki check` validates path + fragment **shape** for
+`@id` / `#@id`, but does **not** open marks to verify the id still exists.
+
 ## Default agent protocol
 
 ```bash

@@ -7,6 +7,7 @@ import { createStore } from "zustand/vanilla";
 
 import type { PromptImage } from "@/lib/agent/api";
 import { toVaultRelative } from "@/lib/core/path";
+import { newTraceId } from "@/lib/pdf/agent-trace/io";
 import type { PdfVisualNormalizedRect } from "@/lib/pdf/agent-trace/types";
 import { vaultStore } from "@/lib/vault/store";
 
@@ -35,8 +36,6 @@ export const visualContextStore = createStore<VisualContextStore>(() => ({
 	drafts: [],
 }));
 
-let nextDraftId = 0;
-
 function normalizeComment(comment: string): string {
 	return comment.trim().slice(0, MAX_COMMENT_CHARS);
 }
@@ -56,7 +55,8 @@ export function addVisualDraft(input: {
 	id?: string;
 }): PdfVisualDraft {
 	const draft: PdfVisualDraft = {
-		id: input.id ?? `vis-${++nextDraftId}`,
+		// Stable across restarts — draft id becomes marks/<id>.json on submit.
+		id: input.id ?? newTraceId(),
 		paperPath: resolvePaperPath(input.paperPath),
 		page: Math.max(1, Math.floor(input.page)),
 		rects: input.rects,

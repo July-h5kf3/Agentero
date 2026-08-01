@@ -133,6 +133,7 @@ where
 fn cancelled_payload(
     session_id: String,
     message_id: String,
+    provider_session_id: Option<String>,
     content: &Arc<Mutex<String>>,
     thought: &Arc<Mutex<String>>,
 ) -> AgentResultPayload {
@@ -151,7 +152,7 @@ fn cancelled_payload(
         content,
         reasoning: (!reasoning.is_empty()).then_some(reasoning),
         stop_reason: Some("cancelled".to_string()),
-        provider_session_id: None,
+        provider_session_id,
     }
 }
 
@@ -988,6 +989,7 @@ pub async fn run_once(
                         let payload = cancelled_payload(
                             session_for_conn.clone(),
                             message_for_conn.clone(),
+                            None,
                             &content_for_conn,
                             &thought_for_conn,
                         );
@@ -1021,6 +1023,7 @@ pub async fn run_once(
                                 let payload = cancelled_payload(
                                     session_for_conn.clone(),
                                     message_for_conn.clone(),
+                                    Some(rid.clone()),
                                     &content_for_conn,
                                     &thought_for_conn,
                                 );
@@ -1052,6 +1055,7 @@ pub async fn run_once(
                                 let payload = cancelled_payload(
                                     session_for_conn.clone(),
                                     message_for_conn.clone(),
+                                    Some(rid.clone()),
                                     &content_for_conn,
                                     &thought_for_conn,
                                 );
@@ -1079,6 +1083,7 @@ pub async fn run_once(
                             let payload = cancelled_payload(
                                 session_for_conn.clone(),
                                 message_for_conn.clone(),
+                                None,
                                 &content_for_conn,
                                 &thought_for_conn,
                             );
@@ -1096,6 +1101,7 @@ pub async fn run_once(
                         let payload = cancelled_payload(
                             session_for_conn.clone(),
                             message_for_conn.clone(),
+                            Some(acp_session_id.to_string()),
                             &content_for_conn,
                             &thought_for_conn,
                         );
@@ -1207,6 +1213,7 @@ pub async fn run_once(
                     let payload = cancelled_payload(
                         session_for_conn.clone(),
                         message_for_conn.clone(),
+                        Some(acp_session_id.to_string()),
                         &content_for_conn,
                         &thought_for_conn,
                     );
@@ -1248,10 +1255,11 @@ pub async fn run_once(
                         .block_task() => response.map_err(|e| acp_err(format!("prompt: {e}")))?,
                     () = wait_for_cancellation(&mut cancellation) => {
                         let _ = connection
-                            .send_notification(CancelNotification::new(acp_session_id));
+                            .send_notification(CancelNotification::new(acp_session_id.clone()));
                         let payload = cancelled_payload(
                             session_for_conn.clone(),
                             message_for_conn.clone(),
+                            Some(acp_session_id.to_string()),
                             &content_for_conn,
                             &thought_for_conn,
                         );
@@ -1897,6 +1905,32 @@ pub async fn load_acp_session(
             })
         }
         Err(e) => Err(AppError::Acp(format!("load session: {e}"))),
+    }
+}
+
+#[cfg(test)]
+mod cancelled_payload_tests {
+    use super::cancelled_payload;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn preserves_provider_session_id_after_cancel() {
+        let content = Arc::new(Mutex::new("partial answer".to_string()));
+        let thought = Arc::new(Mutex::new(String::new()));
+        let payload = cancelled_payload(
+            "runtime-session".to_string(),
+            "message".to_string(),
+            Some("provider-session".to_string()),
+            &content,
+            &thought,
+        );
+
+        assert_eq!(payload.stop_reason.as_deref(), Some("cancelled"));
+        assert_eq!(
+            payload.provider_session_id.as_deref(),
+            Some("provider-session")
+        );
+        assert_eq!(payload.content, "partial answer");
     }
 }
 

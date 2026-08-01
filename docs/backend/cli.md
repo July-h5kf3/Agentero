@@ -38,6 +38,7 @@ cargo test -p agentero-cli
 - 输入必须是 Vault 相对路径；命令只读，不创建目标或重写来源。
 - 派生正文 `PAPER.md` 保留为可链接目标和标题来源，但不作为出链来源参与检查。
 - 全部解析成功时退出码为 0；发现 `missing`、`ambiguous`、`invalidFragment` 时返回非零，错误码为 `wikilink_check_failed`，报告位于 `error.details`。
+- 批注双链 `[[target@id]]` / `[[target#@id]]`：按 path 解析 target，并校验 id 形态；**不**读取 `marks/` 判断 id 是否仍存在（与桌面 resolve 一致）。
 
 报告包含 `checkedFiles`、四类状态计数，以及每个问题的 `source`、`line`、`targetRaw`、`syntax`、`embed`、`targetPath?`、`candidates` 和 `context?`。指定单文件作用域后，Vault 中其它历史坏链不会影响本次验收。
 

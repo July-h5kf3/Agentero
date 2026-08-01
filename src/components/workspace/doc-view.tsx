@@ -226,6 +226,7 @@ export const DocView = memo(function DocView({
 						}
 						vaultPath={vaultPath}
 						zen={pdf.zen}
+						isActive={active}
 						onToggleZen={pdf.onToggleZen}
 						onOpenAnnotations={pdf.onOpenAnnotations}
 						onOpenSettings={pdf.onOpenSettings}

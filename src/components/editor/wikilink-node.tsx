@@ -42,11 +42,21 @@ function WikiLinkNavigationElement({
 	const fragment: LinkFragment | undefined = el.heading
 		? el.heading.startsWith("^")
 			? { kind: "block", id: el.heading.slice(1) }
-			: { kind: "heading", path: el.heading.split("#").filter(Boolean) }
+			: el.heading.startsWith("@")
+				? { kind: "annotation", id: el.heading.slice(1) }
+				: { kind: "heading", path: el.heading.split("#").filter(Boolean) }
 		: undefined;
 	const fallbackStatus = path || (!target && fragment) ? "resolved" : "missing";
-	const withHeading = el.heading ? `${target}#${el.heading}` : target;
-	const label = el.alias || withHeading;
+	const withHeading = el.heading
+		? el.heading.startsWith("@")
+			? target
+				? `${target}${el.heading}`
+				: el.heading
+			: target
+				? `${target}#${el.heading}`
+				: `#${el.heading}`
+		: target;
+	const label = el.alias || withHeading || target;
 
 	const navigate = async (event: MouseEvent) => {
 		event.preventDefault();

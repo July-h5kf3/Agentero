@@ -57,12 +57,18 @@ export function ViewportFloating({
 		null,
 	);
 
+	const pointX = point.x;
+	const pointY = point.y;
+
 	const updatePlacement = useCallback(() => {
 		const element = elementRef.current;
 		if (!element) return;
 		const rect = element.getBoundingClientRect();
+		// Measuring while `visibility: hidden` can yield empty rects; never clear
+		// placement before measure or the menu can stick invisible after re-layout
+		// (e.g. arrow-key selection changes inside a completion list).
 		const next = placeViewportFloating({
-			point,
+			point: { x: pointX, y: pointY },
 			element: { height: rect.height, width: rect.width },
 			viewport: { height: window.innerHeight, width: window.innerWidth },
 			side,
@@ -72,10 +78,9 @@ export function ViewportFloating({
 		setPlacement((previous) =>
 			samePlacement(previous, next) ? previous : next,
 		);
-	}, [edge, offset, point, side]);
+	}, [edge, offset, pointX, pointY, side]);
 
 	useLayoutEffect(() => {
-		setPlacement(null);
 		updatePlacement();
 	}, [updatePlacement]);
 

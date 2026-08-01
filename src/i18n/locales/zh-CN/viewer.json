@@ -89,7 +89,11 @@
 		"askTurns": "{{count}} 条消息",
 		"visualRegions": "{{count}} 个区域",
 		"expandNote": "展开备注",
-		"collapseNote": "收起备注"
+		"collapseNote": "收起备注",
+		"copyLink": "复制双链",
+		"copyEmbed": "复制嵌入",
+		"linkCopied": "已复制双链",
+		"embedCopied": "已复制嵌入"
 	},
 	"references": {
 		"title": "参考文献",

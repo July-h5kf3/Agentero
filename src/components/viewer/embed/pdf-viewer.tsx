@@ -202,6 +202,7 @@ import {
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -288,6 +289,11 @@ export type PdfViewerProps = {
 	onAsksChange?: (threads: PdfAskThread[]) => void;
 	/** Called whenever visual agent-trace marks change (for the annotations panel) */
 	onVisualTracesChange?: (traces: PdfVisualSessionTrace[]) => void;
+	/**
+	 * Workspace active tab. Dock may keep inactive PDFs mounted (`pdfKeepMounted`);
+	 * only the active viewer should poll marks/ (expensive base64 JSON list).
+	 */
+	isActive?: boolean;
 };
 
 /** Recursive outline (bookmarks) list for the PDF side panel. */
@@ -712,6 +718,7 @@ function PdfViewerInner({
 	paperRelPath = null,
 	vaultPath = null,
 	zen = false,
+	isActive = true,
 	onToggleZen,
 	onOpenAnnotations,
 	onOpenSettings,
@@ -1056,15 +1063,18 @@ function PdfViewerInner({
 		})();
 	}, [paperAbsPath]);
 
-	// Refresh agent-trace pins when returning to this paper after a new send.
+	// Refresh agent-trace pins when this viewer is active (dock may keep
+	// inactive PDFs mounted under pdfKeepMounted — avoid N× listMarkRaw polls).
 	useEffect(() => {
-		if (!paperAbsPath || !marksLoadedRef.current) return;
+		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
 		let cancelled = false;
 		const refresh = () => {
 			void listPdfVisualTraces(paperAbsPath).then((traces) => {
 				if (!cancelled) setVisualTraces(traces);
 			});
 		};
+		// Immediate refresh on become-active (covers Agent multi-turn writes
+		// while this tab was backgrounded).
 		refresh();
 		const onFocus = () => refresh();
 		window.addEventListener("focus", onFocus);
@@ -1074,7 +1084,7 @@ function PdfViewerInner({
 			window.removeEventListener("focus", onFocus);
 			window.clearInterval(timer);
 		};
-	}, [paperAbsPath]);
+	}, [paperAbsPath, isActive]);
 
 	// Publish ask threads (with a real question) to the annotations panel.
 	useEffect(() => {
@@ -1825,6 +1835,7 @@ function PdfViewerInner({
 					title,
 					prompt: title,
 					answerSnapshot: trace.answerSnapshot,
+					paperAbsPath: paperAbsPath ?? undefined,
 					visualTrace: {
 						traceId: trace.id,
 						page: trace.page,
@@ -1839,7 +1850,7 @@ function PdfViewerInner({
 			openRightTab("agent");
 			hideActiveCard();
 		},
-		[hideActiveCard, t],
+		[hideActiveCard, paperAbsPath, t],
 	);
 
 	/** Stable callbacks so VisualTraceCard memo can skip PdfViewer re-renders. */
@@ -2295,13 +2306,18 @@ function PdfViewerInner({
 			.getBookmarks()
 			.toPromise()
 			.then((res) => {
-				if (!cancelled) setOutline(res?.bookmarks ?? []);
+				if (cancelled) return;
+				const bookmarks = res?.bookmarks ?? [];
+				setOutline(bookmarks);
+				// Share with annotation embeds for location breadcrumbs.
+				const paperKey = paperAbsPath || paperRelPath;
+				if (paperKey) setPaperOutline(paperKey, bookmarks);
 			})
 			.catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
-	}, [bookmarkCap, docId, totalPages]);
+	}, [bookmarkCap, docId, totalPages, paperAbsPath, paperRelPath]);
 
 	// Cmd/Ctrl+F opens the in-document find bar when the PDF host is focused.
 	useEffect(() => {

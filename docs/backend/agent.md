@@ -29,6 +29,8 @@ spawn 用户配置的 agent
 声明 `loadSession: true`、**不**声明 `resume`；对 Grok 调用 `session/resume` 会
 `Method not found`，Host 应改走 `session/load`。
 
+生成中取消时，只要 provider session 已创建或本轮正在恢复，取消结果仍携带 `providerSessionId`。前端保留该 ID，并写回视觉批注 mark，使下一条消息和重启后的 pin 续聊继续同一会话；在 `session/new` 返回前取消时尚无可恢复的 provider session。
+
 `session/load` 会把历史以 `SessionNotification` 回放。Host 在
 `session/prompt` 之前 **suppress** 回放中的 stream/tool/plan（不 `agent:stream`、
 不写入本轮 content buffer），避免第二轮气泡开头重复上一轮回答；usage /

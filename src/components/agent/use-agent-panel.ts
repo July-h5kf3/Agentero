@@ -135,6 +135,7 @@ import { isTauri } from "@/lib/core/tauri";
 import { paperDirFromPath } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import {
+	beginTraceContinue,
 	buildVisualAnnotationsPrompt,
 	completeTrace,
 	createRunningTraces,
@@ -715,7 +716,12 @@ export function useAgentPanel({
 						answerSnapshot?: string;
 						sources?: string[];
 				  }
-				| { kind: "failed"; error: string; answerSnapshot?: string },
+				| {
+						kind: "failed";
+						error: string;
+						providerSessionId?: string | null;
+						answerSnapshot?: string;
+				  },
 		) => {
 			const pending = takePendingVisualTraces(runtimeSessionId);
 			if (!pending.length) return;
@@ -733,6 +739,7 @@ export function useAgentPanel({
 									})
 								: failTrace(current, {
 										error: outcome.error,
+										providerSessionId: outcome.providerSessionId ?? undefined,
 										answerSnapshot: outcome.answerSnapshot,
 									});
 						await writePdfVisualTrace(paperAbsPath, next);
@@ -790,6 +797,7 @@ export function useAgentPanel({
 				void finalizeVisualTraces(ev.sessionId, {
 					kind: "failed",
 					error: t("messages.cancelled"),
+					providerSessionId: ev.providerSessionId,
 					answerSnapshot: ev.content,
 				});
 				return;
@@ -1561,6 +1569,18 @@ export function useAgentPanel({
 		selections?: SelectionContext[];
 		/** Frozen visual PDF annotation drafts (else live store). */
 		visualDrafts?: PdfVisualDraft[];
+		/**
+		 * Explicit pin binding for follow-ups (pin modal continue). Preferred
+		 * over reading sessionHistoryRef which may lag store upserts.
+		 */
+		visualTraceId?: string;
+		paperAbsPath?: string;
+		/**
+		 * Start a brand-new product + ACP session (Cmd+Enter new pin).
+		 * Ignores the Agent panel's currently open conversation / provider id
+		 * so we never inherit sidebar transcript or session/load into a new mark.
+		 */
+		forceNewSession?: boolean;
 		/** When true, do not wipe the live composer (already cleared on enqueue). */
 		fromQueue?: boolean;
 		/**
@@ -1616,11 +1636,15 @@ export function useAgentPanel({
 				return false;
 			}
 
-			const activeHistoryForAgent = sessionHistoryRef.current.find(
-				(item) => item.id === activeTabRef.current,
-			);
+			const forceNewSessionEarly = options?.forceNewSession === true;
+			const activeHistoryForAgent = forceNewSessionEarly
+				? undefined
+				: sessionHistoryRef.current.find(
+						(item) => item.id === activeTabRef.current,
+					);
 			// Priority: explicit option → continuing session's agent → switcher → default.
 			// Prevents pin-modal continue from loading Codex session with Grok (pdfAsk default).
+			// forceNewSession (Cmd+Enter new pin) never inherits the open panel agent.
 			let agentId =
 				options?.agentId?.trim() ||
 				(activeHistoryForAgent?.providerSessionId &&
@@ -1691,18 +1715,30 @@ export function useAgentPanel({
 					),
 				);
 			}
-			const activeHistory = sessionHistoryRef.current.find(
-				(item) => item.id === activeTabRef.current,
-			);
+			if (forceNewSessionEarly) {
+				// Drop any panel-level continue target before resolving resume.
+				activeConversationRef.current = null;
+			}
+			const activeHistory = forceNewSessionEarly
+				? undefined
+				: sessionHistoryRef.current.find(
+						(item) => item.id === activeTabRef.current,
+					);
 			// Continue when we have a durable provider session id. Host picks
 			// session/resume vs session/load from agent capabilities (Grok: load).
-			const providerContinueId =
-				activeConversationRef.current?.trim() ||
-				activeHistory?.providerSessionId?.trim() ||
-				null;
+			const providerContinueId = forceNewSessionEarly
+				? null
+				: activeConversationRef.current?.trim() ||
+					activeHistory?.providerSessionId?.trim() ||
+					null;
 			const resumeAllowed =
 				Boolean(providerContinueId) && activeHistory?.resumeable !== false;
-			const priorLines = options?.baseLines ?? lines;
+			// Prefer explicit baseLines (external turn handler) — React `lines`
+			// can still be the previous panel session when setLines([]) has not
+			// flushed (Cmd+Enter inheritance bug).
+			const priorLines = forceNewSessionEarly
+				? (options?.baseLines ?? [])
+				: (options?.baseLines ?? lines);
 			const promptBodyParts: string[] = [];
 			if (text) promptBodyParts.push(text);
 			if (!isAcpCommand && contextBlocks.length) {
@@ -1785,6 +1821,26 @@ export function useAgentPanel({
 				return false;
 			}
 			knownSessionIdsRef.current.add(accepted.sessionId);
+			// Bind disk finalizers for this runtime session:
+			// - first turn with visualDrafts → create mark files
+			// - follow-up on a bound pin (no new drafts) → re-register pending
+			//   so complete/fail still patches marks/<id>.json
+			const historyVisualTraceId =
+				activeHistory && "visualTraceId" in activeHistory
+					? (activeHistory as { visualTraceId?: string }).visualTraceId
+					: undefined;
+			const historyPaperAbs =
+				activeHistory && "paperAbsPath" in activeHistory
+					? (activeHistory as { paperAbsPath?: string }).paperAbsPath
+					: undefined;
+			const continueVisualTraceId = !hasVisualDrafts
+				? options?.visualTraceId?.trim() ||
+					historyVisualTraceId?.trim() ||
+					undefined
+				: undefined;
+			const continuePaperAbs = !hasVisualDrafts
+				? options?.paperAbsPath?.trim() || historyPaperAbs?.trim() || undefined
+				: undefined;
 			if (hasVisualDrafts) {
 				const byPaper = new Map<string, PdfVisualDraft[]>();
 				for (const draft of resolvedVisualDrafts) {
@@ -1830,6 +1886,29 @@ export function useAgentPanel({
 					}
 				}
 				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+			} else if (continueVisualTraceId && continuePaperAbs) {
+				try {
+					const current = await readPdfVisualTrace(
+						continuePaperAbs,
+						continueVisualTraceId,
+					);
+					if (current) {
+						const next = beginTraceContinue(current, {
+							runtimeSessionId: accepted.sessionId,
+							messageId: accepted.messageId,
+							userContent: text,
+						});
+						await writePdfVisualTrace(continuePaperAbs, next);
+					}
+				} catch {
+					// Keep chat running even if mark write fails.
+				}
+				rememberPendingVisualTraces(accepted.sessionId, [
+					{
+						paperAbsPath: continuePaperAbs,
+						traceId: continueVisualTraceId,
+					},
+				]);
 			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
@@ -1863,13 +1942,13 @@ export function useAgentPanel({
 			setActiveTabId(accepted.sessionId);
 			knownSessionIdsRef.current.add(accepted.sessionId);
 			const boundVisualTraceId =
-				activeHistory && "visualTraceId" in activeHistory
-					? (activeHistory as { visualTraceId?: string }).visualTraceId
-					: resolvedVisualDrafts[0]?.id;
+				options?.visualTraceId?.trim() ||
+				historyVisualTraceId ||
+				resolvedVisualDrafts[0]?.id;
 			const boundPaperAbs =
-				activeHistory && "paperAbsPath" in activeHistory
-					? (activeHistory as { paperAbsPath?: string }).paperAbsPath
-					: resolvedVisualDrafts[0]?.paperAbsPath;
+				options?.paperAbsPath?.trim() ||
+				historyPaperAbs ||
+				resolvedVisualDrafts[0]?.paperAbsPath;
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,
@@ -2055,13 +2134,42 @@ export function useAgentPanel({
 				selectedAgentIdRef.current = boundAgentId;
 				setSelectedAgentId(boundAgentId);
 			}
+			// Transcript + resume target must be decided here and passed into
+			// send via options — setLines/setActiveTabId are async and send
+			// would otherwise inherit the sidebar's open conversation.
+			let baseLines: ChatLine[] = [];
+			let forceNewSession = false;
 			if (existing) {
-				ctx.activateComposerSession(existing.id);
-				setActiveTabId(existing.id);
-				setLines(existing.lines);
-				activeTabRef.current = existing.id;
-				if (existing.providerSessionId) {
-					activeConversationRef.current = existing.providerSessionId;
+				// Ensure pin binding fields survive even if the live session row
+				// was created before paperAbsPath was stored.
+				const needsBind =
+					(req.visualTraceId && existing.visualTraceId !== req.visualTraceId) ||
+					(req.paperAbsPath && existing.paperAbsPath !== req.paperAbsPath) ||
+					(req.providerSessionId &&
+						existing.providerSessionId !== req.providerSessionId);
+				const bound = needsBind
+					? {
+							...existing,
+							...(req.visualTraceId
+								? { visualTraceId: req.visualTraceId }
+								: {}),
+							...(req.paperAbsPath ? { paperAbsPath: req.paperAbsPath } : {}),
+							...(req.providerSessionId
+								? { providerSessionId: req.providerSessionId }
+								: {}),
+						}
+					: existing;
+				if (needsBind) {
+					store.upsertSession(bound, { activate: true });
+				}
+				ctx.activateComposerSession(bound.id);
+				setActiveTabId(bound.id);
+				setLines(bound.lines);
+				activeTabRef.current = bound.id;
+				baseLines = bound.lines;
+				if (bound.providerSessionId || req.providerSessionId) {
+					activeConversationRef.current =
+						bound.providerSessionId ?? req.providerSessionId ?? null;
 				}
 			} else if (req.seedLines?.length && req.visualTraceId) {
 				const seeded = {
@@ -2081,20 +2189,31 @@ export function useAgentPanel({
 				store.upsertSession(seeded, { activate: true });
 				ctx.activateComposerSession(seeded.id);
 				activeTabRef.current = seeded.id;
+				baseLines = req.seedLines;
 				if (req.providerSessionId) {
 					activeConversationRef.current = req.providerSessionId;
 				}
 			} else {
+				// New pin (Cmd+Enter) or external turn without prior session:
+				// never inherit the Agent panel's open Codex/Grok conversation.
+				forceNewSession = true;
 				setActiveTabId("draft");
 				activeTabRef.current = "draft";
 				setLines([]);
 				ctx.activateComposerSession("draft");
-				activeConversationRef.current = req.providerSessionId ?? null;
+				activeConversationRef.current = null;
+				baseLines = [];
 			}
 			setHistoryOpen(false);
+			// Keep ref in sync before send (upsert may not have flushed React yet).
+			sessionHistoryRef.current = agentSessionStore.getState().sessions;
 			return sendRef.current(req.text, {
 				visualDrafts: req.visualDrafts,
 				fromQueue: true,
+				baseLines,
+				forceNewSession,
+				...(req.visualTraceId ? { visualTraceId: req.visualTraceId } : {}),
+				...(req.paperAbsPath ? { paperAbsPath: req.paperAbsPath } : {}),
 				...(boundAgentId ? { agentId: boundAgentId } : {}),
 				...(req.modelId ? { modelId: req.modelId } : {}),
 			});
@@ -2688,6 +2807,7 @@ export function useAgentPanel({
 				agentName: selected?.name ?? t("defaultName"),
 				startedAt: match?.startedAt || new Date().toLocaleString(i18n.language),
 				emptyFallback: t("composer.visualAnnotation"),
+				paperAbsPath: request.paperAbsPath,
 			});
 			// Merge into existing slot if present; drop duplicate runtime-id entries.
 			setSessionHistory((prev) => {

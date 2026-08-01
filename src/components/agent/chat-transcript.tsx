@@ -76,6 +76,7 @@ import {
 	toolPartState,
 } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { cn } from "@/lib/core/utils";
 
 export function ChatTranscript({
@@ -424,7 +425,9 @@ export function ChatTranscript({
 																	<InlineCitation>
 																		<InlineCitationCard>
 																			<InlineCitationCardTrigger
-																				sources={line.sources}
+																				sources={line.sources.map(
+																					normalizeAgentSourcePath,
+																				)}
 																			/>
 																			<InlineCitationCardBody>
 																				<InlineCitationCarousel>
@@ -434,28 +437,35 @@ export function ChatTranscript({
 																						<InlineCitationCarouselIndex />
 																					</InlineCitationCarouselHeader>
 																					<InlineCitationCarouselContent>
-																						{line.sources.map((s) => (
-																							<InlineCitationCarouselItem
-																								key={s}
-																							>
-																								<InlineCitationSource
-																									title={
-																										s.split(/[/\\]/).pop() || s
-																									}
-																									url={s}
-																									description={
-																										/^https?:\/\//i.test(s)
-																											? undefined
-																											: t("citation.vaultPath")
-																									}
-																									onOpen={
-																										onOpenSource
-																											? () => onOpenSource(s)
-																											: undefined
-																									}
-																								/>
-																							</InlineCitationCarouselItem>
-																						))}
+																						{line.sources.map((raw) => {
+																							const s =
+																								normalizeAgentSourcePath(raw);
+																							return (
+																								<InlineCitationCarouselItem
+																									key={s}
+																								>
+																									<InlineCitationSource
+																										title={
+																											s.split(/[/\\]/).pop() ||
+																											s
+																										}
+																										url={s}
+																										description={
+																											/^https?:\/\//i.test(s)
+																												? undefined
+																												: t(
+																														"citation.vaultPath",
+																													)
+																										}
+																										onOpen={
+																											onOpenSource
+																												? () => onOpenSource(s)
+																												: undefined
+																										}
+																									/>
+																								</InlineCitationCarouselItem>
+																							);
+																						})}
 																					</InlineCitationCarouselContent>
 																				</InlineCitationCarousel>
 																			</InlineCitationCardBody>
@@ -486,7 +496,8 @@ export function ChatTranscript({
 											<Sources>
 												<SourcesTrigger count={line.sources.length} />
 												<SourcesContent>
-													{line.sources.map((s) => {
+													{line.sources.map((raw) => {
+														const s = normalizeAgentSourcePath(raw);
 														const isHttp = /^https?:\/\//i.test(s);
 														return (
 															<Source
