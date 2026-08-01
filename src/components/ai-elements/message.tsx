@@ -2,7 +2,7 @@
 
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
+import { createMathPlugin } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
@@ -27,6 +27,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/core/utils";
+import { normalizeMarkdownMath } from "@/lib/markdown/math-normalize";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 	from: UIMessage["role"];
@@ -325,19 +326,36 @@ export const MessageBranchPage = ({
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+/**
+ * KaTeX via Streamdown. Default `@streamdown/math` turns single-dollar off
+ * (`singleDollarTextMath: false`), so common agent math like `$\pi_\theta$`
+ * rendered as raw text. Enable `$…$` for inline and keep `$$…$$` for display.
+ */
+const streamdownMath = createMathPlugin({ singleDollarTextMath: true });
+const streamdownPlugins = {
+	cjk,
+	code,
+	math: streamdownMath,
+	mermaid,
+};
 
 export const MessageResponse = memo(
-	({ className, ...props }: MessageResponseProps) => (
-		<Streamdown
-			className={cn(
-				"size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-				className,
-			)}
-			plugins={streamdownPlugins}
-			{...props}
-		/>
-	),
+	({ className, children, ...props }: MessageResponseProps) => {
+		const content =
+			typeof children === "string" ? normalizeMarkdownMath(children) : children;
+		return (
+			<Streamdown
+				className={cn(
+					"size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+					className,
+				)}
+				plugins={streamdownPlugins}
+				{...props}
+			>
+				{content}
+			</Streamdown>
+		);
+	},
 	(prevProps, nextProps) =>
 		prevProps.children === nextProps.children &&
 		nextProps.isAnimating === prevProps.isAnimating,
