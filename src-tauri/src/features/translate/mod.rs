@@ -25,15 +25,10 @@ pub const FREE_PROVIDERS: &[&str] = &[
 ];
 
 /// Fallback order for best-effort zh-CN translation (NOTES abstract etc.).
-/// Any single engine may be blocked or rate-limited (e.g. Google from
-/// mainland China), so callers walk this chain until one succeeds.
-pub const ZH_FALLBACK_CHAIN: &[&str] = &[
-    "googleapi",
-    "bing",
-    "youdao",
-    "huoshanweb",
-    "tencenttransmart",
-];
+/// Any single engine may be blocked or rate-limited, so callers walk this
+/// chain until one succeeds. Prefer engines that work better from CN networks
+/// (Bing → Volcengine → Tencent Transmart).
+pub const ZH_FALLBACK_CHAIN: &[&str] = &["bing", "huoshanweb", "tencenttransmart"];
 
 /// zh-CN via the free-MT fallback chain; `None` when every engine fails.
 pub async fn free_mt_to_zh(text: &str) -> Option<String> {
@@ -627,6 +622,10 @@ mod tests {
                 "{p} missing from FREE_PROVIDERS"
             );
         }
+        assert_eq!(
+            ZH_FALLBACK_CHAIN,
+            &["bing", "huoshanweb", "tencenttransmart"]
+        );
     }
 
     #[test]
