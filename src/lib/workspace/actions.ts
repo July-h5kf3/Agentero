@@ -18,6 +18,7 @@ import {
 	isLibraryVirtualPath,
 	isTrashVirtualPath,
 	LIBRARY_VIRTUAL_PATH,
+	resolveLibraryScopePath,
 	TRASH_VIRTUAL_PATH,
 } from "@/lib/paper/api";
 import { refreshLibrary, setLibraryScopePath } from "@/lib/paper/library-store";
@@ -873,6 +874,8 @@ export function selectTrash(): void {
 /**
  * Org folder click: expand happens in the tree; center shows the same Library
  * tab filtered by path prefix — never opens a new tab for the folder.
+ * Only `papers/` (and subfolders) become a scope; notes/.agents/plans etc.
+ * show the full library (#160).
  */
 export function openFolderLibrary(folderAbs: string): void {
 	const abs = folderAbs.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -883,7 +886,7 @@ export function openFolderLibrary(folderAbs: string): void {
 				.replace(/\\/g, "/")
 				.replace(/^\/+|\/+$/g, "")
 		: "";
-	setLibraryScopePath(rel || null);
+	setLibraryScopePath(resolveLibraryScopePath(rel || null));
 	// Reuse / focus the single full-library tab only.
 	openTab(LIBRARY_VIRTUAL_PATH);
 }

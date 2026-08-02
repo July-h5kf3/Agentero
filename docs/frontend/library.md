@@ -6,7 +6,8 @@
 
 - 虚拟路径 `agentero:library`（不写盘）。
 - **全库**：点 Library 节点或关光文档后默认页。
-- **文件夹作用域**：单击非 paper 目录 → 同一 Library panel 上按 `paper.path` **前缀过滤**（不新开 tab、不重新 RPC）。
+- **文件夹作用域**：单击 `papers/` 下非 paper 叶目录（如 `papers/nlp`）→ 同一 Library panel 上按 `paper.path` **前缀过滤**（不新开 tab、不重新 RPC）。
+- **非 papers 目录**（`notes/`、`.agents/`、`plans/` 等）：不进入文件夹作用域，Library 显示全库（#160）。
 - Paper Info / NOTES 仅选中**具体论文**时出现。
 
 ## 表格能力

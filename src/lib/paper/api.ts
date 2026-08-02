@@ -37,14 +37,42 @@ export function normalizeLibraryScope(path: string): string {
 }
 
 /**
+ * Whether a vault-relative path is a meaningful Library folder scope.
+ * Only `papers` / `papers/...` filter the catalog; `notes`, `.agents`,
+ * `plans`, etc. are not paper trees and must show the full library (#160).
+ */
+export function isPapersLibraryScope(
+	scopeRel: string | null | undefined,
+): boolean {
+	if (scopeRel == null || scopeRel === "") return false;
+	const s = normalizeLibraryScope(scopeRel);
+	return s === "papers" || s.startsWith("papers/");
+}
+
+/**
+ * Resolve a folder click to a Library scope path.
+ * Non-papers folders → `null` (full library).
+ */
+export function resolveLibraryScopePath(
+	rel: string | null | undefined,
+): string | null {
+	if (rel == null || rel === "") return null;
+	const cleaned = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!cleaned) return null;
+	return isPapersLibraryScope(cleaned) ? cleaned : null;
+}
+
+/**
  * Whether a catalog paper path falls under a folder scope (recursive).
  * `scopeRel` is vault-relative (e.g. `papers/nlp`); empty/null = full library.
+ * Scopes outside `papers/` are treated as full library (#160).
  */
 export function paperInLibraryScope(
 	paperPath: string | undefined,
 	scopeRel: string | null | undefined,
 ): boolean {
 	if (scopeRel == null || scopeRel === "") return true;
+	if (!isPapersLibraryScope(scopeRel)) return true;
 	if (!paperPath) return false;
 	const p = normalizeLibraryScope(paperPath);
 	const s = normalizeLibraryScope(scopeRel);
@@ -58,6 +86,7 @@ export function filterPapersByScope(
 	scopeRel: string | null | undefined,
 ): PaperMetadata[] {
 	if (scopeRel == null || scopeRel === "") return papers;
+	if (!isPapersLibraryScope(scopeRel)) return papers;
 	const s = normalizeLibraryScope(scopeRel);
 	if (!s) return papers;
 	return papers.filter((p) => paperInLibraryScope(p.path, s));

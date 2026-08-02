@@ -91,7 +91,8 @@ papers/<paper-id>/
 ### Library 与文件夹作用域
 
 - 左侧虚拟节点 **Library** 打开全库表格。
-- 单击文件树中的非 paper 文件夹：同一 Library 表按路径前缀筛选（不新开 tab、不重新拉全库）。
+- 单击 `papers/` 下的组织文件夹（如 `papers/nlp`）：同一 Library 表按路径前缀筛选（不新开 tab、不重新拉全库）。
+- 单击 `notes/`、`.agents/`、`plans/` 等非 papers 目录：不进入文件夹作用域，Library 仍显示全库。
 - 表头可排序；表头右键可选列与顺序（持久化到设置）。
 
 ### 标签

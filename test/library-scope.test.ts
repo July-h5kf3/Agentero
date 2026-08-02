@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { PaperMetadata } from "@/lib/paper";
 import {
 	filterPapersByScope,
+	isPapersLibraryScope,
 	LIBRARY_VIRTUAL_PATH,
 	normalizeLibraryScope,
 	paperInLibraryScope,
+	resolveLibraryScopePath,
 } from "@/lib/paper/api";
 import {
 	createPlaceholderTab,
@@ -37,6 +39,27 @@ describe("normalizeLibraryScope", () => {
 	});
 });
 
+describe("isPapersLibraryScope / resolveLibraryScopePath", () => {
+	it("accepts papers and papers/* only", () => {
+		expect(isPapersLibraryScope("papers")).toBe(true);
+		expect(isPapersLibraryScope("papers/nlp")).toBe(true);
+		expect(isPapersLibraryScope("Papers/NLP")).toBe(true);
+		expect(isPapersLibraryScope("notes")).toBe(false);
+		expect(isPapersLibraryScope(".agents")).toBe(false);
+		expect(isPapersLibraryScope("plans")).toBe(false);
+		expect(isPapersLibraryScope(null)).toBe(false);
+		expect(isPapersLibraryScope("")).toBe(false);
+	});
+
+	it("resolves non-papers folders to null (full library)", () => {
+		expect(resolveLibraryScopePath("papers/nlp")).toBe("papers/nlp");
+		expect(resolveLibraryScopePath("notes")).toBe(null);
+		expect(resolveLibraryScopePath(".agents/skills")).toBe(null);
+		expect(resolveLibraryScopePath("plans/week")).toBe(null);
+		expect(resolveLibraryScopePath("")).toBe(null);
+	});
+});
+
 describe("paperInLibraryScope", () => {
 	it("matches recursive path prefixes", () => {
 		expect(paperInLibraryScope("papers/nlp/1706.03762", "papers/nlp")).toBe(
@@ -53,6 +76,12 @@ describe("paperInLibraryScope", () => {
 		expect(paperInLibraryScope("papers/a", null)).toBe(true);
 		expect(paperInLibraryScope("papers/a", "")).toBe(true);
 		expect(paperInLibraryScope(undefined, "papers")).toBe(false);
+	});
+
+	it("treats notes/.agents/plans as full library (#160)", () => {
+		expect(paperInLibraryScope("papers/a", "notes")).toBe(true);
+		expect(paperInLibraryScope("papers/a", ".agents")).toBe(true);
+		expect(paperInLibraryScope("papers/a", "plans")).toBe(true);
 	});
 });
 
@@ -78,6 +107,12 @@ describe("filterPapersByScope", () => {
 
 	it("filters papers root", () => {
 		expect(filterPapersByScope(rows, "papers")).toHaveLength(4);
+	});
+
+	it("returns all papers for non-papers folder scopes (#160)", () => {
+		expect(filterPapersByScope(rows, "notes")).toHaveLength(4);
+		expect(filterPapersByScope(rows, ".agents")).toHaveLength(4);
+		expect(filterPapersByScope(rows, "plans/todo")).toHaveLength(4);
 	});
 });
 
