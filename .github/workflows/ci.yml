@@ -11,8 +11,15 @@ concurrency:
 
 jobs:
   ts:
-    name: TypeScript (lint, typecheck, test)
+    name: TypeScript (${{ matrix.task }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - quality
+          - test-1
+          - test-2
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,13 +28,36 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec biome ci .
-      - run: pnpm typecheck
-      - run: pnpm test
+      - name: Run TypeScript checks
+        run: |
+          set -euo pipefail
+          case "${{ matrix.task }}" in
+            quality)
+              pnpm exec biome ci .
+              pnpm typecheck
+              ;;
+            test-1)
+              pnpm exec vitest run --shard=1/2
+              ;;
+            test-2)
+              pnpm exec vitest run --shard=2/2
+              ;;
+            *)
+              echo "::error::Unknown TypeScript CI task: ${{ matrix.task }}"
+              exit 1
+              ;;
+          esac
 
   rust:
-    name: Rust (fmt, clippy, test)
+    name: Rust (${{ matrix.task }})
     runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        task:
+          - quality
+          - agentero-tests
+          - cli-tests
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -58,7 +88,23 @@ jobs:
           test -d "$dest/include"
           echo "PDFIUM_LIB_PATH=$dest/lib" >> "$GITHUB_ENV"
           echo "PDFIUM_INCLUDE_PATH=$dest/include" >> "$GITHUB_ENV"
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - run: cargo build -p agentero-cli
+      - name: Run Rust checks
+        run: |
+          set -euo pipefail
+          case "${{ matrix.task }}" in
+            quality)
+              cargo fmt --all --check
+              cargo clippy --workspace --all-targets -- -D warnings
+              ;;
+            agentero-tests)
+              cargo test -p agentero
+              ;;
+            cli-tests)
+              cargo test -p agentero-cli
+              cargo build -p agentero-cli
+              ;;
+            *)
+              echo "::error::Unknown Rust CI task: ${{ matrix.task }}"
+              exit 1
+              ;;
+          esac
