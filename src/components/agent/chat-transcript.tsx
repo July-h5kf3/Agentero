@@ -190,7 +190,7 @@ export function ChatTranscript({
 											{visuals.length > 0 ? (
 												<ChatVisualAnnotations annotations={visuals} />
 											) : null}
-											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-secondary px-3 py-2.5 ring-1 ring-primary/40">
+											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2.5 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
 												<textarea
 													ref={editTextareaRef}
 													className="max-h-60 min-h-16 w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-6 outline-none"

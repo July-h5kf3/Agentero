@@ -63,14 +63,16 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
 	"approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
 	"input-available": <ClockIcon className="size-4 animate-pulse" />,
 	"input-streaming": <CircleIcon className="size-4" />,
-	"output-available": <CheckCircleIcon className="size-4 text-green-600" />,
+	"output-available": (
+		<CheckCircleIcon className="size-4 text-muted-foreground" />
+	),
 	"output-denied": <XCircleIcon className="size-4 text-orange-600" />,
 	"output-error": <XCircleIcon className="size-4 text-red-600" />,
 };
 
 export const getStatusBadge = (status: ToolPart["state"], label: string) => (
 	<Badge
-		className="h-5 gap-1 rounded-full px-1.5 py-0 text-[10px] font-normal"
+		className="h-5 gap-1 rounded-full bg-black/5 px-1.5 py-0 text-[10px] font-normal text-foreground dark:bg-white/10"
 		variant="secondary"
 	>
 		<span className="[&>svg]:size-3">{statusIcons[status]}</span>

@@ -218,7 +218,7 @@ export function AskPopover({
 						if (from === "user" && editingMessageId === m.id) {
 							return (
 								<Message key={m.id} from="user" className="max-w-full">
-									<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-secondary px-3 py-2 ring-1 ring-primary/40">
+									<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
 										<textarea
 											ref={editTextareaRef}
 											className="max-h-28 min-h-12 w-full resize-none overflow-y-auto bg-transparent text-foreground text-sm leading-5 outline-none"
