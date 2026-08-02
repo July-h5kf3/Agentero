@@ -30,6 +30,14 @@ pub const FREE_PROVIDERS: &[&str] = &[
 /// (Bing → Volcengine → Tencent Transmart).
 pub const ZH_FALLBACK_CHAIN: &[&str] = &["bing", "huoshanweb", "tencenttransmart"];
 
+/// Per-engine HTTP timeout for [`free_mt_to_zh`] (import NOTES abstract, etc.).
+///
+/// Bench (2026-08, 5 arXiv abstracts ≈0.9–1.8k chars, Host-equivalent endpoints):
+/// success p50 ≈0.5–0.9s, max ≈1.3s; chain winner (bing) ≈0.4–0.5s.
+/// 5s ≈4× headroom on a slow success; dead-engine wait drops from 15s → 5s;
+/// worst-case full chain 3×5s = 15s (was 45s).
+pub const FREE_MT_ZH_TIMEOUT_MS: u32 = 5_000;
+
 /// zh-CN via the free-MT fallback chain; `None` when every engine fails.
 pub async fn free_mt_to_zh(text: &str) -> Option<String> {
     let slice: String = text.chars().take(MAX_TEXT_CHARS).collect();
@@ -40,7 +48,7 @@ pub async fn free_mt_to_zh(text: &str) -> Option<String> {
             target_lang: "zh-CN".into(),
             provider: (*provider).into(),
             free_base_url: None,
-            timeout_ms: Some(15_000),
+            timeout_ms: Some(FREE_MT_ZH_TIMEOUT_MS),
         })
         .await
         {
@@ -626,6 +634,9 @@ mod tests {
             ZH_FALLBACK_CHAIN,
             &["bing", "huoshanweb", "tencenttransmart"]
         );
+        // Keep abstract-MT snappy: enough for slow success (~1.3s bench max),
+        // not so long that a dead engine stalls import for 15s+.
+        assert!((3_000..=8_000).contains(&FREE_MT_ZH_TIMEOUT_MS));
     }
 
     #[test]
