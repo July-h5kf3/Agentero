@@ -1,71 +1,73 @@
 {
-	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "Agentero",
-	"version": "0.3.3",
-	"identifier": "com.poco-ai.agentero",
-	"build": {
-		"beforeDevCommand": "pnpm dev",
-		"devUrl": "http://localhost:1420",
-		"beforeBuildCommand": "pnpm build",
-		"frontendDist": "../dist"
-	},
-	"app": {
-		"windows": [
-			{
-				"title": "Agentero",
-				"dragDropEnabled": false,
-				"width": 1280,
-				"height": 800,
-				"minWidth": 800,
-				"minHeight": 520,
-				"visible": false,
-				"hiddenTitle": true,
-				"titleBarStyle": "Overlay",
-				"trafficLightPosition": {
-					"x": 14,
-					"y": 18
-				}
-			}
-		],
-		"security": {
-			"csp": null
-		}
-	},
-	"plugins": {
-		"fs": {
-			"requireLiteralLeadingDot": false
-		},
-		"updater": {
-			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc4Q0VGREIxQjk3OTBDQkQKUldTOURIbTVzZjNPZUwzVW9OcExLS0VxUTVyOExrTEJ1VmZQcVdmVTBqaUZ0WW8zak53MnpNQ0oK",
-			"endpoints": [
-				"https://github.com/poco-ai/motif/releases/latest/download/latest.json"
-			]
-		},
-		"deep-link": {
-			"mobile": [
-				{
-					"scheme": ["agentero"],
-					"appLink": false
-				}
-			]
-		}
-	},
-	"bundle": {
-		"active": true,
-		"createUpdaterArtifacts": true,
-		"targets": "all",
-		"category": "Productivity",
-		"icon": [
-			"icons/32x32.png",
-			"icons/128x128.png",
-			"icons/128x128@2x.png",
-			"icons/ios/AppIcon-512@2x.png",
-			"icons/icon.icns",
-			"icons/icon.ico"
-		],
-		"macOS": {
-			"entitlements": "./Entitlements.plist",
-			"minimumSystemVersion": "12.0"
-		}
-	}
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agentero",
+  "version": "0.3.4",
+  "identifier": "com.poco-ai.agentero",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Agentero",
+        "dragDropEnabled": false,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 520,
+        "visible": false,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 18
+        }
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc4Q0VGREIxQjk3OTBDQkQKUldTOURIbTVzZjNPZUwzVW9OcExLS0VxUTVyOExrTEJ1VmZQcVdmVTBqaUZ0WW8zak53MnpNQ0oK",
+      "endpoints": [
+        "https://github.com/poco-ai/motif/releases/latest/download/latest.json"
+      ]
+    },
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "agentero"
+          ],
+          "appLink": false
+        }
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "category": "Productivity",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/ios/AppIcon-512@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "./Entitlements.plist",
+      "minimumSystemVersion": "12.0"
+    }
+  }
 }
