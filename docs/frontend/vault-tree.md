@@ -17,7 +17,7 @@
 - 其它根目录只 list 一层，展开再 list。
 - 忽略：`.git`、`.venv`、`node_modules` 等（`TREE_IGNORE_NAMES`）。
 - 默认只展开 `papers/` 及其一级子目录。
-- 虚拟化：`@tanstack/react-virtual` 拍平窗口化。
+- 虚拟化：`@tanstack/react-virtual` 拍平窗口化；`getItemKey` 用行稳定 id，避免内联新建草稿插入/移除后按索引缓存行高留下空隙。
 
 ## Paper 行
 

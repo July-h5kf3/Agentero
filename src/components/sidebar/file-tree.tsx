@@ -236,11 +236,14 @@ function TreeCreateInput({
 
 	const Icon = kind === "file" ? FileText : FolderPlus;
 
+	// Match virtualized row height (estimateSize ≈ 28px / h-7). Extra outer
+	// padding or an in-flow error line used to measure taller than siblings;
+	// after draft removal the virtualizer kept that size by index and left a gap.
 	return (
-		<div className="flex flex-col gap-0.5 py-0.5">
+		<div className="relative">
 			<div
 				className={cn(
-					"flex items-center gap-1 rounded px-2 py-1",
+					"flex h-7 items-center gap-1 rounded px-2",
 					error ? "bg-destructive/10" : "bg-muted/60",
 				)}
 			>
@@ -250,12 +253,13 @@ function TreeCreateInput({
 					ref={inputRef}
 					type="text"
 					value={value}
+					title={error ?? undefined}
 					aria-label={
 						kind === "file" ? t("fileTree.newFile") : t("fileTree.newFolder")
 					}
 					aria-invalid={Boolean(error)}
 					className={cn(
-						"min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 py-0.5 text-sm outline-none",
+						"h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-sm outline-none",
 						error && "border-destructive",
 					)}
 					onChange={(e) => {
@@ -281,7 +285,7 @@ function TreeCreateInput({
 				/>
 			</div>
 			{error ? (
-				<p className="px-8 text-destructive text-[0.6875rem] leading-tight">
+				<p className="pointer-events-none absolute top-full right-0 left-8 z-10 mt-0.5 rounded bg-background/95 px-1 text-destructive text-[0.6875rem] leading-tight shadow-sm">
 					{error}
 				</p>
 			) : null}
@@ -694,12 +698,22 @@ export const FileTree = memo(
 
 		const treeScrollRef = useRef<HTMLDivElement>(null);
 		const uiScale = useUiScale();
+		// Key by stable row id so insert/remove of the inline create draft does
+		// not leave stale measured heights on recycled indexes (gap after create).
+		const flatRowKeys = useMemo(() => flatRows.map((r) => r.key), [flatRows]);
 		const rowVirtualizer = useVirtualizer({
 			count: flatRows.length,
 			getScrollElement: () => treeScrollRef.current,
 			estimateSize: () => Math.round(28 * uiScale),
+			getItemKey: (index) => flatRowKeys[index] ?? index,
 			overscan: 15,
 		});
+
+		// Remeasure when the flattened set changes (create draft, expand, refresh).
+		// biome-ignore lint/correctness/useExhaustiveDependencies: keys encode flatRows identity
+		useEffect(() => {
+			rowVirtualizer.measure();
+		}, [flatRowKeys, uiScale, rowVirtualizer]);
 
 		/**
 		 * When the active document changes (or tree data refreshes after import),
