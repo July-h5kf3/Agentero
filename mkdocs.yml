@@ -96,6 +96,7 @@ nav:
       - 远程 Vault 文件树懒加载: bug_fix/remote-vault-tree-lazy.md
       - macOS 签名与公证: bug_fix/macos-signing.md
       - Gemini 登录弹窗循环: bug_fix/gemini-login-browser-loop.md
+      - 导入 NOTES 摘要 MT 超时: bug_fix/import-abstract-mt-timeout.md
 
 markdown_extensions:
   - admonition
