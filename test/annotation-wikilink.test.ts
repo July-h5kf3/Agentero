@@ -85,13 +85,15 @@ describe("annotation wikilink parse", () => {
 			alias: "note",
 			embed: true,
 		});
-		expect(wikiLinkToMarkdown(node!)).toBe(md);
+		if (!node) throw new Error("Expected an embedded wikilink node");
+		expect(wikiLinkToMarkdown(node)).toBe(md);
 		const sameNote = parseWikiLinkMarkdown("[[@TGDf_eZGV4]]");
 		expect(sameNote).toMatchObject({
 			value: "",
 			heading: "@TGDf_eZGV4",
 		});
-		expect(wikiLinkToMarkdown(sameNote!)).toBe("[[@TGDf_eZGV4]]");
+		if (!sameNote) throw new Error("Expected a same-note wikilink node");
+		expect(wikiLinkToMarkdown(sameNote)).toBe("[[@TGDf_eZGV4]]");
 	});
 
 	it("unescapes path underscores corrupted by mdast state.safe", () => {
@@ -105,7 +107,8 @@ describe("annotation wikilink parse", () => {
 			alias: "Parfxxx",
 			embed: true,
 		});
-		expect(wikiLinkToMarkdown(node!)).toBe(`![[${path}@mh8SPQgbMG|Parfxxx]]`);
+		if (!node) throw new Error("Expected an annotation wikilink node");
+		expect(wikiLinkToMarkdown(node)).toBe(`![[${path}@mh8SPQgbMG|Parfxxx]]`);
 		expect(
 			splitAnnotationSugar("papers/10\\_1007\\_s11390/NOTES@ab_c"),
 		).toEqual({

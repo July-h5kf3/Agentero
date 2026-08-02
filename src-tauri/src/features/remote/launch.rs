@@ -232,6 +232,10 @@ mod tests {
         let first = ensure_remote_vault_skills(&session, Some("en"))
             .await
             .unwrap();
+        let first_onboarding_path = vault::bundled_onboarding_files("en")
+            .first()
+            .map(|(rel, _)| (*rel).to_string())
+            .expect("English onboarding templates");
         assert!(first
             .created
             .contains(&".agents/skills/deep-research/SKILL.md".to_string()));
@@ -241,10 +245,8 @@ mod tests {
         assert!(!first
             .updated
             .contains(&".agents/skills/paper-reader/SKILL.md".to_string()));
-        assert!(first
-            .created
-            .contains(&"notes/01 Markdown and Wikilinks.md".to_string()));
-        assert_eq!(first.open_path, "notes/01 Markdown and Wikilinks.md");
+        assert!(first.created.contains(&first_onboarding_path));
+        assert_eq!(first.open_path, first_onboarding_path);
         assert_eq!(std::fs::read_to_string(&agents).unwrap(), "# user agents\n");
         assert_eq!(
             std::fs::read_to_string(&existing_skill).unwrap(),

@@ -489,10 +489,15 @@ mod tests {
             .is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
-        assert!(dir.join("notes/01 Markdown and Wikilinks.md").is_file());
-        assert!(dir.join("notes/02 Agent and Skills.md").is_file());
-        assert!(dir.join("notes/03 Papers and Import.md").is_file());
-        assert_eq!(r.open_path, "notes/01 Markdown and Wikilinks.md");
+        let onboarding_paths = bundled_onboarding_files("en")
+            .into_iter()
+            .map(|(rel, _)| rel.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(onboarding_paths.len(), 3);
+        for rel in &onboarding_paths {
+            assert!(dir.join(rel).is_file(), "missing onboarding note: {rel}");
+        }
+        assert_eq!(r.open_path, onboarding_paths[0]);
         assert!(!dir.join("PAPERS.md").exists());
         assert!(!dir.join("library.bib").exists());
         assert!(r
@@ -505,7 +510,7 @@ mod tests {
         // Second call does not wipe AGENTS.md, .agents/README.md, or onboarding notes
         fs::write(dir.join("AGENTS.md"), "# custom\n").unwrap();
         fs::write(dir.join(".agents/README.md"), "# keep\n").unwrap();
-        fs::write(dir.join("notes/01 Markdown and Wikilinks.md"), "# edited\n").unwrap();
+        fs::write(dir.join(&onboarding_paths[0]), "# edited\n").unwrap();
         let r2 = create_vault(&dir, "en").expect("again");
         let content = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
         assert!(content.starts_with("# custom"));
@@ -513,13 +518,9 @@ mod tests {
         let agents_readme = fs::read_to_string(dir.join(".agents/README.md")).unwrap();
         assert!(agents_readme.starts_with("# keep"));
         assert!(!r2.created.iter().any(|c| c == ".agents/README.md"));
-        let onboarding =
-            fs::read_to_string(dir.join("notes/01 Markdown and Wikilinks.md")).unwrap();
+        let onboarding = fs::read_to_string(dir.join(&onboarding_paths[0])).unwrap();
         assert!(onboarding.starts_with("# edited"));
-        assert!(!r2
-            .created
-            .iter()
-            .any(|c| c == "notes/01 Markdown and Wikilinks.md"));
+        assert!(!r2.created.iter().any(|c| c == &onboarding_paths[0]));
 
         let _ = fs::remove_dir_all(&dir);
     }

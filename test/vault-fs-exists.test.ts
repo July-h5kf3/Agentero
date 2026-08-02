@@ -41,7 +41,8 @@ describe("parseRemoteJoinedPath + splitVaultRel (create preflight)", () => {
 			sessionId: "sess-1",
 			rel: "notes/New Folder",
 		});
-		expect(splitVaultRel(remote!.rel)).toEqual({
+		if (!remote) throw new Error("Expected a remote path");
+		expect(splitVaultRel(remote.rel)).toEqual({
 			parent: "notes",
 			name: "New Folder",
 		});
@@ -51,7 +52,8 @@ describe("parseRemoteJoinedPath + splitVaultRel (create preflight)", () => {
 		const full = "remote:sess-1/scratch";
 		const remote = parseRemoteJoinedPath(full);
 		expect(remote).toEqual({ sessionId: "sess-1", rel: "scratch" });
-		expect(splitVaultRel(remote!.rel)).toEqual({
+		if (!remote) throw new Error("Expected a remote path");
+		expect(splitVaultRel(remote.rel)).toEqual({
 			parent: "",
 			name: "scratch",
 		});

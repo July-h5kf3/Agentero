@@ -91,11 +91,11 @@ describe("annotations-store tab lifecycle", () => {
 		remapTabAnnotations([{ fromId: "old", toId: "new" }]);
 
 		const s = annotationsStore.getState();
-		expect(s.highlightsByTab["old"]).toBeUndefined();
-		expect(s.asksByTab["old"]).toBeUndefined();
-		expect(s.visualTracesByTab["old"]).toBeUndefined();
-		expect(s.highlightsByTab["new"]?.[0]?.id).toBe("h1");
-		expect(s.asksByTab["new"]?.[0]?.id).toBe("ask1");
-		expect(s.visualTracesByTab["new"]?.[0]?.id).toBe("v1");
+		expect(s.highlightsByTab.old).toBeUndefined();
+		expect(s.asksByTab.old).toBeUndefined();
+		expect(s.visualTracesByTab.old).toBeUndefined();
+		expect(s.highlightsByTab.new?.[0]?.id).toBe("h1");
+		expect(s.asksByTab.new?.[0]?.id).toBe("ask1");
+		expect(s.visualTracesByTab.new?.[0]?.id).toBe("v1");
 	});
 });

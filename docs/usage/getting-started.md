@@ -35,9 +35,9 @@ Vault 是普通目录。建议不要放在临时目录、下载目录或会被�
 ResearchVault/
 ├── papers/
 ├── notes/
-│   ├── 01 Markdown 与双链.md
+│   ├── 01 论文导入与管理.md
 │   ├── 02 Agent 与 Skill.md
-│   └── 03 论文导入与管理.md
+│   └── 03 Markdown 与双链.md
 ├── plans/
 ├── .agents/
 │   └── skills/

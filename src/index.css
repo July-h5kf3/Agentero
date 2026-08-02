@@ -392,7 +392,7 @@
  * Collapsed: no extra bar under the chip (dockview underline width is already 0).
  */
 .agentero-dockview .dv-tab-group-chip {
-	background-color: transparent !important;
+	background-color: transparent;
 	color: var(--muted-foreground);
 	font-weight: 500;
 	border: none;
@@ -401,16 +401,13 @@
 
 .agentero-dockview .dv-tab-group-chip:hover {
 	color: var(--foreground);
-	background-color: transparent !important;
+	background-color: transparent;
 }
 
 /* Nameless chip: solid accent swatch (identity only). */
 .agentero-dockview .dv-tab-group-chip:has(.dv-tab-group-chip-label--empty) {
-	background-color: var(
-		--dv-tab-group-color,
-		var(--muted-foreground)
-	) !important;
-	color: transparent !important;
+	background-color: var(--dv-tab-group-color, var(--muted-foreground));
+	color: transparent;
 	width: 12px;
 	height: 12px;
 	padding: 0;
@@ -419,7 +416,7 @@
 
 /* Global workspace: always show dockview tab chrome (it owns document tabs). */
 .agentero-dockview.agentero-dock-global .dv-tabs-and-actions-container {
-	display: flex !important;
+	display: flex;
 }
 
 /*

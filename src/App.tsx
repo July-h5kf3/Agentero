@@ -295,7 +295,7 @@ export default function App() {
 		visualAnnotation: () => {
 			const { tabs, activeTabId } = workspaceStore.getState();
 			const tab = tabs.find((item) => item.id === activeTabId);
-			if (!tab || tab.mode !== "pdf") return;
+			if (tab?.mode !== "pdf") return;
 			pdfHandleFor(tab.id)?.toggleVisualAnnotation();
 		},
 	});
