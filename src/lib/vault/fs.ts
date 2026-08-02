@@ -4,6 +4,7 @@ import { isTauri } from "@/lib/core/tauri";
 import {
 	parseRemoteJoinedPath,
 	remoteCacheFile,
+	remoteList,
 	remoteMkdir,
 	remoteReadText,
 	remoteRemove,
@@ -113,6 +114,53 @@ export async function writeVaultBytes(
 		}
 	}
 	await writeFile(path, bytes);
+}
+
+/**
+ * Split a vault-relative path into parent dir + basename.
+ * Empty `rel` (vault root) returns null.
+ */
+export function splitVaultRel(
+	rel: string,
+): { parent: string; name: string } | null {
+	const normalized = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!normalized) return null;
+	const slash = normalized.lastIndexOf("/");
+	if (slash === -1) return { parent: "", name: normalized };
+	return {
+		parent: normalized.slice(0, slash),
+		name: normalized.slice(slash + 1),
+	};
+}
+
+/**
+ * Whether a local or remote vault path exists.
+ *
+ * Remote paths (`remote:<sessionId>/…`) must not use `@tauri-apps/plugin-fs`
+ * `exists` — those are pseudo-handles outside the local FS scope and would
+ * fail (or throw), blocking create on remote vaults (issue #152).
+ */
+export async function vaultPathExists(path: string): Promise<boolean> {
+	if (!isTauri()) {
+		throw new Error(i18n.t("app:vault.readDesktopOnly"));
+	}
+
+	const remote = parseRemoteJoinedPath(path);
+	if (remote) {
+		// Open session root always "exists".
+		const parts = splitVaultRel(remote.rel);
+		if (!parts) return true;
+		try {
+			const entries = await remoteList(remote.sessionId, parts.parent);
+			return entries.some((e) => e.name === parts.name);
+		} catch {
+			// Missing parent → path does not exist.
+			return false;
+		}
+	}
+
+	const { exists } = await import("@tauri-apps/plugin-fs");
+	return exists(path);
 }
 
 /** Create a directory (and parents) under the vault. */

@@ -37,6 +37,7 @@ import {
 	removeRecentVault,
 	saveVaultPath,
 	seededSkillIdsFromCreated,
+	vaultPathExists,
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
@@ -553,8 +554,8 @@ export async function confirmCreate(name: string): Promise<void> {
 	setCreateDraft(null);
 	try {
 		setVaultBusy(true);
-		const { exists } = await import("@tauri-apps/plugin-fs");
-		if (await exists(full)) {
+		// Use vault-aware exists: local FS plugin cannot see `remote:<id>/…`.
+		if (await vaultPathExists(full)) {
 			notifyError(i18n.t("sidebar:fileTree.alreadyExists", { name: trimmed }));
 			return;
 		}

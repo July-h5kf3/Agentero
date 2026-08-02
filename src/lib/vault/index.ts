@@ -5,6 +5,8 @@ export {
 	readVaultBytes,
 	readVaultFile,
 	removeVaultPath,
+	splitVaultRel,
+	vaultPathExists,
 	writeVaultBytes,
 	writeVaultFile,
 } from "@/lib/vault/fs";
