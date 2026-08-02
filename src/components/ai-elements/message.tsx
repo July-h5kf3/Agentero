@@ -346,7 +346,9 @@ export const MessageResponse = memo(
 		return (
 			<Streamdown
 				className={cn(
-					"size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+					// Keep the renderer's height content-driven. `size-full` sets
+					// height: 100%, which can clip later blocks in auto-sized embeds.
+					"w-full min-w-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
 					className,
 				)}
 				plugins={streamdownPlugins}
