@@ -246,77 +246,52 @@ function ConnectorSettingsBlock({
 		}
 	};
 
-	const statusLine = (() => {
-		if (!isTauri()) return t("general.connector.desktopOnly");
-		if (!status) {
-			return settings.connectorEnabled
-				? t("general.connector.statusStarting")
-				: t("general.connector.statusOff");
-		}
-		if (status.lastError) {
-			return t("general.connector.statusError", {
-				message: status.lastError,
-			});
-		}
-		if (status.listening && !status.vaultPath) {
-			return t("general.connector.statusNoVault");
-		}
-		if (status.listening) {
-			return null;
-		}
-		if (settings.connectorEnabled) {
-			return t("general.connector.statusStarting");
-		}
-		return t("general.connector.statusOff");
-	})();
-
 	return (
-		<>
-			<SettingsGroup>
-				<SettingsRow
-					label={t("general.connector.label")}
-					htmlFor="connector-enabled"
-					description={t("general.connector.hint")}
-				>
-					<Switch
-						id="connector-enabled"
-						checked={settings.connectorEnabled}
-						disabled={busy}
-						onCheckedChange={(v) => void onToggle(v)}
-					/>
-				</SettingsRow>
-				<SettingsRow
-					label={
-						<>
-							{t("general.connector.portLabel")}
-							{status?.listening ? (
-								<span
-									role="img"
-									aria-label="listening"
-									className="ml-1.5 inline-block size-2 rounded-full bg-emerald-500 align-middle"
-								/>
-							) : null}
-						</>
-					}
-					htmlFor="connector-port"
-				>
-					<Input
-						id="connector-port"
-						type="number"
-						min={1}
-						max={65535}
-						className="h-8 w-28"
-						defaultValue={settings.connectorPort}
-						onBlur={(e) => void onPortBlur(e.currentTarget.value)}
-						disabled={busy}
-					/>
-				</SettingsRow>
-			</SettingsGroup>
-			{statusLine ? (
-				<p className="px-0.5 font-mono text-[11px] text-muted-foreground leading-relaxed">
-					{statusLine}
-				</p>
-			) : null}
-		</>
+		<SettingsGroup>
+			<SettingsRow
+				label={
+					<span className="inline-flex items-center gap-1.5">
+						{t("general.connector.label")}
+						<span className="text-[11px] font-normal leading-none text-muted-foreground/60">
+							{t("general.connector.hint")}
+						</span>
+					</span>
+				}
+				htmlFor="connector-enabled"
+			>
+				<Switch
+					id="connector-enabled"
+					checked={settings.connectorEnabled}
+					disabled={busy}
+					onCheckedChange={(v) => void onToggle(v)}
+				/>
+			</SettingsRow>
+			<SettingsRow
+				label={
+					<>
+						{t("general.connector.portLabel")}
+						{status?.listening ? (
+							<span
+								role="img"
+								aria-label="listening"
+								className="ml-1.5 inline-block size-2 rounded-full bg-emerald-500 align-middle"
+							/>
+						) : null}
+					</>
+				}
+				htmlFor="connector-port"
+			>
+				<Input
+					id="connector-port"
+					type="number"
+					min={1}
+					max={65535}
+					className="h-8 w-28"
+					defaultValue={settings.connectorPort}
+					onBlur={(e) => void onPortBlur(e.currentTarget.value)}
+					disabled={busy}
+				/>
+			</SettingsRow>
+		</SettingsGroup>
 	);
 }

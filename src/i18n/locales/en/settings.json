@@ -67,11 +67,6 @@
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",
-			"statusOff": "Off",
-			"statusStarting": "Starting…",
-			"statusError": "Error: {{message}}",
-			"statusNoVault": "Open a vault to accept saves",
-			"desktopOnly": "Requires the desktop app.",
 			"portLabel": "Connector port",
 			"invalidPort": "Port must be between 1 and 65535."
 		},
