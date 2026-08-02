@@ -125,6 +125,27 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<SettingsRow label={t("general.batchImportConcurrency.label")}>
+					<Select
+						value={String(settings.batchImportConcurrency)}
+						onValueChange={(value) =>
+							patch({ batchImportConcurrency: Number(value) })
+						}
+					>
+						<SelectTrigger size="sm" className="min-w-[180px] max-w-[240px]">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{Array.from({ length: 10 }, (_, index) => index + 1).map(
+								(value) => (
+									<SelectItem key={value} value={String(value)}>
+										{t("general.batchImportConcurrency.value", { value })}
+									</SelectItem>
+								),
+							)}
+						</SelectContent>
+					</Select>
+				</SettingsRow>
 				<NetworkProxyRow
 					htmlFor="network-proxy-enabled"
 					label={t("general.networkProxy.label")}
