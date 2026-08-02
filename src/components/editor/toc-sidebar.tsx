@@ -30,7 +30,7 @@ export function TocSidebar(props: TocSideBarProps) {
 			{...navProps}
 			aria-label={i18n.t("editor:toc.label")}
 			className={cn(
-				"group/toc absolute top-1/4 right-2 z-20 w-12 -translate-y-1/2",
+				"group/toc absolute top-1/4 right-2 z-20 w-12",
 				"transition-[width] duration-200 ease-out hover:w-64 focus-within:w-64 motion-reduce:transition-none",
 			)}
 		>
