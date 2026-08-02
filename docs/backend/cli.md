@@ -13,7 +13,8 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 |---|---|
 | `vault` | create / which / info 等 |
 | `tree` | 列树 |
-| `paper` | list/get、tag list/set/add/rm、download/parse… |
+| `paper` | list/get、tag list/set/add/rm、move、download/parse… |
+| `trash` | list / restore / purge 本地回收站 |
 | `import` | 标识符入库 |
 | `export` | 导出 |
 | `config` | 配置 |
@@ -26,6 +27,40 @@ cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json
 cargo test -p agentero-cli
+```
+
+## 论文与 Tag
+
+Tag 写入支持桌面端相同的 8 色后缀格式：
+
+```bash
+agentero paper tag add papers/demo "survey:blue"
+agentero paper tag set papers/demo "nlp:green" "must-read:orange"
+```
+
+只有合法颜色后缀会被解析为颜色；例如 `owner:alice` 仍是普通 Tag 名称。
+
+`@zotero:` 是 Connector 内部标签，默认不参与论文列表筛选和 Tag 汇总；需要包含它们时传 `--all`：
+
+```bash
+agentero paper list --tag topic
+agentero paper list --tag "@zotero:imported" --all
+agentero paper tag list --all
+```
+
+`paper delete` 默认移入可恢复回收站；明确传 `--files` 才会物理删除。回收站操作：
+
+```bash
+agentero trash list
+agentero trash restore <batch-id> <stored>
+agentero -y trash purge <batch-id> <stored>
+agentero -y trash purge
+```
+
+论文移动会更新文件夹和 Catalog 路径：
+
+```bash
+agentero paper move papers/inbox/demo papers/archive
 ```
 
 ## 双链检查

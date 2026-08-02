@@ -360,6 +360,84 @@ fn paper_crud_catalog_only() {
     assert!(tags.iter().any(|t| t.as_str() == Some("draft")));
     assert!(!tags.iter().any(|t| t.as_str() == Some("survey")));
 
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "tag",
+            "add",
+            "demo",
+            "colored:red",
+            "colon:name",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let colored = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "get",
+            "demo",
+            "--all",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let colored: Value = serde_json::from_slice(&colored).unwrap();
+    let tags = colored["data"]["paper"]["tags"].as_array().unwrap();
+    assert!(tags
+        .iter()
+        .any(|t| t["name"] == "colored" && t["color"] == "red"));
+    assert!(tags.iter().any(|t| t.as_str() == Some("colon:name")));
+
+    set_tags_json(
+        &vault,
+        "papers/demo",
+        r#"["nlp","draft",{"name":"@zotero:imported"}]"#,
+    );
+    let hidden = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "@zotero:imported",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let hidden: Value = serde_json::from_slice(&hidden).unwrap();
+    assert!(hidden["data"].as_array().unwrap().is_empty());
+
+    let all = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--tag",
+            "@zotero:imported",
+            "--all",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let all: Value = serde_json::from_slice(&all).unwrap();
+    assert_eq!(all["data"].as_array().unwrap().len(), 1);
+
     let tags_idx = agentero()
         .args([
             "--vault",
@@ -410,7 +488,7 @@ fn paper_crud_catalog_only() {
         .assert()
         .success();
 
-    agentero()
+    let delete = agentero()
         .args([
             "--vault",
             vault.to_str().unwrap(),
@@ -421,7 +499,37 @@ fn paper_crud_catalog_only() {
         ])
         .assert()
         .success();
-    // files remain without --files
+    assert!(!paper.exists());
+    let delete: Value = serde_json::from_slice(&delete.get_output().stdout).unwrap();
+    let batch_id = delete["data"]["batchId"].as_str().unwrap();
+
+    let trash = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "trash",
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let trash: Value = serde_json::from_slice(&trash).unwrap();
+    let stored = trash["data"]["items"][0]["stored"].as_str().unwrap();
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "trash",
+            "restore",
+            batch_id,
+            stored,
+            "--json",
+        ])
+        .assert()
+        .success();
     assert!(paper.join("NOTES.md").is_file());
 
     let list2 = agentero()
@@ -438,7 +546,31 @@ fn paper_crud_catalog_only() {
         .stdout
         .clone();
     let v: Value = serde_json::from_slice(&list2).unwrap();
-    assert!(v["data"].as_array().unwrap().is_empty());
+    assert_eq!(v["data"].as_array().unwrap().len(), 1);
+
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "delete",
+            "papers/demo",
+            "--json",
+        ])
+        .assert()
+        .success();
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "-y",
+            "trash",
+            "purge",
+            "--json",
+        ])
+        .assert()
+        .success();
+    assert!(!paper.exists());
 }
 
 #[test]
@@ -461,6 +593,47 @@ fn tree_and_vault_resolve_from_cwd() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"ok\": true"));
+}
+
+#[test]
+fn paper_move_updates_filesystem_and_catalog() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+    fs::create_dir_all(vault.join("papers/inbox/demo")).unwrap();
+    fs::create_dir_all(vault.join("papers/archive")).unwrap();
+    seed_paper(&vault, "papers/inbox/demo", "demo", "Demo");
+
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "move",
+            "papers/inbox/demo",
+            "papers/archive",
+            "--json",
+        ])
+        .assert()
+        .success();
+
+    assert!(!vault.join("papers/inbox/demo").exists());
+    assert!(vault.join("papers/archive/demo").is_dir());
+    let listed = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "paper",
+            "list",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let listed: Value = serde_json::from_slice(&listed).unwrap();
+    assert_eq!(listed["data"][0]["path"], "papers/archive/demo");
 }
 
 #[test]
@@ -626,4 +799,26 @@ fn seed_paper(vault: &Path, path: &str, id: &str, title: &str) {
     );
     let status = Command::new("python3").args(["-c", &py]).status().unwrap();
     assert!(status.success(), "failed to seed catalog");
+}
+
+fn set_tags_json(vault: &Path, path: &str, tags_json: &str) {
+    use std::process::Command;
+    let db = vault.join(".agentero").join("catalog.sqlite");
+    let sql = format!(
+        "UPDATE papers SET tags_json = '{tags_json}' WHERE path = '{path}';",
+        tags_json = tags_json.replace('\'', "''"),
+        path = path.replace('\'', "''"),
+    );
+    let status = Command::new("sqlite3").arg(&db).arg(&sql).status();
+    if status.map(|s| s.success()).unwrap_or(false) {
+        return;
+    }
+    let py = format!(
+        r#"import sqlite3; c=sqlite3.connect(r"{db}"); c.execute("UPDATE papers SET tags_json = ? WHERE path = ?", ({tags:?}, {path:?})); c.commit()"#,
+        db = db.display(),
+        tags = tags_json,
+        path = path,
+    );
+    let status = Command::new("python3").args(["-c", &py]).status().unwrap();
+    assert!(status.success(), "failed to update tags");
 }

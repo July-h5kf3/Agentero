@@ -4,6 +4,7 @@ use crate::error::CliError;
 use crate::output::to_value;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
 use crate::style::{format_table, truncate_chars};
+use agentero_lib::features::catalog;
 use agentero_lib::features::catalog::papers::{self, PaperRecord, PaperTag};
 use agentero_lib::features::import::pdf_parse::{self, PaperParseBodyArgs};
 use agentero_lib::features::import::{self, PaperDownloadAssetsArgs};
@@ -28,6 +29,9 @@ pub enum PaperCmd {
         /// Filter by status field.
         #[arg(long = "status")]
         status: Option<String>,
+        /// Include internal `@zotero:` tags in filtering and output.
+        #[arg(long = "all")]
+        all: bool,
     },
     /// Tag inventory and per-paper tag edits.
     Tag {
@@ -38,10 +42,16 @@ pub enum PaperCmd {
     Get {
         /// Vault-relative path or paper id.
         r#ref: String,
+        /// Include internal `@zotero:` tags in output.
+        #[arg(long = "all")]
+        all: bool,
     },
     /// Print related file paths only.
     Paths { r#ref: String },
-    /// Delete catalog row(s). With `--files` also remove the folder (requires `-y`).
+    /// Move a paper or papers organization directory to the recycle bin.
+    ///
+    /// With `--files`, permanently remove the catalog rows and files instead
+    /// (requires `-y`, retained for explicit destructive automation).
     Delete {
         /// Vault-relative path (paper or org folder under papers/).
         path: String,
@@ -64,12 +74,23 @@ pub enum PaperCmd {
         #[arg(long = "force")]
         force: bool,
     },
+    /// Move a paper or papers organization directory under another papers/ directory.
+    Move {
+        /// Vault-relative source path under papers/.
+        from: String,
+        /// Vault-relative destination parent under papers/.
+        dest_parent: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
 pub enum TagCmd {
     /// List unique tags in the catalog with counts (and colors when set).
-    List,
+    List {
+        /// Include internal `@zotero:` tags.
+        #[arg(long = "all")]
+        all: bool,
+    },
     /// Replace the full tag list for a paper.
     ///
     /// Pass tag names as arguments, or use `--clear` to remove all tags.
@@ -132,20 +153,29 @@ pub async fn run(cmd: PaperCmd, globals: &GlobalOpts) -> Result<Value, CliError>
             tags,
             unread,
             status,
-        } => list(globals, query.as_deref(), &tags, unread, status.as_deref()),
+            all,
+        } => list(
+            globals,
+            query.as_deref(),
+            &tags,
+            unread,
+            status.as_deref(),
+            all,
+        ),
         PaperCmd::Tag { cmd } => run_tag(cmd, globals),
-        PaperCmd::Get { r#ref } => get(globals, &r#ref),
+        PaperCmd::Get { r#ref, all } => get(globals, &r#ref, all),
         PaperCmd::Paths { r#ref } => paths(globals, &r#ref),
         PaperCmd::Delete { path, files } => delete(globals, &path, files),
         PaperCmd::SetRead { r#ref, set_false } => set_read(globals, &r#ref, !set_false),
         PaperCmd::Download { r#ref } => download(globals, &r#ref).await,
         PaperCmd::Parse { r#ref, force } => parse(globals, &r#ref, force).await,
+        PaperCmd::Move { from, dest_parent } => move_paper(globals, &from, &dest_parent),
     }
 }
 
 fn run_tag(cmd: TagCmd, globals: &GlobalOpts) -> Result<Value, CliError> {
     match cmd {
-        TagCmd::List => list_tags(globals),
+        TagCmd::List { all } => list_tags(globals, all),
         TagCmd::Set { r#ref, tags, clear } => {
             if clear && !tags.is_empty() {
                 return Err(CliError::usage("--clear cannot be combined with tag names"));
@@ -178,11 +208,17 @@ fn list(
     filter_tags: &[String],
     unread: bool,
     status: Option<&str>,
+    include_all: bool,
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let mut rows = papers::list_all(&vault)?;
     if unread {
         rows.retain(|r| !r.is_read);
+    }
+    if !include_all {
+        for row in &mut rows {
+            row.tags.retain(|t| !is_connector_tag(&t.name));
+        }
     }
     if let Some(st) = status.map(str::trim).filter(|s| !s.is_empty()) {
         rows.retain(|r| r.status.eq_ignore_ascii_case(st));
@@ -244,9 +280,12 @@ fn list(
     }))
 }
 
-fn list_tags(globals: &GlobalOpts) -> Result<Value, CliError> {
+fn list_tags(globals: &GlobalOpts, include_all: bool) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
-    let pairs = papers::list_all_tags(&vault)?;
+    let pairs = papers::list_all_tags(&vault)?
+        .into_iter()
+        .filter(|t| include_all || !is_connector_tag(&t.name))
+        .collect::<Vec<_>>();
     let items: Vec<TagCountOut> = pairs
         .into_iter()
         .map(|t| TagCountOut {
@@ -276,15 +315,19 @@ fn list_tags(globals: &GlobalOpts) -> Result<Value, CliError> {
     }))
 }
 
-fn get(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {
+fn get(globals: &GlobalOpts, ref_: &str, include_all: bool) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
     let dir = paper_dir(&vault, &paper.path);
     let assets = probe_assets(&dir);
     let suggested_reads = suggested_reads(&paper.path, &assets);
 
+    let mut display_paper = paper.clone();
+    if !include_all {
+        display_paper.tags.retain(|t| !is_connector_tag(&t.name));
+    }
     let data = PaperGetData {
-        paper: paper.clone(),
+        paper: display_paper,
         assets,
         suggested_reads: suggested_reads.clone(),
     };
@@ -406,26 +449,35 @@ fn delete(globals: &GlobalOpts, path: &str, files: bool) -> Result<Value, CliErr
         }
     }
 
-    let removed = papers::delete_under_path(&vault, &path)?;
-    let mut deleted_files = false;
     if files {
+        let removed = papers::delete_under_path(&vault, &path)?;
         let dir = paper_dir(&vault, &path);
         if dir.is_dir() {
             fs::remove_dir_all(&dir)?;
-            deleted_files = true;
         }
+        let style = globals.style;
+        return Ok(json!({
+            "removed": removed,
+            "path": path,
+            "deletedFiles": true,
+            "lines": [format!(
+                "{} removed {} catalog row(s) for {}",
+                style.ok("✓"),
+                removed,
+                style.path(&path)
+            )]
+        }));
     }
 
-    let style = globals.style;
+    let result = agentero_lib::features::trash::trash_paths(&vault, &[path.clone()])?;
     Ok(json!({
-        "removed": removed,
+        "batchId": result.batch_id,
+        "count": result.count,
         "path": path,
-        "deletedFiles": deleted_files,
         "lines": [format!(
-            "{} removed {} catalog row(s) for {}",
-            style.ok("✓"),
-            removed,
-            style.path(&path)
+            "{} moved {} to recycle bin",
+            globals.style.ok("✓"),
+            globals.style.path(&path)
         )]
     }))
 }
@@ -459,7 +511,21 @@ fn set_tags(
 ) -> Result<Value, CliError> {
     let vault = resolve_vault(globals)?;
     let paper = resolve_paper(&vault, ref_, globals)?;
-    let tag_objs: Vec<PaperTag> = tags.iter().map(PaperTag::new).collect();
+    let parsed_tags: Vec<PaperTag> = tags
+        .iter()
+        .map(|tag| parse_tag_spec(tag))
+        .collect::<Result<_, _>>()?;
+    let tag_objs = if matches!(mode, TagMode::Replace) {
+        paper
+            .tags
+            .iter()
+            .filter(|tag| is_connector_tag(&tag.name))
+            .cloned()
+            .chain(parsed_tags)
+            .collect()
+    } else {
+        parsed_tags
+    };
     let row = match mode {
         TagMode::Add => {
             if tags.is_empty() {
@@ -471,7 +537,8 @@ fn set_tags(
             if tags.is_empty() {
                 return Err(CliError::usage("tag rm requires at least one tag"));
             }
-            papers::remove_tags(&vault, &paper.path, tags)?
+            let names = tag_objs.iter().map(|t| t.name.clone()).collect::<Vec<_>>();
+            papers::remove_tags(&vault, &paper.path, &names)?
         }
         TagMode::Replace => papers::set_tags(&vault, &paper.path, &tag_objs)?,
     };
@@ -495,6 +562,47 @@ fn set_tags(
         );
     }
     Ok(v)
+}
+
+fn move_paper(globals: &GlobalOpts, from: &str, dest_parent: &str) -> Result<Value, CliError> {
+    let vault = resolve_vault(globals)?;
+    let new_rel = catalog::move_paper_under(&vault, from, dest_parent)?;
+    Ok(json!({
+        "from": from,
+        "newRel": new_rel,
+        "lines": [format!("moved {} → {}", globals.style.path(from), globals.style.path(&new_rel))],
+    }))
+}
+
+const TAG_COLORS: &[&str] = &[
+    "red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple",
+];
+
+fn parse_tag_spec(raw: &str) -> Result<PaperTag, CliError> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(CliError::usage("tag name must not be empty"));
+    }
+    let Some((name, color)) = value.rsplit_once(':') else {
+        return Ok(PaperTag::new(value));
+    };
+    if name.trim().is_empty() {
+        return Err(CliError::usage("tag name must not be empty"));
+    }
+    if TAG_COLORS
+        .iter()
+        .any(|id| id.eq_ignore_ascii_case(color.trim()))
+    {
+        return Ok(PaperTag {
+            name: name.trim().to_string(),
+            color: Some(color.trim().to_ascii_lowercase()),
+        });
+    }
+    Ok(PaperTag::new(value))
+}
+
+fn is_connector_tag(name: &str) -> bool {
+    name.trim().to_ascii_lowercase().starts_with("@zotero:")
 }
 
 async fn download(globals: &GlobalOpts, ref_: &str) -> Result<Value, CliError> {

@@ -182,6 +182,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::export::ExportCmd,
     },
+    /// List and manage the local recycle bin.
+    Trash {
+        #[command(subcommand)]
+        cmd: commands::trash::TrashCmd,
+    },
     /// CLI-only configuration (not GUI settings).
     Config {
         #[command(subcommand)]
@@ -305,6 +310,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Paper { .. } => "cli.paper",
         Commands::Import { .. } => "cli.import",
         Commands::Export { .. } => "cli.export",
+        Commands::Trash { .. } => "cli.trash",
         Commands::Config { .. } => "cli.config",
         Commands::Wiki { .. } => "cli.wiki",
     }
@@ -334,6 +340,7 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Paper { cmd } => commands::paper::run(cmd, globals).await,
         Commands::Import { cmd } => commands::import::run(cmd, globals).await,
         Commands::Export { cmd } => commands::export::run(cmd, globals).await,
+        Commands::Trash { cmd } => commands::trash::run(cmd, globals),
         Commands::Config { cmd } => commands::config_cmd::run(cmd, globals),
         Commands::Wiki { cmd } => commands::wiki::run(cmd, globals),
     }
