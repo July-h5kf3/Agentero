@@ -1,38 +1,152 @@
 # 远程 Vault：删除文件夹后 list 报 NoSuchFile
 
-**Issue**：用户报告  
 **影响面**：远程 Vault 文件树删除文件夹 / 文件后的刷新  
-**状态**：已修复
+**状态**：已修复  
+**相关代码**：
 
-## 现象
+- `src/lib/vault/tree.ts` — `isPathMissingError` / `listTreeEntries` / `removeTreeNode` / 远程建树
+- `src/lib/vault/store.ts` — `refreshTree` / `loadDirChildren`
+- `src/lib/vault/actions.ts` — `trashPathsAndNotify` 乐观剪枝
+- `src/lib/vault/index.ts` — 导出
+- `test/vault-tree.test.ts` — `isPathMissingError`、`removeTreeNode`
+- 产品约定：[`../frontend/vault-tree.md`](../frontend/vault-tree.md)
+- 远程 trash：`src-tauri/src/features/remote/trash_bridge.rs`（写路径本身正常）
 
-远程 Vault 右键删除文件夹（如 `papers/test`）后 Toast：
+---
+
+## 1. 现象
+
+远程 Vault 右键删除文件夹（例如 `papers/test`）后出现 Toast：
 
 ```text
-sftp list /…/papers/test: Sftp server reported error kind NoSuchFile, msg: … No such file
+sftp list /home/…/papers/test: Sftp server reported error kind NoSuchFile, msg: Err Message: No such file, Language Tag:
 ```
 
-侧栏树可能被清空或刷新失败；本地 Vault 删除无此问题。
+- 侧栏文件树可能被**整栏清空**，或刷新失败后状态异常。
+- 同一操作在**本地 Vault** 上无此问题。
+- 远端磁盘上目标往往已进回收站（删除写路径成功），问题出在**删后刷新树**。
 
-## 根因
+---
 
-1. **本地建树**（`features/vault/tree.rs`）对 `read_dir` 失败是 **best-effort**：子目录不可读 → 空列表，不整树失败。
-2. **远程建树**（`src/lib/vault/tree.ts`）对每次 `remote_list` **硬失败**：任一子路径 `NoSuchFile` 会抛错。
-3. 删除后 `refreshTree` → `loadVaultTree` 递归 list。若并发刷新 / 乐观路径仍访问已移入回收站的目录，SFTP 返回 `NoSuchFile`，整次建树失败。
-4. 原 `refreshTree` 在 catch 里 `setTree([])`，把侧栏直接清空，错误信息即上述 sftp list 文案。
+## 2. 根因
 
-写路径本身（`path_trash` → remote trash rename/copy）可以成功；问题在**删除后的树刷新语义**，不是 trash 协议本身。
+### 2.1 本地 vs 远程建树语义不一致（主因）
 
-## 修复
+**本地** Host（`features/vault/tree.rs`）对子目录 `read_dir` 是 best-effort：
 
-1. `isPathMissingError` + `listTreeEntries`：远程 list 遇 NoSuchFile / not found / ENOENT 时返回 `[]`（与本地 Host 一致）。
-2. `removeTreeNode`：删除成功后先从内存树剪掉目标，再 `refreshTree`。
-3. `loadDirChildren`：展开时路径已消失 → 安静移除节点，不 Toast sftp 原文。
-4. `refreshTree` 失败时**保留旧树**，仅 Toast，避免整栏空白。
+```rust
+// Best-effort: unreadable subdirs yield an empty listing, not a hard error.
+let entries = match fs::read_dir(dir) {
+    Ok(entries) => entries,
+    Err(_) => return Vec::new(),
+};
+```
 
-## 验证
+**远程** 前端（`src/lib/vault/tree.ts`）对每次 `remote_list` 硬失败：任一路径 `NoSuchFile` 整次 `loadVaultTree` 抛错。
 
-- 远程：新建空文件夹 → 删除 → 树去掉该节点，无 NoSuchFile Toast；其它目录仍在。
-- 远程：删除非空文件夹 / 论文夹 → 同上，库表同步刷新。
-- 本地删除行为不变。
-- 单测：`isPathMissingError`、`removeTreeNode`（`test/vault-tree.test.ts`）。
+### 2.2 删除后的调用链
+
+```text
+trashPathsAndNotify
+  → path_trash（远程 rename/copy 到 .agentero/.trash/）  // 可成功
+  → refreshTree → loadVaultTree
+      → 对 papers/ 等 eager 树递归 remote_list
+      → 若仍 list 到已删除的 papers/test → SFTP NoSuchFile → 整树失败
+```
+
+常见触发：
+
+- 并发刷新：上一次建树尚未走完，路径已被移入回收站；
+- 懒展开 / 刷新窗口内仍访问已消失节点。
+
+写路径本身（`path_trash` → `trash_bridge`）与本地回收站语义一致；**不是** trash 协议失败。
+
+### 2.3 失败时清空侧栏
+
+原 `refreshTree` catch：
+
+```ts
+notifyError(message);
+setTree([]); // 整栏空白，Toast 即 sftp list 原文
+```
+
+---
+
+## 3. 修复
+
+与本地 Host 对齐：**缺失路径 = 空列表 / 剪掉节点**，而不是整树失败。
+
+| 改动 | 位置 | 行为 |
+|------|------|------|
+| `isPathMissingError` | `tree.ts` | 识别 NoSuchFile / not found / ENOENT / does not exist |
+| `listTreeEntries` | `tree.ts` | list 遇 missing → `[]`，其它错误仍抛出 |
+| `removeTreeNode` | `tree.ts` | 从内存树不可变删除节点及子孙 |
+| 乐观剪枝 | `actions.ts` `trashPathsAndNotify` | trash 成功后先 `removeTreeNode`，再 `refreshTree` |
+| 懒展开 | `store.ts` `loadDirChildren` | missing → 安静移除节点，不 Toast sftp 原文 |
+| 刷新失败 | `store.ts` `refreshTree` | **保留旧树**，仅 Toast，避免侧栏空白 |
+
+### 3.1 远程 list best-effort（核心）
+
+```ts
+export function isPathMissingError(error: unknown): boolean {
+  const msg = (/* … */).toLowerCase();
+  return (
+    msg.includes("no such file") ||
+    msg.includes("nosuchfile") ||
+    msg.includes("not found") ||
+    msg.includes("enoent") ||
+    msg.includes("does not exist")
+  );
+}
+
+async function listTreeEntries(/* adapter, dir, rel */) {
+  try {
+    return await adapter.list(dirPath, rel);
+  } catch (e) {
+    if (isPathMissingError(e)) return [];
+    throw e;
+  }
+}
+```
+
+`buildTree` / 论文 `source/` 探测均走 `listTreeEntries`，不再直接裸调 `adapter.list`。
+
+### 3.2 删除后乐观剪枝
+
+```ts
+await trashPaths(vaultPath, rels);
+// …
+let pruned = vaultStore.getState().tree;
+for (const p of valid) pruned = removeTreeNode(pruned, p);
+setTree(pruned);
+await refreshTree(vaultPath);
+```
+
+UI 立即去掉目标；随后全量刷新与远端一致。
+
+### 3.3 展开与刷新容错
+
+- **展开**已删除路径：`loadDirChildren` catch missing → `removeTreeNode`，无错误条。
+- **刷新**其它错误：Toast 说明，**不** `setTree([])`。
+
+---
+
+## 4. 验证
+
+| 场景 | 期望 |
+|------|------|
+| 远程：新建空文件夹 → 删除 | 节点消失，无 NoSuchFile Toast；兄弟目录仍在 |
+| 远程：删除非空夹 / 论文夹 | 同上；库表 / 标签页同步关闭相关资源 |
+| 远程：删除后立刻再刷新（⌘R） | 树与远端一致，不整栏清空 |
+| 本地删除 | 行为与修复前一致 |
+| 单测 | `test/vault-tree.test.ts`：`isPathMissingError`、`removeTreeNode` |
+
+---
+
+## 5. 决议
+
+| 议题 | 决议 |
+|------|------|
+| 是否改 SFTP `list` 在 Host 层吞 NoSuchFile | **否**：仅树构建层 best-effort；写路径 / trash 仍需真实错误 |
+| 刷新失败是否清空树 | **否**：保留旧树，避免远程抖动抹掉侧栏 |
+| 删除是否等全量刷新再更新 UI | **否**：先乐观剪枝，再 refresh 对齐远端 |
