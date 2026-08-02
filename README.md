@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="src/assets/agentero-logo.svg" alt="Agentero" width="120" />
+  <img src="docs/assets/hero.png" alt="Agentero" width="100%" />
 </p>
-
-<h1 align="center">Agentero</h1>
 
 <p align="center">
   <a href="https://github.com/poco-ai/agentero/stargazers"><img src="https://img.shields.io/github/stars/poco-ai/agentero?style=flat&logo=github" alt="GitHub stars" /></a>
@@ -11,7 +9,7 @@
   <a href="https://github.com/poco-ai/agentero/pulls"><img src="https://img.shields.io/github/issues-pr/poco-ai/agentero?style=flat" alt="GitHub pull requests" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://github.com/poco-ai/agentero/releases"><img src="https://img.shields.io/github/v/release/poco-ai/agentero?include_prereleases&style=flat" alt="Release" /></a>
-  <a href="https://agentero.poco-ai.com"><img src="https://img.shields.io/badge/docs-online-5319E7?logo=mkdocs&logoColor=white" alt="Documentation" /></a>
+  <a href="https://agentero-docs.poco-ai.com"><img src="https://img.shields.io/badge/docs-online-5319E7?logo=mkdocs&logoColor=white" alt="Documentation" /></a>
 </p>
 
 传统文献管理器对 Agent 并不友好：
