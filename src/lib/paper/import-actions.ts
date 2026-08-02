@@ -5,9 +5,8 @@
 
 import i18n from "@/i18n";
 import {
+	enqueueBackgroundTask,
 	isBackgroundTaskCancelledError,
-	runBackgroundTask,
-	runQueuedBackgroundTask,
 } from "@/lib/core/background-tasks";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import { collectPapersNeedingAssetDownload } from "@/lib/paper";
@@ -63,120 +62,110 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 	if (texts.length === 0) return;
 	const settings = getSettings();
 
-	void runQueuedBackgroundTask(
-		{
-			kind: "lookup",
-			title: i18n.t("app:tasks.lookupImport"),
-			detail: texts.map((text) => text.trim().slice(0, 80)).join(", "),
-		},
-		1,
-		async ({ id, setDetail }) => {
-			setDetail(
-				i18n.t("app:tasks.lookupFetching", { id: String(texts.length) }),
-			);
-			const result = await addPapersByIdentifiers({
-				vaultRoot: vaultPath,
-				parentDir: currentLookupParentDir(),
-				texts,
-				settings,
-				progressTaskId: id,
-			});
-			setDetail(
-				result.skillCandidates.length > 0
-					? i18n.t("sidebar:lookup.skillCandidatesFound", {
+	for (const text of texts) {
+		const input = text.trim();
+		if (!input) continue;
+		void enqueueBackgroundTask(
+			{
+				kind: "lookup",
+				title: i18n.t("app:tasks.lookupImport"),
+				detail: input.slice(0, 80),
+			},
+			async ({ id, setDetail }) => {
+				setDetail(i18n.t("app:tasks.lookupFetching", { id: input }));
+				const result = await addPapersByIdentifiers({
+					vaultRoot: vaultPath,
+					parentDir: currentLookupParentDir(),
+					texts: [input],
+					settings,
+					progressTaskId: id,
+				});
+
+				await refreshTree(vaultPath);
+				if (!isRemoteVaultHandle(vaultPath)) {
+					await rebuildWikiAndNotify(vaultPath);
+				}
+				await refreshLibrary();
+				if (result.skillCandidates.length > 0) {
+					setSkillImportDraft(result.skillCandidates);
+					setDetail(
+						i18n.t("sidebar:lookup.skillCandidatesFound", {
 							count: result.skillCandidates.reduce(
 								(total: number, discovery) =>
 									total + discovery.candidates.length,
 								0,
 							),
-						})
-					: i18n.t("app:tasks.lookupRefreshing", {
-							title: i18n.t("sidebar:lookup.batchSummary", {
-								imported: result.imported.length,
-								skills: result.skills.length,
-								skipped: result.skipped.length,
-								failed: result.errors.length,
-							}),
 						}),
-			);
-			await refreshTree(vaultPath);
-			if (!isRemoteVaultHandle(vaultPath)) {
-				await rebuildWikiAndNotify(vaultPath);
-			}
-			await refreshLibrary();
-			if (result.skillCandidates.length > 0) {
-				setSkillImportDraft(result.skillCandidates);
-			}
-
-			const first = result.imported[0];
-			if (first) {
-				const paperAbs =
-					first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
-					`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
-						first.path || ""
-					)
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "")}`;
-				openPaper(paperAbs);
-			}
-
-			if (result.errors.length > 0) {
-				notifyError(
-					i18n.t("sidebar:lookup.batchSummary", {
-						imported: result.imported.length,
-						skills: result.skills.length,
-						skipped: result.skipped.length,
-						failed: result.errors.length,
-					}),
-				);
-			}
-
-			// Enqueue any newly imported papers that still lack assets.
-			const newPaths = result.imported.map((r) => r.path);
-			if (newPaths.length > 0) {
-				const needing = collectPapersNeedingAssetDownload(
-					vaultStore.getState().tree,
-				).filter((p) =>
-					newPaths.some((rel) => {
-						const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-						const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-						return n === r || n.startsWith(`${r}/`);
-					}),
-				);
-				for (const paperPath of needing) {
-					const rel = toVaultRelative(vaultPath, paperPath)
-						.replace(/\\/g, "/")
-						.replace(/^\/+|\/+$/g, "");
-					void runQueuedBackgroundTask(
-						{
-							kind: "download",
-							title: i18n.t("app:tasks.downloadPaper"),
-							detail: rel,
-						},
-						settings.batchImportConcurrency,
-						async ({ id: downloadTaskId, signal }) => {
-							if (signal.aborted) throw new Error("cancelled");
-							await downloadPaperAssets({
-								vaultRoot: vaultPath,
-								paperPath: rel,
-								progressTaskId: downloadTaskId,
-							});
-							await refreshTree(vaultPath);
-							await refreshLibrary();
-						},
-					).catch((e) => {
-						if (isBackgroundTaskCancelledError(e)) return;
-						notifyError(
-							`${rel}: ${e instanceof Error ? e.message : String(e)}`,
-						);
-					});
+					);
 				}
-			}
-		},
-	).catch((e) => {
-		if (isBackgroundTaskCancelledError(e)) return;
-		notifyError(e instanceof Error ? e.message : String(e));
-	});
+
+				const first = result.imported[0];
+				if (first) {
+					const paperAbs =
+						first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
+						`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
+							first.path || ""
+						)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "")}`;
+					openPaper(paperAbs);
+					setDetail(
+						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),
+					);
+				}
+
+				if (result.errors.length > 0) {
+					notifyError(`${input}: ${result.errors.join("; ")}`);
+				}
+
+				// Enqueue any newly imported paper that still lacks assets.
+				const newPaths = result.imported.map((r) => r.path);
+				if (newPaths.length > 0) {
+					const needing = collectPapersNeedingAssetDownload(
+						vaultStore.getState().tree,
+					).filter((p) =>
+						newPaths.some((rel) => {
+							const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+							const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+							return n === r || n.startsWith(`${r}/`);
+						}),
+					);
+					for (const paperPath of needing) {
+						const rel = toVaultRelative(vaultPath, paperPath)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						void enqueueBackgroundTask(
+							{
+								kind: "download",
+								title: i18n.t("app:tasks.downloadPaper"),
+								detail: rel,
+							},
+							async ({ id: downloadTaskId, signal }) => {
+								if (signal.aborted) throw new Error("cancelled");
+								await downloadPaperAssets({
+									vaultRoot: vaultPath,
+									paperPath: rel,
+									progressTaskId: downloadTaskId,
+								});
+								await refreshTree(vaultPath);
+								await refreshLibrary();
+							},
+							{ concurrency: settings.batchImportConcurrency },
+						).catch((e) => {
+							if (isBackgroundTaskCancelledError(e)) return;
+							notifyError(
+								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
+							);
+						});
+					}
+				}
+			},
+			{ concurrency: settings.batchImportConcurrency },
+		).catch((e) => {
+			if (isBackgroundTaskCancelledError(e)) return;
+			notifyError(`${input}: ${e instanceof Error ? e.message : String(e)}`);
+		});
+	}
 }
 
 export async function confirmSkillImport(
@@ -186,7 +175,7 @@ export async function confirmSkillImport(
 	if (!vaultPath) return;
 	setSkillImportDraft(null);
 	try {
-		const result = await runBackgroundTask(
+		const result = await enqueueBackgroundTask(
 			{
 				kind: "import",
 				title: i18n.t("sidebar:lookup.skillImportTask"),
@@ -246,7 +235,7 @@ export async function importLocalPdf(opts?: {
 		.filter(isImportTempPath);
 	setLibraryIoBusy("import-pdf");
 	try {
-		const result = await runBackgroundTask(
+		const result = await enqueueBackgroundTask(
 			{ kind: "import", title: i18n.t("app:tasks.importPdf") },
 			async ({ id, setDetail }) => {
 				const r = await importLocalPdfs({

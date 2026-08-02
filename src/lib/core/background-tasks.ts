@@ -253,6 +253,12 @@ type BackgroundTaskFn<T> = (ctx: {
 	setDetail: (d: string) => void;
 }) => Promise<T>;
 
+type BackgroundTaskInput = {
+	kind: BackgroundTaskKind;
+	title: string;
+	detail?: string;
+};
+
 function isTaskCancelled(id: string, signal: AbortSignal): boolean {
 	return (
 		signal.aborted ||
@@ -317,6 +323,18 @@ class Semaphore {
 
 	constructor(private max: number) {}
 
+	setMax(max: number): void {
+		this.max = Math.max(1, Math.floor(max));
+		this.drain();
+	}
+
+	private drain(): void {
+		while (this.queue.length > 0 && this.running < this.max) {
+			this.running++;
+			this.queue.shift()?.();
+		}
+	}
+
 	async acquire(): Promise<void> {
 		if (this.running < this.max) {
 			this.running++;
@@ -326,12 +344,8 @@ class Semaphore {
 	}
 
 	release(): void {
-		const next = this.queue.shift();
-		if (next) {
-			next();
-		} else {
-			this.running = Math.max(0, this.running - 1);
-		}
+		this.running = Math.max(0, this.running - 1);
+		this.drain();
 	}
 }
 
@@ -345,42 +359,47 @@ function getSemaphore(
 	if (!sem) {
 		sem = new Semaphore(concurrency);
 		semaphores.set(kind, sem);
+	} else {
+		sem.setMax(concurrency);
 	}
 	return sem;
 }
 
 /**
- * Run an async job as a queued background task with a per-kind concurrency limit.
- * The task is created immediately in `queued` status and starts when a slot is free.
+ * Enqueue an async job as a background task.
+ *
+ * With `concurrency`, tasks of the same kind share a semaphore and are shown
+ * immediately as queued/running. Without it, the task starts immediately.
  */
-export async function runQueuedBackgroundTask<T>(
-	input: {
-		kind: BackgroundTaskKind;
-		title: string;
-		detail?: string;
-	},
-	concurrency: number,
+export async function enqueueBackgroundTask<T>(
+	input: BackgroundTaskInput,
 	fn: BackgroundTaskFn<T>,
+	options?: { concurrency?: number },
 ): Promise<T> {
+	const concurrency = options?.concurrency;
 	const id = startBackgroundTask({
 		kind: input.kind,
 		title: input.title,
 		detail: input.detail,
-		running: false,
+		running: concurrency == null,
 	});
 	const controller = new AbortController();
 	controllers.set(id, controller);
 	const unlisten = await attachProgressListener(id);
 	logger.info(
-		`op enqueue background_task kind=${input.kind} task_id=${id} title=${input.title}`,
+		`op enqueue background_task kind=${input.kind} task_id=${id} title=${input.title} concurrency=${concurrency ?? "unlimited"}`,
 	);
 	let acquired = false;
 	try {
 		throwIfTaskCancelled(id, controller.signal);
-		await getSemaphore(input.kind, concurrency).acquire();
-		acquired = true;
+		if (concurrency != null) {
+			await getSemaphore(input.kind, concurrency).acquire();
+			acquired = true;
+		}
 		throwIfTaskCancelled(id, controller.signal);
-		updateBackgroundTask(id, { status: "running" });
+		if (concurrency != null) {
+			updateBackgroundTask(id, { status: "running" });
+		}
 		const result = await fn({
 			id,
 			signal: controller.signal,
@@ -408,7 +427,7 @@ export async function runQueuedBackgroundTask<T>(
 		throw e;
 	} finally {
 		if (acquired) {
-			getSemaphore(input.kind, concurrency).release();
+			getSemaphore(input.kind, concurrency as number).release();
 		}
 		controllers.delete(id);
 		unlisten?.();
@@ -444,74 +463,4 @@ const FINISHED_STATUSES: ReadonlySet<BackgroundTaskStatus> = new Set([
 
 export function isFinishedBackgroundTask(task: BackgroundTask): boolean {
 	return FINISHED_STATUSES.has(task.status);
-}
-
-/**
- * Run an async job as a background task with automatic complete/fail.
- */
-export async function runBackgroundTask<T>(
-	input: {
-		kind: BackgroundTaskKind;
-		title: string;
-		detail?: string;
-	},
-	fn: (ctx: {
-		id: string;
-		signal: AbortSignal;
-		setProgress: (n: number | null) => void;
-		setDetail: (d: string) => void;
-	}) => Promise<T>,
-): Promise<T> {
-	const id = startBackgroundTask({
-		kind: input.kind,
-		title: input.title,
-		detail: input.detail,
-		running: true,
-		progress: null,
-	});
-	const controller = new AbortController();
-	controllers.set(id, controller);
-	const start = performance.now();
-	const unlisten = await attachProgressListener(id);
-	logger.info(
-		`op start background_task kind=${input.kind} task_id=${id} title=${input.title}`,
-	);
-	try {
-		const result = await fn({
-			id,
-			signal: controller.signal,
-			setProgress: (n) => updateBackgroundTask(id, { progress: n }),
-			setDetail: (d) => updateBackgroundTask(id, { detail: d }),
-		});
-		throwIfTaskCancelled(id, controller.signal);
-		completeBackgroundTask(id);
-		const ms = Math.round(performance.now() - start);
-		logger.info(
-			`op end background_task ok=true duration_ms=${ms} kind=${input.kind} task_id=${id}`,
-		);
-		return result;
-	} catch (e) {
-		if (
-			isTaskCancelled(id, controller.signal) ||
-			isBackgroundTaskCancelledError(e)
-		) {
-			if (
-				getBackgroundTasksSnapshot().tasks.find((t) => t.id === id)?.status !==
-				"cancelled"
-			) {
-				cancelBackgroundTask(id);
-			}
-			throw new BackgroundTaskCancelledError();
-		}
-		const msg = e instanceof Error ? e.message : String(e);
-		failBackgroundTask(id, msg);
-		const ms = Math.round(performance.now() - start);
-		logger.error(
-			`op end background_task ok=false duration_ms=${ms} kind=${input.kind} task_id=${id} error=${msg}`,
-		);
-		throw e;
-	} finally {
-		controllers.delete(id);
-		unlisten?.();
-	}
 }

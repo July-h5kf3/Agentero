@@ -1,5 +1,5 @@
 import i18n from "@/i18n";
-import { runBackgroundTask } from "@/lib/core/background-tasks";
+import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -70,7 +70,7 @@ function maybeTriggerDeferredParse(
 	if (!rel || paperParseTried.has(rel)) return;
 	paperParseTried.add(rel);
 
-	void runBackgroundTask(
+	void enqueueBackgroundTask(
 		{
 			kind: "download",
 			title: i18n.t("app:tasks.downloadPaper"),
@@ -121,7 +121,7 @@ async function resolvePaperPdfSource(
 
 	let didDownload = false;
 	try {
-		await runBackgroundTask(
+		await enqueueBackgroundTask(
 			{
 				kind: "download",
 				title: i18n.t("app:tasks.downloadPaper"),

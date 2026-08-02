@@ -7,7 +7,7 @@
 import i18n from "@/i18n";
 import {
 	BackgroundTaskCancelledError,
-	runBackgroundTask,
+	enqueueBackgroundTask,
 } from "@/lib/core/background-tasks";
 import { notifyError, notifySuccess, notifyWarning } from "@/lib/core/notify";
 import {
@@ -88,7 +88,7 @@ export async function libraryExport(): Promise<void> {
 	if (!vaultPath || libraryStore.getState().ioBusy) return;
 	setLibraryIoBusy("export");
 	try {
-		await runBackgroundTask(
+		await enqueueBackgroundTask(
 			{ kind: "export", title: i18n.t("app:tasks.libraryExport") },
 			async () => {
 				const result = await exportLibraryToFile({
@@ -112,7 +112,7 @@ export async function libraryImport(): Promise<void> {
 	if (!vaultPath || libraryStore.getState().ioBusy) return;
 	setLibraryIoBusy("import");
 	try {
-		const result = await runBackgroundTask(
+		const result = await enqueueBackgroundTask(
 			{ kind: "import", title: i18n.t("app:tasks.libraryImport") },
 			async ({ setDetail }) => {
 				const r = await importLibraryFromFile({
@@ -152,7 +152,7 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 		.replace(/\\/g, "/")
 		.replace(/^\/+|\/+$/g, "");
 	try {
-		const assets = await runBackgroundTask(
+		const assets = await enqueueBackgroundTask(
 			{
 				kind: "download",
 				title: i18n.t("app:tasks.downloadPaper"),
@@ -246,7 +246,7 @@ export async function downloadAllMissingAssets(): Promise<void> {
 
 	const errors: string[] = [];
 	try {
-		await runBackgroundTask(
+		await enqueueBackgroundTask(
 			{
 				kind: "downloadAll",
 				title: i18n.t("app:tasks.downloadAll"),

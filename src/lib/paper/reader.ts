@@ -25,13 +25,7 @@ import {
 	runOnce,
 } from "@/lib/agent";
 import {
-	BackgroundTaskCancelledError,
-	completeBackgroundTask,
-	failBackgroundTask,
-	isBackgroundTaskCancelledError,
-	registerBackgroundTaskCancellation,
-	releaseBackgroundTaskCancellation,
-	startBackgroundTask,
+	enqueueBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
 import { isTauri } from "@/lib/core/tauri";
@@ -220,73 +214,48 @@ export async function runPaperReaderWorkflow(opts: {
 	}
 	inflightReads.add(paperRel);
 
-	const taskId = startBackgroundTask({
-		kind: "paperRead",
-		title: i18n.t("app:tasks.paperRead"),
-		detail: paperRel,
-		running: true,
-		progress: null,
-	});
-	const cancellation = registerBackgroundTaskCancellation(taskId);
-
 	try {
-		updateBackgroundTask(taskId, {
-			detail: i18n.t("app:tasks.paperReadStarting"),
-		});
+		await enqueueBackgroundTask(
+			{
+				kind: "paperRead",
+				title: i18n.t("app:tasks.paperRead"),
+				detail: paperRel,
+			},
+			async ({ id, signal, setDetail }) => {
+				setDetail(i18n.t("app:tasks.paperReadStarting"));
 
-		const template = await resolveDefaultAgentTemplate();
-		const skillStyle = skillMentionStyleForTemplate(template);
-		const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
+				const template = await resolveDefaultAgentTemplate();
+				const skillStyle = skillMentionStyleForTemplate(template);
+				const userPrompt = buildPaperReaderUserPrompt(paperRel, skillStyle);
 
-		const accepted: RunOnceAccepted = await runOnce({
-			vaultPath: opts.vaultRoot,
-			workflow: "paper_reader",
-			target: paperRel,
-			prompt: userPrompt,
-			skillIds: [PAPER_READER_SKILL_ID],
-			autoApprove: true,
-			// Background workflow — never surface in Agent chat history.
-			hideFromChatHistory: true,
-		});
-		const cancelAgent = () => {
-			void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
-		};
-		if (cancellation.aborted) {
-			cancelAgent();
-			throw new BackgroundTaskCancelledError();
-		}
-		cancellation.addEventListener("abort", cancelAgent, { once: true });
-
-		updateBackgroundTask(taskId, {
-			detail: i18n.t("app:tasks.paperReadRunning"),
-		});
-
-		await waitForAgentSession(accepted.sessionId, taskId);
-
-		updateBackgroundTask(taskId, {
-			detail: i18n.t("app:tasks.paperReadMarking"),
-		});
-
-		await setPaperIsRead(opts.vaultRoot, paperRel, true);
-
-		completeBackgroundTask(taskId, i18n.t("app:tasks.paperReadDone"));
-	} catch (e) {
-		if (cancellation.aborted || isBackgroundTaskCancelledError(e)) {
-			if (!cancellation.aborted) {
-				// Keep the task in the same visible cancelled state when the Agent
-				// reports cancellation before the UI signal reaches this workflow.
-				updateBackgroundTask(taskId, {
-					status: "cancelled",
-					detail: i18n.t("app:tasks.cancelled"),
+				const accepted: RunOnceAccepted = await runOnce({
+					vaultPath: opts.vaultRoot,
+					workflow: "paper_reader",
+					target: paperRel,
+					prompt: userPrompt,
+					skillIds: [PAPER_READER_SKILL_ID],
+					autoApprove: true,
+					// Background workflow — never surface in Agent chat history.
+					hideFromChatHistory: true,
 				});
-			}
-			throw e;
-		}
-		const msg = e instanceof Error ? e.message : String(e);
-		failBackgroundTask(taskId, msg);
-		throw e;
+				const cancelAgent = () => {
+					void invoke("agent_cancel_run", { sessionId: accepted.sessionId });
+				};
+				if (signal.aborted) {
+					cancelAgent();
+					throw new Error(i18n.t("app:tasks.cancelled"));
+				}
+				signal.addEventListener("abort", cancelAgent, { once: true });
+
+				setDetail(i18n.t("app:tasks.paperReadRunning"));
+				await waitForAgentSession(accepted.sessionId, id);
+
+				setDetail(i18n.t("app:tasks.paperReadMarking"));
+				await setPaperIsRead(opts.vaultRoot, paperRel, true);
+				setDetail(i18n.t("app:tasks.paperReadDone"));
+			},
+		);
 	} finally {
-		releaseBackgroundTaskCancellation(taskId);
 		inflightReads.delete(paperRel);
 	}
 }

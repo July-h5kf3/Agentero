@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import i18n from "@/i18n";
-import { runBackgroundTask } from "@/lib/core/background-tasks";
+import { enqueueBackgroundTask } from "@/lib/core/background-tasks";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
 import {
@@ -229,7 +229,7 @@ export function ZoteroMigrateDialog({
 		setError(null);
 		setProgress({ current: 0, total: selectedItems.size });
 		try {
-			const res = await runBackgroundTask(
+			const res = await enqueueBackgroundTask(
 				{
 					kind: "import",
 					title: t("sidebar:zoteroMigrate.task"),
