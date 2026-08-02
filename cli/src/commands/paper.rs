@@ -469,7 +469,7 @@ fn delete(globals: &GlobalOpts, path: &str, files: bool) -> Result<Value, CliErr
         }));
     }
 
-    let result = agentero_lib::features::trash::trash_paths(&vault, &[path.clone()])?;
+    let result = agentero_lib::features::trash::trash_paths(&vault, std::slice::from_ref(&path))?;
     Ok(json!({
         "batchId": result.batch_id,
         "count": result.count,

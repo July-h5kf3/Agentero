@@ -41,10 +41,10 @@ describe("Markdown table of contents", () => {
 			'aria-current={active ? "location" : undefined}',
 		);
 		expect(tocComponent).toContain(
-			'active && "text-primary hover:text-primary"',
+			'active && "text-foreground hover:text-foreground"',
 		);
 		expect(tocComponent).toContain(
-			"h-1 bg-primary ring-2 ring-primary/20 group-hover/item:bg-primary",
+			"h-1 bg-foreground ring-2 ring-foreground/15 group-hover/item:bg-foreground",
 		);
 		expect(tocComponent).not.toContain("text-brand");
 		expect(tocComponent).not.toContain("bg-brand");
@@ -58,7 +58,7 @@ describe("Markdown table of contents", () => {
 
 		expect(tocComponent).toContain("group/toc absolute top-1/4 right-2 z-20");
 		expect(tocComponent).toContain(
-			"group-hover/toc:h-6 group-focus-within/toc:h-6",
+			"transition-[width] duration-200 ease-out hover:w-64 focus-within:w-64",
 		);
 		expect(tocComponent).toContain('1: "w-8"');
 		expect(tocComponent).toContain('2: "w-6"');

@@ -26,8 +26,6 @@ Agentero notes are plain Markdown files. You can edit them inside the app or wit
 > [!NOTE]
 > Obsidian-style callouts are supported.
 
-````
-
 Callouts render with icons and theme colors. Click the title or icon to edit the type and title inline. Supported types include `note`, `tip`, `info`, `warning`, `danger`, `success`, `question`, `quote`, `example`, and `failure`.
 
 ## Math
@@ -38,7 +36,7 @@ Block math:
 
 ```markdown
 $$\int_a^b f(x) dx$$
-````
+```
 
 > [!TIP]
 > Typing `\$a\$` keeps it as plain text; `$a$` is rendered as math.
@@ -52,7 +50,7 @@ Common commands:
 | Command        | Inserts                                        |
 | -------------- | ---------------------------------------------- |
 | `/mermaid`     | A live-rendered Mermaid diagram                |
-| `/code`        | A code block (pick language from the selector) |
+| `/code`        | A code block (pick a language from the selector) |
 | `/callout`     | An Obsidian callout (`note` type by default)   |
 | `/link`        | An internal wikilink `[[]]`                    |
 | `/heading 1–3` | A heading block                                |
@@ -60,7 +58,7 @@ Common commands:
 > [!NOTE]
 > `/` must be at the start of a line or after a space. It does not trigger inside code blocks or when a wikilink completion menu is open.
 
-## Diagrams (Mermaid)
+## Mermaid Diagrams
 
 Use `/mermaid` or select **Mermaid** from a code block's language selector. The diagram preview appears below the source code:
 
@@ -72,46 +70,46 @@ graph LR
 ```
 
 > [!TIP]
-> Mermaid diagrams are read-only previews — edit the source code above to change them.
+> Mermaid diagrams are read-only previews. Edit the source code above to update the diagram.
 
 ## Wikilinks
 
 Link to another note with double brackets:
 
 ```markdown
-[[03 Papers and Import]]
+[[01 Papers and Import]]
 ```
 
 Link to a heading inside a note:
 
 ```markdown
-[[03 Papers and Import#Library]]
+[[01 Papers and Import#Library]]
 ```
 
 Nested headings use the full path:
 
 ```markdown
-[[03 Papers and Import#Import#Zotero]]
+[[01 Papers and Import#Import#Zotero]]
 ```
 
-Use `@` for PDF highlights / visual marks (`id` from the Annotations panel copy action, or type `[[@` to complete):
+Use `@` for PDF highlights and visual annotations. Copy the `id` from the Annotations panel, or type `[[@` to open completion:
 
 ```markdown
 [[@annotationId]]
-[[papers/…/NOTES@annotationId|Title]]
+[[papers/…/NOTES@annotationId|Paper title]]
 ```
 
-- `#` heading · `^` block · `|` alias · `@` annotation; `tab` complete · `enter` confirm.
-- Annotation targets are paths (`NOTES` / `paper.pdf` / `papers/…/NOTES`), not display titles alone.
+- `#` heading · `^` text block · `|` display name · `@` annotation; press `tab` to complete and `enter` to confirm.
+- Annotation targets must use a path (`NOTES`, `paper.pdf`, or `papers/…/NOTES`), not only the paper's display title.
 
-Agentero indexes all `[[...]]` links for the **Backlinks** panel and the **Graph** view.
+Agentero indexes all `[[...]]` links for the **Backlinks** panel and **Graph** view.
 
 ## Embeds
 
-Prefix a wikilink with `!` to embed its content inline (read-only):
+Prefix a wikilink with `!` to embed its content as a read-only block:
 
 ```markdown
-![[03 Papers and Import#Library]]
+![[01 Papers and Import#Library]]
 ![[papers/…/NOTES@annotationId]]
 ```
 
@@ -122,7 +120,7 @@ You can embed:
 - **PDF pages** — `![[paper.pdf]]`
 - **PDF annotations** — `![[…@annotationId]]`
 
-Embedded content stays in sync with the source. Editing the original file updates all embeds automatically. The embed itself is read-only — edit the source file to change content.
+Embedded content stays in sync with the source. Editing the original file updates all embeds automatically. The embed itself is read-only; edit the source file to change it.
 
 ## Images
 
@@ -137,4 +135,4 @@ If an image is no longer referenced, it is cleaned up automatically.
 ## Next
 
 - [[02 Agent and Skills]]
-- [[03 Papers and Import]]
+- [[01 Papers and Import]]

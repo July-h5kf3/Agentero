@@ -75,21 +75,8 @@ pub const IDEA_EVALUATOR_SKILL: &str =
 pub const DEEP_RESEARCH_SKILL: &str =
     include_str!("../../../../templates/vault/.agents/skills/deep-research/SKILL.md");
 
-// Onboarding tutorial notes seeded under `notes/` for new/empty vaults.
-
-pub const ONBOARDING_MARKDOWN_EN: &str =
-    include_str!("../../../../templates/vault/notes/en/01 Markdown and Wikilinks.md");
-pub const ONBOARDING_AGENT_EN: &str =
-    include_str!("../../../../templates/vault/notes/en/02 Agent and Skills.md");
-pub const ONBOARDING_PAPERS_EN: &str =
-    include_str!("../../../../templates/vault/notes/en/03 Papers and Import.md");
-
-pub const ONBOARDING_MARKDOWN_ZH: &str =
-    include_str!("../../../../templates/vault/notes/zh-CN/01 Markdown 与双链.md");
-pub const ONBOARDING_AGENT_ZH: &str =
-    include_str!("../../../../templates/vault/notes/zh-CN/02 Agent 与 Skill.md");
-pub const ONBOARDING_PAPERS_ZH: &str =
-    include_str!("../../../../templates/vault/notes/zh-CN/03 论文导入与管理.md");
+// Onboarding tutorial notes are discovered by build.rs and embedded here.
+include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
 
 /// Vault-relative path → content for bundled skill seeding (no overwrite).
 /// Paths are under the vault root (e.g. `.agents/skills/...`).
@@ -280,19 +267,13 @@ pub fn resolve_vault_locale(locale: &str) -> &str {
 
 /// Vault-relative path → content for onboarding tutorial notes.
 /// Files are written only if missing so user edits survive app updates.
-pub(crate) fn bundled_onboarding_files(locale: &str) -> &'static [(&'static str, &'static str)] {
-    match resolve_vault_locale(locale) {
-        "zh-CN" => &[
-            ("notes/01 Markdown 与双链.md", ONBOARDING_MARKDOWN_ZH),
-            ("notes/02 Agent 与 Skill.md", ONBOARDING_AGENT_ZH),
-            ("notes/03 论文导入与管理.md", ONBOARDING_PAPERS_ZH),
-        ],
-        _ => &[
-            ("notes/01 Markdown and Wikilinks.md", ONBOARDING_MARKDOWN_EN),
-            ("notes/02 Agent and Skills.md", ONBOARDING_AGENT_EN),
-            ("notes/03 Papers and Import.md", ONBOARDING_PAPERS_EN),
-        ],
-    }
+pub(crate) fn bundled_onboarding_files(locale: &str) -> Vec<(&'static str, &'static str)> {
+    let resolved = resolve_vault_locale(locale);
+    BUNDLED_ONBOARDING_FILES
+        .iter()
+        .filter(|(entry_locale, _, _)| *entry_locale == resolved)
+        .map(|(_, rel, content)| (*rel, *content))
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -430,7 +411,7 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
 
     // Seed localized onboarding tutorial notes under `notes/` (no overwrite).
     let onboarding_files = bundled_onboarding_files(locale);
-    for (rel, content) in onboarding_files {
+    for (rel, content) in &onboarding_files {
         seed_file_if_missing(path, rel, content, &mut created)?;
     }
 

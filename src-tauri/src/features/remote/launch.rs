@@ -107,7 +107,7 @@ pub async fn ensure_remote_vault_skills(
     }
 
     let onboarding_files = locale.map(vault::bundled_onboarding_files);
-    if let Some(files) = onboarding_files {
+    if let Some(files) = onboarding_files.as_ref() {
         for (rel, content) in files {
             if session.fs.exists(rel).await? {
                 continue;
@@ -127,6 +127,7 @@ pub async fn ensure_remote_vault_skills(
     }
 
     let open_path = onboarding_files
+        .as_ref()
         .and_then(|files| files.first())
         .and_then(|(rel, _)| {
             created
