@@ -67,16 +67,23 @@ function TodoLi(props: ListProps) {
 	return (
 		<li
 			className={cn(
-				"list-none",
+				"relative list-none",
 				Boolean(props.element.checked) && "text-muted-foreground line-through",
 			)}
 		>
-			<div contentEditable={false}>
+			{/*
+			 * Plate `belowNodes` wraps *inside* the block (e.g. `<p class="py-1">`),
+			 * so the list already sits in the content box after paragraph padding.
+			 * Center the checkbox in the first line box (`1lh`) from `top-0` — do
+			 * not also apply `top-1` (that double-counts py-1 and drops the box
+			 * below the text, especially visible when zoomed; #143).
+			 */}
+			<div
+				contentEditable={false}
+				className="absolute top-0 -left-6 flex h-[1lh] w-4 items-center justify-center"
+			>
 				<Checkbox
-					className={cn(
-						"-left-6 absolute top-1",
-						readOnly && "pointer-events-none",
-					)}
+					className={cn(readOnly && "pointer-events-none")}
 					{...checkboxProps}
 				/>
 			</div>

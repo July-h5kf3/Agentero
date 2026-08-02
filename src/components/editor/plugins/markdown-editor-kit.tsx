@@ -190,9 +190,11 @@ export const MarkdownEditorKit = [
 	WikiBlockIdPlugin,
 
 	// Indentation + lists
+	// rem tracks root font-size (uiScale); 1.5rem == 24px at 100% so markers
+	// and todo checkboxes (`-left-6` = 1.5rem) stay aligned when zoomed (#143).
 	IndentPlugin.configure({
 		inject: { targetPlugins: listTargets },
-		options: { offset: 24 },
+		options: { offset: 1.5, unit: "rem" },
 	}),
 	ListPlugin.configure({
 		inputRules: [
