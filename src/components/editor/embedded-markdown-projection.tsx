@@ -9,6 +9,7 @@ import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
 import { MarkdownEditorKit } from "@/components/editor/plugins/markdown-editor-kit";
 import { WikiEmbedProjectionProvider } from "@/components/editor/wiki-embed-projection-context";
+import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { splitFrontmatter } from "@/lib/markdown/doc";
 
 export const EmbeddedMarkdownProjection = memo(
@@ -29,7 +30,7 @@ export const EmbeddedMarkdownProjection = memo(
 				const { body } = splitFrontmatter(markdown);
 				return currentEditor
 					.getApi(MarkdownPlugin)
-					.markdown.deserialize(body || " ");
+					.markdown.deserialize(prepareMarkdownForDeserialize(body || " "));
 			},
 		});
 

@@ -67,6 +67,7 @@ import {
 } from "@/lib/core/clipboard";
 import { errorMessage, notifyError, notifyWarning } from "@/lib/core/notify";
 import { cn } from "@/lib/core/utils";
+import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 import { joinFrontmatter, splitFrontmatter } from "@/lib/markdown/doc";
 import {
 	type EditorLinkTemplateKind,
@@ -308,7 +309,9 @@ export function MarkdownEditor({
 		value: (ed) => {
 			const { frontmatter, body } = splitFrontmatter(initialMarkdown);
 			frontmatterRef.current = frontmatter;
-			return ed.getApi(MarkdownPlugin).markdown.deserialize(body || " ");
+			return ed
+				.getApi(MarkdownPlugin)
+				.markdown.deserialize(prepareMarkdownForDeserialize(body || " "));
 		},
 	});
 
@@ -1357,7 +1360,9 @@ export function MarkdownEditor({
 			const prepared = await prepareMarkdownFormat({
 				currentSource: serialize,
 				deserialize: (body) =>
-					editor.getApi(MarkdownPlugin).markdown.deserialize(body),
+					editor
+						.getApi(MarkdownPlugin)
+						.markdown.deserialize(prepareMarkdownForDeserialize(body)),
 				formatSource: formatMarkdownSource,
 				snapshot,
 			});

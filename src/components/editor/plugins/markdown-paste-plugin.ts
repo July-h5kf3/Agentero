@@ -1,5 +1,6 @@
 import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlatePlugin, KEYS, type SlateEditor } from "platejs";
+import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 
 function isMarkdownPasteBlocked(editor: SlateEditor) {
 	return editor.api.some({
@@ -33,7 +34,7 @@ export const MarkdownPastePlugin = createSlatePlugin({
 
 			const fragment = editor
 				.getApi(MarkdownPlugin)
-				.markdown.deserialize(markdown);
+				.markdown.deserialize(prepareMarkdownForDeserialize(markdown));
 			if (fragment.length === 0) return insertData(dataTransfer);
 
 			editor.tf.insertFragment(fragment);
