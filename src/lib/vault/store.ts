@@ -17,8 +17,10 @@ import {
 	type FileNode,
 	getRecentVaults,
 	getSavedVaultPath,
+	isPathMissingError,
 	listVaultDirChildren,
 	loadVaultTree,
+	removeTreeNode,
 	replaceTreeNodeChildren,
 } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
@@ -168,7 +170,7 @@ export async function refreshTree(path: string): Promise<void> {
 		const message = e instanceof Error ? e.message : String(e);
 		if (getVaultPath() === path && treeLoadGeneration === generation) {
 			notifyError(message);
-			setTree([]);
+			// Keep the previous tree: a transient remote miss must not blank the sidebar.
 		}
 	} finally {
 		if (getVaultPath() === path && treeLoadGeneration === generation) {
@@ -206,9 +208,13 @@ export async function loadDirChildren(dirPath: string): Promise<void> {
 			);
 		}
 	} catch (e) {
-		if (getVaultPath() === vault && treeLoadGeneration === generation) {
-			notifyError(e instanceof Error ? e.message : String(e));
+		if (getVaultPath() !== vault || treeLoadGeneration !== generation) return;
+		// Path vanished mid-expand (e.g. remote delete): drop the ghost node quietly.
+		if (isPathMissingError(e)) {
+			setTree(removeTreeNode(vaultStore.getState().tree, dirPath));
+			return;
 		}
+		notifyError(e instanceof Error ? e.message : String(e));
 	}
 }
 

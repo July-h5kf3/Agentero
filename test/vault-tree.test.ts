@@ -7,9 +7,11 @@ import {
 	type FileNode,
 	isEagerTreeRel,
 	isMarkdownPath,
+	isPathMissingError,
 	normalizePathKey,
 	paperRelFromNotes,
 	pendingDirsAmongExpanded,
+	removeTreeNode,
 	replaceTreeNodeChildren,
 	resolveCreateParent,
 	shouldIgnoreTreeName,
@@ -164,6 +166,37 @@ describe("isEagerTreeRel", () => {
 		expect(isEagerTreeRel("src/agents")).toBe(false);
 		expect(isEagerTreeRel("thesis")).toBe(false);
 		expect(isEagerTreeRel("scripts")).toBe(false);
+	});
+});
+
+describe("isPathMissingError", () => {
+	it("matches SFTP / OS not-found messages", () => {
+		expect(
+			isPathMissingError(
+				new Error(
+					"sftp list /home/u/vault/papers/test: Sftp server reported error kind NoSuchFile, msg: Err Message: No such file",
+				),
+			),
+		).toBe(true);
+		expect(
+			isPathMissingError(new Error("ENOENT: no such file or directory")),
+		).toBe(true);
+		expect(isPathMissingError("directory does not exist")).toBe(true);
+		expect(isPathMissingError(new Error("permission denied"))).toBe(false);
+	});
+});
+
+describe("removeTreeNode", () => {
+	it("drops the target and its descendants", () => {
+		const next = removeTreeNode(tree, "/v/papers/x");
+		expect(treeFindNode(next, "/v/papers/x")).toBeUndefined();
+		expect(treeFindNode(next, "/v/papers/x/NOTES.md")).toBeUndefined();
+		expect(treeFindNode(next, "/v/papers")?.kind).toBe("directory");
+		expect(treeFindNode(next, "/v/notes/todo.md")?.kind).toBe("file");
+	});
+
+	it("is a no-op when the path is absent", () => {
+		expect(removeTreeNode(tree, "/v/missing")).toEqual(tree);
 	});
 });
 

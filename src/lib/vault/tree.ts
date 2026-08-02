@@ -116,6 +116,23 @@ type TreeAdapter = {
 	list(dirPath: string, rel: string): Promise<TreeListEntry[]>;
 };
 
+/**
+ * True when an FS / SFTP error means the path is gone (or never existed).
+ * Matches Host local tree semantics: missing dirs list as empty, not hard fail.
+ */
+export function isPathMissingError(error: unknown): boolean {
+	const msg = (
+		error instanceof Error ? error.message : String(error ?? "")
+	).toLowerCase();
+	return (
+		msg.includes("no such file") ||
+		msg.includes("nosuchfile") ||
+		msg.includes("not found") ||
+		msg.includes("enoent") ||
+		msg.includes("does not exist")
+	);
+}
+
 function remoteTreeAdapter(handle: string): TreeAdapter {
 	const sessionId = remoteSessionIdFromHandle(handle);
 	return {
@@ -133,6 +150,20 @@ function remoteTreeAdapter(handle: string): TreeAdapter {
 	};
 }
 
+/** List via adapter; missing paths yield `[]` (local Host `read_dir` parity). */
+async function listTreeEntries(
+	adapter: TreeAdapter,
+	dirPath: string,
+	rel: string,
+): Promise<TreeListEntry[]> {
+	try {
+		return await adapter.list(dirPath, rel);
+	} catch (e) {
+		if (isPathMissingError(e)) return [];
+		throw e;
+	}
+}
+
 async function buildTree(
 	adapter: TreeAdapter,
 	dirPath: string,
@@ -142,7 +173,7 @@ async function buildTree(
 ): Promise<FileNode[]> {
 	if (depth > 12) return [];
 
-	const entries = await adapter.list(dirPath, rel);
+	const entries = await listTreeEntries(adapter, dirPath, rel);
 	const nodes: FileNode[] = [];
 	const hasPaperMarker = entries.some(
 		(e) => e.isFile && PAPER_MARKER_FILE_NAMES.has(e.name),
@@ -159,7 +190,8 @@ async function buildTree(
 				entry.name === LAZY_PAPER_DIR_NAME
 			) {
 				// One-level probe so asset detection still sees TeX archives.
-				const sourceEntries = await adapter.list(
+				const sourceEntries = await listTreeEntries(
+					adapter,
 					entry.childPath,
 					entry.childRel,
 				);
@@ -332,6 +364,31 @@ export function replaceTreeNodeChildren(
 			}
 			return n;
 		});
+	return walk(nodes);
+}
+
+/**
+ * Remove a node (file or directory) and any of its descendants from the tree.
+ * Used after delete / when a lazy expand finds the path already gone remotely.
+ */
+export function removeTreeNode(
+	nodes: FileNode[],
+	targetPath: string,
+): FileNode[] {
+	const key = normalizePathKey(targetPath);
+	const walk = (list: FileNode[]): FileNode[] => {
+		const out: FileNode[] = [];
+		for (const n of list) {
+			const nKey = normalizePathKey(n.path);
+			if (nKey === key || nKey.startsWith(`${key}/`)) continue;
+			if (n.children?.length) {
+				out.push({ ...n, children: walk(n.children) });
+			} else {
+				out.push(n);
+			}
+		}
+		return out;
+	};
 	return walk(nodes);
 }
 

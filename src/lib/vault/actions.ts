@@ -35,6 +35,7 @@ import {
 	pickCreateVaultDirectory,
 	pickVaultDirectory,
 	removeRecentVault,
+	removeTreeNode,
 	saveVaultPath,
 	seededSkillIdsFromCreated,
 	vaultPathExists,
@@ -325,6 +326,13 @@ export async function trashPathsAndNotify(absPaths: string[]): Promise<void> {
 			.filter((r): r is string => Boolean(r));
 		await trashPaths(vaultPath, rels);
 		for (const p of valid) closeTabsUnderPath(p);
+		// Optimistic prune so a concurrent remote list of the deleted path
+		// cannot leave a ghost folder while refresh rebuilds.
+		let pruned = vaultStore.getState().tree;
+		for (const p of valid) {
+			pruned = removeTreeNode(pruned, p);
+		}
+		setTree(pruned);
 		const treeNorm = vaultStore
 			.getState()
 			.treeSelectedPath?.replace(/\\/g, "/")
