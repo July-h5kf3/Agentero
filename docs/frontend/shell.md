@@ -27,6 +27,7 @@
 
 - 左下角：下载、入库、导入导出、paper-reader 等。
 - Hover 实色不透明；任务可取消。
+- 论文资源下载的总体进度按顺序聚合 PDF 与 TeX：PDF 占前 50%，TeX 占后 50%，避免切换阶段时进度回退。
 - 实现：`src/lib/core/background-tasks.ts`。
 
 ## 弹层栈

@@ -81,6 +81,26 @@ function phaseLabel(phase: string): string {
 	return i18n.t("app:tasks.downloadPhaseAsset");
 }
 
+/**
+ * Map byte progress from one asset phase into the progress of the whole task.
+ * PDF and TeX are sequential, so a new phase must not reset the task to 0%.
+ */
+export function mapDownloadProgress(
+	phase: string,
+	progress: number | null,
+): number | null {
+	const clamped =
+		progress == null ? null : Math.max(0, Math.min(100, progress));
+	if (phase === "pdf") return clamped == null ? 0 : Math.round(clamped * 0.5);
+	if (phase === "tex") {
+		return clamped == null ? 50 : 50 + Math.round(clamped * 0.5);
+	}
+	// Parsing starts after asset downloads. Keep a determinate overall value
+	// until the task can be marked complete at 100%.
+	if (phase === "parse") return 90;
+	return clamped;
+}
+
 /** Vanilla store so plain modules can start/patch tasks without React. */
 export const backgroundTasksStore = createStore<Store>(() => ({
 	tasks: [],
@@ -195,7 +215,21 @@ export function updateBackgroundTask(
 	>,
 ): void {
 	const tasks = store().tasks.map((t) =>
-		t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t,
+		t.id === id && (t.status !== "cancelled" || patch.status === "cancelled")
+			? {
+					...t,
+					...patch,
+					// Progress events can arrive from different phases. Never let
+					// a late event make the task appear to move backwards.
+					progress:
+						patch.progress === undefined
+							? t.progress
+							: typeof patch.progress === "number" && t.progress != null
+								? Math.max(t.progress, patch.progress)
+								: patch.progress,
+					updatedAt: Date.now(),
+				}
+			: t,
 	);
 	setStore({ ...store(), tasks });
 }
@@ -283,7 +317,10 @@ async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
 				event.payload;
 			if (event.payload.phase === "parse") {
 				updateBackgroundTask(id, {
-					progress: null,
+					progress: mapDownloadProgress(
+						event.payload.phase,
+						event.payload.progress,
+					),
 					detail: phaseLabel(event.payload.phase),
 				});
 				return;
@@ -300,7 +337,10 @@ async function attachProgressListener(id: string): Promise<UnlistenFn | null> {
 				return;
 			}
 			updateBackgroundTask(id, {
-				progress: event.payload.progress,
+				progress: mapDownloadProgress(
+					event.payload.phase,
+					event.payload.progress,
+				),
 				detail:
 					totalBytes == null
 						? i18n.t("app:tasks.downloadBytesUnknown", {

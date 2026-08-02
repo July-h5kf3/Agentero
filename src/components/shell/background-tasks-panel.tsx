@@ -156,8 +156,13 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 				: t("tasks.activeCount", { count: active.length });
 
 	const chipProgress =
-		running?.progress != null && running.status === "running"
-			? running.progress
+		active.length > 0 && active.some((task) => task.progress != null)
+			? Math.round(
+					active
+						.filter((task) => task.progress != null)
+						.reduce((sum, task) => sum + (task.progress ?? 0), 0) /
+						active.filter((task) => task.progress != null).length,
+				)
 			: null;
 
 	return (
@@ -250,13 +255,13 @@ export function BackgroundTasksPanel({ className }: { className?: string }) {
 						<p className="truncate font-medium text-xs leading-tight">
 							{chipLabel}
 						</p>
-						{running?.detail && active.length > 0 ? (
-							<p className="truncate text-[10px] text-muted-foreground leading-tight">
-								{running.detail}
-							</p>
-						) : null}
 						{chipProgress != null ? (
-							<Progress value={chipProgress} className="mt-1 h-0.5" />
+							<div className="mt-1 flex items-center gap-1.5">
+								<Progress value={chipProgress} className="h-0.5 flex-1" />
+								<span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
+									{chipProgress}%
+								</span>
+							</div>
 						) : active.length > 0 ? (
 							<div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-muted">
 								<div className="h-full w-1/3 animate-pulse rounded-full bg-primary/70" />
