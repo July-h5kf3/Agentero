@@ -103,7 +103,7 @@ export type LookupBatchAddResult = {
 
 /**
  * Batch add papers by identifiers/URLs into `vaultRoot/parentDir/`.
- * Host parses, deduplicates, and imports each item sequentially.
+ * Host parses, deduplicates, and imports items with the configured limit.
  */
 export async function addPapersByIdentifiers(opts: {
 	vaultRoot: string;
