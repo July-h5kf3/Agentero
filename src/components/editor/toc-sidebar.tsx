@@ -17,11 +17,13 @@ const markerWidthByDepth = {
 	6: "w-2",
 } as const;
 
+const minimumHeadingCount = 3;
+
 export function TocSidebar(props: TocSideBarProps) {
 	const state = useTocSideBarState(props);
 	const { navProps, onContentClick } = useTocSideBar(state);
 
-	if (state.headingList.length === 0) return null;
+	if (state.headingList.length < minimumHeadingCount) return null;
 
 	return (
 		<nav
@@ -34,9 +36,8 @@ export function TocSidebar(props: TocSideBarProps) {
 		>
 			<div
 				className={cn(
-					"rounded-lg border border-transparent bg-transparent px-2 py-1",
-					"transition-[padding,background-color,border-color,box-shadow] duration-200 ease-out",
-					"group-hover/toc:p-2 group-focus-within/toc:p-2 motion-reduce:transition-none",
+					"rounded-lg border border-transparent bg-transparent p-2",
+					"transition-[background-color,border-color,box-shadow] duration-200 ease-out",
 					"group-hover/toc:border-border/60 group-hover/toc:bg-background/95 group-hover/toc:shadow-md",
 					"group-focus-within/toc:border-border/60 group-focus-within/toc:bg-background/95 group-focus-within/toc:shadow-md",
 				)}
@@ -57,11 +58,10 @@ export function TocSidebar(props: TocSideBarProps) {
 								aria-label={item.title}
 								data-active={active}
 								className={cn(
-									"group/item flex h-3 w-full items-center justify-end rounded-sm px-1 outline-none",
-									"transition-[height,background-color,color] duration-200 ease-out",
-									"group-hover/toc:h-6 group-focus-within/toc:h-6 motion-reduce:transition-none",
+									"group/item flex h-6 w-full items-center justify-end rounded-sm px-1 outline-none",
+									"transition-[background-color,color] duration-200 ease-out",
 									"text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-									active && "text-primary hover:text-primary",
+									active && "text-foreground hover:text-foreground",
 								)}
 								onClick={(event) => onContentClick(event, item, "smooth")}
 							>
@@ -87,7 +87,7 @@ export function TocSidebar(props: TocSideBarProps) {
 										] ?? markerWidthByDepth[6],
 										"group-hover/item:bg-muted-foreground/70",
 										active &&
-											"h-1 bg-primary ring-2 ring-primary/20 group-hover/item:bg-primary",
+											"h-1 bg-foreground ring-2 ring-foreground/15 group-hover/item:bg-foreground",
 									)}
 								/>
 							</button>

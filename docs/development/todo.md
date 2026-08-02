@@ -4,6 +4,7 @@
 
 ## 0.3 — 入库与 Agent 补强
 
+- [x] Markdown 目录：标题数量阈值、中性色高亮与稳定 hover 布局（[#155](https://github.com/poco-ai/Agentero/issues/155)）
 - [ ] 关键词/描述 → Agent 候选列表确认后入库
 - [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [../backend/skill-import.md](../backend/skill-import.md)；首版）
 - [ ] 本机 Translator sidecar 捆绑（可选）
