@@ -108,6 +108,19 @@ pub fn run() {
     {
         builder = builder.on_menu_event(|app, event| {
             let id = event.id().as_ref();
+            if id == "close_tab_or_window" {
+                // Cmd+W is app-global on macOS. When Settings is focused, close
+                // that native window instead of forwarding the command to the
+                // main renderer, where it would close the active document tab.
+                if let Some(settings) =
+                    app.get_webview_window(crate::features::window::commands::SETTINGS_WINDOW_LABEL)
+                {
+                    if settings.is_focused().unwrap_or(false) {
+                        let _ = settings.close();
+                        return;
+                    }
+                }
+            }
             if id == "new_window" {
                 // `window_new` is async so webview creation never runs inside this
                 // main-thread menu callback (see its doc comment).

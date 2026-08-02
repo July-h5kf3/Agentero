@@ -59,9 +59,13 @@ export function SettingsNativeRoot() {
 		const onKeyDown = (event: KeyboardEvent) => {
 			const isComma = event.key === "," || event.code === "Comma";
 			const isEsc = event.key === "Escape";
+			const isCloseWindow =
+				(event.key === "w" || event.code === "KeyW") &&
+				(event.metaKey || event.ctrlKey);
 			const metaOrCtrl = event.metaKey || event.ctrlKey;
 			if (
 				isEsc ||
+				(isCloseWindow && !event.altKey && !event.shiftKey) ||
 				(isComma && metaOrCtrl && !event.altKey && !event.shiftKey)
 			) {
 				event.preventDefault();
