@@ -16,27 +16,22 @@ export const CalloutPlugin = createPlatePlugin({
 	node: { isElement: true },
 })
 	.withComponent(CalloutElement)
-	.overrideEditor(({ editor, tf: { insertBreak, selectAll } }) => ({
+	.overrideEditor(({ editor, tf: { insertBreak } }) => ({
 		transforms: {
 			insertBreak() {
 				if (insertCalloutParagraphBreak(editor)) return;
 				insertBreak();
 			},
 			selectAll() {
-				const callout = editor.api.above({
-					match: { type: editor.getType(KEYS.callout) },
-				});
-				const calloutRange = callout && editor.api.range(callout[1]);
+				const documentRange = editor.api.range([]);
+				if (!documentRange) return true;
 				if (
-					callout &&
-					calloutRange &&
-					(!editor.selection ||
-						!RangeApi.equals(editor.selection, calloutRange))
+					!editor.selection ||
+					!RangeApi.equals(editor.selection, documentRange)
 				) {
-					editor.tf.select(callout[1]);
-					return true;
+					editor.tf.select(documentRange);
 				}
-				return selectAll();
+				return true;
 			},
 		},
 	}));

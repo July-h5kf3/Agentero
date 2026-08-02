@@ -435,7 +435,7 @@ describe("Obsidian callout Markdown model", () => {
 		]);
 	});
 
-	it("selects the current callout before selecting the whole document", () => {
+	it("selects the whole document from inside a callout", () => {
 		const editor = createSlateEditor({
 			plugins: [
 				TestParagraphPlugin,
@@ -465,8 +465,8 @@ describe("Obsidian callout Markdown model", () => {
 		editor.tf.selectAll();
 
 		expect(editor.selection).toEqual({
-			anchor: { path: [1, 0, 0], offset: 0 },
-			focus: { path: [1, 1, 0], offset: 6 },
+			anchor: { path: [0, 0], offset: 0 },
+			focus: { path: [2, 0], offset: 5 },
 		});
 	});
 

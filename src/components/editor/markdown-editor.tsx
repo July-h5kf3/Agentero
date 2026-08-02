@@ -1087,7 +1087,44 @@ export function MarkdownEditor({
 
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
+			const target = event.target;
+			const isEditorTarget =
+				target instanceof HTMLElement &&
+				target.closest("[data-slate-editor]") !== null &&
+				target.closest("input, textarea, select, [contenteditable='false']") ===
+					null;
+			if (!isEditorTarget) return;
+
 			if (!event.nativeEvent.isComposing) {
+				if (
+					(event.metaKey || event.ctrlKey) &&
+					!event.shiftKey &&
+					!event.altKey &&
+					event.key.toLowerCase() === "a"
+				) {
+					// Handle Select All before browser/Slate default handling so
+					// the editor selection and the native DOM selection stay in sync.
+					event.preventDefault();
+					event.stopPropagation();
+					const scrollRoot = editorContainerRef.current;
+					const scrollTop = scrollRoot?.scrollTop ?? 0;
+					const scrollLeft = scrollRoot?.scrollLeft ?? 0;
+					editor.tf.selectAll();
+					if (scrollRoot) {
+						// The selection focus is the document end, so Plate may
+						// scroll there while synchronizing the native selection.
+						const restoreScroll = () => {
+							scrollRoot.scrollTop = scrollTop;
+							scrollRoot.scrollLeft = scrollLeft;
+						};
+						restoreScroll();
+						window.requestAnimationFrame(() => {
+							restoreScroll();
+							window.requestAnimationFrame(restoreScroll);
+						});
+					}
+					return;
+				}
 				if (completionControllerRef.current?.handleKeyDown(event)) {
 					event.stopPropagation();
 					return;
