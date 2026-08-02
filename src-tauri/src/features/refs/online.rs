@@ -58,7 +58,7 @@ pub async fn fetch_references(doi: Option<&str>, arxiv_id: Option<&str>) -> Onli
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    crate::features::network::client_builder()
         .timeout(Duration::from_secs(20))
         .user_agent(USER_AGENT)
         .redirect(reqwest::redirect::Policy::limited(5))

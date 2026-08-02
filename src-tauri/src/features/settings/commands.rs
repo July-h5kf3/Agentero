@@ -21,11 +21,19 @@ pub fn settings_get(store: State<'_, AppSettingsStore>) -> ApiResult<SettingsGet
 pub fn settings_set(
     app: AppHandle,
     store: State<'_, AppSettingsStore>,
+    agents: State<'_, crate::features::agent::AgentRegistry>,
     connector: State<'_, Arc<ConnectorController>>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
+    if let Err(e) = crate::features::network::configure_proxy(
+        settings.network_proxy_enabled,
+        &settings.network_proxy_url,
+    ) {
+        return map_err(e);
+    }
     match store.set(settings) {
         Ok(s) => {
+            let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
             let _ = connector.set_port(s.connector_port);
             // Keep every window's settings cache fresh (settings window, main windows).
             let _ = app.emit("settings:changed", &s);
@@ -42,10 +50,18 @@ pub fn settings_set(
 pub fn settings_set(
     app: AppHandle,
     store: State<'_, AppSettingsStore>,
+    agents: State<'_, crate::features::agent::AgentRegistry>,
     settings: AppSettings,
 ) -> ApiResult<AppSettings> {
+    if let Err(e) = crate::features::network::configure_proxy(
+        settings.network_proxy_enabled,
+        &settings.network_proxy_url,
+    ) {
+        return map_err(e);
+    }
     match store.set(settings) {
         Ok(s) => {
+            let _ = agents.set_proxy(s.network_proxy_enabled, s.network_proxy_url.clone());
             let _ = app.emit("settings:changed", &s);
             ApiResult::ok(s)
         }

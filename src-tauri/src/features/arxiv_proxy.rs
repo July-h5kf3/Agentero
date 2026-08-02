@@ -33,7 +33,7 @@ pub fn handle(request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchem
 
     tauri::async_runtime::spawn(async move {
         let result = async {
-            let client = reqwest::Client::builder()
+            let client = crate::features::network::client_builder()
                 .redirect(reqwest::redirect::Policy::limited(5))
                 .build()?;
             let remote = client.get(url).send().await?;

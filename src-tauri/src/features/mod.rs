@@ -9,6 +9,7 @@ pub mod bridge;
 pub mod catalog;
 pub mod connector;
 pub mod import;
+pub mod network;
 pub mod refs;
 pub mod remote;
 pub mod search;

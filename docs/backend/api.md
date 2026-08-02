@@ -1887,6 +1887,8 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 - **参数**：`{ settings: AppSettings }`（camelCase，与前端 `src/lib/settings` 同构）
 - **返回**：规范化后的 `AppSettings`（写盘 + 更新 Host 内存）
 - **事件**：保存成功后向**所有窗口** `emit("settings:changed", AppSettings)`（规范化后的快照）。前端 `initSettingsSync()`（`src/lib/settings`）监听该事件更新各窗口内存缓存并通知订阅者（`subscribeSettings`），保证各窗口的设置实时一致。
+- `networkProxyEnabled` / `networkProxyUrl` 是 Host 级网络代理配置；启用后所有 Host
+  创建的 reqwest HTTP(S)/SOCKS 请求和本地/远端 Agent 进程的代理环境使用该配置。
 - **链接改名策略**：`autoUpdateInternalLinks` 为 `"ask"`（默认）或 `"always"`；未知值规范化为 `"ask"`。它只控制可信**本地外部** rename 的 repair，Agentero 发起的显式 rename/move 始终走单次事务预检，remote Vault 不自动修复。
 
 > 设置文件绝对路径已包含在 `settings_get` 返回的 `path` 字段中（About / 诊断用），无独立 command。

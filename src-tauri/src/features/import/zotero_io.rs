@@ -455,7 +455,7 @@ fn resolve_base(override_url: Option<&str>) -> String {
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
-    reqwest::Client::builder()
+    crate::features::network::client_builder()
         .timeout(timeout)
         .user_agent(USER_AGENT)
         .redirect(reqwest::redirect::Policy::limited(10))

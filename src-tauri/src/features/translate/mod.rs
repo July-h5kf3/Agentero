@@ -245,7 +245,7 @@ fn resolve_timeout(timeout_ms: Option<u32>) -> Duration {
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
-    reqwest::Client::builder()
+    crate::features::network::client_builder()
         .timeout(timeout)
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()

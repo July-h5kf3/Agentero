@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { NetworkProxyRow } from "@/components/settings/agent-common-rows";
 import {
 	PageTitle,
 	SettingsGroup,
@@ -35,6 +36,7 @@ import {
 	AUTO_UPDATE_INTERNAL_LINKS,
 	type AutoUpdateInternalLinks,
 } from "@/lib/settings";
+import { DEFAULT_NETWORK_PROXY_URL } from "@/lib/settings/defaults";
 
 export function GeneralPane({
 	settings,
@@ -46,6 +48,12 @@ export function GeneralPane({
 	hostContext: SettingsHostContext;
 }) {
 	const { t } = useTranslation("settings");
+	const [proxyUrlDraft, setProxyUrlDraft] = useState(settings.networkProxyUrl);
+
+	useEffect(() => {
+		setProxyUrlDraft(settings.networkProxyUrl);
+	}, [settings.networkProxyUrl]);
+
 	return (
 		<>
 			<PageTitle title={t("general.title")} />
@@ -117,6 +125,23 @@ export function GeneralPane({
 						</SelectContent>
 					</Select>
 				</SettingsRow>
+				<NetworkProxyRow
+					htmlFor="network-proxy-enabled"
+					label={t("general.networkProxy.label")}
+					description={t("general.networkProxy.description")}
+					proxyUrl={proxyUrlDraft}
+					proxyEnabled={settings.networkProxyEnabled}
+					onProxyUrlChange={setProxyUrlDraft}
+					onCommitProxyUrl={() =>
+						patch({
+							networkProxyUrl:
+								proxyUrlDraft.trim() || DEFAULT_NETWORK_PROXY_URL,
+						})
+					}
+					onToggleProxy={(networkProxyEnabled) =>
+						patch({ networkProxyEnabled })
+					}
+				/>
 			</SettingsGroup>
 			<ConnectorSettingsBlock settings={settings} patch={patch} />
 			<RemoteCacheSettingsBlock />

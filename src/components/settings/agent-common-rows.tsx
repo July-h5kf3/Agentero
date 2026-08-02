@@ -18,10 +18,11 @@ import { SettingsRow } from "./settings-layout";
 
 type Patch = (p: Partial<AppSettings>) => void;
 
-/** Proxy URL input + enable switch (local and remote Agent panes). */
-export function AgentProxyRow({
+/** Shared network proxy URL input + enable switch. */
+export function NetworkProxyRow({
 	htmlFor,
 	label,
+	description,
 	proxyUrl,
 	proxyEnabled,
 	onProxyUrlChange,
@@ -30,6 +31,7 @@ export function AgentProxyRow({
 }: {
 	htmlFor: string;
 	label: string;
+	description?: string;
 	proxyUrl: string;
 	proxyEnabled: boolean;
 	onProxyUrlChange: (url: string) => void;
@@ -37,7 +39,7 @@ export function AgentProxyRow({
 	onToggleProxy: (enabled: boolean) => void;
 }) {
 	return (
-		<SettingsRow label={label} htmlFor={htmlFor}>
+		<SettingsRow label={label} description={description} htmlFor={htmlFor}>
 			<div className="flex items-center gap-2">
 				<Input
 					value={proxyUrl}

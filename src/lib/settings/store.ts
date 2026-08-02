@@ -278,6 +278,17 @@ function normalizePartial(
 			.trim()
 			.replace(/\/+$/, "");
 	}
+	if (typeof parsed.networkProxyEnabled !== "boolean") {
+		merged.networkProxyEnabled = DEFAULT_SETTINGS.networkProxyEnabled;
+	}
+	if (
+		typeof parsed.networkProxyUrl !== "string" ||
+		!parsed.networkProxyUrl.trim()
+	) {
+		merged.networkProxyUrl = DEFAULT_SETTINGS.networkProxyUrl;
+	} else {
+		merged.networkProxyUrl = parsed.networkProxyUrl.trim();
+	}
 	if (!isPaperTreeLabelMode(merged.paperTreeLabelMode)) {
 		merged.paperTreeLabelMode = DEFAULT_SETTINGS.paperTreeLabelMode;
 	}
@@ -302,6 +313,13 @@ function normalizePartial(
 	}
 	if (typeof parsed.connectorEnabled !== "boolean") {
 		merged.connectorEnabled = DEFAULT_SETTINGS.connectorEnabled;
+	}
+	if (
+		!Number.isInteger(merged.batchImportConcurrency) ||
+		merged.batchImportConcurrency < 1 ||
+		merged.batchImportConcurrency > 10
+	) {
+		merged.batchImportConcurrency = DEFAULT_SETTINGS.batchImportConcurrency;
 	}
 	if (
 		merged.theme !== "system" &&

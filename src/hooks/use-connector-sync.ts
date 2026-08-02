@@ -17,7 +17,7 @@ import {
 	startBackgroundTask,
 	updateBackgroundTask,
 } from "@/lib/core/background-tasks";
-import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import {
 	type ConnectorItemSaved,
@@ -108,13 +108,6 @@ export function useConnectorSync(): void {
 							.replace(/\\/g, "/")
 							.replace(/\/+$/, "")}/${rel}`;
 						openPaper(paperAbs);
-					}
-					if (p?.title) {
-						notifySuccess(
-							p.deduped
-								? t("sidebar:connector.deduped", { title: p.title })
-								: t("sidebar:connector.saved", { title: p.title }),
-						);
 					}
 				}),
 			);

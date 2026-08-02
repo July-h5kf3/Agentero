@@ -12,6 +12,8 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 - Connector 返回的 Zotero 标签会以 `@zotero:` 前缀保存在 catalog 中，用于保留来源信息；
   这类内部标签不会显示在 Library、Paper Info 或标签筛选中。
 - 远程：stage 后 SFTP；catalog 经 work mirror。
+- 保存请求只写入 paper 壳和 catalog，PDF/TeX 在后台下载；后台单篇资源阶段最多
+  运行 3 分钟，超时会通过 `connector:progress` 报错，不会让任务永久挂起。
 
 ## 命令 / 事件
 

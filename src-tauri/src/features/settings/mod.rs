@@ -11,12 +11,17 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
+pub const DEFAULT_NETWORK_PROXY_URL: &str = "http://127.0.0.1:7890";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     #[serde(default = "default_translator_base_url")]
     pub translator_base_url: String,
+    #[serde(default)]
+    pub network_proxy_enabled: bool,
+    #[serde(default = "default_network_proxy_url")]
+    pub network_proxy_url: String,
     #[serde(default = "default_paper_tree_label_mode")]
     pub paper_tree_label_mode: String,
     #[serde(default = "default_paper_tree_sort_mode")]
@@ -111,6 +116,8 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             translator_base_url: DEFAULT_TRANSLATOR_BASE_URL.to_string(),
+            network_proxy_enabled: false,
+            network_proxy_url: default_network_proxy_url(),
             paper_tree_label_mode: default_paper_tree_label_mode(),
             paper_tree_sort_mode: default_paper_tree_sort_mode(),
             auto_update_internal_links: default_auto_update_internal_links(),
@@ -139,6 +146,9 @@ fn default_true() -> bool {
 }
 fn default_translator_base_url() -> String {
     DEFAULT_TRANSLATOR_BASE_URL.to_string()
+}
+fn default_network_proxy_url() -> String {
+    DEFAULT_NETWORK_PROXY_URL.to_string()
 }
 fn default_paper_tree_label_mode() -> String {
     "title-author".into()
@@ -319,6 +329,10 @@ fn normalize(s: &mut AppSettings) {
     } else {
         url.to_string()
     };
+    s.network_proxy_url = s.network_proxy_url.trim().to_string();
+    if s.network_proxy_url.is_empty() {
+        s.network_proxy_url = default_network_proxy_url();
+    }
 
     const LABEL_MODES: &[&str] = &["title-author", "title", "author-year-title", "folder"];
     if !LABEL_MODES.contains(&s.paper_tree_label_mode.as_str()) {

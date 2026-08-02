@@ -125,15 +125,9 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 					skipped: result.skipped.length,
 					failed: result.errors.length,
 				});
-				if (result.skillCandidates.length === 0 || result.errors.length > 0) {
-					if (
-						result.errors.length > 0 ||
-						(result.imported.length === 0 && result.skills.length === 0)
-					) {
-						notifyError(summary);
-					} else {
-						notifySuccess(summary);
-					}
+				if (result.errors.length > 0 ||
+					(result.imported.length === 0 && result.skills.length === 0)) {
+					notifyError(summary);
 				}
 
 				// Enqueue any newly imported papers that still lack assets.

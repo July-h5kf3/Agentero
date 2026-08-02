@@ -16,11 +16,12 @@ Agentero 使用 **BYOA**（Bring Your Own Agent）：Agent 由你安装和登录
 ## 添加 Agent
 
 1. 打开 **Settings**（`⌘,`）。
-2. 进入 **Agent**。
-3. 查看自动探测结果，或新增自定义 Agent。
-4. 检查可执行文件路径与参数。
-5. 选择默认 Agent。
-6. 发起一次测试对话，确认能访问当前 Vault。
+2. 如本机网络需要代理，在 **Settings → General → Network proxy** 配置；该配置同时用于论文、翻译、引用等 Host 请求和 Agent 对话。
+3. 进入 **Agent**。
+4. 查看自动探测结果，或新增自定义 Agent。
+5. 检查可执行文件路径与参数。
+6. 选择默认 Agent。
+7. 发起一次测试对话，确认能访问当前 Vault。
 
 若终端里能跑、应用内探测不到：图形应用的 PATH 可能与 shell 不同，请填写**绝对路径**。远程 Vault 时，Agent 装在**服务器**上，见 [打开远程 Vault](remote-vault.md)。
 

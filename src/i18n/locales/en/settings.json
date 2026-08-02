@@ -64,6 +64,14 @@
 			"ask": "Ask",
 			"always": "Always when safe"
 		},
+		"batchImportConcurrency": {
+			"label": "Import concurrency",
+			"value": "{{value}} simultaneous"
+		},
+		"networkProxy": {
+			"label": "Network proxy",
+			"description": "Used for Host requests and Agent conversations."
+		},
 		"connector": {
 			"label": "Zotero Connector compatibility",
 			"hint": "Quit local Zotero first",

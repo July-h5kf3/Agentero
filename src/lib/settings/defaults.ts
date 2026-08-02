@@ -10,6 +10,7 @@ export const DEFAULT_PDF_ASK_SETTINGS: PdfAskSettings = {
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
 export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
+export const DEFAULT_NETWORK_PROXY_URL = "http://127.0.0.1:7890";
 
 /**
  * Discrete UI scale presets exposed in Settings. Keyboard shortcuts and the
@@ -19,6 +20,8 @@ export const UI_SCALE_PRESETS = [0.8, 0.9, 1, 1.25, 1.5] as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
 	translatorBaseUrl: DEFAULT_TRANSLATOR_BASE_URL,
+	networkProxyEnabled: false,
+	networkProxyUrl: DEFAULT_NETWORK_PROXY_URL,
 	paperTreeLabelMode: "title-author",
 	paperTreeSortMode: "folder",
 	autoUpdateInternalLinks: "ask",

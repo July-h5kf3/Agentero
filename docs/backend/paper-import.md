@@ -50,6 +50,10 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 - 设置：`translatorBaseUrl`。
 - arXiv 的 `abs` / `pdf` / `html` / `src` / `e-print` URL 与裸 ID 都会先提取 ID；不会将 PDF 二进制 URL 交给 Translator 的网页解析器。
 - 补资源：`paper_download_assets`（单篇 / Library 批量）。
+- 网络资源阶段有整篇论文 `3 分钟`截止时间（`PAPER_ASSET_TIMEOUT`），覆盖 PDF
+  fallback、DOI 元数据查询、arXiv e-print 及 Connector 后台下载；单个 HTTP
+  请求仍使用更短的 reqwest timeout。超时不会回滚已经写入的 paper 壳和 catalog，
+  资源错误会保留在导入结果/Connector 进度中，后续可再次执行补资源。
 - 错误：全局 Toast；重复不破坏用户 NOTES。
 
 ## 可读正文

@@ -85,7 +85,8 @@ pub async fn scan_remote_agents(
 /// ACP initialize probe for one catalog template on the remote host.
 ///
 /// `proxy_url` is injected as remote `HTTP(S)_PROXY` when `proxy_enabled` (same
-/// Settings → Agent proxy as local; the proxy must be reachable **from the server**).
+/// Settings → General → Network proxy as local; the proxy must be reachable
+/// **from the server**).
 pub async fn probe_remote_template(
     registry: &RemoteRegistry,
     session_id: &str,

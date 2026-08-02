@@ -9,10 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	AgentCommonRows,
-	AgentProxyRow,
-} from "@/components/settings/agent-common-rows";
+import { AgentCommonRows } from "@/components/settings/agent-common-rows";
 import { AgentModelPicker } from "@/components/settings/agent-model-picker";
 import {
 	catalogNeedsProbe,
@@ -48,7 +45,6 @@ import {
 	probeCatalogAgent,
 	removeAgent,
 	scanCatalog,
-	setAgentProxy,
 	upsertAgent,
 } from "@/lib/agent";
 import { notifyError } from "@/lib/core/notify";
@@ -75,8 +71,6 @@ export function AgentPane({
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
 	const [formArgs, setFormArgs] = useState("");
-	const [proxyEnabled, setProxyEnabled] = useState(false);
-	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
 	const autoProbedRef = useRef(false);
@@ -107,8 +101,6 @@ export function AgentPane({
 			try {
 				const scan = await scanCatalog();
 				setCatalog(scan);
-				setProxyEnabled(scan.proxyEnabled);
-				setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
 				return scan;
 			} catch (e) {
 				notifyError(e instanceof Error ? e.message : String(e));
@@ -241,40 +233,6 @@ export function AgentPane({
 		void refreshPdfAskRegistry();
 	}, [catalog, refreshPdfAskRegistry]);
 
-	/**
-	 * Persist proxy then force re-probe (host clears last_probe_* on change).
-	 * Proxy switch stays enabled during the batch.
-	 */
-	const saveProxySettings = async (enabled: boolean, url: string) => {
-		if (!isTauri()) return;
-		setLoading(true);
-		try {
-			const saved = await setAgentProxy(enabled, url);
-			setProxyEnabled(saved.proxyEnabled);
-			setProxyUrl(saved.proxyUrl || "http://127.0.0.1:7890");
-			const scan = await scanOnce();
-			if (scan) {
-				await probeInstalled(scan, true);
-				await scanOnce();
-			}
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
-			await scanOnce();
-		} finally {
-			setLoading(false);
-			clearAllProbingKeys();
-		}
-	};
-
-	const onToggleProxy = async (v: boolean) => {
-		setProxyEnabled(v);
-		await saveProxySettings(v, proxyUrl);
-	};
-
-	const onCommitProxyUrl = async () => {
-		await saveProxySettings(proxyEnabled, proxyUrl);
-	};
-
 	const onRescanAndProbe = async () => {
 		await rescanAndProbe(true);
 	};
@@ -351,15 +309,6 @@ export function AgentPane({
 			<PageTitle title={t("agent.title")} />
 			<SettingsGroup>
 				<AgentCommonRows settings={settings} patch={patch} />
-				<AgentProxyRow
-					htmlFor="agent-proxy-enabled"
-					label={t("agent.proxy.label")}
-					proxyUrl={proxyUrl}
-					proxyEnabled={proxyEnabled}
-					onProxyUrlChange={setProxyUrl}
-					onCommitProxyUrl={() => void onCommitProxyUrl()}
-					onToggleProxy={(v) => void onToggleProxy(v)}
-				/>
 			</SettingsGroup>
 
 			<SettingsGroup>
@@ -737,27 +686,7 @@ export function RemoteAgentPane({
 	const [loading, setLoading] = useState(false);
 	const { probingKeys, setProbingKeys, clearProbingKey, clearAllProbingKeys } =
 		useProbingKeys();
-	const [proxyEnabled, setProxyEnabled] = useState(false);
-	const [proxyUrl, setProxyUrl] = useState("http://127.0.0.1:7890");
 	const sessionId = hostContext.sessionId;
-
-	// Same registry proxy as local Agent settings (injected into remote process env).
-	useEffect(() => {
-		if (!isTauri()) return;
-		let cancelled = false;
-		void scanCatalog()
-			.then((scan) => {
-				if (cancelled) return;
-				setProxyEnabled(scan.proxyEnabled);
-				setProxyUrl(scan.proxyUrl || "http://127.0.0.1:7890");
-			})
-			.catch(() => {
-				/* ignore */
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, []);
 
 	const scanOnce = useCallback(async (): Promise<CatalogEntry[] | null> => {
 		if (!isTauri()) {
@@ -854,31 +783,6 @@ export function RemoteAgentPane({
 		void rescanAndProbe(false);
 	}, [rescanAndProbe]);
 
-	const saveProxySettings = async (enabled: boolean, url: string) => {
-		if (!isTauri()) return;
-		setLoading(true);
-		try {
-			const saved = await setAgentProxy(enabled, url);
-			setProxyEnabled(saved.proxyEnabled);
-			setProxyUrl(saved.proxyUrl || "http://127.0.0.1:7890");
-			// Proxy is injected into remote agent env — re-probe after change.
-			await rescanAndProbe(true);
-		} catch (e) {
-			notifyError(e instanceof Error ? e.message : String(e));
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	const onToggleProxy = async (v: boolean) => {
-		setProxyEnabled(v);
-		await saveProxySettings(v, proxyUrl);
-	};
-
-	const onCommitProxyUrl = async () => {
-		await saveProxySettings(proxyEnabled, proxyUrl);
-	};
-
 	const onInstallAdapter = async (entry: CatalogEntry) => {
 		if (!isTauri()) return;
 		try {
@@ -902,18 +806,6 @@ export function RemoteAgentPane({
 
 			<SettingsGroup>
 				<AgentCommonRows settings={settings} patch={patch} idSuffix="-r" />
-				<AgentProxyRow
-					htmlFor="agent-proxy-enabled-r"
-					label={t("agent.proxy.label")}
-					proxyUrl={proxyUrl}
-					proxyEnabled={proxyEnabled}
-					onProxyUrlChange={setProxyUrl}
-					onCommitProxyUrl={() => void onCommitProxyUrl()}
-					onToggleProxy={(v) => void onToggleProxy(v)}
-				/>
-				<p className="border-b px-3.5 py-2 text-muted-foreground text-[11px] leading-relaxed last:border-b-0">
-					{t("agent.remote.proxyHint")}
-				</p>
 			</SettingsGroup>
 
 			{!isTauri() ? (

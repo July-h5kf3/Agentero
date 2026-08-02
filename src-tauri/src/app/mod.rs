@@ -79,6 +79,30 @@ pub fn run() {
     }
 
     builder = builder.setup(|app| {
+        let settings_store = app.state::<AppSettingsStore>();
+        let agents = app.state::<AgentRegistry>();
+        let mut settings = settings_store
+            .get()
+            .map(|result| result.settings)
+            .unwrap_or_default();
+        // Migrate the old Agent-only proxy once into the shared network setting.
+        if !settings.network_proxy_enabled {
+            if let Ok((enabled, url)) = agents.proxy_settings() {
+                if enabled {
+                    settings.network_proxy_enabled = true;
+                    settings.network_proxy_url = url;
+                    let _ = settings_store.set(settings.clone());
+                }
+            }
+        }
+        crate::features::network::configure_proxy(
+            settings.network_proxy_enabled,
+            &settings.network_proxy_url,
+        )?;
+        let _ = agents.set_proxy(
+            settings.network_proxy_enabled,
+            settings.network_proxy_url.clone(),
+        );
         // Native menu is macOS-only; the renderer re-syncs the locale on mount.
         #[cfg(target_os = "macos")]
         {

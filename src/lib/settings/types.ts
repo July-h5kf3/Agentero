@@ -78,6 +78,9 @@ export type AppSettings = {
 	 * Default: hosted poco-ai service.
 	 */
 	translatorBaseUrl: string;
+	/** Process-wide HTTP(S)/SOCKS proxy for Host requests and Agent traffic. */
+	networkProxyEnabled: boolean;
+	networkProxyUrl: string;
 	/**
 	 * How paper folders are labeled in the file tree (display-only).
 	 * Default: title · author.

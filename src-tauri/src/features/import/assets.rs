@@ -128,7 +128,17 @@ pub async fn ensure_paper_assets_with_progress(
     cookies: Option<&str>,
     progress: AssetProgressContext<'_>,
 ) -> Result<AssetDownloadResult, AppError> {
-    ensure_paper_assets_impl(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress).await
+    tokio::time::timeout(
+        super::PAPER_ASSET_TIMEOUT,
+        ensure_paper_assets_impl(paper_dir, id, arxiv_id, pdf_url, doi, cookies, progress),
+    )
+    .await
+    .map_err(|_| {
+        AppError::message(format!(
+            "asset download timeout after {}s",
+            super::PAPER_ASSET_TIMEOUT.as_secs()
+        ))
+    })?
 }
 
 /// Variant used by browser integrations that provide the page's cookie jar.
@@ -141,19 +151,28 @@ pub async fn ensure_paper_assets_with_cookies(
     doi: Option<&str>,
     cookies: Option<&str>,
 ) -> Result<AssetDownloadResult, AppError> {
-    ensure_paper_assets_impl(
-        paper_dir,
-        id,
-        arxiv_id,
-        pdf_url,
-        doi,
-        cookies,
-        AssetProgressContext {
-            app: None,
-            task_id: None,
-        },
+    tokio::time::timeout(
+        super::PAPER_ASSET_TIMEOUT,
+        ensure_paper_assets_impl(
+            paper_dir,
+            id,
+            arxiv_id,
+            pdf_url,
+            doi,
+            cookies,
+            AssetProgressContext {
+                app: None,
+                task_id: None,
+            },
+        ),
     )
     .await
+    .map_err(|_| {
+        AppError::message(format!(
+            "asset download timeout after {}s",
+            super::PAPER_ASSET_TIMEOUT.as_secs()
+        ))
+    })?
 }
 
 async fn ensure_paper_assets_impl(
@@ -316,7 +335,7 @@ async fn unpaywall_pdf_url(doi: &str) -> Option<String> {
         "https://api.unpaywall.org/v2/{}?email=agentero@users.noreply.github.com",
         doi.trim()
     );
-    let client = reqwest::Client::builder()
+    let client = crate::features::network::client_builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
         .build()
@@ -366,7 +385,7 @@ async fn crossref_pdf_urls(doi: &str) -> Vec<String> {
         "https://api.crossref.org/works/{}",
         doi.trim().replace(' ', "%20")
     );
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = crate::features::network::client_builder()
         .timeout(Duration::from_secs(20))
         .user_agent(USER_AGENT)
         .redirect(reqwest::redirect::Policy::limited(10))
@@ -621,7 +640,7 @@ pub(crate) async fn http_get_bytes_with_progress(
     cookies: Option<&str>,
     phase: &str,
 ) -> Result<Vec<u8>, AppError> {
-    let client = reqwest::Client::builder()
+    let client = crate::features::network::client_builder()
         .timeout(timeout)
         .user_agent(USER_AGENT)
         .redirect(reqwest::redirect::Policy::limited(10))

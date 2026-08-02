@@ -57,6 +57,14 @@
 			"ask": "询问",
 			"always": "始终（安全时）"
 		},
+		"batchImportConcurrency": {
+			"label": "导入并发数",
+			"value": "同时 {{value}} 个"
+		},
+		"networkProxy": {
+			"label": "网络代理",
+			"description": "用于 Host 请求和 Agent 对话。"
+		},
 		"connector": {
 			"label": "兼容 Zotero Connector",
 			"hint": "请先退出本地Zotero",

@@ -84,6 +84,14 @@ impl AgentRegistry {
         Ok(guard.clone())
     }
 
+    pub fn proxy_settings(&self) -> Result<(bool, String), AppError> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|_| AppError::message("agent registry lock poisoned"))?;
+        Ok((guard.proxy_enabled, normalize_proxy_url(&guard.proxy_url)))
+    }
+
     pub fn set_default(&self, id: Option<String>) -> Result<AgentRegistryState, AppError> {
         let mut guard = self
             .inner
@@ -532,9 +540,6 @@ fn apply_proxy_settings(state: &mut AgentRegistryState) {
 }
 
 fn apply_proxy_to_agent(agent: &mut AgentDescriptor, proxy_enabled: bool, proxy_url: &str) {
-    if matches!(agent.template, AgentTemplate::Custom) {
-        return;
-    }
     for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
         agent.env.remove(key);
     }

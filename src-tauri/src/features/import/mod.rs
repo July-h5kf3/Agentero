@@ -60,6 +60,13 @@ pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 /// Prefix for Zotero tags that are not user-created or are otherwise internal.
 pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
 
+/// Upper bound for the network asset phase of one paper import.
+///
+/// Individual requests have shorter reqwest timeouts, but an import may try
+/// several PDF fallbacks before fetching the arXiv source. Keep the whole
+/// phase bounded so one paper cannot hold an import task indefinitely.
+pub const PAPER_ASSET_TIMEOUT: Duration = Duration::from_secs(3 * 60);
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LookupImportArgs {
@@ -853,7 +860,7 @@ pub(crate) async fn resolve_metadata(
 }
 
 async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError> {
-    let client = reqwest::Client::builder()
+    let client = crate::features::network::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent("agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)")
         .build()
@@ -941,7 +948,7 @@ async fn fetch_arxiv_metadata(arxiv_id: &str) -> Result<PaperMeta, AppError> {
         "https://export.arxiv.org/api/query?id_list={}",
         urlencoding_encode(&bare)
     );
-    let client = reqwest::Client::builder()
+    let client = crate::features::network::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent("agentero-lookup/0.1")
         .build()
