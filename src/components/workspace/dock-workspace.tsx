@@ -137,7 +137,9 @@ function WorkspaceTab({
 	const middleClickRef = useRef(false);
 	const tab = tabsById.get(api.id) ?? null;
 	const canToggleHtml =
-		Boolean(tab?.htmlUrl) && (tab?.mode === "pdf" || tab?.mode === "html");
+		tab?.paperMeta?.type !== "html" &&
+		Boolean(tab?.htmlUrl) &&
+		(tab?.mode === "pdf" || tab?.mode === "html");
 
 	useEffect(() => {
 		const disposable = api.onDidTitleChange((event) => setTitle(event.title));

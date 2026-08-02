@@ -103,6 +103,7 @@ export function toggleTabHtmlMode(id: string): void {
 		prev.map((tab) => {
 			if (
 				tab.id !== id ||
+				tab.paperMeta?.type === "html" ||
 				!tab.htmlUrl ||
 				(tab.mode !== "pdf" && tab.mode !== "html")
 			) {

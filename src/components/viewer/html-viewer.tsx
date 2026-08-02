@@ -48,9 +48,8 @@ export function HtmlViewer({ srcUrl, className }: HtmlViewerProps) {
 
 	const trusted = isArxivHostedUrl(srcUrl);
 	const iframeUrl = trusted ? arxivReaderUrl(srcUrl) : srcUrl;
-	const sandbox = trusted
-		? "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-		: "allow-popups allow-popups-to-escape-sandbox";
+	const sandbox =
+		"allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox";
 
 	return (
 		<div

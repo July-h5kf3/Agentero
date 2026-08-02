@@ -265,8 +265,12 @@ pub fn map_zotero_item(item: &Value) -> Result<PaperMeta, AppError> {
         series: str_field(item, "series"),
         language: str_field(item, "language"),
         pdf_url,
-        html_url: None,
-        source_url: url,
+        html_url: if paper_type == "html" {
+            url.clone()
+        } else {
+            None
+        },
+        source_url: if paper_type == "html" { None } else { url },
         bibtex_key: None,
         zotero_item_type: Some(zotero_type),
         meta_source: str_field(item, "libraryCatalog"),

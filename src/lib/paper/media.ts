@@ -235,6 +235,10 @@ export function paperRemoteAssetsFromMetadata(meta: PaperMetadata | null): {
 	const arxiv = meta.arxiv_id ? arxivUrls(meta.arxiv_id) : null;
 	if (!pdfUrl && arxiv) pdfUrl = arxiv.pdf;
 	if (!htmlUrl && arxiv) htmlUrl = arxiv.html;
+	// Older webpage entries stored their URL only in source_url.
+	if (!htmlUrl && meta.type === "html") {
+		htmlUrl = resolveRemoteUrl(meta.source_url);
+	}
 
 	return { pdfUrl, htmlUrl };
 }
