@@ -24,38 +24,59 @@ pub const FREE_PROVIDERS: &[&str] = &[
     "libre",
 ];
 
-/// Fallback order for best-effort zh-CN translation (NOTES abstract etc.).
-/// Any single engine may be blocked or rate-limited, so callers walk this
-/// chain until one succeeds. Prefer engines that work better from CN networks
-/// (Bing → Volcengine → Tencent Transmart).
-pub const ZH_FALLBACK_CHAIN: &[&str] = &["bing", "huoshanweb", "tencenttransmart"];
+/// Default free engines raced in parallel for best-effort zh-CN (NOTES abstract).
+/// First non-empty success wins; remaining in-flight requests are dropped.
+/// Prefer engines that work better from CN networks.
+pub const ZH_RACE_PROVIDERS: &[&str] = &["bing", "huoshanweb", "tencenttransmart"];
 
 /// Per-engine HTTP timeout for [`free_mt_to_zh`] (import NOTES abstract, etc.).
 ///
 /// Bench (2026-08, 5 arXiv abstracts ≈0.9–1.8k chars, Host-equivalent endpoints):
-/// success p50 ≈0.5–0.9s, max ≈1.3s; chain winner (bing) ≈0.4–0.5s.
-/// 5s ≈4× headroom on a slow success; dead-engine wait drops from 15s → 5s;
-/// worst-case full chain 3×5s = 15s (was 45s).
+/// success p50 ≈0.5–0.9s, max ≈1.3s. Engines run **in parallel**, so wall time is
+/// ~min(successes) rather than sum of failures. 5s ≈4× headroom on a slow success;
+/// worst-case wall time is one timeout (5s), not 3×.
 pub const FREE_MT_ZH_TIMEOUT_MS: u32 = 5_000;
 
-/// zh-CN via the free-MT fallback chain; `None` when every engine fails.
+/// zh-CN via parallel free-MT race; `None` when every engine fails or returns empty.
+///
+/// Spawns one request per [`ZH_RACE_PROVIDERS`] entry and returns the **first**
+/// non-empty translation. Dropping unfinished tasks cancels their HTTP work.
 pub async fn free_mt_to_zh(text: &str) -> Option<String> {
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+
     let slice: String = text.chars().take(MAX_TEXT_CHARS).collect();
-    for provider in ZH_FALLBACK_CHAIN {
-        if let Ok(r) = translate_text(TranslateTextArgs {
-            text: slice.clone(),
-            source_lang: "auto".into(),
-            target_lang: "zh-CN".into(),
-            provider: (*provider).into(),
-            free_base_url: None,
-            timeout_ms: Some(FREE_MT_ZH_TIMEOUT_MS),
-        })
-        .await
-        {
-            let t = r.text.trim();
-            if !t.is_empty() {
-                return Some(t.to_string());
+    if slice.trim().is_empty() {
+        return None;
+    }
+
+    let mut tasks = FuturesUnordered::new();
+    for provider in ZH_RACE_PROVIDERS {
+        let text = slice.clone();
+        let provider = (*provider).to_string();
+        tasks.push(async move {
+            let r = translate_text(TranslateTextArgs {
+                text,
+                source_lang: "auto".into(),
+                target_lang: "zh-CN".into(),
+                provider,
+                free_base_url: None,
+                timeout_ms: Some(FREE_MT_ZH_TIMEOUT_MS),
+            })
+            .await
+            .ok()?;
+            let t = r.text.trim().to_string();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
             }
+        });
+    }
+
+    while let Some(result) = tasks.next().await {
+        if let Some(translated) = result {
+            // Drop `tasks` → cancel remaining engine futures / HTTP clients.
+            return Some(translated);
         }
     }
     None
@@ -624,18 +645,18 @@ mod tests {
         assert!(FREE_PROVIDERS.contains(&"bing"));
         assert!(FREE_PROVIDERS.contains(&"youdao"));
         assert!(FREE_PROVIDERS.contains(&"huoshanweb"));
-        for p in ZH_FALLBACK_CHAIN {
+        for p in ZH_RACE_PROVIDERS {
             assert!(
                 FREE_PROVIDERS.contains(p),
                 "{p} missing from FREE_PROVIDERS"
             );
         }
         assert_eq!(
-            ZH_FALLBACK_CHAIN,
+            ZH_RACE_PROVIDERS,
             &["bing", "huoshanweb", "tencenttransmart"]
         );
-        // Keep abstract-MT snappy: enough for slow success (~1.3s bench max),
-        // not so long that a dead engine stalls import for 15s+.
+        // Keep abstract-MT snappy: enough for slow success (~1.3s bench max);
+        // parallel race → wall ≈ one timeout, not 3×.
         assert!((3_000..=8_000).contains(&FREE_MT_ZH_TIMEOUT_MS));
     }
 

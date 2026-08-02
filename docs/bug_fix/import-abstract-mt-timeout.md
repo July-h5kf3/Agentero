@@ -4,7 +4,7 @@
 **影响面**：魔棒 / CLI `import id` 写 `NOTES.md` 摘要中译；Connector 后台摘要翻译  
 **相关代码**：
 
-- `src-tauri/src/features/translate/mod.rs` — `ZH_FALLBACK_CHAIN`、`FREE_MT_ZH_TIMEOUT_MS`、`free_mt_to_zh`
+- `src-tauri/src/features/translate/mod.rs` — `ZH_RACE_PROVIDERS`、`FREE_MT_ZH_TIMEOUT_MS`、`free_mt_to_zh`
 - `src-tauri/src/features/import/mod.rs` — `abstract_for_notes` / `write_paper_shell_opts`
 - `src-tauri/src/features/import/paper_import/mod.rs` — `translate_abstract: true`
 - 文档：[`../backend/translate.md`](../backend/translate.md)、[`../backend/identifier-lookup.md`](../backend/identifier-lookup.md)
@@ -87,7 +87,7 @@ resolve_metadata (Translator /web)
 
 | 路径 | 引擎来源 |
 |---|---|
-| **导入 `NOTES` 摘要** | Host 硬编码 `ZH_FALLBACK_CHAIN` + `free_mt_to_zh`，**不读** Settings |
+| **导入 `NOTES` 摘要** | Host 硬编码 `ZH_RACE_PROVIDERS` + `free_mt_to_zh`，**不读** Settings |
 | **PDF 划词翻译** | Settings → 翻译，默认 `provider: "bing"` |
 
 旧回退链：
@@ -147,21 +147,78 @@ Settings 默认 bing 的注释明确写了：比 Google gtx 在更多网络下�
 
 | 项 | 旧值 | 新值 |
 |---|---|---|
-| `ZH_FALLBACK_CHAIN` | googleapi → bing → youdao → 火山 → 腾讯 | **bing → huoshanweb → tencenttransmart** |
+| 引擎选择 | 串行兜底 googleapi → … → 腾讯 | **并行竞速** `ZH_RACE_PROVIDERS`：bing / 火山 / 腾讯，**最先成功** |
 | 导入摘要单引擎超时 | 15s | **5s**（`FREE_MT_ZH_TIMEOUT_MS`） |
-| 整链最坏 | 45s | **15s** |
+| 全失败 wall | 最长 ≈ 引擎数 × 超时 | **≈ 单次超时 5s**（并行） |
+| 全失败 NOTES | 回退英文原文 blockquote | **不写摘要块**（无翻译可显示） |
 
 未改：
 
 - `translate_text` 通用默认仍 30s（PDF 划词等）；
 - 设置页探测仍 5s/引擎；
-- Settings 默认 provider 仍为 bing（与导入链首位一致，但导入仍不读设置）。
+- Settings 默认 provider 仍为 bing（导入不读设置）。
 
-单测：`features::translate::tests::free_providers_listed` 断言链顺序与超时落在 3–8s 合理区间。
+单测：`features::translate::tests::free_providers_listed` 断言竞速引擎集合与超时落在 3–8s 合理区间。
 
 ---
 
-## 5. 复现与对照命令
+## 5. 更改前后最坏时长对照（实测）
+
+**方法**（2026-08-02）：Node 复现 Host 同序三引擎（bing / 火山 / 腾讯）与超时策略。
+
+- **更改前语义**：串行回退——前一个失败/超时后再试下一个；wall ≈ **各引擎耗时之和**。
+- **更改后语义**：并行竞速——同时发起，**最先非空成功**即返回；全失败 wall ≈ **max(各引擎)** ≈ 单次超时。
+- **挂死模拟**：引擎直到超时才失败（`Promise` hang + race abort），用于最坏时长。
+- **成功路径**：真实 arXiv 摘要 HTTP 调用（与 Host 端点一致）。
+
+### 5.1 最坏时长（三引擎全挂 / 全失败）
+
+| 场景 | 更改前（串行） | 更改后（并行） | 加速比 |
+|---|---:|---:|---:|
+| 理论：15s/引擎 ×3（历史超时） | **45 000 ms** | 15 000 ms | **3×** |
+| 实测：15s hang ×3 | **45 004 ms** | 15 002 ms | **3×** |
+| 理论：5s/引擎 ×3（当前超时） | **15 000 ms** | **5 000 ms** | **3×** |
+| 实测：5s hang ×3 | **15 004 ms** | **5 001 ms** | **3×** |
+| 实测：首个秒失败 + 后两路 hang@5s | **10 002 ms** | **5 001 ms** | **2×** |
+
+要点：
+
+1. **历史最坏**（串行 + 15s）：约 **45s** 卡在摘要 MT。  
+2. **仅改超时到 5s 仍串行**：最坏仍 **15s**。  
+3. **并行竞速 + 5s**：最坏约 **5s**（与单引擎超时同阶），相对历史最坏约 **9×**（45s → 5s）。
+
+```text
+wall_worst_sequential ≈ Σ timeout_i     (或 Σ fail_ms_i)
+wall_worst_parallel   ≈ max(timeout_i)  (全失败时)
+wall_success_parallel ≈ min(success_ms) (取最先成功)
+```
+
+### 5.2 成功路径 wall（同机、5s 超时，串行 vs 并行）
+
+| 论文 | 字数 | 串行 | 并行 | 并行赢家 |
+|---|---:|---:|---:|---|
+| 2607.21804 | 1051 | 1 563 ms (bing) | **458 ms** (bing) | — |
+| 1706.03762 | 1136 | 438 ms (bing) | **200 ms** (huoshanweb) | 火山更快抢先 |
+| 1412.6980 | 1109 | 1 290 ms (bing) | **227 ms** (huoshanweb) | 火山更快抢先 |
+| **平均** | — | **1 097 ms** | **295 ms** | ~**3.7×** |
+| **最大** | — | 1 563 ms | **458 ms** | ~**3.4×** |
+
+说明：串行在首位 bing 即成功时 wall ≈ bing 单次；并行可被更快的火山/腾讯抢先，成功路径也常 **明显低于** 串行首引擎耗时。
+
+### 5.3 相对导入总时长
+
+结合 §2.2 第 3 次导入 **~17s** 端到端（其中 ① 含 Translator + 摘要 MT ~10.6s）：
+
+| 摘要 MT 形态 | 对 ① 的贡献（量级） |
+|---|---|
+| 历史最坏串行 15s×3 | 可独占 **~45s**（远超下载） |
+| 串行 5s×3 最坏 | 可独占 **~15s** |
+| **并行 5s 最坏** | 封顶 **~5s** |
+| 并行成功（本机） | 常 **0.2–0.5s**，不再是主瓶颈 |
+
+---
+
+## 6. 复现与对照命令
 
 ```bash
 # Translator 可用性
@@ -173,11 +230,11 @@ cargo run -p agentero-cli -- vault create "$VAULT" -q
 /usr/bin/time -p ./target/debug/agentero --json -v "$VAULT" import id 2607.21804
 ```
 
-摘要 MT 可用与 Host 同 URL 的脚本自测三引擎；或依赖导入后 `NOTES.md` 是否为中文 + 导入总时长对照。
+摘要 MT 可用与 Host 同 URL 的脚本对照串行/并行 wall；或依赖导入后 `NOTES.md` 是否为中文 + 导入总时长对照。
 
 ---
 
-## 6. 后续可选
+## 7. 后续可选
 
 - 摘要 MT 与 PDF/TeX 下载 **并行**（现在写 shell 在下载前串行完成）。
 - 导入摘要是否 **跟随 Settings provider**（或提供开关关闭摘要中译）。
@@ -185,11 +242,13 @@ cargo run -p agentero-cli -- vault create "$VAULT" -q
 
 ---
 
-## 7. 时间线（调查日 2026-08-02）
+## 8. 时间线（调查日 2026-08-02）
 
 1. 探测 Translator 公网可用性 → 正常。  
 2. 导入 `2607.21804` 分阶段计时 → ① 元数据+摘要 MT 为主瓶颈。  
 3. 确认导入摘要用硬编码链、首位 googleapi、15s 超时。  
-4. 改链为 bing → 火山 → 腾讯。  
+4. 改引擎集合为 bing / 火山 / 腾讯。  
 5. 五篇摘要 bench → 成功 0.4–1.3s；超时定为 **5s**。  
-6. 文档与本复盘落盘。
+6. 文档与本复盘落盘。  
+7. 再改为 **三引擎并行竞速**（非串行回退）；全失败则 NOTES 不写摘要翻译块。  
+8. **串行 vs 并行最坏/成功 wall 实测**写入本节 §5（全挂 15s→5s；成功均值 ~1.1s→~0.3s）。

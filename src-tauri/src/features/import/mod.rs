@@ -1022,7 +1022,8 @@ pub(crate) fn paper_record_from_meta(path: &str, meta: &PaperMeta) -> PaperRecor
 }
 
 /// Write `{paper}/NOTES.md` shell (title + optional abstract blockquote).
-/// Abstract is shown in **Chinese** when free-MT succeeds (fallback: original text).
+/// Abstract is shown in **Chinese** when free-MT race succeeds; when every engine
+/// fails the blockquote is omitted (no English stand-in as "translation").
 /// Catalog still stores the original `abstract_text`.
 ///
 /// Annotations live in `{paper}/marks/*.json` at runtime (not part of the shell).
@@ -1045,12 +1046,16 @@ pub(crate) async fn write_paper_shell_opts(
         .filter(|s| !s.is_empty())
     {
         Some(a) => {
-            let display = if translate_abstract {
-                abstract_for_notes(a).await
+            if translate_abstract {
+                // Race free-MT engines; omit the blockquote when none succeed
+                // (do not fall back to English as a "translation").
+                match abstract_for_notes(a).await {
+                    Some(display) => format!("> {display}\n\n"),
+                    None => String::new(),
+                }
             } else {
-                a.to_string()
-            };
-            format!("> {display}\n\n")
+                format!("> {a}\n\n")
+            }
         }
         None => String::new(),
     };
@@ -1060,15 +1065,16 @@ pub(crate) async fn write_paper_shell_opts(
 }
 
 /// Prefer zh-CN translation of the abstract for NOTES.md display.
-/// Falls back to the original text when every free engine fails.
-async fn abstract_for_notes(text: &str) -> String {
+///
+/// - Already mostly CJK → return original.
+/// - Else race free-MT engines; `None` when every engine fails (caller omits
+///   the abstract block — no untranslated fallback).
+async fn abstract_for_notes(text: &str) -> Option<String> {
     use crate::features::translate::{free_mt_to_zh, looks_mostly_cjk};
     if looks_mostly_cjk(text) {
-        return text.to_string();
+        return Some(text.to_string());
     }
-    free_mt_to_zh(text)
-        .await
-        .unwrap_or_else(|| text.to_string())
+    free_mt_to_zh(text).await
 }
 
 pub(crate) fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
