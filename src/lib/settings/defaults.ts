@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	libraryColumns: DEFAULT_LIBRARY_COLUMNS.map((c) => ({ ...c })),
 	connectorEnabled: false,
 	connectorPort: 23119,
-	batchImportConcurrency: 3,
+	batchImportConcurrency: 5,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",

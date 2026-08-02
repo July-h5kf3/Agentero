@@ -380,7 +380,7 @@ pub async fn import_by_identifier_batch(
     }
 
     // Phase 2: run imports with a concurrency limit and emit count progress.
-    let concurrency = args.concurrency.unwrap_or(3).max(1);
+    let concurrency = args.concurrency.unwrap_or(5).max(1);
     let imported = Arc::new(Mutex::new(Vec::new()));
     let counter = Arc::new(AtomicUsize::new(0));
 

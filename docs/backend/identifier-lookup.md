@@ -503,7 +503,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
     texts: string[];                // 用户输入拆分后的原始 token 数组
     translatorBaseUrl?: string;     // 同上
     taskId?: string;                // 前端后台任务 id
-    concurrency?: number;           // 最大并发入库数，默认 3，范围 1–10
+    concurrency?: number;           // 最大并发入库数，默认 5，范围 1–10
   }
   ```
 
@@ -524,7 +524,7 @@ await ensure_paper_assets(paperDir, metadata); // PDF + arXiv LaTeX → source/
   1. 对 `texts` 逐条调 `extract_primary_identifier`；未识别则计入 `errors`。
   2. 按规范化 value（arXiv 去 version、DOI 小写等）去重：同一 batch 内重复 → `skipped`（`duplicate_in_batch`）。
   3. 对每条唯一标识符查 catalog：已存在同 `arxiv_id` / `doi` / `isbn` / `pmid` / `id` 的 paper → `skipped`（`already_in_library`）。
-  4. 剩余条目以 `concurrency`（默认 3，范围 1–10）为上限**并发**调 `import_by_identifier_with_progress`。单条失败继续下一条，错误文本加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
+  4. 剩余条目以 `concurrency`（默认 5，范围 1–10）为上限**并发**调 `import_by_identifier_with_progress`。单条失败继续下一条，错误文本加入 `errors`。并发上限可在 **Settings → General → Batch import concurrency** 调整。
   5. 返回全部 `imported` 条目；前端刷新树 / Library / wiki 后，对 `imported` 中仍缺资源的 paper 逐个加入下载队列，每篇对应一个独立的 `download` 后台任务，并按并发上限排队执行。
 
 魔棒界面使用通用的 `enqueueBackgroundTask` 为每个输入创建一个独立的前端任务。任务面板只展示每个标识符的状态和资源进度，不展示 Host 批处理的内部阶段或聚合计数；并发限制由同类任务共享的信号量执行。
@@ -726,7 +726,7 @@ arXiv URL 推导：
 | 单测 `parse` | arXiv URL/ID、DOI、version 剥离 |
 | 单测 `parent_dir` | 根 / 子文件夹 / paper 内文件 → 父目录 |
 | 单测 import | catalog 有 `pdf_url`；`source/` 不出现 pdf（设置关时） |
-| 单测 settings | `batchImportConcurrency` 越界时自动恢复为默认值 3 |
+| 单测 settings | `batchImportConcurrency` 越界时自动恢复为默认值 5 |
 
 ### 12.2 批量魔棒导入手动测试
 
@@ -736,9 +736,9 @@ arXiv URL 推导：
 | B-2 | Batch 内去重 + 已存在去重 | 库中已有 `1706.03762`；输入 `1706.03762\n1706.03762\n1810.04805` | 第 1 个 `1706.03762` → `skipped`（`already_in_library`）；第 2 个 → `skipped`（`duplicate_in_batch`）；`1810.04805` 导入成功；summary `Imported 1, skipped 2, failed 0` |
 | B-3 | 并发上限生效 | 设置 `Batch import concurrency = 2`，粘贴 5 个不同 ID | 任务面板显示 5 个独立任务；同时运行的导入任务不超过 2 个，其余任务排队；每个任务独立显示进度 |
 | B-4 | 非法/无法识别输入 | `1706.03762\nnot-a-valid-id` | `1706.03762` 导入成功；`not-a-valid-id` 进入 `errors`；summary `Imported 1, skipped 0, failed 1` 并走 error toast |
-| B-5 | 导入后逐篇补下缺失资源 | 6 个 ID 均缺 PDF/TeX | 导入完成后左下角任务列表出现 **6 个独立的 `Download paper assets`** 任务；默认并发 3 时前 3 个 `running`、后 3 个 `queued`；每完成一篇队列中下一篇自动开始 |
+| B-5 | 导入后逐篇补下缺失资源 | 6 个 ID 均缺 PDF/TeX | 导入完成后左下角任务列表出现 **6 个独立的 `Download paper assets`** 任务；默认并发 5 时前 5 个 `running`、后 1 个 `queued`；每完成一篇队列中下一篇自动开始 |
 | B-6 | 只打开第一篇成功论文 | 4 个 ID，其中第 2 个失败 | 成功后只打开第 1 篇成功导入的 paper tab；失败条目不打开；文件树展开到新论文路径 |
-| B-7 | 设置值越界自动恢复 | 手动把 `settings.json` 的 `batchImportConcurrency` 改为 `20` 或 `-1` | 启动后自动 clamp 为默认值 3；UI 中显示 3 |
+| B-7 | 设置值越界自动恢复 | 手动把 `settings.json` 的 `batchImportConcurrency` 改为 `20` 或 `-1` | 启动后自动 clamp 为默认值 5；UI 中显示 5 |
 
 ---
 

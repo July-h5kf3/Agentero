@@ -36,7 +36,7 @@
 - 36 个 tweakcn 预设：`src/themes/tweakcn.json`；`src/lib/ui/theme.ts` 注入 CSS 变量。
 - 刷新主题数据：`node scripts/fetch-tweakcn-themes.mjs`。
 - `uiScale`：80%–150% 五档，改 `html` font-size。
-- `batchImportConcurrency`：魔棒批量导入及后续资源下载的并发上限，范围 1–10，默认 3。
+- `batchImportConcurrency`：魔棒批量导入及后续资源下载的并发上限，范围 1–10，默认 5。
 
 ## i18n
 

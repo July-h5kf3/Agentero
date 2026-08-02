@@ -206,7 +206,7 @@ fn default_connector_port() -> u16 {
     23119
 }
 fn default_batch_import_concurrency() -> u32 {
-    3
+    5
 }
 fn default_translate_target() -> String {
     "ui".into()
