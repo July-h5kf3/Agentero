@@ -6,7 +6,7 @@ use crate::features::catalog::papers;
 use crate::features::connector::{ConnectorController, ConnectorProgress};
 use crate::features::import::{
     enrich_remote_urls, ensure_paper_assets_with_cookies, map_zotero_item, normalize_parent_dir,
-    paper_record_from_meta, write_paper_shell_opts, PaperMeta,
+    paper_record_from_meta, write_paper_shell_opts, PaperMeta, ZOTERO_INTERNAL_TAG_PREFIX,
 };
 use crate::features::remote::import_bridge::{unique_remote_paper_path, upload_tree};
 use crate::features::remote::RemoteSession;
@@ -480,6 +480,11 @@ pub async fn move_paper_folder_remote(
 /// ACM/IEEE et al. often only expose the PDF through the page the user is on.
 fn connector_paper_meta(item: &Value, page_uri: Option<&str>) -> Result<PaperMeta, AppError> {
     let mut meta = map_zotero_item(item)?;
+    for tag in &mut meta.tags {
+        if !tag.is_empty() && !tag.starts_with(ZOTERO_INTERNAL_TAG_PREFIX) {
+            *tag = format!("{ZOTERO_INTERNAL_TAG_PREFIX}{tag}");
+        }
+    }
     meta.meta_source = Some("zotero-connector".into());
     if meta.source_url.is_none() {
         if let Some(uri) = page_uri.filter(|s| !s.is_empty()) {
@@ -579,10 +584,18 @@ mod tests {
                 "title": "PDF",
                 "mimeType": "application/pdf",
                 "url": "https://arxiv.org/pdf/1706.03762"
-            }]
+            }],
+            "tags": [{"tag": "survey"}, {"tag": "machine learning"}]
         });
-        let meta = map_zotero_item(&item).expect("map");
+        let meta = connector_paper_meta(&item, None).expect("map");
         assert!(meta.arxiv_id.is_some() || meta.doi.is_some());
         assert!(!meta.title.is_empty());
+        assert_eq!(
+            meta.tags,
+            vec![
+                "@zotero:survey".to_string(),
+                "@zotero:machine learning".to_string()
+            ]
+        );
     }
 }

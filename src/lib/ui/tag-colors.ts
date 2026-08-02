@@ -25,6 +25,22 @@ export type PaperTag = {
 /** Accept catalog / API payloads: bare string or `{ name, color? }`. */
 export type PaperTagInput = string | PaperTag;
 
+/** Internal tags retained for provenance but omitted from user-facing tag UI. */
+export const CONNECTOR_TAG_PREFIX = "@zotero:";
+
+export function isConnectorTagName(name: string): boolean {
+	return name.trim().toLocaleLowerCase().startsWith(CONNECTOR_TAG_PREFIX);
+}
+
+export function isVisiblePaperTag(tag: PaperTagInput): boolean {
+	const name = typeof tag === "string" ? tag : tag?.name;
+	return typeof name === "string" && !isConnectorTagName(name);
+}
+
+export function visiblePaperTags(tags: readonly PaperTagInput[]): PaperTag[] {
+	return normalizePaperTags(tags.filter(isVisiblePaperTag));
+}
+
 type TagColorTokens = {
 	/** Solid swatch (picker + leading dot) */
 	swatch: string;

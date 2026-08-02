@@ -7,7 +7,10 @@
 //! Everything is local: no Translator is contacted.
 
 use super::map::{enrich_remote_urls, map_zotero_item};
-use super::{allocate_paper_path, normalize_parent_dir, paper_record_from_meta, write_paper_shell};
+use super::{
+    allocate_paper_path, normalize_parent_dir, paper_record_from_meta, write_paper_shell,
+    ZOTERO_INTERNAL_TAG_PREFIX,
+};
 use crate::core::error::AppError;
 use crate::features::catalog::papers;
 use rusqlite::{params, Connection};
@@ -695,10 +698,11 @@ fn read_creators(conn: &Connection, item_id: i64) -> Result<Vec<Value>, AppError
 }
 
 fn read_tags(conn: &Connection, item_id: i64) -> Result<Vec<String>, AppError> {
-    // Keep only manually-assigned tags. Zotero marks automatic tags (added by
-    // web translators, e.g. source/status tags) with a non-zero `type`; user
-    // tags are `type = 0`. Older libraries without a `type` column fall back to
-    // every tag.
+    // Zotero marks automatic tags (added by web translators, e.g. source/status
+    // tags) with a non-zero `type`; user tags are `type = 0`. Keep automatic
+    // tags for provenance, but mark them with the same hidden prefix used by
+    // the browser Connector. Older libraries without a `type` column fall back
+    // to treating every tag as user-created.
     let sql = "SELECT t.name, it.type FROM itemTags it JOIN tags t ON it.tagID = t.tagID WHERE it.itemID = ?1";
     let mut stmt = match conn.prepare(sql) {
         Ok(s) => s,
@@ -722,6 +726,8 @@ fn read_tags(conn: &Connection, item_id: i64) -> Result<Vec<String>, AppError> {
         let (name, tag_type) = row?;
         if tag_type == 0 {
             out.push(name);
+        } else {
+            out.push(format!("{ZOTERO_INTERNAL_TAG_PREFIX}{name}"));
         }
     }
     Ok(out)
@@ -1082,8 +1088,8 @@ mod tests {
         let tags = it.json["tags"].as_array().unwrap();
         assert!(tags.iter().any(|t| t["tag"] == "Transformers"));
         assert!(tags.iter().any(|t| t["tag"] == "nlp"));
-        // Automatic Zotero tags (type != 0) are filtered out.
-        assert!(!tags.iter().any(|t| t["tag"] == "_to_read"));
+        // Automatic Zotero tags (type != 0) are retained with the hidden prefix.
+        assert!(tags.iter().any(|t| t["tag"] == "@zotero:_to_read"));
     }
 
     #[test]

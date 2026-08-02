@@ -17,7 +17,7 @@
 | 排序 | 表头点击 |
 | 列 | 表头右键选列 / 拖拽排序；顺序+显隐持久化 `libraryColumns`；标题列不可隐藏 |
 | 滚动 | 横向 + 纵向 |
-| tags | 染色 chip；搜索框匹配标签子串 |
+| tags | 染色 chip；搜索框匹配用户标签子串；`@zotero:` Connector 内部标签不显示 |
 | Rescan | `paper_rescan`：盘上有、catalog 无则补齐 |
 | Download | 库内任一篇缺资源时批量补下 |
 | 导入/导出 | Library 工具栏；导出 BibTeX 亦可在 Library 节点右键 |
@@ -25,6 +25,7 @@
 ## Tags（前端）
 
 - Paper Info 增删 + Apple 8 色色盘 → `paper_set_tags`。
+- `@zotero:` 前缀标签属于 Connector 来源标记，只保留在 catalog 中，不参与展示、搜索和筛选；编辑普通标签时会保留这些内部标签。
 - 色板：`src/lib/ui/tag-colors.ts`。
 - CLI 标签见 [../backend/catalog.md](../backend/catalog.md)。
 

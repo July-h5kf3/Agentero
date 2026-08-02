@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
 	coercePaperTags,
+	isConnectorTagName,
 	isTagColorId,
 	normalizePaperTags,
 	tagChipStyle,
+	visiblePaperTags,
 } from "@/lib/ui/tag-colors";
 
 describe("tag colors", () => {
@@ -38,6 +40,14 @@ describe("tag colors", () => {
 			{ name: "plain" },
 			{ name: "colored", color: "teal" },
 			{ name: "bad" },
+		]);
+	});
+
+	it("recognizes and hides connector provenance tags", () => {
+		expect(isConnectorTagName("@zotero:survey")).toBe(true);
+		expect(isConnectorTagName("survey")).toBe(false);
+		expect(visiblePaperTags(["survey", "@zotero:machine learning"])).toEqual([
+			{ name: "survey" },
 		]);
 	});
 

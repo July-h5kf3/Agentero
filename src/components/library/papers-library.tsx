@@ -65,7 +65,7 @@ import {
 	type LibraryColumnPref,
 	useUiScale,
 } from "@/lib/settings";
-import { coercePaperTags, type PaperTag } from "@/lib/ui/tag-colors";
+import { type PaperTag, visiblePaperTags } from "@/lib/ui/tag-colors";
 
 export type PapersLibraryProps = {
 	/** Full catalog list (or pre-scoped); further filtered by `scopePath`. */
@@ -130,7 +130,7 @@ type PaperRow = {
 };
 
 function buildPaperRow(p: PaperMetadata): PaperRow {
-	const tags = coercePaperTags(p.tags);
+	const tags = visiblePaperTags(p.tags);
 	const id = identifierValue(p) ?? "";
 	return {
 		paper: p,
@@ -617,7 +617,7 @@ export function PapersLibrary({
 	const availableTags = useMemo(() => {
 		const byName = new Map<string, PaperTag>();
 		for (const p of scopedPapers) {
-			for (const tag of coercePaperTags(p.tags)) {
+			for (const tag of visiblePaperTags(p.tags)) {
 				if (!byName.has(tag.name)) byName.set(tag.name, tag);
 			}
 		}

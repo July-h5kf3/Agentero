@@ -37,11 +37,13 @@ import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
 import {
 	coercePaperTags,
+	isConnectorTagName,
 	normalizePaperTags,
 	type PaperTag,
 	TAG_COLOR_IDS,
 	type TagColorId,
 	tagSwatchStyle,
+	visiblePaperTags,
 } from "@/lib/ui/tag-colors";
 
 type PaperInfoPanelProps = {
@@ -111,10 +113,12 @@ function TagsEditor({
 	const [colorOpen, setColorOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const list = coercePaperTags(tags);
+	const allTags = coercePaperTags(tags);
+	const list = visiblePaperTags(allTags);
 
 	const commit = async (next: PaperTag[]) => {
-		const normalized = normalizePaperTags(next);
+		const hidden = allTags.filter((tag) => isConnectorTagName(tag.name));
+		const normalized = normalizePaperTags([...hidden, ...next]);
 		setBusy(true);
 		try {
 			await onChange(normalized);

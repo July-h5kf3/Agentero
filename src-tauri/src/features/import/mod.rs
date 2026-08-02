@@ -57,6 +57,9 @@ pub(crate) fn local_pdf_meta_for_import(id: String, title: String) -> PaperMeta 
 /// Override via Settings → `translatorBaseUrl` / `LookupImportArgs.translator_base_url`.
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 
+/// Prefix for Zotero tags that are not user-created or are otherwise internal.
+pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LookupImportArgs {

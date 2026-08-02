@@ -9,6 +9,8 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 - 支持 `saveItems`、目标文件夹选择、**`saveAttachment`**（浏览器上传 PDF）。
 - 绑定当前 Vault（本地路径或 `remote:<sessionId>`）。
 - 保存后：catalog + paper 目录；刷新树；`openPaper` 聚焦。
+- Connector 返回的 Zotero 标签会以 `@zotero:` 前缀保存在 catalog 中，用于保留来源信息；
+  这类内部标签不会显示在 Library、Paper Info 或标签筛选中。
 - 远程：stage 后 SFTP；catalog 经 work mirror。
 
 ## 命令 / 事件
