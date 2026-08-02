@@ -1,6 +1,6 @@
 # 参考文献解析（Citation Parsing）
 
-> 状态：**M1 + M2 + M3(PDF 内交互) 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 锚文本联动引用卡片高亮，`src/components/viewer/embed/citation-links.tsx` + `src/lib/pdf/citation-hover-store.ts`）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及。
+> 状态：**M1 + M2 + M3(PDF 内交互) 已实现**（M1：Host `features/refs/` — L1 在线 S2/Crossref + L2 本地 bib/bbl/thebibliography + sidecar + 库内匹配，命令契约见 [api.md](api.md) `paper_refs_parse` / `paper_refs_list`；M2：右侧栏 References tab 引用卡片，见 [../frontend/shell.md](../frontend/shell.md)；M3：PDF Link annotation 覆盖层 — 点击 GoTo 跳页 / URI 外链、hover 引用锚文本显示元数据预览并联动引用卡片高亮，`src/components/viewer/embed/citation-links.tsx` + `src/components/viewer/pdf-citation-preview.tsx` + `src/lib/pdf/citation-hover-store.ts`）。剩余草稿：卡片 → PDF 反向 hover 高亮、Agent `#` 提及。
 
 ## 1. 背景与现状
 
@@ -55,7 +55,8 @@
   - `[12]` 编号徽标 + 标题（两行截断；无标题时显示 raw 前两行）；
   - 第二行：首作者 et al. · 年份 · venue；
   - 角标：DOI / arXiv 外链徽标、**已入库**标记（点击打开库内论文）；未入库 hover 出 **导入**（走 `paper_commit` 管线；注意不**自动**导入，此处为用户显式点击）。
-- **hover 联动**：hover 文中 citation anchor → 发布 `references:hover { paperPath, citationId }` → 侧栏对应卡片高亮并 `scrollIntoView`；反向 hover 卡片 → PDF 高亮 anchors。匹配失败静默。
+- **hover 预览与联动**：hover 文中 citation anchor → 显示编号、标题、作者、年份、venue 和已入库状态；同时发布 hover marker，侧栏对应卡片高亮并 `scrollIntoView`。预览内放大镜打开 References 侧栏。引用识别只接受数字引用或作者-年份形式，并排除 Figure、Section、Table、Equation 等内部交叉引用；未能识别的链接只保留点击导航。
+- **反向联动（待实现）**：hover 引用卡片 → PDF 高亮 anchors。
 - **点击**：文中 citation 点击跳 References 条目；卡片点击跳第一个 anchor。
 - PAPER.md 视图（无 PDF 时的回退）：编辑器装饰插件把 `[12]`、`[3, 7]` 渲染为可点击 token，纯展示装饰、不改写 Markdown 源文本；点击/hover 复用同一事件。
 
@@ -85,7 +86,7 @@
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | M1（首版） | **L1 在线（S2 / Crossref）+ L2 本地（含 `.bbl`）** + sidecar 写入 + 库内匹配 + 在线开关设置 | 已实现 |
-| M2 | Paper Content 侧栏 Citations 卡片 + hover/click 双向联动 | 已实现（PDF→卡片单向） |
+| M2 | Paper Content 侧栏 Citations 卡片 + hover/click 双向联动 | 已实现 PDF→预览/卡片单向联动 |
 | M3 | Agent：`@` 分组 + 拖拽 + **`#` 编号提及** + prompt 注入 | 部分实现 |
 | M4 | L3 文本层切分 + Crossref raw string 富化 + references.bib 导出 + 未入库一键导入 | 延后 |
 

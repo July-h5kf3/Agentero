@@ -2,6 +2,10 @@ import { CopyIcon, Pencil } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
+	ChatVisualAnnotations,
+	formatUserLineForCopy,
+} from "@/components/agent/chat-visual-annotations";
+import {
 	Checkpoint,
 	CheckpointIcon,
 	CheckpointTrigger,
@@ -72,6 +76,7 @@ import {
 	toolPartState,
 } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { cn } from "@/lib/core/utils";
 
 export function ChatTranscript({
@@ -177,9 +182,14 @@ export function ChatTranscript({
 						lines.map((line) => {
 							if (line.kind === "user") {
 								const isEditing = editingLineId === line.id;
+								const visuals = line.visualAnnotations ?? [];
 								if (isEditing) {
 									return (
 										<Message key={line.id} from="user">
+											{/* Chips sit above the bubble, matching composer context chips. */}
+											{visuals.length > 0 ? (
+												<ChatVisualAnnotations annotations={visuals} />
+											) : null}
 											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-secondary px-3 py-2.5 ring-1 ring-primary/40">
 												<textarea
 													ref={editTextareaRef}
@@ -229,15 +239,26 @@ export function ChatTranscript({
 								}
 								const userDisplay = stripPromptEnvelopeForDisplay(line.text);
 								// Never render Codex env / Host system envelopes as user bubbles.
-								if (!userDisplay) return null;
+								if (!userDisplay && visuals.length === 0) return null;
+								const copyPayload = formatUserLineForCopy({
+									text: userDisplay,
+									visualAnnotations: visuals,
+								});
 								return (
 									<Message key={line.id} from="user">
-										<MessageContent>
-											<MessageResponse>{userDisplay}</MessageResponse>
-										</MessageContent>
-										{/* Align under user bubble (Message is full-width) */}
+										{/* Visual chips above the text bubble (not inside it). */}
+										{visuals.length > 0 ? (
+											<ChatVisualAnnotations annotations={visuals} />
+										) : null}
+										{/* Free-text only: skip empty bubble when the turn is visual-only. */}
+										{userDisplay ? (
+											<MessageContent>
+												<MessageResponse>{userDisplay}</MessageResponse>
+											</MessageContent>
+										) : null}
+										{/* Align under user content (Message is full-width) */}
 										<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-											{activeTabIsRunning ? null : (
+											{activeTabIsRunning || !userDisplay ? null : (
 												<MessageAction
 													tooltip={t("edit.action")}
 													label={t("edit.action")}
@@ -250,7 +271,7 @@ export function ChatTranscript({
 											<MessageAction
 												tooltip={t("copy")}
 												label={t("copy")}
-												onClick={() => void copyText(userDisplay)}
+												onClick={() => void copyText(copyPayload)}
 											>
 												<CopyIcon className="size-3.5" />
 											</MessageAction>
@@ -404,7 +425,9 @@ export function ChatTranscript({
 																	<InlineCitation>
 																		<InlineCitationCard>
 																			<InlineCitationCardTrigger
-																				sources={line.sources}
+																				sources={line.sources.map(
+																					normalizeAgentSourcePath,
+																				)}
 																			/>
 																			<InlineCitationCardBody>
 																				<InlineCitationCarousel>
@@ -414,28 +437,35 @@ export function ChatTranscript({
 																						<InlineCitationCarouselIndex />
 																					</InlineCitationCarouselHeader>
 																					<InlineCitationCarouselContent>
-																						{line.sources.map((s) => (
-																							<InlineCitationCarouselItem
-																								key={s}
-																							>
-																								<InlineCitationSource
-																									title={
-																										s.split(/[/\\]/).pop() || s
-																									}
-																									url={s}
-																									description={
-																										/^https?:\/\//i.test(s)
-																											? undefined
-																											: t("citation.vaultPath")
-																									}
-																									onOpen={
-																										onOpenSource
-																											? () => onOpenSource(s)
-																											: undefined
-																									}
-																								/>
-																							</InlineCitationCarouselItem>
-																						))}
+																						{line.sources.map((raw) => {
+																							const s =
+																								normalizeAgentSourcePath(raw);
+																							return (
+																								<InlineCitationCarouselItem
+																									key={s}
+																								>
+																									<InlineCitationSource
+																										title={
+																											s.split(/[/\\]/).pop() ||
+																											s
+																										}
+																										url={s}
+																										description={
+																											/^https?:\/\//i.test(s)
+																												? undefined
+																												: t(
+																														"citation.vaultPath",
+																													)
+																										}
+																										onOpen={
+																											onOpenSource
+																												? () => onOpenSource(s)
+																												: undefined
+																										}
+																									/>
+																								</InlineCitationCarouselItem>
+																							);
+																						})}
 																					</InlineCitationCarouselContent>
 																				</InlineCitationCarousel>
 																			</InlineCitationCardBody>
@@ -466,7 +496,8 @@ export function ChatTranscript({
 											<Sources>
 												<SourcesTrigger count={line.sources.length} />
 												<SourcesContent>
-													{line.sources.map((s) => {
+													{line.sources.map((raw) => {
+														const s = normalizeAgentSourcePath(raw);
 														const isHttp = /^https?:\/\//i.test(s);
 														return (
 															<Source

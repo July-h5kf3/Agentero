@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { SelectionContext } from "@/lib/agent/selection-store";
+import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper";
 
 /** Follow-up prompts waiting until the active run finishes. */
@@ -13,6 +14,8 @@ export type QueuedPrompt = {
 	skillIds: string[];
 	/** Selection chips frozen when the user queued the message. */
 	selections: SelectionContext[];
+	/** Visual PDF annotation drafts frozen when the user queued the message. */
+	visualDrafts: PdfVisualDraft[];
 };
 
 export type AgentPanelProps = {

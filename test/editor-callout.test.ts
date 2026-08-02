@@ -26,6 +26,7 @@ import {
 } from "@/components/editor/plugins/callout-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
+	remarkWikiLinkLiteralPaths,
 	WikiLinkPlugin,
 	wikiLinkRules,
 } from "@/components/editor/plugins/wikilink-plugin";
@@ -52,6 +53,7 @@ const TestMarkdownPlugin = MarkdownPlugin.configure({
 			remarkMath,
 			remarkGfm,
 			[wikiLink, { aliasDivider: "|" }],
+			remarkWikiLinkLiteralPaths,
 			remarkMdx,
 			remarkObsidianCallout,
 		],

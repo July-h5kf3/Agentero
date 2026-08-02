@@ -15,6 +15,7 @@
 - 无 Vault：最近路径 MRU、打开 / 创建 / 从 Zotero 迁移。
 - `⌘N` → Host `window_new`（`?fresh=1`）；Vault 与 dock 布局按窗口 session 隔离。
 - 当前窗口 Vault：`sessionStorage`；MRU / 上次路径：`localStorage`。
+- 桌面窗口在 Webview 页面加载完成后显示；React 首次提交前由 `index.html` 的零依赖启动壳占位，避免冷启动和 dev 模块加载期间出现空白窗口。
 
 ## 全局 Toast
 
@@ -38,6 +39,7 @@
 | 快捷键 | 行为 |
 |---|---|
 | `⌘,` | 开/关设置窗口 |
+| `⌘.` | PDF 视觉批注框选（当前 PDF 标签） |
 | `⌘N` | 新窗口 |
 | `⌘W` / `Esc` | 关弹层 → 关 panel → 关窗 |
 | `⌥⌘←/→` | 循环 Dockview panel |

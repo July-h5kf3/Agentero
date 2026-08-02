@@ -13,7 +13,10 @@ import {
 	remarkObsidianCallout,
 } from "@/components/editor/plugins/callout-model";
 import { MarkdownPastePlugin } from "@/components/editor/plugins/markdown-paste-plugin";
-import { wikiLinkRules } from "@/components/editor/plugins/wikilink-model";
+import {
+	remarkWikiLinkLiteralPaths,
+	wikiLinkRules,
+} from "@/components/editor/plugins/wikilink-model";
 
 export const MarkdownKit = [
 	BaseFootnoteReferencePlugin.configure({
@@ -43,6 +46,8 @@ export const MarkdownKit = [
 				remarkMath,
 				remarkGfm,
 				[wikiLink, { aliasDivider: "|" }],
+				// After flowershow: keep vault `_` paths literal (no `\_` on save).
+				remarkWikiLinkLiteralPaths,
 				// biome-ignore lint/suspicious/noExplicitAny: remark-emoji's plugin type is incompatible with Plate's remark plugin type
 				remarkEmoji as any,
 				remarkMdx,

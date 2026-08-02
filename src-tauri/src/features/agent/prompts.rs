@@ -256,6 +256,120 @@ fn paper_reader_skill_line(style: SkillMentionStyle, skill_ids: &[String]) -> St
     }
 }
 
+/// True when `s` looks like a vault-relative file path (not prose).
+fn looks_like_source_path(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() || t.contains(' ') && !t.contains('/') {
+        return false;
+    }
+    // Reject pure prose / parenthetical notes.
+    if t.starts_with('（') || t.starts_with('(') {
+        return false;
+    }
+    let lower = t.to_ascii_lowercase();
+    if lower.ends_with(".md")
+        || lower.ends_with(".tex")
+        || lower.ends_with(".pdf")
+        || lower.ends_with(".png")
+        || lower.ends_with(".jpg")
+        || lower.ends_with(".jpeg")
+        || lower.ends_with(".webp")
+        || lower.ends_with(".gif")
+        || lower.ends_with(".svg")
+        || lower.ends_with(".json")
+        || lower.ends_with(".bib")
+        || lower.ends_with(".csv")
+    {
+        return t.contains('/') || !t.contains(' ');
+    }
+    // Directory-ish vault paths without extension.
+    t.contains('/') && !t.contains('（') && !t.contains('(')
+}
+
+/// Pull the jump target out of a Sources bullet.
+///
+/// Agents often write:
+/// - `` `papers/foo/PAPER.md`（§2.3，Figure 4）``
+/// - `用户批注截图：`assets/image-….png``
+/// - `- 'papers/a/NOTES.md'`
+fn extract_path_from_source_line(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_start_matches(['-', '*', '•']).trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // 1) First `...` segment that looks like a path (most common agent style).
+    let mut rest = trimmed;
+    while let Some(start) = rest.find('`') {
+        let after = &rest[start + 1..];
+        if let Some(end) = after.find('`') {
+            let inner = after[..end].trim();
+            if looks_like_source_path(inner) {
+                return Some(inner.to_string());
+            }
+            rest = &after[end + 1..];
+        } else {
+            break;
+        }
+    }
+
+    // 2) Wikilink [[path]] or [[path|alias]].
+    if let Some(start) = trimmed.find("[[") {
+        if let Some(rel) = trimmed[start + 2..].find("]]") {
+            let inner = &trimmed[start + 2..start + 2 + rel];
+            let path = inner.split('|').next().unwrap_or(inner).trim();
+            if looks_like_source_path(path) {
+                return Some(path.to_string());
+            }
+        }
+    }
+
+    // 3) Whole-line paired quotes.
+    let mut cleaned = trimmed.to_string();
+    if cleaned.len() >= 2 {
+        let bytes = cleaned.as_bytes();
+        let first = bytes[0];
+        let last = bytes[bytes.len() - 1];
+        if matches!((first, last), (b'\'', b'\'') | (b'"', b'"') | (b'`', b'`')) {
+            cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
+        }
+    }
+    cleaned = cleaned
+        .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
+        .trim()
+        .to_string();
+
+    // 4) Path token before Chinese/ASCII parenthetical note:
+    //    papers/foo/PAPER.md（§2.3…）  or  papers/foo/NOTES.md (Experiments)
+    if let Some(idx) = cleaned.find('（').or_else(|| cleaned.find(" (")) {
+        let head = cleaned[..idx].trim();
+        let head = head
+            .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
+            .trim();
+        if looks_like_source_path(head) {
+            return Some(head.to_string());
+        }
+    }
+
+    // 5) Label prefix: "用户批注截图：assets/…" or "截图: path"
+    for sep in ['：', ':'] {
+        if let Some(idx) = cleaned.find(sep) {
+            let tail = cleaned[idx + sep.len_utf8()..].trim();
+            let tail = tail
+                .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
+                .trim();
+            if looks_like_source_path(tail) {
+                return Some(tail.to_string());
+            }
+        }
+    }
+
+    if looks_like_source_path(&cleaned) {
+        return Some(cleaned);
+    }
+    None
+}
+
 /// Best-effort extraction of local paths from agent text (Sources section or bare paths).
 pub fn extract_sources(content: &str) -> Vec<String> {
     let mut sources = Vec::new();
@@ -273,15 +387,10 @@ pub fn extract_sources(content: &str) -> Vec<String> {
             if trimmed.starts_with('#') {
                 break;
             }
-            let cleaned = trimmed
-                .trim_start_matches(['-', '*', '•', '`'])
-                .trim_end_matches('`')
-                .trim();
-            if cleaned.is_empty() {
-                continue;
-            }
-            if cleaned.contains('/') || cleaned.ends_with(".md") || cleaned.ends_with(".tex") {
-                sources.push(cleaned.to_string());
+            if let Some(path) = extract_path_from_source_line(trimmed) {
+                if !sources.iter().any(|s| s == &path) {
+                    sources.push(path);
+                }
             }
         }
     }
@@ -299,6 +408,40 @@ mod tests {
         let s = extract_sources(text);
         assert!(s.iter().any(|p| p.contains("NOTES.md")));
         assert!(s.iter().any(|p| p == "PAPERS.md"));
+    }
+
+    #[test]
+    fn extracts_sources_strips_quotes_and_wikilinks() {
+        let text = "Answer.\n\n## Sources\n- 'papers/a/NOTES.md'\n- \"papers/b/PAPER.md\"\n- `papers/c/source/main.tex`\n- [[papers/d/NOTES.md|title]]\n- papers/e/NOTES.md'\n";
+        let s = extract_sources(text);
+        assert_eq!(
+            s,
+            vec![
+                "papers/a/NOTES.md".to_string(),
+                "papers/b/PAPER.md".to_string(),
+                "papers/c/source/main.tex".to_string(),
+                "papers/d/NOTES.md".to_string(),
+                "papers/e/NOTES.md".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn extracts_sources_with_inline_backticks_and_notes() {
+        // Real agent style: path in backticks + Chinese parenthetical, or label：`path`.
+        let text = "Answer.\n\n## Sources\n\
+- `papers/Towards-Long-Horizon-Agent/PAPER.md`（§2.3，Eq. 2 与 Figure 4 上下文）\n\
+- `papers/Towards-Long-Horizon-Agent/NOTES.md`（Experiments / Figure 4 解读）\n\
+- 用户批注截图：`assets/image-38fac94f-4577-46b6-af56-bb4465f2bc13.png`\n";
+        let s = extract_sources(text);
+        assert_eq!(
+            s,
+            vec![
+                "papers/Towards-Long-Horizon-Agent/PAPER.md".to_string(),
+                "papers/Towards-Long-Horizon-Agent/NOTES.md".to_string(),
+                "assets/image-38fac94f-4577-46b6-af56-bb4465f2bc13.png".to_string(),
+            ]
+        );
     }
 
     #[test]

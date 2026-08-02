@@ -21,6 +21,10 @@ import {
 	TRASH_VIRTUAL_PATH,
 } from "@/lib/paper/api";
 import { refreshLibrary, setLibraryScopePath } from "@/lib/paper/library-store";
+import {
+	lookupAnnotationRef,
+	paperAbsFromWikiTarget,
+} from "@/lib/pdf/annotation-ref";
 import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
 import {
 	type FileNode,
@@ -511,6 +515,40 @@ export function openGraphPath(rel: string): void {
 
 let wikiNavigationIntentId = 0;
 
+/** Retry until the PDF handle is registered after openPaper, then jump. */
+function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
+	const tabId = tabIdForPath(paperAbs);
+	let attempts = 0;
+	const tryJump = () => {
+		attempts += 1;
+		void import("@/components/viewer/pdf-viewer-registry").then(
+			({ pdfHandleFor }) => {
+				const handle = pdfHandleFor(tabId);
+				if (!handle) {
+					if (attempts < 40) window.setTimeout(tryJump, 50);
+					return;
+				}
+				void lookupAnnotationRef(paperAbs, annotationId).then((ref) => {
+					if (!ref) {
+						notifyError(
+							i18n.t("app:errors.wikiLinkInvalidFragment", {
+								target: `@${annotationId}`,
+							}),
+						);
+						return;
+					}
+					if (ref.kind === "agent-trace") {
+						handle.scrollToVisualTrace(ref.id);
+					} else {
+						handle.scrollToHighlight(ref.id);
+					}
+				});
+			},
+		);
+	};
+	window.setTimeout(tryJump, 0);
+}
+
 export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 	const vaultPath = getVaultPath();
 	const destination = wikiNavigationDestination(nav);
@@ -520,6 +558,39 @@ export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 			return;
 		}
 		const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(destination.path)}`;
+
+		// Annotation fragments always open the paper PDF unit, not NOTES alone.
+		if (destination.fragment?.kind === "annotation") {
+			const paperAbs =
+				paperDirFromPath(full, vaultStore.getState().paperFolders) ??
+				paperAbsFromWikiTarget(vaultPath, destination.path);
+			openPaper(paperAbs);
+			const intent = {
+				id: ++wikiNavigationIntentId,
+				fragment: destination.fragment,
+			};
+			setTabs((previous) =>
+				patchTab(previous, tabIdForPath(paperAbs), {
+					navigationIntent: intent,
+				}),
+			);
+			if (destination.warning === "invalidFragment") {
+				setTabs((previous) =>
+					patchTab(previous, tabIdForPath(paperAbs), {
+						navigationIntent: undefined,
+					}),
+				);
+				notifyError(
+					i18n.t("app:errors.wikiLinkInvalidFragment", {
+						target: nav.targetRaw,
+					}),
+				);
+				return;
+			}
+			scheduleAnnotationJump(paperAbs, destination.fragment.id);
+			return;
+		}
+
 		openTab(full, { preferMode: preferredModeForPath(full) });
 		if (destination.fragment) {
 			const intent = {
@@ -725,39 +796,63 @@ export function ensureLibraryTabPresent(): void {
 	setActiveTabId(ensured.activeId);
 }
 
-/** Load resources for restored placeholder panels (mount-only hydrate). */
-export function hydratePlaceholderTabs(): void {
+const placeholderLoads = new Set<string>();
+
+/** Load resources for restored panels only when their dock group exposes them. */
+export function hydratePlaceholderTabs(tabIds: readonly string[]): void {
 	if (!isTauri() || !getVaultPath()) return;
 	if (!getTabs().length) {
 		ensureLibraryTabPresent();
 		return;
 	}
-	for (const tab of getTabs()) {
-		if (tab.loaded) continue;
+	for (const id of new Set(tabIds)) {
+		const tab = getTabs().find((candidate) => candidate.id === id);
+		if (!tab || tab.loaded || placeholderLoads.has(id)) continue;
+		placeholderLoads.add(id);
 		void (async () => {
 			const vaultState = vaultStore.getState();
-			const res = await loadTabResources(
-				tab.path,
-				vaultState.vaultPath,
-				vaultState.tree,
-				vaultState.paperFolders,
-			);
-			if (!getTabs().some((t) => t.id === tab.id)) return;
-			updateTab(tab.id, {
-				kind: res.kind,
-				title: res.title,
-				mode: res.mode,
-				paperMeta: res.paperMeta,
-				pdfUrl: res.pdfUrl,
-				pdfBytes: res.pdfBytes ?? null,
-				htmlUrl: res.htmlUrl,
-				imageUrl: res.imageUrl,
-				notesPath: res.notesPath,
-				notesSeed: res.notesSeed,
-				markdownSeed: res.markdownSeed,
-				seedKey: 1,
-				loaded: true,
-			});
+			try {
+				const res = await loadTabResources(
+					tab.path,
+					vaultState.vaultPath,
+					vaultState.tree,
+					vaultState.paperFolders,
+				);
+				const current = getTabs().find((candidate) => candidate.id === id);
+				if (
+					!current ||
+					current.path !== tab.path ||
+					vaultStore.getState().vaultPath !== vaultState.vaultPath
+				) {
+					return;
+				}
+				if (res.error) {
+					notifyError(
+						res.error === "cannotPreview"
+							? i18n.t("app:errors.cannotPreview", {
+									name: basenameOf(tab.path),
+								})
+							: res.error,
+					);
+				}
+				updateTab(id, {
+					kind: res.kind,
+					title: res.title,
+					mode: res.mode,
+					paperMeta: res.paperMeta,
+					pdfUrl: res.pdfUrl,
+					pdfBytes: res.pdfBytes ?? null,
+					htmlUrl: res.htmlUrl,
+					imageUrl: res.imageUrl,
+					notesPath: res.notesPath,
+					notesSeed: res.notesSeed,
+					markdownSeed: res.markdownSeed,
+					seedKey: 1,
+					loaded: true,
+				});
+			} finally {
+				placeholderLoads.delete(id);
+			}
 		})();
 	}
 }

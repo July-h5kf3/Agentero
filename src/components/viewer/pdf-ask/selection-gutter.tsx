@@ -1,10 +1,15 @@
-import { Languages, MessageSquare, MessageSquareText } from "lucide-react";
+import {
+	Languages,
+	MessageSquare,
+	MessageSquareText,
+	ScanSearch,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/core/utils";
 import type { SelectionPin } from "@/lib/pdf/selection";
 
 type SelectionGutterProps = {
-	/** Pins for this page only (ask + annotate + translate) */
+	/** Pins for this page only (ask + annotate + translate + agent-trace) */
 	items: SelectionPin[];
 	activeId: string | null;
 	onOpen: (pin: SelectionPin) => void;
@@ -67,12 +72,14 @@ function pinIcon(kind: SelectionPin["kind"]) {
 			return MessageSquareText;
 		case "translate":
 			return Languages;
+		case "agent-trace":
+			return ScanSearch;
 	}
 }
 
 /**
- * Unified page pins for selection workflows: ask / annotate / translate.
- * Hover opens ask (parent decides); click opens any kind.
+ * Unified page pins for selection workflows: ask / annotate / translate / agent-trace.
+ * Hover opens the kind-specific card (ask / translate / visual-trace preview).
  */
 export function SelectionGutter({
 	items,
@@ -101,7 +108,11 @@ export function SelectionGutter({
 						? t("pdfAsk.pillAria", { preview: item.preview })
 						: item.kind === "annotate"
 							? t("annotations.pinAria", { preview: item.preview })
-							: t("selection.translatePinAria", { preview: item.preview });
+							: item.kind === "agent-trace"
+								? t("pdfExplain.tracePinAria", { preview: item.preview })
+								: t("selection.translatePinAria", { preview: item.preview });
+				// agent-trace activeCard.id is the per-annotation pin id.
+				const isActive = activeId === item.id;
 
 				return (
 					<button
@@ -113,8 +124,10 @@ export function SelectionGutter({
 								? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
 								: item.kind === "translate"
 									? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
-									: "border-border/80 bg-background text-muted-foreground",
-							activeId === item.id && "ring-2 ring-ring ring-offset-1",
+									: item.kind === "agent-trace"
+										? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
+										: "border-border/80 bg-background text-muted-foreground",
+							isActive && "ring-2 ring-ring ring-offset-1",
 						)}
 						style={{ left: `${pos.leftPct}%`, top: `${pos.topPct}%` }}
 						aria-label={aria}

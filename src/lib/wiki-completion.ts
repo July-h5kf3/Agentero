@@ -4,6 +4,7 @@ export type WikiCompletionRequest =
 	| { kind: "file"; query: string }
 	| { kind: "heading"; target: string; query: string }
 	| { kind: "block"; target: string; query: string }
+	| { kind: "annotation"; target: string; query: string }
 	| { kind: "alias"; target: string; query: string };
 
 /**
@@ -18,7 +19,8 @@ export function parseWikiCompletionQuery(
 	const alias = draft.indexOf("|");
 	if (alias >= 0) {
 		const target = draft.slice(0, alias).trim();
-		if (!target) return null;
+		// Allow `[[@id|alias]]` / `[[NOTES@id|alias]]` alias completion.
+		if (!target && !draft.slice(0, alias).includes("@")) return null;
 		return {
 			kind: "alias",
 			target,
@@ -26,23 +28,38 @@ export function parseWikiCompletionQuery(
 		};
 	}
 	const hash = draft.indexOf("#");
-	if (hash < 0) {
-		const caret = draft.indexOf("^");
-		if (caret >= 0) {
+	if (hash >= 0) {
+		const target = draft.slice(0, hash).trim();
+		const fragment = draft.slice(hash + 1);
+		if (fragment.startsWith("^")) {
+			return { kind: "block", target, query: fragment.slice(1).trim() };
+		}
+		if (fragment.startsWith("@")) {
 			return {
-				kind: "block",
-				target: draft.slice(0, caret).trim(),
-				query: draft.slice(caret + 1).trim(),
+				kind: "annotation",
+				target,
+				query: fragment.slice(1).trim(),
 			};
 		}
-		return { kind: "file", query: draft.trim() };
+		return { kind: "heading", target, query: fragment.trim() };
 	}
-	const target = draft.slice(0, hash).trim();
-	const fragment = draft.slice(hash + 1);
-	if (fragment.startsWith("^")) {
-		return { kind: "block", target, query: fragment.slice(1).trim() };
+	const at = draft.lastIndexOf("@");
+	if (at >= 0) {
+		return {
+			kind: "annotation",
+			target: draft.slice(0, at).trimEnd(),
+			query: draft.slice(at + 1).trim(),
+		};
 	}
-	return { kind: "heading", target, query: fragment.trim() };
+	const caret = draft.indexOf("^");
+	if (caret >= 0) {
+		return {
+			kind: "block",
+			target: draft.slice(0, caret).trim(),
+			query: draft.slice(caret + 1).trim(),
+		};
+	}
+	return { kind: "file", query: draft.trim() };
 }
 
 export type WikiCompletionInsert = {
@@ -174,7 +191,26 @@ export function wikiCompletionInsert(
 			alias: candidate.alias,
 		};
 	}
+	if (
+		request?.kind === "annotation" &&
+		candidate.kind === "annotation" &&
+		candidate.fragment?.kind === "annotation"
+	) {
+		return {
+			target: request.target,
+			heading: `@${candidate.fragment.id}`,
+			alias: candidate.alias,
+		};
+	}
 	const hash = candidate.insertText.indexOf("#");
+	const at = candidate.insertText.lastIndexOf("@");
+	if (at >= 0 && hash < 0) {
+		return {
+			target: candidate.insertText.slice(0, at),
+			heading: candidate.insertText.slice(at) || undefined,
+			alias: candidate.alias,
+		};
+	}
 	return {
 		target:
 			hash < 0 ? candidate.insertText : candidate.insertText.slice(0, hash),

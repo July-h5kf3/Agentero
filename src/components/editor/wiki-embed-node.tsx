@@ -1,6 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import {
+	ExternalLink,
+	FileText,
+	FileType2,
+	Highlighter,
+	ImageIcon,
+	ScanSearch,
+	TextQuote,
+} from "lucide-react";
 import { PlateElement, type PlateElementProps } from "platejs/react";
 import {
 	lazy,
@@ -13,6 +21,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import type { WikiSlateNode } from "@/components/editor/plugins/wikilink-model";
+import { WikiAnnotationEmbed } from "@/components/editor/wiki-annotation-embed";
 import {
 	MAX_WIKI_EMBED_DEPTH,
 	useWikiEmbedAncestry,
@@ -20,10 +29,13 @@ import {
 } from "@/components/editor/wiki-embed-context";
 import { useWikiEmbedProjection } from "@/components/editor/wiki-embed-projection-context";
 import { cn } from "@/lib/core/utils";
+import type { AnnotationRefKind } from "@/lib/pdf/annotation-ref";
 import { joinVaultPath } from "@/lib/vault";
 import {
 	type ResolvedLink,
 	readWikiEmbed,
+	resolveWikiTarget,
+	splitAnnotationSugar,
 	type WikiEmbedResponse,
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
@@ -67,12 +79,32 @@ function embedRequestKey(
 	return JSON.stringify([vaultPath, sourcePath, target, targetRevision]);
 }
 
+/** Request key without revision — same embed identity across marks/file reloads. */
+function embedIdentityKey(
+	vaultPath: string | null | undefined,
+	sourcePath: string | null,
+	target: string,
+): string | null {
+	if (!vaultPath || !sourcePath) return null;
+	return JSON.stringify([vaultPath, sourcePath, target]);
+}
+
 function cachedEmbedState(key: string): EmbedLoadState | undefined {
 	return embedStateCache.get(key);
 }
 
 function retainEmbedState(key: string, state: EmbedLoadState): void {
-	if (state.kind === "error" || state.kind === "loading") return;
+	// Never cache terminal "not found" results: cold-start races (index not
+	// ready yet) must be allowed to succeed on the next mount/retry instead of
+	// permanently showing "找不到嵌入的笔记".
+	if (
+		state.kind === "error" ||
+		state.kind === "loading" ||
+		state.kind === "missing" ||
+		state.kind === "ambiguous"
+	) {
+		return;
+	}
 	embedStateCache.delete(key);
 	embedStateCache.set(key, state);
 	while (embedStateCache.size > EMBED_CACHE_LIMIT) {
@@ -85,9 +117,9 @@ function retainEmbedState(key: string, state: EmbedLoadState): void {
 function fragmentKey(link: ResolvedLink): string {
 	const fragment = link.occurrence.fragment;
 	if (!fragment) return "";
-	return fragment.kind === "block"
-		? `#^${fragment.id}`
-		: `#${fragment.path.join("#")}`;
+	if (fragment.kind === "block") return `#^${fragment.id}`;
+	if (fragment.kind === "annotation") return `@${fragment.id}`;
+	return `#${fragment.path.join("#")}`;
 }
 
 function embedKey(link: ResolvedLink): string {
@@ -105,10 +137,59 @@ function stateFromResponse(response: WikiEmbedResponse): EmbedLoadState {
 				: { kind: "unsupported", response };
 		case "image":
 		case "pdf":
+		case "annotation":
 			return { kind: "ready", response, key: embedKey(response.link) };
 		default:
 			return { kind: "unsupported", response };
 	}
+}
+
+/**
+ * When Host resolve returns `missing` for a `path@annotId` token (cold-start
+ * race, escaped id, or path-like relative mishap), recover via client sugar
+ * parse + vault file list so annotation embeds still open.
+ */
+function recoverAnnotationEmbed(
+	target: string,
+	files: string[],
+	sourcePath: string,
+): WikiEmbedResponse | null {
+	const sugar = splitAnnotationSugar(target);
+	if (!sugar) return null;
+	const targetPath =
+		resolveWikiTarget(sugar.target, files) ||
+		// same-note form: resolve to the source file when listed
+		(sugar.target === ""
+			? files.find(
+					(f) =>
+						f.replace(/\\/g, "/").toLowerCase() ===
+						sourcePath.replace(/\\/g, "/").toLowerCase(),
+				) || null
+			: null);
+	if (!targetPath && sugar.target !== "") return null;
+	const path =
+		targetPath ||
+		sourcePath
+			.replace(/\\/g, "/")
+			.replace(/^.*\/(?=papers\/|notes\/)/i, "") // best-effort vault-rel
+			.replace(/^\//, "");
+	if (!path) return null;
+	return {
+		link: {
+			occurrence: {
+				source: sourcePath,
+				targetRaw: sugar.target,
+				syntax: "wikilink",
+				embed: true,
+				fragment: { kind: "annotation", id: sugar.id },
+				sourceRange: { start: 0, end: 0 },
+				line: 1,
+			},
+			status: "resolved",
+			targetPath: path,
+		},
+		contentKind: "annotation",
+	};
 }
 
 function loadEmbedState(
@@ -116,6 +197,7 @@ function loadEmbedState(
 	vaultPath: string,
 	sourcePath: string,
 	target: string,
+	vaultFiles: string[] = [],
 ): Promise<EmbedLoadState> {
 	const cached = cachedEmbedState(key);
 	if (cached) return Promise.resolve(cached);
@@ -123,7 +205,17 @@ function loadEmbedState(
 	if (pending) return pending;
 
 	const request = readWikiEmbed(vaultPath, sourcePath, target)
-		.then((response) => stateFromResponse(response))
+		.then((response) => {
+			if (response.link.status === "missing" && vaultFiles.length) {
+				const recovered = recoverAnnotationEmbed(
+					target,
+					vaultFiles,
+					sourcePath,
+				);
+				if (recovered) return stateFromResponse(recovered);
+			}
+			return stateFromResponse(response);
+		})
 		.catch(
 			(error): EmbedLoadState => ({
 				kind: "error",
@@ -149,6 +241,62 @@ function EmbedStatus({ message }: { message: string }) {
 	);
 }
 
+type EmbedChromeKind =
+	| "markdown"
+	| "image"
+	| "pdf"
+	/** Text highlight / note on PDF. */
+	| "annotation-highlight"
+	/** Visual crop / region mark. */
+	| "annotation-visual"
+	/** Annotation token known, subtype not loaded yet. */
+	| "annotation"
+	| "status";
+
+function embedChromeKind(
+	state: EmbedLoadState,
+	heading: string | null | undefined,
+	annotationKind: AnnotationRefKind | null,
+): EmbedChromeKind {
+	// Prefer resolved subtype once the body has loaded the mark.
+	if (annotationKind === "agent-trace") return "annotation-visual";
+	if (annotationKind === "highlight") return "annotation-highlight";
+
+	if (state.kind === "ready") {
+		const kind = state.response.contentKind;
+		if (kind === "markdown" || kind === "image" || kind === "pdf") {
+			return kind;
+		}
+		if (kind === "annotation") {
+			// Subtype pending → highlighter (划词), not magnifier (视觉).
+			return "annotation-highlight";
+		}
+	}
+	// Token `…@id` is known from the heading field before Host resolves.
+	if (heading?.startsWith("@")) return "annotation-highlight";
+	return "status";
+}
+
+function EmbedTypeIcon({ kind }: { kind: EmbedChromeKind }) {
+	const className = "size-3.5 shrink-0 text-muted-foreground";
+	switch (kind) {
+		case "annotation-visual":
+			return <ScanSearch className={className} aria-hidden />;
+		case "annotation-highlight":
+		case "annotation":
+			// 划词高亮 / 文字批注 — not the visual magnifier.
+			return <Highlighter className={className} aria-hidden />;
+		case "image":
+			return <ImageIcon className={className} aria-hidden />;
+		case "pdf":
+			return <FileType2 className={className} aria-hidden />;
+		case "markdown":
+			return <FileText className={className} aria-hidden />;
+		default:
+			return <TextQuote className={className} aria-hidden />;
+	}
+}
+
 export function WikiEmbedElement({
 	editing,
 	...props
@@ -162,9 +310,32 @@ export function WikiEmbedElement({
 
 	const target = element.value ?? "";
 	const targetWithFragment = element.heading
-		? `${target}#${element.heading}`
+		? element.heading.startsWith("@")
+			? target
+				? `${target}${element.heading}`
+				: element.heading
+			: target
+				? `${target}#${element.heading}`
+				: `#${element.heading}`
 		: target;
 	const [targetRevision, setTargetRevision] = useState(0);
+	/**
+	 * highlight vs agent-trace for the header icon. Keyed by embed token so a
+	 * subtype from a previous link never sticks after the token changes
+	 * (avoids a reset-only useEffect that trips exhaustive-deps lint).
+	 */
+	const [annotationMeta, setAnnotationMeta] = useState<{
+		token: string;
+		kind: AnnotationRefKind;
+	} | null>(null);
+	const annotationKind =
+		annotationMeta?.token === targetWithFragment ? annotationMeta.kind : null;
+	const onAnnotationKind = useCallback(
+		(kind: AnnotationRefKind) => {
+			setAnnotationMeta({ token: targetWithFragment, kind });
+		},
+		[targetWithFragment],
+	);
 	const requestKey = embedRequestKey(
 		wikiNav?.vaultPath,
 		markdownDoc.filePath,
@@ -209,12 +380,43 @@ export function WikiEmbedElement({
 		}
 
 		let cancelled = false;
-		setLoad({ requestKey, state: { kind: "loading" } });
+		// Stale-while-revalidate only when the embed identity is unchanged and
+		// only the revision suffix advanced (target file / marks reloaded).
+		// Switching to a different ![[target]] still shows loading.
+		const identity = embedIdentityKey(
+			vaultPath,
+			sourcePath,
+			targetWithFragment,
+		);
+		setLoad((previous) => {
+			if (previous.requestKey === requestKey) return previous;
+			const previousIdentity =
+				previous.requestKey && previous.requestKey.length > 2
+					? (() => {
+							try {
+								const parsed = JSON.parse(previous.requestKey) as unknown[];
+								if (!Array.isArray(parsed) || parsed.length < 3) return null;
+								return JSON.stringify(parsed.slice(0, 3));
+							} catch {
+								return null;
+							}
+						})()
+					: null;
+			const keepProjection =
+				identity &&
+				previousIdentity === identity &&
+				previous.state.kind === "ready";
+			return {
+				requestKey,
+				state: keepProjection ? previous.state : { kind: "loading" },
+			};
+		});
 		void loadEmbedState(
 			requestKey,
 			vaultPath,
 			sourcePath,
 			targetWithFragment,
+			wikiNav?.mdFiles ?? [],
 		).then((nextState) => {
 			if (!cancelled) setLoad({ requestKey, state: nextState });
 		});
@@ -225,6 +427,7 @@ export function WikiEmbedElement({
 		markdownDoc.filePath,
 		requestKey,
 		targetWithFragment,
+		wikiNav?.mdFiles,
 		wikiNav?.vaultPath,
 	]);
 
@@ -268,12 +471,20 @@ export function WikiEmbedElement({
 			? joinVaultPath(wikiNav.vaultPath, state.response.link.targetPath)
 			: "";
 
+	const isAnnotationEmbed =
+		state.kind === "ready" && state.response.contentKind === "annotation";
+	const chromeKind = embedChromeKind(state, element.heading, annotationKind);
+
+	// Markdown/image/PDF embeds refresh when their resolved target file changes.
+	// Annotation bodies live under paper marks/, not NOTES.md — subscribing to
+	// absoluteTarget (often the hosting NOTES) made every autosave flash cards.
+	// Mark-path refresh is owned by WikiAnnotationEmbed itself.
 	useEffect(() => {
-		if (!absoluteTarget) return;
+		if (!absoluteTarget || isAnnotationEmbed) return;
 		return subscribeWikiEmbedTarget(absoluteTarget, () => {
 			setTargetRevision((revision) => revision + 1);
 		});
-	}, [absoluteTarget]);
+	}, [absoluteTarget, isAnnotationEmbed]);
 
 	return (
 		<PlateElement
@@ -297,9 +508,11 @@ export function WikiEmbedElement({
 					editing && "hidden",
 				)}
 			>
-				<span className="sticky top-0 z-10 flex items-center justify-between gap-3 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
-					<span className="min-w-0 truncate text-muted-foreground text-xs">
-						{sourceLabel}
+				{/* Shared chrome: type icon + title · open source on the right */}
+				<span className="sticky top-0 z-10 flex items-center gap-2 border-border border-b bg-background/95 px-3 py-1.5 backdrop-blur">
+					<EmbedTypeIcon kind={chromeKind} />
+					<span className="min-w-0 flex-1 truncate font-medium text-foreground/90 text-xs">
+						{sourceLabel || t("embed.untitled")}
 					</span>
 					{resolvedLink?.status === "resolved" ? (
 						<button
@@ -341,6 +554,19 @@ export function WikiEmbedElement({
 								targetPath={presentation.response.link.targetPath ?? target}
 								revision={targetRevision}
 								imageSize={element.alias}
+							/>
+						) : presentation.response.contentKind === "annotation" &&
+							wikiNav?.vaultPath &&
+							presentation.response.link.targetPath &&
+							presentation.response.link.occurrence.fragment?.kind ===
+								"annotation" ? (
+							// Body-only: title/icon + jump live in the shared header above
+							// (body is not click-to-open, same as markdown embeds).
+							<WikiAnnotationEmbed
+								vaultPath={wikiNav.vaultPath}
+								targetPath={presentation.response.link.targetPath}
+								annotationId={presentation.response.link.occurrence.fragment.id}
+								onResolvedKind={onAnnotationKind}
 							/>
 						) : (
 							<EmbedStatus message={t("embed.unsupported")} />

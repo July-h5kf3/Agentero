@@ -21,9 +21,9 @@ type BacklinksPanelProps = {
 function fragmentLabel(link: ResolvedLink): string | null {
 	const fragment = link.occurrence.fragment;
 	if (!fragment) return null;
-	return fragment.kind === "block"
-		? `^${fragment.id}`
-		: fragment.path.join(" › ");
+	if (fragment.kind === "block") return `^${fragment.id}`;
+	if (fragment.kind === "annotation") return `@${fragment.id}`;
+	return fragment.path.join(" › ");
 }
 
 function RelationList({

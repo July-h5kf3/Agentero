@@ -1,6 +1,13 @@
 "use client";
 
-import { CornerDownLeft, FileText, Hash, TextQuote } from "lucide-react";
+import {
+	CornerDownLeft,
+	FileText,
+	Hash,
+	Highlighter,
+	ScanSearch,
+	TextQuote,
+} from "lucide-react";
 import { useEditorRef } from "platejs/react";
 import type {
 	MutableRefObject,
@@ -25,6 +32,16 @@ import {
 } from "@/components/editor/plugins/wikilink-plugin";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
+	listPaperAnnotationSummaries,
+	paperAbsFromSourceFile,
+	paperAbsFromWikiTarget,
+	paperAbsFromWorkspaceTab,
+	pdfTabIdForPaper,
+	truncateAnnotationPreview,
+} from "@/lib/pdf/annotation-ref";
+import { annotationsStore } from "@/lib/pdf/annotations-store";
+import { getVaultPath, vaultStore } from "@/lib/vault/store";
+import {
 	resolveWikiReference,
 	searchWikiLinks,
 	type WikiSearchCandidate,
@@ -40,6 +57,7 @@ import {
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
 } from "@/lib/wiki-completion";
+import { getActiveTabId, workspaceStore } from "@/lib/workspace/store";
 
 export type WikiCompletionDraft = {
 	raw: string;
@@ -73,8 +91,25 @@ function completionRequestKey(
 		: `${request.kind}\u0000${request.target}\u0000${request.query}`;
 }
 
-function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
+function CandidateIcon({
+	kind,
+	detail,
+}: {
+	kind: WikiSearchCandidate["kind"];
+	detail?: string;
+}) {
 	if (kind === "alias") return null;
+	// Annotation candidates: visual uses magnifier; highlight/划词 uses highlighter.
+	if (kind === "annotation") {
+		const visual = detail?.includes("visual");
+		const Icon = visual ? ScanSearch : Highlighter;
+		return (
+			<Icon
+				className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+				aria-hidden
+			/>
+		);
+	}
 	const Icon =
 		kind === "file" ? FileText : kind === "heading" ? Hash : TextQuote;
 	return (
@@ -83,6 +118,78 @@ function CandidateIcon({ kind }: { kind: WikiSearchCandidate["kind"] }) {
 			aria-hidden
 		/>
 	);
+}
+
+function filterAnnotationQuery(
+	query: string,
+	label: string,
+	id: string,
+): boolean {
+	const q = query.trim().toLowerCase();
+	if (!q) return true;
+	return `${label} ${id}`.toLowerCase().includes(q);
+}
+
+/**
+ * Build annotation candidates for `@` completion.
+ * Prefer the PDF tab store when the paper body is open; always fall back to
+ * disk marks so NOTES-focused editing still lists ids.
+ */
+async function buildAnnotationCandidates(
+	query: string,
+	target: string,
+	paperAbs: string | null,
+	pathHint: string,
+): Promise<WikiSearchCandidate[]> {
+	if (!paperAbs) return [];
+	const pdfTabId = pdfTabIdForPaper(paperAbs);
+	const state = annotationsStore.getState();
+	const storeHighlights = state.highlightsByTab[pdfTabId] ?? [];
+	const storeVisuals = state.visualTracesByTab[pdfTabId] ?? [];
+	const out: WikiSearchCandidate[] = [];
+
+	if (storeHighlights.length || storeVisuals.length) {
+		for (const h of storeHighlights) {
+			const preview =
+				truncateAnnotationPreview(h.comment || h.quote || "") || h.id;
+			if (!filterAnnotationQuery(query, preview, h.id)) continue;
+			out.push({
+				kind: "annotation",
+				path: pathHint,
+				insertText: target ? `${target}@${h.id}` : `@${h.id}`,
+				label: preview,
+				detail: `p.${h.page} · highlight`,
+				fragment: { kind: "annotation", id: h.id },
+			});
+		}
+		for (const v of storeVisuals) {
+			const preview = truncateAnnotationPreview(v.comment || "") || v.id;
+			if (!filterAnnotationQuery(query, preview, v.id)) continue;
+			out.push({
+				kind: "annotation",
+				path: pathHint,
+				insertText: target ? `${target}@${v.id}` : `@${v.id}`,
+				label: preview,
+				detail: `p.${v.page} · visual`,
+				fragment: { kind: "annotation", id: v.id },
+			});
+		}
+		return out;
+	}
+
+	const summaries = await listPaperAnnotationSummaries(paperAbs);
+	for (const s of summaries) {
+		if (!filterAnnotationQuery(query, s.preview, s.id)) continue;
+		out.push({
+			kind: "annotation",
+			path: pathHint,
+			insertText: target ? `${target}@${s.id}` : `@${s.id}`,
+			label: s.preview,
+			detail: `p.${s.page} · ${s.kind === "agent-trace" ? "visual" : "highlight"}`,
+			fragment: { kind: "annotation", id: s.id },
+		});
+	}
+	return out;
 }
 
 /**
@@ -99,9 +206,12 @@ export function WikiLinkSuggestion({
 	const editor = useEditorRef();
 	const { filePath } = useMarkdownDoc();
 	const wikiNav = useWikiNav();
+	// Depend on raw text only — draft position updates must not recreate the
+	// request object or we re-fetch and snap selection back to 0.
+	const draftRaw = draft?.raw ?? null;
 	const request = useMemo(
-		() => (draft ? parseWikiCompletionQuery(draft.raw) : null),
-		[draft],
+		() => (draftRaw != null ? parseWikiCompletionQuery(draftRaw) : null),
+		[draftRaw],
 	);
 	const requestKey = completionRequestKey(request);
 	const [candidateState, setCandidateState] = useState<CandidateState>({
@@ -110,6 +220,8 @@ export function WikiLinkSuggestion({
 	});
 	const candidates =
 		candidateState.requestKey === requestKey ? candidateState.items : [];
+	const candidatesRef = useRef(candidates);
+	candidatesRef.current = candidates;
 	const [recentCandidates, setRecentCandidates] = useState<
 		WikiSearchCandidate[]
 	>([]);
@@ -117,15 +229,31 @@ export function WikiLinkSuggestion({
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const listRef = useRef<HTMLDivElement>(null);
 
+	// Keep highlight inside the listbox only — scrollIntoView can scroll the
+	// editor container and onScrollCapture closes the completion popup.
 	useEffect(() => {
-		if (!candidates[selectedIndex]) return;
-		listRef.current
-			?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
-			?.scrollIntoView({ block: "nearest" });
+		const list = listRef.current;
+		if (!list || !candidates[selectedIndex]) return;
+		const option = list.querySelector<HTMLElement>(
+			'[role="option"][aria-selected="true"]',
+		);
+		if (!option) return;
+		const listRect = list.getBoundingClientRect();
+		const optionRect = option.getBoundingClientRect();
+		if (optionRect.bottom > listRect.bottom) {
+			list.scrollTop += optionRect.bottom - listRect.bottom;
+		} else if (optionRect.top < listRect.top) {
+			list.scrollTop -= listRect.top - optionRect.top;
+		}
 	}, [candidates, selectedIndex]);
 
 	useEffect(() => {
+		// Reset highlight only when the completion query identity changes.
+		void requestKey;
 		setSelectedIndex(0);
+	}, [requestKey]);
+
+	useEffect(() => {
 		if (!request) {
 			setCandidateState({ requestKey: null, items: [] });
 			setLoading(false);
@@ -190,6 +318,52 @@ export function WikiLinkSuggestion({
 					}
 					return;
 				}
+				// Annotation completion is frontend-backed (marks live outside the
+				// Markdown wiki index). Resolve paper from target or NOTES path,
+				// then list from PDF-tab store or disk.
+				if (request.kind === "annotation") {
+					let paperAbs: string | null = null;
+					let pathHint = filePath;
+					if (request.target) {
+						const resolved = await resolveWikiReference(
+							vaultPath,
+							filePath,
+							request.target,
+						);
+						if (resolved?.targetPath) {
+							pathHint = resolved.targetPath;
+							paperAbs = paperAbsFromWikiTarget(vaultPath, resolved.targetPath);
+						}
+					}
+					if (!paperAbs) {
+						paperAbs = paperAbsFromSourceFile(
+							filePath,
+							vaultStore.getState().paperFolders,
+						);
+					}
+					if (!paperAbs) {
+						const tab = workspaceStore
+							.getState()
+							.tabs.find((item) => item.id === getActiveTabId());
+						paperAbs = paperAbsFromWorkspaceTab(
+							tab ?? null,
+							getVaultPath(),
+							vaultStore.getState().paperFolders,
+						);
+						if (tab?.paperMeta?.path) pathHint = tab.paperMeta.path;
+					}
+					const items = await buildAnnotationCandidates(
+						request.query,
+						request.target,
+						paperAbs,
+						pathHint,
+					);
+					if (!cancelled) {
+						setCandidateState({ requestKey, items });
+					}
+					return;
+				}
+
 				// Resolve only the file portion before searching its anchors.
 				// An empty target intentionally resolves to the source document, so
 				// the initial `[[#` / `[[^` trigger can list every local anchor.
@@ -278,7 +452,9 @@ export function WikiLinkSuggestion({
 			const parentEntry = editor.api.parent(selection.anchor.path);
 			const stableLinkPath =
 				parentEntry && isWikiLinkNode(parentEntry[0]) ? parentEntry[1] : null;
-			controllerRef.current = null;
+			// Do not null controllerRef here. The layout effect only binds once
+			// (stable identity); clearing it permanently kills ↑/↓/Enter until
+			// remount. Closed menus are ignored via draftRef.current === null.
 			editor.tf.delete({ at: { anchor: start, focus: end } });
 			if (stableLinkPath) {
 				const parsed = parseWikiLinkMarkdown(markdown);
@@ -354,56 +530,76 @@ export function WikiLinkSuggestion({
 			);
 			return true;
 		},
-		[controllerRef, draft, editor, onClose, onContinue, request],
+		[draft, editor, onClose, onContinue, request],
 	);
 
-	const handleKeyDown = useCallback(
-		(event: ReactKeyboardEvent<HTMLDivElement>) => {
-			if (!draft) return false;
-			if (event.key === "Escape") {
-				event.preventDefault();
-				onClose();
-				return true;
-			}
-			if (event.key === "ArrowDown" && candidates.length) {
-				event.preventDefault();
-				setSelectedIndex((index) => (index + 1) % candidates.length);
-				return true;
-			}
-			if (event.key === "ArrowUp" && candidates.length) {
-				event.preventDefault();
-				setSelectedIndex(
-					(index) => (index - 1 + candidates.length) % candidates.length,
-				);
-				return true;
-			}
-			if (isWikiCompletionSubmitKey(event.key) && candidates[selectedIndex]) {
-				if (selectCandidate(candidates[selectedIndex], event.key)) {
-					event.preventDefault();
-					return true;
-				}
-				if (request?.kind === "alias" && !request.query) {
-					event.preventDefault();
-					return true;
-				}
-			}
-			return false;
-		},
-		[candidates, draft, onClose, request, selectCandidate, selectedIndex],
-	);
+	const selectedIndexRef = useRef(selectedIndex);
+	selectedIndexRef.current = selectedIndex;
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const requestRef = useRef(request);
+	requestRef.current = request;
+	const selectCandidateRef = useRef(selectCandidate);
+	selectCandidateRef.current = selectCandidate;
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
 
+	// Stable controller identity: re-binding on every highlight change used to
+	// briefly null `controllerRef` in layout cleanup, and selection re-renders
+	// could race with the next keydown.
 	useLayoutEffect(() => {
-		controllerRef.current = { handleKeyDown };
+		controllerRef.current = {
+			handleKeyDown: (event) => {
+				if (!draftRef.current) return false;
+				if (event.key === "Escape") {
+					event.preventDefault();
+					onCloseRef.current();
+					return true;
+				}
+				// Always consume vertical arrows while the menu is open so the caret
+				// cannot leave the `[[` token (which would dismiss the popup). Cycle
+				// selection when there are items; still swallow keys when empty/loading.
+				if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+					event.preventDefault();
+					event.stopPropagation();
+					const items = candidatesRef.current;
+					if (items.length) {
+						const delta = event.key === "ArrowDown" ? 1 : -1;
+						setSelectedIndex(
+							(index) => (index + delta + items.length) % items.length,
+						);
+					}
+					return true;
+				}
+				const items = candidatesRef.current;
+				const index = selectedIndexRef.current;
+				if (isWikiCompletionSubmitKey(event.key) && items[index]) {
+					if (selectCandidateRef.current(items[index], event.key)) {
+						event.preventDefault();
+						return true;
+					}
+					if (
+						requestRef.current?.kind === "alias" &&
+						!requestRef.current.query
+					) {
+						event.preventDefault();
+						return true;
+					}
+				}
+				return false;
+			},
+		};
 		return () => {
 			controllerRef.current = null;
 		};
-	}, [controllerRef, handleKeyDown]);
+	}, [controllerRef]);
 
 	if (!draft || !request) return null;
 	return (
 		<ViewportFloating
 			point={{ x: draft.left, y: draft.top }}
 			className="z-50 flex w-96 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+			data-editor-completion="wiki"
 		>
 			<div
 				ref={listRef}
@@ -431,6 +627,7 @@ export function WikiLinkSuggestion({
 							key={`${candidate.kind}:${candidate.path}:${candidate.insertText}:${candidate.alias ?? ""}`}
 							type="button"
 							role="option"
+							tabIndex={-1}
 							aria-selected={index === selectedIndex}
 							className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs outline-none ${
 								index === selectedIndex
@@ -440,7 +637,7 @@ export function WikiLinkSuggestion({
 							onMouseDown={(event) => event.preventDefault()}
 							onClick={() => selectCandidate(candidate)}
 						>
-							<CandidateIcon kind={candidate.kind} />
+							<CandidateIcon kind={candidate.kind} detail={candidate.detail} />
 							<span className="min-w-0 flex-1">
 								<span
 									className={`block truncate font-medium ${

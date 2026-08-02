@@ -1,7 +1,7 @@
 /**
  * Unified on-disk layout for PDF selection marks:
  *
- *   papers/<id>/marks/<id>.json          # kind: ask | highlight | translate
+ *   papers/<id>/marks/<id>.json          # kind: ask | highlight | translate | agent-trace
  *   papers/<id>/marks/annotations.json   # EmbedPDF highlight/批注 transfer blob
  *
  * Per-mark files are pretty JSON with required `kind`.
@@ -10,14 +10,19 @@
 import { readDir } from "@tauri-apps/plugin-fs";
 
 import { isTauri } from "@/lib/core/tauri";
-import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
+import {
+	joinVaultPath,
+	readVaultFile,
+	removeVaultPath,
+	writeVaultFile,
+} from "@/lib/vault";
 
 export const MARKS_FOLDER = "marks";
 
 /** Aggregate EmbedPDF annotations file name under `marks/` (not a per-id mark). */
 export const ANNOTATIONS_JSON = "annotations.json";
 
-export type PdfMarkKind = "ask" | "highlight" | "translate";
+export type PdfMarkKind = "ask" | "highlight" | "translate" | "agent-trace";
 
 export function marksDir(paperAbsPath: string): string {
 	return joinVaultPath(paperAbsPath, MARKS_FOLDER);
@@ -85,8 +90,7 @@ export async function deleteMarkFile(
 ): Promise<void> {
 	if (!isTauri() || !paperAbsPath || !id) return;
 	try {
-		const { remove } = await import("@tauri-apps/plugin-fs");
-		await remove(markPath(paperAbsPath, id));
+		await removeVaultPath(markPath(paperAbsPath, id));
 	} catch {
 		// missing is fine
 	}

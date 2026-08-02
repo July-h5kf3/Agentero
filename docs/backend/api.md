@@ -276,6 +276,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **行为**
   - 创建 label 为 `agentero-<uuid>` 的 Webview 窗口，URL 带 `?fresh=1`（不自动恢复上次 Vault）。
   - 窗口尺寸 / macOS overlay 标题栏与主窗口一致。
+  - 窗口初始隐藏，由全局 page-load hook 在页面加载完成后显示；首个 React commit 前显示静态启动壳。
   - Capability 覆盖 `main` 与 `agentero-*`（见 `src-tauri/capabilities/default.json`）。
   - 菜单点击由 Host 直接调用，不经过前端 event 往返（Host 内用 `tauri::async_runtime::spawn` 调用）。
   - **必须是 `async` command**：同步 command 在主线程、且处于调用方 webview 的 IPC 回调内执行，Windows 上从那里 build webview 会卡死（wry 进入嵌套消息循环等 WebView2 controller 回调，而该回调要等当前处理器返回），新窗口表现为空白且无法关闭。
@@ -297,6 +298,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 - **行为**
   - 若 label 为 `settings` 的窗口已存在，则将其聚焦并返回；否则新建。
   - URL 带 `?window=settings&section=...&vault_path=...`，由 `src/main.tsx` 分支渲染轻量 Settings 页面（不加载完整 `App`）。
+  - 新窗口初始隐藏，由全局 page-load hook 在页面加载完成后显示；首个 React commit 前显示静态启动壳。
   - macOS 使用 Overlay 标题栏与原生交通灯；Windows / Linux 使用系统原生窗口边框（OS 自绘标题栏与 caption 按钮）。
   - 窗口关闭时 Host 向所有窗口 `emit("settings_window_closed", ())`，便于主窗口同步 Settings 打开状态（实现 `⌘,` _toggle_）；建窗失败时也会 emit 一次，避免 toggle 卡在“已打开”。
   - 与 `window_new` 同理，**必须是 `async` command**。
@@ -1272,7 +1274,7 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 
 #### `agent_run_once`
 
-通用 ACP provider 创建或恢复会话并发送 prompt。所有 provider（含 Codex）统一使用 ACP `session/new` 或 `session/resume` 管理会话；历史经 `session/list` + `session/load` 获取。
+通用 ACP provider 创建或恢复会话并发送 prompt。`sessionId` 省略时走 `session/new`；提供时按 agent 能力选择恢复方式：`sessionCapabilities.resume` → `session/resume`，否则若 `loadSession` → `session/load`（Grok Build 实测仅支持 load，不支持 resume）。历史列表经 `session/list` + `session/load` 获取。
 
 - **参数**
 

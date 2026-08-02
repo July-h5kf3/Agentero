@@ -1,10 +1,16 @@
-/** Unified PDF selection overlay (ask / annotate / translate). */
+/** Unified PDF selection overlay (ask / annotate / translate / agent-trace). */
 
-export type SelectionOverlayKind = "ask" | "annotate" | "translate";
+export type SelectionOverlayKind =
+	| "ask"
+	| "annotate"
+	| "translate"
+	| "agent-trace";
 
 /**
  * Which selection dialog is open. Anchor geometry lives on the kind-specific
- * record (ask thread / highlight / translate); screen coords are derived.
+ * record (ask thread / highlight / translate / agent-trace); screen coords are
+ * derived. agent-trace shows a preview card; opening the Agent session is a
+ * separate action on that card.
  */
 export type ActiveSelectionCard = {
 	kind: SelectionOverlayKind;
@@ -20,4 +26,6 @@ export type SelectionPin = {
 	preview: string;
 	/** Ask threads that were dismissed still show as “ended” pins */
 	ended?: boolean;
+	/** Mark id when kind is agent-trace (same as pin id). */
+	traceId?: string;
 };

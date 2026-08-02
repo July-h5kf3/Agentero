@@ -653,6 +653,20 @@ impl WikiIndex {
                 content: None,
             });
         };
+
+        // Annotation embeds: Host only confirms the fragment kind; frontend loads
+        // quote/preview from marks/annotations.json or marks/<id>.json.
+        if matches!(
+            link.occurrence.fragment,
+            Some(LinkFragment::Annotation { .. })
+        ) {
+            return Ok(WikiEmbedResponse {
+                link,
+                content_kind: Some(WikiEmbedContentKind::Annotation),
+                content: None,
+            });
+        }
+
         let target = Path::new(vault_root).join(target_path);
         if is_image(&target) {
             return Ok(WikiEmbedResponse {

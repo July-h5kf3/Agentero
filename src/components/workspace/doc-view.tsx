@@ -6,6 +6,7 @@ import { HtmlViewer } from "@/components/viewer/html-viewer";
 import { ImageViewer } from "@/components/viewer/image-viewer";
 import { RecycleBinView } from "@/components/workspace/recycle-bin-view";
 import type { PaperMetadata } from "@/lib/paper";
+import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import type { LibraryColumnPref } from "@/lib/settings";
@@ -69,6 +70,7 @@ export type DocViewPdfProps = {
 	registerHandle: (tabId: string, handle: PdfViewerHandle | null) => void;
 	onHighlightsChange: (tabId: string, list: PdfHighlight[]) => void;
 	onAsksChange: (tabId: string, list: PdfAskThread[]) => void;
+	onVisualTracesChange: (tabId: string, list: PdfVisualSessionTrace[]) => void;
 };
 
 export type DocViewProps = {
@@ -224,6 +226,7 @@ export const DocView = memo(function DocView({
 						}
 						vaultPath={vaultPath}
 						zen={pdf.zen}
+						isActive={active}
 						onToggleZen={pdf.onToggleZen}
 						onOpenAnnotations={pdf.onOpenAnnotations}
 						onOpenSettings={pdf.onOpenSettings}
@@ -231,6 +234,9 @@ export const DocView = memo(function DocView({
 						onHandle={(h) => pdf.registerHandle(tab.id, h)}
 						onHighlightsChange={(list) => pdf.onHighlightsChange(tab.id, list)}
 						onAsksChange={(list) => pdf.onAsksChange(tab.id, list)}
+						onVisualTracesChange={(list) =>
+							pdf.onVisualTracesChange(tab.id, list)
+						}
 					/>
 				</Suspense>
 			</div>

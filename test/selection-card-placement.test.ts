@@ -71,4 +71,76 @@ describe("placeSelectionCard", () => {
 		// Prefer left of anchor when right side would overflow.
 		expect(left + width).toBeLessThanOrEqual(screenX + 1);
 	});
+
+	it("plans side from placementWidth so compact cards open on the stable side", () => {
+		// Compact (280) would still fit on the right near the edge; expanded (360)
+		// would not. Without placementWidth the card would open right then flip.
+		const compact = 280;
+		const expanded = 360;
+		const gap = 6;
+		// Right room for compact only: expanded overflows, compact does not.
+		const screenX = VW - EDGE - compact - gap - 10;
+
+		const withoutPlan = placeSelectionCard(
+			{ x: screenX, y: 200 },
+			{ width: compact, height: 260, preferRight: true },
+		);
+		// Sanity: compact alone prefers the right of the anchor.
+		expect(withoutPlan.left).toBe(screenX + gap);
+
+		const compactPlaced = placeSelectionCard(
+			{ x: screenX, y: 200 },
+			{
+				width: compact,
+				height: 260,
+				placementWidth: expanded,
+				preferRight: true,
+			},
+		);
+		const expandedPlaced = placeSelectionCard(
+			{ x: screenX, y: 200 },
+			{
+				width: expanded,
+				height: 440,
+				placementWidth: expanded,
+				preferRight: true,
+			},
+		);
+
+		// Both sizes share the same left (open left of pin from the start).
+		expect(compactPlaced.left).toBe(expandedPlaced.left);
+		expect(compactPlaced.left + expanded).toBeLessThanOrEqual(screenX + 1);
+		// Expanding must not move left — avoids pointer leave thrash.
+		expect(expandedPlaced.left).toBe(compactPlaced.left);
+	});
+
+	it("plans top from placementHeight so expand does not re-anchor vertically", () => {
+		const compactH = 260;
+		const expandedH = 440;
+		const screenY = VH - EDGE - compactH + 20;
+
+		const compactPlaced = placeSelectionCard(
+			{ x: 100, y: screenY },
+			{
+				width: 280,
+				height: compactH,
+				placementHeight: expandedH,
+				preferRight: true,
+			},
+		);
+		const expandedPlaced = placeSelectionCard(
+			{ x: 100, y: screenY },
+			{
+				width: 360,
+				height: expandedH,
+				placementHeight: expandedH,
+				preferRight: true,
+			},
+		);
+
+		expect(compactPlaced.top).toBe(expandedPlaced.top);
+		expect(expandedPlaced.top + expandedPlaced.maxHeight).toBeLessThanOrEqual(
+			VH - EDGE + 0.5,
+		);
+	});
 });

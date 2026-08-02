@@ -96,16 +96,20 @@ fn resolve_document(
     }
 
     let raw = occurrence.target_raw.trim();
-    // Markdown destinations without a leading slash are relative to the source
-    // document, including bare `Target.md`. Try that location before the
-    // vault-root spelling so a nearby same-named document keeps its Markdown
-    // meaning instead of being shadowed by a root-level file.
+    // Source-relative resolution:
+    // - Markdown destinations are always source-relative (CommonMark).
+    // - Wikilinks only when explicitly relative (`./` / `../`), so vault paths
+    //   like `papers/foo/NOTES` are NOT joined under the source directory
+    //   (which previously produced impossible candidates and flaky misses).
     let mut exact_candidates = Vec::new();
-    if matches!(occurrence.syntax, InternalLinkSyntax::Markdown) && !raw.starts_with('/') {
+    let wiki_explicit_relative = raw == "." || raw.starts_with("./") || raw.starts_with("../");
+    let try_relative = !raw.starts_with('/')
+        && (matches!(occurrence.syntax, InternalLinkSyntax::Markdown) || wiki_explicit_relative);
+    if try_relative {
         let relative = source_relative(&occurrence.source, raw);
-        // A Markdown destination is source-relative. If resolving it would
-        // escape the Vault, do not fall through to a root/suffix/stem match:
-        // `../../Target.md` must never silently become `Target.md` in Vault.
+        // If resolving would escape the Vault, do not fall through to a
+        // root/suffix/stem match: `../../Target.md` must never silently become
+        // `Target.md` at vault root.
         if relative == ".." || relative.starts_with("../") {
             return Err(Vec::new());
         }
@@ -215,6 +219,8 @@ pub(crate) fn fragment_anchors<'a>(
                 .collect()
         }
         LinkFragment::Block { .. } => Vec::new(),
+        // Annotations live in paper marks/, not Markdown anchors.
+        LinkFragment::Annotation { .. } => Vec::new(),
     }
 }
 
@@ -245,6 +251,23 @@ pub fn resolve_occurrence(
     };
 
     if let Some(fragment) = &occurrence.fragment {
+        // PDF annotation ids are not Markdown anchors. A well-formed id + resolved
+        // target is enough for link status; existence is refined when a vault root
+        // is available (see WikiIndex) and always re-checked on the frontend for
+        // embed/jump.
+        if let LinkFragment::Annotation { id } = fragment {
+            let status = if crate::features::wiki::extract::is_valid_annotation_id(id) {
+                LinkResolutionStatus::Resolved
+            } else {
+                LinkResolutionStatus::InvalidFragment
+            };
+            return ResolvedLink {
+                occurrence,
+                status,
+                target_path: Some(path),
+                candidates: Vec::new(),
+            };
+        }
         let document = documents.iter().find(|document| document.path == path);
         let candidates: Vec<String> = document
             .map(|document| {

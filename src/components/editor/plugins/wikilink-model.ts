@@ -6,6 +6,16 @@
  * without creating a component registration cycle.
  */
 
+/**
+ * Strip CommonMark-style escapes (esp. `\_`) that mdast `state.safe` injects
+ * when serializing wiki-link targets. Paths like `papers/10_1007_…/NOTES` must
+ * not become `papers/10\_1007\_…/NOTES` or resolution falls back to ambiguous
+ * stem matches (e.g. many `NOTES`).
+ */
+export function unescapeWikiLinkText(raw: string): string {
+	return raw.replace(/\\(.)/g, "$1");
+}
+
 /** mdast node produced by `@flowershow/remark-wiki-link`. */
 type MdWikiLink = {
 	type: string;
@@ -30,14 +40,31 @@ export type WikiLinkDraftText = {
 	wikiLinkDraft: true;
 };
 
+/**
+ * Split a wikilink main body (no alias) into target + fragment suffix.
+ * - `#…` → heading / `^block` / `@annotation` (fragment keeps leading ^/@ when present)
+ * - sugar `target@id` → heading field `@id` so serialization can prefer sugar form
+ */
 export function splitWikiLinkTarget(raw: string): {
 	target: string;
 	heading: string;
 } {
-	const h = raw.indexOf("#");
-	return h >= 0
-		? { target: raw.slice(0, h), heading: raw.slice(h + 1) }
-		: { target: raw, heading: "" };
+	// Unescape the whole body first so path segments with `_` survive a prior
+	// serialize that ran through mdast `state.safe` (not only the annotation id).
+	const text = unescapeWikiLinkText(raw);
+	const h = text.indexOf("#");
+	if (h >= 0) {
+		return { target: text.slice(0, h), heading: text.slice(h + 1) };
+	}
+	const at = text.lastIndexOf("@");
+	if (at >= 0) {
+		const id = text.slice(at + 1).trim();
+		// nanoid may include `_`; mirror Host `is_valid_annotation_id`.
+		if (id.length > 0 && /^[\p{L}\p{N}_-]+$/u.test(id)) {
+			return { target: text.slice(0, at), heading: `@${id}` };
+		}
+	}
+	return { target: text, heading: "" };
 }
 
 function findWikiLinkAliasSeparator(raw: string): number {
@@ -55,7 +82,17 @@ export function wikiLinkToMarkdown(node: {
 	alias?: string | null;
 	embed?: boolean;
 }): string {
-	const target = node.heading ? `${node.value}#${node.heading}` : node.value;
+	let target = node.value;
+	if (node.heading) {
+		// Prefer sugar `target@id`, or same-note `[[@id]]` when value is empty.
+		target = node.heading.startsWith("@")
+			? node.value
+				? `${node.value}${node.heading}`
+				: node.heading
+			: node.value
+				? `${node.value}#${node.heading}`
+				: `#${node.heading}`;
+	}
 	const alias = node.alias ? `|${node.alias.replaceAll("|", "\\|")}` : "";
 	return `${node.embed ? "!" : ""}[[${target}${alias}]]`;
 }
@@ -71,7 +108,7 @@ export function parseWikiLinkMarkdown(raw: string): WikiSlateNode | null {
 	const pipe = findWikiLinkAliasSeparator(body);
 	const targetWithHeading = pipe < 0 ? body : body.slice(0, pipe);
 	const aliasText =
-		pipe < 0 ? null : body.slice(pipe + 1).replaceAll("\\|", "|");
+		pipe < 0 ? null : unescapeWikiLinkText(body.slice(pipe + 1));
 	if (targetWithHeading.endsWith("#") || aliasText === "") return null;
 	const { target, heading } = splitWikiLinkTarget(targetWithHeading);
 	if (!target && !heading) return null;
@@ -162,6 +199,9 @@ function toSlate(node: MdWikiLink, embed: boolean): WikiSlateNode {
 	const raw = node.value ?? "";
 	const { target, heading } = splitWikiLinkTarget(raw);
 	let alias = node.data?.alias ?? null;
+	if (typeof alias === "string") {
+		alias = unescapeWikiLinkText(alias);
+	}
 	if (embed) {
 		const width = node.data?.hProperties?.["data-fs-width"];
 		const height = node.data?.hProperties?.["data-fs-height"];
@@ -182,16 +222,96 @@ function toSlate(node: MdWikiLink, embed: boolean): WikiSlateNode {
 	};
 }
 
+/**
+ * Build the mdast `value` for a wiki link / embed.
+ * Prefer sugar `target@id` for annotations (matches copy-from-panel + Obsidian);
+ * other fragments keep `target#fragment`.
+ */
+function wikiLinkMdastMain(node: {
+	value: string;
+	heading?: string | null;
+}): string {
+	if (!node.heading) return node.value;
+	if (node.heading.startsWith("@")) {
+		return node.value ? `${node.value}${node.heading}` : node.heading;
+	}
+	return node.value ? `${node.value}#${node.heading}` : `#${node.heading}`;
+}
+
 function serializeWikiLinkNode(node: {
 	value: string;
 	heading?: string | null;
 	alias?: string | null;
 	embed?: boolean;
 }) {
-	const value = node.heading ? `${node.value}#${node.heading}` : node.value;
+	const value = wikiLinkMdastMain(node);
 	const data: { alias?: string } = {};
 	if (node.alias) data.alias = node.alias;
 	return { type: node.embed ? "embed" : "wikiLink", value, data };
+}
+
+/**
+ * Emit `[[…]]` / `![[…]]` without mdast `state.safe`.
+ *
+ * `@flowershow/remark-wiki-link` uses `state.safe` which escapes `_` under
+ * Plate's `emphasis: "_"` stringify option. Vault paths with underscores then
+ * round-trip incorrectly on save/reopen.
+ */
+function formatWikiLinkMdastLiteral(
+	node: {
+		value?: string | null;
+		data?: { alias?: string; hProperties?: Record<string, unknown> };
+	},
+	embed: boolean,
+	aliasDivider = "|",
+): string {
+	const main = unescapeWikiLinkText(String(node.value ?? ""));
+	const width = node.data?.hProperties?.["data-fs-width"];
+	const height = node.data?.hProperties?.["data-fs-height"];
+	let aliasOrDimensions = "";
+	if (embed && (width || height)) {
+		aliasOrDimensions =
+			width && height ? `${width}x${height}` : String(width || height || "");
+	} else if (node.data?.alias) {
+		aliasOrDimensions = unescapeWikiLinkText(
+			String(node.data.alias),
+		).replaceAll("|", "\\|");
+	}
+	const open = embed ? "![[" : "[[";
+	return aliasOrDimensions
+		? `${open}${main}${aliasDivider}${aliasOrDimensions}]]`
+		: `${open}${main}]]`;
+}
+
+/** Minimal unified processor surface used by remark plugin setup. */
+type RemarkPluginThis = {
+	data: () => Record<string, unknown[] | undefined>;
+};
+
+/**
+ * Remark plugin (after `@flowershow/remark-wiki-link`) that replaces wiki/embed
+ * toMarkdown handlers so path underscores are not re-escaped on save.
+ */
+export function remarkWikiLinkLiteralPaths(this: RemarkPluginThis): void {
+	// unified binds `this` to the processor when the plugin is attached.
+	const data = this.data();
+	const add = (field: string, value: unknown) => {
+		const existing = data[field];
+		if (existing) existing.push(value);
+		else data[field] = [value];
+	};
+	add("toMarkdownExtensions", {
+		handlers: {
+			wikiLink: (node: {
+				value?: string;
+				data?: { alias?: string; hProperties?: Record<string, unknown> };
+			}) => formatWikiLinkMdastLiteral(node, false),
+			embed: (node: {
+				value?: string;
+				data?: { alias?: string; hProperties?: Record<string, unknown> };
+			}) => formatWikiLinkMdastLiteral(node, true),
+		},
+	});
 }
 
 export const wikiLinkRules = {

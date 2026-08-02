@@ -25,6 +25,7 @@ import {
 	GlobalPointerProvider,
 	InteractionManagerPluginPackage,
 	PagePointerProvider,
+	useInteractionManagerCapability,
 } from "@embedpdf/plugin-interaction-manager/react";
 import {
 	RenderLayer,
@@ -78,6 +79,7 @@ import {
 	MoveVertical,
 	Plus,
 	RotateCcw,
+	ScanSearch,
 	Search,
 	X,
 } from "lucide-react";
@@ -114,30 +116,55 @@ import {
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
+import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
+import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
+import { VisualAnnotationEditor } from "@/components/viewer/pdf-ask/visual-annotation-editor";
+import { VisualTraceCard } from "@/components/viewer/pdf-ask/visual-trace-card";
+import { PdfCitationPreview } from "@/components/viewer/pdf-citation-preview";
 import {
 	cancelAgentRun,
 	listAgents,
 	listenAgentCompleted,
 	listenAgentFailed,
 	listenAgentStream,
+	type PromptImage,
 	runOnce,
 } from "@/lib/agent";
+import { agentSessionStore } from "@/lib/agent/agent-session-store";
 import {
 	clearActiveSelection,
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
+import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
+import {
+	type Citation,
+	looksLikeCitationMarker,
+	matchCitationByMarker,
+	paperRefsList,
+} from "@/lib/paper/refs";
+import {
+	createRunningTraces,
+	deletePdfVisualTrace,
+	listPdfVisualTraces,
+	newTraceMessageId,
+	type PdfVisualSessionTrace,
+	traceMessages,
+	tracePin,
+	tracePreview,
+} from "@/lib/pdf/agent-trace";
+import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import {
 	createEmptyThread,
 	deletePdfAskThread,
@@ -149,7 +176,11 @@ import {
 } from "@/lib/pdf/ask";
 import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
 import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
-import type { PdfAskAnchor, PdfAskThread } from "@/lib/pdf/ask/types";
+import type {
+	PdfAskAnchor,
+	PdfAskNormalizedRect,
+	PdfAskThread,
+} from "@/lib/pdf/ask/types";
 import { bookmarkPageIndex } from "@/lib/pdf/bookmark";
 import {
 	clearCitationHover,
@@ -172,6 +203,7 @@ import {
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
@@ -192,7 +224,12 @@ import {
 	parsePdfZoomPercentage,
 } from "@/lib/pdf/zoom";
 import { loadSettings } from "@/lib/settings";
-import { openRightTab } from "@/lib/shell/ui-store";
+import { formatShortcutById } from "@/lib/shell/shortcuts";
+import {
+	openRightTab,
+	requestOpenAgentSession,
+	setAgentPanelMounted,
+} from "@/lib/shell/ui-store";
 import {
 	buildTranslatePrompt,
 	prepareTranslateTask,
@@ -209,6 +246,11 @@ export type PdfViewerHandle = {
 	/** Jump to an ask pin and reopen its conversation card. */
 	scrollToAsk: (id: string) => void;
 	deleteAsk: (id: string) => void;
+	/** Jump to a visual agent-trace pin and open its preview card. */
+	scrollToVisualTrace: (id: string) => void;
+	deleteVisualTrace: (id: string) => void;
+	/** Toggle visual-region annotation mode (⌘.). */
+	toggleVisualAnnotation: () => void;
 };
 
 export type PdfViewerProps = {
@@ -246,6 +288,13 @@ export type PdfViewerProps = {
 	onHighlightsChange?: (highlights: PdfHighlight[]) => void;
 	/** Called whenever PDF ask threads change (for the annotations panel) */
 	onAsksChange?: (threads: PdfAskThread[]) => void;
+	/** Called whenever visual agent-trace marks change (for the annotations panel) */
+	onVisualTracesChange?: (traces: PdfVisualSessionTrace[]) => void;
+	/**
+	 * Workspace active tab. Dock may keep inactive PDFs mounted (`pdfKeepMounted`);
+	 * only the active viewer should poll marks/ (expensive base64 JSON list).
+	 */
+	isActive?: boolean;
 };
 
 /** Recursive outline (bookmarks) list for the PDF side panel. */
@@ -643,6 +692,12 @@ type SelectionMenuState = {
 	pages: FormattedSelection[];
 };
 
+type CitationPreviewState = {
+	screen: { x: number; y: number };
+	marker: string;
+	citation: Citation | null;
+};
+
 type EditorState = {
 	screen: { x: number; y: number };
 	pageIndex: number;
@@ -651,27 +706,54 @@ type EditorState = {
 	comment: string;
 };
 
+type VisualDraftEditorState = {
+	screen: { x: number; y: number };
+	page: number;
+	region: PdfAskNormalizedRect;
+	image: PromptImage;
+};
+
 function PdfViewerInner({
 	docId,
 	paperAbsPath = null,
 	paperRelPath = null,
 	vaultPath = null,
 	zen = false,
+	isActive = true,
 	onToggleZen,
 	onOpenAnnotations,
 	onOpenSettings,
 	onHandle,
 	onHighlightsChange,
 	onAsksChange,
+	onVisualTracesChange,
 }: PdfViewerInnerProps) {
 	const { t } = useTranslation("viewer");
+	// Parent often passes inline lambdas; keep latest in refs so data effects
+	// do not re-fire every parent render (was Maximum update depth exceeded).
+	const onAsksChangeRef = useRef(onAsksChange);
+	onAsksChangeRef.current = onAsksChange;
+	const onVisualTracesChangeRef = useRef(onVisualTracesChange);
+	onVisualTracesChangeRef.current = onVisualTracesChange;
+	const onHighlightsChangeRef = useRef(onHighlightsChange);
+	onHighlightsChangeRef.current = onHighlightsChange;
+
+	const { engine } = usePdfEngineContext();
 	const { provides: zoom, state: zoomState } = useZoom(docId);
 	const { provides: scroll, state: scrollState } = useScroll(docId);
 	const { provides: selectionCap } = useSelectionCapability();
+	const { provides: interactionCap } = useInteractionManagerCapability();
 	const { provides: annotationCap } = useAnnotationCapability();
 	const { provides: docCap } = useDocumentManagerCapability();
 	const { state: searchState, provides: search } = useSearch(docId);
 	const { provides: bookmarkCap } = useBookmarkCapability();
+
+	// EmbedPDF's useScroll calls forDocument() every render and returns a fresh
+	// scope object (createScrollScope). Never put `scroll` in useEffect deps —
+	// only primitive readiness (scrollReady) or scrollState fields.
+	const scrollRef = useRef(scroll);
+	scrollRef.current = scroll;
+	const scrollReady = Boolean(scroll);
 
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
@@ -685,10 +767,18 @@ function PdfViewerInner({
 	const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(
 		null,
 	);
+	const [regionSelecting, setRegionSelecting] = useState(false);
+	const [visualCropPending, setVisualCropPending] = useState(false);
+	const [citations, setCitations] = useState<Citation[]>([]);
+	const [citationPreview, setCitationPreview] =
+		useState<CitationPreviewState | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
+	const [visualDraftEditor, setVisualDraftEditor] =
+		useState<VisualDraftEditorState | null>(null);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
+	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
 	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
 		null,
 	);
@@ -697,6 +787,10 @@ function PdfViewerInner({
 	);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
+	const [visualStreaming, setVisualStreaming] = useState(false);
+	const [visualError, setVisualError] = useState<string | null>(null);
+	/** Keep the just-created Cmd+Enter card expanded until the user dismisses it. */
+	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
 	const [translateStreaming, setTranslateStreaming] = useState(false);
 	const [translateError, setTranslateError] = useState<string | null>(null);
 
@@ -723,16 +817,41 @@ function PdfViewerInner({
 	threadsRef.current = threads;
 	const translatesRef = useRef(translates);
 	translatesRef.current = translates;
+	const visualTracesRef = useRef(visualTraces);
+	visualTracesRef.current = visualTraces;
 	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
 	activeCardRef.current = activeCard;
 	const activeSessionRef = useRef<string | null>(null);
+	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
 
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
+
+	useEffect(() => {
+		setCitations([]);
+		setCitationPreview(null);
+		setRegionSelecting(false);
+		clearCitationHover(docId);
+		if (!vaultPath || !paperRelPath) return;
+		let cancelled = false;
+		void paperRefsList(vaultPath, paperRelPath)
+			.then((sidecar) => {
+				if (!cancelled) setCitations(sidecar?.citations ?? []);
+			})
+			.catch(() => {
+				if (!cancelled) setCitations([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [docId, vaultPath, paperRelPath]);
 
 	useEffect(() => {
 		if (!zoomFieldFocusedRef.current) {
@@ -765,6 +884,10 @@ function PdfViewerInner({
 		if (activeCard?.kind !== "translate") return null;
 		return translates.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [translates, activeCard]);
+	const activeVisualTrace = useMemo(() => {
+		if (activeCard?.kind !== "agent-trace") return null;
+		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
+	}, [visualTraces, activeCard]);
 
 	// ---- Highlights (EmbedPDF annotations) ----
 
@@ -781,7 +904,7 @@ function PdfViewerInner({
 			.filter(isHighlightObject)
 			.map((o) => highlightViewFromObject(o, paperKey ?? ""));
 		setHighlights(list);
-		onHighlightsChange?.(list);
+		onHighlightsChangeRef.current?.(list);
 		const links = new Map<number, PdfLinkAnnoObject[]>();
 		for (const tracked of all) {
 			const o = tracked.object;
@@ -792,7 +915,7 @@ function PdfViewerInner({
 			}
 		}
 		setCitationLinks(links);
-	}, [annotationCap, docId, paperKey, onHighlightsChange]);
+	}, [annotationCap, docId, paperKey]);
 
 	const scheduleSave = useCallback(() => {
 		if (!paperAbsPath || !annotationCap) return;
@@ -925,50 +1048,122 @@ function PdfViewerInner({
 		[upsertTranslate],
 	);
 
-	// Load persisted ask threads + translate records once.
+	// Load persisted ask threads + translate records + agent-trace marks once.
 	useEffect(() => {
 		if (marksLoadedRef.current || !paperAbsPath) return;
 		marksLoadedRef.current = true;
 		void (async () => {
-			const [ts, trs] = await Promise.all([
+			const [ts, trs, traces] = await Promise.all([
 				listPdfAskThreads(paperAbsPath),
 				listPdfTranslates(paperAbsPath),
+				listPdfVisualTraces(paperAbsPath),
 			]);
 			if (ts.length) setThreads(ts);
 			if (trs.length) setTranslates(trs);
+			if (traces.length) setVisualTraces(traces);
 		})();
 	}, [paperAbsPath]);
 
+	// Refresh agent-trace pins when this viewer is active (dock may keep
+	// inactive PDFs mounted under pdfKeepMounted — avoid N× listMarkRaw polls).
+	useEffect(() => {
+		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
+		let cancelled = false;
+		const refresh = () => {
+			void listPdfVisualTraces(paperAbsPath).then((traces) => {
+				if (!cancelled) setVisualTraces(traces);
+			});
+		};
+		// Immediate refresh on become-active (covers Agent multi-turn writes
+		// while this tab was backgrounded).
+		refresh();
+		const onFocus = () => refresh();
+		window.addEventListener("focus", onFocus);
+		const timer = window.setInterval(refresh, 4000);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("focus", onFocus);
+			window.clearInterval(timer);
+		};
+	}, [paperAbsPath, isActive]);
+
 	// Publish ask threads (with a real question) to the annotations panel.
 	useEffect(() => {
-		onAsksChange?.(threads.filter(threadHasUserQuestion));
-	}, [threads, onAsksChange]);
+		onAsksChangeRef.current?.(threads.filter(threadHasUserQuestion));
+	}, [threads]);
 
-	const placeActiveCard = useCallback((card: ActiveSelectionCard) => {
+	// Publish visual agent-trace marks to the annotations panel.
+	useEffect(() => {
+		onVisualTracesChangeRef.current?.(visualTraces);
+	}, [visualTraces]);
+
+	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
+	/**
+	 * Place the open pin card next to its anchor. Returns false when the page
+	 * DOM is not mounted yet (virtualized) so callers can retry — never flash
+	 * a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 */
+	const placeActiveCard = useCallback((card: ActiveSelectionCard): boolean => {
 		const host = hostRef.current;
-		if (!host) return;
+		if (!host) return false;
 		let page = 1;
 		let rects: PdfAskAnchor["rects"] = [];
 		let pin: { x: number; y: number } | null = null;
 		if (card.kind === "ask") {
 			const thread = threadsRef.current.find((th) => th.id === card.id);
-			if (!thread) return;
+			if (!thread) return false;
 			page = thread.anchor.page;
 			rects = thread.anchor.rects;
 			pin = threadPin(thread);
 		} else if (card.kind === "translate") {
 			const tr = translatesRef.current.find((r) => r.id === card.id);
-			if (!tr) return;
+			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
 			pin = pinFromRects(tr.rects);
+		} else if (card.kind === "agent-trace") {
+			const tr = visualTracesRef.current.find((item) => item.id === card.id);
+			if (!tr) return false;
+			page = tr.page;
+			rects = tr.rects;
+			pin = tracePin(tr);
 		} else {
-			return;
+			return false;
 		}
 		const pageEl = pageElByIndex(host, page - 1);
 		const pt = popoverScreenPoint(pageEl, rects, pin);
-		setCardScreen(pt ?? { x: 80, y: 120 });
+		// Target page not in the virtual DOM yet — keep cardScreen null so the
+		// modal stays hidden until onScroll / rAF retry can place it for real.
+		if (!pt) return false;
+		// Skip identical coords — avoids re-rendering the open card (and its
+		// input) on every scroll tick when the pin did not actually move.
+		const prev = cardScreenRef.current;
+		if (
+			prev &&
+			Math.round(prev.x) === Math.round(pt.x) &&
+			Math.round(prev.y) === Math.round(pt.y)
+		) {
+			return true;
+		}
+		cardScreenRef.current = pt;
+		setCardScreen(pt);
+		return true;
 	}, []);
+
+	/** After instant page jumps, the virtual page may land a few frames later. */
+	const placeActiveCardWithRetry = useCallback(
+		(card: ActiveSelectionCard, attempts = 12) => {
+			let tries = 0;
+			const tick = () => {
+				if (placeActiveCard(card)) return;
+				tries += 1;
+				if (tries >= attempts) return;
+				requestAnimationFrame(tick);
+			};
+			requestAnimationFrame(tick);
+		},
+		[placeActiveCard],
+	);
 
 	const cancelHoverHide = useCallback(() => {
 		if (hidePopoverTimerRef.current) {
@@ -991,7 +1186,12 @@ function PdfViewerInner({
 			setAskError(null);
 		}
 		if (cur?.kind === "translate") setTranslateError(null);
+		if (cur?.kind === "agent-trace") {
+			setVisualError(null);
+			setVisualCardExpanded(false);
+		}
 		setActiveCard(null);
+		cardScreenRef.current = null;
 		setCardScreen(null);
 		setEditor(null);
 	}, [discardIfEmptyDraft]);
@@ -1026,9 +1226,21 @@ function PdfViewerInner({
 			setActiveCard(card);
 			if (card.kind === "ask") setAskError(null);
 			if (card.kind === "translate") setTranslateError(null);
-			placeActiveCard(card);
+			// Place now if the page is mounted. If not (far jump / virtualized),
+			// clear stale coords so the modal does not flash at the old pin, then
+			// retry for a few frames after instant scroll mounts the page.
+			if (!placeActiveCard(card)) {
+				cardScreenRef.current = null;
+				setCardScreen(null);
+				placeActiveCardWithRetry(card);
+			}
 		},
-		[cancelHoverHide, placeActiveCard, stopTranslateSession],
+		[
+			cancelHoverHide,
+			placeActiveCard,
+			placeActiveCardWithRetry,
+			stopTranslateSession,
+		],
 	);
 
 	const openThread = useCallback(
@@ -1036,14 +1248,22 @@ function PdfViewerInner({
 		[openCard],
 	);
 
-	const startFromAnchor = useCallback(
+	const createThreadFromAnchor = useCallback(
 		(anchor: PdfAskAnchor) => {
 			const paperPath = paperRelPath || paperAbsPath || "paper";
 			const thread = createEmptyThread({ paperPath, anchor });
 			setThreads((prev) => [thread, ...prev.filter(threadHasUserQuestion)]);
+			return thread;
+		},
+		[paperAbsPath, paperRelPath],
+	);
+
+	const startFromAnchor = useCallback(
+		(anchor: PdfAskAnchor) => {
+			const thread = createThreadFromAnchor(anchor);
 			openThread(thread);
 		},
-		[paperAbsPath, paperRelPath, openThread],
+		[createThreadFromAnchor, openThread],
 	);
 
 	const sendToThread = useCallback(
@@ -1053,6 +1273,8 @@ function PdfViewerInner({
 			agentOpts?: { agentId?: string; modelId?: string },
 			/** When set (edit/resend), replace the transcript from this base instead of appending to full history. */
 			baseMessages?: PdfAskThread["messages"],
+			/** Visual PDF crops attached to this turn. */
+			images?: PromptImage[],
 		) => {
 			const threadId = thread.id;
 			if (!question.trim()) return;
@@ -1081,6 +1303,7 @@ function PdfViewerInner({
 					prompt,
 					agentId: agentOpts?.agentId,
 					modelId: agentOpts?.modelId,
+					images,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
 					autoApprove: true,
@@ -1190,6 +1413,258 @@ function PdfViewerInner({
 		}
 		return resolved;
 	}, [t]);
+
+	/** Crop a region and open the visual-annotation draft editor (does not send). */
+	const beginVisualAnnotation = useCallback(
+		async (page: number, region: PdfAskNormalizedRect) => {
+			if (!engine || !docCap || visualCropPending) return;
+			const document = docCap.getDocument(docId);
+			if (!document) {
+				notifyError(t("pdfExplain.cropFailed"));
+				return;
+			}
+			setVisualCropPending(true);
+			setRegionSelecting(false);
+			try {
+				const image = await renderPdfRegionPromptImage({
+					engine,
+					document,
+					pageIndex: page - 1,
+					region,
+				});
+				const pageEl = pageElByIndex(hostRef.current, page - 1);
+				const screen = pageEl
+					? (() => {
+							const box = pageEl.getBoundingClientRect();
+							return {
+								x: box.left + (region.x + region.w) * box.width + 8,
+								y: box.top + region.y * box.height,
+							};
+						})()
+					: { x: 120, y: 120 };
+				setVisualDraftEditor({
+					screen,
+					page,
+					region,
+					image,
+				});
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : t("pdfExplain.cropFailed");
+				notifyError(t("pdfExplain.cropFailed"), { description: message });
+			} finally {
+				setVisualCropPending(false);
+			}
+		},
+		[engine, docCap, docId, visualCropPending, t],
+	);
+
+	const handleVisualDraftSave = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			addVisualDraft({
+				paperPath: paperRelPath || paperAbsPath || "paper",
+				paperAbsPath: paperAbsPath ?? undefined,
+				page: draft.page,
+				rects: [draft.region],
+				comment,
+				image: draft.image,
+			});
+			setVisualDraftEditor(null);
+			openRightTab("agent");
+		},
+		[visualDraftEditor, paperRelPath, paperAbsPath],
+	);
+
+	const upsertVisualTrace = useCallback((trace: PdfVisualSessionTrace) => {
+		setVisualTraces((prev) => {
+			const next = [trace, ...prev.filter((tr) => tr.id !== trace.id)];
+			// Keep ref in sync so openCard/placeActiveCard can find a just-created mark.
+			visualTracesRef.current = next;
+			return next;
+		});
+	}, []);
+
+	/**
+	 * Pin modal chat is the same product session as the right-rail Agent panel.
+	 * All turns go through agentSessionStore.requestTurn → panel send pipeline.
+	 */
+	const requestVisualAgentTurn = useCallback(
+		(input: {
+			trace: PdfVisualSessionTrace;
+			text: string;
+			visualDrafts?: import("@/lib/agent/visual-context-store").PdfVisualDraft[];
+			agentId?: string;
+			modelId?: string;
+		}) => {
+			const { trace, text, visualDrafts, agentId, modelId } = input;
+			setAgentPanelMounted(true);
+			setVisualError(null);
+			agentSessionStore.getState().requestTurn({
+				text,
+				visualTraceId: trace.id,
+				paperAbsPath: paperAbsPath ?? undefined,
+				agentId,
+				modelId,
+				title: text.trim() || trace.comment || t("pdfExplain.visualAnnotation"),
+				providerSessionId: trace.providerSessionId,
+				visualDrafts,
+			});
+		},
+		[paperAbsPath, t],
+	);
+
+	/** ⌘/Ctrl+Enter from the region editor: pin + same Agent session as sidebar. */
+	const handleVisualSendNow = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			const content = comment.trim() || t("pdfExplain.visualAnnotation");
+			const now = new Date().toISOString();
+			const userMsg = {
+				id: newTraceMessageId(),
+				role: "user" as const,
+				content,
+				createdAt: now,
+			};
+			// Provisional pin (geometry + crop). Transcript lives in agent session store.
+			const [provisional] = createRunningTraces({
+				paperPath,
+				agentId: "pending",
+				runtimeSessionId: "pending",
+				messageId: "pending",
+				items: [
+					{
+						page: draft.page,
+						rects: [draft.region],
+						comment: content,
+						image: {
+							data: draft.image.data,
+							mimeType: draft.image.mimeType || "image/png",
+						},
+						messages: [userMsg],
+					},
+				],
+				createdAt: now,
+			});
+			if (!provisional) return;
+			setVisualDraftEditor(null);
+			upsertVisualTrace(provisional);
+			setVisualCardExpanded(true);
+			setVisualError(null);
+			cardScreenRef.current = draft.screen;
+			setCardScreen(draft.screen);
+			openCard({ kind: "agent-trace", id: provisional.id });
+
+			void (async () => {
+				try {
+					const resolved = await resolvePdfAskAgent();
+					const agentId = resolved?.agentId;
+					if (!agentId) {
+						setVisualTraces((prev) =>
+							prev.filter((tr) => tr.id !== provisional.id),
+						);
+						hideActiveCard();
+						return;
+					}
+					// Same draft shape the sidebar composer uses — one send path.
+					const visualDraft: import("@/lib/agent/visual-context-store").PdfVisualDraft =
+						{
+							id: provisional.id,
+							paperPath,
+							paperAbsPath: paperAbsPath ?? undefined,
+							page: draft.page,
+							rects: [draft.region],
+							comment: content,
+							image: {
+								data: draft.image.data,
+								mimeType: draft.image.mimeType || "image/png",
+							},
+						};
+					requestVisualAgentTurn({
+						trace: { ...provisional, agentId },
+						text: content,
+						visualDrafts: [visualDraft],
+						agentId,
+						modelId: resolved.modelId,
+					});
+				} catch (e) {
+					const message =
+						e instanceof Error ? e.message : t("pdfAsk.agentFailed");
+					notifyError(message);
+					setVisualError(message);
+				}
+			})();
+		},
+		[
+			visualDraftEditor,
+			paperRelPath,
+			paperAbsPath,
+			t,
+			upsertVisualTrace,
+			openCard,
+			resolvePdfAskAgent,
+			requestVisualAgentTurn,
+			hideActiveCard,
+		],
+	);
+
+	const handleVisualContinue = useCallback(
+		(question: string) => {
+			const card = activeCardRef.current;
+			const traceId = card?.kind === "agent-trace" ? card.id : null;
+			if (!traceId) return;
+			setVisualCardExpanded(true);
+			void (async () => {
+				try {
+					const latest = visualTracesRef.current.find(
+						(tr) => tr.id === traceId,
+					);
+					if (!latest) return;
+					// Prefer live providerSessionId from shared agent session.
+					const bound = agentSessionStore
+						.getState()
+						.findByVisualTraceId(traceId);
+					const providerSessionId =
+						bound?.providerSessionId ?? latest.providerSessionId;
+					// Continue: stick to the agent that owns this session/mark.
+					// New pins use resolvePdfAskAgent (default); do not re-resolve here
+					// or a Grok default would load a Codex providerSessionId.
+					const markAgent =
+						bound?.agentId?.trim() ||
+						(latest.agentId && latest.agentId !== "pending"
+							? latest.agentId
+							: null);
+					let agentId = markAgent;
+					let modelId: string | undefined;
+					if (!agentId) {
+						const resolved = await resolvePdfAskAgent();
+						if (!resolved?.agentId) return;
+						agentId = resolved.agentId;
+						modelId = resolved.modelId;
+					}
+					requestVisualAgentTurn({
+						trace: {
+							...latest,
+							providerSessionId:
+								providerSessionId ?? latest.providerSessionId ?? undefined,
+							agentId,
+						},
+						text: question,
+						agentId,
+						modelId,
+					});
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					notifyError(message);
+					setVisualError(message);
+				}
+			})();
+		},
+		[resolvePdfAskAgent, requestVisualAgentTurn],
+	);
 
 	const handleSend = useCallback(
 		(question: string) => {
@@ -1310,6 +1785,130 @@ function PdfViewerInner({
 		hideActiveCard();
 	}, [paperAbsPath, stopTranslateSession, hideActiveCard]);
 
+	const deleteVisualTraceById = useCallback(
+		(id: string) => {
+			setVisualTraces((prev) => prev.filter((tr) => tr.id !== id));
+			if (paperAbsPath) void deletePdfVisualTrace(paperAbsPath, id);
+			if (
+				activeCardRef.current?.kind === "agent-trace" &&
+				activeCardRef.current.id === id
+			) {
+				hideActiveCard();
+			}
+		},
+		[paperAbsPath, hideActiveCard],
+	);
+
+	const handleDeleteVisualTrace = useCallback(() => {
+		const id =
+			activeCardRef.current?.kind === "agent-trace"
+				? activeCardRef.current.id
+				: null;
+		if (id) deleteVisualTraceById(id);
+		else hideActiveCard();
+	}, [deleteVisualTraceById, hideActiveCard]);
+
+	const openVisualTraceSession = useCallback(
+		async (trace: PdfVisualSessionTrace) => {
+			// Same session as the pin modal — activate it in the shared store.
+			setAgentPanelMounted(true);
+			const store = agentSessionStore.getState();
+			const existing =
+				store.findByVisualTraceId(trace.id) ||
+				(trace.providerSessionId
+					? store.findByProviderSessionId(trace.providerSessionId)
+					: undefined);
+			if (existing) {
+				store.setActiveTabId(existing.id);
+				store.setLines(existing.lines);
+			} else {
+				// Seed from mark once so sidebar opens the same transcript.
+				const messages = traceMessages(trace);
+				const image = await loadPdfVisualTraceImage(
+					paperAbsPath ?? "",
+					trace.image,
+				);
+				const title =
+					messages.find((m) => m.role === "user")?.content.trim() ||
+					trace.comment.trim() ||
+					t("pdfExplain.visualAnnotation");
+				requestOpenAgentSession({
+					agentId: trace.agentId === "pending" ? "" : trace.agentId,
+					runtimeSessionId: trace.runtimeSessionId,
+					providerSessionId: trace.providerSessionId,
+					messageId: trace.messageId,
+					title,
+					prompt: title,
+					answerSnapshot: trace.answerSnapshot,
+					paperAbsPath: paperAbsPath ?? undefined,
+					visualTrace: {
+						traceId: trace.id,
+						page: trace.page,
+						comment: trace.comment,
+						paperPath: trace.paperPath,
+						...(image ? { image } : {}),
+						messages: messages.map((m) => ({ ...m })),
+						status: trace.status,
+					},
+				});
+			}
+			openRightTab("agent");
+			hideActiveCard();
+		},
+		[hideActiveCard, paperAbsPath, t],
+	);
+
+	/** Stable callbacks so VisualTraceCard memo can skip PdfViewer re-renders. */
+	const handleOpenActiveVisualSession = useCallback(() => {
+		const card = activeCardRef.current;
+		if (card?.kind !== "agent-trace") return;
+		const tr = visualTracesRef.current.find((item) => item.id === card.id);
+		if (tr) void openVisualTraceSession(tr);
+	}, [openVisualTraceSession]);
+
+	const handleStopVisualSession = useCallback(() => {
+		// Shared agent session store is the source of truth after modal↔panel
+		// unification. visualSessionRef is legacy and may be null for turns
+		// that went through requestTurn → panel send.
+		const store = agentSessionStore.getState();
+		const card = activeCardRef.current;
+		const traceId = card?.kind === "agent-trace" ? card.id : null;
+		const bound = traceId ? store.findByVisualTraceId(traceId) : undefined;
+		const sid =
+			visualSessionRef.current ||
+			bound?.id ||
+			(store.submitting && store.activeTabId !== "draft"
+				? store.activeTabId
+				: null);
+		if (sid && sid !== "draft") {
+			void cancelAgentRun(sid).catch(() => undefined);
+			store.setSessions((prev) =>
+				prev.map((item) =>
+					item.id === sid && item.status === "running"
+						? { ...item, status: "cancelled" }
+						: item,
+				),
+			);
+		}
+		// Also clear any other visual-bound sessions stuck as running (e.g.
+		// after an ErrorBoundary crash mid-stream).
+		if (traceId) {
+			store.setSessions((prev) =>
+				prev.map((item) =>
+					"visualTraceId" in item &&
+					(item as { visualTraceId?: string }).visualTraceId === traceId &&
+					item.status === "running"
+						? { ...item, status: "cancelled" }
+						: item,
+				),
+			);
+		}
+		store.setSubmitting(false);
+		visualSessionRef.current = null;
+		setVisualStreaming(false);
+		setVisualError(null);
+	}, []);
+
 	const openEditorForAnnotation = useCallback(
 		(id: string) => {
 			const obj = annotationCap
@@ -1341,6 +1940,13 @@ function PdfViewerInner({
 			}
 			if (pin.kind === "translate") openCard({ kind: "translate", id: pin.id });
 			if (pin.kind === "annotate") openEditorForAnnotation(pin.id);
+			if (pin.kind === "agent-trace") {
+				const markId = pin.traceId || pin.id;
+				const tr = visualTracesRef.current.find((item) => item.id === markId);
+				if (!tr) return;
+				// Pin hover: page is already on-screen; openCard places beside the mark.
+				openCard({ kind: "agent-trace", id: tr.id });
+			}
 		},
 		[upsertThread, openThread, openCard, openEditorForAnnotation],
 	);
@@ -1655,18 +2261,32 @@ function PdfViewerInner({
 		};
 	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
 
-	// Re-anchor the active ask/translate card on scroll + zoom. zoomLevel is an
-	// intentional dep: it forces re-placement after a zoom (body reads live zoom).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-anchor after zoom
+	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
+	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
+	// because EmbedPDF returns a new scope object every render; depending on
+	// it re-fired this effect → setCardScreen → re-render → Maximum update depth
+	// when a modal card was open (visual-trace chat + agent panel re-renders).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady/zoomLevel are intentional re-place triggers
 	useEffect(() => {
 		if (!activeCard) return;
+		// Force re-place after zoom / card change even if rounded coords match.
+		cardScreenRef.current = null;
 		placeActiveCard(activeCard);
-		if (!scroll) return;
-		const off = scroll.onScroll(() => {
-			if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+		const scrollScope = scrollRef.current;
+		if (!scrollScope) return;
+		let raf: number | null = null;
+		const off = scrollScope.onScroll(() => {
+			if (raf != null) return;
+			raf = requestAnimationFrame(() => {
+				raf = null;
+				if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+			});
 		});
-		return () => off();
-	}, [activeCard, scroll, placeActiveCard, zoomLevel]);
+		return () => {
+			if (raf != null) cancelAnimationFrame(raf);
+			off();
+		};
+	}, [activeCard, scrollReady, placeActiveCard, zoomLevel]);
 
 	// Run a debounced full-document search as the query changes.
 	useEffect(() => {
@@ -1691,13 +2311,18 @@ function PdfViewerInner({
 			.getBookmarks()
 			.toPromise()
 			.then((res) => {
-				if (!cancelled) setOutline(res?.bookmarks ?? []);
+				if (cancelled) return;
+				const bookmarks = res?.bookmarks ?? [];
+				setOutline(bookmarks);
+				// Share with annotation embeds for location breadcrumbs.
+				const paperKey = paperAbsPath || paperRelPath;
+				if (paperKey) setPaperOutline(paperKey, bookmarks);
 			})
 			.catch(() => undefined);
 		return () => {
 			cancelled = true;
 		};
-	}, [bookmarkCap, docId, totalPages]);
+	}, [bookmarkCap, docId, totalPages, paperAbsPath, paperRelPath]);
 
 	// Cmd/Ctrl+F opens the in-document find bar when the PDF host is focused.
 	useEffect(() => {
@@ -1730,8 +2355,13 @@ function PdfViewerInner({
 	);
 
 	// Register the imperative handle for the annotations panel.
+	// Parent often passes an inline onHandle; keep it in a ref. Read scroll via
+	// scrollRef so EmbedPDF's fresh scope object does not re-register every paint.
+	const onHandleRef = useRef(onHandle);
+	onHandleRef.current = onHandle;
 	useEffect(() => {
-		if (!onHandle) return;
+		const register = onHandleRef.current;
+		if (!register) return;
 		const handle: PdfViewerHandle = {
 			getHighlights: () => highlightsRef.current,
 			scrollToHighlight: (id) => {
@@ -1739,7 +2369,11 @@ function PdfViewerInner({
 					?.forDocument(docId)
 					.getAnnotationById(id)?.object;
 				if (!obj || !isHighlightObject(obj)) return;
-				scroll?.scrollToPage({ pageNumber: obj.pageIndex + 1 });
+				// Instant: smooth jumps across distant pages feel like slow render.
+				scrollRef.current?.scrollToPage({
+					pageNumber: obj.pageIndex + 1,
+					behavior: "instant",
+				});
 				annotationCap?.forDocument(docId).selectAnnotation(obj.pageIndex, id);
 			},
 			editComment: (id) => openEditorForAnnotation(id),
@@ -1753,24 +2387,49 @@ function PdfViewerInner({
 			scrollToAsk: (id) => {
 				const thread = threadsRef.current.find((th) => th.id === id);
 				if (!thread) return;
-				scroll?.scrollToPage({ pageNumber: thread.anchor.page });
+				scrollRef.current?.scrollToPage({
+					pageNumber: thread.anchor.page,
+					behavior: "instant",
+				});
+				// openThread → openCard places after page mount (retry if virtualized).
 				openThread({ ...thread, status: "open" });
 			},
 			deleteAsk: (id) => {
 				setThreads((prev) => prev.filter((th) => th.id !== id));
 				if (paperAbsPath) void deletePdfAskThread(paperAbsPath, id);
 			},
+			scrollToVisualTrace: (id) => {
+				const tr = visualTracesRef.current.find((item) => item.id === id);
+				if (!tr) return;
+				scrollRef.current?.scrollToPage({
+					pageNumber: tr.page,
+					behavior: "instant",
+				});
+				openCard({ kind: "agent-trace", id: tr.id });
+			},
+			deleteVisualTrace: (id) => {
+				deleteVisualTraceById(id);
+			},
+			toggleVisualAnnotation: () => {
+				if (visualCropPending) return;
+				setSelectionMenu(null);
+				setVisualDraftEditor(null);
+				selectionCap?.clear(docId);
+				setRegionSelecting((active) => !active);
+			},
 		};
-		onHandle(handle);
-		return () => onHandle(null);
+		register(handle);
+		return () => register(null);
 	}, [
-		onHandle,
 		annotationCap,
-		scroll,
 		docId,
 		paperAbsPath,
 		openEditorForAnnotation,
 		openThread,
+		openCard,
+		deleteVisualTraceById,
+		selectionCap,
+		visualCropPending,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.
@@ -1779,8 +2438,10 @@ function PdfViewerInner({
 	}, [currentPage]);
 
 	// On first load: record page count (reading heatmap) and restore last page.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady waits for EmbedPDF scope
 	useEffect(() => {
-		if (restoredRef.current || totalPages <= 0 || !scroll) return;
+		const scrollScope = scrollRef.current;
+		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
 		restoredRef.current = true;
 		if (paperAbsPath) {
 			void writeReadingMetaPageCount(paperAbsPath, totalPages).catch(
@@ -1790,10 +2451,13 @@ function PdfViewerInner({
 		if (paperKey) {
 			const saved = readReadingPage(paperKey);
 			if (saved && saved > 1 && saved <= totalPages) {
-				scroll.scrollToPage({ pageNumber: saved });
+				scrollScope.scrollToPage({
+					pageNumber: saved,
+					behavior: "instant",
+				});
 			}
 		}
-	}, [totalPages, scroll, paperAbsPath, paperKey]);
+	}, [totalPages, scrollReady, paperAbsPath, paperKey]);
 
 	// Persist the last read page (debounced) as the user scrolls.
 	useEffect(() => {
@@ -1806,7 +2470,11 @@ function PdfViewerInner({
 
 	const scrollToResult = (idx: number) => {
 		const r = searchState.results[idx];
-		if (r && scroll) scroll.scrollToPage({ pageNumber: r.pageIndex + 1 });
+		if (r && scroll)
+			scroll.scrollToPage({
+				pageNumber: r.pageIndex + 1,
+				behavior: "instant",
+			});
 	};
 
 	const closeFind = () => {
@@ -1818,7 +2486,7 @@ function PdfViewerInner({
 	const goToPage = (n: number) => {
 		if (!scroll || totalPages <= 0) return;
 		const clamped = Math.min(totalPages, Math.max(1, Math.floor(n)));
-		scroll.scrollToPage({ pageNumber: clamped });
+		scroll.scrollToPage({ pageNumber: clamped, behavior: "instant" });
 	};
 
 	const commitPageField = () => {
@@ -1831,6 +2499,20 @@ function PdfViewerInner({
 
 	const resolveLinkText = useLinkTextResolver(docId);
 	const linkHoverSeqRef = useRef(0);
+
+	const cancelCitationHide = useCallback(() => {
+		if (!citationHideTimerRef.current) return;
+		clearTimeout(citationHideTimerRef.current);
+		citationHideTimerRef.current = null;
+	}, []);
+
+	const scheduleCitationHide = useCallback(() => {
+		cancelCitationHide();
+		citationHideTimerRef.current = setTimeout(() => {
+			citationHideTimerRef.current = null;
+			setCitationPreview(null);
+		}, 250);
+	}, [cancelCitationHide]);
 
 	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
 	const handleCitationLinkActivate = useCallback(
@@ -1853,17 +2535,78 @@ function PdfViewerInner({
 			const seq = ++linkHoverSeqRef.current;
 			if (!link) {
 				clearCitationHover(docId);
+				scheduleCitationHide();
 				return;
 			}
+			cancelCitationHide();
+			setCitationPreview(null);
 			void resolveLinkText(link).then((text) => {
 				if (linkHoverSeqRef.current !== seq || !text) return;
+				if (!looksLikeCitationMarker(text)) {
+					clearCitationHover(docId);
+					return;
+				}
 				setCitationHover(docId, text);
+				const citationId = matchCitationByMarker(citations, text);
+				const citation =
+					citations.find((item) => item.id === citationId) ?? null;
+				const pageEl = pageElByIndex(hostRef.current, link.pageIndex);
+				if (!pageEl) return;
+				setCitationPreview({
+					screen: rectRightScreen(pageEl, link.rect, zoomRef.current),
+					marker: text,
+					citation,
+				});
 			});
 		},
-		[docId, resolveLinkText],
+		[
+			docId,
+			resolveLinkText,
+			citations,
+			scheduleCitationHide,
+			cancelCitationHide,
+		],
 	);
 
-	useEffect(() => () => clearCitationHover(docId), [docId]);
+	useEffect(
+		() => () => {
+			clearCitationHover(docId);
+			if (citationHideTimerRef.current) {
+				clearTimeout(citationHideTimerRef.current);
+			}
+		},
+		[docId],
+	);
+
+	const handleVisualRegionSelect = useCallback(
+		(page: number, region: PdfAskNormalizedRect) => {
+			void beginVisualAnnotation(page, region);
+		},
+		[beginVisualAnnotation],
+	);
+
+	useEffect(() => {
+		if (!regionSelecting) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			setRegionSelecting(false);
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [regionSelecting]);
+
+	// Region-select mode must not allow EmbedPDF text selection under the marquee.
+	useEffect(() => {
+		if (!regionSelecting) return;
+		setSelectionMenu(null);
+		selectionCap?.clear(docId);
+		const scope = interactionCap?.forDocument(docId);
+		scope?.pause();
+		return () => {
+			scope?.resume();
+		};
+	}, [regionSelecting, selectionCap, interactionCap, docId]);
 
 	/**
 	 * Page renderer for the Scroller. Memoized so plain scroll/zoom re-renders
@@ -1883,6 +2626,8 @@ function PdfViewerInner({
 			const pageNumber = pageIndex + 1;
 			const activeTranslateOnPage =
 				activeTranslate?.page === pageNumber ? activeTranslate : null;
+			const activeVisualOnPage =
+				activeVisualTrace?.page === pageNumber ? activeVisualTrace : null;
 			const pins: SelectionPin[] = [
 				...highlights
 					.filter(
@@ -1944,6 +2689,20 @@ function PdfViewerInner({
 							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
 						};
 					}),
+				...visualTraces
+					.filter((tr) => tr.page === pageNumber)
+					.map((tr): SelectionPin => {
+						const pin = tracePin(tr);
+						return {
+							id: tr.id,
+							kind: "agent-trace",
+							x: pin.x,
+							y: pin.y,
+							preview: tracePreview(tr),
+							ended: tr.status !== "running",
+							traceId: tr.id,
+						};
+					}),
 			];
 			return (
 				<div
@@ -1971,7 +2730,10 @@ function PdfViewerInner({
 						pageIndex={pageIndex}
 						style={{ position: "absolute", inset: 0 }}
 					>
-						<SelectionLayer documentId={docId} pageIndex={pageIndex} />
+						{/* Unmount text selection while framing a visual region. */}
+						{regionSelecting ? null : (
+							<SelectionLayer documentId={docId} pageIndex={pageIndex} />
+						)}
 						<AnnotationLayer documentId={docId} pageIndex={pageIndex} />
 						<CitationLinkLayer
 							links={citationLinks.get(pageIndex) ?? []}
@@ -1981,11 +2743,36 @@ function PdfViewerInner({
 							onActivate={handleCitationLinkActivate}
 							onHover={handleCitationLinkHover}
 						/>
+						<PdfRegionSelectLayer
+							active={regionSelecting && !visualCropPending}
+							label={t("pdfExplain.regionSelectionLabel", {
+								page: pageNumber,
+							})}
+							onSelect={(region) =>
+								handleVisualRegionSelect(pageNumber, region)
+							}
+						/>
 						{activeTranslateOnPage
 							? activeTranslateOnPage.rects.map((rect) => (
 									<div
 										key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
 										className="pointer-events-none absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
+										style={{
+											left: `${rect.x * 100}%`,
+											top: `${rect.y * 100}%`,
+											width: `${rect.w * 100}%`,
+											height: `${rect.h * 100}%`,
+										}}
+										aria-hidden="true"
+									/>
+								))
+							: null}
+						{/* Active visual mark: dashed theme outline of the crop region. */}
+						{activeVisualOnPage
+							? activeVisualOnPage.rects.map((rect) => (
+									<div
+										key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-none absolute z-[1] rounded-sm border border-dashed border-primary/45 bg-primary/5"
 										style={{
 											left: `${rect.x * 100}%`,
 											top: `${rect.y * 100}%`,
@@ -2012,8 +2799,10 @@ function PdfViewerInner({
 			highlights,
 			annotationCap,
 			askSummaries,
+			visualTraces,
 			translates,
 			activeTranslate,
+			activeVisualTrace,
 			activeCard?.id,
 			handleOpenPin,
 			cancelHoverHide,
@@ -2021,6 +2810,9 @@ function PdfViewerInner({
 			citationLinks,
 			handleCitationLinkActivate,
 			handleCitationLinkHover,
+			regionSelecting,
+			visualCropPending,
+			handleVisualRegionSelect,
 			t,
 		],
 	);
@@ -2241,6 +3033,39 @@ function PdfViewerInner({
 								{t("pdf.zoomFitPage")}
 							</TooltipContent>
 						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant={regionSelecting ? "secondary" : "ghost"}
+									aria-label={t("pdfExplain.selectRegion")}
+									aria-pressed={regionSelecting}
+									disabled={visualCropPending || !engine}
+									onClick={() => {
+										setSelectionMenu(null);
+										setVisualDraftEditor(null);
+										selectionCap?.clear(docId);
+										setRegionSelecting((active) => !active);
+									}}
+								>
+									<ScanSearch
+										className={cn(
+											"size-3.5",
+											visualCropPending && "animate-pulse",
+										)}
+									/>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{regionSelecting
+									? t("pdfExplain.cancelRegion")
+									: t("pdfExplain.selectRegion")}
+								<span className="ml-2 text-muted-foreground">
+									{formatShortcutById("visualAnnotation")}
+								</span>
+							</TooltipContent>
+						</Tooltip>
 						{onToggleZen ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -2317,6 +3142,31 @@ function PdfViewerInner({
 								/>
 							) : null}
 
+							{visualDraftEditor ? (
+								<VisualAnnotationEditor
+									screen={visualDraftEditor.screen}
+									page={visualDraftEditor.page}
+									image={visualDraftEditor.image}
+									onSave={handleVisualDraftSave}
+									onSendNow={handleVisualSendNow}
+									onClose={() => setVisualDraftEditor(null)}
+								/>
+							) : null}
+
+							{citationPreview ? (
+								<PdfCitationPreview
+									screen={citationPreview.screen}
+									marker={citationPreview.marker}
+									citation={citationPreview.citation}
+									onOpenReferences={() => {
+										setCitationPreview(null);
+										openRightTab("references");
+									}}
+									onPointerEnter={cancelCitationHide}
+									onPointerLeave={scheduleCitationHide}
+								/>
+							) : null}
+
 							{activeThread && cardScreen ? (
 								<AskPopover
 									thread={activeThread}
@@ -2336,6 +3186,24 @@ function PdfViewerInner({
 										activeSessionRef.current = null;
 										setStreaming(false);
 									}}
+								/>
+							) : null}
+
+							{activeVisualTrace && cardScreen ? (
+								<VisualTraceCard
+									trace={activeVisualTrace}
+									paperAbsPath={paperAbsPath ?? undefined}
+									screen={cardScreen}
+									streaming={visualStreaming}
+									error={visualError}
+									initialExpanded={visualCardExpanded}
+									onOpenSession={handleOpenActiveVisualSession}
+									onSend={handleVisualContinue}
+									onDelete={handleDeleteVisualTrace}
+									onHide={hideActiveCard}
+									onPointerEnter={cancelHoverHide}
+									onPointerLeave={scheduleHoverHide}
+									onStop={handleStopVisualSession}
 								/>
 							) : null}
 

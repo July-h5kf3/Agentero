@@ -5,6 +5,7 @@
 
 import { useStore } from "zustand";
 import { selectionStore } from "@/lib/agent/selection-store";
+import { visualContextStore } from "@/lib/agent/visual-context-store";
 import { libraryStore } from "@/lib/paper/library-store";
 import { annotationsStore } from "@/lib/pdf/annotations-store";
 import { settingsStore } from "@/lib/settings/react-store";
@@ -55,6 +56,12 @@ export function useSelectionStore<T>(
 	selector: (state: ExtractState<typeof selectionStore>) => T,
 ): T {
 	return useStore(selectionStore, selector);
+}
+
+export function useVisualContextStore<T>(
+	selector: (state: ExtractState<typeof visualContextStore>) => T,
+): T {
+	return useStore(visualContextStore, selector);
 }
 
 export function useSettings<T>(

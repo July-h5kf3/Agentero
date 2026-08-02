@@ -165,14 +165,21 @@ impl VaultFs for LocalFs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Monotonic suffix so parallel tests never share a temp root.
+    /// `SystemTime` resolution is coarse enough that two tests can get the same
+    /// `as_nanos()` value and then race on `remove_dir_all` (ENOENT / EINVAL).
+    static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
     fn tmp_root() -> PathBuf {
+        let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("agentero-localfs-{nanos}"));
+        let dir = std::env::temp_dir().join(format!("agentero-localfs-{nanos}-{seq}"));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

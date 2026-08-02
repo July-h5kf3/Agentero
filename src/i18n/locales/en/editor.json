@@ -109,19 +109,28 @@
 		"loading": "Loading embedded content…",
 		"missing": "The embedded note could not be found.",
 		"ambiguous": "The embedded target is ambiguous. Use its Vault-relative path.",
-		"invalidFragment": "The embedded heading or block could not be found.",
+		"invalidFragment": "The embedded heading, block, or annotation could not be found.",
 		"cycle": "This embed would repeat content already in the current embed chain.",
 		"depth": "Further embedded content is hidden at the nesting limit.",
 		"unsupported": "This embed type is preserved as Markdown but is not rendered yet.",
 		"error": "The embedded content could not be loaded.",
-		"openSource": "Open {{target}}"
+		"openSource": "Open {{target}}",
+		"annotationHighlight": "Highlight",
+		"annotationVisual": "Visual annotation",
+		"annotationPage": "p.{{page}}",
+		"annotationExpand": "Show more",
+		"annotationCollapse": "Show less",
+		"untitled": "Embed",
+		"annotationRoleUser": "You",
+		"annotationRoleAssistant": "Assistant",
+		"annotationNoTranscript": "No conversation saved for this mark."
 	},
 	"wikiCompletion": {
 		"label": "Internal link suggestions",
 		"loading": "Searching links…",
 		"empty": "No matching internal links",
 		"displayName": "Display name",
-		"syntaxHint": "Type # to link a heading · ^ to link a text block · | to set display text"
+		"syntaxHint": "#heading · ^block · |alias · @annotation; tab complete · enter confirm"
 	},
 	"slashCommand": {
 		"label": "Formatting commands",

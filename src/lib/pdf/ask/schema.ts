@@ -4,12 +4,19 @@ import type {
 	PdfAskNormalizedRect,
 	PdfAskThread,
 	PdfAskTrigger,
+	PdfAskVisualKind,
 } from "@/lib/pdf/ask/types";
 import { isRecord, isRect } from "@/lib/pdf/marks/schema";
 import { pinFromRects } from "@/lib/pdf/selection/pin";
 
 function isTrigger(v: unknown): v is PdfAskTrigger {
-	return v === "selection" || v === "dblclick" || v === "dwell";
+	return (
+		v === "selection" || v === "dblclick" || v === "dwell" || v === "region"
+	);
+}
+
+function isVisualKind(v: unknown): v is PdfAskVisualKind {
+	return v === "formula" || v === "figure";
 }
 
 function parseMessage(v: unknown): PdfAskMessage | null {
@@ -50,6 +57,7 @@ function parseAnchor(v: unknown): PdfAskAnchor | null {
 		trigger,
 	};
 	if (typeof v.quote === "string") anchor.quote = v.quote;
+	if (isVisualKind(v.visualKind)) anchor.visualKind = v.visualKind;
 	return anchor;
 }
 
