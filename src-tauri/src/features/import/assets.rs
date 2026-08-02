@@ -184,6 +184,7 @@ async fn ensure_paper_assets_impl(
     cookies: Option<&str>,
     progress: AssetProgressContext<'_>,
 ) -> Result<AssetDownloadResult, AppError> {
+    super::check_task_not_cancelled(progress.task_id)?;
     let mut out = AssetDownloadResult::default();
     fs::create_dir_all(paper_dir)?;
 
@@ -205,6 +206,7 @@ async fn ensure_paper_assets_impl(
         // DOI fallback: Crossref often lists a direct / open-access PDF link even
         // when the Translator gave no pdf_url (or the publisher landing page failed).
         if !ok {
+            super::check_task_not_cancelled(progress.task_id)?;
             if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
                 let extra: Vec<String> = crossref_pdf_urls(doi)
                     .await
@@ -232,6 +234,7 @@ async fn ensure_paper_assets_impl(
         // Unpaywall fallback: open-access PDF for DOI papers (helps some ACM/IEEE
         // and other paywalled papers that have an OA copy; no API key required).
         if !ok {
+            super::check_task_not_cancelled(progress.task_id)?;
             if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
                 if let Some(url) = unpaywall_pdf_url(doi).await {
                     if !candidates.iter().any(|c| c == &url) {
@@ -260,6 +263,7 @@ async fn ensure_paper_assets_impl(
 
     // LaTeX only for arXiv papers → unpack into source/
     if let Some(aid) = arxiv_id.filter(|a| !a.trim().is_empty()) {
+        super::check_task_not_cancelled(progress.task_id)?;
         if need_tex {
             let source = paper_dir.join("source");
             fs::create_dir_all(&source)?;
@@ -288,6 +292,7 @@ async fn ensure_paper_assets_impl(
     if has_local_tex(paper_dir) {
         out.tex = true;
     }
+    super::check_task_not_cancelled(progress.task_id)?;
 
     Ok(out)
 }
@@ -640,6 +645,7 @@ pub(crate) async fn http_get_bytes_with_progress(
     cookies: Option<&str>,
     phase: &str,
 ) -> Result<Vec<u8>, AppError> {
+    crate::features::import::check_task_not_cancelled(task_id)?;
     let client = crate::features::network::client_builder()
         .timeout(timeout)
         .user_agent(USER_AGENT)
@@ -656,6 +662,7 @@ pub(crate) async fn http_get_bytes_with_progress(
         .send()
         .await
         .map_err(|e| AppError::message(format!("download: {e}")))?;
+    crate::features::import::check_task_not_cancelled(task_id)?;
     if !res.status().is_success() {
         return Err(AppError::message(format!("download HTTP {}", res.status())));
     }

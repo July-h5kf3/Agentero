@@ -67,6 +67,13 @@ pub const ZOTERO_INTERNAL_TAG_PREFIX: &str = "@zotero:";
 /// phase bounded so one paper cannot hold an import task indefinitely.
 pub const PAPER_ASSET_TIMEOUT: Duration = Duration::from_secs(3 * 60);
 
+pub(crate) fn check_task_not_cancelled(task_id: Option<&str>) -> Result<(), AppError> {
+    if task_id.is_some_and(crate::features::agent::background_tasks::is_cancelled) {
+        return Err(AppError::message("background task cancelled"));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LookupImportArgs {
@@ -245,7 +252,10 @@ pub async fn import_by_identifier_with_progress(
         return Err(AppError::message("identifier text is empty"));
     }
 
-    let (mut meta, used_translator) = resolve_metadata(text, &base).await?;
+    check_task_not_cancelled(args.task_id.as_deref())?;
+    let (mut meta, used_translator) =
+        resolve_metadata(text, &base, args.task_id.as_deref()).await?;
+    check_task_not_cancelled(args.task_id.as_deref())?;
     enrich_remote_urls(&mut meta);
 
     let commit = paper_commit(
@@ -266,6 +276,7 @@ pub async fn import_by_identifier_with_progress(
         },
     )
     .await?;
+    check_task_not_cancelled(args.task_id.as_deref())?;
 
     Ok(LookupImportResult {
         paper_dir: commit.paper_dir,
@@ -527,6 +538,7 @@ pub async fn download_paper_assets_with_progress(
         },
     )
     .await?;
+    check_task_not_cancelled(args.task_id.as_deref())?;
 
     // When TeX was downloaded into source/, record body_source = "latex" in catalog
     // so the frontend doesn't show "download TeX" even though source/ is lazy‑loaded.
@@ -548,6 +560,7 @@ pub async fn download_paper_assets_with_progress(
         app,
         task_id: args.task_id.as_deref(),
     };
+    check_task_not_cancelled(args.task_id.as_deref())?;
     parse_progress.emit_phase("parse");
     let parse =
         crate::features::import::pdf_parse::maybe_generate_paper_md_after_download_with_task(
@@ -557,6 +570,7 @@ pub async fn download_paper_assets_with_progress(
             args.task_id.as_deref(),
         )
         .await;
+    check_task_not_cancelled(args.task_id.as_deref())?;
     result.paper_md = parse.paper_md;
     for m in parse.messages {
         result.messages.push(m);
@@ -841,14 +855,19 @@ pub(crate) fn allocate_paper_path(
 pub(crate) async fn resolve_metadata(
     text: &str,
     translator_base: &str,
+    task_id: Option<&str>,
 ) -> Result<(PaperMeta, bool), AppError> {
     // Prefer Translator Runtime (placeholder URL)
-    match translator_fetch(text, translator_base).await {
-        Ok(meta) => Ok((meta, true)),
+    match translator_fetch(text, translator_base, task_id).await {
+        Ok(meta) => {
+            check_task_not_cancelled(task_id)?;
+            Ok((meta, true))
+        }
         Err(e) => {
             // Fall back for arXiv so local dev works without sidecar
             if let Some(aid) = parse::extract_arxiv_id(text) {
-                let meta = fetch_arxiv_metadata(&aid).await?;
+                let meta = fetch_arxiv_metadata(&aid, task_id).await?;
+                check_task_not_cancelled(task_id)?;
                 Ok((meta, false))
             } else {
                 Err(AppError::message(format!(
@@ -859,7 +878,11 @@ pub(crate) async fn resolve_metadata(
     }
 }
 
-async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError> {
+async fn translator_fetch(
+    text: &str,
+    base: &str,
+    task_id: Option<&str>,
+) -> Result<PaperMeta, AppError> {
     let client = crate::features::network::client_builder()
         .timeout(Duration::from_secs(30))
         .user_agent("agentero-lookup/0.1 (+https://github.com/poco-ai/agentero)")
@@ -875,12 +898,14 @@ async fn translator_fetch(text: &str, base: &str) -> Result<PaperMeta, AppError>
         .send()
         .await
         .map_err(|e| AppError::message(format!("translator request failed: {e}")))?;
+    check_task_not_cancelled(task_id)?;
 
     let status = res.status();
     let bytes = res
         .bytes()
         .await
         .map_err(|e| AppError::message(format!("translator read body: {e}")))?;
+    check_task_not_cancelled(task_id)?;
 
     if status.as_u16() == 300 {
         return Err(AppError::message(
@@ -942,7 +967,10 @@ fn translator_request(text: &str, base: &str) -> (String, String) {
     }
 }
 
-async fn fetch_arxiv_metadata(arxiv_id: &str) -> Result<PaperMeta, AppError> {
+async fn fetch_arxiv_metadata(
+    arxiv_id: &str,
+    task_id: Option<&str>,
+) -> Result<PaperMeta, AppError> {
     let bare = regex_lite_strip_version(arxiv_id);
     let api = format!(
         "https://export.arxiv.org/api/query?id_list={}",
@@ -961,6 +989,7 @@ async fn fetch_arxiv_metadata(arxiv_id: &str) -> Result<PaperMeta, AppError> {
         .text()
         .await
         .map_err(|e| AppError::message(format!("arXiv body: {e}")))?;
+    check_task_not_cancelled(task_id)?;
 
     map::map_arxiv_atom(&xml, &bare)
 }

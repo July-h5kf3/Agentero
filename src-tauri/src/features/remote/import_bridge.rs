@@ -40,7 +40,10 @@ pub async fn import_by_identifier_remote(
         return Err(AppError::message("identifier text is empty"));
     }
 
-    let (mut meta, used_translator) = resolve_metadata(text, &base).await?;
+    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
+    let (mut meta, used_translator) =
+        resolve_metadata(text, &base, args.task_id.as_deref()).await?;
+    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
     enrich_remote_urls(&mut meta);
 
     let id = meta.id.clone();
@@ -71,6 +74,7 @@ pub async fn import_by_identifier_remote(
         r.messages.push(format!("asset download error: {e}"));
         r
     });
+    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
 
     let parse = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
         &session.work_root,
@@ -78,12 +82,14 @@ pub async fn import_by_identifier_remote(
         &staging,
     )
     .await;
+    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
     assets.paper_md = parse.paper_md;
     for m in parse.messages {
         assets.messages.push(m);
     }
 
     // Upload staged tree to remote (source of truth)
+    crate::features::import::check_task_not_cancelled(args.task_id.as_deref())?;
     upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
 
     let record = paper_record_from_meta(&path_rel, &meta);
