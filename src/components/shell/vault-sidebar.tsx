@@ -124,7 +124,7 @@ export function VaultSidebar() {
 					onImportLocalPdf={onImportLocalPdf}
 					importBusy={ioBusy === "import"}
 					importPdfBusy={ioBusy === "import-pdf"}
-					busy={busy || ioBusy !== null}
+					busy={busy}
 					isDemo={vaultPath === null}
 					lookupOpenSignal={lookupOpenSignal}
 					recentVaults={recentVaults}

@@ -134,11 +134,8 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 		[vaultPath],
 	);
 	const actionsDisabled =
-		busy ||
-		isDemo ||
-		lookupBusy ||
-		Boolean(importBusy) ||
-		Boolean(importPdfBusy);
+		busy || isDemo || Boolean(importBusy) || Boolean(importPdfBusy);
+	const lookupDisabled = busy || isDemo;
 	const magicWandShortcut = formatShortcutById("magicWand");
 
 	useEffect(() => {
@@ -190,7 +187,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 											variant="ghost"
 											size="icon-xs"
 											aria-label={t("lookup.magicWand")}
-											disabled={actionsDisabled}
+											disabled={lookupDisabled}
 										>
 											<WandSparkles className="size-3.5" />
 										</Button>
@@ -237,7 +234,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 											}
 										}}
 										placeholder={t("lookup.placeholder")}
-										disabled={lookupBusy || importBusy}
+										disabled={lookupBusy}
 										className="min-h-[2.5rem] max-h-32 resize-none overflow-y-auto text-xs"
 										rows={1}
 									/>
@@ -256,7 +253,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 															type="button"
 															variant="ghost"
 															size="icon-xs"
-															disabled={actionsDisabled}
+															disabled={actionsDisabled || Boolean(importBusy)}
 															aria-label={t("papersLibrary.importPdf")}
 															onClick={() => {
 																void onImportLocalPdf();
@@ -281,7 +278,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 															type="button"
 															variant="ghost"
 															size="icon-xs"
-															disabled={actionsDisabled}
+															disabled={actionsDisabled || Boolean(importBusy)}
 															aria-label={t("papersLibrary.import")}
 															onClick={() => {
 																void onImportBibliography();
@@ -326,12 +323,7 @@ export const VaultSidebarHeader = memo(function VaultSidebarHeader({
 											type="submit"
 											size="sm"
 											className="h-7 px-2.5 text-xs"
-											disabled={
-												lookupBusy ||
-												importBusy ||
-												importPdfBusy ||
-												!lookupText.trim()
-											}
+											disabled={lookupBusy || !lookupText.trim()}
 										>
 											{lookupBusy ? t("lookup.adding") : t("lookup.add")}
 										</Button>

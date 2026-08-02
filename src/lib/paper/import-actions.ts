@@ -63,122 +63,125 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 	if (texts.length === 0) return;
 	const settings = getSettings();
 
-	const result = await runBackgroundTask(
-		{
-			kind: "lookup",
-			title: i18n.t("app:tasks.lookupImport"),
-			detail: texts
-				.slice(0, 3)
-				.map((t) => t.trim().slice(0, 40))
-				.join(", "),
-		},
-		async ({ id, setDetail }) => {
-			setDetail(
-				i18n.t("app:tasks.lookupFetching", { id: texts.length.toString() }),
-			);
-			const r = await addPapersByIdentifiers({
-				vaultRoot: vaultPath,
-				parentDir: currentLookupParentDir(),
-				texts,
-				settings,
-				progressTaskId: id,
-			});
-			setDetail(
-				r.skillCandidates.length > 0
-					? i18n.t("sidebar:lookup.skillCandidatesFound", {
-							count: r.skillCandidates.reduce(
-								(total: number, discovery) =>
-									total + discovery.candidates.length,
-								0,
-							),
-						})
-					: i18n.t("app:tasks.lookupRefreshing", {
-							title: i18n.t("sidebar:lookup.batchSummary", {
-								imported: r.imported.length,
-								skills: r.skills.length,
-								skipped: r.skipped.length,
-								failed: r.errors.length,
+	for (const text of texts) {
+		void runQueuedBackgroundTask(
+			{
+				kind: "lookup",
+				title: i18n.t("app:tasks.lookupImport"),
+				detail: text.trim().slice(0, 80),
+			},
+			1,
+			async ({ id, setDetail }) => {
+				setDetail(i18n.t("app:tasks.lookupFetching", { id: "1" }));
+				const result = await addPapersByIdentifiers({
+					vaultRoot: vaultPath,
+					parentDir: currentLookupParentDir(),
+					texts: [text],
+					settings,
+					progressTaskId: id,
+				});
+				setDetail(
+					result.skillCandidates.length > 0
+						? i18n.t("sidebar:lookup.skillCandidatesFound", {
+								count: result.skillCandidates.reduce(
+									(total: number, discovery) =>
+										total + discovery.candidates.length,
+									0,
+								),
+							})
+						: i18n.t("app:tasks.lookupRefreshing", {
+								title: i18n.t("sidebar:lookup.batchSummary", {
+									imported: result.imported.length,
+									skills: result.skills.length,
+									skipped: result.skipped.length,
+									failed: result.errors.length,
+								}),
 							}),
+				);
+				await refreshTree(vaultPath);
+				if (!isRemoteVaultHandle(vaultPath)) {
+					await rebuildWikiAndNotify(vaultPath);
+				}
+				await refreshLibrary();
+				if (result.skillCandidates.length > 0) {
+					setSkillImportDraft(result.skillCandidates);
+				}
+
+				const first = result.imported[0];
+				if (first) {
+					const paperAbs =
+						first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
+						`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
+							first.path || ""
+						)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "")}`;
+					openPaper(paperAbs);
+				}
+
+				const summary = i18n.t("sidebar:lookup.batchSummary", {
+					imported: result.imported.length,
+					skills: result.skills.length,
+					skipped: result.skipped.length,
+					failed: result.errors.length,
+				});
+				if (result.skillCandidates.length === 0 || result.errors.length > 0) {
+					if (
+						result.errors.length > 0 ||
+						(result.imported.length === 0 && result.skills.length === 0)
+					) {
+						notifyError(summary);
+					} else {
+						notifySuccess(summary);
+					}
+				}
+
+				// Enqueue any newly imported papers that still lack assets.
+				const newPaths = result.imported.map((r) => r.path);
+				if (newPaths.length > 0) {
+					const needing = collectPapersNeedingAssetDownload(
+						vaultStore.getState().tree,
+					).filter((p) =>
+						newPaths.some((rel) => {
+							const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+							const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+							return n === r || n.startsWith(`${r}/`);
 						}),
-			);
-			await refreshTree(vaultPath);
-			if (!isRemoteVaultHandle(vaultPath)) {
-				await rebuildWikiAndNotify(vaultPath);
-			}
-			await refreshLibrary();
-			if (r.skillCandidates.length > 0) {
-				setSkillImportDraft(r.skillCandidates);
-			}
-			return r;
-		},
-	);
-
-	const first = result.imported[0];
-	if (first) {
-		const paperAbs =
-			first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
-			`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(first.path || "")
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "")}`;
-		openPaper(paperAbs);
-	}
-
-	// Summary toast.
-	const summary = i18n.t("sidebar:lookup.batchSummary", {
-		imported: result.imported.length,
-		skills: result.skills.length,
-		skipped: result.skipped.length,
-		failed: result.errors.length,
-	});
-	if (result.skillCandidates.length === 0 || result.errors.length > 0) {
-		if (
-			result.errors.length > 0 ||
-			(result.imported.length === 0 && result.skills.length === 0)
-		) {
-			notifyError(summary);
-		} else {
-			notifySuccess(summary);
-		}
-	}
-
-	// Enqueue any newly imported papers that still lack assets.
-	const newPaths = result.imported.map((r) => r.path);
-	if (newPaths.length > 0) {
-		const needing = collectPapersNeedingAssetDownload(
-			vaultStore.getState().tree,
-		).filter((p) =>
-			newPaths.some((rel) => {
-				const n = p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-				const r = rel.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-				return n === r || n.startsWith(`${r}/`);
-			}),
-		);
-		for (const paperPath of needing) {
-			const rel = toVaultRelative(vaultPath, paperPath)
-				.replace(/\\/g, "/")
-				.replace(/^\/+|\/+$/g, "");
-			void runQueuedBackgroundTask(
-				{
-					kind: "download",
-					title: i18n.t("app:tasks.downloadPaper"),
-					detail: rel,
-				},
-				settings.batchImportConcurrency,
-				async ({ id, signal }) => {
-					if (signal.aborted) throw new Error("cancelled");
-					await downloadPaperAssets({
-						vaultRoot: vaultPath,
-						paperPath: rel,
-						progressTaskId: id,
-					});
-					await refreshTree(vaultPath);
-					await refreshLibrary();
-				},
-			).catch((e) => {
-				if (isBackgroundTaskCancelledError(e)) return;
-				notifyError(`${rel}: ${e instanceof Error ? e.message : String(e)}`);
-			});
-		}
+					);
+					for (const paperPath of needing) {
+						const rel = toVaultRelative(vaultPath, paperPath)
+							.replace(/\\/g, "/")
+							.replace(/^\/+|\/+$/g, "");
+						void runQueuedBackgroundTask(
+							{
+								kind: "download",
+								title: i18n.t("app:tasks.downloadPaper"),
+								detail: rel,
+							},
+							settings.batchImportConcurrency,
+							async ({ id: downloadTaskId, signal }) => {
+								if (signal.aborted) throw new Error("cancelled");
+								await downloadPaperAssets({
+									vaultRoot: vaultPath,
+									paperPath: rel,
+									progressTaskId: downloadTaskId,
+								});
+								await refreshTree(vaultPath);
+								await refreshLibrary();
+							},
+						).catch((e) => {
+							if (isBackgroundTaskCancelledError(e)) return;
+							notifyError(
+								`${rel}: ${e instanceof Error ? e.message : String(e)}`,
+							);
+						});
+					}
+				}
+			},
+		).catch((e) => {
+			if (isBackgroundTaskCancelledError(e)) return;
+			notifyError(e instanceof Error ? e.message : String(e));
+		});
 	}
 }
 
