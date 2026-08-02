@@ -622,11 +622,24 @@ export function saveModelCatalog(
 	writeJsonStorage(MODEL_CATALOG_KEY, map);
 }
 
-export function acpStatusLabel(status: CatalogAcpStatus): string {
+export function isAgentAuthFailure(error?: string | null): boolean {
+	if (!error) return false;
+	return /invalid_grant|failed to authenticate|authentication failed|not authenticated|login required|unauthenticated/i.test(
+		error,
+	);
+}
+
+export function acpStatusLabel(
+	status: CatalogAcpStatus,
+	error?: string | null,
+): string {
 	switch (status) {
 		case "ready":
 			return i18n.t("agent:acpStatus.ready");
 		case "failed":
+			if (isAgentAuthFailure(error)) {
+				return i18n.t("agent:acpStatus.notLoggedIn");
+			}
 			return i18n.t("agent:acpStatus.failed");
 		case "not-probed":
 			return i18n.t("agent:acpStatus.notProbed");

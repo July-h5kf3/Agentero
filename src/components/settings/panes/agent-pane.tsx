@@ -40,6 +40,7 @@ import {
 	type CatalogEntry,
 	type CatalogScanResponse,
 	ensureCatalogAgent,
+	isAgentAuthFailure,
 	listAgents,
 	openInstallTerminal,
 	type ProbeResult,
@@ -491,8 +492,16 @@ export function AgentPane({
 									{isProbing ? (
 										<ProbingBadge label={t("agent.probing")} />
 									) : entry.acpStatus !== "missing" ? (
-										<StatusBadge tone={catalogStatusTone(entry.acpStatus)}>
-											{acpStatusLabel(entry.acpStatus)}
+										<StatusBadge
+											tone={catalogStatusTone(
+												entry.acpStatus,
+												entry.lastProbeError,
+											)}
+											title={
+												entry.lastProbeError ?? entry.acpAgentName ?? undefined
+											}
+										>
+											{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
 										</StatusBadge>
 									) : null}
 									{showInstall ? (
@@ -584,8 +593,17 @@ export function AgentPane({
 											{t("agent:acpStatus.ready")}
 										</StatusBadge>
 									) : agent.lastProbeOk === false ? (
-										<StatusBadge tone="err">
-											{t("agent:acpStatus.failed")}
+										<StatusBadge
+											tone={
+												isAgentAuthFailure(agent.lastProbeError)
+													? "warn"
+													: "err"
+											}
+											title={agent.lastProbeError ?? undefined}
+										>
+											{isAgentAuthFailure(agent.lastProbeError)
+												? t("agent:acpStatus.notLoggedIn")
+												: t("agent:acpStatus.failed")}
 										</StatusBadge>
 									) : notProbedYet ? (
 										<ProbingBadge label={t("agent.probing")} />
@@ -980,12 +998,15 @@ export function RemoteAgentPane({
 										<ProbingBadge label={t("agent.probing")} />
 									) : entry.acpStatus !== "missing" ? (
 										<StatusBadge
-											tone={catalogStatusTone(entry.acpStatus)}
+											tone={catalogStatusTone(
+												entry.acpStatus,
+												entry.lastProbeError,
+											)}
 											title={
 												entry.lastProbeError ?? entry.acpAgentName ?? undefined
 											}
 										>
-											{acpStatusLabel(entry.acpStatus)}
+											{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
 										</StatusBadge>
 									) : null}
 									{showInstall ? (

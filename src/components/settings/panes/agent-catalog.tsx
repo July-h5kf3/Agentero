@@ -5,6 +5,7 @@ import type {
 	CatalogScanResponse,
 	ProbeResult,
 } from "@/lib/agent";
+import { isAgentAuthFailure } from "@/lib/agent";
 import { cn } from "@/lib/core/utils";
 
 export function StatusBadge({
@@ -109,11 +110,13 @@ export function patchCustomProbe(
 
 export function catalogStatusTone(
 	status: CatalogEntry["acpStatus"],
+	error?: string | null,
 ): "ok" | "warn" | "err" | "muted" {
 	switch (status) {
 		case "ready":
 			return "ok";
 		case "failed":
+			if (isAgentAuthFailure(error)) return "warn";
 			return "err";
 		case "not-probed":
 			return "warn";

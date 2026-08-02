@@ -2,6 +2,7 @@
 	"acpStatus": {
 		"ready": "ACP ready",
 		"failed": "ACP failed",
+		"notLoggedIn": "Not logged in",
 		"notProbed": "Not probed",
 		"notInstalled": "Not installed"
 	},
