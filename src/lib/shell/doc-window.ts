@@ -2,6 +2,7 @@
  * Per-path document native windows.
  */
 
+import i18n from "@/i18n";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { getVaultPath } from "@/lib/vault/store";
@@ -10,17 +11,21 @@ import { getVaultPath } from "@/lib/vault/store";
 export async function openDocWindow(
 	path: string,
 	mode?: string | null,
+	opts?: { title?: string | null },
 ): Promise<void> {
 	if (!isTauri()) {
-		notifyError("Document windows require the desktop app");
+		notifyError(i18n.t("app:windows.docDesktopOnly"));
 		return;
 	}
 	try {
+		const fileName = path.split(/[/\\]/).pop() || undefined;
 		const { invoke } = await import("@tauri-apps/api/core");
 		await invoke("doc_window_open", {
 			path,
 			mode: mode ?? null,
 			vaultPath: getVaultPath(),
+			title:
+				opts?.title?.trim() || fileName || i18n.t("app:windows.titleDocument"),
 		});
 	} catch (e) {
 		notifyError(String(e));

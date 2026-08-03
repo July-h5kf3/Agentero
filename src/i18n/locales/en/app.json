@@ -113,6 +113,18 @@
 		"emptyTitle": "No document open",
 		"emptyHint": "Pick a file or paper from the sidebar to open it in a tab."
 	},
+	"windows": {
+		"loading": "Loading…",
+		"docMissingPath": "No document path was provided.",
+		"docUnsupported": "Library and Trash cannot be opened in a new window.",
+		"featureDesktopOnly": "Feature windows require the desktop app.",
+		"docDesktopOnly": "Document windows require the desktop app.",
+		"titleAgent": "Agent",
+		"titleBacklinks": "Backlinks",
+		"titleAnnotations": "Annotations",
+		"titleReferences": "References",
+		"titleDocument": "Document"
+	},
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",
 		"cannotPreview": "Cannot preview this file type: {{name}}",

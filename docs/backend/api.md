@@ -293,6 +293,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   vaultPath?: string | null;
   activePath?: string | null;   // initial follow-active path for the popout
   paperTitle?: string | null;
+  title?: string | null;        // localized OS window caption from frontend t()
 }
 ```
 
@@ -321,6 +322,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   path: string;           // absolute vault file / paper path
   mode?: string | null;   // pdf | html | markdown | image …
   vaultPath?: string | null;
+  title?: string | null;  // localized OS caption; falls back to file basename
 }
 ```
 

@@ -100,6 +100,10 @@ export function broadcastAgentSessionHandoff(
 /**
  * Snapshot main-window agent store and emit handoff (with light retries so a
  * just-created feature window can subscribe after boot).
+ *
+ * Producer assumption: only the main window that opened the Agent feature
+ * window emits this event for that open. The feature window applies the first
+ * payload only (`applyAgentSessionHandoffOnce`).
  */
 export function scheduleAgentSessionHandoffFromMain(): void {
 	if (!isTauri()) return;
@@ -118,10 +122,17 @@ export function scheduleAgentSessionHandoffFromMain(): void {
 				selectedAgentId: active?.agentId ?? state.sessions[0]?.agentId ?? null,
 			};
 			// Empty handoff is still useful to clear "draft" flash when nothing open.
+			// Retries only help late subscribers; consumers ignore after first apply.
+			const emit = () => broadcastAgentSessionHandoff(payload);
+			if (
+				typeof window === "undefined" ||
+				typeof window.setTimeout !== "function"
+			) {
+				emit();
+				return;
+			}
 			for (const delay of [0, 120, 350, 900]) {
-				window.setTimeout(() => {
-					broadcastAgentSessionHandoff(payload);
-				}, delay);
+				window.setTimeout(emit, delay);
 			}
 		} catch {
 			// non-fatal

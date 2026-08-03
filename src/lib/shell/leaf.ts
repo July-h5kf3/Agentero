@@ -103,10 +103,11 @@ export async function moveDocToWindow(
 	if (isLibraryVirtualPath(path) || isTrashVirtualPath(path)) {
 		return;
 	}
-	await openDocWindow(path, mode);
-	const [{ closeTab }, { tabIdForPath }] = await Promise.all([
-		import("@/lib/workspace/actions"),
-		import("@/lib/workspace/tabs"),
-	]);
-	closeTab(tabIdForPath(path));
+	const { getTabs } = await import("@/lib/workspace/store");
+	const { tabIdForPath } = await import("@/lib/workspace/tabs");
+	const id = tabIdForPath(path);
+	const tab = getTabs().find((t) => t.id === id);
+	await openDocWindow(path, mode, { title: tab?.title ?? null });
+	const { closeTab } = await import("@/lib/workspace/actions");
+	closeTab(id);
 }

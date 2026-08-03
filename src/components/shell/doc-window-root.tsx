@@ -56,8 +56,13 @@ export function DocWindowRoot() {
 		let cancelled = false;
 		void (async () => {
 			const path = params.path;
-			if (!path || isLibraryVirtualPath(path) || isTrashVirtualPath(path)) {
-				setError("Missing document path");
+			if (!path) {
+				setError(t("windows.docMissingPath"));
+				setReady(true);
+				return;
+			}
+			if (isLibraryVirtualPath(path) || isTrashVirtualPath(path)) {
+				setError(t("windows.docUnsupported"));
 				setReady(true);
 				return;
 			}
@@ -110,7 +115,7 @@ export function DocWindowRoot() {
 		return () => {
 			cancelled = true;
 		};
-	}, [params.path, params.mode, params.vaultPath]);
+	}, [params.path, params.mode, params.vaultPath, t]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -153,7 +158,7 @@ export function DocWindowRoot() {
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{!ready || !tab ? (
 					<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-						{error ?? "…"}
+						{error ?? t("windows.loading")}
 					</div>
 				) : (
 					<DocView

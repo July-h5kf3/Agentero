@@ -63,7 +63,7 @@ import {
 import {
 	type AgentTurnRequest,
 	agentSessionStore,
-	applyAgentSessionHandoff,
+	applyAgentSessionHandoffOnce,
 	useActiveChatLines,
 	useAgentSessionStore,
 } from "@/lib/agent/agent-session-store";
@@ -497,16 +497,16 @@ export function useAgentPanel({
 		setActiveTabId,
 	]);
 
-	// Cross-window handoff: when this panel is the Agent feature popout, restore
-	// the main window's open conversation (and agent selection) for continuity.
+	// Cross-window handoff: first snapshot only (retries may arrive later).
 	useEffect(() => {
 		let unlisten: (() => void) | undefined;
 		void listenAgentSessionHandoff((payload) => {
-			applyAgentSessionHandoff({
+			const applied = applyAgentSessionHandoffOnce({
 				sessions: payload.sessions,
 				activeTabId: payload.activeTabId,
 				draftLines: payload.draftLines,
 			});
+			if (!applied) return;
 			const agentId =
 				payload.selectedAgentId ??
 				payload.sessions.find((s) => s.id === payload.activeTabId)?.agentId ??

@@ -190,6 +190,8 @@ pub async fn feature_window_open(
     vault_path: Option<String>,
     active_path: Option<String>,
     paper_title: Option<String>,
+    // Localized caption from the frontend (`t()`); English fallbacks below.
+    title: Option<String>,
 ) -> Result<(), String> {
     let op = OpTimer::start("feature_window_open");
     validate_feature_view(&view)?;
@@ -211,21 +213,24 @@ pub async fn feature_window_open(
     if let Some(path) = active_path.filter(|s| !s.is_empty()) {
         url.push_str(&format!("&active_path={}", urlencoding::encode(&path)));
     }
-    if let Some(title) = paper_title.filter(|s| !s.is_empty()) {
-        url.push_str(&format!("&paper_title={}", urlencoding::encode(&title)));
+    if let Some(pt) = paper_title.filter(|s| !s.is_empty()) {
+        url.push_str(&format!("&paper_title={}", urlencoding::encode(&pt)));
     }
 
-    let title = match view.as_str() {
-        "agent" => "Agent",
-        "backlinks" => "Backlinks",
-        "annotations" => "Annotations",
-        "references" => "References",
-        other => other,
-    };
+    let window_title =
+        title
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| match view.as_str() {
+                "agent" => "Agent".into(),
+                "backlinks" => "Backlinks".into(),
+                "annotations" => "Annotations".into(),
+                "references" => "References".into(),
+                other => other.to_string(),
+            });
 
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
-        .title(title)
+        .title(window_title)
         .inner_size(420.0, 720.0)
         .min_inner_size(320.0, 400.0)
         .visible(false)
@@ -287,6 +292,8 @@ pub async fn doc_window_open(
     path: String,
     mode: Option<String>,
     vault_path: Option<String>,
+    // Localized caption from the frontend when available.
+    title: Option<String>,
 ) -> Result<(), String> {
     let op = OpTimer::start("doc_window_open");
     if path.trim().is_empty() {
@@ -308,14 +315,17 @@ pub async fn doc_window_open(
         url.push_str(&format!("&vault_path={}", urlencoding::encode(&vp)));
     }
 
-    let title = std::path::Path::new(&path)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Document");
+    let window_title = title.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| {
+        std::path::Path::new(&path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Document")
+            .to_string()
+    });
 
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
-        .title(title)
+        .title(window_title)
         .inner_size(960.0, 720.0)
         .min_inner_size(480.0, 360.0)
         .visible(false)

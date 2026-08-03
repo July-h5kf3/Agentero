@@ -20,7 +20,7 @@ import {
 	useVaultStore,
 	useWikiStore,
 } from "@/hooks/use-app-stores";
-import { applyAgentSessionHandoff } from "@/lib/agent/agent-session-store";
+import { applyAgentSessionHandoffOnce } from "@/lib/agent/agent-session-store";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { toVaultRelative } from "@/lib/core/path";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
@@ -311,9 +311,9 @@ export function FeatureWindowRoot() {
 		}).then((u) => {
 			unlistenOpen = u;
 		});
-		// Apply early so vault/panel boot does not flash an empty draft.
+		// First handoff only — later retries must not clobber in-window chat.
 		void listenAgentSessionHandoff((payload) => {
-			applyAgentSessionHandoff({
+			applyAgentSessionHandoffOnce({
 				sessions: payload.sessions,
 				activeTabId: payload.activeTabId,
 				draftLines: payload.draftLines,
@@ -345,6 +345,19 @@ export function FeatureWindowRoot() {
 	const selectedPath = followed.path;
 	const selectedPaperTitle = followed.paperTitle ?? null;
 	const title = t(viewTitleKey(view));
+
+	// Keep OS window caption in sync with locale (Host may have used a fallback).
+	useEffect(() => {
+		if (!isTauri()) return;
+		void (async () => {
+			try {
+				const { getCurrentWindow } = await import("@tauri-apps/api/window");
+				await getCurrentWindow().setTitle(title);
+			} catch {
+				// ignore
+			}
+		})();
+	}, [title]);
 
 	const referencesPaperPath = useMemo(() => {
 		if (
@@ -379,7 +392,7 @@ export function FeatureWindowRoot() {
 			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{!ready ? (
 					<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-						…
+						{t("windows.loading")}
 					</div>
 				) : view === "agent" ? (
 					<Suspense fallback={null}>

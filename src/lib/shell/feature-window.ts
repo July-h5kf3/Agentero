@@ -4,30 +4,42 @@
  * Policy: at most one surface per view. If a feature window is open, all open
  * intents focus that window and the main right-rail / agent zen must not host
  * a second instance of the same view.
+ *
+ * Note: do not statically import `@/lib/shell/ui-store` — that module dynamically
+ * imports this file for preferFeatureWindow (would form a cycle).
  */
 
+import i18n from "@/i18n";
 import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
-import {
-	layout,
-	type RightSidebarTab,
-	setAgentPanelMounted,
-	setAgentZenMode,
-	setFeaturePoppedOut,
-	setRightSidebarTab,
-	uiStore,
-} from "@/lib/shell/ui-store";
 import { getVaultPath } from "@/lib/vault/store";
 
 /** Same set as right-rail tabs / leaf feature views. */
-export type FeatureViewType = RightSidebarTab;
+export type FeatureViewType =
+	| "agent"
+	| "backlinks"
+	| "annotations"
+	| "references";
 
-const FEATURE_TAB_ORDER: RightSidebarTab[] = [
+const FEATURE_TAB_ORDER: FeatureViewType[] = [
 	"agent",
 	"backlinks",
 	"annotations",
 	"references",
 ];
+
+function featureWindowTitle(view: FeatureViewType): string {
+	switch (view) {
+		case "agent":
+			return i18n.t("app:windows.titleAgent");
+		case "backlinks":
+			return i18n.t("app:windows.titleBacklinks");
+		case "annotations":
+			return i18n.t("app:windows.titleAnnotations");
+		case "references":
+			return i18n.t("app:windows.titleReferences");
+	}
+}
 
 export function featureWindowLabel(view: FeatureViewType): string {
 	return `feature-${view}`;
@@ -38,33 +50,34 @@ export function featureWindowLabel(view: FeatureViewType): string {
  * (avoids dual Agent panels, etc.). Does **not** collapse the right rail —
  * title-bar feature switcher buttons must stay available for other views.
  */
-function clearMainHostForFeature(view: FeatureViewType): void {
-	setFeaturePoppedOut(view, true);
+async function clearMainHostForFeature(view: FeatureViewType): Promise<void> {
+	const ui = await import("@/lib/shell/ui-store");
+	ui.setFeaturePoppedOut(view, true);
 	if (view === "agent") {
-		setAgentPanelMounted(false);
-		if (uiStore.getState().agentZenMode) {
+		ui.setAgentPanelMounted(false);
+		if (ui.uiStore.getState().agentZenMode) {
 			// Prefer layout exit so panel sizes restore; fall back to flag only.
-			const ctrl = layout();
+			const ctrl = ui.layout();
 			if (ctrl) ctrl.exitAgentZen();
-			else setAgentZenMode(false);
+			else ui.setAgentZenMode(false);
 		}
 	}
 	// Rail stays open. If the selected rail tab is the one now in a window,
 	// switch to another non-popped-out tab so the switcher + content remain usable.
-	const { rightSidebarTab, featurePoppedOut } = uiStore.getState();
+	const { rightSidebarTab, featurePoppedOut } = ui.uiStore.getState();
 	if (rightSidebarTab !== view) return;
 	const next = FEATURE_TAB_ORDER.find(
 		(t) => t !== view && !featurePoppedOut[t],
 	);
 	if (!next) return;
-	setRightSidebarTab(next);
-	if (next === "agent") setAgentPanelMounted(true);
+	ui.setRightSidebarTab(next);
+	if (next === "agent") ui.setAgentPanelMounted(true);
 }
 
 /** Open or focus the singleton feature window for `view`. */
 export async function openFeatureWindow(view: FeatureViewType): Promise<void> {
 	if (!isTauri()) {
-		notifyError("Feature windows require the desktop app");
+		notifyError(i18n.t("app:windows.featureDesktopOnly"));
 		return;
 	}
 	try {
@@ -82,8 +95,9 @@ export async function openFeatureWindow(view: FeatureViewType): Promise<void> {
 			vaultPath: getVaultPath(),
 			activePath: active?.path ?? null,
 			paperTitle: active?.paperMeta?.title ?? null,
+			title: featureWindowTitle(view),
 		});
-		clearMainHostForFeature(view);
+		await clearMainHostForFeature(view);
 		// Existing feature windows only get focused — re-broadcast so they follow.
 		const { broadcastWorkspaceActive, scheduleAgentSessionHandoffFromMain } =
 			await import("@/lib/shell/workspace-broadcast");
@@ -108,6 +122,7 @@ export async function closeFeatureWindow(view: FeatureViewType): Promise<void> {
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
 		await invoke("feature_window_close", { view });
+		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
 		setFeaturePoppedOut(view, false);
 	} catch (e) {
 		notifyError(String(e));
@@ -116,24 +131,36 @@ export async function closeFeatureWindow(view: FeatureViewType): Promise<void> {
 
 /**
  * Probe whether the singleton feature Webview exists and focus it.
- * Updates `featurePoppedOut` from live window state (not only the in-memory flag).
+ * Only clears `featurePoppedOut` when the label is confirmed missing — not on
+ * transient focus/API errors (avoids opening a second rail instance).
  */
 export async function focusFeatureWindow(
 	view: FeatureViewType,
 ): Promise<boolean> {
 	if (!isTauri()) return false;
+	let win: Awaited<
+		ReturnType<
+			typeof import("@tauri-apps/api/webviewWindow")["WebviewWindow"]["getByLabel"]
+		>
+	> = null;
 	try {
 		const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-		const win = await WebviewWindow.getByLabel(featureWindowLabel(view));
-		if (!win) {
-			setFeaturePoppedOut(view, false);
-			return false;
-		}
+		win = await WebviewWindow.getByLabel(featureWindowLabel(view));
+	} catch {
+		// Lookup failed — keep poppedOut flag; do not open a rail duplicate.
+		return false;
+	}
+	if (!win) {
+		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
+		setFeaturePoppedOut(view, false);
+		return false;
+	}
+	try {
 		await win.setFocus();
-		clearMainHostForFeature(view);
+		await clearMainHostForFeature(view);
 		return true;
 	} catch {
-		setFeaturePoppedOut(view, false);
+		// Window still exists; leave featurePoppedOut true.
 		return false;
 	}
 }
@@ -182,6 +209,7 @@ export function bindFeatureWindowClosedListener(): () => void {
 	let unlisten: (() => void) | undefined;
 	void (async () => {
 		const { listen } = await import("@tauri-apps/api/event");
+		const { setFeaturePoppedOut } = await import("@/lib/shell/ui-store");
 		unlisten = await listen<{ view: string }>("feature_window_closed", (e) => {
 			const view = e.payload?.view;
 			if (
@@ -199,6 +227,9 @@ export function bindFeatureWindowClosedListener(): () => void {
 	};
 }
 
-export function isFeaturePoppedOut(view: FeatureViewType): boolean {
+export async function isFeaturePoppedOut(
+	view: FeatureViewType,
+): Promise<boolean> {
+	const { uiStore } = await import("@/lib/shell/ui-store");
 	return uiStore.getState().featurePoppedOut[view] === true;
 }

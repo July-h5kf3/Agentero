@@ -270,6 +270,17 @@ export function getAgentSessionState(): AgentSessionStore {
 	return agentSessionStore.getState();
 }
 
+/**
+ * Whether this feature-window process has already consumed a main→popout
+ * session handoff. New Agent windows accept the first snapshot only so later
+ * retry emits cannot clobber in-window progress.
+ */
+let agentSessionHandoffApplied = false;
+
+export function hasAppliedAgentSessionHandoff(): boolean {
+	return agentSessionHandoffApplied;
+}
+
 /** Apply a cross-window handoff snapshot (new Agent feature window boot). */
 export function applyAgentSessionHandoff(payload: {
 	sessions: AgentSessionRecord[];
@@ -290,4 +301,19 @@ export function applyAgentSessionHandoff(payload: {
 		activeTabId,
 		draftLines,
 	});
+}
+
+/**
+ * Apply handoff at most once per feature-window process.
+ * @returns true if this call applied the snapshot
+ */
+export function applyAgentSessionHandoffOnce(payload: {
+	sessions: AgentSessionRecord[];
+	activeTabId: string;
+	draftLines?: ChatLine[];
+}): boolean {
+	if (agentSessionHandoffApplied) return false;
+	agentSessionHandoffApplied = true;
+	applyAgentSessionHandoff(payload);
+	return true;
 }
