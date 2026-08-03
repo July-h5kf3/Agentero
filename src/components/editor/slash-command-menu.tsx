@@ -210,6 +210,7 @@ export function SlashCommandMenu({
 										? "bg-accent text-accent-foreground"
 										: "hover:bg-accent/60"
 								}`}
+								onMouseEnter={() => setSelectedIndex(index)}
 								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => selectCommand(command)}
 							>
