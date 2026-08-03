@@ -88,6 +88,7 @@
 		"closeSplit": "Close split · {{title}}",
 		"contextClose": "Close",
 		"contextOpenNotes": "Open Notes",
+		"contextMoveToNewWindow": "Move to New Window",
 		"contextCloseOthers": "Close Others",
 		"contextCloseAll": "Close All",
 		"contextCreateTabGroup": "New Tab Group",

@@ -88,6 +88,7 @@
 		"closeSplit": "关闭分屏 · {{title}}",
 		"contextClose": "关闭",
 		"contextOpenNotes": "打开笔记",
+		"contextMoveToNewWindow": "移动至新窗口",
 		"contextCloseOthers": "关闭其他",
 		"contextCloseAll": "关闭全部",
 		"contextCreateTabGroup": "新建标签组",
