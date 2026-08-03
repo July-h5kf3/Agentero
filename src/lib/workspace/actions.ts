@@ -210,7 +210,8 @@ export function openTab(
 		nextTabs.find((t) => t.id === insertedId) ??
 		createPlaceholderTab(path, opts?.preferMode);
 
-	// Stack new paper bodies into the existing left reading column.
+	// Paper bodies use free dock placement; NOTES companion still prefers the
+	// notes column when present (see paperReadingPlacements).
 	const initialPlacement =
 		opts?.placement ??
 		paperReadingPlacements(beforeTabs, {

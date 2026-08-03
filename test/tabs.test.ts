@@ -364,7 +364,7 @@ describe("flat workspace helpers", () => {
 		expect(tabHasNotesSplit([paper, notes], paper)).toBe(true);
 	});
 
-	it("paperReadingPlacements stacks into existing left|right columns", () => {
+	it("paperReadingPlacements stacks NOTES into existing notes column only", () => {
 		const paperA = makeTab("/vault/a", {
 			kind: "paper",
 			mode: "pdf",
@@ -379,10 +379,8 @@ describe("flat workspace helpers", () => {
 			paperId: "paper-b",
 			notesId: "notes-b",
 		});
-		expect(place.paper).toEqual({
-			direction: "within",
-			referencePanelId: paperA.id,
-		});
+		// Paper body is free (active group / default) — not forced into paper column.
+		expect(place.paper).toBeNull();
 		expect(place.notes).toEqual({
 			direction: "within",
 			referencePanelId: notesA.id,
