@@ -32,6 +32,7 @@ import {
 } from "@/components/editor/plugins/wikilink-plugin";
 import { ViewportFloating } from "@/components/ui/viewport-floating";
 import {
+	annotationSnippet,
 	listPaperAnnotationSummaries,
 	paperAbsFromSourceFile,
 	paperAbsFromWikiTarget,
@@ -131,6 +132,21 @@ function filterAnnotationQuery(
 }
 
 /**
+ * Default wikilink alias for an annotation pick: truncated comment/quote so Enter
+ * fills `target@id|text` and display (link + embed chrome) never shows a bare UUID
+ * when the mark has readable content.
+ */
+function annotationDisplayAlias(
+	comment?: string | null,
+	quote?: string | null,
+): string | undefined {
+	const preview = truncateAnnotationPreview(
+		annotationSnippet({ comment, quote }),
+	);
+	return preview || undefined;
+}
+
+/**
  * Build annotation candidates for `@` completion.
  * Prefer the PDF tab store when the paper body is open; always fall back to
  * disk marks so NOTES-focused editing still lists ids.
@@ -150,8 +166,8 @@ async function buildAnnotationCandidates(
 
 	if (storeHighlights.length || storeVisuals.length) {
 		for (const h of storeHighlights) {
-			const preview =
-				truncateAnnotationPreview(h.comment || h.quote || "") || h.id;
+			const alias = annotationDisplayAlias(h.comment, h.quote);
+			const preview = alias || h.id;
 			if (!filterAnnotationQuery(query, preview, h.id)) continue;
 			out.push({
 				kind: "annotation",
@@ -159,11 +175,13 @@ async function buildAnnotationCandidates(
 				insertText: target ? `${target}@${h.id}` : `@${h.id}`,
 				label: preview,
 				detail: `p.${h.page} · highlight`,
+				alias,
 				fragment: { kind: "annotation", id: h.id },
 			});
 		}
 		for (const v of storeVisuals) {
-			const preview = truncateAnnotationPreview(v.comment || "") || v.id;
+			const alias = annotationDisplayAlias(v.comment, null);
+			const preview = alias || v.id;
 			if (!filterAnnotationQuery(query, preview, v.id)) continue;
 			out.push({
 				kind: "annotation",
@@ -171,6 +189,7 @@ async function buildAnnotationCandidates(
 				insertText: target ? `${target}@${v.id}` : `@${v.id}`,
 				label: preview,
 				detail: `p.${v.page} · visual`,
+				alias,
 				fragment: { kind: "annotation", id: v.id },
 			});
 		}
@@ -179,13 +198,16 @@ async function buildAnnotationCandidates(
 
 	const summaries = await listPaperAnnotationSummaries(paperAbs);
 	for (const s of summaries) {
-		if (!filterAnnotationQuery(query, s.preview, s.id)) continue;
+		const alias = annotationDisplayAlias(s.comment, s.quote);
+		const preview = alias || s.preview || s.id;
+		if (!filterAnnotationQuery(query, preview, s.id)) continue;
 		out.push({
 			kind: "annotation",
 			path: pathHint,
 			insertText: target ? `${target}@${s.id}` : `@${s.id}`,
-			label: s.preview,
+			label: preview,
 			detail: `p.${s.page} · ${s.kind === "agent-trace" ? "visual" : "highlight"}`,
+			alias,
 			fragment: { kind: "annotation", id: s.id },
 		});
 	}

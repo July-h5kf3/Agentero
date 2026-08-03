@@ -152,6 +152,40 @@ describe("wikilink completion grammar", () => {
 		);
 	});
 
+	it("fills annotation Enter with |preview so display is not a bare UUID", () => {
+		const completion = wikiCompletionInsert(
+			{
+				kind: "annotation",
+				path: "papers/foo/NOTES.md",
+				insertText: "papers/foo/NOTES@TGDf_eZGV4",
+				label: "这是一段批注",
+				alias: "这是一段批注",
+				fragment: { kind: "annotation", id: "TGDf_eZGV4" },
+			},
+			{ kind: "annotation", target: "papers/foo/NOTES", query: "" },
+		);
+		expect(completion).toEqual({
+			target: "papers/foo/NOTES",
+			heading: "@TGDf_eZGV4",
+			alias: "这是一段批注",
+		});
+		expect(
+			wikiLinkToMarkdown({
+				value: completion.target,
+				heading: completion.heading,
+				alias: completion.alias,
+			}),
+		).toBe("[[papers/foo/NOTES@TGDf_eZGV4|这是一段批注]]");
+		expect(
+			wikiLinkToMarkdown({
+				value: completion.target,
+				heading: completion.heading,
+				alias: completion.alias,
+				embed: true,
+			}),
+		).toBe("![[papers/foo/NOTES@TGDf_eZGV4|这是一段批注]]");
+	});
+
 	it("keeps an explicitly typed target when completing a heading or block", () => {
 		const heading = wikiCompletionInsert(
 			{
