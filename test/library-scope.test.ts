@@ -127,21 +127,29 @@ describe("filterPapersByScope latency", () => {
 				const org = i % 20 === 0 ? "nlp" : i % 20 === 1 ? "cv" : `org${i % 50}`;
 				rows.push(paper(`papers/${org}/paper-${i}`));
 			}
-			filterPapersByScope(rows, "papers/nlp"); // warm-up
+			// Warm JIT / allocator before timing (cold first call skews CI averages).
+			for (let w = 0; w < 5; w++) {
+				filterPapersByScope(rows, "papers/nlp");
+			}
 			const iterations = n >= 10_000 ? 30 : 100;
-			const t0 = performance.now();
+			const samples: number[] = [];
 			let hits = 0;
 			for (let i = 0; i < iterations; i++) {
+				const t0 = performance.now();
 				hits = filterPapersByScope(rows, "papers/nlp").length;
+				samples.push(performance.now() - t0);
 			}
-			const avgMs = (performance.now() - t0) / iterations;
+			samples.sort((a, b) => a - b);
+			// Median resists single GC/noisy spikes that pull the mean over a hard
+			// ceiling on shared CI runners (GHA previously flaked at ~52ms mean).
+			const medianMs = samples[Math.floor(samples.length / 2)] ?? 0;
+			const avgMs = samples.reduce((a, b) => a + b, 0) / samples.length;
 			results.push(
-				`n=${String(n).padStart(5)} avg=${avgMs.toFixed(3)}ms hits=${hits}`,
+				`n=${String(n).padStart(5)} median=${medianMs.toFixed(3)}ms avg=${avgMs.toFixed(3)}ms hits=${hits}`,
 			);
-			// Generous ceiling so the assertion is not flaky under machine load
-			// (filtering is O(n) and measures ~1–20ms here); still catches a real
-			// regression (e.g. accidental O(n²) or per-row allocation blowups).
-			expect(avgMs).toBeLessThan(50);
+			// Local n=50k is ~10ms; O(n²) would be hundreds of ms+. Ceiling leaves
+			// headroom for GHA load while still catching real algorithmic blowups.
+			expect(medianMs).toBeLessThan(100);
 			expect(hits).toBeGreaterThan(0);
 		}
 

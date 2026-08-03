@@ -85,6 +85,7 @@ import { KbdLeaf } from "@/components/editor/kbd-leaf";
 import { MentionElement } from "@/components/editor/mention-node";
 import { ParagraphElement } from "@/components/editor/paragraph-node";
 import { CalloutPlugin } from "@/components/editor/plugins/callout-plugin";
+import { handleCodeBlockDeleteBackward } from "@/components/editor/plugins/code-block-delete";
 import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
 import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
@@ -234,11 +235,20 @@ export const MarkdownEditorKit = [
 	}),
 
 	// Code blocks
+	// Override deleteBackward so empty-block Backspace unwraps instead of
+	// jumping to an earlier code_line elsewhere in the document (#178).
 	CodeBlockPlugin.configure({
 		inputRules: [CodeBlockRules.markdown({ on: "match" })],
 		node: { component: CodeBlockElement },
 		options: { lowlight },
-	}),
+	}).overrideEditor(({ editor, tf: { deleteBackward } }) => ({
+		transforms: {
+			deleteBackward(unit) {
+				if (handleCodeBlockDeleteBackward(editor)) return;
+				deleteBackward(unit);
+			},
+		},
+	})),
 	CodeLinePlugin.withComponent(CodeLineElement),
 	CodeSyntaxPlugin.withComponent(CodeSyntaxLeaf),
 
