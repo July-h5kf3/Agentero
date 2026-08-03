@@ -269,3 +269,25 @@ export function useActiveChatLines(): ChatLine[] {
 export function getAgentSessionState(): AgentSessionStore {
 	return agentSessionStore.getState();
 }
+
+/** Apply a cross-window handoff snapshot (new Agent feature window boot). */
+export function applyAgentSessionHandoff(payload: {
+	sessions: AgentSessionRecord[];
+	activeTabId: string;
+	draftLines?: ChatLine[];
+}): void {
+	const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+	const activeTabId =
+		typeof payload.activeTabId === "string" && payload.activeTabId
+			? payload.activeTabId
+			: "draft";
+	const draftLines =
+		Array.isArray(payload.draftLines) && payload.draftLines.length > 0
+			? payload.draftLines
+			: EMPTY_CHAT_LINES;
+	agentSessionStore.setState({
+		sessions,
+		activeTabId,
+		draftLines,
+	});
+}

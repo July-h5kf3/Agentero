@@ -195,15 +195,37 @@ export function toggleSidebar(): void {
 	layout()?.setLeftCollapsed(!sidebarCollapsed);
 }
 
-/** Title-bar toggle: mounts the Agent panel when opening. */
+/**
+ * Expand the right rail on `tab` (main window only). Callers must have already
+ * ruled out an open singleton feature window for this tab.
+ */
+function openRightTabInRail(tab: RightSidebarTab): void {
+	setRightSidebarTab(tab);
+	if (tab === "agent") setAgentPanelMounted(true);
+	if (!uiStore.getState().rightSidebarOpen) {
+		layout()?.setRightCollapsed(false, { focusAgent: tab === "agent" });
+	}
+}
+
+/** Title-bar toggle: mounts the Agent panel when opening (unless agent is popped out). */
 export function toggleRightSidebar(): void {
 	const { agentZenMode, rightSidebarOpen, rightSidebarTab } =
 		uiStore.getState();
 	if (agentZenMode) return;
-	if (!rightSidebarOpen) setAgentPanelMounted(true);
-	layout()?.setRightCollapsed(rightSidebarOpen, {
-		focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
-	});
+	if (rightSidebarOpen) {
+		layout()?.setRightCollapsed(true);
+		return;
+	}
+	// Opening: prefer singleton window for the active feature tab.
+	void import("@/lib/shell/feature-window").then(
+		async ({ preferFeatureWindow }) => {
+			if (await preferFeatureWindow(rightSidebarTab)) return;
+			if (rightSidebarTab === "agent") setAgentPanelMounted(true);
+			layout()?.setRightCollapsed(false, {
+				focusAgent: rightSidebarTab === "agent",
+			});
+		},
+	);
 }
 
 /** ⌘L — toggle right sidebar (defaults to agent). */
@@ -211,9 +233,18 @@ export function toggleChat(): void {
 	const { agentZenMode, rightSidebarOpen, rightSidebarTab } =
 		uiStore.getState();
 	if (agentZenMode) return;
-	layout()?.setRightCollapsed(rightSidebarOpen, {
-		focusAgent: !rightSidebarOpen && rightSidebarTab === "agent",
-	});
+	if (rightSidebarOpen) {
+		layout()?.setRightCollapsed(true);
+		return;
+	}
+	void import("@/lib/shell/feature-window").then(
+		async ({ preferFeatureWindow }) => {
+			if (await preferFeatureWindow(rightSidebarTab)) return;
+			layout()?.setRightCollapsed(false, {
+				focusAgent: rightSidebarTab === "agent",
+			});
+		},
+	);
 }
 
 export function setFeaturePoppedOut(
@@ -229,25 +260,19 @@ export function setFeaturePoppedOut(
 }
 
 /**
- * Open right sidebar on a tab (or switch tab if already open).
- * Prefer {@link openLeaf} from `@/lib/shell/leaf` for new call sites that may
- * use `placement: "window"`.
+ * Open a feature view. If its singleton native window is open, focus that
+ * window and do not host a second copy in the main right rail (same policy for
+ * Agent, Backlinks, Annotations, References).
  *
- * When the feature already lives in a singleton window, focus that window
- * instead of only expanding the rail.
+ * Prefer {@link openLeaf} for new call sites that may use `placement: "window"`.
  */
 export function openRightTab(tab: RightSidebarTab): void {
-	if (uiStore.getState().featurePoppedOut[tab]) {
-		void import("@/lib/shell/feature-window").then(({ focusFeatureWindow }) => {
-			void focusFeatureWindow(tab);
-		});
-		return;
-	}
-	setRightSidebarTab(tab);
-	if (tab === "agent") setAgentPanelMounted(true);
-	if (!uiStore.getState().rightSidebarOpen) {
-		layout()?.setRightCollapsed(false, { focusAgent: tab === "agent" });
-	}
+	void import("@/lib/shell/feature-window").then(
+		async ({ preferFeatureWindow }) => {
+			if (await preferFeatureWindow(tab)) return;
+			openRightTabInRail(tab);
+		},
+	);
 }
 
 let agentSessionOpenNonce = 0;
@@ -264,18 +289,20 @@ export function requestOpenAgentSession(
 	uiStore.setState({
 		agentSessionOpenRequest: request,
 	});
-	if (uiStore.getState().featurePoppedOut.agent) {
-		void import("@/lib/shell/workspace-broadcast").then(
-			({ broadcastAgentOpenSession }) => {
+	// Always try the agent singleton window first (live probe, not only flag).
+	void import("@/lib/shell/feature-window").then(
+		async ({ preferFeatureWindow }) => {
+			const inWindow = await preferFeatureWindow("agent");
+			if (inWindow) {
+				const { broadcastAgentOpenSession } = await import(
+					"@/lib/shell/workspace-broadcast"
+				);
 				broadcastAgentOpenSession(request);
-			},
-		);
-		void import("@/lib/shell/feature-window").then(({ focusFeatureWindow }) => {
-			void focusFeatureWindow("agent");
-		});
-		return;
-	}
-	openRightTab("agent");
+				return;
+			}
+			openRightTabInRail("agent");
+		},
+	);
 }
 
 export function clearAgentSessionOpenRequest(): void {
@@ -284,8 +311,17 @@ export function clearAgentSessionOpenRequest(): void {
 }
 
 export function toggleAgentZen(): void {
-	if (uiStore.getState().agentZenMode) layout()?.exitAgentZen();
-	else layout()?.enterAgentZen();
+	if (uiStore.getState().agentZenMode) {
+		layout()?.exitAgentZen();
+		return;
+	}
+	// Agent already in a feature window → focus it; do not also enter main zen.
+	void import("@/lib/shell/feature-window").then(
+		async ({ preferFeatureWindow }) => {
+			if (await preferFeatureWindow("agent")) return;
+			layout()?.enterAgentZen();
+		},
+	);
 }
 
 export function togglePdfZen(): void {

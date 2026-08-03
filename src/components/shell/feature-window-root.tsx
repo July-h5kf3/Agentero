@@ -20,6 +20,7 @@ import {
 	useVaultStore,
 	useWikiStore,
 } from "@/hooks/use-app-stores";
+import { applyAgentSessionHandoff } from "@/lib/agent/agent-session-store";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { toVaultRelative } from "@/lib/core/path";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
@@ -46,6 +47,7 @@ import {
 } from "@/lib/shell/ui-store";
 import {
 	listenAgentOpenSession,
+	listenAgentSessionHandoff,
 	listenWorkspaceActive,
 	type WorkspaceActiveChangedPayload,
 } from "@/lib/shell/workspace-broadcast";
@@ -300,16 +302,28 @@ export function FeatureWindowRoot() {
 
 	useEffect(() => {
 		if (view !== "agent") return;
-		let unlisten: (() => void) | undefined;
+		let unlistenOpen: (() => void) | undefined;
+		let unlistenHandoff: (() => void) | undefined;
 		void listenAgentOpenSession((payload) => {
 			const req = payload as AgentSessionOpenRequest;
 			if (!req || typeof req !== "object" || !("nonce" in req)) return;
 			uiStore.setState({ agentSessionOpenRequest: req });
 		}).then((u) => {
-			unlisten = u;
+			unlistenOpen = u;
+		});
+		// Apply early so vault/panel boot does not flash an empty draft.
+		void listenAgentSessionHandoff((payload) => {
+			applyAgentSessionHandoff({
+				sessions: payload.sessions,
+				activeTabId: payload.activeTabId,
+				draftLines: payload.draftLines,
+			});
+		}).then((u) => {
+			unlistenHandoff = u;
 		});
 		return () => {
-			unlisten?.();
+			unlistenOpen?.();
+			unlistenHandoff?.();
 		};
 	}, [view]);
 
