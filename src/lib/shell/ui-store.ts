@@ -210,7 +210,11 @@ export function toggleChat(): void {
 	});
 }
 
-/** Open right sidebar on a tab (or switch tab if already open). */
+/**
+ * Open right sidebar on a tab (or switch tab if already open).
+ * Prefer {@link openLeaf} from `@/lib/shell/leaf` for new call sites that may
+ * later use `placement: "window"`.
+ */
 export function openRightTab(tab: RightSidebarTab): void {
 	setRightSidebarTab(tab);
 	if (tab === "agent") setAgentPanelMounted(true);
