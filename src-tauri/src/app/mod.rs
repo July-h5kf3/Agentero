@@ -168,6 +168,13 @@ pub fn run() {
                 if window.label() == crate::features::window::commands::SETTINGS_WINDOW_LABEL {
                     let _ = window.app_handle().emit("settings_window_closed", ());
                 }
+                if let Some(view) =
+                    crate::features::window::commands::feature_view_from_label(window.label())
+                {
+                    let _ = window
+                        .app_handle()
+                        .emit("feature_window_closed", serde_json::json!({ "view": view }));
+                }
             }
         });
     }

@@ -63,6 +63,7 @@ import {
 import {
 	type AgentTurnRequest,
 	agentSessionStore,
+	applyAgentSessionHandoffOnce,
 	useActiveChatLines,
 	useAgentSessionStore,
 } from "@/lib/agent/agent-session-store";
@@ -152,6 +153,7 @@ import {
 } from "@/lib/pdf/agent-trace/open-session";
 import { loadSettings } from "@/lib/settings";
 import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
+import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
 import {
 	collectUserPromptTexts,
 	nextHistoryIndexOnDown,
@@ -494,6 +496,41 @@ export function useAgentPanel({
 		setSessionHistory,
 		setActiveTabId,
 	]);
+
+	// Cross-window handoff: first snapshot only (retries may arrive later).
+	useEffect(() => {
+		let unlisten: (() => void) | undefined;
+		void listenAgentSessionHandoff((payload) => {
+			const applied = applyAgentSessionHandoffOnce({
+				sessions: payload.sessions,
+				activeTabId: payload.activeTabId,
+				draftLines: payload.draftLines,
+			});
+			if (!applied) return;
+			const agentId =
+				payload.selectedAgentId ??
+				payload.sessions.find((s) => s.id === payload.activeTabId)?.agentId ??
+				payload.sessions[0]?.agentId ??
+				null;
+			if (agentId) {
+				setSelectedAgentId(agentId);
+				selectedAgentIdRef.current = agentId;
+			}
+			const tabId = payload.activeTabId || "draft";
+			activeTabRef.current = tabId;
+			activeConversationRef.current = tabId === "draft" ? null : tabId;
+			knownSessionIdsRef.current = new Set(
+				(payload.sessions ?? []).map((s) => s.id),
+			);
+			// Composer scope follows session id; force activate after handoff.
+			activateComposerSession(tabId);
+		}).then((u) => {
+			unlisten = u;
+		});
+		return () => {
+			unlisten?.();
+		};
+	}, [activateComposerSession]);
 
 	// Restore last model catalog / preference for the selected agent.
 	useEffect(() => {

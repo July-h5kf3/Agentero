@@ -129,8 +129,21 @@ export function activatePaperWithNotes(paperTab: DocTab): void {
  */
 export function handleActivePanelChange(panelId: string | null): void {
 	setActiveTabId(panelId);
+	const activeTab = panelId
+		? (getTabs().find((t) => t.id === panelId) ?? null)
+		: null;
+	// Feature popout windows follow the main dock's active document.
+	void import("@/lib/shell/workspace-broadcast").then(
+		({ broadcastWorkspaceActive }) => {
+			broadcastWorkspaceActive({
+				path: activeTab?.path ?? null,
+				vaultPath: getVaultPath(),
+				paperTitle: activeTab?.paperMeta?.title ?? null,
+			});
+		},
+	);
 	if (!panelId || readingSync) return;
-	const tab = getTabs().find((t) => t.id === panelId);
+	const tab = activeTab;
 	if (!tab) return;
 
 	if (isPaperContentTab(tab) && tab.notesPath) {
@@ -210,7 +223,8 @@ export function openTab(
 		nextTabs.find((t) => t.id === insertedId) ??
 		createPlaceholderTab(path, opts?.preferMode);
 
-	// Stack new paper bodies into the existing left reading column.
+	// Paper bodies use free dock placement; NOTES companion still prefers the
+	// notes column when present (see paperReadingPlacements).
 	const initialPlacement =
 		opts?.placement ??
 		paperReadingPlacements(beforeTabs, {

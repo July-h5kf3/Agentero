@@ -7,12 +7,13 @@
 | 场景 | 行为 |
 |---|---|
 | 打开文档 | 文件树 / Library / 命令面板 → `openTab` → `workspaceRef.openPanel` |
-| 首篇 paper | PDF/HTML 左 + `NOTES.md` 右分屏 |
-| 再开 paper | 叠到同一左右两栏（body / NOTES **同步切换**）；不拆第三列 |
+| 首篇 paper | PDF/HTML 默认组 + `NOTES.md` 右分屏（阅读默认） |
+| 再开 paper | body 走自由 dock 放置（当前组 / 默认，可再拖分屏）；NOTES 优先叠进已有笔记列；body↔NOTES **焦点仍同步** |
 | 同步关闭 | 关 paper body 时一并关 NOTES；关 NOTES 保留 body |
 | 文件树拖入 | left/right/above/below/within 分屏落点 |
 | 关 panel | dockview X → `closeTab`；焦点 `onDidActivePanelChange` |
 | 循环 | `⌥⌘←/→` 按 `api.panels` **视觉序** |
+| 移至新窗口 | 文档 tab **右键** → **移动至新窗口** → 独立 `doc-*` Webview；源 panel 关闭（Library / Trash 除外） |
 | NOTES 开关 | Layout 菜单 / 快捷键；优先叠右列 |
 | 打开笔记 | 论文 tab 右键 /文件树论文行右键 → NOTES 进右侧阅读列（已开则聚焦） |
 | 关光文档 | 回到全库 Library panel |
@@ -31,7 +32,10 @@ Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES。
 
 | 路径 | 职责 |
 |---|---|
-| `src/components/workspace/dock-workspace.tsx` | Dockview 宿主 |
+| `src/components/workspace/dock-workspace.tsx` | Dockview 宿主（tab 右键 → 移至新窗口） |
+| `src/lib/shell/leaf.ts` | leaf 打开 / `moveDocToWindow` |
+| `src/lib/shell/doc-window.ts` | `doc_window_open` 前端封装 |
+| `src/components/shell/doc-window-root.tsx` | 文档弹出窗根 |
 | `src/lib/workspace/store.ts` | tabs / active / dockLayout |
 | `src/lib/workspace/tabs/` | DocTab 模型、NOTES 分屏、持久化 |
 | `src/lib/workspace/dock-registry.ts` | 命令式 dockview 句柄 |

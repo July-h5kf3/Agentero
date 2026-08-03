@@ -45,6 +45,8 @@ import {
 import { DocView, type DocViewProps } from "@/components/workspace/doc-view";
 import { AgenteroTabGroupChip } from "@/components/workspace/tab-group-chip";
 import { cn } from "@/lib/core/utils";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { moveDocToWindow } from "@/lib/shell/leaf";
 import { TAG_COLOR_IDS, tagSwatchStyle } from "@/lib/ui/tag-colors";
 import { installDockviewSashFrameLoop } from "@/lib/workspace/dockview-sash";
 import { agenteroDockTheme } from "@/lib/workspace/dockview-theme";
@@ -745,6 +747,20 @@ export const DockWorkspace = memo(
 						},
 						"separator",
 					);
+				}
+				const canMoveToWindow =
+					tab != null &&
+					tab.kind !== "library" &&
+					tab.kind !== "trash" &&
+					!isLibraryVirtualPath(tab.path) &&
+					!isTrashVirtualPath(tab.path);
+				if (canMoveToWindow && tab) {
+					menu.push({
+						label: t("tabs.contextMoveToNewWindow"),
+						action: () => {
+							void moveDocToWindow(tab.path, tab.mode);
+						},
+					});
 				}
 				menu.push(
 					{

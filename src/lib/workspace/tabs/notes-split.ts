@@ -75,8 +75,12 @@ export function findNotesColumnAnchor(
 }
 
 /**
- * Where to place a newly opened paper body / NOTES companion so multi-paper
- * reading stays a stable left|right layout (tabs stack, no extra columns).
+ * Where to place a newly opened paper body / NOTES companion.
+ *
+ * Paper bodies use normal dock placement (active group / default) so multi-paper
+ * layouts can split freely — they are no longer forced into a single left column.
+ * NOTES still prefer an existing notes column when present; otherwise open to the
+ * right of the paper (first-paper reading default).
  */
 export function paperReadingPlacements(
 	tabs: DocTab[],
@@ -92,24 +96,6 @@ export function paperReadingPlacements(
 	paper: OpenPlacement;
 	notes: OpenPlacement;
 } {
-	if (opts.forcedPaperPlacement) {
-		return {
-			paper: opts.forcedPaperPlacement,
-			notes: {
-				direction: "right",
-				referencePanelId: opts.paperId,
-			},
-		};
-	}
-
-	const paperAnchor = findPaperColumnAnchor(tabs, {
-		excludeId: opts.paperId,
-		preferId: opts.activeId,
-	});
-	const paper: OpenPlacement = paperAnchor
-		? { direction: "within", referencePanelId: paperAnchor.id }
-		: null;
-
 	const notesAnchor = opts.notesId
 		? findNotesColumnAnchor(tabs, {
 				excludeId: opts.notesId,
@@ -120,7 +106,15 @@ export function paperReadingPlacements(
 		? { direction: "within", referencePanelId: notesAnchor.id }
 		: { direction: "right", referencePanelId: opts.paperId };
 
-	return { paper, notes };
+	if (opts.forcedPaperPlacement) {
+		return {
+			paper: opts.forcedPaperPlacement,
+			notes,
+		};
+	}
+
+	// null → dockview activates existing / adds to the active group (free layout).
+	return { paper: null, notes };
 }
 
 export function createNotesSplitPane(tab: DocTab): DocTab | null {

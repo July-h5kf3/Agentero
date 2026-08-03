@@ -6,14 +6,17 @@
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
 - **右栏**（可选）：Agent / Backlinks / 批注 / **References**（同样 collapsible）。
   - References：当前激活 paper 的参考文献卡片（数据来自 `agentero-cite.json` sidecar，Host `paper_refs_list` / `paper_refs_parse`）。卡片含编号 `[n]`、标题（无标题回退 raw）、首作者 et al. · 年份 · venue、DOI/arXiv 徽标；已入库（`localMatch`）卡片点击打开库内论文，未入库 hover 出「导入文库」（走魔棒管线）；顶部过滤框 + header 重解析按钮。实现：`src/components/viewer/references-panel.tsx`、`src/lib/paper/refs.ts`。
+  - **移至新窗口**：标题栏右栏功能图标 **右键** →「移动至新窗口」→ 单例 `feature-{view}` Webview；主窗右栏收起。工具视图默认 **跟随主窗当前激活文档**（`workspace:active-changed`）。
 - 左右栏折叠：`⌥⌘S` / `⌘L`（不重叠）。
 
-实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`hooks/use-zen-layout.ts`。
+实现：`src/components/shell/`、`src/lib/shell/ui-store.ts`、`src/lib/shell/leaf.ts`、`src/lib/shell/feature-window.ts`、`hooks/use-zen-layout.ts`。
 
 ## 欢迎页与多窗口
 
 - 无 Vault：最近路径 MRU、打开 / 创建 / 从 Zotero 迁移。
 - `⌘N` → Host `window_new`（`?fresh=1`）；Vault 与 dock 布局按窗口 session 隔离。
+- **功能单例窗**：`feature_window_open` → `?window=feature&view=…`（`FeatureWindowRoot`）。
+- **文档弹出窗**：文档 tab 右键「移动至新窗口」→ `doc_window_open` → `?window=doc&path=…`（`DocWindowRoot`）；同 path 再开则聚焦。
 - 当前窗口 Vault：`sessionStorage`；MRU / 上次路径：`localStorage`。
 - 桌面窗口在 Webview 页面加载完成后显示；React 首次提交前由 `index.html` 的零依赖启动壳占位，避免冷启动和 dev 模块加载期间出现空白窗口。
 

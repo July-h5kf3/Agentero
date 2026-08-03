@@ -13,12 +13,19 @@ import { useTranslation } from "react-i18next";
 import { LayoutMenu } from "@/components/shell/layout-menu";
 import { Button } from "@/components/ui/button";
 import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/core/utils";
+import { moveFeatureToWindow } from "@/lib/shell/leaf";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
 
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
@@ -189,25 +196,38 @@ export const TitleBar = memo(function TitleBar({
 											},
 										] as const
 									).map(({ id, aria, tooltip, Icon }) => (
-										<Tooltip key={id}>
-											<TooltipTrigger asChild>
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon-xs"
-													aria-label={aria}
-													aria-pressed={rightSidebarTab === id}
-													className={cn(
-														rightSidebarTab === id &&
-															"bg-muted text-foreground",
-													)}
-													onClick={() => onOpenRightTab(id)}
+										<ContextMenu key={id}>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<ContextMenuTrigger asChild>
+														<Button
+															type="button"
+															variant="ghost"
+															size="icon-xs"
+															aria-label={aria}
+															aria-pressed={rightSidebarTab === id}
+															className={cn(
+																rightSidebarTab === id &&
+																	"bg-muted text-foreground",
+															)}
+															onClick={() => onOpenRightTab(id)}
+														>
+															<Icon className="size-3.5" />
+														</Button>
+													</ContextMenuTrigger>
+												</TooltipTrigger>
+												<TooltipContent side="bottom">{tooltip}</TooltipContent>
+											</Tooltip>
+											<ContextMenuContent>
+												<ContextMenuItem
+													onSelect={() => {
+														void moveFeatureToWindow(id);
+													}}
 												>
-													<Icon className="size-3.5" />
-												</Button>
-											</TooltipTrigger>
-											<TooltipContent side="bottom">{tooltip}</TooltipContent>
-										</Tooltip>
+													{t("tabs.contextMoveToNewWindow")}
+												</ContextMenuItem>
+											</ContextMenuContent>
+										</ContextMenu>
 									))
 								: null}
 							<Tooltip>

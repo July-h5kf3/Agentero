@@ -88,6 +88,7 @@
 		"closeSplit": "Close split · {{title}}",
 		"contextClose": "Close",
 		"contextOpenNotes": "Open Notes",
+		"contextMoveToNewWindow": "Move to New Window",
 		"contextCloseOthers": "Close Others",
 		"contextCloseAll": "Close All",
 		"contextCreateTabGroup": "New Tab Group",
@@ -111,6 +112,18 @@
 		"splitNotAllowed": "This item cannot open in a split pane.",
 		"emptyTitle": "No document open",
 		"emptyHint": "Pick a file or paper from the sidebar to open it in a tab."
+	},
+	"windows": {
+		"loading": "Loading…",
+		"docMissingPath": "No document path was provided.",
+		"docUnsupported": "Library and Trash cannot be opened in a new window.",
+		"featureDesktopOnly": "Feature windows require the desktop app.",
+		"docDesktopOnly": "Document windows require the desktop app.",
+		"titleAgent": "Agent",
+		"titleBacklinks": "Backlinks",
+		"titleAnnotations": "Annotations",
+		"titleReferences": "References",
+		"titleDocument": "Document"
 	},
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",

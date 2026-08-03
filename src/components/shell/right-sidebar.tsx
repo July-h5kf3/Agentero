@@ -336,6 +336,7 @@ export function RightSidebar() {
 	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
 	const agentZenMode = useUiStore((s) => s.agentZenMode);
 	const agentPanelMounted = useUiStore((s) => s.agentPanelMounted);
+	const featurePoppedOut = useUiStore((s) => s.featurePoppedOut);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const vaultMdFiles = useVaultStore((s) => s.vaultMdFiles);
 	const vaultDirPaths = useVaultStore((s) => s.vaultDirPaths);
@@ -351,44 +352,55 @@ export function RightSidebar() {
 			s.tabs.find((tab) => tab.id === s.activeTabId)?.paperMeta?.title ?? null,
 	);
 
+	// Singleton feature windows own the surface — do not also host in the rail.
+	const agentInWindow = Boolean(featurePoppedOut.agent);
+	const backlinksInWindow = Boolean(featurePoppedOut.backlinks);
+	const annotationsInWindow = Boolean(featurePoppedOut.annotations);
+	const referencesInWindow = Boolean(featurePoppedOut.references);
+
 	return (
 		<>
-			{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat). */}
-			{(agentPanelMounted ||
-				agentZenMode ||
-				(rightSidebarOpen && rightSidebarTab === "agent")) && (
-				<div
-					className={cn(
-						"h-full min-h-0",
-						!agentZenMode &&
-							(!rightSidebarOpen || rightSidebarTab !== "agent") &&
-							"hidden",
-					)}
-				>
-					<Suspense fallback={null}>
-						<AgentPanel
-							vaultPath={vaultPath}
-							selectedPath={selectedPath}
-							selectedPaperTitle={selectedPaperTitle}
-							vaultMarkdownPaths={vaultMdFiles}
-							vaultDirectoryPaths={vaultDirPaths}
-							vaultPaperPaths={vaultPaperPaths}
-							paperMetaByRelPath={paperMetaByRelPath}
-							paperTreeLabelMode={paperTreeLabelMode}
-							className="min-h-0 h-full"
-							title={t("labels.agent")}
-							variant={agentZenMode ? "zen" : "sidebar"}
-							autoFocus={
-								agentZenMode ||
-								(rightSidebarOpen && rightSidebarTab === "agent")
-							}
-							onOpenAgentSettings={onOpenAgentSettings}
-							onOpenSource={handleAgentOpenSource}
-						/>
-					</Suspense>
-				</div>
-			)}
-			{rightSidebarOpen && !agentZenMode && rightSidebarTab === "backlinks" ? (
+			{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat),
+			    but never while the agent singleton window is open. */}
+			{!agentInWindow &&
+				(agentPanelMounted ||
+					agentZenMode ||
+					(rightSidebarOpen && rightSidebarTab === "agent")) && (
+					<div
+						className={cn(
+							"h-full min-h-0",
+							!agentZenMode &&
+								(!rightSidebarOpen || rightSidebarTab !== "agent") &&
+								"hidden",
+						)}
+					>
+						<Suspense fallback={null}>
+							<AgentPanel
+								vaultPath={vaultPath}
+								selectedPath={selectedPath}
+								selectedPaperTitle={selectedPaperTitle}
+								vaultMarkdownPaths={vaultMdFiles}
+								vaultDirectoryPaths={vaultDirPaths}
+								vaultPaperPaths={vaultPaperPaths}
+								paperMetaByRelPath={paperMetaByRelPath}
+								paperTreeLabelMode={paperTreeLabelMode}
+								className="min-h-0 h-full"
+								title={t("labels.agent")}
+								variant={agentZenMode ? "zen" : "sidebar"}
+								autoFocus={
+									agentZenMode ||
+									(rightSidebarOpen && rightSidebarTab === "agent")
+								}
+								onOpenAgentSettings={onOpenAgentSettings}
+								onOpenSource={handleAgentOpenSource}
+							/>
+						</Suspense>
+					</div>
+				)}
+			{rightSidebarOpen &&
+			!agentZenMode &&
+			!backlinksInWindow &&
+			rightSidebarTab === "backlinks" ? (
 				<div className="flex h-full min-h-0 flex-col overflow-hidden">
 					<BacklinksPanel
 						vaultPath={vaultPath}
@@ -415,10 +427,14 @@ export function RightSidebar() {
 			) : null}
 			{rightSidebarOpen &&
 			!agentZenMode &&
+			!annotationsInWindow &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
 			) : null}
-			{rightSidebarOpen && !agentZenMode && rightSidebarTab === "references" ? (
+			{rightSidebarOpen &&
+			!agentZenMode &&
+			!referencesInWindow &&
+			rightSidebarTab === "references" ? (
 				<ReferencesSidebar />
 			) : null}
 		</>
