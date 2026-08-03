@@ -281,6 +281,53 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
   - 菜单点击由 Host 直接调用，不经过前端 event 往返（Host 内用 `tauri::async_runtime::spawn` 调用）。
   - **必须是 `async` command**：同步 command 在主线程、且处于调用方 webview 的 IPC 回调内执行，Windows 上从那里 build webview 会卡死（wry 进入嵌套消息循环等 WebView2 controller 回调，而该回调要等当前处理器返回），新窗口表现为空白且无法关闭。
 
+#### `feature_window_open`（已实现）
+
+打开（或聚焦）右侧功能视图的 **单例** 原生窗口（Agent / Backlinks / Annotations / References）。
+
+- **参数**
+
+```ts
+{
+  view: "agent" | "backlinks" | "annotations" | "references";
+  vaultPath?: string | null;
+}
+```
+
+- **返回**：`Result<(), String>`
+- **行为**
+  - label 为 `feature-{view}`；已存在则 `set_focus`。
+  - URL：`index.html?window=feature&view=…&vault_path=…`（轻量 Feature 根，不加载完整 App Dock）。
+  - 窗口关闭时 Host 向所有窗口 `emit("feature_window_closed", { view })`。
+  - **必须是 `async` command**（同 `window_new`）。
+
+#### `feature_window_close`（已实现）
+
+关闭指定功能单例窗（不存在则 no-op）。
+
+- **参数**：`{ view: "agent" | "backlinks" | "annotations" | "references" }`
+- **返回**：`Result<(), String>`
+
+#### `doc_window_open`（已实现）
+
+打开（或聚焦）单个文档的原生窗口。
+
+- **参数**
+
+```ts
+{
+  path: string;           // absolute vault file / paper path
+  mode?: string | null;   // pdf | html | markdown | image …
+  vaultPath?: string | null;
+}
+```
+
+- **返回**：`Result<(), String>`
+- **行为**
+  - label 为 `doc-` + path 的 sha256 前 16 hex；同 path 再开则聚焦。
+  - URL：`index.html?window=doc&path=…&mode=…&vault_path=…`。
+  - **必须是 `async` command**。
+
 #### `settings_window_open`（已实现）
 
 打开 Settings 原生单例窗口（菜单 **Agentero → Settings…** / `⌘,` / 标题栏齿轮）。
