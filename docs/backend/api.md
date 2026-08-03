@@ -291,13 +291,15 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 {
   view: "agent" | "backlinks" | "annotations" | "references";
   vaultPath?: string | null;
+  activePath?: string | null;   // initial follow-active path for the popout
+  paperTitle?: string | null;
 }
 ```
 
 - **返回**：`Result<(), String>`
 - **行为**
   - label 为 `feature-{view}`；已存在则 `set_focus`。
-  - URL：`index.html?window=feature&view=…&vault_path=…`（轻量 Feature 根，不加载完整 App Dock）。
+  - URL：`index.html?window=feature&view=…&vault_path=…&active_path=…&paper_title=…`（轻量 Feature 根，不加载完整 App Dock）。
   - 窗口关闭时 Host 向所有窗口 `emit("feature_window_closed", { view })`。
   - **必须是 `async` command**（同 `window_new`）。
 

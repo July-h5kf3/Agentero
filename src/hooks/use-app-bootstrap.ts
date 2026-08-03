@@ -97,4 +97,18 @@ export function useAppBootstrap(): void {
 			unlisten?.();
 		};
 	}, []);
+
+	// Feature singleton windows clear popped-out flags when closed.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let unbind: (() => void) | undefined;
+		void import("@/lib/shell/feature-window").then(
+			({ bindFeatureWindowClosedListener }) => {
+				unbind = bindFeatureWindowClosedListener();
+			},
+		);
+		return () => {
+			unbind?.();
+		};
+	}, []);
 }

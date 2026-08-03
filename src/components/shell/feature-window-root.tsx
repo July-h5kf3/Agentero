@@ -1,0 +1,429 @@
+/**
+ * Lightweight root for `?window=feature&view=…` singleton popouts.
+ * Opens the vault from query params and follows main-window active path.
+ */
+
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+	type AnnotationRow,
+	AnnotationsPanel,
+	type AskRow,
+	type VisualTraceRow,
+} from "@/components/viewer/annotations-panel";
+import { ReferencesPanel } from "@/components/viewer/references-panel";
+import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
+import { GraphPanel } from "@/components/wiki/graph-panel";
+import {
+	useLibraryStore,
+	useSettings,
+	useVaultStore,
+	useWikiStore,
+} from "@/hooks/use-app-stores";
+import { normalizeAgentSourcePath } from "@/lib/agent/sources";
+import { toVaultRelative } from "@/lib/core/path";
+import { isMacOS, isTauri } from "@/lib/core/tauri";
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { paperDirFromPath } from "@/lib/paper/detect";
+import { refreshLibrary } from "@/lib/paper/library-store";
+import {
+	annotationWikilinkAlias,
+	listPaperAnnotationSummaries,
+	type PaperAnnotationSummary,
+	wikiTargetForPaper,
+} from "@/lib/pdf/annotation-ref";
+import { listPdfAskThreads } from "@/lib/pdf/ask/io";
+import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
+import {
+	type FeatureViewType,
+	readFeatureWindowView,
+} from "@/lib/shell/feature-window";
+import { openSettingsWindow } from "@/lib/shell/settings-window";
+import {
+	type AgentSessionOpenRequest,
+	setAgentPanelMounted,
+	uiStore,
+} from "@/lib/shell/ui-store";
+import {
+	listenAgentOpenSession,
+	listenWorkspaceActive,
+	type WorkspaceActiveChangedPayload,
+} from "@/lib/shell/workspace-broadcast";
+import { joinVaultPath } from "@/lib/vault";
+import { openRecentVault } from "@/lib/vault/actions";
+import { initVaultStore, refreshTree } from "@/lib/vault/store";
+import { rebuildWikiAndNotify } from "@/lib/wiki/store";
+import { navigateWiki, openGraphPath } from "@/lib/workspace/actions";
+import { initWorkspaceStore } from "@/lib/workspace/store";
+
+const AgentPanel = lazy(() =>
+	import("@/components/agent/agent-panel").then((m) => ({
+		default: m.AgentPanel,
+	})),
+);
+
+function closeCurrentWindow() {
+	if (!isTauri()) return;
+	void (async () => {
+		try {
+			const { getCurrentWindow } = await import("@tauri-apps/api/window");
+			await getCurrentWindow().close();
+		} catch {
+			// ignore
+		}
+	})();
+}
+
+function readFeatureQuery(): {
+	vaultPath: string | null;
+	activePath: string | null;
+	paperTitle: string | null;
+} {
+	try {
+		const params = new URLSearchParams(window.location.search);
+		return {
+			vaultPath: params.get("vault_path"),
+			activePath: params.get("active_path"),
+			paperTitle: params.get("paper_title"),
+		};
+	} catch {
+		return { vaultPath: null, activePath: null, paperTitle: null };
+	}
+}
+
+function viewTitleKey(
+	view: FeatureViewType,
+):
+	| "labels.agent"
+	| "labels.backlinks"
+	| "titlebar.annotationsPanel"
+	| "titlebar.referencesPanel" {
+	switch (view) {
+		case "agent":
+			return "labels.agent";
+		case "backlinks":
+			return "labels.backlinks";
+		case "annotations":
+			return "titlebar.annotationsPanel";
+		case "references":
+			return "titlebar.referencesPanel";
+	}
+}
+
+function handleAgentOpenSource(source: string): void {
+	const trimmed = normalizeAgentSourcePath(source);
+	if (!trimmed) return;
+	if (/^https?:\/\//i.test(trimmed)) {
+		void import("@tauri-apps/plugin-opener")
+			.then(({ openUrl }) => openUrl(trimmed))
+			.catch(() => {
+				window.open(trimmed, "_blank", "noopener,noreferrer");
+			});
+		return;
+	}
+	openGraphPath(trimmed);
+}
+
+function FeatureAnnotations({
+	selectedPath,
+	vaultPath,
+	vaultPaperPaths,
+}: {
+	selectedPath: string | null;
+	vaultPath: string | null;
+	vaultPaperPaths: string[];
+}) {
+	const paperAbs = useMemo(() => {
+		if (!selectedPath || !vaultPath) return null;
+		if (
+			isLibraryVirtualPath(selectedPath) ||
+			isTrashVirtualPath(selectedPath)
+		) {
+			return null;
+		}
+		const relative = toVaultRelative(vaultPath, selectedPath);
+		const paperDir = paperDirFromPath(relative, vaultPaperPaths);
+		if (!paperDir) return null;
+		return joinVaultPath(vaultPath, paperDir);
+	}, [selectedPath, vaultPath, vaultPaperPaths]);
+
+	const [diskSummaries, setDiskSummaries] = useState<PaperAnnotationSummary[]>(
+		[],
+	);
+	const [diskAsks, setDiskAsks] = useState<AskRow[]>([]);
+
+	useEffect(() => {
+		if (!paperAbs) {
+			setDiskSummaries([]);
+			setDiskAsks([]);
+			return;
+		}
+		let cancelled = false;
+		void (async () => {
+			const [summaries, asks] = await Promise.all([
+				listPaperAnnotationSummaries(paperAbs),
+				listPdfAskThreads(paperAbs),
+			]);
+			if (cancelled) return;
+			setDiskSummaries(summaries);
+			setDiskAsks(
+				asks
+					.filter((th) => th.messages.some((m) => m.role === "user"))
+					.map((th) => {
+						const firstUser = th.messages.find((m) => m.role === "user");
+						return {
+							id: th.id,
+							page: th.anchor.page,
+							preview:
+								firstUser?.content.trim() || th.anchor.quote?.trim() || th.id,
+							messageCount: th.messages.filter(
+								(m) => m.role === "user" || m.role === "assistant",
+							).length,
+						};
+					}),
+			);
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbs]);
+
+	const items = useMemo<AnnotationRow[]>(
+		() =>
+			diskSummaries
+				.filter((s) => s.kind === "highlight")
+				.map((s) => ({
+					id: s.id,
+					page: s.page,
+					quote: s.quote,
+					comment: s.comment,
+					color: normalizeHighlightColor(s.color),
+					linkAlias: annotationWikilinkAlias(null, s.preview),
+				})),
+		[diskSummaries],
+	);
+
+	const visualTraceRows = useMemo<VisualTraceRow[]>(
+		() =>
+			diskSummaries
+				.filter((s) => s.kind === "agent-trace")
+				.map((s) => ({
+					id: s.id,
+					page: s.page,
+					preview: s.preview,
+					linkAlias: annotationWikilinkAlias(null, s.preview),
+				})),
+		[diskSummaries],
+	);
+
+	const wikiTarget = useMemo(() => {
+		if (!paperAbs || !vaultPath) return null;
+		const rel = toVaultRelative(vaultPath, paperAbs);
+		return rel ? wikiTargetForPaper(rel, rel) : null;
+	}, [paperAbs, vaultPath]);
+
+	// Jump actions need the main-window PDF handle — list-only in the popout.
+	return (
+		<AnnotationsPanel
+			items={items}
+			asks={diskAsks}
+			visualTraces={visualTraceRows}
+			wikiTarget={wikiTarget}
+			onJump={() => {}}
+			onEdit={() => {}}
+			onDelete={() => {}}
+			onJumpAsk={() => {}}
+			onDeleteAsk={() => {}}
+			onJumpVisual={() => {}}
+			onDeleteVisual={() => {}}
+		/>
+	);
+}
+
+export function FeatureWindowRoot() {
+	const { t } = useTranslation(["app"]);
+	const view = useMemo(() => readFeatureWindowView() ?? "agent", []);
+	const bootQuery = useMemo(() => readFeatureQuery(), []);
+	const isMac = useMemo(() => isMacOS(), []);
+	const [ready, setReady] = useState(false);
+	const [followed, setFollowed] = useState<WorkspaceActiveChangedPayload>({
+		path: bootQuery.activePath,
+		vaultPath: bootQuery.vaultPath,
+		paperTitle: bootQuery.paperTitle,
+	});
+
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const vaultMdFiles = useVaultStore((s) => s.vaultMdFiles);
+	const vaultDirPaths = useVaultStore((s) => s.vaultDirPaths);
+	const vaultPaperPaths = useVaultStore((s) => s.vaultPaperPaths);
+	const paperMetaByRelPath = useLibraryStore((s) => s.paperMetaByRelPath);
+	const paperTreeLabelMode = useSettings((s) => s.paperTreeLabelMode);
+	const wikiIndexRevision = useWikiStore((s) => s.wikiIndexRevision);
+
+	useState(() => {
+		initVaultStore();
+		initWorkspaceStore();
+		return null;
+	});
+
+	useEffect(() => {
+		setAgentPanelMounted(true);
+		let cancelled = false;
+		void (async () => {
+			const vault = bootQuery.vaultPath;
+			if (vault) {
+				await openRecentVault(vault);
+				if (!cancelled) {
+					await refreshTree(vault);
+					await rebuildWikiAndNotify(vault);
+					await refreshLibrary();
+				}
+			}
+			if (!cancelled) setReady(true);
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [bootQuery.vaultPath]);
+
+	useEffect(() => {
+		let unlisten: (() => void) | undefined;
+		void listenWorkspaceActive((payload) => {
+			setFollowed(payload);
+		}).then((u) => {
+			unlisten = u;
+		});
+		return () => {
+			unlisten?.();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (view !== "agent") return;
+		let unlisten: (() => void) | undefined;
+		void listenAgentOpenSession((payload) => {
+			const req = payload as AgentSessionOpenRequest;
+			if (!req || typeof req !== "object" || !("nonce" in req)) return;
+			uiStore.setState({ agentSessionOpenRequest: req });
+		}).then((u) => {
+			unlisten = u;
+		});
+		return () => {
+			unlisten?.();
+		};
+	}, [view]);
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			const isEsc = event.key === "Escape";
+			const isCloseWindow =
+				(event.key === "w" || event.code === "KeyW") &&
+				(event.metaKey || event.ctrlKey);
+			if (isEsc || (isCloseWindow && !event.altKey && !event.shiftKey)) {
+				event.preventDefault();
+				closeCurrentWindow();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	const selectedPath = followed.path;
+	const selectedPaperTitle = followed.paperTitle ?? null;
+	const title = t(viewTitleKey(view));
+
+	const referencesPaperPath = useMemo(() => {
+		if (
+			!selectedPath ||
+			!vaultPath ||
+			isLibraryVirtualPath(selectedPath) ||
+			isTrashVirtualPath(selectedPath)
+		) {
+			return null;
+		}
+		const relative = toVaultRelative(vaultPath, selectedPath);
+		return paperDirFromPath(relative, vaultPaperPaths);
+	}, [selectedPath, vaultPath, vaultPaperPaths]);
+
+	return (
+		<div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
+			{isMac ? (
+				<header className="flex h-8 shrink-0 items-center border-b bg-muted/40 select-none">
+					<div
+						className="w-[92px] shrink-0 self-stretch"
+						data-tauri-drag-region
+					/>
+					<div
+						className="min-w-0 flex-1 truncate px-2 text-xs font-medium text-muted-foreground"
+						data-tauri-drag-region
+					>
+						{title}
+					</div>
+				</header>
+			) : null}
+
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				{!ready ? (
+					<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+						…
+					</div>
+				) : view === "agent" ? (
+					<Suspense fallback={null}>
+						<AgentPanel
+							vaultPath={vaultPath}
+							selectedPath={selectedPath}
+							selectedPaperTitle={selectedPaperTitle}
+							vaultMarkdownPaths={vaultMdFiles}
+							vaultDirectoryPaths={vaultDirPaths}
+							vaultPaperPaths={vaultPaperPaths}
+							paperMetaByRelPath={paperMetaByRelPath}
+							paperTreeLabelMode={paperTreeLabelMode}
+							className="min-h-0 h-full"
+							title={title}
+							variant="sidebar"
+							autoFocus
+							onOpenAgentSettings={() => openSettingsWindow("agent")}
+							onOpenSource={handleAgentOpenSource}
+						/>
+					</Suspense>
+				) : view === "backlinks" ? (
+					<div className="flex h-full min-h-0 flex-col overflow-hidden">
+						<BacklinksPanel
+							vaultPath={vaultPath}
+							selectedPath={selectedPath}
+							onNavigate={(link) =>
+								void navigateWiki({
+									targetRaw: link.occurrence.targetRaw,
+									path: link.targetPath ?? null,
+									status: link.status,
+									fragment: link.occurrence.fragment,
+								})
+							}
+							className="min-h-0 basis-[42%] border-b"
+							wikiIndexRevision={wikiIndexRevision}
+						/>
+						<GraphPanel
+							vaultPath={vaultPath}
+							selectedPath={selectedPath}
+							onOpenPath={openGraphPath}
+							className="min-h-0 flex-1"
+							wikiIndexRevision={wikiIndexRevision}
+						/>
+					</div>
+				) : view === "annotations" ? (
+					<FeatureAnnotations
+						selectedPath={selectedPath}
+						vaultPath={vaultPath}
+						vaultPaperPaths={vaultPaperPaths}
+					/>
+				) : (
+					<ReferencesPanel
+						vaultPath={vaultPath}
+						paperPath={referencesPaperPath}
+						activeTabId={null}
+					/>
+				)}
+			</div>
+		</div>
+	);
+}

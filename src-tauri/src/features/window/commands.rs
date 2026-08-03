@@ -188,6 +188,8 @@ pub async fn feature_window_open(
     app: AppHandle,
     view: String,
     vault_path: Option<String>,
+    active_path: Option<String>,
+    paper_title: Option<String>,
 ) -> Result<(), String> {
     let op = OpTimer::start("feature_window_open");
     validate_feature_view(&view)?;
@@ -205,6 +207,12 @@ pub async fn feature_window_open(
     );
     if let Some(path) = vault_path {
         url.push_str(&format!("&vault_path={}", urlencoding::encode(&path)));
+    }
+    if let Some(path) = active_path.filter(|s| !s.is_empty()) {
+        url.push_str(&format!("&active_path={}", urlencoding::encode(&path)));
+    }
+    if let Some(title) = paper_title.filter(|s| !s.is_empty()) {
+        url.push_str(&format!("&paper_title={}", urlencoding::encode(&title)));
     }
 
     let title = match view.as_str() {

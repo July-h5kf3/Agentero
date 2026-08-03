@@ -20,7 +20,10 @@ import i18n, { resolveLocale } from "./i18n";
 import "./index.css";
 
 const searchParams = new URLSearchParams(window.location.search);
-const isSettingsWindow = searchParams.get("window") === "settings";
+const windowKind = searchParams.get("window");
+const isSettingsWindow = windowKind === "settings";
+const isFeatureWindow = windowKind === "feature";
+const isDocWindow = windowKind === "doc";
 
 // `performance.now()` is measured from navigation start, so these numbers cover
 // index.html + main.tsx module loading too, not just the boot chain. `boot` is a
@@ -82,6 +85,57 @@ async function boot() {
 		);
 		logger.info(
 			`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=settings`,
+		);
+		return;
+	}
+
+	if (isFeatureWindow) {
+		const { FeatureWindowRoot } = await import(
+			"@/components/shell/feature-window-root"
+		);
+		bootStage("feature-window-module");
+		ReactDOM.createRoot(root).render(
+			<React.StrictMode>
+				<I18nextProvider i18n={i18n}>
+					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+						<TooltipProvider delayDuration={300}>
+							<FeatureWindowRoot />
+							<Toaster />
+						</TooltipProvider>
+					</ThemeProvider>
+				</I18nextProvider>
+			</React.StrictMode>,
+		);
+		logger.info(
+			`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=feature`,
+		);
+		return;
+	}
+
+	if (isDocWindow) {
+		// Doc windows may show PDF — need PDFium host; KaTeX for markdown notes.
+		const [{ DocWindowRoot }, { PdfEngineHost }] = await Promise.all([
+			import("@/components/shell/doc-window-root"),
+			import("@/components/viewer/embed/engine-provider"),
+			import("katex/dist/katex.min.css"),
+		]);
+		bootStage("doc-window-module");
+		ReactDOM.createRoot(root).render(
+			<PdfEngineHost>
+				<React.StrictMode>
+					<I18nextProvider i18n={i18n}>
+						<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+							<TooltipProvider delayDuration={300}>
+								<DocWindowRoot />
+								<Toaster />
+							</TooltipProvider>
+						</ThemeProvider>
+					</I18nextProvider>
+				</React.StrictMode>
+			</PdfEngineHost>,
+		);
+		logger.info(
+			`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=doc`,
 		);
 		return;
 	}

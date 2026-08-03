@@ -67,6 +67,11 @@ type UiStore = {
 	pdfZenMode: boolean;
 	/** Keep AgentPanel mounted across sidebar ↔ zen so chat history survives. */
 	agentPanelMounted: boolean;
+	/**
+	 * Feature views currently living in a singleton native window.
+	 * Main window uses this to focus the popout instead of only expanding the rail.
+	 */
+	featurePoppedOut: Partial<Record<RightSidebarTab, boolean>>;
 	/** Increment to open magic-wand popover (⇧⌘I). */
 	lookupOpenSignal: number;
 	/** Zotero one-click migration dialog. */
@@ -86,6 +91,7 @@ export const uiStore = createStore<UiStore>(() => ({
 	agentZenMode: false,
 	pdfZenMode: false,
 	agentPanelMounted: false,
+	featurePoppedOut: {},
 	lookupOpenSignal: 0,
 	zoteroOpen: false,
 	commandOpen: false,
@@ -210,12 +216,33 @@ export function toggleChat(): void {
 	});
 }
 
+export function setFeaturePoppedOut(
+	tab: RightSidebarTab,
+	poppedOut: boolean,
+): void {
+	uiStore.setState((s) => ({
+		featurePoppedOut: {
+			...s.featurePoppedOut,
+			[tab]: poppedOut,
+		},
+	}));
+}
+
 /**
  * Open right sidebar on a tab (or switch tab if already open).
  * Prefer {@link openLeaf} from `@/lib/shell/leaf` for new call sites that may
- * later use `placement: "window"`.
+ * use `placement: "window"`.
+ *
+ * When the feature already lives in a singleton window, focus that window
+ * instead of only expanding the rail.
  */
 export function openRightTab(tab: RightSidebarTab): void {
+	if (uiStore.getState().featurePoppedOut[tab]) {
+		void import("@/lib/shell/feature-window").then(({ focusFeatureWindow }) => {
+			void focusFeatureWindow(tab);
+		});
+		return;
+	}
 	setRightSidebarTab(tab);
 	if (tab === "agent") setAgentPanelMounted(true);
 	if (!uiStore.getState().rightSidebarOpen) {
@@ -230,12 +257,24 @@ export function requestOpenAgentSession(
 	input: Omit<AgentSessionOpenRequest, "nonce">,
 ): void {
 	agentSessionOpenNonce += 1;
+	const request: AgentSessionOpenRequest = {
+		...input,
+		nonce: agentSessionOpenNonce,
+	};
 	uiStore.setState({
-		agentSessionOpenRequest: {
-			...input,
-			nonce: agentSessionOpenNonce,
-		},
+		agentSessionOpenRequest: request,
 	});
+	if (uiStore.getState().featurePoppedOut.agent) {
+		void import("@/lib/shell/workspace-broadcast").then(
+			({ broadcastAgentOpenSession }) => {
+				broadcastAgentOpenSession(request);
+			},
+		);
+		void import("@/lib/shell/feature-window").then(({ focusFeatureWindow }) => {
+			void focusFeatureWindow("agent");
+		});
+		return;
+	}
 	openRightTab("agent");
 }
 

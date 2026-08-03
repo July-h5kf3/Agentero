@@ -4,6 +4,9 @@
  * this module only routes open intents.
  */
 
+import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
+import { openDocWindow } from "@/lib/shell/doc-window";
+import { openFeatureWindow } from "@/lib/shell/feature-window";
 import { openRightTab, type RightSidebarTab } from "@/lib/shell/ui-store";
 
 /** Right-rail / feature-window view kinds (singleton UI surfaces). */
@@ -52,8 +55,6 @@ function defaultPlacement(viewType: ViewType): LeafPlacement {
 
 /**
  * Open a leaf at the given placement.
- * Feature `window` placement is wired in later phases; until then it focuses
- * the right rail so call sites can migrate early.
  */
 export function openLeaf(input: OpenLeafInput): void {
 	const placement = input.placement ?? defaultPlacement(input.viewType);
@@ -84,28 +85,28 @@ export function openLeaf(input: OpenLeafInput): void {
 	openRightTab(input.viewType);
 }
 
-/**
- * Move (or open) a feature view in its singleton native window.
- * Phase 5 wires Tauri; until then falls back to the right rail.
- */
+/** Move (or open) a feature view in its singleton native window. */
 export async function moveFeatureToWindow(
 	view: FeatureViewType,
 ): Promise<void> {
-	// Placeholder: real implementation invokes `feature_window_open`.
-	openRightTab(view);
+	await openFeatureWindow(view);
 }
 
 /**
- * Move a document path into a dedicated native window.
- * Phase 6 wires Tauri; until then opens in the center dock.
+ * Move a document path into a dedicated native window and close the source
+ * dock panel when present.
  */
 export async function moveDocToWindow(
 	path: string,
 	mode?: string,
 ): Promise<void> {
-	// Placeholder: real implementation invokes `doc_window_open` + closeTab.
-	const { openTab } = await import("@/lib/workspace/actions");
-	openTab(path, {
-		preferMode: mode as "pdf" | "html" | "markdown" | "image" | undefined,
-	});
+	if (isLibraryVirtualPath(path) || isTrashVirtualPath(path)) {
+		return;
+	}
+	await openDocWindow(path, mode);
+	const [{ closeTab }, { tabIdForPath }] = await Promise.all([
+		import("@/lib/workspace/actions"),
+		import("@/lib/workspace/tabs"),
+	]);
+	closeTab(tabIdForPath(path));
 }
