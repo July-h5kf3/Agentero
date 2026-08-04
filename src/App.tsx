@@ -22,7 +22,7 @@ import {
 	ResizableHandle,
 	ResizablePanel,
 } from "@/components/ui/resizable";
-import { pdfHandleFor } from "@/components/viewer/pdf-viewer-registry";
+import { resolveActivePdfHandle } from "@/components/viewer/pdf-viewer-registry";
 import { WorkspaceHost } from "@/components/workspace/workspace-host";
 import { useAppBootstrap } from "@/hooks/use-app-bootstrap";
 import { useAppShortcuts } from "@/hooks/use-app-shortcuts";
@@ -86,7 +86,6 @@ import {
 	cycleActiveTab,
 	toggleNotesSplit,
 } from "@/lib/workspace/actions";
-import { workspaceStore } from "@/lib/workspace/store";
 import {
 	normalizeTabPath,
 	tabHasNotesSplit,
@@ -291,12 +290,11 @@ export default function App() {
 		zoomIn,
 		zoomOut,
 		zoomReset,
-		// ⌘. — toggle visual-region annotation on the active PDF tab.
+		// ⌘. — toggle visual-region annotation for the paper being read.
+		// Handles live on the PDF body tab; when NOTES is focused (default
+		// split), resolve the sibling paper tab instead of requiring mode=pdf.
 		visualAnnotation: () => {
-			const { tabs, activeTabId } = workspaceStore.getState();
-			const tab = tabs.find((item) => item.id === activeTabId);
-			if (tab?.mode !== "pdf") return;
-			pdfHandleFor(tab.id)?.toggleVisualAnnotation();
+			resolveActivePdfHandle()?.toggleVisualAnnotation();
 		},
 	});
 
