@@ -1530,7 +1530,7 @@ export const FileTree = memo(
 									type="button"
 									variant="ghost"
 									size="icon-xs"
-									className="size-6"
+									className="size-5"
 									aria-label={t("fileTree.downloadAllMissing")}
 									disabled={libraryBusy}
 									onClick={(e) => {
@@ -1626,7 +1626,7 @@ export const FileTree = memo(
 											type="button"
 											variant="ghost"
 											size="icon-xs"
-											className="size-6"
+											className="size-5"
 											aria-label={reasonTip}
 											disabled={rowBusy}
 											onClick={(e) => {
@@ -1660,7 +1660,7 @@ export const FileTree = memo(
 											type="button"
 											variant="ghost"
 											size="icon-xs"
-											className="size-6"
+											className="size-5"
 											aria-label={t("fileTree.readPaper")}
 											disabled={rowBusy}
 											onClick={(e) => {

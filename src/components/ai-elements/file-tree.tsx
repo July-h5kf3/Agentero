@@ -235,7 +235,7 @@ export const FileTreeFolder = ({
 					data-path={path}
 					draggable
 					className={cn(
-						"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50 active:bg-muted/80",
+						"flex h-7 min-h-7 w-full items-center gap-1 rounded px-2 text-left transition-colors hover:bg-muted/50 active:bg-muted/80",
 						isSelected && "bg-muted",
 						dropTargetPath === path && DROP_RING,
 					)}
@@ -332,7 +332,7 @@ export const FileTreeFolderRow = ({
 			data-path={path}
 			draggable
 			className={cn(
-				"flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50 active:bg-muted/80",
+				"flex h-7 min-h-7 w-full items-center gap-1 rounded px-2 text-left transition-colors hover:bg-muted/50 active:bg-muted/80",
 				isSelected && "bg-muted",
 				dropTargetPath === path && DROP_RING,
 				className,
@@ -476,7 +476,7 @@ export const FileTreeFile = ({
 				data-path={path}
 				draggable
 				className={cn(
-					"flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50 active:bg-muted/80",
+					"flex h-7 min-h-7 cursor-pointer items-center gap-1 rounded px-2 transition-colors hover:bg-muted/50 active:bg-muted/80",
 					isSelected && "bg-muted",
 					dropTargetPath === path && DROP_RING,
 					className,
