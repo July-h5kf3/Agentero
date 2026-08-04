@@ -36,6 +36,7 @@ import {
 	setSkillImportDraft,
 	uiStore,
 } from "@/lib/shell/ui-store";
+import { joinVaultPath } from "@/lib/vault";
 import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
 import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
@@ -101,13 +102,14 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 
 				const first = result.imported[0];
 				if (first) {
-					const paperAbs =
-						first.paperDir?.replace(/\\/g, "/").replace(/\/+$/, "") ||
-						`${vaultPath.replace(/\\/g, "/").replace(/\/+$/, "")}/${(
-							first.path || ""
-						)
-							.replace(/\\/g, "/")
-							.replace(/^\/+|\/+$/g, "")}`;
+					const paperAbs = first.paperDir
+						? first.paperDir.replace(/[\\/]+$/, "")
+						: joinVaultPath(
+								vaultPath,
+								(first.path || "")
+									.replace(/\\/g, "/")
+									.replace(/^\/+|\/+$/g, ""),
+							);
 					openPaper(paperAbs);
 					setDetail(
 						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),

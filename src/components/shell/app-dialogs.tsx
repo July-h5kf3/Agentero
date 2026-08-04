@@ -25,6 +25,7 @@ import {
 } from "@/lib/paper/import-actions";
 import { setMovePaths } from "@/lib/paper/library-store";
 import { setCommandOpen, setZoteroOpen } from "@/lib/shell/ui-store";
+import { joinVaultPath } from "@/lib/vault";
 import { movePathsTo, refreshAll } from "@/lib/vault/actions";
 import { openPaper, openVaultRel } from "@/lib/workspace/actions";
 
@@ -90,8 +91,7 @@ export function AppDialogs() {
 				papers={libraryPapers}
 				commands={paletteCommands}
 				onOpenPaper={(rel) => {
-					if (vaultPath)
-						openPaper(`${vaultPath.replace(/[\\/]+$/, "")}/${rel}`);
+					if (vaultPath) openPaper(joinVaultPath(vaultPath, rel));
 				}}
 				onOpenVaultRel={openVaultRel}
 			/>

@@ -26,13 +26,24 @@ export function dirnameOf(path: string): string {
 }
 
 /**
- * Join two path segments using the parent's separator style.
- * Falls back to forward slashes.
+ * Join a parent path with a child segment (or multi-segment rel path).
+ *
+ * Uses the parent's separator style so Windows vault roots keep backslashes.
+ * Child segments may use either `/` or `\`; they are rewritten to match the
+ * parent. This avoids mixed paths like `C:\\vault/notes/a.md`, which break
+ * under Windows `\\?\` extended paths (CreateFile ERROR_INVALID_NAME / 123).
  */
 export function joinPath(parent: string, name: string): string {
 	if (!parent) return name;
-	const sep = parent.includes("\\") ? "\\" : "/";
-	return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
+	// Prefer backslash when the parent already looks Windows-native.
+	const useBackslash = parent.includes("\\");
+	const sep = useBackslash ? "\\" : "/";
+	const root = parent.replace(/[\\/]+$/, "");
+	// Normalize child to `/` first, then re-emit in the parent style.
+	const segment = name.replace(/[\\/]+/g, "/").replace(/^\/+|\/+$/g, "");
+	if (!segment) return root;
+	const tail = useBackslash ? segment.replace(/\//g, "\\") : segment;
+	return `${root}${sep}${tail}`;
 }
 
 /** Strip vault root prefix when path is absolute. */

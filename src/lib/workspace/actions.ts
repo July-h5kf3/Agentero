@@ -30,6 +30,7 @@ import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
 import {
 	type FileNode,
 	isMarkdownPath,
+	joinVaultPath,
 	readVaultFile,
 	vaultRelativePath,
 	writeVaultFile,
@@ -496,7 +497,7 @@ export function openVaultRel(rel: string): void {
 		return;
 	}
 	const clean = normalizeVaultRel(rel);
-	openPath(`${vaultPath.replace(/[\\/]+$/, "")}/${clean}`);
+	openPath(joinVaultPath(vaultPath, clean));
 }
 
 /** Graph: paper NOTES / paper folder → open paper (PDF + Notes). */
@@ -507,10 +508,10 @@ export function openGraphPath(rel: string): void {
 		return;
 	}
 	const clean = normalizeVaultRel(rel);
-	const root = vaultPath.replace(/[\\/]+$/, "");
+	const candidate = joinVaultPath(vaultPath, clean);
 	// paperFolders are absolute paths from the file tree
 	const paperAbs = paperDirFromPath(
-		`${root}/${clean}`,
+		candidate,
 		vaultStore.getState().paperFolders,
 	);
 	if (paperAbs) {
@@ -519,7 +520,6 @@ export function openGraphPath(rel: string): void {
 	}
 	// Collapsed graph node may already be the paper folder rel path
 	void (async () => {
-		const candidate = `${root}/${clean}`;
 		if (await detectPaperDirectory(candidate)) {
 			openPaper(candidate);
 			return;
@@ -572,7 +572,7 @@ export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 			notifyError(i18n.t("app:errors.openVaultForLinks"));
 			return;
 		}
-		const full = `${vaultPath.replace(/[\\/]+$/, "")}/${normalizeVaultRel(destination.path)}`;
+		const full = joinVaultPath(vaultPath, normalizeVaultRel(destination.path));
 
 		// Annotation fragments always open the paper PDF unit, not NOTES alone.
 		if (destination.fragment?.kind === "annotation") {
@@ -654,7 +654,7 @@ export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 	if (!ok) return;
 
 	const content = newNoteMarkdown(nav.targetRaw);
-	const full = `${vaultPath.replace(/[\\/]+$/, "")}/${createRel}`;
+	const full = joinVaultPath(vaultPath, createRel);
 
 	try {
 		await writeVaultFile(full, content);

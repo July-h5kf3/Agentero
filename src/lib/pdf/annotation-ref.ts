@@ -311,26 +311,30 @@ export function annotationWikilinkMarkdown(input: {
 /**
  * Derive paper absolute dir from a resolved vault-relative wiki target path
  * (NOTES.md, PDF, or paper folder path).
+ * Preserves the vault root's separator style (Windows backslash roots stay
+ * native so subsequent fs opens do not hit ERROR_INVALID_NAME).
  */
 export function paperAbsFromWikiTarget(
 	vaultPath: string,
 	targetPath: string,
 ): string {
-	const root = vaultPath.replace(/[\\/]+$/, "");
 	const rel = targetPath.replace(/\\/g, "/").replace(/^\/+/, "");
-	const full = `${root}/${rel}`.replace(/\\/g, "/");
-	if (/\/NOTES\.md$/i.test(full)) {
-		return full.replace(/\/NOTES\.md$/i, "");
+	const full = joinVaultPath(vaultPath, rel);
+	const useBackslash = full.includes("\\");
+	const asPosix = full.replace(/\\/g, "/");
+	let paperPosix = asPosix;
+	if (/\/NOTES\.md$/i.test(asPosix)) {
+		paperPosix = asPosix.replace(/\/NOTES\.md$/i, "");
+	} else if (/\/NOTES$/i.test(asPosix)) {
+		// Stem-only NOTES resolve target: papers/foo/NOTES
+		paperPosix = asPosix.replace(/\/NOTES$/i, "");
+	} else if (/\.pdf$/i.test(asPosix)) {
+		const idx = asPosix.lastIndexOf("/");
+		paperPosix = idx >= 0 ? asPosix.slice(0, idx) : asPosix;
+	} else {
+		paperPosix = asPosix.replace(/\/+$/, "");
 	}
-	// Stem-only NOTES resolve target: papers/foo/NOTES
-	if (/\/NOTES$/i.test(full)) {
-		return full.replace(/\/NOTES$/i, "");
-	}
-	if (/\.pdf$/i.test(full)) {
-		const idx = full.lastIndexOf("/");
-		return idx >= 0 ? full.slice(0, idx) : full;
-	}
-	return full.replace(/\/+$/, "");
+	return useBackslash ? paperPosix.replace(/\//g, "\\") : paperPosix;
 }
 
 /**

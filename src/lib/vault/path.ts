@@ -26,7 +26,10 @@ export function vaultRelativePath(
 	return null;
 }
 
-/** Join parent + name with the parent's path separator style. */
+/**
+ * Join vault root (or any parent abs path) with a vault-relative child.
+ * Preserves Windows backslash roots so fs opens stay valid (see joinPath).
+ */
 export function joinVaultPath(parent: string, name: string): string {
 	return joinPath(parent, name);
 }

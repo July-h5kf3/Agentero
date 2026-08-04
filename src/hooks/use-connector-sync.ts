@@ -27,6 +27,7 @@ import {
 	connectorSetVault,
 } from "@/lib/paper/import/connector";
 import { refreshLibrary } from "@/lib/paper/library-store";
+import { joinVaultPath } from "@/lib/vault";
 import { getVaultPath, refreshTree } from "@/lib/vault/store";
 import { openPaper } from "@/lib/workspace/actions";
 
@@ -104,10 +105,7 @@ export function useConnectorSync(): void {
 						.replace(/\\/g, "/")
 						.replace(/^\/+|\/+$/g, "");
 					if (vault && rel) {
-						const paperAbs = `${vault
-							.replace(/\\/g, "/")
-							.replace(/\/+$/, "")}/${rel}`;
-						openPaper(paperAbs);
+						openPaper(joinVaultPath(vault, rel));
 					}
 				}),
 			);
