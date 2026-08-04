@@ -3084,7 +3084,8 @@ function PdfViewerInner({
 								{regionSelecting
 									? t("pdfExplain.cancelRegion")
 									: t("pdfExplain.selectRegion")}
-								<span className="ml-2 text-muted-foreground">
+								{/* Inverted tooltip: mute via text-background, not muted-foreground. */}
+								<span className="ml-2 text-background/70">
 									{formatShortcutById("visualAnnotation")}
 								</span>
 							</TooltipContent>
