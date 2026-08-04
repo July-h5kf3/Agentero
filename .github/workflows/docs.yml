@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   deploy:
+    # Pages are a production artifact; never deploy a PR or another branch.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:

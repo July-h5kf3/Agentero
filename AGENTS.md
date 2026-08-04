@@ -72,7 +72,7 @@ cargo test -p agentero-cli
 ## 文档站与发布
 
 - 文档站使用 [MkDocs](https://www.mkdocs.org/) 与 Material for MkDocs 主题。
-- `.github/workflows/docs.yml` 在文档相关文件变更后构建并部署到 `gh-pages` 分支。
+- `.github/workflows/docs.yml` 仅在 `main` 的文档相关变更后构建并部署到 `gh-pages` 分支。
 
 ## Commit
 
