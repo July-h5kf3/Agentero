@@ -525,6 +525,37 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn localized_onboarding_files_are_flattened_under_notes() {
+        for locale in ["en", "zh-CN"] {
+            let onboarding_paths = bundled_onboarding_files(locale);
+            assert_eq!(onboarding_paths.len(), 3, "locale: {locale}");
+            for (rel, _) in onboarding_paths {
+                assert_eq!(
+                    Path::new(rel).parent(),
+                    Some(Path::new("notes")),
+                    "onboarding path must be directly under notes/: {rel}"
+                );
+                assert!(!rel.starts_with("notes/en/"));
+                assert!(!rel.starts_with("notes/zh-CN/"));
+            }
+        }
+
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-create-zh-flat-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = create_vault(&dir, "zh-CN").expect("create Chinese vault");
+        assert!(dir.join("notes/01 论文导入与管理.md").is_file());
+        assert!(!dir.join("notes/zh-CN").exists());
+        assert_eq!(result.open_path, "notes/01 论文导入与管理.md");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     /// After app update: missing bundled skills are added and customized files stay.
     #[test]
     fn ensure_vault_seeds_missing_bundled_skills_without_overwriting_customized_files() {

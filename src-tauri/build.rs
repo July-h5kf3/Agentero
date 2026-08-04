@@ -35,7 +35,9 @@ fn generate_onboarding_templates() {
 
         for file in files {
             let filename = file.file_name().to_string_lossy().into_owned();
-            let rel = format!("notes/{locale}/{filename}");
+            // Keep the selected locale in the embedded entry, but flatten the
+            // generated Vault paths so onboarding notes live directly in notes/.
+            let rel = format!("notes/{filename}");
             let path = file.path();
             entries.push((locale.clone(), rel, path));
         }
