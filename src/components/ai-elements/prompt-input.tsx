@@ -74,6 +74,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useImeGuard } from "@/hooks/use-ime-guard";
+import { fileMatchesAccept } from "@/lib/core/file-accept";
 import { cn } from "@/lib/core/utils";
 
 // ============================================================================
@@ -187,6 +188,8 @@ export interface AttachmentsContext {
 	clear: () => void;
 	openFileDialog: () => void;
 	fileInputRef: RefObject<HTMLInputElement | null>;
+	/** When false, paste/drop/dialog no-ops (agent lacks image prompt capability). */
+	enabled: boolean;
 }
 
 export interface TextInputContext {
@@ -329,6 +332,7 @@ export const PromptInputProvider = ({
 		() => ({
 			add,
 			clear,
+			enabled: true,
 			fileInputRef,
 			files: attachmentFiles,
 			openFileDialog,
@@ -506,6 +510,10 @@ export type PromptInputProps = Omit<
 	maxFiles?: number;
 	// bytes
 	maxFileSize?: number;
+	/**
+	 * When false, file paste / drop / open dialog are disabled. Default true.
+	 */
+	attachmentsEnabled?: boolean;
 	/** Class applied to the inner InputGroup. */
 	inputGroupClassName?: string;
 	onError?: (err: {
@@ -526,6 +534,7 @@ export const PromptInput = ({
 	syncHiddenInput,
 	maxFiles,
 	maxFileSize,
+	attachmentsEnabled = true,
 	inputGroupClassName,
 	onError,
 	onSubmit,
@@ -558,34 +567,18 @@ export const PromptInput = ({
 	}, [files]);
 
 	const openFileDialogLocal = useCallback(() => {
+		if (!attachmentsEnabled) return;
 		inputRef.current?.click();
-	}, []);
+	}, [attachmentsEnabled]);
 
 	const matchesAccept = useCallback(
-		(f: File) => {
-			if (!accept || accept.trim() === "") {
-				return true;
-			}
-
-			const patterns = accept
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-
-			return patterns.some((pattern) => {
-				if (pattern.endsWith("/*")) {
-					// e.g: image/* -> image/
-					const prefix = pattern.slice(0, -1);
-					return f.type.startsWith(prefix);
-				}
-				return f.type === pattern;
-			});
-		},
+		(f: File) => fileMatchesAccept(f, accept),
 		[accept],
 	);
 
 	const addLocal = useCallback(
 		(fileList: File[] | FileList) => {
+			if (!attachmentsEnabled) return;
 			const incoming = [...fileList];
 			const accepted = incoming.filter((f) => matchesAccept(f));
 			if (incoming.length && accepted.length === 0) {
@@ -632,7 +625,7 @@ export const PromptInput = ({
 				return [...prev, ...next];
 			});
 		},
-		[matchesAccept, maxFiles, maxFileSize, onError, t],
+		[attachmentsEnabled, matchesAccept, maxFiles, maxFileSize, onError, t],
 	);
 
 	const removeLocal = useCallback(
@@ -650,6 +643,7 @@ export const PromptInput = ({
 	// Wrapper that validates files before calling provider's add
 	const addWithProviderValidation = useCallback(
 		(fileList: File[] | FileList) => {
+			if (!attachmentsEnabled) return;
 			const incoming = [...fileList];
 			const accepted = incoming.filter((f) => matchesAccept(f));
 			if (incoming.length && accepted.length === 0) {
@@ -689,6 +683,7 @@ export const PromptInput = ({
 			}
 		},
 		[
+			attachmentsEnabled,
 			matchesAccept,
 			maxFileSize,
 			maxFiles,
@@ -721,9 +716,21 @@ export const PromptInput = ({
 
 	const add = usingProvider ? addWithProviderValidation : addLocal;
 	const remove = usingProvider ? controller.attachments.remove : removeLocal;
-	const openFileDialog = usingProvider
-		? controller.attachments.openFileDialog
-		: openFileDialogLocal;
+	const openFileDialog = useCallback(() => {
+		if (!attachmentsEnabled) return;
+		if (usingProvider) {
+			controller?.attachments.openFileDialog();
+			return;
+		}
+		openFileDialogLocal();
+	}, [attachmentsEnabled, usingProvider, controller, openFileDialogLocal]);
+
+	// Drop pending chips when capability turns off mid-session.
+	useEffect(() => {
+		if (!attachmentsEnabled && files.length > 0) {
+			clearAttachments();
+		}
+	}, [attachmentsEnabled, files.length, clearAttachments]);
 
 	const clear = useCallback(() => {
 		clearAttachments();
@@ -749,7 +756,7 @@ export const PromptInput = ({
 	// Attach drop handlers on nearest form and document (opt-in)
 	useEffect(() => {
 		const form = formRef.current;
-		if (!form) {
+		if (!form || !attachmentsEnabled) {
 			return;
 		}
 		if (globalDrop) {
@@ -776,10 +783,10 @@ export const PromptInput = ({
 			form.removeEventListener("dragover", onDragOver);
 			form.removeEventListener("drop", onDrop);
 		};
-	}, [add, globalDrop]);
+	}, [add, globalDrop, attachmentsEnabled]);
 
 	useEffect(() => {
-		if (!globalDrop) {
+		if (!globalDrop || !attachmentsEnabled) {
 			return;
 		}
 
@@ -802,7 +809,7 @@ export const PromptInput = ({
 			document.removeEventListener("dragover", onDragOver);
 			document.removeEventListener("drop", onDrop);
 		};
-	}, [add, globalDrop]);
+	}, [add, globalDrop, attachmentsEnabled]);
 
 	useEffect(
 		() => () => {
@@ -832,12 +839,13 @@ export const PromptInput = ({
 		() => ({
 			add,
 			clear: clearAttachments,
+			enabled: attachmentsEnabled,
 			fileInputRef: inputRef,
 			files: files.map((item) => ({ ...item, id: item.id })),
 			openFileDialog,
 			remove,
 		}),
-		[files, add, remove, clearAttachments, openFileDialog],
+		[files, add, remove, clearAttachments, openFileDialog, attachmentsEnabled],
 	);
 
 	const refsCtx = useMemo<ReferencedSourcesContext>(
@@ -1037,6 +1045,9 @@ export const PromptInputTextarea = ({
 
 	const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = useCallback(
 		(event) => {
+			if (!attachments.enabled) {
+				return;
+			}
 			const items = event.clipboardData?.items;
 
 			if (!items) {

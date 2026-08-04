@@ -43,7 +43,7 @@ commands / config 仍可在 load 期间转发。
 | Command | 说明 |
 |---|---|
 | `agent_probe` / `agent_warm` | 探测与预热 |
-| `agent_run_once` | 发起一轮；`sessionId` 时按能力 resume 或 load |
+| `agent_run_once` | 发起一轮；`sessionId` 时按能力 resume 或 load；可选 `images[]`（base64 + mime）→ ACP `ContentBlock::Image` |
 | `agent_list_sessions` / `agent_load_session` | 会话历史 |
 | `agent_list_skills` | Vault skill 列表 |
 | `agent_respond_permission` | 回答权限请求 |
