@@ -238,6 +238,19 @@ import {
 } from "@/lib/translate";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
 
+/**
+ * Dark-mode page raster styling.
+ *
+ * EmbedPDF 2.x only themes viewer chrome (and we build chrome ourselves). Page
+ * content has no color-scheme API yet — see embedpdf/embed-pdf-viewer#679.
+ * Soft partial invert (not 100%) + slight brightness/contrast so pure white
+ * paper does not become pure black and text is not pure white. Hue-rotate
+ * keeps figure colors roughly correct. Applied only to raster layers so
+ * selection / search / annotation overlays stay uninverted.
+ */
+const PDF_PAGE_RASTER_DARK_CLASS =
+	"dark:[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
+
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
 	scrollToHighlight: (id: string) => void;
@@ -2704,20 +2717,30 @@ function PdfViewerInner({
 						};
 					}),
 			];
+			// Page shell: paper-white in light mode; near-black when the app is dark
+			// so loading gaps match inverted page rasters.
 			return (
 				<div
-					className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+					className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
 					style={{ width, height }}
 					{...{ [EMBED_PAGE_ATTR]: pageIndex }}
 				>
+					{/*
+					 * EmbedPDF has no page color-scheme API yet (UI chrome theme only).
+					 * Invert + hue-rotate only the raster layers so selection / search /
+					 * annotation / pin overlays keep their intended colors. Agent crops
+					 * use engine.renderPageRect and are unaffected.
+					 */}
 					<RenderLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						className={PDF_PAGE_RASTER_DARK_CLASS}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<TilingLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						className={PDF_PAGE_RASTER_DARK_CLASS}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<SearchLayer
