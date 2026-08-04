@@ -3,7 +3,6 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
-	ListTodoIcon,
 	ScanSearch,
 	Star,
 	TextSelect,
@@ -265,11 +264,7 @@ export function AgentComposer({
 				<Queue className={cn(isZen && "shadow-sm")}>
 					<QueueSection defaultOpen>
 						<QueueSectionTrigger>
-							<QueueSectionLabel
-								count={messageQueue.length}
-								icon={<ListTodoIcon className="size-4" />}
-								label={t("composer.queueLabel")}
-							/>
+							<QueueSectionLabel label={t("composer.queueLabel")} />
 						</QueueSectionTrigger>
 						<QueueSectionContent>
 							<QueueList>
@@ -283,7 +278,7 @@ export function AgentComposer({
 											: t("composer.visualAnnotation"));
 									return (
 										<QueueItem key={item.id}>
-											<div className="flex items-center gap-2">
+											<div className="flex w-full items-center gap-2">
 												<QueueItemIndicator />
 												<QueueItemContent title={queueLabel}>
 													{queueLabel}

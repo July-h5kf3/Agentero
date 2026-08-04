@@ -43,6 +43,7 @@ import {
 	PlanContent,
 	PlanDescription,
 	PlanHeader,
+	PlanStep,
 	PlanTitle,
 	PlanTrigger,
 } from "@/components/ai-elements/plan";
@@ -349,33 +350,23 @@ export function ChatTranscript({
 																		<PlanTrigger />
 																	</PlanAction>
 																</PlanHeader>
-																<PlanContent className="space-y-2 pt-0">
-																	{plan.map((entry) => (
-																		<div
-																			key={`${entry.status}:${entry.priority}:${entry.content}`}
-																			className="flex items-start gap-2 text-sm"
-																		>
-																			<span
-																				className={cn(
-																					"mt-1 size-1.5 shrink-0 rounded-full",
-																					entry.status === "completed" &&
-																						"bg-emerald-500",
-																					entry.status === "in_progress" &&
-																						"bg-amber-500",
-																					entry.status === "pending" &&
-																						"bg-muted-foreground/40",
-																				)}
-																			/>
-																			<span
-																				className={cn(
-																					entry.status === "completed" &&
-																						"text-muted-foreground line-through",
-																				)}
+																<PlanContent className="pt-0">
+																	<ol className="space-y-2">
+																		{plan.map((entry) => (
+																			<PlanStep
+																				key={`${entry.status}:${entry.priority}:${entry.content}`}
+																				status={
+																					entry.status === "completed"
+																						? "completed"
+																						: entry.status === "in_progress"
+																							? "in_progress"
+																							: "pending"
+																				}
 																			>
 																				{entry.content}
-																			</span>
-																		</div>
-																	))}
+																			</PlanStep>
+																		))}
+																	</ol>
 																</PlanContent>
 															</Plan>
 														);

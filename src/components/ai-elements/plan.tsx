@@ -1,7 +1,12 @@
 "use client";
 
-import { ChevronsUpDownIcon } from "lucide-react";
-import type { ComponentProps } from "react";
+import {
+	CheckIcon,
+	ChevronsUpDownIcon,
+	CircleIcon,
+	LoaderCircleIcon,
+} from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -129,6 +134,60 @@ export type PlanFooterProps = ComponentProps<"div">;
 export const PlanFooter = (props: PlanFooterProps) => (
 	<CardFooter data-slot="plan-footer" {...props} />
 );
+
+export type PlanStepStatus = "pending" | "in_progress" | "completed";
+
+export type PlanStepProps = ComponentProps<"li"> & {
+	status?: PlanStepStatus;
+	children: ReactNode;
+};
+
+export const PlanStep = ({
+	className,
+	status = "pending",
+	children,
+	...props
+}: PlanStepProps) => {
+	const { t } = useTranslation("aiElements");
+	const statusLabel = t(`plan.status.${status}`);
+	const isCompleted = status === "completed";
+
+	return (
+		<li
+			className={cn(
+				"flex min-w-0 items-start gap-2 text-sm",
+				status === "in_progress" && "text-foreground",
+				status === "pending" && "text-muted-foreground",
+				status === "completed" && "text-muted-foreground",
+				className,
+			)}
+			data-slot="plan-step"
+			{...props}
+		>
+			<span
+				aria-hidden="true"
+				className="mt-0.5 flex size-4 shrink-0 items-center justify-center"
+			>
+				{isCompleted ? (
+					<CheckIcon className="size-3.5 text-emerald-500" />
+				) : status === "in_progress" ? (
+					<LoaderCircleIcon className="size-3.5 animate-spin text-amber-500" />
+				) : (
+					<CircleIcon className="size-2.5 text-muted-foreground/50" />
+				)}
+			</span>
+			<span
+				className={cn(
+					"min-w-0 break-words",
+					isCompleted && "text-muted-foreground line-through",
+				)}
+			>
+				{children}
+			</span>
+			<span className="sr-only">{statusLabel}</span>
+		</li>
+	);
+};
 
 export type PlanTriggerProps = ComponentProps<typeof CollapsibleTrigger>;
 

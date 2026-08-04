@@ -36,7 +36,7 @@ export type QueueItemProps = ComponentProps<"li">;
 export const QueueItem = ({ className, ...props }: QueueItemProps) => (
 	<li
 		className={cn(
-			"group flex flex-col gap-1 rounded-md px-3 py-1 text-sm transition-colors hover:bg-muted",
+			"group flex w-full flex-col gap-1 rounded-md px-3 py-1 text-sm transition-colors hover:bg-muted",
 			className,
 		)}
 		{...props}
@@ -75,7 +75,7 @@ export const QueueItemContent = ({
 }: QueueItemContentProps) => (
 	<span
 		className={cn(
-			"line-clamp-1 grow break-words",
+			"min-w-0 line-clamp-1 grow break-words",
 			completed
 				? "text-muted-foreground/50 line-through"
 				: "text-muted-foreground",
@@ -187,8 +187,8 @@ export const QueueList = ({
 	...props
 }: QueueListProps) => (
 	<ScrollArea className={cn("mt-2 -mb-1", className)} {...props}>
-		<div className="max-h-40 pr-4">
-			<ul>{children}</ul>
+		<div className="max-h-40 w-full">
+			<ul className="w-full">{children}</ul>
 		</div>
 	</ScrollArea>
 );

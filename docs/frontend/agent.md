@@ -18,7 +18,8 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - **当前论文默认 context**（可 X 移除）；`@` 提及或文件树拖入 → context chip。
 - **选区上下文**（Cursor 式）：Markdown / PDF 中选中文字 → composer 出现瞬时选区 chip（虚线，实时跟随最新选区；取消选区即消失）；`⌘L` 或 PDF 划词菜单「加入对话」将其**固定**（实底，最多 4 个）并打开 Agent 面板；无选区时 `⌘L` 仍是开关侧栏。发送时选区以 `Selected text from {path} (page N):` + `> 引用` 追加进 prompt，随该轮消费清空；不落 localStorage，超长截断 4000 字符。Store：`src/lib/agent/selection-store.ts`。
 - `@`：空时优先最近路径与浅层目录；› 进入子目录；论文标签与 `paperTreeLabelMode` 一致。`@`、`$` 与 `/` 候选菜单由 viewport 碰撞处理定位，空间不足时翻转并在可用高度内滚动。
-- 运行中可继续输入 → Queue waitlist；Esc / 停止中止。
+- ACP `plan` 事件使用 AI Elements `Plan` / `PlanStep` 展示，可折叠查看步骤；步骤状态由图标、完成态和无障碍文案表达。
+- 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
 - Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。命令以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
 

@@ -56,7 +56,12 @@
 		"label": "Model Selector"
 	},
 	"plan": {
-		"toggle": "Toggle plan"
+		"toggle": "Toggle plan",
+		"status": {
+			"pending": "Pending",
+			"in_progress": "In progress",
+			"completed": "Completed"
+		}
 	},
 	"chainOfThought": {
 		"title": "Chain of Thought"
