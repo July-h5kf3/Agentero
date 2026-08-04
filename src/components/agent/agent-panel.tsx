@@ -229,11 +229,16 @@ export const AgentPanel = memo(function AgentPanel({
 							setSkillActiveIndex(0);
 							setSlashActiveIndex(0);
 						}}
-						onSubmit={async (text) => {
+						onSubmit={async (text, images) => {
 							if (switchingRef.current || submittingRef.current) {
-								return;
+								// Keep PromptInput attachments when the submit is rejected.
+								throw new Error("composer busy");
 							}
-							await submitComposer(text);
+							const ok = await submitComposer(text, undefined, images);
+							if (!ok) {
+								// Preserve pasted/picked images when send early-returns (e.g. no agent).
+								throw new Error("composer submit rejected");
+							}
 						}}
 						onComposerKeyDown={handleComposerMenuKeyDown}
 						onComposerDragOver={handleComposerDragOver}

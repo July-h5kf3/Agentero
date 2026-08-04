@@ -57,10 +57,15 @@ export type ChatLine =
 	| {
 			id: string;
 			kind: "user";
-			/** Free-form composer text (may be empty when only visual annotations). */
+			/** Free-form composer text (may be empty when only visual annotations / images). */
 			text: string;
 			/** Local multimodal visual crops sent with this turn (session-local). */
 			visualAnnotations?: ChatVisualAnnotation[];
+			/**
+			 * General composer image attachments (paste / file pick) for this turn.
+			 * Session-local only — not persisted to ACP session history load.
+			 */
+			images?: PromptImage[];
 	  }
 	| {
 			id: string;
@@ -102,8 +107,16 @@ export function buildLocalTranscriptPrompt(
 	for (const line of lines) {
 		if (line.kind === "user") {
 			const text = line.text.trim();
-			if (!text && !line.visualAnnotations?.length) continue;
-			const label = text || "(visual annotation)";
+			const hasVisual = Boolean(line.visualAnnotations?.length);
+			const hasImages = Boolean(line.images?.length);
+			if (!text && !hasVisual && !hasImages) continue;
+			const label =
+				text ||
+				(hasVisual
+					? "(visual annotation)"
+					: hasImages
+						? "(image attachment)"
+						: "");
 			turns.push(`User: ${label}`);
 			continue;
 		}

@@ -823,7 +823,8 @@ pub async fn run_once(
         prompt.clone()
     } else {
         let user_prompt = if prompt.trim().is_empty() && !images.is_empty() {
-            "Please analyze the attached image crop from the research paper PDF.".to_string()
+            // Shared fallback for visual crops and general composer attachments.
+            "Please analyze the attached image(s).".to_string()
         } else {
             prompt
         };

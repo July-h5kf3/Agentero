@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { PromptImage } from "@/lib/agent/api";
 import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import type { PaperMetadata, PaperTreeLabelMode } from "@/lib/paper";
@@ -16,6 +17,8 @@ export type QueuedPrompt = {
 	selections: SelectionContext[];
 	/** Visual PDF annotation drafts frozen when the user queued the message. */
 	visualDrafts: PdfVisualDraft[];
+	/** Composer image attachments frozen when the user queued the message. */
+	images?: PromptImage[];
 };
 
 export type AgentPanelProps = {

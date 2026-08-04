@@ -1,4 +1,4 @@
-import { ScanSearch } from "lucide-react";
+import { ImageIcon, ScanSearch } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -9,13 +9,18 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import type { PromptImage } from "@/lib/agent/api";
 import type { ChatVisualAnnotation } from "@/lib/agent/chat-state";
 import { cn } from "@/lib/core/utils";
 
+function promptImageSrc(image: PromptImage): string | null {
+	if (!image.data) return null;
+	const mime = image.mimeType || "image/png";
+	return `data:${mime};base64,${image.data}`;
+}
+
 function imageSrc(annotation: ChatVisualAnnotation): string | null {
-	if (!annotation.image.data) return null;
-	const mime = annotation.image.mimeType || "image/png";
-	return `data:${mime};base64,${annotation.image.data}`;
+	return promptImageSrc(annotation.image);
 }
 
 function chipLabel(
@@ -132,10 +137,97 @@ export function ChatVisualAnnotations({
 	);
 }
 
+/**
+ * Message-row chips for general composer image attachments (paste / file pick).
+ * Same image-only chip pattern as visual annotations; click opens a preview.
+ */
+export function ChatAttachedImages({
+	images,
+	className,
+}: {
+	images: PromptImage[];
+	className?: string;
+}) {
+	const { t } = useTranslation("agent");
+	const [openIndex, setOpenIndex] = useState<number | null>(null);
+	const open =
+		openIndex != null && openIndex >= 0 && openIndex < images.length
+			? images[openIndex]
+			: null;
+	const openSrc = open ? promptImageSrc(open) : null;
+
+	if (!images.length) return null;
+
+	return (
+		<>
+			<div className={cn("flex flex-wrap justify-end gap-1.5", className)}>
+				{images.map((image, index) => {
+					const thumb = promptImageSrc(image);
+					const key = `${image.mimeType}:${image.data.slice(0, 32)}:${index}`;
+					return (
+						<button
+							key={key}
+							type="button"
+							className="inline-flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/80 bg-background/80 shadow-sm transition-colors hover:bg-muted"
+							onClick={() => setOpenIndex(index)}
+							title={t("composer.attachedImageOpen")}
+							aria-label={t("composer.attachedImageOpenAria", {
+								index: index + 1,
+							})}
+						>
+							{thumb ? (
+								<img src={thumb} alt="" className="size-full object-cover" />
+							) : (
+								<ImageIcon className="size-3.5 text-muted-foreground" />
+							)}
+						</button>
+					);
+				})}
+			</div>
+
+			<Dialog
+				open={open != null}
+				onOpenChange={(next) => {
+					if (!next) setOpenIndex(null);
+				}}
+			>
+				<DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+					{open != null && openIndex != null ? (
+						<>
+							<DialogHeader>
+								<DialogTitle>
+									{t("composer.attachedImageDetailTitle", {
+										index: openIndex + 1,
+									})}
+								</DialogTitle>
+								<DialogDescription className="sr-only">
+									{t("composer.attachedImagePreviewAlt", {
+										index: openIndex + 1,
+									})}
+								</DialogDescription>
+							</DialogHeader>
+							{openSrc ? (
+								<img
+									src={openSrc}
+									alt={t("composer.attachedImagePreviewAlt", {
+										index: openIndex + 1,
+									})}
+									className="max-h-[min(60vh,28rem)] w-full rounded-lg border border-border/70 bg-muted/30 object-contain"
+								/>
+							) : null}
+						</>
+					) : null}
+				</DialogContent>
+			</Dialog>
+		</>
+	);
+}
+
 /** Plain-text export of free text + visual comments (copy / edit seed). */
 export function formatUserLineForCopy(line: {
 	text: string;
 	visualAnnotations?: ChatVisualAnnotation[];
+	images?: PromptImage[];
 }): string {
 	const parts: string[] = [];
 	const free = line.text.trim();
@@ -149,6 +241,14 @@ export function formatUserLineForCopy(line: {
 					? `${index + 1}. ${comment}`
 					: `${index + 1}. (p.${item.page})`;
 			}),
+		);
+	}
+	const images = line.images ?? [];
+	if (images.length) {
+		parts.push(
+			images.length === 1
+				? "(1 image attachment)"
+				: `(${images.length} image attachments)`,
 		);
 	}
 	return parts.join("\n");

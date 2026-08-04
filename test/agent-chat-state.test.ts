@@ -218,6 +218,25 @@ describe("buildLocalTranscriptPrompt", () => {
 		expect(block).toContain("User: follow up");
 	});
 
+	it("includes image-only user turns with a placeholder label", () => {
+		const lines: ChatLine[] = [
+			{
+				id: "u1",
+				kind: "user",
+				text: "",
+				images: [{ data: "YWJj", mimeType: "image/png" }],
+			},
+			{
+				id: "a1",
+				kind: "agent",
+				parts: [{ type: "text", id: "t1", text: "looks like a chart" }],
+			},
+		];
+		const block = buildLocalTranscriptPrompt(lines);
+		expect(block).toContain("User: (image attachment)");
+		expect(block).toContain("Assistant: looks like a chart");
+	});
+
 	it("returns empty when there is no prior dialogue", () => {
 		expect(buildLocalTranscriptPrompt([])).toBe("");
 	});

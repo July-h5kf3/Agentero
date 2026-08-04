@@ -2,6 +2,7 @@ import { CopyIcon, Pencil } from "lucide-react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
+	ChatAttachedImages,
 	ChatVisualAnnotations,
 	formatUserLineForCopy,
 } from "@/components/agent/chat-visual-annotations";
@@ -184,12 +185,16 @@ export function ChatTranscript({
 							if (line.kind === "user") {
 								const isEditing = editingLineId === line.id;
 								const visuals = line.visualAnnotations ?? [];
+								const attachedImages = line.images ?? [];
 								if (isEditing) {
 									return (
 										<Message key={line.id} from="user">
 											{/* Chips sit above the bubble, matching composer context chips. */}
 											{visuals.length > 0 ? (
 												<ChatVisualAnnotations annotations={visuals} />
+											) : null}
+											{attachedImages.length > 0 ? (
+												<ChatAttachedImages images={attachedImages} />
 											) : null}
 											<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2.5 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
 												<textarea
@@ -240,18 +245,27 @@ export function ChatTranscript({
 								}
 								const userDisplay = stripPromptEnvelopeForDisplay(line.text);
 								// Never render Codex env / Host system envelopes as user bubbles.
-								if (!userDisplay && visuals.length === 0) return null;
+								if (
+									!userDisplay &&
+									visuals.length === 0 &&
+									attachedImages.length === 0
+								)
+									return null;
 								const copyPayload = formatUserLineForCopy({
 									text: userDisplay,
 									visualAnnotations: visuals,
+									images: attachedImages,
 								});
 								return (
 									<Message key={line.id} from="user">
-										{/* Visual chips above the text bubble (not inside it). */}
+										{/* Visual / image chips above the text bubble (not inside it). */}
 										{visuals.length > 0 ? (
 											<ChatVisualAnnotations annotations={visuals} />
 										) : null}
-										{/* Free-text only: skip empty bubble when the turn is visual-only. */}
+										{attachedImages.length > 0 ? (
+											<ChatAttachedImages images={attachedImages} />
+										) : null}
+										{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
 										{userDisplay ? (
 											<MessageContent>
 												<MessageResponse>{userDisplay}</MessageResponse>

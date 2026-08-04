@@ -51,6 +51,7 @@ import {
 	loadModelPref,
 	loadSession,
 	type PermissionRequest,
+	type PromptImage,
 	respondPermission,
 	runOnce,
 	saveModelCatalog,
@@ -1606,6 +1607,8 @@ export function useAgentPanel({
 		selections?: SelectionContext[];
 		/** Frozen visual PDF annotation drafts (else live store). */
 		visualDrafts?: PdfVisualDraft[];
+		/** Composer image attachments (paste / file pick), frozen or live. */
+		images?: PromptImage[];
 		/**
 		 * Explicit pin binding for follow-ups (pin modal continue). Preferred
 		 * over reading sessionHistoryRef which may lag store upserts.
@@ -1637,8 +1640,12 @@ export function useAgentPanel({
 		const text = textRaw.trim();
 		const resolvedVisualDrafts = options?.visualDrafts ?? currentVisualDrafts();
 		const hasVisualDrafts = resolvedVisualDrafts.length > 0;
+		const attachedImages = (options?.images ?? []).filter(
+			(img) => img.data.trim().length > 0,
+		);
+		const hasAttachedImages = attachedImages.length > 0;
 		if (
-			(!text && !hasVisualDrafts) ||
+			(!text && !hasVisualDrafts && !hasAttachedImages) ||
 			activeTabIsRunning ||
 			switchingRef.current ||
 			submittingRef.current
@@ -1785,15 +1792,25 @@ export function useAgentPanel({
 				isAcpCommand && text
 					? text
 					: promptBodyParts.join("\n\n") ||
-						buildVisualAnnotationsPrompt(
-							resolvedVisualDrafts.map((draft) => ({
-								page: draft.page,
-								comment: draft.comment,
-							})),
-						);
-			const images = hasVisualDrafts
+						(hasVisualDrafts
+							? buildVisualAnnotationsPrompt(
+									resolvedVisualDrafts.map((draft) => ({
+										page: draft.page,
+										comment: draft.comment,
+									})),
+								)
+							: hasAttachedImages
+								? t("composer.imageOnlyPrompt", {
+										count: attachedImages.length,
+									})
+								: "");
+			const visualImages = hasVisualDrafts
 				? resolvedVisualDrafts.map((draft) => draft.image)
-				: undefined;
+				: [];
+			const images =
+				visualImages.length || attachedImages.length
+					? [...visualImages, ...attachedImages]
+					: undefined;
 			const visualAnnotations = hasVisualDrafts
 				? resolvedVisualDrafts.map((draft) => ({
 						id: draft.id,
@@ -1813,7 +1830,11 @@ export function useAgentPanel({
 					? t("composer.visualAnnotationsTitle", {
 							count: resolvedVisualDrafts.length,
 						})
-					: t("composer.visualAnnotation"));
+					: hasAttachedImages
+						? t("composer.attachedImagesTitle", {
+								count: attachedImages.length,
+							})
+						: t("composer.visualAnnotation"));
 			// Workflow suggestions act on the focused paper / mentioned paths so
 			// “Summarize” targets the open paper even without an explicit @mention.
 			const workflow = isAcpCommand ? undefined : options?.workflow;
@@ -1825,6 +1846,7 @@ export function useAgentPanel({
 				kind: "user",
 				text,
 				...(visualAnnotations?.length ? { visualAnnotations } : {}),
+				...(attachedImages.length ? { images: attachedImages } : {}),
 			};
 			const sessionStartLines = [...priorLines, userLine];
 			setLines(sessionStartLines);
@@ -2057,10 +2079,14 @@ export function useAgentPanel({
 	};
 
 	const enqueueMessage = useCallback(
-		(textRaw: string, workflow?: string): boolean => {
+		(textRaw: string, workflow?: string, images?: PromptImage[]): boolean => {
 			const text = textRaw.trim();
 			const liveVisualDrafts = currentVisualDrafts();
-			if ((!text && !liveVisualDrafts.length) || switchingRef.current) {
+			const attached = (images ?? []).filter((img) => img.data.trim().length);
+			if (
+				(!text && !liveVisualDrafts.length && !attached.length) ||
+				switchingRef.current
+			) {
 				return false;
 			}
 			const snap = snapshotComposerState();
@@ -2073,13 +2099,14 @@ export function useAgentPanel({
 			const frozenVisualDrafts = consumeVisualDrafts();
 			const item: QueuedPrompt = {
 				id: nextLineId("queue"),
-				// Keep the typed text only; visual drafts carry their own prompt payload.
+				// Keep the typed text only; visual drafts / images carry their payload.
 				text,
 				workflow,
 				contextPaths: paths,
 				skillIds: [...snap.selectedSkillIds],
 				selections: consumeSelections(),
 				visualDrafts: frozenVisualDrafts,
+				...(attached.length ? { images: attached } : {}),
 			};
 			setMessageQueue((prev) => {
 				const next = [...prev, item];
@@ -2115,14 +2142,14 @@ export function useAgentPanel({
 	const submitComposer = async (
 		textRaw: string,
 		workflow?: string,
-	): Promise<void> => {
-		if (switchingRef.current || submittingRef.current) return;
+		images?: PromptImage[],
+	): Promise<boolean> => {
+		if (switchingRef.current || submittingRef.current) return false;
 		resetPromptHistoryBrowse();
 		if (activeTabIsRunning) {
-			enqueueMessage(textRaw, workflow);
-			return;
+			return enqueueMessage(textRaw, workflow, images);
 		}
-		await send(textRaw, { workflow });
+		return send(textRaw, { workflow, images });
 	};
 
 	const removeQueuedMessage = useCallback((id: string) => {
@@ -2246,6 +2273,7 @@ export function useAgentPanel({
 			sessionHistoryRef.current = agentSessionStore.getState().sessions;
 			return sendRef.current(req.text, {
 				visualDrafts: req.visualDrafts,
+				images: req.images,
 				fromQueue: true,
 				baseLines,
 				forceNewSession,
@@ -2286,6 +2314,7 @@ export function useAgentPanel({
 					skillIds: head.skillIds,
 					selections: head.selections,
 					visualDrafts: head.visualDrafts,
+					images: head.images,
 					fromQueue: true,
 				});
 			} finally {
@@ -2318,6 +2347,7 @@ export function useAgentPanel({
 
 	// Resend an edited user message: drop everything from that message onward
 	// (the stale answer / partial run) and start a fresh turn with the new text.
+	// Preserve original visual crops / image attachments from that user line.
 	const resendEditedMessage = async (lineId: string) => {
 		const text = editingText.trim();
 		if (
@@ -2331,10 +2361,28 @@ export function useAgentPanel({
 			(line) => line.id === lineId && line.kind === "user",
 		);
 		if (index < 0) return;
+		const original = lines[index];
 		const baseLines = lines.slice(0, index);
+		const resendImages =
+			original?.kind === "user" && original.images?.length
+				? original.images
+				: undefined;
+		// Visual crops were already consumed into marks; re-send as plain images
+		// so ACP still receives the multimodal payload without recreating drafts.
+		const visualAsImages =
+			original?.kind === "user"
+				? (original.visualAnnotations ?? []).map((item) => item.image)
+				: [];
+		const mergedImages = [
+			...(resendImages ?? []),
+			...visualAsImages.filter((img) => img.data.trim().length > 0),
+		];
 		setEditingLineId(null);
 		setEditingText("");
-		await send(text, { baseLines });
+		await send(text, {
+			baseLines,
+			...(mergedImages.length ? { images: mergedImages } : {}),
+		});
 	};
 
 	/** Add Vault-relative path(s) as removable context chips (same as @mention). */
@@ -2639,13 +2687,15 @@ export function useAgentPanel({
 				if (line.kind !== "user") return line;
 				const text = stripPromptEnvelopeForDisplay(line.text);
 				const hasVisual = Boolean(line.visualAnnotations?.length);
-				if (!text && !hasVisual) return null;
+				const hasImages = Boolean(line.images?.length);
+				if (!text && !hasVisual && !hasImages) return null;
 				return {
 					...line,
 					text: text || "",
 					...(line.visualAnnotations?.length
 						? { visualAnnotations: line.visualAnnotations }
 						: {}),
+					...(line.images?.length ? { images: line.images } : {}),
 				};
 			})
 			.filter((line): line is ChatLine => line !== null);
