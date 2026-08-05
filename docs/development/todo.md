@@ -19,6 +19,7 @@
 - [ ] CLI：`export papers-md`（随 Host 导出）
 - [ ] 桌面安装包内置同版本 `agentero` CLI；`agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；Windows/Linux PATH、macOS Homebrew/PKG/DMG 安装策略（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[bundled-cli.md](bundled-cli.md)）
 - [ ] CLI `paper move`：补齐目标目录自动创建、Catalog 同步、冲突与越界的集成测试（[#166](https://github.com/poco-ai/Agentero/issues/166)，设计：[bundled-cli.md](bundled-cli.md)）
+- [ ] 官方 `Zotero.dotm` → Agentero provider：先做 macOS `:23119` HTTP + Word Automation Go/No-Go，通过后交付 Catalog/CSL/Refresh 闭环；Windows `WM_COPYDATA` + OLE 后置。需完成 AGPL/GPL 与商标审核，不能与 Zotero Desktop 并行（[#167](https://github.com/poco-ai/Agentero/issues/167)，设计：[zotero-word-integration.md](zotero-word-integration.md)）
 
 ## 0.4 — Vault 采纳与导入加深
 

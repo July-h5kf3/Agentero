@@ -78,6 +78,7 @@ nav:
       - 路线图: development/roadmap.md
       - TODO: development/todo.md
       - 内置桌面 CLI: development/bundled-cli.md
+      - Word 引用集成: development/zotero-word-integration.md
       - 广场 Plaza: development/plaza.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md

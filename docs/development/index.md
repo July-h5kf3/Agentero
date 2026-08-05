@@ -24,5 +24,6 @@
 | [plaza.md](plaza.md) | 广场（Cool Papers / 推荐 / 播客） |
 | [wikilink-heading-reference-stability.md](wikilink-heading-reference-stability.md) | 标题双链调研补充 |
 | [bundled-cli.md](bundled-cli.md) | 桌面安装包内置 CLI、命令行打开 Vault 与跨平台 PATH 策略 |
+| [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。

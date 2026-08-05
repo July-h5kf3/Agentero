@@ -99,6 +99,7 @@
 | 双链 / Graph | 全屏聚焦、邻居高亮、节点搜索；边级增量索引 |
 | 工作区 | tab pin、命名工作区会话 |
 | PDF / 翻译 | 无文本层降级；HTML 标注；更多翻译 adapter/消费方 |
+| Word 引用 | 优先兼容用户已安装的官方 Zotero Word 插件：macOS `:23119` provider + Word Automation，后续 Windows `WM_COPYDATA` + OLE；本机 Library 检索、CSL 引文/参考文献刷新与文档副本迁移。单 provider、AGPL/GPL/商标审核为发布门槛（设计：[zotero-word-integration.md](zotero-word-integration.md)） |
 | Skills | 多篇对比、Idea 评估、实验复现清单 |
 | 发布 | 自动 changelog；多 arch artifact 命名 |
 | 平台 | **iOS/iPad 纯远程客户端 M2 已实现**（见 [移动端前端与远程架构](../frontend/mobile.md)），待 TestFlight 内测和 M3 打磨；**Android 端已初始化**（`gen/android`，复用同一移动壳，待发布流水线）；自托管 [`poco-ai/paseo-relay`](https://github.com/poco-ai/paseo-relay) 远程中继、Git 集成、可选云同步 |
