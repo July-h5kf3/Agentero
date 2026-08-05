@@ -5,6 +5,7 @@ import { PlateElement } from "platejs/react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+import { openExternalUrl } from "@/lib/core/open-external";
 import { cn } from "@/lib/core/utils";
 import {
 	isVaultLocalMarkdownLink,
@@ -130,15 +131,26 @@ export function LinkElement(props: PlateElementProps) {
 		<PlateElement
 			{...props}
 			as="a"
-			className="font-medium text-primary underline decoration-primary/40 underline-offset-2"
+			className="cursor-pointer font-medium text-primary underline decoration-primary/40 underline-offset-2"
 			attributes={{
 				...props.attributes,
 				href: url,
 				target: "_blank",
 				rel: "noopener noreferrer",
 				onClick: (event: MouseEvent) => {
-					// External / normal links: still avoid bubbling to pane chat toggle
+					// Tauri webview does not reliably open target=_blank; use the
+					// system browser. Also stop bubble so the pane chat toggle
+					// does not steal the click.
+					event.preventDefault();
 					event.stopPropagation();
+					if (url.trim()) openExternalUrl(url.trim());
+				},
+				onAuxClick: (event: MouseEvent) => {
+					// Middle-click (button 1) should also open the browser.
+					if (event.button !== 1) return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (url.trim()) openExternalUrl(url.trim());
 				},
 			}}
 		>

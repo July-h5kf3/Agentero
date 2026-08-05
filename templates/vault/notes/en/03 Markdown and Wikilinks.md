@@ -58,6 +58,16 @@ Common commands:
 > [!NOTE]
 > `/` must be at the start of a line or after a space. It does not trigger inside code blocks or when a wikilink completion menu is open.
 
+## External links
+
+Standard Markdown links work in the editor:
+
+```markdown
+[Agentero site](https://example.com)
+```
+
+Type the full `[label](url)` form (the closing `)` turns it into a clickable link), paste the same syntax, or use the context menu / slash command to insert a `[]()` template. Clicking opens the URL in your system browser. Relative links to other vault notes use in-app navigation instead.
+
 ## Mermaid Diagrams
 
 Use `/mermaid` or select **Mermaid** from a code block's language selector. The diagram preview appears below the source code:

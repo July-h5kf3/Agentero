@@ -90,6 +90,7 @@ import { FindReplaceKit } from "@/components/editor/plugins/find-replace-kit";
 import { inlineMathInputRule } from "@/components/editor/plugins/inline-math-input-rule";
 import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
+import { markdownLinkInputRule } from "@/components/editor/plugins/markdown-link-input-rule";
 import { WikiBlockIdPlugin } from "@/components/editor/plugins/wiki-block-id-plugin";
 import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
 import {
@@ -272,7 +273,10 @@ export const MarkdownEditorKit = [
 	// ImagePlugin is configured per-editor (uploadImage → ./assets/) in markdown-editor.tsx
 	MentionPlugin.withComponent(MentionElement),
 	WikiLinkPlugin,
-	LinkPlugin,
+	LinkPlugin.configure({
+		// Hand-typed `[label](url)` → link node (paste already deserializes).
+		inputRules: [markdownLinkInputRule],
+	}),
 
 	// Find & replace (⌘F) — search highlight decorations
 	...FindReplaceKit,
