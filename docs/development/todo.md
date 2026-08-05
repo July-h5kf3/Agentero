@@ -5,6 +5,7 @@
 ## 0.3 — 入库与 Agent 补强
 
 - [x] Markdown 目录：标题数量阈值、中性色高亮与稳定 hover 布局（[#155](https://github.com/poco-ai/Agentero/issues/155)）
+- [x] Agent `AskUserQuestion` 工具调用转为可提交的选项回答（[#203](https://github.com/poco-ai/Agentero/issues/203)）
 - [ ] 关键词/描述 → Agent 候选列表确认后入库
 - [x] 魔棒解析 GitHub / `npx skills` → Skill 装入 `.agents/skills/`（[#118](https://github.com/poco-ai/Agentero/issues/118)，见 [../backend/skill-import.md](../backend/skill-import.md)；首版）
 - [x] 论文导入资源阶段增加整篇 3 分钟超时，覆盖魔棒 / Connector / Bib-RIS（[#161](https://github.com/poco-ai/Agentero/issues/161)）
@@ -19,6 +20,7 @@
 - [ ] CLI：`export papers-md`（随 Host 导出）
 - [ ] 桌面安装包内置同版本 `agentero` CLI；`agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；Windows/Linux PATH、macOS Homebrew/PKG/DMG 安装策略（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[bundled-cli.md](bundled-cli.md)）
 - [ ] CLI `paper move`：补齐目标目录自动创建、Catalog 同步、冲突与越界的集成测试（[#166](https://github.com/poco-ai/Agentero/issues/166)，设计：[bundled-cli.md](bundled-cli.md)）
+- [ ] CLI / Agent：翻译、高亮、批注等阅读标注（`mark` CRUD、默认惰性定位、Skill）（[#170](https://github.com/poco-ai/Agentero/issues/170)，设计：[mark-cli-roadmap.md](mark-cli-roadmap.md)、[mark-locate-lazy.md](mark-locate-lazy.md)、[mark-locate-eager.md](mark-locate-eager.md)）
 - [ ] 官方 `Zotero.dotm` → Agentero provider：先做 macOS `:23119` HTTP + Word Automation Go/No-Go，通过后交付 Catalog/CSL/Refresh 闭环；Windows `WM_COPYDATA` + OLE 后置。需完成 AGPL/GPL 与商标审核，不能与 Zotero Desktop 并行（[#167](https://github.com/poco-ai/Agentero/issues/167)，设计：[zotero-word-integration.md](zotero-word-integration.md)）
 
 ## 0.4 — Vault 采纳与导入加深
@@ -65,4 +67,3 @@
 - [ ] Git 集成 / 可选云同步
 - [ ] 引用图 deeper（聚类、作者机构图）
 - [ ] CLI domain 抽离独立 crate（仅当边界成为问题时）
-- [x] Agent `AskUserQuestion` 工具调用转为可提交的选项回答（[#203](https://github.com/poco-ai/Agentero/issues/203)）

@@ -30,6 +30,7 @@
 | 配置 | 最近 Vault / UI 偏好与 XDG settings 完全对齐；设置内打开/导出日志目录 |
 | 导出 | `catalog:export_papers_md`（Markdown 表） |
 | CLI | `graph` / `doctor` / shell completions；`export papers-md` 对齐 |
+| 阅读标注 CLI | `mark` CRUD + 默认惰性文字定位 + Skill（[#170](https://github.com/poco-ai/Agentero/issues/170)，设计：[mark-cli-roadmap.md](mark-cli-roadmap.md)） |
 | 桌面分发 | 桌面安装包内置同版本 `agentero` CLI；命令行打开本地 Vault；各平台 PATH 策略 |
 
 可选：本机 Translator sidecar 捆绑。

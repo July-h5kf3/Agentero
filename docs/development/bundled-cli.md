@@ -2,6 +2,8 @@
 
 关联 Issue：[\#165](https://github.com/poco-ai/Agentero/issues/165)（命令行打开 Vault）与 [\#166](https://github.com/poco-ai/Agentero/issues/166)（CLI 论文移动）。
 
+**命令能力扩展**（翻译 / 高亮 / 批注等阅读标注进同一 `agentero` bin）：[\#170](https://github.com/poco-ai/Agentero/issues/170)，设计见 [mark-cli-roadmap.md](mark-cli-roadmap.md)。本篇只管 **分发与 `open`**；#170 管 **子命令与 marks 契约**。两者共用一个 headless 二进制，可并行开发。
+
 ## 背景与结论
 
 当前 `agentero-cli` 是独立 release artifact，用户必须另行下载并加入 `PATH`。桌面 App 与 CLI 又共享 `agentero_lib` 中的 Vault / Catalog 领域逻辑，分开安装会带来版本不一致和发现成本。
@@ -9,6 +11,8 @@
 目标是让**桌面安装包携带同版本的 headless CLI**，对用户只暴露一个 `agentero` 命令。不把 GUI 可执行文件直接当作 CLI，也不复制一份 Vault/Catalog 业务逻辑。
 
 这与 VS Code 的产品形态一致：Windows、Linux 安装器提供 PATH；macOS 从应用内显式安装 shell command。Typora 在 macOS 主要提供 App Bundle 可执行文件和 alias，不保证全局命令。Agentero 采用前者的跨平台安装策略，保留后者“CLI 随 App Bundle 交付”的优点。
+
+装包后的 `agentero` 应包含 **当时 tag 上已实现的全部 headless 子命令**（含既有 `vault` / `paper` / `import` / `wiki`，以及 #170 落地后的 `mark` / `translate` 等），避免「GUI 能标、CLI 还要另下包」或版本漂移写出桌面不认的 `marks/`。
 
 ## 范围
 
@@ -19,6 +23,7 @@
 - 保持现有 headless 命令、`--json` 输出和退出码契约。
 - 让系统安装渠道把 `agentero` 暴露到 `PATH`；DMG 场景提供显式安装入口。
 - 覆盖既有 `paper move` 工作流，确保目标父目录不存在时会创建且 Catalog 路径同步。
+- Release 验收：内置 CLI 的 `--help` / 关键子命令（含已合并的 `mark` 等）与独立 `agentero-cli` artifact 同源、同版本。
 
 ### 不做
 
@@ -26,6 +31,7 @@
 - 不把远程 Vault handle、SSH 凭据放入 CLI URL。
 - 不在 `open` 时覆盖用户 Vault 中的文件。既有 `vault_ensure` 的“仅补缺 / 不覆盖”语义保持不变。
 - 不承诺 DMG 拖拽安装后，在所有 shell 中无条件立即可找到 `agentero`；这是 macOS PATH 与权限模型决定的。
+- 不在本篇实现阅读标注语义或 PDF 定位（见 [mark-cli-roadmap.md](mark-cli-roadmap.md)）；内置 CLI **不**内嵌 EmbedPDF / BYOA。
 
 ## 用户命令契约
 

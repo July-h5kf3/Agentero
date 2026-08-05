@@ -79,6 +79,9 @@ nav:
       - TODO: development/todo.md
       - 内置桌面 CLI: development/bundled-cli.md
       - Word 引用集成: development/zotero-word-integration.md
+      - 标注 CLI 路线 (#170): development/mark-cli-roadmap.md
+      - 标注惰性定位: development/mark-locate-lazy.md
+      - 标注即时定位: development/mark-locate-eager.md
       - 广场 Plaza: development/plaza.md
       - 标题双链调研: development/wikilink-heading-reference-stability.md
       - 发布流程: development/release.md

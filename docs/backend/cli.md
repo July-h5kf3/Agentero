@@ -6,6 +6,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 
 - 目录：`cli/`（crate `agentero-cli`）
 - path 依赖 `agentero_lib`：`features::{vault,catalog,import,wiki}` + `core::{error,fs}`
+- 桌面安装包内置同版本 CLI（规划）：[../development/bundled-cli.md](../development/bundled-cli.md)（[#165](https://github.com/poco-ai/Agentero/issues/165)）
 
 ## 命令组
 
@@ -21,6 +22,11 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `wiki` | 只读双链语义检查 |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。
+
+### 规划中（未实现）
+
+阅读标注与翻译进 CLI（[#170](https://github.com/poco-ai/Agentero/issues/170)）：`mark` list/get/add/update/delete、`translate` 文本等。设计见 [../development/mark-cli-roadmap.md](../development/mark-cli-roadmap.md)；文字定位见 [惰性](../development/mark-locate-lazy.md) / [即时](../development/mark-locate-eager.md)。  
+当前 `paper get` 仅报告 `assets.marksDir` 是否存在；skill 仍将 marks 作 L2.5 只读，直至命令落地后改 skill。
 
 ```bash
 cargo build -p agentero-cli

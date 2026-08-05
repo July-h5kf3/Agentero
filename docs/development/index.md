@@ -25,5 +25,8 @@
 | [wikilink-heading-reference-stability.md](wikilink-heading-reference-stability.md) | 标题双链调研补充 |
 | [bundled-cli.md](bundled-cli.md) | 桌面安装包内置 CLI、命令行打开 Vault 与跨平台 PATH 策略 |
 | [zotero-word-integration.md](zotero-word-integration.md) | 官方 Zotero Word 插件 provider 兼容、文档迁移与平台实现评估 |
+| [mark-cli-roadmap.md](mark-cli-roadmap.md) | \#170 阅读标注**内置进 CLI**（方案/命令面/边界）+ 基础→上层→Skill；与 [bundled-cli](bundled-cli.md) 分发衔接 |
+| [mark-locate-lazy.md](mark-locate-lazy.md) | 文字定位：打开 PDF 再算（惰性，默认主路径） |
+| [mark-locate-eager.md](mark-locate-eager.md) | 文字定位：标注时算（即时 B1 viewer / 可选 B2 headless） |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。
