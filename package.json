@@ -7,6 +7,7 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build",
+		"clean": "node scripts/clean-build-artifacts.mjs",
 		"preview": "vite preview",
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",

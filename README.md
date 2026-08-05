@@ -100,6 +100,9 @@ git clone https://github.com/poco-ai/agentero.git
 cd agentero
 pnpm install
 
+# 清除前端与 Rust 构建产物
+pnpm clean
+
 # 桌面应用（推荐）
 pnpm tauri dev
 
