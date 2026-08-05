@@ -225,9 +225,15 @@ const LEGACY_BUNDLED_SKILL_HASHES: &[(&str, &str)] = &[
         ".agents/skills/agentero-cli/SKILL.md",
         "8195723fd1b75a7c8c396f382b2c5b079d812246a693c65be0b9cd91bfb70f67",
     ),
+    // Pre-aliases paper-reader (title-only NOTES shell era).
     (
         ".agents/skills/paper-reader/SKILL.md",
         "e8ded7c1b6eec291b8b7ad3069b45ce42708d422597eaa620a0e73103a9cc478",
+    ),
+    // paper-reader before required frontmatter aliases section.
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "af3173192e5e94c81d36599ecdc0ad2b95a7531afa099391d85672b992c41359",
     ),
     (
         ".agents/skills/vault-normalizer/SKILL.md",

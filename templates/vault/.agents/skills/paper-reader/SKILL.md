@@ -25,6 +25,7 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
 - Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
+  - Ensure YAML frontmatter `aliases` (see below) so vault wikilinks can find this note by title.
 - Do not delete `marks/`, `source/`, assets, or binary files.
 
 ## Activation notes (CLI differences)
@@ -37,10 +38,44 @@ Agentero may inject this entire SKILL.md into the prompt. Depending on the agent
 
 Always execute the workflow even if no native skill runtime fires.
 
+## Frontmatter aliases (required)
+
+Agentero indexes Obsidian-style YAML `aliases` for wikilink search and resolve.
+Keep the on-disk file name as `NOTES.md`; do **not** rename the note to the paper title.
+
+At the top of `{paper}/NOTES.md`, ensure a frontmatter block that includes at least:
+
+```yaml
+---
+aliases:
+  - <Full paper title>
+  - <Short title>
+---
+```
+
+Rules:
+
+- **Full paper title**: the official title (same string as catalog / the H1 when present).
+- **Short title**: a concise, searchable nickname people would type in `[[…]]`
+  (common abbreviation, first author + year, or a short phrase from the title).
+  Prefer something a researcher would actually type; avoid dumping the entire title twice.
+- You may add more aliases when useful (alternate spellings, venue nicknames).
+- If frontmatter already exists, **merge** into `aliases` without removing user keys or
+  user-authored aliases. Deduplicate case-insensitively.
+- Prefer the block-list form above (`aliases:` + `- item`). Inline
+  `aliases: [A, B]` is also valid.
+- Do not invent targets for wikilinks from alias text alone; aliases only help
+  *this* note be found. When linking *to* other notes, still use real paths
+  (see Wikilink policy).
+
 ## Fixed output structure
 
 Write into **`{paper}/NOTES.md`** (Agentero convention — not `notes.md`).
-Use these headings **in order**, with clear markdown `##` / `###` separators.
+Order on disk:
+
+1. YAML frontmatter with `aliases` (see above)
+2. Optional existing title / abstract shell (preserve user text)
+3. The structured lecture sections below (`##` / `###` in order)
 
 ### 1. 30-second High-Level Summary
 
@@ -108,14 +143,15 @@ term.
 1. Resolve the paper folder path (from user / Agentero target).
 2. Locate content: TeX → existing `PAPER.md` → `agentero paper parse {paper}` when needed → PDF.
 3. Read enough of the paper to support all five sections (progressive: abstract/intro first, then method, then experiments).
-4. Generate the structured notes.
-5. Write / update `{paper}/NOTES.md`.
-6. Run `agentero wiki check {paper}/NOTES.md --json`.
+4. Decide frontmatter aliases: full official title + one short title (and optional extras).
+5. Generate the structured notes.
+6. Write / update `{paper}/NOTES.md` (frontmatter aliases + lecture body; preserve user prose).
+7. Run `agentero wiki check {paper}/NOTES.md --json`.
    - Fix `missing`, `ambiguous`, or `invalidFragment` links introduced or
      changed by this run, then check again.
    - If this CLI command is unavailable, report that semantic link validation
      was not completed. Do not claim that every link resolves.
-7. End with `## Sources` listing **Vault-relative** paths you actually read.
+8. End with `## Sources` listing **Vault-relative** paths you actually read.
 
 ## Rules
 
