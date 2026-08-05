@@ -30,6 +30,7 @@
 | 配置 | 最近 Vault / UI 偏好与 XDG settings 完全对齐；设置内打开/导出日志目录 |
 | 导出 | `catalog:export_papers_md`（Markdown 表） |
 | CLI | `graph` / `doctor` / shell completions；`export papers-md` 对齐 |
+| 桌面分发 | 桌面安装包内置同版本 `agentero` CLI；命令行打开本地 Vault；各平台 PATH 策略 |
 
 可选：本机 Translator sidecar 捆绑。
 
