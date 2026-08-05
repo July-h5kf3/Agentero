@@ -10,7 +10,40 @@ import { readVaultFile } from "@/lib/vault/fs";
 import { treeFindNode } from "@/lib/vault/path";
 import type { FileNode } from "@/lib/vault/types";
 
-type NameKind = { name: string; kind?: "file" | "directory" | string };
+type NameKind = {
+	name: string;
+	kind?: "file" | "directory" | string;
+	children?: NameKind[];
+};
+
+const PAPER_FILE_MARKERS = new Set(["notes.md", "paper.md", "metadata.json"]);
+const PAPER_DIR_MARKERS = new Set(["source", "assets", "marks"]);
+
+function isDirectoryEntry(entry: NameKind): boolean {
+	const lower = entry.name.toLowerCase();
+	return (
+		entry.kind === "directory" || (!entry.kind && PAPER_DIR_MARKERS.has(lower))
+	);
+}
+
+/**
+ * An index/overview note may live beside nested paper folders. Treat the
+ * nearest paper-like descendants as leaves and keep their parents as org dirs.
+ * Internal paper dirs are skipped because they can contain arbitrary assets.
+ */
+function hasNestedPaperDirectory(children: NameKind[]): boolean {
+	return children.some((child) => {
+		if (!isDirectoryEntry(child)) return false;
+		const lower = child.name.toLowerCase();
+		if (PAPER_DIR_MARKERS.has(lower)) return false;
+		if (child.children?.length && directoryHasPaperMarkers(child.children)) {
+			return true;
+		}
+		return Boolean(
+			child.children?.length && hasNestedPaperDirectory(child.children),
+		);
+	});
+}
 
 export function resolvePapersParentDir(
 	vaultRoot: string | null,
@@ -75,34 +108,26 @@ export function resolvePapersParentDir(
 	return papersRel;
 }
 
-/** Whether direct children indicate a paper folder (minimal unit). */
+/**
+ * Whether direct children indicate a paper folder (minimal unit).
+ *
+ * `NOTES.md` remains a legacy-compatible marker, but an organization folder
+ * containing nested paper folders wins over its own index/overview note.
+ */
 export function directoryHasPaperMarkers(
 	children: NameKind[] | undefined | null,
 ): boolean {
 	if (!children?.length) return false;
+	let hasDirectMarker = false;
 	for (const c of children) {
 		const name = c.name;
 		const lower = name.toLowerCase();
-		if (
-			lower === "notes.md" ||
-			lower === "paper.md" ||
-			lower === "metadata.json"
-		) {
-			return true;
-		}
-		const isDir =
-			c.kind === "directory" ||
-			// name-only lists: treat known dir markers as dirs
-			(!c.kind &&
-				(lower === "source" || lower === "assets" || lower === "marks"));
-		if (
-			isDir &&
-			(lower === "source" || lower === "assets" || lower === "marks")
-		) {
-			return true;
+		if (PAPER_FILE_MARKERS.has(lower)) hasDirectMarker = true;
+		if (isDirectoryEntry(c) && PAPER_DIR_MARKERS.has(lower)) {
+			hasDirectMarker = true;
 		}
 	}
-	return false;
+	return hasDirectMarker && !hasNestedPaperDirectory(children);
 }
 
 /**
@@ -145,6 +170,10 @@ export function paperDirFromPath(
 				return folder;
 			}
 		}
+		// Once the tree has produced a non-empty paper list, it is authoritative
+		// for path ownership. Do not reclassify an org-level NOTES.md via the
+		// legacy filename fallback below.
+		return null;
 	}
 
 	// Known paper-root files → parent is paper folder

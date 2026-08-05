@@ -46,6 +46,19 @@ describe("paper folder minimal unit", () => {
 				{ name: "1706.03762", kind: "directory" },
 			]),
 		).toBe(false);
+		expect(
+			directoryHasPaperMarkers([
+				{ name: "NOTES.md", kind: "file" },
+				{
+					name: "1706.03762",
+					kind: "directory",
+					children: [
+						{ name: "NOTES.md", kind: "file" },
+						{ name: "metadata.json", kind: "file" },
+					],
+				},
+			]),
+		).toBe(false);
 		// path-only without children is never enough
 		expect(isPaperDirectory("/v/papers/flat-id")).toBe(false);
 	});
@@ -69,6 +82,9 @@ describe("paper folder minimal unit", () => {
 		expect(paperDirFromPath("/v/papers/nlp/1706.03762/NOTES.md", folders)).toBe(
 			"/v/papers/nlp/1706.03762",
 		);
+		expect(
+			paperDirFromPath("/v/papers/nlp/NOTES.md", ["/v/papers/nlp/1706.03762"]),
+		).toBe(null);
 	});
 
 	it("collects paper folders from tree at any depth", () => {
@@ -116,6 +132,54 @@ describe("paper folder minimal unit", () => {
 		expect(folders.sort()).toEqual(
 			["/v/papers/nlp/1706.03762", "/v/papers/vaswani2017"].sort(),
 		);
+	});
+
+	it("keeps an organization index note from masking nested papers", () => {
+		const paper = (name: string) => ({
+			path: `/v/papers/rubric/${name}`,
+			kind: "directory" as const,
+			name,
+			children: [
+				{
+					path: `/v/papers/rubric/${name}/NOTES.md`,
+					kind: "file" as const,
+					name: "NOTES.md",
+				},
+				{
+					path: `/v/papers/rubric/${name}/metadata.json`,
+					kind: "file" as const,
+					name: "metadata.json",
+				},
+			],
+		});
+		const tree = [
+			{
+				path: "/v/papers",
+				kind: "directory" as const,
+				name: "papers",
+				children: [
+					{
+						path: "/v/papers/rubric",
+						kind: "directory" as const,
+						name: "rubric",
+						children: [
+							{
+								path: "/v/papers/rubric/NOTES.md",
+								kind: "file" as const,
+								name: "NOTES.md",
+							},
+							paper("2601.04171"),
+							paper("2601.15808"),
+						],
+					},
+				],
+			},
+		];
+
+		expect(collectPaperFoldersFromTree(tree)).toEqual([
+			"/v/papers/rubric/2601.04171",
+			"/v/papers/rubric/2601.15808",
+		]);
 	});
 
 	it("collects only paper folders still missing assets", () => {
