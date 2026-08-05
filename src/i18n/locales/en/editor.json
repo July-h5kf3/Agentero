@@ -125,6 +125,13 @@
 		"annotationRoleAssistant": "Assistant",
 		"annotationNoTranscript": "No conversation saved for this mark."
 	},
+	"frontmatter": {
+		"title": "Properties",
+		"emptyBadge": "None",
+		"yamlLabel": "YAML frontmatter",
+		"placeholder": "aliases:\n  - Full paper title\n  - Short title",
+		"hint": "Obsidian-compatible YAML. aliases help wikilink search find this note by title."
+	},
 	"wikiCompletion": {
 		"label": "Internal link suggestions",
 		"loading": "Searching links…",

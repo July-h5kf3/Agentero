@@ -125,6 +125,13 @@
 		"annotationRoleAssistant": "助手",
 		"annotationNoTranscript": "此批注暂无对话记录。"
 	},
+	"frontmatter": {
+		"title": "属性",
+		"emptyBadge": "无",
+		"yamlLabel": "YAML frontmatter",
+		"placeholder": "aliases:\n  - 论文全称\n  - 短标题",
+		"hint": "Obsidian 兼容 YAML。aliases 可让双链搜索通过标题找到这篇笔记。"
+	},
 	"wikiCompletion": {
 		"label": "双链候选",
 		"loading": "正在搜索双链…",

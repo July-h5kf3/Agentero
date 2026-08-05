@@ -70,6 +70,15 @@ Plate WYSIWYG；用于普通笔记与论文 `NOTES.md`。磁盘上始终是标�
 
 Frontmatter 当前保存在 Plate AST 之外，因此整理时继续字节级保留；这样格式整理产生的实际正文变化可以由一次 Undo 完整撤销。Prettier 固定使用 `proseWrap: "preserve"`、`embeddedLanguageFormatting: "off"` 与 `htmlWhitespaceSensitivity: "ignore"`，避免重排正文段落或 fenced code 内部语言。
 
+### Properties（frontmatter）
+
+编辑器正文上方提供可折叠 **Properties** 条（默认收起）：
+
+- 展开后直接编辑 YAML 正文（不含 `---` 围栏；保存时自动包回）。
+- 清空 YAML 即去掉 frontmatter；与正文共用自动保存 / dirty 状态。
+- 常见用途：Obsidian 兼容 `aliases`，供双链搜索按标题命中该笔记（见 [wiki.md](wiki.md)）。
+- 精读 skill 会在 `NOTES.md` 写入 `aliases`（论文全称 + 短标题）；用户也可在此面板改。
+
 ### Slash 格式命令
 
 输入 `/` 后，编辑器根据 `/` 后的连续文本过滤命令，条目统一显示图标与本地化文案。`/` 必须位于当前文本叶开头或紧跟空白，URL、转义斜杠、代码块和只读编辑器不会触发；Wiki 双链补全活跃时优先使用 Wiki 菜单，编辑器失焦后关闭菜单。执行前会再次核对当前光标、文本位置与 `/query`，选区已经移动或文本已变化时不会删除内容。
@@ -101,6 +110,8 @@ B --> C[End]
 | 路径 | 职责 |
 |---|---|
 | `src/components/editor/` | Plate 编辑器 |
+| `src/components/editor/frontmatter-panel.tsx` | 可折叠 Properties / YAML frontmatter 编辑 |
+| `src/lib/markdown/frontmatter.ts` | frontmatter 围栏拆装与属性计数 |
 | `src/components/editor/toc-sidebar.tsx` | 基于 Plate TOC hooks 的悬浮目录、当前标题跟踪与跳转 |
 | `src/components/editor/code-block-node.tsx` | 代码语言选择、复制与 Mermaid 预览 |
 | `src/components/editor/plugins/callout-actions.ts` | Callout 类型与标题的校验和 AST 更新 |

@@ -18,6 +18,7 @@ import {
 import { Editor, EditorContainer } from "@/components/editor/editor";
 import { MarkdownEditorToolbar } from "@/components/editor/editor-toolbar";
 import { FindReplaceBar } from "@/components/editor/find-replace-bar";
+import { FrontmatterPanel } from "@/components/editor/frontmatter-panel";
 import { HeadingRenameDialog } from "@/components/editor/heading-rename-dialog";
 import { ImageElement } from "@/components/editor/image-node";
 import { MarkdownDocProvider } from "@/components/editor/markdown-doc-context";
@@ -80,6 +81,10 @@ import {
 	replaceMarkdownEditorValue,
 } from "@/lib/markdown/editor-format";
 import { formatMarkdownSource } from "@/lib/markdown/format";
+import {
+	frontmatterInterior,
+	wrapFrontmatter,
+} from "@/lib/markdown/frontmatter";
 import {
 	collectImageUrlCounts,
 	createManagedAssetGc,
@@ -171,6 +176,13 @@ export function MarkdownEditor({
 	navigationIntent,
 }: MarkdownEditorProps) {
 	const frontmatterRef = useRef("");
+	/** YAML interior for the Properties panel (no `---` fences). */
+	const [frontmatterYaml, setFrontmatterYaml] = useState(() => {
+		const { frontmatter } = splitFrontmatter(initialMarkdown);
+		// Seed ref before first serialize / persist can run.
+		frontmatterRef.current = frontmatter;
+		return frontmatterInterior(frontmatter);
+	});
 	const savedRef = useRef(initialMarkdown);
 	const readyRef = useRef(false);
 	/**
@@ -531,6 +543,27 @@ export function MarkdownEditor({
 		};
 	}, [editor]);
 
+	const schedulePersist = useCallback(() => {
+		if (readOnly || !readyRef.current) return;
+		if (!dirtyRef.current) {
+			setDirty(true);
+		}
+		if (timerRef.current) clearTimeout(timerRef.current);
+		timerRef.current = setTimeout(() => {
+			timerRef.current = null;
+			persistRef.current();
+		}, CHANGE_DEBOUNCE_MS);
+	}, [readOnly, setDirty]);
+
+	const handleFrontmatterChange = useCallback(
+		(interior: string) => {
+			setFrontmatterYaml(interior);
+			frontmatterRef.current = wrapFrontmatter(interior);
+			schedulePersist();
+		},
+		[schedulePersist],
+	);
+
 	const handleChange = useCallback(() => {
 		window.requestAnimationFrame(updateWikiCompletionDraft);
 		window.requestAnimationFrame(updateSlashCommandDraft);
@@ -547,18 +580,11 @@ export function MarkdownEditor({
 		}
 
 		// Mark dirty once (not on every keystroke) to avoid re-rendering the app.
-		if (!dirtyRef.current) {
-			setDirty(true);
-		}
-		if (timerRef.current) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(() => {
-			timerRef.current = null;
-			persistRef.current();
-		}, CHANGE_DEBOUNCE_MS);
+		schedulePersist();
 	}, [
 		editor,
 		readOnly,
-		setDirty,
+		schedulePersist,
 		updateSlashCommandDraft,
 		updateWikiCompletionDraft,
 	]);
@@ -1566,142 +1592,149 @@ export function MarkdownEditor({
 								}}
 							/>
 						) : null}
-						<div className="relative min-h-0 min-w-0 flex-1">
-							<ContextMenu onOpenChange={handleContextMenuOpenChange}>
-								<ContextMenuTrigger asChild>
-									<EditorContainer
-										ref={editorContainerRef}
-										className="agentero-scroll h-full min-w-0 overflow-y-auto"
-										onScrollCapture={() => {
-											// Reposition instead of hard-dismiss: arrow-key list
-											// updates can reflow and fire scroll without leaving [[.
-											window.requestAnimationFrame(updateWikiCompletionDraft);
-											window.requestAnimationFrame(updateSlashCommandDraft);
-										}}
-										onContextMenuCapture={handleEditorContextMenu}
-										onKeyDownCapture={readOnly ? undefined : handleKeyDown}
-										onBeforeInputCapture={
-											readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
-										}
-										onBlur={readOnly ? undefined : handleEditorBlur}
-										onCompositionStartCapture={
-											readOnly ? undefined : handleWikiLinkCompositionStart
-										}
-										onCompositionEndCapture={
-											readOnly ? undefined : handleWikiLinkCompositionEnd
-										}
-									>
-										{/*
-										 * min-h-full + generous bottom padding so the last line is easy
-										 * to click and Enter can always create a new block below it
-										 * (matches Plate default variant pb-72).
-										 */}
-										<Editor
-											variant="none"
-											placeholder={placeholder}
-											readOnly={readOnly}
-											className="min-h-full px-6 pt-4 pb-48"
-											style={fontSize ? { fontSize } : undefined}
-										/>
-										{!readOnly ? (
-											<WikiLinkSuggestion
-												draft={wikiCompletionDraft}
-												onClose={() => setWikiCompletionDraft(null)}
-												onContinue={(raw) =>
-													setWikiCompletionDraft((current) =>
-														current ? { ...current, raw } : current,
-													)
-												}
-												controllerRef={completionControllerRef}
+						<div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+							<FrontmatterPanel
+								value={frontmatterYaml}
+								readOnly={readOnly}
+								onChange={readOnly ? undefined : handleFrontmatterChange}
+							/>
+							<div className="relative min-h-0 min-w-0 flex-1">
+								<ContextMenu onOpenChange={handleContextMenuOpenChange}>
+									<ContextMenuTrigger asChild>
+										<EditorContainer
+											ref={editorContainerRef}
+											className="agentero-scroll h-full min-w-0 overflow-y-auto"
+											onScrollCapture={() => {
+												// Reposition instead of hard-dismiss: arrow-key list
+												// updates can reflow and fire scroll without leaving [[.
+												window.requestAnimationFrame(updateWikiCompletionDraft);
+												window.requestAnimationFrame(updateSlashCommandDraft);
+											}}
+											onContextMenuCapture={handleEditorContextMenu}
+											onKeyDownCapture={readOnly ? undefined : handleKeyDown}
+											onBeforeInputCapture={
+												readOnly ? undefined : handleWikiLinkBoundaryBeforeInput
+											}
+											onBlur={readOnly ? undefined : handleEditorBlur}
+											onCompositionStartCapture={
+												readOnly ? undefined : handleWikiLinkCompositionStart
+											}
+											onCompositionEndCapture={
+												readOnly ? undefined : handleWikiLinkCompositionEnd
+											}
+										>
+											{/*
+											 * min-h-full + generous bottom padding so the last line is easy
+											 * to click and Enter can always create a new block below it
+											 * (matches Plate default variant pb-72).
+											 */}
+											<Editor
+												variant="none"
+												placeholder={placeholder}
+												readOnly={readOnly}
+												className="min-h-full px-6 pt-4 pb-48"
+												style={fontSize ? { fontSize } : undefined}
 											/>
-										) : null}
-										{!readOnly ? (
-											<SlashCommandMenu
-												draft={slashCommandDraft}
-												onClose={() => setSlashCommandDraft(null)}
-												controllerRef={slashCommandControllerRef}
-											/>
-										) : null}
-									</EditorContainer>
-								</ContextMenuTrigger>
-								<ContextMenuContent className="w-56">
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.cut}
-										onSelect={() => {
-											void handleContextMenuCut();
+											{!readOnly ? (
+												<WikiLinkSuggestion
+													draft={wikiCompletionDraft}
+													onClose={() => setWikiCompletionDraft(null)}
+													onContinue={(raw) =>
+														setWikiCompletionDraft((current) =>
+															current ? { ...current, raw } : current,
+														)
+													}
+													controllerRef={completionControllerRef}
+												/>
+											) : null}
+											{!readOnly ? (
+												<SlashCommandMenu
+													draft={slashCommandDraft}
+													onClose={() => setSlashCommandDraft(null)}
+													controllerRef={slashCommandControllerRef}
+												/>
+											) : null}
+										</EditorContainer>
+									</ContextMenuTrigger>
+									<ContextMenuContent className="w-56">
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.cut}
+											onSelect={() => {
+												void handleContextMenuCut();
+											}}
+										>
+											{i18n.t("editor:contextMenu.cut")}
+											<ContextMenuShortcut>⌘X</ContextMenuShortcut>
+										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.copy}
+											onSelect={() => {
+												void handleContextMenuCopy();
+											}}
+										>
+											{i18n.t("editor:contextMenu.copy")}
+											<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.paste}
+											onSelect={() => {
+												void handleContextMenuPaste();
+											}}
+										>
+											{i18n.t("editor:contextMenu.paste")}
+											<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+										</ContextMenuItem>
+										<ContextMenuSeparator />
+										<ContextMenuItem
+											disabled={
+												!contextMenuCapabilities.formatMarkdown ||
+												formattingMarkdown
+											}
+											onSelect={() => {
+												void handleContextMenuFormatMarkdown();
+											}}
+										>
+											{i18n.t(
+												formattingMarkdown
+													? "editor:contextMenu.formatMarkdownBusy"
+													: "editor:contextMenu.formatMarkdown",
+											)}
+										</ContextMenuItem>
+										<ContextMenuSeparator />
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.insertLink}
+											onSelect={() => insertContextMenuLink("wiki")}
+										>
+											{i18n.t("editor:contextMenu.insertWikiLink")}
+										</ContextMenuItem>
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.insertLink}
+											onSelect={() => insertContextMenuLink("external")}
+										>
+											{i18n.t("editor:contextMenu.insertExternalLink")}
+										</ContextMenuItem>
+										<ContextMenuSeparator />
+										<ContextMenuItem
+											disabled={!contextMenuCapabilities.renameHeading}
+											onSelect={() => {
+												if (headingContext) setHeadingRenameOpen(true);
+											}}
+										>
+											{i18n.t("editor:headingRename.menu")}
+										</ContextMenuItem>
+									</ContextMenuContent>
+								</ContextMenu>
+								{findOpen && !readOnly ? (
+									<FindReplaceBar
+										focusTick={findFocusTick}
+										onClose={() => {
+											setFindOpen(false);
+											editor.tf.focus();
 										}}
-									>
-										{i18n.t("editor:contextMenu.cut")}
-										<ContextMenuShortcut>⌘X</ContextMenuShortcut>
-									</ContextMenuItem>
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.copy}
-										onSelect={() => {
-											void handleContextMenuCopy();
-										}}
-									>
-										{i18n.t("editor:contextMenu.copy")}
-										<ContextMenuShortcut>⌘C</ContextMenuShortcut>
-									</ContextMenuItem>
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.paste}
-										onSelect={() => {
-											void handleContextMenuPaste();
-										}}
-									>
-										{i18n.t("editor:contextMenu.paste")}
-										<ContextMenuShortcut>⌘V</ContextMenuShortcut>
-									</ContextMenuItem>
-									<ContextMenuSeparator />
-									<ContextMenuItem
-										disabled={
-											!contextMenuCapabilities.formatMarkdown ||
-											formattingMarkdown
-										}
-										onSelect={() => {
-											void handleContextMenuFormatMarkdown();
-										}}
-									>
-										{i18n.t(
-											formattingMarkdown
-												? "editor:contextMenu.formatMarkdownBusy"
-												: "editor:contextMenu.formatMarkdown",
-										)}
-									</ContextMenuItem>
-									<ContextMenuSeparator />
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.insertLink}
-										onSelect={() => insertContextMenuLink("wiki")}
-									>
-										{i18n.t("editor:contextMenu.insertWikiLink")}
-									</ContextMenuItem>
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.insertLink}
-										onSelect={() => insertContextMenuLink("external")}
-									>
-										{i18n.t("editor:contextMenu.insertExternalLink")}
-									</ContextMenuItem>
-									<ContextMenuSeparator />
-									<ContextMenuItem
-										disabled={!contextMenuCapabilities.renameHeading}
-										onSelect={() => {
-											if (headingContext) setHeadingRenameOpen(true);
-										}}
-									>
-										{i18n.t("editor:headingRename.menu")}
-									</ContextMenuItem>
-								</ContextMenuContent>
-							</ContextMenu>
-							{findOpen && !readOnly ? (
-								<FindReplaceBar
-									focusTick={findFocusTick}
-									onClose={() => {
-										setFindOpen(false);
-										editor.tf.focus();
-									}}
-								/>
-							) : null}
-							<TocSidebar rootMargin="-8px 0px -80% 0px" topOffset={16} />
+									/>
+								) : null}
+								<TocSidebar rootMargin="-8px 0px -80% 0px" topOffset={16} />
+							</div>
 						</div>
 						<HeadingRenameDialog
 							open={headingRenameOpen}
