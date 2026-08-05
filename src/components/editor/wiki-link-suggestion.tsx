@@ -641,8 +641,8 @@ export function WikiLinkSuggestion({
 					</p>
 				) : null}
 				{candidates.map((candidate, index) => {
-					// Frontmatter-alias hits: secondary line is `alias · path`.
-					// Basename hits: path only. Other kinds: host `detail`.
+					// File hits (basename or frontmatter alias): secondary line is path.
+					// Other kinds use host `detail`.
 					const detail = wikiFileCandidateSecondaryLine(candidate);
 					const isAliasPlaceholder =
 						candidate.kind === "alias" && !candidate.label;

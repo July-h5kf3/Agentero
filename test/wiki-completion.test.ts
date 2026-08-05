@@ -127,7 +127,8 @@ describe("wikilink completion grammar", () => {
 		).toBe("[[#^summary]]");
 	});
 
-	it("writes an alias as display text around a canonical target", () => {
+	it("does not write |display for frontmatter-alias file picks", () => {
+		// Alias is only for list label/identity; insert stays bare so # / @ can follow.
 		expect(
 			wikiCompletionInsert({
 				kind: "file",
@@ -138,7 +139,7 @@ describe("wikilink completion grammar", () => {
 			}),
 		).toEqual({
 			target: "notes/Canonical",
-			alias: "Short name",
+			alias: undefined,
 		});
 		expect(
 			wikiCompletionInsert({
@@ -153,14 +154,14 @@ describe("wikilink completion grammar", () => {
 		);
 	});
 
-	it("shows alias · path on the secondary line for frontmatter-alias hits", () => {
+	it("shows only the vault path on the secondary line for file hits", () => {
 		expect(
 			wikiFileCandidateSecondaryLine({
 				kind: "file",
 				path: "papers/1706.03762/NOTES.md",
 				alias: "Attention Is All You Need",
 			}),
-		).toBe("Attention Is All You Need · papers/1706.03762/NOTES.md");
+		).toBe("papers/1706.03762/NOTES.md");
 		expect(
 			wikiFileCandidateSecondaryLine({
 				kind: "file",

@@ -1,7 +1,11 @@
 "use client";
 
 import { ChevronRight, ListTree } from "lucide-react";
-import { useId, useState } from "react";
+import {
+	type KeyboardEvent as ReactKeyboardEvent,
+	useId,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
 	Collapsible,
@@ -10,6 +14,9 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/core/utils";
 import { countFrontmatterProperties } from "@/lib/markdown/frontmatter";
+
+/** YAML list items conventionally indent with two spaces. */
+const YAML_INDENT = "  ";
 
 export type FrontmatterPanelProps = {
 	/** YAML interior only (no `---` fences). */
@@ -35,6 +42,41 @@ export function FrontmatterPanel({
 	const panelId = useId();
 	const propertyCount = countFrontmatterProperties(value);
 	const hasContent = value.trim().length > 0;
+
+	const handleYamlKeyDown = (
+		event: ReactKeyboardEvent<HTMLTextAreaElement>,
+	) => {
+		if (readOnly || event.key !== "Tab") return;
+		// Keep focus in the YAML editor: Tab indents with two spaces (YAML list style).
+		event.preventDefault();
+		event.stopPropagation();
+		const el = event.currentTarget;
+		const start = el.selectionStart;
+		const end = el.selectionEnd;
+		if (event.shiftKey) {
+			const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+			const strip = value.startsWith(YAML_INDENT, lineStart)
+				? YAML_INDENT.length
+				: value.startsWith("\t", lineStart)
+					? 1
+					: 0;
+			if (strip === 0) return;
+			const next = value.slice(0, lineStart) + value.slice(lineStart + strip);
+			onChange?.(next);
+			requestAnimationFrame(() => {
+				el.selectionStart = Math.max(lineStart, start - strip);
+				el.selectionEnd = Math.max(lineStart, end - strip);
+			});
+			return;
+		}
+		const next = `${value.slice(0, start)}${YAML_INDENT}${value.slice(end)}`;
+		onChange?.(next);
+		const cursor = start + YAML_INDENT.length;
+		requestAnimationFrame(() => {
+			el.selectionStart = cursor;
+			el.selectionEnd = cursor;
+		});
+	};
 
 	return (
 		<Collapsible
@@ -96,6 +138,7 @@ export function FrontmatterPanel({
 							if (readOnly) return;
 							onChange?.(event.target.value);
 						}}
+						onKeyDown={handleYamlKeyDown}
 					/>
 					<p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
 						{t("frontmatter.hint")}
