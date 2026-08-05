@@ -4,7 +4,7 @@
  * tree updates no longer re-render the whole App.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { registerFileTreeHandle } from "@/components/shell/file-tree-registry";
 import {
@@ -20,6 +20,7 @@ import {
 	useVaultStore,
 	useWorkspaceStore,
 } from "@/hooks/use-app-stores";
+import type { PaperMetadata, PaperTag } from "@/lib/paper";
 import { resolvePapersParentDir } from "@/lib/paper";
 import {
 	dropLocalPdfs,
@@ -103,6 +104,31 @@ export function VaultSidebar() {
 	const paperMeta = useWorkspaceStore(
 		(s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.paperMeta ?? null,
 	);
+	const [lastPaper, setLastPaper] = useState<{
+		vaultPath: string | null;
+		meta: PaperMetadata | null;
+	}>({ vaultPath: null, meta: null });
+
+	useEffect(() => {
+		if (paperMeta) {
+			setLastPaper({ vaultPath, meta: paperMeta });
+			return;
+		}
+		setLastPaper((previous) =>
+			previous.vaultPath === vaultPath ? previous : { vaultPath, meta: null },
+		);
+	}, [paperMeta, vaultPath]);
+
+	const displayedPaperMeta =
+		paperMeta ?? (lastPaper.vaultPath === vaultPath ? lastPaper.meta : null);
+	const onPaperTagsChange = useCallback(
+		async (tags: PaperTag[]) => {
+			if (!displayedPaperMeta) return;
+			const updated = await paperTagsChange(displayedPaperMeta, tags);
+			if (updated) setLastPaper({ vaultPath, meta: updated });
+		},
+		[displayedPaperMeta, vaultPath],
+	);
 
 	const lookupParentDir = useMemo(
 		() => resolvePapersParentDir(vaultPath, treeSelectedPath, tree),
@@ -171,8 +197,11 @@ export function VaultSidebar() {
 				/>
 			</div>
 			{/* Paper info is a resizable, unboxed section below the file tree. */}
-			{paperMeta ? (
-				<PaperInfoPanel meta={paperMeta} onTagsChange={paperTagsChange} />
+			{displayedPaperMeta ? (
+				<PaperInfoPanel
+					meta={displayedPaperMeta}
+					onTagsChange={onPaperTagsChange}
+				/>
 			) : null}
 		</>
 	);

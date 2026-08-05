@@ -46,7 +46,6 @@ import { getVaultPath, refreshTree, vaultStore } from "@/lib/vault/store";
 import { toVaultRelative } from "@/lib/wiki";
 import { openPaper } from "@/lib/workspace/actions";
 import {
-	getActiveTabId,
 	refreshTabNotes,
 	setTabs,
 	workspaceStore,
@@ -299,15 +298,17 @@ export function openLibraryPaper(paper: PaperMetadata): void {
 	openPaper(joinVaultPath(vaultPath, paper.path));
 }
 
-/** Persist tags from Paper Info and keep library + open tabs in sync. */
-export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
+/** Persist Paper Info tags for the displayed paper and sync library + open tabs. */
+export async function paperTagsChange(
+	paperMeta: PaperMetadata,
+	tags: PaperTag[],
+): Promise<PaperMetadata | null> {
 	const vaultPath = getVaultPath();
-	const activeTab = workspaceStore
+	const matchingTab = workspaceStore
 		.getState()
-		.tabs.find((t) => t.id === getActiveTabId());
-	const paperMeta = activeTab?.paperMeta ?? null;
-	const selectedPath = activeTab?.path ?? null;
-	if (!vaultPath || !paperMeta) return;
+		.tabs.find((tab) => tab.paperMeta?.id === paperMeta.id);
+	const selectedPath = matchingTab?.path ?? null;
+	if (!vaultPath) return null;
 	// Prefer catalog path on meta; projection may omit `path` — fall back to
 	// the open paper folder.
 	let path = (paperMeta.path ?? "")
@@ -325,7 +326,7 @@ export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
 	}
 	if (!path) {
 		notifyError(i18n.t("sidebar:paperInfo.tagsSaveFailed"));
-		return;
+		return null;
 	}
 	try {
 		const updated = await setPaperTags(vaultPath, path, tags);
@@ -337,7 +338,6 @@ export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
 				return key === path ? { ...p, ...updated } : p;
 			}),
 		);
-		const activeId = getActiveTabId();
 		setTabs((prev) =>
 			prev.map((tab) => {
 				if (!tab.paperMeta) return tab;
@@ -345,8 +345,7 @@ export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
 					.replace(/\\/g, "/")
 					.replace(/^\/+|\/+$/g, "");
 				const samePath = key === path;
-				const sameOpenPaper =
-					!key && tab.id === activeId && tab.paperMeta.id === paperMeta.id;
+				const sameOpenPaper = !key && tab.paperMeta.id === paperMeta.id;
 				if (!samePath && !sameOpenPaper) return tab;
 				return {
 					...tab,
@@ -358,7 +357,9 @@ export async function paperTagsChange(tags: PaperTag[]): Promise<void> {
 				};
 			}),
 		);
+		return { ...paperMeta, ...updated, path: updated.path ?? path };
 	} catch (e) {
 		notifyError(e instanceof Error ? e.message : String(e));
+		return null;
 	}
 }
