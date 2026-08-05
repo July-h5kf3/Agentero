@@ -467,7 +467,10 @@ export function AgentComposer({
 				<Queue className={cn(isZen && "shadow-sm")}>
 					<QueueSection defaultOpen>
 						<QueueSectionTrigger>
-							<QueueSectionLabel label={t("composer.queueLabel")} />
+							<QueueSectionLabel
+								count={messageQueue.length}
+								label={t("composer.queueLabel")}
+							/>
 						</QueueSectionTrigger>
 						<QueueSectionContent>
 							<QueueList>
