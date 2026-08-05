@@ -25,7 +25,7 @@ who refuses vague academic filler. Prefer concrete examples over empty jargon.
 - Existing `{paper}/NOTES.md` may already have a title/abstract shell from Agentero import.
   - Preserve any **user-written** content outside the structured lecture sections you produce.
   - Fill or replace the structured lecture body (sections below).
-  - Ensure YAML frontmatter `aliases` (see below) so vault wikilinks can find this note by title.
+  - Ensure YAML frontmatter `aliases` and note-creation date (see below).
 - Do not delete `marks/`, `source/`, assets, or binary files.
 
 ## Activation notes (CLI differences)
@@ -38,9 +38,10 @@ Agentero may inject this entire SKILL.md into the prompt. Depending on the agent
 
 Always execute the workflow even if no native skill runtime fires.
 
-## Frontmatter aliases (required)
+## Frontmatter (required)
 
-Agentero indexes Obsidian-style YAML `aliases` for wikilink search and resolve.
+Agentero indexes Obsidian-style YAML frontmatter. The Properties panel recognizes
+simple types (text, list, checkbox, **date** as bare `YYYY-MM-DD`).
 Keep the on-disk file name as `NOTES.md`; do **not** rename the note to the paper title.
 
 At the top of `{paper}/NOTES.md`, ensure a frontmatter block that includes at least:
@@ -50,30 +51,50 @@ At the top of `{paper}/NOTES.md`, ensure a frontmatter block that includes at le
 aliases:
   - <Full paper title>
   - <Short title>
+created: 2026-08-05
 ---
 ```
 
-Rules:
+### Aliases
 
 - **Full paper title**: the official title (same string as catalog / the H1 when present).
 - **Short title**: a concise, searchable nickname people would type in `[[…]]`
   (common abbreviation, first author + year, or a short phrase from the title).
   Prefer something a researcher would actually type; avoid dumping the entire title twice.
 - You may add more aliases when useful (alternate spellings, venue nicknames).
-- If frontmatter already exists, **merge** into `aliases` without removing user keys or
-  user-authored aliases. Deduplicate case-insensitively.
 - Prefer the block-list form above (`aliases:` + `- item`). Inline
   `aliases: [A, B]` is also valid.
 - Do not invent targets for wikilinks from alias text alone; aliases only help
   *this* note be found. When linking *to* other notes, still use real paths
   (see Wikilink policy).
 
+### Note creation date
+
+- Canonical key for **new** notes: **`created`** (language-neutral; not locale-specific labels).
+- Value: **ISO calendar date only**, `YYYY-MM-DD` (example: `2026-08-05`).
+  - Unquoted bare scalar so Agentero Properties can treat it as a **date** control
+    (type is inferred from the value shape, not from the key language).
+  - Do **not** write times, locales, or prose (e.g. not `2026-08-05T12:00:00`, not `August 5`).
+- Use the **local calendar date of this run** when you first introduce the field
+  (the day you write or substantially create the lecture NOTES).
+- If a creation date is **already present** under `created` (or an existing user key
+  with an ISO `YYYY-MM-DD` date value you did not introduce), leave it unchanged —
+  do not bump on re-read and do not add a second date key.
+- Do **not** invent localized key names (e.g. Chinese/English UI labels) for new notes.
+
+### Merge rules
+
+- If frontmatter already exists, **merge** without removing user keys or
+  user-authored aliases / dates. Deduplicate aliases case-insensitively.
+- Still write missing `aliases` / missing `created` on this run when absent
+  (unless another creation-date field is already present as above).
+
 ## Fixed output structure
 
 Write into **`{paper}/NOTES.md`** (Agentero convention — not `notes.md`).
 Order on disk:
 
-1. YAML frontmatter with `aliases` (see above)
+1. YAML frontmatter with `aliases` + `created` (see above)
 2. Optional existing title / abstract shell (preserve user text)
 3. The structured lecture sections below (`##` / `###` in order)
 
@@ -95,7 +116,10 @@ Explain every major module of the method; do not skip hard parts.
 For difficult method sections:
 
 - Prefer a **teacher / student** style: teacher explains; student asks zero-baseline questions; teacher answers with a **concrete example**.
-- For equations: **physical meaning first**, then the formula.
+- For equations: **physical meaning first**, then the formula in **renderable Markdown math**:
+  - Inline: `$\eta > 1$` (never undelimited `(\eta > 1)` / bare `\eta` in prose — Agentero will not render that as math).
+  - Display: fenced with `$$` on their own lines for multi-line or important identities.
+  - Prefer `$` / `$$` over `\(...\)` / `\[...\]`.
 - Walk through each module of each method chapter.
 
 If you cannot spawn subagents, simulate the teacher–student dialogue inline under clear subheadings.
@@ -143,9 +167,10 @@ term.
 1. Resolve the paper folder path (from user / Agentero target).
 2. Locate content: TeX → existing `PAPER.md` → `agentero paper parse {paper}` when needed → PDF.
 3. Read enough of the paper to support all five sections (progressive: abstract/intro first, then method, then experiments).
-4. Decide frontmatter aliases: full official title + one short title (and optional extras).
+4. Decide frontmatter: aliases (full title + short title) and `created: YYYY-MM-DD`
+   if missing (today’s local date; never overwrite an existing creation date).
 5. Generate the structured notes.
-6. Write / update `{paper}/NOTES.md` (frontmatter aliases + lecture body; preserve user prose).
+6. Write / update `{paper}/NOTES.md` (frontmatter + lecture body; preserve user prose).
 7. Run `agentero wiki check {paper}/NOTES.md --json`.
    - Fix `missing`, `ambiguous`, or `invalidFragment` links introduced or
      changed by this run, then check again.
@@ -158,4 +183,5 @@ term.
 - Keep valid Obsidian-style wikilinks `[[...]]`; do not invent targets.
 - Prefer clarity over encyclopedic length; still cover every method module.
 - Never invent experimental numbers; if something is unclear, say so.
+- Math must use `$...$` / `$$...$$` so Agentero can render it (see vault `AGENTS.md`).
 - Final deliverable path: `{paper}/NOTES.md` only for the lecture notes body.
