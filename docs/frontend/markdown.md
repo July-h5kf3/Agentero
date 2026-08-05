@@ -73,7 +73,7 @@ Frontmatter 当前保存在 Plate AST 之外，因此整理时继续字节级保
 
 ### Properties（frontmatter）
 
-编辑器正文上方提供可折叠 **Properties** 条（默认收起）：
+编辑器工具栏提供 **Properties** 图标，点击后展开属性填写下拉表格：
 
 - **表单模式（默认）**：左侧类型图标切换 **文本 / 列表 / 复选框 / 日期**（列表为 chips，复选框为开关，日期为 `YYYY-MM-DD`）；可添加属性。磁盘仍为合法 YAML（`true`/`false`、ISO 日期、block list）。
 - **源码模式**：右上角切换为 YAML 正文（不含 `---` 围栏；保存时自动包回）。复杂 YAML（嵌套 map、多行标量等）自动回退源码。

@@ -18,6 +18,7 @@
 		"numberedList": "Numbered list",
 		"todoList": "To-do list",
 		"image": "Insert image",
+		"properties": "Properties",
 		"more": "More"
 	},
 	"codeBlock": {
@@ -136,7 +137,6 @@
 	},
 	"frontmatter": {
 		"title": "Properties",
-		"emptyBadge": "None",
 		"yamlLabel": "YAML frontmatter",
 		"placeholder": "aliases:\n  - Full paper title\n  - Short title",
 		"hint": "Obsidian-compatible YAML. aliases help wikilink search find this note by title.",
@@ -144,7 +144,6 @@
 		"formMode": "Edit as form",
 		"sourceOnly": "Complex YAML — source only",
 		"parseFallback": "This frontmatter is too complex for the form editor. Edit the YAML source, or simplify to scalars and simple lists.",
-		"emptyForm": "No properties yet.",
 		"addProperty": "Add property",
 		"keyPlaceholder": "key",
 		"valuePlaceholder": "value",

@@ -18,6 +18,7 @@
 		"numberedList": "有序列表",
 		"todoList": "待办列表",
 		"image": "插入图片",
+		"properties": "属性",
 		"more": "更多"
 	},
 	"codeBlock": {
@@ -136,7 +137,6 @@
 	},
 	"frontmatter": {
 		"title": "属性",
-		"emptyBadge": "无",
 		"yamlLabel": "YAML frontmatter",
 		"placeholder": "aliases:\n  - 论文全称\n  - 短标题",
 		"hint": "Obsidian 兼容 YAML。aliases 可让双链搜索通过标题找到这篇笔记。",
@@ -144,7 +144,6 @@
 		"formMode": "以表单编辑",
 		"sourceOnly": "复杂 YAML，仅源码",
 		"parseFallback": "当前 frontmatter 结构较复杂，无法用表单编辑。请改 YAML 源码，或简化为标量与一层列表。",
-		"emptyForm": "暂无属性。",
 		"addProperty": "添加属性",
 		"keyPlaceholder": "键",
 		"valuePlaceholder": "值",

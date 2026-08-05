@@ -20,6 +20,7 @@ import {
 	List,
 	ListOrdered,
 	ListTodo,
+	ListTree,
 	type LucideIcon,
 	Quote,
 	Search,
@@ -33,10 +34,16 @@ import {
 	useMarkToolbarButtonState,
 	useSelectionFragmentProp,
 } from "platejs/react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
+
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
 import { formatModShortcut } from "@/lib/shell/shortcuts";
@@ -158,9 +165,12 @@ function useImageAction(label: string): ToolbarAction {
  */
 export function MarkdownEditorToolbar({
 	onOpenFind,
+	propertiesPanel,
 }: {
 	/** Show the Search button at the right end; opens the find & replace bar. */
 	onOpenFind?: () => void;
+	/** Content rendered in the Properties toolbar popover. */
+	propertiesPanel?: ReactNode;
 }) {
 	const { t } = useTranslation("editor");
 	const blockType = useSelectionFragmentProp({
@@ -250,15 +260,35 @@ export function MarkdownEditorToolbar({
 			actions={actions}
 			className="rounded-none"
 			trailing={
-				onOpenFind ? (
-					<ToolbarButton
-						tooltip={`${t("findReplace.title")} (${formatModShortcut("f")})`}
-						aria-label={t("findReplace.title")}
-						onClick={onOpenFind}
-					>
-						<Search />
-					</ToolbarButton>
-				) : undefined
+				<>
+					{propertiesPanel ? (
+						<Popover>
+							<PopoverTrigger asChild>
+								<ToolbarButton
+									tooltip={t("toolbar.properties")}
+									aria-label={t("toolbar.properties")}
+								>
+									<ListTree />
+								</ToolbarButton>
+							</PopoverTrigger>
+							<PopoverContent
+								align="end"
+								className="w-[min(30rem,calc(100vw-1rem))] p-2.5"
+							>
+								{propertiesPanel}
+							</PopoverContent>
+						</Popover>
+					) : null}
+					{onOpenFind ? (
+						<ToolbarButton
+							tooltip={`${t("findReplace.title")} (${formatModShortcut("f")})`}
+							aria-label={t("findReplace.title")}
+							onClick={onOpenFind}
+						>
+							<Search />
+						</ToolbarButton>
+					) : null}
+				</>
 			}
 		/>
 	);

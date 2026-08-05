@@ -4,10 +4,8 @@ import {
 	Calendar,
 	Check,
 	CheckSquare,
-	ChevronRight,
 	Code2,
 	List,
-	ListTree,
 	Plus,
 	Trash2,
 	Type,
@@ -21,11 +19,6 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	Collapsible,
-	CollapsibleContent,
-	CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -79,7 +72,7 @@ function stripRowIds(rows: PropertyRowState[]): FrontmatterProperty[] {
 }
 
 /**
- * Collapsible Properties strip above the Markdown body.
+ * Properties form rendered inside the Markdown toolbar popover.
  * Form mode edits simple scalars / lists; Source mode is raw YAML.
  * Frontmatter stays outside the Plate AST and is re-attached on save.
  */
@@ -90,7 +83,6 @@ export function FrontmatterPanel({
 	className,
 }: FrontmatterPanelProps) {
 	const { t } = useTranslation("editor");
-	const [open, setOpen] = useState(false);
 	const [mode, setMode] = useState<EditorMode>("form");
 	const panelId = useId();
 	const parsed = useMemo(() => parseFrontmatterProperties(value), [value]);
@@ -185,159 +177,126 @@ export function FrontmatterPanel({
 	};
 
 	return (
-		<Collapsible
-			open={open}
-			onOpenChange={setOpen}
+		<div
 			className={cn(
-				"shrink-0 border-border/60 border-b bg-muted/20",
+				"flex max-h-[calc(100vh-7rem)] min-h-0 flex-col gap-2.5",
 				className,
 			)}
 		>
-			<div className="flex h-8 min-w-0 items-center">
-				<CollapsibleTrigger
-					className={cn(
-						"flex h-8 min-w-0 flex-1 items-center gap-1.5 px-3 text-left outline-none",
-						"text-muted-foreground text-xs font-medium tracking-wide",
-						"hover:bg-muted/40 hover:text-foreground",
-						"focus-visible:ring-1 focus-visible:ring-ring",
-					)}
-					aria-controls={panelId}
-				>
-					<ChevronRight
-						className={cn(
-							"size-3.5 shrink-0 transition-transform",
-							open && "rotate-90",
-						)}
-						aria-hidden
-					/>
-					<ListTree className="size-3.5 shrink-0" aria-hidden />
+			<div className="flex items-center justify-between gap-3">
+				<div className="flex min-w-0 items-center gap-2 font-medium text-sm">
 					<span className="truncate">{t("frontmatter.title")}</span>
 					{propertyCount > 0 ? (
-						<span className="ml-1 shrink-0 tabular-nums text-[11px] text-muted-foreground/80">
+						<span className="shrink-0 tabular-nums text-muted-foreground text-xs">
 							{propertyCount}
 						</span>
-					) : !hasContent ? (
-						<span className="ml-1 shrink-0 text-[11px] text-muted-foreground/70">
-							{t("frontmatter.emptyBadge")}
-						</span>
 					) : null}
-				</CollapsibleTrigger>
-				{open ? (
-					<TooltipProvider delayDuration={300}>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									className={cn(
-										"mr-2 inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none",
-										"text-muted-foreground hover:bg-muted hover:text-foreground",
-										"focus-visible:ring-1 focus-visible:ring-ring",
-										showSource && formAvailable && "bg-muted text-foreground",
-									)}
-									aria-pressed={showSource}
-									aria-label={
-										showSource
-											? t("frontmatter.formMode")
-											: t("frontmatter.sourceMode")
-									}
-									disabled={!formAvailable && showSource}
-									onClick={(event) => {
-										event.preventDefault();
-										if (!formAvailable) return;
-										setMode((current) => {
-											if (current === "source") {
-												// Reload structured rows from the latest YAML.
-												if (parsed.ok) {
-													setRows(rowsFromProperties(parsed.properties));
-												}
-												return "form";
-											}
-											return "source";
-										});
-									}}
-								>
-									<Code2 className="size-3.5" aria-hidden />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{showSource
-									? formAvailable
-										? t("frontmatter.formMode")
-										: t("frontmatter.sourceOnly")
-									: t("frontmatter.sourceMode")}
-							</TooltipContent>
-						</Tooltip>
-					</TooltipProvider>
-				) : null}
-			</div>
-			<CollapsibleContent id={panelId}>
-				<div className="border-border/50 border-t px-3 pt-2 pb-3">
-					{showSource ? (
-						<>
-							{!formAvailable && hasContent ? (
-								<p className="mb-1.5 text-[11px] text-muted-foreground leading-snug">
-									{t("frontmatter.parseFallback")}
-								</p>
-							) : null}
-							<label className="sr-only" htmlFor={`${panelId}-yaml`}>
-								{t("frontmatter.yamlLabel")}
-							</label>
-							<textarea
-								id={`${panelId}-yaml`}
-								value={value}
-								readOnly={readOnly}
-								spellCheck={false}
-								placeholder={t("frontmatter.placeholder")}
-								rows={Math.min(12, Math.max(4, value.split("\n").length + 1))}
-								className={cn(
-									"agentero-scroll w-full min-h-[5.5rem] resize-y rounded-md border border-input",
-									"bg-background px-2.5 py-2 font-mono text-[12px] leading-relaxed text-foreground",
-									"outline-none placeholder:text-muted-foreground/70",
-									"focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-									readOnly && "cursor-default opacity-90",
-								)}
-								onChange={(event) => {
-									if (readOnly) return;
-									onChange?.(event.target.value);
-								}}
-								onKeyDown={handleYamlKeyDown}
-							/>
-						</>
-					) : (
-						<div className="flex flex-col gap-1.5">
-							{rows.length === 0 ? (
-								<p className="py-1 text-[11px] text-muted-foreground leading-snug">
-									{t("frontmatter.emptyForm")}
-								</p>
-							) : null}
-							{rows.map((property, index) => (
-								<PropertyRow
-									key={property.id}
-									property={property}
-									readOnly={readOnly}
-									onChange={(next) => updateProperty(index, next)}
-									onRemove={() => removeProperty(index)}
-								/>
-							))}
-							{!readOnly ? (
-								<button
-									type="button"
-									className={cn(
-										"mt-0.5 inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] outline-none",
-										"text-muted-foreground hover:bg-muted hover:text-foreground",
-										"focus-visible:ring-1 focus-visible:ring-ring",
-									)}
-									onClick={addProperty}
-								>
-									<Plus className="size-3" aria-hidden />
-									{t("frontmatter.addProperty")}
-								</button>
-							) : null}
-						</div>
-					)}
 				</div>
-			</CollapsibleContent>
-		</Collapsible>
+				<TooltipProvider delayDuration={300}>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								className={cn(
+									"inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none",
+									"text-muted-foreground hover:bg-muted hover:text-foreground",
+									"focus-visible:ring-1 focus-visible:ring-ring",
+									showSource && formAvailable && "bg-muted text-foreground",
+								)}
+								aria-pressed={showSource}
+								aria-label={
+									showSource
+										? t("frontmatter.formMode")
+										: t("frontmatter.sourceMode")
+								}
+								disabled={!formAvailable && showSource}
+								onClick={() => {
+									if (!formAvailable) return;
+									setMode((current) => {
+										if (current === "source") {
+											if (parsed.ok) {
+												setRows(rowsFromProperties(parsed.properties));
+											}
+											return "form";
+										}
+										return "source";
+									});
+								}}
+							>
+								<Code2 className="size-3.5" aria-hidden />
+							</button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{showSource
+								? formAvailable
+									? t("frontmatter.formMode")
+									: t("frontmatter.sourceOnly")
+								: t("frontmatter.sourceMode")}
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+			</div>
+			<div className="agentero-scroll min-h-0 overflow-y-auto pr-1">
+				{showSource ? (
+					<>
+						{!formAvailable && hasContent ? (
+							<p className="mb-1.5 text-[11px] text-muted-foreground leading-snug">
+								{t("frontmatter.parseFallback")}
+							</p>
+						) : null}
+						<label className="sr-only" htmlFor={`${panelId}-yaml`}>
+							{t("frontmatter.yamlLabel")}
+						</label>
+						<textarea
+							id={`${panelId}-yaml`}
+							value={value}
+							readOnly={readOnly}
+							spellCheck={false}
+							placeholder={t("frontmatter.placeholder")}
+							rows={Math.min(12, Math.max(4, value.split("\n").length + 1))}
+							className={cn(
+								"agentero-scroll w-full min-h-[5.5rem] resize-y rounded-md border border-input",
+								"bg-background px-2.5 py-2 font-mono text-[12px] leading-relaxed text-foreground",
+								"outline-none placeholder:text-muted-foreground/70",
+								"focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+								readOnly && "cursor-default opacity-90",
+							)}
+							onChange={(event) => {
+								if (readOnly) return;
+								onChange?.(event.target.value);
+							}}
+							onKeyDown={handleYamlKeyDown}
+						/>
+					</>
+				) : (
+					<div className="flex flex-col gap-2">
+						{rows.map((property, index) => (
+							<PropertyRow
+								key={property.id}
+								property={property}
+								readOnly={readOnly}
+								onChange={(next) => updateProperty(index, next)}
+								onRemove={() => removeProperty(index)}
+							/>
+						))}
+						{!readOnly ? (
+							<button
+								type="button"
+								className={cn(
+									"inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-xs outline-none",
+									"text-muted-foreground hover:bg-muted hover:text-foreground",
+									"focus-visible:ring-1 focus-visible:ring-ring",
+								)}
+								onClick={addProperty}
+							>
+								<Plus className="size-3" aria-hidden />
+								{t("frontmatter.addProperty")}
+							</button>
+						) : null}
+					</div>
+				)}
+			</div>
+		</div>
 	);
 }
 
@@ -391,13 +350,20 @@ function PropertyRow({
 	};
 
 	return (
-		<div className="group flex min-w-0 items-start gap-1">
+		<div
+			className={cn(
+				"group grid min-w-0 items-center gap-2",
+				readOnly
+					? "grid-cols-[2rem_minmax(7rem,0.4fr)_minmax(0,0.6fr)]"
+					: "grid-cols-[2rem_minmax(7rem,0.4fr)_minmax(0,0.6fr)_2rem]",
+			)}
+		>
 			{readOnly ? (
 				<span
-					className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground"
+					className="inline-flex size-8 items-center justify-center text-muted-foreground"
 					aria-hidden
 				>
-					<TypeIcon className="size-3.5" />
+					<TypeIcon className="size-4" />
 				</span>
 			) : (
 				<DropdownMenu>
@@ -405,14 +371,14 @@ function PropertyRow({
 						<button
 							type="button"
 							className={cn(
-								"mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none",
+								"inline-flex size-8 items-center justify-center rounded-md outline-none",
 								"text-muted-foreground hover:bg-muted hover:text-foreground",
 								"focus-visible:ring-1 focus-visible:ring-ring",
 							)}
 							aria-label={t("frontmatter.propertyType")}
 							title={t("frontmatter.propertyType")}
 						>
-							<TypeIcon className="size-3.5" aria-hidden />
+							<TypeIcon className="size-4" aria-hidden />
 						</button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="start" className="min-w-[9.5rem]">
@@ -443,8 +409,8 @@ function PropertyRow({
 				placeholder={t("frontmatter.keyPlaceholder")}
 				aria-label={t("frontmatter.keyPlaceholder")}
 				className={cn(
-					"h-7 w-[6.5rem] shrink-0 rounded-md border border-transparent bg-transparent px-1.5",
-					"font-mono text-[11px] text-muted-foreground outline-none",
+					"h-8 min-w-0 w-full rounded-md border border-transparent bg-transparent px-2",
+					"font-mono text-xs text-muted-foreground outline-none",
 					"hover:border-border focus-visible:border-ring focus-visible:bg-background",
 					readOnly && "cursor-default",
 				)}
@@ -459,14 +425,14 @@ function PropertyRow({
 				{property.kind === "list" ? (
 					<div
 						className={cn(
-							"flex min-h-7 min-w-0 flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5",
+							"flex min-h-8 min-w-0 flex-wrap items-center gap-1 rounded-md border border-transparent px-2 py-1",
 							"hover:border-border focus-within:border-ring focus-within:bg-background",
 						)}
 					>
 						{property.items.map((item) => (
 							<span
 								key={item}
-								className="inline-flex max-w-full items-center gap-0.5 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+								className="inline-flex max-w-full items-center gap-0.5 rounded-md bg-muted px-1.5 py-0.5 text-xs text-foreground"
 							>
 								<span className="truncate" title={item}>
 									{item}
@@ -494,7 +460,7 @@ function PropertyRow({
 								spellCheck={false}
 								placeholder={t("frontmatter.itemPlaceholder")}
 								aria-label={t("frontmatter.itemPlaceholder")}
-								className="h-6 min-w-[7rem] flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/70"
+								className="h-6 min-w-[7rem] flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
 								onChange={(event) => setDraftItem(event.target.value)}
 								onKeyDown={(event) => {
 									if (event.key === "Enter") {
@@ -517,7 +483,7 @@ function PropertyRow({
 						) : null}
 					</div>
 				) : property.kind === "checkbox" ? (
-					<div className="flex h-7 items-center px-1">
+					<div className="flex h-8 items-center px-2">
 						<Switch
 							size="sm"
 							checked={property.value === "true"}
@@ -540,8 +506,8 @@ function PropertyRow({
 						readOnly={readOnly}
 						aria-label={t("frontmatter.typeDate")}
 						className={cn(
-							"h-7 w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5",
-							"text-[11px] text-foreground outline-none",
+							"h-8 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2",
+							"text-xs text-foreground outline-none",
 							"hover:border-border focus-visible:border-ring focus-visible:bg-background",
 							readOnly && "cursor-default",
 							// Native date control is dark-mode awkward; keep compact.
@@ -564,8 +530,8 @@ function PropertyRow({
 						placeholder={t("frontmatter.valuePlaceholder")}
 						aria-label={t("frontmatter.valuePlaceholder")}
 						className={cn(
-							"h-7 w-full rounded-md border border-transparent bg-transparent px-1.5",
-							"text-[11px] text-foreground outline-none",
+							"h-8 w-full rounded-md border border-transparent bg-transparent px-2",
+							"text-xs text-foreground outline-none",
 							"hover:border-border focus-visible:border-ring focus-visible:bg-background",
 							readOnly && "cursor-default",
 						)}
@@ -579,14 +545,14 @@ function PropertyRow({
 				<button
 					type="button"
 					className={cn(
-						"mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md outline-none",
+						"inline-flex size-8 items-center justify-center rounded-md outline-none",
 						"text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground",
 						"group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring",
 					)}
 					aria-label={t("frontmatter.removeProperty")}
 					onClick={onRemove}
 				>
-					<Trash2 className="size-3.5" aria-hidden />
+					<Trash2 className="size-4" aria-hidden />
 				</button>
 			) : null}
 		</div>

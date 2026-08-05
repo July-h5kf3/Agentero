@@ -1608,14 +1608,16 @@ export function MarkdownEditor({
 									setFindOpen(true);
 									setFindFocusTick((tick) => tick + 1);
 								}}
+								propertiesPanel={
+									<FrontmatterPanel
+										value={frontmatterYaml}
+										readOnly={readOnly}
+										onChange={readOnly ? undefined : handleFrontmatterChange}
+									/>
+								}
 							/>
 						) : null}
 						<div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-							<FrontmatterPanel
-								value={frontmatterYaml}
-								readOnly={readOnly}
-								onChange={readOnly ? undefined : handleFrontmatterChange}
-							/>
 							<div className="relative min-h-0 min-w-0 flex-1">
 								<ContextMenu onOpenChange={handleContextMenuOpenChange}>
 									<ContextMenuTrigger asChild>
