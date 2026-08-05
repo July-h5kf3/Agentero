@@ -1,12 +1,17 @@
-import { createSlateEditor } from "platejs";
+import { createSlateEditor, KEYS } from "platejs";
 import { describe, expect, it } from "vitest";
 
+import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { WikiLinkPlugin } from "@/components/editor/plugins/wikilink-plugin";
 import {
 	editorContextMenuCapabilities,
 	editorLinkTemplate,
 	insertEditorLinkTemplate,
 } from "@/lib/markdown/editor-context-menu";
+import {
+	clearExternalLinkEditRequest,
+	peekExternalLinkEditId,
+} from "@/lib/markdown/external-link-insert";
 
 describe("Markdown editor context menu", () => {
 	it("places an empty internal-link caret between the brackets", () => {
@@ -18,12 +23,10 @@ describe("Markdown editor context menu", () => {
 		});
 	});
 
-	it("places an empty external-link caret in its label", () => {
-		expect(editorLinkTemplate("external")).toEqual({
-			text: "[]()",
-			selectionStart: 1,
-			selectionEnd: 1,
+	it("marks external templates as node inserts", () => {
+		expect(editorLinkTemplate("external")).toMatchObject({
 			wikiLinkDraft: false,
+			externalLinkNode: true,
 		});
 	});
 
@@ -34,10 +37,8 @@ describe("Markdown editor context menu", () => {
 			selectionEnd: 8,
 			wikiLinkDraft: true,
 		});
-		expect(editorLinkTemplate("external", "Label")).toEqual({
-			text: "[Label]()",
-			selectionStart: 1,
-			selectionEnd: 6,
+		expect(editorLinkTemplate("external", "Label")).toMatchObject({
+			externalLinkNode: true,
 			wikiLinkDraft: false,
 		});
 	});
@@ -65,8 +66,9 @@ describe("Markdown editor context menu", () => {
 		});
 	});
 
-	it("wraps and reselects text in an external link", () => {
+	it("wraps selected text in an external link node and queues edit popover", () => {
 		const editor = createSlateEditor({
+			plugins: [LinkPlugin],
 			value: [{ type: "p", children: [{ text: "Before label after" }] }],
 		});
 		const selection = {
@@ -74,10 +76,54 @@ describe("Markdown editor context menu", () => {
 			focus: { path: [0, 0], offset: 12 },
 		};
 
+		const result = insertEditorLinkTemplate(editor, "external", selection);
+
+		expect(result.externalLinkNode).toBe(true);
+		const children = (
+			editor.children[0] as { children: Array<Record<string, unknown>> }
+		).children;
+		const link = children.find((c) => c.type === KEYS.a) as
+			| {
+					type: string;
+					url: string;
+					children: unknown;
+					agenteroEditId?: string;
+			  }
+			| undefined;
+		expect(link).toMatchObject({
+			type: KEYS.a,
+			url: "",
+			children: [{ text: "label" }],
+		});
+		expect(typeof link?.agenteroEditId).toBe("string");
+		expect(editor.api.string([])).toBe("Before label after");
+		expect(peekExternalLinkEditId(editor)).toBe(link?.agenteroEditId);
+		clearExternalLinkEditRequest(editor, link!.agenteroEditId!);
+		expect(peekExternalLinkEditId(editor)).toBeNull();
+	});
+
+	it("inserts a default-label external link node when the caret is collapsed", () => {
+		const editor = createSlateEditor({
+			plugins: [LinkPlugin],
+			value: [{ type: "p", children: [{ text: "Before after" }] }],
+		});
+		const selection = {
+			anchor: { path: [0, 0], offset: 7 },
+			focus: { path: [0, 0], offset: 7 },
+		};
+
 		insertEditorLinkTemplate(editor, "external", selection);
 
-		expect(editor.api.string([])).toBe("Before [label]() after");
-		expect(editor.api.string(editor.selection ?? undefined)).toBe("label");
+		const children = (
+			editor.children[0] as { children: Array<Record<string, unknown>> }
+		).children;
+		const link = children.find((c) => c.type === KEYS.a);
+		expect(link).toMatchObject({
+			type: KEYS.a,
+			url: "",
+		});
+		expect(JSON.stringify(editor.children)).not.toContain("[]()");
+		expect(peekExternalLinkEditId(editor)).toBeTruthy();
 	});
 
 	it("keeps copy available in read-only notes and blocks mutations", () => {

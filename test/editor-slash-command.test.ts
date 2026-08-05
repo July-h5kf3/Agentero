@@ -8,6 +8,7 @@ import {
 } from "platejs";
 import { describe, expect, it } from "vitest";
 import { editorCompletionHasFocus } from "@/components/editor/plugins/completion-focus";
+import { LinkPlugin } from "@/components/editor/plugins/link-plugin";
 import { MarkdownKit } from "@/components/editor/plugins/markdown-kit";
 import {
 	executeSlashCommand,
@@ -38,7 +39,7 @@ function createSlashEditor(
 	value: TElement[] = [{ type: KEYS.p, children: [{ text }] }],
 ) {
 	const editor = createSlateEditor({
-		plugins: [...TestPlugins, BaseListPlugin, ...MarkdownKit],
+		plugins: [...TestPlugins, BaseListPlugin, LinkPlugin, ...MarkdownKit],
 		value,
 	});
 	const path = value[0]?.type === KEYS.callout ? [0, 0, 0] : [0, 0];
@@ -255,11 +256,17 @@ describe("slash command execution", () => {
 				currentSlashTarget(external),
 			),
 		).toBe(true);
-		expect(external.api.string([])).toBe("Before []()");
-		expect(external.selection).toEqual({
-			anchor: { path: [0, 0], offset: 8 },
-			focus: { path: [0, 0], offset: 8 },
+		// External links insert a real `a` node (default placeholder label), not `[]()`.
+		const children = (
+			external.children[0] as { children: Array<Record<string, unknown>> }
+		).children;
+		const link = children.find((c) => c.type === KEYS.a);
+		expect(link).toMatchObject({
+			type: KEYS.a,
+			url: "",
 		});
+		expect(external.api.string([])).toMatch(/^Before .+/);
+		expect(JSON.stringify(external.children)).not.toContain("[]()");
 	});
 
 	it("clears list metadata when applying a non-list block command", () => {

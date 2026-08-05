@@ -69,6 +69,15 @@
 		"replace": "替换",
 		"replaceAll": "全部替换"
 	},
+	"externalLink": {
+		"editTitle": "编辑链接",
+		"labelField": "显示文字",
+		"labelPlaceholder": "链接文字",
+		"defaultLabel": "链接",
+		"urlField": "链接地址",
+		"open": "打开",
+		"apply": "应用"
+	},
 	"contextMenu": {
 		"cut": "剪切",
 		"copy": "复制",

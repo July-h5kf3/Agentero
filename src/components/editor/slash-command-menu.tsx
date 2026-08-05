@@ -56,6 +56,12 @@ type SlashCommandMenuProps = {
 	draft: SlashCommandDraft | null;
 	onClose: () => void;
 	controllerRef: MutableRefObject<SlashCommandController | null>;
+	/**
+	 * Called after a command successfully mutates the editor (Enter / click).
+	 * Parent should suppress the following `beforeinput` insertParagraph so
+	 * WebKit/Tauri does not insert a newline after slash confirm.
+	 */
+	onCommandExecuted?: () => void;
 };
 
 const COMMAND_ICONS: Record<SlashCommandId, LucideIcon> = {
@@ -77,6 +83,7 @@ export function SlashCommandMenu({
 	draft,
 	onClose,
 	controllerRef,
+	onCommandExecuted,
 }: SlashCommandMenuProps) {
 	const { t } = useTranslation("editor");
 	const editor = useEditorRef();
@@ -129,11 +136,22 @@ export function SlashCommandMenu({
 				end: draft.end,
 			});
 			if (!handled) return false;
+			// Enter confirm still fires `beforeinput` insertParagraph on WebKit
+			// even after keydown preventDefault — parent must suppress it.
+			onCommandExecuted?.();
 			onClose();
-			window.requestAnimationFrame(() => editor.tf.focus());
+			// External link opens its own edit popover and focuses the URL field.
+			// Refocusing the editor here would steal focus and close that popover.
+			if (command.id !== "externalLink") {
+				window.requestAnimationFrame(() => {
+					editor.tf.focus({
+						at: editor.selection ?? undefined,
+					});
+				});
+			}
 			return true;
 		},
-		[draft, editor, onClose],
+		[draft, editor, onClose, onCommandExecuted],
 	);
 
 	const selectedIndexRef = useRef(selectedIndex);
@@ -171,6 +189,13 @@ export function SlashCommandMenu({
 				if (isSlashCommandSubmitKey(event.key) && items[index]) {
 					if (selectCommandRef.current(items[index])) {
 						event.preventDefault();
+						event.stopPropagation();
+						// Stop the event from reaching Slate's default Enter handler.
+						if (
+							typeof event.nativeEvent?.stopImmediatePropagation === "function"
+						) {
+							event.nativeEvent.stopImmediatePropagation();
+						}
 						return true;
 					}
 				}
