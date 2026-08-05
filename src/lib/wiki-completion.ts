@@ -204,11 +204,14 @@ export function wikiCompletionInsert(
 	}
 	const hash = candidate.insertText.indexOf("#");
 	const at = candidate.insertText.lastIndexOf("@");
+	// Frontmatter-alias hits use `candidate.alias` only for list identity/label.
+	// Never write `|display` for file picks so Tab/Enter can continue with # / @.
+	const displayAlias = candidate.kind === "file" ? undefined : candidate.alias;
 	if (at >= 0 && hash < 0) {
 		return {
 			target: candidate.insertText.slice(0, at),
 			heading: candidate.insertText.slice(at) || undefined,
-			alias: candidate.alias,
+			alias: displayAlias,
 		};
 	}
 	return {
@@ -216,7 +219,7 @@ export function wikiCompletionInsert(
 			hash < 0 ? candidate.insertText : candidate.insertText.slice(0, hash),
 		heading:
 			hash < 0 ? undefined : candidate.insertText.slice(hash + 1) || undefined,
-		alias: candidate.alias,
+		alias: displayAlias,
 	};
 }
 
@@ -254,6 +257,22 @@ export function sameWikiPath(left: string, right: string): boolean {
 		left.replace(/\\/g, "/").toLowerCase() ===
 		right.replace(/\\/g, "/").toLowerCase()
 	);
+}
+
+/**
+ * Secondary line under a completion row.
+ * File hits (including frontmatter-alias hits) show the vault-relative path only;
+ * the primary line already carries the basename or alias label.
+ */
+export function wikiFileCandidateSecondaryLine(
+	candidate: Pick<WikiSearchCandidate, "kind" | "path" | "alias" | "detail">,
+): string | undefined {
+	if (candidate.kind === "file") {
+		const path = candidate.path.trim();
+		return path || undefined;
+	}
+	const detail = candidate.detail?.trim();
+	return detail || undefined;
 }
 
 /** Stable identity for a selected completion while the editor stays mounted. */

@@ -23,6 +23,7 @@ import {
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionInsert,
+	wikiFileCandidateSecondaryLine,
 	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
 
@@ -126,7 +127,8 @@ describe("wikilink completion grammar", () => {
 		).toBe("[[#^summary]]");
 	});
 
-	it("writes an alias as display text around a canonical target", () => {
+	it("does not write |display for frontmatter-alias file picks", () => {
+		// Alias is only for list label/identity; insert stays bare so # / @ can follow.
 		expect(
 			wikiCompletionInsert({
 				kind: "file",
@@ -137,7 +139,7 @@ describe("wikilink completion grammar", () => {
 			}),
 		).toEqual({
 			target: "notes/Canonical",
-			alias: "Short name",
+			alias: undefined,
 		});
 		expect(
 			wikiCompletionInsert({
@@ -150,6 +152,29 @@ describe("wikilink completion grammar", () => {
 		expect(sameWikiPath("notes\\Canonical.md", "notes/canonical.md")).toBe(
 			true,
 		);
+	});
+
+	it("shows only the vault path on the secondary line for file hits", () => {
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "file",
+				path: "papers/1706.03762/NOTES.md",
+				alias: "Attention Is All You Need",
+			}),
+		).toBe("papers/1706.03762/NOTES.md");
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "file",
+				path: "papers/1706.03762/NOTES.md",
+			}),
+		).toBe("papers/1706.03762/NOTES.md");
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "heading",
+				path: "notes/a.md",
+				detail: "H2",
+			}),
+		).toBe("H2");
 	});
 
 	it("fills annotation Enter with |preview so display is not a bare UUID", () => {

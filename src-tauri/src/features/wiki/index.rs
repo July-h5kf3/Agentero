@@ -745,16 +745,15 @@ impl WikiIndex {
             } else {
                 file_name.clone()
             };
-            let file_match = query_key.is_empty()
-                || document.path.to_lowercase().contains(&query_key)
-                || document
-                    .aliases
-                    .iter()
-                    .any(|alias| alias.to_lowercase().contains(&query_key));
+            // Path/basename hits and frontmatter-alias hits are separate rows.
+            // Matching an alias must NOT also emit the basename row (that pair is
+            // confusing when the user typed a title / short name).
+            let path_match =
+                query_key.is_empty() || document.path.to_lowercase().contains(&query_key);
             let include_file = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::File);
             let include_heading = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Heading);
             let include_block = kind.is_none_or(|kind| *kind == WikiSearchCandidateKind::Block);
-            if include_file && file_match {
+            if include_file && path_match {
                 candidates.push(WikiSearchCandidate {
                     kind: WikiSearchCandidateKind::File,
                     path: document.path.clone(),
@@ -765,9 +764,11 @@ impl WikiIndex {
                     fragment: None,
                 });
             }
-            if include_file {
+            // Alias rows only when the query actually matches an alias (not on
+            // empty/recent file lists — those already list each file once).
+            if include_file && !query_key.is_empty() {
                 for alias in &document.aliases {
-                    if query_key.is_empty() || alias.to_lowercase().contains(&query_key) {
+                    if alias.to_lowercase().contains(&query_key) {
                         candidates.push(WikiSearchCandidate {
                             kind: WikiSearchCandidateKind::File,
                             path: document.path.clone(),
@@ -1502,12 +1503,19 @@ mod tests {
             ..Default::default()
         };
 
-        let alias = index
+        let alias_hits: Vec<_> = index
             .search("Short")
             .into_iter()
-            .find(|candidate| candidate.alias.as_deref() == Some("Short name"))
-            .expect("alias candidate");
-        assert_eq!(alias.insert_text, "Canonical");
+            .filter(|candidate| candidate.kind == WikiSearchCandidateKind::File)
+            .collect();
+        assert_eq!(
+            alias_hits.len(),
+            1,
+            "alias query must not also list basename"
+        );
+        assert_eq!(alias_hits[0].alias.as_deref(), Some("Short name"));
+        assert_eq!(alias_hits[0].label, "Short name");
+        assert_eq!(alias_hits[0].insert_text, "Canonical");
 
         let heading = index
             .search("Outer#Overview")

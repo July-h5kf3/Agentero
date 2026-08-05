@@ -39,6 +39,11 @@ For a paper folder, use the richest available source in this order:
 - Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty explicitly.
 - Keep `[[wikilinks]]` and `![[embeds]]` as written; do not rewrite them to plain URLs or inline text.
 - Preserve Mermaid fenced code blocks (` ```mermaid `); do not flatten diagrams to prose.
+- **Math in Markdown (Agentero / KaTeX):** write real math delimiters so NOTES render.
+  - Inline: `$\eta > 1$` (not bare `(\eta > 1)` or undelimited `\eta > 1`).
+  - Display / multi-line: `$$...$$` on their own lines.
+  - Prefer `$` / `$$` over raw TeX parentheses `\(...\)` / `\[...\]` or pseudo-math in plain prose.
+  - Escape a literal dollar as `\$` when it is not math.
 - Cite the Vault-relative paths actually read; end substantial answers with `## Sources`.
 - Never overwrite user notes without an explicit draft + confirmation path.
 - Do not store API keys or other secrets in the Vault.
@@ -225,9 +230,31 @@ const LEGACY_BUNDLED_SKILL_HASHES: &[(&str, &str)] = &[
         ".agents/skills/agentero-cli/SKILL.md",
         "8195723fd1b75a7c8c396f382b2c5b079d812246a693c65be0b9cd91bfb70f67",
     ),
+    // Initial paper-reader seed.
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "9ef2a2ccf6b251e11639a27877e86c1324dd3f05309b320679b60a1535e67bb2",
+    ),
+    // After wiki-check skill constraints (common vault pin; was missing from
+    // legacy list so ensure_vault never upgraded these installs).
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "6a9b35c5bb6858039052e2a19bd3b75beddf0b60dbcd49e026fa94ba21c31e09",
+    ),
+    // Pre-aliases paper-reader (title-only NOTES shell era).
     (
         ".agents/skills/paper-reader/SKILL.md",
         "e8ded7c1b6eec291b8b7ad3069b45ce42708d422597eaa620a0e73103a9cc478",
+    ),
+    // paper-reader before required frontmatter aliases section.
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "af3173192e5e94c81d36599ecdc0ad2b95a7531afa099391d85672b992c41359",
+    ),
+    // paper-reader before required `created` date field.
+    (
+        ".agents/skills/paper-reader/SKILL.md",
+        "15978a666783c48b3b4063c29191bba90c9053e4f0d65c35767509eecbc2691b",
     ),
     (
         ".agents/skills/vault-normalizer/SKILL.md",

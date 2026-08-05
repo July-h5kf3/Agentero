@@ -44,6 +44,13 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 成功写 `NOTES.md`，`is_read = true`；进度在后台任务条。批量导入不连跑。  
 Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md`）。
 
+`NOTES.md` 须带 YAML frontmatter：
+
+- `aliases`（至少：**论文全称** + **一个短标题**），以便双链 `[[…]]` 按标题提示到该 NOTES
+- `created: YYYY-MM-DD`（语言中性键；ISO 日期，Properties 按值识别为日期；已有创建日期则不覆盖）
+
+保留用户已有 frontmatter 键与自定义 alias，不重命名 `NOTES.md` 文件名。约定见 vault 内 `paper-reader` skill。
+
 ## 个人偏好
 
 `agentPersonalPrompt`：非空时经 Host `build_prompt` 注入 envelope。

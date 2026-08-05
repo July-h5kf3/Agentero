@@ -77,7 +77,7 @@ PDF 阅读器支持：
 ## 与我的研究的关系
 ```
 
-`NOTES.md` 是普通 Markdown，可在 Agentero、Obsidian、VS Code 等中继续编辑。粘贴图片会写入同目录 `assets/` 并插入相对路径引用。
+`NOTES.md` 是普通 Markdown，可在 Agentero、Obsidian、VS Code 等中继续编辑。粘贴图片会写入同目录 `assets/` 并插入相对路径引用。编辑器顶部 **属性 / Properties** 可折叠编辑 YAML frontmatter（如 `aliases`），不必改文件名也能用论文标题做双链搜索。
 
 ## 使用双链
 
