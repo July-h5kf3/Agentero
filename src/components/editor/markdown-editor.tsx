@@ -91,6 +91,7 @@ import {
 	saveImageToMarkdownAssets,
 } from "@/lib/markdown/image";
 import { settleMarkdownSaveAttempt } from "@/lib/markdown/save-state";
+import { formatModShortcut } from "@/lib/shell/shortcuts";
 import type { LinkFragment, WikiRenameHeadingRequest } from "@/lib/wiki";
 import {
 	findWikiCompletionTrigger,
@@ -1688,7 +1689,9 @@ export function MarkdownEditor({
 											}}
 										>
 											{i18n.t("editor:contextMenu.cut")}
-											<ContextMenuShortcut>⌘X</ContextMenuShortcut>
+											<ContextMenuShortcut>
+												{formatModShortcut("x")}
+											</ContextMenuShortcut>
 										</ContextMenuItem>
 										<ContextMenuItem
 											disabled={!contextMenuCapabilities.copy}
@@ -1697,7 +1700,9 @@ export function MarkdownEditor({
 											}}
 										>
 											{i18n.t("editor:contextMenu.copy")}
-											<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+											<ContextMenuShortcut>
+												{formatModShortcut("c")}
+											</ContextMenuShortcut>
 										</ContextMenuItem>
 										<ContextMenuItem
 											disabled={!contextMenuCapabilities.paste}
@@ -1706,7 +1711,9 @@ export function MarkdownEditor({
 											}}
 										>
 											{i18n.t("editor:contextMenu.paste")}
-											<ContextMenuShortcut>⌘V</ContextMenuShortcut>
+											<ContextMenuShortcut>
+												{formatModShortcut("v")}
+											</ContextMenuShortcut>
 										</ContextMenuItem>
 										<ContextMenuSeparator />
 										<ContextMenuItem

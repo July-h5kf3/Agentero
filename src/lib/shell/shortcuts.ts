@@ -310,7 +310,18 @@ const ALIASES: Partial<Record<ShortcutId, ShortcutDef[]>> = {
 	],
 };
 
-export function formatShortcut(def: ShortcutDef): string {
+/** Keys needed to render a chord (registry entries or one-off UI hints). */
+export type ShortcutDisplay = Pick<
+	ShortcutDef,
+	"key" | "meta" | "ctrl" | "alt" | "shift"
+>;
+
+/**
+ * Platform-aware shortcut label for UI.
+ * macOS: Apple symbols (⌘X); Windows/Linux: Ctrl+X style.
+ * Not i18n — modifier names follow the OS, not the app language.
+ */
+export function formatShortcut(def: ShortcutDisplay): string {
 	if (def.key === "Escape") return "Esc";
 
 	const isMac =
@@ -341,6 +352,14 @@ export function formatShortcut(def: ShortcutDef): string {
 								: def.key;
 	parts.push(keyLabel);
 	return parts.join(isMac ? "" : "+");
+}
+
+/** Primary-mod + key (⌘K / Ctrl+K) for ad-hoc menu / tooltip hints. */
+export function formatModShortcut(
+	key: string,
+	extras?: Omit<ShortcutDisplay, "key" | "meta">,
+): string {
+	return formatShortcut({ key, meta: true, ...extras });
 }
 
 /** Format the primary shortcut for an id (platform-aware) for tooltip interpolation. */

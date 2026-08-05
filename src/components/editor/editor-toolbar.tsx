@@ -39,6 +39,7 @@ import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/markdown-doc-context";
 import { errorMessage, notifyError } from "@/lib/core/notify";
 import { copyFileToMarkdownAssets, pickImageFiles } from "@/lib/markdown/image";
+import { formatModShortcut } from "@/lib/shell/shortcuts";
 
 import {
 	ResponsiveFixedToolbar,
@@ -251,7 +252,7 @@ export function MarkdownEditorToolbar({
 			trailing={
 				onOpenFind ? (
 					<ToolbarButton
-						tooltip={`${t("findReplace.title")} (⌘F)`}
+						tooltip={`${t("findReplace.title")} (${formatModShortcut("f")})`}
 						aria-label={t("findReplace.title")}
 						onClick={onOpenFind}
 					>
