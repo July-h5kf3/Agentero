@@ -74,10 +74,11 @@ Frontmatter 当前保存在 Plate AST 之外，因此整理时继续字节级保
 
 编辑器正文上方提供可折叠 **Properties** 条（默认收起）：
 
-- 展开后直接编辑 YAML 正文（不含 `---` 围栏；保存时自动包回）。
-- 清空 YAML 即去掉 frontmatter；与正文共用自动保存 / dirty 状态。
+- **表单模式（默认）**：左侧类型图标切换 **文本 / 列表 / 复选框 / 日期**（列表为 chips，复选框为开关，日期为 `YYYY-MM-DD`）；可添加属性。磁盘仍为合法 YAML（`true`/`false`、ISO 日期、block list）。
+- **源码模式**：右上角切换为 YAML 正文（不含 `---` 围栏；保存时自动包回）。复杂 YAML（嵌套 map、多行标量等）自动回退源码。
+- 清空属性即去掉 frontmatter；与正文共用自动保存 / dirty 状态。
 - 常见用途：Obsidian 兼容 `aliases`，供双链搜索按标题命中该笔记（见 [wiki.md](wiki.md)）。
-- 精读 skill 会在 `NOTES.md` 写入 `aliases`（论文全称 + 短标题）；用户也可在此面板改。
+- 精读 skill 会在 `NOTES.md` 写入 `aliases`（论文全称 + 短标题）与 `created: YYYY-MM-DD`（已有创建日期不覆盖）；用户也可在此面板改。
 
 ### Slash 格式命令
 
