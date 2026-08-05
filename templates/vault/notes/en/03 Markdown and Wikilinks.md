@@ -66,7 +66,7 @@ Standard Markdown links work in the editor:
 [Agentero site](https://example.com)
 ```
 
-Type the full `[label](url)` form (the closing `)` turns it into a clickable link), paste the same syntax, or use the context menu / slash command to insert a `[]()` template. Clicking opens the URL in your system browser. Relative links to other vault notes use in-app navigation instead.
+Type the full `[label](url)` form (the closing `)` turns it into a link), paste the same syntax, or use the context menu / slash command **Add external link** — that inserts a link node with a placeholder label and opens the edit bubble for display text and URL. Click an existing link to edit; **⌘/Ctrl+click**, middle-click, or right-click opens it in your system browser. Relative links to other vault notes use in-app navigation instead.
 
 ## Mermaid Diagrams
 
