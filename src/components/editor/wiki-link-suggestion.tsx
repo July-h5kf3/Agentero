@@ -57,6 +57,7 @@ import {
 	sameWikiPath,
 	wikiCompletionCandidateKey,
 	wikiCompletionInsert,
+	wikiFileCandidateSecondaryLine,
 } from "@/lib/wiki-completion";
 import { getActiveTabId, workspaceStore } from "@/lib/workspace/store";
 
@@ -640,8 +641,9 @@ export function WikiLinkSuggestion({
 					</p>
 				) : null}
 				{candidates.map((candidate, index) => {
-					const detail =
-						candidate.kind === "file" ? candidate.path : candidate.detail;
+					// Frontmatter-alias hits: secondary line is `alias · path`.
+					// Basename hits: path only. Other kinds: host `detail`.
+					const detail = wikiFileCandidateSecondaryLine(candidate);
 					const isAliasPlaceholder =
 						candidate.kind === "alias" && !candidate.label;
 					return (
@@ -671,7 +673,10 @@ export function WikiLinkSuggestion({
 										: candidate.label}
 								</span>
 								{detail ? (
-									<span className="block truncate text-muted-foreground">
+									<span
+										className="block truncate text-muted-foreground"
+										title={detail}
+									>
 										{detail}
 									</span>
 								) : null}

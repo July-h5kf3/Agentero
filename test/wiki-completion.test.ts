@@ -23,6 +23,7 @@ import {
 	parseWikiCompletionQuery,
 	sameWikiPath,
 	wikiCompletionInsert,
+	wikiFileCandidateSecondaryLine,
 	wikiLinkArrowDirection,
 } from "@/lib/wiki-completion";
 
@@ -150,6 +151,29 @@ describe("wikilink completion grammar", () => {
 		expect(sameWikiPath("notes\\Canonical.md", "notes/canonical.md")).toBe(
 			true,
 		);
+	});
+
+	it("shows alias · path on the secondary line for frontmatter-alias hits", () => {
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "file",
+				path: "papers/1706.03762/NOTES.md",
+				alias: "Attention Is All You Need",
+			}),
+		).toBe("Attention Is All You Need · papers/1706.03762/NOTES.md");
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "file",
+				path: "papers/1706.03762/NOTES.md",
+			}),
+		).toBe("papers/1706.03762/NOTES.md");
+		expect(
+			wikiFileCandidateSecondaryLine({
+				kind: "heading",
+				path: "notes/a.md",
+				detail: "H2",
+			}),
+		).toBe("H2");
 	});
 
 	it("fills annotation Enter with |preview so display is not a bare UUID", () => {

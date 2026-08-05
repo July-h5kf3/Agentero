@@ -256,6 +256,25 @@ export function sameWikiPath(left: string, right: string): boolean {
 	);
 }
 
+/**
+ * Secondary line under a file completion row.
+ * Frontmatter-alias hits show `alias · path` so they are distinct from basename hits
+ * that only show the vault-relative path.
+ */
+export function wikiFileCandidateSecondaryLine(
+	candidate: Pick<WikiSearchCandidate, "kind" | "path" | "alias" | "detail">,
+): string | undefined {
+	if (candidate.kind === "file") {
+		const path = candidate.path.trim();
+		const alias = candidate.alias?.trim();
+		if (alias && path) return `${alias} · ${path}`;
+		if (alias) return alias;
+		return path || undefined;
+	}
+	const detail = candidate.detail?.trim();
+	return detail || undefined;
+}
+
 /** Stable identity for a selected completion while the editor stays mounted. */
 export function wikiCompletionCandidateKey(
 	candidate: WikiSearchCandidate,
