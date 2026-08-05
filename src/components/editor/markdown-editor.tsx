@@ -215,6 +215,8 @@ export function MarkdownEditor({
 	const contextMenuSelectionRef = useRef<RangeRef | null>(null);
 	const completionControllerRef = useRef<WikiCompletionController | null>(null);
 	const slashCommandControllerRef = useRef<SlashCommandController | null>(null);
+	/** Swallow the `beforeinput` insertParagraph that follows slash Enter confirm. */
+	const suppressNextEditorBreakRef = useRef(false);
 	const syncingWikiLinkPresentationRef = useRef(false);
 	const composingWikiLinkDraftRef = useRef(false);
 	const wikiLinkPresentationFrameRef = useRef<number | null>(null);
@@ -930,6 +932,17 @@ export function MarkdownEditor({
 		(event: FormEvent<HTMLDivElement>) => {
 			const nativeEvent = event.nativeEvent as InputEvent;
 			const inputType = nativeEvent.inputType ?? "";
+			// Slash menu confirms with Enter: keydown is preventDefault'd, but
+			// WebKit/Tauri still emits beforeinput insertParagraph afterwards,
+			// which would put the caret on a new line after the command runs.
+			if (
+				suppressNextEditorBreakRef.current &&
+				(inputType === "insertParagraph" || inputType === "insertLineBreak")
+			) {
+				event.preventDefault();
+				suppressNextEditorBreakRef.current = false;
+				return;
+			}
 			if (nativeEvent.isComposing || !inputType.startsWith("insert")) {
 				return;
 			}
@@ -1402,7 +1415,11 @@ export function MarkdownEditor({
 			const selection = takeContextMenuSelection();
 			if (!selection || !editorContainerRef.current?.isConnected) return;
 			const template = insertEditorLinkTemplate(editor, kind, selection);
-			editor.tf.focus({ at: editor.selection ?? selection });
+			// External link opens the edit popover; focusing the editor would
+			// immediately dismiss it (same race as slash confirm).
+			if (kind !== "external") {
+				editor.tf.focus({ at: editor.selection ?? selection });
+			}
 			if (template.wikiLinkDraft) {
 				window.requestAnimationFrame(updateWikiCompletionDraft);
 			}
@@ -1652,6 +1669,13 @@ export function MarkdownEditor({
 													draft={slashCommandDraft}
 													onClose={() => setSlashCommandDraft(null)}
 													controllerRef={slashCommandControllerRef}
+													onCommandExecuted={() => {
+														suppressNextEditorBreakRef.current = true;
+														// Clear if beforeinput never arrives (some engines).
+														window.setTimeout(() => {
+															suppressNextEditorBreakRef.current = false;
+														}, 100);
+													}}
 												/>
 											) : null}
 										</EditorContainer>

@@ -58,7 +58,7 @@ export function TocSidebar(props: TocSideBarProps) {
 								aria-label={item.title}
 								data-active={active}
 								className={cn(
-									"group/item flex h-6 w-full items-center justify-end rounded-sm px-1 outline-none",
+									"group/item flex h-6 w-full items-center justify-between gap-2 rounded-sm px-1 outline-none",
 									"transition-[background-color,color] duration-200 ease-out",
 									"text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
 									active && "text-foreground hover:text-foreground",
@@ -67,7 +67,7 @@ export function TocSidebar(props: TocSideBarProps) {
 							>
 								<span
 									className={cn(
-										"pointer-events-none mr-2 min-w-0 flex-1 truncate text-right text-xs",
+										"pointer-events-none min-w-0 flex-1 truncate text-left text-xs",
 										"translate-x-1 opacity-0 transition-[transform,opacity] duration-200 ease-out",
 										"group-hover/toc:translate-x-0 group-hover/toc:opacity-100",
 										"group-focus-within/toc:translate-x-0 group-focus-within/toc:opacity-100",

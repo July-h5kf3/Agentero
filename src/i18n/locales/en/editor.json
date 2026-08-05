@@ -69,6 +69,15 @@
 		"replace": "Replace",
 		"replaceAll": "Replace all"
 	},
+	"externalLink": {
+		"editTitle": "Edit link",
+		"labelField": "Display text",
+		"labelPlaceholder": "Link text",
+		"defaultLabel": "Link",
+		"urlField": "URL",
+		"open": "Open",
+		"apply": "Apply"
+	},
 	"contextMenu": {
 		"cut": "Cut",
 		"copy": "Copy",

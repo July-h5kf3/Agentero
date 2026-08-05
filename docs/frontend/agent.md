@@ -42,7 +42,8 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 | 自动 | `autoPaperReader`（默认关）；魔棒/单篇 Download 后 |
 
 成功写 `NOTES.md`，`is_read = true`；进度在后台任务条。批量导入不连跑。  
-Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md`）。
+Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md`）。  
+用户提示会按当前 App 语言（设置里的 `en` / `zh-CN` / 跟随系统解析后）注入一句输出语言说明：正文跟 App 语言，skill 固定的英文 `##` 结构标题保持不变。
 
 `NOTES.md` 须带 YAML frontmatter：
 

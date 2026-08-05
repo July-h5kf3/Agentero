@@ -272,6 +272,7 @@ export const MarkdownEditorKit = [
 	// ImagePlugin is configured per-editor (uploadImage → ./assets/) in markdown-editor.tsx
 	MentionPlugin.withComponent(MentionElement),
 	WikiLinkPlugin,
+	// Hand-typed `[label](url)` + open/edit UI (see link-plugin / link-node).
 	LinkPlugin,
 
 	// Find & replace (⌘F) — search highlight decorations

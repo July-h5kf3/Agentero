@@ -68,12 +68,28 @@ export function formatSkillMention(
 }
 
 /**
+ * Language line for paper-reader NOTES.md body, based on the resolved App
+ * locale (`i18n.language` after settings load: `en` | `zh-CN`).
+ * Fixed skill section headings stay English; only the body language changes.
+ */
+export function paperReaderLanguageInstruction(
+	language: string = i18n.language,
+): string {
+	const lang = (language || "en").toLowerCase();
+	if (lang.startsWith("zh")) {
+		return "Write the NOTES.md body in Chinese (Simplified). Keep the fixed English section headings from the skill (e.g. ## Method).";
+	}
+	return "Write the NOTES.md body in English.";
+}
+
+/**
  * User-facing request body. Host will additionally prefix native triggers
  * (e.g. `$paper-reader` for Codex) and inject SKILL.md by style.
  */
 export function buildPaperReaderUserPrompt(
 	paperRel: string,
 	style: SkillMentionStyle,
+	language: string = i18n.language,
 ): string {
 	const mention = formatSkillMention(PAPER_READER_SKILL_ID, style);
 	const skillLine =
@@ -88,6 +104,7 @@ export function buildPaperReaderUserPrompt(
 		`Paper folder (Vault-relative): \`${paperRel}\`.`,
 		"Prefer TeX under source/, else PAPER.md, else local PDF.",
 		`Write structured lecture notes into \`${paperRel}/NOTES.md\`.`,
+		paperReaderLanguageInstruction(language),
 		"Keep [[wikilinks]]. End with ## Sources listing Vault-relative paths you read.",
 	].join("\n");
 }

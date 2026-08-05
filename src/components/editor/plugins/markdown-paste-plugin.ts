@@ -1,5 +1,6 @@
 import { MarkdownPlugin } from "@platejs/markdown";
 import { createSlatePlugin, KEYS, type SlateEditor } from "platejs";
+import { isUnfinishedMarkdownLinkContext } from "@/components/editor/plugins/markdown-link-input-rule";
 import { prepareMarkdownForDeserialize } from "@/lib/markdown/deserialize";
 
 function isMarkdownPasteBlocked(editor: SlateEditor) {
@@ -17,6 +18,10 @@ function isMarkdownPasteBlocked(editor: SlateEditor) {
 /**
  * Parse clipboard text as Markdown before Plate's HTML parser can claim a
  * payload that contains both text/plain and text/html.
+ *
+ * Exception: when the caret is mid `[label](…)` construction, insert plain
+ * text so a bare URL is not turned into an autolink node that breaks the
+ * surrounding Markdown link syntax.
  */
 export const MarkdownPastePlugin = createSlatePlugin({
 	key: "markdownPaste",
@@ -30,6 +35,14 @@ export const MarkdownPastePlugin = createSlatePlugin({
 				isMarkdownPasteBlocked(editor)
 			) {
 				return insertData(dataTransfer);
+			}
+
+			// Unfinished `[label](` — keep paste as literal characters so typing
+			// `)` can convert the whole thing into one link node.
+			// Only for single-line payloads (multi-line stays Markdown).
+			if (!markdown.includes("\n") && isUnfinishedMarkdownLinkContext(editor)) {
+				editor.tf.insertText(markdown);
+				return;
 			}
 
 			const fragment = editor
