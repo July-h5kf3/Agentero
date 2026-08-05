@@ -11,7 +11,9 @@ import {
 	dedupeModelsClient,
 	errorChatLine,
 	errorText,
+	formatAskUserAnswers,
 	isBackgroundWorkflowHistoryTitle,
+	parseAskUserQuestions,
 	resetAgentChatIds,
 	resolveSelected,
 	upsertPlanPart,
@@ -95,6 +97,45 @@ describe("stream / tool / plan parts", () => {
 		expect(agentHasContent(parts)).toBe(true);
 		expect(agentTextFromParts(parts)).toBe("ab");
 		expect(agentHasContent([])).toBe(false);
+	});
+});
+
+describe("AskUserQuestion tool input", () => {
+	it("parses selectable questions and formats the selected answers", () => {
+		const questions = parseAskUserQuestions({
+			variant: "AskUserQuestion",
+			questions: [
+				{
+					question: "Which scope should I use?",
+					options: [
+						{ label: "Paper", description: "Only the open paper" },
+						{ label: "Vault" },
+					],
+				},
+			],
+		});
+
+		expect(questions).toEqual([
+			{
+				question: "Which scope should I use?",
+				options: [
+					{ label: "Paper", description: "Only the open paper" },
+					{ label: "Vault", description: undefined },
+				],
+			},
+		]);
+		expect(formatAskUserAnswers(questions ?? [], ["Paper"])).toBe(
+			"Question: Which scope should I use?\nAnswer: Paper",
+		);
+	});
+
+	it("leaves malformed or unrelated tools on the generic UI", () => {
+		expect(parseAskUserQuestions({ variant: "Other", questions: [] })).toBe(
+			null,
+		);
+		expect(
+			parseAskUserQuestions('{"variant":"AskUserQuestion","questions":[]}'),
+		).toBe(null);
 	});
 });
 

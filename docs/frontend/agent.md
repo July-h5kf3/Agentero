@@ -20,6 +20,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - **图片附件**：Composer 支持粘贴 / 点选 / 拖入图片（`image/*`，最多 8 张、单张 ≤ 10 MiB）。提交时转为 ACP `ContentBlock::Image`（与 PDF 视觉批注同一 `runOnce.images` 通路）；会话气泡以缩略 chip 展示，纯图消息无文字气泡。图片仅会话本地保留，不随 `session/load` 历史回放。工具：`src/lib/agent/prompt-image.ts`。
 - `@`：空时优先最近路径与浅层目录；› 进入子目录；论文标签与 `paperTreeLabelMode` 一致。`@`、`$` 与 `/` 候选菜单由 viewport 碰撞处理定位，空间不足时翻转并在可用高度内滚动。
 - ACP `plan` 事件使用 AI Elements `Plan` / `PlanStep` 展示，可折叠查看步骤；步骤状态由图标、完成态和无障碍文案表达。
+- ACP `AskUserQuestion` 工具调用会解析为 AI Elements `Tool` 内的可选回答；完成选择后以正常的下一用户轮提交，并继续同一 ACP 会话。
 - 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
 - Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。命令以 `/name` 填入 Composer，并在当前 provider session 中原样发送。

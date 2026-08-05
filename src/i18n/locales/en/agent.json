@@ -121,6 +121,10 @@
 		"defaultTitle": "Tool",
 		"failed": "Tool failed"
 	},
+	"askUserQuestion": {
+		"submit": "Submit answers",
+		"submitted": "Answers submitted"
+	},
 	"citation": {
 		"vaultPath": "Vault path referenced by agent"
 	},

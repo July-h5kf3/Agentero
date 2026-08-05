@@ -211,6 +211,7 @@ export const AgentPanel = memo(function AgentPanel({
 						onResendEdited={(lineId) => void resendEditedMessage(lineId)}
 						onStartEditing={startEditingMessage}
 						onSendSuggestion={sendSuggestion}
+						onAnswerQuestion={submitComposer}
 						onOpenSource={onOpenSource}
 					/>
 

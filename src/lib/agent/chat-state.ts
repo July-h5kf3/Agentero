@@ -41,6 +41,18 @@ export type ToolUiState = {
 	output?: unknown;
 };
 
+/** A selectable answer supplied by an ACP AskUserQuestion tool call. */
+export type AskUserQuestionOption = {
+	label: string;
+	description?: string;
+};
+
+/** A question supplied by an ACP AskUserQuestion tool call. */
+export type AskUserQuestion = {
+	question: string;
+	options: AskUserQuestionOption[];
+};
+
 /**
  * Ordered slice of an agent turn. Reasoning, tool calls, plan and message text
  * are stored in the sequence the agent emitted them so the transcript can show
@@ -372,6 +384,63 @@ export function toolPartState(
 		default:
 			return "input-streaming";
 	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Extract the documented Codex AskUserQuestion shape from raw ACP tool input.
+ * Other tool calls deliberately return null so they retain the generic JSON UI.
+ */
+export function parseAskUserQuestions(
+	input: unknown,
+): AskUserQuestion[] | null {
+	let payload = input;
+	if (typeof payload === "string") {
+		try {
+			payload = JSON.parse(payload) as unknown;
+		} catch {
+			return null;
+		}
+	}
+	if (!isRecord(payload) || payload.variant !== "AskUserQuestion") return null;
+	if (!Array.isArray(payload.questions)) return null;
+
+	const questions = payload.questions.flatMap((value) => {
+		if (!isRecord(value) || typeof value.question !== "string") return [];
+		const question = value.question.trim();
+		if (!question || !Array.isArray(value.options)) return [];
+		const options = value.options.flatMap((option) => {
+			if (!isRecord(option) || typeof option.label !== "string") return [];
+			const label = option.label.trim();
+			if (!label) return [];
+			const description =
+				typeof option.description === "string"
+					? option.description.trim() || undefined
+					: undefined;
+			return [{ label, description }];
+		});
+		return options.length ? [{ question, options }] : [];
+	});
+
+	return questions.length === payload.questions.length && questions.length > 0
+		? questions
+		: null;
+}
+
+/** Format selected options as a concise, self-contained follow-up turn. */
+export function formatAskUserAnswers(
+	questions: AskUserQuestion[],
+	answers: string[],
+): string {
+	return questions
+		.map(
+			(question, index) =>
+				`Question: ${question.question}\nAnswer: ${answers[index]}`,
+		)
+		.join("\n\n");
 }
 
 export type ToolPatch = {

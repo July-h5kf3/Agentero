@@ -1,5 +1,5 @@
 import { CopyIcon, Pencil } from "lucide-react";
-import type { RefObject } from "react";
+import { type RefObject, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	ChatAttachedImages,
@@ -73,6 +73,8 @@ import {
 	agentTextFromParts,
 	type ChatLine,
 	copyText,
+	formatAskUserAnswers,
+	parseAskUserQuestions,
 	SUGGESTION_KEYS,
 	SUGGESTION_WORKFLOW,
 	toolPartState,
@@ -80,6 +82,87 @@ import {
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { cn } from "@/lib/core/utils";
+
+function AskUserQuestionTool({
+	input,
+	disabled,
+	onAnswer,
+}: {
+	input: unknown;
+	disabled: boolean;
+	onAnswer: (answer: string) => Promise<boolean>;
+}) {
+	const { t } = useTranslation("agent");
+	const questions = parseAskUserQuestions(input);
+	const [answers, setAnswers] = useState<string[]>([]);
+	const [sending, setSending] = useState(false);
+	const [submitted, setSubmitted] = useState(false);
+
+	if (!questions) return null;
+	const ready =
+		answers.length === questions.length && answers.every((answer) => answer);
+
+	return (
+		<ToolContent>
+			<div className="space-y-4">
+				{questions.map((question, questionIndex) => (
+					<div key={question.question} className="space-y-2">
+						<p className="text-sm leading-5">{question.question}</p>
+						<div className="flex flex-col gap-1.5">
+							{question.options.map((option) => {
+								const selected = answers[questionIndex] === option.label;
+								return (
+									<Suggestion
+										key={option.label}
+										suggestion={option.label}
+										aria-pressed={selected}
+										disabled={disabled || sending || submitted}
+										variant={selected ? "secondary" : "outline"}
+										className="h-auto w-full justify-start whitespace-normal rounded-md px-3 py-2 text-left"
+										onClick={(answer) =>
+											setAnswers((current) => {
+												const next = [...current];
+												next[questionIndex] = answer;
+												return next;
+											})
+										}
+									>
+										<span className="flex min-w-0 flex-col items-start gap-0.5">
+											<span>{option.label}</span>
+											{option.description ? (
+												<span className="text-muted-foreground text-xs">
+													{option.description}
+												</span>
+											) : null}
+										</span>
+									</Suggestion>
+								);
+							})}
+						</div>
+					</div>
+				))}
+				<Button
+					type="button"
+					size="sm"
+					disabled={!ready || disabled || sending || submitted}
+					onClick={() => {
+						setSending(true);
+						void onAnswer(formatAskUserAnswers(questions, answers)).then(
+							(sent) => {
+								setSending(false);
+								setSubmitted(sent);
+							},
+						);
+					}}
+				>
+					{submitted
+						? t("askUserQuestion.submitted")
+						: t("askUserQuestion.submit")}
+				</Button>
+			</div>
+		</ToolContent>
+	);
+}
 
 export function ChatTranscript({
 	isZen,
@@ -99,6 +182,7 @@ export function ChatTranscript({
 	onResendEdited,
 	onStartEditing,
 	onSendSuggestion,
+	onAnswerQuestion,
 	onOpenSource,
 }: {
 	isZen: boolean;
@@ -125,6 +209,7 @@ export function ChatTranscript({
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
+	onAnswerQuestion: (answer: string) => Promise<boolean>;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
 }) {
@@ -388,26 +473,45 @@ export function ChatTranscript({
 													if (part.type === "tool") {
 														const tool = part.tool;
 														const state = toolPartState(tool.status);
+														const askUserQuestion = parseAskUserQuestions(
+															tool.input,
+														);
 														return (
-															<Tool key={partKey} defaultOpen={false}>
+															<Tool
+																key={partKey}
+																defaultOpen={Boolean(askUserQuestion)}
+															>
 																<ToolHeader
 																	title={tool.title || t("tool.defaultTitle")}
 																	type={`tool-${tool.kind}`}
 																	state={state}
 																/>
-																<ToolContent>
-																	{tool.input !== undefined ? (
-																		<ToolInput input={tool.input} />
-																	) : null}
-																	<ToolOutput
-																		output={tool.output}
-																		errorText={
-																			tool.status === "failed"
-																				? t("tool.failed")
-																				: undefined
+																{askUserQuestion ? (
+																	<AskUserQuestionTool
+																		input={tool.input}
+																		disabled={
+																			switching ||
+																			submitting ||
+																			(tool.status !== "pending" &&
+																				tool.status !== "in_progress")
 																		}
+																		onAnswer={onAnswerQuestion}
 																	/>
-																</ToolContent>
+																) : (
+																	<ToolContent>
+																		{tool.input !== undefined ? (
+																			<ToolInput input={tool.input} />
+																		) : null}
+																		<ToolOutput
+																			output={tool.output}
+																			errorText={
+																				tool.status === "failed"
+																					? t("tool.failed")
+																					: undefined
+																			}
+																		/>
+																	</ToolContent>
+																)}
 															</Tool>
 														);
 													}

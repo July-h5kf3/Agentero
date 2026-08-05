@@ -65,3 +65,4 @@
 - [ ] Git 集成 / 可选云同步
 - [ ] 引用图 deeper（聚类、作者机构图）
 - [ ] CLI domain 抽离独立 crate（仅当边界成为问题时）
+- [x] Agent `AskUserQuestion` 工具调用转为可提交的选项回答（[#203](https://github.com/poco-ai/Agentero/issues/203)）

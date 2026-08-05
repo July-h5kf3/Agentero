@@ -121,6 +121,10 @@
 		"defaultTitle": "工具",
 		"failed": "工具执行失败"
 	},
+	"askUserQuestion": {
+		"submit": "提交回答",
+		"submitted": "回答已提交"
+	},
 	"citation": {
 		"vaultPath": "Agent 引用的知识库路径"
 	},
