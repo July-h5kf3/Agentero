@@ -2,6 +2,7 @@
 
 use super::import::{
     import_connector_item_remote_with_cookies, import_connector_item_with_cookies,
+    import_standalone_attachment, save_attachment_from_resolver, session_has_attachment_resolvers,
     write_snapshot_html, write_snapshot_html_remote,
 };
 use super::state::{ConnectorController, ConnectorItemSaved, ProgressAttachment, ProgressItem};
@@ -42,6 +43,18 @@ pub async fn serve(
             "/connector/saveAttachment",
             post(save_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BYTES)),
         )
+        .route(
+            "/connector/saveStandaloneAttachment",
+            post(save_standalone_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BYTES)),
+        )
+        .route(
+            "/connector/hasAttachmentResolvers",
+            post(has_attachment_resolvers),
+        )
+        .route(
+            "/connector/saveAttachmentFromResolver",
+            post(save_attachment_from_resolver_handler),
+        )
         .route("/connector/sessionProgress", post(session_progress))
         .route("/connector/attachmentProgress", post(attachment_progress))
         .route("/connector/detect", post(detect))
@@ -68,6 +81,17 @@ pub async fn serve(
 
 async fn fallback() -> Response {
     text_response(StatusCode::NOT_FOUND, "text/plain", "No endpoint found\n")
+}
+
+/// Normalize a Connector item `id` (string or number) to the map key used in sessions.
+fn connector_item_key(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
 }
 
 fn text_response(status: StatusCode, content_type: &str, body: &str) -> Response {
@@ -364,10 +388,10 @@ async fn save_items(
                 if !r.deduped {
                     state.ctrl.record_session_paper(&session_id, &r.path);
                 }
-                // Remember connector item id → paper so saveAttachment can resolve parentItemID.
+                // Remember connector item id → paper so saveAttachment / resolvers resolve.
                 state.ctrl.record_session_item_paper(
                     &session_id,
-                    &r.connector_item_id.to_string(),
+                    &connector_item_key(&r.connector_item_id),
                     &r.path,
                 );
                 state.ctrl.emit_item_saved(ConnectorItemSaved {
@@ -562,9 +586,11 @@ async fn save_snapshot(
         }
     };
     state.ctrl.record_session_paper(&session_id, &result.path);
-    state
-        .ctrl
-        .record_session_item_paper(&session_id, &item["id"].to_string(), &result.path);
+    state.ctrl.record_session_item_paper(
+        &session_id,
+        &connector_item_key(&item["id"]),
+        &result.path,
+    );
     if let Some(html) = body.html.as_deref().filter(|s| !s.is_empty()) {
         let write_result = if let Some(sid) = parse_remote_handle(&handle) {
             match state.ctrl.remote_registry() {
@@ -824,6 +850,192 @@ async fn save_attachment(
                 StatusCode::INTERNAL_SERVER_ERROR
             };
             json_response(status, json!({ "error": msg }))
+        }
+    }
+}
+
+/// Standalone PDF upload (no parent item). Body = raw PDF; `X-Metadata` has
+/// `{ sessionID?, title, url }` and `sessionID` may also be a query param.
+async fn save_standalone_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    body: Bytes,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+
+    if headers.get("x-metadata").is_none() {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "METADATA_NOT_PROVIDED" }),
+        );
+    }
+    let meta: Value = headers
+        .get("x-metadata")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(Value::Null);
+
+    let session_id = meta
+        .get("sessionID")
+        .or_else(|| meta.get("sessionId"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| query.get("sessionID").map(String::as_str))
+        .or_else(|| query.get("sessionId").map(String::as_str))
+        .unwrap_or("")
+        .to_string();
+    if session_id.is_empty() {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+        );
+    }
+
+    let title = meta
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let url = meta
+        .get("url")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    match import_standalone_attachment(state.ctrl.clone(), &session_id, title, url, &body).await {
+        Ok(_) => {
+            // Official: `{ canRecognize }`. We skip PDF recognition for now so
+            // the extension will not poll `/connector/getRecognizedItem`.
+            json_response(StatusCode::CREATED, json!({ "canRecognize": false }))
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            state.ctrl.emit_error(&msg, Some(&session_id));
+            let status = if msg.contains("No vault") {
+                StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            json_response(status, json!({ "error": msg }))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ResolverBody {
+    #[serde(default, alias = "sessionId", rename = "sessionID")]
+    session_id: Option<String>,
+    /// Connector item id (string or number from the translator payload).
+    #[serde(default, alias = "itemId", rename = "itemID")]
+    item_id: Option<Value>,
+}
+
+fn resolver_item_id(value: &Option<Value>) -> Option<String> {
+    value.as_ref().and_then(|v| match v {
+        Value::String(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+        Value::Number(n) => Some(n.to_string()),
+        other if !other.is_null() => Some(other.to_string()),
+        _ => None,
+    })
+}
+
+async fn has_attachment_resolvers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ResolverBody>,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    let Some(session_id) = body
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+        );
+    };
+    let Some(item_id) = resolver_item_id(&body.item_id) else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "ITEM_ID_NOT_PROVIDED" }),
+        );
+    };
+    match session_has_attachment_resolvers(state.ctrl.as_ref(), &session_id, &item_id).await {
+        Ok(has) => json_response(StatusCode::OK, json!(has)),
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("SESSION_NOT_FOUND") {
+                json_response(
+                    StatusCode::BAD_REQUEST,
+                    json!({ "error": "SESSION_NOT_FOUND" }),
+                )
+            } else {
+                // Soft-fail: tell the extension there are no resolvers.
+                json_response(StatusCode::OK, json!(false))
+            }
+        }
+    }
+}
+
+async fn save_attachment_from_resolver_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ResolverBody>,
+) -> Response {
+    if let Some(r) = guard(&headers, &Method::POST) {
+        return r;
+    }
+    let Some(session_id) = body
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "SESSION_ID_NOT_PROVIDED" }),
+        );
+    };
+    let Some(item_id) = resolver_item_id(&body.item_id) else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({ "error": "ITEM_ID_NOT_PROVIDED" }),
+        );
+    };
+    match save_attachment_from_resolver(state.ctrl.clone(), &session_id, &item_id).await {
+        Ok(title) => text_response(StatusCode::CREATED, "text/plain", &title),
+        Err(e) => {
+            let msg = e.to_string();
+            state.ctrl.emit_error(&msg, Some(&session_id));
+            if msg.contains("SESSION_NOT_FOUND") {
+                json_response(
+                    StatusCode::BAD_REQUEST,
+                    json!({ "error": "SESSION_NOT_FOUND" }),
+                )
+            } else {
+                text_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "text/plain",
+                    "Failed to save an attachment",
+                )
+            }
         }
     }
 }

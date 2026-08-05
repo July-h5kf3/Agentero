@@ -445,6 +445,21 @@ impl ConnectorController {
             .or_else(|| session.paper_paths.last().cloned())
     }
 
+    /// Exact Connector item id → paper path (no last-paper fallback).
+    /// Used by OA resolvers so multi-item saves cannot attach the wrong PDF.
+    pub fn session_item_paper_exact(
+        &self,
+        session_id: &str,
+        item_id: &str,
+    ) -> Result<Option<String>, AppError> {
+        let g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let session = g
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
+        Ok(session.item_map.get(item_id).cloned())
+    }
+
     /// Resolve paper rel for a `saveAttachment` upload (session map / last paper).
     fn resolve_attachment_rel(
         &self,
@@ -732,14 +747,31 @@ impl ConnectorController {
             (format!("D{parent}"), name)
         };
 
+        // Official Connector only uploads PDFs when `filesEditable` is true:
+        //   getSelectedCollection → if (response.filesEditable) saveAttachmentsToZotero()
+        // Missing this field left it undefined/falsey, so saveItems succeeded but
+        // saveAttachment was never called (IEEE stamp pages looked "saved" with no PDF).
+        let targets_json: Vec<serde_json::Value> = targets
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "name": t.name,
+                    "level": t.level,
+                    "filesEditable": true,
+                })
+            })
+            .collect();
+
         serde_json::json!({
             "libraryID": 1,
             "libraryName": vault_name,
             "libraryEditable": true,
+            "filesEditable": true,
             "editable": true,
             "id": if parent == "papers" { serde_json::Value::Null } else { serde_json::json!(sel_id) },
             "name": sel_name,
-            "targets": targets,
+            "targets": targets_json,
         })
     }
 
@@ -857,5 +889,24 @@ mod tests {
         ctrl.set_vault(None);
         let err = ctrl.vault_handle_and_parent().unwrap_err().to_string();
         assert!(err.contains("No vault open"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn selected_collection_reports_files_editable() {
+        let ctrl = ConnectorController::new();
+        // No vault is fine for this JSON shape check.
+        let v = ctrl.selected_collection_json().await;
+        assert_eq!(v.get("filesEditable"), Some(&serde_json::json!(true)));
+        assert_eq!(v.get("libraryEditable"), Some(&serde_json::json!(true)));
+        assert_eq!(v.get("editable"), Some(&serde_json::json!(true)));
+        if let Some(targets) = v.get("targets").and_then(|t| t.as_array()) {
+            for t in targets {
+                assert_eq!(
+                    t.get("filesEditable"),
+                    Some(&serde_json::json!(true)),
+                    "target missing filesEditable: {t}"
+                );
+            }
+        }
     }
 }

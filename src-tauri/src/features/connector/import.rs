@@ -1,5 +1,6 @@
 //! Map Connector `saveItems` payloads into Vault papers (reuse lookup pipeline).
 
+use super::state::ProgressItem;
 use crate::core::error::AppError;
 use crate::core::fs::WriteOpts;
 use crate::features::catalog::papers;
@@ -9,7 +10,7 @@ use crate::features::import::{
     paper_record_from_meta, write_paper_shell_opts, PaperMeta, ZOTERO_INTERNAL_TAG_PREFIX,
 };
 use crate::features::remote::import_bridge::{unique_remote_paper_path, upload_tree};
-use crate::features::remote::RemoteSession;
+use crate::features::remote::{parse_remote_handle, RemoteSession};
 use crate::features::translate::{free_mt_to_zh, looks_mostly_cjk};
 use serde_json::Value;
 use std::fs;
@@ -521,6 +522,476 @@ fn pdf_attachment_url(item: &Value) -> Option<String> {
     None
 }
 
+/// Decode Connector `title` values that may be RFC 2047 encoded
+/// (`=?UTF-8?B?...?=` / `=?UTF-8?Q?...?=`). Falls back to the raw string.
+fn decode_connector_title(raw: &str) -> String {
+    let t = raw.trim();
+    if t.is_empty() {
+        return String::new();
+    }
+    // Simple single-token RFC 2047: =?charset?B|Q?text?=
+    let Some(rest) = t.strip_prefix("=?") else {
+        return t.to_string();
+    };
+    let Some(end) = rest.find("?=") else {
+        return t.to_string();
+    };
+    let body = &rest[..end];
+    let parts: Vec<&str> = body.splitn(3, '?').collect();
+    if parts.len() != 3 {
+        return t.to_string();
+    }
+    let charset = parts[0].to_ascii_lowercase();
+    if charset != "utf-8" && charset != "utf8" {
+        return t.to_string();
+    }
+    let encoding = parts[1].to_ascii_uppercase();
+    let data = parts[2];
+    match encoding.as_str() {
+        "B" => {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(data.as_bytes())
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| t.to_string())
+        }
+        "Q" => {
+            // Quoted-printable-ish: `_` → space, `=HH` hex.
+            let mut out = Vec::new();
+            let bytes = data.as_bytes();
+            let mut i = 0;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'_' => {
+                        out.push(b' ');
+                        i += 1;
+                    }
+                    b'=' if i + 2 < bytes.len() => {
+                        let hex = &data[i + 1..i + 3];
+                        if let Ok(v) = u8::from_str_radix(hex, 16) {
+                            out.push(v);
+                            i += 3;
+                        } else {
+                            out.push(bytes[i]);
+                            i += 1;
+                        }
+                    }
+                    b => {
+                        out.push(b);
+                        i += 1;
+                    }
+                }
+            }
+            String::from_utf8(out)
+                .ok()
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| t.to_string())
+        }
+        _ => t.to_string(),
+    }
+}
+
+/// Browser-uploaded **standalone** PDF (no parent bibliographic item).
+/// Used when the user saves an open PDF tab via the Connector icon.
+///
+/// Creates a session + paper shell, writes `{id}.pdf`, schedules liteparse in
+/// the background, and returns metadata for the HTTP 201 body.
+/// Official Zotero returns `{ canRecognize }`; we return `canRecognize: false`
+/// because `/connector/getRecognizedItem` is not implemented yet.
+pub async fn import_standalone_attachment(
+    ctrl: Arc<ConnectorController>,
+    session_id: &str,
+    title: Option<&str>,
+    url: Option<&str>,
+    bytes: &[u8],
+) -> Result<ConnectorImportResult, AppError> {
+    if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
+        return Err(AppError::message("uploaded attachment is not a PDF"));
+    }
+
+    let (vault_handle, parent_dir) = ctrl.vault_handle_and_parent()?;
+    let parent_dir = {
+        // Prefer session parent if the session was already opened (e.g. re-save).
+        let session_parent = ctrl.session_parent_dir(session_id);
+        if session_parent.is_empty() {
+            parent_dir
+        } else {
+            session_parent
+        }
+    };
+
+    let title_raw = title.map(str::trim).filter(|s| !s.is_empty());
+    let title = title_raw
+        .map(decode_connector_title)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            url.and_then(|u| {
+                Path::new(u)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.replace('%', " "))
+            })
+        })
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "PDF".into());
+    let base_id = crate::features::import::slug_from_stem(&title);
+    let mut meta = crate::features::import::local_pdf_meta_for_import(base_id, title.clone());
+    meta.meta_source = Some("zotero-connector".into());
+    if let Some(u) = url.map(str::trim).filter(|s| !s.is_empty()) {
+        meta.source_url = Some(u.to_string());
+        meta.pdf_url = Some(u.to_string());
+    }
+
+    // Session must exist for later updateSession / progress; create if new.
+    let progress_item = ProgressItem {
+        id: Value::String(url.unwrap_or("standalone").to_string()),
+        title: title.clone(),
+        item_type: "attachment".into(),
+        attachments: Vec::new(),
+    };
+    match ctrl.create_session(session_id, vec![progress_item]) {
+        Ok(()) => {}
+        Err(e) if e.to_string().contains("SESSION_EXISTS") => {
+            // Official rejects SESSION_EXISTS; allow reuse so a retry after a
+            // partial failure can still land the PDF.
+        }
+        Err(e) => return Err(e),
+    }
+
+    let result = if let Some(sid) = parse_remote_handle(&vault_handle) {
+        let reg = ctrl
+            .remote_registry()
+            .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+        let session = reg.get(sid).await?;
+        import_standalone_remote(session, &parent_dir, meta, bytes).await?
+    } else {
+        import_standalone_local(Path::new(&vault_handle), &parent_dir, meta, bytes).await?
+    };
+
+    ctrl.record_session_paper(session_id, &result.path);
+    // Map by URL (official uses attachment URL as connector key for standalone).
+    if let Some(u) = url.map(str::trim).filter(|s| !s.is_empty()) {
+        ctrl.record_session_item_paper(session_id, u, &result.path);
+    }
+    ctrl.record_session_item_paper(session_id, &result.id, &result.path);
+    ctrl.emit_item_saved(crate::features::connector::ConnectorItemSaved {
+        path: result.path.clone(),
+        id: result.id.clone(),
+        title: result.title.clone(),
+        deduped: result.deduped,
+        session_id: session_id.to_string(),
+    });
+    ctrl.mark_session_done(session_id);
+    Ok(result)
+}
+
+async fn import_standalone_local(
+    vault: &Path,
+    parent_dir: &str,
+    meta: PaperMeta,
+    bytes: &[u8],
+) -> Result<ConnectorImportResult, AppError> {
+    use crate::features::import::paper_import::{
+        paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
+    };
+
+    // Avoid blocking the Connector HTTP request on liteparse (can exceed 60s).
+    // Deferred + manual PDF write; liteparse runs in the background.
+    let title = meta.title.clone();
+    let commit = paper_commit(
+        meta,
+        PaperCommitOptions {
+            vault,
+            parent_dir,
+            dedupe: DedupePolicy::None,
+            assets: AssetsPolicy::Deferred,
+            translate_abstract: false,
+            fresh_timestamps: true,
+        },
+    )
+    .await?;
+    if commit.status == CommitStatus::Deduped {
+        return Ok(ConnectorImportResult {
+            path: commit.path,
+            id: commit.id,
+            title: commit.title,
+            deduped: true,
+            connector_item_id: Value::Null,
+            item_type: "attachment".into(),
+        });
+    }
+
+    let paper_dir = PathBuf::from(&commit.paper_dir);
+    fs::write(paper_dir.join(format!("{}.pdf", commit.id)), bytes)?;
+
+    let vault_bg = vault.to_path_buf();
+    let path_rel = commit.path.clone();
+    let dir_bg = paper_dir;
+    tauri::async_runtime::spawn(async move {
+        let _ = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
+            &vault_bg, &path_rel, &dir_bg,
+        )
+        .await;
+    });
+
+    Ok(ConnectorImportResult {
+        path: commit.path,
+        id: commit.id,
+        title,
+        deduped: false,
+        connector_item_id: Value::Null,
+        item_type: "attachment".into(),
+    })
+}
+
+async fn import_standalone_remote(
+    session: Arc<RemoteSession>,
+    parent_dir: &str,
+    mut meta: PaperMeta,
+    bytes: &[u8],
+) -> Result<ConnectorImportResult, AppError> {
+    let parent_rel = normalize_parent_dir(parent_dir)?;
+    let id = meta.id.clone();
+    if id.is_empty() {
+        return Err(AppError::message("resolved metadata has empty id"));
+    }
+    if let Ok(Some(existing)) = papers::get_by_id(&session.work_root, &id) {
+        return Ok(ConnectorImportResult {
+            path: existing.path,
+            id: existing.id,
+            title: existing.title,
+            deduped: true,
+            connector_item_id: Value::Null,
+            item_type: "attachment".into(),
+        });
+    }
+
+    let (folder_id, path_rel) =
+        unique_remote_paper_path(session.fs.as_ref(), &parent_rel, &id).await?;
+    meta.id = folder_id.clone();
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    meta.added_at = now.clone();
+    meta.updated_at = now;
+    let title = meta.title.clone();
+
+    let staging = session.work_root.join(&path_rel);
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    fs::create_dir_all(&staging)?;
+    fs::write(staging.join(format!("{folder_id}.pdf")), bytes)?;
+    write_paper_shell_opts(&staging, &meta, false).await?;
+    let record = paper_record_from_meta(&path_rel, &meta);
+    papers::upsert_paper(&session.work_root, &record)?;
+    upload_tree(session.fs.as_ref(), &staging, &path_rel).await?;
+    {
+        let mut cat = session.catalog.lock().await;
+        cat.push(session.fs.clone()).await?;
+    }
+
+    let session_bg = session.clone();
+    let rel_bg = path_rel.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
+            &session_bg.work_root,
+            &rel_bg,
+            &session_bg.work_root.join(&rel_bg),
+        )
+        .await;
+        let paper_md = session_bg.work_root.join(&rel_bg).join("PAPER.md");
+        if paper_md.is_file() {
+            if let Ok(md) = fs::read(&paper_md) {
+                let _ = session_bg
+                    .fs
+                    .write(
+                        &format!("{rel_bg}/PAPER.md"),
+                        &md,
+                        WriteOpts {
+                            create_parents: true,
+                        },
+                    )
+                    .await;
+            }
+        }
+    });
+
+    Ok(ConnectorImportResult {
+        path: path_rel,
+        id: meta.id,
+        title,
+        deduped: false,
+        connector_item_id: Value::Null,
+        item_type: "attachment".into(),
+    })
+}
+
+/// Whether an OA/crossref resolver might still obtain a PDF for this session item.
+/// True when the paper has a DOI or arXiv id and no local PDF yet.
+pub async fn session_has_attachment_resolvers(
+    ctrl: &ConnectorController,
+    session_id: &str,
+    item_id: &str,
+) -> Result<bool, AppError> {
+    let paper_rel = match ctrl.session_item_paper_exact(session_id, item_id)? {
+        Some(p) => p,
+        // Session exists but this item was not mapped (or already deduped without record).
+        None => return Ok(false),
+    };
+    let (doi, arxiv, has_pdf) = paper_resolver_hints(ctrl, &paper_rel).await?;
+    Ok((doi.is_some() || arxiv.is_some()) && !has_pdf)
+}
+
+/// Download an OA/Crossref PDF into the paper for a session item (resolver path).
+/// Returns a display title for the attachment (plain text body of HTTP 201).
+pub async fn save_attachment_from_resolver(
+    ctrl: Arc<ConnectorController>,
+    session_id: &str,
+    item_id: &str,
+) -> Result<String, AppError> {
+    let paper_rel = ctrl
+        .session_item_paper_exact(session_id, item_id)?
+        .ok_or_else(|| AppError::message("SESSION_NOT_FOUND"))?;
+
+    let (vault_handle, _) = ctrl.vault_handle_and_parent()?;
+    let (doi, arxiv, has_pdf) = paper_resolver_hints(ctrl.as_ref(), &paper_rel).await?;
+    if has_pdf {
+        return Ok("Full Text PDF".into());
+    }
+    if doi.is_none() && arxiv.is_none() {
+        return Err(AppError::message("Failed to save an attachment"));
+    }
+
+    let id = paper_rel.rsplit('/').next().unwrap_or("paper").to_string();
+
+    if let Some(sid) = parse_remote_handle(&vault_handle) {
+        let reg = ctrl
+            .remote_registry()
+            .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+        let session = reg.get(sid).await?;
+        let paper_dir = session.work_root.join(&paper_rel);
+        fs::create_dir_all(&paper_dir)?;
+        let assets = ensure_paper_assets_with_cookies(
+            &paper_dir,
+            &id,
+            arxiv.as_deref(),
+            None,
+            doi.as_deref(),
+            None,
+        )
+        .await?;
+        if !assets.pdf && !crate::features::import::has_local_pdf(&paper_dir) {
+            return Err(AppError::message("Failed to save an attachment"));
+        }
+        let _ = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
+            &session.work_root,
+            &paper_rel,
+            &paper_dir,
+        )
+        .await;
+        upload_tree(session.fs.as_ref(), &paper_dir, &paper_rel).await?;
+        {
+            let mut cat = session.catalog.lock().await;
+            cat.push(session.fs.clone()).await?;
+        }
+        ctrl.emit_item_saved(crate::features::connector::ConnectorItemSaved {
+            path: paper_rel.clone(),
+            id: id.clone(),
+            title: id,
+            deduped: false,
+            session_id: session_id.to_string(),
+        });
+        return Ok("Full Text PDF".into());
+    }
+
+    let vault = PathBuf::from(&vault_handle);
+    let paper_dir = vault.join(&paper_rel);
+    if !paper_dir.is_dir() {
+        return Err(AppError::message("paper folder missing"));
+    }
+    let assets = ensure_paper_assets_with_cookies(
+        &paper_dir,
+        &id,
+        arxiv.as_deref(),
+        None,
+        doi.as_deref(),
+        None,
+    )
+    .await?;
+    if !assets.pdf && !crate::features::import::has_local_pdf(&paper_dir) {
+        return Err(AppError::message("Failed to save an attachment"));
+    }
+    let _ = crate::features::import::pdf_parse::maybe_generate_paper_md_after_download(
+        &vault, &paper_rel, &paper_dir,
+    )
+    .await;
+    ctrl.emit_item_saved(crate::features::connector::ConnectorItemSaved {
+        path: paper_rel.clone(),
+        id: id.clone(),
+        title: id,
+        deduped: false,
+        session_id: session_id.to_string(),
+    });
+    Ok("Full Text PDF".into())
+}
+
+/// DOI / arXiv / local-PDF presence for resolver decisions.
+async fn paper_resolver_hints(
+    ctrl: &ConnectorController,
+    paper_rel: &str,
+) -> Result<(Option<String>, Option<String>, bool), AppError> {
+    let handle = {
+        let (h, _) = ctrl.vault_handle_and_parent()?;
+        h
+    };
+    if let Some(sid) = parse_remote_handle(&handle) {
+        let reg = ctrl
+            .remote_registry()
+            .ok_or_else(|| AppError::message("remote registry unavailable"))?;
+        let session = reg.get(sid).await?;
+        let row = papers::get_by_path(&session.work_root, paper_rel)?;
+        let doi = row
+            .as_ref()
+            .and_then(|r| r.doi.clone())
+            .filter(|s| !s.is_empty());
+        let arxiv = row
+            .as_ref()
+            .and_then(|r| r.arxiv_id.clone())
+            .filter(|s| !s.is_empty());
+        let has_pdf = crate::features::import::has_local_pdf(&session.work_root.join(paper_rel))
+            || session
+                .fs
+                .list(paper_rel)
+                .await
+                .ok()
+                .map(|entries| {
+                    entries.iter().any(|e| {
+                        !e.is_dir
+                            && e.name
+                                .rsplit('.')
+                                .next()
+                                .map(|ext| ext.eq_ignore_ascii_case("pdf"))
+                                .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
+        return Ok((doi, arxiv, has_pdf));
+    }
+    let vault = PathBuf::from(&handle);
+    let row = papers::get_by_path(&vault, paper_rel)?;
+    let doi = row
+        .as_ref()
+        .and_then(|r| r.doi.clone())
+        .filter(|s| !s.is_empty());
+    let arxiv = row
+        .as_ref()
+        .and_then(|r| r.arxiv_id.clone())
+        .filter(|s| !s.is_empty());
+    let has_pdf = crate::features::import::has_local_pdf(&vault.join(paper_rel));
+    Ok((doi, arxiv, has_pdf))
+}
+
 /// Translate the abstract to Chinese and replace the leading `> ` blockquote in
 /// NOTES.md. Skips when the file was edited after `created` (mtime guard) or the
 /// blockquote was already changed, so user notes are never overwritten.
@@ -568,6 +1039,19 @@ async fn translate_notes_abstract(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn decode_connector_title_plain() {
+        assert_eq!(decode_connector_title("Hello"), "Hello");
+        assert_eq!(decode_connector_title("  spaced  "), "spaced");
+    }
+
+    #[test]
+    fn decode_connector_title_rfc2047_b() {
+        // "Attention" base64
+        let enc = "=?UTF-8?B?QXR0ZW50aW9u?=";
+        assert_eq!(decode_connector_title(enc), "Attention");
+    }
 
     #[test]
     fn map_sample_arxiv_item() {
