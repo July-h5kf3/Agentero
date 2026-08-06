@@ -222,6 +222,7 @@ import {
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
+import { createWheelZoomCoalescer } from "@/lib/pdf/wheel-zoom";
 import {
 	formatPdfZoomPercentage,
 	PDF_ZOOM_MAX,
@@ -514,8 +515,6 @@ export function PdfViewer(props: PdfViewerProps) {
 
 type PdfViewerInnerProps = PdfViewerProps & { docId: string };
 
-const WHEEL_ZOOM_THRESHOLD = 100;
-
 /**
  * PDFium rasterizes on the main thread (the worker engine is unusable in
  * Tauri webviews), so full devicePixelRatio rasters on high-DPI screens make
@@ -571,6 +570,11 @@ function ActiveCardScrollSync({
  * derived from `deltaY`, which makes a single mouse-wheel tick double or
  * halve the zoom. We disable that built-in behavior and instead step the zoom
  * with the same fixed increments used by the toolbar +/- buttons.
+ *
+ * Steps are coalesced per animation frame (createWheelZoomCoalescer): a
+ * trackpad pinch fires many wheel events per second, and each applied step
+ * re-rasterizes all visible pages on the main thread — batching keeps that to
+ * once per frame.
  */
 function WheelZoomHandler({ docId }: { docId: string }) {
 	const viewportRef = useViewportElement();
@@ -582,44 +586,35 @@ function WheelZoomHandler({ docId }: { docId: string }) {
 		const container = viewportRef?.current;
 		if (!container) return;
 
-		let accumulated = 0;
+		const coalescer = createWheelZoomCoalescer({
+			onZoomIn: () => zoomRef.current?.zoomIn(),
+			onZoomOut: () => zoomRef.current?.zoomOut(),
+		});
+
 		let resetTimeout: ReturnType<typeof setTimeout> | null = null;
-
-		const resetAccumulation = () => {
-			accumulated = 0;
-			resetTimeout = null;
-		};
-
 		const scheduleReset = () => {
 			if (resetTimeout) clearTimeout(resetTimeout);
-			resetTimeout = setTimeout(resetAccumulation, 150);
+			resetTimeout = setTimeout(() => {
+				resetTimeout = null;
+				coalescer.reset();
+			}, 150);
 		};
 
 		const handleWheel = (e: WheelEvent) => {
 			if (!e.ctrlKey && !e.metaKey) return;
 			e.preventDefault();
 
-			const z = zoomRef.current;
-			if (!z) return;
+			if (!zoomRef.current) return;
 
-			accumulated += e.deltaY;
+			coalescer.addDelta(e.deltaY);
 			scheduleReset();
-
-			while (Math.abs(accumulated) >= WHEEL_ZOOM_THRESHOLD) {
-				if (accumulated > 0) {
-					z.zoomOut();
-					accumulated -= WHEEL_ZOOM_THRESHOLD;
-				} else {
-					z.zoomIn();
-					accumulated += WHEEL_ZOOM_THRESHOLD;
-				}
-			}
 		};
 
 		container.addEventListener("wheel", handleWheel, { passive: false });
 		return () => {
 			container.removeEventListener("wheel", handleWheel);
 			if (resetTimeout) clearTimeout(resetTimeout);
+			coalescer.dispose();
 		};
 	}, [viewportRef]);
 
