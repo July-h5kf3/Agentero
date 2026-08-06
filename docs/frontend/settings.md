@@ -19,7 +19,10 @@
 | Appearance | 明暗、`uiTheme`（tweakcn 预设）、`uiScale` |
 | Agent | 默认 Agent、权限模式、自动精读、个人提示词、划词提问 Agent |
 | 翻译 | 服务与语言 |
+| 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新 |
+
+知识库诊断页调用 Host 的只读 Doctor 报告。论文 alias 候选的标题与短 alias 可编辑，已有 alias 只展示并保留；点击应用后还有一次批量确认。主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
 
 ## 应用更新
 

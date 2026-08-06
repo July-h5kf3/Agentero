@@ -6,6 +6,7 @@ import {
 	MonitorSmartphone,
 	Paintbrush,
 	SlidersHorizontal,
+	Stethoscope,
 	X,
 } from "lucide-react";
 import {
@@ -42,6 +43,7 @@ const PANE_LOADERS = {
 	appearance: () => import("@/components/settings/panes/appearance-pane"),
 	agent: () => import("@/components/settings/panes/agent-pane"),
 	translate: () => import("@/components/settings/panes/translate-pane"),
+	doctor: () => import("@/components/settings/panes/doctor-pane"),
 	keyboard: () => import("@/components/settings/panes/keyboard-pane"),
 	"remote-access": () =>
 		import("@/components/settings/panes/remote-access-pane"),
@@ -72,6 +74,9 @@ const RemoteAgentPane = lazy(() =>
 const TranslatePane = lazy(() =>
 	PANE_LOADERS.translate().then((m) => ({ default: m.TranslatePane })),
 );
+const DoctorPane = lazy(() =>
+	PANE_LOADERS.doctor().then((m) => ({ default: m.DoctorPane })),
+);
 const KeyboardPane = lazy(() =>
 	PANE_LOADERS.keyboard().then((m) => ({ default: m.KeyboardPane })),
 );
@@ -92,6 +97,7 @@ const NAV: {
 	{ id: "appearance", icon: Paintbrush },
 	{ id: "agent", icon: Bot },
 	{ id: "translate", icon: Languages },
+	{ id: "doctor", icon: Stethoscope },
 	{ id: "keyboard", icon: Keyboard },
 	{ id: "remote-access", icon: MonitorSmartphone },
 	{ id: "about", icon: Info },
@@ -292,6 +298,13 @@ export function SettingsContent({
 									patch={patch}
 									onOpenAgentSettings={() => onSectionChange("agent")}
 								/>
+							</Suspense>
+						</div>
+					)}
+					{visitedSections.includes("doctor") && (
+						<div hidden={section !== "doctor"}>
+							<Suspense fallback={<PaneFallback />}>
+								<DoctorPane vaultPath={vaultPath} hostContext={hostContext} />
 							</Suspense>
 						</div>
 					)}

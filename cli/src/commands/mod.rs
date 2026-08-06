@@ -1,4 +1,5 @@
 pub mod config_cmd;
+pub mod doctor;
 pub mod export;
 pub mod import;
 pub mod paper;

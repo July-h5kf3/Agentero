@@ -221,6 +221,11 @@ impl WikiIndex {
         self.documents.iter().find(|document| document.path == path)
     }
 
+    /// Indexed Markdown metadata used by read-only diagnostics.
+    pub fn documents(&self) -> &[WikiDocument] {
+        &self.documents
+    }
+
     pub fn rebuild(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
         let root = PathBuf::from(vault_path);
         if !root.is_dir() {
@@ -239,6 +244,17 @@ impl WikiIndex {
         let root = PathBuf::from(vault_path);
         let cache_path = wiki_cache_path(&root);
         self.rebuild_fresh_with_cache_path(vault_path, &cache_path)
+    }
+
+    /// Build a complete in-memory snapshot without reading or writing the
+    /// derived on-disk cache. Read-only diagnostics use this path.
+    pub fn rebuild_read_only(&mut self, vault_path: &str) -> Result<RebuildResult, String> {
+        let root = PathBuf::from(vault_path);
+        if !root.is_dir() {
+            return Err(format!("vault path is not a directory: {vault_path}"));
+        }
+        let files = collect_wiki_target_files(&root).map_err(|error| error.to_string())?;
+        self.rebuild_from(vault_path, &root, files, Vec::new(), None, None)
     }
 
     fn rebuild_fresh_with_cache_path(

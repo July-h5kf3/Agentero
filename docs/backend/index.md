@@ -23,7 +23,7 @@ src-tauri/src/
   app/           # run()、menu、logging、command 注册
   core/          # error、fs、paths、log_util
   features/      # 与前端 lib 域对齐
-    vault/ catalog/ import/ wiki/ agent/
+    vault/ catalog/ import/ wiki/ doctor/ agent/
     connector/ remote/ search/ settings/
     translate/ trash/ watcher/ terminal/ window/
   lib.rs
@@ -95,6 +95,7 @@ src-tauri/src/
 | Identifier Lookup / 魔棒入库 | [identifier-lookup.md](identifier-lookup.md) |
 | Zotero Connector | [connector.md](connector.md) |
 | 双链索引 | [wiki.md](wiki.md) |
+| Vault Doctor | [doctor.md](doctor.md) |
 | Agent Host | [agent.md](agent.md) |
 | 远程 Vault | [remote.md](remote.md) |
 | 搜索 | [search.md](search.md) |

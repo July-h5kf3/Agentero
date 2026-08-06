@@ -9,6 +9,7 @@
 		"appearance": "外观",
 		"agent": "Agent",
 		"translate": "翻译",
+		"doctor": "知识库诊断",
 		"keyboard": "快捷键",
 		"remote-access": "远程访问",
 		"about": "关于"
@@ -233,6 +234,39 @@
 			"label": "模型",
 			"followAgent": "跟随 Agent 默认",
 			"needWarm": "在 Chat 中打开过该 Agent 后，可在此选择具体模型。"
+		}
+	},
+	"doctor": {
+		"title": "知识库诊断",
+		"refresh": "重新运行诊断",
+		"remoteUnavailable": "当前版本仅支持诊断本地 Vault。",
+		"openVault": "请打开本地 Vault 后运行诊断。",
+		"sections": {
+			"vault": "Vault 结构",
+			"catalog": "Catalog 结构",
+			"wikilinks": "双链语义",
+			"aliases": "论文别名"
+		},
+		"status": { "ok": "正常", "issues": "有问题" },
+		"issueCount": "{{count}} 个问题",
+		"catalogUnavailable": "Catalog 不可用",
+		"catalogVersion": "结构版本 {{current}} · 期望 {{expected}}",
+		"wikilinkSummary": "已检查 {{files}} 个文件 · {{count}} 个问题",
+		"aliasSummary": "{{total}} 篇论文笔记中 {{complete}} 篇完整",
+		"repair": {
+			"title": "别名修复",
+			"select": "选择 {{path}}",
+			"titleAlias": "标题别名",
+			"shortAlias": "短别名",
+			"preserved": "保留已有别名：{{aliases}}",
+			"manual": "需要手动检查",
+			"apply": "应用所选（{{count}}）",
+			"confirmTitle": "重写论文别名？",
+			"confirmDescription": "Doctor 将把 {{count}} 篇笔记作为一个事务更新；已有别名和其他 frontmatter 内容会保留。",
+			"cancel": "取消",
+			"confirm": "应用更改",
+			"applying": "正在应用…",
+			"success": "已更新 {{count}} 篇论文笔记的别名。"
 		}
 	},
 	"keyboard": {

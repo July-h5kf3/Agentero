@@ -197,6 +197,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::wiki::WikiCmd,
     },
+    /// Diagnose Vault structure, Catalog, wikilinks, and paper aliases.
+    Doctor {
+        #[command(subcommand)]
+        cmd: Option<commands::doctor::DoctorCmd>,
+    },
 }
 
 fn init_logging() {
@@ -313,6 +318,7 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Trash { .. } => "cli.trash",
         Commands::Config { .. } => "cli.config",
         Commands::Wiki { .. } => "cli.wiki",
+        Commands::Doctor { .. } => "cli.doctor",
     }
 }
 
@@ -343,5 +349,6 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Trash { cmd } => commands::trash::run(cmd, globals),
         Commands::Config { cmd } => commands::config_cmd::run(cmd, globals),
         Commands::Wiki { cmd } => commands::wiki::run(cmd, globals),
+        Commands::Doctor { cmd } => commands::doctor::run(cmd, globals),
     }
 }

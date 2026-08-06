@@ -1098,7 +1098,15 @@ pub(crate) async fn write_paper_shell_opts(
         }
         None => String::new(),
     };
-    let notes = format!("# {}\n\n{abstract_block}", meta.title);
+    let body = format!("# {}\n\n{abstract_block}", meta.title);
+    let mut aliases = vec![meta.title.clone()];
+    if let Some(short) =
+        crate::features::doctor::suggest_short_alias(&meta.title, &meta.authors, meta.year)
+    {
+        aliases.push(short);
+    }
+    let notes = crate::features::wiki::frontmatter::prepend_new_aliases(&body, &aliases)
+        .map_err(AppError::message)?;
     fs::write(paper_dir.join("NOTES.md"), notes)?;
     Ok(())
 }

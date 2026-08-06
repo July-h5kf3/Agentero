@@ -40,7 +40,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
 粘贴 arXiv ID / DOI / URL
   → arXiv 输入先规范为 `https://arxiv.org/abs/<id>`，再交给 Translator（或 arXiv Atom fallback）
   → PaperMetadata → catalog upsert
-  → papers/<id>/ + NOTES.md 壳（不覆盖已有 NOTES）
+  → papers/<id>/ + 带 aliases frontmatter 的 NOTES.md 壳（不覆盖已有 NOTES）
   → PDF → {paper}/{id}.pdf
   → arXiv e-print → 解压 LaTeX 到 source/
   → 无 TeX：liteparse → PAPER.md
@@ -55,6 +55,7 @@ Skill 不写入 catalog、不创建 `papers/` 条目、不执行 `scripts/`。�
   请求仍使用更短的 reqwest timeout。超时不会回滚已经写入的 paper 壳和 catalog，
   资源错误会保留在导入结果/Connector 进度中，后续可再次执行补资源。
 - 错误：全局 Toast；重复不破坏用户 NOTES。
+- 新建壳会写论文全称 alias，并在元数据足够时写确定性短 alias；历史笔记由 [Doctor](doctor.md) 诊断和确认迁移。`created` 不属于入库壳或 Doctor 的职责。
 
 ## 可读正文
 

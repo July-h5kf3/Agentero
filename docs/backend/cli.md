@@ -20,6 +20,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `export` | 导出 |
 | `config` | 配置 |
 | `wiki` | 只读双链语义检查 |
+| `doctor` | 聚合诊断与显式确认的论文 aliases 修复 |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。
 
@@ -32,6 +33,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json
+cargo run -p agentero-cli -- doctor --json
 cargo test -p agentero-cli
 ```
 
@@ -82,5 +84,11 @@ agentero paper move papers/inbox/demo papers/archive
 - 批注双链 `[[target@id]]` / `[[target#@id]]`：按 path 解析 target，并校验 id 形态；**不**读取 `marks/` 判断 id 是否仍存在（与桌面 resolve 一致）。
 
 报告包含 `checkedFiles`、四类状态计数，以及每个问题的 `source`、`line`、`targetRaw`、`syntax`、`embed`、`targetPath?`、`candidates` 和 `context?`。指定单文件作用域后，Vault 中其它历史坏链不会影响本次验收。
+
+## Doctor
+
+`agentero doctor` 只读聚合 Vault 结构、Catalog schema、双链语义与 Catalog 论文 `NOTES.md` aliases；任一错误存在时返回 `doctor_issues` 和非零退出码。
+
+`agentero doctor fix aliases` 在 TTY 中逐篇展示已有 alias，并允许编辑生成的标题 alias / 短 alias，最后进行一次批量确认。`-y` 接受全部安全默认值；`--json` 从不提示，未同时传 `-y` 时返回 `needs_confirmation`。修复会保留已有自定义 aliases，以内容哈希做竞态检查，并作为一个可回滚批次写入。详见 [doctor.md](doctor.md)。
 
 Skill 种子：`templates/vault/.agents/skills/agentero-cli/`。

@@ -8,7 +8,7 @@
 use crate::error::CliError;
 use crate::output::OutputFormat;
 use crate::resolve::GlobalOpts;
-use inquire::{Confirm, InquireError, Select};
+use inquire::{Confirm, InquireError, Select, Text};
 use std::io::{stdin, IsTerminal};
 
 /// True when interactive prompts are allowed.
@@ -58,6 +58,19 @@ pub fn select_one(
         .prompt()
         .map_err(map_inquire)?;
     Ok(Some(choice))
+}
+
+/// Edit a generated value in an interactive terminal.
+pub fn text(globals: &GlobalOpts, message: &str, initial: &str) -> Result<String, CliError> {
+    if !allows_interactive(globals) {
+        return Err(CliError::needs_confirmation(
+            "editing generated aliases requires a TTY (pass --yes / -y to accept defaults)",
+        ));
+    }
+    Text::new(message)
+        .with_initial_value(initial)
+        .prompt()
+        .map_err(map_inquire)
 }
 
 fn map_inquire(err: InquireError) -> CliError {

@@ -16,7 +16,8 @@
 - [ ] 最近 Vault / UI 偏好与 XDG settings 完全对齐
 - [ ] 设置「打开/导出日志文件夹」
 - [ ] `catalog:export_papers_md`（Markdown 表）
-- [ ] CLI：`graph` / `doctor` / shell completions（只读 `wiki check` 已实现）
+- [x] CLI + 设置：聚合 Doctor 与论文 `NOTES.md` aliases 安全修复（[#198](https://github.com/poco-ai/Agentero/issues/198)）
+- [ ] CLI：`graph` / shell completions（只读 `wiki check` 与 Doctor 已实现）
 - [ ] CLI：`export papers-md`（随 Host 导出）
 - [ ] 桌面安装包内置同版本 `agentero` CLI；`agentero open <PATH>` / `agentero <PATH>` 打开本地 Vault；Windows/Linux PATH、macOS Homebrew/PKG/DMG 安装策略（[#165](https://github.com/poco-ai/Agentero/issues/165)，设计：[bundled-cli.md](bundled-cli.md)）
 - [ ] CLI `paper move`：补齐目标目录自动创建、Catalog 同步、冲突与越界的集成测试（[#166](https://github.com/poco-ai/Agentero/issues/166)，设计：[bundled-cli.md](bundled-cli.md)）

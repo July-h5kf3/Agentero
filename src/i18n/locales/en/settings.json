@@ -9,6 +9,7 @@
 		"appearance": "Appearance",
 		"agent": "Agent",
 		"translate": "Translate",
+		"doctor": "Doctor",
 		"keyboard": "Keyboard",
 		"remote-access": "Remote access",
 		"about": "About"
@@ -240,6 +241,39 @@
 			"label": "Model",
 			"followAgent": "Follow agent default",
 			"needWarm": "Open this agent in Chat once to list models here."
+		}
+	},
+	"doctor": {
+		"title": "Vault Doctor",
+		"refresh": "Run diagnosis again",
+		"remoteUnavailable": "Doctor is available for local Vaults only in this version.",
+		"openVault": "Open a local Vault to run Doctor.",
+		"sections": {
+			"vault": "Vault structure",
+			"catalog": "Catalog schema",
+			"wikilinks": "Wiki links",
+			"aliases": "Paper aliases"
+		},
+		"status": { "ok": "OK", "issues": "Issues" },
+		"issueCount": "{{count}} issue(s)",
+		"catalogUnavailable": "Catalog unavailable",
+		"catalogVersion": "Schema {{current}} · expected {{expected}}",
+		"wikilinkSummary": "{{files}} file(s) checked · {{count}} issue(s)",
+		"aliasSummary": "{{complete}} of {{total}} paper note(s) complete",
+		"repair": {
+			"title": "Alias repairs",
+			"select": "Select {{path}}",
+			"titleAlias": "Title alias",
+			"shortAlias": "Short alias",
+			"preserved": "Existing aliases preserved: {{aliases}}",
+			"manual": "Manual review required",
+			"apply": "Apply selected ({{count}})",
+			"confirmTitle": "Rewrite paper aliases?",
+			"confirmDescription": "Doctor will update {{count}} note(s) as one transaction. Existing aliases and unrelated frontmatter are preserved.",
+			"cancel": "Cancel",
+			"confirm": "Apply changes",
+			"applying": "Applying…",
+			"success": "Updated aliases in {{count}} paper note(s)."
 		}
 	},
 	"keyboard": {

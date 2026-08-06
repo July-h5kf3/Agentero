@@ -56,6 +56,7 @@ pub fn run() {
         .manage(crate::features::bridge::BridgeController::new())
         .manage(crate::features::bridge::BridgeClientController::new())
         .manage(WikiIndexState::new())
+        .manage(crate::features::doctor::DoctorDirtyPathsState::default())
         .manage(ExternalRenameRepairStore::new());
 
     #[cfg(not(target_os = "ios"))]
@@ -112,6 +113,7 @@ pub fn run() {
         // Ensure registry is loaded early.
         let _ = app.state::<AgentRegistry>();
         let _ = app.state::<WikiIndexState>();
+        let _ = app.state::<crate::features::doctor::DoctorDirtyPathsState>();
         let _ = app.state::<ExternalRenameRepairStore>();
         #[cfg(not(target_os = "ios"))]
         {
