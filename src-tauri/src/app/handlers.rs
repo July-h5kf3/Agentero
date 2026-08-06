@@ -10,6 +10,8 @@ macro_rules! common_commands {
         ::tauri::generate_handler![
             crate::features::settings::commands::settings_get,
             crate::features::settings::commands::settings_set,
+            crate::features::telemetry::commands::telemetry_send_diagnostics,
+            crate::features::telemetry::commands::telemetry_report_frontend_errors,
             crate::features::layout_model::commands::layout_model_status,
             crate::features::layout_model::commands::layout_model_ensure,
             crate::features::agent::commands::agent_list_agents,

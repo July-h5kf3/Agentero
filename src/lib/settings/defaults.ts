@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	connectorEnabled: false,
 	connectorPort: 23119,
 	batchImportConcurrency: 5,
+	telemetryEnabled: true,
 	theme: "system",
 	uiTheme: DEFAULT_UI_THEME,
 	locale: "system",

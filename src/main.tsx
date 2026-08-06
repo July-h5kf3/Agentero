@@ -8,6 +8,7 @@ import { initLogger, logger } from "@/lib/core/logger";
 import { notifyAction, notifyError } from "@/lib/core/notify";
 import { initAutoHideScrollbars } from "@/lib/core/scrollbars";
 import { isMobileApp, isTauri } from "@/lib/core/tauri";
+import { initErrorReporting } from "@/lib/core/telemetry";
 import {
 	ensureSettingsLoaded,
 	initSettingsSync,
@@ -36,6 +37,7 @@ function bootStage(name: string) {
 
 async function boot() {
 	void initLogger();
+	initErrorReporting();
 	logger.info("op start frontend_boot");
 	bootStage("entry");
 

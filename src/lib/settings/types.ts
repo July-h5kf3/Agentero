@@ -114,6 +114,12 @@ export type AppSettings = {
 	 * increase rate-limit risk.
 	 */
 	batchImportConcurrency: number;
+	/**
+	 * Opt-out switch for diagnostics reporting (crash/error logs, app & OS
+	 * version, installed agents). Default **on**; no-op unless the Host was
+	 * built with a telemetry endpoint.
+	 */
+	telemetryEnabled: boolean;
 	// Appearance
 	theme: ThemePreference;
 	/**

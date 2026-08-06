@@ -16,6 +16,7 @@ pub mod refs;
 pub mod remote;
 pub mod search;
 pub mod settings;
+pub mod telemetry;
 pub mod terminal;
 pub mod translate;
 pub mod trash;
