@@ -581,6 +581,14 @@ function pdfRasterDpr(): number {
 }
 
 /**
+ * RenderLayer is only the base coat under the sharp TilingLayer — cap its
+ * scale so zooming past this never re-rasterizes whole pages (the single
+ * worker serializes renders; on long documents full-page rasters at high
+ * zoom plus their blob transfers dominate). Tiles keep the viewport sharp.
+ */
+const PDF_BASE_LAYER_SCALE_CAP = 1.5;
+
+/**
  * Native viewport scroll → re-place floating selection cards.
  * Must render inside DockviewViewport (ViewportElementContext).
  */
@@ -3187,6 +3195,7 @@ function PdfViewerInner({
 					<RenderLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						scale={Math.min(zoomRef.current, PDF_BASE_LAYER_SCALE_CAP)}
 						dpr={pdfRasterDpr()}
 						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
