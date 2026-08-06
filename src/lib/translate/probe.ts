@@ -23,7 +23,6 @@ export type FreeMtProbeMap = Partial<
 >;
 
 export type ProbeFreeMtOptions = {
-	freeBaseUrl?: string;
 	/** Per-request timeout; default {@link TRANSLATE_PROBE_TIMEOUT_MS}. */
 	timeoutMs?: number;
 	/** Called as each provider finishes (progressive UI). */
@@ -35,26 +34,11 @@ export type ProbeFreeMtOptions = {
 	signal?: AbortSignal;
 };
 
-/**
- * Whether a free provider can be probed without a guaranteed local failure.
- * Libre without endpoint is not probeable until the user sets freeBaseUrl.
- */
-export function canProbeFreeMtProvider(
-	id: FreeTranslateProviderId,
-	freeBaseUrl?: string,
-): boolean {
-	if (id === "libre") {
-		return Boolean(freeBaseUrl?.trim());
-	}
-	return true;
-}
-
 async function probeOne(
 	id: FreeTranslateProviderId,
 	opts: ProbeFreeMtOptions,
 ): Promise<boolean> {
 	if (opts.signal?.aborted) return false;
-	if (!canProbeFreeMtProvider(id, opts.freeBaseUrl)) return false;
 	if (!isTauri()) return false;
 	try {
 		const text = await invokeTranslateText({
@@ -62,7 +46,6 @@ async function probeOne(
 			sourceLang: PROBE_SOURCE,
 			targetLang: PROBE_TARGET,
 			provider: id,
-			freeBaseUrl: opts.freeBaseUrl,
 			timeoutMs: opts.timeoutMs ?? TRANSLATE_PROBE_TIMEOUT_MS,
 		});
 		return text.trim().length > 0;

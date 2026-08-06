@@ -90,8 +90,6 @@ pub struct TranslateSettings {
     #[serde(default = "default_translate_source")]
     pub source_lang: String,
     #[serde(default)]
-    pub free_base_url: String,
-    #[serde(default)]
     pub provider_configs: HashMap<String, TranslateProviderConfig>,
     #[serde(default)]
     pub auto_translate_selection: bool,
@@ -107,7 +105,6 @@ impl Default for TranslateSettings {
             provider: default_translate_provider(),
             target_lang: default_translate_target(),
             source_lang: default_translate_source(),
-            free_base_url: String::new(),
             provider_configs: HashMap::new(),
             auto_translate_selection: false,
             agent_id: String::new(),
@@ -442,12 +439,6 @@ fn normalize(s: &mut AppSettings) {
     s.pdf_ask.agent_id = s.pdf_ask.agent_id.trim().to_string();
     s.pdf_ask.model_id = s.pdf_ask.model_id.trim().to_string();
 
-    s.translate.free_base_url = s
-        .translate
-        .free_base_url
-        .trim()
-        .trim_end_matches('/')
-        .to_string();
     normalize_translate_provider_configs(&mut s.translate.provider_configs);
     s.translate.agent_id = s.translate.agent_id.trim().to_string();
     s.translate.model_id = s.translate.model_id.trim().to_string();

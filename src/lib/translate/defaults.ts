@@ -5,7 +5,6 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
 	provider: "tencenttransmart",
 	targetLang: "ui",
 	sourceLang: "auto",
-	freeBaseUrl: "",
 	providerConfigs: {},
 	autoTranslateSelection: false,
 	agentId: "",

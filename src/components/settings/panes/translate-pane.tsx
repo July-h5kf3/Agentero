@@ -172,7 +172,6 @@ export function TranslatePane({
 		setProbeMap(initial);
 
 		void probeFreeMtProviders({
-			freeBaseUrl: tr.freeBaseUrl,
 			signal: ac.signal,
 			onResult: (id, ok) => {
 				if (ac.signal.aborted) return;
@@ -186,7 +185,7 @@ export function TranslatePane({
 				probingRef.current = false;
 			}
 		});
-	}, [tr.freeBaseUrl]);
+	}, []);
 
 	useEffect(() => {
 		return () => {

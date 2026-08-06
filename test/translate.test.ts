@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
 	buildTranslatePrompt,
-	canProbeFreeMtProvider,
+	COMMERCIAL_MT_PROVIDER_IDS,
 	FREE_MT_PROVIDER_IDS,
 	getTranslateService,
+	isCommercialTranslateProvider,
 	isFreeMtProvider,
 	isTranslateProviderId,
 	langsFromSettings,
@@ -45,28 +46,36 @@ describe("translate lang", () => {
 });
 
 describe("translate services registry", () => {
-	it("registers free web engines + agent (no paid APIs)", () => {
+	it("registers free web engines, commercial BYOK engines, and agent", () => {
 		for (const id of FREE_MT_PROVIDER_IDS) {
 			expect(getTranslateService(id)?.kind).toBe("free-mt");
 			expect(getTranslateService(id)?.requireSecret).toBe(false);
 		}
+		for (const id of COMMERCIAL_MT_PROVIDER_IDS) {
+			expect(getTranslateService(id)?.kind).toBe("commercial-mt");
+			expect(getTranslateService(id)?.requireSecret).toBe(true);
+		}
 		expect(getTranslateService("agent")?.kind).toBe("agent");
 		expect(getTranslateService("agent")?.requireExternalConfig).toBe(true);
-		expect(getTranslateService("deepl")).toBeUndefined();
-		expect(isTranslateProviderId("bing")).toBe(true);
+		expect(isTranslateProviderId("deepl")).toBe(true);
+		expect(isCommercialTranslateProvider("deepl")).toBe(true);
 		expect(isFreeMtProvider("youdao")).toBe(true);
 		expect(isFreeMtProvider("deeplx")).toBe(true);
 		expect(isFreeMtProvider("agent")).toBe(false);
+		expect(isFreeMtProvider("deepl")).toBe(false);
 	});
 
-	it("settings list excludes deprecated free alias", () => {
+	it("settings list includes free engines, commercial BYOK engines, and agent", () => {
 		const ids = listSelectableProviders().map((s) => s.id);
 		expect(ids).toContain("googleapi");
 		expect(ids).toContain("tencenttransmart");
 		expect(ids).toContain("huoshanweb");
 		expect(ids).toContain("deeplx");
-		expect(ids).toContain("bing");
 		expect(ids).toContain("youdao");
+		expect(ids).toContain("deepl");
+		expect(ids).toContain("azure");
+		expect(ids).toContain("googleCloud");
+		expect(ids).toContain("openaiCompatible");
 		expect(ids).toContain("agent");
 	});
 
@@ -76,13 +85,13 @@ describe("translate services registry", () => {
 		expect(DEFAULT_TRANSLATE_SETTINGS.modelId).toBe("");
 	});
 
-	it("can probe free engines; libre needs endpoint", () => {
-		expect(canProbeFreeMtProvider("bing")).toBe(true);
-		expect(canProbeFreeMtProvider("googleapi")).toBe(true);
-		expect(canProbeFreeMtProvider("deeplx")).toBe(true);
-		expect(canProbeFreeMtProvider("libre")).toBe(false);
-		expect(canProbeFreeMtProvider("libre", "")).toBe(false);
-		expect(canProbeFreeMtProvider("libre", "https://lt.example")).toBe(true);
+	it("keeps commercial engines out of free-MT probes", () => {
+		for (const id of FREE_MT_PROVIDER_IDS) {
+			expect(isFreeMtProvider(id)).toBe(true);
+		}
+		for (const id of COMMERCIAL_MT_PROVIDER_IDS) {
+			expect(isFreeMtProvider(id)).toBe(false);
+		}
 	});
 });
 

@@ -17,13 +17,12 @@ export function makeFreeMtService(
 		nameKey: id,
 		requireSecret: false,
 		kind: "free-mt",
-		async translate(task, opts) {
+		async translate(task) {
 			const result = await invokeTranslateText({
 				text: task.text.trim(),
 				sourceLang: task.sourceLang || "auto",
 				targetLang: task.targetLang,
 				provider: id,
-				freeBaseUrl: opts.freeBaseUrl,
 			});
 			task.result = result;
 		},
