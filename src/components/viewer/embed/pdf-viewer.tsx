@@ -1283,6 +1283,11 @@ function PdfViewerInner({
 	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
 	// avoid N× listMarkRaw polls). Covers Agent-panel writes that create ask
 	// threads from 「加入对话」 selections while this tab was open.
+	//
+	// Poll results always carry fresh array identity; only commit state when
+	// the content actually changed — otherwise every 4s tick re-renders the
+	// whole viewer (renderPage deps) and the pages visibly twitch.
+	const lastMarksPollRef = useRef("{asks:[],traces:[]}");
 	useEffect(() => {
 		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
 		let cancelled = false;
@@ -1292,6 +1297,16 @@ function PdfViewerInner({
 				listPdfVisualTraces(paperAbsPath),
 			]).then(([asks, traces]) => {
 				if (cancelled) return;
+				let fingerprint: string;
+				try {
+					fingerprint = JSON.stringify({ asks, traces });
+				} catch {
+					fingerprint = "";
+				}
+				if (fingerprint && fingerprint === lastMarksPollRef.current) {
+					return;
+				}
+				lastMarksPollRef.current = fingerprint;
 				setThreads(asks);
 				setVisualTraces(traces);
 			});
