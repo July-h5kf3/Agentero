@@ -70,6 +70,7 @@ src-tauri/src/
 | 文件 | NOTES、PDF、TeX、marks、assets | Vault 内 |
 | Catalog SQLite | 论文集合 + metadata | `.agentero/catalog.sqlite` |
 | 应用设置 | UI / Agent 注册表 / 偏好 | XDG `~/.config/agentero/` |
+| 版面 ONNX | PP-DocLayoutV3（ModelScope → HF） | XDG cache `~/.cache/agentero/models/` |
 | 可重建索引 | 双链图 | 内存 / 可重建缓存，非业务权威 |
 
 原则：Store/设置不存论文 meta；`PAPERS.md` / `library.bib` 默认不生成，仅导出。

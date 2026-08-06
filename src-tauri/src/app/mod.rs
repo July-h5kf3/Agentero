@@ -28,6 +28,9 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("agentero-arxiv", |_ctx, request, responder| {
             crate::features::arxiv_proxy::handle(request, responder);
         })
+        .register_asynchronous_uri_scheme_protocol("agentero-model", |_ctx, request, responder| {
+            crate::features::layout_model::handle_model_uri(request, responder);
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -104,6 +107,9 @@ pub fn run() {
             settings.network_proxy_enabled,
             settings.network_proxy_url.clone(),
         );
+        // Prefetch PP-DocLayoutV3 into XDG as fixed background-task id
+        // (`layout-model`); frontend maps `layout-model:task` into the panel.
+        crate::features::layout_model::spawn_background_download(app.handle().clone());
         // Native menu is macOS-only; the renderer re-syncs the locale on mount.
         #[cfg(target_os = "macos")]
         {

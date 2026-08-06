@@ -55,6 +55,11 @@ pub fn agentero_cache_dir() -> PathBuf {
     xdg_cache_home().join("agentero")
 }
 
+/// ONNX / other large assets: `$XDG_CACHE_HOME/agentero/models`.
+pub fn agentero_models_dir() -> PathBuf {
+    agentero_cache_dir().join("models")
+}
+
 /// App settings file: `…/agentero/settings.json`.
 pub fn settings_path() -> PathBuf {
     agentero_config_dir().join("settings.json")
@@ -148,5 +153,12 @@ mod tests {
     fn cache_dir_ends_with_agentero() {
         let p = agentero_cache_dir();
         assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agentero"));
+    }
+
+    #[test]
+    fn models_dir_under_cache() {
+        let p = agentero_models_dir();
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("models"));
+        assert_eq!(p.parent(), Some(agentero_cache_dir().as_path()));
     }
 }

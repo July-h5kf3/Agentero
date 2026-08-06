@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod connector;
 pub mod doctor;
 pub mod import;
+pub mod layout_model;
 pub mod network;
 pub mod refs;
 pub mod remote;

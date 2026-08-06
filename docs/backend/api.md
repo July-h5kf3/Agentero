@@ -1959,8 +1959,30 @@ snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内�
 |---|---|
 | 应用设置 | `$XDG_CONFIG_HOME/agentero/settings.json`（未设 env 时 Unix：`~/.config/agentero/settings.json`） |
 | Agent 注册表 | `$XDG_CONFIG_HOME/agentero/agents.json` |
+| 版面 ONNX | `$XDG_CACHE_HOME/agentero/models/pp-doclayoutv3.onnx`（见下节） |
 
 Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macOS 路径 `~/Library/Application Support/agentero/` 在首次启动时 **best-effort 复制** 到 XDG 路径。
+
+### 3.10.1 版面模型（PP-DocLayoutV3）
+
+- **路径**：`$XDG_CACHE_HOME/agentero/models/pp-doclayoutv3.onnx`
+- **启动**：`setup` 在代理配置后 `spawn_background_download`（固定 task id `layout-model`）
+- **下载源**：ModelScope（`greatv/oar-ocr`）优先，失败则 HuggingFace EmbedPDF `model_fp16.onnx`
+- **代理**：走 Host 全局 `network::client_builder`（与设置 Network proxy 一致）
+- **协议**：`agentero-model` URI scheme 把本地文件喂给 `onnxruntime-web`
+- **后台任务**：
+  - `emit("layout-model:task", { taskId, status, progress, detail, error, source })`
+  - `emit("background-task:progress", { taskId: "layout-model", phase: "layout-model", … })`
+  - 取消：`background_task_cancel` + task id `layout-model`
+
+#### `layout_model_status`（已实现）
+
+- **返回** `ApiResult<LayoutModelStatus>`：`{ ready, path, sizeBytes, source, fileName }`
+
+#### `layout_model_ensure`（已实现）
+
+- **参数**：`{ progressTaskId?: string }`（来自 `enqueueBackgroundTask` 的 id）
+- **返回**：`LayoutModelStatus`；未就绪则下载（进程锁；支持取消与字节进度）
 
 #### `settings_get`（已实现）
 
