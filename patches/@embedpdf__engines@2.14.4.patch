@@ -43,3 +43,96 @@ index f28a4a85e0b86b398da43e4c2ab163593de4cfc9..3f11b5a76bccb524065f2361eb199819
    }
    /** Update cache configuration for all existing documents */
    updateConfig(newConfig) {
+diff --git a/dist/lib/pdfium/web/direct-engine.js b/dist/lib/pdfium/web/direct-engine.js
+index be9c8a709659616c182a3f449bfdf6666358f2e6..d3c409e83a446a7ffce6783e689fe8fc4f423cd8 100644
+--- a/dist/lib/pdfium/web/direct-engine.js
++++ b/dist/lib/pdfium/web/direct-engine.js
+@@ -1,8 +1,18 @@
+ import "@embedpdf/pdfium";
+-import { d } from "../../../direct-engine-C8xTbxym.js";
++import { d as createPdfiumDirectEngine } from "../../../direct-engine-C8xTbxym.js";
+ import "../../../pdf-engine-D9v0RfKe.js";
+ import "../../../browser-BKLM0ThC.js";
++import { Task } from "@embedpdf/models";
++function createPdfiumEngine(wasmUrl, options) {
++  const engine = createPdfiumDirectEngine(wasmUrl, options);
++  engine.whenReady = () => {
++    const task = new Task();
++    task.resolve(true);
++    return task;
++  };
++  return engine;
++}
+ export {
+-  d as createPdfiumEngine
++  createPdfiumEngine
+ };
+ //# sourceMappingURL=direct-engine.js.map
+diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
+index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..8ff075f5b4309943e12e1f21566ae9d1a0180e46 100644
+--- a/dist/lib/pdfium/web/worker-engine.js
++++ b/dist/lib/pdfium/web/worker-engine.js
+@@ -15,6 +15,18 @@ const _RemoteExecutor = class _RemoteExecutor {
+         this.readyTask.resolve(true);
+         return;
+       }
++      if (response.type === "wasmError") {
++        this.logger.error(
++          LOG_SOURCE$1,
++          LOG_CATEGORY$1,
++          `Worker wasm initialization failed: ${response.error}`
++        );
++        this.readyTask.reject({
++          code: PdfErrorCode.Initialization,
++          message: `Worker wasm initialization failed: ${response.error}`
++        });
++        return;
++      }
+       const task = this.pendingRequests.get(response.id);
+       if (!task) {
+         this.logger.warn(
+@@ -52,6 +64,17 @@ const _RemoteExecutor = class _RemoteExecutor {
+     };
+     this.logger = options.logger ?? new NoopLogger();
+     this.worker.addEventListener("message", this.handleMessage);
++    this.worker.addEventListener("error", (event) => {
++      this.logger.error(
++        LOG_SOURCE$1,
++        LOG_CATEGORY$1,
++        `Worker error: ${event.message || "unknown"}`
++      );
++      this.readyTask.reject({
++        code: PdfErrorCode.Initialization,
++        message: `Worker error: ${event.message || "unknown"}`
++      });
++    });
+     this.readyTask = new Task();
+     this.pendingRequests.set(_RemoteExecutor.READY_TASK_ID, this.readyTask);
+     this.worker.postMessage({
+@@ -69,6 +92,12 @@ const _RemoteExecutor = class _RemoteExecutor {
+   generateId() {
+     return `req-${Date.now()}-${this.requestCounter++}`;
+   }
++  /**
++   * Task that settles when the worker is ready (or its init fails).
++   */
++  whenReady() {
++    return this.readyTask;
++  }
+   /**
+    * Send a message to the worker and return a Task
+    * Waits for worker to be ready before sending
+@@ -623,10 +652,12 @@ self.onmessage = async (event) => {
+     finalEncoderWorkerUrl,
+     logger
+   );
+-  return new PdfEngine(remoteExecutor, {
++  const engine = new PdfEngine(remoteExecutor, {
+     imageConverter: createHybridImageConverter(encoderPool),
+     logger
+   });
++  engine.whenReady = () => remoteExecutor.whenReady();
++  return engine;
+ }
+ export {
+   createPdfiumEngine
