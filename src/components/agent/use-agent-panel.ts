@@ -114,6 +114,7 @@ import {
 	currentSelections,
 	type SelectionContext,
 	selectionsPromptBlock,
+	selectionsWithPdfAnchor,
 } from "@/lib/agent/selection-store";
 import {
 	type AcpCommand,
@@ -142,6 +143,7 @@ import {
 	completeTrace,
 	createRunningTraces,
 	failTrace,
+	newTraceMessageId,
 	readPdfVisualTrace,
 	rememberPendingVisualTraces,
 	takePendingVisualTraces,
@@ -1897,6 +1899,10 @@ export function useAgentPanel({
 			const continuePaperAbs = !hasVisualDrafts
 				? options?.paperAbsPath?.trim() || historyPaperAbs?.trim() || undefined
 				: undefined;
+			// First text-selection mark created this turn (for session pin binding).
+			let textSelectionBound:
+				| { traceId: string; paperAbsPath: string }
+				| undefined;
 			if (hasVisualDrafts) {
 				const byPaper = new Map<string, PdfVisualDraft[]>();
 				for (const draft of resolvedVisualDrafts) {
@@ -1966,6 +1972,68 @@ export function useAgentPanel({
 					},
 				]);
 			}
+			// PDF text selections with geometry → conversation card pins (no crop).
+			// Mirrors visual drafts: one mark per selection, finalized on complete.
+			const anchoredSelections =
+				!isAcpCommand && text
+					? selectionsWithPdfAnchor(resolvedSelections)
+					: [];
+			if (anchoredSelections.length) {
+				const byPaper = new Map<
+					string,
+					ReturnType<typeof selectionsWithPdfAnchor>
+				>();
+				for (const sel of anchoredSelections) {
+					const list = byPaper.get(sel.paperAbsPath) ?? [];
+					list.push(sel);
+					byPaper.set(sel.paperAbsPath, list);
+				}
+				const pendingWrites: Array<{
+					paperAbsPath: string;
+					traceId: string;
+				}> = [];
+				const now = new Date().toISOString();
+				const userContent = text.trim();
+				for (const [paperAbsPath, sels] of byPaper) {
+					try {
+						const traces = createRunningTraces({
+							paperPath: sels[0]?.sourcePath || paperAbsPath,
+							agentId,
+							runtimeSessionId: accepted.sessionId,
+							messageId: accepted.messageId,
+							items: sels.map((sel) => ({
+								page: sel.page,
+								rects: sel.rects,
+								// Pin preview = selected quote; transcript user turn = question.
+								comment: sel.text,
+								messages: userContent
+									? [
+											{
+												id: newTraceMessageId(),
+												role: "user" as const,
+												content: userContent,
+												createdAt: now,
+											},
+										]
+									: undefined,
+							})),
+						});
+						for (const trace of traces) {
+							await writePdfVisualTrace(paperAbsPath, trace);
+							pendingWrites.push({ paperAbsPath, traceId: trace.id });
+							if (!textSelectionBound) {
+								textSelectionBound = {
+									traceId: trace.id,
+									paperAbsPath,
+								};
+							}
+						}
+					} catch {
+						// Keep chat running even if mark write fails.
+					}
+				}
+				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
 			if (!options?.visualDrafts) consumeVisualDrafts();
@@ -2000,11 +2068,13 @@ export function useAgentPanel({
 			const boundVisualTraceId =
 				options?.visualTraceId?.trim() ||
 				historyVisualTraceId ||
-				resolvedVisualDrafts[0]?.id;
+				resolvedVisualDrafts[0]?.id ||
+				textSelectionBound?.traceId;
 			const boundPaperAbs =
 				options?.paperAbsPath?.trim() ||
 				historyPaperAbs ||
-				resolvedVisualDrafts[0]?.paperAbsPath;
+				resolvedVisualDrafts[0]?.paperAbsPath ||
+				textSelectionBound?.paperAbsPath;
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,

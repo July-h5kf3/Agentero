@@ -3,10 +3,15 @@
  * `active` follows the latest live selection; `pinned` holds selections the
  * user froze via ⌘L or the PDF selection menu. Never persisted — selections
  * are ephemeral and consumed by the next submitted turn.
+ *
+ * PDF selections may carry page geometry (`rects` + `paperAbsPath`) so a
+ * submitted Agent turn can insert a conversation card (`kind: ask`) pin at
+ * the selection — not a visual-annotation / agent-trace mark.
  */
 
 import { createStore } from "zustand/vanilla";
 import { toVaultRelative } from "@/lib/core/path";
+import type { PdfVisualNormalizedRect } from "@/lib/pdf/agent-trace/types";
 import { vaultStore } from "@/lib/vault/store";
 
 export type SelectionOrigin = "pdf" | "markdown";
@@ -19,6 +24,14 @@ export type SelectionContext = {
 	origin: SelectionOrigin;
 	/** 1-based PDF page number. */
 	page?: number;
+	/**
+	 * Page-normalized selection rects (PDF only). Present when the selection
+	 * came from a PDF viewer that knows anchor geometry — used to place a
+	 * conversation pin after the Agent turn that consumes this chip.
+	 */
+	rects?: PdfVisualNormalizedRect[];
+	/** Absolute paper folder for mark writes (PDF only). */
+	paperAbsPath?: string;
 	pinned: boolean;
 };
 
@@ -43,25 +56,74 @@ export function publishSelection(input: {
 	sourcePath: string;
 	origin: SelectionOrigin;
 	page?: number;
+	rects?: PdfVisualNormalizedRect[];
+	paperAbsPath?: string;
 }): void {
 	const text = input.text.trim().slice(0, MAX_SELECTION_CHARS);
 	if (!text) {
 		clearActiveSelection(input.origin);
 		return;
 	}
-	selectionStore.setState({
-		active: {
-			id: `sel-${++nextSelectionId}`,
-			text,
-			sourcePath: toVaultRelative(
-				vaultStore.getState().vaultPath,
-				input.sourcePath,
-			),
-			origin: input.origin,
-			page: input.page,
-			pinned: false,
-		},
-	});
+	const active: SelectionContext = {
+		id: `sel-${++nextSelectionId}`,
+		text,
+		sourcePath: toVaultRelative(
+			vaultStore.getState().vaultPath,
+			input.sourcePath,
+		),
+		origin: input.origin,
+		page: input.page,
+		pinned: false,
+	};
+	if (input.rects?.length) {
+		active.rects = input.rects.map((r) => ({ ...r }));
+	}
+	const paperAbs = input.paperAbsPath?.trim();
+	if (paperAbs) {
+		active.paperAbsPath = paperAbs;
+	}
+	selectionStore.setState({ active });
+}
+
+/**
+ * PDF selections that carry enough geometry to leave an ask conversation
+ * card pin (page + rects + absolute paper folder).
+ */
+export function selectionsWithPdfAnchor(selections: SelectionContext[]): Array<
+	SelectionContext & {
+		page: number;
+		rects: PdfVisualNormalizedRect[];
+		paperAbsPath: string;
+	}
+> {
+	const out: Array<
+		SelectionContext & {
+			page: number;
+			rects: PdfVisualNormalizedRect[];
+			paperAbsPath: string;
+		}
+	> = [];
+	for (const sel of selections) {
+		if (sel.origin !== "pdf") continue;
+		const page = sel.page;
+		const rects = sel.rects;
+		const paperAbsPath = sel.paperAbsPath?.trim();
+		if (
+			page == null ||
+			!Number.isFinite(page) ||
+			!rects?.length ||
+			!paperAbsPath
+		) {
+			continue;
+		}
+		out.push({
+			...sel,
+			page: Math.max(1, Math.floor(page)),
+			rects: rects.map((r) => ({ ...r })),
+			paperAbsPath,
+		});
+	}
+	return out;
 }
 
 /** Drop the live selection (optionally only when it came from `origin`). */
