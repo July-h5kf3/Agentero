@@ -143,4 +143,33 @@ describe("placeSelectionCard", () => {
 			VH - EDGE + 0.5,
 		);
 	});
+
+	it("trackPin follows the anchor on scroll instead of pre-shifting by full height", () => {
+		const width = 320;
+		const preferredH = 280;
+
+		const mid = placeSelectionCard(
+			{ x: 200, y: 400 },
+			{ width, height: preferredH, trackPin: true },
+		);
+		const lower = placeSelectionCard(
+			{ x: 200, y: 520 },
+			{ width, height: preferredH, trackPin: true },
+		);
+		const planned = placeSelectionCard(
+			{ x: 200, y: 400 },
+			{ width, height: preferredH, trackPin: false },
+		);
+
+		// trackPin keeps top near the pin (screen.y - 12).
+		expect(mid.top).toBe(400 - 12);
+		expect(lower.top).toBe(520 - 12);
+		// Default plan mode would often clamp both to the same top for tall cards.
+		expect(mid.top).not.toBe(lower.top);
+		// Without trackPin, a mid-viewport pin with height 280 is still clamped
+		// less aggressively than 420 — but mid should still track pin.
+		expect(mid.top).toBeLessThanOrEqual(planned.top + 1);
+		expect(mid.top + mid.maxHeight).toBeLessThanOrEqual(VH - EDGE + 0.5);
+		expect(lower.top + lower.maxHeight).toBeLessThanOrEqual(VH - EDGE + 0.5);
+	});
 });

@@ -41,6 +41,12 @@ export type PlaceSelectionCardOptions = {
 	 * Pass the largest size the card may grow to so expand does not jump.
 	 */
 	placementHeight?: number;
+	/**
+	 * Stick near the anchor on the Y axis and shrink maxHeight instead of
+	 * pre-shifting the card as if it were already full height. Use for
+	 * content-sized cards (e.g. translate) so they track scroll/pin moves.
+	 */
+	trackPin?: boolean;
 	/** Open to the right of the anchor when there is room (default true). */
 	preferRight?: boolean;
 	/** Gap from the anchor point (default 6). */
@@ -74,6 +80,7 @@ export function placeSelectionCard(
 	const preferredMaxH = opts.height ?? SELECTION_CARD_DEFAULT_MAX_HEIGHT;
 	const gap = opts.gap ?? 6;
 	const preferRight = opts.preferRight ?? true;
+	const trackPin = opts.trackPin ?? false;
 	const edge = SELECTION_CARD_EDGE;
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -95,6 +102,25 @@ export function placeSelectionCard(
 	left = Math.min(Math.max(edge, left), Math.max(edge, vw - planWidth - edge));
 
 	const viewportCap = Math.max(SELECTION_CARD_MIN_HEIGHT, vh - edge * 2);
+
+	if (trackPin) {
+		// Content-sized cards: follow the pin; shrink maxHeight near edges
+		// instead of pre-shifting top by the full preferred height.
+		let top = screen.y - 12;
+		if (top < edge) top = edge;
+		let maxHeight = Math.min(preferredMaxH, viewportCap, vh - edge - top);
+		if (
+			maxHeight < SELECTION_CARD_MIN_HEIGHT &&
+			vh - edge * 2 >= SELECTION_CARD_MIN_HEIGHT
+		) {
+			// Not enough room below the pin — slide up just enough to fit.
+			maxHeight = Math.min(preferredMaxH, viewportCap);
+			top = Math.max(edge, vh - edge - maxHeight);
+			maxHeight = Math.min(maxHeight, vh - edge - top);
+		}
+		return { left, top, maxHeight: Math.max(0, maxHeight) };
+	}
+
 	// Plan top against the largest height so expand does not re-anchor.
 	const plannedMaxH = Math.min(planHeight, viewportCap);
 	let top = screen.y - 12;
@@ -137,6 +163,10 @@ export type SelectionCardProps = {
 	 */
 	placementHeight?: number;
 	/**
+	 * Follow the anchor on scroll (content-sized cards). See placeSelectionCard.
+	 */
+	trackPin?: boolean;
+	/**
 	 * Pin the card to the computed max height (not content-sized).
 	 * Needed when the body hosts StickToBottom / `height: 100%` scrollers
 	 * (e.g. PDF Ask conversation) so the scrollbar has a definite viewport.
@@ -173,6 +203,7 @@ export function SelectionCard({
 	height = SELECTION_CARD_DEFAULT_MAX_HEIGHT,
 	placementWidth,
 	placementHeight,
+	trackPin = false,
 	lockHeight = false,
 	preferRight = true,
 	title,
@@ -192,6 +223,7 @@ export function SelectionCard({
 		height,
 		placementWidth,
 		placementHeight,
+		trackPin,
 		preferRight,
 	});
 

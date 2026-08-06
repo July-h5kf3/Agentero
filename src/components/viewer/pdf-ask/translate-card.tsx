@@ -44,6 +44,9 @@ export function TranslateCard({
 		<SelectionCard
 			screen={screen}
 			width={320}
+			height={280}
+			// Content-sized: follow the selection pin while the PDF scrolls.
+			trackPin
 			title={t("selection.translateTitle")}
 			icon={Languages}
 			ariaLive="polite"
