@@ -517,6 +517,19 @@ type PdfViewerInnerProps = PdfViewerProps & { docId: string };
 const WHEEL_ZOOM_THRESHOLD = 100;
 
 /**
+ * PDFium rasterizes on the main thread (the worker engine is unusable in
+ * Tauri webviews), so full devicePixelRatio rasters on high-DPI screens make
+ * every zoom step expensive. Cap the raster dpr: pages stay sharp enough for
+ * reading while each re-render costs far less WASM work.
+ */
+const PDF_RASTER_DPR_CAP = 1.5;
+
+function pdfRasterDpr(): number {
+	const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+	return Math.min(dpr, PDF_RASTER_DPR_CAP);
+}
+
+/**
  * Native viewport scroll → re-place floating selection cards.
  * Must render inside DockviewViewport (ViewportElementContext).
  */
@@ -3007,12 +3020,14 @@ function PdfViewerInner({
 					<RenderLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						dpr={pdfRasterDpr()}
 						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<TilingLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						dpr={pdfRasterDpr()}
 						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
