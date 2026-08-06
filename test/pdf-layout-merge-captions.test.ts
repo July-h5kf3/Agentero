@@ -295,6 +295,73 @@ describe("full-width multi-panel aggregation (Fig 2 / Fig 4)", () => {
 		expect(out[0]?.bbox.w).toBeGreaterThan(0.85);
 	});
 
+	it("does not collapse Figure 2 to the detected title block only", () => {
+		const panels = [
+			region({
+				id: "chart-a",
+				kind: "chart",
+				score: 0.52,
+				bbox: { x: 0.02, y: 0.1, w: 0.22, h: 0.23 },
+			}),
+			region({
+				id: "chart-b",
+				kind: "chart",
+				score: 0.45,
+				bbox: { x: 0.27, y: 0.1, w: 0.21, h: 0.23 },
+			}),
+			region({
+				id: "image-c",
+				kind: "image",
+				score: 0.36,
+				bbox: { x: 0.52, y: 0.1, w: 0.24, h: 0.23 },
+			}),
+			region({
+				id: "chart-d",
+				kind: "chart",
+				score: 0.36,
+				bbox: { x: 0.78, y: 0.1, w: 0.2, h: 0.23 },
+			}),
+		];
+		const subs = panels.map((p, i) =>
+			region({
+				id: `sub-${i}`,
+				kind: "figure_title",
+				score: 0.5,
+				bbox: {
+					x: p.bbox.x + 0.02,
+					y: 0.35,
+					w: 0.16,
+					h: 0.04,
+				},
+				title: `(${String.fromCharCode(97 + i)}) Sub`,
+				captionRole: "subpanel",
+			}),
+		);
+		// Detector may produce one large figure_title over subcaptions + main caption.
+		const detectedTitleBlock = region({
+			id: "figure-2-title",
+			kind: "figure_title",
+			score: 0.91,
+			bbox: { x: 0.02, y: 0.36, w: 0.96, h: 0.2 },
+			title:
+				"Figure 2: Motivating measurements from Terminal Bench. (a) Concentration.",
+			captionRole: "figure_main",
+		});
+
+		const out = mergeCaptionsIntoHosts([
+			...panels,
+			...subs,
+			detectedTitleBlock,
+		]);
+
+		expect(out).toHaveLength(1);
+		expect(out[0]?.id).toBe("figure-2-title");
+		// The merged figure must include the visual body above the title block.
+		expect(out[0]?.bbox.y).toBeLessThanOrEqual(panels[0].bbox.y + 1e-9);
+		expect(out[0]?.bbox.y).toBeLessThan(detectedTitleBlock.bbox.y);
+		expect(out[0]?.bbox.w).toBeGreaterThan(0.9);
+	});
+
 	it("keeps tall multi-row panels under full-width title (no maxHeight cut)", () => {
 		// Figure 4 style: 3 rows × 3 cols, span ~0.65 page height — old maxHeight=0.55
 		// dropped the top row; bottom row slightly bleeds into the caption.
@@ -355,11 +422,14 @@ describe("full-width multi-panel aggregation (Fig 2 / Fig 4)", () => {
 
 		const out = mergeCaptionsIntoHosts([...panels, bleed, title, legend]);
 		expect(out).toHaveLength(1);
-		expect(out[0]?.kind === "chart" || out[0]?.kind === "image").toBe(true);
-		expect(out[0]?.title).toMatch(/Figure 4/);
+		const host = out[0];
+		expect(host).toBeDefined();
+		if (!host) return;
+		expect(host.kind === "chart" || host.kind === "image").toBe(true);
+		expect(host.title).toMatch(/Figure 4/);
 		// Host covers top row through full caption.
-		expect(out[0]!.bbox.y).toBeLessThanOrEqual(0.08 + 1e-9);
-		expect(out[0]!.bbox.y + out[0]!.bbox.h).toBeGreaterThanOrEqual(
+		expect(host.bbox.y).toBeLessThanOrEqual(0.08 + 1e-9);
+		expect(host.bbox.y + host.bbox.h).toBeGreaterThanOrEqual(
 			title.bbox.y + title.bbox.h - 1e-9,
 		);
 	});
