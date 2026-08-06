@@ -75,7 +75,12 @@ export function SelectionMenu({
 	left = Math.min(Math.max(12, left), vw - BAR_W - 12);
 	// Prefer just above the selection; flip below if near the top edge
 	let top = screen.y - BAR_H - 10;
-	if (top < 12) top = Math.min(vh - BAR_H - 12, screen.y + 18);
+	let overContent = false;
+	if (top < 12) {
+		top = Math.min(vh - BAR_H - 12, screen.y + 18);
+		// Menu sits below the selection and may cover body text.
+		overContent = true;
+	}
 
 	const handleCopy = useCallback(() => {
 		onCopy();
@@ -112,6 +117,9 @@ export function SelectionMenu({
 		<div
 			className={cn(
 				"fixed z-50 flex h-10 items-center gap-0.5 rounded-xl border border-border/80 bg-background px-1 shadow-2xl ring-1 ring-black/5 dark:ring-white/10",
+				// Only dim when flipped below the selection (covers body text).
+				overContent &&
+					"bg-background/80 backdrop-blur-sm transition-[background-color] duration-150 hover:bg-background",
 			)}
 			style={{ left, top }}
 			role="toolbar"

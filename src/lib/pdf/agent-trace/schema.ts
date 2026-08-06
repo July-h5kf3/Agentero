@@ -171,10 +171,7 @@ export function tracePreview(
 	return `${fallback} ${trace.index}`;
 }
 
-/** Pin geometry for a mark. */
-export function tracePin(trace: PdfVisualSessionTrace): {
-	x: number;
-	y: number;
-} {
+/** Pin geometry for a mark (prefer right side of the crop). */
+export function tracePin(trace: PdfVisualSessionTrace) {
 	return pinFromRects(trace.rects);
 }

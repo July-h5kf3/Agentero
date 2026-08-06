@@ -28,4 +28,11 @@ export type SelectionPin = {
 	ended?: boolean;
 	/** Mark id when kind is agent-trace (same as pin id). */
 	traceId?: string;
+	/**
+	 * When true the pin sits in the middle of a line and should render
+	 * translucent at rest. Side-of-line pins stay solid.
+	 */
+	overText?: boolean;
+	/** Which side of the selection the pin prefers (affects transform). */
+	side?: "left" | "right";
 };

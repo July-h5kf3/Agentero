@@ -132,7 +132,7 @@ export function threadTitle(
 	return emptyFallback;
 }
 
-/** Pin near the end of the selection (right-center of union rects). */
-export function threadPin(thread: PdfAskThread): { x: number; y: number } {
+/** Pin on the side of the selection (prefer right of union rects). */
+export function threadPin(thread: PdfAskThread) {
 	return pinFromRects(thread.anchor.rects);
 }
