@@ -5,6 +5,7 @@
 //! Markdown extensions; the resulting data is a rebuildable input to the wiki
 //! resolver and rename planner.
 
+use crate::features::wiki::frontmatter::parse_frontmatter_aliases;
 use crate::features::wiki::models::{
     BlockAnchor, HeadingAnchor, InternalLinkOccurrence, InternalLinkSyntax, LinkFragment,
     SourceRange, WikiDocument,
@@ -315,50 +316,6 @@ fn parse_markdown_link(
         line: occurrence_context.line,
         context: occurrence_context.context.clone(),
     })
-}
-
-fn parse_frontmatter_aliases(markdown: &str) -> (usize, Vec<String>) {
-    let mut lines = markdown.lines();
-    if lines.next().map(str::trim) != Some("---") {
-        return (0, Vec::new());
-    }
-    let mut byte_offset = 4.min(markdown.len());
-    let mut aliases = Vec::new();
-    let mut reading_aliases = false;
-    for line in lines {
-        let trimmed = line.trim();
-        byte_offset += line.len() + 1;
-        if trimmed == "---" || trimmed == "..." {
-            return (byte_offset, aliases);
-        }
-        if let Some(value) = trimmed.strip_prefix("aliases:") {
-            reading_aliases = true;
-            let value = value.trim();
-            if value.starts_with('[') && value.ends_with(']') {
-                aliases.extend(
-                    value[1..value.len() - 1]
-                        .split(',')
-                        .map(|item| item.trim().trim_matches(['\'', '"']))
-                        .filter(|item| !item.is_empty())
-                        .map(str::to_string),
-                );
-                reading_aliases = false;
-            }
-            continue;
-        }
-        if reading_aliases && trimmed.starts_with('-') {
-            let value = trimmed
-                .trim_start_matches('-')
-                .trim()
-                .trim_matches(['\'', '"']);
-            if !value.is_empty() {
-                aliases.push(value.to_string());
-            }
-        } else if !trimmed.is_empty() && !line.starts_with(char::is_whitespace) {
-            reading_aliases = false;
-        }
-    }
-    (0, Vec::new())
 }
 
 /// Parse one ATX heading and retain the exact byte range of its visible text.

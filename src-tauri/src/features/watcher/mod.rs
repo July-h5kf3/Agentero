@@ -154,6 +154,15 @@ fn is_ignored(path: &str) -> bool {
         || p.contains("/node_modules/")
 }
 
+/// Temp path used by Host `atomic_write` (wiki rename / heading rename).
+///
+/// Those temps are never user-facing wiki targets. Emitting them as `rename`
+/// without a trusted pair triggers a false "unverified external rename" toast
+/// for content-only overwrites.
+fn is_agentero_atomic_temp(path: &str) -> bool {
+    path.replace('\\', "/").contains(".agentero-rename-")
+}
+
 fn kind_label(kind: &EventKind) -> &'static str {
     match kind {
         EventKind::Create(_) => "create",
@@ -187,17 +196,34 @@ fn payloads_from_events(
 ) -> Vec<FileChangedPayload> {
     let mut out: Vec<FileChangedPayload> = Vec::new();
     for event in events {
-        let kind = kind_label(&event.kind);
-        let paths: Vec<String> = event
+        let raw_paths: Vec<String> = event
             .paths
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .filter(|p| !is_ignored(p))
             .collect();
+        if raw_paths.is_empty() {
+            continue;
+        }
+        // Content replace via tmp+rename is not a user/wiki path rename.
+        let from_atomic_write = raw_paths.iter().any(|p| is_agentero_atomic_temp(p));
+        let paths: Vec<String> = raw_paths
+            .into_iter()
+            .filter(|p| !is_agentero_atomic_temp(p))
+            .collect();
         if paths.is_empty() {
             continue;
         }
-        let rename = verified_rename_pair(&event.kind, &paths);
+        let kind = if from_atomic_write {
+            "modify"
+        } else {
+            kind_label(&event.kind)
+        };
+        let rename = if from_atomic_write {
+            None
+        } else {
+            verified_rename_pair(&event.kind, &paths)
+        };
         out.push(FileChangedPayload {
             paths,
             kind: kind.to_string(),
@@ -228,6 +254,11 @@ mod tests {
     }
 
     #[test]
+    fn agentero_atomic_write_temps_are_content_modifies() {
+        assert!(is_agentero_atomic_temp(
+            "/vault/papers/demo/.NOTES.md.agentero-rename-deadbeef.tmp"
+        ));
+        assert!(!is_agentero_atomic_temp("/vault/papers/demo/NOTES.md"));
     fn catalog_sqlite_changes_are_not_ignored() {
         assert!(!is_ignored("/vault/.agentero/catalog.sqlite"));
         assert!(!is_ignored("/vault/.agentero/catalog.sqlite-wal"));

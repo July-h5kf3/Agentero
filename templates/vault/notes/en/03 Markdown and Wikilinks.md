@@ -99,7 +99,7 @@ Link to a heading inside a note:
 Nested headings use the full path:
 
 ```markdown
-[[01 Papers and Import#Import#Zotero]]
+[[01 Papers and Import#Import Methods#Zotero Connector]]
 ```
 
 Use `@` for PDF highlights and visual annotations. Copy the `id` from the Annotations panel, or type `[[@` to open completion:

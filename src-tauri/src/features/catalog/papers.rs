@@ -260,6 +260,14 @@ pub fn find_by_identifier(
 /// List all papers for library table (newest first).
 pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     let conn = ensure_catalog(vault_root)?;
+    list_all_conn(&conn)
+}
+
+/// Read all papers from an already-open Catalog connection.
+///
+/// Doctor opens the database read-only so diagnosis never creates or migrates
+/// Catalog state as a side effect.
+pub fn list_all_conn(conn: &Connection) -> Result<Vec<PaperRecord>, AppError> {
     let mut stmt = conn
         .prepare(
             r#"

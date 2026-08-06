@@ -7,6 +7,7 @@
  */
 
 import { FolderOpen } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { AppDialogs } from "@/components/shell/app-dialogs";
 import { BackgroundTasksPanel } from "@/components/shell/background-tasks-panel";
@@ -41,6 +42,7 @@ import { pinActiveSelection } from "@/lib/agent/selection-store";
 import { notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
+import { doctorSetDirtyPaths } from "@/lib/doctor/api";
 import { openMagicWand } from "@/lib/paper/import-actions";
 import { scheduleLibraryRefresh } from "@/lib/paper/library-store";
 import { UI_SCALE_PRESETS } from "@/lib/settings";
@@ -72,7 +74,8 @@ import {
 	removeRecent,
 	revealSelectedInFinder,
 } from "@/lib/vault/actions";
-import { scheduleTreeRefresh } from "@/lib/vault/store";
+import { isRemoteVaultHandle } from "@/lib/vault/remote/remote-vault";
+import { scheduleTreeRefresh, vaultStore } from "@/lib/vault/store";
 import { renameMayAffectWikiTargets } from "@/lib/wiki";
 import { handleExternalRename } from "@/lib/wiki/actions";
 import {
@@ -83,8 +86,10 @@ import {
 	applyDiskChange,
 	closeTabOrWindow,
 	cycleActiveTab,
+	dirtyVaultPaths,
 	toggleNotesSplit,
 } from "@/lib/workspace/actions";
+import { workspaceStore } from "@/lib/workspace/store";
 import {
 	normalizeTabPath,
 	tabHasNotesSplit,
@@ -222,6 +227,31 @@ export default function App() {
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
 	const pdfZenMode = useUiStore((s) => s.pdfZenMode);
+
+	// The Settings window is a separate WebView. Mirror unsaved Markdown paths
+	// into Host state so Doctor can reject a batch before touching any file.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let lastPayload = "";
+		const sync = () => {
+			const root = vaultStore.getState().vaultPath;
+			if (!root || isRemoteVaultHandle(root)) return;
+			const paths = dirtyVaultPaths(root).sort();
+			const payload = JSON.stringify([root, paths]);
+			if (payload === lastPayload) return;
+			lastPayload = payload;
+			void doctorSetDirtyPaths(root, paths).catch((error) => {
+				console.warn("[doctor] dirty-path sync failed", error);
+			});
+		};
+		sync();
+		const unsubscribeWorkspace = workspaceStore.subscribe(sync);
+		const unsubscribeVault = vaultStore.subscribe(sync);
+		return () => {
+			unsubscribeWorkspace();
+			unsubscribeVault();
+		};
+	}, []);
 
 	// Host Vault filesystem watcher → editor reseed, tree refresh, wiki rebuild.
 	useVaultFileEvents({

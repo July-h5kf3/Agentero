@@ -8,6 +8,7 @@ pub mod arxiv_proxy;
 pub mod bridge;
 pub mod catalog;
 pub mod connector;
+pub mod doctor;
 pub mod import;
 pub mod network;
 pub mod refs;

@@ -768,6 +768,153 @@ fn delete_files_requires_yes() {
     assert!(!paper.exists());
 }
 
+#[test]
+fn doctor_alias_fix_is_confirmed_preserves_content_and_is_idempotent() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+
+    let notes_path = vault.join("papers/demo/NOTES.md");
+    fs::create_dir_all(notes_path.parent().unwrap()).unwrap();
+    let original = concat!(
+        "---\n",
+        "title: Keep this value\n",
+        "aliases:\n",
+        "  - \"Custom Alias\"\n",
+        "# keep this comment\n",
+        "tags: [nlp, important]\n",
+        "---\n",
+        "# Demo\n\n",
+        "Body sentinel.\n",
+    );
+    fs::write(&notes_path, original).unwrap();
+    seed_paper(&vault, "papers/demo", "demo", "Attention Is All You Need");
+
+    let chinese_notes_path = vault.join("papers/zh/NOTES.md");
+    fs::create_dir_all(chinese_notes_path.parent().unwrap()).unwrap();
+    let chinese_original = "# 中文笔记\n\n正文保持不变。\n";
+    fs::write(&chinese_notes_path, chinese_original).unwrap();
+    seed_paper(&vault, "papers/zh", "zh", "一种新的研究方法");
+    set_paper_authors_and_year(&vault, "papers/zh", r#"["张三"]"#, 2024);
+
+    let check = agentero()
+        .args(["--vault", vault.to_str().unwrap(), "doctor", "--json"])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let check: Value = serde_json::from_slice(&check).unwrap();
+    assert_eq!(check["error"]["code"], "doctor_issues");
+    let candidates = check["error"]["details"]["aliases"]["candidates"]
+        .as_array()
+        .unwrap();
+    let english = candidates
+        .iter()
+        .find(|candidate| candidate["path"] == "papers/demo/NOTES.md")
+        .unwrap();
+    assert_eq!(english["titleAlias"], "Attention Is All You Need");
+    assert_eq!(english["shortAlias"], "AIAYN");
+    assert_eq!(english["currentAliases"][0], "Custom Alias");
+    let chinese = candidates
+        .iter()
+        .find(|candidate| candidate["path"] == "papers/zh/NOTES.md")
+        .unwrap();
+    assert_eq!(chinese["titleAlias"], "一种新的研究方法");
+    assert_eq!(chinese["shortAlias"], "张三 2024");
+    assert_eq!(fs::read_to_string(&notes_path).unwrap(), original);
+    assert_eq!(
+        fs::read_to_string(&chinese_notes_path).unwrap(),
+        chinese_original
+    );
+
+    let confirmation = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "doctor",
+            "fix",
+            "aliases",
+            "--json",
+        ])
+        .assert()
+        .code(4)
+        .get_output()
+        .stdout
+        .clone();
+    let confirmation: Value = serde_json::from_slice(&confirmation).unwrap();
+    assert_eq!(confirmation["error"]["code"], "needs_confirmation");
+    assert_eq!(fs::read_to_string(&notes_path).unwrap(), original);
+
+    let repaired = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "--yes",
+            "doctor",
+            "fix",
+            "aliases",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let repaired: Value = serde_json::from_slice(&repaired).unwrap();
+    let updated_paths = repaired["data"]["updatedPaths"].as_array().unwrap();
+    assert_eq!(updated_paths.len(), 2);
+    assert!(updated_paths
+        .iter()
+        .any(|path| path == "papers/demo/NOTES.md"));
+    assert!(updated_paths
+        .iter()
+        .any(|path| path == "papers/zh/NOTES.md"));
+
+    let updated = fs::read_to_string(&notes_path).unwrap();
+    assert!(updated.contains("  - \"Custom Alias\"\n"));
+    assert!(updated.contains("  - \"Attention Is All You Need\"\n"));
+    assert!(updated.contains("  - \"AIAYN\"\n"));
+    assert!(updated.contains("title: Keep this value\n"));
+    assert!(updated.contains("# keep this comment\n"));
+    assert!(updated.contains("tags: [nlp, important]\n"));
+    assert!(updated.ends_with("# Demo\n\nBody sentinel.\n"));
+
+    let chinese_updated = fs::read_to_string(&chinese_notes_path).unwrap();
+    assert!(chinese_updated.contains("  - \"一种新的研究方法\"\n"));
+    assert!(chinese_updated.contains("  - \"张三 2024\"\n"));
+    assert!(chinese_updated.ends_with(chinese_original));
+
+    agentero()
+        .args(["--vault", vault.to_str().unwrap(), "doctor", "--json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"ok\": true"));
+
+    let rerun = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "--yes",
+            "doctor",
+            "fix",
+            "aliases",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rerun: Value = serde_json::from_slice(&rerun).unwrap();
+    assert!(rerun["data"]["updatedPaths"].as_array().unwrap().is_empty());
+    assert_eq!(fs::read_to_string(&notes_path).unwrap(), updated);
+    assert_eq!(
+        fs::read_to_string(&chinese_notes_path).unwrap(),
+        chinese_updated
+    );
+}
+
 /// Minimal catalog seed without Translator (mirrors papers table columns used by list/get).
 fn seed_paper(vault: &Path, path: &str, id: &str, title: &str) {
     use std::process::Command;
@@ -821,4 +968,26 @@ fn set_tags_json(vault: &Path, path: &str, tags_json: &str) {
     );
     let status = Command::new("python3").args(["-c", &py]).status().unwrap();
     assert!(status.success(), "failed to update tags");
+}
+
+fn set_paper_authors_and_year(vault: &Path, path: &str, authors_json: &str, year: i32) {
+    use std::process::Command;
+    let db = vault.join(".agentero").join("catalog.sqlite");
+    let sql = format!(
+        "UPDATE papers SET authors_json = '{authors_json}', year = {year} WHERE path = '{path}';",
+        authors_json = authors_json.replace('\'', "''"),
+        path = path.replace('\'', "''"),
+    );
+    let status = Command::new("sqlite3").arg(&db).arg(&sql).status();
+    if status.map(|s| s.success()).unwrap_or(false) {
+        return;
+    }
+    let py = format!(
+        r#"import sqlite3; c=sqlite3.connect(r"{db}"); c.execute("UPDATE papers SET authors_json = ?, year = ? WHERE path = ?", ({authors:?}, {year}, {path:?})); c.commit()"#,
+        db = db.display(),
+        authors = authors_json,
+        path = path,
+    );
+    let status = Command::new("python3").args(["-c", &py]).status().unwrap();
+    assert!(status.success(), "failed to update paper metadata");
 }

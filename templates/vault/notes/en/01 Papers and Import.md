@@ -39,5 +39,5 @@ Add or remove tags in the **Info** panel at the bottom left. Tags are stored in 
 
 ## Next
 
-- [[03 Markdown and Wikilinks]]
 - [[02 Agent and Skills]]
+- [[03 Markdown and Wikilinks]]
