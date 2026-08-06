@@ -13,7 +13,9 @@ export type PdfLayoutKind =
 	| "formula_number"
 	| "chart"
 	| "figure_title"
-	| "header";
+	| "header"
+	/** Paragraph / body text — blocker for formula merge, never sidebar. */
+	| "text";
 
 /**
  * One detected region after layout analysis.

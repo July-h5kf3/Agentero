@@ -100,6 +100,65 @@ describe("selectFormulasForNumber", () => {
 		const picked = selectFormulasForNumber(num, [line1, line2, far]);
 		expect(picked.map((p) => p.id).sort()).toEqual(["f1", "f2"]);
 	});
+
+	it("rejects formula bodies that substantially overlap text", () => {
+		const num = region({
+			id: "n1",
+			kind: "formula_number",
+			score: 0.9,
+			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
+			title: "(1)",
+		});
+		const inline = region({
+			id: "f-inline",
+			kind: "formula",
+			score: 0.8,
+			// Nested inside a paragraph text box.
+			bbox: { x: 0.25, y: 0.4, w: 0.3, h: 0.04 },
+		});
+		const display = region({
+			id: "f-display",
+			kind: "formula",
+			score: 0.95,
+			bbox: { x: 0.2, y: 0.39, w: 0.55, h: 0.05 },
+		});
+		const text = region({
+			id: "t1",
+			kind: "text",
+			score: 0.99,
+			bbox: { x: 0.1, y: 0.35, w: 0.55, h: 0.15 },
+		});
+		const picked = selectFormulasForNumber(num, [inline, display], [text]);
+		// display mostly outside text? display x=0.2 w=0.55 covers a lot of text
+		// recalculate: display and text overlap heavily → both might reject.
+		// Use a clean display formula away from text.
+		const clean = region({
+			id: "f-clean",
+			kind: "formula",
+			score: 0.95,
+			bbox: { x: 0.2, y: 0.2, w: 0.55, h: 0.05 },
+		});
+		const num2 = region({
+			id: "n2",
+			kind: "formula_number",
+			score: 0.9,
+			bbox: { x: 0.85, y: 0.21, w: 0.08, h: 0.04 },
+			title: "(2)",
+		});
+		const textLow = region({
+			id: "t-low",
+			kind: "text",
+			score: 0.99,
+			bbox: { x: 0.1, y: 0.5, w: 0.7, h: 0.2 },
+		});
+		const pickedClean = selectFormulasForNumber(
+			num2,
+			[clean, inline],
+			[textLow],
+		);
+		expect(pickedClean.map((p) => p.id)).toEqual(["f-clean"]);
+		expect(picked.map((p) => p.id)).not.toContain("f-inline");
+	});
 });
 
 describe("mergeFormulasByNumber", () => {
@@ -135,7 +194,7 @@ describe("mergeFormulasByNumber", () => {
 		);
 	});
 
-	it("keeps formulas that already carry a recovered number title", () => {
+	it("drops formulas with only recovered title and no formula_number", () => {
 		const f = region({
 			id: "f1",
 			kind: "formula",
@@ -144,8 +203,32 @@ describe("mergeFormulasByNumber", () => {
 			title: "(7)",
 		});
 		const out = mergeFormulasByNumber([f]);
-		expect(out).toHaveLength(1);
-		expect(out[0]?.title).toBe("(7)");
+		expect(out).toHaveLength(0);
+	});
+
+	it("drops numbered formulas that sit inside text blocks", () => {
+		const body = region({
+			id: "f1",
+			kind: "formula",
+			score: 0.9,
+			bbox: { x: 0.2, y: 0.4, w: 0.4, h: 0.04 },
+		});
+		const num = region({
+			id: "n1",
+			kind: "formula_number",
+			score: 0.85,
+			bbox: { x: 0.85, y: 0.4, w: 0.08, h: 0.04 },
+			title: "(3)",
+		});
+		const text = region({
+			id: "t1",
+			kind: "text",
+			score: 0.99,
+			bbox: { x: 0.1, y: 0.35, w: 0.75, h: 0.15 },
+		});
+		const out = mergeFormulasByNumber([body, num, text]);
+		expect(out.filter((r) => r.kind === "formula")).toHaveLength(0);
+		expect(out.some((r) => r.kind === "text")).toBe(false);
 	});
 });
 

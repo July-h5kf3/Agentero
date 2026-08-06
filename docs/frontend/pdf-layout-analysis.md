@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | 上游 | [EmbedPDF Layout Analysis](https://www.embedpdf.com/docs/react/headless/plugins/plugin-layout-analysis) |
-| 代码 | `src/lib/pdf/layout/`、`layout-analysis-toolbar.tsx`、`figures-panel.tsx` |
+| 代码 | `src/lib/pdf/layout/`、`figures-panel.tsx`（header 按钮）、`pdf-viewer.tsx` |
 | 持久化 | **未落盘**；`layoutAnalysisStore` 内存，关 tab / 刷新即失 |
 
 ---
@@ -13,8 +13,8 @@
 ## 流水线（一图）
 
 ```text
-工具栏 Boxes / handle.analyzeLayout()
-        │
+右栏 Figures header：分析 (Boxes) / 叠加层 (Eye)
+        │  handle.analyzeLayout() · store.overlayVisible 同步插件
         ▼
 PP-DocLayoutV3  每页: render → detect → map to PDF points
         │  LayoutBlock[]（插件全量标签；页上 LayoutAnalysisLayer 仍画原始框）
@@ -29,7 +29,7 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
 ③ 侧栏展示: isSidebarLayoutKind + dedupeLayoutRegions(minScore 默认 0.3)
         │  分区顺序：插图 → 表 → 算法 → **公式（最底）**
         ▼
-右栏 Figures + 聚焦高亮（store.focused）
+右栏 Figures + 聚焦高亮（store.focused）+ 可选 PDF bbox 叠加层
 ```
 
 注册（`pdf-viewer.tsx`）：
@@ -70,7 +70,7 @@ LayoutAnalysisPluginPackage: {
 
 | # | 规则 | 说明 |
 |---|---|---|
-| **A1** | 模型 label → kind | 映射：`image` `chart` `table` `algorithm` `formula` `formula_number` `figure_title` `header`；其余丢弃 |
+| **A1** | 模型 label → kind | 映射：`image` `chart` `table` `algorithm` `formula` `formula_number` `figure_title` `header` `text`/`aside_text`→`text`；其余丢弃 |
 | **A2** | 侧栏种类 | 展示 **image / chart / table / algorithm / formula（有编号）**；**不展示** 无编号 formula / 裸 `formula_number` / caption |
 | **A3** | image+chart 同区 | 侧栏「插图」分区；NMS 时同属 `figure` 组；**公式分区固定在列表最下方** |
 
@@ -95,7 +95,7 @@ LayoutAnalysisPluginPackage: {
 |---|---|---|
 | **D1** | 主图题锚点 | 仅 `figure_main`（或宽 figure_title）可启动联图 |
 | **D2** | 竖向带 | panel 须在「上一主图题底边 → 本图题顶边」内（防 Fig6/7/8 竖向串台） |
-| **D3** | 全宽 vs 半宽 | 图题宽 ≥ **0.55**：band 内全部 image/chart 一次收齐；半宽：标题水平栏 + panel 邻接连通 |
+| **D3** | 全宽 vs 半宽 | 图题宽 ≥ **0.55**：band 内全部 image/chart 一次收齐（**不**再砍 `maxHeightAbove`，底行允许轻微压进 title）；半宽：标题水平栏 + panel 邻接连通 + 高度软上限 0.55 |
 | **D4** | 标题完整包含 | 最终 figure `bbox` **必须完全包含** `titleBbox`；图无 title → **丢弃**（视为未分对） |
 
 ### E. 清理与展示（2）
@@ -109,11 +109,11 @@ LayoutAnalysisPluginPackage: {
 
 | # | 规则 | 说明 |
 |---|---|---|
-| **F1** | 编号优先锚点 | 以模型 `formula_number` 为起点；从编号左侧同一竖带收集 `formula` 体（可多行邻接扩展） |
-| **F2** | 无编号不展示 | 未绑到编号、且自身 title 也无法解析为 `(n)` 的 formula **丢弃**；裸 `formula_number` 也不进侧栏 |
-| **F3** | 侧栏位置 | 所有有编号的 formula 合并后统一放在 **插图 / 表 / 算法之后（列表最底）**；卡片标题优先用 `(1)` 等编号 |
+| **F1** | 必须有 formula_number | **仅**模型 `formula_number`（formulatitle）可启动合并；无编号框、仅文本恢复的 `(n)` **不**进侧栏 |
+| **F2** | 不与 text 重叠 | `formula` / `formula_number` / 合并后 host 若被 `text`/`aside_text` 覆盖 ≥ **0.28** 面积 → **丢弃**（行内公式 / 误检） |
+| **F3** | 侧栏位置 | 合并后的 display formula 放在 **插图 / 表 / 算法之后（列表最底）**；标题用 `(1)` 等；`text` 永不进侧栏 |
 
-编号文本解析：`(1)` `(12a)` `(A.1)` `[3]` `Eq. (2)` 等（`extractFormulaNumberLabel`）；拒绝子图 `(a)`。
+编号文本解析：`(1)` `(12a)` `(A.1)` `[3]` `Eq. (2)` 等（`extractFormulaNumberLabel`）；拒绝子图 `(a)`。多行仅在编号竖带内、邻接且 gap 无大块 text 时扩展。
 
 半宽并排（Fig7\|Fig8）仅在双方都是半宽时做**软**水平分开，并**再并回完整 title**；全宽联图不做 mid-split。
 
@@ -140,11 +140,15 @@ LayoutAnalysisPluginPackage: {
 | `layoutThreshold` | 0.3 | 插件层检测 |
 | 侧栏 `minScore` 默认 | 0.3 | 展示过滤 |
 | `LAYOUT_MERGE.fullWidthTitle` | 0.55 | 全宽联图 |
+| `LAYOUT_MERGE.maxHeightAboveTitle` | 0.55 | **仅半宽**图题无 ceiling 时的竖向软上限 |
+| `LAYOUT_MERGE.panelBottomSlack` | 0.04 | 半宽：panel 底可越过 title 顶的量 |
+| `LAYOUT_MERGE.fullWidthPanelBottomSlack` | 0.14 | 全宽：底行 chart 允许压进 caption |
 | `LAYOUT_MERGE.panelNeighborGap` | 0.08 | 子图邻接 |
 | `LAYOUT_MERGE.orphanContainment` | 0.55 | 吞并孤儿 panel |
 | `LAYOUT_MERGE.formulaNumberMaxGap` | 0.28 | 公式体与编号水平间距 |
 | `LAYOUT_MERGE.formulaNumberBandPad` | 0.05 | 编号竖带 |
 | `LAYOUT_MERGE.formulaNeighborGap` | 0.06 | 多行公式竖向扩展 |
+| `LAYOUT_MERGE.formulaTextOverlap` | 0.28 | formula 被 text 覆盖比 → 不合并 |
 | NMS `iouThreshold` | 0.45 | 去重 |
 | NMS `containmentThreshold` | 0.85 | 去重 |
 

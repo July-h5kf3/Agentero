@@ -91,7 +91,9 @@ describe("pageLayoutToRegions", () => {
 		});
 
 		const regions = pageLayoutToRegions(page);
+		// text kept as formula-merge blocker; sidebar never shows it.
 		expect(regions.map((r) => r.kind)).toEqual([
+			"text",
 			"formula",
 			"image",
 			"table",

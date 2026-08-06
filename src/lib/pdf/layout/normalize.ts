@@ -27,6 +27,7 @@ function emptyCounts(): Record<PdfLayoutKind, number> {
 		chart: 0,
 		figure_title: 0,
 		header: 0,
+		text: 0,
 	};
 }
 

@@ -13,6 +13,9 @@ const LABEL_TO_KIND: Record<string, PdfLayoutKind> = {
 	formula_number: "formula_number",
 	figure_title: "figure_title",
 	header: "header",
+	// Body text — kept only as a formula-merge blocker (not listed in Figures).
+	text: "text",
+	aside_text: "text",
 };
 
 export function layoutLabelToKind(label: string): PdfLayoutKind | null {
@@ -47,6 +50,11 @@ export function isFormulaLayoutKind(kind: PdfLayoutKind): boolean {
 /** Equation number boxes (e.g. "(1)") — merged into formula hosts, not listed alone. */
 export function isFormulaNumberLayoutKind(kind: PdfLayoutKind): boolean {
 	return kind === "formula_number";
+}
+
+/** Body / aside text — formula merge blockers only. */
+export function isTextLayoutKind(kind: PdfLayoutKind): boolean {
+	return kind === "text";
 }
 
 /** Caption candidates merged into nearby figures/tables, not listed alone. */

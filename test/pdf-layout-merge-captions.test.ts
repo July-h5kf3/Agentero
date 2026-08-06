@@ -294,6 +294,75 @@ describe("full-width multi-panel aggregation (Fig 2 / Fig 4)", () => {
 		// Full width of four panels.
 		expect(out[0]?.bbox.w).toBeGreaterThan(0.85);
 	});
+
+	it("keeps tall multi-row panels under full-width title (no maxHeight cut)", () => {
+		// Figure 4 style: 3 rows × 3 cols, span ~0.65 page height — old maxHeight=0.55
+		// dropped the top row; bottom row slightly bleeds into the caption.
+		const panels: PdfLayoutRegion[] = [];
+		const cols = [0.05, 0.35, 0.65];
+		const rows = [0.08, 0.28, 0.48];
+		let n = 0;
+		for (const y of rows) {
+			for (const x of cols) {
+				n += 1;
+				panels.push(
+					region({
+						id: `c${n}`,
+						kind: "chart",
+						score: 0.7 + n * 0.01,
+						bbox: { x, y, w: 0.28, h: 0.18 },
+					}),
+				);
+			}
+		}
+		// Bottom-right bleeds ~0.08 past title top (model caption overlap).
+		const bleed = region({
+			id: "c-bleed",
+			kind: "chart",
+			score: 0.85,
+			bbox: { x: 0.35, y: 0.52, w: 0.28, h: 0.2 },
+		});
+		const title = region({
+			id: "ft4",
+			kind: "figure_title",
+			score: 0.9,
+			bbox: { x: 0.05, y: 0.72, w: 0.9, h: 0.08 },
+			title:
+				"Figure 4: End-to-end latency savings across nine Terminal-Bench harnesses.",
+			captionRole: "figure_main",
+		});
+		const legend = region({
+			id: "leg",
+			kind: "header",
+			score: 0.55,
+			bbox: { x: 0.2, y: 0.02, w: 0.55, h: 0.04 },
+			title: "Oracle-action Spec. Actions AOSpec",
+		});
+
+		const cluster = selectClusterForTitle(title, [...panels, bleed], [title]);
+		// All 9 grid cells + bottom bleed row piece.
+		expect(cluster.length).toBeGreaterThanOrEqual(9);
+		expect(cluster.map((c) => c.id)).toEqual(
+			expect.arrayContaining(panels.map((p) => p.id)),
+		);
+		expect(cluster.some((c) => c.id === "c-bleed")).toBe(true);
+
+		// Top row is farther than 0.55 above title — must still be included.
+		const topIds = panels.filter((p) => p.bbox.y < 0.15).map((p) => p.id);
+		for (const id of topIds) {
+			expect(cluster.some((c) => c.id === id)).toBe(true);
+		}
+
+		const out = mergeCaptionsIntoHosts([...panels, bleed, title, legend]);
+		expect(out).toHaveLength(1);
+		expect(out[0]?.kind === "chart" || out[0]?.kind === "image").toBe(true);
+		expect(out[0]?.title).toMatch(/Figure 4/);
+		// Host covers top row through full caption.
+		expect(out[0]!.bbox.y).toBeLessThanOrEqual(0.08 + 1e-9);
+		expect(out[0]!.bbox.y + out[0]!.bbox.h).toBeGreaterThanOrEqual(
+			title.bbox.y + title.bbox.h - 1e-9,
+		);
+	});
 });
 
 describe("side-by-side figures must not become thin slivers", () => {

@@ -23,11 +23,13 @@ export {
 	isSidebarLayoutKind,
 	isTableLayoutKind,
 	isTargetLayoutLabel,
+	isTextLayoutKind,
 	layoutDedupeGroup,
 	layoutLabelToKind,
 } from "@/lib/pdf/layout/labels";
 export {
 	areFigureNeighbors,
+	bboxCoveredBy,
 	bboxFullyContains,
 	buildFigureBboxWithFullTitle,
 	type CaptionPlacement,
@@ -35,6 +37,7 @@ export {
 	captionCompatibleWithHost,
 	clipFigureBboxToTitleColumn,
 	connectedPanelGroups,
+	formulaOverlapsText,
 	hostFamily,
 	isMainAlgorithmCaption,
 	isMainFigureCaption,
@@ -79,10 +82,13 @@ export {
 	clearLayoutDocumentResult,
 	getFocusedLayoutRegion,
 	getLayoutDocumentResult,
+	isLayoutOverlayVisible,
 	layoutAnalysisStore,
 	setFocusedLayoutRegion,
 	setLayoutAnalysisUi,
 	setLayoutDocumentResult,
+	setLayoutOverlayVisible,
+	toggleLayoutOverlayVisible,
 } from "@/lib/pdf/layout/store";
 export {
 	attachTitlesFromTextRuns,

@@ -7,6 +7,7 @@ import {
 	isFormulaNumberLayoutKind,
 	isSidebarLayoutKind,
 	isTableLayoutKind,
+	isTextLayoutKind,
 } from "@/lib/pdf/layout/labels";
 import {
 	extractFormulaNumberLabel,
@@ -27,8 +28,19 @@ export type CaptionPlacement = "below" | "above";
 export const LAYOUT_MERGE = {
 	/** Title width ≥ this → full-page multi-panel figure (take all band panels). */
 	fullWidthTitle: 0.55,
-	/** Max vertical reach above title when no previous caption ceiling. */
+	/**
+	 * Max vertical reach above a *half-width* title when no previous caption ceiling.
+	 * Full-width multi-row figures (e.g. 3×3 Fig 4) ignore this cap — only the
+	 * previous main-caption ceiling bounds the band.
+	 */
 	maxHeightAboveTitle: 0.55,
+	/**
+	 * How far a panel bottom may extend past the title top and still count as
+	 * “above” it. Full-width titles allow more (bottom-row charts often bleed
+	 * into the caption box); half-width stays tight.
+	 */
+	panelBottomSlack: 0.04,
+	fullWidthPanelBottomSlack: 0.14,
 	/** Panel neighbor gap (gutter) for grid connectivity. */
 	panelNeighborGap: 0.08,
 	/** Orphan panel containment inside larger cluster → drop. */
@@ -39,6 +51,11 @@ export const LAYOUT_MERGE = {
 	formulaNumberBandPad: 0.05,
 	/** Max vertical gap to grow multi-line formula cluster. */
 	formulaNeighborGap: 0.06,
+	/**
+	 * Fraction of formula area covered by a body-text box → treat as inline
+	 * math / false positive; do not merge into a numbered host.
+	 */
+	formulaTextOverlap: 0.28,
 } as const;
 
 function clamp01(value: number): number {
@@ -296,6 +313,11 @@ export function captionAttachScore(
 
 /**
  * image/chart panels in the vertical band (ceiling → title) and title column.
+ *
+ * Full-width Figure N titles (3×3 / multi-row):
+ * - no soft maxHeightAbove (tall figures keep the top row)
+ * - looser bottom slack so bottom-row charts that bleed into the caption stay in
+ * Half-width: keep tight height + bottom slack so Fig7|Fig8 do not over-merge.
  */
 export function panelsAboveTitle(
 	title: PdfLayoutRegion,
@@ -304,12 +326,21 @@ export function panelsAboveTitle(
 		/** Bottom of previous main caption (exclusive band start). */
 		ceiling?: number;
 		maxHeightAbove?: number;
+		/** Override full-width treatment (default: title.bbox.w ≥ fullWidthTitle). */
+		fullWidth?: boolean;
 	},
 ): PdfLayoutRegion[] {
+	const fullWidth =
+		options?.fullWidth ?? title.bbox.w >= LAYOUT_MERGE.fullWidthTitle;
 	const ceiling = options?.ceiling ?? 0;
 	const maxHeightAbove =
-		options?.maxHeightAbove ?? LAYOUT_MERGE.maxHeightAboveTitle;
+		options?.maxHeightAbove ??
+		(fullWidth ? Number.POSITIVE_INFINITY : LAYOUT_MERGE.maxHeightAboveTitle);
+	const bottomSlack = fullWidth
+		? LAYOUT_MERGE.fullWidthPanelBottomSlack
+		: LAYOUT_MERGE.panelBottomSlack;
 	const titleTop = title.bbox.y;
+	const titleBottom = title.bbox.y + title.bbox.h;
 
 	return panels.filter((p) => {
 		if (!isFigureLayoutKind(p.kind)) return false;
@@ -318,13 +349,27 @@ export function panelsAboveTitle(
 
 		const pBottom = p.bbox.y + p.bbox.h;
 		const pCy = p.bbox.y + p.bbox.h / 2;
-		// Must be above the title.
-		if (pCy >= titleTop + 0.02) return false;
-		if (pBottom > titleTop + 0.04) return false;
+		// Panel must start above the title (not a box sitting under the caption).
+		if (p.bbox.y >= titleTop - 0.005) return false;
+		// Center of mass should not sit deep inside the caption strip.
+		if (pCy >= titleBottom - 0.01) return false;
+		// Bottom edge may slightly overlap the caption (model bleed).
+		if (pBottom > titleTop + bottomSlack) {
+			// Full-width: still accept if most of the panel is above the title.
+			if (!(fullWidth && titleTop - p.bbox.y >= p.bbox.h * 0.35)) {
+				return false;
+			}
+		}
 		// Not above the previous main caption (avoid multi-figure stack merge).
 		if (p.bbox.y + 0.01 < ceiling) return false;
-		// Soft max height if no ceiling.
-		if (ceiling <= 0 && titleTop - p.bbox.y > maxHeightAbove) return false;
+		// Soft max height only for half-width titles without a ceiling.
+		if (
+			ceiling <= 0 &&
+			Number.isFinite(maxHeightAbove) &&
+			titleTop - p.bbox.y > maxHeightAbove
+		) {
+			return false;
+		}
 		return true;
 	});
 }
@@ -340,12 +385,16 @@ export function selectClusterForTitle(
 	mainFigureCaptions: PdfLayoutRegion[],
 ): PdfLayoutRegion[] {
 	const ceiling = verticalCeilingForTitle(title, mainFigureCaptions);
+	const fullWidth = title.bbox.w >= LAYOUT_MERGE.fullWidthTitle;
 	const figurePanels = panels.filter((p) => isFigureLayoutKind(p.kind));
-	const candidates = panelsAboveTitle(title, figurePanels, { ceiling });
+	const candidates = panelsAboveTitle(title, figurePanels, {
+		ceiling,
+		fullWidth,
+	});
 	if (!candidates.length) return [];
 
 	// ── Pattern A: full-width multi-panel figure under one caption ──
-	if (title.bbox.w >= LAYOUT_MERGE.fullWidthTitle) {
+	if (fullWidth) {
 		return candidates;
 	}
 
@@ -742,22 +791,64 @@ function pairCaptionsOneToOne(
 	return hostCaption;
 }
 
+/** How much of `box` is covered by intersection with `other` (0–1). */
+export function bboxCoveredBy(
+	box: PdfAskNormalizedRect,
+	other: PdfAskNormalizedRect,
+): number {
+	const ax2 = box.x + box.w;
+	const ay2 = box.y + box.h;
+	const bx2 = other.x + other.w;
+	const by2 = other.y + other.h;
+	const ix1 = Math.max(box.x, other.x);
+	const iy1 = Math.max(box.y, other.y);
+	const ix2 = Math.min(ax2, bx2);
+	const iy2 = Math.min(ay2, by2);
+	const iw = Math.max(0, ix2 - ix1);
+	const ih = Math.max(0, iy2 - iy1);
+	const inter = iw * ih;
+	const area = box.w * box.h;
+	return area > 0 ? inter / area : 0;
+}
+
+/**
+ * True when a formula (or candidate host) substantially overlaps body text —
+ * typical of inline math / false formula detections inside paragraphs.
+ */
+export function formulaOverlapsText(
+	box: PdfAskNormalizedRect,
+	pageIndex: number,
+	textBlocks: PdfLayoutRegion[],
+	threshold: number = LAYOUT_MERGE.formulaTextOverlap,
+): boolean {
+	for (const t of textBlocks) {
+		if (t.pageIndex !== pageIndex) continue;
+		if (!isTextLayoutKind(t.kind)) continue;
+		if (bboxCoveredBy(box, t.bbox) >= threshold) return true;
+	}
+	return false;
+}
+
 /**
  * Collect formula bodies belonging to one formula_number (number-first).
- * Bodies sit to the left of the number, share its vertical band, and
- * multi-line stacks grow via vertical neighbors.
+ * Rules (strict — avoid over-merge):
+ * - Only bodies left of the number in the same vertical band
+ * - Reject bodies that substantially overlap `text` boxes
+ * - Multi-line grow is vertical neighbors only, and never across text
  */
 export function selectFormulasForNumber(
 	number: PdfLayoutRegion,
 	formulas: PdfLayoutRegion[],
+	textBlocks: PdfLayoutRegion[] = [],
 ): PdfLayoutRegion[] {
 	const pad = LAYOUT_MERGE.formulaNumberBandPad;
 	const maxGap = LAYOUT_MERGE.formulaNumberMaxGap;
 	const num = number.bbox;
 	const numCy = num.y + num.h / 2;
 
-	const seeds = formulas.filter((f) => {
+	const eligible = (f: PdfLayoutRegion): boolean => {
 		if (f.pageIndex !== number.pageIndex) return false;
+		if (formulaOverlapsText(f.bbox, f.pageIndex, textBlocks)) return false;
 		const fRight = f.bbox.x + f.bbox.w;
 		const fCy = f.bbox.y + f.bbox.h / 2;
 		// Mostly left of the number (equation body, not another margin tag).
@@ -770,12 +861,35 @@ export function selectFormulasForNumber(
 		const nearMid =
 			Math.abs(fCy - numCy) <= Math.max(num.h, f.bbox.h) * 0.75 + pad;
 		return vOv >= 0.15 || inBand || nearMid;
-	});
+	};
+
+	const seeds = formulas.filter(eligible);
 	if (!seeds.length) return [];
 
+	// Prefer the single best seed (closest to the number, highest score)
+	// then only grow to direct vertical neighbors — not every free formula.
+	seeds.sort((a, b) => {
+		const aGap = Math.abs(num.x - (a.bbox.x + a.bbox.w));
+		const bGap = Math.abs(num.x - (b.bbox.x + b.bbox.w));
+		const aDy = Math.abs(a.bbox.y + a.bbox.h / 2 - numCy);
+		const bDy = Math.abs(b.bbox.y + b.bbox.h / 2 - numCy);
+		return aDy - bDy || aGap - bGap || b.score - a.score;
+	});
+
 	// Grow multi-line equation: stacked formula boxes next to the same number.
-	const pool = formulas.filter((f) => f.pageIndex === number.pageIndex);
-	const chosen = new Set(seeds.map((s) => s.id));
+	const pool = formulas.filter(
+		(f) =>
+			f.pageIndex === number.pageIndex &&
+			!formulaOverlapsText(f.bbox, f.pageIndex, textBlocks),
+	);
+	const chosen = new Set<string>([seeds[0]!.id]);
+	// Also take other seeds that are already in-band (same line fragments).
+	for (const s of seeds) {
+		if (verticalOverlapRatio(s.bbox, seeds[0]!.bbox) >= 0.35) {
+			chosen.add(s.id);
+		}
+	}
+
 	let grew = true;
 	while (grew) {
 		grew = false;
@@ -796,9 +910,22 @@ export function selectFormulasForNumber(
 				Math.max(f.bbox.y - bodyBottom, body.y - fBottom),
 			);
 			if (vGap > LAYOUT_MERGE.formulaNeighborGap) continue;
-			// Stay near the number's vertical neighborhood.
+			// Stay near the number's vertical neighborhood (tighter than before).
 			const fCy = f.bbox.y + f.bbox.h / 2;
-			if (fCy < num.y - 0.2 || fCy > num.y + num.h + 0.2) continue;
+			if (fCy < num.y - 0.12 || fCy > num.y + num.h + 0.12) continue;
+			// Gap strip between body and candidate must not be mostly text.
+			const gapBox: PdfAskNormalizedRect = {
+				x: Math.min(body.x, f.bbox.x),
+				y: Math.min(bodyBottom, fBottom) === bodyBottom ? bodyBottom : fBottom,
+				w: Math.max(body.w, f.bbox.w),
+				h: vGap,
+			};
+			if (
+				vGap > 0.005 &&
+				formulaOverlapsText(gapBox, f.pageIndex, textBlocks, 0.4)
+			) {
+				continue;
+			}
 			chosen.add(f.id);
 			grew = true;
 		}
@@ -846,22 +973,26 @@ function mergeFormulaCluster(
 }
 
 /**
- * Number-first formula aggregation:
- * - Start from each formula_number (or formula that already carries an id)
- * - Union left-side multi-line formula bodies into one host
- * - Drop unnumbered formulas and bare formula_number boxes
+ * Number-first formula aggregation (strict):
+ * - Only model `formula_number` anchors (no title-only recovery)
+ * - Only formula bodies that do **not** substantially overlap `text`
+ * - Drop unnumbered formulas, text-overlapped formulas, bare numbers
+ * - `text` regions are never returned (blockers only)
  */
 export function mergeFormulasByNumber(
 	regions: PdfLayoutRegion[],
 ): PdfLayoutRegion[] {
 	const formulas = regions.filter((r) => isFormulaLayoutKind(r.kind));
 	const numbers = regions.filter((r) => isFormulaNumberLayoutKind(r.kind));
+	const textBlocks = regions.filter((r) => isTextLayoutKind(r.kind));
 	const rest = regions.filter(
-		(r) => !isFormulaLayoutKind(r.kind) && !isFormulaNumberLayoutKind(r.kind),
+		(r) =>
+			!isFormulaLayoutKind(r.kind) &&
+			!isFormulaNumberLayoutKind(r.kind) &&
+			!isTextLayoutKind(r.kind),
 	);
 
 	const usedFormulaIds = new Set<string>();
-	const usedNumberIds = new Set<string>();
 	const merged: PdfLayoutRegion[] = [];
 
 	const sortedNumbers = [...numbers].sort(
@@ -869,31 +1000,25 @@ export function mergeFormulasByNumber(
 			a.pageIndex - b.pageIndex || a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x,
 	);
 
-	// Phase A: model formula_number anchors (preferred).
 	for (const num of sortedNumbers) {
+		// formula_number itself sitting inside a paragraph → skip
+		if (formulaOverlapsText(num.bbox, num.pageIndex, textBlocks)) continue;
+
 		const free = formulas.filter((f) => !usedFormulaIds.has(f.id));
-		const cluster = selectFormulasForNumber(num, free);
+		const cluster = selectFormulasForNumber(num, free, textBlocks);
 		if (!cluster.length) continue;
-		merged.push(mergeFormulaCluster(cluster, num));
-		usedNumberIds.add(num.id);
+
+		const host = mergeFormulaCluster(cluster, num);
+		// Final host must not mostly cover body text either.
+		if (formulaOverlapsText(host.bbox, host.pageIndex, textBlocks)) continue;
+
+		merged.push(host);
 		for (const f of cluster) usedFormulaIds.add(f.id);
 	}
 
-	// Phase B: formulas that already have a recovered number in title
-	// (text strip enrichment) but no model formula_number box.
-	const freeFormulas = formulas.filter((f) => !usedFormulaIds.has(f.id));
-	for (const f of freeFormulas) {
-		const label = extractFormulaNumberLabel(f.title ?? "");
-		if (!label) continue;
-		merged.push({
-			...f,
-			title: label,
-			titleBbox: f.titleBbox,
-		});
-		usedFormulaIds.add(f.id);
-	}
+	// No Phase B: recovered "(n)" on a bare formula without formula_number is
+	// not enough — user rule requires a formula title/number box.
 
-	// Unnumbered formulas and unused bare formula_number → dropped.
 	merged.sort(
 		(a, b) =>
 			a.pageIndex - b.pageIndex ||
@@ -923,8 +1048,12 @@ export function mergeCaptionsIntoHosts(
 	const tables = tagged.filter((r) => isTableLayoutKind(r.kind));
 	const algorithms = tagged.filter((r) => isAlgorithmLayoutKind(r.kind));
 	const captions = tagged.filter((r) => isCaptionLayoutKind(r.kind));
+	// formula + formula_number + body text (blocker only for formula merge).
 	const formulaRelated = tagged.filter(
-		(r) => isFormulaLayoutKind(r.kind) || isFormulaNumberLayoutKind(r.kind),
+		(r) =>
+			isFormulaLayoutKind(r.kind) ||
+			isFormulaNumberLayoutKind(r.kind) ||
+			isTextLayoutKind(r.kind),
 	);
 	const others = tagged.filter(
 		(r) =>
@@ -933,7 +1062,8 @@ export function mergeCaptionsIntoHosts(
 			!isAlgorithmLayoutKind(r.kind) &&
 			!isCaptionLayoutKind(r.kind) &&
 			!isFormulaLayoutKind(r.kind) &&
-			!isFormulaNumberLayoutKind(r.kind),
+			!isFormulaNumberLayoutKind(r.kind) &&
+			!isTextLayoutKind(r.kind),
 	);
 
 	const mainFigureTitles = captions.filter(isMainFigureCaption);

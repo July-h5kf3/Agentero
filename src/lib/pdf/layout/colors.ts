@@ -18,6 +18,7 @@ export const LAYOUT_KIND_HEX: Record<PdfLayoutKind, string> = {
 	formula_number: "#0891b2",
 	figure_title: "#6b7280",
 	header: "#ec4899",
+	text: "#94a3b8",
 };
 
 /** Soft fill used for card tints / PDF focus overlays. */
@@ -30,6 +31,7 @@ export const LAYOUT_KIND_FILL: Record<PdfLayoutKind, string> = {
 	formula_number: "rgba(8, 145, 178, 0.12)",
 	figure_title: "rgba(107, 114, 128, 0.15)",
 	header: "rgba(236, 72, 153, 0.15)",
+	text: "rgba(148, 163, 184, 0.08)",
 };
 
 /** Stronger border / ring (matches EmbedPDF overlay border). */
@@ -42,6 +44,7 @@ export const LAYOUT_KIND_BORDER: Record<PdfLayoutKind, string> = {
 	formula_number: "rgba(8, 145, 178, 0.55)",
 	figure_title: "rgba(107, 114, 128, 0.7)",
 	header: "rgba(236, 72, 153, 0.7)",
+	text: "rgba(148, 163, 184, 0.35)",
 };
 
 /** Tailwind-friendly classes for section headers / badges (light + dark). */
@@ -58,6 +61,7 @@ export const LAYOUT_KIND_BADGE_CLASS: Record<PdfLayoutKind, string> = {
 		"bg-cyan-600/10 text-cyan-800 ring-cyan-600/30 dark:text-cyan-200",
 	figure_title: "bg-muted text-muted-foreground ring-border",
 	header: "bg-pink-500/15 text-pink-700 ring-pink-500/40 dark:text-pink-300",
+	text: "bg-muted text-muted-foreground ring-border",
 };
 
 export function layoutKindHex(kind: PdfLayoutKind): string {
