@@ -11,6 +11,7 @@ import {
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutMenu } from "@/components/shell/layout-menu";
+import { UpdateIndicator } from "@/components/shell/update-indicator";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
@@ -123,6 +124,7 @@ export const TitleBar = memo(function TitleBar({
 				{/* Drag region fills the middle — document tabs are in dockview. */}
 				<div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
 				<div className="flex shrink-0 items-center gap-0.5 pr-2">
+					<UpdateIndicator />
 					<LayoutMenu
 						leftSidebarOpen={!sidebarCollapsed}
 						onToggleLeftSidebar={onToggleSidebar}
