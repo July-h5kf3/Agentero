@@ -138,7 +138,7 @@
 		"previewUnresolved": "打开参考文献侧栏查看这条引用。"
 	},
 	"figures": {
-		"title": "插图",
+		"title": "解析",
 		"panelAria": "本论文的插图、表格、算法与公式",
 		"noPaper": "打开论文 PDF 以列出插图、表格、算法与公式。",
 		"empty": "尚无插图、表格、算法或公式。运行版面分析以检测。",
@@ -151,6 +151,8 @@
 		"sectionTables": "表格",
 		"sectionAlgorithms": "算法",
 		"sectionFormulas": "公式",
+		"collapseSection": "收起{{title}}",
+		"expandSection": "展开{{title}}",
 		"figureItem": "图 {{n}}",
 		"chartItem": "图表 {{n}}",
 		"tableItem": "表 {{n}}",

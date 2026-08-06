@@ -55,7 +55,7 @@
 		"backlinksPanel": "Backlinks panel",
 		"annotationsPanel": "Annotations",
 		"referencesPanel": "References",
-		"figuresPanel": "Figures",
+		"figuresPanel": "Analysis",
 		"showRightSidebar": "Show right sidebar",
 		"hideRightSidebar": "Hide right sidebar",
 		"showRightSidebarHint": "Show right sidebar ({{shortcut}})",
@@ -120,7 +120,7 @@
 		"titleBacklinks": "Backlinks",
 		"titleAnnotations": "Annotations",
 		"titleReferences": "References",
-		"titleFigures": "Figures",
+		"titleFigures": "Analysis",
 		"titleDocument": "Document"
 	},
 	"errors": {

@@ -1,12 +1,10 @@
 import {
 	Boxes,
-	Code2,
+	ChevronRight,
 	Eye,
 	EyeOff,
 	ImageIcon,
 	Loader2,
-	Sigma,
-	Table2,
 } from "lucide-react";
 import {
 	type ReactNode,
@@ -35,11 +33,7 @@ import {
 	isFormulaLayoutKind,
 	isSidebarLayoutKind,
 	isTableLayoutKind,
-	LAYOUT_KIND_BADGE_CLASS,
 	layoutAnalysisStore,
-	layoutKindBorder,
-	layoutKindFill,
-	layoutKindHex,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
 	toggleLayoutOverlayVisible,
@@ -70,40 +64,6 @@ function asSidebarKind(kind: PdfLayoutKind): SidebarKind | null {
 	if (isAlgorithmLayoutKind(kind)) return "algorithm";
 	if (isFormulaLayoutKind(kind)) return "formula";
 	return null;
-}
-
-function kindLabelKey(
-	kind: SidebarKind,
-):
-	| "figures.kindImage"
-	| "figures.kindChart"
-	| "figures.kindTable"
-	| "figures.kindAlgorithm"
-	| "figures.kindFormula" {
-	switch (kind) {
-		case "image":
-			return "figures.kindImage";
-		case "chart":
-			return "figures.kindChart";
-		case "table":
-			return "figures.kindTable";
-		case "algorithm":
-			return "figures.kindAlgorithm";
-		case "formula":
-			return "figures.kindFormula";
-	}
-}
-
-function KindIcon({ kind, hex }: { kind: SidebarKind; hex: string }) {
-	const cls = "size-6 opacity-60";
-	if (kind === "table")
-		return <Table2 className={cls} style={{ color: hex }} aria-hidden />;
-	if (kind === "algorithm")
-		return <Code2 className={cls} style={{ color: hex }} aria-hidden />;
-	if (kind === "formula")
-		return <Sigma className={cls} style={{ color: hex }} aria-hidden />;
-	// image + chart share the figure section icon.
-	return <ImageIcon className={cls} style={{ color: hex }} aria-hidden />;
 }
 
 function FigureCard({
@@ -137,41 +97,22 @@ function FigureCard({
 	// Prefer PDF caption text: figure/table titles, or formula number "(1)".
 	const caption = region.title?.trim() || "";
 	const title = caption || fallbackTitle;
-	const kindText = t(kindLabelKey(kind));
-	const hex = layoutKindHex(kind);
-	const fill = layoutKindFill(kind);
-	const border = layoutKindBorder(kind);
-	const confPct = Math.round(Math.min(1, Math.max(0, region.score)) * 100);
 
 	return (
 		<button
 			type="button"
 			data-layout-region={region.id}
 			className={cn(
-				"group flex w-full flex-col overflow-hidden rounded-md border text-left transition-colors",
+				"group flex w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background text-left transition-colors",
 				"hover:bg-muted/30",
-				selected ? "ring-2" : "border-border/80 bg-background",
+				selected && "border-foreground/40 ring-1 ring-foreground/20",
 			)}
-			style={
-				selected
-					? {
-							borderColor: hex,
-							boxShadow: `0 0 0 2px ${hex}55`,
-							backgroundColor: fill,
-						}
-					: { borderColor: border }
-			}
 			onClick={() => onJump(region)}
 		>
-			<div
-				className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden"
-				style={{ backgroundColor: fill }}
-			>
-				<span
-					className="absolute inset-y-0 left-0 w-1"
-					style={{ backgroundColor: hex }}
-					aria-hidden
-				/>
+			<div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-muted/20">
+				<span className="absolute top-1.5 right-1.5 z-10 rounded bg-background/80 px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground backdrop-blur-sm">
+					{t("figures.page", { page })}
+				</span>
 				{thumb ? (
 					<img
 						src={`data:${thumb.mimeType};base64,${thumb.data}`}
@@ -181,47 +122,21 @@ function FigureCard({
 					/>
 				) : (
 					<div className="flex flex-col items-center gap-1 text-muted-foreground">
-						<KindIcon kind={kind} hex={hex} />
+						<ImageIcon className="size-6 opacity-60" aria-hidden />
 						<span className="text-[10px]">{t("figures.thumbPending")}</span>
 					</div>
 				)}
 			</div>
-			<div className="flex items-center justify-between gap-2 px-2 py-1.5">
-				<div className="min-w-0">
-					<p
-						className={cn(
-							"font-medium text-xs",
-							caption ? "line-clamp-2" : "truncate",
-						)}
-						title={title}
-					>
-						{title}
-					</p>
-					<p className="truncate text-[10px] text-muted-foreground">
-						<span
-							className={cn(
-								"mr-1 inline-flex items-center rounded px-1 py-px text-[10px] font-medium ring-1 ring-inset",
-								LAYOUT_KIND_BADGE_CLASS[kind],
-							)}
-						>
-							{kindText}
-						</span>
-						{t("figures.page", { page })}
-						{" · "}
-						<TooltipProvider delayDuration={200}>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<span className="cursor-help tabular-nums underline decoration-dotted underline-offset-2">
-										{t("figures.confidence", { pct: confPct })}
-									</span>
-								</TooltipTrigger>
-								<TooltipContent side="top" className="max-w-52 text-xs">
-									{t("figures.confidenceHint")}
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					</p>
-				</div>
+			<div className="px-2 py-1.5">
+				<p
+					className={cn(
+						"font-medium text-xs",
+						caption ? "line-clamp-2" : "truncate",
+					)}
+					title={title}
+				>
+					{title}
+				</p>
 			</div>
 		</button>
 	);
@@ -230,31 +145,48 @@ function FigureCard({
 function Section({
 	title,
 	count,
-	accent,
 	children,
 }: {
 	title: string;
 	count: number;
-	accent: string;
 	children: ReactNode;
 }) {
+	const { t } = useTranslation("viewer");
+	const [open, setOpen] = useState(true);
+
 	if (count === 0) return null;
+
 	return (
 		<section className="space-y-2">
-			<div className="flex items-center justify-between px-0.5">
-				<h3 className="flex items-center gap-1.5 font-medium text-xs uppercase tracking-wide text-muted-foreground">
-					<span
-						className="inline-block size-2 rounded-full"
-						style={{ backgroundColor: accent }}
+			<button
+				type="button"
+				className={cn(
+					"flex w-full items-center justify-between gap-1 rounded px-0.5 py-0.5 text-left transition-colors",
+					"text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+				)}
+				aria-expanded={open}
+				aria-label={
+					open
+						? t("figures.collapseSection", { title })
+						: t("figures.expandSection", { title })
+				}
+				onClick={() => setOpen((v) => !v)}
+			>
+				<span className="flex min-w-0 items-center gap-1 font-medium text-xs uppercase tracking-wide">
+					<ChevronRight
+						className={cn(
+							"size-3 shrink-0 transition-transform",
+							open && "rotate-90",
+						)}
 						aria-hidden
 					/>
-					{title}
-				</h3>
-				<span className="text-[10px] text-muted-foreground tabular-nums">
+					<span className="truncate">{title}</span>
+				</span>
+				<span className="shrink-0 text-[10px] tabular-nums opacity-80">
 					{count}
 				</span>
-			</div>
-			<div className="grid grid-cols-1 gap-2">{children}</div>
+			</button>
+			{open ? <div className="grid grid-cols-1 gap-2">{children}</div> : null}
 		</section>
 	);
 }
@@ -488,11 +420,6 @@ export function FiguresPanel({
 			>
 				<ImageIcon className="size-4 text-muted-foreground" aria-hidden />
 				<span className="font-medium text-sm">{t("figures.title")}</span>
-				{!empty ? (
-					<span className="text-muted-foreground text-xs tabular-nums">
-						{gallery.length}
-					</span>
-				) : null}
 			</PaneHeader>
 
 			{!documentId ? (
@@ -535,11 +462,7 @@ export function FiguresPanel({
 				</p>
 			) : (
 				<div className="agentero-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
-					<Section
-						title={t("figures.sectionFigures")}
-						count={figures.length}
-						accent={layoutKindHex("image")}
-					>
+					<Section title={t("figures.sectionFigures")} count={figures.length}>
 						{figures.map((region, i) => (
 							<FigureCard
 								key={region.id}
@@ -551,11 +474,7 @@ export function FiguresPanel({
 							/>
 						))}
 					</Section>
-					<Section
-						title={t("figures.sectionTables")}
-						count={tables.length}
-						accent={layoutKindHex("table")}
-					>
+					<Section title={t("figures.sectionTables")} count={tables.length}>
 						{tables.map((region, i) => (
 							<FigureCard
 								key={region.id}
@@ -570,7 +489,6 @@ export function FiguresPanel({
 					<Section
 						title={t("figures.sectionAlgorithms")}
 						count={algorithms.length}
-						accent={layoutKindHex("algorithm")}
 					>
 						{algorithms.map((region, i) => (
 							<FigureCard
@@ -584,11 +502,7 @@ export function FiguresPanel({
 						))}
 					</Section>
 					{/* Formulas always last: numbered only (merge drops unnumbered). */}
-					<Section
-						title={t("figures.sectionFormulas")}
-						count={formulas.length}
-						accent={layoutKindHex("formula")}
-					>
+					<Section title={t("figures.sectionFormulas")} count={formulas.length}>
 						{formulas.map((region, i) => (
 							<FigureCard
 								key={region.id}

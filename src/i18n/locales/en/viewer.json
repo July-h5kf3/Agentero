@@ -138,7 +138,7 @@
 		"previewUnresolved": "Open References to inspect this citation."
 	},
 	"figures": {
-		"title": "Figures",
+		"title": "Analysis",
 		"panelAria": "Figures, tables, algorithms, and formulas of this paper",
 		"noPaper": "Open a paper PDF to list figures, tables, algorithms, and formulas.",
 		"empty": "No figures, tables, algorithms, or formulas yet. Run layout analysis to detect them.",
@@ -151,6 +151,8 @@
 		"sectionTables": "Tables",
 		"sectionAlgorithms": "Algorithms",
 		"sectionFormulas": "Formulas",
+		"collapseSection": "Collapse {{title}}",
+		"expandSection": "Expand {{title}}",
 		"figureItem": "Figure {{n}}",
 		"chartItem": "Chart {{n}}",
 		"tableItem": "Table {{n}}",
