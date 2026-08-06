@@ -1,6 +1,12 @@
-//! Read-only Vault diagnostics and conservative paper-alias repair.
+//! Read-only Vault diagnostics and conservative paper-alias / wikilink repair.
 
 pub mod commands;
+pub mod wikilink_repair;
+
+pub use wikilink_repair::{
+    apply_wikilink_repairs, plan_wikilink_repairs, WikilinkRepairChange, WikilinkRepairPlan,
+    WikilinkRepairResidual, WikilinkRepairResult, WikilinkRepairSuggestion,
+};
 
 use crate::core::error::AppError;
 use crate::features::catalog::{self, papers::PaperRecord};

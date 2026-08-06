@@ -248,6 +248,12 @@
 			"wikilinks": "双链语义",
 			"aliases": "论文别名"
 		},
+		"sectionHints": {
+			"vault": "检查顶层 papers/、notes/、plans/、.agentero/ 目录是否齐全。",
+			"catalog": "检查 .agentero/catalog.sqlite 是否存在，以及 schema 是否与当前应用一致。",
+			"wikilinks": "检查笔记中的本地双链是否可解析（缺失、歧义、无效标题锚点）。",
+			"aliases": "检查论文 NOTES.md 是否具备至少两个可区分的 frontmatter aliases。"
+		},
 		"issueCount": "{{count}} 个问题",
 		"repair": {
 			"select": "选择 {{path}}",
@@ -262,6 +268,25 @@
 			"confirm": "应用更改",
 			"applying": "正在应用…",
 			"success": "已更新 {{count}} 篇论文笔记的别名。"
+		},
+		"wikilink": {
+			"probe": "探测",
+			"planning": "正在做轻量探测…",
+			"working": "处理中…",
+			"probeDone": "探测完成：自动建议 {{auto}} 条，可手改 {{manual}} 条（共 {{total}}）",
+			"agentHint": "并不确定？把下面的提示词交给 Agent，让它先给修改意见。",
+			"agentPromptLabel": "Agent 提示词",
+			"copyPrompt": "复制",
+			"promptCopied": "已复制提示词",
+			"openInAgent": "在 Agent 中打开",
+			"select": "选择 {{source}} 中的修复",
+			"replacement": "替换为",
+			"selectAll": "全选",
+			"deselectAll": "取消全选",
+			"noSuggestions": "没有自动建议，请在笔记中手动改链接。",
+			"confirmTitle": "应用双链修复？",
+			"confirmDescription": "Doctor 将把 {{count}} 处链接目标作为一个事务写入；只改选中的字节范围。",
+			"success": "已更新 {{count}} 个文件中的链接。"
 		}
 	},
 	"keyboard": {

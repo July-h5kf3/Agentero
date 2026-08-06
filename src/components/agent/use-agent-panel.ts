@@ -92,6 +92,10 @@ import {
 	upsertPlanPart,
 } from "@/lib/agent/chat-state";
 import {
+	subscribePendingAgentComposerPrompt,
+	takePendingAgentComposerPrompt,
+} from "@/lib/agent/composer-seed";
+import {
 	contextPathDisplayName,
 	contextPathLabel,
 	normalizeContextPath,
@@ -319,6 +323,20 @@ export function useAgentPanel({
 		// Current paper/file is always in context by default (no click-to-add).
 		defaultIncludeSelectedFile: true,
 	});
+
+	// Doctor / Settings may seed the composer via a cross-window event.
+	useEffect(() => {
+		const apply = (text: string) => {
+			const next = text.trim();
+			if (!next) return;
+			setComposerText(next);
+			setComposerMenuDismissed(true);
+		};
+		const pending = takePendingAgentComposerPrompt();
+		if (pending) apply(pending);
+		return subscribePendingAgentComposerPrompt(apply);
+	}, [setComposerText]);
+
 	const activeConversationRef = useRef<string | null>(null);
 	const activeTabRef = useRef("draft");
 	const selectedAgentIdRef = useRef<string | null>(null);

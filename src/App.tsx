@@ -38,6 +38,10 @@ import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import { SIDEBAR_DEFAULT_PX, useZenLayout } from "@/hooks/use-zen-layout";
+import {
+	listenOpenAgentWithPrompt,
+	setPendingAgentComposerPrompt,
+} from "@/lib/agent/composer-seed";
 import { pinActiveSelection } from "@/lib/agent/selection-store";
 import { notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
@@ -250,6 +254,34 @@ export default function App() {
 		return () => {
 			unsubscribeWorkspace();
 			unsubscribeVault();
+		};
+	}, []);
+
+	// Settings Doctor → main: open Agent rail with a prefilled composer prompt.
+	useEffect(() => {
+		if (!isTauri()) return;
+		let cancelled = false;
+		let unlisten: (() => void) | undefined;
+		void listenOpenAgentWithPrompt((payload) => {
+			const text = payload.text.trim();
+			if (!text) return;
+			setPendingAgentComposerPrompt(text);
+			openRightTab("agent");
+			void (async () => {
+				try {
+					const { getCurrentWindow } = await import("@tauri-apps/api/window");
+					await getCurrentWindow().setFocus();
+				} catch {
+					// ignore
+				}
+			})();
+		}).then((off) => {
+			if (cancelled) off();
+			else unlisten = off;
+		});
+		return () => {
+			cancelled = true;
+			unlisten?.();
 		};
 	}, []);
 

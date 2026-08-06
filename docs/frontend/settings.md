@@ -22,7 +22,18 @@
 | 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新 |
 
-知识库诊断页调用 Host 的只读 Doctor 报告。四个检查项（Vault 结构 / Catalog / 双链 / 论文别名）各自作为小标题，标题行右侧显示 icon + 问题数；有问题时再展开 border 列表。论文别名支持勾选与编辑标题/短 alias，可修复时在标题行最右侧提供「修复」，确认后批量写入。别名修复只改 frontmatter、不改 path，避免触发外部改名修复误报。主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
+知识库诊断页调用 Host 的只读 Doctor 报告。四个检查项各自作为小标题（带一行检测说明），标题行右侧显示 icon + 问题数；模块间用非通栏次要分隔线。列表过长时（双链 / 别名）`max-h` 内滚动。
+
+- **论文别名**：勾选与编辑标题/短 alias，标题行「修复」→ 确认后批量写入 frontmatter（不改 path）。
+- **双链语义**：
+  1. 「探测」→ 自动建议（默认勾选）+ 可手改候选项（默认不勾选）；
+  2. 每条 git 风格整行 diff：核心变更居中高亮，按设置窗宽度窗口化前后文；
+  3. 标题行「全选 / 修复」应用选中项；
+  4. 下方 Agent 提示词（随 UI 语言 en/zh）：复制，或「在 Agent 中打开」（关设置、打开主窗 Agent 并预填 composer）。
+
+主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
+
+相关代码：`src/lib/doctor/`、`src/lib/agent/composer-seed.ts`、`src/components/settings/panes/doctor-pane.tsx`。
 
 ## 应用更新
 
