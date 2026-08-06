@@ -19,6 +19,8 @@
 		"zoomFitPage": "适应整页",
 		"outline": "目录",
 		"linkAria": "PDF 链接",
+		"useDarkMode": "使用暗色模式",
+		"useLightMode": "使用亮色模式",
 		"zenEnter": "沉浸式阅读",
 		"zenExit": "退出沉浸",
 		"findPlaceholder": "在文档中查找",

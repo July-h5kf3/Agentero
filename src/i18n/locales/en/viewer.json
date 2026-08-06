@@ -19,6 +19,8 @@
 		"zoomFitPage": "Fit page",
 		"outline": "Outline",
 		"linkAria": "PDF link",
+		"useDarkMode": "Use dark mode",
+		"useLightMode": "Use light mode",
 		"zenEnter": "Immersive reading",
 		"zenExit": "Exit immersive",
 		"findPlaceholder": "Find in document",

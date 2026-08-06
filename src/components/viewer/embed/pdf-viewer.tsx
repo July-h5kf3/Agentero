@@ -76,11 +76,13 @@ import {
 	MessageSquareText,
 	Minimize2,
 	Minus,
+	Moon,
 	MoveVertical,
 	Plus,
 	RotateCcw,
 	ScanSearch,
 	Search,
+	Sun,
 	X,
 } from "lucide-react";
 import {
@@ -145,6 +147,7 @@ import {
 import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
@@ -249,7 +252,38 @@ import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
  * selection / search / annotation overlays stay uninverted.
  */
 const PDF_PAGE_RASTER_DARK_CLASS =
-	"dark:[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
+	"[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
+
+type PdfColorScheme = "light" | "dark";
+
+const PDF_COLOR_SCHEME_STORAGE_KEY = "agentero-pdf-color-scheme";
+const PDF_COLOR_SCHEME_EVENT = "agentero:pdf-color-scheme";
+
+function getDocumentColorScheme(): PdfColorScheme {
+	if (typeof document === "undefined") return "light";
+	return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function readPdfColorScheme(): PdfColorScheme {
+	const stored = readJsonStorage<PdfColorScheme | null>(
+		PDF_COLOR_SCHEME_STORAGE_KEY,
+		null,
+	);
+	return stored === "light" || stored === "dark"
+		? stored
+		: getDocumentColorScheme();
+}
+
+function writePdfColorScheme(next: PdfColorScheme): void {
+	writeJsonStorage(PDF_COLOR_SCHEME_STORAGE_KEY, next);
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(
+			new CustomEvent<PdfColorScheme>(PDF_COLOR_SCHEME_EVENT, {
+				detail: next,
+			}),
+		);
+	}
+}
 
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
@@ -811,6 +845,8 @@ function PdfViewerInner({
 	const [findQuery, setFindQuery] = useState("");
 	const [outline, setOutline] = useState<PdfBookmarkObject[]>([]);
 	const [showOutline, setShowOutline] = useState(false);
+	const [pdfColorScheme, setPdfColorScheme] =
+		useState<PdfColorScheme>(readPdfColorScheme);
 	const findInputRef = useRef<HTMLInputElement>(null);
 
 	const pageFocusedRef = useRef(false);
@@ -846,6 +882,26 @@ function PdfViewerInner({
 
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
+	const pdfDark = pdfColorScheme === "dark";
+
+	const togglePdfColorScheme = useCallback(() => {
+		setPdfColorScheme((current) => {
+			const next: PdfColorScheme = current === "dark" ? "light" : "dark";
+			writePdfColorScheme(next);
+			return next;
+		});
+	}, []);
+
+	useEffect(() => {
+		const onColorSchemeChange = (event: Event) => {
+			const next = (event as CustomEvent<PdfColorScheme>).detail;
+			if (next === "light" || next === "dark") setPdfColorScheme(next);
+		};
+		window.addEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
+		return () => {
+			window.removeEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
+		};
+	}, []);
 
 	useEffect(() => {
 		setCitations([]);
@@ -2717,11 +2773,14 @@ function PdfViewerInner({
 						};
 					}),
 			];
-			// Page shell: paper-white in light mode; near-black when the app is dark
+			// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 			// so loading gaps match inverted page rasters.
 			return (
 				<div
-					className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
+					className={cn(
+						"relative overflow-hidden rounded-sm shadow-sm ring-1",
+						pdfDark ? "bg-zinc-900 ring-white/10" : "bg-white ring-black/5",
+					)}
 					style={{ width, height }}
 					{...{ [EMBED_PAGE_ATTR]: pageIndex }}
 				>
@@ -2734,13 +2793,13 @@ function PdfViewerInner({
 					<RenderLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						className={PDF_PAGE_RASTER_DARK_CLASS}
+						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<TilingLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						className={PDF_PAGE_RASTER_DARK_CLASS}
+						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<SearchLayer
@@ -2836,9 +2895,14 @@ function PdfViewerInner({
 			regionSelecting,
 			visualCropPending,
 			handleVisualRegionSelect,
+			pdfDark,
 			t,
 		],
 	);
+
+	const pdfColorSchemeLabel = pdfDark
+		? t("pdf.useLightMode")
+		: t("pdf.useDarkMode");
 
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
@@ -3054,6 +3118,27 @@ function PdfViewerInner({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
 								{t("pdf.zoomFitPage")}
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant="ghost"
+									aria-label={pdfColorSchemeLabel}
+									aria-pressed={pdfDark}
+									onClick={togglePdfColorScheme}
+								>
+									{pdfDark ? (
+										<Sun className="size-3.5" />
+									) : (
+										<Moon className="size-3.5" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{pdfColorSchemeLabel}
 							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
