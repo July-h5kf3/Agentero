@@ -30,7 +30,13 @@ import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
+import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import { tracePreview } from "@/lib/pdf/agent-trace/schema";
+import {
+	loadPdfVisualTraceThumbnails,
+	type PdfVisualTraceThumbnail,
+} from "@/lib/pdf/agent-trace/thumbnail";
+import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import {
 	annotationSnippet,
 	annotationWikilinkAlias,
@@ -157,12 +163,17 @@ function AnnotationsSidebar() {
 		[],
 	);
 	const [diskAsks, setDiskAsks] = useState<AskRow[]>([]);
+	const [diskVisuals, setDiskVisuals] = useState<PdfVisualSessionTrace[]>([]);
+	const [visualThumbs, setVisualThumbs] = useState<
+		Record<string, PdfVisualTraceThumbnail>
+	>({});
 
 	// When NOTES is focused the PDF tab may be unmounted — load marks from disk.
 	useEffect(() => {
 		if (!paperAbs) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
+			setDiskVisuals([]);
 			return;
 		}
 		const hasLive =
@@ -170,16 +181,21 @@ function AnnotationsSidebar() {
 		if (hasLive && (storeAsks?.length ?? 0) > 0) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
+			setDiskVisuals([]);
 			return;
 		}
 		let cancelled = false;
 		void (async () => {
-			const [summaries, asks] = await Promise.all([
+			const [summaries, asks, visuals] = await Promise.all([
 				hasLive ? Promise.resolve([]) : listPaperAnnotationSummaries(paperAbs),
 				storeAsks?.length ? Promise.resolve([]) : listPdfAskThreads(paperAbs),
+				storeVisuals?.length
+					? Promise.resolve([])
+					: listPdfVisualTraces(paperAbs),
 			]);
 			if (cancelled) return;
 			if (!hasLive) setDiskSummaries(summaries);
+			if (!storeVisuals?.length) setDiskVisuals(visuals);
 			if (!storeAsks?.length) {
 				setDiskAsks(
 					asks
@@ -203,6 +219,19 @@ function AnnotationsSidebar() {
 			cancelled = true;
 		};
 	}, [paperAbs, storeHighlights, storeVisuals, storeAsks]);
+
+	const visualTraceSource = storeVisuals?.length ? storeVisuals : diskVisuals;
+	useEffect(() => {
+		let cancelled = false;
+		void loadPdfVisualTraceThumbnails(paperAbs, visualTraceSource).then(
+			(images) => {
+				if (!cancelled) setVisualThumbs(images);
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbs, visualTraceSource]);
 
 	/** Resolvable vault-relative target (never display title alone). */
 	const wikiTarget = useMemo(() => {
@@ -288,6 +317,24 @@ function AnnotationsSidebar() {
 						paperTitle,
 						annotationSnippet({ comment: tr.comment }),
 					),
+					thumbnail: visualThumbs[tr.id] ?? null,
+				}));
+		}
+		if (diskVisuals.length) {
+			return [...diskVisuals]
+				.sort(
+					(a, b) =>
+						a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+				)
+				.map((tr) => ({
+					id: tr.id,
+					page: tr.page,
+					preview: tracePreview(tr, "Visual annotation", 160),
+					linkAlias: annotationWikilinkAlias(
+						paperTitle,
+						annotationSnippet({ comment: tr.comment }),
+					),
+					thumbnail: visualThumbs[tr.id] ?? null,
 				}));
 		}
 		return diskSummaries
@@ -298,7 +345,7 @@ function AnnotationsSidebar() {
 				preview: s.preview,
 				linkAlias: annotationWikilinkAlias(paperTitle, s.preview),
 			}));
-	}, [storeVisuals, diskSummaries, paperTitle]);
+	}, [storeVisuals, diskVisuals, diskSummaries, paperTitle, visualThumbs]);
 
 	return (
 		<AnnotationsPanel
