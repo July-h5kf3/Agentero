@@ -17,6 +17,7 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { SiArxiv, SiModelscope } from "react-icons/si";
 
 import {
 	PaperTagChip,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
+import { arxivUrls } from "@/lib/paper/arxiv";
 import {
 	coercePaperTags,
 	isConnectorTagName,
@@ -80,7 +82,15 @@ function MetaRow({
 	);
 }
 
-function LinkChip({ href, label }: { href: string; label: string }) {
+function LinkChip({
+	href,
+	label,
+	icon,
+}: {
+	href: string;
+	label: string;
+	icon?: ReactNode;
+}) {
 	return (
 		<a
 			href={href}
@@ -92,8 +102,39 @@ function LinkChip({ href, label }: { href: string; label: string }) {
 				"hover:bg-muted hover:text-foreground",
 			)}
 		>
+			{icon}
 			{label}
 			<ExternalLink className="size-2.5 opacity-70" aria-hidden />
+		</a>
+	);
+}
+
+function ServiceLinkChip({
+	href,
+	label,
+	icon,
+}: {
+	href: string;
+	label: string;
+	icon: ReactNode;
+}) {
+	return (
+		<a
+			href={href}
+			target="_blank"
+			rel="noreferrer"
+			aria-label={label}
+			title={label}
+			className={cn(
+				"inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md border bg-background px-2",
+				"text-[11px] text-muted-foreground transition-colors",
+				"hover:bg-muted hover:text-foreground",
+				"focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+			)}
+		>
+			{icon}
+			<span className="min-w-0 truncate">{label}</span>
+			<ExternalLink className="size-2.5 shrink-0 opacity-70" aria-hidden />
 		</a>
 	);
 }
@@ -383,6 +424,13 @@ export function PaperInfoPanel({
 	}, [meta]);
 
 	const resizable = open && Boolean(meta);
+	const arxivId = meta?.arxiv_id ? arxivUrls(meta.arxiv_id)?.id : null;
+	const modelScopeUrl = arxivId
+		? `https://modelscope.cn/papers/${arxivId}/overview`
+		: null;
+	const alphaXivUrl = arxivId
+		? `https://www.alphaxiv.org/abs/${arxivId}`
+		: null;
 
 	return (
 		<div
@@ -502,6 +550,24 @@ export function PaperInfoPanel({
 									) : null}
 								</div>
 							)}
+							{modelScopeUrl && alphaXivUrl ? (
+								<div className="flex flex-wrap gap-1.5 px-3 pt-1.5">
+									<ServiceLinkChip
+										href={modelScopeUrl}
+										label={t("paperInfo.modelscopeInterpretation")}
+										icon={
+											<SiModelscope className="size-3.5 shrink-0 text-[#624AFF]" />
+										}
+									/>
+									<ServiceLinkChip
+										href={alphaXivUrl}
+										label={t("paperInfo.alphaXiv")}
+										icon={
+											<SiArxiv className="size-3.5 shrink-0 text-[#B31B1B]" />
+										}
+									/>
+								</div>
+							) : null}
 						</div>
 					)}
 				</CollapsibleContent>
