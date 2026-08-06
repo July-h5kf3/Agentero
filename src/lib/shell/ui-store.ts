@@ -12,7 +12,8 @@ export type RightSidebarTab =
 	| "agent"
 	| "backlinks"
 	| "annotations"
-	| "references";
+	| "references"
+	| "figures";
 
 /** Crop + multi-turn payload when opening a visual-trace pin in Agent. */
 export type AgentSessionOpenVisualTrace = {

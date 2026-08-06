@@ -1,6 +1,7 @@
 import {
 	BookMarked,
 	Bot,
+	ImageIcon,
 	Link2,
 	MessageSquareText,
 	PanelLeft,
@@ -39,13 +40,18 @@ type TitleBarProps = {
 	notesEligible: boolean;
 	showNotes: boolean;
 	rightSidebarOpen: boolean;
-	rightSidebarTab: "agent" | "backlinks" | "annotations" | "references";
+	rightSidebarTab:
+		| "agent"
+		| "backlinks"
+		| "annotations"
+		| "references"
+		| "figures";
 	onToggleSidebar: () => void;
 	/** Toggle NOTES panel for the active paper (state lives in dockview). */
 	onToggleNotes: (open?: boolean) => void;
 	onToggleRightSidebar: () => void;
 	onOpenRightTab: (
-		tab: "agent" | "backlinks" | "annotations" | "references",
+		tab: "agent" | "backlinks" | "annotations" | "references" | "figures",
 	) => void;
 	onOpenSettings: () => void;
 };
@@ -152,6 +158,12 @@ export const TitleBar = memo(function TitleBar({
 										aria: t("titlebar.referencesPanel"),
 										tooltip: t("references.title", { ns: "viewer" }),
 										Icon: BookMarked,
+									},
+									{
+										id: "figures" as const,
+										aria: t("titlebar.figuresPanel"),
+										tooltip: t("figures.title", { ns: "viewer" }),
+										Icon: ImageIcon,
 									},
 								] as const
 							).map(({ id, aria, tooltip, Icon }) => (

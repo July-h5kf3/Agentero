@@ -1,9 +1,16 @@
 /**
- * Right rail: Agent chat, Backlinks +
- * Graph, or PDF annotations. Subscribes to its stores directly.
+ * Right rail: Agent chat, Backlinks + Graph, PDF annotations, References,
+ * and Figures (layout-detected images/tables). Subscribes to stores directly.
  */
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
 	type AnnotationRow,
@@ -12,6 +19,7 @@ import {
 	type VisualTraceRow,
 } from "@/components/viewer/annotations-panel";
 import type { PdfViewerHandle } from "@/components/viewer/embed/pdf-viewer";
+import { FiguresPanel } from "@/components/viewer/figures-panel";
 import { pdfHandleFor } from "@/components/viewer/pdf-viewer-registry";
 import { ReferencesPanel } from "@/components/viewer/references-panel";
 import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
@@ -48,6 +56,7 @@ import {
 } from "@/lib/pdf/annotation-ref";
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
+import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import {
 	navigateWiki,
@@ -132,6 +141,85 @@ function ReferencesSidebar() {
 			vaultPath={vaultPath}
 			paperPath={paperPath}
 			activeTabId={activeTabId}
+		/>
+	);
+}
+
+function FiguresSidebar() {
+	const activeTab = useWorkspaceStore((s) =>
+		s.tabs.find((tab) => tab.id === s.activeTabId),
+	);
+	const vaultPath = useVaultStore((s) => s.vaultPath);
+	const paperFolders = useVaultStore((s) => s.paperFolders);
+	const paperAbs = useMemo(
+		() => paperAbsFromWorkspaceTab(activeTab ?? null, vaultPath, paperFolders),
+		[activeTab, vaultPath, paperFolders],
+	);
+	const pdfTabId = paperAbs ? pdfTabIdForPaper(paperAbs) : null;
+	// Re-check handle registration when the active PDF tab changes.
+	const [viewerReady, setViewerReady] = useState(false);
+	useEffect(() => {
+		if (!pdfTabId) {
+			setViewerReady(false);
+			return;
+		}
+		const tick = () => setViewerReady(Boolean(pdfHandleFor(pdfTabId)));
+		tick();
+		const id = window.setInterval(tick, 400);
+		return () => window.clearInterval(id);
+	}, [pdfTabId]);
+
+	const withHandle = useCallback(
+		(fn: (h: PdfViewerHandle) => void) => {
+			annotationAction(paperAbs, fn);
+		},
+		[paperAbs],
+	);
+
+	const onAnalyze = useCallback(() => {
+		withHandle((h) => h.analyzeLayout());
+	}, [withHandle]);
+
+	const onJump = useCallback(
+		(region: PdfLayoutRegion) => {
+			withHandle((h) =>
+				h.scrollToLayoutRegion({
+					id: region.id,
+					pageIndex: region.pageIndex,
+					bbox: region.bbox,
+				}),
+			);
+		},
+		[withHandle],
+	);
+
+	const onRenderThumb = useCallback(
+		async (region: PdfLayoutRegion) => {
+			const candidates = [
+				paperAbs ? pdfTabIdForPaper(paperAbs) : null,
+				getActiveTabId(),
+			].filter((id): id is string => Boolean(id));
+			for (const id of candidates) {
+				const handle = pdfHandleFor(id);
+				if (!handle) continue;
+				return handle.renderRegion({
+					pageIndex: region.pageIndex,
+					bbox: region.bbox,
+					maxEdgePx: 360,
+				});
+			}
+			return null;
+		},
+		[paperAbs],
+	);
+
+	return (
+		<FiguresPanel
+			documentId={pdfTabId}
+			viewerReady={viewerReady}
+			onAnalyze={onAnalyze}
+			onJump={onJump}
+			onRenderThumb={onRenderThumb}
 		/>
 	);
 }
@@ -398,6 +486,7 @@ export function RightSidebar() {
 	const backlinksInWindow = Boolean(featurePoppedOut.backlinks);
 	const annotationsInWindow = Boolean(featurePoppedOut.annotations);
 	const referencesInWindow = Boolean(featurePoppedOut.references);
+	const figuresInWindow = Boolean(featurePoppedOut.figures);
 
 	return (
 		<>
@@ -467,6 +556,9 @@ export function RightSidebar() {
 			!referencesInWindow &&
 			rightSidebarTab === "references" ? (
 				<ReferencesSidebar />
+			) : null}
+			{rightSidebarOpen && !figuresInWindow && rightSidebarTab === "figures" ? (
+				<FiguresSidebar />
 			) : null}
 		</>
 	);

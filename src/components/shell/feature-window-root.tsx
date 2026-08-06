@@ -11,6 +11,7 @@ import {
 	type AskRow,
 	type VisualTraceRow,
 } from "@/components/viewer/annotations-panel";
+import { FiguresPanel } from "@/components/viewer/figures-panel";
 import { ReferencesPanel } from "@/components/viewer/references-panel";
 import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
 import { GraphPanel } from "@/components/wiki/graph-panel";
@@ -106,7 +107,8 @@ function viewTitleKey(
 	| "labels.agent"
 	| "labels.backlinks"
 	| "titlebar.annotationsPanel"
-	| "titlebar.referencesPanel" {
+	| "titlebar.referencesPanel"
+	| "titlebar.figuresPanel" {
 	switch (view) {
 		case "agent":
 			return "labels.agent";
@@ -116,6 +118,8 @@ function viewTitleKey(
 			return "titlebar.annotationsPanel";
 		case "references":
 			return "titlebar.referencesPanel";
+		case "figures":
+			return "titlebar.figuresPanel";
 	}
 }
 
@@ -478,6 +482,15 @@ export function FeatureWindowRoot() {
 						selectedPath={selectedPath}
 						vaultPath={vaultPath}
 						vaultPaperPaths={vaultPaperPaths}
+					/>
+				) : view === "figures" ? (
+					// Layout results live in the main-window PDF viewer memory;
+					// the popout shows empty until sidecar persistence exists.
+					<FiguresPanel
+						documentId={null}
+						viewerReady={false}
+						onAnalyze={() => {}}
+						onJump={() => {}}
 					/>
 				) : (
 					<ReferencesPanel

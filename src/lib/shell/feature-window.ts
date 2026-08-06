@@ -19,13 +19,15 @@ export type FeatureViewType =
 	| "agent"
 	| "backlinks"
 	| "annotations"
-	| "references";
+	| "references"
+	| "figures";
 
 const FEATURE_TAB_ORDER: FeatureViewType[] = [
 	"agent",
 	"backlinks",
 	"annotations",
 	"references",
+	"figures",
 ];
 
 function featureWindowTitle(view: FeatureViewType): string {
@@ -38,6 +40,8 @@ function featureWindowTitle(view: FeatureViewType): string {
 			return i18n.t("app:windows.titleAnnotations");
 		case "references":
 			return i18n.t("app:windows.titleReferences");
+		case "figures":
+			return i18n.t("app:windows.titleFigures");
 	}
 }
 
@@ -187,7 +191,8 @@ export function readFeatureWindowView(): FeatureViewType | null {
 			view === "agent" ||
 			view === "backlinks" ||
 			view === "annotations" ||
-			view === "references"
+			view === "references" ||
+			view === "figures"
 		) {
 			return view;
 		}
@@ -210,7 +215,8 @@ export function bindFeatureWindowClosedListener(): () => void {
 				view === "agent" ||
 				view === "backlinks" ||
 				view === "annotations" ||
-				view === "references"
+				view === "references" ||
+				view === "figures"
 			) {
 				setFeaturePoppedOut(view, false);
 			}

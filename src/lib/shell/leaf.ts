@@ -45,7 +45,8 @@ export function isFeatureViewType(view: ViewType): view is FeatureViewType {
 		view === "agent" ||
 		view === "backlinks" ||
 		view === "annotations" ||
-		view === "references"
+		view === "references" ||
+		view === "figures"
 	);
 }
 
