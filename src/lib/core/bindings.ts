@@ -24,7 +24,7 @@ export type TranslateTextArgs = {
 	text: string;
 	sourceLang?: string;
 	targetLang: string;
-	/**  Free engine id: google | googleapi | bing | youdao | huoshanweb | tencenttransmart | libre */
+	/**  Free engine id: google | googleapi | bing | youdao | deeplx | huoshanweb | tencenttransmart | libre */
 	provider?: string;
 	/**  LibreTranslate base URL when provider=libre. */
 	freeBaseUrl?: string | null;

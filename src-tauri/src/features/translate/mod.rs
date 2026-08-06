@@ -495,7 +495,7 @@ async fn translate_deeplx(
         },
     })
     .to_string();
-    if (id + 5) % 29 == 0 || (id + 3) % 13 == 0 {
+    if (id + 5).is_multiple_of(29) || (id + 3).is_multiple_of(13) {
         body = body.replace("\"method\":\"", "\"method\" : \"");
     } else {
         body = body.replace("\"method\":\"", "\"method\": \"");
