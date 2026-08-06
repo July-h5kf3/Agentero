@@ -28,7 +28,13 @@ export default defineConfig(async () => ({
 		format: "es",
 	},
 	optimizeDeps: {
-		exclude: ["@embedpdf/pdfium", "@embedpdf/engines"],
+		// PDFium + ONNX Runtime load wasm/workers; dep-optimize rewrites break them.
+		exclude: [
+			"@embedpdf/pdfium",
+			"@embedpdf/engines",
+			"onnxruntime-web",
+			"@embedpdf/ai",
+		],
 	},
 
 	test: {
