@@ -429,7 +429,13 @@ export function PdfViewer(props: PdfViewerProps) {
 			createPluginRegistration(ViewportPluginPackage),
 			createPluginRegistration(ScrollPluginPackage),
 			createPluginRegistration(RenderPluginPackage),
-			createPluginRegistration(TilingPluginPackage),
+			createPluginRegistration(TilingPluginPackage, {
+				// Pre-render one ring of tiles around the viewport so fast
+				// scrolling does not pop tiles in at the edges (rendering is
+				// off-main-thread in the worker engine, so the extra tiles are
+				// cheap).
+				extraRings: 1,
+			}),
 			createPluginRegistration(ZoomPluginPackage, {
 				defaultZoomLevel: ZoomMode.FitWidth,
 				minZoom: PDF_ZOOM_MIN,
