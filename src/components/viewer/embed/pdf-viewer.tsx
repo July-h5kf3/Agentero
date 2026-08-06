@@ -568,10 +568,10 @@ export function PdfViewer(props: PdfViewerProps) {
 type PdfViewerInnerProps = PdfViewerProps & { docId: string };
 
 /**
- * PDFium rasterizes on the main thread (the worker engine is unusable in
- * Tauri webviews), so full devicePixelRatio rasters on high-DPI screens make
- * every zoom step expensive. Cap the raster dpr: pages stay sharp enough for
- * reading while each re-render costs far less WASM work.
+ * Full devicePixelRatio rasters on high-DPI screens make every zoom step
+ * expensive (PDFium renders in a single worker shared by all pages). Cap the
+ * raster dpr: pages stay sharp enough for reading while each re-render costs
+ * far less WASM work.
  */
 const PDF_RASTER_DPR_CAP = 1.5;
 
