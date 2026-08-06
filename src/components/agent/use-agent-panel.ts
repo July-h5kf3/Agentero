@@ -143,7 +143,6 @@ import {
 	completeTrace,
 	createRunningTraces,
 	failTrace,
-	newTraceMessageId,
 	readPdfVisualTrace,
 	rememberPendingVisualTraces,
 	takePendingVisualTraces,
@@ -154,6 +153,14 @@ import {
 	isVisualTraceHistoryId,
 	visualTraceHistoryId,
 } from "@/lib/pdf/agent-trace/open-session";
+import {
+	appendAskAssistantMessage,
+	createAskThreadFromAgentSelection,
+	readPdfAskThread,
+	rememberPendingAskThreads,
+	takePendingAskThreads,
+	writePdfAskThread,
+} from "@/lib/pdf/ask";
 import { loadSettings } from "@/lib/settings";
 import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
@@ -789,6 +796,53 @@ export function useAgentPanel({
 		[],
 	);
 
+	/** Finalize PDF selection → ask conversation cards created on this Agent turn. */
+	const finalizeAskThreads = useCallback(
+		async (
+			runtimeSessionId: string,
+			outcome:
+				| {
+						kind: "completed";
+						answerSnapshot?: string;
+						sources?: string[];
+				  }
+				| {
+						kind: "failed";
+						error: string;
+						answerSnapshot?: string;
+				  },
+		) => {
+			const pending = takePendingAskThreads(runtimeSessionId);
+			if (!pending.length) return;
+			const content =
+				outcome.kind === "completed"
+					? (outcome.answerSnapshot ?? "").trim()
+					: (outcome.answerSnapshot ?? outcome.error).trim() || outcome.error;
+			if (!content) return;
+			const sources =
+				outcome.kind === "completed" && outcome.sources?.length
+					? outcome.sources.map((uri) => ({ uri }))
+					: undefined;
+			await Promise.all(
+				pending.map(async ({ paperAbsPath, threadId }) => {
+					try {
+						const current = await readPdfAskThread(paperAbsPath, threadId);
+						if (!current) return;
+						const next = appendAskAssistantMessage(current, {
+							content,
+							agentSessionId: runtimeSessionId,
+							sources,
+						});
+						await writePdfAskThread(paperAbsPath, next);
+					} catch {
+						// Ask card persistence is best-effort; chat already completed.
+					}
+				}),
+			);
+		},
+		[],
+	);
+
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -835,6 +889,11 @@ export function useAgentPanel({
 					kind: "failed",
 					error: t("messages.cancelled"),
 					providerSessionId: ev.providerSessionId,
+					answerSnapshot: ev.content,
+				});
+				void finalizeAskThreads(ev.sessionId, {
+					kind: "failed",
+					error: t("messages.cancelled"),
 					answerSnapshot: ev.content,
 				});
 				return;
@@ -906,8 +965,14 @@ export function useAgentPanel({
 				answerSnapshot: ev.content,
 				sources: ev.sources,
 			});
+			void finalizeAskThreads(ev.sessionId, {
+				kind: "completed",
+				answerSnapshot: ev.content,
+				sources: ev.sources,
+			});
 		},
 		[
+			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
 			t,
@@ -944,8 +1009,13 @@ export function useAgentPanel({
 				kind: "failed",
 				error,
 			});
+			void finalizeAskThreads(sessionId, {
+				kind: "failed",
+				error,
+			});
 		},
 		[
+			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
 			updateSessionLines,
@@ -1899,10 +1969,6 @@ export function useAgentPanel({
 			const continuePaperAbs = !hasVisualDrafts
 				? options?.paperAbsPath?.trim() || historyPaperAbs?.trim() || undefined
 				: undefined;
-			// First text-selection mark created this turn (for session pin binding).
-			let textSelectionBound:
-				| { traceId: string; paperAbsPath: string }
-				| undefined;
 			if (hasVisualDrafts) {
 				const byPaper = new Map<string, PdfVisualDraft[]>();
 				for (const draft of resolvedVisualDrafts) {
@@ -1972,67 +2038,38 @@ export function useAgentPanel({
 					},
 				]);
 			}
-			// PDF text selections with geometry → conversation card pins (no crop).
-			// Mirrors visual drafts: one mark per selection, finalized on complete.
+			// PDF text selections with geometry → ask conversation cards (kind ask),
+			// not visual-annotation agent-trace marks. One card pin per selection.
 			const anchoredSelections =
 				!isAcpCommand && text
 					? selectionsWithPdfAnchor(resolvedSelections)
 					: [];
 			if (anchoredSelections.length) {
-				const byPaper = new Map<
-					string,
-					ReturnType<typeof selectionsWithPdfAnchor>
-				>();
-				for (const sel of anchoredSelections) {
-					const list = byPaper.get(sel.paperAbsPath) ?? [];
-					list.push(sel);
-					byPaper.set(sel.paperAbsPath, list);
-				}
-				const pendingWrites: Array<{
+				const pendingAskWrites: Array<{
 					paperAbsPath: string;
-					traceId: string;
+					threadId: string;
 				}> = [];
-				const now = new Date().toISOString();
 				const userContent = text.trim();
-				for (const [paperAbsPath, sels] of byPaper) {
+				for (const sel of anchoredSelections) {
 					try {
-						const traces = createRunningTraces({
-							paperPath: sels[0]?.sourcePath || paperAbsPath,
-							agentId,
-							runtimeSessionId: accepted.sessionId,
-							messageId: accepted.messageId,
-							items: sels.map((sel) => ({
-								page: sel.page,
-								rects: sel.rects,
-								// Pin preview = selected quote; transcript user turn = question.
-								comment: sel.text,
-								messages: userContent
-									? [
-											{
-												id: newTraceMessageId(),
-												role: "user" as const,
-												content: userContent,
-												createdAt: now,
-											},
-										]
-									: undefined,
-							})),
+						const thread = createAskThreadFromAgentSelection({
+							paperPath: sel.sourcePath || sel.paperAbsPath,
+							page: sel.page,
+							rects: sel.rects,
+							quote: sel.text,
+							userContent,
+							agentSessionId: accepted.sessionId,
 						});
-						for (const trace of traces) {
-							await writePdfVisualTrace(paperAbsPath, trace);
-							pendingWrites.push({ paperAbsPath, traceId: trace.id });
-							if (!textSelectionBound) {
-								textSelectionBound = {
-									traceId: trace.id,
-									paperAbsPath,
-								};
-							}
-						}
+						await writePdfAskThread(sel.paperAbsPath, thread);
+						pendingAskWrites.push({
+							paperAbsPath: sel.paperAbsPath,
+							threadId: thread.id,
+						});
 					} catch {
-						// Keep chat running even if mark write fails.
+						// Keep chat running even if ask-card write fails.
 					}
 				}
-				rememberPendingVisualTraces(accepted.sessionId, pendingWrites);
+				rememberPendingAskThreads(accepted.sessionId, pendingAskWrites);
 			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
@@ -2068,13 +2105,11 @@ export function useAgentPanel({
 			const boundVisualTraceId =
 				options?.visualTraceId?.trim() ||
 				historyVisualTraceId ||
-				resolvedVisualDrafts[0]?.id ||
-				textSelectionBound?.traceId;
+				resolvedVisualDrafts[0]?.id;
 			const boundPaperAbs =
 				options?.paperAbsPath?.trim() ||
 				historyPaperAbs ||
-				resolvedVisualDrafts[0]?.paperAbsPath ||
-				textSelectionBound?.paperAbsPath;
+				resolvedVisualDrafts[0]?.paperAbsPath;
 			setSessionHistory((prev) => [
 				{
 					id: accepted.sessionId,

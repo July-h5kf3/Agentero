@@ -1065,12 +1065,6 @@ function PdfViewerInner({
 		visualTraces,
 	]);
 
-	// Drop text cache when the open document changes.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the intentional switch key
-	useEffect(() => {
-		setPageTextMap(new Map());
-		pageTextPendingRef.current.clear();
-	}, [docId]);
 	const activeThread = useMemo(() => {
 		if (activeCard?.kind !== "ask") return null;
 		return threads.find((th) => th.id === activeCard.id) ?? null;
@@ -1270,14 +1264,21 @@ function PdfViewerInner({
 		})();
 	}, [paperAbsPath]);
 
-	// Refresh agent-trace pins when this viewer is active (dock may keep
-	// inactive PDFs mounted under pdfKeepMounted — avoid N× listMarkRaw polls).
+	// Refresh ask conversation cards + agent-trace pins when this viewer is
+	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
+	// avoid N× listMarkRaw polls). Covers Agent-panel writes that create ask
+	// threads from 「加入对话」 selections while this tab was open.
 	useEffect(() => {
 		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
 		let cancelled = false;
 		const refresh = () => {
-			void listPdfVisualTraces(paperAbsPath).then((traces) => {
-				if (!cancelled) setVisualTraces(traces);
+			void Promise.all([
+				listPdfAskThreads(paperAbsPath),
+				listPdfVisualTraces(paperAbsPath),
+			]).then(([asks, traces]) => {
+				if (cancelled) return;
+				setThreads(asks);
+				setVisualTraces(traces);
 			});
 		};
 		// Immediate refresh on become-active (covers Agent multi-turn writes
@@ -2885,6 +2886,8 @@ function PdfViewerInner({
 		}) => {
 			const pageNumber = pageIndex + 1;
 			const pageText = pageTextMap.get(pageIndex);
+			const activeAskOnPage =
+				activeThread?.anchor.page === pageNumber ? activeThread : null;
 			const activeTranslateOnPage =
 				activeTranslate?.page === pageNumber ? activeTranslate : null;
 			const activeVisualOnPage =
@@ -3037,6 +3040,24 @@ function PdfViewerInner({
 								handleVisualRegionSelect(pageNumber, region)
 							}
 						/>
+						{/* Open ask conversation card: highlight the anchored selection. */}
+						{activeAskOnPage
+							? activeAskOnPage.anchor.rects.map((rect) => (
+									<div
+										key={`${activeAskOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-auto absolute z-[1] rounded-[2px] bg-amber-300/45 dark:bg-amber-400/35"
+										style={{
+											left: `${rect.x * 100}%`,
+											top: `${rect.y * 100}%`,
+											width: `${rect.w * 100}%`,
+											height: `${rect.h * 100}%`,
+										}}
+										aria-hidden="true"
+										onMouseEnter={markCardHoverEnter}
+										onMouseLeave={scheduleHoverHide}
+									/>
+								))
+							: null}
 						{activeTranslateOnPage
 							? activeTranslateOnPage.rects.map((rect) => (
 									<div
@@ -3103,6 +3124,7 @@ function PdfViewerInner({
 			visualTraces,
 			translates,
 			pageTextMap,
+			activeThread,
 			activeTranslate,
 			activeVisualTrace,
 			visualDraftRegion,

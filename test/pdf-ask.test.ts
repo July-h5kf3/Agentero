@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	appendAskAssistantMessage,
 	clientRectsToNormalized,
+	createAskThreadFromAgentSelection,
 	createEmptyThread,
 	parsePdfAskThread,
+	rememberPendingAskThreads,
+	resetPendingAskThreadsForTests,
+	takePendingAskThreads,
 	threadHasUserQuestion,
 	threadPin,
 	threadPreview,
@@ -81,6 +86,50 @@ describe("pdf-ask schema", () => {
 
 	it("rejects bad version", () => {
 		expect(parsePdfAskThread({ version: 2, id: "x" })).toBeNull();
+	});
+
+	it("builds an ask conversation card from Agent-panel selection turn", () => {
+		const thread = createAskThreadFromAgentSelection({
+			paperPath: "papers/transformer",
+			page: 2,
+			rects: [{ x: 0.1, y: 0.2, w: 0.4, h: 0.05 }],
+			quote: "attention is all you need",
+			userContent: "What does this phrase mean?",
+			agentSessionId: "sess-1",
+		});
+		expect(thread.kind).toBe("ask");
+		expect(thread.anchor.trigger).toBe("selection");
+		expect(thread.anchor.quote).toBe("attention is all you need");
+		expect(thread.messages).toHaveLength(1);
+		expect(thread.messages[0]?.role).toBe("user");
+		expect(thread.messages[0]?.content).toBe("What does this phrase mean?");
+		expect(thread.messages[0]?.agentSessionId).toBe("sess-1");
+		expect(threadHasUserQuestion(thread)).toBe(true);
+
+		const withAnswer = appendAskAssistantMessage(thread, {
+			content: "It is the title of the Transformer paper.",
+			agentSessionId: "sess-1",
+			sources: [{ uri: "https://example.com" }],
+		});
+		expect(withAnswer.messages).toHaveLength(2);
+		expect(withAnswer.messages[1]?.role).toBe("assistant");
+		expect(withAnswer.messages[1]?.content).toContain("Transformer");
+		expect(withAnswer.messages[1]?.sources?.[0]?.uri).toBe(
+			"https://example.com",
+		);
+	});
+
+	it("tracks pending ask finalizers by runtime session", () => {
+		resetPendingAskThreadsForTests();
+		rememberPendingAskThreads("rt-1", [
+			{ paperAbsPath: "/vault/p", threadId: "t1" },
+			{ paperAbsPath: "/vault/p", threadId: "t2" },
+		]);
+		expect(takePendingAskThreads("rt-1")).toEqual([
+			{ paperAbsPath: "/vault/p", threadId: "t1" },
+			{ paperAbsPath: "/vault/p", threadId: "t2" },
+		]);
+		expect(takePendingAskThreads("rt-1")).toEqual([]);
 	});
 
 	it("preserves visual region semantics", () => {
