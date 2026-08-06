@@ -21,6 +21,11 @@ type LayoutStoreState = {
 	 * `documentId` scopes the highlight to the owning PDF tab.
 	 */
 	focused: { documentId: string; regionId: string } | null;
+	/**
+	 * Whether the EmbedPDF layout bbox overlay is shown per document.
+	 * Figures rail toggles this; PDF viewer mirrors into the plugin.
+	 */
+	overlayVisible: Record<string, boolean>;
 };
 
 export const layoutAnalysisStore = createStore<LayoutStoreState>(() => ({
@@ -28,6 +33,7 @@ export const layoutAnalysisStore = createStore<LayoutStoreState>(() => ({
 	ui: { stage: "idle" },
 	activeDocumentId: null,
 	focused: null,
+	overlayVisible: {},
 }));
 
 export function setLayoutAnalysisUi(
@@ -63,8 +69,37 @@ export function clearLayoutDocumentResult(documentId: string): void {
 		delete next[documentId];
 		const focused =
 			state.focused?.documentId === documentId ? null : state.focused;
-		return { byDocument: next, focused };
+		const overlayVisible = { ...state.overlayVisible };
+		delete overlayVisible[documentId];
+		return { byDocument: next, focused, overlayVisible };
 	});
+}
+
+export function setLayoutOverlayVisible(
+	documentId: string,
+	visible: boolean,
+): void {
+	layoutAnalysisStore.setState((state) => {
+		if ((state.overlayVisible[documentId] ?? false) === visible) return state;
+		return {
+			overlayVisible: {
+				...state.overlayVisible,
+				[documentId]: visible,
+			},
+		};
+	});
+}
+
+export function toggleLayoutOverlayVisible(documentId: string): boolean {
+	const next = !(
+		layoutAnalysisStore.getState().overlayVisible[documentId] ?? false
+	);
+	setLayoutOverlayVisible(documentId, next);
+	return next;
+}
+
+export function isLayoutOverlayVisible(documentId: string): boolean {
+	return layoutAnalysisStore.getState().overlayVisible[documentId] ?? false;
 }
 
 export function setFocusedLayoutRegion(

@@ -167,7 +167,10 @@
 		"confidenceHint": "Model confidence (0–100%). Higher means the detector is more sure this region is a figure, table, algorithm, or formula. Overlapping duplicates are removed automatically.",
 		"minConfidence": "Min confidence {{pct}}%",
 		"minConfidenceAria": "Minimum confidence filter",
-		"shownOf": "{{shown}} shown · {{total}} raw"
+		"shownOf": "{{shown}} shown · {{total}} raw",
+		"toggleOverlay": "Toggle layout boxes on PDF",
+		"showOverlay": "Show layout boxes on PDF",
+		"hideOverlay": "Hide layout boxes on PDF"
 	},
 	"selection": {
 		"menuLabel": "Selection actions",

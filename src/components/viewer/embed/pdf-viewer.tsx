@@ -31,6 +31,7 @@ import {
 import {
 	LayoutAnalysisLayer,
 	LayoutAnalysisPluginPackage,
+	useLayoutAnalysis,
 	useLayoutAnalysisCapability,
 } from "@embedpdf/plugin-layout-analysis/react";
 import {
@@ -124,7 +125,6 @@ import {
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
-import { LayoutAnalysisToolbar } from "@/components/viewer/embed/layout-analysis-toolbar";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
@@ -220,6 +220,7 @@ import {
 	layoutKindHex,
 	runDocumentLayoutAnalysis,
 	setFocusedLayoutRegion,
+	setLayoutOverlayVisible,
 } from "@/lib/pdf/layout";
 import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
@@ -894,6 +895,12 @@ function PdfViewerInner({
 	const { state: searchState, provides: search } = useSearch(docId);
 	const { provides: bookmarkCap } = useBookmarkCapability();
 	const { provides: layoutCap } = useLayoutAnalysisCapability();
+	const { provides: layoutAnalysisProvides } = useLayoutAnalysis(docId);
+	/** Figures rail header toggles this; mirror into EmbedPDF plugin. */
+	const layoutOverlayVisible = useStore(
+		layoutAnalysisStore,
+		(s) => s.overlayVisible[docId] ?? false,
+	);
 
 	// EmbedPDF's useScroll calls forDocument() every render and returns a fresh
 	// scope object (createScrollScope). Never put `scroll` in useEffect deps —
@@ -903,6 +910,10 @@ function PdfViewerInner({
 	const scrollReady = Boolean(scroll);
 	const layoutCapRef = useRef(layoutCap);
 	layoutCapRef.current = layoutCap;
+
+	useEffect(() => {
+		layoutAnalysisProvides?.setLayoutOverlayVisible(layoutOverlayVisible);
+	}, [layoutAnalysisProvides, layoutOverlayVisible]);
 	const engineRef = useRef(engine);
 	engineRef.current = engine;
 	const docCapRef = useRef(docCap);
@@ -2788,6 +2799,8 @@ function PdfViewerInner({
 				void runDocumentLayoutAnalysis(la, docId, {
 					onDone: () => {
 						layoutTaskRef.current = null;
+						// Show bbox overlay after a successful run (sidebar can hide it).
+						setLayoutOverlayVisible(docId, true);
 						void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
 							openRightTab("figures"),
 						);
@@ -3565,28 +3578,6 @@ function PdfViewerInner({
 								<Button
 									type="button"
 									size="icon-xs"
-									variant="ghost"
-									aria-label={pdfColorSchemeLabel}
-									aria-pressed={pdfDark}
-									onClick={togglePdfColorScheme}
-								>
-									{pdfDark ? (
-										<Sun className="size-3.5" />
-									) : (
-										<Moon className="size-3.5" />
-									)}
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">
-								{pdfColorSchemeLabel}
-							</TooltipContent>
-						</Tooltip>
-						<LayoutAnalysisToolbar documentId={docId} />
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-xs"
 									variant={regionSelecting ? "secondary" : "ghost"}
 									aria-label={t("pdfExplain.selectRegion")}
 									aria-pressed={regionSelecting}
@@ -3616,29 +3607,6 @@ function PdfViewerInner({
 								</span>
 							</TooltipContent>
 						</Tooltip>
-						{onToggleZen ? (
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-										aria-pressed={zen}
-										onClick={onToggleZen}
-									>
-										{zen ? (
-											<Minimize2 className="size-3.5" />
-										) : (
-											<Maximize2 className="size-3.5" />
-										)}
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
-								</TooltipContent>
-							</Tooltip>
-						) : null}
 						{onOpenAnnotations ? (
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -3790,6 +3758,7 @@ function PdfViewerInner({
 					)
 				: null}
 
+			{/* Bottom bar: page nav + PDF color scheme + immersive (zen). */}
 			{totalPages > 0 ? (
 				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
 					<TooltipProvider delayDuration={200}>
@@ -3852,6 +3821,54 @@ function PdfViewerInner({
 								</TooltipTrigger>
 								<TooltipContent side="top">{t("pdf.nextPage")}</TooltipContent>
 							</Tooltip>
+							<span
+								aria-hidden
+								className="mx-0.5 h-3.5 w-px shrink-0 bg-border"
+							/>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-xs"
+										variant="ghost"
+										aria-label={pdfColorSchemeLabel}
+										aria-pressed={pdfDark}
+										onClick={togglePdfColorScheme}
+									>
+										{pdfDark ? (
+											<Sun className="size-3.5" />
+										) : (
+											<Moon className="size-3.5" />
+										)}
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{pdfColorSchemeLabel}
+								</TooltipContent>
+							</Tooltip>
+							{onToggleZen ? (
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											size="icon-xs"
+											variant="ghost"
+											aria-label={zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
+											aria-pressed={zen}
+											onClick={onToggleZen}
+										>
+											{zen ? (
+												<Minimize2 className="size-3.5" />
+											) : (
+												<Maximize2 className="size-3.5" />
+											)}
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent side="top">
+										{zen ? t("pdf.zenExit") : t("pdf.zenEnter")}
+									</TooltipContent>
+								</Tooltip>
+							) : null}
 						</div>
 					</TooltipProvider>
 				</div>

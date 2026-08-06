@@ -167,7 +167,10 @@
 		"confidenceHint": "模型置信度（0–100%）。越高表示检测器越确定这是插图、表格、算法或公式。重叠重复框会自动去重。",
 		"minConfidence": "最低置信度 {{pct}}%",
 		"minConfidenceAria": "最低置信度筛选",
-		"shownOf": "显示 {{shown}} · 原始 {{total}}"
+		"shownOf": "显示 {{shown}} · 原始 {{total}}",
+		"toggleOverlay": "切换 PDF 上的版面框",
+		"showOverlay": "在 PDF 上显示版面框",
+		"hideOverlay": "隐藏 PDF 上的版面框"
 	},
 	"selection": {
 		"menuLabel": "选区操作",

@@ -1,8 +1,10 @@
 import {
+	Boxes,
 	Code2,
+	Eye,
+	EyeOff,
 	ImageIcon,
 	Loader2,
-	RefreshCw,
 	Sigma,
 	Table2,
 } from "lucide-react";
@@ -40,6 +42,7 @@ import {
 	layoutKindHex,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
+	toggleLayoutOverlayVisible,
 } from "@/lib/pdf/layout";
 
 export type FiguresPanelProps = {
@@ -387,6 +390,10 @@ export function FiguresPanel({
 		[onJump],
 	);
 
+	const overlayVisible = useStore(layoutAnalysisStore, (s) =>
+		documentId ? (s.overlayVisible[documentId] ?? false) : false,
+	);
+
 	const running =
 		analyzing ||
 		(ui.stage === "running" &&
@@ -395,6 +402,20 @@ export function FiguresPanel({
 
 	const empty = gallery.length === 0;
 	const hasRaw = rawSidebarCount > 0;
+
+	const analyzeTooltip =
+		ui.stage === "running"
+			? ui.message
+			: ui.stage === "error"
+				? ui.message
+				: result
+					? t("figures.reanalyze")
+					: t("figures.analyze");
+
+	const handleToggleOverlay = useCallback(() => {
+		if (!documentId) return;
+		toggleLayoutOverlayVisible(documentId);
+	}, [documentId]);
 
 	return (
 		<section
@@ -407,23 +428,67 @@ export function FiguresPanel({
 			<PaneHeader
 				trailing={
 					documentId && viewerReady ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="size-6 text-muted-foreground hover:text-foreground"
-							aria-label={
-								result ? t("figures.reanalyze") : t("figures.analyze")
-							}
-							disabled={running}
-							onClick={onAnalyze}
-						>
-							{running ? (
-								<Loader2 className="size-3.5 animate-spin" aria-hidden />
-							) : (
-								<RefreshCw className="size-3.5" aria-hidden />
-							)}
-						</Button>
+						<TooltipProvider delayDuration={200}>
+							<div className="flex items-center gap-0.5">
+								{hasRaw ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												type="button"
+												variant={overlayVisible ? "secondary" : "ghost"}
+												size="icon-xs"
+												className={cn(
+													"size-6 text-muted-foreground hover:text-foreground",
+													overlayVisible && "text-primary",
+												)}
+												aria-label={t("figures.toggleOverlay")}
+												aria-pressed={overlayVisible}
+												onClick={handleToggleOverlay}
+											>
+												{overlayVisible ? (
+													<Eye className="size-3.5" aria-hidden />
+												) : (
+													<EyeOff className="size-3.5" aria-hidden />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom" className="max-w-52 text-xs">
+											{overlayVisible
+												? t("figures.hideOverlay")
+												: t("figures.showOverlay")}
+										</TooltipContent>
+									</Tooltip>
+								) : null}
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Button
+											type="button"
+											variant={running ? "secondary" : "ghost"}
+											size="icon-xs"
+											className="size-6 text-muted-foreground hover:text-foreground"
+											aria-label={
+												result ? t("figures.reanalyze") : t("figures.analyze")
+											}
+											aria-busy={running}
+											disabled={running}
+											onClick={onAnalyze}
+										>
+											{running ? (
+												<Loader2
+													className="size-3.5 animate-spin"
+													aria-hidden
+												/>
+											) : (
+												<Boxes className="size-3.5" aria-hidden />
+											)}
+										</Button>
+									</TooltipTrigger>
+									<TooltipContent side="bottom" className="max-w-64 text-xs">
+										{analyzeTooltip}
+									</TooltipContent>
+								</Tooltip>
+							</div>
+						</TooltipProvider>
 					) : null
 				}
 			>
