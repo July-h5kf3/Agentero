@@ -433,7 +433,13 @@ export function PdfViewer(props: PdfViewerProps) {
 				maxZoom: PDF_ZOOM_MAX,
 			}),
 			createPluginRegistration(InteractionManagerPluginPackage),
-			createPluginRegistration(SelectionPluginPackage),
+			createPluginRegistration(SelectionPluginPackage, {
+				// Text selection is enough for the floating menu. EmbedPDF's built-in
+				// marquee can be triggered by slight misses around glyphs and paints a
+				// large blue rectangle over the page; visual region annotation uses our
+				// explicit ScanSearch mode instead.
+				marquee: { enabled: false },
+			}),
 			createPluginRegistration(AnnotationPluginPackage, {
 				annotationAuthor: "Agentero",
 				colorPresets: HIGHLIGHT_HEX_LIST,
