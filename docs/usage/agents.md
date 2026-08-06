@@ -53,10 +53,6 @@ Skill 来源不受 Agentero 审计，安装第三方 Skill 等于引入外部指
 
 可选：**个人偏好提示词**（Settings → Agent → `agentPersonalPrompt`）会注入工作流 envelope；留空则不注入。
 
-### 禅模式
-
-`⌥⌘Z` 或 Layout 菜单进入 Agent 禅模式：全屏对话，左侧弱对比历史列表；精读 / PDF 划词等后台任务不会塞进对话历史。
-
 ## 权限模式
 
 Settings → Agent → 全局权限模式（对所有 Agent 生效，非 per-provider YOLO）：

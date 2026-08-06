@@ -77,7 +77,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | `lib/paper/library-store` | 论文库行与 scope |
 | `lib/pdf/annotations-store` | 按 tab 高亮 / Ask |
 | `lib/wiki/store` | 索引 revision、重命名对话框 |
-| `lib/shell/ui-store` | 侧栏、zen、命令面板、对话框 |
+| `lib/shell/ui-store` | 侧栏、PDF 沉浸模式、命令面板、对话框 |
 | `lib/settings` | 设置缓存与跨窗口同步 |
 
 ## 功能索引

@@ -1,5 +1,5 @@
 /**
- * Right rail: Agent chat (kept mounted across sidebar ↔ zen), Backlinks +
+ * Right rail: Agent chat, Backlinks +
  * Graph, or PDF annotations. Subscribes to its stores directly.
  */
 
@@ -43,7 +43,6 @@ import {
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import { layout, uiStore } from "@/lib/shell/ui-store";
 import {
 	navigateWiki,
 	openGraphPath,
@@ -51,8 +50,8 @@ import {
 } from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
 
-// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar /
-// zen mode is opened, so its (large) bundle stays out of the initial chunk.
+// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar is
+// opened, so its (large) bundle stays out of the initial chunk.
 const AgentPanel = lazy(() =>
 	import("@/components/agent/agent-panel").then((m) => ({
 		default: m.AgentPanel,
@@ -62,7 +61,6 @@ const AgentPanel = lazy(() =>
 /**
  * Agent chat Sources / inline citation click: vault paper paths → paper
  * workspace; other vault files → open tab; http(s) → system browser.
- * Exit zen so the paper is visible.
  */
 function onOpenAgentSettings(): void {
 	openSettingsWindow("agent");
@@ -78,9 +76,6 @@ function handleAgentOpenSource(source: string): void {
 				window.open(trimmed, "_blank", "noopener,noreferrer");
 			});
 		return;
-	}
-	if (uiStore.getState().agentZenMode) {
-		layout()?.exitAgentZen();
 	}
 	openGraphPath(trimmed);
 }
@@ -334,7 +329,6 @@ export function RightSidebar() {
 	const { t } = useTranslation(["app"]);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
 	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
-	const agentZenMode = useUiStore((s) => s.agentZenMode);
 	const agentPanelMounted = useUiStore((s) => s.agentPanelMounted);
 	const featurePoppedOut = useUiStore((s) => s.featurePoppedOut);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
@@ -360,18 +354,15 @@ export function RightSidebar() {
 
 	return (
 		<>
-			{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat),
-			    but never while the agent singleton window is open. */}
+			{/* Keep AgentPanel alive when switching rail tabs, but never while
+			    the agent singleton window is open. */}
 			{!agentInWindow &&
 				(agentPanelMounted ||
-					agentZenMode ||
 					(rightSidebarOpen && rightSidebarTab === "agent")) && (
 					<div
 						className={cn(
 							"h-full min-h-0",
-							!agentZenMode &&
-								(!rightSidebarOpen || rightSidebarTab !== "agent") &&
-								"hidden",
+							(!rightSidebarOpen || rightSidebarTab !== "agent") && "hidden",
 						)}
 					>
 						<Suspense fallback={null}>
@@ -386,11 +377,7 @@ export function RightSidebar() {
 								paperTreeLabelMode={paperTreeLabelMode}
 								className="min-h-0 h-full"
 								title={t("labels.agent")}
-								variant={agentZenMode ? "zen" : "sidebar"}
-								autoFocus={
-									agentZenMode ||
-									(rightSidebarOpen && rightSidebarTab === "agent")
-								}
+								autoFocus={rightSidebarOpen && rightSidebarTab === "agent"}
 								onOpenAgentSettings={onOpenAgentSettings}
 								onOpenSource={handleAgentOpenSource}
 							/>
@@ -398,7 +385,6 @@ export function RightSidebar() {
 					</div>
 				)}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!backlinksInWindow &&
 			rightSidebarTab === "backlinks" ? (
 				<div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -426,13 +412,11 @@ export function RightSidebar() {
 				</div>
 			) : null}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!annotationsInWindow &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
 			) : null}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!referencesInWindow &&
 			rightSidebarTab === "references" ? (
 				<ReferencesSidebar />

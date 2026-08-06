@@ -175,7 +175,6 @@ export type UseAgentPanelArgs = Pick<
 	| "vaultPaperPaths"
 	| "paperMetaByRelPath"
 	| "paperTreeLabelMode"
-	| "variant"
 >;
 
 export function useAgentPanel({
@@ -187,9 +186,7 @@ export function useAgentPanel({
 	vaultPaperPaths = [],
 	paperMetaByRelPath = null,
 	paperTreeLabelMode = "title-author",
-	variant = "sidebar",
 }: UseAgentPanelArgs) {
-	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
 	/**
 	 * Focused document as Vault-relative context path.
@@ -2983,7 +2980,6 @@ export function useAgentPanel({
 	]);
 
 	return {
-		isZen,
 		t,
 		// Transcript
 		lines,

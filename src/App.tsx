@@ -3,7 +3,7 @@
  * stores (`src/lib/<domain>/store.ts`) and behavior in plain action modules;
  * heavy surfaces (file tree, dockview workspace, right rail, dialogs)
  * subscribe to their own slices so the shell re-renders only on layout-level
- * changes (vault switch, rail collapse, zen modes).
+ * changes (vault switch, rail collapse, PDF immersive mode).
  */
 
 import { FolderOpen } from "lucide-react";
@@ -54,11 +54,9 @@ import {
 	openRightTab,
 	setRightSidebarOpenState,
 	setSidebarCollapsedState,
-	toggleAgentZen,
 	toggleChat,
 	toggleRightSidebar,
 	toggleSidebar,
-	uiStore,
 } from "@/lib/shell/ui-store";
 import {
 	createNewVault,
@@ -122,13 +120,8 @@ function zoomReset(): void {
 	if (getSettings().uiScale !== 1) patchSettings({ uiScale: 1 });
 }
 
-function exitAgentZenClick(): void {
-	layout()?.exitAgentZen();
-}
-
 /** Title bar wrapper: subscribes to tabs/ui itself so the shell stays still. */
 function AppTitleBar() {
-	const agentZenMode = useUiStore((s) => s.agentZenMode);
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
 	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
@@ -160,17 +153,14 @@ function AppTitleBar() {
 		<TitleBar
 			isMacDesktop={isMacDesktop}
 			showSettingsGear={showSettingsGear}
-			agentZenMode={agentZenMode}
 			sidebarCollapsed={sidebarCollapsed}
 			notesEligible={Boolean(notesEligiblePaper)}
 			showNotes={notesSplitOpen}
 			rightSidebarOpen={rightSidebarOpen}
 			rightSidebarTab={rightSidebarTab}
-			onExitAgentZen={exitAgentZenClick}
 			onToggleSidebar={toggleSidebar}
 			onToggleNotes={toggleNotesSplit}
 			onToggleRightSidebar={toggleRightSidebar}
-			onToggleAgentZen={toggleAgentZen}
 			onOpenRightTab={openRightTab}
 			onOpenSettings={openSettingsWindow}
 		/>
@@ -230,7 +220,6 @@ export default function App() {
 	const vaultPath = useVaultStore((s) => s.vaultPath);
 	const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
-	const agentZenMode = useUiStore((s) => s.agentZenMode);
 	const pdfZenMode = useUiStore((s) => s.pdfZenMode);
 
 	// Host Vault filesystem watcher → editor reseed, tree refresh, wiki rebuild.
@@ -276,11 +265,9 @@ export default function App() {
 		// focus the chat; with no selection it just toggles the sidebar.
 		toggleChat: () => {
 			if (pinActiveSelection()) {
-				// Zen mode already shows the Agent panel fullscreen.
-				if (!uiStore.getState().agentZenMode) openRightTab("agent");
+				openRightTab("agent");
 			} else toggleChat();
 		},
-		toggleAgentZen,
 		focusSidebar: () => layout()?.focusSidebar(),
 		focusEditor: () => layout()?.focusEditorPane(),
 		focusNotes: () => layout()?.focusNotesEditor(),
@@ -350,15 +337,13 @@ export default function App() {
 							</aside>
 						</ResizablePanel>
 
-						{sidebarCollapsed || agentZenMode || pdfZenMode ? null : (
-							<ResizableHandle />
-						)}
+						{sidebarCollapsed || pdfZenMode ? null : <ResizableHandle />}
 
 						<ResizablePanel
 							id="source"
 							panelRef={sourcePanelRef}
 							defaultSize="40"
-							minSize={agentZenMode ? 0 : 200}
+							minSize={200}
 							collapsible
 							collapsedSize={0}
 							className="min-h-0 min-w-0 overflow-hidden"
@@ -379,21 +364,18 @@ export default function App() {
 						</ResizablePanel>
 
 						{/* Right sidebar: always mounted + collapsible (same as left). */}
-						{rightSidebarOpen && !agentZenMode && !pdfZenMode ? (
-							<ResizableHandle />
-						) : null}
+						{rightSidebarOpen && !pdfZenMode ? <ResizableHandle /> : null}
 						<ResizablePanel
 							id="right-sidebar"
 							panelRef={rightSidebarPanelRef}
 							defaultSize={0}
-							minSize={agentZenMode || pdfZenMode ? 0 : 260}
-							maxSize={agentZenMode ? "100%" : 520}
+							minSize={pdfZenMode ? 0 : 260}
+							maxSize={520}
 							collapsible
 							collapsedSize={0}
 							groupResizeBehavior="preserve-pixel-size"
 							className="min-h-0 overflow-hidden"
 							onResize={(size) => {
-								if (uiStore.getState().agentZenMode) return;
 								if (size.inPixels <= 1) setRightSidebarOpenState(false);
 								else if (size.inPixels >= 80) {
 									setRightSidebarOpenState(true);
@@ -408,8 +390,7 @@ export default function App() {
 
 				<AppDialogs />
 
-				{/* IDE-style background tasks (bottom-left floater); hide in zen */}
-				{agentZenMode ? null : <BackgroundTasksPanel />}
+				<BackgroundTasksPanel />
 			</div>
 		</WikiNavProvider>
 	);

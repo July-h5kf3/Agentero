@@ -407,7 +407,6 @@ export function FeatureWindowRoot() {
 							paperTreeLabelMode={paperTreeLabelMode}
 							className="min-h-0 h-full"
 							title={title}
-							variant="sidebar"
 							autoFocus
 							onOpenAgentSettings={() => openSettingsWindow("agent")}
 							onOpenSource={handleAgentOpenSource}

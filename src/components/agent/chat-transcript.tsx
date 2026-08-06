@@ -81,7 +81,6 @@ import {
 } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
-import { cn } from "@/lib/core/utils";
 
 function AskUserQuestionTool({
 	input,
@@ -165,7 +164,6 @@ function AskUserQuestionTool({
 }
 
 export function ChatTranscript({
-	isZen,
 	lines,
 	activeTabId,
 	agentName,
@@ -185,7 +183,6 @@ export function ChatTranscript({
 	onAnswerQuestion,
 	onOpenSource,
 }: {
-	isZen: boolean;
 	lines: ChatLine[];
 	activeTabId: string;
 	agentName: string;
@@ -217,32 +214,14 @@ export function ChatTranscript({
 
 	return (
 		<Conversation className="min-h-0 flex-1">
-			<ConversationContent
-				className={cn(
-					isZen &&
-						(lines.length === 0
-							? "min-h-full justify-center px-0 py-6"
-							: "px-0 py-6"),
-				)}
-			>
-				<div
-					className={cn(
-						"flex w-full flex-col gap-8",
-						isZen && "mx-auto max-w-2xl px-4 sm:px-6",
-					)}
-				>
+			<ConversationContent>
+				<div className="flex w-full flex-col gap-8">
 					{lines.length === 0 ? (
 						<ConversationEmptyState
-							className={cn(isZen ? "max-w-md p-0" : undefined)}
 							title={t("empty.title")}
 							description={t("empty.description")}
 						>
-							<div
-								className={cn(
-									"mt-4 flex w-full flex-col items-stretch gap-2",
-									isZen ? "max-w-md" : "max-w-sm",
-								)}
-							>
+							<div className="mt-4 flex w-full max-w-sm flex-col items-stretch gap-2">
 								{activeTabIsRunning ? (
 									<Shimmer className="text-center text-sm">
 										{t("empty.waiting")}
@@ -652,9 +631,7 @@ export function ChatTranscript({
 					)}
 				</div>
 			</ConversationContent>
-			<ConversationScrollButton
-				className={cn(isZen && "right-4 bottom-4 left-auto translate-x-0")}
-			/>
+			<ConversationScrollButton />
 		</Conversation>
 	);
 }

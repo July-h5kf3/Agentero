@@ -14,7 +14,7 @@
 
 ## 0.2.1 基线（已发布，摘要）
 
-工作台 + Dockview 分屏、Catalog/Library/标签、魔棒与本地 PDF 入库、Zotero Connector/迁移、PDF 划词与翻译、BYOA Agent（精读/权限/禅模式）、双链与 Graph、CLI MVP、远程 Vault MVP、Release CI。细节以功能文档为准。
+工作台 + Dockview 分屏、Catalog/Library/标签、魔棒与本地 PDF 入库、Zotero Connector/迁移、PDF 划词与翻译、BYOA Agent（精读/权限）、双链与 Graph、CLI MVP、远程 Vault MVP、Release CI。细节以功能文档为准。
 
 ---
 

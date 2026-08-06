@@ -14,7 +14,6 @@ import {
 } from "@/lib/shell/settings-window";
 import {
 	layout,
-	toggleAgentZen,
 	toggleChat,
 	toggleSidebar,
 	uiStore,
@@ -111,12 +110,6 @@ export const paletteCommands: AppCommand[] = [
 		categoryKey: "commands.catView",
 		keywords: ["agent", "chat"],
 		run: () => toggleChat(),
-	},
-	{
-		id: "view.agentZen",
-		titleKey: "commands.viewAgentZen",
-		categoryKey: "commands.catView",
-		run: () => toggleAgentZen(),
 	},
 	{
 		id: "view.focusSidebar",

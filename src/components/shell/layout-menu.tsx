@@ -7,7 +7,6 @@ import {
 	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
 	DropdownMenuLabel,
-	DropdownMenuSeparator,
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -27,8 +26,6 @@ type LayoutMenuProps = {
 	onToggleNotes: (open?: boolean) => void;
 	rightSidebarOpen: boolean;
 	onToggleRightSidebar: () => void;
-	zenMode: boolean;
-	onToggleZen: () => void;
 };
 
 /**
@@ -43,8 +40,6 @@ export function LayoutMenu({
 	onToggleNotes,
 	rightSidebarOpen,
 	onToggleRightSidebar,
-	zenMode,
-	onToggleZen,
 }: LayoutMenuProps) {
 	const { t } = useTranslation("app");
 
@@ -95,17 +90,6 @@ export function LayoutMenu({
 					{t("titlebar.layoutRightSidebar")}
 					<DropdownMenuShortcut>
 						{formatShortcutById("toggleChat")}
-					</DropdownMenuShortcut>
-				</DropdownMenuCheckboxItem>
-				<DropdownMenuSeparator />
-				<DropdownMenuCheckboxItem
-					checked={zenMode}
-					onCheckedChange={() => onToggleZen()}
-					onSelect={(e) => e.preventDefault()}
-				>
-					{t("titlebar.enterAgentZen")}
-					<DropdownMenuShortcut>
-						{formatShortcutById("toggleAgentZen")}
 					</DropdownMenuShortcut>
 				</DropdownMenuCheckboxItem>
 			</DropdownMenuContent>

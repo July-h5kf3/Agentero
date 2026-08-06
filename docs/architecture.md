@@ -35,10 +35,6 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 - **论文 NOTES**：默认左右分屏（PDF/HTML 左、`NOTES.md` 右）；多篇 paper 叠到同一两栏；body/NOTES tab 同步切换。
 - **错误 Toast**：右上角 Sonner，经 `notifyError`（`src/lib/core/notify.ts`）；表单就地校验不走 Toast。
 
-### 禅模式
-
-`⌥⌘Z` / Layout 菜单进入。全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`）。左侧栏弱对比历史；精读/PDF 划词等后台运行不进对话历史。
-
 ## 核心工作流
 
 ### 论文入库

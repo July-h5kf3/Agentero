@@ -1,5 +1,5 @@
 /**
- * App shell UI state (zustand vanilla): side rails, zen modes, palette and
+ * App shell UI state (zustand vanilla): side rails, PDF immersive mode, palette and
  * dialog visibility, and one-shot open signals. Signal bumps only re-render
  * their subscribers instead of the whole App.
  */
@@ -61,11 +61,9 @@ type UiStore = {
 	/** Right sidebar (⌘L): Agent (default) or Backlinks with Graph below. */
 	rightSidebarOpen: boolean;
 	rightSidebarTab: RightSidebarTab;
-	/** Agent zen mode: hide vault chrome, full-width Agent chat. */
-	agentZenMode: boolean;
 	/** Immersive full-window PDF reading. */
 	pdfZenMode: boolean;
-	/** Keep AgentPanel mounted across sidebar ↔ zen so chat history survives. */
+	/** Keep AgentPanel mounted when switching right-rail tabs. */
 	agentPanelMounted: boolean;
 	/**
 	 * Feature views currently living in a singleton native window.
@@ -88,7 +86,6 @@ export const uiStore = createStore<UiStore>(() => ({
 	sidebarCollapsed: false,
 	rightSidebarOpen: false,
 	rightSidebarTab: "agent",
-	agentZenMode: false,
 	pdfZenMode: false,
 	agentPanelMounted: false,
 	featurePoppedOut: {},
@@ -111,10 +108,6 @@ export function setRightSidebarOpenState(open: boolean): void {
 
 export function setRightSidebarTab(tab: RightSidebarTab): void {
 	uiStore.setState({ rightSidebarTab: tab });
-}
-
-export function setAgentZenMode(zen: boolean): void {
-	uiStore.setState({ agentZenMode: zen });
 }
 
 export function setPdfZenMode(zen: boolean): void {
@@ -160,7 +153,7 @@ export function setSkillImportDraft(draft: SkillDiscovery[] | null): void {
 
 /**
  * Imperative layout controller registered by the App shell (panel refs and
- * zen-mode resize live in the React layer; plain actions call through here).
+ * panel resize lives in the React layer; plain actions call through here).
  */
 export type LayoutController = {
 	setLeftCollapsed: (collapsed: boolean) => void;
@@ -168,8 +161,6 @@ export type LayoutController = {
 		collapsed: boolean,
 		opts?: { focusAgent?: boolean },
 	) => void;
-	enterAgentZen: () => void;
-	exitAgentZen: () => void;
 	enterPdfZen: () => void;
 	exitPdfZen: () => void;
 	/** Expand the left rail and move focus into it. */
@@ -189,8 +180,7 @@ export function layout(): LayoutController | null {
 }
 
 export function toggleSidebar(): void {
-	const { agentZenMode, sidebarCollapsed } = uiStore.getState();
-	if (agentZenMode) return;
+	const { sidebarCollapsed } = uiStore.getState();
 	// React state is source of truth — isCollapsed() can lag at 0px.
 	layout()?.setLeftCollapsed(!sidebarCollapsed);
 }
@@ -209,9 +199,7 @@ function openRightTabInRail(tab: RightSidebarTab): void {
 
 /** Title-bar toggle: mounts the Agent panel when opening (unless agent is popped out). */
 export function toggleRightSidebar(): void {
-	const { agentZenMode, rightSidebarOpen, rightSidebarTab } =
-		uiStore.getState();
-	if (agentZenMode) return;
+	const { rightSidebarOpen, rightSidebarTab } = uiStore.getState();
 	if (rightSidebarOpen) {
 		layout()?.setRightCollapsed(true);
 		return;
@@ -230,9 +218,7 @@ export function toggleRightSidebar(): void {
 
 /** ⌘L — toggle right sidebar (defaults to agent). */
 export function toggleChat(): void {
-	const { agentZenMode, rightSidebarOpen, rightSidebarTab } =
-		uiStore.getState();
-	if (agentZenMode) return;
+	const { rightSidebarOpen, rightSidebarTab } = uiStore.getState();
 	if (rightSidebarOpen) {
 		layout()?.setRightCollapsed(true);
 		return;
@@ -308,20 +294,6 @@ export function requestOpenAgentSession(
 export function clearAgentSessionOpenRequest(): void {
 	if (!uiStore.getState().agentSessionOpenRequest) return;
 	uiStore.setState({ agentSessionOpenRequest: null });
-}
-
-export function toggleAgentZen(): void {
-	if (uiStore.getState().agentZenMode) {
-		layout()?.exitAgentZen();
-		return;
-	}
-	// Agent already in a feature window → focus it; do not also enter main zen.
-	void import("@/lib/shell/feature-window").then(
-		async ({ preferFeatureWindow }) => {
-			if (await preferFeatureWindow("agent")) return;
-			layout()?.enterAgentZen();
-		},
-	);
 }
 
 export function togglePdfZen(): void {

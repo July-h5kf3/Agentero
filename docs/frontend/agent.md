@@ -6,7 +6,7 @@ BYOA：连接本机（或远程）ACP Agent。Host 协议见 [../backend/agent.m
 
 ```text
 AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
-  → AgentPanel 状态机（含 zen）
+  → AgentPanel 状态机
   → invoke agent_* + 订阅 agent:* 事件
 ```
 
@@ -24,11 +24,6 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
 - Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。命令以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
-
-## 禅模式
-
-- `⌥⌘Z` / Layout 菜单。
-- 全屏对话；左侧弱对比历史；精读 / 划词等 `hideFromChatHistory`。
 
 ## 权限 UI
 

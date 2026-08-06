@@ -241,7 +241,6 @@ function ComposerSubmitControl({
 }
 
 export function AgentComposer({
-	isZen,
 	autoFocus,
 	linesLength,
 	activeTabIsRunning,
@@ -317,7 +316,6 @@ export function AgentComposer({
 	// Follow-up suggestions
 	onSendSuggestion,
 }: {
-	isZen: boolean;
 	autoFocus: boolean;
 	linesLength: number;
 	activeTabIsRunning: boolean;
@@ -440,16 +438,9 @@ export function AgentComposer({
 	}, [isFileDragOver, resetFileDragHighlight]);
 
 	return (
-		<div
-			className={cn(
-				"shrink-0 space-y-2",
-				isZen
-					? "mx-auto w-full max-w-2xl border-0 bg-transparent px-4 pt-1 pb-6 sm:px-6 sm:pb-8"
-					: "border-t bg-muted/10 p-3",
-			)}
-		>
+		<div className="shrink-0 space-y-2 border-t bg-muted/10 p-3">
 			{linesLength > 0 && !activeTabIsRunning ? (
-				<Suggestions className={cn(isZen && "justify-center")}>
+				<Suggestions>
 					{SUGGESTION_KEYS.map((key) => {
 						const label = t(`suggestions.${key}`);
 						return (
@@ -464,7 +455,7 @@ export function AgentComposer({
 				</Suggestions>
 			) : null}
 			{messageQueue.length > 0 ? (
-				<Queue className={cn(isZen && "shadow-sm")}>
+				<Queue>
 					<QueueSection defaultOpen>
 						<QueueSectionTrigger>
 							<QueueSectionLabel
@@ -516,7 +507,6 @@ export function AgentComposer({
 				<PromptInput
 					className={cn(
 						"w-full rounded-xl border-border bg-background shadow-none transition-[background-color,box-shadow,border-color] duration-150",
-						isZen && "rounded-2xl border shadow-sm",
 						isFileDragOver &&
 							"border-primary/55 bg-primary/5 shadow-[inset_0_0_0_1px] shadow-primary/25 ring-2 ring-primary/35",
 					)}
@@ -557,10 +547,7 @@ export function AgentComposer({
 						>
 							<PopoverAnchor asChild>
 								<div
-									className={cn(
-										"relative flex w-full flex-col px-3 pt-3",
-										isZen ? "min-h-[120px]" : "min-h-[96px]",
-									)}
+									className="relative flex min-h-[96px] w-full flex-col px-3 pt-3"
 									onDragOverCapture={onComposerDragOver}
 									onDropCapture={onComposerDrop}
 								>
@@ -1127,7 +1114,6 @@ export function AgentComposer({
 					<div
 						className={cn(
 							"pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl",
-							isZen && "rounded-2xl",
 							"border-2 border-primary/50 border-dashed bg-primary/10 backdrop-blur-[1px]",
 						)}
 						aria-hidden

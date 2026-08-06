@@ -1,5 +1,4 @@
 import {
-	ArrowLeft,
 	BookMarked,
 	Bot,
 	Link2,
@@ -31,24 +30,20 @@ import { formatShortcutById } from "@/lib/shell/shortcuts";
 /** Platform-formatted shortcut chips for title bar tooltips (⌥⌘… on macOS, Ctrl+… elsewhere). */
 const SIDEBAR_SHORTCUT = formatShortcutById("toggleSidebar");
 const CHAT_SHORTCUT = formatShortcutById("toggleChat");
-const ZEN_SHORTCUT = formatShortcutById("toggleAgentZen");
 const SETTINGS_SHORTCUT = formatShortcutById("settings");
 
 type TitleBarProps = {
 	isMacDesktop: boolean;
 	showSettingsGear: boolean;
-	agentZenMode: boolean;
 	sidebarCollapsed: boolean;
 	notesEligible: boolean;
 	showNotes: boolean;
 	rightSidebarOpen: boolean;
 	rightSidebarTab: "agent" | "backlinks" | "annotations" | "references";
-	onExitAgentZen: () => void;
 	onToggleSidebar: () => void;
 	/** Toggle NOTES panel for the active paper (state lives in dockview). */
 	onToggleNotes: (open?: boolean) => void;
 	onToggleRightSidebar: () => void;
-	onToggleAgentZen: () => void;
 	onOpenRightTab: (
 		tab: "agent" | "backlinks" | "annotations" | "references",
 	) => void;
@@ -62,17 +57,14 @@ type TitleBarProps = {
 export const TitleBar = memo(function TitleBar({
 	isMacDesktop,
 	showSettingsGear,
-	agentZenMode,
 	sidebarCollapsed,
 	notesEligible,
 	showNotes,
 	rightSidebarOpen,
 	rightSidebarTab,
-	onExitAgentZen,
 	onToggleSidebar,
 	onToggleNotes,
 	onToggleRightSidebar,
-	onToggleAgentZen,
 	onOpenRightTab,
 	onOpenSettings,
 }: TitleBarProps) {
@@ -93,173 +85,138 @@ export const TitleBar = memo(function TitleBar({
 				<div className="w-2 shrink-0 self-stretch" data-tauri-drag-region />
 			)}
 			<TooltipProvider delayDuration={250}>
-				{agentZenMode ? (
-					<>
-						{/* Zen: drag strip + back — chat chrome lives in AgentPanel */}
-						<div
-							className="min-w-0 flex-1 self-stretch"
-							data-tauri-drag-region
-						/>
-						<div className="flex shrink-0 items-center gap-0.5 pr-2">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={t("titlebar.exitAgentZen")}
-										onClick={onExitAgentZen}
-									>
-										<ArrowLeft className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{t("titlebar.exitAgentZenHint", { shortcut: ZEN_SHORTCUT })}
-								</TooltipContent>
-							</Tooltip>
-						</div>
-					</>
-				) : (
-					<>
-						<div className="flex shrink-0 items-center gap-0.5 pr-1">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={
-											sidebarCollapsed
-												? t("titlebar.showLeftSidebar")
-												: t("titlebar.hideLeftSidebar")
-										}
-										aria-pressed={!sidebarCollapsed}
-										onClick={onToggleSidebar}
-									>
-										<PanelLeft className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{sidebarCollapsed
-										? t("titlebar.showSidebarHint", {
-												shortcut: SIDEBAR_SHORTCUT,
-											})
-										: t("titlebar.hideSidebarHint", {
-												shortcut: SIDEBAR_SHORTCUT,
-											})}
-								</TooltipContent>
-							</Tooltip>
-						</div>
-						{/* Drag region fills the middle — document tabs are in dockview. */}
-						<div
-							className="min-w-0 flex-1 self-stretch"
-							data-tauri-drag-region
-						/>
-						<div className="flex shrink-0 items-center gap-0.5 pr-2">
-							<LayoutMenu
-								leftSidebarOpen={!sidebarCollapsed}
-								onToggleLeftSidebar={onToggleSidebar}
-								notesAvailable={notesEligible}
-								notesOpen={showNotes}
-								onToggleNotes={onToggleNotes}
-								rightSidebarOpen={rightSidebarOpen}
-								onToggleRightSidebar={onToggleRightSidebar}
-								zenMode={agentZenMode}
-								onToggleZen={onToggleAgentZen}
-							/>
-							{rightSidebarOpen
-								? (
-										[
-											{
-												id: "agent" as const,
-												aria: t("titlebar.agentPanel"),
-												tooltip: t("labels.agent"),
-												Icon: Bot,
-											},
-											{
-												id: "backlinks" as const,
-												aria: t("titlebar.backlinksPanel"),
-												tooltip: t("labels.backlinks"),
-												Icon: Link2,
-											},
-											{
-												id: "annotations" as const,
-												aria: t("titlebar.annotationsPanel"),
-												tooltip: t("annotations.title", { ns: "viewer" }),
-												Icon: MessageSquareText,
-											},
-											{
-												id: "references" as const,
-												aria: t("titlebar.referencesPanel"),
-												tooltip: t("references.title", { ns: "viewer" }),
-												Icon: BookMarked,
-											},
-										] as const
-									).map(({ id, aria, tooltip, Icon }) => (
-										<ContextMenu key={id}>
-											<Tooltip>
-												<TooltipTrigger asChild>
-													<ContextMenuTrigger asChild>
-														<Button
-															type="button"
-															variant="ghost"
-															size="icon-xs"
-															aria-label={aria}
-															aria-pressed={rightSidebarTab === id}
-															className={cn(
-																rightSidebarTab === id &&
-																	"bg-muted text-foreground",
-															)}
-															onClick={() => onOpenRightTab(id)}
-														>
-															<Icon className="size-3.5" />
-														</Button>
-													</ContextMenuTrigger>
-												</TooltipTrigger>
-												<TooltipContent side="bottom">{tooltip}</TooltipContent>
-											</Tooltip>
-											<ContextMenuContent>
-												<ContextMenuItem
-													onSelect={() => {
-														void moveFeatureToWindow(id);
-													}}
+				<div className="flex shrink-0 items-center gap-0.5 pr-1">
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label={
+									sidebarCollapsed
+										? t("titlebar.showLeftSidebar")
+										: t("titlebar.hideLeftSidebar")
+								}
+								aria-pressed={!sidebarCollapsed}
+								onClick={onToggleSidebar}
+							>
+								<PanelLeft className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{sidebarCollapsed
+								? t("titlebar.showSidebarHint", {
+										shortcut: SIDEBAR_SHORTCUT,
+									})
+								: t("titlebar.hideSidebarHint", {
+										shortcut: SIDEBAR_SHORTCUT,
+									})}
+						</TooltipContent>
+					</Tooltip>
+				</div>
+				{/* Drag region fills the middle — document tabs are in dockview. */}
+				<div className="min-w-0 flex-1 self-stretch" data-tauri-drag-region />
+				<div className="flex shrink-0 items-center gap-0.5 pr-2">
+					<LayoutMenu
+						leftSidebarOpen={!sidebarCollapsed}
+						onToggleLeftSidebar={onToggleSidebar}
+						notesAvailable={notesEligible}
+						notesOpen={showNotes}
+						onToggleNotes={onToggleNotes}
+						rightSidebarOpen={rightSidebarOpen}
+						onToggleRightSidebar={onToggleRightSidebar}
+					/>
+					{rightSidebarOpen
+						? (
+								[
+									{
+										id: "agent" as const,
+										aria: t("titlebar.agentPanel"),
+										tooltip: t("labels.agent"),
+										Icon: Bot,
+									},
+									{
+										id: "backlinks" as const,
+										aria: t("titlebar.backlinksPanel"),
+										tooltip: t("labels.backlinks"),
+										Icon: Link2,
+									},
+									{
+										id: "annotations" as const,
+										aria: t("titlebar.annotationsPanel"),
+										tooltip: t("annotations.title", { ns: "viewer" }),
+										Icon: MessageSquareText,
+									},
+									{
+										id: "references" as const,
+										aria: t("titlebar.referencesPanel"),
+										tooltip: t("references.title", { ns: "viewer" }),
+										Icon: BookMarked,
+									},
+								] as const
+							).map(({ id, aria, tooltip, Icon }) => (
+								<ContextMenu key={id}>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<ContextMenuTrigger asChild>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-xs"
+													aria-label={aria}
+													aria-pressed={rightSidebarTab === id}
+													className={cn(
+														rightSidebarTab === id &&
+															"bg-muted text-foreground",
+													)}
+													onClick={() => onOpenRightTab(id)}
 												>
-													{t("tabs.contextMoveToNewWindow")}
-												</ContextMenuItem>
-											</ContextMenuContent>
-										</ContextMenu>
-									))
-								: null}
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										aria-label={
-											rightSidebarOpen
-												? t("titlebar.hideRightSidebar")
-												: t("titlebar.showRightSidebar")
-										}
-										aria-pressed={rightSidebarOpen}
-										onClick={onToggleRightSidebar}
-									>
-										<PanelRight className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="bottom">
-									{rightSidebarOpen
-										? t("titlebar.hideRightSidebarHint", {
-												shortcut: CHAT_SHORTCUT,
-											})
-										: t("titlebar.showRightSidebarHint", {
-												shortcut: CHAT_SHORTCUT,
-											})}
-								</TooltipContent>
-							</Tooltip>
-						</div>
-					</>
-				)}
+													<Icon className="size-3.5" />
+												</Button>
+											</ContextMenuTrigger>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">{tooltip}</TooltipContent>
+									</Tooltip>
+									<ContextMenuContent>
+										<ContextMenuItem
+											onSelect={() => {
+												void moveFeatureToWindow(id);
+											}}
+										>
+											{t("tabs.contextMoveToNewWindow")}
+										</ContextMenuItem>
+									</ContextMenuContent>
+								</ContextMenu>
+							))
+						: null}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label={
+									rightSidebarOpen
+										? t("titlebar.hideRightSidebar")
+										: t("titlebar.showRightSidebar")
+								}
+								aria-pressed={rightSidebarOpen}
+								onClick={onToggleRightSidebar}
+							>
+								<PanelRight className="size-3.5" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{rightSidebarOpen
+								? t("titlebar.hideRightSidebarHint", {
+										shortcut: CHAT_SHORTCUT,
+									})
+								: t("titlebar.showRightSidebarHint", {
+										shortcut: CHAT_SHORTCUT,
+									})}
+						</TooltipContent>
+					</Tooltip>
+				</div>
 				{/*
 				  Windows / Linux have no native menu bar, so Settings needs a
 				  visible entry point. The gear sits at the far right of the title

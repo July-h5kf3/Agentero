@@ -50,11 +50,6 @@ export type AgentPanelProps = {
 	headerActions?: ReactNode;
 	autoFocus?: boolean;
 	title?: string;
-	/**
-	 * `sidebar` — right rail chat (default).
-	 * `zen` — full-workbench focus: centered conversation column (AI Elements layout).
-	 */
-	variant?: "sidebar" | "zen";
 	/** Open Settings → Agent (ACP backend registry). */
 	onOpenAgentSettings?: () => void;
 	/**
