@@ -10,6 +10,8 @@ overrides:
   fast-uri@<3.1.4: '>=3.1.4 <4'
   postcss@<8.5.18: '>=8.5.18'
   '@hono/node-server@<1.19.17': '>=1.19.17 <2'
+  # Keep re-installs (e.g. pnpm patch-commit) from drifting the pinned types.
+  '@types/react-dom': 19.2.3
 patchedDependencies:
   '@embedpdf/engines@2.14.4': patches/@embedpdf__engines@2.14.4.patch
   '@embedpdf/plugin-tiling@2.14.4': patches/@embedpdf__plugin-tiling@2.14.4.patch
