@@ -1,10 +1,10 @@
 # 翻译
 
-应用级可插拔翻译：免费 MT + BYOA Agent（无付费 API Key 表单）。
+应用级可插拔翻译：免费 MT + 商用 BYOK + BYOA Agent。
 
 ## 设置
 
-Settings → **翻译**：服务类型、目标语言、Agent 座（跟随默认或指定）。
+Settings → **翻译**：服务类型、目标语言、免费 MT endpoint、商用 API key / region / model、Agent 座（跟随默认或指定）。
 
 ## 消费方
 
@@ -18,6 +18,7 @@ Settings → **翻译**：服务类型、目标语言、Agent 座（跟随默认
 | 类型 | 路径 |
 |---|---|
 | 免费 MT | Host `translate_text`（内置 Google gtx 或 LibreTranslate URL） |
+| 商用 BYOK | Host `translate_text`（DeepL / Azure / Google Cloud / OpenAI-compatible） |
 | Agent | `agent_run_once` + 翻译 prompt |
 
 结果可写入 `marks/`（划词）。Host 细节：[../backend/translate.md](../backend/translate.md)。

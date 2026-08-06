@@ -2,11 +2,12 @@
 
 | Command | 说明 |
 |---|---|
-| `translate_text` | 免费 MT 路径（非文献 Translator） |
+| `translate_text` | 免费 MT + 商用 BYOK 路径（非文献 Translator） |
 
 | 项 | 值 |
 |---|---|
 | 通用 `timeout_ms` | 可选；钳制 1s–30s；默认 30s |
+| 商用 BYOK | DeepL / Azure / Google Cloud / OpenAI-compatible，按 provider 读取 `apiKey`，部分 provider 还需要 `baseUrl` / `region` / `model` |
 | 导入摘要 `free_mt_to_zh` | **并行竞速** 腾讯 / 火山 / DeepLX，取最先成功；单引擎 5s（`FREE_MT_ZH_TIMEOUT_MS`）；全失败则不写翻译 |
 | 设置页探测 | 前端 5s / 引擎 |
 

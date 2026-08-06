@@ -6,6 +6,7 @@
 use crate::core::error::AppError;
 use crate::core::paths::{self, settings_path};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -91,6 +92,8 @@ pub struct TranslateSettings {
     #[serde(default)]
     pub free_base_url: String,
     #[serde(default)]
+    pub provider_configs: HashMap<String, TranslateProviderConfig>,
+    #[serde(default)]
     pub auto_translate_selection: bool,
     #[serde(default)]
     pub agent_id: String,
@@ -105,11 +108,25 @@ impl Default for TranslateSettings {
             target_lang: default_translate_target(),
             source_lang: default_translate_source(),
             free_base_url: String::new(),
+            provider_configs: HashMap::new(),
             auto_translate_selection: false,
             agent_id: String::new(),
             model_id: String::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslateProviderConfig {
+    #[serde(default)]
+    pub api_key: String,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 impl Default for AppSettings {
@@ -431,6 +448,7 @@ fn normalize(s: &mut AppSettings) {
         .trim()
         .trim_end_matches('/')
         .to_string();
+    normalize_translate_provider_configs(&mut s.translate.provider_configs);
     s.translate.agent_id = s.translate.agent_id.trim().to_string();
     s.translate.model_id = s.translate.model_id.trim().to_string();
     const TR_TARGETS: &[&str] = &["ui", "en", "zh-CN"];
@@ -439,6 +457,17 @@ fn normalize(s: &mut AppSettings) {
     }
     if s.translate.source_lang != "auto" {
         s.translate.source_lang = default_translate_source();
+    }
+}
+
+fn normalize_translate_provider_configs(configs: &mut HashMap<String, TranslateProviderConfig>) {
+    const COMMERCIAL: &[&str] = &["deepl", "azure", "googleCloud", "openaiCompatible"];
+    configs.retain(|k, _| COMMERCIAL.contains(&k.as_str()));
+    for cfg in configs.values_mut() {
+        cfg.api_key = cfg.api_key.trim().to_string();
+        cfg.base_url = cfg.base_url.trim().trim_end_matches('/').to_string();
+        cfg.region = cfg.region.trim().to_string();
+        cfg.model = cfg.model.trim().to_string();
     }
 }
 

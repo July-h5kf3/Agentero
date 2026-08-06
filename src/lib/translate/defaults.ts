@@ -6,6 +6,7 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
 	targetLang: "ui",
 	sourceLang: "auto",
 	freeBaseUrl: "",
+	providerConfigs: {},
 	autoTranslateSelection: false,
 	agentId: "",
 	modelId: "",

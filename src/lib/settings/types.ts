@@ -3,14 +3,18 @@ import type {
 	PaperTreeSortMode,
 } from "@/lib/paper/tree-modes";
 import type {
+	CommercialTranslateProviderId,
+	TranslateProviderConfig,
 	TranslateProviderId,
 	TranslateSettings,
 	TranslateTargetLang,
 } from "@/lib/translate/types";
 
 export type {
+	CommercialTranslateProviderId,
 	PaperTreeLabelMode,
 	PaperTreeSortMode,
+	TranslateProviderConfig,
 	TranslateProviderId,
 	TranslateSettings,
 	TranslateTargetLang,

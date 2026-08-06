@@ -20,7 +20,10 @@ import {
 	type PdfAskSettings,
 } from "@/lib/settings/types";
 import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
-import { isTranslateProviderId } from "@/lib/translate/services";
+import {
+	isCommercialTranslateProvider,
+	isTranslateProviderId,
+} from "@/lib/translate/services";
 import type {
 	TranslateSettings,
 	TranslateTargetLang,
@@ -426,7 +429,10 @@ function normalizePdfAskSettings(
 function normalizeTranslateSettings(
 	raw: Partial<TranslateSettings> | undefined,
 ): TranslateSettings {
-	const base = { ...DEFAULT_TRANSLATE_SETTINGS };
+	const base: TranslateSettings = {
+		...DEFAULT_TRANSLATE_SETTINGS,
+		providerConfigs: {},
+	};
 	if (!raw || typeof raw !== "object") return base;
 	if (raw.provider && isTranslateProviderId(raw.provider)) {
 		base.provider = raw.provider;
@@ -437,9 +443,9 @@ function normalizeTranslateSettings(
 	if (raw.sourceLang === "auto") {
 		base.sourceLang = "auto";
 	}
-	if (typeof raw.freeBaseUrl === "string") {
-		base.freeBaseUrl = raw.freeBaseUrl.trim().replace(/\/+$/, "");
-	}
+	base.providerConfigs = normalizeTranslateProviderConfigs(
+		(raw as { providerConfigs?: unknown }).providerConfigs,
+	);
 	if (typeof raw.autoTranslateSelection === "boolean") {
 		base.autoTranslateSelection = raw.autoTranslateSelection;
 	}
@@ -450,4 +456,31 @@ function normalizeTranslateSettings(
 		base.modelId = raw.modelId.trim();
 	}
 	return base;
+}
+
+function normalizeTranslateProviderConfigs(
+	raw: unknown,
+): TranslateSettings["providerConfigs"] {
+	const out: TranslateSettings["providerConfigs"] = {};
+	if (!raw || typeof raw !== "object") return out;
+	for (const [id, value] of Object.entries(raw)) {
+		if (!isCommercialTranslateProvider(id)) continue;
+		if (!value || typeof value !== "object") continue;
+		const cfg = value as {
+			apiKey?: unknown;
+			baseUrl?: unknown;
+			region?: unknown;
+			model?: unknown;
+		};
+		out[id] = {
+			apiKey: typeof cfg.apiKey === "string" ? cfg.apiKey.trim() : "",
+			baseUrl:
+				typeof cfg.baseUrl === "string"
+					? cfg.baseUrl.trim().replace(/\/+$/, "")
+					: "",
+			region: typeof cfg.region === "string" ? cfg.region.trim() : "",
+			model: typeof cfg.model === "string" ? cfg.model.trim() : "",
+		};
+	}
+	return out;
 }

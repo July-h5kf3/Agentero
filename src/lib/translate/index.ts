@@ -8,10 +8,7 @@ export type {
 	FreeMtProbeMap,
 	FreeMtProbeStatus,
 } from "@/lib/translate/probe";
-export {
-	canProbeFreeMtProvider,
-	probeFreeMtProviders,
-} from "@/lib/translate/probe";
+export { probeFreeMtProviders } from "@/lib/translate/probe";
 export { buildTranslatePrompt } from "@/lib/translate/prompt";
 export {
 	listAvailableAgents,
@@ -20,8 +17,12 @@ export {
 export { prepareTranslateTask, runTranslate } from "@/lib/translate/run";
 export {
 	getTranslateService,
+	isCommercialTranslateProvider,
 	isFreeMtProvider,
 	isTranslateProviderId,
 	listSelectableProviders,
 } from "@/lib/translate/services";
-export { FREE_MT_PROVIDER_IDS } from "@/lib/translate/types";
+export {
+	COMMERCIAL_MT_PROVIDER_IDS,
+	FREE_MT_PROVIDER_IDS,
+} from "@/lib/translate/types";

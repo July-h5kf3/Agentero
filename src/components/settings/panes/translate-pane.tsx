@@ -24,6 +24,8 @@ import { Switch } from "@/components/ui/switch";
 import { isTauri } from "@/lib/core/tauri";
 import type {
 	AppSettings,
+	CommercialTranslateProviderId,
+	TranslateProviderConfig,
 	TranslateProviderId,
 	TranslateTargetLang,
 } from "@/lib/settings";
@@ -31,6 +33,7 @@ import {
 	FREE_MT_PROVIDER_IDS,
 	type FreeMtProbeMap,
 	type FreeMtProbeStatus,
+	isCommercialTranslateProvider,
 	isFreeMtProvider,
 	listSelectableProviders,
 	probeFreeMtProviders,
@@ -99,8 +102,39 @@ export function TranslatePane({
 			patch({ translate: { ...tr, ...partial } }),
 		[patch, tr],
 	);
-	const showEndpoint = tr.provider === "libre" || tr.freeBaseUrl.length > 0;
 	const showAgent = tr.provider === "agent";
+	const showCommercial = isCommercialTranslateProvider(tr.provider);
+	const providerConfig = useMemo<TranslateProviderConfig>(
+		() =>
+			(showCommercial
+				? tr.providerConfigs[tr.provider as CommercialTranslateProviderId]
+				: undefined) ?? {
+				apiKey: "",
+				baseUrl: "",
+				region: "",
+				model: "",
+			},
+		[showCommercial, tr.provider, tr.providerConfigs],
+	);
+	const patchProviderConfig = useCallback(
+		(partial: Partial<TranslateProviderConfig>) => {
+			if (!showCommercial) return;
+			const providerId = tr.provider as CommercialTranslateProviderId;
+			const current = tr.providerConfigs[providerId] ?? {
+				apiKey: "",
+				baseUrl: "",
+				region: "",
+				model: "",
+			};
+			patchTranslate({
+				providerConfigs: {
+					...tr.providerConfigs,
+					[providerId]: { ...current, ...partial },
+				},
+			});
+		},
+		[patchTranslate, showCommercial, tr.provider, tr.providerConfigs],
+	);
 
 	/** Free-MT probe status (Agent never probed here). */
 	const [probeMap, setProbeMap] = useState<FreeMtProbeMap>({});
@@ -197,7 +231,7 @@ export function TranslatePane({
 											) : null}
 											<span className="truncate">
 												{t(
-													`translate.provider.${s.nameKey}` as "translate.provider.bing",
+													`translate.provider.${s.nameKey}` as "translate.provider.google",
 												)}
 											</span>
 										</span>
@@ -292,39 +326,92 @@ export function TranslatePane({
 				</>
 			)}
 
-			{showEndpoint && (
-				<>
-					<SettingsGroup>
+			{showCommercial && (
+				<SettingsGroup>
+					<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+						<Label
+							htmlFor="translate-provider-api-key"
+							className="font-normal text-[13px]"
+						>
+							{t("translate.providerConfig.apiKey.label")}
+						</Label>
+						<Input
+							id="translate-provider-api-key"
+							type="password"
+							value={providerConfig.apiKey}
+							onChange={(e) => patchProviderConfig({ apiKey: e.target.value })}
+							placeholder={t("translate.providerConfig.apiKey.placeholder")}
+							className="h-8 font-mono text-xs"
+							spellCheck={false}
+							autoComplete="off"
+						/>
+					</div>
+					<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+						<Label
+							htmlFor="translate-provider-base-url"
+							className="font-normal text-[13px]"
+						>
+							{t("translate.providerConfig.baseUrl.label")}
+						</Label>
+						<Input
+							id="translate-provider-base-url"
+							value={providerConfig.baseUrl}
+							onChange={(e) => patchProviderConfig({ baseUrl: e.target.value })}
+							onBlur={() => {
+								const trimmed = providerConfig.baseUrl
+									.trim()
+									.replace(/\/+$/, "");
+								if (trimmed !== providerConfig.baseUrl) {
+									patchProviderConfig({ baseUrl: trimmed });
+								}
+							}}
+							placeholder={t("translate.providerConfig.baseUrl.placeholder")}
+							className="h-8 font-mono text-xs"
+							spellCheck={false}
+							autoComplete="off"
+						/>
+					</div>
+					{tr.provider === "azure" ? (
 						<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
 							<Label
-								htmlFor="translate-free-base-url"
+								htmlFor="translate-provider-region"
 								className="font-normal text-[13px]"
 							>
-								{t("translate.freeBaseUrl.label")}
+								{t("translate.providerConfig.region.label")}
 							</Label>
 							<Input
-								id="translate-free-base-url"
-								value={tr.freeBaseUrl}
+								id="translate-provider-region"
+								value={providerConfig.region}
 								onChange={(e) =>
-									patchTranslate({ freeBaseUrl: e.target.value })
+									patchProviderConfig({ region: e.target.value })
 								}
-								onBlur={() => {
-									const trimmed = tr.freeBaseUrl.trim().replace(/\/+$/, "");
-									if (trimmed !== tr.freeBaseUrl) {
-										patchTranslate({ freeBaseUrl: trimmed });
-									}
-								}}
-								placeholder="https://libretranslate.example"
+								placeholder={t("translate.providerConfig.region.placeholder")}
 								className="h-8 font-mono text-xs"
 								spellCheck={false}
 								autoComplete="off"
 							/>
 						</div>
-					</SettingsGroup>
-					<p className="px-0.5 text-muted-foreground text-xs leading-relaxed">
-						{t("translate.freeBaseUrl.hint")}
-					</p>
-				</>
+					) : null}
+					{tr.provider === "openaiCompatible" ? (
+						<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+							<Label
+								htmlFor="translate-provider-model"
+								className="font-normal text-[13px]"
+							>
+								{t("translate.providerConfig.model.label")}
+							</Label>
+							<Input
+								id="translate-provider-model"
+								value={providerConfig.model}
+								onChange={(e) => patchProviderConfig({ model: e.target.value })}
+								placeholder={t("translate.providerConfig.model.placeholder")}
+								className="h-8 font-mono text-xs"
+								spellCheck={false}
+								autoComplete="off"
+							/>
+						</div>
+					) : null}
+				</SettingsGroup>
 			)}
 		</>
 	);

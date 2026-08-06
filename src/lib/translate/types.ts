@@ -3,18 +3,27 @@
  * Architecture mirrors zotero-pdf-translate's pluggable TranslateService table.
  */
 
-/** Free MT engines + BYOA Agent (no paid API keys). */
+/** Free MT engines (no paid API keys). */
 export type FreeTranslateProviderId =
 	| "google"
 	| "googleapi"
-	| "bing"
 	| "youdao"
 	| "deeplx"
 	| "huoshanweb"
-	| "tencenttransmart"
-	| "libre";
+	| "tencenttransmart";
 
-export type TranslateProviderId = FreeTranslateProviderId | "agent";
+/** Commercial BYOK engines called directly by the Tauri Host. */
+export type CommercialTranslateProviderId =
+	| "deepl"
+	| "azure"
+	| "googleCloud"
+	| "openaiCompatible";
+
+export type HostTranslateProviderId =
+	| FreeTranslateProviderId
+	| CommercialTranslateProviderId;
+
+export type TranslateProviderId = HostTranslateProviderId | "agent";
 
 export type TranslateTargetLang = "ui" | "en" | "zh-CN";
 
@@ -26,11 +35,11 @@ export type TranslateSettings = {
 	targetLang: TranslateTargetLang;
 	sourceLang: TranslateSourceLang;
 	/**
-	 * Optional endpoint override:
-	 * - provider `libre`: LibreTranslate base URL (required)
-	 * - otherwise unused
+	 * Per-provider BYOK config. Stored in the app settings file, not in Vault.
 	 */
-	freeBaseUrl: string;
+	providerConfigs: Partial<
+		Record<CommercialTranslateProviderId, TranslateProviderConfig>
+	>;
 	/** PDF consumer: auto-run translate after selection (default off). */
 	autoTranslateSelection: boolean;
 	/**
@@ -43,6 +52,16 @@ export type TranslateSettings = {
 	 * Empty = follow loadModelPref(agentId) / agent current.
 	 */
 	modelId: string;
+};
+
+export type TranslateProviderConfig = {
+	apiKey: string;
+	/** Optional API base URL / endpoint override. */
+	baseUrl: string;
+	/** Azure subscription region; ignored by most providers. */
+	region: string;
+	/** OpenAI-compatible model id. */
+	model: string;
 };
 
 export type TranslateServiceType = "sentence" | "word";
@@ -66,11 +85,8 @@ export type TranslateTask = {
 export type TranslateRunOptions = {
 	/** Override settings.provider for this call. */
 	providerId?: TranslateProviderId;
-	/**
-	 * Endpoint override for LibreTranslate.
-	 * Prefer setting via {@link runTranslate} from AppSettings.
-	 */
-	freeBaseUrl?: string;
+	/** Current BYOK provider config, resolved from settings. */
+	providerConfig?: TranslateProviderConfig;
 	/**
 	 * Agent path: inject runner so lib/ does not depend on ACP wiring.
 	 * Streaming is the caller's concern; this returns the final string when used.
@@ -87,19 +103,25 @@ export type TranslateService = {
 	nameKey: string;
 	requireSecret: boolean;
 	requireExternalConfig?: boolean;
-	/** Free MT engines call Host; agent uses ACP. */
-	kind: "free-mt" | "agent";
+	/** MT engines call Host; agent uses ACP. */
+	kind: "free-mt" | "commercial-mt" | "agent";
 	translate: (task: TranslateTask, opts: TranslateRunOptions) => Promise<void>;
 };
 
-/** Ordered list for settings UI (free engines; agent registered separately). */
+/** Ordered list for settings UI (free engines). */
 export const FREE_MT_PROVIDER_IDS: FreeTranslateProviderId[] = [
 	"tencenttransmart",
 	"huoshanweb",
 	"deeplx",
-	"bing",
 	"youdao",
 	"googleapi",
 	"google",
-	"libre",
+];
+
+/** Ordered list for settings UI (commercial BYOK engines). */
+export const COMMERCIAL_MT_PROVIDER_IDS: CommercialTranslateProviderId[] = [
+	"deepl",
+	"azure",
+	"googleCloud",
+	"openaiCompatible",
 ];

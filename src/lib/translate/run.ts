@@ -1,7 +1,10 @@
 import i18n from "@/i18n";
 import { loadSettings } from "@/lib/settings";
 import { langsFromSettings } from "@/lib/translate/lang";
-import { getTranslateService } from "@/lib/translate/services";
+import {
+	getTranslateService,
+	isCommercialTranslateProvider,
+} from "@/lib/translate/services";
 import type {
 	TranslateProviderId,
 	TranslateRunOptions,
@@ -41,7 +44,11 @@ export async function runTranslate(
 
 	const runOpts: TranslateRunOptions = {
 		...opts,
-		freeBaseUrl: opts.freeBaseUrl ?? settings.translate.freeBaseUrl ?? "",
+		providerConfig:
+			opts.providerConfig ??
+			(isCommercialTranslateProvider(providerId)
+				? settings.translate.providerConfigs[providerId]
+				: undefined),
 	};
 
 	try {

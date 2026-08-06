@@ -1,5 +1,5 @@
-//! Free machine-translation backends (no paid API keys).
-//! Google / Bing Edge / Youdao / DeepLX / Volcengine / Tencent Transmart / LibreTranslate.
+//! Translation backends.
+//! Free web MT plus commercial BYOK providers called directly by the Host.
 //! Unofficial / best-effort; may break or rate-limit.
 
 use crate::core::error::AppError;
@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-/// Soft cap for a single free-MT request (characters).
+/// Soft cap for a single translation request (characters).
 pub const MAX_TEXT_CHARS: usize = 5000;
 
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -24,6 +24,9 @@ pub const FREE_PROVIDERS: &[&str] = &[
     "tencenttransmart",
     "libre",
 ];
+
+/// Commercial BYOK provider ids configured in Settings → Translate.
+pub const COMMERCIAL_PROVIDERS: &[&str] = &["deepl", "azure", "googleCloud", "openaiCompatible"];
 
 /// Default free engines raced in parallel for best-effort zh-CN (NOTES abstract).
 /// First non-empty success wins; remaining in-flight requests are dropped.
@@ -61,6 +64,10 @@ pub async fn free_mt_to_zh(text: &str) -> Option<String> {
                 target_lang: "zh-CN".into(),
                 provider,
                 free_base_url: None,
+                api_key: None,
+                base_url: None,
+                region: None,
+                model: None,
                 timeout_ms: Some(FREE_MT_ZH_TIMEOUT_MS),
             })
             .await
@@ -104,12 +111,24 @@ pub struct TranslateTextArgs {
     #[serde(default = "default_source")]
     pub source_lang: String,
     pub target_lang: String,
-    /// Free engine id: google | googleapi | bing | youdao | deeplx | huoshanweb | tencenttransmart | libre
+    /// Provider id: free MT, commercial BYOK, or `agent`.
     #[serde(default = "default_provider")]
     pub provider: String,
     /// LibreTranslate base URL when provider=libre.
     #[serde(default)]
     pub free_base_url: Option<String>,
+    /// Commercial BYOK API key.
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Commercial BYOK base URL / endpoint override.
+    #[serde(default)]
+    pub base_url: Option<String>,
+    /// Azure subscription region.
+    #[serde(default)]
+    pub region: Option<String>,
+    /// OpenAI-compatible model id.
+    #[serde(default)]
+    pub model: Option<String>,
     /// Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
     /// Settings probe uses a shorter value for snappy parallel checks.
     #[serde(default)]
@@ -138,7 +157,7 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
     }
     if text.chars().count() > MAX_TEXT_CHARS {
         return Err(AppError::message(format!(
-            "Text too long for free translation (max {MAX_TEXT_CHARS} characters)"
+            "Text too long for translation (max {MAX_TEXT_CHARS} characters)"
         )));
     }
 
@@ -195,9 +214,55 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
             };
             translate_libre(url, text, &source, &target, timeout).await?
         }
+        "deepl" => {
+            translate_deepl(
+                text,
+                &source,
+                &target,
+                timeout,
+                args.api_key.as_deref(),
+                args.base_url.as_deref(),
+            )
+            .await?
+        }
+        "azure" => {
+            translate_azure(
+                text,
+                &source,
+                &target,
+                timeout,
+                args.api_key.as_deref(),
+                args.base_url.as_deref(),
+                args.region.as_deref(),
+            )
+            .await?
+        }
+        "googlecloud" => {
+            translate_google_cloud(
+                text,
+                &source,
+                &target,
+                timeout,
+                args.api_key.as_deref(),
+                args.base_url.as_deref(),
+            )
+            .await?
+        }
+        "openaicompatible" => {
+            translate_openai_compatible(
+                text,
+                &source,
+                &target,
+                timeout,
+                args.api_key.as_deref(),
+                args.base_url.as_deref(),
+                args.model.as_deref(),
+            )
+            .await?
+        }
         other => {
             return Err(AppError::message(format!(
-                "Unknown free translation provider: {other}"
+                "Unknown translation provider: {other}"
             )));
         }
     };
@@ -210,6 +275,28 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
         text: out,
         provider,
     })
+}
+
+fn required_api_key<'a>(provider: &str, api_key: Option<&'a str>) -> Result<&'a str, AppError> {
+    let Some(key) = api_key.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Err(AppError::message(format!(
+            "{provider} requires apiKey (Settings → Translate)"
+        )));
+    };
+    Ok(key)
+}
+
+fn optional_endpoint(base_url: Option<&str>, default_root: &str, suffix: &str) -> String {
+    let base = base_url
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(default_root)
+        .trim_end_matches('/');
+    if base.ends_with(suffix) {
+        base.to_string()
+    } else {
+        format!("{base}{suffix}")
+    }
 }
 
 fn normalize_lang(raw: &str, allow_auto: bool) -> String {
@@ -709,6 +796,292 @@ async fn translate_libre(
     Err(AppError::message(
         "Unexpected LibreTranslate response (missing translatedText)",
     ))
+}
+
+// ─── DeepL ─────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct DeepLRequest<'a> {
+    text: &'a str,
+    target_lang: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_lang: Option<&'a str>,
+}
+
+async fn translate_deepl(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+) -> Result<String, AppError> {
+    let key = required_api_key("DeepL", api_key)?;
+    let url = optional_endpoint(base_url, "https://api-free.deepl.com", "/v2/translate");
+    let client = http_client(timeout)?;
+    let target_lang = deepl_target(target);
+    let source_lang = if source == "auto" {
+        None
+    } else {
+        Some(deepl_source(source))
+    };
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("DeepL-Auth-Key {key}"))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .form(&DeepLRequest {
+            text,
+            target_lang: &target_lang,
+            source_lang: source_lang.as_deref(),
+        })
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("DeepL request failed: {e}")))?;
+    let (status, body) = read_body(resp).await?;
+    if !status.is_success() {
+        return Err(http_err(status, &body, "DeepL"));
+    }
+    let v: Value =
+        serde_json::from_str(&body).map_err(|e| AppError::message(format!("DeepL parse: {e}")))?;
+    v.get("translations")
+        .and_then(|x| x.as_array())
+        .and_then(|x| x.first())
+        .and_then(|x| x.get("text"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::message("Unexpected DeepL translation response"))
+}
+
+fn deepl_source(code: &str) -> String {
+    match code {
+        "zh-CN" | "zh-Hans" => "ZH".to_string(),
+        "en" => "EN".to_string(),
+        _ => lang_base(code).to_ascii_uppercase(),
+    }
+}
+
+fn deepl_target(code: &str) -> String {
+    match code {
+        "zh-CN" | "zh-Hans" => "ZH-HANS".to_string(),
+        "en" => "EN-US".to_string(),
+        _ => lang_base(code).to_ascii_uppercase(),
+    }
+}
+
+// ─── Azure Translator ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct AzureRequestItem<'a> {
+    #[serde(rename = "Text")]
+    text: &'a str,
+}
+
+async fn translate_azure(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+    region: Option<&str>,
+) -> Result<String, AppError> {
+    let key = required_api_key("Azure Translator", api_key)?;
+    let region = region
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AppError::message("Azure Translator requires region (Settings → Translate)")
+        })?;
+    let url = optional_endpoint(
+        base_url,
+        "https://api.cognitive.microsofttranslator.com",
+        "/translate",
+    );
+    let mut req = vec![("api-version", "3.0"), ("to", azure_lang(target))];
+    if source != "auto" {
+        req.push(("from", azure_lang(source)));
+    }
+    let client = http_client(timeout)?;
+    let resp = client
+        .post(&url)
+        .query(&req)
+        .header("Ocp-Apim-Subscription-Key", key)
+        .header("Ocp-Apim-Subscription-Region", region)
+        .header("Content-Type", "application/json")
+        .json(&[AzureRequestItem { text }])
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("Azure Translator request failed: {e}")))?;
+    let (status, body) = read_body(resp).await?;
+    if !status.is_success() {
+        return Err(http_err(status, &body, "Azure Translator"));
+    }
+    let v: Value = serde_json::from_str(&body)
+        .map_err(|e| AppError::message(format!("Azure Translator parse: {e}")))?;
+    v.get(0)
+        .and_then(|x| x.get("translations"))
+        .and_then(|x| x.get(0))
+        .and_then(|x| x.get("text"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::message("Unexpected Azure Translator response"))
+}
+
+fn azure_lang(code: &str) -> &str {
+    match code {
+        "zh-CN" | "zh-Hans" => "zh-Hans",
+        "zh-TW" | "zh-Hant" => "zh-Hant",
+        "en" => "en",
+        _ => lang_base(code),
+    }
+}
+
+// ─── Google Cloud Translation ──────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct GoogleCloudRequest<'a> {
+    q: &'a str,
+    target: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<&'a str>,
+    format: &'a str,
+}
+
+async fn translate_google_cloud(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+) -> Result<String, AppError> {
+    let key = required_api_key("Google Cloud Translate", api_key)?;
+    let url = optional_endpoint(
+        base_url,
+        "https://translation.googleapis.com",
+        "/language/translate/v2",
+    );
+    let client = http_client(timeout)?;
+    let resp = client
+        .post(&url)
+        .query(&[("key", key)])
+        .header("Content-Type", "application/json")
+        .json(&GoogleCloudRequest {
+            q: text,
+            target: google_cloud_target(target),
+            source: if source == "auto" {
+                None
+            } else {
+                Some(google_cloud_source(source))
+            },
+            format: "text",
+        })
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("Google Cloud Translate request failed: {e}")))?;
+    let (status, body) = read_body(resp).await?;
+    if !status.is_success() {
+        return Err(http_err(status, &body, "Google Cloud Translate"));
+    }
+    let v: Value = serde_json::from_str(&body)
+        .map_err(|e| AppError::message(format!("Google Cloud Translate parse: {e}")))?;
+    v.get("data")
+        .and_then(|x| x.get("translations"))
+        .and_then(|x| x.get(0))
+        .and_then(|x| x.get("translatedText"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::message("Unexpected Google Cloud Translate response"))
+}
+
+fn google_cloud_source(code: &str) -> &str {
+    match code {
+        "zh-CN" | "zh-Hans" => "zh",
+        _ => lang_base(code),
+    }
+}
+
+fn google_cloud_target(code: &str) -> &str {
+    match code {
+        "zh-CN" | "zh-Hans" => "zh-CN",
+        _ => lang_base(code),
+    }
+}
+
+// ─── OpenAI-compatible chat translation ────────────────────────────────────
+
+#[derive(Serialize)]
+struct OpenAiMessage<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+#[derive(Serialize)]
+struct OpenAiRequest<'a> {
+    model: &'a str,
+    messages: [OpenAiMessage<'a>; 2],
+    temperature: f32,
+}
+
+async fn translate_openai_compatible(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+    model: Option<&str>,
+) -> Result<String, AppError> {
+    let key = required_api_key("OpenAI-compatible", api_key)?;
+    let model = model
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            AppError::message("OpenAI-compatible requires model (Settings → Translate)")
+        })?;
+    let url = optional_endpoint(base_url, "https://api.openai.com/v1", "/chat/completions");
+    let prompt =
+        format!(
+        "Translate the following text from {} to {}. Return translation only, without notes.\n\n{}",
+        if source == "auto" { "the source language" } else { source },
+        target,
+        text
+    );
+    let client = http_client(timeout)?;
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {key}"))
+        .header("Content-Type", "application/json")
+        .json(&OpenAiRequest {
+            model,
+            messages: [
+                OpenAiMessage {
+                    role: "system",
+                    content: "You are a translation engine.",
+                },
+                OpenAiMessage {
+                    role: "user",
+                    content: &prompt,
+                },
+            ],
+            temperature: 0.0,
+        })
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("OpenAI-compatible request failed: {e}")))?;
+    let (status, body) = read_body(resp).await?;
+    if !status.is_success() {
+        return Err(http_err(status, &body, "OpenAI-compatible"));
+    }
+    let v: Value = serde_json::from_str(&body)
+        .map_err(|e| AppError::message(format!("OpenAI-compatible parse: {e}")))?;
+    v.get("choices")
+        .and_then(|x| x.get(0))
+        .and_then(|x| x.get("message"))
+        .and_then(|x| x.get("content"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::message("Unexpected OpenAI-compatible response"))
 }
 
 /// Minimal URL-encoding for query values (enough for our use).

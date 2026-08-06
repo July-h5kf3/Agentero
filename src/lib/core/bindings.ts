@@ -24,10 +24,18 @@ export type TranslateTextArgs = {
 	text: string;
 	sourceLang?: string;
 	targetLang: string;
-	/**  Free engine id: google | googleapi | bing | youdao | deeplx | huoshanweb | tencenttransmart | libre */
+	/**  Provider id: free MT, commercial BYOK, or `agent`. */
 	provider?: string;
 	/**  LibreTranslate base URL when provider=libre. */
 	freeBaseUrl?: string | null;
+	/**  Commercial BYOK API key. */
+	apiKey?: string | null;
+	/**  Commercial BYOK base URL / endpoint override. */
+	baseUrl?: string | null;
+	/**  Azure subscription region. */
+	region?: string | null;
+	/**  OpenAI-compatible model id. */
+	model?: string | null;
 	/**
 	 *  Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
 	 *  Settings probe uses a shorter value for snappy parallel checks.

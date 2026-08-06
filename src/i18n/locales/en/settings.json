@@ -204,14 +204,16 @@
 		"title": "Translate",
 		"provider": {
 			"label": "Default service",
-			"bing": "Bing (Edge free)",
 			"youdao": "Youdao",
 			"deeplx": "DeepLX",
 			"huoshanweb": "Volcengine Web",
 			"tencenttransmart": "Tencent Transmart",
 			"googleapi": "Google Translate (API)",
 			"google": "Google Translate",
-			"libre": "LibreTranslate",
+			"deepl": "DeepL API (BYOK)",
+			"azure": "Microsoft Translator (BYOK)",
+			"googleCloud": "Google Cloud Translate (BYOK)",
+			"openaiCompatible": "OpenAI-compatible (BYOK)",
 			"agent": "Agent (BYOA)",
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",
@@ -227,9 +229,23 @@
 		"autoSelection": {
 			"label": "Auto-translate PDF selection"
 		},
-		"freeBaseUrl": {
-			"label": "Custom endpoint (optional)",
-			"hint": "LibreTranslate: base URL with POST /translate. Separate from General → Translator (paper metadata)."
+		"providerConfig": {
+			"apiKey": {
+				"label": "API key",
+				"placeholder": "Stored locally in settings.json"
+			},
+			"baseUrl": {
+				"label": "Endpoint (optional)",
+				"placeholder": "Use provider default"
+			},
+			"region": {
+				"label": "Region",
+				"placeholder": "e.g. eastasia"
+			},
+			"model": {
+				"label": "Model",
+				"placeholder": "Provider model id"
+			}
 		},
 		"agentId": {
 			"label": "Agent",

@@ -16,10 +16,12 @@ export type {
 	AiResponseLanguage,
 	AppSettings,
 	AutoUpdateInternalLinks,
+	CommercialTranslateProviderId,
 	LibraryColumnKey,
 	LibraryColumnPref,
 	LocalePreference,
 	ThemePreference,
+	TranslateProviderConfig,
 	TranslateProviderId,
 	TranslateTargetLang,
 } from "@/lib/settings/types";

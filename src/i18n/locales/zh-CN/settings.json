@@ -197,14 +197,16 @@
 		"title": "翻译",
 		"provider": {
 			"label": "默认服务",
-			"bing": "Bing（Edge 免费）",
 			"youdao": "有道",
 			"deeplx": "DeepLX",
 			"huoshanweb": "火山翻译 Web",
 			"tencenttransmart": "腾讯交互翻译",
 			"googleapi": "Google 翻译（API）",
 			"google": "Google 翻译",
-			"libre": "LibreTranslate",
+			"deepl": "DeepL API（BYOK）",
+			"azure": "微软翻译（BYOK）",
+			"googleCloud": "Google Cloud Translate（BYOK）",
+			"openaiCompatible": "OpenAI 兼容（BYOK）",
 			"agent": "Agent（BYOA）",
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",
@@ -220,9 +222,23 @@
 		"autoSelection": {
 			"label": "PDF 划词后自动翻译"
 		},
-		"freeBaseUrl": {
-			"label": "自定义端点（可选）",
-			"hint": "LibreTranslate：填写根地址（POST /translate）。与「通用 → Translator」（文献元数据）无关。"
+		"providerConfig": {
+			"apiKey": {
+				"label": "API Key",
+				"placeholder": "仅保存在本地 settings.json"
+			},
+			"baseUrl": {
+				"label": "端点（可选）",
+				"placeholder": "使用服务默认值"
+			},
+			"region": {
+				"label": "区域",
+				"placeholder": "例如 eastasia"
+			},
+			"model": {
+				"label": "模型",
+				"placeholder": "服务商模型 ID"
+			}
 		},
 		"agentId": {
 			"label": "Agent",

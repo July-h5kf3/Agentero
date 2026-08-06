@@ -17,7 +17,10 @@ export async function invokeTranslateText(args: {
 	sourceLang: string;
 	targetLang: string;
 	provider: string;
-	freeBaseUrl?: string;
+	apiKey?: string;
+	baseUrl?: string;
+	region?: string;
+	model?: string;
 	/** Host request timeout (ms); clamped 1s–30s server-side. */
 	timeoutMs?: number;
 }): Promise<string> {
@@ -29,7 +32,10 @@ export async function invokeTranslateText(args: {
 		sourceLang: args.sourceLang,
 		targetLang: args.targetLang,
 		provider: args.provider,
-		freeBaseUrl: args.freeBaseUrl?.trim() || null,
+		apiKey: args.apiKey?.trim() || null,
+		baseUrl: args.baseUrl?.trim() || null,
+		region: args.region?.trim() || null,
+		model: args.model?.trim() || null,
 		timeoutMs: args.timeoutMs ?? null,
 	});
 	if (!res.ok || !res.data) {
