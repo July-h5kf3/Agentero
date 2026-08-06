@@ -1,4 +1,10 @@
-import { CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
+import {
+	CheckCircle2,
+	Circle,
+	ExternalLink,
+	Loader2,
+	XCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -21,6 +27,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { isTauri } from "@/lib/core/tauri";
 import type {
 	AppSettings,
@@ -29,15 +40,46 @@ import type {
 	TranslateProviderId,
 	TranslateTargetLang,
 } from "@/lib/settings";
+import { saveSettingsAsync } from "@/lib/settings";
 import {
+	COMMERCIAL_MT_DEFAULT_BASE_URLS,
+	COMMERCIAL_MT_DOCS_URLS,
+	COMMERCIAL_MT_PROVIDER_IDS,
+	type CommercialMtProbeMap,
 	FREE_MT_PROVIDER_IDS,
 	type FreeMtProbeMap,
 	type FreeMtProbeStatus,
+	hasTranslateApiKey,
+	isCommercialProviderConfigured,
 	isCommercialTranslateProvider,
 	isFreeMtProvider,
+	isTranslateApiKeyMask,
 	listSelectableProviders,
+	maskTranslateApiKey,
+	probeCommercialMtProvider,
 	probeFreeMtProviders,
 } from "@/lib/translate";
+
+function openExternalUrl(url: string): void {
+	void import("@tauri-apps/plugin-opener")
+		.then(({ openUrl }) => openUrl(url))
+		.catch(() => {
+			window.open(url, "_blank", "noopener,noreferrer");
+		});
+}
+
+const EMPTY_PROVIDER_CONFIG: TranslateProviderConfig = {
+	apiKey: "",
+	baseUrl: "",
+	region: "",
+	model: "",
+};
+
+/** Resolve API key for save/probe: draft wins; otherwise keep stored (may be mask). */
+function resolveApiKeyDraft(draft: string | undefined, stored: string): string {
+	if (draft !== undefined) return draft.trim();
+	return stored.trim();
+}
 
 function ProviderProbeIcon({
 	status,
@@ -85,6 +127,19 @@ function ProviderProbeIcon({
 	);
 }
 
+function probeStatusLabelKey(status: FreeMtProbeStatus): string {
+	switch (status) {
+		case "ok":
+			return "translate.provider.probeOk";
+		case "fail":
+			return "translate.provider.probeFail";
+		case "probing":
+			return "translate.provider.probeProbing";
+		default:
+			return "translate.provider.probeIdle";
+	}
+}
+
 export function TranslatePane({
 	settings,
 	patch,
@@ -96,36 +151,33 @@ export function TranslatePane({
 }) {
 	const { t } = useTranslation("settings");
 	const tr = settings.translate;
-	const providers = listSelectableProviders();
 	const patchTranslate = useCallback(
 		(partial: Partial<typeof tr>) =>
 			patch({ translate: { ...tr, ...partial } }),
 		[patch, tr],
 	);
 	const showAgent = tr.provider === "agent";
-	const showCommercial = isCommercialTranslateProvider(tr.provider);
-	const providerConfig = useMemo<TranslateProviderConfig>(
+	const getProviderConfig = useCallback(
+		(id: CommercialTranslateProviderId): TranslateProviderConfig =>
+			tr.providerConfigs[id] ?? EMPTY_PROVIDER_CONFIG,
+		[tr.providerConfigs],
+	);
+	/** Free MT + Agent always; commercial only when configured (or currently selected). */
+	const providers = useMemo(
 		() =>
-			(showCommercial
-				? tr.providerConfigs[tr.provider as CommercialTranslateProviderId]
-				: undefined) ?? {
-				apiKey: "",
-				baseUrl: "",
-				region: "",
-				model: "",
-			},
-		[showCommercial, tr.provider, tr.providerConfigs],
+			listSelectableProviders().filter((s) => {
+				if (!isCommercialTranslateProvider(s.id)) return true;
+				if (tr.provider === s.id) return true;
+				return isCommercialProviderConfigured(s.id, getProviderConfig(s.id));
+			}),
+		[getProviderConfig, tr.provider],
 	);
 	const patchProviderConfig = useCallback(
-		(partial: Partial<TranslateProviderConfig>) => {
-			if (!showCommercial) return;
-			const providerId = tr.provider as CommercialTranslateProviderId;
-			const current = tr.providerConfigs[providerId] ?? {
-				apiKey: "",
-				baseUrl: "",
-				region: "",
-				model: "",
-			};
+		(
+			providerId: CommercialTranslateProviderId,
+			partial: Partial<TranslateProviderConfig>,
+		) => {
+			const current = tr.providerConfigs[providerId] ?? EMPTY_PROVIDER_CONFIG;
 			patchTranslate({
 				providerConfigs: {
 					...tr.providerConfigs,
@@ -133,13 +185,22 @@ export function TranslatePane({
 				},
 			});
 		},
-		[patchTranslate, showCommercial, tr.provider, tr.providerConfigs],
+		[patchTranslate, tr.providerConfigs],
 	);
 
 	/** Free-MT probe status (Agent never probed here). */
 	const [probeMap, setProbeMap] = useState<FreeMtProbeMap>({});
 	const probeAbortRef = useRef<AbortController | null>(null);
 	const probingRef = useRef(false);
+	const [commercialProbeMap, setCommercialProbeMap] =
+		useState<CommercialMtProbeMap>({});
+	const commercialProbeAbortRef = useRef<
+		Partial<Record<CommercialTranslateProviderId, AbortController>>
+	>({});
+	/** In-progress API keys not yet confirmed (never written until Confirm). */
+	const [apiKeyDrafts, setApiKeyDrafts] = useState<
+		Partial<Record<CommercialTranslateProviderId, string>>
+	>({});
 
 	const agentModelValue = useMemo(
 		() => ({ agentId: tr.agentId, modelId: tr.modelId }),
@@ -187,9 +248,133 @@ export function TranslatePane({
 		});
 	}, []);
 
+	const runCommercialProbe = useCallback(
+		(
+			providerId: CommercialTranslateProviderId,
+			configOverride?: TranslateProviderConfig,
+		) => {
+			const config = configOverride ?? getProviderConfig(providerId);
+			if (!isCommercialProviderConfigured(providerId, config)) {
+				setCommercialProbeMap((prev) => ({ ...prev, [providerId]: "idle" }));
+				return;
+			}
+
+			commercialProbeAbortRef.current[providerId]?.abort();
+			const ac = new AbortController();
+			commercialProbeAbortRef.current[providerId] = ac;
+			setCommercialProbeMap((prev) => ({
+				...prev,
+				[providerId]: "probing",
+			}));
+
+			void probeCommercialMtProvider(providerId, {
+				config,
+				signal: ac.signal,
+			})
+				.then((ok) => {
+					if (ac.signal.aborted) return;
+					setCommercialProbeMap((prev) => ({
+						...prev,
+						[providerId]: ok ? "ok" : "fail",
+					}));
+				})
+				.catch(() => {
+					if (ac.signal.aborted) return;
+					setCommercialProbeMap((prev) => ({
+						...prev,
+						[providerId]: "fail",
+					}));
+				})
+				.finally(() => {
+					if (commercialProbeAbortRef.current[providerId] === ac) {
+						delete commercialProbeAbortRef.current[providerId];
+					}
+				});
+		},
+		[getProviderConfig],
+	);
+
+	/** Confirm: persist key (Host keeps secret), mask UI with same-length `*`, then probe. */
+	const confirmCommercialProvider = useCallback(
+		async (providerId: CommercialTranslateProviderId) => {
+			const stored = getProviderConfig(providerId);
+			const draftOrStored = resolveApiKeyDraft(
+				apiKeyDrafts[providerId],
+				stored.apiKey,
+			);
+			// Retype → new plaintext; still showing mask → send mask so Host merge keeps secret.
+			const toSave: TranslateProviderConfig = {
+				...stored,
+				apiKey: draftOrStored,
+			};
+			if (!isCommercialProviderConfigured(providerId, toSave)) {
+				setCommercialProbeMap((prev) => ({ ...prev, [providerId]: "idle" }));
+				return;
+			}
+
+			const displayMask = isTranslateApiKeyMask(toSave.apiKey)
+				? toSave.apiKey
+				: maskTranslateApiKey(toSave.apiKey);
+			const nextTranslate = {
+				...tr,
+				providerConfigs: {
+					...tr.providerConfigs,
+					[providerId]: toSave,
+				},
+			};
+			const maskedCfg: TranslateProviderConfig = {
+				...toSave,
+				apiKey: displayMask,
+			};
+
+			setApiKeyDrafts((prev) => {
+				const next = { ...prev };
+				delete next[providerId];
+				return next;
+			});
+
+			try {
+				// Write real key (or mask-merge) to Host before probe.
+				await saveSettingsAsync({
+					...settings,
+					translate: nextTranslate,
+				});
+			} catch {
+				// Still try probe / mask UI below.
+			}
+
+			// React state shows same-length `*` only; second save merges mask → keep secret.
+			patch({
+				translate: {
+					...nextTranslate,
+					providerConfigs: {
+						...nextTranslate.providerConfigs,
+						[providerId]: maskedCfg,
+					},
+				},
+			});
+
+			runCommercialProbe(providerId, maskedCfg);
+		},
+		[apiKeyDrafts, getProviderConfig, patch, runCommercialProbe, settings, tr],
+	);
+
+	/** Probe configured commercial engines when the default-service Select opens. */
+	const runConfiguredCommercialProbes = useCallback(() => {
+		if (!isTauri()) return;
+		for (const id of COMMERCIAL_MT_PROVIDER_IDS) {
+			if (isCommercialProviderConfigured(id, getProviderConfig(id))) {
+				runCommercialProbe(id);
+			}
+		}
+	}, [getProviderConfig, runCommercialProbe]);
+
 	useEffect(() => {
 		return () => {
 			probeAbortRef.current?.abort();
+			for (const ac of Object.values(commercialProbeAbortRef.current)) {
+				ac?.abort();
+			}
 		};
 	}, []);
 
@@ -204,7 +389,9 @@ export function TranslatePane({
 							patchTranslate({ provider: v as TranslateProviderId })
 						}
 						onOpenChange={(open) => {
-							if (open) runFreeMtProbe();
+							if (!open) return;
+							runFreeMtProbe();
+							runConfiguredCommercialProbes();
 						}}
 					>
 						<SelectTrigger size="sm" className="min-w-[200px] max-w-[280px]">
@@ -212,10 +399,13 @@ export function TranslatePane({
 						</SelectTrigger>
 						<SelectContent className="max-h-72">
 							{providers.map((s) => {
-								const freeId = isFreeMtProvider(s.id) ? s.id : null;
-								const status: FreeMtProbeStatus | undefined = freeId
-									? (probeMap[freeId] ?? "idle")
-									: undefined;
+								const status: FreeMtProbeStatus | undefined = isFreeMtProvider(
+									s.id,
+								)
+									? (probeMap[s.id] ?? "idle")
+									: isCommercialTranslateProvider(s.id)
+										? (commercialProbeMap[s.id] ?? "idle")
+										: undefined;
 								return (
 									<SelectItem key={s.id} value={s.id}>
 										<span className="flex min-w-0 items-center gap-1.5">
@@ -273,6 +463,214 @@ export function TranslatePane({
 				</SettingsRow>
 			</SettingsGroup>
 
+			<div className="mb-5">
+				<h3 className="mb-2 px-0.5 font-medium text-sm">
+					{t("translate.providerConfig.section")}
+				</h3>
+				<div className="grid gap-2">
+					{COMMERCIAL_MT_PROVIDER_IDS.map((id) => {
+						const cfg = getProviderConfig(id);
+						const draftKey = apiKeyDrafts[id];
+						const displayApiKey =
+							draftKey !== undefined
+								? draftKey
+								: hasTranslateApiKey(cfg.apiKey)
+									? isTranslateApiKeyMask(cfg.apiKey)
+										? cfg.apiKey
+										: maskTranslateApiKey(cfg.apiKey)
+									: "";
+						const effectiveCfg: TranslateProviderConfig = {
+							...cfg,
+							apiKey: resolveApiKeyDraft(draftKey, cfg.apiKey),
+						};
+						const configured = isCommercialProviderConfigured(id, effectiveCfg);
+						const status = commercialProbeMap[id] ?? "idle";
+						const statusLabel = configured
+							? t(probeStatusLabelKey(status) as "translate.provider.probeIdle")
+							: t("translate.providerConfig.notConfigured");
+						const inputPrefix = `translate-provider-${id}`;
+						return (
+							<div key={id} className="rounded-lg border bg-card px-3 py-2.5">
+								<div className="mb-2 flex items-center justify-between gap-2">
+									<div className="flex min-w-0 items-center gap-1">
+										<p className="min-w-0 truncate font-medium text-[13px]">
+											{t(
+												`translate.provider.${id}` as "translate.provider.google",
+											)}
+											<span className="ml-1.5 font-normal text-muted-foreground text-xs">
+												{statusLabel}
+											</span>
+										</p>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon-xs"
+													className="shrink-0 text-muted-foreground"
+													aria-label={t("translate.providerConfig.openDocs")}
+													onClick={() =>
+														openExternalUrl(COMMERCIAL_MT_DOCS_URLS[id])
+													}
+												>
+													<ExternalLink className="size-3" aria-hidden />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>
+												{t("translate.providerConfig.openDocs")}
+											</TooltipContent>
+										</Tooltip>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="xs"
+										disabled={!configured || status === "probing"}
+										onClick={() => void confirmCommercialProvider(id)}
+									>
+										{t("translate.providerConfig.confirm")}
+									</Button>
+								</div>
+
+								<div className="grid gap-1.5">
+									<div className="flex items-center gap-2">
+										<Label
+											htmlFor={`${inputPrefix}-api-key`}
+											className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+										>
+											{t("translate.providerConfig.apiKey.label")}
+										</Label>
+										<Input
+											id={`${inputPrefix}-api-key`}
+											type="password"
+											value={displayApiKey}
+											onChange={(e) => {
+												const next = e.target.value;
+												const shownMask =
+													draftKey === undefined &&
+													hasTranslateApiKey(cfg.apiKey)
+														? isTranslateApiKeyMask(cfg.apiKey)
+															? cfg.apiKey
+															: maskTranslateApiKey(cfg.apiKey)
+														: null;
+												// Typing over the mask starts a fresh draft (not mask + chars).
+												if (
+													shownMask != null &&
+													(next === shownMask || next.startsWith(shownMask))
+												) {
+													const stripped = next.startsWith(shownMask)
+														? next.slice(shownMask.length)
+														: next;
+													setApiKeyDrafts((prev) => ({
+														...prev,
+														[id]: stripped,
+													}));
+													return;
+												}
+												setApiKeyDrafts((prev) => ({
+													...prev,
+													[id]: next,
+												}));
+											}}
+											onFocus={(e) => {
+												// Select mask so the next keystroke replaces it entirely.
+												if (
+													draftKey === undefined &&
+													hasTranslateApiKey(cfg.apiKey)
+												) {
+													e.currentTarget.select();
+												}
+											}}
+											placeholder={t(
+												"translate.providerConfig.apiKey.placeholder",
+											)}
+											className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+											spellCheck={false}
+											autoComplete="off"
+										/>
+									</div>
+									<div className="flex items-center gap-2">
+										<Label
+											htmlFor={`${inputPrefix}-base-url`}
+											className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+										>
+											{t("translate.providerConfig.baseUrl.label")}
+										</Label>
+										<Input
+											id={`${inputPrefix}-base-url`}
+											value={cfg.baseUrl}
+											onChange={(e) =>
+												patchProviderConfig(id, { baseUrl: e.target.value })
+											}
+											onBlur={() => {
+												const trimmed = cfg.baseUrl.trim().replace(/\/+$/, "");
+												if (trimmed !== cfg.baseUrl) {
+													patchProviderConfig(id, { baseUrl: trimmed });
+												}
+											}}
+											placeholder={COMMERCIAL_MT_DEFAULT_BASE_URLS[id]}
+											className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+											spellCheck={false}
+											autoComplete="off"
+										/>
+									</div>
+									{id === "azure" ? (
+										<div className="flex items-center gap-2">
+											<Label
+												htmlFor={`${inputPrefix}-region`}
+												className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+											>
+												{t("translate.providerConfig.region.label")}
+											</Label>
+											<Input
+												id={`${inputPrefix}-region`}
+												value={cfg.region}
+												onChange={(e) =>
+													patchProviderConfig(id, {
+														region: e.target.value,
+													})
+												}
+												placeholder={t(
+													"translate.providerConfig.region.placeholder",
+												)}
+												className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+												spellCheck={false}
+												autoComplete="off"
+											/>
+										</div>
+									) : null}
+									{id === "openaiCompatible" ? (
+										<div className="flex items-center gap-2">
+											<Label
+												htmlFor={`${inputPrefix}-model`}
+												className="w-20 shrink-0 font-normal text-muted-foreground text-xs"
+											>
+												{t("translate.providerConfig.model.label")}
+											</Label>
+											<Input
+												id={`${inputPrefix}-model`}
+												value={cfg.model}
+												onChange={(e) =>
+													patchProviderConfig(id, {
+														model: e.target.value,
+													})
+												}
+												placeholder={t(
+													"translate.providerConfig.model.placeholder",
+												)}
+												className="h-8 min-w-0 flex-1 font-mono text-xs placeholder:text-muted-foreground/50"
+												spellCheck={false}
+												autoComplete="off"
+											/>
+										</div>
+									) : null}
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			</div>
+
 			{showAgent && (
 				<>
 					<SettingsGroup>
@@ -323,94 +721,6 @@ export function TranslatePane({
 						</p>
 					) : null}
 				</>
-			)}
-
-			{showCommercial && (
-				<SettingsGroup>
-					<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-						<Label
-							htmlFor="translate-provider-api-key"
-							className="font-normal text-[13px]"
-						>
-							{t("translate.providerConfig.apiKey.label")}
-						</Label>
-						<Input
-							id="translate-provider-api-key"
-							type="password"
-							value={providerConfig.apiKey}
-							onChange={(e) => patchProviderConfig({ apiKey: e.target.value })}
-							placeholder={t("translate.providerConfig.apiKey.placeholder")}
-							className="h-8 font-mono text-xs"
-							spellCheck={false}
-							autoComplete="off"
-						/>
-					</div>
-					<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-						<Label
-							htmlFor="translate-provider-base-url"
-							className="font-normal text-[13px]"
-						>
-							{t("translate.providerConfig.baseUrl.label")}
-						</Label>
-						<Input
-							id="translate-provider-base-url"
-							value={providerConfig.baseUrl}
-							onChange={(e) => patchProviderConfig({ baseUrl: e.target.value })}
-							onBlur={() => {
-								const trimmed = providerConfig.baseUrl
-									.trim()
-									.replace(/\/+$/, "");
-								if (trimmed !== providerConfig.baseUrl) {
-									patchProviderConfig({ baseUrl: trimmed });
-								}
-							}}
-							placeholder={t("translate.providerConfig.baseUrl.placeholder")}
-							className="h-8 font-mono text-xs"
-							spellCheck={false}
-							autoComplete="off"
-						/>
-					</div>
-					{tr.provider === "azure" ? (
-						<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-							<Label
-								htmlFor="translate-provider-region"
-								className="font-normal text-[13px]"
-							>
-								{t("translate.providerConfig.region.label")}
-							</Label>
-							<Input
-								id="translate-provider-region"
-								value={providerConfig.region}
-								onChange={(e) =>
-									patchProviderConfig({ region: e.target.value })
-								}
-								placeholder={t("translate.providerConfig.region.placeholder")}
-								className="h-8 font-mono text-xs"
-								spellCheck={false}
-								autoComplete="off"
-							/>
-						</div>
-					) : null}
-					{tr.provider === "openaiCompatible" ? (
-						<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-							<Label
-								htmlFor="translate-provider-model"
-								className="font-normal text-[13px]"
-							>
-								{t("translate.providerConfig.model.label")}
-							</Label>
-							<Input
-								id="translate-provider-model"
-								value={providerConfig.model}
-								onChange={(e) => patchProviderConfig({ model: e.target.value })}
-								placeholder={t("translate.providerConfig.model.placeholder")}
-								className="h-8 font-mono text-xs"
-								spellCheck={false}
-								autoComplete="off"
-							/>
-						</div>
-					) : null}
-				</SettingsGroup>
 			)}
 		</>
 	);

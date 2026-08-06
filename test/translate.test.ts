@@ -5,11 +5,14 @@ import {
 	COMMERCIAL_MT_PROVIDER_IDS,
 	FREE_MT_PROVIDER_IDS,
 	getTranslateService,
+	isCommercialProviderConfigured,
 	isCommercialTranslateProvider,
 	isFreeMtProvider,
+	isTranslateApiKeyMask,
 	isTranslateProviderId,
 	langsFromSettings,
 	listSelectableProviders,
+	maskTranslateApiKey,
 	resolveTargetLangCode,
 	resolveTargetLangName,
 	resolveTranslateAgent,
@@ -92,6 +95,45 @@ describe("translate services registry", () => {
 		for (const id of COMMERCIAL_MT_PROVIDER_IDS) {
 			expect(isFreeMtProvider(id)).toBe(false);
 		}
+	});
+
+	it("treats same-length host API key mask as configured", () => {
+		const masked = maskTranslateApiKey("sk-secret-key");
+		expect(masked).toBe("*************");
+		expect(isTranslateApiKeyMask(masked)).toBe(true);
+		expect(isTranslateApiKeyMask("sk-secret")).toBe(false);
+		expect(
+			isCommercialProviderConfigured("deepl", {
+				apiKey: masked,
+				baseUrl: "",
+				region: "",
+				model: "",
+			}),
+		).toBe(true);
+		expect(
+			isCommercialProviderConfigured("deepl", {
+				apiKey: "",
+				baseUrl: "",
+				region: "",
+				model: "",
+			}),
+		).toBe(false);
+		expect(
+			isCommercialProviderConfigured("azure", {
+				apiKey: masked,
+				baseUrl: "",
+				region: "",
+				model: "",
+			}),
+		).toBe(false);
+		expect(
+			isCommercialProviderConfigured("azure", {
+				apiKey: masked,
+				baseUrl: "",
+				region: "eastasia",
+				model: "",
+			}),
+		).toBe(true);
 	});
 });
 

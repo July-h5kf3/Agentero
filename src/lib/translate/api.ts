@@ -8,8 +8,8 @@ import { isTauri } from "@/lib/core/tauri";
 export type { TranslateTextArgs, TranslateTextResult };
 
 /**
- * Host free-MT command via the generated typed binding (tauri-specta pilot).
- * `provider` selects the web engine (googleapi / bing / youdao / …).
+ * Host MT command via the generated typed binding (tauri-specta pilot).
+ * `provider` selects a free web engine or a commercial BYOK engine.
  * Regenerate bindings: `cargo test -p agentero export_typescript_bindings`.
  */
 export async function invokeTranslateText(args: {

@@ -5,10 +5,18 @@ export {
 	targetLangDisplayName,
 } from "@/lib/translate/lang";
 export type {
+	CommercialMtProbeMap,
 	FreeMtProbeMap,
 	FreeMtProbeStatus,
 } from "@/lib/translate/probe";
-export { probeFreeMtProviders } from "@/lib/translate/probe";
+export {
+	hasTranslateApiKey,
+	isCommercialProviderConfigured,
+	isTranslateApiKeyMask,
+	maskTranslateApiKey,
+	probeCommercialMtProvider,
+	probeFreeMtProviders,
+} from "@/lib/translate/probe";
 export { buildTranslatePrompt } from "@/lib/translate/prompt";
 export {
 	listAvailableAgents,
@@ -23,6 +31,8 @@ export {
 	listSelectableProviders,
 } from "@/lib/translate/services";
 export {
+	COMMERCIAL_MT_DEFAULT_BASE_URLS,
+	COMMERCIAL_MT_DOCS_URLS,
 	COMMERCIAL_MT_PROVIDER_IDS,
 	FREE_MT_PROVIDER_IDS,
 } from "@/lib/translate/types";

@@ -7,7 +7,6 @@
 export type FreeTranslateProviderId =
 	| "google"
 	| "googleapi"
-	| "youdao"
 	| "deeplx"
 	| "huoshanweb"
 	| "tencenttransmart";
@@ -113,7 +112,6 @@ export const FREE_MT_PROVIDER_IDS: FreeTranslateProviderId[] = [
 	"tencenttransmart",
 	"huoshanweb",
 	"deeplx",
-	"youdao",
 	"googleapi",
 	"google",
 ];
@@ -125,3 +123,31 @@ export const COMMERCIAL_MT_PROVIDER_IDS: CommercialTranslateProviderId[] = [
 	"googleCloud",
 	"openaiCompatible",
 ];
+
+/**
+ * Default API roots when `baseUrl` is empty (Host appends the path suffix).
+ * Keep in sync with `optional_endpoint` defaults in
+ * `src-tauri/src/features/translate/mod.rs`.
+ */
+export const COMMERCIAL_MT_DEFAULT_BASE_URLS: Record<
+	CommercialTranslateProviderId,
+	string
+> = {
+	deepl: "https://api-free.deepl.com",
+	azure: "https://api.cognitive.microsofttranslator.com",
+	googleCloud: "https://translation.googleapis.com",
+	openaiCompatible: "https://api.openai.com/v1",
+};
+
+/** Official docs / console pages for obtaining keys (settings UI external link). */
+export const COMMERCIAL_MT_DOCS_URLS: Record<
+	CommercialTranslateProviderId,
+	string
+> = {
+	deepl: "https://www.deepl.com/pro-api",
+	azure:
+		"https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/TextTranslation",
+	googleCloud:
+		"https://console.cloud.google.com/apis/library/translate.googleapis.com",
+	openaiCompatible: "https://platform.openai.com/api-keys",
+};

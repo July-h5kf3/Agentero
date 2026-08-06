@@ -204,17 +204,16 @@
 		"title": "Translate",
 		"provider": {
 			"label": "Default service",
-			"youdao": "Youdao",
 			"deeplx": "DeepLX",
 			"huoshanweb": "Volcengine Web",
 			"tencenttransmart": "Tencent Transmart",
 			"googleapi": "Google Translate (API)",
 			"google": "Google Translate",
-			"deepl": "DeepL API (BYOK)",
-			"azure": "Microsoft Translator (BYOK)",
-			"googleCloud": "Google Cloud Translate (BYOK)",
-			"openaiCompatible": "OpenAI-compatible (BYOK)",
-			"agent": "Agent (BYOA)",
+			"deepl": "DeepL API",
+			"azure": "Microsoft Translator",
+			"googleCloud": "Google Cloud Translate",
+			"openaiCompatible": "OpenAI-compatible",
+			"agent": "Agent",
 			"probeIdle": "Not checked yet",
 			"probeOk": "Available",
 			"probeFail": "Unavailable",
@@ -230,13 +229,16 @@
 			"label": "Auto-translate PDF selection"
 		},
 		"providerConfig": {
+			"section": "Commercial APIs",
+			"confirm": "Confirm",
+			"openDocs": "Open provider website",
+			"notConfigured": "Not configured",
 			"apiKey": {
 				"label": "API key",
-				"placeholder": "Stored locally in settings.json"
+				"placeholder": ""
 			},
 			"baseUrl": {
-				"label": "Endpoint (optional)",
-				"placeholder": "Use provider default"
+				"label": "Endpoint (optional)"
 			},
 			"region": {
 				"label": "Region",

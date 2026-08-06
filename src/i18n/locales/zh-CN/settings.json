@@ -197,17 +197,16 @@
 		"title": "翻译",
 		"provider": {
 			"label": "默认服务",
-			"youdao": "有道",
 			"deeplx": "DeepLX",
 			"huoshanweb": "火山翻译 Web",
 			"tencenttransmart": "腾讯交互翻译",
 			"googleapi": "Google 翻译（API）",
 			"google": "Google 翻译",
-			"deepl": "DeepL API（BYOK）",
-			"azure": "微软翻译（BYOK）",
-			"googleCloud": "Google Cloud Translate（BYOK）",
-			"openaiCompatible": "OpenAI 兼容（BYOK）",
-			"agent": "Agent（BYOA）",
+			"deepl": "DeepL API",
+			"azure": "微软翻译",
+			"googleCloud": "Google Cloud Translate",
+			"openaiCompatible": "OpenAI 兼容",
+			"agent": "Agent",
 			"probeIdle": "尚未检测",
 			"probeOk": "可用",
 			"probeFail": "不可用",
@@ -223,13 +222,16 @@
 			"label": "PDF 划词后自动翻译"
 		},
 		"providerConfig": {
+			"section": "商用 API",
+			"confirm": "确定",
+			"openDocs": "打开服务商网站",
+			"notConfigured": "未配置",
 			"apiKey": {
 				"label": "API Key",
-				"placeholder": "仅保存在本地 settings.json"
+				"placeholder": ""
 			},
 			"baseUrl": {
-				"label": "端点（可选）",
-				"placeholder": "使用服务默认值"
+				"label": "端点（可选）"
 			},
 			"region": {
 				"label": "区域",
