@@ -6,10 +6,7 @@ import type {
 
 import type { PromptImage } from "@/lib/agent";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
-import {
-	expandNormalizedRegion,
-	normalizedRegionToPdfRect,
-} from "@/lib/pdf/region";
+import { normalizedRegionToPdfRect } from "@/lib/pdf/region";
 
 const MAX_CROP_EDGE_PX = 1600;
 
@@ -48,12 +45,11 @@ export async function renderPdfRegionPromptImage({
 }): Promise<PromptImage> {
 	const page = document.pages[pageIndex];
 	if (!page) throw new Error("PDF page is unavailable");
-	const padded = expandNormalizedRegion(region);
-	const rect = normalizedRegionToPdfRect(padded, page.size);
+	const rect = normalizedRegionToPdfRect(region, page.size);
 	if (!rect) throw new Error("PDF crop region is empty");
 	const blob = await engine
 		.renderPageRect(document, page, rect, {
-			scaleFactor: cropScaleFactor(page, padded),
+			scaleFactor: cropScaleFactor(page, region),
 			imageType: "image/png",
 			withAnnotations: false,
 			withForms: false,
