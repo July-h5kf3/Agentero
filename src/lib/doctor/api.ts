@@ -24,6 +24,18 @@ export type AliasRepairCandidate = {
 	reason?: string;
 };
 
+export type WikiCheckIssue = {
+	status: string;
+	source: string;
+	line: number;
+	targetRaw: string;
+	syntax: string;
+	embed: boolean;
+	targetPath?: string;
+	candidates?: string[];
+	context?: string;
+};
+
 export type DoctorReport = {
 	ok: boolean;
 	vault: DoctorSection;
@@ -39,7 +51,7 @@ export type DoctorReport = {
 			ambiguous: number;
 			invalidFragment: number;
 		};
-		issues: unknown[];
+		issues: WikiCheckIssue[];
 	};
 	aliases: {
 		ok: boolean;

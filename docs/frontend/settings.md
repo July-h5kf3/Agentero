@@ -22,7 +22,7 @@
 | 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新 |
 
-知识库诊断页调用 Host 的只读 Doctor 报告。论文 alias 候选的标题与短 alias 可编辑，已有 alias 只展示并保留；点击应用后还有一次批量确认。主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
+知识库诊断页调用 Host 的只读 Doctor 报告。四个检查项（Vault 结构 / Catalog / 双链 / 论文别名）各自作为小标题，标题行右侧显示 icon + 问题数；有问题时再展开 border 列表。论文别名支持勾选与编辑标题/短 alias，可修复时在标题行最右侧提供「修复」，确认后批量写入。别名修复只改 frontmatter、不改 path，避免触发外部改名修复误报。主窗口把未保存的 Markdown 路径同步到 Host，因此独立设置 Webview 发起修复时仍能在任何写入前拒绝脏文件。远程 Vault 首版只显示不可用。
 
 ## 应用更新
 

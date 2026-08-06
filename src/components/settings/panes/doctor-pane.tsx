@@ -1,12 +1,14 @@
 import { CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import {
-	PageTitle,
-	SettingsGroup,
-} from "@/components/settings/settings-layout";
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
+import { useTranslation } from "react-i18next";
+import { PageTitle } from "@/components/settings/settings-layout";
 import type { SettingsHostContext } from "@/components/settings/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -28,37 +30,94 @@ import {
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import {
 	type AliasRepairCandidate,
+	type DoctorIssue,
 	type DoctorReport,
 	doctorApplyAliases,
 	doctorCheck,
+	type WikiCheckIssue,
 } from "@/lib/doctor/api";
 
 type CandidateDraft = AliasRepairCandidate & { selected: boolean };
 
-function StatusRow({
-	label,
+/** Section title with status on the right; issue list below when present. */
+function DoctorSection({
+	title,
 	ok,
-	detail,
-	statusLabel,
+	issueCount,
+	action,
+	children,
 }: {
-	label: string;
+	title: string;
 	ok: boolean;
-	detail: string;
-	statusLabel: string;
+	issueCount: number;
+	action?: ReactNode;
+	children?: ReactNode;
 }) {
+	const { t } = useTranslation("settings");
+	const hasList = Boolean(children);
+
 	return (
-		<div className="flex items-center gap-3 border-b px-3.5 py-3 last:border-b-0">
-			{ok ? (
-				<CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-			) : (
-				<TriangleAlert className="size-4 shrink-0 text-amber-600" />
-			)}
-			<div className="min-w-0 flex-1">
-				<p className="text-[13px]">{label}</p>
-				<p className="truncate text-muted-foreground text-xs">{detail}</p>
+		<div className="mb-5">
+			<div className="mb-2 flex items-center gap-3 px-0.5">
+				<p className="min-w-0 flex-1 font-medium text-[13px]">{title}</p>
+				<span className="flex shrink-0 items-center gap-1.5 text-[13px]">
+					{ok ? (
+						<CheckCircle2 className="size-4 text-emerald-600" />
+					) : (
+						<TriangleAlert className="size-4 text-amber-600" />
+					)}
+					{t("doctor.issueCount", { count: issueCount })}
+				</span>
+				{action}
 			</div>
-			<Badge variant={ok ? "secondary" : "destructive"}>{statusLabel}</Badge>
+			{hasList ? (
+				<div className="overflow-hidden rounded-xl border bg-card">
+					{children}
+				</div>
+			) : null}
 		</div>
+	);
+}
+
+function IssueRows({ issues }: { issues: DoctorIssue[] }) {
+	return (
+		<>
+			{issues.map((issue) => (
+				<div
+					key={`${issue.code}:${issue.path ?? ""}:${issue.message}`}
+					className="border-b px-3.5 py-2.5 last:border-b-0"
+				>
+					<p className="text-[13px] leading-snug">{issue.message}</p>
+					{issue.path ? (
+						<p className="mt-0.5 truncate text-muted-foreground text-xs">
+							{issue.path}
+						</p>
+					) : null}
+				</div>
+			))}
+		</>
+	);
+}
+
+function WikiIssueRows({ issues }: { issues: WikiCheckIssue[] }) {
+	return (
+		<>
+			{issues.map((issue) => (
+				<div
+					key={`${issue.source}:${issue.line}:${issue.targetRaw}:${issue.status}:${issue.context ?? ""}`}
+					className="border-b px-3.5 py-2.5 last:border-b-0"
+				>
+					<p className="text-[13px] leading-snug">
+						{issue.targetRaw}
+						<span className="text-muted-foreground"> · {issue.status}</span>
+					</p>
+					<p className="mt-0.5 truncate text-muted-foreground text-xs">
+						{issue.source}:{issue.line}
+						{issue.context ? ` · ${issue.context}` : ""}
+					</p>
+				</div>
+			))}
+		</>
 	);
 }
 
@@ -163,7 +222,17 @@ export function DoctorPane({
 		);
 	}
 
-	const linkIssueCount = report?.wikilinks.issues.length ?? 0;
+	const vaultIssues = report?.vault.issues ?? [];
+	const catalogIssues = report?.catalog.issues ?? [];
+	const wikiIssues = report?.wikilinks.issues ?? [];
+	const aliasIssues = report?.aliases.issues ?? [];
+	const aliasIssueCount =
+		drafts.length +
+		aliasIssues.filter(
+			(issue) => !drafts.some((draft) => draft.path === issue.path),
+		).length;
+	const hasFixableAliases = drafts.some((draft) => draft.fixable);
+
 	return (
 		<>
 			<PageTitle
@@ -187,133 +256,137 @@ export function DoctorPane({
 				}
 			/>
 
-			<SettingsGroup>
-				<StatusRow
-					label={t("doctor.sections.vault")}
-					ok={report?.vault.ok ?? false}
-					detail={t("doctor.issueCount", {
-						count: report?.vault.issues.length ?? 0,
-					})}
-					statusLabel={t(
-						report?.vault.ok ? "doctor.status.ok" : "doctor.status.issues",
-					)}
-				/>
-				<StatusRow
-					label={t("doctor.sections.catalog")}
-					ok={report?.catalog.ok ?? false}
-					detail={
-						report?.catalog.schemaVersion == null
-							? t("doctor.catalogUnavailable")
-							: t("doctor.catalogVersion", {
-									current: report.catalog.schemaVersion,
-									expected: report.catalog.expectedSchemaVersion,
-								})
-					}
-					statusLabel={t(
-						report?.catalog.ok ? "doctor.status.ok" : "doctor.status.issues",
-					)}
-				/>
-				<StatusRow
-					label={t("doctor.sections.wikilinks")}
-					ok={linkIssueCount === 0}
-					detail={t("doctor.wikilinkSummary", {
-						files: report?.wikilinks.checkedFiles ?? 0,
-						count: linkIssueCount,
-					})}
-					statusLabel={t(
-						linkIssueCount === 0 ? "doctor.status.ok" : "doctor.status.issues",
-					)}
-				/>
-				<StatusRow
-					label={t("doctor.sections.aliases")}
-					ok={report?.aliases.ok ?? false}
-					detail={t("doctor.aliasSummary", {
-						complete: report?.aliases.completePapers ?? 0,
-						total: report?.aliases.checkedPapers ?? 0,
-					})}
-					statusLabel={t(
-						report?.aliases.ok ? "doctor.status.ok" : "doctor.status.issues",
-					)}
-				/>
-			</SettingsGroup>
+			<DoctorSection
+				title={t("doctor.sections.vault")}
+				ok={report?.vault.ok ?? true}
+				issueCount={vaultIssues.length}
+			>
+				{vaultIssues.length > 0 ? <IssueRows issues={vaultIssues} /> : null}
+			</DoctorSection>
 
-			{drafts.length > 0 ? (
-				<div className="mb-4 space-y-2">
-					<p className="font-medium text-[13px]">{t("doctor.repair.title")}</p>
-					{drafts.map((draft) => (
-						<div key={draft.path} className="rounded-xl border bg-card p-3">
-							<div className="mb-2 flex items-start gap-2">
-								<Checkbox
-									checked={draft.selected}
-									disabled={!draft.fixable}
-									aria-label={t("doctor.repair.select", { path: draft.path })}
-									onCheckedChange={(checked) =>
-										patchDraft(draft.path, { selected: checked === true })
-									}
-								/>
-								<div className="min-w-0">
-									<p className="truncate text-[13px]">{draft.paperTitle}</p>
-									<p className="truncate text-muted-foreground text-xs">
-										{draft.path}
-									</p>
-								</div>
-							</div>
-							{draft.fixable ? (
-								<div className="grid gap-2 pl-6">
-									<div className="grid gap-1">
-										<Label className="text-muted-foreground text-xs">
-											{t("doctor.repair.titleAlias")}
-										</Label>
-										<Input
-											aria-label={t("doctor.repair.titleAlias")}
-											value={draft.titleAlias}
-											onChange={(event) =>
-												patchDraft(draft.path, {
-													titleAlias: event.currentTarget.value,
-												})
-											}
-										/>
-									</div>
-									<div className="grid gap-1">
-										<Label className="text-muted-foreground text-xs">
-											{t("doctor.repair.shortAlias")}
-										</Label>
-										<Input
-											aria-label={t("doctor.repair.shortAlias")}
-											value={draft.shortAlias}
-											onChange={(event) =>
-												patchDraft(draft.path, {
-													shortAlias: event.currentTarget.value,
-												})
-											}
-										/>
-									</div>
-									{draft.currentAliases.length > 0 ? (
-										<p className="text-muted-foreground text-xs">
-											{t("doctor.repair.preserved", {
-												aliases: draft.currentAliases.join(", "),
-											})}
-										</p>
-									) : null}
-								</div>
-							) : (
-								<p className="pl-6 text-amber-700 text-xs dark:text-amber-400">
-									{t("doctor.repair.manual")}
-								</p>
-							)}
-						</div>
-					))}
-					<div className="flex justify-end pt-1">
+			<DoctorSection
+				title={t("doctor.sections.catalog")}
+				ok={report?.catalog.ok ?? true}
+				issueCount={catalogIssues.length}
+			>
+				{catalogIssues.length > 0 ? <IssueRows issues={catalogIssues} /> : null}
+			</DoctorSection>
+
+			<DoctorSection
+				title={t("doctor.sections.wikilinks")}
+				ok={wikiIssues.length === 0}
+				issueCount={wikiIssues.length}
+			>
+				{wikiIssues.length > 0 ? <WikiIssueRows issues={wikiIssues} /> : null}
+			</DoctorSection>
+
+			<DoctorSection
+				title={t("doctor.sections.aliases")}
+				ok={report?.aliases.ok ?? true}
+				issueCount={aliasIssueCount}
+				action={
+					hasFixableAliases ? (
 						<Button
 							type="button"
+							size="sm"
 							disabled={selected.length === 0}
 							onClick={() => setConfirmOpen(true)}
 						>
-							{t("doctor.repair.apply", { count: selected.length })}
+							{t("doctor.repair.apply")}
 						</Button>
-					</div>
-				</div>
-			) : null}
+					) : undefined
+				}
+			>
+				{drafts.length > 0 || aliasIssues.length > 0 ? (
+					<>
+						{drafts.map((draft) => (
+							<div
+								key={draft.path}
+								className="border-b px-3.5 py-3 last:border-b-0"
+							>
+								<div className="mb-2 flex items-start gap-2">
+									<Checkbox
+										checked={draft.selected}
+										disabled={!draft.fixable}
+										aria-label={t("doctor.repair.select", {
+											path: draft.path,
+										})}
+										onCheckedChange={(checked) =>
+											patchDraft(draft.path, { selected: checked === true })
+										}
+									/>
+									<div className="min-w-0">
+										<p className="truncate text-[13px]">{draft.paperTitle}</p>
+										<p className="truncate text-muted-foreground text-xs">
+											{draft.path}
+										</p>
+									</div>
+								</div>
+								{draft.fixable ? (
+									<div className="grid gap-2 pl-6">
+										<div className="grid gap-1">
+											<Label className="text-muted-foreground text-xs">
+												{t("doctor.repair.titleAlias")}
+											</Label>
+											<Input
+												aria-label={t("doctor.repair.titleAlias")}
+												value={draft.titleAlias}
+												onChange={(event) =>
+													patchDraft(draft.path, {
+														titleAlias: event.currentTarget.value,
+													})
+												}
+											/>
+										</div>
+										<div className="grid gap-1">
+											<Label className="text-muted-foreground text-xs">
+												{t("doctor.repair.shortAlias")}
+											</Label>
+											<Input
+												aria-label={t("doctor.repair.shortAlias")}
+												value={draft.shortAlias}
+												onChange={(event) =>
+													patchDraft(draft.path, {
+														shortAlias: event.currentTarget.value,
+													})
+												}
+											/>
+										</div>
+										{draft.currentAliases.length > 0 ? (
+											<p className="text-muted-foreground text-xs">
+												{t("doctor.repair.preserved", {
+													aliases: draft.currentAliases.join(", "),
+												})}
+											</p>
+										) : null}
+									</div>
+								) : (
+									<p className="pl-6 text-amber-700 text-xs dark:text-amber-400">
+										{draft.reason ?? t("doctor.repair.manual")}
+									</p>
+								)}
+							</div>
+						))}
+						{aliasIssues
+							.filter(
+								(issue) => !drafts.some((draft) => draft.path === issue.path),
+							)
+							.map((issue) => (
+								<div
+									key={`${issue.code}:${issue.path ?? ""}:${issue.message}`}
+									className="border-b px-3.5 py-2.5 last:border-b-0"
+								>
+									<p className="text-[13px] leading-snug">{issue.message}</p>
+									{issue.path ? (
+										<p className="mt-0.5 truncate text-muted-foreground text-xs">
+											{issue.path}
+										</p>
+									) : null}
+								</div>
+							))}
+					</>
+				) : null}
+			</DoctorSection>
 
 			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
 				<DialogContent>
