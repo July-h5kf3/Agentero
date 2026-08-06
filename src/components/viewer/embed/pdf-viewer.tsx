@@ -466,6 +466,9 @@ export function PdfViewer(props: PdfViewerProps) {
 				// off-main-thread in the worker engine, so the extra tiles are
 				// cheap).
 				extraRings: 1,
+				// Larger tiles → fewer render round-trips through the single
+				// worker, which matters on long documents.
+				tileSize: 1024,
 			}),
 			createPluginRegistration(ZoomPluginPackage, {
 				defaultZoomLevel: ZoomMode.FitWidth,
