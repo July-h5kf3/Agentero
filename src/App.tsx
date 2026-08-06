@@ -34,6 +34,7 @@ import {
 } from "@/hooks/use-app-stores";
 import { useConnectorSync } from "@/hooks/use-connector-sync";
 import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
+import { useLayoutModelPrefetch } from "@/hooks/use-layout-model-prefetch";
 import { useNativeMenuEvents } from "@/hooks/use-native-menu-events";
 import { useAnyOverlayOpen } from "@/hooks/use-overlay-registration";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
@@ -215,6 +216,7 @@ export default function App() {
 	const { t } = useTranslation(["app"]);
 	useAppBootstrap();
 	useConnectorSync();
+	useLayoutModelPrefetch();
 	// Cancel WebView navigation on any OS file drop (PDF import is tree-only).
 	useExternalFileDrop();
 	const {

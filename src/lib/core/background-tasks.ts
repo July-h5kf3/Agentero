@@ -78,6 +78,8 @@ function phaseLabel(phase: string): string {
 	if (phase === "pdf") return i18n.t("app:tasks.downloadPhasePdf");
 	if (phase === "tex") return i18n.t("app:tasks.downloadPhaseTex");
 	if (phase === "parse") return i18n.t("app:tasks.downloadPhaseParse");
+	if (phase === "layout-model")
+		return i18n.t("app:tasks.downloadPhaseLayoutModel");
 	return i18n.t("app:tasks.downloadPhaseAsset");
 }
 
@@ -190,22 +192,33 @@ export function startBackgroundTask(input: {
 	/** Start as running immediately (default true). */
 	running?: boolean;
 	progress?: number | null;
+	/** Stable id (e.g. Host-driven `layout-model`); default random. */
+	id?: string;
 }): string {
 	const now = Date.now();
+	const id = input.id?.trim() || uid();
+	const existing = store().tasks.find((t) => t.id === id);
+	if (
+		existing &&
+		(existing.status === "queued" || existing.status === "running")
+	) {
+		return id;
+	}
 	const task: BackgroundTask = {
-		id: uid(),
+		id,
 		kind: input.kind,
 		title: input.title,
 		detail: input.detail,
 		status: input.running === false ? "queued" : "running",
 		progress: input.progress === undefined ? null : input.progress,
 		queueIndex: 0,
-		createdAt: now,
+		createdAt: existing?.createdAt ?? now,
 		updatedAt: now,
 	};
-	const tasks = [...store().tasks, task].slice(-MAX_HISTORY - 8);
+	const without = store().tasks.filter((t) => t.id !== id);
+	const tasks = [...without, task].slice(-MAX_HISTORY - 8);
 	setStore({ ...store(), tasks, expanded: store().expanded });
-	return task.id;
+	return id;
 }
 
 export function updateBackgroundTask(

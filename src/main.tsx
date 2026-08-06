@@ -171,6 +171,8 @@ async function boot() {
 		`op end frontend_boot ok=true duration_ms=${bootElapsed()} window=main`,
 	);
 	void checkForStartupUpdate();
+	// Layout model download is a Host background task; App mounts
+	// `useLayoutModelPrefetch` to surface it in the tasks panel.
 }
 
 /** A single main window owns the background update notification. */

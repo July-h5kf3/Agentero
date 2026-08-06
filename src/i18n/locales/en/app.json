@@ -55,6 +55,7 @@
 		"backlinksPanel": "Backlinks panel",
 		"annotationsPanel": "Annotations",
 		"referencesPanel": "References",
+		"figuresPanel": "Figures",
 		"showRightSidebar": "Show right sidebar",
 		"hideRightSidebar": "Hide right sidebar",
 		"showRightSidebarHint": "Show right sidebar ({{shortcut}})",
@@ -119,6 +120,7 @@
 		"titleBacklinks": "Backlinks",
 		"titleAnnotations": "Annotations",
 		"titleReferences": "References",
+		"titleFigures": "Figures",
 		"titleDocument": "Document"
 	},
 	"errors": {
@@ -212,6 +214,9 @@
 		"downloadPhaseTex": "TeX source",
 		"downloadPhaseParse": "Parsing PDF",
 		"downloadPhaseAsset": "Asset",
+		"downloadPhaseLayoutModel": "Layout model",
+		"layoutModelDownload": "Download layout model",
+		"layoutModelDetail": "ModelScope → HuggingFace · PP-DocLayoutV3",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",
