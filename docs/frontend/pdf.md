@@ -69,7 +69,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/agent-trace/` | agent-trace 契约 / mark 资产 IO / prompt / Open-in-Agent 重建 / 会话回跳 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
-| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、内存 store |
+| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、内存 UI store |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
@@ -85,8 +85,8 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 → **[pdf-layout-analysis.md](pdf-layout-analysis.md)**
 
-要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；**未**落盘 sidecar。
+要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 
-引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；插图 sidecar 与自动视觉区域检测尚未实现。
+引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；最终插图 sidecar / 缩略图资产与自动视觉批注尚未实现。

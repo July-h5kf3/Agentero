@@ -6,7 +6,7 @@
 |---|---|
 | 上游 | [EmbedPDF Layout Analysis](https://www.embedpdf.com/docs/react/headless/plugins/plugin-layout-analysis) |
 | 代码 | `src/lib/pdf/layout/`、`figures-panel.tsx`（header 按钮）、`pdf-viewer.tsx` |
-| 持久化 | **未落盘**；`layoutAnalysisStore` 内存，关 tab / 刷新即失 |
+| 持久化 | Paper PDF 写入 `{paper}/source/layout.json`（raw text-enriched regions）；`layoutAnalysisStore` 仍是运行时 UI store |
 
 ---
 
@@ -22,6 +22,10 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
 ① 抽 caption / formula_number 文字（PDF text runs）
         │  captionRole: figure_main | table_main | algorithm_main | subpanel | other
         │  formula 右侧条带也可恢复 "(n)" 编号
+        │  写入 {paper}/source/layout.json；再次分析优先读缓存
+        ▼
+①b source/layout.json 缓存命中
+        │  跳过 PP-DocLayoutV3，只从 raw regions 重新归并
         ▼
 ② mergeCaptionsIntoHosts（联图 / 表题 / 算法题 / 公式按编号）
         │  输出 PdfLayoutRegion[]（图必有完整 title；公式仅保留有编号）
@@ -59,6 +63,20 @@ LayoutAnalysisPluginPackage: {
 | Commands | `layout_model_status` / `layout_model_ensure({ progressTaskId? })` |
 
 实现：`src-tauri/src/features/layout_model/`、`src/lib/pdf/layout/model.ts`、`ai-runtime.ts`。
+
+### Layout sidecar
+
+`{paper}/source/layout.json` 保存 **初步解析结果**：模型标签映射后的 `PdfLayoutRegion[]`，并已尽力补充 caption / formula number 文本与 `captionRole`。它不保存侧栏最终卡片列表，也不保存缩略图；后续 `mergeCaptionsIntoHosts`、去重和置信度筛选都从该 raw sidecar 重新计算。因此修改联图、公式合并或筛选规则后，不需要重新运行 PP-DocLayoutV3。
+
+```ts
+type LayoutSidecar = {
+  schemaVersion: 1;
+  source: { mode: "embedpdf-layout"; generatedAt: string };
+  regions: PdfLayoutRegion[]; // raw, pre-merge
+};
+```
+
+缓存只在已知 paper folder 时启用；散落 PDF 没有 `{paper}` 路径，仍使用当前内存流程。点击重新分析时默认先读 `source/layout.json`；需要强制刷新模型输出时走 `force` 路径。
 
 ---
 
@@ -127,7 +145,7 @@ LayoutAnalysisPluginPackage: {
 | 硬中线切全宽图导致细条框 | **已废止**（仅半宽软切 + 标题回并） |
 | `clipFigureBboxToTitleColumn` 裁掉标题一半 | **已改为** `buildFigureBboxWithFullTitle`（标题必整框） |
 | 无 title 仍保留 chart 进侧栏 | **已废止**（`requireFigureTitles`） |
-| 侧栏默认 50% 置信度 | **已改为 30%**（滑条 30–90） |
+| 侧栏默认 50% 置信度 | **已改为固定 30%**（无 UI 滑条） |
 | 文档写死 0.5 / 无 merge 流水线 | **以本文为准** |
 | `looksLikeFigureCaption` | 兼容别名，等价 `captionRoleFromText` 主类判断，勿再扩展 |
 
@@ -138,7 +156,7 @@ LayoutAnalysisPluginPackage: {
 | 符号 / 位置 | 值 | 用途 |
 |---|---|---|
 | `layoutThreshold` | 0.3 | 插件层检测 |
-| 侧栏 `minScore` 默认 | 0.3 | 展示过滤 |
+| 侧栏 `minScore` | 0.3（固定，无滑条） | 展示过滤 |
 | `LAYOUT_MERGE.fullWidthTitle` | 0.55 | 全宽联图 |
 | `LAYOUT_MERGE.maxHeightAboveTitle` | 0.55 | **仅半宽**图题无 ceiling 时的竖向软上限 |
 | `LAYOUT_MERGE.panelBottomSlack` | 0.04 | 半宽：panel 底可越过 title 顶的量 |
@@ -181,6 +199,7 @@ type PdfLayoutRegion = {
 | 路径 | 职责 |
 |---|---|
 | `run-analysis.ts` | 分析 → 文字 → merge → store |
+| `io.ts` | `{paper}/source/layout.json` raw sidecar 读写与 schema 校验 |
 | `title-text.ts` | 抽字、captionRole、公式编号解析 |
 | `merge-captions.ts` | 联图 / 表 / 算法 / **公式按编号**、标题完整包含 |
 | `normalize.ts` | DocumentLayout → regions（sync 无文字） |
@@ -193,5 +212,6 @@ type PdfLayoutRegion = {
 ## 限制与后续
 
 - 实验路径；大模型推理可能卡顿。
-- 不改 PDF 二进制；不写 Vault。
-- 后续：figure sidecar 落盘、自动分析、一键视觉批注。
+- 不改 PDF 二进制；只写可重建的 `{paper}/source/layout.json`。
+- `layout.json` 只缓存 raw layout，不等同于未来 `agentero-figures.json` / 缩略图资产 sidecar。
+- 后续：最终 figure sidecar、自动分析、一键视觉批注。

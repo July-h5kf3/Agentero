@@ -74,7 +74,7 @@
 
 ## 0.6 — 引用关系与 Connected Papers
 
-本地引用/插图 → 邻域图 → Agent 引用工作流。实现见 [../backend/citation-parsing.md](../backend/citation-parsing.md)；插图 sidecar 延后。
+本地引用/插图 → 邻域图 → Agent 引用工作流。实现见 [../backend/citation-parsing.md](../backend/citation-parsing.md)；PDF layout raw cache 已落到 `{paper}/source/layout.json`，最终插图 sidecar 延后。
 
 | 主题 | 交付 |
 |---|---|

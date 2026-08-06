@@ -2797,6 +2797,7 @@ function PdfViewerInner({
 					message: "superseded",
 				});
 				void runDocumentLayoutAnalysis(la, docId, {
+					paperAbsPath,
 					onDone: () => {
 						layoutTaskRef.current = null;
 						// Show bbox overlay after a successful run (sidebar can hide it).

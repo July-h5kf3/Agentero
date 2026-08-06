@@ -6,6 +6,7 @@ import type {
 } from "@embedpdf/plugin-layout-analysis";
 
 import { logger } from "@/lib/core/logger";
+import { readLayoutSidecar, writeLayoutSidecar } from "@/lib/pdf/layout/io";
 import { mergeCaptionsIntoHosts } from "@/lib/pdf/layout/merge-captions";
 import { ensureLayoutModel } from "@/lib/pdf/layout/model";
 import {
@@ -27,8 +28,10 @@ import type {
 } from "@/lib/pdf/layout/types";
 
 export type RunLayoutAnalysisOptions = {
-	/** Re-analyze even if pages are cached. */
+	/** Re-analyze even if pages are cached in EmbedPDF or source/layout.json. */
 	force?: boolean;
+	/** Paper folder path; when present, raw layout persists to source/layout.json. */
+	paperAbsPath?: string | null;
 	onProgress?: (messageStage: DocumentAnalysisProgress) => void;
 	onDone?: (summary: string, total: number) => void;
 	onError?: (message: string, aborted: boolean) => void;
@@ -42,6 +45,16 @@ function taskToPromise<T>(task: {
 	});
 }
 
+function buildResultFromRawRegions(
+	documentId: string,
+	rawRegions: PdfLayoutRegion[],
+): PdfLayoutDocumentResult {
+	return buildLayoutDocumentResult(
+		documentId,
+		mergeCaptionsIntoHosts(rawRegions),
+	);
+}
+
 /**
  * 1) Extract text on every caption box
  * 2) Assign captionRole (Figure/Table/Algorithm/subpanel)
@@ -52,7 +65,10 @@ async function buildTextAwareResult(
 	scope: LayoutAnalysisScope,
 	documentId: string,
 	docLayout: DocumentLayout,
-): Promise<PdfLayoutDocumentResult> {
+): Promise<{
+	rawRegions: PdfLayoutRegion[];
+	result: PdfLayoutDocumentResult;
+}> {
 	let raw: PdfLayoutRegion[] = regionsFromDocumentLayout(docLayout);
 
 	const pages = new Set(raw.map((r) => r.pageIndex));
@@ -69,7 +85,8 @@ async function buildTextAwareResult(
 		}
 	}
 
-	let regions = mergeCaptionsIntoHosts(raw);
+	let result = buildResultFromRawRegions(documentId, raw);
+	let regions = result.regions;
 
 	// Ensure hosts with titleBbox have title strings.
 	for (const pageIndex of pages) {
@@ -88,12 +105,13 @@ async function buildTextAwareResult(
 				textRuns.runs ?? [],
 				pageSize,
 			);
+			result = buildLayoutDocumentResult(documentId, regions);
 		} catch {
 			// ignore
 		}
 	}
 
-	return buildLayoutDocumentResult(documentId, regions);
+	return { rawRegions: raw, result };
 }
 
 /**
@@ -104,7 +122,36 @@ export async function runDocumentLayoutAnalysis(
 	scope: LayoutAnalysisScope,
 	documentId: string,
 	options: RunLayoutAnalysisOptions = {},
-): Promise<LayoutTask<DocumentLayout, DocumentAnalysisProgress>> {
+): Promise<LayoutTask<DocumentLayout, DocumentAnalysisProgress> | null> {
+	if (!options.force && options.paperAbsPath) {
+		setLayoutAnalysisUi(
+			{ stage: "running", message: "Loading cached layout…" },
+			documentId,
+		);
+		const cached = await readLayoutSidecar(options.paperAbsPath);
+		if (cached) {
+			const result = buildResultFromRawRegions(documentId, cached.regions);
+			setLayoutDocumentResult(result);
+			const summary = summarizeLayoutResult(result);
+			setLayoutAnalysisUi(
+				{
+					stage: "done",
+					message: summary,
+					total: result.regions.length,
+				},
+				documentId,
+			);
+			console.info("[layout-analysis]", {
+				documentId,
+				summary,
+				cache: true,
+				regions: result.regions,
+			});
+			options.onDone?.(summary, result.regions.length);
+			return null;
+		}
+	}
+
 	setLayoutAnalysisUi(
 		{ stage: "running", message: "Preparing layout model…" },
 		documentId,
@@ -173,7 +220,13 @@ export async function runDocumentLayoutAnalysis(
 				documentId,
 			);
 			void buildTextAwareResult(scope, documentId, docLayout)
-				.then((result) => {
+				.then(async ({ rawRegions, result }) => {
+					try {
+						await writeLayoutSidecar(options.paperAbsPath, rawRegions);
+					} catch (e) {
+						const message = e instanceof Error ? e.message : String(e);
+						logger.warn("layout sidecar write failed", { error: message });
+					}
 					setLayoutDocumentResult(result);
 					const summary = summarizeLayoutResult(result);
 					setLayoutAnalysisUi(

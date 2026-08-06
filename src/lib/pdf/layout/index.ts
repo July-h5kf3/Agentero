@@ -15,6 +15,15 @@ export {
 	dedupeLayoutRegions,
 } from "@/lib/pdf/layout/dedupe";
 export {
+	LAYOUT_SIDECAR_FILE,
+	LAYOUT_SIDECAR_SCHEMA_VERSION,
+	layoutSidecarPath,
+	type PdfLayoutSidecar,
+	parseLayoutSidecar,
+	readLayoutSidecar,
+	writeLayoutSidecar,
+} from "@/lib/pdf/layout/io";
+export {
 	isAlgorithmLayoutKind,
 	isCaptionLayoutKind,
 	isFigureLayoutKind,
