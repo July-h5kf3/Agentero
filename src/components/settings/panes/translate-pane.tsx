@@ -1,10 +1,4 @@
-import {
-	CheckCircle2,
-	Circle,
-	ExternalLink,
-	Loader2,
-	XCircle,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -33,6 +27,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { isTauri } from "@/lib/core/tauri";
+import { cn } from "@/lib/core/utils";
 import type {
 	AppSettings,
 	CommercialTranslateProviderId,
@@ -81,49 +76,45 @@ function resolveApiKeyDraft(draft: string | undefined, stored: string): string {
 	return stored.trim();
 }
 
-function ProviderProbeIcon({
-	status,
-	labelIdle,
-	labelOk,
-	labelFail,
-	labelProbing,
+type ProviderStatusKind = FreeMtProbeStatus | "unconfigured";
+
+function providerStatusDotClass(kind: ProviderStatusKind): string {
+	switch (kind) {
+		case "ok":
+			return "bg-emerald-500";
+		case "fail":
+			return "bg-destructive";
+		case "probing":
+			return "bg-amber-500 animate-pulse";
+		case "unconfigured":
+			return "bg-muted-foreground/35";
+		default:
+			// idle — configured but not checked yet
+			return "bg-muted-foreground/50";
+	}
+}
+
+function ProviderStatusDot({
+	kind,
+	label,
 }: {
-	status: FreeMtProbeStatus;
-	labelIdle: string;
-	labelOk: string;
-	labelFail: string;
-	labelProbing: string;
+	kind: ProviderStatusKind;
+	label: string;
 }) {
-	if (status === "probing") {
-		return (
-			<Loader2
-				className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-				aria-label={labelProbing}
-			/>
-		);
-	}
-	if (status === "ok") {
-		return (
-			<CheckCircle2
-				className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
-				aria-label={labelOk}
-			/>
-		);
-	}
-	if (status === "fail") {
-		return (
-			<XCircle
-				className="size-3.5 shrink-0 text-destructive/80"
-				aria-label={labelFail}
-			/>
-		);
-	}
-	// idle (not yet probed)
 	return (
-		<Circle
-			className="size-3.5 shrink-0 text-muted-foreground/50"
-			aria-label={labelIdle}
-		/>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span
+					role="status"
+					aria-label={label}
+					className={cn(
+						"inline-block size-1.5 shrink-0 rounded-full",
+						providerStatusDotClass(kind),
+					)}
+				/>
+			</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -406,17 +397,19 @@ export function TranslatePane({
 									: isCommercialTranslateProvider(s.id)
 										? (commercialProbeMap[s.id] ?? "idle")
 										: undefined;
+								const statusLabel =
+									status != null
+										? t(
+												probeStatusLabelKey(
+													status,
+												) as "translate.provider.probeIdle",
+											)
+										: null;
 								return (
 									<SelectItem key={s.id} value={s.id}>
 										<span className="flex min-w-0 items-center gap-1.5">
-											{status != null ? (
-												<ProviderProbeIcon
-													status={status}
-													labelIdle={t("translate.provider.probeIdle")}
-													labelOk={t("translate.provider.probeOk")}
-													labelFail={t("translate.provider.probeFail")}
-													labelProbing={t("translate.provider.probeProbing")}
-												/>
+											{status != null && statusLabel != null ? (
+												<ProviderStatusDot kind={status} label={statusLabel} />
 											) : null}
 											<span className="truncate">
 												{t(
@@ -485,6 +478,9 @@ export function TranslatePane({
 						};
 						const configured = isCommercialProviderConfigured(id, effectiveCfg);
 						const status = commercialProbeMap[id] ?? "idle";
+						const statusKind: ProviderStatusKind = configured
+							? status
+							: "unconfigured";
 						const statusLabel = configured
 							? t(probeStatusLabelKey(status) as "translate.provider.probeIdle")
 							: t("translate.providerConfig.notConfigured");
@@ -492,14 +488,12 @@ export function TranslatePane({
 						return (
 							<div key={id} className="rounded-lg border bg-card px-3 py-2.5">
 								<div className="mb-2 flex items-center justify-between gap-2">
-									<div className="flex min-w-0 items-center gap-1">
+									<div className="flex min-w-0 items-center gap-1.5">
+										<ProviderStatusDot kind={statusKind} label={statusLabel} />
 										<p className="min-w-0 truncate font-medium text-[13px]">
 											{t(
 												`translate.provider.${id}` as "translate.provider.google",
 											)}
-											<span className="ml-1.5 font-normal text-muted-foreground text-xs">
-												{statusLabel}
-											</span>
 										</p>
 										<Tooltip>
 											<TooltipTrigger asChild>
