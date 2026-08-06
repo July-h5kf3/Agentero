@@ -69,6 +69,69 @@ export type AliasRepairChange = {
 	expectedHash: string;
 };
 
+export type WikilinkRepairLayer = "deterministic" | "manual";
+export type WikilinkEditKind = "target" | "fragment";
+
+export type WikilinkRepairSuggestion = {
+	id: string;
+	source: string;
+	line: number;
+	status: string;
+	syntax: string;
+	embed: boolean;
+	targetRaw: string;
+	suggestedReplacement: string;
+	editKind: WikilinkEditKind;
+	rangeStart: number;
+	rangeEnd: number;
+	expected: string;
+	expectedHash: string;
+	/** Same-line text before the edit span (git-style context). */
+	linePrefix?: string;
+	/** Same-line text after the edit span. */
+	lineSuffix?: string;
+	layer: WikilinkRepairLayer;
+	reason: string;
+	selectedByDefault: boolean;
+	candidates?: string[];
+	context?: string;
+};
+
+export type WikilinkRepairResidual = {
+	id: string;
+	source: string;
+	line: number;
+	status: string;
+	syntax: string;
+	embed: boolean;
+	targetRaw: string;
+	editKind: WikilinkEditKind;
+	rangeStart: number;
+	rangeEnd: number;
+	expected: string;
+	expectedHash: string;
+	linePrefix?: string;
+	lineSuffix?: string;
+	candidates?: string[];
+	context?: string;
+	targetPath?: string;
+	vaultHints?: string[];
+};
+
+export type WikilinkRepairPlan = {
+	suggestions: WikilinkRepairSuggestion[];
+	residuals: WikilinkRepairResidual[];
+};
+
+export type WikilinkRepairChange = {
+	source: string;
+	rangeStart: number;
+	rangeEnd: number;
+	expected: string;
+	replacement: string;
+	expectedHash: string;
+};
+
 export function doctorCheck(vaultPath: string): Promise<DoctorReport> {
 	return invokeApi<DoctorReport>("doctor_check", {
 		args: { vaultPath },
@@ -80,6 +143,23 @@ export function doctorApplyAliases(
 	changes: AliasRepairChange[],
 ): Promise<{ updatedPaths: string[] }> {
 	return invokeApi<{ updatedPaths: string[] }>("doctor_apply_aliases", {
+		args: { vaultPath, changes },
+	});
+}
+
+export function doctorPlanWikilinks(
+	vaultPath: string,
+): Promise<WikilinkRepairPlan> {
+	return invokeApi<WikilinkRepairPlan>("doctor_plan_wikilinks", {
+		args: { vaultPath },
+	});
+}
+
+export function doctorApplyWikilinks(
+	vaultPath: string,
+	changes: WikilinkRepairChange[],
+): Promise<{ updatedPaths: string[] }> {
+	return invokeApi<{ updatedPaths: string[] }>("doctor_apply_wikilinks", {
 		args: { vaultPath, changes },
 	});
 }

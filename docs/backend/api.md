@@ -1881,9 +1881,23 @@ snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内�
 - 仅接受 Catalog paper 对应的 `papers/**/NOTES.md`。
 - 批量预检脏路径、哈希、alias 冲突与 YAML 安全范围；全部通过后**原地写入** frontmatter（不改 path），失败按规划内容回滚。不使用 tmp+rename，以免被 watcher 误报为外部改名。
 
+#### `doctor_plan_wikilinks`
+
+- 参数：`{ vaultPath }`。
+- 返回：`{ suggestions, residuals }`。  
+  - `suggestions`：可勾选修复项（`deterministic` 默认勾选，`manual` 默认可手改）；含 `rangeStart/End`、`expected`、`expectedHash`、`suggestedReplacement`、`linePrefix` / `lineSuffix`。  
+  - `residuals`：与 manual 对应的结构化详情（供设置页生成 Agent 提示词），不单独渲染列表。
+
+#### `doctor_apply_wikilinks`
+
+- 参数：`{ vaultPath, changes, dirtyPaths? }`；每条 change 含 `source`、`rangeStart/End`、`expected`、`replacement`、`expectedHash`。
+- 只改链接 target/fragment 的字节范围；脏路径 / 哈希 / 重叠 range 预检；原地写入，失败回滚。
+
+设置页对 Agent 采用 **提示词 handoff**（复制 / 打开 Agent 预填 composer），不在 Doctor 内批量调用模型。
+
 #### `doctor_set_dirty_paths`
 
-主窗口向 Host 镜像当前 Vault 的未保存 Markdown 相对路径，供独立 Settings Webview 发起 alias 修复时做全批次写前拒绝。它只维护进程内保护状态，不落盘。
+主窗口向 Host 镜像当前 Vault 的未保存 Markdown 相对路径，供独立 Settings Webview 发起修复时做全批次写前拒绝。它只维护进程内保护状态，不落盘。
 
 详见 [doctor.md](doctor.md)。
 

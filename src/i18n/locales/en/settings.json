@@ -255,6 +255,12 @@
 			"wikilinks": "Wiki links",
 			"aliases": "Paper aliases"
 		},
+		"sectionHints": {
+			"vault": "Checks top-level papers/, notes/, plans/, and .agentero/ folders.",
+			"catalog": "Checks that .agentero/catalog.sqlite exists and its schema matches this app.",
+			"wikilinks": "Checks local wiki links for missing, ambiguous, or invalid heading targets.",
+			"aliases": "Checks paper NOTES.md for at least two distinct frontmatter aliases."
+		},
 		"issueCount": "{{count}} issue(s)",
 		"repair": {
 			"select": "Select {{path}}",
@@ -269,6 +275,25 @@
 			"confirm": "Apply changes",
 			"applying": "Applying…",
 			"success": "Updated aliases in {{count}} paper note(s)."
+		},
+		"wikilink": {
+			"probe": "Probe",
+			"planning": "Running lightweight probe…",
+			"working": "Working…",
+			"probeDone": "Probe done: {{auto}} auto, {{manual}} manual ({{total}} total)",
+			"agentHint": "Not sure? Hand the prompt below to your Agent and ask for a fix plan first.",
+			"agentPromptLabel": "Agent prompt",
+			"copyPrompt": "Copy",
+			"promptCopied": "Prompt copied",
+			"openInAgent": "Open in Agent",
+			"select": "Select repair in {{source}}",
+			"replacement": "Replacement",
+			"selectAll": "Select all",
+			"deselectAll": "Deselect all",
+			"noSuggestions": "No automatic suggestions. Edit links in the notes manually.",
+			"confirmTitle": "Apply link repairs?",
+			"confirmDescription": "Doctor will rewrite {{count}} link target(s) as one transaction. Only the selected byte ranges change.",
+			"success": "Updated links in {{count}} file(s)."
 		}
 	},
 	"keyboard": {
