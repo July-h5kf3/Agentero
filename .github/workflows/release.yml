@@ -73,7 +73,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -81,7 +81,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -216,7 +216,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check Android signing configuration
         id: signing-config
@@ -270,7 +270,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.signing-config.outputs.ready == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
@@ -351,7 +351,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
