@@ -262,7 +262,7 @@ function Section({
 /**
  * Right-rail gallery: figures / tables / algorithms / numbered formulas.
  * Formulas section is always last. Unnumbered formulas are already dropped
- * at merge time. Filters by confidence, drops tiny boxes, NMS-dedupes.
+ * at merge time. Fixed confidence gate + NMS-dedupe (no slider).
  */
 export function FiguresPanel({
 	documentId,
@@ -284,19 +284,13 @@ export function FiguresPanel({
 	);
 	const ui = useStore(layoutAnalysisStore, (s) => s.ui);
 	const [thumbs, setThumbs] = useState<Record<string, PromptImage | null>>({});
-	/** Confidence threshold 0–100 for the UI slider (maps to score 0–1). */
-	const [minScorePct, setMinScorePct] = useState(
-		Math.round(DEFAULT_MIN_SCORE * 100),
-	);
-
-	const minScore = minScorePct / 100;
 
 	const gallery = useMemo(() => {
 		const sidebarOnly = (result?.regions ?? []).filter((r) =>
 			isSidebarLayoutKind(r.kind),
 		);
-		return dedupeLayoutRegions(sidebarOnly, { minScore });
-	}, [result, minScore]);
+		return dedupeLayoutRegions(sidebarOnly, { minScore: DEFAULT_MIN_SCORE });
+	}, [result]);
 
 	const figures = useMemo(
 		() => gallery.filter((r) => isFigureLayoutKind(r.kind)),
@@ -535,158 +529,77 @@ export function FiguresPanel({
 						</Button>
 					) : null}
 				</div>
+			) : empty ? (
+				<p className="px-3 py-8 text-center text-muted-foreground text-xs">
+					{t("figures.emptyFiltered")}
+				</p>
 			) : (
-				<div className="flex min-h-0 flex-1 flex-col">
-					{/* Confidence filter: score is model certainty (0–100%). */}
-					<div className="shrink-0 space-y-1.5 border-b px-2 py-2">
-						<div className="flex items-center justify-between gap-2">
-							<TooltipProvider delayDuration={200}>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<label
-											htmlFor="figures-min-score"
-											className="cursor-help text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2"
-										>
-											{t("figures.minConfidence", { pct: minScorePct })}
-										</label>
-									</TooltipTrigger>
-									<TooltipContent side="bottom" className="max-w-56 text-xs">
-										{t("figures.confidenceHint")}
-									</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
-							<span className="text-[10px] text-muted-foreground tabular-nums">
-								{t("figures.shownOf", {
-									shown: gallery.length,
-									total: rawSidebarCount,
-								})}
-							</span>
-						</div>
-						<input
-							id="figures-min-score"
-							type="range"
-							min={30}
-							max={90}
-							step={5}
-							value={minScorePct}
-							onChange={(e) =>
-								setMinScorePct(Number.parseInt(e.target.value, 10) || 30)
-							}
-							className="h-1.5 w-full cursor-pointer accent-primary"
-							aria-label={t("figures.minConfidenceAria")}
-						/>
-						<div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-							<span className="inline-flex items-center gap-1">
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: layoutKindHex("image") }}
-								/>
-								{t("figures.kindImage")}
-							</span>
-							<span className="inline-flex items-center gap-1">
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: layoutKindHex("chart") }}
-								/>
-								{t("figures.kindChart")}
-							</span>
-							<span className="inline-flex items-center gap-1">
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: layoutKindHex("table") }}
-								/>
-								{t("figures.kindTable")}
-							</span>
-							<span className="inline-flex items-center gap-1">
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: layoutKindHex("algorithm") }}
-								/>
-								{t("figures.kindAlgorithm")}
-							</span>
-							<span className="inline-flex items-center gap-1">
-								<span
-									className="size-2 rounded-full"
-									style={{ backgroundColor: layoutKindHex("formula") }}
-								/>
-								{t("figures.kindFormula")}
-							</span>
-						</div>
-					</div>
-
-					{empty ? (
-						<p className="px-3 py-8 text-center text-muted-foreground text-xs">
-							{t("figures.emptyFiltered")}
-						</p>
-					) : (
-						<div className="agentero-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
-							<Section
-								title={t("figures.sectionFigures")}
-								count={figures.length}
-								accent={layoutKindHex("image")}
-							>
-								{figures.map((region, i) => (
-									<FigureCard
-										key={region.id}
-										region={region}
-										index={i + 1}
-										selected={focusedId === region.id}
-										thumb={thumbs[region.id]}
-										onJump={handleJump}
-									/>
-								))}
-							</Section>
-							<Section
-								title={t("figures.sectionTables")}
-								count={tables.length}
-								accent={layoutKindHex("table")}
-							>
-								{tables.map((region, i) => (
-									<FigureCard
-										key={region.id}
-										region={region}
-										index={i + 1}
-										selected={focusedId === region.id}
-										thumb={thumbs[region.id]}
-										onJump={handleJump}
-									/>
-								))}
-							</Section>
-							<Section
-								title={t("figures.sectionAlgorithms")}
-								count={algorithms.length}
-								accent={layoutKindHex("algorithm")}
-							>
-								{algorithms.map((region, i) => (
-									<FigureCard
-										key={region.id}
-										region={region}
-										index={i + 1}
-										selected={focusedId === region.id}
-										thumb={thumbs[region.id]}
-										onJump={handleJump}
-									/>
-								))}
-							</Section>
-							{/* Formulas always last: numbered only (merge drops unnumbered). */}
-							<Section
-								title={t("figures.sectionFormulas")}
-								count={formulas.length}
-								accent={layoutKindHex("formula")}
-							>
-								{formulas.map((region, i) => (
-									<FigureCard
-										key={region.id}
-										region={region}
-										index={i + 1}
-										selected={focusedId === region.id}
-										thumb={thumbs[region.id]}
-										onJump={handleJump}
-									/>
-								))}
-							</Section>
-						</div>
-					)}
+				<div className="agentero-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-2">
+					<Section
+						title={t("figures.sectionFigures")}
+						count={figures.length}
+						accent={layoutKindHex("image")}
+					>
+						{figures.map((region, i) => (
+							<FigureCard
+								key={region.id}
+								region={region}
+								index={i + 1}
+								selected={focusedId === region.id}
+								thumb={thumbs[region.id]}
+								onJump={handleJump}
+							/>
+						))}
+					</Section>
+					<Section
+						title={t("figures.sectionTables")}
+						count={tables.length}
+						accent={layoutKindHex("table")}
+					>
+						{tables.map((region, i) => (
+							<FigureCard
+								key={region.id}
+								region={region}
+								index={i + 1}
+								selected={focusedId === region.id}
+								thumb={thumbs[region.id]}
+								onJump={handleJump}
+							/>
+						))}
+					</Section>
+					<Section
+						title={t("figures.sectionAlgorithms")}
+						count={algorithms.length}
+						accent={layoutKindHex("algorithm")}
+					>
+						{algorithms.map((region, i) => (
+							<FigureCard
+								key={region.id}
+								region={region}
+								index={i + 1}
+								selected={focusedId === region.id}
+								thumb={thumbs[region.id]}
+								onJump={handleJump}
+							/>
+						))}
+					</Section>
+					{/* Formulas always last: numbered only (merge drops unnumbered). */}
+					<Section
+						title={t("figures.sectionFormulas")}
+						count={formulas.length}
+						accent={layoutKindHex("formula")}
+					>
+						{formulas.map((region, i) => (
+							<FigureCard
+								key={region.id}
+								region={region}
+								index={i + 1}
+								selected={focusedId === region.id}
+								thumb={thumbs[region.id]}
+								onJump={handleJump}
+							/>
+						))}
+					</Section>
 				</div>
 			)}
 		</section>
