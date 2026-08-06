@@ -41,6 +41,7 @@ const EXPANDED = { width: 360, height: 440 } as const;
 type VisualTraceCardProps = {
 	trace: PdfVisualSessionTrace;
 	screen: { x: number; y: number };
+	preferRight?: boolean;
 	streaming?: boolean;
 	error?: string | null;
 	/**
@@ -197,6 +198,7 @@ function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
 	screen,
+	preferRight = true,
 	streaming: streamingProp = false,
 	error = null,
 	initialExpanded = false,
@@ -322,7 +324,7 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			placementWidth={EXPANDED.width}
 			placementHeight={EXPANDED.height}
 			lockHeight
-			preferRight
+			preferRight={preferRight}
 			title={title}
 			icon={ScanSearch}
 			ariaLabel={t("pdfExplain.traceCardTitle")}

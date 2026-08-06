@@ -77,7 +77,7 @@ describe("placeSelectionCard", () => {
 		// would not. Without placementWidth the card would open right then flip.
 		const compact = 280;
 		const expanded = 360;
-		const gap = 6;
+		const gap = 4;
 		// Right room for compact only: expanded overflows, compact does not.
 		const screenX = VW - EDGE - compact - gap - 10;
 
@@ -112,6 +112,18 @@ describe("placeSelectionCard", () => {
 		expect(compactPlaced.left + expanded).toBeLessThanOrEqual(screenX + 1);
 		// Expanding must not move left — avoids pointer leave thrash.
 		expect(expandedPlaced.left).toBe(compactPlaced.left);
+	});
+
+	it("opens fully left of the pin when preferRight is false", () => {
+		const width = 320;
+		const gap = 4;
+		const screenX = 500;
+		const { left } = placeSelectionCard(
+			{ x: screenX, y: 200 },
+			{ width, height: 220, preferRight: false, gap },
+		);
+		// Card occupies [left, left+width] entirely to the left of the pin.
+		expect(left + width).toBeLessThanOrEqual(screenX - gap + 0.5);
 	});
 
 	it("plans top from placementHeight so expand does not re-anchor vertically", () => {
@@ -161,9 +173,9 @@ describe("placeSelectionCard", () => {
 			{ width, height: preferredH, trackPin: false },
 		);
 
-		// trackPin keeps top near the pin (screen.y - 12).
-		expect(mid.top).toBe(400 - 12);
-		expect(lower.top).toBe(520 - 12);
+		// trackPin keeps top near the pin (screen.y - 8).
+		expect(mid.top).toBe(400 - 8);
+		expect(lower.top).toBe(520 - 8);
 		// Default plan mode would often clamp both to the same top for tall cards.
 		expect(mid.top).not.toBe(lower.top);
 		// Without trackPin, a mid-viewport pin with height 280 is still clamped

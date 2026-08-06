@@ -49,7 +49,7 @@ export type PlaceSelectionCardOptions = {
 	trackPin?: boolean;
 	/** Open to the right of the anchor when there is room (default true). */
 	preferRight?: boolean;
-	/** Gap from the anchor point (default 6). */
+	/** Gap from the anchor point (default 4). */
 	gap?: number;
 };
 
@@ -78,7 +78,7 @@ export function placeSelectionCard(
 ): PlaceSelectionCardResult {
 	const preferredWidth = opts.width;
 	const preferredMaxH = opts.height ?? SELECTION_CARD_DEFAULT_MAX_HEIGHT;
-	const gap = opts.gap ?? 6;
+	const gap = opts.gap ?? 4;
 	const preferRight = opts.preferRight ?? true;
 	const trackPin = opts.trackPin ?? false;
 	const edge = SELECTION_CARD_EDGE;
@@ -95,9 +95,14 @@ export function placeSelectionCard(
 		Math.max(0, vh - edge * 2),
 	);
 
-	let left = preferRight ? screen.x + gap : screen.x;
+	// Prefer the pin's side: right of anchor, or fully to the left of it.
+	let left = preferRight ? screen.x + gap : screen.x - planWidth - gap;
 	if (preferRight && left + planWidth > vw - edge) {
+		// Not enough room on the right — flip left of the pin.
 		left = Math.max(edge, screen.x - planWidth - gap);
+	} else if (!preferRight && left < edge) {
+		// Not enough room on the left — flip right of the pin.
+		left = Math.min(vw - edge - planWidth, screen.x + gap);
 	}
 	left = Math.min(Math.max(edge, left), Math.max(edge, vw - planWidth - edge));
 
@@ -106,7 +111,7 @@ export function placeSelectionCard(
 	if (trackPin) {
 		// Content-sized cards: follow the pin; shrink maxHeight near edges
 		// instead of pre-shifting top by the full preferred height.
-		let top = screen.y - 12;
+		let top = screen.y - 8;
 		if (top < edge) top = edge;
 		let maxHeight = Math.min(preferredMaxH, viewportCap, vh - edge - top);
 		if (
@@ -122,8 +127,9 @@ export function placeSelectionCard(
 	}
 
 	// Plan top against the largest height so expand does not re-anchor.
+	// Keep the card top near the pin; only slide up when it would overflow.
 	const plannedMaxH = Math.min(planHeight, viewportCap);
-	let top = screen.y - 12;
+	let top = screen.y - 8;
 	if (top + plannedMaxH > vh - edge) {
 		top = vh - edge - plannedMaxH;
 	}

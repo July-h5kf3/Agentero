@@ -7,6 +7,7 @@ import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 
 export type TranslateCardProps = {
 	screen: { x: number; y: number };
+	preferRight?: boolean;
 	/** Translation text (may stream in) */
 	result: string;
 	streaming: boolean;
@@ -27,6 +28,7 @@ export type TranslateCardProps = {
  */
 export function TranslateCard({
 	screen,
+	preferRight = true,
 	result,
 	streaming,
 	error,
@@ -47,6 +49,7 @@ export function TranslateCard({
 			height={280}
 			// Content-sized: follow the selection pin while the PDF scrolls.
 			trackPin
+			preferRight={preferRight}
 			title={t("selection.translateTitle")}
 			icon={Languages}
 			ariaLive="polite"

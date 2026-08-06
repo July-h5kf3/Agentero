@@ -30,6 +30,8 @@ import {
 type AskPopoverProps = {
 	thread: PdfAskThread;
 	screen: { x: number; y: number };
+	/** Match gutter pin side so the card stays next to the pin. */
+	preferRight?: boolean;
 	streaming: boolean;
 	error: string | null;
 	/** Prefill single-line prompt (e.g. page number on double-click) */
@@ -54,6 +56,7 @@ type AskPopoverProps = {
 export function AskPopover({
 	thread,
 	screen,
+	preferRight = true,
 	streaming,
 	error,
 	initialPrompt,
@@ -150,6 +153,10 @@ export function AskPopover({
 			height={360}
 			// Fixed height so the nested scrollport has a definite viewport.
 			lockHeight
+			// Follow pin while scrolling; shrink height near edges instead of
+			// jumping the card far from the selection.
+			trackPin
+			preferRight={preferRight}
 			title={title}
 			icon={MessageSquareIcon}
 			ariaLabel={t("pdfAsk.dialogLabel")}

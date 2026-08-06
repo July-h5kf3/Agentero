@@ -164,7 +164,6 @@ import {
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
-	tracePin,
 	tracePreview,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
@@ -178,7 +177,7 @@ import {
 	writePdfAskThread,
 } from "@/lib/pdf/ask";
 import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
-import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
+import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
 import type {
 	PdfAskAnchor,
 	PdfAskNormalizedRect,
@@ -883,9 +882,11 @@ function PdfViewerInner({
 	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
 		null,
 	);
-	const [cardScreen, setCardScreen] = useState<{ x: number; y: number } | null>(
-		null,
-	);
+	const [cardScreen, setCardScreen] = useState<{
+		x: number;
+		y: number;
+		preferRight?: boolean;
+	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
 	const [visualStreaming, setVisualStreaming] = useState(false);
@@ -1304,39 +1305,45 @@ function PdfViewerInner({
 		onVisualTracesChangeRef.current?.(visualTraces);
 	}, [visualTraces]);
 
-	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
+	const cardScreenRef = useRef<{
+		x: number;
+		y: number;
+		preferRight?: boolean;
+	} | null>(null);
 	/**
-	 * Place the open pin card next to its anchor. Returns false when the page
-	 * DOM is not mounted yet (virtualized) so callers can retry — never flash
-	 * a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 * Place the open pin card next to its gutter pin. Returns false when the
+	 * page DOM is not mounted yet (virtualized) so callers can retry — never
+	 * flash a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 *
+	 * Uses the same pinFromRects(+pageText) side choice as the gutter so a
+	 * left-side pin does not open the dialog on the far right of the selection.
 	 */
 	const placeActiveCard = useCallback((card: ActiveSelectionCard): boolean => {
 		const host = hostRef.current;
 		if (!host) return false;
 		let page = 1;
 		let rects: PdfAskAnchor["rects"] = [];
-		let pin: { x: number; y: number } | null = null;
 		if (card.kind === "ask") {
 			const thread = threadsRef.current.find((th) => th.id === card.id);
 			if (!thread) return false;
 			page = thread.anchor.page;
 			rects = thread.anchor.rects;
-			pin = threadPin(thread);
 		} else if (card.kind === "translate") {
 			const tr = translatesRef.current.find((r) => r.id === card.id);
 			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
-			pin = pinFromRects(tr.rects);
 		} else if (card.kind === "agent-trace") {
 			const tr = visualTracesRef.current.find((item) => item.id === card.id);
 			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
-			pin = tracePin(tr);
 		} else {
 			return false;
 		}
+		// Same side choice as the gutter pin (page text → may flip left).
+		const pageText = pageTextMapRef.current.get(page - 1);
+		const pin = pinFromRects(rects, pageText);
 		const pageEl = pageElByIndex(host, page - 1);
 		const pt = popoverScreenPoint(pageEl, rects, pin);
 		// Target page not in the virtual DOM yet — keep cardScreen null so the
@@ -1348,7 +1355,8 @@ function PdfViewerInner({
 		if (
 			prev &&
 			Math.round(prev.x) === Math.round(pt.x) &&
-			Math.round(prev.y) === Math.round(pt.y)
+			Math.round(prev.y) === Math.round(pt.y) &&
+			prev.preferRight === pt.preferRight
 		) {
 			return true;
 		}
@@ -3525,6 +3533,7 @@ function PdfViewerInner({
 								<AskPopover
 									thread={activeThread}
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									streaming={streaming}
 									error={askError}
 									onSend={handleSend}
@@ -3547,6 +3556,7 @@ function PdfViewerInner({
 								<VisualTraceCard
 									trace={activeVisualTrace}
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									streaming={visualStreaming}
 									error={visualError}
 									initialExpanded={visualCardExpanded}
@@ -3563,6 +3573,7 @@ function PdfViewerInner({
 							{activeTranslate && cardScreen ? (
 								<TranslateCard
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									result={activeTranslate.result ?? ""}
 									streaming={translateStreaming}
 									error={translateError ?? activeTranslate.error ?? null}
