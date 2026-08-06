@@ -32,10 +32,37 @@ export type RunLayoutAnalysisOptions = {
 	force?: boolean;
 	/** Paper folder path; when present, raw layout persists to source/layout.json. */
 	paperAbsPath?: string | null;
+	/** PDF page count for progress bar before the first page-complete event. */
+	totalPages?: number | null;
 	onProgress?: (messageStage: DocumentAnalysisProgress) => void;
 	onDone?: (summary: string, total: number) => void;
 	onError?: (message: string, aborted: boolean) => void;
 };
+
+/** Intra-page phase weight (0–1) so the bar advances within a page. */
+function pagePhaseWeight(stage: DocumentAnalysisProgress["stage"]): number {
+	switch (stage) {
+		case "creating-session":
+			return 0.05;
+		case "rendering":
+			return 0.2;
+		case "layout-detection":
+			return 0.55;
+		case "mapping-coordinates":
+			return 0.8;
+		case "table-structure":
+			return 0.9;
+		case "page-complete":
+			return 1;
+		default:
+			return 0.4;
+	}
+}
+
+function clampProgress(value: number): number {
+	if (!Number.isFinite(value)) return 0;
+	return Math.max(0, Math.min(100, Math.round(value)));
+}
 
 function taskToPromise<T>(task: {
 	wait: (ok: (v: T) => void, err: (e: unknown) => void) => void;
@@ -125,7 +152,11 @@ export async function runDocumentLayoutAnalysis(
 ): Promise<LayoutTask<DocumentLayout, DocumentAnalysisProgress> | null> {
 	if (!options.force && options.paperAbsPath) {
 		setLayoutAnalysisUi(
-			{ stage: "running", message: "Loading cached layout…" },
+			{
+				stage: "running",
+				message: "Loading cached layout…",
+				progress: null,
+			},
 			documentId,
 		);
 		const cached = await readLayoutSidecar(options.paperAbsPath);
@@ -153,7 +184,11 @@ export async function runDocumentLayoutAnalysis(
 	}
 
 	setLayoutAnalysisUi(
-		{ stage: "running", message: "Preparing layout model…" },
+		{
+			stage: "running",
+			message: "Analyzing layout…",
+			progress: null,
+		},
 		documentId,
 	);
 
@@ -172,8 +207,20 @@ export async function runDocumentLayoutAnalysis(
 		throw e;
 	}
 
+	let knownTotal =
+		typeof options.totalPages === "number" && options.totalPages > 0
+			? Math.floor(options.totalPages)
+			: null;
+	let completedPages = 0;
+
 	setLayoutAnalysisUi(
-		{ stage: "running", message: "Analyzing layout…" },
+		{
+			stage: "running",
+			message: "Analyzing layout…",
+			progress: 0,
+			completed: 0,
+			total: knownTotal ?? undefined,
+		},
 		documentId,
 	);
 
@@ -181,42 +228,72 @@ export async function runDocumentLayoutAnalysis(
 
 	task.onProgress((p) => {
 		options.onProgress?.(p);
-		let message = "Analyzing layout…";
+		const message = "Analyzing layout…";
+		let progress: number | null = knownTotal && knownTotal > 0 ? 0 : null;
+		let page: number | undefined;
+
 		switch (p.stage) {
 			case "downloading-model": {
 				// Host may still be writing the file; plugin loads via agentero-model://.
-				const pct = p.total > 0 ? Math.round((p.loaded / p.total) * 100) : 0;
-				message = `Loading layout model… ${pct}%`;
+				// Keep stable message; only surface numeric progress when known.
+				const pct = p.total > 0 ? (p.loaded / p.total) * 100 : 0;
+				progress = clampProgress(pct);
 				break;
 			}
 			case "creating-session":
-				message = "Initializing layout model…";
+				progress = knownTotal && knownTotal > 0 ? 0 : null;
 				break;
 			case "rendering":
-				message = `Rendering page ${p.pageIndex + 1}…`;
-				break;
 			case "layout-detection":
-				message = `Detecting layout on page ${p.pageIndex + 1}…`;
-				break;
 			case "mapping-coordinates":
-				message = `Mapping coordinates on page ${p.pageIndex + 1}…`;
+			case "table-structure": {
+				// Keep a stable "Analyzing layout…" message; page progress is
+				// shown via progress bar + page counters in the figures panel.
+				page = p.pageIndex + 1;
+				if (knownTotal && knownTotal > 0) {
+					const phase = pagePhaseWeight(p.stage);
+					progress = clampProgress(((p.pageIndex + phase) / knownTotal) * 100);
+				} else {
+					// No page count yet: soft advance by page index alone.
+					progress = clampProgress(Math.min(95, (p.pageIndex + 0.5) * 4));
+				}
 				break;
-			case "table-structure":
-				message = `Table structure page ${p.pageIndex + 1}…`;
-				break;
+			}
 			case "page-complete":
-				message = `Layout page ${p.completed}/${p.total}`;
+				if (p.total > 0) knownTotal = p.total;
+				completedPages = p.completed;
+				page = p.pageIndex + 1;
+				progress =
+					p.total > 0 ? clampProgress((p.completed / p.total) * 100) : null;
 				break;
 			default:
 				break;
 		}
-		setLayoutAnalysisUi({ stage: "running", message }, documentId);
+
+		setLayoutAnalysisUi(
+			{
+				stage: "running",
+				message,
+				progress,
+				page,
+				completed: completedPages,
+				total: knownTotal ?? undefined,
+			},
+			documentId,
+		);
 	});
 
 	task.wait(
 		(docLayout) => {
 			setLayoutAnalysisUi(
-				{ stage: "running", message: "Merging figures & captions…" },
+				{
+					stage: "running",
+					message: "Merging figures & captions…",
+					progress: 99,
+					page: knownTotal ?? completedPages,
+					completed: knownTotal ?? completedPages,
+					total: knownTotal ?? undefined,
+				},
 				documentId,
 			);
 			void buildTextAwareResult(scope, documentId, docLayout)

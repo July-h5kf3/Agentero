@@ -9,11 +9,22 @@ export {
 	layoutKindHex,
 } from "@/lib/pdf/layout/colors";
 export {
+	LAYOUT_HOVER_DWELL_MS,
+	LAYOUT_SIDEBAR_MIN_SCORE,
+} from "@/lib/pdf/layout/constants";
+export {
 	bboxContainment,
 	bboxIoU,
 	type DedupeLayoutOptions,
 	dedupeLayoutRegions,
 } from "@/lib/pdf/layout/dedupe";
+export {
+	bboxArea,
+	hoverableLayoutRegions,
+	hoverableLayoutRegionsOnPage,
+	pickLayoutRegionAtPoint,
+	pointInBbox,
+} from "@/lib/pdf/layout/hit-test";
 export {
 	LAYOUT_SIDECAR_FILE,
 	LAYOUT_SIDECAR_SCHEMA_VERSION,

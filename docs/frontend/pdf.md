@@ -81,7 +81,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 ## 版面分析（实验）
 
-右栏 **Figures** header（分析 / 叠加层）→ 页内检测 → 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
+右栏 **解析** header（分析 / 叠加层）→ 页内检测 → 列表（image/chart、table、algorithm、**有编号 formula 置底**）。
 
 **完整流水线、14 条核心规则、阈值与代码地图**见：
 
@@ -89,6 +89,8 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 
 要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。
 
+**Hover 视觉提问：** 指针在插图 / 表 / 算法 / 有编号公式上停留约 600ms 后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。中途移开取消；框选模式或已有草稿卡时不触发。
+
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 
-引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)；最终插图 sidecar / 缩略图资产与自动视觉批注尚未实现。
+引用元数据解析与 References 侧栏：[../backend/citation-parsing.md](../backend/citation-parsing.md)。

@@ -72,7 +72,21 @@ export type PdfLayoutDocumentResult = {
 
 export type LayoutAnalysisUiStatus =
 	| { stage: "idle" }
-	| { stage: "running"; message: string }
+	| {
+			stage: "running";
+			message: string;
+			/**
+			 * Overall analysis progress 0–100 when known.
+			 * Omit / null for indeterminate (pulse) stages such as model prep.
+			 */
+			progress?: number | null;
+			/** 1-based page currently being processed (when known). */
+			page?: number;
+			/** Pages finished (from plugin page-complete), when known. */
+			completed?: number;
+			/** Document page count for the current run, when known. */
+			total?: number;
+	  }
 	| { stage: "done"; message: string; total: number }
 	| { stage: "error"; message: string }
 	| { stage: "cancelled" };

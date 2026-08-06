@@ -214,10 +214,13 @@ import {
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
 	getPdfAiRuntime,
+	hoverableLayoutRegionsOnPage,
+	LAYOUT_HOVER_DWELL_MS,
 	layoutAnalysisStore,
 	layoutKindBorder,
 	layoutKindFill,
 	layoutKindHex,
+	type PdfLayoutRegion,
 	runDocumentLayoutAnalysis,
 	setFocusedLayoutRegion,
 	setLayoutOverlayVisible,
@@ -935,6 +938,8 @@ function PdfViewerInner({
 
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
+	const totalPagesRef = useRef(totalPages);
+	totalPagesRef.current = totalPages;
 
 	/** Sidebar-selected layout region → PDF focus outline. */
 	const focusedLayoutRegion = useStore(layoutAnalysisStore, (s) => {
@@ -961,6 +966,12 @@ function PdfViewerInner({
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [visualDraftEditor, setVisualDraftEditor] =
 		useState<VisualDraftEditorState | null>(null);
+
+	/** Post-merge layout regions for hover hit targets (figures rail source). */
+	const layoutDocRegions = useStore(
+		layoutAnalysisStore,
+		(s) => s.byDocument[docId]?.regions ?? null,
+	);
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
@@ -1022,6 +1033,21 @@ function PdfViewerInner({
 	visualTracesRef.current = visualTraces;
 	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
 	activeCardRef.current = activeCard;
+	const regionSelectingRef = useRef(regionSelecting);
+	regionSelectingRef.current = regionSelecting;
+	const visualCropPendingRef = useRef(visualCropPending);
+	visualCropPendingRef.current = visualCropPending;
+	const visualDraftEditorRef = useRef(visualDraftEditor);
+	visualDraftEditorRef.current = visualDraftEditor;
+	const selectionMenuRef = useRef(selectionMenu);
+	selectionMenuRef.current = selectionMenu;
+	/** Pending dwell timer for layout-region hover → visual editor. */
+	const layoutHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const layoutHoverRegionIdRef = useRef<string | null>(null);
+	/** Bumped to drop late crops after leave / supersede. */
+	const layoutHoverSeqRef = useRef(0);
 	const activeSessionRef = useRef<string | null>(null);
 	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
@@ -1773,10 +1799,37 @@ function PdfViewerInner({
 		return resolved;
 	}, [t]);
 
+	const cancelLayoutHover = useCallback((regionId?: string) => {
+		if (
+			regionId != null &&
+			layoutHoverRegionIdRef.current != null &&
+			layoutHoverRegionIdRef.current !== regionId
+		) {
+			return;
+		}
+		if (layoutHoverTimerRef.current) {
+			clearTimeout(layoutHoverTimerRef.current);
+			layoutHoverTimerRef.current = null;
+		}
+		if (regionId == null || layoutHoverRegionIdRef.current === regionId) {
+			layoutHoverRegionIdRef.current = null;
+		}
+	}, []);
+
+	/** Drop in-flight hover dwell / crop so a late result does not open the editor. */
+	const invalidateLayoutHover = useCallback(() => {
+		layoutHoverSeqRef.current += 1;
+		cancelLayoutHover();
+	}, [cancelLayoutHover]);
+
 	/** Crop a region and open the visual-annotation draft editor (does not send). */
 	const beginVisualAnnotation = useCallback(
-		async (page: number, region: PdfAskNormalizedRect) => {
-			if (!engine || !docCap || visualCropPending) return;
+		async (
+			page: number,
+			region: PdfAskNormalizedRect,
+			opts?: { seq?: number },
+		) => {
+			if (!engine || !docCap || visualCropPendingRef.current) return;
 			const document = docCap.getDocument(docId);
 			if (!document) {
 				notifyError(t("pdfExplain.cropFailed"));
@@ -1791,6 +1844,9 @@ function PdfViewerInner({
 					pageIndex: page - 1,
 					region,
 				});
+				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
+					return;
+				}
 				const pageEl = pageElByIndex(hostRef.current, page - 1);
 				const screen = pageEl
 					? (() => {
@@ -1807,7 +1863,11 @@ function PdfViewerInner({
 					region,
 					image,
 				});
+				layoutHoverRegionIdRef.current = null;
 			} catch (error) {
+				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
+					return;
+				}
 				const message =
 					error instanceof Error ? error.message : t("pdfExplain.cropFailed");
 				notifyError(t("pdfExplain.cropFailed"), { description: message });
@@ -1815,8 +1875,80 @@ function PdfViewerInner({
 				setVisualCropPending(false);
 			}
 		},
-		[engine, docCap, docId, visualCropPending, t],
+		[engine, docCap, docId, t],
 	);
+
+	/**
+	 * After dwelling on a layout region, open the same visual editor as manual
+	 * region-select (crop only — user still confirms send).
+	 */
+	const scheduleLayoutHoverOpen = useCallback(
+		(region: PdfLayoutRegion) => {
+			if (
+				regionSelectingRef.current ||
+				visualCropPendingRef.current ||
+				visualDraftEditorRef.current ||
+				selectionMenuRef.current
+			) {
+				return;
+			}
+			if (
+				layoutHoverRegionIdRef.current === region.id &&
+				layoutHoverTimerRef.current
+			) {
+				return;
+			}
+			cancelLayoutHover();
+			layoutHoverRegionIdRef.current = region.id;
+			layoutHoverTimerRef.current = setTimeout(() => {
+				layoutHoverTimerRef.current = null;
+				if (layoutHoverRegionIdRef.current !== region.id) return;
+				if (
+					regionSelectingRef.current ||
+					visualCropPendingRef.current ||
+					visualDraftEditorRef.current ||
+					selectionMenuRef.current
+				) {
+					return;
+				}
+				const seq = ++layoutHoverSeqRef.current;
+				setFocusedLayoutRegion(docId, region.id);
+				void beginVisualAnnotation(region.pageIndex + 1, region.bbox, {
+					seq,
+				});
+			}, LAYOUT_HOVER_DWELL_MS);
+		},
+		[beginVisualAnnotation, cancelLayoutHover, docId],
+	);
+
+	const handleLayoutHoverLeave = useCallback(
+		(regionId: string) => {
+			if (layoutHoverRegionIdRef.current === regionId) {
+				// Timer still running → just cancel. Timer already fired / crop
+				// in flight → invalidate so a late crop does not open the editor.
+				if (
+					layoutHoverTimerRef.current == null ||
+					visualCropPendingRef.current
+				) {
+					layoutHoverSeqRef.current += 1;
+				}
+			}
+			cancelLayoutHover(regionId);
+		},
+		[cancelLayoutHover],
+	);
+
+	useEffect(() => {
+		// Drop in-flight hover when switching PDF documents or unmounting.
+		if (!docId) {
+			invalidateLayoutHover();
+			return;
+		}
+		invalidateLayoutHover();
+		return () => {
+			invalidateLayoutHover();
+		};
+	}, [docId, invalidateLayoutHover]);
 
 	const handleVisualDraftSave = useCallback(
 		(comment: string) => {
@@ -2807,8 +2939,10 @@ function PdfViewerInner({
 					type: "no-document",
 					message: "superseded",
 				});
+				const pages = totalPagesRef.current;
 				void runDocumentLayoutAnalysis(la, docId, {
 					paperAbsPath,
+					totalPages: pages > 0 ? pages : null,
 					onDone: () => {
 						layoutTaskRef.current = null;
 						// Show bbox overlay after a successful run (sidebar can hide it).
@@ -2842,7 +2976,6 @@ function PdfViewerInner({
 					behavior: "instant",
 				});
 				setFocusedLayoutRegion(docId, region.id);
-				layoutCapRef.current?.selectBlock(region.id);
 			},
 			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
 				const eng = engineRef.current;
@@ -3245,6 +3378,33 @@ function PdfViewerInner({
 								handleVisualRegionSelect(pageNumber, region)
 							}
 						/>
+						{/*
+						 * Hover hit targets for post-merge figure/table/algorithm/formula.
+						 * Largest first so smaller boxes stack on top and win pointer hits.
+						 * Hidden only when framing or a draft editor is open (not during crop:
+						 * unmount leave must not cancel an in-flight hover open).
+						 */}
+						{!regionSelecting && !visualDraftEditor && layoutDocRegions
+							? hoverableLayoutRegionsOnPage(layoutDocRegions, pageIndex).map(
+									(region) => (
+										<button
+											key={`layout-hit-${region.id}`}
+											type="button"
+											data-layout-hit={region.id}
+											aria-label={t("figures.hoverAskAria")}
+											className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+											style={{
+												left: `${region.bbox.x * 100}%`,
+												top: `${region.bbox.y * 100}%`,
+												width: `${region.bbox.w * 100}%`,
+												height: `${region.bbox.h * 100}%`,
+											}}
+											onPointerEnter={() => scheduleLayoutHoverOpen(region)}
+											onPointerLeave={() => handleLayoutHoverLeave(region.id)}
+										/>
+									),
+								)
+							: null}
 						{/* Open ask conversation card: highlight the anchored selection. */}
 						{activeAskOnPage
 							? activeAskOnPage.anchor.rects.map((rect) => (
@@ -3360,7 +3520,11 @@ function PdfViewerInner({
 			handleCitationLinkHover,
 			regionSelecting,
 			visualCropPending,
+			visualDraftEditor,
+			layoutDocRegions,
 			handleVisualRegionSelect,
+			scheduleLayoutHoverOpen,
+			handleLayoutHoverLeave,
 			pdfDark,
 			t,
 		],

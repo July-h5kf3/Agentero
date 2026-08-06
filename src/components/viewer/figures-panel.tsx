@@ -18,6 +18,7 @@ import { useStore } from "zustand";
 
 import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
 	Tooltip,
 	TooltipContent,
@@ -33,6 +34,7 @@ import {
 	isFormulaLayoutKind,
 	isSidebarLayoutKind,
 	isTableLayoutKind,
+	LAYOUT_SIDEBAR_MIN_SCORE,
 	layoutAnalysisStore,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
@@ -52,9 +54,6 @@ export type FiguresPanelProps = {
 	onRenderThumb?: (region: PdfLayoutRegion) => Promise<PromptImage | null>;
 	className?: string;
 };
-
-/** Default confidence gate for the figures rail (model score 0–1). */
-const DEFAULT_MIN_SCORE = 0.3;
 
 type SidebarKind = "image" | "chart" | "table" | "algorithm" | "formula";
 
@@ -221,7 +220,9 @@ export function FiguresPanel({
 		const sidebarOnly = (result?.regions ?? []).filter((r) =>
 			isSidebarLayoutKind(r.kind),
 		);
-		return dedupeLayoutRegions(sidebarOnly, { minScore: DEFAULT_MIN_SCORE });
+		return dedupeLayoutRegions(sidebarOnly, {
+			minScore: LAYOUT_SIDEBAR_MIN_SCORE,
+		});
 	}, [result]);
 
 	const figures = useMemo(
@@ -329,6 +330,21 @@ export function FiguresPanel({
 	const empty = gallery.length === 0;
 	const hasRaw = rawSidebarCount > 0;
 
+	const analysisProgress =
+		ui.stage === "running" && typeof ui.progress === "number"
+			? ui.progress
+			: null;
+	const analysisPageTotal =
+		ui.stage === "running" && typeof ui.total === "number" && ui.total > 0
+			? ui.total
+			: null;
+	const analysisPageCurrent =
+		ui.stage === "running" && typeof ui.page === "number" && ui.page > 0
+			? ui.page
+			: ui.stage === "running" && typeof ui.completed === "number"
+				? ui.completed
+				: null;
+
 	const analyzeTooltip =
 		ui.stage === "running"
 			? ui.message
@@ -427,14 +443,34 @@ export function FiguresPanel({
 					{t("figures.noPaper")}
 				</p>
 			) : running && !hasRaw ? (
-				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4">
-					<Loader2
-						className="size-4 animate-spin text-muted-foreground"
-						aria-hidden
-					/>
-					<p className="text-center text-muted-foreground text-xs">
-						{ui.stage === "running" ? ui.message : t("figures.analyzing")}
-					</p>
+				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4">
+					<div className="w-full max-w-[14rem] space-y-2">
+						<p className="text-center text-muted-foreground text-xs">
+							{ui.stage === "running" ? ui.message : t("figures.analyzing")}
+						</p>
+						<Progress
+							value={analysisProgress ?? undefined}
+							aria-label={
+								ui.stage === "running" ? ui.message : t("figures.analyzing")
+							}
+							className={cn(
+								"h-1.5",
+								analysisProgress == null && "animate-pulse opacity-70",
+							)}
+						/>
+						{analysisProgress != null || analysisPageTotal != null ? (
+							<p className="text-center text-[10px] text-muted-foreground tabular-nums">
+								{analysisPageTotal != null && analysisPageCurrent != null
+									? t("figures.progressPages", {
+											page: analysisPageCurrent,
+											total: analysisPageTotal,
+										})
+									: t("figures.progressPct", {
+											pct: analysisProgress ?? 0,
+										})}
+							</p>
+						) : null}
+					</div>
 				</div>
 			) : !hasRaw ? (
 				<div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4">

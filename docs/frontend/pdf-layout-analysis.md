@@ -34,6 +34,11 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points
         │  分区顺序：插图 → 表 → 算法 → **公式（最底）**
         ▼
 右栏 Figures + 聚焦高亮（store.focused）+ 可选 PDF bbox 叠加层
+        │
+④ PDF 页 hover dwell（默认 600ms）→ 视觉批注卡
+        │  hit 层用 **post-merge** 区域（与侧栏同源，非插件 raw 框）
+        │  插图 / 表 / 算法 / 有编号公式；打开 VisualAnnotationEditor（不自动发送）
+        │  实现：`hit-test.ts` + `pdf-viewer` layout hit + `LAYOUT_HOVER_DWELL_MS`
 ```
 
 注册（`pdf-viewer.tsx`）：
