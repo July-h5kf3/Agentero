@@ -3471,13 +3471,14 @@ function PdfViewerInner({
 			) : null}
 			<div className="pointer-events-none absolute top-2 right-3 z-20 flex items-center gap-1">
 				<TooltipProvider delayDuration={200}>
-					<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
+					<div className="pointer-events-auto flex h-7 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
 									type="button"
 									size="icon-xs"
 									variant="ghost"
+									className="shrink-0 self-center"
 									aria-label={t("pdf.zoomOut")}
 									disabled={zoomLevel <= PDF_ZOOM_MIN}
 									onClick={() => zoom?.zoomOut()}
@@ -3487,7 +3488,7 @@ function PdfViewerInner({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">{t("pdf.zoomOut")}</TooltipContent>
 						</Tooltip>
-						<div className="relative">
+						<div className="flex h-6 shrink-0 items-center self-center">
 							<input
 								type="text"
 								inputMode="decimal"
@@ -3495,7 +3496,9 @@ function PdfViewerInner({
 								value={zoomField}
 								aria-label={t("pdf.zoomPercentage")}
 								title={t("pdf.zoomPercentage")}
-								className="h-6 w-12 rounded border border-transparent bg-transparent py-0 pr-3.5 pl-1 text-right font-medium text-muted-foreground text-xs tabular-nums outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+								size={Math.max(zoomField.length, 1)}
+								style={{ width: `${Math.max(zoomField.length, 1)}ch` }}
+								className="h-6 min-w-[1ch] rounded border border-transparent bg-transparent p-0 text-center font-medium text-muted-foreground text-xs leading-6 tabular-nums outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
 								onChange={(event) => setZoomField(event.target.value)}
 								onFocus={(event) => {
 									zoomFieldFocusedRef.current = true;
@@ -3523,7 +3526,7 @@ function PdfViewerInner({
 							/>
 							<span
 								aria-hidden="true"
-								className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground text-xs"
+								className="select-none text-muted-foreground text-xs leading-none"
 							>
 								%
 							</span>
@@ -3534,6 +3537,7 @@ function PdfViewerInner({
 									type="button"
 									size="icon-xs"
 									variant="ghost"
+									className="shrink-0 self-center"
 									aria-label={t("pdf.zoomIn")}
 									disabled={zoomLevel >= PDF_ZOOM_MAX}
 									onClick={() => zoom?.zoomIn()}
@@ -3549,6 +3553,7 @@ function PdfViewerInner({
 									type="button"
 									size="icon-xs"
 									variant="ghost"
+									className="shrink-0 self-center"
 									aria-label={t("pdf.zoomFit")}
 									onClick={() => zoom?.requestZoom(ZoomMode.FitWidth)}
 								>
@@ -3563,6 +3568,7 @@ function PdfViewerInner({
 									type="button"
 									size="icon-xs"
 									variant="ghost"
+									className="shrink-0 self-center"
 									aria-label={t("pdf.zoomFitPage")}
 									onClick={() => zoom?.requestZoom(ZoomMode.FitPage)}
 								>
@@ -3579,6 +3585,7 @@ function PdfViewerInner({
 									type="button"
 									size="icon-xs"
 									variant={regionSelecting ? "secondary" : "ghost"}
+									className="shrink-0 self-center"
 									aria-label={t("pdfExplain.selectRegion")}
 									aria-pressed={regionSelecting}
 									disabled={visualCropPending || !engine}
@@ -3614,6 +3621,7 @@ function PdfViewerInner({
 										type="button"
 										size="icon-xs"
 										variant="ghost"
+										className="shrink-0 self-center"
 										aria-label={t("annotations.title")}
 										onClick={onOpenAnnotations}
 									>
