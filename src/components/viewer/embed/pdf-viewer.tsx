@@ -76,11 +76,13 @@ import {
 	MessageSquareText,
 	Minimize2,
 	Minus,
+	Moon,
 	MoveVertical,
 	Plus,
 	RotateCcw,
 	ScanSearch,
 	Search,
+	Sun,
 	X,
 } from "lucide-react";
 import {
@@ -145,6 +147,7 @@ import {
 import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
@@ -161,7 +164,6 @@ import {
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
-	tracePin,
 	tracePreview,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
@@ -175,7 +177,7 @@ import {
 	writePdfAskThread,
 } from "@/lib/pdf/ask";
 import { buildPdfAskPrompt } from "@/lib/pdf/ask/prompt";
-import { threadHasUserQuestion, threadPin } from "@/lib/pdf/ask/schema";
+import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
 import type {
 	PdfAskAnchor,
 	PdfAskNormalizedRect,
@@ -207,7 +209,10 @@ import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
 	type ActiveSelectionCard,
+	type NormalizedRect,
+	normalizePageTextRects,
 	pinFromRects,
+	pinObscuresBodyText,
 	type SelectionPin,
 } from "@/lib/pdf/selection";
 import {
@@ -249,7 +254,38 @@ import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
  * selection / search / annotation overlays stay uninverted.
  */
 const PDF_PAGE_RASTER_DARK_CLASS =
-	"dark:[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
+	"[filter:invert(0.88)_hue-rotate(180deg)_brightness(1.06)_contrast(0.92)]";
+
+type PdfColorScheme = "light" | "dark";
+
+const PDF_COLOR_SCHEME_STORAGE_KEY = "agentero-pdf-color-scheme";
+const PDF_COLOR_SCHEME_EVENT = "agentero:pdf-color-scheme";
+
+function getDocumentColorScheme(): PdfColorScheme {
+	if (typeof document === "undefined") return "light";
+	return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function readPdfColorScheme(): PdfColorScheme {
+	const stored = readJsonStorage<PdfColorScheme | null>(
+		PDF_COLOR_SCHEME_STORAGE_KEY,
+		null,
+	);
+	return stored === "light" || stored === "dark"
+		? stored
+		: getDocumentColorScheme();
+}
+
+function writePdfColorScheme(next: PdfColorScheme): void {
+	writeJsonStorage(PDF_COLOR_SCHEME_STORAGE_KEY, next);
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(
+			new CustomEvent<PdfColorScheme>(PDF_COLOR_SCHEME_EVENT, {
+				detail: next,
+			}),
+		);
+	}
+}
 
 export type PdfViewerHandle = {
 	getHighlights: () => PdfHighlight[];
@@ -399,7 +435,13 @@ export function PdfViewer(props: PdfViewerProps) {
 				maxZoom: PDF_ZOOM_MAX,
 			}),
 			createPluginRegistration(InteractionManagerPluginPackage),
-			createPluginRegistration(SelectionPluginPackage),
+			createPluginRegistration(SelectionPluginPackage, {
+				// Text selection is enough for the floating menu. EmbedPDF's built-in
+				// marquee can be triggered by slight misses around glyphs and paints a
+				// large blue rectangle over the page; visual region annotation uses our
+				// explicit ScanSearch mode instead.
+				marquee: { enabled: false },
+			}),
 			createPluginRegistration(AnnotationPluginPackage, {
 				annotationAuthor: "Agentero",
 				colorPresets: HIGHLIGHT_HEX_LIST,
@@ -473,6 +515,41 @@ export function PdfViewer(props: PdfViewerProps) {
 type PdfViewerInnerProps = PdfViewerProps & { docId: string };
 
 const WHEEL_ZOOM_THRESHOLD = 100;
+
+/**
+ * Native viewport scroll → re-place floating selection cards.
+ * Must render inside DockviewViewport (ViewportElementContext).
+ */
+function ActiveCardScrollSync({
+	active,
+	onScroll,
+}: {
+	active: boolean;
+	onScroll: () => void;
+}) {
+	const viewportRef = useViewportElement();
+	const onScrollRef = useRef(onScroll);
+	onScrollRef.current = onScroll;
+	useEffect(() => {
+		if (!active) return;
+		const el = viewportRef?.current;
+		if (!el) return;
+		let raf: number | null = null;
+		const handle = () => {
+			if (raf != null) return;
+			raf = requestAnimationFrame(() => {
+				raf = null;
+				onScrollRef.current();
+			});
+		};
+		el.addEventListener("scroll", handle, { passive: true });
+		return () => {
+			if (raf != null) cancelAnimationFrame(raf);
+			el.removeEventListener("scroll", handle);
+		};
+	}, [active, viewportRef]);
+	return null;
+}
 
 /**
  * Custom Ctrl/Cmd+wheel zoom handler.
@@ -791,13 +868,25 @@ function PdfViewerInner({
 
 	const [threads, setThreads] = useState<PdfAskThread[]>([]);
 	const [translates, setTranslates] = useState<PdfTranslateRecord[]>([]);
+	/**
+	 * Per-page 0–1 text rects from PDFium `getPageTextRects` — used to decide
+	 * whether a gutter pin sits on real glyphs (translucent) vs in a free gutter.
+	 */
+	const [pageTextMap, setPageTextMap] = useState(
+		() => new Map<number, NormalizedRect[]>(),
+	);
+	const pageTextPendingRef = useRef(new Set<number>());
+	const pageTextMapRef = useRef(pageTextMap);
+	pageTextMapRef.current = pageTextMap;
 	const [visualTraces, setVisualTraces] = useState<PdfVisualSessionTrace[]>([]);
 	const [activeCard, setActiveCard] = useState<ActiveSelectionCard | null>(
 		null,
 	);
-	const [cardScreen, setCardScreen] = useState<{ x: number; y: number } | null>(
-		null,
-	);
+	const [cardScreen, setCardScreen] = useState<{
+		x: number;
+		y: number;
+		preferRight?: boolean;
+	} | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [askError, setAskError] = useState<string | null>(null);
 	const [visualStreaming, setVisualStreaming] = useState(false);
@@ -806,11 +895,14 @@ function PdfViewerInner({
 	const [visualCardExpanded, setVisualCardExpanded] = useState(false);
 	const [translateStreaming, setTranslateStreaming] = useState(false);
 	const [translateError, setTranslateError] = useState<string | null>(null);
+	const translateStreamingRef = useRef(false);
 
 	const [findOpen, setFindOpen] = useState(false);
 	const [findQuery, setFindQuery] = useState("");
 	const [outline, setOutline] = useState<PdfBookmarkObject[]>([]);
 	const [showOutline, setShowOutline] = useState(false);
+	const [pdfColorScheme, setPdfColorScheme] =
+		useState<PdfColorScheme>(readPdfColorScheme);
 	const findInputRef = useRef<HTMLInputElement>(null);
 
 	const pageFocusedRef = useRef(false);
@@ -840,12 +932,34 @@ function PdfViewerInner({
 	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
+	/** True while pointer is over the active card, pin, or source fragment. */
+	const cardHoverSurfaceRef = useRef(false);
 	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
 
 	/** Stable key for resume-reading (null for loose PDFs without a paper path). */
 	const paperKey = paperRelPath || paperAbsPath || null;
+	const pdfDark = pdfColorScheme === "dark";
+
+	const togglePdfColorScheme = useCallback(() => {
+		setPdfColorScheme((current) => {
+			const next: PdfColorScheme = current === "dark" ? "light" : "dark";
+			writePdfColorScheme(next);
+			return next;
+		});
+	}, []);
+
+	useEffect(() => {
+		const onColorSchemeChange = (event: Event) => {
+			const next = (event as CustomEvent<PdfColorScheme>).detail;
+			if (next === "light" || next === "dark") setPdfColorScheme(next);
+		};
+		window.addEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
+		return () => {
+			window.removeEventListener(PDF_COLOR_SCHEME_EVENT, onColorSchemeChange);
+		};
+	}, []);
 
 	useEffect(() => {
 		setCitations([]);
@@ -889,6 +1003,69 @@ function PdfViewerInner({
 		() => toSummaries(threads.filter(threadHasUserQuestion)),
 		[threads],
 	);
+
+	// Load real page text geometry for pages that have pins (or near the viewport).
+	useEffect(() => {
+		if (!engine || !docCap || totalPages <= 0) return;
+		const doc = docCap.getDocument(docId);
+		if (!doc) return;
+
+		const need = new Set<number>();
+		const from = Math.max(0, currentPage - 2);
+		const to = Math.min(totalPages, currentPage + 2);
+		for (let i = from; i < to; i++) need.add(i);
+		for (const tr of translates) {
+			if (!tr.error) need.add(tr.page - 1);
+		}
+		for (const th of threads) {
+			if (threadHasUserQuestion(th)) need.add(th.anchor.page - 1);
+		}
+		for (const h of highlights) {
+			if (h.comment?.trim()) need.add(h.page - 1);
+		}
+		for (const v of visualTraces) need.add(v.page - 1);
+
+		for (const pageIndex of need) {
+			if (
+				pageTextMapRef.current.has(pageIndex) ||
+				pageTextPendingRef.current.has(pageIndex)
+			) {
+				continue;
+			}
+			const page = doc.pages[pageIndex];
+			if (!page) continue;
+			pageTextPendingRef.current.add(pageIndex);
+			void engine
+				.getPageTextRects(doc, page)
+				.toPromise()
+				.then((rects) => {
+					const norm = normalizePageTextRects(rects, page.size);
+					setPageTextMap((prev) => {
+						if (prev.get(pageIndex) === norm) return prev;
+						const next = new Map(prev);
+						next.set(pageIndex, norm);
+						return next;
+					});
+				})
+				.catch(() => {
+					// Leave unloaded; pins stay solid until text geometry is available.
+				})
+				.finally(() => {
+					pageTextPendingRef.current.delete(pageIndex);
+				});
+		}
+	}, [
+		engine,
+		docCap,
+		docId,
+		totalPages,
+		currentPage,
+		translates,
+		threads,
+		highlights,
+		visualTraces,
+	]);
+
 	const activeThread = useMemo(() => {
 		if (activeCard?.kind !== "ask") return null;
 		return threads.find((th) => th.id === activeCard.id) ?? null;
@@ -901,6 +1078,16 @@ function PdfViewerInner({
 		if (activeCard?.kind !== "agent-trace") return null;
 		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [visualTraces, activeCard]);
+	const visualDraftRegion = useMemo(
+		() =>
+			visualDraftEditor
+				? {
+						page: visualDraftEditor.page,
+						region: visualDraftEditor.region,
+					}
+				: null,
+		[visualDraftEditor],
+	);
 
 	// ---- Highlights (EmbedPDF annotations) ----
 
@@ -1055,6 +1242,7 @@ function PdfViewerInner({
 					updatedAt: new Date().toISOString(),
 				});
 			}
+			translateStreamingRef.current = false;
 			setTranslateStreaming(false);
 			setTranslateError(message);
 		},
@@ -1077,14 +1265,21 @@ function PdfViewerInner({
 		})();
 	}, [paperAbsPath]);
 
-	// Refresh agent-trace pins when this viewer is active (dock may keep
-	// inactive PDFs mounted under pdfKeepMounted — avoid N× listMarkRaw polls).
+	// Refresh ask conversation cards + agent-trace pins when this viewer is
+	// active (dock may keep inactive PDFs mounted under pdfKeepMounted —
+	// avoid N× listMarkRaw polls). Covers Agent-panel writes that create ask
+	// threads from 「加入对话」 selections while this tab was open.
 	useEffect(() => {
 		if (!paperAbsPath || !marksLoadedRef.current || !isActive) return;
 		let cancelled = false;
 		const refresh = () => {
-			void listPdfVisualTraces(paperAbsPath).then((traces) => {
-				if (!cancelled) setVisualTraces(traces);
+			void Promise.all([
+				listPdfAskThreads(paperAbsPath),
+				listPdfVisualTraces(paperAbsPath),
+			]).then(([asks, traces]) => {
+				if (cancelled) return;
+				setThreads(asks);
+				setVisualTraces(traces);
 			});
 		};
 		// Immediate refresh on become-active (covers Agent multi-turn writes
@@ -1110,39 +1305,45 @@ function PdfViewerInner({
 		onVisualTracesChangeRef.current?.(visualTraces);
 	}, [visualTraces]);
 
-	const cardScreenRef = useRef<{ x: number; y: number } | null>(null);
+	const cardScreenRef = useRef<{
+		x: number;
+		y: number;
+		preferRight?: boolean;
+	} | null>(null);
 	/**
-	 * Place the open pin card next to its anchor. Returns false when the page
-	 * DOM is not mounted yet (virtualized) so callers can retry — never flash
-	 * a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 * Place the open pin card next to its gutter pin. Returns false when the
+	 * page DOM is not mounted yet (virtualized) so callers can retry — never
+	 * flash a top-left fallback while EmbedPDF is still scrolling/rendering.
+	 *
+	 * Uses the same pinFromRects(+pageText) side choice as the gutter so a
+	 * left-side pin does not open the dialog on the far right of the selection.
 	 */
 	const placeActiveCard = useCallback((card: ActiveSelectionCard): boolean => {
 		const host = hostRef.current;
 		if (!host) return false;
 		let page = 1;
 		let rects: PdfAskAnchor["rects"] = [];
-		let pin: { x: number; y: number } | null = null;
 		if (card.kind === "ask") {
 			const thread = threadsRef.current.find((th) => th.id === card.id);
 			if (!thread) return false;
 			page = thread.anchor.page;
 			rects = thread.anchor.rects;
-			pin = threadPin(thread);
 		} else if (card.kind === "translate") {
 			const tr = translatesRef.current.find((r) => r.id === card.id);
 			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
-			pin = pinFromRects(tr.rects);
 		} else if (card.kind === "agent-trace") {
 			const tr = visualTracesRef.current.find((item) => item.id === card.id);
 			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
-			pin = tracePin(tr);
 		} else {
 			return false;
 		}
+		// Same side choice as the gutter pin (page text → may flip left).
+		const pageText = pageTextMapRef.current.get(page - 1);
+		const pin = pinFromRects(rects, pageText);
 		const pageEl = pageElByIndex(host, page - 1);
 		const pt = popoverScreenPoint(pageEl, rects, pin);
 		// Target page not in the virtual DOM yet — keep cardScreen null so the
@@ -1154,7 +1355,8 @@ function PdfViewerInner({
 		if (
 			prev &&
 			Math.round(prev.x) === Math.round(pt.x) &&
-			Math.round(prev.y) === Math.round(pt.y)
+			Math.round(prev.y) === Math.round(pt.y) &&
+			prev.preferRight === pt.preferRight
 		) {
 			return true;
 		}
@@ -1203,16 +1405,35 @@ function PdfViewerInner({
 			setVisualError(null);
 			setVisualCardExpanded(false);
 		}
+		cardHoverSurfaceRef.current = false;
 		setActiveCard(null);
 		cardScreenRef.current = null;
 		setCardScreen(null);
 		setEditor(null);
 	}, [discardIfEmptyDraft]);
 
+	const markCardHoverEnter = useCallback(() => {
+		cardHoverSurfaceRef.current = true;
+		cancelHoverHide();
+	}, [cancelHoverHide]);
+
+	/**
+	 * Leave pin / card / source fragment. Translate cards hide when nothing is
+	 * hovered (unless still streaming). Ask / visual keep the existing 1s delay.
+	 */
 	const scheduleHoverHide = useCallback(() => {
+		cardHoverSurfaceRef.current = false;
 		cancelHoverHide();
 		hidePopoverTimerRef.current = setTimeout(() => {
 			hidePopoverTimerRef.current = null;
+			if (cardHoverSurfaceRef.current) return;
+			// Ephemeral translate result: stay open only while streaming or hovered.
+			if (
+				activeCardRef.current?.kind === "translate" &&
+				translateStreamingRef.current
+			) {
+				return;
+			}
 			hideActiveCard();
 		}, 1000);
 	}, [cancelHoverHide, hideActiveCard]);
@@ -1224,11 +1445,25 @@ function PdfViewerInner({
 			if (activeSessionRef.current === sid) activeSessionRef.current = null;
 			translateSessionRef.current = null;
 		}
+		translateStreamingRef.current = false;
 		setTranslateStreaming(false);
 	}, []);
 
+	// Translate cards are ephemeral: once streaming ends, auto-hide unless the
+	// pointer is still over the card, pin, or source highlight.
+	const activeTranslateCardId =
+		activeCard?.kind === "translate" ? activeCard.id : null;
+	useEffect(() => {
+		if (!activeTranslateCardId) return;
+		if (translateStreaming) return;
+		if (cardHoverSurfaceRef.current) return;
+		scheduleHoverHide();
+	}, [activeTranslateCardId, translateStreaming, scheduleHoverHide]);
+
 	const openCard = useCallback(
 		(card: ActiveSelectionCard) => {
+			// Pin/menu open: cancel pending hide. Hover surface is set by
+			// pin/card enter handlers — menu-open starts with surface false.
 			cancelHoverHide();
 			if (
 				activeCardRef.current?.kind === "translate" &&
@@ -2056,11 +2291,14 @@ function PdfViewerInner({
 		selectionCap?.clear(docId);
 		if (!quote) return;
 		// Re-publish after clear: clearing the PDF selection also drops the live chip.
+		// Keep page geometry so the next Agent turn can write a conversation card pin.
 		publishSelection({
 			text: quote,
 			sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
 			origin: "pdf",
 			page: anchor.page,
+			rects: anchor.rects,
+			paperAbsPath: paperAbsPath ?? undefined,
 		});
 		pinActiveSelection();
 		openRightTab("agent");
@@ -2082,7 +2320,10 @@ function PdfViewerInner({
 			quote,
 		});
 		upsertTranslate(rec);
+		// Menu action is not a hover surface; card auto-hides after result.
+		cardHoverSurfaceRef.current = false;
 		openCard({ kind: "translate", id: rec.id });
+		translateStreamingRef.current = true;
 		setTranslateStreaming(true);
 		setTranslateError(null);
 
@@ -2130,6 +2371,7 @@ function PdfViewerInner({
 							translateSessionRef.current = null;
 						if (activeSessionRef.current === sessionId)
 							activeSessionRef.current = null;
+						translateStreamingRef.current = false;
 						setTranslateStreaming(false);
 					};
 					unsubs.push(
@@ -2200,6 +2442,7 @@ function PdfViewerInner({
 				};
 				upsertTranslate(next);
 				void persistTranslate(next);
+				translateStreamingRef.current = false;
 				setTranslateStreaming(false);
 				setTranslateError(null);
 			} catch (e) {
@@ -2258,6 +2501,8 @@ function PdfViewerInner({
 					sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
 					origin: "pdf",
 					page: anchor.page,
+					rects: anchor.rects,
+					paperAbsPath: paperAbsPath ?? undefined,
 				});
 			})();
 		});
@@ -2274,32 +2519,43 @@ function PdfViewerInner({
 		};
 	}, [selectionCap, docCap, docId, paperRelPath, paperAbsPath]);
 
+	const rePlaceActiveCardOnScroll = useCallback(() => {
+		if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+	}, [placeActiveCard]);
+
 	// Re-anchor the active pin modal on scroll + zoom. zoomLevel forces
 	// re-placement after zoom. Use scrollReady (boolean) — not `scroll` —
 	// because EmbedPDF returns a new scope object every render; depending on
 	// it re-fired this effect → setCardScreen → re-render → Maximum update depth
 	// when a modal card was open (visual-trace chat + agent panel re-renders).
+	// Native wheel scroll is handled by ActiveCardScrollSync (viewport element).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady/zoomLevel are intentional re-place triggers
 	useEffect(() => {
 		if (!activeCard) return;
 		// Force re-place after zoom / card change even if rounded coords match.
 		cardScreenRef.current = null;
 		placeActiveCard(activeCard);
-		const scrollScope = scrollRef.current;
-		if (!scrollScope) return;
 		let raf: number | null = null;
-		const off = scrollScope.onScroll(() => {
+		const rePlace = () => {
 			if (raf != null) return;
 			raf = requestAnimationFrame(() => {
 				raf = null;
-				if (activeCardRef.current) placeActiveCard(activeCardRef.current);
+				rePlaceActiveCardOnScroll();
 			});
-		});
+		};
+		const scrollScope = scrollRef.current;
+		const offPlugin = scrollScope?.onScroll(rePlace) ?? (() => undefined);
 		return () => {
 			if (raf != null) cancelAnimationFrame(raf);
-			off();
+			offPlugin();
 		};
-	}, [activeCard, scrollReady, placeActiveCard, zoomLevel]);
+	}, [
+		activeCard,
+		scrollReady,
+		placeActiveCard,
+		zoomLevel,
+		rePlaceActiveCardOnScroll,
+	]);
 
 	// Run a debounced full-document search as the query changes.
 	useEffect(() => {
@@ -2637,10 +2893,17 @@ function PdfViewerInner({
 			height: number;
 		}) => {
 			const pageNumber = pageIndex + 1;
+			const pageText = pageTextMap.get(pageIndex);
+			const activeAskOnPage =
+				activeThread?.anchor.page === pageNumber ? activeThread : null;
 			const activeTranslateOnPage =
 				activeTranslate?.page === pageNumber ? activeTranslate : null;
 			const activeVisualOnPage =
 				activeVisualTrace?.page === pageNumber ? activeVisualTrace : null;
+			const visualDraftRegionOnPage =
+				visualDraftRegion?.page === pageNumber
+					? visualDraftRegion.region
+					: null;
 			const pins: SelectionPin[] = [
 				...highlights
 					.filter(
@@ -2656,56 +2919,61 @@ function PdfViewerInner({
 						const pageWidth = width / zoomRef.current;
 						const pageHeight = height / zoomRef.current;
 						if (pageWidth <= 0 || pageHeight <= 0) return [];
+						const normRect = {
+							x: obj.rect.origin.x / pageWidth,
+							y: obj.rect.origin.y / pageHeight,
+							w: obj.rect.size.width / pageWidth,
+							h: obj.rect.size.height / pageHeight,
+						};
+						const pin = pinFromRects([normRect], pageText);
 						return [
 							{
 								id: highlight.id,
 								kind: "annotate",
-								x: Math.min(
-									0.98,
-									Math.max(
-										0.02,
-										(obj.rect.origin.x + obj.rect.size.width) / pageWidth,
-									),
-								),
-								y: Math.min(
-									0.98,
-									Math.max(
-										0.02,
-										(obj.rect.origin.y + obj.rect.size.height / 2) / pageHeight,
-									),
-								),
+								x: pin.x,
+								y: pin.y,
 								preview: highlight.comment?.trim() ?? highlight.id,
+								overText: pinObscuresBodyText(pin, pageText),
+								side: pin.side,
 							},
 						];
 					}),
 				...askSummaries
 					.filter((s) => s.page === pageNumber)
-					.map(
-						(s): SelectionPin => ({
+					.map((s): SelectionPin => {
+						const thread = threads.find((th) => th.id === s.id);
+						const pin = thread
+							? pinFromRects(thread.anchor.rects, pageText)
+							: { x: s.x, y: s.y, side: "right" as const };
+						return {
 							id: s.id,
 							kind: "ask",
-							x: s.x,
-							y: s.y,
+							x: pin.x,
+							y: pin.y,
 							preview: s.preview,
 							ended: s.status === "ended",
-						}),
-					),
+							overText: pinObscuresBodyText(pin, pageText),
+							side: pin.side,
+						};
+					}),
 				...translates
 					.filter((tr) => tr.page === pageNumber && !tr.error)
 					.map((tr): SelectionPin => {
-						const pin = pinFromRects(tr.rects);
+						const pin = pinFromRects(tr.rects, pageText);
 						return {
 							id: tr.id,
 							kind: "translate",
 							x: pin.x,
 							y: pin.y,
 							preview: tr.result?.trim() || tr.quote?.trim() || tr.id,
+							overText: pinObscuresBodyText(pin, pageText),
+							side: pin.side,
 						};
 					}),
 				...visualTraces
 					.filter((tr) => tr.page === pageNumber)
 					.map((tr): SelectionPin => {
-						const pin = tracePin(tr);
+						const pin = pinFromRects(tr.rects, pageText);
 						return {
 							id: tr.id,
 							kind: "agent-trace",
@@ -2714,14 +2982,19 @@ function PdfViewerInner({
 							preview: tracePreview(tr),
 							ended: tr.status !== "running",
 							traceId: tr.id,
+							overText: pinObscuresBodyText(pin, pageText),
+							side: pin.side,
 						};
 					}),
 			];
-			// Page shell: paper-white in light mode; near-black when the app is dark
+			// Page shell: paper-white in light mode; near-black when PDF dark mode is on
 			// so loading gaps match inverted page rasters.
 			return (
 				<div
-					className="relative overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
+					className={cn(
+						"relative overflow-hidden rounded-sm shadow-sm ring-1",
+						pdfDark ? "bg-zinc-900 ring-white/10" : "bg-white ring-black/5",
+					)}
 					style={{ width, height }}
 					{...{ [EMBED_PAGE_ATTR]: pageIndex }}
 				>
@@ -2734,13 +3007,13 @@ function PdfViewerInner({
 					<RenderLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						className={PDF_PAGE_RASTER_DARK_CLASS}
+						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<TilingLayer
 						documentId={docId}
 						pageIndex={pageIndex}
-						className={PDF_PAGE_RASTER_DARK_CLASS}
+						className={pdfDark ? PDF_PAGE_RASTER_DARK_CLASS : undefined}
 						style={{ position: "absolute", inset: 0 }}
 					/>
 					<SearchLayer
@@ -2775,11 +3048,12 @@ function PdfViewerInner({
 								handleVisualRegionSelect(pageNumber, region)
 							}
 						/>
-						{activeTranslateOnPage
-							? activeTranslateOnPage.rects.map((rect) => (
+						{/* Open ask conversation card: highlight the anchored selection. */}
+						{activeAskOnPage
+							? activeAskOnPage.anchor.rects.map((rect) => (
 									<div
-										key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-										className="pointer-events-none absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
+										key={`${activeAskOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-auto absolute z-[1] rounded-[2px] bg-amber-300/45 dark:bg-amber-400/35"
 										style={{
 											left: `${rect.x * 100}%`,
 											top: `${rect.y * 100}%`,
@@ -2787,15 +3061,47 @@ function PdfViewerInner({
 											height: `${rect.h * 100}%`,
 										}}
 										aria-hidden="true"
+										onMouseEnter={markCardHoverEnter}
+										onMouseLeave={scheduleHoverHide}
 									/>
 								))
 							: null}
-						{/* Active visual mark: dashed theme outline of the crop region. */}
+						{activeTranslateOnPage
+							? activeTranslateOnPage.rects.map((rect) => (
+									<div
+										key={`${activeTranslateOnPage.id}-source-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+										className="pointer-events-auto absolute z-[1] rounded-[2px] bg-yellow-300/40 dark:bg-yellow-400/35"
+										style={{
+											left: `${rect.x * 100}%`,
+											top: `${rect.y * 100}%`,
+											width: `${rect.w * 100}%`,
+											height: `${rect.h * 100}%`,
+										}}
+										aria-hidden="true"
+										onMouseEnter={markCardHoverEnter}
+										onMouseLeave={scheduleHoverHide}
+									/>
+								))
+							: null}
+						{/* Open visual draft / mark: show the framed source region on-page. */}
+						{visualDraftRegionOnPage ? (
+							<div
+								className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								style={{
+									left: `${visualDraftRegionOnPage.x * 100}%`,
+									top: `${visualDraftRegionOnPage.y * 100}%`,
+									width: `${visualDraftRegionOnPage.w * 100}%`,
+									height: `${visualDraftRegionOnPage.h * 100}%`,
+								}}
+								aria-hidden="true"
+							/>
+						) : null}
+						{/* Active visual mark: theme outline of the crop region. */}
 						{activeVisualOnPage
 							? activeVisualOnPage.rects.map((rect) => (
 									<div
 										key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-										className="pointer-events-none absolute z-[1] rounded-sm border border-dashed border-primary/45 bg-primary/5"
+										className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 										style={{
 											left: `${rect.x * 100}%`,
 											top: `${rect.y * 100}%`,
@@ -2810,7 +3116,7 @@ function PdfViewerInner({
 							items={pins}
 							activeId={activeCard?.id ?? null}
 							onOpen={handleOpenPin}
-							onEnter={cancelHoverHide}
+							onEnter={markCardHoverEnter}
 							onLeave={scheduleHoverHide}
 						/>
 					</PagePointerProvider>
@@ -2822,13 +3128,17 @@ function PdfViewerInner({
 			highlights,
 			annotationCap,
 			askSummaries,
+			threads,
 			visualTraces,
 			translates,
+			pageTextMap,
+			activeThread,
 			activeTranslate,
 			activeVisualTrace,
+			visualDraftRegion,
 			activeCard?.id,
 			handleOpenPin,
-			cancelHoverHide,
+			markCardHoverEnter,
 			scheduleHoverHide,
 			citationLinks,
 			handleCitationLinkActivate,
@@ -2836,9 +3146,14 @@ function PdfViewerInner({
 			regionSelecting,
 			visualCropPending,
 			handleVisualRegionSelect,
+			pdfDark,
 			t,
 		],
 	);
+
+	const pdfColorSchemeLabel = pdfDark
+		? t("pdf.useLightMode")
+		: t("pdf.useDarkMode");
 
 	return (
 		<div ref={hostRef} className="relative flex h-full min-h-0 w-full flex-col">
@@ -3061,6 +3376,27 @@ function PdfViewerInner({
 								<Button
 									type="button"
 									size="icon-xs"
+									variant="ghost"
+									aria-label={pdfColorSchemeLabel}
+									aria-pressed={pdfDark}
+									onClick={togglePdfColorScheme}
+								>
+									{pdfDark ? (
+										<Sun className="size-3.5" />
+									) : (
+										<Moon className="size-3.5" />
+									)}
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{pdfColorSchemeLabel}
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
 									variant={regionSelecting ? "secondary" : "ghost"}
 									aria-label={t("pdfExplain.selectRegion")}
 									aria-pressed={regionSelecting}
@@ -3141,6 +3477,10 @@ function PdfViewerInner({
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 			>
 				<WheelZoomHandler docId={docId} />
+				<ActiveCardScrollSync
+					active={Boolean(activeCard)}
+					onScroll={rePlaceActiveCardOnScroll}
+				/>
 				{/* Pinch zoom still handled by EmbedPDF; wheel zoom is replaced above so
 				    the step size matches the toolbar +/- buttons. */}
 				<ZoomGestureWrapper documentId={docId} enableWheel={false}>
@@ -3169,8 +3509,6 @@ function PdfViewerInner({
 							{visualDraftEditor ? (
 								<VisualAnnotationEditor
 									screen={visualDraftEditor.screen}
-									page={visualDraftEditor.page}
-									image={visualDraftEditor.image}
 									onSave={handleVisualDraftSave}
 									onSendNow={handleVisualSendNow}
 									onClose={() => setVisualDraftEditor(null)}
@@ -3195,13 +3533,14 @@ function PdfViewerInner({
 								<AskPopover
 									thread={activeThread}
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									streaming={streaming}
 									error={askError}
 									onSend={handleSend}
 									onResend={handleResend}
 									onHide={handleHide}
 									onDelete={handleDelete}
-									onPointerEnter={cancelHoverHide}
+									onPointerEnter={markCardHoverEnter}
 									onPointerLeave={scheduleHoverHide}
 									onStop={() => {
 										const sid = activeSessionRef.current;
@@ -3216,8 +3555,8 @@ function PdfViewerInner({
 							{activeVisualTrace && cardScreen ? (
 								<VisualTraceCard
 									trace={activeVisualTrace}
-									paperAbsPath={paperAbsPath ?? undefined}
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									streaming={visualStreaming}
 									error={visualError}
 									initialExpanded={visualCardExpanded}
@@ -3225,7 +3564,7 @@ function PdfViewerInner({
 									onSend={handleVisualContinue}
 									onDelete={handleDeleteVisualTrace}
 									onHide={hideActiveCard}
-									onPointerEnter={cancelHoverHide}
+									onPointerEnter={markCardHoverEnter}
 									onPointerLeave={scheduleHoverHide}
 									onStop={handleStopVisualSession}
 								/>
@@ -3234,13 +3573,14 @@ function PdfViewerInner({
 							{activeTranslate && cardScreen ? (
 								<TranslateCard
 									screen={cardScreen}
+									preferRight={cardScreen.preferRight ?? true}
 									result={activeTranslate.result ?? ""}
 									streaming={translateStreaming}
 									error={translateError ?? activeTranslate.error ?? null}
 									onOpenSettings={() => onOpenSettings?.()}
 									onHide={hideActiveCard}
 									onDelete={deleteTranslateCard}
-									onPointerEnter={cancelHoverHide}
+									onPointerEnter={markCardHoverEnter}
 									onPointerLeave={scheduleHoverHide}
 								/>
 							) : null}
@@ -3251,7 +3591,7 @@ function PdfViewerInner({
 									initialComment={editor.comment}
 									onSave={saveEditor}
 									onClose={() => setEditor(null)}
-									onPointerEnter={cancelHoverHide}
+									onPointerEnter={markCardHoverEnter}
 									onPointerLeave={scheduleHoverHide}
 								/>
 							) : null}

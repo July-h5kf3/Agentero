@@ -23,20 +23,32 @@ const PILL = 20;
 const GAP = 4;
 
 /**
- * Nudge overlapping pins so they stay clickable while staying near anchors.
+ * Nudge overlapping pins vertically so they stay clickable.
+ * Keeps x on the line side (does not slide pins into mid-line).
  * Positions are page-normalized 0–1; page size used only for collision in px.
  */
 function layoutPins(
 	items: SelectionPin[],
 	pageW: number,
 	pageH: number,
-): Array<{ id: string; leftPct: number; topPct: number }> {
+): Array<{
+	id: string;
+	leftPct: number;
+	topPct: number;
+	side: "left" | "right";
+}> {
 	const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
-	const placed: Array<{ id: string; x: number; y: number }> = [];
+	const placed: Array<{
+		id: string;
+		x: number;
+		y: number;
+		side: "left" | "right";
+	}> = [];
 
 	for (const it of sorted) {
 		let x = it.x;
 		let y = it.y;
+		const side = it.side ?? "right";
 		let guard = 0;
 		while (guard < 12) {
 			let hit = false;
@@ -44,6 +56,7 @@ function layoutPins(
 				const dx = (x - p.x) * pageW;
 				const dy = (y - p.y) * pageH;
 				if (Math.hypot(dx, dy) < PILL + GAP) {
+					// Stack vertically only — preserve side-of-line x.
 					y += (PILL + GAP) / (pageH || 1);
 					hit = true;
 					break;
@@ -54,13 +67,14 @@ function layoutPins(
 		}
 		y = Math.min(0.98, Math.max(0.02, y));
 		x = Math.min(0.98, Math.max(0.02, x));
-		placed.push({ id: it.id, x, y });
+		placed.push({ id: it.id, x, y, side });
 	}
 
 	return placed.map((p) => ({
 		id: p.id,
 		leftPct: p.x * 100,
 		topPct: p.y * 100,
+		side: p.side,
 	}));
 }
 
@@ -80,6 +94,10 @@ function pinIcon(kind: SelectionPin["kind"]) {
 /**
  * Unified page pins for selection workflows: ask / annotate / translate / agent-trace.
  * Hover opens the kind-specific card (ask / translate / visual-trace preview).
+ *
+ * Default appearance is solid (unchanged). Only pins flagged `overText` render
+ * translucent at rest so body text stays readable; hover / focus / active
+ * restore full opacity.
  */
 export function SelectionGutter({
 	items,
@@ -113,41 +131,58 @@ export function SelectionGutter({
 								: t("selection.translatePinAria", { preview: item.preview });
 				// agent-trace activeCard.id is the per-annotation pin id.
 				const isActive = activeId === item.id;
+				// Opacity may change on hover/active; transform must stay fixed to
+				// `side` or the pin jumps when isActive flips dimForText.
+				const dimForText = Boolean(item.overText) && !isActive;
+				const wrapTransform =
+					pos.side === "left"
+						? "translate(calc(-100% - 2px), -50%)"
+						: "translate(2px, -50%)";
 
 				return (
-					<button
+					<div
 						key={`${item.kind}-${item.id}`}
-						type="button"
-						className={cn(
-							"pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border shadow-sm transition-transform hover:scale-110",
-							item.kind === "ask" && item.ended
-								? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
-								: item.kind === "translate"
-									? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
-									: item.kind === "agent-trace"
-										? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
-										: "border-border/80 bg-background text-muted-foreground",
-							isActive && "ring-2 ring-ring ring-offset-1",
-						)}
-						style={{ left: `${pos.leftPct}%`, top: `${pos.topPct}%` }}
-						aria-label={aria}
-						onMouseEnter={() => {
-							onEnter?.(item);
-							onOpen(item);
-						}}
-						onMouseLeave={() => onLeave?.(item)}
-						onFocus={() => {
-							onEnter?.(item);
-							onOpen(item);
-						}}
-						onClick={(e) => {
-							e.stopPropagation();
-							onEnter?.(item);
-							onOpen(item);
+						className="pointer-events-auto absolute"
+						style={{
+							left: `${pos.leftPct}%`,
+							top: `${pos.topPct}%`,
+							transform: wrapTransform,
 						}}
 					>
-						<Icon className="size-3.5" strokeWidth={2} />
-					</button>
+						<button
+							type="button"
+							className={cn(
+								"flex size-6 items-center justify-center rounded-md border shadow-sm transition-[opacity,background-color] duration-150 hover:scale-110",
+								item.kind === "ask" && item.ended
+									? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
+									: item.kind === "translate"
+										? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
+										: item.kind === "agent-trace"
+											? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
+											: "border-border/80 bg-background text-muted-foreground",
+								dimForText &&
+									"bg-background/55 opacity-40 backdrop-blur-[1px] hover:bg-background hover:opacity-100 focus-visible:bg-background focus-visible:opacity-100",
+								isActive && "ring-2 ring-ring ring-offset-1",
+							)}
+							aria-label={aria}
+							onMouseEnter={() => {
+								onEnter?.(item);
+								onOpen(item);
+							}}
+							onMouseLeave={() => onLeave?.(item)}
+							onFocus={() => {
+								onEnter?.(item);
+								onOpen(item);
+							}}
+							onClick={(e) => {
+								e.stopPropagation();
+								onEnter?.(item);
+								onOpen(item);
+							}}
+						>
+							<Icon className="size-3.5" strokeWidth={2} />
+						</button>
+					</div>
 				);
 			})}
 		</div>

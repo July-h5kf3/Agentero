@@ -35,10 +35,6 @@ Agentero 基于 Tauri 2 + React 19，本地优先，Vault 文件与 Catalog SQLi
 - **论文 NOTES**：默认左右分屏（PDF/HTML 左、`NOTES.md` 右）；多篇 paper 叠到同一两栏；body/NOTES tab 同步切换。
 - **错误 Toast**：右上角 Sonner，经 `notifyError`（`src/lib/core/notify.ts`）；表单就地校验不走 Toast。
 
-### 禅模式
-
-`⌥⌘Z` / Layout 菜单进入。全屏 Agent 对话，复用 AI Elements `AgentPanel`（`variant="zen"`）。左侧栏弱对比历史；精读/PDF 划词等后台运行不进对话历史。
-
 ## 核心工作流
 
 ### 论文入库
@@ -68,7 +64,7 @@ BYOA，连接本机 ACP Agent。详见 [frontend/agent.md](frontend/agent.md) / 
 
 - **空态**：建议 chips → `summary` / `qa` / `related_work`。
 - **上下文**：当前论文默认加入（实心 chip，可 X 移除）。`@` 提及与文件树拖入为可移除 context chip。
-- **选区上下文**：Markdown/PDF 选中文字 → 瞬时选区 chip（虚线）；`⌘L` 或「加入对话」固定为 chip。发送时以引用块消费。
+- **选区上下文**：Markdown/PDF 选中文字 → 瞬时选区 chip（虚线）；`⌘L` 或「加入对话」固定为 chip。发送时以引用块消费；PDF 带几何的选区在发送后插入 `kind: ask` 对话卡片页边针（非视觉批注）。
 - **运行中继续输入**：后续消息进 Queue waitlist，当前回复结束后自动发送。
 - **权限**：全局模式 `restricted`（默认）/ `ask` / `auto`。`ask` 时弹权限对话框。
 - **个人偏好**：`agentPersonalPrompt` 非空时经 Host `build_prompt` 注入 envelope。

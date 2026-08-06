@@ -2,7 +2,7 @@
 
 ## 布局
 
-- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`）。
+- **左栏**：文件树 + Paper Info（显示最近选中的论文；切换到非论文文档时保持不消失；无卡片容器、常驻 collapsible；上边缘可拖拽调整高度，`preserve-pixel-size`；arXiv 论文在资源按钮下显示魔搭论文解读与 alphaXiv 外链）。
 - **中间**：无 Vault 欢迎页；有 Vault 时为全局 Dockview（见 [workspace.md](workspace.md)）。
 - **右栏**（可选）：Agent / Backlinks / 批注 / **References**（同样 collapsible）。
   - References：当前激活 paper 的参考文献卡片（数据来自 `agentero-cite.json` sidecar，Host `paper_refs_list` / `paper_refs_parse`）。卡片含编号 `[n]`、标题（无标题回退 raw）、首作者 et al. · 年份 · venue、DOI/arXiv 徽标；已入库（`localMatch`）卡片点击打开库内论文，未入库 hover 出「导入文库」（走魔棒管线）；顶部过滤框 + header 重解析按钮。实现：`src/components/viewer/references-panel.tsx`、`src/lib/paper/refs.ts`。
@@ -47,7 +47,6 @@
 | `⌘N` | 新窗口 |
 | `⌘W` / `Esc` | 关弹层 → 关 panel → 关窗 |
 | `⌥⌘←/→` | 循环 Dockview panel |
-| `⌥⌘Z` | Agent 禅模式 |
 | `⌘P` / `⌘K` | 快速打开 |
 | `⇧⌘P` | 命令面板 |
 | `⇧⌘I` | 魔棒 |

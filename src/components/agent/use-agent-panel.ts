@@ -114,6 +114,7 @@ import {
 	currentSelections,
 	type SelectionContext,
 	selectionsPromptBlock,
+	selectionsWithPdfAnchor,
 } from "@/lib/agent/selection-store";
 import {
 	type AcpCommand,
@@ -152,6 +153,14 @@ import {
 	isVisualTraceHistoryId,
 	visualTraceHistoryId,
 } from "@/lib/pdf/agent-trace/open-session";
+import {
+	appendAskAssistantMessage,
+	createAskThreadFromAgentSelection,
+	readPdfAskThread,
+	rememberPendingAskThreads,
+	takePendingAskThreads,
+	writePdfAskThread,
+} from "@/lib/pdf/ask";
 import { loadSettings } from "@/lib/settings";
 import { clearAgentSessionOpenRequest } from "@/lib/shell/ui-store";
 import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
@@ -175,7 +184,6 @@ export type UseAgentPanelArgs = Pick<
 	| "vaultPaperPaths"
 	| "paperMetaByRelPath"
 	| "paperTreeLabelMode"
-	| "variant"
 >;
 
 export function useAgentPanel({
@@ -187,9 +195,7 @@ export function useAgentPanel({
 	vaultPaperPaths = [],
 	paperMetaByRelPath = null,
 	paperTreeLabelMode = "title-author",
-	variant = "sidebar",
 }: UseAgentPanelArgs) {
-	const isZen = variant === "zen";
 	const { t, i18n } = useTranslation("agent");
 	/**
 	 * Focused document as Vault-relative context path.
@@ -790,6 +796,53 @@ export function useAgentPanel({
 		[],
 	);
 
+	/** Finalize PDF selection → ask conversation cards created on this Agent turn. */
+	const finalizeAskThreads = useCallback(
+		async (
+			runtimeSessionId: string,
+			outcome:
+				| {
+						kind: "completed";
+						answerSnapshot?: string;
+						sources?: string[];
+				  }
+				| {
+						kind: "failed";
+						error: string;
+						answerSnapshot?: string;
+				  },
+		) => {
+			const pending = takePendingAskThreads(runtimeSessionId);
+			if (!pending.length) return;
+			const content =
+				outcome.kind === "completed"
+					? (outcome.answerSnapshot ?? "").trim()
+					: (outcome.answerSnapshot ?? outcome.error).trim() || outcome.error;
+			if (!content) return;
+			const sources =
+				outcome.kind === "completed" && outcome.sources?.length
+					? outcome.sources.map((uri) => ({ uri }))
+					: undefined;
+			await Promise.all(
+				pending.map(async ({ paperAbsPath, threadId }) => {
+					try {
+						const current = await readPdfAskThread(paperAbsPath, threadId);
+						if (!current) return;
+						const next = appendAskAssistantMessage(current, {
+							content,
+							agentSessionId: runtimeSessionId,
+							sources,
+						});
+						await writePdfAskThread(paperAbsPath, next);
+					} catch {
+						// Ask card persistence is best-effort; chat already completed.
+					}
+				}),
+			);
+		},
+		[],
+	);
+
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -836,6 +889,11 @@ export function useAgentPanel({
 					kind: "failed",
 					error: t("messages.cancelled"),
 					providerSessionId: ev.providerSessionId,
+					answerSnapshot: ev.content,
+				});
+				void finalizeAskThreads(ev.sessionId, {
+					kind: "failed",
+					error: t("messages.cancelled"),
 					answerSnapshot: ev.content,
 				});
 				return;
@@ -907,8 +965,14 @@ export function useAgentPanel({
 				answerSnapshot: ev.content,
 				sources: ev.sources,
 			});
+			void finalizeAskThreads(ev.sessionId, {
+				kind: "completed",
+				answerSnapshot: ev.content,
+				sources: ev.sources,
+			});
 		},
 		[
+			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
 			t,
@@ -945,8 +1009,13 @@ export function useAgentPanel({
 				kind: "failed",
 				error,
 			});
+			void finalizeAskThreads(sessionId, {
+				kind: "failed",
+				error,
+			});
 		},
 		[
+			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
 			updateSessionLines,
@@ -1969,6 +2038,39 @@ export function useAgentPanel({
 					},
 				]);
 			}
+			// PDF text selections with geometry → ask conversation cards (kind ask),
+			// not visual-annotation agent-trace marks. One card pin per selection.
+			const anchoredSelections =
+				!isAcpCommand && text
+					? selectionsWithPdfAnchor(resolvedSelections)
+					: [];
+			if (anchoredSelections.length) {
+				const pendingAskWrites: Array<{
+					paperAbsPath: string;
+					threadId: string;
+				}> = [];
+				const userContent = text.trim();
+				for (const sel of anchoredSelections) {
+					try {
+						const thread = createAskThreadFromAgentSelection({
+							paperPath: sel.sourcePath || sel.paperAbsPath,
+							page: sel.page,
+							rects: sel.rects,
+							quote: sel.text,
+							userContent,
+							agentSessionId: accepted.sessionId,
+						});
+						await writePdfAskThread(sel.paperAbsPath, thread);
+						pendingAskWrites.push({
+							paperAbsPath: sel.paperAbsPath,
+							threadId: thread.id,
+						});
+					} catch {
+						// Keep chat running even if ask-card write fails.
+					}
+				}
+				rememberPendingAskThreads(accepted.sessionId, pendingAskWrites);
+			}
 			// A submitted turn consumes its selection chips (queued turns already did).
 			if (!options?.selections) consumeSelections();
 			if (!options?.visualDrafts) consumeVisualDrafts();
@@ -2983,7 +3085,6 @@ export function useAgentPanel({
 	]);
 
 	return {
-		isZen,
 		t,
 		// Transcript
 		lines,

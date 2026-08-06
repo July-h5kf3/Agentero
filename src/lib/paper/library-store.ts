@@ -136,3 +136,28 @@ export async function refreshLibrary(): Promise<void> {
 		libraryStore.setState({ loading: false });
 	}
 }
+
+let libraryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Quiet, debounced catalog reload for external tools (CLI, sync clients).
+ * Avoids loading-state flicker while still updating tree labels and table rows.
+ */
+export function scheduleLibraryRefresh(): void {
+	if (libraryRefreshTimer) clearTimeout(libraryRefreshTimer);
+	libraryRefreshTimer = setTimeout(() => {
+		libraryRefreshTimer = null;
+		const vaultPath = getVaultPath();
+		if (!vaultPath || !isTauri()) {
+			setLibraryPapers([]);
+			return;
+		}
+		void listPapers(vaultPath)
+			.then((papers) => {
+				if (getVaultPath() === vaultPath) setLibraryPapers(papers);
+			})
+			.catch(() => {
+				// Best-effort background refresh; explicit Library opens still report loading.
+			});
+	}, 500);
+}

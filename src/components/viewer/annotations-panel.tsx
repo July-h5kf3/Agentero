@@ -15,6 +15,7 @@ import { PaneHeader } from "@/components/shell/pane-header";
 import { Button } from "@/components/ui/button";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
+import type { PdfVisualTraceThumbnail } from "@/lib/pdf/agent-trace/thumbnail";
 import { annotationWikilinkMarkdown } from "@/lib/pdf/annotation-ref";
 import {
 	type HighlightColor,
@@ -49,6 +50,8 @@ export type VisualTraceRow = {
 	preview: string;
 	/** Full wikilink alias (`Title·snippet`) when copying. */
 	linkAlias?: string | null;
+	/** Crop thumbnail for visual marks. */
+	thumbnail?: PdfVisualTraceThumbnail | null;
 };
 
 type AnnotationsPanelProps = {
@@ -439,6 +442,14 @@ function VisualTraceListCard({
 				<p className="mt-1.5 line-clamp-2 text-[13px] text-foreground leading-relaxed">
 					{trace.preview}
 				</p>
+				{trace.thumbnail?.data ? (
+					<img
+						src={`data:${trace.thumbnail.mimeType || "image/png"};base64,${trace.thumbnail.data}`}
+						alt={t("pdfExplain.annotationPreviewAlt", { page: trace.page })}
+						className="mt-2 max-h-28 w-full rounded-md border border-border/70 bg-muted/30 object-contain"
+						loading="lazy"
+					/>
+				) : null}
 			</div>
 			{onDelete || wikiTarget ? (
 				<div className="absolute top-2 right-2 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 opacity-0 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">

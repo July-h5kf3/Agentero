@@ -1,5 +1,5 @@
 /**
- * Right rail: Agent chat (kept mounted across sidebar ↔ zen), Backlinks +
+ * Right rail: Agent chat, Backlinks +
  * Graph, or PDF annotations. Subscribes to its stores directly.
  */
 
@@ -30,7 +30,13 @@ import { toVaultRelative } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
+import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import { tracePreview } from "@/lib/pdf/agent-trace/schema";
+import {
+	loadPdfVisualTraceThumbnails,
+	type PdfVisualTraceThumbnail,
+} from "@/lib/pdf/agent-trace/thumbnail";
+import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import {
 	annotationSnippet,
 	annotationWikilinkAlias,
@@ -43,7 +49,6 @@ import {
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { normalizeHighlightColor } from "@/lib/pdf/highlight/palette";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import { layout, uiStore } from "@/lib/shell/ui-store";
 import {
 	navigateWiki,
 	openGraphPath,
@@ -51,8 +56,8 @@ import {
 } from "@/lib/workspace/actions";
 import { getActiveTabId } from "@/lib/workspace/store";
 
-// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar /
-// zen mode is opened, so its (large) bundle stays out of the initial chunk.
+// The Agent panel is lazy-loaded: it isn't mounted until the agent sidebar is
+// opened, so its (large) bundle stays out of the initial chunk.
 const AgentPanel = lazy(() =>
 	import("@/components/agent/agent-panel").then((m) => ({
 		default: m.AgentPanel,
@@ -62,7 +67,6 @@ const AgentPanel = lazy(() =>
 /**
  * Agent chat Sources / inline citation click: vault paper paths → paper
  * workspace; other vault files → open tab; http(s) → system browser.
- * Exit zen so the paper is visible.
  */
 function onOpenAgentSettings(): void {
 	openSettingsWindow("agent");
@@ -78,9 +82,6 @@ function handleAgentOpenSource(source: string): void {
 				window.open(trimmed, "_blank", "noopener,noreferrer");
 			});
 		return;
-	}
-	if (uiStore.getState().agentZenMode) {
-		layout()?.exitAgentZen();
 	}
 	openGraphPath(trimmed);
 }
@@ -162,12 +163,17 @@ function AnnotationsSidebar() {
 		[],
 	);
 	const [diskAsks, setDiskAsks] = useState<AskRow[]>([]);
+	const [diskVisuals, setDiskVisuals] = useState<PdfVisualSessionTrace[]>([]);
+	const [visualThumbs, setVisualThumbs] = useState<
+		Record<string, PdfVisualTraceThumbnail>
+	>({});
 
 	// When NOTES is focused the PDF tab may be unmounted — load marks from disk.
 	useEffect(() => {
 		if (!paperAbs) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
+			setDiskVisuals([]);
 			return;
 		}
 		const hasLive =
@@ -175,16 +181,21 @@ function AnnotationsSidebar() {
 		if (hasLive && (storeAsks?.length ?? 0) > 0) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
+			setDiskVisuals([]);
 			return;
 		}
 		let cancelled = false;
 		void (async () => {
-			const [summaries, asks] = await Promise.all([
+			const [summaries, asks, visuals] = await Promise.all([
 				hasLive ? Promise.resolve([]) : listPaperAnnotationSummaries(paperAbs),
 				storeAsks?.length ? Promise.resolve([]) : listPdfAskThreads(paperAbs),
+				storeVisuals?.length
+					? Promise.resolve([])
+					: listPdfVisualTraces(paperAbs),
 			]);
 			if (cancelled) return;
 			if (!hasLive) setDiskSummaries(summaries);
+			if (!storeVisuals?.length) setDiskVisuals(visuals);
 			if (!storeAsks?.length) {
 				setDiskAsks(
 					asks
@@ -208,6 +219,19 @@ function AnnotationsSidebar() {
 			cancelled = true;
 		};
 	}, [paperAbs, storeHighlights, storeVisuals, storeAsks]);
+
+	const visualTraceSource = storeVisuals?.length ? storeVisuals : diskVisuals;
+	useEffect(() => {
+		let cancelled = false;
+		void loadPdfVisualTraceThumbnails(paperAbs, visualTraceSource).then(
+			(images) => {
+				if (!cancelled) setVisualThumbs(images);
+			},
+		);
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbs, visualTraceSource]);
 
 	/** Resolvable vault-relative target (never display title alone). */
 	const wikiTarget = useMemo(() => {
@@ -293,6 +317,24 @@ function AnnotationsSidebar() {
 						paperTitle,
 						annotationSnippet({ comment: tr.comment }),
 					),
+					thumbnail: visualThumbs[tr.id] ?? null,
+				}));
+		}
+		if (diskVisuals.length) {
+			return [...diskVisuals]
+				.sort(
+					(a, b) =>
+						a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+				)
+				.map((tr) => ({
+					id: tr.id,
+					page: tr.page,
+					preview: tracePreview(tr, "Visual annotation", 160),
+					linkAlias: annotationWikilinkAlias(
+						paperTitle,
+						annotationSnippet({ comment: tr.comment }),
+					),
+					thumbnail: visualThumbs[tr.id] ?? null,
 				}));
 		}
 		return diskSummaries
@@ -303,7 +345,7 @@ function AnnotationsSidebar() {
 				preview: s.preview,
 				linkAlias: annotationWikilinkAlias(paperTitle, s.preview),
 			}));
-	}, [storeVisuals, diskSummaries, paperTitle]);
+	}, [storeVisuals, diskVisuals, diskSummaries, paperTitle, visualThumbs]);
 
 	return (
 		<AnnotationsPanel
@@ -334,7 +376,6 @@ export function RightSidebar() {
 	const { t } = useTranslation(["app"]);
 	const rightSidebarOpen = useUiStore((s) => s.rightSidebarOpen);
 	const rightSidebarTab = useUiStore((s) => s.rightSidebarTab);
-	const agentZenMode = useUiStore((s) => s.agentZenMode);
 	const agentPanelMounted = useUiStore((s) => s.agentPanelMounted);
 	const featurePoppedOut = useUiStore((s) => s.featurePoppedOut);
 	const vaultPath = useVaultStore((s) => s.vaultPath);
@@ -360,18 +401,15 @@ export function RightSidebar() {
 
 	return (
 		<>
-			{/* Keep AgentPanel alive across sidebar ↔ zen (no remount / lost chat),
-			    but never while the agent singleton window is open. */}
+			{/* Keep AgentPanel alive when switching rail tabs, but never while
+			    the agent singleton window is open. */}
 			{!agentInWindow &&
 				(agentPanelMounted ||
-					agentZenMode ||
 					(rightSidebarOpen && rightSidebarTab === "agent")) && (
 					<div
 						className={cn(
 							"h-full min-h-0",
-							!agentZenMode &&
-								(!rightSidebarOpen || rightSidebarTab !== "agent") &&
-								"hidden",
+							(!rightSidebarOpen || rightSidebarTab !== "agent") && "hidden",
 						)}
 					>
 						<Suspense fallback={null}>
@@ -386,11 +424,7 @@ export function RightSidebar() {
 								paperTreeLabelMode={paperTreeLabelMode}
 								className="min-h-0 h-full"
 								title={t("labels.agent")}
-								variant={agentZenMode ? "zen" : "sidebar"}
-								autoFocus={
-									agentZenMode ||
-									(rightSidebarOpen && rightSidebarTab === "agent")
-								}
+								autoFocus={rightSidebarOpen && rightSidebarTab === "agent"}
 								onOpenAgentSettings={onOpenAgentSettings}
 								onOpenSource={handleAgentOpenSource}
 							/>
@@ -398,7 +432,6 @@ export function RightSidebar() {
 					</div>
 				)}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!backlinksInWindow &&
 			rightSidebarTab === "backlinks" ? (
 				<div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -426,13 +459,11 @@ export function RightSidebar() {
 				</div>
 			) : null}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!annotationsInWindow &&
 			rightSidebarTab === "annotations" ? (
 				<AnnotationsSidebar />
 			) : null}
 			{rightSidebarOpen &&
-			!agentZenMode &&
 			!referencesInWindow &&
 			rightSidebarTab === "references" ? (
 				<ReferencesSidebar />

@@ -17,7 +17,6 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ChatVisualAnnotations } from "@/components/agent/chat-visual-annotations";
 import {
 	Message,
 	MessageContent,
@@ -28,14 +27,9 @@ import { Button } from "@/components/ui/button";
 import { SelectionCard } from "@/components/viewer/pdf-ask/selection-card";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
-import {
-	agentTextFromParts,
-	type ChatLine,
-	type ChatVisualAnnotation,
-} from "@/lib/agent/chat-state";
+import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { cn } from "@/lib/core/utils";
-import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 
@@ -46,8 +40,8 @@ const EXPANDED = { width: 360, height: 440 } as const;
 
 type VisualTraceCardProps = {
 	trace: PdfVisualSessionTrace;
-	paperAbsPath?: string;
 	screen: { x: number; y: number };
+	preferRight?: boolean;
 	streaming?: boolean;
 	error?: string | null;
 	/**
@@ -169,45 +163,23 @@ type ModalTraceMessage = {
 	id: string;
 	role: "user" | "assistant";
 	content: string;
-	/** Same crop chips as the Agent panel user turn (above the bubble). */
-	visualAnnotations?: ChatVisualAnnotation[];
 };
-
-/** Crop chip for the first user turn when store lines omit visualAnnotations. */
-function chipFromTrace(
-	trace: PdfVisualSessionTrace,
-	image: Awaited<ReturnType<typeof loadPdfVisualTraceImage>>,
-): ChatVisualAnnotation | null {
-	if (!image?.data) return null;
-	return {
-		id: trace.id,
-		page: trace.page,
-		comment: trace.comment,
-		paperPath: trace.paperPath,
-		image: {
-			data: image.data,
-			mimeType: image.mimeType || "image/png",
-		},
-	};
-}
 
 /**
  * Map shared Agent session lines → pin-modal bubbles (same source as sidebar).
- * Keep `visualAnnotations` so crop chips match the right-rail transcript.
+ * The PDF hover card intentionally omits crop chips; the Agent sidebar is the
+ * detailed visual transcript.
  */
 function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 	const out: ModalTraceMessage[] = [];
 	for (const line of lines) {
 		if (line.kind === "user") {
 			const content = stripPromptEnvelopeForDisplay(line.text);
-			const visuals = line.visualAnnotations ?? [];
-			// Visual-only turns may have empty free text after envelope strip.
-			if (!content && visuals.length === 0) continue;
+			if (!content) continue;
 			out.push({
 				id: line.id,
 				role: "user",
 				content,
-				...(visuals.length ? { visualAnnotations: visuals } : {}),
 			});
 			continue;
 		}
@@ -223,27 +195,10 @@ function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 	return out;
 }
 
-/** Ensure the first user bubble has a crop chip (store path or mark fallback). */
-function withTraceCropChip(
-	messages: ModalTraceMessage[],
-	trace: PdfVisualSessionTrace,
-	image: Awaited<ReturnType<typeof loadPdfVisualTraceImage>>,
-): ModalTraceMessage[] {
-	const chip = chipFromTrace(trace, image);
-	if (!chip) return messages;
-	let attached = false;
-	return messages.map((m) => {
-		if (m.role !== "user" || attached) return m;
-		attached = true;
-		if (m.visualAnnotations?.length) return m;
-		return { ...m, visualAnnotations: [chip] };
-	});
-}
-
 export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
-	paperAbsPath,
 	screen,
+	preferRight = true,
 	streaming: streamingProp = false,
 	error = null,
 	initialExpanded = false,
@@ -257,34 +212,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 }: VisualTraceCardProps) {
 	const { t } = useTranslation("viewer");
 	const [expanded, setExpanded] = useState(initialExpanded);
-	const cropData = trace.image?.data;
-	const cropMimeType = trace.image?.mimeType || "image/png";
-	const cropPath = trace.image?.path;
-	const [cropImage, setCropImage] = useState<
-		Awaited<ReturnType<typeof loadPdfVisualTraceImage>>
-	>(cropData ? { data: cropData, mimeType: cropMimeType } : null);
-	useEffect(() => {
-		let cancelled = false;
-		if (cropData) {
-			setCropImage({
-				data: cropData,
-				mimeType: cropMimeType,
-			});
-			return () => {
-				cancelled = true;
-			};
-		}
-		setCropImage(null);
-		void loadPdfVisualTraceImage(
-			paperAbsPath ?? "",
-			cropPath ? { path: cropPath, mimeType: cropMimeType } : undefined,
-		).then((image) => {
-			if (!cancelled) setCropImage(image);
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [cropData, cropMimeType, cropPath, paperAbsPath]);
 	// Same transcript as the right-rail Agent panel (single store).
 	const boundSessionId = useAgentSessionStore(
 		(s) =>
@@ -308,18 +235,14 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			boundSessionId !== null &&
 			boundSessionId === activeTabId);
 	const messages = useMemo(() => {
-		const raw: ModalTraceMessage[] =
-			boundLines && boundLines.length > 0
-				? chatLinesToTraceMessages(boundLines)
-				: traceMessages(trace).map((m) => ({
-						id: m.id,
-						role:
-							m.role === "user" ? ("user" as const) : ("assistant" as const),
-						content: m.content,
-					}));
-		// Pin crop chip on first user turn (matches Agent panel Open-in-Agent lines).
-		return withTraceCropChip(raw, trace, cropImage);
-	}, [boundLines, cropImage, trace]);
+		return boundLines && boundLines.length > 0
+			? chatLinesToTraceMessages(boundLines)
+			: traceMessages(trace).map((m) => ({
+					id: m.id,
+					role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+					content: m.content,
+				}));
+	}, [boundLines, trace]);
 	const preview = tracePreview(trace, t("pdfExplain.visualAnnotation"), 280);
 	const title = preview || t("pdfExplain.traceCardTitle");
 	/** Keep the user's annotation turn in view; do not auto-jump to the answer. */
@@ -401,7 +324,7 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			placementWidth={EXPANDED.width}
 			placementHeight={EXPANDED.height}
 			lockHeight
-			preferRight
+			preferRight={preferRight}
 			title={title}
 			icon={ScanSearch}
 			ariaLabel={t("pdfExplain.traceCardTitle")}
@@ -446,10 +369,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 						!expanded && "gap-2",
 					)}
 				>
-					{/* Crop preview lives on the PDF (dashed region + pin); omit modal image. */}
-					<p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wider tabular-nums">
-						{t("annotations.pageLabel", { page: trace.page })}
-					</p>
 					{messages.length === 0 ? (
 						<p className="text-muted-foreground text-xs leading-relaxed">
 							{t("pdfExplain.traceEmptyMessages")}
@@ -459,7 +378,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 							const from = m.role === "user" ? "user" : "assistant";
 							const isLive = from === "assistant" && m.id === lastStreamingId;
 							const isEmptyAssistant = isLive && !m.content.trim();
-							const visuals = m.visualAnnotations ?? [];
 							const clamp =
 								!expanded && from === "assistant"
 									? "line-clamp-4"
@@ -467,8 +385,7 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 										? "line-clamp-2"
 										: null;
 							const bodyText = m.content.trim();
-							// Match Agent panel: chips above bubble; skip empty text bubble.
-							if (from === "user" && !bodyText && visuals.length === 0) {
+							if (from === "user" && !bodyText) {
 								return null;
 							}
 							return (
@@ -478,12 +395,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 									from={from}
 									className="max-w-full"
 								>
-									{from === "user" && visuals.length > 0 ? (
-										<ChatVisualAnnotations
-											annotations={visuals}
-											className={cn(!expanded && "scale-95 origin-top-right")}
-										/>
-									) : null}
 									{from === "user" && !bodyText ? null : (
 										<MessageContent
 											className={cn(

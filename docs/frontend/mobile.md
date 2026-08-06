@@ -311,7 +311,7 @@ Agent **只在桌面**运行：iOS 发 `agent_run_once` RPC → 桌面走完全�
 
 ### 8.2 对话体验
 
-- iOS Agent 面板 = 精简禅模式：流式 markdown、Agent 后端选择、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
+- iOS Agent 面板：流式 markdown、Agent 后端选择、tool call 折叠、plan 展示，全部复用 AI Elements 组件；
 - 上下文 chips：当前打开论文默认加入（与桌面一致）；`@` 提及数据源改走 `vault_tree_children` RPC；
 - 运行中锁屏/切后台：桌面侧继续跑（这是远程执行的天然优势）；回前台经 `agent_load_session` 补齐时间线。
 

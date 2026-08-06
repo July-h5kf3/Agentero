@@ -1,6 +1,6 @@
 /**
- * Zen / rail layout controller: owns the resizable panel refs and the
- * imperative collapse / expand / zen transitions, and registers them into the
+ * Rail / PDF immersive layout controller: owns the resizable panel refs and the
+ * imperative collapse / expand transitions, and registers them into the
  * ui-store so plain actions (palette, shortcuts, agent) can drive layout.
  */
 
@@ -8,11 +8,8 @@ import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import {
 	registerLayoutController,
-	setAgentPanelMounted,
-	setAgentZenMode,
 	setPdfZenMode,
 	setRightSidebarOpenState,
-	setRightSidebarTab,
 	setSidebarCollapsedState,
 	uiStore,
 } from "@/lib/shell/ui-store";
@@ -29,7 +26,7 @@ export type ZenLayout = {
 	sourcePanelRef: ReturnType<typeof usePanelRef>;
 	sidebarAsideRef: RefObject<HTMLElement | null>;
 	editorPaneRef: RefObject<HTMLDivElement | null>;
-	/** Last expanded rail widths in px (survive collapse / zen round-trips). */
+	/** Last expanded rail widths in px (survive collapse / PDF immersive round-trips). */
 	leftWidthPxRef: RefObject<number>;
 	rightWidthPxRef: RefObject<number>;
 };
@@ -42,7 +39,6 @@ export function useZenLayout(): ZenLayout {
 	const editorPaneRef = useRef<HTMLDivElement>(null);
 	const leftWidthPxRef = useRef(SIDEBAR_DEFAULT_PX);
 	const rightWidthPxRef = useRef(RIGHT_SIDEBAR_DEFAULT_PX);
-	const leftCollapsedBeforeZenRef = useRef(false);
 	const leftCollapsedBeforePdfZenRef = useRef(false);
 	const rightOpenBeforePdfZenRef = useRef(false);
 
@@ -103,62 +99,6 @@ export function useZenLayout(): ZenLayout {
 		};
 
 		/**
-		 * Enter agent zen mode: collapse left + center, expand Agent rail full
-		 * width. Keeps the same AgentPanel instance so conversation survives.
-		 */
-		const enterAgentZen = () => {
-			leftCollapsedBeforeZenRef.current = uiStore.getState().sidebarCollapsed;
-			setAgentZenMode(true);
-			setAgentPanelMounted(true);
-			setRightSidebarTab("agent");
-			setRightCollapsed(false, { focusAgent: true });
-			setLeftCollapsed(true);
-			requestAnimationFrame(() => {
-				try {
-					sourcePanelRef.current?.collapse();
-				} catch {
-					// ignore
-				}
-				try {
-					rightSidebarPanelRef.current?.expand();
-				} catch {
-					// ignore
-				}
-				try {
-					rightSidebarPanelRef.current?.resize("100%");
-				} catch {
-					// ignore
-				}
-			});
-		};
-
-		const exitAgentZen = () => {
-			setAgentZenMode(false);
-			requestAnimationFrame(() => {
-				try {
-					sourcePanelRef.current?.expand();
-				} catch {
-					// ignore
-				}
-				try {
-					sourcePanelRef.current?.resize("40");
-				} catch {
-					// ignore
-				}
-				try {
-					rightSidebarPanelRef.current?.resize(
-						rightWidthPxRef.current || RIGHT_SIDEBAR_DEFAULT_PX,
-					);
-				} catch {
-					// ignore
-				}
-				if (!leftCollapsedBeforeZenRef.current) {
-					setLeftCollapsed(false);
-				}
-			});
-		};
-
-		/**
 		 * Immersive PDF reading: collapse both side rails and hide the center
 		 * header so the viewer fills the window.
 		 */
@@ -178,7 +118,6 @@ export function useZenLayout(): ZenLayout {
 		};
 
 		const focusSidebar = () => {
-			if (uiStore.getState().agentZenMode) return;
 			setLeftCollapsed(false);
 			requestAnimationFrame(() => {
 				sidebarAsideRef.current?.querySelector<HTMLElement>("button")?.focus();
@@ -213,15 +152,13 @@ export function useZenLayout(): ZenLayout {
 		return {
 			setLeftCollapsed,
 			setRightCollapsed,
-			enterAgentZen,
-			exitAgentZen,
 			enterPdfZen,
 			exitPdfZen,
 			focusSidebar,
 			focusEditorPane,
 			focusNotesEditor,
 		};
-	}, [sidebarPanelRef, rightSidebarPanelRef, sourcePanelRef]);
+	}, [sidebarPanelRef, rightSidebarPanelRef]);
 
 	useEffect(() => {
 		registerLayoutController(controller);

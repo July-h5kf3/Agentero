@@ -137,7 +137,21 @@ impl FsWatchController {
 /// Ignore churn from internal state and VCS metadata.
 fn is_ignored(path: &str) -> bool {
     let p = path.replace('\\', "/");
-    p.contains("/.agentero/") || p.contains("/.git/") || p.contains("/node_modules/")
+    // Catalog changes are user-visible in the Library and paper tree labels.
+    // Keep other .agentero churn hidden from the renderer.
+    let is_catalog_storage = p.contains("/.agentero/catalog.sqlite")
+        && matches!(
+            p.rsplit('/').next(),
+            Some(
+                "catalog.sqlite"
+                    | "catalog.sqlite-wal"
+                    | "catalog.sqlite-shm"
+                    | "catalog.sqlite-journal"
+            )
+        );
+    (!is_catalog_storage && p.contains("/.agentero/"))
+        || p.contains("/.git/")
+        || p.contains("/node_modules/")
 }
 
 /// Temp path used by Host `atomic_write` (wiki rename / heading rename).
@@ -245,6 +259,11 @@ mod tests {
             "/vault/papers/demo/.NOTES.md.agentero-rename-deadbeef.tmp"
         ));
         assert!(!is_agentero_atomic_temp("/vault/papers/demo/NOTES.md"));
+    fn catalog_sqlite_changes_are_not_ignored() {
+        assert!(!is_ignored("/vault/.agentero/catalog.sqlite"));
+        assert!(!is_ignored("/vault/.agentero/catalog.sqlite-wal"));
+        assert!(is_ignored("/vault/.agentero/wiki-cache.json"));
+        assert!(is_ignored("/vault/.git/index"));
     }
 }
 

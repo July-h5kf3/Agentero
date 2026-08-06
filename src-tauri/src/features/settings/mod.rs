@@ -194,7 +194,7 @@ fn default_ai_response_language() -> String {
     "auto".into()
 }
 fn default_translate_provider() -> String {
-    "bing".into()
+    "tencenttransmart".into()
 }
 #[cfg(not(target_os = "ios"))]
 fn default_connector_port() -> u16 {

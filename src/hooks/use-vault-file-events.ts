@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import { toVaultRelative } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
+import { isUnderPapers } from "@/lib/paper/paths";
 import {
 	startVaultWatch,
 	stopVaultWatch,
@@ -13,6 +15,8 @@ type VaultFileEventsParams = {
 	onDiskChange: (absPath: string) => void;
 	/** Refresh the file tree after a structural change (create/delete/rename). */
 	onStructuralChange: (changedAbsPaths: string[]) => void;
+	/** Refresh catalog-backed Library state after external paper/catalog changes. */
+	onLibraryChange?: () => void;
 	/**
 	 * Any touched path (content or structural). Used to (debounced) rebuild the
 	 * wiki / backlinks / graph index so it never goes stale after external writes.
@@ -37,6 +41,7 @@ export function useVaultFileEvents({
 	vaultPath,
 	onDiskChange,
 	onStructuralChange,
+	onLibraryChange,
 	onWikiChange,
 	shouldIgnoreEvent,
 	onExternalRename,
@@ -66,6 +71,9 @@ export function useVaultFileEvents({
 				VAULT_FILE_CHANGED_EVENT,
 				async ({ payload }) => {
 					if (shouldIgnoreEvent?.(payload)) return;
+					if (onLibraryChange && payloadAffectsLibrary(vaultPath, payload)) {
+						onLibraryChange();
+					}
 					if (payload.rename) {
 						await onExternalRename?.(payload.rename, payload);
 					} else if (payload.kind === "rename") {
@@ -88,8 +96,36 @@ export function useVaultFileEvents({
 		onDiskChange,
 		onExternalRename,
 		onUnverifiedRename,
+		onLibraryChange,
 		onStructuralChange,
 		onWikiChange,
 		shouldIgnoreEvent,
+		vaultPath,
 	]);
+}
+
+function payloadAffectsLibrary(
+	vaultPath: string | null,
+	payload: VaultFileChangedPayload,
+): boolean {
+	if (payload.paths.some((p) => isCatalogStoragePath(vaultPath, p)))
+		return true;
+	// CLI/import tools materialize paper folders and metadata under papers/.
+	// Plain content edits to NOTES.md should not hit the catalog path.
+	return (
+		payload.kind !== "modify" && payload.paths.some((p) => isUnderPapers(p))
+	);
+}
+
+function isCatalogStoragePath(
+	vaultPath: string | null,
+	absPath: string,
+): boolean {
+	const rel = toVaultRelative(vaultPath, absPath).toLowerCase();
+	return (
+		rel === ".agentero/catalog.sqlite" ||
+		rel === ".agentero/catalog.sqlite-wal" ||
+		rel === ".agentero/catalog.sqlite-shm" ||
+		rel === ".agentero/catalog.sqlite-journal"
+	);
 }

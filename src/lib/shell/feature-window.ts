@@ -2,7 +2,7 @@
  * Native singleton feature windows (Agent / Backlinks / Annotations / References).
  *
  * Policy: at most one surface per view. If a feature window is open, all open
- * intents focus that window and the main right-rail / agent zen must not host
+ * intents focus that window and the main right-rail must not host
  * a second instance of the same view.
  *
  * Note: do not statically import `@/lib/shell/ui-store` — that module dynamically
@@ -55,12 +55,6 @@ async function clearMainHostForFeature(view: FeatureViewType): Promise<void> {
 	ui.setFeaturePoppedOut(view, true);
 	if (view === "agent") {
 		ui.setAgentPanelMounted(false);
-		if (ui.uiStore.getState().agentZenMode) {
-			// Prefer layout exit so panel sizes restore; fall back to flag only.
-			const ctrl = ui.layout();
-			if (ctrl) ctrl.exitAgentZen();
-			else ui.setAgentZenMode(false);
-		}
 	}
 	// Rail stays open. If the selected rail tab is the one now in a window,
 	// switch to another non-popped-out tab so the switcher + content remain usable.

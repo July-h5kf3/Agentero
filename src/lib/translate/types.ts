@@ -9,6 +9,7 @@ export type FreeTranslateProviderId =
 	| "googleapi"
 	| "bing"
 	| "youdao"
+	| "deeplx"
 	| "huoshanweb"
 	| "tencenttransmart"
 	| "libre";
@@ -66,7 +67,7 @@ export type TranslateRunOptions = {
 	/** Override settings.provider for this call. */
 	providerId?: TranslateProviderId;
 	/**
-	 * Endpoint override (LibreTranslate / DeepLX).
+	 * Endpoint override for LibreTranslate.
 	 * Prefer setting via {@link runTranslate} from AppSettings.
 	 */
 	freeBaseUrl?: string;
@@ -93,10 +94,11 @@ export type TranslateService = {
 
 /** Ordered list for settings UI (free engines; agent registered separately). */
 export const FREE_MT_PROVIDER_IDS: FreeTranslateProviderId[] = [
+	"tencenttransmart",
+	"huoshanweb",
+	"deeplx",
 	"bing",
 	"youdao",
-	"huoshanweb",
-	"tencenttransmart",
 	"googleapi",
 	"google",
 	"libre",

@@ -1,9 +1,6 @@
 import { memo } from "react";
 import { AgentComposer } from "@/components/agent/agent-composer";
-import {
-	SidebarHistoryTrailing,
-	ZenHistoryRail,
-} from "@/components/agent/agent-history";
+import { SidebarHistoryTrailing } from "@/components/agent/agent-history";
 import { AgentPermissionDialog } from "@/components/agent/agent-permission-dialog";
 import { AgentSwitcher } from "@/components/agent/agent-switcher";
 import { ChatTranscript } from "@/components/agent/chat-transcript";
@@ -28,7 +25,6 @@ export const AgentPanel = memo(function AgentPanel({
 	headerActions,
 	autoFocus = false,
 	title = "Chat",
-	variant = "sidebar",
 	onOpenAgentSettings,
 	onOpenSource,
 }: AgentPanelProps) {
@@ -41,11 +37,9 @@ export const AgentPanel = memo(function AgentPanel({
 		vaultPaperPaths,
 		paperMetaByRelPath,
 		paperTreeLabelMode,
-		variant,
 	});
 
 	const {
-		isZen,
 		t,
 		lines,
 		activeTabId,
@@ -142,39 +136,22 @@ export const AgentPanel = memo(function AgentPanel({
 
 	return (
 		<section
-			className={cn(
-				"flex h-full min-h-0 bg-background",
-				isZen ? "flex-row bg-muted/15" : "flex-col",
-				className,
-			)}
+			className={cn("flex h-full min-h-0 flex-col bg-background", className)}
 			aria-label={title}
 		>
-			{isZen ? (
-				<ZenHistoryRail
-					sessionHistory={sessionHistory}
-					activeTabId={activeTabId}
-					submitting={submitting}
-					onNewConversation={newConversation}
-					onOpenSession={openHistorySession}
-				/>
-			) : null}
-
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-				{/* Same header chrome in both modes: Agent switcher + trailing actions (zen: no trailing). */}
 				<PaneHeader
 					trailing={
-						isZen ? undefined : (
-							<SidebarHistoryTrailing
-								historyOpen={historyOpen}
-								onHistoryOpenChange={setHistoryOpen}
-								sessionHistory={sessionHistory}
-								activeTabId={activeTabId}
-								submitting={submitting}
-								headerActions={headerActions}
-								onNewConversation={newConversation}
-								onOpenSession={openHistorySession}
-							/>
-						)
+						<SidebarHistoryTrailing
+							historyOpen={historyOpen}
+							onHistoryOpenChange={setHistoryOpen}
+							sessionHistory={sessionHistory}
+							activeTabId={activeTabId}
+							submitting={submitting}
+							headerActions={headerActions}
+							onNewConversation={newConversation}
+							onOpenSession={openHistorySession}
+						/>
 					}
 				>
 					<AgentSwitcher
@@ -187,14 +164,8 @@ export const AgentPanel = memo(function AgentPanel({
 					/>
 				</PaneHeader>
 
-				{/*
-				  Shared AI Elements transcript for sidebar + zen.
-				  Zen only changes the scroll viewport width (full pane → scrollbar on the
-				  far right) and centers the message column; message components are identical.
-				*/}
 				<div className="flex min-h-0 flex-1 flex-col">
 					<ChatTranscript
-						isZen={isZen}
 						lines={lines}
 						activeTabId={activeTabId}
 						agentName={selected?.name ?? t("defaultName")}
@@ -216,7 +187,6 @@ export const AgentPanel = memo(function AgentPanel({
 					/>
 
 					<AgentComposer
-						isZen={isZen}
 						autoFocus={autoFocus}
 						linesLength={lines.length}
 						activeTabIsRunning={activeTabIsRunning}

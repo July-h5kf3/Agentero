@@ -27,6 +27,13 @@ import { isMacOS, isTauri } from "@/lib/core/tauri";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { paperDirFromPath } from "@/lib/paper/detect";
 import { refreshLibrary } from "@/lib/paper/library-store";
+import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
+import { tracePreview } from "@/lib/pdf/agent-trace/schema";
+import {
+	loadPdfVisualTraceThumbnails,
+	type PdfVisualTraceThumbnail,
+} from "@/lib/pdf/agent-trace/thumbnail";
+import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 import {
 	annotationWikilinkAlias,
 	listPaperAnnotationSummaries,
@@ -153,21 +160,28 @@ function FeatureAnnotations({
 		[],
 	);
 	const [diskAsks, setDiskAsks] = useState<AskRow[]>([]);
+	const [diskVisuals, setDiskVisuals] = useState<PdfVisualSessionTrace[]>([]);
+	const [visualThumbs, setVisualThumbs] = useState<
+		Record<string, PdfVisualTraceThumbnail>
+	>({});
 
 	useEffect(() => {
 		if (!paperAbs) {
 			setDiskSummaries([]);
 			setDiskAsks([]);
+			setDiskVisuals([]);
 			return;
 		}
 		let cancelled = false;
 		void (async () => {
-			const [summaries, asks] = await Promise.all([
+			const [summaries, asks, visuals] = await Promise.all([
 				listPaperAnnotationSummaries(paperAbs),
 				listPdfAskThreads(paperAbs),
+				listPdfVisualTraces(paperAbs),
 			]);
 			if (cancelled) return;
 			setDiskSummaries(summaries);
+			setDiskVisuals(visuals);
 			setDiskAsks(
 				asks
 					.filter((th) => th.messages.some((m) => m.role === "user"))
@@ -190,6 +204,16 @@ function FeatureAnnotations({
 		};
 	}, [paperAbs]);
 
+	useEffect(() => {
+		let cancelled = false;
+		void loadPdfVisualTraceThumbnails(paperAbs, diskVisuals).then((images) => {
+			if (!cancelled) setVisualThumbs(images);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbs, diskVisuals]);
+
 	const items = useMemo<AnnotationRow[]>(
 		() =>
 			diskSummaries
@@ -207,15 +231,28 @@ function FeatureAnnotations({
 
 	const visualTraceRows = useMemo<VisualTraceRow[]>(
 		() =>
-			diskSummaries
-				.filter((s) => s.kind === "agent-trace")
-				.map((s) => ({
-					id: s.id,
-					page: s.page,
-					preview: s.preview,
-					linkAlias: annotationWikilinkAlias(null, s.preview),
-				})),
-		[diskSummaries],
+			diskVisuals.length
+				? [...diskVisuals]
+						.sort(
+							(a, b) =>
+								a.page - b.page || (a.rects[0]?.y ?? 0) - (b.rects[0]?.y ?? 0),
+						)
+						.map((tr) => ({
+							id: tr.id,
+							page: tr.page,
+							preview: tracePreview(tr, "Visual annotation", 160),
+							linkAlias: annotationWikilinkAlias(null, tr.comment),
+							thumbnail: visualThumbs[tr.id] ?? null,
+						}))
+				: diskSummaries
+						.filter((s) => s.kind === "agent-trace")
+						.map((s) => ({
+							id: s.id,
+							page: s.page,
+							preview: s.preview,
+							linkAlias: annotationWikilinkAlias(null, s.preview),
+						})),
+		[diskVisuals, diskSummaries, visualThumbs],
 	);
 
 	const wikiTarget = useMemo(() => {
@@ -407,7 +444,6 @@ export function FeatureWindowRoot() {
 							paperTreeLabelMode={paperTreeLabelMode}
 							className="min-h-0 h-full"
 							title={title}
-							variant="sidebar"
 							autoFocus
 							onOpenAgentSettings={() => openSettingsWindow("agent")}
 							onOpenSource={handleAgentOpenSource}

@@ -224,6 +224,8 @@
 		"tagsSaveFailed": "Failed to save tags.",
 		"pdf": "PDF",
 		"html": "HTML",
-		"abs": "Abs"
+		"abs": "Abs",
+		"modelscopeInterpretation": "Open ModelScope paper reading",
+		"alphaXiv": "alphaXiv"
 	}
 }

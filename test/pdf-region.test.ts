@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import {
 	expandNormalizedRegion,
 	normalizedRegionFromPoints,
@@ -56,5 +57,50 @@ describe("PDF visual regions", () => {
 		expect(rect?.origin.y).toBeCloseTo(80);
 		expect(rect?.size.width).toBeCloseTo(300);
 		expect(rect?.size.height).toBeCloseTo(160);
+	});
+
+	it("renders crops from the exact framed region", async () => {
+		let capturedRect: NonNullable<
+			ReturnType<typeof normalizedRegionToPdfRect>
+		> | null = null;
+		const page = {
+			index: 0,
+			size: { width: 600, height: 800 },
+			rotation: 0,
+			objectNumber: 1,
+		};
+		const engine = {
+			renderPageRect: (
+				_document: unknown,
+				_page: unknown,
+				rect: typeof capturedRect,
+			) => {
+				capturedRect = rect;
+				return {
+					toPromise: async () =>
+						new Blob([new Uint8Array([1])], { type: "image/png" }),
+				};
+			},
+		};
+
+		await renderPdfRegionPromptImage({
+			engine: engine as never,
+			document: {
+				id: "doc",
+				pageCount: 1,
+				pages: [page],
+				isEncrypted: false,
+				isOwnerUnlocked: true,
+				permissions: 0,
+				normalizedRotation: true,
+			},
+			pageIndex: 0,
+			region: { x: 0.25, y: 0.1, w: 0.5, h: 0.2 },
+		});
+
+		expect(capturedRect?.origin.x).toBeCloseTo(150);
+		expect(capturedRect?.origin.y).toBeCloseTo(80);
+		expect(capturedRect?.size.width).toBeCloseTo(300);
+		expect(capturedRect?.size.height).toBeCloseTo(160);
 	});
 });

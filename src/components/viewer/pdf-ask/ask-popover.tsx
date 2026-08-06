@@ -1,12 +1,7 @@
 import { MessageSquareIcon, MinusIcon, Pencil, Trash2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-	Conversation,
-	ConversationContent,
-	ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
 import {
 	Message,
 	MessageAction,
@@ -35,6 +30,8 @@ import {
 type AskPopoverProps = {
 	thread: PdfAskThread;
 	screen: { x: number; y: number };
+	/** Match gutter pin side so the card stays next to the pin. */
+	preferRight?: boolean;
 	streaming: boolean;
 	error: string | null;
 	/** Prefill single-line prompt (e.g. page number on double-click) */
@@ -59,6 +56,7 @@ type AskPopoverProps = {
 export function AskPopover({
 	thread,
 	screen,
+	preferRight = true,
 	streaming,
 	error,
 	initialPrompt,
@@ -75,10 +73,18 @@ export function AskPopover({
 	const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 	const [editingText, setEditingText] = useState("");
 	const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+	const scrollPortRef = useRef<HTMLDivElement | null>(null);
+	const scrolledForThreadRef = useRef<string | null>(null);
 	const {
 		isBlockedByIme: isEditBlockedByIme,
 		compositionProps: editCompositionProps,
 	} = useImeGuard();
+
+	/** Keep the first user turn in view on open — do not stick to the answer bottom. */
+	const userAnchorId = useMemo(() => {
+		const firstUser = thread.messages.find((m) => m.role === "user");
+		return firstUser?.id ?? thread.messages[0]?.id ?? null;
+	}, [thread.messages]);
 
 	// Leave edit mode when the thread changes or a run starts.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: reset edit UI when identity/run changes
@@ -86,6 +92,22 @@ export function AskPopover({
 		setEditingMessageId(null);
 		setEditingText("");
 	}, [thread.id, streaming]);
+
+	// Pin / hover open: place the user message once (never jump to reply end).
+	useEffect(() => {
+		if (scrolledForThreadRef.current === thread.id) return;
+		if (!userAnchorId) return;
+		const port = scrollPortRef.current;
+		const el = document.getElementById(`pdf-ask-msg-${userAnchorId}`);
+		if (!port || !el) return;
+		scrolledForThreadRef.current = thread.id;
+		requestAnimationFrame(() => {
+			const portTop = port.getBoundingClientRect().top;
+			const elTop = el.getBoundingClientRect().top;
+			// Align user turn near the top of the scrollport.
+			port.scrollTop += elTop - portTop - 8;
+		});
+	}, [thread.id, userAnchorId]);
 
 	useEffect(() => {
 		if (!editingMessageId) return;
@@ -129,15 +151,18 @@ export function AskPopover({
 			screen={screen}
 			width={360}
 			height={360}
-			// Fixed height so StickToBottom’s height:100% scroll viewport gets a
-			// definite size (maxHeight-only content-sizing was clipping without a bar).
+			// Fixed height so the nested scrollport has a definite viewport.
 			lockHeight
+			// Follow pin while scrolling; shrink height near edges instead of
+			// jumping the card far from the selection.
+			trackPin
+			preferRight={preferRight}
 			title={title}
 			icon={MessageSquareIcon}
 			ariaLabel={t("pdfAsk.dialogLabel")}
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
-			// Conversation owns scroll; body only constrains the flex chain.
+			// Body only constrains flex; messages own their own scrollport.
 			bodyClassName="min-h-0 overflow-hidden p-0"
 			actions={[
 				{
@@ -197,14 +222,22 @@ export function AskPopover({
 				</PromptInput>
 			}
 		>
-			{/* h-full: StickToBottom.Content uses height:100% for the scrollport */}
-			<Conversation className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-				<ConversationContent className="gap-3 px-3 py-2.5">
+			{/* Plain scroll — not StickToBottom (hover/open must not jump to reply end). */}
+			<div
+				ref={scrollPortRef}
+				className={cn(
+					"agentero-scroll h-full min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
+					"[scrollbar-gutter:stable]",
+				)}
+				role="log"
+			>
+				<div className="flex flex-col gap-3 px-3 py-2.5">
 					{thread.messages.map((m) => {
 						if (m.role === "system") {
 							return (
 								<p
 									key={m.id}
+									id={`pdf-ask-msg-${m.id}`}
 									className="text-center text-muted-foreground text-xs"
 								>
 									{m.content}
@@ -217,7 +250,12 @@ export function AskPopover({
 
 						if (from === "user" && editingMessageId === m.id) {
 							return (
-								<Message key={m.id} from="user" className="max-w-full">
+								<Message
+									key={m.id}
+									id={`pdf-ask-msg-${m.id}`}
+									from="user"
+									className="max-w-full"
+								>
 									<div className="ml-auto flex w-full flex-col gap-2 rounded-lg bg-black/5 px-3 py-2 ring-1 ring-black/10 dark:bg-white/10 dark:ring-white/15">
 										<textarea
 											ref={editTextareaRef}
@@ -267,7 +305,12 @@ export function AskPopover({
 						}
 
 						return (
-							<Message key={m.id} from={from} className="max-w-full">
+							<Message
+								key={m.id}
+								id={`pdf-ask-msg-${m.id}`}
+								from={from}
+								className="max-w-full"
+							>
 								<MessageContent
 									className={cn(
 										"text-sm",
@@ -280,6 +323,8 @@ export function AskPopover({
 											{t("pdfAsk.thinking")}
 										</Shimmer>
 									) : m.content.trim() ? (
+										// Avoid live markdown reflow thrash while streaming;
+										// animate only the latest assistant turn.
 										<MessageResponse
 											isAnimating={
 												streaming &&
@@ -310,9 +355,8 @@ export function AskPopover({
 							{error}
 						</p>
 					) : null}
-				</ConversationContent>
-				<ConversationScrollButton className="bottom-2 size-8 shadow-md" />
-			</Conversation>
+				</div>
+			</div>
 		</SelectionCard>
 	);
 }

@@ -55,21 +55,23 @@ describe("translate services registry", () => {
 		expect(getTranslateService("deepl")).toBeUndefined();
 		expect(isTranslateProviderId("bing")).toBe(true);
 		expect(isFreeMtProvider("youdao")).toBe(true);
+		expect(isFreeMtProvider("deeplx")).toBe(true);
 		expect(isFreeMtProvider("agent")).toBe(false);
 	});
 
 	it("settings list excludes deprecated free alias", () => {
 		const ids = listSelectableProviders().map((s) => s.id);
 		expect(ids).toContain("googleapi");
+		expect(ids).toContain("tencenttransmart");
+		expect(ids).toContain("huoshanweb");
+		expect(ids).toContain("deeplx");
 		expect(ids).toContain("bing");
 		expect(ids).toContain("youdao");
-		expect(ids).toContain("huoshanweb");
-		expect(ids).toContain("tencenttransmart");
 		expect(ids).toContain("agent");
 	});
 
-	it("defaults to bing free engine", () => {
-		expect(DEFAULT_TRANSLATE_SETTINGS.provider).toBe("bing");
+	it("defaults to tencent transmart", () => {
+		expect(DEFAULT_TRANSLATE_SETTINGS.provider).toBe("tencenttransmart");
 		expect(DEFAULT_TRANSLATE_SETTINGS.agentId).toBe("");
 		expect(DEFAULT_TRANSLATE_SETTINGS.modelId).toBe("");
 	});
@@ -77,6 +79,7 @@ describe("translate services registry", () => {
 	it("can probe free engines; libre needs endpoint", () => {
 		expect(canProbeFreeMtProvider("bing")).toBe(true);
 		expect(canProbeFreeMtProvider("googleapi")).toBe(true);
+		expect(canProbeFreeMtProvider("deeplx")).toBe(true);
 		expect(canProbeFreeMtProvider("libre")).toBe(false);
 		expect(canProbeFreeMtProvider("libre", "")).toBe(false);
 		expect(canProbeFreeMtProvider("libre", "https://lt.example")).toBe(true);

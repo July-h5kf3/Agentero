@@ -1,12 +1,12 @@
 //! Free machine-translation backends (no paid API keys).
-//! Google / Bing Edge / Youdao / Volcengine / Tencent Transmart / LibreTranslate.
+//! Google / Bing Edge / Youdao / DeepLX / Volcengine / Tencent Transmart / LibreTranslate.
 //! Unofficial / best-effort; may break or rate-limit.
 
 use crate::core::error::AppError;
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Soft cap for a single free-MT request (characters).
 pub const MAX_TEXT_CHARS: usize = 5000;
@@ -19,6 +19,7 @@ pub const FREE_PROVIDERS: &[&str] = &[
     "googleapi",
     "bing",
     "youdao",
+    "deeplx",
     "huoshanweb",
     "tencenttransmart",
     "libre",
@@ -27,7 +28,7 @@ pub const FREE_PROVIDERS: &[&str] = &[
 /// Default free engines raced in parallel for best-effort zh-CN (NOTES abstract).
 /// First non-empty success wins; remaining in-flight requests are dropped.
 /// Prefer engines that work better from CN networks.
-pub const ZH_RACE_PROVIDERS: &[&str] = &["bing", "huoshanweb", "tencenttransmart"];
+pub const ZH_RACE_PROVIDERS: &[&str] = &["tencenttransmart", "huoshanweb", "deeplx"];
 
 /// Per-engine HTTP timeout for [`free_mt_to_zh`] (import NOTES abstract, etc.).
 ///
@@ -103,7 +104,7 @@ pub struct TranslateTextArgs {
     #[serde(default = "default_source")]
     pub source_lang: String,
     pub target_lang: String,
-    /// Free engine id: google | googleapi | bing | youdao | huoshanweb | tencenttransmart | libre
+    /// Free engine id: google | googleapi | bing | youdao | deeplx | huoshanweb | tencenttransmart | libre
     #[serde(default = "default_provider")]
     pub provider: String,
     /// LibreTranslate base URL when provider=libre.
@@ -120,7 +121,7 @@ fn default_source() -> String {
 }
 
 fn default_provider() -> String {
-    "bing".to_string()
+    "tencenttransmart".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -143,7 +144,7 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
 
     let mut provider = args.provider.trim().to_ascii_lowercase();
     if provider.is_empty() {
-        provider = "bing".to_string();
+        provider = default_provider();
     }
 
     let source = normalize_lang(&args.source_lang, true);
@@ -183,6 +184,7 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
         }
         "bing" => translate_bing(text, &source, &target, timeout).await?,
         "youdao" => translate_youdao(text, &source, &target, timeout).await?,
+        "deeplx" => translate_deeplx(text, &source, &target, timeout).await?,
         "huoshanweb" => translate_huoshan_web(text, &source, &target, timeout).await?,
         "tencenttransmart" => translate_tencent_transmart(text, &source, &target, timeout).await?,
         "libre" => {
@@ -453,6 +455,110 @@ fn youdao_lang(code: &str) -> String {
     }
 }
 
+// ─── DeepLX / DeepL browser-extension endpoint ─────────────────────────────
+
+async fn translate_deeplx(
+    text: &str,
+    source: &str,
+    target: &str,
+    timeout: Duration,
+) -> Result<String, AppError> {
+    let client = http_client(timeout)?;
+    let id = deeplx_request_id();
+    let i_count = text.matches('i').count() as u128 + text.matches('I').count() as u128 + 1;
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let timestamp = now_ms - (now_ms % i_count) + i_count;
+    let mut body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "LMT_handle_texts",
+        "id": id,
+        "params": {
+            "texts": [
+                {
+                    "text": text,
+                    "requestAlternatives": 3,
+                }
+            ],
+            "splitting": "newlines",
+            "lang": {
+                "source_lang_user_selected": deeplx_lang(source, true),
+                "target_lang": deeplx_lang(target, false),
+            },
+            "timestamp": timestamp,
+            "commonJobParams": {
+                "wasSpoken": false,
+                "transcribe_as": "",
+            },
+        },
+    })
+    .to_string();
+    if (id + 5) % 29 == 0 || (id + 3) % 13 == 0 {
+        body = body.replace("\"method\":\"", "\"method\" : \"");
+    } else {
+        body = body.replace("\"method\":\"", "\"method\": \"");
+    }
+
+    let resp = client
+        .post("https://www2.deepl.com/jsonrpc?client=chrome-extension,1.28.0&method=LMT_handle_jobs")
+        .header("Accept", "*/*")
+        .header("Authorization", "None")
+        .header("Cache-Control", "no-cache")
+        .header("Content-Type", "application/json")
+        .header("DNT", "1")
+        .header("Origin", "chrome-extension://cofdbpoegempjloogbagkncekinflcnj")
+        .header("Pragma", "no-cache")
+        .header("Referer", "https://www.deepl.com/")
+        .header("Sec-Fetch-Dest", "empty")
+        .header("Sec-Fetch-Mode", "cors")
+        .header("Sec-Fetch-Site", "none")
+        .header("Sec-GPC", "1")
+        .header("User-Agent", "DeepLBrowserExtension/1.28.0 Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("DeepLX request failed: {e}")))?;
+    let (status, body) = read_body(resp).await?;
+    if !status.is_success() {
+        return Err(http_err(status, &body, "DeepLX"));
+    }
+    let v: Value =
+        serde_json::from_str(&body).map_err(|e| AppError::message(format!("DeepLX parse: {e}")))?;
+    if let Some(error) = v.get("error") {
+        return Err(AppError::message(format!("DeepLX service error: {error}")));
+    }
+    v.get("result")
+        .and_then(|x| x.get("texts"))
+        .and_then(|x| x.get(0))
+        .and_then(|x| x.get("text"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::message("Unexpected DeepLX translation response"))
+}
+
+fn deeplx_request_id() -> u64 {
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    8_300_000_001 + (now_ms % 99_999) * 1_000
+}
+
+fn deeplx_lang(code: &str, allow_auto: bool) -> String {
+    if allow_auto && code == "auto" {
+        return "AUTO".to_string();
+    }
+    let lower = code.to_ascii_lowercase();
+    match lower.as_str() {
+        "zh" | "zh-cn" | "zh-hans" | "zh-hk" | "zh-mo" | "zh-sg" | "zh-tw" => "ZH".to_string(),
+        "pt-br" => "PT-BR".to_string(),
+        "pt-pt" => "PT-PT".to_string(),
+        _ => lang_base(code).to_ascii_uppercase(),
+    }
+}
+
 // ─── Volcengine / Huoshan web ───────────────────────────────────────────────
 
 async fn translate_huoshan_web(
@@ -644,6 +750,7 @@ mod tests {
     fn free_providers_listed() {
         assert!(FREE_PROVIDERS.contains(&"bing"));
         assert!(FREE_PROVIDERS.contains(&"youdao"));
+        assert!(FREE_PROVIDERS.contains(&"deeplx"));
         assert!(FREE_PROVIDERS.contains(&"huoshanweb"));
         for p in ZH_RACE_PROVIDERS {
             assert!(
@@ -653,7 +760,7 @@ mod tests {
         }
         assert_eq!(
             ZH_RACE_PROVIDERS,
-            &["bing", "huoshanweb", "tencenttransmart"]
+            &["tencenttransmart", "huoshanweb", "deeplx"]
         );
         // Keep abstract-MT snappy: enough for slow success (~1.3s bench max);
         // parallel race → wall ≈ one timeout, not 3×.

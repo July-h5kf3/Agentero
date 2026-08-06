@@ -41,9 +41,15 @@ export type PlaceSelectionCardOptions = {
 	 * Pass the largest size the card may grow to so expand does not jump.
 	 */
 	placementHeight?: number;
+	/**
+	 * Stick near the anchor on the Y axis and shrink maxHeight instead of
+	 * pre-shifting the card as if it were already full height. Use for
+	 * content-sized cards (e.g. translate) so they track scroll/pin moves.
+	 */
+	trackPin?: boolean;
 	/** Open to the right of the anchor when there is room (default true). */
 	preferRight?: boolean;
-	/** Gap from the anchor point (default 6). */
+	/** Gap from the anchor point (default 4). */
 	gap?: number;
 };
 
@@ -72,8 +78,9 @@ export function placeSelectionCard(
 ): PlaceSelectionCardResult {
 	const preferredWidth = opts.width;
 	const preferredMaxH = opts.height ?? SELECTION_CARD_DEFAULT_MAX_HEIGHT;
-	const gap = opts.gap ?? 6;
+	const gap = opts.gap ?? 4;
 	const preferRight = opts.preferRight ?? true;
+	const trackPin = opts.trackPin ?? false;
 	const edge = SELECTION_CARD_EDGE;
 	const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
@@ -88,16 +95,41 @@ export function placeSelectionCard(
 		Math.max(0, vh - edge * 2),
 	);
 
-	let left = preferRight ? screen.x + gap : screen.x;
+	// Prefer the pin's side: right of anchor, or fully to the left of it.
+	let left = preferRight ? screen.x + gap : screen.x - planWidth - gap;
 	if (preferRight && left + planWidth > vw - edge) {
+		// Not enough room on the right — flip left of the pin.
 		left = Math.max(edge, screen.x - planWidth - gap);
+	} else if (!preferRight && left < edge) {
+		// Not enough room on the left — flip right of the pin.
+		left = Math.min(vw - edge - planWidth, screen.x + gap);
 	}
 	left = Math.min(Math.max(edge, left), Math.max(edge, vw - planWidth - edge));
 
 	const viewportCap = Math.max(SELECTION_CARD_MIN_HEIGHT, vh - edge * 2);
+
+	if (trackPin) {
+		// Content-sized cards: follow the pin; shrink maxHeight near edges
+		// instead of pre-shifting top by the full preferred height.
+		let top = screen.y - 8;
+		if (top < edge) top = edge;
+		let maxHeight = Math.min(preferredMaxH, viewportCap, vh - edge - top);
+		if (
+			maxHeight < SELECTION_CARD_MIN_HEIGHT &&
+			vh - edge * 2 >= SELECTION_CARD_MIN_HEIGHT
+		) {
+			// Not enough room below the pin — slide up just enough to fit.
+			maxHeight = Math.min(preferredMaxH, viewportCap);
+			top = Math.max(edge, vh - edge - maxHeight);
+			maxHeight = Math.min(maxHeight, vh - edge - top);
+		}
+		return { left, top, maxHeight: Math.max(0, maxHeight) };
+	}
+
 	// Plan top against the largest height so expand does not re-anchor.
+	// Keep the card top near the pin; only slide up when it would overflow.
 	const plannedMaxH = Math.min(planHeight, viewportCap);
-	let top = screen.y - 12;
+	let top = screen.y - 8;
 	if (top + plannedMaxH > vh - edge) {
 		top = vh - edge - plannedMaxH;
 	}
@@ -137,6 +169,10 @@ export type SelectionCardProps = {
 	 */
 	placementHeight?: number;
 	/**
+	 * Follow the anchor on scroll (content-sized cards). See placeSelectionCard.
+	 */
+	trackPin?: boolean;
+	/**
 	 * Pin the card to the computed max height (not content-sized).
 	 * Needed when the body hosts StickToBottom / `height: 100%` scrollers
 	 * (e.g. PDF Ask conversation) so the scrollbar has a definite viewport.
@@ -173,6 +209,7 @@ export function SelectionCard({
 	height = SELECTION_CARD_DEFAULT_MAX_HEIGHT,
 	placementWidth,
 	placementHeight,
+	trackPin = false,
 	lockHeight = false,
 	preferRight = true,
 	title,
@@ -192,6 +229,7 @@ export function SelectionCard({
 		height,
 		placementWidth,
 		placementHeight,
+		trackPin,
 		preferRight,
 	});
 
