@@ -5,24 +5,20 @@
 use crate::core::error::AppError;
 use serde::Serialize;
 use serde_json::Value;
-use std::sync::Mutex;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Soft cap for a single translation request (characters).
 pub const MAX_TEXT_CHARS: usize = 5000;
 
 const UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/// Known free MT provider ids (plus Host-side `libre` via freeBaseUrl).
+/// Known free MT provider ids.
 pub const FREE_PROVIDERS: &[&str] = &[
     "google",
     "googleapi",
-    "bing",
-    "youdao",
     "deeplx",
     "huoshanweb",
     "tencenttransmart",
-    "libre",
 ];
 
 /// Commercial BYOK provider ids configured in Settings → Translate.
@@ -63,7 +59,6 @@ pub async fn free_mt_to_zh(text: &str) -> Option<String> {
                 source_lang: "auto".into(),
                 target_lang: "zh-CN".into(),
                 provider,
-                free_base_url: None,
                 api_key: None,
                 base_url: None,
                 region: None,
@@ -114,9 +109,6 @@ pub struct TranslateTextArgs {
     /// Provider id: free MT, commercial BYOK, or `agent`.
     #[serde(default = "default_provider")]
     pub provider: String,
-    /// LibreTranslate base URL when provider=libre.
-    #[serde(default)]
-    pub free_base_url: Option<String>,
     /// Commercial BYOK API key.
     #[serde(default)]
     pub api_key: Option<String>,
@@ -172,12 +164,6 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
         return Err(AppError::message("Missing target language"));
     }
 
-    let base = args
-        .free_base_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-
     let timeout = resolve_timeout(args.timeout_ms);
 
     let translated = match provider.as_str() {
@@ -201,19 +187,9 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
             )
             .await?
         }
-        "bing" => translate_bing(text, &source, &target, timeout).await?,
-        "youdao" => translate_youdao(text, &source, &target, timeout).await?,
         "deeplx" => translate_deeplx(text, &source, &target, timeout).await?,
         "huoshanweb" => translate_huoshan_web(text, &source, &target, timeout).await?,
         "tencenttransmart" => translate_tencent_transmart(text, &source, &target, timeout).await?,
-        "libre" => {
-            let Some(url) = base else {
-                return Err(AppError::message(
-                    "LibreTranslate requires freeBaseUrl (Settings → Translate)",
-                ));
-            };
-            translate_libre(url, text, &source, &target, timeout).await?
-        }
         "deepl" => {
             translate_deepl(
                 text,
@@ -404,142 +380,6 @@ fn parse_google_gtx_body(body: &str) -> Result<String, AppError> {
         return Err(AppError::message("Empty Google translation result"));
     }
     Ok(out)
-}
-
-// ─── Bing (Edge free token) ─────────────────────────────────────────────────
-
-struct BingTokenCache {
-    token: String,
-    exp: Instant,
-}
-
-static BING_TOKEN: Mutex<Option<BingTokenCache>> = Mutex::new(None);
-
-async fn bing_auth_token(timeout: Duration) -> Result<String, AppError> {
-    {
-        let guard = BING_TOKEN.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(c) = guard.as_ref() {
-            if Instant::now() < c.exp {
-                return Ok(c.token.clone());
-            }
-        }
-    }
-    let client = http_client(timeout)?;
-    let resp = client
-        .get("https://edge.microsoft.com/translate/auth")
-        .header("User-Agent", UA)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("Bing auth failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() || body.trim().is_empty() {
-        return Err(http_err(status, &body, "Bing auth"));
-    }
-    let token = body.trim().to_string();
-    if let Ok(mut guard) = BING_TOKEN.lock() {
-        *guard = Some(BingTokenCache {
-            token: token.clone(),
-            exp: Instant::now() + Duration::from_secs(4 * 60),
-        });
-    }
-    Ok(token)
-}
-
-async fn translate_bing(
-    text: &str,
-    source: &str,
-    target: &str,
-    timeout: Duration,
-) -> Result<String, AppError> {
-    let token = bing_auth_token(timeout).await?;
-    let client = http_client(timeout)?;
-    let from = if source == "auto" { "" } else { source };
-    let mut url = format!(
-        "https://api-edge.cognitive.microsofttranslator.com/translate?to={}&api-version=3.0&includeSentenceLength=true",
-        urlencoding_minimal(target)
-    );
-    if !from.is_empty() {
-        url.push_str(&format!("&from={}", urlencoding_minimal(from)));
-    }
-    let body = serde_json::json!([{ "text": text }]);
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {token}"))
-        .header("Content-Type", "application/json")
-        .header("User-Agent", UA)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("Bing translate request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "Bing Translate"));
-    }
-    let v: Value =
-        serde_json::from_str(&body).map_err(|e| AppError::message(format!("Bing parse: {e}")))?;
-    v.get(0)
-        .and_then(|x| x.get("translations"))
-        .and_then(|x| x.get(0))
-        .and_then(|x| x.get("text"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| AppError::message("Unexpected Bing translation response"))
-}
-
-// ─── Youdao free web ────────────────────────────────────────────────────────
-
-async fn translate_youdao(
-    text: &str,
-    source: &str,
-    target: &str,
-    timeout: Duration,
-) -> Result<String, AppError> {
-    let client = http_client(timeout)?;
-    let from = youdao_lang(source);
-    let to = youdao_lang(target);
-    let typ = format!("{from}2{to}");
-    let resp = client
-        .get("https://fanyi.youdao.com/translate")
-        .query(&[("doctype", "json"), ("type", typ.as_str()), ("i", text)])
-        .header("User-Agent", UA)
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("Youdao request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "Youdao"));
-    }
-    let v: Value =
-        serde_json::from_str(&body).map_err(|e| AppError::message(format!("Youdao parse: {e}")))?;
-    let mut out = String::new();
-    if let Some(rows) = v.get("translateResult").and_then(|x| x.as_array()) {
-        for row in rows {
-            if let Some(cells) = row.as_array() {
-                for cell in cells {
-                    if let Some(t) = cell.get("tgt").and_then(|x| x.as_str()) {
-                        out.push_str(t);
-                    }
-                }
-            }
-        }
-    }
-    if out.is_empty() {
-        return Err(AppError::message("Unexpected Youdao translation response"));
-    }
-    Ok(out)
-}
-
-fn youdao_lang(code: &str) -> String {
-    if code == "auto" {
-        return "AUTO".to_string();
-    }
-    // EN2ZH_CN style
-    let base = lang_base(code).to_ascii_uppercase();
-    if base == "ZH" {
-        "ZH_CN".to_string()
-    } else {
-        base
-    }
 }
 
 // ─── DeepLX / DeepL browser-extension endpoint ─────────────────────────────
@@ -739,62 +579,6 @@ async fn translate_tencent_transmart(
     }
     Err(AppError::message(
         "Unexpected Tencent Transmart translation response",
-    ))
-}
-
-// ─── LibreTranslate ─────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-struct LibreRequest<'a> {
-    q: &'a str,
-    source: &'a str,
-    target: &'a str,
-    format: &'a str,
-}
-
-async fn translate_libre(
-    base_url: &str,
-    text: &str,
-    source: &str,
-    target: &str,
-    timeout: Duration,
-) -> Result<String, AppError> {
-    let base = base_url.trim_end_matches('/');
-    let url = format!("{base}/translate");
-    let client = http_client(timeout)?;
-    let lt_target =
-        if target.eq_ignore_ascii_case("zh-CN") || target.eq_ignore_ascii_case("zh-Hans") {
-            "zh"
-        } else {
-            target
-        };
-    let lt_source = if source == "auto" { "auto" } else { source };
-    let resp = client
-        .post(&url)
-        .json(&LibreRequest {
-            q: text,
-            source: lt_source,
-            target: lt_target,
-            format: "text",
-        })
-        .send()
-        .await
-        .map_err(|e| AppError::message(format!("LibreTranslate request failed: {e}")))?;
-    let (status, body) = read_body(resp).await?;
-    if !status.is_success() {
-        return Err(http_err(status, &body, "LibreTranslate"));
-    }
-    let parsed: Value = serde_json::from_str(&body)
-        .map_err(|e| AppError::message(format!("LibreTranslate parse: {e}")))?;
-    if let Some(t) = parsed
-        .get("translatedText")
-        .or_else(|| parsed.get("translated_text"))
-        .and_then(|x| x.as_str())
-    {
-        return Ok(t.to_string());
-    }
-    Err(AppError::message(
-        "Unexpected LibreTranslate response (missing translatedText)",
     ))
 }
 
@@ -1084,23 +868,6 @@ async fn translate_openai_compatible(
         .ok_or_else(|| AppError::message("Unexpected OpenAI-compatible response"))
 }
 
-/// Minimal URL-encoding for query values (enough for our use).
-fn urlencoding_minimal(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() * 2);
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char);
-            }
-            _ => {
-                out.push('%');
-                out.push_str(&format!("{b:02X}"));
-            }
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1121,10 +888,17 @@ mod tests {
 
     #[test]
     fn free_providers_listed() {
-        assert!(FREE_PROVIDERS.contains(&"bing"));
-        assert!(FREE_PROVIDERS.contains(&"youdao"));
         assert!(FREE_PROVIDERS.contains(&"deeplx"));
         assert!(FREE_PROVIDERS.contains(&"huoshanweb"));
+        assert!(FREE_PROVIDERS.contains(&"tencenttransmart"));
+        assert!(FREE_PROVIDERS.contains(&"googleapi"));
+        assert!(FREE_PROVIDERS.contains(&"google"));
+        for p in COMMERCIAL_PROVIDERS {
+            assert!(
+                !FREE_PROVIDERS.contains(p),
+                "{p} should stay out of FREE_PROVIDERS"
+            );
+        }
         for p in ZH_RACE_PROVIDERS {
             assert!(
                 FREE_PROVIDERS.contains(p),

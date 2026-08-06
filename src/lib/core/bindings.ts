@@ -26,8 +26,6 @@ export type TranslateTextArgs = {
 	targetLang: string;
 	/**  Provider id: free MT, commercial BYOK, or `agent`. */
 	provider?: string;
-	/**  LibreTranslate base URL when provider=libre. */
-	freeBaseUrl?: string | null;
 	/**  Commercial BYOK API key. */
 	apiKey?: string | null;
 	/**  Commercial BYOK base URL / endpoint override. */

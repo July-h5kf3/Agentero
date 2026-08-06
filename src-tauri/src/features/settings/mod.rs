@@ -14,6 +14,24 @@ use std::sync::Mutex;
 pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
 pub const DEFAULT_NETWORK_PROXY_URL: &str = "http://127.0.0.1:7890";
 
+/// True when `key` is a UI mask of only `*` (length mirrors the real secret).
+/// Real secrets stay in the Host process / settings file; `settings_set` treats
+/// an all-asterisk value as “keep previous key”.
+pub fn is_translate_api_key_mask(key: &str) -> bool {
+    let t = key.trim();
+    !t.is_empty() && t.chars().all(|c| c == '*')
+}
+
+/// Replace a non-empty secret with the same number of `*` characters.
+pub fn mask_translate_api_key(key: &str) -> String {
+    let n = key.trim().chars().count();
+    if n == 0 {
+        String::new()
+    } else {
+        "*".repeat(n)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -268,13 +286,20 @@ impl AppSettingsStore {
             .clone();
         let existed = self.path.is_file();
         Ok(SettingsGetResult {
-            settings,
+            settings: redact_translate_secrets(settings),
             path: self.path.to_string_lossy().into_owned(),
             existed,
         })
     }
 
     pub fn set(&self, mut settings: AppSettings) -> Result<AppSettings, AppError> {
+        {
+            let previous = self
+                .inner
+                .lock()
+                .map_err(|_| AppError::message("settings lock poisoned"))?;
+            merge_translate_secrets(&mut settings, &previous);
+        }
         normalize(&mut settings);
         persist(&self.path, &settings)?;
         let mut guard = self
@@ -282,7 +307,22 @@ impl AppSettingsStore {
             .lock()
             .map_err(|_| AppError::message("settings lock poisoned"))?;
         *guard = settings.clone();
-        Ok(settings)
+        // Never echo raw API keys back to the WebView / settings:changed.
+        Ok(redact_translate_secrets(settings))
+    }
+
+    /// Resolve a commercial MT API key by provider id (case-insensitive).
+    /// Used by `translate_text` so the WebView never needs the plaintext key.
+    pub fn translate_api_key(&self, provider: &str) -> Option<String> {
+        let key = commercial_provider_settings_key(provider)?;
+        let guard = self.inner.lock().ok()?;
+        let cfg = guard.translate.provider_configs.get(key)?;
+        let api_key = cfg.api_key.trim();
+        if api_key.is_empty() || is_translate_api_key_mask(api_key) {
+            None
+        } else {
+            Some(api_key.to_string())
+        }
     }
 }
 
@@ -327,7 +367,48 @@ fn persist(path: &PathBuf, settings: &AppSettings) -> Result<(), AppError> {
         // Windows may fail rename over existing; fallback to write.
         fs::write(path, raw.as_bytes())
     })?;
+    // Owner-only file when secrets (BYOK keys) may live in this JSON.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+    }
     Ok(())
+}
+
+/// Map Host translate provider id (any case) → settings `providerConfigs` key.
+pub fn commercial_provider_settings_key(provider: &str) -> Option<&'static str> {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "deepl" => Some("deepl"),
+        "azure" => Some("azure"),
+        "googlecloud" => Some("googleCloud"),
+        "openaicompatible" => Some("openaiCompatible"),
+        _ => None,
+    }
+}
+
+/// Replace non-empty commercial API keys with same-length `*` masks.
+fn redact_translate_secrets(mut settings: AppSettings) -> AppSettings {
+    for cfg in settings.translate.provider_configs.values_mut() {
+        if !cfg.api_key.trim().is_empty() {
+            cfg.api_key = mask_translate_api_key(&cfg.api_key);
+        }
+    }
+    settings
+}
+
+/// Apply incoming commercial configs while preserving secrets when the UI sends the mask.
+fn merge_translate_secrets(incoming: &mut AppSettings, previous: &AppSettings) {
+    for (id, cfg) in incoming.translate.provider_configs.iter_mut() {
+        if is_translate_api_key_mask(&cfg.api_key) {
+            if let Some(prev) = previous.translate.provider_configs.get(id) {
+                cfg.api_key = prev.api_key.clone();
+            } else {
+                // Mask with no prior secret → treat as unset.
+                cfg.api_key.clear();
+            }
+        }
+    }
 }
 
 fn normalize(s: &mut AppSettings) {
@@ -494,6 +575,76 @@ mod tests {
         };
         normalize(&mut s);
         assert_eq!(s.translator_base_url, DEFAULT_TRANSLATOR_BASE_URL);
+    }
+
+    #[test]
+    fn redact_and_merge_translate_api_keys() {
+        let mut previous = AppSettings::default();
+        previous.translate.provider_configs.insert(
+            "deepl".into(),
+            TranslateProviderConfig {
+                api_key: "sk-secret".into(),
+                ..Default::default()
+            },
+        );
+
+        let redacted = redact_translate_secrets(previous.clone());
+        assert_eq!(
+            redacted
+                .translate
+                .provider_configs
+                .get("deepl")
+                .map(|c| c.api_key.as_str()),
+            Some("*********") // "sk-secret".chars().count()
+        );
+        assert!(is_translate_api_key_mask("*********"));
+        assert!(!is_translate_api_key_mask("sk-secret"));
+
+        let mut incoming = redacted;
+        merge_translate_secrets(&mut incoming, &previous);
+        assert_eq!(
+            incoming
+                .translate
+                .provider_configs
+                .get("deepl")
+                .map(|c| c.api_key.as_str()),
+            Some("sk-secret")
+        );
+
+        // Explicit empty clears the secret.
+        incoming
+            .translate
+            .provider_configs
+            .get_mut("deepl")
+            .unwrap()
+            .api_key
+            .clear();
+        merge_translate_secrets(&mut incoming, &previous);
+        assert_eq!(
+            incoming
+                .translate
+                .provider_configs
+                .get("deepl")
+                .map(|c| c.api_key.as_str()),
+            Some("")
+        );
+    }
+
+    #[test]
+    fn commercial_provider_key_mapping() {
+        assert_eq!(
+            commercial_provider_settings_key("googleCloud"),
+            Some("googleCloud")
+        );
+        assert_eq!(
+            commercial_provider_settings_key("GOOGLECLOUD"),
+            Some("googleCloud")
+        );
+        assert_eq!(
+            commercial_provider_settings_key("openaiCompatible"),
+            Some("openaiCompatible")
+        );
+        assert_eq!(commercial_provider_settings_key("deeplx"), None);
     }
 
     #[test]
