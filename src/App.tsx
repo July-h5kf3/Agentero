@@ -42,6 +42,7 @@ import { notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
 import { openMagicWand } from "@/lib/paper/import-actions";
+import { scheduleLibraryRefresh } from "@/lib/paper/library-store";
 import { UI_SCALE_PRESETS } from "@/lib/settings";
 import { getSettings, patchSettings } from "@/lib/settings/react-store";
 import {
@@ -227,6 +228,7 @@ export default function App() {
 		vaultPath,
 		onDiskChange: (absPath) => void applyDiskChange(absPath),
 		onStructuralChange: scheduleTreeRefresh,
+		onLibraryChange: scheduleLibraryRefresh,
 		onWikiChange: scheduleWikiRebuild,
 		shouldIgnoreEvent: shouldIgnoreInternalRenameEvent,
 		onExternalRename: (rename, payload) => {

@@ -19,6 +19,7 @@
 - 忽略：`.git`、`.venv`、`node_modules` 等（`TREE_IGNORE_NAMES`）。
 - 默认只展开 `papers/` 及其一级子目录。
 - 虚拟化：`@tanstack/react-virtual` 拍平窗口化；`getItemKey` 用行稳定 id，避免内联新建草稿插入/移除后按索引缓存行高留下空隙。文件/文件夹行固定为 `h-7`，论文资源操作按钮不改变行高。
+- 外部工具 / CLI 导入论文时，watcher 会刷新文件树，并在 Catalog 或 `papers/` 结构变更后去抖刷新 Library 元数据；论文行标签因此可在不重开论文库的情况下从目录 ID 更新为标题/作者。
 
 ### 论文目录识别
 
