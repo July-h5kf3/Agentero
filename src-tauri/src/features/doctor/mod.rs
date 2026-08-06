@@ -7,7 +7,7 @@ use crate::features::catalog::{self, papers::PaperRecord};
 use crate::features::wiki::frontmatter::{inspect_aliases, patch_aliases, AliasEdit};
 use crate::features::wiki::index::WikiIndex;
 use crate::features::wiki::models::{WikiCheckCounts, WikiCheckResult};
-use crate::features::wiki::rename::{atomic_write, content_hash};
+use crate::features::wiki::rename::content_hash;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -730,10 +730,10 @@ pub fn apply_alias_repairs(
 
     let mut written: Vec<&PlannedAliasWrite> = Vec::new();
     for write in &planned {
-        if let Err(error) = atomic_write(&write.absolute, write.rewritten.as_bytes()) {
+        if let Err(error) = write_note_bytes(&write.absolute, write.rewritten.as_bytes()) {
             let mut rollback_complete = true;
             for previous in written.iter().rev() {
-                if atomic_write(&previous.absolute, previous.original.as_bytes()).is_err() {
+                if write_note_bytes(&previous.absolute, previous.original.as_bytes()).is_err() {
                     rollback_complete = false;
                 }
             }
@@ -756,6 +756,17 @@ pub fn apply_alias_repairs(
     Ok(AliasRepairResult {
         updated_paths: planned.into_iter().map(|write| write.path).collect(),
     })
+}
+
+/// In-place content write for alias repair (path/name never change).
+///
+/// Do **not** use tmp+rename here: Host `atomic_write` is reported by FSEvents
+/// as an incomplete rename. The main window then toasts
+/// `vault.externalRename.unverified` even though no wiki target moved and path-
+/// based `[[...]]` links need no repair. Same trade-off as cite sidecars in
+/// `features/refs` — preflight + in-memory rollback cover batch safety.
+fn write_note_bytes(path: &Path, contents: &[u8]) -> Result<(), String> {
+    fs::write(path, contents).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

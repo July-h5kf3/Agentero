@@ -1879,7 +1879,7 @@ snapshot 保存所有 Wiki target 的 size+mtime stat 指纹（不读文件内�
 
 - 参数：`{ vaultPath, changes, dirtyPaths? }`；每条 change 含 `path`、可编辑的 `titleAlias` / `shortAlias` 与诊断时 `expectedHash`。
 - 仅接受 Catalog paper 对应的 `papers/**/NOTES.md`。
-- 批量预检脏路径、哈希、alias 冲突与 YAML 安全范围；全部通过后原子写入，失败回滚。
+- 批量预检脏路径、哈希、alias 冲突与 YAML 安全范围；全部通过后**原地写入** frontmatter（不改 path），失败按规划内容回滚。不使用 tmp+rename，以免被 watcher 误报为外部改名。
 
 #### `doctor_set_dirty_paths`
 
