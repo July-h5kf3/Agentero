@@ -9,13 +9,17 @@
 
 任意 Vault 路径 `.pdf` 可 `blob:` 预览；论文单元：本地优先 → 自动下载 → 远程 `pdf_url` 回退。HTML 用远程 `html_url` iframe（不注入主 DOM）。普通网页条目打开 HTML 并创建 `NOTES.md` 分屏；旧条目缺少 `html_url` 时从 `source_url` 兜底。
 
-PDFium engine 由窗口共享并在主线程运行。Engine 宿主位于 React StrictMode 外，异步初始化即使在完成前被卸载也会主动销毁结果，避免 dev reload 遗留孤儿 WASM engine。工作区只挂载当前可见与最近使用的至多两个 PDF viewer；恢复的隐藏 PDF 标签按需 hydrate，退出保留集合的本地 PDF 字节会释放并在再次激活时重新读取。
+PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑在 Web Worker，缩放/滚动不阻塞主线程）；启动时经 `whenReady()` 就绪握手 + 8s 超时探针验证（`@embedpdf/engines` patch 同时把 worker 侧 `wasmError` / `onerror` 暴露为就绪失败，不再静默挂起），失败则自动回退主线程 direct engine 并记住结论（旧版库的 worker 变体在 Tauri WebView 下就绪消息丢失，表现为文档永远“正在加载”）。wasm URL 传给 worker 前先解析为绝对地址（blob worker 不能按页面基址解析相对路径）。Engine 宿主位于 React StrictMode 外，异步初始化即使在完成前被卸载也会主动销毁结果，避免 dev reload 遗留孤儿 WASM engine。工作区只挂载当前可见与最近使用的至多两个 PDF viewer；恢复的隐藏 PDF 标签按需 hydrate，退出保留集合的本地 PDF 字节会释放并在再次激活时重新读取。
+
+光栅化分辨率按 `min(devicePixelRatio, 1.5)` 封顶（`pdfRasterDpr`）：高 DPI 屏全 dpr 光栅会让每次缩放重渲染过重；封顶后 `RenderLayer` / `TilingLayer` 都按该 dpr 出图（`TilingLayer` 的 `dpr` 属性由 `@embedpdf/plugin-tiling` patch 提供）。Agent 区域裁剪走 `renderPageRect`，不受封顶影响。
+
+抗抽动（twitch）措施：瓦片 `extraRings: 1` 预渲染视口外圈，减少快速滚动时边缘瓦片延迟弹出；`TilingLayer` patch 在新瓦片集异步光栅到达前保留旧瓦片作拉伸占位（`scale/srcScale` 重映射，1.5s 超时兜底），消除缩放瞬间的空白闪烁；marks 4s 轮询结果先做 JSON 指纹比对，内容未变不提交 state，避免周期性整 viewer 重渲染。
 
 ## 阅读能力
 
 | 能力 | 说明 |
 |---|---|
-| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、适应宽/整页、⌘滚轮；真实 scale 重渲染 |
+| 缩放 | 可输入 50%–300% 精确比例；支持 +/-、适应宽/整页、⌘滚轮；真实 scale 重渲染。⌘滚轮步进按动画帧合并（`createWheelZoomCoalescer`）：一帧内多个 wheel 事件先累加抵消，再一次性应用净步进，避免触控板高频事件逐事件触发整页重光栅 |
 | 导航 | 页码 pill、PageUp/Down、Home/End |
 | 大纲 | 左侧书签浮层 |
 | 查找 | `⌘F` + 命中高亮 |
@@ -55,6 +59,7 @@ PDFium engine 由窗口共享并在主线程运行。Engine 宿主位于 React S
 | 路径 | 职责 |
 |---|---|
 | `src/components/viewer/embed/pdf-viewer.tsx` | 阅读器 |
+| `src/components/viewer/embed/engine-provider.tsx` | PDFium engine 宿主：worker 优先 + 就绪探针 + 主线程回退 |
 | `src/components/viewer/embed/pdf-region-select-layer.tsx` | 图片区域框选覆盖层 |
 | `src/components/viewer/embed/pdf-region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
 | `src/components/viewer/pdf-ask/visual-annotation-editor.tsx` | 框选后批注编辑器 |
@@ -66,6 +71,7 @@ PDFium engine 由窗口共享并在主线程运行。Engine 宿主位于 React S
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
+| `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进 |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
 
