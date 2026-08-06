@@ -53,7 +53,7 @@ export type PdfAskThreadSummary = {
 	page: number;
 	/**
 	 * Pin position on the page (0–1), near the selection —
-	 * typically the right-middle of the anchor rects.
+	 * typically the right side of the anchor rects.
 	 */
 	x: number;
 	y: number;

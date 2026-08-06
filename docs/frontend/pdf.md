@@ -34,17 +34,19 @@ PDFium engine 由窗口共享并在主线程运行。Engine 宿主位于 React S
 | 高亮 | `marks/annotations.json` | 颜色 |
 | 批注 | 高亮 + `comment` | 页边针 + 右侧批注面板 |
 | 提问 | `marks/<id>.json`（kind ask） | 迷你问答；页边针 |
-| 加入对话 | 不落盘 | 选区固定为 Agent composer 文本 chip，见 [agent.md](agent.md) |
-| 翻译 | `marks/<id>.json`（kind translate） | [translate.md](translate.md) |
+| 加入对话 | 发送该轮后写 `marks/<id>.json`（kind `agent-trace`，无裁剪图） | 选区固定为 Agent composer 文本 chip；**发送**后在选区旁落对话卡片页边针（与视觉批注同一 mark 族 / 浮层续聊），见 [agent.md](agent.md) |
+| 翻译 | `marks/<id>.json`（kind translate） | 浮层结果卡：贴合选区随滚轮重定位；未悬停卡片 / 原文高亮 / 页边针时自动收起（流式中除外）。见 [translate.md](translate.md) |
 | 视觉批注 | `marks/<id>.json`（kind `agent-trace`）保存会话与 `image.path`；裁剪图位于 `marks/assets/<id>.png`；`providerSessionId` 为源会话；`messages[]` 本地多轮 transcript（续聊也会落盘） | 框选 → **Enter** → composer；**⌘↵** → 浮层。多轮续聊走 ACP 同一 session（load/resume），同时 `beginTraceContinue` + complete 更新 mark。打开 Agent 与 pin 共享 `providerSessionId` / `visualTraceId` |
 
 - 不改 PDF 二进制；不自动写入 `NOTES.md`。
 - 提问 Agent 可与面板默认 Agent 分开配置。
 - 坐标归一化；多段 rect 支持双栏。
+- 页边针：用 PDFium `getPageTextRects` 判断是否压字。优先贴选区右侧，有字则试左侧；压字半透明，空白处实心。文字层未加载时保持实心。划词菜单仅在翻到选区下方时半透明。
 - 普通划词只启用文本选区；EmbedPDF 默认 marquee 矩形框选关闭，视觉区域批注只通过工具栏 / **⌘.** 显式进入。
 - 旧版 visual Ask（`kind: ask` + `visualKind`）仍可读、可打开。
 - 一次提交可包含多条视觉批注：prompt 按 `## Annotation N` 分点，图片顺序与 annotation 对齐。
-- 视觉裁剪不以 base64 写入 mark JSON；活动 PDF 的 marks 轮询只读取 metadata，悬浮卡片、打开 Agent 与 Wiki 嵌入按需读取图片。图片缺失时仍保留位置、批注和多轮 transcript。
+- PDF 内视觉批注草稿 / pin 卡片打开时，原页面显示框选区域；浮层不重复显示页码和裁剪图，裁剪图在 Agent 侧边栏视觉上下文与批注侧边栏视觉批注列表中展示。
+- 视觉裁剪按用户框选的实际区域生成截图（不隐式外扩），最长边 1600 px；不以 base64 写入 mark JSON。活动 PDF 的 marks 轮询只读取 metadata，悬浮卡片、打开 Agent 与 Wiki 嵌入按需读取图片。图片缺失时仍保留位置、批注和多轮 transcript。
 - **写进笔记**：批注面板复制 / `[[@id]]` / `![[…@id]]`，见 [wiki.md](wiki.md) 编辑器 `@` 说明。
 
 ## 代码
