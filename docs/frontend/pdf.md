@@ -62,18 +62,30 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/embed/engine-provider.tsx` | PDFium engine 宿主：worker 优先 + 就绪探针 + 主线程回退 |
 | `src/components/viewer/embed/pdf-region-select-layer.tsx` | 图片区域框选覆盖层 |
 | `src/components/viewer/embed/pdf-region-crop.ts` | PDF 区域裁剪与 Agent 图片编码 |
+| `src/components/viewer/embed/layout-analysis-toolbar.tsx` | 版面分析（配图/表格/公式 bbox）入口 |
 | `src/components/viewer/pdf-ask/visual-annotation-editor.tsx` | 框选后批注编辑器 |
 | `src/components/viewer/pdf-citation-preview.tsx` | 文中引用悬浮预览 |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
 | `src/lib/pdf/agent-trace/` | agent-trace 契约 / mark 资产 IO / prompt / Open-in-Agent 重建 / 会话回跳 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
 | `src/lib/pdf/ask/` | 划词提问 |
+| `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、内存 store |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
 | `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进 |
 | `src/lib/pdf/annotations-store.ts` | 按 tab 状态 |
 | `src/lib/pdf/selection/` | 选区与 marks IO |
+
+## 版面分析（实验）
+
+工具栏 **Boxes** → 页内检测 → 右栏 **Figures**（image/chart、table、algorithm、**有编号 formula 置底**）。
+
+**完整流水线、14 条核心规则、阈值与代码地图**见：
+
+→ **[pdf-layout-analysis.md](pdf-layout-analysis.md)**
+
+要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；**未**落盘 sidecar。
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 

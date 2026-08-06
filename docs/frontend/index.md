@@ -91,6 +91,7 @@ UI (AI Elements: Conversation + Message + PromptInput + Sources)
 | 入库 UI | [paper-import.md](paper-import.md) |
 | Markdown 编辑 | [markdown.md](markdown.md) |
 | PDF 阅读与划词 | [pdf.md](pdf.md) |
+| PDF 版面分析（实验） | [pdf-layout-analysis.md](pdf-layout-analysis.md) |
 | Agent 面板 | [agent.md](agent.md) |
 | 移动端壳与 Bridge 客户端 | [mobile.md](mobile.md) |
 | 双链 UI | [wiki.md](wiki.md) |
