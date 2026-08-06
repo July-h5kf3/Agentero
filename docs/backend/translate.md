@@ -7,7 +7,8 @@
 | 项 | 值 |
 |---|---|
 | 通用 `timeout_ms` | 可选；钳制 1s–30s；默认 30s |
-| 商用 BYOK | DeepL / Azure / Google Cloud / OpenAI-compatible，按 provider 读取 `apiKey`，部分 provider 还需要 `baseUrl` / `region` / `model` |
+| 商用 BYOK | DeepL / Azure / Google Cloud / OpenAI-compatible；`apiKey` 可由调用方传入，或由 Host 从 `settings.translate.providerConfigs` 解析（前端仅持有同长度 `*` 掩码） |
+| 密钥存储 | 明文写在用户本机 `settings.json`（Unix `0600`）；`settings_get` / 广播按字符 redact 为 `*`；`settings_set` 对纯 `*` 串 merge 保留原值 |
 | 导入摘要 `free_mt_to_zh` | **并行竞速** 腾讯 / 火山 / DeepLX，取最先成功；单引擎 5s（`FREE_MT_ZH_TIMEOUT_MS`）；全失败则不写翻译 |
 | 设置页探测 | 前端 5s / 引擎 |
 

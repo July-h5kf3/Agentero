@@ -759,8 +759,11 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     text: string;
     sourceLang?: string;     // default "auto"
     targetLang: string;      // e.g. "zh-CN" | "en"
-    provider?: string;       // tencenttransmart (default) | huoshanweb | deeplx | bing | youdao | googleapi | google | libre
-    freeBaseUrl?: string | null; // libre 必填
+    provider?: string;       // tencenttransmart (default) | huoshanweb | deeplx | googleapi | google | deepl | azure | googleCloud | openaiCompatible
+    apiKey?: string | null;  // 商用 BYOK；可省略或传同长度 "*" 掩码，Host 从 settings 注入真实密钥
+    baseUrl?: string | null; // 商用 provider endpoint override（可选）
+    region?: string | null;  // azure 必填
+    model?: string | null;   // openaiCompatible 必填
     timeoutMs?: number | null;   // optional; clamped 1s–30s server-side (default 30s); settings probe uses 5000
   }
   ```

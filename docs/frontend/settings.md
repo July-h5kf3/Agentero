@@ -18,7 +18,7 @@
 | 通用 | Translator URL、Connector 开关、文件树标签/排序、打开行为 |
 | Appearance | 明暗、`uiTheme`（tweakcn 预设）、`uiScale` |
 | Agent | 默认 Agent、权限模式、自动精读、个人提示词、划词提问 Agent |
-| 翻译 | 免费 MT、BYOK 商用服务、语言与 Agent 座 |
+| 翻译 | 默认服务选择、商用 API 配置、语言与 Agent 座 |
 | 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新 |
 

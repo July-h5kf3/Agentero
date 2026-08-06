@@ -4,7 +4,16 @@
 
 ## 设置
 
-Settings → **翻译**：服务类型、目标语言、免费 MT endpoint、商用 API key / region / model、Agent 座（跟随默认或指定）。
+Settings → **翻译**：
+
+- **默认服务** 下拉：免费 MT 与 Agent 始终可选；商用仅列出已配置者。打开下拉时对免费 MT 与已配置商用并行 probe。
+- 目标语言、划词自动翻译。
+- **商用 API** 卡片仅填写 key / endpoint / region / model；点「确定」后：
+  - 将 API key 写入 Host `settings.json`（Unix 权限 `0600`）；WebView 只保留同长度 `*` 掩码，不再回显明文。
+  - Host `settings_get` / `settings:changed` 对 key 按字符 redact 为 `*`；`settings_set` 收到纯 `*` 串时保留原密钥。
+  - `translate_text` 在 key 缺省或为 `*` 掩码时从 Host 配置解析真实密钥。
+  - 随后做一次连通性 probe。卡片不承担「设为默认」选择。
+- 默认服务为 Agent 时展示 Agent / 模型座。
 
 ## 消费方
 
@@ -17,7 +26,7 @@ Settings → **翻译**：服务类型、目标语言、免费 MT endpoint、商
 
 | 类型 | 路径 |
 |---|---|
-| 免费 MT | Host `translate_text`（内置 Google gtx 或 LibreTranslate URL） |
+| 免费 MT | Host `translate_text`（腾讯交互翻译 / 火山 Web / DeepLX / Google gtx） |
 | 商用 BYOK | Host `translate_text`（DeepL / Azure / Google Cloud / OpenAI-compatible） |
 | Agent | `agent_run_once` + 翻译 prompt |
 
