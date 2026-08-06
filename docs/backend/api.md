@@ -759,7 +759,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     text: string;
     sourceLang?: string;     // default "auto"
     targetLang: string;      // e.g. "zh-CN" | "en"
-    provider?: string;       // bing (default) | youdao | huoshanweb | tencenttransmart | googleapi | google | libre
+    provider?: string;       // tencenttransmart (default) | huoshanweb | deeplx | bing | youdao | googleapi | google | libre
     freeBaseUrl?: string | null; // libre 必填
     timeoutMs?: number | null;   // optional; clamped 1s–30s server-side (default 30s); settings probe uses 5000
   }
