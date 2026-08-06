@@ -259,6 +259,9 @@ mod tests {
             "/vault/papers/demo/.NOTES.md.agentero-rename-deadbeef.tmp"
         ));
         assert!(!is_agentero_atomic_temp("/vault/papers/demo/NOTES.md"));
+    }
+
+    #[test]
     fn catalog_sqlite_changes_are_not_ignored() {
         assert!(!is_ignored("/vault/.agentero/catalog.sqlite"));
         assert!(!is_ignored("/vault/.agentero/catalog.sqlite-wal"));
