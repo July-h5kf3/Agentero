@@ -25,11 +25,15 @@ async function blobToPromptImage(blob: Blob): Promise<PromptImage> {
 	};
 }
 
-function cropScaleFactor(page: PdfPageObject, region: PdfAskNormalizedRect) {
+function cropScaleFactor(
+	page: PdfPageObject,
+	region: PdfAskNormalizedRect,
+	maxEdgePx: number,
+) {
 	const cropWidth = page.size.width * region.w;
 	const cropHeight = page.size.height * region.h;
 	const longestEdge = Math.max(cropWidth, cropHeight, 1);
-	return Math.max(1, Math.min(2, MAX_CROP_EDGE_PX / longestEdge));
+	return Math.max(0.25, Math.min(2, maxEdgePx / longestEdge));
 }
 
 export async function renderPdfRegionPromptImage({
@@ -37,19 +41,24 @@ export async function renderPdfRegionPromptImage({
 	document,
 	pageIndex,
 	region,
+	maxEdgePx = MAX_CROP_EDGE_PX,
 }: {
 	engine: PdfEngine;
 	document: PdfDocumentObject;
 	pageIndex: number;
 	region: PdfAskNormalizedRect;
+	/** Longest edge of the crop output in CSS pixels (default 1600). */
+	maxEdgePx?: number;
 }): Promise<PromptImage> {
 	const page = document.pages[pageIndex];
 	if (!page) throw new Error("PDF page is unavailable");
 	const rect = normalizedRegionToPdfRect(region, page.size);
 	if (!rect) throw new Error("PDF crop region is empty");
+	const edge =
+		Number.isFinite(maxEdgePx) && maxEdgePx > 0 ? maxEdgePx : MAX_CROP_EDGE_PX;
 	const blob = await engine
 		.renderPageRect(document, page, rect, {
-			scaleFactor: cropScaleFactor(page, region),
+			scaleFactor: cropScaleFactor(page, region, edge),
 			imageType: "image/png",
 			withAnnotations: false,
 			withForms: false,

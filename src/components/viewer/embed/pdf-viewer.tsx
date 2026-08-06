@@ -6,6 +6,7 @@ import type {
 	PdfLinkAnnoObject,
 } from "@embedpdf/models";
 import { PdfAnnotationSubtype } from "@embedpdf/models";
+import { AiManagerPluginPackage } from "@embedpdf/plugin-ai-manager/react";
 import {
 	AnnotationLayer,
 	AnnotationPluginPackage,
@@ -27,6 +28,11 @@ import {
 	PagePointerProvider,
 	useInteractionManagerCapability,
 } from "@embedpdf/plugin-interaction-manager/react";
+import {
+	LayoutAnalysisLayer,
+	LayoutAnalysisPluginPackage,
+	useLayoutAnalysisCapability,
+} from "@embedpdf/plugin-layout-analysis/react";
 import {
 	RenderLayer,
 	RenderPluginPackage,
@@ -98,7 +104,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-
+import { useStore } from "zustand";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -118,6 +124,7 @@ import {
 	rectRightScreen,
 	rectTopCenterScreen,
 } from "@/components/viewer/embed/geometry";
+import { LayoutAnalysisToolbar } from "@/components/viewer/embed/layout-analysis-toolbar";
 import { renderPdfRegionPromptImage } from "@/components/viewer/embed/pdf-region-crop";
 import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-select-layer";
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
@@ -205,6 +212,15 @@ import {
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import {
+	getPdfAiRuntime,
+	layoutAnalysisStore,
+	layoutKindBorder,
+	layoutKindFill,
+	layoutKindHex,
+	runDocumentLayoutAnalysis,
+	setFocusedLayoutRegion,
+} from "@/lib/pdf/layout";
 import { setPaperOutline } from "@/lib/pdf/outline-location";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 import {
@@ -301,6 +317,20 @@ export type PdfViewerHandle = {
 	deleteVisualTrace: (id: string) => void;
 	/** Toggle visual-region annotation mode (⌘.). */
 	toggleVisualAnnotation: () => void;
+	/** Run EmbedPDF layout analysis for figures / tables / formulas. */
+	analyzeLayout: () => void;
+	/** Jump to a layout region (0-based page) and focus its overlay. */
+	scrollToLayoutRegion: (region: {
+		id: string;
+		pageIndex: number;
+		bbox: PdfAskNormalizedRect;
+	}) => void;
+	/** Crop a normalized page region (for figure sidebar thumbnails). */
+	renderRegion: (args: {
+		pageIndex: number;
+		bbox: PdfAskNormalizedRect;
+		maxEdgePx?: number;
+	}) => Promise<PromptImage | null>;
 };
 
 export type PdfViewerProps = {
@@ -457,6 +487,18 @@ export function PdfViewer(props: PdfViewerProps) {
 			}),
 			createPluginRegistration(SearchPluginPackage),
 			createPluginRegistration(BookmarkPluginPackage),
+			// Experimental: on-device layout (image/table/formula) via ONNX.
+			// Model lives under XDG cache (startup prefetch: ModelScope → HF).
+			createPluginRegistration(AiManagerPluginPackage, {
+				runtime: getPdfAiRuntime(),
+			}),
+			createPluginRegistration(LayoutAnalysisPluginPackage, {
+				// Match sidebar default min confidence (30%).
+				layoutThreshold: 0.3,
+				tableStructure: false,
+				autoAnalyze: false,
+				renderScale: 2,
+			}),
 		];
 	}, [source, sourceBytes, docId]);
 
@@ -851,6 +893,7 @@ function PdfViewerInner({
 	const { provides: docCap } = useDocumentManagerCapability();
 	const { state: searchState, provides: search } = useSearch(docId);
 	const { provides: bookmarkCap } = useBookmarkCapability();
+	const { provides: layoutCap } = useLayoutAnalysisCapability();
 
 	// EmbedPDF's useScroll calls forDocument() every render and returns a fresh
 	// scope object (createScrollScope). Never put `scroll` in useEffect deps —
@@ -858,9 +901,26 @@ function PdfViewerInner({
 	const scrollRef = useRef(scroll);
 	scrollRef.current = scroll;
 	const scrollReady = Boolean(scroll);
+	const layoutCapRef = useRef(layoutCap);
+	layoutCapRef.current = layoutCap;
+	const engineRef = useRef(engine);
+	engineRef.current = engine;
+	const docCapRef = useRef(docCap);
+	docCapRef.current = docCap;
+	const layoutTaskRef = useRef<Awaited<
+		ReturnType<typeof runDocumentLayoutAnalysis>
+	> | null>(null);
 
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
+
+	/** Sidebar-selected layout region → PDF focus outline. */
+	const focusedLayoutRegion = useStore(layoutAnalysisStore, (s) => {
+		if (s.focused?.documentId !== docId) return null;
+		const result = s.byDocument[docId];
+		if (!result || !s.focused) return null;
+		return result.regions.find((r) => r.id === s.focused?.regionId) ?? null;
+	});
 	const zoomLevel = zoomState.currentZoomLevel || 1;
 
 	const [pageField, setPageField] = useState("1");
@@ -2715,9 +2775,78 @@ function PdfViewerInner({
 				selectionCap?.clear(docId);
 				setRegionSelecting((active) => !active);
 			},
+			analyzeLayout: () => {
+				const la = layoutCapRef.current?.forDocument(docId);
+				if (!la) {
+					notifyError(t("pdf.layout.unavailable"));
+					return;
+				}
+				layoutTaskRef.current?.abort({
+					type: "no-document",
+					message: "superseded",
+				});
+				void runDocumentLayoutAnalysis(la, docId, {
+					onDone: () => {
+						layoutTaskRef.current = null;
+						void import("@/lib/shell/ui-store").then(({ openRightTab }) =>
+							openRightTab("figures"),
+						);
+					},
+					onError: (message, aborted) => {
+						layoutTaskRef.current = null;
+						if (aborted) return;
+						notifyError(t("pdf.layout.failed"), {
+							description: message,
+						});
+					},
+				})
+					.then((task) => {
+						layoutTaskRef.current = task;
+					})
+					.catch((e) => {
+						layoutTaskRef.current = null;
+						const message = e instanceof Error ? e.message : String(e);
+						notifyError(t("pdf.layout.failed"), {
+							description: message,
+						});
+					});
+			},
+			scrollToLayoutRegion: (region) => {
+				scrollRef.current?.scrollToPage({
+					pageNumber: region.pageIndex + 1,
+					behavior: "instant",
+				});
+				setFocusedLayoutRegion(docId, region.id);
+				layoutCapRef.current?.selectBlock(region.id);
+			},
+			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
+				const eng = engineRef.current;
+				const docs = docCapRef.current;
+				if (!eng || !docs) return null;
+				const document = docs.getDocument(docId);
+				if (!document) return null;
+				try {
+					return await renderPdfRegionPromptImage({
+						engine: eng,
+						document,
+						pageIndex,
+						region: bbox,
+						maxEdgePx: maxEdgePx ?? 360,
+					});
+				} catch {
+					return null;
+				}
+			},
 		};
 		register(handle);
-		return () => register(null);
+		return () => {
+			layoutTaskRef.current?.abort({
+				type: "no-document",
+				message: "unmount",
+			});
+			layoutTaskRef.current = null;
+			register(null);
+		};
 	}, [
 		annotationCap,
 		docId,
@@ -2728,6 +2857,7 @@ function PdfViewerInner({
 		deleteVisualTraceById,
 		selectionCap,
 		visualCropPending,
+		t,
 	]);
 
 	// Keep the page-number input in sync with the observed current page.
@@ -2933,6 +3063,10 @@ function PdfViewerInner({
 				visualDraftRegion?.page === pageNumber
 					? visualDraftRegion.region
 					: null;
+			const focusedLayoutOnPage =
+				focusedLayoutRegion?.pageIndex === pageIndex
+					? focusedLayoutRegion
+					: null;
 			const pins: SelectionPin[] = [
 				...highlights
 					.filter(
@@ -3052,6 +3186,12 @@ function PdfViewerInner({
 						pageIndex={pageIndex}
 						style={{ position: "absolute", inset: 0 }}
 					/>
+					{/* Layout bbox overlay (image / table / formula). Toggled from toolbar. */}
+					<LayoutAnalysisLayer
+						documentId={docId}
+						pageIndex={pageIndex}
+						style={{ position: "absolute", inset: 0 }}
+					/>
 					<PagePointerProvider
 						documentId={docId}
 						pageIndex={pageIndex}
@@ -3127,6 +3267,23 @@ function PdfViewerInner({
 								aria-hidden="true"
 							/>
 						) : null}
+						{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
+						{focusedLayoutOnPage ? (
+							<div
+								className="pointer-events-none absolute z-[2] rounded-sm border-2 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								style={{
+									left: `${focusedLayoutOnPage.bbox.x * 100}%`,
+									top: `${focusedLayoutOnPage.bbox.y * 100}%`,
+									width: `${focusedLayoutOnPage.bbox.w * 100}%`,
+									height: `${focusedLayoutOnPage.bbox.h * 100}%`,
+									borderColor: layoutKindHex(focusedLayoutOnPage.kind),
+									backgroundColor: layoutKindFill(focusedLayoutOnPage.kind),
+									// Keep a slightly stronger edge for visibility.
+									outline: `1px solid ${layoutKindBorder(focusedLayoutOnPage.kind)}`,
+								}}
+								aria-hidden="true"
+							/>
+						) : null}
 						{/* Active visual mark: theme outline of the crop region. */}
 						{activeVisualOnPage
 							? activeVisualOnPage.rects.map((rect) => (
@@ -3167,6 +3324,7 @@ function PdfViewerInner({
 			activeTranslate,
 			activeVisualTrace,
 			visualDraftRegion,
+			focusedLayoutRegion,
 			activeCard?.id,
 			handleOpenPin,
 			markCardHoverEnter,
@@ -3423,6 +3581,7 @@ function PdfViewerInner({
 								{pdfColorSchemeLabel}
 							</TooltipContent>
 						</Tooltip>
+						<LayoutAnalysisToolbar documentId={docId} />
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
