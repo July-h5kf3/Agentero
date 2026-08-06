@@ -12,3 +12,4 @@ overrides:
   '@hono/node-server@<1.19.17': '>=1.19.17 <2'
 patchedDependencies:
   '@embedpdf/engines@2.14.4': patches/@embedpdf__engines@2.14.4.patch
+  '@embedpdf/plugin-tiling@2.14.4': patches/@embedpdf__plugin-tiling@2.14.4.patch
