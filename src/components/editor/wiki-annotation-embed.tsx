@@ -1,5 +1,6 @@
 "use client";
 
+import { NotebookPen } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -275,10 +276,14 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 
 	const { ref } = state;
 	const color: HighlightColor = ref.color ?? "yellow";
+	const isVisual = ref.kind === "visual" || ref.kind === "agent-trace";
 	const hasQuote = Boolean(ref.quote?.trim());
 	const hasComment = Boolean(ref.comment?.trim());
-	const hasImage = Boolean(ref.kind === "agent-trace" && ref.image?.data);
-	const messages = ref.kind === "agent-trace" ? (ref.messages ?? []) : [];
+	const hasImage = Boolean(isVisual && ref.image?.data);
+	// Conversation turns only — never synthesize from comment. Note-only marks
+	// leave this empty so the embed shows note + crop without a transcript block.
+	const messages = isVisual ? (ref.messages ?? []) : [];
+	const hasTranscript = messages.length > 0;
 
 	// Body is not a jump target — open via shared chrome ExternalLink only
 	// (same as markdown / attachment embeds) so selection & scroll stay usable.
@@ -286,7 +291,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		<div className={cn("block w-full px-3 py-2 text-left", className)}>
 			{/* Location: outline breadcrumb or page fallback */}
 			<div className="flex items-center gap-1.5">
-				{ref.kind === "agent-trace" ? null : (
+				{isVisual ? null : (
 					<span
 						className={cn(
 							"size-2 shrink-0 rounded-full",
@@ -314,6 +319,24 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</blockquote>
 			) : null}
 
+			{/* Visual note: icon + text above the crop (annotation, not chat). */}
+			{isVisual && hasComment ? (
+				<div
+					className={cn(
+						"flex min-w-0 items-start gap-1.5 text-[13px] text-foreground/90 leading-relaxed",
+						hasQuote ? "mt-2" : "mt-1.5",
+					)}
+				>
+					<NotebookPen
+						className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+						aria-hidden
+					/>
+					<span className="min-w-0 whitespace-pre-wrap break-words">
+						{ref.comment.trim()}
+					</span>
+				</div>
+			) : null}
+
 			{/* Visual crop — capped so conversation can still scroll below */}
 			{hasImage ? (
 				<img
@@ -321,7 +344,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 					alt=""
 					className={cn(
 						"max-h-40 w-full rounded border border-border/60 object-contain",
-						hasQuote ? "mt-2" : "mt-1.5",
+						hasQuote || (isVisual && hasComment) ? "mt-2" : "mt-1.5",
 					)}
 				/>
 			) : null}
@@ -340,47 +363,34 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 				</div>
 			) : null}
 
-			{/* Visual: read-only agent transcript with md (no composer) */}
-			{ref.kind === "agent-trace" ? (
+			{/* Visual conversation: only when agent messages exist (no empty placeholder). */}
+			{isVisual && hasTranscript ? (
 				<div
 					className={cn(
 						"space-y-2",
 						hasQuote || hasImage || hasComment ? "mt-2" : "mt-1.5",
 					)}
 				>
-					{hasComment && !messages.some((m) => m.content === ref.comment) ? (
-						<div className="min-w-0 text-[13px] text-foreground/85 leading-relaxed">
+					{messages.map((m) => (
+						<div
+							key={m.id}
+							className={cn(
+								"min-w-0 rounded-md px-2.5 py-1.5 text-[13px] leading-relaxed",
+								m.role === "user"
+									? "bg-primary/10 text-foreground/90"
+									: "bg-muted/70 text-foreground/85",
+							)}
+						>
+							<div className="mb-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+								{m.role === "user"
+									? t("embed.annotationRoleUser")
+									: t("embed.annotationRoleAssistant")}
+							</div>
 							<MessageResponse className="text-[13px] leading-relaxed">
-								{ref.comment}
+								{m.content}
 							</MessageResponse>
 						</div>
-					) : null}
-					{messages.length === 0 ? (
-						<p className="text-muted-foreground text-xs">
-							{t("embed.annotationNoTranscript")}
-						</p>
-					) : (
-						messages.map((m) => (
-							<div
-								key={m.id}
-								className={cn(
-									"min-w-0 rounded-md px-2.5 py-1.5 text-[13px] leading-relaxed",
-									m.role === "user"
-										? "bg-primary/10 text-foreground/90"
-										: "bg-muted/70 text-foreground/85",
-								)}
-							>
-								<div className="mb-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
-									{m.role === "user"
-										? t("embed.annotationRoleUser")
-										: t("embed.annotationRoleAssistant")}
-								</div>
-								<MessageResponse className="text-[13px] leading-relaxed">
-									{m.content}
-								</MessageResponse>
-							</div>
-						))
-					)}
+					))}
 				</div>
 			) : null}
 		</div>

@@ -4,7 +4,7 @@
  *
  * Sources (MVP):
  * - highlights / text notes: `marks/annotations.json` (EmbedPDF transfer)
- * - visual agent-traces: `marks/<id>.json` with `kind: "agent-trace"`
+ * - visual marks: `marks/<id>.json` with `kind: "visual"` (legacy `agent-trace`)
  *
  * Marks are stored under the paper folder. UI state is often keyed by the PDF
  * tab id (`tabIdForPath(paperAbs)`), which differs from the NOTES companion
@@ -16,7 +16,7 @@ import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import {
 	parsePdfVisualSessionTrace,
-	traceMessages,
+	traceMessagesForEmbed,
 } from "@/lib/pdf/agent-trace/schema";
 import type {
 	PdfVisualNormalizedRect,
@@ -36,7 +36,7 @@ import { joinVaultPath } from "@/lib/vault";
 import { formatWikiLinkBody } from "@/lib/wiki/api";
 import { tabIdForPath } from "@/lib/workspace/tabs/model";
 
-export type AnnotationRefKind = "highlight" | "agent-trace";
+export type AnnotationRefKind = "highlight" | "visual" | "agent-trace";
 
 export type AnnotationRefRect = {
 	/** 0–1 relative to page box (top-down when from app marks). */
@@ -218,12 +218,14 @@ export async function lookupAnnotationRef(
 	const raw = await readMarkRaw(paperAbsPath, id);
 	const trace = parsePdfVisualSessionTrace(raw);
 	if (trace && trace.id === id) {
-		const messages = traceMessages(trace);
+		// Embed: note field vs conversation are separate; do not promote comment
+		// into a synthetic "user" turn (see traceMessagesForEmbed).
+		const messages = traceMessagesForEmbed(trace);
 		const image = options?.includeImage
 			? await loadPdfVisualTraceImage(paperAbsPath, trace.image)
 			: null;
 		return {
-			kind: "agent-trace",
+			kind: "visual",
 			id,
 			paperAbsPath,
 			page: trace.page,
@@ -425,7 +427,7 @@ export async function listPaperAnnotationSummaries(
 	for (const trace of traces) {
 		const snippet = annotationSnippet({ comment: trace.comment });
 		out.push({
-			kind: "agent-trace",
+			kind: "visual",
 			id: trace.id,
 			page: trace.page,
 			quote: "",

@@ -293,13 +293,21 @@
 			"vault": "Vault structure",
 			"catalog": "Catalog schema",
 			"wikilinks": "Wiki links",
-			"aliases": "Paper aliases"
+			"aliases": "Paper aliases",
+			"visualMarks": "Visual annotations"
 		},
 		"sectionHints": {
 			"vault": "Checks top-level papers/, notes/, plans/, and .agentero/ folders.",
 			"catalog": "Checks that .agentero/catalog.sqlite exists and its schema matches this app.",
 			"wikilinks": "Checks local wiki links for missing, ambiguous, or invalid heading targets.",
-			"aliases": "Checks paper NOTES.md for at least two distinct frontmatter aliases."
+			"aliases": "Checks paper NOTES.md for at least two distinct frontmatter aliases.",
+			"visualMarks": "Migrates legacy agent-trace marks to nested visual v2 (note-only marks stay valid)."
+		},
+		"visualMarks": {
+			"select": "Select {{path}}",
+			"apply": "Upgrade {{count}}",
+			"applying": "Upgrading…",
+			"success": "Upgraded {{count}} visual mark file(s)."
 		},
 		"issueCount": "{{count}} issue(s)",
 		"repair": {

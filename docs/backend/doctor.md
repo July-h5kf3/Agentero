@@ -1,15 +1,16 @@
 # Vault Doctor
 
-Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名与双链提供**显式确认**的安全修复。
+Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名、双链与视觉批注格式提供**显式确认**的安全修复。
 
 ## 检查范围
 
-`DoctorReport` 包含四组结果：
+`DoctorReport` 包含五组结果：
 
 1. Vault 目录结构（`papers/`、`notes/`、`plans/`、`.agentero/`）；
 2. `.agentero/catalog.sqlite` 是否存在且 schema 与当前版本一致；
 3. 与桌面导航共用 `WikiIndex::check_links` 的双链语义结果；
-4. Catalog 中每篇 `papers/**/NOTES.md` 的 frontmatter aliases。
+4. Catalog 中每篇 `papers/**/NOTES.md` 的 frontmatter aliases；
+5. `papers/**/marks/*.json` 视觉批注格式（旧版 `agent-trace` → `visual` v2）。
 
 一次检查不会创建目录、迁移 Catalog 或修改 Markdown；Catalog 以只读 SQLite connection 打开。
 
@@ -57,12 +58,22 @@ Doctor 聚合本地 Vault 的只读完整性检查，并为论文别名与双链
 
 设置页流程：探测 → 建议列表（全选 / 修复）→ 下方 Agent 提示词（复制或打开 Agent）。
 
+### 视觉批注格式
+
+扫描 `papers/**/marks/*.json`（跳过 `annotations.json`）。对 `kind: agent-trace` 或扁平 agent 字段的旧格式给出候选：
+
+- `doctor_apply_visual_marks` / CLI `doctor fix visual-marks`：改写为 `kind: visual` v2，agent 字段嵌套进 `agent` 对象；**保留 id 与 `image.path`**
+- 幂等：已是嵌套 v2 的跳过
+- 脏路径（打开中的 mark）拒绝写入
+
+读路径（桌面）始终 dual-read v1/v2，不依赖 Doctor 也能打开旧 Vault。
+
 ## 入口
 
 - 桌面：设置 → 知识库诊断；远程 Vault 当前显示不可用。
-- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero -y doctor fix aliases`（CLI 诊断同样尊重 `.agentero/doctor.json` 忽略列表）。
-- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_ignore_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`。
+- CLI：`agentero doctor`、`agentero doctor fix aliases`、`agentero doctor fix visual-marks`、`agentero -y doctor fix …`（CLI 诊断同样尊重 `.agentero/doctor.json` 忽略列表）。
+- Host：`doctor_check`、`doctor_apply_aliases`、`doctor_ignore_aliases`、`doctor_set_dirty_paths`、`doctor_plan_wikilinks`、`doctor_apply_wikilinks`、`doctor_apply_visual_marks`。
 
 ![Vault Doctor 设置页](../assets/doctor-settings.png)
 
-代码：`src-tauri/src/features/doctor/`（含 `wikilink_repair.rs`）、`src/lib/doctor/`、`src/components/settings/panes/doctor-pane.tsx`。
+代码：`src-tauri/src/features/doctor/`（含 `wikilink_repair.rs`、`visual_marks_repair.rs`）、`src/lib/doctor/`、`src/components/settings/panes/doctor-pane.tsx`。

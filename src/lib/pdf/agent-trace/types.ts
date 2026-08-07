@@ -1,6 +1,11 @@
 /**
- * PDF visual-region mark → Agent session.
- * One mark file per crop: papers/<id>/marks/<trace-id>.json (kind "agent-trace").
+ * PDF visual-region mark (area crop + optional user note + optional Agent thread).
+ *
+ * Disk shape (v2):
+ *   papers/<id>/marks/<id>.json  kind: "visual"
+ *   papers/<id>/marks/assets/<id>.png
+ *
+ * Legacy v1 used kind "agent-trace" with flat agent fields; parse normalizes to v2.
  */
 
 export type PdfVisualNormalizedRect = {
@@ -35,23 +40,10 @@ export type PdfVisualTraceMessage = {
 };
 
 /**
- * One visual pin on a paper (one crop + comment). Marks submitted in the same
- * Agent turn share runtimeSessionId / messageId.
+ * Optional Agent conversation bound to a visual mark.
+ * Absent when the user saved a note-only annotation (#196).
  */
-export type PdfVisualSessionTrace = {
-	version: 1;
-	kind: "agent-trace";
-	id: string;
-	/** Vault-relative paper folder when known; else absolute hint. */
-	paperPath: string;
-	/** 1-based order within the submitted batch (matches prompt Annotation N). */
-	index: number;
-	/** 1-based PDF page number. */
-	page: number;
-	rects: PdfVisualNormalizedRect[];
-	comment: string;
-	/** Crop image for pin hover preview. */
-	image?: PdfVisualTraceImage;
+export type PdfVisualAgent = {
 	agentId: string;
 	/** Agentero runtime/event session id from runOnce. */
 	runtimeSessionId: string;
@@ -59,15 +51,63 @@ export type PdfVisualSessionTrace = {
 	/** ACP provider session id when available after completion. */
 	providerSessionId?: string;
 	status: PdfVisualTraceStatus;
+	/** Local multi-turn chat for pin hover / Cmd+Enter modal. */
+	messages?: PdfVisualTraceMessage[];
 	/** Local answer text when provider history is unavailable. */
 	answerSnapshot?: string;
-	/**
-	 * Optional multi-turn chat for pin hover / Cmd+Enter modal.
-	 * Legacy marks without this field synthesize from comment + answerSnapshot.
-	 */
-	messages?: PdfVisualTraceMessage[];
 	sources?: string[];
 	error?: string;
+	/** 1-based order within a multi-crop Agent batch. */
+	index?: number;
+};
+
+export const VISUAL_MARK_KIND = "visual" as const;
+export const LEGACY_VISUAL_MARK_KIND = "agent-trace" as const;
+
+export type PdfVisualMarkKind =
+	| typeof VISUAL_MARK_KIND
+	| typeof LEGACY_VISUAL_MARK_KIND;
+
+/** True for current and legacy visual mark discriminators. */
+export function isVisualMarkKind(
+	kind: string | null | undefined,
+): kind is PdfVisualMarkKind {
+	return kind === VISUAL_MARK_KIND || kind === LEGACY_VISUAL_MARK_KIND;
+}
+
+/**
+ * One visual pin on a paper (crop + optional comment + optional Agent thread).
+ * In-memory always uses kind "visual" + version 2 after parse.
+ */
+export type PdfVisualSessionTrace = {
+	version: 2;
+	kind: typeof VISUAL_MARK_KIND;
+	id: string;
+	/** Vault-relative paper folder when known; else absolute hint. */
+	paperPath: string;
+	/** 1-based PDF page number. */
+	page: number;
+	rects: PdfVisualNormalizedRect[];
+	/** User note; may be empty when an agent thread is attached. */
+	comment: string;
+	/** Crop image for pin hover preview. */
+	image?: PdfVisualTraceImage;
+	/** Present only when the user has started (or finished) an Agent turn. */
+	agent?: PdfVisualAgent;
 	createdAt: string;
 	updatedAt: string;
 };
+
+/**
+ * Note-only marks have no agent; agent marks may omit comment.
+ * A crop image alone is enough to keep a visual pin (like a highlight without note).
+ */
+export function visualMarkHasContent(mark: {
+	comment: string;
+	agent?: PdfVisualAgent | null;
+	image?: PdfVisualTraceImage | null;
+}): boolean {
+	return Boolean(
+		mark.comment.trim() || mark.agent || mark.image?.path || mark.image?.data,
+	);
+}

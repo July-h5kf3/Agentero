@@ -1,10 +1,11 @@
 /**
  * Unified on-disk layout for PDF selection marks:
  *
- *   papers/<id>/marks/<id>.json          # kind: ask | highlight | translate | agent-trace
+ *   papers/<id>/marks/<id>.json          # kind: ask | highlight | translate | visual
  *   papers/<id>/marks/annotations.json   # EmbedPDF highlight/批注 transfer blob
  *
  * Per-mark files are pretty JSON with required `kind`.
+ * Legacy visual marks used kind `agent-trace` (still readable).
  * `annotations.json` is the aggregate EmbedPDF annotation store (not a mark).
  */
 import { readDir } from "@tauri-apps/plugin-fs";
@@ -22,7 +23,12 @@ export const MARKS_FOLDER = "marks";
 /** Aggregate EmbedPDF annotations file name under `marks/` (not a per-id mark). */
 export const ANNOTATIONS_JSON = "annotations.json";
 
-export type PdfMarkKind = "ask" | "highlight" | "translate" | "agent-trace";
+export type PdfMarkKind =
+	| "ask"
+	| "highlight"
+	| "translate"
+	| "visual"
+	| "agent-trace";
 
 export function marksDir(paperAbsPath: string): string {
 	return joinVaultPath(paperAbsPath, MARKS_FOLDER);

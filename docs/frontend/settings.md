@@ -20,10 +20,10 @@
 | Appearance | 明暗、`uiTheme`（tweakcn 预设）、`uiScale` |
 | Agent | 目录两层检测（Agent CLI / ACP）、未装「安装」/ 缺 ACP「安装 ACP」/ 已装「升级」、默认 Agent、权限模式、自动精读、个人提示词、划词提问 Agent |
 | 翻译 | 默认服务选择、商用 API 配置、语言与 Agent 座 |
-| 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases；本地 Vault 可确认批量修复 |
+| 知识库诊断 | Vault / Catalog / 双链 / 论文 aliases / 视觉批注格式；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新 |
 
-知识库诊断页调用 Host 的只读 Doctor 报告。四个检查项各自作为小标题（带一行检测说明），标题行右侧显示 icon + 问题数；模块间用非通栏次要分隔线。列表过长时（双链 / 别名）`max-h` 内滚动。
+知识库诊断页调用 Host 的只读 Doctor 报告。检查项各自作为小标题（带一行检测说明），标题行右侧显示 icon + 问题数；模块间用非通栏次要分隔线。列表过长时（双链 / 别名 / 视觉批注）`max-h` 内滚动。视觉批注一节可将旧版 `agent-trace` mark 一键升级为 `visual` v2。
 
 - **论文别名**：勾选与编辑标题/短 alias，标题行「修复」→ 确认后批量写入 frontmatter（不改 path）。单行「忽略」或「忽略所选」把路径写入 Vault `.agentero/doctor.json`，下次诊断不再报错；列表底部可恢复。
 - **双链语义**：

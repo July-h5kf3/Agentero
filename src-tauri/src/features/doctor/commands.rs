@@ -1,7 +1,8 @@
 use super::{
-    apply_alias_repairs, apply_wikilink_repairs, diagnose, plan_wikilink_repairs,
-    set_ignored_alias_paths, AliasRepairChange, AliasRepairResult, DoctorDirtyPathsState,
-    DoctorReport, DoctorVaultState, WikilinkRepairChange, WikilinkRepairPlan, WikilinkRepairResult,
+    apply_alias_repairs, apply_visual_mark_repairs, apply_wikilink_repairs, diagnose,
+    plan_wikilink_repairs, set_ignored_alias_paths, AliasRepairChange, AliasRepairResult,
+    DoctorDirtyPathsState, DoctorReport, DoctorVaultState, VisualMarkRepairChange,
+    VisualMarkRepairResult, WikilinkRepairChange, WikilinkRepairPlan, WikilinkRepairResult,
 };
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::wiki::WikiIndexState;
@@ -143,6 +144,36 @@ pub fn doctor_plan_wikilinks(args: DoctorPlanWikilinksArgs) -> ApiResult<Wikilin
             AppError::message(error.to_string()),
             serde_json::to_value(&error).unwrap_or_default(),
         ),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoctorApplyVisualMarksArgs {
+    pub vault_path: String,
+    pub changes: Vec<VisualMarkRepairChange>,
+    #[serde(default)]
+    pub dirty_paths: Vec<String>,
+}
+
+#[tauri::command]
+pub fn doctor_apply_visual_marks(
+    args: DoctorApplyVisualMarksArgs,
+    dirty_state: State<'_, DoctorDirtyPathsState>,
+) -> ApiResult<VisualMarkRepairResult> {
+    let vault = PathBuf::from(&args.vault_path);
+    let mut dirty_paths = match dirty_state.get(&args.vault_path) {
+        Ok(paths) => paths,
+        Err(error) => {
+            return map_err(AppError::message(format!(
+                "doctor dirty paths lock: {error}"
+            )))
+        }
+    };
+    dirty_paths.extend(args.dirty_paths);
+    match apply_visual_mark_repairs(&vault, &args.changes, &dirty_paths) {
+        Ok(result) => ApiResult::ok(result),
+        Err(error) => map_err(error),
     }
 }
 

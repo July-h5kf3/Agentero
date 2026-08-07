@@ -46,7 +46,7 @@ papers/<id>/
 
 - 高亮/批注：`annotations.json`（含 `comment` 的为批注）；CLI 区域批注写 per-id `highlight`（`geometry: resolved` + `layoutRef`）
 - 提问/翻译：`<id>.json`（`kind`）；CLI 可用 `mark add --region … --question` 写 `ask` 壳
-- 视觉批注：`<id>.json`（`kind: agent-trace`）保存位置、会话与 `image.path`；裁剪图片位于 `assets/<id>.png`
+- 视觉批注：`<id>.json`（`kind: visual` v2）保存区域、用户 `comment`、可选嵌套 `agent` 与 `image.path`；裁剪图片位于 `assets/<id>.png`。旧版 `kind: agent-trace`（扁平 agent 字段）仍可读，Doctor 可迁移
 - 不写 PDF 二进制，不强制写入 NOTES
 
 ```text

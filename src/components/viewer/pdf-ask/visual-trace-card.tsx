@@ -1,7 +1,9 @@
 import {
 	ArrowUpIcon,
 	ExternalLink,
-	ScanSearch,
+	MessageSquarePlus,
+	MessagesSquare,
+	NotebookPen,
 	SquareIcon,
 	Trash2Icon,
 	X,
@@ -30,13 +32,17 @@ import { useAgentSessionStore } from "@/lib/agent/agent-session-store";
 import { agentTextFromParts, type ChatLine } from "@/lib/agent/chat-state";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
 import { cn } from "@/lib/core/utils";
-import { traceMessages, tracePreview } from "@/lib/pdf/agent-trace/schema";
+import { traceMessages } from "@/lib/pdf/agent-trace/schema";
 import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace/types";
 
-/** Compact pin-hover size (before pointer enters the card). */
-const COMPACT = { width: 280, height: 260 } as const;
-/** Expanded interactive size (pointer on the card). */
-const EXPANDED = { width: 360, height: 440 } as const;
+/** Note mode matches text AnnotationEditor footprint. */
+const NOTE_SIZE = { width: 240, height: 200 } as const;
+/** Compact pin-hover chat size (before pointer enters the card). */
+const CHAT_COMPACT = { width: 280, height: 260 } as const;
+/** Expanded interactive chat size (pointer on the card). */
+const CHAT_EXPANDED = { width: 360, height: 440 } as const;
+
+type CardMode = "note" | "chat";
 
 type VisualTraceCardProps = {
 	trace: PdfVisualSessionTrace;
@@ -45,11 +51,17 @@ type VisualTraceCardProps = {
 	streaming?: boolean;
 	error?: string | null;
 	/**
-	 * Start expanded (e.g. just created via ⌘Enter). Pin hover stays compact
-	 * until the pointer enters the card.
+	 * Start expanded chat (e.g. just created via Agent). Pin hover stays
+	 * compact until the pointer enters the card.
 	 */
 	initialExpanded?: boolean;
+	/** Force initial mode; default: note when no agent thread, else chat. */
+	initialMode?: CardMode;
 	onOpenSession: () => void;
+	/** Add this mark’s crop to the Agent sidebar composer. */
+	onAddToChat: () => void;
+	/** Persist an edited note (note mode Save). */
+	onSaveComment: (comment: string) => void;
 	onSend: (question: string) => void;
 	onDelete: () => void;
 	onHide: () => void;
@@ -58,11 +70,19 @@ type VisualTraceCardProps = {
 	onPointerLeave?: () => void;
 };
 
+/** True when the mark has (or had) an Agent thread worth showing as chat. */
+function hasAgentConversation(trace: PdfVisualSessionTrace): boolean {
+	const agent = trace.agent;
+	if (!agent) return false;
+	if (agent.agentId === "pending" || agent.runtimeSessionId === "pending") {
+		// Provisional pin created for an in-flight first turn.
+		return true;
+	}
+	return true;
+}
+
 /**
  * Lightweight local-state input — intentionally NOT PromptInput.
- * PromptInput pulls attachments/drag-drop/context providers; combined with
- * frequent PdfViewer re-renders that made typing feel laggy even when idle.
- *
  * memo + local text state: parent stream/list updates must not remount this.
  */
 const VisualTraceFooter = memo(function VisualTraceFooter({
@@ -84,8 +104,6 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 	onStop?: () => void;
 	onFocusInput: () => void;
 }) {
-	// Uncontrolled: AX set_value / OS automation write the DOM node directly.
-	// A controlled `value={text}` would immediately overwrite that on re-render.
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 	const { isBlockedByIme, compositionProps } = useImeGuard();
 
@@ -118,7 +136,6 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 				placeholder={placeholder}
 				disabled={streaming}
 				rows={1}
-				// Fixed box — no field-sizing-content layout thrash per keystroke.
 				className="min-h-8 max-h-8 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 text-sm leading-5 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
 				onFocus={onFocusInput}
 				onKeyDown={onKeyDown}
@@ -141,7 +158,6 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 					size="icon-xs"
 					className="shrink-0 rounded-full"
 					aria-label={sendLabel}
-					// Always clickable when idle: submit() validates DOM value (AX set_value).
 					disabled={streaming}
 					onClick={submit}
 				>
@@ -152,24 +168,12 @@ const VisualTraceFooter = memo(function VisualTraceFooter({
 	);
 });
 
-/**
- * Hover card for one visual mark: compact preview → expand on card hover with
- * message list + continue input. "Open in Agent" sits in the header (top-right).
- *
- * Scroll is manual only — no stick-to-bottom. Pin open keeps the user turn in
- * view; expanding preserves scrollTop so the answer is not jumped to.
- */
 type ModalTraceMessage = {
 	id: string;
 	role: "user" | "assistant";
 	content: string;
 };
 
-/**
- * Map shared Agent session lines → pin-modal bubbles (same source as sidebar).
- * The PDF hover card intentionally omits crop chips; the Agent sidebar is the
- * detailed visual transcript.
- */
 function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 	const out: ModalTraceMessage[] = [];
 	for (const line of lines) {
@@ -195,6 +199,13 @@ function chatLinesToTraceMessages(lines: ChatLine[]): ModalTraceMessage[] {
 	return out;
 }
 
+/**
+ * Visual mark pin card:
+ * - **Note mode** (default for note-only marks): same as text 批注备注 —
+ *   editable field + 取消/保存; header action = 加入侧边栏对话.
+ * - **Chat mode** (when an Agent thread exists): transcript + continue input;
+ *   header includes switch → note mode.
+ */
 export const VisualTraceCard = memo(function VisualTraceCard({
 	trace,
 	screen,
@@ -202,7 +213,10 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 	streaming: streamingProp = false,
 	error = null,
 	initialExpanded = false,
+	initialMode,
 	onOpenSession,
+	onAddToChat,
+	onSaveComment,
 	onSend,
 	onDelete,
 	onHide,
@@ -211,8 +225,35 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 	onPointerLeave,
 }: VisualTraceCardProps) {
 	const { t } = useTranslation("viewer");
-	const [expanded, setExpanded] = useState(initialExpanded);
-	// Same transcript as the right-rail Agent panel (single store).
+	const canChat = hasAgentConversation(trace);
+	const [mode, setMode] = useState<CardMode>(
+		() => initialMode ?? (canChat ? "chat" : "note"),
+	);
+	const [expanded, setExpanded] = useState(initialExpanded && canChat);
+	const [noteText, setNoteText] = useState(trace.comment);
+	const noteRef = useRef<HTMLTextAreaElement>(null);
+	const { isBlockedByIme, compositionProps } = useImeGuard();
+
+	// Re-sync note field when switching marks or external comment updates.
+	// Include id so two marks with the same comment still re-bind the field.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: id forces rebind across pins
+	useEffect(() => {
+		setNoteText(trace.comment);
+	}, [trace.id, trace.comment]);
+
+	// If a note-only mark later gains an agent thread, stay in note unless user
+	// already chose chat; provisional Agent open forces chat via initialMode.
+	useEffect(() => {
+		if (initialMode) setMode(initialMode);
+	}, [initialMode]);
+
+	useEffect(() => {
+		if (mode === "note") {
+			// Focus note field when entering note mode.
+			requestAnimationFrame(() => noteRef.current?.focus());
+		}
+	}, [mode]);
+
 	const boundSessionId = useAgentSessionStore(
 		(s) =>
 			s.sessions.find((item) => item.visualTraceId === trace.id)?.id ?? null,
@@ -243,9 +284,7 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 					content: m.content,
 				}));
 	}, [boundLines, trace]);
-	const preview = tracePreview(trace, t("pdfExplain.visualAnnotation"), 280);
-	const title = preview || t("pdfExplain.traceCardTitle");
-	/** Keep the user's annotation turn in view; do not auto-jump to the answer. */
+
 	const userAnchorId = useMemo(() => {
 		const firstUser = messages.find((m) => m.role === "user");
 		return firstUser?.id ?? messages[0]?.id ?? null;
@@ -258,8 +297,8 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			? messages[messages.length - 1]?.id
 			: null;
 
-	// Pin open: place the user message in view once (never stick to the bottom).
 	useEffect(() => {
+		if (mode !== "chat") return;
 		if (scrolledForTraceRef.current === trace.id) return;
 		if (!userAnchorId) return;
 		const port = scrollPortRef.current;
@@ -271,11 +310,14 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 			const elTop = el.getBoundingClientRect().top;
 			port.scrollTop += elTop - portTop - 8;
 		});
-	}, [trace.id, userAnchorId]);
+	}, [mode, trace.id, userAnchorId]);
 
 	useEffect(() => {
-		if (initialExpanded) setExpanded(true);
-	}, [initialExpanded]);
+		if (initialExpanded && canChat) {
+			setExpanded(true);
+			setMode("chat");
+		}
+	}, [initialExpanded, canChat]);
 
 	const expandCard = useCallback(() => {
 		setExpanded((prev) => {
@@ -290,58 +332,154 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 		});
 	}, []);
 
-	const size = expanded ? EXPANDED : COMPACT;
+	const saveNote = useCallback(() => {
+		onSaveComment(noteText);
+		// Match text 批注备注: Save closes the floating editor.
+		onHide();
+	}, [noteText, onSaveComment, onHide]);
 
-	const actions = useMemo(
-		() => [
+	const noteActions = useMemo(() => {
+		const items: Array<{
+			label: string;
+			onClick: () => void;
+			icon: ReactNode;
+			destructive?: boolean;
+		}> = [];
+		// When a conversation exists, allow switching back to chat from note mode.
+		if (canChat) {
+			items.push({
+				label: t("pdfExplain.switchToChat"),
+				onClick: () => setMode("chat"),
+				icon: (<MessagesSquare className="size-3.5" />) as ReactNode,
+			});
+		}
+		items.push(
+			{
+				label: t("pdfExplain.addToSidebarChat"),
+				onClick: onAddToChat,
+				icon: (<MessageSquarePlus className="size-3.5" />) as ReactNode,
+			},
+			{
+				label: t("annotations.delete"),
+				onClick: onDelete,
+				icon: (<Trash2Icon className="size-3.5" />) as ReactNode,
+				destructive: true,
+			},
+			{
+				label: t("annotations.close"),
+				onClick: onHide,
+				icon: (<X className="size-3.5" />) as ReactNode,
+			},
+		);
+		return items;
+	}, [t, onAddToChat, onDelete, onHide, canChat]);
+
+	const chatActions = useMemo(() => {
+		return [
+			{
+				label: t("pdfExplain.switchToNote"),
+				onClick: () => setMode("note"),
+				icon: (<NotebookPen className="size-3.5" />) as ReactNode,
+			},
 			{
 				label: t("pdfExplain.traceOpenSession"),
 				onClick: onOpenSession,
 				icon: (<ExternalLink className="size-3.5" />) as ReactNode,
 			},
 			{
-				label: t("pdfExplain.traceDelete"),
+				label: t("annotations.delete"),
 				onClick: onDelete,
 				icon: (<Trash2Icon className="size-3.5" />) as ReactNode,
 				destructive: true,
 			},
 			{
-				label: t("pdfExplain.traceHide"),
+				label: t("annotations.close"),
 				onClick: onHide,
 				icon: (<X className="size-3.5" />) as ReactNode,
 			},
-		],
-		[t, onOpenSession, onDelete, onHide],
-	);
+		];
+	}, [t, onOpenSession, onDelete, onHide]);
+
+	// ── Note mode: same shell as AnnotationEditor ──────────────────────────
+	if (mode === "note") {
+		return (
+			<SelectionCard
+				screen={screen}
+				width={NOTE_SIZE.width}
+				height={NOTE_SIZE.height}
+				preferRight={preferRight}
+				title={t("annotations.editorLabel")}
+				icon={NotebookPen}
+				ariaLabel={t("annotations.editorLabel")}
+				onPointerEnter={onPointerEnter}
+				onPointerLeave={onPointerLeave}
+				bodyClassName="gap-2 px-3 py-2.5"
+				actions={noteActions}
+				footer={
+					<div className="flex items-center justify-end gap-1">
+						<Button type="button" variant="ghost" size="sm" onClick={onHide}>
+							{t("annotations.cancel")}
+						</Button>
+						<Button type="button" size="sm" onClick={saveNote}>
+							{t("annotations.save")}
+						</Button>
+					</div>
+				}
+			>
+				<textarea
+					ref={noteRef}
+					className="min-h-16 w-full min-w-0 flex-1 resize-none rounded-md border border-border/80 bg-transparent p-2 text-sm text-foreground/80 outline-none placeholder:text-muted-foreground/80 focus:ring-1 focus:ring-ring"
+					placeholder={t("annotations.placeholder")}
+					value={noteText}
+					onChange={(e) => setNoteText(e.target.value)}
+					// Keep pin auto-hide from closing while editing the note.
+					onFocus={onPointerEnter}
+					onPointerDown={onPointerEnter}
+					{...compositionProps}
+					onKeyDown={(e) => {
+						if (e.key === "Escape") {
+							e.preventDefault();
+							onHide();
+							return;
+						}
+						if (e.key === "Enter" && !e.shiftKey && !isBlockedByIme(e)) {
+							e.preventDefault();
+							saveNote();
+						}
+					}}
+				/>
+			</SelectionCard>
+		);
+	}
+
+	// ── Chat mode ──────────────────────────────────────────────────────────
+	const size = expanded ? CHAT_EXPANDED : CHAT_COMPACT;
 
 	return (
 		<SelectionCard
 			screen={screen}
 			width={size.width}
 			height={size.height}
-			// Place against the expanded footprint so compact → expand never
-			// flips left/right under the pointer (right-edge thrash).
-			placementWidth={EXPANDED.width}
-			placementHeight={EXPANDED.height}
+			placementWidth={CHAT_EXPANDED.width}
+			placementHeight={CHAT_EXPANDED.height}
 			lockHeight
 			preferRight={preferRight}
-			title={title}
-			icon={ScanSearch}
+			title={t("pdfExplain.traceCardTitle")}
+			icon={MessagesSquare}
 			ariaLabel={t("pdfExplain.traceCardTitle")}
 			onPointerEnter={() => {
 				expandCard();
 				onPointerEnter?.();
 			}}
 			onPointerLeave={() => {
-				// Stay expanded while streaming so the user can read the answer.
+				// Collapse compact preview only; parent scheduleHoverHide handles close.
+				// Keep calling onPointerLeave so pin→gap→card timers still work.
 				if (!streaming) setExpanded(false);
 				onPointerLeave?.();
 			}}
 			bodyClassName="min-h-0 overflow-hidden p-0"
-			// Light size transition for compact → expanded affordance. Footer is
-			// memoized so the animation does not thrash the textarea.
 			className="origin-top-left transition-[width,height,max-height] duration-150 ease-out"
-			actions={actions}
+			actions={chatActions}
 			footer={
 				<VisualTraceFooter
 					streaming={streaming}
@@ -409,8 +547,6 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 													{t("pdfExplain.traceThinking")}
 												</Shimmer>
 											) : bodyText ? (
-												// Live stream: plain text only. Streamdown after the
-												// turn settles (math/mermaid parse is expensive).
 												expanded && from === "assistant" && !isLive ? (
 													<MessageResponse>{bodyText}</MessageResponse>
 												) : (
@@ -430,9 +566,9 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 							{error}
 						</p>
 					) : null}
-					{trace.status === "failed" && trace.error && !error ? (
+					{trace.agent?.status === "failed" && trace.agent.error && !error ? (
 						<p className="text-destructive text-xs leading-relaxed">
-							{trace.error}
+							{trace.agent.error}
 						</p>
 					) : null}
 				</div>

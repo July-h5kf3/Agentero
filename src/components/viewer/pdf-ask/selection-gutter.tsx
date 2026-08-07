@@ -86,6 +86,7 @@ function pinIcon(kind: SelectionPin["kind"]) {
 			return MessageSquareText;
 		case "translate":
 			return Languages;
+		case "visual":
 		case "agent-trace":
 			return ScanSearch;
 	}
@@ -126,7 +127,7 @@ export function SelectionGutter({
 						? t("pdfAsk.pillAria", { preview: item.preview })
 						: item.kind === "annotate"
 							? t("annotations.pinAria", { preview: item.preview })
-							: item.kind === "agent-trace"
+							: item.kind === "visual" || item.kind === "agent-trace"
 								? t("pdfExplain.tracePinAria", { preview: item.preview })
 								: t("selection.translatePinAria", { preview: item.preview });
 				// agent-trace activeCard.id is the per-annotation pin id.
@@ -157,7 +158,7 @@ export function SelectionGutter({
 									? "border-amber-600/35 bg-background text-amber-600 dark:text-amber-400"
 									: item.kind === "translate"
 										? "border-sky-600/35 bg-background text-sky-700 dark:text-sky-400"
-										: item.kind === "agent-trace"
+										: item.kind === "visual" || item.kind === "agent-trace"
 											? "border-violet-600/35 bg-background text-violet-700 dark:text-violet-400"
 											: "border-border/80 bg-background text-muted-foreground",
 								dimForText &&
@@ -165,11 +166,13 @@ export function SelectionGutter({
 								isActive && "ring-2 ring-ring ring-offset-1",
 							)}
 							aria-label={aria}
-							onMouseEnter={() => {
+							// Match SelectionCard pointer model so pin leave / card
+							// enter share one hover surface (mouse-only races hide).
+							onPointerEnter={() => {
 								onEnter?.(item);
 								onOpen(item);
 							}}
-							onMouseLeave={() => onLeave?.(item)}
+							onPointerLeave={() => onLeave?.(item)}
 							onFocus={() => {
 								onEnter?.(item);
 								onOpen(item);

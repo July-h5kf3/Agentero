@@ -207,7 +207,7 @@ async function buildAnnotationCandidates(
 			path: pathHint,
 			insertText: target ? `${target}@${s.id}` : `@${s.id}`,
 			label: preview,
-			detail: `p.${s.page} · ${s.kind === "agent-trace" ? "visual" : "highlight"}`,
+			detail: `p.${s.page} · ${s.kind === "visual" || s.kind === "agent-trace" ? "visual" : "highlight"}`,
 			alias,
 			fragment: { kind: "annotation", id: s.id },
 		});

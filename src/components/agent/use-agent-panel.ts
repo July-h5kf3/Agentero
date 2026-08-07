@@ -150,6 +150,7 @@ import {
 	completeTrace,
 	createRunningTraces,
 	failTrace,
+	newTraceMessageId,
 	readPdfVisualTrace,
 	rememberPendingVisualTraces,
 	takePendingVisualTraces,
@@ -2030,6 +2031,11 @@ export function useAgentPanel({
 				for (const [paperAbsPath, drafts] of byPaper) {
 					try {
 						// One mark file per crop so pins hover/delete independently.
+						// Prefer the turn text as the first user message (Cmd+Enter /
+						// composer). draft.comment is the annotation note only — leave
+						// it out of messages so wiki embeds do not show the same text twice.
+						const userText = text.trim();
+						const now = new Date().toISOString();
 						const traces = createRunningTraces({
 							paperPath: drafts[0]?.paperPath || paperAbsPath,
 							agentId,
@@ -2044,7 +2050,18 @@ export function useAgentPanel({
 									data: draft.image.data,
 									mimeType: draft.image.mimeType || "image/png",
 								},
+								messages: userText
+									? [
+											{
+												id: newTraceMessageId(),
+												role: "user" as const,
+												content: userText,
+												createdAt: now,
+											},
+										]
+									: undefined,
 							})),
+							createdAt: now,
 						});
 						for (const trace of traces) {
 							await writePdfVisualTrace(paperAbsPath, trace);
@@ -2066,6 +2083,8 @@ export function useAgentPanel({
 							runtimeSessionId: accepted.sessionId,
 							messageId: accepted.messageId,
 							userContent: text,
+							// Note-only marks need agentId when attaching the first thread.
+							agentId: agentId || current.agent?.agentId || undefined,
 						});
 						await writePdfVisualTrace(continuePaperAbs, next);
 					}
@@ -3013,12 +3032,15 @@ export function useAgentPanel({
 					comment: vt.comment,
 					paperPath: vt.paperPath ?? "",
 					image: vt.image,
-					agentId: request.agentId,
-					runtimeSessionId: request.runtimeSessionId,
-					providerSessionId: request.providerSessionId,
-					status: vt.status ?? "completed",
-					messages: vt.messages,
-					answerSnapshot: request.answerSnapshot,
+					agent: {
+						agentId: request.agentId,
+						runtimeSessionId: request.runtimeSessionId,
+						messageId: request.messageId ?? "pending",
+						providerSessionId: request.providerSessionId ?? undefined,
+						status: vt.status ?? "completed",
+						messages: vt.messages,
+						answerSnapshot: request.answerSnapshot,
+					},
 				},
 				messages: vt.messages,
 				title:

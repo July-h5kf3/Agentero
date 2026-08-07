@@ -20,7 +20,7 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `export` | 导出 |
 | `config` | 配置 |
 | `wiki` | 只读双链语义检查 |
-| `doctor` | 聚合诊断与显式确认的论文 aliases 修复 |
+| `doctor` | 聚合诊断与显式确认的论文 aliases / 视觉批注格式修复 |
 | `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula） |
 | `mark` | 阅读标注：`list` / `get` / `add --region` / `delete`（区域锚点优先） |
 
@@ -110,8 +110,10 @@ agentero paper move papers/inbox/demo papers/archive
 
 ## Doctor
 
-`agentero doctor` 只读聚合 Vault 结构、Catalog schema、双链语义与 Catalog 论文 `NOTES.md` aliases；任一错误存在时返回 `doctor_issues` 和非零退出码。诊断会尊重设置页写入的 `.agentero/doctor.json` 别名忽略列表（这些路径不计入别名错误）。
+`agentero doctor` 只读聚合 Vault 结构、Catalog schema、双链语义、Catalog 论文 `NOTES.md` aliases，以及 `papers/**/marks/*.json` 视觉批注格式；任一错误/待修项存在时返回 `doctor_issues` 和非零退出码。诊断会尊重设置页写入的 `.agentero/doctor.json` 别名忽略列表（这些路径不计入别名错误）。
 
-`agentero doctor fix aliases` 在 TTY 中逐篇展示已有 alias，并允许编辑生成的标题 alias / 短 alias，最后进行一次批量确认。`-y` 接受全部安全默认值；`--json` 从不提示，未同时传 `-y` 时返回 `needs_confirmation`。修复会保留已有自定义 aliases，以内容哈希做竞态检查，并作为一个可回滚批次写入。详见 [doctor.md](doctor.md)。
+`agentero doctor fix aliases` 在 TTY 中逐篇展示已有 alias，并允许编辑生成的标题 alias / 短 alias，最后进行一次批量确认。`-y` 接受全部安全默认值；`--json` 从不提示，未同时传 `-y` 时返回 `needs_confirmation`。修复会保留已有自定义 aliases，以内容哈希做竞态检查，并作为一个可回滚批次写入。
+
+`agentero doctor fix visual-marks -y` 将旧版 `kind: agent-trace`（扁平 agent 字段）迁移为 `kind: visual` v2（可选嵌套 `agent`），幂等；不改 id 与裁剪图路径。详见 [doctor.md](doctor.md)。
 
 Skill 种子：`templates/vault/.agents/skills/agentero-cli/`。
