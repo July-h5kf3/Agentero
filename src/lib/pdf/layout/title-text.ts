@@ -5,6 +5,7 @@ import {
 	isCaptionLayoutKind,
 	isFormulaLayoutKind,
 	isFormulaNumberLayoutKind,
+	isLayoutBodyTextKind,
 } from "@/lib/pdf/layout/labels";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
 
@@ -132,8 +133,8 @@ export function looksLikeFormulaNumber(text: string): boolean {
 
 /**
  * Write extracted text + role onto caption-like regions (figure_title / header)
- * and formula_number boxes. Also try to recover equation ids on formula hosts
- * from text inside / just to the right of the formula bbox.
+ * and formula_number boxes; body text/abstract into `text`. Also try to
+ * recover equation ids on formula hosts from text inside / just to the right.
  */
 export function enrichCaptionRegionsWithText(
 	regions: PdfLayoutRegion[],
@@ -157,11 +158,25 @@ export function enrichCaptionRegionsWithText(
 				: (captionRoleFromGeometry(region) ?? "other");
 			// Model often labels "Table N: …" as figure_title — keep kind for
 			// geometry but role drives merge (table_main → attach to table).
+			// Mirror extract into `text` so bulk translate can pick it up.
 			return {
 				...region,
 				title: text || region.title,
+				text: text || region.text,
 				captionRole: role,
 			};
+		}
+
+		if (isLayoutBodyTextKind(region.kind) && region.kind !== "header") {
+			// text / abstract — full body extract for debug + bulk translate.
+			const body = textFromRunsInBbox(
+				runs,
+				region.bbox,
+				pageSize.width,
+				pageSize.height,
+			);
+			if (!body) return region;
+			return { ...region, text: body };
 		}
 
 		if (isFormulaNumberLayoutKind(region.kind)) {

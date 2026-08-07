@@ -83,8 +83,57 @@ function buildResultFromRawRegions(
 	);
 }
 
+/** Prefer plugin page layout; else recover size from point-rect / normalized bbox. */
+function estimatePageSizesFromRegions(
+	regions: readonly PdfLayoutRegion[],
+	scope: LayoutAnalysisScope,
+): Map<number, { width: number; height: number }> {
+	const pageSizes = new Map<number, { width: number; height: number }>();
+	const pages = new Set(regions.map((r) => r.pageIndex));
+	for (const pageIndex of pages) {
+		const layout = scope.getPageLayout(pageIndex);
+		const size = layout?.pageSize;
+		if (size && size.width > 0 && size.height > 0) {
+			pageSizes.set(pageIndex, size);
+			continue;
+		}
+		// rect (points) / bbox (0–1) ⇒ page size.
+		let width = 0;
+		let height = 0;
+		for (const r of regions) {
+			if (r.pageIndex !== pageIndex) continue;
+			if (r.bbox.w > 0.02) width = Math.max(width, r.rect.w / r.bbox.w);
+			if (r.bbox.h > 0.02) height = Math.max(height, r.rect.h / r.bbox.h);
+		}
+		if (width > 0 && height > 0) pageSizes.set(pageIndex, { width, height });
+	}
+	return pageSizes;
+}
+
+/** Pull PDF text layer into caption / body / abstract fields per page. */
+async function enrichRawRegionsWithPageText(
+	scope: LayoutAnalysisScope,
+	raw: PdfLayoutRegion[],
+	pageSizes: Map<number, { width: number; height: number }>,
+): Promise<PdfLayoutRegion[]> {
+	let next = raw;
+	const pages = new Set(raw.map((r) => r.pageIndex));
+	for (const pageIndex of pages) {
+		const pageSize = pageSizes.get(pageIndex);
+		if (!pageSize || pageSize.width <= 0 || pageSize.height <= 0) continue;
+		try {
+			const textRuns = await taskToPromise(scope.getPageTextRuns(pageIndex));
+			const runs = textRuns.runs ?? [];
+			next = enrichCaptionRegionsWithText(next, pageIndex, runs, pageSize);
+		} catch {
+			// continue without text for this page
+		}
+	}
+	return next;
+}
+
 /**
- * 1) Extract text on every caption box
+ * 1) Extract text on every caption / body / abstract box
  * 2) Assign captionRole (Figure/Table/Algorithm/subpanel)
  * 3) Merge by role + geometry
  * 4) Fill host titles from titleBbox if needed
@@ -99,27 +148,19 @@ async function buildTextAwareResult(
 }> {
 	let raw: PdfLayoutRegion[] = regionsFromDocumentLayout(docLayout);
 
-	const pages = new Set(raw.map((r) => r.pageIndex));
-	for (const pageIndex of pages) {
-		const pageLayout = docLayout.pages.find((p) => p.pageIndex === pageIndex);
-		const pageSize = pageLayout?.pageSize;
-		if (!pageSize || pageSize.width <= 0 || pageSize.height <= 0) continue;
-		try {
-			const textRuns = await taskToPromise(scope.getPageTextRuns(pageIndex));
-			const runs = textRuns.runs ?? [];
-			raw = enrichCaptionRegionsWithText(raw, pageIndex, runs, pageSize);
-		} catch {
-			// continue without text for this page
-		}
+	const pageSizes = new Map<number, { width: number; height: number }>();
+	for (const page of docLayout.pages) {
+		pageSizes.set(page.pageIndex, page.pageSize);
 	}
+	raw = await enrichRawRegionsWithPageText(scope, raw, pageSizes);
 
 	let result = buildResultFromRawRegions(documentId, raw);
 	let regions = result.regions;
 
 	// Ensure hosts with titleBbox have title strings.
+	const pages = new Set(raw.map((r) => r.pageIndex));
 	for (const pageIndex of pages) {
-		const pageLayout = docLayout.pages.find((p) => p.pageIndex === pageIndex);
-		const pageSize = pageLayout?.pageSize;
+		const pageSize = pageSizes.get(pageIndex);
 		if (!pageSize) continue;
 		const need = regions.some(
 			(r) => r.pageIndex === pageIndex && r.titleBbox && !r.title?.trim(),
@@ -162,7 +203,20 @@ export async function runDocumentLayoutAnalysis(
 		);
 		const cached = await readLayoutSidecar(options.paperAbsPath);
 		if (cached) {
-			const result = buildResultFromRawRegions(documentId, cached.regions);
+			// Sidecar may predate body-text extract; re-pull PDF text layer cheaply.
+			const pageSizes = estimatePageSizesFromRegions(cached.regions, scope);
+			const needsText = cached.regions.some(
+				(r) =>
+					(r.kind === "text" ||
+						r.kind === "abstract" ||
+						r.kind === "header" ||
+						r.kind === "figure_title") &&
+					!(r.text?.trim() || r.title?.trim()),
+			);
+			const raw = needsText
+				? await enrichRawRegionsWithPageText(scope, cached.regions, pageSizes)
+				: cached.regions;
+			const result = buildResultFromRawRegions(documentId, raw);
 			setLayoutDocumentResult(result);
 			const summary = summarizeLayoutResult(result);
 			setLayoutAnalysisUi(
@@ -179,6 +233,11 @@ export async function runDocumentLayoutAnalysis(
 				cache: true,
 				regions: result.regions,
 			});
+			if (needsText) {
+				void writeLayoutSidecar(options.paperAbsPath, raw).catch(
+					() => undefined,
+				);
+			}
 			options.onDone?.(summary, result.regions.length);
 			return null;
 		}

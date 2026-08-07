@@ -78,6 +78,7 @@ function parseRegion(value: unknown): PdfLayoutRegion | null {
 		bbox: parsedBbox,
 	};
 	if (typeof value.title === "string") out.title = value.title;
+	if (typeof value.text === "string") out.text = value.text;
 	const titleBbox = parseRect(value.titleBbox);
 	if (titleBbox) out.titleBbox = titleBbox;
 	if (

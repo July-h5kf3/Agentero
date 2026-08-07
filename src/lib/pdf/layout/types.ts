@@ -49,6 +49,11 @@ export type PdfLayoutRegion = {
 	 * Set after merge + text enrichment.
 	 */
 	title?: string;
+	/**
+	 * Body / abstract / header text extracted from the PDF text layer inside
+	 * this region's bbox (not used for figure-caption merge).
+	 */
+	text?: string;
 	/** Normalized caption box (before union into bbox), if a title was attached. */
 	titleBbox?: PdfAskNormalizedRect;
 	/**
