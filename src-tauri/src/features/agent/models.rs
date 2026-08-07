@@ -111,8 +111,8 @@ pub struct AgentTemplateInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detect_command: Option<String>,
     pub install_hint: String,
-    /// Optional shell command to install a missing ACP adapter (opened in the
-    /// system terminal with a confirmation prompt — never run silently).
+    /// Optional shell command for guided install (remote SSH confirm; local uses
+    /// silent `agent_run_tool_lifecycle` instead).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_command: Option<String>,
 }
@@ -143,14 +143,20 @@ pub struct CatalogEntry {
     /// Shell install command for a missing ACP adapter (from the template).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_command: Option<String>,
-    /// Host CLI present but ACP entrypoint missing — Settings may offer install.
+    /// Host CLI present but ACP entrypoint missing — Settings may offer ACP install.
     #[serde(default)]
     pub offer_install: bool,
-    /// Primary CLI found on PATH (detect_command or command).
+    /// Silent install/update via `agent_run_tool_lifecycle` is available (local).
+    #[serde(default)]
+    pub can_install: bool,
+    /// Host detect binary differs from ACP entrypoint (e.g. `claude` vs `claude-agent-acp`).
+    #[serde(default)]
+    pub adapter_distinct: bool,
+    /// Primary CLI found on PATH (detect_command) — Agent layer.
     pub binary_available: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_path: Option<String>,
-    /// ACP entrypoint command found (e.g. npx / opencode).
+    /// ACP entrypoint command found — ACP layer (may equal host for native ACP agents).
     pub acp_command_available: bool,
     pub acp_status: CatalogAcpStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
