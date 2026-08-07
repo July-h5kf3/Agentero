@@ -96,6 +96,9 @@ export function AnnotationEditor({
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}
+				// Focus/click re-arms pin hover surface (parent hide timer).
+				onFocus={onPointerEnter}
+				onPointerDown={onPointerEnter}
 				{...compositionProps}
 				onKeyDown={(e) => {
 					if (e.key === "Escape") {

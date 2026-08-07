@@ -432,6 +432,9 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 					placeholder={t("annotations.placeholder")}
 					value={noteText}
 					onChange={(e) => setNoteText(e.target.value)}
+					// Keep pin auto-hide from closing while editing the note.
+					onFocus={onPointerEnter}
+					onPointerDown={onPointerEnter}
 					{...compositionProps}
 					onKeyDown={(e) => {
 						if (e.key === "Escape") {
@@ -469,6 +472,8 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 				onPointerEnter?.();
 			}}
 			onPointerLeave={() => {
+				// Collapse compact preview only; parent scheduleHoverHide handles close.
+				// Keep calling onPointerLeave so pin→gap→card timers still work.
 				if (!streaming) setExpanded(false);
 				onPointerLeave?.();
 			}}

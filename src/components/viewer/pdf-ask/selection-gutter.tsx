@@ -166,11 +166,13 @@ export function SelectionGutter({
 								isActive && "ring-2 ring-ring ring-offset-1",
 							)}
 							aria-label={aria}
-							onMouseEnter={() => {
+							// Match SelectionCard pointer model so pin leave / card
+							// enter share one hover surface (mouse-only races hide).
+							onPointerEnter={() => {
 								onEnter?.(item);
 								onOpen(item);
 							}}
-							onMouseLeave={() => onLeave?.(item)}
+							onPointerLeave={() => onLeave?.(item)}
 							onFocus={() => {
 								onEnter?.(item);
 								onOpen(item);

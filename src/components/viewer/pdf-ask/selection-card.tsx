@@ -1,5 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import {
+	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useRef,
+} from "react";
 
 import {
 	Tooltip,
@@ -230,6 +235,7 @@ export function SelectionCard({
 	bodyClassName,
 	children,
 }: SelectionCardProps) {
+	const rootRef = useRef<HTMLDivElement>(null);
 	const { left, top, maxHeight } = placeSelectionCard(screen, {
 		width,
 		height,
@@ -239,8 +245,25 @@ export function SelectionCard({
 		preferRight,
 	});
 
+	// If the card mounts / remounts under an existing pointer (mode switch,
+	// open under cursor), browsers do not re-fire pointerenter — re-arm the
+	// parent hover surface so hide timers do not close an actively hovered modal.
+	useEffect(() => {
+		const el = rootRef.current;
+		if (!el || !onPointerEnter) return;
+		if (el.matches(":hover")) onPointerEnter();
+	}, [onPointerEnter]);
+
+	const handlePointerLeave = (e: ReactPointerEvent<HTMLDivElement>) => {
+		// Still inside this card (including children) — ignore.
+		const next = e.relatedTarget;
+		if (next instanceof Node && e.currentTarget.contains(next)) return;
+		onPointerLeave?.();
+	};
+
 	return (
 		<div
+			ref={rootRef}
 			className={cn(
 				"fixed z-50 flex flex-col",
 				// Content-sized cards (no body scroll) should not clip children.
@@ -267,7 +290,7 @@ export function SelectionCard({
 			// floating cards share the same hover model — mouse-only leave can
 			// race with pointer leave on some trackpads and flicker hide timers.
 			onPointerEnter={onPointerEnter}
-			onPointerLeave={onPointerLeave}
+			onPointerLeave={handlePointerLeave}
 		>
 			<header className="flex shrink-0 items-center gap-2 border-border/60 border-b px-3 py-2">
 				<Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -275,7 +298,9 @@ export function SelectionCard({
 					{title}
 				</span>
 				{actions && actions.length > 0 ? (
-					<TooltipProvider delayDuration={200}>
+					// disableHoverableContent: tooltip is portaled outside the card;
+					// moving into it would fire pointerleave and start the hide timer.
+					<TooltipProvider delayDuration={200} disableHoverableContent>
 						<div className="flex items-center gap-0.5">
 							{actions.map((a) => (
 								<Tooltip key={a.label}>
