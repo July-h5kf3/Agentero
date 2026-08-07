@@ -91,6 +91,11 @@ export function isReferenceLayoutLabel(label: string): boolean {
 	return k === "reference" || k === "reference_content";
 }
 
+/** PP-DocLayoutV3 side-margin text (`aside_text` → kind text; keep raw label). */
+export function isAsideTextLayoutLabel(label: string): boolean {
+	return label.trim().toLowerCase() === "aside_text";
+}
+
 /** Section headings like "References" / "Bibliography" / "参考文献". */
 export function isReferenceSectionTitle(text: string): boolean {
 	const t = text.trim();
@@ -101,7 +106,7 @@ export function isReferenceSectionTitle(text: string): boolean {
 /**
  * Reading-order list of regions with extractable source text
  * (body, abstract, headers, figure/table captions).
- * Skips algorithm / reference regions (and text inside them).
+ * Skips algorithm / reference / aside_text regions (and text inside them).
  */
 export function listTranslatableLayoutRegions(
 	regions: readonly PdfLayoutRegion[],
@@ -120,6 +125,8 @@ export function listTranslatableLayoutRegions(
 		if (isAlgorithmLayoutKind(r.kind)) continue;
 		// Bibliography entries from the layout model.
 		if (isReferenceLayoutLabel(r.label)) continue;
+		// Side-margin / running column text (e.g. arXiv strip when labeled aside_text).
+		if (isAsideTextLayoutLabel(r.label)) continue;
 		if (!isLayoutTranslatableKind(r.kind)) continue;
 		if (!(r.score >= minScore)) continue;
 		if (!(r.bbox.w > 0 && r.bbox.h > 0)) continue;

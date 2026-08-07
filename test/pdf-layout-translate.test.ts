@@ -189,6 +189,28 @@ describe("listTranslatableLayoutRegions", () => {
 		]);
 		expect(list.map((r) => r.id)).toEqual(["body"]);
 	});
+
+	it("skips aside_text side-margin regions", () => {
+		const list = listTranslatableLayoutRegions([
+			region({
+				id: "aside",
+				kind: "text",
+				label: "aside_text",
+				pageIndex: 0,
+				bbox: { x: 0.01, y: 0.05, w: 0.04, h: 0.9 },
+				text: "arXiv:2608.00881v1 [cs.LG] 1 Aug 2026",
+			}),
+			region({
+				id: "body",
+				kind: "text",
+				label: "text",
+				pageIndex: 0,
+				bbox: { x: 0.12, y: 0.2, w: 0.7, h: 0.15 },
+				text: "Normal paragraph on the page.",
+			}),
+		]);
+		expect(list.map((r) => r.id)).toEqual(["body"]);
+	});
 });
 
 describe("fontSizeForLayoutTranslateBox", () => {

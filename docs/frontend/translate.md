@@ -22,7 +22,7 @@ Settings → **翻译**：
   - 翻译完成后若未悬停结果卡 / 原文黄高亮 / 页边针，约 1s 后自动收起；流式输出期间保持可见。隐藏后仍可从页边针重新打开。
 - PDF 版面批量翻译（工具栏 Languages，在视觉批注旁）：
   - 依赖版面分析 + PDF 文字层；翻译 `text` / `abstract` / `header` / `figure_title`（图题·表题）区域（score ≥ 30%）。
-  - **不翻译**：算法框及其内部文字；`reference` / `reference_content` 文献条目；“References / Bibliography / 参考文献” 标题。
+  - **不翻译**：算法框及其内部文字；`reference` / `reference_content` 文献条目；“References / Bibliography / 参考文献” 标题；侧栏 `aside_text`。
   - 按阅读顺序启动，并发 2；**每块完成立刻**在 bbox 上盖译文层（非整页等齐）。
   - 运行中再点=停止；有译文再点=清除。实现：`layout-translate.ts` + `layout-translate-overlay.tsx`。
 - API：`runTranslate(task)`（`src/lib/translate/`）。
