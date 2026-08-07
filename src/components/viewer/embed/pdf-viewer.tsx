@@ -4489,25 +4489,10 @@ function PdfViewerInner({
 				<div className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
 					<TooltipProvider delayDuration={200}>
 						<div className="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 shadow-sm backdrop-blur-sm">
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										size="icon-xs"
-										variant="ghost"
-										aria-label={t("pdf.prevPage")}
-										disabled={currentPage <= 1}
-										onClick={() => goToPage(currentPage - 1)}
-									>
-										<ChevronLeft className="size-3.5" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent side="top">{t("pdf.prevPage")}</TooltipContent>
-							</Tooltip>
 							<input
 								type="text"
 								inputMode="numeric"
-								className="w-8 rounded bg-transparent text-center font-medium text-foreground text-xs tabular-nums outline-none focus:bg-muted"
+								className="w-6 rounded bg-transparent text-center font-medium text-foreground text-xs tabular-nums outline-none focus:bg-muted"
 								aria-label={t("pdf.goToPage")}
 								value={pageField}
 								onFocus={(e) => {
