@@ -1,5 +1,6 @@
 ---
 name: equation-annotation
+version: 1
 description: >-
   从论文（优先 LaTeX）抽取公式与变量含义，写入 {paper}/Annotation.md。
 ---

@@ -11,6 +11,23 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 | `idea-evaluator` | 研究 idea 评审 |
 | `deep-research` | 综述级文献调研 |
 
+## Versioning & upgrades
+
+First-party (and vendored) bundled skills carry an integer frontmatter field:
+
+```yaml
+version: 1
+```
+
+On vault open, Agentero compares this to the app template:
+
+- **lower version** → auto-upgrade to the template, then toast the skill id
+- **same / higher version** → leave the on-disk file alone (including same-version edits)
+- **no `version`** → leave alone (user-owned or unversioned install)
+
+To customize a bundled skill and keep your edits across app updates, either
+remove `version` or set it higher than the template after editing.
+
 ## Third-party source & license
 
 `idea-evaluator` / `deep-research` are vendored from

@@ -1,5 +1,6 @@
 ---
 name: paper-reader
+version: 1
 description: >-
   Read and explain a research paper clearly (prefer TeX, else PAPER.md/PDF).
   Use for core contribution, method deep-dive, experiments, limitations, and

@@ -219,8 +219,9 @@ export function refreshAll(): void {
 }
 
 /**
- * After app updates, seed new bundled skills and safely update untouched
- * first-party skills. User-edited files are never overwritten.
+ * After app updates, seed new bundled skills and safely upgrade managed
+ * first-party skills (frontmatter `version` only). User-owned files
+ * (no/higher/same version) stay put.
  */
 export function seedVaultSkills(path: string): void {
 	if (!isTauri() || !path) return;

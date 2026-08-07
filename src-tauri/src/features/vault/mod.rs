@@ -3,7 +3,6 @@
 use crate::core::error::AppError;
 use crate::features::catalog;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
@@ -230,65 +229,61 @@ pub(crate) fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
     ]
 }
 
-/// Previous first-party SKILL.md hashes eligible for an automatic bundled
-/// update. Byte equality by SHA-256 proves that the user has not customized the
-/// seeded file. Any other content is preserved.
-const LEGACY_BUNDLED_SKILL_HASHES: &[(&str, &str)] = &[
-    (
-        ".agents/skills/agentero-cli/SKILL.md",
-        "8195723fd1b75a7c8c396f382b2c5b079d812246a693c65be0b9cd91bfb70f67",
-    ),
-    // Initial paper-reader seed.
-    (
-        ".agents/skills/paper-reader/SKILL.md",
-        "9ef2a2ccf6b251e11639a27877e86c1324dd3f05309b320679b60a1535e67bb2",
-    ),
-    // After wiki-check skill constraints (common vault pin; was missing from
-    // legacy list so ensure_vault never upgraded these installs).
-    (
-        ".agents/skills/paper-reader/SKILL.md",
-        "6a9b35c5bb6858039052e2a19bd3b75beddf0b60dbcd49e026fa94ba21c31e09",
-    ),
-    // Pre-aliases paper-reader (title-only NOTES shell era).
-    (
-        ".agents/skills/paper-reader/SKILL.md",
-        "e8ded7c1b6eec291b8b7ad3069b45ce42708d422597eaa620a0e73103a9cc478",
-    ),
-    // paper-reader before required frontmatter aliases section.
-    (
-        ".agents/skills/paper-reader/SKILL.md",
-        "af3173192e5e94c81d36599ecdc0ad2b95a7531afa099391d85672b992c41359",
-    ),
-    // paper-reader before required `created` date field.
-    (
-        ".agents/skills/paper-reader/SKILL.md",
-        "15978a666783c48b3b4063c29191bba90c9053e4f0d65c35767509eecbc2691b",
-    ),
-    (
-        ".agents/skills/vault-normalizer/SKILL.md",
-        "bec14afc8ad2d9c8b3f2ad06c7c84ef6e99fe546a8c944b757213d743feb2f33",
-    ),
-];
-
-fn sha256_hex(content: &[u8]) -> String {
-    hex::encode(Sha256::digest(content))
+/// Parse optional integer `version:` from YAML frontmatter (Agentero managed
+/// bundled skills). Accepts `version: 1` or `version: "1"`. Non-integer values
+/// are ignored so user/SemVer strings do not trigger silent overwrites.
+pub(crate) fn parse_skill_frontmatter_version(content: &str) -> Option<u32> {
+    let rest = content
+        .strip_prefix("---\n")
+        .or_else(|| content.strip_prefix("---\r\n"))?;
+    let (front_matter, _) = rest
+        .split_once("\n---")
+        .or_else(|| rest.split_once("\r\n---"))?;
+    for line in front_matter.lines() {
+        let line = line.trim();
+        let Some(value) = line.strip_prefix("version:") else {
+            continue;
+        };
+        let value = value.trim().trim_matches(['"', '\'']);
+        if let Ok(v) = value.parse::<u32>() {
+            return Some(v);
+        }
+    }
+    None
 }
 
-fn matches_legacy_bundled_skill(rel: &str, content: &[u8], hashes: &[(&str, &str)]) -> bool {
-    let hash = sha256_hex(content);
-    hashes
-        .iter()
-        .any(|(path, legacy_hash)| *path == rel && *legacy_hash == hash)
+/// Whether `existing` may be replaced by the current bundled template.
+///
+/// Rules:
+/// 1. Identical bytes → no upgrade.
+/// 2. Bundled template has integer frontmatter `version` **and** existing has a
+///    lower integer `version` → upgrade.
+/// 3. Otherwise leave the file alone (no version / equal / higher / non-skill).
+///
+/// Opt out after editing a first-party skill: remove `version`, or set it higher
+/// than the template.
+pub(crate) fn should_auto_upgrade_bundled_skill(existing: &[u8], bundled: &str) -> bool {
+    if existing == bundled.as_bytes() {
+        return false;
+    }
+    let Some(bundled_version) = parse_skill_frontmatter_version(bundled) else {
+        // Non-versioned bundled assets (README, LICENSE, references) are
+        // seed-if-missing only.
+        return false;
+    };
+    let Some(existing_version) = std::str::from_utf8(existing)
+        .ok()
+        .and_then(parse_skill_frontmatter_version)
+    else {
+        // No managed version → treat as user-owned / unversioned install.
+        return false;
+    };
+    existing_version < bundled_version
 }
 
-pub(crate) fn is_legacy_bundled_skill(rel: &str, content: &[u8]) -> bool {
-    matches_legacy_bundled_skill(rel, content, LEGACY_BUNDLED_SKILL_HASHES)
-}
-
-pub(crate) fn bundled_skill_has_legacy_version(rel: &str) -> bool {
-    LEGACY_BUNDLED_SKILL_HASHES
-        .iter()
-        .any(|(path, _)| *path == rel)
+/// True when the bundled template carries a managed `version` (may upgrade).
+pub(crate) fn bundled_skill_may_upgrade(bundled: &str) -> bool {
+    parse_skill_frontmatter_version(bundled).is_some()
 }
 
 /// Normalize a frontend/CLI locale preference to a supported onboarding locale.
@@ -349,31 +344,8 @@ fn seed_file_if_missing(
     Ok(())
 }
 
-/// Seed a missing bundled file, or update an untouched first-party SKILL.md
-/// whose bytes match a known previous bundled version.
-fn seed_or_upgrade_bundled_file_with_hashes(
-    root: &Path,
-    rel: &str,
-    content: &str,
-    created: &mut Vec<String>,
-    updated: &mut Vec<String>,
-    hashes: &[(&str, &str)],
-) -> Result<(), AppError> {
-    let path = join_rel(root, rel);
-    if !path.exists() {
-        return seed_file_if_missing(root, rel, content, created);
-    }
-    if !hashes.iter().any(|(path, _)| *path == rel) {
-        return Ok(());
-    }
-    let existing = fs::read(&path)?;
-    if existing != content.as_bytes() && matches_legacy_bundled_skill(rel, &existing, hashes) {
-        fs::write(&path, content)?;
-        updated.push(rel.to_string());
-    }
-    Ok(())
-}
-
+/// Seed a missing bundled file, or safely upgrade a managed first-party
+/// `SKILL.md` via frontmatter `version`.
 fn seed_or_upgrade_bundled_file(
     root: &Path,
     rel: &str,
@@ -381,23 +353,25 @@ fn seed_or_upgrade_bundled_file(
     created: &mut Vec<String>,
     updated: &mut Vec<String>,
 ) -> Result<(), AppError> {
-    seed_or_upgrade_bundled_file_with_hashes(
-        root,
-        rel,
-        content,
-        created,
-        updated,
-        LEGACY_BUNDLED_SKILL_HASHES,
-    )
+    let path = join_rel(root, rel);
+    if !path.exists() {
+        return seed_file_if_missing(root, rel, content, created);
+    }
+    let existing = fs::read(&path)?;
+    if should_auto_upgrade_bundled_skill(&existing, content) {
+        fs::write(&path, content)?;
+        updated.push(rel.to_string());
+    }
+    Ok(())
 }
 
 /// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
 /// Creates: `papers/`, `notes/`, `plans/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills from
-/// the app template, safely upgrades untouched first-party skills, seeds
-/// localized onboarding tutorial notes under `notes/`, and initializes
-/// `.agentero/catalog.sqlite`.
+/// the app template, safely upgrades managed first-party skills (frontmatter
+/// `version`), seeds localized onboarding tutorial notes under `notes/`, and
+/// initializes `.agentero/catalog.sqlite`.
 /// Does **not** create `PAPERS.md` / `library.bib`.
 ///
 /// Safe to call on every vault open after an app update so newly shipped skills
@@ -645,9 +619,30 @@ mod tests {
     }
 
     #[test]
-    fn bundled_skill_upgrade_requires_an_exact_known_hash() {
+    fn parse_skill_frontmatter_version_reads_integer() {
+        assert_eq!(
+            parse_skill_frontmatter_version("---\nname: x\nversion: 2\n---\nbody\n"),
+            Some(2)
+        );
+        assert_eq!(
+            parse_skill_frontmatter_version("---\nversion: \"3\"\nname: x\n---\n"),
+            Some(3)
+        );
+        assert_eq!(
+            parse_skill_frontmatter_version("---\nname: x\n---\nno version\n"),
+            None
+        );
+        // SemVer / non-integer must not be treated as managed.
+        assert_eq!(
+            parse_skill_frontmatter_version("---\nversion: 1.2.0\n---\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn bundled_skill_upgrades_when_version_is_lower() {
         let dir = env::temp_dir().join(format!(
-            "agentero-vault-upgrade-skill-{}",
+            "agentero-vault-upgrade-version-{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
@@ -655,38 +650,87 @@ mod tests {
         let rel = ".agents/skills/example/SKILL.md";
         let path = join_rel(&dir, rel);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "old bundled skill\n").unwrap();
-        let legacy_hash = sha256_hex(b"old bundled skill\n");
-        let hashes = [(rel, legacy_hash.as_str())];
+        let old = "---\nname: example\nversion: 1\n---\nold body\n";
+        let new = "---\nname: example\nversion: 2\n---\nnew body\n";
+        fs::write(&path, old).unwrap();
         let mut created = Vec::new();
         let mut updated = Vec::new();
 
-        seed_or_upgrade_bundled_file_with_hashes(
-            &dir,
-            rel,
-            "new bundled skill\n",
-            &mut created,
-            &mut updated,
-            &hashes,
-        )
-        .unwrap();
+        seed_or_upgrade_bundled_file(&dir, rel, new, &mut created, &mut updated).unwrap();
         assert!(created.is_empty());
         assert_eq!(updated, vec![rel]);
-        assert_eq!(fs::read_to_string(&path).unwrap(), "new bundled skill\n");
+        assert_eq!(fs::read_to_string(&path).unwrap(), new);
 
-        fs::write(&path, "user customization\n").unwrap();
+        // Same version with user edits must not be overwritten.
+        let customized = "---\nname: example\nversion: 2\n---\nuser edit\n";
+        fs::write(&path, customized).unwrap();
         updated.clear();
-        seed_or_upgrade_bundled_file_with_hashes(
-            &dir,
-            rel,
-            "another bundled skill\n",
-            &mut created,
-            &mut updated,
-            &hashes,
-        )
-        .unwrap();
+        seed_or_upgrade_bundled_file(&dir, rel, new, &mut created, &mut updated).unwrap();
         assert!(updated.is_empty());
-        assert_eq!(fs::read_to_string(&path).unwrap(), "user customization\n");
+        assert_eq!(fs::read_to_string(&path).unwrap(), customized);
+
+        // Higher local version (user fork) must not be overwritten by template.
+        let forked = "---\nname: example\nversion: 9\n---\nfork\n";
+        fs::write(&path, forked).unwrap();
+        updated.clear();
+        seed_or_upgrade_bundled_file(&dir, rel, new, &mut created, &mut updated).unwrap();
+        assert!(updated.is_empty());
+        assert_eq!(fs::read_to_string(&path).unwrap(), forked);
+
+        // No version → treat as user-owned; never overwrite.
+        fs::write(&path, "user customization without version\n").unwrap();
+        updated.clear();
+        seed_or_upgrade_bundled_file(&dir, rel, new, &mut created, &mut updated).unwrap();
+        assert!(updated.is_empty());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "user customization without version\n"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_vault_upgrades_versioned_first_party_skills() {
+        let dir = env::temp_dir().join(format!(
+            "agentero-vault-ensure-version-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        create_vault(&dir, "en").expect("create");
+
+        let paper = dir.join(".agents/skills/paper-reader/SKILL.md");
+        let current = fs::read_to_string(&paper).unwrap();
+        let bundled_v = parse_skill_frontmatter_version(&current).expect("bundled version");
+        assert!(bundled_v >= 1);
+
+        // Simulate an older managed install (lower version, different body).
+        let older = "---\nname: paper-reader\nversion: 0\n---\n# stale paper-reader\n";
+        fs::write(&paper, older).unwrap();
+        let r = ensure_vault(&dir, "en").expect("ensure upgrades by version");
+        assert!(
+            r.updated
+                .iter()
+                .any(|p| p == ".agents/skills/paper-reader/SKILL.md"),
+            "expected paper-reader in updated: {:?}",
+            r.updated
+        );
+        let after = fs::read_to_string(&paper).unwrap();
+        assert_eq!(parse_skill_frontmatter_version(&after), Some(bundled_v));
+        assert!(after.contains("# Paper Reader"));
+
+        // User-edited skill without version must not be overwritten.
+        fs::write(&paper, "# my custom paper-reader\n").unwrap();
+        let r2 = ensure_vault(&dir, "en").expect("ensure preserves custom");
+        assert!(!r2
+            .updated
+            .iter()
+            .any(|p| p == ".agents/skills/paper-reader/SKILL.md"));
+        assert_eq!(
+            fs::read_to_string(&paper).unwrap(),
+            "# my custom paper-reader\n"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

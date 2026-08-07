@@ -63,9 +63,10 @@ pub async fn resolve_remote_target(
 /// the remote vault.
 ///
 /// Remote vault handles are opaque session ids, so the local `vault_ensure`
-/// command cannot be used for them. User-customized remote files are never
-/// replaced. When `locale` is `Some`, localized onboarding tutorial notes are
-/// also seeded.
+/// command cannot be used for them. Managed first-party skills upgrade via the
+/// same frontmatter `version` rules as local vaults; user-owned remote files
+/// are never replaced. When `locale` is `Some`, localized onboarding tutorial
+/// notes are also seeded.
 pub async fn ensure_remote_vault_skills(
     session: &RemoteSession,
     locale: Option<&str>,
@@ -74,10 +75,9 @@ pub async fn ensure_remote_vault_skills(
     let mut updated = Vec::new();
     for (rel, content) in vault::bundled_skill_files() {
         if session.fs.exists(rel).await? {
-            if vault::bundled_skill_has_legacy_version(rel) {
+            if vault::bundled_skill_may_upgrade(content) {
                 let existing = session.fs.read(rel).await?;
-                if existing != content.as_bytes() && vault::is_legacy_bundled_skill(rel, &existing)
-                {
+                if vault::should_auto_upgrade_bundled_skill(&existing, content) {
                     session
                         .fs
                         .write(

@@ -6,7 +6,7 @@
 
 - 魔棒输入的类型识别完全在 Host 侧：`src-tauri/src/features/import/parse.rs` 的 `IdentifierKind::Skill`、`SkillSource` 和 `extract_primary_identifier()`。Skill 识别发生在普通 URL 分支之前，GitHub 链接不会再被送入 Translator `/web`。
 - 前端不做识别，只切分多条输入（`src/components/sidebar/vault-sidebar-header.tsx` `parseLookupTexts()`），经 `lookup_import_batch`（`src-tauri/src/features/import/commands.rs:17`）进入 `import_by_identifier_batch`。
-- Skill 目录约定已存在：`vault/.agents/skills/<id>/SKILL.md`（YAML frontmatter `name` / `description`，解析见 `src-tauri/src/features/agent/skills.rs` `parse_skill_metadata`）；`ensure_vault()` 播种 bundled skills，并只在第一方文件 hash 与已知旧版模板完全一致时升级；用户修改始终保留。
+- Skill 目录约定已存在：`vault/.agents/skills/<id>/SKILL.md`（YAML frontmatter `name` / `description`，解析见 `src-tauri/src/features/agent/skills.rs` `parse_skill_metadata`）；`ensure_vault()` 播种 bundled skills，并按 frontmatter 整数 `version` 升级第一方 Skill（盘上版本低于模板则覆盖；无 `version` / 同版本 / 更高版本不覆盖）。
 - 文件树中 `.agents` 是 eager 目录（`src/lib/vault/tree.ts` `TREE_EAGER_ROOT_NAMES` / `TREE_ALLOWED_DOT_NAMES`），写入后 `refreshTree` 即可见。
 - 仓库内**没有任何 git clone / npm 逻辑**；可复用的下载基础在 `src-tauri/src/features/import/assets.rs`：`http_get_bytes_with_progress()`（reqwest + 进度事件）与 arXiv e-print 的 **tar/gzip 安全解压**（`extract_tar_safe` / `sanitize_tar_path`，防路径穿越）。
 

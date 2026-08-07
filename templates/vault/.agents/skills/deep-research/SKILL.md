@@ -1,5 +1,6 @@
 ---
 name: deep-research
+version: 1
 description: >-
   Runs a deep, survey-grade literature investigation on a research topic:
   freezes research questions, searches from multiple adversarial
