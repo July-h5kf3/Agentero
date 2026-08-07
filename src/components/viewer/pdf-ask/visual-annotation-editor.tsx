@@ -8,9 +8,9 @@ import { useImeGuard } from "@/hooks/use-ime-guard";
 type VisualAnnotationEditorProps = {
 	/** Screen point near the selected region. */
 	screen: { x: number; y: number };
-	/** Enter: add to Agent composer drafts (default). */
+	/** Enter: save note-only visual annotation (requires non-empty comment). */
 	onSave: (comment: string) => void;
-	/** ⌘/Ctrl+Enter: start an in-place visual conversation immediately. */
+	/** ⌘/Ctrl+Enter: start an in-place visual Agent conversation. */
 	onSendNow: (comment: string) => void;
 	onClose: () => void;
 	/** Hover surface for ephemeral layout-hover drafts (cancel auto-hide). */
@@ -20,7 +20,7 @@ type VisualAnnotationEditorProps = {
 
 /**
  * Floating editor after a PDF region crop: preview + comment.
- * Enter → composer draft; ⌘/Ctrl+Enter → immediate pin chat.
+ * Enter → save as annotation; ⌘/Ctrl+Enter → Agent prompt.
  * Actions are keyboard-driven; cancel is a header icon only.
  */
 export function VisualAnnotationEditor({
@@ -40,8 +40,11 @@ export function VisualAnnotationEditor({
 		ref.current?.focus();
 	}, []);
 
-	const submitDraft = () => onSave(text);
-	const submitNow = () => onSendNow(text);
+	const submitNote = () => {
+		if (!text.trim()) return;
+		onSave(text);
+	};
+	const submitAgent = () => onSendNow(text);
 
 	return (
 		<SelectionCard
@@ -82,14 +85,14 @@ export function VisualAnnotationEditor({
 						return;
 					}
 					if (e.key !== "Enter" || e.shiftKey || isBlockedByIme(e)) return;
-					// ⌘/Ctrl+Enter → immediate conversation; bare Enter → composer draft.
+					// ⌘/Ctrl+Enter → Agent conversation; bare Enter → save note.
 					if (e.metaKey || e.ctrlKey) {
 						e.preventDefault();
-						submitNow();
+						submitAgent();
 						return;
 					}
 					e.preventDefault();
-					submitDraft();
+					submitNote();
 				}}
 			/>
 		</SelectionCard>

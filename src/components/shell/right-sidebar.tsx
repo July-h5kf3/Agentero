@@ -426,7 +426,7 @@ function AnnotationsSidebar() {
 				}));
 		}
 		return diskSummaries
-			.filter((s) => s.kind === "agent-trace")
+			.filter((s) => s.kind === "visual" || s.kind === "agent-trace")
 			.map((s) => ({
 				id: s.id,
 				page: s.page,

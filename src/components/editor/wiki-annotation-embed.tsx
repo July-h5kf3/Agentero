@@ -277,8 +277,13 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 	const color: HighlightColor = ref.color ?? "yellow";
 	const hasQuote = Boolean(ref.quote?.trim());
 	const hasComment = Boolean(ref.comment?.trim());
-	const hasImage = Boolean(ref.kind === "agent-trace" && ref.image?.data);
-	const messages = ref.kind === "agent-trace" ? (ref.messages ?? []) : [];
+	const hasImage = Boolean(
+		(ref.kind === "visual" || ref.kind === "agent-trace") && ref.image?.data,
+	);
+	const messages =
+		ref.kind === "visual" || ref.kind === "agent-trace"
+			? (ref.messages ?? [])
+			: [];
 
 	// Body is not a jump target — open via shared chrome ExternalLink only
 	// (same as markdown / attachment embeds) so selection & scroll stay usable.
@@ -286,7 +291,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 		<div className={cn("block w-full px-3 py-2 text-left", className)}>
 			{/* Location: outline breadcrumb or page fallback */}
 			<div className="flex items-center gap-1.5">
-				{ref.kind === "agent-trace" ? null : (
+				{ref.kind === "visual" || ref.kind === "agent-trace" ? null : (
 					<span
 						className={cn(
 							"size-2 shrink-0 rounded-full",
@@ -341,7 +346,7 @@ export const WikiAnnotationEmbed = memo(function WikiAnnotationEmbed({
 			) : null}
 
 			{/* Visual: read-only agent transcript with md (no composer) */}
-			{ref.kind === "agent-trace" ? (
+			{ref.kind === "visual" || ref.kind === "agent-trace" ? (
 				<div
 					className={cn(
 						"space-y-2",

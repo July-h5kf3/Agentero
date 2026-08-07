@@ -552,7 +552,7 @@ function scheduleAnnotationJump(paperAbs: string, annotationId: string): void {
 						);
 						return;
 					}
-					if (ref.kind === "agent-trace") {
+					if (ref.kind === "visual" || ref.kind === "agent-trace") {
 						handle.scrollToVisualTrace(ref.id);
 					} else {
 						handle.scrollToHighlight(ref.id);

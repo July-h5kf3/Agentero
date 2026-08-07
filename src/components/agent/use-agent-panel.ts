@@ -2066,6 +2066,8 @@ export function useAgentPanel({
 							runtimeSessionId: accepted.sessionId,
 							messageId: accepted.messageId,
 							userContent: text,
+							// Note-only marks need agentId when attaching the first thread.
+							agentId: agentId || current.agent?.agentId || undefined,
 						});
 						await writePdfVisualTrace(continuePaperAbs, next);
 					}
@@ -3013,12 +3015,15 @@ export function useAgentPanel({
 					comment: vt.comment,
 					paperPath: vt.paperPath ?? "",
 					image: vt.image,
-					agentId: request.agentId,
-					runtimeSessionId: request.runtimeSessionId,
-					providerSessionId: request.providerSessionId,
-					status: vt.status ?? "completed",
-					messages: vt.messages,
-					answerSnapshot: request.answerSnapshot,
+					agent: {
+						agentId: request.agentId,
+						runtimeSessionId: request.runtimeSessionId,
+						messageId: request.messageId ?? "pending",
+						providerSessionId: request.providerSessionId ?? undefined,
+						status: vt.status ?? "completed",
+						messages: vt.messages,
+						answerSnapshot: request.answerSnapshot,
+					},
 				},
 				messages: vt.messages,
 				title:

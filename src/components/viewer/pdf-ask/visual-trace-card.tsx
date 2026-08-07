@@ -292,13 +292,22 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 
 	const size = expanded ? EXPANDED : COMPACT;
 
-	const actions = useMemo(
-		() => [
-			{
+	const actions = useMemo(() => {
+		const items: Array<{
+			label: string;
+			onClick: () => void;
+			icon: ReactNode;
+			destructive?: boolean;
+		}> = [];
+		// Note-only marks have no Agent session yet.
+		if (trace.agent) {
+			items.push({
 				label: t("pdfExplain.traceOpenSession"),
 				onClick: onOpenSession,
 				icon: (<ExternalLink className="size-3.5" />) as ReactNode,
-			},
+			});
+		}
+		items.push(
 			{
 				label: t("pdfExplain.traceDelete"),
 				onClick: onDelete,
@@ -310,9 +319,9 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 				onClick: onHide,
 				icon: (<X className="size-3.5" />) as ReactNode,
 			},
-		],
-		[t, onOpenSession, onDelete, onHide],
-	);
+		);
+		return items;
+	}, [t, onOpenSession, onDelete, onHide, trace.agent]);
 
 	return (
 		<SelectionCard
@@ -430,9 +439,9 @@ export const VisualTraceCard = memo(function VisualTraceCard({
 							{error}
 						</p>
 					) : null}
-					{trace.status === "failed" && trace.error && !error ? (
+					{trace.agent?.status === "failed" && trace.agent.error && !error ? (
 						<p className="text-destructive text-xs leading-relaxed">
-							{trace.error}
+							{trace.agent.error}
 						</p>
 					) : null}
 				</div>

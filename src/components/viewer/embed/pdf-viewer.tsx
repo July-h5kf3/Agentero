@@ -153,7 +153,6 @@ import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
-import { addVisualDraft } from "@/lib/agent/visual-context-store";
 import {
 	BackgroundTaskCancelledError,
 	enqueueBackgroundTask,
@@ -171,13 +170,16 @@ import {
 	paperRefsList,
 } from "@/lib/paper/refs";
 import {
+	createNoteTrace,
 	createRunningTraces,
 	deletePdfVisualTrace,
+	isVisualMarkKind,
 	listPdfVisualTraces,
 	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
 	tracePreview,
+	writePdfVisualTrace,
 } from "@/lib/pdf/agent-trace";
 import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import {
@@ -1240,7 +1242,7 @@ function PdfViewerInner({
 		return translates.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [translates, activeCard]);
 	const activeVisualTrace = useMemo(() => {
-		if (activeCard?.kind !== "agent-trace") return null;
+		if (!isVisualMarkKind(activeCard?.kind)) return null;
 		return visualTraces.find((tr) => tr.id === activeCard.id) ?? null;
 	}, [visualTraces, activeCard]);
 	const visualDraftRegion = useMemo(
@@ -1513,7 +1515,7 @@ function PdfViewerInner({
 			if (!tr) return false;
 			page = tr.page;
 			rects = tr.rects;
-		} else if (card.kind === "agent-trace") {
+		} else if (isVisualMarkKind(card.kind)) {
 			const tr = visualTracesRef.current.find((item) => item.id === card.id);
 			if (!tr) return false;
 			page = tr.page;
@@ -1581,7 +1583,7 @@ function PdfViewerInner({
 			setAskError(null);
 		}
 		if (cur?.kind === "translate") setTranslateError(null);
-		if (cur?.kind === "agent-trace") {
+		if (isVisualMarkKind(cur?.kind)) {
 			setVisualError(null);
 			setVisualCardExpanded(false);
 		}
@@ -2143,24 +2145,6 @@ function PdfViewerInner({
 		};
 	}, [docId]);
 
-	const handleVisualDraftSave = useCallback(
-		(comment: string) => {
-			const draft = visualDraftEditor;
-			if (!draft) return;
-			closeVisualDraftEditor();
-			addVisualDraft({
-				paperPath: paperRelPath || paperAbsPath || "paper",
-				paperAbsPath: paperAbsPath ?? undefined,
-				page: draft.page,
-				rects: [draft.region],
-				comment,
-				image: draft.image,
-			});
-			openRightTab("agent");
-		},
-		[visualDraftEditor, paperRelPath, paperAbsPath, closeVisualDraftEditor],
-	);
-
 	const upsertVisualTrace = useCallback((trace: PdfVisualSessionTrace) => {
 		setVisualTraces((prev) => {
 			const next = [trace, ...prev.filter((tr) => tr.id !== trace.id)];
@@ -2169,6 +2153,56 @@ function PdfViewerInner({
 			return next;
 		});
 	}, []);
+
+	/**
+	 * Enter from the region editor: persist a note-only visual mark (no Agent).
+	 * Requires a non-empty comment (#196).
+	 */
+	const handleVisualDraftSave = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			const note = comment.trim();
+			if (!note) return;
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			let mark: PdfVisualSessionTrace;
+			try {
+				mark = createNoteTrace({
+					paperPath,
+					page: draft.page,
+					rects: [draft.region],
+					comment: note,
+					image: {
+						data: draft.image.data,
+						mimeType: draft.image.mimeType || "image/png",
+					},
+				});
+			} catch {
+				return;
+			}
+			closeVisualDraftEditor();
+			upsertVisualTrace(mark);
+			// Persist in background; keep pin visible even if write fails.
+			if (paperAbsPath) {
+				void writePdfVisualTrace(paperAbsPath, mark).catch((error) => {
+					console.warn("[visual-mark] save note failed", error);
+					notifyError(error instanceof Error ? error.message : String(error));
+				});
+			}
+			// Jump pin into view without opening Agent.
+			cardScreenRef.current = draft.screen;
+			setCardScreen(draft.screen);
+			openCard({ kind: "visual", id: mark.id });
+		},
+		[
+			visualDraftEditor,
+			paperRelPath,
+			paperAbsPath,
+			closeVisualDraftEditor,
+			upsertVisualTrace,
+			openCard,
+		],
+	);
 
 	/**
 	 * Pin modal chat is the same product session as the right-rail Agent panel.
@@ -2192,7 +2226,7 @@ function PdfViewerInner({
 				agentId,
 				modelId,
 				title: text.trim() || trace.comment || t("pdfExplain.visualAnnotation"),
-				providerSessionId: trace.providerSessionId,
+				providerSessionId: trace.agent?.providerSessionId,
 				visualDrafts,
 			});
 		},
@@ -2205,6 +2239,7 @@ function PdfViewerInner({
 			const draft = visualDraftEditor;
 			if (!draft) return;
 			const paperPath = paperRelPath || paperAbsPath || "paper";
+			// Agent path may use empty comment; fallback keeps visualMarkHasContent.
 			const content = comment.trim() || t("pdfExplain.visualAnnotation");
 			const now = new Date().toISOString();
 			const userMsg = {
@@ -2240,7 +2275,7 @@ function PdfViewerInner({
 			setVisualError(null);
 			cardScreenRef.current = draft.screen;
 			setCardScreen(draft.screen);
-			openCard({ kind: "agent-trace", id: provisional.id });
+			openCard({ kind: "visual", id: provisional.id });
 
 			void (async () => {
 				try {
@@ -2268,7 +2303,17 @@ function PdfViewerInner({
 							},
 						};
 					requestVisualAgentTurn({
-						trace: { ...provisional, agentId },
+						trace: {
+							...provisional,
+							agent: {
+								...(provisional.agent ?? {
+									runtimeSessionId: "pending",
+									messageId: "pending",
+									status: "running" as const,
+								}),
+								agentId,
+							},
+						},
 						text: content,
 						visualDrafts: [visualDraft],
 						agentId,
@@ -2299,7 +2344,7 @@ function PdfViewerInner({
 	const handleVisualContinue = useCallback(
 		(question: string) => {
 			const card = activeCardRef.current;
-			const traceId = card?.kind === "agent-trace" ? card.id : null;
+			const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
 			if (!traceId) return;
 			setVisualCardExpanded(true);
 			void (async () => {
@@ -2313,15 +2358,14 @@ function PdfViewerInner({
 						.getState()
 						.findByVisualTraceId(traceId);
 					const providerSessionId =
-						bound?.providerSessionId ?? latest.providerSessionId;
+						bound?.providerSessionId ?? latest.agent?.providerSessionId;
 					// Continue: stick to the agent that owns this session/mark.
 					// New pins use resolvePdfAskAgent (default); do not re-resolve here
 					// or a Grok default would load a Codex providerSessionId.
+					const priorAgentId = latest.agent?.agentId;
 					const markAgent =
 						bound?.agentId?.trim() ||
-						(latest.agentId && latest.agentId !== "pending"
-							? latest.agentId
-							: null);
+						(priorAgentId && priorAgentId !== "pending" ? priorAgentId : null);
 					let agentId = markAgent;
 					let modelId: string | undefined;
 					if (!agentId) {
@@ -2330,13 +2374,19 @@ function PdfViewerInner({
 						agentId = resolved.agentId;
 						modelId = resolved.modelId;
 					}
-					requestVisualAgentTurn({
-						trace: {
-							...latest,
-							providerSessionId:
-								providerSessionId ?? latest.providerSessionId ?? undefined,
+					const agent = {
+						...(latest.agent ?? {
 							agentId,
-						},
+							runtimeSessionId: "pending",
+							messageId: "pending",
+							status: "running" as const,
+						}),
+						agentId,
+						providerSessionId:
+							providerSessionId ?? latest.agent?.providerSessionId,
+					};
+					requestVisualAgentTurn({
+						trace: { ...latest, agent },
 						text: question,
 						agentId,
 						modelId,
@@ -2475,7 +2525,7 @@ function PdfViewerInner({
 			setVisualTraces((prev) => prev.filter((tr) => tr.id !== id));
 			if (paperAbsPath) void deletePdfVisualTrace(paperAbsPath, id);
 			if (
-				activeCardRef.current?.kind === "agent-trace" &&
+				isVisualMarkKind(activeCardRef.current?.kind) &&
 				activeCardRef.current.id === id
 			) {
 				hideActiveCard();
@@ -2485,23 +2535,24 @@ function PdfViewerInner({
 	);
 
 	const handleDeleteVisualTrace = useCallback(() => {
-		const id =
-			activeCardRef.current?.kind === "agent-trace"
-				? activeCardRef.current.id
-				: null;
+		const id = isVisualMarkKind(activeCardRef.current?.kind)
+			? activeCardRef.current.id
+			: null;
 		if (id) deleteVisualTraceById(id);
 		else hideActiveCard();
 	}, [deleteVisualTraceById, hideActiveCard]);
 
 	const openVisualTraceSession = useCallback(
 		async (trace: PdfVisualSessionTrace) => {
+			// Note-only marks have no Agent session yet — stay on the pin card.
+			if (!trace.agent) return;
 			// Same session as the pin modal — activate it in the shared store.
 			setAgentPanelMounted(true);
 			const store = agentSessionStore.getState();
 			const existing =
 				store.findByVisualTraceId(trace.id) ||
-				(trace.providerSessionId
-					? store.findByProviderSessionId(trace.providerSessionId)
+				(trace.agent.providerSessionId
+					? store.findByProviderSessionId(trace.agent.providerSessionId)
 					: undefined);
 			if (existing) {
 				store.setActiveTabId(existing.id);
@@ -2517,14 +2568,16 @@ function PdfViewerInner({
 					messages.find((m) => m.role === "user")?.content.trim() ||
 					trace.comment.trim() ||
 					t("pdfExplain.visualAnnotation");
+				const agentId =
+					trace.agent.agentId === "pending" ? "" : trace.agent.agentId;
 				requestOpenAgentSession({
-					agentId: trace.agentId === "pending" ? "" : trace.agentId,
-					runtimeSessionId: trace.runtimeSessionId,
-					providerSessionId: trace.providerSessionId,
-					messageId: trace.messageId,
+					agentId,
+					runtimeSessionId: trace.agent.runtimeSessionId,
+					providerSessionId: trace.agent.providerSessionId,
+					messageId: trace.agent.messageId,
 					title,
 					prompt: title,
-					answerSnapshot: trace.answerSnapshot,
+					answerSnapshot: trace.agent.answerSnapshot,
 					paperAbsPath: paperAbsPath ?? undefined,
 					visualTrace: {
 						traceId: trace.id,
@@ -2533,7 +2586,7 @@ function PdfViewerInner({
 						paperPath: trace.paperPath,
 						...(image ? { image } : {}),
 						messages: messages.map((m) => ({ ...m })),
-						status: trace.status,
+						status: trace.agent.status,
 					},
 				});
 			}
@@ -2546,7 +2599,7 @@ function PdfViewerInner({
 	/** Stable callbacks so VisualTraceCard memo can skip PdfViewer re-renders. */
 	const handleOpenActiveVisualSession = useCallback(() => {
 		const card = activeCardRef.current;
-		if (card?.kind !== "agent-trace") return;
+		if (!isVisualMarkKind(card?.kind)) return;
 		const tr = visualTracesRef.current.find((item) => item.id === card.id);
 		if (tr) void openVisualTraceSession(tr);
 	}, [openVisualTraceSession]);
@@ -2557,7 +2610,7 @@ function PdfViewerInner({
 		// that went through requestTurn → panel send.
 		const store = agentSessionStore.getState();
 		const card = activeCardRef.current;
-		const traceId = card?.kind === "agent-trace" ? card.id : null;
+		const traceId = isVisualMarkKind(card?.kind) ? card.id : null;
 		const bound = traceId ? store.findByVisualTraceId(traceId) : undefined;
 		const sid =
 			visualSessionRef.current ||
@@ -2625,12 +2678,12 @@ function PdfViewerInner({
 			}
 			if (pin.kind === "translate") openCard({ kind: "translate", id: pin.id });
 			if (pin.kind === "annotate") openEditorForAnnotation(pin.id);
-			if (pin.kind === "agent-trace") {
+			if (isVisualMarkKind(pin.kind)) {
 				const markId = pin.traceId || pin.id;
 				const tr = visualTracesRef.current.find((item) => item.id === markId);
 				if (!tr) return;
 				// Pin hover: page is already on-screen; openCard places beside the mark.
-				openCard({ kind: "agent-trace", id: tr.id });
+				openCard({ kind: "visual", id: tr.id });
 			}
 		},
 		[upsertThread, openThread, openCard, openEditorForAnnotation],
@@ -3392,7 +3445,7 @@ function PdfViewerInner({
 					pageNumber: tr.page,
 					behavior: "instant",
 				});
-				openCard({ kind: "agent-trace", id: tr.id });
+				openCard({ kind: "visual", id: tr.id });
 			},
 			deleteVisualTrace: (id) => {
 				deleteVisualTraceById(id);
@@ -3737,11 +3790,11 @@ function PdfViewerInner({
 						const pin = pinFromRects(tr.rects, pageText);
 						return {
 							id: tr.id,
-							kind: "agent-trace",
+							kind: "visual",
 							x: pin.x,
 							y: pin.y,
 							preview: tracePreview(tr),
-							ended: tr.status !== "running",
+							ended: tr.agent?.status !== "running",
 							traceId: tr.id,
 							overText: pinObscuresBodyText(pin, pageText),
 							side: pin.side,
