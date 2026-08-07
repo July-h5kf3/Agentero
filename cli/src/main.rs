@@ -202,6 +202,16 @@ enum Commands {
         #[command(subcommand)]
         cmd: Option<commands::doctor::DoctorCmd>,
     },
+    /// Sidebar layout index (figures / tables / algorithms / formulas).
+    Layout {
+        #[command(subcommand)]
+        cmd: commands::layout::LayoutCmd,
+    },
+    /// Reading marks (region-anchored annotations).
+    Mark {
+        #[command(subcommand)]
+        cmd: commands::mark::MarkCmd,
+    },
 }
 
 fn init_logging() {
@@ -319,6 +329,8 @@ fn command_label(cmd: &Commands) -> &'static str {
         Commands::Config { .. } => "cli.config",
         Commands::Wiki { .. } => "cli.wiki",
         Commands::Doctor { .. } => "cli.doctor",
+        Commands::Layout { .. } => "cli.layout",
+        Commands::Mark { .. } => "cli.mark",
     }
 }
 
@@ -350,5 +362,7 @@ async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Valu
         Commands::Config { cmd } => commands::config_cmd::run(cmd, globals),
         Commands::Wiki { cmd } => commands::wiki::run(cmd, globals),
         Commands::Doctor { cmd } => commands::doctor::run(cmd, globals),
+        Commands::Layout { cmd } => commands::layout::run(cmd, globals),
+        Commands::Mark { cmd } => commands::mark::run(cmd, globals).await,
     }
 }

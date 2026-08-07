@@ -13,6 +13,7 @@ pub mod registry;
 pub mod runtime;
 pub mod skills;
 pub mod templates;
+pub mod tool_lifecycle;
 
 pub use acp::{
     list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, warm_agent,

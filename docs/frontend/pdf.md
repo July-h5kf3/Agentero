@@ -25,7 +25,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | 导航 | 底部页码 pill、PageUp/Down、Home/End |
 | 大纲 | 左侧书签浮层 |
 | 查找 | `⌘F` + 命中高亮 |
-| 明暗模式 | 底部换页栏旁可单独切换亮色 / 暗色页面，偏好保存在本地，不改变应用全局主题。EmbedPDF 尚无页面 color-scheme API，仅在 PDF 暗色模式下对 `RenderLayer` / `TilingLayer` 做柔和反相（`invert(0.88)` + `hue-rotate(180)` + 轻亮度/对比）；选区 / 搜索 / 批注覆盖层与 Agent 裁剪（`renderPageRect`）不受影响。扫描版/插图会被一并反相 |
+| 明暗模式 | 底部换页栏旁可单独切换亮色 / 暗色页面，偏好保存在本地，不改变应用全局主题。EmbedPDF 尚无页面 color-scheme API，仅在 PDF 暗色模式下对 `RenderLayer` / `TilingLayer` 做柔和反相（`PDF_PAGE_RASTER_DARK_CLASS`：`invert(0.88)` + `hue-rotate(180)` + 轻亮度/对比）；全文翻译覆盖层同样按浅色纸面绘制后套用同一 filter，以匹配反转后的纸面。选区 / 搜索 / 批注覆盖层与 Agent 裁剪（`renderPageRect`）不受影响。扫描版/插图会被一并反相 |
 | 沉浸 | 底部换页栏旁切换；全屏 + 限宽居中 |
 | 位置 | 记忆阅读位置 |
 | 文中链接 | Link annotation 覆盖层：citation / 图表 / 章节 GoTo 点击跳页，URI 开系统浏览器；hover citation 锚文本（`[12]` / 作者-年份）显示元数据预览并联动右侧 References 卡片高亮。图表、章节、公式等内部链接只保留导航，不显示引用预览 |
@@ -67,6 +67,8 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/figures-panel.tsx` | 版面分析入口（右栏 header：分析 / 显示 bbox） |
 | `src/components/viewer/pdf-ask/visual-annotation-editor.tsx` | 框选后批注编辑器 |
 | `src/components/viewer/pdf-citation-preview.tsx` | 文中引用悬浮预览 |
+| `src/components/viewer/pdf-ask/formula-annotation-card.tsx` | 公式 hover「公式解析」符号对照卡 |
+| `src/lib/pdf/equation-annotation/` | `Annotation.md` 符号表解析与加载 |
 | `src/lib/agent/visual-context-store.ts` | Agent composer 视觉批注草稿 |
 | `src/lib/pdf/agent-trace/` | visual mark 契约（v2 + 读兼容 v1）/ mark 资产 IO / prompt / Open-in-Agent / 会话 pending |
 | `src/lib/pdf/highlight/` | 高亮 / 批注 |
@@ -90,6 +92,23 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 要点：先文字角色再联图；图题须整框在 figure bbox 内；图无 title 丢弃；默认置信度 30%；Paper PDF 的初步解析结果缓存到 `{paper}/source/layout.json`，后续 merge/filter 可重复计算。
 
 **Hover 视觉提问：** 指针在插图 / 表 / 算法 / 有编号公式上停留约 600ms 后，自动裁剪该区域并打开 `VisualAnnotationEditor`（与手动框选相同；不自动发送 Agent）。中途移开取消；打开后离开源区 / 草稿卡约 1000ms 自动关闭（与 ask / 视觉 pin 卡 hide 一致，便于指针移到卡片）；框选模式或已有草稿卡时不触发。手动框选草稿不会因移开而自动关闭。
+
+**Hover 公式解析：** 当论文目录存在 `Annotation.md`（由 `equation-annotation` Skill 生成的符号词典）且解析到符号表时，hover **有编号公式** 不打开视觉提问，改为弹出「公式解析」卡片：展示符号 / 含义 / 通俗理解对照（符号列 KaTeX 渲染）。卡片可打开 `Annotation.md`。
+
+Hover UX（与视觉提问分离）：
+
+| 项 | 值 |
+|---|---|
+| 打开 dwell | ~280ms（无裁图，比视觉提问 600ms 更短） |
+| 移走关闭 | 离开公式 hit 或卡片后 ~320ms（够穿越到卡片空隙；比 1s 更利落） |
+| 回到公式 / 卡片 | 取消关闭；同一公式重新进入立即保持打开 |
+| 切换公式 | 图例已开时 hover 另一公式立即切换（无二次 dwell） |
+| 滚动 / 缩放 | 卡片随 bbox 重定位 |
+| Escape | 立即关闭 |
+| hit 层 | 图例打开时仍挂载，负责 leave/enter，不依赖第二层 hover surface |
+| 页上框 | 与视觉提问相同的 primary 描边框，标出当前公式区域 |
+
+无 `Annotation.md` 或表为空时，公式仍走上述视觉提问 hover。实现：`src/lib/pdf/equation-annotation/`、`formula-annotation-card.tsx`、`LAYOUT_FORMULA_HOVER_*`。
 
 Host 下载/解析：[../backend/paper-import.md](../backend/paper-import.md)。
 

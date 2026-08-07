@@ -34,15 +34,18 @@ papers/<id>/
 ├── marks/            # 高亮/批注/提问/翻译 JSON 与 mark 自有资产
 ├── source/           # TeX 等（可懒加载）
 │   ├── agentero-cite.json  # 参考文献 sidecar（可重建，见 api.md paper_refs_parse）
-│   └── layout.json         # PDF 版面 raw sidecar（可重建；merge/filter 可重复）
+│   ├── layout.json         # PDF 版面 raw sidecar（可重建；merge/filter 可重复）
+│   └── layout-index.json   # 侧栏同构索引（CLI/Agent；post-merge figure/table/…）
 ├── PAPER.md          # 无 TeX 时 liteparse 正文
 └── assets/           # NOTES 内嵌图等
 ```
 
+`layout-index.json` 与侧栏 Figures 同源（merge + score/NMS 后），供 `agentero layout list` / `mark add --region` 使用；**可从** `layout.json` 重算，分析完成或缓存命中时由桌面写入。详见 [../frontend/pdf-layout-analysis.md](../frontend/pdf-layout-analysis.md)。
+
 ## marks/
 
-- 高亮/批注：`annotations.json`（含 `comment` 的为批注）
-- 提问/翻译：`<id>.json`（`kind`）
+- 高亮/批注：`annotations.json`（含 `comment` 的为批注）；CLI 区域批注写 per-id `highlight`（`geometry: resolved` + `layoutRef`）
+- 提问/翻译：`<id>.json`（`kind`）；CLI 可用 `mark add --region … --question` 写 `ask` 壳
 - 视觉批注：`<id>.json`（`kind: visual` v2）保存区域、用户 `comment`、可选嵌套 `agent` 与 `image.path`；裁剪图片位于 `assets/<id>.png`。旧版 `kind: agent-trace`（扁平 agent 字段）仍可读，Doctor 可迁移
 - 不写 PDF 二进制，不强制写入 NOTES
 

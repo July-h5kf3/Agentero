@@ -7,6 +7,7 @@
 import { cn } from "@/lib/core/utils";
 import { isLayoutTranslateHeadingKind } from "@/lib/pdf/layout/labels";
 import type { LayoutTranslateItem } from "@/lib/pdf/layout/layout-translate";
+import { PDF_PAGE_RASTER_DARK_CLASS } from "@/lib/pdf/page-theme";
 
 export type LayoutTranslateOverlayProps = {
 	items: readonly LayoutTranslateItem[];
@@ -169,10 +170,10 @@ export function LayoutTranslateOverlay({
 						key={`layout-tr-${item.id}`}
 						className={cn(
 							"pointer-events-none absolute z-[3] overflow-hidden rounded-[1px]",
-							// PDF-page theme: solid white on light pages, zinc on dark.
-							pdfDark
-								? "bg-zinc-900 text-zinc-100 ring-1 ring-white/12"
-								: "bg-white text-zinc-900 ring-1 ring-black/8",
+							// Always paint as light paper; in PDF dark mode apply the same
+							// invert as page rasters so cover blocks match inverted paper.
+							"bg-white text-zinc-900",
+							pdfDark && PDF_PAGE_RASTER_DARK_CLASS,
 							item.status === "running" && "opacity-90",
 						)}
 						style={{

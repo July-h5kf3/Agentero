@@ -9,6 +9,8 @@ export {
 	layoutKindHex,
 } from "@/lib/pdf/layout/colors";
 export {
+	LAYOUT_FORMULA_HOVER_DWELL_MS,
+	LAYOUT_FORMULA_HOVER_HIDE_MS,
 	LAYOUT_HOVER_DWELL_MS,
 	LAYOUT_HOVER_HIDE_MS,
 	LAYOUT_SIDEBAR_MIN_SCORE,
@@ -33,12 +35,17 @@ export {
 	rawLayoutRegionsOnPage,
 } from "@/lib/pdf/layout/hit-test";
 export {
+	LAYOUT_INDEX_FILE,
 	LAYOUT_SIDECAR_FILE,
 	LAYOUT_SIDECAR_SCHEMA_VERSION,
+	layoutIndexPath,
 	layoutSidecarPath,
 	type PdfLayoutSidecar,
 	parseLayoutSidecar,
+	readLayoutIndex,
 	readLayoutSidecar,
+	writeLayoutIndex,
+	writeLayoutIndexFromRaw,
 	writeLayoutSidecar,
 } from "@/lib/pdf/layout/io";
 export {
@@ -58,6 +65,18 @@ export {
 	layoutKindI18nKey,
 	layoutLabelToKind,
 } from "@/lib/pdf/layout/labels";
+export {
+	buildLayoutIndexItems,
+	buildLayoutIndexSidecar,
+	LAYOUT_INDEX_SCHEMA_VERSION,
+	type LayoutIndexBbox,
+	type LayoutIndexItem,
+	type LayoutIndexKind,
+	type LayoutIndexSection,
+	type LayoutIndexSidecar,
+	parseLayoutIndexSidecar,
+	slugFromTitle,
+} from "@/lib/pdf/layout/layout-index";
 export {
 	LAYOUT_TRANSLATE_CONCURRENCY,
 	LAYOUT_TRANSLATE_MAX_CHARS,

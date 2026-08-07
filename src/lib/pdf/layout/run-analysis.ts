@@ -6,7 +6,11 @@ import type {
 } from "@embedpdf/plugin-layout-analysis";
 
 import { logger } from "@/lib/core/logger";
-import { readLayoutSidecar, writeLayoutSidecar } from "@/lib/pdf/layout/io";
+import {
+	readLayoutSidecar,
+	writeLayoutIndexFromRaw,
+	writeLayoutSidecar,
+} from "@/lib/pdf/layout/io";
 import { mergeCaptionsIntoHosts } from "@/lib/pdf/layout/merge-captions";
 import { ensureLayoutModel } from "@/lib/pdf/layout/model";
 import {
@@ -245,6 +249,10 @@ export async function runDocumentLayoutAnalysis(
 					() => undefined,
 				);
 			}
+			// Always refresh sidebar index (cheap; keeps CLI in sync with merge rules).
+			void writeLayoutIndexFromRaw(options.paperAbsPath, raw).catch(
+				() => undefined,
+			);
 			options.onDone?.(summary, result.regions.length);
 			return null;
 		}
@@ -374,6 +382,12 @@ export async function runDocumentLayoutAnalysis(
 					} catch (e) {
 						const message = e instanceof Error ? e.message : String(e);
 						logger.warn("layout sidecar write failed", { error: message });
+					}
+					try {
+						await writeLayoutIndexFromRaw(options.paperAbsPath, rawRegions);
+					} catch (e) {
+						const message = e instanceof Error ? e.message : String(e);
+						logger.warn("layout index write failed", { error: message });
 					}
 					setLayoutDocumentResult(result);
 					const summary = summarizeLayoutResult(result);

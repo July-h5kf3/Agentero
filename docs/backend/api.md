@@ -1474,17 +1474,41 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
 }
 ```
 
-#### `agent_open_install_terminal`（已实现）
+#### `agent_run_tool_lifecycle`（已实现，[#225](https://github.com/poco-ai/Agentero/issues/225)）
 
-打开系统终端，展示指定 catalog 模板的 **安装命令**，并 **等待用户按 Enter（Windows：任意键）后才执行**。不静默安装；UI 不得传入任意 shell——仅允许模板内置的 `install_command`。
+**静默**安装或升级 catalog Agent CLI（需要时一并装 ACP 适配器）。不弹终端、不写临时确认脚本；命令由 Host 按平台拼装，UI 不得传入任意 shell。
 
-- **参数**：`{ templateId: string }`（如 `claude-acp`）
-- **返回**：`{ ok: true; data: null }`
+> 已取代旧的 `agent_open_install_terminal`（打开系统终端、Enter 确认后再装）。远端仍用 `remote_agent_open_install_terminal`（SSH 确认安装）。
+
+- **参数**：`{ templateId: string, action: "install" | "update" }`
+  - 支持的 `templateId`：`opencode` · `claude-acp` · `codex-acp` · `gemini` · `grok-build`（不含 `qodercli` / `custom`）
+- **返回**：`{ ok: true; data: null }` 或错误（stderr/stdout 末尾若干行）
 - **行为**
-  - 查找内置模板的 `installCommand`；无则报错。
-  - 写入临时脚本 → 打开系统默认终端运行该脚本（打印命令 → 确认 → 执行 → 提示回到 Settings 点 Refresh）。
-  - Claude：`npm i -g @agentclientprotocol/claude-agent-acp`（需本机已装 Claude Code 与 npm）。
-- **Catalog 扫描字段**（`agent_scan_catalog`）：`detect` 对 Claude 使用 `claude`；`command` 仍为 `claude-agent-acp`。当 `binaryAvailable && !acpCommandAvailable && installCommand` 时 `offerInstall: true`。
+  - `install`：未装 host 时走官方 installer（POSIX curl→临时文件再 bash，非 `curl|bash`）或 npm；Claude/Codex 在 host 已存在但 ACP 缺失时只装适配器；两者都缺则 host && adapter。
+  - `update`：优先 `tool update` / 官方链，失败再 npm；Codex 固定 npm（避免假成功）；Windows 上 OpenCode 不用交互式 `upgrade`。
+  - macOS/Linux：注入 login shell 的 `PATH`（GUI 窄 PATH）。
+  - Windows：写临时 `.bat` + `CREATE_NO_WINDOW` + `call` 前缀。
+  - 在 `spawn_blocking` 中执行，避免卡住 async runtime。
+- **实现**：`src-tauri/src/features/agent/tool_lifecycle.rs`
+- **Catalog 两层检测**（`agent_scan_catalog` / 远端 scan）：
+  - **Agent**：`binaryAvailable`（`detect_command`，如 `claude` / `codex` / `opencode`）
+  - **ACP**：`acpCommandAvailable`（`command`，如 `claude-agent-acp`；原生 ACP 时与 Agent 同二进制）
+  - `adapterDistinct`：host 与 ACP 入口不同
+  - `canInstall`：本机支持静默安装
+  - `offerInstall`：Agent 已装但 ACP 缺失 → 设置页「安装 ACP」
+  - Agent 未装且 `canInstall` → 设置页「安装」
+
+#### `agent_tool_lifecycle_supported`（已实现）
+
+- **参数**：`{ templateId: string }`
+- **返回**：`{ ok: true; data: boolean }`
+
+#### `agent_tool_install_commands`（已实现）
+
+平台相关的一键手动安装文案（复制用，无副作用）。
+
+- **参数**：无
+- **返回**：`{ ok: true; data: string }`
 
 #### `agent:list_sessions`
 

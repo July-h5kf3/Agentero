@@ -5,6 +5,7 @@ use crate::features::agent::models::{
     CatalogEntry, CatalogScanResponse, ProbeResult, UpsertAgentRequest,
 };
 use crate::features::agent::templates::{catalog_templates, template_from_id, template_info};
+use crate::features::agent::tool_lifecycle;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -377,12 +378,20 @@ impl AgentRegistry {
                 .zip(default_id.as_ref())
                 .is_some_and(|(a, d)| a == d);
 
+            // Two install layers: Agent (detect binary) vs ACP entrypoint.
+            let adapter_distinct = info
+                .detect_command
+                .as_ref()
+                .is_some_and(|d| d != &info.command);
+            let can_install = tool_lifecycle::supports_lifecycle(&info.id);
+            // Offer ACP install when host is present but ACP entry is missing.
             let offer_install = binary_available
                 && !acp_command_available
-                && info
-                    .install_command
-                    .as_ref()
-                    .is_some_and(|c| !c.trim().is_empty());
+                && (can_install
+                    || info
+                        .install_command
+                        .as_ref()
+                        .is_some_and(|c| !c.trim().is_empty()));
 
             entries.push(CatalogEntry {
                 template_id: info.id,
@@ -393,6 +402,8 @@ impl AgentRegistry {
                 install_hint: info.install_hint,
                 install_command: info.install_command,
                 offer_install,
+                can_install,
+                adapter_distinct,
                 binary_available,
                 resolved_path: detect_path.map(|p| p.display().to_string()),
                 acp_command_available,

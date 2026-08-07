@@ -3,13 +3,11 @@ use crate::features::agent::models::{
     AgentDescriptor, AgentListResponse, AgentSkill, CatalogScanResponse, ProbeResult,
     RunOnceAccepted, RunOnceRequest, UpsertAgentRequest, WarmRequest, WarmResult,
 };
-use crate::features::agent::templates::template_info;
 use crate::features::agent::{
     list_agent_skills, new_ids, probe_agent, run_once, warm_agent, AgentEventEmitter,
     AgentRegistry, AgentRunController, AgentWarmGate, PermissionGate, PermissionPolicy,
 };
 use crate::features::remote::{materialize_skills_to_work, resolve_remote_target, RemoteRegistry};
-use crate::features::terminal;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -182,31 +180,61 @@ pub async fn agent_probe(
     Ok(ApiResult::ok(result))
 }
 
-/// Open a system terminal that shows the template's install command and waits for
-/// the user to press Enter before running it. Only templates with a registered
-/// `install_command` are allowed (no free-form shell from the UI).
+/// Silently install or update a catalog Agent CLI (and ACP adapter when needed).
+///
+/// Replaces the old terminal confirm-then-run helper. Platform scripts mirror
+/// CC Switch: official installer first, npm fallback; GUI apps inject the
+/// login-shell PATH on macOS/Linux. UI must not pass free-form shell — only known
+/// template ids and `install` | `update`.
+///
+/// Blocking work runs on a worker thread so the async runtime is not stalled.
 #[tauri::command]
-pub fn agent_open_install_terminal(template_id: String) -> ApiResult<serde_json::Value> {
-    let info = match template_info(&template_id) {
-        Some(t) => t,
-        None => {
-            return map_err(AppError::message(format!(
-                "unknown catalog template: {template_id}"
-            )));
-        }
+pub async fn agent_run_tool_lifecycle(
+    template_id: String,
+    action: String,
+) -> Result<ApiResult<serde_json::Value>, String> {
+    use crate::features::agent::tool_lifecycle::{run_template_lifecycle, ToolLifecycleAction};
+
+    let action_label = action.clone();
+    let action = match ToolLifecycleAction::parse(&action) {
+        Ok(a) => a,
+        Err(e) => return Ok(map_err(AppError::message(e))),
     };
-    let command = match info.install_command {
-        Some(c) if !c.trim().is_empty() => c,
-        _ => {
-            return map_err(AppError::message(format!(
-                "no install command for template: {template_id}"
-            )));
+    let template_id_for_log = template_id.clone();
+    let result = tokio::task::spawn_blocking(move || run_template_lifecycle(&template_id, action))
+        .await
+        .map_err(|e| format!("tool lifecycle task join error: {e}"))?;
+
+    match result {
+        Ok(()) => {
+            log::info!(
+                target: "agentero::agent",
+                "tool_lifecycle ok template={template_id_for_log} action={action_label}"
+            );
+            Ok(ApiResult::ok(serde_json::Value::Null))
         }
-    };
-    match terminal::open_terminal_confirm_command(&command) {
-        Ok(()) => ApiResult::ok(serde_json::Value::Null),
-        Err(e) => map_err(e),
+        Err(e) => {
+            log::warn!(
+                target: "agentero::agent",
+                "tool_lifecycle failed template={template_id_for_log} action={action_label}: {e}"
+            );
+            Ok(map_err(AppError::message(e)))
+        }
     }
+}
+
+/// Whether a catalog template supports silent install/update.
+#[tauri::command]
+pub fn agent_tool_lifecycle_supported(template_id: String) -> ApiResult<bool> {
+    ApiResult::ok(crate::features::agent::tool_lifecycle::supports_lifecycle(
+        &template_id,
+    ))
+}
+
+/// Platform-specific manual install commands (copyable help text). No side effects.
+#[tauri::command]
+pub fn agent_tool_install_commands() -> ApiResult<String> {
+    ApiResult::ok(crate::features::agent::tool_lifecycle::manual_install_commands_text())
 }
 
 /// Ensure catalog agent is registered, then run ACP initialize probe.

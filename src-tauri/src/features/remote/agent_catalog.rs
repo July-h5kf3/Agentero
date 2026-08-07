@@ -9,6 +9,7 @@ use crate::features::agent::models::{
 };
 use crate::features::agent::probe_agent;
 use crate::features::agent::templates::{catalog_templates, template_from_id, template_info};
+use crate::features::agent::tool_lifecycle;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,11 +45,17 @@ pub async fn scan_remote_agents(
 
         let binary_available = detect_path.is_some();
         let acp_command_available = acp_path.is_some();
+        let adapter_distinct = tmpl
+            .detect_command
+            .as_ref()
+            .is_some_and(|d| d != &tmpl.command);
+        // Remote has no silent lifecycle; can_install only reflects local capability.
+        let can_install = tool_lifecycle::supports_lifecycle(&tmpl.id);
         let offer_install = binary_available
             && !acp_command_available
             && tmpl.install_command.as_ref().is_some_and(|c| !c.is_empty());
 
-        let acp_status = if !binary_available && !acp_command_available {
+        let acp_status = if !acp_command_available {
             CatalogAcpStatus::Missing
         } else {
             CatalogAcpStatus::NotProbed
@@ -63,6 +70,8 @@ pub async fn scan_remote_agents(
             install_hint: tmpl.install_hint,
             install_command: tmpl.install_command,
             offer_install,
+            can_install,
+            adapter_distinct,
             binary_available,
             resolved_path: detect_path.or(acp_path),
             acp_command_available,

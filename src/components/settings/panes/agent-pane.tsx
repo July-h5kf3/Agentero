@@ -1,4 +1,5 @@
 import {
+	ArrowUpCircle,
 	Check,
 	Loader2,
 	Plus,
@@ -20,6 +21,9 @@ import {
 	patchCatalogProbe,
 	patchCustomProbe,
 	StatusBadge,
+	showInstallAcp,
+	showInstallAgent,
+	showUpdateAgent,
 } from "@/components/settings/panes/agent-catalog";
 import {
 	PageTitle,
@@ -39,15 +43,16 @@ import {
 	ensureCatalogAgent,
 	isAgentAuthFailure,
 	listAgents,
-	openInstallTerminal,
 	type ProbeResult,
 	probeAgent,
 	probeCatalogAgent,
 	removeAgent,
+	runToolLifecycle,
 	scanCatalog,
+	type ToolLifecycleAction,
 	upsertAgent,
 } from "@/lib/agent";
-import { notifyError } from "@/lib/core/notify";
+import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import type { AppSettings } from "@/lib/settings";
@@ -67,6 +72,8 @@ export function AgentPane({
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const [catalog, setCatalog] = useState<CatalogScanResponse | null>(null);
 	const [loading, setLoading] = useState(false);
+	/** Template id currently running silent install (row-level spinner). */
+	const [installingId, setInstallingId] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
 	const [formName, setFormName] = useState(() => t("agent.form.defaultName"));
 	const [formCommand, setFormCommand] = useState("");
@@ -196,6 +203,9 @@ export function AgentPane({
 			setLoading(true);
 			try {
 				const scan = await scanOnce();
+				// Release global busy after PATH scan so Install stays clickable while
+				// ACP probes (often multi-second / timeouts) run in the background.
+				setLoading(false);
 				if (scan) {
 					await probeInstalled(scan, force);
 					await scanOnce();
@@ -250,12 +260,27 @@ export function AgentPane({
 		}
 	};
 
-	const onInstallAdapter = async (entry: CatalogEntry) => {
+	/** Silent install/update: Host scopes Agent vs ACP from PATH (no free-form shell). */
+	const onToolLifecycle = async (
+		entry: CatalogEntry,
+		action: ToolLifecycleAction,
+	) => {
 		if (!isTauri()) return;
+		setInstallingId(entry.templateId);
 		try {
-			await openInstallTerminal(entry.templateId);
+			await runToolLifecycle(entry.templateId, action);
+			notifySuccess(
+				t(
+					action === "update" ? "agent.updateSuccess" : "agent.installSuccess",
+					{ name: entry.name },
+				),
+			);
+			const scan = await scanOnce();
+			if (scan) await probeInstalled(scan, true);
 		} catch (e) {
 			notifyError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setInstallingId(null);
 		}
 	};
 
@@ -311,65 +336,13 @@ export function AgentPane({
 				<AgentCommonRows settings={settings} patch={patch} />
 			</SettingsGroup>
 
-			<SettingsGroup>
-				<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
-					<Label
-						htmlFor="agent-personal-prompt"
-						className="font-normal text-[13px]"
-					>
-						{t("agent.personalPrompt.label")}
-					</Label>
-					<Textarea
-						id="agent-personal-prompt"
-						value={settings.agentPersonalPrompt}
-						onChange={(e) =>
-							patch({
-								agentPersonalPrompt: e.target.value.slice(0, 8000),
-							})
-						}
-						onBlur={() => {
-							const trimmed = settings.agentPersonalPrompt.trim();
-							if (trimmed !== settings.agentPersonalPrompt) {
-								patch({ agentPersonalPrompt: trimmed });
-							}
-						}}
-						placeholder={t("agent.personalPrompt.placeholder")}
-						rows={4}
-						className="min-h-[88px] resize-y text-xs placeholder:text-muted-foreground/50"
-						spellCheck={true}
-					/>
-				</div>
-			</SettingsGroup>
-
-			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-				{t("agent.pdfAsk.section")}
-			</p>
-			<SettingsGroup>
-				<AgentModelPicker
-					value={pdfAskValue}
-					onChange={onPdfAskChange}
-					registry={pdfAskRegistry}
-					agentLabel={t("agent.pdfAsk.agentId.label")}
-					modelLabel={t("agent.pdfAsk.modelId.label")}
-					followDefaultLabel={t("agent.pdfAsk.agentId.followDefault")}
-					followDefaultNamedLabel={(name) =>
-						t("agent.pdfAsk.agentId.followDefaultNamed", { name })
-					}
-					followModelLabel={t("agent.pdfAsk.modelId.followAgent")}
-					emptyState={
-						<p className="px-3 py-2 text-muted-foreground text-xs">
-							{t("agent.pdfAsk.agentId.empty")}
-						</p>
-					}
-				/>
-			</SettingsGroup>
-
 			{!isTauri() ? (
 				<p className="mb-3 text-muted-foreground text-xs">
 					{t("agent.desktopHint")}
 				</p>
 			) : null}
 
+			{/* Common agents first — install/update before prefs that pick among them. */}
 			<div className="mb-2 flex items-center justify-between gap-2">
 				<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
 					{t("agent.commonAgents")}
@@ -401,46 +374,68 @@ export function AgentPane({
 				) : null}
 				{entries.map((entry) => {
 					const canUse =
-						entry.binaryAvailable ||
-						entry.acpCommandAvailable ||
-						entry.acpStatus === "ready";
-					const showInstall = Boolean(entry.offerInstall);
+						entry.acpCommandAvailable || entry.acpStatus === "ready";
+					const installAgent = showInstallAgent(entry);
+					const installAcp = showInstallAcp(entry);
+					const updateAgent = showUpdateAgent(entry);
+					// Install/ACP-only gaps gate “Use default”; Update can sit beside it.
+					const needsInstall = installAgent || installAcp;
+					const hasLifecycleAction = needsInstall || updateAgent;
 					const notInstalled = !entry.binaryAvailable;
+					const rowInstalling = installingId === entry.templateId;
 					// Mid-probe or host-cleared not-probed while a batch is running.
 					const isProbing =
 						probingKeys.has(catalogProbeKey(entry.templateId)) ||
-						(entry.acpStatus === "not-probed" &&
+						(entry.acpCommandAvailable &&
+							entry.acpStatus === "not-probed" &&
 							(loading || probingKeys.size > 0));
 					return (
 						<div
 							key={entry.templateId}
-							className={cn(
-								"flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0",
-								notInstalled && "opacity-50",
-							)}
+							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
 							<div className="flex min-w-0 flex-1 items-center gap-4">
 								<span
 									className={cn(
 										"w-24 shrink-0 truncate font-medium text-[13px]",
-										notInstalled && "text-muted-foreground",
+										// Dim label only — never the Install button (looks disabled).
+										notInstalled &&
+											!hasLifecycleAction &&
+											"text-muted-foreground opacity-50",
+										notInstalled &&
+											hasLifecycleAction &&
+											"text-muted-foreground",
 									)}
 								>
 									{entry.name}
 								</span>
 								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
+									{/* Layer 1: Agent host CLI */}
 									{entry.binaryAvailable ? (
-										<StatusBadge tone="ok">
-											{t("agent.badges.installed")}
+										<StatusBadge
+											tone="ok"
+											title={entry.resolvedPath ?? undefined}
+										>
+											{t("agent.badges.agentInstalled")}
 										</StatusBadge>
 									) : (
 										<StatusBadge tone="muted">
-											{t("agent.badges.notInstalled")}
+											{t("agent.badges.agentMissing")}
 										</StatusBadge>
 									)}
-									{isProbing ? (
+									{/* Layer 2: ACP entrypoint / probe */}
+									{!entry.acpCommandAvailable ? (
+										<StatusBadge
+											tone={entry.binaryAvailable ? "warn" : "muted"}
+											title={
+												entry.lastProbeError ?? entry.installHint ?? undefined
+											}
+										>
+											{t("agent.badges.acpMissing")}
+										</StatusBadge>
+									) : isProbing ? (
 										<ProbingBadge label={t("agent.probing")} />
-									) : entry.acpStatus !== "missing" ? (
+									) : (
 										<StatusBadge
 											tone={catalogStatusTone(
 												entry.acpStatus,
@@ -452,22 +447,40 @@ export function AgentPane({
 										>
 											{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
 										</StatusBadge>
-									) : null}
-									{showInstall ? (
-										<StatusBadge tone="warn">
-											{t("agent.badges.adapterMissing")}
-										</StatusBadge>
-									) : null}
+									)}
 								</div>
 							</div>
 							{/* Fixed action slot so icon-only rows align with “Use default” */}
 							<div
 								className={cn(
 									"flex h-7 shrink-0 items-center justify-center gap-1",
-									showInstall ? "min-w-0" : "w-20",
+									hasLifecycleAction ? "min-w-0" : "w-20",
 								)}
 							>
-								{showInstall ? (
+								{installAgent ? (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										aria-label={t("agent.installAgentAria", {
+											name: entry.name,
+										})}
+										title={t("agent.installAgentTitle")}
+										// Do not gate on global `busy` (catalog scan/ACP probe of
+										// other agents) — that left Install looking dead for minutes.
+										disabled={rowInstalling || !isTauri()}
+										onClick={() => void onToolLifecycle(entry, "install")}
+									>
+										{rowInstalling ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<Terminal className="size-3" />
+										)}
+										{t("agent.installAgent")}
+									</Button>
+								) : null}
+								{installAcp ? (
 									<Button
 										type="button"
 										variant="outline"
@@ -476,18 +489,37 @@ export function AgentPane({
 										aria-label={t("agent.installAdapterAria", {
 											name: entry.name,
 										})}
-										title={
-											entry.installCommand
-												? t("agent.installAdapterTitle", {
-														command: entry.installCommand,
-													})
-												: t("agent.installAdapter")
-										}
-										disabled={busy || !isTauri()}
-										onClick={() => void onInstallAdapter(entry)}
+										title={t("agent.installAdapterTitle")}
+										disabled={rowInstalling || !isTauri()}
+										onClick={() => void onToolLifecycle(entry, "install")}
 									>
-										<Terminal className="size-3" />
+										{rowInstalling ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<Terminal className="size-3" />
+										)}
 										{t("agent.installAdapter")}
+									</Button>
+								) : null}
+								{updateAgent ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 gap-1 px-2 text-xs"
+										aria-label={t("agent.updateAgentAria", {
+											name: entry.name,
+										})}
+										title={t("agent.updateAgentTitle")}
+										disabled={rowInstalling || !isTauri()}
+										onClick={() => void onToolLifecycle(entry, "update")}
+									>
+										{rowInstalling ? (
+											<Loader2 className="size-3 animate-spin" />
+										) : (
+											<ArrowUpCircle className="size-3" />
+										)}
+										{t("agent.updateAgent")}
 									</Button>
 								) : null}
 								{entry.isDefault ? (
@@ -499,7 +531,7 @@ export function AgentPane({
 									>
 										<Check className="size-4" aria-hidden />
 									</span>
-								) : canUse && !showInstall ? (
+								) : canUse && !needsInstall ? (
 									<Button
 										type="button"
 										variant="ghost"
@@ -664,6 +696,59 @@ export function AgentPane({
 			<p className="mt-2 mb-3 px-0.5 text-muted-foreground text-xs leading-relaxed">
 				{t("agent.commonAgentsHint")}
 			</p>
+
+			<SettingsGroup>
+				<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+					<Label
+						htmlFor="agent-personal-prompt"
+						className="font-normal text-[13px]"
+					>
+						{t("agent.personalPrompt.label")}
+					</Label>
+					<Textarea
+						id="agent-personal-prompt"
+						value={settings.agentPersonalPrompt}
+						onChange={(e) =>
+							patch({
+								agentPersonalPrompt: e.target.value.slice(0, 8000),
+							})
+						}
+						onBlur={() => {
+							const trimmed = settings.agentPersonalPrompt.trim();
+							if (trimmed !== settings.agentPersonalPrompt) {
+								patch({ agentPersonalPrompt: trimmed });
+							}
+						}}
+						placeholder={t("agent.personalPrompt.placeholder")}
+						rows={4}
+						className="min-h-[88px] resize-y text-xs placeholder:text-muted-foreground/50"
+						spellCheck={true}
+					/>
+				</div>
+			</SettingsGroup>
+
+			<p className="mb-1.5 mt-4 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+				{t("agent.pdfAsk.section")}
+			</p>
+			<SettingsGroup>
+				<AgentModelPicker
+					value={pdfAskValue}
+					onChange={onPdfAskChange}
+					registry={pdfAskRegistry}
+					agentLabel={t("agent.pdfAsk.agentId.label")}
+					modelLabel={t("agent.pdfAsk.modelId.label")}
+					followDefaultLabel={t("agent.pdfAsk.agentId.followDefault")}
+					followDefaultNamedLabel={(name) =>
+						t("agent.pdfAsk.agentId.followDefaultNamed", { name })
+					}
+					followModelLabel={t("agent.pdfAsk.modelId.followAgent")}
+					emptyState={
+						<p className="px-3 py-2 text-muted-foreground text-xs">
+							{t("agent.pdfAsk.agentId.empty")}
+						</p>
+					}
+				/>
+			</SettingsGroup>
 		</>
 	);
 }
@@ -848,27 +933,25 @@ export function RemoteAgentPane({
 					</p>
 				) : null}
 				{entries.map((entry) => {
-					const showInstall = Boolean(entry.offerInstall);
-					const notInstalled =
-						!entry.binaryAvailable && !entry.acpCommandAvailable;
+					// Remote: only guided terminal ACP install (no silent host install).
+					const installAcp = Boolean(entry.offerInstall);
+					const notInstalled = !entry.binaryAvailable;
 					const isProbing =
 						probingKeys.has(catalogProbeKey(entry.templateId)) ||
-						(entry.acpStatus === "not-probed" &&
-							(loading || probingKeys.size > 0) &&
-							(entry.binaryAvailable || entry.acpCommandAvailable));
+						(entry.acpCommandAvailable &&
+							entry.acpStatus === "not-probed" &&
+							(loading || probingKeys.size > 0));
 					return (
 						<div
 							key={entry.templateId}
-							className={cn(
-								"flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0",
-								notInstalled && "opacity-50",
-							)}
+							className="flex items-center justify-between gap-3 border-b py-2.5 pr-1.5 pl-3.5 last:border-b-0"
 						>
 							<div className="flex min-w-0 flex-1 items-center gap-4">
 								<span
 									className={cn(
 										"w-24 shrink-0 truncate font-medium text-[13px]",
 										notInstalled && "text-muted-foreground",
+										notInstalled && !installAcp && "opacity-50",
 									)}
 									title={
 										entry.lastProbeError || entry.description || entry.name
@@ -878,17 +961,27 @@ export function RemoteAgentPane({
 								</span>
 								<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 									{entry.binaryAvailable ? (
-										<StatusBadge tone="ok">
-											{t("agent.badges.installed")}
+										<StatusBadge
+											tone="ok"
+											title={entry.resolvedPath ?? undefined}
+										>
+											{t("agent.badges.agentInstalled")}
 										</StatusBadge>
 									) : (
 										<StatusBadge tone="muted">
-											{t("agent.badges.notInstalled")}
+											{t("agent.badges.agentMissing")}
 										</StatusBadge>
 									)}
-									{isProbing ? (
+									{!entry.acpCommandAvailable ? (
+										<StatusBadge
+											tone={entry.binaryAvailable ? "warn" : "muted"}
+											title={entry.lastProbeError ?? undefined}
+										>
+											{t("agent.badges.acpMissing")}
+										</StatusBadge>
+									) : isProbing ? (
 										<ProbingBadge label={t("agent.probing")} />
-									) : entry.acpStatus !== "missing" ? (
+									) : (
 										<StatusBadge
 											tone={catalogStatusTone(
 												entry.acpStatus,
@@ -900,21 +993,16 @@ export function RemoteAgentPane({
 										>
 											{acpStatusLabel(entry.acpStatus, entry.lastProbeError)}
 										</StatusBadge>
-									) : null}
-									{showInstall ? (
-										<StatusBadge tone="warn">
-											{t("agent.badges.adapterMissing")}
-										</StatusBadge>
-									) : null}
+									)}
 								</div>
 							</div>
 							<div
 								className={cn(
 									"flex h-7 shrink-0 items-center justify-center gap-1",
-									showInstall ? "min-w-0" : "w-8",
+									installAcp ? "min-w-0" : "w-8",
 								)}
 							>
-								{showInstall ? (
+								{installAcp ? (
 									<Button
 										type="button"
 										variant="outline"

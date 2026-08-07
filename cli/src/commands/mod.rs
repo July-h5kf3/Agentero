@@ -2,6 +2,8 @@ pub mod config_cmd;
 pub mod doctor;
 pub mod export;
 pub mod import;
+pub mod layout;
+pub mod mark;
 pub mod paper;
 pub mod trash;
 pub mod tree;

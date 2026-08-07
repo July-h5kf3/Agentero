@@ -6,7 +6,7 @@
 |---|---|
 | 上游 | [EmbedPDF Layout Analysis](https://www.embedpdf.com/docs/react/headless/plugins/plugin-layout-analysis) |
 | 代码 | `src/lib/pdf/layout/`、`figures-panel.tsx`（header 按钮）、`pdf-viewer.tsx` |
-| 持久化 | Paper PDF 写入 `{paper}/source/layout.json`（raw text-enriched regions）；`layoutAnalysisStore` 仍是运行时 UI store |
+| 持久化 | Paper PDF 写入 `{paper}/source/layout.json`（raw text-enriched regions）+ `{paper}/source/layout-index.json`（侧栏同构，供 CLI）；`layoutAnalysisStore` 仍是运行时 UI store |
 
 ---
 
@@ -52,11 +52,15 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points（仅无 sidecar
         │  侧栏 / hover 仍用 **regions**（post-merge；不含 abstract）
         │  不用 EmbedPDF LayoutAnalysisLayer 画框：sidecar 缓存命中时插件无 page layout
         │
-④ PDF 页 hover dwell（默认 600ms）→ 视觉批注卡
+④ PDF 页 hover dwell → 视觉批注卡 / 公式解析卡
         │  hit 层用 **post-merge** 区域（与侧栏同源，非插件 raw 框）
-        │  插图 / 表 / 算法 / 有编号框的公式；打开 VisualAnnotationEditor（不自动发送）
-        │  移开源区 / 草稿卡后 hide（默认 1000ms，`LAYOUT_HOVER_HIDE_MS`）
-        │  实现：`hit-test.ts` + `pdf-viewer` layout hit + `LAYOUT_HOVER_DWELL_MS` / `LAYOUT_HOVER_HIDE_MS`
+        │  插图 / 表 / 算法：600ms → VisualAnnotationEditor；hide 1000ms
+        │  有编号公式 + Annotation.md 符号表：280ms →「公式解析」卡；hide 320ms
+        │    · hit 保持挂载（可切换公式 / leave→hide）
+        │    · 滚动/缩放重定位；Escape 关闭
+        │  有编号公式但无符号表：同视觉批注卡
+        │  实现：`hit-test.ts` + `pdf-viewer` + `equation-annotation/` +
+        │        `LAYOUT_HOVER_*` / `LAYOUT_FORMULA_HOVER_*`
         │
 ⑤ 正文 / 摘要 / 标题文字抽取（PDF text layer → region.text）
         │  分析或 sidecar 回填时 enrich；供调试与 bulk 翻译
@@ -100,15 +104,25 @@ LayoutAnalysisPluginPackage: {
 
 ```ts
 type LayoutSidecar = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   source: { mode: "embedpdf-layout"; generatedAt: string };
   regions: PdfLayoutRegion[]; // raw, pre-merge
 };
 ```
 
-缓存只在已知 paper folder 时启用；散落 PDF 没有 `{paper}` 路径，仍使用当前内存流程。
+#### 侧栏索引（CLI）
 
-**重新分析按钮**（Figures header）：`force: false`。有 `source/layout.json` 时只重跑 JSON→侧栏（`mergeCaptionsIntoHosts` + NMS），**不**再跑 PP-DocLayoutV3，也**不**覆盖 sidecar。无缓存时才走完整 PDF→JSON。需要强制刷新模型输出时由调用方显式传 `force: true`（当前 UI 不暴露）。
+`{paper}/source/layout-index.json` 在 **每次 merge 后**（含缓存命中只重算 merge）写出，与 Figures 轨 / hover 目标同源：
+
+- 过滤：`isSidebarLayoutKind` + `LAYOUT_SIDEBAR_MIN_SCORE` + NMS（`dedupeLayoutRegions`）
+- 分区：figure（image+chart）→ table → algorithm → formula
+- 字段：`id`（如 `figure-3`）、`stableKey`、`kind`、`section`、`page`（**1-based**）、`pageIndex`、`bbox`（0–1）、`score`、`title?`、`layoutRegionId`
+- 代码：`src/lib/pdf/layout/layout-index.ts`、`writeLayoutIndexFromRaw`（`io.ts`）
+- CLI：`agentero layout list|get`、`agentero mark add --region <id>`（见 [../backend/cli.md](../backend/cli.md)）
+
+缓存只在已知 paper folder 时启用；散落 PDF 没有 `{paper}` 路径，仍使用当前内存流程（也不写 index）。
+
+**重新分析按钮**（Figures header）：`force: false`。有 `source/layout.json` 时只重跑 JSON→侧栏（`mergeCaptionsIntoHosts` + NMS），**不**再跑 PP-DocLayoutV3，也**不**覆盖 raw sidecar；**会**刷新 `layout-index.json`。无缓存时才走完整 PDF→JSON。需要强制刷新模型输出时由调用方显式传 `force: true`（当前 UI 不暴露）。
 
 ---
 

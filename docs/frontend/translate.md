@@ -25,6 +25,7 @@ Settings → **翻译**：
   - **不翻译**：算法框及其内部文字；`reference` / `reference_content` 文献条目；“References / Bibliography / 参考文献” 标题；侧栏 `aside_text`。
   - 按阅读顺序启动，并发 2；**每块完成立刻**在 bbox 上盖译文层（非整页等齐）。
   - 运行中再点=停止；有译文再点=清除。实现：`layout-translate.ts` + `layout-translate-overlay.tsx`。
+  - 覆盖层按浅色纸面绘制（白底深字）；PDF 暗色模式下套用与页面栅格相同的 invert filter（`PDF_PAGE_RASTER_DARK_CLASS`），使盖住原文的底色与反转后的纸面一致。
 - API：`runTranslate(task)`（`src/lib/translate/`）。
 
 ## 路径
