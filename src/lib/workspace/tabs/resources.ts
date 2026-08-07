@@ -21,10 +21,12 @@ import {
 } from "@/lib/paper";
 import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { downloadPaperAssets } from "@/lib/paper/lookup";
+import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import {
 	ensureLocalFsScope,
 	type FileNode,
 	isTextOpenable,
+	joinVaultPath,
 	readVaultFile,
 } from "@/lib/vault";
 import { basenameOf, normalizePathKey, treeFindNode } from "@/lib/vault/path";
@@ -82,6 +84,10 @@ function maybeTriggerDeferredParse(
 				paperPath: rel,
 				progressTaskId: id,
 			});
+			enqueuePaperLayoutAnalysis({
+				paperAbsPath: joinVaultPath(vaultPath, rel),
+				paperLabel: rel,
+			});
 		},
 	).catch(() => {});
 }
@@ -133,6 +139,10 @@ async function resolvePaperPdfSource(
 					vaultRoot: vaultPath,
 					paperPath: rel,
 					progressTaskId: id,
+				});
+				enqueuePaperLayoutAnalysis({
+					paperAbsPath: joinVaultPath(vaultPath, rel),
+					paperLabel: rel,
 				});
 				return r;
 			},

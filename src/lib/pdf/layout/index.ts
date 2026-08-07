@@ -19,6 +19,11 @@ export {
 	type DedupeLayoutOptions,
 	dedupeLayoutRegions,
 } from "@/lib/pdf/layout/dedupe";
+export { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout/enqueue-paper-layout";
+export {
+	analyzePaperLayoutHeadless,
+	type HeadlessLayoutResult,
+} from "@/lib/pdf/layout/headless-analyze";
 export {
 	bboxArea,
 	hoverableLayoutRegions,

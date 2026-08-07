@@ -39,6 +39,7 @@ import {
 	paperAssetsReadyForReader,
 	runPaperReaderWorkflow,
 } from "@/lib/paper/reader";
+import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
 import type { FileNode } from "@/lib/vault";
 import { joinVaultPath, readVaultFile } from "@/lib/vault";
@@ -167,6 +168,10 @@ export async function downloadPaperAssetsAction(node: FileNode): Promise<void> {
 				setDetail(i18n.t("app:tasks.downloadRefreshing", { path: rel }));
 				await refreshTree(vaultPath);
 				await refreshLibrary();
+				enqueuePaperLayoutAnalysis({
+					paperAbsPath: joinVaultPath(vaultPath, rel),
+					paperLabel: rel,
+				});
 				return r;
 			},
 		);
@@ -271,6 +276,10 @@ export async function downloadAllMissingAssets(): Promise<void> {
 							vaultRoot: vaultPath,
 							paperPath: rel,
 							progressTaskId: id,
+						});
+						enqueuePaperLayoutAnalysis({
+							paperAbsPath: joinVaultPath(vaultPath, rel),
+							paperLabel: rel,
 						});
 					} catch (e) {
 						if (signal.aborted) throw e;

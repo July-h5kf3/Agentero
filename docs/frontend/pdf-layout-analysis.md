@@ -13,9 +13,13 @@
 ## 流水线（一图）
 
 ```text
-打开论文 PDF（页数就绪）→ 自动版面分析
-        │  有 `{paper}/source/layout.json` → 静默命中缓存（无后台任务条）
-        │  无缓存 → 左下角后台任务（kind parse）显示进度；可取消
+下载 / 添加入库完成后 → 后台任务「解析插图、表格、文字」
+        │  headless EmbedPDF 栈写 `{paper}/source/layout.json`（有缓存则跳过）
+        │  实现：`enqueue-paper-layout.ts` + `headless-analyze.ts`
+        │
+打开论文 PDF（页数就绪）→ 自动版面分析（兜底）
+        │  有 layout.json → 静默命中缓存（无后台任务条）
+        │  无缓存 → 左下角后台任务显示进度；可取消
         │  手动：Figures header「分析」→ force 重跑 + 打开 Figures / 可选 Eye
         ▼
 PP-DocLayoutV3  每页: render → detect → map to PDF points

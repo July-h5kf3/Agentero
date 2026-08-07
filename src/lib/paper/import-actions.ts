@@ -25,6 +25,7 @@ import {
 	installDiscoveredSkills,
 	type LocalPdfImportEntry,
 } from "@/lib/paper/lookup";
+import { enqueuePaperLayoutAnalysis } from "@/lib/pdf/layout";
 import { getSettings } from "@/lib/settings/react-store";
 import {
 	cleanupImportTempPaths,
@@ -115,6 +116,24 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 						i18n.t("app:tasks.lookupRefreshing", { title: first.title }),
 					);
 				}
+				// Papers that already have a PDF after import: start layout now.
+				// Those still downloading enqueue layout after download completes.
+				for (const paper of result.imported) {
+					const abs = paper.paperDir
+						? paper.paperDir.replace(/[\\/]+$/, "")
+						: joinVaultPath(
+								vaultPath,
+								(paper.path || "")
+									.replace(/\\/g, "/")
+									.replace(/^\/+|\/+$/g, ""),
+							);
+					if (abs) {
+						enqueuePaperLayoutAnalysis({
+							paperAbsPath: abs,
+							paperLabel: paper.path || paper.title,
+						});
+					}
+				}
 
 				if (result.errors.length > 0) {
 					notifyError(`${input}: ${result.errors.join("; ")}`);
@@ -151,6 +170,10 @@ export async function lookupSubmit(texts: string[]): Promise<void> {
 								});
 								await refreshTree(vaultPath);
 								await refreshLibrary();
+								enqueuePaperLayoutAnalysis({
+									paperAbsPath: joinVaultPath(vaultPath, rel),
+									paperLabel: rel,
+								});
 							},
 							{ concurrency: settings.batchImportConcurrency },
 						).catch((e) => {
@@ -260,6 +283,14 @@ export async function importLocalPdf(opts?: {
 		);
 		if (result) {
 			if (result.papers[0]) openPaper(result.papers[0].paperDir);
+			for (const paper of result.papers) {
+				if (paper.paperDir) {
+					enqueuePaperLayoutAnalysis({
+						paperAbsPath: paper.paperDir.replace(/[\\/]+$/, ""),
+						paperLabel: paper.path || paper.title,
+					});
+				}
+			}
 			if (result.errors.length) {
 				notifyWarning(
 					`${i18n.t("sidebar:papersLibrary.importPdfDone", { count: result.papers.length })}; ${result.errors.slice(0, 2).join("; ")}`,
