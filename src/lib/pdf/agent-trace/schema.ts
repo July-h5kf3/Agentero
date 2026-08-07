@@ -263,6 +263,54 @@ export function traceMessages(
 	return synthesized;
 }
 
+/**
+ * Conversation turns for wiki embed projection.
+ *
+ * Unlike {@link traceMessages}, never promotes `comment` into a "user" turn —
+ * the embed shows the note as icon+text above the crop. Empty when there is no
+ * real agent dialogue (note-only marks).
+ */
+export function traceMessagesForEmbed(
+	trace: PdfVisualSessionTrace,
+): PdfVisualTraceMessage[] {
+	const agent = trace.agent;
+	const note = trace.comment.trim();
+	let messages: PdfVisualTraceMessage[] = [];
+	if (agent?.messages?.length) {
+		messages = agent.messages;
+	} else {
+		const answer = agent?.answerSnapshot?.trim();
+		if (answer) {
+			messages = [
+				{
+					id: `${trace.id}-assistant`,
+					role: "assistant",
+					content: answer,
+					createdAt: trace.updatedAt,
+					agentSessionId: agent?.runtimeSessionId,
+				},
+			];
+		} else if (agent?.status === "failed" && agent.error?.trim()) {
+			messages = [
+				{
+					id: `${trace.id}-error`,
+					role: "assistant",
+					content: agent.error.trim(),
+					createdAt: trace.updatedAt,
+				},
+			];
+		}
+	}
+	// Legacy Cmd+Enter stored the prompt in both comment and messages — drop
+	// the user turn that only repeats the note so the embed does not double it.
+	if (note) {
+		messages = messages.filter(
+			(m) => !(m.role === "user" && m.content.trim() === note),
+		);
+	}
+	return messages;
+}
+
 function shorten(text: string, max: number): string {
 	const t = text.trim().replace(/\s+/g, " ");
 	if (!t) return "";

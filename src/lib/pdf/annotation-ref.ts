@@ -16,7 +16,7 @@ import { loadPdfVisualTraceImage } from "@/lib/pdf/agent-trace/image";
 import { listPdfVisualTraces } from "@/lib/pdf/agent-trace/io";
 import {
 	parsePdfVisualSessionTrace,
-	traceMessages,
+	traceMessagesForEmbed,
 } from "@/lib/pdf/agent-trace/schema";
 import type {
 	PdfVisualNormalizedRect,
@@ -218,7 +218,9 @@ export async function lookupAnnotationRef(
 	const raw = await readMarkRaw(paperAbsPath, id);
 	const trace = parsePdfVisualSessionTrace(raw);
 	if (trace && trace.id === id) {
-		const messages = traceMessages(trace);
+		// Embed: note field vs conversation are separate; do not promote comment
+		// into a synthetic "user" turn (see traceMessagesForEmbed).
+		const messages = traceMessagesForEmbed(trace);
 		const image = options?.includeImage
 			? await loadPdfVisualTraceImage(paperAbsPath, trace.image)
 			: null;

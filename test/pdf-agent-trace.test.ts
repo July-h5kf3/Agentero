@@ -35,6 +35,7 @@ import {
 	serializePdfVisualSessionTrace,
 	takePendingVisualTraces,
 	traceMessages,
+	traceMessagesForEmbed,
 	tracePin,
 	tracePreview,
 	visualTraceHistoryId,
@@ -349,6 +350,41 @@ describe("agent-trace schema and lifecycle", () => {
 		).toBeNull();
 	});
 
+	it("Cmd+Enter path keeps comment empty and seeds messages only", () => {
+		// Direct chat: conversation text must not also fill mark.comment
+		// (wiki embeds would show the same string twice).
+		const [mark] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "agent-1",
+			runtimeSessionId: "rt-1",
+			messageId: "msg-1",
+			items: [
+				{
+					page: 1,
+					rects: [rect],
+					comment: "",
+					image,
+					messages: [
+						{
+							id: "u1",
+							role: "user",
+							content: "解释这个公式",
+							createdAt: "t0",
+						},
+					],
+				},
+			],
+		});
+		expect(mark?.comment).toBe("");
+		expect(mark?.agent?.messages?.[0]?.content).toBe("解释这个公式");
+		expect(mark?.image?.data).toBe("aaa");
+		const disk = serializePdfVisualSessionTrace(mark!);
+		expect(disk.comment).toBe("");
+		const again = parsePdfVisualSessionTrace(disk);
+		expect(again?.comment).toBe("");
+		expect(again?.agent?.messages?.[0]?.content).toBe("解释这个公式");
+	});
+
 	it("creates one mark per crop and updates completed/failed", () => {
 		const marks = createRunningTraces({
 			paperPath: "papers/a",
@@ -600,6 +636,84 @@ describe("agent-trace schema and lifecycle", () => {
 		expect(msgs[0]?.content).toBe("what is λ?");
 		expect(msgs[1]?.role).toBe("assistant");
 		expect(msgs[1]?.content).toContain("learning rate");
+		// Embed: note stays in comment; only assistant answer is conversation.
+		const embedMsgs = traceMessagesForEmbed(t);
+		expect(embedMsgs).toHaveLength(1);
+		expect(embedMsgs[0]?.role).toBe("assistant");
+		expect(embedMsgs[0]?.content).toContain("learning rate");
+	});
+
+	it("embed messages omit note-only marks and de-dupe legacy user=comment", () => {
+		const noteOnly = createNoteTrace({
+			paperPath: "papers/a",
+			page: 1,
+			rects: [rect],
+			comment: "值得注意",
+			image,
+		});
+		expect(traceMessagesForEmbed(noteOnly)).toEqual([]);
+
+		const [running] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			items: [
+				{
+					page: 1,
+					rects: [rect],
+					// Legacy path: same string in note + first user turn.
+					comment: "explain",
+					image,
+					messages: [
+						{
+							id: "u1",
+							role: "user",
+							content: "explain",
+							createdAt: "t0",
+						},
+						{
+							id: "a1",
+							role: "assistant",
+							content: "ok",
+							createdAt: "t1",
+						},
+					],
+				},
+			],
+		});
+		expect(running).toBeDefined();
+		if (!running) return;
+		const embed = traceMessagesForEmbed(running);
+		expect(embed.map((m) => m.role)).toEqual(["assistant"]);
+		expect(embed[0]?.content).toBe("ok");
+
+		// Cmd+Enter: empty note, conversation user turn stays.
+		const [sendNow] = createRunningTraces({
+			paperPath: "papers/a",
+			agentId: "a",
+			runtimeSessionId: "r",
+			messageId: "m",
+			items: [
+				{
+					page: 1,
+					rects: [rect],
+					comment: "",
+					image,
+					messages: [
+						{
+							id: "u1",
+							role: "user",
+							content: "what is this figure?",
+							createdAt: "t0",
+						},
+					],
+				},
+			],
+		});
+		expect(traceMessagesForEmbed(sendNow!).map((m) => m.content)).toEqual([
+			"what is this figure?",
+		]);
 	});
 
 	it("builds continue prompt with history", () => {

@@ -13,7 +13,7 @@
 - 标题候选显示 canonical 路径 `外层标题 › 内层标题`，选择候选后写回完整 `外层标题#内层标题`；手写的唯一后缀保持原文。查询接受源码分隔符 `#` 和候选展示分隔符 `›`，并保留用户已输入的文件 target、alias 与 embed 标记。
 - `@` 批注与 `#` / `^` 同属 fragment：`[[@id]]`、`[[papers/…/NOTES@id|alias]]`、`[[paper.pdf@id]]`、`[[…#@id]]`（与 `@id` 等价）。target 必须是可解析路径/文件名，**不要**单独用论文展示标题；面板复制默认 `[[papers/…/NOTES@id|论文标题]]`。id 来自高亮 `annotations.json` 或视觉 mark（`kind: visual`，旧 `agent-trace` 仍认；nanoid 可含 `_`）。
 - 序列化必须写回 `[[...]]`（Obsidian 兼容）。
-- `![[...]]`：嵌入 Markdown 区段、图片、PDF、批注（只读）；普通编辑不刷新无关嵌入。批注嵌入（`contentKind: annotation`）与其它 embed 共用 `max-h` 滚动壳；位置优先大纲路径否则页码；视觉批注展示对话 Markdown（无 composer）；**正文不可点跳转**，仅顶栏 ExternalLink 打开 PDF。Host `wiki check` 校验 path + id 形态，不读 `marks/` 验存活。
+- `![[...]]`：嵌入 Markdown 区段、图片、PDF、批注（只读）；普通编辑不刷新无关嵌入。批注嵌入（`contentKind: annotation`）与其它 embed 共用 `max-h` 滚动壳；位置优先大纲路径否则页码。视觉批注：备注以图标 + 文字显示在裁剪图上方；仅当有 Agent 对话时才展示下方 transcript（无对话不显示空状态）；**正文不可点跳转**，仅顶栏 ExternalLink 打开 PDF。Host `wiki check` 校验 path + id 形态，不读 `marks/` 验存活。
 
 ## Graph
 
