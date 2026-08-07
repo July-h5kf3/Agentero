@@ -131,6 +131,7 @@ import { PdfRegionSelectLayer } from "@/components/viewer/embed/pdf-region-selec
 import { anchorFromEmbedSelection } from "@/components/viewer/embed/selection-anchor";
 import { AnnotationEditor } from "@/components/viewer/pdf-ask/annotation-editor";
 import { AskPopover } from "@/components/viewer/pdf-ask/ask-popover";
+import { FormulaAnnotationCard } from "@/components/viewer/pdf-ask/formula-annotation-card";
 import { SelectionGutter } from "@/components/viewer/pdf-ask/selection-gutter";
 import { SelectionMenu } from "@/components/viewer/pdf-ask/selection-menu";
 import { TranslateCard } from "@/components/viewer/pdf-ask/translate-card";
@@ -162,6 +163,7 @@ import {
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
+import { isTauri } from "@/lib/core/tauri";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
 import {
@@ -203,6 +205,11 @@ import {
 } from "@/lib/pdf/citation-hover-store";
 import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
 import {
+	type EquationSymbol,
+	equationAnnotationPath,
+	loadEquationAnnotation,
+} from "@/lib/pdf/equation-annotation";
+import {
 	hasAnnotationsFile,
 	highlightViewFromObject,
 	isHighlightObject,
@@ -223,6 +230,9 @@ import {
 	getLayoutDocumentResult,
 	getPdfAiRuntime,
 	hoverableLayoutRegionsOnPage,
+	isFormulaLayoutKind,
+	LAYOUT_FORMULA_HOVER_DWELL_MS,
+	LAYOUT_FORMULA_HOVER_HIDE_MS,
 	LAYOUT_HOVER_DWELL_MS,
 	LAYOUT_HOVER_HIDE_MS,
 	type LayoutTranslateItem,
@@ -280,6 +290,12 @@ import {
 	resolveTranslateAgent,
 	runTranslate,
 } from "@/lib/translate";
+import {
+	VAULT_FILE_CHANGED_EVENT,
+	type VaultFileChangedPayload,
+} from "@/lib/vault/fs-watch";
+import { normalizePathKey } from "@/lib/vault/path";
+import { openPath } from "@/lib/workspace/actions";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
 
 type PdfColorScheme = "light" | "dark";
@@ -884,6 +900,15 @@ type VisualDraftEditorState = {
 	ephemeral?: boolean;
 };
 
+/** Hover card for formula regions when `{paper}/Annotation.md` has symbols. */
+type FormulaAnnotationPreviewState = {
+	screen: { x: number; y: number };
+	regionId: string;
+	page: number;
+	region: PdfAskNormalizedRect;
+	symbols: EquationSymbol[];
+};
+
 function PdfViewerInner({
 	docId,
 	paperAbsPath = null,
@@ -979,6 +1004,11 @@ function PdfViewerInner({
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [visualDraftEditor, setVisualDraftEditor] =
 		useState<VisualDraftEditorState | null>(null);
+	/** Formula hover → Annotation.md symbol glossary (when present). */
+	const [formulaAnnotationPreview, setFormulaAnnotationPreview] =
+		useState<FormulaAnnotationPreviewState | null>(null);
+	/** Parsed rows from `{paper}/Annotation.md` (empty when missing). */
+	const [equationSymbols, setEquationSymbols] = useState<EquationSymbol[]>([]);
 
 	/** Post-merge layout regions for hover hit targets (figures rail source). */
 	const layoutDocRegions = useStore(
@@ -1064,6 +1094,10 @@ function PdfViewerInner({
 	visualCropPendingRef.current = visualCropPending;
 	const visualDraftEditorRef = useRef(visualDraftEditor);
 	visualDraftEditorRef.current = visualDraftEditor;
+	const formulaAnnotationPreviewRef = useRef(formulaAnnotationPreview);
+	formulaAnnotationPreviewRef.current = formulaAnnotationPreview;
+	const equationSymbolsRef = useRef(equationSymbols);
+	equationSymbolsRef.current = equationSymbols;
 	const selectionMenuRef = useRef(selectionMenu);
 	selectionMenuRef.current = selectionMenu;
 	/** Pending dwell timer for layout-region hover → visual editor. */
@@ -1079,6 +1113,17 @@ function PdfViewerInner({
 	);
 	/** True while pointer is over the ephemeral source region or draft card. */
 	const layoutDraftHoverSurfaceRef = useRef(false);
+	/** Formula legend dwell (separate from visual-ask dwell). */
+	const formulaHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const formulaHoverRegionIdRef = useRef<string | null>(null);
+	/** Formula legend auto-hide after leave region / card. */
+	const formulaHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	/** True while pointer is over the formula hit region or legend card. */
+	const formulaHoverSurfaceRef = useRef(false);
 	const activeSessionRef = useRef<string | null>(null);
 	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
@@ -1241,7 +1286,17 @@ function PdfViewerInner({
 				: null,
 		[visualDraftEditor],
 	);
-
+	/** Formula legend keeps the same on-page visual frame as visual-ask hover. */
+	const formulaAnnotationRegion = useMemo(
+		() =>
+			formulaAnnotationPreview
+				? {
+						page: formulaAnnotationPreview.page,
+						region: formulaAnnotationPreview.region,
+					}
+				: null,
+		[formulaAnnotationPreview],
+	);
 	// ---- Highlights (EmbedPDF annotations) ----
 
 	const [citationLinks, setCitationLinks] = useState<
@@ -1416,6 +1471,62 @@ function PdfViewerInner({
 			if (trs.length) setTranslates(trs);
 			if (traces.length) setVisualTraces(traces);
 		})();
+	}, [paperAbsPath]);
+
+	// Load `{paper}/Annotation.md` symbol glossary for formula hover cards.
+	useEffect(() => {
+		let cancelled = false;
+		if (!paperAbsPath) {
+			setEquationSymbols([]);
+			setFormulaAnnotationPreview(null);
+			return;
+		}
+		void loadEquationAnnotation(paperAbsPath).then((symbols) => {
+			if (cancelled) return;
+			setEquationSymbols(symbols);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [paperAbsPath]);
+
+	// Reload Annotation.md when the Agent / editor rewrites it on disk.
+	useEffect(() => {
+		if (!paperAbsPath || !isTauri()) return;
+		const annotationPath = equationAnnotationPath(paperAbsPath);
+		const annotationKey = normalizePathKey(annotationPath);
+		let cancelled = false;
+		let unsub: (() => void) | undefined;
+		void (async () => {
+			const { listen } = await import("@tauri-apps/api/event");
+			if (cancelled) return;
+			unsub = await listen<VaultFileChangedPayload>(
+				VAULT_FILE_CHANGED_EVENT,
+				({ payload }) => {
+					const paths = [...payload.paths];
+					if (payload.rename) {
+						paths.push(payload.rename.from, payload.rename.to);
+					}
+					const hit = paths.some((p) => normalizePathKey(p) === annotationKey);
+					if (!hit) return;
+					void loadEquationAnnotation(paperAbsPath).then((symbols) => {
+						setEquationSymbols(symbols);
+						// Drop open card if the glossary disappeared.
+						if (symbols.length === 0) {
+							setFormulaAnnotationPreview(null);
+						} else {
+							setFormulaAnnotationPreview((prev) =>
+								prev ? { ...prev, symbols } : prev,
+							);
+						}
+					});
+				},
+			);
+		})();
+		return () => {
+			cancelled = true;
+			unsub?.();
+		};
 	}, [paperAbsPath]);
 
 	// Refresh ask conversation cards + agent-trace pins when this viewer is
@@ -1853,6 +1964,29 @@ function PdfViewerInner({
 		layoutDraftHideTimerRef.current = null;
 	}, []);
 
+	const cancelFormulaHover = useCallback((regionId?: string) => {
+		if (
+			regionId != null &&
+			formulaHoverRegionIdRef.current != null &&
+			formulaHoverRegionIdRef.current !== regionId
+		) {
+			return;
+		}
+		if (formulaHoverTimerRef.current) {
+			clearTimeout(formulaHoverTimerRef.current);
+			formulaHoverTimerRef.current = null;
+		}
+		if (regionId == null || formulaHoverRegionIdRef.current === regionId) {
+			formulaHoverRegionIdRef.current = null;
+		}
+	}, []);
+
+	const cancelFormulaHide = useCallback(() => {
+		if (!formulaHideTimerRef.current) return;
+		clearTimeout(formulaHideTimerRef.current);
+		formulaHideTimerRef.current = null;
+	}, []);
+
 	const closeVisualDraftEditor = useCallback(() => {
 		cancelLayoutDraftHide();
 		layoutDraftHoverSurfaceRef.current = false;
@@ -1860,10 +1994,21 @@ function PdfViewerInner({
 		// with the draft so the image selection outline does not linger.
 		const wasEphemeral = visualDraftEditorRef.current?.ephemeral === true;
 		setVisualDraftEditor(null);
-		if (wasEphemeral) {
+		if (wasEphemeral && !formulaAnnotationPreviewRef.current) {
 			setFocusedLayoutRegion(docId, null);
 		}
 	}, [cancelLayoutDraftHide, docId]);
+
+	const closeFormulaAnnotationPreview = useCallback(() => {
+		cancelFormulaHover();
+		cancelFormulaHide();
+		formulaHoverSurfaceRef.current = false;
+		const had = formulaAnnotationPreviewRef.current != null;
+		setFormulaAnnotationPreview(null);
+		if (had && !visualDraftEditorRef.current?.ephemeral) {
+			setFocusedLayoutRegion(docId, null);
+		}
+	}, [cancelFormulaHide, cancelFormulaHover, docId]);
 
 	const markLayoutDraftHoverEnter = useCallback(() => {
 		layoutDraftHoverSurfaceRef.current = true;
@@ -1875,7 +2020,7 @@ function PdfViewerInner({
 	 * Manual region-select drafts ignore this (no auto-hide).
 	 */
 	const scheduleLayoutDraftHide = useCallback(() => {
-		if (!visualDraftEditorRef.current?.ephemeral) return;
+		if (visualDraftEditorRef.current?.ephemeral !== true) return;
 		layoutDraftHoverSurfaceRef.current = false;
 		cancelLayoutDraftHide();
 		layoutDraftHideTimerRef.current = setTimeout(() => {
@@ -1887,11 +2032,83 @@ function PdfViewerInner({
 		}, LAYOUT_HOVER_HIDE_MS);
 	}, [cancelLayoutDraftHide, closeVisualDraftEditor]);
 
+	/** Keep formula legend open while pointer is on the hit region or card. */
+	const markFormulaHoverEnter = useCallback(() => {
+		formulaHoverSurfaceRef.current = true;
+		cancelFormulaHide();
+	}, [cancelFormulaHide]);
+
+	/**
+	 * Leave formula hit / legend card → close after a short grace so the
+	 * pointer can cross the gap into the floating card.
+	 */
+	const scheduleFormulaHide = useCallback(() => {
+		if (!formulaAnnotationPreviewRef.current) return;
+		formulaHoverSurfaceRef.current = false;
+		cancelFormulaHide();
+		formulaHideTimerRef.current = setTimeout(() => {
+			formulaHideTimerRef.current = null;
+			if (formulaHoverSurfaceRef.current) return;
+			if (!formulaAnnotationPreviewRef.current) return;
+			closeFormulaAnnotationPreview();
+		}, LAYOUT_FORMULA_HOVER_HIDE_MS);
+	}, [cancelFormulaHide, closeFormulaAnnotationPreview]);
+
 	/** Drop in-flight hover dwell / crop so a late result does not open the editor. */
 	const invalidateLayoutHover = useCallback(() => {
 		layoutHoverSeqRef.current += 1;
 		cancelLayoutHover();
 	}, [cancelLayoutHover]);
+
+	/** Screen point near a layout bbox (right edge) for hover cards. */
+	const screenPointForRegion = useCallback(
+		(pageIndex0: number, region: PdfAskNormalizedRect) => {
+			const pageEl = pageElByIndex(hostRef.current, pageIndex0);
+			if (!pageEl) return { x: 120, y: 120 };
+			const box = pageEl.getBoundingClientRect();
+			return {
+				x: box.left + (region.x + region.w) * box.width + 8,
+				y: box.top + region.y * box.height,
+			};
+		},
+		[],
+	);
+
+	/** Open / switch the formula legend card for a layout region. */
+	const openFormulaLegend = useCallback(
+		(region: PdfLayoutRegion) => {
+			const symbols = equationSymbolsRef.current;
+			if (symbols.length === 0) return;
+			// Pointer is still on the formula hit when we open; keep surface live
+			// so unmount/remount of overlays does not immediately hide.
+			formulaHoverSurfaceRef.current = true;
+			cancelFormulaHide();
+			cancelFormulaHover();
+			setFocusedLayoutRegion(docId, region.id);
+			setFormulaAnnotationPreview({
+				screen: screenPointForRegion(region.pageIndex, region.bbox),
+				regionId: region.id,
+				page: region.pageIndex + 1,
+				region: region.bbox,
+				symbols,
+			});
+		},
+		[cancelFormulaHide, cancelFormulaHover, docId, screenPointForRegion],
+	);
+
+	/** Re-anchor the open formula legend after scroll / zoom. */
+	const rePlaceFormulaAnnotationOnScroll = useCallback(() => {
+		const prev = formulaAnnotationPreviewRef.current;
+		if (!prev) return;
+		const screen = screenPointForRegion(prev.page - 1, prev.region);
+		setFormulaAnnotationPreview((current) => {
+			if (!current || current.regionId !== prev.regionId) return current;
+			if (current.screen.x === screen.x && current.screen.y === screen.y) {
+				return current;
+			}
+			return { ...current, screen };
+		});
+	}, [screenPointForRegion]);
 
 	/** Crop a region and open the visual-annotation draft editor (does not send). */
 	const beginVisualAnnotation = useCallback(
@@ -1908,6 +2125,8 @@ function PdfViewerInner({
 			}
 			setVisualCropPending(true);
 			setRegionSelecting(false);
+			// Visual draft and formula legend are mutually exclusive.
+			closeFormulaAnnotationPreview();
 			try {
 				const image = await renderPdfRegionPromptImage({
 					engine,
@@ -1918,16 +2137,7 @@ function PdfViewerInner({
 				if (opts?.seq != null && opts.seq !== layoutHoverSeqRef.current) {
 					return;
 				}
-				const pageEl = pageElByIndex(hostRef.current, page - 1);
-				const screen = pageEl
-					? (() => {
-							const box = pageEl.getBoundingClientRect();
-							return {
-								x: box.left + (region.x + region.w) * box.width + 8,
-								y: box.top + region.y * box.height,
-							};
-						})()
-					: { x: 120, y: 120 };
+				const screen = screenPointForRegion(page - 1, region);
 				const ephemeral = opts?.ephemeral === true;
 				// Pointer is still over the region when hover-open completes; keep
 				// the surface active so unmounting hit targets does not auto-hide.
@@ -1954,12 +2164,21 @@ function PdfViewerInner({
 				setVisualCropPending(false);
 			}
 		},
-		[engine, docCap, docId, t, cancelLayoutDraftHide],
+		[
+			engine,
+			docCap,
+			docId,
+			t,
+			cancelLayoutDraftHide,
+			closeFormulaAnnotationPreview,
+			screenPointForRegion,
+		],
 	);
 
 	/**
-	 * After dwelling on a layout region, open the same visual editor as manual
-	 * region-select (crop only — user still confirms send).
+	 * After dwelling on a layout region:
+	 * - formula + Annotation.md symbols → 「公式解析」glossary card (light UX)
+	 * - otherwise → same visual editor as manual region-select (crop only)
 	 */
 	const scheduleLayoutHoverOpen = useCallback(
 		(region: PdfLayoutRegion) => {
@@ -1971,6 +2190,55 @@ function PdfViewerInner({
 			) {
 				return;
 			}
+
+			const symbols = equationSymbolsRef.current;
+			const formulaLegend =
+				isFormulaLayoutKind(region.kind) && symbols.length > 0;
+
+			// ---- Formula legend path (tooltip-like; independent timers) ----
+			if (formulaLegend) {
+				// Already showing this formula: cancel pending hide, stay open.
+				if (formulaAnnotationPreviewRef.current?.regionId === region.id) {
+					markFormulaHoverEnter();
+					return;
+				}
+				// Switching formulas: open the new one after a short dwell (or
+				// immediately if a legend is already open — seamless switch).
+				if (
+					formulaHoverRegionIdRef.current === region.id &&
+					formulaHoverTimerRef.current
+				) {
+					return;
+				}
+				cancelFormulaHover();
+				// Leave visual-ask dwell alone when entering a formula hit.
+				cancelLayoutHover();
+				// Switching while another legend is open: no extra dwell.
+				if (formulaAnnotationPreviewRef.current) {
+					openFormulaLegend(region);
+					return;
+				}
+				formulaHoverRegionIdRef.current = region.id;
+				formulaHoverTimerRef.current = setTimeout(() => {
+					formulaHoverTimerRef.current = null;
+					if (formulaHoverRegionIdRef.current !== region.id) return;
+					if (
+						regionSelectingRef.current ||
+						visualCropPendingRef.current ||
+						visualDraftEditorRef.current ||
+						selectionMenuRef.current
+					) {
+						return;
+					}
+					openFormulaLegend(region);
+				}, LAYOUT_FORMULA_HOVER_DWELL_MS);
+				return;
+			}
+
+			// ---- Visual-ask path (figures / tables / algorithms / bare formula) ----
+			// Don't stack a visual draft while a formula legend is open.
+			if (formulaAnnotationPreviewRef.current) return;
+
 			if (
 				layoutHoverRegionIdRef.current === region.id &&
 				layoutHoverTimerRef.current
@@ -1978,6 +2246,7 @@ function PdfViewerInner({
 				return;
 			}
 			cancelLayoutHover();
+			cancelFormulaHover();
 			layoutHoverRegionIdRef.current = region.id;
 			layoutHoverTimerRef.current = setTimeout(() => {
 				layoutHoverTimerRef.current = null;
@@ -1986,23 +2255,39 @@ function PdfViewerInner({
 					regionSelectingRef.current ||
 					visualCropPendingRef.current ||
 					visualDraftEditorRef.current ||
+					formulaAnnotationPreviewRef.current ||
 					selectionMenuRef.current
 				) {
 					return;
 				}
-				const seq = ++layoutHoverSeqRef.current;
 				setFocusedLayoutRegion(docId, region.id);
+				const seq = ++layoutHoverSeqRef.current;
 				void beginVisualAnnotation(region.pageIndex + 1, region.bbox, {
 					seq,
 					ephemeral: true,
 				});
 			}, LAYOUT_HOVER_DWELL_MS);
 		},
-		[beginVisualAnnotation, cancelLayoutHover, docId],
+		[
+			beginVisualAnnotation,
+			cancelFormulaHover,
+			cancelLayoutHover,
+			docId,
+			markFormulaHoverEnter,
+			openFormulaLegend,
+		],
 	);
 
 	const handleLayoutHoverLeave = useCallback(
 		(regionId: string) => {
+			// Formula dwell / open legend for this region.
+			if (formulaHoverRegionIdRef.current === regionId) {
+				cancelFormulaHover(regionId);
+			}
+			if (formulaAnnotationPreviewRef.current?.regionId === regionId) {
+				scheduleFormulaHide();
+			}
+
 			if (layoutHoverRegionIdRef.current === regionId) {
 				// Timer still running → just cancel. Timer already fired / crop
 				// in flight → invalidate so a late crop does not open the editor.
@@ -2015,7 +2300,7 @@ function PdfViewerInner({
 			}
 			cancelLayoutHover(regionId);
 		},
-		[cancelLayoutHover],
+		[cancelFormulaHover, cancelLayoutHover, scheduleFormulaHide],
 	);
 
 	useEffect(() => {
@@ -2023,15 +2308,46 @@ function PdfViewerInner({
 		if (!docId) {
 			invalidateLayoutHover();
 			cancelLayoutDraftHide();
+			closeFormulaAnnotationPreview();
 			return;
 		}
 		invalidateLayoutHover();
 		cancelLayoutDraftHide();
+		closeFormulaAnnotationPreview();
 		return () => {
 			invalidateLayoutHover();
 			cancelLayoutDraftHide();
+			closeFormulaAnnotationPreview();
 		};
-	}, [docId, invalidateLayoutHover, cancelLayoutDraftHide]);
+	}, [
+		docId,
+		invalidateLayoutHover,
+		cancelLayoutDraftHide,
+		closeFormulaAnnotationPreview,
+	]);
+
+	// Escape closes the formula legend (same expectation as other floaters).
+	useEffect(() => {
+		if (!formulaAnnotationPreview) return;
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== "Escape") return;
+			e.preventDefault();
+			closeFormulaAnnotationPreview();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [formulaAnnotationPreview, closeFormulaAnnotationPreview]);
+
+	// Keep formula legend glued to its bbox across zoom (scroll uses ActiveCardScrollSync).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: zoomLevel re-places intentionally
+	useEffect(() => {
+		if (!formulaAnnotationPreview) return;
+		rePlaceFormulaAnnotationOnScroll();
+	}, [
+		formulaAnnotationPreview?.regionId,
+		zoomLevel,
+		rePlaceFormulaAnnotationOnScroll,
+	]);
 
 	const stopLayoutTranslate = useCallback(() => {
 		layoutTranslateAbortRef.current?.abort();
@@ -3649,6 +3965,10 @@ function PdfViewerInner({
 				visualDraftRegion?.page === pageNumber
 					? visualDraftRegion.region
 					: null;
+			const formulaAnnotationRegionOnPage =
+				formulaAnnotationRegion?.page === pageNumber
+					? formulaAnnotationRegion.region
+					: null;
 			const focusedLayoutOnPage =
 				focusedLayoutRegion?.pageIndex === pageIndex
 					? focusedLayoutRegion
@@ -3862,28 +4182,39 @@ function PdfViewerInner({
 						{/*
 						 * Hover hit targets for post-merge figure/table/algorithm/formula.
 						 * Largest first so smaller boxes stack on top and win pointer hits.
-						 * Hidden only when framing or a draft editor is open (not during crop:
+						 * Hidden when framing or a visual draft is open (not during crop:
 						 * unmount leave must not cancel an in-flight hover open).
+						 * Formula legend keeps hits mounted so leave/enter can switch
+						 * equations and drive hide without a second hover surface.
 						 */}
 						{!regionSelecting && !visualDraftEditor && layoutDocRegions
 							? hoverableLayoutRegionsOnPage(layoutDocRegions, pageIndex).map(
-									(region) => (
-										<button
-											key={`layout-hit-${region.id}`}
-											type="button"
-											data-layout-hit={region.id}
-											aria-label={t("figures.hoverAskAria")}
-											className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
-											style={{
-												left: `${region.bbox.x * 100}%`,
-												top: `${region.bbox.y * 100}%`,
-												width: `${region.bbox.w * 100}%`,
-												height: `${region.bbox.h * 100}%`,
-											}}
-											onPointerEnter={() => scheduleLayoutHoverOpen(region)}
-											onPointerLeave={() => handleLayoutHoverLeave(region.id)}
-										/>
-									),
+									(region) => {
+										const formulaLegend =
+											isFormulaLayoutKind(region.kind) &&
+											equationSymbols.length > 0;
+										return (
+											<button
+												key={`layout-hit-${region.id}`}
+												type="button"
+												data-layout-hit={region.id}
+												aria-label={
+													formulaLegend
+														? t("equationAnnotation.hoverAria")
+														: t("figures.hoverAskAria")
+												}
+												className="absolute z-[2] cursor-pointer rounded-sm border-0 bg-transparent p-0 transition-colors hover:bg-primary/5"
+												style={{
+													left: `${region.bbox.x * 100}%`,
+													top: `${region.bbox.y * 100}%`,
+													width: `${region.bbox.w * 100}%`,
+													height: `${region.bbox.h * 100}%`,
+												}}
+												onPointerEnter={() => scheduleLayoutHoverOpen(region)}
+												onPointerLeave={() => handleLayoutHoverLeave(region.id)}
+											/>
+										);
+									},
 								)
 							: null}
 						{/* Open ask conversation card: highlight the anchored selection. */}
@@ -3951,8 +4282,25 @@ function PdfViewerInner({
 								}
 							/>
 						) : null}
+						{/*
+						 * Formula legend: keep the same primary visual frame as visual-ask
+						 * so the hovered equation is clearly boxed on the page.
+						 * Hits own enter/leave; frame is visual-only.
+						 */}
+						{formulaAnnotationRegionOnPage ? (
+							<div
+								className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								style={{
+									left: `${formulaAnnotationRegionOnPage.x * 100}%`,
+									top: `${formulaAnnotationRegionOnPage.y * 100}%`,
+									width: `${formulaAnnotationRegionOnPage.w * 100}%`,
+									height: `${formulaAnnotationRegionOnPage.h * 100}%`,
+								}}
+								aria-hidden="true"
+							/>
+						) : null}
 						{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
-						{focusedLayoutOnPage ? (
+						{focusedLayoutOnPage && !formulaAnnotationRegionOnPage ? (
 							<div
 								className="pointer-events-none absolute z-[2] rounded-sm border-2 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
 								style={{
@@ -4008,6 +4356,7 @@ function PdfViewerInner({
 			activeTranslate,
 			activeVisualTrace,
 			visualDraftRegion,
+			formulaAnnotationRegion,
 			focusedLayoutRegion,
 			activeCard?.id,
 			handleOpenPin,
@@ -4019,6 +4368,7 @@ function PdfViewerInner({
 			regionSelecting,
 			visualCropPending,
 			visualDraftEditor,
+			equationSymbols.length,
 			layoutDocRegions,
 			layoutRawRegions,
 			layoutOverlayVisible,
@@ -4333,8 +4683,11 @@ function PdfViewerInner({
 			>
 				<WheelZoomHandler docId={docId} />
 				<ActiveCardScrollSync
-					active={Boolean(activeCard)}
-					onScroll={rePlaceActiveCardOnScroll}
+					active={Boolean(activeCard || formulaAnnotationPreview)}
+					onScroll={() => {
+						rePlaceActiveCardOnScroll();
+						rePlaceFormulaAnnotationOnScroll();
+					}}
 				/>
 				{/* Pinch zoom still handled by EmbedPDF; wheel zoom is replaced above so
 				    the step size matches the toolbar +/- buttons. */}
@@ -4377,6 +4730,24 @@ function PdfViewerInner({
 											? scheduleLayoutDraftHide
 											: undefined
 									}
+								/>
+							) : null}
+
+							{formulaAnnotationPreview ? (
+								<FormulaAnnotationCard
+									screen={formulaAnnotationPreview.screen}
+									symbols={formulaAnnotationPreview.symbols}
+									onOpenFile={
+										paperAbsPath
+											? () => {
+													closeFormulaAnnotationPreview();
+													openPath(equationAnnotationPath(paperAbsPath));
+												}
+											: undefined
+									}
+									onClose={closeFormulaAnnotationPreview}
+									onPointerEnter={markFormulaHoverEnter}
+									onPointerLeave={scheduleFormulaHide}
 								/>
 							) : null}
 

@@ -9,6 +9,8 @@ export {
 	layoutKindHex,
 } from "@/lib/pdf/layout/colors";
 export {
+	LAYOUT_FORMULA_HOVER_DWELL_MS,
+	LAYOUT_FORMULA_HOVER_HIDE_MS,
 	LAYOUT_HOVER_DWELL_MS,
 	LAYOUT_HOVER_HIDE_MS,
 	LAYOUT_SIDEBAR_MIN_SCORE,

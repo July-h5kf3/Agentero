@@ -178,6 +178,12 @@ export type SelectionCardProps = {
 	 * (e.g. PDF Ask conversation) so the scrollbar has a definite viewport.
 	 */
 	lockHeight?: boolean;
+	/**
+	 * When false, the body does not scroll (`agentero-scroll` off) and grows
+	 * with content. Use for short tables that should show fully (formula legend).
+	 * Still clamped by placement `maxHeight` via the outer shell when needed.
+	 */
+	bodyScroll?: boolean;
 	preferRight?: boolean;
 	title: string;
 	icon: LucideIcon;
@@ -211,6 +217,7 @@ export function SelectionCard({
 	placementHeight,
 	trackPin = false,
 	lockHeight = false,
+	bodyScroll = true,
 	preferRight = true,
 	title,
 	icon: Icon,
@@ -236,7 +243,9 @@ export function SelectionCard({
 	return (
 		<div
 			className={cn(
-				"fixed z-50 flex flex-col overflow-hidden",
+				"fixed z-50 flex flex-col",
+				// Content-sized cards (no body scroll) should not clip children.
+				bodyScroll || lockHeight ? "overflow-hidden" : "overflow-visible",
 				"rounded-xl border border-border/80 bg-background text-foreground shadow-2xl ring-1 ring-black/5 dark:ring-white/10",
 				className,
 			)}
@@ -244,7 +253,10 @@ export function SelectionCard({
 				left,
 				top,
 				width: `min(${width}px, calc(100vw - ${SELECTION_CARD_EDGE * 2}px))`,
-				maxHeight,
+				// Only enforce maxHeight when the body is a scroller / locked;
+				// content-sized cards grow with their children (viewport clamp is
+				// still applied via placeSelectionCard when height is large).
+				...(bodyScroll || lockHeight ? { maxHeight } : null),
 				// Definite height so flex-1 + nested height:100% scroll areas work.
 				...(lockHeight ? { height: maxHeight } : null),
 			}}
@@ -252,8 +264,11 @@ export function SelectionCard({
 			aria-label={ariaLabel ?? title}
 			aria-modal="false"
 			onMouseDown={(e) => e.stopPropagation()}
-			onMouseEnter={onPointerEnter}
-			onMouseLeave={onPointerLeave}
+			// Prefer pointer events so PDF hit targets (pointerenter/leave) and
+			// floating cards share the same hover model — mouse-only leave can
+			// race with pointer leave on some trackpads and flicker hide timers.
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
 		>
 			<header className="flex shrink-0 items-center gap-2 border-border/60 border-b px-3 py-2">
 				<Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -290,7 +305,10 @@ export function SelectionCard({
 
 			<div
 				className={cn(
-					"agentero-scroll flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto",
+					"flex flex-col",
+					bodyScroll
+						? "agentero-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+						: "overflow-visible",
 					bodyClassName,
 				)}
 				aria-live={ariaLive === "off" ? undefined : ariaLive}
