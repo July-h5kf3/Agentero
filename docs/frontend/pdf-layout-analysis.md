@@ -116,13 +116,14 @@ type LayoutSidecar = {
 
 按阶段编号。实现常量见 `merge-captions.ts` → `LAYOUT_MERGE`。
 
-### A. 标签与侧栏（3）
+### A. 标签与侧栏（4）
 
 | # | 规则 | 说明 |
 |---|---|---|
 | **A1** | 模型 label → kind | 映射：`image` `chart` `table` `algorithm` `formula` `formula_number` `figure_title` `header` `text`/`aside_text`→`text`；其余丢弃 |
 | **A2** | 侧栏种类 | 展示 **image / chart / table / algorithm / formula（有 formula_number 框并成功合并）**；**不展示** 无编号框 formula / 裸 `formula_number` / caption |
 | **A3** | image+chart 同区 | 侧栏「插图」分区；NMS 时同属 `figure` 组；**公式分区固定在列表最下方** |
+| **A4** | 纯 text/header 不得当图片 | 若 image/chart 被 score≥0.3 的 text/header/abstract **覆盖 ≥55%** 且正文置信度不低于图的 ~85%，则 **丢弃** 该 image/chart（双标 / 段落误检）。Eye 叠加层与 merge 共用 `suppressSpuriousFigureDetections` |
 
 ### B. 文字角色（3）
 
@@ -209,6 +210,8 @@ type LayoutSidecar = {
 | `LAYOUT_MERGE.formulaBodyMinScore` | 0.3 | formula 主体 seed 最低置信度 |
 | `LAYOUT_MERGE.formulaMaxBodyHeight` | 0.055 | 拒绝过高「公式」误检 |
 | `LAYOUT_MERGE.columnMidX` | 0.5 | 双栏分栏中线（公式排序） |
+| `LAYOUT_MERGE.figureTextCover` | 0.55 | image/chart 被正文覆盖比 → 可能丢弃 |
+| `LAYOUT_MERGE.figureTextMinScore` | 0.3 | 可否决 image 的 text/header 最低分 |
 | ~~`formulaNeighborGap` / 竖向 grow~~ | — | **已废止** |
 | ~~`formulaTextOverlap`~~ | ~~0.28~~ | **已废止** |
 | NMS `iouThreshold` | 0.45 | 去重 |

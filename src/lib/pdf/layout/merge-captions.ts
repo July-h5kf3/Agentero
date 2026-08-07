@@ -5,6 +5,7 @@ import {
 	isFigureLayoutKind,
 	isFormulaLayoutKind,
 	isFormulaNumberLayoutKind,
+	isLayoutBodyTextKind,
 	isSidebarLayoutKind,
 	isTableLayoutKind,
 	isTextLayoutKind,
@@ -71,6 +72,13 @@ export const LAYOUT_MERGE = {
 	 * is enough for typical academic PDFs.
 	 */
 	columnMidX: 0.5,
+	/**
+	 * Drop image/chart when this fraction of its area is covered by a confident
+	 * text/header/abstract box (dual-label or text misclassified as figure).
+	 */
+	figureTextCover: 0.55,
+	/** Min score for text/header/abstract to veto a figure detection. */
+	figureTextMinScore: 0.3,
 } as const;
 
 /**
@@ -109,6 +117,61 @@ export function compareLayoutReadingOrder(
 		aa.x - ba.x ||
 		a.readingOrder - b.readingOrder
 	);
+}
+
+/**
+ * True when a confident text/header/abstract box covers most of `box`.
+ * Used to reject image/chart dual-labels on pure text blocks.
+ */
+export function figureCoveredByBodyText(
+	box: PdfAskNormalizedRect,
+	pageIndex: number,
+	bodyBlocks: readonly PdfLayoutRegion[],
+	coverThreshold: number = LAYOUT_MERGE.figureTextCover,
+): boolean {
+	for (const t of bodyBlocks) {
+		if (t.pageIndex !== pageIndex) continue;
+		if (!isLayoutBodyTextKind(t.kind)) continue;
+		if (t.score < LAYOUT_MERGE.figureTextMinScore) continue;
+		if (bboxCoveredBy(box, t.bbox) >= coverThreshold) return true;
+	}
+	return false;
+}
+
+/**
+ * Drop image/chart detections that are really text/header regions.
+ * Model often dual-labels section titles and paragraphs as low/mid image;
+ * pure text+header areas must not surface as figures (sidebar or Eye overlay).
+ */
+export function suppressSpuriousFigureDetections(
+	regions: readonly PdfLayoutRegion[],
+): PdfLayoutRegion[] {
+	const bodyBlocks = regions.filter(
+		(r) =>
+			isLayoutBodyTextKind(r.kind) &&
+			r.score >= LAYOUT_MERGE.figureTextMinScore,
+	);
+	if (!bodyBlocks.length) return [...regions];
+
+	return regions.filter((r) => {
+		if (!isFigureLayoutKind(r.kind)) return true;
+		// Strong figure boxes that beat overlapping body text stay.
+		// Veto when body text covers most of the box (same area dual-label / wrap).
+		if (!figureCoveredByBodyText(r.bbox, r.pageIndex, bodyBlocks)) {
+			return true;
+		}
+		// If a body block covers us, only keep the figure when it is clearly
+		// more confident than every covering body block.
+		for (const t of bodyBlocks) {
+			if (t.pageIndex !== r.pageIndex) continue;
+			if (bboxCoveredBy(r.bbox, t.bbox) < LAYOUT_MERGE.figureTextCover) {
+				continue;
+			}
+			// Body is competitive or stronger → not a real figure.
+			if (t.score >= r.score * 0.85) return false;
+		}
+		return true;
+	});
 }
 
 function clamp01(value: number): number {
@@ -1019,8 +1082,10 @@ export function mergeFormulasByNumber(
 export function mergeCaptionsIntoHosts(
 	regions: PdfLayoutRegion[],
 ): PdfLayoutRegion[] {
+	// Drop image/chart that are dual-labeled text/header before figure clustering.
+	const cleaned = suppressSpuriousFigureDetections(regions);
 	// Ensure roles are resolved for merge decisions.
-	const tagged = regions.map((r) =>
+	const tagged = cleaned.map((r) =>
 		isCaptionLayoutKind(r.kind)
 			? { ...r, captionRole: resolveCaptionRole(r) }
 			: r,

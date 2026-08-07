@@ -100,6 +100,7 @@ export {
 	selectClusterForTitle,
 	selectFormulasForNumber,
 	suppressOrphanFiguresInsideClusters,
+	suppressSpuriousFigureDetections,
 	unionBbox,
 	verticalCeilingForTitle,
 } from "@/lib/pdf/layout/merge-captions";

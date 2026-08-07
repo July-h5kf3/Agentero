@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { isFigureLayoutKind } from "@/lib/pdf/layout/labels";
 import {
 	areFigureNeighbors,
 	bboxFullyContains,
@@ -11,6 +12,7 @@ import {
 	panelInTitleColumn,
 	preferredCaptionPlacement,
 	selectClusterForTitle,
+	suppressSpuriousFigureDetections,
 	verticalCeilingForTitle,
 } from "@/lib/pdf/layout/merge-captions";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
@@ -39,6 +41,85 @@ describe("family / placement", () => {
 		expect(hostFamily("table")).toBe("table");
 		expect(preferredCaptionPlacement("figure")).toBe("below");
 		expect(preferredCaptionPlacement("table")).toBe("above");
+	});
+});
+
+describe("suppressSpuriousFigureDetections", () => {
+	it("drops image dual-labeled on a confident text/header block", () => {
+		const header = region({
+			id: "h",
+			kind: "header",
+			score: 0.82,
+			bbox: { x: 0.52, y: 0.83, w: 0.35, h: 0.016 },
+		});
+		const text = region({
+			id: "t",
+			kind: "text",
+			score: 0.9,
+			bbox: { x: 0.52, y: 0.85, w: 0.4, h: 0.05 },
+		});
+		// Same area as header+text — model dual-label as image.
+		const fakeImg = region({
+			id: "img",
+			kind: "image",
+			score: 0.4,
+			bbox: { x: 0.52, y: 0.83, w: 0.4, h: 0.07 },
+		});
+		const out = suppressSpuriousFigureDetections([header, text, fakeImg]);
+		expect(out.some((r) => r.kind === "image")).toBe(false);
+		expect(
+			out.filter((r) => r.kind === "header" || r.kind === "text"),
+		).toHaveLength(2);
+	});
+
+	it("keeps real charts not covered by body text", () => {
+		const chart = region({
+			id: "c",
+			kind: "chart",
+			score: 0.9,
+			bbox: { x: 0.1, y: 0.1, w: 0.4, h: 0.3 },
+		});
+		const text = region({
+			id: "t",
+			kind: "text",
+			score: 0.95,
+			// Below the chart — does not cover it.
+			bbox: { x: 0.1, y: 0.5, w: 0.4, h: 0.2 },
+		});
+		const out = suppressSpuriousFigureDetections([chart, text]);
+		expect(out.some((r) => r.id === "c")).toBe(true);
+	});
+
+	it("merge does not promote text-only blocks into figure cards", () => {
+		const header = region({
+			id: "h",
+			kind: "header",
+			score: 0.82,
+			bbox: { x: 0.5, y: 0.2, w: 0.4, h: 0.03 },
+			title: "5.3 Generalization to an Unseen Benchmark",
+		});
+		const text = region({
+			id: "t",
+			kind: "text",
+			score: 0.9,
+			bbox: { x: 0.5, y: 0.24, w: 0.4, h: 0.12 },
+		});
+		const fakeImg = region({
+			id: "img",
+			kind: "image",
+			score: 0.45,
+			bbox: { x: 0.5, y: 0.2, w: 0.4, h: 0.16 },
+		});
+		const cap = region({
+			id: "ft",
+			kind: "figure_title",
+			score: 0.9,
+			bbox: { x: 0.5, y: 0.37, w: 0.4, h: 0.04 },
+			title: "Figure 9: Not a real figure.",
+			captionRole: "figure_main",
+		});
+		const out = mergeCaptionsIntoHosts([header, text, fakeImg, cap]);
+		expect(out.some((r) => isFigureLayoutKind(r.kind))).toBe(false);
 	});
 });
 

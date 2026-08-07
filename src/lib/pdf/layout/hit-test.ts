@@ -1,6 +1,7 @@
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import { dedupeLayoutRegions } from "@/lib/pdf/layout/dedupe";
 import { isSidebarLayoutKind } from "@/lib/pdf/layout/labels";
+import { suppressSpuriousFigureDetections } from "@/lib/pdf/layout/merge-captions";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
 
 export function bboxArea(bbox: PdfLayoutRegion["bbox"]): number {
@@ -32,21 +33,25 @@ export function hoverableLayoutRegionsOnPage(
 /**
  * Debug overlay: pre-merge detections on a page (all kinds, no NMS).
  * Drops boxes below minScore (default 0.3). Largest first so smaller paint on top.
+ * Also drops image/chart that are really text/header dual-labels.
  */
 export function rawLayoutRegionsOnPage(
 	regions: readonly PdfLayoutRegion[],
 	pageIndex: number,
 	minScore: number = LAYOUT_SIDEBAR_MIN_SCORE,
 ): PdfLayoutRegion[] {
-	return regions
-		.filter(
-			(r) =>
-				r.pageIndex === pageIndex &&
-				r.bbox.w > 0 &&
-				r.bbox.h > 0 &&
-				r.score >= minScore,
-		)
-		.sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox));
+	const page = regions.filter(
+		(r) =>
+			r.pageIndex === pageIndex &&
+			r.bbox.w > 0 &&
+			r.bbox.h > 0 &&
+			r.score >= minScore,
+	);
+	// Suppress needs full-page body blocks at minScore; pass page slice only
+	// (body blocks below minScore already excluded — matches Eye gate).
+	return suppressSpuriousFigureDetections(page).sort(
+		(a, b) => bboxArea(b.bbox) - bboxArea(a.bbox),
+	);
 }
 
 export function pointInBbox(
