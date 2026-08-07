@@ -1,5 +1,6 @@
 ---
 name: agentero-cli
+version: 1
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,

@@ -3,6 +3,7 @@ import {
 	type AcpCommand,
 	filterSlashCommands,
 	mapAcpCommands,
+	normalizeAcpCommandName,
 } from "@/lib/agent/slash-commands";
 
 describe("agent-slash-commands", () => {
@@ -33,10 +34,46 @@ describe("agent-slash-commands", () => {
 		]);
 	});
 
+	it("strips leading $ so Composer does not show /$name (issue #222)", () => {
+		const commands = mapAcpCommands([
+			{
+				name: "$deep-research",
+				description: "Runs a deep research",
+				input: null,
+			},
+			{
+				name: "/$idea-evaluator",
+				description: "Evaluates an idea",
+				input: null,
+			},
+			{ name: "  $$git-master  ", description: "Git expert", input: null },
+		]);
+		expect(commands.map((c) => c.name)).toEqual([
+			"deep-research",
+			"idea-evaluator",
+			"git-master",
+		]);
+		expect(commands.map((c) => c.title)).toEqual([
+			"deep-research",
+			"idea-evaluator",
+			"git-master",
+		]);
+	});
+
+	it("normalizeAcpCommandName strips mixed / and $ prefixes", () => {
+		expect(normalizeAcpCommandName("$foo")).toBe("foo");
+		expect(normalizeAcpCommandName("/$foo")).toBe("foo");
+		expect(normalizeAcpCommandName("/foo")).toBe("foo");
+		expect(normalizeAcpCommandName("  /$bar  ")).toBe("bar");
+		expect(normalizeAcpCommandName("plain")).toBe("plain");
+	});
+
 	it("filters out empty ACP command names", () => {
 		const commands = mapAcpCommands([
 			{ name: "", description: "Empty", input: null },
 			{ name: "/valid", description: "Valid", input: null },
+			{ name: "$", description: "Only dollar", input: null },
+			{ name: "/$", description: "Only markers", input: null },
 		]);
 		expect(commands).toHaveLength(1);
 		expect(commands[0].name).toBe("valid");

@@ -1,5 +1,6 @@
 ---
 name: idea-evaluator
+version: 1
 description: >-
   Evaluates a preliminary research idea against a five-dimension framework
   (Higher, Faster, Stronger, Cheaper, Broader) plus idea-lifecycle and

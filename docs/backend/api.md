@@ -82,7 +82,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 > **实现状态（V0.1）**  
 >
 > - 已实现：`vault_create`、`vault_ensure`（snake_case invoke 名）、`vault_allow_fs_scope`、`vault_tree_build` / `vault_tree_children`、`path_open_in_terminal`、`path_trash`（+ `path_list_trash` / `path_restore_item` / `path_purge_item` / `path_purge_trash`）、`window_new`、`set_locale`。  
-> - 打开 Vault / 最近列表：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；本地树加载走 Host `vault_tree_build`（一次 IPC）；打开或恢复时会调用 `vault_ensure` 补种 bundled skills，并按 hash 安全升级未定制的第一方 Skill。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。
+> - 打开 Vault / 最近列表：当前主要由前端 `plugin-fs` + `localStorage`/`sessionStorage` 完成；本地树加载走 Host `vault_tree_build`（一次 IPC）；打开或恢复时会调用 `vault_ensure` 补种 bundled skills，并按 frontmatter `version` 安全升级未定制的第一方 Skill。Host 侧 `vault:open` / `vault:recent` 仍为规划契约。
 > - 实际 command 注册见 `src-tauri/src/lib.rs`。
 
 #### `vault_create`（已实现）
@@ -105,7 +105,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   data: {
     path: string;
     created: string[]; // 创建的目录/文件相对路径列表
-    updated: string[]; // hash 命中已知旧版后安全升级的第一方 Skill
+    updated: string[]; // frontmatter version 更低后安全升级的第一方 Skill
     openPath: string;  // 建议首开，如 AGENTS.md
   };
 }
@@ -117,7 +117,7 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
   - 写入默认 `AGENTS.md`（若不存在）。
   - 写入 **`.agents/README.md`**（若不存在；内容来自仓库 `templates/vault/.agents/`）。
   - 种子 **bundled skills**：`paper-reader`、`agentero-cli`、`vault-normalizer`、`idea-evaluator`、`deep-research`（后两者含 `references/`，来自 [Supervisor-Skills](https://github.com/HKUSTDial/Supervisor-Skills)，**CC BY-NC-SA 4.0**；另写 `skills/README.md` 与 `LICENSE-Supervisor-Skills.txt`）。
-  - **不**创建根级 `PAPERS.md` / `library.bib`；已有第一方 `SKILL.md` 仅在 hash 命中已知旧版 bundled 内容时升级，用户修改与其它 `.agents/**` 文件保持原样。
+  - **不**创建根级 `PAPERS.md` / `library.bib`；已有第一方 `SKILL.md` 按 frontmatter 整数 `version` 升级（见 `vault_ensure`）；用户去掉/抬高 `version` 的修改与其它 `.agents/**` 文件保持原样。
   - 最近列表由前端在成功打开后写入 `localStorage`（`agentero-recent-vaults`）。
 
 #### `vault_ensure`（已实现）
@@ -136,8 +136,8 @@ Host 通过 Tauri event 向前端推送事件。文件系统、任务和菜单�
 
 - **策略**
   - **补缺失**：目录 / `AGENTS.md` / 模板里有而盘上没有的 skill 文件。
-  - **安全升级**：第一方 `SKILL.md` 的 SHA-256 与已知旧版 bundled 内容完全一致时写入新版。
-  - **保留定制**：用户改过的 `SKILL.md`、第三方 Skill 和 references 保持原样。
+  - **安全升级**（第一方 `SKILL.md`）：盘上 frontmatter 整数 `version` **低于** 模板 → 写入新版（后续升级只需 bump `version`）。同版本 / 更高版本 / 无 `version` → **不**覆盖。
+  - **保留定制**：去掉或抬高 `version` 后的用户 `SKILL.md`、第三方 Skill 和 references 保持原样。
   - 应用升级新增的 skill（如后续模板里加的 id）会在下次打开 Vault 时自动出现。
   - 前端：`created` 与 `updated` 分别触发新增/升级 success toast；均为空时不打扰。
 
@@ -193,7 +193,7 @@ type VaultTreeNode = {
 | `remote_agent_scan` | 目录模板 + 远端 PATH 扫描 → `CatalogEntry[]`（设置页远端 Agent） |
 | `remote_agent_probe` | `{ sessionId, templateId }` → 远端 ACP `initialize`（应用 Agent 代理 env） |
 | `remote_agent_open_install_terminal` | 本机终端确认后 `ssh -t` 在远端执行模板 `install_command`（如 Claude ACP 适配器） |
-| `remote_vault_ensure` | `{ sessionId }` → 通过 SFTP 补种 bundled skills，并按相同 hash 规则安全升级未定制的第一方 Skill |
+| `remote_vault_ensure` | `{ sessionId }` → 通过 SFTP 补种 bundled skills，并按相同 frontmatter `version` 规则安全升级第一方 Skill |
 
 Host 还支持 `__local_sim__` host（本机目录当远端，单测/开发用）。
 

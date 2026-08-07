@@ -25,7 +25,7 @@ AI Elements (Conversation / Message / PromptInput / Sources / Reasoning)
 - 运行中可继续输入 → Queue waitlist；标题保持简洁，条目等宽并可单独移除；Esc / 停止中止。
 - 会话空闲时 hover 用户消息可 **Edit** 后重发。
 - **新建对话 / 历史恢复**：新建草稿不会清空刚离开的本地 transcript；历史项同时存在 Agentero runtime id 与 ACP provider id 时，`session/load` / 后续续聊只使用 `providerSessionId`；连续续聊产生的新 runtime 行会按 provider id 合并回同一个历史项；加载结果通过一次原子 store 更新写入并激活，避免列表刷新后出现空白会话。详见 [Codex 历史恢复误用 runtime id](../bug_fix/codex-history-runtime-session-id.md)。
-- Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。命令以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
+- Slash 命令完全来自当前 ACP session 的 `available_commands_update`；Agentero 不再注册本地 action/template。映射时剥离名称前导 `/` 与 `$`（部分 Agent 把 skill 以 `$name` 形式广播），再以 `/name` 填入 Composer，并在当前 provider session 中原样发送。
 
 ## 权限 UI
 

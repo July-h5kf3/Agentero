@@ -20,7 +20,7 @@
   `templates/vault/notes/zh-CN/`，写入 Vault 时统一展开到 `notes/` 根目录；
   不覆盖用户已编辑的同名文件。
 - `vault_create` 返回的 `openPath` 为首篇教程路径；若教程已存在则回退到 `AGENTS.md`。
-- 每次打开会补种缺失的 bundled skills；第一方 `SKILL.md` 只有在内容 hash 与已知旧版模板完全一致时才升级。用户改过的文件保持原样，返回值的 `updated` 列出本次安全升级路径。
+- 每次打开会补种缺失的 bundled skills；第一方 `SKILL.md` 仅通过 frontmatter 整数 `version` 安全升级（盘上版本低于模板则覆盖并 toast）。无 `version`、同版本或更高版本的文件保持原样；返回值的 `updated` 列出本次安全升级路径。
 
 ## 文件树
 

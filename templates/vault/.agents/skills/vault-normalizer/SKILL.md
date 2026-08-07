@@ -1,5 +1,6 @@
 ---
 name: vault-normalizer
+version: 1
 description: Normalize an existing research directory into an Agentero vault layout. Use when reorganizing files, papers, notes, PDFs, TeX sources, marks, assets, or legacy Zotero/Obsidian-style folders to match Agentero directory and catalog conventions.
 ---
 
