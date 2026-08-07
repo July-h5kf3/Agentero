@@ -18,7 +18,10 @@ import { RenderPluginPackage } from "@embedpdf/plugin-render";
 import { logger } from "@/lib/core/logger";
 import { findLocalPdfPath, localFileToArrayBuffer } from "@/lib/paper";
 import { getPdfAiRuntime } from "@/lib/pdf/layout/ai-runtime";
-import { readLayoutSidecar } from "@/lib/pdf/layout/io";
+import {
+	readLayoutSidecar,
+	writeLayoutIndexFromRaw,
+} from "@/lib/pdf/layout/io";
 import { runDocumentLayoutAnalysis } from "@/lib/pdf/layout/run-analysis";
 
 function taskToPromise<T>(task: {
@@ -112,6 +115,12 @@ export async function analyzePaperLayoutHeadless(opts: {
 
 	const existing = await readLayoutSidecar(paperAbsPath);
 	if (existing?.regions?.length) {
+		// Ensure CLI-facing sidebar index exists even on raw-only cache hits.
+		try {
+			await writeLayoutIndexFromRaw(paperAbsPath, existing.regions);
+		} catch {
+			// non-fatal
+		}
 		return {
 			fromCache: true,
 			summary: `cached ${existing.regions.length} regions`,

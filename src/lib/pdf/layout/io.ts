@@ -1,9 +1,18 @@
+import {
+	buildLayoutIndexSidecar,
+	LAYOUT_INDEX_FILE,
+	type LayoutIndexSidecar,
+	parseLayoutIndexSidecar,
+} from "@/lib/pdf/layout/layout-index";
+import { mergeCaptionsIntoHosts } from "@/lib/pdf/layout/merge-captions";
 import type { PdfLayoutKind, PdfLayoutRegion } from "@/lib/pdf/layout/types";
 import { joinVaultPath, readVaultFile, writeVaultFile } from "@/lib/vault";
 
 /** Bump when label mapping / stored region semantics change (invalidates cache). */
 export const LAYOUT_SIDECAR_SCHEMA_VERSION = 2;
 export const LAYOUT_SIDECAR_FILE = "layout.json";
+/** Re-export for consumers that only import from `io`. */
+export { LAYOUT_INDEX_FILE } from "@/lib/pdf/layout/layout-index";
 
 export type PdfLayoutSidecar = {
 	schemaVersion: number;
@@ -100,6 +109,13 @@ export function layoutSidecarPath(paperAbsPath: string): string {
 	);
 }
 
+export function layoutIndexPath(paperAbsPath: string): string {
+	return joinVaultPath(
+		joinVaultPath(paperAbsPath, "source"),
+		LAYOUT_INDEX_FILE,
+	);
+}
+
 export function parseLayoutSidecar(raw: unknown): PdfLayoutSidecar | null {
 	if (!isObject(raw)) return null;
 	if (raw.schemaVersion !== LAYOUT_SIDECAR_SCHEMA_VERSION) return null;
@@ -149,4 +165,43 @@ export async function writeLayoutSidecar(
 		layoutSidecarPath(paperAbsPath),
 		`${JSON.stringify(sidecar, null, 2)}\n`,
 	);
+}
+
+export async function readLayoutIndex(
+	paperAbsPath: string | null | undefined,
+): Promise<LayoutIndexSidecar | null> {
+	if (!paperAbsPath) return null;
+	try {
+		const text = await readVaultFile(layoutIndexPath(paperAbsPath));
+		return parseLayoutIndexSidecar(JSON.parse(text));
+	} catch {
+		return null;
+	}
+}
+
+/** Write sidebar-aligned index from **post-merge** regions. */
+export async function writeLayoutIndex(
+	paperAbsPath: string | null | undefined,
+	mergedRegions: readonly PdfLayoutRegion[],
+): Promise<LayoutIndexSidecar | null> {
+	if (!paperAbsPath) return null;
+	const index = buildLayoutIndexSidecar(mergedRegions);
+	await writeVaultFile(
+		layoutIndexPath(paperAbsPath),
+		`${JSON.stringify(index, null, 2)}\n`,
+	);
+	return index;
+}
+
+/**
+ * Rebuild `layout-index.json` from raw `layout.json` regions
+ * (merge + sidebar filter). Safe to call whenever raw sidecar is present.
+ */
+export async function writeLayoutIndexFromRaw(
+	paperAbsPath: string | null | undefined,
+	rawRegions: readonly PdfLayoutRegion[],
+): Promise<LayoutIndexSidecar | null> {
+	if (!paperAbsPath) return null;
+	const merged = mergeCaptionsIntoHosts([...rawRegions]);
+	return writeLayoutIndex(paperAbsPath, merged);
 }
