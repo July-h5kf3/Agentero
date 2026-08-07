@@ -18,6 +18,8 @@ type VisualAnnotationEditorProps = {
 	 * (does not start a pin chat by itself).
 	 */
 	onAddToChat: (comment: string) => void;
+	/** ⌘/Ctrl+Enter: start an in-place visual Agent conversation immediately. */
+	onSendNow: (comment: string) => void;
 	/** Discard the pending crop (same as cancel for a fresh region). */
 	onDelete: () => void;
 	onClose: () => void;
@@ -28,13 +30,15 @@ type VisualAnnotationEditorProps = {
 
 /**
  * Post-crop note editor — same chrome as the text highlight AnnotationEditor
- * (title「批注备注」、textarea、取消/保存). Header: 加入侧边栏 / 删除 / 关闭.
+ * (title「批注备注」、textarea、取消/保存).
+ * Enter → save note; ⌘/Ctrl+Enter → ask Agent now.
  */
 export function VisualAnnotationEditor({
 	screen,
 	initialComment,
 	onSave,
 	onAddToChat,
+	onSendNow,
 	onDelete,
 	onClose,
 	onPointerEnter,
@@ -55,6 +59,7 @@ export function VisualAnnotationEditor({
 
 	const save = useCallback(() => onSave(text), [onSave, text]);
 	const addToChat = useCallback(() => onAddToChat(text), [onAddToChat, text]);
+	const sendNow = useCallback(() => onSendNow(text), [onSendNow, text]);
 
 	const actions = useMemo(
 		() => [
@@ -82,7 +87,7 @@ export function VisualAnnotationEditor({
 		<SelectionCard
 			screen={screen}
 			width={240}
-			height={200}
+			height={220}
 			preferRight
 			title={t("annotations.editorLabel")}
 			icon={NotebookPen}
@@ -92,13 +97,18 @@ export function VisualAnnotationEditor({
 			bodyClassName="gap-2 px-3 py-2.5"
 			actions={actions}
 			footer={
-				<div className="flex items-center justify-end gap-1">
-					<Button type="button" variant="ghost" size="sm" onClick={onClose}>
-						{t("annotations.cancel")}
-					</Button>
-					<Button type="button" size="sm" onClick={save}>
-						{t("annotations.save")}
-					</Button>
+				<div className="flex w-full flex-col gap-1.5">
+					<p className="px-0.5 text-center text-[10px] text-muted-foreground leading-tight">
+						{t("pdfExplain.annotationShortcuts")}
+					</p>
+					<div className="flex items-center justify-end gap-1">
+						<Button type="button" variant="ghost" size="sm" onClick={onClose}>
+							{t("annotations.cancel")}
+						</Button>
+						<Button type="button" size="sm" onClick={save}>
+							{t("annotations.save")}
+						</Button>
+					</div>
 				</div>
 			}
 		>
@@ -108,6 +118,8 @@ export function VisualAnnotationEditor({
 				placeholder={t("annotations.placeholder")}
 				value={text}
 				onChange={(e) => setText(e.target.value)}
+				onFocus={onPointerEnter}
+				onPointerDown={onPointerEnter}
 				{...compositionProps}
 				onKeyDown={(e) => {
 					if (e.key === "Escape") {
@@ -115,11 +127,15 @@ export function VisualAnnotationEditor({
 						onClose();
 						return;
 					}
-					// Enter = save; Shift+Enter = newline (same as AnnotationEditor).
-					if (e.key === "Enter" && !e.shiftKey && !isBlockedByIme(e)) {
+					if (e.key !== "Enter" || e.shiftKey || isBlockedByIme(e)) return;
+					// ⌘/Ctrl+Enter → Agent conversation; bare Enter → save note.
+					if (e.metaKey || e.ctrlKey) {
 						e.preventDefault();
-						save();
+						sendNow();
+						return;
 					}
+					e.preventDefault();
+					save();
 				}}
 			/>
 		</SelectionCard>

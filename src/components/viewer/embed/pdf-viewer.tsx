@@ -174,9 +174,11 @@ import {
 } from "@/lib/paper/refs";
 import {
 	createNoteTrace,
+	createRunningTraces,
 	deletePdfVisualTrace,
 	isVisualMarkKind,
 	listPdfVisualTraces,
+	newTraceMessageId,
 	type PdfVisualSessionTrace,
 	traceMessages,
 	tracePreview,
@@ -1667,6 +1669,29 @@ function PdfViewerInner({
 		}
 	}, []);
 
+	/**
+	 * Selection / note modals are portaled `role="dialog"`. After pin leave the
+	 * hide timer may fire before (or without) a card pointerenter — keep open
+	 * while the pointer is still over a dialog or a field inside it is focused.
+	 */
+	const isFloatingDialogActive = useCallback((): boolean => {
+		if (typeof document === "undefined") return false;
+		const dialogs = document.querySelectorAll('[role="dialog"]');
+		for (const node of dialogs) {
+			if (!(node instanceof HTMLElement)) continue;
+			// Fixed floating selection cards / annotation editors only.
+			if (!node.classList.contains("fixed")) continue;
+			try {
+				if (node.matches(":hover")) return true;
+			} catch {
+				// :hover may throw in non-browser test envs
+			}
+			const ae = document.activeElement;
+			if (ae instanceof HTMLElement && node.contains(ae)) return true;
+		}
+		return false;
+	}, []);
+
 	const discardIfEmptyDraft = useCallback((threadId: string | null) => {
 		if (!threadId) return;
 		const th = threadsRef.current.find((t) => t.id === threadId);
@@ -1699,7 +1724,8 @@ function PdfViewerInner({
 
 	/**
 	 * Leave pin / card / source fragment. Translate cards hide when nothing is
-	 * hovered (unless still streaming). Ask / visual keep the existing 1s delay.
+	 * hovered (unless still streaming). Ask / visual / note editors keep a 1s
+	 * delay, and never dismiss while the floating dialog is hovered or focused.
 	 */
 	const scheduleHoverHide = useCallback(() => {
 		cardHoverSurfaceRef.current = false;
@@ -1707,6 +1733,11 @@ function PdfViewerInner({
 		hidePopoverTimerRef.current = setTimeout(() => {
 			hidePopoverTimerRef.current = null;
 			if (cardHoverSurfaceRef.current) return;
+			// Still interacting with the floating note / chat modal.
+			if (isFloatingDialogActive()) {
+				cardHoverSurfaceRef.current = true;
+				return;
+			}
 			// Ephemeral translate result: stay open only while streaming or hovered.
 			if (
 				activeCardRef.current?.kind === "translate" &&
@@ -1716,7 +1747,7 @@ function PdfViewerInner({
 			}
 			hideActiveCard();
 		}, 1000);
-	}, [cancelHoverHide, hideActiveCard]);
+	}, [cancelHoverHide, hideActiveCard, isFloatingDialogActive]);
 
 	const stopTranslateSession = useCallback(() => {
 		const sid = translateSessionRef.current;
@@ -1742,9 +1773,11 @@ function PdfViewerInner({
 
 	const openCard = useCallback(
 		(card: ActiveSelectionCard) => {
-			// Pin/menu open: cancel pending hide. Hover surface is set by
-			// pin/card enter handlers — menu-open starts with surface false.
+			// Cancel pending hide and treat open as an active hover surface so
+			// the card does not auto-close while the pointer is still over the
+			// pin / newly mounted modal (mount under cursor skips pointerenter).
 			cancelHoverHide();
+			cardHoverSurfaceRef.current = true;
 			if (
 				activeCardRef.current?.kind === "translate" &&
 				(card.kind !== "translate" || card.id !== activeCardRef.current.id)
@@ -2554,6 +2587,114 @@ function PdfViewerInner({
 		[paperAbsPath, t],
 	);
 
+	/**
+	 * ⌘/Ctrl+Enter from the region editor: open pin chat and start Agent turn.
+	 */
+	const handleVisualSendNow = useCallback(
+		(comment: string) => {
+			const draft = visualDraftEditor;
+			if (!draft) return;
+			const paperPath = paperRelPath || paperAbsPath || "paper";
+			// Agent path may use empty comment; fallback keeps visualMarkHasContent.
+			const content = comment.trim() || t("pdfExplain.visualAnnotation");
+			const now = new Date().toISOString();
+			const userMsg = {
+				id: newTraceMessageId(),
+				role: "user" as const,
+				content,
+				createdAt: now,
+			};
+			const [provisional] = createRunningTraces({
+				paperPath,
+				agentId: "pending",
+				runtimeSessionId: "pending",
+				messageId: "pending",
+				items: [
+					{
+						page: draft.page,
+						rects: [draft.region],
+						comment: content,
+						image: {
+							data: draft.image.data,
+							mimeType: draft.image.mimeType || "image/png",
+						},
+						messages: [userMsg],
+					},
+				],
+				createdAt: now,
+			});
+			if (!provisional) return;
+			closeVisualDraftEditor();
+			upsertVisualTrace(provisional);
+			setVisualCardExpanded(true);
+			setVisualError(null);
+			cardScreenRef.current = draft.screen;
+			setCardScreen(draft.screen);
+			openCard({ kind: "visual", id: provisional.id });
+
+			void (async () => {
+				try {
+					const resolved = await resolvePdfAskAgent();
+					const agentId = resolved?.agentId;
+					if (!agentId) {
+						setVisualTraces((prev) =>
+							prev.filter((tr) => tr.id !== provisional.id),
+						);
+						hideActiveCard();
+						return;
+					}
+					const visualDraft: import("@/lib/agent/visual-context-store").PdfVisualDraft =
+						{
+							id: provisional.id,
+							paperPath,
+							paperAbsPath: paperAbsPath ?? undefined,
+							page: draft.page,
+							rects: [draft.region],
+							comment: content,
+							image: {
+								data: draft.image.data,
+								mimeType: draft.image.mimeType || "image/png",
+							},
+						};
+					requestVisualAgentTurn({
+						trace: {
+							...provisional,
+							agent: {
+								...(provisional.agent ?? {
+									runtimeSessionId: "pending",
+									messageId: "pending",
+									status: "running" as const,
+								}),
+								agentId,
+							},
+						},
+						text: content,
+						visualDrafts: [visualDraft],
+						agentId,
+						modelId: resolved.modelId,
+					});
+				} catch (e) {
+					const message =
+						e instanceof Error ? e.message : t("pdfAsk.agentFailed");
+					notifyError(message);
+					setVisualError(message);
+				}
+			})();
+		},
+		[
+			visualDraftEditor,
+			paperRelPath,
+			paperAbsPath,
+			t,
+			closeVisualDraftEditor,
+			upsertVisualTrace,
+			openCard,
+			resolvePdfAskAgent,
+			requestVisualAgentTurn,
+			hideActiveCard,
+		],
+	);
+
 	/** Persist comment edits from the pin note mode. */
 	const handleVisualSaveComment = useCallback(
 		(comment: string) => {
@@ -2978,6 +3119,10 @@ function PdfViewerInner({
 			if (!obj || !isHighlightObject(obj)) return;
 			const pageEl = pageElByIndex(hostRef.current, obj.pageIndex);
 			if (!pageEl) return;
+			// Same sticky-hover contract as openCard — pin leave must not close
+			// the note editor while the user is moving onto / into the modal.
+			cancelHoverHide();
+			cardHoverSurfaceRef.current = true;
 			setEditor({
 				screen: rectRightScreen(pageEl, obj.rect, zoomRef.current),
 				pageIndex: obj.pageIndex,
@@ -2986,7 +3131,7 @@ function PdfViewerInner({
 				comment: obj.contents?.trim() ?? "",
 			});
 		},
-		[annotationCap, docId],
+		[annotationCap, docId, cancelHoverHide],
 	);
 
 	const handleOpenPin = useCallback(
@@ -4800,6 +4945,7 @@ function PdfViewerInner({
 									screen={visualDraftEditor.screen}
 									onSave={handleVisualDraftSave}
 									onAddToChat={handleVisualAddToChat}
+									onSendNow={handleVisualSendNow}
 									onDelete={closeVisualDraftEditor}
 									onClose={closeVisualDraftEditor}
 									onPointerEnter={

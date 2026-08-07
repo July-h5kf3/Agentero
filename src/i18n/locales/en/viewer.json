@@ -84,7 +84,7 @@
 		"annotationSave": "Save",
 		"annotationSendNow": "Ask agent",
 		"annotationCancel": "Cancel",
-		"annotationShortcuts": "Enter saves",
+		"annotationShortcuts": "Enter saves note · ⌘/Ctrl+Enter asks agent",
 		"annotationPage": "Page {{page}}",
 		"annotationPreviewAlt": "Cropped region from page {{page}}",
 		"visualAnnotation": "Visual annotation",
