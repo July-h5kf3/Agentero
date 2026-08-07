@@ -32,7 +32,7 @@ function taskToPromise<T>(task: {
 let analysisEngine: PdfEngine | null = null;
 let analysisEnginePromise: Promise<PdfEngine> | null = null;
 
-async function getHeadlessPdfEngine(): Promise<PdfEngine> {
+export async function getHeadlessPdfEngine(): Promise<PdfEngine> {
 	if (analysisEngine) return analysisEngine;
 	if (analysisEnginePromise) return analysisEnginePromise;
 	const pending = (async () => {

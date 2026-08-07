@@ -165,7 +165,6 @@ import { openExternalUrl } from "@/lib/core/open-external";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import { isPdfViewerSource } from "@/lib/paper";
-import { writeReadingMetaPageCount } from "@/lib/paper/reading-heatmap";
 import {
 	type Citation,
 	looksLikeCitationMarker,
@@ -3476,11 +3475,6 @@ function PdfViewerInner({
 		const scrollScope = scrollRef.current;
 		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
 		restoredRef.current = true;
-		if (paperAbsPath) {
-			void writeReadingMetaPageCount(paperAbsPath, totalPages).catch(
-				() => undefined,
-			);
-		}
 		if (paperKey) {
 			const saved = readReadingPage(paperKey);
 			if (saved && saved > 1 && saved <= totalPages) {

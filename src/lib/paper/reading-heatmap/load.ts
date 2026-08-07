@@ -3,13 +3,13 @@ import {
 	emptyHeatmap,
 	meanRectY,
 } from "@/lib/paper/reading-heatmap/aggregate";
-import { readReadingMeta } from "@/lib/paper/reading-heatmap/meta";
 import type {
 	ReadingActivityPoint,
 	ReadingHeatmap,
 } from "@/lib/paper/reading-heatmap/types";
 import { listPdfAskThreads } from "@/lib/pdf/ask/io";
 import { listPdfHighlights } from "@/lib/pdf/highlight/io";
+import { getPdfPageCount } from "@/lib/pdf/page-count";
 import { listPdfTranslates } from "@/lib/pdf/translate/io";
 import { joinVaultPath } from "@/lib/vault";
 
@@ -19,11 +19,11 @@ export async function loadReadingActivityPoints(
 ): Promise<{ points: ReadingActivityPoint[]; pageCount?: number }> {
 	if (!paperAbsPath) return { points: [] };
 
-	const [highlights, asks, translates, meta] = await Promise.all([
+	const [highlights, asks, translates, pageCount] = await Promise.all([
 		listPdfHighlights(paperAbsPath).catch(() => []),
 		listPdfAskThreads(paperAbsPath).catch(() => []),
 		listPdfTranslates(paperAbsPath).catch(() => []),
-		readReadingMeta(paperAbsPath).catch(() => null),
+		getPdfPageCount(paperAbsPath),
 	]);
 
 	const points: ReadingActivityPoint[] = [];
@@ -59,7 +59,7 @@ export async function loadReadingActivityPoints(
 
 	return {
 		points,
-		pageCount: meta?.pageCount,
+		pageCount: pageCount ?? undefined,
 	};
 }
 
