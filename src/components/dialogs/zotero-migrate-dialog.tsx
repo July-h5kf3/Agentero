@@ -62,6 +62,19 @@ const DEFAULT_OPTS: SavedOpts = {
 	migrateAnnotations: true,
 	parentDir: "papers",
 };
+
+/** Item types that read as ordinary papers; anything else gets a type badge
+ * in the picker so non-reference entries (webpage, …) stand out. */
+const STANDARD_ITEM_TYPES = new Set([
+	"journalArticle",
+	"preprint",
+	"conferencePaper",
+	"thesis",
+	"book",
+	"bookSection",
+	"report",
+	"document",
+]);
 function loadOpts(): SavedOpts {
 	const stored = readJsonStorage<Partial<SavedOpts>>(OPTS_KEY, {});
 	return { ...DEFAULT_OPTS, ...stored };
@@ -315,6 +328,13 @@ export function ZoteroMigrateDialog({
 										})}
 									</li>
 								) : null}
+								{result.relocated > 0 ? (
+									<li>
+										{t("sidebar:zoteroMigrate.summaryRelocated", {
+											count: result.relocated,
+										})}
+									</li>
+								) : null}
 								{result.copiedPdfs > 0 ? (
 									<li>
 										{t("sidebar:zoteroMigrate.summaryPdfs", {
@@ -501,6 +521,12 @@ export function ZoteroMigrateDialog({
 															{it.title}
 															{it.year ? ` (${it.year})` : ""}
 														</label>
+														{it.itemType &&
+														!STANDARD_ITEM_TYPES.has(it.itemType) ? (
+															<span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
+																{it.itemType}
+															</span>
+														) : null}
 														{it.hasPdf ? (
 															<span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground uppercase">
 																pdf

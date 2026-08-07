@@ -17,6 +17,8 @@ export type ZoteroCollectionInfo = {
 export type ZoteroItemInfo = {
 	id: number;
 	title: string;
+	/** Zotero item type (journalArticle, webpage, …) for the picker badge. */
+	itemType: string;
 	year: number | null;
 	hasPdf: boolean;
 	notes: number;
@@ -38,6 +40,8 @@ export type ZoteroMigrateResult = {
 	skipped: number;
 	copiedPdfs: number;
 	notesAdded: number;
+	/** Already-imported papers moved into their collection folder. */
+	relocated: number;
 	pruned: number;
 	paths: string[];
 	errors: string[];

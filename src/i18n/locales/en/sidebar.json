@@ -154,6 +154,7 @@
 		"summaryTitle": "Migration complete",
 		"summaryImported": "{{count}} papers imported",
 		"summaryNotes": "Notes added to {{count}} existing papers",
+		"summaryRelocated": "{{count}} existing papers moved into collection folders",
 		"summaryPdfs": "{{count}} PDFs copied",
 		"summaryPruned": "{{count}} stale entries cleaned up",
 		"summarySkipped": "{{count}} already in your library",

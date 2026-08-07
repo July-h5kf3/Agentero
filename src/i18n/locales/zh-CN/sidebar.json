@@ -154,6 +154,7 @@
 		"summaryTitle": "迁移完成",
 		"summaryImported": "导入 {{count}} 篇文献",
 		"summaryNotes": "为 {{count}} 篇已有文献补充了笔记",
+		"summaryRelocated": "将 {{count}} 篇已有文献移入分类文件夹",
 		"summaryPdfs": "复制了 {{count}} 个 PDF",
 		"summaryPruned": "清理了 {{count}} 条失效记录",
 		"summarySkipped": "{{count}} 篇已在库中（跳过）",
