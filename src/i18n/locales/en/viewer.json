@@ -50,12 +50,12 @@
 			"hideOverlay": "Hide layout boxes"
 		},
 		"layoutTranslate": {
-			"start": "Translate layout text regions",
-			"stop": "Stop layout translation",
-			"clear": "Clear layout translations",
+			"start": "Full-text translate",
+			"stop": "Stop full-text translate",
+			"clear": "Clear full-text translations",
 			"needLayout": "Run layout analysis first (Figures panel).",
 			"noText": "No extractable text regions to translate.",
-			"failed": "Layout translation failed"
+			"failed": "Full-text translate failed"
 		}
 	},
 	"pdfAsk": {

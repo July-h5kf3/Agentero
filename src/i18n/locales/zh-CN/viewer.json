@@ -50,12 +50,12 @@
 			"hideOverlay": "隐藏版面框"
 		},
 		"layoutTranslate": {
-			"start": "翻译版面文字区域",
-			"stop": "停止版面翻译",
-			"clear": "清除版面译文",
+			"start": "全文翻译",
+			"stop": "停止全文翻译",
+			"clear": "清除全文译文",
 			"needLayout": "请先运行版面分析（Figures 面板）。",
 			"noText": "没有可提取文字的版面区域可翻译。",
-			"failed": "版面翻译失败"
+			"failed": "全文翻译失败"
 		}
 	},
 	"pdfAsk": {
