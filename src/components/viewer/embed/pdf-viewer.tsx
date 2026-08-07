@@ -216,6 +216,7 @@ import {
 	getPdfAiRuntime,
 	hoverableLayoutRegionsOnPage,
 	LAYOUT_HOVER_DWELL_MS,
+	LAYOUT_HOVER_HIDE_MS,
 	layoutAnalysisStore,
 	layoutKindBorder,
 	layoutKindFill,
@@ -872,6 +873,11 @@ type VisualDraftEditorState = {
 	page: number;
 	region: PdfAskNormalizedRect;
 	image: PromptImage;
+	/**
+	 * Opened by layout-region hover: auto-closes after leaving the region /
+	 * draft card (grace period). Manual region-select drafts stay until dismiss.
+	 */
+	ephemeral?: boolean;
 };
 
 function PdfViewerInner({
@@ -1048,6 +1054,12 @@ function PdfViewerInner({
 	const layoutHoverRegionIdRef = useRef<string | null>(null);
 	/** Bumped to drop late crops after leave / supersede. */
 	const layoutHoverSeqRef = useRef(0);
+	/** Auto-hide timer for ephemeral layout-hover draft editors. */
+	const layoutDraftHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	/** True while pointer is over the ephemeral source region or draft card. */
+	const layoutDraftHoverSurfaceRef = useRef(false);
 	const activeSessionRef = useRef<string | null>(null);
 	const visualSessionRef = useRef<string | null>(null);
 	const translateSessionRef = useRef<string | null>(null);
@@ -1816,6 +1828,46 @@ function PdfViewerInner({
 		}
 	}, []);
 
+	const cancelLayoutDraftHide = useCallback(() => {
+		if (!layoutDraftHideTimerRef.current) return;
+		clearTimeout(layoutDraftHideTimerRef.current);
+		layoutDraftHideTimerRef.current = null;
+	}, []);
+
+	const closeVisualDraftEditor = useCallback(() => {
+		cancelLayoutDraftHide();
+		layoutDraftHoverSurfaceRef.current = false;
+		// Layout-hover also sets figures-rail focus for the bbox frame; clear it
+		// with the draft so the image selection outline does not linger.
+		const wasEphemeral = visualDraftEditorRef.current?.ephemeral === true;
+		setVisualDraftEditor(null);
+		if (wasEphemeral) {
+			setFocusedLayoutRegion(docId, null);
+		}
+	}, [cancelLayoutDraftHide, docId]);
+
+	const markLayoutDraftHoverEnter = useCallback(() => {
+		layoutDraftHoverSurfaceRef.current = true;
+		cancelLayoutDraftHide();
+	}, [cancelLayoutDraftHide]);
+
+	/**
+	 * Leave ephemeral layout-hover source region or draft card.
+	 * Manual region-select drafts ignore this (no auto-hide).
+	 */
+	const scheduleLayoutDraftHide = useCallback(() => {
+		if (!visualDraftEditorRef.current?.ephemeral) return;
+		layoutDraftHoverSurfaceRef.current = false;
+		cancelLayoutDraftHide();
+		layoutDraftHideTimerRef.current = setTimeout(() => {
+			layoutDraftHideTimerRef.current = null;
+			if (layoutDraftHoverSurfaceRef.current) return;
+			if (!visualDraftEditorRef.current?.ephemeral) return;
+			// Clears draft + focused layout bbox (see closeVisualDraftEditor).
+			closeVisualDraftEditor();
+		}, LAYOUT_HOVER_HIDE_MS);
+	}, [cancelLayoutDraftHide, closeVisualDraftEditor]);
+
 	/** Drop in-flight hover dwell / crop so a late result does not open the editor. */
 	const invalidateLayoutHover = useCallback(() => {
 		layoutHoverSeqRef.current += 1;
@@ -1827,7 +1879,7 @@ function PdfViewerInner({
 		async (
 			page: number,
 			region: PdfAskNormalizedRect,
-			opts?: { seq?: number },
+			opts?: { seq?: number; ephemeral?: boolean },
 		) => {
 			if (!engine || !docCap || visualCropPendingRef.current) return;
 			const document = docCap.getDocument(docId);
@@ -1857,11 +1909,19 @@ function PdfViewerInner({
 							};
 						})()
 					: { x: 120, y: 120 };
+				const ephemeral = opts?.ephemeral === true;
+				// Pointer is still over the region when hover-open completes; keep
+				// the surface active so unmounting hit targets does not auto-hide.
+				if (ephemeral) {
+					layoutDraftHoverSurfaceRef.current = true;
+					cancelLayoutDraftHide();
+				}
 				setVisualDraftEditor({
 					screen,
 					page,
 					region,
 					image,
+					ephemeral: ephemeral || undefined,
 				});
 				layoutHoverRegionIdRef.current = null;
 			} catch (error) {
@@ -1875,7 +1935,7 @@ function PdfViewerInner({
 				setVisualCropPending(false);
 			}
 		},
-		[engine, docCap, docId, t],
+		[engine, docCap, docId, t, cancelLayoutDraftHide],
 	);
 
 	/**
@@ -1915,6 +1975,7 @@ function PdfViewerInner({
 				setFocusedLayoutRegion(docId, region.id);
 				void beginVisualAnnotation(region.pageIndex + 1, region.bbox, {
 					seq,
+					ephemeral: true,
 				});
 			}, LAYOUT_HOVER_DWELL_MS);
 		},
@@ -1942,18 +2003,22 @@ function PdfViewerInner({
 		// Drop in-flight hover when switching PDF documents or unmounting.
 		if (!docId) {
 			invalidateLayoutHover();
+			cancelLayoutDraftHide();
 			return;
 		}
 		invalidateLayoutHover();
+		cancelLayoutDraftHide();
 		return () => {
 			invalidateLayoutHover();
+			cancelLayoutDraftHide();
 		};
-	}, [docId, invalidateLayoutHover]);
+	}, [docId, invalidateLayoutHover, cancelLayoutDraftHide]);
 
 	const handleVisualDraftSave = useCallback(
 		(comment: string) => {
 			const draft = visualDraftEditor;
 			if (!draft) return;
+			closeVisualDraftEditor();
 			addVisualDraft({
 				paperPath: paperRelPath || paperAbsPath || "paper",
 				paperAbsPath: paperAbsPath ?? undefined,
@@ -1962,10 +2027,9 @@ function PdfViewerInner({
 				comment,
 				image: draft.image,
 			});
-			setVisualDraftEditor(null);
 			openRightTab("agent");
 		},
-		[visualDraftEditor, paperRelPath, paperAbsPath],
+		[visualDraftEditor, paperRelPath, paperAbsPath, closeVisualDraftEditor],
 	);
 
 	const upsertVisualTrace = useCallback((trace: PdfVisualSessionTrace) => {
@@ -2041,7 +2105,7 @@ function PdfViewerInner({
 				createdAt: now,
 			});
 			if (!provisional) return;
-			setVisualDraftEditor(null);
+			closeVisualDraftEditor();
 			upsertVisualTrace(provisional);
 			setVisualCardExpanded(true);
 			setVisualError(null);
@@ -2094,6 +2158,7 @@ function PdfViewerInner({
 			paperRelPath,
 			paperAbsPath,
 			t,
+			closeVisualDraftEditor,
 			upsertVisualTrace,
 			openCard,
 			resolvePdfAskAgent,
@@ -2925,7 +2990,7 @@ function PdfViewerInner({
 			toggleVisualAnnotation: () => {
 				if (visualCropPending) return;
 				setSelectionMenu(null);
-				setVisualDraftEditor(null);
+				closeVisualDraftEditor();
 				selectionCap?.clear(docId);
 				setRegionSelecting((active) => !active);
 			},
@@ -3015,6 +3080,7 @@ function PdfViewerInner({
 		deleteVisualTraceById,
 		selectionCap,
 		visualCropPending,
+		closeVisualDraftEditor,
 		t,
 	]);
 
@@ -3443,7 +3509,14 @@ function PdfViewerInner({
 						{/* Open visual draft / mark: show the framed source region on-page. */}
 						{visualDraftRegionOnPage ? (
 							<div
-								className="pointer-events-none absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+								className={cn(
+									"absolute z-[2] rounded-sm border-2 border-primary bg-primary/15 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+									// Ephemeral layout-hover drafts need a hover surface so
+									// leaving the region can schedule auto-hide.
+									visualDraftEditor?.ephemeral
+										? "pointer-events-auto"
+										: "pointer-events-none",
+								)}
 								style={{
 									left: `${visualDraftRegionOnPage.x * 100}%`,
 									top: `${visualDraftRegionOnPage.y * 100}%`,
@@ -3451,6 +3524,16 @@ function PdfViewerInner({
 									height: `${visualDraftRegionOnPage.h * 100}%`,
 								}}
 								aria-hidden="true"
+								onMouseEnter={
+									visualDraftEditor?.ephemeral
+										? markLayoutDraftHoverEnter
+										: undefined
+								}
+								onMouseLeave={
+									visualDraftEditor?.ephemeral
+										? scheduleLayoutDraftHide
+										: undefined
+								}
 							/>
 						) : null}
 						{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
@@ -3525,6 +3608,8 @@ function PdfViewerInner({
 			handleVisualRegionSelect,
 			scheduleLayoutHoverOpen,
 			handleLayoutHoverLeave,
+			markLayoutDraftHoverEnter,
+			scheduleLayoutDraftHide,
 			pdfDark,
 			t,
 		],
@@ -3768,7 +3853,7 @@ function PdfViewerInner({
 									disabled={visualCropPending || !engine}
 									onClick={() => {
 										setSelectionMenu(null);
-										setVisualDraftEditor(null);
+										closeVisualDraftEditor();
 										selectionCap?.clear(docId);
 										setRegionSelecting((active) => !active);
 									}}
@@ -3854,7 +3939,17 @@ function PdfViewerInner({
 									screen={visualDraftEditor.screen}
 									onSave={handleVisualDraftSave}
 									onSendNow={handleVisualSendNow}
-									onClose={() => setVisualDraftEditor(null)}
+									onClose={closeVisualDraftEditor}
+									onPointerEnter={
+										visualDraftEditor.ephemeral
+											? markLayoutDraftHoverEnter
+											: undefined
+									}
+									onPointerLeave={
+										visualDraftEditor.ephemeral
+											? scheduleLayoutDraftHide
+											: undefined
+									}
 								/>
 							) : null}
 

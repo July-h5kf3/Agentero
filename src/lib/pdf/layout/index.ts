@@ -10,6 +10,7 @@ export {
 } from "@/lib/pdf/layout/colors";
 export {
 	LAYOUT_HOVER_DWELL_MS,
+	LAYOUT_HOVER_HIDE_MS,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 } from "@/lib/pdf/layout/constants";
 export {

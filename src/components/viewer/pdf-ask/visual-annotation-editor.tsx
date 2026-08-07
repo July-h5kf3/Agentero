@@ -13,6 +13,9 @@ type VisualAnnotationEditorProps = {
 	/** ⌘/Ctrl+Enter: start an in-place visual conversation immediately. */
 	onSendNow: (comment: string) => void;
 	onClose: () => void;
+	/** Hover surface for ephemeral layout-hover drafts (cancel auto-hide). */
+	onPointerEnter?: () => void;
+	onPointerLeave?: () => void;
 };
 
 /**
@@ -25,6 +28,8 @@ export function VisualAnnotationEditor({
 	onSave,
 	onSendNow,
 	onClose,
+	onPointerEnter,
+	onPointerLeave,
 }: VisualAnnotationEditorProps) {
 	const { t } = useTranslation("viewer");
 	const [text, setText] = useState("");
@@ -48,6 +53,8 @@ export function VisualAnnotationEditor({
 			icon={ScanSearch}
 			ariaLabel={t("pdfExplain.annotationEditorLabel")}
 			bodyClassName="gap-2 px-3 py-2.5"
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
 			actions={[
 				{
 					label: t("pdfExplain.annotationCancel"),
