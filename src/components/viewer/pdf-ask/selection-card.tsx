@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
 	TooltipContent,
@@ -266,19 +265,31 @@ export function SelectionCard({
 							{actions.map((a) => (
 								<Tooltip key={a.label}>
 									<TooltipTrigger asChild>
-										<Button
+										<button
 											type="button"
-											variant="ghost"
-											size="icon-xs"
 											aria-label={a.label}
+											// Native button (not ghost Button): avoid variant
+											// hover:text-foreground fighting the red icon color.
 											className={cn(
-												a.destructive &&
-													"text-muted-foreground hover:text-destructive",
+												"inline-flex size-6 shrink-0 items-center justify-center rounded-md",
+												"text-muted-foreground transition-colors outline-none",
+												"focus-visible:ring-2 focus-visible:ring-ring/50",
+												a.destructive
+													? "hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+													: "hover:bg-muted hover:text-foreground",
 											)}
 											onClick={a.onClick}
 										>
-											{a.icon}
-										</Button>
+											<span
+												className={cn(
+													"inline-flex [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+													// currentColor so Lucide stroke follows hover:text-*
+													"[&_svg]:text-current",
+												)}
+											>
+												{a.icon}
+											</span>
+										</button>
 									</TooltipTrigger>
 									<TooltipContent side="bottom">{a.label}</TooltipContent>
 								</Tooltip>

@@ -311,17 +311,19 @@ function GitLine({
 	focusNode?: ReactNode;
 }) {
 	const { ref, windowed } = useWindowedLine(before, focus, after);
+	// Use palette red/emerald (not theme `destructive`) so the minus hunk stays
+	// clearly red — `destructive` can read as charcoal on cream backgrounds.
 	const focusClass =
 		tone === "bad"
-			? "shrink-0 rounded-sm bg-destructive/25 px-0.5 font-medium text-destructive"
+			? "shrink-0 rounded-sm bg-red-500/20 px-0.5 font-medium text-red-700 dark:bg-red-500/25 dark:text-red-300"
 			: "shrink-0 rounded-sm bg-emerald-500/25 px-0.5 font-medium text-emerald-800 dark:text-emerald-300";
 	const rowClass =
 		tone === "bad"
-			? "flex min-w-0 items-center bg-destructive/10"
+			? "flex min-w-0 items-center bg-red-500/10 dark:bg-red-500/15"
 			: "flex min-w-0 items-center bg-emerald-500/10 dark:bg-emerald-500/15";
 	const signClass =
 		tone === "bad"
-			? "shrink-0 select-none px-2 py-1 text-destructive/80"
+			? "shrink-0 select-none px-2 py-1 text-red-600/80 dark:text-red-400/80"
 			: "shrink-0 select-none px-2 py-1 text-emerald-700/80 dark:text-emerald-400/80";
 
 	return (
