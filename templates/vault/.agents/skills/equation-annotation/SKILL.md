@@ -1,6 +1,6 @@
 ---
 name: equation-annotation
-version: 1
+version: 2
 description: >-
   从论文（优先 LaTeX）抽取公式与变量含义，写入 {paper}/Annotation.md。
 ---
@@ -44,40 +44,15 @@ description: >-
 ## 输出：`{paper}/Annotation.md`
 
 ```markdown
----
-aliases:
-  - <短标题> 符号
-created: YYYY-MM-DD
----
-
-# 符号注释
-
-## 全局符号
-
-| 符号 | 含义 | 首次出现 |
+| 符号 | 含义 | 通俗理解 |
 | --- | --- | --- |
-| $Q$ | 查询矩阵 | 式 (1) / §3.2 |
-
-## 公式
-
-### 式 (1) — 可选短名
-
-$$
-...
-$$
-
-**摘要：** 一句话说明本式作用。
-
-| 符号 | 在本式中的含义 |
-| --- | --- |
-| $Q$ | … |
+| $Q$ | 查询矩阵 | |
 ```
 
 ### 规则
 
 - 文中未定义的符号：写「文中未明确定义」，不要猜。
 - 已有 `created` 不要改；aliases 合并去重。
-- 编号优先用文中式号；否则用 `\label`；再否则 `式 (auto-1)`。
 - 只写 `Annotation.md`，不改 `NOTES.md`。
 
 ## 流程

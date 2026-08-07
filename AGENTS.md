@@ -35,6 +35,7 @@ Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vau
 - UI 保持简约：图标按钮必须有可访问名称和 Tooltip；避免常驻解释文案。操作失败用 `notifyError` Toast，不在侧栏 header 挂常驻错误条。
 - 国际化（i18n）：所有面向用户文案必须经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [docs/frontend/shell.md](docs/frontend/shell.md)。
 - 修改后需同步更新相关文档，并检查 Roadmap 和 Todo。
+- 如果修改了 Template 下的 Skill，需要对应更新版本号。
 
 ## 常用命令
 
