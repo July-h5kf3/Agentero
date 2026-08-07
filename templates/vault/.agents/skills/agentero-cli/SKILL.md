@@ -1,12 +1,13 @@
 ---
 name: agentero-cli
-version: 1
+version: 2
 description: >-
   Use the Agentero CLI (bin `agentero`) to create, discover, and inspect a local
   research vault and catalog—list/get papers, import by id/URL, check wikilinks,
-  download assets, parse PAPER.md, export bib—without BYOA. Prefer --json. Use
-  when managing a vault headless, scripting Motif/Agentero, or exploring papers
-  via machine APIs ($agentero-cli / /agentero-cli).
+  layout regions (figures/tables/formulas), region-anchored marks, download
+  assets, parse PAPER.md, export bib—without BYOA. Prefer --json. Use when
+  managing a vault headless, scripting Motif/Agentero, or exploring papers via
+  machine APIs ($agentero-cli / /agentero-cli).
 ---
 
 # Agentero CLI
@@ -48,7 +49,9 @@ directly; do not invent catalog rows.
 1. **L0** — `AGENTS.md` (if present)
 2. **L1** — `agentero paper list --json` (catalog; no full-text)
 3. **L2** — `{paper}/NOTES.md`
-4. **L2.5** — `{paper}/marks/*.json` (reader highlights / asks / translates)
+4. **L2.5** — layout index + marks  
+   - `agentero layout list <paper> --json` (sidebar figures/tables/algorithms/formulas)  
+   - `{paper}/marks/*.json` (reader highlights / asks / translates; prefer CLI write)
 5. **L3** — `{paper}/PAPER.md` (if no TeX)
 6. **L4** — `{paper}/source/**` (TeX preferred when present)
 
@@ -56,11 +59,26 @@ After `paper get --json`, use `data.assets` (`marksDir` = reader annotations),
 `data.suggestedReads` / `paper paths`, then `read_file` those paths. Do **not**
 paste whole sources unless needed.
 
+**Figures / formulas (preferred over inventing coordinates):**
+
+```bash
+agentero layout list <paper> --kind figure --json
+agentero layout list <paper> --kind formula --json
+agentero mark add <paper> --region figure-3 --comment "…" --json
+# optional ask shell:
+agentero mark add <paper> --region <id> --question "…" --json
+```
+
+Requires `{paper}/source/layout-index.json` (written when the desktop runs layout
+analysis). If `layout_index_missing`, tell the user to open the paper in Agentero
+and run Figures analysis — do not invent bboxes.
+
 Reader marks under `{paper}/marks/` can be referenced from Markdown as annotation
 wikilinks: `[[papers/…/NOTES@<id>|label]]` / `![[…@<id>]]` (same sugar as the app).
 When you edit NOTES, prefer real ids from `marks/` or the desktop copy action;
 do not invent ids. `agentero wiki check` validates path + fragment **shape** for
 `@id` / `#@id`, but does **not** open marks to verify the id still exists.
+Do **not** write EmbedPDF `marks/annotations.json` by hand.
 
 ## Default agent protocol
 
@@ -115,6 +133,10 @@ Global: `--vault`, `--json` / `--output json`, `-y` / `--yes`, `--translator-url
 | Set / add / remove tags | `agentero paper tag set\|add\|rm <path\|id> … --json`（清空：`tag set --clear`） |
 | Magic-wand import | `agentero import id <text> [--parent papers/…] --json` |
 | Bib import/export | `agentero import bib <file\|-> --json` / `export bib [-o\|--out file\|-] --json` |
+| Layout regions | `agentero layout list <paper> [--kind figure\|table\|algorithm\|formula] --json` |
+| Layout get | `agentero layout get <paper> <regionId> --json` |
+| Mark on region | `agentero mark add <paper> --region <id> [--comment …] [--question …] --json` |
+| Mark list/get/delete | `agentero mark list\|get\|delete … --json`（delete 需 `-y`） |
 | Graph (later) | `agentero graph backlinks|export|rebuild --json` |
 
 ## JSON contract

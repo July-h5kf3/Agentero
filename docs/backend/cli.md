@@ -21,19 +21,42 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | `config` | 配置 |
 | `wiki` | 只读双链语义检查 |
 | `doctor` | 聚合诊断与显式确认的论文 aliases 修复 |
+| `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula） |
+| `mark` | 阅读标注：`list` / `get` / `add --region` / `delete`（区域锚点优先） |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。
 
-### 规划中（未实现）
+### 版面索引与区域批注（已实现）
 
-阅读标注与翻译进 CLI（[#170](https://github.com/poco-ai/Agentero/issues/170)）：`mark` list/get/add/update/delete、`translate` 文本等。设计见 [../development/mark-cli-roadmap.md](../development/mark-cli-roadmap.md)；文字定位见 [惰性](../development/mark-locate-lazy.md) / [即时](../development/mark-locate-eager.md)。  
-当前 `paper get` 仅报告 `assets.marksDir` 是否存在；skill 仍将 marks 作 L2.5 只读，直至命令落地后改 skill。
+侧栏 Figures 同源列表落在 `{paper}/source/layout-index.json`（由桌面版面分析在 merge 后写入；raw 仍为 `source/layout.json`）。
+
+```bash
+# 列出图 / 表 / 算法 / 公式（--kind 可重复，OR）
+agentero layout list papers/demo --json
+agentero layout list papers/demo --kind figure --kind formula --json
+agentero layout get  papers/demo figure-3 --json
+
+# 按区域钉批注（geometry=resolved，拷贝 bbox；不写 annotations.json）
+agentero mark add papers/demo --region figure-3 --comment "核心图" --json
+agentero mark add papers/demo --region formula-p3-… --question "推导？" --json
+agentero mark list papers/demo --json
+agentero mark delete papers/demo <id> -y --json
+```
+
+| `--kind`（layout list） | 含义 |
+|---|---|
+| `figure` | 侧栏插图分区（image + chart） |
+| `image` / `chart` / `table` / `algorithm` / `formula` | 精确 kind |
+
+无 `layout-index.json` 时返回 `layout_index_missing`（提示先在 App 打开论文跑版面分析）。  
+正文句子高亮 / `translate` 命令见规划 [#170](https://github.com/poco-ai/Agentero/issues/170) 与 [mark-cli-roadmap.md](../development/mark-cli-roadmap.md)。
 
 ```bash
 cargo build -p agentero-cli
 cargo run -p agentero-cli -- vault which --json
 cargo run -p agentero-cli -- wiki check papers/demo/NOTES.md --json
 cargo run -p agentero-cli -- doctor --json
+cargo run -p agentero-cli -- layout list papers/demo --json
 cargo test -p agentero-cli
 ```
 

@@ -991,3 +991,212 @@ fn set_paper_authors_and_year(vault: &Path, path: &str, authors_json: &str, year
     let status = Command::new("python3").args(["-c", &py]).status().unwrap();
     assert!(status.success(), "failed to update paper metadata");
 }
+
+#[test]
+fn layout_list_and_mark_add_region() {
+    let tmp = tempdir().unwrap();
+    let vault = tmp.path().join("v");
+    create_vault(&vault);
+
+    let paper = vault.join("papers").join("demo");
+    fs::create_dir_all(paper.join("source")).unwrap();
+    fs::write(paper.join("NOTES.md"), "# Demo\n").unwrap();
+    seed_paper(&vault, "papers/demo", "demo", "Demo Paper");
+
+    // Missing index → structured error
+    let missing = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "layout",
+            "list",
+            "papers/demo",
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+    let missing: Value = serde_json::from_slice(&missing).unwrap();
+    assert_eq!(missing["ok"], false);
+    assert_eq!(missing["error"]["code"], "layout_index_missing");
+
+    let index = serde_json::json!({
+        "schemaVersion": 1,
+        "source": {
+            "mode": "sidebar",
+            "from": "layout.json",
+            "generatedAt": "2026-01-01T00:00:00.000Z",
+            "minScore": 0.3
+        },
+        "items": [
+            {
+                "id": "figure-3",
+                "stableKey": "p2:figure:Figure 3: Heads",
+                "kind": "image",
+                "section": "figure",
+                "page": 2,
+                "pageIndex": 1,
+                "bbox": { "x": 0.1, "y": 0.2, "w": 0.5, "h": 0.3 },
+                "score": 0.95,
+                "title": "Figure 3: Heads",
+                "layoutRegionId": "raw-fig-3"
+            },
+            {
+                "id": "table-1",
+                "stableKey": "p1:table:Table 1",
+                "kind": "table",
+                "section": "table",
+                "page": 1,
+                "pageIndex": 0,
+                "bbox": { "x": 0.05, "y": 0.1, "w": 0.9, "h": 0.2 },
+                "score": 0.88,
+                "title": "Table 1",
+                "layoutRegionId": "raw-tab-1"
+            },
+            {
+                "id": "formula-p3-abc",
+                "stableKey": "p3:formula:0.2_0.4_0.4_0.05",
+                "kind": "formula",
+                "section": "formula",
+                "page": 3,
+                "pageIndex": 2,
+                "bbox": { "x": 0.2, "y": 0.4, "w": 0.4, "h": 0.05 },
+                "score": 0.8,
+                "layoutRegionId": "raw-eq-1"
+            }
+        ]
+    });
+    fs::write(
+        paper.join("source").join("layout-index.json"),
+        format!("{}\n", serde_json::to_string_pretty(&index).unwrap()),
+    )
+    .unwrap();
+
+    let listed = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "layout",
+            "list",
+            "demo",
+            "--kind",
+            "figure",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let listed: Value = serde_json::from_slice(&listed).unwrap();
+    assert_eq!(listed["ok"], true);
+    let items = listed["data"]["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], "figure-3");
+    assert_eq!(items[0]["page"], 2);
+
+    let formulas = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "layout",
+            "list",
+            "demo",
+            "--kind",
+            "formula",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let formulas: Value = serde_json::from_slice(&formulas).unwrap();
+    assert_eq!(formulas["data"]["items"].as_array().unwrap().len(), 1);
+
+    let got = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "layout",
+            "get",
+            "demo",
+            "figure-3",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let got: Value = serde_json::from_slice(&got).unwrap();
+    assert_eq!(got["data"]["item"]["title"], "Figure 3: Heads");
+
+    let added = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "mark",
+            "add",
+            "demo",
+            "--region",
+            "figure-3",
+            "--comment",
+            "核心图",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let added: Value = serde_json::from_slice(&added).unwrap();
+    assert_eq!(added["ok"], true);
+    assert_eq!(added["data"]["mark"]["kind"], "highlight");
+    assert_eq!(added["data"]["mark"]["geometry"], "resolved");
+    assert_eq!(added["data"]["mark"]["page"], 2);
+    assert_eq!(added["data"]["mark"]["layoutRef"]["regionId"], "figure-3");
+    assert_eq!(added["data"]["mark"]["comment"], "核心图");
+    let mark_id = added["data"]["mark"]["id"].as_str().unwrap();
+    assert!(paper
+        .join("marks")
+        .join(format!("{mark_id}.json"))
+        .is_file());
+
+    let marks = agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "mark",
+            "list",
+            "demo",
+            "--json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let marks: Value = serde_json::from_slice(&marks).unwrap();
+    assert_eq!(marks["data"]["count"], 1);
+
+    agentero()
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "-y",
+            "mark",
+            "delete",
+            "demo",
+            mark_id,
+            "--json",
+        ])
+        .assert()
+        .success();
+    assert!(!paper
+        .join("marks")
+        .join(format!("{mark_id}.json"))
+        .is_file());
+}

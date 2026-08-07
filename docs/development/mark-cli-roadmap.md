@@ -235,13 +235,15 @@ agentero mark delete <paper> <id> -y --json
 | P1 | Skill：把已有 mark 的 quote 作为对话上下文，而非 CLI 起 session |
 | P2 | 与「加入对话」chip 模型对齐（桌面） |
 
-### 6.5 图 / 公式（后置上层）
+### 6.5 图 / 公式（侧栏索引路径 — 已部分落地）
 
-| 优先级 | 项 |
-|---|---|
-| P0 体验 | Skill 写清：用 comment + 页码/图号；请用户框选 |
-| P2 | 大纲/图题 sidecar 粗锚 |
-| P3 | 自动区域检测 + 与 `agent-trace` 裁图结合 |
+| 优先级 | 项 | 状态 |
+|---|---|---|
+| P0 | 写出 `source/layout-index.json`（与侧栏同源） | **已实现**（layout 分析 merge 后） |
+| P0 | CLI `layout list\|get` + `mark add --region` | **已实现** |
+| P1 | Skill 教 Agent：`layout list` → `mark add --region` | **已改 agentero-cli v2** |
+| P2 | 桌面打开时对 `layoutRef` mark 稳定出针/黄底 | 依赖现有 rects；可再打磨 |
+| P3 | 自动裁图 + `agent-trace` | 仍后置 |
 
 ### 6.6 上层验收（P0 集合）
 
